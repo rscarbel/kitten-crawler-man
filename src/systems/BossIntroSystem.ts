@@ -1,7 +1,22 @@
 import { drawHumanSprite } from '../sprites/humanSprite';
 import { drawCatSprite } from '../sprites/catSprite';
-import { drawJuicerSprite, JUICER_HEAD_CLEARANCE_TILES } from '../sprites/juicerSprite';
-import { drawHoarderSprite } from '../sprites/hoarderSprite';
+import { drawRoosterSprite, prewarmRoosterRow } from '../sprites/roosterSprite';
+import {
+  BIG_ROOSTER_FIGURE,
+  GROUND_OFFSET_PX,
+  roosterStateName,
+} from '../sprites/art/roosterFigure';
+import { BIG_ROOSTER_BOSS_TYPE } from '../core/bossTypes';
+import {
+  drawTrashGremlinSprite,
+  prewarmTrashGremlinLocomotion,
+} from '../sprites/trashGremlinSprite';
+import {
+  GROUND_OFFSET_PX as TRASH_GREMLIN_GROUND_OFFSET_PX,
+  TRASH_GREMLIN_FIGURE,
+} from '../sprites/art/trashGremlinFigure';
+import { type DrawnFigureRow, drawnFigureRow } from '../sprites/figure/figureDef';
+import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
 import {
   drawNecromancerSprite,
   necromancerArtHeightTiles,
@@ -85,21 +100,42 @@ const HUMAN_SPRITE_X_OFFSET = 14;
 const HUMAN_SPRITE_Y_OFFSET = 78;
 /** Human sprite size. */
 const HUMAN_SPRITE_SIZE = 72;
-/** Juicer sprite size. */
-const JUICER_SPRITE_SIZE = 56;
-/** How much clear panel is left above the top of his head. */
-const JUICER_PANEL_TOP_PAD = 12;
+/** How much clear panel is left above the top of his comb. */
+const BIG_ROOSTER_PANEL_TOP_PAD = 12;
+/** Clear panel kept between his toes and the name label under him. */
+const BIG_ROOSTER_PANEL_BOTTOM_PAD = 8;
+/** How far down the panel his toes may reach: clear of the name label. */
+const BIG_ROOSTER_PANEL_ART_BOTTOM =
+  VERSUS_PANEL_H -
+  TEAM_LABEL_Y_OFFSET_FROM_BOTTOM -
+  LABEL_TEXT_ADJUST -
+  BIG_ROOSTER_PANEL_BOTTOM_PAD;
+/** Where his toes stand inside his own tile, as a fraction of it from the top. */
+const BIG_ROOSTER_GROUND_TILE_FRACTION = GROUND_OFFSET_PX / BIG_ROOSTER_FIGURE.tileScale;
+/** The head-on idle his portrait holds. */
+const BIG_ROOSTER_PORTRAIT_ROW = drawnFigureRow(
+  BIG_ROOSTER_FIGURE,
+  roosterStateName('idle', 'front'),
+);
+
 /**
- * Where his tile sits down the panel. Derived from his own headroom rather than
- * picked: he is drawn most of a tile and a half above the tile he stands on, so
- * a hand-picked offset puts his head through the top of the panel.
+ * His tile size and tile top in the panel, fitted comb to toe between the pads
+ * from his portrait row's measured headroom: he stands over three tiles tall,
+ * so a size picked by eye puts his comb through the top of the panel or his
+ * toes into his name.
  */
-const JUICER_SPRITE_Y_OFFSET =
-  JUICER_PANEL_TOP_PAD + Math.round(JUICER_SPRITE_SIZE * JUICER_HEAD_CLEARANCE_TILES);
+function bigRoosterPortraitPlacement(): { size: number; yOffset: number } {
+  const headroomTiles = rowHeadroomTiles(BIG_ROOSTER_PORTRAIT_ROW);
+  const size = Math.floor(
+    (BIG_ROOSTER_PANEL_ART_BOTTOM - BIG_ROOSTER_PANEL_TOP_PAD) /
+      (headroomTiles + BIG_ROOSTER_GROUND_TILE_FRACTION),
+  );
+  return { size, yOffset: BIG_ROOSTER_PANEL_TOP_PAD + Math.round(size * headroomTiles) };
+}
 /** He is posed head-on in the panel, looking out at the player. */
-const JUICER_INTRO_FACING_Y = 1;
+const BIG_ROOSTER_INTRO_FACING_Y = 1;
 /** A portrait holds one pose rather than breathing through the intro. */
-const JUICER_INTRO_IDLE_FRAME = 0;
+const BIG_ROOSTER_INTRO_IDLE_FRAME = 0;
 /**
  * How tall her art is drawn in the panel.
  *
@@ -149,15 +185,46 @@ function spiderPortraitTileSize(panelW: number): number {
   const byWidth = (panelW - SPIDER_PANEL_PAD * 2) / (reach.side * 2);
   return Math.floor(Math.min(byHeight, byWidth));
 }
+/** How much clear panel is left above the top of its ears and crown. */
+const TRASH_GREMLIN_PANEL_TOP_PAD = 12;
+/** Clear panel kept between its feet and the name label under it. */
+const TRASH_GREMLIN_PANEL_BOTTOM_PAD = 8;
+/** How far down the panel its feet may reach: clear of the name label. */
+const TRASH_GREMLIN_PANEL_ART_BOTTOM =
+  VERSUS_PANEL_H -
+  TEAM_LABEL_Y_OFFSET_FROM_BOTTOM -
+  LABEL_TEXT_ADJUST -
+  TRASH_GREMLIN_PANEL_BOTTOM_PAD;
+/** Where its soles stand inside its own tile, as a fraction of it from the top. */
+const TRASH_GREMLIN_GROUND_TILE_FRACTION =
+  TRASH_GREMLIN_GROUND_OFFSET_PX / TRASH_GREMLIN_FIGURE.tileScale;
+/** The head-on idle the portrait holds. */
+const TRASH_GREMLIN_PORTRAIT_ROW = drawnFigureRow(TRASH_GREMLIN_FIGURE, 'idle');
+
 /**
- * Her tile anchor sits 191px down a 280px frame, and the portrait is
- * positioned off that anchor — both numbers measured against the current sheet.
+ * How far a portrait row's ink rises above the top of its tile, in tiles,
+ * measured off the painted row rather than frozen so a redraw cannot push a
+ * head through the top of the panel or the feet into the name. Asked for when
+ * the intro starts, so the measurement lands during the title; until it does
+ * the answer is the whole cell's headroom, which only ever draws it smaller.
  */
-const HOARDER_SPRITE_SIZE = 44;
-/** Hoarder sprite y offset. */
-const HOARDER_SPRITE_Y_OFFSET = 135;
+function rowHeadroomTiles(row: DrawnFigureRow): number {
+  const tileScale = row.def.tileScale;
+  const inkTopAboveTile = -figureRowInkTop(row, 0, tileScale);
+  return inkTopAboveTile / tileScale;
+}
+
+/** Its tile size and tile top in the panel, fitted crown to sole between the pads. */
+function trashGremlinPortraitPlacement(): { size: number; yOffset: number } {
+  const headroomTiles = rowHeadroomTiles(TRASH_GREMLIN_PORTRAIT_ROW);
+  const size = Math.floor(
+    (TRASH_GREMLIN_PANEL_ART_BOTTOM - TRASH_GREMLIN_PANEL_TOP_PAD) /
+      (headroomTiles + TRASH_GREMLIN_GROUND_TILE_FRACTION),
+  );
+  return { size, yOffset: TRASH_GREMLIN_PANEL_TOP_PAD + Math.round(size * headroomTiles) };
+}
 /** Pinned rather than clock-driven: a portrait that breathes reads as a bug. */
-const HOARDER_PORTRAIT_FRAME = 0;
+const TRASH_GREMLIN_PORTRAIT_FRAME = 0;
 /** Cat sprite x fraction of panel width. */
 const CAT_SPRITE_X_FRACTION = 0.52;
 /** Cat sprite y offset in versus panel. */
@@ -193,6 +260,7 @@ const FIGHT_LABEL_SIZE = 10;
 const KRAKAREN_BOSS_TYPE = 'krakaren_clone';
 /** The boss type the Briar Hollow siege passes for Vordrick Boneharrow. */
 const NECROMANCER_BOSS_TYPE = 'necromancer';
+const TRASH_GREMLIN_BOSS_TYPE = 'trash_gremlin';
 
 /**
  * Total pixel height of the necromancer's portrait cell — sized larger than
@@ -219,10 +287,20 @@ export class BossIntroSystem implements GameSystem {
 
   trigger(bossType: string, bossName: string, bossColor: string): void {
     this.state = { bossType, bossName, bossColor, frame: 0, phase: 'letters' };
-    // The intro is seven seconds during which she is drawn only as a portrait,
-    // which is more lead than anything else in her fight can offer the one
+    // The intro is seven seconds during which the boss is drawn only as a
+    // portrait, which is more lead than anything else in the fight can offer a
     // figure whose cells cost milliseconds rather than microseconds to paint.
     if (bossType === KRAKAREN_BOSS_TYPE) prewarmKrakarenBody();
+    if (bossType === TRASH_GREMLIN_BOSS_TYPE) {
+      // Its portrait holds the head-on idle, one of the rows it stands in.
+      prewarmTrashGremlinLocomotion();
+      rowHeadroomTiles(TRASH_GREMLIN_PORTRAIT_ROW);
+    }
+    if (bossType === BIG_ROOSTER_BOSS_TYPE) {
+      prewarmRoosterRow('big', 'idle');
+      prewarmRoosterRow('big', 'crow');
+      rowHeadroomTiles(BIG_ROOSTER_PORTRAIT_ROW);
+    }
   }
 
   /** Dismisses an in-progress intro without playing it out — used on a checkpoint respawn. */
@@ -402,13 +480,20 @@ export class BossIntroSystem implements GameSystem {
       );
 
       ctx.save();
-      if (intro.bossType === 'juicer') {
-        const jS = JUICER_SPRITE_SIZE;
-        drawJuicerSprite(ctx, rightX + panelW / 2 - jS / 2, panelY + JUICER_SPRITE_Y_OFFSET, jS, {
-          facingX: 0,
-          facingY: JUICER_INTRO_FACING_Y,
-          idleFrame: JUICER_INTRO_IDLE_FRAME,
-        });
+      if (intro.bossType === BIG_ROOSTER_BOSS_TYPE) {
+        const portrait = bigRoosterPortraitPlacement();
+        drawRoosterSprite(
+          ctx,
+          'big',
+          rightX + panelW / 2 - portrait.size / 2,
+          panelY + portrait.yOffset,
+          portrait.size,
+          {
+            facingX: 0,
+            facingY: BIG_ROOSTER_INTRO_FACING_Y,
+            idleFrame: BIG_ROOSTER_INTRO_IDLE_FRAME,
+          },
+        );
       } else if (intro.bossType === KRAKAREN_BOSS_TYPE) {
         const kS =
           KRAKAREN_SPRITE_SIZE / krakarenArtHeightTiles(KRAKAREN_FALLBACK_ART_HEIGHT_TILES);
@@ -457,12 +542,18 @@ export class BossIntroSystem implements GameSystem {
           false,
         );
       } else {
-        const hS = HOARDER_SPRITE_SIZE;
-        drawHoarderSprite(ctx, rightX + panelW / 2 - hS / 2, panelY + HOARDER_SPRITE_Y_OFFSET, hS, {
-          facingX: 0,
-          facingY: 1,
-          idleFrame: HOARDER_PORTRAIT_FRAME,
-        });
+        const portrait = trashGremlinPortraitPlacement();
+        drawTrashGremlinSprite(
+          ctx,
+          rightX + panelW / 2 - portrait.size / 2,
+          panelY + portrait.yOffset,
+          portrait.size,
+          {
+            facingX: 0,
+            facingY: 1,
+            idleFrame: TRASH_GREMLIN_PORTRAIT_FRAME,
+          },
+        );
       }
       ctx.restore();
 

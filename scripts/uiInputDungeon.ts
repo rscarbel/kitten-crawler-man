@@ -64,7 +64,7 @@ const { signLine } = await import('../src/dialog/scripts/crawlerSigns.js');
 const { toCssRect } = await import('../src/ui/hud/HudSurface.js');
 const { LONG_PRESS_MS } = await import('../src/ui/screens/inventory/InventoryScreen.js');
 const { ACHIEVEMENT_DEFS } = await import('../src/core/AchievementManager.js');
-const { Juicer } = await import('../src/creatures/Juicer.js');
+const { BigRooster } = await import('../src/creatures/BigRooster.js');
 
 type Scene = InstanceType<typeof DungeonScene>;
 type DockId = Parameters<Scene['hud']['cssDockRect']>[0];
@@ -1014,14 +1014,14 @@ section('a Keyboard Hero lane tap that slides a little still counts');
     'the interact press picks it up too',
   );
 
-  const juicer = new Juicer(tileX + HOSTILE_OFFSET_TILES, tileY, TILE_SIZE);
-  roster.add(juicer);
+  const bigRooster = new BigRooster(tileX + HOSTILE_OFFSET_TILES, tileY, TILE_SIZE);
+  roster.add(bigRooster);
   try {
     placeBench();
     frame(street);
     check(
       street['gymPromptTargets']().barrier === undefined,
-      'with the Juicer in swing range no prompt promises the bare press',
+      'with Big Rooster in swing range no prompt promises the bare press',
     );
     check(
       pickedUpBy(() => tap(street, benchOnScreen())),
@@ -1038,7 +1038,7 @@ section('a Keyboard Hero lane tap that slides a little still counts');
       barriers.tryPickupAt = tryPickupAt;
     }
   } finally {
-    roster.replaceAll(roster.mobs.filter((mob) => mob !== juicer));
+    roster.replaceAll(roster.mobs.filter((mob) => mob !== bigRooster));
     roster.rebuildGrid();
     barriers['barriers'].length = 0;
   }

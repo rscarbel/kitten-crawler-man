@@ -196,9 +196,8 @@ export function snareConvertChance(level: number): number {
 
 // ── Player-facing descriptions ────────────────────────────────────────────────
 //
-// Every string below quotes the wording of the original per-level perk lists,
-// only lightly smoothed for grammar and with the source's own bracketed
-// clarifications folded into the sentence.
+// Every string below is one level's perk as the player reads it, with any
+// clarification folded into the sentence rather than left in brackets.
 
 /** One level's player-facing perk text: what the level-up dialog shows on ding, and what the Crafts tab lists as an unlock. */
 export interface PerkUnlock {

@@ -1,7 +1,7 @@
 /**
  * Trousers (or stockings) and shoes for the people built on Carl's rig — the
  * town's citizens and residents, the club dancer, the Incubus. Never his:
- * Carl is canonically bare-legged and barefoot, and nothing he can loot paints
+ * Carl's own look is bare-legged and barefoot, and nothing he can loot paints
  * these.
  *
  * Both are painted on the leg part, inside each leg's own slab and right after

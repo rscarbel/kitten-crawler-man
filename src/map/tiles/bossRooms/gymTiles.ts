@@ -11,7 +11,7 @@ import { gymRackFill, gymSquatRackLoaded } from './gymPropState';
 import { UINT32_SPAN } from '../../../core/WorldRandom';
 
 /**
- * Paints the boss-room tile types of the Juicer's gym. Returns false for any other type.
+ * Paints the boss-room tile types of Big Rooster's gym. Returns false for any other type.
  *
  * A solid prop is Y-sorted: the chunk bake has already drawn the floor beneath
  * it, so its case blits only the prop, from the gym's painted sheets. The belt

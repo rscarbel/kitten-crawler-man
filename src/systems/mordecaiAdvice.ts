@@ -103,15 +103,20 @@ export class MordecaiAdvisor {
 }
 
 /** The four gateway bosses whose speech is pinned to the safe room guarding them. */
-const GATEWAY_ADVICE_IDS = ['the_hoarder', 'juicer', 'krakaren_clone', 'ball_of_swine'] as const;
+const GATEWAY_ADVICE_IDS = [
+  'trash_gremlin',
+  'big_rooster',
+  'krakaren_clone',
+  'ball_of_swine',
+] as const;
 
 /** A boss whose speech belongs to the safe room guarding it. */
 export type GatewayAdviceId = (typeof GATEWAY_ADVICE_IDS)[number];
 
 /** Every objective Mordecai has something to say about. */
 export type AdviceObjectiveId =
-  | 'the_hoarder'
-  | 'juicer'
+  | 'trash_gremlin'
+  | 'big_rooster'
   | 'defend_goblin_mother'
   | 'krakaren_clone'
   | 'stealth_gate'

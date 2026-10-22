@@ -281,8 +281,8 @@ const LIGHT: Pt = { x: -0.66, y: -0.75 };
 
 /**
  * Crown of the head to the sole, in tiles. Carl stands about 1.46 tiles on
- * screen, so this is a head and a half taller than him — the seven feet of the
- * books, pushed a little further so it reads as towering at 32 px.
+ * screen, so this is a head and a half taller than him — a seven-foot figure,
+ * pushed a little further so it reads as towering at 32 px.
  */
 export const FIGURE_HEIGHT = 2;
 /**

@@ -60,6 +60,139 @@ re-download and re-decode hundreds of megabytes every time the player opened a s
 `releaseSpritesExcept` is called once, at the stairs transition, keyed on the new floor's
 required keys.
 
+Art a scene bakes for its own map is the exception: it is released when that scene exits,
+because no other scene will draw it. `GameMap.releaseTileArt` gives back a map's tile
+chunks and overlay entries at once, rather than whenever the browser collects the
+canvases. `BuildingInteriorScene.onExit` releases every storey's map, and
+`DungeonScene.onExit` releases its map and minimap (`releaseFloorArt`) unless a building
+visit holds them. `enterBuilding` is the only writer of that hold
+(`floorArtHeldByBuildingVisit`), because the overworld hands its map to the scene rebuilt
+at the door (`existingMap`) and any other floor hands it back through
+`holdFloorForInterior`. Every other exit abandons the map: the stairs, a respawn, a
+restart, the title screen. A defeat indoors that respawns from the save releases the held
+map there, since nothing takes it over. The prison's own ground and lighting are released
+by `GoblinPrisonSystem.dispose`. `npm run verify:chunk-cache` checks that `releaseTileArt`
+returns every chunk.
+
+## Memory follows the party within a floor
+
+The stairs are not the only release. While the party stays on a floor, what each cache
+holds follows where the party is and what has been drawn lately, not how much of the
+floor it has seen. **The rule for every resident cache:** it gives memory back while the
+party stays on a floor, by idle time, by distance or by budget, never only at the stairs;
+and anything placed in the world whose art should follow the party registers as a
+resident set with `WorldResidency`. On a phone, memory that only grows with how much of a
+floor has been seen is what tips the tab into canvas loss.
+
+**Idle release.** Each cache lets go of what nothing has drawn for its window:
+
+- environment sheets: `releaseIdleSheets` in `environmentArtCache.ts`, after
+  `RECENTLY_DRAWN_FRAMES` (half a minute) without a lookup or a touch;
+- figure rows: the figure cache's idle sweep, after `IDLE_FRAMES_BEFORE_RELEASE`, except
+  pinned rows;
+- tile chunks: each map's `TileChunkCache` drops a chunk undrawn for
+  `CHUNK_IDLE_RELEASE_FRAMES` (half a minute) of that map's own frames, however far below
+  `MAX_CACHED_CHUNKS` it is;
+- town interior props: their `RecentSurfaceCache` is built with an idle window
+  (`PROP_FRAME_IDLE_RELEASE_FRAMES`, half a minute), swept every frame by
+  `releaseIdleRecentSurfaces`.
+
+The sheet and prop windows count `idleFrameNumber()` (`src/core/renderFrameClock.ts`):
+render frames, less those spent while something holds the idle clock
+(`holdIdleClock`/`releaseIdleClock`, counted, so holds nest). `ArrivalLoader` holds it
+while its screen is up, beside `holdFigureIdleSweep`, and `BuildingInteriorScene` holds it
+from `onEnter` to `onExit`. Time behind a loading screen or inside a shop is waiting, not
+abandonment, so it never ages the floor outside, and furniture is let go only after half a
+minute back outdoors. Chunks count their own map's frames, so a map not being drawn ages
+nothing. Eviction over a byte budget counts render frames for sheets and
+`RecentSurfaceCache` (`renderFrameNumber()`), and the chunk cache's own frames for chunks.
+
+**Distance.** `WorldResidency` (`src/systems/WorldResidency.ts`) decides what stays
+resident by distance from the party, for every resident set registered with it. Nothing
+in it names a floor, a town or a siege. `DungeonScene` owns one on every floor
+(`residency`). It decides every `RESIDENCY_CHECK_INTERVAL_UPDATES` (10) updates, building
+the outlook only when a decision is due, and decides at once (`settleNow`) where the
+party is set down: on arrival, before the arrival loader measures what is owed, and after
+a warp.
+
+- **The outlook** (`ResidencyOutlook`) lists the points the next frames may be drawn
+  around: the active crawler, the other one unless knocked out (a switch moves the camera
+  to it at once), and a coming warp's landing, flagged `landing` (a recall channel's tile,
+  or the death screen's checkpoint respawn, which also sets `covered`). For each entry the
+  decision takes `tilesUntilInView`, how far a camera centred on the nearest focus must
+  travel before any of the entry's area is in view.
+- **The rings** come from each set's own repaint lead. The hold ring is the set's
+  `leadSeconds` times `FASTEST_WALK_TILES_PER_SECOND` (Speed Fizz on top of the stall's
+  boon); the release ring is that plus its `releaseHysteresisTiles`. Within the hold ring
+  an entry is held and anything it is missing is asked for urgently, nearest first. Past
+  the release ring it is released. In between it keeps whichever it was, so a party
+  standing on the edge does not flip it every few steps.
+- **A resident set** implements `ResidentSet<Entry>`: `leadSeconds`,
+  `releaseHysteresisTiles`, `entriesStartHeld`, `keyOf`, `placements()` (each entry with a
+  tile `area`; placements sharing a key are one entry, as near as its nearest), `hold` and
+  `release` (called only on a change), `warm(entry, urgency)` (on every decision:
+  `urgent` inside the hold ring, `speculative` outside it, `forgiving` under a warp's
+  loading screen), `warmth`, and optionally `hurryWhileCovered`, `hurryWhileApproached`
+  and `bakeFor`. `WorldResidency` keeps each key's held or released state. A key no longer
+  placed anywhere is released and forgotten at the next decision. What holding, warming
+  and releasing mean is the set's business, so cache specifics stay in the set.
+- **Warps.** `isWarmAround`, `forgiveAndWarmAround`, `warmthAround` and `bakeFor` run over
+  every set. A warp that would land among cold entries goes behind the arrival's loading
+  screen (`coverWarpIfLandingCold`), whose "Waking the world" task asks again, forgiving
+  what the caches gave up on, for its first `WARP_COVER_FORGIVING_STEPS` frames, splits its
+  budget evenly over the sets that bake, and lifts when the landing is warm, when nothing
+  missing is still queued, or after `WARP_COVER_MAX_STEPS`.
+
+The sets the game registers:
+
+| Set                                               | Entries and where they are placed                                                                       | Lead / hysteresis | Hold                                        | Release                                                       |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ----------------- | ------------------------------------------- | ------------------------------------------------------------- |
+| `EnvironmentSheetResidentSet`, `FACADE_RING`      | each building's still frame over its art; every other sheet the floor's groups paint over the whole map | 2 s / 10 tiles    | touched each decision, repainted if missing | `releaseEnvironmentSheet`: gone after `RELEASED_GRACE_FRAMES` |
+| `EnvironmentSheetResidentSet`, `FACADE_LIFE_RING` | each building's `<facade>_life` row over its art                                                        | 0 s / 3 tiles     | the same                                    | the same                                                      |
+| `CrowdResidentSet` (where `TownLifeSystem` runs)  | each look the street crowd and the market's vendors wear, placed at every wearer                        | 5 s / 12 tiles    | pins its `idle` and `walk` rows             | unpins them for the idle sweep                                |
+
+Both kinds of set leave `entriesStartHeld` false: nothing is held until a decision
+reaches it. Ground materials and indoor-only sheets are in no set. Chunks touch the
+materials they draw, and a room asks for its sheets again behind its loading screen, so
+the idle sweep alone is right for them. Sheets placed over the whole map are held for the
+whole visit.
+
+**Who releases what.**
+
+- `WorldResidency.releaseAll()`, wherever a `DungeonScene` gives up its world: the
+  stairs, an overworld building exit, a respawn from a save, a restart, the title screen.
+  The rebuilt scene's first decision takes back what it needs, within the sheets' release
+  grace and long before the figure sweep would run.
+- The scene that baked a map's tile art, on exit (see above).
+- The caches' own idle release and byte budgets, all the time.
+- The stairs: `releaseSpritesExcept`, `releaseEnvironmentArt` and
+  `flushFigureFrameCache`, which also discard seeded art of a floor that no longer exists.
+
+**Measuring it.** `npm run report:residency` drives the real scenes headless over named
+routes per floor (`RESIDENCY_FLOORS` in `scripts/residencyRoutes.ts`): floor 3's `tour`
+(the streets and a dozen interiors, then Briar Hollow) and `direct` (straight there), and
+the scaled city's `walk` (across a grid of floor-3 towns from `scripts/scaledCity.ts`) and
+`arrive` (a cold arrival at its far edge). Each route runs in its own process, and the
+report prints each owner's bytes and surfaces at every milestone, as they stand and after
+forced collections, plus any scene or map still reachable after the route left it, and the
+difference between the pair. `npm run verify:residency` runs `tour` (two interiors) and
+`direct`, one after the other, each in its own process, and fails when:
+
+- any owner but `figureCells` holds more than `OWNER_TOLERANCE_MEGABYTES` more after the
+  tour, as the tallies stand or after forced collections;
+- a figure first drawn indoors (one that gained cells at an interior milestone and that
+  the street crowd cannot wear) still holds cells at the village, unless the direct
+  route holds it too;
+- a scene or map either route left is still reachable after collection;
+- either route reads nothing for an owner every route holds (`OWNERS_ALWAYS_HELD`:
+  environment sheets, tile chunks, figure cells), or the direct route reads no surfaces at
+  all, since every comparison would then pass on zeros;
+- the routes end at different milestones, a route does not finish, or a route leaves a
+  note (a door that would not open, a frame that threw).
+
+It compares the two routes with each other, never with stored megabytes, and takes about
+five minutes. `npm run verify:town-residency` covers the crowd's release.
+
 ## Indoor-only art is painted at the door
 
 Some art is only ever drawn inside a floor's buildings. On floor 3 that is
@@ -82,11 +215,14 @@ headless, on the first building entered), and on a later visit each one is eithe
 resident, so the request costs nothing, or was let go by the cache, so it is queued again
 and the card waits for it.
 
-Leaving the room releases nothing. The sheets stay resident and go idle, and the
-environment cache's least-recently-drawn eviction lets them go first if the floor ever
-needs the room. Releasing them on every exit would only repaint them on every entry,
-behind a card that would otherwise be up for a few frames; keeping them costs 10.9 MB
-that the budget has room for.
+Leaving the room does not release them on the spot: a door stepped out of and straight
+back into finds them resident. They go idle, and the idle sweep lets them go once nothing
+has drawn them for `RECENTLY_DRAWN_FRAMES` of idle frames, which do not pass while the
+party is indoors. A later visit's request for a sheet let go answers `owedOnDemand`: its
+repaint is queued among the waiting repaints, which the arrival's loading screen counts as
+owed (`environmentRepaintsWaiting` in `floorArrivalLoad.ts`), so the card stays up until it
+lands. The same holds for a room's furniture: `townInteriorProps` lets its frames go after
+half a minute of idle frames back outdoors, and they bake again as the room draws them.
 
 To add another indoor-only set: declare an `AssetGroup` in `ASSET_GROUPS`, list it in
 the floor's `interiorSpriteGroups`, and, if its sheets are painted, register their
@@ -165,50 +301,58 @@ request is a guess, and may only evict a row idle as long as the sweep's own
 loading screen, after a scene rebuild — reads every row as unused and evicts the party's
 own, which the first frames of play then re-bake on the render path.
 
-**A crowd is pinned, not swept.** The global ceiling, `CACHE_BUDGET_MEGABYTES` (188), is
-sized for a town plaza and for arriving on level 3. The crowd's pinned working set is the
-largest share of it (about 83 MB on arrival in the seed-7919 town at DPR 2, measured
-headless in 2026-10; the constant's JSDoc gives ~122 MB as its spread across world seeds),
-and beside it sits the player's
-own per-figure ceiling, `HUMAN_FIGURE_BUDGET_MEGABYTES` (67), so a town visit never leaves
-Carl's new gear nowhere to bake. Pinning only the citizens within a radius of the camera
-was measured and rejected: thousands of crowd draws became stand-in frames as citizens
-walked into the ring cold. The ten-second idle window is a false signal for a strolling crowd:
-a look worn by one or two citizens can go that long between draws of its rarer facing.
-So the town pins each citizen's `idle` and `walk` rows (`pinCitizenFigure`) and warms
-`talk` only when a citizen is frozen into a conversation (`prewarmAndPinCitizenTalk`).
+**A crowd is pinned, not swept.** The ten-second idle window is a false signal for a
+strolling crowd: a look worn by one or two citizens can go that long between draws of its
+rarer facing. So a crowd look near the party has its `idle` and `walk` rows pinned
+(`pinCitizenFigure`), and `talk` is warmed and pinned only while a citizen is frozen into a
+conversation (`prewarmAndPinCitizenTalk`, undone by `unpinCitizenTalk` when the
+conversation ends).
 
 - A pinned row is exempt from the idle sweep and from eviction.
 - A sweep that meets a pinned row must `continue` past it, not stop, or the older
   unpinned rows behind it are never released.
-- `TownLifeSystem.dispose` unpins on every path that rebuilds the town scene.
 - A pinned row that has gone missing is re-queued urgently the next time it is drawn.
 
-**Far from town the crowd stands down.** Briar Hollow is the town's neighbour, and a
-siege wave there is a dozen distinct creatures in several facings; with the crowd's
-~83 MB pinned off screen beside the party's ~45, the wave's rows evicted one another
-and were painted live every frame. `TownResidency` (owned by `DungeonScene` on the
-overworld) measures, for every look the crowd and the market's vendors wear, how far
-a camera would have to travel before a citizen wearing it came into view, from each
-crawler (a switch moves the camera to the other at once, unless it is knocked out)
-and from any warp landing that is coming (a recall channel, a death screen's save
-point). Past the hold distance plus a hysteresis it stands the look's rows down
-(`setFigureStatePinStandby`): still pinned against the sweep, so a quiet trip costs no
-re-bake, but evictable when something on screen needs the room. The hold distance is
-the walk the fastest crawler (Speed Fizz with the stall's boon) covers in
-`CROWD_REWARM_LEAD_SECONDS`; inside it a look is held again and any row missing is
-asked for urgently, nearest look first, within the ordinary prewarm budget. Outside
-it, and while no siege contests the room, missing rows are asked for speculatively, so
-they fill back in as the fight's rows are swept. Only behind the death screen, which
-covers the world, is the budget raised; a recall channel is played through and rewarms
-its landing at the ordinary budget. A warp that still lands among cold rows comes in
-behind the arrival's own loading screen (`ArrivalLoader.coverWarp`), which asks for
-the rows again, forgiving any the queue gave up on, for its first
-`WARP_COVER_FORGIVING_STEPS` frames, and lifts when they are warm, when the queue has
-given up on them again, or after `WARP_COVER_MAX_STEPS`: a cache
-that cannot make room leaves a few stand-ins rather than a screen that never lifts. Nothing changes inside the town: every
-look is within the hold distance of anywhere in it. `npm run verify:town-residency`
-counts the stand-ins after a walk home, a death, two recalls and a crawler switch.
+**The pins follow the party, in a city and out of one.** The one owner of crowd pins is
+the crowd's resident set (`CrowdResidentSet`), registered with `DungeonScene`'s
+`WorldResidency` wherever `TownLifeSystem` is built, over the street crowd and the
+market's vendors. Nothing pins or queues a crowd look on construction. A look is held
+while any citizen wearing it is within the hold ring, the walk the fastest crawler covers
+in `CROWD_REWARM_LEAD_SECONDS` (5), and released once every wearer is past it by
+`CROWD_RELEASE_HYSTERESIS_TILES` (12): released, its rows are unpinned
+(`unpinCitizenFigure`) and the idle sweep returns them. Inside the hold ring any missing
+row is asked for urgently, nearest look first. A look still held just outside it is baked
+back speculatively, unless the cache has run short of room overall within
+`IDLE_FRAMES_BEFORE_RELEASE` (`figureCacheRoomContested`), when the row would only be
+dropped again. A released look is never asked for. A purged recovery's new look is held
+by the set's next decision.
+
+Holding by distance is what leaves room for a fight elsewhere: a siege wave at Briar
+Hollow is a dozen distinct creatures in several facings, and with the whole crowd pinned
+off screen beside the party its rows evicted one another and were painted live every
+frame. Measured headless on floor 3, the crowd pins 83.0 MB on arrival in the plaza and
+about 54–63 MB at Briar Hollow (58.8 MB in the run in "What scenes hold"), where a few
+looks still have wearers within reach of the village. The figure varies by 5–9 MB between
+runs because it follows where the town's wanderers happen to stand when the party
+arrives. A street cast is a closed set of looks, so inside a city most looks have a
+wearer within reach of any point, and crowd memory follows distinct looks, not
+population.
+
+When looks the cache gave back are owed within the hold ring, the set raises the figure
+prewarm to `OWED_REWARM_BUDGET_MS` a frame, renewed on each decision: behind the death
+screen (`hurryWhileCovered`), and when a crawler, not only a landing, is near them
+(`hurryWhileApproached`), so a party walking back to a cold crowd meets it warm. A recall
+channel's landing alone never raises it. A warp that still lands among cold rows comes in
+behind the arrival's loading screen (see "Memory follows the party within a floor"): a
+cache that cannot make room leaves a few stand-ins rather than a screen that never lifts.
+`npm run verify:town-residency` counts the stand-ins after a walk home, a death, the
+recalls, a crawler switch, and a full-speed walk across a city of three by three towns
+from a cold arrival.
+
+The global ceiling, `CACHE_BUDGET_MEGABYTES` (188), is sized for a town plaza with its
+crowd pinned and for arriving on level 3. Beside the crowd sits the player's own
+per-figure ceiling, `HUMAN_FIGURE_BUDGET_MEGABYTES` (67), so a town visit never leaves
+Carl's new gear nowhere to bake.
 
 **A row nothing has room for is abandoned for a while.** After
 `PREWARM_CAPACITY_RETRIES` refusals the queue gives the row up and refuses it for
@@ -254,6 +398,12 @@ alone — no randomness, no clock, no module state, and nothing that advances a 
 paint time — must stay inside its declared cell, must not read caller `ctx` state, and
 must not call back into the cache. `scripts/gates-<x>.ts` holds its art gates and
 `npm run render:<x>` runs them and writes a contact sheet to `preview/`.
+
+**A finished figure with no role lives on the shelf.** `src/shelf/` keeps painted
+characters out of the game until they have a place in it, one folder per character.
+Nothing outside `src/shelf/` and `scripts/` may import from it, so a shelved figure is
+never in the bundle and never in the cache. Each keeps its art gates and render harness,
+so it still compiles and renders, and each has an entry in `src/shelf/README.md`.
 
 ## The ground is painted too
 
@@ -344,7 +494,7 @@ its layout is.
 The five boss rooms on floors 1 and 2 ship no images. Each room's floor, props,
 toppled and flooded states and effect frames are a sheet family in
 `src/sprites/sheets/bossRooms/<room>Sheets.ts`, keyed by its asset group
-(`boss_hoarder`, `boss_juicer`, `boss_krakaren`, `boss_grotesque_spider`,
+(`boss_trash_gremlin`, `boss_big_rooster`, `boss_krakaren`, `boss_grotesque_spider`,
 `boss_colosseum`) in `bossRoomSheets.ts`. `requestEnvironmentSheetsForGroups`
 paints them at floor load under `BOSS_ROOM_SALT`, so a room's art variation is
 repainted with its floor, while its collidable layout comes from doorway-relative
@@ -390,13 +540,22 @@ Two measurements decided that shape, and both are worth keeping:
   worst-frame limit exists to catch a pass that has grown to swallow its whole
   family, not to certify a frame time.
 
-**The sheet is one row, not two.** A building's `idle` is a single frame and its
-`life` row is up to twenty-four, so a two-row sheet of the wider of those was
-mostly transparent padding that still cost four bytes a pixel. Putting the idle
-frame in column zero and starting the life row at column one — a `colOffset` the
-loader has always understood — took the town's facades from 116 MB resident to
-62 MB. `registerPaintedSprite` and the residency report both size a sheet the way
-`frameOrigin` reads one, so neither can be fooled by the layout.
+**A building wears two sheets.** `<facade>` is its single idle frame (0.4–1.1 MB), and
+`<facade>_life` is its life row of 6–26 frames (lit windows, smoke, glow), each frame
+cropped to the rectangle the row inks and offset by a negative `tileX`/`tileY`
+(`lifeInkCrop` in `scripts/buildinggen/bake.ts`, checked by `gen:buildings`). The life
+rows are most of a building's bytes, and the crop takes floor 3's from 59.4 MB to 24 MB.
+The crop is aligned to multiples of `LIFE_CROP_ALIGNMENT_PX` (6), so a facade painted at
+48 px per tile and drawn at 32 resamples identically; `gates:environment-art` checks that
+every life row draws pixel-identical to its whole frames. The two are held by separate
+rings (see "Memory follows the party within a floor"): the still frame well ahead of the
+camera, because a facade let go and walked back to is a building missing for the frames
+its repaint takes, and the life row only while in view, since a building whose row has
+not landed only stands still for the 1–3 frames it takes to paint.
+`drawDecorationLifeLayer` draws the life row only when both sheets are resident, asking
+`hasEnvironmentSheet` first so no miss is recorded. Every landing of a building's sheet is
+announced by key (`environmentSheetsRepaintedSince`), so the overlay cache drops only that
+building's entries and the tile chunks are left alone.
 
 `overworld_main_tower` stays an authored PNG: it is not a generated facade.
 
@@ -434,7 +593,8 @@ The decision is made on every construction of the scene, not at the call sites
 that build it, and only when the arrival owes real work
 (`floorArrivalOwesWork`): a walk out of a building goes straight to play unless
 environment art is still owed. The town's crowd is rolled from the world seed, so the
-rebuilt scene's crowd is the same people with the same rows, still pinned; what else its
+rebuilt scene's crowd is the same people with the same rows, held again by its arrival
+decision before the idle sweep could take them; what else its
 figure queue owes is the respawned wild mobs' speculative rows, which the paced queue
 takes over the next seconds. `npm run verify:town-soak` walks through twenty doors on
 the real scenes and holds that: no loading screen on an exit, and frame cost, pins,
@@ -487,17 +647,26 @@ working set, so it stops growth without ever evicting something visible:
   over budget rather than opening a hole. A cache that bakes from a sheet and then draws
   its own copy (tile chunks, overlays) records the keys with `recordSheetLookups` and
   calls `touchEnvironmentSheets` on every cached draw, or a ground material on screen
-  only through a baked chunk would look idle. Floor 3 paints about 126 MB on arrival,
-  and 137 MB once its buildings have been visited; a walk around it draws most of that,
-  so the whole set is its working set and the limit is a ceiling against growth, not a
-  trim. `npm run verify:environment-sheet-budget` sums every floor's set, arrival plus
-  indoor-only groups, from the sheet plans' dimensions without painting anything, and
-  fails if one uses more than 90% of the budget.
-- **Tile chunks:** `MAX_CACHED_CHUNKS` (60; a 1080p view spans 20), measured at 20–34 MB.
+  only through a baked chunk would look idle. The budget bounds the working set around
+  the party, not the floor: the idle sweep and the facade resident sets keep resident
+  only the floor-wide sheets plus the buildings near the party, so a floor may paint more
+  than the budget in all. `npm run verify:environment-sheet-budget` measures, from the
+  sheet plans' dimensions and without painting anything, the largest set any position on
+  each floor needs at 1080p: every floor-wide sheet (ground, masks, the sheets placed over
+  the whole map, and the floor's indoor-only groups, since a visit indoors keeps the
+  floor outside resident), each building's still frame within the facade release ring
+  and its life row within the life release ring, each widened by the walk
+  `RELEASED_GRACE_FRAMES` allows. It fails if one uses more than 90% of the budget. It
+  measures the scaled city (`scripts/scaledCity.ts`) too, as painted and with every
+  block's facades its own, which is what a bigger floor brings. Measured 2026-10: floor 3
+  needs 102.5 MB, the per-block city 137.9 MB.
+- **Tile chunks:** `MAX_CACHED_CHUNKS` (60; a 1080p view spans 20), measured at 20–34 MB,
+  and each chunk let go after half a minute undrawn.
   **Tile overlays:** `OVERLAY_CACHE_BUDGET_MEGABYTES` (32), evicting in batches down to 24.
 - **Smaller pools:** town interior props 8 MB and nursery poses 4 MB, both through the
-  shared `RecentSurfaceCache` (`src/core/recentSurfaceCache.ts`: a byte budget, LRU, and
-  nothing drawn within its protected frames let go); figure rims
+  shared `RecentSurfaceCache` (`src/core/recentSurfaceCache.ts`: a byte budget, LRU,
+  nothing drawn within its protected frames let go, and optionally an idle window, which
+  the town interior props use); figure rims
   (`RIM_CACHE_BUDGET_MEGABYTES`, 8); Big Top props (6); held item art
   (`HELD_ART_BUDGET_MEGABYTES`, 4); title hero cells (32).
 
@@ -513,20 +682,43 @@ repaints. Never branch on platform; `&deviceMemory=<GB>` stands in for the brows
 report. The only other cut is the last resort of repeated canvas purges at the lowest
 variety tier, which halves the scale for the rest of the session ("Variety tiers").
 
-**What scenes hold**, tracked peak by `__perfMemory`, Chrome on an M1 Pro at DPR 2,
-2026-10:
+**What scenes hold.** On floor 3 and the scaled city, measured headless with
+`npm run report:residency` (node-canvas at DPR 2, 1280×720, world seed 1, `normal`,
+`sharp`; surface tallies, not Chrome's tracked peak), 2026-10:
 
-| scene                       | tracked peak | largest owners (MB)                                      |
-| --------------------------- | ------------ | -------------------------------------------------------- |
-| floor 1                     | ≈230 MB      | figure cells 111, sheets 45, chunks 29, lighting 24      |
-| floor 2, spider lab         | ≈270 MB      | figure cells 153, sheets 47, chunks 34, lighting 25      |
-| Juicer's gym                | ≈240 MB      |                                                          |
-| town, Big Top, casino floor | ≈383–391 MB  | figure cells 188 (at the ceiling), sheets 139, chunks 20 |
-| Briar Hollow siege          | ≈390–407 MB  | figure cells 188, sheets 139, chunks 30, main canvas 17  |
-| casino table (idle)         | ≈65 MB       |                                                          |
+| scene                                    | resident | largest owners (MB)                                                        |
+| ---------------------------------------- | -------- | -------------------------------------------------------------------------- |
+| floor 3, plaza on arrival                | 312.5 MB | figure cells 187.6 (83.0 pinned), sheets 86.8                              |
+| Briar Hollow, straight from the plaza    | 240.8 MB | figure cells 136.1 (58.8 pinned), sheets 59.9, ground parts 12.2, chunks 6 |
+| Briar Hollow, after twelve interiors     | 246.5 MB | figure cells 139.7 (63.4 pinned), sheets 59.9, ground parts 13.5, chunks 6 |
+| scaled city 3×3, west edge on arrival    | 215.3 MB | figure cells 107.0 (all pinned), sheets 91.6                               |
+| scaled city 3×3, east edge after walk    | 123.8 MB | figure cells 107.0 (all pinned), sheets 0 (the fixture draws no facades)   |
+| scaled city 5×5, east edge after walk    | 123.8 MB | figure cells 107.0 (all pinned)                                            |
+| scaled city 5×5, east edge, cold arrival | 113.3 MB | figure cells 96.5 (all pinned)                                             |
 
-The overworld scenes sit at the figure ceiling because the crowd's pinned rows fill it;
-in the town walk the cache still serves 99.4% of cells, with one direct paint in 30 s.
+Briar Hollow after the tour holds 5.8 MB more than straight from the plaza, the same
+before and after forced collections, and no scene or map the tour left is still
+reachable. What remains is bounded: a look whose wanderers stood nearer the village when
+the longer route arrived, the rooms' floor-material parts (`groundTileParts`, capped by
+entry count and keyed by material, cleared at the stairs), and scratch canvases grown to
+the largest figure painted indoors. Tile chunks, environment sheets and town interior
+props come out equal. Walking across the 5×5 city holds 10.5 MB more than arriving cold
+at its far edge, all of it the crowd's release hysteresis; walking across the 3×3 city
+holds exactly what arriving at its far edge does.
+
+Elsewhere, tracked peak by `__perfMemory`, Chrome on an M1 Pro at DPR 2, 2026-10:
+
+| scene               | tracked peak | largest owners (MB)                                 |
+| ------------------- | ------------ | --------------------------------------------------- |
+| floor 1             | ≈230 MB      | figure cells 111, sheets 45, chunks 29, lighting 24 |
+| floor 2, spider lab | ≈270 MB      | figure cells 153, sheets 47, chunks 34, lighting 25 |
+| Big Rooster's gym   | not measured | figure cells, offline: see below                    |
+| casino table (idle) | ≈65 MB       |                                                     |
+
+The gym has no Chrome measurement yet. Offline, G9 in `scripts/gates-rooster.ts` sums
+every declared state's cells at tile scale 32: Big Rooster's whole runtime set is
+23.1 MB of the 24 MB per-figure budget, Little Rooster's 2.1 MB and Slightly Bent
+Rooster's 3.7 MB.
 
 ## Variety tiers
 
@@ -553,7 +745,7 @@ citizen picks its look:
   repaints anyway, so nobody sees it swap. A tier step from lag alone re-dresses no one;
   what spawns after it wears the new tier.
 - Bosses, bounty marks, the Necromancer, quest-critical mobs and boss adds are never
-  substituted — the Hoarder's cockroaches stay cockroaches. That is the kind's
+  substituted — the Trash Gremlin's cockroaches stay cockroaches. That is the kind's
   `protected` field on its `MOB_KINDS` entry (`src/levels/mobKinds.ts`), and
   `standInFor` (`src/levels/ladder.ts`) honours it whatever a ladder says.
 - A stand-in must already be part of the same encounter at that tier, so a substitution
@@ -599,8 +791,8 @@ citizen picks its look:
   spaced out by `MEMORY_PRESSURE_RECOVERY_SPACING_MS`. A memory-pressure request never
   holds off the purge check. These steps apply whatever the preset, `sharp` included:
   a dropped canvas is worse than fewer looks. After a purge only the
-  environment sheets drawn within `RECENTLY_DRAWN_FRAMES` are repainted at once; the
-  rest repaint on miss, so a recovery does not climb straight back to the peak that was
+  environment sheets drawn within `ON_SCREEN_FRAMES` (a second of render frames) and
+  those still owed are repainted at once; the rest repaint when next wanted, so a recovery does not climb straight back to the peak that was
   just lost.
 - **Last resort:** once `PURGES_AT_MINIMAL_TIER_BEFORE_BUDGET_CUT` purges have been
   answered at tier 4, `cutMemoryBudgetsForSession()` (`src/core/deviceMemoryBudget.ts`)

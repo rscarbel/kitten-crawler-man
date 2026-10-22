@@ -108,7 +108,7 @@ function buildingMusic(name: string): ReadonlyArray<MusicTrackId> {
   return isTownBuilding ? DEFAULT_BUILDING_MUSIC_TRACKS : [];
 }
 
-/** A tattoo from the parlour; the Desperado Pass tattoo is the Juicer's reward, not the parlour's. */
+/** A tattoo from the parlour; the Desperado Pass tattoo is Big Rooster's reward, not the parlour's. */
 function hasParlourTattoo(snap: PlayerSnapshot): boolean {
   return (snap.tattoo ?? null) !== null || (snap.skillTattoo ?? null) !== null;
 }

@@ -1302,8 +1302,10 @@ export class GoblinPrisonSystem {
     return [];
   }
 
-  /** Stops the positional loops and lets go of the bus. */
+  /** Stops the positional loops, lets go of the bus and gives back the prison's baked art. */
   dispose(): void {
+    this.ground.release();
+    this.lighting.release();
     for (const off of this.unsubscribe) off();
     this.unsubscribe.length = 0;
     const audio = this.deps.audioScope;

@@ -1553,7 +1553,7 @@ function aegisTicksAfterSecond(mob: Goblin): number {
  * A shield fairy that keeps its ward list through a called-off fight, so a
  * fairy reset mid-encounter would come back with its slots already spent.
  */
-class WardHoardingShieldFairy extends ShieldFairy {
+class WardKeepingShieldFairy extends ShieldFairy {
   protected override clearEncounterPhase(): void {
     const held = [...this.warded];
     super.clearEncounterPhase();
@@ -1577,11 +1577,11 @@ function checkResetAndDepartures(report: FairyGateReport): void {
     "a called-off fight empties the fairy's ward list",
     `${reset.heldAfter} still held`,
   );
-  const hoarder = wardsAfterReset((x, y) => new WardHoardingShieldFairy(x, y, TILE_SIZE));
+  const trashGremlin = wardsAfterReset((x, y) => new WardKeepingShieldFairy(x, y, TILE_SIZE));
   report.checkCatches(
-    hoarder.wardedFirst && hoarder.heldAfter === 0,
+    trashGremlin.wardedFirst && trashGremlin.heldAfter === 0,
     'a fairy that keeps its ward list through the reset is caught holding it',
-    `${hoarder.heldAfter} still held`,
+    `${trashGremlin.heldAfter} still held`,
   );
 
   const departed = secondAllyAfterFirstLeaves(true);

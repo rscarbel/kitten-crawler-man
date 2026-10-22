@@ -27,7 +27,7 @@ export type LocationKind =
 /** Where the active crawler is, in words the AI can repeat back. */
 export interface SemanticLocation {
   kind: LocationKind;
-  /** e.g. "safe room", "boss arena (the hoarder)", "General Store", "dark corridor near stairwell". */
+  /** e.g. "safe room", "boss arena (the trashGremlin)", "General Store", "dark corridor near stairwell". */
   label: string;
   inSafeRoom: boolean;
   inBossArena: boolean;

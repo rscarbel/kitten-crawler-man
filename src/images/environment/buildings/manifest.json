@@ -29,10 +29,18 @@
       "idle": {
         "row": 0,
         "frameCount": 1
-      },
+      }
+    }
+  },
+  "barracks_life": {
+    "frameWidth": 336,
+    "frameHeight": 168,
+    "tileX": -6,
+    "tileY": -90,
+    "tileScale": 48,
+    "states": {
       "life": {
         "row": 0,
-        "colOffset": 1,
         "frameCount": 8
       }
     }
@@ -67,10 +75,18 @@
       "idle": {
         "row": 0,
         "frameCount": 1
-      },
+      }
+    }
+  },
+  "blacksmith_life": {
+    "frameWidth": 294,
+    "frameHeight": 240,
+    "tileX": -48,
+    "tileY": 0,
+    "tileScale": 48,
+    "states": {
       "life": {
         "row": 0,
-        "colOffset": 1,
         "frameCount": 8
       }
     }
@@ -105,10 +121,18 @@
       "idle": {
         "row": 0,
         "frameCount": 1
-      },
+      }
+    }
+  },
+  "desperado_club_life": {
+    "frameWidth": 354,
+    "frameHeight": 426,
+    "tileX": -48,
+    "tileY": 0,
+    "tileScale": 48,
+    "states": {
       "life": {
         "row": 0,
-        "colOffset": 1,
         "frameCount": 6
       }
     }
@@ -143,10 +167,18 @@
       "idle": {
         "row": 0,
         "frameCount": 1
-      },
+      }
+    }
+  },
+  "temple_life": {
+    "frameWidth": 264,
+    "frameHeight": 300,
+    "tileX": -78,
+    "tileY": 0,
+    "tileScale": 48,
+    "states": {
       "life": {
         "row": 0,
-        "colOffset": 1,
         "frameCount": 6
       }
     }
@@ -220,10 +252,18 @@
       "idle": {
         "row": 0,
         "frameCount": 1
-      },
+      }
+    }
+  },
+  "sleeping_cat_inn_life": {
+    "frameWidth": 252,
+    "frameHeight": 264,
+    "tileX": -18,
+    "tileY": 0,
+    "tileScale": 48,
+    "states": {
       "life": {
         "row": 0,
-        "colOffset": 1,
         "frameCount": 26
       }
     }
@@ -258,10 +298,18 @@
       "idle": {
         "row": 0,
         "frameCount": 1
-      },
+      }
+    }
+  },
+  "blackwood_lodge_life": {
+    "frameWidth": 252,
+    "frameHeight": 126,
+    "tileX": -42,
+    "tileY": -108,
+    "tileScale": 48,
+    "states": {
       "life": {
         "row": 0,
-        "colOffset": 1,
         "frameCount": 9
       }
     }
@@ -296,10 +344,18 @@
       "idle": {
         "row": 0,
         "frameCount": 1
-      },
+      }
+    }
+  },
+  "plumbline_farm_life": {
+    "frameWidth": 84,
+    "frameHeight": 66,
+    "tileX": -162,
+    "tileY": 0,
+    "tileScale": 48,
+    "states": {
       "life": {
         "row": 0,
-        "colOffset": 1,
         "frameCount": 7
       }
     }
@@ -334,10 +390,18 @@
       "idle": {
         "row": 0,
         "frameCount": 1
-      },
+      }
+    }
+  },
+  "cartwrights_workshop_life": {
+    "frameWidth": 48,
+    "frameHeight": 198,
+    "tileX": -294,
+    "tileY": 0,
+    "tileScale": 48,
+    "states": {
       "life": {
         "row": 0,
-        "colOffset": 1,
         "frameCount": 6
       }
     }
@@ -372,10 +436,18 @@
       "idle": {
         "row": 0,
         "frameCount": 1
-      },
+      }
+    }
+  },
+  "herb_remedy_life": {
+    "frameWidth": 168,
+    "frameHeight": 48,
+    "tileX": -84,
+    "tileY": -132,
+    "tileScale": 48,
+    "states": {
       "life": {
         "row": 0,
-        "colOffset": 1,
         "frameCount": 7
       }
     }
@@ -410,10 +482,18 @@
       "idle": {
         "row": 0,
         "frameCount": 1
-      },
+      }
+    }
+  },
+  "general_store_life": {
+    "frameWidth": 198,
+    "frameHeight": 84,
+    "tileX": -156,
+    "tileY": -66,
+    "tileScale": 48,
+    "states": {
       "life": {
         "row": 0,
-        "colOffset": 1,
         "frameCount": 6
       }
     }
@@ -448,10 +528,18 @@
       "idle": {
         "row": 0,
         "frameCount": 1
-      },
+      }
+    }
+  },
+  "horned_flagon_life": {
+    "frameWidth": 306,
+    "frameHeight": 210,
+    "tileX": -36,
+    "tileY": 0,
+    "tileScale": 48,
+    "states": {
       "life": {
         "row": 0,
-        "colOffset": 1,
         "frameCount": 24
       }
     }
@@ -486,10 +574,18 @@
       "idle": {
         "row": 0,
         "frameCount": 1
-      },
+      }
+    }
+  },
+  "hildas_cottage_life": {
+    "frameWidth": 36,
+    "frameHeight": 36,
+    "tileX": -228,
+    "tileY": 0,
+    "tileScale": 48,
+    "states": {
       "life": {
         "row": 0,
-        "colOffset": 1,
         "frameCount": 7
       }
     }
@@ -524,10 +620,18 @@
       "idle": {
         "row": 0,
         "frameCount": 1
-      },
+      }
+    }
+  },
+  "sunken_stump_life": {
+    "frameWidth": 60,
+    "frameHeight": 48,
+    "tileX": -138,
+    "tileY": -120,
+    "tileScale": 48,
+    "states": {
       "life": {
         "row": 0,
-        "colOffset": 1,
         "frameCount": 6
       }
     }
@@ -562,10 +666,18 @@
       "idle": {
         "row": 0,
         "frameCount": 1
-      },
+      }
+    }
+  },
+  "millers_farm_life": {
+    "frameWidth": 150,
+    "frameHeight": 42,
+    "tileX": -60,
+    "tileY": 0,
+    "tileScale": 48,
+    "states": {
       "life": {
         "row": 0,
-        "colOffset": 1,
         "frameCount": 7
       }
     }
@@ -600,10 +712,18 @@
       "idle": {
         "row": 0,
         "frameCount": 1
-      },
+      }
+    }
+  },
+  "quiet_needle_life": {
+    "frameWidth": 240,
+    "frameHeight": 156,
+    "tileX": -96,
+    "tileY": -78,
+    "tileScale": 48,
+    "states": {
       "life": {
         "row": 0,
-        "colOffset": 1,
         "frameCount": 8
       }
     }

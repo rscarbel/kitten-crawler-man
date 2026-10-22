@@ -3,7 +3,7 @@
  * rack holds, and whether each squat rack still has its plates.
  *
  * The racks are tiles, drawn by the map's Y-sorted decoration pass, which is
- * handed a tile and nothing else. `JuicerRoomSystem` owns the state and writes
+ * handed a tile and nothing else. `GymRoomSystem` owns the state and writes
  * it here every frame it changes; the tile painter reads it. Keyed by tile, and
  * cleared whenever a gym is built, so a previous floor's racks cannot leak into
  * this one's.

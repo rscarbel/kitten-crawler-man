@@ -2143,7 +2143,7 @@ export class GameMap {
     this._tilesOfTypeCache = new Map();
     // Both caches capture the grid's width when they are built, so a replaced
     // structure must not keep them.
-    this.releaseTileArtCaches();
+    this.releaseTileArt();
     this.maskHeight = this.structure.length;
     this.maskWidth = this.structure[0]?.length ?? 0;
     const cellCount = this.maskWidth * this.maskHeight;
@@ -2836,13 +2836,19 @@ export class GameMap {
   }
 
   /**
-   * Drops every pre-rendered chunk/overlay block so the next `renderCanvas`
-   * re-bakes everything from scratch. For a review render that must show only
-   * fresh art on its next frame; a live scene marks the art stale instead with
-   * {@link markTileArtStale}, which never costs a screenful of baking at once.
+   * Gives back every baked chunk and overlay block at once, zero-sizing their
+   * backing stores rather than leaving them for a collection, which a browser
+   * may run long after. The next `renderCanvas` re-bakes from scratch.
+   *
+   * For a map no scene will draw again, and for a review render that must show
+   * only fresh art on its next frame. A live scene marks the art stale instead
+   * with {@link markTileArtStale}, which never costs a screenful of baking at once.
    */
-  invalidateAllTileArt(): void {
-    this.releaseTileArtCaches();
+  releaseTileArt(): void {
+    this._chunkCache?.dispose();
+    this._overlayCache?.dispose();
+    this._chunkCache = null;
+    this._overlayCache = null;
   }
 
   /**
@@ -2853,32 +2859,17 @@ export class GameMap {
    * until each re-bake fits a frame's budget, so a landing is "wrong for a
    * frame or two", never a hitch. Sprite buildings are left alone unless
    * `includeFacades` says their sheets may have changed too: each one's entry
-   * draws only its own facade sheet, which {@link invalidateFacadeArt} covers.
+   * draws only its own facade sheet, whose landing the overlay cache follows
+   * by key.
    */
   markTileArtStale(options: { readonly includeFacades: boolean }): void {
     this._chunkCache?.markAllStale();
     this._overlayCache?.markAllStale(options.includeFacades);
   }
 
-  /**
-   * Drops the overlay entries drawn from one building facade sheet, for when
-   * that sheet lands. The chunks are left alone: the ground under a building is
-   * baked from the ground sheets, never from its facade.
-   */
-  invalidateFacadeArt(spriteKey: string): void {
-    this._overlayCache?.invalidateSpriteKey(spriteKey);
-  }
-
   /** Sets what decides whether decorations draw their animated layer, read on every frame. */
   setTileArtDetail(fullDetail: () => boolean): void {
     this.tileArtFullDetail = fullDetail;
-  }
-
-  private releaseTileArtCaches(): void {
-    this._chunkCache?.dispose();
-    this._overlayCache?.dispose();
-    this._chunkCache = null;
-    this._overlayCache = null;
   }
 
   /**

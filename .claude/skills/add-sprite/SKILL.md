@@ -55,10 +55,21 @@ look at cannot be different art.
   is painted behind a building's loading card instead of on the floor's
   arrival. See "Indoor-only art is painted at the door" in
   `docs/asset-management.md`. `npm run verify:environment-sheet-budget` checks
-  every floor's set, arrival plus indoor, fits the sheet cache's budget.
+  that the largest set any position on a floor needs resident (floor-wide
+  sheets plus the facades within `EnvironmentSheetResidentSet`'s ring) fits
+  the sheet cache's budget; a floor's total may exceed it. Sheets nothing
+  draws for `RECENTLY_DRAWN_FRAMES` of idle time are let go by the idle sweep.
+  Art placed in the world whose memory should follow the party registers a
+  resident set with the scene's `WorldResidency`: a family in a floor's
+  `spriteGroups` is placed over the whole map and held for the visit by
+  `environmentSheetPlacements` with no extra code, and a building's facade
+  sheets are placed over each building that wears them. A new kind of art with
+  positions of its own, too large to hold floor-wide, needs placements from
+  where it is laid out (see "Memory follows the party within a floor" in
+  `docs/asset-management.md`).
   Boss-room families are the exception to registering one by one: each room's
   plans live in `src/sprites/sheets/bossRooms/<room>Sheets.ts`, keyed by its
-  asset group (`boss_hoarder`, `boss_juicer`, `boss_krakaren`,
+  asset group (`boss_trash_gremlin`, `boss_big_rooster`, `boss_krakaren`,
   `boss_grotesque_spider`, `boss_colosseum`) in `bossRoomSheets.ts`, and
   `requestEnvironmentSheetsForGroups` paints every declared one in a single
   loop. `npm run gates:boss-rooms` checks those sheets against the manifest.

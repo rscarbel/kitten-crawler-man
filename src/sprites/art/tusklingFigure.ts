@@ -67,11 +67,9 @@ const FIGURE_SCALE = 0.71;
  * The cell the poses and the gore pieces are painted into, and where the
  * creature's own tile sits inside it.
  *
- * These four numbers were measured by the bake this figure replaces — the
- * widest pose plus padding, quantised — and `scripts/parity-figure-sheet.ts` is
- * what proved the painter still fills exactly that cell. The gates re-check
- * that nothing paints against the edge, which is what would say a pose has
- * outgrown them.
+ * These four numbers are the widest pose plus padding, quantised. The gates
+ * check that nothing paints against the edge, which is what would say a pose
+ * has outgrown them.
  */
 const FRAME_WIDTH = 104;
 const FRAME_HEIGHT = 88;

@@ -66,10 +66,10 @@ const MIN_NAMES_PER_TYPE = 5;
 /**
  * The band a bounty boss's XP has to sit in.
  *
- * Read off the game's existing named bosses rather than invented: the Hoarder is
+ * Read off the game's existing named bosses rather than invented: the Trash Gremlin is
  * the floor of that set at 500 and the Grotesque Spider the ceiling at 2000. A
  * bounty is meant to be a strong source of XP, so the floor here is well above
- * the Hoarder's.
+ * the Trash Gremlin's.
  */
 const MIN_BOSS_XP = 1000;
 const MAX_BOSS_XP = 2000;

@@ -21,8 +21,8 @@ export type AssetGroup =
   | 'dungeon_common'
   | 'floor1_tileset'
   | 'floor2_tileset'
-  | 'boss_hoarder'
-  | 'boss_juicer'
+  | 'boss_trash_gremlin'
+  | 'boss_big_rooster'
   | 'boss_krakaren'
   | 'boss_grotesque_spider'
   | 'boss_colosseum';
@@ -85,6 +85,23 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'sleeping_cat_inn',
     'sunken_stump',
     'temple',
+    // Each facade's lit windows, smoke and glow, a sheet of their own so a
+    // building far from the screen holds only its still frame.
+    'barracks_life',
+    'blackwood_lodge_life',
+    'blacksmith_life',
+    'cartwrights_workshop_life',
+    'desperado_club_life',
+    'general_store_life',
+    'herb_remedy_life',
+    'hildas_cottage_life',
+    'horned_flagon_life',
+    'millers_farm_life',
+    'plumbline_farm_life',
+    'quiet_needle_life',
+    'sleeping_cat_inn_life',
+    'sunken_stump_life',
+    'temple_life',
     'bunting_11',
     'bunting_16',
     'gate_arch_across_2',
@@ -255,17 +272,17 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'bathroom_decals',
   ],
 
-  boss_hoarder: [
-    'hoard_pile',
-    'hoard_pile_fill',
-    'hoard_tower',
-    'hoard_tower_fall_east',
-    'hoard_tower_fall_south',
-    'hoard_tower_fall_north',
+  boss_trash_gremlin: [
+    'trash_pile',
+    'trash_pile_fill',
+    'trash_tower',
+    'trash_tower_fall_east',
+    'trash_tower_fall_south',
+    'trash_tower_fall_north',
     'garbage_bag',
-    'hoarder_floor',
-    'hoarder_nest',
-    'hoard_barricade',
+    'trash_gremlin_floor',
+    'trash_gremlin_nest',
+    'trash_barricade',
   ],
   // Level 2's spider lab: the dressing that only exists because the boss does.
   // The boss herself, her spit, the life machines, the small-spider adds and the
@@ -283,7 +300,7 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
   // The other boss rooms' painted dressing. Each group also names the sheets
   // `requestEnvironmentSheetsForGroups` paints for it, so a key listed here is
   // one `verify:assets` can see belongs to a floor.
-  boss_juicer: [
+  boss_big_rooster: [
     'gym_rack',
     'gym_squat_rack',
     'gym_cable_stack',
@@ -335,9 +352,11 @@ export const MOB_SPRITE_KEYS: Readonly<Record<MobKind, readonly SpriteKey[]>> = 
   mantid: [],
   mantis: [],
   rat: [],
-  the_hoarder: [],
+  trash_gremlin: [],
   cockroach: [],
-  juicer: [],
+  big_rooster: [],
+  little_rooster: [],
+  slightly_bent_rooster: [],
   troglodyte: [],
   tuskling: [],
   ball_of_swine: [],

@@ -34,6 +34,8 @@ const SLOW_GATES: ReadonlySet<string> = new Set([
   'verify:floor-sweep',
   'verify:town-soak',
   'verify:plaza-perf',
+  'verify:residency',
+  'verify:town-residency',
 ]);
 
 /** Gates that read a changed file from disk instead of importing it. */

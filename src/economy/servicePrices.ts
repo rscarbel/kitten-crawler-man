@@ -40,8 +40,7 @@ export const SERVICE_PRICES = {
   /** The plaza seer charges for the theatre; Hilda reads at her own table for less. */
   fortune: { plaza_seer: 3, hedge_witch: 2 },
   /**
-   * Canon: the escort pair is 500. It is waived once the party's casino wagers
-   * exceed that same figure.
+   * The escort pair is waived once the party's casino wagers exceed its price.
    */
   vip_lounge: { heal: 40, cocktail: 60, bodyguard_pair: 500 },
   /**

@@ -192,7 +192,7 @@ export function prewarmSkyfowlCastMember(id: SkyfowlLookId): void {
   }
 }
 
-/** The rows {@link prewarmSkyfowlCastMember} warms and {@link pinSkyfowlCastMember} pins. */
+/** The rows {@link prewarmSkyfowlCastMember} warms. */
 export function skyfowlCastMemberRows(id: SkyfowlLookId): DrawnFigureRow[] {
   const figure = skyfowlCastFigure(id);
   return PREWARM_CAST_ROLES.flatMap((role) =>
@@ -201,33 +201,21 @@ export function skyfowlCastMemberRows(id: SkyfowlLookId): DrawnFigureRow[] {
 }
 
 /**
- * Exempts a cast member's idle and walk rows from the cache's idle-release
- * sweep — see `pinTownCastLook`, the human cast's own equivalent, for why.
- */
-export function pinSkyfowlCastMember(id: SkyfowlLookId): void {
-  const figure = skyfowlCastFigure(id);
-  for (const role of PREWARM_CAST_ROLES) {
-    for (const view of PREWARM_VIEWS) {
-      pinFigureState(figure, castStateName(role, view));
-    }
-  }
-}
-
-/**
  * Warms and pins one cast member's `talk` row in the facing it is about to be
  * drawn in — see `prewarmAndPinTownCastTalk`, the human cast's own
  * equivalent, for why this is called at the moment of freezing into a
- * conversation rather than folded into `pinSkyfowlCastMember`.
+ * conversation rather than held with the look's idle and walk rows.
  */
 export function prewarmAndPinSkyfowlTalk(
   id: SkyfowlLookId,
   facingX: number,
   facingY: number,
-): void {
+): DrawnFigureRow {
   const figure = skyfowlCastFigure(id);
   const key = skyfowlCastStateFor('talk', facingX, facingY);
   // Urgent: a conversation is opening on this exact row right now, not at
   // some eventual point a background warm-up would otherwise get to.
   prewarmFigureState(figure, key, undefined, true);
   pinFigureState(figure, key);
+  return drawnFigureRow(figure, key);
 }

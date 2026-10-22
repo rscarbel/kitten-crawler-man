@@ -55,7 +55,7 @@ export const MORDECAI_CHARACTER: AICharacterDefinition = {
     },
     goals: [
       'Keep Carl and Donut alive to the next floor.',
-      'Get them to stop hoarding potions and start using them.',
+      'Get them to stop sitting on potions and start drinking them.',
       'Not get attached. Again.',
     ],
   },

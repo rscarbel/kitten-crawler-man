@@ -41,7 +41,7 @@ const { GoblinArcher } = await import('../src/creatures/GoblinArcher.js');
 const { GraveBull } = await import('../src/creatures/GraveBull.js');
 const { GrotesqueSpider } = await import('../src/creatures/GrotesqueSpider.js');
 const { HeatherTheBear } = await import('../src/creatures/HeatherTheBear.js');
-const { Juicer } = await import('../src/creatures/Juicer.js');
+const { BigRooster } = await import('../src/creatures/BigRooster.js');
 const { KrakarenClone } = await import('../src/creatures/KrakarenClone.js');
 const { KrakarenTentacle } = await import('../src/creatures/KrakarenTentacle.js');
 const { Krasue } = await import('../src/creatures/Krasue.js');
@@ -67,7 +67,7 @@ const { SkyFowl, SKYFOWL_TOUGH_FAMILY } = await import('../src/creatures/SkyFowl
 const { SmallSpider } = await import('../src/creatures/SmallSpider.js');
 const { StiltClown } = await import('../src/creatures/StiltClown.js');
 const { TerrorTheClown } = await import('../src/creatures/TerrorTheClown.js');
-const { TheHoarder } = await import('../src/creatures/TheHoarder.js');
+const { TrashGremlin } = await import('../src/creatures/TrashGremlin.js');
 const { TheLich } = await import('../src/creatures/TheLich.js');
 const { Troglodyte } = await import('../src/creatures/Troglodyte.js');
 const { Tuskling } = await import('../src/creatures/Tuskling.js');
@@ -206,12 +206,12 @@ function subjects(): Subject[] {
     unmarked(new Remex(...at), 'remex'),
     unmarked(new SkyFowl(...at, SKYFOWL_TOUGH_FAMILY.canonical), 'skyfowl'),
     unmarked(new Tuskling(...at), 'tuskling'),
-    unmarked(new TheHoarder(...at), 'the Hoarder'),
+    unmarked(new TrashGremlin(...at), 'the Trash Gremlin'),
     unmarked(new SmallSpider(...at), 'small spider'),
     unmarked(new GrotesqueSpider(...at), 'grotesque spider'),
     unmarked(new MissQuill(...at, () => undefined), 'Miss Quill'),
     unmarked(new Necromancer(...at, Math.random), 'necromancer'),
-    unmarked(new Juicer(...at), 'the Juicer'),
+    unmarked(new BigRooster(...at), 'Big Rooster'),
     unmarked(new BallOfSwine(...at), 'Ball of Swine'),
     unmarked(new KrakarenClone(...at), 'Krakaren'),
     unmarked(surfaced(new KrakarenTentacle(...at)), 'Krakaren tentacle'),

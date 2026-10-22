@@ -4,8 +4,8 @@
  */
 
 export const BOSS_IDENTITY_COLOR = {
-  the_hoarder: '#c084fc',
-  juicer: '#fb923c',
+  trash_gremlin: '#c084fc',
+  big_rooster: '#fb923c',
   ball_of_swine: '#f87171',
   krakaren_clone: '#e05090',
 } as const;

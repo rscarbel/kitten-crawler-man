@@ -89,7 +89,7 @@ const BODY_DISCOVERY_RANGE_TILES = 5;
 const GUMGUM_DOOR_OFFSET = { dx: 3, dy: 0 };
 /** GumGum loiters this far south of the club door when the hook meets there. */
 const GUMGUM_CLUB_DOOR_OFFSET = { dx: 0, dy: 2 };
-/** The club building whose entrance hosts GumGum's book-accurate approach. */
+/** The club building whose entrance hosts GumGum's approach. */
 const GUMGUM_HOOK_CLUB_NAME = 'The Desperado Club';
 /**
  * The alley where her body turns up.
@@ -301,8 +301,8 @@ export class MurderMysteryQuestSystem implements GameSystem {
       },
     });
     const pubDoor = this.doorTileOf('The Sunken Stump Pub');
-    // Book-accurate hook: GumGum approaches at the Desperado Club when it exists
-    // on this floor, else the pub (Carl's Doomsday Scenario). Gated on the pub
+    // GumGum's opening approach happens at the Desperado Club when it exists
+    // on this floor, else at the pub. Gated on the pub
     // too, so on a pub-less map the alley/body anchor and the "is this quest
     // viable?" check below resolve without a club. Dropping this club lookup
     // forces the pub hook; nothing else in the quest depends on it.

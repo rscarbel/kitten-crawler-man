@@ -74,9 +74,9 @@ const GUT: Ramp = { dark: '#5a1218', mid: '#9c2a2f', light: '#c05a52' };
  * Ball radius in tiles, shared with the runtime.
  *
  * A tile carries about 6'4" of creature — the Tuskling is 4'6" at 0.71 of a tile —
- * so the source's "almost 15 feet" is a hair under 2.4 tiles across. Authored a
- * touch over that: at sprite scale the extra reads as mass, and it still leaves
- * the sheet smaller than the one it replaces.
+ * so a ball almost 15 feet across is a hair under 2.4 tiles across. Authored a
+ * touch over that: at sprite scale the extra reads as mass, and the widest
+ * state still fits inside its per-state memory budget.
  */
 export const BALL_RADIUS = BOS_BODY_RADIUS_TILES;
 
@@ -116,7 +116,7 @@ const LOBE_DEPTH = 0.026;
  * Lobe counts around the circumference — three overlapping bulge frequencies.
  *
  * High rather than low. Three lobes around a circle is a triangle; eleven is a
- * ripple, which is what the source describes.
+ * ripple.
  */
 const LOBE_HARMONICS = [5, 8, 13] as const;
 
@@ -357,8 +357,8 @@ function traceBody(ctx: Ctx, shape: BodyShape, grow: number): void {
 /**
  * Where the flesh stops holding its mid tone and starts turning into the rim.
  *
- * Late, so that most of the visible ball is *pink*. The description leads with
- * "rippling pink flesh", and a ball that spends two thirds of its area falling
+ * Late, so that most of the visible ball is *pink*. Pink flesh is the first
+ * thing it has to read as, and a ball that spends two thirds of its area falling
  * off toward the outline is a maroon ball with a pink dot in the middle.
  */
 const RIM_FALLOFF_START = 0.74;

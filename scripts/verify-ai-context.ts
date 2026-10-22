@@ -64,7 +64,7 @@ const FAKE_LEVEL_TIMER_MINUTES = 40;
 const LOW_HP = 5;
 const FULL_HP = 100;
 const POTIONS_HELD = 3;
-const HOARDING_WAIT_MS = 9_000;
+const STOCKPILING_WAIT_MS = 9_000;
 const BATCH_LIMIT = 3;
 const MANY_EVENTS = 7;
 /** The safe-room fight, the death and Donut's potion: all Mordecai saw in the witness-scoping run. */
@@ -480,7 +480,7 @@ function verifyWitnessScoping(): void {
   bus.emit('combatStarted', { attacker: 'Human', mobType: 'Goblin' });
   scene.enterSafeRoom(true);
   bus.emit('combatStarted', { attacker: 'Human', mobType: 'Goblin' });
-  bus.emit('bossFightInitiated', { bossType: 'the_hoarder' });
+  bus.emit('bossFightInitiated', { bossType: 'trash_gremlin' });
   scene.enterSafeRoom(false);
   bus.emit('playerDied', { fallen: pm.human, cause: 'goblin' });
   const events = eventsIn(builder.tick());
@@ -542,7 +542,7 @@ function verifyRollups(): void {
     advance(KILL_SPACING_MS);
   }
   bus.emit('mobKilled', {
-    mob: new Dummy('The Hoarder', true),
+    mob: new Dummy('The Trash Gremlin', true),
     killer: pm.human,
     killType: null,
     topDamageDealer: pm.human,
@@ -586,15 +586,17 @@ function verifyDerivedEvents(): void {
   scene.live.carl.healthPotions = POTIONS_HELD;
   bus.emit('healthLow', { player: 'Human', hp: LOW_HP, maxHp: FULL_HP });
   builder.tick();
-  advance(HOARDING_WAIT_MS);
-  const hoarding = eventsIn(builder.tick()).filter((event) => event.type === 'potionHoarding');
-  check(hoarding.length === 1, 'sitting on potions at low HP is reported');
+  advance(STOCKPILING_WAIT_MS);
+  const stockpiling = eventsIn(builder.tick()).filter(
+    (event) => event.type === 'potionStockpiling',
+  );
+  check(stockpiling.length === 1, 'sitting on potions at low HP is reported');
 
   bus.emit('healthLow', { player: 'Human', hp: LOW_HP, maxHp: FULL_HP });
   bus.emit('healingPotionUsed', { player: 'Human', hpRestored: FULL_HP / 2 });
-  advance(HOARDING_WAIT_MS);
-  const drank = eventsIn(builder.tick()).filter((event) => event.type === 'potionHoarding');
-  check(drank.length === 0, 'drinking one in time is not hoarding');
+  advance(STOCKPILING_WAIT_MS);
+  const drank = eventsIn(builder.tick()).filter((event) => event.type === 'potionStockpiling');
+  check(drank.length === 0, 'drinking one in time is not stockpiling');
 
   const nextFloor = new FakeScene(pm.human);
   nextFloor.session = {

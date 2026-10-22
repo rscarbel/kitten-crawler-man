@@ -17,6 +17,7 @@ import type { LoadTask } from '../core/LoadRunner';
 import { renderQuality } from '../core/RenderQuality';
 import { viewportHeight, viewportWidth } from '../core/Viewport';
 import { holdFigureIdleSweep, releaseFigureIdleSweep } from '../sprites/figure/figureFrameCache';
+import { holdIdleClock, releaseIdleClock } from '../core/renderFrameClock';
 import type { Surface, UiRoot } from '../ui/core/UiRoot';
 import { LoadingOverlay } from '../ui/LoadingScreen';
 import type { ArrivalLoadingScreen } from '../levels/types';
@@ -92,10 +93,11 @@ export class ArrivalLoader {
     this.overlay = overlay;
     this.overlaySurface = overlay.surface(ARRIVAL_LOADING_SURFACE_ID);
     // Its frames are neither play nor a sign that anything went unused: the
-    // render-quality probe would judge the loader's frames, and the figure
-    // cache's idle sweep would release the rows being warmed for play.
+    // render-quality probe would judge the loader's frames, and the idle
+    // sweeps would release the rows and sheets being warmed for play.
     renderQuality.beginLoadingCover();
     holdFigureIdleSweep();
+    holdIdleClock();
   }
 
   /** True until the arrival's work is done: the world must neither update nor draw. */
@@ -173,5 +175,6 @@ export class ArrivalLoader {
   private releaseHolds(): void {
     renderQuality.endLoadingCover();
     releaseFigureIdleSweep();
+    releaseIdleClock();
   }
 }

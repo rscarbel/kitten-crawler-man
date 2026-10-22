@@ -67,9 +67,9 @@ import {
   BROKEN_CHAIR,
   BROKEN_BOOKSHELF,
   CRAWLER_SIGN,
-  HOARD_PILE,
-  HOARD_TOWER,
-  HOARD_BAG,
+  TRASH_PILE,
+  TRASH_TOWER,
+  TRASH_BAG,
   GYM_RACK,
   GYM_SQUAT_RACK,
   GYM_CABLE_STACK,
@@ -185,12 +185,12 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   BROKEN_CHAIR,
   BROKEN_BOOKSHELF,
   CRAWLER_SIGN,
-  // Boss-room props. The walkable boss-room decals (`HOARD_RUBBLE`,
+  // Boss-room props. The walkable boss-room decals (`TRASH_RUBBLE`,
   // `GYM_TREADMILL_BELT`, `KRAKAREN_WADE`, `LAB_WEB`, `ARENA_MUD`) are
   // deliberately absent: each is ground a fight is meant to cross.
-  HOARD_PILE,
-  HOARD_TOWER,
-  HOARD_BAG,
+  TRASH_PILE,
+  TRASH_TOWER,
+  TRASH_BAG,
   GYM_RACK,
   GYM_SQUAT_RACK,
   GYM_CABLE_STACK,
@@ -232,7 +232,7 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
  * such prop in a boss room would become cover that makes the fight easier.
  */
 const SIGHT_TRANSPARENT_TILE_TYPES: readonly number[] = [
-  HOARD_BAG,
+  TRASH_BAG,
   GYM_RACK,
   KRAKAREN_CONSOLE,
   LAB_BENCH,

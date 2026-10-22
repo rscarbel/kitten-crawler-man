@@ -4690,10 +4690,23 @@ const PROP_FRAME_BUDGET_MEGABYTES = 8;
 /** A frame drawn this frame or the one before is never let go. */
 const PROP_FRAME_PROTECTED_FRAMES = 1;
 
+const PROP_FRAME_IDLE_RELEASE_SECONDS = 30;
+const PROP_FRAME_IDLE_FRAMES_PER_SECOND = 60;
+/**
+ * Idle frames a baked prop frame is kept undrawn. The idle clock stands still
+ * while the party is indoors, so this is half a minute back outside: a door
+ * stepped out of and straight back into finds its furniture baked. Measured
+ * headless on floor 3, a party that toured twelve interiors still held the
+ * full 8 MB at Briar Hollow, 35 seconds' wait later, without it.
+ */
+const PROP_FRAME_IDLE_RELEASE_FRAMES =
+  PROP_FRAME_IDLE_RELEASE_SECONDS * PROP_FRAME_IDLE_FRAMES_PER_SECOND;
+
 const frameCache = new RecentSurfaceCache<CachedPropFrame>(
   PROP_FRAME_BUDGET_MEGABYTES * BYTES_PER_MEGABYTE,
   PROP_FRAME_PROTECTED_FRAMES,
   (frame) => frame.canvas,
+  PROP_FRAME_IDLE_RELEASE_FRAMES,
 );
 // A purge blanks every baked frame; they repaint as they are next drawn.
 onCanvasRecovery((cause) => {

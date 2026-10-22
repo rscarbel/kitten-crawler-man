@@ -4,8 +4,8 @@ import {
   VOID_TYPE,
   SAFE_ROOM_FLOOR,
   SAFE_ROOM_THRESHOLD,
-  HOARDER_FLOOR,
-  JUICER_BOSS_ROOM_FLOOR,
+  TRASH_GREMLIN_FLOOR,
+  GYM_FLOOR,
   KRAKAREN_BOSS_ROOM_FLOOR,
   METAL_WALL,
   ARENA_CAGE,
@@ -849,14 +849,14 @@ function seatStairwellsByIsolation(
 
 function bossFloorForType(type: string): number {
   switch (type) {
-    case 'the_hoarder':
-      return HOARDER_FLOOR;
-    case 'juicer':
-      return JUICER_BOSS_ROOM_FLOOR;
+    case 'trash_gremlin':
+      return TRASH_GREMLIN_FLOOR;
+    case 'big_rooster':
+      return GYM_FLOOR;
     case 'krakaren_clone':
       return KRAKAREN_BOSS_ROOM_FLOOR;
     default:
-      return HOARDER_FLOOR;
+      return TRASH_GREMLIN_FLOOR;
   }
 }
 
@@ -1277,7 +1277,7 @@ function reserveArena(
   siting: ArenaSiting,
 ): ArenaReservation | null {
   // Scored rather than first-fit: the arena is meant to sit at the far end of the
-  // floor's paths, the way the Juicer does on floor 1, and taking the first legal
+  // floor's paths, the way Big Rooster does on floor 1, and taking the first legal
   // spiral step put it wherever the search happened to look first — sometimes a
   // couple of rooms past the gauntlet exit, where a crawler trips over it on the way
   // out. Distance from that exit is the score, and the whole attempt budget is spent

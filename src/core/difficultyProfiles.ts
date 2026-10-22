@@ -80,7 +80,7 @@ const COCKROACH_KNOCKOUT_RELIEF_MS_EASY = COCKROACH_RECHARGE_MS + 1;
 const COCKROACH_KNOCKOUT_RELIEF_MS_HARD_TOKEN = 1;
 
 /**
- * UI labels for each tier, per the Dungeon Crawler Carl framing. The single
+ * UI labels for each tier. The single
  * source both the Settings tab's toggle and the `?difficulty` overlay read,
  * so the two can never drift out of sync with each other.
  */

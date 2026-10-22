@@ -1,5 +1,5 @@
 /**
- * Painters for the Juicer's gym: the dumbbell rack, the squat rack, the cable
+ * Painters for Big Rooster's gym: the dumbbell rack, the squat rack, the cable
  * stack, the treadmill belt and console, the boombox, the roll-down shutter,
  * the bowled plate, chalk puffs and the cracked mirror.
  *

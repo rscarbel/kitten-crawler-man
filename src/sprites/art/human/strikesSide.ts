@@ -506,7 +506,7 @@ export function hookSide(frame: number): CarlPose {
 // ── Punt ─────────────────────────────────────────────────────────────────────
 
 /**
- * The punt: the canon rat-punting kick. Weight rocks onto the lead foot, the
+ * The punt: the rat-punting kick. Weight rocks onto the lead foot, the
  * rear knee chambers up in front of him, and the foot is driven out low —
  * knee-high on a man, which is where a rat or a grub actually is — then
  * carries on up through it before the knee folds back and the foot returns

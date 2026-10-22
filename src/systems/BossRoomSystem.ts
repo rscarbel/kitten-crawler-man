@@ -2,18 +2,26 @@ import { displayHp } from '../core/crawlerFormulas';
 import { BOSS_IDENTITY_COLOR, SEALED_ROOM_BORDER_COLOR } from '../sprites/bossRoomColors';
 import type { GameMap } from '../map/GameMap';
 import type { DamageSource, Player } from '../Player';
-import { TILE_SIZE } from '../core/constants';
+import { MAX_MOB_CULL_MARGIN_TILES, TILE_SIZE } from '../core/constants';
 import { applySpawnDifficulty } from '../core/difficultyProfiles';
 import { clamp } from '../utils';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
 import { hasLivingBossHealer } from '../creatures/fairies/bossHealerBond';
 import type { Fairy, FairyConfinement } from '../creatures/fairies/Fairy';
-import { POINT_BLANK_TILES, TheHoarder } from '../creatures/TheHoarder';
+import { POINT_BLANK_TILES, TrashGremlin } from '../creatures/TrashGremlin';
 import { Cockroach } from '../creatures/Cockroach';
 import { prewarmCockroach } from '../sprites/cockroachSprite';
-import { prewarmHoarderVomit } from '../sprites/hoarderSprite';
-import { prewarmHoarderBile } from '../sprites/hoarderBileSprite';
+import {
+  pinTrashGremlinEncounterRows,
+  prewarmTrashGremlinGore,
+  prewarmTrashGremlinLocomotion,
+  prewarmTrashGremlinSummon,
+  prewarmTrashGremlinVomit,
+  unpinTrashGremlinEncounterRows,
+} from '../sprites/trashGremlinSprite';
+import { pinGremlinBile, prewarmGremlinBile, unpinGremlinBile } from '../sprites/gremlinBileSprite';
+import { viewportHeight, viewportWidth } from '../core/Viewport';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { MiniMapSystem } from './MiniMapSystem';
@@ -23,8 +31,8 @@ import type { GameSystem, SystemContext } from './GameSystem';
 import type { MobRoster } from './kits/SceneWorld';
 import type { EventBus } from '../core/EventBus';
 import { worldText } from '../ui/world/worldText';
-import { drawHoarderAcidPool, drawHoarderBile } from '../sprites/hoarderBileSprite';
-import { bileLobHeight, drawBileShadow, isHoardJunk, stopsBile } from './bossRooms/hoarderBile';
+import { drawGremlinAcidPool, drawGremlinBile } from '../sprites/gremlinBileSprite';
+import { bileLobHeight, drawBileShadow, stopsBile } from './bossRooms/gremlinBile';
 import {
   KrakarenClone,
   MAX_GUARD_TENTACLES,
@@ -63,18 +71,18 @@ interface VomitProjectile {
   ttl: number;
   age: number;
   /**
-   * The Hoarder that brought it up, so a hit can be recorded against her.
+   * The Trash Gremlin that brought it up, so a hit can be recorded against it.
    *
-   * A bolus in the air outlives her — this system keeps flying it after she
-   * dies — so this may reference a dead mob, which is fine: it is only ever read
-   * to note blood. Held on the record rather than on her precisely because a
+   * A bolus in the air outlives the gremlin — this system keeps flying it after
+   * it dies — so this may reference a dead mob, which is fine: it is only ever read
+   * to note blood. Held on the record rather than on the mob precisely because a
    * projectile stored on a mob is deleted in mid-air when that mob dies.
    */
-  readonly owner: TheHoarder;
+  readonly owner: TrashGremlin;
   /**
    * The last point of its flight that was over open floor. A bolus flies over
-   * her junk, so where it stops can be above a heap, and the pool it leaves
-   * goes down here instead of on top of the heap.
+   * the gremlin's junk, so where it stops can be above a pile, and the pool it
+   * leaves goes down here instead of on top of the pile.
    */
   lastOpenX: number;
   lastOpenY: number;
@@ -85,11 +93,11 @@ interface AcidPuddle {
   y: number;
   ttl: number;
   /**
-   * The Hoarder whose bolus poured it. A pool routinely outlives her, which is
-   * why burning in one only counts as her blow while she is still alive — see
+   * The Trash Gremlin whose bolus poured it. A pool routinely outlives it, which is
+   * why burning in one only counts as its blow while it is still alive — see
    * `tickAcidPuddles`.
    */
-  readonly owner: TheHoarder;
+  readonly owner: TrashGremlin;
 }
 
 export interface BossRoomState {
@@ -122,8 +130,8 @@ export interface BossRoomCheckpoint {
 }
 
 export const BOSS_META: Record<string, { displayName: string; color: string }> = {
-  the_hoarder: { displayName: 'THE HOARDER', color: BOSS_IDENTITY_COLOR.the_hoarder },
-  juicer: { displayName: 'THE JUICER', color: BOSS_IDENTITY_COLOR.juicer },
+  trash_gremlin: { displayName: 'THE TRASH GREMLIN', color: BOSS_IDENTITY_COLOR.trash_gremlin },
+  big_rooster: { displayName: 'BIG ROOSTER', color: BOSS_IDENTITY_COLOR.big_rooster },
   ball_of_swine: { displayName: 'BALL OF SWINE', color: BOSS_IDENTITY_COLOR.ball_of_swine },
   krakaren_clone: { displayName: 'KRAKAREN CLONE', color: BOSS_IDENTITY_COLOR.krakaren_clone },
 };
@@ -196,7 +204,7 @@ function rectConfinement(bounds: { x: number; y: number; w: number; h: number })
  * At `ACID_PUDDLE_RADIUS` each and no two of them overlapping, this is about a
  * fifth of the boss room's floor. Much more and the pools stop being a hazard
  * to walk around and become a wall the melee half of the party cannot reach
- * her through.
+ * the gremlin through.
  */
 const MAX_ACID_PUDDLES = 6;
 /**
@@ -234,26 +242,26 @@ const PUDDLE_CROWDING_RADIUS = ACID_PUDDLE_RADIUS * POOLS_TANGENT_MULTIPLIER;
 const SLAM_HAZARD_MARGIN_PX = TILE_SIZE;
 const SLAM_HAZARD_RADIUS_PX = SLAM_KILL_RADIUS_PX + SLAM_HAZARD_MARGIN_PX;
 /**
- * No acid forms this close to a living Hoarder, so a bolus landing at the edge
+ * No acid forms this close to a living Trash Gremlin, so a bolus landing at the edge
  * of the bubble still cannot burn back into the ring a melee attacker stands in.
- * Otherwise a boss who backs into a corner spits a moat around herself and the
- * only way in is through it, which is exactly how the fight played.
+ * Otherwise a boss that backs into a corner spits a moat around itself and the
+ * only way in is through it.
  *
- * The same rule decides who she is willing to aim at, so it is her constant.
+ * The same rule decides who it is willing to aim at, so it is its constant.
  */
-const HOARDER_CLEAR_RADIUS = TILE_SIZE * POINT_BLANK_TILES;
+const TRASH_GREMLIN_CLEAR_RADIUS = TILE_SIZE * POINT_BLANK_TILES;
 
 // Rendering constants
 const BOSS_REVIVE_HP_FRACTION = 0.3;
 const DEFEAT_TIMER_FRAMES = 300;
 const ACID_DAMAGE_FLASH_FRAMES = 8;
 /**
- * Attributed to The Hoarder so the death screen can name what dissolved you, but
+ * Attributed to the Trash Gremlin so the death screen can name what dissolved you, but
  * marked undodgeable: a puddle you are standing in is not something you sidestep.
  */
 const ACID_PUDDLE_DAMAGE_SOURCE: DamageSource = {
   kind: 'mob',
-  mobType: 'TheHoarder',
+  mobType: 'TrashGremlin',
   attackType: 'acid_puddle',
   undodgeable: true,
 };
@@ -261,7 +269,7 @@ const ACID_PUDDLE_DAMAGE_SOURCE: DamageSource = {
 /** A direct hit is dodgeable; standing in the pool it leaves is not. */
 const VOMIT_IMPACT_DAMAGE_SOURCE: DamageSource = {
   kind: 'mob',
-  mobType: 'TheHoarder',
+  mobType: 'TrashGremlin',
   attackType: 'acid_puddle',
 };
 const COCKROACH_MOB_CLEANUP_THRESHOLD = 200;
@@ -379,6 +387,16 @@ const BORDER_CROSS_LINE_WIDTH = 2;
 
 // Corner X markers
 
+/**
+ * How near the camera's crawler a Trash Gremlin must be for it to be drawn: the
+ * screen's half-diagonal, plus the overhang its art may reach past its tile.
+ * Read each frame, since the viewport changes with the window.
+ */
+function trashGremlinSightingRangePx(): number {
+  const halfDiagonalPx = Math.hypot(viewportWidth(), viewportHeight()) / 2;
+  return halfDiagonalPx + TILE_SIZE * MAX_MOB_CULL_MARGIN_TILES;
+}
+
 export class BossRoomSystem implements GameSystem, GroundHazardSource {
   private readonly states: BossRoomState[];
   private readonly bossTypes: string[];
@@ -409,14 +427,14 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     );
 
   /**
-   * Whether this point is inside acid *now*. Handed to the Hoarder so she does
+   * Whether this point is inside acid *now*. Handed to the Trash Gremlin so it does
    * not waste a spit on someone the floor is already burning; bound once rather
-   * than rebuilt per frame, because she holds it across frames.
+   * than rebuilt per frame, because it holds it across frames.
    *
    * A separate question from crowding and a much tighter radius: crowding asks
    * whether two pools would overlap, this asks whether a player is standing in
-   * one. Answered at the crowding radius she would decline to shoot at anyone
-   * within four tiles of any pool, which is most of the room she fights in.
+   * one. Answered at the crowding radius it would decline to shoot at anyone
+   * within four tiles of any pool, which is most of the room it fights in.
    */
   private readonly isStandingInAcidAt = (x: number, y: number): boolean =>
     this.acidPuddles.some((puddle) => Math.hypot(puddle.x - x, puddle.y - y) < ACID_PUDDLE_RADIUS);
@@ -640,7 +658,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     this.lootSealWarningCooldown[roomIndex] = 0;
   }
 
-  /** The Hoarder's bile in the air, read by her lair so a bolus can knock a tower over. */
+  /** The Trash Gremlin's bile in the air, read by its lair so a bolus can knock a tower over. */
   bileInFlight(): ReadonlyArray<Readonly<Pick<VomitProjectile, 'x' | 'y' | 'dx' | 'dy'>>> {
     return this.vomitProjectiles;
   }
@@ -774,7 +792,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
 
   /**
    * Which boss types have been killed, by the snake_case ids from
-   * `levelDef.bossRooms[].type` (`'the_hoarder'`, `'juicer'`, `'krakaren_clone'`).
+   * `levelDef.bossRooms[].type` (`'trash_gremlin'`, `'big_rooster'`, `'krakaren_clone'`).
    *
    * A set of what is dead rather than a widening of `bossTypes` to public: that
    * is the question every caller actually has, and it is the only answer that
@@ -925,8 +943,8 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
    * Unlike {@link isAnyPlayerInBossRoom} this does not require the room to be
    * locked, because the question it answers is about the moment *before* the
    * fight: a boss with a ten-tile aggro range can see down a corridor through
-   * its own doorway, and the Hoarder was spitting acid across the threshold at
-   * a party that had not come in yet — walling off her own entrance with pools
+   * its own doorway, and the Trash Gremlin would spit acid across the threshold at
+   * a party that had not come in yet — walling off its own entrance with pools
    * the companion AI would not path through.
    */
   sharesRoomWithPlayer(
@@ -1028,7 +1046,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       // Start a new fight when a player enters a room with a living boss.
       if (!state.locked && bossAlive && (humanInRoom || catInRoom)) {
         state.locked = true;
-        this.sealedBossType = this.bossTypes[i] ?? 'the_hoarder';
+        this.sealedBossType = this.bossTypes[i] ?? 'trash_gremlin';
         this.fightListener?.onSeal(i);
         // They walked in, so the lesson landed. A later retreat and a second
         // poke earns it again.
@@ -1038,20 +1056,26 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         this.catIsInsider[i] = catInRoom;
         if (!this.enteredRooms.has(i)) {
           this.enteredRooms.add(i);
-          this.newlyLockedBossType = this.bossTypes[i] ?? 'the_hoarder';
+          this.newlyLockedBossType = this.bossTypes[i] ?? 'trash_gremlin';
         }
         // Sealing the room is the moment with real lead on the swarm: the
-        // Hoarder's first purge is five seconds of fighting away, and she is
-        // the only thing in the game that makes a cockroach. Her heave and its
-        // acid are warmed here for the same reason and not at her own telegraph,
-        // which is eighty frames against the several hundred milliseconds those
-        // rows cost to paint; her first bolus is three and a half seconds out,
-        // which is lead enough and short enough that the idle sweep cannot take
-        // the rows back before she throws.
-        if (boss instanceof TheHoarder) {
+        // Trash Gremlin's first purge is five seconds of fighting away, and its
+        // piles are the only thing in the game that makes a cockroach. Its
+        // shriek, its spit and the acid are warmed here for the same reason and
+        // not at their own telegraphs, which are a second or less against the
+        // several hundred milliseconds those rows cost to paint; its first
+        // bolus is three and a half seconds out. Its stance and scurry are
+        // warmed too, with the seven-second intro as their lead, and so are its
+        // severed pieces: a burst of damage can take it from full health to
+        // dead without an enrage frame between to warm them on. Its rows and
+        // the bile's stay pinned while the room is sealed.
+        if (boss instanceof TrashGremlin) {
           prewarmCockroach();
-          prewarmHoarderVomit();
-          prewarmHoarderBile();
+          prewarmTrashGremlinLocomotion();
+          prewarmTrashGremlinSummon();
+          prewarmTrashGremlinGore();
+          prewarmTrashGremlinVomit();
+          prewarmGremlinBile();
         }
         // Her body is the most expensive thing in the fleet to paint, and her
         // severed pieces are all drawn on the single frame she comes apart with
@@ -1180,7 +1204,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         this.miniMap.revealBossNeighborhood(state.bounds);
         if (boss) this.newlyDefeatedRooms.push({ roomIndex: i, boss });
         this.fightListener?.onBossDefeated(i);
-        // Her swarm outlives her by exactly as long as it takes to die. Killed
+        // The gremlin's swarm outlives it by exactly as long as it takes to die. Killed
         // through `justDied` they come apart and leave the mob grid the way
         // anything else does, rather than being spliced out of existence. The
         // kill is unattributed unless the party had already been hitting that
@@ -1210,7 +1234,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         // ledger the companion reads as "blood has been drawn here", and the
         // phase the boss latched on the way down. Refilling HP alone left both,
         // so an aborted fight permanently re-commissioned the companion against
-        // a boss standing at full health — and handed the party a Juicer back
+        // a boss standing at full health — and handed the party back a boss
         // at full health that was still permanently enraged.
         // A boss already dead with its healer still up stays dead: healing it
         // here would stand the corpse back up.
@@ -1229,7 +1253,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     }
 
     this.cacheLiveKrakarens(mobs);
-    this.spawnHoarderCockroaches(ctx.roster);
+    this.syncTrashGremlins(ctx.roster, human.isActive ? human : cat);
     this.spawnKrakarenTentacles(ctx.roster);
     this.tickSummonedMobTTLs(mobs, mobGrid);
     this.processVomitProjectiles(mobs, human, cat);
@@ -1275,8 +1299,8 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     this.unenteredRegenDelay[roomIndex] = 0;
     boss.healAndForgetFight();
     this.fightListener?.onFightAborted(roomIndex);
-    // The ground this boss flooded goes with its wounds — a restored Hoarder
-    // standing behind a wall of her own acid has sealed the doorway the notice
+    // The ground this boss flooded goes with its wounds — a restored Trash Gremlin
+    // standing behind a wall of its own acid has sealed the doorway the notice
     // is telling the player to use. Filtered by owner rather than emptied:
     // these two arrays are shared by every room on the floor, and truncating
     // them would delete another boss's live hazards mid-fight.
@@ -1444,28 +1468,45 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     }
   }
 
-  private spawnHoarderCockroaches(roster: MobRoster): void {
+  /**
+   * Tells each live Trash Gremlin whether its roach cap is full and where the
+   * acid lies, and takes the bile it released this frame. Its roaches are not
+   * drained here: every one comes out of its lair's junk.
+   *
+   * Also the one place that sees every live gremlin every frame wherever the
+   * party is, so it asks for each one's stance and scurry before it can come
+   * on screen, and holds its fight's rows in the cache while any fight is
+   * sealed.
+   */
+  private syncTrashGremlins(roster: MobRoster, viewer: HumanPlayer | CatPlayer): void {
     const { mobs } = roster;
     // Counted rather than filtered into a new array, and only once a live
-    // Hoarder is known to exist: this runs every frame on every floor, and on
-    // the three floors with no Hoarder on them the filter was allocating an
-    // array per frame to learn nothing.
-    let hoarders = 0;
+    // gremlin is known to exist: this runs every frame on every floor, and on
+    // the floors with no gremlin a filter would allocate an array per frame to
+    // learn nothing.
+    let gremlins = 0;
     let liveCount = 0;
     for (const mob of mobs) {
       if (!mob.isAlive) continue;
       if (mob instanceof Cockroach) liveCount++;
-      else if (mob instanceof TheHoarder) hoarders++;
+      else if (mob instanceof TrashGremlin) gremlins++;
     }
-    if (hoarders === 0) return;
+    if (gremlins === 0) {
+      this.setTrashGremlinRowsPinned(false);
+      return;
+    }
 
+    const sightingRangePx = trashGremlinSightingRangePx();
+    let anySealed = false;
     for (const mob of mobs) {
-      if (!(mob instanceof TheHoarder) || !mob.isAlive) continue;
+      if (!(mob instanceof TrashGremlin) || !mob.isAlive) continue;
+
+      if (Math.hypot(mob.x - viewer.x, mob.y - viewer.y) <= sightingRangePx) mob.warmForSighting();
+      if (this.isBossInLockedRoom(mob)) anySealed = true;
 
       mob.cockroachAtCap = liveCount >= mob.cockroachCap;
       mob.isAcidCovered = this.isStandingInAcidAt;
 
-      // Enraged she brings up a spread.
       for (const p of mob.pendingVomitProjectiles) {
         this.vomitProjectiles.push({
           x: p.x,
@@ -1480,52 +1521,47 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         });
       }
       mob.pendingVomitProjectiles.length = 0;
-
-      if (mob.cockroachSpawns.length === 0) continue;
-      let spawned = liveCount;
-      for (const sp of mob.cockroachSpawns) {
-        if (spawned >= mob.cockroachCap) break;
-        // A roach brought up over one of her heaps lands at her feet instead:
-        // dropping it would let the junk she stands beside thin her swarm.
-        const overJunk = isHoardJunk(
-          this.gameMap,
-          Math.floor(sp.x / TILE_SIZE),
-          Math.floor(sp.y / TILE_SIZE),
-        );
-        const landX = overJunk ? mob.x + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET : sp.x;
-        const landY = overJunk ? mob.y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET : sp.y;
-        const tileX = Math.floor(landX / TILE_SIZE);
-        const tileY = Math.floor(landY / TILE_SIZE);
-        if (this.gameMap.isWalkable(tileX, tileY)) {
-          // Through the roster rather than by hand: a roach that never received
-          // the scene's spell context walks straight through a protective shell.
-          const cockroach = spawnMob(
-            'cockroach',
-            { x: tileX, y: tileY },
-            this.gameMap,
-            liveSpawnContext('boss:the_hoarder'),
-          );
-          cockroach.isBossAdd = true;
-          roster.add(cockroach);
-          spawned++;
-        }
-      }
-      mob.cockroachSpawns = [];
     }
+    this.setTrashGremlinRowsPinned(anySealed);
+  }
+
+  /**
+   * Whether the gremlin's and its bile's rows are pinned. Set from whether a
+   * fight is sealed each frame rather than at each way a fight can end — a
+   * kill, an abort, a checkpoint restore, a heal-and-forget — so no path out
+   * of a fight can leave them pinned.
+   */
+  private trashGremlinRowsPinned = false;
+
+  private setTrashGremlinRowsPinned(pinned: boolean): void {
+    if (pinned === this.trashGremlinRowsPinned) return;
+    this.trashGremlinRowsPinned = pinned;
+    if (pinned) {
+      pinTrashGremlinEncounterRows();
+      pinGremlinBile();
+    } else {
+      unpinTrashGremlinEncounterRows();
+      unpinGremlinBile();
+    }
+  }
+
+  /** Lets go of anything this system still holds in the figure cache. */
+  dispose(): void {
+    this.setTrashGremlinRowsPinned(false);
   }
 
   /**
    * True when a fresh pool here would land on the ground around a living
-   * Hoarder. Tested where a bolus lands, so it keeps that ground clear at the
-   * moment the acid appears; she is free to walk onto her own pools afterwards,
-   * and a player chasing her is free to follow.
+   * Trash Gremlin. Tested where a bolus lands, so it keeps that ground clear at the
+   * moment the acid appears; it is free to walk onto its own pools afterwards,
+   * and a player chasing it is free to follow.
    */
-  private isUnderfootOfHoarder(mobs: readonly Mob[], x: number, y: number): boolean {
+  private isUnderfootOfTrashGremlin(mobs: readonly Mob[], x: number, y: number): boolean {
     for (const mob of mobs) {
-      if (!(mob instanceof TheHoarder) || !mob.isAlive) continue;
+      if (!(mob instanceof TrashGremlin) || !mob.isAlive) continue;
       const centreX = mob.x + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET;
       const centreY = mob.y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET;
-      if (Math.hypot(centreX - x, centreY - y) < HOARDER_CLEAR_RADIUS) return true;
+      if (Math.hypot(centreX - x, centreY - y) < TRASH_GREMLIN_CLEAR_RADIUS) return true;
     }
     return false;
   }
@@ -1571,15 +1607,15 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         const puddleX = landing.x;
         const puddleY = landing.y;
         // Crowding is decided here rather than where the bolus was aimed: it
-        // flies until a wall, a player or its lifetime stops it, so the Hoarder
+        // flies until a wall, a player or its lifetime stops it, so the gremlin
         // cannot know where it will come down, and the enraged spread's flanks
         // miss the target by construction and fly the whole way. A pool poured
         // into a live pool adds no hazard and takes another lane away, and one
-        // at her own feet takes away the only ground anyone can hit her from.
+        // at its own feet takes away the only ground anyone can hit it from.
         if (
           this.acidPuddles.length < MAX_ACID_PUDDLES &&
           !this.isPuddleCrowdedAt(puddleX, puddleY) &&
-          !this.isUnderfootOfHoarder(mobs, puddleX, puddleY)
+          !this.isUnderfootOfTrashGremlin(mobs, puddleX, puddleY)
         ) {
           this.acidPuddles.push({ x: puddleX, y: puddleY, ttl: PUDDLE_TTL, owner: proj.owner });
         }
@@ -1616,7 +1652,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     return { x: proj.lastOpenX, y: proj.lastOpenY };
   }
 
-  /** Where the Hoarder's acid lies, read by her lair's gates. */
+  /** Where the Trash Gremlin's acid lies, read by its lair's gates. */
   acidPools(): ReadonlyArray<Readonly<Pick<AcidPuddle, 'x' | 'y'>>> {
     return this.acidPuddles;
   }
@@ -1643,9 +1679,9 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     if (frames % ACID_DAMAGE_INTERVAL === 0) {
       const connected = player.takeDamage(ACID_DAMAGE, ACID_PUDDLE_DAMAGE_SOURCE);
       player.damageFlash = ACID_DAMAGE_FLASH_FRAMES;
-      // Standing in a live Hoarder's acid is being in a fight with the Hoarder,
-      // so the burn counts as her blow. Only while she lives: a pool outlasts
-      // her, and reviving the flag for a dead boss would keep pointing the
+      // Standing in a live Trash Gremlin's acid is being in a fight with it,
+      // so the burn counts as its blow. Only while it lives: a pool outlasts
+      // it, and reviving the flag for a dead boss would keep pointing the
       // companion at a corpse.
       if (connected && puddle.owner.isAlive) puddle.owner.noteStruckPlayer(player);
     }
@@ -1687,8 +1723,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
   }
 
   /**
-   * Drains the Krakaren's pending guard tentacles, the way the Hoarder's
-   * roaches are drained.
+   * Drains the Krakaren's pending guard tentacles.
    *
    * The map test is `hasRoomToMove` rather than a bare walkability check: a
    * one-tile pocket between props is walkable ground that would root an add the
@@ -1802,7 +1837,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
 
   renderObjects(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     for (let i = 0; i < this.states.length; i++) {
-      const bossType = this.bossTypes[i] ?? 'the_hoarder';
+      const bossType = this.bossTypes[i] ?? 'trash_gremlin';
       this.renderSingleBossRoomObjects(ctx, camX, camY, this.states[i].bounds, bossType);
     }
     this.renderAcidPuddles(ctx, camX, camY);
@@ -1812,7 +1847,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
 
   renderProjectiles(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     for (const proj of this.vomitProjectiles) {
-      drawHoarderBile(
+      drawGremlinBile(
         ctx,
         proj.x - camX,
         proj.y - camY - bileLobHeight(proj.age, PROJECTILE_TTL),
@@ -1825,7 +1860,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
 
   private renderAcidPuddles(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     for (const puddle of this.acidPuddles) {
-      drawHoarderAcidPool(
+      drawGremlinAcidPool(
         ctx,
         puddle.x - camX,
         puddle.y - camY,
@@ -1892,7 +1927,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     bossType: string,
   ): void {
     const ts = TILE_SIZE;
-    const meta = BOSS_META[bossType] ?? BOSS_META.the_hoarder;
+    const meta = BOSS_META[bossType] ?? BOSS_META.trash_gremlin;
     const bannerX = (b.x + Math.floor(b.w / 2)) * ts - camX;
     const bannerY = (b.y - 1) * ts - camY;
     worldText(ctx, 'BOSS ROOM', {
@@ -1965,8 +2000,8 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     if (!relevantState) return null;
 
     const relevantStateIdx = this.states.indexOf(relevantState);
-    const bossType = this.bossTypes[relevantStateIdx] ?? 'the_hoarder';
-    const meta = BOSS_META[bossType] ?? BOSS_META.the_hoarder;
+    const bossType = this.bossTypes[relevantStateIdx] ?? 'trash_gremlin';
+    const meta = BOSS_META[bossType] ?? BOSS_META.trash_gremlin;
 
     const boss = mobs.find((m) => m.isBoss && this.isEntityInRoom(m, relevantState.bounds));
     if (!boss) return null;

@@ -21,7 +21,7 @@ import {
   GARDEN_PLANTING,
   GOBLIN_TENT,
   HIGHLAND_GRASS,
-  HOARDER_FLOOR,
+  TRASH_GREMLIN_FLOOR,
   HOLLOW_DECAL,
   HOLLOW_GATE,
   HOLLOW_PALISADE,
@@ -146,7 +146,7 @@ export function minimapTileColor(type: number): string {
     case LAB_STATION_WHITEBOARD:
     case LAB_STATION_LANTERN:
       return '#4a5256';
-    case HOARDER_FLOOR:
+    case TRASH_GREMLIN_FLOOR:
       return '#2a1808';
     case TOWN_WALL:
       return '#8a8175';

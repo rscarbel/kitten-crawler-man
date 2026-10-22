@@ -8,7 +8,7 @@
  *
  * Each room's own knowledge — how to find it, which systems dress it, how to
  * drive it into a fight state, and its extra gates — lives in its own module
- * beside this one (`hoarder.ts`, `juicer.ts`, …), so each room can change
+ * beside this one (`trashGremlin.ts`, `gym.ts`, …), so each room can change
  * without touching the others.
  */
 
@@ -52,7 +52,7 @@ import type { BossRoomAssetGroup } from '../../src/sprites/sheets/bossRoomSheets
 import type { FrameEdge } from '../../src/sprites/sheets/propSheetPlan.js';
 import { asGameContext, type NodeContext } from '../nodeGameContext.js';
 
-export const BOSS_ROOM_IDS = ['hoarder', 'juicer', 'krakaren', 'spider', 'swine'] as const;
+export const BOSS_ROOM_IDS = ['trashGremlin', 'gym', 'krakaren', 'spider', 'swine'] as const;
 export type BossRoomId = (typeof BOSS_ROOM_IDS)[number];
 
 export const BOSS_ROOM_STATES = [

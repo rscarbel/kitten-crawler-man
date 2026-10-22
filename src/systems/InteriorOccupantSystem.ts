@@ -26,6 +26,7 @@ import { interiorHoldsOccupants } from './interiorStoryOwnership';
 import { findPartyArrivalTiles, hasRoomToMove } from '../map/findWalkableTile';
 import { SOUTHWARD_PROBE_DROP } from '../map/collisionAnchors';
 import { Townsperson } from '../creatures/Townsperson';
+import { prewarmCitizenFigure } from '../creatures/citizenFigure';
 import { CITIZEN_TALK_RADIUS_TILES, findNearestTownsperson } from '../creatures/townInteraction';
 import type { WanderParams } from '../creatures/townWander';
 import type { TownRole } from '../sprites/person/PersonAppearance';
@@ -617,7 +618,9 @@ export class InteriorOccupantSystem implements GameSystem {
     });
 
     for (const occupant of placedBySpec) {
-      if (occupant !== null) this.occupants.push(occupant);
+      if (occupant === null) continue;
+      this.occupants.push(occupant);
+      prewarmCitizenFigure(occupant.figure);
     }
   }
 
@@ -656,7 +659,13 @@ export class InteriorOccupantSystem implements GameSystem {
         roamer.faceToward(focus.x, focus.y);
       }
     }
-    for (const occupant of this.occupants) occupant.update();
+    for (const occupant of this.occupants) {
+      const worn = occupant.figure;
+      occupant.update();
+      // A purged canvas recovery can re-dress an occupant, and nothing else
+      // warms a room's looks.
+      if (occupant.figure !== worn) prewarmCitizenFigure(occupant.figure);
+    }
   }
 
   private scanFurniture(): Map<AnchorKind, TileXY[]> {

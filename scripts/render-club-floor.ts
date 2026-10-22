@@ -65,7 +65,7 @@ if (building === undefined) throw new Error(`town plan has no "${CLUB_BUILDING_N
 
 const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [], artSeed });
 map.generateInterior(building.kind, 0, building.name, false, 'default');
-map.invalidateAllTileArt();
+map.releaseTileArt();
 
 const mapW = map.structure[0]?.length ?? 0;
 const mapH = map.structure.length;

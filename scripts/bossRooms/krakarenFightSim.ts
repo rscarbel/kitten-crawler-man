@@ -134,7 +134,7 @@ function runSeededFight(options: RunOptions): FightMetrics {
 
   const parts =
     options.withLab === false
-      ? { hoarder: null, juicer: null, krakaren: null }
+      ? { trashGremlin: null, gym: null, krakaren: null }
       : gameGauntletDressings(env);
   const dressings = new BossRoomDressings(
     { ...parts, spiderLab: null, colosseum: null },

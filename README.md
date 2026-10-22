@@ -210,7 +210,7 @@ beside the fixtures. Fixtures live in the server repo, under
 - `npm run ai:replays` writes the scripted ones there: short sessions acted
   out headlessly through the real AI adapter and context builder with a
   scripted clock, so they are the same on every run. `dynamite-incident` is a
-  goblin fight Carl ends with dynamite that also knocks Donut out, the Hoarder
+  goblin fight Carl ends with dynamite that also knocks Donut out, the Trash Gremlin
   boss kill, then "Remember the dynamite?"; `challenge-and-death` is an
   accepted and won challenge, a death, then a question about the challenge.
   `-- --out=<dir>` writes elsewhere.
@@ -269,7 +269,7 @@ Switch between them with Tab. The inactive character auto-follows and auto-fight
 
 ### Three Levels
 
-**Level 1: The Dungeon** — Procedurally generated rooms and hallways. Goblins, rats, and lava-spitting llamas roam the corridors. Two boss rooms await: TheHoarder and the Juicer. Troglodytes guard the boss wing.
+**Level 1: The Dungeon** — Procedurally generated rooms and hallways. Goblins, rats, and lava-spitting llamas roam the corridors. Two boss rooms await: the Trash Gremlin and Big Rooster. Little Rooster and Slightly Bent Rooster peck and punch at the gym door.
 
 **Level 2: Safe Haven** — A larger dungeon with tougher enemies (troglodytes, llamas, goblins, brindle grubs). Features the Krakaren Clone boss, an arena with the Ball of Swine and Grotesque Spider, and Bugaboos that spawn from floor grates.
 
@@ -277,8 +277,8 @@ Switch between them with Tab. The inactive character auto-follows and auto-fight
 
 ### Bosses
 
-- **TheHoarder** — Flees while spawning cockroaches and spitting acid bile. Drops the Trollskin Shirt
-- **Juicer** — Throws dumbbells, enrages at 40% HP. Drops the Enchanted Crown of the Sepsis Whore
+- **The Trash Gremlin** — flees, spits acid and shrieks cockroaches out of its trash piles. Drops the Trollskin Shirt
+- **Big Rooster** — clubs you with dumbbells up close, throws them from afar, enrages at 40% HP. Drops the Enchanted Crown of the Sepsis Whore
 - **Krakaren Clone** — Immobile 20-ft octopus with human-mouthed tentacles, arena encounter in Level 2
 - **Ball of Swine** — Orbiting arena boss (280 HP), contact-kills while moving, only vulnerable when stopped by barriers. Spawns 8 dazed Tusklings on death
 - **Grotesque Spider** — Spits venom that applies Stuck and Spit Venom status, immobilizing targets for 4 seconds
@@ -381,7 +381,7 @@ src/
 │   ├── SpellSystem.ts         ← protective shell, confusing fog
 │   ├── DestructiblePropSystem.ts ← smashable barrels/crates, splinters, coin drops
 │   ├── BarrierSystem.ts       ← gym item placement, mob slow zones
-│   ├── JuicerRoomSystem.ts    ← gym equipment spawns + Juicer coordination
+│   ├── GymRoomSystem.ts       ← gym equipment spawns + Big Rooster coordination
 │   ├── LootSystem.ts          ← item drops, TTL, auto-collect
 │   ├── StairwellSystem.ts     ← level transitions
 │   ├── BuildingSystem.ts      ← door detection, entry prompts
@@ -409,7 +409,8 @@ src/
 │   ├── Mob.ts                 ← enemy AI base (aggro, pathfinding, LOS, health bar)
 │   ├── Goblin.ts, Rat.ts, Llama.ts, Troglodyte.ts
 │   ├── Tuskling.ts, Cockroach.ts, Bugaboo.ts, BrindleGrub.ts
-│   ├── TheHoarder.ts, Juicer.ts
+│   ├── TrashGremlin.ts, BigRooster.ts
+│   ├── RoosterMinion.ts, LittleRooster.ts, SlightlyBentRooster.ts
 │   ├── KrakarenClone.ts, BallOfSwine.ts, GrotesqueSpider.ts
 │   ├── SkyFowl.ts
 │   ├── Mongo.ts               ← raptor companion
@@ -480,7 +481,8 @@ Player (base: position, HP, stats, walk animation)
 ├── CatPlayer
 └── Mob (AI: aggro, pathfinding, LOS, health bar)
     ├── Goblin, Rat, Llama, Troglodyte, Tuskling, Bugaboo, BrindleGrub, ...
-    ├── TheHoarder, Juicer (bosses)
+    ├── TrashGremlin, BigRooster (bosses)
+    ├── LittleRooster, SlightlyBentRooster (gym minions)
     └── BallOfSwine, KrakarenClone, GrotesqueSpider (arena bosses)
 ```
 

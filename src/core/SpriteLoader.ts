@@ -10,7 +10,7 @@ import environmentCampManifest from '../images/environment/camp/manifest.json';
 import environmentVillageManifest from '../images/environment/village/manifest.json';
 import environmentCircusManifest from '../images/environment/circus/manifest.json';
 import environmentBossKrakarenManifest from '../images/environment/boss_krakaren/manifest.json';
-import environmentHoarderManifest from '../images/environment/hoarder/manifest.json';
+import environmentTrashGremlinManifest from '../images/environment/trash_gremlin/manifest.json';
 import environmentGymManifest from '../images/environment/gym/manifest.json';
 import environmentSpiderLabManifest from '../images/environment/spider_lab/manifest.json';
 import environmentOverCityManifest from '../images/environment/towns/over_city/manifest.json';
@@ -55,10 +55,10 @@ const environmentManifest = {
   // The circus grounds' tents and arch posts, painted at floor load, in their
   // own directory for the same reason.
   ...environmentCircusManifest,
-  // The Hoarder's lair: its junk, its floor and its toppling towers, painted
+  // The Trash Gremlin's lair: its junk, its floor and its toppling towers, painted
   // at floor load. Its own directory so no other room's sheets share a file.
-  ...environmentHoarderManifest,
-  // The Juicer's gym equipment, painted at floor load, in its own directory for
+  ...environmentTrashGremlinManifest,
+  // Big Rooster's gym equipment, painted at floor load, in its own directory for
   // the same reason.
   ...environmentGymManifest,
   // Krakaren Clone's clone lab: its vats and consoles are Y-sorted tile props,

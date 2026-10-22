@@ -3,8 +3,6 @@
 How the third floor's town is generated, rendered and tuned. This is reference for
 anyone changing the town's layout, ground, props or the systems anchored to it.
 
-> Source-material background on the Over City: [over-city-reference.md](over-city-reference.md)
-
 ---
 
 ## What the town is
@@ -60,8 +58,8 @@ they run, and a species in the role union would sell or bark as a job.
 ten skyfowl and six human. The humans are Wendell (Plumbline Farm), Old Hilda, Marta
 Miller, Apothecary Fen, Innkeep Marlow and Wick, the General Store's clerk. Keeper Brenna
 Kestrel runs the General Store: she is the counter occupant `ShopSystem.setKeeper` points
-the shop at. The club's cast (Clarabelle, Rosemarie, Mordecai and the rest) is fixed by
-the books and sits outside the ratio.
+the shop at. The club's cast (Clarabelle, Rosemarie and the rest) belongs to
+`DesperadoClubSystem`, and Mordecai to `SafeRoomSystem`; both sit outside the ratio.
 
 **The crowd.** `TownLifeSystem` rolls each street cohort's species at its own share:
 `PLAZA_SKYFOWL_SHARE` and `ANCHOR_SKYFOWL_SHARE` two thirds, `TRAVELER_SKYFOWL_SHARE` one
@@ -209,15 +207,19 @@ art is invisible, because the later sprite just draws over the earlier one.
 
 Every facade is **painted by the game itself**, from the kit in
 `src/sprites/buildinggen/` and under the floor's own art seed. The fifteen named
-buildings each own one sprite key, one spec, and one `life` animation overlay
-composited over `idle` by the `SPRITE_BUILDING` path at 8 fps. The tower
+buildings each own one spec and two sheets: the still `idle` frame under the building's
+sprite key, and its `life` animation as a sheet of its own, `<key>_life`, composited over
+`idle` by the `SPRITE_BUILDING` path at 8 fps. The tower
 (`overworld_main_tower`) is the exception: it is still authored art and still ships
 as a file. `npm run gen:buildings` bakes review copies of the same art into
 `preview/`; nothing offline writes into `src/images/`.
 
 A facade is the most expensive picture the game makes, so it is painted in stages
-across frames rather than in one step, and the town's facades are painted outward
-from wherever the party arrives — see `docs/asset-management.md` for that machinery
+across frames rather than in one step. Each building's sheets are a resident set held
+by distance from the party: the still frame is asked for, nearest first, about two
+seconds of fastest walk before the building comes into view and let go once the party
+is well past it, and the life row is held only while the building is in view. See
+`docs/asset-management.md` ("Memory follows the party within a floor") for that machinery
 and what it measured.
 
 Three things about the pipeline are load-bearing for the town rather than for the art:
@@ -423,7 +425,7 @@ contents are data: one layout file per building in `src/map/town/interiors/`, li
 `NAMED_INTERIOR_LAYOUTS` (`index.ts`), each a pure function of the shell's size that
 returns layout entries. `generateInterior` holds no per-building logic.
 
-Only the Desperado Club's rooms and stations are fixed by the source material. Every other
+Only the Desperado Club's rooms and stations are fixed. Every other
 room's shell and layout may change freely, as long as its function holds: quest beats,
 services, the safe room, the murder mystery's alley and cellar, the cult hideout, and the
 gates below. A room's layout follows from what the building is, and every room should

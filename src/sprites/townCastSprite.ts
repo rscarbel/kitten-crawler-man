@@ -159,13 +159,7 @@ export function prewarmTownCastLook(look: TownCastLook): void {
   }
 }
 
-/**
- * Exempts a citizen look's idle and walk rows from the cache's idle-release
- * sweep, for a scene that keeps its own crowd on screen for as long as it is
- * active and would rather hold the memory than pay a rebake for a look one
- * or two citizens rarely turn to face away from the camera in.
- */
-/** The rows {@link prewarmTownCastLook} warms and {@link pinTownCastLook} pins. */
+/** The rows {@link prewarmTownCastLook} warms. */
 export function townCastLookRows(look: TownCastLook): DrawnFigureRow[] {
   const figure = townCastOutfitFigure(look);
   return PREWARM_CITIZEN_ROLES.flatMap((role) =>
@@ -173,18 +167,9 @@ export function townCastLookRows(look: TownCastLook): DrawnFigureRow[] {
   );
 }
 
-export function pinTownCastLook(look: TownCastLook): void {
-  const figure = townCastOutfitFigure(look);
-  for (const role of PREWARM_CITIZEN_ROLES) {
-    for (const view of ALL_TOWN_CAST_VIEWS) {
-      pinFigureState(figure, townCastStateName(role, view));
-    }
-  }
-}
-
 /**
  * Warms and pins one look's `talk` row in the facing it is about to be drawn
- * in — the row `pinTownCastLook` deliberately leaves lazy, called instead the
+ * in — the row a crowd's look leaves lazy, called instead the
  * moment a citizen is actually frozen into a conversation. The row bakes
  * within the next frame or two on the ordinary prewarm queue; until it lands,
  * `drawTownCastSprite`'s own approximate path covers the gap the same way it
@@ -195,11 +180,12 @@ export function prewarmAndPinTownCastTalk(
   look: TownCastLook,
   facingX: number,
   facingY: number,
-): void {
+): DrawnFigureRow {
   const figure = townCastOutfitFigure(look);
   const key = townCastStateFor('talk', look, facingX, facingY);
   // Urgent: a conversation is opening on this exact row right now, not at
   // some eventual point a background warm-up would otherwise get to.
   prewarmFigureState(figure, key, undefined, true);
   pinFigureState(figure, key);
+  return drawnFigureRow(figure, key);
 }

@@ -3,10 +3,10 @@
  * Renders the five boss rooms, each on a real generated floor, in each state
  * its fight can put it in.
  *
- *   npm run render:boss-rooms -- --room=hoarder --state=sealed --door=east --scale=2
+ *   npm run render:boss-rooms -- --room=trashGremlin --state=sealed --door=east --scale=2
  *
  * Flags:
- *   --room=hoarder|juicer|krakaren|spider|swine|all   (default all)
+ *   --room=trashGremlin|gym|krakaren|spider|swine|all   (default all)
  *   --seed=N    world seed the floor is generated from (default 1); with
  *               `--door`, the search for a matching floor starts here
  *   --state=pre|sealed|enraged|phase2|phase3|defeated|all   (default all

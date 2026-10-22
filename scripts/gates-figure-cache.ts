@@ -1396,6 +1396,27 @@ const TRANSIT_TILE = 3;
     `after one approximate draw of the missing pinned row, ${figurePrewarmRequests(figure)} ` +
       'prewarm request(s) are queued',
   );
+  unpinFigureState(figure, 'walk');
+}
+
+// A flush (a canvas recovery, a render-scale change) gives back cells, not
+// pins: whoever pinned a row still holds it, and nothing would pin it again.
+{
+  reset();
+  const figure = makeFigure('pin-flush', 0);
+  pinFigureState(figure, 'walk');
+  flushFigureFrameCache();
+  beginFigureFrame();
+  drawFigureCached(ctx, figure, 'walk', 0, 0, 0, TILE_SIZE);
+  const rebakedBytes = figureResidentBytes(figure);
+  for (let i = 0; i < RELEASE_FRAME_AFTER_WINDOW + IDLE_POLL_SLACK_FRAMES; i++) beginFigureFrame();
+  check(
+    'a pin survives a flush of the cache',
+    rebakedBytes > 0 && figureResidentBytes(figure) === rebakedBytes,
+    `a row pinned before a flush and baked after it held ${figureResidentBytes(figure)} of its ` +
+      `${rebakedBytes} bytes once the idle window had passed`,
+  );
+  unpinFigureState(figure, 'walk');
 }
 
 /** Frames a boosted-budget figure declares — comfortably more than the boost can bake in one frame. */

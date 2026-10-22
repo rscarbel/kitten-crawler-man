@@ -255,7 +255,13 @@ function bossEntry(): TopBandEntry {
     priority: 'boss',
     accent: BOSS_ACCENT,
     rows: [
-      { kind: 'text', text: 'THE HOARDER', role: 'label', color: BOSS_ACCENT, align: 'center' },
+      {
+        kind: 'text',
+        text: 'THE TRASH GREMLIN',
+        role: 'label',
+        color: BOSS_ACCENT,
+        align: 'center',
+      },
       {
         kind: 'meter',
         id: 'boss-room/hp',

@@ -90,7 +90,7 @@ const DUNGEON_LAP = crossLap(ARRIVAL, DUNGEON_LAP_REACH_TILES, DUNGEON_LAP_REACH
 /** Interiors are entered from their south wall, so the lap's first north-south leg heads north, into the room. */
 const INTERIOR_LAP = crossLap(ARRIVAL, INTERIOR_LAP_REACH_TILES, -INTERIOR_LAP_REACH_TILES);
 const SPIDER_LAB = { kind: 'spiderLab' } as const;
-const JUICER_GYM = { kind: 'bossRoomPast', bossType: 'juicer' } as const;
+const GYM = { kind: 'bossRoomPast', bossType: 'big_rooster' } as const;
 const CIRCUS_CENTRE = { kind: 'circusCentre' } as const;
 
 /** A floor boot pinned to the perf seed, the party under `!tough` so the walk outlives the floor. */
@@ -152,12 +152,12 @@ const PERF_SCENES: readonly PerfScene[] = [
     ),
   },
   {
-    id: 'juicer',
-    description: "From the safe room into the Juicer's gym, then laps of it",
-    query: pinnedFloor('playtest=juicer'),
+    id: 'big_rooster',
+    description: "From the safe room into Big Rooster's gym, then laps of it",
+    query: pinnedFloor('playtest=big_rooster'),
     route: leadInThenLap(
-      [{ kind: 'walk', anchor: JUICER_GYM }],
-      crossLap(JUICER_GYM, BOSS_ROOM_LAP_REACH_TILES, BOSS_ROOM_LAP_REACH_TILES),
+      [{ kind: 'walk', anchor: GYM }],
+      crossLap(GYM, BOSS_ROOM_LAP_REACH_TILES, BOSS_ROOM_LAP_REACH_TILES),
     ),
   },
   {

@@ -25,7 +25,8 @@ import { BugabooPreviewScene } from '../scenes/BugabooPreviewScene';
 import { TroglodytePreviewScene } from '../scenes/TroglodytePreviewScene';
 import { TusklingPreviewScene } from '../scenes/TusklingPreviewScene';
 import { KrakarenPreviewScene } from '../scenes/KrakarenPreviewScene';
-import { JuicerPreviewScene } from '../scenes/JuicerPreviewScene';
+import { TrashGremlinPreviewScene } from '../scenes/TrashGremlinPreviewScene';
+import { BigRoosterPreviewScene } from '../scenes/BigRoosterPreviewScene';
 import { StatusPreviewScene } from '../scenes/StatusPreviewScene';
 import { FairyPreviewScene } from '../scenes/FairyPreviewScene';
 import { CasinoPreviewScene } from '../scenes/CasinoPreviewScene';
@@ -447,8 +448,13 @@ export function devBootScene(
     return true;
   }
 
-  if (params.get('juicer') !== null) {
-    sceneManager.replace(new JuicerPreviewScene());
+  if (params.get('gremlin') !== null) {
+    sceneManager.replace(new TrashGremlinPreviewScene());
+    return true;
+  }
+
+  if (params.get('rooster') !== null) {
+    sceneManager.replace(new BigRoosterPreviewScene());
     return true;
   }
 

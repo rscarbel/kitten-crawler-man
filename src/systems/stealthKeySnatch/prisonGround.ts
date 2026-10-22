@@ -297,6 +297,10 @@ export class PrisonGround {
     const current = canvasGeneration();
     if (this.generation === current) return;
     this.generation = current;
+    this.releaseBakedSurfaces();
+  }
+
+  private releaseBakedSurfaces(): void {
     if (this.grime !== null) {
       releaseSurface(this.grime);
       this.grime = null;
@@ -306,6 +310,15 @@ export class PrisonGround {
     }
     this.strawTiles.clear();
     for (const figure of this.figures) figure.release();
+  }
+
+  /**
+   * Gives back every baked chunk and surface at once, for a prison no one will
+   * draw again: zero-sized now rather than whenever the browser collects them.
+   */
+  release(): void {
+    this.chunks.dispose();
+    this.releaseBakedSurfaces();
   }
 
   private barFigures(): BakedFigure[] {

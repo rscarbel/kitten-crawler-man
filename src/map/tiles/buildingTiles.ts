@@ -345,11 +345,10 @@ function drawMetalWallPanel(
 /**
  * A barred alcove in the arena wall, with what is left of a spectator in it.
  *
- * The one piece of story in the whole structure: the Ball of Swine is described as
- * embedded with scraps of tuxedos and red sequin dresses, and until now nothing in
- * the game said where a rolling pig had found either. The cages do. Half of them
- * hold a black tie, half a red gown, and the occupant is slumped and long past
- * caring.
+ * The one piece of story in the whole structure: the Ball of Swine wears scraps
+ * of tuxedos and red sequin dresses, and the cages say where a rolling pig found
+ * them. Half of them hold a black tie, half a red gown, and the occupant is
+ * slumped and long past caring.
  */
 const CAGE_ALCOVE_INSET = 0.2;
 const CAGE_BAR_COUNT = 4;

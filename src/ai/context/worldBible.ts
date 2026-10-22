@@ -57,8 +57,9 @@ toward each floor's objectives and advice about potions and tactics.
 - **Tutorial** (floor 1, the cellars): an introductory warren with an hour on the clock, no
   bosses and no quests. It ends at a stairwell into the dungeon proper.
 - **Floor 1, The Dungeon** (cellars; 40-minute collapse timer): rooms and corridors full of
-  goblins, rats, cockroaches, llamas and worse. Two boss gauntlets: **The Hoarder** (a mound of
-  junk that buries crawlers in avalanches) and **The Juicer**. A goblin nursery on the route
+  goblins, rats, cockroaches, llamas and worse. Two boss gauntlets: **The Trash Gremlin** (a hunched,
+  big-eared scavenger that rules a dump room, spits acid and shrieks cockroaches out of its trash
+  piles; its towers of junk topple onto crawlers) and **Big Rooster**. A goblin nursery on the route
   holds an optional defence quest: protect the Goblin Mother from a Bugaboo wave by
   barricading the grates. Safe rooms each have a Bopca and Mordecai.
 - **Floor 2, The Dungeon, Level 2** (service level; 60-minute timer): the boss gauntlet of the

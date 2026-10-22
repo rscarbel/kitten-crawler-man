@@ -1,9 +1,9 @@
 import type { TileContent } from '../tileTypes';
 import {
-  HOARD_PILE,
-  HOARD_TOWER,
-  HOARD_BAG,
-  HOARD_RUBBLE,
+  TRASH_PILE,
+  TRASH_TOWER,
+  TRASH_BAG,
+  TRASH_RUBBLE,
   GYM_RACK,
   GYM_SQUAT_RACK,
   GYM_CABLE_STACK,
@@ -16,7 +16,7 @@ import {
   LAB_WEB,
   ARENA_MUD,
 } from '../tileTypes';
-import { drawHoarderTile } from './bossRooms/hoarderTiles';
+import { drawTrashGremlinTile } from './bossRooms/trashGremlinTiles';
 import { drawGymTile } from './bossRooms/gymTiles';
 import { drawKrakarenTile } from './bossRooms/krakarenTiles';
 import { drawLabTile } from './bossRooms/labTiles';
@@ -38,7 +38,7 @@ export function drawBossRoomTile(
   ty: number,
 ): boolean {
   return (
-    drawHoarderTile(ctx, structure, type, sx, sy, ts, tx, ty) ||
+    drawTrashGremlinTile(ctx, structure, type, sx, sy, ts, tx, ty) ||
     drawGymTile(ctx, structure, type, sx, sy, ts, tx, ty) ||
     drawKrakarenTile(ctx, structure, type, sx, sy, ts, tx, ty) ||
     drawLabTile(ctx, structure, type, sx, sy, ts, tx, ty) ||
@@ -47,10 +47,10 @@ export function drawBossRoomTile(
 }
 
 const BOSS_ROOM_MINIMAP_COLORS: ReadonlyMap<number, string> = new Map([
-  [HOARD_PILE, '#4a3a22'],
-  [HOARD_TOWER, '#5a4a2e'],
-  [HOARD_BAG, '#34382c'],
-  [HOARD_RUBBLE, '#3e3020'],
+  [TRASH_PILE, '#4a3a22'],
+  [TRASH_TOWER, '#5a4a2e'],
+  [TRASH_BAG, '#34382c'],
+  [TRASH_RUBBLE, '#3e3020'],
   [GYM_RACK, '#4a4a52'],
   [GYM_SQUAT_RACK, '#5a5a64'],
   [GYM_CABLE_STACK, '#5a5a64'],

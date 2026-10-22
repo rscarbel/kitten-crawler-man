@@ -138,7 +138,7 @@ const BUGABOO_MAX_LEVEL = 7;
 const KRAKAREN_MIN_LEVEL = 6;
 const KRAKAREN_MAX_LEVEL = 10;
 /**
- * The Ball of Swine is a level-15 borough boss in the source, and borough bosses
+ * The Ball of Swine is a borough boss pitched around level 15, and borough bosses
  * are meant to be tougher than anything else on their floor. It is also entirely
  * optional, so it is the one fight on floor 2 that can afford to sit above the
  * party's own level rather than tracking it.

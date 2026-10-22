@@ -3,8 +3,11 @@ import {
   parseColosseumDressingCheckpoint,
   type ColosseumDressingCheckpoint,
 } from './ColosseumDressingSystem';
-import { parseHoarderRoomCheckpoint, type HoarderRoomCheckpoint } from './hoarderRoomCheckpoint';
-import { parseJuicerRoomCheckpoint, type JuicerRoomCheckpoint } from './juicerRoomCheckpoint';
+import {
+  parseTrashGremlinRoomCheckpoint,
+  type TrashGremlinRoomCheckpoint,
+} from './trashGremlinRoomCheckpoint';
+import { parseGymRoomCheckpoint, type GymRoomCheckpoint } from './gymRoomCheckpoint';
 import { parseKrakarenRoomCheckpoint, type KrakarenRoomCheckpoint } from './krakarenRoomCheckpoint';
 import {
   parseSpiderLabDressingCheckpoint,
@@ -13,8 +16,8 @@ import {
 
 /** The rooms' own state for a safe-room checkpoint. */
 export interface BossRoomDressingCheckpoint {
-  hoarder: HoarderRoomCheckpoint | null;
-  juicer: JuicerRoomCheckpoint | null;
+  trashGremlin: TrashGremlinRoomCheckpoint | null;
+  gym: GymRoomCheckpoint | null;
   krakaren: KrakarenRoomCheckpoint | null;
   spiderLab: SpiderLabDressingCheckpoint | null;
   colosseum: ColosseumDressingCheckpoint | null;
@@ -28,26 +31,24 @@ export function parseBossRoomDressingCheckpoint(
   value: unknown,
 ): BossRoomDressingCheckpoint | undefined {
   if (!isRecord(value)) return undefined;
-  const hoarder = parseHoarderRoomCheckpoint(value.hoarder);
+  const trashGremlin = parseTrashGremlinRoomCheckpoint(value.trashGremlin);
   const krakaren = parseKrakarenRoomCheckpoint(value.krakaren);
   // Absent from saves written before the gym kept any state: that loads as a
   // gym as generated, not as a failed load.
-  const juicer =
-    value.juicer === null || value.juicer === undefined
-      ? null
-      : parseJuicerRoomCheckpoint(value.juicer);
+  const gym =
+    value.gym === null || value.gym === undefined ? null : parseGymRoomCheckpoint(value.gym);
   const spiderLab =
     value.spiderLab === null ? null : parseSpiderLabDressingCheckpoint(value.spiderLab);
   const colosseum =
     value.colosseum === null ? null : parseColosseumDressingCheckpoint(value.colosseum);
   if (
-    hoarder === undefined ||
-    juicer === undefined ||
+    trashGremlin === undefined ||
+    gym === undefined ||
     krakaren === undefined ||
     spiderLab === undefined ||
     colosseum === undefined
   ) {
     return undefined;
   }
-  return { hoarder, juicer, krakaren, spiderLab, colosseum };
+  return { trashGremlin, gym, krakaren, spiderLab, colosseum };
 }

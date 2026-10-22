@@ -5,7 +5,7 @@
  * A singleton rather than a field on {@link GameStats}, and the reason is the
  * whole point of the thing: `GameStats` is rebuilt with its `DungeonScene`, so a
  * party that walks down a stairwell loses everything it counted. The
- * target-feel table is measured across a *run* — floor 1 pre-Hoarder through
+ * target-feel table is measured across a *run* — floor 1 pre-Trash Gremlin through
  * floor 3 — so the numbers have to outlive the scene that produced them, the
  * same way `perfMonitor` does.
  *
@@ -18,16 +18,17 @@
  *
  * Floor 1 is split by its two gauntlet bosses because that is where the
  * difficulty curve is supposed to bend — a single "floor 1" number would average
- * the tutorial-adjacent opening together with the post-Juicer free region and
+ * the tutorial-adjacent opening together with the free region past Big Rooster and
  * say nothing about either.
  */
 import { settings } from './Settings';
+import { BIG_ROOSTER_BOSS_TYPE } from './bossTypes';
 import type { Difficulty } from './difficultyProfiles';
 
 export const DIFFICULTY_SEGMENTS = [
-  'floor1-pre-hoarder',
-  'floor1-post-hoarder',
-  'floor1-post-juicer',
+  'floor1-pre-gremlin',
+  'floor1-post-gremlin',
+  'floor1-post-rooster',
   'floor2',
   'floor3',
 ] as const;
@@ -136,8 +137,7 @@ function emptyTally(difficulty: Difficulty): MutableTally {
  * Spawn keys of the two floor-1 gauntlet bosses, as `bossDefeated` reports
  * them — the same names the level definitions and the boss music use.
  */
-const HOARDER_BOSS_TYPE = 'the_hoarder';
-const JUICER_BOSS_TYPE = 'juicer';
+const TRASH_GREMLIN_BOSS_TYPE = 'trash_gremlin';
 
 const FIRST_FLOOR = 1;
 const SECOND_FLOOR = 2;
@@ -147,8 +147,8 @@ const THIRD_FLOOR = 3;
 export class DifficultyStats {
   private readonly tallies = new Map<DifficultySegment, MutableTally>();
   private floorNumber = FIRST_FLOOR;
-  private hoarderDefeated = false;
-  private juicerDefeated = false;
+  private trashGremlinDefeated = false;
+  private bigRoosterDefeated = false;
 
   /** Completed stairwell-hunt lengths, in frames, keyed by floor number. */
   private readonly huntFramesByFloor = new Map<number, number>();
@@ -164,9 +164,9 @@ export class DifficultyStats {
   get segment(): DifficultySegment {
     if (this.floorNumber >= THIRD_FLOOR) return 'floor3';
     if (this.floorNumber === SECOND_FLOOR) return 'floor2';
-    if (this.juicerDefeated) return 'floor1-post-juicer';
-    if (this.hoarderDefeated) return 'floor1-post-hoarder';
-    return 'floor1-pre-hoarder';
+    if (this.bigRoosterDefeated) return 'floor1-post-rooster';
+    if (this.trashGremlinDefeated) return 'floor1-post-gremlin';
+    return 'floor1-pre-gremlin';
   }
 
   /** Called on scene entry so the counters know which floor they are on. */
@@ -176,8 +176,8 @@ export class DifficultyStats {
 
   /** Called from the `bossDefeated` handler; unknown boss types are ignored. */
   noteBossDefeated(bossType: string): void {
-    if (bossType === HOARDER_BOSS_TYPE) this.hoarderDefeated = true;
-    if (bossType === JUICER_BOSS_TYPE) this.juicerDefeated = true;
+    if (bossType === TRASH_GREMLIN_BOSS_TYPE) this.trashGremlinDefeated = true;
+    if (bossType === BIG_ROOSTER_BOSS_TYPE) this.bigRoosterDefeated = true;
   }
 
   private current(): MutableTally {
@@ -330,13 +330,13 @@ export class DifficultyStats {
    *
    * The boss flags matter as much as the tallies: they latch, so a second
    * playthrough in the same page session would begin on floor 1 already
-   * classified `floor1-post-juicer` — and the pre-Hoarder baseline this is
+   * classified `floor1-post-rooster` — and the pre-Trash Gremlin baseline this is
    * meant to capture would be unreachable without reloading the page.
    */
   beginRun(): void {
     this.tallies.clear();
-    this.hoarderDefeated = false;
-    this.juicerDefeated = false;
+    this.trashGremlinDefeated = false;
+    this.bigRoosterDefeated = false;
     this.floorNumber = FIRST_FLOOR;
     this.huntFramesByFloor.clear();
     this.openHunt = null;

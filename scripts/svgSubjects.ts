@@ -269,14 +269,14 @@ export const SUBJECTS: readonly SvgSubject[] = [
     },
   },
   {
-    name: 'hoarder',
+    name: 'trash_gremlin',
     views: async () => {
-      const { drawHoarderSprite } = await import('../src/sprites/hoarderSprite.js');
+      const { drawTrashGremlinSprite } = await import('../src/sprites/trashGremlinSprite.js');
       return [
         {
           name: 'front',
           paint: ({ dom, unit }) =>
-            drawHoarderSprite(dom, 0, 0, unit, {
+            drawTrashGremlinSprite(dom, 0, 0, unit, {
               facingX: 0,
               facingY: FACING_TOWARD_CAMERA,
               idleFrame: STILL_FRAME,
@@ -285,7 +285,7 @@ export const SUBJECTS: readonly SvgSubject[] = [
         {
           name: 'back',
           paint: ({ dom, unit }) =>
-            drawHoarderSprite(dom, 0, 0, unit, {
+            drawTrashGremlinSprite(dom, 0, 0, unit, {
               facingX: 0,
               facingY: FACING_AWAY,
               idleFrame: STILL_FRAME,
@@ -294,7 +294,7 @@ export const SUBJECTS: readonly SvgSubject[] = [
         {
           name: 'side',
           paint: ({ dom, unit }) =>
-            drawHoarderSprite(dom, 0, 0, unit, {
+            drawTrashGremlinSprite(dom, 0, 0, unit, {
               facingX: FACING_RIGHT,
               facingY: 0,
               idleFrame: STILL_FRAME,
@@ -303,7 +303,7 @@ export const SUBJECTS: readonly SvgSubject[] = [
         {
           name: 'vomit',
           paint: ({ dom, unit }) =>
-            drawHoarderSprite(dom, 0, 0, unit, {
+            drawTrashGremlinSprite(dom, 0, 0, unit, {
               facingX: 0,
               facingY: FACING_TOWARD_CAMERA,
               vomitProgress: ATTACK_MIDPOINT,
@@ -313,14 +313,14 @@ export const SUBJECTS: readonly SvgSubject[] = [
     },
   },
   {
-    name: 'juicer',
+    name: 'big_rooster',
     views: async () => {
-      const { drawJuicerSprite } = await import('../src/sprites/juicerSprite.js');
+      const { drawRoosterSprite } = await import('../src/sprites/roosterSprite.js');
       return [
         {
           name: 'front',
           paint: ({ dom, unit }) =>
-            drawJuicerSprite(dom, 0, 0, unit, {
+            drawRoosterSprite(dom, 'big', 0, 0, unit, {
               facingX: 0,
               facingY: FACING_TOWARD_CAMERA,
               idleFrame: STILL_FRAME,
@@ -329,7 +329,7 @@ export const SUBJECTS: readonly SvgSubject[] = [
         {
           name: 'back',
           paint: ({ dom, unit }) =>
-            drawJuicerSprite(dom, 0, 0, unit, {
+            drawRoosterSprite(dom, 'big', 0, 0, unit, {
               facingX: 0,
               facingY: FACING_AWAY,
               idleFrame: STILL_FRAME,
@@ -338,7 +338,7 @@ export const SUBJECTS: readonly SvgSubject[] = [
         {
           name: 'side',
           paint: ({ dom, unit }) =>
-            drawJuicerSprite(dom, 0, 0, unit, {
+            drawRoosterSprite(dom, 'big', 0, 0, unit, {
               facingX: FACING_RIGHT,
               facingY: 0,
               idleFrame: STILL_FRAME,
@@ -347,7 +347,7 @@ export const SUBJECTS: readonly SvgSubject[] = [
         {
           name: 'enraged',
           paint: ({ dom, unit }) =>
-            drawJuicerSprite(dom, 0, 0, unit, {
+            drawRoosterSprite(dom, 'big', 0, 0, unit, {
               facingX: 0,
               facingY: FACING_TOWARD_CAMERA,
               idleFrame: STILL_FRAME,
@@ -357,7 +357,7 @@ export const SUBJECTS: readonly SvgSubject[] = [
         {
           name: 'throw',
           paint: ({ dom, unit }) =>
-            drawJuicerSprite(dom, 0, 0, unit, {
+            drawRoosterSprite(dom, 'big', 0, 0, unit, {
               facingX: FACING_RIGHT,
               facingY: 0,
               throwProgress: ATTACK_MIDPOINT,
@@ -367,19 +367,135 @@ export const SUBJECTS: readonly SvgSubject[] = [
         {
           name: 'punch',
           paint: ({ dom, unit }) =>
-            drawJuicerSprite(dom, 0, 0, unit, {
+            drawRoosterSprite(dom, 'big', 0, 0, unit, {
               facingX: FACING_RIGHT,
               facingY: 0,
               punchProgress: ATTACK_MIDPOINT,
             }),
         },
         {
+          name: 'club_swing',
+          paint: ({ dom, unit }) =>
+            drawRoosterSprite(dom, 'big', 0, 0, unit, {
+              facingX: FACING_RIGHT,
+              facingY: 0,
+              clubProgress: ATTACK_MIDPOINT,
+              heldDumbbell: true,
+            }),
+        },
+        {
+          name: 'slam',
+          paint: ({ dom, unit }) =>
+            drawRoosterSprite(dom, 'big', 0, 0, unit, {
+              facingX: FACING_RIGHT,
+              facingY: 0,
+              slamProgress: ATTACK_MIDPOINT,
+            }),
+        },
+        {
+          name: 'crow',
+          paint: ({ dom, unit }) =>
+            drawRoosterSprite(dom, 'big', 0, 0, unit, {
+              facingX: 0,
+              facingY: FACING_TOWARD_CAMERA,
+              crowProgress: ATTACK_MIDPOINT,
+            }),
+        },
+        {
           name: 'sprint',
           paint: ({ dom, unit }) =>
-            drawJuicerSprite(dom, 0, 0, unit, {
+            drawRoosterSprite(dom, 'big', 0, 0, unit, {
               facingX: FACING_RIGHT,
               facingY: 0,
               isSprinting: true,
+            }),
+        },
+      ];
+    },
+  },
+  {
+    name: 'little_rooster',
+    views: async () => {
+      const { drawRoosterSprite } = await import('../src/sprites/roosterSprite.js');
+      return [
+        {
+          name: 'front',
+          paint: ({ dom, unit }) =>
+            drawRoosterSprite(dom, 'little', 0, 0, unit, {
+              facingX: 0,
+              facingY: FACING_TOWARD_CAMERA,
+              idleFrame: STILL_FRAME,
+            }),
+        },
+        {
+          name: 'side',
+          paint: ({ dom, unit }) =>
+            drawRoosterSprite(dom, 'little', 0, 0, unit, {
+              facingX: FACING_RIGHT,
+              facingY: 0,
+              idleFrame: STILL_FRAME,
+            }),
+        },
+        {
+          name: 'peck',
+          paint: ({ dom, unit }) =>
+            drawRoosterSprite(dom, 'little', 0, 0, unit, {
+              facingX: FACING_RIGHT,
+              facingY: 0,
+              peckProgress: ATTACK_MIDPOINT,
+            }),
+        },
+        {
+          name: 'punch',
+          paint: ({ dom, unit }) =>
+            drawRoosterSprite(dom, 'little', 0, 0, unit, {
+              facingX: FACING_RIGHT,
+              facingY: 0,
+              punchProgress: ATTACK_MIDPOINT,
+            }),
+        },
+      ];
+    },
+  },
+  {
+    name: 'slightly_bent_rooster',
+    views: async () => {
+      const { drawRoosterSprite } = await import('../src/sprites/roosterSprite.js');
+      return [
+        {
+          name: 'front',
+          paint: ({ dom, unit }) =>
+            drawRoosterSprite(dom, 'bent', 0, 0, unit, {
+              facingX: 0,
+              facingY: FACING_TOWARD_CAMERA,
+              idleFrame: STILL_FRAME,
+            }),
+        },
+        {
+          name: 'side',
+          paint: ({ dom, unit }) =>
+            drawRoosterSprite(dom, 'bent', 0, 0, unit, {
+              facingX: FACING_RIGHT,
+              facingY: 0,
+              idleFrame: STILL_FRAME,
+            }),
+        },
+        {
+          name: 'peck',
+          paint: ({ dom, unit }) =>
+            drawRoosterSprite(dom, 'bent', 0, 0, unit, {
+              facingX: FACING_RIGHT,
+              facingY: 0,
+              peckProgress: ATTACK_MIDPOINT,
+            }),
+        },
+        {
+          name: 'punch',
+          paint: ({ dom, unit }) =>
+            drawRoosterSprite(dom, 'bent', 0, 0, unit, {
+              facingX: FACING_RIGHT,
+              facingY: 0,
+              punchProgress: ATTACK_MIDPOINT,
             }),
         },
       ];

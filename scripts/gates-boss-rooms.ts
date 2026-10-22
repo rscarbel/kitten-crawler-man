@@ -50,10 +50,10 @@ import {
   GYM_RACK,
   GYM_SQUAT_RACK,
   GYM_TREADMILL_BELT,
-  HOARD_BAG,
-  HOARD_PILE,
-  HOARD_RUBBLE,
-  HOARD_TOWER,
+  TRASH_BAG,
+  TRASH_PILE,
+  TRASH_RUBBLE,
+  TRASH_TOWER,
   KRAKAREN_CONSOLE,
   KRAKAREN_TANK,
   KRAKAREN_WADE,
@@ -156,7 +156,7 @@ const PROP_INK_ALPHA_MIN = 128;
  * draw site that will fall back to nothing, or a manifest entry nothing loads.
  */
 const REMOVED_IMAGE_KEYS: readonly string[] = [
-  'hoarders_room',
+  'trash_gremlin_room',
   'spider_room_floor',
   'lab_tables',
   'scientist',
@@ -164,7 +164,7 @@ const REMOVED_IMAGE_KEYS: readonly string[] = [
 ];
 
 /** A key the rooms still load, so the `removed-key` fault has a live name to find. */
-const LIVE_IMAGE_KEY = 'hoarder_floor';
+const LIVE_IMAGE_KEY = 'trash_gremlin_floor';
 
 // ── Reporting ────────────────────────────────────────────────────────────────
 
@@ -198,10 +198,10 @@ interface TileContract {
 }
 
 const TILE_CONTRACTS: ReadonlyMap<number, TileContract> = new Map([
-  [HOARD_PILE, { name: 'HOARD_PILE', walkable: false, blocksSight: true, ySorted: true }],
-  [HOARD_TOWER, { name: 'HOARD_TOWER', walkable: false, blocksSight: true, ySorted: true }],
-  [HOARD_BAG, { name: 'HOARD_BAG', walkable: false, blocksSight: false, ySorted: true }],
-  [HOARD_RUBBLE, { name: 'HOARD_RUBBLE', walkable: true, blocksSight: false, ySorted: false }],
+  [TRASH_PILE, { name: 'TRASH_PILE', walkable: false, blocksSight: true, ySorted: true }],
+  [TRASH_TOWER, { name: 'TRASH_TOWER', walkable: false, blocksSight: true, ySorted: true }],
+  [TRASH_BAG, { name: 'TRASH_BAG', walkable: false, blocksSight: false, ySorted: true }],
+  [TRASH_RUBBLE, { name: 'TRASH_RUBBLE', walkable: true, blocksSight: false, ySorted: false }],
   [GYM_RACK, { name: 'GYM_RACK', walkable: false, blocksSight: false, ySorted: true }],
   [GYM_SQUAT_RACK, { name: 'GYM_SQUAT_RACK', walkable: false, blocksSight: true, ySorted: true }],
   [GYM_CABLE_STACK, { name: 'GYM_CABLE_STACK', walkable: false, blocksSight: true, ySorted: true }],

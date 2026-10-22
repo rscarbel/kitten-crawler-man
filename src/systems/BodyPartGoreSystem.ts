@@ -13,7 +13,10 @@ import {
   figureInkRadiusPx,
 } from '../sprites/figure/figureFrameCache';
 import { COCKROACH_BODY_PART_KEY, COCKROACH_GORE_PARTS } from '../sprites/cockroachSprite';
-import { HOARDER_BODY_PART_KEY, HOARDER_GORE_PARTS } from '../sprites/hoarderSprite';
+import {
+  TRASH_GREMLIN_BODY_PART_KEY,
+  TRASH_GREMLIN_GORE_PARTS,
+} from '../sprites/trashGremlinSprite';
 import type { GameMap } from '../map/GameMap';
 import { GOBLIN_GORE_PARTS, goblinFigure } from '../sprites/goblinSprite';
 import {
@@ -56,9 +59,9 @@ import { TROGLODYTE_BODY_PART_KEY, TROGLODYTE_GORE_PARTS } from '../sprites/trog
 import { TUSKLING_BODY_PART_KEY, TUSKLING_GORE_PARTS } from '../sprites/tusklingSprite';
 import { TUSKLING_FIGURE } from '../sprites/art/tusklingFigure';
 import { TROGLODYTE_FIGURE } from '../sprites/art/troglodyteFigure';
-import { JUICER_BODY_PART_KEY, JUICER_GORE_PARTS } from '../sprites/juicerSprite';
-import { HOARDER_FIGURE } from '../sprites/art/hoarderFigure';
-import { JUICER_FIGURE } from '../sprites/art/juicerFigure';
+import { ROOSTER_BODY_PART_KEYS, ROOSTER_GORE_PARTS } from '../sprites/roosterSprite';
+import { TRASH_GREMLIN_FIGURE } from '../sprites/art/trashGremlinFigure';
+import { ROOSTER_FIGURES } from '../sprites/art/roosterFigure';
 import { MANTID_FIGURE, MANTIS_FIGURE } from '../sprites/art/mantidFigure';
 import {
   ROCK_GOLEM_ALLY_FIGURE,
@@ -111,9 +114,9 @@ const COCKROACH_CONFIG: MobBodyPartConfig = {
   parts: COCKROACH_GORE_PARTS,
 };
 
-const HOARDER_CONFIG: MobBodyPartConfig = {
-  art: HOARDER_FIGURE,
-  parts: HOARDER_GORE_PARTS,
+const TRASH_GREMLIN_CONFIG: MobBodyPartConfig = {
+  art: TRASH_GREMLIN_FIGURE,
+  parts: TRASH_GREMLIN_GORE_PARTS,
 };
 
 /** The eight pieces a rat comes apart into, painted by the rat's own figure. */
@@ -225,13 +228,16 @@ const TUSKLING_CONFIG: MobBodyPartConfig = {
 };
 
 /**
- * The Juicer's eight. The tail is what says a lizard came apart here, and the
- * arm — an absurd bicep over a cut deltoid face — is what says it was him.
+ * Every rooster's pieces, each build painting its own at its own size. The
+ * comb on the head and the sickle tail fan say a rooster came apart here; the
+ * feathered human arm is what says it was one of this flock.
  */
-const JUICER_CONFIG: MobBodyPartConfig = {
-  art: JUICER_FIGURE,
-  parts: JUICER_GORE_PARTS,
-};
+const ROOSTER_CONFIGS: ReadonlyArray<readonly [string, MobBodyPartConfig]> = (
+  ['big', 'little', 'bent'] as const
+).map((build): readonly [string, MobBodyPartConfig] => [
+  ROOSTER_BODY_PART_KEYS[build],
+  { art: ROOSTER_FIGURES[build], parts: ROOSTER_GORE_PARTS },
+]);
 
 /**
  * The guard tentacle's four. A killed one bursts rather than sliding back
@@ -258,7 +264,7 @@ const GRAVE_BULL_CONFIG: MobBodyPartConfig = {
 const BODY_PART_REGISTRY = new Map<string, MobBodyPartConfig>([
   ...ROCK_GOLEM_CONFIGS,
   ...GOBLIN_CONFIGS,
-  [HOARDER_BODY_PART_KEY, HOARDER_CONFIG],
+  [TRASH_GREMLIN_BODY_PART_KEY, TRASH_GREMLIN_CONFIG],
   [COCKROACH_BODY_PART_KEY, COCKROACH_CONFIG],
   [RAT_BODY_PART_KEY, RAT_CONFIG],
   [LLAMA_BODY_PART_KEY, LLAMA_CONFIG],
@@ -268,7 +274,7 @@ const BODY_PART_REGISTRY = new Map<string, MobBodyPartConfig>([
   [DARK_KNIGHT_BODY_PART_KEY, DARK_KNIGHT_CONFIG],
   [TROGLODYTE_BODY_PART_KEY, TROGLODYTE_CONFIG],
   [TUSKLING_BODY_PART_KEY, TUSKLING_CONFIG],
-  [JUICER_BODY_PART_KEY, JUICER_CONFIG],
+  ...ROOSTER_CONFIGS,
   [BRINDLED_VESPA_BODY_PART_KEY, BRINDLED_VESPA_CONFIG],
   [KRAKAREN_TENTACLE_BODY_PART_KEY, KRAKAREN_TENTACLE_CONFIG],
   [KRAKAREN_BODY_PART_KEY, KRAKAREN_CONFIG],
@@ -541,10 +547,10 @@ export class BodyPartGoreSystem implements GameSystem {
    *
    * The cap has to stay — it is what bounds this system's memory and its
    * per-frame draw cost — but the newest arrival is the wrong end to trim. A
-   * boss who spawns her own trash mobs kills the payoff of her own fight
-   * otherwise: her swarm's litter takes every slot during the fight and holds it
-   * long past their deaths, so her six pieces burst out of her, fly, and wink
-   * out the instant they touch the floor.
+   * boss whose fight fills the room with trash mobs kills the payoff of its own
+   * fight otherwise: the swarm's litter takes every slot during the fight and
+   * holds it long past their deaths, so the boss's own pieces burst out, fly,
+   * and wink out the instant they touch the floor.
    *
    * Life counts down from the same start for every piece, so the lowest life is
    * the piece that has been lying there longest.

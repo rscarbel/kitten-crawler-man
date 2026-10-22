@@ -141,10 +141,10 @@ const PERCEPTIBLE_CHANNEL_STEP = 12;
  * 0.20% clears the worst shipped row by 1.5× and rejects the worst duplicate by
  * 2.1×.
  *
- * It is a duplicate detector and not a measure of how lively a row is: the
- * Hoarder's idles, before their weight shift, ran a hold–move–move–hold–move
- * pattern whose *held* pairs still measured 0.22%–0.54% because she is a big
- * figure and the held frames differed faintly everywhere. Loop continuity and
+ * It is a duplicate detector and not a measure of how lively a row is: an
+ * idle with a hold–move–move–hold–move pattern can still measure 0.22%–0.54%
+ * on its *held* pairs when the figure is big and the held frames differ
+ * faintly everywhere. Loop continuity and
  * the evenness of a row are somebody else's gate; this one answers only "is
  * this frame a picture the row has already painted".
  */

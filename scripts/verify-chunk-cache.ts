@@ -12,6 +12,8 @@
  *  - A tile changed on a chunk corner is patched into all four chunks it
  *    reaches before they are drawn, with no chunk re-baked, and the view then
  *    matches a fresh bake of the changed map.
+ *  - A map let go with `releaseTileArt` gives every chunk's pixels back at
+ *    once, without waiting for a collection.
  *
  * Every check is a count or a pixel comparison, never a timing. The cache
  * paces itself by the clock, so the gate swaps `performance.now` for a virtual
@@ -34,6 +36,7 @@ const { TileChunkCache, renderCanvas } = await import('../src/map/TileRenderer.j
 const { perfMonitor } = await import('../src/core/PerfMonitor.js');
 const { CHUNK_TILES } = await import('../src/map/tiles/chunkTiles.js');
 const { FloorTypeValue } = await import('../src/map/tileTypes.js');
+const { surfaceTallies } = await import('../src/core/canvasSurface.js');
 
 const WORLD_SEED = 7919;
 const VIEW_W = 1280;
@@ -207,6 +210,17 @@ if (cornerTile === undefined) {
   const patchedDiff = differingPixels(afterChange, freshBakePixels());
   check(patchedDiff === 0, `the patched view matches a fresh bake (${patchedDiff} bytes differ)`);
 }
+
+console.log('\n── The map is let go');
+const chunkSurfacesHeld = (): number => surfaceTallies().get('tileChunks')?.surfaces ?? 0;
+const heldBeforeRelease = chunkSurfacesHeld();
+check(heldBeforeRelease > 0, `the walk left chunks resident (${heldBeforeRelease})`);
+map.releaseTileArt();
+const heldAfterRelease = chunkSurfacesHeld();
+check(
+  heldAfterRelease === 0,
+  `releasing the map's art gives every chunk back (${heldAfterRelease} left)`,
+);
 
 if (failures.length > 0) {
   console.error(`\n${failures.length} check(s) failed`);

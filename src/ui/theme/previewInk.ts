@@ -23,8 +23,10 @@ const floor = {
   unlitCave: '#2a2f2b',
   /** The Krakaren's lair floor. */
   wetStone: '#3c4644',
-  /** The Juicer's gym. */
+  /** Big Rooster's gym. */
   gymMat: '#3a3f46',
+  /** The Trash Gremlin's linoleum. */
+  lairLinoleum: '#7d7458',
 } as const;
 
 /** The review grid every creature scene lays its animation rows out in. */

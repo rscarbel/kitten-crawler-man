@@ -77,7 +77,7 @@ export interface EscortSpawnRule extends MobLevelRange {
   maxCount?: number;
   /**
    * Withheld until the progression region at this index; absent means every
-   * region. Floor 1's archers are gated behind the Hoarder this way, so the
+   * region. Floor 1's archers are gated behind the Trash Gremlin this way, so the
    * opening stretch of a first-time crawler's first dungeon is unchanged. A
    * hallway point belongs to no region, so an escort with one set never joins
    * a hallway rule.

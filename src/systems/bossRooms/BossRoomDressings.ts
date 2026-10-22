@@ -3,7 +3,7 @@ import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { GameMap } from '../../map/GameMap';
 import type { SystemContext } from '../GameSystem';
 import type { GroundHazardSource } from '../GroundHazardSource';
-import { JuicerRoomSystem } from '../JuicerRoomSystem';
+import { GymRoomSystem } from '../GymRoomSystem';
 import type {
   BossRoomDressing,
   BossRoomFightListener,
@@ -11,23 +11,23 @@ import type {
 } from './BossRoomDressing';
 import type { BossRoomDressingCheckpoint } from './bossRoomDressingCheckpoint';
 import { ColosseumDressingSystem } from './ColosseumDressingSystem';
-import { HoarderRoomSystem } from './HoarderRoomSystem';
+import { TrashGremlinRoomSystem } from './TrashGremlinRoomSystem';
 import { KrakarenRoomSystem } from './KrakarenRoomSystem';
 import { buildKrakarenLabLayout } from './krakarenLabLayout';
 import { gymLayoutOf } from '../../map/tiles/bossRooms/gymLayout';
 import {
   colosseumFloodLamps,
   gymStripLights,
-  hoarderBulb,
+  trashGremlinBulb,
   krakarenMoodLights,
   type BossRoomMoodLight,
   type MoodLightSink,
 } from './bossRoomMoodLights';
 import type { SpiderLabDressing } from './SpiderLabDressing';
+import { BIG_ROOSTER_BOSS_TYPE } from '../../core/bossTypes';
 
 /** The boss-type ids from `levelDef.bossRooms[].type` that own a rectangular boss room. */
-export const HOARDER_BOSS_TYPE = 'the_hoarder';
-export const JUICER_BOSS_TYPE = 'juicer';
+export const TRASH_GREMLIN_BOSS_TYPE = 'trash_gremlin';
 export const KRAKAREN_BOSS_TYPE = 'krakaren_clone';
 
 /**
@@ -37,8 +37,8 @@ export const KRAKAREN_BOSS_TYPE = 'krakaren_clone';
  * type: a list could only snapshot them as `unknown`.
  */
 export interface BossRoomDressingParts {
-  hoarder: HoarderRoomSystem | null;
-  juicer: JuicerRoomSystem | null;
+  trashGremlin: TrashGremlinRoomSystem | null;
+  gym: GymRoomSystem | null;
   krakaren: KrakarenRoomSystem | null;
   spiderLab: SpiderLabDressing | null;
   colosseum: ColosseumDressingSystem | null;
@@ -61,21 +61,24 @@ export interface BossRoomDefeats {
 export function buildGauntletRoomDressings(
   gameMap: GameMap,
   bossTypes: readonly string[],
-): Pick<BossRoomDressingParts, 'hoarder' | 'krakaren'> & { juicer: JuicerRoomSystem } {
+): Pick<BossRoomDressingParts, 'trashGremlin' | 'krakaren'> & { gym: GymRoomSystem } {
   const boundsOf = (bossType: string): GameMap['bossRooms'][number]['bounds'] | undefined => {
     const index = bossTypes.indexOf(bossType);
     const roomExists = index >= 0 && index < gameMap.bossRooms.length;
     return roomExists ? gameMap.bossRooms[index].bounds : undefined;
   };
-  const hoarderBounds = boundsOf(HOARDER_BOSS_TYPE);
-  const juicerIndex = bossTypes.indexOf(JUICER_BOSS_TYPE);
-  const juicerRoomExists = juicerIndex >= 0 && juicerIndex < gameMap.bossRooms.length;
+  const trashGremlinBounds = boundsOf(TRASH_GREMLIN_BOSS_TYPE);
+  const gymIndex = bossTypes.indexOf(BIG_ROOSTER_BOSS_TYPE);
+  const gymRoomExists = gymIndex >= 0 && gymIndex < gameMap.bossRooms.length;
   const krakarenBounds = boundsOf(KRAKAREN_BOSS_TYPE);
   return {
-    hoarder: hoarderBounds === undefined ? null : new HoarderRoomSystem(gameMap, hoarderBounds),
+    trashGremlin:
+      trashGremlinBounds === undefined
+        ? null
+        : new TrashGremlinRoomSystem(gameMap, trashGremlinBounds),
     // Built even on a floor with no gym: it stands inert without bounds, and the
     // scene reads its camera shake every frame.
-    juicer: new JuicerRoomSystem(juicerRoomExists ? gameMap : null, juicerIndex),
+    gym: new GymRoomSystem(gymRoomExists ? gameMap : null, gymIndex),
     krakaren: krakarenBounds === undefined ? null : new KrakarenRoomSystem(gameMap, krakarenBounds),
   };
 }
@@ -104,13 +107,13 @@ export function registerBossRoomMoodLights(
   bossTypes.forEach((bossType, index) => {
     if (index >= gameMap.bossRooms.length) return;
     const room = gameMap.bossRooms[index];
-    if (bossType === HOARDER_BOSS_TYPE) lights.push(hoarderBulb(room.bounds).light);
+    if (bossType === TRASH_GREMLIN_BOSS_TYPE) lights.push(trashGremlinBulb(room.bounds).light);
     if (bossType === KRAKAREN_BOSS_TYPE) {
       const lab = buildKrakarenLabLayout(gameMap.structure, room.bounds, room.centre);
       lights.push(...krakarenMoodLights(lab));
     }
   });
-  const gym = bossTypes.includes(JUICER_BOSS_TYPE) ? gymLayoutOf(gameMap.structure) : null;
+  const gym = bossTypes.includes(BIG_ROOSTER_BOSS_TYPE) ? gymLayoutOf(gameMap.structure) : null;
   if (gym !== null) lights.push(...gymStripLights(gym).map((strip) => strip.light));
   if (gameMap.arenaExteriors.length > 0) {
     const arena = gameMap.arenaExteriors[0];
@@ -140,15 +143,15 @@ export class BossRoomDressings implements GroundHazardSource, BossRoomFightListe
     private readonly bossTypes: readonly string[],
   ) {
     this.all = [
-      parts.hoarder,
-      parts.juicer,
+      parts.trashGremlin,
+      parts.gym,
       parts.krakaren,
       parts.spiderLab,
       parts.colosseum,
     ].filter((dressing): dressing is NonNullable<typeof dressing> => dressing !== null);
     this.byBossRoomIndex = bossTypes.map((bossType) => {
-      if (bossType === HOARDER_BOSS_TYPE) return parts.hoarder;
-      if (bossType === JUICER_BOSS_TYPE) return parts.juicer;
+      if (bossType === TRASH_GREMLIN_BOSS_TYPE) return parts.trashGremlin;
+      if (bossType === BIG_ROOSTER_BOSS_TYPE) return parts.gym;
       if (bossType === KRAKAREN_BOSS_TYPE) return parts.krakaren;
       return null;
     });
@@ -228,10 +231,10 @@ export class BossRoomDressings implements GroundHazardSource, BossRoomFightListe
   }
 
   captureCheckpoint(): BossRoomDressingCheckpoint {
-    const { hoarder, juicer, krakaren, spiderLab, colosseum } = this.parts;
+    const { trashGremlin, gym, krakaren, spiderLab, colosseum } = this.parts;
     return {
-      hoarder: hoarder?.captureCheckpoint() ?? null,
-      juicer: juicer?.captureCheckpoint() ?? null,
+      trashGremlin: trashGremlin?.captureCheckpoint() ?? null,
+      gym: gym?.captureCheckpoint() ?? null,
       krakaren: krakaren?.captureCheckpoint() ?? null,
       spiderLab: spiderLab?.captureCheckpoint() ?? null,
       colosseum: colosseum?.captureCheckpoint() ?? null,
@@ -239,9 +242,9 @@ export class BossRoomDressings implements GroundHazardSource, BossRoomFightListe
   }
 
   restoreCheckpoint(snapshot: BossRoomDressingCheckpoint): void {
-    const { hoarder, juicer, krakaren, spiderLab, colosseum } = this.parts;
-    if (snapshot.hoarder !== null) hoarder?.restoreCheckpoint(snapshot.hoarder);
-    if (snapshot.juicer !== null) juicer?.restoreCheckpoint(snapshot.juicer);
+    const { trashGremlin, gym, krakaren, spiderLab, colosseum } = this.parts;
+    if (snapshot.trashGremlin !== null) trashGremlin?.restoreCheckpoint(snapshot.trashGremlin);
+    if (snapshot.gym !== null) gym?.restoreCheckpoint(snapshot.gym);
     if (snapshot.krakaren !== null) krakaren?.restoreCheckpoint(snapshot.krakaren);
     if (snapshot.spiderLab !== null) spiderLab?.restoreCheckpoint(snapshot.spiderLab);
     if (snapshot.colosseum !== null) colosseum?.restoreCheckpoint(snapshot.colosseum);

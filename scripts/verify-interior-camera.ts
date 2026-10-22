@@ -230,7 +230,7 @@ function buildInterior(
     stampSafeRoomCounters(map);
     stampSafeRoomDecor(map);
   }
-  map.invalidateAllTileArt();
+  map.releaseTileArt();
   return map;
 }
 

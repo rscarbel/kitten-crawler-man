@@ -1,13 +1,13 @@
 import type { TileContent } from '../tileTypes';
 import { drawGymFloorTile } from './bossRooms/gymTiles';
-import { drawHoarderFloor } from './bossRooms/hoarderTiles';
+import { drawTrashGremlinFloor } from './bossRooms/trashGremlinTiles';
 import {
   SAFE_ROOM_FLOOR,
   SAFE_ROOM_THRESHOLD,
   LAB_STATION_FLOOR,
   LAB_STATION_THRESHOLD,
-  HOARDER_FLOOR,
-  JUICER_BOSS_ROOM_FLOOR,
+  TRASH_GREMLIN_FLOOR,
+  GYM_FLOOR,
   KRAKAREN_BOSS_ROOM_FLOOR,
   ARENA_FLOOR,
   FLOOR_GRATE,
@@ -646,13 +646,13 @@ export function drawSpecialFloorTile(
       break;
     }
 
-    case HOARDER_FLOOR:
-      drawHoarderFloor(ctx, structure, sx, sy, ts, tx, ty);
+    case TRASH_GREMLIN_FLOOR:
+      drawTrashGremlinFloor(ctx, structure, sx, sy, ts, tx, ty);
       break;
 
-    // The Juicer's gym: rubber mat, lifting platform and turf lane, zoned by
+    // Big Rooster's gym: rubber mat, lifting platform and turf lane, zoned by
     // where the tile sits in the room.
-    case JUICER_BOSS_ROOM_FLOOR: {
+    case GYM_FLOOR: {
       drawGymFloorTile(ctx, structure, sx, sy, ts, tx, ty);
       drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
       break;

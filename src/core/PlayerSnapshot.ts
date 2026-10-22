@@ -88,7 +88,7 @@ export interface PlayerSnapshot {
   tattoo?: StatTattooId | null;
   /** Skill taught by the Quiet Needle's brass mark. Absent on saves predating it. */
   skillTattoo?: SkillId | null;
-  /** The Juicer's Desperado Pass ink. Absent on saves predating it. */
+  /** Big Rooster's Desperado Pass ink. Absent on saves predating it. */
   desperadoPassTattoo?: boolean;
   /**
    * The weapon the human had in hand, written by v3 and below only. A restore

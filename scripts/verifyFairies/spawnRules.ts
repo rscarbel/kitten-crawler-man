@@ -626,7 +626,7 @@ export function verifySpawnRules(report: FairyGateReport): void {
   );
   report.check(
     shipped.revived.length === 0,
-    'every chance designed off stays off: floor 1 before the Hoarder, floor 1 healers, floor 3 rooms, scatter off floor 3',
+    'every chance designed off stays off: floor 1 before the Trash Gremlin, floor 1 healers, floor 3 rooms, scatter off floor 3',
     describeMismatches(shipped.revived, shipped.chancesChecked),
   );
   report.check(

@@ -7,6 +7,7 @@ import { beginFigureFrame } from '../sprites/figure/figureFrameCache';
 import { beginEnvironmentArtFrame } from '../map/environmentArtCache';
 import { beginFrameCostTally, closeFrameCost, lastFrameCost } from './frameCost';
 import { beginRenderFrame } from './renderFrameClock';
+import { releaseIdleRecentSurfaces } from './recentSurfaceCache';
 import { beginCanvasRecoveryFrame, watchForCanvasLoss } from './canvasRecovery';
 import { closeAboveDarkness } from '../systems/lighting/aboveDarkness';
 import { perfMonitor } from './PerfMonitor';
@@ -481,6 +482,7 @@ export class SceneManager {
     beginFrameCostTally();
     beginFigureFrame();
     beginEnvironmentArtFrame();
+    releaseIdleRecentSurfaces();
     closeAboveDarkness();
     try {
       this.current?.render(this.ctx);

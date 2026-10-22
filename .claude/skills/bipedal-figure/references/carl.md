@@ -623,8 +623,10 @@ west-facing profiles are in `add-sprite`.
 
 ## Anchors frozen off the art
 
-Nothing can measure ink at runtime, so these are measured once and re-measured
-by a gate on every render:
+These are measured once off the painted cells and re-measured by a gate on
+every render. The sole line is cell geometry and has to be frozen; the hair's
+top is frozen debt, since `figureRowInkTop` in `figureFrameCache.ts` measures a
+drawn row's top at runtime and could replace it:
 
 - `HUMAN_SPRITE_TOP_ABOVE_TILE` in `HumanPlayer.ts`: the top of his hair sits
   21.5 px above the tile anchor at the 32 px tile, frozen as 22 so the health bar

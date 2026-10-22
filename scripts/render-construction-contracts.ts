@@ -488,7 +488,7 @@ function skyfowlRoom(): void {
     artSeed: FLOOR_ART_SEEDS[0],
   });
   map.generateInterior(building.kind, 0, building.name, false, 'default');
-  map.invalidateAllTileArt();
+  map.releaseTileArt();
   const spots: PlacedSpot[] = [];
   const hiddenPropIds = new Set<string>();
   for (const spot of site.spots) {

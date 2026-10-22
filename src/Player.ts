@@ -201,7 +201,7 @@ export type DamageSource =
         | 'clownGas'
         | 'lichFirewall'
         | 'lichOrb'
-        | 'hoarderAvalanche'
+        | 'trashAvalanche'
         | 'krakarenLiveWire'
         | 'krakarenTankBurst';
     }
@@ -675,7 +675,7 @@ export abstract class Player implements AboveDarknessDrawer {
    */
   thirdEyeReadyAt: number | null = null;
   /**
-   * Earned by defeating the Juicer; the Desperado Club recognizes it at the
+   * Earned by defeating Big Rooster; the Desperado Club recognizes it at the
    * door. Permanent, one per crawler.
    */
   hasDesperadoPassTattoo = false;

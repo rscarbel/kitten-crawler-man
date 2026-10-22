@@ -77,6 +77,8 @@ import {
 } from '../core/canvasRecovery';
 import {
   recordSheetLookups,
+  environmentRepaintCursor,
+  environmentSheetsRepaintedSince,
   repaintedSheetRevision,
   touchEnvironmentSheets,
 } from './environmentArtCache';
@@ -124,6 +126,21 @@ const CHUNK_SPECULATIVE_BUDGET_MS = 1;
  * screens of scroll history.
  */
 const MAX_CACHED_CHUNKS = 60;
+
+const CHUNK_IDLE_RELEASE_SECONDS = 30;
+const CHUNK_FRAMES_PER_SECOND = 60;
+/**
+ * Frames of this map's own drawing a chunk may go undrawn before it is let go,
+ * however far below {@link MAX_CACHED_CHUNKS} the cache is. A map that lives
+ * for a whole visit to the floor otherwise keeps every chunk of the last
+ * screens it showed for good: measured headless on floor 3, a party that
+ * walked the town before going to Briar Hollow still held 20 chunks (20 MB)
+ * more than one that went straight there after standing 35 seconds. Half a
+ * minute keeps the ground a fight circles over and lets the walk behind go.
+ * Counted on the cache's own frames, so a map not drawn at all (the floor
+ * outside while the party is in a building) ages nothing.
+ */
+const CHUNK_IDLE_RELEASE_FRAMES = CHUNK_IDLE_RELEASE_SECONDS * CHUNK_FRAMES_PER_SECOND;
 
 declare const __DEV_BUILD__: boolean | undefined;
 /** Whether this is a dev build, where the stale-chunk drain is watched. */
@@ -548,6 +565,8 @@ export class TileChunkCache {
   private generation = canvasGeneration();
   /** The repainted-sheet revision the chunks were baked under; see `repaintedSheetRevision`. */
   private sheetRevision = repaintedSheetRevision();
+  /** How far through the eviction repaints this cache has read; see `environmentSheetsRepaintedSince`. */
+  private repaintCursor = environmentRepaintCursor();
   /** No chunk is baked before this frame; set by a bake that threw. */
   private bakeRetryFrame = 0;
   /** Measured cost of one chunk bake, or null before the first. */
@@ -834,9 +853,16 @@ export class TileChunkCache {
       this.dispose();
       return;
     }
-    if (this.sheetRevision === revision) return;
-    this.sheetRevision = revision;
-    this.markAllStale();
+    if (this.sheetRevision !== revision) {
+      this.sheetRevision = revision;
+      this.markAllStale();
+      return;
+    }
+    // A building's own sheet is never baked into the ground; any other may
+    // have been drawn at its fallback by chunks baked while it was gone.
+    const repainted = environmentSheetsRepaintedSince(this.repaintCursor);
+    this.repaintCursor = repainted.cursor;
+    if (repainted.sheets.some((sheet) => !sheet.drawnOnlyByItsBuilding)) this.markAllStale();
   }
 
   /**
@@ -1214,6 +1240,7 @@ export class TileChunkCache {
     this.previousCameraY = cameraY;
 
     this.evictLeastRecentlyUsed();
+    this.releaseIdleChunks();
   }
 
   private watchStaleDrain(showsStale: boolean, rebakedStale: boolean): void {
@@ -1331,12 +1358,24 @@ export class TileChunkCache {
       // more chunks than the cap, they all tie on age, and evicting them would
       // re-bake and re-evict the same chunks every frame.
       if (oldestKey === NO_CHUNK || oldestFrame === this.frameCounter) return;
-      const evicted = this.chunks.get(oldestKey);
-      if (evicted !== undefined) this.releaseChunk(evicted);
-      this.chunks.delete(oldestKey);
-      // A bake in progress for it still owes the patches made since it began.
-      if (this.job?.key !== oldestKey) this.pendingPatches.delete(oldestKey);
+      this.dropChunk(oldestKey);
     }
+  }
+
+  /** Lets go of every chunk not drawn within {@link CHUNK_IDLE_RELEASE_FRAMES}. */
+  private releaseIdleChunks(): void {
+    const oldestKeptFrame = this.frameCounter - CHUNK_IDLE_RELEASE_FRAMES;
+    for (const [key, chunk] of this.chunks) {
+      if (chunk.lastUsedFrame < oldestKeptFrame) this.dropChunk(key);
+    }
+  }
+
+  private dropChunk(key: number): void {
+    const chunk = this.chunks.get(key);
+    if (chunk !== undefined) this.releaseChunk(chunk);
+    this.chunks.delete(key);
+    // A bake in progress for it still owes the patches made since it began.
+    if (this.job?.key !== key) this.pendingPatches.delete(key);
   }
 }
 
@@ -1502,6 +1541,8 @@ export class OverlayTileCache {
   private generation = canvasGeneration();
   /** The repainted-sheet revision the entries were rendered under; see `repaintedSheetRevision`. */
   private sheetRevision = repaintedSheetRevision();
+  /** How far through the eviction repaints this cache has read; see `environmentSheetsRepaintedSince`. */
+  private repaintCursor = environmentRepaintCursor();
   /** No new entry is rendered before this time; set by a render that threw. */
   private renderRetryAtMs = 0;
   /** Advanced by {@link beginFrame}; stamps each entry as it is drawn, for eviction. */
@@ -1713,9 +1754,10 @@ export class OverlayTileCache {
   }
 
   /**
-   * As `TileChunkCache`'s: a canvas rebuild drops every entry, and a repainted
-   * sheet landing marks them all stale, facades included, since any sheet may
-   * be the one repainted.
+   * As `TileChunkCache`'s: a canvas rebuild drops every entry, and a purge's
+   * repaint landing marks them all stale, facades included, since any sheet
+   * may be the one repainted. A building's sheet landing drops only that
+   * building's entries.
    */
   private syncCanvasGeneration(): void {
     const current = canvasGeneration();
@@ -1726,9 +1768,18 @@ export class OverlayTileCache {
       this.dispose();
       return;
     }
-    if (this.sheetRevision === revision) return;
-    this.sheetRevision = revision;
-    this.markAllStale(true);
+    if (this.sheetRevision !== revision) {
+      this.sheetRevision = revision;
+      this.markAllStale(true);
+      return;
+    }
+    const repainted = environmentSheetsRepaintedSince(this.repaintCursor);
+    this.repaintCursor = repainted.cursor;
+    for (const sheet of repainted.sheets) {
+      // A building's sheet is drawn by that building's entries alone.
+      if (sheet.drawnOnlyByItsBuilding) this.invalidateSpriteKey(sheet.key);
+      else this.markAllStale(false);
+    }
   }
 
   /**

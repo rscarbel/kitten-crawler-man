@@ -741,7 +741,7 @@ export function verifyRateUpgrade(report: FairyGateReport): void {
 // ── Fairies that fled in ─────────────────────────────────────────────────────
 
 /** A floor-1 boss, so no upgrade floor 2 ships with answers to the probe's death. */
-const FLED_IN_BOSS_TYPE = 'the_hoarder' as const satisfies StandaloneMobKind;
+const FLED_IN_BOSS_TYPE = 'trash_gremlin' as const satisfies StandaloneMobKind;
 const FLED_IN_REGION = 0;
 /** A room in the middle of the test arena, the rect its spawn point describes. */
 const FLED_IN_POINT = { x: 12, y: 12, w: 9, h: 9, region: FLED_IN_REGION };

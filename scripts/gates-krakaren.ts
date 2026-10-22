@@ -268,7 +268,7 @@ const DRAPE_HALF_LIMIT_TILES =
 
 /**
  * The rows the drape limit governs: she is at rest in all of them, which is the
- * spread the brief and her cull margin were written for.
+ * spread `KRAKAREN_SPREAD_HALF_TILES` and `KRAKAREN_CULL_MARGIN_TILES` budget for.
  */
 const DRAPE_ROWS = [
   'idle',

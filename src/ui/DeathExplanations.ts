@@ -9,10 +9,13 @@ export type DeathCause =
   | 'levelTimerRanOut'
   | 'goblin'
   | 'cockroach'
-  | 'hoarder'
-  | 'juicer'
-  | 'juicerPunch'
-  | 'juicerPlateRoll'
+  | 'trashGremlin'
+  | 'bigRooster'
+  | 'bigRoosterSlam'
+  | 'bigRoosterClub'
+  | 'bigRoosterPlateRoll'
+  | 'roosterPeck'
+  | 'roosterPunch'
   | 'bugaboo'
   | 'burnedStatus'
   | 'poisonStatus'
@@ -83,7 +86,7 @@ export type DeathCause =
   | 'clownGas'
   | 'lichFirewall'
   | 'lichOrb'
-  | 'hoarderAvalanche'
+  | 'trashAvalanche'
   | 'krakarenLiveWire'
   | 'krakarenTankBurst'
   | 'explosiveFriendlyFire'
@@ -114,24 +117,39 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'You died by a cockroach. That is the dumbest way to die in this dungeon.',
     'The cockroach swarm was too much for you.',
   ],
-  hoarder: [
-    "You burned in a pool of the Hoarder's acid vomit.",
-    'The Hoarder, the easiest boss in the dungeon, managed to kill you.',
-    "You were corroded by vomit. I bet you won't stand in that again.",
+  trashGremlin: [
+    "You stood in the Trash Gremlin's spit until there was less of you to stand.",
+    'The Trash Gremlin, the easiest boss in the dungeon, is wearing your boots as a hat now.',
+    'Its throat glowed. You saw it glow. You stayed exactly where you were.',
   ],
-  juicer: [
-    'You took a dumbbell to the face. That went as well as you might expect.',
-    'The Juicer absolutely crushed you.',
-    'Oof. The Juicer collapsed your windpipe with a thrown dumbbell.',
+  bigRooster: [
+    'A dumbbell came at you from across the gym. You were standing exactly where he aimed it.',
+    'Big Rooster threw iron at you until you stopped getting up. He called it a set.',
+    'All chest, all arms, all throw. You lost the argument at range.',
   ],
-  juicerPunch: [
-    'The Juicer put both fists through the floor, and you were standing on it.',
-    'He punched the ground. The ground punched you. Never leg day, always dead.',
+  bigRoosterSlam: [
+    'Both fists came down over his comb and the floor came up under you.',
+    'The chalk ring was a suggestion to leave. You stayed for the shockwave.',
   ],
-  juicerPlateRoll: [
-    'He bowled a forty-five pound plate at your ankles. It was drawn on the floor in chalk first.',
-    'Flattened by a rolling bumper plate. The chalk line was the part where you move.',
-    'The Juicer racked you like a spare. Somebody should have spotted you.',
+  bigRoosterClub: [
+    'You got close to the rooster holding a dumbbell. He used it the way a dumbbell is not meant to be used.',
+    'One wide swing, one cracked crawler. Nobody spots you in this gym.',
+    'He raised the weight high behind his shoulder first. That was your cue.',
+  ],
+  bigRoosterPlateRoll: [
+    'He bowled a plate down a chalk lane and you stood in the lane.',
+    'Flattened by a rolling bumper plate. The line on the floor was the part where you move.',
+    'Big Rooster rolled iron at your ankles and called it cardio.',
+  ],
+  roosterPeck: [
+    'Pecked to death. By a rooster. In a gym.',
+    'A beak found the soft spot every time. You had several.',
+    'The neck drew back before each peck. You watched it happen anyway.',
+  ],
+  roosterPunch: [
+    'A rooster threw a straight right and you caught it with your face.',
+    'Small bird, big arms, one clean punch. Do not tell anyone.',
+    'He leads with the fist, not the beak. You learned that last.',
   ],
   bugaboo: [
     'A Bugaboo swarmed you to death. Hard to dodge what you cannot see.',
@@ -253,10 +271,10 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'The circle was on the ground for a reason. You were still inside it.',
     'The Lich rained soul-fire on the office and one of them found you.',
   ],
-  hoarderAvalanche: [
-    'A tower of her newspapers came down on you. She had been saving them for exactly this.',
-    'Buried under forty years of junk mail. The tower wobbled first. You watched it wobble.',
-    'Crushed by a hoard. Somewhere in that pile is the receipt for everything that killed you.',
+  trashAvalanche: [
+    'A tower of garbage came down on you. The Trash Gremlin calls that redecorating.',
+    'Buried under a landslide of tin cans and wet cardboard. The tower wobbled first. You watched it wobble.',
+    'Flattened by trash. The roaches will be moving into you by morning.',
   ],
   krakarenLiveWire: [
     'You stood in the wired puddle while the cable sparked its way down to you. The junction box was right there. It had a lightning bolt on it.',

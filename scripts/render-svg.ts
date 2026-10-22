@@ -192,7 +192,7 @@ if (options.list) {
   await listSubjects();
 } else if (options.all || options.subject !== null) {
   // Some characters are composites that blit baked sheets — market props, the
-  // Hoarder's sacks — and those blits are silently skipped on an unloaded key,
+  // boss-room junk — and those blits are silently skipped on an unloaded key,
   // so the sheets have to be in memory before anything is painted.
   await loadGameSpritesInNode();
 

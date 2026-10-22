@@ -21,11 +21,12 @@ import {
   drawKnightFront,
   restingPose as knightRestingPose,
 } from '../src/sprites/art/darkKnightArt.js';
+import { TRASH_GREMLIN_FIGURE } from '../src/sprites/art/trashGremlinFigure.js';
 import {
-  drawHoarderFront,
-  restingPose as hoarderRestingPose,
-} from '../src/sprites/art/hoarderArt.js';
-import { drawJuicerFront, restingPose as juicerRestingPose } from '../src/sprites/art/juicerArt.js';
+  BENT_ROOSTER_FIGURE,
+  BIG_ROOSTER_FIGURE,
+  LITTLE_ROOSTER_FIGURE,
+} from '../src/sprites/art/roosterFigure.js';
 import { drawRatKinFront, restingPose as ratKinRestingPose } from '../src/sprites/art/ratKinArt.js';
 import { MORDECAI_OUTFIT } from '../src/sprites/art/ratkin/cast.js';
 import { drawShady, restingPose as shadyRestingPose } from '../src/sprites/art/shadyArt.js';
@@ -75,8 +76,8 @@ import {
   POOL_FRAME_COUNT,
   POOL_FRAME_SIZE,
   drawAcidPoolLoop,
-  drawHoarderBile,
-} from '../src/sprites/art/hoarderBileArt.js';
+  drawGremlinBile,
+} from '../src/sprites/art/gremlinBileArt.js';
 import {
   EVIL_CLOWN_FIGURE,
   FAT_CLOWN_FIGURE,
@@ -182,8 +183,6 @@ function figureSubject(def: FigureDef, state: string): Subject {
 /** Where the figure's feet sit inside its cell, as a fraction of cell height. */
 const GROUND_FRACTION = 0.8;
 
-const juicerPose = juicerRestingPose();
-const hoarderPose = hoarderRestingPose();
 const knightPose = knightRestingPose();
 const carlPose = carlRestingPose();
 const catPose = catRestPose();
@@ -209,16 +208,12 @@ const SUBJECTS: readonly Subject[] = [
     frameSize: 128,
     paint: (ctx) => drawShady(asGameContext(ctx), shadyPose),
   },
+  figureSubject(TRASH_GREMLIN_FIGURE, 'idle'),
   {
-    name: 'hoarder',
-    frameSize: 208,
-    paint: (ctx) => drawHoarderFront(asGameContext(ctx), hoarderPose),
-  },
-  {
-    name: 'hoarder_bile_arc',
+    name: 'gremlin_bile_arc',
     frameSize: BOLUS_FRAME_SIZE,
     paint: (ctx) =>
-      drawHoarderBile(
+      drawGremlinBile(
         asGameContext(ctx),
         BOLUS_FRAME_SIZE / 2,
         BOLUS_FRAME_SIZE / 2,
@@ -227,7 +222,7 @@ const SUBJECTS: readonly Subject[] = [
       ),
   },
   {
-    name: 'hoarder_acid',
+    name: 'gremlin_acid',
     frameSize: POOL_FRAME_SIZE,
     paint: (ctx) =>
       drawAcidPoolLoop(
@@ -242,11 +237,6 @@ const SUBJECTS: readonly Subject[] = [
     name: 'dark_knight',
     frameSize: 216,
     paint: (ctx) => drawKnightFront(asGameContext(ctx), knightPose),
-  },
-  {
-    name: 'juicer',
-    frameSize: 176,
-    paint: (ctx) => drawJuicerFront(asGameContext(ctx), juicerPose),
   },
   {
     name: 'mongo_adult',
@@ -308,6 +298,9 @@ const SUBJECTS: readonly Subject[] = [
   figureSubject(KRAKAREN_TENTACLE_FIGURE, 'idle'),
   figureSubject(KRAKAREN_SLAM_FIGURE, 'loom'),
   figureSubject(TUSKLING_FIGURE, 'idle'),
+  figureSubject(BIG_ROOSTER_FIGURE, 'idle'),
+  figureSubject(LITTLE_ROOSTER_FIGURE, 'idle'),
+  figureSubject(BENT_ROOSTER_FIGURE, 'idle'),
   figureSubject(PROTECTIVE_SHELL_FIGURE, 'active'),
   figureSubject(PROTECTIVE_SHELL_MINI_FIGURE, 'active'),
   figureSubject(PROTECTIVE_SHELL_SHOCKWAVE_FIGURE, 'expand'),

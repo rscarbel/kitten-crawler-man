@@ -19,7 +19,7 @@ import {
   TORCH,
   BRAZIER,
   BOOKSHELF,
-  HOARD_BAG,
+  TRASH_BAG,
   type TileContent,
 } from '../map/tileTypes';
 import { inferFloorType } from '../map/tiles/helpers';
@@ -53,7 +53,7 @@ const SMASH_SIGHT_TRANSPARENT_TYPES: ReadonlySet<number> = new Set([
   TORCH,
   BRAZIER,
   BOOKSHELF,
-  HOARD_BAG,
+  TRASH_BAG,
 ]);
 
 /**

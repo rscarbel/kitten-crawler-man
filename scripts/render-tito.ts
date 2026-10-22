@@ -142,7 +142,7 @@ const building = plan.buildings.find((b) => b.name === CLUB_BUILDING_NAME);
 if (building === undefined) throw new Error(`town plan has no "${CLUB_BUILDING_NAME}"`);
 const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [], artSeed });
 map.generateInterior(building.kind, 0, building.name, false, 'default');
-map.invalidateAllTileArt();
+map.releaseTileArt();
 
 const human = new HumanPlayer(map.startTile.x, map.startTile.y, TILE_SIZE);
 const cat = new CatPlayer(map.startTile.x + 1, map.startTile.y, TILE_SIZE);

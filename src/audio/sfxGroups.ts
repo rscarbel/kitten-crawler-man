@@ -451,14 +451,10 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'velociraptor_chitter',
   ],
 
-  /** The Hoarder + Juicer boss rooms, level1's llama/rat, and its dungeon-generated arena. */
+  /** The Trash Gremlin + Big Rooster boss rooms, level1's llama/rat, and its dungeon-generated arena. */
   level1: [
-    'hoarder_damage_1',
-    'hoarder_damage_2',
-    'hoarder_damage_3',
-    'hoarder_vomit',
-    'juicer_grunt',
-    'juicer_throw',
+    'trash_gremlin_vomit',
+    'dumbbell_throw',
     'llama_fireball',
     'llama_fireball_explosion',
     'massive_strike_with_dirt_impact',
@@ -773,7 +769,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'glass_break_3',
     'glass_break_4',
     'hammer_strike',
-    'juicer_throw',
+    'dumbbell_throw',
     'knight_magic_windup',
     'laser_1',
     'laser_2',

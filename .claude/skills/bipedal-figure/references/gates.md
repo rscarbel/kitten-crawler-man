@@ -3,7 +3,7 @@
 A figure's gates live in `scripts/gates-<x>.ts` and are run by its review
 harness, `npm run render:<x>` — **the gates first, before the contact sheet is
 baked**. A contact sheet is a tens-of-megapixel allocation, and measuring the art
-on the far side of one made the Juicer's centroid gate intermittently report a
+on the far side of one made a boss's centroid gate intermittently report a
 seam at twice its true width. A gate that goes red on art nobody touched is the
 one thing that teaches an agent to loosen a threshold.
 
@@ -11,7 +11,7 @@ There is no sheet on disk, so a pixel gate paints its own cells:
 `bakeFigureCell(def, state, frame)` bakes exactly the way the runtime cache does
 (supersampled, then downsampled), so what you measure is what the game blits;
 `paintFigureCell(def, state, frame, density)` is the unbaked version when you
-need one. `scripts/gates-juicer.ts` and `scripts/gates-goblins.ts` are the
+need one. `scripts/gates-rooster.ts` and `scripts/gates-goblins.ts` are the
 reference implementations — grep either for `function gate`.
 
 Accumulate failures rather than throwing one at a time, so one run reports
@@ -93,7 +93,7 @@ figure specifically.
 | **Impact is the peak**  | the declared impact frame is the extreme of the motion                             | a timing table that drifted from the choreography                                                                     |
 | **Timing table**        | row names, frame counts and impact frames agree between the figure and the runtime | a row added in one place only                                                                                         |
 | **Runtime state names** | every state name the runtime can compose is one the figure paints                  | an invisible creature and no log line                                                                                 |
-| **Frozen measurements** | every offline-measured constant re-measured from the art                           | a recentring offset or head clearance that went wrong on a redraw                                                     |
+| **Frozen measurements** | every offline-measured constant re-measured from the art                           | a frozen cell size or anchor that went wrong on a redraw                                                              |
 
 **Gates go blind in pairs.** The off-hand-grip gate asks whether the fist
 _reaches_ the haft, which it does even when the arm has folded to a third of its
@@ -124,12 +124,13 @@ fill its own bounding box maps every convex blob onto a filled square and scored
 a severed head against a rib slab at 71%, i.e. it measured the normalisation
 rather than the art.
 
-Gore cells are compared **as blitted**, and each piece's frozen recentring offset
-moves it — so a duplicate-piece mutation must duplicate the offset too, or it
-reddens the recentring gate instead and makes the distinctness gate look
-unfailable when it is not. Freeze a recentring offset in cell pixels, gate it on
-its _effect_ ("the ink lands on the cell centre") rather than by re-deriving the
-same arithmetic, and re-measure per variant even in a family that shares a table.
+Gore cells are compared **as blitted**. Don't freeze a recentring offset for a
+piece: `drawFigureCachedRotatedCenter` spins a piece about its own ink, measured
+at runtime (`figureInkBounds`), so where the ink sits in its cell does not change
+how it tumbles. Paint each piece about the cell's centre with clearance from the
+edges and let the structural edge gate hold it. The same goes for a head
+clearance: `figureRowInkTop` measures a drawn row's top at runtime, so hang
+labels off that rather than off a frozen number.
 
 A legibility threshold does not transfer between subjects: severed limbs sit
 ~65 % apart, stone chunks ~19 % because they are _meant_ to look alike. Re-scope

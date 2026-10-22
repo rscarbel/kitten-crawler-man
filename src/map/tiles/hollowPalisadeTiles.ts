@@ -116,7 +116,7 @@ const FORTIFIED_FACE_HEIGHT = 1.22;
 const ASHLAR_COURSE = 0.17;
 const MERLON_WIDTH = 0.16;
 const MERLON_HEIGHT = 0.17;
-const HOARDING_DEPTH = 0.24;
+const BRATTICE_DEPTH = 0.24;
 /** Every how many path tiles a fortified wall carries a buttress. */
 export const BUTTRESS_EVERY_TILES = 3;
 const BUTTRESS_HALF_WIDTH = 0.2;
@@ -160,7 +160,7 @@ const VARIANT_COUNT = 4;
 const VARIANT_SALT = 911;
 const RUBBLE_SALT = 457;
 
-/** Cues for which side of a wall is outside the village, where the spikes and the hoarding go. */
+/** Cues for which side of a wall is outside the village, where the spikes and the brattice go. */
 type Side = 'north' | 'south' | 'east' | 'west';
 
 /** Damage looks, matching `damageStageFor`: 0 intact, 1 cracked, 2 wrecked. */
@@ -1176,7 +1176,7 @@ class WallPainter {
 
   // ── Fortified ───────────────────────────────────────────────────────────
 
-  /** Dressed stone with crenels, a timber hoarding on the outside, and banded buttresses. */
+  /** Dressed stone with crenels, a timber brattice on the outside, and banded buttresses. */
   fortified(): void {
     this.berm(STONE.deep, STONE.dark);
     const face = FORTIFIED_FACE_HEIGHT;
@@ -1184,7 +1184,7 @@ class WallPainter {
     const spikeItems = this.spikes(face);
     if (behind) {
       for (const spike of spikeItems) spike.draw();
-      this.hoarding(face);
+      this.brattice(face);
       if (this.piece.buttress) this.buttress(face);
     }
     const items: WallItem[] = [];
@@ -1201,7 +1201,7 @@ class WallPainter {
     this.drawItems(items);
     if (!behind) {
       if (this.piece.buttress) this.buttress(face);
-      this.hoarding(face);
+      this.brattice(face);
       for (const spike of spikeItems) spike.draw();
     }
   }
@@ -1235,7 +1235,7 @@ class WallPainter {
   }
 
   /** A timber gallery hung out over the outer face just under the top. */
-  private hoarding(face: number): void {
+  private brattice(face: number): void {
     const side = this.piece.outside;
     for (const arm of this.arms) {
       if (arm.horizontal !== (side === 'north' || side === 'south')) continue;
@@ -1245,20 +1245,20 @@ class WallPainter {
         const top =
           side === 'south'
             ? this.py(GROUND_Y - face + 0.02)
-            : this.py(GROUND_Y - face - WALL_CAP_DEPTH - HOARDING_DEPTH * 0.6);
-        const h = HOARDING_DEPTH * this.u * (side === 'south' ? 1 : 0.6);
-        this.hoardingBoards(x, top, w, h);
+            : this.py(GROUND_Y - face - WALL_CAP_DEPTH - BRATTICE_DEPTH * 0.6);
+        const h = BRATTICE_DEPTH * this.u * (side === 'south' ? 1 : 0.6);
+        this.bratticeBoards(x, top, w, h);
       } else {
         const sign = this.outsideSign;
-        const x = this.px(0.5 + sign * COLUMN_HALF_WIDTH - (sign > 0 ? 0 : HOARDING_DEPTH * 0.55));
+        const x = this.px(0.5 + sign * COLUMN_HALF_WIDTH - (sign > 0 ? 0 : BRATTICE_DEPTH * 0.55));
         const top = this.py(arm.y0 - face);
-        const bottom = this.py(arm.y1 - face + HOARDING_DEPTH);
-        this.hoardingBoards(x, top, HOARDING_DEPTH * 0.55 * this.u, bottom - top);
+        const bottom = this.py(arm.y1 - face + BRATTICE_DEPTH);
+        this.bratticeBoards(x, top, BRATTICE_DEPTH * 0.55 * this.u, bottom - top);
       }
     }
   }
 
-  private hoardingBoards(x: number, y: number, w: number, h: number): void {
+  private bratticeBoards(x: number, y: number, w: number, h: number): void {
     const ctx = this.ctx;
     ctx.fillStyle = WOOD.dark;
     ctx.fillRect(x, y, w, h);

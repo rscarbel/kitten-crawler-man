@@ -177,7 +177,7 @@ const SAFE_ROOM: SemanticLocation = {
 };
 const BOSS_ARENA: SemanticLocation = {
   kind: 'bossArena',
-  label: 'boss arena (the hoarder)',
+  label: 'boss arena (the trashGremlin)',
   inSafeRoom: false,
   inBossArena: true,
   roomIndex: BOSS_ROOM_INDEX,
@@ -430,7 +430,7 @@ async function dynamiteIncident(): Promise<AIReplayFixture> {
     'dynamite-incident',
     'The dynamite incident',
     'Floor 1: a goblin fight Carl ends with goblin dynamite that also knocks Donut out, a revive, ' +
-      'the Hoarder boss kill, then in a safe room the player asks the System whether it remembers the dynamite.',
+      'the Trash Gremlin boss kill, then in a safe room the player asks the System whether it remembers the dynamite.',
   );
   const { bus, human, cat, live } = world;
   const goblins = Array.from({ length: GOBLINS_IN_CAMP }, () => new Dummy('Goblin', 'goblin'));
@@ -492,14 +492,14 @@ async function dynamiteIncident(): Promise<AIReplayFixture> {
     live.location = CORRIDOR;
   });
 
-  const hoarder = new Dummy('The Hoarder', 'the_hoarder', true);
-  world.mobs.push(hoarder);
+  const trashGremlin = new Dummy('The Trash Gremlin', 'trash_gremlin', true);
+  world.mobs.push(trashGremlin);
   await world.step(WALK_MS, () => {
     live.location = BOSS_ARENA;
-    live.nearbyMobs = [nearby(hoarder.displayName, BOSS_DISTANCE_TILES, true)];
+    live.nearbyMobs = [nearby(trashGremlin.displayName, BOSS_DISTANCE_TILES, true)];
     live.bossFightActive = true;
     live.combatInProgress = true;
-    bus.emit('bossFightInitiated', { bossType: 'the_hoarder' });
+    bus.emit('bossFightInitiated', { bossType: 'trash_gremlin' });
   });
   await world.step(LONG_BEAT_MS, () => {
     live.carl.hp = CARL_HP_IN_BOSS_FIGHT;
@@ -507,13 +507,13 @@ async function dynamiteIncident(): Promise<AIReplayFixture> {
     bus.emit('healthLow', { player: 'Cat', hp: DONUT_HP_IN_BOSS_FIGHT, maxHp: DONUT_MAX_HP });
   });
   await world.step(BOSS_FIGHT_MS, () => {
-    hoarder.hp = 0;
+    trashGremlin.hp = 0;
     live.nearbyMobs = [];
     live.bossFightActive = false;
     live.combatInProgress = false;
     live.carl.xp = XP_AFTER_BOSS;
     live.carl.level = PARTY_LEVEL + 1;
-    bus.emit('bossDefeated', { bossType: 'the_hoarder', mob: hoarder });
+    bus.emit('bossDefeated', { bossType: 'trash_gremlin', mob: trashGremlin });
     bus.emit('playerLevelUp', { player: human, newLevel: PARTY_LEVEL + 1 });
   });
   await world.step(WALK_MS, () => {

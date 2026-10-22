@@ -21,7 +21,7 @@ import { frameTime } from '../utils';
 import { SkeletonLord } from '../creatures/SkeletonLord';
 import { TheLich } from '../creatures/TheLich';
 import { DarkKnight } from '../creatures/DarkKnight';
-import { Juicer } from '../creatures/Juicer';
+import { BigRooster } from '../creatures/BigRooster';
 import { RockGolemBoss } from '../creatures/RockGolemBoss';
 import { Mantid } from '../creatures/Mantid';
 import { BallOfSwine } from '../creatures/BallOfSwine';
@@ -52,7 +52,7 @@ import {
  *   2. applyMovement         — dx/dy + collision → new player position
  *   3. applyKnockbackMotion  — hit-driven displacement, on top of applyMovement's result
  *   4. updateSafeRoom        — protection flags, safe room entry achievements
- *   5. updateSystems         — barriers, juicer room, companion, spells, etc.
+ *   5. updateSystems         — barriers, gym room, companion, spells, etc.
  *   6. updateMobAI           — activate nearby mobs, run AI, clamp bosses
  *   7. resolveCombat         — attack hits, kills, XP split, loot drops
  *   8. postCombat            — gore, grub spawns, arena phases, Mongo
@@ -634,7 +634,7 @@ function playCuesOf(mob: Mob, audio: PlacedCuePlayer | null): void {
     // the room's second half is meant to sound like a continuation of its
     // first.
     if (mob.audioTag === 'miss_quill') audio?.play('magic_ball_launch');
-    if (mob.audioTag === 'evil_clown') audio?.play('juicer_throw');
+    if (mob.audioTag === 'evil_clown') audio?.play('dumbbell_throw');
     if (mob.audioTag === 'rock_golem') audio?.play('rock_golem_grunt');
   }
   if (mob.damageSoundPending) {
@@ -647,10 +647,6 @@ function playCuesOf(mob: Mob, audio: PlacedCuePlayer | null): void {
       case 'bear':
         mob.damageSoundPending = false;
         audio?.play('bear_growl_1');
-        break;
-      case 'hoarder':
-        mob.damageSoundPending = false;
-        audio?.playRandom(['hoarder_damage_1', 'hoarder_damage_2', 'hoarder_damage_3']);
         break;
       // [STAND-IN] Dry bone rattle, not yet sourced. Snapping wood is the
       // nearest dry clatter the library has.
@@ -676,11 +672,11 @@ function playCuesOf(mob: Mob, audio: PlacedCuePlayer | null): void {
   if (mob.specialSoundPending) {
     mob.specialSoundPending = false;
     switch (mob.audioTag) {
-      case 'hoarder':
-        audio?.play('hoarder_vomit');
+      case 'trash_gremlin':
+        audio?.play('trash_gremlin_vomit');
         break;
-      case 'juicer':
-        audio?.play('juicer_throw');
+      case 'big_rooster':
+        audio?.play('dumbbell_throw');
         break;
       case 'ball_of_swine':
         audio?.play('ball_of_swine_rolling');
@@ -730,7 +726,7 @@ function playCuesOf(mob: Mob, audio: PlacedCuePlayer | null): void {
   playAttackCowCues(mob, audio);
   playCastWindup(mob, audio);
   playDarkKnightCues(mob, audio);
-  playJuicerCues(mob, audio);
+  playBigRoosterCues(mob, audio);
   playKrakarenCloneCues(mob, audio);
   playKrakarenTentacleCues(mob, audio);
   playFairyCastCues(mob, audio);
@@ -782,18 +778,15 @@ function playKrakarenTentacleCues(mob: Mob, audio: PlacedCuePlayer | null): void
 }
 
 /**
- * The Juicer's ground punch, which `specialSoundPending` cannot carry: that one
- * boolean is already the dumbbell throw, and a punch landing on the frame he
- * winds up a throw would drop whichever cue came second.
+ * Big Rooster's slam landing, which `specialSoundPending` cannot carry: that one
+ * boolean is already the dumbbell throw, and a slam landing on the frame he
+ * winds up a throw would drop whichever cue came second. His wind-up plays
+ * no cue.
  */
-function playJuicerCues(mob: Mob, audio: PlacedCuePlayer | null): void {
-  if (!(mob instanceof Juicer)) return;
-  if (mob.punchWindupSoundPending) {
-    mob.punchWindupSoundPending = false;
-    audio?.play('juicer_grunt');
-  }
-  if (mob.punchImpactSoundPending) {
-    mob.punchImpactSoundPending = false;
+function playBigRoosterCues(mob: Mob, audio: PlacedCuePlayer | null): void {
+  if (!(mob instanceof BigRooster)) return;
+  if (mob.slamImpactSoundPending) {
+    mob.slamImpactSoundPending = false;
     // [STAND-IN] the Rock Golem's slam, which is the library's only fist-sized
     // impact into earth.
     audio?.play('massive_strike_with_dirt_impact');

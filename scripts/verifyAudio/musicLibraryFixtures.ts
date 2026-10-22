@@ -201,8 +201,8 @@ function townArrivalState(): Record<string, unknown> {
     doomsday: { stage: 'inactive', remainingMs: null, crystalTile: null },
     krakarenKilled: false,
     krakarenBossRoomIdx: -1,
-    juicerKilled: false,
-    juicerBossRoomIdx: -1,
+    bigRoosterKilled: false,
+    bigRoosterBossRoomIdx: -1,
   };
 }
 
@@ -271,7 +271,7 @@ export function backfillFixtures(
   currentGeneratorVersion: number,
   staleGeneratorVersion: number,
 ): readonly BackfillFixture[] {
-  const juicerSlainParty = {
+  const bigRoosterSlainParty = {
     humanSnap: { ...party.humanSnap, desperadoPassTattoo: true },
     catSnap: { ...party.catSnap, desperadoPassTattoo: true },
   };
@@ -314,14 +314,14 @@ export function backfillFixtures(
         version: PRE_LIBRARY_SAVE_VERSION,
         savedAt: FIXTURE_SAVED_AT,
         levelId: 'level2',
-        ...juicerSlainParty,
+        ...bigRoosterSlainParty,
         mongoUnlocked: false,
         gameStats: {
           killsByType: [
             ['Goblin', GOBLIN_KILLS],
             ['Rat', RAT_KILLS],
-            ['The Hoarder', BOSS_KILLS],
-            ['The Juicer', BOSS_KILLS],
+            ['The Trash Gremlin', BOSS_KILLS],
+            ['Big Rooster', BOSS_KILLS],
           ],
           potionsUsed: 4,
           bossesDefeated: 2,
@@ -338,7 +338,7 @@ export function backfillFixtures(
     },
     {
       name: 'a floor-3 save from a night at the Desperado Club, on an older generator',
-      save: townSave(juicerSlainParty, staleGeneratorVersion, clubNight, {
+      save: townSave(bigRoosterSlainParty, staleGeneratorVersion, clubNight, {
         humanAchievements: { ...NO_ACHIEVEMENTS, unlocked: ['desperado_member'] },
       }),
       expected: [
@@ -352,7 +352,7 @@ export function backfillFixtures(
     },
     {
       name: 'a floor-3 save from the town square, with nothing done off the forced route',
-      save: townSave(juicerSlainParty, currentGeneratorVersion, townArrivalState(), {}),
+      save: townSave(bigRoosterSlainParty, currentGeneratorVersion, townArrivalState(), {}),
       expected: [...DUNGEON_SONGS_TO_FLOOR_3, 'town_music_1', 'town_music_2', 'riverside_welcome'],
     },
   ];

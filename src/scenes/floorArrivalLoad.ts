@@ -18,6 +18,7 @@ import type { GameMap } from '../map/GameMap';
 import {
   environmentPaintDepth,
   environmentPaintedStepCount,
+  environmentRepaintsWaiting,
   paintEnvironmentArtFor,
 } from '../map/environmentArtCache';
 import { buildingSheetsNotYetQueued } from '../sprites/buildinggen/runtimeBuildingSheets';
@@ -28,12 +29,13 @@ import {
 } from '../sprites/figure/figureFrameCache';
 
 /**
- * Steps one facade is expected to take once its chain queues it: its paint
- * stages, the compose step and its life frames. Only used to size the bar for
- * facades the chain has not planned yet, so a wrong guess moves the bar
- * unevenly rather than wrongly — the runner never lets it go backwards.
+ * Steps one sheet not yet queued is expected to take: about a facade's paint
+ * stages and compose step, the largest such sheet. Only used to size the bar
+ * for facades the building queue has not planned yet and let-go sheets
+ * waiting to be repainted, so a wrong guess moves the bar unevenly rather
+ * than wrongly — the runner never lets it go backwards.
  */
-const ESTIMATED_STEPS_PER_FACADE = 40;
+const ESTIMATED_STEPS_PER_UNQUEUED_SHEET = 40;
 
 /**
  * What a figure cell nobody has baked yet is guessed to cost, for deciding
@@ -76,7 +78,8 @@ export interface FloorArrivalLoadDeps {
 }
 
 function environmentOwedSteps(): number {
-  return environmentPaintDepth() + buildingSheetsNotYetQueued() * ESTIMATED_STEPS_PER_FACADE;
+  const unqueuedSheets = buildingSheetsNotYetQueued() + environmentRepaintsWaiting();
+  return environmentPaintDepth() + unqueuedSheets * ESTIMATED_STEPS_PER_UNQUEUED_SHEET;
 }
 
 /**

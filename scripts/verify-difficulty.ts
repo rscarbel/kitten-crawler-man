@@ -30,6 +30,14 @@ import {
   TROGLODYTE_WINDUP_FLOOR_FRAMES,
   troglodyteWindupFrames,
 } from '../src/creatures/Troglodyte';
+import {
+  BIG_ROOSTER_CLUB_SWING_WINDUP_FRAMES,
+  BIG_ROOSTER_SLAM_WINDUP_FRAMES,
+  BIG_ROOSTER_THROW_RELEASE_FRAME,
+  ROOSTER_PECK_WINDUP_FRAMES,
+  ROOSTER_PUNCH_WINDUP_FRAMES,
+} from '../src/sprites/bigRoosterAttackTiming';
+import { BIG_ROOSTER_BOSS_TYPE } from '../src/core/bossTypes';
 import { BOLT_SPEED_CAP, lavaBoltSpeedForLevel } from '../src/systems/LavaBallSystem';
 import { GOBLIN_BOW_SHOTS, goblinArrowReleaseFrame } from '../src/sprites/goblinSprite';
 import {
@@ -70,7 +78,14 @@ import {
 import { Goblin, GOBLIN_MAX_SPEED } from '../src/creatures/Goblin';
 import { BallOfSwine } from '../src/creatures/BallOfSwine';
 import { makeSepsis } from '../src/core/StatusEffect';
-import { Juicer } from '../src/creatures/Juicer';
+import {
+  BigRooster,
+  type BigRoosterState,
+  CLUB_ARC_HALF_ANGLE_RAD,
+  CLUB_REACH_TILES,
+  SLAM_RADIUS_TILES,
+  SLAM_REACH_TILES,
+} from '../src/creatures/BigRooster';
 import {
   GoblinArcher,
   ARCHER_MAX_SPEED as GOBLIN_ARCHER_MAX_SPEED,
@@ -89,6 +104,12 @@ import { SKYFOWL_TOUGH_FAMILY, SkyFowl } from '../src/creatures/SkyFowl';
 import { GameMap } from '../src/map/GameMap';
 import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
+import { LittleRooster } from '../src/creatures/LittleRooster';
+import {
+  ROOSTER_STRIKE_CONE_HALF_ANGLE_RAD,
+  roosterStrikeReachTiles,
+  type RoosterStrikeKind,
+} from '../src/creatures/roosterStrikes';
 import { TheLich, HANDS_WINDUP_FRAMES, LICH_MAX_SPEED } from '../src/creatures/TheLich';
 import {
   applySpawnDifficulty,
@@ -208,6 +229,50 @@ const REINFORCEMENT_ROLL_SEED = 0x2e1_f0cc;
 /** Party levels sampled for the level-band checks. */
 const MAX_PROBED_PARTY_LEVEL = 40;
 
+/** Frames any rooster melee probe may run: Big Rooster's opening crow and a whole wind-up, with room to spare. */
+const ROOSTER_MELEE_TEST_FRAMES = 180;
+/** Where every melee probe's crawler starts, in tiles straight ahead of the rooster: inside every cone's reach. */
+const ROOSTER_CONE_START_TILES = 1;
+/** How far past the side of a cone the orbiting crawler walks before she stops, in radians. */
+const ROOSTER_CONE_DODGE_MARGIN_RAD = 0.15;
+/** How far past a cone's reach or edge an escaping crawler walks before she stops, in tiles. */
+const ROOSTER_CONE_ESCAPE_MARGIN_TILES = 0.15;
+/** Where the slam probe's crawler starts, in tiles straight ahead: inside the slam's trigger range. */
+const ROOSTER_SLAM_START_TILES = 1.6;
+/** How far outside the slam's disc a dodging crawler walks before she stops, in tiles. */
+const ROOSTER_SLAM_DODGE_MARGIN_TILES = 0.15;
+/**
+ * What `Math.random` is pinned to while a minion's blow is probed: its blow is
+ * chosen by one roll against its peck share, so a roll of zero always pecks
+ * and one just under one always punches.
+ */
+const ROOSTER_PECK_ROLL = 0;
+const ROOSTER_PUNCH_ROLL = 0.999;
+
+/**
+ * A crawler who never dodges, so a melee probe's "was she hit" reads the
+ * blow's geometry rather than her dodge roll.
+ */
+class UndodgingCrawler extends HumanPlayer {
+  protected override get canDodge(): boolean {
+    return false;
+  }
+}
+
+/** Big Rooster's throw test: a target in the middle of his throw band, in tiles. */
+const ROOSTER_THROW_TEST_TARGET_TILE = 6;
+/** Frames the throw test may run: his opening crow, then one whole wind-up, with room to spare. */
+const ROOSTER_THROW_TEST_FRAMES = 240;
+/** How far the target walks off the line each frame once the wind-up starts, in px. */
+const ROOSTER_THROW_TEST_DODGE_STEP_PX = 2;
+/**
+ * How far the dumbbell's heading may sit off the line to the locked point, in
+ * radians: float noise only. One frame of the target's walk at this range
+ * already turns the line by about a hundredth of a radian, so a lock re-taken
+ * on any frame of the wind-up lands far outside it.
+ */
+const ROOSTER_THROW_HEADING_EPSILON_RAD = 1e-6;
+
 /** Tiles the test target stands from the archer — inside its firing band. */
 const ARCHER_TEST_TARGET_TILE = 5;
 /** Frames the archer is driven for; comfortably longer than one whole draw. */
@@ -323,6 +388,68 @@ section('telegraphs');
   check(trackingSurvives, 'the windup always leaves some aim-tracking ahead of the lock');
   check(windupNeverGrows, 'the windup only ever shortens with level');
 
+  // Every rooster blow fixes its aim, or its point on the floor, on the first
+  // frame of its wind-up, so the whole wind-up is the locked telegraph. The
+  // throw's lock runs up to its release, on a point fixed in `beginThrow`; the
+  // plate roll is bowled on the same wind-up and release, down a lane fixed
+  // when it starts.
+  const roosterWindups: ReadonlyArray<readonly [string, number]> = [
+    ["a rooster's peck", ROOSTER_PECK_WINDUP_FRAMES],
+    ["a rooster's punch", ROOSTER_PUNCH_WINDUP_FRAMES],
+    ["Big Rooster's club swing", BIG_ROOSTER_CLUB_SWING_WINDUP_FRAMES],
+    ["Big Rooster's slam", BIG_ROOSTER_SLAM_WINDUP_FRAMES],
+    ["Big Rooster's throw, up to its release", BIG_ROOSTER_THROW_RELEASE_FRAME],
+  ];
+  for (const [blow, frames] of roosterWindups) {
+    check(
+      isAtLeast(frames, LOCKED_TELEGRAPH_MIN_FRAMES),
+      `${blow} winds up for at least ${LOCKED_TELEGRAPH_MIN_FRAMES} frames (${frames})`,
+    );
+  }
+  check(
+    bigRoosterThrowHonoursItsLock(),
+    "Big Rooster's dumbbell flies at the point his wind-up locked, not at a target that moved",
+  );
+  for (const blow of roosterMeleeLockProbes()) {
+    const stood = blow.run(null);
+    const escaped = blow.run(blow.escape);
+    const orbited = blow.run(blow.orbit);
+    const runs = [stood, escaped, orbited];
+    check(
+      runs.every((run) => run.committed),
+      `${blow.name}: the blow actually winds up against a crawler in reach`,
+    );
+    check(
+      runs.every((run) => !run.hitBeforeCommit),
+      `${blow.name}: nothing hits the crawler before the blow is committed to`,
+    );
+    if (blow.committedAs !== undefined) {
+      const expected = blow.committedAs;
+      check(
+        runs.every((run) => run.locked?.startsWith(`${expected},`) === true),
+        `${blow.name}: the blow that wound up is a ${expected}`,
+      );
+    }
+    check(
+      stood.resolvedAfter === blow.windupFrames &&
+        isAtLeast(blow.windupFrames, LOCKED_TELEGRAPH_MIN_FRAMES),
+      `${blow.name}: lands ${stood.resolvedAfter ?? 'never'} frames after its commit, its constant's ${blow.windupFrames} and at least ${LOCKED_TELEGRAPH_MIN_FRAMES}`,
+    );
+    // P2 holds a melee blow to the locked-telegraph floor, not to a reaction allowance.
+    const walkOut = dodgeFrames(blow.escape);
+    check(
+      walkOut < blow.windupFrames,
+      `${blow.name}: walking out from the commit takes ${walkOut} frames, under its ${blow.windupFrames}-frame wind-up`,
+    );
+    check(!escaped.hit, `${blow.name}: a crawler who walks out from the commit is not hit`);
+    check(orbited.lockHeld, `${blow.name}: the locked telegraph never moves during the wind-up`);
+    check(
+      !orbited.hit,
+      `${blow.name}: a crawler who leaves the locked telegraph for where a tracking blow would still land is not hit`,
+    );
+    check(stood.hit, `${blow.name}: a crawler who stayed in the locked telegraph is hit`);
+  }
+
   // The archer's telegraph is a fixed number of game frames rather than a
   // level-scaled one, so what has to be checked is that both of its shots — the
   // aimed one and the hurried one — buy their speed out of the *tracking* half
@@ -368,6 +495,373 @@ section('telegraphs');
   // reliably as one who ignored it — a telegraph that looks right, satisfies a
   // constant, and does nothing.
   check(archerHonoursItsLock(), "the archer's arrow follows the aim it locked, not its target");
+}
+
+/** What one driven melee wind-up did. */
+interface MeleeLockRun {
+  /** Whether the blow began its wind-up at all. */
+  readonly committed: boolean;
+  /** Whether the crawler took damage before the blow was committed to: something else hit her. */
+  readonly hitBeforeCommit: boolean;
+  /** The telegraph as it read on the wind-up's first frame, or null if it never began. */
+  readonly locked: string | null;
+  /** Whether the telegraph read the same on every frame of the wind-up. */
+  readonly lockHeld: boolean;
+  /** Whether the blow landed on the crawler. */
+  readonly hit: boolean;
+  /** Frames from the commit to the frame the blow landed, or null when it never landed. */
+  readonly resolvedAfter: number | null;
+}
+
+/**
+ * The walk a dodging crawler takes from the frame she reacts, at the
+ * crawler's own walking pace: where she is after `travelledPx`, in tiles ahead
+ * of the rooster and to his side, and how long the whole walk is.
+ */
+interface MeleeDodge {
+  readonly startAheadTiles: number;
+  readonly lengthPx: number;
+  readonly at: (travelledPx: number) => { readonly ahead: number; readonly side: number };
+}
+
+/** One rooster blow driven through a whole wind-up, against a crawler who stands or walks `walk`. */
+interface MeleeLockProbe {
+  readonly name: string;
+  readonly run: (walk: MeleeDodge | null) => MeleeLockRun;
+  /** The wind-up constant the floor check above reads for this blow. */
+  readonly windupFrames: number;
+  /** The shortest walk out of the blow from where the crawler stands. */
+  readonly escape: MeleeDodge;
+  /**
+   * A walk that leaves the locked telegraph but stays where a blow that
+   * tracked her would still land, so a miss proves the blow is locked.
+   */
+  readonly orbit: MeleeDodge;
+  /** For a minion's blow, the kind the locked telegraph must name. */
+  readonly committedAs?: RoosterStrikeKind;
+}
+
+/**
+ * Round the rooster at a fixed distance, from straight ahead to past the side
+ * of a cone with half-angle `halfAngleRad`: always inside the cone's reach, so
+ * only a blow that tracked her could still land once she is out of it.
+ */
+function coneDodge(halfAngleRad: number): MeleeDodge {
+  const radiusTiles = ROOSTER_CONE_START_TILES;
+  const endAngle = halfAngleRad + ROOSTER_CONE_DODGE_MARGIN_RAD;
+  const lengthPx = endAngle * radiusTiles * TILE_SIZE;
+  return {
+    startAheadTiles: radiusTiles,
+    lengthPx,
+    at: (travelledPx) => {
+      const angle = Math.min(travelledPx, lengthPx) / (radiusTiles * TILE_SIZE);
+      return { ahead: Math.cos(angle) * radiusTiles, side: Math.sin(angle) * radiusTiles };
+    },
+  };
+}
+
+/**
+ * Straight out to the side of the slam's disc. A slam point that followed her
+ * would land between him and her, close enough to still catch her, so only a
+ * point locked straight ahead misses.
+ */
+function slamDodge(): MeleeDodge {
+  const offCentre = ROOSTER_SLAM_START_TILES - SLAM_REACH_TILES;
+  const clearOfDisc = SLAM_RADIUS_TILES + ROOSTER_SLAM_DODGE_MARGIN_TILES;
+  const sideTiles = Math.sqrt(clearOfDisc * clearOfDisc - offCentre * offCentre);
+  const lengthPx = sideTiles * TILE_SIZE;
+  return {
+    startAheadTiles: ROOSTER_SLAM_START_TILES,
+    lengthPx,
+    at: (travelledPx) => ({
+      ahead: ROOSTER_SLAM_START_TILES,
+      side: Math.min(travelledPx, lengthPx) / TILE_SIZE,
+    }),
+  };
+}
+
+/**
+ * A straight walk of `lengthTiles` from `startAheadTiles` straight ahead of
+ * the rooster, along the unit direction (`dirAhead`, `dirSide`).
+ */
+function lineDodge(
+  startAheadTiles: number,
+  dirAhead: number,
+  dirSide: number,
+  lengthTiles: number,
+): MeleeDodge {
+  const lengthPx = lengthTiles * TILE_SIZE;
+  return {
+    startAheadTiles,
+    lengthPx,
+    at: (travelledPx) => {
+      const tiles = Math.min(travelledPx, lengthPx) / TILE_SIZE;
+      return { ahead: startAheadTiles + dirAhead * tiles, side: dirSide * tiles };
+    },
+  };
+}
+
+/**
+ * The shortest way out of a cone of half-angle `halfAngleRad` and reach
+ * `reachTiles` for a crawler standing on its axis: straight back past the
+ * reach, or square to the cone's nearer edge, whichever is shorter.
+ */
+function coneEscape(halfAngleRad: number, reachTiles: number): MeleeDodge {
+  const start = ROOSTER_CONE_START_TILES;
+  const backTiles = reachTiles - start + ROOSTER_CONE_ESCAPE_MARGIN_TILES;
+  const edgeTiles = start * Math.sin(halfAngleRad) + ROOSTER_CONE_ESCAPE_MARGIN_TILES;
+  if (backTiles <= edgeTiles) return lineDodge(start, 1, 0, backTiles);
+  return lineDodge(start, -Math.sin(halfAngleRad), Math.cos(halfAngleRad), edgeTiles);
+}
+
+/** Frames the whole dodge takes at the crawler's walking pace. */
+function dodgeFrames(dodge: MeleeDodge): number {
+  return Math.ceil(dodge.lengthPx / PLAYER_SPEED);
+}
+
+/** Puts `crawler` `ahead` tiles in front of `rooster` (who faces +x) and `side` tiles to his side. */
+function placeAround(rooster: Mob, crawler: HumanPlayer, ahead: number, side: number): void {
+  crawler.x = rooster.x + ahead * TILE_SIZE;
+  crawler.y = rooster.y + side * TILE_SIZE;
+}
+
+/**
+ * Drives a rooster through one blow against a crawler standing
+ * `startAheadTiles` in front of him who either stays put (`walk` null) or,
+ * from the commit frame, walks `walk` at the crawler's own pace. Reports
+ * whether the telegraph `snapshot` reads stayed put, whether the blow landed
+ * and how many frames after the commit it did. `inWindup` says when the blow
+ * has been committed to.
+ */
+function driveMeleeLock(
+  rooster: Mob,
+  startAheadTiles: number,
+  walk: MeleeDodge | null,
+  inWindup: () => boolean,
+  snapshot: () => string | null,
+): MeleeLockRun {
+  const target = new UndodgingCrawler(0, 0, TILE_SIZE);
+  placeAround(rooster, target, startAheadTiles, 0);
+  let committedAt: number | null = null;
+  let locked: string | null = null;
+  let lockHeld = true;
+  const finish = (resolvedAt: number | null): MeleeLockRun => ({
+    committed: committedAt !== null,
+    hitBeforeCommit: false,
+    locked,
+    lockHeld,
+    hit: resolvedAt !== null,
+    resolvedAfter: resolvedAt === null || committedAt === null ? null : resolvedAt - committedAt,
+  });
+  for (let frame = 0; frame < ROOSTER_MELEE_TEST_FRAMES; frame++) {
+    rooster.updateAI([target]);
+    const hurt = target.hp < target.maxHp;
+    if (committedAt === null) {
+      if (hurt) return { ...finish(null), hitBeforeCommit: true };
+      if (!inWindup()) continue;
+      committedAt = frame;
+      locked = snapshot();
+      if (locked === null) lockHeld = false;
+    }
+    if (hurt) return finish(frame);
+    if (!inWindup()) return finish(null);
+    if (snapshot() !== locked) lockHeld = false;
+    if (walk !== null) {
+      const walkingFrames = frame - committedAt + 1;
+      const spot = walk.at(walkingFrames * PLAYER_SPEED);
+      placeAround(rooster, target, spot.ahead, spot.side);
+    }
+  }
+  return finish(null);
+}
+
+/** Every rooster melee blow, each driven through its wind-up against a crawler who dodges and one who stands. */
+function roosterMeleeLockProbes(): readonly MeleeLockProbe[] {
+  const slamWalk = slamDodge();
+  const slamClear = SLAM_REACH_TILES + SLAM_RADIUS_TILES + ROOSTER_SLAM_DODGE_MARGIN_TILES;
+  const slamEscape = lineDodge(
+    ROOSTER_SLAM_START_TILES,
+    1,
+    0,
+    slamClear - ROOSTER_SLAM_START_TILES,
+  );
+  return [
+    {
+      name: "Big Rooster's club swing",
+      windupFrames: BIG_ROOSTER_CLUB_SWING_WINDUP_FRAMES,
+      escape: coneEscape(CLUB_ARC_HALF_ANGLE_RAD, CLUB_REACH_TILES),
+      orbit: coneDodge(CLUB_ARC_HALF_ANGLE_RAD),
+      run: (walk) => {
+        const rooster = new BigRooster(0, 0, TILE_SIZE);
+        rooster.heldDumbbell = true;
+        rooster.forceAggro = true;
+        return driveMeleeLock(
+          rooster,
+          ROOSTER_CONE_START_TILES,
+          walk,
+          () => rooster.behaviour === 'club_windup',
+          () => {
+            const cone = rooster.clubTelegraph;
+            return cone === null ? null : `${cone.x},${cone.y},${cone.aimX},${cone.aimY}`;
+          },
+        );
+      },
+    },
+    {
+      name: "Big Rooster's slam",
+      windupFrames: BIG_ROOSTER_SLAM_WINDUP_FRAMES,
+      escape: slamEscape,
+      orbit: slamWalk,
+      run: (walk) => {
+        const rooster = new BigRooster(0, 0, TILE_SIZE);
+        rooster.forceAggro = true;
+        return driveMeleeLock(
+          rooster,
+          ROOSTER_SLAM_START_TILES,
+          walk,
+          () => rooster.behaviour === 'slam_windup',
+          () => {
+            const disc = rooster.slamTelegraph;
+            return disc === null ? null : `${disc.x},${disc.y}`;
+          },
+        );
+      },
+    },
+    bigRoosterStrikeProbe('peck', 'armed', ROOSTER_PECK_WINDUP_FRAMES),
+    bigRoosterStrikeProbe('punch', 'empty-handed', ROOSTER_PUNCH_WINDUP_FRAMES),
+    littleRoosterStrikeProbe('peck', ROOSTER_PECK_ROLL, ROOSTER_PECK_WINDUP_FRAMES),
+    littleRoosterStrikeProbe('punch', ROOSTER_PUNCH_ROLL, ROOSTER_PUNCH_WINDUP_FRAMES),
+  ];
+}
+
+/**
+ * Plays Big Rooster through his opening against a stand-in crawler where the
+ * probe's crawler will stand, until he has thrown one of `blows` and come out
+ * of it: the stand-in takes the crow and the blow that puts his club or his
+ * slam on cooldown, so the probe's own crawler meets only the strike.
+ */
+function warmUpPast(rooster: BigRooster, blows: readonly BigRoosterState[]): void {
+  const standIn = new UndodgingCrawler(0, 0, TILE_SIZE);
+  placeAround(rooster, standIn, ROOSTER_CONE_START_TILES, 0);
+  let thrown = false;
+  for (let frame = 0; frame < ROOSTER_MELEE_TEST_FRAMES; frame++) {
+    rooster.updateAI([standIn]);
+    standIn.hp = standIn.maxHp;
+    placeAround(rooster, standIn, ROOSTER_CONE_START_TILES, 0);
+    const inBlow = blows.includes(rooster.behaviour);
+    if (inBlow) thrown = true;
+    else if (thrown) return;
+  }
+}
+
+/**
+ * Big Rooster's own `kind`, through his `tryBeginStrike`. Armed, his club is
+ * put on cooldown first so the peck is his answer inside club reach;
+ * empty-handed, his slam is, and `Math.random` is pinned so the punch is the
+ * blow he picks.
+ */
+function bigRoosterStrikeProbe(
+  kind: RoosterStrikeKind,
+  hands: 'armed' | 'empty-handed',
+  windupFrames: number,
+): MeleeLockProbe {
+  const roll = kind === 'peck' ? ROOSTER_PECK_ROLL : ROOSTER_PUNCH_ROLL;
+  return {
+    name: `Big Rooster's ${hands} ${kind}`,
+    committedAs: kind,
+    windupFrames,
+    escape: coneEscape(ROOSTER_STRIKE_CONE_HALF_ANGLE_RAD, roosterStrikeReachTiles(kind)),
+    orbit: coneDodge(ROOSTER_STRIKE_CONE_HALF_ANGLE_RAD),
+    run: (walk) => {
+      const random = Math.random;
+      Math.random = () => roll;
+      try {
+        const rooster = new BigRooster(0, 0, TILE_SIZE);
+        rooster.forceAggro = true;
+        rooster.heldDumbbell = hands === 'armed';
+        warmUpPast(
+          rooster,
+          hands === 'armed' ? ['club_windup', 'club_recover'] : ['slam_windup', 'slam_recover'],
+        );
+        return driveMeleeLock(
+          rooster,
+          ROOSTER_CONE_START_TILES,
+          walk,
+          () => rooster.strikeWindupAim !== null,
+          () => {
+            const aim = rooster.strikeWindupAim;
+            return aim === null ? null : `${aim.kind},${aim.x},${aim.y}`;
+          },
+        );
+      } finally {
+        Math.random = random;
+      }
+    },
+  };
+}
+
+/**
+ * Little Rooster's `kind`, with `Math.random` pinned to `roll` for the run so
+ * the same blow winds up every time, and restored afterwards.
+ */
+function littleRoosterStrikeProbe(
+  kind: RoosterStrikeKind,
+  roll: number,
+  windupFrames: number,
+): MeleeLockProbe {
+  return {
+    name: `Little Rooster's ${kind}`,
+    committedAs: kind,
+    windupFrames,
+    escape: coneEscape(ROOSTER_STRIKE_CONE_HALF_ANGLE_RAD, roosterStrikeReachTiles(kind)),
+    orbit: coneDodge(ROOSTER_STRIKE_CONE_HALF_ANGLE_RAD),
+    run: (walk) => {
+      const random = Math.random;
+      Math.random = () => roll;
+      try {
+        const rooster = new LittleRooster(0, 0, TILE_SIZE);
+        rooster.forceAggro = true;
+        return driveMeleeLock(
+          rooster,
+          ROOSTER_CONE_START_TILES,
+          walk,
+          () => rooster.strikeWindupAim !== null,
+          () => {
+            const aim = rooster.strikeWindupAim;
+            return aim === null ? null : `${aim.kind},${aim.x},${aim.y}`;
+          },
+        );
+      } finally {
+        Math.random = random;
+      }
+    },
+  };
+}
+
+/**
+ * Drives a real Big Rooster, dumbbell in hand, from his opening crow through
+ * one throw, walking the target off the line from the first frame of the
+ * wind-up, and asks which way the dumbbell actually flew.
+ */
+function bigRoosterThrowHonoursItsLock(): boolean {
+  const rooster = new BigRooster(0, 0, TILE_SIZE);
+  rooster.heldDumbbell = true;
+  rooster.forceAggro = true;
+  const target = new HumanPlayer(ROOSTER_THROW_TEST_TARGET_TILE, 0, TILE_SIZE);
+  const lockedY = target.y;
+  for (let frame = 0; frame < ROOSTER_THROW_TEST_FRAMES; frame++) {
+    rooster.updateAI([target]);
+    if (rooster.behaviour === 'winding_up') target.y += ROOSTER_THROW_TEST_DODGE_STEP_PX;
+    const flying = rooster.thrownDumbbell;
+    if (flying === null) continue;
+    // He stands still through the wind-up and the target only walks sideways,
+    // so the line to the locked point is the line from his centre to where her
+    // centre stood on its first frame.
+    const towardLocked = Math.atan2(lockedY - rooster.y, target.x - rooster.x);
+    const heading = Math.atan2(flying.vy, flying.vx);
+    return Math.abs(heading - towardLocked) <= ROOSTER_THROW_HEADING_EPSILON_RAD;
+  }
+  return false;
 }
 
 /**
@@ -704,14 +1198,13 @@ section('re-levelling');
   check(mob.maxHp === levelledMaxHp, 'a second applyMobLevel is refused rather than compounded');
   check(mob.mobLevel === RELEVEL_TEST_LEVEL, 'the refused call leaves the original level in place');
 
-  // The other half of the same problem, and the one that actually shipped: a
-  // level cannot be re-applied, so anything that re-authors speed or max HP from
-  // a flat constant throws the scaling away for good. A checkpoint restore calls
-  // `resetToSpawn` on every surviving hostile, which is where a levelled boss
-  // used to come back at level-1 speed with its levelled HP intact — a boss
-  // that eats hits like a level-1 mob but has a levelled boss's max HP, which
-  // this gate exists to forbid.
-  const boss = new Juicer(0, 0, TILE_SIZE);
+  // The other half of the same problem: a level cannot be re-applied, so
+  // anything that re-authors speed or max HP from a flat constant throws the
+  // scaling away for good. A checkpoint restore calls `resetToSpawn` on every
+  // surviving hostile, and a levelled boss must come back from it at its
+  // levelled speed as well as its levelled HP, never at level-1 speed under a
+  // levelled boss's max HP.
+  const boss = new BigRooster(0, 0, TILE_SIZE);
   boss.applyMobLevel(BOSS_TEST_LEVEL);
   const levelledSpeed = boss.moveSpeed;
   const bossMaxHp = boss.maxHp;
@@ -843,9 +1336,10 @@ const SPEED_CAP_TEST_MOB_CAP = 3.0;
 
 /**
  * A minimal capped mob whose only job is to prove `setBaseSpeed` itself
- * clamps — no registry creature exercises that path today, since none of the
- * game's `setBaseSpeed` callers (the Hoarder, BrindleGrub, SkyFowl, Juicer)
- * declare a `levelledSpeedCap`.
+ * clamps. Built here rather than borrowed from the registry, so the check
+ * does not depend on whichever real creature happens to both declare a cap
+ * and re-author its speed, and cannot silently stop exercising the clamp when
+ * one of them changes.
  */
 class SpeedCapTestMob extends Mob {
   readonly xpValue = 0;
@@ -905,13 +1399,10 @@ section('speed caps');
   }
   check(everyCapHolds, `no levelled mob exceeds its declared cap at level ${SPEED_CAP_TEST_LEVEL}`);
 
-  // No registry creature today re-authors its speed via `setBaseSpeed` after
-  // levelling (the four `setBaseSpeed` callers in the game — the Hoarder,
-  // BrindleGrub, SkyFowl, Juicer — declare no cap), so a checkpoint reset on
-  // any of them would pass this check whether or not `setBaseSpeed` clamps at
-  // all — the gate-that-cannot-find-its-row trap. Exercised directly instead,
-  // against a minimal capped mob built for exactly this: levelled past its
-  // cap, then re-authored from its base the way an enrage or evolution would.
+  // Exercised against a synthetic capped mob rather than a registry creature, so
+  // the check keeps proving the clamp whatever the real creatures declare:
+  // levelled past its cap, then re-authored from its base the way an enrage or
+  // evolution would.
   const capped = new SpeedCapTestMob(0, 0, TILE_SIZE);
   capped.applyMobLevel(SPEED_CAP_TEST_LEVEL);
   check(
@@ -1192,7 +1683,7 @@ section('progression regions');
   check(tagsMatchGeometry, 'each room’s region matches the gauntlet whose bounds contain it');
 }
 
-// ── Floor 1's bombers wait behind the Juicer ─────────────────────────────────
+// ── Floor 1's bombers wait behind Big Rooster ─────────────────────────────────
 
 /** Floor-1 maps generated and populated for the bomber check. */
 const BOMBER_MAP_SEEDS = 6;
@@ -1214,15 +1705,18 @@ function isBomberType(type: StandaloneMobKind): boolean {
   return isBomber(spawnMob(type, { x: 0, y: 0 }, bomberProbeMap, liveSpawnContext('dev:spawn')));
 }
 
-section("floor 1's bombers wait behind the Juicer");
+section("floor 1's bombers wait behind Big Rooster");
 {
   const def = level1;
   const profile = DIFFICULTY_PROFILES.normal;
-  const juicerGauntlet = def.progression?.gauntlets.findIndex(
-    (gauntlet) => gauntlet.bossType === 'juicer',
+  const bigRoosterGauntlet = def.progression?.gauntlets.findIndex(
+    (gauntlet) => gauntlet.bossType === BIG_ROOSTER_BOSS_TYPE,
   );
-  check(juicerGauntlet !== undefined && juicerGauntlet >= 0, 'floor 1 still has a Juicer gauntlet');
-  const postJuicerRegion = (juicerGauntlet ?? 0) + 1;
+  check(
+    bigRoosterGauntlet !== undefined && bigRoosterGauntlet >= 0,
+    'floor 1 still has a Big Rooster gauntlet',
+  );
+  const postRoosterRegion = (bigRoosterGauntlet ?? 0) + 1;
 
   // Every rule that is not a room's own escort has no region to gate on, so
   // none may name a bomber at all.
@@ -1252,7 +1746,7 @@ section("floor 1's bombers wait behind the Juicer");
           Math.random,
         );
         const bombers = escorts.filter((escort) => isBomberType(escort.type)).length;
-        if (region < postJuicerRegion) earlyRolled += bombers;
+        if (region < postRoosterRegion) earlyRolled += bombers;
         else lateRolled += bombers;
       }
     }
@@ -1294,7 +1788,7 @@ section("floor 1's bombers wait behind the Juicer");
         );
       });
       if (room === undefined) unplaced++;
-      else if (room.region < postJuicerRegion) earlySpawned++;
+      else if (room.region < postRoosterRegion) earlySpawned++;
       else lateSpawned++;
     }
   }
@@ -1302,11 +1796,11 @@ section("floor 1's bombers wait behind the Juicer");
 
   check(
     earlyRolled === 0 && earlySpawned === 0 && unplaced === 0,
-    `no bomber spawns before the Juicer (${earlyRolled} rolled, ${earlySpawned} on ${BOMBER_MAP_SEEDS} maps, ${unplaced} outside a room)`,
+    `no bomber spawns before Big Rooster (${earlyRolled} rolled, ${earlySpawned} on ${BOMBER_MAP_SEEDS} maps, ${unplaced} outside a room)`,
   );
   check(
     lateRolled > 0 && lateSpawned > 0,
-    `bombers do spawn past the Juicer (${lateRolled} rolled, ${lateSpawned} on ${BOMBER_MAP_SEEDS} maps)`,
+    `bombers do spawn past Big Rooster (${lateRolled} rolled, ${lateSpawned} on ${BOMBER_MAP_SEEDS} maps)`,
   );
 }
 
@@ -2206,7 +2700,7 @@ section('difficulty telemetry: trait/no-trait HP split');
     seconds: NO_TRAIT_FIGHT_SECONDS,
   });
 
-  const tally = stats.tallyFor('floor1-pre-hoarder');
+  const tally = stats.tallyFor('floor1-pre-gremlin');
   check(tally !== null, 'a segment with recorded fights has a tally');
   if (tally !== null) {
     check(tally.roomFights === 2, `roomFights counts both fights (got ${tally.roomFights})`);
@@ -2242,7 +2736,7 @@ section('difficulty telemetry: trait/no-trait HP split');
   // an untouched segment must report no tally at all rather than one full of
   // zeroes that would satisfy every check above by accident.
   check(
-    new DifficultyStats().tallyFor('floor1-pre-hoarder') === null,
+    new DifficultyStats().tallyFor('floor1-pre-gremlin') === null,
     'an untouched segment has no tally',
   );
 }
@@ -2436,8 +2930,8 @@ function registeredMob(id: StandaloneMobKind): () => Mob {
  * systems build them.
  */
 const ARENA_BOSSES: readonly (readonly [string, () => Mob])[] = [
-  ['the_hoarder', registeredMob('the_hoarder')],
-  ['juicer', registeredMob('juicer')],
+  ['trash_gremlin', registeredMob('trash_gremlin')],
+  [BIG_ROOSTER_BOSS_TYPE, registeredMob(BIG_ROOSTER_BOSS_TYPE)],
   ['krakaren_clone', registeredMob('krakaren_clone')],
   ['ball_of_swine', registeredMob('ball_of_swine')],
   ['grotesque_spider', registeredMob('grotesque_spider')],

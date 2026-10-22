@@ -8,7 +8,7 @@ import {
   BOOKSHELF,
   BRAZIER,
   CRATE,
-  HOARD_BAG,
+  TRASH_BAG,
   TORCH,
   PROP_DAMAGE_STAGE_CRACKED,
   PROP_DAMAGE_STAGE_DENTED,
@@ -184,7 +184,7 @@ const TORCH_HP = 4;
 const BRAZIER_HP = 9;
 /** A joined case standing a whole tile tall — more timber than a crate carries. */
 const BOOKSHELF_HP = 8;
-/** A split bag of rubbish in the Hoarder's lair: two punches and it goes. */
+/** A split bag of rubbish in the Trash Gremlin's lair: two punches and it goes. */
 const GARBAGE_BAG_HP = 2;
 /**
  * The share of breaks that leave coins. One in ten for a garbage bag — the odd
@@ -265,7 +265,7 @@ const DENTED_HOLD_HP = 1;
 const SWARM_CHANCE = 0.07;
 /**
  * The pieces something could be living in: sealed, dark, left alone. Only the
- * dungeon's own furniture — never a building's barrel or the Hoarder's
+ * dungeon's own furniture — never a building's barrel or the Trash Gremlin's
  * rubbish, whose room has real cockroaches in it.
  */
 export const SWARM_HIDING_KINDS: ReadonlySet<DestructiblePropKind> = new Set<DestructiblePropKind>([
@@ -549,7 +549,7 @@ function kindForTileType(type: number): DestructiblePropKind | null {
   if (type === TORCH) return 'torch';
   if (type === BRAZIER) return 'brazier';
   if (type === BOOKSHELF) return 'bookshelf';
-  if (type === HOARD_BAG) return 'garbage_bag';
+  if (type === TRASH_BAG) return 'garbage_bag';
   return (
     servicePropKindForTileType(type) ??
     cellarPropKindForTileType(type) ??
@@ -565,7 +565,7 @@ export const TILE_TYPE_FOR_KIND: Record<DestructiblePropKind, number> = {
   torch: TORCH,
   brazier: BRAZIER,
   bookshelf: BOOKSHELF,
-  garbage_bag: HOARD_BAG,
+  garbage_bag: TRASH_BAG,
   ...perServiceKind((def) => def.tileType),
   ...perCellarKind((def) => def.tileType),
   ...perRemainsKind((def) => def.tileType),

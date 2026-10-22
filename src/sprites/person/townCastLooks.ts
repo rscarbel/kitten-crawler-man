@@ -124,9 +124,9 @@ export interface TownCastLookCarl extends TownCastLookCommon {
   readonly accessory: AccessorySpec;
   /** Trousers under a short cut; slim stockings under a hem that already covers the thigh. */
   readonly legwear: LegwearCut;
-  /** Covers Carl's own bare legs — his canon look, not the rig's — in the trousers' or stockings' colour. */
+  /** Covers Carl's own bare legs — his own look, not the rig's — in the trousers' or stockings' colour. */
   readonly pantsColor: string;
-  /** Covers Carl's own bare feet, the other half of his canon look. */
+  /** Covers Carl's own bare feet, the other half of his own look. */
   readonly shoeColor: string;
   readonly expression: CarlExpression;
   readonly details?: TownCastLookDetails;

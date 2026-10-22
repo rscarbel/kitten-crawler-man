@@ -88,8 +88,8 @@ export interface ToolTierDef {
 }
 
 /**
- * Every axe and pickaxe tier, transcribed once from the source data so
- * `ITEM_DEF` and the forge shop both read the same numbers.
+ * Every axe and pickaxe tier: the single table `ITEM_DEF` and the forge shop
+ * both read, so they always agree.
  */
 export const TOOL_TIERS: Record<ToolKind, readonly ToolTierDef[]> = {
   axe: [

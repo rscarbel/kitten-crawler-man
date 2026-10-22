@@ -6,10 +6,11 @@
  * Builds floor 3 the way `DungeonScene` does for everything this touches — the
  * real overworld `GameMap`, its art seed pushed before anything paints, the
  * ground and environment sheets *queued* (not painted outright, as the other
- * harnesses do), the street furniture, the whole `TownLifeSystem` crowd and the
- * party — then runs the real `floorArrivalLoadTasks` through a real
- * `LoadRunner`, frame by frame, with the caches' own frame-boundary slices
- * ticking beside it exactly as `SceneManager.step` ticks them.
+ * harnesses do), the street furniture, the whole `TownLifeSystem` crowd with
+ * its residency's arrival decision, and the party — then runs the real
+ * `floorArrivalLoadTasks` through a real `LoadRunner`, frame by frame, with the
+ * caches' own frame-boundary slices ticking beside it exactly as
+ * `SceneManager.step` ticks them.
  *
  * Then it plays the plaza for a stretch and asserts, from frame 0:
  *  - no figure cell is baked on the render path, approximated by a stand-in,
@@ -63,6 +64,10 @@ const { createShopStock } = await import('../src/economy/shopStock.js');
 const { TownPropSystem } = await import('../src/systems/TownPropSystem.js');
 const { TownDecorSystem } = await import('../src/systems/TownDecorSystem.js');
 const { TownLifeSystem } = await import('../src/systems/TownLifeSystem.js');
+const { CrowdResidentSet } = await import('../src/systems/CrowdResidentSet.js');
+const { EnvironmentSheetResidentSet, environmentSheetPlacements, FACADE_LIFE_RING, FACADE_RING } =
+  await import('../src/systems/EnvironmentSheetResidentSet.js');
+const { WorldResidency, tileFocus } = await import('../src/systems/WorldResidency.js');
 const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
 const { MobRoster } = await import('../src/systems/kits/SceneWorld.js');
@@ -121,14 +126,7 @@ const queueFloorArt = (): void => {
     groundSheetKeysAmong(requiredSpriteKeysForLevel(level3.id, level3.spriteGroups)),
     invalidateTileArt,
   );
-  requestEnvironmentSheetsForGroups(level3.spriteGroups, {
-    onSheetPainted: invalidateTileArt,
-    onFacadePainted: (spriteKey) => gameMap.invalidateFacadeArt(spriteKey),
-    town:
-      gameMap.townPlan === undefined
-        ? undefined
-        : { plan: gameMap.townPlan, spawnTile: plazaCentre },
-  });
+  requestEnvironmentSheetsForGroups(level3.spriteGroups, { onSheetPainted: invalidateTileArt });
 };
 queueFloorArt();
 
@@ -152,7 +150,31 @@ const townDecor = new TownDecorSystem(
   new Set([...market.reservedTiles, ...townProps.reservedTiles]),
 );
 const props = [...market.props, ...townProps.props, ...townDecor.props];
-let townLife = new TownLifeSystem(gameMap, () => true);
+const arrivalOutlook = { focus: [tileFocus(plazaCentre)], covered: false };
+interface SettledTown {
+  readonly townLife: InstanceType<typeof TownLifeSystem>;
+  readonly residency: InstanceType<typeof WorldResidency>;
+}
+/** The crowd and the residency deciding for it, built and settled as `DungeonScene` does. */
+function settleTownCrowd(): SettledTown {
+  const crowd = new TownLifeSystem(gameMap, () => true);
+  const residency = new WorldResidency();
+  residency.register(new CrowdResidentSet({ people: () => [...crowd.people, ...market.vendors] }));
+  const sheetPlacements = environmentSheetPlacements(gameMap.structure, level3.spriteGroups);
+  residency.register(
+    new EnvironmentSheetResidentSet(FACADE_RING, sheetPlacements.still, {
+      bakesUnderLoadingScreen: true,
+    }),
+  );
+  residency.register(
+    new EnvironmentSheetResidentSet(FACADE_LIFE_RING, sheetPlacements.life, {
+      bakesUnderLoadingScreen: false,
+    }),
+  );
+  residency.settleNow(arrivalOutlook);
+  return { townLife: crowd, residency };
+}
+let town = settleTownCrowd();
 const human = new HumanPlayer(plazaCentre.x, plazaCentre.y, TILE_SIZE);
 const cat = new CatPlayer(plazaCentre.x + 1, plazaCentre.y, TILE_SIZE);
 human.isActive = true;
@@ -240,7 +262,8 @@ interface PlayFrame {
 }
 
 function playFrame(): PlayFrame {
-  townLife.update({
+  town.residency.update(() => arrivalOutlook);
+  town.townLife.update({
     human,
     cat,
     active: human,
@@ -255,7 +278,7 @@ function playFrame(): PlayFrame {
   beginEnvironmentArtFrame();
   gameMap.renderCanvas(ctx, camX, camY, VIEWPORT_W, VIEWPORT_H);
   gameMap.renderDecorationsOverlay(ctx, camX, camY, VIEWPORT_W, VIEWPORT_H);
-  const inView = townLife.people.filter(
+  const inView = town.townLife.people.filter(
     (person) =>
       person.x >= camX - CULL_MARGIN &&
       person.x <= camX + VIEWPORT_W + CULL_MARGIN &&
@@ -316,9 +339,9 @@ check(
 
 // ── A walk back out of a building: same floor, same map, rebuilt scene ──────
 
-townLife.dispose();
+town.residency.releaseAll();
 queueFloorArt();
-townLife = new TownLifeSystem(gameMap, () => true);
+town = settleTownCrowd();
 const exitOwesWork = floorArrivalOwesWork(true);
 check(
   !exitOwesWork,

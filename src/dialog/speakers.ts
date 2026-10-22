@@ -481,8 +481,8 @@ export const SPEAKERS = {
   },
 
   // The gym's boss.
-  juicer: {
-    name: 'The Juicer',
+  big_rooster: {
+    name: 'Big Rooster',
     portrait: null,
     voice: { kind: 'typing' },
     reveal: 'sentence',

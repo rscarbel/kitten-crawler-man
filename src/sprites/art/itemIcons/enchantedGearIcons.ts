@@ -24,7 +24,7 @@ import {
 } from './iconPaint';
 
 /**
- * Icons for the eight source-material enchanted pieces.
+ * Icons for the eight enchanted pieces.
  *
  * Unlike the issue kit, these are not a matched set — they come from eight
  * different corners of the fiction and are worn by both crawlers — so each one

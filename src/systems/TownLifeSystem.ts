@@ -41,7 +41,6 @@ import { SpatialGrid } from '../core/SpatialGrid';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { allResidents, residentSpecies } from './townResidents';
 import type { TownSpecies } from './townSpecies';
-import { boostPrewarmBudget, unpinAllFigureStates } from '../sprites/figure/figureFrameCache';
 import { mulberry32, rangeInt, subSeed, type Rng } from '../sprites/person/rng';
 
 /** The made surfaces of the town, which citizens treat as public space. */
@@ -96,18 +95,6 @@ const STREET_NEAR_DOOR_TILES = 10;
 const PLAZA_POPULATION = 18;
 const TRAVELER_POPULATION = 12;
 
-/**
- * Per-frame prewarm budget for the town's own arrival window, in place of the
- * cache's ordinary steady-state ceiling — see `boostPrewarmBudget`. Still a
- * frame budget, not a block: every frame keeps rendering at up to this much
- * baking rather than the thread pausing until the crowd is warm. Sized to
- * clear the crowd's own closed set (measured ~2.3 s of total baking, headless)
- * within {@link ARRIVAL_BOOST_FRAMES} without spending enough of a 60 Hz
- * frame to be its own hitch.
- */
-const ARRIVAL_BOOST_BUDGET_MS = 10;
-/** Frames the boosted budget above stays in effect — five seconds at 60 Hz. */
-const ARRIVAL_BOOST_FRAMES = 300;
 /**
  * Doorstep loiterers drawn at most while render quality is reduced, nearest the
  * view's centre first. They stand still on the far edges of the frame, so they
@@ -185,7 +172,7 @@ const DOORSTEP_ANCHORS_PER_BUILDING = 1;
 /**
  * Every doorstep anchor's species follows the resident who owns that door —
  * three of the four land skyfowl. The Desperado Club's bouncer is
- * not tied to any named resident or to the club's own canon-fixed cast (that
+ * not tied to any named resident or to the club's own fixed cast (that
  * cast is `DesperadoClubSystem`'s, not this generic street citizen); fixed
  * human here as a plain, arbitrary tie-break rather than rolled, since the
  * club's door staff sit outside the town's species ratio.
@@ -381,29 +368,6 @@ export class TownLifeSystem implements GameSystem {
     this.spawnFrontageLoiterers();
     this.spawnTravelers();
     this.spawnActivityAnchors();
-
-    // Every citizen above already queued its own look's rows on construction
-    // (`Townsperson`'s constructor calls `prewarmCitizenFigure`). Raising the
-    // queue's own per-frame budget for the arrival window spreads the crowd's
-    // closed set across several seconds of frames that still render, rather
-    // than baking it all before the first one — the citizen sprite wrapper's
-    // own approximate draw path covers whatever hasn't finished yet with an
-    // already-baked stand-in instead of a render-path bake.
-    boostPrewarmBudget(ARRIVAL_BOOST_BUDGET_MS, ARRIVAL_BOOST_FRAMES);
-    // Pinned immediately, not once baked: a pin on a row that hasn't landed
-    // yet does nothing until something bakes it, so there is no ordering
-    // requirement here — see `pinFigureState`.
-    for (const person of this.townsfolk) person.pinLook();
-  }
-
-  /**
-   * Gives back the working set this system pinned, for the scene that owns it
-   * to call when the town is left. Without this a pin outlives the system
-   * that made it, holding memory a later floor's own figures have no claim on
-   * evicting — pins are exempt from the idle sweep by design.
-   */
-  dispose(): void {
-    unpinAllFigureStates();
   }
 
   /** The current crowd, for the scene's Y-sorted entity render pass. */
@@ -412,9 +376,9 @@ export class TownLifeSystem implements GameSystem {
   }
 
   /**
-   * The citizens to draw this frame. Thinning never touches the pin set: the
-   * crowd's rows stay pinned until `dispose`, so a loiterer hidden at reduced
-   * quality is still warm the frame it is drawn again.
+   * The citizens to draw this frame. Thinning never touches what the crowd's
+   * resident set holds, which goes by where citizens stand, so a loiterer
+   * hidden at reduced quality is still warm the frame it is drawn again.
    */
   renderablePeople(camX: number, camY: number): ReadonlyArray<Townsperson> {
     if (this.fullDetail()) return this.townsfolk;

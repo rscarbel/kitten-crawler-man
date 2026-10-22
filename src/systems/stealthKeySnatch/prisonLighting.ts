@@ -284,6 +284,14 @@ export class PrisonLighting {
     this.maskSurface();
   }
 
+  /** Gives back the mask and the cut buffer of a prison no one will draw again. */
+  release(): void {
+    if (this.mask !== null) releaseSurface(this.mask);
+    this.mask = null;
+    if (this.cut !== null) releaseSurface(this.cut.surface);
+    this.cut = null;
+  }
+
   private maskSurface(): CanvasSurface {
     if (this.mask !== null) return this.mask;
     const tileToMask = TILE_SIZE * MASK_SCALE;

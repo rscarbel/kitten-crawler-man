@@ -13,7 +13,7 @@ import {
 const HEATHER_HP = 65;
 const HEATHER_SPEED = 0.55;
 const HEATHER_DAMAGE = 3;
-/** The book's Neighborhood Boss level — applied by the quest system on spawn. */
+/** Her Neighborhood Boss level — applied by the quest system on spawn. */
 export const HEATHER_LEVEL = 19;
 
 const AGGRO_RANGE_TILES = 9;

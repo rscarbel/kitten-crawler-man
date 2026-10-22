@@ -24,8 +24,6 @@ import {
   citizenSpeechStyle,
   citizenLookKey,
   pickCitizenFigure,
-  pinCitizenFigure,
-  prewarmCitizenFigure,
   type CitizenFigure,
 } from './citizenFigure';
 import { onCanvasRecovery } from '../core/canvasRecovery';
@@ -128,8 +126,6 @@ export class Townsperson implements WanderState {
   private readonly seed: number;
   /** {@link purgedRecoveries} as of this citizen's last look. */
   private lookPurgeCount = purgedRecoveries;
-  /** Whether the owning system pinned this citizen's look, so a new look is pinned in turn. */
-  private looksPinned = false;
 
   x: number;
   y: number;
@@ -198,11 +194,6 @@ export class Townsperson implements WanderState {
         : pickCitizenFigure(opts.seed, opts.role, opts.species);
     this.wornDialogSeed = citizenDialogSeed(this.wornFigure);
     this.wornSpeechStyle = citizenSpeechStyle(this.wornFigure);
-    // Every citizen shares its look's cells with every other wearer of that
-    // look, so queuing this look's rows here costs nothing extra once the
-    // crowd's small closed set is warm — and keeps the cost off whichever
-    // citizen happens to draw the first frame anyone wears it in.
-    prewarmCitizenFigure(this.wornFigure);
     this.speed = opts.speed;
     this.cycleDistance = citizenWalkCyclePx(this.wornFigure, PERSON_DRAW_SIZE);
     this.walkFrames = citizenWalkFrames(this.wornFigure);
@@ -223,21 +214,13 @@ export class Townsperson implements WanderState {
   }
 
   /**
-   * Exempts this citizen's look from the figure cache's idle sweep, and any
-   * look it changes to after a purge. For a system that keeps its crowd's
-   * working set resident for as long as the crowd stands.
-   */
-  pinLook(): void {
-    this.looksPinned = true;
-    pinCitizenFigure(this.wornFigure);
-  }
-
-  /**
    * After a purged canvas recovery, changes to the look the current variety
    * tier gives this citizen's seed and role. A named resident keeps its own
    * look, and a citizen in a conversation keeps the face the player is
    * talking to; neither changes later either, since only the moment of the
-   * purge hides the change.
+   * purge hides the change. The new look is warmed by the citizen's owner: a
+   * street crowd's resident set holds and warms it at its next decision once
+   * a wearer is within reach, and an interior's occupant system prewarms it.
    */
   private followPurgedRecovery(): void {
     if (this.lookPurgeCount === purgedRecoveries) return;
@@ -251,8 +234,6 @@ export class Townsperson implements WanderState {
     this.cycleDistance = citizenWalkCyclePx(next, this.cycleDistanceDrawSize);
     this.walkFrames = citizenWalkFrames(next);
     this.drawnRow = undefined;
-    prewarmCitizenFigure(next);
-    if (this.looksPinned) pinCitizenFigure(next);
   }
 
   /** Advances one frame of wander, facing, and animation. */

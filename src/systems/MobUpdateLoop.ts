@@ -273,7 +273,7 @@ export class MobUpdateLoop implements GameSystem {
       // physics: a held or confused mob is still pushed.
       mob.advanceKnockback();
 
-      // Keep bosses (specifically the Juicer) confined to their room
+      // Keep bosses (specifically Big Rooster) confined to their room
       if (mob.isBoss && !(mob instanceof BallOfSwine)) bossRoom?.clampBossToRoom(mob);
       // Any healer fairy standing in a boss room is held to it, bonded or not
       // — see confineHealerToBossRoom's own comment for why bond is not the test.

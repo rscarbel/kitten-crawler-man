@@ -15,8 +15,8 @@ const DEFAULT_BOSS_TRACK = 'boss_music_3' as const satisfies MusicTrackId;
  * the tower finale runs Quill, a silence and the Lich as one claim.
  */
 const BOSS_TRACKS: Readonly<Partial<Record<string, MusicTrackId | null>>> = {
-  the_hoarder: 'boss_music_1',
-  juicer: 'boss_music_2',
+  trash_gremlin: 'boss_music_1',
+  big_rooster: 'boss_music_2',
   miss_quill: null,
   the_lich: null,
 };

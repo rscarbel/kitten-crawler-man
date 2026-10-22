@@ -338,13 +338,13 @@ against, or cited as "how it's done here".
   out 21.5 px above the tile anchor at the 32 px tile, frozen as
   `HUMAN_SPRITE_TOP_ABOVE_TILE` (22) in `HumanPlayer.ts` and re-measured by G21
   with the rest of `HUMAN_STATUS_FIGURE_BOX`.
-- **Frame geometry is measured, not authored — and nothing can measure ink at
-  runtime.** Measure it once offline, freeze it as a named constant in the
-  figure module (`frameWidth`, `frameHeight`, `tileX`, `tileY`, a head clearance,
-  a gore recentring offset), and write a gate that paints the art again,
+- **Frame geometry is measured, not authored.** Measure the cell once offline,
+  freeze it as named constants in the figure module (`frameWidth`,
+  `frameHeight`, `tileX`, `tileY`), and write a gate that paints the art again,
   re-measures, and fails when the two part company. A frozen measurement with no
   gate behind it goes quietly wrong on the next redraw with every other gate
-  green.
+  green. A gore piece's spin centre and a row's ink top are measured at runtime
+  (`drawFigureCachedRotatedCenter`, `figureRowInkTop`), so neither is frozen.
 - **Vertical wall tests are anchored by direction** (`src/map/collisionAnchors.ts`).
   Walking south the feet lead, so the test drops to the sole (0.95); every other
   direction tests the centre. Any new bipedal mob must use these or it stands

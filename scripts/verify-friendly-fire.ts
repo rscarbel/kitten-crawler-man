@@ -450,7 +450,7 @@ console.log(
   }> = [
     { name: 'a rat', make: spawned('rat'), fullBlast: false, pushed: true },
     { name: 'a goblin', make: spawned('goblin'), fullBlast: false, pushed: true },
-    { name: 'the Juicer', make: spawned('juicer'), fullBlast: false, pushed: false },
+    { name: 'Big Rooster', make: spawned('big_rooster'), fullBlast: false, pushed: false },
     { name: 'a Brindled Vespa', make: makeVespa, fullBlast: true, pushed: true },
     { name: 'a hireling', make: makeHireling, fullBlast: true, pushed: true },
   ];
@@ -460,8 +460,8 @@ console.log(
     vespaProbe instanceof BrindleGrub && vespaProbe.isVespa && vespaProbe.huntsOtherMobs,
     'the grub under test has hatched into a Vespa that hunts other mobs',
   );
-  const juicerProbe = spawned('juicer')();
-  check(juicerProbe.isBoss, 'the Juicer under test is a boss');
+  const bigRoosterProbe = spawned('big_rooster')();
+  check(bigRoosterProbe.isBoss, 'Big Rooster under test is a boss');
 
   const placed: { name: string; mob: Mob; fullBlast: boolean; pushed: boolean }[] = [];
   const crawler = new HumanPlayer(BLAST_CENTRE_TILE, BLAST_CENTRE_TILE, TILE_SIZE);

@@ -6,7 +6,7 @@
  * `DoomsdayProgress`, …), this is a plain mutable object threaded by reference
  * through the `DungeonScene` ↔ `BuildingInteriorScene` constructors so it
  * survives entering and leaving the club. Obtaining the Desperado Pass would
- * (per the books) permanently forfeit any Club Vanquisher membership — pure
+ * permanently forfeit any Club Vanquisher membership — pure
  * flavour here, since the rival club is out of scope.
  */
 

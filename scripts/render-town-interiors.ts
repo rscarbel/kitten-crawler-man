@@ -141,7 +141,7 @@ for (const { building, floor, floorCount } of storeys) {
     stampSafeRoomCounters(map);
     stampSafeRoomDecor(map);
   }
-  map.invalidateAllTileArt();
+  map.releaseTileArt();
 
   const occupants = InteriorOccupantSystem.forBuilding(map, building.kind, building.name);
   for (let frame = 0; frame < WARM_FRAMES; frame++) occupants?.update();

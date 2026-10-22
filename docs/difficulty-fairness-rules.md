@@ -382,7 +382,7 @@ FIREBALL_FLIGHT_FRAMES`, so a crawler standing dead on the landing who starts
 - **Fairy chances sit 15 points above their design rates.** Every enabled fairy chance —
   room rates per region and difficulty, the Ball of Swine's upgrade, the room healer, and
   floor 3's scatter fairy and scatter healer — is its design rate plus 0.15, held to 1;
-  a chance designed off (floor 1 before the Hoarder, floor 1's healer) stays off, and no
+  a chance designed off (floor 1 before the Trash Gremlin, floor 1's healer) stays off, and no
   count range moves (`verify:fairies` spawn rules).
 - **Every fairy group has a shield fairy.** Wherever a room, a rate-upgrade top-up or a
   floor-3 scatter point leaves at least one fairy (a healer included) and none is a

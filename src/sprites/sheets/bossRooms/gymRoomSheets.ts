@@ -1,5 +1,5 @@
 /**
- * The Juicer's gym, as painted sheets: its racks, its treadmills' belts and
+ * Big Rooster's gym, as painted sheets: its racks, its treadmills' belts and
  * consoles, the boombox, the shutter, the bowled plate, chalk, the mirror
  * crack, and the three pieces of kit a crawler can carry off (bench,
  * treadmill, dumbbell). The colosseum's pickups blit the same frames.

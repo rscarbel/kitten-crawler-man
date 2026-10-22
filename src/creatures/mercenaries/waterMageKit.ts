@@ -30,7 +30,7 @@ import {
  * crossbow bolts. When a crowd bunches up in front of him he throws the Wet Spot
  * routine: a wave that rolls out across a cone, hits everything it reaches and
  * carries them back. Water magic is an offensive spell, so it never goes off in
- * a safe room — in the books a saferoom blocked this exact routine.
+ * a safe room.
  *
  * He is small and fragile, so a hostile that closes to arm's length makes him
  * back off before he shoots again.

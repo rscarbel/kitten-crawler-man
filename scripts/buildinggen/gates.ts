@@ -347,15 +347,14 @@ export function measureTextureRichness(buffer: PixelBuffer): number {
 }
 
 /**
- * The floor is a fraction of the *replaced* art's own number rather than one
- * global figure, because a fieldstone cottage and a dressed-stone club do not
- * carry comparable amounts of detail: one global threshold would either pass the
- * cottage trivially or fail the club unfairly.
+ * The floor is a fraction of the richness recorded for the sheet named by
+ * `spec.replaces` rather than one global figure, because a fieldstone cottage
+ * and a dressed-stone club do not carry comparable amounts of detail: one global
+ * threshold would either pass the cottage trivially or fail the club unfairly.
  *
- * ## Why the fraction is 0.5 and not the 0.7 first written down
+ * ## Why the fraction is 0.5
  *
- * The 0.7 was chosen before any procedurally built facade had been measured. Two
- * things came out of measuring one.
+ * Two facts about the metric set it.
  *
  * The first is that this metric is not a marginal flat-fill detector at any
  * threshold in this range — it is an overwhelming one. `npm run verify:buildings`
@@ -363,32 +362,30 @@ export function measureTextureRichness(buffer: PixelBuffer): number {
  * its own ramp scores about 0.6, the finished buildings score 15 to 23, and it
  * fails if the tightest floor ever stops being a comfortable multiple of the
  * flat score. So what this fraction actually governs is a softer question than
- * "is there texture": how close the redraw has to come to the *decoration
- * density* of the art it replaces.
+ * "is there texture": how close a building has to come to the *decoration
+ * density* of its recorded sheet.
  *
- * The second is that the reference art's own numbers are partly incidental to
- * that question. They are continuous-tone renders carrying brush noise inside
- * every flat area, and they are busier — the barracks alone had banners, gilt
- * columns and carved panels across its frontage. Chasing the last of their
- * figure with surface noise was tried and it visibly destroyed the masonry: the
- * courses dissolved into a cellular net. Detail that *reads* — string courses,
- * piers, props, openings — is worth adding and has been; noise past that is
- * worth less than the material it obscures.
+ * The second is that the recorded numbers are partly incidental to that
+ * question. They come from continuous-tone renders carrying brush noise inside
+ * every flat area, and those renders are busier — the barracks alone carries
+ * banners, gilt columns and carved panels across its frontage. Matching their
+ * figure with surface noise visibly destroys the masonry: the courses dissolve
+ * into a cellular net. Detail that *reads* — string courses, piers, props,
+ * openings — is worth adding; noise past that is worth less than the material
+ * it obscures.
  *
- * ## The building that set the number
+ * ## The building that sets the number
  *
- * The Temple of the Sky. Its predecessor is the richest asset in the set at
- * 34.72 — more small decoration than anything else in town — and the temple was
- * the last building still failing. Pushed to meet a higher bar its elevation
- * filled with repeated plaques and scattered windows and stopped reading as a
- * temple at all; pulled back to a clean dome-on-drum over a plain ashlar front
- * it measures about 18.6, against a floor of 17.36. That is the honest ceiling
- * for this building.
+ * The Temple of the Sky. Its recorded sheet is the richest in the set at
+ * 34.72 — more small decoration than anything else in town. Pushed to meet a
+ * higher bar its elevation fills with repeated plaques and scattered windows and
+ * stops reading as a temple at all; as a clean dome-on-drum over a plain ashlar
+ * front it clears its floor of 17.36 by only a few percent. That is the honest
+ * ceiling for this building.
  *
- * Old Hilda's Cottage is now the tightest, at 14.98 against 11.42 — the margins
- * moved when the palette was re-exposed, and any figure quoted here is only as
- * good as the bake it was taken from. `npm run gen:buildings` prints all fifteen
- * every run; trust that over this paragraph.
+ * The temple and Old Hilda's Cottage are the two tightest, and any figure quoted
+ * here is only as good as the bake it was taken from. `npm run gen:buildings`
+ * prints all fifteen every run; trust that over this paragraph.
  */
 export const TEXTURE_RICHNESS_FLOOR_FRACTION = 0.5;
 
@@ -498,9 +495,9 @@ export function gatePlaneSeparation(
  */
 export const PALETTE_TOLERANCE = 78;
 /**
- * Tightened once the art was measured: all fifteen buildings come in at 0.000%
- * stray, so the previous allowance was permitting roughly a thousand pixels of
- * arbitrary colour on an inn-sized frame while catching nothing.
+ * All fifteen buildings measure 0.000% stray, so a looser allowance would permit
+ * roughly a thousand pixels of arbitrary colour on an inn-sized frame while
+ * catching nothing.
  */
 export const PALETTE_STRAY_FRACTION_LIMIT = 0.001;
 const PALETTE_RAMP_SAMPLES = 9;
@@ -751,8 +748,7 @@ export function gateLifeFrameCount(
   const MAX_FRAMES = MAX_LIFE_FRAMES;
   // No check that `lifeFrames.length === spec.life.frames`: the only caller
   // builds that array with `Array.from({ length: spec.life.frames })`, so the
-  // comparison was against the expression it came from and could not fail —
-  // exactly the shape `gateNoCellBleed` replaced one function away.
+  // comparison would be against the expression it came from and could not fail.
   if (spec.life.frames < MIN_FRAMES || spec.life.frames > MAX_FRAMES) {
     results.fail(
       spec.key,
@@ -783,10 +779,8 @@ export function gateLifeFrameCount(
  * someone else's art on the next one. Size is the whole of the hazard, because a
  * painter cannot draw outside the surface it was given: this compares the
  * surface the painter produced against the frame the manifest declares, which
- * are arrived at by two different routes.
- *
- * It replaced a check that compared the idle cell's width against the expression
- * its own width had been computed from, and so could not fail.
+ * are arrived at by two different routes. Comparing the idle cell's width against
+ * the expression its own width was computed from could never fail.
  */
 export function gateNoCellBleed(
   results: GateResults,

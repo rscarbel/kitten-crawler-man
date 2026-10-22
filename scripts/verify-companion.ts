@@ -525,30 +525,38 @@ console.log('\nA damage-over-time tick cannot walk through a boss shield');
 console.log('\nCalling a fight off puts the boss back the way the party found it');
 {
   const party = makeParty(new GameMap(MAP_OPTIONS));
-  const juicer = addMob(party, 'juicer', party.map.startTile.x + 3, party.map.startTile.y);
-  const restingSpeed = juicer.moveSpeed;
+  const bigRooster = addMob(party, 'big_rooster', party.map.startTile.x + 3, party.map.startTile.y);
+  const restingSpeed = bigRooster.moveSpeed;
 
-  juicer.takeDamageFrom(Math.ceil(juicer.maxHp * ENRAGE_CHIP_FRACTION), party.human, 'melee');
-  juicer.updateAI([party.human, party.cat]);
-  check(juicer.isEnraged === true, 'chipping the Juicer enrages him');
-  check(juicer.moveSpeed > restingSpeed, 'and speeds him up');
+  bigRooster.takeDamageFrom(
+    Math.ceil(bigRooster.maxHp * ENRAGE_CHIP_FRACTION),
+    party.human,
+    'melee',
+  );
+  bigRooster.updateAI([party.human, party.cat]);
+  check(bigRooster.isEnraged === true, 'chipping Big Rooster enrages him');
+  check(bigRooster.moveSpeed > restingSpeed, 'and speeds him up');
 
-  juicer.healAndForgetFight();
-  check(juicer.hp === juicer.maxHp, 'calling the fight off heals him');
-  check(juicer.isEnraged === false, 'and un-enrages him');
+  bigRooster.healAndForgetFight();
+  check(bigRooster.hp === bigRooster.maxHp, 'calling the fight off heals him');
+  check(bigRooster.isEnraged === false, 'and un-enrages him');
   check(
-    juicer.moveSpeed === restingSpeed,
-    `so the next fight is the one the party first met (${juicer.moveSpeed} vs ${restingSpeed})`,
+    bigRooster.moveSpeed === restingSpeed,
+    `so the next fight is the one the party first met (${bigRooster.moveSpeed} vs ${restingSpeed})`,
   );
 
   // The checkpoint route to the same place. Both rewinds share one hook, and a
   // boss that un-enrages down one of them and not the other is the harder bug
   // to notice, because only one of them happens on a good run.
-  juicer.takeDamageFrom(Math.ceil(juicer.maxHp * ENRAGE_CHIP_FRACTION), party.human, 'melee');
-  juicer.updateAI([party.human, party.cat]);
-  juicer.resetToSpawn();
+  bigRooster.takeDamageFrom(
+    Math.ceil(bigRooster.maxHp * ENRAGE_CHIP_FRACTION),
+    party.human,
+    'melee',
+  );
+  bigRooster.updateAI([party.human, party.cat]);
+  bigRooster.resetToSpawn();
   check(
-    juicer.isEnraged === false && juicer.moveSpeed === restingSpeed,
+    bigRooster.isEnraged === false && bigRooster.moveSpeed === restingSpeed,
     'and a checkpoint rewind unwinds the same phase',
   );
 }

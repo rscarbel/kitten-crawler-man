@@ -21,7 +21,8 @@
 import { createCanvas } from 'canvas';
 
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
-import { asNodeCanvas } from './nodeGameContext.js';
+import { asGameContext, asNodeCanvas } from './nodeGameContext.js';
+import type { ResidentSet } from '../src/systems/WorldResidency.js';
 
 installCanvasGlobals();
 
@@ -40,17 +41,41 @@ const {
   releaseEnvironmentArt,
   requestEnvironmentSheet,
   residentEnvironmentSheetKeys,
+  environmentRepaintCursor,
+  environmentSheetState,
+  environmentSheetsRepaintedSince,
+  releaseEnvironmentSheet,
+  deferEnvironmentSheet,
+  wantEnvironmentSheet,
+  environmentRepaintsWaiting,
+  environmentSheetsQueued,
+  RELEASED_GRACE_FRAMES,
+  repaintedSheetRevision,
+  setEnvironmentIdleWindowFrames,
   setEnvironmentSheetByteBudget,
 } = await import('../src/map/environmentArtCache.js');
 const { GROUND_SHEET_KEYS, requestGroundSheets } =
   await import('../src/map/ground/runtimeGroundSheets.js');
-const { getManifestEntry, getSpriteDefByKey } = await import('../src/core/SpriteLoader.js');
+const { getManifestEntry, getSpriteDefByKey, getSpriteMissCounts } =
+  await import('../src/core/SpriteLoader.js');
+const { drawDecorationLifeLayer } = await import('../src/map/tiles/decorationTiles.js');
+const { drawSprite } = await import('../src/core/SpriteRenderer.js');
+const { BUILDING_SPECS } = await import('../src/sprites/buildinggen/buildings.js');
+const { paintLifeFrame } = await import('../src/sprites/buildinggen/animate.js');
+const { frameHeightPx, frameWidthPx } = await import('../src/sprites/buildinggen/spec.js');
 type SpriteKey = Parameters<typeof getManifestEntry>[0];
 type EnvironmentSheetPlan = Parameters<typeof requestEnvironmentSheet>[0];
 const { BUILDING_SALT, floorArtSubSeed, setFloorArtSeed } =
   await import('../src/map/ground/floorArtSeed.js');
-const { requestBuildingSheets, BUILDING_KEYS } =
-  await import('../src/sprites/buildinggen/runtimeBuildingSheets.js');
+const {
+  requestBuildingSheets,
+  BUILDING_KEYS,
+  BUILDING_LIFE_STATE,
+  buildingLifeKeys,
+  buildingLifeKeyOf,
+  buildingSheetsNotYetQueued,
+  wantBuildingSheet,
+} = await import('../src/sprites/buildinggen/runtimeBuildingSheets.js');
 const { FLOOR_ART_SEEDS } = await import('../src/map/ground/artSeedAlphabet.js');
 const { propSheetPlanMismatches } = await import('../src/sprites/sheets/propSheetPlan.js');
 const { townscapeSheetPlans, OVERWORLD_MAP_SIZE_TILES } =
@@ -73,7 +98,14 @@ const { getLevelDef } = await import('../src/levels/index.js');
 const { runCanvasRecovery } = await import('../src/core/canvasRecovery.js');
 const { BYTES_PER_MEGABYTE, CanvasContextUnavailableError } =
   await import('../src/core/canvasSurface.js');
-const { beginRenderFrame } = await import('../src/core/renderFrameClock.js');
+const { beginRenderFrame, holdIdleClock, releaseIdleClock } =
+  await import('../src/core/renderFrameClock.js');
+const { setViewportSize } = await import('../src/core/Viewport.js');
+const { TILE_SIZE } = await import('../src/core/constants.js');
+const { EnvironmentSheetResidentSet, FACADE_LIFE_RING, FACADE_RING } =
+  await import('../src/systems/EnvironmentSheetResidentSet.js');
+const { FASTEST_WALK_TILES_PER_SECOND, tilesUntilInView, WorldResidency } =
+  await import('../src/systems/WorldResidency.js');
 const { OverlayTileCache } = await import('../src/map/TileRenderer.js');
 const { SPRITE_BUILDING } = await import('../src/map/tileTypes.js');
 
@@ -203,7 +235,12 @@ requestGroundSheets(GROUND_SHEET_KEYS);
 requestBuildingSheets(floorArtSubSeed(BUILDING_SALT));
 
 /** Every sheet this gate expects to see painted and published. */
-const PAINTED_KEYS = [...GROUND_SHEET_KEYS, MASK_SHEET_KEY, ...BUILDING_KEYS];
+const PAINTED_KEYS = [
+  ...GROUND_SHEET_KEYS,
+  MASK_SHEET_KEY,
+  ...BUILDING_KEYS,
+  ...buildingLifeKeys(),
+];
 
 const owedAtStart = environmentPaintDepth();
 check(owedAtStart > 0, 'requesting every ground sheet queued no work at all');
@@ -631,6 +668,8 @@ check(idleKeys.includes(IDLE_KEY), 'the budget probe painted no idle sheet to ev
 const idlePixelsBefore = sheetPixels(IDLE_KEY);
 const evictionsBefore = environmentSheetEvictionStats();
 setEnvironmentSheetByteBudget(0);
+// Only the budget lets go here: the idle sweep has its own probe below.
+setEnvironmentIdleWindowFrames(Number.POSITIVE_INFINITY);
 for (let frame = 0; frame <= RECENTLY_DRAWN_FRAMES; frame++) {
   beginRenderFrame();
   overlayCache.beginFrame();
@@ -655,6 +694,7 @@ check(
     `${evictionsAfter.evictions - evictionsBefore.evictions}`,
 );
 setEnvironmentSheetByteBudget(null);
+setEnvironmentIdleWindowFrames(null);
 paintEnvironmentArtNow();
 check(hasEnvironmentSheet(IDLE_KEY), 'an evicted sheet looked up again was never repainted');
 check(
@@ -666,6 +706,560 @@ check(
   samePixels(idlePixelsBefore, sheetPixels(IDLE_KEY)),
   'an evicted sheet repainted to different pixels than it held before',
 );
+
+// ── the idle sweep ─────────────────────────────────────────────────────────
+
+/**
+ * The sweep's window for the probes below: long enough for a sheet to be
+ * painted inside it, short enough to walk out of and back into.
+ */
+const PROBE_IDLE_WINDOW_FRAMES = 240;
+
+function idleFrames(frames: number, eachFrame: () => void = () => undefined): void {
+  for (let frame = 0; frame < frames; frame++) {
+    beginRenderFrame();
+    eachFrame();
+    beginEnvironmentArtFrame();
+  }
+}
+
+// Within budget, a sheet nothing draws for the window goes; one drawn every
+// frame stays; and a loading screen's hold ages neither.
+flushEnvironmentArtCache();
+setFloorArtSeed(freshArtSeed());
+setEnvironmentIdleWindowFrames(PROBE_IDLE_WINDOW_FRAMES);
+requestGroundSheets([DRAWN_KEY, IDLE_KEY]);
+paintEnvironmentArtNow();
+const undrawnKeys = residentEnvironmentSheetKeys().filter((key) => key !== DRAWN_KEY);
+const sweptBefore = environmentSheetEvictionStats();
+holdIdleClock();
+idleFrames(PROBE_IDLE_WINDOW_FRAMES * 2, () => getSpriteDefByKey(DRAWN_KEY));
+releaseIdleClock();
+check(
+  hasEnvironmentSheet(IDLE_KEY),
+  'a sheet went undrawn only while the idle clock was held (a loading screen, a visit indoors) and the sweep let it go',
+);
+idleFrames(PROBE_IDLE_WINDOW_FRAMES + 1, () => getSpriteDefByKey(DRAWN_KEY));
+check(hasEnvironmentSheet(DRAWN_KEY), 'a sheet drawn on every frame was let go by the idle sweep');
+for (const key of undrawnKeys) {
+  check(!hasEnvironmentSheet(key), `"${key}" sat undrawn past the idle window but was not let go`);
+}
+const sweptAfter = environmentSheetEvictionStats();
+check(
+  sweptAfter.idleReleases - sweptBefore.idleReleases === undrawnKeys.length &&
+    sweptAfter.evictions === sweptBefore.evictions,
+  `expected the idle sweep to let go of the ${undrawnKeys.length} undrawn sheets and the budget ` +
+    `of none; counted ${sweptAfter.idleReleases - sweptBefore.idleReleases} and ` +
+    `${sweptAfter.evictions - sweptBefore.evictions}`,
+);
+check(
+  getSpriteDefByKey(IDLE_KEY) === undefined,
+  'a sheet let go by the idle sweep is still published',
+);
+paintEnvironmentArtNow();
+check(hasEnvironmentSheet(IDLE_KEY), 'a sheet let go by the idle sweep never repainted on lookup');
+
+// ── the distance hold ──────────────────────────────────────────────────────
+
+const VIEW_W = 1280;
+const VIEW_H = 720;
+setViewportSize(VIEW_W, VIEW_H);
+const UPDATES_PER_SECOND = 60;
+const WALK_TILES_PER_FRAME = FASTEST_WALK_TILES_PER_SECOND / UPDATES_PER_SECOND;
+const releaseTiles =
+  FACADE_RING.leadSeconds * FASTEST_WALK_TILES_PER_SECOND + FACADE_RING.releaseHysteresisTiles;
+/** A placed sheet's area, standing in for a building. */
+const PLACED_AREA = { x: 0, y: 0, w: 4, h: 4 };
+/** Where the party stands just outside the hold ring, so it holds without drawing. */
+const HOLD_EDGE_MARGIN_TILES = 1;
+/** Tiles out to walk past the ring before turning back, so the sheet is released. */
+const FAR_WALK_TILES = 200;
+const placedKey = PROBE_KEY;
+const floorWideKey: SpriteKey = 'ground_interior';
+
+interface WalkReport {
+  /** Frames the placed sheet was in view while it was not drawable. */
+  readonly framesMissingInView: number;
+  /** Whether the placed sheet was still resident when the party stood near it. */
+  readonly heldWhileNear: boolean;
+  /** Whether it was let go by the time the party was past the release ring, the sweep held off. */
+  readonly releasedOnLeaving: boolean;
+}
+
+/**
+ * Stands just outside the view of a placed sheet past the idle window, walks
+ * past the release ring with the sweep held off, then walks back at the
+ * fastest walk: what a party does leaving a district and returning to it.
+ */
+function walkAwayAndBack(): WalkReport {
+  flushEnvironmentArtCache();
+  setFloorArtSeed(freshArtSeed());
+  // Block plans rather than real art, so a repaint takes a few frames however
+  // loaded the machine is, well inside the lead the walk back is given.
+  requestEnvironmentSheet(blockPlan(placedKey, {}));
+  requestEnvironmentSheet(blockPlan(floorWideKey, {}));
+  paintEnvironmentArtNow();
+  const residency = new WorldResidency();
+  residency.register(
+    new EnvironmentSheetResidentSet(
+      FACADE_RING,
+      [
+        { entry: placedKey, area: PLACED_AREA },
+        { entry: floorWideKey, area: { x: -FAR_WALK_TILES, y: 0, w: FAR_WALK_TILES * 2, h: 1 } },
+      ],
+      { bakesUnderLoadingScreen: true },
+    ),
+  );
+  const halfViewTiles = VIEW_W / 2 / TILE_SIZE;
+  let partyTileX = PLACED_AREA.x + PLACED_AREA.w + halfViewTiles + HOLD_EDGE_MARGIN_TILES;
+  let framesMissingInView = 0;
+  const step = (): void => {
+    const focus = { x: partyTileX * TILE_SIZE, y: PLACED_AREA.y * TILE_SIZE };
+    residency.update(() => ({ focus: [focus], covered: false }));
+    if (tilesUntilInView(focus, PLACED_AREA) === 0) {
+      if (!hasEnvironmentSheet(placedKey)) framesMissingInView++;
+      getSpriteDefByKey(placedKey);
+    }
+  };
+  idleFrames(PROBE_IDLE_WINDOW_FRAMES * 2, step);
+  const heldWhileNear = hasEnvironmentSheet(placedKey);
+  // Only the release can let it go from here on.
+  setEnvironmentIdleWindowFrames(Number.POSITIVE_INFINITY);
+  const walkFrames = Math.ceil(FAR_WALK_TILES / WALK_TILES_PER_FRAME);
+  idleFrames(walkFrames, () => {
+    partyTileX += WALK_TILES_PER_FRAME;
+    step();
+  });
+  const releasedOnLeaving = !hasEnvironmentSheet(placedKey);
+  // Back past where it stood, onto the sheet's own area.
+  const returnFrames = Math.ceil((partyTileX - PLACED_AREA.x) / WALK_TILES_PER_FRAME);
+  idleFrames(returnFrames, () => {
+    partyTileX -= WALK_TILES_PER_FRAME;
+    step();
+  });
+  setEnvironmentIdleWindowFrames(PROBE_IDLE_WINDOW_FRAMES);
+  return { framesMissingInView, heldWhileNear, releasedOnLeaving };
+}
+
+check(
+  FAR_WALK_TILES > releaseTiles * 2,
+  'the distance-hold probe never walks past the release ring, so it tests nothing',
+);
+const walk = walkAwayAndBack();
+check(
+  walk.heldWhileNear,
+  'a placed sheet within the hold ring but out of view was let go by the idle sweep',
+);
+check(
+  walk.releasedOnLeaving,
+  'a placed sheet past its release ring was kept: what is let go there must not wait out the ' +
+    'idle window, or the working set the budget gate measures is not what stays resident',
+);
+check(
+  walk.framesMissingInView === 0,
+  `walking back to a placed sheet the sweep had let go, it was missing for ` +
+    `${walk.framesMissingInView} frames in view; it must be painted again before the camera reaches it`,
+);
+check(
+  hasEnvironmentSheet(floorWideKey),
+  'a sheet placed over the whole floor was let go although the party never left it',
+);
+
+// ── a let-go sheet is owed on demand, and announced by key ─────────────────
+
+// A scene rebuilt around a floor asks for the floor's sheets again; one let go
+// must stay let go until something wants it, or every door repaints the floor.
+flushEnvironmentArtCache();
+setFloorArtSeed(freshArtSeed());
+requestEnvironmentSheet(blockPlan(placedKey, {}));
+paintEnvironmentArtNow();
+releaseEnvironmentSheet(placedKey);
+idleFrames(RELEASED_GRACE_FRAMES + 1);
+check(!hasEnvironmentSheet(placedKey), 'a sheet released by its resident set outlived its grace');
+// Asked for again, as an interior re-entered after the party was outdoors a
+// while asks for its own sheets, its repaint must be owed where an arrival
+// card counts it, or the card lifts onto a bare room.
+const revisionBefore = repaintedSheetRevision();
+const cursorBefore = environmentRepaintCursor();
+const reaskOutcome = requestEnvironmentSheet(blockPlan(placedKey, {}));
+check(
+  reaskOutcome === 'owedOnDemand' &&
+    environmentSheetState(placedKey) === 'owed' &&
+    environmentRepaintsWaiting() > 0,
+  `asking again for a sheet let go (${reaskOutcome}) left it ${environmentSheetState(placedKey)} ` +
+    'with no repaint waiting, so a loading card would lift before it lands',
+);
+// It lands announced by its key, not by the revision that makes every chunk
+// and overlay entry on the floor re-bake.
+paintEnvironmentArtNow();
+const announced = environmentSheetsRepaintedSince(cursorBefore).sheets.map((sheet) => sheet.key);
+check(hasEnvironmentSheet(placedKey), 'a let-go sheet wanted again was never painted');
+check(
+  repaintedSheetRevision() === revisionBefore && announced.includes(placedKey),
+  'a let-go sheet painted again bumped the floor-wide repaint revision instead of announcing ' +
+    'its own key, so every chunk and overlay entry would re-bake',
+);
+
+// ── released before it landed ──────────────────────────────────────────────
+
+// A sheet released while still painting lands released, and goes after the
+// grace; kept instead, every life row that enters and leaves view at speed
+// would stay for the whole idle window.
+flushEnvironmentArtCache();
+setFloorArtSeed(freshArtSeed());
+requestEnvironmentSheet(blockPlan(placedKey, {}));
+releaseEnvironmentSheet(placedKey);
+paintEnvironmentArtNow();
+idleFrames(RELEASED_GRACE_FRAMES + 1);
+check(
+  !hasEnvironmentSheet(placedKey),
+  'a sheet released while it was still painting was kept after it landed',
+);
+// Released while painting, then wanted again before it landed: the want
+// cancels the release, and it lands kept.
+flushEnvironmentArtCache();
+setFloorArtSeed(freshArtSeed());
+requestEnvironmentSheet(blockPlan(placedKey, {}));
+releaseEnvironmentSheet(placedKey);
+wantEnvironmentSheet(placedKey);
+paintEnvironmentArtNow();
+idleFrames(RELEASED_GRACE_FRAMES + 1);
+check(
+  hasEnvironmentSheet(placedKey),
+  'a sheet released while painting and then wanted again was let go when it landed',
+);
+// A purge while a released sheet is still painting must not repaint it as
+// if it were wanted: it would land unreleased and stay the idle window.
+flushEnvironmentArtCache();
+setFloorArtSeed(freshArtSeed());
+requestEnvironmentSheet(blockPlan(placedKey, {}));
+releaseEnvironmentSheet(placedKey);
+runCanvasRecovery('purged', null);
+check(
+  environmentSheetState(placedKey) === 'evicted',
+  `a purge left a sheet released while painting ${environmentSheetState(placedKey)}; ` +
+    'repainted, it would land unreleased and stay for the idle window',
+);
+// Released while painting and then refused a surface mid-paint: nothing
+// wants it, so it is owed on demand rather than retried and landed unreleased.
+flushEnvironmentArtCache();
+setFloorArtSeed(freshArtSeed());
+requestEnvironmentSheet(blockPlan(placedKey, { refuseOnceOnStep: 1 }));
+releaseEnvironmentSheet(placedKey);
+for (let frame = 0; frame < THROWING_PLAN_FRAMES; frame++) beginEnvironmentArtFrame();
+check(
+  environmentSheetState(placedKey) === 'evicted',
+  `a sheet released while painting and then refused a surface is ` +
+    `${environmentSheetState(placedKey)}; a retry would land it unreleased`,
+);
+// A sheet waiting out a refused surface when released waits for nothing.
+flushEnvironmentArtCache();
+setFloorArtSeed(freshArtSeed());
+deferEnvironmentSheet(placedKey, true, () => blockPlan(placedKey, {}));
+releaseEnvironmentSheet(placedKey);
+check(
+  environmentSheetState(placedKey) === 'evicted',
+  `a sheet refused a surface and then released is ${environmentSheetState(placedKey)}; ` +
+    'it should be owed on demand, not retried',
+);
+flushEnvironmentArtCache();
+setFloorArtSeed(freshArtSeed());
+requestEnvironmentSheet(blockPlan(placedKey, {}));
+paintEnvironmentArtNow();
+releaseEnvironmentSheet(placedKey);
+idleFrames(RELEASED_GRACE_FRAMES + 1);
+// A repaint waiting its turn when released is not started at all.
+wantEnvironmentSheet(placedKey);
+releaseEnvironmentSheet(placedKey);
+check(
+  environmentSheetState(placedKey) === 'evicted',
+  `a waiting repaint released before its turn is ${environmentSheetState(placedKey)}; it ` +
+    'should go back to being owed on demand',
+);
+// A facade released before its turn in the building queue is taken back.
+flushEnvironmentArtCache();
+setFloorArtSeed(freshArtSeed());
+const queueProbeSet = new EnvironmentSheetResidentSet(FACADE_RING, [], {
+  bakesUnderLoadingScreen: false,
+});
+queueProbeSet.warm(BUILDING_KEYS[0], 'urgent');
+queueProbeSet.warm(BUILDING_KEYS[1], 'urgent');
+const waitingBefore = buildingSheetsNotYetQueued();
+queueProbeSet.release(BUILDING_KEYS[1]);
+check(
+  waitingBefore === 1 && buildingSheetsNotYetQueued() === 0,
+  `a facade released before its turn stayed in the building queue (${waitingBefore} waiting, ` +
+    `then ${buildingSheetsNotYetQueued()})`,
+);
+flushEnvironmentArtCache();
+
+// A purge does not repaint a sheet its resident set has just released, even
+// one drawn a moment ago: it is going anyway.
+setFloorArtSeed(freshArtSeed());
+requestEnvironmentSheet(blockPlan(placedKey, {}));
+paintEnvironmentArtNow();
+idleFrames(1, () => getSpriteDefByKey(placedKey));
+releaseEnvironmentSheet(placedKey);
+runCanvasRecovery('purged', null);
+check(
+  environmentSheetState(placedKey) === 'evicted',
+  `a purge left a just-released sheet ${environmentSheetState(placedKey)}; repainted, it ` +
+    'would also lose its release and stay for the idle window',
+);
+flushEnvironmentArtCache();
+
+// ── a loading screen's budget across the sets that bake ───────────────────
+
+/** A resident set with nothing placed that only bakes, spending what `spendMs` says of its share. */
+function bakingProbeSet(
+  spendMs: (shareMs: number) => number,
+  offered: number[],
+): ResidentSet<string> {
+  return {
+    leadSeconds: FACADE_RING.leadSeconds,
+    releaseHysteresisTiles: FACADE_RING.releaseHysteresisTiles,
+    entriesStartHeld: false,
+    keyOf: (key) => key,
+    placements: () => [],
+    hold: () => undefined,
+    release: () => undefined,
+    warm: () => false,
+    warmth: () => 'warm',
+    bakeFor: (budgetMs) => {
+      offered.push(budgetMs);
+      const until = performance.now() + spendMs(budgetMs);
+      while (performance.now() < until) {
+        // Spends its share, as a busy cache would.
+      }
+    },
+  };
+}
+const PROBE_BAKE_BUDGET_MS = 12;
+/** Share of the budget the second set must be offered once the first spent none of its own. */
+const UNSPENT_SHARE_PASSED_ON = 0.9;
+const offeredToFirst: number[] = [];
+const offeredToSecond: number[] = [];
+const bakingResidency = new WorldResidency();
+bakingResidency.register(bakingProbeSet(() => 0, offeredToFirst));
+bakingResidency.register(bakingProbeSet((share) => share, offeredToSecond));
+bakingResidency.register(
+  new EnvironmentSheetResidentSet(FACADE_LIFE_RING, [], { bakesUnderLoadingScreen: false }),
+);
+bakingResidency.bakeFor(PROBE_BAKE_BUDGET_MS, true);
+check(
+  (offeredToSecond[0] ?? 0) >= PROBE_BAKE_BUDGET_MS * UNSPENT_SHARE_PASSED_ON,
+  `a set that spent none of its share left the next set only ${offeredToSecond[0] ?? 0} ms ` +
+    `of a ${PROBE_BAKE_BUDGET_MS} ms loading-screen frame; unspent budget must pass on`,
+);
+
+// ── a building's sheets ────────────────────────────────────────────────────
+
+const LIFE_PROBE_TILE_SIZE = 32;
+const LIFE_PROBE_CANVAS_PX = 512;
+const LIFE_FACADE_KEY = BUILDING_KEYS[0];
+const lifeProbeKey = buildingLifeKeyOf(LIFE_FACADE_KEY);
+const lifeProbeStructure = [
+  [{ tileId: 'gate-life', type: SPRITE_BUILDING, spriteKey: LIFE_FACADE_KEY }],
+];
+
+/** Draws the probe building's life layer, returning whether it inked anything. */
+function lifeLayerInks(): boolean {
+  const canvas = createCanvas(LIFE_PROBE_CANVAS_PX, LIFE_PROBE_CANVAS_PX);
+  const ctx = canvas.getContext('2d');
+  drawDecorationLifeLayer(
+    asGameContext(ctx),
+    lifeProbeStructure,
+    SPRITE_BUILDING,
+    0,
+    0,
+    LIFE_PROBE_TILE_SIZE,
+    0,
+    0,
+  );
+  const ALPHA_OFFSET = 3;
+  const CHANNELS = 4;
+  const pixels = ctx.getImageData(0, 0, LIFE_PROBE_CANVAS_PX, LIFE_PROBE_CANVAS_PX).data;
+  for (let index = ALPHA_OFFSET; index < pixels.length; index += CHANNELS) {
+    if (pixels[index] > 0) return true;
+  }
+  return false;
+}
+
+check(lifeProbeKey !== undefined, `"${LIFE_FACADE_KEY}" has no life sheet to probe`);
+if (lifeProbeKey !== undefined) {
+  // A life row landed before its facade must not float over the empty plot.
+  flushEnvironmentArtCache();
+  setFloorArtSeed(freshArtSeed());
+  wantBuildingSheet(lifeProbeKey);
+  paintEnvironmentArtNow();
+  check(hasEnvironmentSheet(lifeProbeKey), 'the life-row probe could not paint a life sheet');
+  check(
+    !lifeLayerInks(),
+    'a building whose facade is not resident drew its life row: windows and smoke over an empty plot',
+  );
+  // A facade without its life row draws still, and never asks for the missing
+  // row: a lookup of a sheet not resident is a miss, every frame it is drawn.
+  flushEnvironmentArtCache();
+  setFloorArtSeed(freshArtSeed());
+  wantBuildingSheet(LIFE_FACADE_KEY);
+  paintEnvironmentArtNow();
+  const missesBefore = getSpriteMissCounts().get(lifeProbeKey) ?? 0;
+  lifeLayerInks();
+  check(
+    (getSpriteMissCounts().get(lifeProbeKey) ?? 0) === missesBefore,
+    'a facade drawn without its life row looked the row up, which records a sprite miss every frame',
+  );
+  // A facade painted under the last floor's seed is not this floor's: it must
+  // read as never painted, or it blocks the new seed's paint.
+  check(
+    environmentSheetState(LIFE_FACADE_KEY) === 'resident',
+    'the stale-seed probe could not paint its facade',
+  );
+  setFloorArtSeed(freshArtSeed());
+  check(
+    environmentSheetState(LIFE_FACADE_KEY) === 'absent',
+    `a facade painted under the previous floor's seed reads ` +
+      `${environmentSheetState(LIFE_FACADE_KEY)}, so the new floor would never paint its own`,
+  );
+}
+
+// A life sheet stores only the inked rectangle of each frame, anchored by its
+// entry; drawn, it must put down exactly what the whole frame did.
+flushEnvironmentArtCache();
+setFloorArtSeed(freshArtSeed());
+const CROP_PROBE_TILE_SIZE = 32;
+const CROP_PROBE_ORIGIN_PX = 3;
+for (const spec of BUILDING_SPECS) {
+  const lifeKey = buildingLifeKeyOf(spec.key);
+  if (lifeKey === undefined) continue;
+  wantBuildingSheet(lifeKey);
+  paintEnvironmentArtNow();
+  const lifeDef = getSpriteDefByKey(lifeKey);
+  const lifeRow = lifeDef?.states.get(BUILDING_LIFE_STATE);
+  if (lifeDef === undefined || lifeRow === undefined) {
+    check(false, `"${lifeKey}" was not painted for the crop probe`);
+    continue;
+  }
+  const scale = CROP_PROBE_TILE_SIZE / lifeDef.tileScale;
+  const width = Math.ceil(frameWidthPx(spec) * scale) + CROP_PROBE_ORIGIN_PX * 2;
+  const height = Math.ceil(frameHeightPx(spec) * scale) + CROP_PROBE_ORIGIN_PX * 2;
+  let differs = 0;
+  for (let step = 0; step < spec.life.frames; step++) {
+    const cropped = createCanvas(width, height);
+    drawSprite(
+      asGameContext(cropped.getContext('2d')),
+      lifeDef,
+      lifeRow,
+      step,
+      CROP_PROBE_ORIGIN_PX,
+      CROP_PROBE_ORIGIN_PX,
+      CROP_PROBE_TILE_SIZE,
+    );
+    const whole = createCanvas(width, height);
+    whole
+      .getContext('2d')
+      .drawImage(
+        asNodeCanvas(paintLifeFrame(spec, step)),
+        CROP_PROBE_ORIGIN_PX,
+        CROP_PROBE_ORIGIN_PX,
+        frameWidthPx(spec) * scale,
+        frameHeightPx(spec) * scale,
+      );
+    const a = cropped.getContext('2d').getImageData(0, 0, width, height).data;
+    const b = whole.getContext('2d').getImageData(0, 0, width, height).data;
+    for (let index = 0; index < a.length; index++) if (a[index] !== b[index]) differs++;
+  }
+  check(
+    differs === 0,
+    `"${lifeKey}" drawn from its cropped sheet differs from its whole frames in ${differs} ` +
+      'channel values; the crop must not change a pixel on screen',
+  );
+}
+flushEnvironmentArtCache();
+
+// A facade refused its sheet's surface settles at once, inside the request;
+// the queue must still have only one facade in flight.
+flushEnvironmentArtCache();
+setFloorArtSeed(freshArtSeed());
+const canvasDocument: { document?: unknown } = globalThis;
+const realDocument = canvasDocument.document;
+const refusedFacade = getManifestEntry(BUILDING_KEYS[1]);
+let refusalArmed = false;
+canvasDocument.document = {
+  createElement(tag: string) {
+    if (tag !== 'canvas') throw new Error(`harness cannot create <${tag}>`);
+    const counted = createCanvas(1, 1);
+    const realContext = counted.getContext.bind(counted);
+    Object.defineProperty(counted, 'getContext', {
+      value: (...args: Parameters<typeof realContext>) => {
+        // A sheet's surface is the one context of its size asked for without
+        // read-back; the planes a facade is composed on read back.
+        const settings: unknown = args[1];
+        const readsBack =
+          typeof settings === 'object' &&
+          settings !== null &&
+          'willReadFrequently' in settings &&
+          settings.willReadFrequently === true;
+        const isFacadeSheet =
+          counted.width === refusedFacade.frameWidth &&
+          counted.height === refusedFacade.frameHeight &&
+          !readsBack;
+        if (refusalArmed && isFacadeSheet) {
+          refusalArmed = false;
+          return null;
+        }
+        return realContext(...args);
+      },
+    });
+    return counted;
+  },
+};
+// The first facade is in flight and the rest wait behind it, so the refused
+// one is planned when the first settles, with more still to queue.
+for (const key of BUILDING_KEYS) wantBuildingSheet(key);
+refusalArmed = true;
+const FRAMES_TO_REACH_REFUSAL = 400;
+for (
+  let frame = 0;
+  frame < FRAMES_TO_REACH_REFUSAL && refusalArmed && environmentPaintDepth() > 0;
+  frame++
+) {
+  beginEnvironmentArtFrame();
+}
+canvasDocument.document = realDocument;
+check(!refusalArmed, 'the refused-facade probe never reached the facade it refuses');
+check(
+  environmentSheetsQueued() === 1,
+  `${environmentSheetsQueued()} facades were in flight after one was refused its surface; ` +
+    'the building queue paints one at a time',
+);
+flushEnvironmentArtCache();
+
+// ── a purge repaints what is on screen, not what the idle clock kept ───────
+
+// Inside a building the idle clock stands still, so a purge there must judge
+// "in use" by what was drawn just now, or it repaints the whole floor outside.
+const PURGE_INDOORS_FRAMES = 600;
+flushEnvironmentArtCache();
+setFloorArtSeed(freshArtSeed());
+setEnvironmentIdleWindowFrames(null);
+requestEnvironmentSheet(blockPlan(placedKey, {}));
+requestEnvironmentSheet(blockPlan(floorWideKey, {}));
+paintEnvironmentArtNow();
+holdIdleClock();
+idleFrames(PURGE_INDOORS_FRAMES, () => getSpriteDefByKey(floorWideKey));
+runCanvasRecovery('purged', null);
+releaseIdleClock();
+check(
+  environmentSheetState(placedKey) === 'evicted',
+  `a purge repainted a sheet nothing had drawn for ${PURGE_INDOORS_FRAMES} frames indoors ` +
+    `(${environmentSheetState(placedKey)}); it should wait to be wanted`,
+);
+check(
+  environmentSheetState(floorWideKey) === 'owed',
+  'a purge left a sheet drawn on every frame waiting for a lookup instead of repainting it',
+);
+setEnvironmentIdleWindowFrames(null);
 
 flushEnvironmentArtCache();
 check(environmentPaintDepth() === 0, 'a flush left work on the queue');

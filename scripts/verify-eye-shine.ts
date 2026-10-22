@@ -82,10 +82,11 @@ const { GrotesqueSpider } = await import('../src/creatures/GrotesqueSpider.js');
 const { GumGum } = await import('../src/creatures/GumGum.js');
 const { HeatherTheBear } = await import('../src/creatures/HeatherTheBear.js');
 const { InkMarauder } = await import('../src/creatures/InkMarauder.js');
-const { Juicer } = await import('../src/creatures/Juicer.js');
+const { BigRooster } = await import('../src/creatures/BigRooster.js');
 const { KrakarenClone } = await import('../src/creatures/KrakarenClone.js');
 const { KrakarenTentacle } = await import('../src/creatures/KrakarenTentacle.js');
 const { Krasue } = await import('../src/creatures/Krasue.js');
+const { LittleRooster } = await import('../src/creatures/LittleRooster.js');
 const { Llama } = await import('../src/creatures/Llama.js');
 const { Mantid } = await import('../src/creatures/Mantid.js');
 const { MantisCrony } = await import('../src/creatures/MantisCrony.js');
@@ -111,12 +112,13 @@ const { SkeletonArcher } = await import('../src/creatures/SkeletonArcher.js');
 const { SkeletonLord } = await import('../src/creatures/SkeletonLord.js');
 const { SkeletonWarrior } = await import('../src/creatures/SkeletonWarrior.js');
 const { SkyFowl, SKYFOWL_TOUGH_FAMILY } = await import('../src/creatures/SkyFowl.js');
+const { SlightlyBentRooster } = await import('../src/creatures/SlightlyBentRooster.js');
 const { SmallSpider } = await import('../src/creatures/SmallSpider.js');
 const { SpiderEgg } = await import('../src/creatures/SpiderEgg.js');
 const { SpiderHatchling } = await import('../src/creatures/SpiderHatchling.js');
 const { StiltClown } = await import('../src/creatures/StiltClown.js');
 const { TerrorTheClown } = await import('../src/creatures/TerrorTheClown.js');
-const { TheHoarder } = await import('../src/creatures/TheHoarder.js');
+const { TrashGremlin } = await import('../src/creatures/TrashGremlin.js');
 const { TheLich } = await import('../src/creatures/TheLich.js');
 const { Troglodyte } = await import('../src/creatures/Troglodyte.js');
 const { Tuskling } = await import('../src/creatures/Tuskling.js');
@@ -291,13 +293,14 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
     eyed('ink marauder shark', inkMarauder('shark', INK_EMERGE_FRAMES), 'profileOnly'),
     eyeless('ink marauder emerging', inkMarauder('ogre', 0)),
   ],
-  Juicer: () => [eyed('the Juicer', new Juicer(...at))],
+  BigRooster: () => [eyed('Big Rooster', new BigRooster(...at))],
   KrakarenClone: () => [eyeless('Krakaren', new KrakarenClone(...at))],
   KrakarenTentacle: () => [
     eyeless('Krakaren tentacle buried', new KrakarenTentacle(...at)),
     eyeless('Krakaren tentacle', surfacedTentacle()),
   ],
   Krasue: () => [eyed('krasue', new Krasue(...at))],
+  LittleRooster: () => [eyed('Little Rooster', new LittleRooster(...at))],
   Llama: () => [eyed('llama', new Llama(...at))],
   Mantid: () => [eyed('mantid', new Mantid(...at))],
   MantisCrony: () => [eyed('mantis crony', new MantisCrony(...at))],
@@ -343,6 +346,7 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
     eyeless('skeleton warrior rising', risingSkeleton()),
   ],
   SkyFowl: () => [eyed('skyfowl', new SkyFowl(...at, SKYFOWL_TOUGH_FAMILY.canonical))],
+  SlightlyBentRooster: () => [eyed('Slightly Bent Rooster', new SlightlyBentRooster(...at))],
   SmallSpider: () => [eyed('small spider', new SmallSpider(...at), 'turnsToFace')],
   SpiderEgg: () => [eyeless('spider egg', new SpiderEgg(...at))],
   SpiderHatchling: () => [
@@ -359,7 +363,7 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
   ],
   StiltClown: () => [eyed('stilt clown', new StiltClown(...at))],
   TerrorTheClown: () => [eyed('Terror the Clown', new TerrorTheClown(...at))],
-  TheHoarder: () => [eyed('the Hoarder', new TheHoarder(...at))],
+  TrashGremlin: () => [eyed('the Trash Gremlin', new TrashGremlin(...at))],
   TheLich: () => [eyed('the Lich', new TheLich(...at))],
   Troglodyte: () => [eyed('troglodyte', new Troglodyte(...at))],
   Tuskling: () => [eyed('tuskling', new Tuskling(...at))],

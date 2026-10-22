@@ -900,8 +900,8 @@ const GORE_INK_ALPHA = 24;
  *
  * Only the Evil Clown comes apart, and he comes apart into ten pieces that all
  * land on the floor at once, so a player reading the pile has nothing but
- * outline to go on. The same 0.62 the Hoarder, the Juicer, the Krakaren and the
- * cockroach hold to; his worst pair is the head against the ruff at 59%.
+ * outline to go on. The same 0.62 Big Rooster, the Krakaren and the cockroach
+ * hold to; his worst pair is the head against the ruff at 59%.
  *
  * This gate was missing until his gore was measured against theirs, and it
  * found one: the vials' vented gas was painted as a disc centred on the glass,

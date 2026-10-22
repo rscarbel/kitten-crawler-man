@@ -36,7 +36,7 @@ export function bareFistDamage(strength: number): number {
 
 /** Species HP floor for the cat: 2 + CON 2 × 2 = 6 starting max HP. She is meant to be fragile. */
 export const CAT_BASE_HP_OFFSET = 2;
-/** Donut's constitution is fixed at 2 by the enhanced pet biscuit — book canon. */
+/** Donut's constitution is fixed at 2 by the enhanced pet biscuit. */
 export const CAT_BASE_CONSTITUTION = 2;
 /** The pet biscuit's head start: she is very hard to hit. */
 export const CAT_STARTING_DEXTERITY = 8;

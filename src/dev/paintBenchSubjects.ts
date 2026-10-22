@@ -17,9 +17,13 @@ import type { FigureDef } from '../sprites/figure/figureDef';
 import { CAT_FIGURE } from '../sprites/art/catFigure';
 import { HUMAN_FIGURE } from '../sprites/art/humanFigure';
 import { DARK_KNIGHT_FIGURE } from '../sprites/art/darkKnightFigure';
-import { HOARDER_ACID_FIGURE, HOARDER_BILE_ARC_FIGURE } from '../sprites/art/hoarderBileFigure';
-import { HOARDER_FIGURE } from '../sprites/art/hoarderFigure';
-import { JUICER_FIGURE } from '../sprites/art/juicerFigure';
+import { GREMLIN_ACID_FIGURE, GREMLIN_BILE_ARC_FIGURE } from '../sprites/art/gremlinBileFigure';
+import { TRASH_GREMLIN_FIGURE } from '../sprites/art/trashGremlinFigure';
+import {
+  BENT_ROOSTER_FIGURE,
+  BIG_ROOSTER_FIGURE,
+  LITTLE_ROOSTER_FIGURE,
+} from '../sprites/art/roosterFigure';
 import { MONGO_FIGURES } from '../sprites/art/mongoFigure';
 import { BALL_OF_SWINE_FIGURE } from '../sprites/art/ballOfSwineFigure';
 import { RAT_KIN_FIGURE } from '../sprites/art/ratKinFigure';
@@ -113,7 +117,9 @@ export interface PaintBenchSubject {
 export const PAINT_BENCH_SUBJECTS: readonly PaintBenchSubject[] = [
   { def: HUMAN_FIGURE, state: 'idle' },
   { def: CAT_FIGURE, state: 'idle' },
-  { def: JUICER_FIGURE, state: 'idle' },
+  { def: BIG_ROOSTER_FIGURE, state: 'idle' },
+  { def: LITTLE_ROOSTER_FIGURE, state: 'idle' },
+  { def: BENT_ROOSTER_FIGURE, state: 'idle' },
   { def: DARK_KNIGHT_FIGURE, state: 'idle' },
   { def: RAT_KIN_FIGURE, state: 'idle' },
   // The heaviest-dressed villager (coat, chain, spectacles, ledger) and the
@@ -123,9 +129,9 @@ export const PAINT_BENCH_SUBJECTS: readonly PaintBenchSubject[] = [
   { def: SHADY_FIGURE, state: 'idle' },
   { def: skyfowlCastFigure('tough_hawkbrown_standard'), state: 'walk' },
   { def: MONGO_FIGURES.adult, state: 'walk_side' },
-  { def: HOARDER_FIGURE, state: 'idle' },
-  { def: HOARDER_BILE_ARC_FIGURE, state: 'arc' },
-  { def: HOARDER_ACID_FIGURE, state: 'pool' },
+  { def: TRASH_GREMLIN_FIGURE, state: 'idle' },
+  { def: GREMLIN_BILE_ARC_FIGURE, state: 'arc' },
+  { def: GREMLIN_ACID_FIGURE, state: 'pool' },
   { def: BALL_OF_SWINE_FIGURE, state: 'roll' },
   { def: FAT_CLOWN_FIGURE, state: 'idle' },
   { def: STILT_CLOWN_FIGURE, state: 'idle' },

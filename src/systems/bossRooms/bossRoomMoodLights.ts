@@ -2,7 +2,7 @@
  * Where each boss room's mood lights hang, and what they are.
  *
  * A boss room is never darkened: its fight was tuned in full light and plays
- * in it. These lights only add colour — a bare bulb over the Hoarder's junk,
+ * in it. These lights only add colour — a bare bulb over the Trash Gremlin's junk,
  * strip lights over the gym's mirror, the lab's monitors and its broken vat,
  * floodlights on the colosseum's rim. One placement serves both the lighting
  * pass, which adds the glow, and the room's dressing, which paints the fixture
@@ -37,12 +37,12 @@ function tileCentrePx(tile: TilePoint): { x: number; y: number } {
   return { x: (tile.x + HALF) * TILE_SIZE, y: (tile.y + HALF) * TILE_SIZE };
 }
 
-// ── The Hoarder's bulb ──────────────────────────────────────────────────────
+// ── The Trash Gremlin's bulb ──────────────────────────────────────────────────────
 
 /** How high over the floor the bulb hangs; it is drawn this far up the screen from its pool. */
 const BULB_HANG_TILES = 1.6;
 
-/** The Hoarder's single bare bulb over the middle of her room. */
+/** The Trash Gremlin's single bare bulb over the middle of its room. */
 export interface HangingBulb {
   readonly light: BossRoomMoodLight;
   /** The bulb's glass, in world pixels. */
@@ -50,7 +50,7 @@ export interface HangingBulb {
   readonly bulbY: number;
 }
 
-export function hoarderBulb(bounds: TileRect): HangingBulb {
+export function trashGremlinBulb(bounds: TileRect): HangingBulb {
   const tile = { x: bounds.x + Math.floor(bounds.w / 2), y: bounds.y + Math.floor(bounds.h / 2) };
   const centre = tileCentrePx(tile);
   return {

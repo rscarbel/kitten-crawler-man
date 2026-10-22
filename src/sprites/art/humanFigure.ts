@@ -603,7 +603,7 @@ export type HumanRowRole =
  *
  * - `punch` / `kick`: which limb.
  * - `low`: lands below his waist, where a rat or a grub actually is.
- * - `punt` / `stomp`: the blows canon says he earned Foot Soldier with.
+ * - `punt` / `stomp`: the blows behind his Foot Soldier achievement.
  * - `high`: lands at a tall enemy's chest or head.
  * - `long`: reaches past his arms, for a target at the edge of his range.
  * - `finisher`: ends a combo, and only ever thrown as its last blow.

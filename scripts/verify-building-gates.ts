@@ -178,7 +178,7 @@ function lifeCellRect(
   readonly width: number;
   readonly height: number;
 } {
-  const layout = sheetLayoutFor(baked.entry);
+  const layout = sheetLayoutFor(baked.entry, baked.lifeEntry);
   const width = baked.idle.width;
   const height = baked.idle.height;
   return {
@@ -429,13 +429,13 @@ expectGateFails(
     const EXTRA_COLUMN = 1;
     return {
       ...baked,
-      entry: {
-        ...baked.entry,
+      lifeEntry: {
+        ...baked.lifeEntry,
         states: {
-          ...baked.entry.states,
+          ...baked.lifeEntry.states,
           life: {
-            ...baked.entry.states.life,
-            frameCount: baked.entry.states.life.frameCount + EXTRA_COLUMN,
+            ...baked.lifeEntry.states.life,
+            frameCount: baked.lifeEntry.states.life.frameCount + EXTRA_COLUMN,
           },
         },
       },

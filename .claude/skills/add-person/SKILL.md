@@ -73,15 +73,16 @@ and why the crowd is rolled from the world seed.
   are keyed by role, so never add a species to it.
 - **One dispatch point.** `pickCitizenFigure(seed, role, species, tier?)`
   (`src/creatures/citizenFigure.ts`) returns a `CitizenFigure`. `drawCitizenSprite`,
-  `citizenWalkCyclePx`, `prewarmCitizenFigure`, `pinCitizenFigure` and
+  `citizenWalkCyclePx`, `citizenFigureRows`, `prewarmCitizenFigure` and
   `prewarmAndPinCitizenTalk` dispatch on it. `Townsperson` never reads a look directly.
   A third species is a case here.
 - **Variety tiers trim the street's looks, never its roles.** The pick reads the
   variety tier (`src/core/varietyTier.ts`): humans by `TOWN_CAST_TIER_PLANS` (role
   groups wearing their first role's looks), skyfowl by `skyfowlStreetLookAllowance`.
   A `Townsperson` re-picks only after a purged canvas recovery, never while `frozen`
-  in a conversation, and a named resident never. A system that pins its crowd calls
-  `Townsperson.pinLook()` so a re-picked look is pinned too. `gates:human-cast` (H9,
+  in a conversation, and a named resident never. A `Townsperson` warms and pins nothing
+  itself: its owner does, so a re-picked look is held by whoever holds the old one.
+  `gates:human-cast` (H9,
   H10) and `gates:skyfowl-cast` (G9) hold this. A new look joins the tier plans by where
   it sits: a group, and a role trimmed to one look, wear only the lead role's
   **first-listed** looks in `TOWN_CAST_LOOKS`, and skyfowl keep each street role's first
@@ -138,8 +139,15 @@ knockback never strobes the legs. Dance rows are opt-in per look (`TownCastLook.
 ### Cache
 
 Citizens draw through the shared figure frame cache with `approx` on: a missing cell
-borrows a nearby baked one instead of baking on the render path. The town pins its
-crowd's `idle` and `walk` rows and warms `talk` only when a conversation starts. The rules
+borrows a nearby baked one instead of baking on the render path. A street crowd's
+`idle` and `walk` rows are pinned by distance through its resident set
+(`CrowdResidentSet`, registered with the scene's `WorldResidency`): a look is held
+while any citizen wearing it is within reach of the party and released to the idle
+sweep once all of them are well past it, in a city or out of one. Nothing pins or
+queues a crowd look on construction. An owner that holds its citizens some other
+way (a room's occupants) calls `prewarmCitizenFigure` itself. `talk` is warmed and
+pinned only while a conversation is open (`prewarmAndPinCitizenTalk`, undone by
+`unpinCitizenTalk`). The rules
 are in `docs/asset-management.md` ("A crowd is pinned, not swept").
 
 ### Review and gates

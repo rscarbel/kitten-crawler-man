@@ -52,7 +52,7 @@ export const CLARABELLE = {
     ];
   },
 
-  /** Shown to a crawler who already earned the Pass as a tattoo from the Juicer. */
+  /** Shown to a crawler who already earned the Pass as a tattoo from Big Rooster. */
   tattooGreeting(crawlerIsCat: boolean): NonEmpty<DialogLine> {
     return [
       narrator.line(

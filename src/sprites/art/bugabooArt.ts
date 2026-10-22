@@ -2,8 +2,8 @@
  * Drawing engine for the Bugaboo — the thing that comes up through the floor
  * grates.
  *
- * The read the whole design serves, from the source material: about seven feet
- * tall, "terrifying and cartoonish" at once. The general shape of a bear with
+ * The read the whole design serves: about seven feet
+ * tall, frightening and cartoonish at once. The general shape of a bear with
  * no neck, enormous owl-like eyes, comically skinny legs and long but absurdly
  * thin arms, the whole of it under obsidian-coloured hair.
  *
@@ -943,7 +943,7 @@ function skullMassOf(skeleton: Skeleton, view: ViewSpec): CoatMass {
  * The two lobes are outlined first and filled afterwards, in that order across
  * both: outlined and filled one at a time, the second lobe's dark fringe cuts
  * a seam across the first, and a seam between head and body is a neck — the one
- * feature the source material rules out.
+ * feature the design rules out.
  */
 function drawMass(ctx: Ctx, skeleton: Skeleton, pose: BugabooPose, view: ViewSpec): void {
   const masses = [bodyMassOf(skeleton, view), skullMassOf(skeleton, view)];

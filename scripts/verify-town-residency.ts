@@ -22,7 +22,12 @@
  *    landing must come in behind the loading screen; and once with a heavier
  *    wave pinned in place, so no room can be made even under the screen,
  *    which must still lift;
- *  - **a switch** to the other crawler, left standing in the plaza.
+ *  - **a switch** to the other crawler, left standing in the plaza;
+ *  - **a city wider than the hold distance** (`buildScaledCity`), arrived at
+ *    on its west edge with a cold cache and walked across through its middle
+ *    row of plazas at the fastest walk, its citizens in view drawn every frame
+ *    through their real render path, so every look a block brings is pinned
+ *    and warmed by distance alone.
  *
  * After each of these but the last recall, no citizen is drawn as a stand-in or painted
  * live. Every check is a count. The figure cache bakes against a simulated
@@ -35,6 +40,7 @@
 import type { Scene } from '../src/core/Scene.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 import { installBrowserShim, ShimEvent } from './browserShim.js';
+import { asGameContext } from './nodeGameContext.js';
 
 const RETINA_DEVICE_PIXEL_RATIO = 2;
 const VIEWPORT = { width: 1280, height: 720, devicePixelRatio: RETINA_DEVICE_PIXEL_RATIO } as const;
@@ -72,6 +78,11 @@ const { REFRESHED_SPEED_FACTOR } = await import('../src/core/StatusEffect.js');
 const { citizenFigureRows } = await import('../src/creatures/citizenFigure.js');
 const { figureStates } = await import('../src/sprites/figure/figureDef.js');
 const { environmentPaintDepth } = await import('../src/map/environmentArtCache.js');
+const { buildScaledCity, cityFocus } = await import('./scaledCity.js');
+const { CrowdResidentSet } = await import('../src/systems/CrowdResidentSet.js');
+const { WorldResidency } = await import('../src/systems/WorldResidency.js');
+const { beginRenderFrame } = await import('../src/core/renderFrameClock.js');
+const { viewportHeight, viewportWidth } = await import('../src/core/Viewport.js');
 const {
   PREWARM_BAKE_BUDGET_MS,
   figurePrewarmBudgetMs,
@@ -82,6 +93,9 @@ const {
   figurePrewarmDepth,
   figureResidentBytes,
   onFigureUnbakedDraw,
+  flushFigureFrameCache,
+  beginFigureFrame,
+  pinnedFigureFootprint,
 } = await import('../src/sprites/figure/figureFrameCache.js');
 
 const MS_PER_SECOND = 1000;
@@ -118,6 +132,12 @@ const RESPAWN_KEY = 'Enter';
 const SWITCH_KEY = 'Tab';
 const BYTES_PER_MEGABYTE = 1024 * 1024;
 const MEGABYTE_PLACES = 1;
+/** Blocks along each side of the city walked across: wide enough that no hold ring reaches all of it. */
+const SCALED_CITY_BLOCKS_PER_SIDE = 3;
+/** Milliseconds per frame the city's arrival screen bakes for, as the floor's loading screen would. */
+const SCALED_CITY_ARRIVAL_BUDGET_MS = 50;
+/** Frames the city's arrival may take before the run calls it hung. */
+const MAX_SCALED_CITY_ARRIVAL_FRAMES = 20000;
 
 const failures: string[] = [];
 function check(ok: boolean, message: string): void {
@@ -483,6 +503,92 @@ await standCounted(holdSplit);
 const switchUnbaked = citizenUnbakedDraws;
 check(switchUnbaked === 0, `${switchUnbaked} citizen cells were drawn unbaked after the switch`);
 
+// ── A city wider than the hold distance, walked across ──────────────────────
+
+// A cold cache, as a floor's arrival has, left the way the stairs leave a
+// floor: the village scene lets go of what its residency holds, then the
+// flush returns every cell. A flush keeps pins, so without the release the
+// village crowd would stay pinned through the city.
+const villageResidency: unknown = Reflect.get(scene(), 'residency');
+if (!(villageResidency instanceof WorldResidency))
+  throw new Error('the overworld has no residency');
+villageResidency.releaseAll();
+flushFigureFrameCache();
+const city = buildScaledCity({ blocksPerSide: SCALED_CITY_BLOCKS_PER_SIDE });
+const cityFigures = new Set<string>();
+for (const citizen of city.citizens) {
+  for (const row of citizenFigureRows(citizen.figure)) cityFigures.add(row.def.id);
+}
+let cityUnbakedDraws = 0;
+onFigureUnbakedDraw((def) => {
+  if (cityFigures.has(def.id)) cityUnbakedDraws++;
+});
+const cityResidency = new WorldResidency();
+cityResidency.register(new CrowdResidentSet({ people: () => city.citizens }));
+const cityCanvas = createCanvas(
+  viewportWidth() * RETINA_DEVICE_PIXEL_RATIO,
+  viewportHeight() * RETINA_DEVICE_PIXEL_RATIO,
+);
+const cityNodeContext = cityCanvas.getContext('2d');
+cityNodeContext.scale(RETINA_DEVICE_PIXEL_RATIO, RETINA_DEVICE_PIXEL_RATIO);
+const cityContext = asGameContext(cityNodeContext);
+
+let party = cityFocus(city.crossing[0]);
+cityResidency.settleNow({ focus: [party], covered: true });
+let cityArrivalFrames = 0;
+while (cityArrivalFrames < MAX_SCALED_CITY_ARRIVAL_FRAMES && figurePrewarmDepth() > 0) {
+  beginRenderFrame();
+  beginFigureFrame();
+  cityResidency.bakeFor(SCALED_CITY_ARRIVAL_BUDGET_MS, true);
+  cityArrivalFrames++;
+}
+check(
+  figurePrewarmDepth() === 0,
+  `the city's arrival still owed ${figurePrewarmDepth()} rows after ${cityArrivalFrames} frames`,
+);
+const cityPinnedOnArrival = pinnedFigureFootprint().bytes;
+
+/** One frame in `SceneManager.step`'s order: the cache's slice, the decision, then the citizens in view. */
+function cityFrame(): void {
+  beginRenderFrame();
+  beginFigureFrame();
+  cityResidency.update(() => ({ focus: [party], covered: false }));
+  const camX = party.x - viewportWidth() / 2;
+  const camY = party.y - viewportHeight() / 2;
+  for (const citizen of city.citizens) {
+    const inView =
+      citizen.x >= camX - TILE_SIZE &&
+      citizen.x <= camX + viewportWidth() + TILE_SIZE &&
+      citizen.y >= camY - TILE_SIZE &&
+      citizen.y <= camY + viewportHeight() + TILE_SIZE;
+    if (inView) citizen.render(cityContext, camX, camY);
+  }
+}
+
+cityUnbakedDraws = 0;
+let cityWalkFrames = 0;
+for (const waypoint of city.crossing.slice(1)) {
+  const target = cityFocus(waypoint);
+  for (;;) {
+    const dx = target.x - party.x;
+    const dy = target.y - party.y;
+    const remaining = Math.hypot(dx, dy);
+    const arrived = remaining <= FASTEST_WALK_PX_PER_UPDATE;
+    const step = arrived ? 1 : FASTEST_WALK_PX_PER_UPDATE / remaining;
+    party = { x: party.x + dx * step, y: party.y + dy * step };
+    cityFrame();
+    cityWalkFrames++;
+    if (arrived) break;
+  }
+}
+const cityWalkUnbaked = cityUnbakedDraws;
+check(
+  cityWalkUnbaked === 0,
+  `${cityWalkUnbaked} citizen cells were drawn unbaked on the walk across the city`,
+);
+const cityPinnedAtFarEdge = pinnedFigureFootprint().bytes;
+cityResidency.releaseAll();
+
 console.log(
   `wave: crowd ${megabytes(crowdBytesBeforeWave)} → ${megabytes(crowdBytesUnderWave)} MB, ` +
     `${walkWaveMisses} wave misses once settled`,
@@ -500,6 +606,12 @@ console.log(
     `${crampedRecall.coverFrames} frames`,
 );
 console.log(`switch: ${switchUnbaked} unbaked citizen draws`);
+console.log(
+  `city (${SCALED_CITY_BLOCKS_PER_SIDE}x${SCALED_CITY_BLOCKS_PER_SIDE} blocks, ` +
+    `${city.citizens.length} citizens): arrival ${cityArrivalFrames} frames, ` +
+    `pinned ${megabytes(cityPinnedOnArrival)} MB; walk across (${cityWalkFrames} frames): ` +
+    `${cityWalkUnbaked} unbaked citizen draws, pinned ${megabytes(cityPinnedAtFarEdge)} MB at the far edge`,
+);
 
 if (failures.length > 0) {
   for (const failure of failures) console.error(`FAIL ${failure}`);

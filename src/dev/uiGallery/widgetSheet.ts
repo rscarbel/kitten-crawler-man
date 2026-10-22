@@ -390,7 +390,7 @@ export function renderWidgetSheet(ui: Ui, area: Rect, model: GalleryModel): numb
       kind: 'boss',
       value: BOSS_VALUE,
       max: BOSS_MAX,
-      label: 'The Juicer',
+      label: 'Big Rooster',
       valueText: '65%',
       tall: true,
     },

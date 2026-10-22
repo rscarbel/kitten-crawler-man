@@ -23,7 +23,10 @@ import {
   flushEnvironmentArtCache,
 } from '../src/map/environmentArtCache.js';
 import { getManifestKeys, getManifestEntry, getSpriteDefByKey } from '../src/core/SpriteLoader.js';
-import { requestBuildingSheets } from '../src/sprites/buildinggen/runtimeBuildingSheets.js';
+import {
+  buildingLifeKeyOf,
+  requestBuildingSheets,
+} from '../src/sprites/buildinggen/runtimeBuildingSheets.js';
 import { BUILDING_SPECS } from '../src/sprites/buildinggen/buildings.js';
 import { frameHeightPx, frameWidthPx } from '../src/sprites/buildinggen/spec.js';
 
@@ -31,6 +34,8 @@ import { frameHeightPx, frameWidthPx } from '../src/sprites/buildinggen/spec.js'
 const UNVARIED = 0;
 /** The row the life frames sat on in the two-row sheets being compared against. */
 const REPLACED_LIFE_ROW = 1;
+/** Columns a facade's still sheet spans: its one idle frame. */
+const STILL_FRAME_COLUMNS = 1;
 
 /**
  * Alpha above which a pixel's colour is worth comparing.
@@ -131,14 +136,21 @@ for (const spec of BUILDING_SPECS) {
     mismatches.push(`${spec.key}: names no manifest entry`);
     continue;
   }
-  const entry = getManifestEntry(key);
-  const lifeState = entry.states.life;
+  const lifeKey = buildingLifeKeyOf(key);
+  const lifeDef = lifeKey === undefined ? undefined : getSpriteDefByKey(lifeKey);
+  if (lifeKey === undefined || lifeDef === undefined) {
+    mismatches.push(`${spec.key}: the painter published no life sheet`);
+    continue;
+  }
+  const lifeState = getManifestEntry(lifeKey).states.life;
+  // The still frame and the life row are separate sheets; they are laid side
+  // by side here, the still frame first, to be read cell by cell.
   const painted: Cell[] = [
-    { label: 'idle', column: entry.states.idle.colOffset ?? 0, row: entry.states.idle.row },
+    { label: 'idle', column: 0, row: 0 },
     ...Array.from({ length: lifeState.frameCount }, (_unused, step) => ({
       label: `life ${step}`,
-      column: (lifeState.colOffset ?? 0) + step,
-      row: lifeState.row,
+      column: STILL_FRAME_COLUMNS + step,
+      row: 0,
     })),
   ];
   const replaced: Cell[] = [
@@ -159,13 +171,33 @@ for (const spec of BUILDING_SPECS) {
   // fetched it. Narrowed rather than asserted, so a building that quietly went
   // back to being a file fails here instead of being compared against itself.
   const paintedSheet = def.img;
-  if (!('getContext' in paintedSheet)) {
+  const paintedLife = lifeDef.img;
+  if (!('getContext' in paintedSheet) || !('getContext' in paintedLife)) {
     mismatches.push(`${spec.key}: was loaded from a file rather than painted`);
     continue;
   }
-  const paintedCanvas = createCanvas(paintedSheet.width, paintedSheet.height);
+  const paintedCanvas = createCanvas(
+    (STILL_FRAME_COLUMNS + lifeState.frameCount) * frameWidthPx(spec),
+    frameHeightPx(spec),
+  );
   const paintedCtx = paintedCanvas.getContext('2d');
   paintedCtx.drawImage(asNodeCanvas(paintedSheet), 0, 0);
+  // Each life cell holds only the rectangle its row inks, anchored by the
+  // entry's negative tileX/tileY; put back where it sits in the whole frame.
+  const lifeEntry = getManifestEntry(lifeKey);
+  for (let step = 0; step < lifeState.frameCount; step++) {
+    paintedCtx.drawImage(
+      asNodeCanvas(paintedLife),
+      ((lifeState.colOffset ?? 0) + step) * lifeEntry.frameWidth,
+      lifeState.row * lifeEntry.frameHeight,
+      lifeEntry.frameWidth,
+      lifeEntry.frameHeight,
+      (STILL_FRAME_COLUMNS + step) * frameWidthPx(spec) - lifeEntry.tileX,
+      -lifeEntry.tileY,
+      lifeEntry.frameWidth,
+      lifeEntry.frameHeight,
+    );
+  }
 
   painted.forEach((paintedCell, index) => {
     const replacedCell = replaced[index];

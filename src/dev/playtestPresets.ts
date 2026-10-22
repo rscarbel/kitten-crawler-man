@@ -176,11 +176,11 @@ export interface PlaytestPreset {
   readonly constructionContracts?: PlaytestContractsSetup;
 }
 
-const HOARDER: PlaytestPreset = {
-  id: 'hoarder',
-  description: 'Safe room just before the Hoarder',
+const TRASH_GREMLIN: PlaytestPreset = {
+  id: 'trash_gremlin',
+  description: 'Safe room just before the Trash Gremlin',
   levelId: 'level1',
-  spawn: { kind: 'safeRoomBefore', bossType: 'the_hoarder' },
+  spawn: { kind: 'safeRoomBefore', bossType: 'trash_gremlin' },
   abilityLevels: { smush: 3, magic_missile: 3, protective_shell: 3 },
   human: {
     level: 4,
@@ -212,11 +212,11 @@ const HOARDER: PlaytestPreset = {
   },
 };
 
-const JUICER: PlaytestPreset = {
-  id: 'juicer',
-  description: 'Safe room just before the Juicer',
+const BIG_ROOSTER: PlaytestPreset = {
+  id: 'big_rooster',
+  description: 'Safe room just before Big Rooster',
   levelId: 'level1',
-  spawn: { kind: 'safeRoomBefore', bossType: 'juicer' },
+  spawn: { kind: 'safeRoomBefore', bossType: 'big_rooster' },
   abilityLevels: { smush: 4, magic_missile: 4, protective_shell: 3 },
   human: {
     level: 11,
@@ -537,13 +537,13 @@ const SWINE: PlaytestPreset = {
 };
 
 /**
- * Third floor town with both crawlers already carrying the full source-material
+ * Third floor town with both crawlers already carrying the full enchanted
  * gear set, so every new piece — plus the slingshot — can be equipped, compared
  * in the Equipment tab, and tooltip-checked in one boot without farming drops.
  */
 const GEAR: PlaytestPreset = {
   id: 'gear',
-  description: 'Third floor town, both crawlers kitted in the new source-material gear',
+  description: 'Third floor town, both crawlers kitted in the enchanted gear',
   levelId: 'level3',
   spawn: { kind: 'mapStart' },
   abilityLevels: { smush: 7, magic_missile: 6, protective_shell: 3 },
@@ -674,17 +674,17 @@ const CLUB_STAT_BOOST: PlaytestPreset = {
 /**
  * The nursery, on floor 1, where the defense quest now sits.
  *
- * Its own preset rather than a note to walk there from the `juicer` one: the
+ * Its own preset rather than a note to walk there from the `big_rooster` one: the
  * nursery is a room every crawler walks through between the two bosses, and its
  * whole shape — the grates, the wave the goblin mother offers, the boards that
  * go up only for a party that takes it — is visible only from inside the room.
  * Finding it from the gateway safe room is several minutes of walking every
- * time. The loadout is the `juicer` party, which is who meets it.
+ * time. The loadout is the `big_rooster` party, which is who meets it.
  */
 const NURSERY: PlaytestPreset = {
-  ...JUICER,
+  ...BIG_ROOSTER,
   id: 'nursery',
-  description: 'Inside the goblin mother’s nursery, between the Hoarder and the Juicer',
+  description: 'Inside the goblin mother’s nursery, between the Trash Gremlin and Big Rooster',
   spawn: { kind: 'questRoomEntrance' },
 };
 
@@ -1122,19 +1122,19 @@ const SPIDER_HALLWAY: PlaytestPreset = {
   spiderQuestAwaitingHacking: false,
 };
 
-/** Floor 1 from its own start, with the Juicer preset's party to survive what comes. */
+/** Floor 1 from its own start, with the `big_rooster` preset's party to survive what comes. */
 const LEVEL1: PlaytestPreset = {
-  ...JUICER,
+  ...BIG_ROOSTER,
   id: 'level1',
-  description: "Start of the first floor, the Juicer preset's party",
+  description: "Start of the first floor, the big_rooster preset's party",
   spawn: { kind: 'mapStart' },
 };
 
-/** Floor 1 a few steps short of its stairwell, with the Juicer preset's party, for watching a descent. */
+/** Floor 1 a few steps short of its stairwell, with the `big_rooster` preset's party, for watching a descent. */
 const STAIRWELL: PlaytestPreset = {
-  ...JUICER,
+  ...BIG_ROOSTER,
   id: 'stairwell',
-  description: "A few tiles short of the first floor's stairwell, the Juicer preset's party",
+  description: "A few tiles short of the first floor's stairwell, the big_rooster preset's party",
   spawn: { kind: 'stairwellApproach' },
 };
 
@@ -1156,8 +1156,8 @@ const CASINO_FLOOR: PlaytestPreset = {
 };
 
 export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
-  HOARDER,
-  JUICER,
+  TRASH_GREMLIN,
+  BIG_ROOSTER,
   NURSERY,
   LEVEL2,
   BATHROOM,

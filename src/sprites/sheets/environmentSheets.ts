@@ -9,10 +9,8 @@
 
 import { ASSET_GROUPS, type AssetGroup } from '../../core/assetGroups';
 import { getManifestEntry, sheetSizePx, type SpriteKey } from '../../core/SpriteLoader';
-import type { TilePoint, TownPlan } from '../../map/town/townPlan';
 import {
   BOSS_ROOM_SALT,
-  BUILDING_SALT,
   CAMP_SALT,
   PROP_SALT,
   ROCK_SALT,
@@ -25,7 +23,7 @@ import { bathroomSheetPlans } from './bathroomSheets';
 import { campSheetPlans } from './campSheets';
 import { cellarPropSheetPlans } from './cellarPropSheets';
 import { circusSheetPlans } from './circusSheets';
-import { BUILDING_KEYS, requestBuildingSheets } from '../buildinggen/runtimeBuildingSheets';
+import { BUILDING_KEYS, buildingLifeKeys } from '../buildinggen/runtimeBuildingSheets';
 import { clubFurnitureSheetPlans } from './clubFurnitureSheets';
 import { destructiblePropSheetPlans } from './destructiblePropSheets';
 import { dungeonSignSheetPlans } from './dungeonSignSheets';
@@ -57,18 +55,6 @@ const UNSEEDED_CORE_PROPS = 0;
 export interface EnvironmentSheetRequest {
   /** Re-bake the tile chunks that took a fallback colour before a sheet landed. */
   readonly onSheetPainted?: () => void;
-  /**
-   * Told which building facade landed. A facade is drawn only by its own
-   * building, so a caller can redraw just that one; without this, a facade
-   * landing calls `onSheetPainted` like any other sheet.
-   */
-  readonly onFacadePainted?: (spriteKey: SpriteKey) => void;
-  /**
-   * The town plan and where the party arrives, so the facades — the only family
-   * slow enough for the order to matter — are painted outward from the street
-   * the player is standing in.
-   */
-  readonly town?: { readonly plan: TownPlan; readonly spawnTile: TilePoint };
 }
 
 /** A family of prop sheets requested together, and how the cache is to hold them. */
@@ -80,7 +66,8 @@ interface PropFamily {
 
 /**
  * One entry in a floor's paint order: a family of prop sheets, or the town's
- * facades, which are planned one at a time as each lands rather than up front.
+ * buildings, which are asked for building by building as the party nears them
+ * (`EnvironmentSheetResidentSet`) rather than with the floor.
  */
 type EnvironmentFamily =
   { readonly kind: 'props'; readonly family: PropFamily } | { readonly kind: 'facades' };
@@ -139,10 +126,6 @@ function environmentFamilies(groups: ReadonlyArray<AssetGroup>): EnvironmentFami
     // Street furniture carries no floor seed: a lamp is the same lamp
     // wherever it is hung, and the town's own signage is a picture of a place.
     families.push(props([...townscapeSheetPlans(), ...overCitySheetPlans()], false));
-    // Last inside the town, because a facade is twenty times the work of every
-    // lamp and stall put together and each one publishes the moment its own
-    // stages are done — so the street furniture is up in a fraction of a second
-    // and the buildings arrive one at a time behind it.
     families.push({ kind: 'facades' });
   }
   if (wanted.has('overworld')) {
@@ -166,10 +149,13 @@ function environmentFamilies(groups: ReadonlyArray<AssetGroup>): EnvironmentFami
 }
 
 /**
- * Queues the painted environment art the given asset groups stand for.
+ * Queues the painted environment art the given asset groups stand for, except
+ * the buildings, which a floor's resident set asks for as the party nears
+ * them: a city's every facade painted on arrival would be its whole floor's
+ * worth, most of it let go again before it was seen.
  *
- * Cheap to call on every floor entry: a sheet already painted or already queued
- * is skipped.
+ * Cheap to call on every floor entry: a sheet already painted, already queued,
+ * or let go and owed when next wanted is skipped.
  */
 export function requestEnvironmentSheetsForGroups(
   groups: ReadonlyArray<AssetGroup>,
@@ -183,13 +169,7 @@ export function requestEnvironmentSheetsForGroups(
         readyRows: entry.family.readyRows,
         onSheetPainted,
       });
-      continue;
     }
-    requestBuildingSheets(floorArtSubSeed(BUILDING_SALT), {
-      plan: request.town?.plan,
-      nearestTo: request.town?.spawnTile,
-      onFacadePainted: request.onFacadePainted ?? (() => onSheetPainted?.()),
-    });
   }
 }
 
@@ -215,7 +195,9 @@ export function plannedEnvironmentSheetSizes(
       for (const plan of entry.family.plans) sizes.push({ key: plan.key, ...propSheetSize(plan) });
       continue;
     }
-    for (const key of BUILDING_KEYS) sizes.push({ key, ...sheetSizePx(getManifestEntry(key)) });
+    for (const key of [...BUILDING_KEYS, ...buildingLifeKeys()]) {
+      sizes.push({ key, ...sheetSizePx(getManifestEntry(key)) });
+    }
   }
   return sizes;
 }

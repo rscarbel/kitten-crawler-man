@@ -15,10 +15,10 @@ export const FLOOR_TYPES = [
 export const VOID_TYPE = 9;
 /** Tile type for the Safe Room floor — warm sanctuary look. */
 export const SAFE_ROOM_FLOOR = 10;
-/** The Hoarder's lair floor: yellowed linoleum, painted by `drawHoarderFloor`. */
-export const HOARDER_FLOOR = 11;
-/** Tile type for the Gym Boss Room floor — dark rubber mat look (Juicer). */
-export const JUICER_BOSS_ROOM_FLOOR = 12;
+/** The Trash Gremlin's lair floor: yellowed linoleum, painted by `drawTrashGremlinFloor`. */
+export const TRASH_GREMLIN_FLOOR = 11;
+/** Tile type for the Gym Boss Room floor — dark rubber mat look (Big Rooster). */
+export const GYM_FLOOR = 12;
 /** Tile type for outdoor trees — renders as trunk + canopy, not walkable. */
 export const TREE = 13;
 /** Tile type for overworld building exteriors — lighter stone facade look. */
@@ -344,7 +344,7 @@ export const DEN_HOLLOW = 92;
  *
  * Structurally a `METAL_WALL` — same thickness, same solidity, same shadow — so it
  * is registered everywhere that one is. It exists for what it says: the Ball of
- * Swine is described as studded with scraps of tuxedos and red sequin dresses, and
+ * Swine is studded with scraps of tuxedos and red sequin dresses, and
  * these are where they came from. Without them the clothing on the boss has no
  * source anywhere in the game.
  */
@@ -467,19 +467,19 @@ export const CRAWLER_SIGN = 112;
  * prop that hid a crawler from a boss's line of fire would be free cover.
  */
 
-/** A tall heap of household junk in the Hoarder's lair. Solid, blocks sight. */
-export const HOARD_PILE = 113;
+/** A tall heap of household junk in the Trash Gremlin's lair. Solid, blocks sight. */
+export const TRASH_PILE = 113;
 
 /** A teetering tower of newspapers and boxes that can topple. Solid, blocks sight. */
-export const HOARD_TOWER = 114;
+export const TRASH_TOWER = 114;
 
 /** A split, breakable garbage bag. Solid but low, so it does not block sight. */
-export const HOARD_BAG = 115;
+export const TRASH_BAG = 115;
 
-/** What a toppled `HOARD_TOWER` leaves behind: a walkable spread of flattened junk. */
-export const HOARD_RUBBLE = 116;
+/** What a toppled `TRASH_TOWER` leaves behind: a walkable spread of flattened junk. */
+export const TRASH_RUBBLE = 116;
 
-/** A knee-high dumbbell rack in the Juicer's gym. Solid, does not block sight. */
+/** A knee-high dumbbell rack in Big Rooster's gym. Solid, does not block sight. */
 export const GYM_RACK = 117;
 
 /** A head-high squat rack. Solid, blocks sight. */
@@ -514,9 +514,9 @@ export const ARENA_MUD = 127;
 
 /** Every solid boss-room prop; each is drawn in the Y-sorted decoration pass. */
 export const BOSS_ROOM_PROP_TILE_TYPES: ReadonlySet<number> = new Set([
-  HOARD_PILE,
-  HOARD_TOWER,
-  HOARD_BAG,
+  TRASH_PILE,
+  TRASH_TOWER,
+  TRASH_BAG,
   GYM_RACK,
   GYM_SQUAT_RACK,
   GYM_CABLE_STACK,
@@ -528,7 +528,7 @@ export const BOSS_ROOM_PROP_TILE_TYPES: ReadonlySet<number> = new Set([
 
 /** Every walkable boss-room ground decal; each is baked flat into the chunk. */
 export const BOSS_ROOM_FLAT_TILE_TYPES: ReadonlySet<number> = new Set([
-  HOARD_RUBBLE,
+  TRASH_RUBBLE,
   GYM_TREADMILL_BELT,
   KRAKAREN_WADE,
   LAB_WEB,

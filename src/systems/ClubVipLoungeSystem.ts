@@ -30,7 +30,7 @@ export interface EscortPair {
   readonly variants: readonly [CretinVariant, CretinVariant];
 }
 
-/** The club's usual security detail, and the pair in the books. */
+/** The club's usual security detail. */
 const HOUSE_ESCORT: EscortPair = { names: 'The Sledge & Bomo', variants: ['sledge', 'bomo'] };
 
 /** Club security who are not Meat Shields hires, so they are never out on contract. */
@@ -75,15 +75,15 @@ function vipServiceKind(key: string): VipServiceKind | null {
 }
 
 /**
- * The Desperado Club's VIP Lounge — the tasteful adaptation of the book's
- * members-only back room. Sells three premium coin sinks: a
- * full heal, a short buff cocktail, and a Cretin bodyguard escort. The
- * escort is free when the player's casino wagers this visit clear
- * the escort's own price — the canon "spend enough at the tables and
- * security is free" perk. The booking lasts until the party leaves the floor it
- * was made on, so it is kept on the {@link ClubMembership} that outlives each
- * visit. The escort is cosmetic (the club is a safe zone); the host
- * {@link DesperadoClubSystem} renders the two Cretins trailing the player.
+ * The Desperado Club's VIP Lounge — the members-only back room. Sells three
+ * premium coin sinks: a full heal, a short buff cocktail, and a Cretin
+ * bodyguard escort. The escort is free when the player's casino wagers this
+ * visit clear the escort's own price, so security is free to anyone who
+ * spends enough at the tables. The booking lasts until the party leaves the
+ * floor it was made on, so it is kept on the {@link ClubMembership} that
+ * outlives each visit. The escort is cosmetic (the club is a safe zone);
+ * the host {@link DesperadoClubSystem} renders the two Cretins trailing the
+ * player.
  */
 export class ClubVipLoungeSystem {
   /** The lounge's counter, drawn by the shop screen like every other. */

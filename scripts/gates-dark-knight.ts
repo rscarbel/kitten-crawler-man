@@ -735,19 +735,19 @@ const DISTINCT_MASK = 16;
  * How much of their combined silhouette two gore pieces may share.
  *
  * Re-derived from the shipped art rather than inherited. Measured over five
- * converted gore sets — the knight's seven pieces, the Juicer's eight, the
- * Hoarder's six and the Krakaren's seven and four, 91 pairs in all — the worst
- * honest pair anywhere is the Juicer's head against his thigh at 63%, and the
- * knight's own worst is his helm against his breastplate at 61%. Two pieces
+ * converted gore sets — the knight's seven pieces, Big Rooster's five, a
+ * six-piece boss set and the Krakaren's seven and four, 73 pairs in all — the
+ * worst honest pairs sit in the low sixties: the knight's own worst is his helm
+ * against his breastplate at 61%, and Big Rooster's is his comb-topped head
+ * against his tail fan at 55%. Two pieces
  * that genuinely read as one picture score 100%: the mask is normalised to each
  * piece's own bounding box, so a duplicate is a duplicate whatever size it is
  * painted at.
  *
- * At the 62% it shipped with, the band between the healthiest art in the game
- * and a failure was a single point wide, and the knight sat one point inside
- * it — one redraw of a pauldron away from a red gate that meant nothing. 80%
- * sits roughly halfway between the worst honest pair and an outright copy,
- * which leaves seventeen points of headroom for honest art and still fails
+ * A limit just above the worst honest pair would leave the knight one redraw
+ * of a pauldron away from a red gate that meant nothing. 80% sits roughly
+ * halfway between the worst honest pair and an outright copy,
+ * which leaves close to twenty points of headroom for honest art and still fails
  * anything a player would read as the same piece twice.
  */
 const DISTINCT_IOU_LIMIT = 0.8;

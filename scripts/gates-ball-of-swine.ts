@@ -6,10 +6,9 @@
  * them, supersampled and downsampled, so what is measured is what the game
  * blits.
  *
- * Several gates exist specifically to catch the ways the *previous* art failed —
- * a ball that was a third of the size its frame paid for, and a maroon sphere
- * with none of the pink flesh, tusks or evening wear the creature is described
- * by. Those are measurable, so they are measured.
+ * Several gates hold the art to targets that can be measured: the ball fills
+ * the frame it pays for, its flesh reads pink rather than maroon, its tusks read
+ * as bone, and scraps of evening wear show on its hide.
  *
  * Failures accumulate rather than throwing one at a time, so one run reports
  * everything that is wrong, each with the number it measured and the limit it
@@ -317,8 +316,8 @@ const MAX_CENTROID_DRIFT_PX = 3;
  *
  * Derived from the lobe depth the art module declares rather than picked: the
  * silhouette's ripple is a deliberate asymmetry, so the limit has to be whatever
- * that ripple can produce. Tightened past this it would forbid the rippling the
- * creature is described by; loosened it would stop catching a genuinely
+ * that ripple can produce. Tightened past this it would forbid the ripple the
+ * silhouette is built on; loosened it would stop catching a genuinely
  * off-centre bake.
  */
 const MAX_SPAN_DRIFT_PX = LOBE_BOX_DRIFT * TILE_SCALE;
@@ -605,14 +604,13 @@ function gateRollSilhouetteIsRigid(): void {
  * How far the painted ball may be from the diameter the art module declares.
  *
  * `BALL_RADIUS` is not decoration: the fight's contact radius, the arena's clear
- * lines and the creature's whole "almost fifteen feet" read are all priced
- * against it. The art the *previous* sheet baked filled about a third of its
- * frame, and nothing measured that.
+ * lines and the creature's whole almost-fifteen-foot read are all priced
+ * against it, so a painter that fills only part of its frame has to fail here.
  *
  * Measured on the shipped art the roll paints 185px across against a declared
  * 179px — 3% out, because the tusks and the outermost members break the outline
  * past the hide. 6% is that doubled, and it is as loose as the gate can be and
- * still speak: at the inherited 10% a fifth of the body could go missing before
+ * still speak: at 10% a fifth of the body could go missing before
  * anything said so.
  */
 const MAX_DIAMETER_ERROR = 0.06;
@@ -689,14 +687,14 @@ const BYTES_PER_MEGABYTE = 1024 * 1024;
 /**
  * The hard ceiling for one warm animation state.
  *
- * The sheet this figure replaced had a whole-texture budget. A painted figure is
- * admitted to the cache a state at a time, so what decides whether it fits is
- * the widest state's warm bytes rather than the sum of every state — and it has
- * to stay well inside the cache's own per-figure ceiling so that a second state
- * can be warm alongside it. These are the largest cells in the fleet, and the
- * twelve-frame roll is the fleet's largest single row, which is what sets this
- * number: it is the measured row plus room to grow, and it still leaves the
- * per-figure ceiling holding six of them.
+ * A painted figure is admitted to the cache a state at a time, so what decides
+ * whether it fits is the widest state's warm bytes rather than a whole-texture
+ * total of every state — and it has to stay well inside the cache's own
+ * per-figure ceiling so that a second state can be warm alongside it. These are
+ * the largest cells in the fleet, and the twelve-frame roll is the fleet's
+ * largest single row, which is what sets this number: it is the measured row
+ * plus room to grow, and it still leaves the per-figure ceiling holding six of
+ * them.
  */
 const STATE_BUDGET_MEGABYTES = 4.2;
 
@@ -1057,15 +1055,12 @@ const SEQUIN_RED_OVER_GREEN = 95;
 const SEQUIN_RED_OVER_BLUE = 80;
 
 /**
- * G15 — the creature the source describes is actually painted.
+ * G15 — the creature's three defining features are actually painted, each
+ * measurable:
  *
- * Three specific claims from the description, each measurable, each a way the
- * art this replaced failed:
- *
- *  - "rippling **pink** flesh" — the old sphere was maroon, and dark enough to
- *    disappear against the arena's steel floor.
- *  - "**tusks**" — bone, so much lighter than anything else on the body.
- *  - "scraps of tuxedos and **red sequin dresses**" — the sequins are the only
+ *  - **Pink** flesh. A darker body disappears against the arena's steel floor.
+ *  - **Tusks** of bone, so much lighter than anything else on the body.
+ *  - Scraps of tuxedos and **red sequin dresses**. The sequins are the only
  *    saturated highlight on the creature, and the linen the only real value
  *    contrast in the black cloth. Without them the scraps read as holes.
  */
@@ -1156,7 +1151,7 @@ function gateDescribedCreature(): void {
     fail(
       'G15',
       `the flesh averages a lightness of ${lightness.toFixed(0)} (floor ${MIN_PINK_LIGHTNESS}); ` +
-        `"rippling pink flesh" cannot be this dark`,
+        `pink flesh cannot be this dark`,
     );
   }
   if (meanR <= meanG || meanR <= meanB) {

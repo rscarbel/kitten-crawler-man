@@ -1,6 +1,6 @@
 export {
   AIContextBuilder,
-  HOARDING_GRACE_MS,
+  STOCKPILING_GRACE_MS,
   MAX_EVENTS_PER_BATCH,
   PROFILE_INTERVAL_MS,
   type AIContextBuilderOptions,

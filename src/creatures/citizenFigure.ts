@@ -10,6 +10,7 @@
  */
 
 import type { DrawnFigureRow } from '../sprites/figure/figureDef';
+import { pinFigureState, unpinFigureState } from '../sprites/figure/figureFrameCache';
 import { mulberry32, pick, subSeed } from '../sprites/person/rng';
 import type { TownRole } from '../sprites/person/PersonAppearance';
 import { pickTownCastLook, type TownCastLook } from '../sprites/person/townCastLooks';
@@ -21,13 +22,11 @@ import {
 } from '../sprites/art/skyfowl/cast';
 import {
   drawSkyfowlCastSprite,
-  pinSkyfowlCastMember,
   prewarmAndPinSkyfowlTalk,
   prewarmSkyfowlCastMember,
   skyfowlCastMemberRows,
 } from '../sprites/skyfowlCastSprite';
 import {
-  pinTownCastLook,
   prewarmAndPinTownCastTalk,
   prewarmTownCastLook,
   townCastLookRows,
@@ -224,10 +223,9 @@ export function citizenSpeechStyle(figure: CitizenFigure): CitizenSpeechStyle {
 
 /**
  * Warms a citizen's figure ahead of its first draw, whichever cast it belongs
- * to — the one dispatch point every constructor that hands out a
- * `CitizenFigure` calls, so a look's cells are queued on the cache's own
- * time-sliced prewarm budget instead of paid for in the frame that first
- * draws it.
+ * to, for an owner that does not hold its citizens by distance: a look's
+ * cells are queued on the cache's own time-sliced prewarm budget instead of
+ * paid for in the frame that first draws it.
  */
 export function prewarmCitizenFigure(figure: CitizenFigure): void {
   if (figure.species === 'skyfowl') {
@@ -238,26 +236,26 @@ export function prewarmCitizenFigure(figure: CitizenFigure): void {
 }
 
 /**
- * Exempts a citizen's figure from the cache's idle-release sweep — the other
- * half of keeping a strolling crowd's own working set resident for as long as
- * the scene that spawned it stays active. Pinning ahead of the row actually
- * baking is fine; it grants no admission of its own.
- */
-export function pinCitizenFigure(figure: CitizenFigure): void {
-  if (figure.species === 'skyfowl') {
-    pinSkyfowlCastMember(figure.look.id);
-    return;
-  }
-  pinTownCastLook(figure.look);
-}
-
-/**
- * The rows {@link pinCitizenFigure} pins: the idle and walk rows of the
- * citizen's look in every facing, which every citizen wearing it shares.
+ * The idle and walk rows of a citizen's look in every facing, which every
+ * citizen wearing it shares: what a crowd holds of each look.
  */
 export function citizenFigureRows(figure: CitizenFigure): DrawnFigureRow[] {
   if (figure.species === 'skyfowl') return skyfowlCastMemberRows(figure.look.id);
   return townCastLookRows(figure.look);
+}
+
+/**
+ * Exempts a look's {@link citizenFigureRows} from the cache's idle sweep and
+ * eviction, for as long as a citizen wearing it may walk into view. Pinning
+ * ahead of the rows baking is fine; it grants no admission of its own.
+ */
+export function pinCitizenFigure(figure: CitizenFigure): void {
+  for (const row of citizenFigureRows(figure)) pinFigureState(row.def, row.state);
+}
+
+/** Undoes {@link pinCitizenFigure}, so the idle sweep returns the look's rows once undrawn. */
+export function unpinCitizenFigure(figure: CitizenFigure): void {
+  for (const row of citizenFigureRows(figure)) unpinFigureState(row.def, row.state);
 }
 
 /** Names a citizen's look: citizens wearing the same one share every row. */
@@ -267,24 +265,27 @@ export function citizenLookKey(figure: CitizenFigure): string {
 
 /**
  * Warms and pins a citizen's `talk` row in the facing it is about to be drawn
- * in. Call this the moment a citizen is frozen into a conversation (dialog
- * opening sites in `DungeonScene`/`BuildingInteriorScene`, right after
- * `faceToward` fixes the facing this row bakes for) — never as part of
- * {@link pinCitizenFigure} itself, which only ever warms `idle`/`walk`. Without
- * this call a frozen citizen's `talk` state is never baked at all, so the one
- * person a player is looking straight at forever shows an approximate
- * idle/walk stand-in instead of ever actually talking.
+ * in, returning the row for {@link unpinCitizenTalk} once the conversation
+ * ends. Call this the moment a citizen is frozen into a conversation, after
+ * `faceToward` fixes the facing this row bakes for. A crowd holds only a
+ * look's idle and walk rows, so without this a frozen citizen's `talk` state
+ * is never baked at all, and the one person a player is looking straight at
+ * shows an approximate idle/walk stand-in instead of talking.
  */
 export function prewarmAndPinCitizenTalk(
   figure: CitizenFigure,
   facingX: number,
   facingY: number,
-): void {
+): DrawnFigureRow {
   if (figure.species === 'skyfowl') {
-    prewarmAndPinSkyfowlTalk(figure.look.id, facingX, facingY);
-    return;
+    return prewarmAndPinSkyfowlTalk(figure.look.id, facingX, facingY);
   }
-  prewarmAndPinTownCastTalk(figure.look, facingX, facingY);
+  return prewarmAndPinTownCastTalk(figure.look, facingX, facingY);
+}
+
+/** Undoes {@link prewarmAndPinCitizenTalk}, so the idle sweep returns the row once undrawn. */
+export function unpinCitizenTalk(row: DrawnFigureRow): void {
+  unpinFigureState(row.def, row.state);
 }
 
 /** Draws one citizen through whichever cast its figure belongs to, returning the row drawn. */

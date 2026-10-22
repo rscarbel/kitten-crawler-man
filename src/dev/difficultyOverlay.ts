@@ -61,9 +61,9 @@ const HUNT_FLOOR_LABELS: Record<number, string> = {
 
 /** Short segment labels — the full ids do not fit the column. */
 const SEGMENT_LABELS: Record<DifficultySegment, string> = {
-  'floor1-pre-hoarder': 'f1 pre-hoard',
-  'floor1-post-hoarder': 'f1 post-hoard',
-  'floor1-post-juicer': 'f1 post-juice',
+  'floor1-pre-gremlin': 'f1 pre-gremlin',
+  'floor1-post-gremlin': 'f1 post-gremlin',
+  'floor1-post-rooster': 'f1 post-rooster',
   floor2: 'floor 2',
   floor3: 'floor 3',
 };

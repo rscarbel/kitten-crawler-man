@@ -3,10 +3,11 @@
  * Headless checks on the one promise severed body parts make: a creature the
  * player just killed leaves its pieces on the floor.
  *
- * The reported bug was the Hoarder coming apart into nothing — her six pieces
- * burst out of her, flew, and vanished the moment they landed. Her fight is a
- * swarm fight, and the swarm's litter had taken every slot the settled-parts cap
- * allows, so the boss's own remains were the pieces the cap refused.
+ * The failure this guards against is the Trash Gremlin coming apart into
+ * nothing — its pieces burst out of it, fly, and vanish the moment they land.
+ * Its fight is a swarm fight, and the swarm's litter can take every slot the
+ * settled-parts cap allows, so the boss's own remains would be the pieces the
+ * cap refused.
  *
  * Both halves of that are checked here, because either alone passes vacuously:
  * a cap that never fills makes the boss check meaningless, and a cap that has
@@ -22,9 +23,12 @@ import { TILE_SIZE } from '../src/core/constants.js';
 import { GameMap } from '../src/map/GameMap.js';
 import { BodyPartGoreSystem } from '../src/systems/BodyPartGoreSystem.js';
 import { COCKROACH_FIGURE } from '../src/sprites/art/cockroachFigure.js';
-import { HOARDER_FIGURE } from '../src/sprites/art/hoarderFigure.js';
+import { TRASH_GREMLIN_FIGURE } from '../src/sprites/art/trashGremlinFigure.js';
 import { COCKROACH_BODY_PART_KEY, COCKROACH_GORE_PARTS } from '../src/sprites/cockroachSprite.js';
-import { HOARDER_BODY_PART_KEY, HOARDER_GORE_PARTS } from '../src/sprites/hoarderSprite.js';
+import {
+  TRASH_GREMLIN_BODY_PART_KEY,
+  TRASH_GREMLIN_GORE_PARTS,
+} from '../src/sprites/trashGremlinSprite.js';
 import { GOBLIN_GORE_PARTS, goblinBodyPartKey } from '../src/sprites/goblinSprite.js';
 import { RAT_BODY_PART_KEY, RAT_GORE_PARTS } from '../src/sprites/ratSprite.js';
 import { LLAMA_BODY_PART_KEY, LLAMA_GORE_PARTS } from '../src/sprites/llamaSprite.js';
@@ -43,7 +47,7 @@ import {
   TROGLODYTE_GORE_PARTS,
 } from '../src/sprites/troglodyteSprite.js';
 import { TUSKLING_BODY_PART_KEY, TUSKLING_GORE_PARTS } from '../src/sprites/tusklingSprite.js';
-import { JUICER_BODY_PART_KEY, JUICER_GORE_PARTS } from '../src/sprites/juicerSprite.js';
+import { ROOSTER_BODY_PART_KEYS, ROOSTER_GORE_PARTS } from '../src/sprites/roosterSprite.js';
 import {
   BRINDLED_VESPA_BODY_PART_KEY,
   BRINDLED_VESPA_GORE_PARTS,
@@ -168,7 +172,7 @@ function step(gore: BodyPartGoreSystem, frames: number): void {
  * dropping that creature's whole corpse.
  */
 const GORE_CONTRACT: ReadonlyArray<readonly [string, ReadonlyArray<string>]> = [
-  [HOARDER_BODY_PART_KEY, HOARDER_GORE_PARTS],
+  [TRASH_GREMLIN_BODY_PART_KEY, TRASH_GREMLIN_GORE_PARTS],
   [COCKROACH_BODY_PART_KEY, COCKROACH_GORE_PARTS],
   [RAT_BODY_PART_KEY, RAT_GORE_PARTS],
   [LLAMA_BODY_PART_KEY, LLAMA_GORE_PARTS],
@@ -178,7 +182,9 @@ const GORE_CONTRACT: ReadonlyArray<readonly [string, ReadonlyArray<string>]> = [
   [DARK_KNIGHT_BODY_PART_KEY, DARK_KNIGHT_GORE_PARTS],
   [TROGLODYTE_BODY_PART_KEY, TROGLODYTE_GORE_PARTS],
   [TUSKLING_BODY_PART_KEY, TUSKLING_GORE_PARTS],
-  [JUICER_BODY_PART_KEY, JUICER_GORE_PARTS],
+  [ROOSTER_BODY_PART_KEYS.big, ROOSTER_GORE_PARTS],
+  [ROOSTER_BODY_PART_KEYS.little, ROOSTER_GORE_PARTS],
+  [ROOSTER_BODY_PART_KEYS.bent, ROOSTER_GORE_PARTS],
   [BRINDLED_VESPA_BODY_PART_KEY, BRINDLED_VESPA_GORE_PARTS],
   [KRAKAREN_BODY_PART_KEY, KRAKAREN_GORE_PARTS],
   [KRAKAREN_TENTACLE_BODY_PART_KEY, KRAKAREN_TENTACLE_GORE_PARTS],
@@ -208,8 +214,8 @@ function checkEveryCorpseLandsOnEmptyGround(): void {
   }
 }
 
-function checkBossRemainsSurviveHerOwnSwarm(): void {
-  console.log("\nthe boss's remains outlive the litter of the swarm she spawned");
+function checkBossRemainsSurviveItsSwarm(): void {
+  console.log("\nthe boss's remains outlive the litter of the swarm it summoned");
   const { map, centre } = openArena();
   const gore = new BodyPartGoreSystem(map);
 
@@ -221,16 +227,16 @@ function checkBossRemainsSurviveHerOwnSwarm(): void {
   const litterOnTheFloor = gore.settledCount;
   check(
     litterOnTheFloor >= EXPECTED_MAX_SETTLED_PARTS,
-    `the swarm saturated the cap before she died (${litterOnTheFloor} pieces resting)`,
+    `the swarm saturated the cap before it died (${litterOnTheFloor} pieces resting)`,
   );
 
-  gore.spawnParts(centre.x, centre.y, HOARDER_BODY_PART_KEY, TILE_SIZE);
+  gore.spawnParts(centre.x, centre.y, TRASH_GREMLIN_BODY_PART_KEY, TILE_SIZE);
   step(gore, FRAMES_TO_SETTLE);
 
-  const hersOnTheFloor = gore.countSettledFrom(HOARDER_FIGURE);
+  const bossPiecesOnTheFloor = gore.countSettledFrom(TRASH_GREMLIN_FIGURE);
   check(
-    hersOnTheFloor === HOARDER_GORE_PARTS.length,
-    `${hersOnTheFloor} of her ${HOARDER_GORE_PARTS.length} pieces are on the floor`,
+    bossPiecesOnTheFloor === TRASH_GREMLIN_GORE_PARTS.length,
+    `${bossPiecesOnTheFloor} of its ${TRASH_GREMLIN_GORE_PARTS.length} pieces are on the floor`,
   );
   check(
     gore.settledCount <= EXPECTED_MAX_SETTLED_PARTS,
@@ -238,13 +244,13 @@ function checkBossRemainsSurviveHerOwnSwarm(): void {
   );
   check(
     gore.countSettledFrom(COCKROACH_FIGURE) < litterOnTheFloor,
-    'room for her was made out of the oldest litter, not out of her own pieces',
+    'room for the boss was made out of the oldest litter, not out of its own pieces',
   );
 }
 
 console.log('gore: severed body parts');
 checkEveryCorpseLandsOnEmptyGround();
-checkBossRemainsSurviveHerOwnSwarm();
+checkBossRemainsSurviveItsSwarm();
 
 if (failures > 0) {
   console.log(`\n${failures} check(s) failed`);

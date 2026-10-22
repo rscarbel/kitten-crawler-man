@@ -613,9 +613,9 @@ export function verifySpawnTables(report: FairyGateReport): void {
     regions: level2.fairies?.roomRatesByRegion.length ?? 0,
   };
   const REGIONS_BEFORE_AND_AFTER_KRAKAREN = 2;
-  const REGIONS_AROUND_HOARDER_AND_JUICER = 3;
+  const REGIONS_AROUND_GREMLIN_AND_BIG_ROOSTER = 3;
   report.check(
-    floor1.regions === REGIONS_AROUND_HOARDER_AND_JUICER &&
+    floor1.regions === REGIONS_AROUND_GREMLIN_AND_BIG_ROOSTER &&
       floor2.regions === REGIONS_BEFORE_AND_AFTER_KRAKAREN,
     'every progression region has a table row to measure',
     `floor 1 ${floor1.regions}, floor 2 ${floor2.regions}`,
@@ -687,7 +687,7 @@ export function verifySpawnTables(report: FairyGateReport): void {
   const mutantRegion0 = anyFairyRooms(rollRoomFairies, region0Set, 0, rng);
   report.checkCatches(
     mutantRegion0 === 0,
-    'a floor 1 table with region 0 set is caught spawning before the Hoarder',
+    'a floor 1 table with region 0 set is caught spawning before the Trash Gremlin',
     `${mutantRegion0} rooms`,
   );
 

@@ -42,8 +42,8 @@ Locomotion_ plates are public domain and photograph athletic men walking,
 running, boxing, kicking, hammering, lifting, throwing, stooping, falling and
 getting up — timing, contact frames, arm phase and flight share should match
 them, not intuition. Public-domain anatomy plates cover the muscle landmarks.
-Character likeness is judged against a text description of the source art;
-never download cover art into the repo or hand it to a subagent as a file.
+Character likeness is judged against a written description of the target look;
+never download reference images into the repo or hand them to a subagent as files.
 References live in the scratchpad and are never committed.
 
 **When to stop.** Not when it "looks fine" and not when the gates pass. Stop when
@@ -63,8 +63,9 @@ ceiling.
    `preview/`, and the harness runs the art gates before it bakes anything.
    `npm run review:index` gathers every image in `preview/` into
    `preview/index.html`, which is how a human scans a batch of them.
-2. Hand **only the PNG** to a fresh agent, with a target description (for Carl,
-   the Dungeon Crawler Carl cover) and no access to the source. Ask for
+2. Hand **only the PNG** to a fresh agent, with a written target description
+   (for Carl: build, proportions, outfit and stance, in words) and no access to
+   the painter code. Ask for
    **numeric** findings: pixel measurements, ratios, and target values — not
    adjectives.
 3. Apply the numbers. Re-render. Repeat.
@@ -88,8 +89,8 @@ A whole-figure contact sheet hides exactly the defects that matter most at these
 sizes. `render-human.ts --part=head|torso|hands|legs|feet` crops one body part
 across all frames. Express the window as **fractions of the frame**, not in
 pixels, so the table survives the figure re-deriving its own cell size — see the
-`PARTS` tables in `render-human.ts` and `render-juicer.ts`, the latter of which
-adds `arms` and `tail`.
+`PARTS` tables in `render-human.ts` and `render-big-rooster.ts`, the latter of
+which swaps `torso` for `shoulders` and adds `arms` and `tail`.
 
 Any new figure's harness gets its own equivalent table. The hands and the face
 are where the review always finds the most.
@@ -136,7 +137,7 @@ they are the _right_ shapes.
 - A run with no `--row` paginates the tall modes: `--out=foo.png` becomes
   `foo-p1.png`, `foo-p2.png`, … when one canvas cannot hold every row.
 
-The same patterns in `render-goblins.ts` and `render-juicer.ts` are
+The same patterns in `render-goblins.ts` and `render-big-rooster.ts` are
 build-tooling, independent of the goblins' (unconvincing) motion:
 
 - **onion** — consecutive frames overlaid at low alpha. Shows a snap or a pop as

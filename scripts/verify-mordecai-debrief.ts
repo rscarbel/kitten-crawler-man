@@ -15,9 +15,9 @@ import {
 } from '../src/core/ItemDefs.js';
 import type { StatName } from '../src/Player.js';
 import { CRAWLER_NAMES, type CrawlerKind } from '../src/core/SkillManager.js';
-import { Juicer } from '../src/creatures/Juicer.js';
+import { BigRooster } from '../src/creatures/BigRooster.js';
 import { KrakarenClone } from '../src/creatures/KrakarenClone.js';
-import { TheHoarder } from '../src/creatures/TheHoarder.js';
+import { TrashGremlin } from '../src/creatures/TrashGremlin.js';
 import {
   ALL_DEBRIEF_BOSS_TYPES,
   BOSS_DISPLAY_NAMES,
@@ -54,7 +54,7 @@ const ONE_CARL_BOX: BoxCounts = { human: 1, cat: 0 };
 const CONGRATULATED: DebriefMemory = { ...EMPTY_DEBRIEF_MEMORY, congratulated: true };
 
 /** Any boss will do where the gate is not about the congratulations. */
-const ANY_BOSS: DebriefBossType = 'the_hoarder';
+const ANY_BOSS: DebriefBossType = 'trash_gremlin';
 
 const KETTLE_HELM_NAME = ITEM_DEF.issue_kettle_helm.name;
 const CROWN_ID: ItemId = 'enchanted_crown_sepsis_whore';
@@ -198,8 +198,8 @@ function spoken(
 const emptyState = stateOf(inventoryOf('human', []), inventoryOf('cat', []));
 
 const bossMobs = {
-  the_hoarder: new TheHoarder(0, 0, TILE_SIZE),
-  juicer: new Juicer(0, 0, TILE_SIZE),
+  trash_gremlin: new TrashGremlin(0, 0, TILE_SIZE),
+  big_rooster: new BigRooster(0, 0, TILE_SIZE),
   krakaren_clone: new KrakarenClone(0, 0, TILE_SIZE),
 } as const satisfies Record<DebriefBossType, { displayName: string }>;
 
@@ -687,19 +687,22 @@ check(
 
 {
   check(
-    isSupersededDebrief('the_hoarder', new Set(['the_hoarder', 'juicer'])),
-    'the Hoarder is not superseded once the Juicer is also dead',
+    isSupersededDebrief('trash_gremlin', new Set(['trash_gremlin', 'big_rooster'])),
+    'the Trash Gremlin is not superseded once Big Rooster is also dead',
   );
   check(
-    !isSupersededDebrief('the_hoarder', new Set(['the_hoarder'])),
-    'control: the Hoarder is superseded with no later boss dead',
+    !isSupersededDebrief('trash_gremlin', new Set(['trash_gremlin'])),
+    'control: the Trash Gremlin is superseded with no later boss dead',
   );
   check(
-    !isSupersededDebrief('juicer', new Set(['the_hoarder', 'juicer'])),
-    'the Juicer is superseded by a boss earlier than it in the order',
+    !isSupersededDebrief('big_rooster', new Set(['trash_gremlin', 'big_rooster'])),
+    'Big Rooster is superseded by a boss earlier than it in the order',
   );
   check(
-    !isSupersededDebrief('krakaren_clone', new Set(['the_hoarder', 'juicer', 'krakaren_clone'])),
+    !isSupersededDebrief(
+      'krakaren_clone',
+      new Set(['trash_gremlin', 'big_rooster', 'krakaren_clone']),
+    ),
     'the Krakaren Clone, last in the boss order, is superseded by an earlier boss',
   );
 }

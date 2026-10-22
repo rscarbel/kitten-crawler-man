@@ -51,9 +51,9 @@ import {
   FLASH_WALL,
   PIGMENT_SHELF,
   GRINDING_SLAB,
-  HOARD_PILE,
-  HOARD_TOWER,
-  HOARD_BAG,
+  TRASH_PILE,
+  TRASH_TOWER,
+  TRASH_BAG,
   GYM_RACK,
   GYM_SQUAT_RACK,
   GYM_CABLE_STACK,
@@ -100,6 +100,8 @@ import {
 import { OVERWORLD_GROUND } from '../town/groundMaterials';
 import { drawSpecialFloorTile } from './specialFloorTiles';
 import { drawSpriteKey, drawSprite, timeFrameIndex } from '../../core/SpriteRenderer';
+import { buildingLifeKeyOf } from '../../sprites/buildinggen/runtimeBuildingSheets';
+import { hasEnvironmentSheet } from '../environmentArtCache';
 import { drawFountainTileSlice } from '../../sprites/fountainSprite';
 import { getSpriteDefByKey, getSpriteOverlayStatesByKey } from '../../core/SpriteLoader';
 import { frameTime } from '../../utils';
@@ -164,12 +166,24 @@ export function drawDecorationLifeLayer(
   if (type !== SPRITE_BUILDING) return;
   const spriteKey = structure[ty][tx].spriteKey;
   if (spriteKey === undefined) return;
-  const def = getSpriteDefByKey(spriteKey);
+  // A painted facade's life row is a sheet of its own; any other building
+  // keeps its overlays beside its idle frame.
+  const paintedLifeKey = buildingLifeKeyOf(spriteKey);
+  // Each is resident only near the screen. Without its facade the plot is
+  // empty, and windows and smoke must not float over it; without the life
+  // row the building draws still, which its idle frame already did. Asked
+  // first, because a lookup of a sheet not resident counts as a miss.
+  const lifeDrawable =
+    paintedLifeKey === undefined ||
+    (hasEnvironmentSheet(spriteKey) && hasEnvironmentSheet(paintedLifeKey));
+  if (!lifeDrawable) return;
+  const lifeKey = paintedLifeKey ?? spriteKey;
+  const def = getSpriteDefByKey(lifeKey);
   if (def === undefined) return;
   // Any extra state is an animated overlay authored in the same frame-local
   // space as `idle` (e.g. the blacksmith's forge flames), so it composites on
   // top of the facade at the same anchor rather than replacing it.
-  for (const overlayState of getSpriteOverlayStatesByKey(spriteKey)) {
+  for (const overlayState of getSpriteOverlayStatesByKey(lifeKey)) {
     const overlayDef = def.states.get(overlayState);
     if (overlayDef === undefined) continue;
     const frame = lifeFrameIndex(tx, ty, SPRITE_BUILDING_OVERLAY_FPS, overlayDef.frameCount);
@@ -2322,9 +2336,9 @@ export function drawDecorationTile(
       case FLASH_WALL:
       case PIGMENT_SHELF:
       case GRINDING_SLAB:
-      case HOARD_PILE:
-      case HOARD_TOWER:
-      case HOARD_BAG:
+      case TRASH_PILE:
+      case TRASH_TOWER:
+      case TRASH_BAG:
       case GYM_RACK:
       case GYM_SQUAT_RACK:
       case GYM_CABLE_STACK:

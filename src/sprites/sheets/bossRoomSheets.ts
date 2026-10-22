@@ -8,15 +8,15 @@
 
 import type { AssetGroup } from '../../core/assetGroups';
 import type { PropSheetPlan } from './propSheetPlan';
-import { hoarderRoomSheetPlans } from './bossRooms/hoarderSheets';
+import { trashGremlinRoomSheetPlans } from './bossRooms/trashGremlinSheets';
 import { gymRoomSheetPlans } from './bossRooms/gymRoomSheets';
 import { krakarenRoomSheetPlans } from './bossRooms/krakarenSheets';
 import { spiderLabSheetPlans } from './bossRooms/spiderLabSheets';
 import { colosseumSheetPlans } from './bossRooms/colosseumSheets';
 
 const BOSS_ROOM_SHEET_FAMILIES = {
-  boss_hoarder: hoarderRoomSheetPlans,
-  boss_juicer: gymRoomSheetPlans,
+  boss_trash_gremlin: trashGremlinRoomSheetPlans,
+  boss_big_rooster: gymRoomSheetPlans,
   boss_krakaren: krakarenRoomSheetPlans,
   boss_grotesque_spider: spiderLabSheetPlans,
   boss_colosseum: colosseumSheetPlans,
@@ -25,8 +25,8 @@ const BOSS_ROOM_SHEET_FAMILIES = {
 export type BossRoomAssetGroup = keyof typeof BOSS_ROOM_SHEET_FAMILIES;
 
 export const BOSS_ROOM_ASSET_GROUPS: readonly BossRoomAssetGroup[] = [
-  'boss_hoarder',
-  'boss_juicer',
+  'boss_trash_gremlin',
+  'boss_big_rooster',
   'boss_krakaren',
   'boss_grotesque_spider',
   'boss_colosseum',

@@ -14,10 +14,10 @@ import {
 import { CRAWLER_NAMES, type CrawlerKind } from '../core/SkillManager';
 import {
   MORDECAI_DEBRIEF_GEAR_CLOSING,
-  MORDECAI_DEBRIEF_HOARDER_CONGRATS,
+  MORDECAI_DEBRIEF_TRASH_GREMLIN_CONGRATS,
   MORDECAI_DEBRIEF_HUSHED_ALSO_LINE,
   MORDECAI_DEBRIEF_HUSHED_ONLY_LINE,
-  MORDECAI_DEBRIEF_JUICER_CONGRATS,
+  MORDECAI_DEBRIEF_BIG_ROOSTER_CONGRATS,
   MORDECAI_DEBRIEF_KRAKAREN_CONGRATS,
   mordecaiDebriefBothBoxesLine,
   mordecaiDebriefGearFirstSentence,
@@ -26,7 +26,7 @@ import {
 } from '../dialog/scripts/mordecai';
 
 /** In the order the spine meets them; {@link isSupersededDebrief} relies on it. */
-const DEBRIEF_BOSS_TYPES = ['the_hoarder', 'juicer', 'krakaren_clone'] as const;
+const DEBRIEF_BOSS_TYPES = ['trash_gremlin', 'big_rooster', 'krakaren_clone'] as const;
 
 export type DebriefBossType = (typeof DEBRIEF_BOSS_TYPES)[number];
 
@@ -54,8 +54,8 @@ export function isSupersededDebrief(
 
 /** Must match each mob's `displayName`; `verify:mordecai-debrief` checks it. */
 export const BOSS_DISPLAY_NAMES = {
-  the_hoarder: 'The Hoarder',
-  juicer: 'The Juicer',
+  trash_gremlin: 'The Trash Gremlin',
+  big_rooster: 'Big Rooster',
   krakaren_clone: 'Krakaren Clone',
 } as const satisfies Record<DebriefBossType, string>;
 
@@ -267,8 +267,8 @@ export function reconcileDebriefMemory(memory: DebriefMemory, boxes: BoxCounts):
 }
 
 const CONGRATULATIONS = {
-  the_hoarder: MORDECAI_DEBRIEF_HOARDER_CONGRATS,
-  juicer: MORDECAI_DEBRIEF_JUICER_CONGRATS,
+  trash_gremlin: MORDECAI_DEBRIEF_TRASH_GREMLIN_CONGRATS,
+  big_rooster: MORDECAI_DEBRIEF_BIG_ROOSTER_CONGRATS,
   krakaren_clone: MORDECAI_DEBRIEF_KRAKAREN_CONGRATS,
 } as const satisfies Record<DebriefBossType, ReadonlyArray<string>>;
 

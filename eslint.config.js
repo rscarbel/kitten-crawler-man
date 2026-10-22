@@ -97,7 +97,13 @@ export default tseslint.config(
     // The numbers there are art geometry, not semantic game constants.
     // `src/map/tilegen/` is the same category one level down: material painters,
     // palette ramps and noise lattices, whose numbers are the art itself.
-    files: ['src/sprites/**/*.ts', 'src/map/tiles/**/*.ts', 'src/map/tilegen/**/*.ts'],
+    // `src/shelf/` holds painted figures kept out of the game, the same art.
+    files: [
+      'src/sprites/**/*.ts',
+      'src/shelf/**/*.ts',
+      'src/map/tiles/**/*.ts',
+      'src/map/tilegen/**/*.ts',
+    ],
     rules: {
       '@typescript-eslint/no-magic-numbers': 'off',
     },

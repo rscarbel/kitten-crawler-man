@@ -245,7 +245,7 @@ for (const roomName of roomNames) {
   }
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
   map.generateInterior(building.kind, 0, building.name, false);
-  map.invalidateAllTileArt();
+  map.releaseTileArt();
   const reachable = reachableTiles(map);
   const title = interiorRoomTitle(building.name, null);
   const slug = building.name

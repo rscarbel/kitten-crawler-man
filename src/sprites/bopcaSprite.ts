@@ -37,7 +37,7 @@ export type BopcaState =
 
 /**
  * Per-Bopca colouring. Seeded from the safe room index so two are never
- * identical, but always within the canon green-brown range.
+ * identical, but always within the green-brown range.
  */
 export interface BopcaPalette {
   coatLight: string;
@@ -211,9 +211,9 @@ const MOUTH_SMILE_CURVE = -0.035;
 
 // ── Toque ─────────────────────────────────────────────────────────────────────
 /**
- * Wide and low rather than a tall pleated chef's hat: the folded linen toque of
- * the source art, and the only shape that still reads as a cook's hat when the
- * whole figure is barely a tile tall.
+ * Wide and low rather than a tall pleated chef's hat: the folded linen toque, and
+ * the only shape that still reads as a cook's hat when the whole figure is barely a
+ * tile tall.
  */
 const TOQUE_HALF_WIDTH = 0.44;
 /** How far the folded crown flops to one side, as a fraction of its half-width. */
@@ -271,7 +271,7 @@ const COAT_HUES: ReadonlyArray<{
   { light: '#74764f', mid: '#585a3c', dark: '#40422b', darkest: '#2b2c1d' },
 ];
 
-/** Aprons in the teal family, per the source art. */
+/** Aprons in the teal family. */
 const APRON_HUES: ReadonlyArray<{ face: string; shade: string }> = [
   { face: '#5b8b95', shade: '#3f6b74' },
   { face: '#4f7f88', shade: '#376067' },
@@ -357,9 +357,9 @@ export function drawBopcaSprite(
   drawTorso(ctx, x, y, w, h, palette, bob);
   drawApron(ctx, x, y, w, h, palette, bob);
   drawShagLocks(ctx, cx, baseY, h, w, palette, animFrames, bobRate, shagMotion, bob, 'front');
-  // Arms last of the body: in the source art the forearm and whatever it is
-  // holding sit *over* the coat, and a bowl hidden behind the beard is no use to
-  // an animation whose whole job is to show that food was made.
+  // Arms last of the body: the forearm and whatever it is holding sit *over* the
+  // coat, and a bowl hidden behind the beard is no use to an animation whose whole
+  // job is to show that food was made.
   drawArms(ctx, x, y, w, h, palette, state, animFrames);
   drawBeardAndJaw(ctx, x, y, w, h, palette);
   drawShagHood(ctx, cx, baseY, h, w, palette, animFrames, bobRate, shagMotion, bob);
@@ -465,7 +465,7 @@ function drawShagLocks(
 /**
  * The head's own hair: a hood over the crown and down both cheeks, with a gap
  * left for the face. Drawn over the skull rather than behind it, so the face
- * sits *inside* the hair the way it does in the source art.
+ * sits *inside* the hair.
  */
 function drawShagHood(
   ctx: CanvasRenderingContext2D,
@@ -588,7 +588,7 @@ function drawApron(
 
   ctx.fillStyle = palette.apronDark;
   ctx.fillRect(x(0) - halfWidth, top, halfWidth * 2, h * 0.012);
-  // Patch pocket, straight off the reference art.
+  // A patch pocket breaks up the apron's flat front.
   const pocketWidth = halfWidth * 0.5;
   ctx.fillRect(
     x(0) - halfWidth * 0.78,
@@ -658,8 +658,8 @@ function drawBeardAndJaw(
     ctx.fill();
   }
 
-  // Moustache. Kept off the mouth itself: the beard parts around the mouth in
-  // the source art, and the mouth line is half the expression.
+  // Moustache. Kept off the mouth itself: the beard parts around the mouth, and the
+  // mouth line is half the expression.
   ctx.fillStyle = palette.coatDark;
   ctx.beginPath();
   ctx.ellipse(

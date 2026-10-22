@@ -102,8 +102,8 @@ const FULL_BAKE_SCALE = 1;
  * strangers drawn from a few dozen looks needs its idle and walk rows warm in
  * every facing at once (a citizen a player is looking at may be facing any of
  * three ways), and the whole crowd's own pinned working set — every look a
- * population this size statistically touches, held resident for as long as
- * the town scene stays open rather than released and re-baked — measures a
+ * population this size statistically touches, held resident while the party
+ * is near the crowd rather than released and re-baked — measures a
  * consistent ~122 MB across world seeds. A pinned row is exempt from active
  * eviction (see `pinFigureState`), so the rest of the cache cannot borrow it
  * under pressure.
@@ -146,8 +146,7 @@ export function figureCacheByteBudget(): number {
 /**
  * Default ceiling on one figure's cells.
  *
- * Sized from the pilot conversion, which is the fleet's shape for a boss: the
- * Juicer declares 182 cells of 176×176, which is 21.5 MB with every row of
+ * Sized from a boss-shaped figure, the shelved Iron Iggy: he declares 182 cells of 176×176, which is 21.5 MB with every row of
  * every facing warm at once. Its heaviest row is 1.9 MB, and the three views of
  * its punch — prewarmed together when the telegraph fires — are 4.3 MB. A
  * ceiling below the declared total is one a boss reaches mid-fight, and reaching
@@ -366,7 +365,7 @@ const WHOLE_BAKE_SCRATCH_LEVELS = 1;
 const LAYERED_BAKE_SCRATCH_LEVELS = 2;
 
 /** Tile-relative mirror axis, matching `drawSprite`'s flip. */
-const TILE_CENTER_OFFSET = 0.5;
+export const TILE_CENTER_OFFSET = 0.5;
 
 /** Default alpha for full opacity, matching `drawSprite`. */
 const DEFAULT_ALPHA = 1;
@@ -722,8 +721,8 @@ let drawnPrewarmAbandons = 0;
 /**
  * Rows the idle sweep must never release, by `${figureId}|${state}`.
  *
- * For a cast that stays on screen for as long as a scene does — a town's
- * strolling crowd — where the idle sweep's ten-second window is a false
+ * For a cast that may be drawn at any moment while the party is near it — a
+ * town's strolling crowd — where the idle sweep's ten-second window is a false
  * signal: a look worn by only one or two of the crowd can go that long
  * between draws of its rarer facing and still be squarely part of the
  * working set, not a row that fell out of use. Pinning is metadata over
@@ -733,16 +732,14 @@ let drawnPrewarmAbandons = 0;
 const pinnedRows = new Set<string>();
 
 /**
- * Pinned rows, by `${figureId}|${state}`, that may be evicted to make room
- * though the idle sweep still never releases them — see
- * {@link setFigureStatePinStandby}.
+ * Frames after the cache last had to drop a row, or refuse a bake, for want of
+ * room overall during which its room counts as contested: the idle window,
+ * because a row dropped for room within it was still part of something's
+ * working set.
  */
-const standbyPins = new Set<string>();
-
-/** Whether eviction must pass over a row: pinned, and not stood down. */
-function heldAgainstEviction(key: string): boolean {
-  return pinnedRows.has(key) && !standbyPins.has(key);
-}
+const ROOM_CONTESTED_FRAMES = IDLE_FRAMES_BEFORE_RELEASE;
+/** The frame the cache last ran short of room overall, or never. */
+let lastRoomShortageFrame = Number.NEGATIVE_INFINITY;
 
 function pinKey(figureId: FigureId, state: string): string {
   return `${figureId}|${state}`;
@@ -893,13 +890,12 @@ function evictStaleRowsOf(
     if (hasRoom()) return;
     if (frameCounter - row.lastFrame < minIdleFrames) continue;
     // A pin is a promise the row stays resident for as long as whatever
-    // pinned it says so — a town scene's own crowd, kept warm for the scene's
-    // whole life rather than released and re-baked. Active eviction breaking
+    // pinned it says so — a crowd near the party, kept warm while it may walk
+    // into view rather than released and re-baked. Active eviction breaking
     // that promise under byte pressure is exactly the bug pinning exists to
     // prevent, so a pinned row is skipped here the same way `releaseIdleRows`
-    // skips it, never dropped as the cache's last resort for room — unless
-    // whatever pinned it has stood it down while nothing near could draw it.
-    if (heldAgainstEviction(pinKey(id, state))) continue;
+    // skips it, never dropped as the cache's last resort for room.
+    if (pinnedRows.has(pinKey(id, state))) continue;
     dropRow(entry, state, row);
     recordFigureCacheEviction();
   }
@@ -916,6 +912,7 @@ function evictStaleRowsOf(
  */
 function evictStaleForGlobalBytes(bytes: number, minIdleFrames: number): void {
   if (admitsGlobally(bytes)) return;
+  lastRoomShortageFrame = frameCounter;
   for (const [id, entry] of entries) {
     evictStaleRowsOf(id, entry, () => admitsGlobally(bytes), minIdleFrames);
     if (admitsGlobally(bytes)) break;
@@ -1664,33 +1661,16 @@ export function isFigureIdleSweepHeld(): boolean {
 
 /** Undoes {@link pinFigureState}. A row that was never pinned is left alone. */
 export function unpinFigureState(def: FigureDef, state: string): void {
-  const key = pinKey(def.id, state);
-  pinnedRows.delete(key);
-  standbyPins.delete(key);
+  pinnedRows.delete(pinKey(def.id, state));
 }
 
 /**
- * Releases every pin at once, for a scene giving up the working set it
- * pinned rather than naming each row it pinned one at a time.
+ * Whether the cache has run short of room overall lately: something drawn
+ * needed more than it had, so a row baked now for anything not drawn would
+ * only be dropped again.
  */
-export function unpinAllFigureStates(): void {
-  pinnedRows.clear();
-  standbyPins.clear();
-}
-
-/**
- * Stands a pinned row down, or back up. A row on standby stays exempt from
- * the idle sweep, but eviction may take it as it would any row out of use.
- *
- * For a pinned working set that is far from anything that could draw it — a
- * town's crowd while the party is out in the country — where another figure
- * on screen needs the room more, and nothing is gained by re-baking the set
- * when no such figure does.
- */
-export function setFigureStatePinStandby(def: FigureDef, state: string, standby: boolean): void {
-  const key = pinKey(def.id, state);
-  if (standby) standbyPins.add(key);
-  else standbyPins.delete(key);
+export function figureCacheRoomContested(): boolean {
+  return frameCounter - lastRoomShortageFrame < ROOM_CONTESTED_FRAMES;
 }
 
 /**
@@ -2979,10 +2959,10 @@ export function flushFigureFrameCache(): void {
   prewarmQueue.length = 0;
   lastDrawnFrameByFigure.clear();
   abandonedPrewarms.clear();
-  // A pin naming a row that no longer exists is dead weight, not a leak on
-  // its own, but nothing keeps it meaningful once every cell it could have
-  // named is gone.
-  pinnedRows.clear();
+  // Pins outlive the flush: a canvas recovery or a render-scale change
+  // flushes cells while whoever pinned them still holds them, and re-bakes
+  // them pinned. Each owner unpins its own rows when it lets them go.
+  lastRoomShortageFrame = Number.NEGATIVE_INFINITY;
   // The queue it was owed against is gone, so the next floor's first prewarm
   // must not open paused. What a painter costs survives, though: the estimates
   // are a property of the painter rather than of any cell, and re-learning them

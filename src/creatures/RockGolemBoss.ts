@@ -20,7 +20,7 @@ import type { TacticsTrait } from './tactics/tacticsTraits';
 
 const BOSS_HP = 90;
 /**
- * Boss-tier reward. The named bosses in this game run 500 (the Hoarder) to 2000
+ * Boss-tier reward. The named bosses in this game run 500 (the Trash Gremlin) to 2000
  * (the Grotesque Spider); a bounty is meant to be a strong source of XP, so it
  * sits high in that band. `scripts/verify-bounty.ts` asserts every bounty boss
  * stays inside it — three of the five originally shipped near 250, below every

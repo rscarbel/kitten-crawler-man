@@ -344,7 +344,7 @@ function samePixels(a: Uint8ClampedArray, b: Uint8ClampedArray): boolean {
 installRecordingCanvasGlobals();
 setFloorArtSeed(DEFAULT_FLOOR_ART_SEED);
 const gameMap = floorMap();
-requestGroundSheets(GROUND_SHEET_KEYS, () => gameMap.invalidateAllTileArt());
+requestGroundSheets(GROUND_SHEET_KEYS, () => gameMap.releaseTileArt());
 paintEnvironmentArtNow();
 
 let nowMs = 0;
@@ -405,7 +405,7 @@ beginCanvasRecoveryFrame(nowMs);
 check(canvasRecoveryCount() === recoveriesBefore + 1, 'a healthy check runs no recovery');
 
 refuseContexts = true;
-gameMap.invalidateAllTileArt();
+gameMap.releaseTileArt();
 let threw = false;
 try {
   render(gameMap);

@@ -1,8 +1,8 @@
 /**
  * Trainable crawler skills.
  *
- * Modelled on {@link AbilityManager}, with two deliberate differences drawn from
- * the books: skills are **not granted** — every one starts locked and has to be
+ * Modelled on {@link AbilityManager}, with two deliberate differences:
+ * skills are **not granted** — every one starts locked and has to be
  * found in the dungeon (skill book, tattoo, quest reward) — and they progress by
  * **use count** rather than XP, so a skill improves because you leaned on it.
  *

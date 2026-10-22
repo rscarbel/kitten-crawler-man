@@ -14,9 +14,12 @@ import { Mantid } from '../creatures/Mantid';
 import { MantisCrony } from '../creatures/MantisCrony';
 import { Rat } from '../creatures/Rat';
 import { ShrineVermin } from '../creatures/ShrineVermin';
-import { TheHoarder } from '../creatures/TheHoarder';
+import { TrashGremlin } from '../creatures/TrashGremlin';
 import { Cockroach } from '../creatures/Cockroach';
-import { Juicer } from '../creatures/Juicer';
+import { BigRooster, prewarmBigRoosterArrival } from '../creatures/BigRooster';
+import { LittleRooster } from '../creatures/LittleRooster';
+import { prewarmRoosterMinionArrival } from '../creatures/RoosterMinion';
+import { SlightlyBentRooster } from '../creatures/SlightlyBentRooster';
 import { Troglodyte } from '../creatures/Troglodyte';
 import { Tuskling } from '../creatures/Tuskling';
 import { SkyFowl, SKYFOWL_TOUGH_FAMILY } from '../creatures/SkyFowl';
@@ -85,6 +88,11 @@ import { RAT_FIGURE } from '../sprites/art/ratFigure';
 import { COCKROACH_FIGURE } from '../sprites/art/cockroachFigure';
 import { skyfowlCastFigure } from '../sprites/art/skyfowlCastFigure';
 import { TROGLODYTE_FIGURE } from '../sprites/art/troglodyteFigure';
+import {
+  BENT_ROOSTER_FIGURE,
+  BIG_ROOSTER_FIGURE,
+  LITTLE_ROOSTER_FIGURE,
+} from '../sprites/art/roosterFigure';
 import { LLAMA_FIGURE } from '../sprites/art/llamaFigure';
 import { CIRCUS_LEMUR_FIGURE } from '../sprites/art/circusLemurFigure';
 import { FAT_CLOWN_FIGURE, STILT_CLOWN_FIGURE } from '../sprites/art/clownFigure';
@@ -375,8 +383,8 @@ const MOB_KIND_DEFS = {
     },
     prewarm: null,
   }),
-  the_hoarder: kind({
-    create: (tile) => new TheHoarder(tile.x, tile.y, TILE_SIZE),
+  trash_gremlin: kind({
+    create: (tile) => new TrashGremlin(tile.x, tile.y, TILE_SIZE),
     threat: 16,
     role: 'ranged',
     protected: 'boss',
@@ -393,12 +401,38 @@ const MOB_KIND_DEFS = {
     },
     prewarm: prewarmCockroach,
   }),
-  juicer: kind({
-    create: (tile) => new Juicer(tile.x, tile.y, TILE_SIZE),
+  big_rooster: kind({
+    create: (tile) => new BigRooster(tile.x, tile.y, TILE_SIZE),
     threat: 83,
     role: 'ranged',
     protected: 'boss',
-    prewarm: null,
+    approach: {
+      figure: oneFigure(BIG_ROOSTER_FIGURE),
+      rows: { walk: 'walk', attacks: ['crow', 'club_swing'], views: THREE_VIEW_SUFFIXES },
+    },
+    prewarm: prewarmBigRoosterArrival,
+  }),
+  little_rooster: kind({
+    create: (tile) => new LittleRooster(tile.x, tile.y, TILE_SIZE),
+    threat: 6.9,
+    role: 'melee',
+    protected: 'boss-add',
+    approach: {
+      figure: oneFigure(LITTLE_ROOSTER_FIGURE),
+      rows: { walk: 'walk', attacks: ['peck', 'punch'], views: THREE_VIEW_SUFFIXES },
+    },
+    prewarm: () => prewarmRoosterMinionArrival('little'),
+  }),
+  slightly_bent_rooster: kind({
+    create: (tile) => new SlightlyBentRooster(tile.x, tile.y, TILE_SIZE),
+    threat: 10,
+    role: 'melee',
+    protected: 'boss-add',
+    approach: {
+      figure: oneFigure(BENT_ROOSTER_FIGURE),
+      rows: { walk: 'walk', attacks: ['peck', 'punch'], views: THREE_VIEW_SUFFIXES },
+    },
+    prewarm: () => prewarmRoosterMinionArrival('bent'),
   }),
   troglodyte: kind({
     create: (tile) => new Troglodyte(tile.x, tile.y, TILE_SIZE),

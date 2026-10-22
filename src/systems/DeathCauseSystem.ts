@@ -1,7 +1,12 @@
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import { VIAL_ATTACK_TYPE } from '../creatures/EvilClown';
 import { KNIGHT_MISSILE_ATTACK_TYPE } from '../creatures/DarkKnight';
-import { GROUND_PUNCH_ATTACK_TYPE, PLATE_ROLL_ATTACK_TYPE } from '../creatures/Juicer';
+import {
+  CLUB_ATTACK_TYPE,
+  PLATE_ROLL_ATTACK_TYPE,
+  SLAM_ATTACK_TYPE,
+} from '../creatures/BigRooster';
+import { ROOSTER_PECK_ATTACK_TYPE, ROOSTER_PUNCH_ATTACK_TYPE } from '../creatures/roosterStrikes';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { DamageSource } from '../Player';
 import { BLOOD_VOMIT_STATUS, FROZEN_STATUS } from '../core/StatusEffect';
@@ -28,8 +33,10 @@ const MOB_TYPE_TO_CAUSE: Partial<Record<string, DeathCause>> = {
   Goblin: 'goblin',
   TutorialGoblin: 'goblin',
   Cockroach: 'cockroach',
-  TheHoarder: 'hoarder',
-  Juicer: 'juicer',
+  TrashGremlin: 'trashGremlin',
+  BigRooster: 'bigRooster',
+  LittleRooster: 'roosterPeck',
+  SlightlyBentRooster: 'roosterPunch',
   BallOfSwine: 'ballOfSwine',
   Tuskling: 'tuskling',
   Troglodyte: 'troglodyte',
@@ -90,7 +97,7 @@ export function causeFromDamageSource(source: DamageSource): DeathCause {
     if (source.hazard === 'clownGas') return 'clownGas';
     if (source.hazard === 'lichFirewall') return 'lichFirewall';
     if (source.hazard === 'lichOrb') return 'lichOrb';
-    if (source.hazard === 'hoarderAvalanche') return 'hoarderAvalanche';
+    if (source.hazard === 'trashAvalanche') return 'trashAvalanche';
     if (source.hazard === 'krakarenLiveWire') return 'krakarenLiveWire';
     if (source.hazard === 'krakarenTankBurst') return 'krakarenTankBurst';
     return 'burningTree';
@@ -138,11 +145,16 @@ export function causeFromDamageSource(source: DamageSource): DeathCause {
     return 'darkKnight';
   }
 
-  // The thrown dumbbell is dodged at range; the ground punch is dodged by
-  // reading a telegraphed circle up close. Telling both deaths the same way
-  // loses the lesson the punch is meant to teach.
-  if (mobType === 'Juicer' && attackType === GROUND_PUNCH_ATTACK_TYPE) return 'juicerPunch';
-  if (mobType === 'Juicer' && attackType === PLATE_ROLL_ATTACK_TYPE) return 'juicerPlateRoll';
+  // The thrown dumbbell is dodged at range; the slam and the club are dodged by
+  // reading a telegraph on the floor up close. Telling the deaths the same way
+  // loses the lesson each telegraph is meant to teach.
+  if (mobType === 'BigRooster' && attackType === SLAM_ATTACK_TYPE) return 'bigRoosterSlam';
+  if (mobType === 'BigRooster' && attackType === CLUB_ATTACK_TYPE) return 'bigRoosterClub';
+  if (mobType === 'BigRooster' && attackType === PLATE_ROLL_ATTACK_TYPE)
+    return 'bigRoosterPlateRoll';
+  // Every rooster pecks and punches through the same strikes, so the blow names the death.
+  if (attackType === ROOSTER_PECK_ATTACK_TYPE) return 'roosterPeck';
+  if (attackType === ROOSTER_PUNCH_ATTACK_TYPE) return 'roosterPunch';
 
   // The cone is a red shape on the ground the player was given time to leave;
   // the bolts are not. Telling both deaths the same way loses the lesson.

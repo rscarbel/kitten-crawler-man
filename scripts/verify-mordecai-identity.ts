@@ -7,8 +7,18 @@
  * layer, a proportion preset, a held prop — can quietly move a pixel of his
  * art, and no structural gate would notice: he would still stand on his tile,
  * still fit his cell, still walk. This compares every cell of every row he
- * paints against the checked-in baseline of his approved art, and fails on a
- * single byte of difference.
+ * paints against the checked-in baseline of his approved art.
+ *
+ * The comparison is exact up to rasterizer noise, and no further. Cairo's
+ * antialiasing differs by a few levels of edge coverage between CPU
+ * architectures (the baseline is written on arm64 macOS, CI paints on x86_64
+ * Linux), so a byte-exact gate can never pass on both. Pixels are compared
+ * premultiplied: getImageData un-premultiplies, which inflates a one-level
+ * coverage change on a nearly transparent edge pixel into a jump of dozens of
+ * colour levels, while premultiplied it stays the one level it really is. A
+ * pixel off by more than {@link RASTER_NOISE_MAX_DELTA}, or more noisy pixels
+ * than {@link RASTER_NOISE_MAX_FRACTION} of a surface's painted area, is a
+ * change to his art.
  *
  * Two surfaces per cell, because each hides differences the other shows: the
  * supersampled paint (what the painter actually drew, before a downsample can
@@ -34,6 +44,24 @@ import { RAT_KIN_FIGURE } from '../src/sprites/art/ratKinFigure.js';
 export const MORDECAI_BASELINE_PATH = resolve('scripts/baselines/mordecai-rat-kin.rgba.gz');
 
 const CHANNELS = 4;
+const ALPHA_CHANNEL = 3;
+const CHANNEL_MAX = 255;
+
+/**
+ * The largest premultiplied channel difference treated as rasterizer noise.
+ * Measured between arm64 macOS and x86_64 Linux: at most 8 levels on any
+ * pixel of any surface. Twice that leaves headroom for another cairo build
+ * while still failing a shifted outline or a recoloured part, which move
+ * pixels by far more.
+ */
+const RASTER_NOISE_MAX_DELTA = 16;
+
+/**
+ * The share of a surface's painted pixels allowed to carry noise. Measured
+ * at under 2% on the worst surface; a cap of twice that fails a subtle tint
+ * spread across a whole garment, whose every pixel sits within the noise delta.
+ */
+const RASTER_NOISE_MAX_FRACTION = 0.04;
 
 interface CellSurface {
   readonly label: string;
@@ -129,10 +157,17 @@ export function writeMordecaiBaseline(def: FigureDef = RAT_KIN_FIGURE): string {
 /** How many differing cells to itemise before summarising the rest. */
 const REPORTED_DIFFERENCES = 8;
 
+/** A channel's value premultiplied by its pixel's alpha, as the rasterizer stores it. */
+function premultipliedChannel(bytes: ArrayLike<number>, pixel: number, channel: number): number {
+  const alpha = bytes[pixel * CHANNELS + ALPHA_CHANNEL];
+  const value = bytes[pixel * CHANNELS + channel];
+  return channel === ALPHA_CHANNEL ? value : (value * alpha) / CHANNEL_MAX;
+}
+
 /**
- * Every way `def`'s cells differ from the stored baseline, empty when they are
- * byte-identical. `def` defaults to Mordecai; the negative test passes another
- * outfit to prove the comparison can fail.
+ * Every way `def`'s cells differ from the stored baseline, empty when they
+ * match it within rasterizer noise. `def` defaults to Mordecai; passing a
+ * deliberately altered figure (shifted or tinted) proves the comparison can fail.
  */
 export function mordecaiIdentityFailures(def: FigureDef = RAT_KIN_FIGURE): string[] {
   if (!existsSync(MORDECAI_BASELINE_PATH)) {
@@ -172,28 +207,36 @@ export function mordecaiIdentityFailures(def: FigureDef = RAT_KIN_FIGURE): strin
     }
     comparedBytes += length;
     let changedPixels = 0;
-    let firstChanged = -1;
+    let paintedPixels = 0;
+    let firstBeyondNoise = -1;
     let largestDelta = 0;
     for (let pixel = 0; pixel < length / CHANNELS; pixel++) {
-      let pixelDiffers = false;
+      const alphaIndex = pixel * CHANNELS + ALPHA_CHANNEL;
+      const painted = surface.bytes[alphaIndex] > 0 || reference[alphaIndex] > 0;
+      if (painted) paintedPixels++;
+      let pixelDelta = 0;
       for (let channel = 0; channel < CHANNELS; channel++) {
-        const i = pixel * CHANNELS + channel;
-        const delta = Math.abs(surface.bytes[i] - reference[i]);
-        if (delta === 0) continue;
-        pixelDiffers = true;
-        largestDelta = Math.max(largestDelta, delta);
+        const delta = Math.abs(
+          premultipliedChannel(surface.bytes, pixel, channel) -
+            premultipliedChannel(reference, pixel, channel),
+        );
+        pixelDelta = Math.max(pixelDelta, delta);
       }
-      if (!pixelDiffers) continue;
+      if (pixelDelta === 0) continue;
       changedPixels++;
-      if (firstChanged < 0) firstChanged = pixel;
+      largestDelta = Math.max(largestDelta, pixelDelta);
+      if (pixelDelta > RASTER_NOISE_MAX_DELTA && firstBeyondNoise < 0) firstBeyondNoise = pixel;
     }
-    if (changedPixels === 0) return;
+    const noiseBudget = paintedPixels * RASTER_NOISE_MAX_FRACTION;
+    const beyondNoise = firstBeyondNoise >= 0 || changedPixels > noiseBudget;
+    if (!beyondNoise) return;
     differing++;
     if (differing <= REPORTED_DIFFERENCES) {
-      const x = firstChanged % surface.width;
-      const y = Math.floor(firstChanged / surface.width);
+      const beyondX = firstBeyondNoise % surface.width;
+      const beyondY = Math.floor(firstBeyondNoise / surface.width);
+      const where = firstBeyondNoise >= 0 ? `, first beyond noise at (${beyondX}, ${beyondY})` : '';
       failures.push(
-        `${surface.label}: ${changedPixels} pixels differ, first at (${x}, ${y}), largest channel delta ${largestDelta}`,
+        `${surface.label}: ${changedPixels} of ${paintedPixels} painted pixels differ${where}, largest premultiplied delta ${largestDelta.toFixed(1)}`,
       );
     }
   });
@@ -218,7 +261,7 @@ function main(): void {
     for (const failure of failures) console.error(`  ${failure}`);
     process.exit(1);
   }
-  console.log('PASS mordecai identity: every cell byte-identical to the baseline');
+  console.log('PASS mordecai identity: every cell matches the baseline within rasterizer noise');
 }
 
 const invokedDirectly = process.argv[1]?.endsWith('verify-mordecai-identity.ts') ?? false;

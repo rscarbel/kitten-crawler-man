@@ -1,5 +1,5 @@
 /**
- * Painters for the canon gear Carl can be seen wearing: the War Gauntlet of
+ * Painters for the gear Carl can be seen wearing: the War Gauntlet of
  * the Exalted Grull on his right wrist and the Nightgaunt Cloak off his
  * shoulders. Each is painted by its garment (`src/sprites/garments/human/`),
  * which decides from the row being painted whether it is worn and in what
@@ -599,8 +599,8 @@ function paintHoodInProfile(ctx: Ctx, skeleton: Skeleton): void {
 }
 
 /**
- * The Nightgaunt Cloak: black leather "like a demon's leathery wing",
- * stretched over rows of fingerbones, its hem scalloped between the finger
+ * The Nightgaunt Cloak: black leather stretched like a bat's wing over
+ * rows of fingerbones, its hem scalloped between the finger
  * tips, hanging from the jacket's shoulders with the pointed-eared hood down
  * at his back. Call it where {@link cloakInFront} says it belongs in the
  * figure's draw order.
@@ -744,7 +744,7 @@ const SMOKE_PUFFS: readonly { x: number; y: number; radius: number }[] = [
   { x: 0.08, y: -0.19, radius: 0.065 },
 ];
 /**
- * A warm, sooty grey — it "smells of burnt hair" — well below the steel's
+ * A warm, sooty grey, like burnt hair, well below the steel's
  * value, so the puff never reads as more of the gauntlet.
  */
 const SMOKE_LIT = '#c8c3b9';

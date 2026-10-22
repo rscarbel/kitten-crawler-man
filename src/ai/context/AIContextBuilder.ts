@@ -30,11 +30,11 @@ export const PROFILE_INTERVAL_MS = 180_000;
 export const MAX_EVENTS_PER_BATCH = 20;
 /**
  * How long a crawler can sit below low HP with potions in the bag before the
- * AI hears about it. Long enough that a crawler mid-swing is not "hoarding".
+ * AI hears about it. Long enough that a crawler mid-swing is not "stockpiling".
  */
-export const HOARDING_GRACE_MS = 8_000;
-/** At least this many potions held while dying counts as hoarding rather than being out. */
-export const HOARDING_MIN_POTIONS = 2;
+export const STOCKPILING_GRACE_MS = 8_000;
+/** At least this many potions held while dying counts as stockpiling rather than being out. */
+export const STOCKPILING_MIN_POTIONS = 2;
 const MS_PER_SECOND = 1000;
 
 /** One outbound message in the v2 protocol's shape. */
@@ -50,7 +50,7 @@ export interface AIContextBuilderOptions {
   maxEventsPerBatch?: number;
 }
 
-interface HoardingWatch {
+interface StockpilingWatch {
   crawler: CrawlerName;
   since: number;
 }
@@ -86,7 +86,7 @@ export class AIContextBuilder {
   private commentaryOnly = false;
   private forceContext = true;
   private lastDungeonLevelId: string | null = null;
-  private hoarding: HoardingWatch[] = [];
+  private stockpiling: StockpilingWatch[] = [];
 
   constructor(options: AIContextBuilderOptions = {}) {
     this.now = options.now ?? (() => Date.now());
@@ -120,9 +120,9 @@ export class AIContextBuilder {
       stream: this.stream,
       profile: this.profile,
       now: () => this.now(),
-      watchForHoarding: (crawler) => this.watchForHoarding(crawler),
+      watchForStockpiling: (crawler) => this.watchForStockpiling(crawler),
       potionDrunk: (crawler) => {
-        this.hoarding = this.hoarding.filter((watch) => watch.crawler !== crawler);
+        this.stockpiling = this.stockpiling.filter((watch) => watch.crawler !== crawler);
       },
     });
     this.noteFloor(source);
@@ -135,7 +135,7 @@ export class AIContextBuilder {
     for (const unsub of this.unsubs) unsub();
     this.unsubs = [];
     this.source = null;
-    this.hoarding = [];
+    this.stockpiling = [];
   }
 
   /** The server lost what it had (reconnect): resend context and a full snapshot. */
@@ -204,7 +204,7 @@ export class AIContextBuilder {
         this.profileComputedAt = now;
         this.profileJson = this.profile.summary(now);
       }
-      this.checkHoarding(now, live);
+      this.checkStockpiling(now, live);
 
       if (now - this.lastStateSentAt >= this.stateIntervalMs) {
         const sent = this.collectState(session, live, now, out);
@@ -290,36 +290,36 @@ export class AIContextBuilder {
     );
   }
 
-  private watchForHoarding(crawler: CrawlerName): void {
-    if (this.hoarding.some((watch) => watch.crawler === crawler)) return;
-    this.hoarding.push({ crawler, since: this.now() });
+  private watchForStockpiling(crawler: CrawlerName): void {
+    if (this.stockpiling.some((watch) => watch.crawler === crawler)) return;
+    this.stockpiling.push({ crawler, since: this.now() });
   }
 
-  private checkHoarding(now: number, live: LiveInput): void {
-    if (this.hoarding.length === 0 || live.isPaused) return;
-    const stillWatching: HoardingWatch[] = [];
-    for (const watch of this.hoarding) {
+  private checkStockpiling(now: number, live: LiveInput): void {
+    if (this.stockpiling.length === 0 || live.isPaused) return;
+    const stillWatching: StockpilingWatch[] = [];
+    for (const watch of this.stockpiling) {
       const state = watch.crawler === 'Carl' ? live.carl : live.donut;
       const stillLow = state.maxHp > 0 && state.hp / state.maxHp < LOW_HP_FRACTION;
       if (!stillLow || state.knockedOut) continue;
-      if (now - watch.since < HOARDING_GRACE_MS) {
+      if (now - watch.since < STOCKPILING_GRACE_MS) {
         stillWatching.push(watch);
         continue;
       }
-      if (state.healthPotions < HOARDING_MIN_POTIONS) continue;
-      this.profile.recordHoarding();
+      if (state.healthPotions < STOCKPILING_MIN_POTIONS) continue;
+      this.profile.recordStockpiling();
       this.stream.record(
         {
-          type: 'potionHoarding',
+          type: 'potionStockpiling',
           data: { crawler: watch.crawler, healthPotions: state.healthPotions, hp: state.hp },
           summary: `${watch.crawler} is nearly dead with ${state.healthPotions} healing potions in the bag and is not drinking any.`,
-          importance: EVENT_IMPORTANCE.potionHoarding,
+          importance: EVENT_IMPORTANCE.potionStockpiling,
           witness: 'inSafeRoom',
         },
         now,
         live.location.inSafeRoom,
       );
     }
-    this.hoarding = stillWatching;
+    this.stockpiling = stillWatching;
   }
 }

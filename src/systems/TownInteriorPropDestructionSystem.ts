@@ -207,7 +207,7 @@ const TIMBER_SPREAD_TILE_FRACTION =
   DEBRIS_PILE_RADIUS_X_TILE_FRACTION * TIMBER_SPREAD_FRACTION_OF_PILE;
 const TIMBER_SPREAD_Y_FLATTEN = 0.4;
 
-/** A few scattered short planks, standing in for a smashed chair/crate/shelf/barrel. */
+/** A few scattered short planks, standing in for a smashed chair, crate, shelf or barrel. */
 function paintTimberPile(ctx: Ctx, color: string, cx: number, cy: number, seed: number): void {
   const length = TILE_SIZE * TIMBER_PLANK_LENGTH_TILE_FRACTION;
   const width = TILE_SIZE * TIMBER_PLANK_WIDTH_TILE_FRACTION;

@@ -1,7 +1,7 @@
 /**
  * The Bopca's dishes, its attendants' names, and its choice-row labels.
  *
- * Canon anchored in the source material: they are genuinely good cooks and proud
+ * They are genuinely good cooks and proud
  * of it, they never wash their hands, they get a physical newsletter rather than
  * the newsfeed, and they may discuss safe rooms but not the Dungeon at large.
  *

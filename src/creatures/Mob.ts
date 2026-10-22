@@ -1522,7 +1522,7 @@ export abstract class Mob extends Player {
 
   /**
    * Set to true when this mob performs its one signature action with a cue of
-   * its own — the Hoarder's vomit, the Juicer's throw, the Ball of Swine's
+   * its own — the Trash Gremlin's vomit, Big Rooster's throw, the Ball of Swine's
    * roll. Generic rather than per-subclass so the audio pass stays a single
    * walk over the mob list driven by `audioTag`, with no `instanceof` chain.
    */
@@ -1897,7 +1897,7 @@ export abstract class Mob extends Player {
     return this.isConverted || this.siegeCapable !== null;
   }
 
-  /** Whether this mob is currently in an enraged state. Subclasses (e.g. Juicer) set this. */
+  /** Whether this mob is currently in an enraged state. Subclasses (e.g. Big Rooster) set this. */
   isEnraged?: boolean;
 
   /** The player who dealt the killing blow; set when hp reaches 0. */
@@ -3162,7 +3162,7 @@ export abstract class Mob extends Player {
   isSummon = false;
 
   /**
-   * Set by the system that stages a boss's own adds — the Hoarder's roaches,
+   * Set by the system that stages a boss's own adds — the Trash Gremlin's roaches,
    * the Krakaren's tentacles, the ball's Tusklings — as it spawns them. Their
    * number and timing are the boss's script, so a necromancer standing one back
    * up would be rewriting that fight.
@@ -3940,9 +3940,9 @@ export abstract class Mob extends Player {
    * A boss room can rewind a fight in three different ways — a checkpoint
    * restore, an abort when nobody conscious is left inside, and the heal that
    * undoes damage dealt to a boss nobody ever walked in on. All three mean the
-   * same thing to the boss: that fight did not happen. Without this, a Juicer
-   * chipped to a third of its health and left alone came back at full health
-   * and still permanently enraged, which is a harder boss than the one the
+   * same thing to the boss: that fight did not happen. Without this, a boss
+   * chipped to a third of its health and left alone would come back at full
+   * health and still permanently enraged, which is a harder boss than the one the
    * party first met.
    *
    * No-op by default. Override it — not `resetToSpawn`, which calls this —

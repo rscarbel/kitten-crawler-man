@@ -53,6 +53,8 @@ npm run verify:slots         # slot engine: paylines, wilds, scatters, jackpot p
 npm run verify:wheel         # Wheel of Fortune: board red share, bet upgrades, retired prizes, landings, the wipe's save latch
 npm run verify:audio         # music director, library and credits, voices, ramped stops, scopes, captions, mute/mono/background
 npm run verify:ai-actions    # AI action registry: schemas vs tool definitions, fuzzed calls through the governor's fairness rules
+npm run verify:residency     # a floor-3 tour of two interiors holds no more per owner at Briar Hollow than going straight there (~5.5 min)
+npm run report:residency     # bytes and surfaces per owner along scripted routes, per floor; never fails (-- --floor=3|scaled-city --route=<name>)
 npm run report:slots-rtp     # slot RTP / hit-rate / win-tier report for tuning; never fails (-- --spins=N --seed=S --bet=B)
 npm run bench:slots          # times the slots MEGA WIN celebration on a phone-sized canvas (-- idle for the resting machine)
 ```

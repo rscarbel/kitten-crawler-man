@@ -69,14 +69,14 @@ export const MORDECAI_TUTORIAL_REMINDER_FIND_STAIRWELL: DialogLine = say.line(
 
 // ── Post-boss debrief ────────────────────────────────────────────────────────
 
-export const MORDECAI_DEBRIEF_HOARDER_CONGRATS: Paragraphs = [
-  "So. The Hoarder is dead, and the two of you aren't. I'll admit I had my doubts.",
-  "Don't let it go to your heads. She was a neighborhood boss. The dungeon noticed all the same, and the dungeon doesn't reward being noticed.",
+export const MORDECAI_DEBRIEF_TRASH_GREMLIN_CONGRATS: Paragraphs = [
+  "So. The Trash Gremlin is dead, and the two of you aren't. I'll admit I had my doubts.",
+  "Don't let it go to your heads. It was king of a rubbish heap, and its subjects were bugs. The dungeon noticed all the same, and the dungeon doesn't reward being noticed.",
 ];
 
-export const MORDECAI_DEBRIEF_JUICER_CONGRATS: Paragraphs = [
-  "The Juicer is dead. I'll admit I had my doubts about that one. He had help, and you still walked out.",
-  "Don't let it go to your heads. The dungeon noticed, and the dungeon doesn't reward being noticed. If either of you is still carrying that poison, sit down for a while.",
+export const MORDECAI_DEBRIEF_BIG_ROOSTER_CONGRATS: Paragraphs = [
+  "Big Rooster is down and the two of you are still standing. That's the right way round, and not the way I'd have bet it.",
+  "He'll be crowing about his arms in whatever comes after for roosters. Don't you start. The dungeon saw that, and being seen down here is never the prize it sounds like.",
 ];
 
 export const MORDECAI_DEBRIEF_KRAKAREN_CONGRATS: Paragraphs = [
@@ -168,7 +168,7 @@ function adviceLine(pages: Paragraphs, bearing?: string): (args: MordecaiAdviceA
 
 /**
  * Mordecai's floor-advice prose, one entry per objective `mordecaiAdvice.ts`
- * knows about. The gateway speeches (`the_hoarder`, `juicer`, `krakaren_clone`,
+ * knows about. The gateway speeches (`trash_gremlin`, `big_rooster`, `krakaren_clone`,
  * `ball_of_swine`) carry no bearing: they are spoken in the room immediately
  * before their boss, so they say where it is themselves. Every other entry
  * with a bearing ends with the same "another crawler noticed it" framing,
@@ -176,17 +176,18 @@ function adviceLine(pages: Paragraphs, bearing?: string): (args: MordecaiAdviceA
  * not "to the North East side").
  */
 export const MORDECAI_ADVICE = {
-  the_hoarder: adviceLine([
-    "There's a boss through the hallway {direction}. Once you enter her territory, the fight will begin. That's how the dungeon likes to do things.",
-    "If you're looking for the stairwell, you'll have to deal with her. There may be other bosses waiting for you as well, but this is the one in your way.",
-    "Keep your head. She's a neighborhood boss, which puts her toward the bottom of the food chain. She shouldn't be too difficult.",
+  trash_gremlin: adviceLine([
+    "There's a boss through the hallway {direction}. A gremlin that lives in a room full of garbage and thinks it's royalty. Once you enter its territory, the fight will begin. That's how the dungeon likes to do things.",
+    "If you're looking for the stairwell, you'll have to deal with it. There may be other bosses waiting for you as well, but this is the one in your way.",
+    "Two things. When its throat starts to glow, it's about to spit acid, so move. And when it shrieks, the roaches come out of the trash piles, not out of the gremlin. Mind which piles you're standing next to.",
+    "Keep your head. Under the crown and the noise it's a small, scrawny thing that would rather run than fight. It shouldn't be too difficult.",
   ]),
 
-  juicer: adviceLine([
-    "There's another boss ahead, {direction} of here. You won't be able to avoid him if you're heading that way. He's another neighborhood boss, though this one looks a little nastier.",
-    "I can't give you much more than that. I can tell you to watch his minions, the Troglodytes.",
-    "They attack with their tongues. The poison they carry is quite unpleasant. Getting hit isn't necessarily fatal, but I'd prefer not to find out how many hits you can take.",
-    "They're slow. Keep moving and don't let them corner you.",
+  big_rooster: adviceLine([
+    "There's a gym ahead, {direction} of here, and the boss who owns it is a rooster. A big one. With arms. If you're heading that way you'll be going through him.",
+    "Two smaller roosters keep his door. They don't lift, but they peck and they punch. The neck goes back before a peck, so watch for it.",
+    "Inside, he fights with a dumbbell. Get close and he swings it like a club, and the floor shows you where it'll pass before it does. Stay well back and he throws it instead.",
+    'Anywhere in between, he walks you down. Pick a distance and keep it.',
   ]),
 
   defend_goblin_mother: adviceLine(

@@ -66,7 +66,7 @@ import {
 } from '../core/difficultyProfiles';
 import { setFloorReferencePartyLevel } from '../core/floorReferenceLevel';
 import { getSpriteMissCounts, prewarmGroups, releaseSpritesExcept } from '../core/SpriteLoader';
-import { bakeFigurePrewarmFor, flushFigureFrameCache } from '../sprites/figure/figureFrameCache';
+import { flushFigureFrameCache } from '../sprites/figure/figureFrameCache';
 import { requiredSpriteKeysForLevel } from '../core/systemAssetRequirements';
 import { getLevelDef, levelLoadingKicker } from '../levels';
 import { dungeonOptionsForLevel } from '../levels/dungeonOptions';
@@ -227,15 +227,23 @@ import {
 } from '../systems/BuildingSystem';
 import { interiorSellsSomething } from '../systems/townServices';
 import { TownLifeSystem } from '../systems/TownLifeSystem';
+import { CrowdResidentSet } from '../systems/CrowdResidentSet';
 import {
-  TownResidency,
+  EnvironmentSheetResidentSet,
+  environmentSheetPlacements,
+  FACADE_LIFE_RING,
+  FACADE_RING,
+} from '../systems/EnvironmentSheetResidentSet';
+import {
+  WorldResidency,
   tileFocus,
   type ResidencyFocus,
   type ResidencyOutlook,
-} from '../systems/TownResidency';
+} from '../systems/WorldResidency';
 import type { Townsperson } from '../creatures/Townsperson';
 import { CITIZEN_TALK_RADIUS_TILES } from '../creatures/townInteraction';
-import { prewarmAndPinCitizenTalk } from '../creatures/citizenFigure';
+import { prewarmAndPinCitizenTalk, unpinCitizenTalk } from '../creatures/citizenFigure';
+import type { DrawnFigureRow } from '../sprites/figure/figureDef';
 import { TownDecorSystem } from '../systems/TownDecorSystem';
 import { TownPropSystem } from '../systems/TownPropSystem';
 import { CRAWLER_SIGN_READ_RADIUS_TILES, CrawlerSignSystem } from '../systems/CrawlerSignSystem';
@@ -274,7 +282,7 @@ import {
   interactionPromptsDrawnThisFrame,
   setInteractionPromptsSuppressed,
 } from '../ui/InteractionPrompt';
-import type { JuicerRoomSystem } from '../systems/JuicerRoomSystem';
+import type { GymRoomSystem } from '../systems/GymRoomSystem';
 import {
   BossRoomDressings,
   buildColosseumDressing,
@@ -975,9 +983,9 @@ const VILLAGE_AMBIENT_VOLUME = 0.4;
 const VILLAGE_WORKSHOP_AMBIENT_RADIUS_TILES = 9;
 const VILLAGE_WORKSHOP_AMBIENT_VOLUME = 0.5;
 
-/** Toast shown the moment the Juicer falls and both crawlers take the ink. */
+/** Toast shown the moment Big Rooster falls and both crawlers take the ink. */
 const DESPERADO_TATTOO_NOTICE = 'New tattoo: the Desperado Pass. The Club will know you.';
-/** Its line in the Juicer chest's reward columns — an award, not an inventory item. */
+/** Its line in Big Rooster's chest's reward columns — an award, not an inventory item. */
 const DESPERADO_TATTOO_REWARD_LABEL = 'Desperado Pass Tattoo (both crawlers)';
 
 /**
@@ -1121,16 +1129,18 @@ const MULTIKILL_ACHIEVEMENT_THRESHOLD = 10;
 const LITTLE_BOOM_KILL_THRESHOLD = 2;
 
 /**
- * How far around the Juicer's room a troglodyte still counts as one of his
- * guards. His minions are the gateway troglodytes standing outside the door,
- * not in-room spawns, so the radius has to reach past the room itself while
- * staying clear of the floor's ordinary troglodyte population.
+ * How far around Big Rooster's room a rooster of his flock still counts as one
+ * of his guards. His minions stand outside the gym door, not in the room, so
+ * the radius has to reach past the room itself.
  */
 const BIG_BRAWLER_GUARD_RADIUS_TILES = 20;
 const BIG_BRAWLER_GUARD_RADIUS = BIG_BRAWLER_GUARD_RADIUS_TILES * TILE_SIZE;
 
-/** Spawn-table key of the mobs that guard the Juicer's gateway. */
-const TROGLODYTE_SPAWN_KEY = 'troglodyte';
+/** Spawn-table keys of the roosters that guard Big Rooster's gateway. */
+const ROOSTER_FLOCK_SPAWN_KEYS: ReadonlySet<MobKind> = new Set<MobKind>([
+  'little_rooster',
+  'slightly_bent_rooster',
+]);
 
 /** How far under the player's music level the tutorial's track sits, as gain. */
 const TUTORIAL_MUSIC_DUCK_LEVEL = 0.25;
@@ -1344,6 +1354,12 @@ interface RoomSaveEntry {
 
 export class DungeonScene extends GameplayScene {
   private gameMap: GameMap;
+  /**
+   * Set when a building visit takes this scene's map and minimap to hand to
+   * the scene rebuilt at the door, so leaving this scene must not give their
+   * art back. Every other exit abandons them.
+   */
+  private floorArtHeldByBuildingVisit = false;
   readonly pm: PlayerManager;
   /** Map, bus, audio and population — what every kit this scene builds is handed. */
   private readonly world: SceneWorld;
@@ -1429,7 +1445,7 @@ export class DungeonScene extends GameplayScene {
   private readonly travelUnlocks: TravelUnlockState;
   private building: BuildingSystem | null = null;
   private townLife: TownLifeSystem | null = null;
-  private townResidency: TownResidency | null = null;
+  private readonly residency = new WorldResidency();
   protected readonly arrivalLoading = new ArrivalLoader();
   /** The arrival's own screen and work, for a warp within the floor that needs covering. */
   private warpLoadRequest: WarpLoadRequest | null = null;
@@ -1454,6 +1470,8 @@ export class DungeonScene extends GameplayScene {
   private signDialogHandle: ConversationHandle | null = null;
   /** Citizen currently frozen mid-conversation; unfrozen once the shared conversation closes. */
   private citizenDialogTarget: Townsperson | null = null;
+  /** The talk row pinned for {@link citizenDialogTarget}, unpinned with it. */
+  private citizenTalkRow: DrawnFigureRow | null = null;
   /** The handle the citizen's conversation opened with — see `signDialogHandle`. */
   private citizenDialogHandle: ConversationHandle | null = null;
   /** Keeps Carl talking, turned to whoever he is in conversation with. */
@@ -1463,7 +1481,7 @@ export class DungeonScene extends GameplayScene {
   /** Stops this scene's bus hearing every shop counter's trades; set in `wireEventBus`. */
   private stopForwardingSceneHooks: () => void = () => undefined;
   private fortuneTeller: FortuneTable | null = null;
-  private juicerRoom: JuicerRoomSystem;
+  private gymRoom: GymRoomSystem;
   private bossRoomDressings: BossRoomDressings;
   private arenaRoom: ArenaRoomSystem;
   private barriers: BarrierSystem;
@@ -1737,8 +1755,8 @@ export class DungeonScene extends GameplayScene {
   private readonly touch = new TouchMoveState();
   private krakarenKilled = false;
   private krakarenBossRoomIdx = -1;
-  private juicerKilled = false;
-  private juicerBossRoomIdx = -1;
+  private bigRoosterKilled = false;
+  private bigRoosterBossRoomIdx = -1;
   private woodBreakSoundIdx = 0;
   private combatCooldownFrames = 0;
   private humanHealthLow = false;
@@ -2054,19 +2072,23 @@ export class DungeonScene extends GameplayScene {
     // with no ground yet is unreadable while a floor with no trees yet is merely
     // sparse. The same tile-art invalidation applies: a decoration bakes into a
     // chunk, and a chunk baked before its sheet landed would keep the gap.
-    requestEnvironmentSheetsForGroups(levelDef.spriteGroups, {
-      onSheetPainted: repaintTileArt,
-      onFacadePainted: (spriteKey) => this.gameMap.invalidateFacadeArt(spriteKey),
-      // The facades are seconds of painting and the rest of the town is not, so
-      // they are painted outward from where the party actually arrives.
-      town:
-        this.gameMap.townPlan === undefined
-          ? undefined
-          : {
-              plan: this.gameMap.townPlan,
-              spawnTile: { x: spawnTileX, y: spawnTileY },
-            },
-    });
+    requestEnvironmentSheetsForGroups(levelDef.spriteGroups, { onSheetPainted: repaintTileArt });
+    // The buildings' sheets are asked for by these sets, from the arrival's
+    // decision on, nearest the party first.
+    const sheetPlacements = environmentSheetPlacements(
+      this.gameMap.structure,
+      levelDef.spriteGroups,
+    );
+    this.residency.register(
+      new EnvironmentSheetResidentSet(FACADE_RING, sheetPlacements.still, {
+        bakesUnderLoadingScreen: true,
+      }),
+    );
+    this.residency.register(
+      new EnvironmentSheetResidentSet(FACADE_LIFE_RING, sheetPlacements.life, {
+        bakesUnderLoadingScreen: false,
+      }),
+    );
 
     this.world = {
       gameMap: this.gameMap,
@@ -2207,12 +2229,13 @@ export class DungeonScene extends GameplayScene {
       crawlerBarks: this.crawlerBarks,
     };
     const gauntletRoomDressings = buildGauntletRoomDressings(this.gameMap, bossTypes);
-    this.juicerRoom = gauntletRoomDressings.juicer;
+    this.gymRoom = gauntletRoomDressings.gym;
     // Anchored to the room he spawns into rather than to where his corpse ends
     // up: a knockback onto a doorway or boundary tile can land his death
     // position outside every tracked boss room, which would otherwise pin
     // this at -1 and make the Big Brawler gauntlet permanently unclearable.
-    this.juicerBossRoomIdx = levelDef.bossRooms?.findIndex((b) => b.type === 'juicer') ?? -1;
+    this.bigRoosterBossRoomIdx =
+      levelDef.bossRooms?.findIndex((b) => b.type === 'big_rooster') ?? -1;
     this.arenaRoom = new ArenaRoomSystem(this.gameMap.arenaExteriors[0]);
     this.barriers = new BarrierSystem(this.gameMap);
     this.defendQuest = new DefendQuestSystem(
@@ -2575,9 +2598,9 @@ export class DungeonScene extends GameplayScene {
           this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
           this.attackCowSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
           this.attackCowSystem.prepareForNewFloor();
-          // Gives back this floor's own pinned crowd explicitly, rather than
-          // leaning only on the cache-wide flush below to clear it.
-          this.townLife?.dispose();
+          // The cache-wide flush below returns cells but keeps pins, so what
+          // this floor's residency holds is unpinned here.
+          this.residency.releaseAll();
           // This is the one genuine floor change among DungeonScene's four
           // `sceneManager.replace` sites, so it's the only one that runs the
           // sprite eviction pass — building enter/exit rebuild the scene around
@@ -2714,10 +2737,11 @@ export class DungeonScene extends GameplayScene {
       ];
       this.townLife = new TownLifeSystem(this.gameMap, () => renderQuality.fullDetail);
       const townLife = this.townLife;
-      this.townResidency = new TownResidency({
-        people: () => [...townLife.people, ...(this.market?.vendors ?? [])],
-        roomContested: () => this.briarHollowKit?.assault?.inSiege === true,
-      });
+      this.residency.register(
+        new CrowdResidentSet({
+          people: () => [...townLife.people, ...(this.market?.vendors ?? [])],
+        }),
+      );
       this.bounty = new BountySystem(
         this.gameMap,
         this.bus,
@@ -3139,9 +3163,12 @@ export class DungeonScene extends GameplayScene {
       this.aiChallenges.endQuietly('left the floor'),
     );
 
+    // From where every arrival path has set the party down, so only what is
+    // within reach of it is held and queued.
+    this.residency.settleNow(this.residencyOutlook());
     // Last, so every system that queues art or figures on construction — the
-    // crowd, the residents, the party — has queued it before the loader
-    // measures what is owed. Checked on every construction rather than at the
+    // residency's arrival decision, the residents, the party — has queued it
+    // before the loader measures what is owed. Checked on every construction rather than at the
     // call sites that build this scene, because there are several and a floor
     // is arrived on through all of them: stairs, a save, a restart, a door.
     this.warpLoadRequest = {
@@ -3193,18 +3220,18 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
-   * Whether the Juicer is dead and none of his gateway guards are still
+   * Whether Big Rooster is dead and none of his gateway guards are still
    * standing — the pair of conditions the Big Brawler award needs, which can
    * complete in either order.
    */
-  private juicerGauntletFullyCleared(): boolean {
-    if (!this.juicerKilled) return false;
-    // -1 on a level with no Juicer gauntlet, which leaves no centre to measure
+  private roosterGauntletFullyCleared(): boolean {
+    if (!this.bigRoosterKilled) return false;
+    // -1 on a level with no Big Rooster gauntlet, which leaves no centre to measure
     // his guards against.
-    if (this.juicerBossRoomIdx < 0) return false;
-    const room = this.gameMap.bossRooms[this.juicerBossRoomIdx];
-    const guards = this.countLivingMobsOfTypeNear(
-      TROGLODYTE_SPAWN_KEY,
+    if (this.bigRoosterBossRoomIdx < 0) return false;
+    const room = this.gameMap.bossRooms[this.bigRoosterBossRoomIdx];
+    const guards = this.countLivingMobsOfKindsNear(
+      ROOSTER_FLOCK_SPAWN_KEYS,
       room.centre.x * TILE_SIZE,
       room.centre.y * TILE_SIZE,
       BIG_BRAWLER_GUARD_RADIUS,
@@ -3214,7 +3241,7 @@ export class DungeonScene extends GameplayScene {
 
   private tryUnlockBigBrawler(): void {
     if (this.tutorial !== null) return;
-    if (!this.juicerGauntletFullyCleared()) return;
+    if (!this.roosterGauntletFullyCleared()) return;
     if (this.humanAchievements.tryUnlock('big_brawler')) {
       this.bus.emit('achievementUnlocked', { achievementId: 'big_brawler', player: 'Human' });
     }
@@ -3234,13 +3261,18 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
-   * How many living mobs from a given spawn-table key are inside the patch of
+   * How many living mobs spawned as any of `kinds` are inside the patch of
    * map centred on (x, y) — the encounter's own neighbourhood, not the floor.
    */
-  private countLivingMobsOfTypeNear(type: string, x: number, y: number, radius: number): number {
+  private countLivingMobsOfKindsNear(
+    kinds: ReadonlySet<MobKind>,
+    x: number,
+    y: number,
+    radius: number,
+  ): number {
     let count = 0;
     for (const mob of this.world.roster.grid.queryCircle(x, y, radius)) {
-      if (mob.isAlive && mob.spawnTypeKey === type) count++;
+      if (mob.isAlive && mob.spawnTypeKey !== null && kinds.has(mob.spawnTypeKey)) count++;
     }
     return count;
   }
@@ -3410,7 +3442,7 @@ export class DungeonScene extends GameplayScene {
         }
       }
 
-      if (mob.spawnTypeKey === TROGLODYTE_SPAWN_KEY) {
+      if (mob.spawnTypeKey !== null && ROOSTER_FLOCK_SPAWN_KEYS.has(mob.spawnTypeKey)) {
         this.tryUnlockBigBrawler();
       }
 
@@ -3431,7 +3463,7 @@ export class DungeonScene extends GameplayScene {
           // Tested rather than assumed: calling `receiveBossLoot` is no proof a
           // chest took the drop, and a drop nothing took must still land
           // somewhere. Still partitioned by owner even down this path — The
-          // Hoarder's guaranteed Cockroach book is the cat's only reliable
+          // Trash Gremlin's guaranteed Cockroach book is the cat's only reliable
           // source and must never land on the human.
           // `hasLockedBossChest` is asked first because `receiveBossLoot` warns
           // on a miss, and a boss room whose chest has already been opened is a
@@ -3483,8 +3515,8 @@ export class DungeonScene extends GameplayScene {
           // a swarm — but grubs left behind in rooms the party has already
           // cleared are neither a threat nor a cost, and counting them starved
           // every later encounter of the burst that makes the rule interesting.
-          const alreadyAliveNearby = this.countLivingMobsOfTypeNear(
-            rule.type,
+          const alreadyAliveNearby = this.countLivingMobsOfKindsNear(
+            new Set<MobKind>([rule.type]),
             mob.x,
             mob.y,
             ON_KILL_SPAWN_CAP_RADIUS,
@@ -3544,8 +3576,8 @@ export class DungeonScene extends GameplayScene {
         this.krakarenBossRoomIdx = this.bossRoomIndexContaining(e.mob.x, e.mob.y);
       }
 
-      if (e.bossType === 'juicer' && !this.juicerKilled) {
-        this.juicerKilled = true;
+      if (e.bossType === 'big_rooster' && !this.bigRoosterKilled) {
+        this.bigRoosterKilled = true;
         this.human.hasDesperadoPassTattoo = true;
         this.cat.hasDesperadoPassTattoo = true;
         // Announced here as well as on the chest, so a player who walks past the
@@ -3856,6 +3888,9 @@ export class DungeonScene extends GameplayScene {
   }
 
   onExit(): void {
+    // A conversation cut off by the scene changing never closes on its own,
+    // and its talk row would stay pinned.
+    this.releaseCitizenDialogTarget();
     this.stopForwardingQuestItemEvictions?.();
     this.stopForwardingQuestItemEvictions = null;
     this.stopForwardingEquipmentChanges?.();
@@ -3895,6 +3930,9 @@ export class DungeonScene extends GameplayScene {
     this.highStriker?.dispose();
     this.fairies.dispose();
     this.fairyFireballs.dispose();
+    // A floor left mid-fight would otherwise leave its boss's rows pinned in the
+    // figure cache for the rest of the page's life.
+    this.bossRoom.dispose();
     this.goblinBombs.dispose();
     this.explosionShake.dispose();
     this.fuseSizzle.stopAll(this.audioScope);
@@ -3913,6 +3951,17 @@ export class DungeonScene extends GameplayScene {
     this.aiChallenges.dispose();
     this.stopForwardingSceneHooks();
     this.bus.clear();
+    if (!this.floorArtHeldByBuildingVisit) this.releaseFloorArt();
+  }
+
+  /**
+   * Gives back the baked tile art and the minimap of a map no scene will draw
+   * again, at once rather than whenever the browser gets round to collecting
+   * the canvases.
+   */
+  private releaseFloorArt(): void {
+    this.gameMap.releaseTileArt();
+    this.miniMap.dispose();
   }
 
   /**
@@ -4739,9 +4788,9 @@ export class DungeonScene extends GameplayScene {
     const focus: ResidencyFocus[] = [{ x: active.x, y: active.y }];
     if (!inactive.isKnockedOut) focus.push({ x: inactive.x, y: inactive.y });
     const landing = this.recall.channelLandingTile;
-    if (landing !== null) focus.push(tileFocus(landing));
+    if (landing !== null) focus.push({ ...tileFocus(landing), landing: true });
     const respawn = this.gameOver ? this.checkpointRespawnFocus() : null;
-    if (respawn !== null) focus.push(respawn);
+    if (respawn !== null) focus.push({ ...respawn, landing: true });
     return { focus, covered: respawn !== null };
   }
 
@@ -4753,13 +4802,6 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
-   * Puts the arrival's loading screen over a warp that has just landed the
-   * party among crowd rows not yet baked — a cache full of a fight's rows can
-   * outrun the death screen's boosted rewarm and a recall channel's
-   * normal-budget one — rather
-   * than show them as stand-ins. A warm landing shows nothing.
-   */
-  /**
    * Readies the landing of a warp that moved the party within this floor. The
    * sound groups are decided here rather than on the next update, because the
    * screen the warp may raise halts updates, and a group the landing needs has
@@ -4767,13 +4809,20 @@ export class DungeonScene extends GameplayScene {
    */
   private settleAfterWarp(): void {
     this.updateSfxGates();
-    this.coverWarpIfCrowdCold();
+    this.coverWarpIfLandingCold();
   }
 
-  private coverWarpIfCrowdCold(): void {
-    const residency = this.townResidency;
+  /**
+   * Puts the arrival's loading screen over a warp that has just landed the
+   * party among resident art not yet baked — a cache full of a fight's rows
+   * can outrun the death screen's boosted rewarm and a recall channel's
+   * normal-budget one — rather than show stand-ins. A warm landing shows
+   * nothing.
+   */
+  private coverWarpIfLandingCold(): void {
+    const residency = this.residency;
     const request = this.warpLoadRequest;
-    if (residency === null || request === null) return;
+    if (request === null) return;
     // Decided now rather than at the next check, so the rows the landing
     // needs are queued before the screen measures what it owes.
     residency.settleNow(this.residencyOutlook());
@@ -4787,18 +4836,18 @@ export class DungeonScene extends GameplayScene {
     // screen either — its surfaces refused, its room pinned — leaves a few
     // stand-ins rather than a screen that never lifts.
     let steps = 0;
-    const crowdTask: LoadTask = {
-      label: 'Waking the inhabitants',
+    const landingTask: LoadTask = {
+      label: 'Waking the world',
       work: steppedWork((budgetMs, mustProgress) => {
         steps++;
         if (steps <= WARP_COVER_FORGIVING_STEPS) residency.forgiveAndWarmAround(landing);
-        bakeFigurePrewarmFor(budgetMs, mustProgress);
+        residency.bakeFor(budgetMs, mustProgress);
         const warmth = residency.warmthAround(landing);
         const settled = warmth.share === 1 || !warmth.anyQueued;
         return settled || steps >= WARP_COVER_MAX_STEPS ? 1 : warmth.share;
       }),
     };
-    this.arrivalLoading.coverWarp({ ...request, tasks: () => [crowdTask, ...request.tasks()] });
+    this.arrivalLoading.coverWarp({ ...request, tasks: () => [landingTask, ...request.tasks()] });
   }
 
   /**
@@ -5091,6 +5140,7 @@ export class DungeonScene extends GameplayScene {
     const heldFloor = this.floorRegeneratesAroundBuildings
       ? null
       : this.holdFloorForInterior(returnTile);
+    this.floorArtHeldByBuildingVisit = true;
     const humanSnap = snapPlayer(this.human);
     const catSnap = snapPlayer(this.cat);
     const hudView: HudViewState = { miniMapExpanded: this.miniMap.isExpanded };
@@ -5124,6 +5174,9 @@ export class DungeonScene extends GameplayScene {
           const lastSave = this.lastSave;
           if (defeated) rearmExpiredDoomsday(this.doomsdayQuestProgress, Date.now());
           if (defeated && lastSave !== null) {
+            // The save rebuilds its floor from scratch, so nothing takes over
+            // the map this visit was holding.
+            this.releaseFloorArt();
             this.respawnFromSave(lastSave.progress);
             return;
           }
@@ -5131,12 +5184,12 @@ export class DungeonScene extends GameplayScene {
           // the overworld does on its first frame; the start tile at least
           // keeps a defeat off the doorstep.
           const exitTile = defeated ? this.gameMap.startTile : returnTile;
-          // A building-exit rebuild is still the same floor, so the crowd
-          // the new scene's own `TownLifeSystem` pins moments from now is
-          // the same working set — cheap to give back and re-pin, and the
-          // only way every leave-town path stays covered without special
-          // cases for which ones happen to be "the same floor."
-          this.townLife?.dispose();
+          // A building-exit rebuild is still the same floor, so what the new
+          // scene's residency holds moments from now is mostly the same
+          // working set — cheap to give back and hold again, and the only way
+          // every leave-town path stays covered without special cases for
+          // which ones happen to be "the same floor."
+          this.residency.releaseAll();
           this.sceneManager.replace(
             new DungeonScene(levelDef, this.input, this.sceneManager, {
               ...this.buildingExitOptions(hudView, hSnap, cSnap, companionDeparture),
@@ -5415,9 +5468,9 @@ export class DungeonScene extends GameplayScene {
       },
       progressForRespawn(progress),
     );
-    // The save's own floor may not be this one, so the crowd this scene
-    // pinned (if any) has no guaranteed successor to inherit it.
-    this.townLife?.dispose();
+    // The save's own floor may not be this one, so what this scene holds has
+    // no guaranteed successor to inherit it.
+    this.residency.releaseAll();
     this.sceneManager.replace(new DungeonScene(levelDef, this.input, this.sceneManager, options));
   }
 
@@ -5635,8 +5688,8 @@ export class DungeonScene extends GameplayScene {
 
       krakarenKilled: this.krakarenKilled,
       krakarenBossRoomIdx: this.krakarenBossRoomIdx,
-      juicerKilled: this.juicerKilled,
-      juicerBossRoomIdx: this.juicerBossRoomIdx,
+      bigRoosterKilled: this.bigRoosterKilled,
+      bigRoosterBossRoomIdx: this.bigRoosterBossRoomIdx,
     };
   }
 
@@ -5705,8 +5758,8 @@ export class DungeonScene extends GameplayScene {
 
     this.krakarenKilled = world.krakarenKilled;
     this.krakarenBossRoomIdx = world.krakarenBossRoomIdx;
-    this.juicerKilled = world.juicerKilled;
-    this.juicerBossRoomIdx = world.juicerBossRoomIdx;
+    this.bigRoosterKilled = world.bigRoosterKilled;
+    this.bigRoosterBossRoomIdx = world.bigRoosterBossRoomIdx;
   }
 
   /**
@@ -5777,8 +5830,8 @@ export class DungeonScene extends GameplayScene {
 
       krakarenKilled: this.krakarenKilled,
       krakarenBossRoomIdx: this.krakarenBossRoomIdx,
-      juicerKilled: this.juicerKilled,
-      juicerBossRoomIdx: this.juicerBossRoomIdx,
+      bigRoosterKilled: this.bigRoosterKilled,
+      bigRoosterBossRoomIdx: this.bigRoosterBossRoomIdx,
     };
   }
 
@@ -5829,8 +5882,8 @@ export class DungeonScene extends GameplayScene {
       briarHollow,
       krakarenKilled,
       krakarenBossRoomIdx,
-      juicerKilled,
-      juicerBossRoomIdx,
+      bigRoosterKilled,
+      bigRoosterBossRoomIdx,
       ...unappliedFields
     } = state;
     assertNoFieldsLeft(unappliedFields);
@@ -5902,8 +5955,8 @@ export class DungeonScene extends GameplayScene {
 
     this.krakarenKilled = krakarenKilled;
     this.krakarenBossRoomIdx = krakarenBossRoomIdx;
-    this.juicerKilled = juicerKilled;
-    this.juicerBossRoomIdx = juicerBossRoomIdx;
+    this.bigRoosterKilled = bigRoosterKilled;
+    this.bigRoosterBossRoomIdx = bigRoosterBossRoomIdx;
   }
 
   /**
@@ -6117,10 +6170,10 @@ export class DungeonScene extends GameplayScene {
    * just finished is exactly the one they may want to walk around in again.
    */
   private returnToMainMenu(): void {
-    // Leaves the town for the title screen, not just this scene — whatever
-    // this floor pinned has no claim on the memory once the player is back
-    // at the menu, continuing or not.
-    this.townLife?.dispose();
+    // Leaves the floor for the title screen, not just this scene — whatever
+    // this floor holds has no claim on the memory once the player is back at
+    // the menu, continuing or not.
+    this.residency.releaseAll();
     this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     const baseOptions: DungeonSceneOptions = {
       audio: this.audio ?? undefined,
@@ -6544,9 +6597,9 @@ export class DungeonScene extends GameplayScene {
     this.attackCowSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     restoreMercenaryRoster(this.mercenaryRoster, this.floorEntryMercenaryRoster);
     // A fresh-seed restart of the same floor identity — the new scene's own
-    // `TownLifeSystem` (if this is a town) pins its own crowd moments from
-    // now, so there is nothing gained by leaving the old one pinned meanwhile.
-    this.townLife?.dispose();
+    // residency holds what is near the party moments from now, so there is
+    // nothing gained by leaving the old one's held meanwhile.
+    this.residency.releaseAll();
     this.sceneManager.replace(
       new DungeonScene(this.levelDef, this.input, this.sceneManager, {
         // Only ever reached from a death, which clears the incurable statuses.
@@ -6901,8 +6954,6 @@ export class DungeonScene extends GameplayScene {
     if (target === null || target === this.citizenDialogTarget) return false;
     target.faceToward(active.x, active.y);
     target.frozen = true;
-    const facing = target.facingXY();
-    prewarmAndPinCitizenTalk(target.figure, facing.x, facing.y);
     const line = buildCitizenConversation(
       target.role,
       citizenSpecies(target),
@@ -6926,7 +6977,10 @@ export class DungeonScene extends GameplayScene {
     });
     // Only once `open` has run: a citizen this press was handed on from is
     // released by that call, through `releaseCitizenDialogTarget`, and must
-    // still be the one it finds there.
+    // still be the one it finds there, and its talk row unpinned before this
+    // one, which may be the same row, is pinned.
+    const facing = target.facingXY();
+    this.citizenTalkRow = prewarmAndPinCitizenTalk(target.figure, facing.x, facing.y);
     this.citizenDialogTarget = target;
     target.conversationCount++;
     return true;
@@ -6937,6 +6991,8 @@ export class DungeonScene extends GameplayScene {
     this.citizenDialogTarget.frozen = false;
     this.citizenDialogTarget = null;
     this.citizenDialogHandle = null;
+    if (this.citizenTalkRow !== null) unpinCitizenTalk(this.citizenTalkRow);
+    this.citizenTalkRow = null;
   }
 
   /** Opens a sign's conversation on the shared box, from `CrawlerSignSystem`'s `onRead` callback. */
@@ -7502,7 +7558,7 @@ export class DungeonScene extends GameplayScene {
   private floorObjectives(): ReadonlyArray<AdviceSlot> {
     // The tutorial shares floor 1's number but not its map: its hand-crafted
     // grid has no boss rooms, no goblin mother and no stairs down, so the floor-1
-    // list would send the player after a Hoarder that does not exist — and with
+    // list would send the player after a Trash Gremlin that does not exist — and with
     // no boss room to take a bearing from, without even a direction.
     if (this.levelDef.id === TUTORIAL_LEVEL_ID) return [];
 
@@ -7514,7 +7570,7 @@ export class DungeonScene extends GameplayScene {
       // still ahead of them. Whether they hear it at all depends on where they
       // next take advice — a gateway safe room speaks only about the boss it
       // guards until that boss is dead — so on floor 1 it reaches a party that
-      // sits down again after the Hoarder rather than one that walks straight
+      // sits down again after the Trash Gremlin rather than one that walks straight
       // on, while on floor 2 the spine's own station usually seats ahead of the
       // nursery and catches them on the way.
       //
@@ -7525,9 +7581,9 @@ export class DungeonScene extends GameplayScene {
       // about it says to find another if you would rather keep your bones.
       case DUNGEON_FLOOR_ONE:
         return [
-          this.bossObjective('the_hoarder'),
+          this.bossObjective('trash_gremlin'),
           this.defendQuestObjective(),
-          this.bossObjective('juicer'),
+          this.bossObjective('big_rooster'),
         ];
       case DUNGEON_FLOOR_TWO:
         return [
@@ -7596,7 +7652,9 @@ export class DungeonScene extends GameplayScene {
    * from `levelDef.bossRooms`, in the same order, so the two lists are index
    * aligned and this is the same mapping the system itself uses.
    */
-  private bossObjective(bossType: 'the_hoarder' | 'juicer' | 'krakaren_clone'): AdviceObjective {
+  private bossObjective(
+    bossType: 'trash_gremlin' | 'big_rooster' | 'krakaren_clone',
+  ): AdviceObjective {
     const index = this.levelDef.bossRooms?.findIndex((room) => room.type === bossType) ?? -1;
     const room = index < 0 ? undefined : this.gameMap.bossRooms[index];
     return adviceObjective(
@@ -8319,7 +8377,7 @@ export class DungeonScene extends GameplayScene {
     const worldY = y + camY;
     const gymPieceTaken =
       this.barriers.tryPickupAt(worldX, worldY, active) ||
-      this.bossRoomDressings.parts.juicer?.tryPickupBenchAt(worldX, worldY, active) === true ||
+      this.bossRoomDressings.parts.gym?.tryPickupBenchAt(worldX, worldY, active) === true ||
       this.arenaRoom.tryPickupAt(worldX, worldY, active);
     if (gymPieceTaken) this.audio?.play('picking_up_ground_object');
     return gymPieceTaken;
@@ -8406,7 +8464,7 @@ export class DungeonScene extends GameplayScene {
     // should freeze the streets.
     // Ungated: a death screen or a pause is exactly when the next place the
     // party is drawn may be a warp away, and the caches can use the time.
-    this.townResidency?.update(this.residencyOutlook());
+    this.residency.update(() => this.residencyOutlook());
     if (
       !this.gameOver &&
       !this.menus.pauseScreen.isOpen &&
@@ -9517,7 +9575,7 @@ export class DungeonScene extends GameplayScene {
     this.bossRoomDressings.update(ctx);
     const colosseumCue = this.bossRoomDressings.parts.colosseum?.takeSoundCue() ?? null;
     if (colosseumCue !== null) this.audio?.play(colosseumCue);
-    for (const takes of this.juicerRoom.drainSoundCues()) this.audio?.playRandom(takes);
+    for (const takes of this.gymRoom.drainSoundCues()) this.audio?.playRandom(takes);
     for (const cue of this.bossRoomDressings.parts.krakaren?.drainSoundCues() ?? []) {
       this.audio?.play(cue.id, { volume: cue.volume });
     }
@@ -10324,7 +10382,7 @@ export class DungeonScene extends GameplayScene {
 
     const shakeOffset = this.spiderQuest.cameraOffset;
     const smushShake = this.combat.smushFx.cameraOffset;
-    const juicerShake = this.juicerRoom.cameraOffset;
+    const gymShake = this.gymRoom.cameraOffset;
     const villageShake = this.briarHollowKit?.cameraOffset ?? { x: 0, y: 0 };
     const blastShake = this.explosionShake.cameraOffset;
     // Applied after the clamp so the sway can drift past the map edge rather than
@@ -10336,7 +10394,7 @@ export class DungeonScene extends GameplayScene {
         shakeOffset.x +
         sway.x +
         smushShake.x +
-        juicerShake.x +
+        gymShake.x +
         villageShake.x +
         blastShake.x,
       y:
@@ -10344,7 +10402,7 @@ export class DungeonScene extends GameplayScene {
         shakeOffset.y +
         sway.y +
         smushShake.y +
-        juicerShake.y +
+        gymShake.y +
         villageShake.y +
         blastShake.y,
     };
@@ -10420,7 +10478,7 @@ export class DungeonScene extends GameplayScene {
       };
     }
 
-    if (chest.bossRoomIndex !== null && chest.bossRoomIndex === this.juicerBossRoomIdx) {
+    if (chest.bossRoomIndex !== null && chest.bossRoomIndex === this.bigRoosterBossRoomIdx) {
       return {
         split: {
           humanLoot: baseSplit?.humanLoot ?? { coins: 0, items: [] },

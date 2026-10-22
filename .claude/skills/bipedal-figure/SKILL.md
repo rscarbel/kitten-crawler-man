@@ -39,14 +39,15 @@ four-file shape applies, but their anatomy traps are not in this skill.
 ## The four-file pipeline
 
 Every painted figure in this repo is the same four modules. Copy the shape; do
-not invent a new one. The Juicer is the worked bipedal example end to end.
+not invent a new one. Big Rooster is the worked bipedal example end to end: one
+painter with three builds (`big`, `little`, `bent`), each its own `FigureDef`.
 
-| File                           | Job                                                                                                                                                                                                         | Reference implementations                                  |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `src/sprites/art/<x>Art.ts`    | **The painter.** Palette ramps, proportions in tile units, the view table, the pose interface, the IK solver, and one `draw<Name><View>` per view over one shared pose type. Knows nothing about animation. | `carl/rig.ts` — the rig to copy; `juicerArt.ts`            |
-| `src/sprites/art/<x>Figure.ts` | **Choreography plus the `FigureDef`.** One pose function per row, the row table, the cell geometry constants, gore-piece placement, `paintFrame(ctx, state, frame)`, and the exported `<X>_FIGURE`.         | `humanFigure.ts`, `juicerFigure.ts`                        |
-| `scripts/gates-<x>.ts`         | **The art gates.** Paints cells from the `FigureDef` and measures them, plus pose-stream gates that need no pixels. Accumulates failures and exports `<x>GateFailures()`.                                   | `gates-juicer.ts` (~19 gates), `gates-goblins.ts`          |
-| `scripts/render-<x>.ts`        | **The review harness.** Runs the gates **first**, then bakes a labelled contact sheet with `bakeFigureSheet` into `preview/`. This is the only way the art gets judged.                                     | `render-juicer.ts`, `render-human.ts`, `render-goblins.ts` |
+| File                           | Job                                                                                                                                                                                                         | Reference implementations                                       |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `src/sprites/art/<x>Art.ts`    | **The painter.** Palette ramps, proportions in tile units, the view table, the pose interface, the IK solver, and one `draw<Name><View>` per view over one shared pose type. Knows nothing about animation. | `carl/rig.ts` — the rig to copy; `roosterArt.ts` and `rooster/` |
+| `src/sprites/art/<x>Figure.ts` | **Choreography plus the `FigureDef`.** One pose function per row, the row table, the cell geometry constants, gore-piece placement, `paintFrame(ctx, state, frame)`, and the exported `<X>_FIGURE`.         | `humanFigure.ts`, `roosterFigure.ts`                            |
+| `scripts/gates-<x>.ts`         | **The art gates.** Paints cells from the `FigureDef` and measures them, plus pose-stream gates that need no pixels. Accumulates failures and exports `<x>GateFailures()`.                                   | `gates-rooster.ts` (run per build), `gates-goblins.ts`          |
+| `scripts/render-<x>.ts`        | **The review harness.** Runs the gates **first**, then bakes a labelled contact sheet into `preview/`, most with `bakeFigureSheet`. This is the only way the art gets judged.                               | `render-big-rooster.ts`, `render-human.ts`, `render-goblins.ts` |
 
 A figure that outgrows one painter file splits it by concern rather than
 growing it: Carl's painter is a directory (`carl/` — geometry, palette,
@@ -261,11 +262,11 @@ Two lint rules bite modules that live under `src/`:
    a row — each piece takes its own one-frame state.
 
    **Anything measured offline has to be frozen as a named constant, and every
-   frozen ink measurement needs a gate that re-measures it.** Nothing can measure
-   ink at runtime, so cell extents, a gore recentring offset, a health-bar
-   clearance are all computed once and written down. The Juicer freezes
-   `GORE_RECENTRE` in `juicerFigure.ts` and `JUICER_HEAD_CLEARANCE_TILES` in
-   `juicerSprite.ts`, and gates re-measure both on every render. A frozen
+   frozen ink measurement needs a gate that re-measures it** — cell extents and
+   the tile anchor are the usual ones. What the runtime can measure for itself
+   needs no frozen copy: a gore piece spins about its own ink
+   (`drawFigureCachedRotatedCenter`), and `figureRowInkTop` gives a drawn row's
+   top for a health bar or a label (both in `figureFrameCache.ts`). A frozen
    measurement with no gate behind it goes quietly wrong the first time somebody
    redraws the creature, with every other gate green.
 
@@ -395,7 +396,7 @@ the only thing that answers this question.
   that reports success. It arrives by accident: a foot lift returning `1e-17`
   instead of `0` empties an equality filter; an arm moved from IK to joint angles
   empties another. Count what each filtered loop examined and hand the count to
-  `nothingMeasuredFailures` (the Juicer wraps it as a one-line
+  `nothingMeasuredFailures` (`gates-rooster.ts` wraps it as a one-line
   `failUnlessMeasured(gateId, n, what)`). Compare floats against an epsilon,
   never for equality. Do this for every filtering loop, including the ones that
   obviously match something today.

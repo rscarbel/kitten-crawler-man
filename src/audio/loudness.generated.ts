@@ -2915,31 +2915,7 @@ export const LOUDNESS = {
     hash: '060f5f6cee67390a',
     trimDb: -3.6,
   },
-  hoarder_damage_1: {
-    bus: 'sfx',
-    basis: 'integrated',
-    lufs: -18,
-    truePeakDbtp: -4,
-    hash: 'f87e5a96c51aebca',
-    trimDb: 2,
-  },
-  hoarder_damage_2: {
-    bus: 'sfx',
-    basis: 'integrated',
-    lufs: -17.6,
-    truePeakDbtp: -6.2,
-    hash: '0e09b045ba0cd17a',
-    trimDb: 1.6,
-  },
-  hoarder_damage_3: {
-    bus: 'sfx',
-    basis: 'integrated',
-    lufs: -12.7,
-    truePeakDbtp: -3.4,
-    hash: '3c0ba275d7e11c4f',
-    trimDb: -3.3,
-  },
-  hoarder_vomit: {
+  trash_gremlin_vomit: {
     bus: 'sfx',
     basis: 'integrated',
     lufs: -15,
@@ -3051,15 +3027,7 @@ export const LOUDNESS = {
     hash: 'e43faf6f9982f02a',
     trimDb: -3.5,
   },
-  juicer_grunt: {
-    bus: 'sfx',
-    basis: 'integrated',
-    lufs: -10.1,
-    truePeakDbtp: 0,
-    hash: 'b99595bf4d72c050',
-    trimDb: -5.9,
-  },
-  juicer_throw: {
+  dumbbell_throw: {
     bus: 'sfx',
     basis: 'integrated',
     lufs: -19.2,

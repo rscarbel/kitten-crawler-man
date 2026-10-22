@@ -381,7 +381,7 @@ export function tusklingGorePieces(): readonly GorePiece[] {
   const leg: GorePiece = {
     state: 'gore_leg',
     paint: (ctx) => {
-      // Short and sharply bent — the stubby leg of the description, and the
+      // Short and sharply bent — the stubby leg of the design, and the
       // shape that keeps it apart from the long straight arm.
       // A hard hock, not a gentle curve: bent where the arm is straight is the
       // only thing keeping two tapered pink tubes apart at 16 px.

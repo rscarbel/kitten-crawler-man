@@ -25,7 +25,7 @@ import type { Mob } from '../../src/creatures/Mob';
 import type { Player } from '../../src/Player';
 import type { ActiveFairyCast, FairyCast } from '../../src/creatures/fairies/Fairy';
 import { Goblin } from '../../src/creatures/Goblin';
-import { TheHoarder } from '../../src/creatures/TheHoarder';
+import { TrashGremlin } from '../../src/creatures/TrashGremlin';
 import { KrakarenClone } from '../../src/creatures/KrakarenClone';
 import { TheLich } from '../../src/creatures/TheLich';
 import { BallOfSwine } from '../../src/creatures/BallOfSwine';
@@ -148,8 +148,8 @@ const CURVES: ReadonlyArray<readonly [string, LevelledCurve]> = [
 ];
 /** Every boss whose HP phases carry a heal ceiling, by spawn key. */
 const PHASED_BOSS_KEYS = [
-  'the_hoarder',
-  'juicer',
+  'trash_gremlin',
+  'big_rooster',
   'krakaren_clone',
   'ball_of_swine',
   'terror_the_clown',
@@ -485,8 +485,8 @@ class HugeGoblin extends Goblin {
   }
 }
 
-/** A Hoarder whose heal ceiling has been lost: it reports its whole max HP. */
-class CeilinglessHoarder extends TheHoarder {
+/** A Trash Gremlin whose heal ceiling has been lost: it reports its whole max HP. */
+class CeilinglessTrashGremlin extends TrashGremlin {
   override get fairyHealCeiling(): number {
     return this.maxHp;
   }
@@ -502,18 +502,18 @@ function checkBossHealing(report: FairyGateReport): void {
     );
   }
   const mutant = bossCeilingRun((s) => {
-    const hoarder = new CeilinglessHoarder(
+    const trashGremlin = new CeilinglessTrashGremlin(
       HEALER_TILE + NEIGHBOR_OFFSET_TILES,
       HEALER_TILE,
       TILE_SIZE,
     );
-    hoarder.setMap(s.map);
-    s.roster.add(hoarder);
-    return hoarder;
+    trashGremlin.setMap(s.map);
+    s.roster.add(trashGremlin);
+    return trashGremlin;
   });
   report.checkCatches(
     heldUnderLine(mutant),
-    'a Hoarder that has lost its heal ceiling is caught healed back past its enrage line',
+    'a Trash Gremlin that has lost its heal ceiling is caught healed back past its enrage line',
     mutant.detail,
   );
 

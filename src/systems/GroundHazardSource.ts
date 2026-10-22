@@ -1,5 +1,5 @@
 /**
- * Anything that puts damaging ground under the party's feet — the Hoarder's acid
+ * Anything that puts damaging ground under the party's feet — the Trash Gremlin's acid
  * puddles, the Evil Clown's gas clouds — and can therefore tell whatever steers
  * a body on the party's side (the AI companion, Mongo, the hirelings) which way
  * to run.

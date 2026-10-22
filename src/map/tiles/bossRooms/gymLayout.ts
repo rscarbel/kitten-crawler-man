@@ -1,5 +1,5 @@
 /**
- * Where everything in the Juicer's gym goes: floor zones, equipment, the mirror
+ * Where everything in Big Rooster's gym goes: floor zones, equipment, the mirror
  * and the whiteboard. A pure function of the room's bounds and doorways, so the
  * chunk painter, the room system and the gates all read one answer.
  *
@@ -10,7 +10,7 @@
  */
 
 import type { TileContent } from '../../tileTypes';
-import { JUICER_BOSS_ROOM_FLOOR } from '../../tileTypes';
+import { GYM_FLOOR } from '../../tileTypes';
 import { roomDoorways } from '../../roomDoorways';
 import {
   approachLaneTiles,
@@ -51,7 +51,7 @@ export interface GymLayout {
   readonly side: DoorSide;
   /** One step from the doorway wall into the room. */
   readonly inward: TileStep;
-  /** Where the Juicer stands when the fight begins; the platform is centred on it. */
+  /** Where Big Rooster stands when the fight begins; the platform is centred on it. */
   readonly spawn: TilePoint;
   readonly platform: TileRect;
   /** The sprint lane's tiles, belts excluded. */
@@ -466,7 +466,7 @@ function mirrorRun(
 // ── Reading a gym off a finished grid ────────────────────────────────────────
 
 function isGymFloor(tile: TileContent): boolean {
-  return tile.type === JUICER_BOSS_ROOM_FLOOR || tile.groundType === JUICER_BOSS_ROOM_FLOOR;
+  return tile.type === GYM_FLOOR || tile.groundType === GYM_FLOOR;
 }
 
 const layoutCache = new WeakMap<TileContent[][], GymLayout | null>();

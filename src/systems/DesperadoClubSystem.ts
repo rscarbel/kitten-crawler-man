@@ -675,7 +675,7 @@ export class DesperadoClubSystem {
     });
   }
 
-  /** Clarabelle waving through a crawler wearing the Juicer's ink. */
+  /** Clarabelle waving through a crawler wearing Big Rooster's ink. */
   private openTattooGreeting(crawler: Player): void {
     this.openConversation(CLARABELLE.tattooGreeting(crawler instanceof CatPlayer), () => {
       this.unlockAchievement('desperado_member');

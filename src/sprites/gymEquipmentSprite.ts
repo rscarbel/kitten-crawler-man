@@ -3,7 +3,7 @@ import { iconSquare } from '../ui/icons/iconSquare';
 
 /**
  * Sprite functions for gym equipment items:
- *   - Dumbbell  (floor world, inventory icon, held-by-Juicer)
+ *   - Dumbbell  (floor world, inventory icon, held-by-Big Rooster)
  *   - Bench press (floor world, inventory icon)
  *   - Treadmill   (floor world, inventory icon)
  *
@@ -664,7 +664,7 @@ export function drawDumbbellInventoryIcon(ctx: CanvasRenderingContext2D, rect: R
 }
 
 /**
- * Dumbbell held by Juicer — rendered at hand position with throw-anim rotation.
+ * Dumbbell held by Big Rooster — rendered at hand position with throw-anim rotation.
  * `cx, cy` = world position of the hand. `throwAnim` 0→1 swings the arm forward.
  */
 export function drawDumbbellHeld(

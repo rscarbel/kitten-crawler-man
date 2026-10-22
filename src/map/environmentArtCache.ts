@@ -28,7 +28,7 @@ import {
 } from '../core/canvasSurface';
 import { onCanvasRecovery, reportCanvasAllocationFailure } from '../core/canvasRecovery';
 import { floorArtSeed } from './ground/floorArtSeed';
-import { renderFrameNumber } from '../core/renderFrameClock';
+import { idleFrameNumber, renderFrameNumber } from '../core/renderFrameClock';
 import { memoryBudgetScale } from '../core/deviceMemoryBudget';
 import {
   onPaintedSpriteMiss,
@@ -84,15 +84,14 @@ const DEFERRED_SHEET_RETRY_MS = 5000;
 /**
  * Megabytes of finished sheets kept before the least recently drawn are let go.
  *
- * Above everything the busiest floor paints for itself, so a floor as it is
- * today never loses a sheet. The Over City holds about 137 MB of sheets once its
- * buildings have been visited; one screen of it draws about 57 MB at once, but a
- * walk around the town draws most of the rest, and a facade let go and walked
- * back to is a building missing for the frames it takes to repaint. So the
- * floor's whole set is its working set, and the limit is a ceiling against
- * growth rather than a trim: what it stops is a floor that gains sheets until
- * they no longer fit, which `verify:environment-sheet-budget` checks every
- * floor against.
+ * A ceiling on the working set around the party, not on a floor: the idle
+ * sweep lets go of what nothing has drawn lately, and a resident set holds
+ * what lies within its lead of coming into view, so what stays resident is
+ * the floor-wide art (ground, masks, props every region draws) plus the
+ * placed art near the party. `verify:environment-sheet-budget` measures the
+ * largest such set anywhere on each floor against this. Over it, the least
+ * recently drawn go first, which a placed sheet walked back to repays as a
+ * building missing for the frames its repaint takes.
  */
 export const ENVIRONMENT_SHEET_BUDGET_MEGABYTES = 160;
 
@@ -100,21 +99,35 @@ const RECENTLY_DRAWN_SECONDS = 30;
 const NOMINAL_FRAMES_PER_SECOND = 60;
 
 /**
- * Render frames a sheet is safe from eviction after its last lookup, and within
- * which a purge repaints it straight away.
+ * Frames within which a sheet counts as drawn lately: safe from eviction over
+ * the budget, and kept by the idle sweep. Eviction counts render frames; the
+ * sweep counts idle frames (`idleFrameNumber`), so time behind a loading
+ * screen or indoors does not age the floor outside.
  *
- * A sheet is looked up every frame it is drawn as a sprite, but a ground
- * material is looked up only while a tile chunk is being baked from it, and the
- * baked chunk keeps showing it long after. Letting one go inside that time would
- * be invisible until the next chunk is baked, then flat fallback colour at the
- * edge of the screen while it repaints. Half a minute, which covers walking a
- * screen's width many times over and a short visit indoors.
+ * A sheet is looked up every frame it is drawn as a sprite, and a cache that
+ * draws its own copy (a tile chunk, an overlay entry) touches the sheets it
+ * was baked from each time it draws. Half a minute covers walking a screen's
+ * width many times over. Measured headless on floor 3: a party that toured
+ * twelve interiors and then stood at Briar Hollow for 35 seconds held 10.9 MB
+ * of sheets more than one that went straight there (the indoor grounds and a
+ * club's furniture), all of it older than this, so the sweep returns all of
+ * it within the wait a player makes there.
  *
- * A purge repaints only these at once. Repainting every resident sheet rebuilds
- * the very memory peak that preceded the loss; one not drawn lately waits, like
- * an evicted sheet, to be painted when it is next looked up.
  */
 export const RECENTLY_DRAWN_FRAMES = RECENTLY_DRAWN_SECONDS * NOMINAL_FRAMES_PER_SECOND;
+
+const ON_SCREEN_SECONDS = 1;
+/**
+ * Render frames within which a sheet counts as on screen for a purge, which
+ * repaints only those at once. Repainting every resident sheet rebuilds the
+ * very memory peak that preceded the loss; and the idle window will not do,
+ * because its clock stands still indoors, where a purge would then repaint
+ * the whole floor outside. A second covers what the frame before the purge
+ * drew, tile chunks and overlays touching what they were baked from each time
+ * they draw, and a resident set's touches, made every few updates. Anything
+ * else waits, like an evicted sheet, to be painted when it is next wanted.
+ */
+const ON_SCREEN_FRAMES = ON_SCREEN_SECONDS * NOMINAL_FRAMES_PER_SECOND;
 
 /** One piece of a sheet: a material's patch, a prop's frame row, a facade. */
 export interface PaintStep {
@@ -153,6 +166,12 @@ export interface EnvironmentSheetPlan {
    * rather than per floor — which is what lets them survive the stairs.
    */
   readonly variesWithFloorSeed: boolean;
+  /**
+   * Whether only the building that wears this sheet draws it, so a repaint
+   * after eviction redraws that building's cached art alone rather than every
+   * tile chunk and overlay entry on the floor.
+   */
+  readonly drawnOnlyByItsBuilding?: boolean;
   /**
    * Run once the sheet is first drawable — after `readySteps`, which is every
    * step unless the plan says otherwise. A sheet with rows still owed fires this
@@ -193,8 +212,14 @@ interface PendingSheet {
   readonly artSeed: number;
   nextStep: number;
   published: boolean;
-  /** Painted again after a purge, so landing bumps {@link repaintedSheetRevision}. */
+  /** Painted again from a replay rather than first asked for. */
   replayed: boolean;
+  /**
+   * A replay of a sheet let go while it was not drawn: landing is announced
+   * for its key alone ({@link environmentSheetsRepaintedSince}). A replay
+   * after a purge or a refused surface bumps {@link repaintedSheetRevision}.
+   */
+  afterEviction: boolean;
   /**
    * No step is painted before this wall-clock time: set when a step of a
    * published sheet was refused a surface, so the rows it still owes are
@@ -219,6 +244,7 @@ function replanOf(plan: EnvironmentSheetPlan): () => EnvironmentSheetPlan {
     steps: plan.steps,
     readySteps: plan.readySteps,
     variesWithFloorSeed: plan.variesWithFloorSeed,
+    drawnOnlyByItsBuilding: plan.drawnOnlyByItsBuilding,
   };
   return () => bare;
 }
@@ -236,8 +262,20 @@ interface ResidentSheet {
    * the latest draw of something baked from it.
    */
   lastLookupFrame: number;
+  /** The same moment on the idle clock, which the sweep and a purge measure by. */
+  lastLookupIdleFrame: number;
+  /**
+   * The idle frame a resident set released it at, or null while anything
+   * holds or draws it; see {@link releaseEnvironmentSheet}.
+   */
+  releasedAtIdleFrame: number | null;
 }
 let sheetByteBudgetOverride: number | null = null;
+let idleWindowOverride: number | null = null;
+
+function idleWindowFrames(): number {
+  return idleWindowOverride ?? RECENTLY_DRAWN_FRAMES;
+}
 
 /**
  * Scaled for this device only where sheets paint at half density (see
@@ -316,11 +354,17 @@ function dropIfStale(key: string): void {
  * for everything again — but it is the one outcome that fires no `onSettled`,
  * because there is nothing left to settle.
  *
+ * `owedOnDemand` means it was painted and then let go while nothing drew it:
+ * its repaint is queued among the waiting repaints, one at a time, which an
+ * arrival's loading card counts as owed. Like `alreadyPainted`, it fires no
+ * `onSettled`.
+ *
  * `deferred` means the browser refused the sheet a surface. It is settled at
  * once, so a caller queueing one sheet at a time carries on with the next, and
  * the cache asks for it again itself once memory may have come back.
  */
-export type SheetRequestOutcome = 'queued' | 'alreadyQueued' | 'alreadyPainted' | 'deferred';
+export type SheetRequestOutcome =
+  'queued' | 'alreadyQueued' | 'alreadyPainted' | 'owedOnDemand' | 'deferred';
 
 /** A sheet the browser refused a surface for, waiting to be asked for again. */
 interface DeferredSheet {
@@ -334,8 +378,9 @@ const deferred = new Map<string, DeferredSheet>();
 let deferredRetryAtMs = 0;
 
 /**
- * Sheets let go over the byte budget, or purged without having been drawn
- * lately, painted again the first time anything looks one up. Shaped like a
+ * Sheets let go over the byte budget, by the idle sweep, or purged without
+ * having been drawn lately, painted again the first time anything looks one up
+ * or asks for it through {@link wantEnvironmentSheet}. Shaped like a
  * deferred sheet because it is one: owed, with nothing to paint it into until
  * it is wanted.
  */
@@ -345,11 +390,20 @@ const evicted = new Map<string, DeferredSheet>();
 interface EnvironmentSheetEvictionStats {
   /** Sheets let go over the byte budget. */
   evictions: number;
-  /** Evicted sheets looked up again, and so painted again. */
+  /** Sheets let go by the idle sweep. */
+  idleReleases: number;
+  /** Sheets let go by a resident set as the party left their release ring. */
+  distanceReleases: number;
+  /** Sheets let go either way and then asked for again, and so painted again. */
   repaintsAfterEviction: number;
 }
 
-const evictionStats: EnvironmentSheetEvictionStats = { evictions: 0, repaintsAfterEviction: 0 };
+const evictionStats: EnvironmentSheetEvictionStats = {
+  evictions: 0,
+  idleReleases: 0,
+  distanceReleases: 0,
+  repaintsAfterEviction: 0,
+};
 
 export function environmentSheetEvictionStats(): Readonly<EnvironmentSheetEvictionStats> {
   return { ...evictionStats };
@@ -409,6 +463,13 @@ export function requestEnvironmentSheet(plan: EnvironmentSheetPlan): SheetReques
   dropIfStale(plan.key);
   if (resident.has(plan.key) && !pending.has(plan.key)) return 'alreadyPainted';
   if (pending.has(plan.key)) return 'alreadyQueued';
+  if (owedOnDemand(plan.key)) {
+    // A plan built up front may hold surfaces for its steps; the repaint plans
+    // afresh from what was kept when the sheet was let go.
+    if (plan.replan !== undefined) plan.release?.();
+    repaintEvicted(plan.key);
+    return 'owedOnDemand';
+  }
   const scale = paintScaleNow();
   const surface = allocCanvas(
     'environmentSheets',
@@ -428,7 +489,8 @@ export function requestEnvironmentSheet(plan: EnvironmentSheetPlan): SheetReques
     return 'deferred';
   }
   deferred.delete(plan.key);
-  evicted.delete(plan.key);
+  // Asked for afresh: whatever released it before no longer stands.
+  releasedWhilePainting.delete(plan.key);
   ctx.scale(scale, scale);
   pending.set(plan.key, {
     plan,
@@ -439,6 +501,7 @@ export function requestEnvironmentSheet(plan: EnvironmentSheetPlan): SheetReques
     nextStep: 0,
     published: false,
     replayed: false,
+    afterEviction: false,
     retryAtMs: 0,
   });
   queue.push(plan.key);
@@ -513,6 +576,12 @@ function readyStepsOf(plan: EnvironmentSheetPlan): number {
   return Math.min(plan.readySteps ?? plan.steps.length, plan.steps.length);
 }
 
+function markDrawn(sheet: ResidentSheet): void {
+  sheet.lastLookupFrame = renderFrameNumber();
+  sheet.lastLookupIdleFrame = idleFrameNumber();
+  sheet.releasedAtIdleFrame = null;
+}
+
 function publish(sheet: PendingSheet): void {
   sheet.published = true;
   const residentSheet: ResidentSheet = {
@@ -522,14 +591,21 @@ function publish(sheet: PendingSheet): void {
     variesWithFloorSeed: sheet.plan.variesWithFloorSeed,
     artSeed: sheet.artSeed,
     lastLookupFrame: renderFrameNumber(),
+    lastLookupIdleFrame: idleFrameNumber(),
+    releasedAtIdleFrame: releasedWhilePainting.delete(sheet.plan.key) ? idleFrameNumber() : null,
   };
   const key = sheet.plan.key;
   registerPaintedSprite(key, sheet.surface, sheet.scale, () => {
-    residentSheet.lastLookupFrame = renderFrameNumber();
+    markDrawn(residentSheet);
     lookupRecording?.add(key);
   });
   resident.set(sheet.plan.key, residentSheet);
-  if (sheet.replayed) repaintedRevision += 1;
+  // A building's sheet is announced by key on every landing, since no caller
+  // keeps a callback for it; any other only when it comes back from eviction.
+  const announcedByKey =
+    sheet.plan.drawnOnlyByItsBuilding === true || (sheet.replayed && sheet.afterEviction);
+  if (announcedByKey) noteLandedByKey(sheet.plan);
+  else if (sheet.replayed) repaintedRevision += 1;
   sheet.plan.onReady?.();
 }
 
@@ -557,6 +633,7 @@ function abandon(key: string, sheet: PendingSheet, error: unknown): void {
     resident.delete(key);
     sheet.plan.release?.();
   }
+  releasedWhilePainting.delete(key);
   pending.delete(key);
   dequeue(key);
   // Told last, and told at all: a caller sequencing its sheets one at a time
@@ -582,7 +659,17 @@ function deferMidPaint(key: string, sheet: PendingSheet): void {
   drop(key, sheet.surface);
   resident.delete(key);
   sheet.plan.release?.();
-  deferEnvironmentSheet(key, sheet.plan.variesWithFloorSeed, replanOf(sheet.plan));
+  // Released while painting, nothing wants it: owed on demand, not retried
+  // into a sheet that would land unreleased.
+  if (releasedWhilePainting.delete(key)) {
+    evicted.set(key, {
+      replan: replanOf(sheet.plan),
+      variesWithFloorSeed: sheet.plan.variesWithFloorSeed,
+      artSeed: sheet.artSeed,
+    });
+  } else {
+    deferEnvironmentSheet(key, sheet.plan.variesWithFloorSeed, replanOf(sheet.plan));
+  }
   pending.delete(key);
   dequeue(key);
   sheet.plan.onSettled?.();
@@ -681,6 +768,7 @@ export function environmentPaintMsThisFrame(): number {
 export function beginEnvironmentArtFrame(): void {
   msPaintedThisFrame = 0;
   evictOverBudget();
+  releaseIdleSheets();
   retryDeferredSheets();
   requestNextReplay();
   if (paintDebtMs > 0) {
@@ -770,16 +858,45 @@ function evictOverBudget(): void {
   candidates.sort(([, a], [, b]) => a.lastLookupFrame - b.lastLookupFrame);
   for (const [key, sheet] of candidates) {
     if (residentBytes <= sheetByteBudget()) return;
-    drop(key, sheet.surface);
-    resident.delete(key);
+    evict(key, sheet);
     residentBytes -= sheet.bytes;
-    evicted.set(key, {
-      replan: sheet.replan,
-      variesWithFloorSeed: sheet.variesWithFloorSeed,
-      artSeed: sheet.artSeed,
-    });
     evictionStats.evictions += 1;
   }
+}
+
+/**
+ * Lets go of every finished sheet nothing has drawn within the idle window,
+ * whether or not the cache is near its budget, so memory follows what the
+ * party is near rather than everything it has seen on the floor. Never one
+ * still painting. Measured on the idle clock, so a loading screen or a visit
+ * indoors holds it.
+ */
+function releaseIdleSheets(): void {
+  const now = idleFrameNumber();
+  const oldestKeptFrame = now - idleWindowFrames();
+  for (const [key, sheet] of resident) {
+    if (pending.has(key)) continue;
+    const releasedAt = sheet.releasedAtIdleFrame;
+    if (releasedAt !== null && now - releasedAt > RELEASED_GRACE_FRAMES) {
+      evict(key, sheet);
+      evictionStats.distanceReleases += 1;
+      continue;
+    }
+    if (sheet.lastLookupIdleFrame >= oldestKeptFrame) continue;
+    evict(key, sheet);
+    evictionStats.idleReleases += 1;
+  }
+}
+
+/** Gives a finished sheet's pixels back, owing it to be painted again when next asked for. */
+function evict(key: string, sheet: ResidentSheet): void {
+  drop(key, sheet.surface);
+  resident.delete(key);
+  evicted.set(key, {
+    replan: sheet.replan,
+    variesWithFloorSeed: sheet.variesWithFloorSeed,
+    artSeed: sheet.artSeed,
+  });
 }
 
 /** Sheets looked up while {@link recordSheetLookups} runs, or null outside one. */
@@ -810,12 +927,131 @@ export function recordSheetLookups(paint: () => void): readonly string[] {
 
 /** Marks sheets as drawn this frame, for a cache drawing something it baked from them. */
 export function touchEnvironmentSheets(keys: readonly string[]): void {
-  if (keys.length === 0) return;
-  const frame = renderFrameNumber();
   for (const key of keys) {
     const sheet = resident.get(key);
-    if (sheet !== undefined) sheet.lastLookupFrame = frame;
+    if (sheet !== undefined) markDrawn(sheet);
   }
+}
+
+/**
+ * Where a sheet stands: drawable, on its way, let go until next asked for,
+ * or never asked for under this floor's seed.
+ */
+export type EnvironmentSheetState = 'resident' | 'owed' | 'evicted' | 'absent';
+
+export function environmentSheetState(key: string): EnvironmentSheetState {
+  dropIfStale(key);
+  if (resident.has(key)) return 'resident';
+  const awaited =
+    pending.has(key) || deferred.has(key) || replays.some((replay) => replay.key === key);
+  if (awaited) return 'owed';
+  return owedOnDemand(key) ? 'evicted' : 'absent';
+}
+
+/** Whether a sheet was let go and is still owed for this floor, to be painted when wanted. */
+function owedOnDemand(key: string): boolean {
+  const sheet = evicted.get(key);
+  return sheet !== undefined && (!sheet.variesWithFloorSeed || sheet.artSeed === floorArtSeed());
+}
+
+const RELEASED_GRACE_SECONDS = 0.2;
+/**
+ * Idle frames a sheet a resident set released is kept, unless something
+ * draws or holds it again: far short of the idle window, so what lies past a
+ * release ring does not stay resident for the half minute the party may walk
+ * on in. Not zero, because a scene rebuilt around the same floor releases
+ * everything its old resident sets held as it goes, and the new scene's sets
+ * take those sheets back on their first decision, made as it is built; the
+ * idle clock stands still through a building visit in between. A fifth of a
+ * second is two tiles of fastest walk past each release ring.
+ */
+export const RELEASED_GRACE_FRAMES = Math.round(RELEASED_GRACE_SECONDS * NOMINAL_FRAMES_PER_SECOND);
+
+/**
+ * Lets a finished sheet go within {@link RELEASED_GRACE_FRAMES}, for a
+ * resident set that knows nothing will draw it soon: one past its release
+ * ring is held by nothing, and leaving it for the idle sweep would keep it
+ * for the whole idle window while the party walks on. Drawn or touched again
+ * in the meantime, it is kept.
+ */
+export function releaseEnvironmentSheet(key: string): void {
+  const sheet = resident.get(key);
+  if (sheet !== undefined) {
+    sheet.releasedAtIdleFrame = idleFrameNumber();
+    return;
+  }
+  // A repaint not started yet is not started at all: owed again on demand.
+  const waiting = replays.findIndex((replay) => replay.key === key);
+  if (waiting >= 0) {
+    const [replay] = replays.splice(waiting, 1);
+    evicted.set(key, {
+      replan: replay.replan,
+      variesWithFloorSeed: replay.variesWithFloorSeed,
+      artSeed: replay.artSeed,
+    });
+    return;
+  }
+  // One refused a surface waits for a retry nothing now needs.
+  const refused = deferred.get(key);
+  if (refused !== undefined) {
+    deferred.delete(key);
+    evicted.set(key, refused);
+    return;
+  }
+  // One already painting finishes, then goes after the grace like any other.
+  if (pending.has(key)) releasedWhilePainting.add(key);
+}
+
+/**
+ * Sheets a resident set released while they were still painting: each is
+ * published as released, or a row that entered and left the ring before it
+ * landed would be kept for the whole idle window.
+ */
+const releasedWhilePainting = new Set<string>();
+
+/** Repaints of let-go sheets waiting their turn, for a loading screen measuring what it owes. */
+export function environmentRepaintsWaiting(): number {
+  return replays.length;
+}
+
+/**
+ * Asks for a sheet as something about to draw it: touches it when resident;
+ * when it was let go, queues its repaint now rather than on the first lookup
+ * that would find it missing. A repaint already waiting is moved behind the
+ * others, so a caller asking nearest first gets its repaints in that order.
+ * Returns whether the sheet is missing.
+ */
+export function wantEnvironmentSheet(key: string): boolean {
+  dropIfStale(key);
+  releasedWhilePainting.delete(key);
+  const residentSheet = resident.get(key);
+  if (residentSheet !== undefined) {
+    markDrawn(residentSheet);
+    return false;
+  }
+  const waiting = replays.findIndex((replay) => replay.key === key);
+  if (waiting >= 0) {
+    replays.push(...replays.splice(waiting, 1));
+    return true;
+  }
+  repaintEvicted(key);
+  return true;
+}
+
+/** Owes an evicted sheet's repaint, unless it belongs to a floor that has gone. */
+function repaintEvicted(key: string): void {
+  const sheet = evicted.get(key);
+  if (sheet === undefined) return;
+  evicted.delete(key);
+  if (sheet.variesWithFloorSeed && sheet.artSeed !== floorArtSeed()) return;
+  replays.push({
+    key,
+    replan: sheet.replan,
+    variesWithFloorSeed: sheet.variesWithFloorSeed,
+    artSeed: sheet.artSeed,
+    afterEviction: true,
+  });
+  evictionStats.repaintsAfterEviction += 1;
 }
 
 /**
@@ -825,6 +1061,15 @@ export function touchEnvironmentSheets(keys: readonly string[]): void {
  */
 export function setEnvironmentSheetByteBudget(bytes: number | null): void {
   sheetByteBudgetOverride = bytes;
+}
+
+/**
+ * Overrides the idle sweep's window, or restores
+ * {@link RECENTLY_DRAWN_FRAMES} with null. For the cache's gate, which checks
+ * the sweep and the distance hold over a window short enough to walk.
+ */
+export function setEnvironmentIdleWindowFrames(frames: number | null): void {
+  idleWindowOverride = frames;
 }
 
 function drop(key: string, surface: CanvasSurface): void {
@@ -846,6 +1091,7 @@ function release(shouldRelease: (key: string, variesWithFloorSeed: boolean) => b
   }
   for (const [key, sheet] of pending) {
     if (!shouldRelease(key, sheet.plan.variesWithFloorSeed)) continue;
+    releasedWhilePainting.delete(key);
     drop(key, sheet.surface);
     if (!sheet.published) sheet.plan.release?.();
     pending.delete(key);
@@ -917,6 +1163,8 @@ interface SheetReplay {
   readonly variesWithFloorSeed: boolean;
   /** The floor art seed it is owed under; one for another floor is let go. */
   readonly artSeed: number;
+  /** Owed because it was let go undrawn rather than lost to a purge or refused. */
+  readonly afterEviction?: boolean;
 }
 
 /**
@@ -938,6 +1186,46 @@ let repaintedRevision = 0;
  */
 export function repaintedSheetRevision(): number {
   return repaintedRevision;
+}
+
+/** A sheet whose landing is announced by its key. */
+export interface RepaintedSheet {
+  readonly key: string;
+  readonly drawnOnlyByItsBuilding: boolean;
+}
+
+/** Every landing announced by key so far, numbered; a reader keeps the number it read up to. */
+let announcedLandingCount = 0;
+const announcedLandings = new Map<string, RepaintedSheet & { readonly number: number }>();
+
+function noteLandedByKey(plan: EnvironmentSheetPlan): void {
+  announcedLandingCount += 1;
+  announcedLandings.set(plan.key, {
+    key: plan.key,
+    drawnOnlyByItsBuilding: plan.drawnOnlyByItsBuilding === true,
+    number: announcedLandingCount,
+  });
+}
+
+/**
+ * The sheets announced by key since `cursor`, and the cursor to pass next
+ * time: a building's sheet on every landing, any other sheet when it lands
+ * again after eviction. A cache that baked from the sheets redraws only what
+ * those keys may have left at their fallback, rather than everything it
+ * holds, as a purge's {@link repaintedSheetRevision} makes it.
+ */
+export function environmentSheetsRepaintedSince(cursor: number): {
+  readonly cursor: number;
+  readonly sheets: readonly RepaintedSheet[];
+} {
+  if (cursor === announcedLandingCount) return { cursor, sheets: [] };
+  const sheets = [...announcedLandings.values()].filter((sheet) => sheet.number > cursor);
+  return { cursor: announcedLandingCount, sheets };
+}
+
+/** The cursor a cache built now starts reading from. */
+export function environmentRepaintCursor(): number {
+  return announcedLandingCount;
 }
 
 function replayInFlight(): boolean {
@@ -965,15 +1253,25 @@ function requestNextReplay(): void {
       }
       continue;
     }
+    evicted.delete(next.key);
     const outcome = requestEnvironmentSheet(plan);
     const replayed = pending.get(next.key);
-    if (outcome === 'queued' && replayed !== undefined) replayed.replayed = true;
+    if (outcome === 'queued' && replayed !== undefined) {
+      replayed.replayed = true;
+      replayed.afterEviction = next.afterEviction === true;
+    }
   }
+}
+
+/** Whether a resident set released a sheet, whether it had landed yet or not. */
+function releasedBySet(key: string): boolean {
+  const releasedAt = resident.get(key)?.releasedAtIdleFrame ?? null;
+  return releasedAt !== null || releasedWhilePainting.has(key);
 }
 
 /**
  * Paints the sheets in use again after the browser discarded the pixels of
- * every canvas: those drawn within {@link RECENTLY_DRAWN_FRAMES} and those still
+ * every canvas: those drawn within {@link ON_SCREEN_FRAMES} and those still
  * owed. The rest are evicted, to repaint when next looked up. A sheet painted
  * under another floor's seed is dropped instead: it is art of a floor that no
  * longer exists.
@@ -983,7 +1281,7 @@ function requestNextReplay(): void {
  */
 function repaintEnvironmentArtAfterPurge(): void {
   const current = floorArtSeed();
-  const oldestRecentFrame = renderFrameNumber() - RECENTLY_DRAWN_FRAMES;
+  const oldestRecentFrame = renderFrameNumber() - ON_SCREEN_FRAMES;
   const owed = new Map<string, SheetReplay>();
   const idle = new Map<string, DeferredSheet>();
   const interruptedChains: Array<() => void> = [];
@@ -994,6 +1292,12 @@ function repaintEnvironmentArtAfterPurge(): void {
       variesWithFloorSeed: sheet.variesWithFloorSeed,
       artSeed: sheet.artSeed,
     };
+    // A sheet its resident set has released is going anyway; repainting it
+    // would also lose the release.
+    if (releasedBySet(key)) {
+      idle.set(key, owedSheet);
+      continue;
+    }
     const drawnRecently = sheet.lastLookupFrame >= oldestRecentFrame;
     if (drawnRecently || pending.has(key)) owed.set(key, { key, ...owedSheet });
     else idle.set(key, owedSheet);
@@ -1002,6 +1306,18 @@ function repaintEnvironmentArtAfterPurge(): void {
     const sheet = pending.get(key);
     if (sheet === undefined) continue;
     if (sheet.plan.variesWithFloorSeed && sheet.artSeed !== current) continue;
+    const settled = sheet.plan.onSettled;
+    if (settled !== undefined) interruptedChains.push(settled);
+    if (releasedBySet(key)) {
+      if (!idle.has(key)) {
+        idle.set(key, {
+          replan: replanOf(sheet.plan),
+          variesWithFloorSeed: sheet.plan.variesWithFloorSeed,
+          artSeed: sheet.artSeed,
+        });
+      }
+      continue;
+    }
     if (!owed.has(key)) {
       owed.set(key, {
         key,
@@ -1010,8 +1326,6 @@ function repaintEnvironmentArtAfterPurge(): void {
         artSeed: sheet.artSeed,
       });
     }
-    const settled = sheet.plan.onSettled;
-    if (settled !== undefined) interruptedChains.push(settled);
   }
   for (const [key, sheet] of deferred) {
     if (sheet.variesWithFloorSeed && sheet.artSeed !== current) continue;
@@ -1034,6 +1348,7 @@ function repaintEnvironmentArtAfterPurge(): void {
   // Evicted sheets stay owed on demand rather than joining the repaint: nothing
   // drew them lately, which is why they were let go.
   const stillEvicted = [...evicted, ...idle];
+  for (const key of idle.keys()) releasedWhilePainting.delete(key);
   release(() => true);
   for (const [key, sheet] of stillEvicted) evicted.set(key, sheet);
   if (staging !== null) {
@@ -1048,19 +1363,7 @@ function repaintEnvironmentArtAfterPurge(): void {
   for (const settled of interruptedChains) settled();
 }
 
-onPaintedSpriteMiss((key) => {
-  const sheet = evicted.get(key);
-  if (sheet === undefined) return;
-  evicted.delete(key);
-  if (sheet.variesWithFloorSeed && sheet.artSeed !== floorArtSeed()) return;
-  replays.push({
-    key,
-    replan: sheet.replan,
-    variesWithFloorSeed: sheet.variesWithFloorSeed,
-    artSeed: sheet.artSeed,
-  });
-  evictionStats.repaintsAfterEviction += 1;
-});
+onPaintedSpriteMiss(repaintEvicted);
 
 onCanvasRecovery((cause) => {
   // Under memory pressure the sheets are correct and the costliest art there is

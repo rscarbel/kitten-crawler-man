@@ -47,7 +47,7 @@ export const EVENT_IMPORTANCE = {
   bossDefeated: IMPORTANCE.LANDMARK,
   healthLow: IMPORTANCE.HIGH,
   healingPotionUsed: IMPORTANCE.NOTABLE,
-  potionHoarding: IMPORTANCE.HIGH,
+  potionStockpiling: IMPORTANCE.HIGH,
   crawlerKnockedOut: IMPORTANCE.MAJOR,
   crawlerRevived: IMPORTANCE.SIGNIFICANT,
   roomCleared: IMPORTANCE.MODERATE,

@@ -1,14 +1,14 @@
 /**
  * What each hired mercenary says, and when.
  *
- * The lines are written for each character rather than lifted from anywhere:
+ * The lines are written for each character:
  * the Meat Shields hires are crude, funny and a little bleak, with the cruelty
- * aimed at the dungeon and never at the player. Nothing here reaches past the
- * third floor — no later deaths, no later spells, nothing the characters have
- * not lived through yet by the time the party can hire them.
+ * aimed at the dungeon and never at the player. The lines mention nothing
+ * beyond what the game has shown by the third floor, when the party can hire
+ * them.
  *
- * The cat crawler is "Princess" to the two cretins, because in the books Sledge
- * is devoted to Donut and Bomo follows his lead.
+ * The cat crawler is "Princess" to the two cretins, because Sledge
+ * is devoted to her and Bomo follows his lead.
  *
  * `MercenaryBarker` (`src/creatures/mercenaries/MercenaryBarker.ts`) reads
  * every one of these pools generically, through `MercenaryLines` and

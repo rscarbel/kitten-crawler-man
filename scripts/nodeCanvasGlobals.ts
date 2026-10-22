@@ -24,7 +24,13 @@ import { GROUND_SHEET_KEYS, requestGroundSheets } from '../src/map/ground/runtim
 import { paintEnvironmentArtNow } from '../src/map/environmentArtCache.js';
 import { requestEnvironmentSheetsForGroups } from '../src/sprites/sheets/environmentSheets.js';
 import { BOSS_ROOM_ASSET_GROUPS } from '../src/sprites/sheets/bossRoomSheets.js';
-import { DEFAULT_FLOOR_ART_SEED, setFloorArtSeed } from '../src/map/ground/floorArtSeed.js';
+import {
+  BUILDING_SALT,
+  DEFAULT_FLOOR_ART_SEED,
+  floorArtSubSeed,
+  setFloorArtSeed,
+} from '../src/map/ground/floorArtSeed.js';
+import { requestBuildingSheets } from '../src/sprites/buildinggen/runtimeBuildingSheets.js';
 
 /** Where `SpriteLoader` resolves manifest paths against, from the repo root. */
 const IMAGE_BASE = 'src/images/';
@@ -58,7 +64,8 @@ export async function loadGameSpritesInNode(artSeed = DEFAULT_FLOOR_ART_SEED): P
 
 /**
  * Paints every sheet the shipped game paints for itself: the generated ground
- * tilesets, the town's street furniture and signage, and the wilderness.
+ * tilesets, the town's buildings, street furniture and signage, and the
+ * wilderness.
  *
  * `loadSprites` cannot fetch any of them — their manifest entries declare no
  * file — so a harness that only loaded sheets would render a floor in each
@@ -86,6 +93,9 @@ export function paintEnvironmentArtInNode(artSeed = DEFAULT_FLOOR_ART_SEED): voi
     'floor2_tileset',
     ...BOSS_ROOM_ASSET_GROUPS,
   ]);
+  // A floor asks for its buildings one by one as the party nears them; a
+  // harness rendering a town wants every facade and life row at once.
+  requestBuildingSheets(floorArtSubSeed(BUILDING_SALT));
   paintEnvironmentArtNow();
 }
 

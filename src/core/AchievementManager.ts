@@ -275,7 +275,7 @@ export const ACHIEVEMENT_DEFS: Record<AchievementId, AchievementDef> = {
   big_brawler: {
     id: 'big_brawler',
     name: 'Big Brawler',
-    description: 'Killed a roided-out mutant troglodyte and his minions.',
+    description: 'Killed Big Rooster and his flock.',
     playerType: 'human',
     lootBox: { tier: 'Silver', category: 'Boss' },
     itemRewards: [{ id: 'grull_war_gauntlet', quantity: 1 }],

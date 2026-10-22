@@ -1,14 +1,13 @@
 /**
- * The words of every named Over City resident — the individuals layered on
- * top of the role system in `townDialog.ts` rather than replacing it. Each
- * entry's `ambient` is everyday chatter in their own voice, `lore` is a
- * multi-page life story told one entry per talk, and `reactive` is a
- * quest-gated pool shown as the lead page when their corner of town has
- * something timelier to say. The lore is sourced from the Over City as it
- * appears in the books — Scolopendra's curse, the skyfowl and their
- * watchers, Featherfall's magistracy, Grimaldi's circus, and the Syndicate's
- * cameras — and from the game's own questlines, which the `reactive` hooks
- * read through the same `TownDialogContext` the street uses.
+ * The words of every named Over City resident — the individuals layered on top of
+ * the role system in `townDialog.ts` rather than replacing it. Each entry's
+ * `ambient` is everyday chatter in their own voice, `lore` is a multi-page life
+ * story told one entry per talk, and `reactive` is a quest-gated pool shown as the
+ * lead page when their corner of town has something timelier to say. The lore
+ * covers Scolopendra's curse, the skyfowl and their watchers, Featherfall's
+ * magistracy, Grimaldi's circus, and the Syndicate's cameras, and the `reactive`
+ * hooks read the game's own questlines through the same `TownDialogContext` the
+ * street uses.
  */
 
 import type { TownDialogContext } from '../../systems/townDialog';

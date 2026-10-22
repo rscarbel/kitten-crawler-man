@@ -26,7 +26,7 @@ export interface EventMappingHost {
   readonly profile: PlayerProfileTracker;
   now(): number;
   /** A crawler dropped to low HP; the host decides later whether they sat on their potions. */
-  watchForHoarding(crawler: CrawlerName): void;
+  watchForStockpiling(crawler: CrawlerName): void;
   potionDrunk(crawler: CrawlerName): void;
 }
 
@@ -38,7 +38,7 @@ function kindName(kind: 'human' | 'cat'): CrawlerName {
   return kind === 'human' ? 'Carl' : 'Donut';
 }
 
-/** `the_hoarder` → `the hoarder`. */
+/** `trash_gremlin` → `the trashGremlin`. */
 function humanize(id: string): string {
   return id.replace(/_/g, ' ');
 }
@@ -179,7 +179,7 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
     }),
     bus.on('healthLow', (e) => {
       const crawler = sideName(e.player);
-      host.watchForHoarding(crawler);
+      host.watchForStockpiling(crawler);
       emit({
         type: 'healthLow',
         data: { crawler, hp: Math.ceil(e.hp), maxHp: e.maxHp },

@@ -868,7 +868,7 @@ export function resolveKills(ctx: CombatContext): void {
     }
     // The XP split, and only the XP split, needs somebody to have dealt damage.
     // The death itself does not: a mob finished by a burn or a poison — or one
-    // the game kills outright, like the Hoarder's swarm when she drops — has an
+    // the game kills outright, like the Trash Gremlin's swarm when it drops — has an
     // empty ledger, and bailing out here would take its gore, its corpse marker
     // and its `mobKilled` event along with the XP it has nobody to give.
     const hasDamageLedger = totalDmg > 0;

@@ -72,7 +72,7 @@ const TOOTH = '#e7dcc4';
 
 const TUSK: Ramp = { dark: '#9c8f6c', mid: '#e2d9bb', light: '#fbf6e4' };
 const HOOF: Ramp = { dark: '#1e1820', mid: '#3a2f39', light: '#5d4d58' };
-/** Black eyes, per the source description — the spark is what keeps them alive. */
+/** Black eyes: the spark is what keeps them alive. */
 const EYE = '#0c0a10';
 const EYE_SPARK = '#ffffff';
 const BRISTLE = '#4d2a33';
@@ -119,7 +119,7 @@ const ANKLE_Y = -0.07;
 const KNEE_Y = -0.225;
 /**
  * The hip sits at under a third of the standing height rather than at half of
- * it, which is what "comically stubby from the waist down" means: the torso
+ * it, which is what makes it comically stubby from the waist down: the torso
  * takes the difference.
  */
 const HIP_Y = -0.4;
@@ -1383,8 +1383,8 @@ function drawTusk(ctx: Ctx, root: Pt, control: Pt, tip: Pt, shade: number): void
 
 /**
  * The long front pair, rooted at the jaw corners. They sweep up and out and
- * then hook back in so the two tips cross over the snout — the "four crossed
- * tusks" of the description, and the read that has to survive a 32 px tile.
+ * then hook back in so the two tips cross over the snout — the four crossed
+ * tusks of the design, and the read that has to survive a 32 px tile.
  */
 function drawFacingFrontTusk(ctx: Ctx, side: number, shade: number): void {
   const root = pt(side * MUZZLE_RX * 0.78, MUZZLE_Y + MUZZLE_RY * 0.5);
@@ -1442,9 +1442,8 @@ function drawEye(ctx: Ctx, centre: Pt, blink: number, glare: number): void {
     ctx.stroke();
     return;
   }
-  // A sunken socket, then a solid black lozenge. The source says black eyes,
-  // and the pale sclera with a white specular dot that was here instead is the
-  // single most reliable cute-mammal cue there is.
+  // A sunken socket, then a solid black lozenge. Pale sclera with a white
+  // specular dot is the single most reliable cute-mammal cue, so the eye has neither.
   fillEllipse(ctx, centre, rx * 1.7, ry * 1.8, HIDE.dark);
   fillEllipse(ctx, centre, rx, ry, EYE);
   if (glare > GLINT_FROM) {
@@ -1793,11 +1792,11 @@ const THROAT_OVERLAP = 0.3;
 /**
  * The wedge of muscle between the jaw and the chest.
  *
- * The description's "heads that sit too close to their shoulders" is a
- * silhouette with nothing between the two, and a head placed close enough to
- * look right standing still still opens a gap the moment a pose leans, turns or
- * thrusts it. Painting the gap shut is the only thing that holds across every
- * frame; a strut narrow enough to show reads as a leash.
+ * A head that sits too close to its shoulders is a silhouette with nothing
+ * between the two, and a head placed close enough to look right standing still
+ * still opens a gap the moment a pose leans, turns or thrusts it. Painting the
+ * gap shut is the only thing that holds across every frame; a strut narrow
+ * enough to show reads as a leash.
  */
 function drawThroat(ctx: Ctx, skeleton: Skeleton, view: ViewSpec): void {
   const rootHalf = SHOULDER_HALF * view.girth * THROAT_ROOT_SHARE;

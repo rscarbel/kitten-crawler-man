@@ -88,6 +88,8 @@ const { createShopStock } = await import('../src/economy/shopStock.js');
 const { TownPropSystem } = await import('../src/systems/TownPropSystem.js');
 const { TownDecorSystem } = await import('../src/systems/TownDecorSystem.js');
 const { TownLifeSystem } = await import('../src/systems/TownLifeSystem.js');
+const { CrowdResidentSet } = await import('../src/systems/CrowdResidentSet.js');
+const { WorldResidency, tileFocus } = await import('../src/systems/WorldResidency.js');
 const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
 const { MobRoster } = await import('../src/systems/kits/SceneWorld.js');
@@ -175,8 +177,8 @@ const perFrameBakeCeiling = intArg('per-frame-bake-ceiling', DEFAULT_PER_FRAME_B
  * arrival window (`warmupFrames`) — not the whole run, which deliberately
  * counts every approximate draw the crowd's arrival makes as a miss (see
  * `drawFigureCachedApprox`) even though none of them cost a bake. The crowd's
- * own working set is pinned resident for as long as the scene stays active
- * (`pinCitizenFigure`), so a real run measures at or near 100% here — the
+ * own working set is pinned resident while the party is near it
+ * (`CrowdResidentSet`), so a real run measures at or near 100% here — the
  * small margin below that is for a state this harness never exercises (a
  * citizen's `talk` row, warmed lazily on purpose since dialog is a rare,
  * one-off cost) rather than an expected steady miss.
@@ -187,7 +189,7 @@ const minHitRatePercent = intArg('min-hit-rate', DEFAULT_MIN_HIT_RATE_PERCENT);
 /**
  * Cell bakes per steady-state frame the render path itself may pay, held to
  * zero: the crowd's idle and walk rows are baked before the scene's first
- * frame and pinned against the idle sweep for as long as it stays active, so
+ * frame and pinned against the idle sweep while the party is near, so
  * nothing should ever miss on the render path again once warmup ends. A
  * `prewarmBakes` cell is unaffected by this — see the lazy/prewarm split this
  * gate reads — because the active player's own figure keeps warming on its
@@ -266,6 +268,12 @@ const roster = new MobRoster(gameMap, new SpellSystem());
 setViewportSize(viewportW, viewportH);
 setRenderScaleValue(REVIEW_DEVICE_PIXEL_RATIO);
 
+// Decided once the viewport is set, which decides what is within reach of it.
+const residency = new WorldResidency();
+residency.register(new CrowdResidentSet({ people: () => [...townLife.people, ...market.vendors] }));
+const plazaOutlook = { focus: [tileFocus(plazaCentre)], covered: false };
+residency.settleNow(plazaOutlook);
+
 const camX = plazaCentre.x * TILE_SIZE - viewportW / 2;
 const camY = plazaCentre.y * TILE_SIZE - viewportH / 2;
 /** Matches `RenderPipeline`'s own townsfolk cull margin: one tile past the frame. */
@@ -319,6 +327,7 @@ let peakFigureBakeMs = 0;
 
 for (let frame = 0; frame < frameCount; frame++) {
   const updateStart = performance.now();
+  residency.update(() => plazaOutlook);
   townLife.update({
     human,
     cat,
@@ -439,6 +448,7 @@ const BURST_FRAMES = 90;
 let burstEvictions = 0;
 let burstCitizenDirectDraws = 0;
 for (let i = 0; i < BURST_FRAMES; i++) {
+  residency.update(() => plazaOutlook);
   townLife.update({
     human,
     cat,

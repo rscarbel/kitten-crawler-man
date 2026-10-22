@@ -63,7 +63,7 @@ const ELITE_MARKER_RADIUS = 4;
 /** Half-length of the elite marker's black cross arms (pixels). */
 const ELITE_MARKER_CROSS_ARM = 2.5;
 
-/** Minimap quest-marker glyphs; 'elite' is the book's black-cross-in-white-circle elite mark. */
+/** Minimap quest-marker glyphs; 'elite' is a black cross in a white circle. */
 export type QuestMarkerType = 'exclamation' | 'question' | 'red_x' | 'elite';
 /** Stairwell icon half-size (extra pixels beyond pxPerTile). */
 const STAIRWELL_ICON_HALF_EXTRA = 1;
@@ -558,7 +558,7 @@ export class MiniMapSystem implements GameSystem {
           align: 'center',
         });
       } else if (qm.type === 'elite') {
-        // The book's elite marker: a black cross inside a white circle.
+        // The elite marker: a black cross inside a white circle.
         ctx.save();
         ctx.fillStyle = worldPalette.minimap.eliteDisc;
         ctx.beginPath();

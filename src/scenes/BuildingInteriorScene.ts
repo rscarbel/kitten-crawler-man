@@ -37,6 +37,7 @@ import { PRISON_TRAIL_SPACING_TILES } from '../systems/stealthKeySnatch/prisonTu
 import { setFloorArtSeed } from '../map/ground/floorArtSeed';
 import { requestGroundSheets } from '../map/ground/runtimeGroundSheets';
 import { requestEnvironmentSheetsForGroups } from '../sprites/sheets/environmentSheets';
+import { holdIdleClock, releaseIdleClock } from '../core/renderFrameClock';
 import { BRAZIER, FIREPLACE } from '../map/tileTypes';
 import { PlayerManager } from '../core/PlayerManager';
 import { setSkillBookReaders } from '../creatures/skillBookDrop';
@@ -155,7 +156,8 @@ import type { Mob } from '../creatures/Mob';
 import type { Townsperson } from '../creatures/Townsperson';
 import { CITIZEN_TALK_RADIUS_TILES } from '../creatures/townInteraction';
 import { safeRoomPressLeavesSpeaker, safeRoomSpeakerFor } from '../systems/safeRoomSpeaker';
-import { prewarmAndPinCitizenTalk } from '../creatures/citizenFigure';
+import { prewarmAndPinCitizenTalk, unpinCitizenTalk } from '../creatures/citizenFigure';
+import type { DrawnFigureRow } from '../sprites/figure/figureDef';
 import {
   BIG_TOP_BUILDING_NAME,
   isCircusResolvedStage,
@@ -904,6 +906,8 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly conversation: Conversation;
   /** Occupant the open conversation belongs to; used to notice the player walking off. */
   private citizenDialogTarget: Townsperson | null = null;
+  /** The talk row pinned for {@link citizenDialogTarget}, unpinned with it. */
+  private citizenTalkRow: DrawnFigureRow | null = null;
   /** Keeps Carl talking, turned to whoever he is in conversation with. */
   private readonly humanTalk = new HumanTalkDriver();
   /**
@@ -1139,9 +1143,11 @@ export class BuildingInteriorScene extends GameplayScene {
     // Queued rather than painted outright, and before the loading card begins
     // below, so the card is up until every sheet lands. That is the whole
     // guarantee for the floor's indoor-only groups (`LevelDef.interiorSpriteGroups`):
-    // the floor never painted them, and the overworld's cache may have let them
-    // go since the last visit, but the card cannot lift while one is owed.
-    // The floor's own groups are already held, so asking again costs nothing.
+    // the floor never painted them, and the idle sweep lets them go once the
+    // party has been outdoors a while, but asking for a let-go sheet queues its
+    // repaint and the card cannot lift while one is owed. The floor's own
+    // groups stay resident (the idle clock stands still indoors), so asking
+    // again costs nothing.
     const repaintTileArt = (): void => {
       for (const floor of isTower ? this.towerFloors : [this.map]) {
         floor.markTileArtStale({ includeFacades: true });
@@ -2228,6 +2234,9 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   onEnter(): void {
+    // The floor outside waits for the party to come back out unchanged, so
+    // time spent in here must not age its art toward the idle sweeps.
+    holdIdleClock();
     bindRunStats(this.gameStats);
     this.stopForwardingSceneHooks = forwardSceneHooksToBus(this.bus, {
       conversation: this.conversation,
@@ -2420,6 +2429,10 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   onExit(): void {
+    // A conversation cut off by the scene changing never closes on its own,
+    // and its talk row would stay pinned.
+    this.releaseCitizenDialogTarget();
+    releaseIdleClock();
     this.arrivalLoading.dispose();
     this.stopForwardingQuestItemEvictions?.();
     this.stopForwardingQuestItemEvictions = null;
@@ -2462,6 +2475,10 @@ export class BuildingInteriorScene extends GameplayScene {
     // maps — reachable for the rest of the page's life.
     for (const floor of this.floors) floor.combat.dispose();
     for (const floor of this.floors) floor.fairies.dispose();
+    // Every visit builds its storeys afresh, so a room left is never drawn
+    // again; its pixels go back now rather than at a collection the browser
+    // may put off for a long time.
+    for (const floor of this.floors) floor.world.gameMap.releaseTileArt();
     this.inputHandler.unbind();
     // A real <input> on document.body, which swallows every key it is focused
     // for. Left behind, it makes the scene that replaces this one unplayable.
@@ -4049,8 +4066,6 @@ export class BuildingInteriorScene extends GameplayScene {
     // ends when the *player* walks off, which only holds if the other party
     // stays put.
     target.frozen = true;
-    const facing = target.facingXY();
-    prewarmAndPinCitizenTalk(target.figure, facing.x, facing.y);
     this.conversation.open({
       lines: [line],
       reward: null,
@@ -4072,7 +4087,10 @@ export class BuildingInteriorScene extends GameplayScene {
     });
     // Only once `open` has run: an occupant this press was handed on from is
     // released by that call, through `releaseCitizenDialogTarget`, and must
-    // still be the one it finds there.
+    // still be the one it finds there, and its talk row unpinned before this
+    // one, which may be the same row, is pinned.
+    const facing = target.facingXY();
+    this.citizenTalkRow = prewarmAndPinCitizenTalk(target.figure, facing.x, facing.y);
     this.citizenDialogTarget = target;
     this.noteTalk(target, inDanger);
     return true;
@@ -4110,6 +4128,8 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.citizenDialogTarget === null) return;
     this.citizenDialogTarget.frozen = false;
     this.citizenDialogTarget = null;
+    if (this.citizenTalkRow !== null) unpinCitizenTalk(this.citizenTalkRow);
+    this.citizenTalkRow = null;
   }
 
   /**

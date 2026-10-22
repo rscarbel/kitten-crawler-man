@@ -52,7 +52,7 @@ const MIN_ROLL_FRACTION = 0.3;
  * It re-aims at a crawler at each wall carom and then commits: the whole leg is one
  * line, from the wall it left to the wall it is going to hit.
  *
- * This started as a bounded steering rate, and simulation killed it. A wide turning
+ * A bounded steering rate does not work here, as simulation showed. A wide turning
  * circle inside a *circular* arena — the radius worked out at eight tiles inside
  * eleven — turns every approach into a long arc, and a long arc meets a circle at a
  * shallow angle almost every time. Over five simulated minutes the ball hit the wall
@@ -75,8 +75,8 @@ const MIN_ROLL_FRACTION = 0.3;
  * How square an impact has to be to count as a head-on slam, as the cosine of the
  * angle between the ball's heading and the wall's inward normal.
  *
- * Below this the ball caroms off and keeps every scrap of its momentum, which is
- * the source's "it never loses momentum" taken literally. Above it, a fifteen-foot
+ * Below this the ball caroms off and keeps every scrap of its momentum: the
+ * rule that it never loses momentum, taken literally. Above it, a fifteen-foot
  * sack of muscle hits iron flat and something has to give.
  */
 const HEAD_ON_COSINE = 0.72;
@@ -108,8 +108,8 @@ const WALLOW_MAX_FRAMES = 210;
 /**
  * Share of incoming damage that lands while the ball is rolling.
  *
- * A fraction rather than the flat cap of 1 the previous fight used: capped at 1,
- * every attack outside the vulnerable window is pointless, so a ranged crawler
+ * A fraction rather than a flat cap of 1 damage: capped at 1, every attack
+ * outside the vulnerable window is pointless, so a ranged crawler
  * spends the whole fight not playing. A fifth still makes chip damage worth
  * throwing while rewarding the window enormously.
  */
@@ -133,10 +133,10 @@ const TRAMPLE_COOLDOWN = 55;
 /**
  * Share of a trample that a *wallowing* ball still deals on contact.
  *
- * The vulnerable window used to be completely safe, so the greedy play — stand inside
- * it and swing — carried no risk at all, and the whole fight collapsed into waiting
- * for a free hit. A thousand pounds of thrashing pig is not safe to stand on, and
- * making the window cost something is what turns it into a decision.
+ * A completely safe vulnerable window makes the greedy play — stand inside it and swing
+ * — riskless, and the whole fight collapses into waiting for a free hit. A thousand
+ * pounds of thrashing pig is not safe to stand on, and making the window cost something
+ * is what turns it into a decision.
  */
 const WALLOW_CONTACT_FRACTION = 0.28;
 /**
@@ -336,16 +336,15 @@ export interface StenchBurst {
  * The Ball of Swine — floor 2's optional borough boss.
  *
  * The whole fight is one idea: **momentum**. It never loses any on its own, which
- * is what the source insists on, and it never loses any to a glancing carom off the
+ * is the point of it, and it never loses any to a glancing carom off the
  * arena wall either. What takes momentum away is the crawler making it hit
  * something flat — a square wall slam, or a gym barrier's slow field — and momentum
  * is what its speed, its trample damage and its invulnerability are all made of.
  * Take enough and it collapses into a wallow, which is the only window in which it
  * can be hurt properly.
  *
- * Nothing here is on a timer the player cannot see or influence, which is the
- * fight the previous version was not: that one rolled on a fixed orbit, killed
- * instantly on contact, and stopped for twenty to forty seconds at random.
+ * Nothing here is on a timer the player cannot see or influence: it holds no
+ * fixed orbit, never kills instantly on contact, and never stops at random.
  */
 export class BallOfSwine extends Mob {
   /** A rolling knot of pig faces turns its eyes with the roll; no one point is its head. */
@@ -1039,12 +1038,12 @@ export class BallOfSwine extends Mob {
 
     // Only a fight can cost it momentum. With nobody in the chamber, or with its
     // target out on the safe ring rather than in the drum, every contact is a free
-    // carom however square it is: the source is explicit that it never loses
-    // momentum, and a ball that had been grinding itself down on the ironwork since
-    // the floor loaded — or on a route walker it can see but never touch — would
-    // greet the party already collapsed, with an empty momentum bar and VULNERABLE
-    // over its head, the opening beat and Mordecai's hint about baiting the wall
-    // both spent before anyone arrived or without anyone ever risking anything.
+    // carom however square it is: it never loses momentum, and a ball that had been
+    // grinding itself down on the ironwork since the floor loaded — or on a route
+    // walker it can see but never touch — would greet the party already collapsed,
+    // with an empty momentum bar and VULNERABLE over its head, the opening beat and
+    // Mordecai's hint about baiting the wall both spent before anyone arrived or
+    // without anyone ever risking anything.
     if (incidence >= HEAD_ON_COSINE && this.targetInsideDrum(this.currentTarget)) {
       this.slamHeading = this.heading;
       this.heading = caromHeading(this.heading, normalX, normalY);
@@ -1052,9 +1051,9 @@ export class BallOfSwine extends Mob {
       return;
     }
 
-    // A glancing carom costs it nothing at all. This is the source's "it never loses
-    // momentum", and it is what makes the crawler's job *aiming* the thing rather
-    // than waiting for it to tire.
+    // A glancing carom costs it nothing at all, so it never loses momentum, and
+    // that is what makes the crawler's job *aiming* the thing rather than waiting
+    // for it to tire.
     //
     // The carom is also where it picks its next line, because a wall is the only
     // place a committed charge can end. It turns on the spot like a bull — it has
@@ -1070,7 +1069,7 @@ export class BallOfSwine extends Mob {
    * Straight at a crawler when there is one, clamped so it cannot aim back into the
    * wall it is standing against — and a plain physical carom when the arena is
    * empty, so an unattended ball keeps rattling round its chamber instead of
-   * stopping, which is the one thing the source says it never does.
+   * stopping, which is the one thing it never does.
    */
   private chargeHeadingFrom(normalX: number, normalY: number): number {
     const wanted = this.headingToward(this.currentTarget);
@@ -1211,8 +1210,8 @@ export class BallOfSwine extends Mob {
       if (Math.hypot(targetX - centreX, targetY - centreY) > range) continue;
 
       // Half the victim's own maximum health at a full roll, scaled down by how
-      // much momentum it is actually carrying. Brutal, but survivable from full —
-      // the previous fight dealt 9999 here, which is a coin flip rather than a hit.
+      // much momentum it is actually carrying. Brutal, but survivable from full:
+      // an instant kill would make every contact a coin flip rather than a hit.
       //
       // Dealt directly rather than through `dealDamage`, which would put it through
       // the mob-level multiplier as well. It is already relative to the victim, and

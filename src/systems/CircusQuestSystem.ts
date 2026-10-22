@@ -1,7 +1,7 @@
 /**
  * CircusQuestSystem — the overworld half of "The Show Must Go On", the
  * Vengeance of the Daughter circus questline. Everything is dialog-gated on
- * Tsarina Signet, following the book:
+ * Tsarina Signet:
  *
  *   talk to Signet → defend her Mold Lion "casting" (she meant your blood to
  *   fuel it) → she tells the story of Signet the Bastard and Grimaldi, takes
@@ -184,7 +184,7 @@ export const RITUAL_WAVES: ReadonlyArray<ReadonlyArray<WaveSpawn>> = [
 ];
 
 /**
- * The assault on the circus grounds, in the book's order: knife-throwing
+ * The assault on the circus grounds: knife-throwing
  * lemurs, stilt clowns, fat clowns with the remaining mold lions, then
  * Terror the Clown. Offsets are relative to the circus centre and sit on
  * open ground round the Big Top (dx -6..+5, dy -4..0) and its flanking
@@ -877,7 +877,7 @@ export class CircusQuestSystem implements GameSystem {
 
     if (this.signet?.isAlive) {
       const tile = this.signetTile();
-      // The book's elite mark follows Signet everywhere.
+      // The elite mark follows Signet everywhere.
       markers.push({ x: tile.x, y: tile.y, type: 'elite' });
       if (this.hasPendingDialog()) {
         markers.push({ x: tile.x, y: tile.y, type: 'exclamation' });
@@ -1121,7 +1121,7 @@ export class CircusQuestSystem implements GameSystem {
   }
 
   private startHeatherHunt(active: Player): void {
-    // The book's collateral beat — Signet takes Mongo until the job is done.
+    // Signet takes Mongo as collateral until the job is done.
     if (this.mongoSystem?.mongo && this.lastCtx) {
       this.mongoSystem.dismiss(this.lastCtx.roster.mobs, this.lastCtx.roster.grid);
       this.progress.mongoKidnapped = true;

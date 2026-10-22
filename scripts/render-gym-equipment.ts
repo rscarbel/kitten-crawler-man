@@ -3,7 +3,7 @@
  * Headless review harness for the procedurally drawn gym equipment.
  *
  * The bench and the treadmill have no sprite sheet and no preview route, so the
- * only way to judge them used to be walking to the Juicer's room in a running
+ * only way to judge them used to be walking to Big Rooster's room in a running
  * game. Art has to be reviewed as an image: this renders every draw function at
  * the real tile size on a gym-floor swatch, and again magnified, so proportion
  * defects and 32px silhouette defects are both visible in one picture.

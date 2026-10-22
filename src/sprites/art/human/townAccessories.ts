@@ -70,7 +70,7 @@ const PROP_STROKE_WIDTH = 0.01;
 
 // ── Shoes ────────────────────────────────────────────────────────────────────
 //
-// Carl's own canon look is barefoot — a trait of his own character, not of
+// Carl's own look is barefoot — a trait of his own character, not of
 // the rig. A flat shoe laid over each foot target of a finished figure, for a
 // figure that dresses after its paint rather than through the cast's
 // `townsfolk_shoes` garment.

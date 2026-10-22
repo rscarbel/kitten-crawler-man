@@ -110,10 +110,10 @@ export interface WorldCheckpoint {
   /**
    * One-time kill latches the scene owns directly rather than through a system.
    * `krakarenKilled` gates a reward that must not be collectable twice, and
-   * `juicerKilled` does the same for the Desperado Pass tattoo.
+   * `bigRoosterKilled` does the same for the Desperado Pass tattoo.
    */
   krakarenKilled: boolean;
   krakarenBossRoomIdx: number;
-  juicerKilled: boolean;
-  juicerBossRoomIdx: number;
+  bigRoosterKilled: boolean;
+  bigRoosterBossRoomIdx: number;
 }

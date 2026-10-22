@@ -28,14 +28,14 @@ function ratio(part: number, whole: number): number {
 /**
  * Derived play-style statistics. Raw counts accumulate from game events and
  * sampled live state; `summary()` turns them into the rates the AI reasons
- * about ("this crawler is a hoarder", "this crawler leaves the cat behind").
+ * about ("this crawler is a trashGremlin", "this crawler leaves the cat behind").
  */
 export class PlayerProfileTracker {
   private readonly startedAt: number;
   private kills = 0;
   private potionsHighHp = 0;
   private potionsLowHp = 0;
-  private hoardingMoments = 0;
+  private stockpilingMoments = 0;
   private coinsGained = 0;
   private purchases = 0;
   private boxesOpened = 0;
@@ -66,8 +66,8 @@ export class PlayerProfileTracker {
     else this.potionsLowHp++;
   }
 
-  recordHoarding(): void {
-    this.hoardingMoments++;
+  recordStockpiling(): void {
+    this.stockpilingMoments++;
   }
 
   recordPurchase(): void {
@@ -133,7 +133,7 @@ export class PlayerProfileTracker {
       caution: {
         potionsDrunk: potionsTotal,
         shareDrunkAboveHalfHp: ratio(this.potionsHighHp, potionsTotal),
-        timesSatOnPotionsAtLowHp: this.hoardingMoments,
+        timesSatOnPotionsAtLowHp: this.stockpilingMoments,
       },
       lootGreed: {
         coinsPerMinute: round2(this.coinsGained / minutes),

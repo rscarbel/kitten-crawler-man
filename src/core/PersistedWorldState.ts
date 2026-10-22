@@ -135,8 +135,8 @@ export interface PersistedWorldState {
 
   krakarenKilled: boolean;
   krakarenBossRoomIdx: number;
-  juicerKilled: boolean;
-  juicerBossRoomIdx: number;
+  bigRoosterKilled: boolean;
+  bigRoosterBossRoomIdx: number;
 }
 
 export type PersistedArenaCheckpoint = Omit<ArenaCheckpoint, 'arenaLiveTusklings'>;
@@ -1412,7 +1412,7 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
   const briarHollow = parseBriarHollowStateSnapshot(value.briarHollow);
   const cloggedBathroom = parseCloggedBathroomCheckpoint(value.cloggedBathroom);
   const stealthKeySnatch = parseStealthKeySnatchCheckpoint(value.stealthKeySnatch);
-  const { krakarenKilled, krakarenBossRoomIdx, juicerKilled, juicerBossRoomIdx } = value;
+  const { krakarenKilled, krakarenBossRoomIdx, bigRoosterKilled, bigRoosterBossRoomIdx } = value;
 
   if (
     bossRoom === undefined ||
@@ -1434,8 +1434,8 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
     mongoPetState === undefined ||
     !isBoolean(krakarenKilled) ||
     !isNumber(krakarenBossRoomIdx) ||
-    !isBoolean(juicerKilled) ||
-    !isNumber(juicerBossRoomIdx)
+    !isBoolean(bigRoosterKilled) ||
+    !isNumber(bigRoosterBossRoomIdx)
   ) {
     return undefined;
   }
@@ -1468,7 +1468,7 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
     stealthKeySnatch,
     krakarenKilled,
     krakarenBossRoomIdx,
-    juicerKilled,
-    juicerBossRoomIdx,
+    bigRoosterKilled,
+    bigRoosterBossRoomIdx,
   };
 }

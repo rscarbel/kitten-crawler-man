@@ -41,6 +41,7 @@ import type { SpriteManifestEntry, SpriteStateDef } from '../../src/core/SpriteL
 import {
   BUILDING_IDLE_STATE,
   BUILDING_LIFE_STATE,
+  buildingLifeManifestEntry,
   buildingManifestEntry,
 } from '../../src/sprites/buildinggen/runtimeBuildingSheets.js';
 import {
@@ -115,7 +116,7 @@ export function readFixture(): ReadonlyMap<string, FootprintFixtureEntry> {
  * comparing two independently derived numbers rather than one expression
  * against itself.
  */
-export interface SheetLayout {
+interface SheetLayout {
   readonly idleColumn: number;
   readonly idleRow: number;
   readonly lifeColumn: number;
@@ -133,11 +134,19 @@ function stateOf(entry: SpriteManifestEntry, name: string): SpriteStateDef {
   return state;
 }
 
-export function sheetLayoutFor(entry: SpriteManifestEntry): SheetLayout {
+/**
+ * The review sheet a bake lays out: the still frame where its own entry puts
+ * it, and the life row, a sheet of its own in the game, after it on the same
+ * canvas so one picture shows a building whole.
+ */
+export function sheetLayoutFor(
+  entry: SpriteManifestEntry,
+  lifeEntry: SpriteManifestEntry,
+): SheetLayout {
   const idle = stateOf(entry, BUILDING_IDLE_STATE);
-  const life = stateOf(entry, BUILDING_LIFE_STATE);
+  const life = stateOf(lifeEntry, BUILDING_LIFE_STATE);
   const idleColumn = idle.colOffset ?? 0;
-  const lifeColumn = life.colOffset ?? 0;
+  const lifeColumn = idleColumn + idle.frameCount + (life.colOffset ?? 0);
   return {
     idleColumn,
     idleRow: idle.row,
@@ -157,7 +166,7 @@ export function sheetLayoutFor(entry: SpriteManifestEntry): SheetLayout {
  * must stop short of that row or it joins the base course, spans the whole
  * frontage, and leaves no gap for a door to be found in.
  */
-export function blockedRegionsFor(spec: BuildingSpec): ReadonlyArray<BlockedRegion> {
+function blockedRegionsFor(spec: BuildingSpec): ReadonlyArray<BlockedRegion> {
   const scale = BUILDING_TILE_SCALE;
   const frameWidth = spec.tilesWide * scale;
   const frameHeight = spec.tilesHigh * scale;
@@ -207,9 +216,78 @@ function describeRegions(regions: ReadonlyArray<BlockedRegion>): string {
 }
 
 /**
+ * Transparent pixels kept around a life row's ink. A cropped frame drawn at
+ * its offset maps every pixel exactly where the whole frame did, but a
+ * smoothed draw samples past a source rectangle's edge; with this margin of
+ * transparency there, the crop draws what the whole frame drew.
+ */
+const LIFE_CROP_PADDING_PX = 2;
+/**
+ * A crop's offset and size are kept to multiples of six. Of three, because a
+ * facade painted at 48 px a tile is drawn at 32 px a tile, two thirds, and
+ * only an offset of a multiple of three lands on whole screen pixels there,
+ * resampling exactly as the whole frame did; anything else shifts the
+ * filter's phase and changes the picture. Of two, so a device painting
+ * sheets at half density keeps every cropped pixel on the same grid.
+ */
+const LIFE_CROP_ALIGNMENT_PX = 6;
+const ALPHA_CHANNEL = 3;
+const CHANNELS_PER_PIXEL = 4;
+
+/** Where a building's life row has ink, in frame pixels, shared by all its frames. */
+interface LifeCrop {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/**
+ * The rectangle of a building's frame its life row ever inks, padded and
+ * aligned: what its life sheet stores of each frame. Most of a life frame is
+ * transparent (lit windows and a wisp of smoke over a whole facade's
+ * rectangle), and one rectangle for the whole row, rather than one per frame,
+ * keeps within a few percent of the tightest crop.
+ */
+function lifeInkCrop(spec: BuildingSpec): LifeCrop {
+  const frameWidth = frameWidthPx(spec);
+  const frameHeight = frameHeightPx(spec);
+  let left = frameWidth;
+  let top = frameHeight;
+  let right = 0;
+  let bottom = 0;
+  for (let step = 0; step < spec.life.frames; step++) {
+    const frame = asNodeCanvas(paintLifeFrame(spec, step));
+    const pixels = frame.getContext('2d').getImageData(0, 0, frameWidth, frameHeight).data;
+    for (let y = 0; y < frameHeight; y++) {
+      for (let x = 0; x < frameWidth; x++) {
+        const alpha = pixels[(y * frameWidth + x) * CHANNELS_PER_PIXEL + ALPHA_CHANNEL];
+        if (alpha === 0) continue;
+        left = Math.min(left, x);
+        top = Math.min(top, y);
+        right = Math.max(right, x + 1);
+        bottom = Math.max(bottom, y + 1);
+      }
+    }
+  }
+  if (right <= left || bottom <= top) {
+    return { x: 0, y: 0, width: LIFE_CROP_ALIGNMENT_PX, height: LIFE_CROP_ALIGNMENT_PX };
+  }
+  const alignDown = (value: number): number =>
+    Math.floor(value / LIFE_CROP_ALIGNMENT_PX) * LIFE_CROP_ALIGNMENT_PX;
+  const alignUp = (value: number): number =>
+    Math.ceil(value / LIFE_CROP_ALIGNMENT_PX) * LIFE_CROP_ALIGNMENT_PX;
+  const x = Math.max(0, alignDown(left - LIFE_CROP_PADDING_PX));
+  const y = Math.max(0, alignDown(top - LIFE_CROP_PADDING_PX));
+  const width = Math.min(alignUp(frameWidth), alignUp(right + LIFE_CROP_PADDING_PX)) - x;
+  const height = Math.min(alignUp(frameHeight), alignUp(bottom + LIFE_CROP_PADDING_PX)) - y;
+  return { x, y, width, height };
+}
+
+/**
  * Every way a spec disagrees with the manifest entry the game reads it through.
  *
- * The manifest is checked-in data now rather than something a bake emits, which
+ * The manifest is checked-in data rather than something a bake emits, which
  * means the two halves can drift in silence: a spec that grows a tile, gains a
  * life frame or moves its door still paints happily, while the game keeps
  * slicing the old geometry out of the new sheet and keeps blocking the old
@@ -244,17 +322,35 @@ export function manifestEntryProblems(spec: BuildingSpec): string[] {
     );
   }
   const idle = stateOf(entry, BUILDING_IDLE_STATE);
-  const life = stateOf(entry, BUILDING_LIFE_STATE);
+  const life = stateOf(buildingLifeManifestEntry(spec), BUILDING_LIFE_STATE);
   const IDLE_FRAME_COUNT = 1;
   if (idle.frameCount !== IDLE_FRAME_COUNT) {
     complain(
-      `declares ${idle.frameCount} idle frames; a facade has exactly one, and the rest of the ` +
-        'row belongs to its life overlay',
+      `declares ${idle.frameCount} idle frames; a facade has exactly one, and its life ` +
+        'overlay is a sheet of its own',
     );
   }
   if (life.frameCount !== spec.life.frames) {
     complain(
       `paints ${spec.life.frames} life frames but its manifest entry declares ${life.frameCount}`,
+    );
+  }
+  // The life sheet stores only the inked rectangle of each frame, anchored by
+  // a negative tileX/tileY so it draws exactly where the whole frame did.
+  const crop = lifeInkCrop(spec);
+  const lifeEntry = buildingLifeManifestEntry(spec);
+  const cropMatches =
+    lifeEntry.frameWidth === crop.width &&
+    lifeEntry.frameHeight === crop.height &&
+    lifeEntry.tileX === -crop.x &&
+    lifeEntry.tileY === -crop.y &&
+    lifeEntry.tileScale === entry.tileScale;
+  if (!cropMatches) {
+    complain(
+      `inks its life row within ${crop.width}x${crop.height}px at (${crop.x}, ${crop.y}); its ` +
+        `life entry declares ${lifeEntry.frameWidth}x${lifeEntry.frameHeight}px anchored at ` +
+        `(${-lifeEntry.tileX}, ${-lifeEntry.tileY}), so its windows would draw cut off or ` +
+        'out of place',
     );
   }
   const painted = blockedRegionsFor(spec);
@@ -280,6 +376,8 @@ export interface BakedBuilding {
   readonly idle: Canvas;
   readonly life: ReadonlyArray<Canvas>;
   readonly entry: SpriteManifestEntry;
+  /** The life row's own entry, a separate sheet in the game. */
+  readonly lifeEntry: SpriteManifestEntry;
 }
 
 /**
@@ -289,7 +387,8 @@ export interface BakedBuilding {
  */
 export function bake(spec: BuildingSpec, weatherSeed = 0): BakedBuilding {
   const entry = buildingManifestEntry(spec);
-  const layout = sheetLayoutFor(entry);
+  const lifeEntry = buildingLifeManifestEntry(spec);
+  const layout = sheetLayoutFor(entry, lifeEntry);
   const frameWidth = frameWidthPx(spec);
   const frameHeight = frameHeightPx(spec);
   const sheet = createCanvas(layout.columns * frameWidth, layout.rows * frameHeight);
@@ -315,11 +414,11 @@ export function bake(spec: BuildingSpec, weatherSeed = 0): BakedBuilding {
     ctx.restore();
   }
 
-  return { spec, sheet, idle, life, entry };
+  return { spec, sheet, idle, life, entry, lifeEntry };
 }
 
 /** Every ramp a spec names, which is what the palette gate measures against. */
-export function declaredRamps(spec: BuildingSpec): ReadonlySet<string> {
+function declaredRamps(spec: BuildingSpec): ReadonlySet<string> {
   const ramps = new Set<string>([
     'ink_outline',
     'ground_shadow',
@@ -368,7 +467,7 @@ export function runPixelGates(
   const { spec, sheet } = baked;
   const frameWidth = frameWidthPx(spec);
   const frameHeight = frameHeightPx(spec);
-  const layout = sheetLayoutFor(baked.entry);
+  const layout = sheetLayoutFor(baked.entry, baked.lifeEntry);
 
   for (const problem of manifestEntryProblems(spec)) {
     results.fail(spec.key, 'manifest-entry', problem);
