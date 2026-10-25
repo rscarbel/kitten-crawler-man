@@ -21,7 +21,7 @@ export type WorkChannelBuilder = HumanPlayer | CatPlayer;
 export const JOB_MOTION_TOLERANCE_PX = 0.5;
 
 /**
- * Donut's work swing — her two-paw chop or pick with a tool out, her swipe
+ * The cat's work swing — her two-paw chop or pick with a tool out, her swipe
  * bare-pawed — lands on this cadence while she works, at a job here and at a
  * harvest alike.
  */
@@ -33,7 +33,7 @@ export interface WorkChannelOptions {
   /** The unit vector the builder faces while working. */
   readonly faceX: number;
   readonly faceY: number;
-  /** The rows Carl loops while working, one per view. */
+  /** The rows the human crawler loops while working, one per view. */
   readonly humanRows: ViewRows;
   /** Asked every tick; false ends the channel unfinished (the job went away under it). */
   readonly stillWanted: () => boolean;
@@ -48,7 +48,7 @@ export class WorkChannel {
   private framesLeft: number;
   private refX: number;
   private refY: number;
-  /** Whether Carl's working row is this channel's, so ending it only ever stops its own. */
+  /** Whether the human crawler's working row is this channel's, so ending it only ever stops its own. */
   private posing = false;
   private catSwingTicks = 0;
   private ended = false;
@@ -125,7 +125,7 @@ export class WorkChannel {
   }
 
   /**
-   * Carl's row loops until the channel ends. A row the animator refuses (he
+   * The human crawler's row loops until the channel ends. A row the animator refuses (he
    * is mid-flinch) or another system stops is asked for again next tick, so
    * the picture catches back up with the work.
    */

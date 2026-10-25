@@ -6,14 +6,14 @@
  * the top-right column moves under the controls rather than squeezing every
  * control into a column of its own.
  *
- * Donut's `?donut` scene: `?donut=<row>` opens on that row and a tap on the
+ * The cat's `?cat` scene: `?cat=<row>` opens on that row and a tap on the
  * art steps it; the compass shows every facing view; the outfit picker lists
  * everything she can wear and puts it on her sprite; the tool picker offers
  * every working tool and the carry picker every carriable thing; every row
  * she plays holding something shows her holding it; and every compass action
  * renders.
  *
- * Carl's `?human` scene: the weapon picker lists every weapon item he can
+ * The human's `?human` scene: the weapon picker lists every weapon item he can
  * hold, read off the item table; picking one puts it out in the live
  * player's hand and turns the row pane to its rows; the live script draws
  * and stows it; every weapon renders.
@@ -31,11 +31,12 @@ const { asGameContext } = await import('./nodeGameContext.js');
 const { PreviewScene } = await import('../src/scenes/PreviewScene.js');
 const { PRIMARY_BUTTON } = await import('../src/ui/core/pointer.js');
 const { setViewportSize } = await import('../src/core/Viewport.js');
-const { DonutPreviewScene } = await import('../src/scenes/DonutPreviewScene.js');
+const { CatPreviewScene } = await import('../src/scenes/CatPreviewScene.js');
 const { CAT_ROWS } = await import('../src/sprites/art/catFigure.js');
 const { catGripOf } = await import('../src/sprites/art/catSockets.js');
 const { MOUTH_CARRY_VISUAL_IDS } = await import('../src/sprites/held/heldVisualIds.js');
-const { activeCatFigure } = await import('../src/sprites/catSprite.js');
+const { activeCatFigure, activeCatLook } = await import('../src/sprites/catSprite.js');
+const { CAT_LOOKS } = await import('./catLooks.js');
 const { FACING_VIEWS } = await import('../src/sprites/facingView.js');
 const { ITEM_DEF, isItemId, wearerAllows } = await import('../src/core/ItemDefs.js');
 const { TOOL_TIERS } = await import('../src/core/toolTiers.js');
@@ -157,7 +158,7 @@ console.log('A long caption on a phone leaves the controls in rows');
   );
 }
 
-const DONUT_OPENING_ROW = 'swipe_side';
+const CAT_OPENING_ROW = 'swipe_side';
 /** Longer than a swipe plus its rest, so the watch spans a full play and a replay. */
 const ONE_SHOT_WATCH_TICKS = 100;
 /** Bare and "everything" bracket the one-item outfits and the garment sets. */
@@ -168,7 +169,7 @@ const TOOLS_BESIDE_TIERS = 2;
 /** Enough ticks for a compass swipe, cast and work swing to get under way. */
 const TICKS_PER_COMPASS_ACTION = 20;
 
-class DonutProbe extends DonutPreviewScene {
+class CatProbe extends CatPreviewScene {
   private readonly ctx = asGameContext(
     createCanvas(PHONE_VIEWPORT.width, PHONE_VIEWPORT.height).getContext('2d'),
   );
@@ -189,20 +190,25 @@ class DonutProbe extends DonutPreviewScene {
   }
 }
 
-console.log('Donut’s preview shows her rows, views, outfits and tools');
-{
-  window.location.search = `?donut=${DONUT_OPENING_ROW}`;
-  const scene = new DonutProbe();
+for (const look of CAT_LOOKS) {
+  console.log(`The cat’s preview shows ${look.id}'s rows, views, outfits and tools`);
+  window.location.search = `?cat=${CAT_OPENING_ROW}&look=${look.id}`;
+  const scene = new CatProbe();
   window.location.search = '';
   check(
-    '?donut=<row> opens on that row',
-    scene.previewRow.state === DONUT_OPENING_ROW,
+    `&look=${look.id} paints her as ${look.id}`,
+    activeCatLook().id === look.id && activeCatFigure().id.startsWith(`cat:${look.id}`),
+    activeCatFigure().id,
+  );
+  check(
+    '?cat=<row> opens on that row',
+    scene.previewRow.state === CAT_OPENING_ROW,
     scene.previewRow.state,
   );
   let offRowDraws = 0;
   for (let tick = 0; tick < ONE_SHOT_WATCH_TICKS; tick++) {
     scene.update();
-    if (scene.rowCell.state !== DONUT_OPENING_ROW) offRowDraws++;
+    if (scene.rowCell.state !== CAT_OPENING_ROW) offRowDraws++;
   }
   check(
     'a one-shot row draws only that row, through its rest as well as its play',
@@ -213,7 +219,7 @@ console.log('Donut’s preview shows her rows, views, outfits and tools');
   press(scene, PRIMARY_BUTTON);
   check(
     'a tap on the art steps to the next row',
-    scene.previewRow.state !== DONUT_OPENING_ROW,
+    scene.previewRow.state !== CAT_OPENING_ROW,
     scene.previewRow.state,
   );
 
@@ -331,7 +337,9 @@ const { HumanPreviewScene } = await import('../src/scenes/HumanPreviewScene.js')
 const { weaponStatsOf } = await import('../src/core/ItemDefs.js');
 const { HELD_VISUALS } = await import('../src/sprites/held/heldVisuals.js');
 const { motionSetOf } = await import('../src/sprites/art/human/motionSets.js');
-const { motionSetOfRow } = await import('../src/sprites/humanSprite.js');
+const { activeHumanFigure, activeHumanLook, motionSetOfRow } =
+  await import('../src/sprites/humanSprite.js');
+const { HUMAN_LOOKS } = await import('./humanLooks.js');
 const { humanRowOf } = await import('../src/sprites/art/humanFigure.js');
 
 /** Long enough for the live script to stow, draw and strike with the weapon picked. */
@@ -354,9 +362,18 @@ class HumanProbe extends HumanPreviewScene {
   }
 }
 
-console.log('Carl’s preview picks every weapon he can hold and plays its rows');
-{
+for (const look of HUMAN_LOOKS) {
+  console.log(
+    `The human’s preview paints ${look.id}, picks every weapon he can hold and plays its rows`,
+  );
+  window.location.search = `?human&look=${look.id}`;
   const scene = new HumanProbe();
+  window.location.search = '';
+  check(
+    `&look=${look.id} paints him as ${look.id}`,
+    activeHumanLook().id === look.id && activeHumanFigure().id.startsWith(`human:${look.id}`),
+    activeHumanFigure().id,
+  );
   const humanWeapons = Object.keys(ITEM_DEF)
     .filter(isItemId)
     .filter((id) => {

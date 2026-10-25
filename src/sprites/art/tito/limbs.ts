@@ -9,7 +9,7 @@
  * fingertips pressed together, pointing up, over the counter.
  */
 
-import { type Pt } from '../carlArt';
+import { type Pt } from '../bipedArt';
 import {
   type Ctx,
   type FormShading,

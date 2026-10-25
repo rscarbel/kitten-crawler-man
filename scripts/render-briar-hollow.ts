@@ -15,7 +15,7 @@
  * - `preview/briar-hollow-<seed>-vs-town.png` — the town square beside the
  *   village's south-west quarter, at game scale;
  * - `preview/briar-hollow-<seed>-probes.png` — one cottage at Retina scale
- *   with Carl standing at the three places a roofless wall can get wrong:
+ *   with the human standing at the three places a roofless wall can get wrong:
  *   inside behind the south cutaway, inside in front of the north wall, and in
  *   the doorway.
  *
@@ -87,8 +87,8 @@ const PROBE_BUILDING = 'home_nella';
 const PROBE_MARGIN_TILES = 3;
 /** Retina: the probe image is judged at the density the game is played at. */
 const PROBE_SCALE = 2;
-/** Carl's standing breath loop, first frame. */
-const CARL_IDLE_ROW = 'idle';
+/** The human crawler's standing breath loop, first frame. */
+const HUMAN_IDLE_ROW = 'idle';
 /** The village is also written in four quarters at 1:1, the scale it is played at. */
 const DETAIL_QUARTERS = 4;
 const DETAIL_SCALE = 1;
@@ -175,7 +175,7 @@ function renderView(
         drawFigureCached(
           ctx,
           activeHumanFigure(),
-          CARL_IDLE_ROW,
+          HUMAN_IDLE_ROW,
           0,
           probe.tx * TILE_SIZE - camX,
           probe.ty * TILE_SIZE - camY,
@@ -327,5 +327,5 @@ for (const seed of seeds) {
     `${PREVIEW_DIR}/briar-hollow-${seed}-probes.png`,
     probeCanvas.toBuffer('image/png'),
   );
-  console.log(`${probePath}: Carl at ${probes.map((p) => `(${p.tx}, ${p.ty})`).join(', ')}`);
+  console.log(`${probePath}: The human at ${probes.map((p) => `(${p.tx}, ${p.ty})`).join(', ')}`);
 }

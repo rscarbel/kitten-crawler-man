@@ -18,7 +18,7 @@
  * skeleton and the view — so the same layer serves every row and every facing.
  */
 
-import type { Pt } from '../carlArt';
+import type { Pt } from '../bipedArt';
 import type { Ramp } from './paint';
 import type {
   BoneChain,

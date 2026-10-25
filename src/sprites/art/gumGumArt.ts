@@ -1,5 +1,5 @@
 /**
- * GumGum, painted on Carl's rig: a stout, kindly orc woman in a patched plum
+ * GumGum, painted on the biped rig: a stout, kindly orc woman in a patched plum
  * wool coat-dress and a much-washed apron tied in a bow, her hair parted and
  * piled into a bun with a wild rose in it, two plaits over her shoulders. The
  * orc reads from green skin, small lower tusks and pointed ears; the woman from
@@ -7,7 +7,7 @@
  * face with lashes, rose lips and gold hoops; the friendliness from no scowl at
  * all, a smile, and the clothes of somebody's aunt.
  *
- * Her clothes, hair and face are `CarlAttachments`, painted inside the figure's
+ * Her clothes, hair and face are `BipedAttachments`, painted inside the figure's
  * composition from the solved skeleton so they follow the pose and share its
  * silhouette outline (see `wendellAttachments.ts` for why a garment laid over
  * the finished figure reads as a sticker). `gumGumFigure.ts` composes them.
@@ -16,16 +16,31 @@
  * the alley is visibly the same woman.
  */
 
-import type { CarlAttachments } from './carl/figure';
-import { headAngle } from './carl/head';
-import { deriveGlossRamp, type Ramp } from './carl/palette';
-import { HEAD_DEPTH, HEAD_RX, HEAD_RY } from './carl/proportions';
-import type { CarlPose, Skeleton, ViewSpec } from './carl/rig';
+import type { BipedAttachments } from './biped/figure';
+import { headAngle } from './biped/head';
+import { deriveGlossRamp, type Ramp } from './biped/palette';
+import { HEAD_DEPTH, HEAD_RX, HEAD_RY } from './biped/proportions';
+import type { BipedPose, Skeleton, ViewSpec } from './biped/rig';
 import { type CardinalView } from '../facingView';
-import { torsoFrame, traceGarmentTorso, type TorsoFrame } from './carl/torso';
-import { mix, rgba, type Pt } from './carlArt';
+import {
+  type GarmentCut,
+  RIG_GARMENT_CUT,
+  torsoFrame,
+  traceGarmentTorso,
+  type TorsoFrame,
+  type TorsoLook,
+} from './biped/torso';
+import { LEATHER_SLEEVE_CONTRAST, LEVEL_CAP, PADDED_SLEEVE, type SleeveCut } from './biped/sleeve';
+import { mix, rgba, type Pt } from './bipedArt';
 import { fillSoftEllipse } from './softShade';
-import { FEMININE_FACING_BROW, FEMININE_PROFILE_BROW, type CarlExpression } from './carl/head';
+import {
+  FEMININE_FACING_BROW,
+  FEMININE_PROFILE_BROW,
+  FLAT_MOUTH,
+  RIG_BROW_TONE,
+  RIG_EYES,
+  type BipedExpression,
+} from './biped/head';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -34,7 +49,7 @@ type Ctx = CanvasRenderingContext2D;
 /**
  * A warm sage green rather than a toxic or swampy one: the hue leans toward
  * olive in the lights and only cools toward teal in the deepest shadow, the
- * same hue-shift Carl's own skin ramp uses, so she sits in the same light as
+ * same hue-shift Dave's skin ramp uses, so she sits in the same light as
  * the humans beside her rather than glowing like a slime.
  */
 export const GUMGUM_SKIN: Ramp = {
@@ -79,17 +94,20 @@ const SMILE_INK = '#2a1a14';
 // ── Expression ───────────────────────────────────────────────────────────────
 
 /**
- * No anger at all: every row she plays was authored for Carl, whose idle carries
- * a little of his scowl in `pose.brow`, and even a trace of it on her reads as a
+ * No anger at all: every row she plays was authored for the human crawler, whose
+ * idle carries a little of his scowl in `pose.brow`, and even a trace of it on her reads as a
  * glare under the tusks. Fuller lips than the feminine default, because the
  * smile painted over the mouth needs width to curl up at.
  */
 const GUMGUM_LIP_FULLNESS = 1.1;
-export const GUMGUM_EXPRESSION: CarlExpression = {
+export const GUMGUM_EXPRESSION: BipedExpression = {
   angerScale: 0,
   profileBrow: FEMININE_PROFILE_BROW,
   facingBrow: FEMININE_FACING_BROW,
   lipFullness: GUMGUM_LIP_FULLNESS,
+  mouthSmile: FLAT_MOUTH,
+  eyes: RIG_EYES,
+  browTone: RIG_BROW_TONE,
 };
 
 // ── Apron ────────────────────────────────────────────────────────────────────
@@ -517,9 +535,10 @@ function traceBellSkirt(ctx: Ctx, frame: TorsoFrame, view: ViewSpec, reversed = 
 function clipToGarment(
   ctx: Ctx,
   skeleton: Skeleton,
-  pose: CarlPose,
+  pose: BipedPose,
   view: ViewSpec,
   frame: TorsoFrame,
+  look: TorsoLook,
 ): void {
   const inBoth = frame.at(0, frame.waistY + SKIRT_HIP_DROP);
   const transform = ctx.getTransform();
@@ -527,7 +546,7 @@ function clipToGarment(
   const probeY = transform.b * inBoth.x + transform.d * inBoth.y + transform.f;
   for (const reversed of [false, true]) {
     ctx.beginPath();
-    traceGarmentTorso(ctx, skeleton, pose, view);
+    traceGarmentTorso(ctx, skeleton, pose, view, look);
     traceBellSkirt(ctx, frame, view, reversed);
     if (ctx.isPointInPath(probeX, probeY, 'nonzero')) break;
   }
@@ -563,11 +582,17 @@ function paintBellSkirt(ctx: Ctx, frame: TorsoFrame, view: ViewSpec): void {
   ctx.restore();
 }
 
-function paintGarment(ctx: Ctx, skeleton: Skeleton, view: ViewSpec, pose: CarlPose): void {
-  const frame = torsoFrame(skeleton, pose);
+function paintGarment(
+  ctx: Ctx,
+  skeleton: Skeleton,
+  view: ViewSpec,
+  pose: BipedPose,
+  look: TorsoLook,
+): void {
+  const frame = torsoFrame(skeleton, pose, look);
   paintBellSkirt(ctx, frame, view);
   ctx.save();
-  clipToGarment(ctx, skeleton, pose, view, frame);
+  clipToGarment(ctx, skeleton, pose, view, frame, look);
   if (view.profile) {
     paintPatches(ctx, frame, PROFILE_PATCHES);
     paintProfileApron(ctx, frame);
@@ -1007,7 +1032,7 @@ function paintFacingFeminine(ctx: Ctx): void {
   }
 }
 
-function paintHeadDetails(ctx: Ctx, skeleton: Skeleton, view: ViewSpec, pose: CarlPose): void {
+function paintHeadDetails(ctx: Ctx, skeleton: Skeleton, view: ViewSpec, pose: BipedPose): void {
   ctx.save();
   ctx.translate(skeleton.headCentre.x, skeleton.headCentre.y);
   ctx.rotate(headAngle(pose));
@@ -1076,7 +1101,7 @@ function quadAt(from: Pt, control: Pt, to: Pt, t: number): Pt {
   };
 }
 
-function headPoint(skeleton: Skeleton, pose: CarlPose, local: Pt): Pt {
+function headPoint(skeleton: Skeleton, pose: BipedPose, local: Pt): Pt {
   const angle = headAngle(pose);
   return {
     x: skeleton.headCentre.x + local.x * Math.cos(angle) - local.y * Math.sin(angle),
@@ -1127,8 +1152,14 @@ function paintPlait(ctx: Ctx, from: Pt, control: Pt, to: Pt): void {
   }
 }
 
-function paintPlaits(ctx: Ctx, skeleton: Skeleton, view: ViewSpec, pose: CarlPose): void {
-  const frame = torsoFrame(skeleton, pose);
+function paintPlaits(
+  ctx: Ctx,
+  skeleton: Skeleton,
+  view: ViewSpec,
+  pose: BipedPose,
+  look: TorsoLook,
+): void {
+  const frame = torsoFrame(skeleton, pose, look);
   if (view.profile) {
     paintPlait(
       ctx,
@@ -1158,8 +1189,8 @@ const HEAD_DETAIL_REACH_Y = 1.9;
 /** Past the skirt's widest points, so the composing surface is sized round the bell. */
 const SKIRT_REACH_SHARE = 1.15;
 
-function skirtReach(skeleton: Skeleton, view: ViewSpec, pose: CarlPose): Pt[] {
-  const frame = torsoFrame(skeleton, pose);
+function skirtReach(skeleton: Skeleton, view: ViewSpec, pose: BipedPose, look: TorsoLook): Pt[] {
+  const frame = torsoFrame(skeleton, pose, look);
   const shape = skirtShape(view);
   return [
     frame.hem(shape.hemLeft * SKIRT_REACH_SHARE, SKIRT_SCALLOP_DIP),
@@ -1169,14 +1200,15 @@ function skirtReach(skeleton: Skeleton, view: ViewSpec, pose: CarlPose): Pt[] {
   ];
 }
 
-export const GUMGUM_ATTACHMENTS: CarlAttachments = {
-  over: (ctx, skeleton, view, pose) => {
-    paintGarment(ctx, skeleton, view, pose);
+/** Her apron, bodice, skirt, plaits and the details of her head, painted inside the rig's composition. */
+export const GUMGUM_ATTACHMENTS: BipedAttachments = {
+  over: (ctx, skeleton, view, pose, look) => {
+    paintGarment(ctx, skeleton, view, pose, look);
     paintHeadDetails(ctx, skeleton, view, pose);
-    paintPlaits(ctx, skeleton, view, pose);
+    paintPlaits(ctx, skeleton, view, pose, look);
   },
-  reach: (skeleton, view, pose) => [
-    ...skirtReach(skeleton, view, pose),
+  reach: (skeleton, view, pose, look) => [
+    ...skirtReach(skeleton, view, pose, look),
     {
       x: skeleton.headCentre.x - HEAD_RX * HEAD_DETAIL_REACH_X,
       y: skeleton.headCentre.y - HEAD_RY * HEAD_DETAIL_REACH_Y,
@@ -1197,8 +1229,8 @@ export const GUMGUM_ATTACHMENTS: CarlAttachments = {
  */
 const HEAD_TILT = 0.12;
 
-/** Her bearing on every row: the warm tilt, and never a trace of Carl's scowl. */
-export function gumGumPosture(pose: CarlPose, view: CardinalView): CarlPose {
+/** Her bearing on every row: the warm tilt, and never a trace of the crawler's scowl. */
+export function gumGumPosture(pose: BipedPose, view: CardinalView): BipedPose {
   if (view !== 'front') return { ...pose, brow: 0 };
   return { ...pose, headTilt: pose.headTilt + HEAD_TILT, brow: 0 };
 }
@@ -1209,12 +1241,22 @@ export function gumGumPosture(pose: CarlPose, view: CardinalView): CarlPose {
  * The rig's own coat-dress falls to mid-shin under the bell skirt painted over
  * it, flared only enough that its straight hem never shows past the bell's.
  */
-export const GUMGUM_DRESS_HEM_DROP = 0.85;
-export const GUMGUM_DRESS_HEM_FLARE = 1.6;
+export const GUMGUM_DRESS_CUT: GarmentCut = {
+  ...RIG_GARMENT_CUT,
+  hemDrop: 0.85,
+  hasHardware: false,
+  hemFlare: 1.6,
+};
 /**
- * Sleeves to the wrist with only a soft cuff: Carl's shoved-up sleeve with its
+ * Sleeves to the wrist with only a soft cuff: Dave's shoved-up sleeve with its
  * bunched roll at the elbow is a brawler's arm, and it squares off her shoulders.
  */
-export const GUMGUM_SLEEVE_CUFF_ALONG = 0.88;
-export const GUMGUM_SLEEVE_CUFF_BULK = 1.4;
+export const GUMGUM_SLEEVE_CUT: SleeveCut = {
+  cuffAlongForearm: 0.88,
+  cuffBulk: 1.4,
+  padding: PADDED_SLEEVE,
+  capSwell: PADDED_SLEEVE,
+  capSlope: LEVEL_CAP,
+  shadeContrast: LEATHER_SLEEVE_CONTRAST,
+};
 export const GUMGUM_SHOE = '#4a3a2c';

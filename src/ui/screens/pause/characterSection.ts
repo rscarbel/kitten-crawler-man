@@ -5,8 +5,8 @@
 
 import { CON_HP_BONUS_PER_POINT, displayHp } from '../../../core/crawlerFormulas';
 import { formatPlayTime, type GameStats } from '../../../core/GameStats';
+import { crawlerName } from '../../../characters/characters';
 import {
-  CRAWLER_NAMES,
   getSkillDef,
   isEligible,
   SKILL_IDS,
@@ -183,7 +183,7 @@ function crawlerHeader(column: SectionLayout, ctx: PauseContext, crawler: Crawle
   const player = crawlerOf(ctx, crawler);
   const titleRow = column.row(lineHeightOf(ui, 'title'), space.xs);
   text(ui, titleRow, {
-    text: CRAWLER_NAMES[crawler],
+    text: crawlerName(crawler),
     role: 'title',
     color: crawlerColor(ui.theme, crawler),
   });
@@ -391,7 +391,7 @@ function renderSkills(layout: SectionLayout, ctx: PauseContext): void {
     const remaining = undiscoveredCount(crawler, states.length);
     const titleRow = column.row(lineHeightOf(ui, 'title'), ui.theme.space.sm);
     text(ui, titleRow, {
-      text: `${CRAWLER_NAMES[crawler]} · ${states.length} known`,
+      text: `${crawlerName(crawler)} · ${states.length} known`,
       role: 'title',
       color: crawlerColor(ui.theme, crawler),
     });

@@ -444,9 +444,8 @@ function gateFootRoll(people: ReadonlyArray<PersonAppearance>): void {
  * This is the one defect in this rig that every limb moving correctly still
  * hides: driving the arm from a sine when the foot path peaks at cycle zero
  * leaves the arms a quarter of a stride out of phase, and the result reads as a
- * shuffle rather than as anything obviously broken. The repo has made exactly
- * this mistake before — see the `carl-arm-swing-is-90-degrees-out-of-phase`
- * note — so it is asserted rather than left to the eye.
+ * shuffle rather than as anything obviously broken, so it is asserted rather
+ * than left to the eye.
  */
 function gateArmPhase(people: ReadonlyArray<PersonAppearance>): void {
   for (const appearance of people) {

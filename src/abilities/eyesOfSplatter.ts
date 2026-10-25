@@ -6,7 +6,7 @@ import { TICKS_PER_SECOND } from '../sprites/art/human/timing';
 import type { Missile } from '../sprites/catSprite';
 
 /**
- * The Eyes of Splatter: while Donut wears them, every missile of hers that
+ * The Eyes of Splatter: while the cat crawler wears them, every missile of hers that
  * lands on an enemy throws off copies of itself that hunt nearby hostiles, or
  * circle her until one turns up.
  */
@@ -44,7 +44,7 @@ const COPY_TURN_RATE = 0.15;
  */
 const SEEK_LIMIT_SECONDS = 5;
 const SEEK_LIMIT_FRAMES = SEEK_LIMIT_SECONDS * TICKS_PER_SECOND;
-/** How long a copy circles Donut with nothing to chase before it fades. */
+/** How long a copy circles the cat with nothing to chase before it fades. */
 const ORBIT_LIFETIME_SECONDS = 30;
 const ORBIT_LIFETIME_FRAMES = ORBIT_LIFETIME_SECONDS * TICKS_PER_SECOND;
 const FADE_SECONDS = 0.5;
@@ -54,7 +54,7 @@ const ORBIT_RADIUS_TILES = 0.9;
 const ORBIT_RADIUS_PX = ORBIT_RADIUS_TILES * TILE_SIZE;
 /** The ring is seen from above at the game's angle, so it is squashed top to bottom. */
 const ORBIT_VERTICAL_SQUASH = 0.55;
-/** Donut sits low in her tile; the ring circles her body, not her feet. */
+/** The cat sits low in her tile; the ring circles her body, not her feet. */
 const ORBIT_CENTRE_LIFT_PX = 4;
 const ORBIT_PERIOD_SECONDS = 4;
 const ORBIT_TURN_PER_FRAME = (Math.PI * 2) / (ORBIT_PERIOD_SECONDS * TICKS_PER_SECOND);
@@ -79,7 +79,7 @@ export interface SplatterCopy {
   mode: SplatterCopyMode;
   /** Frames spent in the current mode. */
   modeFrames: number;
-  /** This copy's place on Donut's ring, in radians. */
+  /** This copy's place on the cat's ring, in radians. */
   orbitAngle: number;
   /** Release order, so the cap retires the oldest copy first. */
   readonly serial: number;
@@ -101,7 +101,7 @@ export interface SplatterSource {
 /** What one frame of copies needs to know about the world and the cat. */
 export interface SplatterFrame {
   readonly mobGrid: SpatialGrid<Mob> | undefined;
-  /** Donut's centre, in world pixels. */
+  /** The cat's centre, in world pixels. */
   readonly ownerX: number;
   readonly ownerY: number;
   /** False while she is downed or dead: nothing circles a cat who is not up. */
@@ -135,7 +135,7 @@ export function steerMissileToward(
 
 /**
  * Whether a missile may land a blow this frame. A copy strikes only while it is
- * seeking: one arming, circling Donut or fading is decoration until it picks a
+ * seeking: one arming, circling the cat or fading is decoration until it picks a
  * target, and must not burst on whatever wanders through her ring.
  */
 export function missileCanStrike(missile: Missile): boolean {
@@ -154,7 +154,7 @@ export function missileMayHitMob(missile: Missile, mob: Pick<Mob, 'isHostile'>):
 
 /**
  * Whether a missile detonates on crates, interior props and trees. A copy
- * circling Donut passes through them: she would otherwise blow up every crate
+ * circling the cat passes through them: she would otherwise blow up every crate
  * she stands beside and set alight every tree she walks past.
  */
 export function missileStrikesScenery(missile: Missile): boolean {
@@ -215,7 +215,7 @@ export class SplatterCopies {
     this.releaseCuePending = true;
   }
 
-  /** True while any copy is circling Donut — what the orbit hum follows. */
+  /** True while any copy is circling the cat — what the orbit hum follows. */
   anyOrbiting(missiles: readonly Missile[]): boolean {
     return missiles.some((m) => m.state === 'flying' && m.splatter?.mode === 'orbiting');
   }

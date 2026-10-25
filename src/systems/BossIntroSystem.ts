@@ -39,6 +39,9 @@ import { worldPlate, worldTint } from '../ui/world/worldShapes';
 import { worldPalette } from '../ui/theme/worldInk';
 import { withAlpha } from '../ui/theme/color';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { crawlerName } from '../characters/characters';
+
+const CRAWLER_TEAM_LABEL = `TEAM ${crawlerName('human').toUpperCase()} & ${crawlerName('cat').toUpperCase()}`;
 
 type IntroState = {
   bossType: string;
@@ -86,7 +89,7 @@ const VERSUS_PANEL_GAP = 20;
 const VERSUS_PANEL_W_FRACTION = 0.38;
 /** Max panel width. */
 const VERSUS_PANEL_W_MAX = 280;
-/** Offset for the "TEAM CAT POSSE" label from panel bottom. */
+/** Offset for the crawlers' team label from panel bottom. */
 const TEAM_LABEL_Y_OFFSET_FROM_BOTTOM = 28;
 /** Lifts a label from its baseline-relative offset to the top of its glyphs. */
 const LABEL_TEXT_ADJUST = 9;
@@ -452,7 +455,7 @@ export class BossIntroSystem implements GameSystem {
       );
       ctx.restore();
 
-      worldText(ctx, 'TEAM CAT POSSE', {
+      worldText(ctx, CRAWLER_TEAM_LABEL, {
         x: leftX + panelW / 2,
         y: panelY + panelH - TEAM_LABEL_Y_OFFSET_FROM_BOTTOM - LABEL_TEXT_ADJUST,
         size: PANEL_LABEL_SIZE,

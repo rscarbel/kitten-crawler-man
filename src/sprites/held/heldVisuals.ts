@@ -15,6 +15,7 @@ import { archetypeSpec, type StowedPlacement } from './gripArchetypes';
 import type { HeldVisualDef, WeaponHeldVisualDef } from './heldVisualDef';
 import type { HeldVisualId, WeaponHeldVisualId } from './heldVisualIds';
 import { FELLING_AXE, PLAIN_ARMING_SWORD, SPIKED_CLUB } from './art/provingWeapons';
+import { CARRIED_BLUEPRINTS_HELD, CARRIED_PRISON_KEY_HELD } from './art/carriedHeld';
 import { CARRIED_WRENCH_HELD, SCRIPTED_PROP_HELD, SLINGSHOT_HELD } from './art/scriptedPropHeld';
 import { TARANIS_HELD } from './art/taranisHeld';
 import { STRIKER_MALLET_HELD } from './art/strikerMalletHeld';
@@ -45,6 +46,8 @@ export const HELD_VISUALS: Readonly<
   worldscar_pick: TOOL_HELD.pickaxe[5],
   ...SCRIPTED_PROP_HELD,
   carried_wrench: CARRIED_WRENCH_HELD,
+  carried_prison_key: CARRIED_PRISON_KEY_HELD,
+  carried_blueprints: CARRIED_BLUEPRINTS_HELD,
   striker_mallet: STRIKER_MALLET_HELD,
 };
 

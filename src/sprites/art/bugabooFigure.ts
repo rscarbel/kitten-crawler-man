@@ -26,7 +26,7 @@
  * harness runs: `npm run render:bugaboo`.
  */
 
-import { clamp01, deg, easeInOut, lerp, ramp } from './carlArt';
+import { clamp01, deg, easeInOut, lerp, ramp } from './bipedArt';
 import {
   ARM_ROOT_HALF,
   FOOT_STAND_SPREAD,
@@ -56,7 +56,7 @@ import { type FigureDef, figureStates } from '../figure/figureDef';
 /** Tile size the art is drawn at; the runtime scales by tileSize / TILE_SCALE. */
 export const TILE_SCALE = 64;
 /**
- * Where the floor sits inside the tile, matching the cat's and Carl's foot
+ * Where the floor sits inside the tile, matching the cat's and the human's foot
  * placement so the three stand on the same line.
  */
 export const GROUND_OFFSET_PX = 58;
@@ -64,8 +64,8 @@ export const GROUND_OFFSET_PX = 58;
 /**
  * How much of a tile the creature fills. The anatomy is authored at a
  * comfortable working size and then scaled about its own ground line, which
- * keeps the feet on the tile they belong to. Set against Carl, who stands 1.46
- * tiles at his own scale: seven feet against six is a fifth taller, and this is
+ * keeps the feet on the tile they belong to. Set against the human crawler, who stands
+ * 1.46 tiles at his own scale: seven feet against six is a fifth taller, and this is
  * the factor that lands it there.
  */
 export const FIGURE_SCALE = 0.72;
@@ -457,7 +457,7 @@ const RIGHT_ARM = 1;
 const LEFT_ARM = -1;
 /**
  * Shoulder rotation at the top of the forward swing. Small, because these arms
- * are nearly a tile and a half long: the same angle Carl swings at throws a
+ * are nearly a tile and a half long: the same angle the biped figure swings at throws a
  * Bugaboo's hand twice as far and turns the walk into a semaphore.
  */
 const ARM_SWING_ANGLE = deg(21);

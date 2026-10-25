@@ -4,7 +4,7 @@
  * screenshots the PWA manifest offers, and the favicon / home-screen icon set.
  *
  * Everything is painted from the game's own art — a dungeon floor rendered by
- * `render-dungeon.ts` with Carl, Donut and goblins painted from their figure
+ * `render-dungeon.ts` with the human, the cat and goblins painted from their figure
  * painters on top — so the card shows the game as it looks rather than a mock
  * of it. The icons are resampled from the goblin icon, `icon-512.png`.
  *
@@ -24,8 +24,9 @@ import { paintFigureCell } from './figureSheet.js';
 import { PREVIEW_DIR } from './previewOut.js';
 import { figureBakeDensity, type FigureDef } from '../src/sprites/figure/figureDef.js';
 import { humanFigureWearing } from '../src/sprites/art/human/appearance.js';
-import { DEFAULT_CARL_OUTFIT } from '../src/sprites/garments/human/carlDressing.js';
-import { catFigureFor } from '../src/sprites/art/catFigure.js';
+import { defaultOutfitOf } from '../src/sprites/garments/human/humanDressing.js';
+import { humanLookFlag } from './humanLooks.js';
+import { catFigureFor, PLAYER_CAT_LOOK } from '../src/sprites/art/catFigure.js';
 import { outfitOf } from '../src/sprites/garments/outfit.js';
 import { GOBLIN_AXE_FIGURE, GOBLIN_SWORD_FIGURE } from '../src/sprites/art/goblinFigure.js';
 import { UI_FONT_FAMILY } from '../src/ui/theme/fonts.js';
@@ -82,8 +83,10 @@ function renderBackdrop(name: string, window: TileWindow): string {
 
 // ── Figures ──────────────────────────────────────────────────────────────────
 
-const CARL = humanFigureWearing(DEFAULT_CARL_OUTFIT);
-const DONUT = catFigureFor(outfitOf('cat', []));
+/** The human crawler the images show: `--look=<id>`, Ryan's by default. */
+const HUMAN_LOOK = humanLookFlag();
+const HUMAN = humanFigureWearing(HUMAN_LOOK, defaultOutfitOf(HUMAN_LOOK));
+const CAT = catFigureFor(PLAYER_CAT_LOOK, outfitOf(PLAYER_CAT_LOOK, []));
 
 interface FigurePlacement {
   readonly figure: FigureDef;
@@ -185,10 +188,10 @@ const PILL_MARGIN = 30;
 /** How far down the card the top fade reaches before the scene shows through clean. */
 const TOP_FADE_STOP = 0.5;
 
-/** Carl and Donut squaring up to two goblins across the torchlit floor. */
+/** The human and the cat squaring up to two goblins across the torchlit floor. */
 const CARD_CAST: readonly FigurePlacement[] = [
-  { figure: CARL, state: 'guard_side', frame: 2, at: { x: 0.4, y: 0.66 }, mirrored: false },
-  { figure: DONUT, state: 'cast_side', frame: 3, at: { x: 0.31, y: 0.73 }, mirrored: false },
+  { figure: HUMAN, state: 'guard_side', frame: 2, at: { x: 0.4, y: 0.66 }, mirrored: false },
+  { figure: CAT, state: 'cast_side', frame: 3, at: { x: 0.31, y: 0.73 }, mirrored: false },
   {
     figure: GOBLIN_SWORD_FIGURE,
     state: 'walk',
@@ -273,8 +276,8 @@ const WIDE_SHOT = { width: 1280, height: 720 } as const;
 const NARROW_SHOT = { width: 720, height: 1280 } as const;
 
 const WIDE_CAST: readonly FigurePlacement[] = [
-  { figure: CARL, state: 'jab_side', frame: 3, at: { x: 0.42, y: 0.62 }, mirrored: false },
-  { figure: DONUT, state: 'idle_side', frame: 0, at: { x: 0.3, y: 0.74 }, mirrored: false },
+  { figure: HUMAN, state: 'jab_side', frame: 3, at: { x: 0.42, y: 0.62 }, mirrored: false },
+  { figure: CAT, state: 'idle_side', frame: 0, at: { x: 0.3, y: 0.74 }, mirrored: false },
   {
     figure: GOBLIN_SWORD_FIGURE,
     state: 'attack_light',
@@ -285,8 +288,8 @@ const WIDE_CAST: readonly FigurePlacement[] = [
 ];
 
 const NARROW_CAST: readonly FigurePlacement[] = [
-  { figure: CARL, state: 'idle', frame: 0, at: { x: 0.45, y: 0.55 }, mirrored: false },
-  { figure: DONUT, state: 'idle', frame: 0, at: { x: 0.68, y: 0.6 }, mirrored: false },
+  { figure: HUMAN, state: 'idle', frame: 0, at: { x: 0.45, y: 0.55 }, mirrored: false },
+  { figure: CAT, state: 'idle', frame: 0, at: { x: 0.68, y: 0.6 }, mirrored: false },
   {
     figure: GOBLIN_SWORD_FIGURE,
     state: 'idle',

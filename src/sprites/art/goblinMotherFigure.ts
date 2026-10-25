@@ -9,7 +9,7 @@
  */
 
 import { type FigureDef, figureStates } from '../figure/figureDef';
-import { hump, lerp } from './carlArt';
+import { hump, lerp } from './bipedArt';
 import {
   type MotherPose,
   type ToddlerPose,
@@ -57,7 +57,7 @@ const TODDLER_ROW_FRAMES: Readonly<Record<ToddlerRow, number>> = {
 /** Cell pixels per tile. */
 export const TILE_SCALE = 64;
 /**
- * Both figures stand on the same row of their tile as Carl and Rosemarie, so
+ * Both figures stand on the same row of their tile as the human crawler and Rosemarie, so
  * she and the toddler beside her share one ground line.
  */
 const GROUND_ROW_IN_TILE = 58;

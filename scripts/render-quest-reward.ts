@@ -34,6 +34,7 @@ const { travelUnlocksSection, unlockedDestinationIds } =
 const { ANCHOR_QUEST_NAME, createAnchorQuestProgress } =
   await import('../src/core/AnchorQuestProgress.js');
 const { createCircusQuestProgress } = await import('../src/core/CircusQuestProgress.js');
+const { crawlerName } = await import('../src/characters/characters.js');
 const { createBriarHollowState } = await import('../src/core/briarHollowState.js');
 const { VILLAGE_SAVE_REWARD_SECTION } =
   await import('../src/systems/briarHollow/VillageQuestSystem.js');
@@ -154,14 +155,14 @@ const CASES: ReadonlyArray<{ readonly name: string; readonly spec: QuestRewardSp
       questTitle: 'The Extraordinarily Long-Winded Affair of the Seventeen Borrowed Wheelbarrows',
       renderQuestIcon: itemIconPainter('skill_book_night_vision'),
       sections: [
-        { kind: 'xp', amount: 1934, recipient: 'Carl' },
-        { kind: 'xp', amount: 2000, recipient: 'Donut' },
+        { kind: 'xp', amount: 1934, recipient: crawlerName('human') },
+        { kind: 'xp', amount: 2000, recipient: crawlerName('cat') },
         {
           kind: 'items',
           items: [
             bagItemRewardLine('skill_book_night_vision', 1, {
               describe: true,
-              note: "In Donut's bag.",
+              note: `In ${crawlerName('cat')}'s bag.`,
             }),
           ],
         },

@@ -9,7 +9,7 @@
  * viewer's left.
  */
 
-import { easeInOut, hump, lerp, type Pt } from '../carlArt';
+import { easeInOut, hump, lerp, type Pt } from '../bipedArt';
 import { type Grip } from './grip';
 import { type HandPose, RESTING_HAND } from './hand';
 import { type DeuceExpression } from './head';

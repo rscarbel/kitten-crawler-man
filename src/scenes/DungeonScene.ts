@@ -148,7 +148,8 @@ import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
 import { TacticsNoticeSystem } from '../systems/TacticsNoticeSystem';
 import type { TacticsTrait } from '../creatures/tactics/tacticsTraits';
 import { isEngagedInFight } from '../creatures/tactics/tacticalFrame';
-import { getSkillDef, CRAWLER_NAMES, type CrawlerKind } from '../core/SkillManager';
+import { crawlerName } from '../characters/characters';
+import { getSkillDef, type CrawlerKind } from '../core/SkillManager';
 import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
 import { BossRoomSystem, BOSS_META } from '../systems/BossRoomSystem';
@@ -298,7 +299,7 @@ import {
   isChestOpenable,
 } from '../systems/TreasureChestSystem';
 import { HumanTalkDriver, openChestWithGesture } from '../creatures/humanGestures';
-import { type Pt } from '../sprites/art/carlArt';
+import { type Pt } from '../sprites/art/bipedArt';
 import { ChestRewardDialog, type ChestLootSplit } from '../ui/ChestRewardDialog';
 import { ConfirmDialog } from '../ui/screens/dialogs/ConfirmDialog';
 import { chestRewardSurface } from '../ui/screens/dialogs/chestRewardScreen';
@@ -812,7 +813,7 @@ export interface DungeonSceneOptions {
   clubMembership?: ClubMembership;
   /** The Wheel of Fortune's won prizes and pending spin, threaded by reference. */
   wheelLedger?: WheelLedger;
-  /** Carl's attack cow, threaded by reference like `mongoPetState`. */
+  /** The human crawler's attack cow, threaded by reference like `mongoPetState`. */
   attackCowState?: AttackCowState;
   /** Resident lore progress + the apothecary's batch, threaded by reference across building/scene transitions. */
   townMemory?: TownMemory;
@@ -1474,7 +1475,7 @@ export class DungeonScene extends GameplayScene {
   private citizenTalkRow: DrawnFigureRow | null = null;
   /** The handle the citizen's conversation opened with — see `signDialogHandle`. */
   private citizenDialogHandle: ConversationHandle | null = null;
-  /** Keeps Carl talking, turned to whoever he is in conversation with. */
+  /** Keeps the human crawler talking, turned to whoever he is in conversation with. */
   private readonly humanTalk = new HumanTalkDriver();
   private noticeBoard: NoticeBoard | null = null;
   private marketPanel: ShopSession | null = null;
@@ -3373,7 +3374,7 @@ export class DungeonScene extends GameplayScene {
     bus.on('crawlerKnockedOut', (e) => {
       e.player.applyCockroachKnockoutRelief();
       if (e.player === this.cat && this.human.isAlive && !this.human.isKnockedOut) {
-        this.crawlerBarks.say(this.human, [CRAWLER_BARKS.donutKnockedOut.paragraphs[0]]);
+        this.crawlerBarks.say(this.human, [CRAWLER_BARKS.catKnockedOut.paragraphs[0]]);
       }
     });
     barkWhenBlueprintsItemEvicted(bus, { human: this.human, cat: this.cat }, this.crawlerBarks);
@@ -4679,7 +4680,7 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
-   * Gives the party Carl's attack cow and stands her beside him now — the
+   * Gives the party the human crawler's attack cow and stands her beside him now — the
    * wheel's prize, and the `!cow` cheat. Returns false if she is already owned.
    */
   grantAttackCow(): boolean {
@@ -5024,9 +5025,9 @@ export class DungeonScene extends GameplayScene {
     if (!isWardExplainerDue(this.gameStats)) return;
     this.gameStats.recordWardExplainerHeard();
     if (humanPending) {
-      this.crawlerBarks.say(this.human, barkTexts(CRAWLER_BARKS.wardExplainer.carl));
+      this.crawlerBarks.say(this.human, barkTexts(CRAWLER_BARKS.wardExplainer.human));
     } else {
-      this.crawlerBarks.say(this.cat, barkTexts(CRAWLER_BARKS.wardExplainer.donut));
+      this.crawlerBarks.say(this.cat, barkTexts(CRAWLER_BARKS.wardExplainer.cat));
     }
   }
 
@@ -8166,7 +8167,7 @@ export class DungeonScene extends GameplayScene {
       dock.push({
         id: 'switch',
         icon: other === 'cat' ? 'cat' : 'user',
-        label: `Switch to ${CRAWLER_NAMES[other]}`,
+        label: `Switch to ${crawlerName(other)}`,
         key: keybindings.labelFor('switchCharacter'),
         onTap: () => this.triggerSwitchCharacter(),
       });
@@ -9163,7 +9164,7 @@ export class DungeonScene extends GameplayScene {
           : null;
       const pausePrefix = `${PAUSE_SURFACE_ID}/`;
       const suggestedSpendId = `${pausePrefix}${statSpendButtonId('human', CONSTITUTION_STAT_NAME)}`;
-      // Constitution first; any other of Carl's "+" when it has scrolled out of view.
+      // Constitution first; any other of the human crawler's "+" when it has scrolled out of view.
       const statSpendButtonRect =
         regionCssRect((region) => region.id === suggestedSpendId) ??
         regionCssRect(
@@ -9242,7 +9243,7 @@ export class DungeonScene extends GameplayScene {
    */
   private sealedBuildingMessage(entry: BuildingEntry): string | null {
     const partner = this.inactive();
-    const partnerName = partner === this.human ? CRAWLER_NAMES.human : CRAWLER_NAMES.cat;
+    const partnerName = partner === this.human ? crawlerName('human') : crawlerName('cat');
     const partnerDown = downedPartnerEntryRefusal(partner, partnerName);
     if (partnerDown !== null) return partnerDown;
     const prisonRefusal = prisonDoorRefusal(entry, this.stealthKeySnatch.isGuardBriefed);
@@ -10249,10 +10250,14 @@ export class DungeonScene extends GameplayScene {
       this.human.isActive ? this.human : this.cat;
     return {
       crawlerNameOf: (player) =>
-        player === this.human ? 'Carl' : player === this.cat ? 'Donut' : null,
+        player === this.human
+          ? crawlerName('human')
+          : player === this.cat
+            ? crawlerName('cat')
+            : null,
       isPartyInSafeRoom: () => this.safeRoom.isEntityInSafeRoom(activeCrawler()),
       isCrawlerInSafeRoom: (crawler) =>
-        this.safeRoom.isEntityInSafeRoom(crawler === 'Carl' ? this.human : this.cat),
+        this.safeRoom.isEntityInSafeRoom(crawler === crawlerName('human') ? this.human : this.cat),
       readSession: () => {
         const levelDef = this.levelDef;
         const session: SessionInput = {
@@ -10280,9 +10285,11 @@ export class DungeonScene extends GameplayScene {
         const active = activeCrawler();
         const menuOpen = this.aiMenuOpen();
         return {
-          activeCrawler: this.human.isActive ? 'Carl' : 'Donut',
-          carl: readCrawler(this.human, 'Carl'),
-          donut: readCrawler(this.cat, 'Donut'),
+          activeCrawler: crawlerName(this.human.isActive ? 'human' : 'cat'),
+          crawlers: {
+            human: readCrawler(this.human, crawlerName('human')),
+            cat: readCrawler(this.cat, crawlerName('cat')),
+          },
           location: this.aiLocation(active),
           nearbyMobs: readNearbyMobs(this.world.roster.mobs, active),
           combatInProgress: this.combatCooldownFrames > 0,
@@ -10419,7 +10426,7 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
-   * Where the one Carl is in conversation with stands, while a conversation
+   * Where the one the human crawler is in conversation with stands, while a conversation
    * with somebody is open; null otherwise. Only the conversations whose
    * speaker this scene can place — a townsperson, Mordecai, the defend-quest
    * giver.

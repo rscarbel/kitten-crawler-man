@@ -43,7 +43,7 @@
  * This module knows nothing about animation: it paints one pose.
  */
 
-import { type Pt, clamp01, deg, hump, lerp, mix } from '../../sprites/art/carlArt';
+import { type Pt, clamp01, deg, hump, lerp, mix } from '../../sprites/art/bipedArt';
 
 type Ctx = CanvasRenderingContext2D;
 

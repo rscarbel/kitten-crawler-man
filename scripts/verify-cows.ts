@@ -6,7 +6,7 @@
  *
  * 1. The herd, headlessly, on real generated floor-3 maps: five simulated
  *    minutes per seed through the real `MobUpdateLoop` (so crawler shoves and
- *    cow-on-cow separation apply), with Carl wandering the pen and the lane
+ *    cow-on-cow separation apply), with the human wandering the pen and the lane
  *    outside the gate, two blasts set off beside the herd, and a siege.
  *    Every frame, every seed:
  *    - no animal's centre leaves the paddock, the barn, or the lane between
@@ -22,7 +22,7 @@
  * 3. Dynamite at the herd, through the real `DynamiteSystem` and
  *    `resolveKills`: every cow in the blast dies, each leaves 2–3 burgers
  *    (both counts seen across seeds), and none is counted as a kill.
- * 4. Pet routing: with the cat's missile slotted (or Carl's sling wielded) and
+ * 4. Pet routing: with the cat's missile slotted (or the human's sling wielded) and
  *    no hostile near, the village link and then the attack pet the cow and
  *    fire nothing; with a hostile in range the pet is refused and the attack
  *    fires. That the real scene asks the village before it swings, on every
@@ -34,6 +34,7 @@
  * Run: npm run verify:cows, or `tsx scripts/verify-cows.ts --seeds=N` for this half alone
  */
 
+import { installCanvasGlobals } from './nodeCanvasGlobals';
 import { GameMap } from '../src/map/GameMap';
 import { hasRoomToMove } from '../src/map/findWalkableTile';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
@@ -81,15 +82,19 @@ import { cowFigure } from '../src/sprites/art/cowFigure';
 import type { CowAge, CowCoatId } from '../src/sprites/cowSprite';
 import {
   CACHE_BUDGET_MEGABYTES,
+  measureFigureFrameBytes,
   IDLE_FRAMES_BEFORE_RELEASE,
 } from '../src/sprites/figure/figureFrameCache';
+
+// The herd's ledger paints rows to measure what the cache would store of them.
+installCanvasGlobals();
 
 /** The level the kit's militia are raised at; nothing here fights them. */
 const MILITIA_LEVEL = 1;
 
 const PERCENT = 100;
-/** Mixed into the map seed so Carl's wandering draws a stream of its own. */
-const CARL_WANDER_RNG_SALT = 0x5eed;
+/** Mixed into the map seed so the human's wandering draws a stream of its own. */
+const HUMAN_WANDER_RNG_SALT = 0x5eed;
 
 const MAP_SIZE = 280;
 const DEFAULT_SEEDS = 30;
@@ -129,7 +134,7 @@ const STUCK_MIN_PROGRESS_PX = TILE_SIZE;
 const SHELL_SECOND = 100;
 const SHELL_FRAME = SHELL_SECOND * FRAMES_PER_SECOND;
 const SHELL_LEVEL = 15;
-/** Animals gathered round Carl for the shell. */
+/** Animals gathered round the human for the shell. */
 const SHELL_VICTIMS = 3;
 /** How far a stick's blast reaches, stated here. */
 const STICK_KILL_REACH_TILES = 3;
@@ -141,7 +146,6 @@ const STICK_BURN_FRAMES = STICK_BURN_SECONDS * FRAMES_PER_SECOND;
  * next to a whole village's villagers, soldiers and undead gets a third.
  */
 const HERD_CACHE_SHARE_DIVISOR = 3;
-const BYTES_PER_PIXEL = 4;
 const BYTES_PER_KILOBYTE = 1024;
 const BYTES_PER_MEGABYTE = BYTES_PER_KILOBYTE * BYTES_PER_KILOBYTE;
 /** How long an animal put off the pen has to walk back on. */
@@ -157,10 +161,10 @@ const MIN_TILES_WALKED_PER_SEED = 100;
 /** How far the lane between the paddock gate and the barn may run. */
 const LANE_MAX_TILES = 4;
 
-/** Carl lingers this long at each stop as he wanders the pen. */
-const CARL_LINGER_MAX_SECONDS = 4;
-const CARL_LINGER_MAX_FRAMES = CARL_LINGER_MAX_SECONDS * FRAMES_PER_SECOND;
-/** Every so often Carl drives the cow nearest the gate at a tile this far out along the lane. */
+/** The human lingers this long at each stop as he wanders the pen. */
+const HUMAN_LINGER_MAX_SECONDS = 4;
+const HUMAN_LINGER_MAX_FRAMES = HUMAN_LINGER_MAX_SECONDS * FRAMES_PER_SECOND;
+/** Every so often the human drives the cow nearest the gate at a tile this far out along the lane. */
 const DRIVE_EVERY_SECONDS = 12;
 const DRIVE_EVERY_FRAMES = DRIVE_EVERY_SECONDS * FRAMES_PER_SECOND;
 const LANE_EXIT_TILES = 2;
@@ -335,7 +339,7 @@ function buildWorld(seed: number): World | null {
 }
 
 /**
- * Carl ambles between pen and lane tiles, walking straight through whatever is
+ * The human ambles between pen and lane tiles, walking straight through whatever is
  * there — and now and then drives a cow at the way out, stepping in behind it
  * and walking through it toward the gate and the lane beyond, which is the
  * shove most likely to carry an animal out of the pen.
@@ -375,7 +379,7 @@ class Wanderer {
       this.body.x = this.goal.x * TILE_SIZE;
       this.body.y = this.goal.y * TILE_SIZE;
       this.goal = null;
-      this.lingerFrames = Math.floor(this.random() * CARL_LINGER_MAX_FRAMES);
+      this.lingerFrames = Math.floor(this.random() * HUMAN_LINGER_MAX_FRAMES);
       return;
     }
     this.body.x += (dx / distance) * PLAYER_SPEED;
@@ -418,11 +422,19 @@ class WarmLedger implements CowRowWarmer {
   private readonly drawnThisFrame = new Map<string, number>();
   private readonly held = new Map<string, { bytes: number; frame: number }>();
 
+  /** Each frame's stored bytes by figure and row, measured once: what the cache keeps, ink crops. */
+  private readonly frameBytesByRow = new Map<string, number[]>();
+
   private rowBytes(coat: CowCoatId, age: CowAge, state: string, frameLimit?: number): number {
     const figure = cowFigure(coat, age);
     const declared = figure.states.get(state)?.frames ?? 0;
     const frames = Math.min(declared, frameLimit ?? declared);
-    return frames * figure.frameWidth * figure.frameHeight * BYTES_PER_PIXEL;
+    const key = `${figure.id}|${state}`;
+    const perFrame =
+      this.frameBytesByRow.get(key) ??
+      Array.from({ length: declared }, (_, frame) => measureFigureFrameBytes(figure, state, frame));
+    this.frameBytesByRow.set(key, perFrame);
+    return perFrame.slice(0, frames).reduce((sum, bytes) => sum + bytes, 0);
   }
 
   /** Keeps the larger of a row's recorded size and `bytes` while it is still within the window. */
@@ -507,13 +519,13 @@ function simulate(seed: number, tally: HerdTally): void {
   const { livestock, site } = world;
   const herd = livestock.herd;
   const allowed = allowedGround(site);
-  const random = mulberry32(seed ^ CARL_WANDER_RNG_SALT);
+  const random = mulberry32(seed ^ HUMAN_WANDER_RNG_SALT);
   const laneStops: TilePoint[] = [];
   const allowedStops = [...livestock.pen.pastureTiles, ...livestock.pen.barnTiles];
   for (const gate of site.pasture.fenceGates) {
     laneStops.push(gate, { x: gate.x - 1, y: gate.y }, { x: gate.x - 1, y: gate.y - 1 });
   }
-  const carl = new Wanderer(world.human, [...allowedStops, ...laneStops], random);
+  const human = new Wanderer(world.human, [...allowedStops, ...laneStops], random);
   const exits = site.pasture.fenceGates.flatMap((gate) => [
     { x: gate.x - LANE_EXIT_TILES, y: gate.y - LANE_EXIT_TILES },
     { x: gate.x - LANE_EXIT_TILES, y: gate.y + LANE_EXIT_TILES },
@@ -569,12 +581,12 @@ function simulate(seed: number, tally: HerdTally): void {
             tilesApart(b, { x: gate.x * TILE_SIZE, y: gate.y * TILE_SIZE }),
         );
       const exit = exits[Math.floor(random() * exits.length)];
-      if (livingByDistanceToGate.length > 0) carl.driveAt(livingByDistanceToGate[0], exit);
+      if (livingByDistanceToGate.length > 0) human.driveAt(livingByDistanceToGate[0], exit);
     }
     if (frame >= SHELL_FRAME && world.spells.isInsideShell(world.human.x, world.human.y)) {
-      // Carl holds still inside his shell while it lasts, so it keeps pushing where it was cast.
+      // The human holds still inside his shell while it lasts, so it keeps pushing where it was cast.
     } else {
-      carl.step();
+      human.step();
     }
     livestock.update({ human: world.human, cat: world.cat, active: world.human });
     world.spells.update(world.ctx);
@@ -639,7 +651,7 @@ function simulate(seed: number, tally: HerdTally): void {
 
 /**
  * Casts the widest protective shell from inside the paddock, hard against its
- * fence by the gate, with animals gathered round Carl — a shell ignores walls,
+ * fence by the gate, with animals gathered round the human — a shell ignores walls,
  * so it is the one push that could throw a cow over the rail. Returns the
  * animals it was cast among.
  */
@@ -1008,8 +1020,8 @@ function respawnSection(): void {
     check(cow.x === homeX && cow.y === homeY, `seed ${seed}: on the tile it first stood on`);
     check(roster.grid.has(cow), `seed ${seed}: and can be found in the mob grid again`);
     for (const [name, body] of [
-      ['Carl', human],
-      ['Donut', cat],
+      ['The human', human],
+      ['The cat', cat],
       ['Mongo', mongo],
     ] as const) {
       const overlaps = Math.abs(body.x - cow.x) < TILE_SIZE && Math.abs(body.y - cow.y) < TILE_SIZE;
@@ -1126,14 +1138,13 @@ function routingSection(): void {
     `and fires nothing (${missiles} missiles, ${swings} swings)`,
   );
 
-  // Carl, sling in hand, beside it.
   cat.isActive = false;
   human.isActive = true;
   human.x = cow.x - TILE_SIZE;
   human.y = cow.y;
-  check(human.hasSlingDrawn, 'Carl has the slingshot wielded');
+  check(human.hasSlingDrawn, 'The human has the slingshot wielded');
   pressSpace();
-  check(swings === 0, `Carl pets rather than slings (${swings} shots)`);
+  check(swings === 0, `The human pets rather than slings (${swings} shots)`);
 
   // A hostile in reach takes the press.
   const goblin = spawnMob(

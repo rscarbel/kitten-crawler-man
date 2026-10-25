@@ -6,7 +6,7 @@
  * gold tooth, which is the brightest thing in his face on purpose.
  */
 
-import { deriveRamp } from '../carl/palette';
+import { deriveRamp } from '../biped/palette';
 import { HAIR_COLOR_BASES, SKIN_TONE_BASES } from '../../person/townCastLooks';
 import { type Ramp } from '../deuce/palette';
 

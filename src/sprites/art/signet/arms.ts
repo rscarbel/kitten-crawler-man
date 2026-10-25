@@ -13,7 +13,7 @@
  */
 
 import { fillSoftEllipse } from '../softShade';
-import { mix } from '../carlArt';
+import { mix } from '../bipedArt';
 import { applyInkStyle, drawDragonMotif, drawEelLightningMotif, stampTattoo } from './tattoos';
 import {
   fillCrescent,

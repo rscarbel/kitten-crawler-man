@@ -14,7 +14,7 @@
  * read as fingers curling round something instead of sticks splayed flat.
  */
 
-import { mix, type Pt } from '../carlArt';
+import { mix, type Pt } from '../bipedArt';
 import {
   type Ctx,
   type Trace,

@@ -66,7 +66,7 @@ export const CELLAR_TILE_TYPES: ReadonlySet<number> = new Set([
 
 /**
  * Solid pieces low enough to see and shoot past. Only the bottle rack, a
- * shelf of glass standing taller than Carl, hides what is behind it; a spear
+ * shelf of glass standing taller than the human crawler, hides what is behind it; a spear
  * rack is mostly gaps.
  */
 export const CELLAR_SIGHT_TRANSPARENT_TILE_TYPES: ReadonlySet<number> = new Set(

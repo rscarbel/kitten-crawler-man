@@ -30,7 +30,7 @@ import { SaveIndicator } from '../ui/SaveIndicator';
 import type { EventBus } from '../core/EventBus';
 import { displayHp } from '../core/crawlerFormulas';
 import { partyCoins } from '../core/partyCoins';
-import { CRAWLER_NAMES } from '../core/SkillManager';
+import { crawlerName } from '../characters/characters';
 import { statusRemainingFraction } from '../core/StatusEffect';
 import { statusBadge } from '../sprites/status/statusEffectVisuals';
 import type { Rect } from '../ui/core/geom';
@@ -261,7 +261,7 @@ export abstract class GameplayScene extends Scene {
     }
     return {
       id: kind,
-      name: CRAWLER_NAMES[kind],
+      name: crawlerName(kind),
       glyph: kind === 'human' ? 'user' : 'cat',
       level: player.level,
       hp: displayHp(player.hp),
@@ -282,7 +282,7 @@ export abstract class GameplayScene extends Scene {
     const pending = Math.round(this.rewardFly.pendingCoinAmount());
     return {
       shown: Math.max(0, partyCoins(this.human, this.cat) - pending),
-      split: `${CRAWLER_NAMES.human} ${this.human.coins} · ${CRAWLER_NAMES.cat} ${this.cat.coins}`,
+      split: `${crawlerName('human')} ${this.human.coins} · ${crawlerName('cat')} ${this.cat.coins}`,
       pulse: this.rewardFly.coinCounterPulse(),
     };
   }

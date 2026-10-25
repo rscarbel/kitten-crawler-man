@@ -1,5 +1,5 @@
 /**
- * The Enchanted Crown of the Sepsis Whore on Donut: a small gold crown of
+ * The Enchanted Crown of the Sepsis Whore on the cat crawler: a small gold crown of
  * three points with a blood-red stone, sitting on the top of her head between
  * her ears. Painted once the whole head is on, so it sits over the roots of
  * her ears the way a crown worn between them would.
@@ -9,10 +9,10 @@
  * finer turns to a yellow smudge.
  */
 
-import type { CatHeadFrame, CatHeadLandmarks } from '../../art/catParts';
+import type { CatHeadFrame } from '../../art/catParts';
 import { CAT_VIEW_FALLBACK } from '../../catViews';
 import { defineGarment, type GarmentFrameContext, withViewFallback } from '../garmentDef';
-import { lyingTipBack } from './headwear';
+import { fitHatToSkull, type HatFit, hatFitFor, lyingTipBack } from './headwear';
 import { GOLD, metalFill, paintGlint } from './metalInk';
 
 type Ctx = CanvasRenderingContext2D;
@@ -164,18 +164,21 @@ function paintCrown(ctx: Ctx, look: CrownLook): void {
   }
 }
 
-function seatOf(landmarks: CatHeadLandmarks): number {
-  return landmarks.skull.cy - landmarks.skull.ry + SEAT_DEPTH;
+/** Where the band's lower edge rests, in the fitted frame. */
+function seatOf(fit: HatFit): number {
+  return fit.skullTop + SEAT_DEPTH;
 }
 
 function headOn(fromBehind: boolean) {
   return (ctx: Ctx, frame: CatHeadFrame): void => {
     if (frame.piece !== 'top') return;
     const { landmarks } = frame;
+    const fit = hatFitFor(landmarks, 'headOn');
     ctx.save();
+    fitHatToSkull(ctx, landmarks, fit);
     paintCrown(ctx, {
       cx: landmarks.skull.cx + landmarks.turn * TURN_SLIDE,
-      seatY: seatOf(landmarks),
+      seatY: seatOf(fit),
       halfWidth: fromBehind ? BACK_HALF_WIDTH : HALF_WIDTH,
       showGem: !fromBehind,
       lit: !fromBehind,
@@ -188,8 +191,10 @@ function paintProfile(ctx: Ctx, frame: CatHeadFrame, context: GarmentFrameContex
   if (frame.piece !== 'top') return;
   const { landmarks } = frame;
   const cx = landmarks.skull.cx;
-  const seatY = seatOf(landmarks);
+  const fit = hatFitFor(landmarks, 'profile');
+  const seatY = seatOf(fit);
   ctx.save();
+  fitHatToSkull(ctx, landmarks, fit);
   ctx.translate(cx, seatY);
   ctx.rotate(PROFILE_TILT - lyingTipBack(context));
   ctx.translate(-cx, -seatY);

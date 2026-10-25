@@ -37,7 +37,7 @@ import {
   drawCow,
   restCowPose,
 } from './cowArt';
-import { clamp01, deg, easeInOut, hump, lerp } from './carlArt';
+import { clamp01, deg, easeInOut, hump, lerp } from './bipedArt';
 import {
   ADULT_COW_BUILD,
   CALF_BUILD,

@@ -11,8 +11,8 @@
 import { speakerLines } from '../line';
 
 const wendell = speakerLines('wendell');
-const carl = speakerLines('carl');
-const donut = speakerLines('donut');
+const ryan = speakerLines('ryan');
+const belle = speakerLines('belle');
 
 export const WENDELL = {
   /** The first visit, after the crawlers ask about the blueprints. */
@@ -31,7 +31,7 @@ export const WENDELL = {
     "So I am afraid I cannot simply hand over Fenna's plans as though our agreement had never existed.",
     'Get Fenna to agree to provide me with a healthy dairy cow, and the blueprints are yours to borrow. I shall even have them ready for you before you leave.',
   ]),
-  /** The first visit, answering Donut. */
+  /** The first visit, answering Belle. */
   missesTheCows: wendell.line([
     'Of course I do.',
     "One spends enough time alone in a field with an animal and eventually discovers that the animal has become part of one's daily life.",
@@ -53,37 +53,37 @@ export const WENDELL = {
 
 /**
  * The crawler talking to Wendell on the first visit. Either can be the one
- * talking, so both voices carry the same words and the scene picks whichever
- * crawler the player is controlling.
+ * talking, so each asks the same questions in their own voice and the scene
+ * picks whichever crawler the player is controlling.
  */
 export const WENDELL_BLUEPRINTS_REPLIES = {
-  carl: {
-    askAboutBlueprints: carl.line(
-      "Hi Wendell. Our friend Fenna from Briar Hollow mentioned she left some blueprints with you last year. They're for a saw station and a rope walk. Do you know which blueprints I mean?",
+  ryan: {
+    askAboutBlueprints: ryan.line(
+      'Wendell! Good to meet you. Our friend Fenna from Briar Hollow says she left some blueprints with you last year, for a saw station and a rope walk. Ring any bells?',
     ),
-    askToBorrow: carl.line(
-      "Wonderful! Could we have them back? It'll only be for a short while, and then we'll bring them right back to you.",
+    askToBorrow: ryan.line(
+      "Fantastic! Any chance we could borrow them? Just for a little while, and we'll bring them straight back. Promise.",
     ),
   },
-  donut: {
-    askAboutBlueprints: donut.line(
-      "Hi Wendell. Our friend Fenna from Briar Hollow mentioned she left some blueprints with you last year. They're for a saw station and a rope walk. Do you know which blueprints I mean?",
+  belle: {
+    askAboutBlueprints: belle.line(
+      "Hi Wendell! You're nice and warm. Fenna from Briar Hollow left some blueprints with you. For a saw station and a rope walk. Do you still have them?",
     ),
-    askToBorrow: donut.line(
-      "Wonderful! Could we have them back? It'll only be for a short while, and then we'll bring them right back to you.",
+    askToBorrow: belle.line(
+      "Yay! Can we borrow them? Just for a little bit. We'll bring them right back, pinky promise.",
     ),
   },
 } as const;
 
 /** The two lines on the first visit that belong to one crawler whoever is being controlled. */
 export const WENDELL_BLUEPRINTS_ASIDES = {
-  /** Donut, to Wendell, whoever asked about the blueprints. */
-  donutAsksAboutCows: donut.line('You really miss the cows?'),
+  /** Belle, to Wendell, whoever asked about the blueprints. */
+  belleAsksAboutCows: belle.line('You miss the cows? Aww. Do you want a hug?'),
   /**
-   * Carl, to Donut. He has not met Merrit yet, so the "he" is Carl guessing
+   * Ryan, to Belle. He has not met Merrit yet, so the "she" is Ryan guessing
    * at a farmer he has never seen.
    */
-  carlPlansTheCow: carl.line(
-    "It sounds like we just need to get one cow and collect some resources, that doesn't sound so bad. Let's go talk to the farmer in Briar Hollow to see if she'll give us a cow.",
+  ryanPlansTheCow: ryan.line(
+    "So all we need is one cow and a few resources. How hard can that be? Let's go find the farmer in Briar Hollow and talk her into giving us a cow.",
   ),
 } as const;

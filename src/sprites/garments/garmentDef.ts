@@ -3,7 +3,7 @@
  * the crawler's own body rather than against the screen or the cell.
  *
  * A crawler's anatomy publishes a frame for each piece of each part as it
- * paints it (`catParts.ts` for Donut), and a garment paints there, in the
+ * paints it (`catParts.ts` for the cat), and a garment paints there, in the
  * frame's coordinates, through one painter per part it covers and per facing
  * view. Because it is painted at that moment of the figure's own composition,
  * whatever the anatomy paints afterwards covers it, and it shares the figure's
@@ -21,19 +21,23 @@
  */
 
 import type { CatPose } from '../art/catArt';
-import type { CarlHideableFeature, CarlPartFrames, HumanGarmentRow } from '../art/carl/carlParts';
-import type { CarlPose, Skeleton, ViewSpec } from '../art/carl/rig';
+import type {
+  BipedHideableFeature,
+  BipedPartFrames,
+  HumanGarmentRow,
+} from '../art/biped/bipedParts';
+import type { BipedPose, Skeleton, ViewSpec } from '../art/biped/rig';
 import type { CatHideableFeature, CatPartFrames } from '../art/catParts';
 import { FACING_VIEWS, type CardinalView, type FacingView } from '../facingView';
 import type { GarmentIdFor } from './garmentIds';
+import type { HumanLook } from '../looks/humanLook';
 
 /** Stacking order, innermost first: a garment paints over every garment on a lower layer. */
 export const GARMENT_LAYERS = ['skin', 'under', 'over', 'outer', 'back'] as const;
 export type GarmentLayer = (typeof GARMENT_LAYERS)[number];
 
 /** What a garment is made of, which picks the sound of putting it on. */
-export const GARMENT_MATERIALS = ['cloth', 'leather', 'metal', 'jewelry'] as const;
-export type GarmentMaterial = (typeof GARMENT_MATERIALS)[number];
+export type GarmentMaterial = 'cloth' | 'leather' | 'metal' | 'jewelry';
 
 /** A point in whatever frame carries it. */
 export interface FramePoint {
@@ -50,12 +54,13 @@ export type FrameEnvelope =
 
 /**
  * Every point a garment's ink reaches past its wearer's skeleton, for the
- * surface a figure is composed on: Carl's cloak streams well past him.
+ * surface a figure is composed on: the Nightgaunt Cloak streams well past its wearer.
  */
-export type CarlGarmentReach = (
+type BipedGarmentReach = (
   skeleton: Skeleton,
   view: ViewSpec,
   context: GarmentFrameContext<'human'>,
+  look: HumanLook,
 ) => readonly FramePoint[];
 
 interface CatAnatomy {
@@ -63,24 +68,31 @@ interface CatAnatomy {
   readonly parts: CatPartFrames;
   readonly feature: CatHideableFeature;
   readonly row: string;
-  /** Donut's cell is sized for every pose and garment of hers, so nothing of hers states a reach. */
+  /** The cat's cell is sized for every pose and garment of hers, so nothing of hers states a reach. */
   readonly reach: never;
+  /** No garment of hers is worn on bare skin a base garment could cover. */
+  readonly bare: never;
 }
 
 interface HumanAnatomy {
-  readonly pose: CarlPose;
-  readonly parts: CarlPartFrames;
-  readonly feature: CarlHideableFeature;
+  readonly pose: BipedPose;
+  readonly parts: BipedPartFrames;
+  readonly feature: BipedHideableFeature;
   readonly row: HumanGarmentRow;
-  readonly reach: CarlGarmentReach;
+  readonly reach: BipedGarmentReach;
+  readonly bare: HumanBareFeature;
 }
+
+/** Bare skin of a human a garment can need: a toe ring needs bare feet. */
+type HumanBareFeature = 'feet';
 
 /**
  * Each crawler that can wear garments: their pose, the part frames their
  * anatomy publishes, what a garment may hide, what a garment that moves with
- * the row is told of it, and how a garment states ink standing off the body.
+ * the row is told of it, how a garment states ink standing off the body, and
+ * the bare skin a garment can need.
  */
-export interface WearerAnatomy {
+interface WearerAnatomy {
   readonly cat: CatAnatomy;
   readonly human: HumanAnatomy;
 }
@@ -94,6 +106,7 @@ export type PartFrame<
   P extends GarmentPart<W>,
 > = WearerAnatomy[W]['parts'][P];
 export type HideableFeature<W extends GarmentWearer> = WearerAnatomy[W]['feature'];
+type BareFeature<W extends GarmentWearer> = WearerAnatomy[W]['bare'];
 
 /** The cell a garment is being painted into, for garments that move with the row. */
 export interface GarmentFrameContext<W extends GarmentWearer> {
@@ -130,8 +143,7 @@ export type GarmentHideRule<W extends GarmentWearer> =
 
 /**
  * A base garment is part of every outfit, so as a garment it is never put on
- * or taken off and has no material; an item that looks like one sounds as
- * `garmentMaterialOf` decides. Anything else has a material.
+ * or taken off and has no material. Anything else has a material.
  */
 type GarmentKind =
   | { readonly base: true; readonly material?: never }
@@ -147,10 +159,29 @@ export type GarmentSpec<W extends GarmentWearer, R extends GarmentPart<W>> = {
   readonly paint: GarmentPainters<W, R>;
   readonly hides?: readonly GarmentHideRule<W>[];
   readonly reach?: WearerAnatomy[W]['reach'];
+  /**
+   * Bare skin the garment is worn on. A look whose base garments cover it
+   * leaves the garment off: a toe ring cannot show on a booted foot.
+   */
+  readonly needsBare?: BareFeature<W>;
+  /**
+   * Bare skin the garment covers: shoes and boots cover the feet. It leaves
+   * off every garment needing that skin bare, and every garment covering it
+   * from a layer further in — a boot over a sneaker hides the sneaker.
+   */
+  readonly covers?: readonly BareFeature<W>[];
+  /**
+   * A stiff piece strapped over a limb — a kneepad, a bracer, a boot's shaft,
+   * plate — rather than cloth that drapes over it. A limb under a rigid piece
+   * shows the piece's flat face, not the limb's form, so the figure's
+   * muscle-read gate judges it with the piece; cloth over a limb still has
+   * to read as the limb.
+   */
+  readonly rigid?: true;
 } & GarmentKind;
 
-/** A validated garment, as outfits hold it. */
-export interface GarmentDef<W extends GarmentWearer> {
+/** What every validated garment has, base or put on. */
+interface GarmentDefBody<W extends GarmentWearer> {
   readonly id: GarmentIdFor<W>;
   readonly name: string;
   readonly wearer: W;
@@ -159,13 +190,31 @@ export interface GarmentDef<W extends GarmentWearer> {
   readonly paint: Partial<GarmentPainters<W, GarmentPart<W>>>;
   readonly hides: readonly GarmentHideRule<W>[];
   readonly reach: WearerAnatomy[W]['reach'] | null;
-  readonly base: boolean;
-  /** Null for a base garment; see `GarmentKind`. */
-  readonly material: GarmentMaterial | null;
+  /** Null for a garment worn over anything; see `GarmentSpec.needsBare`. */
+  readonly needsBare: BareFeature<W> | null;
+  /** See `GarmentSpec.covers`. */
+  readonly covers: readonly BareFeature<W>[];
+  /** See `GarmentSpec.rigid`. */
+  readonly rigid: boolean;
 }
 
+/** A garment every outfit is built on, so never put on or taken off: it has no material. */
+export interface BaseGarmentDef<W extends GarmentWearer> extends GarmentDefBody<W> {
+  readonly base: true;
+  readonly material: null;
+}
+
+/** A garment put on over the base, heard as its material as it goes on. */
+export interface WornGarmentDef<W extends GarmentWearer> extends GarmentDefBody<W> {
+  readonly base: false;
+  readonly material: GarmentMaterial;
+}
+
+/** A validated garment, as outfits hold it. */
+export type GarmentDef<W extends GarmentWearer> = BaseGarmentDef<W> | WornGarmentDef<W>;
+
 /** Thrown at module load by a garment that breaks a rule the types cannot hold. */
-export class GarmentDefinitionError extends Error {}
+class GarmentDefinitionError extends Error {}
 
 function definitionProblems<W extends GarmentWearer, R extends GarmentPart<W>>(
   spec: GarmentSpec<W, R>,
@@ -198,8 +247,15 @@ function definitionProblems<W extends GarmentWearer, R extends GarmentPart<W>>(
 /**
  * Validates a garment and widens it for outfits. Throws, naming the garment,
  * when it breaks a rule: an empty or repeated region, a painter outside its
- * region or missing a view, or a garment hiding itself.
+ * region or missing a view, a garment hiding itself, or a base garment that
+ * hides anything.
  */
+export function defineGarment<W extends GarmentWearer, R extends GarmentPart<W>>(
+  spec: GarmentSpec<W, R> & { readonly base: true },
+): BaseGarmentDef<W>;
+export function defineGarment<W extends GarmentWearer, R extends GarmentPart<W>>(
+  spec: GarmentSpec<W, R> & { readonly material: GarmentMaterial },
+): WornGarmentDef<W>;
 export function defineGarment<W extends GarmentWearer, R extends GarmentPart<W>>(
   spec: GarmentSpec<W, R>,
 ): GarmentDef<W> {
@@ -211,7 +267,7 @@ export function defineGarment<W extends GarmentWearer, R extends GarmentPart<W>>
   }
   const paint: { [P in GarmentPart<W>]?: ViewPainters<W, P> } = {};
   for (const part of spec.region) paint[part] = spec.paint[part];
-  return {
+  const body: GarmentDefBody<W> = {
     id: spec.id,
     name: spec.name,
     wearer: spec.wearer,
@@ -220,13 +276,17 @@ export function defineGarment<W extends GarmentWearer, R extends GarmentPart<W>>
     paint,
     hides: spec.hides ?? [],
     reach: spec.reach ?? null,
-    base: spec.base === true,
-    material: spec.material ?? null,
+    needsBare: spec.needsBare ?? null,
+    covers: spec.covers ?? [],
+    rigid: spec.rigid === true,
   };
+  return spec.base === true
+    ? { ...body, base: true, material: null }
+    : { ...body, base: false, material: spec.material };
 }
 
 /** The facing views that are not cardinal: the three-quarter views. */
-export type DiagonalView = Exclude<FacingView, CardinalView>;
+type DiagonalView = Exclude<FacingView, CardinalView>;
 
 /**
  * A painter per facing view from the three cardinal painters, each diagonal

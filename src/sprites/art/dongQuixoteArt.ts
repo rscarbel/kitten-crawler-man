@@ -20,7 +20,7 @@
  * Knows nothing about animation; `dongQuixoteFigure.ts` choreographs him.
  */
 
-import { type Pt, clamp01, easeInOut, lerp, mix, rgba } from './carlArt';
+import { type Pt, clamp01, easeInOut, lerp, mix, rgba } from './bipedArt';
 import { fillSoftEllipse, withClip } from './softShade';
 
 type Ctx = CanvasRenderingContext2D;
@@ -103,13 +103,14 @@ const AHEAD: V3 = v3(0, 0, 1);
 // ── Proportions ──────────────────────────────────────────────────────────────
 
 /**
- * Sole to the crown of the skull. Carl's rig is 2.03 units drawn at 0.72 of a
- * tile, about 1.46 tiles; Dong stands a head taller, so he is visibly the
- * bigger man beside him before the helmet and lance add anything.
+ * Sole to the crown of the skull, in his figure units (a tile of the human rig
+ * at its own size). The human rig is 2.03 units drawn at 0.72 of a tile, about
+ * 1.46 of these; Dong stands a head taller, so he is visibly the bigger man
+ * beside the crawler before the helmet and lance add anything.
  */
 export const FIGURE_HEIGHT = 1.78;
 /**
- * A tall, lean-limbed old man is more heads tall than Carl's 5.5: size is read
+ * A tall, lean-limbed old man is more heads tall than the biped figure's 5.5: size is read
  * by counting heads, and a longer count is what says "tall" rather than "big".
  */
 const HEADS_TALL = 6.2;
@@ -634,16 +635,6 @@ function toppled(s: Skeleton, t: Topple): Skeleton {
     lanceTip: s.lanceTip,
     lanceGrip: s.lanceGrip,
     lanceDir: s.lanceDir,
-  };
-}
-
-/** The lance's point and butt projected into a view, for gates and runtime anchors. */
-export function lanceEndsInView(skeleton: Skeleton, view: DongView): { butt: Pt; tip: Pt } {
-  const butt = projectPoint(skeleton.lanceButt, view);
-  const dir = projectPropDirection(skeleton.lanceDir, view, skeleton.lanceHeld);
-  return {
-    butt,
-    tip: { x: butt.x + dir.x * LANCE_LENGTH, y: butt.y + dir.y * LANCE_LENGTH },
   };
 }
 

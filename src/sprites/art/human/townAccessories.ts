@@ -1,20 +1,20 @@
 /**
- * Small worn accessories layered over the human rig after Carl's own painter
+ * Small worn accessories layered over the biped rig after the biped painter
  * has finished (a head accessory over the solved head, in the rig's `over`
  * slab), so a townsfolk look reads its role at a glance without a
  * bespoke garment system of its own: an apron, a satchel, a tabard, a
  * brimmed hat, a stole, a patched hood. Each is drawn in the same figure-unit
- * space Carl's own rig paints in (`carl/proportions.ts`'s constants), so it
- * sits on him wherever the pose puts his shoulders, waist and head — it is
+ * space the biped rig paints in (`biped/proportions.ts`'s constants), so it
+ * sits on the figure wherever the pose puts its shoulders, waist and head — it is
  * not baked into a fixed screen position.
  *
  * These are deliberately simple flat/two-tone shapes, not full anatomy-grade
  * paint: the point is a silhouette and colour cue that survives at 32px, laid
- * over a body already fully shaded by Carl's own painter.
+ * over a body already fully shaded by the biped painter.
  */
 
-import { mix, rgba } from '../carlArt';
-import type { CarlPose } from '../carl/rig';
+import { mix, rgba } from '../bipedArt';
+import type { BipedPose } from '../biped/rig';
 import { type CardinalView } from '../../facingView';
 import {
   HEAD_CENTRE_Y,
@@ -24,7 +24,7 @@ import {
   SHOULDER_HALF,
   SHOULDER_Y,
   WAIST_Y,
-} from '../carl/proportions';
+} from '../biped/proportions';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -70,9 +70,9 @@ const PROP_STROKE_WIDTH = 0.01;
 
 // ── Shoes ────────────────────────────────────────────────────────────────────
 //
-// Carl's own look is barefoot — a trait of his own character, not of
-// the rig. A flat shoe laid over each foot target of a finished figure, for a
-// figure that dresses after its paint rather than through the cast's
+// The rig paints bare feet: shoes are a look's to wear, not the rig's. This is
+// a flat shoe laid over each foot target of a finished figure, for a figure
+// that dresses after its paint rather than through the cast's
 // `townsfolk_shoes` garment.
 
 const SHOE_HALF_WIDTH = 0.09;
@@ -102,7 +102,7 @@ function drawShoe(ctx: Ctx, foot: { x: number; y: number }, color: string): void
 }
 
 /** Draws a flat shoe over each of `pose`'s own feet — the far one a shade darker, matching every other worn accessory here. */
-export function drawShoes(ctx: Ctx, _view: CardinalView, pose: CarlPose, color: string): void {
+export function drawShoes(ctx: Ctx, _view: CardinalView, pose: BipedPose, color: string): void {
   drawShoe(ctx, pose.leftFoot, shaded(color));
   drawShoe(ctx, pose.rightFoot, color);
 }

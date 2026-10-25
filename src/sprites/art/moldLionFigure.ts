@@ -1,6 +1,6 @@
 /** The Mold Lion figure. Profile only; the runtime mirrors it to face left. */
 
-import { clamp01, deg, easeInOut, hump, lerp } from './carlArt';
+import { clamp01, deg, easeInOut, hump, lerp } from './bipedArt';
 import { type LionPose, type PawPose, drawMoldLionSide, restLionPose, TWO_PI } from './moldLionArt';
 import { type FigureDef, figureStates } from '../figure/figureDef';
 

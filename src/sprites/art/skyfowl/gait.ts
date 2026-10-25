@@ -17,11 +17,11 @@
  * planted leg, riding no higher than that leg reaches, which is what drops it
  * at double support rather than a bob laid on top.
  *
- * Timing follows Carl's walk (ten stance frames of sixteen), the one gait in
+ * Timing follows the biped figure's walk (ten stance frames of sixteen), the one gait in
  * this game that reads as convincing; only the leg it drives is different.
  */
 
-import { deg, lerp } from '../carlArt';
+import { deg, lerp } from '../bipedArt';
 import { splineKeys, type PathKey } from '../human/gaitShared';
 import { SKYFOWL_STANDING_HIP, skyfowlHipCeiling, type SkyfowlLegPose } from './rig';
 
@@ -195,7 +195,7 @@ export function gaitHipHeight(spec: SkyfowlGaitSpec, phase: number): number {
 // ── The two gaits ────────────────────────────────────────────────────────────
 
 const WALK_FRAMES = 16;
-/** Ten of sixteen frames down, as Carl walks: both feet share the floor a frame either side of each landing. */
+/** Ten of sixteen frames down, as the biped figure walks: both feet share the floor a frame either side of each landing. */
 const WALK_STANCE_STEPS = 9;
 const WALK_CONTACT_AHEAD = 0.24;
 const WALK_TOE_OFF_BEHIND = 0.21;

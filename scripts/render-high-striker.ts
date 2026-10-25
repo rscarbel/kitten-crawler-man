@@ -8,9 +8,9 @@
  *   npx tsx scripts/render-high-striker.ts --seed=15838
  *
  * Each play starts south of the striker with the power meter up, then steps
- * to the side of the pad for the swing. Rows: Carl at full power (the bell
+ * to the side of the pad for the swing. Rows: The human at full power (the bell
  * rings), at mid power and at low power (the puck stops partway, no bell),
- * then Donut at full power. The queued interaction prompts are drawn through
+ * then the cat at full power. The queued interaction prompts are drawn through
  * the game's own prompt surface, once as on a desktop and once as on a phone
  * at the largest UI size, so the lock prompt can be checked against the
  * meter. Writes `preview/high-striker.png` and `preview/high-striker-phone.png`,
@@ -84,7 +84,7 @@ const LABEL_Y = 3;
 const SHEET_SCALE = 3;
 const SHEET_BACKGROUND = '#111111';
 
-/** Ticks into Carl's swing for the wind-up panel: the mallet at the top of its arc. */
+/** Ticks into the human's swing for the wind-up panel: the mallet at the top of its arc. */
 const WIND_UP_TICKS = 35;
 /** Ticks a swing is given to reach its impact; generous, the system says when it lands. */
 const SWING_TICK_LIMIT = 120;
@@ -238,7 +238,7 @@ function playRow(
   crawler.isActive = true;
   crawler.facingX = 0;
   crawler.facingY = -1;
-  const who = crawler instanceof HumanPlayer ? 'Carl' : 'Donut';
+  const who = crawler instanceof HumanPlayer ? 'The human' : 'The cat';
   if (!system.tryInteract(crawler)) throw new Error(`${who} could not raise the meter`);
   const meterTicks = ticksToPower(power);
   for (let tick = 0; tick < meterTicks; tick++) step(crawler);
@@ -283,8 +283,8 @@ function shortMoments(power: number): ReadonlyArray<readonly [number, string]> {
   ];
 }
 
-const makeCarl = (x: number, y: number): Crawler => new HumanPlayer(x, y, TILE_SIZE);
-const makeDonut = (x: number, y: number): Crawler => {
+const makeHuman = (x: number, y: number): Crawler => new HumanPlayer(x, y, TILE_SIZE);
+const makeCat = (x: number, y: number): Crawler => {
   const cat = new CatPlayer(x, y, TILE_SIZE);
   cat.setMap(site.map);
   return cat;
@@ -292,10 +292,10 @@ const makeDonut = (x: number, y: number): Crawler => {
 for (const viewport of [DESKTOP, PHONE]) {
   promptViewport = viewport;
   const rows: Panel[][] = [
-    playRow(makeCarl, FULL_POWER, FULL_MOMENTS),
-    playRow(makeCarl, MID_POWER, shortMoments(MID_POWER)),
-    playRow(makeCarl, WEAK_POWER, shortMoments(WEAK_POWER)),
-    playRow(makeDonut, FULL_POWER, FULL_MOMENTS),
+    playRow(makeHuman, FULL_POWER, FULL_MOMENTS),
+    playRow(makeHuman, MID_POWER, shortMoments(MID_POWER)),
+    playRow(makeHuman, WEAK_POWER, shortMoments(WEAK_POWER)),
+    playRow(makeCat, FULL_POWER, FULL_MOMENTS),
   ];
 
   const panelW = VIEW_TILES_WIDE * TILE_SIZE;

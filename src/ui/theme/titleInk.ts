@@ -157,7 +157,7 @@ const particleInk = {
   moteFade: 'rgba(232, 214, 186, 0)',
 } as const;
 
-/** Carl, Donut and the things that watch them from the dark. */
+/** The two crawlers and the things that watch them from the dark. */
 const castInk = {
   /** Laid over a figure the light has not reached; the hall's own shadow colour. */
   shadow: '#05040a',

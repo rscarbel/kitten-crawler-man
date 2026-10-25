@@ -18,7 +18,7 @@
  * by IK sweeps both segments together and the forearm flails.
  */
 
-import { clamp01, deg, easeInOut, hump, lerp } from '../carlArt';
+import { clamp01, deg, easeInOut, hump, lerp } from '../bipedArt';
 import type { ArmAngles, FootPose, RatKinPose, RatKinView } from '../ratKinArt';
 import {
   FACING_SWING_MIDPOINT,

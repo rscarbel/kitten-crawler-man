@@ -41,7 +41,7 @@ import {
   restPose,
 } from './splashZoneArt';
 import { drawBolt, drawSplash, drawWave } from './splashZoneWaterArt';
-import { clamp01, deg, easeInOut, easeOut, hump, lerp } from './carlArt';
+import { clamp01, deg, easeInOut, easeOut, hump, lerp } from './bipedArt';
 import { type FigureDef, figureStates } from '../figure/figureDef';
 import {
   SPLASH_ZONE_BOLT_FRAMES,
@@ -77,7 +77,7 @@ export const OTTER_TILE_Y = 32;
 /**
  * The share of his authored size he is drawn at. Scaled about the point between
  * his feet, so he stays standing on his tile: a shade over a tile tall, which
- * is how "short" reads next to Carl's two.
+ * is how "short" reads next to the human crawler's two.
  */
 export const OTTER_BODY_SCALE = 0.88;
 

@@ -9,6 +9,7 @@
  * Talks go through the kit's Space entry, as a player's would.
  */
 
+import { playerCharacter } from '../../src/characters/characters';
 import { setViewportSize } from '../../src/core/Viewport';
 import type { BlueprintsQuestPhase } from '../../src/core/blueprintsQuestPhase';
 import type { VillageQuestPhase } from '../../src/core/villageQuestPhase';
@@ -145,8 +146,8 @@ export function verifyMerritAsk(check: Check): void {
     );
     const pages = talkToMerrit(talk);
     check(
-      same(pages, paragraphs(merritAskPages('carl', pleaWon))),
-      `Carl asks for a cow and Merrit's greeting follows the Plea (won: ${pleaWon})`,
+      same(pages, paragraphs(merritAskPages(playerCharacter('human').speakerId, pleaWon))),
+      `the human asks for a cow and Merrit's greeting follows the Plea (won: ${pleaWon})`,
     );
     talk.rig.step();
     check(
@@ -163,15 +164,15 @@ export function verifyMerritAsk(check: Check): void {
     talk.rig.dispose();
   }
 
-  const donut = talkRig('ask_merrit', 'fortifying');
-  donut.rig.human.isActive = false;
-  donut.rig.cat.isActive = true;
-  const donutPages = talkToMerrit(donut);
+  const belle = talkRig('ask_merrit', 'fortifying');
+  belle.rig.human.isActive = false;
+  belle.rig.cat.isActive = true;
+  const bellePages = talkToMerrit(belle);
   check(
-    same(donutPages, paragraphs(merritAskPages('donut', false))),
-    'with Donut active, Donut does the asking',
+    same(bellePages, paragraphs(merritAskPages(playerCharacter('cat').speakerId, false))),
+    'with the cat active, the cat does the asking',
   );
-  donut.rig.dispose();
+  belle.rig.dispose();
 }
 
 /** The fence reported, and the step moving on to the harvest. */
@@ -180,7 +181,7 @@ export function verifyMerritFenceDone(check: Check): void {
   check(merritMarker(talk) === 'question', 'a "?" over Merrit at report_fence');
   const pages = talkToMerrit(talk);
   check(
-    same(pages, paragraphs(merritFenceDonePages('carl'))),
+    same(pages, paragraphs(merritFenceDonePages(playerCharacter('human').speakerId))),
     'the finished fence, and her terms for Midge',
   );
   talk.rig.step();

@@ -5,22 +5,29 @@
  * then the standing views large. `--compare` paints each row without the
  * garment beside it. No art gates run here: this is for looking.
  *
- *   npx tsx scripts/render-garments.ts --wear=carl_crown
+ *   npx tsx scripts/render-garments.ts --wear=human_crown
  *   npx tsx scripts/render-garments.ts --wear=cat_crown,cat_butterfly_talisman --compare
- *   npx tsx scripts/render-garments.ts --wear=carl_boots --rows=walk_side:0,walk_side:8
- *   npx tsx scripts/render-garments.ts --wear=carl_crown --out=crown.png
+ *   npx tsx scripts/render-garments.ts --wear=human_boots --rows=walk_side:0,walk_side:8
+ *   npx tsx scripts/render-garments.ts --wear=human_crown --out=crown.png
+ *   npx tsx scripts/render-garments.ts --wear=cat_crown --look=pumpkin
+ *   npx tsx scripts/render-garments.ts --wear=human_boots --look=dave
+ *
+ * A garment is drawn on the look `--look=` names: a cat look for a cat garment
+ * (see `catLooks.ts`), a human look for a human one (see `humanLooks.ts`).
  */
 
 import { createCanvas } from 'canvas';
+import { catLookFlag } from './catLooks.js';
 import { bakeFigureCell } from './figureSheet.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { catFigureFor, TILE_SCALE as CAT_TILE_SCALE } from '../src/sprites/art/catFigure.js';
 import { humanFigureFor } from '../src/sprites/art/human/appearance.js';
 import { TILE_SCALE as HUMAN_TILE_SCALE } from '../src/sprites/art/human/figureScale.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
-import type { GarmentDef, GarmentWearer } from '../src/sprites/garments/garmentDef.js';
-import { garmentsOf } from '../src/sprites/garments/garments.js';
+import type { GarmentWearer, WornGarmentDef } from '../src/sprites/garments/garmentDef.js';
+import { wornGarmentsOf } from '../src/sprites/garments/garments.js';
 import { outfitOf } from '../src/sprites/garments/outfit.js';
+import { humanLookFlag } from './humanLooks.js';
 
 const IN_GAME_TILE = 32;
 /** How many times the 32 px strip is blown up, nearest-neighbour, so its pixels can be read. */
@@ -47,10 +54,10 @@ const CAT_STRIP = parseSamples(
 );
 const CAT_ZOOM = parseSamples('idle:0,idle_side:0,idle_side_west:0,idle_away:0');
 
-const CARL_STRIP = parseSamples(
+const HUMAN_STRIP = parseSamples(
   'walk:0,walk:8,walk_side:0,walk_side:8,walk_away:0,walk_away:8,run_side:4,run:4,idle:0,idle_side:0,idle_away:0,guard_side:0,cross_side:4,roundhouse_side:4,stomp_down:3,uppercut_up:4,shell_cast:4,build_side:6,knocked_out_side:0,smush_side:4',
 );
-const CARL_ZOOM = parseSamples('idle:0,idle_side:0,idle_away:0');
+const HUMAN_ZOOM = parseSamples('idle:0,idle_side:0,idle_away:0');
 
 function flag(name: string): string | null {
   const prefix = `--${name}=`;
@@ -65,8 +72,8 @@ function parseSamples(raw: string): Sample[] {
   });
 }
 
-function wearable<W extends GarmentWearer>(wearer: W, ids: readonly string[]): GarmentDef<W>[] {
-  return garmentsOf(wearer).filter((garment) => !garment.base && ids.includes(garment.id));
+function wearable<W extends GarmentWearer>(wearer: W, ids: readonly string[]): WornGarmentDef<W>[] {
+  return wornGarmentsOf(wearer).filter((garment) => ids.includes(garment.id));
 }
 
 function subjectFor(ids: readonly string[]): Subject {
@@ -75,26 +82,28 @@ function subjectFor(ids: readonly string[]): Subject {
   if (cat.length > 0 && human.length > 0)
     throw new Error('--wear= names garments of both crawlers');
   if (cat.length + human.length !== ids.length) {
-    const known = [...garmentsOf('cat'), ...garmentsOf('human')].map((g) => g.id);
+    const known = [...wornGarmentsOf('cat'), ...wornGarmentsOf('human')].map((g) => g.id);
     throw new Error(`--wear= names a garment that is not one of ${known.join(', ')}`);
   }
   if (cat.length > 0) {
+    const look = catLookFlag();
     return {
-      worn: catFigureFor(outfitOf('cat', cat)),
-      bare: catFigureFor(outfitOf('cat', [])),
+      worn: catFigureFor(look, outfitOf(look, cat)),
+      bare: catFigureFor(look, outfitOf(look, [])),
       tileScale: CAT_TILE_SCALE,
       crop: { x: 0.15, y: 0.22, w: 0.7, h: 0.66 },
       strip: CAT_STRIP,
       zoom: CAT_ZOOM,
     };
   }
+  const look = humanLookFlag();
   return {
-    worn: humanFigureFor(outfitOf('human', human), null).def,
-    bare: humanFigureFor(outfitOf('human', []), null).def,
+    worn: humanFigureFor(look, outfitOf(look, human), null).def,
+    bare: humanFigureFor(look, outfitOf(look, []), null).def,
     tileScale: HUMAN_TILE_SCALE,
     crop: { x: 0.2, y: 0.08, w: 0.6, h: 0.82 },
-    strip: CARL_STRIP,
-    zoom: CARL_ZOOM,
+    strip: HUMAN_STRIP,
+    zoom: HUMAN_ZOOM,
   };
 }
 

@@ -11,7 +11,7 @@
  * folds. Folds are filled bands, not lines, so they stay decisive at a glance.
  */
 
-import { type Pt } from '../carlArt';
+import { type Pt } from '../bipedArt';
 import {
   type Ctx,
   type Trace,

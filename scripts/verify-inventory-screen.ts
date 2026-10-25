@@ -13,6 +13,7 @@
  *   npm run verify:inventory-screen
  */
 
+import { crawlerName } from '../src/characters/characters';
 import { spawnSync } from 'node:child_process';
 
 import { createCanvas } from 'canvas';
@@ -266,10 +267,10 @@ function makeRig(platform: PlatformSpec, opts: RigOptions = {}): Rig {
   };
   const party: readonly Member[] = opts.companion
     ? [
-        { id: 'human', name: 'Carl', owner: ownerOf(inv) },
-        { id: 'cat', name: 'Donut', owner: ownerOf(catInv) },
+        { id: 'human', name: crawlerName('human'), owner: ownerOf(inv) },
+        { id: 'cat', name: crawlerName('cat'), owner: ownerOf(catInv) },
       ]
-    : [{ id: 'human', name: 'Carl', owner: ownerOf(inv) }];
+    : [{ id: 'human', name: crawlerName('human'), owner: ownerOf(inv) }];
   const canvas = createCanvas(platform.cssWidth, platform.cssHeight);
   const ctx = asGameContext(canvas.getContext('2d'));
   const send = (kind: 'down' | 'move' | 'up', at: Point, button: number = PRIMARY_BUTTON): void => {

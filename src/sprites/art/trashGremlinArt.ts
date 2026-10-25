@@ -12,7 +12,7 @@
  * that in the cell. Knows nothing about animation.
  */
 
-import { type Pt, rgba } from './carlArt';
+import { type Pt, rgba } from './bipedArt';
 import {
   armForms,
   footForms,

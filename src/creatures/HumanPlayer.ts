@@ -16,18 +16,19 @@ import type { Mob } from './Mob';
 import {
   stampPointOf,
   activeHumanSocketSource,
-  type CarlHeldDraw,
-  type CarlStowedDraw,
+  type BipedHeldDraw,
+  type BipedStowedDraw,
   drawHumanSelection,
   explosiveHeldDraw,
   handsShareHaft,
   heldHeadInTile,
   prewarmHumanRow,
   prewarmHumanSprite,
+  activeHumanLook,
   type HumanRowSelection,
   setHumanHeld,
-  carlRowView,
-  type CarlRowView,
+  humanRowView,
+  type HumanRowView,
   viewRow,
 } from '../sprites/humanSprite';
 import { type FacingSelection, FacingState } from '../sprites/facingView';
@@ -44,7 +45,7 @@ import {
   type StrikeTargetContext,
 } from '../sprites/humanAnimator';
 import { SMUSH_DURATION_TICKS, SMUSH_RECOVERY_TICKS } from '../sprites/art/human/timing';
-import { type Pt } from '../sprites/art/carlArt';
+import { type Pt } from '../sprites/art/bipedArt';
 import {
   GROUND_OFFSET_IN_TILE,
   HUMAN_ROW_TABLE,
@@ -79,9 +80,10 @@ import { carriedGripOf } from '../sprites/art/human/carry';
 import type { HeldVisualDef, WeaponHeldVisualDef } from '../sprites/held/heldVisualDef';
 import type { ThrownPropVisualId } from '../sprites/held/heldVisualIds';
 import { motionSetOf } from '../sprites/art/human/motionSets';
-import { carlSocketsAt } from '../sprites/art/human/sockets';
+import { humanSocketsAt } from '../sprites/art/human/sockets';
 import type { WorkingTool } from '../core/toolTiers';
 import type { CrawlerKind } from '../core/SkillManager';
+import type { HumanLook } from '../sprites/looks/humanLook';
 import {
   bareFistDamage,
   HUMAN_BASE_HP_OFFSET,
@@ -94,14 +96,6 @@ import {
 } from '../core/SkillManager';
 
 /**
- * How far the top of his hair sits above the tile anchor at the in-game tile
- * size, rounded up to a whole pixel so the health bar hung off it clears the
- * hair. Measured off the painted cells: the standing rows' solid ink tops out
- * 21.5px above the anchor. Gate G21 in `scripts/gates-human.ts` re-measures it.
- */
-const HUMAN_SPRITE_TOP_ABOVE_TILE = 22;
-
-/**
  * How far his ground line sits above the bottom edge of his tile. The rig is
  * measured from the ground line, but the waterline is placed from the tile's
  * bottom edge, so the two are this far apart.
@@ -109,12 +103,20 @@ const HUMAN_SPRITE_TOP_ABOVE_TILE = 22;
 const HUMAN_GROUND_ABOVE_TILE_BOTTOM_PX = (1 - GROUND_OFFSET_IN_TILE) * TILE_SIZE;
 
 /**
- * Where a waterline crosses him when he wades: his hips, read off the solved
- * rig of his standing pose at the in-game tile rather than frozen, so a redraw
- * that changes his proportions moves the waterline with it.
+ * Where a waterline crosses `look` when he wades: his hips, read off the
+ * solved rig of his standing pose at the in-game tile rather than frozen, so a
+ * redraw that changes his proportions moves the waterline with it.
  */
-const HUMAN_WAIST_ABOVE_FOOT_PX =
-  standingHipAboveSolePx(TILE_SIZE) + HUMAN_GROUND_ABOVE_TILE_BOTTOM_PX;
+function waistAboveFootPx(look: HumanLook): number {
+  const known = waistAboveFootByLook.get(look);
+  if (known !== undefined) return known;
+  const waist = standingHipAboveSolePx(TILE_SIZE, look) + HUMAN_GROUND_ABOVE_TILE_BOTTOM_PX;
+  waistAboveFootByLook.set(look, waist);
+  return waist;
+}
+
+/** Solved once per look: the waterline is read every frame he wades. */
+const waistAboveFootByLook = new WeakMap<HumanLook, number>();
 
 /**
  * Where his soles land, in tile fractions: the ground line sits at 58/64 of
@@ -125,25 +127,20 @@ const HUMAN_WAIST_ABOVE_FOOT_PX =
 const HUMAN_SOLE_BELOW_TILE_TOP = 0.984;
 
 /**
- * Half his width head-on, arms included, in tile fractions. He is narrower
- * than the tile: flames or drips spread across the full tile would visibly
- * miss him. Measured off the standing front and back rows (0.406); gate G21
- * re-measures it.
+ * The ink of `look`'s figure against its own tile anchor, as the status
+ * effects hang off it. Exported so `StatusPreviewScene` reviews effects on the
+ * same box the game paints them on — a harness using its own numbers can only
+ * prove that the harness's numbers work.
  */
-const HUMAN_HALF_WIDTH_TILES = 0.41;
-
-/**
- * Carl's ink, measured off the painted `HUMAN_FIGURE` cell against its own tile
- * anchor. Exported so `StatusPreviewScene` reviews effects on
- * the same box the game paints them on — a harness using its own numbers can
- * only prove that the harness's numbers work.
- */
-export const HUMAN_STATUS_FIGURE_BOX: StatusFigureBox = {
-  centerX: 0.5,
-  top: -HUMAN_SPRITE_TOP_ABOVE_TILE / TILE_SIZE,
-  bottom: HUMAN_SOLE_BELOW_TILE_TOP,
-  halfWidth: HUMAN_HALF_WIDTH_TILES,
-};
+export function humanStatusFigureBoxOf(look: HumanLook): StatusFigureBox {
+  const extent = look.figureExtent;
+  return {
+    centerX: 0.5,
+    top: -extent.spriteTopAboveTilePx / TILE_SIZE,
+    bottom: HUMAN_SOLE_BELOW_TILE_TOP,
+    halfWidth: extent.halfWidthTiles,
+  };
+}
 
 /** The point under the middle of his tile he stands on, in tile fractions. */
 const SMUSH_FALLBACK_STAMP_TILE: Pt = { x: 0.5, y: GROUND_OFFSET_IN_TILE };
@@ -286,15 +283,11 @@ export class HumanPlayer extends Player {
   private static readonly ACTIVE_SPHERE_RADIUS = 4;
   /** Distance above the sprite so the sphere sits just below the health bar. */
   private static readonly ACTIVE_SPHERE_GAP = 3;
-  /** The marker and health bar are stacked from the top of his hair. */
-  private static readonly SPRITE_TOP_ABOVE_TILE = HUMAN_SPRITE_TOP_ABOVE_TILE;
   /** Extra lift from the marker sphere's centre up to the health bar's anchor. */
   private static readonly BAR_LIFT_ABOVE_SPHERE = 7;
-  /** Offset from tile anchor so sphere sits in the gap between head top and health bar bottom. */
-  private static readonly ACTIVE_SPHERE_SPRITE_TOP = HumanPlayer.SPRITE_TOP_ABOVE_TILE;
-  private static readonly HEALTH_BAR_Y_OFFSET =
-    HumanPlayer.SPRITE_TOP_ABOVE_TILE + HumanPlayer.BAR_LIFT_ABOVE_SPHERE;
-  readonly waterlineAboveFootPx = HUMAN_WAIST_ABOVE_FOOT_PX;
+  override get waterlineAboveFootPx(): number {
+    return waistAboveFootPx(activeHumanLook());
+  }
 
   /** The view his facing is drawn in, held through the selector's hysteresis. */
   readonly facing = new FacingState(this.facingX, this.facingY);
@@ -323,7 +316,15 @@ export class HumanPlayer extends Player {
    * reach his chest.
    */
   protected override get statusFigureBox(): StatusFigureBox {
-    return HUMAN_STATUS_FIGURE_BOX;
+    return humanStatusFigureBoxOf(activeHumanLook());
+  }
+
+  /**
+   * The marker sphere and health bar are stacked from the top of his hair,
+   * which sits where the look he is drawn as puts it.
+   */
+  private get spriteTopAboveTile(): number {
+    return activeHumanLook().figureExtent.spriteTopAboveTilePx;
   }
 
   protected override get statusMouth(): FigureMouth | null {
@@ -405,14 +406,14 @@ export class HumanPlayer extends Player {
    * it is stowed, and while it is out on any frame his main hand is not
    * closed on it — reaching for it on a draw, letting go of it on a stow.
    */
-  private stowedDraw(selection: HumanRowSelection): CarlStowedDraw | null {
+  private stowedDraw(selection: HumanRowSelection): BipedStowedDraw | null {
     const look = this.mainHandLook();
     if (look === null) return null;
     const placement = stowedPlacementOfHeld(look);
     if (placement === 'none') return null;
     const inHand = this.drawnWeaponId !== null || this.stowing !== null;
     if (inHand) {
-      const frames = carlSocketsAt(activeHumanSocketSource(), selection.row, selection.frame);
+      const frames = humanSocketsAt(activeHumanSocketSource(), selection.row, selection.frame);
       if (frames.sockets.mainHand.grips === true) return null;
     }
     return { look, placement };
@@ -423,7 +424,7 @@ export class HumanPlayer extends Player {
    * lighting, holding or throwing, else the working tool on a swing where both
    * fists close on its haft, else the weapon out in his hand, else nothing.
    */
-  private heldDraw(selection: HumanRowSelection): CarlHeldDraw | null {
+  private heldDraw(selection: HumanRowSelection): BipedHeldDraw | null {
     if (!this.isAlive) return null;
     const explosive = explosiveHeldDraw(this.explosiveLook, selection);
     if (explosive !== null) return explosive;
@@ -742,8 +743,8 @@ export class HumanPlayer extends Player {
   }
 
   /** The view whose rows he is drawn in for a facing, his own unless one is given. */
-  rowViewFacing(faceX = this.facingX, faceY = this.facingY): CarlRowView {
-    return carlRowView(this.facing.peek(faceX, faceY).view);
+  rowViewFacing(faceX = this.facingX, faceY = this.facingY): HumanRowView {
+    return humanRowView(this.facing.peek(faceX, faceY).view);
   }
 
   /**
@@ -991,7 +992,7 @@ export class HumanPlayer extends Player {
    */
   handWorldPosition(side: HumanHandSide): Pt {
     const drawn = this.spriteSelection();
-    const inTile = handTipInTile(drawn.row, drawn.frame, drawn.flipX, side);
+    const inTile = handTipInTile(drawn.row, drawn.frame, drawn.flipX, side, activeHumanLook());
     return { x: this.x + inTile.x * this.tileSize, y: this.y + inTile.y * this.tileSize };
   }
 
@@ -1005,7 +1006,13 @@ export class HumanPlayer extends Player {
     const drawn = this.spriteSelection();
     const row: HumanRowMeta = HUMAN_ROW_TABLE[drawn.row];
     if (row.role !== 'strike' || row.strike === undefined) return null;
-    const inTile = strikeContactInTile(drawn.row, drawn.frame, drawn.flipX, row.strike.reachLimb);
+    const inTile = strikeContactInTile(
+      drawn.row,
+      drawn.frame,
+      drawn.flipX,
+      row.strike.reachLimb,
+      activeHumanLook(),
+    );
     return { x: this.x + inTile.x * this.tileSize, y: this.y + inTile.y * this.tileSize };
   }
 
@@ -1252,8 +1259,7 @@ export class HumanPlayer extends Player {
     if (this.isActive && !this.paintingBodyOnly) {
       const r = HumanPlayer.ACTIVE_SPHERE_RADIUS;
       const sphereCX = sx + s * HumanPlayer.SPRITE_HORIZONTAL_OFFSET;
-      const sphereCY =
-        sy - HumanPlayer.ACTIVE_SPHERE_SPRITE_TOP - HumanPlayer.ACTIVE_SPHERE_GAP - r;
+      const sphereCY = sy - this.spriteTopAboveTile - HumanPlayer.ACTIVE_SPHERE_GAP - r;
       drawActivePlayerMarker(ctx, sphereCX, sphereCY, r);
     }
 
@@ -1267,7 +1273,8 @@ export class HumanPlayer extends Player {
 
     if (!this.paintingBodyOnly) drawSlingshotRocks(ctx, this.rocks, camX, camY, s);
 
-    this.renderHealthBar(ctx, sx, sy - HumanPlayer.HEALTH_BAR_Y_OFFSET);
+    const healthBarAboveAnchor = this.spriteTopAboveTile + HumanPlayer.BAR_LIFT_ABOVE_SPHERE;
+    this.renderHealthBar(ctx, sx, sy - healthBarAboveAnchor);
     this.renderKnockedOutOverlay(ctx, sx, sy);
   }
 }

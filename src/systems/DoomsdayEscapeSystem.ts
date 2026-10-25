@@ -1,5 +1,5 @@
 /**
- * DoomsdayEscapeSystem — the overworld half of "Carl's Doomsday Scenario".
+ * DoomsdayEscapeSystem — the overworld half of the Doomsday Scenario.
  *
  * The escape stairwell by the tower door is on the map from the moment the
  * countdown starts, so the player always knows where the way out is. It is
@@ -18,6 +18,7 @@
  * long before the finale exists.
  */
 
+import { crawlerName } from '../characters/characters';
 import { TILE_SIZE } from '../core/constants';
 import type { GameMap } from '../map/GameMap';
 import type { GameSystem, SystemContext } from './GameSystem';
@@ -64,7 +65,7 @@ export const STAIRWELL_KNOCKED_OUT_TOAST = 'Revive your partner before you go do
 
 /** Stable Journal id for the finale, so a pin on it survives the objective changing under it. */
 export const DOOMSDAY_TRACKER_ID = 'doomsday_scenario';
-const DOOMSDAY_TRACKER_NAME = "Carl's Doomsday Scenario";
+const DOOMSDAY_TRACKER_NAME = `${crawlerName('human')}'s Doomsday Scenario`;
 const ESCAPE_OBJECTIVE = 'Reach the escape stairwell';
 const ESCAPED_OBJECTIVE = 'You escaped the city';
 /** The stairwell's art is two tiles wide; the beacon should stand over all of it. */

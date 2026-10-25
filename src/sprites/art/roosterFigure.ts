@@ -12,7 +12,7 @@
  * while the body walks under it, then snaps forward — the head-bob is what a
  * fowl's walk is, frame for frame, in Muybridge's plates. Above the waist he
  * moves like a man: the arms swing from the shoulder by joint angles, as
- * Carl's do (`human/locomotion.ts`), and every strike is a fist or a held
+ * the biped figure's do (`human/locomotion.ts`), and every strike is a fist or a held
  * weapon driven to a target. The gait is paced by ground covered: a stance
  * foot slides back through the cell at a constant rate, so a planted foot holds
  * its place on the floor while the sprite carries him.
@@ -22,7 +22,7 @@
  * the row passes through rather than an extreme it happens to reach.
  */
 
-import { clamp01, deg, easeInOut, lerp } from './carlArt';
+import { clamp01, deg, easeInOut, lerp } from './bipedArt';
 import {
   type ArmAngles,
   ELBOW_IN,

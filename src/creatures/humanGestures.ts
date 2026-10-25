@@ -1,5 +1,5 @@
 /**
- * The gestures systems ask Carl for outside a fight — casting Protective
+ * The gestures systems ask the human crawler for outside a fight — casting Protective
  * Shell, drinking, stooping for loot, heaving a chest open, talking — each
  * picked for the view he faces and played through `HumanPlayer.playAction`.
  *
@@ -19,7 +19,7 @@
 
 import { TILE_SIZE } from '../core/constants';
 import type { Player } from '../Player';
-import { type Pt } from '../sprites/art/carlArt';
+import { type Pt } from '../sprites/art/bipedArt';
 import { eventFrame, type HumanRowName, type ViewRows } from '../sprites/art/humanFigure';
 import { HumanPlayer } from './HumanPlayer';
 
@@ -140,7 +140,7 @@ export function standByForShellCast(human: HumanPlayer, offCooldown: boolean): v
 }
 
 /**
- * A drink: bottle to the mouth, head back, a wipe of the mouth. Only Carl has
+ * A drink: bottle to the mouth, head back, a wipe of the mouth. Only the human has
  * the rows; the cat drinks unseen. Asked for while the world is halted under a
  * menu, it waits on its first frame — the idle's own — and plays once play
  * resumes; walking off cuts it short.
@@ -190,7 +190,7 @@ type ChestLidOutcome = 'shown' | 'unseen';
 /**
  * Heaving a chest open: turned to it, a squat, the lid lifted and pushed over,
  * and `lidUp` run once the lid is up past his chest — or straight away if the
- * opener is not Carl, if he cannot play it, or if it is cut short first.
+ * opener is not the human crawler, if he cannot play it, or if it is cut short first.
  *
  * The loot is the caller's to grant on the press; only the showing of it waits
  * on the lid. Cut short by the world stopping under the death screen, `lidUp`
@@ -222,7 +222,7 @@ export function openChestWithGesture(
 }
 
 /**
- * Keeps Carl talking, turned toward whoever he is in conversation with, for as
+ * Keeps the human crawler talking, turned toward whoever he is in conversation with, for as
  * long as a scene reports a speaker; and back to standing when it stops.
  *
  * Most conversations halt the world, and a halted world does not tick him, so

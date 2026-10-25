@@ -17,7 +17,7 @@ import {
   ROSEMARIE_COIN_TOSS_RELEASE_FRAME,
   ROSEMARIE_IDLE_FRAMES,
 } from '../rosemarieTiming';
-import { hump, lerp } from './carlArt';
+import { hump, lerp } from './bipedArt';
 import {
   type HandGrip,
   type RosemariePose,
@@ -41,7 +41,7 @@ export const FRAME_H = 80;
 export const TILE_X = (FRAME_W - TILE_SCALE) / 2;
 /**
  * Her feet sit on a whole cell row near the bottom of her tile, level with
- * where Carl's do, so the desk in front of her tile covers her boots and hem
+ * where the human crawler's do, so the desk in front of her tile covers her boots and hem
  * and she peers over it from the knees up.
  */
 const GROUND_ROW_IN_TILE = 58;

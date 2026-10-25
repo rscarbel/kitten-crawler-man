@@ -3,7 +3,7 @@ import { updateFrameTime } from '../utils';
 import { bindPointerEvents, PointerInput } from '../ui/core/pointer';
 import type { UiRoot } from '../ui/core/UiRoot';
 import { rebindCaptureArmed } from '../ui/screens/pause/rebindCapture';
-import { beginFigureFrame } from '../sprites/figure/figureFrameCache';
+import { beginFigureFrame, setFigureWorldPixelRatio } from '../sprites/figure/figureFrameCache';
 import { beginEnvironmentArtFrame } from '../map/environmentArtCache';
 import { beginFrameCostTally, closeFrameCost, lastFrameCost } from './frameCost';
 import { beginRenderFrame } from './renderFrameClock';
@@ -341,6 +341,9 @@ export class SceneManager {
     const horizontalScale = this.canvas.width / cssWidth;
     const verticalScale = this.canvas.height / cssHeight;
     this.ctx.setTransform(horizontalScale, 0, 0, verticalScale, 0, 0);
+    // The world is drawn in CSS pixels with no zoom of its own, so the render
+    // scale is every device pixel a world pixel covers.
+    setFigureWorldPixelRatio(scale);
   }
 
   /**

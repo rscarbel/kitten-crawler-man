@@ -12,9 +12,9 @@ const SHIELD_APPEAR_TICKS = CRETIN_SHIELD_APPEAR_FRAMES * CRETIN_SHIELD_APPEAR_T
 const SHIELD_FADE_TICKS = CRETIN_SHIELD_FADE_FRAMES * CRETIN_SHIELD_FADE_TICKS_PER_FRAME;
 
 /**
- * The dome's cell is painted to cover Carl, whose drawn figure stands about
- * this many tiles from sole to crown. Anyone shorter gets a dome shrunk by
- * the ratio of their height to his.
+ * The dome's cell is painted to cover the human crawler, whose drawn figure
+ * stands about this many tiles from sole to crown. Anyone shorter gets a dome
+ * shrunk by the ratio of their height to his.
  */
 const DOME_FITTED_FIGURE_HEIGHT_TILES = 1.67;
 /**

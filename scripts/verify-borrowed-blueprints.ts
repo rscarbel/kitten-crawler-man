@@ -21,6 +21,7 @@ import {
   parseBriarHollowStateSnapshot,
   restoreBriarHollowState,
 } from '../src/core/briarHollowState';
+import { playerCharacter } from '../src/characters/characters';
 import { EventBus } from '../src/core/EventBus';
 import { Inventory } from '../src/core/Inventory';
 import { ITEM_DEF, QUEST_SLOT_IDX, type InventoryItem } from '../src/core/ItemDefs';
@@ -265,8 +266,9 @@ function standInProvider(
 
 function verifyProviderOrder(): void {
   const ctx = villagerContext();
-  const [pleaLine] = merritFenceDonePages('carl');
-  const [sideLine] = merritAskPages('carl', true);
+  const humanVoice = playerCharacter('human').speakerId;
+  const [pleaLine] = merritFenceDonePages(humanVoice);
+  const [sideLine] = merritAskPages(humanVoice, true);
   const plea = standInProvider('fenna', pleaLine, 'question');
   const side = standInProvider('fenna', sideLine, 'exclamation');
   const opening = firstQuestOpening('fenna', ctx, [plea, side]);
@@ -436,21 +438,23 @@ function verifyDialog(): void {
     ),
     "Fenna's directions finish her sentence",
   );
-  const carlVisit = wendellFirstVisitPages('carl');
-  const donutVisit = wendellFirstVisitPages('donut');
+  const humanVoice = playerCharacter('human').speakerId;
+  const catVoice = playerCharacter('cat').speakerId;
+  const humanVisit = wendellFirstVisitPages(humanVoice);
+  const catVisit = wendellFirstVisitPages(catVoice);
   const speakerOf = (line: DialogLine): string =>
     line.speaker.kind === 'cast' ? line.speaker.id : line.speaker.name;
   check(
-    speakerOf(carlVisit[0]) === 'carl' && speakerOf(donutVisit[0]) === 'donut',
+    speakerOf(humanVisit[0]) === humanVoice && speakerOf(catVisit[0]) === catVoice,
     "the active crawler opens Wendell's first visit",
   );
   check(
-    speakerOf(carlVisit[carlVisit.length - 1]) === 'carl' &&
-      speakerOf(donutVisit[donutVisit.length - 1]) === 'carl',
-    'Carl has the last word to Donut, whoever is active',
+    speakerOf(humanVisit[humanVisit.length - 1]) === humanVoice &&
+      speakerOf(catVisit[catVisit.length - 1]) === humanVoice,
+    'the human has the last word to the cat, whoever is active',
   );
-  const [, afterPlea] = merritAskPages('donut', true);
-  const [, beforePlea] = merritAskPages('donut', false);
+  const [, afterPlea] = merritAskPages(catVoice, true);
+  const [, beforePlea] = merritAskPages(catVoice, false);
   check(
     afterPlea !== beforePlea && speakerOf(afterPlea) === 'merrit',
     "Merrit's greeting follows the Plea's outcome",

@@ -25,8 +25,8 @@
  * Coordinates are tile units. The painters translate to {@link GROUND_Y} first,
  * so every shape below is authored in a **figure frame** whose origin is the
  * point between the feet with +Y pointing down the screen — heights above the
- * ground are negative, exactly as in Carl's rig (`carl/rig.ts`). The caller translates to the
- * frame origin and scales by one tile before calling a painter.
+ * ground are negative, exactly as in the biped rig (`biped/rig.ts`). The
+ * caller translates to the frame origin and scales by one tile before calling a painter.
  *
  * Light comes from the upper left, matching every other prop in the repo.
  */

@@ -125,16 +125,16 @@ writePreviewPng(`${OUT_DIR}/dance-floor-4x.png`, cropCanvas.toBuffer('image/png'
 console.log(`wrote ${OUT_DIR}/dance-floor-4x.png`);
 
 // The casino at in-game size and enlarged, so the slot bank, the wheel and the
-// counter are judged both as the player sees them and in detail. Carl and
-// Donut stand in the row behind the slot bank, where the cabinets' fronts must
+// counter are judged both as the player sees them and in detail. The human and
+// the cat stand in the row behind the slot bank, where the cabinets' fronts must
 // be painted over them.
 const CASINO_TILES = { x0: 17, y0: 0, x1: 24, y1: 10 };
 const BEHIND_SLOTS_ROW = 7;
-const CARL_BEHIND_SLOTS_X = 21;
-const DONUT_BEHIND_SLOTS_X = 22;
-const carlBehindSlots = new HumanPlayer(CARL_BEHIND_SLOTS_X, BEHIND_SLOTS_ROW, TILE_SIZE);
-const donutBehindSlots = new CatPlayer(DONUT_BEHIND_SLOTS_X, BEHIND_SLOTS_ROW, TILE_SIZE);
-const casinoFigures = [...figures, carlBehindSlots, donutBehindSlots].sort((a, b) => a.y - b.y);
+const HUMAN_BEHIND_SLOTS_X = 21;
+const CAT_BEHIND_SLOTS_X = 22;
+const humanBehindSlots = new HumanPlayer(HUMAN_BEHIND_SLOTS_X, BEHIND_SLOTS_ROW, TILE_SIZE);
+const catBehindSlots = new CatPlayer(CAT_BEHIND_SLOTS_X, BEHIND_SLOTS_ROW, TILE_SIZE);
+const casinoFigures = [...figures, humanBehindSlots, catBehindSlots].sort((a, b) => a.y - b.y);
 const CASINO_SCALES = [1, CROP_SCALE] as const;
 for (const scale of CASINO_SCALES) {
   const casinoW = (CASINO_TILES.x1 - CASINO_TILES.x0) * TILE_SIZE;

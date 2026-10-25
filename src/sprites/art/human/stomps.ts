@@ -19,19 +19,19 @@
  */
 
 import { PLAYER_SPEED } from '../../../core/constants';
-import { mixPt, pt, rotate } from '../carl/geometry';
-import { ANKLE_Y, LEG_ROOT_HALF, PROFILE_LATERAL, SHOULDER_Y } from '../carl/proportions';
+import { mixPt, pt, rotate } from '../biped/geometry';
+import { ANKLE_Y, LEG_ROOT_HALF, PROFILE_LATERAL, SHOULDER_Y } from '../biped/proportions';
 import {
   type BodySide,
   buildSkeleton,
-  type CarlPose,
+  type BipedPose,
   FULL_UPPER_ARM,
   HEAD_ON_FLOOR_FORESHORTENING,
   restingPose,
   VIEWS,
-} from '../carl/rig';
+} from '../biped/rig';
 import { type CardinalView } from '../../facingView';
-import { deg, lerp, type Pt } from '../carlArt';
+import { deg, lerp, type Pt } from '../bipedArt';
 import {
   ankleOverPivot,
   bisect,
@@ -49,6 +49,7 @@ import {
   RUN_GROUND_PER_CYCLE_PX,
   RUN_TOE_OFF_PHASE,
   runFacing,
+  runFacingCycle,
   runFoot,
   runSide,
 } from './locomotion';
@@ -194,7 +195,9 @@ const GUARD_FOOT = Number.NaN;
  *    the jaw, the head down over the foot, the shoulders turning into the
  *    grind.
  * 5. The grind back the other way, still pressing.
- * 6. He rises out of the press on both feet, the fists coming up.
+ * 6. He rises out of the press on both feet, the fists already back up in
+ *    guard: a fist caught on its way back up from the knee stands out from
+ *    him at the chest with its forearm level, an arm thrown out to the side.
  * 7. Nearly in guard.
  * 8. The guard's own first frame.
  *
@@ -289,7 +292,7 @@ const STOMP_BEATS: readonly StompBeat[] = [
     lean: deg(14),
     weight: -0.1,
     twist: 0.05,
-    arms: -0.1,
+    arms: 0,
     chin: -0.4,
     mouth: 0.2,
   },
@@ -302,7 +305,7 @@ const STOMP_BEATS: readonly StompBeat[] = [
     lean: deg(6),
     weight: 0,
     twist: 0,
-    arms: -0.05,
+    arms: 0,
     chin: -0.3,
     mouth: 0,
   },
@@ -335,7 +338,7 @@ function stampSideOf(view: CardinalView): BodySide {
 
 /** The guard each view hands back to, and where its feet and fists are. */
 interface GuardStance {
-  readonly pose: CarlPose;
+  readonly pose: BipedPose;
   readonly stampSide: BodySide;
   /** The stamping foot's target and pitch in guard. */
   readonly stampFoot: Pt;
@@ -403,14 +406,14 @@ function standingFootX(beat: StompBeat, view: CardinalView, frame: number): numb
  * throws the knee in across the body and the thigh reads as swung sideways —
  * a side kick, or a dog at a post.
  */
-function facingChamberFootX(pose: CarlPose): number {
+function facingChamberFootX(pose: BipedPose): number {
   return pose.sway + LEG_ROOT_HALF;
 }
 
 /**
  * The rest of the head-on chamber is forward, toward the way he faces: the
  * knee comes up over the hip and the shin hangs under it, ahead of the body,
- * far enough ahead that the knee is painted over the shorts.
+ * far enough ahead that the knee is painted over the trouser seat.
  */
 const FACING_CHAMBER_AHEAD = 0.45;
 /**
@@ -470,12 +473,6 @@ const FACING_PRESS_NEARNESS = 0.7;
 const PROFILE_BALANCE_LEAD: Pt = pt(0.36, SHOULDER_Y - 0.26);
 /** How far the rear heel comes up off the floor at the full weight of the press. */
 const PROFILE_PRESS_HEEL_LIFT = deg(35);
-/**
- * Head-on the fists rise out of his guard rather than to a point of their own:
- * a little higher and a little wider, forearms still upright either side of
- * the chin. Anywhere higher or further in the forearms cross over the chest.
- */
-const FACING_BALANCE_LIFT: Pt = pt(0.05, -0.06);
 /** Head-on, how far the torso tips toward the stamping foot at the full weight of the press. */
 const FACING_PRESS_LEAN = 0.25;
 /**
@@ -525,8 +522,6 @@ const PRESS_LOADED_COLUMN = 0.55;
 const DRIVEN_FIST_BESIDE_KNEE: Pt = pt(0.3, -0.04);
 /** Edge-on the driven fist comes down in front of the lead knee instead. */
 const PROFILE_DRIVEN_FIST_BESIDE_KNEE: Pt = pt(0.1, -0.04);
-/** How far out from its standing guard the guard fist is held head-on. */
-const PRESS_GUARD_SPREAD = 0.06;
 /** Edge-on, how far the head tips down to look at the foot, per unit of tucked chin. */
 const PROFILE_PRESS_HEAD_DROP = 0.9;
 /**
@@ -557,12 +552,33 @@ function guardFistFromShoulder(view: CardinalView, side: BodySide): Pt {
 }
 
 /**
+ * The view's guard fists where `pose`'s own shoulders now hold them: the press
+ * sets off from the guard as the body carries it, so a fist that has barely
+ * left the guard sits by the chin wherever the crouch and the lean have taken
+ * the shoulders, not where a standing guard held it.
+ */
+function carriedGuard(pose: BipedPose, view: CardinalView): Wrists {
+  const skeleton = buildSkeleton(pose, VIEWS[view]);
+  const at = (side: BodySide): Pt => {
+    const shoulder = side === 'left' ? skeleton.leftShoulder : skeleton.rightShoulder;
+    const fist = guardFistFromShoulder(view, side);
+    return pt(shoulder.x + fist.x, shoulder.y + fist.y);
+  };
+  return {
+    leftWrist: at('left'),
+    rightWrist: at('right'),
+    leftUpperArmScale: GUARDS[view].leftUpperArmScale,
+    rightUpperArmScale: GUARDS[view].rightUpperArmScale,
+  };
+}
+
+/**
  * Hands for the press, `share` of the way from where they were: the fist on
  * `drivenSide` driven down beside the stamping knee, the other held in the
  * view's guard where its own shoulder now is.
  */
 function pressHands(
-  pose: CarlPose,
+  pose: BipedPose,
   view: CardinalView,
   stampSide: BodySide,
   drivenSide: BodySide,
@@ -579,8 +595,7 @@ function pressHands(
   const guardSide: BodySide = drivenSide === 'right' ? 'left' : 'right';
   const shoulder = guardSide === 'left' ? skeleton.leftShoulder : skeleton.rightShoulder;
   const fist = guardFistFromShoulder(view, guardSide);
-  const spread = profile ? 0 : (guardSide === 'left' ? -1 : 1) * PRESS_GUARD_SPREAD;
-  const guarded = pt(shoulder.x + fist.x + spread, shoulder.y + fist.y);
+  const guarded = pt(shoulder.x + fist.x, shoulder.y + fist.y);
   // A fist driven down to the knee reaches along the picture plane: the whole upper arm shows.
   const drivenScale = lerp(upperArmScaleOf(from, drivenSide), FULL_UPPER_ARM, share);
   const guardedScale = lerp(
@@ -616,7 +631,7 @@ function handAt(guard: Pt, raised: Pt, raise: number, carry: Pt): Pt {
 const REST_SHOULDERS = buildSkeleton(restingPose(), VIEWS.front).shoulderCentre;
 
 /** How far a pose's shoulders stand from where a standing body carries them. */
-function shoulderCarry(pose: CarlPose, view: CardinalView): Pt {
+function shoulderCarry(pose: BipedPose, view: CardinalView): Pt {
   const shoulders = buildSkeleton(pose, VIEWS[view]).shoulderCentre;
   return pt(shoulders.x - REST_SHOULDERS.x, shoulders.y - REST_SHOULDERS.y);
 }
@@ -652,11 +667,26 @@ const JACKET_FLARE_DRIVEN = 0.3;
 /** Elbows bowed out from the ribs while the fists are away from the guard. */
 const PROFILE_STOMP_ELBOW_FLARE = 0.8;
 /**
- * Head-on the raised fists come up inboard of the shoulders, where this sign
- * drops the elbows down along the ribs; the other sign folds them out and up
- * into a flex beside the head.
+ * Head-on a fist held up in the guard rides with the shoulders. The guard
+ * holds its fists close in front of the chin with the elbows out below them,
+ * and there a fist moved off the guard by its hand — lifted, or spread wider
+ * — swings the elbow in under it: the forearm stands up parallel to the other
+ * and the fist turns out at the shoulder. So head-on the guard arm is the
+ * guard's own, carried with the body, through every frame it is held.
  */
-const FACING_STOMP_ELBOW_FLARE = 0.6;
+function heldGuardFist(guardWrist: Pt, carry: Pt): Pt {
+  return pt(guardWrist.x + carry.x, guardWrist.y + carry.y);
+}
+
+/**
+ * A fist held in the guard keeps the guard's straight wrist. At the wrist's
+ * default hold a fist raised by the face bends back toward its shoulder and
+ * turns out to the side, palm to the camera.
+ */
+function holdGuardWrists(pose: BipedPose, guard: BipedPose): void {
+  pose.leftWristFollow = guard.leftWristFollow;
+  pose.rightWristFollow = guard.rightWristFollow;
+}
 
 /** The ankle a profile foot target stands its ankle at, for a foot at `pitch`. */
 function profileAnkleOf(target: Pt, pitch: number): Pt {
@@ -727,7 +757,7 @@ function supportSideOf(guard: GuardStance): BodySide {
   return guard.stampSide === 'left' ? 'right' : 'left';
 }
 
-function setFoot(pose: CarlPose, side: BodySide, foot: Pt, pitch: number): void {
+function setFoot(pose: BipedPose, side: BodySide, foot: Pt, pitch: number): void {
   if (side === 'left') {
     pose.leftFoot = foot;
     pose.leftFootPitch = pitch;
@@ -742,13 +772,13 @@ function setFoot(pose: CarlPose, side: BodySide, foot: Pt, pitch: number): void 
  * frame is the view's guard, which the animator hands over to when the row
  * ends.
  */
-export function smushStanding(frame: number, view: CardinalView): CarlPose {
+export function smushStanding(frame: number, view: CardinalView): BipedPose {
   const step = Math.min(Math.max(Math.round(frame), 0), LAST_FRAME);
   const guard = GUARDS[view];
   if (step === LAST_FRAME) {
     // The guard itself, with its support foot's toe on the floor where the
     // stamp stood it rather than where the guard sinks it.
-    const settled: CarlPose = { ...guard.pose };
+    const settled: BipedPose = { ...guard.pose };
     if (view === 'side') {
       const support = rolledAboutToe(guard.supportFoot, guard.supportPitch, guard.supportPitch);
       setFoot(settled, supportSideOf(guard), support, guard.supportPitch);
@@ -801,17 +831,18 @@ export function smushStanding(frame: number, view: CardinalView): CarlPose {
     setFoot(pose, guard.stampSide, profileStampFoot(beat, stampX, guard), beat.pitch);
     const carry = shoulderCarry(pose, view);
     if (beat.arms >= 0) {
-      pose.leftHand = handAt(guard.leftWrist, PROFILE_BALANCE_LEAD, beat.arms, carry);
+      // Both fists leave from the guard as the crouch and the lean carry it:
+      // a guard fist left where a standing man holds it ends up above his
+      // dropped shoulder, an arm raised in front of his face.
+      const leadGuard = heldGuardFist(guard.leftWrist, carry);
+      pose.leftHand = handAt(leadGuard, PROFILE_BALANCE_LEAD, beat.arms, carry);
       // Edge-on the near arm is painted over the head, so raised anywhere
       // above the chin it lies across the face and leaves only the hair: the
-      // back of his head. The rear fist stays in guard and rides with the
-      // shoulders.
-      pose.rightHand = handAt(guard.rightWrist, guard.rightWrist, beat.arms, carry);
+      // back of his head. The rear fist stays in guard.
+      pose.rightHand = heldGuardFist(guard.rightWrist, carry);
     } else {
-      // Edge-on the near arm is the one seen whole, so it is the one bearing
-      // down on the lead knee.
       // Edge-on the near arm is the one seen whole, so it is the one driven.
-      pressHands(pose, view, guard.stampSide, 'right', guard, -beat.arms);
+      pressHands(pose, view, guard.stampSide, 'right', carriedGuard(pose, view), -beat.arms);
       pose.headTilt = Math.max(0, -beat.chin) * PROFILE_PRESS_HEAD_DROP;
     }
     pose.elbowFlare = beat.arms < 0 ? guard.pose.elbowFlare : PROFILE_STOMP_ELBOW_FLARE;
@@ -860,30 +891,19 @@ export function smushStanding(frame: number, view: CardinalView): CarlPose {
     pose.leftFootPoint = SUPPORT_POINT[step];
     pose.leftFootPlanted = false;
   }
-  const carry = shoulderCarry(pose, view);
-  const raisedRight = pt(
-    guard.rightWrist.x + FACING_BALANCE_LIFT.x,
-    guard.rightWrist.y + FACING_BALANCE_LIFT.y,
-  );
-  const raisedLeft = pt(
-    guard.leftWrist.x - FACING_BALANCE_LIFT.x,
-    guard.leftWrist.y + FACING_BALANCE_LIFT.y,
-  );
+  pose.leftArmBehind = guard.pose.leftArmBehind;
+  pose.rightArmBehind = guard.pose.rightArmBehind;
+  pose.elbowFlare = guard.pose.elbowFlare;
   if (beat.arms >= 0) {
-    pose.rightHand = handAt(guard.rightWrist, raisedRight, beat.arms, carry);
-    pose.leftHand = handAt(guard.leftWrist, raisedLeft, beat.arms, carry);
-    // Raised out of the guard the fists stay up by the jaw, the upper arms
-    // still driven toward the camera as the guard holds them.
+    // The guard holds through the chamber: the raised knee is the wind-up.
+    const carry = shoulderCarry(pose, view);
+    pose.rightHand = heldGuardFist(guard.rightWrist, carry);
+    pose.leftHand = heldGuardFist(guard.leftWrist, carry);
     pose.rightUpperArmScale = guard.rightUpperArmScale;
     pose.leftUpperArmScale = guard.leftUpperArmScale;
-    pose.elbowFlare = FACING_STOMP_ELBOW_FLARE;
-    pose.leftArmBehind = guard.pose.leftArmBehind;
-    pose.rightArmBehind = guard.pose.rightArmBehind;
+    holdGuardWrists(pose, guard.pose);
   } else {
-    pose.leftArmBehind = guard.pose.leftArmBehind;
-    pose.rightArmBehind = guard.pose.rightArmBehind;
-    pressHands(pose, view, 'right', 'right', guard, -beat.arms);
-    pose.elbowFlare = guard.pose.elbowFlare;
+    pressHands(pose, view, 'right', 'right', carriedGuard(pose, view), -beat.arms);
   }
   return pose;
 }
@@ -962,12 +982,17 @@ function hopLastHeldFrame(): number {
  * phase is held that much behind or ahead of its own and carried back over the
  * floor with it. Once it has pushed off, the swing takes up the difference by
  * the last frame, where the leg is the run's own again.
+ *
+ * The catch-up starts from the first frame off the floor, at the held phase
+ * itself: begun a frame sooner, a leg whose own phase is behind is pulled back
+ * into its stance, and its foot is drawn on the floor at a phase that has
+ * moved less than the floor under it — a skate.
  */
 function stampLegPhase(entry: number, leg: BlowLeg, frame: number): number {
   const own = legPhase(hopRunPhase(entry, frame), leg.side);
-  const lastHeld = hopLastHeldFrame();
-  if (frame <= lastHeld) return own - leg.lead;
-  const caughtUp = (frame - lastHeld) / (LAST_FRAME - lastHeld);
+  const firstSwung = hopLastHeldFrame() + 1;
+  if (frame < firstSwung) return own - leg.lead;
+  const caughtUp = (frame - firstSwung) / (LAST_FRAME - firstSwung);
   return own - leg.lead * (1 - caughtUp);
 }
 
@@ -1050,8 +1075,13 @@ const HOP_TRAILING_TUCK: readonly Pt[] = [
 const HOP_DROP: readonly number[] = [0, 0, 0, 0.3, 0.3, 0.1, 0, 0, 0];
 /** Arched back over the hop, folded forward onto the stamp. */
 const HOP_LEAN: readonly number[] = [0, deg(-4), deg(-6), deg(27), deg(16), deg(4), 0, 0, 0];
-/** Arms as in {@link StompBeat}: raised for balance in the air, driven down on the stamp. */
-const HOP_ARMS: readonly number[] = [0, 0.95, 1, -1, -1, 0, 0, 0, 0];
+/**
+ * Arms per hop frame: the share of the way from the run's own swing into the
+ * carried guard, or, below zero, driven down on the stamp as in
+ * {@link StompBeat}. Part way between the two, the swinging arm's elbow is
+ * thrown out level with its shoulder.
+ */
+const HOP_ARMS: readonly number[] = [0, 1, 1, -1, -1, 1, 1, 1, 0];
 const HOP_MOUTH: readonly number[] = [0, 0.2, 0.35, 0.5, 0.4, 0.2, 0, 0, 0];
 const HOP_CHIN: readonly number[] = [0, 0.1, 0, -0.8, -0.6, -0.2, 0, 0, 0];
 
@@ -1076,19 +1106,11 @@ function hopStampFoot(entry: number, leg: BlowLeg, frame: number, view: Cardinal
 }
 
 /**
- * In the air on the hop both fists swing forward and up along the way he is
- * going, the way a jumper's arms carry him. Head-on "forward" is toward the
- * camera, so the fists come up over the chest instead; raised past the
- * shoulders there they read as hands clasped behind the head.
+ * Arm targets for the hop: the guard carried with the body in the air and
+ * out of the press, and on the landing the same press as standing. Left
+ * swinging with the run, the arms pump through a blow that is not a stride.
  */
-const HOP_REACH_LEAD: Pt = pt(0.44, SHOULDER_Y - 0.1);
-const HOP_REACH_REAR: Pt = pt(0.32, SHOULDER_Y);
-const HOP_REACH_FACING: Pt = pt(0.16, SHOULDER_Y + 0.1);
-/**
- * Arm targets for the hop: reaching along the way he is going in the air,
- * then on the landing the same press as standing, both fists back in guard.
- */
-function hopArms(pose: CarlPose, view: CardinalView, arms: number, stampSide: BodySide): void {
+function hopArms(pose: BipedPose, view: CardinalView, arms: number, stampSide: BodySide): void {
   if (arms === 0) return;
   const skeleton = buildSkeleton(pose, VIEWS[view]);
   const from: Wrists = { leftWrist: skeleton.leftArm.end, rightWrist: skeleton.rightArm.end };
@@ -1100,16 +1122,23 @@ function hopArms(pose: CarlPose, view: CardinalView, arms: number, stampSide: Bo
     return;
   }
   const carry = shoulderCarry(pose, view);
-  if (view === 'side') {
-    pose.leftHand = handAt(from.leftWrist, HOP_REACH_LEAD, arms, carry);
-    pose.rightHand = handAt(from.rightWrist, HOP_REACH_REAR, arms, carry);
-    pose.elbowFlare = PROFILE_STOMP_ELBOW_FLARE;
-    return;
-  }
-  const mirrored = pt(-HOP_REACH_FACING.x, HOP_REACH_FACING.y);
-  pose.rightHand = handAt(from.rightWrist, HOP_REACH_FACING, arms, carry);
-  pose.leftHand = handAt(from.leftWrist, mirrored, arms, carry);
-  pose.elbowFlare = FACING_STOMP_ELBOW_FLARE;
+  const guard = GUARDS[view];
+  pose.rightHand = mixPt(from.rightWrist, heldGuardFist(guard.rightWrist, carry), arms);
+  pose.leftHand = mixPt(from.leftWrist, heldGuardFist(guard.leftWrist, carry), arms);
+  pose.rightUpperArmScale = lerp(
+    pose.rightUpperArmScale ?? FULL_UPPER_ARM,
+    guard.rightUpperArmScale,
+    arms,
+  );
+  pose.leftUpperArmScale = lerp(
+    pose.leftUpperArmScale ?? FULL_UPPER_ARM,
+    guard.leftUpperArmScale,
+    arms,
+  );
+  pose.elbowFlare = guard.pose.elbowFlare;
+  pose.leftArmBehind = guard.pose.leftArmBehind;
+  pose.rightArmBehind = guard.pose.rightArmBehind;
+  holdGuardWrists(pose, guard.pose);
 }
 
 /**
@@ -1118,12 +1147,12 @@ function hopArms(pose: CarlPose, view: CardinalView, arms: number, stampSide: Bo
  * {@link smushHopExitPhase}; everything between is the run with the hop laid
  * over it, stamped with whichever foot {@link smushHopStampSide} names.
  */
-export function smushHop(frame: number, view: CardinalView, entry: number): CarlPose {
+export function smushHop(frame: number, view: CardinalView, entry: number): BipedPose {
   const step = Math.min(Math.max(Math.round(frame), 0), LAST_FRAME);
   const phase = wrapPhase(hopRunPhase(entry, step));
-  const pose = view === 'side' ? runSide(phase) : runFacing(phase, view === 'back');
   const onHop = step > 0 && step < LAST_FRAME;
-  if (!onHop) return pose;
+  if (!onHop) return view === 'side' ? runSide(phase) : runFacingCycle(phase, view === 'back');
+  const pose = view === 'side' ? runSide(phase) : runFacing(phase, view === 'back');
 
   const chambered = step < SMUSH_IMPACT_FRAME;
   const leg = hopStampLeg(entry);

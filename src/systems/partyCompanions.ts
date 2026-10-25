@@ -13,7 +13,7 @@ const COMPANION_LANDING_SEARCH_TILES = 4;
 /** Offset from a body's origin to the centre of the tile it stands on, as a fraction of a tile. */
 const TILE_CENTRE_FRACTION = 0.5;
 
-/** A companion the party brings with it: Mongo, a hired Meat Shield, or Carl's attack cow. */
+/** A companion the party brings with it: Mongo, a hired Meat Shield, or the human crawler's attack cow. */
 export type PartyCompanion = Mongo | Mercenary | AttackCow;
 
 /**

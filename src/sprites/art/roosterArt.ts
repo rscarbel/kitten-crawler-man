@@ -29,7 +29,7 @@
  * direction.
  */
 
-import { rgba } from './carlArt';
+import { rgba } from './bipedArt';
 import {
   blitLayer,
   clear,

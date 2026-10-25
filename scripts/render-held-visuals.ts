@@ -22,11 +22,11 @@ import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { asGameContext, type NodeContext } from './nodeGameContext.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { BYTES_PER_MEGABYTE } from '../src/core/canvasSurface.js';
-import { HUMAN_SCALE } from '../src/sprites/art/human/figureScale.js';
-import { VIEWS } from '../src/sprites/art/carl/rig.js';
-import { PROP_ART } from '../src/sprites/art/carl/props.js';
-import { burningDynamite } from '../src/sprites/art/carl/props/dynamite.js';
-import { drawTaranisSword } from '../src/sprites/art/carl/props/sword.js';
+import { PLAYER_HUMAN_SCALE } from '../src/sprites/art/human/figureScale.js';
+import { VIEWS } from '../src/sprites/art/biped/rig.js';
+import { PROP_ART } from '../src/sprites/art/biped/props.js';
+import { burningDynamite } from '../src/sprites/art/biped/props/dynamite.js';
+import { drawTaranisSword } from '../src/sprites/art/biped/props/sword.js';
 import { paintWorkingTool } from '../src/sprites/art/toolArt.js';
 import { TOOL_TIERS, type ToolKind, type ToolTier, isToolTier } from '../src/core/toolTiers.js';
 import { HELD_VISUALS } from '../src/sprites/held/heldVisuals.js';
@@ -61,7 +61,7 @@ const LARGE_PX_PER_UNIT = 92;
 /** Wide enough for a column's caption, however small the item. */
 const MIN_LARGE_CELL = 84;
 const IN_GAME_TILE = 32;
-const IN_GAME_PX_PER_UNIT = IN_GAME_TILE * HUMAN_SCALE;
+const IN_GAME_PX_PER_UNIT = IN_GAME_TILE * PLAYER_HUMAN_SCALE;
 const BLOW_UP = 3;
 const SWEEP_ANGLES_DEG: readonly number[] = [0, 45, 90, 135, 180, 225, 270, 315];
 /** The angle the foreshortened, edge-on, mirrored and shaded entries are shown at. */

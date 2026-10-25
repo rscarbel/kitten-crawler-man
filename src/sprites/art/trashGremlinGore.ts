@@ -18,7 +18,7 @@
  * own cell.
  */
 
-import { type Pt, deg } from './carlArt';
+import { type Pt, deg } from './bipedArt';
 import { drawWound } from './goreWound';
 import {
   armForms,

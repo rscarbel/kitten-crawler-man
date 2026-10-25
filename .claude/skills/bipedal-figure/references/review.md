@@ -46,6 +46,14 @@ Character likeness is judged against a written description of the target look;
 never download reference images into the repo or hand them to a subagent as files.
 References live in the scratchpad and are never committed.
 
+**One exception: a likeness review.** When a character is based on a real person
+or animal, the reviewer judging likeness may be given the owner-supplied photos.
+It reads them in place, from wherever they sit outside the repo; they are never
+copied into the repo. Any crop or comparison sheet that includes them is written
+outside the repo too. The likeness reviewer is the only one that sees them: the
+realism review stays blind, judging the render against a written description
+alone.
+
 **When to stop.** Not when it "looks fine" and not when the gates pass. Stop when
 the last few logged iterations were each marginal or sideways in the compare
 view, two consecutive fresh blind reviewers name the figure and every action
@@ -64,7 +72,7 @@ ceiling.
    `npm run review:index` gathers every image in `preview/` into
    `preview/index.html`, which is how a human scans a batch of them.
 2. Hand **only the PNG** to a fresh agent, with a written target description
-   (for Carl: build, proportions, outfit and stance, in words) and no access to
+   (for the human: build, proportions, outfit and stance, in words) and no access to
    the painter code. Ask for
    **numeric** findings: pixel measurements, ratios, and target values — not
    adjectives.
@@ -79,7 +87,7 @@ ceiling.
    fabricate. Where you disagree, its image-based complaint wins unless you can
    point at the pixels that refute it.
 
-Four rounds on Carl produced, in order: a five-head bobblehead, hips wider than
+Four rounds on the human rig produced, in order: a five-head bobblehead, hips wider than
 shoulders, mitten hands, an unreadable face, sandal-strap toes, a jacket darker
 than the dungeon floor it stands on, and a barrel silhouette.
 
@@ -150,12 +158,12 @@ build-tooling, independent of the goblins' (unconvincing) motion:
 
 ## In-motion checks a still cannot cover
 
-Add a `?<name>` preview scene in `src/dev/devBoot.ts`. Carl's is `?human`
+Add a `?<name>` preview scene in `src/dev/devBoot.ts`. The human's is `?human`
 (`?human=<row>` opens on a row): one row looped at 128, 64 and 32 px at the
 game's real pacing, and a live `HumanPlayer` driven through a fixed script so
 the animator's hand-offs show rather than any one row; its weapon picker plays
-each motion set with the weapon held and stowed. Donut's is `?donut`
-(`?donut=<row>`), with a compass of all eight headings, an outfit, tool and
+each motion set with the weapon held and stowed. The cat's is `?cat`
+(`?cat=<row>`), with a compass of all eight headings, an outfit, tool and
 carry picker. Browser automation _can_
 drive this game (rAF, keyboard, synthetic canvas mouse events all work), but a
 backgrounded tab freezes rAF entirely, so the loop does not run and every

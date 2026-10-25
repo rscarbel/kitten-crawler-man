@@ -47,7 +47,7 @@ export function wedgeFaceById(id: string): WheelWedge | null {
 export interface WheelPrizeTarget {
   readonly crawler: Player;
   readonly kind: WheelCrawler;
-  /** Gives Carl the attack cow, whoever spun. */
+  /** Gives the human crawler the attack cow, whoever spun. */
   readonly grantAttackCow: () => void;
 }
 

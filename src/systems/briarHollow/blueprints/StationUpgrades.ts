@@ -189,7 +189,7 @@ interface UpgradeChannel {
   readonly startY: number;
   framesLeft: number;
   framesWorked: number;
-  /** Whether Carl's hammering pose is this channel's, so ending it only ever stops its own. */
+  /** Whether the human crawler's hammering pose is this channel's, so ending it only ever stops its own. */
   posing: boolean;
 }
 

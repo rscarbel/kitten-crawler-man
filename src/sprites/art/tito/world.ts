@@ -12,7 +12,7 @@
  * body is cached per gesture step and blink; the breath is a translation.
  */
 
-import { clamp01, hump, lerp, type Pt } from '../carlArt';
+import { clamp01, hump, lerp, type Pt } from '../bipedArt';
 import { BitmapCache, type CacheBox } from '../deuce/bitmapCache';
 import {
   type Ctx,

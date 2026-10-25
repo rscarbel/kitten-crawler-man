@@ -1,5 +1,5 @@
 /**
- * The part of Carl's attack cow that outlives the creature.
+ * The part of the human crawler's attack cow that outlives the creature.
  *
  * Like `MongoPetState`: the cow instance is thrown away at every door, stair
  * and despawn, so whether the party owns her, her health and her rest latch are

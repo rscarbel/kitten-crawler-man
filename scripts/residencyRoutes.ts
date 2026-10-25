@@ -94,6 +94,8 @@ export const routeResultSchema = z.object({
   notes: z.array(z.string()),
   /** Ids of every figure row the floor's street crowd can be drawn as. */
   crowdFigureIds: z.array(z.string()),
+  /** Ids of every figure a destination's own prewarm keeps resident while the party stands near it. */
+  standByFigureIds: z.array(z.string()),
 });
 
 export type OwnerTally = z.infer<typeof ownerTallySchema>;

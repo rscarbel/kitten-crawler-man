@@ -228,6 +228,11 @@ export interface WorkingTool {
   readonly tier: ToolTier;
 }
 
+/** Whether a working tool is one of the party's own tiered tools rather than a borrowed one. */
+export function isOwnedToolKind(kind: WorkingToolKind): kind is ToolKind {
+  return kind === 'axe' || kind === 'pickaxe';
+}
+
 /** Looks up a tier's data by kind and tier index. */
 export function toolTierDef(kind: ToolKind, tier: ToolTier): ToolTierDef {
   return TOOL_TIERS[kind][tier];

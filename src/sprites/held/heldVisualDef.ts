@@ -9,9 +9,9 @@
  * paint anything that depends on where an arm or a face is.
  */
 
-import type { Pt } from '../art/carlArt';
-import type { HeldProp } from '../art/carl/props';
-import type { ViewSpec } from '../art/carl/rig';
+import type { Pt } from '../art/bipedArt';
+import type { HeldProp } from '../art/biped/props';
+import type { ViewSpec } from '../art/biped/rig';
 import {
   type ArchetypeRange,
   archetypeSpec,

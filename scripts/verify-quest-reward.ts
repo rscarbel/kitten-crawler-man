@@ -10,7 +10,7 @@
  * keys, finish its reveal on the first press and close on the second, wait
  * out an open conversation, and queue two completions from one frame.
  *
- * The crawlers earn XP at reduced rates here, Carl at half and Donut at a
+ * The crawlers earn XP at reduced rates here, the human at half and the cat at a
  * quarter, so a screen quoting the flat award, or one crawler's figure on the
  * other's line, instead of what landed on each bar is caught.
  *
@@ -26,7 +26,8 @@ import { ANCHOR_SHARD_IDS } from '../src/core/ItemDefs';
 import { createMurderQuestProgress } from '../src/core/MurderQuestProgress';
 import { transientSpeaker } from '../src/dialog/line';
 import { Conversation } from '../src/dialog/Conversation';
-import { CRAWLER_NAMES } from '../src/core/SkillManager';
+import { crawlerName } from '../src/characters/characters';
+import { type CrawlerKind } from '../src/core/SkillManager';
 import { AnchorQuestSystem } from '../src/systems/AnchorQuestSystem';
 import { CircusQuestSystem } from '../src/systems/CircusQuestSystem';
 import {
@@ -99,7 +100,7 @@ interface RewardRig {
   /** Times the screen actually went up. */
   readonly opens: { count: number };
   /** What each `gainXp` (and so `awardXp`) call returned, per crawler, in order. */
-  readonly xpLanded: Record<keyof typeof CRAWLER_NAMES, number[]>;
+  readonly xpLanded: Record<CrawlerKind, number[]>;
   /** Every coin grant either crawler earned, in order. */
   readonly coinGrants: number[];
 }
@@ -341,11 +342,11 @@ function verifyEachQuestOpensOneScreen(): void {
     if (questCase.paysXp) {
       check(
         human.length === 1 && cat.length === 1 && (human[0] ?? 0) > 0 && (cat[0] ?? 0) > 0,
-        `${name}: pays XP to both crawlers exactly once (${CRAWLER_NAMES.human} ${human.join() || 'none'}, ${CRAWLER_NAMES.cat} ${cat.join() || 'none'})`,
+        `${name}: pays XP to both crawlers exactly once (${crawlerName('human')} ${human.join() || 'none'}, ${crawlerName('cat')} ${cat.join() || 'none'})`,
       );
       const expected = [
-        `${CRAWLER_NAMES.human}=${human.join('+')}`,
-        `${CRAWLER_NAMES.cat}=${cat.join('+')}`,
+        `${crawlerName('human')}=${human.join('+')}`,
+        `${crawlerName('cat')}=${cat.join('+')}`,
       ];
       const shown = xpLinesShown(spec);
       check(

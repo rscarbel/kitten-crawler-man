@@ -41,8 +41,8 @@ import {
   loopFrame,
   outline,
   paint,
-  paintCarlChevrons,
-  paintDonutHoop,
+  paintHumanChevrons,
+  paintCatHoop,
   paintImpact,
   paintPulseHalo,
   propRng,
@@ -1209,7 +1209,7 @@ function bellPainter(swingStep: number, dull: boolean): Painter {
     ctx.fill();
     outline(ctx, s);
 
-    // The striped post, barber-pole fashion, in Donut's red and bone.
+    // The striped post, barber-pole fashion, in the cat's red and bone.
     const traceP = (): void => {
       ctx.beginPath();
       ctx.rect(cx - postWidth / 2, postTop, postWidth, footY - postTop - s * BELL.postFootGap);
@@ -1373,7 +1373,7 @@ export function drawFeedingBell(
     }
     ctx.restore();
   }
-  paintDonutHoop(ctx, cx, y + size / 2, size, strength);
+  paintCatHoop(ctx, cx, y + size / 2, size, strength);
   paintImpact(ctx, cx, y + size * (BELL_PIVOT_Y + BELL_HEIGHT / 2), size, state.struck);
 }
 
@@ -1790,7 +1790,7 @@ export function drawBleacherSpectator(
   );
 }
 
-// ── Donut's release ring on its chain ────────────────────────────────────────
+// ── The cat's release ring on its chain ──────────────────────────────────────
 
 const RING_LATCH_HEIGHT = 0.08;
 const RING_CHAIN_LINKS = 6;
@@ -1902,7 +1902,7 @@ function releaseRingPainter(broken: boolean, swayFrame: number): Painter {
   };
 }
 
-/** The release ring Donut shoots: a gilt ring on a chain that trips a cage door's latch. */
+/** The release ring the cat shoots: a gilt ring on a chain that trips a cage door's latch. */
 export function drawCageReleaseRing(
   ctx: Ctx,
   x: number,
@@ -1935,10 +1935,10 @@ export function drawCageReleaseRing(
     RING_RADIUS * RING_IMPACT_SCALE,
   );
   if (state.broken) return;
-  paintDonutHoop(ctx, cx, y + size / 2, size, strength);
+  paintCatHoop(ctx, cx, y + size / 2, size, strength);
 }
 
-// ── Carl's capstan winch ─────────────────────────────────────────────────────
+// ── The human's capstan winch ────────────────────────────────────────────────
 
 const WINCH_CHEEK_WIDTH = 0.1;
 const WINCH_CHEEK_TOP = 0.3;
@@ -2082,7 +2082,7 @@ function winchPainter(facing: 'west' | 'east', broken: boolean): Painter {
       ctx.stroke();
     }
 
-    // The ratchet on the side Carl stands, and the pawl that clicks into it.
+    // The ratchet on the side the human stands, and the pawl that clicks into it.
     const gearX = facing === 'east' ? ox + s * WINCH.gearEastX : ox + s * WINCH.gearWestX;
     const gearY = drumTop + drumHeight / 2;
     const toothAngle = TAU / WINCH_GEAR_TEETH;
@@ -2151,7 +2151,7 @@ function winchPainter(facing: 'west' | 'east', broken: boolean): Painter {
   };
 }
 
-/** Carl's capstan winch: one blow knocks the pawl free and the drum spins the rope out. */
+/** The human's capstan winch: one blow knocks the pawl free and the drum spins the rope out. */
 export function drawCapstanWinch(
   ctx: Ctx,
   x: number,
@@ -2185,7 +2185,7 @@ export function drawCapstanWinch(
     WINCH_GEAR_RADIUS * 2,
   );
   if (state.broken) return;
-  paintCarlChevrons(ctx, cx, y + size / 2, size, state.facing, strength);
+  paintHumanChevrons(ctx, cx, y + size / 2, size, state.facing, strength);
 }
 
 /**

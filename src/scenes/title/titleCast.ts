@@ -5,35 +5,29 @@
  * frame it first shows, which is a stutter in the middle of the reveal.
  */
 
-import {
-  activeHumanFigure,
-  emptyHandedHumanFigure,
-  prewarmHumanRow,
-} from '../../sprites/humanSprite';
-import { prewarmFigureState } from '../../sprites/figure/figureFrameCache';
-import { prewarmCatSprite, type CatState } from '../../sprites/catSprite';
+import type { CatState } from '../../sprites/catSprite';
 import { prewarmGoblinBystander, type GoblinArchetype } from '../../sprites/goblinSprite';
 import { prewarmMongoWalk, type MongoStage } from '../../sprites/mongoSprite';
 import type { HumanRowName } from '../../sprites/art/humanFigure';
 
-/** Carl stands facing the camera, breathing. */
-export const CARL_IDLE_ROW = 'idle' satisfies HumanRowName;
+/** The human crawler stands facing the camera, breathing. */
+export const HUMAN_IDLE_ROW = 'idle' satisfies HumanRowName;
 
 /**
  * His stance shifts: small, head-on gestures that read as a man waiting for a
  * show to start, never as a man about to throw a punch.
  */
-export const CARL_FIDGET_ROWS = [
+export const HUMAN_FIDGET_ROWS = [
   'fidget_glance',
   'fidget_knuckles',
   'fidget_neck',
 ] as const satisfies readonly HumanRowName[];
 
-/** Donut sits head-on; her tail flicks through the idle loop itself. */
-export const DONUT_IDLE_ROW = 'idle' satisfies CatState;
+/** The cat crawler sits head-on; her tail flicks through the idle loop itself. */
+export const CAT_IDLE_ROW = 'idle' satisfies CatState;
 
 /** Her idle breaks, every one drawn head-on. */
-export const DONUT_BREAK_ROWS = [
+export const CAT_BREAK_ROWS = [
   'groom_paw',
   'groom_flank',
   'look_around',
@@ -46,29 +40,23 @@ export const PEEKING_GOBLIN: GoblinArchetype = 'sword';
 export const TITLE_MONGO_STAGE: MongoStage = 'adult';
 
 /**
- * Queues every row the title draws for baking. Called during the boot loading
- * screen so the first title frame finds them warm, and again when the title
- * lays out, since a scene re-entered from a run may have let some go.
+ * Queues every row the title draws from the shared figure cache for baking.
+ * Called during the boot loading screen so the first title frame finds them
+ * warm, and again when the title lays out, since a scene re-entered from a run
+ * may have let some go. The two heroes are not among them: the title paints
+ * them into cells of its own (`TitleHeroCells`).
  */
 export function prewarmTitleCast(): void {
-  const carlRows: readonly HumanRowName[] = [CARL_IDLE_ROW, ...CARL_FIDGET_ROWS];
-  for (const row of carlRows) prewarmHumanRow(row);
-  // The title draws him empty-handed; back from a run with a weapon out, that
-  // is a different figure from the one `prewarmHumanRow` warms.
-  const emptyHanded = emptyHandedHumanFigure();
-  if (emptyHanded.id !== activeHumanFigure().id) {
-    for (const row of carlRows) prewarmFigureState(emptyHanded, row);
-  }
-  prewarmCatSprite();
   prewarmGoblinBystander(PEEKING_GOBLIN);
   prewarmMongoWalk(TITLE_MONGO_STAGE);
 }
 
 /**
  * The box each hero's art reaches inside its cell across every row above, in
- * cell pixels, with a margin round it. The title paints its heroes at screen
- * density, where a whole cell is mostly empty and costs several times this;
- * a new pose that reaches past its box is clipped on the title alone.
+ * cell pixels, with a margin round it: wider at the cat's sides, where her
+ * tail sweeps. The title paints its heroes at screen density, where a whole
+ * cell is mostly empty and costs several times this; a new pose or a new look
+ * that reaches past its box is clipped on the title alone.
  */
-export const CARL_HERO_CROP = { left: 52, top: 48, width: 84, height: 132 } as const;
-export const DONUT_HERO_CROP = { left: 46, top: 46, width: 88, height: 86 } as const;
+export const HUMAN_HERO_CROP = { left: 76, top: 67, width: 80, height: 145 } as const;
+export const CAT_HERO_CROP = { left: 54, top: 50, width: 70, height: 70 } as const;

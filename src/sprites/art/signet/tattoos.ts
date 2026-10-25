@@ -3,7 +3,7 @@
  * that decides whether either is drawn at all.
  */
 
-import { mix } from '../carlArt';
+import { mix } from '../bipedArt';
 import { FIGURE_SCALE } from './proportions';
 import { INK_COLOR, INK_GLOW_COLOR, INK_LIT_COLOR, SCALE_COLOR } from './palette';
 

@@ -1,5 +1,5 @@
 /**
- * The Eyes of Splatter as Donut wears them: round pink-lensed sunglasses
+ * The Eyes of Splatter as the cat crawler wears them: round pink-lensed sunglasses
  * painted onto her head in each viewpoint, once her face's features are on.
  *
  * Coordinates are her head's own units: the frame's origin is already at the

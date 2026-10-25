@@ -741,7 +741,7 @@ function gateLegReach(): void {
  *
  * Two different faults, and a clamp check alone sees only the first.
  *
- * Unlike Carl's equivalent this does *not* demand a near-straight arm. These
+ * Unlike the human figure's equivalent this does *not* demand a near-straight arm. These
  * arms are more than half the creature's height, so almost every deliberate
  * pose folds them hard — a hand reaching out of a floor hole spans a third of
  * its own arm and is correct. What is never correct is a joint folded past the

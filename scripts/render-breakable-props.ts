@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * Review gallery for the dungeon's breakable props: every sheet's every row,
- * on a floor-1 and a floor-2 swatch, at in-game size and enlarged, with Carl at
+ * on a floor-1 and a floor-2 swatch, at in-game size and enlarged, with the human at
  * the head of each row for scale.
  *
  *   Run: npx tsx scripts/render-breakable-props.ts [--out=<dir>] [--zoom=<n>]
@@ -42,8 +42,8 @@ const outDir = resolve(flag('out', 'preview/props/breakable-gallery'));
 const zoom = Number.parseInt(flag('zoom', String(DEFAULT_ZOOM)), 10);
 mkdirSync(outDir, { recursive: true });
 
-const carl = bakeFigureCell(HUMAN_FIGURE, 'idle', 0);
-const carlScale = IN_GAME_TILE / HUMAN_FIGURE.tileScale;
+const human = bakeFigureCell(HUMAN_FIGURE, 'idle', 0);
+const humanScale = IN_GAME_TILE / HUMAN_FIGURE.tileScale;
 
 interface Row {
   readonly sheet: Canvas;
@@ -67,10 +67,10 @@ function rowsOf(plans: ReadonlyArray<PropSheetPlan>): Row[] {
 function render(name: string, plans: ReadonlyArray<PropSheetPlan>, scale: number): void {
   const rows = rowsOf(plans);
   const cellScale = (plan: PropSheetPlan) => (IN_GAME_TILE / plan.tileScale) * scale;
-  const carlW = HUMAN_FIGURE.frameWidth * carlScale * scale;
-  const carlH = HUMAN_FIGURE.frameHeight * carlScale * scale;
-  const rowHeight = (row: Row) => Math.max(row.plan.frameHeight * cellScale(row.plan), carlH);
-  const rowWidth = (row: Row) => carlW + row.frames * row.plan.frameWidth * cellScale(row.plan);
+  const humanW = HUMAN_FIGURE.frameWidth * humanScale * scale;
+  const humanH = HUMAN_FIGURE.frameHeight * humanScale * scale;
+  const rowHeight = (row: Row) => Math.max(row.plan.frameHeight * cellScale(row.plan), humanH);
+  const rowWidth = (row: Row) => humanW + row.frames * row.plan.frameWidth * cellScale(row.plan);
   const blockWidth = Math.max(...rows.map(rowWidth)) + PADDING * 2;
   const height = rows.reduce((sum, row) => sum + rowHeight(row) + PADDING, PADDING);
   const canvas = createCanvas(blockWidth * FLOOR_SWATCHES.length, height);
@@ -88,8 +88,8 @@ function render(name: string, plans: ReadonlyArray<PropSheetPlan>, scale: number
       const s = cellScale(row.plan);
       const h = rowHeight(row);
       const groundY = y + h - (row.plan.frameHeight - row.plan.tileY - row.plan.tileScale) * s;
-      const carlGround = (HUMAN_FIGURE.tileY + HUMAN_FIGURE.tileScale) * carlScale * scale;
-      ctx.drawImage(carl, left + PADDING, groundY - carlGround, carlW, carlH);
+      const humanGround = (HUMAN_FIGURE.tileY + HUMAN_FIGURE.tileScale) * humanScale * scale;
+      ctx.drawImage(human, left + PADDING, groundY - humanGround, humanW, humanH);
       for (let frame = 0; frame < row.frames; frame++) {
         ctx.drawImage(
           row.sheet,
@@ -97,7 +97,7 @@ function render(name: string, plans: ReadonlyArray<PropSheetPlan>, scale: number
           row.rowIndex * row.plan.frameHeight,
           row.plan.frameWidth,
           row.plan.frameHeight,
-          left + PADDING + carlW + frame * row.plan.frameWidth * s,
+          left + PADDING + humanW + frame * row.plan.frameWidth * s,
           groundY - (row.plan.tileY + row.plan.tileScale) * s,
           row.plan.frameWidth * s,
           row.plan.frameHeight * s,

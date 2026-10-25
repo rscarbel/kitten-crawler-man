@@ -21,7 +21,7 @@
  * the precedent of re-deriving its own tones.
  */
 
-import { clamp01, easeInOut, lerp, mix, type Pt } from './carlArt';
+import { clamp01, easeInOut, lerp, mix, type Pt } from './bipedArt';
 import { hash1, rgba } from './ratArt';
 import { BOS_BODY_RADIUS_TILES } from '../ballOfSwineSheet';
 

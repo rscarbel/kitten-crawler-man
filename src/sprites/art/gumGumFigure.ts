@@ -1,35 +1,35 @@
 /**
- * GumGum as a painted figure: Carl's own rig and choreography (`carl/figure.ts`,
- * `human/`), in her green skin, mustard coat-dress and apron, with the hair,
+ * GumGum as a painted figure: the biped rig and its choreography
+ * (`biped/figure.ts`, `human/`), in her green skin, mustard coat-dress and apron, with the hair,
  * ears, tusks, apron and bodice of `gumGumArt.ts` composed into it.
  *
  * Her own figure rather than a street-cast look, because the cast's paint path
- * has no hook for the sleeve: Carl's shoved-up sleeve, bunched at the elbow,
- * squares off the shoulders and reads as a man's arm, so she is drawn with a
- * long sleeve and a soft cuff, swapped in and reset like every other cut.
+ * has no hook for the sleeve: Dave's shoved-up sleeve, bunched at the elbow,
+ * squares off the shoulders and reads as a man's arm, so her look gives her a
+ * long sleeve and a soft cuff.
  *
  * Rows, in three views (profile drawn facing +X and mirrored at runtime):
- *    idle / idle_side / idle_away   — Carl's breathing idle
- *    walk / walk_side / walk_away   — Carl's walk
- *    talk / talk_side / talk_away   — Carl's talk
+ *    idle / idle_side / idle_away   — the figure's breathing idle
+ *    walk / walk_side / walk_away   — the figure's walk
+ *    talk / talk_side / talk_away   — the figure's talk
  */
 
-import { BARE_CARL_OUTFIT, stillOutfit } from '../garments/human/carlDressing';
+import { stillOutfit } from '../garments/human/humanDressing';
+import { outfitOf } from '../garments/outfit';
 import { type FigureDef, figureStates } from '../figure/figureDef';
-import { type CarlComposeOptions, drawCarlBack, drawCarlFront, drawCarlSide } from './carl/figure';
-import { resetCarlExpression, setCarlExpression } from './carl/head';
 import {
-  resetCarlGarmentRamp,
-  resetCarlSkinHairRamp,
-  setCarlGarmentRamp,
-  setCarlSkinHairRamp,
-} from './carl/palette';
-import type { CarlPose } from './carl/rig';
+  type BipedComposeOptions,
+  drawBipedBack,
+  drawBipedFront,
+  drawBipedSide,
+} from './biped/figure';
+import type { BipedPose } from './biped/rig';
 import { type CardinalView } from '../facingView';
-import { pt } from './carl/geometry';
-import { resetCarlSleeveCut, setCarlSleeveCut } from './carl/sleeve';
-import { resetCarlTorsoCut, setCarlTorsoCut } from './carl/torso';
+import { pt } from './biped/geometry';
 import { HUMAN_CELL_PX_PER_UNIT } from './human/figureScale';
+import { type HumanLook, lookPxPerUnit } from '../looks/humanLook';
+import { DAVE_JACKET } from '../garments/human/daveJacket';
+import { RIG_LOOK } from '../looks/humans/rig';
 import { idleBack, idleFront, idleSide } from './human/idles';
 import { walkFacing, walkSide } from './human/locomotion';
 import { talkBack, talkFront, talkSide, TALK_FRAMES } from './human/actionsMisc';
@@ -38,14 +38,12 @@ import { drawShoes } from './human/townAccessories';
 import {
   GUMGUM_ATTACHMENTS,
   GUMGUM_COAT_RAMP,
-  GUMGUM_DRESS_HEM_DROP,
-  GUMGUM_DRESS_HEM_FLARE,
+  GUMGUM_DRESS_CUT,
   GUMGUM_EXPRESSION,
   GUMGUM_HAIR,
   GUMGUM_SHOE,
   GUMGUM_SKIN,
-  GUMGUM_SLEEVE_CUFF_ALONG,
-  GUMGUM_SLEEVE_CUFF_BULK,
+  GUMGUM_SLEEVE_CUT,
   gumGumPosture,
 } from './gumGumArt';
 
@@ -59,7 +57,7 @@ const VIEW_SUFFIX: Readonly<Record<GumGumView, string>> = {
   side: '_side',
   away: '_away',
 };
-const CARL_VIEW: Readonly<Record<GumGumView, CardinalView>> = {
+const BIPED_VIEW: Readonly<Record<GumGumView, CardinalView>> = {
   front: 'front',
   side: 'side',
   away: 'back',
@@ -75,13 +73,31 @@ export function gumGumStateName(role: GumGumRole, view: GumGumView): string {
 // ── Build ────────────────────────────────────────────────────────────────────
 
 /**
- * Carl's height and, sideways, a shade under his width: stout and matronly.
+ * The base figure's height and, sideways, a shade under its width: stout and matronly.
  * The breadth she needs is in the bell skirt, not the shoulders — widening the
  * whole figure further squares the shoulders and reads as a man.
  */
 const GUMGUM_WIDTH_SCALE = 0.84;
-const UNIT_PX_Y = HUMAN_CELL_PX_PER_UNIT;
-const UNIT_PX_X = HUMAN_CELL_PX_PER_UNIT * GUMGUM_WIDTH_SCALE;
+
+/**
+ * Her look on the rig: Dave's crop and eyes under her own hair, skin, coat
+ * and face, so the hair and ears painted over them are hers. Of Dave's base
+ * garments she keeps only the jacket, recut as her coat: under the skirt her
+ * legs are her own.
+ */
+const GUMGUM_LOOK: HumanLook = {
+  ...RIG_LOOK,
+  id: 'gumgum',
+  skin: GUMGUM_SKIN,
+  hair: GUMGUM_HAIR,
+  garment: GUMGUM_COAT_RAMP,
+  garmentCut: GUMGUM_DRESS_CUT,
+  sleeveCut: GUMGUM_SLEEVE_CUT,
+  expression: GUMGUM_EXPRESSION,
+  widthScale: GUMGUM_WIDTH_SCALE,
+  baseGarments: [DAVE_JACKET],
+};
+const UNIT_PX = lookPxPerUnit(GUMGUM_LOOK, HUMAN_CELL_PX_PER_UNIT);
 
 // ── Cell ─────────────────────────────────────────────────────────────────────
 
@@ -104,20 +120,20 @@ const HALF_TILE = GUMGUM_TILE_SCALE / 2;
 interface Row {
   readonly frames: number;
   readonly view: GumGumView;
-  readonly pose: (frame: number) => CarlPose;
+  readonly pose: (frame: number) => BipedPose;
 }
 
-const IDLE_POSE: Readonly<Record<GumGumView, (phase: number, lid: number) => CarlPose>> = {
+const IDLE_POSE: Readonly<Record<GumGumView, (phase: number, lid: number) => BipedPose>> = {
   front: idleFront,
   side: idleSide,
   away: idleBack,
 };
-const WALK_POSE: Readonly<Record<GumGumView, (phase: number) => CarlPose>> = {
+const WALK_POSE: Readonly<Record<GumGumView, (phase: number) => BipedPose>> = {
   front: (phase) => walkFacing(phase, false),
   side: walkSide,
   away: (phase) => walkFacing(phase, true),
 };
-const TALK_POSE: Readonly<Record<GumGumView, (frame: number) => CarlPose>> = {
+const TALK_POSE: Readonly<Record<GumGumView, (frame: number) => BipedPose>> = {
   front: talkFront,
   side: talkSide,
   away: talkBack,
@@ -129,7 +145,7 @@ const TALK_POSE: Readonly<Record<GumGumView, (frame: number) => CarlPose>> = {
  * either side instead of two arms hanging square down her sides — and it is a
  * patient, kindly way to stand. Head-on the hands meet just under the apron's
  * bow, in front of the body; edge-on they rest on the front of the apron. From
- * behind the arms hang as Carl's do.
+ * behind the arms hang as the base figure's do.
  */
 const FOLDED_HANDS_Y = -1.0;
 const FOLDED_HAND_SPREAD = 0.05;
@@ -137,7 +153,7 @@ const FOLDED_HANDS_DEPTH = 0.2;
 const FOLDED_HAND_FIST = 0.35;
 const PROFILE_FOLDED_HANDS_X = 0.2;
 
-function foldHands(pose: CarlPose, view: GumGumView): CarlPose {
+function foldHands(pose: BipedPose, view: GumGumView): BipedPose {
   if (view === 'away') return pose;
   const lift = pose.bob;
   const atX = view === 'side' ? PROFILE_FOLDED_HANDS_X : 0;
@@ -178,41 +194,29 @@ const ROWS: ReadonlyMap<string, Row> = new Map(
 );
 
 const DRAW_BY_VIEW: Readonly<
-  Record<GumGumView, (ctx: Ctx, pose: CarlPose, options: CarlComposeOptions) => void>
+  Record<GumGumView, (ctx: Ctx, pose: BipedPose, options: BipedComposeOptions) => void>
 > = {
-  front: drawCarlFront,
-  side: drawCarlSide,
-  away: drawCarlBack,
+  front: drawBipedFront,
+  side: drawBipedSide,
+  away: drawBipedBack,
 };
 
-/** Nothing of Carl's own over the rig's base garments: no cloak, no gauntlet, no trollskin band at the collar. */
-const NOTHING_OVER_HIS_BASE = stillOutfit(BARE_CARL_OUTFIT);
+/** Nothing over her base garments: no cloak, no gauntlet, no trollskin band at the collar. */
+const NOTHING_OVER_HER_BASE = stillOutfit(outfitOf(GUMGUM_LOOK, []));
 
 function paintGumGumFrame(ctx: Ctx, state: string, frame: number): void {
   const row = ROWS.get(state);
   if (row === undefined) return;
-  const carlView = CARL_VIEW[row.view];
-  const pose = gumGumPosture({ ...row.pose(frame), outfit: NOTHING_OVER_HIS_BASE }, carlView);
-  // Reset in `finally`: a painter that throws mid-bake must not leave the next
-  // figure baked — Carl or a resident — in her skin, dress, sleeves or face.
-  setCarlSkinHairRamp(GUMGUM_SKIN, GUMGUM_HAIR);
-  setCarlGarmentRamp(GUMGUM_COAT_RAMP);
-  setCarlTorsoCut(GUMGUM_DRESS_HEM_DROP, false, GUMGUM_DRESS_HEM_FLARE);
-  setCarlSleeveCut(GUMGUM_SLEEVE_CUFF_ALONG, GUMGUM_SLEEVE_CUFF_BULK);
-  setCarlExpression(GUMGUM_EXPRESSION);
+  const bipedView = BIPED_VIEW[row.view];
+  const pose = gumGumPosture({ ...row.pose(frame), outfit: NOTHING_OVER_HER_BASE }, bipedView);
   ctx.save();
   try {
     ctx.translate(ORIGIN_X, GROUND_Y);
-    ctx.scale(UNIT_PX_X, UNIT_PX_Y);
-    DRAW_BY_VIEW[row.view](ctx, pose, { attachments: GUMGUM_ATTACHMENTS });
-    drawShoes(ctx, carlView, pose, GUMGUM_SHOE);
+    ctx.scale(UNIT_PX.x, UNIT_PX.y);
+    DRAW_BY_VIEW[row.view](ctx, pose, { look: GUMGUM_LOOK, attachments: GUMGUM_ATTACHMENTS });
+    drawShoes(ctx, bipedView, pose, GUMGUM_SHOE);
   } finally {
     ctx.restore();
-    resetCarlSkinHairRamp();
-    resetCarlGarmentRamp();
-    resetCarlTorsoCut();
-    resetCarlSleeveCut();
-    resetCarlExpression();
   }
 }
 
@@ -227,7 +231,7 @@ export const GUMGUM_FIGURE: FigureDef = {
   tileX: ORIGIN_X - HALF_TILE,
   tileY: GROUND_Y - GUMGUM_TILE_SCALE,
   tileScale: GUMGUM_TILE_SCALE,
-  // Carl's painter composes on its own surface at the bake's density, with a
+  // The biped painter composes on its own surface at the bake's density, with a
   // one-pixel outline; a supersampled bake would only smear it.
   skipSupersample: true,
   states: figureStates(FRAME_COUNTS),

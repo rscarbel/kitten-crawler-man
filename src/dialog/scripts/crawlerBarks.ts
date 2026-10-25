@@ -4,49 +4,50 @@
  * (`src/systems/CrawlerBarkSystem.ts`).
  */
 
+import { crawlerName } from '../../characters/characters';
 import { speakerLines } from '../line';
 import type { BarkLine, NonEmpty } from '../line';
 
-const carl = speakerLines('carl');
-const donut = speakerLines('donut');
+const ryan = speakerLines('ryan');
+const belle = speakerLines('belle');
 
 export const CRAWLER_BARKS: {
-  readonly donutKnockedOut: BarkLine;
+  readonly catKnockedOut: BarkLine;
   /**
    * What a crawler says after landing several hits on a shield fairy's ward
    * with nothing to show for it — `Player.noteWardBlockedHit`'s threshold.
-   * Said by whichever crawler triggers it, so both voices carry the same
-   * words; the call site picks the one that matches whoever triggered it.
+   * Each crawler says it in their own voice; the call site picks the one
+   * that matches whoever triggered it.
    */
-  readonly wardExplainer: { readonly carl: NonEmpty<BarkLine>; readonly donut: NonEmpty<BarkLine> };
+  readonly wardExplainer: { readonly human: NonEmpty<BarkLine>; readonly cat: NonEmpty<BarkLine> };
   /**
    * What the crawler whose quest slot was just taken over by another quest's
    * item says when Merrit's scythe was what got pushed out. Nothing is lost —
    * the scythe goes back on the barn wall — so this is a reminder, not an alarm.
    */
-  readonly scytheLeftBehind: { readonly carl: BarkLine; readonly donut: BarkLine };
+  readonly scytheLeftBehind: { readonly human: BarkLine; readonly cat: BarkLine };
   /** The same reminder when it was Tikka's blueprints, which go home to Wendell's plan chest. */
-  readonly blueprintsLeftBehind: { readonly carl: BarkLine; readonly donut: BarkLine };
+  readonly blueprintsLeftBehind: { readonly human: BarkLine; readonly cat: BarkLine };
 } = {
-  /** Carl's reaction to Donut going down, on the `crawlerKnockedOut` event. */
-  donutKnockedOut: carl.bark('God dammit, Donut!'),
+  /** The human's reaction to the cat going down, on the `crawlerKnockedOut` event. */
+  catKnockedOut: ryan.bark(`Hang in there, ${crawlerName('cat')}! I got you!`),
   wardExplainer: {
-    carl: [
-      carl.bark("I think these guys surrounded by blue can't be damaged."),
-      carl.bark('I need to kill the shield fairy first.'),
+    human: [
+      ryan.bark("Huh. The ones glowing blue aren't taking a scratch."),
+      ryan.bark('Shield fairy first, then. Easy.'),
     ],
-    donut: [
-      donut.bark("I think these guys surrounded by blue can't be damaged."),
-      donut.bark('I need to kill the shield fairy first.'),
+    cat: [
+      belle.bark("The blue ones won't get hurt. They're all glowy."),
+      belle.bark('Get the shield fairy first. Then cuddles.'),
     ],
   },
   scytheLeftBehind: {
-    carl: carl.bark('We left the scythe behind.'),
-    donut: donut.bark('We left the scythe behind.'),
+    human: ryan.bark('Oops. We left the scythe behind.'),
+    cat: belle.bark('We forgot the scythe! Poor scythe.'),
   },
   blueprintsLeftBehind: {
-    carl: carl.bark('We left the blueprints behind.'),
-    donut: donut.bark('We left the blueprints behind.'),
+    human: ryan.bark('Oops. We left the blueprints behind.'),
+    cat: belle.bark('We forgot the blueprints! The paper ones.'),
   },
 };
 

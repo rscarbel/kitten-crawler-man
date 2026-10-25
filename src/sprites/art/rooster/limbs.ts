@@ -10,7 +10,7 @@
  * scaly skin with dark nails.
  */
 
-import { clamp01, deg, lerp, mix, rgba } from '../carlArt';
+import { clamp01, deg, lerp, mix, rgba } from '../bipedArt';
 import { hash1 } from '../ratArt';
 import type { Ramp, RoosterBuildSpec } from './builds';
 import {

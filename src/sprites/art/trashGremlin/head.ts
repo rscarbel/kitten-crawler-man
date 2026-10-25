@@ -9,7 +9,7 @@
  * is the width of the mouth, the ears and the sac, never a muzzle.
  */
 
-import { type Pt, clamp01, lerp, rgba } from '../carlArt';
+import { type Pt, clamp01, lerp, rgba } from '../bipedArt';
 import {
   BRASS,
   TIN,

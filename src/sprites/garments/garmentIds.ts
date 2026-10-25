@@ -7,54 +7,79 @@
 import type { CrawlerKind } from '../../core/SkillManager';
 import type { GarmentMaterial } from './garmentDef';
 
-/** Donut's garments: her coat, which every outfit of hers is built on, then what she can put on. */
-export const CAT_GARMENT_IDS = [
-  'cat_coat',
-  'cat_shades',
-  'cat_crown',
-  'cat_kettle_helm',
-  'cat_butterfly_talisman',
-  'cat_scale_crupper',
-  'cat_dex_bracelet',
-] as const;
-export type CatGarmentId = (typeof CAT_GARMENT_IDS)[number];
+/** The coat every cat outfit is built on. */
+export type CatBaseGarmentId = 'cat_coat';
+
+/** What the cat crawler can put on. */
+export type CatWornGarmentId =
+  | 'cat_shades'
+  | 'cat_crown'
+  | 'cat_kettle_helm'
+  | 'cat_butterfly_talisman'
+  | 'cat_scale_crupper'
+  | 'cat_dex_bracelet'
+  | 'cat_trollskin_shirt'
+  | 'cat_gambeson'
+  | 'cat_bracers'
+  | 'cat_boots'
+  | 'cat_bigboi_boxers';
+
+type CatGarmentId = CatBaseGarmentId | CatWornGarmentId;
+
+/** Dave's jacket and jeans and Ryan's clothes, which every outfit of each is built on. */
+export type HumanBaseGarmentId =
+  | 'dave_jacket'
+  | 'dave_trousers'
+  | 'ryan_shirt'
+  | 'ryan_belt'
+  | 'ryan_chinos'
+  | 'ryan_sneakers'
+  | 'ryan_watch';
 
 /**
- * Garments on Carl's rig: his jacket and boxers, which every outfit of his is
- * built on, then what he can put on, then what only the people built on his
- * rig wear.
+ * Garments put on over the biped rig's base: what the human crawler can put
+ * on, then what only the townsfolk built on the rig wear.
  */
-export const HUMAN_GARMENT_IDS = [
-  'carl_jacket',
-  'carl_boxers',
-  'carl_trollskin_shirt',
-  'carl_gauntlet',
-  'carl_cloak',
-  'carl_toe_ring',
-  'carl_pedicure',
-  'carl_crown',
-  'carl_kettle_helm',
-  'carl_gambeson',
-  'carl_kneepads',
-  'carl_bracers',
-  'carl_boots',
-  'townsfolk_trousers',
-  'townsfolk_shoes',
-] as const;
-export type HumanGarmentId = (typeof HUMAN_GARMENT_IDS)[number];
+export type HumanWornGarmentId =
+  | 'human_trollskin_shirt'
+  | 'human_gauntlet'
+  | 'human_cloak'
+  | 'human_toe_ring'
+  | 'human_pedicure'
+  | 'human_crown'
+  | 'human_kettle_helm'
+  | 'human_gambeson'
+  | 'human_kneepads'
+  | 'human_bracers'
+  | 'human_boots'
+  | 'townsfolk_trousers'
+  | 'townsfolk_shoes';
+
+type HumanGarmentId = HumanBaseGarmentId | HumanWornGarmentId;
 
 interface GarmentIdsByWearer {
   readonly cat: CatGarmentId;
   readonly human: HumanGarmentId;
 }
 
+interface WornGarmentIdsByWearer {
+  readonly cat: CatWornGarmentId;
+  readonly human: HumanWornGarmentId;
+}
+
 /** The ids of the garments a crawler of kind `W` can wear. */
 export type GarmentIdFor<W extends CrawlerKind> = GarmentIdsByWearer[W];
 
-/** The item is drawn as this garment on that crawler. */
+/** The ids of the garments a crawler of kind `W` can put on over their base. */
+export type WornGarmentIdFor<W extends CrawlerKind> = WornGarmentIdsByWearer[W];
+
+/**
+ * The item is drawn as this garment on that crawler: one put on over the
+ * base, since a base garment is in every outfit already.
+ */
 export interface GarmentLook<W extends CrawlerKind> {
   readonly kind: 'garment';
-  readonly garment: GarmentIdFor<W>;
+  readonly garment: WornGarmentIdFor<W>;
 }
 
 /**

@@ -4,10 +4,10 @@
  * jitter) scaled to a prop tile, and the live ownership overlays drawn over a
  * cached prop.
  *
- * Ownership is load-bearing for the two-crawler split. Donut's props are stage
- * red and bone stripes with a gilt hoop; Carl's are ringmaster blue and brass
- * on timber with brass strike chevrons. A player names the prop and its owner
- * from the colours alone at a 32-pixel tile, under the stage lights.
+ * Ownership is load-bearing for the two-crawler split. The cat's props are
+ * stage red and bone stripes with a gilt hoop; the human's are ringmaster blue
+ * and brass on timber with brass strike chevrons. A player names the prop and
+ * its owner from the colours alone at a 32-pixel tile, under the stage lights.
  */
 
 import { mulberry32, range, type Rng } from '../../person/rng';
@@ -169,8 +169,8 @@ const HOOP_TICK_COUNT = 4;
 const HOOP_TICK_LENGTH = 0.07;
 const HOOP_IDLE_ALPHA = 0.65;
 
-/** The gilt hoop that marks a prop as Donut's to shoot. */
-export function paintDonutHoop(
+/** The gilt hoop that marks a prop as the cat's to shoot. */
+export function paintCatHoop(
   ctx: Ctx,
   cx: number,
   cy: number,
@@ -201,8 +201,8 @@ const CHEVRON_GAP = 0.13;
 const CHEVRON_WIDTH = 0.05;
 const CHEVRON_IDLE_ALPHA = 0.75;
 
-/** The brass chevrons that mark a prop as Carl's to smash, pointing where the blow goes. */
-export function paintCarlChevrons(
+/** The brass chevrons that mark a prop as the human's to smash, pointing where the blow goes. */
+export function paintHumanChevrons(
   ctx: Ctx,
   cx: number,
   cy: number,

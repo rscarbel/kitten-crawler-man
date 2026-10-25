@@ -10,7 +10,7 @@
  * shares a contour with the crawlers' young, square-jawed faces.
  */
 
-import { mix, type Pt } from '../carlArt';
+import { mix, type Pt } from '../bipedArt';
 import {
   type Ctx,
   type Trace,

@@ -288,7 +288,7 @@ const RESIST_TEXT = 'Resist';
 const INVULNERABLE_TEXT_THROTTLE_FRAMES = 30;
 /**
  * How many of this crawler's blows a shield fairy's ward has to swallow or
- * blunt before Carl explains it aloud — a hit that landed on a warded body and
+ * blunt before the human crawler explains it aloud — a hit that landed on a warded body and
  * did nothing (or, on easy, far less than it should have) counts the same
  * either way, since what the player watched was their damage not doing its
  * job, whichever reason.
@@ -585,7 +585,9 @@ export abstract class Player implements AboveDarknessDrawer {
    * figure instead wades to its own fraction of its own height, so both read as
    * "in the water" from the same river.
    */
-  readonly waterlineAboveFootPx: number = DEFAULT_WATERLINE_ABOVE_FOOT_PX;
+  get waterlineAboveFootPx(): number {
+    return DEFAULT_WATERLINE_ABOVE_FOOT_PX;
+  }
   /** Set when a status effect deals a damage tick; DungeonScene reads and clears it to play the sound. */
   effectDamageSoundPending = false;
   /**

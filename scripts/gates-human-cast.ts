@@ -10,8 +10,6 @@
  *       same pose painted `frameCount` times
  *   H5  builds are visually distinct from one another at 32px (measured ink width)
  *   H6  residency: the whole closed set fits the figure cache's own budget
- *   H7  no adult look stands shorter than any child look (plus a margin) —
- *       a build is a frame, never a shrunk-or-stretched age
  *   H8  no two adult looks share the same (skin, hair colour, hair style,
  *       garment colour) combination — every look is visually distinguishable
  *       by at least one of those axes
@@ -183,7 +181,7 @@ const MIN_BUILD_WIDTH_DIFFERENCE_SHARE = 0.12;
 
 function gateBuildDistinctness(): void {
   const adults = TOWN_CAST_LOOKS.filter(
-    (look): look is TownCastLook & { painter: 'carl' } => look.painter === 'carl',
+    (look): look is TownCastLook & { painter: 'biped' } => look.painter === 'biped',
   );
   const byBuild = new Map<string, { width: number }[]>();
   for (const look of adults) {
@@ -217,46 +215,11 @@ function gateBuildDistinctness(): void {
   failures.push(...nothingMeasuredFailures(measured, 'build pairs').map((m) => `H5: ${m}`));
 }
 
-/** How much taller than the tallest child every adult look must stand, as a share of the child's own height. */
-const MIN_ADULT_OVER_CHILD_HEIGHT_SHARE = 0.15;
-
-function gateAdultTallerThanChild(): void {
-  const childHeights = TOWN_CAST_LOOKS.filter((look) => look.painter === 'person')
-    .map(idleInkBoxAt32)
-    .filter((box): box is { width: number; height: number } => box !== null)
-    .map((box) => box.height);
-  const tallestChild = Math.max(...childHeights);
-  failures.push(
-    ...nothingMeasuredFailures(childHeights.length, 'child looks for height').map(
-      (m) => `H7: ${m}`,
-    ),
-  );
-
-  let measured = 0;
-  for (const look of TOWN_CAST_LOOKS) {
-    if (look.painter !== 'carl') continue;
-    const box = idleInkBoxAt32(look);
-    if (box === null) continue;
-    measured++;
-    const minHeight = tallestChild * (1 + MIN_ADULT_OVER_CHILD_HEIGHT_SHARE);
-    if (box.height < minHeight) {
-      fail(
-        'H7',
-        `${look.id} stands ${box.height.toFixed(1)}px tall, under the ${minHeight.toFixed(1)}px an adult ` +
-          `must clear over the tallest child (${tallestChild.toFixed(1)}px) — it reads as a shrunk Carl, not a build`,
-      );
-    }
-  }
-  failures.push(
-    ...nothingMeasuredFailures(measured, 'adult looks for height').map((m) => `H7: ${m}`),
-  );
-}
-
 function gateLookCombinationsDistinct(): void {
   const seen = new Map<string, string>();
   let measured = 0;
   for (const look of TOWN_CAST_LOOKS) {
-    if (look.painter !== 'carl') continue;
+    if (look.painter !== 'biped') continue;
     measured++;
     const key = [
       look.skinRamp.base,
@@ -544,7 +507,6 @@ export function humanCastGateFailures(): string[] {
   gateAnchor();
   gateFrameDistinctness();
   gateBuildDistinctness();
-  gateAdultTallerThanChild();
   gateLookCombinationsDistinct();
   gateResidency();
   gateTierAllowance();

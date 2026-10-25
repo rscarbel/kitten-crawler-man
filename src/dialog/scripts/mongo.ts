@@ -2,12 +2,12 @@
 
 import { speakerLines } from '../line';
 
-const say = speakerLines('donut');
+const say = speakerLines('belle');
 
 export const MONGO_LINES = {
-  noRoom: say.bark('No room for Mongo!'),
-  summon: say.bark('Go Mongo!'),
-  recall: say.bark('Mongo, come back!'),
-  arrived: say.bark('Mongo!'),
-  restUp: say.bark('Rest up, Mongo.'),
+  noRoom: say.bark('No room for Mongo! Sorry.'),
+  summon: say.bark('Go, Mongo! Go!'),
+  recall: say.bark('Mongo, come back! Cuddles!'),
+  arrived: say.bark('Mongo! Hi, Mongo!'),
+  restUp: say.bark('Rest up, Mongo. Nap time.'),
 };

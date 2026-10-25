@@ -15,7 +15,7 @@ import {
   type CanvasSurface,
 } from '../../core/canvasSurface';
 import { onCanvasRecovery } from '../../core/canvasRecovery';
-import { drawCatSprite } from '../../sprites/catSprite';
+import { activeCatFigure, drawCatSprite } from '../../sprites/catSprite';
 import { drawClubCastFigure, type ClubFigureRef } from '../../sprites/clubCastFigure';
 import { drawHumanSprite, emptyHandedHumanFigure } from '../../sprites/humanSprite';
 import { centerIn, inset, splitV, type Rect } from '../core/geom';
@@ -109,10 +109,10 @@ interface BustCrop {
 }
 
 const CAST_BUST: BustCrop = { top: -0.66, span: 0.62 };
-/** Carl stands taller in his tile than the club cast, so his crop starts higher. */
-const CARL_BUST: BustCrop = { top: -0.68, span: 0.6 };
-/** Donut sits low in hers, head near the tile's top. */
-const DONUT_BUST: BustCrop = { top: 0.05, span: 0.62 };
+/** The human crawler stands taller in his tile than the club cast, so his crop starts higher. */
+const HUMAN_BUST: BustCrop = { top: -1, span: 0.72 };
+/** The cat crawler sits low in hers, head near the tile's top. */
+const CAT_BUST: BustCrop = { top: 0.05, span: 0.62 };
 /** Baked at a fixed resolution and scaled down at paint time; big enough for the widest plate. */
 const BUST_BAKE_PX = 128;
 const MAX_BAKED_BUSTS = 32;
@@ -160,10 +160,12 @@ function avatarBust(avatar: SeatAvatar): CanvasSurface | null {
       return bakedBust(avatar.key, CAST_BUST, castPainter(avatar.look));
     case 'crawler':
       return avatar.crawler === 'human'
-        ? bakedBust(`crawler/human/${emptyHandedHumanFigure().id}`, CARL_BUST, (ctx, x, y, tile) =>
+        ? bakedBust(`crawler/human/${emptyHandedHumanFigure().id}`, HUMAN_BUST, (ctx, x, y, tile) =>
             drawHumanSprite(ctx, x, y, tile),
           )
-        : bakedBust('crawler/cat', DONUT_BUST, (ctx, x, y, tile) => drawCatSprite(ctx, x, y, tile));
+        : bakedBust(`crawler/cat/${activeCatFigure().id}`, CAT_BUST, (ctx, x, y, tile) =>
+            drawCatSprite(ctx, x, y, tile),
+          );
     case 'empty':
       return null;
   }

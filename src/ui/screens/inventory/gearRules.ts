@@ -62,7 +62,7 @@ const ALL_DOLL_SECTIONS: readonly DollSection[] = EQUIP_SLOT_ORDER.map((slot) =>
 
 /**
  * Every sub-slot a crawler of `kind` has, head to foot, in the order the doll
- * lays them out: Carl's doll has hands to hold with, Donut's a mouth.
+ * lays them out: the human's doll has hands to hold with, the cat's a mouth.
  */
 export function dollSectionsFor(kind: CrawlerKind): readonly DollSection[] {
   return ALL_DOLL_SECTIONS.filter((section) => wearerAllows(EQUIP_SLOT_WEARER[section.slot], kind));

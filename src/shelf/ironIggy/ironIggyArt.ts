@@ -30,7 +30,7 @@
  * gore piece stops fading out and sits on the floor at full strength.
  */
 
-import { type Pt, clamp01, deg, lerp, mix } from '../../sprites/art/carlArt';
+import { type Pt, clamp01, deg, lerp, mix } from '../../sprites/art/bipedArt';
 import { hash1, rgba } from '../../sprites/art/ratArt';
 
 type Ctx = CanvasRenderingContext2D;

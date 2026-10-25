@@ -19,12 +19,12 @@
  *
  * Coordinates are tile units with the origin at the point between the feet and
  * +Y pointing down the screen, so heights above the ground are negative — the
- * same frame Carl's rig (`carl/rig.ts`) uses, and for the same reason: the generator
+ * same frame the biped rig (`biped/rig.ts`) uses, and for the same reason: the generator
  * translates to that ground point, scales by one tile, and calls a painter.
  *
  * The rig's structure — the `ViewSpec` table, hand/foot targets solved by a
  * two-bone IK with FK escape hatches for swinging arms, and poses written as
- * edits to one resting pose — is taken from `carl/rig.ts`, the only figure in
+ * edits to one resting pose — is taken from `biped/rig.ts`, the only figure in
  * this game whose movement convinces. The anatomy on top of it is not.
  */
 
@@ -197,8 +197,8 @@ const HEAD_CENTRE_Y = -1.3;
 /**
  * The legs are longer than the hip is high, which is the whole silhouette: the
  * knees can never straighten, so the creature stands folded and reads as
- * something that springs rather than walks. Carl's legs are sized to *just*
- * reach the floor from his hip; these overshoot it by a fifth.
+ * something that springs rather than walks. The biped figure's legs are sized to
+ * *just* reach the floor from its hip; these overshoot it by a fifth.
  */
 const LEG_OVERSHOOT = 1.2;
 const HIP_TO_ANKLE = Math.abs(HIP_Y - ANKLE_Y);

@@ -6,7 +6,8 @@ import {
   type AchievementManager,
   type BoxTier,
 } from '../../../core/AchievementManager';
-import { CRAWLER_NAMES, type CrawlerKind } from '../../../core/SkillManager';
+import { crawlerName } from '../../../characters/characters';
+import { type CrawlerKind } from '../../../core/SkillManager';
 import { centerIn, inset, splitH } from '../../core/geom';
 import type { Ui } from '../../core/UiRoot';
 import { drawGlyph } from '../../theme/glyphs';
@@ -81,7 +82,7 @@ function crawlerAchievements(layout: SectionLayout, ctx: PauseContext, crawler: 
   const { ui } = layout;
   const { space } = ui.theme;
   const manager = ctx.achievements[crawler];
-  layout.heading(CRAWLER_NAMES[crawler], ui.theme.palette.crawler[crawler]);
+  layout.heading(crawlerName(crawler), ui.theme.palette.crawler[crawler]);
   const unlocked = unlockedFor(manager, crawler);
   if (unlocked.length === 0 && manager.aiAchievements().length === 0) {
     layout.paragraph('No achievements yet...', 'muted');

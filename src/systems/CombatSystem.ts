@@ -224,7 +224,7 @@ function missileExplosionVariant(missile: Missile): ExplosionVariant {
 
 /**
  * What one of this crawler's basic melee strikes deals: the same number the
- * swing below lands, Carl's Powerful Strike roll included. Shared so anything
+ * swing below lands, the human's Powerful Strike roll included. Shared so anything
  * that strikes "as the crawler would" — a spiked snare — cannot drift from
  * the real blow when the formula is retuned.
  *
@@ -243,7 +243,7 @@ export function crawlerMeleeStrikeDamage(crawler: HumanPlayer | CatPlayer): numb
 }
 
 /**
- * The riders Carl's gear puts on a blow that landed on `mob`: the crown's
+ * The riders the human crawler's gear puts on a blow that landed on `mob`: the crown's
  * sepsis and the gauntlet's stun. Shared by every blow he lands in melee, fist
  * or blade, so a weapon in hand never quietly drops what the gear promises.
  */
@@ -297,7 +297,7 @@ export function landTattooStrikeProcs(crawler: HumanPlayer | CatPlayer, mob: Mob
   }
 }
 
-/** One swing of a weapon in Carl's hand, as the generic strike hands it to the weapon's proc. */
+/** One swing of a weapon in the human crawler's hand, as the generic strike hands it to the weapon's proc. */
 export interface WeaponSwing {
   readonly weaponId: ItemId;
   readonly weapon: MeleeWeaponStats;
@@ -343,7 +343,7 @@ export function cutWithWeapon(ctx: CombatContext, mob: Mob, damageMultiplier: nu
 }
 
 /**
- * The one strike every melee weapon in Carl's hand swings through: its edge
+ * The one strike every melee weapon in the human crawler's hand swings through: its edge
  * cuts everything in its reach and facing, exactly as a fist would find it,
  * then its proc runs, then it lands on whatever props it reaches.
  *

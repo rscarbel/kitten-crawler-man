@@ -37,7 +37,7 @@
  * exponent notation and bakes the shape as an opaque smear.
  */
 
-import { type Pt, clamp01, deg, lerp, mix } from './carlArt';
+import { type Pt, clamp01, deg, lerp, mix } from './bipedArt';
 import { TWO_PI, easeInOut, hash1, ramp, rgba } from './ratArt';
 import {
   KRAKAREN_SWIPE_FRAMES,

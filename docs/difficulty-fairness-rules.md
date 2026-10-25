@@ -518,12 +518,12 @@ blackPowderFlightFrames` (`blackPowderDodgeMarginFrames`): under a third of a
 - **The blast is a share of the struck crawler's own bar.** A blast takes
   `GOBLIN_DYNAMITE_HP_SHARE` or `GOBLIN_BLACK_POWDER_HP_SHARE` of each struck
   crawler's max HP (`goblinBlastDamage`), scaled by the difficulty's incoming
-  damage, so Carl's deep bar loses the same share as Donut's and it never grows
+  damage, so the human's deep bar loses the same share as the cat's and it never grows
   with the mob's own level (P2). It is undodgeable: no dodge roll turns aside an
   explosion the crawler is standing in. Siege walls and trebuchets take a multiple
   of the blast an on-curve crawler would take at the floor's reference party level
   (`floorReferencePartyLevel`).
-- **Who the blast hurts.** Carl and Donut take the full blast, as do party-side
+- **Who the blast hurts.** Both crawlers take the full blast, as do party-side
   mobs (Mongo, hirelings, soldiers, thralls, converted mobs, attack cows), each the
   same share of its own max HP. A hostile that attacks other mobs on its own
   (`Mob.huntsOtherMobs`, today the Brindled Vespa) is the goblins' enemy too and

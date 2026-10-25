@@ -5,8 +5,8 @@
  * mini-wave with, at the variety tier it was planned at.
  *
  * The undead are seen nowhere else, so none is warm when a wave is
- * announced, and the cache they share is also holding the crawlers — Carl's
- * fight alone keeps nearly 40 MB of the cache's own ceiling drawn every frame. So
+ * announced, and the cache they share is also holding the crawlers — the human
+ * crawler's fight alone keeps nearly 40 MB of the cache's own ceiling drawn every frame. So
  * {@link AssaultWavePrewarm}:
  *
  * - **Warms a small set.** Only the rows a wave arrives playing, in the views

@@ -5,7 +5,7 @@
 
 import type { PartyXpApplied } from '../../core/awardXp';
 import { ITEM_DEF, type ItemId } from '../../core/ItemDefs';
-import { CRAWLER_NAMES } from '../../core/SkillManager';
+import { crawlerName } from '../../characters/characters';
 import { cachedWheelFace, paintWheelFace } from '../../sprites/art/wheelFaceArt';
 import { BASE_WHEEL_BOARD, tapedBoard } from '../../systems/casino/wheel/wheelBoard';
 import { drawItemIcon } from '../icons/drawItemIcon';
@@ -46,8 +46,8 @@ export function bagItemRewardLine(
 /** One `xp` section per crawler, each naming who it went to, for an award from `awardPartyXp`. */
 export function partyXpSections(applied: PartyXpApplied): QuestRewardSection[] {
   return [
-    { kind: 'xp', amount: applied.human, recipient: CRAWLER_NAMES.human },
-    { kind: 'xp', amount: applied.cat, recipient: CRAWLER_NAMES.cat },
+    { kind: 'xp', amount: applied.human, recipient: crawlerName('human') },
+    { kind: 'xp', amount: applied.cat, recipient: crawlerName('cat') },
   ];
 }
 

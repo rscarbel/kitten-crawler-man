@@ -399,7 +399,7 @@ export function verifyFenceCancelAndRefusal(check: Check): void {
 
 const HAMMER_ROWS: readonly HumanRowName[] = Object.values(REPAIR_ROWS);
 
-/** Carl hammers while a section is worked, facing it, and stops when the work does. */
+/** The human hammers while a section is worked, facing it, and stops when the work does. */
 export function verifyFenceHammering(check: Check): void {
   const { rig, blueprints } = blueprintsRig('build_fence');
   const fence = blueprints.fence;
@@ -411,7 +411,7 @@ export function verifyFenceHammering(check: Check): void {
   rig.human.facingX = 0;
   rig.human.facingY = 0;
   fence.tryInteract(rig.human);
-  check(hammering(), 'Carl hammers as the channel starts');
+  check(hammering(), 'the human hammers as the channel starts');
   const toTileX = (tile.x + TILE_CENTRE) * TILE_SIZE - (rig.human.x + TILE_SIZE * TILE_CENTRE);
   const toTileY = (tile.y + TILE_CENTRE) * TILE_SIZE - (rig.human.y + TILE_SIZE * TILE_CENTRE);
   check(

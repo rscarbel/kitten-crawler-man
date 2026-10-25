@@ -10,7 +10,7 @@
  * displaced, a line that tracks the form, never a ring around its centre.
  */
 
-import { type Pt, clamp01, rgba } from '../carlArt';
+import { type Pt, clamp01, rgba } from '../bipedArt';
 import { OUTLINE, type Ramp } from './palette';
 
 export type Ctx = CanvasRenderingContext2D;

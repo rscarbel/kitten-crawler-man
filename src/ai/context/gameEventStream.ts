@@ -24,8 +24,8 @@ export interface EventDraft {
   witness: Witness;
   /**
    * The crawler the event happened to. A safe-room witness rule is judged on
-   * where that crawler stands, not the controlled one: Donut drinking a potion
-   * in the safe room is seen there even while Carl explores outside.
+   * where that crawler stands, not the controlled one: the cat drinking a
+   * potion in the safe room is seen there even while the human explores outside.
    */
   subject?: CrawlerName;
 }

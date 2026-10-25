@@ -26,6 +26,7 @@
 import { installCanvasGlobals } from './nodeCanvasGlobals';
 import { setViewportSize } from '../src/core/Viewport';
 import type { ConversationRequest } from '../src/dialog/request';
+import { crawlerName } from '../src/characters/characters';
 import { TILE_SIZE } from '../src/core/constants';
 import {
   captureBriarHollowState,
@@ -116,7 +117,7 @@ const REQUEST_BELL_HP = 120;
 const MAYOR_CHOICE_LIMIT = 9;
 /** Pages turned at most while reading a conversation through to its choices. */
 const READ_THROUGH_PAGE_LIMIT = 40;
-/** Carl waits out the countdown this many tiles south of the bell. */
+/** The human waits out the countdown this many tiles south of the bell. */
 const BELL_STAND_OFFSET_TILES = 3;
 const WOODEN_WALL_BOARDS = 5;
 /** Enough stone to load a trebuchet from empty. */
@@ -178,8 +179,8 @@ conversation.open = (request) => {
   return handle;
 };
 
-// Every narrated line the questline queues outside a conversation — Carl or
-// Donut's own beats, the Mayor's shout — in order.
+// Every narrated line the questline queues outside a conversation — the
+// crawlers' own beats, the Mayor's shout — in order.
 const questLines: Array<{ speaker: string; text: string }> = [];
 const showQuestLine = kit.showQuestLine.bind(kit);
 kit.showQuestLine = (speaker: string, text: string, onClosed?: () => void) => {
@@ -427,8 +428,10 @@ section('3. Wood, then stone');
   human.inventory.addItem('wood', 1);
   rig.step();
   check(
-    questLines.some((q) => q.text === QUARRY_SPOTTED_LINE),
-    'the active crawler mentions the quarry once the wood target is held',
+    questLines.some(
+      (q) => q.text === QUARRY_SPOTTED_LINE.human && q.speaker === crawlerName('human'),
+    ),
+    'the active crawler mentions the quarry in their own voice once the wood target is held',
   );
   check(state.quest.phase === 'gather_stone', `${WOOD_TARGET} wood held moves on to the quarry`);
   check(
@@ -499,7 +502,9 @@ section("5. Fenna, processing, and Tikka's plans");
   human.inventory.addItem('rope', PROCESSING_ROPE_TARGET);
   rig.step();
   check(
-    questLines.some((q) => q.text === PROCESSING_DONE_LINE),
+    questLines.some(
+      (q) => q.text === PROCESSING_DONE_LINE.human && q.speaker === crawlerName('human'),
+    ),
     'the active crawler suggests heading back to Tikka once processing is done',
   );
   check(

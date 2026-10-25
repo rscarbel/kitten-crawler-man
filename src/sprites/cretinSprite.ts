@@ -152,7 +152,7 @@ export interface CretinShieldState {
   /** Ticks since the row started (appear, fade) or a running clock (hold). */
   readonly ticks: number;
   /**
-   * Size of the dome relative to one sized for Carl, about his height and
+   * Size of the dome relative to one sized for the human crawler, about his height and
    * shoulders. A smaller ally takes a smaller dome; the feet stay put.
    */
   readonly scale?: number;

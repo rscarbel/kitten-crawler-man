@@ -4,6 +4,7 @@
  * like a real run, plus the mid-timeline states worth judging.
  */
 
+import { crawlerName } from '../../../characters/characters';
 import { createAnchorQuestProgress } from '../../../core/AnchorQuestProgress';
 import { blueprintsRewardSpec } from '../../../systems/briarHollow/blueprints/blueprintsRewardSpec';
 import type { TreasureChest } from '../../../systems/TreasureChestSystem';
@@ -142,7 +143,7 @@ const DEFEND_SPEC: QuestRewardSpec = {
         bagItemRewardLine('health_potion', POTIONS_GIVEN),
         bagItemRewardLine('skill_book_night_vision', 1, {
           describe: true,
-          note: "In Donut's bag.",
+          note: `In ${crawlerName('cat')}'s bag.`,
         }),
       ],
     },

@@ -768,7 +768,7 @@ export class GoblinBombSystem implements GameSystem, GroundHazardSource {
  * What one goblin blast does to the bodies inside it. Shared by both
  * explosives.
  *
- * - Carl and Donut take the full blast, as the thrower's blow: the blast's
+ * - Both crawlers take the full blast, as the thrower's blow: the blast's
  *   share of each one's own max HP, which no dodge roll turns aside.
  * - A party-side mob (Mongo, a hireling, a soldier, a thrall, a converted mob,
  *   an attack cow) takes the full blast too, the same share of its own max HP.

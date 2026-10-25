@@ -1,5 +1,5 @@
 /**
- * The Desperado Club's dance routines on Carl's rig: the same three the
+ * The Desperado Club's dance routines on the biped rig: the same three the
  * skyfowl dancers do (`../danceStyles.ts`), so a mixed floor dances one
  * vocabulary.
  *
@@ -17,12 +17,12 @@ import {
   restingPose,
   setArmAngles,
   type BodySide,
-  type CarlPose,
-} from '../carl/rig';
-import type { Pt } from '../carlArt';
-import { FOREARM_LENGTH, UPPER_ARM_LENGTH } from '../carl/proportions';
-import { deg, hump, lerp } from '../carlArt';
-import { pt, TWO_PI } from '../carl/geometry';
+  type BipedPose,
+} from '../biped/rig';
+import type { Pt } from '../bipedArt';
+import { FOREARM_LENGTH, UPPER_ARM_LENGTH } from '../biped/proportions';
+import { deg, hump, lerp } from '../bipedArt';
+import { pt, TWO_PI } from '../biped/geometry';
 import { anglesThrough, splineKeys, type PathKey } from './gaitShared';
 import { IDLE_SIDE_FOOT_LEAD } from './idles';
 import {
@@ -66,7 +66,7 @@ const ELBOW_DOWN_WEIGHT = 0.5;
  * breaks a head-on elbow inward, which for a hand over the head folds the
  * forearm across the face — hands on the head, not in the air.
  */
-function placeHand(pose: CarlPose, side: BodySide, offset: Pt): void {
+function placeHand(pose: BipedPose, side: BodySide, offset: Pt): void {
   const skeleton = buildSkeleton(pose, VIEWS.back);
   const root = side === 'left' ? skeleton.leftArm.root : skeleton.rightArm.root;
   const outward = side === 'left' ? -1 : 1;
@@ -105,12 +105,12 @@ function onBeat(frame: number): number {
   return 0.5 + 0.5 * Math.cos(beatPhase(frame) * TWO_PI);
 }
 
-/** A dancer's face is open, not Carl's scowl: brow relaxed, lips parted. */
+/** A dancer's face is open, not the combat scowl: brow relaxed, lips parted. */
 const DANCE_BROW = 0.1;
 const DANCE_MOUTH = 0.25;
 const DANCE_ELBOW_FLARE = 0.6;
 
-function base(): CarlPose {
+function base(): BipedPose {
   const pose = restingPose();
   pose.brow = DANCE_BROW;
   pose.mouth = DANCE_MOUTH;
@@ -151,7 +151,7 @@ function pumpHop(frame: number): number {
  * punching back up on the hop between beats; the hips swing across the bar
  * and the head rocks with them.
  */
-function pumpPose(frame: number): CarlPose {
+function pumpPose(frame: number): BipedPose {
   const pose = base();
   const dip = onBeat(frame);
   const hop = pumpHop(frame);
@@ -217,7 +217,7 @@ const POINT_PATH_Y: readonly PathKey[] = [
  * the beat, and one hand points up at the ceiling while the other rests on
  * the hip — trading on the next beat.
  */
-function shimmyPose(frame: number): CarlPose {
+function shimmyPose(frame: number): BipedPose {
   const pose = base();
   const dip = onBeat(frame);
   const bar = barPhase(frame) * TWO_PI;
@@ -293,7 +293,7 @@ const SPIN_LANDING_FRAMES = 2;
  * then turns a full circle on the ball of one foot on the second, arms swept
  * up and the skirt flaring, landing facing the camera into the next dip.
  */
-function spinPose(frame: number, facing: DanceFacing): CarlPose {
+function spinPose(frame: number, facing: DanceFacing): BipedPose {
   const pose = base();
   const armsUp = Math.min(1, Math.max(0, splineKeys(frame, SPIN_ARMS_UP)));
   const turning = facing !== 'down' || frame >= DANCE_FRAMES - SPIN_LANDING_FRAMES;
@@ -325,7 +325,7 @@ function spinPose(frame: number, facing: DanceFacing): CarlPose {
 }
 
 /** One frame of a routine, posed for the facing the routine is in on that frame. */
-export function dancePose(style: DanceStyle, frame: number): CarlPose {
+export function dancePose(style: DanceStyle, frame: number): BipedPose {
   if (style === 'pump') return pumpPose(frame);
   if (style === 'shimmy') return shimmyPose(frame);
   return spinPose(frame, danceFacingAt(style, frame));

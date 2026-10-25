@@ -49,7 +49,7 @@ const SIDE_MARGIN_PX = 16;
 const KEEPOUT_GAP_PX = 8;
 /**
  * How far below the screen's centre, where the crawler stands, the bar's top
- * sits by preference: enough to clear Carl's feet and his scythe's sweep.
+ * sits by preference: enough to clear the human crawler's feet and his scythe's sweep.
  */
 const BELOW_CRAWLER_PX = 44;
 /** The same clearance when the bar has to go over the crawler: head, name and prompt. */

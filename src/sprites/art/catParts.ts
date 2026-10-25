@@ -1,5 +1,5 @@
 /**
- * The part frames Donut's anatomy publishes while it paints, and the dressing
+ * The part frames a cat's anatomy publishes while it paints, and the dressing
  * it publishes them to.
  *
  * Her figure is painted piece by piece: each tuft of fur, then the face's
@@ -17,6 +17,7 @@
  */
 
 import type { FurPart, Pt } from './catArt';
+import type { CatTailCoat } from '../looks/catLook';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -45,8 +46,6 @@ export interface CatHeadLandmarks {
   readonly eyes: readonly Pt[];
   /** The height her eyes sit at, whether or not the view shows them. */
   readonly eyeLine: number;
-  /** Where each ear roots into the skull: both head-on and from behind, near then far in profile. */
-  readonly ears: readonly Pt[];
   /** How far the head is turned, -1 to her right through +1 to her left; 0 in profile. */
   readonly turn: number;
 }
@@ -101,11 +100,13 @@ export interface CatBodyFrame extends FurPiece {
 /**
  * One piece of a leg: a column or segment in its own frame, origin at the
  * joint it hangs from and +Y down the limb, or a paw in its own frame, origin
- * at the paw's centre.
+ * at the paw's centre. A two-bone leg is `upper` and `lower`; a hind leg drawn
+ * with its hock is `upper`, `shank` and `hock`, the hock bone ending at the
+ * paw.
  */
 export type CatLegFrame =
   | (FurPiece & {
-      readonly piece: 'column' | 'upper' | 'lower';
+      readonly piece: 'column' | 'upper' | 'lower' | 'shank' | 'hock';
       readonly side: CatSide;
       readonly length: number;
       readonly halfWidth: number;
@@ -126,7 +127,9 @@ export interface CatTailFrame {
   readonly piece: 'tail';
   readonly spine: readonly Pt[];
   readonly widths: readonly number[];
-  readonly puff: number;
+  readonly coat: CatTailCoat;
+  /** How far the tail's tufts poke past its silhouette, puffed out with it. */
+  readonly fringe: number;
   readonly shade: number;
   readonly envelope: readonly Pt[];
 }

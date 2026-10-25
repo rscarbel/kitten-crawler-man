@@ -16,7 +16,7 @@
  *       with the safety margin (counted work, not timed frames, so it is the
  *       same verdict on every machine); the figure stays inside its budget;
  *       and every row warmed so far draws with no misses;
- *   A2  the ticker, `AssaultWavePrewarm`, with Carl, Donut and the four
+ *   A2  the ticker, `AssaultWavePrewarm`, with the human, the cat and the four
  *       militia held on screen every frame beside it, at 1, 2, 2.4 and 8
  *       cache frames per update: each wave's countdown; wave 3's fight after
  *       he arrives, his standing set drawn with his drift; and the lull before
@@ -186,8 +186,8 @@ const RATE_120_HZ = 2;
 const RATE_144_HZ = 2.4;
 const RATE_PAUSED = 8;
 const ALL_RATES: readonly number[] = [RATE_60_HZ, RATE_120_HZ, RATE_144_HZ, RATE_PAUSED];
-/** Carl's fight is gated in one view, the one his busiest strike family is painted in. */
-const CARL_FIGHT_VIEW = 'side';
+/** The human's fight is gated in one view, the one his busiest strike family is painted in. */
+const HUMAN_FIGHT_VIEW = 'side';
 /** The militia rows a defence is fought in. */
 const SOLDIER_FIGHT_ROLES: ReadonlySet<string> = new Set(['walk', 'idle', 'strike', 'hurt']);
 /** A display density the cache treats as low-end, and bakes at half density for. */
@@ -530,34 +530,34 @@ function waveRows(wave: AssaultWave): Row[] {
 }
 
 /**
- * Carl in a fight: every row he is drawn in continuously, the wind-up of every
+ * The human in a fight: every row he is drawn in continuously, the wind-up of every
  * blow he can open with, and every strike in the view he is fighting in — the
  * core of the working set `gates-human`'s G9b sizes against his budget.
  */
-function carlRows(): Row[] {
-  const carl = activeHumanFigure();
+function humanRows(): Row[] {
+  const human = activeHumanFigure();
   const whole = new Set([
     ...alwaysDrawnRows('unarmed'),
     ...HUMAN_ATTACK_ROWS.filter((name) => {
       const meta = HUMAN_ROW_TABLE[name];
-      return meta.view === CARL_FIGHT_VIEW && motionSetOfRow(meta) === 'unarmed';
+      return meta.view === HUMAN_FIGHT_VIEW && motionSetOfRow(meta) === 'unarmed';
     }),
   ]);
   const windUps = openingStrikeRows('unarmed').filter((name) => !whole.has(name));
   return [
-    ...[...whole].map((name) => row(carl, name)),
-    ...windUps.map((name) => row(carl, name, strikeWindUpFrames(HUMAN_ROW_TABLE[name]))),
+    ...[...whole].map((name) => row(human, name)),
+    ...windUps.map((name) => row(human, name, strikeWindUpFrames(HUMAN_ROW_TABLE[name]))),
   ];
 }
 
 function crawlerRows(): Row[] {
-  const donut = RESIDENT_VIEW_ROWS.map((state) => row(CAT_FIGURE, state));
+  const cat = RESIDENT_VIEW_ROWS.map((state) => row(CAT_FIGURE, state));
   const soldiers = RATKIN_SOLDIER_IDS.flatMap((id) =>
     castRowsFor(id)
       .filter((spec) => SOLDIER_FIGHT_ROLES.has(spec.role))
       .map((spec) => row(ratkinCastFigure(id), spec.name)),
   );
-  return [...carlRows(), ...donut, ...soldiers];
+  return [...humanRows(), ...cat, ...soldiers];
 }
 
 function residentOf(rows: readonly Row[]): number {
@@ -825,9 +825,9 @@ function lullBefore(wave: AssaultWave, rate: number, crawlers: readonly Row[]): 
 
 function countdownGate(): void {
   const crawlers = crawlerRows();
-  const carl = activeHumanFigure();
-  const carlLoad = crawlers.filter((r) => r.def === carl);
-  for (const failure of nothingMeasuredFailures(carlLoad.length, 'Carl rows')) {
+  const human = activeHumanFigure();
+  const humanLoad = crawlers.filter((r) => r.def === human);
+  for (const failure of nothingMeasuredFailures(humanLoad.length, 'The human rows')) {
     fail('A2 countdown', failure);
   }
   for (const failure of nothingMeasuredFailures(cellsOf(crawlers), 'crawler cells')) {
@@ -839,16 +839,16 @@ function countdownGate(): void {
   warmDirectly(crawlers);
   const coldCrawlerCells = missesDrawing(crawlers);
   const crawlerBytes = residentOf(crawlers);
-  const carlBytes = figureResidentBytes(carl);
+  const humanBytes = figureResidentBytes(human);
   console.log(
-    `  A2 crawlers: ${crawlers.length} rows, ${mb(crawlerBytes)} MB (Carl ${mb(carlBytes)}), ` +
+    `  A2 crawlers: ${crawlers.length} rows, ${mb(crawlerBytes)} MB (the human ${mb(humanBytes)}), ` +
       `${coldCrawlerCells} cold before the countdown`,
   );
   if (coldCrawlerCells > 0) {
     fail('A2 countdown', `${coldCrawlerCells} crawler cells are cold before any wave is warmed`);
   }
-  if (carlBytes > figureByteBudgetFor(carl)) {
-    fail('A2 countdown', `Carl's load alone is past his own budget, so it proves nothing`);
+  if (humanBytes > figureByteBudgetFor(human)) {
+    fail('A2 countdown', `The human's load alone is past his own budget, so it proves nothing`);
   }
   let measured = 0;
   for (const wave of COUNTDOWN_WAVES) {

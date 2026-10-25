@@ -17,7 +17,7 @@
  * exactly.
  */
 
-import { lerp, type Pt } from '../carlArt';
+import { lerp, type Pt } from '../bipedArt';
 import { BitmapCache, type CacheBox, quantize } from './bitmapCache';
 import { type CardSize, cardCorners, paintCardBack } from './cards';
 import { type Grip, type GripBuild, paintGrippingHand } from './grip';

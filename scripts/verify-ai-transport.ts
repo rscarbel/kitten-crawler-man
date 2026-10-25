@@ -20,6 +20,7 @@
  *
  * Run: npm run verify:ai-transport
  */
+import { crawlerName } from '../src/characters/characters';
 import {
   DEFAULT_LIMITS,
   TypedEmitter,
@@ -43,6 +44,7 @@ import { MORDECAI_CHARACTER_NAME, SYSTEM_CHARACTER_NAME } from '../src/ai/charac
 import { SYSTEM_FALLBACK_LINES } from '../src/ai/characters/fallbackLines';
 import type {
   AIContextSource,
+  CrawlerName,
   CrawlerState,
   LiveInput,
   SessionInput,
@@ -152,7 +154,7 @@ class FakeClient extends TypedEmitter<GameAiClientEvents> implements AIClient {
   }
 }
 
-function crawler(name: 'Carl' | 'Donut', active: boolean): CrawlerState {
+function crawler(name: CrawlerName, active: boolean): CrawlerState {
   return {
     name,
     hp: FULL_HP,
@@ -258,9 +260,11 @@ function buildRig(): Rig {
     indoors: false,
   };
   const live = (): LiveInput => ({
-    activeCrawler: 'Carl',
-    carl: crawler('Carl', true),
-    donut: crawler('Donut', false),
+    activeCrawler: crawlerName('human'),
+    crawlers: {
+      human: crawler(crawlerName('human'), true),
+      cat: crawler(crawlerName('cat'), false),
+    },
     location: { kind: 'corridor', label: 'dark corridor', inSafeRoom: false, inBossArena: false },
     nearbyMobs: [],
     combatInProgress: false,
@@ -273,7 +277,7 @@ function buildRig(): Rig {
     readLive: live,
     isPartyInSafeRoom: () => false,
     isCrawlerInSafeRoom: () => false,
-    crawlerNameOf: (player) => (player === human ? 'Carl' : 'Donut'),
+    crawlerNameOf: (player) => (player === human ? crawlerName('human') : crawlerName('cat')),
   };
   rig.adapter.bindScene(scene, rig.bus, source);
   return rig;
@@ -290,7 +294,7 @@ function sleep(ms: number): Promise<void> {
 /** A heal well inside the action's own range, so only the intensity can refuse it. */
 const HEAL_PERCENT = 20;
 const LOOT_BOX = { tier: 'Bronze', reason: 'Good show.' };
-const REMEMBER = { fact: 'Carl hums while he fights.', kind: 'fact' };
+const REMEMBER = { fact: `${crawlerName('human')} hums while he fights.`, kind: 'fact' };
 
 function action(
   id: string,

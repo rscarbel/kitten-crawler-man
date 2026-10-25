@@ -285,7 +285,7 @@ function drawWoodBoardIcon(
 // ── Rope: a coiled tan hank, wound as a spiral ──────────────────────────────
 
 /**
- * A single ring reads as a donut or a magnifying glass at icon size, whatever
+ * A single ring reads as a doughnut or a magnifying glass at icon size, whatever
  * is added to its rim. A spiral — a strand winding inward over multiple turns
  * — is the shape that is unambiguously "coiled rope" instead, the way a real
  * hank looks set down on a table.

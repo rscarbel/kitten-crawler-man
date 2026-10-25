@@ -13,7 +13,7 @@
  * box with a glow — so each is a few bold outlined shapes and nothing finer.
  */
 
-import { type Pt, rgba } from '../carlArt';
+import { type Pt, rgba } from '../bipedArt';
 import type { HeldPropKind } from './outfit';
 import {
   DETAIL_OUTLINE_WIDTH,

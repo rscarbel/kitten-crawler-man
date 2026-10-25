@@ -1,13 +1,14 @@
 /**
- * Pieces of Carl's choreography more than one row family is built from: a
+ * Pieces of the human figure's choreography more than one row family is built from: a
  * one-shot's progress split around its impact, the blink, where a relaxed arm
  * hangs, a smooth path through timed keys, the rolling foot and the leg's
  * reach at a given knee bend, the damped spring loose parts hang on, and the
  * walking arm swing.
  */
 
-import { footSoleLandmarks, RIGHT_FOOT_OUT } from '../carl/feet';
-import { HALF_PI, offset, pt, rotate, TWO_PI } from '../carl/geometry';
+import { footSoleLandmarks, RIGHT_FOOT_OUT } from '../biped/feet';
+import { RIG_LIMBS } from '../biped/limbs';
+import { HALF_PI, offset, pt, rotate, TWO_PI } from '../biped/geometry';
 import {
   ANKLE_Y,
   ARM_LENGTH,
@@ -17,9 +18,16 @@ import {
   SHOULDER_JOINT_DROP,
   THIGH_LENGTH,
   UPPER_ARM_LENGTH,
-} from '../carl/proportions';
-import { type ArmAngles, type BodySide, FULL_UPPER_ARM, LEG_MAX_REACH, VIEWS } from '../carl/rig';
-import { deg, hump, type Pt } from '../carlArt';
+} from '../biped/proportions';
+import {
+  type ArmAngles,
+  type BodySide,
+  FULL_UPPER_ARM,
+  LEG_MAX_REACH,
+  RESTING_HAND_SPREAD,
+  VIEWS,
+} from '../biped/rig';
+import { deg, hump, type Pt } from '../bipedArt';
 import { RUN_FRAMES } from './timing';
 
 // ── Phase ────────────────────────────────────────────────────────────────────
@@ -71,21 +79,16 @@ export function blink(phase: number, at: number): number {
 }
 
 /**
- * Where a relaxed arm hangs: straight down from the shoulder root, wrist level
- * with the boxer hem. Standing and the head-on walk share these, because the
- * walk has to start from where he stands.
+ * Where a relaxed arm hangs: the rig's resting hand, wrist level with the
+ * hips. Standing and the head-on walk share these, because the walk has to
+ * start from where he stands.
  *
- * Both numbers are load-bearing. Set the hands inboard of the shoulder roots
- * (`SHOULDER_HALF * ARM_INSET`, 0.252) and the forearms converge on the
- * centreline, which turns his hands inward in front of his own crotch. Set the
- * drop past the arm's reach (0.628) and the IK clamps it, which tips the whole
- * arm toward whatever the target was — inward, again.
- *
- * Any further out than this and a one-pixel gap opens between the thick
- * forearm and the boxers, which the silhouette outline fills with an ink line
- * down each side of his hips. A heavy man's forearms hang against his thighs.
+ * Both numbers are load-bearing. Set the hands much further in and the
+ * forearms converge on the centreline, which turns his hands inward in front
+ * of his own crotch. Set the drop past the arm's reach (0.628) and the IK
+ * clamps it, which tips the whole arm toward whatever the target was.
  */
-const HAND_HANG_SPREAD = 0.31;
+const HAND_HANG_SPREAD = RESTING_HAND_SPREAD;
 /**
  * How far the wrist sits below the shoulder *joint* — just inside the arm's own
  * reach, so the IK has nothing to bend to take up. Measured from the shoulder
@@ -254,9 +257,12 @@ export function frameValue(table: FrameTable, frame: number): number {
 
 // ── The rolling foot ─────────────────────────────────────────────────────────
 
-/** Where the heel and toe ends of the sole sit relative to the ankle, at a pitch, in profile. */
+/**
+ * Where the heel and toe ends of the rig's sole sit relative to the ankle, at
+ * a pitch, in profile: the rows are authored on the rig's foot.
+ */
 export function soleOffsets(pitch: number): { heel: Pt; toe: Pt } {
-  return footSoleLandmarks(pt(0, 0), pitch, VIEWS.side, RIGHT_FOOT_OUT);
+  return footSoleLandmarks(pt(0, 0), pitch, VIEWS.side, RIGHT_FOOT_OUT, RIG_LIMBS);
 }
 
 /**

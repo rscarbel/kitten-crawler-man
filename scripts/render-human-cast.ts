@@ -7,7 +7,7 @@
  *   preview/human-cast/<id>.png      one look: every row's first frame at 3x
  *   preview/human-cast/blind.png     the in-game lineup, shuffled and numbered,
  *                                    for a reviewer matching builds/roles blind
- *   preview/human-cast/compare.png   the cast beside the ratkin cast and Carl
+ *   preview/human-cast/compare.png   the cast beside the ratkin cast and the human
  *
  *   npm run render:human-cast
  *   npx tsx scripts/render-human-cast.ts --id=standard_guard
@@ -30,6 +30,7 @@ import { TOWN_CAST_LOOKS, type TownCastLook } from '../src/sprites/person/townCa
 import { ratkinCastFigure } from '../src/sprites/art/ratkinCastFigure.js';
 import { RATKIN_CAST_IDS } from '../src/sprites/art/ratkin/cast.js';
 import { HUMAN_FIGURE } from '../src/sprites/art/humanFigure.js';
+import { playerCharacter } from '../src/characters/characters.js';
 
 const OUT_DIR = `${PREVIEW_DIR}/human-cast`;
 const REVIEW_SCALE = 3;
@@ -183,7 +184,7 @@ function renderLookSheet(look: TownCastLook): void {
   console.log(`wrote ${path}`);
 }
 
-/** The human lineup beside the ratkin lineup and Carl, for direct quality comparison. */
+/** The human lineup beside the ratkin lineup and the human crawler, for direct quality comparison. */
 function renderCompare(): void {
   const humanCards = TOWN_CAST_LOOKS.slice(0, LINEUP_COLUMNS).map(lineupCard);
   const ratkinCards = RATKIN_CAST_IDS.slice(0, LINEUP_COLUMNS).map((id) => {
@@ -199,34 +200,39 @@ function renderCompare(): void {
     label(ctx, id, canvas.width / 2, canvas.height - COMPARE_LABEL_Y_MARGIN);
     return canvas;
   });
-  const carlCell = bakeFigureCell(HUMAN_FIGURE, 'idle', 0);
-  const carlCanvas = createCanvas(
-    carlCell.width * IN_GAME_SCALE + PADDING * 2,
-    carlCell.height * IN_GAME_SCALE + PADDING * 2,
+  const humanCell = bakeFigureCell(HUMAN_FIGURE, 'idle', 0);
+  const humanCanvas = createCanvas(
+    humanCell.width * IN_GAME_SCALE + PADDING * 2,
+    humanCell.height * IN_GAME_SCALE + PADDING * 2,
   );
-  const carlCtx = carlCanvas.getContext('2d');
-  carlCtx.fillStyle = COMPARE_ROW_BACKDROP;
-  carlCtx.fillRect(0, 0, carlCanvas.width, carlCanvas.height);
-  carlCtx.drawImage(
-    carlCell,
+  const humanCtx = humanCanvas.getContext('2d');
+  humanCtx.fillStyle = COMPARE_ROW_BACKDROP;
+  humanCtx.fillRect(0, 0, humanCanvas.width, humanCanvas.height);
+  humanCtx.drawImage(
+    humanCell,
     PADDING,
     PADDING,
-    carlCell.width * IN_GAME_SCALE,
-    carlCell.height * IN_GAME_SCALE,
+    humanCell.width * IN_GAME_SCALE,
+    humanCell.height * IN_GAME_SCALE,
   );
-  label(carlCtx, 'carl', carlCanvas.width / 2, carlCanvas.height - COMPARE_LABEL_Y_MARGIN);
+  label(
+    humanCtx,
+    playerCharacter('human').look.id,
+    humanCanvas.width / 2,
+    humanCanvas.height - COMPARE_LABEL_Y_MARGIN,
+  );
 
   const humanRow = drawGrid(createCanvas(1, 1), humanCards, LINEUP_COLUMNS);
   const ratkinRow = drawGrid(createCanvas(1, 1), ratkinCards, LINEUP_COLUMNS);
-  const width = Math.max(humanRow.width, ratkinRow.width, carlCanvas.width);
-  const height = humanRow.height + ratkinRow.height + carlCanvas.height;
+  const width = Math.max(humanRow.width, ratkinRow.width, humanCanvas.width);
+  const height = humanRow.height + ratkinRow.height + humanCanvas.height;
   const out = createCanvas(width, height);
   const ctx = out.getContext('2d');
   ctx.fillStyle = BACKDROP;
   ctx.fillRect(0, 0, width, height);
   ctx.drawImage(humanRow, 0, 0);
   ctx.drawImage(ratkinRow, 0, humanRow.height);
-  ctx.drawImage(carlCanvas, 0, humanRow.height + ratkinRow.height);
+  ctx.drawImage(humanCanvas, 0, humanRow.height + ratkinRow.height);
   const path = writePreviewPng(`${OUT_DIR}/compare.png`, out.toBuffer('image/png'));
   console.log(`wrote ${path}`);
 }

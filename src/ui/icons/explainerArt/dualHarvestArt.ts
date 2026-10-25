@@ -1,14 +1,16 @@
 /**
- * The illustration for the dual-harvest hint: Carl chops alone, the switch
- * is pressed and control passes to Donut, then she mines a boulder while he
+ * The illustration for the dual-harvest hint: the human crawler chops alone,
+ * the switch is pressed and control passes to the cat, then she mines a
+ * boulder while he
  * keeps chopping, both hauls climbing.
  */
 
+import { crawlerName } from '../../../characters/characters';
 import type { IllustrationRect } from './illustration';
 import {
   BOULDER_KEY,
   chopLoopFrames,
-  drawChoppingCarl,
+  drawChoppingHuman,
   drawGround,
   drawResourcePop,
   groundY,
@@ -57,9 +59,9 @@ const CONTROL_LEAD_FRAMES = framesIn(CONTROL_LEAD_MS);
 const CAPTION_FADE_FRAMES = framesIn(CAPTION_FADE_MS);
 
 /** Where each figure stands across the band, as a fraction of its width. */
-const CARL_X = 0.13;
+const HUMAN_X = 0.13;
 const TREE_X = 0.28;
-const DONUT_X = 0.71;
+const CAT_X = 0.71;
 const BOULDER_X = 0.87;
 /**
  * The oak's crown towers well over its tile; drawn a little under the stage
@@ -69,8 +71,8 @@ const TREE_TILE = 48;
 const HALF = 0.5;
 
 /** Heights above the ground line the marker floats over each crawler's head. */
-const CARL_HEAD_TILES = 1.62;
-const DONUT_HEAD_TILES = 0.92;
+const HUMAN_HEAD_TILES = 1.62;
+const CAT_HEAD_TILES = 0.92;
 const MARKER_RADIUS = 6;
 const MARKER_GAP = 9;
 /** The marker hops in an arc on its way across, clearing the switch control below it. */
@@ -79,7 +81,7 @@ const MARKER_HOP_PX = 16;
 /** Low between the two pairs, under the path the marker slides along overhead. */
 const CONTROL_ABOVE_GROUND = 76;
 const CONTROL_CAPTION_GAP = 6;
-const CONTROL_CAPTION = 'Switch to Donut';
+const CONTROL_CAPTION = `Switch to ${crawlerName('cat')}`;
 const CONTROL_CAPTION_SIZE = 12;
 const CONTROL_CAPTION_COLOR = '#e2e8f0';
 
@@ -97,8 +99,8 @@ const TALLY_DROP = 12;
 const CAT_IMPACT_PROGRESS = 0.5;
 const CAT_IMPACT_FRAMES = Math.round(CAT_WORK_SWING_DURATION_TICKS * CAT_IMPACT_PROGRESS);
 
-const DONUT_FACING = selectFacing(1, 0);
-const DONUT_PICKAXE = workingToolHeldVisual({ kind: 'pickaxe', tier: TOOL_TIER_BASIC });
+const CAT_FACING = selectFacing(1, 0);
+const CAT_PICKAXE = workingToolHeldVisual({ kind: 'pickaxe', tier: TOOL_TIER_BASIC });
 
 function clamp01(t: number): number {
   return Math.min(1, Math.max(0, t));
@@ -116,13 +118,13 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-function donutSwingStart(frame: number): number | null {
+function catSwingStart(frame: number): number | null {
   if (frame < BOTH_AT) return null;
   return frame - ((frame - BOTH_AT) % CAT_WORK_SWING_TICKS);
 }
 
-function donutOneShot(frame: number): CatOneShotState | null {
-  const start = donutSwingStart(frame);
+function catOneShot(frame: number): CatOneShotState | null {
+  const start = catSwingStart(frame);
   if (start === null) return null;
   const since = frame - start;
   if (since >= CAT_WORK_SWING_DURATION_TICKS) return null;
@@ -135,22 +137,22 @@ function stoneMined(frame: number): number {
   return Math.floor(sinceFirstImpact / CAT_WORK_SWING_TICKS) + 1;
 }
 
-function drawDonut(
+function drawCat(
   ctx: CanvasRenderingContext2D,
   tile: { readonly x: number; readonly y: number },
   frame: number,
 ): void {
   const working = frame >= SWITCH_AT;
   const held: CatHeldDraw | null =
-    working && DONUT_PICKAXE !== null ? { look: DONUT_PICKAXE, phase: 0, hold: 'mine' } : null;
+    working && CAT_PICKAXE !== null ? { look: CAT_PICKAXE, phase: 0, hold: 'mine' } : null;
   drawCatSprite(
     ctx,
     tile.x,
     tile.y,
     STAGE_TILE,
     {
-      facing: DONUT_FACING,
-      oneShot: donutOneShot(frame),
+      facing: CAT_FACING,
+      oneShot: catOneShot(frame),
       working: working ? 'mine' : null,
     },
     undefined,
@@ -161,13 +163,13 @@ function drawDonut(
 function drawMarker(
   ctx: CanvasRenderingContext2D,
   ground: number,
-  carlX: number,
-  donutX: number,
+  humanX: number,
+  catX: number,
   frame: number,
 ): void {
   const t = smooth(clamp01((frame - SWITCH_AT) / (BOTH_AT - SWITCH_AT)));
-  const x = lerp(carlX, donutX, t);
-  const headTiles = lerp(CARL_HEAD_TILES, DONUT_HEAD_TILES, t);
+  const x = lerp(humanX, catX, t);
+  const headTiles = lerp(HUMAN_HEAD_TILES, CAT_HEAD_TILES, t);
   const hop = Math.sin(Math.PI * t) * MARKER_HOP_PX;
   const y = ground - STAGE_TILE * headTiles - MARKER_GAP - hop;
   drawActivePlayerMarker(ctx, x, y, MARKER_RADIUS);
@@ -239,26 +241,26 @@ export function drawDualHarvestScene(
   const boulder = standingTile(rect, at(BOULDER_X));
   drawSpriteKey(ctx, BOULDER_KEY, 'idle', 0, boulder.x, boulder.y, STAGE_TILE);
 
-  const carl = standingTile(rect, at(CARL_X));
-  drawChoppingCarl(ctx, carl, frame);
-  const donut = standingTile(rect, at(DONUT_X));
-  drawDonut(ctx, donut, frame);
+  const human = standingTile(rect, at(HUMAN_X));
+  drawChoppingHuman(ctx, human, frame);
+  const cat = standingTile(rect, at(CAT_X));
+  drawCat(ctx, cat, frame);
 
   const chopFrames = chopLoopFrames();
-  const woodPopTile = standingTile(rect, (at(CARL_X) + treeX) * HALF);
+  const woodPopTile = standingTile(rect, (at(HUMAN_X) + treeX) * HALF);
   drawResourcePop(ctx, '+1 Wood', woodPopTile, frame % chopFrames);
-  const swingStart = donutSwingStart(frame);
+  const swingStart = catSwingStart(frame);
   if (swingStart !== null) {
     drawResourcePop(ctx, '+1 Stone', boulder, frame - swingStart - CAT_IMPACT_FRAMES);
   }
 
-  drawMarker(ctx, ground, at(CARL_X), at(DONUT_X), frame);
+  drawMarker(ctx, ground, at(HUMAN_X), at(CAT_X), frame);
 
   const woodChopped = Math.floor(frame / chopFrames) + 1;
-  drawTally(ctx, `Wood ${woodChopped}`, (at(CARL_X) + at(TREE_X)) * HALF, ground);
-  drawTally(ctx, `Stone ${stoneMined(frame)}`, (at(DONUT_X) + at(BOULDER_X)) * HALF, ground);
+  drawTally(ctx, `Wood ${woodChopped}`, (at(HUMAN_X) + at(TREE_X)) * HALF, ground);
+  drawTally(ctx, `Stone ${stoneMined(frame)}`, (at(CAT_X) + at(BOULDER_X)) * HALF, ground);
 
-  const centreX = (at(TREE_X) + at(DONUT_X)) * HALF;
+  const centreX = (at(TREE_X) + at(CAT_X)) * HALF;
   if (frame >= SWITCH_AT - CONTROL_LEAD_FRAMES && frame < BOTH_AT) {
     drawSwitchControl(ctx, centreX, frame, mode, switchKey, ground);
   }
@@ -276,8 +278,8 @@ export function drawDualHarvestScene(
   }
 }
 
-/** Queues Donut's idle and mining rows so the page never paints a cold figure mid-swing. */
+/** Queues the cat's idle and mining rows so the page never paints a cold figure mid-swing. */
 export function prewarmDualHarvestArt(): void {
   prewarmCatSprite();
-  prewarmCatHold('mine', DONUT_FACING, false);
+  prewarmCatHold('mine', CAT_FACING, false);
 }

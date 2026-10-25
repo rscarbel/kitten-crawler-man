@@ -1,3 +1,4 @@
+import { crawlerName } from '../characters/characters';
 import { displayNameOf } from '../ai/AIChatFeed';
 import { randomInt } from '../utils';
 import { isItemId, type ItemId } from './ItemDefs';
@@ -193,7 +194,7 @@ export const ACHIEVEMENT_DEFS: Record<AchievementId, AchievementDef> = {
   },
   doomsday_contained: {
     id: 'doomsday_contained',
-    name: "Carl's Doomsday Scenario",
+    name: `${crawlerName('human')}'s Doomsday Scenario`,
     description: 'Contain the destabilizing soul crystal before it levels the city.',
     playerType: 'both',
     lootBox: { tier: 'Gold', category: 'Adventurer' },

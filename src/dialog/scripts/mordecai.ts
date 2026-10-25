@@ -7,6 +7,7 @@
  * says once that choice has been made.
  */
 
+import { crawlerName } from '../../characters/characters';
 import type { CardinalDirection } from '../../utils';
 import type { AdviceObjectiveId } from '../../systems/mordecaiAdvice';
 import { speakerLines } from '../line';
@@ -58,7 +59,7 @@ export const MORDECAI_TUTORIAL_REMINDER_FIRE_MISSILE: DialogLine = say.line(
   'Fire your magic missile over the fence at the goblin!',
 );
 export const MORDECAI_TUTORIAL_REMINDER_SWITCH_BACK: DialogLine = say.line(
-  'Switch back to Carl. Use the Switch button, or the switch key on a keyboard.',
+  `Switch back to ${crawlerName('human')}. Use the Switch button, or the switch key on a keyboard.`,
 );
 export const MORDECAI_TUTORIAL_REMINDER_CALL_CAT: DialogLine = say.line(
   'Use the Follower button to call the cat to you first.',
@@ -115,10 +116,8 @@ export function mordecaiDebriefGearMoreSentence(crawlerName: string, itemList: s
 export const MORDECAI_DEBRIEF_GEAR_CLOSING =
   "Wear what you're carrying. The stat boosts are the point. Gear in a bag does nothing for anyone.";
 
-export const MORDECAI_DEBRIEF_HUSHED_ONLY_LINE =
-  'Donut, it looks like you have some unequipped items in your bag.';
-export const MORDECAI_DEBRIEF_HUSHED_ALSO_LINE =
-  "Donut, there's something else unworn in your bag as well.";
+export const MORDECAI_DEBRIEF_HUSHED_ONLY_LINE = `${crawlerName('cat')}, it looks like you have some unequipped items in your bag.`;
+export const MORDECAI_DEBRIEF_HUSHED_ALSO_LINE = `${crawlerName('cat')}, there's something else unworn in your bag as well.`;
 
 /** Wraps a fully assembled sequence of debrief pages as one spoken `DialogLine`. */
 export function mordecaiSpokenPages(pages: ReadonlyArray<string>): DialogLine | null {

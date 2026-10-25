@@ -4,7 +4,7 @@
  * between them at runtime: one transform from the socket, one painter.
  */
 
-import type { Pt } from '../art/carlArt';
+import type { Pt } from '../art/bipedArt';
 import { drawHeldVisual } from './heldVisualCache';
 import type { HeldVisualDef, ScriptedPropPlacement } from './heldVisualDef';
 import { type HeldVisualTransform, paintHeldVisual, type Vec3 } from './heldPaint';

@@ -14,8 +14,8 @@
  * on the ground between its feet.
  */
 
-import { type Pt, clamp01 } from '../carlArt';
-import { pt } from '../carl/geometry';
+import { type Pt, clamp01 } from '../bipedArt';
+import { pt } from '../biped/geometry';
 import {
   ANKLE_HEIGHT,
   ARM_REACH,

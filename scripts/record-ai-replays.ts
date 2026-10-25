@@ -12,6 +12,7 @@
  * Every fixture is validated against `scripts/aiReplaySchema.ts` before it is
  * written, and `replay.schema.json` is written beside them.
  */
+import { crawlerName } from '../src/characters/characters';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import * as prettier from 'prettier';
 import path from 'node:path';
@@ -29,6 +30,7 @@ import { ActionGovernor } from '../src/ai/actions/governor';
 import { FRAMES_PER_SECOND } from '../src/ai/actions/helpers';
 import type { AISceneContext } from '../src/ai/actions/types';
 import { SYSTEM_CHARACTER_NAME } from '../src/ai/characters';
+import { describeDamageSource } from '../src/ai/context/eventMapping';
 import type {
   AIContextSource,
   CrawlerName,
@@ -70,8 +72,11 @@ const SCRIPT_CONTEXT_TICK_MS = 1;
 /** Real time each step waits for the context poll to send what the step produced. */
 const SETTLE_MS = 8;
 
+const HUMAN = crawlerName('human');
+const CAT = crawlerName('cat');
+
 const FULL_HP = 100;
-const DONUT_MAX_HP = 80;
+const CAT_MAX_HP = 80;
 const PARTY_LEVEL = 3;
 const START_TILE = 5;
 const DUMMY_HP = 10;
@@ -278,9 +283,11 @@ async function buildWorld(id: string, title: string, description: string): Promi
     indoors: false,
   };
   const live: LiveInput = {
-    activeCrawler: 'Carl',
-    carl: crawlerState('Carl', FULL_HP, true),
-    donut: crawlerState('Donut', DONUT_MAX_HP, false),
+    activeCrawler: crawlerName('human'),
+    crawlers: {
+      human: crawlerState(crawlerName('human'), FULL_HP, true),
+      cat: crawlerState(crawlerName('cat'), CAT_MAX_HP, false),
+    },
     location: CORRIDOR,
     nearbyMobs: [],
     combatInProgress: false,
@@ -323,7 +330,7 @@ async function buildWorld(id: string, title: string, description: string): Promi
     readLive: () => structuredClone(live),
     isPartyInSafeRoom: () => live.location.inSafeRoom,
     isCrawlerInSafeRoom: () => live.location.inSafeRoom,
-    crawlerNameOf: (player) => (player === human ? 'Carl' : 'Donut'),
+    crawlerNameOf: (player) => (player === human ? crawlerName('human') : crawlerName('cat')),
   };
   const recorder = new AIReplayRecorder({ id, title, description, source: 'scripted', now });
   adapter.setOutboundListener(recorder.record);
@@ -409,12 +416,12 @@ const FIRST_MOB_DISTANCE_TILES = 3;
 const BOSS_DISTANCE_TILES = 4;
 /** Where the rest of the camp stands once the first goblin is down. */
 const CLOSING_MOB_DISTANCE_TILES = 2;
-const CARL_HP_AFTER_FIRST_HITS = 74;
-const CARL_HP_AFTER_BLAST = 21;
+const HUMAN_HP_AFTER_FIRST_HITS = 74;
+const HUMAN_HP_AFTER_BLAST = 21;
 const POTION_HP_RESTORED = 40;
-const DONUT_HP_REVIVED = 24;
-const CARL_HP_IN_BOSS_FIGHT = 48;
-const DONUT_HP_IN_BOSS_FIGHT = 15;
+const CAT_HP_REVIVED = 24;
+const HUMAN_HP_IN_BOSS_FIGHT = 48;
+const CAT_HP_IN_BOSS_FIGHT = 15;
 const DYNAMITE_HELD = 2;
 const XP_AFTER_FIRST_KILL = 30;
 const XP_AFTER_BLAST = 120;
@@ -429,7 +436,7 @@ async function dynamiteIncident(): Promise<AIReplayFixture> {
   const world = await buildWorld(
     'dynamite-incident',
     'The dynamite incident',
-    'Floor 1: a goblin fight Carl ends with goblin dynamite that also knocks Donut out, a revive, ' +
+    `Floor 1: a goblin fight ${HUMAN} ends with goblin dynamite that also knocks ${CAT} out, a revive, ` +
       'the Trash Gremlin boss kill, then in a safe room the player asks the System whether it remembers the dynamite.',
   );
   const { bus, human, cat, live } = world;
@@ -437,7 +444,7 @@ async function dynamiteIncident(): Promise<AIReplayFixture> {
   world.mobs.push(...goblins);
   const first = goblins[0];
   const rest = goblins.slice(1);
-  live.carl.notableItems = { 'Goblin Dynamite': DYNAMITE_HELD };
+  live.crawlers.human.notableItems = { 'Goblin Dynamite': DYNAMITE_HELD };
 
   await world.step(BEAT_MS, () => {
     live.location = GOBLIN_ROOM;
@@ -449,44 +456,44 @@ async function dynamiteIncident(): Promise<AIReplayFixture> {
   });
   await world.step(QUICK_BEAT_MS, () => {
     bus.emit('playerDodged', { player: 'Human' });
-    live.carl.hp = CARL_HP_AFTER_FIRST_HITS;
+    live.crawlers.human.hp = HUMAN_HP_AFTER_FIRST_HITS;
   });
   await world.step(QUICK_BEAT_MS, () => {
     kill(world, first, human);
     live.nearbyMobs = nearbyMobs(rest, CLOSING_MOB_DISTANCE_TILES);
-    live.carl.xp = XP_AFTER_FIRST_KILL;
+    live.crawlers.human.xp = XP_AFTER_FIRST_KILL;
   });
   await world.step(QUICK_BEAT_MS, () => {
-    live.carl.notableItems = { 'Goblin Dynamite': DYNAMITE_HELD - 1 };
+    live.crawlers.human.notableItems = { 'Goblin Dynamite': DYNAMITE_HELD - 1 };
     bus.emit('dynamiteUsed', { player: 'Human', item: 'goblin_dynamite' });
   });
   await world.step(QUICK_BEAT_MS, () => {
     for (const goblin of rest) kill(world, goblin, human);
     bus.emit('dynamiteKills', { killer: human, kills: rest.length, bossKilled: false });
     cat.lastDamageSource = { kind: 'dynamite' };
-    live.donut.hp = 0;
-    live.donut.knockedOut = true;
+    live.crawlers.cat.hp = 0;
+    live.crawlers.cat.knockedOut = true;
     bus.emit('crawlerKnockedOut', { player: cat });
-    live.carl.hp = CARL_HP_AFTER_BLAST;
-    bus.emit('healthLow', { player: 'Human', hp: CARL_HP_AFTER_BLAST, maxHp: FULL_HP });
+    live.crawlers.human.hp = HUMAN_HP_AFTER_BLAST;
+    bus.emit('healthLow', { player: 'Human', hp: HUMAN_HP_AFTER_BLAST, maxHp: FULL_HP });
     live.nearbyMobs = [];
     live.combatInProgress = false;
-    live.carl.xp = XP_AFTER_BLAST;
+    live.crawlers.human.xp = XP_AFTER_BLAST;
   });
   await world.step(BEAT_MS, () => {
-    live.carl.hp = CARL_HP_AFTER_BLAST + POTION_HP_RESTORED;
+    live.crawlers.human.hp = HUMAN_HP_AFTER_BLAST + POTION_HP_RESTORED;
     bus.emit('healingPotionUsed', { player: 'Human', hpRestored: POTION_HP_RESTORED });
   });
   await world.step(BEAT_MS, () => {
-    live.donut.hp = DONUT_HP_REVIVED;
-    live.donut.knockedOut = false;
+    live.crawlers.cat.hp = CAT_HP_REVIVED;
+    live.crawlers.cat.knockedOut = false;
     bus.emit('crawlerRevived', { player: cat });
   });
   await world.step(QUICK_BEAT_MS, () => {
     bus.emit('roomCleared', { roomIndex: GOBLIN_CAMP_ROOM_INDEX });
   });
   await world.serverAction('replay-announce-1', 'announce', {
-    text: 'Friendly fire is still fire, Carl. The viewers would like to see that again.',
+    text: `Friendly fire is still fire, ${HUMAN}. The viewers would like to see that again.`,
   });
   await world.step(LONG_BEAT_MS, () => {
     live.location = CORRIDOR;
@@ -502,17 +509,17 @@ async function dynamiteIncident(): Promise<AIReplayFixture> {
     bus.emit('bossFightInitiated', { bossType: 'trash_gremlin' });
   });
   await world.step(LONG_BEAT_MS, () => {
-    live.carl.hp = CARL_HP_IN_BOSS_FIGHT;
-    live.donut.hp = DONUT_HP_IN_BOSS_FIGHT;
-    bus.emit('healthLow', { player: 'Cat', hp: DONUT_HP_IN_BOSS_FIGHT, maxHp: DONUT_MAX_HP });
+    live.crawlers.human.hp = HUMAN_HP_IN_BOSS_FIGHT;
+    live.crawlers.cat.hp = CAT_HP_IN_BOSS_FIGHT;
+    bus.emit('healthLow', { player: 'Cat', hp: CAT_HP_IN_BOSS_FIGHT, maxHp: CAT_MAX_HP });
   });
   await world.step(BOSS_FIGHT_MS, () => {
     trashGremlin.hp = 0;
     live.nearbyMobs = [];
     live.bossFightActive = false;
     live.combatInProgress = false;
-    live.carl.xp = XP_AFTER_BOSS;
-    live.carl.level = PARTY_LEVEL + 1;
+    live.crawlers.human.xp = XP_AFTER_BOSS;
+    live.crawlers.human.level = PARTY_LEVEL + 1;
     bus.emit('bossDefeated', { bossType: 'trash_gremlin', mob: trashGremlin });
     bus.emit('playerLevelUp', { player: human, newLevel: PARTY_LEVEL + 1 });
   });
@@ -524,9 +531,15 @@ async function dynamiteIncident(): Promise<AIReplayFixture> {
   await world.step(BEAT_MS, () => {
     world.say('Hey System. Remember the dynamite?', {
       kind: 'recall',
-      mentionsAny: ['Donut', 'knocked', 'friendly fire', 'three goblins', 'blast', 'blew up'],
-      description:
-        'The System should bring up Carl lighting goblin dynamite that killed three goblins and knocked Donut out.',
+      mentionsAny: [
+        crawlerName('cat'),
+        'knocked',
+        'friendly fire',
+        'three goblins',
+        'blast',
+        'blew up',
+      ],
+      description: `The System should bring up ${HUMAN} lighting goblin dynamite that killed three goblins and knocked ${CAT} out.`,
     });
   });
   await world.step(LONG_BEAT_MS);
@@ -539,19 +552,19 @@ const MINUTES_PLAYED_BEFORE_CHALLENGE = 15;
 const RATS_FOR_CHALLENGE = 3;
 const RAT_DISTANCE_TILES = 6;
 const CHALLENGE_SECONDS = 60;
-const CARL_HP_BEFORE_DEATH = 22;
+const HUMAN_HP_BEFORE_DEATH = 22;
 const WAR_BAND_DISTANCE_TILES = 2;
 
 async function challengeAndDeath(): Promise<AIReplayFixture> {
   const world = await buildWorld(
     'challenge-and-death',
     'A challenge, then a death',
-    'Floor 1, mid-run: the System offers a three-kill challenge the party accepts and wins, then Carl ' +
+    `Floor 1, mid-run: the System offers a three-kill challenge the party accepts and wins, then ${HUMAN} ` +
       'wanders into a goblin war band and dies, respawns at the save, and asks what that challenge was.',
   );
   const { bus, human, live, session } = world;
   session.secondsPlayed = MINUTES_PLAYED_BEFORE_CHALLENGE * SECONDS_PER_MINUTE;
-  live.carl.level = PARTY_LEVEL + 1;
+  live.crawlers.human.level = PARTY_LEVEL + 1;
   const rats = Array.from({ length: RATS_FOR_CHALLENGE }, () => new Dummy('Rat', 'rat'));
   world.mobs.push(...rats);
 
@@ -566,7 +579,7 @@ async function challengeAndDeath(): Promise<AIReplayFixture> {
     seconds: CHALLENGE_SECONDS,
     count: RATS_FOR_CHALLENGE,
     mob_type: 'any',
-    pitch: 'Kill three things in a minute. Even Donut could manage that.',
+    pitch: `Kill three things in a minute. Even ${CAT} could manage that.`,
   });
   await world.step(BEAT_MS, () => {
     world.show.acceptChallenge();
@@ -594,12 +607,12 @@ async function challengeAndDeath(): Promise<AIReplayFixture> {
     bus.emit('combatStarted', { attacker: 'Cat', mobType: 'Goblin Shaman' });
   });
   await world.step(BEAT_MS, () => {
-    live.carl.hp = CARL_HP_BEFORE_DEATH;
-    bus.emit('healthLow', { player: 'Human', hp: CARL_HP_BEFORE_DEATH, maxHp: FULL_HP });
+    live.crawlers.human.hp = HUMAN_HP_BEFORE_DEATH;
+    bus.emit('healthLow', { player: 'Human', hp: HUMAN_HP_BEFORE_DEATH, maxHp: FULL_HP });
   });
   await world.step(BEAT_MS, () => {
     human.lastDamageSource = { kind: 'mob', mobType: 'Goblin Shaman', attackType: 'fireball' };
-    live.carl.hp = 0;
+    live.crawlers.human.hp = 0;
     session.deaths = 1;
     live.isPaused = true;
     bus.emit('playerDied', { fallen: human, cause: 'goblin shaman' });
@@ -607,8 +620,8 @@ async function challengeAndDeath(): Promise<AIReplayFixture> {
   await world.step(LONG_BEAT_MS, () => {
     live.isPaused = false;
     live.combatInProgress = false;
-    live.carl.hp = FULL_HP;
-    live.donut.hp = DONUT_MAX_HP;
+    live.crawlers.human.hp = FULL_HP;
+    live.crawlers.cat.hp = CAT_MAX_HP;
     live.location = SAFE_ROOM;
     live.nearbyMobs = [];
   });
@@ -673,8 +686,8 @@ function dynamiteProblems(fixture: AIReplayFixture): string[] {
   const problems: string[] = [];
   if (!events.some((event) => event.type === 'dynamiteUsed')) problems.push('no dynamiteUsed');
   const knockout = events.find((event) => event.type === 'crawlerKnockedOut');
-  if (knockout?.data.cause !== 'their own dynamite') {
-    problems.push('Donut’s knockout is not blamed on the dynamite');
+  if (knockout?.data.cause !== describeDamageSource({ kind: 'dynamite' })) {
+    problems.push(`${CAT}’s knockout is not blamed on the dynamite`);
   }
   return problems;
 }

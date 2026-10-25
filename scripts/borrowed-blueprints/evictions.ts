@@ -18,6 +18,7 @@
  * and on real interiors for Wendell and Hilda, so the gate needs no scene.
  */
 
+import { crawlerName } from '../../src/characters/characters';
 import { createAnchorQuestProgress } from '../../src/core/AnchorQuestProgress';
 import { createBriarHollowState } from '../../src/core/briarHollowState';
 import { BLUEPRINTS_GRAIN_TARGET } from '../../src/core/blueprintsQuestPhase';
@@ -59,8 +60,14 @@ const PILE_RESTOCK_FRAMES = WOOD_PILE_RESPAWN_SECONDS * UPDATES_PER_SECOND + 1;
 /** Far enough from Hilda's pile that it is out of pickup reach. */
 const AWAY_FROM_PILE_TILES = 4;
 
-const SCYTHE_BARK = 'We left the scythe behind.';
-const BLUEPRINTS_BARK = 'We left the blueprints behind.';
+const SCYTHE_BARK = {
+  human: 'Oops. We left the scythe behind.',
+  cat: 'We forgot the scythe! Poor scythe.',
+} as const satisfies Record<CrawlerKind, string>;
+const BLUEPRINTS_BARK = {
+  human: 'Oops. We left the blueprints behind.',
+  cat: 'We forgot the blueprints! The paper ones.',
+} as const satisfies Record<CrawlerKind, string>;
 
 interface Remark {
   readonly speaker: Player;
@@ -171,7 +178,7 @@ export function verifyScytheEvictionRecovery(check: Check): void {
   const { human } = rig;
   human.x = pegs.x * TILE_SIZE;
   human.y = (pegs.y + 1) * TILE_SIZE;
-  check(rig.quest.tryInteract(human), 'Carl takes the scythe off the barn wall');
+  check(rig.quest.tryInteract(human), 'the human takes the scythe off the barn wall');
   check(rig.quest.guidance()?.kind === 'grain_field', 'with it held, guidance is the grain field');
 
   human.inventory.addItem('doomsday_scenario', 1);
@@ -196,8 +203,8 @@ export function verifyScytheEvictionRecovery(check: Check): void {
   check(
     rig.remarks.length === 1 &&
       rig.remarks[0].speaker === human &&
-      remarkText(rig.remarks[0]) === SCYTHE_BARK,
-    `Carl, whose slot it was, says "${SCYTHE_BARK}" (said: ${remarkText(rig.remarks[0])})`,
+      remarkText(rig.remarks[0]) === SCYTHE_BARK.human,
+    `the human, whose slot it was, says "${SCYTHE_BARK.human}" (said: ${remarkText(rig.remarks[0])})`,
   );
 
   check(rig.quest.tryInteract(human), 'the scythe can be taken again');
@@ -234,8 +241,8 @@ export function verifyKnockedOutRemark(check: Check): void {
   check(
     rig.remarks.length === 1 &&
       rig.remarks[0].speaker === rig.human &&
-      remarkText(rig.remarks[0]) === SCYTHE_BARK,
-    'with Donut knocked out, Carl says it',
+      remarkText(rig.remarks[0]) === SCYTHE_BARK.human,
+    'with the cat knocked out, the human says it',
   );
 }
 
@@ -280,12 +287,12 @@ export function verifyBlueprintsEvictionRecovery(check: Check): void {
   check(
     rig.remarks.length === 1 &&
       rig.remarks[0].speaker === cat &&
-      remarkText(rig.remarks[0]) === BLUEPRINTS_BARK,
-    `Donut, whose slot it was, says "${BLUEPRINTS_BARK}" (said: ${remarkText(rig.remarks[0])})`,
+      remarkText(rig.remarks[0]) === BLUEPRINTS_BARK.cat,
+    `the cat, whose slot it was, says "${BLUEPRINTS_BARK.cat}" (said: ${remarkText(rig.remarks[0])})`,
   );
 
   wendellHandsBackBlueprints(check, rig, cat);
-  check(questSlotItem(cat) === 'quest_blueprints', 'Donut holds the blueprints again');
+  check(questSlotItem(cat) === 'quest_blueprints', 'the cat holds the blueprints again');
   check(rig.remarks.length === 1, 'the crystal they evicted draws no remark');
   check(
     rig.state.blueprints.phase === 'build_stations' &&
@@ -355,13 +362,13 @@ export function verifyHildaBoardsRecover(check: Check): void {
   standAt(human, pile.x, pile.y);
   room.update();
   const boardsTaken = human.inventory.countOf('quest_wood_board');
-  check(boardsTaken > 0, `Carl picks up boards from the pile (${boardsTaken})`);
+  check(boardsTaken > 0, `the human picks up boards from the pile (${boardsTaken})`);
   standAt(human, awayX, pile.y);
 
   grantBlueprintsItem(human, 'quest_scythe');
   check(
     human.inventory.countOf('quest_wood_board') === 0 && rig.evicted.join() === 'quest_wood_board',
-    "the scythe evicts Carl's boards",
+    "the scythe evicts the human's boards",
   );
 
   for (let frame = 0; frame < PILE_RESTOCK_FRAMES; frame++) room.update();
@@ -371,7 +378,7 @@ export function verifyHildaBoardsRecover(check: Check): void {
   room.update();
   check(
     cat.inventory.countOf('quest_wood_board') === boardsTaken,
-    'Donut, with a free quest slot, picks the boards back up',
+    'the cat, with a free quest slot, picks the boards back up',
   );
   check(rig.remarks.length === 0, "the boards are not this quest's to remark on");
 
@@ -381,12 +388,12 @@ export function verifyHildaBoardsRecover(check: Check): void {
   room.update();
   check(
     questSlotItem(human) === 'quest_wood_board' && room.stockedWoodPileTile === null,
-    'Carl, walking over the pile with the scythe, takes the boards',
+    'the human, walking over the pile with the scythe, takes the boards',
   );
   check(
     rig.evicted[rig.evicted.length - 1] === 'quest_scythe' &&
-      remarkText(rig.remarks[0]) === SCYTHE_BARK,
-    `evicting the scythe, and Carl says "${SCYTHE_BARK}" (said: ${remarkText(rig.remarks[0])})`,
+      remarkText(rig.remarks[0]) === SCYTHE_BARK.human,
+    `evicting the scythe, and the human says "${SCYTHE_BARK.human}" (said: ${remarkText(rig.remarks[0])})`,
   );
 }
 
@@ -407,7 +414,7 @@ export function verifyWoodPileEvictsBlueprints(check: Check, kind: CrawlerKind):
   const { room, pile } = cottage;
   const carrier = kind === 'human' ? rig.human : rig.cat;
   const partner = kind === 'human' ? rig.cat : rig.human;
-  const name = kind === 'human' ? 'Carl' : 'Donut';
+  const name = crawlerName(kind);
   carrier.isActive = true;
   partner.isActive = false;
   grantBlueprintsItem(carrier, 'quest_blueprints');
@@ -431,8 +438,8 @@ export function verifyWoodPileEvictsBlueprints(check: Check, kind: CrawlerKind):
   check(
     rig.remarks.length === 1 &&
       rig.remarks[0].speaker === carrier &&
-      remarkText(rig.remarks[0]) === BLUEPRINTS_BARK,
-    `${name} says "${BLUEPRINTS_BARK}" (said: ${remarkText(rig.remarks[0])})`,
+      remarkText(rig.remarks[0]) === BLUEPRINTS_BARK[kind],
+    `${name} says "${BLUEPRINTS_BARK[kind]}" (said: ${remarkText(rig.remarks[0])})`,
   );
   check(!rig.quest.blueprintsHeld, 'the quest no longer sees the blueprints held');
   const guidance = rig.quest.guidance();
@@ -477,7 +484,7 @@ export function verifyWoodPilePrefersFreeSlot(check: Check): void {
   room.update();
   check(
     questSlotItem(human) === 'quest_blueprints' && questSlotItem(cat) === 'quest_wood_board',
-    'Donut takes the boards and Carl keeps the blueprints',
+    'the cat takes the boards and the human keeps the blueprints',
   );
   check(rig.evicted.length === 0, 'and nothing is evicted');
 }
@@ -520,11 +527,11 @@ export function evictionSections(
     },
     { name: "Evictions: Hilda's boards come back", run: () => verifyHildaBoardsRecover(check) },
     {
-      name: "Evictions: Hilda's pile evicts Carl's blueprints",
+      name: "Evictions: Hilda's pile evicts the human's blueprints",
       run: () => verifyWoodPileEvictsBlueprints(check, 'human'),
     },
     {
-      name: "Evictions: Hilda's pile evicts Donut's blueprints",
+      name: "Evictions: Hilda's pile evicts the cat's blueprints",
       run: () => verifyWoodPileEvictsBlueprints(check, 'cat'),
     },
     {

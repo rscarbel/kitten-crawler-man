@@ -15,6 +15,7 @@
  *   npx tsx scripts/verify-ai-context.ts
  */
 
+import { crawlerName } from '../src/characters/characters';
 import { TILE_SIZE } from '../src/core/constants';
 import { EventBus } from '../src/core/EventBus';
 import { makePoison } from '../src/core/StatusEffect';
@@ -41,6 +42,7 @@ import type { ContextUpdate } from '@rscarbel/game-server-llm-sdk';
 import { SdkContextTransport } from '../src/ai/context/transport';
 import type {
   AIContextSource,
+  CrawlerName,
   CrawlerState,
   GameEvent,
   LiveInput,
@@ -67,7 +69,7 @@ const POTIONS_HELD = 3;
 const STOCKPILING_WAIT_MS = 9_000;
 const BATCH_LIMIT = 3;
 const MANY_EVENTS = 7;
-/** The safe-room fight, the death and Donut's potion: all Mordecai saw in the witness-scoping run. */
+/** The safe-room fight, the death and the cat's potion: all Mordecai saw in the witness-scoping run. */
 /** The events the witness-scoping test emits: a corridor fight, a safe-room fight, a boss fight, a death. */
 const SCOPING_EVENTS = 4;
 const WITNESSED_IN_SCOPING_TEST = 3;
@@ -219,7 +221,7 @@ function verifySnapshotDiffer(): void {
 
 // ── A scriptable scene ─────────────────────────────────────────────────────
 
-function crawler(name: 'Carl' | 'Donut', active: boolean): CrawlerState {
+function crawler(name: CrawlerName, active: boolean): CrawlerState {
   return {
     name,
     hp: FULL_HP,
@@ -253,9 +255,11 @@ class FakeScene implements AIContextSource {
     indoors: false,
   };
   live: LiveInput = {
-    activeCrawler: 'Carl',
-    carl: crawler('Carl', true),
-    donut: crawler('Donut', false),
+    activeCrawler: crawlerName('human'),
+    crawlers: {
+      human: crawler(crawlerName('human'), true),
+      cat: crawler(crawlerName('cat'), false),
+    },
     location: { kind: 'corridor', label: 'dark corridor', inSafeRoom: false, inBossArena: false },
     nearbyMobs: [],
     combatInProgress: false,
@@ -271,22 +275,23 @@ class FakeScene implements AIContextSource {
   }
 
   readLive(): LiveInput {
-    return { ...this.live, carl: { ...this.live.carl }, donut: { ...this.live.donut } };
+    const { human, cat } = this.live.crawlers;
+    return { ...this.live, crawlers: { human: { ...human }, cat: { ...cat } } };
   }
 
-  /** Where Donut stands, apart from the active crawler (Carl). */
-  donutInSafeRoom = false;
+  /** Where the cat stands, apart from the active crawler (the human). */
+  catInSafeRoom = false;
 
   isPartyInSafeRoom(): boolean {
     return this.live.location.inSafeRoom;
   }
 
-  isCrawlerInSafeRoom(crawler: 'Carl' | 'Donut'): boolean {
-    return crawler === 'Carl' ? this.live.location.inSafeRoom : this.donutInSafeRoom;
+  isCrawlerInSafeRoom(crawler: CrawlerName): boolean {
+    return crawler === crawlerName('human') ? this.live.location.inSafeRoom : this.catInSafeRoom;
   }
 
-  crawlerNameOf(player: Player): 'Carl' | 'Donut' | null {
-    return player === this.human ? 'Carl' : 'Donut';
+  crawlerNameOf(player: Player): CrawlerName | null {
+    return player === this.human ? crawlerName('human') : crawlerName('cat');
   }
 
   enterSafeRoom(inside: boolean): void {
@@ -388,7 +393,7 @@ function verifyContextChangeDetection(): void {
     itemAt(ofType(later(), 'context_set'), 0)?.payload.flags.inSafeRoom === true,
     'inSafeRoom follows the party',
   );
-  scene.live.carl.hp = LOW_HP;
+  scene.live.crawlers.human.hp = LOW_HP;
   check(
     itemAt(ofType(later(), 'context_set'), 0)?.payload.flags.lowHp === true,
     'lowHp follows the active crawler',
@@ -411,7 +416,7 @@ function verifyContextChangeDetection(): void {
   );
 
   // A tick that really sends something, so the window below starts there.
-  scene.live.carl.hp = LOW_HP + 1;
+  scene.live.crawlers.human.hp = LOW_HP + 1;
   later();
   advance(HALF_INTERVAL_MS);
   scene.live.isPaused = true;
@@ -439,10 +444,10 @@ function verifyContextChangeDetection(): void {
     'the AI intensity rides on context_set',
   );
 
-  scene.live.carl.hp = LOW_HP - 1;
+  scene.live.crawlers.human.hp = LOW_HP - 1;
   later();
   advance(HALF_INTERVAL_MS);
-  scene.live.carl.hp = LOW_HP - 2;
+  scene.live.crawlers.human.hp = LOW_HP - 2;
   check(
     ofType(builder.tick(), 'state_snapshot').length === 0,
     'state patches are held to the snapshot interval',
@@ -507,22 +512,22 @@ function verifyWitnessScoping(): void {
     'every mapped event carries a summary and a 0..1 importance',
   );
 
-  scene.donutInSafeRoom = true;
+  scene.catInSafeRoom = true;
   bus.emit('healingPotionUsed', { player: 'Cat', hpRestored: 1 });
   bus.emit('healingPotionUsed', { player: 'Human', hpRestored: 1 });
   const drinks = eventsIn(builder.tick());
-  const donutDrank = itemAt(drinks, 0);
-  const carlDrank = itemAt(drinks, 1);
+  const catDrank = itemAt(drinks, 0);
+  const humanDrank = itemAt(drinks, 1);
   check(
-    donutDrank?.witnessedBy?.includes(MORDECAI_CHARACTER_NAME) === true &&
-      carlDrank?.witnessedBy === undefined,
+    catDrank?.witnessedBy?.includes(MORDECAI_CHARACTER_NAME) === true &&
+      humanDrank?.witnessedBy === undefined,
     'witnessing follows the crawler it happened to, not the one being driven',
   );
   const briefing = builder.witnessedHighlights(MORDECAI_CHARACTER_NAME, MANY_EVENTS);
   check(
-    itemAt(briefing, 0)?.summary === donutDrank?.summary &&
+    itemAt(briefing, 0)?.summary === catDrank?.summary &&
       briefing.length === WITNESSED_IN_SCOPING_TEST &&
-      briefing.every((line) => line.summary !== carlDrank?.summary),
+      briefing.every((line) => line.summary !== humanDrank?.summary),
     'Mordecai is briefed only on what he witnessed, newest first',
   );
 }
@@ -582,8 +587,8 @@ function verifyDerivedEvents(): void {
   section('derived events');
   const { bus, scene, builder, pm, advance } = makeRig();
   builder.tick();
-  scene.live.carl.hp = LOW_HP;
-  scene.live.carl.healthPotions = POTIONS_HELD;
+  scene.live.crawlers.human.hp = LOW_HP;
+  scene.live.crawlers.human.healthPotions = POTIONS_HELD;
   bus.emit('healthLow', { player: 'Human', hp: LOW_HP, maxHp: FULL_HP });
   builder.tick();
   advance(STOCKPILING_WAIT_MS);

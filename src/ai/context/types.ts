@@ -1,8 +1,10 @@
 import type { Player } from '../../Player';
 import type { JsonObject } from './json';
+import type { PlayerCharacterName } from '../../characters/characters';
+import type { CrawlerKind } from '../../core/SkillManager';
 
 /** The two crawlers, by the names the AI knows them by. */
-export type CrawlerName = 'Carl' | 'Donut';
+export type CrawlerName = PlayerCharacterName;
 
 /**
  * A game event as the AI server receives it. `witnessedBy` names every
@@ -27,7 +29,7 @@ export type LocationKind =
 /** Where the active crawler is, in words the AI can repeat back. */
 export interface SemanticLocation {
   kind: LocationKind;
-  /** e.g. "safe room", "boss arena (the trashGremlin)", "General Store", "dark corridor near stairwell". */
+  /** e.g. "safe room", "boss arena (the Trash Gremlin)", "General Store", "dark corridor near stairwell". */
   label: string;
   inSafeRoom: boolean;
   inBossArena: boolean;
@@ -92,8 +94,8 @@ export interface SessionInput {
 /** Fast-changing state: what `state_snapshot` is built from. */
 export interface LiveInput {
   activeCrawler: CrawlerName;
-  carl: CrawlerState;
-  donut: CrawlerState;
+  /** Both crawlers, keyed by species: which character plays each is the registry's business, not this record's. */
+  crawlers: Record<CrawlerKind, CrawlerState>;
   location: SemanticLocation;
   nearbyMobs: NearbyMobState[];
   combatInProgress: boolean;

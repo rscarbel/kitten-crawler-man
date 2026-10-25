@@ -26,7 +26,7 @@
  * harness runs: `npm run render:iron-iggy`.
  */
 
-import { clamp01, deg, easeInOut, lerp } from '../../sprites/art/carlArt';
+import { clamp01, deg, easeInOut, lerp } from '../../sprites/art/bipedArt';
 import {
   ARM_ROOT_HALF,
   ELBOW_IN_FRONT,

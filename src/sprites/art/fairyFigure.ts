@@ -15,7 +15,7 @@
  * runs: `npm run render:fairy`.
  */
 
-import { clamp01, deg, easeInOut, easeOut, hump, lerp } from './carlArt';
+import { clamp01, deg, easeInOut, easeOut, hump, lerp } from './bipedArt';
 import {
   type FairyEffect,
   type FairyPose,

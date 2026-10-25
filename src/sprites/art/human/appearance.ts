@@ -1,23 +1,25 @@
 /**
- * The figure Carl is painted as in each outfit.
+ * The figure a human look is painted as in each outfit.
  *
  * A cached cell is keyed by figure, state and frame and shared by every draw,
- * so what he wears cannot be a parameter of one draw: each outfit is a figure
- * of its own, painted from the same rows, keyed by the outfit's garments and by
- * the grip his fist closes on. Only one Carl exists, so only his current
- * outfit's figures are resident, one per grip he draws with; the runtime swaps
- * them when his equipment changes and releases the old ones.
+ * so who is painted and what he wears cannot be a parameter of one draw: each
+ * look in each outfit is a figure of its own, painted from the same rows,
+ * keyed by the look, the outfit's garments and the grip his fist closes on.
+ * Only one player human exists, so only his current outfit's figures are
+ * resident, one per grip he draws with; the runtime swaps them when his
+ * equipment changes and releases the old ones.
  */
 
-import type { HumanGarmentRow } from '../carl/carlParts';
-import { type CarlPose } from '../carl/rig';
+import type { HumanGarmentRow } from '../biped/bipedParts';
+import { type BipedPose } from '../biped/rig';
 import { type FigureDef } from '../../figure/figureDef';
-import { DEFAULT_CARL_OUTFIT } from '../../garments/human/carlDressing';
+import { defaultOutfitOf } from '../../garments/human/humanDressing';
 import type { Outfit } from '../../garments/outfit';
 import {
   firstImpactFrame,
   HUMAN_FIGURE,
   HUMAN_FIGURE_PAINTING,
+  humanFigureId,
   HUMAN_ROWS,
   type HumanFigurePainting,
   humanHeldLayers,
@@ -26,6 +28,7 @@ import {
   type RowSpec,
 } from '../humanFigure';
 import { type CarriedGrip, carriedGripKey, carryInMainHand } from './carry';
+import { type HumanLook, withLookBuild } from '../../looks/humanLook';
 
 // ── What a row tells the garments that move with it ──────────────────────────
 
@@ -70,19 +73,17 @@ export function garmentRowOf(row: RowSpec): HumanGarmentRow {
  */
 export function dressedPose(
   outfit: Outfit<'human'>,
-  pose: CarlPose,
+  pose: BipedPose,
   row: RowSpec,
   frame: number,
-): CarlPose {
+): BipedPose {
   return {
     ...pose,
     outfit: { outfit, row: garmentRowOf(row), frame, frameCount: row.frameCount },
   };
 }
 
-const DEFAULT_KEY = figureKey(DEFAULT_CARL_OUTFIT, null);
-
-/** One of Carl's figures: the cells it paints, and how it paints them. */
+/** One of the human figures: the cells it paints, and how it paints them. */
 export interface HumanFigure {
   readonly def: FigureDef;
   readonly painting: HumanFigurePainting;
@@ -96,39 +97,52 @@ const figuresByKey = new Map<string, HumanFigure>();
 
 const BASE_FIGURE: HumanFigure = { def: HUMAN_FIGURE, painting: HUMAN_FIGURE_PAINTING };
 
-/** The key a figure is cached under: the outfit, and the handle in his main hand if any. */
-function figureKey(outfit: Outfit<'human'>, held: CarriedGrip | null): string {
-  return held === null ? outfit.key : `${outfit.key}:holding-${carriedGripKey(held)}`;
+/** The key a figure is cached under: the look, the outfit, and the handle in his main hand if any. */
+function figureKey(look: HumanLook, outfit: Outfit<'human'>, held: CarriedGrip | null): string {
+  const dressed = `${humanFigureId(look)}:${outfit.key}`;
+  return held === null ? dressed : `${dressed}:holding-${carriedGripKey(held)}`;
 }
 
+const BASE_KEY = figureKey(
+  HUMAN_FIGURE_PAINTING.look,
+  defaultOutfitOf(HUMAN_FIGURE_PAINTING.look),
+  null,
+);
+
 /**
- * The figure Carl is painted as in `outfit`, his main hand closed on an
- * equipment-chosen item the way `held` says, or holding nothing. The default
- * outfit holding nothing is `HUMAN_FIGURE` itself; every other shares its
- * rows, cell and budget and differs in its id, in the garments laid on each pose
- * and in what closes his right fist.
+ * The figure `look` is painted as in `outfit`, his main hand closed on an
+ * equipment-chosen item the way `held` says, or holding nothing. The player's
+ * look in its default outfit holding nothing is `HUMAN_FIGURE` itself; every
+ * other shares its rows, cell and budget and differs in its id, in the look
+ * it paints, in the garments laid on each pose and in what closes his right
+ * fist.
  *
  * A held item is not part of the figure: only the fist closed round its
  * handle is, and each frame it closes on one is baked in two layers so the
  * item can be drawn between them.
  */
-export function humanFigureFor(outfit: Outfit<'human'>, held: CarriedGrip | null): HumanFigure {
-  const key = figureKey(outfit, held);
-  if (key === DEFAULT_KEY) return BASE_FIGURE;
+export function humanFigureFor(
+  look: HumanLook,
+  outfit: Outfit<'human'>,
+  held: CarriedGrip | null,
+): HumanFigure {
+  const key = figureKey(look, outfit, held);
+  if (key === BASE_KEY) return BASE_FIGURE;
   const known = figuresByKey.get(key);
   if (known !== undefined) return known;
-  const dress = (pose: CarlPose, row: RowSpec, frame: number): CarlPose => {
-    const dressed = dressedPose(outfit, pose, row, frame);
+  const dress = (pose: BipedPose, row: RowSpec, frame: number): BipedPose => {
+    const dressed = withLookBuild(dressedPose(outfit, pose, row, frame), look);
     return held === null ? dressed : carryInMainHand(dressed, row, held);
   };
   const painting: HumanFigurePainting = {
+    look,
     dress,
     itemHandle: HUMAN_FIGURE_PAINTING.itemHandle,
   };
   const figure: HumanFigure = {
     def: {
       ...HUMAN_FIGURE,
-      id: `${HUMAN_FIGURE.id}:${key}`,
+      id: key,
       paintFrame: (ctx, state, frame) => paintDressedHumanFrame(ctx, state, frame, painting),
       heldLayers: humanHeldLayers(painting),
     },
@@ -138,7 +152,7 @@ export function humanFigureFor(outfit: Outfit<'human'>, held: CarriedGrip | null
   return figure;
 }
 
-/** The figure Carl is painted as in `outfit`, holding nothing of equipment's choosing. */
-export function humanFigureWearing(outfit: Outfit<'human'>): FigureDef {
-  return humanFigureFor(outfit, null).def;
+/** The figure `look` is painted as in `outfit`, holding nothing of equipment's choosing. */
+export function humanFigureWearing(look: HumanLook, outfit: Outfit<'human'>): FigureDef {
+  return humanFigureFor(look, outfit, null).def;
 }

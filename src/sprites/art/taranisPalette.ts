@@ -1,11 +1,11 @@
 /**
  * The Fury of Taranis's colours, shared by everything that draws it: the
- * sword in Carl's hand, its item icon, and the electric wave and sparks a
+ * sword in the human crawler's hand, its item icon, and the electric wave and sparks a
  * swing throws. One table, so the blade's crackle, the icon's edge and the
  * wave in the world are visibly the same lightning.
  */
 
-import type { GlossRamp, Ramp } from './carl/palette';
+import type { GlossRamp, Ramp } from './biped/palette';
 
 /** Old bronze for the hilt: crossguard, grip wrap and pommel. Warm and dull, so the blade outshines it. */
 export const TARANIS_BRONZE: Ramp = {

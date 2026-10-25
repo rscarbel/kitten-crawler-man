@@ -1,40 +1,44 @@
 /**
  * The city elf cultist — one of Miss Quill's hooded faithful — as a painted
- * figure: Carl's own rig and choreography (`carl/figure.ts`, `human/`), drawn
- * taller and narrower as an elf, in pale skin and an ankle-length violet robe,
+ * figure: the biped rig and its choreography (`biped/figure.ts`, `human/`),
+ * drawn taller and narrower as an elf, in pale skin and an ankle-length violet robe,
  * with the hood, ears, stole, sigil, girdle and shoes of
  * `cityElfCultistArt.ts` composed into it.
  *
- * Built on Carl's rig for the reason every humanoid in the town is: it is the
+ * Built on the biped rig for the reason every humanoid in the town is: it is the
  * only figure in the game whose movement convinces.
  *
  * Rows, in three views (profile drawn facing +X and mirrored at runtime):
- *    idle / idle_side / idle_away   — Carl's breathing idle, eyes smouldering
- *    walk / walk_side / walk_away   — Carl's walk, paced by ground covered
+ *    idle / idle_side / idle_away   — the figure's breathing idle, eyes smouldering
+ *    walk / walk_side / walk_away   — the figure's walk, paced by ground covered
  *    cast / cast_side / cast_away   — a palm thrust at the target, the soul
  *                                     bolt's light flaring in it and in the eyes
  */
 
-import { BARE_CARL_OUTFIT, stillOutfit } from '../garments/human/carlDressing';
+import { stillOutfit } from '../garments/human/humanDressing';
+import { outfitOf } from '../garments/outfit';
 import { type FigureDef, figureStates } from '../figure/figureDef';
-import { type CarlComposeOptions, drawCarlBack, drawCarlFront, drawCarlSide } from './carl/figure';
-import { pt, TWO_PI } from './carl/geometry';
+import {
+  type BipedComposeOptions,
+  drawBipedBack,
+  drawBipedFront,
+  drawBipedSide,
+} from './biped/figure';
+import { pt, TWO_PI } from './biped/geometry';
 import {
   FEMININE_FACING_BROW,
   FEMININE_PROFILE_BROW,
-  resetCarlExpression,
-  setCarlExpression,
-} from './carl/head';
-import {
-  resetCarlGarmentRamp,
-  resetCarlSkinHairRamp,
-  setCarlGarmentRamp,
-  setCarlSkinHairRamp,
-} from './carl/palette';
-import { type CarlPose } from './carl/rig';
-import { resetCarlSleeveCut, setCarlSleeveCut } from './carl/sleeve';
-import { resetCarlTorsoCut, setCarlTorsoCut } from './carl/torso';
-import { lerp } from './carlArt';
+  FLAT_MOUTH,
+  RIG_BROW_TONE,
+  RIG_EYES,
+} from './biped/head';
+import { type BipedPose } from './biped/rig';
+import { LEATHER_SLEEVE_CONTRAST, LEVEL_CAP, PADDED_SLEEVE } from './biped/sleeve';
+import { lerp } from './bipedArt';
+import { type HumanLook, lookPxPerUnit } from '../looks/humanLook';
+import { DAVE_JACKET } from '../garments/human/daveJacket';
+import { RIG_LOOK } from '../looks/humans/rig';
+import { RIG_GARMENT_CUT } from './biped/torso';
 import {
   CULTIST_HAIR,
   CULTIST_ROBE,
@@ -74,8 +78,6 @@ export function cultistStateName(role: CultistRole, view: CultistView): string {
  */
 export const CULTIST_HEIGHT_SCALE = 1.08;
 const CULTIST_WIDTH_SCALE = 0.76;
-const UNIT_PX_Y = HUMAN_CELL_PX_PER_UNIT * CULTIST_HEIGHT_SCALE;
-const UNIT_PX_X = UNIT_PX_Y * CULTIST_WIDTH_SCALE;
 
 /**
  * The robe falls from the shoulders to just above the ankle — past the waist
@@ -86,20 +88,55 @@ const ROBE_HEM_DROP = 1.0;
 const ROBE_HEM_FLARE = 1.3;
 /**
  * The robe's sleeves run to the wrist and open into a wide cuff, so only the
- * hands show: an elf's forearm bared like Carl's reads as a brawler.
+ * hands show: an elf's forearm bared like Dave's reads as a brawler.
  */
 const ROBE_SLEEVE_CUFF_ALONG = 0.92;
 const ROBE_SLEEVE_CUFF_BULK = 5;
 
-/** Cold and composed: thin arched brows, a measure of Carl's scowl, a fine mouth. */
+/** Cold and composed: thin arched brows, a measure of Dave's scowl, a fine mouth. */
 const CULTIST_ANGER_SCALE = 0.3;
 const CULTIST_LIP_FULLNESS = 0.8;
-const CULTIST_EXPRESSION = {
-  angerScale: CULTIST_ANGER_SCALE,
-  profileBrow: FEMININE_PROFILE_BROW,
-  facingBrow: FEMININE_FACING_BROW,
-  lipFullness: CULTIST_LIP_FULLNESS,
-} as const;
+
+/**
+ * The cultist on the rig: Dave's crop and eyes under the hood, in the robe's
+ * own cut and an elf's face. Of Dave's base garments only the jacket is kept,
+ * recut as the robe.
+ */
+const CULTIST_LOOK: HumanLook = {
+  ...RIG_LOOK,
+  id: 'city_elf_cultist',
+  skin: CULTIST_SKIN,
+  hair: CULTIST_HAIR,
+  garment: CULTIST_ROBE,
+  garmentCut: {
+    ...RIG_GARMENT_CUT,
+    hemDrop: ROBE_HEM_DROP,
+    hasHardware: false,
+    hemFlare: ROBE_HEM_FLARE,
+  },
+  sleeveCut: {
+    cuffAlongForearm: ROBE_SLEEVE_CUFF_ALONG,
+    cuffBulk: ROBE_SLEEVE_CUFF_BULK,
+    padding: PADDED_SLEEVE,
+    capSwell: PADDED_SLEEVE,
+    capSlope: LEVEL_CAP,
+    shadeContrast: LEATHER_SLEEVE_CONTRAST,
+  },
+  expression: {
+    angerScale: CULTIST_ANGER_SCALE,
+    profileBrow: FEMININE_PROFILE_BROW,
+    facingBrow: FEMININE_FACING_BROW,
+    lipFullness: CULTIST_LIP_FULLNESS,
+    mouthSmile: FLAT_MOUTH,
+    eyes: RIG_EYES,
+    browTone: RIG_BROW_TONE,
+  },
+  heightScale: CULTIST_HEIGHT_SCALE,
+  // The slenderness is measured against the elf's own height, not the base figure's.
+  widthScale: CULTIST_HEIGHT_SCALE * CULTIST_WIDTH_SCALE,
+  baseGarments: [DAVE_JACKET],
+};
+const UNIT_PX = lookPxPerUnit(CULTIST_LOOK, HUMAN_CELL_PX_PER_UNIT);
 
 // ── Cell ─────────────────────────────────────────────────────────────────────
 
@@ -170,12 +207,12 @@ const AWAY_CAST_UPPER_ARM_SCALE = 0.6;
 /** A lean into the thrust, head-on, shown as the chest pitching toward the target. */
 const FACING_CAST_PITCH = 0.12;
 
-function castOpenHand(pose: CarlPose, glow: number): void {
+function castOpenHand(pose: BipedPose, glow: number): void {
   pose.rightHandShape = 'open';
   pose.palmGlow = { hand: 'right', strength: glow };
 }
 
-function castSide(frame: number): CarlPose {
+function castSide(frame: number): BipedPose {
   const pose = idleSide(0);
   const reach = castTrack(CAST_REACH, frame);
   pose.rightArmAngles = {
@@ -193,7 +230,7 @@ function castSide(frame: number): CarlPose {
   return pose;
 }
 
-function castFacing(frame: number, away: boolean): CarlPose {
+function castFacing(frame: number, away: boolean): BipedPose {
   const pose = away ? idleBack(0) : idleFront(0);
   const reach = castTrack(CAST_REACH, frame);
   const rest = pose.rightHand;
@@ -215,21 +252,21 @@ function castFacing(frame: number, away: boolean): CarlPose {
 
 interface CultistRow {
   readonly frames: number;
-  readonly pose: (frame: number) => CarlPose;
+  readonly pose: (frame: number) => BipedPose;
   readonly motion: (frame: number) => CultistMotion;
 }
 
-const IDLE_POSE: Readonly<Record<CultistView, (phase: number, lid: number) => CarlPose>> = {
+const IDLE_POSE: Readonly<Record<CultistView, (phase: number, lid: number) => BipedPose>> = {
   front: idleFront,
   side: idleSide,
   away: idleBack,
 };
-const WALK_POSE: Readonly<Record<CultistView, (phase: number) => CarlPose>> = {
+const WALK_POSE: Readonly<Record<CultistView, (phase: number) => BipedPose>> = {
   front: (phase) => walkFacing(phase, false),
   side: walkSide,
   away: (phase) => walkFacing(phase, true),
 };
-const CAST_POSE: Readonly<Record<CultistView, (frame: number) => CarlPose>> = {
+const CAST_POSE: Readonly<Record<CultistView, (frame: number) => BipedPose>> = {
   front: (frame) => castFacing(frame, false),
   side: castSide,
   away: (frame) => castFacing(frame, true),
@@ -280,40 +317,28 @@ const ROWS: ReadonlyMap<string, NamedRow> = new Map(
 );
 
 const DRAW_BY_VIEW: Readonly<
-  Record<CultistView, (ctx: Ctx, pose: CarlPose, options: CarlComposeOptions) => void>
+  Record<CultistView, (ctx: Ctx, pose: BipedPose, options: BipedComposeOptions) => void>
 > = {
-  front: drawCarlFront,
-  side: drawCarlSide,
-  away: drawCarlBack,
+  front: drawBipedFront,
+  side: drawBipedSide,
+  away: drawBipedBack,
 };
 
-/** Nothing of Carl's own over the rig's base garments: no cloak, no gauntlet, no trollskin band at the collar. */
-const NOTHING_OVER_HIS_BASE = stillOutfit(BARE_CARL_OUTFIT);
+/** Nothing over the rig's base garments: no cloak, no gauntlet, no trollskin band at the collar. */
+const NOTHING_OVER_HIS_BASE = stillOutfit(outfitOf(CULTIST_LOOK, []));
 
 function paintCultistFrame(ctx: Ctx, state: string, frame: number): void {
   const row = ROWS.get(state);
   if (row === undefined) return;
-  const pose: CarlPose = { ...row.pose(frame), outfit: NOTHING_OVER_HIS_BASE };
+  const pose: BipedPose = { ...row.pose(frame), outfit: NOTHING_OVER_HIS_BASE };
   const attachments = cultistAttachments(row.motion(frame));
-  // Reset in `finally`: a painter that throws mid-bake must not leave the next
-  // figure baked — Carl or a resident — in this one's skin, robe or face.
-  setCarlSkinHairRamp(CULTIST_SKIN, CULTIST_HAIR);
-  setCarlGarmentRamp(CULTIST_ROBE);
-  setCarlTorsoCut(ROBE_HEM_DROP, false, ROBE_HEM_FLARE);
-  setCarlSleeveCut(ROBE_SLEEVE_CUFF_ALONG, ROBE_SLEEVE_CUFF_BULK);
-  setCarlExpression(CULTIST_EXPRESSION);
   ctx.save();
   try {
     ctx.translate(ORIGIN_X, GROUND_Y);
-    ctx.scale(UNIT_PX_X, UNIT_PX_Y);
-    DRAW_BY_VIEW[row.view](ctx, pose, { attachments });
+    ctx.scale(UNIT_PX.x, UNIT_PX.y);
+    DRAW_BY_VIEW[row.view](ctx, pose, { look: CULTIST_LOOK, attachments });
   } finally {
     ctx.restore();
-    resetCarlSkinHairRamp();
-    resetCarlGarmentRamp();
-    resetCarlTorsoCut();
-    resetCarlSleeveCut();
-    resetCarlExpression();
   }
 }
 
@@ -328,7 +353,7 @@ export const CITY_ELF_CULTIST_FIGURE: FigureDef = {
   tileX: ORIGIN_X - HALF_TILE,
   tileY: GROUND_Y - CULTIST_TILE_SCALE,
   tileScale: CULTIST_TILE_SCALE,
-  // Carl's painter composes on its own surface at the bake's density, with a
+  // The biped painter composes on its own surface at the bake's density, with a
   // one-pixel outline; a supersampled bake would only smear it.
   skipSupersample: true,
   states: figureStates(FRAME_COUNTS),

@@ -10,13 +10,13 @@
  * where the item rests while it is stowed. A new item of an existing archetype
  * is data; a new archetype is new rows.
  *
- * All lengths are rig units, the units Carl is authored in (his rig is 2.03
- * units sole to crown).
+ * All lengths are rig units, the units the biped rig is authored in (it is
+ * 2.03 units sole to crown).
  */
 
 import type { CrawlerKind } from '../../core/SkillManager';
 
-export const CARL_GRIP_ARCHETYPES = [
+export const HUMAN_GRIP_ARCHETYPES = [
   'oneHandHaft',
   'twoHandHaft',
   'thrown',
@@ -24,11 +24,11 @@ export const CARL_GRIP_ARCHETYPES = [
   'carriedFlat',
   'smallHeld',
 ] as const;
-export const DONUT_GRIP_ARCHETYPES = ['mouthCarry', 'pawTool'] as const;
+export const CAT_GRIP_ARCHETYPES = ['mouthCarry', 'pawTool'] as const;
 
-export type CarlGripArchetype = (typeof CARL_GRIP_ARCHETYPES)[number];
-export type DonutGripArchetype = (typeof DONUT_GRIP_ARCHETYPES)[number];
-export type GripArchetype = CarlGripArchetype | DonutGripArchetype;
+export type HumanGripArchetype = (typeof HUMAN_GRIP_ARCHETYPES)[number];
+export type CatGripArchetype = (typeof CAT_GRIP_ARCHETYPES)[number];
+export type GripArchetype = HumanGripArchetype | CatGripArchetype;
 
 /** The archetypes a weapon item can be held in. */
 export const WEAPON_GRIP_ARCHETYPES = [
@@ -38,11 +38,11 @@ export const WEAPON_GRIP_ARCHETYPES = [
 ] as const satisfies readonly GripArchetype[];
 export type WeaponGripArchetype = (typeof WEAPON_GRIP_ARCHETYPES)[number];
 
-/** Where on Carl a held or stowed item attaches. */
-export type CarlSocket = 'mainHand' | 'offHand' | 'back' | 'hip';
-/** Where on Donut a held or stowed item attaches. */
-export type DonutSocket = 'mouth' | 'forePaw' | 'back';
-export type HeldSocket = CarlSocket | DonutSocket;
+/** Where on the human figure a held or stowed item attaches. */
+export type HumanSocket = 'mainHand' | 'offHand' | 'back' | 'hip';
+/** Where on the cat figure a held or stowed item attaches. */
+export type CatSocket = 'mouth' | 'forePaw' | 'back';
+export type HeldSocket = HumanSocket | CatSocket;
 
 /** How thick a handle is, which sets how far a gripping hand's fingers curl. */
 export type HandleRadius = 'thin' | 'standard' | 'thick';
@@ -104,8 +104,8 @@ export interface ArchetypeSpec<S extends HeldSocket> {
   readonly heldLevel: boolean;
 }
 
-type ArchetypeTable = Readonly<Record<CarlGripArchetype, ArchetypeSpec<CarlSocket>>> &
-  Readonly<Record<DonutGripArchetype, ArchetypeSpec<DonutSocket>>>;
+type ArchetypeTable = Readonly<Record<HumanGripArchetype, ArchetypeSpec<HumanSocket>>> &
+  Readonly<Record<CatGripArchetype, ArchetypeSpec<CatSocket>>>;
 
 /**
  * The ranges are the shipped art's own measurements with headroom either side:

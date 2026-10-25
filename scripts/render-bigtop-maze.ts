@@ -301,8 +301,8 @@ for (const rise of [0.2, 0.5, 0.8]) {
 push('lantern cleared', (ctx, x, y) => drawSpotlightClear(ctx, x, y, CELL, SAMPLE_PHASE));
 push('lantern dock', (ctx, x, y) => drawSpotlightDock(ctx, x, y, CELL, 0.7, SAMPLE_PHASE));
 
-push('chip DONUT', (ctx, x, y) => drawTargetNameChip(ctx, x, y, CELL, 'cat'));
-push('chip CARL', (ctx, x, y) => drawTargetNameChip(ctx, x, y, CELL, 'human'));
+push('chip cat', (ctx, x, y) => drawTargetNameChip(ctx, x, y, CELL, 'cat'));
+push('chip human', (ctx, x, y) => drawTargetNameChip(ctx, x, y, CELL, 'human'));
 
 for (const pulled of [false, true]) {
   for (const owner of ['human', 'cat'] as const) {
@@ -778,8 +778,8 @@ PUZZLE_ROWS.push([
 ]);
 
 /**
- * A little board, lit: Carl's lamp throws blue into a splitter, which sends
- * one branch on to the twin star and one up to the blue star. Donut's lamp
+ * A little board, lit: the human's lamp throws blue into a splitter, which sends
+ * one branch on to the twin star and one up to the blue star. The cat's lamp
  * throws red into a splitter of its own: one branch on to the twin's other
  * half, one up into a pivot that turns it back across the divider through a
  * window, where it sputters on a blue star. A swivel shows both its settings.

@@ -19,7 +19,7 @@ export const MAXX_IDLE_FRAMES = 12;
 export const MAXX_IDLE_FPS = 15;
 
 /**
- * The run cycle: two steps. Ten frames rather than Carl's sixteen because
+ * The run cycle: two steps. Ten frames rather than the figure's sixteen because
  * Maxx is fast and short-legged — see `MAXX_MAX_WALK_FRAMES_PER_TICK`.
  */
 export const MAXX_WALK_FRAMES = 10;

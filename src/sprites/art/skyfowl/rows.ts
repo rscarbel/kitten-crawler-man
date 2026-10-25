@@ -9,7 +9,7 @@
  * distance walked by, never elapsed time.
  */
 
-import { clamp01, deg, easeInOut, easeOut, hump, lerp } from '../carlArt';
+import { clamp01, deg, easeInOut, easeOut, hump, lerp } from '../bipedArt';
 import { splineKeys, type PathKey } from '../human/gaitShared';
 import {
   DANCE_FRAMES,

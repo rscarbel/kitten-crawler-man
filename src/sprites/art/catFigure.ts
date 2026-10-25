@@ -1,5 +1,5 @@
 /**
- * Donut, as a painted figure: the choreography, the cell geometry, and the
+ * The cat crawler, as a painted figure: the choreography, the cell geometry, and the
  * `FigureDef` the runtime cache and the review harness both draw through.
  *
  * This module is choreography and nothing else: one pose function per animation
@@ -52,32 +52,46 @@ import {
   easeInOut,
   forepawsOnHaft,
   hump,
+  legLiftOf,
   lerp,
   ramp,
   restPose,
+  rgba,
   TWO_PI,
 } from './catArt';
 import type { CatDressing } from './catParts';
+import {
+  blitLayer,
+  dilationOffsets,
+  inFigureSpace,
+  type InkReach,
+  keepOpaque,
+  layerBounds,
+  makeLayer,
+  outlineInto,
+  scratchPx,
+  withComposeLayers,
+} from './figureCompose';
+import { playerCharacter } from '../../characters/characters';
+import type { CatGait, CatLook, CatOutline } from '../looks/catLook';
+import { lateralWalkBack, lateralWalkFront, lateralWalkSide } from './catLateralWalk';
 import { CARDINAL_VIEWS, type CardinalView } from '../facingView';
 import { type FigureDef, figureStates } from '../figure/figureDef';
-import { BARE_CAT_OUTFIT, dressCat } from '../garments/cat/catDressing';
+import { BARE_CAT_OUTFIT, bareCatOutfit, dressCat } from '../garments/cat/catDressing';
 import type { GarmentFrameContext } from '../garments/garmentDef';
 import type { Outfit } from '../garments/outfit';
 
 // ── Cell geometry ────────────────────────────────────────────────────────────
 
 /**
- * The cell the poses are painted into, and where Donut's own tile sits inside
- * it.
+ * The cell the poses are painted into, and where the cat's own tile sits inside
+ * it. 160px leaves three quarters of a tile of clearance on every side, which
+ * is what a tail, a raised paw and the claw arc need at full reach.
  *
  * These five numbers are measured off the widest pose plus padding, quantised,
  * and `scripts/parity-figure-sheet.ts` proves the painter still fills
  * exactly that cell. The gates re-check that nothing paints against the edge,
  * which is what would say a pose has outgrown them.
- */
-/**
- * 160px leaves three quarters of a tile of clearance on every side, which is
- * what the tail plume, a raised paw and the claw arc need at full reach.
  */
 export const FRAME_W = 160;
 export const FRAME_H = 160;
@@ -90,7 +104,7 @@ export const TILE_Y = (FRAME_H - TILE_SCALE) / 2;
 const ORIGIN_X = TILE_X + TILE_SCALE / 2;
 const ORIGIN_Y = TILE_Y + TILE_SCALE / 2;
 /**
- * How much of a tile Donut fills. She is a housecat standing next to goblins
+ * How much of a tile the cat fills. She is a housecat standing next to goblins
  * and clowns, so she is drawn at two thirds of the anatomy's natural size —
  * scaled about her own ground line, which keeps her paws on the tile they
  * belong to. The frame keeps its full resolution; only she gets smaller.
@@ -131,7 +145,7 @@ function tail(
   rootX = 0,
   rootY = 0,
 ): TailPose {
-  return { base, curl, wave, phase, puff, flick, rootX, rootY };
+  return { base, curl, wave, phase, puff, flick, rootX, rootY, reach: 1 };
 }
 
 /**
@@ -234,7 +248,20 @@ function walkBack(phase: number): CatPose {
   };
 }
 
-/** A diagonal (trotting) gait: it reads far more clearly than a lateral walk at tile size. */
+/** Her walk in each view, as a pose for each phase of its cycle. */
+type CatWalk = Readonly<Record<CardinalView, (phase: number) => CatPose>>;
+
+/** Each gait's walk, by the gait a look declares. */
+const WALKS: Readonly<Record<CatGait, CatWalk>> = {
+  trot: { front: walkFront, side: walkSide, back: walkBack },
+  lateralWalk: { front: lateralWalkFront, side: lateralWalkSide, back: lateralWalkBack },
+};
+
+function walkOf(look: CatLook): CatWalk {
+  return WALKS[look.gait];
+}
+
+/** Pumpkin's walk in profile: a diagonal trot, the diagonal pairs of paws moving together. */
 function walkSide(phase: number): CatPose {
   const angle = phase * TWO_PI;
   const rest = restPose();
@@ -280,12 +307,25 @@ function idleFront(phase: number): CatPose {
   };
 }
 
+/**
+ * The back idle's tail runs this share of a cycle ahead of the rest of her.
+ * From behind the tail is the largest thing that moves, and its wave and its
+ * flick are both fastest at the start of their cycle: begun there, the row's
+ * biggest step falls on the loop's seam and reads as a pop at the wrap.
+ */
+const IDLE_BACK_TAIL_LEAD = 1 / 8;
+/**
+ * Standing from behind she lets her tail lean out past her flank: carried
+ * upright it lies flush against her dark back and reads as a flat paddle.
+ */
+const IDLE_BACK_TAIL_BASE = deg(-62);
+
 function idleBack(phase: number): CatPose {
-  const angle = phase * TWO_PI;
+  const tailAngle = (phase + IDLE_BACK_TAIL_LEAD) * TWO_PI;
   const front = idleFront(phase);
   return {
     ...front,
-    tail: tail(BACK_TAIL_BASE, -0.45, 0.3, angle, 0.25, 0.4 * Math.sin(angle * 2)),
+    tail: tail(IDLE_BACK_TAIL_BASE, -0.45, 0.3, tailAngle, 0.25, 0.4 * Math.sin(tailAngle * 2)),
   };
 }
 
@@ -841,8 +881,16 @@ const TAIL_BASE_FOR: Readonly<Record<CardinalView, number>> = {
   back: BACK_TAIL_BASE,
 };
 
-/** One frame of a two-paw swing in `view`: her body and both paws closed on the haft. */
-function swingPose(keys: SwingKeys, view: CardinalView, frame: number): CatPose {
+/**
+ * One frame of a two-paw swing in `view` for a cat looking like `look`: her
+ * body, and both paws closed on the haft. A cat whose legs hold her higher
+ * swings the same arc as high again above the floor, so the haft stays where
+ * her chest and head are. Her head rides her legs' lift less the drop of her
+ * neck, so a raised swing, which passes between her chest and her chin, rises
+ * by the mean of the two lifts: lifted with her chest alone, a low-necked
+ * cat's paws close on the haft behind her chin and hide it.
+ */
+function swingPose(keys: SwingKeys, view: CardinalView, frame: number, look: CatLook): CatPose {
   const at = keys[Math.max(0, Math.min(keys.length - 1, frame))];
   const body = swingBody(frame, view, TAIL_BASE_FOR[view]);
   const leaned: CatPose = { ...body, lean: body.lean + at.lean };
@@ -853,11 +901,30 @@ function swingPose(keys: SwingKeys, view: CardinalView, frame: number): CatPose 
     haftDepth: at.depth,
     padNormal: PADS_TO_CAMERA,
   };
+  const raised = clamp01((GROUND_Y - at.butt.y) / SWING_RAISE_SPAN);
+  const liftView = liftViewOf(view);
+  const chestLift = legLiftOf(leaned, look, liftView);
+  const headLift = chestLift - look.proportions.neckDrop[liftView];
+  const swingLift = lerp(chestLift, headLift, CHEST_TO_HEAD_SHARE);
+  const butt = { x: at.butt.x, y: at.butt.y - swingLift * raised };
   return {
     ...leaned,
-    ...forepawsOnHaft(leaned, view, at.butt, grip, HAFT_PAW_SPACING, HAFT_PAW_LIFT),
+    ...forepawsOnHaft(leaned, view, butt, grip, HAFT_PAW_SPACING, HAFT_PAW_LIFT),
     grip,
   };
+}
+
+/**
+ * A swing key this far above the floor is lifted the whole of her legs'
+ * lift; one on the floor (the bite) not at all, so the tool still strikes
+ * the ground.
+ */
+const SWING_RAISE_SPAN = 0.6;
+/** A raised swing passes midway between her chest and her chin. */
+const CHEST_TO_HEAD_SHARE = 0.5;
+
+function liftViewOf(view: CardinalView): 'headOn' | 'profile' {
+  return view === 'side' ? 'profile' : 'headOn';
 }
 
 // ── Carrying in her jaws ─────────────────────────────────────────────────────
@@ -923,7 +990,12 @@ export interface RowSpec {
   readonly facesWest: boolean;
   /** What the row holds, for a row played only while she holds it. */
   readonly hold?: CatHold;
-  readonly pose: (t: number) => CatPose;
+  /**
+   * The row's pose on frame `t` for a cat looking like `look`. Two kinds of
+   * row differ by look: her walk, whose choreography the look's gait picks,
+   * and the tool swings, whose paws rise with her stance.
+   */
+  readonly pose: (t: number, look: CatLook) => CatPose;
 }
 
 /**
@@ -956,7 +1028,7 @@ const EAST_ROWS: readonly RowSpec[] = [
     frameCount: WALK_FRAMES,
     kind: 'loop',
     view: 'front',
-    pose: (f) => walkFront(cyclePhase(f, WALK_FRAMES)),
+    pose: (f, look) => walkOf(look).front(cyclePhase(f, WALK_FRAMES)),
   },
   {
     name: 'walk_side',
@@ -964,7 +1036,7 @@ const EAST_ROWS: readonly RowSpec[] = [
     frameCount: WALK_FRAMES,
     kind: 'loop',
     view: 'side',
-    pose: (f) => walkSide(cyclePhase(f, WALK_FRAMES)),
+    pose: (f, look) => walkOf(look).side(cyclePhase(f, WALK_FRAMES)),
   },
   {
     name: 'walk_away',
@@ -972,7 +1044,7 @@ const EAST_ROWS: readonly RowSpec[] = [
     frameCount: WALK_FRAMES,
     kind: 'loop',
     view: 'back',
-    pose: (f) => walkBack(cyclePhase(f, WALK_FRAMES)),
+    pose: (f, look) => walkOf(look).back(cyclePhase(f, WALK_FRAMES)),
   },
   {
     name: 'idle',
@@ -1102,17 +1174,12 @@ function swingRows(
     kind: 'oneShot',
     view,
     hold,
-    pose: (f) => swingPose(keys[view], view, f),
+    pose: (f, look) => swingPose(keys[view], view, f, look),
   }));
 }
 
 /** Her walk and idle with something in her jaws. */
 function carryRows(): RowSpec[] {
-  const walks: Readonly<Record<CardinalView, (phase: number) => CatPose>> = {
-    front: walkFront,
-    side: walkSide,
-    back: walkBack,
-  };
   const idles: Readonly<Record<CardinalView, (phase: number) => CatPose>> = {
     front: idleFront,
     side: idleSide,
@@ -1126,7 +1193,7 @@ function carryRows(): RowSpec[] {
       kind: 'loop',
       view,
       hold: 'carry',
-      pose: (f) => carrying(walks[view](cyclePhase(f, WALK_FRAMES)), view),
+      pose: (f, look) => carrying(walkOf(look)[view](cyclePhase(f, WALK_FRAMES)), view),
     },
     {
       name: `carry_idle${VIEW_SUFFIX[view]}`,
@@ -1157,18 +1224,20 @@ export const CAT_ROWS: readonly RowSpec[] = [...EAST_ROWS, ...WEST_ROWS];
 
 /**
  * Paints `pose` the way `row` is painted: in the row's view, facing the row's
- * way. `front` receives the slabs in front of whatever she holds.
+ * way, looking like `look`. `front` receives the slabs in front of whatever
+ * she holds.
  */
 export function paintCatPose(
   ctx: CanvasRenderingContext2D,
+  look: CatLook,
   row: RowSpec,
   pose: CatPose,
   dressing: CatDressing,
   front: CanvasRenderingContext2D | null = null,
 ): void {
-  if (row.view === 'front') drawCatFront(ctx, pose, dressing, front);
-  else if (row.view === 'back') drawCatBack(ctx, pose, dressing, front);
-  else drawCatSide(ctx, pose, dressing, row.facesWest ? 'left' : 'right', front);
+  if (row.view === 'front') drawCatFront(ctx, pose, dressing, look, front);
+  else if (row.view === 'back') drawCatBack(ctx, pose, dressing, look, front);
+  else drawCatSide(ctx, pose, dressing, look, row.facesWest ? 'left' : 'right', front);
 }
 
 function rowOf(state: string): RowSpec | undefined {
@@ -1192,8 +1261,8 @@ export function catGarmentContext(
 }
 
 /**
- * Paints one cell of Donut, in the cell's own pixels, dressed by whatever
- * `dressingFor` returns for that cell.
+ * Paints one cell of a cat looking like `look`, in the cell's own pixels,
+ * dressed by whatever `dressingFor` returns for that cell.
  *
  * Every painter draws around the centre of the logical tile, and she is scaled
  * about her own ground line rather than about that centre, which is what keeps
@@ -1201,6 +1270,7 @@ export function catGarmentContext(
  */
 export function paintCatCell(
   ctx: CanvasRenderingContext2D,
+  look: CatLook,
   state: string,
   frame: number,
   dressingFor: (context: GarmentFrameContext<'cat'>) => CatDressing,
@@ -1208,15 +1278,77 @@ export function paintCatCell(
 ): void {
   const row = rowOf(state);
   if (row === undefined) return;
-  const pose = row.pose(frame);
+  const pose = row.pose(frame, look);
+  const dressing = dressingFor(catGarmentContext(row, frame, pose));
+  const paint = (target: CanvasRenderingContext2D): void =>
+    paintCatPose(target, look, row, pose, dressing, front);
   ctx.save();
   ctx.translate(ORIGIN_X, ORIGIN_Y);
   ctx.scale(TILE_SCALE, TILE_SCALE);
   ctx.translate(0, GROUND_Y);
   ctx.scale(CAT_SCALE, CAT_SCALE);
   ctx.translate(0, -GROUND_Y);
-  paintCatPose(ctx, row, pose, dressingFor(catGarmentContext(row, frame, pose)), front);
+  if (look.outline === null) paint(ctx);
+  else paintOutlined(ctx, look.outline, paint);
   ctx.restore();
+}
+
+/** A point of her cell, cell pixels, in her pose space: {@link catPoseToCell} turned round. */
+function cellToPose(point: Pt): Pt {
+  return {
+    x: (point.x - ORIGIN_X) / (TILE_SCALE * CAT_SCALE),
+    y: GROUND_Y + ((point.y - ORIGIN_Y) / TILE_SCALE - GROUND_Y) / CAT_SCALE,
+  };
+}
+
+/** Her whole cell in pose space: everything she paints lies inside it. */
+const CELL_IN_POSE_SPACE: InkReach = {
+  points: [cellToPose({ x: 0, y: 0 }), cellToPose({ x: FRAME_W, y: FRAME_H })],
+  margin: 0,
+};
+/** Directions her outline is dilated in: enough that a two-pixel line reads round, not octagonal. */
+const OUTLINE_SAMPLES = 16;
+/**
+ * The faintest ink her outline traces round, 0–255: her ground shadow and the
+ * soft tips of her fur fall under it, so the line follows her body and not
+ * the shadow she stands in.
+ */
+const OUTLINE_MIN_ALPHA = 128;
+/** Her outline leaves the gap between two legs open rather than filling it with line. */
+const OUTLINE_CLOSES_GAPS = true;
+
+/**
+ * Paints her through `paint` on a layer of her own and lays a line round the
+ * finished silhouette: drawn part by part, every leg over her body would get
+ * a ring of its own.
+ */
+function paintOutlined(
+  ctx: CanvasRenderingContext2D,
+  outline: CatOutline,
+  paint: (target: CanvasRenderingContext2D) => void,
+): void {
+  withComposeLayers(() => {
+    const bounds = layerBounds(ctx, [CELL_IN_POSE_SPACE]);
+    const body = makeLayer(bounds);
+    const silhouette = makeLayer(bounds);
+    const out = makeLayer(bounds);
+    const scratch = makeLayer(bounds);
+    inFigureSpace(body, bounds, paint);
+    silhouette.ctx.drawImage(body.surface, 0, 0);
+    keepOpaque(silhouette, OUTLINE_MIN_ALPHA);
+    const radius = scratchPx(bounds, outline.widthPx, CAT_CELL_PX_PER_POSE_UNIT);
+    outlineInto(
+      out,
+      silhouette,
+      scratch,
+      dilationOffsets(radius, OUTLINE_SAMPLES),
+      outline.colour,
+      rgba(outline.colour, outline.alpha),
+      OUTLINE_CLOSES_GAPS,
+    );
+    out.ctx.drawImage(body.surface, 0, 0);
+    blitLayer(ctx, out, bounds);
+  });
 }
 
 /** The row named `state`, or undefined for a name that is no row of hers. */
@@ -1225,13 +1357,13 @@ export function catRowOf(state: string): RowSpec | undefined {
 }
 
 /**
- * Whether a cell of hers bakes a front layer: a frame of a row she plays
+ * Whether a cell of a cat looking like `look` bakes a front layer: a frame of a row she plays
  * holding something, whose held thing lies under one of her slabs.
  */
-export function catCellIsLayered(state: string, frame: number): boolean {
+function catCellIsLayered(look: CatLook, state: string, frame: number): boolean {
   const row = rowOf(state);
   if (row?.hold === undefined) return false;
-  return row.pose(frame).grip?.under !== undefined;
+  return row.pose(frame, look).grip?.under !== undefined;
 }
 
 /**
@@ -1253,11 +1385,11 @@ export function catRowView(state: string): CardinalView | undefined {
   return rowOf(state)?.view;
 }
 
-function rowMouth(row: RowSpec, frame: number): Pt | null {
+function rowMouth(look: CatLook, row: RowSpec, frame: number): Pt | null {
   if (row.view === 'back') return null;
-  const pose = row.pose(frame);
-  if (row.view === 'front') return catMouthFront(pose);
-  const east = catMouthSide(pose);
+  const pose = row.pose(frame, look);
+  if (row.view === 'front') return catMouthFront(pose, look);
+  const east = catMouthSide(pose, look);
   return row.facesWest ? { x: -east.x, y: east.y } : east;
 }
 
@@ -1270,14 +1402,19 @@ export function catRowFacesWest(state: string): boolean {
 const TILE_CENTRE_FRACTION = 0.5;
 
 /**
- * Where her mouth is painted on one cell, in tile fractions from the sprite's
+ * Where the mouth of a cat looking like `look` is painted on one cell, in tile fractions from the sprite's
  * tile origin, mirrored with the cell; null for a back view or an unknown row.
  * Mapped through the same placement {@link paintCatFrame} paints with.
  */
-export function catMouthInTile(state: string, frame: number, flipX: boolean): Pt | null {
+export function catMouthInTile(
+  look: CatLook,
+  state: string,
+  frame: number,
+  flipX: boolean,
+): Pt | null {
   const row = rowOf(state);
   if (row === undefined) return null;
-  const mouth = rowMouth(row, frame);
+  const mouth = rowMouth(look, row, frame);
   if (mouth === null) return null;
   const tileX = (ORIGIN_X - TILE_X) / TILE_SCALE + mouth.x * CAT_SCALE;
   const tileY = (ORIGIN_Y - TILE_Y) / TILE_SCALE + GROUND_Y + (mouth.y - GROUND_Y) * CAT_SCALE;
@@ -1291,7 +1428,7 @@ function catStateFrames(): Record<string, number> {
 }
 
 /**
- * Donut's own per-figure cache ceiling, in place of the fleet's 24 MB.
+ * The cat crawler's own per-figure cache ceiling, in place of the fleet's 24 MB.
  *
  * Measured at full scale (`bench:turn-residency`): her turning rows in every
  * view are 12.5 MB, 15.75 MB with a tool out. Carrying something in her jaws
@@ -1301,17 +1438,26 @@ function catStateFrames(): Record<string, number> {
  * window runs out: that peaked at the 24 MB ceiling, whose evictions then
  * drew cold cells as she put the thing down and walked off. Twenty-eight
  * leaves those rows their window; the cache's global ceiling is unchanged.
+ * Every cat look shares the same cell and the same rows, so a look's working
+ * set is the same bytes whoever she is, and one number serves them all; only
+ * the cat being played is ever resident (`setCatLook` releases the other).
  */
 const CAT_FIGURE_BUDGET_MEGABYTES = 28;
 
-/** The figure id of Donut with nothing on; every other outfit's id names its garments. */
-const BARE_CAT_FIGURE_ID = 'cat';
+const CAT_FIGURE_ID_PREFIX = 'cat';
 
-function catFigure(outfit: Outfit<'cat'>): FigureDef {
-  const id =
-    outfit.key === BARE_CAT_OUTFIT.key ? BARE_CAT_FIGURE_ID : `${BARE_CAT_FIGURE_ID}:${outfit.key}`;
+/**
+ * A cat figure's id: the look, so two cats never share a cached cell, and
+ * after it the garments of any outfit beyond her bare coat.
+ */
+function catFigureId(look: CatLook, outfit: Outfit<'cat'>): string {
+  const bare = `${CAT_FIGURE_ID_PREFIX}:${look.id}`;
+  return outfit.key === bareCatOutfit(look).key ? bare : `${bare}:${outfit.key}`;
+}
+
+function catFigure(look: CatLook, outfit: Outfit<'cat'>): FigureDef {
   return {
-    id,
+    id: catFigureId(look, outfit),
     frameWidth: FRAME_W,
     frameHeight: FRAME_H,
     tileX: TILE_X,
@@ -1320,33 +1466,37 @@ function catFigure(outfit: Outfit<'cat'>): FigureDef {
     states: figureStates(catStateFrames()),
     budgetMegabytes: CAT_FIGURE_BUDGET_MEGABYTES,
     paintFrame: (ctx, state, frame) =>
-      paintCatCell(ctx, state, frame, (context) => dressCat(outfit, context)),
+      paintCatCell(ctx, look, state, frame, (context) => dressCat(outfit, context)),
     heldLayers: {
-      layered: catCellIsLayered,
+      layered: (state, frame) => catCellIsLayered(look, state, frame),
       paintLayers: (back, front, state, frame) =>
-        paintCatCell(back, state, frame, (context) => dressCat(outfit, context), front),
+        paintCatCell(back, look, state, frame, (context) => dressCat(outfit, context), front),
     },
   };
 }
 
-/** Donut with nothing on but her coat. */
-export const CAT_FIGURE: FigureDef = catFigure(BARE_CAT_OUTFIT);
+/** How the cat the player controls looks. */
+export const PLAYER_CAT_LOOK: CatLook = playerCharacter('cat').look;
+
+/** The cat the player controls, with nothing on but her coat. */
+export const CAT_FIGURE: FigureDef = catFigure(PLAYER_CAT_LOOK, BARE_CAT_OUTFIT);
 
 /**
  * Built on first use: a `FigureDef` costs nothing resident, but most outfits
  * are never worn in a session.
  */
-const figuresByOutfit = new Map<string, FigureDef>([[BARE_CAT_OUTFIT.key, CAT_FIGURE]]);
+const figuresById = new Map<string, FigureDef>([[CAT_FIGURE.id, CAT_FIGURE]]);
 
 /**
- * The figure that draws Donut in `outfit`. Each look is a figure of its own,
- * because a cell is keyed on figure, state and frame alone and her garments
- * are painted into every cell.
+ * The figure that draws a cat looking like `look` in `outfit`. Each pairing
+ * is a figure of its own, because a cell is keyed on figure, state and frame
+ * alone and both her coat and her garments are painted into every cell.
  */
-export function catFigureFor(outfit: Outfit<'cat'>): FigureDef {
-  const known = figuresByOutfit.get(outfit.key);
+export function catFigureFor(look: CatLook, outfit: Outfit<'cat'>): FigureDef {
+  const id = catFigureId(look, outfit);
+  const known = figuresById.get(id);
   if (known !== undefined) return known;
-  const figure = catFigure(outfit);
-  figuresByOutfit.set(outfit.key, figure);
+  const figure = catFigure(look, outfit);
+  figuresById.set(id, figure);
   return figure;
 }

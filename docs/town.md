@@ -81,8 +81,9 @@ only _picks_ a look. `pickCitizenFigure` (`src/creatures/citizenFigure.ts`) is t
 place species chooses a cast:
 
 - **Humans:** `src/sprites/person/townCastLooks.ts` and `src/sprites/art/townCastFigure.ts`.
-  Adults are painted on Carl's rig in his gear plus a role accessory. The two child looks
-  use the person skeleton, because Carl's rig is one adult's proportions.
+  Adults are painted on the biped rig (`src/sprites/art/biped/`), each dressed and groomed
+  as itself plus a role accessory. The two child looks use the person skeleton, because
+  the biped rig is one fixed adult build.
 - **Skyfowl:** `src/sprites/art/skyfowl/` and `skyfowlCastFigure.ts`.
 - **Named residents:** each wears a fixed look from `src/creatures/residentFigures.ts`,
   which throws on a resident with no entry.
@@ -100,7 +101,7 @@ and then tried farming; every cow he owned died. He keeps Fenna's blueprints, an
 Briar Hollow's side quest "The Borrowed Blueprints" runs through his house and his
 pasture (see [The Borrowed Blueprints](#the-borrowed-blueprints)).
 
-**His look** is `resident_wendell` in `src/sprites/person/townCastLooks.ts`, on Carl's rig:
+**His look** is `resident_wendell` in `src/sprites/person/townCastLooks.ts`, on the biped rig:
 a lean, greying human with a slight stoop from the drafting table (`wendellPosture`), a
 brown waistcoat over rolled linen shirtsleeves, spectacles and a carpenter's pencil
 behind his ear (`WENDELL_ATTACHMENTS`, `src/sprites/art/human/wendellAttachments.ts`),
@@ -1094,8 +1095,8 @@ scythe whenever no crawler holds `quest_scythe` (`TileContent.scytheTaken`). In
 `GRAIN_FIELD`, the field south of the scarecrow (`briarHollowLayout.ts`), is always grain;
 its stands are left out of the chunk bake and drawn each frame from a cached four-stage
 set (`full`, `thinned`, `sparse`, `stubble`). A press next to a stand (the faced one first)
-starts a `SCYTHE_SWING_SECONDS` (1.5 s) swing, drawn on Carl's chop row paced to the swing
-with the scythe as his working tool; Donut swipes as the grain falls. The swing shows a
+starts a `SCYTHE_SWING_SECONDS` (1.5 s) swing, drawn on the human's chop row paced to the swing
+with the scythe as his working tool; the cat swipes as the grain falls. The swing shows a
 screen-wide timing bar in the HUD pass (`ScytheSwingBar`): a needle crossing a track with
 the good and perfect bands marked, laid out below the crawler and pushed in sideways or
 up off the unit frames, minimap, hotbar and a phone's buttons (compact under 520 px tall).
@@ -1503,7 +1504,7 @@ and orange `pending` while it would refuse (materials short, or the siege). The 
 would work also gets the pulsing reach glow, and the spot in reach shows its label and cost
 row. Space or a tap on the footprint starts the channel: `CONTRACT_SPOT_BASE_SECONDS` +
 `CONTRACT_SECONDS_PER_MATERIAL` × the spot's materials, scaled by the builder's
-Construction level; Carl loops `REPAIR_ROWS`. A short party is told
+Construction level; the human loops `REPAIR_ROWS`. A short party is told
 `CONTRACT_SHORT_MESSAGE` ("Not enough materials."), and a spot that would only refuse
 steps aside for any competing press target (a person, a machine). Nothing is spent on
 accept: the finish re-counts and `spend`s the spot's cost all or nothing, marks it done,
@@ -1641,7 +1642,7 @@ anything built or damaged since the party last saved.
 - `?townmap` cycles town → whole world → Briar Hollow (building outlines, the ruins
   disc, district labels).
 - `npm run render:briar-hollow` renders the village with the real art, Y-sorted like
-  `RenderPipeline`, including three Carl-at-a-wall probes; `--labels=off` for blind
+  `RenderPipeline`, including three human-at-a-wall probes; `--labels=off` for blind
   review, `--frame=world` for the whole map.
 - `npm run render:village-siege` renders siege states (bell struck, cracked, poster).
 - `?playtest=briar-hollow-kit`, `briar-hollow-village`, `briar-hollow-builders`,
@@ -1660,7 +1661,7 @@ anything built or damaged since the party last saved.
   whether Midge has left it.
 - `?playtest=contracts` stands the party outside Plumbline Farm with The Borrowed
   Blueprints finished, so Wendell offers construction contracts, and 40 boards, 10 rope
-  and 50 stone to work one. The Plea is complete and Carl's hotbar key 7 holds the
+  and 50 stone to work one. The Plea is complete and the human's hotbar key 7 holds the
   Wayfinder's Anchor (his treadmills moved to the bag), so the stone travels to Briar
   Hollow. `contracts-last-spot` adds a contract already issued at the
   Mayor's Hall with every spot done but one, the party on the hall's threshold; both
@@ -1877,7 +1878,7 @@ ambience flips it and calls `markTileDirty` on only the tiles the runners cross.
   convergence, the texture band against the lot, the registries, the arch and marionette
   surfaces, and a 6 MB sheet budget. Faults: wide-prop, flat-canvas, sheet-budget,
   loose-crossbar.
-- `npm run render:circus-grounds` renders the real floor with Carl, Donut and the
+- `npm run render:circus-grounds` renders the real floor with both crawlers and the
   quest's cast (`--stage=`, `--seeds=`, `--time=`, `--label=`) into `preview/`.
 - Dev: `?level=level3&spawn=circus`, `?level=level3&quest=<CircusQuestStage>`, the
   `circus-hire` playtest preset.
@@ -1955,8 +1956,8 @@ addition. Its top row is the wall the exit gates are cut into, its twelve floor 
 `MIRROR_BOARD_ROWS` (tent rows 20–31), and its bottom row is the wall holding each lane's
 doorway from the teaching strip (`MAZE_TEACHING_DOORWAYS`). The teaching strip's four
 floor rows (`TEACHING_STRIP_ROWS`, tent rows 33–36) sit below that, and
-`MIRROR_HALL_ROWS` spans both. `MIRROR_BOARD_DIVIDER_X` is the dividing wall: Carl's lane
-is west, Donut's east. Each lane walks in at `MIRROR_BOARD_ENTRIES` and leaves by
+`MIRROR_HALL_ROWS` spans both. `MIRROR_BOARD_DIVIDER_X` is the dividing wall: the human's lane
+is west, the cat's east. Each lane walks in at `MIRROR_BOARD_ENTRIES` and leaves by
 `MIRROR_BOARD_EXITS`.
 
 `BIG_TOP_MAZE_ROWS` leaves the hall's floor rows bare. `writeBoardIntoRows` writes each
@@ -1966,16 +1967,16 @@ board's limelights (`P` `Q`), stars (`*`), windows (`|`) and pillars (`o`) in, a
 #### The pieces
 
 - **Limelights.** One per lane in the lane's outer wall, on a row the generator picks.
-  Carl's throws **blue** east, Donut's throws **red** west. The span from the lens to
+  The human's throws **blue** east, the cat's throws **red** west. The span from the lens to
   the first optic is the **hot span**, the hall's only hazard: it burns, and it never
   moves. `boardHotSpan` walks it with every mirror's facing unknown, so no turn can
   change it. `hotSpanProblems` holds it fair. The first optic on each ray is a mirror
   within `FIRST_MIRROR_MAX_TILES` (5) of the lens, the fire stays in its own lane, and it
   never covers an entry or exit tile. The reachable row walks every lane with the hot
   span solid.
-- **Pivot mirror** (Carl's). One-sided glass that turns a quarter per blow through all
+- **Pivot mirror** (the human's). One-sided glass that turns a quarter per blow through all
   four facings (`PIVOT_CYCLE`). Light that hits its back stops.
-- **Swivel mirror** (Donut's). One-sided glass that snaps between **two** facings, which
+- **Swivel mirror** (the cat's). One-sided glass that snaps between **two** facings, which
   vary per mirror. The art shows the current facing as glass and the other as a ghost
   mark (`drawSwivelMirrorWithGhost`). A mirror's owner is always the lane its tile is
   in.
@@ -1983,7 +1984,7 @@ board's limelights (`P` `Q`), stars (`*`), windows (`|`) and pillars (`o`) in, a
   straight on **and** reflects, from either side. It is the only way one light reaches
   two stars.
 - **Window.** A glass tile in the divider. Light passes and crawlers do not.
-- **Stars**, set in wall tiles. **Blue** wants Carl's light and **red** wants Donut's.
+- **Stars**, set in wall tiles. **Blue** wants the human's light and **red** wants the cat's.
   The **twin** sits in the divider, is hit from both faces, and wants both lights at
   once. The **encore** is gold and wants either light. A star reads `dark`, `lit`,
   `half` (a twin with one light) or `fizzle` (a coloured star with only the wrong light,
@@ -2189,8 +2190,8 @@ frame (fire, opened ways, act gates, lantern warnings, name chips) stay live in
 baked frames: a red beam's marching dashes, a blue beam's glints, a star's sparks, the
 marquee chase and the turn preview's dots.
 
-- **Ownership colours are load-bearing** for the two-crawler split. Donut's props are
-  stage red and bone stripes with gilt trim and a gilt hoop. Carl's are ringmaster blue
+- **Ownership colours are load-bearing** for the two-crawler split. The cat's props are
+  stage red and bone stripes with gilt trim and a gilt hoop. The human's are ringmaster blue
   and brass on timber with brass strike chevrons. A player must name prop and owner from
   colour alone at 32 px under the stage lights. The owner's pulse and hit flash are live
   overlays over the cached frame.
@@ -2322,7 +2323,7 @@ correct while the pixels are wrong.
 
 Review harnesses for the town's art, each writing into `preview/`:
 
-- `npm run render:town-interiors -- --only=<name> --probes` renders every room, with Carl
+- `npm run render:town-interiors -- --only=<name> --probes` renders every room, with the human
   standing at a counter, a table and the door for scale.
 - `npm run render:buildings -- --only=<id>` renders the facades.
 - `npm run render:residents`, `render:human-cast` and `render:skyfowl-cast` render the

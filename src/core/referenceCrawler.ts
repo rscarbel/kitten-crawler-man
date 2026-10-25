@@ -53,7 +53,7 @@ interface ReferenceStats {
   readonly dodgeChance: number;
   /**
    * The repeating sequence mashing the attack key produces, in order. The human
-   * punches every swing; Donut's key fires her missile whenever it is off
+   * punches every swing; the cat's key fires her missile whenever it is off
    * cooldown and claws with every press in between, exactly as
    * `triggerPlayerAttack` resolves it.
    */
@@ -148,9 +148,9 @@ export function referenceStats(crawler: ReferenceCrawler, partyLevel: number): R
 }
 
 /**
- * The max HP of an on-schedule Carl at `partyLevel`: the
+ * The max HP of an on-schedule human crawler at `partyLevel`: the
  * yardstick a blow sized as a share of a crawler's health is measured against.
- * Carl rather than Donut because her constitution never grows, so her max HP
+ * The human rather than the cat because her constitution never grows, so her max HP
  * says nothing about how far into the run the party is.
  */
 export function onCurveCrawlerMaxHp(partyLevel: number): number {

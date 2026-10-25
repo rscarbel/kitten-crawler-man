@@ -12,7 +12,7 @@
  * and the knife, a handful of shapes, are painted each frame.
  */
 
-import { type Pt } from '../carlArt';
+import { type Pt } from '../bipedArt';
 import { BitmapCache, type CacheBox } from '../deuce/bitmapCache';
 import {
   type Ctx,

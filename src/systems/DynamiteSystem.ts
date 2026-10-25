@@ -45,8 +45,8 @@ import {
   type ViewRows,
 } from '../sprites/art/humanFigure';
 import { DYNAMITE_THROWING_HAND } from '../sprites/art/human/actionsThrow';
-import { type CarlRowView, prewarmHumanRow } from '../sprites/humanSprite';
-import { easeOut, type Pt } from '../sprites/art/carlArt';
+import { type HumanRowView, prewarmHumanRow } from '../sprites/humanSprite';
+import { easeOut, type Pt } from '../sprites/art/bipedArt';
 
 /** The explosives he throws through this system, by the item spent on each throw. */
 export type ThrownExplosiveId = Extract<ItemId, 'goblin_dynamite' | 'black_powder_bomb'>;
@@ -420,7 +420,7 @@ type ThrowPlacement = (ticksPending: number, hand: Pt | null) => void;
 interface HeldExplosive {
   readonly item: ThrownExplosiveId;
   /** The view whose rows have been warmed, null before the first tick. */
-  warmedView: CarlRowView | null;
+  warmedView: HumanRowView | null;
 }
 
 /** A blast's light reaches past its damage radius by this much. */

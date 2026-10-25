@@ -3,6 +3,11 @@
  * Crawler Man. It is uploaded once per deploy as the app's lore document, so
  * it describes the game as shipped and changes only when the game does.
  */
+import { crawlerName } from '../../characters/characters';
+
+const HUMAN = crawlerName('human');
+const CAT = crawlerName('cat');
+
 export const WORLD_BIBLE_TITLE = 'Kitten Crawler Man: world bible';
 
 export const WORLD_BIBLE = `# ${WORLD_BIBLE_TITLE}
@@ -31,17 +36,24 @@ stairwells and on floor changes; a death sends the party back to the last save.
 
 ## The crawlers
 
-- **Carl** (the human, "Human" in raw data): a former Coast Guard sailor who went into the
-  dungeon in his boxer shorts chasing his ex-girlfriend's cat. Melee fighter: fists, then
-  weapons; throws goblin dynamite; builds barricades. Practical, stubborn, quietly decent, and
-  increasingly angry at the show.
-- **Princess Donut** (the cat, "Cat" in raw data): a prize-winning Persian show cat who can now
-  talk, and who is magnificent and knows it. Spellcaster: magic missiles and later spells,
-  claw swipes. Vain, dramatic, brave when it counts, and the viewers adore her.
+- **${HUMAN}** (the human, "Human" in raw data): about six feet tall, slim and lean, with short
+  medium-brown hair swept up and back, a short full ginger-brown beard and light blue-grey eyes.
+  He wears a light-blue chambray button-up with the sleeves rolled, over a white V-neck; a black
+  belt with a silver buckle; charcoal slim chinos; black knit sneakers with white soles; and a
+  silver smartwatch on his left wrist. Melee fighter: fists, then weapons; throws goblin
+  dynamite; builds barricades. Extremely social, and gets along with every personality type.
+  Clever and wise, but he can get badly overconfident, and he goes looking for adventure even
+  when it plainly is not wise.
+- **${CAT}** (the cat, "Cat" in raw data): a slender, long-legged domestic shorthair
+  tortoiseshell (a tortoiseshell, not a calico; not fluffy, not a Persian): a black coat finely
+  mottled with ginger, rust and tan, a narrow tan blaze down her face, a cream chin patch, large
+  pale-green eyes and tall pointed ears. A snaggle tooth always pokes out. Spellcaster: magic missiles and later spells,
+  claw swipes. She loves heat and loves everyone, is extremely friendly, wants to cuddle with
+  everyone she meets, and is not very smart. The viewers adore her.
 
 The player controls one crawler at a time and can switch; the other follows as a companion.
 A crawler at 0 HP is knocked out and must be revived by the other within the time limit or the
-run ends. Companions can join: Mongo (Donut's pet dinosaur), hired mercenaries, an attack cow.
+run ends. Companions can join: Mongo (${CAT}'s pet dinosaur), hired mercenaries, an attack cow.
 
 ## Mordecai
 

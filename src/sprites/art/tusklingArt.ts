@@ -15,11 +15,11 @@
  *
  * The rig — the view table, the two-bone IK, the FK escape hatch for swinging
  * arms, and "every pose is an edit to one resting pose" — is taken from
- * Carl's rig (`carl/rig.ts`), the only figure in this game whose movement
+ * the biped rig (`biped/rig.ts`), the only figure in this game whose movement
  * convinces.
  */
 
-import { type Pt, clamp01, deg, lerp, mix } from './carlArt';
+import { type Pt, clamp01, deg, lerp, mix } from './bipedArt';
 import { hash1, rgba } from './ratArt';
 
 type Ctx = CanvasRenderingContext2D;
@@ -103,7 +103,7 @@ function limbTone(base: string, shade: number): string {
 
 /**
  * Total standing height. A Tuskling is 4'6" against a 6'0" human, so this is
- * three quarters of the height `carl/proportions.ts` authors, and the generator scales
+ * three quarters of the height `biped/proportions.ts` authors, and the generator scales
  * the whole figure about its own ground line afterwards.
  */
 const FIGURE_HEIGHT = 1.55;

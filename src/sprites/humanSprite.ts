@@ -25,15 +25,16 @@ import {
 } from './art/humanFigure';
 import { FACING_VIEWS, type FacingView, selectFacing } from './facingView';
 import { type HumanWarmSpan } from './humanReactions';
-import { type Pt } from './art/carlArt';
+import { type Pt } from './art/bipedArt';
 import { heldFrameAt, heldLength, TICKS_PER_SECOND } from './art/human/timing';
 import { type HumanFigure, humanFigureFor } from './art/human/appearance';
-import { BARE_CARL_OUTFIT } from './garments/human/carlDressing';
-import { type Outfit, sameOutfit } from './garments/outfit';
+import { type Outfit, outfitOf, sameOutfit } from './garments/outfit';
+import { playerCharacter } from '../characters/characters';
+import { type HumanLook, playerStatureScale } from './looks/humanLook';
 import { HUMAN_CELL_PX_PER_UNIT, mirroredTileX } from './art/human/figureScale';
 import {
-  type CarlSocketFrames,
-  carlSocketsAt,
+  type HumanSocketFrames,
+  humanSocketsAt,
   cellPointInTile,
   mirroredSocket,
   REARMOST_SOCKET_LAYER,
@@ -44,7 +45,7 @@ import {
 import type { MotionSet } from './art/human/motionSets';
 import type { ShownPlacement } from './art/human/stowedGeometry';
 import { archetypeSpec } from './held/gripArchetypes';
-import { CARL_VIEW_FALLBACK } from './carlViews';
+import { HUMAN_VIEW_FALLBACK } from './humanViews';
 import { type CarriedGrip, carriedGripKey } from './art/human/carry';
 import type { HeldVisualDef } from './held/heldVisualDef';
 import { compositeHeldItem, heldTransformAt } from './held/heldComposite';
@@ -69,7 +70,7 @@ type HumanAttackPhase = HumanRowName | null;
  * different place standing and on the hop, and in each view.
  */
 export function stampPointOf(selection: HumanRowSelection): Pt | null {
-  const anchor = stampAnchorOf(HUMAN_ROW_TABLE[selection.row]);
+  const anchor = stampAnchorOf(HUMAN_ROW_TABLE[selection.row], activeLook);
   if (anchor === null) return null;
   const x = mirroredTileX(anchor.x, selection.flipX);
   return { x, y: anchor.y };
@@ -110,27 +111,27 @@ export function rowFrameAtTicks(row: HumanRowMeta, ticks: number): number {
   return heldFrameAt(rowFrameHolds(row), ticks);
 }
 
-type CarlFallbackView = keyof typeof CARL_VIEW_FALLBACK;
+type HumanFallbackView = keyof typeof HUMAN_VIEW_FALLBACK;
 
-/** A facing view Carl has rows of his own for. */
-export type CarlRowView = Exclude<FacingView, CarlFallbackView>;
+/** A facing view the human figure has rows of its own for. */
+export type HumanRowView = Exclude<FacingView, HumanFallbackView>;
 
-function fallsBack(view: FacingView): view is CarlFallbackView {
-  return view in CARL_VIEW_FALLBACK;
+function fallsBack(view: FacingView): view is HumanFallbackView {
+  return view in HUMAN_VIEW_FALLBACK;
 }
 
-/** The view whose rows Carl is drawn in for a facing view. */
-export function carlRowView(view: FacingView): CarlRowView {
-  return fallsBack(view) ? CARL_VIEW_FALLBACK[view] : view;
+/** The view whose rows the human figure is drawn in for a facing view. */
+export function humanRowView(view: FacingView): HumanRowView {
+  return fallsBack(view) ? HUMAN_VIEW_FALLBACK[view] : view;
 }
 
 /** The row a view-keyed table names for a facing view. */
 export function viewRow(rows: ViewRows, view: FacingView): HumanRowName {
-  return rows[carlRowView(view)];
+  return rows[humanRowView(view)];
 }
 
 /** Every view he is ever drawn in, once the fallback table has had its say. */
-const DRAWN_VIEWS: ReadonlySet<FacingView> = new Set(FACING_VIEWS.map(carlRowView));
+const DRAWN_VIEWS: ReadonlySet<FacingView> = new Set(FACING_VIEWS.map(humanRowView));
 
 /** A row painted for a view he is drawn in, rather than one waiting on a fallback entry. */
 function inDrawnView(row: RowSpec): boolean {
@@ -243,26 +244,48 @@ const RESIDENT_SPANS_BY_SET: Readonly<Record<MotionSet, readonly HumanWarmSpan[]
 };
 
 /**
- * The outfit Carl is drawn in, the handle closed in his main hand, and the
+ * The outfit the human crawler is drawn in, the handle closed in his main hand, and the
  * figure that paints them. Module state rather than a player field because
  * every picture of him — the live player, a cutscene, a tutorial panel, a
  * status preview — must show the same man in the same gear, and there is
  * only ever one of him.
  *
- * Bare and empty-handed to begin with, because that is how a new game's Carl
+ * Bare and empty-handed to begin with, because that is how a new game's human crawler
  * is first drawn: nothing he starts with shows, so a first prewarm in any
  * other figure would be released on his first frame.
  */
-let activeOutfit: Outfit<'human'> = BARE_CARL_OUTFIT;
+let activeLook: HumanLook = playerCharacter('human').look;
+let activeOutfit: Outfit<'human'> = outfitOf(activeLook, []);
 let activeHeld: CarriedGrip | null = null;
-let activeFigure: HumanFigure = humanFigureFor(BARE_CARL_OUTFIT, null);
+let activeFigure: HumanFigure = humanFigureFor(activeLook, activeOutfit, null);
 /**
  * Every figure of the outfit he wears that has been drawn: the one in hand,
  * and the other held-or-not variant, kept warm across a draw or a stow.
  */
 const outfitFigures = new Set<FigureDef>([activeFigure.def]);
 
-/** The figure every draw and prewarm of Carl goes through. */
+/** Who the human crawler is painted as: the player's human, unless a preview has asked for another. */
+export function activeHumanLook(): HumanLook {
+  return activeLook;
+}
+
+/**
+ * Paints the human crawler as `look` from now on, in the garments he has on
+ * and with what is in his hand. The old look's cells are released at once:
+ * only one human look is ever resident.
+ */
+export function setHumanLook(look: HumanLook): void {
+  if (look === activeLook) return;
+  for (const figure of outfitFigures) releaseFigure(figure);
+  outfitFigures.clear();
+  activeLook = look;
+  activeOutfit = outfitOf(look, activeOutfit.worn);
+  activeFigure = humanFigureFor(look, activeOutfit, activeHeld);
+  outfitFigures.add(activeFigure.def);
+  prewarmHumanSprite();
+}
+
+/** The figure every draw and prewarm of the human crawler goes through. */
 export function activeHumanFigure(): FigureDef {
   return activeFigure.def;
 }
@@ -278,7 +301,7 @@ export function activeHumanSocketSource(): SocketSource {
 }
 
 /**
- * Dresses Carl in `outfit`. On a change the old outfit's cells are
+ * Dresses the human crawler in `outfit`. On a change the old outfit's cells are
  * released at once — his working set nearly fills his budget, so two outfits
  * cannot be resident together — and the new one's always-drawn rows are
  * queued for baking. Call it where equipment changes, which is a menu or a
@@ -293,7 +316,7 @@ export function setHumanOutfit(outfit: Outfit<'human'>): boolean {
   for (const figure of outfitFigures) releaseFigure(figure);
   outfitFigures.clear();
   activeOutfit = outfit;
-  activeFigure = humanFigureFor(outfit, activeHeld);
+  activeFigure = humanFigureFor(activeLook, outfit, activeHeld);
   outfitFigures.add(activeFigure.def);
   prewarmHumanSprite();
   return true;
@@ -315,7 +338,7 @@ export function setHumanHeld(held: CarriedGrip | null): boolean {
   const set = held?.motionSet ?? 'unarmed';
   if (key === activeKey && set === activeMotionSet()) return false;
   activeHeld = held;
-  activeFigure = humanFigureFor(activeOutfit, held);
+  activeFigure = humanFigureFor(activeLook, activeOutfit, held);
   outfitFigures.add(activeFigure.def);
   prewarmHumanSprite();
   return true;
@@ -333,7 +356,7 @@ const RESIDENT_VIEWS: Readonly<Record<MotionSet, ResidentRows>> = {
 };
 
 /**
- * Queues Carl's always-drawn rows for baking, and the wind-up of every blow a
+ * Queues the human crawler's always-drawn rows for baking, and the wind-up of every blow a
  * fight can open with, in every view, up to its impact frame: the first blow
  * is thrown the tick the button is pressed, and a cold impact frame is a
  * direct paint on the frame the hit lands. The blows later in a chain are
@@ -345,13 +368,13 @@ export function prewarmHumanSprite(): void {
   }
 }
 
-/** Queues one of Carl's rows for baking ahead of the draw that needs it: all of it, or its first `frames`. */
+/** Queues one of the human crawler's rows for baking ahead of the draw that needs it: all of it, or its first `frames`. */
 export function prewarmHumanRow(row: HumanRowName, frames?: number): void {
   prewarmFigureState(activeFigure.def, row, frames);
 }
 
 /** A bare-handed row of a view: a still picture of him holds nothing. */
-function rowInView(view: CarlRowView, test: (row: RowSpec) => boolean): RowSpec {
+function rowInView(view: HumanRowView, test: (row: RowSpec) => boolean): RowSpec {
   const row = HUMAN_ROWS.find(
     (candidate) =>
       candidate.view === view && motionSetOfRow(candidate) === 'unarmed' && test(candidate),
@@ -360,7 +383,7 @@ function rowInView(view: CarlRowView, test: (row: RowSpec) => boolean): RowSpec 
 }
 
 /**
- * A still or scripted picture of Carl — a cutscene, a tutorial panel, a
+ * A still or scripted picture of the human crawler — a cutscene, a tutorial panel, a
  * preview — described by the fields the scene has, rather than by the
  * animator a live player carries.
  */
@@ -375,7 +398,7 @@ interface HumanSpriteState {
   facingY?: number;
 }
 
-/** The row, frame and mirroring one draw of Carl paints. */
+/** The row, frame and mirroring one draw of the human crawler paints. */
 export interface HumanRowSelection {
   readonly row: HumanRowName;
   readonly frame: number;
@@ -385,7 +408,7 @@ export interface HumanRowSelection {
 /**
  * Which cell a scripted state shows. Priority (highest first): attack > walk >
  * idle, every one in the view {@link selectFacing} picks for the facing,
- * through {@link carlRowView}.
+ * through {@link humanRowView}.
  *
  * The live player never comes through here: `HumanAnimator` chooses his rows.
  *
@@ -409,7 +432,7 @@ function selectHumanRow(state: HumanSpriteState, idleSeconds: number): HumanRowS
     flipX: HUMAN_ROW_TABLE[row].mirrorable && facing.flipX,
   });
 
-  const view = carlRowView(facing.view);
+  const view = humanRowView(facing.view);
   if (attackPhase !== null && attackTimer > 0) {
     const progress = 1 - attackTimer / attackFrames;
     return pick(attackPhase, progressFrameIndex(progress, HUMAN_ROW_TABLE[attackPhase].frameCount));
@@ -430,7 +453,7 @@ function selectHumanRow(state: HumanSpriteState, idleSeconds: number): HumanRowS
 }
 
 /**
- * Draws one chosen cell of Carl. Only the profile rows are ever mirrored, so
+ * Draws one chosen cell of the human crawler. Only the profile rows are ever mirrored, so
  * his jacket never swaps sides.
  *
  * The blast Smush throws off is not part of this figure — `SmushEffectSystem`
@@ -442,8 +465,8 @@ export function drawHumanSelection(
   sy: number,
   s: number,
   selection: HumanRowSelection,
-  held: CarlHeldDraw | null = null,
-  stowed: CarlStowedDraw | null = null,
+  held: BipedHeldDraw | null = null,
+  stowed: BipedStowedDraw | null = null,
 ): void {
   // A picture that hands him nothing to hold — a preview, a bust, a portrait,
   // his body once he is down — is drawn empty-handed, never as a fist closed
@@ -456,7 +479,7 @@ export function drawHumanSelection(
 
 /** The outfit he wears, holding nothing of equipment's choosing. */
 function emptyHandedFigure(): HumanFigure {
-  const figure = humanFigureFor(activeOutfit, null);
+  const figure = humanFigureFor(activeLook, activeOutfit, null);
   outfitFigures.add(figure.def);
   return figure;
 }
@@ -467,7 +490,7 @@ export function emptyHandedHumanFigure(): FigureDef {
 }
 
 /**
- * Draws one chosen cell of one of Carl's figures, with `held` composited at
+ * Draws one chosen cell of one of the human crawler's figures, with `held` composited at
  * its socket between the cell's two layers — for a picture of him that is
  * not the man being played, such as an explainer's illustration.
  */
@@ -478,8 +501,8 @@ export function drawHumanFigureSelection(
   sy: number,
   s: number,
   selection: HumanRowSelection,
-  held: CarlHeldDraw | null,
-  stowed: CarlStowedDraw | null = null,
+  held: BipedHeldDraw | null,
+  stowed: BipedStowedDraw | null = null,
 ): void {
   const opts = selection.flipX ? { flipX: true } : {};
   const source = { id: figure.def.id, painting: figure.painting };
@@ -495,9 +518,18 @@ export function drawHumanFigureSelection(
 }
 
 /** What equipment has on him but not in his hands on one draw: the item's look, and where it rests. */
-export interface CarlStowedDraw {
+export interface BipedStowedDraw {
   readonly look: HeldVisualDef;
   readonly placement: ShownPlacement;
+}
+
+/**
+ * Cell pixels per figure unit of what a figure holds: an item is sized to his
+ * stature, not his breadth, so a slighter build swings the same sword at the
+ * same length against his height.
+ */
+export function heldPxPerUnit(source: SocketSource): number {
+  return HUMAN_CELL_PX_PER_UNIT * playerStatureScale(source.painting.look);
 }
 
 /**
@@ -507,10 +539,10 @@ export interface CarlStowedDraw {
  */
 function stowedAt(
   source: SocketSource,
-  stowed: CarlStowedDraw,
+  stowed: BipedStowedDraw,
   selection: HumanRowSelection,
 ): { readonly draw: FigureBetween; readonly behind: boolean } | null {
-  const socket = carlSocketsAt(source, selection.row, selection.frame).sockets[stowed.placement];
+  const socket = humanSocketsAt(source, selection.row, selection.frame).sockets[stowed.placement];
   return {
     behind: socket.layer === REARMOST_SOCKET_LAYER,
     draw: (ctx, place) => {
@@ -520,7 +552,7 @@ function stowedAt(
       };
       const transform = heldTransformAt(
         { ...socket, centre },
-        place.scale * HUMAN_CELL_PX_PER_UNIT,
+        place.scale * heldPxPerUnit(source),
         0,
       );
       compositeHeldItem(ctx, stowed.look, transform, 'cached');
@@ -529,7 +561,7 @@ function stowedAt(
 }
 
 /** What equipment puts in his hands on one draw: the item's look, and which of its pictures. */
-export interface CarlHeldDraw {
+export interface BipedHeldDraw {
   readonly look: HeldVisualDef;
   readonly phase: number;
 }
@@ -543,7 +575,7 @@ export interface CarlHeldDraw {
 export function explosiveHeldDraw(
   look: HeldVisualDef,
   selection: HumanRowSelection,
-): CarlHeldDraw | null {
+): BipedHeldDraw | null {
   const fuse = explosiveInHandAt(selection.row, selection.frame);
   return fuse === null ? null : { look, phase: fusePhaseOf(fuse) };
 }
@@ -553,7 +585,7 @@ export function explosiveHeldDraw(
  * two-handed haft at the fist on its butt, while both fists close on it; a
  * one-handed item in his main hand, while that hand is closed on it alone.
  */
-export function heldSocketOf(look: HeldVisualDef, frames: CarlSocketFrames): SocketFrame | null {
+export function heldSocketOf(look: HeldVisualDef, frames: HumanSocketFrames): SocketFrame | null {
   const { sockets, butt } = frames;
   if (butt !== undefined) {
     const shared = archetypeSpec(look.archetype).heldIn.length > 1;
@@ -565,10 +597,10 @@ export function heldSocketOf(look: HeldVisualDef, frames: CarlSocketFrames): Soc
 /** Composites `held` at its socket on the cell being drawn, between the cell's two layers. */
 function heldBetween(
   source: SocketSource,
-  held: CarlHeldDraw,
+  held: BipedHeldDraw,
   selection: HumanRowSelection,
 ): FigureBetween | undefined {
-  const frames = carlSocketsAt(source, selection.row, selection.frame);
+  const frames = humanSocketsAt(source, selection.row, selection.frame);
   const socket = heldSocketOf(held.look, frames);
   if (socket === null) return undefined;
   return (ctx, place) => {
@@ -578,7 +610,7 @@ function heldBetween(
     };
     const transform = heldTransformAt(
       { ...socket, centre },
-      place.scale * HUMAN_CELL_PX_PER_UNIT,
+      place.scale * heldPxPerUnit(source),
       held.phase,
     );
     compositeHeldItem(ctx, held.look, transform, 'cached');
@@ -588,7 +620,7 @@ function heldBetween(
 /** Whether both his fists close on one haft on the cell being drawn: a tool's swing. */
 export function handsShareHaft(selection: HumanRowSelection): boolean {
   return (
-    carlSocketsAt(activeHumanSocketSource(), selection.row, selection.frame).butt !== undefined
+    humanSocketsAt(activeHumanSocketSource(), selection.row, selection.frame).butt !== undefined
   );
 }
 
@@ -598,12 +630,13 @@ export function handsShareHaft(selection: HumanRowSelection): boolean {
  * leaves a carried sling from — or null where it is not held.
  */
 export function heldHeadInTile(look: HeldVisualDef, selection: HumanRowSelection): Pt | null {
-  const frames = carlSocketsAt(activeHumanSocketSource(), selection.row, selection.frame);
+  const frames = humanSocketsAt(activeHumanSocketSource(), selection.row, selection.frame);
   const held = heldSocketOf(look, frames);
   if (held === null) return null;
   const socket = mirroredSocket(held, selection.flipX);
   const reach =
-    ((1 - look.gripPoint) * look.handle.length + look.head.length) * HUMAN_CELL_PX_PER_UNIT;
+    ((1 - look.gripPoint) * look.handle.length + look.head.length) *
+    heldPxPerUnit(activeHumanSocketSource());
   const head = {
     x: socket.centre.x + socket.axis.x * reach,
     y: socket.centre.y + socket.axis.y * reach,
@@ -612,7 +645,7 @@ export function heldHeadInTile(look: HeldVisualDef, selection: HumanRowSelection
 }
 
 /**
- * Draws Carl from a scripted state (see {@link HumanSpriteState}). The breath
+ * Draws the human crawler from a scripted state (see {@link HumanSpriteState}). The breath
  * loop of a still picture runs off wall-clock time, having no ticks of its own.
  */
 export function drawHumanSprite(

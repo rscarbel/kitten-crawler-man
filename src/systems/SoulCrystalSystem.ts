@@ -1,5 +1,5 @@
 /**
- * SoulCrystalSystem — the containment beat of "Carl's Doomsday Scenario",
+ * SoulCrystalSystem — the containment beat of the Doomsday Scenario,
  * owned directly by BuildingInteriorScene and ticked every frame regardless
  * of which floor or building the players are standing in.
  *

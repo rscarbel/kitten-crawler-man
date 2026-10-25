@@ -1,6 +1,6 @@
 /**
  * The slot machine's reel symbols as vector art: cherries, a lemon, a bell, a
- * BAR plate, Mongo on his disc, Princess Donut's tiara, Carl's boots, a golden
+ * BAR plate, Mongo on his disc, a jewelled tiara, a crawler's boots, a golden
  * 7, the gold sheriff-star wild and the glowing loot-box scatter. Painted into
  * a square cell; `ui/casino/slots/slotSymbols` bakes them per size so the
  * reels only ever blit.

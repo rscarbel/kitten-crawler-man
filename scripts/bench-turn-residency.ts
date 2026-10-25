@@ -1,5 +1,5 @@
 /**
- * Whether a quick turn ever finds Carl's or Donut's rows cold, run headlessly
+ * Whether a quick turn ever finds the human's or the cat's rows cold, run headlessly
  * against the real figure cache.
  *
  * Each crawler is built, warmed as a scene warms it, and driven through turns
@@ -7,7 +7,7 @@
  * direction (past the cache's release window) followed by a keyboard snap of a
  * quarter or a half turn, on the move and standing; a menu held open past the
  * window (drawn, never ticked) before a turn; and the whole cache flushed, as a
- * render-quality change flushes it, before one — where every row held warm
+ * canvas recovery flushes it, before one — where every row held warm
  * must be asked for again on the very first frame drawn after the flush, not
  * on some later refresh. Every rendered frame draws
  * the crawler as the game does, and a cell that is not warm when it is drawn
@@ -105,7 +105,7 @@ interface Scenario {
   readonly movingAt: (tick: number) => boolean;
   /** Ticks on which the world is halted under a menu: drawn, never ticked. */
   readonly haltedAt?: (tick: number) => boolean;
-  /** The tick the whole cache is flushed on, as a render-quality change flushes it. */
+  /** The tick the whole cache is flushed on, as a canvas recovery flushes it. */
   readonly flushAt?: number;
   /** Cold cells are counted from this tick: a flush leaves even the row on screen cold. */
   readonly countFrom?: number;
@@ -234,11 +234,11 @@ interface Crawler {
 }
 
 /**
- * Carl with a weapon out whose grip and weight play `set`, read off the item
+ * The human with a weapon out whose grip and weight play `set`, read off the item
  * table so no bench names a weapon.
  */
-function carlHolding(set: ArmedMotionSet): HumanPlayer {
-  const carl = new HumanPlayer(0, 0, TILE_SIZE);
+function humanHolding(set: ArmedMotionSet): HumanPlayer {
+  const human = new HumanPlayer(0, 0, TILE_SIZE);
   const weapon = Object.keys(ITEM_DEF)
     .filter(isItemId)
     .find((id) => {
@@ -246,15 +246,15 @@ function carlHolding(set: ArmedMotionSet): HumanPlayer {
       return stats !== null && motionSetOf(HELD_VISUALS[stats.heldVisual]) === set;
     });
   if (weapon === undefined) throw new Error(`no weapon item plays the ${set} rows`);
-  carl.inventory.addItem(weapon, 1);
-  carl.inventory.equipment.equipById(weapon);
-  carl.restoreWeaponDrawn(true);
-  return carl;
+  human.inventory.addItem(weapon, 1);
+  human.inventory.equipment.equipById(weapon);
+  human.restoreWeaponDrawn(true);
+  return human;
 }
 
 const CRAWLERS: readonly Crawler[] = [
   {
-    name: 'Carl',
+    name: 'The human',
     build: () => new HumanPlayer(0, 0, TILE_SIZE),
     figure: activeHumanFigure,
     prewarm: prewarmHumanSprite,
@@ -262,15 +262,15 @@ const CRAWLERS: readonly Crawler[] = [
     holds: false,
   },
   ...ARMED_MOTION_SETS.map((set) => ({
-    name: `Carl with a ${set} weapon out`,
-    build: () => carlHolding(set),
+    name: `The human with a ${set} weapon out`,
+    build: () => humanHolding(set),
     figure: activeHumanFigure,
     prewarm: prewarmHumanSprite,
     residentRows: residentViewSpans(set).map((span) => span.row),
     holds: false,
   })),
   {
-    name: 'Donut',
+    name: 'The cat',
     build: () => new CatPlayer(0, 0, TILE_SIZE),
     figure: activeCatFigure,
     prewarm: prewarmCatSprite,

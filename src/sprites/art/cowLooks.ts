@@ -7,7 +7,7 @@
  */
 
 import { type CowBuild, type CowHide, type CowLook, type HornSpec } from './cowArt';
-import { deg } from './carlArt';
+import { deg } from './bipedArt';
 
 export type CowCoatId = 'holstein' | 'jersey' | 'dun';
 export type CowAge = 'adult' | 'calf';

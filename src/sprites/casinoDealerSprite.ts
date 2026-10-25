@@ -9,7 +9,7 @@
  * the deck, eyes on the cards, with a reaction for every outcome.
  */
 
-import { lerp } from './art/carlArt';
+import { lerp } from './art/bipedArt';
 import { scaleHumanoidBox } from './humanoidScale';
 import { deucePoseAt, type DealerState } from './art/deuce/motion';
 import { paintDeucePortrait } from './art/deuce/portrait';

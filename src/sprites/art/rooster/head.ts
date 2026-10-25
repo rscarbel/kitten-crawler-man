@@ -11,7 +11,7 @@
  * its far eye and its beak by construction rather than by a table of cases.
  */
 
-import { clamp01, lerp, mix, rgba } from '../carlArt';
+import { clamp01, lerp, mix, rgba } from '../bipedArt';
 import type { Ramp, RoosterBuildSpec } from './builds';
 import {
   type Ctx,

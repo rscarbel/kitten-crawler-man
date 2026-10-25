@@ -9,7 +9,7 @@
  *
  *   npm run render:cretin                                   every row of Sledge
  *   npx tsx scripts/render-cretin.ts --variant=bomo --row=walk_side --scale=5
- *   npx tsx scripts/render-cretin.ts --mode=lineup          all four beside Carl
+ *   npx tsx scripts/render-cretin.ts --mode=lineup          all four beside the human
  *   npx tsx scripts/render-cretin.ts --mode=strip32         every row at 32 px
  *   npx tsx scripts/render-cretin.ts --mode=shield          the amber dome
  *   --skip-gates                                            art iteration only
@@ -203,7 +203,7 @@ function blitCell(
 }
 
 /**
- * The four Cretins in each view beside Carl, at the in-game tile and enlarged
+ * The four Cretins in each view beside the human crawler, at the in-game tile and enlarged
  * with nearest-neighbour: the size read and the tell-them-apart read in one
  * picture.
  */
@@ -212,7 +212,7 @@ function renderLineup(outPath: string): void {
     {
       def: HUMAN_FIGURE,
       state: (view) => (view === 'front' ? 'idle' : `idle_${view}`),
-      label: 'Carl',
+      label: 'The human',
     },
     ...CRETIN_VARIANTS.map((variant) => ({
       def: CRETIN_FIGURES[variant],
@@ -317,7 +317,7 @@ function renderStrip32(def: FigureDef, states: readonly string[], outPath: strin
   console.log(`Wrote ${outPath} (${canvas.width}×${canvas.height}px, strip)`);
 }
 
-/** The dome's three rows enlarged, then held over Carl at the in-game tile. */
+/** The dome's three rows enlarged, then held over the human crawler at the in-game tile. */
 function renderShield(outPath: string, scale: number): void {
   const def = CRETIN_SHIELD_FIGURE;
   const rows = Object.keys(CRETIN_SHIELD_ROWS);

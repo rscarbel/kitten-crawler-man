@@ -17,7 +17,7 @@
  * bolt's tip, the wave crest's apex, the ground point under the splash.
  */
 
-import { clamp01, hump, lerp, rgba, type Pt } from './carlArt';
+import { clamp01, hump, lerp, rgba, type Pt } from './bipedArt';
 
 type Ctx = CanvasRenderingContext2D;
 

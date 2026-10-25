@@ -829,7 +829,7 @@ export const MAZE_SPOTLIGHT_CELLS: ReadonlyArray<VentSchedule> = MAZE_SPOTLIGHTS
  *
  * Every bell stands in the cat's lane and holds the pair of lanterns on its
  * row — one in each lane. That is the whole cross-character point of the act:
- * Donut buys Carl his crossing and then buys her own, and neither of them ever
+ * the cat buys the human his crossing and then buys her own, and neither of them ever
  * walks a lit floor because they timed it right on their own.
  */
 export interface MazeBell {
@@ -934,8 +934,8 @@ export type MazeTargetKind = MazeBlockKind | 'show_bell' | 'pivot_mirror' | 'swi
 /**
  * Which crawler each kind belongs to, which is also what colours it.
  *
- * Donut's are red-and-white striped canvas with gold trim and a hoop ring drawn
- * round them; Carl's are circus blue and brass on heavy timber. The palette is
+ * The cat's are red-and-white striped canvas with gold trim and a hoop ring drawn
+ * round them; the human's are circus blue and brass on heavy timber. The palette is
  * the answer to "whose job is that" from across a room.
  */
 /** Every prop kind, so a check can walk them all without naming them again. */
@@ -1139,8 +1139,8 @@ export const MAZE_HALVES: ReadonlyArray<MazeHalf> = ['human', 'cat'];
 /**
  * One steerable mirror, in tent tiles.
  *
- * Carl's pivots are heavy standing glass that turns a quarter at a time through
- * all four facings; Donut's swivels are spring-mounted and snap between two.
+ * The human's pivots are heavy standing glass that turns a quarter at a time through
+ * all four facings; the cat's swivels are spring-mounted and snap between two.
  */
 export interface MazeMirror {
   readonly id: string;

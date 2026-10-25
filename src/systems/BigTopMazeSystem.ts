@@ -22,6 +22,7 @@
  * across the door, so leaving mid-run and coming back starts it over.
  */
 
+import { crawlerName } from '../characters/characters';
 import { TILE_SIZE } from '../core/constants';
 import type { GameMap } from '../map/GameMap';
 import type { EventBus } from '../core/EventBus';
@@ -253,7 +254,7 @@ const CS_APPROACH_STOP_TILES = 1.5;
 /** Frames the camera takes to slide from the crawler onto the vine. */
 const CS_CAMERA_LERP_FRAMES = 45;
 /**
- * How long the coils take to let go while Carl is talking him down.
+ * How long the coils take to let go while the human is talking him down.
  *
  * The slump belongs to the conversation rather than to the potion: what loosens
  * the vine's grip is the dwarf inside it remembering his own name, and the
@@ -1148,7 +1149,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     // back across the tent and the switch.
     this.showBanner(
       WAY_OPENED_BANNER,
-      block.blocks === 'human' ? WAY_OPENED_FOR_CARL : WAY_OPENED_FOR_DONUT,
+      block.blocks === 'human' ? WAY_OPENED_FOR_HUMAN : WAY_OPENED_FOR_CAT,
     );
   }
 
@@ -1280,7 +1281,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
       this.openTile(MAZE_TEACHING_DOORWAYS[half]);
       this.showBanner(
         WAY_OPENED_BANNER,
-        half === 'human' ? TEACHING_OPENED_FOR_CARL : TEACHING_OPENED_FOR_DONUT,
+        half === 'human' ? TEACHING_OPENED_FOR_HUMAN : TEACHING_OPENED_FOR_CAT,
       );
     }
 
@@ -1381,7 +1382,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
   }
 
   private readyToPour(ctx: SystemContext): boolean {
-    // The human does the pouring — it is Carl who has the conversation, and the
+    // The human does the pouring — it is the human who has the conversation, and the
     // cat has no hands for a bottle.
     return (
       this.currentSectionId === 'finale' && ctx.active === ctx.human && this.bothInChamber(ctx)
@@ -1395,7 +1396,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     return dist <= TILE_SIZE * POUR_RANGE_TILES;
   }
 
-  /** Space / tap: walks Carl into the last conversation. Returns true when handled. */
+  /** Space / tap: walks the human into the last conversation. Returns true when handled. */
   tryInteract(ctx: SystemContext): boolean {
     if (!this.canPour(ctx)) return false;
     this.beginLastConversation(ctx);
@@ -1403,7 +1404,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
   }
 
   /**
-   * Both crawlers are in the ring and Carl has walked up to the pole.
+   * Both crawlers are in the ring and the human has walked up to the pole.
    *
    * The conversation runs first and the bottle is the last line of it, because
    * the potion is not what cures him — being talked back into his own name is,
@@ -2475,7 +2476,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     }
     if (!this.inChamber(active)) return;
     if (!this.bothInChamber(ctxFrame)) {
-      const waitingFor = half === 'human' ? 'Donut' : 'Carl';
+      const waitingFor = crawlerName(half === 'human' ? 'cat' : 'human');
       this.drawWorldHint(
         ctx,
         active,
@@ -2491,7 +2492,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
         active,
         camX,
         camY,
-        `Carl has the potion. Press ${this.switchControlLabel()} to switch.`,
+        `${crawlerName('human')} has the potion. Press ${this.switchControlLabel()} to switch.`,
       );
     }
   }
@@ -2602,7 +2603,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
         camY,
         half === 'cat'
           ? 'Ring the show-bell to clear the boards, or wait in the alcoves.'
-          : `Donut's bell clears the boards. Otherwise, wait in the alcoves.`,
+          : `${crawlerName('cat')}'s bell clears the boards. Otherwise, wait in the alcoves.`,
       );
       return true;
     }
@@ -2623,7 +2624,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     const activeTile = tileOf(active);
     const room = half === 'human' ? curtain.humanRoom : curtain.catRoom;
     if (!rectContains(room, activeTile.x, activeTile.y)) return;
-    const waitingFor = half === 'human' ? 'Donut' : 'Carl';
+    const waitingFor = crawlerName(half === 'human' ? 'cat' : 'human');
     this.drawWorldHint(
       ctx,
       active,
@@ -2666,8 +2667,8 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
       camX,
       camY,
       blocked.blocks === 'human'
-        ? `Donut can reach that ${thing}. Press ${control} to switch.`
-        : `Carl can break that ${thing}. Press ${control} to switch.`,
+        ? `${crawlerName('cat')} can reach that ${thing}. Press ${control} to switch.`
+        : `${crawlerName('human')} can break that ${thing}. Press ${control} to switch.`,
     );
   }
 
@@ -2703,7 +2704,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
       if (ctx === null || !this.bothInChamber(ctx)) {
         return { line: 'The chamber is open. Bring both of you to the pole.', done: false };
       }
-      return { line: 'Carl has the potion. Pour it over him.', done: false };
+      return { line: `${crawlerName('human')} has the potion. Pour it over him.`, done: false };
     }
 
     if (section === 'mirrors') {
@@ -2775,11 +2776,11 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
  * *active* crawler and the crawler this concerns is the other one.
  */
 const WAY_OPENED_BANNER = 'The way is open';
-const WAY_OPENED_FOR_CARL = 'Switch to Carl and walk through.';
-const WAY_OPENED_FOR_DONUT = 'Switch to Donut and walk through.';
+const WAY_OPENED_FOR_HUMAN = `Switch to ${crawlerName('human')} and walk through.`;
+const WAY_OPENED_FOR_CAT = `Switch to ${crawlerName('cat')} and walk through.`;
 const WAY_OPENED_FOR_BOTH = 'Both lanes can go on.';
-const TEACHING_OPENED_FOR_CARL = "Carl's doorway into the hall is open.";
-const TEACHING_OPENED_FOR_DONUT = "Donut's doorway into the hall is open.";
+const TEACHING_OPENED_FOR_HUMAN = `${crawlerName('human')}'s doorway into the hall is open.`;
+const TEACHING_OPENED_FOR_CAT = `${crawlerName('cat')}'s doorway into the hall is open.`;
 const ENCORE_BANNER = 'Bravo!';
 const ENCORE_PAID_SUBTITLE = 'An encore. The house throws coins.';
 const ENCORE_REPEAT_SUBTITLE = 'An encore. The house has nothing left to throw.';

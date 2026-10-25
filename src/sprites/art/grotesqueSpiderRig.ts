@@ -23,7 +23,7 @@
  */
 
 import type { SpiderAttackStage } from '../../creatures/grotesqueSpiderTimeline';
-import { clamp01, easeInOut, easeOut, hump, lerp, ramp } from './carlArt';
+import { clamp01, easeInOut, easeOut, hump, lerp, ramp } from './bipedArt';
 import { SPIDER_EGG_RADIUS_TILES } from './spiderEggArt';
 
 // ── Rows, stages and the pose key ────────────────────────────────────────────

@@ -4,7 +4,7 @@
  *
  * Runs the gates first, then writes:
  *   <out>/mordecai-sheet.png     every row, enlarged to 96 px per tile (3x)
- *   <out>/mordecai-context.png   standing next to Carl and town residents, at
+ *   <out>/mordecai-context.png   standing next to the human and town residents, at
  *                                32 px per tile and again enlarged 3x
  *   <out>/mordecai-ingame.png    the 32 px render blown up pixel-for-pixel, to
  *                                judge what the game actually shows
@@ -211,7 +211,7 @@ function contextSubjects(): Subject[] {
     };
   });
   return [
-    { label: 'Carl', def: HUMAN_FIGURE, state: 'idle', frame: 0 },
+    { label: 'The human', def: HUMAN_FIGURE, state: 'idle', frame: 0 },
     { label: 'Mordecai', def: INCUBUS_FIGURE, state: 'idle', frame: 0 },
     { label: 'side', def: INCUBUS_FIGURE, state: 'idle_side', frame: 0 },
     { label: 'away', def: INCUBUS_FIGURE, state: 'idle_away', frame: 0 },

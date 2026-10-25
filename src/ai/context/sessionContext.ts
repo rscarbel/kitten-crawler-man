@@ -1,5 +1,7 @@
+import { crawlerName } from '../../characters/characters';
 import type { ActionSeverity } from '../actions/types';
 import type { JsonObject } from './json';
+import { liveCrawlerNamed } from './liveState';
 import type { LiveInput, SessionInput } from './types';
 
 /** A crawler below this share of max HP is "low" for the AI and for tool policies. */
@@ -51,7 +53,7 @@ export function buildSessionFlags(
   live: LiveInput,
   commentaryOnly: boolean,
 ): SessionFlags {
-  const active = live.activeCrawler === 'Carl' ? live.carl : live.donut;
+  const active = liveCrawlerNamed(live, live.activeCrawler);
   const timerLow =
     session.levelTimerRunning &&
     session.levelTimerSeconds !== undefined &&
@@ -63,7 +65,7 @@ export function buildSessionFlags(
     inMenu: live.menuOpen,
     inBossFight: live.bossFightActive,
     lowHp: active.maxHp > 0 && active.hp / active.maxHp < LOW_HP_FRACTION,
-    crawlerDown: live.carl.knockedOut || live.donut.knockedOut,
+    crawlerDown: live.crawlers.human.knockedOut || live.crawlers.cat.knockedOut,
     indoors: session.indoors,
     levelTimerLow: timerLow,
     commentaryOnly,
@@ -82,7 +84,7 @@ export function buildSessionContext(session: SessionInput, profile: JsonObject |
       levelId: session.levelId,
       name: session.floorName,
     },
-    party: ['Carl', 'Donut', ...session.companions],
+    party: [crawlerName('human'), crawlerName('cat'), ...session.companions],
     difficulty: session.difficulty,
     minutesPlayed: Math.floor(session.secondsPlayed / SECONDS_PER_MINUTE),
     deaths: session.deaths,

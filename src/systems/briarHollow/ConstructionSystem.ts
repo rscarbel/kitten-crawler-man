@@ -42,7 +42,7 @@ import {
   REPAIR_ROWS,
   humanRowOf,
 } from '../../sprites/art/humanFigure';
-import { type CarlRowView } from '../../sprites/humanSprite';
+import { type HumanRowView } from '../../sprites/humanSprite';
 import {
   type DefenseStructures,
   type StructureRef,
@@ -158,7 +158,7 @@ const PUSH_FRAMES = 8;
 /** After this long a push that has not arrived (a body wedged on a corner) is finished by placing it. */
 const PUSH_SETTLE_GRACE_FRAMES = 4;
 const PUSH_SETTLE_FRAMES = PUSH_FRAMES + PUSH_SETTLE_GRACE_FRAMES;
-/** Hammer cadence when nobody is drawn hammering: the cat's paws, or Carl mid-flinch. */
+/** Hammer cadence when nobody is drawn hammering: the cat's paws, or the human mid-flinch. */
 const HAMMER_CADENCE_FRAMES = 30;
 /** The resource strip stays up for the whole job, renewed this often. */
 const HUD_NOTE_INTERVAL_FRAMES = UPDATES_PER_SECOND;
@@ -270,7 +270,7 @@ export interface ConstructionSystemDeps {
 
 interface Hammering {
   readonly human: HumanPlayer;
-  readonly view: CarlRowView;
+  readonly view: HumanRowView;
   readonly faceX: number;
   readonly faceY: number;
   readonly repair: boolean;
@@ -1349,7 +1349,7 @@ export class ConstructionSystem {
     }
   }
 
-  // ── Carl's hammering ────────────────────────────────────────────────────
+  // ── The human crawler's hammering ───────────────────────────────────────
 
   private targetCentre(target: StructureRef | PlannedFootprint): { x: number; y: number } | null {
     const tiles = isPlannedFootprint(target)

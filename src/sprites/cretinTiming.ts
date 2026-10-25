@@ -28,7 +28,7 @@ export const CRETIN_WALK_FRAMES = 16;
 /**
  * How much bigger than its authored proportions a Cretin is drawn, about the
  * point between its feet. The rig is authored at seven feet — a sixth taller
- * than Carl — and drawn up from there to the third again that reads as
+ * than the human crawler — and drawn up from there to the third again that reads as
  * towering over him at a 32 px tile. Everything the rig measures in its own
  * units reaches the screen multiplied by this, the walk's stride included.
  */

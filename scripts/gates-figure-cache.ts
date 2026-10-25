@@ -43,9 +43,14 @@ import {
   PREWARM_CAPACITY_RETRIES,
   releaseFigure,
   setFigureBakeClock,
+  setFigureWorldPixelRatio,
+  figureFrameStoredBytes,
+  recordFigureCellBlits,
+  takeRecordedFigureCell,
 } from '../src/sprites/figure/figureFrameCache.js';
-import { DEFAULT_CARL_OUTFIT } from '../src/sprites/garments/human/carlDressing.js';
-import { garmentOf } from '../src/sprites/garments/garments.js';
+import { defaultOutfitOf } from '../src/sprites/garments/human/humanDressing.js';
+import { playerCharacter } from '../src/characters/characters.js';
+import { wornGarmentOf } from '../src/sprites/garments/garments.js';
 import { outfitOf } from '../src/sprites/garments/outfit.js';
 import {
   activeHumanFigure,
@@ -60,6 +65,9 @@ import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { gameContext } from './nodeGameContext.js';
 
 installCanvasGlobals();
+
+/** The look the player's human is painted in, whose outfits the residency checks dress him in. */
+const PLAYER_LOOK = playerCharacter('human').look;
 
 /**
  * The cache's clock for this gate, advanced only by the synthetic painters'
@@ -160,8 +168,12 @@ function makeFigure(
     tileY: cellSize - TILE_SCALE,
     tileScale: TILE_SCALE,
     states: figureStates({ walk: frames, attack: frames }),
+    // Inked to every edge, so a cell crops to its whole extent and the byte
+    // arithmetic these gates do on whole cells is what the cache stores.
     paintFrame: (ctx, _state, frame) => {
       ctx.fillStyle = '#c0392b';
+      ctx.fillRect(0, 0, cellSize, cellSize);
+      ctx.fillStyle = '#2b7bc0';
       ctx.fillRect(frame, frame, cellSize / 2, cellSize / 2);
       gateClockMs += paintMs;
     },
@@ -1179,23 +1191,23 @@ const ROWS_DRAWN_PER_OUTFIT = 1;
   );
 }
 
-// Carl changing outfit: the outfit he took off is released, the new one warmed.
+// The human changing outfit: the outfit he took off is released, the new one warmed.
 {
   reset();
-  setHumanOutfit(DEFAULT_CARL_OUTFIT);
+  setHumanOutfit(defaultOutfitOf(PLAYER_LOOK));
   const before = activeHumanFigure();
   drawHumanSelection(ctx, 0, 0, TILE_SIZE, { row: 'idle', frame: 0, flipX: false });
   const warmBytes = figureResidentBytes(before);
   setHumanOutfit(
-    outfitOf('human', [
-      garmentOf('human', 'carl_trollskin_shirt'),
-      garmentOf('human', 'carl_cloak'),
-      garmentOf('human', 'carl_gauntlet'),
+    outfitOf(PLAYER_LOOK, [
+      wornGarmentOf('human', 'human_trollskin_shirt'),
+      wornGarmentOf('human', 'human_cloak'),
+      wornGarmentOf('human', 'human_gauntlet'),
     ]),
   );
   const after = activeHumanFigure();
   check(
-    "Carl's equipment change releases the outfit he took off",
+    "The human's equipment change releases the outfit he took off",
     warmBytes > 0 &&
       after.id !== before.id &&
       figureResidentBytes(before) === 0 &&
@@ -1205,34 +1217,34 @@ const ROWS_DRAWN_PER_OUTFIT = 1;
       `drawing ${after.id} in place of ${before.id}`,
   );
   check(
-    "Carl's equipment change queues the new outfit's rows",
+    "The human's equipment change queues the new outfit's rows",
     figurePrewarmRequests(after) > 0,
     `${after.id} has no prewarm queued after the change, so his first frames in it paint cold`,
   );
-  setHumanOutfit(DEFAULT_CARL_OUTFIT);
+  setHumanOutfit(defaultOutfitOf(PLAYER_LOOK));
 }
 
 /** Frames the geared player is drawn for, so his outfit is resident before the scene changes. */
 const TRANSIT_WARM_FRAMES = 60;
-/** Where the transit gate's Carl stands; anywhere on the map serves. */
+/** Where the transit gate's human stands; anywhere on the map serves. */
 const TRANSIT_TILE = 3;
 
-// A scene change keeps a geared Carl's warm outfit: the new scene builds a
+// A scene change keeps a geared human's warm outfit: the new scene builds a
 // fresh player, empty-handed, and restores his gear onto him from a snapshot.
 // Dressing that fresh player in what his empty inventory says releases every
 // cell of the outfit he is about to be drawn in again.
 {
   reset();
-  const carl = new HumanPlayer(TRANSIT_TILE, TRANSIT_TILE, TILE_SIZE);
-  carl.inventory.addItem('nightgaunt_cloak', 1);
-  carl.inventory.equipByItemId('nightgaunt_cloak');
+  const human = new HumanPlayer(TRANSIT_TILE, TRANSIT_TILE, TILE_SIZE);
+  human.inventory.addItem('nightgaunt_cloak', 1);
+  human.inventory.equipByItemId('nightgaunt_cloak');
   const geared = activeHumanFigure();
   for (let i = 0; i < TRANSIT_WARM_FRAMES; i++) {
     beginFigureFrame();
-    carl.render(ctx, 0, 0, TILE_SIZE);
+    human.render(ctx, 0, 0, TILE_SIZE);
   }
   const warmBytes = figureResidentBytes(geared);
-  const snapshot = snapPlayer(carl);
+  const snapshot = snapPlayer(human);
   const residentAt: Array<readonly [string, number]> = [];
   const rebuilt = new HumanPlayer(TRANSIT_TILE, TRANSIT_TILE, TILE_SIZE);
   residentAt.push(['construct', figureResidentBytes(geared)]);
@@ -1243,18 +1255,18 @@ const TRANSIT_TILE = 3;
   residentAt.push(['first draw', figureResidentBytes(geared)]);
   const dropped = residentAt.filter(([, bytes]) => bytes === 0).map(([step]) => step);
   check(
-    "a scene change keeps a geared Carl's outfit resident",
+    "a scene change keeps a geared human's outfit resident",
     warmBytes > 0 && dropped.length === 0 && activeHumanFigure() === geared,
     `${geared.id} held ${warmBytes} bytes before the change; it held none after ` +
       `${dropped.join(', ') || 'no step'} and is drawing ${activeHumanFigure().id}`,
   );
-  setHumanOutfit(DEFAULT_CARL_OUTFIT);
+  setHumanOutfit(defaultOutfitOf(PLAYER_LOOK));
 }
 
 // A pinned row is exempt from active eviction under *global* byte pressure —
 // `evictStaleRowsOf` makes the same pin check `releaseIdleRows` makes, and
 // `evictStaleRowsOf` is what `evictStaleForGlobalBytes` calls when an unrelated
-// figure (stood in here for Carl baking new rows in town) needs more room than
+// figure (stood in here for the human baking new rows in town) needs more room than
 // the cache has free. `figureResidentBytes` is unambiguous for the pinned
 // figure here because it is only ever asked to bake this one row.
 {
@@ -1267,7 +1279,7 @@ const TRANSIT_TILE = 3;
 
   // A second figure with its own ceiling raised well past the global budget,
   // so it is global pressure — not this figure's own — that forces the
-  // eviction attempt, the same shape as Carl baking new rows in a plaza
+  // eviction attempt, the same shape as the human baking new rows in a plaza
   // nearly full of pinned citizens.
   const bytesPerBigCell = BIG_CELL_SIZE * BIG_CELL_SIZE * BYTES_PER_PIXEL;
   const cellsPastGlobalCeiling =
@@ -1399,7 +1411,7 @@ const TRANSIT_TILE = 3;
   unpinFigureState(figure, 'walk');
 }
 
-// A flush (a canvas recovery, a render-scale change) gives back cells, not
+// A flush (a canvas recovery, a floor change) gives back cells, not
 // pins: whoever pinned a row still holds it, and nothing would pin it again.
 {
   reset();
@@ -1480,6 +1492,130 @@ const BOOST_TEST_BUDGET_CELL_MULTIPLE = 3;
     missed.directDraws === 1 && next.prewarmBakes >= 1 && figureRowInkPending() > 0,
     `the draw painted ${missed.directDraws} cell(s) directly; the next frame baked ` +
       `${next.prewarmBakes} cell(s) with ${figureRowInkPending()} row(s) of ink still queued`,
+  );
+}
+
+// A baked frame is stored cropped to its ink, padded, and blitted back where
+// the whole cell would have put it: the bytes are the crop's, the pixels the
+// whole cell's.
+{
+  reset();
+  const cropCellPx = 256;
+  const ink = { x: 90, y: 140, width: 40, height: 30 };
+  const cropPaddingPx = 2;
+  const painted: FigureDef = {
+    id: 'cropped_ink',
+    frameWidth: cropCellPx,
+    frameHeight: cropCellPx,
+    tileX: 0,
+    tileY: 0,
+    tileScale: TILE_SCALE,
+    states: figureStates({ pose: 1 }),
+    skipSupersample: true,
+    paintFrame: (paintCtx) => {
+      paintCtx.fillStyle = '#c0392b';
+      paintCtx.fillRect(ink.x, ink.y, ink.width, ink.height);
+      paintCtx.fillStyle = 'rgba(43, 123, 192, 0.5)';
+      paintCtx.fillRect(ink.x + 1, ink.y + 1, ink.width / 2, ink.height / 2);
+    },
+  };
+  const target = gameContext(cropCellPx, cropCellPx);
+  const offsetPx = 3.5;
+  drawFigureCached(target, painted, 'pose', 0, offsetPx, offsetPx, TILE_SCALE);
+  const reference = gameContext(cropCellPx, cropCellPx);
+  const whole = gameContext(cropCellPx, cropCellPx);
+  painted.paintFrame(whole, 'pose', 0);
+  reference.drawImage(whole.canvas, offsetPx, offsetPx);
+  const drawn = target.getImageData(0, 0, cropCellPx, cropCellPx).data;
+  const expected = reference.getImageData(0, 0, cropCellPx, cropCellPx).data;
+  const differing = drawn.filter((value, index) => value !== expected[index]).length;
+  const croppedBytes =
+    (ink.width + cropPaddingPx * 2) * (ink.height + cropPaddingPx * 2) * BYTES_PER_PIXEL;
+  const stored = figureFrameStoredBytes(painted, 'pose', 0);
+  check(
+    'a baked frame is stored as its padded ink crop',
+    stored === croppedBytes && figureResidentBytes(painted) === croppedBytes,
+    `stored ${stored} bytes (figure ${figureResidentBytes(painted)}), the padded crop is ${croppedBytes}`,
+  );
+  check(
+    'a cropped frame blits exactly as its whole cell would',
+    differing === 0,
+    `${differing} channel value(s) differ from the whole cell's blit`,
+  );
+}
+
+// A change of draw density rebakes progressively: each row goes on being drawn
+// from its old cells, scaled, until its whole rebake replaces them together —
+// never a frame of the row at one density beside a frame at another, and never
+// a stand-in or a live paint while it waits.
+{
+  reset();
+  const levelFrames = 4;
+  const halfLevel = 0.5;
+  const fullLevel = 1;
+  const rebaking = makeFigure('rebaking', CHEAP_PAINT_MS, CELL_SIZE, levelFrames);
+  const halfDensityRatio = 1;
+  const fullDensityRatio = 2;
+  setFigureWorldPixelRatio(halfDensityRatio);
+  const drawnLevels = (): number[] => {
+    const levels: number[] = [];
+    for (let frame = 0; frame < levelFrames; frame++) {
+      recordFigureCellBlits();
+      drawFigureCached(ctx, rebaking, 'walk', frame, 0, 0, TILE_SIZE);
+      const blit = takeRecordedFigureCell();
+      const drawScale = TILE_SIZE / TILE_SCALE;
+      levels.push(blit === null ? 0 : (drawScale * blit.surface.width) / blit.destWidth);
+    }
+    return levels;
+  };
+  const settleFrameLimit = 120;
+  let settled = drawnLevels();
+  for (
+    let frame = 0;
+    frame < settleFrameLimit && settled.some((level) => level !== halfLevel);
+    frame++
+  ) {
+    beginFigureFrame();
+    settled = drawnLevels();
+  }
+  setFigureWorldPixelRatio(fullDensityRatio);
+  const before = getFigureCacheStats();
+  const sequence: number[][] = [];
+  for (let frame = 0; frame < settleFrameLimit; frame++) {
+    beginFigureFrame();
+    const levels = drawnLevels();
+    sequence.push(levels);
+    if (levels.every((level) => level === fullLevel)) break;
+  }
+  const after = getFigureCacheStats();
+  setFigureWorldPixelRatio(null);
+  const mixedFrame = sequence.findIndex((levels) => new Set(levels).size !== 1);
+  const finalLevels = sequence[sequence.length - 1] ?? [];
+  const wentBack = sequence.some(
+    (levels, index) => index > 0 && levels[0] < (sequence[index - 1]?.[0] ?? 0),
+  );
+  check(
+    'a row is baked at the density it is drawn at',
+    settled.every((level) => level === halfLevel),
+    `drawn at half density the row's cells were baked at ${settled.join(', ')}`,
+  );
+  check(
+    'a density change rebakes the row and then draws it at the new level',
+    finalLevels.length === levelFrames && finalLevels.every((level) => level === fullLevel),
+    `after ${sequence.length} frames the row is drawn at ${finalLevels.join(', ')}`,
+  );
+  check(
+    'a row mid-rebake is drawn at one level throughout, and never goes back',
+    mixedFrame === -1 && !wentBack,
+    mixedFrame === -1
+      ? 'a frame drew the row at a lower level after a higher one'
+      : `frame ${mixedFrame} drew the row at ${sequence[mixedFrame]?.join(', ')}`,
+  );
+  check(
+    'a row mid-rebake draws its old cells, never a stand-in or a live paint',
+    after.directDraws === before.directDraws && after.approxDraws === before.approxDraws,
+    `${after.directDraws - before.directDraws} live paint(s) and ` +
+      `${after.approxDraws - before.approxDraws} stand-in(s) while the rebake ran`,
   );
 }
 

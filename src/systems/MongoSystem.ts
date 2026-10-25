@@ -515,7 +515,7 @@ export class MongoSystem implements GameSystem {
     // he keeps the juvenile's stats and sheet until the next time he is summoned.
     this.mongo.applyLevel(this.petLevel());
 
-    // Donut going down does not spend him: he keeps fighting, guarding her
+    // The cat going down does not spend him: he keeps fighting, guarding her
     // fallen body the same way he guards her standing, because `this.owner`
     // (his leash and follow anchor) is her position either way.
 

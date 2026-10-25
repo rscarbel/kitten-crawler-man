@@ -14,7 +14,16 @@
  */
 
 import { EMPTY_ALPHA_CUTOFF } from '../src/core/spriteFrames.js';
-import type { FigureDef } from '../src/sprites/figure/figureDef.js';
+import { figureFrameCount, type FigureDef } from '../src/sprites/figure/figureDef.js';
+import {
+  bakeFigurePrewarmFor,
+  beginFigureFrame,
+  figureFrameStoredBytes,
+  prewarmFigureState,
+  releaseFigure,
+  setFigureWorldPixelRatio,
+  figureWorldPixelRatio,
+} from '../src/sprites/figure/figureFrameCache.js';
 import { paintFigureCell } from './figureSheet.js';
 
 const RGBA_STRIDE = 4;
@@ -27,8 +36,9 @@ const ALPHA_OFFSET = 3;
 
 /**
  * How much of the cell the widest pose must fill before the cell counts as
- * honest. A cell far larger than anything painted into it is memory every
- * instance of the figure pays for and nobody sees.
+ * honest. A baked frame keeps only its ink, but every bake still paints,
+ * reads back and reserves room for the whole cell, so a cell far larger than
+ * anything painted into it is bake time and headroom nobody sees.
  */
 const MIN_INK_AREA_SHARE = 0.15;
 
@@ -384,4 +394,48 @@ export function reportFigureGates(label: string, failures: readonly string[]): b
   for (const failure of failures) console.error(`  FAIL ${label}: ${failure}`);
   process.exitCode = 1;
   return false;
+}
+
+/**
+ * The display every byte gate measures a figure at: the default desktop view
+ * on a DPR-2 screen. The world's 32 px tile lands on 64 device pixels there,
+ * which is one cell pixel per device pixel — the full-size cell — for a figure
+ * of tile scale 64, the fleet's usual. The render scale is capped at 2, so no
+ * display the game draws for stores more.
+ */
+export const REFERENCE_WORLD_PIXEL_RATIO = 2;
+
+/** Frames after its last draw that the cache counts a row out of use, and an urgent bake may evict it. */
+const ROWS_OUT_OF_USE_AFTER_FRAMES = 2;
+
+/** No bake budget: a measurement owns the whole frame. */
+const MEASUREMENT_BAKE_BUDGET_MS = Number.POSITIVE_INFINITY;
+
+/**
+ * What each frame of a row really costs the figure cache, by frame index:
+ * baked through the cache at {@link REFERENCE_WORLD_PIXEL_RATIO} and read
+ * back, so the ink crop and any front layer are counted exactly as stored.
+ * Leaves the cache holding none of the figure.
+ */
+export function storedRowBytes(def: FigureDef, state: string): number[] {
+  const previousRatio = figureWorldPixelRatio();
+  setFigureWorldPixelRatio(REFERENCE_WORLD_PIXEL_RATIO);
+  try {
+    // Asked for urgently, after the frames a row drawn by an earlier gate
+    // needs to fall out of use, so whatever that gate left in the cache makes
+    // room rather than refusing the measurement.
+    for (let frame = 0; frame < ROWS_OUT_OF_USE_AFTER_FRAMES; frame++) beginFigureFrame();
+    prewarmFigureState(def, state, undefined, true);
+    bakeFigurePrewarmFor(MEASUREMENT_BAKE_BUDGET_MS, true);
+    const bytes: number[] = [];
+    for (let frame = 0; frame < figureFrameCount(def, state); frame++) {
+      const stored = figureFrameStoredBytes(def, state, frame);
+      if (stored === null) throw new Error(`${def.id} ${state} frame ${frame} was not baked`);
+      bytes.push(stored);
+    }
+    return bytes;
+  } finally {
+    releaseFigure(def);
+    setFigureWorldPixelRatio(previousRatio);
+  }
 }

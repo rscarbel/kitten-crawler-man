@@ -318,7 +318,7 @@ export class CombatKit {
 
   /**
    * The Eyes of Splatter's cues. The orbit hum follows whether any copy is
-   * circling Donut this frame rather than a started flag, so every way the
+   * circling the cat this frame rather than a started flag, so every way the
    * copies can vanish — fading, peeling off, a floor change dropping them, her
    * going down — silences it on the next frame without being told.
    */

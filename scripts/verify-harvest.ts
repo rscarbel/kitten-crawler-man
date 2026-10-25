@@ -151,7 +151,7 @@ const KIT_LEVEL = 14;
 const SUMMON_LEVEL = 10;
 const BELOW_SUMMON_LEVEL = SUMMON_LEVEL - 1;
 const TOP_LEVEL = 15;
-/** A speed level partway up the table, used to check Carl's own pace differs from Donut's unleveled one. */
+/** A speed level partway up the table, used to check the human's own pace differs from the cat's unleveled one. */
 const FAST_LEVEL = 12;
 /** The Ratkin Forge tier: on the speed ladder, same yield as the basic tool. */
 const FORGE_TIER: ToolTier = 3;
@@ -1039,41 +1039,41 @@ section('Skills are never shared: each crawler harvests at their own level');
   const rig = makeRig();
   teach(rig.human, FAST_LEVEL);
   teach(rig.cat, 1);
-  const carlTree = takeTree();
-  const donutTree = takeTree();
-  stand(rig.human, carlTree);
-  stand(rig.cat, donutTree);
+  const humanTree = takeTree();
+  const catTree = takeTree();
+  stand(rig.human, humanTree);
+  stand(rig.cat, catTree);
 
-  check(rig.harvest.tryStart(rig.human), 'Carl starts chopping');
+  check(rig.harvest.tryStart(rig.human), 'The human starts chopping');
   const catBefore = JSON.stringify(rig.cat.craftSkills.snapshot());
-  const carl = nextAward(rig, rig.human, 'wood', TICKS_PER_SECOND * AWARD_WAIT_SECONDS);
-  const carlExpectedTicks = Math.ceil(
+  const human = nextAward(rig, rig.human, 'wood', TICKS_PER_SECOND * AWARD_WAIT_SECONDS);
+  const humanExpectedTicks = Math.ceil(
     TICKS_PER_SECOND * EXPECTED_WOOD_BASE_SECONDS * (EXPECTED_SPEED.get(FAST_LEVEL) ?? 0),
   );
   check(
-    carl !== null && carl.ticks === carlExpectedTicks,
-    `Carl at L12 lands his first wood after ${carl?.ticks ?? 'no'} ticks (expected ${carlExpectedTicks})`,
+    human !== null && human.ticks === humanExpectedTicks,
+    `The human at L12 lands his first wood after ${human?.ticks ?? 'no'} ticks (expected ${humanExpectedTicks})`,
   );
   check(
-    carl !== null && carl.amount === 1,
-    `Carl at L12 gets ${carl?.amount ?? 'nothing'} wood a tick (expected 1: the perk lengthens the tree, not the award)`,
+    human !== null && human.amount === 1,
+    `The human at L12 gets ${human?.amount ?? 'nothing'} wood a tick (expected 1: the perk lengthens the tree, not the award)`,
   );
   check(
     JSON.stringify(rig.cat.craftSkills.snapshot()) === catBefore,
-    "Carl's XP never touches Donut's Resourcing",
+    "The human's XP never touches the cat's Resourcing",
   );
   rig.harvest.stop(rig.human);
 
-  check(rig.harvest.tryStart(rig.cat), 'Donut starts chopping');
-  const donut = nextAward(rig, rig.cat, 'wood', TICKS_PER_SECOND * AWARD_WAIT_SECONDS);
-  const donutExpectedTicks = TICKS_PER_SECOND * EXPECTED_WOOD_BASE_SECONDS;
+  check(rig.harvest.tryStart(rig.cat), 'The cat starts chopping');
+  const cat = nextAward(rig, rig.cat, 'wood', TICKS_PER_SECOND * AWARD_WAIT_SECONDS);
+  const catExpectedTicks = TICKS_PER_SECOND * EXPECTED_WOOD_BASE_SECONDS;
   check(
-    donut !== null && donut.ticks === donutExpectedTicks,
-    `Donut at L1 lands her first wood after ${donut?.ticks ?? 'no'} ticks (expected ${donutExpectedTicks})`,
+    cat !== null && cat.ticks === catExpectedTicks,
+    `The cat at L1 lands her first wood after ${cat?.ticks ?? 'no'} ticks (expected ${catExpectedTicks})`,
   );
   check(
-    donut !== null && donut.amount === 1,
-    `Donut at L1 gets ${donut?.amount ?? 'nothing'} wood (expected 1)`,
+    cat !== null && cat.amount === 1,
+    `The cat at L1 gets ${cat?.amount ?? 'nothing'} wood (expected 1)`,
   );
   rig.harvest.stop(rig.cat);
 }
@@ -1255,7 +1255,7 @@ section('Thralls: lifetime, cooldown, count, resources, XP and no luck');
   const catXpBefore = JSON.stringify(rig.cat.craftSkills.snapshot());
   const humanWoodBefore = woodHeld(rig.human);
   const catWoodBefore = woodHeld(rig.cat);
-  check(rig.thralls.trySummon(rig.human, 'axe') === 'summoned', 'Carl at L15 summons');
+  check(rig.thralls.trySummon(rig.human, 'axe') === 'summoned', 'The human at L15 summons');
   check(
     rig.thralls.snapshot.length === TOP_LEVEL_THRALLS,
     `level 15 summons three (${rig.thralls.snapshot.length})`,
@@ -1404,10 +1404,10 @@ section('Thralls glide straight, through whatever is in the way');
 
 // ── Concurrent harvesting: two crawlers, one channel each ──────────────────
 
-section("Concurrent harvesting: Carl starting his own never stops Donut's");
+section("Concurrent harvesting: The human starting his own never stops the cat's");
 {
   // A second walkable side of the same tree, clear of any other node within
-  // reach from there, so Carl and Donut can work one tile from two tiles at
+  // reach from there, so the human and the cat can work one tile from two tiles at
   // once without either one's `nodeInReach` picking something else instead.
   function onlyNodeNear(
     standTileX: number,
@@ -1466,25 +1466,25 @@ section("Concurrent harvesting: Carl starting his own never stops Donut's");
     rig.human.x = second.x * TILE_SIZE;
     rig.human.y = second.y * TILE_SIZE;
 
-    check(rig.harvest.tryStart(rig.cat), 'Donut starts working the tree first');
+    check(rig.harvest.tryStart(rig.cat), 'The cat starts working the tree first');
     const ctx = contextFor(rig, rig.human);
     rig.harvest.update(ctx, false);
-    check(rig.harvest.isHarvesting(rig.cat), 'Donut is mid-channel');
+    check(rig.harvest.isHarvesting(rig.cat), 'The cat is mid-channel');
 
     rig.harvest.tryStart(rig.human);
     check(
       rig.harvest.isHarvesting(rig.cat),
-      "Carl starting his own harvest never cancels Donut's — the reported regression",
+      "The human starting his own harvest never cancels the cat's — the reported regression",
     );
-    check(rig.harvest.isHarvesting(rig.human), 'and Carl is now working the same tree too');
+    check(rig.harvest.isHarvesting(rig.human), 'and the human is now working the same tree too');
 
     const state = rig.ledger.knownStateAt(spot.tileX, spot.tileY);
     check(state !== null, 'the shared node has a known capacity');
     const capacity = state?.capacity ?? 0;
     const interval = harvestIntervalTicks('wood', 1, NO_TOOL_SPEED_BONUS);
     const soloTicksToDeplete = capacity * interval;
-    // Donut got one extra tick's head start above (the update that proved she
-    // was already mid-channel before Carl joined), so the two channels are not
+    // The cat got one extra tick's head start above (the update that proved she
+    // was already mid-channel before the human joined), so the two channels are not
     // in perfect lockstep — this brackets "roughly half the solo time" rather
     // than asserting an exact tick, which the offset would otherwise break.
     const COMBINED_RATE_LOWER_FRACTION = 0.4;
@@ -1492,8 +1492,8 @@ section("Concurrent harvesting: Carl starting his own never stops Donut's");
     const combinedLowerBound = soloTicksToDeplete * COMBINED_RATE_LOWER_FRACTION - interval;
     const combinedUpperBound = soloTicksToDeplete * COMBINED_RATE_UPPER_FRACTION + interval;
 
-    const carlWoodBefore = rig.human.inventory.countOf('wood');
-    const donutWoodBefore = rig.cat.inventory.countOf('wood');
+    const humanWoodBefore = rig.human.inventory.countOf('wood');
+    const catWoodBefore = rig.cat.inventory.countOf('wood');
     const maxTicks = soloTicksToDeplete + interval;
     let tick = 0;
     for (; tick < maxTicks; tick++) {
@@ -1510,21 +1510,21 @@ section("Concurrent harvesting: Carl starting his own never stops Donut's");
     );
     const woodGained =
       rig.human.inventory.countOf('wood') -
-      carlWoodBefore +
-      (rig.cat.inventory.countOf('wood') - donutWoodBefore);
+      humanWoodBefore +
+      (rig.cat.inventory.countOf('wood') - catWoodBefore);
     check(
       woodGained === capacity,
       `the node's whole capacity (${capacity}) landed between the two bags, none lost or doubled (got ${woodGained})`,
     );
 
-    const carlWoodAfterDepletion = rig.human.inventory.countOf('wood');
-    const donutWoodAfterDepletion = rig.cat.inventory.countOf('wood');
+    const humanWoodAfterDepletion = rig.human.inventory.countOf('wood');
+    const catWoodAfterDepletion = rig.cat.inventory.countOf('wood');
     for (let i = 0; i < interval * 2; i++) rig.harvest.update(ctx, false);
     check(
       !rig.harvest.isHarvesting(rig.human) &&
         !rig.harvest.isHarvesting(rig.cat) &&
-        rig.human.inventory.countOf('wood') === carlWoodAfterDepletion &&
-        rig.cat.inventory.countOf('wood') === donutWoodAfterDepletion,
+        rig.human.inventory.countOf('wood') === humanWoodAfterDepletion &&
+        rig.cat.inventory.countOf('wood') === catWoodAfterDepletion,
       'neither auto-restarts on another node once this one is spent',
     );
   }
@@ -1535,13 +1535,13 @@ section('Concurrent harvesting: different nodes each progress on their own');
   const rig = makeRig();
   teach(rig.human, 1);
   teach(rig.cat, 1);
-  const carlTree = takeTree();
-  const donutTree = takeTree();
-  stand(rig.human, carlTree);
-  stand(rig.cat, donutTree);
+  const humanTree = takeTree();
+  const catTree = takeTree();
+  stand(rig.human, humanTree);
+  stand(rig.cat, catTree);
 
-  check(rig.harvest.tryStart(rig.human), 'Carl starts his own tree');
-  check(rig.harvest.tryStart(rig.cat), "Donut starts hers, unaffected by Carl's channel");
+  check(rig.harvest.tryStart(rig.human), 'The human starts his own tree');
+  check(rig.harvest.tryStart(rig.cat), "The cat starts hers, unaffected by the human's channel");
   check(
     rig.harvest.isHarvesting(rig.human) && rig.harvest.isHarvesting(rig.cat),
     'both are mid-channel at once',
@@ -1549,12 +1549,12 @@ section('Concurrent harvesting: different nodes each progress on their own');
 
   const ctx = contextFor(rig, rig.human);
   const interval = harvestIntervalTicks('wood', 1, NO_TOOL_SPEED_BONUS);
-  const carlWoodBefore = rig.human.inventory.countOf('wood');
-  const donutWoodBefore = rig.cat.inventory.countOf('wood');
+  const humanWoodBefore = rig.human.inventory.countOf('wood');
+  const catWoodBefore = rig.cat.inventory.countOf('wood');
   for (let tick = 0; tick < interval; tick++) rig.harvest.update(ctx, false);
   check(
-    rig.human.inventory.countOf('wood') === carlWoodBefore + 1 &&
-      rig.cat.inventory.countOf('wood') === donutWoodBefore + 1,
+    rig.human.inventory.countOf('wood') === humanWoodBefore + 1 &&
+      rig.cat.inventory.countOf('wood') === catWoodBefore + 1,
     'each lands their own first award on schedule, independent of the other',
   );
   check(

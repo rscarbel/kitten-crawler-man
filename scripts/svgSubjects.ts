@@ -163,28 +163,39 @@ export const SUBJECTS: readonly SvgSubject[] = [
     },
   },
   {
-    // The one raster exception: Carl's outline, cast shadows and bounce rim are
+    // The one raster exception: the human figure's outline, cast shadows and bounce rim are
     // pixel morphology — the silhouette dilated and eroded by whole-pixel blits
     // and `destination-out` compositing on a fixed-density layer — with no path
     // for the recorder to capture. His export is that finished layer embedded
     // as an `<image>` at the layer's own resolution, not scalable art.
-    name: 'carl',
+    name: 'human',
     views: async (frame) => {
-      const { drawCarlFront, drawCarlBack, drawCarlSide } =
-        await import('../src/sprites/art/carl/figure.js');
-      const { HUMAN_ROWS } = await import('../src/sprites/art/humanFigure.js');
-      return sheetViews(
-        HUMAN_ROWS,
-        { front: drawCarlFront, back: drawCarlBack, side: drawCarlSide },
-        frame,
-        domContextOf,
-      );
+      const { drawBipedFront, drawBipedBack, drawBipedSide } =
+        await import('../src/sprites/art/biped/figure.js');
+      const { VIEWS } = await import('../src/sprites/art/biped/rig.js');
+      const { HUMAN_ROWS, HUMAN_FIGURE_PAINTING, paintedPose } =
+        await import('../src/sprites/art/humanFigure.js');
+      const { playerLookAxes } = await import('../src/sprites/looks/humanLook.js');
+      const { look, itemHandle } = HUMAN_FIGURE_PAINTING;
+      const painters = { front: drawBipedFront, back: drawBipedBack, side: drawBipedSide };
+      return HUMAN_ROWS.map((row) => ({
+        name: row.name,
+        paint: (targets: SvgTargets) =>
+          inUnitSpace(domContextOf(targets), targets.unit, (ctx) => {
+            const axes = playerLookAxes(look, VIEWS[row.view].profile);
+            ctx.scale(axes.x, axes.y);
+            painters[row.view](ctx, paintedPose(HUMAN_FIGURE_PAINTING, row, frame), {
+              look,
+              itemHandle,
+            });
+          }),
+      }));
     },
   },
   {
-    name: 'donut',
+    name: 'cat',
     views: async (frame) => {
-      const { CAT_ROWS, catGarmentContext, paintCatPose } =
+      const { CAT_ROWS, PLAYER_CAT_LOOK, catGarmentContext, paintCatPose } =
         await import('../src/sprites/art/catFigure.js');
       const { BARE_CAT_OUTFIT, dressCat } =
         await import('../src/sprites/garments/cat/catDressing.js');
@@ -192,9 +203,9 @@ export const SUBJECTS: readonly SvgSubject[] = [
         name: row.name,
         paint: (targets: SvgTargets) =>
           inUnitSpace(domContextOf(targets), targets.unit, (ctx) => {
-            const pose = row.pose(frame);
+            const pose = row.pose(frame, PLAYER_CAT_LOOK);
             const dressing = dressCat(BARE_CAT_OUTFIT, catGarmentContext(row, frame, pose));
-            paintCatPose(ctx, row, pose, dressing);
+            paintCatPose(ctx, PLAYER_CAT_LOOK, row, pose, dressing);
           }),
       }));
     },
@@ -572,7 +583,7 @@ export const SUBJECTS: readonly SvgSubject[] = [
     },
   },
   {
-    // Painted on Carl's rig, so the same raster exception as Carl applies.
+    // Painted on the biped rig, so the same raster exception as the human applies.
     name: 'incubus',
     views: async (frame) => {
       const { INCUBUS_FIGURE, INCUBUS_ROLES, INCUBUS_VIEWS, incubusStateName } =
@@ -636,7 +647,7 @@ export const SUBJECTS: readonly SvgSubject[] = [
     },
   },
   {
-    // Painted on Carl's rig, so the same raster exception as Carl applies.
+    // Painted on the biped rig, so the same raster exception as the human applies.
     name: 'city-elf-cultist',
     views: async (frame) => {
       const { CITY_ELF_CULTIST_FIGURE, CULTIST_ROLES, CULTIST_VIEWS, cultistStateName } =

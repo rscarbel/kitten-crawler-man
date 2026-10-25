@@ -1,7 +1,7 @@
 /**
  * Frame counts baked per row for the town cast figure. They are low for a
- * figure on Carl's rig because every look in the closed set pays Carl's
- * per-cell cost (rig, cell and outline), and all of them share one figure
+ * figure on the biped rig because every look in the closed set pays the
+ * rig's per-cell cost (rig, cell and outline), and all of them share one figure
  * cache budget. The idle is only a breath, and its four frames are spread
  * over the whole of one (see `townCastLoopFrame`).
  *

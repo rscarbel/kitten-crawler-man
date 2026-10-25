@@ -10,6 +10,7 @@
  * gate needs no scene.
  */
 
+import { playerCharacter } from '../../src/characters/characters';
 import type { BlueprintsQuestPhase } from '../../src/core/blueprintsQuestPhase';
 import { createBriarHollowState, type BriarHollowState } from '../../src/core/briarHollowState';
 import { TILE_SIZE } from '../../src/core/constants';
@@ -119,8 +120,8 @@ export function verifyWendellFirstVisit(check: Check): void {
   check(hook.isDialogOpen, 'and the beat is his');
   const firstLine = firstLineOf(rig.opened[0]);
   check(
-    firstLine !== null && speakerOf(firstLine) === 'carl',
-    'Carl opens it when Carl is being driven',
+    firstLine !== null && speakerOf(firstLine) === playerCharacter('human').speakerId,
+    'the human opens it when the human is being driven',
   );
 
   check(hook.dismissDialog(), 'Esc closes the first visit');
@@ -132,10 +133,10 @@ export function verifyWendellFirstVisit(check: Check): void {
   rig.human.isActive = false;
   rig.cat.isActive = true;
   check(hook.tryOpenDialog('wendell', rig.cat), 'asking again replays the first visit');
-  const donutFirst = firstLineOf(rig.opened[1]);
+  const catFirst = firstLineOf(rig.opened[1]);
   check(
-    donutFirst !== null && speakerOf(donutFirst) === 'donut',
-    'Donut opens it when Donut is being driven',
+    catFirst !== null && speakerOf(catFirst) === playerCharacter('cat').speakerId,
+    'the cat opens it when the cat is being driven',
   );
   readThrough(rig.conversation);
   check(!rig.conversation.isOpen, 'the first visit reads to its end');

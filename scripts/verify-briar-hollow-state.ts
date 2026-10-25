@@ -12,7 +12,7 @@
  *    sub-fields absent, is handled gracefully rather than rejected;
  *  - a corrupted field (bad array entries, wrong-typed top-level value) drops
  *    only the bad entries and keeps the rest, or refuses gracefully;
- *  - Carl's and Donut's craft-skill levels round-trip through
+ *  - the human's and the cat's craft-skill levels round-trip through
  *    `PlayerSnapshot` independently;
  *  - `GameProgress.crafts` parses through absence and garbage.
  *
@@ -252,7 +252,10 @@ function populatedState(): BriarHollowState {
   const humanLevel = human.craftSkills.getLevel('resourcing');
   const catLevel = cat.craftSkills.getLevel('resourcing');
   check(humanLevel > catLevel, 'the two crawlers reach different Resourcing levels');
-  check(cat.craftSkills.getLevel('construction') === 1, "XP given to Carl doesn't touch Donut");
+  check(
+    cat.craftSkills.getLevel('construction') === 1,
+    "XP given to the human doesn't touch the cat",
+  );
 
   const humanSnap = snapPlayer(human);
   const catSnap = snapPlayer(cat);

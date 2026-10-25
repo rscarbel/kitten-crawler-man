@@ -17,8 +17,8 @@
  * each heel strike and lifts her over the straight leg at mid-stance.
  */
 
-import { clamp01, lerp } from '../carlArt';
-import { HEAD_ON_FLOOR_FORESHORTENING } from '../carl/rig';
+import { clamp01, lerp } from '../bipedArt';
+import { HEAD_ON_FLOOR_FORESHORTENING } from '../biped/rig';
 import {
   ANKLE_HEIGHT,
   ANKLE_REST_X,
@@ -1087,7 +1087,7 @@ export interface Pt2 {
 /**
  * Head-on, a point's distance ahead of her draws as a little screen height —
  * the floor's share near the ground, nothing at the hip — because the floor is
- * seen from above while she stands as if seen level (see Carl's `depthShareAt`).
+ * seen from above while she stands as if seen level (see the biped rig's `depthShareAt`).
  */
 function depthShare(y: number): number {
   return HEAD_ON_FLOOR_FORESHORTENING * clamp01((y - HIP_JOINT_Y) / (ANKLE_Y - HIP_JOINT_Y));

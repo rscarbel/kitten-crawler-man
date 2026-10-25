@@ -1,3 +1,4 @@
+import { playerCharacter } from '../../characters/characters';
 import type { BoxTier } from '../../core/AchievementManager';
 import { TILE_SIZE } from '../../core/constants';
 import type { CatPlayer } from '../../creatures/CatPlayer';
@@ -27,7 +28,7 @@ export const BOX_TIER_POINTS: Readonly<Record<AIBoxTier, number>> = {
 export const TARGET_PARAM = optionalEnumParam(
   'target_player',
   ['active', 'Human', 'Cat'],
-  'Which crawler: the one the player is driving (active), Carl (Human) or Donut (Cat).',
+  `Which crawler: the one the player is driving (active), ${playerCharacter('human').displayName} (Human) or ${playerCharacter('cat').displayName} (Cat).`,
   'active',
 );
 
@@ -47,7 +48,7 @@ export function crawlerKind(scene: AISceneContext, crawler: Crawler): AITargetCr
 }
 
 export function crawlerName(scene: AISceneContext, crawler: Crawler): string {
-  return crawler === scene.getHuman() ? 'Carl' : 'Donut';
+  return playerCharacter(crawlerKind(scene, crawler)).displayName;
 }
 
 export function bothCrawlers(scene: AISceneContext): readonly Crawler[] {

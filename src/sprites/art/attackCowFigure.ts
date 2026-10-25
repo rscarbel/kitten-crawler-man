@@ -1,5 +1,5 @@
 /**
- * Carl's attack cow as a painted figure: the rows, the cell, and
+ * The human crawler's attack cow as a painted figure: the rows, the cell, and
  * `ATTACK_COW_FIGURE`. The look and its armour are in `attackCowArt.ts`; the
  * anatomy and the walking, idling and lying rows are the village cow's.
  *
@@ -19,7 +19,7 @@
  * The art is reviewed with `npm run render:cow -- --mode=attack`.
  */
 
-import { clamp01, easeInOut, easeOut, hump } from './carlArt';
+import { clamp01, easeInOut, easeOut, hump } from './bipedArt';
 import { drawCow, type CowPose, type CowView } from './cowArt';
 import { type RowKind, TILE_SCALE, cowRowsFor, cowStateName } from './cowFigure';
 import { ATTACK_COW_LOOK, drawAttackCowOverlay } from './attackCowArt';

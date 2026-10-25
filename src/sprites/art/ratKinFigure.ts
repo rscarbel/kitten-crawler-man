@@ -20,7 +20,7 @@
  * harness runs: `npm run render:rat-kin`.
  */
 
-import { clamp01, deg, easeInOut, hump, lerp, type Pt } from './carlArt';
+import { clamp01, deg, easeInOut, hump, lerp, type Pt } from './bipedArt';
 import {
   GROUND_Y,
   ballLiftForRoll,
@@ -44,7 +44,7 @@ import { MORDECAI_OUTFIT } from './ratkin/cast';
 /** Tile size the art is drawn at; the runtime scales by tileSize / TILE_SCALE. */
 export const TILE_SCALE = 64;
 /**
- * How far down its own tile a figure's feet sit. Matched to Carl and the cat: a
+ * How far down its own tile a figure's feet sit. Matched to the human and the cat: a
  * floor-standing creature belongs near the *bottom* of the tile it occupies, and
  * anchoring the soles on the tile's centre instead floats him half a tile above
  * the floor everything else stands on.
@@ -457,8 +457,8 @@ const FACING_FOREARM_TILT = deg(-21);
  * Head-on the upper arm is nearly end-on to the viewer and has almost nothing
  * it *can* show, so the forearm carries what visible travel there is.
  *
- * Bigger than a head-on human's, and deliberately so. Carl's arms hang at his
- * sides, where a few degrees at the shoulder moves the hand a long way; these
+ * Bigger than a head-on human's, and deliberately so. The biped figure's arms hang at
+ * its sides, where a few degrees at the shoulder moves the hand a long way; these
  * are folded up in front of the chest, where the same few degrees barely move
  * it at all.
  */

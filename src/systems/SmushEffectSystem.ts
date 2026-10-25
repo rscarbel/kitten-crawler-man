@@ -7,7 +7,7 @@ import {
 import type { GameSystem } from './GameSystem';
 
 /**
- * Owns the blasts Smush leaves behind: the burst of air under Carl's heel and
+ * Owns the blasts Smush leaves behind: the burst of air under the human crawler's heel and
  * the compression wave that sweeps out to the edge of the damage radius.
  *
  * The blast is a separate system rather than frames of the human sheet because
@@ -33,7 +33,7 @@ const MAX_LIVE_BLASTS = 4;
 
 /**
  * Which grind of the Smush is on screen this tick, counted from 1, or null on
- * every frame that is not one — read off the row Carl is actually drawn in.
+ * every frame that is not one — read off the row the human crawler is actually drawn in.
  */
 export type SmushGrindSource = () => number | null;
 
@@ -149,12 +149,12 @@ export class SmushEffectSystem implements GameSystem {
     return { x: this.shakeX, y: this.shakeY };
   }
 
-  /** The floor under Carl's feet: rings, cracks, dust, and what is behind him. */
+  /** The floor under the human crawler's feet: rings, cracks, dust, and what is behind him. */
   renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     for (const blast of this.blasts) drawSmushBlastGround(ctx, blastFrame(blast, camX, camY));
   }
 
-  /** The air in front of Carl: the near half of the burst, flying chips, haze. */
+  /** The air in front of the human crawler: the near half of the burst, flying chips, haze. */
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     for (const blast of this.blasts) drawSmushBlastAir(ctx, blastFrame(blast, camX, camY));
   }

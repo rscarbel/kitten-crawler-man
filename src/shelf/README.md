@@ -19,7 +19,7 @@ instead of rotting in history.
   any audio kept with it, and what it lacks to go live.
 
 A shelved character may import shared infrastructure (`src/sprites/figure/`,
-the `carlArt` helpers, `softShade`, the gore helpers, `SpriteRenderer`'s frame
+the `bipedArt` helpers, `softShade`, the gore helpers, `SpriteRenderer`'s frame
 index helpers) but nothing game-side: no creature class, room, system or effect.
 
 Bringing one into the game means moving its folder under `src/sprites/`, writing

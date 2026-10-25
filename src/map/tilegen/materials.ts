@@ -1846,7 +1846,7 @@ function paintHerringbone(ctx: PaintContext, options: HerringboneOptions): void 
 }
 
 /**
- * Three brick widths to a game tile: the size a laid brick is beside Carl, and
+ * Three brick widths to a game tile: the size a laid brick is beside the human crawler, and
  * twelve units across a four-tile patch, which is the multiple of four the
  * herringbone needs to wrap.
  */

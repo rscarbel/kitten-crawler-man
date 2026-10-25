@@ -7,7 +7,7 @@
  * Anatomy, palette and every stroke of paint live in `tusklingArt.ts` and
  * `tusklingGore.ts`.
  *
- * The gait is Carl's, in `human/locomotion.ts`, scaled to this creature's much
+ * The gait is the biped figure's, in `human/locomotion.ts`, scaled to this creature's much
  * shorter leg: stance is a constant-rate backward slide so the contact rolls
  * rather than skates, swing is a keyed tuck -> pass -> reach, and the pelvis
  * *drops* at contact so the IK never clamps. Arms swing from joint angles, not
@@ -18,7 +18,7 @@
  * harness runs: `npm run render:tuskling`.
  */
 
-import { clamp01, deg, easeInOut, lerp } from './carlArt';
+import { clamp01, deg, easeInOut, lerp } from './bipedArt';
 import {
   ARM_ROOT_HALF,
   ELBOW_IN_FRONT,
@@ -481,7 +481,7 @@ export function walkFacing(phase: number, away: boolean): TusklingPose {
   const bobPhase = Math.abs(Math.sin(phase * FULL_TURN));
 
   // The pelvis drops at contact head-on as well as in profile. Rising at
-  // mid-stance instead — which is what the human rig does — lifts the hip
+  // mid-stance instead — which is what the human's walk does — lifts the hip
   // above the planted hoof's reach and the IK clamps the leg straight.
   pose.bob = WALK_BOB * (1 - bobPhase);
   pose.sway = Math.sin(phase * FULL_TURN) * WALK_SWAY;

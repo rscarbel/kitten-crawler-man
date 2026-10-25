@@ -36,7 +36,7 @@
  * the runtime mirrors it for the other direction.
  */
 
-import { type Pt, clamp01, deg, lerp, mix, rgba } from './carlArt';
+import { type Pt, clamp01, deg, lerp, mix, rgba } from './bipedArt';
 import { fillSoftEllipse } from './softShade';
 
 type Ctx = CanvasRenderingContext2D;

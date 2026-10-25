@@ -170,7 +170,7 @@ interface ManualJob {
    */
   woodPerPress: number;
   framesLeft: number;
-  /** Whether Carl's working pose is this cut's, so ending the cut only ever stops its own. */
+  /** Whether the human crawler's working pose is this cut's, so ending the cut only ever stops its own. */
   posing: boolean;
 }
 

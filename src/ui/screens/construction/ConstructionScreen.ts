@@ -3,7 +3,7 @@
  * them, how long it takes them, and — for anything they cannot build right
  * now — why not.
  *
- * Every number on it is the active crawler's own: Carl and Donut each level
+ * Every number on it is the active crawler's own: the human and the cat each level
  * Construction separately, so costs, build times and discounts change when the
  * player switches crawler. The resource strip is the party's combined stock.
  *

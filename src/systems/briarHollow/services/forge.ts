@@ -16,6 +16,7 @@
  * paid for by whoever is being steered, the way every shop charges.
  */
 
+import { crawlerName } from '../../../characters/characters';
 import { ITEM_DEF } from '../../../core/ItemDefs';
 import type { BriarHollowState } from '../../../core/briarHollowState';
 import type { EventBus } from '../../../core/EventBus';
@@ -224,7 +225,7 @@ function upgradeOption(tools: PartyToolsState, kind: ToolKind): ShopRow {
     };
   }
   const next = toolTierDef(kind, nextTier);
-  const gain = `${describeToolTierGain(next)} (now ${describeToolTierGain(current)}). Applies to Carl and Donut.`;
+  const gain = `${describeToolTierGain(next)} (now ${describeToolTierGain(current)}). Applies to ${crawlerName('human')} and ${crawlerName('cat')}.`;
   return {
     key: kind,
     label: next.name,

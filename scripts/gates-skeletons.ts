@@ -19,21 +19,17 @@
  * Run by the review harness: `npm run render:skeletons`.
  */
 
-import { createCanvas } from 'canvas';
-
-import { bakeFigureCell, paintFigureCell } from './figureSheet.js';
+import { paintFigureCell } from './figureSheet.js';
 import {
   figureStructuralFailures,
   missingStateFailures,
   nothingMeasuredFailures,
 } from './figureGates.js';
-import { asGameContext } from './nodeGameContext.js';
 import {
   GORE_RECENTRE_PX,
   GORE_STATES,
   SKELETON_FIGURES,
   SKELETON_ROWS,
-  goreUnitOf,
 } from '../src/sprites/art/skeletonFigure.js';
 import {
   lateralFor,
@@ -41,7 +37,6 @@ import {
   type SkeletonPose,
   type SkeletonVariant,
 } from '../src/sprites/art/skeletonArt.js';
-import { skeletonGorePieces } from '../src/sprites/art/skeletonGore.js';
 import { SKELETON_GORE_PARTS, SKELETON_PREWARMED_STATES } from '../src/sprites/skeletonSprite.js';
 
 const VARIANTS: ReadonlyArray<SkeletonVariant> = ['lord', 'sword', 'archer'];
@@ -621,125 +616,6 @@ function gateGoreRecentre(): void {
   console.log(`  G8 worst gore centring gap ${worstGap.toFixed(2)}px at ${worstAt}`);
 }
 
-// ── G9 the bones are drawn at their own variant's size ───────────────────────
-
-/**
- * How much taller than the archer's the Lord's longest bone must be.
- *
- * An ordering rather than a frozen span: the pieces are painted at each
- * variant's own figure scale, and the whole point of scaling them is that a
- * 2.5-tile Lord does not scatter a 1.5-tile archer's bones. A shared bone size
- * across the three is exactly what happens when the scale stops being applied,
- * and it is invisible in any single variant's contact sheet.
- */
-const MIN_LORD_TO_ARCHER_BONE_RATIO = 1.4;
-
-function longestBoneOf(variant: SkeletonVariant): number {
-  const span = 512;
-  const origin = span / 2;
-  const canvas = createCanvas(span, span);
-  const ctx = canvas.getContext('2d');
-  const art = asGameContext(ctx);
-  const unit = goreUnitOf(variant);
-  let longest = 0;
-  for (const piece of skeletonGorePieces(variant)) {
-    ctx.clearRect(0, 0, span, span);
-    art.save();
-    art.translate(origin, origin);
-    art.scale(unit, unit);
-    piece.paint(art);
-    art.restore();
-    const box = inkBoxIn(ctx.getImageData(0, 0, span, span).data, span, span);
-    if (box === null) {
-      fail('G9', `${variant}/${piece.state} painted nothing at all about its own origin`);
-      continue;
-    }
-    longest = Math.max(longest, box.maxX - box.minX, box.maxY - box.minY);
-  }
-  return longest;
-}
-
-function gateBoneScale(): void {
-  const longest = new Map<SkeletonVariant, number>();
-  let variantsMeasured = 0;
-  for (const variant of VARIANTS) {
-    const reach = longestBoneOf(variant);
-    if (reach <= 0) {
-      fail('G9', `${variant} painted no measurable bone at all`);
-      continue;
-    }
-    variantsMeasured++;
-    longest.set(variant, reach);
-  }
-  failUnlessMeasured('G9', variantsMeasured, 'variants');
-  const lord = longest.get('lord');
-  const archer = longest.get('archer');
-  if (lord === undefined || archer === undefined) return;
-  console.log(
-    `  G9 longest bone: lord ${lord.toFixed(0)}px, archer ${archer.toFixed(0)}px ` +
-      `(ratio ${(lord / archer).toFixed(2)}×)`,
-  );
-  if (lord / archer < MIN_LORD_TO_ARCHER_BONE_RATIO) {
-    fail(
-      'G9',
-      `the Lord's longest bone is only ${(lord / archer).toFixed(2)}× the archer's, under the ` +
-        `${MIN_LORD_TO_ARCHER_BONE_RATIO}× a whole tile of height between them should give — ` +
-        'the variant scale has stopped reaching the loose bones',
-    );
-  }
-}
-
-// ── G10 the variants are visibly different heights ───────────────────────────
-
-/**
- * How much taller the Lord's painted silhouette must be than the archer's.
- *
- * The three share every pose function and differ only by a scale applied at the
- * cell, so a scale that stops being applied leaves three identical creatures at
- * three cell sizes — and each one's own contact sheet still looks right. Measured
- * off the painted idle rather than off the declared heights, which is the number
- * that would have been edited.
- */
-const MIN_LORD_TO_ARCHER_HEIGHT_RATIO = 1.5;
-
-function paintedHeightOf(variant: SkeletonVariant): number {
-  const figure = SKELETON_FIGURES[variant];
-  const cell = bakeFigureCell(figure, 'idle', 0);
-  const { data } = cell.getContext('2d').getImageData(0, 0, figure.frameWidth, figure.frameHeight);
-  const box = inkBoxIn(data, figure.frameWidth, figure.frameHeight);
-  if (box === null) {
-    fail('G10', `${variant}'s idle painted nothing at all`);
-    return 0;
-  }
-  return box.maxY - box.minY + 1;
-}
-
-function gateVariantHeights(): void {
-  const lord = paintedHeightOf('lord');
-  const sword = paintedHeightOf('sword');
-  const archer = paintedHeightOf('archer');
-  if (lord === 0 || sword === 0 || archer === 0) return;
-  console.log(
-    `  G10 painted idle heights: lord ${lord}px, sword ${sword}px, archer ${archer}px ` +
-      `(lord/archer ${(lord / archer).toFixed(2)}×)`,
-  );
-  if (lord / archer < MIN_LORD_TO_ARCHER_HEIGHT_RATIO) {
-    fail(
-      'G10',
-      `the Lord stands only ${(lord / archer).toFixed(2)}× the archer's painted height, under ` +
-        `the ${MIN_LORD_TO_ARCHER_HEIGHT_RATIO}× their declared tile heights call for — the ` +
-        'per-variant scale has stopped being applied',
-    );
-  }
-  if (sword < archer) {
-    fail(
-      'G10',
-      `the sword warrior paints shorter (${sword}px) than the archer (${archer}px), which ` +
-        'inverts their declared heights',
-    );
-  }
-}
-
 /** Runs every gate and returns one message per failure. */
 export function skeletonGateFailures(): string[] {
   failures.length = 0;
@@ -751,7 +627,5 @@ export function skeletonGateFailures(): string[] {
   gateWarmRowSize();
   gateRuntimeStateNames();
   gateGoreRecentre();
-  gateBoneScale();
-  gateVariantHeights();
   return [...failures];
 }

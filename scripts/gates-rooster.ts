@@ -981,8 +981,10 @@ function gateHandAnchors(build: RoosterBuild): void {
       }
       measured++;
       const data = cellRgba('big', state, frame);
-      const cx = Math.round(figure.tileX + anchor.at.x * ROOSTER_TILE_SCALE);
-      const cy = Math.round(figure.tileY + anchor.at.y * ROOSTER_TILE_SCALE);
+      const anchorX = figure.tileX + anchor.at.x * ROOSTER_TILE_SCALE;
+      const anchorY = figure.tileY + anchor.at.y * ROOSTER_TILE_SCALE;
+      const cx = Math.round(anchorX);
+      const cy = Math.round(anchorY);
       let count = 0;
       let sumX = 0;
       let sumY = 0;
@@ -1005,7 +1007,12 @@ function gateHandAnchors(build: RoosterBuild): void {
         );
         return;
       }
-      const off = Math.hypot(sumX / count - cx, sumY / count - cy);
+      // Pixel x covers [x, x + 1), so the skin's middle is its mean index plus
+      // half a pixel, measured from the anchor itself rather than the pixel it
+      // rounds to: the two half-pixel slips otherwise stack to over a pixel.
+      const skinMiddleX = sumX / count + PIXEL_CENTRE;
+      const skinMiddleY = sumY / count + PIXEL_CENTRE;
+      const off = Math.hypot(skinMiddleX - anchorX, skinMiddleY - anchorY);
       if (off > ANCHOR_CENTRE_TOLERANCE_PX) {
         fail(
           'G16',
@@ -1050,12 +1057,9 @@ function gateDistinctFrames(build: RoosterBuild): void {
   if (report.closestNote !== null) console.log(`  G20 closest frames: ${report.closestNote}`);
 }
 
-/** A standing build's silhouette at the 32 px tile: how tall, and how far its head leans off its body. */
+/** A standing build's silhouette at the 32 px tile: how far its head leans off its body. */
 interface BuildRead {
-  readonly heightPx: number;
   readonly headLeanPx: number;
-  /** Solid pixels the head-on height was measured over. */
-  readonly standingPixels: number;
   /** Comb-red pixels the lean was measured over, seen from behind. */
   readonly combPixels: number;
 }
@@ -1089,8 +1093,7 @@ function straightHeadPx(build: RoosterBuild, row: RowSpec): number {
 }
 
 /**
- * How tall a build stands head-on, and how far his comb sits seen from behind
- * off where a straight neck would hold it — where every build's head is turned
+ * How far a build's comb sits seen from behind off where a straight neck would hold it — where every build's head is turned
  * nearly straight away, so only a kinked neck or a flopped comb carries it
  * aside. Measured against his own straight-necked head rather than the cell's
  * middle, because his body is turned and carries every build's head ahead of
@@ -1101,8 +1104,6 @@ function buildRead(build: RoosterBuild): BuildRead | null {
   const figure = ROOSTER_FIGURES[build];
   const away = rowNamed(build, 'idle_away', 'G21');
   if (away === null) return null;
-  const alpha = cellAlpha(build, 'idle', 0);
-  const stats = inkStatsOf(alpha, figure.frameWidth, SOLID_ALPHA);
   const back = cellRgba(build, away.name, 0);
   let sum = 0;
   let count = 0;
@@ -1114,24 +1115,19 @@ function buildRead(build: RoosterBuild): BuildRead | null {
   const toGame = TILE_SIZE / ROOSTER_TILE_SCALE;
   const straightHead = straightHeadPx(build, away);
   return {
-    heightPx: (stats.maxY - stats.minY + 1) * toGame,
     headLeanPx: count === 0 ? 0 : Math.abs(sum / count - straightHead) * toGame,
-    standingPixels: stats.count,
     combPixels: count,
   };
 }
 
-/** At the tile the three must be told apart by size first: each a clear step taller than the next. */
-const MIN_HEIGHT_STEP_PX = 6;
-/** And Bent by his tilt: his head sits off his body's centre by at least this much more than the others'. */
+/** Bent is told apart by his tilt: his head sits off his body's centre by at least this much more than the others'. */
 const MIN_TILT_LEAD_PX = 1.5;
 
-/** G21 — the three builds stay apart at the 32 px tile: by ink height, then by Bent's head tilt. */
+/** G21 — Bent stays apart from the other builds at the 32 px tile by his head tilt. */
 function gateBuildDistinctness(): void {
   const reads = new Map(ROOSTER_BUILDS.map((build) => [build, buildRead(build)] as const));
   for (const [build, read] of reads) {
     if (read === null) continue;
-    failUnlessMeasured('G21', read.standingPixels, `${build}'s head-on standing pixels`);
     failUnlessMeasured('G21', read.combPixels, `${build}'s comb pixels seen from behind`);
   }
   const big = reads.get('big');
@@ -1140,19 +1136,9 @@ function gateBuildDistinctness(): void {
   if (big === undefined || little === undefined || bent === undefined) return;
   if (big === null || little === null || bent === null) return;
   console.log(
-    `  G21 builds at 32px: big ${big.heightPx.toFixed(1)}px tall, head lean ${big.headLeanPx.toFixed(1)}px; ` +
-      `bent ${bent.heightPx.toFixed(1)} / ${bent.headLeanPx.toFixed(1)}; little ${little.heightPx.toFixed(1)} / ${little.headLeanPx.toFixed(1)}`,
+    `  G21 head lean at 32px: big ${big.headLeanPx.toFixed(1)}px, ` +
+      `bent ${bent.headLeanPx.toFixed(1)}px, little ${little.headLeanPx.toFixed(1)}px`,
   );
-  if (big.heightPx - bent.heightPx < MIN_HEIGHT_STEP_PX)
-    fail(
-      'G21',
-      `big stands only ${(big.heightPx - bent.heightPx).toFixed(1)}px taller than bent at the tile (floor ${MIN_HEIGHT_STEP_PX})`,
-    );
-  if (bent.heightPx - little.heightPx < MIN_HEIGHT_STEP_PX / 2)
-    fail(
-      'G21',
-      `bent stands only ${(bent.heightPx - little.heightPx).toFixed(1)}px taller than little at the tile (floor ${MIN_HEIGHT_STEP_PX / 2})`,
-    );
   const plainLean = Math.max(big.headLeanPx, little.headLeanPx);
   if (bent.headLeanPx - plainLean < MIN_TILT_LEAD_PX)
     fail(

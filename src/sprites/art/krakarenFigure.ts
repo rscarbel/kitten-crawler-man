@@ -26,7 +26,7 @@
  * harness runs: `npm run render:krakaren`.
  */
 
-import { type Pt, clamp01 } from './carlArt';
+import { type Pt, clamp01 } from './bipedArt';
 import {
   type GuardTentaclePose,
   type KrakarenPose,

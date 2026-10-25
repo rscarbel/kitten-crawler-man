@@ -13,7 +13,8 @@ import {
 } from '../../../core/AbilityManager';
 import type { Inventory } from '../../../core/Inventory';
 import { HOTBAR_COUNT } from '../../../core/ItemDefs';
-import { CRAWLER_NAMES, type CrawlerKind } from '../../../core/SkillManager';
+import { crawlerName } from '../../../characters/characters';
+import { type CrawlerKind } from '../../../core/SkillManager';
 import { centerIn, grid, inset, splitV, type Rect } from '../../core/geom';
 import type { Ui } from '../../core/UiRoot';
 import { ITEM_ICONS } from '../../icons/itemIcons';
@@ -47,8 +48,8 @@ const SLOT_KEY_CORNER = 0.5;
 const ADD_BUTTON_WIDTH_CONTROLS = 3;
 
 const CRAWLER_CHOICES: readonly Choice<CrawlerKind>[] = [
-  { value: 'human', label: CRAWLER_NAMES.human },
-  { value: 'cat', label: CRAWLER_NAMES.cat },
+  { value: 'human', label: crawlerName('human') },
+  { value: 'cat', label: crawlerName('cat') },
 ];
 
 function xpFraction(state: AbilityState): number {
@@ -56,7 +57,7 @@ function xpFraction(state: AbilityState): number {
 }
 
 function ownerLabel(state: AbilityState): string {
-  return CRAWLER_NAMES[state.owner];
+  return crawlerName(state.owner);
 }
 
 /** The largest square in `r` that shares its top-left corner. */

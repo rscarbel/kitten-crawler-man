@@ -1,6 +1,6 @@
 /**
  * The axe and the pick a crawler works a resource node with, painted in the
- * rig units Carl is authored in, for every tier's look — and Merrit's scythe,
+ * rig units the human figure is authored in, for every tier's look — and Merrit's scythe,
  * swung through the grain on the same rows.
  *
  * Painted in one canonical frame: the butt fist's grip at the origin, the
@@ -20,7 +20,7 @@ import {
   type ItemWorkingToolKind,
   TOOL_TIER_LOOKS,
 } from '../../core/toolTiers';
-import { mix, rgba } from './carlArt';
+import { mix, rgba } from './bipedArt';
 
 type Ctx = CanvasRenderingContext2D;
 

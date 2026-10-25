@@ -116,7 +116,7 @@ function fennaRig(): FennaRig {
   return rig;
 }
 
-/** A rig with Construction fully open: Carl taught, Tikka's plans in hand. */
+/** A rig with Construction fully open: the human taught, Tikka's plans in hand. */
 function unlockedRig(): FennaRig {
   const rig = fennaRig();
   rig.humanLearned = true;

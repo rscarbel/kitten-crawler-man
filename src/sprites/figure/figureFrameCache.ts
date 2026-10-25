@@ -36,6 +36,16 @@
  * fallback skips the supersample — it costs a quarter as much, and one softer
  * frame before the bake lands is not a thing a player can see.
  *
+ * A baked frame is stored cropped to its ink, with where the crop sits in the
+ * cell, and blitted back to the same place: a cell is sized for the figure's
+ * widest pose, so most of any one pose's cell is transparent margin. And a
+ * frame is baked at the density it is drawn at — the world's device pixels
+ * per cell pixel, rounded up to one of a few levels and never past the
+ * declared cell — so a figure drawn at half a cell pixel per device pixel
+ * holds a quarter of the bytes. A change of level is baked a row at a time
+ * within the same budgets, each row drawn from its old cells, scaled, until
+ * its whole rebake replaces them.
+ *
  * Both paths composite off screen and blit once. A painter is hundreds of
  * canvas operations, and a caller that has set `filter`, `globalAlpha`,
  * `shadowBlur` or a compositing mode — a damage flash is exactly that — would
@@ -71,6 +81,7 @@ import {
   drawnFigureRow,
 } from './figureDef';
 import { perfMonitor } from '../../core/PerfMonitor';
+import { TILE_SIZE } from '../../core/constants';
 import {
   beginFigureCacheStatsFrame,
   type FigureDirectDrawCause,
@@ -90,9 +101,41 @@ import {
  * A sheet the loader decides this display is too poor for is resampled to half
  * size; a painted figure answers the same question by painting its cells half
  * as dense, so a blit stays 1:1 on a DPR-1 screen instead of being squeezed.
+ * It is also the floor of every bake level: a figure is never baked sparser
+ * than the low-end device bakes it, however small it is drawn.
  */
 const LOW_END_BAKE_SCALE = 0.5;
+const THREE_QUARTER_BAKE_SCALE = 0.75;
+/** The figure's declared cell, pixel for pixel: the ceiling of every bake level. */
 const FULL_BAKE_SCALE = 1;
+
+/**
+ * The densities a cell may be baked at, ascending. A figure is baked at the
+ * first level at or above the density it is drawn at, so it is never blurred
+ * by an upscale; discrete levels are what keep a small change in draw scale
+ * from rebaking anything.
+ */
+const BAKE_LEVELS = [LOW_END_BAKE_SCALE, THREE_QUARTER_BAKE_SCALE, FULL_BAKE_SCALE] as const;
+
+/**
+ * Slack under a bake level within which a draw scale still counts as that
+ * level: the product of a device ratio and a tile mapping lands a float's
+ * rounding away from the level it means.
+ */
+const BAKE_LEVEL_EPSILON = 1e-6;
+
+/**
+ * Transparent pixels kept round a cell's ink crop, clamped to the cell. A
+ * blit at a fractional position filters each edge pixel with its neighbours,
+ * and an accelerated canvas also antialiases the blit's own rectangle; inside
+ * the whole cell both fell on transparent pixels. Two keeps a 1:1 blit at any
+ * sub-pixel offset identical to the whole cell's in Chrome, GPU and software
+ * alike; one is not enough on the GPU path.
+ */
+const CELL_CROP_PADDING_PX = 2;
+
+/** The surface a frame with no ink at all is stored as: one transparent pixel. */
+const EMPTY_CELL_PX = 1;
 
 /**
  * Ceiling on the pixel data the cache holds across every figure, the scratch
@@ -101,37 +144,33 @@ const FULL_BAKE_SCALE = 1;
  * Sized to hold a town plaza's own crowd, not just a fight: a crowd of forty
  * strangers drawn from a few dozen looks needs its idle and walk rows warm in
  * every facing at once (a citizen a player is looking at may be facing any of
- * three ways), and the whole crowd's own pinned working set — every look a
+ * three ways), and the whole crowd's pinned working set — every look a
  * population this size statistically touches, held resident while the party
- * is near the crowd rather than released and re-baked — measures a
- * consistent ~122 MB across world seeds. A pinned row is exempt from active
+ * is near the crowd rather than released and re-baked — is exempt from active
  * eviction (see `pinFigureState`), so the rest of the cache cannot borrow it
  * under pressure.
  *
- * The per-figure budgets — the active player's 67 MB
+ * The per-figure budgets — the active player's
  * (`HUMAN_FIGURE_BUDGET_MEGABYTES` in `humanFigure.ts`) among them — are
  * ceilings on what one figure may hold, not residency that sits on top of the
  * crowd's: adding the two would overstate the need, since a town draws fewer
- * of his rows than a fight. What sizes this ceiling is the two measured
- * together: in the plaza with the crowd pinned and Carl carrying the weapon
- * whose rows take the most room, drawing and stowing it, the cache peaked at
- * 133.0, 139.9 and 142.5 MB across three runs, with no eviction and no
- * direct paint. While he carries a weapon his empty-handed figure stays
- * resident beside the carrying one, but none of its rows is drawn while the
- * other is, so they are the first a full cache gives up.
+ * of his rows than a fight.
  *
- * Arriving on level 3 is the tightest moment: behind the loading screen the
- * town's crowd, the fairies, Carl and Donut — her side views in both facings —
- * are warmed together. Uncapped that asks for 200.6 MB; stale-row eviction
- * carries it home with no figure baked or painted on the render path from
- * 184 MB up, and this ceiling keeps a few megabytes over that. It stays well
- * under what it replaces — the full sheet set decodes to roughly 807 MB and
- * level 3 alone holds about 370 MB resident.
+ * Arriving on level 3 is the tightest moment measured: behind the loading
+ * screen the town's crowd, the fairies and both crawlers — the cat's side
+ * views in both facings — are warmed together. With every cell stored as its
+ * ink crop, that asks for 53.1 MB with the ceiling lifted out of reach (the
+ * crowd's pins 20.3 MB of it), and Briar Hollow 55.6 MB; the plaza harness
+ * peaks at 11.4 MB. Eighty megabytes is half as much again as the arrival:
+ * room for a weapon's rows beside the crowd, and for a boss fight's, without
+ * a ceiling so far past the need that a leak goes unseen. It stays well under
+ * what it replaces — the full sheet set decodes to roughly 807 MB and level 3
+ * alone holds about 370 MB resident.
  *
  * This is the full budget; {@link figureCacheByteBudget} is what a device is
  * held to.
  */
-export const CACHE_BUDGET_MEGABYTES = 188;
+export const CACHE_BUDGET_MEGABYTES = 80;
 
 /**
  * The ceiling this device's cache is held to: the full budget, scaled down
@@ -277,6 +316,14 @@ export const PREWARM_CAPACITY_RETRIES = 4;
 export const IDLE_FRAMES_BEFORE_RELEASE = 600;
 
 /**
+ * How long a draw at a density above the world's keeps its figure baked at
+ * that density: the idle window, so a figure drawn large now and then (a
+ * portrait, a boss drawn over-size) is not rebaked down and back up between
+ * draws, and a level is never left and retaken frame to frame.
+ */
+const RAISED_LEVEL_HOLD_FRAMES = IDLE_FRAMES_BEFORE_RELEASE;
+
+/**
  * How long a row must have gone undrawn before a bake on the render path may
  * evict it: only the rows drawn on this very frame are the working set it
  * protects, because that bake is for something on screen now.
@@ -364,6 +411,9 @@ const SCRATCH_UNION_AREA_SLACK = 1.5;
 const WHOLE_BAKE_SCRATCH_LEVELS = 1;
 const LAYERED_BAKE_SCRATCH_LEVELS = 2;
 
+/** Whole cells a layered frame is admitted at: the cell, and as much again for its front layer. */
+const LAYERED_CELL_RESERVE_FACTOR = 2;
+
 /** Tile-relative mirror axis, matching `drawSprite`'s flip. */
 export const TILE_CENTER_OFFSET = 0.5;
 
@@ -386,11 +436,45 @@ interface FrontLayerCell {
   readonly y: number;
 }
 
+/**
+ * One baked frame, cropped to its ink: most of a cell sized for the figure's
+ * widest pose is transparent in any one pose, and holding that margin is most
+ * of what a full cell costs.
+ */
+interface BakedFrame {
+  readonly surface: CanvasSurface;
+  /** Where the crop's top-left sits inside the whole cell, in the cell's baked pixels. */
+  readonly x: number;
+  readonly y: number;
+  /** Cell pixels per declared frame pixel. */
+  readonly bakeScale: number;
+  readonly front: FrontLayerCell | null;
+  /** The crop's bytes and its front layer's. */
+  readonly bytes: number;
+}
+
+/** A row's frames rebaked at a new level, held beside the cells drawn until they can replace them. */
+interface RowRebake {
+  readonly bakeScale: number;
+  readonly cells: Map<number, BakedFrame>;
+}
+
 /** One animation row's baked cells, keyed by frame index. */
 interface FigureRow {
-  cells: Map<number, CanvasSurface>;
-  /** The front layers of the row's layered frames, keyed by frame index. */
-  fronts: Map<number, FrontLayerCell>;
+  cells: Map<number, BakedFrame>;
+  /**
+   * The level every cell in `cells` was baked at. A row is drawn at one level
+   * throughout: an animation whose frames alternate between two densities
+   * reads as a flicker from soft to sharp.
+   */
+  bakeScale: number;
+  /**
+   * Set while the figure bakes at a level other than the row's: the cells
+   * rebaked so far, which replace `cells` together once they hold every frame
+   * `cells` does. Until then the row goes on being drawn from `cells`, scaled.
+   */
+  rebake: RowRebake | null;
+  /** Both sets' bytes. */
   bytes: number;
   /** The frame this row was last drawn on, so idle rows can be reclaimed. */
   lastFrame: number;
@@ -398,18 +482,21 @@ interface FigureRow {
 
 interface FigureEntry {
   readonly def: FigureDef;
-  /** Cell pixels per declared frame pixel; a change rebuilds every cell. */
-  bakeScale: number;
-  cellPixelWidth: number;
-  cellPixelHeight: number;
   bytes: number;
   /** Insertion-ordered by last use, so the first row is the coldest. */
   rows: Map<string, FigureRow>;
+  /** The highest level a draw above the world's density asked for, while it holds. */
+  raisedLevel: number;
+  /** The frame {@link raisedLevel} was last asked for on. */
+  raisedAtFrame: number;
 }
 
-/** A cell ready to blit, with the destination extent it must be blitted at. */
+/** A cell ready to blit, with the destination rectangle its crop lands on. */
 interface PlacedCell {
   readonly surface: CanvasSurface;
+  /** The crop's offset from the whole cell's top-left, in destination units. */
+  readonly destOffsetX: number;
+  readonly destOffsetY: number;
   readonly destWidth: number;
   readonly destHeight: number;
   /** Destination units per baked cell pixel. */
@@ -439,7 +526,7 @@ const entries = new Map<FigureId, FigureEntry>();
 
 // ── Cell identity, for caches built from a blitted cell ─────────────────────
 
-/** One cell as {@link drawFigureCached} blitted it. */
+/** One cell as {@link drawFigureCached} blitted it: its ink crop and where the crop landed. */
 export interface FigureCellBlit {
   /** The baked cell itself: the same object for as long as the cell is held. */
   readonly surface: CanvasSurface;
@@ -534,9 +621,16 @@ function noteDirectPaint(def: FigureDef, state: string): void {
  */
 const surfacesAwaitingRelease: CanvasSurface[] = [];
 
+function queueFramesForRelease(frames: Iterable<BakedFrame>): void {
+  for (const baked of frames) {
+    surfacesAwaitingRelease.push(baked.surface);
+    if (baked.front !== null) surfacesAwaitingRelease.push(baked.front.surface);
+  }
+}
+
 function queueRowSurfacesForRelease(row: FigureRow): void {
-  for (const cell of row.cells.values()) surfacesAwaitingRelease.push(cell);
-  for (const front of row.fronts.values()) surfacesAwaitingRelease.push(front.surface);
+  queueFramesForRelease(row.cells.values());
+  if (row.rebake !== null) queueFramesForRelease(row.rebake.cells.values());
 }
 
 function releaseDroppedSurfaces(): void {
@@ -544,11 +638,16 @@ function releaseDroppedSurfaces(): void {
   surfacesAwaitingRelease.length = 0;
 }
 
-function notifyCellsDropped(row: FigureRow): void {
+function notifyFramesDropped(frames: Iterable<BakedFrame>): void {
   if (cellDropListeners.length === 0) return;
-  for (const cell of row.cells.values()) {
-    for (const listener of cellDropListeners) listener(cell);
+  for (const baked of frames) {
+    for (const listener of cellDropListeners) listener(baked.surface);
   }
+}
+
+function notifyCellsDropped(row: FigureRow): void {
+  notifyFramesDropped(row.cells.values());
+  if (row.rebake !== null) notifyFramesDropped(row.rebake.cells.values());
 }
 
 function noteFigureDraw(): void {
@@ -566,8 +665,8 @@ function noteCellBlit(
   if (record === null) return;
   record.blit = {
     surface: cell.surface,
-    destX,
-    destY,
+    destX: destX + cell.destOffsetX,
+    destY: destY + cell.destOffsetY,
     destWidth: cell.destWidth,
     destHeight: cell.destHeight,
     transform: ctx.getTransform(),
@@ -745,8 +844,93 @@ function pinKey(figureId: FigureId, state: string): string {
   return `${figureId}|${state}`;
 }
 
-function bakeScaleNow(): number {
+/**
+ * Device pixels per world pixel the world is drawn at, or null before any
+ * renderer has said — a headless harness, which bakes full cells.
+ */
+let worldDevicePixelRatio: number | null = null;
+
+/**
+ * Tells the cache how many device pixels a world pixel covers: the render
+ * scale, times any zoom the world is drawn at. Each figure bakes at the level
+ * its tiles land at on that grid, so a figure drawn at half a cell pixel per
+ * device pixel holds a quarter of the bytes. A change moves every figure to
+ * its new level progressively, each row swapped once its rebake is whole.
+ * Null forgets it, as before any renderer had said.
+ */
+export function setFigureWorldPixelRatio(ratio: number | null): void {
+  worldDevicePixelRatio = ratio;
+}
+
+/** The ratio last given to {@link setFigureWorldPixelRatio}, or null when none is set. */
+export function figureWorldPixelRatio(): number | null {
+  return worldDevicePixelRatio;
+}
+
+/** The highest level this device bakes at: the low-end path keeps its half density. */
+function bakeLevelCeiling(): number {
   return shouldDownscaleForLowEndDevice() ? LOW_END_BAKE_SCALE : FULL_BAKE_SCALE;
+}
+
+/** The first level at or above a draw density, within the ceiling. */
+function quantizedBakeLevel(density: number, ceiling: number): number {
+  const level =
+    BAKE_LEVELS.find((candidate) => candidate >= density - BAKE_LEVEL_EPSILON) ?? FULL_BAKE_SCALE;
+  return Math.min(level, ceiling);
+}
+
+/** The level a figure bakes at when drawn on a world tile: the density its tile mapping lands at. */
+function worldBakeLevel(def: FigureDef): number {
+  const ceiling = bakeLevelCeiling();
+  if (worldDevicePixelRatio === null) return ceiling;
+  const density = (worldDevicePixelRatio * TILE_SIZE) / def.tileScale;
+  return quantizedBakeLevel(density, ceiling);
+}
+
+/** The level an entry's cells are baked at now: the world's, or a held draw above it. */
+function bakeLevelOf(entry: FigureEntry): number {
+  const world = worldBakeLevel(entry.def);
+  const raiseHeld = frameCounter - entry.raisedAtFrame <= RAISED_LEVEL_HOLD_FRAMES;
+  return raiseHeld ? Math.max(world, Math.min(entry.raisedLevel, bakeLevelCeiling())) : world;
+}
+
+/** {@link bakeLevelOf} for a figure the cache may not be holding. */
+function bakeLevelFor(def: FigureDef): number {
+  const entry = entries.get(def.id);
+  return entry === undefined ? worldBakeLevel(def) : bakeLevelOf(entry);
+}
+
+/**
+ * Notes the density one draw lands at, so a figure drawn larger than a world
+ * tile — an over-size boss, a portrait — bakes at that size rather than
+ * being upscaled from its world bake. Only a raise is heard: a figure drawn
+ * smaller somewhere as well keeps the density it needs on its tile.
+ */
+function noteDrawDensity(entry: FigureEntry, ctx: CanvasRenderingContext2D, scale: number): void {
+  const ceiling = bakeLevelCeiling();
+  const world = worldBakeLevel(entry.def);
+  if (world >= ceiling) return;
+  const { a, b, c, d } = ctx.getTransform();
+  const devicePerUnit = Math.sqrt(Math.abs(a * d - b * c));
+  const level = quantizedBakeLevel(scale * devicePerUnit, ceiling);
+  if (level <= world) return;
+  if (level < bakeLevelOf(entry)) return;
+  entry.raisedLevel = level;
+  entry.raisedAtFrame = frameCounter;
+}
+
+/** A cell's whole extent at a bake level, rounded up to whole pixels. */
+function cellPixelsAt(def: FigureDef, bakeScale: number): SurfaceSize {
+  return {
+    width: Math.max(1, Math.ceil(def.frameWidth * bakeScale)),
+    height: Math.max(1, Math.ceil(def.frameHeight * bakeScale)),
+  };
+}
+
+/** What a whole uncropped cell at a bake level would hold: the most one frame's crop can take. */
+function wholeCellBytes(def: FigureDef, bakeScale: number): number {
+  const { width, height } = cellPixelsAt(def, bakeScale);
+  return width * height * BYTES_PER_PIXEL;
 }
 
 const performanceClock = (): number => performance.now();
@@ -868,7 +1052,7 @@ function dropRow(entry: FigureEntry, state: string, row: FigureRow): void {
  * sweep happens to reach it.
  */
 function dropRowIfEmpty(entry: FigureEntry, state: string, row: FigureRow): void {
-  if (row.cells.size > 0) return;
+  if (row.cells.size > 0 || row.rebake !== null) return;
   dropRow(entry, state, row);
   if (entry.rows.size === 0) entries.delete(entry.def.id);
   publishOccupancy();
@@ -927,25 +1111,18 @@ function evictStaleForFigureBytes(entry: FigureEntry, bytes: number, minIdleFram
 }
 
 function entryFor(def: FigureDef): FigureEntry {
-  const bakeScale = bakeScaleNow();
   const existing = entries.get(def.id);
-  if (existing?.bakeScale === bakeScale) {
+  if (existing !== undefined) {
     entries.delete(def.id);
     entries.set(def.id, existing);
     return existing;
   }
-  if (existing !== undefined) {
-    for (const [state, row] of existing.rows) dropRow(existing, state, row);
-    entries.delete(def.id);
-  }
-
   const entry: FigureEntry = {
     def,
-    bakeScale,
-    cellPixelWidth: Math.max(1, Math.ceil(def.frameWidth * bakeScale)),
-    cellPixelHeight: Math.max(1, Math.ceil(def.frameHeight * bakeScale)),
     bytes: 0,
     rows: new Map(),
+    raisedLevel: LOW_END_BAKE_SCALE,
+    raisedAtFrame: Number.NEGATIVE_INFINITY,
   };
   entries.set(def.id, entry);
   return entry;
@@ -957,9 +1134,16 @@ function rowFor(entry: FigureEntry, state: string): FigureRow {
     entry.rows.delete(state);
     entry.rows.set(state, existing);
     existing.lastFrame = frameCounter;
+    syncRowLevel(entry, existing, bakeLevelOf(entry));
     return existing;
   }
-  const row: FigureRow = { cells: new Map(), fronts: new Map(), bytes: 0, lastFrame: frameCounter };
+  const row: FigureRow = {
+    cells: new Map(),
+    bakeScale: bakeLevelOf(entry),
+    rebake: null,
+    bytes: 0,
+    lastFrame: frameCounter,
+  };
   entry.rows.set(state, row);
   cachedRows += 1;
   // Published here rather than only once a cell lands: a row the budget then
@@ -969,14 +1153,114 @@ function rowFor(entry: FigureEntry, state: string): FigureRow {
   return row;
 }
 
-function cellBytes(entry: FigureEntry): number {
-  return entry.cellPixelWidth * entry.cellPixelHeight * BYTES_PER_PIXEL;
+function chargeBytes(entry: FigureEntry, row: FigureRow, bytes: number): void {
+  row.bytes += bytes;
+  entry.bytes += bytes;
+  cachedBytes += bytes;
 }
 
-/** Whether a cell of this figure fits its own ceiling and the whole cache's, both empty. */
-function cellCanEverFit(entry: FigureEntry): boolean {
-  const bytes = cellBytes(entry);
-  return bytes <= figureByteBudgetFor(entry.def) && bytes <= figureCacheByteBudget();
+function sumFrameBytes(frames: Iterable<BakedFrame>): number {
+  let bytes = 0;
+  for (const baked of frames) bytes += baked.bytes;
+  return bytes;
+}
+
+/** Lets go of a row's part-finished rebake, whose level the figure no longer bakes at. */
+function discardRebake(entry: FigureEntry, row: FigureRow): void {
+  const rebake = row.rebake;
+  if (rebake === null) return;
+  row.rebake = null;
+  notifyFramesDropped(rebake.cells.values());
+  queueFramesForRelease(rebake.cells.values());
+  chargeBytes(entry, row, -sumFrameBytes(rebake.cells.values()));
+}
+
+/**
+ * Brings a row in line with the level its figure bakes at now: an empty row
+ * simply adopts it, a row already at it needs no rebake, and a rebake begun
+ * for some other level is abandoned. A row holding cells at another level
+ * keeps them, drawn scaled, until a rebake at this level can replace them.
+ */
+function syncRowLevel(entry: FigureEntry, row: FigureRow, level: number): void {
+  if (row.cells.size === 0) {
+    discardRebake(entry, row);
+    row.bakeScale = level;
+    return;
+  }
+  if (row.bakeScale === level || row.rebake?.bakeScale !== level) discardRebake(entry, row);
+}
+
+/** Whether a frame of a row is baked at `level`: in the row's cells, or in a rebake at it. */
+function frameBakedAt(row: FigureRow, frame: number, level: number): boolean {
+  if (row.bakeScale === level) return row.cells.has(frame);
+  return row.rebake?.bakeScale === level && row.rebake.cells.has(frame);
+}
+
+/** Whether a row is drawn at a level other than the one its figure bakes at now. */
+function rowIsStale(entry: FigureEntry, row: FigureRow): boolean {
+  return row.cells.size > 0 && row.bakeScale !== bakeLevelOf(entry);
+}
+
+/**
+ * Files a baked frame with its row: among the row's own cells when it is at
+ * the row's level, or into the row's rebake, which replaces the cells as soon
+ * as it holds every frame they do.
+ */
+function storeBakedFrame(
+  entry: FigureEntry,
+  row: FigureRow,
+  frame: number,
+  baked: BakedFrame,
+): void {
+  chargeBytes(entry, row, baked.bytes);
+  if (row.cells.size === 0 && row.rebake === null) row.bakeScale = baked.bakeScale;
+  if (baked.bakeScale === row.bakeScale) {
+    row.cells.set(frame, baked);
+    return;
+  }
+  if (row.rebake?.bakeScale !== baked.bakeScale) {
+    discardRebake(entry, row);
+    row.rebake = { bakeScale: baked.bakeScale, cells: new Map() };
+  }
+  row.rebake.cells.set(frame, baked);
+  swapInRebakeIfWhole(entry, row);
+}
+
+/** Replaces a row's cells with its rebake once the rebake holds every frame they do. */
+function swapInRebakeIfWhole(entry: FigureEntry, row: FigureRow): boolean {
+  const rebake = row.rebake;
+  if (rebake === null) return false;
+  for (const heldFrame of row.cells.keys()) {
+    if (!rebake.cells.has(heldFrame)) return false;
+  }
+  const replaced = row.cells;
+  notifyFramesDropped(replaced.values());
+  queueFramesForRelease(replaced.values());
+  chargeBytes(entry, row, -sumFrameBytes(replaced.values()));
+  row.cells = rebake.cells;
+  row.bakeScale = rebake.bakeScale;
+  row.rebake = null;
+  return true;
+}
+
+/**
+ * A frame the row's cells lack but its rebake at the figure's current level
+ * holds, drawn by swapping the rebake in when it already covers every frame
+ * the cells do. Baking the frame again at the row's old level would spend a
+ * paint on a cell the swap throws away, and drawing the rebake's cell among
+ * the old ones would mix two levels in one row.
+ */
+function swappedInRebakeCell(entry: FigureEntry, row: FigureRow, frame: number): BakedFrame | null {
+  if (row.rebake?.bakeScale !== bakeLevelOf(entry)) return null;
+  const rebaked = row.rebake.cells.get(frame);
+  if (rebaked === undefined || !swapInRebakeIfWhole(entry, row)) return null;
+  return rebaked;
+}
+
+/** Whether a whole cell of this figure at `bakeScale` fits its own ceiling and the whole cache's, both empty. */
+function cellCanEverFit(def: FigureDef, bakeScale: number): boolean {
+  const bytes = wholeCellBytes(def, bakeScale);
+  return bytes <= figureByteBudgetFor(def) && bytes <= figureCacheByteBudget();
 }
 
 function admitsGlobally(bytes: number): boolean {
@@ -987,18 +1271,48 @@ function admitsForFigure(entry: FigureEntry, bytes: number): boolean {
   return entry.bytes + bytes <= figureByteBudgetFor(entry.def);
 }
 
-/** What a cell of this figure is expected to cost, or null if none has been baked. */
+/** What a cell of this figure at its current level is expected to cost, or null if none has been baked there. */
 function estimatedBakeMs(entry: FigureEntry): number | null {
-  const estimate = bakeCostByFigure.get(entry.def.id);
-  if (estimate?.bakeScale !== entry.bakeScale) return null;
+  return estimatedBakeMsAt(entry.def, bakeLevelOf(entry));
+}
+
+function estimatedBakeMsAt(def: FigureDef, bakeScale: number): number | null {
+  const estimate = bakeCostByFigure.get(def.id);
+  if (estimate?.bakeScale !== bakeScale) return null;
   return estimate.msPerCell;
 }
 
-function recordBakeCost(entry: FigureEntry, elapsedMs: number): void {
-  const previous = estimatedBakeMs(entry);
+function recordBakeCost(def: FigureDef, bakeScale: number, elapsedMs: number): void {
+  const previous = estimatedBakeMsAt(def, bakeScale);
   const smoothed =
     previous === null ? elapsedMs : previous + (elapsedMs - previous) * BAKE_COST_SMOOTHING;
-  bakeCostByFigure.set(entry.def.id, { bakeScale: entry.bakeScale, msPerCell: smoothed });
+  bakeCostByFigure.set(def.id, { bakeScale, msPerCell: smoothed });
+}
+
+/**
+ * The share of a whole cell one of a figure's baked frames has been taking
+ * once cropped, front layer included, smoothed as the bake cost is. Kept per
+ * figure and outside `entries` for the same reasons: it is a property of the
+ * painter's poses, and it is nearly the same at every level.
+ */
+const storedShareByFigure = new Map<FigureId, number>();
+
+function recordStoredShare(def: FigureDef, baked: BakedFrame): void {
+  const share = baked.bytes / wholeCellBytes(def, baked.bakeScale);
+  const previous = storedShareByFigure.get(def.id);
+  const smoothed =
+    previous === undefined ? share : previous + (share - previous) * BAKE_COST_SMOOTHING;
+  storedShareByFigure.set(def.id, smoothed);
+}
+
+/**
+ * What a frame of this figure not yet baked is expected to hold at a level:
+ * its measured crop share of a whole cell, or the whole cell before any
+ * frame of it has been measured.
+ */
+function expectedStoredBytes(def: FigureDef, bakeScale: number): number {
+  const share = storedShareByFigure.get(def.id) ?? 1;
+  return Math.ceil(wholeCellBytes(def, bakeScale) * share);
 }
 
 /**
@@ -1152,7 +1466,11 @@ function releaseScratch(): void {
  * throwing painter is rare enough that reallocating after one costs nothing.
  */
 function discardInnermostScratch(): void {
-  const level = scratchDepth - 1;
+  discardScratchLevel(scratchDepth - 1);
+}
+
+/** {@link discardInnermostScratch} for any claimed level. */
+function discardScratchLevel(level: number): void {
   const poisoned = scratchStack[level] ?? null;
   if (poisoned === null) return;
   scratchBytes -= surfaceBytes(poisoned);
@@ -1169,38 +1487,43 @@ function releaseScratchSurfaces(): void {
   });
   scratchStack.length = 0;
   scratchBytes = 0;
-  if (frontScratch !== null && scratchDepth === 0) releaseSurface(frontScratch);
-  frontScratch = null;
+  if (scratchDepth === 0) {
+    for (const surface of readableScratch.values()) releaseSurface(surface);
+  }
+  readableScratch.clear();
 }
 
-/** Bakes one cell, or returns null when a budget refused it. */
+/**
+ * Bakes one frame at `bakeScale` and files it with its row, or returns null
+ * when a budget refused it.
+ */
 function bakeCell(
   entry: FigureEntry,
   row: FigureRow,
   state: string,
   frame: number,
   eviction: EvictionPolicy,
-): CanvasSurface | null {
-  const bytes = cellBytes(entry);
-  const layers = entry.def.heldLayers;
+  bakeScale: number,
+): BakedFrame | null {
+  const def = entry.def;
+  // A frame's crop is only known once it is painted, so it is admitted at
+  // the most it can take — the whole cell, and as much again for a layered
+  // frame's front — and charged what it actually holds.
+  const bytes = wholeCellBytes(def, bakeScale);
+  const layers = def.heldLayers;
   const layered = layers?.layered(state, frame) === true;
-  // A layered cell's front is cropped out of a cell-sized surface, so a cell
-  // that may carry one is admitted with room for both.
-  const reservedBytes = layered ? bytes * 2 : bytes;
+  const reservedBytes = layered ? bytes * LAYERED_CELL_RESERVE_FACTOR : bytes;
   // The supersampled scratch the paint borrows counts against the whole
   // cache's ceiling, and growing it for this cell is a cost of this bake.
-  const supersample = figureBakeDensity(entry.def);
+  const supersample = figureBakeDensity(def);
+  const cell = cellPixelsAt(def, bakeScale);
   const scratchLevels = layered ? LAYERED_BAKE_SCRATCH_LEVELS : WHOLE_BAKE_SCRATCH_LEVELS;
   const globallyReservedBytes =
     reservedBytes +
-    scratchGrowthBytes(
-      scratchLevels,
-      entry.cellPixelWidth * supersample,
-      entry.cellPixelHeight * supersample,
-    );
+    scratchGrowthBytes(scratchLevels, cell.width * supersample, cell.height * supersample);
   // No eviction can free room for a cell that does not fit an empty cache, and
   // sweeping for one only destroys rows that were serving somebody.
-  if (!cellCanEverFit(entry)) {
+  if (!cellCanEverFit(def, bakeScale)) {
     lastBakeRefusal = 'tooLarge';
     return null;
   }
@@ -1226,11 +1549,11 @@ function bakeCell(
   const perfStartedAt = perfMonitor.begin();
   const startedAt = bakeClock();
   const msBakedBefore = msBakedThisFrame;
-  let baked: BakedCell;
+  let baked: BakedFrame;
   try {
     baked = layered
-      ? bakeLayeredCell(entry, layers, state, frame)
-      : bakeWholeCell(entry, state, frame);
+      ? bakeLayeredCell(def, layers, state, frame, bakeScale)
+      : bakeWholeCell(def, state, frame, bakeScale);
   } catch (error) {
     if (!(error instanceof CanvasContextUnavailableError)) throw error;
     noteBakeRefusedMemory();
@@ -1238,17 +1561,12 @@ function bakeCell(
     perfMonitor.end('figureBake', perfStartedAt);
     return null;
   }
-  const { cell, front } = baked;
-  const frontBytes = front === null ? 0 : surfaceBytes(front.surface);
-  row.cells.set(frame, cell);
-  if (front !== null) row.fronts.set(frame, front);
-  row.bytes += bytes + frontBytes;
-  entry.bytes += bytes + frontBytes;
-  cachedBytes += bytes + frontBytes;
+  storeBakedFrame(entry, row, frame, baked);
+  recordStoredShare(def, baked);
   const paintedMs = bakeClock() - startedAt;
   // The figure's cost estimate is the paint alone; a sweep's drop listeners
   // would skew it, though the frame still pays for both below.
-  recordBakeCost(entry, paintedMs);
+  recordBakeCost(def, bakeScale, paintedMs);
   recordFigureCacheBakeMs(paintedMs);
   // A painter that composes another figure bakes or paints it on deeper scratch
   // levels this cell's admission did not size, and that nested figure's own
@@ -1268,18 +1586,21 @@ function bakeCell(
   perfMonitor.end('figureBake', perfStartedAt);
   perfMonitor.count('figureBakes', 1);
   publishOccupancy();
-  return cell;
+  return baked;
 }
 
-/** A front-layer pixel whose alpha is at or under this holds no ink, and the crop leaves it out. */
-const FRONT_INK_ALPHA_FLOOR = 0;
+/** A pixel whose alpha is at or under this holds no ink, and a crop leaves it out. */
+const INK_ALPHA_FLOOR = 0;
+
+interface InkBox {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
+}
 
 /** The ink box of a surface's alpha, in its own pixels, or null for no ink at all. */
-function alphaInkBox(
-  surface: CanvasSurface,
-  width: number,
-  height: number,
-): { left: number; top: number; width: number; height: number } | null {
+function alphaInkBox(surface: CanvasSurface, width: number, height: number): InkBox | null {
   const data = surfaceContext(surface).getImageData(0, 0, width, height).data;
   let left = width;
   let top = height;
@@ -1287,8 +1608,7 @@ function alphaInkBox(
   let bottom = -1;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      if (data[(y * width + x) * RGBA_STRIDE + ALPHA_CHANNEL_OFFSET] <= FRONT_INK_ALPHA_FLOOR)
-        continue;
+      if (data[(y * width + x) * RGBA_STRIDE + ALPHA_CHANNEL_OFFSET] <= INK_ALPHA_FLOOR) continue;
       if (x < left) left = x;
       if (x > right) right = x;
       if (y < top) top = y;
@@ -1299,125 +1619,192 @@ function alphaInkBox(
   return { left, top, width: right - left + 1, height: bottom - top + 1 };
 }
 
-let frontScratch: CanvasSurface | null = null;
+/** `box` grown by `padding` on every side, clamped to a `width`×`height` surface. */
+function paddedInkBox(box: InkBox, padding: number, width: number, height: number): InkBox {
+  const left = Math.max(0, box.left - padding);
+  const top = Math.max(0, box.top - padding);
+  const right = Math.min(width, box.left + box.width + padding);
+  const bottom = Math.min(height, box.top + box.height + padding);
+  return { left, top, width: right - left, height: bottom - top };
+}
+
+/** The two readable cell-sized surfaces a bake is read back from: the whole figure, and a front layer. */
+type ReadableScratchSlot = 'body' | 'front';
 
 /**
- * The cell-sized surface a front layer is read back from. Readable, because
- * its ink box is measured; kept across bakes, because a fight bakes dozens.
+ * Readable, because each bake's ink box is measured off it; kept across
+ * bakes, because a fight bakes dozens. A painter that composes another figure
+ * finishes the nested bake before its own paint is read back, so one surface
+ * per slot is enough at any nesting depth.
  */
-function frontScratchOf(width: number, height: number): CanvasSurface {
-  if (frontScratch === null || frontScratch.width < width || frontScratch.height < height) {
-    if (frontScratch !== null) releaseSurface(frontScratch);
-    frontScratch = allocReadableCanvas('figureScratch', width, height);
+const readableScratch = new Map<ReadableScratchSlot, CanvasSurface>();
+
+function readableScratchOf(slot: ReadableScratchSlot, size: SurfaceSize): CanvasSurface {
+  let surface = readableScratch.get(slot);
+  if (surface === undefined || surface.width < size.width || surface.height < size.height) {
+    const grown = allocReadableCanvas('figureScratch', size.width, size.height);
+    // Its context is taken before the old surface goes, so a refusal leaves the slot as it was.
+    freshSurfaceContext(grown);
+    if (surface !== undefined) {
+      scratchBytes -= surfaceBytes(surface);
+      releaseSurface(surface);
+    }
+    surface = grown;
+    scratchBytes += surfaceBytes(surface);
+    readableScratch.set(slot, surface);
   }
-  const ctx = surfaceContext(frontScratch);
+  const ctx = surfaceContext(surface);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, frontScratch.width, frontScratch.height);
-  return frontScratch;
+  ctx.clearRect(0, 0, surface.width, surface.height);
+  return surface;
 }
 
-interface BakedCell {
-  readonly cell: CanvasSurface;
-  readonly front: FrontLayerCell | null;
+/** Copies one rectangle of a readable surface into a surface of its own. */
+function copiedCrop(readable: CanvasSurface, box: InkBox): CanvasSurface {
+  const crop = allocCanvas('figureCells', box.width, box.height);
+  freshSurfaceContext(crop).drawImage(
+    readable,
+    box.left,
+    box.top,
+    box.width,
+    box.height,
+    0,
+    0,
+    box.width,
+    box.height,
+  );
+  return crop;
 }
 
-/** Paints one ordinary frame into a cell of its own: supersampled, then downsampled into place. */
-function bakeWholeCell(entry: FigureEntry, state: string, frame: number): BakedCell {
-  const supersample = figureBakeDensity(entry.def);
-  const superWidth = entry.cellPixelWidth * supersample;
-  const superHeight = entry.cellPixelHeight * supersample;
-  const cell = cellSurface(entry);
-  let surface: CanvasSurface;
-  try {
-    surface = acquireScratch(superWidth, superHeight);
-  } catch (error) {
-    releaseSurface(cell);
-    throw error;
+/** A whole cell's picture as a {@link BakedFrame}: cropped to its ink, padded, placed where it sat. */
+function croppedBody(
+  readable: CanvasSurface,
+  cell: SurfaceSize,
+  bakeScale: number,
+  front: FrontLayerCell | null,
+): BakedFrame {
+  const frontBytes = front === null ? 0 : surfaceBytes(front.surface);
+  const ink = alphaInkBox(readable, cell.width, cell.height);
+  if (ink === null) {
+    const empty = allocCanvas('figureCells', EMPTY_CELL_PX, EMPTY_CELL_PX);
+    freshSurfaceContext(empty);
+    return {
+      surface: empty,
+      x: 0,
+      y: 0,
+      bakeScale,
+      front,
+      bytes: surfaceBytes(empty) + frontBytes,
+    };
   }
+  const box = paddedInkBox(ink, CELL_CROP_PADDING_PX, cell.width, cell.height);
+  const surface = copiedCrop(readable, box);
+  return {
+    surface,
+    x: box.left,
+    y: box.top,
+    bakeScale,
+    front,
+    bytes: surfaceBytes(surface) + frontBytes,
+  };
+}
+
+/**
+ * Paints one ordinary frame and crops it: supersampled, downsampled into
+ * place, then cut to its ink.
+ *
+ * Only a throwing painter poisons the scratch. A browser out of canvas memory
+ * refuses the crop's surface after the paint, and the scratch it leaves is
+ * whole, ready for the body drawn directly in the cell's place.
+ */
+function bakeWholeCell(
+  def: FigureDef,
+  state: string,
+  frame: number,
+  bakeScale: number,
+): BakedFrame {
+  const supersample = figureBakeDensity(def);
+  const cell = cellPixelsAt(def, bakeScale);
+  const surface = acquireScratch(cell.width * supersample, cell.height * supersample);
   try {
-    paintInto(surfaceContext(surface), entry.def, state, frame, entry.bakeScale * supersample);
-    downsampleInto(cell, surface, entry);
-  } catch (error) {
-    discardInnermostScratch();
-    releaseSurface(cell);
-    throw error;
+    try {
+      paintInto(surfaceContext(surface), def, state, frame, bakeScale * supersample);
+    } catch (error) {
+      discardInnermostScratch();
+      throw error;
+    }
+    const readable = readableScratchOf('body', cell);
+    downsampleInto(readable, surface, cell, supersample);
+    return croppedBody(readable, cell, bakeScale, null);
   } finally {
     releaseScratch();
   }
-  return { cell, front: null };
 }
 
-function downsampleInto(target: CanvasSurface, source: CanvasSurface, entry: FigureEntry): void {
-  const supersample = figureBakeDensity(entry.def);
+function downsampleInto(
+  target: CanvasSurface,
+  source: CanvasSurface,
+  cell: SurfaceSize,
+  supersample: number,
+): void {
   surfaceContext(target).drawImage(
     source,
     0,
     0,
-    entry.cellPixelWidth * supersample,
-    entry.cellPixelHeight * supersample,
+    cell.width * supersample,
+    cell.height * supersample,
     0,
     0,
-    entry.cellPixelWidth,
-    entry.cellPixelHeight,
+    cell.width,
+    cell.height,
   );
 }
 
 /**
  * Paints a layered frame in its one pass and keeps both halves: the whole
- * figure as the cell, and the part in front of the held thing cropped to its
- * ink.
+ * figure, and the part in front of the held thing, each cropped to its ink.
  */
 function bakeLayeredCell(
-  entry: FigureEntry,
+  def: FigureDef,
   layers: NonNullable<FigureDef['heldLayers']>,
   state: string,
   frame: number,
-): BakedCell {
-  const supersample = figureBakeDensity(entry.def);
-  const superWidth = entry.cellPixelWidth * supersample;
-  const superHeight = entry.cellPixelHeight * supersample;
-  const cell = cellSurface(entry);
-  let back: CanvasSurface;
-  try {
-    back = acquireScratch(superWidth, superHeight);
-  } catch (error) {
-    releaseSurface(cell);
-    throw error;
-  }
+  bakeScale: number,
+): BakedFrame {
+  const supersample = figureBakeDensity(def);
+  const cell = cellPixelsAt(def, bakeScale);
+  const superWidth = cell.width * supersample;
+  const superHeight = cell.height * supersample;
+  const back = acquireScratch(superWidth, superHeight);
   try {
     const front = acquireScratch(superWidth, superHeight);
     try {
-      const density = entry.bakeScale * supersample;
-      paintLayersInto(surfaceContext(back), surfaceContext(front), layers, state, frame, density);
-      downsampleInto(cell, back, entry);
-      const readable = frontScratchOf(entry.cellPixelWidth, entry.cellPixelHeight);
-      downsampleInto(readable, front, entry);
-      return { cell, front: croppedFront(readable, entry) };
-    } catch (error) {
-      discardInnermostScratch();
-      throw error;
+      try {
+        const density = bakeScale * supersample;
+        paintLayersInto(surfaceContext(back), surfaceContext(front), layers, state, frame, density);
+      } catch (error) {
+        // The painter may have thrown past a save on either surface.
+        discardScratchLevel(scratchDepth - 1);
+        discardScratchLevel(scratchDepth - 2);
+        throw error;
+      }
+      const readableFront = readableScratchOf('front', cell);
+      downsampleInto(readableFront, front, cell, supersample);
+      const frontLayer = croppedFront(readableFront, cell);
+      try {
+        const readableBody = readableScratchOf('body', cell);
+        downsampleInto(readableBody, back, cell, supersample);
+        return croppedBody(readableBody, cell, bakeScale, frontLayer);
+      } catch (error) {
+        if (frontLayer !== null) releaseSurface(frontLayer.surface);
+        throw error;
+      }
     } finally {
       releaseScratch();
     }
-  } catch (error) {
-    discardInnermostScratch();
-    releaseSurface(cell);
-    throw error;
   } finally {
     releaseScratch();
   }
-}
-
-/**
- * A surface for a new cell, its context taken before anything is painted: a
- * browser out of canvas memory refuses here, before the pooled scratch is
- * touched, so a refusal costs no paint and leaves the scratch for the body
- * drawn directly in the cell's place.
- */
-function cellSurface(entry: FigureEntry): CanvasSurface {
-  const cell = allocCanvas('figureCells', entry.cellPixelWidth, entry.cellPixelHeight);
-  freshSurfaceContext(cell);
-  return cell;
 }
 
 /** Runs a figure's two-layer painter at `density`, popping the density however it ends. */
@@ -1441,23 +1828,12 @@ function paintLayersInto(
   }
 }
 
-/** The ink of a cell-sized front layer on its own surface, or null when it has none. */
-function croppedFront(readable: CanvasSurface, entry: FigureEntry): FrontLayerCell | null {
-  const box = alphaInkBox(readable, entry.cellPixelWidth, entry.cellPixelHeight);
-  if (box === null) return null;
-  const crop = allocCanvas('figureCells', box.width, box.height);
-  surfaceContext(crop).drawImage(
-    readable,
-    box.left,
-    box.top,
-    box.width,
-    box.height,
-    0,
-    0,
-    box.width,
-    box.height,
-  );
-  return { surface: crop, x: box.left, y: box.top };
+/** The ink of a cell-sized front layer on its own surface, padded as a body is, or null when it has none. */
+function croppedFront(readable: CanvasSurface, cell: SurfaceSize): FrontLayerCell | null {
+  const ink = alphaInkBox(readable, cell.width, cell.height);
+  if (ink === null) return null;
+  const box = paddedInkBox(ink, CELL_CROP_PADDING_PX, cell.width, cell.height);
+  return { surface: copiedCrop(readable, box), x: box.left, y: box.top };
 }
 
 /**
@@ -1577,8 +1953,8 @@ export function figurePrewarmDepth(): number {
  * Marks a row as wanted without drawing it: its last-use frame moves to now,
  * so the idle sweep passes it over, and it moves to the fresh end of its own
  * figure's rows. Nothing is baked or queued. Returns whether every frame of
- * the row is warm at the scale the cache bakes at now — a row baked before a
- * quality change is dropped at the next draw — so a caller keeping rows alive
+ * the row is warm at the level its figure bakes at now — a row baked at
+ * another level is drawn scaled until its rebake lands — so a caller keeping rows alive
  * knows which to ask for again.
  *
  * Less than a hit: the figure keeps its place in the cache's least-recently-
@@ -1600,8 +1976,12 @@ export function touchFigureState(def: FigureDef, state: string): boolean {
   entry.rows.delete(state);
   entry.rows.set(state, row);
   row.lastFrame = frameCounter;
-  const bakedAtCurrentScale = entry.bakeScale === bakeScaleNow();
-  return bakedAtCurrentScale && row.cells.size >= figureFrameCount(def, state);
+  return rowIsWhole(entry, row, figureFrameCount(def, state));
+}
+
+/** Whether a row holds every one of its `frames` at the level its figure bakes at now. */
+function rowIsWhole(entry: FigureEntry, row: FigureRow, frames: number): boolean {
+  return row.bakeScale === bakeLevelOf(entry) && row.cells.size >= frames;
 }
 
 /**
@@ -1612,9 +1992,7 @@ export function touchFigureState(def: FigureDef, state: string): boolean {
  * thousands of frames, where the blits, not the cache, would be the cost.
  */
 export function markFigureStateDrawn(def: FigureDef, state: string): void {
-  const entry = entries.get(def.id);
-  const heldAtCurrentScale = entry?.bakeScale === bakeScaleNow() && entry.rows.has(state);
-  if (!heldAtCurrentScale) return;
+  if (entries.get(def.id)?.rows.has(state) !== true) return;
   lastDrawnFrameByFigure.set(def.id, frameCounter);
   rowFor(entryFor(def), state);
 }
@@ -1674,31 +2052,65 @@ export function figureCacheRoomContested(): boolean {
 }
 
 /**
- * Whether every cell of a row is baked at this device's density. Touches
- * nothing: asking does not make the row look drawn.
+ * Whether every cell of a row is baked at the level its figure bakes at now.
+ * Touches nothing: asking does not make the row look drawn.
  */
 export function isFigureStateWarm(def: FigureDef, state: string): boolean {
   const entry = entries.get(def.id);
-  if (entry?.bakeScale !== bakeScaleNow()) return false;
-  const cells = entry.rows.get(state)?.cells;
-  if (cells === undefined) return false;
-  return cells.size >= figureFrameCount(def, state);
+  const row = entry?.rows.get(state);
+  if (entry === undefined || row === undefined) return false;
+  return rowIsWhole(entry, row, figureFrameCount(def, state));
 }
 
-/** Bytes still to bake for the first `frames` frames of a row, at the scale the cache bakes at now. */
-function unbakedBytes(def: FigureDef, state: string, frames: number): number {
-  const scale = bakeScaleNow();
-  const cellBytesAtScale =
-    Math.max(1, Math.ceil(def.frameWidth * scale)) *
-    Math.max(1, Math.ceil(def.frameHeight * scale)) *
-    BYTES_PER_PIXEL;
-  const entry = entries.get(def.id);
-  const cells = entry?.bakeScale === scale ? entry.rows.get(state)?.cells : undefined;
+/** How many of a row's first `frames` frames are not yet baked at the level its figure bakes at now. */
+function framesUnbaked(def: FigureDef, state: string, frames: number): number {
+  const level = bakeLevelFor(def);
+  const row = entries.get(def.id)?.rows.get(state);
   let missing = 0;
   for (let frame = 0; frame < frames; frame++) {
-    if (cells?.has(frame) !== true) missing++;
+    if (row === undefined || !frameBakedAt(row, frame, level)) missing++;
   }
-  return missing * cellBytesAtScale;
+  return missing;
+}
+
+/** Bytes still to bake for the first `frames` frames of a row, at the level its figure bakes at now. */
+function unbakedBytes(def: FigureDef, state: string, frames: number): number {
+  return framesUnbaked(def, state, frames) * expectedStoredBytes(def, bakeLevelFor(def));
+}
+
+/** The most a single bake of a row's unbaked frames reserves: from the figure's budget, and from the whole cache's. */
+interface LargestAdmission {
+  readonly figureBytes: number;
+  readonly globalBytes: number;
+}
+
+/**
+ * What the largest single admission among a row's first `frames` unbaked
+ * frames reserves, as {@link bakeCell} admits it: the whole cell, doubled for
+ * a layered frame, plus the scratch growth on the whole cache's side.
+ */
+function largestAdmission(def: FigureDef, state: string, frames: number): LargestAdmission {
+  const level = bakeLevelFor(def);
+  const row = entries.get(def.id)?.rows.get(state);
+  const cellBytes = wholeCellBytes(def, level);
+  const cell = cellPixelsAt(def, level);
+  const supersample = figureBakeDensity(def);
+  let figureBytes = 0;
+  let globalBytes = 0;
+  for (let frame = 0; frame < frames; frame++) {
+    if (row !== undefined && frameBakedAt(row, frame, level)) continue;
+    const layered = def.heldLayers?.layered(state, frame) === true;
+    const reservedBytes = layered ? cellBytes * LAYERED_CELL_RESERVE_FACTOR : cellBytes;
+    const scratchLevels = layered ? LAYERED_BAKE_SCRATCH_LEVELS : WHOLE_BAKE_SCRATCH_LEVELS;
+    const scratchGrowth = scratchGrowthBytes(
+      scratchLevels,
+      cell.width * supersample,
+      cell.height * supersample,
+    );
+    figureBytes = Math.max(figureBytes, reservedBytes);
+    globalBytes = Math.max(globalBytes, reservedBytes + scratchGrowth);
+  }
+  return { figureBytes, globalBytes };
 }
 
 /**
@@ -1712,22 +2124,36 @@ function unbakedBytes(def: FigureDef, state: string, frames: number): number {
  * drawn a frame ago are as likely to go as any — whose rebake on the draw then
  * evicts the warmed row in turn, every frame. The queue ahead is counted
  * because it spends the same room first.
+ *
+ * Unbaked frames are estimated at their measured crop share, but each one is
+ * admitted at the most it could take, so the largest single admission is held
+ * in reserve on top: without it a row that fits by its estimate can still
+ * evict on its last frame's admission.
  */
 export function figureRowFitsWithoutEviction(def: FigureDef, state: string): boolean {
-  const neededBytes = unbakedBytes(def, state, figureFrameCount(def, state));
+  const frames = figureFrameCount(def, state);
+  const neededBytes = unbakedBytes(def, state, frames);
   if (neededBytes <= 0) return true;
+  const own = largestAdmission(def, state, frames);
   let queuedBytes = 0;
   let queuedFigureBytes = 0;
+  let headroomBytes = own.globalBytes;
+  let figureHeadroomBytes = own.figureBytes;
   for (const pending of prewarmQueue) {
     if (pending.def.id === def.id && pending.state === state) continue;
     const bytes = unbakedBytes(pending.def, pending.state, pending.frames);
+    const admission = largestAdmission(pending.def, pending.state, pending.frames);
     queuedBytes += bytes;
-    if (pending.def.id === def.id) queuedFigureBytes += bytes;
+    headroomBytes = Math.max(headroomBytes, admission.globalBytes);
+    if (pending.def.id === def.id) {
+      queuedFigureBytes += bytes;
+      figureHeadroomBytes = Math.max(figureHeadroomBytes, admission.figureBytes);
+    }
   }
-  const entry = entries.get(def.id);
-  const figureBytes = entry?.bakeScale === bakeScaleNow() ? entry.bytes : 0;
-  const fitsFigure = figureBytes + queuedFigureBytes + neededBytes <= figureByteBudgetFor(def);
-  return admitsGlobally(queuedBytes + neededBytes) && fitsFigure;
+  const figureBytes = entries.get(def.id)?.bytes ?? 0;
+  const figureNeededBytes = figureBytes + queuedFigureBytes + neededBytes + figureHeadroomBytes;
+  const fitsFigure = figureNeededBytes <= figureByteBudgetFor(def);
+  return admitsGlobally(queuedBytes + neededBytes + headroomBytes) && fitsFigure;
 }
 
 /**
@@ -1848,12 +2274,13 @@ function drainPrewarmQueue(
     const entry = entryFor(pending.def);
     if (!fitsPrewarmAllowance(entry, pending, budgetMs)) return;
     const row = rowFor(entry, pending.state);
+    const level = bakeLevelOf(entry);
     let baked = false;
     let refused = false;
     for (const frame of bakeOrder(pending)) {
-      if (row.cells.has(frame)) continue;
+      if (frameBakedAt(row, frame, level)) continue;
       if (!fitsPrewarmAllowance(entry, pending, budgetMs)) return;
-      if (bakeCell(entry, row, pending.state, frame, prewarmEviction(pending)) === null) {
+      if (bakeCell(entry, row, pending.state, frame, prewarmEviction(pending), level) === null) {
         dropRowIfEmpty(entry, pending.state, row);
         // Refused for memory rather than for room: no request is at fault, and
         // charging each would give up on rows on screen within a few frames.
@@ -1926,16 +2353,17 @@ export function bakeFigurePrewarmFor(budgetMs: number, mustProgress: boolean): v
     if (pending === undefined) return;
     const entry = entryFor(pending.def);
     const row = rowFor(entry, pending.state);
+    const level = bakeLevelOf(entry);
     let refused = false;
     for (const frame of bakeOrder(pending)) {
-      if (row.cells.has(frame)) continue;
+      if (frameBakedAt(row, frame, level)) continue;
       const owedFirstCell = mustProgress && !startedAny;
       if (!owedFirstCell && !fitsCeiling(entry)) {
         dropRowIfEmpty(entry, pending.state, row);
         return;
       }
       startedAny = true;
-      if (bakeCell(entry, row, pending.state, frame, prewarmEviction(pending)) === null) {
+      if (bakeCell(entry, row, pending.state, frame, prewarmEviction(pending), level) === null) {
         dropRowIfEmpty(entry, pending.state, row);
         // Refused for memory rather than for room: no request is at fault, and
         // charging each would give up on rows on screen within a few frames.
@@ -1960,18 +2388,11 @@ export function bakeFigurePrewarmFor(budgetMs: number, mustProgress: boolean): v
  * pacing.
  */
 export function figurePrewarmOwed(unmeasuredCellMs: number): { cells: number; ms: number } {
-  const scale = bakeScaleNow();
   let cells = 0;
   let ms = 0;
   for (const pending of prewarmQueue) {
-    const entry = entries.get(pending.def.id);
-    const heldCells = entry?.bakeScale === scale ? entry.rows.get(pending.state)?.cells : undefined;
-    let missing = 0;
-    for (let frame = 0; frame < pending.frames; frame++) {
-      if (heldCells?.has(frame) !== true) missing++;
-    }
-    const estimate = bakeCostByFigure.get(pending.def.id);
-    const perCellMs = estimate?.bakeScale === scale ? estimate.msPerCell : unmeasuredCellMs;
+    const missing = framesUnbaked(pending.def, pending.state, pending.frames);
+    const perCellMs = estimatedBakeMsAt(pending.def, bakeLevelFor(pending.def)) ?? unmeasuredCellMs;
     cells += missing;
     ms += missing * perCellMs;
   }
@@ -2009,7 +2430,7 @@ function deferRefusedPrewarm(pending: PrewarmRequest): void {
   // screen. What is worth a warning is a row something is drawing, or one
   // that no amount of room could ever admit — a figure declared too big for
   // its own budget.
-  if (pending.urgent || !cellCanEverFit(entryFor(pending.def))) {
+  if (pending.urgent || !cellCanEverFit(pending.def, bakeLevelFor(pending.def))) {
     drawnPrewarmAbandons++;
     warnPrewarmAbandoned(pending);
     return;
@@ -2053,8 +2474,8 @@ function isPrewarmAbandoned(figureId: FigureId, state: string, urgent: boolean):
 /**
  * Drops every cell of one figure and every prewarm queued for it, at once.
  *
- * For a figure that has been replaced rather than merely left undrawn — Carl
- * changing outfit, say — where waiting on the idle release would hold the old
+ * For a figure that has been replaced rather than merely left undrawn — the human
+ * crawler changing outfit, say — where waiting on the idle release would hold the old
  * figure's rows beside the new one's for {@link IDLE_FRAMES_BEFORE_RELEASE}
  * frames, and a figure whose working set alone nearly fills its budget has no
  * room for two.
@@ -2082,6 +2503,37 @@ export function figureResidentBytes(def: FigureDef): number {
   return entries.get(def.id)?.bytes ?? 0;
 }
 
+/**
+ * What one frame would cost the cache once baked — its ink crop and its front
+ * layer's, at the level its figure bakes at now — painted and measured
+ * without being kept, so measuring disturbs nothing the cache holds. For
+ * gates accounting for rows a scenario has not baked yet.
+ */
+export function measureFigureFrameBytes(def: FigureDef, state: string, frame: number): number {
+  const bakeScale = bakeLevelFor(def);
+  const layers = def.heldLayers;
+  const baked =
+    layers?.layered(state, frame) === true
+      ? bakeLayeredCell(def, layers, state, frame, bakeScale)
+      : bakeWholeCell(def, state, frame, bakeScale);
+  releaseSurface(baked.surface);
+  if (baked.front !== null) releaseSurface(baked.front.surface);
+  return baked.bytes;
+}
+
+/**
+ * What one held frame of a row costs the cache — its ink crop and its front
+ * layer's, at the level the row is drawn at — or null when the frame is not
+ * held. For gates sizing a figure's working set from what is really stored.
+ */
+export function figureFrameStoredBytes(
+  def: FigureDef,
+  state: string,
+  frame: number,
+): number | null {
+  return entries.get(def.id)?.rows.get(state)?.cells.get(frame)?.bytes ?? null;
+}
+
 /** One resident figure's baked surfaces: its cells and its layered frames' front layers. */
 interface ResidentFigureCells {
   readonly figureId: FigureId;
@@ -2098,9 +2550,15 @@ export function residentFigureCells(): ResidentFigureCells[] {
   const resident: ResidentFigureCells[] = [];
   for (const [figureId, entry] of entries) {
     const cells: CanvasSurface[] = [];
+    const collect = (frames: Iterable<BakedFrame>): void => {
+      for (const baked of frames) {
+        cells.push(baked.surface);
+        if (baked.front !== null) cells.push(baked.front.surface);
+      }
+    };
     for (const row of entry.rows.values()) {
-      cells.push(...row.cells.values());
-      for (const front of row.fronts.values()) cells.push(front.surface);
+      collect(row.cells.values());
+      if (row.rebake !== null) collect(row.rebake.cells.values());
     }
     resident.push({ figureId, cells, bytes: entry.bytes });
   }
@@ -2297,17 +2755,44 @@ function clampFrame(def: FigureDef, state: string, frame: number): number {
  * allowance is spent, or null when a budget refused it or there was nothing
  * of the figure to borrow. Null is the caller's cue to paint directly.
  */
-function cellFor(def: FigureDef, state: string, frame: number, scale: number): PlacedCell | null {
+function cellFor(
+  ctx: CanvasRenderingContext2D,
+  def: FigureDef,
+  state: string,
+  frame: number,
+  scale: number,
+): PlacedCell | null {
   lastDrawnFrameByFigure.set(def.id, frameCounter);
   const entry = entryFor(def);
+  noteDrawDensity(entry, ctx, scale);
   const row = rowFor(entry, state);
   const cached = row.cells.get(frame);
   if (cached !== undefined) {
     recordFigureCacheHit();
-    return placed(entry, cached, scale, row.fronts.get(frame) ?? null);
+    askForRebakeIfStale(entry, row, state, frame);
+    return placed(cached, scale, true);
+  }
+  const rebaked = swappedInRebakeCell(entry, row, frame);
+  if (rebaked !== null) {
+    recordFigureCacheHit();
+    return placed(rebaked, scale, true);
   }
   recordFigureCacheMiss();
   return bakeForDraw(entry, row, state, frame, scale);
+}
+
+/**
+ * Asks again for a row drawn at a level its figure no longer bakes at,
+ * urgently since it is on screen. It goes on being drawn from its old cells,
+ * scaled, until the whole rebake lands.
+ */
+function askForRebakeIfStale(
+  entry: FigureEntry,
+  row: FigureRow,
+  state: string,
+  frame: number,
+): void {
+  if (rowIsStale(entry, row)) prewarmDrawnRow(entry.def, state, frame);
 }
 
 /**
@@ -2316,6 +2801,9 @@ function cellFor(def: FigureDef, state: string, frame: number, scale: number): P
  * figure while the exact row warms on the queue, and returns null — having
  * noted why — only when there is nothing to borrow or the cell can never be
  * baked, and the caller must paint directly.
+ *
+ * The miss is baked at the row's own level, even a row still waiting on a
+ * rebake, so the row stays one density throughout while it plays.
  */
 function bakeForDraw(
   entry: FigureEntry,
@@ -2336,53 +2824,68 @@ function bakeForDraw(
       recordFigureCacheApproxDraw();
       noteUnbakedDraw(entry.def, state, 'standIn');
       prewarmDrawnRow(entry.def, state, frame);
-      return placed(entry, standIn, scale, null);
+      return placed(standIn, scale, false);
     }
     directPaintCause = 'frameAllowance';
     return null;
   }
-  const baked = bakeCell(entry, row, state, frame, RENDER_EVICTION);
+  const baked = bakeCell(entry, row, state, frame, RENDER_EVICTION, row.bakeScale);
   if (baked === null) {
     directPaintCause = lastBakeRefusal;
     dropRowIfEmpty(entry, state, row);
     return null;
   }
   recordFigureCacheBake();
-  return placed(entry, baked, scale, row.fronts.get(frame) ?? null);
+  askForRebakeIfStale(entry, row, state, frame);
+  return placed(baked, scale, true);
 }
 
 /** The already-baked cell of a row closest to the frame actually wanted. */
-function nearestBakedCell(row: FigureRow, wantedFrame: number): CanvasSurface | null {
-  let best: CanvasSurface | null = null;
+function nearestBakedCell(row: FigureRow, wantedFrame: number): BakedFrame | null {
+  let best: BakedFrame | null = null;
   let bestDistance = Number.POSITIVE_INFINITY;
-  for (const [cellFrame, surface] of row.cells) {
+  for (const [cellFrame, baked] of row.cells) {
     const distance = Math.abs(cellFrame - wantedFrame);
     if (distance < bestDistance) {
       bestDistance = distance;
-      best = surface;
+      best = baked;
     }
   }
   return best;
 }
 
-/** Any already-baked cell of the figure, for a row that has nothing of its own yet. */
-function anyBakedCell(entry: FigureEntry): CanvasSurface | null {
+/**
+ * Any already-baked cell of the figure, for a row that has nothing of its own
+ * yet: one at the level the figure bakes at now by preference, else one baked
+ * finer. Never a coarser one — a low-resolution stand-in reads as a blur, and
+ * the caller bakes or paints instead.
+ */
+function anyBakedCell(entry: FigureEntry): BakedFrame | null {
+  const level = bakeLevelOf(entry);
+  let finer: BakedFrame | null = null;
   for (const row of entry.rows.values()) {
-    const cell = nearestBakedCell(row, 0);
-    if (cell !== null) return cell;
+    if (row.bakeScale === level) {
+      const cell = nearestBakedCell(row, 0);
+      if (cell !== null) return cell;
+    }
+    const rebake = row.rebake;
+    if (rebake?.bakeScale === level) {
+      const rebaked = rebake.cells.values().next();
+      if (rebaked.done !== true) return rebaked.value;
+    }
+    if (finer === null && row.bakeScale > level) finer = nearestBakedCell(row, 0);
   }
-  return null;
+  return finer;
 }
 
 /**
  * Re-queues a pinned row that has nothing to show at all — the safety net for
  * a pin whose row went missing some way {@link evictStaleRowsOf}'s own pin
- * check does not cover (a bake-scale change drops every row of a figure
- * outright, `entryFor`'s own rebuild path, regardless of what was pinned).
- * Without this a citizen whose pinned row vanished would fall to a
- * `directPaint` every single frame forever rather than getting baked back and
- * pinned again within the next few; harmless to call repeatedly while the row
- * is still missing, since `prewarmFigureState` already dedupes against its
+ * check does not cover (a flush drops every row outright, regardless of what
+ * was pinned). Without this a citizen whose pinned row vanished would fall to
+ * a `directPaint` every single frame forever rather than getting baked back
+ * and pinned again within the next few; harmless to call repeatedly while the
+ * row is still missing, since `prewarmFigureState` already dedupes against its
  * own queue.
  */
 function requeuePinnedRowIfMissing(def: FigureDef, state: string): void {
@@ -2403,29 +2906,32 @@ function requeuePinnedRowIfMissing(def: FigureDef, state: string): void {
  * bake too.
  */
 function approxCellFor(
+  ctx: CanvasRenderingContext2D,
   def: FigureDef,
   state: string,
   frame: number,
   scale: number,
 ): PlacedCell | null {
   lastDrawnFrameByFigure.set(def.id, frameCounter);
-  const entry = entries.get(def.id);
-  if (entry?.bakeScale !== bakeScaleNow()) {
-    recordFigureCacheMiss();
-    requeuePinnedRowIfMissing(def, state);
-    return bakeWithNothingToBorrow(def, state, frame, scale);
-  }
+  const entry = entryFor(def);
+  noteDrawDensity(entry, ctx, scale);
   const row = entry.rows.get(state);
   const exact = row?.cells.get(frame);
-  if (exact !== undefined) {
+  if (row !== undefined && exact !== undefined) {
     recordFigureCacheHit();
-    return placed(entry, exact, scale, row?.fronts.get(frame) ?? null);
+    askForRebakeIfStale(entry, row, state, frame);
+    return placed(exact, scale, true);
+  }
+  const rebaked = row !== undefined ? swappedInRebakeCell(entry, row, frame) : null;
+  if (rebaked !== null) {
+    recordFigureCacheHit();
+    return placed(rebaked, scale, true);
   }
   recordFigureCacheMiss();
   const standIn = (row !== undefined ? nearestBakedCell(row, frame) : null) ?? anyBakedCell(entry);
   if (standIn === null) {
     requeuePinnedRowIfMissing(def, state);
-    return bakeWithNothingToBorrow(def, state, frame, scale);
+    return bakeForDraw(entry, rowFor(entry, state), state, frame, scale);
   }
   recordFigureCacheApproxDraw();
   noteUnbakedDraw(def, state, 'standIn');
@@ -2433,48 +2939,46 @@ function approxCellFor(
   // on speculation, so it is asked for as such — a speculative request for it
   // may be waiting behind a full cache that only an urgent one can make room in.
   prewarmDrawnRow(def, state, frame);
-  return placed(entry, standIn, scale, null);
+  return placed(standIn, scale, false);
 }
 
 /**
- * {@link bakeForDraw} for a figure {@link approxCellFor} found nothing of: the
- * entry is taken the way an exact draw takes it, rebuilt if it was baked at
- * another density.
- */
-function bakeWithNothingToBorrow(
-  def: FigureDef,
-  state: string,
-  frame: number,
-  scale: number,
-): PlacedCell | null {
-  const entry = entryFor(def);
-  return bakeForDraw(entry, rowFor(entry, state), state, frame, scale);
-}
-
-/**
- * A cell's destination extent.
+ * Where a baked frame's crop lands, for a cell whose whole extent is drawn at
+ * `scale` destination units per declared pixel.
  *
- * The cell was rounded *up* to whole pixels, so blitting it at the un-rounded
- * `frameWidth * scale` asks the canvas to squeeze the transparent surplus into
- * the destination — which shrinks the whole image by a fraction of a pixel and
- * drags the tile anchor with it. Dividing the allocated width by the density it
- * was allocated at puts the surplus back outside the figure, where it is the
- * padding it was meant to be.
+ * The cell was rounded *up* to whole pixels, so stretching it to the
+ * un-rounded `frameWidth * scale` would squeeze the transparent surplus into
+ * the destination — shrinking the image by a fraction of a pixel and dragging
+ * the tile anchor with it. Every extent is instead the baked pixels divided by
+ * the density they were baked at, which leaves the surplus outside the figure.
  */
-function placed(
-  entry: FigureEntry,
-  surface: CanvasSurface,
-  scale: number,
-  front: FrontLayerCell | null,
-): PlacedCell {
-  const densityRatio = scale / entry.bakeScale;
+function placed(baked: BakedFrame, scale: number, withFront: boolean): PlacedCell {
+  const densityRatio = scale / baked.bakeScale;
   return {
-    surface,
-    destWidth: entry.cellPixelWidth * densityRatio,
-    destHeight: entry.cellPixelHeight * densityRatio,
+    surface: baked.surface,
+    destOffsetX: baked.x * densityRatio,
+    destOffsetY: baked.y * densityRatio,
+    destWidth: baked.surface.width * densityRatio,
+    destHeight: baked.surface.height * densityRatio,
     densityRatio,
-    front,
+    front: withFront ? baked.front : null,
   };
+}
+
+/** Blits a placed cell's crop where it sits in a whole cell whose top-left is at (destX, destY). */
+function blitCrop(
+  ctx: CanvasRenderingContext2D,
+  cell: PlacedCell,
+  destX: number,
+  destY: number,
+): void {
+  ctx.drawImage(
+    cell.surface,
+    destX + cell.destOffsetX,
+    destY + cell.destOffsetY,
+    cell.destWidth,
+    cell.destHeight,
+  );
 }
 
 /** Blits a placed cell, and — around `between` — its front layer. */
@@ -2487,7 +2991,7 @@ function blitPlaced(
   between: FigureBetween | undefined,
 ): void {
   noteCellBlit(ctx, cell, destX, destY, between === undefined);
-  ctx.drawImage(cell.surface, destX, destY, cell.destWidth, cell.destHeight);
+  blitCrop(ctx, cell, destX, destY);
   if (between === undefined) return;
   between(ctx, { x: destX, y: destY, scale });
   const front = cell.front;
@@ -2526,7 +3030,7 @@ export function drawFigureCached(
   }
   const clamped = clampFrame(def, state, frame);
   const scale = tileSize / def.tileScale;
-  const cell = cellFor(def, state, clamped, scale);
+  const cell = cellFor(ctx, def, state, clamped, scale);
   withFigurePlacement(ctx, def, x, y, tileSize, scale, opts, (destX, destY) => {
     recordInkTop(ctx, def, state, destX, destY, scale);
     if (cell === null) {
@@ -2568,14 +3072,14 @@ export function drawFigureCachedApprox(
   }
   const clamped = clampFrame(def, state, frame);
   const scale = tileSize / def.tileScale;
-  const cell = approxCellFor(def, state, clamped, scale);
+  const cell = approxCellFor(ctx, def, state, clamped, scale);
   withFigurePlacement(ctx, def, x, y, tileSize, scale, opts, (destX, destY) => {
     recordInkTop(ctx, def, state, destX, destY, scale);
     if (cell === null) {
       directPaint(ctx, def, state, clamped, destX, destY, scale);
       return;
     }
-    ctx.drawImage(cell.surface, destX, destY, cell.destWidth, cell.destHeight);
+    blitCrop(ctx, cell, destX, destY);
   });
 }
 
@@ -2606,7 +3110,7 @@ export function drawFigureCachedRotatedCenter(
   const clamped = clampFrame(def, state, frame);
   const ink = figureInkBounds(def, state, clamped);
   const scale = tileSize / def.tileScale;
-  const cell = cellFor(def, state, clamped, scale);
+  const cell = cellFor(ctx, def, state, clamped, scale);
 
   ctx.save();
   try {
@@ -2616,7 +3120,7 @@ export function drawFigureCachedRotatedCenter(
     const destX = -ink.centerX * scale;
     const destY = -ink.centerY * scale;
     if (cell === null) directPaint(ctx, def, state, clamped, destX, destY, scale);
-    else ctx.drawImage(cell.surface, destX, destY, cell.destWidth, cell.destHeight);
+    else blitCrop(ctx, cell, destX, destY);
   } finally {
     ctx.restore();
   }
@@ -2677,7 +3181,7 @@ export function drawFigureFitted(
   const inkMidY = ink.top + inkHeight / 2;
   const destX = box.x + box.w / 2 - inkMidX * scale;
   const destY = box.y + box.h / 2 - inkMidY * scale;
-  const cell = cellFor(def, state, clamped, scale);
+  const cell = cellFor(ctx, def, state, clamped, scale);
   if (cell === null) directPaint(ctx, def, state, clamped, destX, destY, scale);
   else blitPlaced(ctx, cell, destX, destY, scale, undefined);
 }
@@ -2942,8 +3446,7 @@ export function figureCacheFlushCount(): number {
 /**
  * Drops every baked cell and every pending prewarm.
  *
- * Called when the render quality changes — cells are density-specific — and at
- * a floor change, where the sheet path evicts its sheets for the same reason:
+ * Called at a floor change, where the sheet path evicts its sheets too:
  * whatever the next floor still needs is rebuilt lazily and nothing else is
  * paid for.
  */
@@ -2959,9 +3462,9 @@ export function flushFigureFrameCache(): void {
   prewarmQueue.length = 0;
   lastDrawnFrameByFigure.clear();
   abandonedPrewarms.clear();
-  // Pins outlive the flush: a canvas recovery or a render-scale change
-  // flushes cells while whoever pinned them still holds them, and re-bakes
-  // them pinned. Each owner unpins its own rows when it lets them go.
+  // Pins outlive the flush: a canvas recovery or a floor change flushes
+  // cells while whoever pinned them still holds them, and re-bakes them
+  // pinned. Each owner unpins its own rows when it lets them go.
   lastRoomShortageFrame = Number.NEGATIVE_INFINITY;
   // The queue it was owed against is gone, so the next floor's first prewarm
   // must not open paused. What a painter costs survives, though: the estimates

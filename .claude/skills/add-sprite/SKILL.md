@@ -1,6 +1,6 @@
 ---
 name: add-sprite
-description: Add or modify a sprite in Kitten Crawler Man — sprite sheets (PNG or runtime-painted), JSON manifests, SpriteLoader/SpriteRenderer, offline generator scripts. Use when a creature, item, prop or effect needs new art or animation states. For a weapon, tool or garment Carl or Donut holds or wears, use add-gear.
+description: Add or modify a sprite in Kitten Crawler Man — sprite sheets (PNG or runtime-painted), JSON manifests, SpriteLoader/SpriteRenderer, offline generator scripts. Use when a creature, item, prop or effect needs new art or animation states. For a weapon, tool or garment the human or the cat holds or wears, use add-gear.
 ---
 
 # Add a Sprite
@@ -105,7 +105,7 @@ look at cannot be different art.
 
 ## Conventions
 
-- Manifest keys are `snake_case` (`rat`, `goblin_base`); sprite modules are `src/sprites/<camelName>Sprite.ts` exporting `draw<PascalName>Sprite`.
+- Manifest keys are `snake_case` (`goblin_tent_a`); sprite modules are `src/sprites/<camelName>Sprite.ts` exporting `draw<PascalName>Sprite`.
 - Multi-layer sprites (e.g. goblin body + weapon overlay): separate manifest keys drawn at the same frame — see `src/sprites/goblinSprite.ts`.
 - **Every off-screen surface has an owner.** Allocate with `allocCanvas(owner, w, h)` (or `allocReadableCanvas` for one read back with `getImageData`) from `src/core/canvasSurface.ts`, naming the specific `SurfaceOwner` the pixels belong to (add one to `SURFACE_OWNERS` for a new pool). Resize with `resizeSurface`, never by assigning `width`/`height`, and call `releaseSurface` on every eviction and drop path so the pixels go back at once. A new cache gets a byte budget; `RecentSurfaceCache` (`src/core/recentSurfaceCache.ts`) is the ready-made LRU that never lets go of what was just drawn. The owners, their limits and how to measure them are in `docs/asset-management.md`.
 - Reference shape (`src/sprites/ratSprite.ts`): attack anim → `attack` state via `progressFrameIndex`; moving → `walk` via `walkFrameIndex`; else `idle` frame 0. `flipX = facingX < 0`.
@@ -114,26 +114,26 @@ look at cannot be different art.
 
 Creatures are not sheets at all: each is a `FigureDef` (`src/sprites/figure/figureDef.ts`) whose `paintFrame` is baked into cells on demand by `src/sprites/figure/figureFrameCache.ts` (`drawFigureCached`). The `bipedal-figure` skill owns the painter pipeline; these are the cache contracts a figure opts into or must respect:
 
-- **Per-figure budget.** Every figure's cells are held to a 24 MB default under a global ceiling (`CACHE_BUDGET_MEGABYTES`, 188 MB, sized for a town plaza's pinned crowd plus the player, and for level 3's arrival warming the crowd, the fairies and both crawlers at once). `FigureDef.budgetMegabytes` replaces the default for one figure, and is legitimate only for a figure on screen almost every frame whose rows that must stay warm _together_ (locomotion, idle, whatever it is doing now) outgrow the default on their own. It never raises the global ceiling, so the room comes out of every other figure's share. Anything that checks a figure's bytes — admission, gates — goes through `figureByteBudgetFor(def)`, never `FIGURE_BYTE_BUDGET`, which only the cache's own gates read. Carl declares one (`HUMAN_FIGURE_BUDGET_MEGABYTES` in `humanFigure.ts`, 67 MB), and so do Donut (`CAT_FIGURE_BUDGET_MEGABYTES` in `catFigure.ts`, 28 MB) and the Necromancer. Carl's is gated by G9b per motion set in his hand (bare 55.55 MB, 57.3 MB carrying with front layers; light one-hander 64.1 / 66.2 MB; heavy 49.2 / 52.3 MB; two-hander 35.6 / 37.8 MB): the light one-hander's blow family is the largest working set he has, and it sized the number.
+- **Per-figure budget.** Every figure's cells are held to a 24 MB default under a global ceiling (`CACHE_BUDGET_MEGABYTES`, 80 MB, sized for level 3's arrival warming the crowd, the fairies and both crawlers at once, 53.1 MB of stored ink crops). `FigureDef.budgetMegabytes` replaces the default for one figure, and is legitimate only for a figure on screen almost every frame whose rows that must stay warm _together_ (locomotion, idle, whatever it is doing now) outgrow the default on their own. It never raises the global ceiling, so the room comes out of every other figure's share. Anything that checks a figure's bytes — admission, gates — goes through `figureByteBudgetFor(def)`, never `FIGURE_BYTE_BUDGET`, which only the cache's own gates read. The human figure declares one (`HUMAN_FIGURE_BUDGET_MEGABYTES` in `humanFigure.ts`, 28 MB), and so do the cat's (`CAT_FIGURE_BUDGET_MEGABYTES` in `catFigure.ts`, 28 MB) and the Necromancer's. Bytes are what the cache stores: each frame cropped to its padded ink box, at the density it is drawn (see `docs/asset-management.md`). The human's is gated by G9b per motion set in his hand, baked through the cache and measured as stored (Ryan: bare 11.4 MB, 13.7 carrying; light one-hander 16.4 / 17.1; heavy 12.2 / 12.9; two-hander 9.9 / 10.6; Dave fully geared peaks at 22.0 carrying the light set): the light one-hander's blow family is the largest working set he has, and it sized the number. The cat's and the Necromancer's, and the 24 MB default, were sized from whole cells and are loose upper bounds.
 - **`skipSupersample`.** Cells are normally painted at twice the density and downsampled. A figure that composes itself on a scratch surface at whatever density it is painted at, with whole-pixel effects (a one-pixel outline, a two-pixel cast shadow), sets this: its edges are already antialiased, and supersampling would compose four times the pixels only to smear those effects into half-pixel blurs.
-- **Two-layer cells (`FigureDef.heldLayers`).** A frame that holds a runtime-chosen item is painted in one pass into the whole cell and a front layer (what lies in front of the item), and the cache stores the front cropped to its ink beside the cell; `drawFigureCached(..., between)` draws cell, the item, then the front. The crop is charged to the row's bytes. Measured cost: a front crop is usually a fist's worth of pixels (Carl's largest is 58×104 px); over Carl's whole working set the crops add 1.7–2.1 MB (about 3–4%), over Donut's tool rows about 0.1 MB. A scripted prop (hammer, dynamite, crate…) is baked between the two layers at bake time through the same `compositeHeldItem` (`src/sprites/held/heldComposite.ts`) the runtime uses, so a cell with a prop painted into it needs no front layer at draw time. Carl's front crops and his carrying working set are measured by G9b (see `bipedal-figure/references/gates.md`).
+- **Two-layer cells (`FigureDef.heldLayers`).** A frame that holds a runtime-chosen item is painted in one pass into the whole cell and a front layer (what lies in front of the item), and the cache stores the front cropped to its ink beside the cell; `drawFigureCached(..., between)` draws cell, the item, then the front. The crop is charged to the row's bytes. Measured cost: a front crop is usually a fist's worth of pixels (the human's largest is 58×104 px); over the human's whole working set the crops add 1.7–2.1 MB (about 3–4%), over the cat's tool rows about 0.1 MB. A scripted prop (hammer, dynamite, crate…) is baked between the two layers at bake time through the same `compositeHeldItem` (`src/sprites/held/heldComposite.ts`) the runtime uses, so a cell with a prop painted into it needs no front layer at draw time. The human's front crops and his carrying working set are measured by G9b (see `bipedal-figure/references/gates.md`).
 - **Outfit variants and `releaseFigure`.** A cell is keyed on `(figure, state, frame)` and shared by every draw, so a closed set of looks is a set of figures, each with its own id and the same rows. Only the variant on screen should be resident: `releaseFigure(def)` drops every cell and queued prewarm of a replaced figure at once, instead of waiting out `IDLE_FRAMES_BEFORE_RELEASE` with two working sets side by side. `setOutfit` (`src/sprites/outfits.ts`) releases a crawler's old outfit and prewarms the new one; anything that queued rows for the old outfit must ask again.
-- **Attachments on Carl's rig.** A humanoid built on Carl's rig grows extra anatomy or clothing (wings, a tail, horns, trousers) through `CarlAttachments` (`carl/figure.ts`, passed as `CarlComposeOptions.attachments`), so the parts share his silhouette outline and cast shadows instead of reading as stickers. The Incubus (`incubusArt.ts`, `incubusFigure.ts`) is the worked example; see the `bipedal-figure` skill.
+- **Attachments on the human rig.** A humanoid built on the human rig grows extra anatomy or clothing (wings, a tail, horns, trousers) through `BipedAttachments` (`biped/figure.ts`, passed as `BipedComposeOptions.attachments`), so the parts share his silhouette outline and cast shadows instead of reading as stickers. The Incubus (`incubusArt.ts`, `incubusFigure.ts`) is the worked example; see the `bipedal-figure` skill.
 - **`prewarmFigureState(def, state, frameLimit?)`.** `frameLimit` warms only a row's first frames — a blow's wind-up up to its impact frame — so the rest can bake while those play. Repeated requests for the same row merge to the larger limit.
-- **The cache caps are tunable numbers, not platform limits.** `CACHE_BUDGET_MEGABYTES` (188), the 24 MB per-figure default, Carl's 67, Donut's 28 and the held-art cache's `HELD_ART_BUDGET_MEGABYTES` (4) were chosen to catch leaks and to stay far below the old sprite-sheet era (about 800 MB decoded). None is a device ceiling. When a figure genuinely needs more room, measure the need (G9b for Carl, cat G9 and `bench:turn-residency` for Donut), raise its number to that measurement with a little slack, and say why in the constant's JSDoc — never raise one to make a red gate pass without the measurement.
+- **The cache caps are tunable numbers, not platform limits.** `CACHE_BUDGET_MEGABYTES` (80), the 24 MB per-figure default, the human's 28, the cat's 28 and the held-art cache's `HELD_ART_BUDGET_MEGABYTES` (4) were chosen to catch leaks and to stay far below the old sprite-sheet era (about 800 MB decoded). None is a device ceiling. When a figure genuinely needs more room, measure the need (G9b for the human, cat G9 and `bench:turn-residency` for the cat), raise its number to that measurement with a little slack, and say why in the constant's JSDoc — never raise one to make a red gate pass without the measurement.
 - **Held item art has its own cache.** A held visual (`src/sprites/held/`) is not part of any figure: `drawHeldVisual` in `heldVisualCache.ts` draws it at a socket transform from pictures keyed by look id × on-screen angle step (`AXIS_ANGLE_STEPS`, 32) × foreshortening step (`FORESHORTENING_STEPS`, 4) × flat/edge-on × mirrored × reversed × lit/shaded × phase. Each picture is painted already turned to its step (so the key light falls correctly for that angle) and cropped to its ink; the blit turns and stretches only the residue, so a swing never visibly snaps. Least-recently-drawn pictures go first past `HELD_ART_BUDGET_MEGABYTES`; it survives a canvas recovery. Measured: the Fury of Taranis in every look it has (3072 pictures, three crackle phases) is 5.4 MB at cell density, 0.5 s to paint in node; the common subset (lit, flat, one handedness) about 0.67 MB. Painting at twice the cell density measured 20.9 MB with no visible difference at the tile, so `HELD_ART_SUPERSAMPLE` is 1. `measureHeldVisualSet(def)` reports one look's whole set; `heldVisualCacheBytes()` / `heldVisualCacheCount()` what is resident. `paintHeldVisual` (`heldPaint.ts`) is the uncached path, used at bake time and for icons.
-- **The crawlers hold every view warm.** Carl and Donut are drawn through one facing model (`src/sprites/facingView.ts`: eight 45° sectors, five views, a hysteresis margin), and each holds the rows a turn changes warm in every view they are drawn in, for as long as they are on screen: Carl's `residentViewSpans(set)` in `humanSprite.ts` for the motion set in his hand (every always-drawn row whole, every opening blow to its impact frame; a weapon out swaps the bare-handed rows for its own) and Donut's `RESIDENT_VIEW_ROWS` in `catSprite.ts` (walk, idle, swipe and cast in every view). Both are held by a `ResidentRows` (`src/sprites/figure/residentRows.ts`) from the crawler's own draw function, on the cache's clock: every draw touches each held row and re-queues any that is cold. It runs from the draw path, not a tick, because a world halted under a menu keeps drawing but stops ticking, and a tick-paced re-ask let the sweep take the far views during a long menu; it also notices a flushed cache on the next draw. Without it the idle sweep releases a view he has not faced for its release window, and the turn back into it bakes on the render path. Only the view faced and its two neighbours was tried and rejected: a keyboard turns a crawler a quarter or a half turn in one tick, and a half turn from head-on lands on the away view, which is never a neighbour. Measured headlessly by `npm run bench:turn-residency` (real cache, node bakes, about three times Chrome's cost) after a 12 s run one way and a snap turn, at 60 Hz:
+- **The crawlers hold every view warm.** The human and the cat are drawn through one facing model (`src/sprites/facingView.ts`: eight 45° sectors, five views, a hysteresis margin), and each holds the rows a turn changes warm in every view they are drawn in, for as long as they are on screen: the human's `residentViewSpans(set)` in `humanSprite.ts` for the motion set in his hand (every always-drawn row whole, every opening blow to its impact frame; a weapon out swaps the bare-handed rows for its own) and the cat's `RESIDENT_VIEW_ROWS` in `catSprite.ts` (walk, idle, swipe and cast in every view). Both are held by a `ResidentRows` (`src/sprites/figure/residentRows.ts`) from the crawler's own draw function, on the cache's clock: every draw touches each held row and re-queues any that is cold. It runs from the draw path, not a tick, because a world halted under a menu keeps drawing but stops ticking, and a tick-paced re-ask let the sweep take the far views during a long menu; it also notices a flushed cache on the next draw. Without it the idle sweep releases a view he has not faced for its release window, and the turn back into it bakes on the render path. Only the view faced and its two neighbours was tried and rejected: a keyboard turns a crawler a quarter or a half turn in one tick, and a half turn from head-on lands on the away view, which is never a neighbour. Measured headlessly by `npm run bench:turn-residency` (real cache, node bakes, about three times Chrome's cost) after a 12 s run one way and a snap turn, at 60 Hz:
 
-  | Carl, full bake                | nothing held            | view and neighbours held | every view held |
+  | the human, full bake           | nothing held            | view and neighbours held | every view held |
   | ------------------------------ | ----------------------- | ------------------------ | --------------- |
   | run east, snap a quarter north | 7 cold frames, 3 direct | 0                        | 0               |
   | run east, snap a quarter south | 7, 3 direct             | 7, 3 direct              | 0               |
   | run south, snap a half north   | 7, 3 direct             | 7, 3 direct              | 0               |
   | run north, snap a quarter east | 7, 3 direct             | 7, 3 direct              | 0               |
   | stand north, snap a half south | 8, 0 direct             | 1, 0 direct              | 0               |
-  | Carl resident at the end       | 3.7–12.9 MB             | 16.5–22.1 MB             | 18.4–25.5 MB    |
+  | the human resident at the end  | 3.7–12.9 MB             | 16.5–22.1 MB             | 18.4–25.5 MB    |
 
-  The low-end bake scale gives the same pattern at a quarter of the bytes, and a fast circle-strafe (a turn a second) is clean under all three, because every view is visited inside the window. Holding every view adds nothing to the budget: those spans are the always-warm core `G9b` already sizes (55.55 MB of Carl's 67 MB bare-handed). With a weapon out, his resident spans are that motion set's own rows (`residentViewSpans(set)`); `bench:turn-residency` runs every scenario with each set out too, all with no cold frame, peaking at about 40 MB bare, 67 MB light, 49 MB heavy and 31 MB two-handed at full bake scale. Each of Carl's views costs about 5.7 MB of always-drawn rows plus 1.4–2.1 MB of opening wind-ups at full scale, so every view he gains raises that working set by roughly 7 MB, and his `budgetMegabytes` with it. Donut's turning rows are 12.5 MB at full scale (all 38 of her rows warm at once would be 31.25 MB); with what else she holds warm, her own 28 MB ceiling is sized in "What Donut holds" below. Her idle breaks are in no view's resident set, so the animator queues the next break's row a lead ahead of playing it.
+  The low-end bake scale gives the same pattern at a quarter of the bytes, and a fast circle-strafe (a turn a second) is clean under all three, because every view is visited inside the window. Holding every view adds nothing to the budget: those spans are the always-warm core `G9b` already sizes. With a weapon out, his resident spans are that motion set's own rows (`residentViewSpans(set)`); `bench:turn-residency` runs every scenario with each set out too, all with no cold frame. Every view he gains adds its always-drawn rows and opening wind-ups to that working set, and his `budgetMegabytes` with it; re-measure with G9b. The cat's turning rows were 12.5 MB at full scale as whole cells (all 38 of her rows warm at once 31.25 MB); with what else she holds warm, her own 28 MB ceiling is sized in "What the cat holds" below. Her idle breaks are in no view's resident set, so the animator queues the next break's row a lead ahead of playing it.
 
 - **A throwing painter cannot poison later cells.** When a painter throws mid-bake, the cache discards the scratch surface it was painting on (a `save()` of the painter's own may still hold a clip and an alpha under the cache's restore) and rethrows; the next cell gets a fresh surface. `gates:figure-cache` asserts it. Painters should still restore their own state in `try/finally` — `withClip` in `src/sprites/art/softShade.ts` does.
 
@@ -153,7 +153,7 @@ creatures here, in three disguises:
   would step further than the leg extends and the reach gate rejects it. Cap
   the cadence with a ceiling derived from the fastest real locomotion
   (`MONGO_UNDERSAMPLING_FRAME_LIMIT` in `mongoSprite.ts` and
-  `MAX_WALK_FRAMES_PER_TICK` in `Mongo.ts` are the pattern), so raising the
+  `MAXX_MAX_WALK_FRAMES_PER_TICK` in `gluteusMaxxTiming.ts` are the pattern), so raising the
   sprint speeds the legs up with it instead of clamping to a stale number.
 - A creature that changes speed for one state. A charging Tuskling sampled at
   the walk cadence skipped frames and read as vibrating rather than sprinting;
@@ -182,17 +182,64 @@ the floor. This game's convention — set by the rat's walk row — is head at t
 top with any crest above it, body below, tail swept off the centreline. Follow
 it.
 
-## Donut: views, west twins, and why she has no three-quarter view
+## The cat: views, west twins, and why she has no three-quarter view
 
-Donut (`src/sprites/art/catArt.ts`, `catFigure.ts`, `src/sprites/catSprite.ts`)
-has hand-authored rows head-on, in profile and from behind. Her tortoiseshell
-coat is not symmetric, so **no row of hers is mirrored at runtime**: every
-profile row has a `_west` twin, the same pose painted by `drawCatSide` mirrored
-with her left flank's coat (`LEFT_FLANK`: black, a ginger saddle over the
-shoulder, a black face with a ginger cheek by the muzzle). Facing east she
-shows her right flank, facing west her left, and her patches never swap sides
-as she turns. The light falls from the upper right in the west twins, as it did
-when the profile was flipped. The twins cost 40 cells (3.9 MB); walk, idle, swipe and cast
+The cat (`src/sprites/art/catArt.ts`, `catFigure.ts`, `src/sprites/catSprite.ts`)
+has hand-authored rows head-on, in profile and from behind.
+
+**A cat's appearance is data.** Everything that makes a cat herself — her coat
+tones and patch layouts per view and flank, face and eye colours, toe beans,
+proportions (body, head, ear, ruff, cheek, leg bones, tail) and fur switches
+(fringe scale, hair length, ruff, cheek ruffs, tail puff), her stance
+(`legLift`, `neckDrop`, `profileLength`, haunch and chest radii, limb width,
+paw size, `earSpread` across the skull), how she reads from behind
+(`backView`: head size and height, ear height and inset, the `nape` share
+that grows her neck down into her shoulders instead of leaving the skull a
+disc on the body, `tailOverNape`, which paints a raised tail over her
+nape — from behind it is the nearest part of her), her hind legs in profile
+(`hindHock`: thigh width and the hock bone's share of the lower leg, drawn as
+thigh, shank and hock bone; null keeps two bones like the forelegs), a faint
+cool `coat.nearLegRim` inside the near legs' outline so a black coat's steps
+survive a dark floor at the tile, her face (eye size and spacing as `eyeScale` /
+`eyeSpread`, eye roundness, brow-whisker length and `browWhiskerAlpha`, how far the pale
+inside of her ears reaches (`innerEar.reach`), `muzzleWidth` head-on, and
+the optional marks: a `blaze` with its `bend` between the eyes, a mottled
+nose, a `tooth` showing over her lip on one side, alternate whisker colour),
+how deep her far legs sit in shadow in profile (`coat.profile.farLimbShade`,
+which a dark coat needs more of to tell the pairs apart), and her `gait` —
+plus the base garments every outfit of hers starts from — is a `CatLook`
+(`src/sprites/looks/catLook.ts`). A look's neutral values (lift 0, scales 1,
+no nape, no blaze or tooth) leave the engine's pixels exactly as they were,
+which is how Pumpkin stays pixel-identical while Belle
+(`looks/cats/belle.ts`) differs. Row poses take the look, and two kinds of row
+differ by it: the tool swings, whose paws rise with her stance, and the walk —
+`trot` is Pumpkin's, `lateralWalk` (`catLateralWalk.ts`) is Belle's
+lateral-sequence walk; its timing (footfalls, the toward/away rows
+sampled between footfalls so no two frames mirror) lives in that module,
+not in the look. Her tooth (`drawFang`) is drawn slim in a warm off-white
+and grows only to one surface pixel, which the 2× supersample softens to a
+faint light pixel at the 32 px tile; `render:cat --mode=strip32` paints at
+the in-game size the way the cache does, so it shows what the game shows.
+G1's cell-fill floor is per look (`MIN_CELL_FILL_BY_LOOK` in
+`scripts/gates-cat.ts`): a new look measures its widest pose's fill and
+takes a floor a margin under it.
+Pumpkin's is `PUMPKIN_LOOK` (`src/sprites/looks/cats/pumpkin.ts`), registered as
+`CHARACTERS.pumpkin.look`; the player cat's is `PLAYER_CAT_LOOK` in
+`catFigure.ts`. The engine names no tone: a `CoatBlob`'s `tone` is a
+`CoatTone` colour triple the look declares, so a new coat is a new look file.
+Every painter, `paintCatCell`/`paintCatPose`, `catFigureFor(look, outfit)` and
+`catSocketsAt(look, row, frame)` take the look; nothing reads a module
+constant for her colours or proportions. A figure id carries the look:
+`cat:<look id>` bare, else `cat:<look id>:<sorted garment ids>`.
+
+A tortoiseshell coat is not symmetric, so **no cat row is mirrored at
+runtime**: every profile row has a `_west` twin, the same pose painted by
+`drawCatSide` mirrored with the look's `coat.profile.flanks.left`. Pumpkin's
+left flank is black with broad ginger patches over the shoulder and back, a
+cream bib and a ginger cheek by the muzzle; Belle's carries a denser ginger
+streak over the shoulder than her right, and her blaze and speckled tan
+muzzle are on that side. Facing east a cat shows her right flank, facing west
+her left, and her patches never swap sides as she turns. In the west twins the light falls from the upper right. The twins cost 40 cells (3.9 MB); walk, idle, swipe and cast
 twins are in the resident set, while `knocked_out_west`, like `knocked_out`, is not; `catCellFor` always returns `flipX: false`.
 
 A facing with no rows of its own is drawn through `CAT_VIEW_FALLBACK` in
@@ -209,8 +256,8 @@ chain bent in body space; every coat patch a direction on a part's surface,
 projected and foreshortened by how squarely it faces the camera. They were
 projected through a camera yaw of ±45° and ±135° at a 26° downward pitch and
 painted by the same fur engine. Within a row nothing turned or popped (the
-turntable failure Carl's attempt had, recorded in `bipedal-figure`'s
-`references/carl.md`, did not happen), and reviewers named every row's view
+turntable failure the human's attempt had, recorded in `bipedal-figure`'s
+`references/human.md`, did not happen), and reviewers named every row's view
 correctly. It failed on what her coat does at 32 px:
 
 - **Away from the camera** (two review rounds plus scouts): the back and rump
@@ -235,61 +282,65 @@ cardinal rows harshly ("stubby nubs" for legs, a tail "like a stick"), so
 weigh a complaint by whether it is specific to the new view.
 
 Renders and the whole attempt as a patch (against commit `68d506c`) are
-kept locally under `preview/donut-diagonal/` (the preview folder is not
+kept locally under `preview/cat-diagonal/` (the preview folder is not
 committed): `round1-strip32.png`, `round2-strip32.png`,
 `front-diagonal-confirm-strip32.png`, `back-diagonal-zoom.png`,
 `front-diagonal-zoom.png`, `cardinal-calibration-strip32.png`,
-`west-profile-strip32.png`, `donut-diagonal-spike.patch`. Measured cost had it
+`west-profile-strip32.png`, `cat-diagonal-spike.patch`. Measured cost had it
 shipped: eight walk and idle rows in the toward and away views each way, 64
 cells, 6.25 MB; all of her rows warm would have been 25 MB, over the 24 MB
 default.
 
-## Donut's garments
+## The cat's garments
 
-Everything Donut wears is a `GarmentDef` (`src/sprites/garments/`): her coat
-(`cat_coat`, the base garment that paints every piece of her fur), the Eyes of
-Splatter, the crown, the kettle helm, the slate butterfly talisman, the fae
-scale crupper and the bracelet of DEX. Her anatomy (`catArt.ts`) never paints
+Everything the cat wears is a `GarmentDef` (`src/sprites/garments/cat/`): her
+coat (`cat_coat`, the base garment that paints every piece of her fur), the
+Eyes of Splatter (`cat_shades`), the crown, the kettle helm, the slate
+butterfly talisman, the fae scale crupper, the bracelet of DEX, and the
+armour and clothes the human also wears in his own cut — `cat_trollskin_shirt`,
+`cat_gambeson`, `cat_bracers`, `cat_boots` and `cat_bigboi_boxers`. The shirt
+and gambeson share `torsoCover.ts`, which clips a cover to her barrel and
+chest in each view; the cloth garments take their fills and shading from
+`clothInk.ts`, the metal ones from `metalInk.ts`; the hats fit themselves to
+her skull through `headwear.ts`. Her anatomy (`catArt.ts`) never paints
 fur itself: it hands each piece to a `CatDressing` with a part frame
 (`catParts.ts`), and every garment covering that part paints there, so later
 pieces cover it like fur. `setOutfit('cat', garments)` (`src/sprites/outfits.ts`)
-dresses her sprite; the figure id is `cat` bare, else `cat:<sorted garment ids>`.
+dresses her sprite; the figure id is `cat:<look id>` bare, else `cat:<look id>:<sorted garment ids>`.
 An item's `look` in `ItemDefs.ts` names the garment. Gate:
 `npm run gates:equipment -- --item=<item or garment id>` (E5, the envelope).
 
-What review found at the 32 px tile, after four rounds of fresh blind
-reviewers (renders kept locally in `preview/donut-garments/`):
+How the garments read at the 32 px tile (renders in `preview/cat-garments/`):
 
 - **Every garment is named and placed right**: crown on her head, helm on her
   head with the ears hidden, a charm at her throat, scale armour over her rump,
   a gold band on her right foreleg. Each stays on her own side facing west.
 - **The talisman reads as a bow, not a butterfly.** The charm is about 5×3 px
-  head-on. Tried: larger wings, a dark body line, splayed antennae, a brighter
-  slate; at that size two wing lobes and a pinch are all a butterfly can be.
-- **The bracelet is about 3×2 px** on a leg 2–3 px wide. Tried: a wider and
-  taller band, a paler gold, a dark rim line, moving it onto the paw head-on.
-  Reviewers name it, side and leg correctly, but call it small.
+  head-on; at that size two wing lobes and a pinch are all a butterfly can be,
+  whatever the wing size, body line, antennae or slate.
+- **The bracelet is about 3×2 px** on a leg 2–3 px wide: it reads as a band
+  on the right foreleg, and small.
 - **The crupper reads as cloth from far off**: the scales are one or two
-  pixels. Tried: larger scales, darker scale edges. Head-on only her hips show
-  it; a full head-on skirt read as a cushion she sits on.
-- **The kettle helm's ear pockets read as "a hat with ears"** to a reviewer who
-  is not told it is made for a cat. They are the cat-shaped part of the brief;
-  they were lowered and widened once.
+  pixels. Head-on only her hips show it; a full head-on skirt reads as a
+  cushion she sits on.
+- **The kettle helm's ear pockets read as "a hat with ears"** to a viewer who
+  is not told it is made for a cat; they are the cat-shaped part of it.
 - **Lying down**, both hats are turned back against her head's tilt
-  (`lyingTipBack`): turned with her head they covered her face.
+  (`lyingTipBack`): turned with her head they cover her face.
 
-## What Donut holds: sockets, her tool swing and her jaws
+## What the cat holds: sockets, her tool swing and her jaws
 
-Donut holds two kinds of thing (`src/sprites/held/gripArchetypes.ts`):
-`pawTool`, the axes, picks and the scythe Carl swings two-handed, held with
+The cat holds two kinds of thing (`src/sprites/held/gripArchetypes.ts`):
+`pawTool`, the axes, picks and the scythe the human swings two-handed, held with
 both forepaws on the haft; and `mouthCarry`, a small thing across her jaws.
 `catGripOf(look)` (`src/sprites/art/catSockets.ts`) maps a held visual to the
 grip she uses, so the tool tiers need no second definition.
 
-- **Sockets** (`catSockets.ts`, `donutSocketsAt(figureId, row, frame)`,
-  memoised per figure, row and frame): `mouth`, `forePaw` (under the pad of
+- **Sockets** (`catSockets.ts`, `catSocketsAt(look, row, frame)`,
+  memoised per look, row and frame): `mouth`, `forePaw` (under the pad of
   the paw on the haft's butt: screen-left head-on and from behind, the near
-  paw in profile) and `back` (over her spine; nothing occupies it yet). Each
+  paw in profile) and `back` (over her spine, where a stowed party tool
+  rides: behind her head-on, over her back in profile and from behind). Each
   comes from the placement functions the painter itself places her with
   (`catForepawFront/Side/Back`, `catMouthFront/Side`, `catSaddle` in
   `catArt.ts`), so a socket cannot disagree with the picture. A pose's
@@ -318,8 +369,8 @@ grip she uses, so the tool tiers need no second definition.
   ears forward. `CatPlayer.playWorkSwing` plays her tool's swing (a pick at
   stone, a chop at anything else, the swipe bare-pawed); a thing in her jaws
   comes from `setMouthCarry` or from her `Mouth:Held` item when its look is a
-  `mouthCarry` one — no item of that kind exists yet, so `?donut`'s carry
-  control shows the rows with `carried_wrench`.
+  `mouthCarry` one, or from the quest item in her quest slot when it names
+  `carriedInJaws` (the prison key, Tikka's blueprints).
 - **Memory and warmth.** Those 16 rows are not in `PREWARMED_ROWS`:
   `HELD_ROWS` in `catSprite.ts` is warmed when the hold begins, the view she
   faces first, and while she holds something her resident set swaps
@@ -336,8 +387,9 @@ grip she uses, so the tool tiers need no second definition.
   drew cold cells, so she has `budgetMegabytes` 28. `bench:turn-residency`
   has a harvest start after a long stand in every facing, and a long carry
   put down and walked off.
-- **Gates.** `npm run gates:equipment` runs E1–E4 and E7 on her
-  (`scripts/gates-equipment-donut.ts`): socket under the butt paw's front
+- **Gates.** `npm run gates:equipment` runs E1–E4 and E7 on every cat look
+  (`scripts/gates-equipment-cat.ts`, also runnable alone with `npx tsx` and
+  an optional `--item=`): socket under the butt paw's front
   ink and the haft through her second paw, a carried thing in the lower half
   of her face; nothing on the cell border or in the floor except a tool's
   head on its bite; no tool over her face unless a paw is there; a pad over
@@ -345,26 +397,65 @@ grip she uses, so the tool tiers need no second definition.
   of the east ones while the west cell is not the reflected east cell.
   `render:cat` G8 counts `HELD_ROWS` as warmed.
 
-What review found at the 32 px tile (two fresh blind reviewers in a row,
-renders kept locally in `preview/donut-hold/`):
+How the holds read at the 32 px tile (renders in `preview/cat-hold/`):
 
-- **The chop and the pick read in every view**: both reviewers named a calico
-  cat chopping with an axe and swinging a pickaxe, facing the camera, side-on
-  each way and from behind, with nothing major. Minors left: from behind the
-  tool is out of sight on her first and last frames; the forepaws on the
-  haft cannot be told apart at the tile (a paw is about 3 px, cream on her
-  cream bib), so the haft can read as coming from her chest; a pick held
-  straight up from behind reads as a T.
-- **A thing across her jaws head-on reads as a muzzle or a gag.** Seen from
-  the side it hangs from her mouth and reads as carried; from behind only its
-  end shows past her head. Head-on her face is about 10 px wide and anything
-  across her mouth covers its lower third. Tried: a larger thing (the potion
-  bottle first, a red blob read as lips; then the wrench at Carl's size, then
-  1.3×), cocking it off level, and seating it on her lower jaw below the
-  mouth line. Each made the thing more visible and none stopped the face
-  reading as strapped. Crosswise is the archetype's definition; a thing
-  carried by one end, hanging from her jaws as the profile shows it, is what
-  would read, and that is a different archetype.
+- **The chop and the pick read in every view**, facing the camera, side-on
+  each way and from behind. Their limits, on Pumpkin: from behind the tool is
+  out of sight on the first and last frames; her forepaws on the haft cannot
+  be told apart at the tile (a paw is about 3 px, cream on her cream bib), so
+  the haft can read as coming from her chest; a pick held straight up from
+  behind reads as a T.
+- **A thing across the jaws head-on reads as a muzzle or a gag.** Seen from
+  the side it hangs from the mouth and reads as carried; from behind only its
+  end shows past the head. Head-on a cat's face is about 10 px wide and
+  anything across the mouth covers its lower third. A larger thing, a thing
+  cocked off level and a thing seated on the lower jaw below the mouth line
+  each show more and still leave the face reading as strapped. Crosswise is
+  the archetype's definition; a thing carried by one end, hanging from the
+  jaws as the profile shows it, is what would read, and that is a different
+  archetype.
+
+## Belle: what her art depends on, and its limits
+
+Belle's look (`looks/cats/belle.ts`) is a cute stylised dark tortoiseshell:
+a round full-cheeked head, large dark ears leaning out (`ear.lean`,
+`ear.straightEdges`), round aqua eyes with a big soft pupil and a forehead
+above them (`face.eyeDrop`, `face.pupilHeight`), a small nose and gentle
+mouth with no fang, short faint whiskers (`face.whiskerLength` /
+`whiskerAlpha`), soft feathered coat patches, and a lateral-sequence walk of
+her own. Cute outranks photo likeness: matched closely to the owner's photos
+she read as uncanny. Her head is the same height head-on, from behind and in
+profile (`head.ry` matches `profileHead.ry`, `legLift` and `neckDrop` put it
+at the same height), so she reads as one size in every view. A light
+`outline` round her whole silhouette keeps her shape on dark floors.
+
+- **A walk is judged in motion.** Stills of a lateral-sequence walk look
+  broken; a GIF or flipbook at game speed tells a walk from a bound. In
+  profile the painter turns the legs with the body's `lean`, so more than a
+  degree or two of rock lifts a planted pair off the floor together and the
+  walk becomes a bound.
+- **Toward and away at the tile** read as walking when the paws lift about
+  two pixels and the row is sampled off the footfalls
+  (`AXIAL_PHASE_OFFSET`); sampled on them, neighbouring frames mirror and the
+  row stutters.
+- **Legibility is a question of the floor.** A black cat's legs vanish on a
+  plain dark background no level has. Over the floor tiles in
+  `preview/tilesets/` they read on stone, concrete, grass and paving and
+  fade only on the darkest bricks, which is what `nearLegRim` is for; a
+  stronger rim turns her legs grey.
+- **Head width against chest width is not a useful measure** of her
+  likeness: it swings by ±15% with where a ruler is laid on a 20 px head.
+- **Her coat is a few soft clouds, not brindle.** Many small crisp flecks
+  read as scraggly speckle at 32 px. Her patches are large and feathered
+  (`CoatBlob.feather`), and hair strokes take a feathered patch's colour as
+  softly as it is painted, so the edges stay soft.
+- **A black tail toward or away from the camera** only reads where it
+  clears her body. Walking, it swishes out past her flank once a stride
+  (`swishedTail` in `catLateralWalk.ts`), and standing from behind it leans
+  out to one side. Drawn upright behind her head it reads as a horn or a
+  third ear, and over her back as a flat paddle.
+- **Her idle from behind sits at G3's noise floor**; see the design-debt
+  register's entry on the cat's loop-seam gate before tuning her to it.
 
 ## Checklist for a new creature sprite
 

@@ -20,7 +20,7 @@
  * runs out with no press is judged a miss. Every swing lands its grain when
  * it ends — a hit its full share, a miss a single stalk's worth — and the
  * stand in front of the crawler takes one cut. The bar comes down the moment
- * the needle reaches its end, together with Carl's swing row, so nothing
+ * the needle reaches its end, together with the human crawler's swing row, so nothing
  * stands idle between the swing finishing and the next one starting.
  *
  * A swing the swinger breaks off — walking, attacking, being struck, a
@@ -124,7 +124,7 @@ const REGROW_THINNED_FROM_SECONDS = 25;
 const SWING_MOTION_TOLERANCE_PX = 0.5;
 /** How squarely a stand must sit in front of the crawler to be picked over a nearer one. */
 const FACING_PREFERENCE_DOT = 0.5;
-/** Donut swings the scythe with her two-paw chop, landing this long before the swing ends, as the grain falls. */
+/** The cat swings the scythe with her two-paw chop, landing this long before the swing ends, as the grain falls. */
 const CAT_SWIPE_LEAD_SECONDS = 0.4;
 const CAT_SWIPE_LEAD_TICKS = Math.round(CAT_SWIPE_LEAD_SECONDS * UPDATES_PER_SECOND);
 const SCYTHE_LOOK_TIER = 0;
@@ -165,7 +165,7 @@ interface Swing {
   verdict: ScytheGrade | null;
   /** The harvest tick the verdict was reached on, for the bar's flash and pop. */
   verdictTick: number;
-  /** Whether Carl's paced swing row is playing for this swing. */
+  /** Whether the human crawler's paced swing row is playing for this swing. */
   animating: boolean;
 }
 
@@ -486,7 +486,7 @@ export class GrainHarvest {
   }
 
   /**
-   * Carl's chop row, paced by the swing rather than by its own clock, so the
+   * The human crawler's chop row, paced by the swing rather than by its own clock, so the
    * axe's one-second swing plays out over the scythe's longer one.
    */
   private playSwingRow(swing: Swing, human: HumanPlayer): void {

@@ -1,6 +1,7 @@
+import { crawlerName } from '../characters/characters';
 import type { StatName } from '../Player';
 import type { CrawlerKind, SkillId } from './SkillManager';
-import type { WorkingToolHeldVisualId } from '../sprites/held/heldVisualIds';
+import type { MouthCarryVisualId, WorkingToolHeldVisualId } from '../sprites/held/heldVisualIds';
 import type { LookOnEach, NoLook, WearerLook } from '../sprites/garments/garmentIds';
 import {
   toolTierDef,
@@ -97,8 +98,8 @@ export type ItemId =
   | 'snare_kit';
 
 /**
- * The equipment sections. `Hand` (Carl's main and off hand) and `Mouth`
- * (what Donut carries in her teeth) are the held slots; the rest are worn.
+ * The equipment sections. `Hand` (the human's main and off hand) and `Mouth`
+ * (what the cat carries in her teeth) are the held slots; the rest are worn.
  */
 export type EquipSlot = 'Head' | 'Mouth' | 'Torso' | 'Legs' | 'Hands' | 'Hand' | 'Feet';
 
@@ -271,6 +272,7 @@ interface WornBy<W extends Wearer> {
   readonly look: ItemLook<W>;
   readonly weapon?: never;
   readonly heldVisual?: never;
+  readonly carriedInJaws?: never;
 }
 
 /** Armour: worn in a slot, by the crawler or crawlers `wearer` names, and looking as `look` says. */
@@ -284,6 +286,7 @@ interface WeaponItemFields {
   readonly wearer: Wearer;
   readonly weapon: WeaponStats;
   readonly heldVisual?: never;
+  readonly carriedInJaws?: never;
   /** A weapon's look is its stat block's held visual. */
   readonly look?: never;
 }
@@ -298,14 +301,13 @@ interface UnwornItemFields {
   readonly wearer?: never;
   readonly weapon?: never;
   readonly heldVisual?: WorkingToolHeldVisualId;
+  /**
+   * A thing the cat crawler carries in her jaws for as long as it is in her
+   * pack, so the party can see she has it.
+   */
+  readonly carriedInJaws?: MouthCarryVisualId;
   readonly look?: never;
 }
-
-/** Gear nobody has painted on Donut: she is drawn without it. */
-const UNDRAWN_ON_DONUT: NoLook = {
-  kind: 'none',
-  reason: 'No picture of it on Donut exists, so she is drawn without it.',
-};
 
 /** Every ring, on either crawler. */
 const RING_LOOK: NoLook = {
@@ -454,7 +456,10 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     canHotlist: false,
     type: 'armor',
     wearer: 'both',
-    look: { human: { kind: 'garment', garment: 'carl_trollskin_shirt' }, cat: UNDRAWN_ON_DONUT },
+    look: {
+      human: { kind: 'garment', garment: 'human_trollskin_shirt' },
+      cat: { kind: 'garment', garment: 'cat_trollskin_shirt' },
+    },
     lootRecipient: 'human',
     equipSlot: 'Torso',
     equipSubSlot: 'Shirt',
@@ -474,7 +479,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     type: 'armor',
     wearer: 'both',
     look: {
-      human: { kind: 'garment', garment: 'carl_crown' },
+      human: { kind: 'garment', garment: 'human_crown' },
       cat: { kind: 'garment', garment: 'cat_crown' },
     },
     lootRecipient: 'cat',
@@ -500,7 +505,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     type: 'armor',
     wearer: 'both',
     look: {
-      human: { kind: 'garment', garment: 'carl_kettle_helm' },
+      human: { kind: 'garment', garment: 'human_kettle_helm' },
       cat: { kind: 'garment', garment: 'cat_kettle_helm' },
     },
     equipSlot: 'Head',
@@ -519,7 +524,10 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     canHotlist: false,
     type: 'armor',
     wearer: 'both',
-    look: { human: { kind: 'garment', garment: 'carl_gambeson' }, cat: UNDRAWN_ON_DONUT },
+    look: {
+      human: { kind: 'garment', garment: 'human_gambeson' },
+      cat: { kind: 'garment', garment: 'cat_gambeson' },
+    },
     equipSlot: 'Torso',
     equipSubSlot: 'Shirt',
     statBonus: { constitution: 2 },
@@ -535,7 +543,10 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     canHotlist: false,
     type: 'armor',
     wearer: 'both',
-    look: { human: { kind: 'garment', garment: 'carl_bracers' }, cat: UNDRAWN_ON_DONUT },
+    look: {
+      human: { kind: 'garment', garment: 'human_bracers' },
+      cat: { kind: 'garment', garment: 'cat_bracers' },
+    },
     equipSlot: 'Hands',
     equipSubSlot: 'Gloves',
     statBonus: { strength: 1 },
@@ -551,7 +562,10 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     canHotlist: false,
     type: 'armor',
     wearer: 'both',
-    look: { human: { kind: 'garment', garment: 'carl_boots' }, cat: UNDRAWN_ON_DONUT },
+    look: {
+      human: { kind: 'garment', garment: 'human_boots' },
+      cat: { kind: 'garment', garment: 'cat_boots' },
+    },
     equipSlot: 'Feet',
     equipSubSlot: 'Shoes',
     statBonus: { dexterity: 1 },
@@ -761,7 +775,10 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     canHotlist: true,
     type: 'armor',
     wearer: 'both',
-    look: { human: { kind: 'garment', garment: 'carl_boxers' }, cat: UNDRAWN_ON_DONUT },
+    look: {
+      human: { kind: 'none', reason: 'Worn under the trousers.' },
+      cat: { kind: 'garment', garment: 'cat_bigboi_boxers' },
+    },
     equipSlot: 'Legs',
     equipSubSlot: 'Pants',
     statBonus: { constitution: 2 },
@@ -777,7 +794,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
   doomsday_scenario: {
     id: 'doomsday_scenario',
     category: 'quest',
-    name: "Carl's Doomsday Scenario",
+    name: `${crawlerName('human')}'s Doomsday Scenario`,
     stackable: false,
     canHotlist: false,
     canDrop: false,
@@ -802,6 +819,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
   quest_blueprints: {
     id: 'quest_blueprints',
     category: 'quest',
+    carriedInJaws: 'carried_blueprints',
     name: "Tikka's Blueprints",
     stackable: false,
     canHotlist: false,
@@ -814,6 +832,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
   quest_prison_key: {
     id: 'quest_prison_key',
     category: 'quest',
+    carriedInJaws: 'carried_prison_key',
     name: 'The Key',
     stackable: false,
     canHotlist: false,
@@ -833,7 +852,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     equipSlot: 'Torso',
     equipSubSlot: 'Back',
     wearer: 'human',
-    look: { kind: 'garment', garment: 'carl_cloak' },
+    look: { kind: 'garment', garment: 'human_cloak' },
     statBonus: { constitution: 4 },
     resistances: ['poison', 'ice', 'piercing'],
     description:
@@ -923,7 +942,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     equipSlot: 'Feet',
     equipSubSlot: 'Toe Ring',
     wearer: 'human',
-    look: { kind: 'garment', garment: 'carl_toe_ring' },
+    look: { kind: 'garment', garment: 'human_toe_ring' },
     statBonus: { strength: 3 },
     skillLevelBonus: { pugilism: 3 },
     description:
@@ -993,7 +1012,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     equipSlot: 'Legs',
     equipSubSlot: 'Knee Pads',
     wearer: 'human',
-    look: { kind: 'garment', garment: 'carl_kneepads' },
+    look: { kind: 'garment', garment: 'human_kneepads' },
     damageReflectPct: KNEEPADS_DAMAGE_REFLECT_PCT,
     cancelsMomentum: true,
     description:
@@ -1012,7 +1031,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     equipSlot: 'Hands',
     equipSubSlot: 'Gloves',
     wearer: 'human',
-    look: { kind: 'garment', garment: 'carl_gauntlet' },
+    look: { kind: 'garment', garment: 'human_gauntlet' },
     statBonus: { dexterity: 1 },
     meleeOnlyStatBonus: { strength: 3 },
     skillLevelBonus: { iron_punch: 2, powerful_strike: 1 },
@@ -1369,7 +1388,7 @@ export const EQUIP_SUBSLOTS: Readonly<Record<EquipSlot, readonly string[]>> = {
 };
 
 /**
- * Which crawler has each section at all. Carl's hands hold and Donut's mouth
+ * Which crawler has each section at all. The human's hands hold and the cat's mouth
  * carries; neither can use the other's.
  */
 export const EQUIP_SLOT_WEARER: Readonly<Record<EquipSlot, Wearer>> = {
@@ -1382,9 +1401,9 @@ export const EQUIP_SLOT_WEARER: Readonly<Record<EquipSlot, Wearer>> = {
   Feet: 'both',
 };
 
-/** The key of Carl's main hand, where the weapon he draws from the hotbar is held. */
+/** The key of the human crawler's main hand, where the weapon he draws from the hotbar is held. */
 export const MAIN_HAND_KEY = 'Hand:Main';
-/** The equipment key of what Donut carries in her jaws. */
+/** The equipment key of what the cat crawler carries in her jaws. */
 export const MOUTH_HELD_KEY = 'Mouth:Held';
 
 const EQUIP_SLOT_NAMES: ReadonlySet<string> = new Set(Object.keys(EQUIP_SUBSLOTS));
@@ -1416,14 +1435,14 @@ export function wearerOf(id: ItemId): Wearer | undefined {
   return isItemId(id) ? ITEM_DEF[id].wearer : undefined;
 }
 
-/** How `def` looks on Donut, or null for anything she cannot wear. */
+/** How `def` looks on the cat crawler, or null for anything she cannot wear. */
 export function catLookOf(def: ItemDef): WearerLook<'cat'> | null {
   if (def.type !== 'armor') return null;
   if (def.wearer === 'both') return def.look.cat;
   return def.wearer === 'cat' ? def.look : null;
 }
 
-/** How `def` looks on Carl, or null for anything he cannot wear. */
+/** How `def` looks on the human crawler, or null for anything he cannot wear. */
 export function humanLookOf(def: ItemDef): WearerLook<'human'> | null {
   if (def.type !== 'armor') return null;
   if (def.wearer === 'both') return def.look.human;

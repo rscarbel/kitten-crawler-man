@@ -33,7 +33,7 @@
  */
 
 import { allocCanvas, releaseSurface, surfaceContext } from '../../core/canvasSurface';
-import { clamp01, deg, lerp, mix, rgba, type Pt } from './carlArt';
+import { clamp01, deg, lerp, mix, rgba, type Pt } from './bipedArt';
 
 type Ctx = CanvasRenderingContext2D;
 

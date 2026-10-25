@@ -12,7 +12,7 @@
  */
 
 import type { Vec3 } from '../../held/heldPaint';
-import { type BodySide, type CarlPose, type HaftDepth, HAFT_IN_PLANE } from '../carl/rig';
+import { type BodySide, type BipedPose, type HaftDepth, HAFT_IN_PLANE } from '../biped/rig';
 
 /** A direction from its three parts, made unit. */
 export function towards(x: number, y: number, z: number): Vec3 {
@@ -37,7 +37,7 @@ export const PALM_TO_CAMERA: Vec3 = towards(0, 0, 1);
  * `haftAngle` on screen.
  */
 export function turnHand(
-  pose: CarlPose,
+  pose: BipedPose,
   side: BodySide,
   palmNormal: Vec3,
   haftDepth: HaftDepth = HAFT_IN_PLANE,
@@ -53,6 +53,6 @@ export function turnHand(
 }
 
 /** Turns every hand the pose has given a prop by the palm `palmFor` names for its side. */
-export function turnPropHands(pose: CarlPose, palmFor: (side: BodySide) => Vec3): void {
+export function turnPropHands(pose: BipedPose, palmFor: (side: BodySide) => Vec3): void {
   for (const prop of pose.heldProps ?? []) turnHand(pose, prop.hand, palmFor(prop.hand));
 }

@@ -1,5 +1,5 @@
 /**
- * The blows Carl throws with a weapon out, one family per armed set, each
+ * The blows the human crawler throws with a weapon out, one family per armed set, each
  * authored frame by frame in every view he has rows for:
  *
  * - a light one-hander: the forehand slash (high on his right, down across
@@ -26,10 +26,11 @@
 
 import { HUMAN_SWING_FRAMES } from '../../../core/crawlerFormulas';
 import { PLAYER_SPEED } from '../../../core/constants';
-import { lerpAngle, pt } from '../carl/geometry';
+import { lerpAngle, pt } from '../biped/geometry';
+import { WRIST_FOLLOW } from '../biped/limbs';
 import {
   type BodySide,
-  type CarlPose,
+  type BipedPose,
   FULL_UPPER_ARM,
   type HaftDepth,
   HAFT_AWAY_FROM_CAMERA,
@@ -37,8 +38,8 @@ import {
   HAFT_TOWARD_CAMERA,
   VIEWS,
   buildSkeleton,
-} from '../carl/rig';
-import { deg, lerp, type Pt } from '../carlArt';
+} from '../biped/rig';
+import { deg, lerp, type Pt } from '../bipedArt';
 import type { CardinalView } from '../../facingView';
 import type { Vec3 } from '../../held/heldPaint';
 import {
@@ -57,7 +58,7 @@ import {
 import { type FrameTable, frameValue, runPhaseAt } from './gaitShared';
 import { KNUCKLES_TO_CAMERA, rolled, towards } from './handTurn';
 import { guardBack, guardFront, guardSide, idleBack, idleFront, idleSide } from './idles';
-import { RUN_GROUND_PER_CYCLE_PX, runFacing, runSide } from './locomotion';
+import { RUN_GROUND_PER_CYCLE_PX, runFacingCycle, runSide } from './locomotion';
 import type { ArmedMotionSet } from './motionSets';
 import { ATTACK_FRAMES } from './timing';
 
@@ -256,9 +257,9 @@ const LIGHT_FRONT_SLASH: OneHandPlan = {
   palm: towards(0.3, 0, -0.95),
   keys: [
     { fist: fist(0.05, 0.3, 'up', 0.6), haft: -74 },
-    { fist: fist(0.28, -0.06, 'up'), haft: -62 },
-    { fist: fist(0.26, -0.18, 'up', 0.85), haft: -74, share: 0.8, depth: HAFT_AWAY_FROM_CAMERA },
-    { fist: fist(0.16, 0.02, 'up', 0.8), haft: -175, share: 0.8, depth: HAFT_TOWARD_CAMERA },
+    { fist: fist(0.28, -0.06, 'down'), haft: -62 },
+    { fist: fist(0.26, -0.18, 'down', 0.85), haft: -74, share: 0.8, depth: HAFT_AWAY_FROM_CAMERA },
+    { fist: fist(0.16, 0.02, 'down', 0.8), haft: -175, share: 0.8, depth: HAFT_TOWARD_CAMERA },
     { fist: fist(-0.14, 0.2, 'down', 0.4, 0.75), haft: 172 },
     { fist: fist(-0.28, 0.3, 'down', 0.8), haft: 165, share: 0.9, depth: HAFT_AWAY_FROM_CAMERA },
     { fist: fist(-0.1, 0.4, 'down', 0.8), haft: 200 },
@@ -281,9 +282,9 @@ const LIGHT_FRONT_BACKHAND: OneHandPlan = {
     { fist: fist(-0.14, 0.24, 'down', 0.8), haft: 168, share: 0.9, depth: HAFT_AWAY_FROM_CAMERA },
     { fist: fist(-0.22, 0.26, 'down', 0.8), haft: 176, share: 0.9, depth: HAFT_AWAY_FROM_CAMERA },
     { fist: fist(0.0, 0.34, 'down', 0.7), haft: 72, share: 0.7, depth: HAFT_TOWARD_CAMERA },
-    { fist: fist(0.28, -0.04, 'up', 0.45, 0.7), haft: -36 },
-    { fist: fist(0.32, -0.24, 'up'), haft: -70 },
-    { fist: fist(0.18, 0.06, 'up', 0.8), haft: -80 },
+    { fist: fist(0.28, -0.04, 'down', 0.45, 0.7), haft: -36 },
+    { fist: fist(0.32, -0.24, 'down'), haft: -70 },
+    { fist: fist(0.18, 0.06, 'down', 0.8), haft: -80 },
     { fist: fist(0.07, 0.28, 'up', 0.6), haft: -76 },
   ],
   trunk: {
@@ -300,9 +301,9 @@ const LIGHT_FRONT_CHOP: OneHandPlan = {
   palm: towards(0.3, 0, -0.95),
   keys: [
     { fist: fist(0.05, 0.3, 'up', 0.6), haft: -74 },
-    { fist: fist(0.16, -0.24, 'up', 0.9), haft: -92 },
-    { fist: fist(0.12, -0.5, 'up'), haft: -90, share: 0.5, depth: HAFT_AWAY_FROM_CAMERA },
-    { fist: fist(0.12, -0.24, 'up'), haft: -64, share: 0.6, depth: HAFT_TOWARD_CAMERA },
+    { fist: fist(0.16, -0.24, 'down', 0.9), haft: -92 },
+    { fist: fist(0.12, -0.5, 'down'), haft: -90, share: 0.5, depth: HAFT_AWAY_FROM_CAMERA },
+    { fist: fist(0.12, -0.24, 'down'), haft: -64, share: 0.6, depth: HAFT_TOWARD_CAMERA },
     { fist: fist(0.05, 0.36, 'up', 0.45, 0.7), haft: 100, share: 0.7, depth: HAFT_TOWARD_CAMERA },
     { fist: fist(0.05, 0.46, 'up', 0.6, 0.8), haft: 96, share: 0.8, depth: HAFT_TOWARD_CAMERA },
     { fist: fist(0.05, 0.38, 'up', 0.6), haft: 20 },
@@ -424,12 +425,12 @@ const HEAVY_FRONT_SMASH: OneHandPlan = {
   palm: towards(0.3, 0, -0.95),
   keys: [
     { fist: fist(0.12, 0.14, 'up', 0.7), haft: -92 },
-    { fist: fist(0.24, -0.2, 'up'), haft: -82 },
-    { fist: fist(0.14, -0.5, 'up'), haft: -96, share: 0.5, depth: HAFT_AWAY_FROM_CAMERA },
-    { fist: fist(0.12, -0.26, 'up'), haft: -70, share: 0.6, depth: HAFT_TOWARD_CAMERA },
+    { fist: fist(0.24, -0.2, 'down'), haft: -82 },
+    { fist: fist(0.14, -0.5, 'down'), haft: -96, share: 0.5, depth: HAFT_AWAY_FROM_CAMERA },
+    { fist: fist(0.12, -0.26, 'down'), haft: -70, share: 0.6, depth: HAFT_TOWARD_CAMERA },
     { fist: fist(0.05, 0.4, 'up', 0.45, 0.7), haft: 175, share: 0.9, depth: HAFT_TOWARD_CAMERA },
     { fist: fist(0.05, 0.48, 'up', 0.6, 0.8), haft: 160, share: 0.9, depth: HAFT_TOWARD_CAMERA },
-    { fist: fist(0.08, 0.36, 'up', 0.65), haft: 10 },
+    { fist: fist(0.1, 0.46, 'up', 0.75, 0.85), haft: 10 },
     { fist: fist(0.12, 0.18, 'up', 0.7), haft: -70 },
   ],
   trunk: {
@@ -446,12 +447,12 @@ const HEAVY_FRONT_SWING: OneHandPlan = {
   palm: towards(0.3, 0, -0.95),
   keys: [
     { fist: fist(0.12, 0.14, 'up', 0.7), haft: -92 },
-    { fist: fist(0.38, 0.16, 'up'), haft: -20 },
-    { fist: fist(0.44, 0.12, 'up'), haft: -6, share: 0.8, depth: HAFT_AWAY_FROM_CAMERA },
-    { fist: fist(0.22, 0.26, 'up', 0.8), haft: 54, share: 0.5, depth: HAFT_TOWARD_CAMERA },
+    { fist: fist(0.38, 0.16, 'down'), haft: -20 },
+    { fist: fist(0.44, 0.12, 'down'), haft: -6, share: 0.8, depth: HAFT_AWAY_FROM_CAMERA },
+    { fist: fist(0.24, 0.36, 'up', 0.85), haft: 54, share: 0.5, depth: HAFT_TOWARD_CAMERA },
     { fist: fist(-0.1, 0.3, 'down', 0.5, 0.8), haft: 174 },
     { fist: fist(-0.34, 0.3, 'down', 0.8), haft: 196, share: 0.7, depth: HAFT_AWAY_FROM_CAMERA },
-    { fist: fist(-0.06, 0.26, 'down', 0.75), haft: 210 },
+    { fist: fist(-0.06, 0.26, 'down', 0.75), haft: 200 },
     { fist: fist(0.1, 0.18, 'up', 0.7), haft: 266 },
   ],
   trunk: {
@@ -579,7 +580,7 @@ const STRIKE_PLANS: Readonly<Record<ArmedStrike, PlansByView>> = {
 const GUARD_SETTLED_PHASE = 0.5;
 
 /** What a blow is thrown from in a view: the bare-handed guard's legs, or a two-hander's stance. */
-function strikeBase(set: ArmedMotionSet, view: CardinalView): CarlPose {
+function strikeBase(set: ArmedMotionSet, view: CardinalView): BipedPose {
   if (!guardsOwnWay(set)) {
     if (view === 'side') return idleSide(0);
     return view === 'back' ? idleBack(0) : idleFront(0);
@@ -646,7 +647,7 @@ function holdAt(plan: StrikePlan, frame: number, view: CardinalView): Hold {
 /** A set face: the brow drawn down and the mouth open on the effort. */
 const EFFORT_MOUTH = 0.45;
 
-function applyTrunk(pose: CarlPose, trunk: TrunkTracks, frame: number, weight: number): void {
+function applyTrunk(pose: BipedPose, trunk: TrunkTracks, frame: number, weight: number): void {
   pose.twist += frameValue(trunk.twist, frame) * weight;
   pose.lean += frameValue(trunk.lean, frame) * weight;
   pose.crouch += frameValue(trunk.crouch, frame) * weight;
@@ -664,7 +665,7 @@ const LEAD_STEP_LIFT = 0.02;
  * frame it travels, set down where it lands, and planted only while it holds
  * still.
  */
-function stepLead(pose: CarlPose, steps: FrameTable, frame: number): void {
+function stepLead(pose: BipedPose, steps: FrameTable, frame: number): void {
   const step = frameValue(steps, frame);
   const moving = step !== frameValue(steps, frame - 1) && step !== frameValue(steps, frame + 1);
   const lift = moving ? LEAD_STEP_LIFT : 0;
@@ -678,7 +679,7 @@ export function armedStrike(
   strike: ArmedStrike,
   view: CardinalView,
   frame: number,
-): CarlPose {
+): BipedPose {
   const plan = STRIKE_PLANS[strike][view];
   const base = strikeBase(set, view);
   applyTrunk(base, plan.trunk, frame, 1);
@@ -770,9 +771,11 @@ export function armedTravellingStrike(
   view: CardinalView,
   entry: number,
   frame: number,
-): CarlPose {
+): BipedPose {
   const phase = travellingRunPhase(entry, frame);
-  const run = view === 'side' ? runSide(phase) : runFacing(phase, view === 'back');
+  // The blow takes the upper body only: the legs stay the run's own, flight
+  // and all.
+  const run = view === 'side' ? runSide(phase) : runFacingCycle(phase, view === 'back');
   const carrying = armedRunUnder(set, view, run);
   const plan = STRIKE_PLANS[strike][view];
   const weight = frameValue(TRAVELLING_BLEND, frame);
@@ -789,16 +792,25 @@ export function armedTravellingStrike(
   if (blow.kind === 'oneHand' && blow.free !== undefined) {
     const running = armOf(carrying, view, 'left');
     const raised = armAnglesFor(blow.free);
+    // Head-on the standing blow's free fist sits at his belt, which over
+    // running legs reads as a hand parked on the hip: the free arm keeps
+    // pumping with the stride instead. Edge-on it rises to the guard.
+    const freeWeight = VIEWS[view].profile ? weight : 0;
     setArm(
       pose,
       view,
       'left',
       {
-        upper: lerp(running.angles.upper, raised.upper, weight),
-        fore: lerp(running.angles.fore, raised.fore, weight),
-        foreScale: lerp(running.angles.foreScale, raised.foreScale, weight),
+        upper: lerp(running.angles.upper, raised.upper, freeWeight),
+        fore: lerp(running.angles.fore, raised.fore, freeWeight),
+        foreScale: lerp(running.angles.foreScale, raised.foreScale, freeWeight),
+        wristFollow: lerp(
+          running.angles.wristFollow ?? WRIST_FOLLOW,
+          raised.wristFollow ?? WRIST_FOLLOW,
+          freeWeight,
+        ),
       },
-      lerp(running.upperScale, blow.free.upperScale ?? FULL_UPPER_ARM, weight),
+      lerp(running.upperScale, blow.free.upperScale ?? FULL_UPPER_ARM, freeWeight),
     );
   }
   if (plan.kind === 'oneHand' && view === 'back') {
@@ -813,7 +825,7 @@ export function armedTravellingStrike(
  * that produced it — the carry's fist where the stride has swung it — so a
  * blow taken over from it starts from the arm on screen.
  */
-function currentHold(carrying: CarlPose, view: CardinalView, set: ArmedMotionSet): Hold {
+function currentHold(carrying: BipedPose, view: CardinalView, set: ArmedMotionSet): Hold {
   const carry = CARRY_HOLDS[set][view];
   if (carry.kind === 'twoHand') return carry;
   const turned = carrying.rightHandOrientation?.haftAngle ?? carry.haftAngle;
@@ -826,6 +838,6 @@ function currentHold(carrying: CarlPose, view: CardinalView, set: ArmedMotionSet
   };
 }
 
-function rightShoulderOf(pose: CarlPose, view: CardinalView): Pt {
+function rightShoulderOf(pose: BipedPose, view: CardinalView): Pt {
   return buildSkeleton(pose, VIEWS[view]).rightArm.root;
 }

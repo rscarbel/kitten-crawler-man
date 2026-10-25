@@ -1,10 +1,10 @@
 /**
- * Carl, as a painted figure: the row table, the cell geometry, and the
+ * The human crawler, as a painted figure: the row table, the cell geometry, and the
  * `FigureDef` the runtime cache and the review harness both draw through.
  *
  * This module is the assembly and nothing else. The pose functions each row
  * samples per frame live in `human/`, one file per family of rows; the anatomy,
- * the palette and every stroke of paint live in `carl/`.
+ * the palette and every stroke of paint live in `biped/`.
  *
  * Rows:
  *    idle        — toward the camera, breathing, fists loose
@@ -56,19 +56,19 @@
 
 import { type FigureDef, type FigureHeldLayers, figureStates } from '../figure/figureDef';
 import {
-  type CarlComposeOptions,
-  type CarlHandSockets,
-  carlHandSockets,
-  carlPropDraws,
-  drawCarlBack,
-  drawCarlFront,
-  drawCarlSide,
-} from './carl/figure';
-import { type CarlPose, VIEWS } from './carl/rig';
+  type BipedComposeOptions,
+  type BipedHandSockets,
+  bipedHandSockets,
+  bipedPropDraws,
+  drawBipedBack,
+  drawBipedFront,
+  drawBipedSide,
+} from './biped/figure';
+import { type BipedPose, VIEWS } from './biped/rig';
 import type { HandleRadius } from '../held/gripArchetypes';
 import { compositeHeldItem } from '../held/heldComposite';
 import { type CardinalView, type FacingView } from '../facingView';
-import { type CarlRowView } from '../humanSprite';
+import { type HumanRowView } from '../humanSprite';
 import {
   fidgetCeilingBack,
   fidgetCeilingFront,
@@ -122,7 +122,7 @@ import {
   explosiveFuseAt,
   type ThrowRowFamily,
 } from './human/actionsThrow';
-import type { DynamiteVariant } from './carl/props/dynamite';
+import type { DynamiteVariant } from './biped/props/dynamite';
 import {
   CHEST_LID_UP_FRAME,
   CHEST_OPEN_FRAMES,
@@ -180,7 +180,14 @@ import {
   MINE_TICKS_PER_FRAME,
   mine,
 } from './human/actionsGather';
-import { HUMAN_SCALE, TILE_SCALE } from './human/figureScale';
+import {
+  HUMAN_SCALE,
+  PLAYER_HUMAN_CELL_PX_PER_UNIT,
+  PLAYER_HUMAN_SIZE_OVER_RIG,
+  TILE_SCALE,
+} from './human/figureScale';
+import { type HumanLook, playerLookAxes, withLookBuild } from '../looks/humanLook';
+import { playerCharacter } from '../../characters/characters';
 import { sideOfSign } from './human/gaitShared';
 import { travellingEntryPhase } from './human/travelling';
 import { REACTION_ROW_NAMES, REACTION_ROW_TABLE } from './human/reactions';
@@ -231,6 +238,7 @@ import {
   puntRunSide,
   puntSide,
   roundhouseSide,
+  RUNNING_STRIKE_ENTRY_PHASES,
   RUNNING_STRIKE_FRAMES,
   RUNNING_STRIKE_IMPACT_FRAME,
   runningStrikeExitPhase,
@@ -276,15 +284,38 @@ import {
 // ── Cell geometry ────────────────────────────────────────────────────────────
 
 /**
- * The cell the poses are painted into, and where Carl's own tile sits inside
+ * The ground line's cell row within the tile, near the cat's 0.9 foot
+ * placement. A whole row, not 0.9 of the tile (57.6 px): the painter composes
+ * the figure on a surface of its own laid on the pose's origin, and an origin on a
+ * fractional row resamples the whole figure half a pixel down, smearing every
+ * one-pixel mark — the mouth line, the zip — across two rows.
+ */
+const GROUND_ROW_IN_TILE = 58;
+export const GROUND_OFFSET_IN_TILE = GROUND_ROW_IN_TILE / TILE_SCALE;
+
+/**
+ * The square the rig drawn at its own size is painted in — an overhead axe and
+ * a lunging sword point included — and the room it keeps below his ground
+ * line. The player's figure is drawn `PLAYER_HUMAN_SIZE_OVER_RIG` larger, so
+ * his cell and that room are that much larger.
+ */
+const RIG_CELL_SIDE = 192;
+const RIG_ROOM_BELOW_GROUND = 30;
+/** Cell sides are kept to whole multiples of this many pixels. */
+const CELL_SIDE_STEP = 8;
+const CELL_SIDE =
+  Math.ceil((RIG_CELL_SIDE * PLAYER_HUMAN_SIZE_OVER_RIG) / CELL_SIDE_STEP) * CELL_SIDE_STEP;
+
+/**
+ * The cell the poses are painted into, and where the human's own tile sits inside
  * it. The gates check that nothing paints against the edge, which is what
  * would say a pose has outgrown them.
  */
-export const FRAME_W = 192;
-export const FRAME_H = 192;
+export const FRAME_W = CELL_SIDE;
+export const FRAME_H = CELL_SIDE;
 export const TILE_X = (FRAME_W - TILE_SCALE) / 2;
 /**
- * The tile sits low in the frame: Carl is two tiles tall and throws a fist
+ * The tile sits low in the frame: the human is two tiles tall and throws a fist
  * higher still, so most of the spare room has to be above his feet.
  *
  * Not all of it, though. Seen head-on a stride reaches along the floor, and
@@ -294,16 +325,8 @@ export const TILE_X = (FRAME_W - TILE_SCALE) / 2;
  * up the cell to make room would jump by that much whenever he set off or
  * stopped — so the room is left below the ground line for all of them.
  */
-export const TILE_Y = 104;
-/**
- * The ground line's cell row within the tile, near the cat's 0.9 foot
- * placement. A whole row, not 0.9 of the tile (57.6 px): the painter composes
- * Carl on a surface of its own laid on the pose's origin, and an origin on a
- * fractional row resamples the whole figure half a pixel down, smearing every
- * one-pixel mark — the mouth line, the zip — across two rows.
- */
-const GROUND_ROW_IN_TILE = 58;
-export const GROUND_OFFSET_IN_TILE = GROUND_ROW_IN_TILE / TILE_SCALE;
+const ROOM_BELOW_GROUND = Math.ceil(RIG_ROOM_BELOW_GROUND * PLAYER_HUMAN_SIZE_OVER_RIG);
+export const TILE_Y = FRAME_H - ROOM_BELOW_GROUND - GROUND_ROW_IN_TILE;
 /** The cell pixel the pose's ground point — between his feet — is painted at. */
 export const ORIGIN_X = TILE_X + TILE_SCALE / 2;
 export const ORIGIN_Y = TILE_Y + TILE_SCALE * GROUND_OFFSET_IN_TILE;
@@ -311,7 +334,7 @@ export const ORIGIN_Y = TILE_Y + TILE_SCALE * GROUND_OFFSET_IN_TILE;
 // ── Row table ────────────────────────────────────────────────────────────────
 
 /**
- * Every row Carl is painted in, in sheet order. The runtime's state type is
+ * Every row the human is painted in, in sheet order. The runtime's state type is
  * derived from this tuple, and {@link HUMAN_ROW_TABLE} must carry exactly these
  * keys, so a row cannot be added to one side without the other.
  */
@@ -664,7 +687,7 @@ export type StrikeReachLimb =
 type StrikeDrive = 'out' | 'down';
 
 export interface HumanRowDef extends HumanRowMeta {
-  readonly pose: (frame: number) => CarlPose;
+  readonly pose: (frame: number) => BipedPose;
 }
 
 export interface RowSpec extends HumanRowDef {
@@ -706,7 +729,7 @@ const COMBO_FINISHER = 3;
 // version begins nearest the stride on screen.
 
 function jabRunRow(version: number): HumanRowDef {
-  const entry = travellingEntryPhase('side', version);
+  const entry = RUNNING_STRIKE_ENTRY_PHASES[version];
   return {
     frameCount: RUNNING_STRIKE_FRAMES,
     kind: 'oneShot',
@@ -723,7 +746,7 @@ function jabRunRow(version: number): HumanRowDef {
 }
 
 function puntRunRow(version: number): HumanRowDef {
-  const entry = travellingEntryPhase('side', version);
+  const entry = RUNNING_STRIKE_ENTRY_PHASES[version];
   const reachLimb = sideOfSign(puntRunKickingSide(entry)) === 'right' ? 'foot' : 'leftFoot';
   return {
     frameCount: RUNNING_STRIKE_FRAMES,
@@ -863,7 +886,7 @@ function gatherRow(
   frames: number,
   ticksPerFrame: number,
   events: HumanRowMeta['eventFrames'],
-  pose: (frame: number, view: CardinalView) => CarlPose,
+  pose: (frame: number, view: CardinalView) => BipedPose,
 ): HumanRowDef {
   return {
     frameCount: frames,
@@ -883,7 +906,7 @@ function gatherRow(
  * A guard drop's frames sit strictly between its two ends — the guard's first
  * frame before it, the idle's after — so neither end is drawn twice.
  */
-function guardDropRow(view: CardinalView, pose: (t: number) => CarlPose): HumanRowDef {
+function guardDropRow(view: CardinalView, pose: (t: number) => BipedPose): HumanRowDef {
   const frames = view === 'side' ? GUARD_DROP_PROFILE_FRAMES : GUARD_DROP_FACING_FRAMES;
   return {
     frameCount: frames,
@@ -902,7 +925,7 @@ function guardDropRow(view: CardinalView, pose: (t: number) => CarlPose): HumanR
 function fidgetRow(
   view: CardinalView,
   frames: number,
-  pose: (t: number) => CarlPose,
+  pose: (t: number) => BipedPose,
   levelUpOrder?: number,
 ): HumanRowDef {
   return {
@@ -1261,7 +1284,7 @@ export const HUMAN_ROW_TABLE = {
   // The strikes thrown north, away from the camera. Punches and the knee go
   // to a tall enemy's head; the front kick is the punt, for what is knee-high
   // or at the edge of his reach. As a combo: uppercut to open, the overhand
-  // behind it, the hop-knee in the middle, the two-hand hammer-fist to end it.
+  // behind it, the hop-knee in the middle, the hammer-fist to end it.
   uppercut_up: {
     frameCount: ATTACK_FRAMES,
     kind: 'oneShot',
@@ -2041,7 +2064,7 @@ export const HUMAN_ROW_TABLE = {
 } satisfies Record<HumanRowName, HumanRowDef>;
 
 /**
- * One action drawn in every view Carl has rows for. A system playing it picks
+ * One action drawn in every view the human has rows for. A system playing it picks
  * the row for the way he faces with `viewRow`, so the rows are named here once
  * rather than composed from a view suffix, which would let a misspelt name
  * through to a figure that silently paints nothing.
@@ -2051,7 +2074,7 @@ export const HUMAN_ROW_TABLE = {
  * and from then on every table must name one.
  */
 export type ViewRows = Readonly<
-  Record<CarlRowView, HumanRowName> & Partial<Record<FacingView, HumanRowName>>
+  Record<HumanRowView, HumanRowName> & Partial<Record<FacingView, HumanRowName>>
 >;
 
 export const BUILD_KNEEL_ROWS: ViewRows = {
@@ -2081,12 +2104,13 @@ export const HUMAN_ROWS: readonly RowSpec[] = HUMAN_ROW_NAMES.map((name) => ({
 function paintView(
   ctx: CanvasRenderingContext2D,
   view: CardinalView,
-  pose: CarlPose,
-  compose: CarlComposeOptions,
+  pose: BipedPose,
+  compose: BipedComposeOptions,
 ): void {
-  if (view === 'front') drawCarlFront(ctx, pose, compose);
-  else if (view === 'back') drawCarlBack(ctx, pose, compose);
-  else drawCarlSide(ctx, pose, compose);
+  const sized = { ...compose, cellPxPerUnit: PLAYER_HUMAN_CELL_PX_PER_UNIT };
+  if (view === 'front') drawBipedFront(ctx, pose, sized);
+  else if (view === 'back') drawBipedBack(ctx, pose, sized);
+  else drawBipedSide(ctx, pose, sized);
 }
 
 const HUMAN_ROWS_BY_NAME: ReadonlyMap<string, RowSpec> = new Map(
@@ -2110,36 +2134,45 @@ export function eventFrame(row: HumanRowName, event: HumanRowEvent): number | un
  * gear that changes with the action — steel that forms round a fist on the
  * frames a blow lands — is decided per cell.
  */
-export type HumanPoseDresser = (pose: CarlPose, row: RowSpec, frame: number) => CarlPose;
+export type HumanPoseDresser = (pose: BipedPose, row: RowSpec, frame: number) => BipedPose;
 
-/** How one of Carl's figures turns a row's frame into a picture: what it lays on the pose, and how it composes it. */
+/** How one of the human figures turns a row's frame into a picture: who it paints, what it lays on the pose, and how it composes it. */
 export interface HumanFigurePainting {
+  readonly look: HumanLook;
   readonly dress: HumanPoseDresser;
   /** The handle an equipment-chosen item in his grip is assumed to have. */
   readonly itemHandle: HandleRadius;
 }
 
-function undressed(pose: CarlPose): CarlPose {
-  return pose;
-}
-
 /**
- * Carl's own figure holds nothing of its own choosing; an equipment-chosen
- * item reaches him only through the rows that grip a working tool, whose
- * hafts are all one thickness.
+ * The player's own figure holds nothing of its own choosing; an
+ * equipment-chosen item reaches him only through the rows that grip a working
+ * tool, whose hafts are all one thickness.
  */
-const UNDRESSED_PAINTING: HumanFigurePainting = { dress: undressed, itemHandle: 'standard' };
+const PLAYER_HUMAN_LOOK = playerCharacter('human').look;
+
+const UNDRESSED_PAINTING: HumanFigurePainting = {
+  look: PLAYER_HUMAN_LOOK,
+  dress: (pose) => withLookBuild(pose, PLAYER_HUMAN_LOOK),
+  itemHandle: 'standard',
+};
 
 /** A row's pose as `painting` paints it on `frame`. */
-export function paintedPose(painting: HumanFigurePainting, row: RowSpec, frame: number): CarlPose {
+export function paintedPose(painting: HumanFigurePainting, row: RowSpec, frame: number): BipedPose {
   return painting.dress(row.pose(frame), row, frame);
 }
 
-function inCell(ctx: CanvasRenderingContext2D, paint: () => void): void {
+function inCell(
+  ctx: CanvasRenderingContext2D,
+  look: HumanLook,
+  view: CardinalView,
+  paint: () => void,
+): void {
+  const axes = playerLookAxes(look, VIEWS[view].profile);
   ctx.save();
   ctx.translate(ORIGIN_X, ORIGIN_Y);
   ctx.scale(TILE_SCALE, TILE_SCALE);
-  ctx.scale(HUMAN_SCALE, HUMAN_SCALE);
+  ctx.scale(HUMAN_SCALE * axes.x, HUMAN_SCALE * axes.y);
   try {
     paint();
   } finally {
@@ -2148,11 +2181,12 @@ function inCell(ctx: CanvasRenderingContext2D, paint: () => void): void {
 }
 
 /**
- * Paints one cell of Carl as `painting` dresses him, in the cell's own pixels.
+ * Paints one cell of the human as `painting` dresses him, in the cell's own pixels.
  *
  * The pose is anchored at the ground line under the cell's centre, which is
  * what ties the art to the tile he stands on, and scaled about that same
- * ground line so his feet stay on it whatever `HUMAN_SCALE` is set to.
+ * ground line, by `HUMAN_SCALE` and the look's own build, so his feet stay on
+ * it whatever either is set to.
  */
 export function paintDressedHumanFrame(
   ctx: CanvasRenderingContext2D,
@@ -2163,7 +2197,8 @@ export function paintDressedHumanFrame(
   const row = humanRowOf(state);
   if (row === undefined) return;
   const pose = paintedPose(painting, row, frame);
-  inCell(ctx, () => paintView(ctx, row.view, pose, { itemHandle: painting.itemHandle }));
+  const { look, itemHandle } = painting;
+  inCell(ctx, look, row.view, () => paintView(ctx, row.view, pose, { look, itemHandle }));
 }
 
 /**
@@ -2177,14 +2212,15 @@ export function paintDressedHumanLayers(
   state: string,
   frame: number,
   painting: HumanFigurePainting,
-  compose: Pick<CarlComposeOptions, 'deferProps'> = {},
+  compose: Pick<BipedComposeOptions, 'deferProps'> = {},
 ): void {
   const row = humanRowOf(state);
   if (row === undefined) return;
   const pose = paintedPose(painting, row, frame);
-  inCell(front, () =>
-    inCell(back, () =>
-      paintView(back, row.view, pose, { ...compose, itemHandle: painting.itemHandle, front }),
+  const { look, itemHandle } = painting;
+  inCell(front, look, row.view, () =>
+    inCell(back, look, row.view, () =>
+      paintView(back, row.view, pose, { ...compose, look, itemHandle, front }),
     ),
   );
 }
@@ -2202,10 +2238,11 @@ export function paintRowProps(
 ): void {
   const row = humanRowOf(state);
   if (row === undefined) return;
-  const draws = carlPropDraws(paintedPose(painting, row, frame), VIEWS[row.view], {
+  const draws = bipedPropDraws(paintedPose(painting, row, frame), VIEWS[row.view], {
+    look: painting.look,
     itemHandle: painting.itemHandle,
   });
-  inCell(ctx, () => {
+  inCell(ctx, painting.look, row.view, () => {
     for (const draw of draws) compositeHeldItem(ctx, draw.def, draw.transform, 'cached');
   });
 }
@@ -2218,14 +2255,15 @@ export function paintedHandSockets(
   painting: HumanFigurePainting,
   row: RowSpec,
   frame: number,
-): CarlHandSockets {
-  return carlHandSockets(paintedPose(painting, row, frame), VIEWS[row.view], {
+): BipedHandSockets {
+  return bipedHandSockets(paintedPose(painting, row, frame), VIEWS[row.view], {
+    look: painting.look,
     itemHandle: painting.itemHandle,
   });
 }
 
 /**
- * The two-layer painting of a Carl figure: a frame is layered when either of
+ * The two-layer painting of a human figure: a frame is layered when either of
  * his hands closes on an equipment-chosen item. Answered once per frame and
  * kept, since the cache asks on every bake and every direct paint.
  */
@@ -2259,7 +2297,7 @@ function humanStateFrames(): Record<string, number> {
 }
 
 /**
- * Carl's own per-figure cache ceiling, in place of the fleet default.
+ * The human crawler's own per-figure cache ceiling, in place of the fleet default.
  *
  * He is the one figure on screen almost every frame, so the rows that must
  * stay warm together are his baseline footprint rather than a peak: the run,
@@ -2269,26 +2307,30 @@ function humanStateFrames(): Record<string, number> {
  * release window; the wind-up of every blow a fight can open with from
  * standing; and the opening frames of the rows held on stand-by for a moment
  * that can come on any tick — the flinch, the stumble, the Protective Shell
- * cast and, once he is low, the falls. At 192×192 (144 KiB a cell) that comes
- * to about fifty-five megabytes — the blows thrown on the move alone are
+ * cast and, once he is low, the falls. The blows thrown on the move are
  * painted once per phase of the stride they can begin at, five versions a row
- * in profile, which is what takes it past the fleet's 24 MB default twice
- * over. Carrying a weapon, every one of those cells that closes his right fist
- * on it also holds a front layer cropped to its ink, about 1.9 MB over the
- * set: 57.5 MB at the most. With a light one-hander out its own rows
- * replace the bare-handed ones, and its family of blows — four in each view,
- * every one with its versions painted on the move — is the largest he has:
- * that working set measures 64.1 MB, 66.2 MB with its front layers round the
- * thickest handle. Sixty-seven megabytes covers it with a cell or so of
- * slack and still leaves the cache's global ceiling, which this does not
- * change, room for the rest of the floor's figures. `scripts/gates-human.ts`
- * measures the working set of every set in his hand, bare and carrying,
- * against it.
+ * in profile, which is what makes his the largest working set in the fleet.
+ * A cell is stored cropped to its ink, so what that set costs follows his
+ * painted area rather than his cell: with a light one-hander out, the largest
+ * family he has — four blows in each view, every one with its versions painted
+ * on the move — measures 17.1 MB stored with its front layers round the
+ * thickest handle in Ryan's clothes (93.6 MB were each held as a whole cell),
+ * and 22.0 MB on Dave in every garment the gates dress him in, the heaviest
+ * any look or outfit measures. Twenty-eight megabytes covers that, the two
+ * whole cells a bake in flight is admitted at, and a quarter as much again for
+ * gear and art still to come, without the room a leak would hide in.
+ * `scripts/gates-human.ts` measures the working set of every set in his hand,
+ * bare and carrying, against it.
  */
-const HUMAN_FIGURE_BUDGET_MEGABYTES = 67;
+const HUMAN_FIGURE_BUDGET_MEGABYTES = 28;
+
+/** The id of every figure painted in `look`; a figure dressed past it adds its outfit's key. */
+export function humanFigureId(look: HumanLook): string {
+  return `human:${look.id}`;
+}
 
 export const HUMAN_FIGURE: FigureDef = {
-  id: 'human',
+  id: humanFigureId(UNDRESSED_PAINTING.look),
   frameWidth: FRAME_W,
   frameHeight: FRAME_H,
   tileX: TILE_X,

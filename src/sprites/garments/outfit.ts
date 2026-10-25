@@ -7,14 +7,15 @@
 
 import {
   GARMENT_LAYERS,
+  type BaseGarmentDef,
   type GarmentWearer,
   type GarmentDef,
   type GarmentFrameContext,
   type GarmentPart,
   type HideableFeature,
   type PartFrame,
+  type WornGarmentDef,
 } from './garmentDef';
-import { baseGarmentsOf } from './garments';
 
 export interface Outfit<W extends GarmentWearer> {
   readonly wearer: W;
@@ -28,6 +29,23 @@ export interface Outfit<W extends GarmentWearer> {
   readonly hidden: ReadonlySet<HideableFeature<W>>;
   /** A stable name for the look: the ids of the garments that show, sorted. */
   readonly key: string;
+  /**
+   * What was put on, before the base was added, before any garment hid
+   * another and before the base turned away any that need skin it covers:
+   * what to dress another wearer of the same kind in, whose base may leave a
+   * different set showing.
+   */
+  readonly worn: readonly WornGarmentDef<W>[];
+}
+
+/**
+ * What every outfit of one look starts from: the base garments it is always
+ * painted in, whose `covers` decide what bare skin is already covered. A look carries these itself, so
+ * two looks on the same rig can start from different clothes.
+ */
+export interface OutfitBase<W extends GarmentWearer> {
+  readonly wearer: W;
+  readonly baseGarments: readonly BaseGarmentDef<W>[];
 }
 
 const KEY_SEPARATOR = '+';
@@ -42,15 +60,40 @@ function layerRank<W extends GarmentWearer>(garment: GarmentDef<W>): number {
 }
 
 /**
- * What a crawler of kind `wearer` looks like in `worn`, on top of the base
- * garments every outfit of theirs starts from. A garment another worn garment
- * hides is left off.
+ * Whether a garment can go on over `base`'s own clothes: one needing bare skin
+ * a base garment covers (`GarmentSpec.covers`) never shows.
+ */
+export function fitsOver<W extends GarmentWearer>(
+  base: OutfitBase<W>,
+  garment: GarmentDef<W>,
+): boolean {
+  const needs = garment.needsBare;
+  return needs === null || !base.baseGarments.some((worn) => worn.covers.includes(needs));
+}
+
+/**
+ * Whether `cover` leaves `other` off by covering its skin: `other` needs bare
+ * what `cover` covers, or covers it too from a layer further in.
+ */
+function coversOver<W extends GarmentWearer>(cover: GarmentDef<W>, other: GarmentDef<W>): boolean {
+  return cover.covers.some(
+    (skin) =>
+      other.needsBare === skin ||
+      (other.covers.includes(skin) && layerRank(other) < layerRank(cover)),
+  );
+}
+
+/**
+ * What a look starting from `base` looks like in `worn`, on top of its base
+ * garments. A garment another worn garment hides, or one needing bare skin the
+ * base garments cover, is left off.
  */
 export function outfitOf<W extends GarmentWearer>(
-  wearer: W,
-  worn: readonly GarmentDef<W>[],
+  base: OutfitBase<W>,
+  worn: readonly WornGarmentDef<W>[],
 ): Outfit<W> {
-  const all = [...baseGarmentsOf(wearer), ...worn.filter((garment) => !garment.base)];
+  const overBase = worn.filter((garment) => fitsOver(base, garment));
+  const all = [...base.baseGarments, ...overBase];
   const unique = all.filter(
     (garment, index) => all.findIndex((other) => other.id === garment.id) === index,
   );
@@ -58,6 +101,9 @@ export function outfitOf<W extends GarmentWearer>(
   for (const garment of unique) {
     for (const rule of garment.hides) {
       if (rule.kind === 'garment') hiddenGarments.add(rule.garment);
+    }
+    for (const other of unique) {
+      if (coversOver(garment, other)) hiddenGarments.add(other.id);
     }
   }
   const showing = unique.filter((garment) => !hiddenGarments.has(garment.id));
@@ -74,7 +120,7 @@ export function outfitOf<W extends GarmentWearer>(
     .map((garment) => garment.id)
     .sort(byCodeUnit)
     .join(KEY_SEPARATOR);
-  return { wearer, garments, hidden, key };
+  return { wearer: base.wearer, garments, hidden, key, worn };
 }
 
 /** Whether two outfits paint the same figure. */

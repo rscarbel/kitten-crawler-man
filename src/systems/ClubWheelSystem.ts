@@ -18,6 +18,7 @@
  * it back, and the wheel closes back to the picker once the chain resolves.
  */
 
+import { crawlerFormalName } from '../characters/characters';
 import type { AudioManager } from '../audio/AudioManager';
 import type { AudioScope } from '../audio/AudioScope';
 import type { SoundId } from '../audio/sounds';
@@ -122,7 +123,7 @@ export interface ClubWheelDeps {
   readonly progressWipe: ProgressWipe | null;
   /** Runs once the Nothing has played out and the save is gone: the page reload. */
   readonly afterNothing: () => void;
-  /** Gives Carl the attack cow and stands her beside him; her arrival moo is the grant's own. */
+  /** Gives the human crawler the attack cow and stands her beside him; her arrival moo is the grant's own. */
   readonly grantAttackCow: () => void;
   /** A notice for the scene's toasts. */
   readonly onNotice?: (message: string, tone: ToastTone) => void;
@@ -345,15 +346,9 @@ function revealEffectFor(wedge: WheelWedge): WheelRevealEffect {
 
 /** Skips that take the prize screen from any point to closed: to the reveal, then past it. */
 const PRIZE_SKIPS_TO_CLOSE = 2;
-const CARL_NAME = 'Carl';
-const DONUT_NAME = 'Princess Donut';
 
 function plural(name: string): string {
   return name.endsWith('s') ? name : `${name}s`;
-}
-
-function crawlerName(kind: WheelCrawler): string {
-  return kind === 'human' ? CARL_NAME : DONUT_NAME;
 }
 
 /**
@@ -361,9 +356,10 @@ function crawlerName(kind: WheelCrawler): string {
  * the banner's own title over again.
  */
 function prizeLine(wedge: WheelWedge, effect: WheelPrizeEffect, recipient: WheelCrawler): string {
-  const name = crawlerName(recipient);
+  const name = crawlerFormalName(recipient);
   const { prize } = wedge;
-  if (prize.kind === 'pet') return `An attack cow of his very own for ${CARL_NAME}`;
+  if (prize.kind === 'pet')
+    return `An attack cow of his very own for ${crawlerFormalName('human')}`;
   if (prize.kind === 'gold') return `Paid straight into ${name}'s purse`;
   if (prize.kind === 'heal_and_gold') {
     return `${name} is healed to full and paid ${prize.amount.toLocaleString()} gold`;
@@ -1233,7 +1229,7 @@ export class ClubWheelSystem implements WheelGameHost {
         {
           tier: reveal.itemTier,
           title: `${reveal.itemTier} prize`,
-          playerName: crawlerName(phase.spin.recipientKind),
+          playerName: crawlerFormalName(phase.spin.recipientKind),
           contents: { coins: reveal.coinsWon, itemRewards: reveal.items },
           detail: prizeDetail(reveal.items),
         },

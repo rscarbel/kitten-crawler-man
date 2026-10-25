@@ -3,7 +3,7 @@
  *
  * Module state rather than a system field: the scene — and the thrall system
  * with it — is rebuilt on every door visit, and walking into a shop must not
- * reset the wait. Per crawler, because the skill is: Carl and Donut each
+ * reset the wait. Per crawler, because the skill is: the human and the cat each
  * summon on their own clock, and one crawler's axe and pick summons share it.
  */
 

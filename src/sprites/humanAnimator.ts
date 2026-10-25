@@ -1,5 +1,5 @@
 /**
- * Carl's animator: which row he is drawn in, and how far through it he is.
+ * The human crawler's animator: which row he is drawn in, and how far through it he is.
  *
  * `HumanPlayer` tells it what is happening — how far he actually moved this
  * tick, which way he faces, that a strike or a Smush began, that he was hit,
@@ -29,8 +29,8 @@ import { FacingState } from './facingView';
 import {
   MAX_GAIT_ADVANCE_PX_PER_TICK,
   RUN_RADIANS_PER_PX,
-  RUN_SPEED_ENTER_PX_PER_TICK,
-  RUN_SPEED_EXIT_PX_PER_TICK,
+  gaitThresholdsOf,
+  type GaitThresholds,
   WALK_RADIANS_PER_PX,
 } from './art/human/locomotion';
 import { groundPxPerFrame, type HumanJointProbe, probeHumanJoints } from './art/human/probe';
@@ -46,19 +46,20 @@ import {
 } from './art/humanFigure';
 import { fightReactionSpans } from './humanReactions';
 import {
-  carlRowView,
-  type CarlRowView,
+  humanRowView,
+  type HumanRowView,
   type HumanRowSelection,
   isGaitCycle,
   rowFrameAtTicks,
   rowLengthInTicks,
   strikeWindUpFrames,
 } from './humanSprite';
-import { TWO_PI } from './art/carl/geometry';
+import { TWO_PI } from './art/biped/geometry';
 import { mulberry32, type Rng } from './person/rng';
 import { wrapPhase } from './art/human/gaitShared';
 import { PHASE_EPSILON } from './art/human/travelling';
 import type { HolsterMotion, MotionSet } from './art/human/motionSets';
+import { activeHumanLook } from './humanSprite';
 
 // ── Gait pacing ──────────────────────────────────────────────────────────────
 
@@ -74,6 +75,11 @@ const RADIANS_PER_PX: Readonly<Record<HumanGait, number>> = {
  */
 export function gaitRadiansPerPx(gait: HumanGait): number {
   return RADIANS_PER_PX[gait];
+}
+
+/** The ground speeds the look he is drawn as changes between a walk and a run at. */
+function activeGait(): GaitThresholds {
+  return gaitThresholdsOf(activeHumanLook());
 }
 
 /**
@@ -158,7 +164,7 @@ function rowsWithRole(role: HumanRowRole): readonly RowSpec[] {
   return HUMAN_ROWS.filter((row) => row.role === role);
 }
 
-function inView(rows: readonly RowSpec[], view: CarlRowView): readonly RowSpec[] {
+function inView(rows: readonly RowSpec[], view: HumanRowView): readonly RowSpec[] {
   return rows.filter((row) => row.view === view);
 }
 
@@ -198,17 +204,21 @@ function ofSet(rows: readonly RowSpec[], set: MotionSet): readonly RowSpec[] {
  * for a set with none in that view — his bare hands', the weapon carried in
  * the fist that throws them.
  */
-function strikingSet(set: MotionSet, view: CarlRowView): MotionSet {
+function strikingSet(set: MotionSet, view: HumanRowView): MotionSet {
   return inView(ofSet(STANDING_STRIKES, set), view).length > 0 ? set : 'unarmed';
 }
 
 /** The rows the melee family of one view can throw, standing, with `set` in hand. */
-function strikeFamily(view: CarlRowView, set: MotionSet): readonly RowSpec[] {
+function strikeFamily(view: HumanRowView, set: MotionSet): readonly RowSpec[] {
   return inView(ofSet(STANDING_STRIKES, strikingSet(set, view)), view);
 }
 
 /** The draw or stow of `set`'s weapon in a view, if it has one. */
-function holsterRow(motion: HolsterMotion, set: MotionSet, view: CarlRowView): RowSpec | undefined {
+function holsterRow(
+  motion: HolsterMotion,
+  set: MotionSet,
+  view: HumanRowView,
+): RowSpec | undefined {
   return HOLSTER_ROWS.find(
     (row) => row.holster === motion && setOf(row) === set && row.view === view,
   );
@@ -223,7 +233,7 @@ function hasTravellingVersions(row: RowSpec): boolean {
   return travellingVersions(row).length > 0;
 }
 
-function firstInView(rows: readonly RowSpec[], view: CarlRowView): RowSpec | undefined {
+function firstInView(rows: readonly RowSpec[], view: HumanRowView): RowSpec | undefined {
   return rows.find((row) => row.view === view);
 }
 
@@ -235,7 +245,7 @@ function firstInView(rows: readonly RowSpec[], view: CarlRowView): RowSpec | und
 function bridgeFor(
   rows: readonly RowSpec[],
   gait: HumanGait,
-  view: CarlRowView,
+  view: HumanRowView,
   set: MotionSet,
 ): RowSpec | undefined {
   const cycle = cycleRow(gait, view, set);
@@ -251,7 +261,7 @@ function bridgeFor(
  */
 export function cycleRow(
   gait: HumanGait,
-  view: CarlRowView,
+  view: HumanRowView,
   set: MotionSet = 'unarmed',
 ): RowSpec | undefined {
   const own = ofSet(CYCLE_ROWS, set);
@@ -301,12 +311,13 @@ const nearestStandingCache = new Map<string, readonly number[]>();
  * pair, so it follows the art.
  */
 function framesNearestStanding(cycle: RowSpec, standing: RowSpec): readonly number[] {
-  const key = `${cycle.name}>${standing.name}`;
+  const look = activeHumanLook();
+  const key = `${look.id}:${cycle.name}>${standing.name}`;
   const cached = nearestStandingCache.get(key);
   if (cached !== undefined) return cached;
-  const rest = probeHumanJoints(standing.name, 0);
+  const rest = probeHumanJoints(standing.name, 0, look);
   const jumps = Array.from({ length: cycle.frameCount }, (_unused, frame) =>
-    jointJump(probeHumanJoints(cycle.name, frame), rest),
+    jointJump(probeHumanJoints(cycle.name, frame, look), rest),
   );
   const best = Math.min(...jumps);
   const frames = jumps
@@ -339,14 +350,15 @@ function nearestVersion(
 ): RowSpec | undefined {
   if (versions.length === 0) return undefined;
   const first = versions[0];
-  const key = `${drawn.row}[${drawn.frame}]>${first.name}`;
+  const look = activeHumanLook();
+  const key = `${look.id}:${drawn.row}[${drawn.frame}]>${first.name}`;
   const cached = nearestVersionCache.get(key);
   if (cached !== undefined) return cached;
-  const onScreen = probeHumanJoints(drawn.row, drawn.frame);
+  const onScreen = probeHumanJoints(drawn.row, drawn.frame, look);
   let best = first;
   let bestJump = Number.POSITIVE_INFINITY;
   for (const version of versions) {
-    const jump = ankleJump(onScreen, probeHumanJoints(version.name, 0));
+    const jump = ankleJump(onScreen, probeHumanJoints(version.name, 0, look));
     if (jump >= bestJump) continue;
     best = version;
     bestJump = jump;
@@ -540,7 +552,7 @@ export class HumanAnimator {
   private facingX = 1;
   private facingY = 0;
   private flipX = false;
-  private view: CarlRowView = 'side';
+  private view: HumanRowView = 'side';
 
   private mode: BaseMode = 'idle';
   /** The row a one-shot base mode (start, unstart, stop, fidget) is playing. */
@@ -567,11 +579,11 @@ export class HumanAnimator {
   private reaction: Scripted | null = null;
   private knockedOut = false;
   private lastStrike: HumanRowName | null = null;
-  private lastStrikeView: CarlRowView | null = null;
+  private lastStrikeView: HumanRowView | null = null;
   private lastStrikeEndTick = Number.NEGATIVE_INFINITY;
   private comboStep = 0;
   private comboClosed = false;
-  private readonly strikeBags = new Map<CarlRowView, HumanRowName[]>();
+  private readonly strikeBags = new Map<HumanRowView, HumanRowName[]>();
 
   private guardTicks = 0;
   private suppressTicks = 0;
@@ -773,7 +785,7 @@ export class HumanAnimator {
     target: StrikeTargetContext | null,
   ): HumanRowName | null {
     const facing = this.facing.peek(facingX, facingY);
-    const view = carlRowView(facing.view);
+    const view = humanRowView(facing.view);
     const family = strikeFamily(view, this.motionSet);
     if (family.length === 0) return null;
 
@@ -807,7 +819,7 @@ export class HumanAnimator {
    */
   beginSmush(facingX: number, facingY: number): HumanRowName | null {
     const facing = this.facing.peek(facingX, facingY);
-    const view = carlRowView(facing.view);
+    const view = humanRowView(facing.view);
     const fallback = STANDING_STOMPS.length > 0 ? STANDING_STOMPS[0] : undefined;
     const standing = firstInView(STANDING_STOMPS, view) ?? fallback;
     const hops = this.isStriding() ? inView(TRAVELLING_STOMPS, view) : [];
@@ -834,7 +846,7 @@ export class HumanAnimator {
     facingY: number,
     onEnd?: (reason: HumanActionEndReason) => void,
   ): HumanRowName | null {
-    const row = holsterRow(motion, set, carlRowView(this.facing.peek(facingX, facingY).view));
+    const row = holsterRow(motion, set, humanRowView(this.facing.peek(facingX, facingY).view));
     if (row === undefined) return null;
     const options: HumanActionOptions = onEnd === undefined ? {} : { onEnd };
     return this.playAction(row.name, options) ? row.name : null;
@@ -874,7 +886,7 @@ export class HumanAnimator {
     this.facingY = input.facingY;
     const facing = this.facing.update(input.facingX, input.facingY);
     this.flipX = facing.flipX;
-    const view = carlRowView(facing.view);
+    const view = humanRowView(facing.view);
     if (view !== this.view) this.changeView(view);
 
     const groundPx = Math.min(Math.max(0, input.groundPx), MAX_GAIT_ADVANCE_PX_PER_TICK);
@@ -885,7 +897,8 @@ export class HumanAnimator {
     const settingOff = moving && this.isStanding();
     if (settingOff) this.smoothedSpeed = groundPx;
     else this.smoothedSpeed += (groundPx - this.smoothedSpeed) * SPEED_SMOOTHING;
-    if (settingOff) this.gait = this.smoothedSpeed >= RUN_SPEED_ENTER_PX_PER_TICK ? 'run' : 'walk';
+    if (settingOff)
+      this.gait = this.smoothedSpeed >= activeGait().enterRunPxPerTick ? 'run' : 'walk';
     if (moving) this.chooseGait();
 
     this.knockedOut = input.knockedOut;
@@ -1080,7 +1093,7 @@ export class HumanAnimator {
    * still whichever the combo and the shuffle allow.
    */
   private chooseStrike(
-    view: CarlRowView,
+    view: HumanRowView,
     family: readonly RowSpec[],
     target: StrikeTargetContext | null,
     striding: boolean,
@@ -1115,7 +1128,7 @@ export class HumanAnimator {
   }
 
   private drawFromBag(
-    view: CarlRowView,
+    view: HumanRowView,
     family: readonly RowSpec[],
     candidates: readonly RowSpec[],
   ): RowSpec {
@@ -1189,7 +1202,7 @@ export class HumanAnimator {
    * call for on any tick. Asked again on every blow thrown or taken, which is
    * also what keeps them from being released as idle while the fight lasts.
    */
-  private warmCombatRows(view: CarlRowView): void {
+  private warmCombatRows(view: HumanRowView): void {
     this.warmRow(this.restRowFor('guard', view).name);
     const striking = strikingSet(this.motionSet, view);
     for (const row of inView(ofSet(STRIKE_ROWS, striking), view)) this.warmRow(row.name);
@@ -1202,7 +1215,7 @@ export class HumanAnimator {
    * tick it lands. Only the view he is running in, so a floor's worth of
    * running does not hold every view's versions warm at once.
    */
-  private warmTravellingBlows(view: CarlRowView): void {
+  private warmTravellingBlows(view: HumanRowView): void {
     const striking = strikingSet(this.motionSet, view);
     const blows = TRAVELLING_BLOWS.filter((row) => row.role === 'stomp' || setOf(row) === striking);
     for (const row of inView(blows, view)) {
@@ -1223,12 +1236,12 @@ export class HumanAnimator {
   }
 
   private chooseGait(): void {
-    if (this.gait === 'walk' && this.smoothedSpeed >= RUN_SPEED_ENTER_PX_PER_TICK) {
+    if (this.gait === 'walk' && this.smoothedSpeed >= activeGait().enterRunPxPerTick) {
       this.gait = 'run';
-    } else if (this.gait === 'run' && this.smoothedSpeed < RUN_SPEED_EXIT_PX_PER_TICK) {
+    } else if (this.gait === 'run' && this.smoothedSpeed < activeGait().exitRunPxPerTick) {
       this.gait = 'walk';
     }
-    const near = this.smoothedSpeed < RUN_SPEED_ENTER_PX_PER_TICK * (1 + WALK_PREWARM_HEADROOM);
+    const near = this.smoothedSpeed < activeGait().enterRunPxPerTick * (1 + WALK_PREWARM_HEADROOM);
     if (near && !this.nearWalk) this.warmWalk();
     this.nearWalk = near;
   }
@@ -1498,7 +1511,7 @@ export class HumanAnimator {
    * guard — its idle; for a set with no standing rows at all, his bare
    * hands'.
    */
-  private restRowFor(role: 'idle' | 'guard', view: CarlRowView): RowSpec {
+  private restRowFor(role: 'idle' | 'guard', view: HumanRowView): RowSpec {
     const set = this.motionSet;
     const bareIdle = firstInView(ofSet(IDLE_ROWS, 'unarmed'), view) ?? IDLE_ROWS[0];
     const ownIdle = firstInView(ofSet(IDLE_ROWS, set), view);
@@ -1515,7 +1528,7 @@ export class HumanAnimator {
    * standing, a start to the stride. The fidget warmed for the old view is
    * for a view he is no longer in.
    */
-  private changeView(view: CarlRowView): void {
+  private changeView(view: HumanRowView): void {
     this.view = view;
     this.warmedFidget = null;
     if (this.nearWalk) this.warmWalk();

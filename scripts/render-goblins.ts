@@ -172,8 +172,8 @@ interface PartWindow {
 /**
  * Windows onto one body part, as fractions of the frame, so a reviewer can judge
  * the ears or the hands at a scale where they are actually visible. Whole-figure
- * contact sheets hide exactly the defects that matter most — four rounds of
- * review on Carl only became possible once the face could be looked at alone.
+ * contact sheets hide exactly the defects that matter most, and a face's only
+ * show once it is looked at alone.
  */
 const PART_WINDOWS: Record<string, PartWindow> = {
   head: { x: 0.3, y: 0.05, w: 0.45, h: 0.55 },

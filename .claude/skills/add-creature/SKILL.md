@@ -99,7 +99,7 @@ A creature that must be hit by the world's damage pipeline but is not an enemy i
 
 ## Companions and pets
 
-A player-owned creature is a `Mob` with three contracts the base class does not give you. `Mongo` (`src/creatures/Mongo.ts` + `src/systems/MongoSystem.ts` + `src/core/MongoPetState.ts`) is the worked example; read those three together before building another. Carl's attack cow (`src/creatures/AttackCow.ts` + `src/systems/AttackCowSystem.ts` + `src/core/AttackCowState.ts`) is the second: always out once owned, downed and revived rather than killed, and the one companion that taunts.
+A player-owned creature is a `Mob` with three contracts the base class does not give you. `Mongo` (`src/creatures/Mongo.ts` + `src/systems/MongoSystem.ts` + `src/core/MongoPetState.ts`) is the worked example; read those three together before building another. The human's attack cow (`src/creatures/AttackCow.ts` + `src/systems/AttackCowSystem.ts` + `src/core/AttackCowState.ts`) is the second: always out once owned, downed and revived rather than killed, and the one companion that taunts.
 
 **Attribution.** A pet must deal damage in its own name — pass itself as the attacker and set `target.retaliateMob = this` — or the mobs it mauls come after the owner standing behind it. Kill credit is then redirected by `Player.xpCreditTarget` (defaults to `this`; a pet returns its owner), which `CombatSystem.resolveKills` maps damage entries through, so the owner keeps the XP exactly as before. `Mob.killedByDealer` holds the literal dealer alongside the credited one, because killer-keyed loot rolls and achievements must still see the pet. Any `takeDamageFrom` override in a boss subclass has to preserve this mapping or it silently drops pet credit.
 

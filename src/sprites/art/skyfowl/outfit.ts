@@ -8,7 +8,7 @@
  * optional held prop.
  */
 
-import type { Pt } from '../carlArt';
+import type { Pt } from '../bipedArt';
 import { fillSoftEllipse } from '../softShade';
 import { fillCapsule, outlineCapsule, pt, type Ramp } from './paint';
 import type { SkyfowlBuild, SkyfowlBuildSpec } from './palette';

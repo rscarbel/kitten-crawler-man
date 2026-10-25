@@ -14,7 +14,7 @@
  *   beckon — a "this way" wave toward himself
  *   cower  — a one-shot flinch into hands up over his face, held trembling
  *
- * The gait is Carl's structure, not his phase or posture: a planted foot
+ * The gait is the biped rig's structure, not its phase or posture: a planted foot
  * slides back through the cell at exactly the rate the sprite is carried over
  * the floor, so walk and run are paced by ground covered
  * ({@link advanceScientistPhase}); the pelvis rides the lower of the planted
@@ -29,7 +29,7 @@ import { TILE_SIZE } from '../../core/constants';
 import type { CardinalView, FacingSelection, FacingView } from '../facingView';
 import { type FigureDef, figureStates } from '../figure/figureDef';
 import { drawFigureCached } from '../figure/figureFrameCache';
-import { clamp01, easeInOut, easeOut, hump, lerp, ramp, type Pt } from './carlArt';
+import { clamp01, easeInOut, easeOut, hump, lerp, ramp, type Pt } from './bipedArt';
 import {
   ANKLE_HEIGHT,
   type ArmPose,
@@ -97,8 +97,9 @@ export function scientistStatesFor(action: ScientistAction): string[] {
 /** Art tile size; the runtime scales by tileSize / TILE_SCALE. */
 export const TILE_SCALE = 64;
 /**
- * How much of a tile one figure unit spans: the same as Carl's, so the two
- * stand on one scale and Moult's extra height is his own, a head over Carl's.
+ * How much of a tile one figure unit spans: the same as the biped rig's, so the
+ * two stand on one scale and Moult's extra height is his own, a head over the
+ * human crawler's.
  */
 export const SCIENTIST_SCALE = 0.72;
 export const PX_PER_UNIT = TILE_SCALE * SCIENTIST_SCALE;
@@ -107,7 +108,7 @@ const FRAME_HEIGHT = 176;
 const TILE_X = (FRAME_WIDTH - TILE_SCALE) / 2;
 /** The tile sits low in the frame: he stands well over two tiles tall. */
 const TILE_Y = 104;
-/** His soles sit on the same row of the tile as Carl's, a whole cell row so no mark smears. */
+/** His soles sit on the same row of the tile as the biped figure's, a whole cell row so no mark smears. */
 const GROUND_ROW_IN_TILE = 58;
 export const ORIGIN_X = TILE_X + TILE_SCALE / 2;
 export const ORIGIN_Y = TILE_Y + GROUND_ROW_IN_TILE;
@@ -161,7 +162,7 @@ interface GaitSpec {
  * The walk: ten of sixteen frames down per foot, so both feet are down for a
  * frame either side of each contact. The steps are short — a little over
  * half a foot's length ahead and behind — which at his walking speed is a
- * cadence well above Carl's.
+ * cadence well above the human crawler's.
  */
 const WALK: GaitSpec = {
   frames: 16,

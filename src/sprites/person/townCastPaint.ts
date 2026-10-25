@@ -1,15 +1,15 @@
 /**
  * Turns the person renderer's flat, single-tone fills into the standard the
  * rest of the cast paints to: a soft directional glaze that gives every mass
- * real volume, and a silhouette-only outline, so townsfolk sit beside Carl
+ * real volume, and a silhouette-only outline, so townsfolk sit beside the crawlers
  * and the other painted casts without looking like flat cut-outs.
  *
  * The shapes themselves (torso curve, limb capsules, face, hair, hat) stay
  * `drawPerson.ts`'s: they were never the problem, and redrawing anatomy that
  * already reads correctly would only risk it. What changes is what happens
  * after the shapes are down: a figure is painted once to an offscreen surface,
- * a warm outline is dilated from its own silhouette (Carl's own technique,
- * `carl/figure.ts`'s `outlineInto`), and a shadow/light glaze derived from the
+ * a warm outline is dilated from its own silhouette (the rig's own technique,
+ * `biped/figure.ts`'s `outlineInto`), and a shadow/light glaze derived from the
  * look's own colours is laid over the top, clipped to the ink already there so
  * it never bleeds past the figure's edge.
  */
@@ -20,10 +20,10 @@ import {
   surfaceContext,
   type CanvasSurface,
 } from '../../core/canvasSurface';
-import { mix, rgba } from '../art/carlArt';
+import { mix, rgba } from '../art/bipedArt';
 import { fillSoftEllipse } from '../art/softShade';
-import { OUTLINE_PX } from '../art/carl/figure';
-import { SILHOUETTE_OUTLINE, SILHOUETTE_OUTLINE_ALPHA } from '../art/carl/palette';
+import { OUTLINE_PX } from '../art/biped/figure';
+import { SILHOUETTE_OUTLINE, SILHOUETTE_OUTLINE_ALPHA } from '../art/biped/palette';
 import type { PersonAppearance } from './PersonAppearance';
 import { drawPersonWithPose } from './drawPerson';
 import type { Facing, Pose } from './skeleton';
@@ -38,7 +38,7 @@ const TWO_PI = Math.PI * 2;
  */
 const OUTLINE_SAMPLES = 24;
 
-/** Where the key light sits, in the same convention Carl's own painter uses. */
+/** Where the key light sits, in the same convention the rig's own painter uses. */
 const LIGHT_ANGLE_FROM_TOP = -0.9;
 const SHADOW_TOWARD = '#241830';
 const LIGHT_TOWARD = '#fff3d6';
@@ -57,7 +57,7 @@ const GLAZE_RADIUS_SHARE = 0.42;
 const GLAZE_CORE_FRACTION = 0.08;
 const GLAZE_OFFSET_SHARE = 0.32;
 
-/** The bake scale the outline width is defined at, matching Carl's own convention. */
+/** The bake scale the outline width is defined at, matching the rig's own convention. */
 const TILE_SCALE_REFERENCE = 64;
 
 /**
@@ -174,8 +174,8 @@ function hardSilhouette(body: CanvasSurface, cellWidth: number, cellHeight: numb
 
 /**
  * Dilates `body`'s own silhouette into a warm outline ring, then lays `body`
- * back over it — the same construction `carl/figure.ts`'s `outlineInto` uses,
- * generalised to a source surface rather than Carl's own layer stack.
+ * back over it — the same construction `biped/figure.ts`'s `outlineInto` uses,
+ * generalised to a source surface rather than the rig's own layer stack.
  */
 function outlineFrom(
   body: CanvasSurface,

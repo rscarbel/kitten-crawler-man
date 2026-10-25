@@ -3,7 +3,7 @@
  * floor, at game scale (32 px a tile), through the game's real ground and
  * decoration renderers in the Y-sorted order `RenderPipeline` draws in.
  *
- * Carl and Donut stand at the Big Top's door, a fat clown on the forecourt and
+ * The human and the cat stand at the Big Top's door, a fat clown on the forecourt and
  * a stilt clown in the east field, so every tent and prop is judged against
  * the bodies that fight round it. The quest's own cast for the chosen stage
  * (Signet, and in the assault the first wave) is stood up by a real
@@ -96,7 +96,7 @@ function isStageName(value: string): value is StageName {
 }
 
 /** Where the scale figures stand, as offsets: the door's for the crawlers, the centre's for the clowns. */
-const CAT_BESIDE_CARL_TILES = 1;
+const CAT_BESIDE_HUMAN_TILES = 1;
 const CRAWLER_ROWS_SOUTH_OF_DOOR = 2;
 const FAT_CLOWN_OFFSET = { x: -2, y: 2 } as const;
 const STILT_CLOWN_OFFSET = { x: 9, y: 1 } as const;
@@ -171,11 +171,11 @@ function standingTile(site: CircusSite, x: number, y: number): { x: number; y: n
   return findNearbyWalkableTile(site.map, x, y, FIGURE_SEARCH_RADIUS_TILES) ?? { x, y };
 }
 
-/** Carl, Donut, a fat clown and a stilt clown, stood on open ground for scale. */
+/** The human, the cat, a fat clown and a stilt clown, stood on open ground for scale. */
 function scaleFigures(site: CircusSite): Figure[] {
   const door = site.bigTop.doorTile;
-  const carlTile = standingTile(site, door.x, door.y + CRAWLER_ROWS_SOUTH_OF_DOOR);
-  const catTile = standingTile(site, carlTile.x + CAT_BESIDE_CARL_TILES, carlTile.y);
+  const humanTile = standingTile(site, door.x, door.y + CRAWLER_ROWS_SOUTH_OF_DOOR);
+  const catTile = standingTile(site, humanTile.x + CAT_BESIDE_HUMAN_TILES, humanTile.y);
   const fatTile = standingTile(
     site,
     site.centre.x + FAT_CLOWN_OFFSET.x,
@@ -186,12 +186,12 @@ function scaleFigures(site: CircusSite): Figure[] {
     site.centre.x + STILT_CLOWN_OFFSET.x,
     site.centre.y + STILT_CLOWN_OFFSET.y,
   );
-  const carl = new HumanPlayer(carlTile.x, carlTile.y, TILE_SIZE);
-  const donut = new CatPlayer(catTile.x, catTile.y, TILE_SIZE);
+  const human = new HumanPlayer(humanTile.x, humanTile.y, TILE_SIZE);
+  const cat = new CatPlayer(catTile.x, catTile.y, TILE_SIZE);
   const fat = new FatClown(fatTile.x, fatTile.y, TILE_SIZE);
   const stilt = new StiltClown(stiltTile.x, stiltTile.y, TILE_SIZE);
-  for (const figure of [donut, fat, stilt]) figure.setMap(site.map);
-  return [carl, donut, fat, stilt];
+  for (const figure of [cat, fat, stilt]) figure.setMap(site.map);
+  return [human, cat, fat, stilt];
 }
 
 /** The stage's own cast — Signet, and the first wave in the assault — as the quest stands it up. */

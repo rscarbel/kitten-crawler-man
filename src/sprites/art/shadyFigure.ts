@@ -53,7 +53,7 @@ export const ORIGIN_X = TILE_X + TILE_SCALE / 2;
 export const ORIGIN_Y = TILE_Y + TILE_SCALE * GROUND_OFFSET_IN_TILE;
 
 /**
- * How much of a tile Shady fills. Set against Carl (2.03 tiles authored × 0.72)
+ * How much of a tile Shady fills. Set against the human crawler (2.03 tiles authored × 0.72)
  * so the two stand in the same street at plausible relative heights — Shady a
  * shade shorter, which is the point of his slouch.
  */
@@ -99,7 +99,7 @@ const SECOND_SHIFT_AT = 0.75;
  * since `lag` ago. Sampling the drive signal at an offset and differencing it
  * is an exact lag. A phase-shifted sine of its own instead risks the hood and
  * hem *leading* the shoulders — the robe animating the man rather than
- * following him. Same trap as Carl's arm swing.
+ * following him. Same trap as the biped figure's arm swing.
  */
 function trailOf(t: number, lag: number): number {
   return weightShift(t - lag) - weightShift(t);

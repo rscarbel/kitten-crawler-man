@@ -15,16 +15,13 @@ import {
   DONG_QUIXOTE_FIGURE,
   DONG_ROWS,
   DONG_VIEWS,
+  DONG_TILES_PER_FIGURE_UNIT,
   DONG_WALK_GROUND_PER_CYCLE,
   type DongAction,
-  TILE_SCALE,
-  TILE_X,
-  ORIGIN_X,
-  ORIGIN_Y,
   dongPoseAt,
   dongStateName,
 } from './art/dongQuixoteFigure';
-import { type DongView, buildSkeleton, lanceEndsInView } from './art/dongQuixoteArt';
+import { type DongView, buildSkeleton } from './art/dongQuixoteArt';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import { DONG_IDLE_FRAME_MS, dongFrameAtProgress } from './dongQuixoteTiming';
 
@@ -32,9 +29,10 @@ export type { DongAction } from './art/dongQuixoteFigure';
 export type { DongView } from './art/dongQuixoteArt';
 
 /** Ground one walk cycle covers, in tiles: advance `cyclePhase` by distance over this. */
-export const DONG_WALK_TILES_PER_CYCLE = DONG_WALK_GROUND_PER_CYCLE;
+export const DONG_WALK_TILES_PER_CYCLE = DONG_WALK_GROUND_PER_CYCLE * DONG_TILES_PER_FIGURE_UNIT;
 /** Ground one charge cycle covers, in tiles. */
-export const DONG_CHARGE_TILES_PER_CYCLE = DONG_CHARGE_GROUND_PER_CYCLE;
+export const DONG_CHARGE_TILES_PER_CYCLE =
+  DONG_CHARGE_GROUND_PER_CYCLE * DONG_TILES_PER_FIGURE_UNIT;
 
 /**
  * How far above his tile's top edge the crown of his helmet's comb stands, in
@@ -43,7 +41,7 @@ export const DONG_CHARGE_TILES_PER_CYCLE = DONG_CHARGE_GROUND_PER_CYCLE;
  * his head. Measured off the painted idle, walk and hurt rows and re-measured
  * by `scripts/gates-dong-quixote.ts` on every render.
  */
-export const DONG_HEAD_TOP_ABOVE_TILE = 1.03;
+export const DONG_HEAD_TOP_ABOVE_TILE = 1.4;
 
 export interface DongQuixoteSpriteState {
   /** The way he faces; any length. */
@@ -69,7 +67,7 @@ export interface DongQuixoteSpriteState {
 /**
  * The view a facing selects: well north of level is drawn from behind, well
  * to either side is drawn in profile, and the rest head-on — the same split
- * Carl's sprite uses, so the two turn together as they walk side by side.
+ * the human crawler's sprite uses, so the two turn together as they walk side by side.
  */
 const AWAY_THRESHOLD = -0.5;
 const SIDEWAYS_THRESHOLD = 0.5;
@@ -181,30 +179,5 @@ export function prewarmDongQuixoteAction(action: DongAction, frameLimit?: number
  */
 export function dongLanceReachTiles(action: DongAction, frame: number): number {
   const { pose } = dongPoseAt(dongStateName(action, 'side'), frame);
-  return buildSkeleton(pose).lanceTip.z;
-}
-
-/**
- * Where the lance point is drawn, as an offset in tiles from the top-left of
- * his tile, for a spark or a hit flash at the point. Mirrors with the
- * profile's flip.
- */
-export function dongLanceTipOnTile(
-  action: DongAction,
-  frame: number,
-  facingX: number,
-  facingY: number,
-): { x: number; y: number } {
-  const view = dongQuixoteViewFor(facingX, facingY);
-  const state = dongStateName(action, view);
-  const { pose } = dongPoseAt(state, frame);
-  const { tip } = lanceEndsInView(buildSkeleton(pose), view);
-  const cellX = ORIGIN_X + tip.x * TILE_SCALE;
-  const cellY = ORIGIN_Y + tip.y * TILE_SCALE;
-  const tileFractionX = (cellX - TILE_X) / TILE_SCALE;
-  const flipped = view === 'side' && facingX < 0;
-  return {
-    x: flipped ? 1 - tileFractionX : tileFractionX,
-    y: (cellY - DONG_QUIXOTE_FIGURE.tileY) / TILE_SCALE,
-  };
+  return buildSkeleton(pose).lanceTip.z * DONG_TILES_PER_FIGURE_UNIT;
 }

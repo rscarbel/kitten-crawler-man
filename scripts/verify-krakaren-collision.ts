@@ -5,7 +5,7 @@
  * Headless, on real generated second floors with her flooded lab built, through
  * the real `MobUpdateLoop` and the real `applyMovement`:
  *
- *   - a crawler (Carl, then the cat) holding a direction straight into her from
+ *   - a crawler (the human, then the cat) holding a direction straight into her from
  *     each side never gets its centre closer than `KRAKAREN_BODY_RADIUS_PX`;
  *   - she never moves: not for a crawler, a companion, a hostile mob, or a
  *     knockback;
@@ -220,11 +220,11 @@ function bossHasNotMoved(boss: KrakarenClone, origin: TilePoint): boolean {
 
 // ── A crawler pressed into her ──────────────────────────────────────────────
 
-function checkPressingInto(side: DoorSide, crawlerName: 'Carl' | 'the cat'): void {
+function checkPressingInto(side: DoorSide, crawlerName: 'the human' | 'the cat'): void {
   for (const direction of DIRECTIONS) {
     const arena = buildArena(side);
     const { boss, ctx } = arena;
-    const crawler = crawlerName === 'Carl' ? ctx.human : ctx.cat;
+    const crawler = crawlerName === 'the human' ? ctx.human : ctx.cat;
     const other = crawler === ctx.human ? ctx.cat : ctx.human;
     setActive(arena, crawler);
     const spawn = arena.env.room.spawn;
@@ -400,7 +400,7 @@ function checkReach(): void {
   const { human, cat } = arena.ctx;
   check(
     human.getMeleeRange() > KRAKAREN_BODY_RADIUS_PX,
-    `Carl's swing (${human.getMeleeRange().toFixed(1)} px) reaches her from her body's edge`,
+    `The human's swing (${human.getMeleeRange().toFixed(1)} px) reaches her from her body's edge`,
   );
   check(
     cat.getMeleeRange() > KRAKAREN_BODY_RADIUS_PX,
@@ -450,7 +450,7 @@ function checkAttention(side: DoorSide): void {
 console.log(`verify:krakaren-collision${FAULT === undefined ? '' : ` --fault=${FAULT}`}`);
 checkReach();
 for (const side of DOOR_SIDES) {
-  checkPressingInto(side, 'Carl');
+  checkPressingInto(side, 'the human');
   checkPressingInto(side, 'the cat');
   checkMobsAndShoves(side);
   checkPinnedAgainstWall(side);

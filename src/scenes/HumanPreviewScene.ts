@@ -1,6 +1,7 @@
 /**
- * Localhost-only harness for Carl in motion. Reached via `?human` in
- * `devBootScene`; `?human=<row>` opens on that row.
+ * Localhost-only harness for the human crawler in motion. Reached via `?human` in
+ * `devBootScene`; `?human=<row>` opens on that row, and `&look=<look id>` picks
+ * which human in the registry is painted (the player's human by default).
  *
  * Two panes, both at the game's real timing:
  *
@@ -22,6 +23,12 @@
  * strobing cycle shows up.
  */
 
+import {
+  CHARACTERS,
+  type HumanCharacterDef,
+  isHumanCharacter,
+  playerCharacter,
+} from '../characters/characters';
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import { progressFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
 import { HUMAN_SWING_FRAMES } from '../core/crawlerFormulas';
@@ -33,8 +40,8 @@ import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { HUMAN_ROWS, type RowSpec } from '../sprites/art/humanFigure';
 import {
   activeHumanSocketSource,
-  type CarlHeldDraw,
-  type CarlStowedDraw,
+  type BipedHeldDraw,
+  type BipedStowedDraw,
   drawHumanSelection,
   explosiveHeldDraw,
   type HumanRowSelection,
@@ -42,6 +49,7 @@ import {
   motionSetOfRow,
   prewarmHumanSprite,
   rowFrameAtTicks,
+  setHumanLook,
   rowLengthInTicks,
   rowTicksPerFrame,
 } from '../sprites/humanSprite';
@@ -56,7 +64,7 @@ import {
 import { HELD_VISUALS, stowedPlacementOfHeld } from '../sprites/held/heldVisuals';
 import type { WeaponHeldVisualDef } from '../sprites/held/heldVisualDef';
 import { type MotionSet, motionSetOf } from '../sprites/art/human/motionSets';
-import { carlSocketsAt } from '../sprites/art/human/sockets';
+import { humanSocketsAt } from '../sprites/art/human/sockets';
 import { gaitRadiansPerPx } from '../sprites/humanAnimator';
 import { groundPxPerFrame } from '../sprites/art/human/probe';
 import { TICKS_PER_SECOND } from '../sprites/art/human/timing';
@@ -73,7 +81,7 @@ const MARGIN = 40;
 const LABEL_SIZE = 12;
 const PANE_GAP = 60;
 const CAPTION_GAP = 8;
-/** Each square pane, in tiles: Carl stands over a tile and a half above his own, so the pane is that much taller than a tile. */
+/** Each square pane, in tiles: the figure stands over a tile and a half above its own, so the pane is that much taller than a tile. */
 const PANE_SIZE_TILES = 2.2;
 /** A one-shot rests this long on its last frame before it plays again. */
 const ONE_SHOT_REST_TICKS = 30;
@@ -154,7 +162,26 @@ function initialRowIndex(): number {
   return Math.max(0, index);
 }
 
+/** The humans the preview can paint, by the look id `&look=` names: every human in the registry. */
+const PREVIEW_HUMANS: readonly HumanCharacterDef[] =
+  Object.values(CHARACTERS).filter(isHumanCharacter);
+
+/**
+ * The human `&look=` names, the player's human by default, made the look the human crawler
+ * is painted as. Called from the scene's first field initializer, so every
+ * player and prewarm the scene builds after it is built on that look.
+ */
+function selectPreviewHuman(): HumanCharacterDef {
+  const wanted = new URLSearchParams(window.location.search).get('look');
+  const human =
+    PREVIEW_HUMANS.find((candidate) => candidate.look.id === wanted) ?? playerCharacter('human');
+  setHumanLook(human.look);
+  return human;
+}
+
 export class HumanPreviewScene extends PreviewScene {
+  /** Who the preview paints: `&look=` names one of the human characters. */
+  readonly character = selectPreviewHuman();
   private rowIndex = initialRowIndex();
   private rowTicks = 0;
   private readonly live = new HumanPlayer(0, 0, TILE_SIZE);
@@ -216,14 +243,14 @@ export class HumanPreviewScene extends PreviewScene {
   }
 
   protected previewTitle(): string {
-    return 'human preview — ?human';
+    return `human preview — ?human&look=${PREVIEW_HUMANS.map((human) => human.look.id).join('|')}`;
   }
 
   protected previewCaptions(): readonly string[] {
     const row = HUMAN_ROWS[this.rowIndex];
     const frame = frameAt(row, this.rowTicks);
     return [
-      `Carl — ${row.name} (${row.view}, ${row.kind}) — click for the next row`,
+      `${this.character.displayName} — ${row.name} (${row.view}, ${row.kind}) — click for the next row`,
       `frame ${frame + 1} of ${row.frameCount}, at game timing`,
     ];
   }
@@ -325,7 +352,7 @@ export class HumanPreviewScene extends PreviewScene {
    * rows that throw one, else the picked weapon where the row closes his fist
    * on one.
    */
-  private rowHeld(selection: HumanRowSelection): CarlHeldDraw | null {
+  private rowHeld(selection: HumanRowSelection): BipedHeldDraw | null {
     const explosive = explosiveHeldDraw(HELD_VISUALS.prop_dynamite, selection);
     if (explosive !== null) return explosive;
     const id = this.pickedWeapon;
@@ -334,13 +361,13 @@ export class HumanPreviewScene extends PreviewScene {
   }
 
   /** The picked weapon where it rests, on the row pane's cells of a draw or stow before his fist reaches it. */
-  private rowStowed(selection: HumanRowSelection): CarlStowedDraw | null {
+  private rowStowed(selection: HumanRowSelection): BipedStowedDraw | null {
     const id = this.pickedWeapon;
     const look = id === null ? null : weaponLook(id);
     if (look === null || HUMAN_ROWS[this.rowIndex].holster === undefined) return null;
     const placement = stowedPlacementOfHeld(look);
     if (placement === 'none') return null;
-    const frames = carlSocketsAt(activeHumanSocketSource(), selection.row, selection.frame);
+    const frames = humanSocketsAt(activeHumanSocketSource(), selection.row, selection.frame);
     return frames.sockets.mainHand.grips === true ? null : { look, placement };
   }
 

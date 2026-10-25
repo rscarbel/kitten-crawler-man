@@ -1,10 +1,11 @@
 /**
- * Review harness for what Carl holds: every held item drawn between his
+ * Review harness for what the human holds: every held item drawn between his
  * cells' two layers at its socket, exactly as the game composites it.
  *
  *   npm run render:equipment
  *   npx tsx scripts/render-equipment.ts --item=fury_of_taranis
  *   npx tsx scripts/render-equipment.ts --part=hands
+ *   npx tsx scripts/render-equipment.ts --item=spiked_club --rows=heavy_smash_run_1,heavy_run
  *
  * The sheet: for each item, the rows it is held on, large (a profile row
  * again facing −X, the way he faces west), then the same rows at the 32 px
@@ -32,7 +33,9 @@ import { reportFigureGates } from './figureGates.js';
 import { equipmentGateFailures } from './gates-equipment.js';
 import { type HumanFigure, humanFigureFor } from '../src/sprites/art/human/appearance.js';
 import { carriedGripOf } from '../src/sprites/art/human/carry.js';
-import { BARE_CARL_OUTFIT } from '../src/sprites/garments/human/carlDressing.js';
+import { outfitOf } from '../src/sprites/garments/outfit.js';
+import { playerLookAxes, playerStatureScale } from '../src/sprites/looks/humanLook.js';
+import { humanLookFlag } from './humanLooks.js';
 import {
   CHOP_ROWS,
   explosiveRowNames,
@@ -58,7 +61,7 @@ import {
   motionSetOfRow,
 } from '../src/sprites/humanSprite.js';
 import { motionSetOf } from '../src/sprites/art/human/motionSets.js';
-import { carlSocketsAt } from '../src/sprites/art/human/sockets.js';
+import { humanSocketsAt } from '../src/sprites/art/human/sockets.js';
 import { beginFigureFrame } from '../src/sprites/figure/figureFrameCache.js';
 import { HELD_VISUALS, stowedPlacementOfHeld } from '../src/sprites/held/heldVisuals.js';
 import {
@@ -72,22 +75,25 @@ import type { HeldVisualDef, WeaponHeldVisualDef } from '../src/sprites/held/hel
 import { compositeHeldItem, heldTransformAt } from '../src/sprites/held/heldComposite.js';
 import type { Vec3 } from '../src/sprites/held/heldPaint.js';
 import {
-  type CarlPose,
+  type BipedPose,
   type HandOrientation,
   HAFT_IN_PLANE,
   VIEWS,
-} from '../src/sprites/art/carl/rig.js';
+} from '../src/sprites/art/biped/rig.js';
 import {
-  carlHandSockets,
-  drawCarlBack,
-  drawCarlFront,
-  drawCarlSide,
-} from '../src/sprites/art/carl/figure.js';
+  bipedHandSockets,
+  drawBipedBack,
+  drawBipedFront,
+  drawBipedSide,
+} from '../src/sprites/art/biped/figure.js';
 import { idleBack, idleFront, idleSide } from '../src/sprites/art/human/idles.js';
 import type { CardinalView } from '../src/sprites/facingView.js';
 
 installCanvasGlobals();
 
+/** The look every item is shown on: `--look=<id>`, Ryan's by default. */
+const LOOK = humanLookFlag();
+const BARE_OUTFIT = outfitOf(LOOK, []);
 const LARGE_TILE = 96;
 const SMALL_TILE = 32;
 const PIXEL_ZOOM = 3;
@@ -156,7 +162,7 @@ function weaponRows(look: WeaponHeldVisualDef): readonly HumanRowName[] {
 }
 
 function showings(only: string | null): Showing[] {
-  const base = humanFigureFor(BARE_CARL_OUTFIT, null);
+  const base = humanFigureFor(LOOK, BARE_OUTFIT, null);
   const list: Showing[] = [
     {
       id: 'basic_axe',
@@ -181,7 +187,7 @@ function showings(only: string | null): Showing[] {
       return {
         id,
         look,
-        figure: humanFigureFor(BARE_CARL_OUTFIT, carriedGripOf(look)),
+        figure: humanFigureFor(LOOK, BARE_OUTFIT, carriedGripOf(look)),
         rows: weaponRows(look),
       };
     }),
@@ -222,7 +228,7 @@ function strip(
   for (let frame = 0; frame < frames; frame++) {
     beginFigureFrame();
     // A draw or stow shows the weapon where it rests until the fist closes on it.
-    const reaching = holster && carlSocketsAt(source, row, frame).sockets.mainHand.grips !== true;
+    const reaching = holster && humanSocketsAt(source, row, frame).sockets.mainHand.grips !== true;
     const stowed = reaching && placement !== 'none' ? { look, placement } : null;
     drawHumanFigureSelection(
       ctx,
@@ -267,7 +273,7 @@ function bandsFor(showing: Showing): Band[] {
   }
   const thrown = THROWN_PROP_VISUAL_IDS.some((id) => id === showing.id);
   const tiers =
-    showing.figure.def.id === humanFigureFor(BARE_CARL_OUTFIT, null).def.id &&
+    showing.figure.def.id === humanFigureFor(LOOK, BARE_OUTFIT, null).def.id &&
     showing.id !== 'quest_scythe' &&
     !thrown
       ? TOOL_HELD_VISUAL_IDS.filter((id) => id.includes('pick') === showing.id.includes('pick'))
@@ -324,7 +330,7 @@ function paged(bands: readonly Band[]): Band[][] {
 
 // ── The grip through a roll ─────────────────────────────────────────────────
 
-const STANDING: Readonly<Record<CardinalView, () => CarlPose>> = {
+const STANDING: Readonly<Record<CardinalView, () => BipedPose>> = {
   front: () => idleFront(0),
   side: () => idleSide(0),
   back: () => idleBack(0),
@@ -333,14 +339,14 @@ const STANDING: Readonly<Record<CardinalView, () => CarlPose>> = {
 function paintView(
   ctx: CanvasRenderingContext2D,
   view: CardinalView,
-  pose: CarlPose,
+  pose: BipedPose,
   front: CanvasRenderingContext2D,
   look: HeldVisualDef,
 ): void {
-  const options = { itemHandle: look.handle.radius, front };
-  if (view === 'front') drawCarlFront(ctx, pose, options);
-  else if (view === 'back') drawCarlBack(ctx, pose, options);
-  else drawCarlSide(ctx, pose, options);
+  const options = { look: LOOK, itemHandle: look.handle.radius, front };
+  if (view === 'front') drawBipedFront(ctx, pose, options);
+  else if (view === 'back') drawBipedBack(ctx, pose, options);
+  else drawBipedSide(ctx, pose, options);
 }
 
 /** The palm turned `roll` radians round a level haft, from knuckles to the camera to palm to it. */
@@ -349,7 +355,7 @@ function rolledPalm(roll: number): Vec3 {
 }
 
 /** His right fist held out level in front of him, closed on a level haft, the palm `roll` round it. */
-function holdingOut(view: CardinalView, roll: number): CarlPose {
+function holdingOut(view: CardinalView, roll: number): BipedPose {
   const pose = STANDING[view]();
   const orientation: HandOrientation = {
     palmNormal: rolledPalm(roll),
@@ -367,17 +373,21 @@ function gripCrop(view: CardinalView, roll: number, look: HeldVisualDef): Canvas
   const backCtx = asGameContext(back.getContext('2d'));
   const frontCtx = asGameContext(front.getContext('2d'));
   const pose = holdingOut(view, roll);
+  const axes = playerLookAxes(LOOK, VIEWS[view].profile);
   for (const ctx of [backCtx, frontCtx]) {
     ctx.scale(HAND_DENSITY, HAND_DENSITY);
     ctx.translate(ORIGIN_X, ORIGIN_Y);
-    ctx.scale(TILE_SCALE * HUMAN_SCALE, TILE_SCALE * HUMAN_SCALE);
+    ctx.scale(TILE_SCALE * HUMAN_SCALE * axes.x, TILE_SCALE * HUMAN_SCALE * axes.y);
   }
   paintView(backCtx, view, pose, frontCtx, look);
-  const sockets = carlHandSockets(pose, VIEWS[view], { itemHandle: look.handle.radius });
+  const sockets = bipedHandSockets(pose, VIEWS[view], {
+    look: LOOK,
+    itemHandle: look.handle.radius,
+  });
   const hand = VIEWS[view].mirrored ? sockets.left : sockets.right;
   const centre = {
-    x: (ORIGIN_X + hand.centre.x * HUMAN_CELL_PX_PER_UNIT) * HAND_DENSITY,
-    y: (ORIGIN_Y + hand.centre.y * HUMAN_CELL_PX_PER_UNIT) * HAND_DENSITY,
+    x: (ORIGIN_X + hand.centre.x * HUMAN_CELL_PX_PER_UNIT * axes.x) * HAND_DENSITY,
+    y: (ORIGIN_Y + hand.centre.y * HUMAN_CELL_PX_PER_UNIT * axes.y) * HAND_DENSITY,
   };
   const composite = createCanvas(width, height);
   const ctx = asGameContext(composite.getContext('2d'));
@@ -385,7 +395,10 @@ function gripCrop(view: CardinalView, roll: number, look: HeldVisualDef): Canvas
   compositeHeldItem(
     ctx,
     look,
-    heldTransformAt({ ...hand, centre }, HUMAN_CELL_PX_PER_UNIT * HAND_DENSITY),
+    heldTransformAt(
+      { ...hand, centre },
+      HUMAN_CELL_PX_PER_UNIT * playerStatureScale(LOOK) * HAND_DENSITY,
+    ),
     'painted',
   );
   ctx.drawImage(front, 0, 0);
@@ -429,8 +442,15 @@ const flag = (name: string): string | null =>
   args.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3) ?? null;
 const only = flag('item');
 const part = flag('part');
+/** `--rows=a,b` narrows every item's band to those rows. */
+const rowFilter = flag('rows')?.split(',') ?? null;
 
-console.log('Gating Carl’s equipment…');
+function narrowed(showing: Showing): Showing {
+  if (rowFilter === null) return showing;
+  return { ...showing, rows: showing.rows.filter((row) => rowFilter.includes(row)) };
+}
+
+console.log('Gating the human’s equipment…');
 const clean = reportFigureGates('equipment', equipmentGateFailures(only));
 if (part === 'hands') {
   const chosen = HELD_VISUAL_IDS.find((id) => id === only);
@@ -441,7 +461,7 @@ if (part === 'hands') {
   );
 } else {
   const out = flag('out') ?? `${PREVIEW_DIR}/equipment.png`;
-  const pages = paged(showings(only).flatMap(bandsFor));
+  const pages = paged(showings(only).map(narrowed).flatMap(bandsFor));
   pages.forEach((bands, index) => {
     const path = pages.length === 1 ? out : out.replace(/\.png$/, `-p${index + 1}.png`);
     writePreviewPng(path, stack(bands).toBuffer('image/png'));

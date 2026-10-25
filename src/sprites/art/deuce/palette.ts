@@ -1,6 +1,6 @@
 /**
  * Deuce's colours. He is an old card mechanic with a drinker's complexion:
- * weathered, ruddy skin a long way warmer than Carl's, grey hair, and the club's
+ * weathered, ruddy skin a long way warmer than Dave's, grey hair, and the club's
  * green-and-gold uniform — waistcoat, pressed shirt, sleeve garters, eyeshade.
  *
  * Every form is shaded from a three- or four-step ramp with hard steps between

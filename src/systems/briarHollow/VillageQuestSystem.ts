@@ -67,7 +67,8 @@ import {
   TREBUCHET_HEIGHT_TILES,
   WALL_TIERS,
 } from './structureRules';
-import { CRAWLER_NAMES } from '../../core/SkillManager';
+import { crawlerName } from '../../characters/characters';
+import type { CrawlerKind } from '../../core/SkillManager';
 import { BRAMBLEWICK, FENNA, OREN, TIKKA, type VillagerId } from '../../dialog/scripts/briarHollow';
 import type { ConversationRequest, ConversationTopic } from '../../dialog/request';
 import {
@@ -138,22 +139,29 @@ const READY_FOR_ASSAULT_TOPIC_KEY = 'quest_ready_for_assault';
 /** An opening that ends the conversation once read, with nothing further to run. */
 const CLOSE_WHEN_READ: OpeningAfter = { kind: 'close', onClosed: () => undefined };
 
-/** What the active crawler says once processing is done, before heading back to Tikka. */
-export const PROCESSING_DONE_LINE =
-  "Alright, now let's bring this back to Tikka and see what she has for us.";
+/** What the active crawler says once processing is done, before heading back to Tikka, in each crawler's voice. */
+export const PROCESSING_DONE_LINE = {
+  human:
+    "Look at that! Boards and rope. Let's take all this back to Tikka and see what she cooks up.",
+  cat: "Boards and rope! Let's bring them back to Tikka. Her workshop is so warm.",
+} as const satisfies Record<CrawlerKind, string>;
 
-/** What the active crawler says once enough wood is held, before heading to the quarry. */
-export const QUARRY_SPOTTED_LINE =
-  'I think I saw a quarry by the southern gate. We should test our pickaxe out there.';
+/** What the active crawler says once enough wood is held, before heading to the quarry, in each crawler's voice. */
+export const QUARRY_SPOTTED_LINE = {
+  human: "I'm pretty sure I saw a quarry by the southern gate. Let's go try out the pickaxe!",
+  cat: "There was a quarry by the southern gate. Rocks get warm in the sun. Let's go dig with the pickaxe!",
+} as const satisfies Record<CrawlerKind, string>;
 
-/** What the active crawler says once enough stone is held, before heading back to Tikka. */
-export const STONE_GATHERED_LINE =
-  "Oren mentioned we should speak with Tikka once we've collected some wood and stone. We should go see what she has for us.";
+/** What the active crawler says once enough stone is held, before heading back to Tikka, in each crawler's voice. */
+export const STONE_GATHERED_LINE = {
+  human:
+    "Oren said to talk to Tikka once we had some wood and stone. Well, we've got both. Let's go see her!",
+  cat: "Oren said find Tikka when we have wood and stone. We have both! Let's go see Tikka.",
+} as const satisfies Record<CrawlerKind, string>;
 
 /** What the Mayor shouts once the wall is up, summoning both crawlers to hear his ask. */
 export const MAYOR_SHOUT_SUMMONS_SPEAKER = 'Mayor Bramblewick [shouting]';
-export const MAYOR_SHOUT_SUMMONS_TEXT =
-  'Carl, Donut, come and speak with me. I have something for you.';
+export const MAYOR_SHOUT_SUMMONS_TEXT = `${crawlerName('human')}, ${crawlerName('cat')}, come and speak with me. I have something for you.`;
 
 /** What the fortifications stand at, for the journal's fortifying-phase tally. */
 export interface FortificationTally {
@@ -346,8 +354,17 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
   }
 
   /** The display name for whichever crawler is currently active. */
-  private activeCrawlerName(): string {
-    return this.deps.active() === this.deps.human ? CRAWLER_NAMES.human : CRAWLER_NAMES.cat;
+  private activeCrawlerKind(): CrawlerKind {
+    return this.deps.active() === this.deps.human ? 'human' : 'cat';
+  }
+
+  /** Opens `line` in the active crawler's own voice, headed with their name. */
+  private showActiveCrawlerLine(
+    line: Readonly<Record<CrawlerKind, string>>,
+    onClosed: () => void,
+  ): void {
+    const kind = this.activeCrawlerKind();
+    this.deps.showQuestLine(crawlerName(kind), line[kind], onClosed);
   }
 
   // ── Polling: steps the world itself finishes, not a conversation ─────────
@@ -362,7 +379,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
       case 'gather_wood':
         if (!this.quarryLineRequested && this.woodHeld() >= WOOD_TARGET) {
           this.quarryLineRequested = true;
-          this.deps.showQuestLine(this.activeCrawlerName(), QUARRY_SPOTTED_LINE, () => {
+          this.showActiveCrawlerLine(QUARRY_SPOTTED_LINE, () => {
             this.quarryLineRequested = false;
             this.setPhase('gather_stone');
           });
@@ -371,7 +388,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
       case 'gather_stone':
         if (!this.stoneLineRequested && this.stoneHeld() >= STONE_TARGET) {
           this.stoneLineRequested = true;
-          this.deps.showQuestLine(this.activeCrawlerName(), STONE_GATHERED_LINE, () => {
+          this.showActiveCrawlerLine(STONE_GATHERED_LINE, () => {
             this.stoneLineRequested = false;
             this.setPhase('report_tikka');
           });
@@ -384,7 +401,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
           this.ropeHeld() >= PROCESSING_ROPE_TARGET
         ) {
           this.processingLineRequested = true;
-          this.deps.showQuestLine(this.activeCrawlerName(), PROCESSING_DONE_LINE, () => {
+          this.showActiveCrawlerLine(PROCESSING_DONE_LINE, () => {
             this.processingLineRequested = false;
             this.setPhase('return_tikka');
           });

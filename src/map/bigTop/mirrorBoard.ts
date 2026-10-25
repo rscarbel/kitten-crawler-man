@@ -129,7 +129,7 @@ export const MIRROR_BOARD_TENT_ORIGIN: BoardTile = { x: 4, y: 19 };
 export const MIRROR_BOARD_WIDTH = 36;
 /** Gate-row wall, twelve floor rows, and the wall with the doorways in. */
 export const MIRROR_BOARD_HEIGHT = 14;
-/** The dividing wall between Carl's lane (west) and Donut's (east). */
+/** The dividing wall between the human's lane (west) and the cat's (east). */
 export const MIRROR_BOARD_DIVIDER_X = 17;
 /** The floor tile beneath each lane's exit gate (`<` and `>` in the tent). */
 export const MIRROR_BOARD_EXITS: Readonly<Record<BoardLane, BoardTile>> = {
@@ -196,7 +196,7 @@ export const FIRST_MIRROR_MAX_TILES = 5;
 export interface MirrorBoardTier {
   /** A twin star in the divider, lit by both lights at once. */
   readonly twin: boolean;
-  /** A red star in Carl's lane. The blue star in Donut's lane is on every tier. */
+  /** A red star in the human's lane. The blue star in the cat's lane is on every tier. */
   readonly redStar: boolean;
   /**
    * Mirrors per leg of a light's route: from the lens, or from a splitter, to

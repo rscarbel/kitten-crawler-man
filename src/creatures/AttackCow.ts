@@ -1,5 +1,5 @@
 /**
- * Carl's attack cow: a war cow won at the Desperado Club's wheel, who walks
+ * The human crawler's attack cow: a war cow won at the Desperado Club's wheel, who walks
  * with the party for the rest of the run.
  *
  * She is a meat shield, not a damage dealer. Very high health and a weak
@@ -8,7 +8,7 @@
  * (`Mob.tauntedBy`), so the blows meant for the crawlers land on her hide.
  *
  * Built on `Cow`, so she keeps the village cow's lead — the latched follow band,
- * the stall detour — for walking after Carl, and its voice for her moos. Her
+ * the stall detour — for walking after the human crawler, and its voice for her moos. Her
  * fight, her fall and her rest are her own, and so is her figure
  * (`attackCowFigure.ts`).
  *
@@ -19,6 +19,7 @@
  * `AttackCowState`, which `AttackCowSystem` keeps.
  */
 
+import { crawlerName } from '../characters/characters';
 import { Cow, type CowLeadBand } from './Cow';
 import type { LootDrop, Mob, PlayerDamageType } from './Mob';
 import type { DamageSource, Player } from '../Player';
@@ -81,7 +82,7 @@ export function attackCowMaxHpForFloor(floorNumber: number): number {
 
 // ── Movement ─────────────────────────────────────────────────────────────────
 
-/** Pace on the lead after Carl: a touch under his own, so she trails rather than leads. */
+/** Pace on the lead after the human crawler: a touch under his own, so she trails rather than leads. */
 const FOLLOW_SPEED = 2.3;
 /** Pace closing on a target already within butting distance of a charge. */
 const CLOSE_SPEED = 2;
@@ -107,9 +108,9 @@ const ATTACK_COW_LEAD_BAND: CowLeadBand = {
 
 /** A hostile this close to her is one she goes for. */
 export const ATTACK_COW_ENGAGE_RADIUS_TILES = 6;
-/** ...as long as it is also this close to Carl: she guards him, she does not hunt. */
+/** ...as long as it is also this close to the human crawler: she guards him, she does not hunt. */
 const ENGAGE_OWNER_RADIUS_TILES = 9;
-/** Past this far from Carl she drops the fight and comes back. */
+/** Past this far from the human crawler she drops the fight and comes back. */
 const LEASH_BREAK_TILES = 12;
 /** A target dropped at the leash is left alone this long, or she yo-yos on the line. */
 const LEASH_BAN_FRAMES = 90;
@@ -171,7 +172,7 @@ export type AttackCowPhase =
   'follow' | 'fight' | 'downed' | 'reviving' | 'limping' | 'lying_down' | 'resting';
 
 export class AttackCow extends Cow {
-  /** Who she follows and guards. Carl. */
+  /** Who she follows and guards: the human crawler. */
   owner: Player;
   /** The scene's mob list, set by the system each frame, which she picks fights from. */
   allMobs: readonly Mob[] = [];
@@ -214,8 +215,7 @@ export class AttackCow extends Cow {
     this.creditTarget = owner;
     this.mass = ATTACK_COW_MASS;
     this.displayName = 'Attack Cow';
-    this.description =
-      'Carl’s war cow. Helmet, spiked collar, and a grudge against anything near him.';
+    this.description = `${crawlerName('human')}’s war cow. Helmet, spiked collar, and a grudge against anything near him.`;
     const level = attackCowLevelForFloor(floorNumber);
     this.setFixedMaxHp(attackCowMaxHpForFloor(floorNumber));
     this.hp = Math.max(1, Math.min(this.maxHp, Math.round(startingHp ?? this.maxHp)));
@@ -267,7 +267,7 @@ export class AttackCow extends Cow {
     return true;
   }
 
-  /** The crawlers walk through her: a cow in a doorway must never wall Carl in. */
+  /** The crawlers walk through her: a cow in a doorway must never wall the human in. */
   override get displacesPlayers(): boolean {
     return false;
   }
@@ -444,7 +444,7 @@ export class AttackCow extends Cow {
     this.fight(target);
   }
 
-  /** Walks after Carl on the cow's lead, counting a stall the catch-up can answer. */
+  /** Walks after the human crawler on the cow's lead, counting a stall the catch-up can answer. */
   private follow(targets: Player[]): void {
     const beforeX = this.x;
     const beforeY = this.y;
@@ -505,8 +505,8 @@ export class AttackCow extends Cow {
   }
 
   /**
-   * The blow, in her own name so the victim turns on her, credited to Carl
-   * (`creditTarget`) so the kill and its XP are his.
+   * The blow, in her own name so the victim turns on her, credited to the human
+   * crawler (`creditTarget`) so the kill and its XP are his.
    */
   private landHeadbutt(target: Mob): void {
     if (!target.isAlive) return;
@@ -533,7 +533,7 @@ export class AttackCow extends Cow {
   /**
    * The hostile to go for: the one she has, while it is still worth having,
    * else the nearest she can see within her engage radius that is also near
-   * Carl. A boss whose fight has not begun is the player's to start.
+   * the human crawler. A boss whose fight has not begun is the player's to start.
    */
   private chooseTarget(): Mob | null {
     const ownerTiles = this.tilesTo(this.owner);
@@ -579,7 +579,7 @@ export class AttackCow extends Cow {
 
   // ── Resting ────────────────────────────────────────────────────────────────
 
-  /** Open ground a few tiles away from Carl, beyond where she fell, to lie down on. */
+  /** Open ground a few tiles away from the human crawler, beyond where she fell, to lie down on. */
   private findRestSpot(): { x: number; y: number } | null {
     const map = this.map;
     if (map === null) return null;

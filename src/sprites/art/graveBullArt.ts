@@ -16,7 +16,7 @@
  *   here" and swing with every stride.
  */
 
-import { deg, lerp, mix, rgba, type Pt } from './carlArt';
+import { deg, lerp, mix, rgba, type Pt } from './bipedArt';
 import {
   cowPollPoint,
   hash1,

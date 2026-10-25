@@ -1,5 +1,5 @@
 /**
- * Carl working a resource node: chopping a trunk with an axe and breaking
+ * The human crawler working a resource node: chopping a trunk with an axe and breaking
  * rock with a pick, each a looping two-handed swing in all three views.
  *
  * The tool itself is not in these cells. Its tier changes what it looks like,
@@ -20,20 +20,20 @@
  * half jumps reads as a stutter, not a rhythm.
  */
 
-import { mixPt, pt } from '../carl/geometry';
-import { handGrip } from '../carl/limbs';
+import { mixPt, pt } from '../biped/geometry';
+import { handGrip } from '../biped/limbs';
 import {
   type BodySide,
   buildSkeleton,
-  type CarlPose,
+  type BipedPose,
   type HaftDepth,
   HAFT_AWAY_FROM_CAMERA,
   HAFT_IN_PLANE,
   HAFT_TOWARD_CAMERA,
   VIEWS,
-} from '../carl/rig';
+} from '../biped/rig';
 import { type CardinalView } from '../../facingView';
-import { deg, lerp, type Pt } from '../carlArt';
+import { deg, lerp, type Pt } from '../bipedArt';
 import { idleBack, idleFront, idleSide } from './idles';
 import { KNUCKLES_TO_CAMERA, PALM_TO_CAMERA, towards, turnHand } from './handTurn';
 import type { Vec3 } from '../../held/heldPaint';
@@ -204,7 +204,7 @@ const GRIP_SOLVE_PASSES = 3;
  * are what the tool is drawn through, land where the swing puts them.
  */
 function gripHaft(
-  pose: CarlPose,
+  pose: BipedPose,
   swing: SwingKey,
   view: CardinalView,
   coil: number,
@@ -242,7 +242,7 @@ export interface HaftGrip {
  * of the arm's reach moves its grip less per pass and needs more of them.
  */
 export function closeFistsOnHaft(
-  pose: CarlPose,
+  pose: BipedPose,
   view: CardinalView,
   grip: HaftGrip,
   passes = GRIP_SOLVE_PASSES,
@@ -352,7 +352,9 @@ const SIDE_LIFT_BULGE = pt(-0.14, 0.16);
 /**
  * An angled notch cut into the trunk ahead of him at waist height. The drive
  * is authored for the reason the pick's is: brought over the crown, not
- * across the face.
+ * across the face. It starts no higher than the fists can go with the longest
+ * haft swung on it, Merrit's scythe, still inside the cell, and far enough
+ * back over his crown that the near arm passes behind his eye at that height.
  */
 const CHOP_SIDE: SwingPlan = {
   frames: CHOP_FRAMES,
@@ -362,7 +364,7 @@ const CHOP_SIDE: SwingPlan = {
   cock: key(-0.3, -1.8, 570),
   liftBulge: SIDE_LIFT_BULGE,
   driveBulge: pt(0, 0),
-  drive: [key(-0.16, -2.0, 610), key(0.22, -1.66, 668), key(0.4, -1.38, 705)],
+  drive: [key(-0.24, -1.92, 610), key(0.22, -1.66, 668), key(0.4, -1.38, 705)],
 };
 const CHOP_SIDE_LEAN: CoilRange = { blow: 0.2, cocked: -0.04 };
 /** Eyes on the notch through the swing, a little down. */
@@ -530,7 +532,7 @@ function workingSide(
     readonly rear: Pt;
     readonly palms: Readonly<Record<BodySide, Vec3>>;
   },
-): CarlPose {
+): BipedPose {
   const { key: swing, coil } = swingAt(plan, frame);
   const pose = idleSide(0);
   pose.crouch = coiled(body.crouch, coil);
@@ -552,8 +554,8 @@ function workingFacing(
   footSpread: number,
   crouch: CoilRange,
   palms: Readonly<Record<BodySide, Vec3>>,
-  shape: (pose: CarlPose, coil: number) => void,
-): CarlPose {
+  shape: (pose: BipedPose, coil: number) => void,
+): BipedPose {
   const { key: swing, coil } = swingAt(plan, frame);
   const pose = back ? idleBack(0) : idleFront(0);
   pose.crouch = coiled(crouch, coil);
@@ -573,9 +575,9 @@ function workingFacing(
   return pose;
 }
 
-export function chop(frame: number, view: CardinalView): CarlPose {
+export function chop(frame: number, view: CardinalView): BipedPose {
   const f = wrapFrame(frame, CHOP_FRAMES);
-  let pose: CarlPose;
+  let pose: BipedPose;
   if (view === 'side') {
     pose = workingSide(CHOP_SIDE, f, {
       crouch: CHOP_CROUCH,
@@ -607,9 +609,9 @@ export function chop(frame: number, view: CardinalView): CarlPose {
   return pose;
 }
 
-export function mine(frame: number, view: CardinalView): CarlPose {
+export function mine(frame: number, view: CardinalView): BipedPose {
   const f = wrapFrame(frame, MINE_FRAMES);
-  let pose: CarlPose;
+  let pose: BipedPose;
   if (view === 'side') {
     pose = workingSide(MINE_SIDE, f, {
       crouch: MINE_CROUCH,

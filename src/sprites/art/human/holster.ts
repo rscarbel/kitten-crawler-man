@@ -10,10 +10,10 @@
  * axis, so nothing jumps.
  */
 
-import { pt } from '../carl/geometry';
-import { handGrip } from '../carl/limbs';
-import { buildSkeleton, type CarlPose, HAFT_IN_PLANE, VIEWS } from '../carl/rig';
-import { deg, easeInOut, lerp, type Pt } from '../carlArt';
+import { pt } from '../biped/geometry';
+import { handGrip } from '../biped/limbs';
+import { buildSkeleton, type BipedPose, HAFT_IN_PLANE, VIEWS } from '../biped/rig';
+import { deg, easeInOut, lerp, type Pt } from '../bipedArt';
 import type { CardinalView } from '../../facingView';
 import { armOf, CARRY_HOLDS, type FistPlace, setArm, withHold } from './armedHold';
 import { KNUCKLES_TO_CAMERA, towards } from './handTurn';
@@ -32,7 +32,7 @@ const PULL_FRAME = 3;
 const SWING_FRAME = 4;
 const LAST_FRAME = HOLSTER_FRAMES - 1;
 
-function standing(view: CardinalView): CarlPose {
+function standing(view: CardinalView): BipedPose {
   if (view === 'side') return idleSide(0);
   return view === 'back' ? idleBack(0) : idleFront(0);
 }
@@ -41,7 +41,7 @@ function standing(view: CardinalView): CarlPose {
 const GRIP_SOLVE_PASSES = 3;
 
 /** Puts his right fist's grip on `target` (figure space as authored), by its wrist. */
-function rightGripOn(pose: CarlPose, view: CardinalView, target: Pt): void {
+function rightGripOn(pose: BipedPose, view: CardinalView, target: Pt): void {
   pose.rightArmAngles = null;
   pose.rightHand = target;
   for (let pass = 0; pass < GRIP_SOLVE_PASSES; pass++) {
@@ -143,7 +143,7 @@ const HOLSTER_PALM = KNUCKLES_TO_CAMERA;
 const FACING_HOLSTER_PALM = towards(0.3, 0, -0.95);
 
 /** One frame of `set`'s draw in `view`. A weapon stowed out of sight comes out of nowhere. */
-export function armedDraw(set: ArmedMotionSet, view: CardinalView, frame: number): CarlPose {
+export function armedDraw(set: ArmedMotionSet, view: CardinalView, frame: number): BipedPose {
   if (frame >= LAST_FRAME) return withHold(standing(view), view, CARRY_HOLDS[set][view], 0);
   const placement = stowedPlacementOfSet(set);
   if (placement === 'none') return { ...standing(view) };
@@ -191,7 +191,7 @@ export function armedDraw(set: ArmedMotionSet, view: CardinalView, frame: number
  * The free hand comes up to meet the haft as a two-hander swings down off
  * the shoulder: half-way from its hang to where the carry closes it.
  */
-function joinFreeHand(pose: CarlPose, view: CardinalView): CarlPose {
+function joinFreeHand(pose: BipedPose, view: CardinalView): BipedPose {
   const carried = withHold(standing(view), view, CARRY_HOLDS.twoHand[view], 0);
   const from = armOf(pose, view, 'left');
   const to = armOf(carried, view, 'left');
@@ -213,7 +213,7 @@ function joinFreeHand(pose: CarlPose, view: CardinalView): CarlPose {
 const HALF = 0.5;
 
 /** One frame of `set`'s stow: its draw played backwards. */
-export function armedStow(set: ArmedMotionSet, view: CardinalView, frame: number): CarlPose {
+export function armedStow(set: ArmedMotionSet, view: CardinalView, frame: number): BipedPose {
   return armedDraw(set, view, LAST_FRAME - frame);
 }
 
@@ -223,6 +223,6 @@ export function armedHolster(
   motion: HolsterMotion,
   view: CardinalView,
   frame: number,
-): CarlPose {
+): BipedPose {
   return motion === 'draw' ? armedDraw(set, view, frame) : armedStow(set, view, frame);
 }

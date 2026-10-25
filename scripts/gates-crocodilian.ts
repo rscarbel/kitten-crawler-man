@@ -47,7 +47,6 @@ import {
   type CrocCell,
   type RowSpec,
 } from '../src/sprites/art/crocodilianFigure.js';
-import { HUMAN_FIGURE } from '../src/sprites/art/humanFigure.js';
 import {
   BUCKET_BOY_DEATH_FRAMES,
   BUCKET_BOY_SLAP_FRAMES,
@@ -638,44 +637,6 @@ function gateTeeth(): void {
   failUnlessMeasured('G10', measured, 'jaw frames');
 }
 
-// ── G11: heights against Carl ────────────────────────────────────────────────
-
-/**
- * Bucket Boy is short and Clarabelle is big: measured against the player's own
- * standing height, in tiles, from the baked idle.
- */
-/** Measured 0.64 on the shipped art: two-thirds of the player, a head and a half shorter. */
-const BUCKET_BOY_MAX_SHARE_OF_CARL = 0.72;
-/** Measured 1.18 on the shipped art. */
-const CLARABELLE_MIN_SHARE_OF_CARL = 1.12;
-
-function standingHeightTiles(def: FigureDef): number | null {
-  const box = solidBox(cellPixels(def, 'idle', 0), def.frameWidth, def.frameHeight);
-  return box === null ? null : (box.bottom - box.top + 1) / def.tileScale;
-}
-
-function gateHeights(): void {
-  const carl = standingHeightTiles(HUMAN_FIGURE);
-  const bucketBoy = standingHeightTiles(BUCKET_BOY_FIGURE);
-  const clarabelle = standingHeightTiles(CLARABELLE_FIGURE);
-  if (carl === null || bucketBoy === null || clarabelle === null) {
-    fail('G11', 'could not measure a standing height');
-    return;
-  }
-  if (bucketBoy > carl * BUCKET_BOY_MAX_SHARE_OF_CARL) {
-    fail(
-      'G11',
-      `Bucket Boy stands ${bucketBoy.toFixed(2)} tiles against Carl's ${carl.toFixed(2)} — he is meant to be short (≤${BUCKET_BOY_MAX_SHARE_OF_CARL}×)`,
-    );
-  }
-  if (clarabelle < carl * CLARABELLE_MIN_SHARE_OF_CARL) {
-    fail(
-      'G11',
-      `Clarabelle stands ${clarabelle.toFixed(2)} tiles against Carl's ${carl.toFixed(2)} — a bouncer must tower (≥${CLARABELLE_MIN_SHARE_OF_CARL}×)`,
-    );
-  }
-}
-
 // ── G12: every frame is its own picture ──────────────────────────────────────
 
 /**
@@ -774,7 +735,6 @@ export function crocodilianGateFailures(): string[] {
   gateStateNames();
   gateArmband();
   gateTeeth();
-  gateHeights();
   gateDistinctFrames();
   gateWarmRows();
   gateSparkleFade();

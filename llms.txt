@@ -1,6 +1,6 @@
 # Kitten Crawler Man
 
-> Kitten Crawler Man is a free, single-player dungeon crawler and action RPG that runs in a web browser on desktop and mobile. The player controls Carl, a human melee brawler, and Donut, his spell-casting cat, through procedurally generated dungeon floors and then an overworld city.
+> Kitten Crawler Man is a free, single-player dungeon crawler and action RPG that runs in a web browser on desktop and mobile. The player controls Ryan, a human melee fighter, and Belle, his spell-casting tortoiseshell cat, through procedurally generated dungeon floors and then an overworld city.
 
 - Play: https://rscarbel.github.io/kitten-crawler-man/
 - Offline download page: https://rscarbel.github.io/kitten-crawler-man/download/
@@ -10,8 +10,8 @@
 
 ## Characters
 
-- Carl: a human melee fighter. Abilities: Smush and Protective Shell.
-- Donut: a cat. Abilities: Magic Missile and summoning her pet, Mongo.
+- Ryan: a human melee fighter. Warm, sociable and clever, he gets along with anyone, but he is confident to a fault and chases adventure even when it probably isn't wise. Abilities: Smush and Protective Shell.
+- Belle: a slim, short-haired tortoiseshell cat who casts spells. She loves heat and loves everyone, wants to cuddle with everyone, and is not very smart. Abilities: Magic Missile and summoning her pet, Mongo.
 - The player switches between them at any time (Tab). The crawler not being controlled follows and fights on its own, and can be given follower orders.
 - Mordecai: the guide who waits in safe rooms.
 
@@ -20,12 +20,12 @@
 - Tutorial: a short hand-built introduction.
 - Floor 1, "The Dungeon": procedurally generated rooms and corridors on a collapse countdown (find a stairwell before the floor collapses), safe rooms with a Bopca shop, the "Defend the Goblin Mother" quest, and the bosses The Trash Gremlin and Big Rooster.
 - Floor 2, "The Dungeon, Level 2": bosses Krakaren Clone, Ball of Swine (in a colosseum arena) and Grotesque Spider ("The Arachnid Experiment"); mini quests "The Stealth Key Snatch" (a prison stealth mission) and "The Clogged Bathroom" (a pipe puzzle).
-- Floor 3, "The Overworld": the Over City, with the Sleeping Cat Inn, shops, the Desperado Club and the Town Center Tower. Quests include "The Show Must Go On" (a circus and Big Top maze), "The Krasue Murders" (a murder mystery), "Briar Hollow's Plea" (gather, build and defend a ratkin village against a siege led by the necromancer Vordrick Boneharrow), "The Anchor is Broken", and the finale "Carl's Doomsday Scenario".
+- Floor 3, "The Overworld": the Over City, with the Sleeping Cat Inn, shops, the Desperado Club and the Town Center Tower. Quests include "The Show Must Go On" (a circus and Big Top maze), "The Krasue Murders" (a murder mystery), "Briar Hollow's Plea" (gather, build and defend a ratkin village against a siege led by the necromancer Vordrick Boneharrow), "The Anchor is Broken", and the finale "Ryan's Doomsday Scenario".
 
 ## Features
 
 - Three difficulty levels: Kitten (easy), Crawler (normal), Nightmare (hard).
-- Loot, equipment that visibly changes how Carl and Donut look, and health potions.
+- Loot, equipment that visibly changes how Ryan and Belle look, and health potions.
 - Achievements that award loot boxes in six tiers: Bronze, Silver, Gold, Platinum, Legendary and Celestial.
 - Companions: Mongo, plus hireable mercenaries called the Meat Shields.
 - Crafting skills (Resourcing and Construction) for harvesting, processing and building structures such as walls and trebuchets.
@@ -40,7 +40,7 @@ Keyboard defaults (all rebindable from the pause menu):
 
 - Move: W A S D or arrow keys
 - Attack / interact: Space
-- Switch between Carl and Donut: Tab
+- Switch between Ryan and Belle: Tab
 - Drink potion: Q
 - Hotbar: 1-8
 - Inventory: I; Gear: G; Mini-map: M; Quest journal: J; Follower orders: F

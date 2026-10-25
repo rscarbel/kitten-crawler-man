@@ -1,5 +1,5 @@
 /**
- * Carl's strikes at something north of him. He throws them away from the
+ * The human crawler's strikes at something north of him. He throws them away from the
  * camera, so every one is seen from behind — and from behind a fist travelling
  * away from the viewer has almost no screen motion of its own. Each blow is
  * therefore sold through what the back of a fighter does: the shoulders
@@ -15,9 +15,9 @@
 
 import { HUMAN_SWING_FRAMES } from '../../../core/crawlerFormulas';
 import { PLAYER_SPEED } from '../../../core/constants';
-import { pt } from '../carl/geometry';
-import { type ArmAngles, buildSkeleton, type CarlPose, VIEWS } from '../carl/rig';
-import { deg, lerp, type Pt } from '../carlArt';
+import { pt } from '../biped/geometry';
+import { type ArmAngles, buildSkeleton, type BipedPose, FULL_UPPER_ARM, VIEWS } from '../biped/rig';
+import { deg, lerp, type Pt } from '../bipedArt';
 import {
   ankleOverPivot,
   type FrameTable,
@@ -26,7 +26,7 @@ import {
   TOE_AHEAD_OF_ANKLE,
 } from './gaitShared';
 import { guardBack } from './idles';
-import { RUN_GROUND_PER_CYCLE_PX, RUN_TOE_OFF_PHASE, runFacing } from './locomotion';
+import { RUN_GROUND_PER_CYCLE_PX, RUN_TOE_OFF_PHASE, runFacingCarried } from './locomotion';
 import { ATTACK_FRAMES, ATTACK_IMPACT_FRAME } from './timing';
 import { kickingLeg } from './travelling';
 
@@ -94,6 +94,11 @@ interface UpStrikeKeys {
   readonly rightArm?: ArmTrack;
   readonly leftArm?: ArmTrack;
   /**
+   * The share of the right upper arm drawn, for an elbow driven forward under
+   * a rising fist, away from the camera. Absent is the guard's.
+   */
+  readonly rightUpperArm?: FrameTable;
+  /**
    * Frames on which both arms are on the camera's side of his back: fists
    * cocked up behind his head, where from behind they cover the back of his
    * skull instead of vanishing behind it. Absent is never.
@@ -127,6 +132,7 @@ const GUARD_RIGHT_FIST = fromShoulders(GUARD.rightHand);
 const GUARD_LEFT_FIST = fromShoulders(GUARD.leftHand);
 const G_CROUCH = GUARD.crouch;
 const G_FLARE = GUARD.elbowFlare;
+const G_UPPER_ARM = GUARD.rightUpperArmScale ?? FULL_UPPER_ARM;
 const G_JACKET = GUARD.jacketFlare;
 const G_RIGHT_X = GUARD.rightFoot.x;
 const G_LEFT_X = GUARD.leftFoot.x;
@@ -145,6 +151,17 @@ function guardHeld(fist: Pt, dy: FrameTable = STILL): PointTrack {
 }
 
 /**
+ * Rolling the shoulders round over the hips carries the lead shoulder out
+ * past where the guard held it; a lead fist left at the guard's place then
+ * lays its forearm out level from the shoulder. The fist rides out with the
+ * shoulder by `share` of this, frame by frame.
+ */
+const LEAD_FIST_SHOULDER_ROLL = 0.12;
+function leadGuardRolled(share: FrameTable): PointTrack {
+  return share.map((amount) => pt(L.x + amount * LEAD_FIST_SHOULDER_ROLL, L.y));
+}
+
+/**
  * Where the ankle sits for a foot `pitch` radians toes-down while the ball of
  * the foot stays on the floor: raised, and drawn back toward the heel.
  */
@@ -157,7 +174,7 @@ function heelRaise(pitch: number): { lift: number; depth: number } {
 /** Under this lift a foot counts as on the floor. */
 const GROUNDED_LIFT = 1e-3;
 
-function placeFoot(pose: CarlPose, side: 'left' | 'right', track: FootTrack, frame: number): void {
+function placeFoot(pose: BipedPose, side: 'left' | 'right', track: FootTrack, frame: number): void {
   const lift = sampleTrack(track.lift, frame);
   const pitch = sampleTrack(track.pitch, frame);
   const grounded = lift < GROUNDED_LIFT;
@@ -180,7 +197,7 @@ function placeFoot(pose: CarlPose, side: 'left' | 'right', track: FootTrack, fra
 }
 
 /** Poses the upper body — trunk, fists, loose parts — from a strike's keys. */
-function placeUpperBody(pose: CarlPose, keys: UpStrikeKeys, frame: number): void {
+function placeUpperBody(pose: BipedPose, keys: UpStrikeKeys, frame: number): void {
   pose.crouch = sampleTrack(keys.crouch, frame);
   pose.bob = sampleTrack(keys.bob, frame);
   pose.lean = sampleTrack(keys.lean, frame);
@@ -218,11 +235,14 @@ function arm(upperDegrees: number, foreDegrees: number, foreScale = 1): ArmAngle
   return { upper: deg(upperDegrees), fore: deg(foreDegrees), foreScale };
 }
 
-function poseFromKeys(keys: UpStrikeKeys, frame: number): CarlPose {
+function poseFromKeys(keys: UpStrikeKeys, frame: number): BipedPose {
   const pose = guardBack(0);
   placeUpperBody(pose, keys, frame);
   placeFoot(pose, 'right', keys.rightFoot, frame);
   placeFoot(pose, 'left', keys.leftFoot, frame);
+  if (keys.rightUpperArm !== undefined) {
+    pose.rightUpperArmScale = sampleTrack(keys.rightUpperArm, frame);
+  }
   pose.rightArmAngles = armAt(keys.rightArm, frame);
   pose.leftArmAngles = armAt(keys.leftArm, frame);
   // An arm posed by angle still reports where its fist is, for everything
@@ -236,14 +256,25 @@ function poseFromKeys(keys: UpStrikeKeys, frame: number): CarlPose {
 // ── Uppercut ─────────────────────────────────────────────────────────────────
 
 /**
+ * On contact the uppercut's elbow is driven forward under the fist, so the
+ * upper arm draws short and the forearm, standing up from it at the target's
+ * chin, draws a little short of its length.
+ */
+const UPPERCUT_FOREARM_AWAY = 0.8;
+const UPPERCUT_FOREARM_SETTLING = 0.85;
+/**
  * A rear-hand uppercut at a tall enemy's chin. He dips and drops the right
  * shoulder, the fist sinking out past his right hip where, from behind, it
  * shows below the elbow; then he drives up out of the legs: the right heel
  * peels, the hips and shoulders roll left over it, and the fist scoops up the
- * middle of him and breaks the top of his head's outline beside it on the
- * impact frame, the body risen onto the ball of the rear foot. The low-to-high path
- * is the whole read: an arm raised from the guard alone reads as a wave. The
- * lead fist pulls in tight to the ribs as the right goes up.
+ * middle of him and comes up beside his head at the height of a tall man's
+ * chin on the impact frame, the body risen onto the ball of the rear foot.
+ * The low-to-high path is the whole read: an arm raised from the guard alone
+ * reads as a wave, and one driven on up past the top of his head as an arm
+ * thrust straight up at the ceiling. The elbow stays under the fist, bent,
+ * driven forward with it; flared out to the side it is a flexed bicep. The
+ * lead fist holds the guard at his jaw: pulled down to the ribs, its elbow
+ * juts out sideways past the jacket.
  */
 const UPPERCUT: UpStrikeKeys = {
   crouch: [G_CROUCH, 0.2, 0.28, 0.12, 0.04, 0.05, 0.07, G_CROUCH],
@@ -251,28 +282,30 @@ const UPPERCUT: UpStrikeKeys = {
   lean: [0, deg(7), deg(10), deg(3), deg(-6), deg(-7), deg(-3), 0],
   pitch: [0, 0.12, 0.18, 0.05, -0.08, -0.06, 0, 0],
   sway: [0, 0.03, 0.045, 0.015, -0.025, -0.03, -0.01, 0],
-  twist: [0, -0.3, -0.45, -0.1, 0.4, 0.45, 0.2, 0],
-  elbowFlare: [G_FLARE, 0.2, 0.15, 0.2, 0.25, 0.3, 0.45, G_FLARE],
+  twist: [0, -0.3, -0.45, -0.1, 0.2, 0.2, 0.1, 0],
+  elbowFlare: [G_FLARE, 0.2, 0.15, 0.2, G_FLARE, G_FLARE, G_FLARE, G_FLARE],
+  rightUpperArm: [G_UPPER_ARM, 0.4, 0.4, 0.45, 0.35, 0.35, 0.5, G_UPPER_ARM],
+  rightArm: [
+    null,
+    null,
+    null,
+    null,
+    arm(20, 200, UPPERCUT_FOREARM_AWAY),
+    arm(20, 200, UPPERCUT_FOREARM_SETTLING),
+    null,
+    null,
+  ],
   rightHand: [
     R,
-    pt(0.34, 0.3),
-    pt(0.38, 0.44),
-    pt(0.26, 0.06),
-    pt(0.2, -0.64),
-    pt(0.2, -0.52),
-    pt(0.18, -0.18),
+    pt(0.36, 0.44),
+    pt(0.36, 0.48),
+    pt(0.26, 0.08),
+    pt(0.22, -0.16),
+    pt(0.22, -0.13),
+    pt(0.18, -0.06),
     R,
   ],
-  leftHand: [
-    L,
-    L,
-    pt(-0.22, 0.1),
-    pt(-0.24, 0.16),
-    pt(-0.26, 0.2),
-    pt(-0.25, 0.18),
-    pt(-0.2, 0.06),
-    L,
-  ],
+  leftHand: leadGuardRolled([0, 0, 0, 0, 1, 1, 0.5, 0]),
   rightFoot: plantedFoot(G_RIGHT_X, [0, 0, deg(4), deg(18), deg(34), deg(30), deg(12), 0]),
   leftFoot: plantedFoot(G_LEFT_X),
   jacketFlare: [G_JACKET, 0.1, 0.15, 0.25, 0.5, 0.45, 0.25, G_JACKET],
@@ -298,7 +331,7 @@ const UPPERCUT: UpStrikeKeys = {
   ],
 };
 
-export function uppercutUp(frame: number): CarlPose {
+export function uppercutUp(frame: number): BipedPose {
   return poseFromKeys(UPPERCUT, frame);
 }
 
@@ -326,30 +359,22 @@ const OVERHAND: UpStrikeKeys = {
   lean: [0, deg(8), deg(10), deg(2), deg(-9), deg(-11), deg(-5), 0],
   pitch: [0, -0.06, -0.1, 0.1, 0.45, 0.5, 0.2, 0],
   sway: [0, 0.04, 0.045, 0.0, -0.05, -0.06, -0.02, 0],
-  twist: [0, -0.4, -0.55, -0.1, 0.5, 0.6, 0.25, 0],
-  elbowFlare: [G_FLARE, 0.2, 0.1, 1, 0.9, 0.3, 0.5, G_FLARE],
-  rightHand: [R, pt(0.3, -0.22), pt(0.32, -0.3), R, R, pt(0.02, 0.3), pt(0.06, 0.04), R],
-  leftHand: [
-    L,
-    pt(-0.2, -0.02),
-    pt(-0.22, -0.04),
-    L,
-    pt(-0.24, 0.14),
-    pt(-0.26, 0.18),
-    pt(-0.2, 0.06),
-    L,
+  twist: [0, -0.4, -0.55, -0.1, 0.3, 0.3, 0.15, 0],
+  elbowFlare: [G_FLARE, 0.2, 0.1, 0.6, 0.9, 0.3, 0.5, G_FLARE],
+  rightHand: [R, pt(0.26, 0), pt(0.26, -0.02), pt(0.24, -0.04), R, pt(0.1, 0.3), pt(0.1, 0.06), R],
+  leftHand: leadGuardRolled([0, 0, 0, 0, 1, 1, 0.5, 0]),
+  rightArm: [null, null, null, null, arm(120, 230, OVERHAND_FOREARM_AWAY), null, null, null],
+  rightArmNearCamera: [false, true, true, true, false, false, false, false],
+  rightUpperArm: [
+    G_UPPER_ARM,
+    G_UPPER_ARM,
+    G_UPPER_ARM,
+    G_UPPER_ARM,
+    0.4,
+    G_UPPER_ARM,
+    G_UPPER_ARM,
+    G_UPPER_ARM,
   ],
-  rightArm: [
-    null,
-    null,
-    null,
-    arm(150, 235),
-    arm(195, 215, OVERHAND_FOREARM_AWAY),
-    null,
-    null,
-    null,
-  ],
-  rightArmNearCamera: [false, true, true, false, false, false, false, false],
   rightFoot: plantedFoot(G_RIGHT_X, [0, 0, deg(6), deg(16), deg(30), deg(32), deg(14), 0]),
   leftFoot: plantedFoot(G_LEFT_X),
   jacketFlare: [G_JACKET, 0.15, 0.25, 0.3, 0.55, 0.6, 0.3, G_JACKET],
@@ -375,51 +400,57 @@ const OVERHAND: UpStrikeKeys = {
   ],
 };
 
-export function overhandUp(frame: number): CarlPose {
+export function overhandUp(frame: number): BipedPose {
   return poseFromKeys(OVERHAND, frame);
 }
 
-// ── Two-hand hammer-fist ─────────────────────────────────────────────────────
+// ── Hammer-fist ──────────────────────────────────────────────────────────────
 
 /**
- * Both fists clubbed together over his head and brought down on a tall
- * enemy's collarbone. He dips first, then the arms go up fast and high — his
- * whole outline grows by a forearm — he rises onto both toes at the top, then
- * drops his weight straight down through the blow: knees bend, both heels
- * slam, the head sinks between the shoulders, and on the impact frame the
- * clubbed fists show just over his sunken head with the elbows wide either
- * side of it. The drop under the fists is the blow: arms coming down over a
- * body that stays upright read as a stretch.
+ * The right fist cocked beside his ear and brought down onto a tall enemy's
+ * collarbone. He dips first, the fist comes up beside his head on the
+ * camera's side of him with the elbow bent under it, he rises onto both toes
+ * at the top, then drops his weight straight down through the blow: knees
+ * bend, both heels slam, the head sinks between the shoulders, and on the
+ * impact frame the fist shows just over his right shoulder, the forearm
+ * driven forward and down at the target. The lead fist holds the guard. The
+ * drop under the fist is the blow: an arm coming down over a body that stays
+ * upright reads as a stretch, and both fists raised overhead as a man
+ * hailing a cab.
  */
+const HAMMER_FIST_FOREARM_DOWN = 0.6;
+const HAMMER_FIST_UPPER_ARM_AWAY = 0.5;
 const HAMMER_FIST: UpStrikeKeys = {
-  crouch: [G_CROUCH, 0.16, 0.0, 0.0, 0.42, 0.42, 0.2, G_CROUCH],
+  crouch: [G_CROUCH, 0.16, 0.0, 0.0, 0.3, 0.3, 0.16, G_CROUCH],
   bob: [0, 0.01, -0.03, -0.04, 0, 0, 0, 0],
   lean: STILL,
-  pitch: [0, 0.1, -0.1, -0.12, 0.75, 0.75, 0.3, 0],
+  pitch: [0, 0.1, -0.1, -0.12, 0.55, 0.55, 0.25, 0],
   sway: STILL,
-  twist: [0, 0, 0.06, 0.06, -0.04, -0.06, -0.03, 0],
-  elbowFlare: [G_FLARE, 1.2, -0.3, -0.5, 1.6, 1.6, 1.4, G_FLARE],
-  rightHand: [
-    R,
-    pt(0.14, 0.22),
-    pt(0.05, -0.62),
-    pt(0.05, -0.56),
-    pt(0.06, -0.24),
-    pt(0.06, -0.24),
-    pt(0.12, 0.1),
-    R,
+  twist: [0, -0.1, -0.3, -0.3, 0, 0, 0, 0],
+  elbowFlare: [G_FLARE, 0.4, 0.6, 0.6, G_FLARE, G_FLARE, G_FLARE, G_FLARE],
+  rightHand: [R, pt(0.16, 0.06), pt(0.24, -0.04), pt(0.22, -0.06), R, R, pt(0.14, 0.04), R],
+  leftHand: guardHeld(L),
+  rightArm: [
+    null,
+    null,
+    null,
+    null,
+    arm(150, 330, HAMMER_FIST_FOREARM_DOWN),
+    arm(150, 330, HAMMER_FIST_FOREARM_DOWN),
+    null,
+    null,
   ],
-  leftHand: [
-    L,
-    pt(-0.13, 0.22),
-    pt(-0.04, -0.61),
-    pt(-0.04, -0.55),
-    pt(-0.05, -0.24),
-    pt(-0.05, -0.24),
-    pt(-0.11, 0.1),
-    L,
+  rightUpperArm: [
+    G_UPPER_ARM,
+    G_UPPER_ARM,
+    G_UPPER_ARM,
+    G_UPPER_ARM,
+    HAMMER_FIST_UPPER_ARM_AWAY,
+    HAMMER_FIST_UPPER_ARM_AWAY,
+    G_UPPER_ARM,
+    G_UPPER_ARM,
   ],
-  armsNearCamera: [false, false, true, true, false, false, false, false],
+  rightArmNearCamera: [false, false, true, true, false, false, false, false],
   rightFoot: plantedFoot(G_RIGHT_X, [0, 0, deg(18), deg(20), 0, 0, 0, 0]),
   leftFoot: plantedFoot(G_LEFT_X, [0, 0, deg(18), deg(20), 0, 0, 0, 0]),
   jacketFlare: [G_JACKET, 0.15, 0.3, 0.35, 0.6, 0.55, 0.3, G_JACKET],
@@ -445,7 +476,7 @@ const HAMMER_FIST: UpStrikeKeys = {
   ],
 };
 
-export function hammerFistUp(frame: number): CarlPose {
+export function hammerFistUp(frame: number): BipedPose {
   return poseFromKeys(HAMMER_FIST, frame);
 }
 
@@ -502,7 +533,7 @@ const FRONT_KICK: UpStrikeKeys = {
   ],
 };
 
-export function frontKickUp(frame: number): CarlPose {
+export function frontKickUp(frame: number): BipedPose {
   return poseFromKeys(FRONT_KICK, frame);
 }
 
@@ -571,7 +602,7 @@ const HOP_KNEE: UpStrikeKeys = {
   ],
 };
 
-export function hopKneeUp(frame: number): CarlPose {
+export function hopKneeUp(frame: number): BipedPose {
   return poseFromKeys(HOP_KNEE, frame);
 }
 
@@ -608,17 +639,19 @@ export function runningPuntExitPhase(entry: number): number {
  * The kicking foot's own path, used on the frames between the run's hand-offs:
  * it chambers higher than a running knee ever comes, sweeps out low and far
  * along the floor through the target, and — unlike the standing push-kick —
- * follows through upward, the way a punted ball's kick does.
+ * follows through upward, the way a punted ball's kick does. At the impact it
+ * is driven clearly further out than the run's own heel flicked up behind him
+ * in flight, or the kick reads as no reach at all.
  */
 const PUNT_LIFT: FrameTable = [0, 0.24, 0.44, 0.32, 0.28, 0.42, 0.26, 0];
-const PUNT_DEPTH: FrameTable = [0, -0.02, 0.14, 0.44, 0.62, 0.5, 0.3, 0];
+const PUNT_DEPTH: FrameTable = [0, -0.02, 0.14, 0.44, 0.68, 0.5, 0.3, 0];
 const PUNT_PITCH: FrameTable = [0, deg(40), deg(10), deg(30), deg(40), deg(20), deg(5), 0];
 /** How much of each frame's foot is the kick rather than the run's own swing. */
 const PUNT_WEIGHT: FrameTable = [0, 0.6, 1, 1, 1, 1, 0.6, 0];
 /**
  * The kick sweeps only a little outboard of the run's line, enough to clear
  * the standing leg. From behind a foot driven ahead has to vanish up behind
- * his shorts; sent further out, its shin shows level beside the knee and reads
+ * his trouser seat; sent further out, its shin shows level beside the knee and reads
  * as a heel curled up behind him.
  */
 const PUNT_OUTBOARD = 0.07;
@@ -649,11 +682,11 @@ export function runningPuntUpKickingSide(entry: number): number {
  * the left kick is the right one mirrored across him: the foot sweeps out on
  * its own side and the arm furthest flung is the one opposite the kick.
  */
-export function runningPuntUp(frame: number, entry: number): CarlPose {
-  const pose = runFacing(puntRunPhaseAt(entry, frame), true);
+export function runningPuntUp(frame: number, entry: number): BipedPose {
+  const weight = sampleTrack(PUNT_WEIGHT, frame);
+  const pose = runFacingCarried(puntRunPhaseAt(entry, frame), true, 1 - weight);
   const side = runningPuntUpKickingSide(entry);
   const kicksRight = side === RIGHT_ARM;
-  const weight = sampleTrack(PUNT_WEIGHT, frame);
   const runFoot = kicksRight ? pose.rightFoot : pose.leftFoot;
   const runLift = -runFoot.y;
   const runDepth = (kicksRight ? pose.rightFootDepth : pose.leftFootDepth) ?? 0;

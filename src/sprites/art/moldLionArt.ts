@@ -3,7 +3,7 @@
  * profile faces +X with the lion's left side nearest the viewer.
  */
 
-import { type Pt, clamp01, deg, lerp, mix, rgba } from './carlArt';
+import { type Pt, clamp01, deg, lerp, mix, rgba } from './bipedArt';
 import { hash1 } from './cowArt';
 import { withClip } from './softShade';
 

@@ -10,14 +10,14 @@
  *
  *   1. A **digitigrade** leg. The hock — what reads as a backward-bending knee —
  *      is the strongest rodent cue in the silhouette, and it is why this module
- *      solves a three-segment leg where Carl's rig (`carl/rig.ts`) solves two.
+ *      solves a three-segment leg where the biped rig (`biped/rig.ts`) solves two.
  *   2. A long **tail** counterbalancing behind him, the one part of the outline
  *      that is unambiguously not human.
  *   3. A long **muzzle** and big round **ears** breaking the head's circle.
  *
  * Everything else — arm swing as FK, the pelvis dropping at contact, IK slack
- * discipline — is Carl's, because Carl is the only figure in this game whose
- * movement convinces.
+ * discipline — is the biped rig's, because it is the only figure in this game
+ * whose movement convinces.
  *
  * This module knows nothing about animation: it paints one pose. The
  * choreography lives in `src/sprites/art/ratKinFigure.ts`.
@@ -31,10 +31,10 @@
 
 type Ctx = CanvasRenderingContext2D;
 
-// The scalar helpers are Carl's, imported rather than copied: they are pure
-// maths with no Carl in them, and a fourth transcription of `lerp` in this repo
+// The scalar helpers are the biped painter's, imported rather than copied:
+// they are pure maths with nothing of the figure in them, and a fourth transcription of `lerp` in this repo
 // is a fourth place for it to drift.
-import { type Pt, clamp01, deg, lerp, mix, rgba } from './carlArt';
+import { type Pt, clamp01, deg, lerp, mix, rgba } from './bipedArt';
 import {
   BODY_OUTLINE_WIDTH,
   HALF_PI,

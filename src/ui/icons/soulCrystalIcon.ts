@@ -5,7 +5,7 @@ import type { Rect } from '../core/geom';
 import { iconSquare } from './iconSquare';
 
 /**
- * Carl's Doomsday Scenario: the city's soul crystal, sealed under an enchanted
+ * the Doomsday Scenario: the city's soul crystal, sealed under an enchanted
  * glass dome on a brass plinth.
  *
  * The crystal is painted by the same body painter as the one hovering in the
@@ -165,7 +165,7 @@ export function paintSoulCrystalIconAt(
   ctx.restore();
 }
 
-/** Draws Carl's Doomsday Scenario in an inventory or hotbar cell. */
+/** Draws the Doomsday Scenario in an inventory or hotbar cell. */
 export function drawSoulCrystalIcon(ctx: CanvasRenderingContext2D, rect: Rect, alpha = 1): void {
   paintSoulCrystalIconAt(ctx, rect, frameTime, alpha);
 }

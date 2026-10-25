@@ -21,7 +21,7 @@
  * would only smear its one-pixel effects.
  */
 
-import type { Pt } from './carlArt';
+import type { Pt } from './bipedArt';
 import {
   allocCanvas,
   type CanvasSurface,
@@ -41,9 +41,19 @@ export interface LayerBounds {
   /** In scratch pixels. */
   readonly width: number;
   readonly height: number;
-  /** Scratch pixels per figure unit. */
+  /** Scratch pixels per figure unit across. */
   readonly pxPerUnit: number;
+  /**
+   * Scratch pixels per figure unit down: the same as across, except on a
+   * figure drawn stretched — a look narrower or taller than its rig — which
+   * is composed at its own density down so the finished surface lands on
+   * the target pixel for pixel rather than being resampled into it.
+   */
+  readonly pxPerUnitY: number;
 }
+
+/** How far apart two densities may be and still be one: rounding in a rotated transform. */
+const SAME_DENSITY = 1e-9;
 
 /** Points a figure's ink reaches toward, and how far past them it can still run. */
 export interface InkReach {
@@ -66,6 +76,8 @@ function fraction(value: number): number {
 export function layerBounds(ctx: Ctx, reaches: readonly InkReach[]): LayerBounds {
   const transform = ctx.getTransform();
   const pxPerUnit = Math.max(Math.hypot(transform.a, transform.b), DEGENERATE_DENSITY);
+  const downDensity = Math.max(Math.hypot(transform.c, transform.d), DEGENERATE_DENSITY);
+  const pxPerUnitY = Math.abs(downDensity - pxPerUnit) < SAME_DENSITY ? pxPerUnit : downDensity;
   const gridX = fraction(transform.e);
   const gridY = fraction(transform.f);
   let left = Infinity;
@@ -80,13 +92,13 @@ export function layerBounds(ctx: Ctx, reaches: readonly InkReach[]): LayerBounds
       bottom = Math.max(bottom, p.y + margin);
     }
   }
-  const snap = (value: number, grid: number): number =>
-    (Math.floor(value * pxPerUnit + grid) - grid) / pxPerUnit;
-  const minX = snap(left, gridX);
-  const minY = snap(top, gridY);
+  const snap = (value: number, grid: number, density: number): number =>
+    (Math.floor(value * density + grid) - grid) / density;
+  const minX = snap(left, gridX, pxPerUnit);
+  const minY = snap(top, gridY, pxPerUnitY);
   const width = Math.ceil((right - minX) * pxPerUnit);
-  const height = Math.ceil((bottom - minY) * pxPerUnit);
-  return { minX, minY, width, height, pxPerUnit };
+  const height = Math.ceil((bottom - minY) * pxPerUnitY);
+  return { minX, minY, width, height, pxPerUnit, pxPerUnitY };
 }
 
 /**
@@ -172,7 +184,7 @@ export function inFigureSpace(layer: Layer, bounds: LayerBounds, paint: (ctx: Ct
   const { ctx } = layer;
   ctx.save();
   try {
-    ctx.scale(bounds.pxPerUnit, bounds.pxPerUnit);
+    ctx.scale(bounds.pxPerUnit, bounds.pxPerUnitY);
     ctx.translate(-bounds.minX, -bounds.minY);
     paint(ctx);
   } finally {
@@ -188,6 +200,20 @@ export function tint(layer: Layer, colour: string): void {
   ctx.fillStyle = colour;
   ctx.fillRect(0, 0, surface.width, surface.height);
   ctx.restore();
+}
+
+/**
+ * Clears every pixel of `layer` fainter than `minAlpha` (0–255): what keeps a
+ * soft cast shadow on the floor out of a silhouette traced from the layer.
+ */
+export function keepOpaque(layer: Layer, minAlpha: number): void {
+  const { ctx, surface } = layer;
+  const image = ctx.getImageData(0, 0, surface.width, surface.height);
+  const { data } = image;
+  for (let i = ALPHA_CHANNEL; i < data.length; i += RGBA_CHANNELS) {
+    if (data[i] < minAlpha) data[i] = 0;
+  }
+  ctx.putImageData(image, 0, 0);
 }
 
 export function clear(layer: Layer): void {
@@ -306,8 +332,11 @@ export function outlineInto(
   tint(out, colour);
   ctx.save();
   if (closeGaps) {
+    // The closed sliver's edges are antialiased, so one cut leaves a stipple of
+    // part-alpha ink along a gap that narrows to nothing; cutting again takes
+    // that residue to below what reads as a mark.
     ctx.globalCompositeOperation = 'destination-out';
-    ctx.drawImage(scratch.surface, 0, 0);
+    for (let cut = 0; cut < SLIVER_CUTS; cut++) ctx.drawImage(scratch.surface, 0, 0);
   }
   ctx.globalCompositeOperation = 'destination-in';
   ctx.fillStyle = opacity;
@@ -316,6 +345,61 @@ export function outlineInto(
   ctx.drawImage(body.surface, 0, 0);
 }
 
+/**
+ * Clears the outline from every hole in `body` the floor shows through but
+ * the outside cannot reach: a gap enclosed between an arm and the hip it
+ * rests on. The outline is the line round the figure; drawn round the rim of
+ * a hole too wide for {@link outlineInto} to close, it is a ring of ink lying
+ * on the floor between his arm and his side.
+ */
+export function clearOutlineInHoles(out: Layer, body: Layer): void {
+  const { width, height } = out.surface;
+  if (width === 0 || height === 0) return;
+  const bodyAlpha = body.ctx.getImageData(0, 0, width, height).data;
+  const open = (i: number): boolean => bodyAlpha[i * RGBA_CHANNELS + ALPHA_CHANNEL] < HOLE_ALPHA;
+  const outside = new Uint8Array(width * height);
+  const queue: number[] = [];
+  const reach = (i: number): void => {
+    if (outside[i] === 1 || !open(i)) return;
+    outside[i] = 1;
+    queue.push(i);
+  };
+  for (let x = 0; x < width; x++) {
+    reach(x);
+    reach((height - 1) * width + x);
+  }
+  for (let y = 0; y < height; y++) {
+    reach(y * width);
+    reach(y * width + width - 1);
+  }
+  // The queue grows as it is walked, so it is read by index, not iterated.
+  let head = 0;
+  while (head < queue.length) {
+    const i = queue[head++];
+    const x = i % width;
+    if (x > 0) reach(i - 1);
+    if (x < width - 1) reach(i + 1);
+    if (i >= width) reach(i - width);
+    if (i < width * (height - 1)) reach(i + width);
+  }
+  const image = out.ctx.getImageData(0, 0, width, height);
+  let cleared = false;
+  for (let i = 0; i < outside.length; i++) {
+    if (outside[i] === 1 || !open(i)) continue;
+    image.data[i * RGBA_CHANNELS + ALPHA_CHANNEL] = 0;
+    cleared = true;
+  }
+  if (cleared) out.ctx.putImageData(image, 0, 0);
+}
+
+/** A pixel of the body this transparent or less is floor showing through. */
+const HOLE_ALPHA = 8;
+const RGBA_CHANNELS = 4;
+const ALPHA_CHANNEL = 3;
+
+/** How many times a closed sliver is cut out of the outline: see {@link outlineInto}. */
+const SLIVER_CUTS = 3;
+
 /** Blits a finished layer back down into the figure space `ctx` is painting in. */
 export function blitLayer(ctx: Ctx, layer: Layer, bounds: LayerBounds): void {
   ctx.drawImage(
@@ -323,7 +407,7 @@ export function blitLayer(ctx: Ctx, layer: Layer, bounds: LayerBounds): void {
     bounds.minX,
     bounds.minY,
     bounds.width / bounds.pxPerUnit,
-    bounds.height / bounds.pxPerUnit,
+    bounds.height / bounds.pxPerUnitY,
   );
 }
 

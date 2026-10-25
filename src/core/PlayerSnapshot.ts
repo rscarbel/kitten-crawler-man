@@ -125,7 +125,7 @@ export interface PlayerSnapshot {
   skillStates?: SkillState[];
   /**
    * Resourcing and Construction levels, saved and restored per crawler like
-   * `skillStates` — Carl's and Donut's craft progress never mix. Absent on
+   * `skillStates` — the two crawlers' craft progress never mixes. Absent on
    * saves predating craft skills.
    */
   craftSkillStates?: CraftSkillsSnapshot;

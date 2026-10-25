@@ -1,8 +1,8 @@
 /**
- * Trousers (or stockings) and shoes for the people built on Carl's rig — the
- * town's citizens and residents, the club dancer, the Incubus. Never his:
- * Carl's own look is bare-legged and barefoot, and nothing he can loot paints
- * these.
+ * Trousers (or stockings) and shoes for the people built on the biped rig —
+ * the town's citizens and residents, the club dancer, the Incubus — and the
+ * leg painter a look's own trousers are cut with. Nothing a crawler can loot
+ * paints these.
  *
  * Both are painted on the leg part, inside each leg's own slab and right after
  * the bare leg it covers, so they follow every knee bend, foot plant and slab
@@ -11,28 +11,32 @@
  * view or gait; the shoe is the boot painter's foot, which is built on the
  * bare foot's own measures.
  *
- * A cell is shared by every figure drawn with it, so the colours are not read
- * per instance: like the rig's skin and jacket ramps they are live module
- * state, set by the figure's painter round its draw and reset after it.
+ * The painters take their colours as arguments. The two cast garments read
+ * theirs from live module state, set by the cast figure's painter round its
+ * draw and reset after it, because every look of the cast shares one garment.
  */
 
-import type { CarlLegFrame } from '../../art/carl/carlParts';
-import { legCover, type LegCoverSegment } from '../../art/carl/limbs';
-import { crease, shadeForm } from '../../art/carl/paint';
-import { deriveGlossRamp, deriveRamp, type GlossRamp } from '../../art/carl/palette';
-import { mix, rgba } from '../../art/carlArt';
-import { footSoleLandmarks } from '../../art/carl/feet';
-import type { LegwearCut } from '../../art/human/legwear';
+import type { BipedLegFrame } from '../../art/biped/bipedParts';
+import { legCover, type LegCoverSegment } from '../../art/biped/limbs';
+import { crease, shadeForm } from '../../art/biped/paint';
+import { deriveGlossRamp, deriveRamp, type GlossRamp } from '../../art/biped/palette';
+import { mix, type Pt, rgba } from '../../art/bipedArt';
+import { footSoleLandmarks } from '../../art/biped/feet';
+import { LEG_COVER, type LegwearCut } from '../../art/human/legwear';
 import { defineGarment } from '../garmentDef';
-import { type BootLook, paintBootOnLeg } from './carlBoots';
-import { carlEveryView } from './views';
+import { BOOT_SOLE, type BootLook, paintBootOnLeg } from './humanBoots';
+import { humanEveryView } from './views';
 
 type Ctx = CanvasRenderingContext2D;
 
-/** What a figure on Carl's rig wears on its legs and feet. */
-export interface TownsfolkLegwear {
+/** What a pair of trouser or stocking legs is cut from. */
+export interface LegCloth {
   readonly cloth: GlossRamp;
   readonly cut: LegwearCut;
+}
+
+/** What a figure on the biped rig wears on its legs and feet. */
+export interface TownsfolkLegwear extends LegCloth {
   readonly footwear: GlossRamp;
   /** Pasture mud caked on the shoes and flicked up the cuffs. */
   readonly muddy: boolean;
@@ -58,27 +62,26 @@ export function resetTownsfolkLegwear(): void {
   worn = DEFAULT_LEGWEAR;
 }
 
-/**
- * How much fuller than the bare leg each cut stands: loose trousers clear the
- * muscle by a good margin, stockings hug it. The margin is in figure units, so
- * the slim ankle is covered as surely as the broad thigh.
- */
-const COVER: Readonly<Record<LegwearCut, { grow: number; margin: number }>> = {
-  trousers: { grow: 1.08, margin: 0.018 },
-  stockings: { grow: 1.02, margin: 0.012 },
-};
 const CLOTH_SPECULAR = 0.25;
-/** The fold behind the knee, across the top of the shin. */
+/**
+ * The fold behind the knee, across the top of the shin: a soft one, or the
+ * leg reads as a doll's, jointed at the knee.
+ */
 const KNEE_FOLD_ALONG = 0.06;
 const KNEE_FOLD_WIDTH = 0.012;
-const KNEE_FOLD_OPACITY = 0.45;
+const KNEE_FOLD_OPACITY = 0.2;
 
-function nearnessOf(frame: CarlLegFrame): number {
+function nearnessOf(frame: BipedLegFrame): number {
   return frame.drawn === 'left' ? frame.pose.leftLegNearness : frame.pose.rightLegNearness;
 }
 
-function paintCover(ctx: Ctx, frame: CarlLegFrame, segment: LegCoverSegment): void {
-  const { grow, margin } = COVER[worn.cut];
+function paintCover(
+  ctx: Ctx,
+  frame: BipedLegFrame,
+  segment: LegCoverSegment,
+  { cloth, cut }: LegCloth,
+): void {
+  const { grow, margin, terminator } = LEG_COVER[cut];
   const cover = legCover(
     ctx,
     frame.chain,
@@ -88,14 +91,29 @@ function paintCover(ctx: Ctx, frame: CarlLegFrame, segment: LegCoverSegment): vo
     segment,
     grow,
     margin,
+    frame.look.limbs,
   );
-  const { joint, end } = frame.chain;
+  const { root, joint, end } = frame.chain;
+  const trousers = cut !== 'stockings';
+  // Head-on a trouser leg is one tube of cloth hanging from the hip: thigh
+  // and shin take their light across one line, down the whole leg, or the
+  // two covers' own lights meet at the knee at an angle in a step that joints
+  // the leg. Edge-on the knee bends in the picture, and each cover takes the
+  // light across its own bone.
+  const axis = trousers && !frame.view.profile ? { from: root, to: end } : cover.axis;
+  ctx.save();
+  // Only a standing leg seen head-on is cut at the knee: a knee bent in the
+  // picture, or driven at the camera, is covered by the shin's own top, and
+  // cut there it leaves the bare knee showing through the trousers.
+  if (segment === 'shin' && trousers && !frame.view.profile && frame.piece === 'leg') {
+    clipBelowKnee(ctx, root, joint);
+  }
   shadeForm(
     ctx,
     cover.trace,
-    cover.axis,
-    worn.cloth,
-    { halfWidth: cover.axis.halfWidth, specular: CLOTH_SPECULAR },
+    axis,
+    cloth,
+    { halfWidth: cover.axis.halfWidth, specular: CLOTH_SPECULAR, terminator },
     segment === 'shin'
       ? () =>
           crease(
@@ -107,22 +125,63 @@ function paintCover(ctx: Ctx, frame: CarlLegFrame, segment: LegCoverSegment): vo
               ctx.lineTo(foldX + cover.axis.halfWidth, foldY);
             },
             KNEE_FOLD_WIDTH,
-            worn.cloth,
+            cloth,
             KNEE_FOLD_OPACITY,
           )
       : undefined,
   );
+  ctx.restore();
 }
 
-function paintCloth(ctx: Ctx, frame: CarlLegFrame): void {
+/**
+ * How far past the knee, along the thigh, a trouser leg's shin cover is
+ * still drawn: just enough to close any gap where the two covers meet.
+ */
+const SHIN_OVERLAP = 0.01;
+/** How far the cut runs either side of the knee, so the cover's own outline, not the cut's end, bounds it. */
+const KNEE_CUT_REACH = 1;
+
+/**
+ * Clips what is painted next to below the knee, square to the thigh. A trouser leg is one tube of cloth: the shin cover's round top
+ * laid over the thigh reads as a seam, a kneepad sewn on at the knee.
+ */
+function clipBelowKnee(ctx: Ctx, hip: Pt, knee: Pt): void {
+  const length = Math.hypot(knee.x - hip.x, knee.y - hip.y);
+  if (length === 0) return;
+  const down = { x: (knee.x - hip.x) / length, y: (knee.y - hip.y) / length };
+  const across = { x: -down.y, y: down.x };
+  const cut = { x: knee.x - down.x * SHIN_OVERLAP, y: knee.y - down.y * SHIN_OVERLAP };
+  const corner = (side: number, along: number): Pt => ({
+    x: cut.x + across.x * side * KNEE_CUT_REACH + down.x * along,
+    y: cut.y + across.y * side * KNEE_CUT_REACH + down.y * along,
+  });
+  ctx.beginPath();
+  for (const [side, along] of [
+    [-1, 0],
+    [1, 0],
+    [1, KNEE_CUT_REACH],
+    [-1, KNEE_CUT_REACH],
+  ] as const) {
+    const p = corner(side, along);
+    ctx.lineTo(p.x, p.y);
+  }
+  ctx.closePath();
+  ctx.clip();
+}
+
+/**
+ * Paints `legs` over the leg `frame` dresses, following the rig's own leg
+ * contour through every bend of the pose.
+ */
+export function paintLegCloth(ctx: Ctx, frame: BipedLegFrame, legs: LegCloth): void {
   // A knee driven at the camera is shaded over the shin after the leg is
   // dressed, so the shin is laid again over that shading.
   if (frame.piece === 'kneeAtCamera') {
-    paintCover(ctx, frame, 'shin');
+    paintCover(ctx, frame, 'shin', legs);
     return;
   }
-  if (frame.segments !== 'lower') paintCover(ctx, frame, 'thigh');
-  if (frame.segments !== 'thigh') paintCover(ctx, frame, 'shin');
+  if (frame.segments !== 'lower') paintCover(ctx, frame, 'thigh', legs);
+  if (frame.segments !== 'thigh') paintCover(ctx, frame, 'shin', legs);
 }
 
 /** A plain low shoe: the trouser cuff covers the ankle, so its shaft stops just above it. */
@@ -131,12 +190,13 @@ const SHOE_SHAFT_TOP_AT = 0.8;
 const SOLE_DARKEN_TOWARD = '#120d0b';
 const SOLE_DARKEN = 0.7;
 
-function shoeLook(): BootLook {
+function shoeLook(footwear: GlossRamp): BootLook {
   return {
-    leather: worn.footwear,
-    sole: deriveRamp(mix(worn.footwear.base, SOLE_DARKEN_TOWARD, SOLE_DARKEN)),
+    leather: footwear,
+    sole: deriveRamp(mix(footwear.base, SOLE_DARKEN_TOWARD, SOLE_DARKEN)),
     shaftTopAt: SHOE_SHAFT_TOP_AT,
     hobnails: false,
+    soleBuild: BOOT_SOLE,
   };
 }
 
@@ -162,11 +222,18 @@ const MUD_SPLASHES: readonly { readonly up: number; readonly across: number }[] 
  * landmarks and foot scale the shoe is built on, so the mud stays on the shoe
  * through every plant and lift of the stride.
  */
-function paintMud(ctx: Ctx, frame: CarlLegFrame): void {
+function paintMud(ctx: Ctx, frame: BipedLegFrame): void {
   const { chain, view, footScale } = frame;
   const point =
     (frame.drawn === 'left' ? frame.pose.leftFootPoint : frame.pose.rightFootPoint) ?? 0;
-  const landmarks = footSoleLandmarks(chain.end, frame.footPitch, view, frame.footOut, point);
+  const landmarks = footSoleLandmarks(
+    chain.end,
+    frame.footPitch,
+    view,
+    frame.footOut,
+    frame.look.limbs,
+    point,
+  );
   const scaled = (p: { x: number; y: number }): { x: number; y: number } => ({
     x: chain.end.x + (p.x - chain.end.x) * footScale,
     y: chain.end.y + (p.y - chain.end.y) * footScale,
@@ -210,10 +277,18 @@ function paintMud(ctx: Ctx, frame: CarlLegFrame): void {
   }
 }
 
-function paintShoe(ctx: Ctx, frame: CarlLegFrame): void {
+function paintShoe(ctx: Ctx, frame: BipedLegFrame, { footwear, muddy }: TownsfolkLegwear): void {
   if (frame.piece === 'kneeAtCamera' || frame.segments === 'thigh') return;
-  paintBootOnLeg(ctx, frame, shoeLook());
-  if (worn.muddy) paintMud(ctx, frame);
+  paintBootOnLeg(ctx, frame, shoeLook(footwear));
+  if (muddy) paintMud(ctx, frame);
+}
+
+function paintWornCloth(ctx: Ctx, frame: BipedLegFrame): void {
+  paintLegCloth(ctx, frame, worn);
+}
+
+function paintWornShoe(ctx: Ctx, frame: BipedLegFrame): void {
+  paintShoe(ctx, frame, worn);
 }
 
 export const TOWNSFOLK_TROUSERS = defineGarment({
@@ -223,7 +298,7 @@ export const TOWNSFOLK_TROUSERS = defineGarment({
   material: 'cloth',
   layer: 'over',
   region: ['leg'],
-  paint: { leg: carlEveryView(paintCloth) },
+  paint: { leg: humanEveryView(paintWornCloth) },
 });
 
 export const TOWNSFOLK_SHOES = defineGarment({
@@ -233,9 +308,6 @@ export const TOWNSFOLK_SHOES = defineGarment({
   material: 'leather',
   layer: 'outer',
   region: ['leg'],
-  hides: [
-    { kind: 'garment', garment: 'carl_toe_ring' },
-    { kind: 'garment', garment: 'carl_pedicure' },
-  ],
-  paint: { leg: carlEveryView(paintShoe) },
+  covers: ['feet'],
+  paint: { leg: humanEveryView(paintWornShoe) },
 });

@@ -2,18 +2,22 @@
  * "The Show Must Go On" — Tsarina Signet's questline outside the Big Top.
  *
  * Signet is theatrical, imperious, formal, and pivots between menace and
- * grief with no transition. Donut is ALL CAPS and treats a dead circus as an
- * engagement she is headlining. Carl is blunt, plain, and never raises his
- * voice.
+ * grief with no transition. Ryan makes friends with her anyway, grinning
+ * through the menace. Belle sees a warm lady with moving pictures and wants
+ * to sit with her.
  */
 
 import { speakerLines, transientSpeaker } from '../../line';
 import type { DialogLine, NonEmpty } from '../../line';
 import type { DialogReward } from '../../request';
+import { crawlerName } from '../../../characters/characters';
+
+const HUMAN_NAME = crawlerName('human');
+const CAT_NAME = crawlerName('cat');
 
 const signet = speakerLines('signet');
-const carl = speakerLines('carl');
-const donut = speakerLines('donut');
+const ryan = speakerLines('ryan');
+const belle = speakerLines('belle');
 const mordecai = speakerLines('mordecaiInEar');
 const grimaldiInTent = speakerLines('grimaldiInTent');
 /** The questline's own header, for a narration page with no more specific title to give it. */
@@ -25,13 +29,15 @@ export const CIRCUS_INTRO: NonEmpty<DialogLine> = [
   signet.line(
     'Well, hello there. How fortunate that you walked by. I could really use some help from someone like you.',
   ),
-  donut.line('CARL. HER TATTOOS ARE MOVING. THE SHARK IS LOOKING AT ME, CARL.'),
+  belle.line(`${HUMAN_NAME}! Her pictures are moving! The shark is looking at me. Hi, shark!`),
   mordecai.line(
     '*Listen carefully. That is a level sixty Elite. She stars in a show, and trust me, you do NOT want to get involved. Do not engage. Get out of there. now.',
   ),
-  carl.line("We're nobody. We saw lights over a dead circus and got curious. What do you want?"),
+  ryan.line(
+    `Hi! ${HUMAN_NAME} and ${CAT_NAME}. We saw lights over a dead circus and couldn't resist. What can we do for you?`,
+  ),
   signet.button(
-    'Defend yoursef',
+    'Defend yourself',
     'I need your help for a spell casting. Mold Lions approach, and I think they will do just fine for my purposes.',
   ),
 ];
@@ -45,11 +51,11 @@ export const CIRCUS_RITUAL_FAILED: NonEmpty<DialogLine> = [
   signet.line(
     'There is a bear here named Heather. She was my friend. She danced here before all of this. Some part of her is still there, but Grimaldi brings her back every time she dies. And the next night, she has to do it all again. I need you to kill her.',
   ),
-  carl.line("You're asking us to put down your friend?"),
+  ryan.line("Oh. You're asking us to put down your friend?"),
   signet.line(
     'She is suffering. Grimaldi keeps bringing her back, and every time he does, she has to live through it again. That is what this place has become. They cannot die, and they cannot leave.',
   ),
-  carl.button('Kill Heather', '...Fine.'),
+  ryan.button('Kill Heather', "...Okay. We'll make it quick for her."),
 ];
 
 // Scene C — Heather is down
@@ -77,10 +83,10 @@ export const CIRCUS_BIGTOP_READY: NonEmpty<DialogLine> = [
     'You can enter the tent now, however I cannot. Go and stop my former husband. I cannot bear to see what he has become, but he needs to be stopped. I love him, but Grimaldi would never have wanted this for his family.',
   ),
   mordecai.line(
-    "*The tent keeps you in separate lanes, so take turns and watch each other's path. Half the gates on Carl's side open from Donut's side, and the other way round. Lookout for traps.*",
+    `*The tent keeps you in separate lanes, so take turns and watch each other's path. Half the gates on ${HUMAN_NAME}'s side open from ${CAT_NAME}'s side, and the other way round. Lookout for traps.*`,
   ),
-  donut.line(
-    'A TWO-RING SHOW AND WE ARE THE HEADLINERS, CARL. FINALLY, A DUNGEON WITH TASTE. I WANT TOP BILLING AND SOMETHING SHINY TO SHOOT.',
+  belle.line(
+    `Two rings? One for you and one for me, ${HUMAN_NAME}. I hope there are big warm spotlights.`,
   ),
   signet.button('Enter the Big Top', 'Take this. Go. Finish the show.'),
 ];
@@ -105,14 +111,14 @@ const MONGO_RETURNED_LINE = signet.line(
   'And your beast is returned, as promised. He bit three of my tattoos, ate a fourth, and slept through most of the week. I think I will miss him.',
 );
 
-const DONUT_CLOSING_LINE = donut.button(
+const BELLE_CLOSING_LINE = belle.button(
   'Finish',
-  'WELL, CARL. THE SHOW IS OVER, THE FAMILY IS FREE, AND NOBODY THANKED THE CAT WITH A CLOSING NUMBER. TYPICAL. I WILL BE ACCEPTING APPLAUSE AT THE EXIT.',
+  `The show is over, and the family is together again. ${HUMAN_NAME}, everybody is hugging. Can I hug too? I'm going to hug Signet super tight.`,
 );
 
 export function circusResolutionLines(mongoKidnapped: boolean): NonEmpty<DialogLine> {
   const lines = resolutionOpening();
   return mongoKidnapped
-    ? [...lines, MONGO_RETURNED_LINE, DONUT_CLOSING_LINE]
-    : [...lines, DONUT_CLOSING_LINE];
+    ? [...lines, MONGO_RETURNED_LINE, BELLE_CLOSING_LINE]
+    : [...lines, BELLE_CLOSING_LINE];
 }

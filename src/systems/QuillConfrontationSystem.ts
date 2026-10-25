@@ -10,7 +10,7 @@
  * letters stops pretending. Owned by BuildingInteriorScene (top floor only);
  * quest state crosses scenes via MurderQuestProgress.
  *
- * The end of the confrontation destabilizes the city's soul crystal (Carl's
+ * The end of the confrontation destabilizes the city's soul crystal (the
  * Doomsday Scenario): this system only fires that one-time reveal — writing
  * the crystal's position and a containment deadline into DoomsdayProgress —
  * and hands off to SoulCrystalSystem, which ticks independently of this

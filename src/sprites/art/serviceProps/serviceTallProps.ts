@@ -3,7 +3,7 @@
  * cabinet, the vending machine and the gas bottle.
  *
  * Each stands against a wall and rises above its own tile; the locker and the
- * vending machine stand a little taller than Carl. Every painter is handed the
+ * vending machine stand a little taller than the human crawler. Every painter is handed the
  * anchor tile's top-left corner and the tile size, and a variant seed that
  * only reaches the passes allowed to vary — dents, rust, stickers, what is on
  * the shelves — never the silhouette.
@@ -80,7 +80,7 @@ function wreckBed(ctx: Ctx, cx: number, cy: number, ts: number): void {
 const LOCKER_SEED = 0x10c4;
 const LOCKER_VARIANT_STRIDE = 977;
 const LOCKER_WIDTH_FRACTION = 0.84;
-/** A locker stands a hand above Carl, as a real one stands above a crawler. */
+/** A locker stands a hand above the human crawler, as a real one stands above a crawler. */
 const LOCKER_HEIGHT_FRACTION = 1.56;
 const LOCKER_DEPTH_FRACTION = 0.22;
 const LOCKER_CONTACT_SHADOW_SCALE = 1.05;

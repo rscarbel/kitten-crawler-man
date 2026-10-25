@@ -407,7 +407,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'taranis_wave_hit_2',
     'taranis_wave_hit_3',
     'taranis_wave_hit_4',
-    // Carl can draw, swing and land a weapon, and either crawler can put on
+    // The human crawler can draw, swing and land a weapon, and either crawler can put on
     // gear, anywhere.
     'slash_strike_1',
     'slash_strike_2',

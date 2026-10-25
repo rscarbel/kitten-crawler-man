@@ -1,6 +1,6 @@
 /**
- * The city elf cultist's vestments and elven anatomy, painted onto Carl's rig
- * as attachments (`CarlAttachments` in `carl/figure.ts`): a deep cowl with a
+ * The city elf cultist's vestments and elven anatomy, painted onto the biped rig
+ * as attachments (`BipedAttachments` in `biped/figure.ts`): a deep cowl with a
  * gold-trimmed opening and the brim's shadow over the eyes, long pointed ears
  * thrust out through slits in the hood, an ivory stole, the cult's winged-eye
  * sigil, a rope girdle with a skyfowl feather tied to it, a gold hem band and
@@ -11,19 +11,20 @@
  * and every cultist carries a stolen feather at the hip.
  *
  * Everything is in the rig's figure units — origin between the feet, +Y down —
- * and hung off the solved skeleton, shaded with Carl's own `shadeForm` so the
+ * and hung off the solved skeleton, shaded with the rig's own `shadeForm` so the
  * vestments light the same way as the body they are worn on, and composed
- * inside his figure so the silhouette outline runs round them too.
+ * inside the figure so the silhouette outline runs round them too.
  *
  * Silhouette carries the read at the 32 px tile: the hood is a peaked dome
  * wider than a bare head, the ears are two points standing out of it, and the
  * stole and hem band are the only pale shapes on a dark robe.
  */
 
-import { type CarlAttachments } from './carl/figure';
-import { footSoleLandmarks, LEFT_FOOT_OUT, RIGHT_FOOT_OUT } from './carl/feet';
-import { headAngle } from './carl/head';
-import { addCapsule, crease, shadeForm } from './carl/paint';
+import { type BipedAttachments } from './biped/figure';
+import { footSoleLandmarks, LEFT_FOOT_OUT, RIGHT_FOOT_OUT } from './biped/feet';
+import { RIG_LIMBS } from './biped/limbs';
+import { headAngle } from './biped/head';
+import { addCapsule, crease, shadeForm } from './biped/paint';
 import {
   deriveGlossRamp,
   deriveRamp,
@@ -32,11 +33,11 @@ import {
   type Ramp,
   receded,
   recededGloss,
-} from './carl/palette';
-import { HEAD_DEPTH, HEAD_RX, HEAD_RY, WAIST_HALF } from './carl/proportions';
-import { type BoneChain, type CarlPose, type Skeleton, type ViewSpec } from './carl/rig';
-import { torsoFrame, traceGarmentTorso, type TorsoFrame } from './carl/torso';
-import { clamp01, lerp, type Pt, rgba } from './carlArt';
+} from './biped/palette';
+import { HEAD_DEPTH, HEAD_RX, HEAD_RY, WAIST_HALF } from './biped/proportions';
+import { type BoneChain, type BipedPose, type Skeleton, type ViewSpec } from './biped/rig';
+import { torsoFrame, traceGarmentTorso, type TorsoFrame, type TorsoLook } from './biped/torso';
+import { clamp01, lerp, type Pt, rgba } from './bipedArt';
 import { withClip } from './softShade';
 
 type Ctx = CanvasRenderingContext2D;
@@ -96,7 +97,7 @@ function at(origin: Pt, dx: number, dy: number): Pt {
   return { x: origin.x + dx, y: origin.y + dy };
 }
 
-function inHeadFrame(ctx: Ctx, skeleton: Skeleton, pose: CarlPose, paint: () => void): void {
+function inHeadFrame(ctx: Ctx, skeleton: Skeleton, pose: BipedPose, paint: () => void): void {
   ctx.save();
   try {
     ctx.translate(skeleton.headCentre.x, skeleton.headCentre.y);
@@ -454,7 +455,7 @@ function paintHoodedHead(
   ctx: Ctx,
   skeleton: Skeleton,
   view: ViewSpec,
-  pose: CarlPose,
+  pose: BipedPose,
   motion: CultistMotion,
 ): void {
   inHeadFrame(ctx, skeleton, pose, () => {
@@ -673,13 +674,19 @@ const HEM_BAND_WIDTH = 0.04;
 const HEM_BAND_ABOVE = 0.035;
 const HEM_BAND_REACH = 1;
 
-function paintHemBand(ctx: Ctx, skeleton: Skeleton, view: ViewSpec, pose: CarlPose): void {
-  const frame = torsoFrame(skeleton, pose);
+function paintHemBand(
+  ctx: Ctx,
+  skeleton: Skeleton,
+  view: ViewSpec,
+  pose: BipedPose,
+  look: TorsoLook,
+): void {
+  const frame = torsoFrame(skeleton, pose, look);
   withClip(
     ctx,
     () => {
       ctx.beginPath();
-      traceGarmentTorso(ctx, skeleton, pose, view);
+      traceGarmentTorso(ctx, skeleton, pose, view, look);
     },
     () => {
       const left = frame.hem(-HEM_BAND_REACH, -HEM_BAND_ABOVE);
@@ -742,7 +749,7 @@ function paintShoe(
     paintShoeHeadOn(ctx, chain, outward, ramp);
     return;
   }
-  const { heel, toe } = footSoleLandmarks(chain.end, pitch, view, outward, point);
+  const { heel, toe } = footSoleLandmarks(chain.end, pitch, view, outward, RIG_LIMBS, point);
   const heelTop = at(heel, 0, -SHOE_HEEL_HALF);
   const toeTop = at(toe, 0, -SHOE_TOE_HALF);
   const shaftTop = at(chain.end, 0, -SHOE_SHAFT_RISE);
@@ -759,7 +766,7 @@ function paintShoe(
   );
 }
 
-function paintShoes(ctx: Ctx, skeleton: Skeleton, view: ViewSpec, pose: CarlPose): void {
+function paintShoes(ctx: Ctx, skeleton: Skeleton, view: ViewSpec, pose: BipedPose): void {
   const farShade = view.profile ? FAR_LIMB_SHADE : 0;
   paintShoe(
     ctx,
@@ -828,12 +835,13 @@ function paintVestments(
   ctx: Ctx,
   skeleton: Skeleton,
   view: ViewSpec,
-  pose: CarlPose,
+  pose: BipedPose,
   motion: CultistMotion,
+  look: TorsoLook,
 ): void {
-  const frame = torsoFrame(skeleton, pose);
+  const frame = torsoFrame(skeleton, pose, look);
   const stoleEnd = -STOLE_END_ABOVE_HEM;
-  paintHemBand(ctx, skeleton, view, pose);
+  paintHemBand(ctx, skeleton, view, pose, look);
   if (view.profile) {
     paintStoleBand(ctx, profileStoleBand(frame, stoleEnd), STOLE);
     paintSigil(ctx, frame.at(SIGIL_PROFILE_ACROSS, SIGIL_CHEST_DOWN), SIGIL_PROFILE_SCALE);
@@ -851,7 +859,7 @@ function paintVestments(
 }
 
 /** Ink past the skeleton: the hood's peak and mantle, the ear tips, the feather's tip. */
-function attachmentReach(skeleton: Skeleton, view: ViewSpec, pose: CarlPose): Pt[] {
+function attachmentReach(skeleton: Skeleton, view: ViewSpec, pose: BipedPose): Pt[] {
   const head = skeleton.headCentre;
   const angle = headAngle(pose);
   const cos = Math.cos(angle);
@@ -871,15 +879,15 @@ function attachmentReach(skeleton: Skeleton, view: ViewSpec, pose: CarlPose): Pt
 }
 
 /** The cultist's attachments for one frame. */
-export function cultistAttachments(motion: CultistMotion): CarlAttachments {
+export function cultistAttachments(motion: CultistMotion): BipedAttachments {
   const clamped: CultistMotion = { ...motion, eyeGlow: clamp01(motion.eyeGlow) };
   return {
     overLegs: (ctx, skeleton, view, pose) => {
       paintSkirtPanels(ctx, skeleton, view);
       paintShoes(ctx, skeleton, view, pose);
     },
-    over: (ctx, skeleton, view, pose) => {
-      paintVestments(ctx, skeleton, view, pose, clamped);
+    over: (ctx, skeleton, view, pose, look) => {
+      paintVestments(ctx, skeleton, view, pose, clamped, look);
       paintHoodedHead(ctx, skeleton, view, pose, clamped);
     },
     reach: (skeleton, view, pose) => attachmentReach(skeleton, view, pose),

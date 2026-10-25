@@ -1,6 +1,6 @@
 /**
- * How Carl holds a weapon out in his hand while he stands, guards, walks and
- * runs — every armed set's stance and stride rows are the bare-handed rows'
+ * How the human crawler holds a weapon out in his hand while he stands,
+ * guards, walks and runs — every armed set's stance and stride rows are the bare-handed rows'
  * legs and body with the arms that hold the weapon re-posed here.
  *
  * - A light one-hander is carried low in his right fist, point forward and
@@ -20,13 +20,13 @@
  * rides on whatever the body under it is doing.
  */
 
-import { pt } from '../carl/geometry';
-import { FOREARM_LENGTH, UPPER_ARM_LENGTH } from '../carl/proportions';
+import { pt } from '../biped/geometry';
+import { FOREARM_LENGTH, UPPER_ARM_LENGTH } from '../biped/proportions';
 import {
   type ArmAngles,
   type BodySide,
   buildSkeleton,
-  type CarlPose,
+  type BipedPose,
   FULL_UPPER_ARM,
   type HaftDepth,
   HAFT_AWAY_FROM_CAMERA,
@@ -34,8 +34,8 @@ import {
   HAFT_TOWARD_CAMERA,
   setArmAngles,
   VIEWS,
-} from '../carl/rig';
-import { deg, lerp, type Pt } from '../carlArt';
+} from '../biped/rig';
+import { deg, lerp, type Pt } from '../bipedArt';
 import type { CardinalView } from '../../facingView';
 import type { Vec3 } from '../../held/heldPaint';
 import { closeFistsOnHaft } from './actionsGather';
@@ -113,7 +113,7 @@ export function armAnglesFor(place: FistPlace): ArmAngles {
 
 /** Poses `side`'s arm by `angles`, keeping the pose's hand target on the wrist drawn. */
 export function setArm(
-  pose: CarlPose,
+  pose: BipedPose,
   view: CardinalView,
   side: BodySide,
   angles: ArmAngles,
@@ -128,7 +128,7 @@ export function setArm(
 
 /** A pose's arm as joint angles, solving one it places by the hand, and the share of its upper arm drawn. */
 export function armOf(
-  pose: CarlPose,
+  pose: BipedPose,
   view: CardinalView,
   side: BodySide,
 ): { readonly angles: ArmAngles; readonly upperScale: number } {
@@ -190,7 +190,7 @@ const FACING_CARRY_PALM = towards(0.3, 0, -0.95);
  * A light one-hander carried low: the fist a little ahead of his hip, the
  * elbow soft, the point forward and down — clear of the leg in profile, out
  * past the hip head-on, where the blade shows against the floor rather than
- * against his shorts.
+ * against his trouser seat.
  */
 const LIGHT_CARRY: Readonly<Record<CardinalView, OneHandHold>> = {
   side: {
@@ -258,7 +258,7 @@ const HEAVY_CARRY: Readonly<Record<CardinalView, OneHandHold>> = {
   front: {
     kind: 'oneHand',
     fist: { wrist: pt(0.07, 0.1), upperScale: 0.75, bend: 'up' },
-    haftAngle: deg(-78),
+    haftAngle: deg(-72),
     haftShare: 0.8,
     haftDepth: HAFT_AWAY_FROM_CAMERA,
     palm: FACING_CARRY_PALM,
@@ -406,7 +406,7 @@ export interface SwingShares {
 
 /** How much of the forearm's swing a one-handed item turns with, edge-on. */
 const PROFILE_ITEM_FOLLOW = 0.25;
-/** Head-on less, or the swing carries it in across his shorts. */
+/** Head-on less, or the swing carries it in across his trouser seat. */
 const FACING_ITEM_FOLLOW = 0.2;
 
 const SWING_SHARES: Readonly<Record<ArmedMotionSet, SwingShares>> = {
@@ -441,7 +441,7 @@ const STANDING_ARMS: Readonly<Record<CardinalView, Readonly<Record<BodySide, Arm
 };
 
 /** How far a bare-handed pose's arm has swung away from how it hangs standing. */
-function swingOf(pose: CarlPose, view: CardinalView, side: BodySide): ArmAngles {
+function swingOf(pose: BipedPose, view: CardinalView, side: BodySide): ArmAngles {
   const now = armOf(pose, view, side).angles;
   const rest = STANDING_ARMS[view][side];
   return { upper: now.upper - rest.upper, fore: now.fore - rest.fore, foreScale: 1 };
@@ -456,11 +456,11 @@ const NO_SWING: ArmAngles = { upper: 0, fore: 0, foreScale: 1 };
  * through, the item turning with the forearm.
  */
 export function withHold(
-  pose: CarlPose,
+  pose: BipedPose,
   view: CardinalView,
   hold: Hold,
   swingShare: number,
-): CarlPose {
+): BipedPose {
   const held = { ...pose };
   const swing = swingShare === 0 ? NO_SWING : swingOf(pose, view, 'right');
   if (hold.kind === 'twoHand') {
@@ -477,6 +477,7 @@ export function withHold(
     upper: base.upper + swing.upper * swingShare,
     fore: base.fore + swing.fore * swingShare,
     foreScale: base.foreScale,
+    ...(VIEWS[view].profile ? {} : { wristFollow: FACING_WEAPON_WRIST_FOLLOW }),
   };
   setArm(held, view, 'right', angles, hold.fist.upperScale ?? FULL_UPPER_ARM);
   if (hold.free !== undefined) {
@@ -487,8 +488,17 @@ export function withHold(
   return held;
 }
 
+/**
+ * Head-on, how much of the forearm's direction the weapon fist takes. A fist
+ * on a handle holds its wrist nearly straight, knuckles running on up the
+ * forearm; at the wrist's default hold an elbow bent under a raised weapon
+ * cocks the hand back off the forearm, which reads as the palm turned out to
+ * the camera. Edge-on the default hold already lies along the swing.
+ */
+const FACING_WEAPON_WRIST_FOLLOW = 0.9;
+
 /** Closes his right fist on a one-handed item, turned as `hold` says and swung on by `turn`. */
-function gripOneHanded(pose: CarlPose, hold: OneHandHold, turn: number): void {
+function gripOneHanded(pose: BipedPose, hold: OneHandHold, turn: number): void {
   pose.rightHandShape = 'grip';
   pose.rightFist = GRIPPING_FIST;
   pose.rightHandOrientation = {
@@ -500,7 +510,7 @@ function gripOneHanded(pose: CarlPose, hold: OneHandHold, turn: number): void {
 }
 
 /** Closes both fists on a haft held where `hold` says, rocked by `rock` radians. */
-function holdTwoHanded(pose: CarlPose, view: CardinalView, hold: TwoHandHold, rock: number): void {
+function holdTwoHanded(pose: BipedPose, view: CardinalView, hold: TwoHandHold, rock: number): void {
   const shoulders = buildSkeleton(pose, VIEWS[view]).shoulderCentre;
   pose.elbowFlare = hold.elbowFlare;
   // Both arms reach for the haft at their whole length: a stride's arm drawn
@@ -561,12 +571,12 @@ function blendFist(from: FistPlace, to: FistPlace, t: number): FistPlace {
 
 // ── Rows ─────────────────────────────────────────────────────────────────────
 
-function idlePose(view: CardinalView, phase: number, lid: number): CarlPose {
+function idlePose(view: CardinalView, phase: number, lid: number): BipedPose {
   if (view === 'side') return idleSide(phase, lid);
   return view === 'back' ? idleBack(phase, lid) : idleFront(phase, lid);
 }
 
-function guardPose(view: CardinalView, phase: number): CarlPose {
+function guardPose(view: CardinalView, phase: number): BipedPose {
   if (view === 'side') return guardSide(phase);
   return view === 'back' ? guardBack(phase) : guardFront(phase);
 }
@@ -581,17 +591,17 @@ export function armedIdle(
   view: CardinalView,
   phase: number,
   lid: number,
-): CarlPose {
+): BipedPose {
   return withHold(idlePose(view, phase, lid), view, CARRY_HOLDS[set][view], 0);
 }
 
 /** On guard with the weapon ready, bouncing as the bare-handed guard bounces. */
-export function armedGuard(set: GuardingSet, view: CardinalView, phase: number): CarlPose {
+export function armedGuard(set: GuardingSet, view: CardinalView, phase: number): BipedPose {
   return withHold(guardPose(view, phase), view, guardHold(set, view), 0);
 }
 
 /** `t` of the way from the guard down to the carry, the feet stepping as the bare-handed drop steps them. */
-export function armedGuardDrop(set: GuardingSet, view: CardinalView, t: number): CarlPose {
+export function armedGuardDrop(set: GuardingSet, view: CardinalView, t: number): BipedPose {
   const body = guardDropBetween(guardPose(view, 0), idlePose(view, 0, 0), t, view);
   const guard = guardHold(set, view);
   const carry = CARRY_HOLDS[set][view];
@@ -615,41 +625,41 @@ export function armedGuardDrop(set: GuardingSet, view: CardinalView, t: number):
   return pose;
 }
 
-function walkPose(view: CardinalView, phase: number): CarlPose {
+function walkPose(view: CardinalView, phase: number): BipedPose {
   if (view === 'side') return walkSide(phase);
   return walkFacing(phase, view === 'back');
 }
 
-function runPose(view: CardinalView, phase: number): CarlPose {
+function runPose(view: CardinalView, phase: number): BipedPose {
   if (view === 'side') return runSide(phase);
   return runFacingCycle(phase, view === 'back');
 }
 
-export function armedWalk(set: ArmedMotionSet, view: CardinalView, phase: number): CarlPose {
+export function armedWalk(set: ArmedMotionSet, view: CardinalView, phase: number): BipedPose {
   return withHold(walkPose(view, phase), view, CARRY_HOLDS[set][view], SWING_SHARES[set].walk);
 }
 
-export function armedRun(set: ArmedMotionSet, view: CardinalView, phase: number): CarlPose {
+export function armedRun(set: ArmedMotionSet, view: CardinalView, phase: number): BipedPose {
   return withHold(runPose(view, phase), view, CARRY_HOLDS[set][view], SWING_SHARES[set].run);
 }
 
-export function armedWalkStart(set: ArmedMotionSet, view: CardinalView, frame: number): CarlPose {
+export function armedWalkStart(set: ArmedMotionSet, view: CardinalView, frame: number): BipedPose {
   return withHold(walkStart(frame, view), view, CARRY_HOLDS[set][view], SWING_SHARES[set].walk);
 }
 
-export function armedWalkStop(set: ArmedMotionSet, view: CardinalView, frame: number): CarlPose {
+export function armedWalkStop(set: ArmedMotionSet, view: CardinalView, frame: number): BipedPose {
   return withHold(walkStop(frame, view), view, CARRY_HOLDS[set][view], SWING_SHARES[set].walk);
 }
 
-export function armedRunStart(set: ArmedMotionSet, view: CardinalView, frame: number): CarlPose {
+export function armedRunStart(set: ArmedMotionSet, view: CardinalView, frame: number): BipedPose {
   return withHold(runStart(frame, view), view, CARRY_HOLDS[set][view], SWING_SHARES[set].run);
 }
 
-export function armedRunStop(set: ArmedMotionSet, view: CardinalView, frame: number): CarlPose {
+export function armedRunStop(set: ArmedMotionSet, view: CardinalView, frame: number): BipedPose {
   return withHold(runStop(frame, view), view, CARRY_HOLDS[set][view], SWING_SHARES[set].run);
 }
 
 /** The run pose with `set`'s carry laid on, for blows thrown on the move. */
-export function armedRunUnder(set: ArmedMotionSet, view: CardinalView, pose: CarlPose): CarlPose {
+export function armedRunUnder(set: ArmedMotionSet, view: CardinalView, pose: BipedPose): BipedPose {
   return withHold(pose, view, CARRY_HOLDS[set][view], SWING_SHARES[set].run);
 }

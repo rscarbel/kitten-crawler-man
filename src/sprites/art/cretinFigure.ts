@@ -36,7 +36,7 @@ import {
   restPose,
 } from './cretinArt';
 import { type ShieldLook, drawCretinShield } from './cretinShieldArt';
-import { clamp01, deg, easeInOut, easeOut, hump, lerp } from './carlArt';
+import { clamp01, deg, easeInOut, easeOut, hump, lerp } from './bipedArt';
 import { type FigureDef, figureStates } from '../figure/figureDef';
 import {
   CRETIN_CAST_SHIELD_CAST_FRAME,

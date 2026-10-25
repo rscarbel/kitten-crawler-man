@@ -124,8 +124,8 @@ export interface BombThrower {
 /**
  * What a goblin blast takes from a body with `maxHp` that takes the whole
  * blast: `share` of that body's own max HP, at least a point. Sized off the
- * struck body rather than any reference crawler, so a blast costs Carl, with
- * his deep bar, the same share as Donut, and never grows with the thrower's
+ * struck body rather than any reference crawler, so a blast costs the human, with
+ * his deep bar, the same share as the cat, and never grows with the thrower's
  * level. The difficulty's incoming-damage scale and any harm cap stamped on
  * the source apply on top, inside `Player.incomingDamage`.
  */

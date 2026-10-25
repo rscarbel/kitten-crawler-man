@@ -1,5 +1,5 @@
 /**
- * Carl's attack cow: a war cow, painted by the cow painter (`cowArt.ts`) through
+ * The human crawler's attack cow: a war cow, painted by the cow painter (`cowArt.ts`) through
  * a `CowLook`, so she walks, turns and lies down exactly as the village herd
  * does. What makes her a veteran rather than livestock is layered on:
  *
@@ -13,7 +13,7 @@
  * rivet is a pixel and a stitch is nothing.
  */
 
-import { deg, lerp, mix, rgba, type Pt } from './carlArt';
+import { deg, lerp, mix, rgba, type Pt } from './bipedArt';
 import {
   cowPollPoint,
   hash1,

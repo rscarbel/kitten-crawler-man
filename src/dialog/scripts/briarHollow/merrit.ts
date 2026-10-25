@@ -59,33 +59,31 @@ export const MERRIT = {
   ),
 } as const;
 
-const carl = speakerLines('carl');
-const donut = speakerLines('donut');
+const ryan = speakerLines('ryan');
+const belle = speakerLines('belle');
 
 /**
  * The crawlers' side of Merrit's "Borrowed Blueprints" scenes. Either can be
- * the one talking, so both voices carry the same words and the scene picks
- * whichever crawler the player is controlling.
+ * the one talking, so each says the same beats in their own voice and the
+ * scene picks whichever crawler the player is controlling.
  */
 export const MERRIT_BLUEPRINTS_REPLIES = {
-  carl: {
-    goodMorning: carl.line('Good morning, Merrit.'),
-    itsWhatWeDo: carl.line("It's what we do."),
-    askForCow: carl.line(
-      "Listen, I don't know how to bring this up casually... Can we have one of your cows?",
+  ryan: {
+    goodMorning: ryan.line('Morning, Merrit! Those winter crops are looking great.'),
+    itsWhatWeDo: ryan.line("Happy to. It's kind of our thing."),
+    askForCow: ryan.line(
+      "Okay, there's no smooth way to ask this, so I'll just ask... Could we have one of your cows?",
     ),
-    fenceAgreed: carl.line("Got it. Leave it to us and we'll make your fence look great."),
-    theMayor: carl.line('What? The mayor?'),
-    needMilk: carl.line('Right. Well good, we need a cow to give milk, not to manage a village.'),
+    fenceAgreed: ryan.line("Deal. Leave it to us. That'll be the best fence in Briar Hollow."),
+    theMayor: ryan.line('Wait. The mayor?'),
+    needMilk: ryan.line('Ha! Good. We need a cow that gives milk, not one that runs a village.'),
   },
-  donut: {
-    goodMorning: donut.line('Good morning, Merrit.'),
-    itsWhatWeDo: donut.line("It's what we do."),
-    askForCow: donut.line(
-      "Listen, I don't know how to bring this up casually... Can we have one of your cows?",
-    ),
-    fenceAgreed: donut.line("Got it. Leave it to us and we'll make your fence look great."),
-    theMayor: donut.line('What? The mayor?'),
-    needMilk: donut.line('Right. Well good, we need a cow to give milk, not to manage a village.'),
+  belle: {
+    goodMorning: belle.line('Good morning, Merrit! Your barn is so cozy.'),
+    itsWhatWeDo: belle.line('We like helping! Helping is nice.'),
+    askForCow: belle.line('Um... can we have a cow? A nice one? We will love her lots.'),
+    fenceAgreed: belle.line("Okay! We'll make you the prettiest fence. Promise."),
+    theMayor: belle.line("The mayor? He won't fit in the pasture..."),
+    needMilk: belle.line('Oh good. Milk cow, not mayor cow. Milk is yummy.'),
   },
 } as const;

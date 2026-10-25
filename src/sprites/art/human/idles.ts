@@ -1,5 +1,5 @@
 /**
- * Carl standing: the breathing idle, the combat-ready guard, and the fidgets
+ * The human crawler standing: the breathing idle, the combat-ready guard, and the fidgets
  * he breaks the idle with.
  *
  * Every fidget starts and ends exactly on the base idle's first frame, which
@@ -7,20 +7,20 @@
  * dropped into the idle at that seam without a pop at either end.
  */
 
-import { HEAD_CENTRE_Y, HEAD_RY, SHOULDER_Y } from '../carl/proportions';
+import { HEAD_CENTRE_Y, HEAD_RY, SHOULDER_Y } from '../biped/proportions';
 import {
   type ArmAngles,
   type BodySide,
   type BoneChain,
   buildSkeleton,
-  type CarlPose,
+  type BipedPose,
   FULL_UPPER_ARM,
   restingPose,
   setArmAngles,
   VIEWS,
   type ViewSpec,
-} from '../carl/rig';
-import { clamp01, deg, easeInOut, hump, lerp, type Pt } from '../carlArt';
+} from '../biped/rig';
+import { clamp01, deg, easeInOut, hump, lerp, type Pt } from '../bipedArt';
 import {
   anglesThrough,
   ankleOverPivot,
@@ -33,7 +33,7 @@ import {
   TOE_AHEAD_OF_ANKLE,
   upperArmShareThrough,
 } from './gaitShared';
-import { lerpAngle, mixPt, pt, TWO_PI } from '../carl/geometry';
+import { lerpAngle, mixPt, pt, TWO_PI } from '../biped/geometry';
 import type { CardinalView } from '../../facingView';
 
 /** 0 outside `[start, end]`, rising to 1 halfway through it and back to 0. */
@@ -127,7 +127,7 @@ const SIDE_HEAD_TURN = 0.2;
  * Edge-on the feet stand staggered by about half a foot's length. Closer, the
  * two shins and both feet overlap into one column and one slab at the tile;
  * much wider, and the profile stance splits the legs so far fore-and-aft that
- * no pair of shorts can cover both.
+ * no trouser seat can cover both.
  */
 export const IDLE_SIDE_FOOT_LEAD = 0.115;
 /** How far behind the hip the near hand hangs in profile. */
@@ -135,7 +135,7 @@ const SIDE_HAND_BEHIND = 0.02;
 /**
  * The far hand hangs level with the near one, hidden behind his body. Set
  * further back, its forearm shows as a strip of skin behind the seat of the
- * boxers, and at the tile that strip reads as a bare backside.
+ * trouser seat, and at the tile that strip reads as a bare backside.
  */
 const SIDE_FAR_HAND_BEHIND = SIDE_HAND_BEHIND;
 /** Edge-on the elbow breaks backward; forward it swings the forearm across his crotch. */
@@ -143,14 +143,25 @@ const SIDE_ELBOW_FLARE = -0.35;
 
 const HALF = 0.5;
 
+/**
+ * How far ahead of an even rate the inhale runs through its middle. Eased in
+ * and out like the exhale, the inhale's short span puts the whole of its fast
+ * middle between two idle frames and the loop snaps there; drawn at an even
+ * rate, the last step back to the top of the breath, across the loop seam,
+ * becomes the largest of the cycle. Running a little ahead early leaves less
+ * for that last step.
+ */
+const INHALE_LEAD = 0.2;
+
 /** The standing breath as a 0..1 exhale, 0 at the top of it on frame 0 and 1 at the bottom. */
 export function idleExhale(phase: number): number {
   const wrapped = phase - Math.floor(phase);
   if (wrapped < EXHALE_SHARE) return easeInOut(wrapped / EXHALE_SHARE);
-  return 1 - easeInOut((wrapped - EXHALE_SHARE) / (1 - EXHALE_SHARE));
+  const inhaled = (wrapped - EXHALE_SHARE) / (1 - EXHALE_SHARE);
+  return 1 - (inhaled + INHALE_LEAD * inhaled * (1 - inhaled));
 }
 
-function idleBase(phase: number, lid: number, settle: number, chestSink: number): CarlPose {
+function idleBase(phase: number, lid: number, settle: number, chestSink: number): BipedPose {
   const exhale = idleExhale(phase);
   const pose = restingPose();
   pose.bob = STANDING_KNEE_SOFTEN + settle * exhale;
@@ -164,7 +175,7 @@ function idleBase(phase: number, lid: number, settle: number, chestSink: number)
 }
 
 /** `lid` is the eye, 0 open to 1 shut; the row blinks on a frame of its own. */
-export function idleFront(phase: number, lid = 0): CarlPose {
+export function idleFront(phase: number, lid = 0): BipedPose {
   const pose = idleBase(phase, lid, BREATH_SETTLE_FACING, BREATH_CHEST_SINK_FACING);
   // The same joint angles the head-on walk swings around, so stepping off from
   // standing cannot change the shape of his arms — only how much they move.
@@ -179,10 +190,10 @@ export function idleFront(phase: number, lid = 0): CarlPose {
   return pose;
 }
 
-export function idleSide(phase: number, lid = 0): CarlPose {
+export function idleSide(phase: number, lid = 0): BipedPose {
   const pose = idleBase(phase, lid, BREATH_SETTLE_PROFILE, BREATH_CHEST_SINK_PROFILE);
   // Edge-on the arms hang against the hip, and the fingertips have to stop at
-  // or above the boxer hem: a bare hand below it, on the centreline, reads
+  // or above the trouser seat's hem: a bare hand below it, on the centreline, reads
   // obscenely at tile size. The hang is the near-full reach the front view
   // uses; held any higher the IK takes up the slack at the elbow and throws
   // the arm into a dog-leg.
@@ -196,7 +207,7 @@ export function idleSide(phase: number, lid = 0): CarlPose {
   return pose;
 }
 
-export function idleBack(phase: number, lid = 0): CarlPose {
+export function idleBack(phase: number, lid = 0): BipedPose {
   const pose = idleFront(phase, lid);
   // Seen from behind his arms hang on the far side of him, the same as they do
   // in the walk he steps into from here.
@@ -210,23 +221,29 @@ export function idleBack(phase: number, lid = 0): CarlPose {
 /**
  * A trained fighter between blows: a boxer's high guard, chin tucked, knees
  * soft, bouncing on the balls of his feet. Head-on the fists are up either
- * side of the jaw, a fist's width clear of the face, with the forearms upright
- * and the elbows down in front of the ribs, so the forearms frame the face
- * rather than hide it. Held lower and closer — under the chin, touching — the
- * two fists merge at the tile into hands pressed together in prayer.
+ * side of the face, framing it, and the elbows stand down and out
+ * past the ribs, so each forearm leans in from its elbow to its fist and the
+ * two frame the face without crossing. Held lower and closer — under the
+ * chin, touching — the two fists merge at the tile into hands pressed
+ * together in prayer; with the elbows tucked in under them the forearms
+ * stand parallel over the mouth.
  */
 const GUARD_CROUCH = 0.09;
 /** The bounce, as extra knee bend at the bottom of it. Always a drop, never a lift. */
 const GUARD_BOUNCE = 0.022;
-const GUARD_CHIN_TUCK = -0.35;
+const GUARD_CHIN_TUCK = -0.55;
 const GUARD_BROW = 0.85;
 const GUARD_FIST = 0.95;
-/** Head-on: the fists' height below the head's centre, and their spread. */
-const GUARD_FIST_BELOW_HEAD = HEAD_RY * 1.2;
-const GUARD_LEAD_FIST_SPREAD = 0.22;
-const GUARD_REAR_FIST_SPREAD = 0.24;
-/** The rear hand rides a touch higher, covering the jaw. */
-const GUARD_REAR_FIST_RISE = 0.04;
+/**
+ * Head-on: the wrists' height below the head's centre, and their spread. The
+ * fists, standing on up their forearms from there, are close together just in
+ * front of his chin and the bottom of his cheeks. Higher, the elbows a
+ * forearm below them ride up level with the shoulders into chicken wings;
+ * further apart, the forearms stand straight up beside the face.
+ */
+const GUARD_FIST_BELOW_HEAD = HEAD_RY * 1.55;
+const GUARD_LEAD_FIST_SPREAD = 0.16;
+const GUARD_REAR_FIST_SPREAD = 0.16;
 /**
  * A wider base than standing: a fighter's feet sit about shoulder width, which
  * is what lets him bounce without the knees knocking.
@@ -235,30 +252,52 @@ const GUARD_FOOT_SPREAD = 0.17;
 /**
  * The IK bends toward the side this sign names relative to the shoulder→fist
  * line, and a fist raised inboard of its shoulder turns "outward" into "up":
- * this sign is the one that drops the elbows down against the ribs.
+ * this sign is the one that drops the elbows below the fists rather than
+ * lifting them level with them into chicken wings.
  */
 const GUARD_ELBOW_FLARE = 0.6;
 /**
  * Head-on the guard's upper arms run forward from the shoulders toward the
- * camera and draw at this share of their length. At full length a fist raised
- * to the jaw can only be reached by an elbow thrown up and out beside the
- * head (a flex) or folded in across the chest (arms crossed).
+ * camera and draw at this share of their length. The forearm is short against
+ * his head, so with the fists in front of his chin the elbows can only stand a
+ * forearm below and outside them: at this share the elbow lands just there,
+ * out past the shoulder and below it, and each forearm slants in and up to its
+ * fist, the two framing the face as an inverted triangle. Longer, the elbows
+ * fold in under the fists and the forearms stand up parallel; shorter, they
+ * ride up beside the fists.
  */
-const GUARD_UPPER_ARM_SCALE = 0.55;
+const GUARD_UPPER_ARM_SCALE = 0.5;
+/**
+ * The wrists stay straight in every view, so each fist carries on the line of
+ * its forearm, knuckles toward his man: turned onto the line of the whole arm
+ * instead, a fist raised by the face bends back at the wrist and twists out.
+ */
+const GUARD_WRIST_FOLLOW = 1;
 /** The fists lag the body's bounce a little, which is what keeps them loose. */
 const GUARD_FIST_BOUNCE_SHARE = 0.6;
 
 /**
- * Edge-on the lead (far) hand is out in front and the rear hand by the chin,
- * over a stance split fore and aft: the same stance the profile strikes wind
- * up from, so a punch thrown out of the guard does not re-plant the feet.
+ * Edge-on the lead (far) fist is at chin-to-eye height a forearm's length in
+ * front of his face and the rear fist by the chin, over a stance split fore
+ * and aft: the same stance the profile strikes wind up from, so a punch
+ * thrown out of the guard does not re-plant the feet. Held further out, the
+ * lead arm reaches level from the shoulder and the guard reads as a man
+ * reaching for something; closer in, the elbow folds down in front of the ribs.
  */
-const GUARD_SIDE_LEAD_HAND: Pt = pt(0.42, -1.62);
+const GUARD_SIDE_LEAD_HAND: Pt = pt(0.47, -1.62);
 /**
- * The rear (near) arm is posed by its joints: elbow down and a little forward,
- * forearm up to the chin.
+ * The rear (near) arm is posed by its joints: elbow down and forward in front
+ * of the ribs, forearm rising a little back toward his face to a fist at the
+ * jaw. Leaned forward instead, the fist stands clear of the chin and the arm
+ * reads as a raised fist; leaned much further back, the forearm swings the
+ * short way round through his back as the guard drops.
  */
-const GUARD_SIDE_REAR_ARM: ArmAngles = { upper: deg(18), fore: deg(172), foreScale: 1 };
+const GUARD_SIDE_REAR_ARM: ArmAngles = {
+  upper: deg(30),
+  fore: deg(192),
+  foreScale: 1,
+  wristFollow: GUARD_WRIST_FOLLOW,
+};
 /**
  * Where the lead foot stands, and where the rear foot would stand flat: close
  * enough in under the hip that both legs keep a bend at the top of the
@@ -282,7 +321,7 @@ const GUARD_REAR_TOE_FLOOR_X = GUARD_SIDE_REAR_FOOT + TOE_AHEAD_OF_ANKLE;
  * blink on every cycle would be a flutter; and a fighter watching his man
  * holds his eyes open for the few seconds the guard lasts.
  */
-function guardBase(phase: number): CarlPose {
+function guardBase(phase: number): BipedPose {
   const pose = restingPose();
   // A triangle rather than a sine: six samples of a sine step a quarter, a
   // half, a quarter, and the half-steps read as a jolt; a triangle's steps are
@@ -302,15 +341,15 @@ function guardBase(phase: number): CarlPose {
 const GUARD_JACKET_BOUNCE = 0.08;
 
 /** Where a head-on guard fist sits, following the body down through the bounce. */
-function guardFistY(pose: CarlPose): number {
+function guardFistY(pose: BipedPose): number {
   return HEAD_CENTRE_Y + GUARD_FIST_BELOW_HEAD + pose.bob * GUARD_FIST_BOUNCE_SHARE;
 }
 
-export function guardFront(phase: number): CarlPose {
+export function guardFront(phase: number): BipedPose {
   const pose = guardBase(phase);
   const fistY = guardFistY(pose);
   pose.leftHand = pt(-GUARD_LEAD_FIST_SPREAD, fistY);
-  pose.rightHand = pt(GUARD_REAR_FIST_SPREAD, fistY - GUARD_REAR_FIST_RISE);
+  pose.rightHand = pt(GUARD_REAR_FIST_SPREAD, fistY);
   pose.leftFoot = pt(-GUARD_FOOT_SPREAD, 0);
   pose.rightFoot = pt(GUARD_FOOT_SPREAD, 0);
   pose.leftForeshorten = 1;
@@ -318,14 +357,17 @@ export function guardFront(phase: number): CarlPose {
   pose.elbowFlare = GUARD_ELBOW_FLARE;
   pose.leftUpperArmScale = GUARD_UPPER_ARM_SCALE;
   pose.rightUpperArmScale = GUARD_UPPER_ARM_SCALE;
+  pose.leftWristFollow = GUARD_WRIST_FOLLOW;
+  pose.rightWristFollow = GUARD_WRIST_FOLLOW;
   return pose;
 }
 
-export function guardSide(phase: number): CarlPose {
+export function guardSide(phase: number): BipedPose {
   const pose = guardBase(phase);
   const follow = pose.bob * GUARD_FIST_BOUNCE_SHARE;
   pose.leftHand = pt(GUARD_SIDE_LEAD_HAND.x, GUARD_SIDE_LEAD_HAND.y + follow);
   pose.rightArmAngles = GUARD_SIDE_REAR_ARM;
+  pose.leftWristFollow = GUARD_WRIST_FOLLOW;
   pose.leftFoot = pt(GUARD_SIDE_LEAD_FOOT, 0);
   pose.rightFoot = profileFootTarget(
     ankleOverPivot(GUARD_REAR_TOE_FLOOR_X, 'toe', GUARD_REAR_HEEL_LIFT),
@@ -341,31 +383,32 @@ export function guardSide(phase: number): CarlPose {
 }
 
 /** In profile a tucked chin is a real rotation of the head, toward the chest. */
-const GUARD_SIDE_CHIN_TUCK_TILT = deg(8);
+const GUARD_SIDE_CHIN_TUCK_TILT = deg(18);
 
 /**
- * From behind, a guard is read from its outline alone. The fists stay where
- * the head-on guard holds them — in front of his chin, on the far side of him
- * and hidden by his back — and only the elbows show, bent and bowed out past
- * the ribs. Fists raised far enough to show either side of the head read as
- * hands clasped behind it; fists held in at the ribs, as arms hanging.
+ * From behind, a guard is read from its outline alone: the fists are in
+ * front of his chin, hidden by his back, and what shows is the elbows, down
+ * and out past his ribs either side. The fists sit a little lower and closer
+ * than head-on, behind his neck and shoulders — at the jaw they stand clear
+ * past the sides of his neck and read as hands clasped behind it — and the
+ * upper arms draw longer, which carries the elbows out past his flanks.
  */
-const GUARD_BACK_FIST_SPREAD = 0.18;
-const GUARD_BACK_FIST_BELOW_HEAD = HEAD_RY * 1.9;
-/** The elbows bowed out past the ribs, the one part of the guard that shows from behind. */
-const GUARD_BACK_ELBOW_FLARE = 1.6;
+const GUARD_BACK_FIST_DROP = 0.12;
+const GUARD_BACK_FIST_SPREAD = 0.12;
+const GUARD_BACK_UPPER_ARM_SCALE = 0.7;
 
-export function guardBack(phase: number): CarlPose {
+export function guardBack(phase: number): BipedPose {
   const pose = guardFront(phase);
   pose.leftArmBehind = true;
   pose.rightArmBehind = true;
-  const fistY = HEAD_CENTRE_Y + GUARD_BACK_FIST_BELOW_HEAD + pose.bob * GUARD_FIST_BOUNCE_SHARE;
-  pose.leftHand = pt(-GUARD_BACK_FIST_SPREAD, fistY - GUARD_REAR_FIST_RISE);
-  pose.rightHand = pt(GUARD_BACK_FIST_SPREAD, fistY);
-  pose.elbowFlare = GUARD_BACK_ELBOW_FLARE;
-  // From behind the fists are hidden and only the elbows show, so the upper arms draw whole.
-  pose.leftUpperArmScale = FULL_UPPER_ARM;
-  pose.rightUpperArmScale = FULL_UPPER_ARM;
+  pose.leftHand = pt(-GUARD_BACK_FIST_SPREAD, pose.leftHand.y + GUARD_BACK_FIST_DROP);
+  pose.rightHand = pt(GUARD_BACK_FIST_SPREAD, pose.rightHand.y + GUARD_BACK_FIST_DROP);
+  pose.leftUpperArmScale = GUARD_BACK_UPPER_ARM_SCALE;
+  pose.rightUpperArmScale = GUARD_BACK_UPPER_ARM_SCALE;
+  // Stood straight up the forearm, the hidden fists' knuckles would rise
+  // over his shoulders; at the wrist's default hold they lie behind his back.
+  pose.leftWristFollow = undefined;
+  pose.rightWristFollow = undefined;
   return pose;
 }
 
@@ -385,7 +428,7 @@ function solvedArm(arm: BoneChain): SolvedArm {
   };
 }
 
-function setSolvedArm(pose: CarlPose, side: BodySide, arm: SolvedArm): void {
+function setSolvedArm(pose: BipedPose, side: BodySide, arm: SolvedArm): void {
   setArmAngles(pose, side, arm.angles, arm.upperScale);
 }
 
@@ -395,7 +438,7 @@ function setSolvedArm(pose: CarlPose, side: BodySide, arm: SolvedArm): void {
  * forearm passes level through the middle of the drop — pointing, forward in
  * profile and across the belly head-on.
  */
-const DROP_UPPER_LEAD = 2.4;
+const DROP_UPPER_LEAD = 2;
 const DROP_FORE_DELAY = 0.1;
 const DROP_FORE_RATE = 1.6;
 /**
@@ -513,12 +556,12 @@ function steppedFoot(
  * when the guard runs out, so the hands never jump from the jaw to the hips.
  */
 function guardDrop(
-  guard: CarlPose,
-  idle: CarlPose,
+  guard: BipedPose,
+  idle: BipedPose,
   t: number,
   view: ViewSpec,
   steps: DropSteps,
-): CarlPose {
+): BipedPose {
   const arms = easeInOut(clamp01(t * DROP_ARMS_LEAD));
   const body = easeInOut(clamp01((t - DROP_RISE_START) / (1 - DROP_RISE_START)));
   const from = buildSkeleton(guard, view);
@@ -577,23 +620,23 @@ const DROP_STEPS: Readonly<Record<CardinalView, DropSteps>> = {
  * on the bare-handed ones' feet.
  */
 export function guardDropBetween(
-  guard: CarlPose,
-  idle: CarlPose,
+  guard: BipedPose,
+  idle: BipedPose,
   t: number,
   view: CardinalView,
-): CarlPose {
+): BipedPose {
   return guardDrop(guard, idle, t, VIEWS[view], DROP_STEPS[view]);
 }
 
-export function guardDropFront(t: number): CarlPose {
+export function guardDropFront(t: number): BipedPose {
   return guardDropBetween(guardFront(0), idleFront(0), t, 'front');
 }
 
-export function guardDropSide(t: number): CarlPose {
+export function guardDropSide(t: number): BipedPose {
   return guardDropBetween(guardSide(0), idleSide(0), t, 'side');
 }
 
-export function guardDropBack(t: number): CarlPose {
+export function guardDropBack(t: number): BipedPose {
   return guardDropBetween(guardBack(0), idleBack(0), t, 'back');
 }
 
@@ -655,7 +698,7 @@ const FOLD_PASS_ANGLE = deg(90);
 const FOLD_UPPER_TUCK = deg(2);
 
 /** The seam pose every fidget leaves from and returns to. */
-function seamFront(t: number): CarlPose {
+function seamFront(t: number): BipedPose {
   const pose = idleFront(0);
   pose.sway += FIDGET_WEIGHT_DRIFT * hump(t);
   return pose;
@@ -668,7 +711,7 @@ function seamFront(t: number): CarlPose {
  */
 const FIDGET_WEIGHT_DRIFT = 0.012;
 
-function seamSide(t: number): CarlPose {
+function seamSide(t: number): BipedPose {
   const pose = idleSide(0);
   pose.sway += FIDGET_WEIGHT_DRIFT * hump(t);
   return pose;
@@ -776,7 +819,7 @@ function ceilingBeat(t: number): CeilingBeat {
   return { lift, build, shake, mouthOpen, mouthWidth };
 }
 
-function openHands(pose: CarlPose, amount: number): void {
+function openHands(pose: BipedPose, amount: number): void {
   pose.rightFist = lerp(pose.rightFist, 0, amount);
   pose.leftFist = lerp(pose.leftFist, 0, amount);
   if (amount < CEILING_HANDS_OPEN_AT) return;
@@ -795,7 +838,7 @@ function shrugArm(side: number, amount: number, outAngle: number): ArmAngles {
   };
 }
 
-export function fidgetCeilingFront(t: number): CarlPose {
+export function fidgetCeilingFront(t: number): BipedPose {
   const pose = seamFront(t);
   const beat = ceilingBeat(t);
   pose.chinLift = beat.lift * CEILING_CHIN_LIFT;
@@ -812,7 +855,7 @@ export function fidgetCeilingFront(t: number): CarlPose {
   return pose;
 }
 
-export function fidgetCeilingSide(t: number): CarlPose {
+export function fidgetCeilingSide(t: number): BipedPose {
   const pose = seamSide(t);
   const beat = ceilingBeat(t);
   pose.headTilt = CEILING_SIDE_TILT * beat.lift - CEILING_HOLD_ROLL_DRIFT * beat.build;
@@ -848,7 +891,7 @@ const NECK_ROLL_TWIST = 0.12;
 /** The shoulders counter-rotate twice per roll: once as the head drops, once as it lifts. */
 const NECK_ROLL_TWISTS_PER_SWEEP = 2;
 
-export function fidgetNeckRoll(t: number): CarlPose {
+export function fidgetNeckRoll(t: number): BipedPose {
   const pose = seamFront(t);
   const amount = plateau(t, NECK_ROLL_BEATS);
   const sweep = clamp01(
@@ -882,7 +925,7 @@ const FIST_LOOK_TUCK = -0.55;
 const FIST_LOOK_GAZE = -0.8;
 const FIST_BROW = 0.9;
 
-export function fidgetFist(t: number): CarlPose {
+export function fidgetFist(t: number): BipedPose {
   const pose = seamFront(t);
   const raised = plateau(t, FIST_RAISE_BEATS);
   const looking = plateau(t, FIST_LOOK_BEATS);
@@ -937,7 +980,7 @@ const KNUCKLES_CRACK_TWIST = 0.08;
 const KNUCKLES_CRACK_ELBOWS = deg(9);
 const KNUCKLES_PEEL_EASE = 1.8;
 
-export function fidgetKnuckles(t: number): CarlPose {
+export function fidgetKnuckles(t: number): BipedPose {
   const pose = seamFront(t);
   const together = plateau(t, KNUCKLES_BEATS);
   const crack = pulse(
@@ -1002,7 +1045,7 @@ const GLANCE_LEAN = deg(3);
 /** Looking back over his shoulder he puts his weight on the foot he turns from. */
 const GLANCE_WEIGHT_SHIFT = 0.03;
 
-export function fidgetGlance(t: number): CarlPose {
+export function fidgetGlance(t: number): BipedPose {
   const pose = seamFront(t);
   const head = plateau(t, GLANCE_HEAD_BEATS);
   const shoulders = plateau(t, GLANCE_SHOULDER_BEATS);
@@ -1027,7 +1070,7 @@ export function fidgetGlance(t: number): CarlPose {
  * Only the gestures that read from behind are given one — a fist raised in
  * front of his chest, or two hands meeting there, are hidden by his back.
  */
-function fromBehind(pose: CarlPose): CarlPose {
+function fromBehind(pose: BipedPose): BipedPose {
   return {
     ...pose,
     headTurn: -pose.headTurn,
@@ -1036,15 +1079,15 @@ function fromBehind(pose: CarlPose): CarlPose {
   };
 }
 
-export function fidgetCeilingBack(t: number): CarlPose {
+export function fidgetCeilingBack(t: number): BipedPose {
   return fromBehind(fidgetCeilingFront(t));
 }
 
-export function fidgetNeckRollBack(t: number): CarlPose {
+export function fidgetNeckRollBack(t: number): BipedPose {
   return fromBehind(fidgetNeckRoll(t));
 }
 
-export function fidgetGlanceBack(t: number): CarlPose {
+export function fidgetGlanceBack(t: number): BipedPose {
   return fromBehind(fidgetGlance(t));
 }
 
@@ -1088,7 +1131,7 @@ const NECK_SIDE_DROP = deg(40);
 const NECK_SIDE_BACK = deg(-14);
 const NECK_SIDE_TURN = 0.35;
 
-export function fidgetNeckRollSide(t: number): CarlPose {
+export function fidgetNeckRollSide(t: number): BipedPose {
   const pose = seamSide(t);
   const amount = plateau(t, NECK_ROLL_BEATS);
   const sweep = clamp01(
@@ -1114,7 +1157,7 @@ export function fidgetNeckRollSide(t: number): CarlPose {
 const FIST_SIDE_ARM: ArmAngles = { upper: deg(28), fore: deg(168), foreScale: 1 };
 const FIST_SIDE_BOW = deg(22);
 
-export function fidgetFistSide(t: number): CarlPose {
+export function fidgetFistSide(t: number): BipedPose {
   const pose = seamSide(t);
   const raised = plateau(t, FIST_RAISE_BEATS);
   const looking = plateau(t, FIST_LOOK_BEATS);
@@ -1144,7 +1187,7 @@ const KNUCKLES_SIDE_BOW = deg(14);
 
 const KNUCKLES_SIDE_RISE_EASE = 0.8;
 
-export function fidgetKnucklesSide(t: number): CarlPose {
+export function fidgetKnucklesSide(t: number): BipedPose {
   const pose = seamSide(t);
   const together = plateau(t, KNUCKLES_BEATS);
   const crack = pulse(
@@ -1182,7 +1225,7 @@ const GLANCE_SIDE_TWIST = 1;
 const GLANCE_SIDE_LEAN = deg(-4);
 const GLANCE_SIDE_SWAY = -0.02;
 
-export function fidgetGlanceSide(t: number): CarlPose {
+export function fidgetGlanceSide(t: number): BipedPose {
   const pose = seamSide(t);
   const head = plateau(t, GLANCE_HEAD_BEATS);
   const shoulders = plateau(t, GLANCE_SHOULDER_BEATS);

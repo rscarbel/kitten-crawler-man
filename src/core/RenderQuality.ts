@@ -46,7 +46,6 @@ import {
   varietyTier,
   type VarietyTier,
 } from './varietyTier';
-import { flushFigureFrameCache } from '../sprites/figure/figureFrameCache';
 import { onCanvasRecovery } from './canvasRecovery';
 
 const MS_PER_SECOND = 1000;
@@ -170,8 +169,6 @@ interface RenderQualityEnvironment {
   readonly documentHidden: () => boolean;
   readonly deviceMemoryScale: () => number;
   readonly sharpRenderScale: () => number;
-  /** Called after the render scale moved. */
-  readonly onRenderScaleChanged: () => void;
   /** Registers `handler` to run after every canvas recovery, whatever its cause. */
   readonly subscribeCanvasRecovery: (handler: () => void) => void;
 }
@@ -576,9 +573,6 @@ export class RenderQualityController {
     if (target === null) return;
     if (target.renderScale === scale) return;
     target.setRenderScale(scale);
-    // Baked cells are density-specific; keeping them would leave every cached
-    // figure resampled for the rest of the session.
-    this.env.onRenderScaleChanged();
   }
 }
 
@@ -615,7 +609,6 @@ const browserEnvironment: RenderQualityEnvironment = {
   documentHidden: () => document.hidden,
   deviceMemoryScale: deviceMemoryBudgetScale,
   sharpRenderScale,
-  onRenderScaleChanged: flushFigureFrameCache,
   subscribeCanvasRecovery: (handler) => onCanvasRecovery(handler),
 };
 

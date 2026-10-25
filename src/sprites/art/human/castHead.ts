@@ -1,30 +1,30 @@
 /**
- * Hair and facial hair for the people built on Carl's rig.
+ * Hair and facial hair for the people built on the biped rig.
  *
- * Carl's own tufted crop is his and nobody else's: a look painted on his rig
+ * Dave's tufted crop is his and nobody else's: a look painted on the rig
  * hides it (the `hair` feature its outfit hides) and wears one of these
  * styles instead, so no townsperson shares his head at the 32 px tile. Each
  * style is painted as the rig's `over` attachment in the head's own frame —
  * translated to the solved head centre and turned with it — so it rides every
  * bob, nod and turn of the head it sits on.
  *
- * Head-local units, as `carl/head.ts` paints in: origin at the eye line, +Y
+ * Head-local units, as `biped/head.ts` paints in: origin at the eye line, +Y
  * down, x a fraction of `HEAD_RX` head-on and of `HEAD_DEPTH` edge-on (the
  * face toward +X), y a fraction of `HEAD_RY`. The skull's crown is at -1.2,
  * the brow near -0.3, the mouth at 0.62 and the chin near 1.2.
  */
 
-import { headAngle, pitchedHairY } from '../carl/head';
-import { crease, shadeForm } from '../carl/paint';
-import { type Ramp } from '../carl/palette';
-import { HEAD_DEPTH, HEAD_RX, HEAD_RY } from '../carl/proportions';
-import { type CarlPose, type Skeleton, type ViewSpec } from '../carl/rig';
-import { rgba, type Pt } from '../carlArt';
+import { headAngle, pitchedHairY } from '../biped/head';
+import { crease, shadeForm } from '../biped/paint';
+import { type Ramp } from '../biped/palette';
+import { HEAD_DEPTH, HEAD_RX, HEAD_RY } from '../biped/proportions';
+import { type BipedPose, type Skeleton, type ViewSpec } from '../biped/rig';
+import { rgba, type Pt } from '../bipedArt';
 import { withClip } from '../softShade';
 
 type Ctx = CanvasRenderingContext2D;
 
-/** Every hairstyle a figure on Carl's rig can wear; none of them is his crop. */
+/** Every hairstyle a figure on the biped rig can wear; none of them is Dave's crop. */
 export type HairStyleKind =
   'bald' | 'receding' | 'sidePart' | 'long' | 'bun' | 'ponytail' | 'curly' | 'headscarf';
 
@@ -40,7 +40,7 @@ export interface CastHeadSpec {
 
 // ── Shape tables ─────────────────────────────────────────────────────────────
 
-type PathCommand =
+export type PathCommand =
   | readonly ['M', number, number]
   | readonly ['L', number, number]
   | readonly ['Q', number, number, number, number];
@@ -53,14 +53,14 @@ interface Lobe {
 }
 
 /** A groove combed into a mass, as a quadratic: from, control, to. */
-type Strand = readonly [number, number, number, number, number, number];
+export type Strand = readonly [number, number, number, number, number, number];
 
 /**
  * One closed mass of hair: an outline, round lobes unioned with it, and the
  * grooves combed into it. A smooth shaded shell on a head is a helmet; the
  * grooves running the way the hair lies are what make it hair.
  */
-interface HairMass {
+export interface HairMass {
   readonly path: readonly PathCommand[];
   readonly lobes?: readonly Lobe[];
   readonly strands?: readonly Strand[];
@@ -443,7 +443,7 @@ const FACIAL_MASSES: Readonly<Record<Exclude<FacialHairKind, 'none'>, Omit<ViewM
 
 // ── Painting ─────────────────────────────────────────────────────────────────
 
-/** Hair takes the ramp a step darker than its swatch, the way Carl's own crop does. */
+/** Hair takes the ramp a step darker than its swatch, the way Dave's crop does. */
 function hairTone(hair: Ramp): Ramp {
   return {
     deep: hair.deep,
@@ -467,9 +467,14 @@ const SHADE_HALF_WIDTH_SHARE = 1.1;
 const STRAND_WIDTH = 0.014;
 const STRAND_OPACITY = 0.8;
 
-interface Units {
+export interface Units {
   readonly x: number;
   readonly y: number;
+}
+
+/** Head-local units in a view: x a fraction of the head's half-width head-on and of its depth edge-on, y of its half-height. */
+export function headUnits(profile: boolean): Units {
+  return { x: profile ? HEAD_DEPTH : HEAD_RX, y: HEAD_RY };
 }
 
 /** Signed area under the y-down convention: positive is clockwise on screen. */
@@ -533,7 +538,21 @@ function massBounds(mass: HairMass, units: Units): { top: number; bottom: number
   return { top: Math.min(...ys), bottom: Math.max(...ys) };
 }
 
-function paintMass(ctx: Ctx, mass: HairMass, units: Units, ramp: Ramp): void {
+/**
+ * Paints one mass of hair, shaded down its own height, combed and edged, in
+ * head-local `units`.
+ *
+ * @param edge how strongly the mass's own outline is drawn: a head of hair or
+ *   a full beard has an edge where it stands off the skin; stubble has none,
+ *   and an inked edge round it draws a mask on the face.
+ */
+export function paintHairMass(
+  ctx: Ctx,
+  mass: HairMass,
+  units: Units,
+  ramp: Ramp,
+  edge: number = EDGE_ALPHA,
+): void {
   const { top, bottom } = massBounds(mass, units);
   const trace = (): void => traceMass(ctx, mass, units);
   shadeForm(ctx, trace, { from: { x: 0, y: top }, to: { x: 0, y: bottom } }, ramp, {
@@ -561,8 +580,9 @@ function paintMass(ctx: Ctx, mass: HairMass, units: Units, ramp: Ramp): void {
       ),
     );
   }
+  if (edge <= 0) return;
   trace();
-  ctx.strokeStyle = rgba(ramp.deep, EDGE_ALPHA);
+  ctx.strokeStyle = rgba(ramp.deep, edge);
   ctx.lineWidth = EDGE_WIDTH;
   ctx.lineJoin = 'round';
   ctx.stroke();
@@ -589,10 +609,10 @@ export function paintCastHead(
   ctx: Ctx,
   skeleton: Skeleton,
   view: ViewSpec,
-  pose: CarlPose,
+  pose: BipedPose,
   spec: CastHeadSpec,
 ): void {
-  const units: Units = { x: view.profile ? HEAD_DEPTH : HEAD_RX, y: HEAD_RY };
+  const units = headUnits(view.profile);
   ctx.save();
   ctx.translate(skeleton.headCentre.x, skeleton.headCentre.y);
   ctx.rotate(headAngle(pose));
@@ -600,13 +620,13 @@ export function paintCastHead(
   if (!view.showsBack && spec.facialHair !== 'none') {
     const tone = hairTone(spec.hair);
     for (const mass of viewMasses({ ...FACIAL_MASSES[spec.facialHair], back: [] }, view)) {
-      paintMass(ctx, mass, units, tone);
+      paintHairMass(ctx, mass, units, tone);
     }
   }
   if (spec.hairStyle !== 'bald') {
     const ramp = spec.hairStyle === 'headscarf' ? spec.scarf : hairTone(spec.hair);
     for (const mass of viewMasses(STYLE_MASSES[spec.hairStyle], view)) {
-      paintMass(ctx, mass, units, ramp);
+      paintHairMass(ctx, mass, units, ramp);
     }
   }
   ctx.restore();

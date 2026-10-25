@@ -4,7 +4,8 @@
  * them, the two coloured lights and the teaching strip's footlight lamps.
  *
  * Every colour here has a shape or pattern twin, so the hall still reads in
- * greyscale: Carl's blue is solid with brass chevrons, Donut's red is dashed
+ * greyscale: the human crawler's blue is solid with brass chevrons, the cat
+ * crawler's red is dashed
  * and striped with bone, the twin star is split down the middle, and the
  * encore is spotted gold ringed with bulbs.
  *
@@ -50,7 +51,7 @@ type Ctx = CanvasRenderingContext2D;
 
 // ── Types the system hands the art ──────────────────────────────────────────
 
-/** Whose light: Carl's limelight throws blue, Donut's throws red. */
+/** Whose light: the human's limelight throws blue, the cat's throws red. */
 export type LightColour = 'blue' | 'red';
 
 /** Which floor diagonal a splitter's pane stands on, as the tile is seen from above: `/` or `\`. */
@@ -263,7 +264,7 @@ function paintChevrons(
   }
 }
 
-/** Bone stripes across Donut's star: bands this share of the outer radius, stripe and gap alike. */
+/** Bone stripes across the cat's star: bands this share of the outer radius, stripe and gap alike. */
 const STRIPE_BAND_SHARE = 0.3;
 /** The stripes start this share of a band below the top point, so a stripe crosses the star's waist. */
 const STRIPE_OFFSET_SHARE = 0.5;
@@ -784,8 +785,8 @@ function paintSputter(
 }
 
 /**
- * A star set in a wall tile. Blue with brass chevrons wants Carl's light, red
- * with bone stripes wants Donut's, the twin (split down the middle, one half
+ * A star set in a wall tile. Blue with brass chevrons wants the human's light,
+ * red with bone stripes wants the cat's, the twin (split down the middle, one half
  * of each) wants both at once, and the spotted gold encore wants either. Lit,
  * it blazes with rays; under the wrong light its body goes grey — its
  * pattern keeps the kind — and it smokes and throws sparks, so light it
@@ -1552,10 +1553,10 @@ const LAMP_BAND_WIDTH = 0.05;
 const LAMP_SHADOW_RADIUS_X = 0.3;
 const LAMP_SHADOW_RADIUS_Y = 0.09;
 const LAMP_SHADOW_ALPHA = 0.55;
-/** The lamp's hood stripes (Donut's) and chevron (Carl's), as shares of the tile. */
+/** The lamp's hood stripes (the cat's) and chevron (the human's), as shares of the tile. */
 const LAMP_STRIPE_PITCH = 0.08;
 const LAMP_CHEVRON_WIDTH = 0.04;
-/** Carl's chevron on the hood: its arms' tops and point, as shares down the body, and its reach as a share of the half-width. */
+/** The human's chevron on the hood: its arms' tops and point, as shares down the body, and its reach as a share of the half-width. */
 const LAMP_CHEVRON_TOP = 0.25;
 const LAMP_CHEVRON_POINT = 0.7;
 const LAMP_CHEVRON_REACH = 0.7;
@@ -1576,8 +1577,8 @@ function lampLensCentre(
 
 /**
  * A footlight lamp: a squat hooded lamp on two feet, painted in its owner's
- * colours with that owner's pattern — Carl's blue with a brass chevron,
- * Donut's red with bone stripes — and its lens aimed down the strip. Aimed
+ * colours with that owner's pattern — the human's blue with a brass chevron,
+ * the cat's red with bone stripes — and its lens aimed down the strip. Aimed
  * north, away from the viewer, the lens shows as a lit sliver on its top.
  */
 function paintFootlightLamp(
@@ -1873,7 +1874,7 @@ const BEAM_BODY_STOPS: ReadonlyArray<{
   { at: 0.78, part: 'edge', alpha: 0.75 },
   { at: 1, part: 'edge', alpha: 0 },
 ];
-/** Donut's red is laid as a dim underglow, the dashes carrying the colour. */
+/** The cat's red is laid as a dim underglow, the dashes carrying the colour. */
 const RED_UNDERGLOW_ALPHA = 0.35;
 
 function paintBeamBody(
@@ -1904,7 +1905,7 @@ function paintBeamBody(
   else ctx.fillRect(originX, centre - half, size, half * 2);
 }
 
-/** Carl's light only ever shares a tile from the `before` side, Donut's from the `after` side. */
+/** The human's light only ever shares a tile from the `before` side, the cat's from the `after` side. */
 const LANES_BY_COLOUR: Readonly<Record<LightColour, ReadonlyArray<BeamLane>>> = {
   blue: ['centre', 'before'],
   red: ['centre', 'after'],
@@ -2071,8 +2072,8 @@ function paintRun(
 
 /**
  * One tile of coloured light: every run of light across it, blue and red.
- * Carl's blue is a solid band with a gilt spine and brass glints sliding
- * along it; Donut's red is a row of dashes marching the way the light goes.
+ * The human's blue is a solid band with a gilt spine and brass glints sliding
+ * along it; the cat's red is a row of dashes marching the way the light goes.
  * Where both run the same way through a tile they lie side by side, and where
  * they cross each is drawn whole, red over blue. A splitter's branches are
  * ordinary runs, drawn at full strength. A partial run stops at the face of

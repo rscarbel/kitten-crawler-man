@@ -11,7 +11,7 @@
  * what survive, so those are drawn heavier there.
  */
 
-import { lerp, type Pt } from '../carlArt';
+import { lerp, type Pt } from '../bipedArt';
 import {
   type Ctx,
   type FormShading,

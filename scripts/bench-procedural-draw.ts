@@ -59,10 +59,16 @@ import {
   restPose as mongoRestPose,
 } from '../src/sprites/art/mongoArt.js';
 import { drawBallRoll } from '../src/sprites/art/ballOfSwineArt.js';
-import { drawCarlFront } from '../src/sprites/art/carl/figure.js';
-import { restingPose as carlRestingPose } from '../src/sprites/art/carl/rig.js';
+import { drawBipedFront } from '../src/sprites/art/biped/figure.js';
+import { playerCharacter } from '../src/characters/characters.js';
+import { restingPose as humanRestingPose } from '../src/sprites/art/biped/rig.js';
 import { restPose as catRestPose } from '../src/sprites/art/catArt.js';
-import { CAT_ROWS, catGarmentContext, paintCatPose } from '../src/sprites/art/catFigure.js';
+import {
+  CAT_ROWS,
+  PLAYER_CAT_LOOK,
+  catGarmentContext,
+  paintCatPose,
+} from '../src/sprites/art/catFigure.js';
 import { BARE_CAT_OUTFIT, dressCat } from '../src/sprites/garments/cat/catDressing.js';
 import {
   MANTID_BOSS_BUILD,
@@ -184,7 +190,7 @@ function figureSubject(def: FigureDef, state: string): Subject {
 const GROUND_FRACTION = 0.8;
 
 const knightPose = knightRestingPose();
-const carlPose = carlRestingPose();
+const humanPose = humanRestingPose();
 const catPose = catRestPose();
 const catIdleRow = CAT_ROWS.find((row) => row.name === 'idle') ?? CAT_ROWS[0];
 const ratKinPose = ratKinRestingPose();
@@ -246,7 +252,8 @@ const SUBJECTS: readonly Subject[] = [
   {
     name: 'human',
     frameSize: 192,
-    paint: (ctx) => drawCarlFront(asGameContext(ctx), carlPose),
+    paint: (ctx) =>
+      drawBipedFront(asGameContext(ctx), humanPose, { look: playerCharacter('human').look }),
   },
   {
     name: 'cat',
@@ -254,6 +261,7 @@ const SUBJECTS: readonly Subject[] = [
     paint: (ctx) =>
       paintCatPose(
         asGameContext(ctx),
+        PLAYER_CAT_LOOK,
         catIdleRow,
         catPose,
         dressCat(BARE_CAT_OUTFIT, catGarmentContext(catIdleRow, 0, catPose)),

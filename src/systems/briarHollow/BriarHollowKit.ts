@@ -565,7 +565,7 @@ export class BriarHollowKit {
 
   /**
    * Every bang that may be coming: each burning stick, which can only go off
-   * where it lies; a stick in Carl's hand, which could land anywhere he can
+   * where it lies; a stick in the human crawler's hand, which could land anywhere he can
    * throw it; and a Smush winding up, which lands round his feet.
    */
   private blastThreats(): BlastThreat[] {
@@ -1532,7 +1532,7 @@ const NO_CAMERA_OFFSET = { x: 0, y: 0 } as const;
 /** Posted as the victory fanfare ends, pointing the party at the Mayor, who gives the reward. */
 const VICTORY_REWARD_NOTICE = 'Speak with Mayor Bramblewick to claim your reward';
 
-/** How far a stick still in Carl's hand could end up blasting: a full throw plus the blast. */
+/** How far a stick still in the human crawler's hand could end up blasting: a full throw plus the blast. */
 const STICK_IN_HAND_REACH_TILES = 12;
 /** How far round his feet the widest Smush reaches: a full-power outer ring. */
 const SMUSH_REACH_TILES = 9;

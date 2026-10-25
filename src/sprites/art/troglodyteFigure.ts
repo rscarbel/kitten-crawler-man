@@ -63,7 +63,7 @@ export const TILE_SCALE = 64;
 const TROG_SCALE = 0.78;
 /**
  * Where the ground line sits inside the tile, in pixels of the tile the art is
- * drawn at. Near the bottom, the way Carl's sheet places his: a standing
+ * drawn at. Near the bottom, the way the human crawler's sheet places his: a standing
  * figure's feet belong on the floor of its tile, not in the middle of it.
  */
 export const GROUND_OFFSET_PX = 58;

@@ -6,7 +6,8 @@
 import type { IllustrationRect } from './illustration';
 import { getSpriteDefByKey } from '../../../core/SpriteLoader';
 import { drawSprite } from '../../../core/SpriteRenderer';
-import { BUILD_ROWS, HUMAN_FIGURE, humanRowOf } from '../../../sprites/art/humanFigure';
+import { BUILD_ROWS, humanRowOf } from '../../../sprites/art/humanFigure';
+import { emptyHandedHumanFigure } from '../../../sprites/humanSprite';
 import { drawFigureCached } from '../../../sprites/figure/figureFrameCache';
 import {
   IRON,
@@ -122,7 +123,15 @@ function drawWorker(
   const frameCount = humanRowOf(WORKER_ROW)?.frameCount ?? 1;
   const workFrame = Math.floor(frame / WORK_TICKS_PER_FRAME) % frameCount;
   const worker = standingTile(rect, x);
-  drawFigureCached(ctx, HUMAN_FIGURE, WORKER_ROW, workFrame, worker.x, worker.y, STAGE_TILE);
+  drawFigureCached(
+    ctx,
+    emptyHandedHumanFigure(),
+    WORKER_ROW,
+    workFrame,
+    worker.x,
+    worker.y,
+    STAGE_TILE,
+  );
 }
 
 function drawLabel(

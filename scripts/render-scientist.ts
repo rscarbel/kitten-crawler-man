@@ -7,7 +7,7 @@
  *   npx tsx scripts/render-scientist.ts --row=walk_side --scale=4
  *   npx tsx scripts/render-scientist.ts --part=head --scale=8
  *   npx tsx scripts/render-scientist.ts --mode=strip32 [--row=run]
- *   npx tsx scripts/render-scientist.ts --mode=lineup     beside Carl at the tile
+ *   npx tsx scripts/render-scientist.ts --mode=lineup     beside the human at the tile
  *   npx tsx scripts/render-scientist.ts --mode=blind      unlabelled, for a blind reviewer
  *   npx tsx scripts/render-scientist.ts --mode=trails --row=walk_side
  *
@@ -227,10 +227,10 @@ function renderStrip32(states: readonly string[], labels: boolean): Canvas {
   return canvas;
 }
 
-// ── lineup: beside Carl ──────────────────────────────────────────────────────
+// ── lineup: beside the human crawler ─────────────────────────────────────────
 
 const LINEUP_SCALE = 3;
-const CARL_STATES: readonly string[] = ['idle', 'idle_side', 'idle_away'];
+const HUMAN_STATES: readonly string[] = ['idle', 'idle_side', 'idle_away'];
 const SCIENTIST_LINEUP: readonly string[] = [
   'idle',
   'idle_side',
@@ -242,7 +242,7 @@ const SCIENTIST_LINEUP: readonly string[] = [
 /** Each figure stands on one ground line, its tile bottoms aligned, so the heights compare directly. */
 function renderLineup(): Canvas {
   const entries = [
-    ...CARL_STATES.map((state) => ({ def: HUMAN_FIGURE, state })),
+    ...HUMAN_STATES.map((state) => ({ def: HUMAN_FIGURE, state })),
     ...SCIENTIST_LINEUP.map((state) => ({ def: SCIENTIST_FIGURE, state })),
   ];
   const tilePx = TILE_SIZE * LINEUP_SCALE;

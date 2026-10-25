@@ -1,6 +1,6 @@
 /**
- * Carl lighting a stick of goblin dynamite with his Zippo and lobbing it
- * overhand, in three row families per view:
+ * The human crawler lighting a stick of goblin dynamite with his Zippo and
+ * lobbing it overhand, in three row families per view:
  *
  * - **light** — the Zippo comes up in the left fist beside the stick in the
  *   right, the lid flips, it catches, the fuse is touched to the flame and
@@ -28,24 +28,24 @@
  * arm the near one.
  */
 
-import { offset, pt } from '../carl/geometry';
-import { type HeldProp } from '../carl/props';
-import { burningDynamite, type DynamiteVariant } from '../carl/props/dynamite';
-import { type ZippoVariant } from '../carl/props/zippo';
-import { handGrip } from '../carl/limbs';
+import { offset, pt } from '../biped/geometry';
+import { type HeldProp } from '../biped/props';
+import { burningDynamite, type DynamiteVariant } from '../biped/props/dynamite';
+import { type ZippoVariant } from '../biped/props/zippo';
+import { handGrip } from '../biped/limbs';
 import {
   type ArmAngles,
   buildSkeleton,
-  type CarlPose,
+  type BipedPose,
   FULL_UPPER_ARM,
   HAFT_IN_PLANE,
   type HandShape,
   poseAsDrawn,
   setArmAngles,
   VIEWS,
-} from '../carl/rig';
+} from '../biped/rig';
 import { type CardinalView } from '../../facingView';
-import { deg, type Pt } from '../carlArt';
+import { deg, type Pt } from '../bipedArt';
 import {
   anglesThrough,
   ankleOverPivot,
@@ -164,7 +164,7 @@ interface ThrowKey {
 
 // ── Shared pose building ─────────────────────────────────────────────────────
 
-const IDLE_OF: Record<CardinalView, () => CarlPose> = {
+const IDLE_OF: Record<CardinalView, () => BipedPose> = {
   front: () => idleFront(0),
   side: () => idleSide(0),
   back: () => idleBack(0),
@@ -185,7 +185,7 @@ function keyedAngles(key: Exclude<ArmKey, { kind: 'idle' }>, shoulder: Pt): ArmA
   }
 }
 
-function placeArm(pose: CarlPose, view: CardinalView, side: 'left' | 'right', key: ArmKey): void {
+function placeArm(pose: BipedPose, view: CardinalView, side: 'left' | 'right', key: ArmKey): void {
   if (key.kind === 'idle') return;
   const skeleton = buildSkeleton(pose, VIEWS[view]);
   const shoulder = side === 'left' ? skeleton.leftArm.root : skeleton.rightArm.root;
@@ -214,7 +214,12 @@ function placeArm(pose: CarlPose, view: CardinalView, side: 'left' | 'right', ke
 /** Under this lift a foot counts as on the floor. */
 const GROUNDED_LIFT = 1e-3;
 
-function placeFoot(pose: CarlPose, view: CardinalView, side: 'left' | 'right', key: FootKey): void {
+function placeFoot(
+  pose: BipedPose,
+  view: CardinalView,
+  side: 'left' | 'right',
+  key: FootKey,
+): void {
   const lift = key.lift ?? 0;
   const pitch = deg(key.pitch ?? 0);
   const grounded = lift < GROUNDED_LIFT;
@@ -300,7 +305,7 @@ function handShapeHolding(holding: boolean): HandShape {
 /** A hand that has just let go stays open, fingers spread off the release. */
 const OPEN_HAND_FIST = 0;
 
-function poseFromKey(view: CardinalView, key: ThrowKey, previous: ThrowKey | null): CarlPose {
+function poseFromKey(view: CardinalView, key: ThrowKey, previous: ThrowKey | null): BipedPose {
   const pose = IDLE_OF[view]();
   pose.crouch = key.crouch;
   pose.sway = key.sway;
@@ -363,7 +368,7 @@ const EXPLOSIVE_HANDLE: HandleRadius = 'thick';
  * orientation. A mirrored view reflects both the fist and the turn, so the
  * angle is found on the drawn skeleton and reflected back.
  */
-function explosiveHaftAngle(pose: CarlPose, view: CardinalView, stickAngle: number): number {
+function explosiveHaftAngle(pose: BipedPose, view: CardinalView, stickAngle: number): number {
   const spec = VIEWS[view];
   const drawn = buildSkeleton(poseAsDrawn(pose, spec), spec);
   const drawnArm = spec.mirrored ? drawn.leftArm : drawn.rightArm;
@@ -376,7 +381,7 @@ function keyAt(keys: readonly ThrowKey[], frame: number): ThrowKey {
   return keys[Math.min(keys.length - 1, Math.max(0, frame))];
 }
 
-function poseAt(view: CardinalView, keys: readonly ThrowKey[], frame: number): CarlPose {
+function poseAt(view: CardinalView, keys: readonly ThrowKey[], frame: number): BipedPose {
   const previous = frame > 0 ? keyAt(keys, frame - 1) : null;
   return poseFromKey(view, keyAt(keys, frame), previous);
 }
@@ -406,7 +411,7 @@ function idleKey(stick: DynamiteVariant | null): ThrowKey {
 
 /**
  * Carried at his side the stick hangs straight down out of the fist, along
- * the outside of his thigh: held level it lies along the boxers' waistband
+ * the outside of his thigh: held level it lies along the trousers' waistband
  * and reads as a red belt, and tipped in toward his middle it crosses his
  * groin.
  */
@@ -1215,16 +1220,16 @@ const COCKED: Record<CardinalView, ThrowKey> = {
   back: BACK_COCKED,
 };
 
-export function dynamiteLight(view: CardinalView, frame: number): CarlPose {
+export function dynamiteLight(view: CardinalView, frame: number): BipedPose {
   return poseAt(view, LIGHT_KEYS[view], frame);
 }
 
-export function dynamiteHold(view: CardinalView, frame: number): CarlPose {
+export function dynamiteHold(view: CardinalView, frame: number): BipedPose {
   const previous = holdKey(COCKED[view], frame - 1);
   return poseFromKey(view, holdKey(COCKED[view], frame), previous);
 }
 
-export function dynamiteThrow(view: CardinalView, frame: number): CarlPose {
+export function dynamiteThrow(view: CardinalView, frame: number): BipedPose {
   return poseAt(view, THROW_KEYS[view], frame);
 }
 

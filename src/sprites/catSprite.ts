@@ -9,8 +9,9 @@ import {
   type FigureBetween,
   prewarmFigureState,
   releaseFigure,
+  withFigureCellPlacement,
 } from './figure/figureFrameCache';
-import { catHeldPxPerUnit, catHeldSocketOf, donutSocketsAt } from './art/catSockets';
+import { catHeldPxPerUnit, catHeldSocketOf, catSocketsAt } from './art/catSockets';
 import { compositeHeldItem, heldTransformAt } from './held/heldComposite';
 import type { HeldVisualDef } from './held/heldVisualDef';
 import { ResidentRows, type ResidentSpan } from './figure/residentRows';
@@ -28,6 +29,7 @@ import {
   DANCE_FRAMES,
   IDLE_FRAMES,
   KO_FRAMES,
+  PLAYER_CAT_LOOK,
   WALK_FRAMES,
   WORK_IMPACT_FRAME,
 } from './art/catFigure';
@@ -40,7 +42,8 @@ import { missileOpacity, type SplatterCopy } from '../abilities/eyesOfSplatter';
 import { DEFAULT_FACING_SELECTION, type FacingSelection } from './facingView';
 import { catRowViewOf, type CatRowView } from './catViews';
 import { BARE_CAT_OUTFIT } from './garments/cat/catDressing';
-import { sameOutfit, type Outfit } from './garments/outfit';
+import { outfitOf, sameOutfit, type Outfit } from './garments/outfit';
+import type { CatLook } from './looks/catLook';
 
 export interface Missile {
   x: number;
@@ -290,16 +293,36 @@ const HELD_ROWS: Readonly<Record<CatHold, readonly CatState[]>> = {
   ],
 };
 
+let activeLook: CatLook = PLAYER_CAT_LOOK;
 let activeOutfit: Outfit<'cat'> = BARE_CAT_OUTFIT;
-let activeFigure: FigureDef = catFigureFor(BARE_CAT_OUTFIT);
+let activeFigure: FigureDef = catFigureFor(activeLook, BARE_CAT_OUTFIT);
 
-/** The figure every draw and prewarm of Donut goes through. */
+/** Who the cat crawler is painted as: the player's cat, unless a preview has asked for another. */
+export function activeCatLook(): CatLook {
+  return activeLook;
+}
+
+/**
+ * Paints the cat crawler as `look` from now on, in the garments she has on.
+ * The old look's cells are released at once: only one cat look is ever
+ * resident.
+ */
+export function setCatLook(look: CatLook): void {
+  if (look === activeLook) return;
+  releaseFigure(activeFigure);
+  activeLook = look;
+  activeOutfit = outfitOf(look, activeOutfit.worn);
+  activeFigure = catFigureFor(look, activeOutfit);
+  prewarmCatSprite();
+}
+
+/** The figure every draw and prewarm of the cat crawler goes through. */
 export function activeCatFigure(): FigureDef {
   return activeFigure;
 }
 
 /**
- * Dresses Donut's sprite in `outfit`. On a change the old look's cells are
+ * Dresses the cat crawler's sprite in `outfit`. On a change the old look's cells are
  * released at once and the new one's rows queued: she is the most expensive
  * painter in the game, so two complete looks resident side by side is budget
  * nothing else gets back. Cheap when nothing that shows changed.
@@ -310,12 +333,12 @@ export function setCatOutfit(outfit: Outfit<'cat'>): boolean {
   if (sameOutfit(outfit, activeOutfit)) return false;
   releaseFigure(activeFigure);
   activeOutfit = outfit;
-  activeFigure = catFigureFor(outfit);
+  activeFigure = catFigureFor(activeLook, outfit);
   prewarmCatSprite();
   return true;
 }
 
-/** Queues every row Donut can be drawn in empty-handed for baking. Call once per scene. */
+/** Queues every row the cat crawler can be drawn in empty-handed for baking. Call once per scene. */
 export function prewarmCatSprite(): void {
   for (const state of PREWARMED_ROWS) prewarmFigureState(activeFigure, state);
 }
@@ -364,7 +387,7 @@ function randomBreak(): CatOneShot {
 }
 
 /**
- * Owns Donut's animation timers: the one-shot currently playing and how long
+ * Owns the cat crawler's animation timers: the one-shot currently playing and how long
  * she has been standing around doing nothing, which is what triggers the idle
  * breaks (a look around, a paw wash, a flank wash).
  */
@@ -605,7 +628,7 @@ const RESIDENT_VIEWS_HOLDING: Readonly<Record<CatHold, ResidentRows>> = {
   carry: new ResidentRows(spansOf(RESIDENT_VIEW_ROWS_HOLDING.carry)),
 };
 
-/** One cell of Donut's figure: which row, which frame, and whether it is mirrored. */
+/** One cell of the cat crawler's figure: which row, which frame, and whether it is mirrored. */
 export interface CatCell {
   readonly state: CatState;
   readonly frame: number;
@@ -684,7 +707,8 @@ export interface CatHeldDraw {
 /**
  * Draw the cat player body: the cell {@link catCellFor} picks, or `cell` when
  * the caller already has it, with `held` composited at its socket between
- * the cell's two layers.
+ * the cell's two layers, and `stowed` riding on her back: behind all of her
+ * head-on, over her back in profile and from behind.
  */
 export function drawCatSprite(
   ctx: CanvasRenderingContext2D,
@@ -694,6 +718,7 @@ export function drawCatSprite(
   state: CatSpriteState = {},
   cell: CatCell = catCellFor(state),
   held: CatHeldDraw | null = null,
+  stowed: HeldVisualDef | null = null,
 ): void {
   if (held === null) {
     RESIDENT_VIEWS.hold(activeFigure);
@@ -702,22 +727,53 @@ export function drawCatSprite(
     RESIDENT_VIEWS_HOLDING[held.hold].hold(activeFigure);
   }
   const between = held === null ? undefined : catHeldBetween(held, cell);
-  drawFigureCached(
-    ctx,
-    activeFigure,
-    cell.state,
-    cell.frame,
-    sx,
-    sy,
-    s,
-    { flipX: cell.flipX },
-    between,
-  );
+  const resting = stowed === null ? null : catStowedAt(stowed, cell);
+  const opts = { flipX: cell.flipX };
+  const drawResting = (): void => {
+    if (resting === null) return;
+    withFigureCellPlacement(ctx, activeFigure, sx, sy, s, opts, resting.draw);
+  };
+  if (resting?.behind === true) drawResting();
+  drawFigureCached(ctx, activeFigure, cell.state, cell.frame, sx, sy, s, opts, between);
+  if (resting?.behind === false) drawResting();
+}
+
+/**
+ * Over her back, a stowed tool rides with the middle of its haft on her
+ * spine, so neither end hangs off her: the grip point is moved this share of
+ * the haft's length back from her saddle. Behind her head-on it rides from
+ * the saddle up, so its head shows past her shoulder.
+ */
+const STOWED_HAFT_CENTRING = 0.5;
+const STOWED_BEHIND_CENTRING = 0;
+
+/** Where her stowed tool is drawn on the cell being drawn, and whether it is behind her. */
+function catStowedAt(
+  look: HeldVisualDef,
+  cell: CatCell,
+): { readonly draw: FigureBetween; readonly behind: boolean } | null {
+  const frames = catSocketsAt(activeLook, cell.state, cell.frame);
+  if (frames === null) return null;
+  const socket = frames.sockets.back;
+  const pxPerUnit = catHeldPxPerUnit(look);
+  const share = socket.behind ? STOWED_BEHIND_CENTRING : STOWED_HAFT_CENTRING;
+  const centring = look.handle.length * share * pxPerUnit;
+  return {
+    behind: socket.behind,
+    draw: (ctx, place) => {
+      const centre = {
+        x: place.x + (socket.centre.x - socket.axis.x * centring) * place.scale,
+        y: place.y + (socket.centre.y - socket.axis.y * centring) * place.scale,
+      };
+      const transform = heldTransformAt({ ...socket, centre }, place.scale * pxPerUnit, 0);
+      compositeHeldItem(ctx, look, transform, 'cached');
+    },
+  };
 }
 
 /** Composites `held` at its socket on the cell being drawn, or nothing where the cell does not hold it. */
 function catHeldBetween(held: CatHeldDraw, cell: CatCell): FigureBetween | undefined {
-  const frames = donutSocketsAt(activeFigure.id, cell.state, cell.frame);
+  const frames = catSocketsAt(activeLook, cell.state, cell.frame);
   if (frames === null) return undefined;
   const socket = catHeldSocketOf(held.look, frames);
   if (socket === null) return undefined;
@@ -777,6 +833,23 @@ const MISSILE_ANIM_FPS: Record<MissileSpriteVariant, number> = {
   sub_missile: 17,
 };
 
+/**
+ * Which side of the cat who cast them a pass of {@link drawMissiles} paints:
+ * the missiles further from the camera than her, drawn before her so her body
+ * hides them, or the rest, drawn over her.
+ */
+export type MissileDepthLayer = 'beyond' | 'near';
+
+/**
+ * Whether a missile is further from the camera than the cat whose depth line
+ * is `depthY`. One just launched sits on the line, so the way it is flying
+ * decides: a missile cast away from the camera leaves from behind her.
+ */
+function missileIsBeyond(missile: Missile, depthY: number): boolean {
+  const ahead = missile.y - depthY;
+  return ahead < 0 || (ahead === 0 && missile.vy < 0);
+}
+
 export function drawMissiles(
   ctx: CanvasRenderingContext2D,
   missiles: Missile[],
@@ -784,10 +857,14 @@ export function drawMissiles(
   camY: number,
   s: number,
   EXPLODE_FRAMES: number,
+  layer: MissileDepthLayer,
+  depthY: number,
 ): void {
   const now = performance.now() / MILLISECONDS_PER_SECOND;
+  const paintBeyond = layer === 'beyond';
 
   for (const m of missiles) {
+    if (missileIsBeyond(m, depthY) !== paintBeyond) continue;
     const mx = m.x - camX;
     const my = m.y - camY;
     // Sub-missiles carry an ability level of 1 so they cannot chain into more

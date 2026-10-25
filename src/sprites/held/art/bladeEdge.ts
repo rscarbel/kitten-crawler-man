@@ -4,7 +4,7 @@
  * still reads as steel.
  */
 
-import { rgba } from '../../art/carlArt';
+import { rgba } from '../../art/bipedArt';
 
 type Ctx = CanvasRenderingContext2D;
 

@@ -5,7 +5,7 @@
  */
 
 import { fillSoftEllipse, withClip } from '../softShade';
-import { mix } from '../carlArt';
+import { mix } from '../bipedArt';
 import {
   HEAD_CENTER_Y,
   HEAD_RADIUS_X,

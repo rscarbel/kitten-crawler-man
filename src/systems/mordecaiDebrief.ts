@@ -11,7 +11,8 @@ import {
   type ItemId,
   type WearableItem,
 } from '../core/ItemDefs';
-import { CRAWLER_NAMES, type CrawlerKind } from '../core/SkillManager';
+import { crawlerName } from '../characters/characters';
+import { type CrawlerKind } from '../core/SkillManager';
 import {
   MORDECAI_DEBRIEF_GEAR_CLOSING,
   MORDECAI_DEBRIEF_TRASH_GREMLIN_CONGRATS,
@@ -67,7 +68,7 @@ const CRAWLER_POSSESSIVES = {
 const CRAWLER_ORDER: ReadonlyArray<CrawlerKind> = ['human', 'cat'];
 
 /**
- * He never tells Donut to wear the crown by name. It still counts as unworn gear
+ * He never tells the cat to wear the crown by name. It still counts as unworn gear
  * for the `!`; only the wording changes.
  */
 const UNRECOMMENDED_ITEM_IDS: ReadonlySet<ItemId> = new Set<ItemId>([
@@ -277,7 +278,7 @@ function boxesPage(boxes: BoxCounts): string {
     return mordecaiDebriefBothBoxesLine();
   }
   const owner: CrawlerKind = boxes.human > 0 ? 'human' : 'cat';
-  return mordecaiDebriefOneBoxLine(CRAWLER_NAMES[owner], boxes[owner]);
+  return mordecaiDebriefOneBoxLine(crawlerName(owner), boxes[owner]);
 }
 
 function itemList(items: ReadonlyArray<UnwornItem>): string {
@@ -304,7 +305,7 @@ function gearSentences(recommendable: ReadonlyArray<UnwornItem>): GearSentence[]
   for (const owner of CRAWLER_ORDER) {
     const own = recommendable.filter((item) => item.owner === owner);
     chunk(own, MAX_ITEMS_PER_DEBRIEF_PAGE).forEach((group, index) => {
-      const name = CRAWLER_NAMES[owner];
+      const name = crawlerName(owner);
       const text =
         index === 0
           ? mordecaiDebriefGearFirstSentence(name, CRAWLER_POSSESSIVES[owner], itemList(group))

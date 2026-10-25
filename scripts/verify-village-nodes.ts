@@ -551,7 +551,7 @@ section('Grove regrowth waits for a body standing on the sapling');
   );
   standOn(rig.cat, grove);
   tick(rig, EXPECTED_SAPLING_TO_TREE_TICKS + GROW_IN_SLACK_TICKS + EXPECTED_RETRY_TICKS);
-  check(typeAt(grove) !== TREE, 'a sapling with Donut on it does not become a solid tree');
+  check(typeAt(grove) !== TREE, 'a sapling with the cat on it does not become a solid tree');
   rig.cat.x = 0;
   rig.cat.y = 0;
   const grew = ticksUntil(

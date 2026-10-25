@@ -10,7 +10,7 @@ import { WALL_FACE_RISE_TILES } from '../../map/dungeon/wallLight';
 export const FACE_STRIP_ROWS = 2;
 /**
  * Wall top showing above the cap in an upper-face tile. What is left of the two
- * tiles is the face itself, a little over one and a half tiles: taller than Carl,
+ * tiles is the face itself, a little over one and a half tiles: taller than the human crawler,
  * which is what stops it reading as a kerb.
  */
 export const WALL_TOP_TILES = FACE_STRIP_ROWS - WALL_FACE_RISE_TILES;

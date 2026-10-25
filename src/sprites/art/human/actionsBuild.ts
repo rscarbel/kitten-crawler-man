@@ -1,5 +1,5 @@
 /**
- * Carl's hands-on work: nailing down a barricade, setting a piece of gym
+ * The human crawler's hands-on work: nailing down a barricade, setting a piece of gym
  * equipment down where it goes, and mending a broken thing with a spanner.
  *
  * He was a machinery technician, so all three are a mechanic's: close to the
@@ -13,13 +13,13 @@
  * toes before any weight goes on it.
  */
 
-import { mixPt, pt } from '../carl/geometry';
-import { handGrip } from '../carl/limbs';
-import { SHIN_LENGTH, THIGH_LENGTH } from '../carl/proportions';
-import { FLOOR_BOARD } from '../carl/props/board';
-import { buildSkeleton, type CarlPose, restingPose, setArmAngles, VIEWS } from '../carl/rig';
+import { mixPt, pt } from '../biped/geometry';
+import { handGrip } from '../biped/limbs';
+import { SHIN_LENGTH, THIGH_LENGTH } from '../biped/proportions';
+import { FLOOR_BOARD } from '../biped/props/board';
+import { buildSkeleton, type BipedPose, restingPose, setArmAngles, VIEWS } from '../biped/rig';
 import { type CardinalView } from '../../facingView';
-import { clamp01, easeInOut, lerp, type Pt } from '../carlArt';
+import { clamp01, easeInOut, lerp, type Pt } from '../bipedArt';
 import {
   ankleOverPivot,
   type PathKey,
@@ -130,7 +130,7 @@ function perStrike<T>(beats: readonly (readonly [number, T])[]): (readonly [numb
  * against the authored pose aims it in every view.
  */
 function aimedAngle(
-  pose: CarlPose,
+  pose: BipedPose,
   view: CardinalView,
   hand: 'left' | 'right',
   absolute: number,
@@ -141,7 +141,7 @@ function aimedAngle(
 }
 
 /** The pose's hands at wherever `pose` actually solves them, for a row that picks up from it. */
-function solvedHands(pose: CarlPose, view: CardinalView): { left: Pt; right: Pt } {
+function solvedHands(pose: BipedPose, view: CardinalView): { left: Pt; right: Pt } {
   const skeleton = buildSkeleton(pose, VIEWS[view]);
   return { left: skeleton.leftArm.end, right: skeleton.rightArm.end };
 }
@@ -208,7 +208,7 @@ const KNEEL_BOB = KNEEL_ROOT_Y - FULL_CROUCH_HIP_Y;
 const KNEEL_SWAY = KNEEL_HIP_X / VIEWS.side.lateral;
 
 /** The kneeling legs, the same on every frame of the loop so neither the knee nor the toes slide. */
-function kneelLegsSide(pose: CarlPose): void {
+function kneelLegsSide(pose: BipedPose): void {
   pose.crouch = 1;
   pose.bob = KNEEL_BOB;
   pose.sway = KNEEL_SWAY;
@@ -314,7 +314,7 @@ function isCheckFrame(frame: number): boolean {
  * board lies on the floor rather than in the hand (see `props/board.ts`), so
  * it stays put while his hands come off it for the check.
  */
-function withTools(pose: CarlPose, hammerAim: number, view: CardinalView): void {
+function withTools(pose: BipedPose, hammerAim: number, view: CardinalView): void {
   pose.rightHandShape = 'grip';
   pose.leftHandShape = 'grip';
   pose.heldProps = [
@@ -357,7 +357,7 @@ const CASE_HAND_PALM: Readonly<Record<CardinalView, Vec3>> = {
   back: towards(0.6, 0, -0.8),
 };
 
-function buildLoopSide(frame: number): CarlPose {
+function buildLoopSide(frame: number): BipedPose {
   const pose = restingPose();
   kneelLegsSide(pose);
   pose.lean = trackAt(frame, SIDE_LEAN);
@@ -389,7 +389,7 @@ const FACING_KNEELING_FOOT: Pt = pt(-0.18, 0);
 const FACING_KNEELING_FOOT_DEPTH = -0.14;
 /**
  * How much nearer the camera the kneeling shin is drawn than its thigh. Fully
- * near, the knee on the floor swells into a bare disc under the boxers that
+ * near, the knee on the floor swells into a bare disc under the trouser seat that
  * reads as a second head at the tile.
  */
 const FACING_KNEELING_NEARNESS = 0.5;
@@ -397,7 +397,7 @@ const FACING_KNEELING_NEARNESS = 0.5;
 const FACING_STANDING_KNEE_FORESHORTEN = 0.3;
 
 /** The head-on kneel, the same on every frame of the loop so neither foot slides. */
-function kneelLegsFacing(pose: CarlPose, standing: CarlPose): void {
+function kneelLegsFacing(pose: BipedPose, standing: BipedPose): void {
   pose.crouch = FACING_KNEEL_CROUCH;
   pose.bob = FACING_KNEEL_BOB;
   pose.leftFoot = FACING_KNEELING_FOOT;
@@ -508,7 +508,7 @@ const FRONT_SINK = loopTrack(
   ]),
 );
 
-function buildLoopFacing(frame: number, back: boolean): CarlPose {
+function buildLoopFacing(frame: number, back: boolean): BipedPose {
   const pose = back ? idleBack(0) : idleFront(0);
   kneelLegsFacing(pose, pose);
   pose.bob += trackAt(frame, FRONT_SINK);
@@ -539,7 +539,7 @@ function buildLoopFacing(frame: number, back: boolean): CarlPose {
   return pose;
 }
 
-export function buildLoop(frame: number, view: CardinalView): CarlPose {
+export function buildLoop(frame: number, view: CardinalView): BipedPose {
   const beat = beatOfFrame(frame);
   if (view === 'side') return buildLoopSide(beat);
   return buildLoopFacing(beat, view === 'back');
@@ -547,7 +547,7 @@ export function buildLoop(frame: number, view: CardinalView): CarlPose {
 
 // ── Getting down and getting up ──────────────────────────────────────────────
 
-function standingPose(view: CardinalView): CarlPose {
+function standingPose(view: CardinalView): BipedPose {
   if (view === 'side') return idleSide(0);
   return view === 'back' ? idleBack(0) : idleFront(0);
 }
@@ -563,11 +563,11 @@ const KNEEL_TOES_DOWN_BY = 0.5;
  * first half and then only pivots on its planted toes while the knee lowers
  * onto the floor, and head-on it slides back under him as the knee comes down.
  */
-function kneelBlend(view: CardinalView, kneel: CarlPose, t: number, withGear: boolean): CarlPose {
+function kneelBlend(view: CardinalView, kneel: BipedPose, t: number, withGear: boolean): BipedPose {
   const stand = standingPose(view);
   const standHands = solvedHands(stand, view);
   const body = easeInOut(t);
-  const pose: CarlPose = { ...kneel };
+  const pose: BipedPose = { ...kneel };
   pose.crouch = lerp(stand.crouch, kneel.crouch, body);
   pose.bob = lerp(stand.bob, kneel.bob, body);
   pose.sway = lerp(stand.sway, kneel.sway, body);
@@ -624,12 +624,12 @@ function kneelBlend(view: CardinalView, kneel: CarlPose, t: number, withGear: bo
  */
 const GEAR_OUT_FROM = 0.5;
 
-export function buildKneel(frame: number, view: CardinalView): CarlPose {
+export function buildKneel(frame: number, view: CardinalView): BipedPose {
   const t = frame / BUILD_KNEEL_FRAMES;
   return kneelBlend(view, buildLoop(0, view), t, t >= GEAR_OUT_FROM);
 }
 
-export function buildRise(frame: number, view: CardinalView): CarlPose {
+export function buildRise(frame: number, view: CardinalView): BipedPose {
   const t = 1 - (frame + 1) / BUILD_RISE_FRAMES;
   return kneelBlend(view, buildLoop(0, view), t, t >= 1 - GEAR_OUT_FROM);
 }
@@ -641,7 +641,7 @@ export function buildRise(frame: number, view: CardinalView): CarlPose {
  * back stays straight and hinges forward just enough to keep the chest over
  * the feet, and the feet never move. `depth` 0 is standing.
  */
-function squat(view: CardinalView, depth: number): CarlPose {
+function squat(view: CardinalView, depth: number): BipedPose {
   const pose = standingPose(view);
   pose.crouch = depth;
   if (view === 'side') {
@@ -739,7 +739,7 @@ const PLACE_FACING_FIST_X = 0.36;
 /**
  * From behind he carries it lower, at his hips rather than his chest: the
  * jacket is the widest thing about him and hides a case held against it,
- * while below the hem the ends show clear either side of the boxers.
+ * while below the hem the ends show clear either side of the trouser seat.
  */
 const PLACE_BACK_CARRY_Y = -0.8;
 const PLACE_BACK_FIST_X = 0.4;
@@ -776,7 +776,7 @@ function placeHolding(frame: number): boolean {
   return frame < PLACE_RELEASE_FRAME;
 }
 
-export function placeEquipment(frame: number, view: CardinalView): CarlPose {
+export function placeEquipment(frame: number, view: CardinalView): BipedPose {
   const depth = trackAt(frame, PLACE_DEPTH);
   const pose = squat(view, depth);
   const look = trackAt(frame, PLACE_LOOK_DOWN);
@@ -885,7 +885,7 @@ function turnAt(workFrame: number): number {
 }
 
 /** Kneeling at the work, `turn` of the way through a pull of the spanner. */
-function repairAtWork(view: CardinalView, turn: number): CarlPose {
+function repairAtWork(view: CardinalView, turn: number): BipedPose {
   const pose = standingPose(view);
   if (view === 'side') {
     kneelLegsSide(pose);
@@ -916,7 +916,7 @@ function repairAtWork(view: CardinalView, turn: number): CarlPose {
   return pose;
 }
 
-export function repairMend(frame: number, view: CardinalView): CarlPose {
+export function repairMend(frame: number, view: CardinalView): BipedPose {
   if (frame < REPAIR_KNEEL_FRAMES) {
     const t = frame / REPAIR_KNEEL_FRAMES;
     return kneelBlend(view, repairAtWork(view, 0), t, t >= GEAR_OUT_FROM);

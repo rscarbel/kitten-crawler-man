@@ -1,6 +1,6 @@
 /**
- * How Carl carries an equipment-chosen item in his main hand on rows that
- * were not authored for it: his right fist closed round its handle, the item
+ * How the human crawler carries an equipment-chosen item in his main hand on
+ * rows that were not authored for it: his right fist closed round its handle, the item
  * carried point-forward and low, and on a blow he throws with that fist,
  * run on down the line of the fist, so a punch reads as a thrust or a cut.
  *
@@ -9,20 +9,20 @@
  * palm — keeps its hands, and the item is not drawn on it.
  */
 
-import { deg } from '../carlArt';
-import { handGrip, wristAngle } from '../carl/limbs';
-import { HEAD_RX } from '../carl/proportions';
-import type { Pt } from '../carlArt';
+import { deg } from '../bipedArt';
+import { handGrip, wristAngle } from '../biped/limbs';
+import { HEAD_RX } from '../biped/proportions';
+import type { Pt } from '../bipedArt';
 import {
   type BoneChain,
   buildSkeleton,
-  type CarlPose,
+  type BipedPose,
   drawnSide,
   HAFT_IN_PLANE,
   HEAD_ON_FLOOR_FORESHORTENING,
   poseAsDrawn,
   VIEWS,
-} from '../carl/rig';
+} from '../biped/rig';
 import type { CardinalView } from '../../facingView';
 import type { RowSpec } from '../humanFigure';
 import { towards } from './handTurn';
@@ -69,7 +69,7 @@ const CARRY_PALM = towards(-0.3, 0, -0.95);
 /** A fist driving a blow turns its palm down, the flat of the blade still to the camera. */
 const STRIKING_PALM = towards(0, 0.5, -0.85);
 
-function busy(pose: CarlPose): boolean {
+function busy(pose: BipedPose): boolean {
   if (pose.rightHandShape === 'grip' || pose.leftHandShape === 'grip') return true;
   if ((pose.heldProps?.length ?? 0) > 0) return true;
   return pose.palmGlow?.hand === 'right';
@@ -87,7 +87,7 @@ function thrustsWithRightFist(row: RowSpec): boolean {
 }
 
 /** His right arm and head on the drawn cell. */
-function drawnRightArm(pose: CarlPose, view: CardinalView): { arm: BoneChain; head: Pt } {
+function drawnRightArm(pose: BipedPose, view: CardinalView): { arm: BoneChain; head: Pt } {
   const spec = VIEWS[view];
   const skeleton = buildSkeleton(poseAsDrawn(pose, spec), spec);
   const arm = drawnSide('right', spec) === 'right' ? skeleton.rightArm : skeleton.leftArm;
@@ -194,7 +194,7 @@ function clearedAngle(
   return best;
 }
 
-function carryAngle(pose: CarlPose, view: CardinalView, style: CarryStyle): number {
+function carryAngle(pose: BipedPose, view: CardinalView, style: CarryStyle): number {
   const { arm, head } = drawnRightArm(pose, view);
   const raised = style === 'low' && arm.end.y < arm.root.y;
   const base = raised ? RAISED_HAFT_ANGLE[view] : CARRY_HAFT_ANGLE[style][view];
@@ -247,7 +247,7 @@ export function carriedGripKey(grip: CarriedGrip): string {
  * armed row has turned to grip it: the row says how the hand turns, the
  * item how thick a handle it closes on.
  */
-function withCarriedHandle(pose: CarlPose, grip: CarriedGrip): CarlPose {
+function withCarriedHandle(pose: BipedPose, grip: CarriedGrip): BipedPose {
   const { handle } = grip;
   const right = pose.rightHandOrientation;
   const left = pose.leftHandOrientation;
@@ -264,7 +264,7 @@ function withCarriedHandle(pose: CarlPose, grip: CarriedGrip): CarlPose {
  * hand free. An armed row holds it as it was authored to, on the carried
  * item's handle.
  */
-export function carryInMainHand(pose: CarlPose, row: RowSpec, grip: CarriedGrip): CarlPose {
+export function carryInMainHand(pose: BipedPose, row: RowSpec, grip: CarriedGrip): BipedPose {
   const { style } = grip;
   if (row.motionSet !== undefined) return withCarriedHandle(pose, grip);
   if (busy(pose)) return pose;

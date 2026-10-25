@@ -9,7 +9,7 @@
  * bird.
  */
 
-import { type Pt, lerp } from '../carlArt';
+import { type Pt, lerp } from '../bipedArt';
 
 type Ctx = CanvasRenderingContext2D;
 

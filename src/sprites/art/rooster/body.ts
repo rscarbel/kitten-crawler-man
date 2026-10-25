@@ -5,7 +5,7 @@
  * body — the lifting belt round his middle, a sweatband round his neck.
  */
 
-import { clamp01, deg, lerp, mix, rgba } from '../carlArt';
+import { clamp01, deg, lerp, mix, rgba } from '../bipedArt';
 import { hash1 } from '../ratArt';
 import type { Ramp, RoosterBuildSpec } from './builds';
 import {

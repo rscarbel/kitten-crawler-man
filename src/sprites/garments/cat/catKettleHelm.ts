@@ -1,5 +1,5 @@
 /**
- * The Issue Kettle Helm on Donut: the garrison's wide-brimmed iron pot, made
+ * The Issue Kettle Helm on the cat crawler: the garrison's wide-brimmed iron pot, made
  * over for a cat. The dome has two rounded pockets her ears go up into, so it
  * hides her ears rather than having them poke through the iron; the brim
  * stands out past her cheek ruffs and shades her brow, and a leather strap
@@ -13,7 +13,7 @@
 import type { CatHeadFrame, CatHeadLandmarks } from '../../art/catParts';
 import { CAT_VIEW_FALLBACK } from '../../catViews';
 import { defineGarment, type GarmentFrameContext, withViewFallback } from '../garmentDef';
-import { lyingTipBack } from './headwear';
+import { fitHatToSkull, type HatFit, hatFitFor, lyingTipBack } from './headwear';
 import { IRON, metalFill, type MetalRamp } from './metalInk';
 
 type Ctx = CanvasRenderingContext2D;
@@ -189,8 +189,9 @@ function paintHelm(ctx: Ctx, look: HelmLook): void {
   ctx.restore();
 }
 
-function brimYOf(landmarks: CatHeadLandmarks): number {
-  return landmarks.skull.cy - landmarks.skull.ry + BRIM_DROP;
+/** The brim's height in the fitted frame, from the fitted skull's top. */
+function brimYOf(fit: HatFit): number {
+  return fit.skullTop + BRIM_DROP;
 }
 
 function strokeStrap(
@@ -210,11 +211,11 @@ function strokeStrap(
   ctx.stroke();
 }
 
-function headOnLook(landmarks: CatHeadLandmarks): HelmLook {
+function headOnLook(landmarks: CatHeadLandmarks, fit: HatFit): HelmLook {
   const cx = landmarks.skull.cx + landmarks.turn * TURN_SLIDE;
   return {
     cx,
-    brimY: brimYOf(landmarks),
+    brimY: brimYOf(fit),
     brimHalfWidth: BRIM_HALF_WIDTH,
     brimHalfDepth: BRIM_HALF_DEPTH,
     domeCx: cx,
@@ -229,8 +230,10 @@ function headOnLook(landmarks: CatHeadLandmarks): HelmLook {
 
 function paintFront(ctx: Ctx, frame: CatHeadFrame): void {
   if (frame.piece !== 'top') return;
-  const look = headOnLook(frame.landmarks);
+  const fit = hatFitFor(frame.landmarks, 'headOn');
+  const look = headOnLook(frame.landmarks, fit);
   ctx.save();
+  fitHatToSkull(ctx, frame.landmarks, fit);
   for (const side of [-1, 1]) {
     strokeStrap(
       ctx,
@@ -247,8 +250,10 @@ function paintFront(ctx: Ctx, frame: CatHeadFrame): void {
 
 function paintBack(ctx: Ctx, frame: CatHeadFrame): void {
   if (frame.piece !== 'top') return;
-  const look = headOnLook(frame.landmarks);
+  const fit = hatFitFor(frame.landmarks, 'headOn');
+  const look = headOnLook(frame.landmarks, fit);
   ctx.save();
+  fitHatToSkull(ctx, frame.landmarks, fit);
   paintHelm(ctx, look);
   ctx.restore();
 }
@@ -256,7 +261,8 @@ function paintBack(ctx: Ctx, frame: CatHeadFrame): void {
 function paintSide(ctx: Ctx, frame: CatHeadFrame, context: GarmentFrameContext<'cat'>): void {
   if (frame.piece !== 'top') return;
   const { landmarks } = frame;
-  const brimY = brimYOf(landmarks) - PROFILE_BRIM_LIFT;
+  const fit = hatFitFor(landmarks, 'profile');
+  const brimY = brimYOf(fit) - PROFILE_BRIM_LIFT;
   const cx = landmarks.skull.cx - PROFILE_BRIM_BACK;
   const look: HelmLook = {
     cx,
@@ -272,6 +278,7 @@ function paintSide(ctx: Ctx, frame: CatHeadFrame, context: GarmentFrameContext<'
     metal: IRON,
   };
   ctx.save();
+  fitHatToSkull(ctx, landmarks, fit);
   strokeStrap(ctx, PROFILE_STRAP_X, brimY, PROFILE_STRAP_CHIN.x, PROFILE_STRAP_CHIN.y, 0);
   ctx.translate(cx, brimY);
   ctx.rotate(PROFILE_TILT - lyingTipBack(context));

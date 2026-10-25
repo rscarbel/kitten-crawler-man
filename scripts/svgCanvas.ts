@@ -348,6 +348,12 @@ export class SvgRecorder {
     this.state.matrix = IDENTITY;
   }
 
+  /** The current matrix in `DOMMatrix`'s field names: what painters that snap layers to the pixel grid read. */
+  getTransform(): { a: number; b: number; c: number; d: number; e: number; f: number } {
+    const [a, b, c, d, e, f] = this.state.matrix;
+    return { a, b, c, d, e, f };
+  }
+
   /* ── Path building ───────────────────────────────────────────────────── */
 
   beginPath(): void {
@@ -949,7 +955,7 @@ export function asDomContext(recorder: SvgRecorder): CanvasRenderingContext2D {
 
 /**
  * Hands the recorder to code written against node-canvas's context type — the
- * offline art modules (`carl/`, `catArt`, `clownArt`, …).
+ * offline art modules (`biped/`, `catArt`, `clownArt`, …).
  *
  * A real 1×1 node-canvas context supplies the type; the proxy means not one of
  * its calls ever reaches it.

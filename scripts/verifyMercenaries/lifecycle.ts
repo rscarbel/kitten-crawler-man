@@ -357,7 +357,7 @@ function spawnsOnFloorFromCorridor(
 
 /**
  * Whether bringing the hire into a scene queued any figure warming. The scene
- * — Carl, who warms his own rows, included — is built first and the cache
+ * — the human, who warms his own rows, included — is built first and the cache
  * emptied after, so only what the arrival itself asked for is counted.
  */
 function arrivalWarms(

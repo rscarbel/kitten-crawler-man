@@ -117,7 +117,7 @@ import { CompanionSystem } from '../src/systems/CompanionSystem';
 import { hudLayout } from '../src/ui/hud/hudLayout';
 import { NO_INSETS, resolveViewport } from '../src/ui/core/viewport';
 import { BuildingSystem, downedPartnerEntryRefusal } from '../src/systems/BuildingSystem';
-import { CRAWLER_NAMES } from '../src/core/SkillManager';
+import { crawlerName } from '../src/characters/characters';
 
 // ── Reporting ────────────────────────────────────────────────────────────────
 
@@ -1364,11 +1364,11 @@ function checkPartyInEveryRoom(arrival: RoomArrival): void {
     arrival.fixedMarks === undefined
       ? facts
       : { blocked: facts.blocked, reachable: reachableFrom(map, arrival.fixedMarks.cat) };
-  const humanOk = checkStandsFree(map, facts, party.human, `${arrival.label}: Carl`);
+  const humanOk = checkStandsFree(map, facts, party.human, `${arrival.label}: The human`);
   const catOk = checkStandsFree(map, catFacts, party.cat, `${arrival.label}: the cat`);
 
   for (const [name, crawler] of [
-    ['Carl', party.human],
+    ['The human', party.human],
     ['the cat', party.cat],
   ] as const) {
     const walked = bestWalkPx(crawler, map);
@@ -1382,7 +1382,7 @@ function checkPartyInEveryRoom(arrival: RoomArrival): void {
     const followed = followerTilesMoved(arrival, party, facts);
     check(
       followed >= MIN_FOLLOW_TILES,
-      `${arrival.label}: the cat follows Carl across the room (${followed.toFixed(1)} tiles)`,
+      `${arrival.label}: the cat follows the human across the room (${followed.toFixed(1)} tiles)`,
     );
   }
   arriveAsTheSceneDoes(arrival, party);
@@ -1916,14 +1916,14 @@ const OFF_THE_MAT_TILES = 3;
  */
 function checkDownedPartnerKeepsEveryDoorShut(): void {
   section('No door opens while the partner is down');
-  const expected = `${CRAWLER_NAMES.cat} is down. Help them up before going inside.`;
+  const expected = `${crawlerName('cat')} is down. Help them up before going inside.`;
   const partner = { isKnockedOut: true };
   check(
-    downedPartnerEntryRefusal(partner, CRAWLER_NAMES.cat) === expected,
+    downedPartnerEntryRefusal(partner, crawlerName('cat')) === expected,
     `the refusal names the downed crawler ("${expected}")`,
   );
   check(
-    downedPartnerEntryRefusal({ isKnockedOut: false }, CRAWLER_NAMES.cat) === null,
+    downedPartnerEntryRefusal({ isKnockedOut: false }, crawlerName('cat')) === null,
     'a standing partner opens every door',
   );
 
@@ -1942,7 +1942,7 @@ function checkDownedPartnerKeepsEveryDoorShut(): void {
       entered++;
     },
     {
-      blockedMessage: () => downedPartnerEntryRefusal(partner, CRAWLER_NAMES.cat),
+      blockedMessage: () => downedPartnerEntryRefusal(partner, crawlerName('cat')),
       onRefused: (message) => refusals.push(message),
     },
   );

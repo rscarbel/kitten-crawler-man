@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * The Big Top as a player stands in it: the real tile map through the real
- * chunk bake, the maze's dressing and props, and Carl and Donut for scale —
+ * chunk bake, the maze's dressing and props, and the human and the cat for scale —
  * one frame per act, a curtain room, and one per forced hazard state, each at
  * 32 and 64 px per tile.
  *
@@ -95,7 +95,7 @@ interface Shot {
   readonly focus: MazeTile;
   /** Drives the tent into the shot's state; returns the hazards it forced. */
   readonly force: (tent: TentHarness) => ForcedHazard[];
-  /** Where Carl and Donut stand, given the forced hazards. */
+  /** Where the human and the cat stand, given the forced hazards. */
   readonly party: (tent: TentHarness, forced: ReadonlyArray<ForcedHazard>) => [MazeTile, MazeTile];
 }
 
@@ -132,7 +132,7 @@ const curtainShot: Shot = {
   ],
 };
 
-/** The hall's funhouse glass: Carl at a side wall's panes, Donut at the dividing wall's. */
+/** The hall's funhouse glass: the human at a side wall's panes, the cat at the dividing wall's. */
 const reflectionShot: Shot = {
   id: 'mirror-reflections',
   act: 'mirrors',
@@ -167,12 +167,12 @@ const hazardShots: Shot[] = HAZARD_SHOT_GROUPS.map(({ id, states }) => {
     party: (tent, forced) => {
       const avoid = forced.flatMap((hazard) => [...hazard.family, ...hazard.tiles]);
       const standing = safeTilesNear(tent.map, hazardFocus(first), PARTY_SIZE, avoid);
-      const carl = entryAt(standing, 0);
-      const donut = entryAt(standing, 1);
-      if (carl === undefined || donut === undefined) {
+      const human = entryAt(standing, 0);
+      const cat = entryAt(standing, 1);
+      if (human === undefined || cat === undefined) {
         throw new Error(`${id}: no safe floor near the hazard to stand the party on`);
       }
-      return [carl, donut];
+      return [human, cat];
     },
   };
 });
@@ -208,9 +208,9 @@ for (const shot of shots) {
     if (report.samples.length === 0) problems.push(`${hazard.state}: no tile could be scored`);
   }
 
-  const [carl, donut] = shot.party(tent, forced);
-  placeAt(tent.human, carl);
-  placeAt(tent.cat, donut);
+  const [human, cat] = shot.party(tent, forced);
+  placeAt(tent.human, human);
+  placeAt(tent.cat, cat);
   const view = viewCentredOn(shot.focus);
   for (const scale of RENDER_SCALES) {
     const canvas = renderTentFrame(tent, view, { scale, withParty: true, lighting });

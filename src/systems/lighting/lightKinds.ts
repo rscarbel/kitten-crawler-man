@@ -130,7 +130,7 @@ const FLOOD_LAMP_REACH_TILES = 7;
 const FLOOD_LAMP_GLOW_RADIUS_TILES = 6;
 const FLOOD_LAMP_GLOW_STRENGTH = 0.4;
 
-/** Carl's light: soft, neutral, and always there, so a pitch-black room is never unfair. */
+/** A crawler's light: soft, neutral, and always there, so a pitch-black room is never unfair. */
 export const CRAWLER_LIGHT_REACH_TILES = 3.5;
 const COMPANION_REACH_TILES = 2;
 const MISSILE_REACH_TILES = 2.2;

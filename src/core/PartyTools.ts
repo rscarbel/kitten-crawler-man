@@ -34,6 +34,20 @@ export function parsePartyToolsState(value: unknown): PartyToolsState {
   return state;
 }
 
+/**
+ * The tier of the `kind` tool a crawler carries, the highest if more than one,
+ * or null if she carries none. Reconciliation keeps the party's tier in both
+ * inventories, so this is the party's tier for a crawler that has been given
+ * her tools.
+ */
+export function carriedToolTier(owner: ToolOwner, kind: ToolKind): ToolTier | null {
+  for (let tier = MAX_TOOL_TIER; tier >= TOOL_TIER_BASIC; tier--) {
+    if (!isToolTier(tier)) continue;
+    if (owner.inventory.countOf(toolTierDef(kind, tier).id) > 0) return tier;
+  }
+  return null;
+}
+
 function tierFieldFor(kind: ToolKind): 'axeTier' | 'pickaxeTier' {
   return kind === 'axe' ? 'axeTier' : 'pickaxeTier';
 }

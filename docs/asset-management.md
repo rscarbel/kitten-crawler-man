@@ -278,6 +278,36 @@ Four decisions carry that, and each is load-bearing:
 Cells are baked supersampled and downsampled into place, matching what the deleted
 offline generators did, so a cached cell is the sheet cell it replaced.
 
+**A cell is stored as its ink, at the density it is drawn.** Two more decisions keep the
+bytes down to what is on screen:
+
+- **Crop to ink.** A cell is sized for the figure's widest pose, so most of any one pose's
+  cell is transparent margin. Each baked frame (and each layered frame's front layer) is
+  kept as its ink box padded by `CELL_CROP_PADDING_PX` (2) transparent pixels, with where
+  it sat in the cell, and blitted back to that place. At one cell pixel per device pixel
+  the blit is pixel-identical to the whole cell's at any sub-pixel offset, in Chrome's
+  GPU and software canvases alike; one pixel of padding was not enough on the GPU path.
+  A frame's crop is only known once painted, so a bake is admitted at the whole cell (twice
+  that for a layered frame) and charged its crop. Every byte count — a row's, a figure's,
+  the budgets, `figureFrameStoredBytes`, G9b — is the crop's.
+- **Bake at the drawn density.** A figure bakes at the device pixels per cell pixel its
+  world tile lands at — `SceneManager` reports the render scale through
+  `setFigureWorldPixelRatio`, and the world has no zoom of its own — rounded up to one of
+  `BAKE_LEVELS` (0.5, 0.75, 1). The level never exceeds the declared cell (1) and never
+  goes below the low-end density (0.5); a low-end device (`shouldDownscaleForLowEndDevice`)
+  stays at 0.5. A draw that lands denser than the world's level (an over-size boss, a
+  portrait) raises its figure for `RAISED_LEVEL_HOLD_FRAMES`, the idle window, so an
+  occasional large draw does not rebake it down and back up. At the default view on a
+  DPR-2 screen a tile-scale-64 figure bakes its full cell; at render
+  scale 1 on that screen (the `performance` preset, or `auto` after a lag rung) it bakes
+  at half density, a quarter of the bytes. A harness with no renderer bakes full cells.
+- **A level change never flickers.** A row is drawn at one level throughout. When its
+  figure's level moves, the row goes on being drawn from its old cells, scaled, while the
+  rebake is asked for urgently and baked within the ordinary budgets; the rebaked cells
+  replace the old ones together once they hold every frame the old set did. A frame the old
+  row lacks meanwhile is baked at the old level, so an animation never alternates soft and
+  sharp frames.
+
 **Prewarm is the pack rule.** A painter over roughly 1 ms per cell cannot be absorbed by
 the fallback, so every path that schedules such a creature calls `prewarmFigureState`
 when the spawn is _scheduled_, not when the mob first renders. Each kind's `prewarm` on its
@@ -330,9 +360,9 @@ by the set's next decision.
 Holding by distance is what leaves room for a fight elsewhere: a siege wave at Briar
 Hollow is a dozen distinct creatures in several facings, and with the whole crowd pinned
 off screen beside the party its rows evicted one another and were painted live every
-frame. Measured headless on floor 3, the crowd pins 83.0 MB on arrival in the plaza and
-about 54–63 MB at Briar Hollow (58.8 MB in the run in "What scenes hold"), where a few
-looks still have wearers within reach of the village. The figure varies by 5–9 MB between
+frame. Measured headless on floor 3, the crowd pins 20.3 MB on arrival in the plaza and
+about 13–14 MB at Briar Hollow (13.1 MB in the run in "What scenes hold"), where a few
+looks still have wearers within reach of the village. The figure varies by a few megabytes between
 runs because it follows where the town's wanderers happen to stand when the party
 arrives. A street cast is a closed set of looks, so inside a city most looks have a
 wearer within reach of any point, and crowd memory follows distinct looks, not
@@ -349,10 +379,11 @@ cache that cannot make room leaves a few stand-ins rather than a screen that nev
 recalls, a crawler switch, and a full-speed walk across a city of three by three towns
 from a cold arrival.
 
-The global ceiling, `CACHE_BUDGET_MEGABYTES` (188), is sized for a town plaza with its
-crowd pinned and for arriving on level 3. Beside the crowd sits the player's own
-per-figure ceiling, `HUMAN_FIGURE_BUDGET_MEGABYTES` (67), so a town visit never leaves
-Carl's new gear nowhere to bake.
+The global ceiling, `CACHE_BUDGET_MEGABYTES` (80), is sized for arriving on level 3, the
+tightest moment measured: the crowd, the fairies and both crawlers warmed together ask
+for 53.1 MB of ink crops. Beside the crowd sits the player's own per-figure ceiling,
+`HUMAN_FIGURE_BUDGET_MEGABYTES` (28, against a heaviest measured working set of 22.0 MB),
+so a town visit never leaves the human's new gear nowhere to bake.
 
 **A row nothing has room for is abandoned for a while.** After
 `PREWARM_CAPACITY_RETRIES` refusals the queue gives the row up and refuses it for
@@ -388,9 +419,9 @@ when the desk signs the contract and again every time `MercenarySystem` spawns i
 save restore, a walk out of a building — and `prewarmForFight` when it picks a fight.
 Warming all seven would hold six figures nobody can see.
 
-The cache is flushed when the render quality changes (cells are density-specific) and at
-the stairs transition, beside `releaseSpritesExcept`, for the same reason sheets are
-evicted there.
+The cache is flushed at the stairs transition, beside `releaseSpritesExcept`, for the same
+reason sheets are evicted there, and on a canvas recovery. A render-scale change does not
+flush it: each figure moves to its new level as above.
 
 **Obligations when adding or changing a figure:** its states are declared in its
 `FigureDef` and nowhere else; its painter must be deterministic in `(state, frame)`
@@ -638,9 +669,11 @@ scratch surfaces.
 Every large owner is bounded, and each limit sits above the busiest scene's on-screen
 working set, so it stops growth without ever evicting something visible:
 
-- **Figure cells:** `CACHE_BUDGET_MEGABYTES` (188) overall, read through
+- **Figure cells:** `CACHE_BUDGET_MEGABYTES` (80) overall, read through
   `figureCacheByteBudget()`; per figure, `FigureDef.budgetMegabytes` or the 24 MB default
-  — Carl 67 (`HUMAN_FIGURE_BUDGET_MEGABYTES`), Necromancer 32, Donut 28.
+  — the human 28 (`HUMAN_FIGURE_BUDGET_MEGABYTES`), Necromancer 32, the cat 28
+  (`CAT_FIGURE_BUDGET_MEGABYTES`). Every count is of stored ink crops; the default and the
+  cat's and the Necromancer's were sized from whole cells and are loose upper bounds.
 - **Environment sheets:** `ENVIRONMENT_SHEET_BUDGET_MEGABYTES` (160), least recently
   drawn first. A sheet looked up within `RECENTLY_DRAWN_FRAMES` (half a minute) or still
   painting is never a candidate, so when everything resident is in use the cache stays
@@ -684,12 +717,14 @@ variety tier, which halves the scale for the rest of the session ("Variety tiers
 
 **What scenes hold.** On floor 3 and the scaled city, measured headless with
 `npm run report:residency` (node-canvas at DPR 2, 1280×720, world seed 1, `normal`,
-`sharp`; surface tallies, not Chrome's tracked peak), 2026-10:
+`sharp`; surface tallies, not Chrome's tracked peak), 2026-10. The first two rows are
+measured with cells stored as their ink crops; the rest, and the Chrome table below,
+count whole cells:
 
 | scene                                    | resident | largest owners (MB)                                                        |
 | ---------------------------------------- | -------- | -------------------------------------------------------------------------- |
-| floor 3, plaza on arrival                | 312.5 MB | figure cells 187.6 (83.0 pinned), sheets 86.8                              |
-| Briar Hollow, straight from the plaza    | 240.8 MB | figure cells 136.1 (58.8 pinned), sheets 59.9, ground parts 12.2, chunks 6 |
+| floor 3, plaza on arrival                | 178.1 MB | figure cells 53.1 (20.3 pinned), sheets 86.8                               |
+| Briar Hollow, straight from the plaza    | 132.1 MB | figure cells 26.7 (13.1 pinned), sheets 59.9, ground parts 12.2, chunks 6  |
 | Briar Hollow, after twelve interiors     | 246.5 MB | figure cells 139.7 (63.4 pinned), sheets 59.9, ground parts 13.5, chunks 6 |
 | scaled city 3×3, west edge on arrival    | 215.3 MB | figure cells 107.0 (all pinned), sheets 91.6                               |
 | scaled city 3×3, east edge after walk    | 123.8 MB | figure cells 107.0 (all pinned), sheets 0 (the fixture draws no facades)   |
@@ -982,7 +1017,7 @@ timers and gauges, not by the over-20 ms count alone.
 **Findings that stand (2026-10).** Every large owner's density ratio is at most 1.0
 (figure cells and props 1.0, sheets and chunks 0.5), so there is no density to cut
 without visible loss. About 4% of live figure cells are byte-identical to another cell of
-the same figure (6.6% across every figure baked headless at 1×, Carl's 12.6% the
+the same figure (6.6% across every figure baked headless at 1×, the human's 12.6% the
 highest); the saving does not justify reference-counted sharing of cell surfaces.
 
 `npm run verify:assets` is the build-time gate: it proves every mob a floor can produce

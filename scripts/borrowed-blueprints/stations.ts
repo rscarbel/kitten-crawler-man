@@ -235,7 +235,7 @@ export function stationsRig(
   };
 }
 
-/** A rig at `build_stations` with the blueprints in Carl's quest slot. */
+/** A rig at `build_stations` with the blueprints in the human's quest slot. */
 function buildStationsRig(): StationsRig | null {
   const rig = stationsRig();
   if (rig === null) return null;
@@ -248,7 +248,7 @@ function machineOf(rig: StationsRig, kind: ProcessingStationKind): ProcessingSta
   return processingStationsOf(rig.site).find((station) => station.kind === kind) ?? null;
 }
 
-/** Stands Carl on the tile just south of `machine`, well inside its reach. */
+/** Stands the human on the tile just south of `machine`, well inside its reach. */
 function standBeside(rig: StationsRig, machine: ProcessingStation): void {
   const { x, y, h } = machine.footprint;
   rig.human.x = x * TILE_SIZE;
@@ -810,7 +810,7 @@ export function verifyStationMarksStandDown(check: Check): void {
   check(
     rig.quest.stations.isUpgrading &&
       channelling.fills.some((color) => withoutSpaces(color) === barColor),
-    `with the cat down, Carl's upgrade still shows its progress bar (${channelling.fills.join() || 'nothing filled'})`,
+    `with the cat down, the human's upgrade still shows its progress bar (${channelling.fills.join() || 'nothing filled'})`,
   );
   rig.cat.isKnockedOut = false;
 }

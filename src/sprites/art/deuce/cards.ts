@@ -4,7 +4,7 @@
  * club floor, each passing its own card size.
  */
 
-import { mix, type Pt } from '../carlArt';
+import { mix, type Pt } from '../bipedArt';
 import {
   type Ctx,
   type Trace,

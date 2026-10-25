@@ -24,13 +24,13 @@ import { isBlueprintsQuestItem, type BlueprintsQuestItemId } from './blueprintsP
 
 /** The remark for `item`, in `speaker`'s voice. */
 function leftBehindLine(item: BlueprintsQuestItemId, speaker: CrawlerKind): BarkLine {
-  const isCarl = speaker === 'human';
+  const isHuman = speaker === 'human';
   if (item === 'quest_scythe') {
-    return isCarl ? CRAWLER_BARKS.scytheLeftBehind.carl : CRAWLER_BARKS.scytheLeftBehind.donut;
+    return isHuman ? CRAWLER_BARKS.scytheLeftBehind.human : CRAWLER_BARKS.scytheLeftBehind.cat;
   }
-  return isCarl
-    ? CRAWLER_BARKS.blueprintsLeftBehind.carl
-    : CRAWLER_BARKS.blueprintsLeftBehind.donut;
+  return isHuman
+    ? CRAWLER_BARKS.blueprintsLeftBehind.human
+    : CRAWLER_BARKS.blueprintsLeftBehind.cat;
 }
 
 /** Who says what about one eviction. */

@@ -2,7 +2,7 @@
   "id": "/kitten-crawler-man/",
   "name": "Kitten Crawler Man",
   "short_name": "Kitten Crawler",
-  "description": "A free browser dungeon crawler: play as Carl and his cat Donut, fight through procedurally generated floors, beat bosses, and collect loot.",
+  "description": "A free browser dungeon crawler: play as Ryan and Belle, his tortoiseshell cat, fight through procedurally generated floors, beat bosses, and collect loot.",
   "lang": "en",
   "dir": "ltr",
   "start_url": "/kitten-crawler-man/",
@@ -45,14 +45,14 @@
       "sizes": "1280x720",
       "type": "image/jpeg",
       "form_factor": "wide",
-      "label": "Carl squares up to a goblin while Donut watches his back in a torchlit dungeon cell block"
+      "label": "Ryan, a man in a light-blue shirt, throws a punch at a sword-wielding goblin while Belle, a black tortoiseshell cat, watches his back in a torchlit dungeon cell block"
     },
     {
       "src": "src/images/website/screenshot-narrow.jpg",
       "sizes": "720x1280",
       "type": "image/jpeg",
       "form_factor": "narrow",
-      "label": "Carl and Donut in a dungeon room as a goblin closes in"
+      "label": "Ryan and Belle, a man in a light-blue shirt and a black tortoiseshell cat, stand in a torchlit dungeon cell block as a sword-wielding goblin closes in"
     }
   ]
 }

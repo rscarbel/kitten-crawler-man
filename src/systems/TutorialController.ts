@@ -1,4 +1,5 @@
 import { TILE_SIZE } from '../core/constants';
+import { crawlerName } from '../characters/characters';
 import { getSmushStats } from '../abilities/smush';
 import type { TutorialGoblin } from '../creatures/TutorialGoblin';
 import type { GameMap } from '../map/GameMap';
@@ -263,7 +264,7 @@ const TOUCH_HINT_TEXTS: Record<TutorialState, string> = {
   CAT_OPENED_TREASURE_BOX: '',
   CAT_EQUIPPED_MAGIC_MISSILE: 'Tap Magic Missile (slot 1). It flies over the fence at the goblin!',
   CAT_SHOT_GUARD: 'The missile flew right over the fence!',
-  AWAITING_SWITCH_TO_HUMAN: 'Tap the Switch button to go back to Carl.',
+  AWAITING_SWITCH_TO_HUMAN: `Tap the Switch button to go back to ${crawlerName('human')}.`,
   SWITCHED_TO_HUMAN: 'Tap the Follower button and call the cat to you.',
   CAT_ARRIVED: 'Speak with Mordecai once more.',
   TALKED_TO_MORDECAI_AGAIN: 'Tutorial complete! Find the stairs to continue.',
@@ -294,7 +295,7 @@ function pointerHintTexts(): Record<TutorialState, string> {
     CAT_OPENED_TREASURE_BOX: '',
     CAT_EQUIPPED_MAGIC_MISSILE: `A goblin guard lurks behind the fence. Press ${firstSlotKey}. Magic flies right over it!`,
     CAT_SHOT_GUARD: 'The missile flew right over the fence!',
-    AWAITING_SWITCH_TO_HUMAN: `Switch back to Carl. Press ${keyLabel('switchCharacter')}.`,
+    AWAITING_SWITCH_TO_HUMAN: `Switch back to ${crawlerName('human')}. Press ${keyLabel('switchCharacter')}.`,
     SWITCHED_TO_HUMAN: `Press "${keyLabel('companionFollow')}" to bring up the follower menu and call the cat to you.`,
     CAT_ARRIVED: 'Speak with Mordecai once more.',
     TALKED_TO_MORDECAI_AGAIN: 'Tutorial complete! Find the stairwell and descend to begin.',
@@ -323,7 +324,7 @@ function bagTabHint(mode: InputMode): string {
 
 /** The stat step's copy once the Character page is open: what a point does, then the one ask. */
 function statSpendHint(mode: InputMode): string {
-  return `A point makes Carl stronger in one stat for good. ${tapVerb(mode)} the + on any stat to spend it. Constitution (more health) is a safe first pick.`;
+  return `A point makes ${crawlerName('human')} stronger in one stat for good. ${tapVerb(mode)} the + on any stat to spend it. Constitution (more health) is a safe first pick.`;
 }
 
 function leaveMenuHint(mode: InputMode): string {
@@ -582,7 +583,7 @@ export interface TutorialRenderContext {
   isChestRewardOpen: boolean;
   /** Screen-space rect of the HUD's Switch button, or null while it is not shown. */
   switchButtonRect: Rect | null;
-  /** Screen-space rect of Carl's "+N" skill-point badge on his level disc, or null while hidden. */
+  /** Screen-space rect of the human's "+N" skill-point badge on his level disc, or null while hidden. */
   levelBadgeRect: Rect | null;
   /** Screen-space frame of the open pause menu, which the hint box keeps clear of; null while closed. */
   pauseFrame: Rect | null;
@@ -1637,7 +1638,7 @@ export class TutorialController implements ObjectiveBeaconSource {
   }
 
   /**
-   * Carl's first level-up: to the "+N" badge on his level disc (or, from the
+   * The human's first level-up: to the "+N" badge on his level disc (or, from the
    * keyboard, Esc), then on the Character page to a stat's "+".
    */
   private renderStatPointGuide(

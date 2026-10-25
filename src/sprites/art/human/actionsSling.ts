@@ -16,19 +16,19 @@
  * parts of it they would.
  */
 
-import { handGrip } from '../carl/limbs';
-import { mixPt, offset, pt } from '../carl/geometry';
-import { SLINGSHOT_LOADED, SLINGSHOT_TIPS_ABOVE_GRIP } from '../carl/props/slingshot';
+import { handGrip } from '../biped/limbs';
+import { mixPt, offset, pt } from '../biped/geometry';
+import { SLINGSHOT_LOADED, SLINGSHOT_TIPS_ABOVE_GRIP } from '../biped/props/slingshot';
 import {
   type BodySide,
   buildSkeleton,
-  type CarlPose,
+  type BipedPose,
   restingPose,
   setArmAngles,
   VIEWS,
-} from '../carl/rig';
+} from '../biped/rig';
 import { type CardinalView } from '../../facingView';
-import { deg, type Pt } from '../carlArt';
+import { deg, type Pt } from '../bipedArt';
 import { SLINGSHOT_COOLDOWN_FRAMES } from '../../slingshotSprite';
 import { anglesThrough, frameValue, upperArmShareThrough } from './gaitShared';
 import { PALM_TO_CAMERA, towards, turnHand } from './handTurn';
@@ -255,7 +255,7 @@ const STANCES: Readonly<Record<CardinalView, SlingStance>> = {
 };
 
 /** Poses an arm through the elbow and wrist `place` says, each segment drawn at the length that takes. */
-function placeArmThrough(pose: CarlPose, side: BodySide, shoulder: Pt, place: ArmPlace): void {
+function placeArmThrough(pose: BipedPose, side: BodySide, shoulder: Pt, place: ArmPlace): void {
   const angles = anglesThrough(shoulder, place.elbow, place.wrist);
   setArmAngles(pose, side, angles, upperArmShareThrough(shoulder, place.elbow));
 }
@@ -268,7 +268,7 @@ function shiftPlace(place: ArmPlace, by: Pt): ArmPlace {
   return { elbow: offset(place.elbow, by.x, by.y), wrist: offset(place.wrist, by.x, by.y) };
 }
 
-function slingPose(stance: SlingStance, frame: number): CarlPose {
+function slingPose(stance: SlingStance, frame: number): BipedPose {
   const pose = restingPose();
   const draw = frameValue(DRAW_BY_FRAME, frame);
   const snap = frameValue(SNAP_BY_FRAME, frame);
@@ -360,14 +360,14 @@ function releasedPouch(stance: SlingStance, forkGrip: Pt, frame: number): Pt | u
   return offset(betweenTips, stance.shot.x * overshoot, stance.shot.y * overshoot);
 }
 
-export function slingSide(frame: number): CarlPose {
+export function slingSide(frame: number): BipedPose {
   return slingPose(STANCES.side, frame);
 }
 
-export function slingFront(frame: number): CarlPose {
+export function slingFront(frame: number): BipedPose {
   return slingPose(STANCES.front, frame);
 }
 
-export function slingBack(frame: number): CarlPose {
+export function slingBack(frame: number): BipedPose {
   return slingPose(STANCES.back, frame);
 }

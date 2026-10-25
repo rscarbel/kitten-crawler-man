@@ -12,8 +12,8 @@
  * bare shank running down and forward to the toes. It is solved once, side-on,
  * in the bird's own walking plane, and the head-on views project that one
  * solve, so a stride is one motion seen from three places rather than three
- * motions that disagree. The arm is a human arm taken from Carl's rig
- * (`carl/rig.ts`): a two-bone IK reaching for a hand target, with joint angles
+ * motions that disagree. The arm is a human arm taken from the biped rig
+ * (`biped/rig.ts`): a two-bone IK reaching for a hand target, with joint angles
  * as an escape hatch for an arm that swings from the shoulder.
  *
  * Handedness: every pose is authored with the rooster's own right side at +X as
@@ -22,7 +22,7 @@
  * the painter shades the mirrored geometry in screen space.
  */
 
-import { type Pt, clamp01, deg } from '../carlArt';
+import { type Pt, clamp01, deg } from '../bipedArt';
 import type { RoosterBuildSpec } from './builds';
 
 export type { Pt };

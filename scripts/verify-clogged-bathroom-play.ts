@@ -788,7 +788,7 @@ function verifyCompanions(rig: Rig, copy: BathroomCopy, label: string): void {
         crawler.hp = crawler.maxHp;
       }
     }
-    const who = activeIsCat ? 'Carl as companion' : 'Donut as companion';
+    const who = activeIsCat ? 'The human as companion' : 'The cat as companion';
     check(picked === 0, `${label}: ${who} targeted a bathroom goblin on ${picked} frame(s)`);
   }
 }

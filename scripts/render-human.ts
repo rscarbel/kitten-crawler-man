@@ -1,14 +1,17 @@
 /**
- * Carl's review harness. Art has to be judged as an image, by something that
+ * The human's review harness. Art has to be judged as an image, by something that
  * only looks at the image — every defect that has ever mattered on a figure in
  * this project was invisible to `typecheck`, `lint` and a code read.
  *
  * The contact sheet is painted from `HUMAN_FIGURE` the way the runtime cache
- * bakes it, and the art gates run as part of the render — in the default
- * outfit, bare and in all his gear — so one command answers both "does it
- * still hold together" and "what does it look like".
+ * bakes it, and the art gates run as part of the render — on every human look
+ * unless `--look=` narrows them to one, each in the default outfit, bare and
+ * in all his gear — so one command answers both "does it still hold
+ * together" and "what does it look like". The sheet paints the named look, or
+ * the default one.
  *
  *   npm run render:human
+ *   npm run render:human -- --look=dave
  *   npx tsx scripts/render-human.ts --row=smush --scale=4
  *   npx tsx scripts/render-human.ts --part=head --scale=6
  *   npx tsx scripts/render-human.ts --row=walk_side --mode=onion --scale=3
@@ -36,7 +39,7 @@
  *   npx tsx scripts/render-human.ts --row=jab_side --frame=4 --ref=<png>
  *     Works alongside sheet/onion/delta on a single frame (--row and --frame
  *     both required): places the reference image beside that frame, scaled so
- *     its content height matches Carl's own head-to-ground height there.
+ *     its content height matches the human's own head-to-ground height there.
  *
  * A run with no --row stacks every declared row into one contact sheet, which
  * for `sheet`/`onion`/`delta`/`strip32` can want a canvas taller than the
@@ -53,12 +56,10 @@ import { reportFigureGates } from './figureGates.js';
 import { humanGateFailures } from './gates-human.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { humanFigureWearing } from '../src/sprites/art/human/appearance.js';
-import {
-  BARE_CARL_OUTFIT,
-  DEFAULT_CARL_OUTFIT,
-} from '../src/sprites/garments/human/carlDressing.js';
+import { defaultOutfitOf } from '../src/sprites/garments/human/humanDressing.js';
 import { humanItemGarments } from '../src/sprites/garments/itemLooks.js';
 import { outfitOf, type Outfit } from '../src/sprites/garments/outfit.js';
+import { gatedHumanLooks, humanLookFlag } from './humanLooks.js';
 import {
   HUMAN_ROW_NAMES,
   HUMAN_ROW_TABLE,
@@ -78,9 +79,10 @@ import {
   floorDriftPerFrameCellPx,
 } from '../src/sprites/art/human/probe.js';
 import { stampAnchorOf } from '../src/sprites/art/human/sockets.js';
-import { type Pt } from '../src/sprites/art/carlArt.js';
-import { HEAD_RY } from '../src/sprites/art/carl/proportions.js';
+import { type Pt } from '../src/sprites/art/bipedArt.js';
+import { HEAD_RY } from '../src/sprites/art/biped/proportions.js';
 import { TILE_SIZE } from '../src/core/constants.js';
+import type { HumanLook } from '../src/sprites/looks/humanLook.js';
 
 const DEFAULT_SCALE = 1.5;
 const MIN_SCALE = 0.25;
@@ -145,18 +147,20 @@ function parseNumberFlag(name: string, fallback: number, min: number, max: numbe
   return value;
 }
 
+const LOOK = humanLookFlag();
+
 /** Everything he can put on: every garment of his but the base ones every outfit starts from. */
 const WEARABLE = humanItemGarments().filter((garment) => !garment.base);
 
 /**
- * The outfit to paint and gate him in: `--gear=carl_cloak+carl_gauntlet`,
+ * The outfit to paint and gate him in: `--gear=human_cloak+human_gauntlet`,
  * garment ids joined by `+`, or `bare`. Absent is his default outfit. Each
  * outfit is a figure of its own, so each is gated on its own.
  */
-function parseOutfit(): Outfit<'human'> {
+function parseOutfit(look: HumanLook): Outfit<'human'> {
   const raw = GEAR_FLAG;
-  if (raw === null) return DEFAULT_CARL_OUTFIT;
-  if (raw === 'bare') return BARE_CARL_OUTFIT;
+  if (raw === null) return defaultOutfitOf(look);
+  if (raw === 'bare') return outfitOf(look, []);
   const worn = raw.split('+').map((id) => {
     const garment = WEARABLE.find((candidate) => candidate.id === id);
     if (garment === undefined) {
@@ -166,24 +170,24 @@ function parseOutfit(): Outfit<'human'> {
     }
     return garment;
   });
-  return outfitOf('human', worn);
+  return outfitOf(look, worn);
 }
 
 const GEAR_FLAG = parseOptionalFlag('gear');
-const OUTFIT = parseOutfit();
-const FIGURE = humanFigureWearing(OUTFIT);
+const OUTFIT = parseOutfit(LOOK);
+const FIGURE = humanFigureWearing(LOOK, OUTFIT);
 
 /**
  * The outfits a run gates. A named `--gear` is gated alone. Otherwise three
  * are: the default the rows were authored in; bare, which is how every new
- * game's Carl is drawn until he finds his shirt; and every piece at once,
+ * game's human crawler is drawn until he finds his shirt; and every piece at once,
  * where the gear crowds the cell the most. Each is held to every gate —
  * most of the time goes to the pixel gates, which are the ones an outfit can
  * turn red, so a shorter list for the extra outfits would save little.
  */
-function gatedOutfits(): readonly Outfit<'human'>[] {
-  if (GEAR_FLAG !== null) return [OUTFIT];
-  return [DEFAULT_CARL_OUTFIT, BARE_CARL_OUTFIT, outfitOf('human', WEARABLE)];
+function gatedOutfits(look: HumanLook): readonly Outfit<'human'>[] {
+  if (GEAR_FLAG !== null) return [parseOutfit(look)];
+  return [defaultOutfitOf(look), outfitOf(look, []), outfitOf(look, WEARABLE)];
 }
 
 function parseMode(): Mode {
@@ -200,7 +204,7 @@ function clampFrame(frameCount: number, frame: number): number {
 
 function frameCountOf(state: string): number {
   const declared = FIGURE.states.get(state);
-  if (declared === undefined) throw new Error(`Carl declares no state "${state}"`);
+  if (declared === undefined) throw new Error(`The human declares no state "${state}"`);
   return declared.frames;
 }
 
@@ -218,7 +222,7 @@ function labelOf(state: string): string {
 /** Narrows a validated row name to `HumanRowName` without a cast. */
 function asHumanRowName(state: string): HumanRowName {
   const found = HUMAN_ROW_NAMES.find((name) => name === state);
-  if (found === undefined) throw new Error(`"${state}" is not a declared Carl row`);
+  if (found === undefined) throw new Error(`"${state}" is not a declared human row`);
   return found;
 }
 
@@ -523,7 +527,7 @@ function drawTrailsPanel(
   ctx.stroke();
 
   const row = rowOf(state);
-  const stamp = stampAnchorOf(row);
+  const stamp = stampAnchorOf(row, LOOK);
   if (stamp !== null) {
     const anchor = stampAnchorCellPx(stamp);
     const ax = anchor.x * scale;
@@ -540,7 +544,7 @@ function drawTrailsPanel(
   ctx.font = FRAME_LABEL_FONT;
   for (const trail of JOINT_TRAILS) {
     const points = Array.from({ length: frameCount }, (_unused, f) => {
-      const probe = probeHumanJoints(state, f);
+      const probe = probeHumanJoints(state, f, LOOK);
       const p = trail.point(probe);
       return { x: p.x * scale, y: p.y * scale, clamped: trail.clamped?.(probe) === true };
     });
@@ -604,7 +608,7 @@ function drawGroundPlanePanel(
 
   const seriesPerLeg = legs.map((trace) =>
     Array.from({ length: frameCount }, (_unused, f) => {
-      const leg = trace.leg(probeHumanJoints(state, f));
+      const leg = trace.leg(probeHumanJoints(state, f, LOOK));
       const groundX = along(trace.point(leg)) + f * travelPerFrame;
       return { frame: f, groundX, planted: leg.planted ?? false };
     }),
@@ -689,7 +693,7 @@ function renderTrails(states: readonly string[], scale: number): Canvas {
     ctx,
     PADDING,
     PADDING,
-    rows.some((r) => stampAnchorOf(r.row) !== null),
+    rows.some((r) => stampAnchorOf(r.row, LOOK) !== null),
   );
 
   let y = PADDING + legendHeight;
@@ -959,7 +963,7 @@ async function composeRef(
   return canvas;
 }
 
-/** Carl's own head-top-to-ground height for one probed frame, in cell pixels. */
+/** The human figure's own head-top-to-ground height for one probed frame, in cell pixels. */
 function figureHeightCellPx(probe: HumanJointProbe): number {
   const headTopY = probe.headCentre.y - HEAD_RY * probe.pixelsPerUnit;
   return probe.groundY - headTopY;
@@ -969,7 +973,7 @@ function figureHeightCellPx(probe: HumanJointProbe): number {
 
 /**
  * node-canvas rejects a canvas taller or wider than this, and browsers cap a
- * `<canvas>` element the same way. Carl declares well over a hundred rows,
+ * `<canvas>` element the same way. The human figure declares well over a hundred rows,
  * so a contact sheet stacking every row at any usable scale routinely wants a
  * canvas past this — the sheet is paginated instead of grown past it.
  */
@@ -1046,10 +1050,12 @@ async function main(): Promise<void> {
   // Ahead of the contact sheet rather than after it: the sheet is a
   // tens-of-megapixel allocation, and measuring art on the far side of one is
   // how a gate goes red on art nobody touched.
-  for (const worn of gatedOutfits()) {
-    const outfit = worn.key;
-    console.log(`Gating Carl in ${outfit}…`);
-    reportFigureGates(`human (${outfit})`, humanGateFailures(worn));
+  for (const look of gatedHumanLooks()) {
+    for (const worn of gatedOutfits(look)) {
+      const outfit = worn.key;
+      console.log(`Gating the human (${look.id}) in ${outfit}…`);
+      reportFigureGates(`human (${look.id}, ${outfit})`, humanGateFailures(look, worn));
+    }
   }
 
   let canvasPages: Canvas[];
@@ -1073,7 +1079,7 @@ async function main(): Promise<void> {
         pageCanvas = await composeCompare(pageCanvas, path);
       } else if (refPath !== null) {
         const clampedFrame = clampFrame(frameCountOf(pageStates[0]), frameFilter);
-        const probe = probeHumanJoints(asHumanRowName(pageStates[0]), clampedFrame);
+        const probe = probeHumanJoints(asHumanRowName(pageStates[0]), clampedFrame, LOOK);
         const height = figureHeightCellPx(probe) * scale;
         pageCanvas = await composeRef(pageCanvas, refPath, grid.cellGroundY, height);
       }

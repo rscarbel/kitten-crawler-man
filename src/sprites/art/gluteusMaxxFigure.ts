@@ -40,7 +40,7 @@ import {
   type Spark,
   type V3,
 } from './gluteusMaxxArt';
-import { clamp01, deg, easeInOut, hump, lerp } from './carlArt';
+import { clamp01, deg, easeInOut, hump, lerp } from './bipedArt';
 import { type FigureDef, figureStates } from '../figure/figureDef';
 import {
   MAXX_CRUSH_FRAMES,
@@ -60,7 +60,7 @@ import {
 export const TILE_SCALE = 64;
 
 /**
- * The ground line's row within the tile, the one Carl and the cat stand on,
+ * The ground line's row within the tile, the one the human and the cat stand on,
  * so a hireling beside the player stands on the same line he does.
  */
 const GROUND_ROW_IN_TILE = 58;

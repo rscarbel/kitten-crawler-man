@@ -19,7 +19,7 @@
  * harness runs: `npm run render:crocodilian`.
  */
 
-import { clamp01, deg, easeInOut, easeOut, hump, lerp, type Pt } from './carlArt';
+import { clamp01, deg, easeInOut, easeOut, hump, lerp, type Pt } from './bipedArt';
 import {
   BUCKET_BOY_BUILD,
   BUCKET_REST_HEIGHT,
@@ -61,7 +61,7 @@ import {
 
 /** Tile size the art is drawn at; the runtime scales by tileSize / TILE_SCALE. */
 export const TILE_SCALE = 64;
-/** The ground line's row within the tile, matched to Carl's so they stand on one floor. */
+/** The ground line's row within the tile, matched to the human crawler's so they stand on one floor. */
 const GROUND_ROW_IN_TILE = 58;
 export const GROUND_OFFSET_IN_TILE = GROUND_ROW_IN_TILE / TILE_SCALE;
 
@@ -85,10 +85,10 @@ export const BUCKET_BOY_CELL: CrocCell = {
 };
 
 export const CLARABELLE_CELL: CrocCell = {
-  frameWidth: 160,
-  frameHeight: 152,
-  tileX: 48,
-  tileY: 76,
+  frameWidth: 192,
+  frameHeight: 184,
+  tileX: 64,
+  tileY: 104,
 };
 
 export const TRIAGE_SPARKLE_CELL: CrocCell = {

@@ -452,7 +452,7 @@ function gateFacingParity(): void {
 // ── G8: she is short even for a dwarf ────────────────────────────────────────
 
 /**
- * Standing height to the crown of her hair, in tiles. Carl is two tiles; a
+ * Standing height to the crown of her hair, in tiles. The human crawler is two tiles; a
  * dwarf woman bent over a cane comes to his hip, and stands shorter than the
  * club patrons around her, who are about a tile.
  */

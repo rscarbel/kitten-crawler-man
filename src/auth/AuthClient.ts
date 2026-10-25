@@ -105,7 +105,7 @@ export interface GameProgress {
   wheelQuestFreeSpins?: WheelQuestFreeSpins;
   /** Frames of blood vomiting each crawler has left. */
   bloodVomitRemaining?: BloodVomitRemaining;
-  /** Whether Carl owns the attack cow. */
+  /** Whether the human crawler owns the attack cow. */
   attackCowOwned?: boolean;
   /** The cow's HP; absent while she is at a full health not yet measured. */
   attackCowHp?: number;

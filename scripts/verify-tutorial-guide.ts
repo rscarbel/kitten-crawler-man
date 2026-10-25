@@ -26,13 +26,13 @@
  *  - the safe-room doorway, the chest and the stairwell are lit only during
  *    their steps, and the chest stands down the moment it is opened;
  *  - a cat already at full health (god mode's heal) skips the potion step;
- *  - Carl levels up exactly on the smush, never before, and the cat not at
+ *  - the human levels up exactly on the smush, never before, and the cat not at
  *    all; the stat step waits for his point to be spent (god mode or not),
  *    pins the pause menu to the Character page, then pans to the cat, and is
  *    skipped with no point to spend;
  *  - every step finished inside a menu completes, and asks for the menus to
  *    close, even while the menu halts the world;
- *  - after goblin B the game waits for the player's own switch back to Carl,
+ *  - after goblin B the game waits for the player's own switch back to the human,
  *    refusing the switch before that step and allowing it for good after;
  *  - a shut gate is drawn and holds its crawler back, rattling (once, not
  *    every frame) when walked into; once unlocked it stays shut while its
@@ -825,7 +825,7 @@ const HARD_DIFFICULTY_XP_SCALE = 1.25;
 const LEVEL_BEFORE = 1;
 const LEVEL_AFTER = 2;
 
-/** Carl's and the cat's levels after each tutorial kill, at a difficulty's reward scale. */
+/** The human's and the cat's levels after each tutorial kill, at a difficulty's reward scale. */
 function levelsThroughTutorial(xpScale: number): { human: number; cat: number }[] {
   const human = new HumanPlayer(0, 0, TILE_SIZE);
   const cat = new CatPlayer(0, 0, TILE_SIZE);
@@ -844,7 +844,7 @@ function levelsThroughTutorial(xpScale: number): { human: number; cat: number }[
   });
 }
 
-section('Carl levels up exactly on the smush, and the cat not at all');
+section('The human levels up exactly on the smush, and the cat not at all');
 for (const xpScale of [1, HARD_DIFFICULTY_XP_SCALE]) {
   const levels = levelsThroughTutorial(xpScale);
   const at = (kill: number): { human: number; cat: number } => levels[kill];
@@ -885,7 +885,7 @@ function runFrames(
   for (let frame = 0; frame < BEAT_FRAMES; frame++) tutorial.update(human, cat);
 }
 
-section('the stat step waits for Carl’s point, on the Character page, then pans to the cat');
+section('the stat step waits for the human’s point, on the Character page, then pans to the cat');
 {
   const { tutorial, human, cat } = tutorialAt('HUMAN_SMUSHED_GUARDS');
   human.gainXp(human.xpNeededForNextLevel);
@@ -940,11 +940,11 @@ section('a step finished inside a menu completes while the menu halts the world'
   bag.tutorial.updateUnderMenus(bag.human, bag.cat);
   check(
     bag.tutorial.state === 'HUMAN_EQUIPPED_SMUSH' && bag.tutorial.needsAutoCloseMenus,
-    `Carl's bag step, finished, closes the menus (${bag.tutorial.state})`,
+    `The human's bag step, finished, closes the menus (${bag.tutorial.state})`,
   );
 }
 
-section('after goblin B the game waits for the player to switch back to Carl');
+section('after goblin B the game waits for the player to switch back to the human');
 {
   const { tutorial, human, cat } = tutorialAt('CAT_SHOT_GUARD');
   human.isActive = false;
@@ -1006,7 +1006,7 @@ const SMUSH_TEST_DAMAGE = 100;
 const DOOR_GROUND_LINE_TILES = 0.55;
 const FAR_VIEW = gateView({ x: FAR_AWAY_PX, y: FAR_AWAY_PX });
 
-/** Two fresh crawlers and a fresh tutorial, Carl the one being steered. */
+/** Two fresh crawlers and a fresh tutorial, the human the one being steered. */
 function freshTutorial(): {
   tutorial: Controller;
   human: InstanceType<typeof HumanPlayer>;
@@ -1059,8 +1059,8 @@ function cameraOn(crawler: { x: number; y: number }): { x: number; y: number } {
   };
 }
 
-/** Carl standing in the safe-entrance gate's hall, `tilesNorth` rows short of its clamp line. */
-function carlInSafeEntranceHall(tilesNorth: number): {
+/** The human standing in the safe-entrance gate's hall, `tilesNorth` rows short of its clamp line. */
+function humanInSafeEntranceHall(tilesNorth: number): {
   tutorial: Controller;
   human: InstanceType<typeof HumanPlayer>;
   cat: InstanceType<typeof CatPlayer>;
@@ -1078,7 +1078,7 @@ function carlInSafeEntranceHall(tilesNorth: number): {
 }
 
 /**
- * Carl walks straight west along the connector at the smush gate from the
+ * The human walks straight west along the connector at the smush gate from the
  * safe room; counts the frames a gate stopped him.
  */
 function walkThroughSmushGate(godMode: boolean): { stops: number; through: boolean } {
@@ -1102,7 +1102,7 @@ function walkThroughSmushGate(godMode: boolean): { stops: number; through: boole
 
 section('a shut gate is drawn and holds its crawler back');
 {
-  const { tutorial, human, cat } = carlInSafeEntranceHall(0);
+  const { tutorial, human, cat } = humanInSafeEntranceHall(0);
   const camera = cameraOn(human);
   const ctx = gameContext(DESKTOP.width, DESKTOP.height);
   for (const piece of tutorial.gateRenderables()) piece.render(ctx, camera.x, camera.y, TILE_SIZE);
@@ -1121,7 +1121,7 @@ section('a shut gate is drawn and holds its crawler back');
   tutorial.applyGateConstraints(human, cat);
   check(
     human.y === TUTORIAL_GATE_SAFE_ENTRANCE.clampPxY,
-    `Carl walking into it is held at its clamp line (y ${human.y})`,
+    `The human walking into it is held at its clamp line (y ${human.y})`,
   );
   const firstBump = tutorial.drainGateCues().map((raised) => raised.cue);
   human.y += PLAYER_SPEED;
@@ -1133,9 +1133,9 @@ section('a shut gate is drawn and holds its crawler back');
   );
 }
 
-section("Carl's safe-room gate rises as soon as all of it is in view, however far off he is");
+section("The human's safe-room gate rises as soon as all of it is in view, however far off he is");
 {
-  const { tutorial, human, cat } = carlInSafeEntranceHall(GATE_WALK_START_TILES);
+  const { tutorial, human, cat } = humanInSafeEntranceHall(GATE_WALK_START_TILES);
   advanceTo(tutorial, 'HUMAN_KILLED_GOBLIN');
   const gateRowPx = TUTORIAL_GATE_SAFE_ENTRANCE.y * TILE_SIZE;
   const cutOff = gateView({ x: cameraOn(human).x, y: gateRowPx - DESKTOP.height });
@@ -1146,11 +1146,11 @@ section("Carl's safe-room gate rises as soon as all of it is in view, however fa
   tutorial.updateGates(human, cat, gateView(cameraOn(human)));
   check(
     raisedCue(tutorial, 'gateRaise'),
-    `and rises once it is wholly in view, Carl still ${GATE_WALK_START_TILES} tiles up the hall`,
+    `and rises once it is wholly in view, the human still ${GATE_WALK_START_TILES} tiles up the hall`,
   );
 }
 
-section("Donut's gate opens once every dialog box is shut, wherever she is");
+section("The cat's gate opens once every dialog box is shut, wherever she is");
 {
   const { tutorial, human, cat } = freshTutorial();
   human.isActive = false;
@@ -1176,7 +1176,7 @@ section("the final gate opens the moment Mordecai's farewell ends");
   settleGates(tutorial, human, cat, gateView(cameraOn(human)));
   human.y = TUTORIAL_GATE_G3.clampPxY + PLAYER_SPEED;
   tutorial.applyGateConstraints(human, cat);
-  check(human.y === TUTORIAL_GATE_G3.clampPxY, 'it holds Carl until the farewell is heard');
+  check(human.y === TUTORIAL_GATE_G3.clampPxY, 'it holds the human until the farewell is heard');
   advanceTo(tutorial, 'TALKED_TO_MORDECAI_AGAIN');
   tutorial.drainGateCues();
   tutorial.updateGates(human, cat, FAR_VIEW);
@@ -1187,30 +1187,30 @@ section("the final gate opens the moment Mordecai's farewell ends");
   check(human.y > TUTORIAL_GATE_G3.clampPxY, 'and lets him through');
 }
 
-section('the smush gate waits for Carl to walk up to it, on screen, and never stops him');
+section('the smush gate waits for the human to walk up to it, on screen, and never stops him');
 {
   const { tutorial, human, cat } = freshTutorial();
   human.x = TUTORIAL_GATE_SMUSH.clampPxX + GATE_WALK_START_TILES * TILE_SIZE;
   human.y = ((TUTORIAL_GATE_SMUSH.y1 + TUTORIAL_GATE_SMUSH.y2) / 2) * TILE_SIZE;
   advanceTo(tutorial, 'HUMAN_SMUSHED_GUARDS');
   tutorial.updateGates(human, cat, gateView(cameraOn(human)));
-  check(!smushGateRaised(tutorial, 'gateRaise'), 'it stays down while Carl is far off');
+  check(!smushGateRaised(tutorial, 'gateRaise'), 'it stays down while the human is far off');
   human.x = TUTORIAL_GATE_SMUSH.clampPxX;
   tutorial.updateGates(human, cat, FAR_VIEW);
   check(
     !smushGateRaised(tutorial, 'gateRaise'),
-    'and while it is off screen, even with Carl at it',
+    'and while it is off screen, even with the human at it',
   );
   tutorial.updateGates(human, cat, gateView(cameraOn(human)));
   check(
     smushGateRaised(tutorial, 'gateRaise'),
-    'and rises when it comes on screen with Carl beside it',
+    'and rises when it comes on screen with the human beside it',
   );
 
   const normal = walkThroughSmushGate(false);
   check(
     normal.through && normal.stops === 0,
-    `walking at it, Carl passes without a stop (${normal.stops} frames held)`,
+    `walking at it, the human passes without a stop (${normal.stops} frames held)`,
   );
   const god = walkThroughSmushGate(true);
   check(god.through && god.stops === 0, `at god-mode pace too (${god.stops} frames held)`);
@@ -1234,7 +1234,7 @@ section('the cat waiting at the fence goes through the moment she is called');
   tutorial.updateGates(human, cat, FAR_VIEW);
   check(
     raisedCue(tutorial, 'fenceGateSwing'),
-    'called, its gate swings open at once, though Carl is too far off to see it',
+    'called, its gate swings open at once, though the human is too far off to see it',
   );
   settleGates(tutorial, human, cat, FAR_VIEW);
   const before = cat.y + PLAYER_SPEED;
@@ -1243,7 +1243,7 @@ section('the cat waiting at the fence goes through the moment she is called');
   check(cat.y === before, 'and once it is open it no longer holds her');
 }
 
-section("goblin B's door keeps Carl off him until the cat's missile kills him");
+section("goblin B's door keeps the human off him until the cat's missile kills him");
 {
   const { tutorial, human, cat } = freshTutorial();
   human.x = ((TUTORIAL_GOBLIN_B_DOOR.x1 + TUTORIAL_GOBLIN_B_DOOR.x2) / 2) * TILE_SIZE;
@@ -1257,16 +1257,16 @@ section("goblin B's door keeps Carl off him until the cat's missile kills him");
   const goblinBottomPx = (GOBLIN_B_POS.y + 1) * TILE_SIZE;
   check(
     human.y === TUTORIAL_GOBLIN_B_DOOR.southClampPxY && human.y > goblinBottomPx,
-    `walking north at goblin B, Carl is held south of his door (y ${human.y}, goblin ends at ${goblinBottomPx})`,
+    `walking north at goblin B, the human is held south of his door (y ${human.y}, goblin ends at ${goblinBottomPx})`,
   );
   const { getSmushStats } = await import('../src/abilities/smush.js');
-  const carlCentreY = TUTORIAL_GOBLIN_B_DOOR.southClampPxY + TILE_SIZE / 2;
+  const humanCentreY = TUTORIAL_GOBLIN_B_DOOR.southClampPxY + TILE_SIZE / 2;
   const goblinCentreY = (GOBLIN_B_POS.y + 1 / 2) * TILE_SIZE;
   const smushReachPx =
     (getSmushStats(TUTORIAL_SMUSH_LEVEL).outerBlastRadius + SMUSH_REACH_MARGIN_TILES) * TILE_SIZE;
   check(
-    carlCentreY - goblinCentreY > smushReachPx,
-    `from there goblin B is ${((carlCentreY - goblinCentreY) / TILE_SIZE).toFixed(1)} tiles off, past a level-1 Smush's blast plus ${SMUSH_REACH_MARGIN_TILES} (${(smushReachPx / TILE_SIZE).toFixed(1)})`,
+    humanCentreY - goblinCentreY > smushReachPx,
+    `from there goblin B is ${((humanCentreY - goblinCentreY) / TILE_SIZE).toFixed(1)} tiles off, past a level-1 Smush's blast plus ${SMUSH_REACH_MARGIN_TILES} (${(smushReachPx / TILE_SIZE).toFixed(1)})`,
   );
   const goblinB = tutorial.allMobs.find(
     (mob) => mob.x === GOBLIN_B_POS.x * TILE_SIZE && mob.y === GOBLIN_B_POS.y * TILE_SIZE,
@@ -1277,7 +1277,7 @@ section("goblin B's door keeps Carl off him until the cat's missile kills him");
       !goblinB.takesPlayerDamage('melee') &&
       !goblinB.takesPlayerDamage('slingshot') &&
       goblinB.takesPlayerDamage('missile'),
-    "and nothing of Carl's can hurt goblin B at any range, god-mode Smush included: only the cat's missile",
+    "and nothing of the human's can hurt goblin B at any range, god-mode Smush included: only the cat's missile",
   );
   if (goblinB !== undefined) {
     goblinB.takeDamageFrom(SMUSH_TEST_DAMAGE, human, 'smush');
@@ -1320,7 +1320,7 @@ section('a gate unlocked far from the player is still heard, from its direction'
   advanceTo(tutorial, 'SWITCHED_TO_CAT');
   tutorial.updateGates(human, cat, gateView(cameraOn(human)));
   const unlock = tutorial.drainGateCues().find((raised) => raised.cue === 'gateUnlock');
-  check(unlock !== undefined, "Donut's gate unlocks while Carl is across the map");
+  check(unlock !== undefined, "The cat's gate unlocks while the human is across the map");
   if (unlock !== undefined) {
     const ears = { x: human.x + TILE_SIZE / 2, y: human.y + TILE_SIZE / 2 };
     const tilesFrom = (point: { x: number; y: number }): number =>

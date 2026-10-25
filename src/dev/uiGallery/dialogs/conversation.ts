@@ -1,4 +1,5 @@
 import { setViewportSize } from '../../../core/Viewport';
+import { crawlerName } from '../../../characters/characters';
 import { Conversation } from '../../../dialog/Conversation';
 import {
   speakerLines,
@@ -116,7 +117,7 @@ function conversationFixture(
 }
 
 const mordecai = speakerLines('mordecai');
-const donut = speakerLines('donut');
+const belle = speakerLines('belle');
 const systemAi = transientSpeaker('System AI', 'system');
 
 const LONG_TEXT =
@@ -134,7 +135,7 @@ export const FIXTURES: readonly DialogFixture[] = [
   ),
   conversationFixture(
     'conversation-multipage',
-    request([mordecai.line(LONG_TEXT), donut.line('WE KNOW, MORDECAI.')]),
+    request([mordecai.line(LONG_TEXT), belle.line('Okay, Mordecai! Naps and no floor mushrooms.')]),
     false,
   ),
   conversationFixture(
@@ -153,17 +154,20 @@ export const FIXTURES: readonly DialogFixture[] = [
   ),
   conversationFixture(
     'conversation-choices-floating',
-    request([donut.line('Carl, we should buy the hat. The hat is important.')], {
-      haltsWorld: false,
-      ending: {
-        kind: 'choices',
-        choices: [
-          choice('Buy the hat', 'normal'),
-          choice('About the quest', 'quest'),
-          choice('Not now', 'exit'),
-        ],
+    request(
+      [belle.line(`${crawlerName('human')}, can we get the hat? It looks so warm. Please?`)],
+      {
+        haltsWorld: false,
+        ending: {
+          kind: 'choices',
+          choices: [
+            choice('Buy the hat', 'normal'),
+            choice('About the quest', 'quest'),
+            choice('Not now', 'exit'),
+          ],
+        },
       },
-    }),
+    ),
     true,
   ),
   conversationFixture(

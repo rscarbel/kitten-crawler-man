@@ -18,7 +18,7 @@ import {
   type IncubusView,
   incubusStateName,
 } from './art/incubusFigure';
-import { WALK_GROUND_PER_CYCLE_PX } from './art/human/locomotion';
+import { RIG_WALK_GROUND_PER_CYCLE_PX } from './art/human/locomotion';
 import { idleFrameAtSeconds, TICKS_PER_SECOND } from './art/human/timing';
 import { TALK_TICKS_PER_FRAME } from './art/human/actionsMisc';
 
@@ -48,11 +48,11 @@ export function prewarmIncubusSprite(): void {
 }
 
 /**
- * Ground one walk cycle covers, in world pixels at the standard tile: Carl's
- * own walk, whose rows these are, on a figure scaled up by his height. Pace
+ * Ground one walk cycle covers, in world pixels at the standard tile: the
+ * figure's own walk, whose rows these are, on a figure scaled up by his height. Pace
  * the walk by distance with this and the planted foot holds still.
  */
-export const INCUBUS_PIXELS_PER_WALK_CYCLE = WALK_GROUND_PER_CYCLE_PX * INCUBUS_HEIGHT_SCALE;
+export const INCUBUS_PIXELS_PER_WALK_CYCLE = RIG_WALK_GROUND_PER_CYCLE_PX * INCUBUS_HEIGHT_SCALE;
 
 /** Tiles per walk cycle, for callers that measure the world in tiles. */
 export const INCUBUS_TILES_PER_WALK_CYCLE = INCUBUS_PIXELS_PER_WALK_CYCLE / TILE_SIZE;

@@ -3,6 +3,7 @@
  * packs, one named fixture at a time.
  */
 
+import { crawlerName } from '../../characters/characters';
 import { Inventory } from '../../core/Inventory';
 import { BAG_PAGE_SLOTS, ITEM_DEF, isItemId, type ItemId } from '../../core/ItemDefs';
 import type { CrawlerKind } from '../../core/SkillManager';
@@ -19,7 +20,7 @@ import type { DialogFixture } from './dialogs/fixture';
 const FIXTURE_COINS = 1240;
 /** Where the fixture's right-click lands, in UI units. */
 const MENU_AT = { x: 200, y: 120 } as const;
-const FIXTURE_COIN_SPLIT = 'Carl 900 · Donut 340';
+const FIXTURE_COIN_SPLIT = `${crawlerName('human')} 900 · ${crawlerName('cat')} 340`;
 /** Potions share a cooldown; the fixture shows it part-way through. */
 const POTION_COOLDOWN = { current: 180, max: 480 } as const;
 
@@ -28,7 +29,7 @@ const CAT_STATS = { strength: 6, intelligence: 14, constitution: 8, dexterity: 1
 /** A packed fixture bag runs this many pages deep, the last one part-filled. */
 const PACKED_BAG_PAGES = 2.5;
 
-const CARL_BAG: readonly { readonly id: ItemId; readonly quantity: number }[] = [
+const HUMAN_BAG: readonly { readonly id: ItemId; readonly quantity: number }[] = [
   { id: 'speed_fizz', quantity: 3 },
   { id: 'jugg_juice', quantity: 2 },
   { id: 'dirty_shirley', quantity: 4 },
@@ -50,7 +51,7 @@ const CARL_BAG: readonly { readonly id: ItemId; readonly quantity: number }[] = 
   { id: 'trebuchet_kit', quantity: 2 },
 ];
 
-const DONUT_BAG: readonly { readonly id: ItemId; readonly quantity: number }[] = [
+const CAT_BAG: readonly { readonly id: ItemId; readonly quantity: number }[] = [
   { id: 'speed_fizz', quantity: 1 },
   { id: 'cooldown_crisp', quantity: 2 },
   { id: 'splatter_skunk_toe_ring', quantity: 1 },
@@ -77,7 +78,7 @@ interface FixtureSpec {
   readonly name: string;
   readonly tab: InventoryTab;
   /** Arranges the screen and packs before the first frame. */
-  readonly arrange?: (screen: InventoryScreen, carl: InventoryOwner) => void;
+  readonly arrange?: (screen: InventoryScreen, human: InventoryOwner) => void;
   readonly member?: CrawlerKind;
   readonly packedBag?: boolean;
 }
@@ -107,20 +108,20 @@ export function buildFixture(spec: FixtureSpec): DialogFixture {
   return {
     name: spec.name,
     surfaces: (shown) => {
-      const carl = fixtureOwner('human', BASE_STATS);
-      const donut = fixtureOwner('cat', CAT_STATS);
-      stock(carl, CARL_BAG);
-      stock(donut, DONUT_BAG);
-      carl.inventory.placeOnHotbar('goblin_dynamite', 2);
-      carl.inventory.placeOnHotbar('speed_fizz', 1);
-      carl.inventory.equipByItemId('issue_kettle_helm');
-      carl.inventory.equipByItemId('padded_gambeson');
-      carl.inventory.equipByItemId('fury_of_taranis');
-      carl.inventory.unseenUpgrades.add('enchanted_crown_sepsis_whore');
-      if (spec.packedBag === true) packBag(carl);
+      const human = fixtureOwner('human', BASE_STATS);
+      const cat = fixtureOwner('cat', CAT_STATS);
+      stock(human, HUMAN_BAG);
+      stock(cat, CAT_BAG);
+      human.inventory.placeOnHotbar('goblin_dynamite', 2);
+      human.inventory.placeOnHotbar('speed_fizz', 1);
+      human.inventory.equipByItemId('issue_kettle_helm');
+      human.inventory.equipByItemId('padded_gambeson');
+      human.inventory.equipByItemId('fury_of_taranis');
+      human.inventory.unseenUpgrades.add('enchanted_crown_sepsis_whore');
+      if (spec.packedBag === true) packBag(human);
       const party: readonly InventoryMember[] = [
-        { id: 'human', name: 'Carl', owner: carl },
-        { id: 'cat', name: 'Donut', owner: donut },
+        { id: 'human', name: crawlerName('human'), owner: human },
+        { id: 'cat', name: crawlerName('cat'), owner: cat },
       ];
       const screen = new InventoryScreen({
         actions: new InventoryActions(),
@@ -130,7 +131,7 @@ export function buildFixture(spec: FixtureSpec): DialogFixture {
         cooldownFor: (item) => (item.id === 'health_potion' ? POTION_COOLDOWN : null),
       });
       screen.open({ tab: spec.tab, member: spec.member });
-      spec.arrange?.(screen, carl);
+      spec.arrange?.(screen, human);
       const surface: Surface = {
         ...screen.surface,
         id: `inventory-${spec.name}`,
@@ -145,22 +146,22 @@ export const INVENTORY_FIXTURES: readonly DialogFixture[] = [
   buildFixture({
     name: 'bag',
     tab: 'bag',
-    arrange: (screen, carl) => selectBag(screen, carl, 'dirty_shirley'),
+    arrange: (screen, human) => selectBag(screen, human, 'dirty_shirley'),
   }),
   buildFixture({
     name: 'bag-armor',
     tab: 'bag',
-    arrange: (screen, carl) => {
+    arrange: (screen, human) => {
       screen.filter = 'armor';
-      selectBag(screen, carl, 'enchanted_crown_sepsis_whore');
+      selectBag(screen, human, 'enchanted_crown_sepsis_whore');
       screen.sheetOpen = true;
     },
   }),
   buildFixture({
     name: 'bag-hotbar-picker',
     tab: 'bag',
-    arrange: (screen, carl) => {
-      selectBag(screen, carl, 'jugg_juice');
+    arrange: (screen, human) => {
+      selectBag(screen, human, 'jugg_juice');
       screen.sheetOpen = true;
       screen.hotbarPickerOpen = true;
     },
@@ -168,26 +169,26 @@ export const INVENTORY_FIXTURES: readonly DialogFixture[] = [
   buildFixture({
     name: 'bag-menu',
     tab: 'bag',
-    arrange: (screen, carl) => {
-      const slotIdx = carl.inventory.bag.slots.findIndex((item) => item?.id === 'dirty_shirley');
-      const item = carl.inventory.bag.slots[slotIdx];
+    arrange: (screen, human) => {
+      const slotIdx = human.inventory.bag.slots.findIndex((item) => item?.id === 'dirty_shirley');
+      const item = human.inventory.bag.slots[slotIdx];
       if (item !== null) screen.openItemMenu({ source: 'inv', slotIdx, item }, MENU_AT);
     },
   }),
   buildFixture({
     name: 'bag-tool-menu',
     tab: 'bag',
-    arrange: (screen, carl) => {
-      const slotIdx = carl.inventory.bag.slots.findIndex((item) => item?.id === 'basic_axe');
-      const item = carl.inventory.bag.slots[slotIdx];
+    arrange: (screen, human) => {
+      const slotIdx = human.inventory.bag.slots.findIndex((item) => item?.id === 'basic_axe');
+      const item = human.inventory.bag.slots[slotIdx];
       if (item !== null) screen.openItemMenu({ source: 'inv', slotIdx, item }, MENU_AT);
     },
   }),
   buildFixture({
     name: 'bag-tool-detail',
     tab: 'bag',
-    arrange: (screen, carl) => {
-      selectBag(screen, carl, 'basic_axe');
+    arrange: (screen, human) => {
+      selectBag(screen, human, 'basic_axe');
       screen.sheetOpen = true;
     },
   }),
@@ -204,7 +205,7 @@ export const INVENTORY_FIXTURES: readonly DialogFixture[] = [
     name: 'bag-last-page',
     tab: 'bag',
     packedBag: true,
-    arrange: (screen, carl) => screen.showPage(carl.inventory.bag.pageCount - 1),
+    arrange: (screen, human) => screen.showPage(human.inventory.bag.pageCount - 1),
   }),
   buildFixture({
     name: 'character',

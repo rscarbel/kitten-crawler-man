@@ -36,14 +36,14 @@ export function bareFistDamage(strength: number): number {
 
 /** Species HP floor for the cat: 2 + CON 2 × 2 = 6 starting max HP. She is meant to be fragile. */
 export const CAT_BASE_HP_OFFSET = 2;
-/** Donut's constitution is fixed at 2 by the enhanced pet biscuit. */
+/** The cat's constitution is fixed at 2 by the enhanced pet biscuit. */
 export const CAT_BASE_CONSTITUTION = 2;
 /** The pet biscuit's head start: she is very hard to hit. */
 export const CAT_STARTING_DEXTERITY = 8;
-/** Dexterity the System hands Donut for free on each level-up (Enhanced Growth). */
+/** Dexterity the System hands the cat for free on each level-up (Enhanced Growth). */
 export const CAT_DEXTERITY_PER_LEVEL = 1;
 /**
- * The stats Donut can never spend a point into: her constitution is fixed by the
+ * The stats the cat can never spend a point into: her constitution is fixed by the
  * pet biscuit and her dexterity is auto-allocated by Enhanced Growth.
  */
 export const CAT_LOCKED_STATS: readonly StatName[] = ['constitution', 'dexterity'];

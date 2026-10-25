@@ -15,7 +15,8 @@ import type { GameStats } from '../../../core/GameStats';
 import { keybindings } from '../../../core/Keybindings';
 import { activeMusicLibrary, type MusicLibrary } from '../../../core/MusicLibrary';
 import { settings } from '../../../core/Settings';
-import { CRAWLER_NAMES, type CrawlerKind } from '../../../core/SkillManager';
+import { crawlerName } from '../../../characters/characters';
+import { type CrawlerKind } from '../../../core/SkillManager';
 import type { CatPlayer } from '../../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../../creatures/HumanPlayer';
 import { inset, splitH, splitV, type Rect } from '../../core/geom';
@@ -156,7 +157,7 @@ interface Reveal {
 }
 
 function restrictionHint(restriction: Extract<PauseRestriction, { kind: 'inventory' }>): string {
-  return `Open ${CRAWLER_NAMES[restriction.crawler]}'s Inventory to continue.`;
+  return `Open ${crawlerName(restriction.crawler)}'s Inventory to continue.`;
 }
 
 /** The menu row a restriction leaves enabled. */

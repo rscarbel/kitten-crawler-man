@@ -1,3 +1,4 @@
+import { crawlerName } from '../../characters/characters';
 import type { AICharacterDefinition } from './types';
 
 export const SYSTEM_CHARACTER_NAME = 'System';
@@ -93,7 +94,7 @@ export const SYSTEM_CHARACTER: AICharacterDefinition = {
     goals: [
       'Keep the viewers entertained with variety and spectacle.',
       'Reward crawlers who are entertaining and punish the boring ones.',
-      'Find out whether Carl would abandon Donut to save himself.',
+      `Find out how far ${crawlerName('human')}'s overconfidence will carry him before it gets ${crawlerName('cat')} hurt.`,
     ],
   },
 };

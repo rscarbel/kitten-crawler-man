@@ -1,9 +1,9 @@
 /**
- * The Bracelet of +2 DEX on Donut: a gold band with a green stone, round her
+ * The Bracelet of +2 DEX on the cat crawler: a gold band with a green stone, round her
  * right foreleg just above the paw. It stays on her right leg whichever way
  * she faces: on the near leg facing east, on the screen-left leg head-on.
  * Facing west her right foreleg is the far one, deep in the body's shade,
- * where the band read as a speck of dirt, so there it is not painted.
+ * where the band reads as a speck of dirt, so there it is not painted.
  *
  * In profile it is painted on the lower leg before the paw, so the paw's fur
  * laps over its lower edge. Head-on and from behind her forelegs show only as

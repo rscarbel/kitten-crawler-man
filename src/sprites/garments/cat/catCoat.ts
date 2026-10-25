@@ -1,7 +1,7 @@
 /**
- * Donut's coat: the base garment every outfit of hers is built on. It paints
+ * The cat's coat: the base garment every cat outfit is built on. It paints
  * every piece of fur her anatomy lays out — skull, cheeks, ears, muzzle, body,
- * haunches, legs, paws and tail — in the tortoiseshell patches the anatomy
+ * haunches, legs, paws and tail — in the coat patches the anatomy
  * places on each piece. Everything else she wears is painted after it, piece
  * by piece, so it sits on her fur and under whatever is painted next.
  */

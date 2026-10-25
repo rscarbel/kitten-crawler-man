@@ -428,7 +428,7 @@ export class RenderPipeline {
     rc.fairyFireballs?.renderGround(ctx, camX, camY);
     // Scorches, the shadows under bombs in the air, and the burning sticks' circles.
     rc.goblinBombs?.renderGround(ctx, camX, camY);
-    // The Smush's floor half: its rings and cracks are the ground Carl stamps,
+    // The Smush's floor half: its rings and cracks are the ground the human crawler stamps,
     // and drawn over him they wash out the feet the stamp is read from.
     rc.smushFx.renderGround(ctx, camX, camY);
     // A blast's scorch is floor too: drawn over the crawlers it would sit on

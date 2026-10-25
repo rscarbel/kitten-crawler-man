@@ -8,8 +8,8 @@
  * where an item sits or how it is lit.
  */
 
-import { mix, type Pt, rgba } from '../art/carlArt';
-import { deriveRamp, FAR_LIMB_SHADE, LIGHT, OUTLINE } from '../art/carl/palette';
+import { mix, type Pt, rgba } from '../art/bipedArt';
+import { deriveRamp, FAR_LIMB_SHADE, LIGHT, OUTLINE } from '../art/biped/palette';
 import { archetypeSpec, HANDLE_HALF_WIDTH } from './gripArchetypes';
 import type {
   HeldFacing,

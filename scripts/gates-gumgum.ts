@@ -1,5 +1,5 @@
 /**
- * Art gates for GumGum: the living orc on Carl's rig and her corpse.
+ * Art gates for GumGum: the living orc on the biped rig and her corpse.
  *
  * What a typecheck cannot see and these do:
  *
@@ -8,8 +8,8 @@
  *       draws nothing and says nothing)
  *   G3  she is green: the orc read rests on the skin swap reaching the paint
  *   G4  her tusks show — near-white ink in the head band, above the apron
- *   G5  painting her leaves Carl's own cell byte-identical (her skin, garment,
- *       cut and expression are module state swapped in and reset after)
+ *   G5  baking frame 0 of every one of her rows leaves the human's idle frame 0
+ *       byte-identical to a bake of it taken before hers
  *   G6  the corpse is in a pool of blood, wet, and is visibly her: blood-red
  *       ink, a specular sheen on it, her green skin and her plum coat
  *   G7  she reads as a woman by her hair: plaits lie down her chest, below the jaw
@@ -30,9 +30,6 @@ import { GUMGUM_FIGURE } from '../src/sprites/art/gumGumFigure.js';
 import { GUMGUM_STANDING_STATE, GUMGUM_WALK_STATE } from '../src/sprites/gumGumSprite.js';
 import { GUMGUM_CORPSE_FIGURE, GUMGUM_CORPSE_STATE } from '../src/sprites/art/gumGumCorpseArt.js';
 import { HUMAN_FIGURE } from '../src/sprites/art/humanFigure.js';
-import { resetCarlGarmentRamp, resetCarlSkinHairRamp } from '../src/sprites/art/carl/palette.js';
-import { resetCarlTorsoCut } from '../src/sprites/art/carl/torso.js';
-import { resetCarlExpression } from '../src/sprites/art/carl/head.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 
 const RGBA_STRIDE = 4;
@@ -257,27 +254,24 @@ function livingFailures(): string[] {
 
 // ── G5 ───────────────────────────────────────────────────────────────────────
 
-const CARL_REFERENCE_STATE = 'idle';
+const HUMAN_REFERENCE_STATE = 'idle';
 
 /**
- * The reference is painted from Carl's own defaults, restored here first: any
- * earlier bake in this process (another gate, the harness) could already have
- * leaked, and a reference painted in leaked colours makes the comparison pass.
+ * Painting GumGum on the biped rig leaves the human's own cells as they were: her
+ * look reaches the rig only through the options her bake passes.
  */
-function swapFailures(): string[] {
-  resetCarlSkinHairRamp();
-  resetCarlGarmentRamp();
-  resetCarlTorsoCut();
-  resetCarlExpression();
-  const before = pixelsOf(HUMAN_FIGURE, CARL_REFERENCE_STATE, 0);
+function lookIsolationFailures(): string[] {
+  const before = pixelsOf(HUMAN_FIGURE, HUMAN_REFERENCE_STATE, 0);
   for (const state of figureStateNames(GUMGUM_FIGURE)) {
     bakeFigureCell(GUMGUM_FIGURE, state, 0);
   }
-  const after = pixelsOf(HUMAN_FIGURE, CARL_REFERENCE_STATE, 0);
-  if (before.data.length === 0) return ['G5 Carl reference cell is empty'];
+  const after = pixelsOf(HUMAN_FIGURE, HUMAN_REFERENCE_STATE, 0);
+  if (before.data.length === 0) return ['G5 the human reference cell is empty'];
   for (let i = 0; i < before.data.length; i++) {
     if (before.data[i] !== after.data[i]) {
-      return [`G5 painting GumGum changed Carl's ${CARL_REFERENCE_STATE} cell — a swap leaked`];
+      return [
+        `G5 painting GumGum changed the human's ${HUMAN_REFERENCE_STATE} cell — her look reached his`,
+      ];
     }
   }
   return [];
@@ -335,7 +329,7 @@ export function gumGumGateFailures(): string[] {
     ...structureFailures(),
     ...stateFailures(),
     ...livingFailures(),
-    ...swapFailures(),
+    ...lookIsolationFailures(),
     ...corpseFailures(),
   ];
 }

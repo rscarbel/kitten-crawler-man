@@ -1021,7 +1021,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
         this.progress.stage = 'investigation';
         this.questManager.startQuest(MURDER_QUEST_ID);
         this.bus.emit('questStarted', { questId: MURDER_QUEST_ID });
-        // The dialog strip only ever previews these — Carl pockets the writ and the
+        // The dialog strip only ever previews these — the human crawler pockets the writ and the
         // letter off the body here, in code, or neither ever reaches the bag.
         this.progress.evidenceOwed = [...ALLEY_EVIDENCE];
       },

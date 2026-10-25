@@ -63,7 +63,7 @@ const WORK_MOTION_TOLERANCE_PX = 0.5;
 /** How often the resource strip is kept up while hammering, so it shows the boards about to go. */
 const RESOURCE_NOTE_INTERVAL_FRAMES = UPDATES_PER_SECOND;
 const WORK_LOOP_VOLUME = 0.7;
-/** Donut has no hammering row: her swipe lands on this cadence while she works a section. */
+/** The cat has no hammering row: her swipe lands on this cadence while she works a section. */
 const CAT_HAMMER_SWING_TICKS = 30;
 const FLOATING_TEXT = 'Fence rebuilt';
 
@@ -111,7 +111,7 @@ interface FenceJob {
   frames: number;
   refX: number;
   refY: number;
-  /** Whether Carl's hammering row is this job's, so ending the job only ever stops its own. */
+  /** Whether the human crawler's hammering row is this job's, so ending the job only ever stops its own. */
   posing: boolean;
   catSwingTicks: number;
 }
@@ -319,7 +319,7 @@ export class PastureFenceWork {
   }
 
   /**
-   * Carl's hammering loops until the job ends. A row the animator refuses
+   * The human crawler's hammering loops until the job ends. A row the animator refuses
    * (he is mid-flinch) or another system stops is asked for again next tick,
    * so the picture catches back up with the work.
    */

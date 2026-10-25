@@ -42,8 +42,8 @@ import {
   loopFrame,
   outline,
   paint,
-  paintCarlChevrons,
-  paintDonutHoop,
+  paintHumanChevrons,
+  paintCatHoop,
   paintImpact,
   paintPulseHalo,
   propRng,
@@ -611,7 +611,7 @@ function paintLegend(
   paintWord(ctx, word, cx, top + settle, fitted, stencilPigment(color), propRng(seed));
 }
 
-// ── Donut's counterweight: the stencilled sandbag ────────────────────────────
+// ── The cat's counterweight: the stencilled sandbag ──────────────────────────
 
 const SANDBAG_WIDTH = 0.6;
 const SANDBAG_HEIGHT = 0.5;
@@ -832,7 +832,7 @@ function sandbagPainter(facing: 'west' | 'east', broken: boolean, swayFrame: num
 }
 
 /**
- * The counterweight Donut shoots out: a striped sack stencilled "GRIMALDI &
+ * The counterweight the cat shoots out: a striped sack stencilled "GRIMALDI &
  * CO.", hung on a rope that runs over the pulley in the grate beside it.
  */
 export function drawGrimaldiSandbag(
@@ -863,10 +863,10 @@ export function drawGrimaldiSandbag(
   // Its only blow is also its breaking blow, so the flash must paint before the broken return.
   paintImpact(ctx, x + size / 2, y + size * (SANDBAG_TOP + SANDBAG_HEIGHT / 2), size, state.struck);
   if (state.broken) return;
-  paintDonutHoop(ctx, x + size / 2, y + size / 2, size, strength);
+  paintCatHoop(ctx, x + size / 2, y + size / 2, size, strength);
 }
 
-// ── Carl's brace: a timber stage brace on a screw jack ───────────────────────
+// ── The human's brace: a timber stage brace on a screw jack ──────────────────
 
 const BRACE_POST_WIDTH = 0.2;
 const BRACE_POST_TOP = 0.06;
@@ -1090,7 +1090,7 @@ function bracePainter(facing: 'west' | 'east', broken: boolean) {
   };
 }
 
-/** The load-bearing brace Carl breaks: a blue-banded timber on a screw jack, raked against the wall. */
+/** The load-bearing brace the human breaks: a blue-banded timber on a screw jack, raked against the wall. */
 export function drawStageBrace(
   ctx: Ctx,
   x: number,
@@ -1119,7 +1119,7 @@ export function drawStageBrace(
     BRACE_POST_WIDTH * BRACE_IMPACT_SCALE,
   );
   if (state.broken) return;
-  paintCarlChevrons(ctx, x + size / 2, y + size / 2, size, state.facing, strength);
+  paintHumanChevrons(ctx, x + size / 2, y + size / 2, size, state.facing, strength);
 }
 
 // ── The shut ways: an iron fire screen and a boarded flat ────────────────────
@@ -1302,7 +1302,7 @@ function paintBoardedFlat(ctx: Ctx, ox: number, oy: number, s: number): void {
   }
 }
 
-/** The boarded scenery flat barring a lane until Carl breaks the brace holding it. */
+/** The boarded scenery flat barring a lane until the human breaks the brace holding it. */
 export function drawBoardedFlat(ctx: Ctx, x: number, y: number, size: number): void {
   drawBigTopProp(
     ctx,

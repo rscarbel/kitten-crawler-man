@@ -16,6 +16,7 @@
  *    the current seed, one line per check.
  */
 
+import { crawlerName } from '../characters/characters';
 import { setViewportSize, viewportHeight, viewportWidth } from '../core/Viewport';
 import { settings } from '../core/Settings';
 import { TILE_SIZE } from '../core/constants';
@@ -302,8 +303,8 @@ const PLATE_SUBJECTS: ReadonlyArray<PlateSubject> = [
     name: POKER_REGULARS[id].name,
     avatar: { kind: 'regular', key: id, look: POKER_REGULARS[id].look } as const,
   })),
-  { name: 'You (Carl)', avatar: { kind: 'crawler', crawler: 'human' } },
-  { name: 'You (Donut)', avatar: { kind: 'crawler', crawler: 'cat' } },
+  { name: `You (${crawlerName('human')})`, avatar: { kind: 'crawler', crawler: 'human' } },
+  { name: `You (${crawlerName('cat')})`, avatar: { kind: 'crawler', crawler: 'cat' } },
   { name: 'Empty seat', avatar: { kind: 'empty' } },
 ];
 

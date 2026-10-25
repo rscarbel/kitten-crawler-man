@@ -8,8 +8,8 @@
  * glass, dust in a beam, a crawler's reflection, a flare where the light
  * strikes — is drawn live over the cached frame.
  *
- * Ownership is the tent's two-colour language: Carl's pivot mirrors are
- * circus blue and brass on a timber turntable, Donut's swivel mirrors are
+ * Ownership is the tent's two-colour language: the human's pivot mirrors
+ * are circus blue and brass on a timber turntable, the cat's swivel mirrors are
  * red-and-white stripes on a gold spring mount.
  */
 
@@ -307,7 +307,7 @@ function paintSilverFace(ctx: Ctx, panel: PanelGeometry, size: number): void {
  * The back of either kind of mirror is dark timber boarding, never anything
  * that could pass for glass: light that lands on it stops, and the player has
  * to be able to see that before the beam proves it. Ownership survives on the
- * bracing — Carl's is iron, Donut's a red-painted batten.
+ * bracing — the human's is iron, the cat's a red-painted batten.
  */
 function paintDullBack(ctx: Ctx, panel: PanelGeometry, size: number, kind: MirrorKind): void {
   ctx.save();
@@ -376,7 +376,7 @@ function paintPost(
   ctx.rect(foot.x - width / 2, pivotY, width, foot.y - pivotY);
   ctx.fill();
   if (kind === 'swivel_mirror') {
-    // A barber-pole twist of red up Donut's gold-capped posts.
+    // A barber-pole twist of red up the cat's gold-capped posts.
     ctx.save();
     try {
       ctx.beginPath();

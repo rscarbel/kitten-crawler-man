@@ -16,7 +16,7 @@
  * carry it once the player looks.
  */
 
-import { deg, lerp, mix, type Pt } from './carlArt';
+import { deg, lerp, mix, type Pt } from './bipedArt';
 import type { GarmentLayer, HemShape, RatkinOutfit } from './ratkin/outfit';
 import { hood, notchedEar, paddedJack, robe, smock, speckle } from './ratkin/garments';
 import {

@@ -31,7 +31,7 @@
  * view faces +X; the runtime mirrors it for the other direction.
  */
 
-import { type Pt, clamp01, clampAlpha, deg, easeOut, lerp, mix, rgba } from './carlArt';
+import { type Pt, clamp01, clampAlpha, deg, easeOut, lerp, mix, rgba } from './bipedArt';
 import { allocCanvas, releaseSurface, surfaceContext } from '../../core/canvasSurface';
 import { withClip } from './softShade';
 import type { FairyKind } from './fairyTiming';

@@ -8,7 +8,7 @@
  * line and the figure reads as a paper doll.
  */
 
-import { rgba } from '../carlArt';
+import { rgba } from '../bipedArt';
 import type { Ramp } from './builds';
 import { type Pt, add, angleOf, mixPt, pt } from './rig';
 

@@ -1,5 +1,5 @@
 /**
- * Where a weapon rests on Carl while it is equipped and not in his hand, as
+ * Where a weapon rests on the human crawler while it is equipped and not in his hand, as
  * the drawn picture shows it: a light one-hander (and a slingshot) hangs at
  * his left hip, hilt up and point down and back; a heavy one-hander or a
  * two-hander lies across his back, its handle up behind his right shoulder
@@ -14,9 +14,9 @@
 
 import type { Vec3 } from '../../held/heldPaint';
 import type { CardinalView } from '../../facingView';
-import type { Pt } from '../carlArt';
-import { pt } from '../carl/geometry';
-import { drawnSide, type Skeleton, VIEWS } from '../carl/rig';
+import type { Pt } from '../bipedArt';
+import { pt } from '../biped/geometry';
+import { drawnSide, type Skeleton, VIEWS } from '../biped/rig';
 
 /** The stowed places that show: a place of `none` is put away out of sight. */
 export type ShownPlacement = 'hip' | 'back';

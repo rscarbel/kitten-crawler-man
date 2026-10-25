@@ -1,9 +1,9 @@
 /**
- * Donut's art gates.
+ * The cat's art gates.
  *
  * These gates enforce sheet-shape invariants — a pose that fits its cell, a
  * row that keeps its frames — directly against cells painted from
- * `CAT_FIGURE`, baked exactly the way the runtime cache bakes them, plus
+ * one of her figures, baked exactly the way the runtime cache bakes them, plus
  * pose-stream checks that measure the choreography itself and need no pixels
  * at all.
  *
@@ -28,9 +28,10 @@ import {
 import {
   ACTION_FRAMES,
   BREAK_FRAMES,
-  CAT_FIGURE,
   CAT_ROWS,
   DANCE_FRAMES,
+  FRAME_H,
+  FRAME_W,
   IDLE_FRAMES,
   KO_FRAMES,
   TILE_SCALE,
@@ -40,13 +41,18 @@ import {
   type RowSpec,
 } from '../src/sprites/art/catFigure.js';
 import { GROUND_Y, type CatPose } from '../src/sprites/art/catArt.js';
+import type { FigureDef } from '../src/sprites/figure/figureDef.js';
+import type { CatLook } from '../src/sprites/looks/catLook.js';
+import { BELLE_LOOK } from '../src/sprites/looks/cats/belle.js';
+import { PUMPKIN_LOOK } from '../src/sprites/looks/cats/pumpkin.js';
 
 const INK_ALPHA_THRESHOLD = 24;
 const SOLID_ALPHA_THRESHOLD = 200;
 const CHANNELS = 4;
 const ALPHA_OFFSET = 3;
 
-const { frameWidth, frameHeight } = CAT_FIGURE;
+const frameWidth = FRAME_W;
+const frameHeight = FRAME_H;
 
 const failures: string[] = [];
 
@@ -71,11 +77,11 @@ function failUnlessMeasured(gateId: string, measured: number, what: string): voi
 const alphaByCell = new Map<string, Uint8ClampedArray>();
 
 /** One cell's alpha channel, baked as the runtime cache bakes it. */
-function cellAlpha(state: string, frame: number): Uint8ClampedArray {
-  const key = `${state}[${frame}]`;
+function cellAlpha(figure: FigureDef, state: string, frame: number): Uint8ClampedArray {
+  const key = `${figure.id}:${state}[${frame}]`;
   const cached = alphaByCell.get(key);
   if (cached !== undefined) return cached;
-  const cell = bakeFigureCell(CAT_FIGURE, state, frame);
+  const cell = bakeFigureCell(figure, state, frame);
   const { data } = cell.getContext('2d').getImageData(0, 0, frameWidth, frameHeight);
   const alpha = new Uint8ClampedArray(frameWidth * frameHeight);
   for (let i = 0; i < alpha.length; i++) alpha[i] = data[i * CHANNELS + ALPHA_OFFSET];
@@ -140,32 +146,51 @@ function rowNamed(name: string, gateId: string): RowSpec | null {
   return row;
 }
 
-function posesOf(row: RowSpec): CatPose[] {
-  return Array.from({ length: row.frameCount }, (_unused, frame) => row.pose(frame));
+function posesOf(row: RowSpec, look: CatLook): CatPose[] {
+  return Array.from({ length: row.frameCount }, (_unused, frame) => row.pose(frame, look));
 }
 
-function cellsOfRow(row: RowSpec): Uint8ClampedArray[] {
-  return Array.from({ length: row.frameCount }, (_unused, frame) => cellAlpha(row.name, frame));
+function cellsOfRow(figure: FigureDef, row: RowSpec): Uint8ClampedArray[] {
+  return Array.from({ length: row.frameCount }, (_unused, frame) =>
+    cellAlpha(figure, row.name, frame),
+  );
 }
 
 // ── G1: structure ────────────────────────────────────────────────────────────
 
 /**
- * How much of her cell Donut's widest pose fills.
+ * How much of her cell each look's widest pose must fill.
  *
- * Below the shared default, and deliberately: her cell is 160px so that the
- * tail plume, a raised paw and the claw arc all have room at full reach, while
- * she herself is drawn at two thirds of the anatomy's natural size because she
- * is a housecat standing next to goblins and clowns. The cell size is frozen by
- * the bake this figure replaces, so it cannot be tightened without breaking the
- * parity that proved the conversion; G9 is what says the cells are affordable.
+ * Below the shared default, and deliberately: the cell is 160px so that a
+ * tail, a raised paw and the claw arc all have room at full reach, while the
+ * cat is drawn at two thirds of the anatomy's natural size because she is a
+ * housecat standing next to goblins and clowns. The cell size is fixed by that
+ * room, so the fill cannot be raised by tightening the cell; G9 is what says
+ * the cells are affordable.
+ *
+ * The floor is per look because the ink is: Pumpkin's plume and bulk fill far
+ * more of the same cell than a slender shorthair with a thin tail. A look's
+ * floor sits a margin under what its widest pose was measured to fill, so the
+ * gate still catches a figure that collapses in its cell.
  */
-const MIN_CELL_FILL_SHARE = 0.13;
+const PUMPKIN_MIN_CELL_FILL_SHARE = 0.13;
+/** Belle's widest pose (her swipe in profile, outline included), measured: 11.3% of the cell. */
+const BELLE_MEASURED_CELL_FILL_SHARE = 0.113;
+/** A look's floor is this share of its measured fill. */
+const CELL_FILL_MARGIN = 0.9;
 
-function gateStructure(): void {
-  for (const failure of figureStructuralFailures(CAT_FIGURE, {
-    minInkAreaShare: MIN_CELL_FILL_SHARE,
-  })) {
+const MIN_CELL_FILL_BY_LOOK: ReadonlyMap<string, number> = new Map([
+  [PUMPKIN_LOOK.id, PUMPKIN_MIN_CELL_FILL_SHARE],
+  [BELLE_LOOK.id, BELLE_MEASURED_CELL_FILL_SHARE * CELL_FILL_MARGIN],
+]);
+
+function gateStructure(look: CatLook, figure: FigureDef): void {
+  const minInkAreaShare = MIN_CELL_FILL_BY_LOOK.get(look.id);
+  if (minInkAreaShare === undefined) {
+    fail('G1', `no cell-fill floor for look "${look.id}": add it to MIN_CELL_FILL_BY_LOOK`);
+    return;
+  }
+  for (const failure of figureStructuralFailures(figure, { minInkAreaShare })) {
     fail('G1', failure);
   }
 }
@@ -211,14 +236,14 @@ const STANDING_ROWS = ['idle', 'idle_side', 'idle_away'] as const;
  * The paws are measured against the solid-alpha threshold so the soft contact
  * shadow under her does not count as the lowest ink and quietly satisfy it.
  */
-function gateCellGeometry(): void {
+function gateCellGeometry(figure: FigureDef): void {
   const groundY = TILE_Y + TILE_SCALE / 2 + GROUND_Y * TILE_SCALE;
   const tileCentreX = TILE_X + TILE_SCALE / 2;
   let framesMeasured = 0;
   for (const name of STANDING_ROWS) {
     const row = rowNamed(name, 'G2');
     if (row === null) continue;
-    const solid = inkStatsOf(cellAlpha(row.name, 0), SOLID_ALPHA_THRESHOLD);
+    const solid = inkStatsOf(cellAlpha(figure, row.name, 0), SOLID_ALPHA_THRESHOLD);
     if (solid.count === 0) {
       fail('G2', `${name}[0] paints no solid ink at all`);
       continue;
@@ -233,7 +258,7 @@ function gateCellGeometry(): void {
           `${drop.toFixed(1)}px off, limit ${GROUND_TOLERANCE_PX}`,
       );
     }
-    const offCentre = Math.abs(inkStatsOf(cellAlpha(row.name, 0)).centroidX - tileCentreX);
+    const offCentre = Math.abs(inkStatsOf(cellAlpha(figure, row.name, 0)).centroidX - tileCentreX);
     if (offCentre > CENTRELINE_TOLERANCE_PX) {
       fail(
         'G2',
@@ -252,10 +277,9 @@ function gateCellGeometry(): void {
  *
  * A cycle that closes makes the wrap from last frame to first just another step
  * of the same cycle, so the largest step inside the row is the only scale that
- * describes it. The disjunct this replaces allowed the seam up to 2.1× the row's
- * *median* step instead, and could not fail: her walks and idles wrap at
- * 1.27–1.71× their own median as shipped, so a cycle sampled over 1.5 turns
- * still sat comfortably under it.
+ * describes it. The row's *median* step is not: her walks and idles wrap at
+ * 1.27–1.71× their own median, so a limit set against the median sits above
+ * a cycle sampled over 1.5 turns and cannot fail.
  *
  * Measured over her eight loops with the ink threshold this module uses, the
  * shipped seams run 0.558–1.281 of their largest in-cycle step, the top being
@@ -287,7 +311,7 @@ const LOOP_SEAM_CEILING = 1.35;
  * so its last frame repeats its first.
  *
  * Deliberately weaker than "the pose function is periodic in the frame count":
- * several rows drive a channel at half the row's own frequency — Donut's idle
+ * several rows drive a channel at half the row's own frequency — the cat's idle
  * head tilt is a `sin(angle * 0.5)` — so the poses only agree again at the whole
  * turn, which is the only place the row ever wraps.
  */
@@ -304,7 +328,7 @@ const CYCLE_CLOSE_TOLERANCE_PX = 0;
  * Deliberately *not* the sibling form of this check, "no interior frame may
  * reproduce frame 0". That is false of this art: measured over the loop rows
  * here, the head-on and profile idles reproduce frame 0 exactly at frame 4 of 8
- * and Donut's dance at frame 6 of 12, because those rows run two whole turns of
+ * and the cat's dance at frame 6 of 12, because those rows run two whole turns of
  * their oscillation each. Turn *count* is not the invariant; frames per turn is.
  * Shipped, the first exact repeat lands at 4, 6, 8, 12 or 16 frames, so 4 is the
  * floor the art already sits on, and it is an integer structural quantity rather
@@ -328,12 +352,12 @@ const MIN_FRAMES_PER_CYCLE_TURN = 4;
 const LOOP_SEAM_FLOOR = 0.5;
 
 /** G3 — a loop must close: not a pop across its seam, and not a held frame. */
-function gateLoopClosure(): void {
+function gateLoopClosure(figure: FigureDef): void {
   let loopsMeasured = 0;
   for (const row of CAT_ROWS) {
     if (row.kind !== 'loop') continue;
     loopsMeasured++;
-    const cells = cellsOfRow(row);
+    const cells = cellsOfRow(figure, row);
     const steps: number[] = [];
     for (let i = 1; i < cells.length; i++) steps.push(frameDelta(cells[i - 1], cells[i]));
     const seam = frameDelta(cells[cells.length - 1], cells[0]);
@@ -369,7 +393,7 @@ function gateLoopClosure(): void {
       );
     }
 
-    const closure = frameDelta(cells[0], cellAlpha(row.name, row.frameCount));
+    const closure = frameDelta(cells[0], cellAlpha(figure, row.name, row.frameCount));
     if (closure > CYCLE_CLOSE_TOLERANCE_PX) {
       fail(
         'G3',
@@ -452,10 +476,10 @@ const FROZEN_STEP_SHARE = 1 / 3;
  * somewhere no frame of the row goes. The frozen-step half below has no such
  * blind spot.
  */
-function gateMotionContinuity(): void {
+function gateMotionContinuity(figure: FigureDef): void {
   let stepsMeasured = 0;
   for (const row of CAT_ROWS) {
-    const cells = cellsOfRow(row);
+    const cells = cellsOfRow(figure, row);
     const steps: number[] = [];
     for (let i = 1; i < cells.length; i++) steps.push(frameDelta(cells[i - 1], cells[i]));
     if (steps.length === 0) {
@@ -530,13 +554,13 @@ const CLAW_EPSILON = 1e-6;
  * measures the pose's claw value rather than painted ink: the value is what the
  * three views share, and it is what a redraw would break.
  */
-function gateClawSwing(): void {
+function gateClawSwing(look: CatLook): void {
   let clawedRowsMeasured = 0;
   for (const name of CLAWED_SWIPE_ROWS) {
     const row = rowNamed(name, 'G5');
     if (row === null) continue;
     clawedRowsMeasured++;
-    const claws = posesOf(row).map((pose) => pose.frontR.claw);
+    const claws = posesOf(row, look).map((pose) => pose.frontR.claw);
     let peakFrame = 0;
     claws.forEach((claw, frame) => {
       if (claw > claws[peakFrame]) peakFrame = frame;
@@ -571,7 +595,7 @@ function gateClawSwing(): void {
     const row = rowNamed(name, 'G5');
     if (row === null) continue;
     slashRowsMeasured++;
-    const poses = posesOf(row);
+    const poses = posesOf(row, look);
     failUnlessMeasured(
       'G5',
       poses.filter((pose) => pose.slash !== null).length,
@@ -602,13 +626,13 @@ const CAST_EPSILON = 1e-6;
  * starts returning a hair above zero instead of exactly zero would empty an
  * equality filter and leave this passing while measuring nothing.
  */
-function gateCastChargesBeforeRelease(): void {
+function gateCastChargesBeforeRelease(look: CatLook): void {
   let rowsMeasured = 0;
   for (const name of CAST_ROWS) {
     const row = rowNamed(name, 'G6');
     if (row === null) continue;
     rowsMeasured++;
-    const poses = posesOf(row);
+    const poses = posesOf(row, look);
     const firstRelease = poses.findIndex((pose) => pose.castRelease > CAST_EPSILON);
     if (firstRelease < 0) {
       fail('G6', `${name} never releases: castRelease stays at zero for the whole row`);
@@ -652,7 +676,7 @@ const KNOCKED_OUT_MAX_HEIGHT_SHARE = 0.8;
  * than from a pose of its own, so a change to either quietly stands her back
  * up.
  */
-function gateKnockedOutLiesDown(): void {
+function gateKnockedOutLiesDown(figure: FigureDef): void {
   const downed = rowNamed('knocked_out', 'G7');
   const standing = rowNamed('idle_side', 'G7');
   if (downed === null || standing === null) return;
@@ -660,7 +684,7 @@ function gateKnockedOutLiesDown(): void {
   const heightOf = (row: RowSpec): number => {
     let tallest = 0;
     for (let frame = 0; frame < row.frameCount; frame++) {
-      const stats = inkStatsOf(cellAlpha(row.name, frame));
+      const stats = inkStatsOf(cellAlpha(figure, row.name, frame));
       if (stats.count === 0) continue;
       tallest = Math.max(tallest, stats.maxY - stats.minY + 1);
     }
@@ -747,7 +771,7 @@ function directionalStateNames(): string[] {
  * count table are read out of the source because the sprite module reaches for
  * browser globals a Node process does not have.
  */
-function gateRuntimeStates(): void {
+function gateRuntimeStates(figure: FigureDef): void {
   const source = spriteModuleSource();
 
   const union = /type CatState =([^;]*);/.exec(source);
@@ -755,11 +779,7 @@ function gateRuntimeStates(): void {
     fail('G8', `${SPRITE_MODULE_PATH} does not declare a CatState union`);
   } else {
     const names = [...union[1].matchAll(/'([^']+)'/g)].map((match) => match[1]);
-    for (const failure of missingStateFailures(
-      CAT_FIGURE,
-      names,
-      `${SPRITE_MODULE_PATH}'s CatState`,
-    )) {
+    for (const failure of missingStateFailures(figure, names, `${SPRITE_MODULE_PATH}'s CatState`)) {
       fail('G8', failure);
     }
   }
@@ -774,7 +794,7 @@ function gateRuntimeStates(): void {
     const directional: readonly string[] = DIRECTIONAL_BASES;
     const headOnOnly = names.filter((name) => !directional.includes(name));
     for (const failure of missingStateFailures(
-      CAT_FIGURE,
+      figure,
       headOnOnly,
       `${SPRITE_MODULE_PATH}'s CatOneShot`,
     )) {
@@ -783,7 +803,7 @@ function gateRuntimeStates(): void {
   }
 
   for (const failure of missingStateFailures(
-    CAT_FIGURE,
+    figure,
     directionalStateNames(),
     `${SPRITE_MODULE_PATH}'s directionalState`,
   )) {
@@ -798,7 +818,7 @@ function gateRuntimeStates(): void {
     if (held === null) fail('G8', `${SPRITE_MODULE_PATH} does not declare a HELD_ROWS table`);
     const warmedWhenHeld = [...(held?.[1] ?? '').matchAll(/'([^']+)'/g)].map((match) => match[1]);
     for (const failure of missingStateFailures(
-      CAT_FIGURE,
+      figure,
       warmedWhenHeld,
       `${SPRITE_MODULE_PATH}'s HELD_ROWS`,
     )) {
@@ -810,7 +830,7 @@ function gateRuntimeStates(): void {
       ...warmedWhenHeld,
     ];
     for (const failure of missingStateFailures(
-      CAT_FIGURE,
+      figure,
       warmed,
       `${SPRITE_MODULE_PATH}'s PREWARMED_ROWS`,
     )) {
@@ -819,7 +839,7 @@ function gateRuntimeStates(): void {
     // Her painter costs an order of magnitude more per frame than the point at
     // which painting on demand fits inside a frame's slack, so a row nobody
     // warms is a dropped frame the first time she plays it.
-    for (const state of CAT_FIGURE.states.keys()) {
+    for (const state of figure.states.keys()) {
       if (warmed.includes(state)) continue;
       fail(
         'G8',
@@ -847,7 +867,7 @@ function gateRuntimeStates(): void {
       );
       continue;
     }
-    const painted = CAT_FIGURE.states.get(state)?.frames;
+    const painted = figure.states.get(state)?.frames;
     if (painted === undefined) {
       fail('G8', `${SPRITE_MODULE_PATH} counts "${state}", which the figure does not paint`);
       continue;
@@ -871,8 +891,7 @@ const BYTES_PER_MEGABYTE = 1024 * 1024;
 /**
  * The hard ceiling for one warm animation row.
  *
- * The sheet this figure replaced was one texture with a whole-texture budget. A
- * painted figure is admitted to the cache a row at a time, so the number that
+ * A painted figure is admitted to the cache a row at a time, so the number that
  * decides whether it fits is the widest row's warm bytes rather than the sum of
  * all of them — and it has to stay well inside the cache's per-figure ceiling,
  * because she is on screen continuously with several of her rows warm at once.
@@ -880,13 +899,13 @@ const BYTES_PER_MEGABYTE = 1024 * 1024;
 const ROW_BUDGET_MEGABYTES = 3;
 
 /** G9 — the widest warm row's memory, reported whether or not it passes. */
-function gateWarmRowSize(): void {
+function gateWarmRowSize(figure: FigureDef): void {
   const cellBytes = frameWidth * frameHeight * BYTES_PER_PIXEL;
   let widestState = '';
   let widestFrames = 0;
   let statesMeasured = 0;
   let totalFrames = 0;
-  for (const [state, declared] of CAT_FIGURE.states) {
+  for (const [state, declared] of figure.states) {
     statesMeasured++;
     totalFrames += declared.frames;
     if (declared.frames <= widestFrames) continue;
@@ -912,17 +931,17 @@ function gateWarmRowSize(): void {
   }
 }
 
-/** Runs every gate and returns one message per failure. */
-export function catGateFailures(): string[] {
+/** Runs every gate on one of her figures (`look` in an outfit) and returns one message per failure. */
+export function catGateFailures(look: CatLook, figure: FigureDef): string[] {
   failures.length = 0;
-  gateStructure();
-  gateCellGeometry();
-  gateLoopClosure();
-  gateMotionContinuity();
-  gateClawSwing();
-  gateCastChargesBeforeRelease();
-  gateKnockedOutLiesDown();
-  gateRuntimeStates();
-  gateWarmRowSize();
+  gateStructure(look, figure);
+  gateCellGeometry(figure);
+  gateLoopClosure(figure);
+  gateMotionContinuity(figure);
+  gateClawSwing(look);
+  gateCastChargesBeforeRelease(look);
+  gateKnockedOutLiesDown(figure);
+  gateRuntimeStates(figure);
+  gateWarmRowSize(figure);
   return [...failures];
 }

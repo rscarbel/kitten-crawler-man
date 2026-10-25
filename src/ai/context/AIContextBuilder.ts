@@ -6,6 +6,7 @@ import { GameEventStream } from './gameEventStream';
 import { jsonEqual, type JsonObject } from './json';
 import {
   buildLiveState,
+  liveCrawlerNamed,
   SnapshotDiffer,
   SNAPSHOT_MIN_INTERVAL_MS,
   type StateSnapshotPayload,
@@ -299,7 +300,7 @@ export class AIContextBuilder {
     if (this.stockpiling.length === 0 || live.isPaused) return;
     const stillWatching: StockpilingWatch[] = [];
     for (const watch of this.stockpiling) {
-      const state = watch.crawler === 'Carl' ? live.carl : live.donut;
+      const state = liveCrawlerNamed(live, watch.crawler);
       const stillLow = state.maxHp > 0 && state.hp / state.maxHp < LOW_HP_FRACTION;
       if (!stillLow || state.knockedOut) continue;
       if (now - watch.since < STOCKPILING_GRACE_MS) {

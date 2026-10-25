@@ -15,7 +15,7 @@
  * view's rows instead, through the one fallback table its animator keeps.
  */
 
-import { TWO_PI } from './art/carl/geometry';
+import { TWO_PI } from './art/biped/geometry';
 
 export const FACING_VIEWS = ['front', 'frontDiagonal', 'side', 'backDiagonal', 'back'] as const;
 export type FacingView = (typeof FACING_VIEWS)[number];

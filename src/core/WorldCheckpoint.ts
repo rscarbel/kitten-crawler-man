@@ -102,7 +102,7 @@ export interface WorldCheckpoint {
   townMemory: TownMemoryCheckpoint;
   mercenaryRoster: MercenaryRosterCheckpoint;
   mongoPetState: MongoPetStateCheckpoint;
-  /** Carl's attack cow: owned, her health and her rest, rewound like Mongo's. */
+  /** The human crawler's attack cow: owned, her health and her rest, rewound like Mongo's. */
   attackCowState: AttackCowStateCheckpoint;
   /** Briar Hollow's quest, structures and soldier orders. Empty on every floor but 3. */
   briarHollow: BriarHollowStateSnapshot;

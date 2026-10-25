@@ -1,21 +1,10 @@
 import { Player, type FigureMouth, type StatName, type StatusFigureBox } from '../Player';
 
-/**
- * Donut's ink, measured off the painted `CAT_FIGURE` cell against its own tile
- * anchor. He is roughly tile-shaped but sits low and to the right of it, and a
- * status painted on the tile would float off his back.
- */
-const CAT_STATUS_FIGURE_BOX: StatusFigureBox = {
-  centerX: 0.63,
-  top: 0.2,
-  bottom: 1.03,
-  halfWidth: 0.44,
-};
-
 import type { Mob } from './Mob';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Missile } from '../sprites/catSprite';
 import {
+  activeCatLook,
   CatAnimator,
   drawCatSprite,
   drawMissiles,
@@ -26,6 +15,7 @@ import {
   type CatHeldDraw,
   type CatSpriteState,
   type CatWorkSwing,
+  type MissileDepthLayer,
   CAT_WORK_SWING_OF_TOOL,
 } from '../sprites/catSprite';
 import { catGarmentsWearing } from '../sprites/garments/itemLooks';
@@ -44,12 +34,13 @@ import {
 } from '../abilities/eyesOfSplatter';
 import { TILE_SIZE } from '../core/constants';
 import type { CrawlerKind } from '../core/SkillManager';
-import type { WorkingTool } from '../core/toolTiers';
+import { carriedToolTier } from '../core/PartyTools';
+import { isOwnedToolKind, type ToolKind, type WorkingTool } from '../core/toolTiers';
 import { HELD_VISUALS, workingToolHeldVisual } from '../sprites/held/heldVisuals';
 import type { HeldVisualDef } from '../sprites/held/heldVisualDef';
 import { heldPhaseAt } from '../sprites/held/heldComposite';
 import { catGripOf } from '../sprites/art/catSockets';
-import { MOUTH_HELD_KEY, weaponStatsOf } from '../core/ItemDefs';
+import { ITEM_DEF, MOUTH_HELD_KEY, weaponStatsOf } from '../core/ItemDefs';
 import { CONSTITUTION_LOCK_SNAPSHOT_VERSION } from '../core/PlayerSnapshot';
 
 /** Single source for this class's crawler identity — used by the UI and by skill eligibility. */
@@ -73,15 +64,16 @@ const DEGREES_PER_HALF_TURN = 180;
 
 const CONSTITUTION_AUDIT_NOTICE = 'Constitution refunded — spend the points';
 
-/**
- * This is a playable character.
- * Primary attack (Space): claw swipe — short-range melee.
- * Magic Missile: hotbar ability, fires an arcane projectile.
- */
-
 /** A bursting missile's light, as a share of one in flight. */
 const MISSILE_BURST_LIGHT = 0.7;
 
+/** The party's own tools, in the order she shows one on her back before she has used either. */
+const STOWABLE_TOOL_KINDS: readonly ToolKind[] = ['axe', 'pickaxe'];
+
+/**
+ * The cat crawler. Primary attack (Space): claw swipe, short-range melee.
+ * Magic Missile: a hotbar ability that fires an arcane projectile.
+ */
 export class CatPlayer extends Player {
   /** Which half of the skill roster this crawler is eligible for. */
   readonly crawlerKind = CAT_CRAWLER_KIND;
@@ -134,9 +126,8 @@ export class CatPlayer extends Player {
   /** Half a tile: what you add to a tile origin to get its centre. */
   private static readonly TILE_CENTER_OFFSET = 0.5;
 
-  /** See {@link CAT_STATUS_FIGURE_BOX}. Shared, not rebuilt on every read. */
   protected override get statusFigureBox(): StatusFigureBox {
-    return CAT_STATUS_FIGURE_BOX;
+    return activeCatLook().statusFigureBox;
   }
 
   protected override get statusMouth(): FigureMouth | null {
@@ -183,7 +174,10 @@ export class CatPlayer extends Player {
    * `Player.waterlineAboveFootPx` documents: one honest water depth either takes
    * him to the ankle or puts her under.
    */
-  readonly waterlineAboveFootPx = 9;
+  override get waterlineAboveFootPx(): number {
+    return CatPlayer.BELLY_WATERLINE_PX;
+  }
+  private static readonly BELLY_WATERLINE_PX = 9;
   /** Raises the health bar above the sphere so it doesn't overlap the cat's head. */
   private static readonly HEALTH_BAR_RAISE = 16;
   private static readonly AI_MIN_COOLDOWN = 20;
@@ -253,7 +247,7 @@ export class CatPlayer extends Player {
   }
 
   /**
-   * Donut's constitution is fixed by the enhanced pet biscuit, and her dexterity
+   * The cat's constitution is fixed by the enhanced pet biscuit, and her dexterity
    * is auto-allocated by Enhanced Growth — neither accepts a spent point. Her
    * banked points go to strength and intelligence.
    */
@@ -281,7 +275,7 @@ export class CatPlayer extends Player {
   }
 
   /**
-   * Enhanced Growth: the System auto-allocates Donut's dexterity on every
+   * Enhanced Growth: the System auto-allocates the cat's dexterity on every
    * level-up, which is the counterweight to her locked constitution.
    */
   protected override onLevelGained(): void {
@@ -437,12 +431,35 @@ export class CatPlayer extends Player {
    */
   private workingTool: WorkingTool | null = null;
 
+  /**
+   * Which of the party's own tools, axe or pick, she last worked with: that
+   * one rides on her back between uses. A borrowed tool — the scythe, the
+   * striker's mallet — goes back to its owner and is never stowed. Only the
+   * kind is hers to remember; the tier is whatever she carries now.
+   */
+  private lastOwnedToolKind: ToolKind | null = null;
+
+  /**
+   * The tool on her back: the kind she last used — or, before she has used
+   * one since the game loaded, the first she carries — at the tier she
+   * carries now.
+   */
+  private get stowedTool(): WorkingTool | null {
+    const kinds = this.lastOwnedToolKind === null ? STOWABLE_TOOL_KINDS : [this.lastOwnedToolKind];
+    for (const kind of kinds) {
+      const tier = carriedToolTier(this, kind);
+      if (tier !== null) return { kind, tier };
+    }
+    return null;
+  }
+
   setWorkingTool(tool: WorkingTool | null): void {
     // A swing cut short by putting the tool away would finish with her paws
     // closed on nothing.
     const putAway = this.workSwing;
     if (putAway !== null) this.animator.stop(putAway);
     this.workingTool = tool;
+    if (tool !== null && isOwnedToolKind(tool.kind)) this.lastOwnedToolKind = tool.kind;
     const swing = this.workSwing;
     if (swing !== null) {
       prewarmCatHold(swing, this.facing.peek(this.facingX, this.facingY), this.isMoving);
@@ -483,14 +500,35 @@ export class CatPlayer extends Player {
     prewarmCatHold('carry', this.facing.peek(this.facingX, this.facingY), this.isMoving);
   }
 
-  /** What she carries in her jaws: a scene's scripted thing, or the item in her mouth slot made to be carried. */
+  /**
+   * What she carries in her jaws: a scene's scripted thing, else the item in
+   * her mouth slot made to be carried, else the quest thing in her pack she
+   * carries in her jaws while she has it.
+   */
   private mouthCarry(): HeldVisualDef | null {
     if (this.scriptedMouthCarry !== null) return this.scriptedMouthCarry;
     const id = this.inventory.equipment.getEquippedId(MOUTH_HELD_KEY);
     const look = id === undefined ? undefined : weaponStatsOf(id)?.heldVisual;
-    if (look === undefined) return null;
-    const def = HELD_VISUALS[look];
-    return catGripOf(def) === 'mouthCarry' ? def : null;
+    if (look !== undefined) {
+      const def = HELD_VISUALS[look];
+      if (catGripOf(def) === 'mouthCarry') return def;
+    }
+    const questItem = this.inventory.questItemId;
+    const carried = questItem === null ? undefined : ITEM_DEF[questItem].carriedInJaws;
+    return carried === undefined ? null : HELD_VISUALS[carried];
+  }
+
+  /** The thing last seen in her jaws, so one that arrives by a pack change warms her carrying rows. */
+  private carriedLastDraw: HeldVisualDef | null = null;
+
+  /**
+   * A quest thing comes into her jaws by landing in her pack, which nothing
+   * announces to her, so a change is noticed on the draw that first shows it.
+   */
+  private noticeCarried(carried: HeldVisualDef | null): void {
+    if (carried === this.carriedLastDraw) return;
+    this.carriedLastDraw = carried;
+    this.prewarmMouthCarry();
   }
 
   /** What she is drawn holding: her working tool while she works, else what is in her jaws. */
@@ -501,8 +539,21 @@ export class CatPlayer extends Player {
     const toolLook = tool === null ? null : workingToolHeldVisual(tool);
     if (toolLook !== null && swing !== null) return { look: toolLook, phase: 0, hold: swing };
     const carried = this.mouthCarry();
+    this.noticeCarried(carried);
     if (carried === null) return null;
     return { look: carried, phase: heldPhaseAt(carried, this.heldTicks), hold: 'carry' };
+  }
+
+  /**
+   * Her stowed tool, drawn on her back unless it is the one in her paws: a
+   * borrowed scythe or mallet in her paws leaves her own axe where it rides.
+   */
+  private stowedDraw(held: CatHeldDraw | null): HeldVisualDef | null {
+    const tool = this.stowedTool;
+    if (tool === null || !this.isAlive) return null;
+    const working = held !== null && held.hold !== 'carry' ? this.workingTool : null;
+    const inPaws = working !== null && working.kind === tool.kind;
+    return inPaws ? null : workingToolHeldVisual(tool);
   }
 
   /** Primary Space action: claw swipe (melee). */
@@ -864,12 +915,16 @@ export class CatPlayer extends Player {
 
     const held = this.heldDraw();
     const state = this.spriteState(held);
+    const missileDepthY = this.y + s * CatPlayer.TILE_CENTER_OFFSET;
+    const drawMissileLayer = (layer: MissileDepthLayer): void => {
+      if (this.paintingBodyOnly) return;
+      drawMissiles(ctx, this.missiles, camX, camY, s, this.EXPLODE_FRAMES, layer, missileDepthY);
+    };
+    drawMissileLayer('beyond');
     this.drawRetching(ctx, sx, sy, s, () => {
-      drawCatSprite(ctx, sx, sy, s, state, catCellFor(state), held);
+      drawCatSprite(ctx, sx, sy, s, state, catCellFor(state), held, this.stowedDraw(held));
     });
-    if (!this.paintingBodyOnly) {
-      drawMissiles(ctx, this.missiles, camX, camY, s, this.EXPLODE_FRAMES);
-    }
+    drawMissileLayer('near');
 
     this.renderHealthBar(ctx, sx, sy - CatPlayer.HEALTH_BAR_RAISE);
     this.renderKnockedOutOverlay(ctx, sx, sy);

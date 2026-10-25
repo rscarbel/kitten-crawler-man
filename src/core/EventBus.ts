@@ -170,7 +170,7 @@ export interface GameEvents {
    */
   weaponSwing: { weaponId: ItemId; hit: boolean };
 
-  /** Carl drew the weapon in his main hand, or stowed it. */
+  /** The human crawler drew the weapon in his main hand, or stowed it. */
   weaponHolstered: { weaponId: ItemId; motion: HolsterMotion };
 
   /**

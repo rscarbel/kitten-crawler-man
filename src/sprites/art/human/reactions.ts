@@ -1,5 +1,5 @@
 /**
- * Carl on the receiving end: the flinch when a blow lands, the stumble when
+ * The human crawler on the receiving end: the flinch when a blow lands, the stumble when
  * one shoves him back, the struggle against a web or a grip that holds his
  * feet, the collapse when he is knocked out, the lying loop he breathes in
  * while he waits to be revived, the climb back to his feet, and the fall when
@@ -18,20 +18,20 @@
  * foreshortened heap; the runtime turns him to the nearest profile to fall.
  */
 
-import { mixPt, pt, TWO_PI } from '../carl/geometry';
-import { HIP_Y, SHIN_LENGTH, THIGH_LENGTH } from '../carl/proportions';
+import { mixPt, pt, TWO_PI } from '../biped/geometry';
+import { HIP_Y, SHIN_LENGTH, THIGH_LENGTH } from '../biped/proportions';
 import {
   type ArmAngles,
   type BoneChain,
   buildSkeleton,
-  type CarlPose,
+  type BipedPose,
   CROUCH_DROP,
   restingPose,
   setArmAngles,
   VIEWS,
-} from '../carl/rig';
+} from '../biped/rig';
 import { type CardinalView } from '../../facingView';
-import { clamp01, deg, easeOut, type Pt } from '../carlArt';
+import { clamp01, deg, easeOut, type Pt } from '../bipedArt';
 import {
   anglesThrough,
   ankleOverPivot,
@@ -310,7 +310,7 @@ function shoveSign(from: HurtFrom): number {
 /** A mouth pulled wide as the grimace opens. */
 const HURT_MOUTH_STRETCH = 0.6;
 
-function hurtFace(pose: CarlPose, frame: number): void {
+function hurtFace(pose: BipedPose, frame: number): void {
   pose.brow = 1;
   pose.blink = trackAt(frame, HURT_SQUINT);
   pose.mouth = trackAt(frame, HURT_GRIMACE);
@@ -352,7 +352,7 @@ const GUARD_SIDE_REAR_FROM_SHOULDER = minus(
  * The profile flinch. Hit from in front, the rear foot gives ground behind
  * him; shoved from behind, the lead foot is thrown out ahead to catch him.
  */
-function hurtSide(frame: number, from: HurtFrom): CarlPose {
+function hurtSide(frame: number, from: HurtFrom): BipedPose {
   const pose = guardSide(0);
   const shove = shoveSign(from);
   const snap = trackAt(frame, HURT_SNAP);
@@ -455,7 +455,7 @@ const HURT_FACING_HAIR_SHARE = 0.7;
  * back from the blow, or ahead of him to catch a shove from behind — which
  * head-on is a step in depth, drawn up or down the screen.
  */
-function hurtFacing(frame: number, from: HurtFrom, away: boolean): CarlPose {
+function hurtFacing(frame: number, from: HurtFrom, away: boolean): BipedPose {
   const pose = away ? guardBack(0) : guardFront(0);
   const shove = shoveSign(from);
   const snap = trackAt(frame, HURT_SNAP);
@@ -510,11 +510,11 @@ function hurtFacing(frame: number, from: HurtFrom, away: boolean): CarlPose {
   return pose;
 }
 
-function hurtFront(frame: number, from: HurtFrom): CarlPose {
+function hurtFront(frame: number, from: HurtFrom): BipedPose {
   return hurtFacing(frame, from, false);
 }
 
-function hurtBack(frame: number, from: HurtFrom): CarlPose {
+function hurtBack(frame: number, from: HurtFrom): BipedPose {
   return hurtFacing(frame, from, true);
 }
 
@@ -675,7 +675,7 @@ const STAGGER_RIGHT_PLANTED: readonly boolean[] = [
   true,
 ];
 
-function staggerSide(frame: number): CarlPose {
+function staggerSide(frame: number): BipedPose {
   const pose = guardSide(0);
   pose.lean = trackAt(frame, STAGGER_LEAN);
   pose.crouch = trackAt(frame, STAGGER_CROUCH);
@@ -748,7 +748,7 @@ const STAGGER_JACKET_FLARE = 0.6;
  * (toward the camera when he faces it) and scrambling back under him, the
  * arms flung up to either side for balance.
  */
-function staggerFacing(frame: number, away: boolean): CarlPose {
+function staggerFacing(frame: number, away: boolean): BipedPose {
   const pose = away ? guardBack(0) : guardFront(0);
   const side = staggerSide(frame);
   pose.crouch = side.crouch;
@@ -815,11 +815,11 @@ const STAGGER_FACING_ARM_SHARE = 0.6;
 /** Head-on the arms windmill him from side to side as he tries to stay up. */
 const STAGGER_FACING_WOBBLE = deg(7);
 
-function staggerFront(frame: number): CarlPose {
+function staggerFront(frame: number): BipedPose {
   return staggerFacing(frame, false);
 }
 
-function staggerBack(frame: number): CarlPose {
+function staggerBack(frame: number): BipedPose {
   return staggerFacing(frame, true);
 }
 
@@ -869,7 +869,7 @@ function heelTorn(target: Pt, pitch: number): Pt {
   return profileFootTarget(ankleOverPivot(toe, 'toe', pitch), pitch);
 }
 
-function struggleSide(frame: number): CarlPose {
+function struggleSide(frame: number): BipedPose {
   const { haul, wrench } = struggleBeats(frame);
   const pose = idleSide(0);
   pose.crouch = STRUGGLE_CROUCH + haul * STRUGGLE_HAUL_CROUCH;
@@ -921,7 +921,7 @@ function offset(point: Pt, dx: number): Pt {
  * and thrown back with the fists yanked out to the sides, the right heel
  * coming up.
  */
-function struggleFacing(frame: number, away: boolean): CarlPose {
+function struggleFacing(frame: number, away: boolean): BipedPose {
   const { haul, wrench } = struggleBeats(frame);
   const pose = away ? guardBack(0) : guardFront(0);
   pose.crouch = STRUGGLE_CROUCH + haul * STRUGGLE_HAUL_CROUCH;
@@ -1016,11 +1016,11 @@ const STRUGGLE_FACING_CHEST_DROP = 0.1;
 const STRUGGLE_FACING_HANG_OUT = 0.05;
 const STRUGGLE_FACING_ELBOW_FLARE = 1.2;
 
-function struggleFront(frame: number): CarlPose {
+function struggleFront(frame: number): BipedPose {
   return struggleFacing(frame, false);
 }
 
-function struggleBack(frame: number): CarlPose {
+function struggleBack(frame: number): BipedPose {
   return struggleFacing(frame, true);
 }
 
@@ -1073,7 +1073,7 @@ const KNEELING_HIP_HEIGHT = KNEE_ON_FLOOR + THIGH_LENGTH * 0.98;
  * A pose with everything the collapse, the fall and the rise share: the face
  * gone slack, the fists open.
  */
-function floorPose(): CarlPose {
+function floorPose(): BipedPose {
   const pose = restingPose();
   pose.brow = FLOOR_BROW;
   pose.leftFist = LIMP_HAND;
@@ -1089,7 +1089,7 @@ const LIMP_HAND = 0.3;
  * which is the only way to lay an arm on the floor beside a body whose
  * shoulders move with its lean.
  */
-function placeHandsFromShoulders(pose: CarlPose, left: Pt, right: Pt): void {
+function placeHandsFromShoulders(pose: BipedPose, left: Pt, right: Pt): void {
   const skeleton = buildSkeleton(pose, VIEWS.side);
   pose.leftHand = pt(skeleton.leftShoulder.x + left.x, skeleton.leftShoulder.y + left.y);
   pose.rightHand = pt(skeleton.rightShoulder.x + right.x, skeleton.rightShoulder.y + right.y);
@@ -1301,7 +1301,7 @@ function entryAt<T>(table: readonly T[], frame: number): T | undefined {
   return frame >= 0 && frame < table.length ? table[frame] : undefined;
 }
 
-function knockdownLegs(pose: CarlPose, frame: number): void {
+function knockdownLegs(pose: BipedPose, frame: number): void {
   if (frame >= KNOCKDOWN_LEGS_DOWN_FRAME) {
     pose.leftFoot = LYING_LEFT_FOOT;
     pose.rightFoot = LYING_RIGHT_FOOT;
@@ -1319,7 +1319,7 @@ function knockdownLegs(pose: CarlPose, frame: number): void {
   pose.rightFootPlanted = frame <= KNOCKDOWN_REAR_FOOT_PLANTED_THROUGH;
 }
 
-function knockdownArms(pose: CarlPose, frame: number): void {
+function knockdownArms(pose: BipedPose, frame: number): void {
   const leftArm = entryAt(KNOCKDOWN_LEFT_ARM, frame);
   const rightArm = entryAt(KNOCKDOWN_RIGHT_ARM, frame);
   if (frame >= KNOCKDOWN_ARMS_LAND_FROM) {
@@ -1352,7 +1352,7 @@ function knockdownArms(pose: CarlPose, frame: number): void {
   pose.elbowFlare = LIMP_ELBOW_FLARE;
 }
 
-function knockdownSide(frame: number): CarlPose {
+function knockdownSide(frame: number): BipedPose {
   const pose = floorPose();
   pose.lean = trackAt(frame, KNOCKDOWN_LEAN);
   pose.spineBend = trackAt(frame, KNOCKDOWN_SPINE_BEND);
@@ -1374,7 +1374,7 @@ const KNOCKDOWN_JACKET_FLARE = 0.5;
 const LIMP_ELBOW_FLARE = -0.3;
 
 /** Flat on his back, eyes shut, breathing slow. */
-function knockedOutSide(frame: number): CarlPose {
+function knockedOutSide(frame: number): BipedPose {
   const breath = (1 - Math.cos((frame / KNOCKED_OUT_FRAMES) * TWO_PI)) / 2;
   const pose = knockdownSide(KNOCKDOWN_LAST);
   pose.lean = SUPINE_LEAN + breath * BREATH_LEAN;
@@ -1452,7 +1452,7 @@ const REVIVE_BLINK: Track = [
   [REVIVE_LAST, 0],
 ];
 
-function reviveLegs(pose: CarlPose, frame: number): void {
+function reviveLegs(pose: BipedPose, frame: number): void {
   if (frame <= REVIVE_TUCKED_FRAME) {
     // Knees drawn up as he sits: the feet slide in toward the hip, the near
     // one right in under it, ready to take a knee over. Most of the slide is
@@ -1529,7 +1529,7 @@ const REVIVE_RIGHT_HAND: PointTrack = [
   [REVIVE_LAST, pt(-0.02, 0.6)],
 ];
 
-function reviveSide(frame: number): CarlPose {
+function reviveSide(frame: number): BipedPose {
   const pose = floorPose();
   pose.lean = trackAt(frame, REVIVE_LEAN);
   // The curl he lay in straightens as he props himself up.
@@ -1627,7 +1627,7 @@ const DEATH_BLINK: Track = [
 const PRONE_FOOT_X = -0.8;
 const PRONE_FOOT_PITCH = deg(80);
 
-function deathLegs(pose: CarlPose, frame: number): void {
+function deathLegs(pose: BipedPose, frame: number): void {
   if (frame <= DEATH_STANDING_THROUGH_FRAME) {
     pose.leftFoot = pt(DEATH_STANCE_HALF, 0);
     pose.rightFoot = pt(-DEATH_STANCE_HALF, 0);
@@ -1663,7 +1663,7 @@ const DEATH_KNEELING_THROUGH_FRAME = 6;
 const DEATH_FAR_KNEE_AHEAD = 0.05;
 const DEATH_SHIN_RISE = deg(3);
 
-function deathSide(frame: number): CarlPose {
+function deathSide(frame: number): BipedPose {
   const pose = floorPose();
   pose.lean = trackAt(frame, DEATH_LEAN);
   pose.bob = bobForHipHeight(trackAt(frame, DEATH_HIP_HEIGHT), 0);
@@ -1754,7 +1754,7 @@ function viewRow(
   kind: 'loop' | 'oneShot',
   ticksPerFrame: number,
   locomotion: 'none' | 'planted',
-  pose: (frame: number) => CarlPose,
+  pose: (frame: number) => BipedPose,
 ): HumanRowDef {
   return {
     frameCount,
@@ -1861,7 +1861,7 @@ export const REACTION_ROW_TABLE = {
 // ── Views ────────────────────────────────────────────────────────────────────
 
 /** The flinch for a view and the side the blow came from. */
-function hurtPose(view: CardinalView, from: HurtFrom, frame: number): CarlPose {
+function hurtPose(view: CardinalView, from: HurtFrom, frame: number): BipedPose {
   if (view === 'side') return hurtSide(frame, from);
   return view === 'back' ? hurtBack(frame, from) : hurtFront(frame, from);
 }

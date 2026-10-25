@@ -17,7 +17,7 @@
  *   npx tsx scripts/render-town-interiors.ts --probes
  *
  * `--only` matches a case-insensitive substring of the building name.
- * `--probes` stands Carl at a counter, a table, the doorway and on the top
+ * `--probes` stands the human at a counter, a table, the doorway and on the top
  * row of the room's first rug (one of each the room actually has) so a scale
  * mismatch between the new interior props and a real figure — or a rug drawn
  * over the people standing on it — shows up in the picture rather than
@@ -65,9 +65,8 @@ const { InteriorOccupantSystem, scanInteriorFurniture } =
 const { FLOOR_ART_SEEDS } = await import('../src/map/ground/artSeedAlphabet.js');
 const { drawTownInteriorGroundProps, townInteriorGroundProps, townInteriorPropFigures } =
   await import('../src/systems/townInteriorPropFigures.js');
-const { drawCarlFront } = await import('../src/sprites/art/carl/figure.js');
-const { restingPose } = await import('../src/sprites/art/carl/rig.js');
-const { HUMAN_SCALE } = await import('../src/sprites/art/human/figureScale.js');
+const { drawFigureCached } = await import('../src/sprites/figure/figureFrameCache.js');
+const { HUMAN_FIGURE } = await import('../src/sprites/art/humanFigure.js');
 
 /** Matches how `TownPlan` sizes and centres a level-3 town; only `.buildings` is read here. */
 const TOWN_PLAN_SIZE = 280;
@@ -125,8 +124,6 @@ function slug(name: string): string {
 
 /** One screen pixel of headroom above a probe's own foot tile, so he reads as standing beside the furniture rather than merged into it. */
 const PROBE_SOUTH_OFFSET_TILES = 1;
-/** A probe stands on the middle of its tile, not its west edge. */
-const PROBE_FOOT_CENTRE_TILES = 0.5;
 
 const storeys = rooms.flatMap((building) => {
   const floorCount = building.kind === 'tower' ? TOWER_FLOOR_COUNT : 1;
@@ -160,15 +157,16 @@ for (const { building, floor, floorCount } of storeys) {
   drawTownInteriorGroundProps(gameCtx, map, 0, 0, TILE_SIZE);
   map.renderDecorationsOverlay(gameCtx, 0, 0, viewW, viewH);
 
-  function drawCarlProbe(tileX: number, tileY: number): void {
-    const footX = (tileX + PROBE_FOOT_CENTRE_TILES) * TILE_SIZE;
-    const footY = (tileY + 1) * TILE_SIZE;
-    ctx.save();
-    ctx.translate(footX, footY);
-    ctx.scale(TILE_SIZE, TILE_SIZE);
-    ctx.scale(HUMAN_SCALE, HUMAN_SCALE);
-    drawCarlFront(gameCtx, restingPose());
-    ctx.restore();
+  function drawHumanProbe(tileX: number, tileY: number): void {
+    drawFigureCached(
+      gameCtx,
+      HUMAN_FIGURE,
+      'idle',
+      0,
+      tileX * TILE_SIZE,
+      tileY * TILE_SIZE,
+      TILE_SIZE,
+    );
   }
 
   // Keeper Brenna Kestrel is a counter-anchored occupant like any other
@@ -199,7 +197,7 @@ for (const { building, floor, floorCount } of storeys) {
       const probeY = t.y + PROBE_SOUTH_OFFSET_TILES;
       figures.push({
         y: probeY * TILE_SIZE,
-        render: () => drawCarlProbe(t.x, probeY),
+        render: () => drawHumanProbe(t.x, probeY),
       });
     }
   }

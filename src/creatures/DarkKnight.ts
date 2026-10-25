@@ -109,7 +109,7 @@ const SWEEP_SHARE_INSIDE_RING = 0.6;
 /**
  * The two ground attacks are priced as punishment for ignoring a warning that
  * sat on the floor for most of a second: a share of the victim's own max HP,
- * which keeps them lethal against Donut's fixed HP and against a Carl who has
+ * which keeps them lethal against the cat's fixed HP and against a human crawler who has
  * poured everything into constitution.
  *
  * **These go through `dealPreScaledDamage`, not `dealDamage`.** A share of the

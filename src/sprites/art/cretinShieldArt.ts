@@ -2,7 +2,7 @@
  * The Cretins' Shield: a translucent amber dome over whichever ally it
  * protects.
  *
- * It must never be mistaken for Carl's Protective Shell, a flat ring on the
+ * It must never be mistaken for the human crawler's Protective Shell, a flat ring on the
  * floor five tiles across, blue or at full power a saturated orange-to-gold.
  * The two differ in shape — an upright dome hugging one body against a disc
  * round a crowd, a honeycomb lattice against a plain ring — and in colour: the
@@ -18,14 +18,14 @@
  * over it, so a caller fading the dome fades it rather than flashing it back.
  */
 
-import { type Pt, clamp01, lerp, mix, rgba } from './carlArt';
+import { type Pt, clamp01, lerp, mix, rgba } from './bipedArt';
 import { SHIELD_AMBER, SHIELD_AMBER_DEEP, SHIELD_AMBER_HOT, TWO_PI } from './cretinArt';
 
 type Ctx = CanvasRenderingContext2D;
 
-/** Half the dome's width at its base, tiles: wide enough to clear Carl's shoulders. */
+/** Half the dome's width at its base, tiles: wide enough to clear the human crawler's shoulders. */
 export const DOME_HALF_WIDTH = 0.8;
-/** Dome height, tiles: over Carl's head with a little room. */
+/** Dome height, tiles: over the human crawler's head with a little room. */
 export const DOME_HEIGHT = 1.8;
 /** The base ellipse's half-depth: the floor seen from above. */
 const DOME_BASE_DEPTH = 0.17;

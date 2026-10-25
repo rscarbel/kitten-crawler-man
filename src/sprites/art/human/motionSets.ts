@@ -1,6 +1,6 @@
 /**
- * Which family of rows Carl moves and fights in, chosen by what is out in his
- * hand. Bare-handed he punches and kicks; a weapon out picks the rows its grip
+ * Which family of rows the human crawler moves and fights in, chosen by what
+ * is out in his hand. Bare-handed he punches and kicks; a weapon out picks the rows its grip
  * archetype and weight are authored for, and every item of that archetype and
  * weight plays the same rows — a new sword is a look, never a row.
  *

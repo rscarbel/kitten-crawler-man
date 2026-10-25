@@ -2,7 +2,7 @@
  * Gate for the player snapshot's held-weapon format and the equipped-set
  * door every save comes through.
  *
- * A v3 save kept the weapon in Carl's hand apart from his equipment, as
+ * A v3 save kept the weapon in the human's hand apart from his equipment, as
  * `wieldedWeaponId`. Loaded today it must come back as the same weapon
  * equipped in his main hand and drawn, beside whatever he was wearing; a v3
  * save with nothing in hand must leave the hand empty. The current format must
@@ -68,20 +68,20 @@ const DEEP_BAG_STACKS = 1000;
 /** Both crawlers' snapshots ride in one save, so each must leave room for the other and the world. */
 const SNAPSHOT_SHARE_OF_BODY_LIMIT = 0.5;
 
-function carlHolding(...ids: readonly ItemId[]): HumanPlayer {
-  const carl = new HumanPlayer(0, 0, TILE_SIZE);
-  for (const id of ids) carl.inventory.addItem(id, 1);
-  return carl;
+function humanHolding(...ids: readonly ItemId[]): HumanPlayer {
+  const human = new HumanPlayer(0, 0, TILE_SIZE);
+  for (const id of ids) human.inventory.addItem(id, 1);
+  return human;
 }
 
 /**
- * A snapshot as v3 wrote it: Carl wearing his boxers and the ring, with
+ * A snapshot as v3 wrote it: the human wearing his boxers and the ring, with
  * `wielded` in hand outside his equipment.
  */
 function v3Snapshot(wielded: ItemId | null): PlayerSnapshot {
-  const carl = carlHolding(SWORD, SLING, RING);
-  carl.inventory.equipByItemId(RING);
-  const current = snapPlayer(carl);
+  const human = humanHolding(SWORD, SLING, RING);
+  human.inventory.equipByItemId(RING);
+  const current = snapPlayer(human);
   const { weaponDrawn: _dropped, ...withoutDrawnBit } = current;
   return {
     ...withoutDrawnBit,
@@ -92,9 +92,9 @@ function v3Snapshot(wielded: ItemId | null): PlayerSnapshot {
 }
 
 function restored(snap: PlayerSnapshot): HumanPlayer {
-  const carl = new HumanPlayer(0, 0, TILE_SIZE);
-  restorePlayer(carl, snap);
-  return carl;
+  const human = new HumanPlayer(0, 0, TILE_SIZE);
+  restorePlayer(human, snap);
+  return human;
 }
 
 // ── A v3 save with the sword wielded and a ring worn ─────────────────────────
@@ -105,32 +105,32 @@ function restored(snap: PlayerSnapshot): HumanPlayer {
       !snap.equippedEntries.some(([key]) => key === MAIN_HAND_KEY),
     'the v3 fixture wears the ring and has no main-hand entry',
   );
-  const carl = restored(snap);
-  const equipment = carl.inventory.equipment;
+  const human = restored(snap);
+  const equipment = human.inventory.equipment;
   check(
     equipment.getEquippedId(MAIN_HAND_KEY) === SWORD,
     `a v3 wielded sword is equipped in ${MAIN_HAND_KEY} (found ${String(equipment.getEquippedId(MAIN_HAND_KEY))})`,
   );
-  check(carl.drawnWeaponId === SWORD, 'a v3 wielded sword comes back drawn');
+  check(human.drawnWeaponId === SWORD, 'a v3 wielded sword comes back drawn');
   check(equipment.getEquippedId(RING_KEY) === RING, `the v3 ring is still worn in ${RING_KEY}`);
   check(
     equipment.getEquippedId(BOXERS_KEY) === 'enchanted_bigboi_boxers',
     'the v3 boxers are still worn',
   );
   check(
-    carl.drawnMeleeWeapon?.damageMultiplier === TARANIS_DAMAGE_MULTIPLIER,
+    human.drawnMeleeWeapon?.damageMultiplier === TARANIS_DAMAGE_MULTIPLIER,
     'the drawn sword strikes with its own multiplier',
   );
   check(
-    carl.getMeleeRange() === TILE_SIZE * HUMAN_ARM_REACH_TILES,
+    human.getMeleeRange() === TILE_SIZE * HUMAN_ARM_REACH_TILES,
     'the drawn sword reaches exactly as far as his arm did',
   );
   check(
-    carl.getStrikeDamage() === carl.getBladeDamage(),
+    human.getStrikeDamage() === human.getBladeDamage(),
     'the drawn sword strikes for blade damage, not a fist',
   );
 
-  const resaved = snapPlayer(carl);
+  const resaved = snapPlayer(human);
   check(
     resaved.snapshotVersion === PLAYER_SNAPSHOT_VERSION && resaved.weaponDrawn === true,
     'saving him again writes the current version with the sword drawn',
@@ -180,9 +180,9 @@ function restored(snap: PlayerSnapshot): HumanPlayer {
     inventorySlots: fresh.inventorySlots.map(oldShaped),
     inventoryHotbar: fresh.inventoryHotbar.map(oldShaped),
   };
-  const carl = restored(snap);
-  check(carl.drawnWeaponId === SWORD, 'an old-shaped wielded sword comes back drawn');
-  const heldCopies = [...carl.inventory.bag.slots, ...carl.inventory.actionBar.slots].filter(
+  const human = restored(snap);
+  check(human.drawnWeaponId === SWORD, 'an old-shaped wielded sword comes back drawn');
+  const heldCopies = [...human.inventory.bag.slots, ...human.inventory.actionBar.slots].filter(
     (slot) => slot?.id === SWORD || slot?.id === SLING,
   );
   check(
@@ -190,49 +190,49 @@ function restored(snap: PlayerSnapshot): HumanPlayer {
     'old-shaped weapon copies can be put in a hand slot after a restore',
   );
   check(
-    carl.toggleWeaponDrawn(SLING) && carl.drawnWeaponId === SLING,
+    human.toggleWeaponDrawn(SLING) && human.drawnWeaponId === SLING,
     'an old-shaped sling can be swapped into his hand for the sword',
   );
-  carl.inventory.equipment.unequip(MAIN_HAND_KEY);
+  human.inventory.equipment.unequip(MAIN_HAND_KEY);
   check(
-    carl.drawWeapon(SWORD) && carl.mainHandWeaponId === SWORD,
+    human.drawWeapon(SWORD) && human.mainHandWeaponId === SWORD,
     'an old-shaped sword can be re-equipped and drawn after his hand is emptied',
   );
 }
 
 // ── A v3 save with the sling wielded ─────────────────────────────────────────
 {
-  const carl = restored(v3Snapshot(SLING));
+  const human = restored(v3Snapshot(SLING));
   check(
-    carl.hasSlingDrawn && carl.drawnWeaponId === SLING,
+    human.hasSlingDrawn && human.drawnWeaponId === SLING,
     'a v3 wielded sling comes back drawn, taking the attack key',
   );
 }
 
 // ── A v3 save with nothing in hand ───────────────────────────────────────────
 {
-  const carl = restored(v3Snapshot(null));
+  const human = restored(v3Snapshot(null));
   check(
-    carl.inventory.equipment.getEquippedId(MAIN_HAND_KEY) === undefined &&
-      carl.drawnWeaponId === null,
+    human.inventory.equipment.getEquippedId(MAIN_HAND_KEY) === undefined &&
+      human.drawnWeaponId === null,
     'a v3 save with empty hands leaves his main hand empty',
   );
   check(
-    carl.inventory.equipment.getEquippedId(RING_KEY) === RING,
+    human.inventory.equipment.getEquippedId(RING_KEY) === RING,
     'a v3 save with empty hands still wears the ring',
   );
 }
 
 // ── A stowed weapon round-trips stowed ───────────────────────────────────────
 {
-  const carl = carlHolding(SWORD);
-  check(carl.drawWeapon(SWORD), 'Carl can draw the sword from his bag');
-  carl.stowWeapon();
+  const human = humanHolding(SWORD);
+  check(human.drawWeapon(SWORD), 'The human can draw the sword from his bag');
+  human.stowWeapon();
   check(
-    carl.drawnWeaponId === null && carl.mainHandWeaponId === SWORD,
+    human.drawnWeaponId === null && human.mainHandWeaponId === SWORD,
     'stowing leaves the sword in his main hand, not drawn',
   );
-  const back = restored(snapPlayer(carl));
+  const back = restored(snapPlayer(human));
   check(
     back.mainHandWeaponId === SWORD && back.drawnWeaponId === null,
     'a stowed sword comes back equipped and stowed',
@@ -241,45 +241,45 @@ function restored(snap: PlayerSnapshot): HumanPlayer {
 
 // ── replaceAll validates keys against the sub-slots ──────────────────────────
 {
-  const carl = carlHolding(SWORD, RING);
+  const human = humanHolding(SWORD, RING);
   const entries: [string, ItemId][] = [
     ...RETIRED_KEYS.map((key): [string, ItemId] => [key, RING]),
     [CAT_ONLY_HELD_KEY, SWORD],
     [RING_KEY, RING],
   ];
-  carl.inventory.equipment.replaceAll(entries);
-  const kept = carl.inventory.equipment.entries();
+  human.inventory.equipment.replaceAll(entries);
+  const kept = human.inventory.equipment.entries();
   check(
     kept.length === 1 && kept[0]?.[0] === RING_KEY,
     `only the valid key survives a restore (kept ${JSON.stringify(kept)})`,
   );
 
-  const donut = new CatPlayer(0, 0, TILE_SIZE);
-  donut.inventory.addItem(RING, 1);
-  donut.inventory.equipment.replaceAll([
+  const cat = new CatPlayer(0, 0, TILE_SIZE);
+  cat.inventory.addItem(RING, 1);
+  cat.inventory.equipment.replaceAll([
     [MAIN_HAND_KEY, RING],
     [RING_KEY, RING],
   ]);
   check(
-    donut.inventory.equipment.getEquippedId(MAIN_HAND_KEY) === undefined &&
-      donut.inventory.equipment.getEquippedId(RING_KEY) === RING,
-    "Donut's restore drops a main-hand entry she has no hand for",
+    cat.inventory.equipment.getEquippedId(MAIN_HAND_KEY) === undefined &&
+      cat.inventory.equipment.getEquippedId(RING_KEY) === RING,
+    "The cat's restore drops a main-hand entry she has no hand for",
   );
 
   const catOnlyEyes: ItemId = 'eyes_of_splatter';
   const humanOnlyCloak: ItemId = 'nightgaunt_cloak';
-  const carlInDonutsGear = carlHolding(catOnlyEyes);
-  carlInDonutsGear.inventory.equipment.replaceAll([['Head:Face', catOnlyEyes]]);
+  const humanInCatsGear = humanHolding(catOnlyEyes);
+  humanInCatsGear.inventory.equipment.replaceAll([['Head:Face', catOnlyEyes]]);
   check(
-    !carlInDonutsGear.inventory.hasEquipped(catOnlyEyes),
-    "Carl's restore drops a cat-only item canEquip would refuse him",
+    !humanInCatsGear.inventory.hasEquipped(catOnlyEyes),
+    "The human's restore drops a cat-only item canEquip would refuse him",
   );
-  const donutInCarlsGear = new CatPlayer(0, 0, TILE_SIZE);
-  donutInCarlsGear.inventory.addItem(humanOnlyCloak, 1);
-  donutInCarlsGear.inventory.equipment.replaceAll([['Torso:Back', humanOnlyCloak]]);
+  const catInHumansGear = new CatPlayer(0, 0, TILE_SIZE);
+  catInHumansGear.inventory.addItem(humanOnlyCloak, 1);
+  catInHumansGear.inventory.equipment.replaceAll([['Torso:Back', humanOnlyCloak]]);
   check(
-    !donutInCarlsGear.inventory.hasEquipped(humanOnlyCloak),
-    "Donut's restore drops a human-only item canEquip would refuse her",
+    !catInHumansGear.inventory.hasEquipped(humanOnlyCloak),
+    "The cat's restore drops a human-only item canEquip would refuse her",
   );
 }
 
@@ -292,8 +292,8 @@ function restored(snap: PlayerSnapshot): HumanPlayer {
   for (let index = 0; index < BAG_PAGE_SLOTS * (packedPages - 1); index++) {
     packed.inventory.addItem(nonStacking[index % nonStacking.length], 1);
   }
-  const layout = (carl: HumanPlayer): string =>
-    carl.inventory.bag.slots.map((slot) => slot?.id ?? '-').join(',');
+  const layout = (human: HumanPlayer): string =>
+    human.inventory.bag.slots.map((slot) => slot?.id ?? '-').join(',');
   const back = restored(structuredClone(snapPlayer(packed)));
   check(
     packed.inventory.bag.pageCount === packedPages && layout(back) === layout(packed),

@@ -9,7 +9,7 @@
  *   strongest short swing bounds them all;
  * - a ringing swing is never cut, and its puck meets the bell on the onset;
  * - a short swing's puck peaks at a height proportional to its power;
- * - Carl, walking as he locks the meter in, is set down on the striking spot
+ * - the human, walking as he locks the meter in, is set down on the striking spot
  *   without a stride: his swing is not ended as a walk-off, and the bell
  *   waits for the swing's own impact frame.
  */
@@ -104,23 +104,23 @@ function checkWalkingLockIn(): void {
   let now = 0;
   const system = new HighStrikerSystem({ audio: null, clock: () => now });
   system.update(site.map, false);
-  const carl = new HumanPlayer(placed.rect.x, placed.rect.y + 1, TILE_SIZE);
-  carl.isActive = true;
+  const human = new HumanPlayer(placed.rect.x, placed.rect.y + 1, TILE_SIZE);
+  human.isActive = true;
   const tick = (): void => {
     now += 1 / TICKS_PER_SECOND;
-    carl.tickTimers();
+    human.tickTimers();
     system.update(site.map, false);
   };
-  if (!system.tryInteract(carl)) {
-    failures.push('Carl south of the striker could not raise its meter');
+  if (!system.tryInteract(human)) {
+    failures.push('The human south of the striker could not raise its meter');
     return;
   }
   for (let index = 0; index < METER_TICKS; index++) tick();
   // A direction key held through the press: he reads as walking when he is set down.
-  carl.isMoving = true;
-  const startX = carl.x;
-  system.claimPress(carl);
-  if (carl.x === startX) failures.push('Carl was not stepped to a striking spot');
+  human.isMoving = true;
+  const startX = human.x;
+  system.claimPress(human);
+  if (human.x === startX) failures.push('The human was not stepped to a striking spot');
   let struckOnTick: number | null = null;
   for (let index = 1; index <= FOLLOW_TICKS && struckOnTick === null; index++) {
     tick();

@@ -18,7 +18,7 @@ import {
   type CultistView,
   cultistStateName,
 } from './art/cityElfCultistFigure';
-import { WALK_GROUND_PER_CYCLE_PX } from './art/human/locomotion';
+import { RIG_WALK_GROUND_PER_CYCLE_PX } from './art/human/locomotion';
 import { idleFrameAtSeconds } from './art/human/timing';
 
 /**
@@ -31,12 +31,12 @@ export const CITY_ELF_CULTIST_DRAWN_STATES: readonly string[] = CULTIST_ROLES.fl
 );
 
 /**
- * Tiles one walk cycle covers: Carl's own walk, whose rows these are, on a
+ * Tiles one walk cycle covers: the figure's own walk, whose rows these are, on a
  * figure scaled up by the elf's height. Pace the walk by distance with this
  * and the planted foot holds still.
  */
 export const CITY_ELF_CULTIST_TILES_PER_WALK_CYCLE =
-  (WALK_GROUND_PER_CYCLE_PX * CULTIST_HEIGHT_SCALE) / TILE_SIZE;
+  (RIG_WALK_GROUND_PER_CYCLE_PX * CULTIST_HEIGHT_SCALE) / TILE_SIZE;
 
 /**
  * Warms every row a cultist can play. Called when a cultist is stood up —

@@ -9,7 +9,7 @@
  * twelve pixels a head, where a soft blend reads as airbrushed plastic.
  */
 
-import { type Pt } from '../carlArt';
+import { type Pt } from '../bipedArt';
 import { LIGHT_DIR, OUTLINE, type Ramp } from './palette';
 
 export type Ctx = CanvasRenderingContext2D;

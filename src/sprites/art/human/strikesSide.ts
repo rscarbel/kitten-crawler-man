@@ -1,5 +1,5 @@
 /**
- * Carl's sideways strikes, thrown in profile from an orthodox guard: the jab,
+ * The human crawler's sideways strikes, thrown in profile from an orthodox guard: the jab,
  * the cross, the lead hook, the punt, the roundhouse, the knee and the shoulder
  * barge, plus the jab and the punt thrown on the run.
  *
@@ -17,20 +17,20 @@
 
 import { HUMAN_SWING_FRAMES } from '../../../core/crawlerFormulas';
 import { PLAYER_SPEED } from '../../../core/constants';
-import { mixPt, offset, pt } from '../carl/geometry';
-import { HEAD_RY } from '../carl/proportions';
+import { lerpAngle, mixPt, offset, pt } from '../biped/geometry';
+import { HEAD_RY } from '../biped/proportions';
 import {
   type ArmAngles,
   type BoneChain,
   buildSkeleton,
-  type CarlPose,
+  type BipedPose,
   FULL_UPPER_ARM,
   LEG_MAX_REACH,
   setArmAngles,
   type Skeleton,
   VIEWS,
-} from '../carl/rig';
-import { deg, type Pt } from '../carlArt';
+} from '../biped/rig';
+import { deg, type Pt } from '../bipedArt';
 import {
   ankleOverPivot,
   armLength,
@@ -38,14 +38,15 @@ import {
   type FrameTable,
   frameValue,
   HALF_CYCLE,
+  LEFT_ARM,
   profileFootTarget,
   RIGHT_ARM,
   runPhaseAt,
   soleOffsets,
 } from './gaitShared';
 import { guardSide } from './idles';
-import { RUN_GROUND_PER_CYCLE_PX, RUN_TOE_OFF_PHASE, runSide } from './locomotion';
-import { kickingLeg } from './travelling';
+import { RUN_GROUND_PER_CYCLE_PX, RUN_TOE_OFF_PHASE, runFoot, runSide } from './locomotion';
+import { entryPhasesWhere, kickingLeg, legPhase } from './travelling';
 import { RUN_FRAMES } from './timing';
 
 // ── Keyed tracks ─────────────────────────────────────────────────────────────
@@ -68,14 +69,21 @@ function trail(track: FrameTable, frame: number, gain: number): number {
  */
 const GUARD_SETTLED_PHASE = 0.5;
 
-function settledGuard(): CarlPose {
+function settledGuard(): BipedPose {
   return guardSide(GUARD_SETTLED_PHASE);
 }
 
 const GUARD = settledGuard();
 const GUARD_SKELETON = buildSkeleton(GUARD, VIEWS.side);
-const GUARD_LEAD_WRIST = GUARD_SKELETON.leftArm.end;
-const GUARD_REAR_WRIST = GUARD_SKELETON.rightArm.end;
+/** Where the guard holds each fist, from its own shoulder. */
+const GUARD_LEAD_FIST_FROM_SHOULDER = pt(
+  GUARD_SKELETON.leftArm.end.x - GUARD_SKELETON.leftArm.root.x,
+  GUARD_SKELETON.leftArm.end.y - GUARD_SKELETON.leftArm.root.y,
+);
+const GUARD_REAR_FIST_FROM_SHOULDER = pt(
+  GUARD_SKELETON.rightArm.end.x - GUARD_SKELETON.rightArm.root.x,
+  GUARD_SKELETON.rightArm.end.y - GUARD_SKELETON.rightArm.root.y,
+);
 
 /** A guard arm as joint angles, recovered from where the guard puts its hand. */
 function guardAngles(arm: BoneChain): ArmAngles {
@@ -104,7 +112,7 @@ const GUARD_REAR_TOE_X =
  * toe, so the toe stays on the floor where the heel pivots of every strike
  * keep it, rather than pitched about the foot's middle and sunk below it.
  */
-function guardPose(): CarlPose {
+function guardPose(): BipedPose {
   const pose = { ...GUARD };
   setFoot(pose, 'rear', onToes(GUARD_REAR_TOE_X, GUARD.rightFootPitch), GUARD.rightFootPitch);
   return pose;
@@ -114,7 +122,7 @@ function guardPose(): CarlPose {
 
 type Side = 'lead' | 'rear';
 
-function skeletonOf(pose: CarlPose): Skeleton {
+function skeletonOf(pose: BipedPose): Skeleton {
   return buildSkeleton(pose, VIEWS.side);
 }
 
@@ -124,7 +132,7 @@ function skeletonOf(pose: CarlPose): Skeleton {
  * lean and the shoulder turn carry the fist, and a share under one keeps the
  * elbow short of locking — a punch lands fully extended, never hyper-extended.
  */
-function punchTarget(pose: CarlPose, side: Side, dip: number, share: number, upperScale = 1): Pt {
+function punchTarget(pose: BipedPose, side: Side, dip: number, share: number, upperScale = 1): Pt {
   const skeleton = skeletonOf(pose);
   const shoulder = side === 'lead' ? skeleton.leftArm.root : skeleton.rightArm.root;
   const reach = armLength(upperScale) * share;
@@ -140,13 +148,13 @@ const COVER_BELOW_IN_HEAD_RADII = 0.75;
 const COVER_AHEAD = HEAD_RY * COVER_AHEAD_IN_HEAD_RADII;
 const COVER_BELOW = HEAD_RY * COVER_BELOW_IN_HEAD_RADII;
 
-function coverTarget(pose: CarlPose): Pt {
+function coverTarget(pose: BipedPose): Pt {
   const head = skeletonOf(pose).headCentre;
   return offset(head, COVER_AHEAD, COVER_BELOW);
 }
 
 /** Places a hand on a target by the arm's joint angles, solved against the pose's own shoulder. */
-function placeHand(pose: CarlPose, side: Side, target: Pt, upperScale = 1): void {
+function placeHand(pose: BipedPose, side: Side, target: Pt, upperScale = 1): void {
   const skeleton = skeletonOf(pose);
   // The hand target is kept in step with the angles that win over it, so
   // anything reading the pose's hand reads where the fist is drawn.
@@ -164,8 +172,18 @@ function placeHand(pose: CarlPose, side: Side, target: Pt, upperScale = 1): void
   }
 }
 
-function guardWrist(side: Side): Pt {
-  return side === 'lead' ? GUARD_LEAD_WRIST : GUARD_REAR_WRIST;
+/**
+ * Where `pose` holds a fist in its guard: the guard's fist carried on the
+ * pose's own shoulder. A blow leans, turns and drops the shoulders a long way,
+ * and a fist set off from where a standing guard held it is left behind them
+ * — up over the head as he leans into a cross — rather than leaving from the
+ * chin and coming back to it.
+ */
+function guardWrist(pose: BipedPose, side: Side): Pt {
+  const skeleton = skeletonOf(pose);
+  const shoulder = side === 'lead' ? skeleton.leftArm.root : skeleton.rightArm.root;
+  const fist = side === 'lead' ? GUARD_LEAD_FIST_FROM_SHOULDER : GUARD_REAR_FIST_FROM_SHOULDER;
+  return offset(shoulder, fist.x, fist.y);
 }
 
 /**
@@ -176,7 +194,7 @@ function guardWrist(side: Side): Pt {
  * straight line between the two hand positions.
  */
 function swingArm(
-  pose: CarlPose,
+  pose: BipedPose,
   side: Side,
   fromDown: number,
   weight: number,
@@ -184,8 +202,8 @@ function swingArm(
 ): void {
   const swung: ArmAngles = { upper: fromDown, fore: fromDown + SWUNG_ELBOW_BEND, foreScale: 1 };
   const angles: ArmAngles = {
-    upper: start.upper + (swung.upper - start.upper) * weight,
-    fore: start.fore + (swung.fore - start.fore) * weight,
+    upper: lerpAngle(start.upper, swung.upper, weight),
+    fore: lerpAngle(start.fore, swung.fore, weight),
     foreScale: 1,
   };
   setArmAngles(pose, side === 'lead' ? 'left' : 'right', angles);
@@ -203,7 +221,7 @@ const SWUNG_ELBOW_BEND = deg(18);
  * arm leaving a shoulder turned into the blow.
  */
 function throwStraight(
-  pose: CarlPose,
+  pose: BipedPose,
   side: Side,
   dip: number,
   extension: number,
@@ -212,12 +230,12 @@ function throwStraight(
 ): void {
   const upperScale = 1 + shoulderDrive * Math.max(0, drive);
   const target = punchTarget(pose, side, dip, extension, upperScale);
-  placeHand(pose, side, mixPt(guardWrist(side), target, drive), upperScale);
+  placeHand(pose, side, mixPt(guardWrist(pose, side), target, drive), upperScale);
 }
 
 /** A hand `weight` of the way from its guard to `target`; past 1 it overshoots, below 0 it cocks back. */
-function handToward(pose: CarlPose, side: Side, target: Pt, weight: number): void {
-  placeHand(pose, side, mixPt(guardWrist(side), target, weight));
+function handToward(pose: BipedPose, side: Side, target: Pt, weight: number): void {
+  placeHand(pose, side, mixPt(guardWrist(pose, side), target, weight));
 }
 
 /**
@@ -225,7 +243,7 @@ function handToward(pose: CarlPose, side: Side, target: Pt, weight: number): voi
  * `dip` radians below level. Under one keeps the knee soft of locking and the
  * IK clear of clamping.
  */
-function kickTarget(pose: CarlPose, side: Side, dip: number, share: number, pitch: number): Pt {
+function kickTarget(pose: BipedPose, side: Side, dip: number, share: number, pitch: number): Pt {
   const skeleton = skeletonOf(pose);
   const hip = side === 'lead' ? skeleton.leftLeg.root : skeleton.rightLeg.root;
   const reach = LEG_MAX_REACH * share;
@@ -238,7 +256,7 @@ function onToes(toeX: number, pitch: number): Pt {
   return profileFootTarget(ankleOverPivot(toeX, 'toe', pitch), pitch);
 }
 
-function setFoot(pose: CarlPose, side: Side, target: Pt, pitch: number): void {
+function setFoot(pose: BipedPose, side: Side, target: Pt, pitch: number): void {
   if (side === 'lead') {
     pose.leftFoot = target;
     pose.leftFootPitch = pitch;
@@ -249,7 +267,7 @@ function setFoot(pose: CarlPose, side: Side, target: Pt, pitch: number): void {
 }
 
 /** Rolls a guard foot onto its toes about its own toe, which stays planted. */
-function pivotFoot(pose: CarlPose, side: Side, pitch: number): void {
+function pivotFoot(pose: BipedPose, side: Side, pitch: number): void {
   const toeX = side === 'lead' ? GUARD_LEAD_TOE_X : GUARD_REAR_TOE_X;
   setFoot(pose, side, onToes(toeX, pitch), pitch);
 }
@@ -277,7 +295,7 @@ interface TrunkTracks {
 const HAIR_TRAIL = 0.12;
 const HEM_TRAIL = 0.08;
 
-function applyTrunk(pose: CarlPose, frame: number, trunk: TrunkTracks): void {
+function applyTrunk(pose: BipedPose, frame: number, trunk: TrunkTracks): void {
   pose.crouch = GUARD.crouch + frameValue(trunk.crouch, frame);
   pose.lean = GUARD.lean + frameValue(trunk.lean, frame);
   pose.twist = GUARD.twist + frameValue(trunk.twist, frame);
@@ -288,7 +306,7 @@ function applyTrunk(pose: CarlPose, frame: number, trunk: TrunkTracks): void {
 }
 
 /** A strike's face: the brow sets and the mouth opens on the effort. */
-function applyEffort(pose: CarlPose, frame: number, effort: FrameTable): void {
+function applyEffort(pose: BipedPose, frame: number, effort: FrameTable): void {
   const amount = frameValue(effort, frame);
   pose.brow = GUARD.brow + (1 - GUARD.brow) * amount;
   pose.mouth = EFFORT_MOUTH * amount;
@@ -332,11 +350,11 @@ const JAB_LEAD_LIFT: FrameTable = [0, 0.02, 0.02, 0, 0, 0, 0.02, 0.01];
 const JAB_SHOULDER_DRIVE = 0.6;
 
 /** Carries the lead foot `step` ahead of its guard position and `lift` off the floor. */
-function stepLead(pose: CarlPose, step: number, lift: number): void {
+function stepLead(pose: BipedPose, step: number, lift: number): void {
   setFoot(pose, 'lead', offset(GUARD.leftFoot, step, -lift), GUARD.leftFootPitch);
 }
 
-export function jabSide(frame: number): CarlPose {
+export function jabSide(frame: number): BipedPose {
   const pose = guardPose();
   applyTrunk(pose, frame, JAB_TRUNK);
   applyEffort(pose, frame, JAB_EFFORT);
@@ -372,8 +390,12 @@ const CROSS_TRUNK: TrunkTracks = {
 };
 /** The rear heel lifts and turns as the hip drives, a frame ahead of the shoulder. */
 const CROSS_HEEL: FrameTable = [0, 0, deg(35), deg(60), deg(72), deg(72), deg(40), deg(15)];
-/** A visible cock of the rear fist first, then the whole arm's length. */
-const CROSS_DRIVE: FrameTable = [0, -0.25, 0.2, 0.7, 1, 0.98, 0.5, 0.12];
+/**
+ * The rear fist leaves the chin as the hips turn and goes straight out the
+ * whole arm's length. Cocked back first, it is pulled up behind his head and
+ * the cross reads as a wind-up over the shoulder, which no boxer throws.
+ */
+const CROSS_DRIVE: FrameTable = [0, 0, 0.3, 0.7, 1, 0.98, 0.5, 0.12];
 const CROSS_COVER: FrameTable = [0, 0.3, 0.7, 1, 1, 1, 0.7, 0.3];
 const CROSS_EFFORT: FrameTable = [0, 0.3, 0.6, 0.9, 1, 1, 0.6, 0.25];
 /**
@@ -392,7 +414,7 @@ const CROSS_LEAD_STEP: FrameTable = [0, 0, 0.12, 0.28, 0.32, 0.32, 0.18, 0.05];
 const CROSS_LEAD_LIFT: FrameTable = [0, 0, 0.03, 0.01, 0, 0, 0.03, 0.02];
 const CROSS_EXTENSION = 0.97;
 
-export function crossSide(frame: number): CarlPose {
+export function crossSide(frame: number): BipedPose {
   const pose = guardPose();
   applyTrunk(pose, frame, CROSS_TRUNK);
   applyEffort(pose, frame, CROSS_EFFORT);
@@ -421,12 +443,14 @@ export function crossSide(frame: number): CarlPose {
  * hook would swing where nobody can see it.
  *
  * Edge-on most of the swing runs through depth, so the hook is told from the
- * cross by the two parts of it that show. First the load: the hips turn away,
- * the knees dip and the elbow is drawn back and up behind his shoulder, the
- * forearm level — a wing standing off his back. Then the blow: the elbow
- * comes round level with the shoulder and the forearm stands up and across
- * in front of him, a bent arm at head height where the cross is a straight
- * one, and the follow-through carries the fist on across his chest.
+ * cross by the two parts of it that show. First the load: the hips turn away
+ * and the knees dip, the fist staying up by the jaw and the elbow settling
+ * back beside the ribs. Drawn back and up behind the shoulder instead, the
+ * arm stands off his back like a wing, which nobody loads a hook with. Then
+ * the blow: the elbow comes round level with the shoulder and the forearm
+ * stands up and across in front of him, a bent arm at head height where the
+ * cross is a straight one, and the follow-through carries the fist on across
+ * his chest.
  */
 const HOOK_TRUNK: TrunkTracks = {
   crouch: [0, 0.08, 0.14, 0.22, 0.26, 0.26, 0.14, 0.04],
@@ -439,28 +463,19 @@ const HOOK_TRUNK: TrunkTracks = {
 const HOOK_REAR_HEEL: FrameTable = [0, 0, deg(10), deg(40), deg(55), deg(55), deg(30), deg(12)];
 const HOOK_EFFORT: FrameTable = [0, 0.3, 0.6, 0.9, 1, 0.9, 0.5, 0.2];
 /**
- * The hooking arm's joint angles, frame by frame: drawn back into the wing,
+ * The hooking arm's joint angles, frame by frame: settled back by the jaw,
  * swung out to the side (the upper arm pointing into depth, so drawn short),
  * round level in front with the forearm standing up and across, then on
  * across the chest. At the blow the upper arm is drawn longer than itself for
  * the same reason as a straight punch's (see {@link throwStraight}): the elbow
  * has to clear the chest, or the hook is only a fist beside the chin.
  */
-const HOOK_UPPER: FrameTable = [
-  0,
-  -deg(50),
-  -deg(95),
-  deg(20),
-  deg(88),
-  deg(100),
-  deg(55),
-  deg(25),
-];
+const HOOK_UPPER: FrameTable = [0, deg(12), -deg(5), deg(20), deg(88), deg(100), deg(55), deg(25)];
 const HOOK_UPPER_SCALE: FrameTable = [1, 0.95, 1, 0.5, 1.15, 0.9, 0.95, 1];
 const HOOK_FORE: FrameTable = [
   0,
-  deg(115),
-  deg(125),
+  deg(185),
+  deg(175),
   deg(100),
   deg(140),
   deg(172),
@@ -468,8 +483,12 @@ const HOOK_FORE: FrameTable = [
   deg(158),
 ];
 const HOOK_FORE_SCALE: FrameTable = [1, 1, 1, 0.9, 0.85, 0.6, 0.85, 0.95];
-/** See {@link CROSS_LEAD_STEP}: the hook turns on the lead foot rather than stepping in. */
-const HOOK_LEAD_STEP: FrameTable = [0, 0, 0.04, 0.1, 0.12, 0.12, 0.06, 0.01];
+/**
+ * See {@link CROSS_LEAD_STEP}: the hook turns on the lead foot rather than
+ * stepping in. The foot is set down at the full turn on the frame it lands
+ * and held there: still edging forward once it is on the floor, it skates.
+ */
+const HOOK_LEAD_STEP: FrameTable = [0, 0, 0.04, 0.12, 0.12, 0.12, 0.06, 0.01];
 const HOOK_LEAD_LIFT: FrameTable = [0, 0, 0.02, 0, 0, 0, 0.02, 0.01];
 /** How far the arm has left the guard: all the way through the blow, half back by the last frame. */
 const HOOK_ARM_WEIGHT: FrameTable = [0, 1, 1, 1, 1, 1, 1, 0.5];
@@ -479,8 +498,8 @@ function hookArm(frame: number): ArmAngles {
   const weight = frameValue(HOOK_ARM_WEIGHT, frame);
   const guard = REAR_GUARD_ANGLES;
   return {
-    upper: guard.upper + (frameValue(HOOK_UPPER, frame) - guard.upper) * weight,
-    fore: guard.fore + (frameValue(HOOK_FORE, frame) - guard.fore) * weight,
+    upper: lerpAngle(guard.upper, frameValue(HOOK_UPPER, frame), weight),
+    fore: lerpAngle(guard.fore, frameValue(HOOK_FORE, frame), weight),
     foreScale: guard.foreScale + (frameValue(HOOK_FORE_SCALE, frame) - guard.foreScale) * weight,
   };
 }
@@ -490,7 +509,7 @@ function hookUpperScale(frame: number): number {
   return FULL_UPPER_ARM + (frameValue(HOOK_UPPER_SCALE, frame) - FULL_UPPER_ARM) * weight;
 }
 
-export function hookSide(frame: number): CarlPose {
+export function hookSide(frame: number): BipedPose {
   const pose = guardPose();
   applyTrunk(pose, frame, HOOK_TRUNK);
   applyEffort(pose, frame, HOOK_EFFORT);
@@ -561,7 +580,7 @@ const KICK_HEEL_UP_FRAME = 1;
  * simply carried, rather than driven out along the leg.
  */
 function kickingFoot(
-  pose: CarlPose,
+  pose: BipedPose,
   frame: number,
   footX: FrameTable,
   lift: FrameTable,
@@ -581,7 +600,7 @@ function kickingFoot(
 
 const GUARD_REAR_ANKLE = ankleOverPivot(GUARD_REAR_TOE_X, 'toe', GUARD.rightFootPitch);
 
-export function puntSide(frame: number): CarlPose {
+export function puntSide(frame: number): BipedPose {
   const pose = guardPose();
   applyTrunk(pose, frame, PUNT_TRUNK);
   applyEffort(pose, frame, PUNT_EFFORT);
@@ -624,7 +643,7 @@ const PUNT_REAR_ARM_BACK = -deg(10);
  */
 const ROUNDHOUSE_TRUNK: TrunkTracks = {
   crouch: [0, 0.04, 0.06, 0.06, 0.06, 0.06, 0.05, 0.01],
-  lean: [0, deg(2), -deg(10), -deg(22), -deg(32), -deg(30), -deg(14), -deg(3)],
+  lean: [0, deg(2), -deg(8), -deg(15), -deg(21), -deg(20), -deg(10), -deg(2)],
   twist: [0, -0.2, 0.4, 0.9, 1.1, 1.1, 0.5, 0.1],
   sway: [0, 0.12, 0.2, 0.2, 0.15, 0.15, 0.12, 0.04],
   // The head stays level on the target while the body tips away under it.
@@ -670,7 +689,7 @@ const ROUNDHOUSE_FOLLOW_EXTENSION = 0.86;
 const ROUNDHOUSE_REAR_ARM_BACK = -deg(35);
 const ROUNDHOUSE_ARM_FLING: FrameTable = [0, 0.2, 0.55, 0.9, 1, 1, 0.55, 0.15];
 
-export function roundhouseSide(frame: number): CarlPose {
+export function roundhouseSide(frame: number): BipedPose {
   const pose = guardPose();
   applyTrunk(pose, frame, ROUNDHOUSE_TRUNK);
   applyEffort(pose, frame, ROUNDHOUSE_EFFORT);
@@ -753,7 +772,7 @@ const CLINCH_FIST = 0.7;
 const CLINCH_LEAD_OFFSET: Pt = pt(0.04, 0);
 const CLINCH_REAR_OFFSET: Pt = pt(-0.02, 0.02);
 
-export function kneeSide(frame: number): CarlPose {
+export function kneeSide(frame: number): BipedPose {
   const pose = guardPose();
   applyTrunk(pose, frame, KNEE_TRUNK);
   applyEffort(pose, frame, KNEE_EFFORT);
@@ -853,14 +872,14 @@ function bargeRamArm(frame: number): ArmAngles {
   const weight = frameValue(BARGE_RAM_WEIGHT, frame);
   const guard = REAR_GUARD_ANGLES;
   return {
-    upper: guard.upper + (frameValue(BARGE_RAM_UPPER, frame) - guard.upper) * weight,
-    fore: guard.fore + (frameValue(BARGE_RAM_FORE, frame) - guard.fore) * weight,
+    upper: lerpAngle(guard.upper, frameValue(BARGE_RAM_UPPER, frame), weight),
+    fore: lerpAngle(guard.fore, frameValue(BARGE_RAM_FORE, frame), weight),
     foreScale:
       guard.foreScale + (frameValue(BARGE_RAM_FORE_SCALE, frame) - guard.foreScale) * weight,
   };
 }
 
-export function bargeSide(frame: number): CarlPose {
+export function bargeSide(frame: number): BipedPose {
   const pose = guardPose();
   applyTrunk(pose, frame, BARGE_TRUNK);
   applyEffort(pose, frame, BARGE_EFFORT);
@@ -877,15 +896,47 @@ export function bargeSide(frame: number): CarlPose {
 
 /**
  * A strike thrown on the move lasts the swing's ticks while he covers the
- * ground the run covers in that time, so its legs step through that many run
- * frames — one per row frame, the pace the foot-slip gate carries every
- * travelling row at.
+ * ground the run covers in that time, so the row is as many frames as the run
+ * steps through in a swing, rounded to whole frames.
  */
 export const RUNNING_STRIKE_FRAMES = Math.round(
   (HUMAN_SWING_FRAMES * PLAYER_SPEED) / (RUN_GROUND_PER_CYCLE_PX / RUN_FRAMES),
 );
 /** The hit lands halfway through the swing, whatever the row's length. */
 export const RUNNING_STRIKE_IMPACT_FRAME = Math.floor(RUNNING_STRIKE_FRAMES / 2);
+/**
+ * How much of a run cycle one frame of a strike on the run covers: the ground
+ * the sprite travels in that frame, exactly. The row's frame count is rounded
+ * to whole run frames, and stepping the legs one run frame per row frame
+ * would leave the stance foot slipping by the rounding.
+ */
+const RUN_CYCLE_PER_RUNNING_STRIKE_FRAME =
+  ((HUMAN_SWING_FRAMES / RUNNING_STRIKE_FRAMES) * PLAYER_SPEED) / RUN_GROUND_PER_CYCLE_PX;
+
+/** The run phase a strike on the run begun at `entry` has its legs at on `frame`. */
+function runningStrikeRunPhase(entry: number, frame: number): number {
+  return runPhaseAt(entry, frame, RUN_CYCLE_PER_RUNNING_STRIKE_FRAME);
+}
+
+/**
+ * Whether a strike on the run begun on `runFrame` has a foot holding the floor
+ * across two of its frames: the blow is thrown off a planted foot, and one
+ * whose legs only ever touch down for a frame is thrown in mid-air.
+ */
+function strikeHoldsTheFloor(runFrame: number): boolean {
+  const entry = runFrame / RUN_FRAMES;
+  const plantedOn = (side: number, frame: number): boolean =>
+    runFoot(legPhase(runningStrikeRunPhase(entry, frame), side)).planted;
+  return [RIGHT_ARM, LEFT_ARM].some((side) =>
+    Array.from(
+      { length: RUNNING_STRIKE_FRAMES - 1 },
+      (_unused, frame) => plantedOn(side, frame) && plantedOn(side, frame + 1),
+    ).some(Boolean),
+  );
+}
+
+/** The run phases the strikes on the run — the jab and the punt — begin at, one version each. */
+export const RUNNING_STRIKE_ENTRY_PHASES = entryPhasesWhere('side', strikeHoldsTheFloor);
 
 /**
  * The running strikes' tracks are keyed one value a frame over a nine-frame
@@ -902,7 +953,7 @@ function runningAt(track: FrameTable, frame: number): number {
 
 /** The run phase a strike thrown on the run, begun at `entry`, hands the legs back at. */
 export function runningStrikeExitPhase(entry: number): number {
-  return runPhaseAt(entry, RUNNING_STRIKE_FRAMES - 1);
+  return runningStrikeRunPhase(entry, RUNNING_STRIKE_FRAMES - 1);
 }
 
 /** How much of the strike the upper body has taken over from the run's arms, per frame. */
@@ -920,7 +971,7 @@ const RUNNING_JAB_TWIST: FrameTable = [0, -0.05, -0.15, -0.3, -0.38, -0.38, -0.2
  */
 const RUNNING_JAB_LEAN: FrameTable = [0, 0, deg(3), deg(8), deg(11), deg(10), deg(5), deg(2), 0];
 
-function runWrists(pose: CarlPose): { lead: Pt; rear: Pt } {
+function runWrists(pose: BipedPose): { lead: Pt; rear: Pt } {
   const skeleton = skeletonOf(pose);
   return { lead: skeleton.leftArm.end, rear: skeleton.rightArm.end };
 }
@@ -930,8 +981,8 @@ function runWrists(pose: CarlPose): { lead: Pt; rear: Pt } {
  * arms and shoulders strike, so every entry throws the same punch over
  * whichever step the stride is in.
  */
-export function jabRunSide(frame: number, entry: number): CarlPose {
-  const pose = runSide(runPhaseAt(entry, frame));
+export function jabRunSide(frame: number, entry: number): BipedPose {
+  const pose = runSide(runningStrikeRunPhase(entry, frame));
   const blend = runningAt(RUNNING_JAB_BLEND, frame);
   if (blend <= 0) return pose;
   const running = runWrists(pose);
@@ -1010,7 +1061,7 @@ function sideOf(sign: number): Side {
 /** Which foot, as `placeFoot`'s sign, the running punt begun at `entry` kicks with. */
 export function puntRunKickingSide(entry: number): number {
   return kickingLeg(
-    (frame) => runPhaseAt(entry, frame),
+    (frame) => runningStrikeRunPhase(entry, frame),
     Array.from({ length: RUNNING_STRIKE_FRAMES }, (_unused, frame) =>
       runningAt(RUNNING_PUNT_BLEND, frame),
     ),
@@ -1025,8 +1076,8 @@ export function puntRunKickingSide(entry: number): number {
  * lands at, so the draw-back is always that leg's own recovery rather than a
  * planted foot torn off the floor.
  */
-export function puntRunSide(frame: number, entry: number): CarlPose {
-  const phase = runPhaseAt(entry, frame);
+export function puntRunSide(frame: number, entry: number): BipedPose {
+  const phase = runningStrikeRunPhase(entry, frame);
   const pose = runSide(phase);
   const kicking = sideOf(puntRunKickingSide(entry));
   const other: Side = kicking === 'rear' ? 'lead' : 'rear';

@@ -9,7 +9,7 @@
  * three dimensions is what keeps those three the same lid.
  */
 
-import { type Pt, clamp01, rgba } from '../carlArt';
+import { type Pt, clamp01, rgba } from '../bipedArt';
 import { BIN_BAG, BIN_BAG_SHEEN, RUST, STEEL, STRAP, STRING, TIN } from './palette';
 import {
   type Ctx,

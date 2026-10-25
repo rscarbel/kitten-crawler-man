@@ -77,8 +77,8 @@ const VARIANT_HEIGHT_TILES: Readonly<Record<SkeletonVariant, number>> = {
 
 /**
  * Walks are sampled denser than everything else because a gait is the one
- * animation a player watches for minutes at a time. Twelve rather than Carl's
- * sixteen: these are mobs seen at a distance, and four extra columns buys
+ * animation a player watches for minutes at a time. Twelve rather than the human
+ * crawler's sixteen: these are mobs seen at a distance, and four extra columns buys
  * smoothness nobody is close enough to see.
  */
 const WALK_FRAMES = 12;

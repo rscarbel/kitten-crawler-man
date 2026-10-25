@@ -18,7 +18,7 @@
  * faint so it cannot fight the silhouette at 32 pixels.
  */
 
-import { type Pt, lerp, mix } from '../carlArt';
+import { type Pt, lerp, mix } from '../bipedArt';
 import { ratkinArmWidths, ratkinLegWidths } from '../ratKinArt';
 import type { ArmFrame, GarmentFrame, GarmentLayer, HemShape } from './outfit';
 import {

@@ -1,13 +1,13 @@
 /**
- * The Incubus's own anatomy and clothes, painted onto Carl's rig as
- * attachments (`CarlAttachments` in `carl/figure.ts`): devil horns, folded bat
+ * The Incubus's own anatomy and clothes, painted onto the biped rig as
+ * attachments (`BipedAttachments` in `biped/figure.ts`): devil horns, folded bat
  * wings, a forked tail, an open-necked shirt with a sash, trousers and boots.
  *
  * Everything here is in the rig's figure units — origin between the feet, +Y
  * down, one unit a little under half a tile — and hung off the solved
  * skeleton, so it follows the body wherever a pose puts it. Each form is
- * shaded with Carl's own recipe (`shadeForm`), so the parts light the same way
- * as the body they are attached to, and they are composed inside his figure
+ * shaded with the rig's own recipe (`shadeForm`), so the parts light the same way
+ * as the body they are attached to, and they are composed inside the figure
  * so the silhouette outline runs round them too.
  *
  * Silhouette carries the read at the 32 px tile: the horns are the two points
@@ -16,9 +16,9 @@
  * bonus at that size, never the thing the shape depends on.
  */
 
-import { type CarlAttachments } from './carl/figure';
-import { headAngle } from './carl/head';
-import { crease, FIGURE_CREASE_LAYERS, shadeForm } from './carl/paint';
+import { type BipedAttachments } from './biped/figure';
+import { headAngle } from './biped/head';
+import { crease, FIGURE_CREASE_LAYERS, shadeForm } from './biped/paint';
 import {
   deriveGlossRamp,
   deriveRamp,
@@ -27,10 +27,10 @@ import {
   receded,
   recededGloss,
   FAR_LIMB_SHADE,
-} from './carl/palette';
-import { type CarlPose, type Skeleton, type ViewSpec } from './carl/rig';
-import { WAIST_HALF } from './carl/proportions';
-import { lerp, type Pt, rgba } from './carlArt';
+} from './biped/palette';
+import { type BipedPose, type Skeleton, type ViewSpec } from './biped/rig';
+import { WAIST_HALF } from './biped/proportions';
+import { lerp, type Pt, rgba } from './bipedArt';
 import { strokeSoftCrease } from './softShade';
 import { paintTrouserSeat } from './human/legwear';
 import { type TownsfolkLegwear } from '../garments/human/townsfolkLegwear';
@@ -291,7 +291,7 @@ function hornShapes(view: ViewSpec): { far: HornShape[]; near: HornShape[] } {
   return { far: [], near: [HORN_HEAD_ON, mirrored(HORN_HEAD_ON)] };
 }
 
-function inHeadFrame(ctx: Ctx, skeleton: Skeleton, pose: CarlPose, paint: () => void): void {
+function inHeadFrame(ctx: Ctx, skeleton: Skeleton, pose: BipedPose, paint: () => void): void {
   ctx.save();
   try {
     ctx.translate(skeleton.headCentre.x, skeleton.headCentre.y);
@@ -302,7 +302,7 @@ function inHeadFrame(ctx: Ctx, skeleton: Skeleton, pose: CarlPose, paint: () => 
   }
 }
 
-function drawHorns(ctx: Ctx, skeleton: Skeleton, view: ViewSpec, pose: CarlPose): void {
+function drawHorns(ctx: Ctx, skeleton: Skeleton, view: ViewSpec, pose: BipedPose): void {
   const shapes = hornShapes(view);
   inHeadFrame(ctx, skeleton, pose, () => {
     for (const shape of shapes.far) paintHorn(ctx, shape, recededGloss(HORN, FAR_LIMB_SHADE));
@@ -321,7 +321,13 @@ function drawHorns(ctx: Ctx, skeleton: Skeleton, view: ViewSpec, pose: CarlPose)
 const WING_HEAD_ON = {
   root: { x: 0.2, y: 0.1 },
   wrist: { x: 0.33, y: -0.4 },
-  claw: { x: 0.25, y: -0.5 },
+  /**
+   * Stands a few pixels clear of the horn's outer curve. Kissing it, the
+   * breath opens and shuts a hairline between them, and the floor between
+   * wing and head flips frame to frame between an outlined gap and a
+   * sealed hole — the head reads as swaying.
+   */
+  claw: { x: 0.3, y: -0.5 },
   outerBulge: { x: 0.62, y: -0.02 },
   tip: { x: 0.45, y: 0.86 },
   /** Where the finger bones end on the trailing edge, outermost first. */
@@ -781,7 +787,7 @@ function attachmentReach(skeleton: Skeleton, view: ViewSpec, motion: IncubusMoti
  * The Incubus's attachments for one frame. Head-on and edge-on the wings and
  * tail hang behind him; from behind they lie over his back.
  */
-export function incubusAttachments(motion: IncubusMotion): CarlAttachments {
+export function incubusAttachments(motion: IncubusMotion): BipedAttachments {
   const skin = INCUBUS_SKIN;
   const wingsBehind = (ctx: Ctx, skeleton: Skeleton, view: ViewSpec): void => {
     if (view.profile) {

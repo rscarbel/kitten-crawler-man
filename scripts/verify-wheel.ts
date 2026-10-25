@@ -1141,7 +1141,7 @@ async function checkLegendaryWeaponPaysBoth(): Promise<void> {
   check(
     human.inventory.countOf(FURY_OF_TARANIS_ITEM_ID) === 1 &&
       cat.inventory.countOf(EYES_OF_SPLATTER_ITEM_ID) === 0,
-    "Carl's first Legendary Weapon is his own sword",
+    "The human's first Legendary Weapon is his own sword",
   );
   check(!retired(), 'the wedge stays live after one weapon');
 
@@ -1158,7 +1158,7 @@ async function checkLegendaryWeaponPaysBoth(): Promise<void> {
     cat.inventory.countOf(EYES_OF_SPLATTER_ITEM_ID) === 1 &&
       human.inventory.countOf(EYES_OF_SPLATTER_ITEM_ID) === 0 &&
       human.inventory.countOf(FURY_OF_TARANIS_ITEM_ID) === 1,
-    "Carl landing it again sends Donut's glasses to Donut",
+    "The human landing it again sends the cat's glasses to the cat",
   );
   check(retired(), 'the wedge retires once both weapons are out');
 
@@ -1193,7 +1193,7 @@ async function checkLegendaryWeaponPaysBoth(): Promise<void> {
   settleWheelLedger(legacyHeld, legacyParty);
   check(
     legacyHeld.prizesWon.join(',') === LEGENDARY_WEAPON_CLAIM_IDS.cat,
-    `a legacy claim with Donut's glasses in hand becomes her claim alone (${legacyHeld.prizesWon.join(',')})`,
+    `a legacy claim with the cat's glasses in hand becomes her claim alone (${legacyHeld.prizesWon.join(',')})`,
   );
   const legacyLost = createWheelLedger([weaponWedge]);
   settleWheelLedger(legacyLost, {

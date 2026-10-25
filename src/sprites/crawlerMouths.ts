@@ -11,8 +11,8 @@ import { mouthInTile } from './art/human/probe';
 import { HUMAN_ROW_TABLE } from './art/humanFigure';
 import { catMouthInTile, catRowFacesWest, catRowView } from './art/catFigure';
 import { isTurnedView } from './facingView';
-import type { HumanRowSelection } from './humanSprite';
-import type { CatCell } from './catSprite';
+import { activeHumanLook, type HumanRowSelection } from './humanSprite';
+import { activeCatLook, type CatCell } from './catSprite';
 
 const humanMouthByCell = new Map<string, FigureMouth | null>();
 const catMouthByCell = new Map<string, FigureMouth | null>();
@@ -27,30 +27,32 @@ function withLean(point: { x: number; y: number } | null, lean: -1 | 0 | 1): Fig
   return point === null ? null : { x: point.x, y: point.y, lean };
 }
 
-/** Carl's mouth on the cell `selection` draws, in tile fractions; null when he faces away. */
+/** The human crawler's mouth on the cell `selection` draws, in tile fractions; null when he faces away. */
 export function humanMouthOf(selection: HumanRowSelection): FigureMouth | null {
-  const key = `${selection.row}:${selection.frame}:${String(selection.flipX)}`;
+  const look = activeHumanLook();
+  const key = `${look.id}:${selection.row}:${selection.frame}:${String(selection.flipX)}`;
   const known = humanMouthByCell.get(key);
   if (known !== undefined) return known;
   const profile = isTurnedView(HUMAN_ROW_TABLE[selection.row].view);
   const found = withLean(
-    mouthInTile(selection.row, selection.frame, selection.flipX),
+    mouthInTile(selection.row, selection.frame, selection.flipX, look),
     profileLean(profile, selection.flipX),
   );
   humanMouthByCell.set(key, found);
   return found;
 }
 
-/** Donut's mouth on `cell`, in tile fractions; null when she faces away. */
+/** The cat crawler's mouth on `cell`, in tile fractions; null when she faces away. */
 export function catMouthOf(cell: CatCell): FigureMouth | null {
-  const key = `${cell.state}:${cell.frame}:${String(cell.flipX)}`;
+  const look = activeCatLook();
+  const key = `${look.id}:${cell.state}:${cell.frame}:${String(cell.flipX)}`;
   const known = catMouthByCell.get(key);
   if (known !== undefined) return known;
   const view = catRowView(cell.state);
   const profile = view !== undefined && isTurnedView(view);
   const facesLeft = cell.flipX !== catRowFacesWest(cell.state);
   const found = withLean(
-    catMouthInTile(cell.state, cell.frame, cell.flipX),
+    catMouthInTile(look, cell.state, cell.frame, cell.flipX),
     profileLean(profile, facesLeft),
   );
   catMouthByCell.set(key, found);

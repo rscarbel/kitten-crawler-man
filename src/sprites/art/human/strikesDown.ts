@@ -1,5 +1,5 @@
 /**
- * Carl's strikes at something south of him, seen head-on.
+ * The human crawler's strikes at something south of him, seen head-on.
  *
  * Head-on, the whole blow travels toward the camera, which is the one direction
  * a flat picture cannot show. Each strike here is sold by what does show: a
@@ -11,9 +11,9 @@
  * what the animator hands back to after a blow.
  */
 
-import { mixPt, offset, pt } from '../carl/geometry';
-import { buildSkeleton, type CarlPose, FULL_UPPER_ARM, VIEWS } from '../carl/rig';
-import { clamp01, lerp, type Pt } from '../carlArt';
+import { mixPt, offset, pt } from '../biped/geometry';
+import { type ArmAngles, buildSkeleton, type BipedPose, FULL_UPPER_ARM, VIEWS } from '../biped/rig';
+import { clamp01, deg, lerp, type Pt } from '../bipedArt';
 import {
   fromRest,
   offsetTrack,
@@ -132,7 +132,7 @@ function upperArmScaleFor(fistFromShoulder: Pt, guardFist: Pt, guardScale: numbe
 }
 
 /** Sets both hands from their paths, against the shoulders of the body as already posed. */
-function placeHands(pose: CarlPose, frame: number, right: HandPath, left: HandPath): void {
+function placeHands(pose: BipedPose, frame: number, right: HandPath, left: HandPath): void {
   const skeleton = buildSkeleton(pose, VIEWS.front);
   const rightFist = pt(trackAt(frame, right.x), trackAt(frame, right.y));
   const leftFist = pt(trackAt(frame, left.x), trackAt(frame, left.y));
@@ -150,7 +150,7 @@ function placeHands(pose: CarlPose, frame: number, right: HandPath, left: HandPa
  * picture-plane leg, so the row hands back to the guard without the knee
  * jumping.
  */
-function placeRightFoot(pose: CarlPose, x: number, lift: number, depth: number): void {
+function placeRightFoot(pose: BipedPose, x: number, lift: number, depth: number): void {
   pose.rightFoot = pt(x, -Math.max(lift, 0));
   const offTheHipLine = lift > 0 || depth > FOOT_ON_HIP_LINE;
   if (offTheHipLine) pose.rightFootDepth = depth;
@@ -168,7 +168,7 @@ const STOMP_APEX = STOMP_DOWN_IMPACT - 1;
 /**
  * The stamping foot: a dip loads the stance leg, the knee comes up high at
  * the camera with the shin hanging under it — far enough toward the camera
- * that the knee and shin are painted over the shorts, which is the only
+ * that the knee and shin are painted over the trouser seat, which is the only
  * silhouette a knee pointed at the viewer has; swung out to the side instead
  * it reads as a leg cocked at a post — and at the top of the chamber the heel
  * is driven down through the target, landing back where the guard stands it
@@ -280,10 +280,15 @@ const STOMP_LEFT_HAND = handPath(GUARD_LEFT_FIST, STOMP_LAST, [
   [5, atShoulder(GUARD_LEFT_FIST, -0.15, 0.6)],
   [6, pt(-0.06, 0.2)],
 ]);
-/** Elbows up and out with the arms at the chamber; straight down with the stamp. */
+/**
+ * Elbows out to the sides with the arms at the chamber; straight down with the
+ * stamp. With the fists raised over the shoulders the flare turns over: bent
+ * the way it bows a hanging arm out from the ribs, a raised arm folds its
+ * elbow in across the face.
+ */
 const STOMP_ELBOW_FLARE: Track = fromRest(GUARD.elbowFlare, STOMP_LAST, [
-  [2, 0.8],
-  [STOMP_APEX, 0.9],
+  [2, -0.8],
+  [STOMP_APEX, -0.9],
   [STOMP_DOWN_IMPACT, 0.1],
   [5, 0.1],
   [6, 0.3],
@@ -316,7 +321,7 @@ const STOMP_HAIR: Track = offsetTrack(STOMP_LAST, [
 const FULL_BROW = 1;
 
 /** A stamp at something small at his feet: knee up toward the camera, heel driven down. */
-export function stompDown(frame: number): CarlPose {
+export function stompDown(frame: number): BipedPose {
   const pose = guardFront(0);
   pose.sway = trackAt(frame, STOMP_SWAY);
   pose.bob += trackAt(frame, STOMP_BOB);
@@ -348,7 +353,7 @@ const PUNT_LAST = PUNT_DOWN_FRAMES - 1;
  * A toe punt at something on the floor in front of him: the foot draws back
  * behind the stance leg with the heel kicked up, then swings through and up
  * at the camera, the leg nearly straight and the sole and swelling foot held
- * out in front of the shorts on the impact frame while he rocks back off it.
+ * out in front of the trouser seat on the impact frame while he rocks back off it.
  * Ahead of him is lower on the screen and up is higher, so a foot kicked
  * forward and up stays in front of him rather than rising past the hip.
  */
@@ -373,7 +378,7 @@ const PUNT_DEPTH: Track = offsetTrack(PUNT_LAST, [
 /**
  * The knee chambers in under his centre and the kick snaps straight out at the
  * target, toward the camera. Its silhouette is the knee and shin painted over
- * the shorts and the foot swelling low on the screen, not a sideways swing:
+ * the trouser seat and the foot swelling low on the screen, not a sideways swing:
  * a leg carried out to the side reads as a kick at something beside him.
  */
 const PUNT_FOOT_X: Track = fromRest(GUARD.rightFoot.x, PUNT_LAST, [
@@ -479,7 +484,7 @@ const PUNT_HAIR: Track = offsetTrack(PUNT_LAST, [
 ]);
 
 /** A toe punt toward the camera, the rat-punting kick. */
-export function puntDown(frame: number): CarlPose {
+export function puntDown(frame: number): BipedPose {
   const pose = guardFront(0);
   pose.sway = trackAt(frame, PUNT_SWAY);
   pose.bob += trackAt(frame, PUNT_BOB);
@@ -508,9 +513,9 @@ export function puntDown(frame: number): CarlPose {
 const HAMMER_LAST = HAMMER_DOWN_FRAMES - 1;
 
 /**
- * The right fist goes up over his head, and then he drops his body under it
- * and folds over it: knees bend and the chest pitches down toward the
- * camera, so the fist reaches a target at knee height, which no arm swung
+ * The right fist is cocked up beside his ear, and then he drops his body
+ * under it and folds over it: knees bend and the chest pitches down toward
+ * the camera, so the fist reaches a target at knee height, which no arm swung
  * from a standing shoulder can.
  */
 const HAMMER_CROUCH: Track = offsetTrack(HAMMER_LAST, [
@@ -560,30 +565,46 @@ const HAMMER_THIGH_NEARNESS: Track = offsetTrack(HAMMER_LAST, [
   [6, 0.3],
 ]);
 /**
- * Straight up over his head, then down through the front of him to the
- * target in front of his knees, on the centreline: brought down beside him
- * instead, the fist reads as a hand dropped to the hip.
+ * Cocked beside his ear with the elbow bent, then driven down through the
+ * front of him to the target in front of his knees, on the centreline. Flung
+ * up overhead the arm reads as a wave; brought down beside him, the fist
+ * reads as a hand dropped to the hip.
  */
 const HAMMER_RIGHT_HAND = handPath(GUARD_RIGHT_FIST, HAMMER_LAST, [
-  [1, atShoulder(GUARD_RIGHT_FIST, 0.02, -0.46)],
-  [2, atShoulder(GUARD_RIGHT_FIST, -0.2, -0.5)],
-  [3, atShoulder(GUARD_RIGHT_FIST, -0.2, 0.12)],
-  [HAMMER_DOWN_IMPACT, atShoulder(GUARD_RIGHT_FIST, -0.24, 0.6)],
-  [5, atShoulder(GUARD_RIGHT_FIST, -0.24, 0.6)],
+  [1, atShoulder(GUARD_RIGHT_FIST, -0.12, -0.26)],
+  [2, atShoulder(GUARD_RIGHT_FIST, -0.14, -0.33)],
+  [3, atShoulder(GUARD_RIGHT_FIST, -0.22, 0.08)],
+  [HAMMER_DOWN_IMPACT, atShoulder(GUARD_RIGHT_FIST, -0.3, 0.74)],
+  [5, atShoulder(GUARD_RIGHT_FIST, -0.3, 0.74)],
   [6, pt(0.0, 0.2)],
 ]);
 /**
- * The left arm counters the blow: forward to the jaw as the right goes up,
- * then thrown back and out past the hip as the right comes down.
+ * The right arm while it is cocked, posed by its joints: a fist raised beside
+ * his ear is above the shoulder, where a two-bone reach folds the elbow in
+ * across his chest and lays the forearm over his face. Cocked, the elbow
+ * points out and down at the camera — the upper arm drawn short — and the
+ * forearm stands up from it to the fist.
  */
-const HAMMER_LEFT_HAND = handPath(GUARD_LEFT_FIST, HAMMER_LAST, [
-  [1, pt(0.02, 0.02)],
-  [2, pt(0.04, 0.04)],
-  [3, atShoulder(GUARD_LEFT_FIST, -0.2, 0.36)],
-  [HAMMER_DOWN_IMPACT, atShoulder(GUARD_LEFT_FIST, -0.42, 0.3)],
-  [5, atShoulder(GUARD_LEFT_FIST, -0.4, 0.3)],
-  [6, pt(-0.04, 0.16)],
-]);
+interface CockedArm {
+  readonly angles: ArmAngles;
+  readonly upperArmScale: number;
+}
+const COCKED_UPPER_ARM_SCALE = 0.35;
+const HAMMER_COCKED_ARM: Readonly<Partial<Record<number, CockedArm>>> = {
+  1: {
+    angles: { upper: deg(39), fore: deg(210), foreScale: 1 },
+    upperArmScale: COCKED_UPPER_ARM_SCALE,
+  },
+  2: {
+    angles: { upper: deg(50), fore: deg(210), foreScale: 1 },
+    upperArmScale: COCKED_UPPER_ARM_SCALE,
+  },
+};
+/**
+ * The left fist holds the guard at his jaw, carried down with the body: an
+ * arm thrown out to counter the blow reads, at the tile, as a flailing man.
+ */
+const HAMMER_LEFT_HAND = handPath(GUARD_LEFT_FIST, HAMMER_LAST, []);
 const HAMMER_SWAY: Track = offsetTrack(HAMMER_LAST, [
   [2, -0.03],
   [3, 0.01],
@@ -615,17 +636,17 @@ const HAMMER_HAIR: Track = offsetTrack(HAMMER_LAST, [
   [HAMMER_DOWN_IMPACT, -0.5],
   [5, -0.3],
 ]);
-/** The elbow leads the fist up over the top and straightens on the way down. */
+/** The cocked elbow points out and down under the fist, and straightens on the way down. */
 const HAMMER_ELBOW_FLARE: Track = fromRest(GUARD.elbowFlare, HAMMER_LAST, [
-  [2, 1],
-  [3, 0.6],
+  [2, 0.6],
+  [3, 0.5],
   [HAMMER_DOWN_IMPACT, 0.05],
   [5, 0.05],
   [6, 0.15],
 ]);
 
 /** A right hammer-fist driven down onto something low, the body dropping under it. */
-export function hammerDown(frame: number): CarlPose {
+export function hammerDown(frame: number): BipedPose {
   const pose = guardFront(0);
   pose.sway = trackAt(frame, HAMMER_SWAY);
   pose.bob += trackAt(frame, HAMMER_BOB);
@@ -638,6 +659,12 @@ export function hammerDown(frame: number): CarlPose {
   pose.leftFootPlanted = true;
   pose.rightFootPlanted = true;
   placeHands(pose, frame, HAMMER_RIGHT_HAND, HAMMER_LEFT_HAND);
+  const cocked = HAMMER_COCKED_ARM[Math.round(frame)];
+  if (cocked !== undefined) {
+    pose.rightArmAngles = cocked.angles;
+    pose.rightUpperArmScale = cocked.upperArmScale;
+    pose.rightHand = buildSkeleton(pose, VIEWS.front).rightArm.end;
+  }
   pose.elbowFlare = trackAt(frame, HAMMER_ELBOW_FLARE);
   pose.chinLift = trackAt(frame, HAMMER_CHIN);
   pose.brow = frame === 0 || frame === HAMMER_LAST ? GUARD.brow : FULL_BROW;
@@ -809,7 +836,7 @@ const KNEE_HAIR: Track = offsetTrack(KNEE_LAST, [
 ]);
 
 /** The finisher on a downed enemy: he drops his whole weight onto one knee. */
-export function kneeDropDown(frame: number): CarlPose {
+export function kneeDropDown(frame: number): BipedPose {
   const pose = guardFront(0);
   pose.bob += trackAt(frame, KNEE_BOB);
   pose.crouch += trackAt(frame, KNEE_CROUCH);
@@ -942,7 +969,7 @@ const STOMP_RUN_EXTRA_LIFT: Track = [
 ];
 /**
  * The chambered knee carries the foot nearer the camera than the stride does,
- * far enough that the knee and shin are painted over the shorts.
+ * far enough that the knee and shin are painted over the trouser seat.
  */
 const STOMP_RUN_EXTRA_DEPTH: Track = [
   [0, 0],
@@ -954,7 +981,7 @@ const STOMP_RUN_EXTRA_DEPTH: Track = [
 ];
 /**
  * The chambered knee swings only a touch out as it rises. It is told from one
- * more stride by coming over the shorts at the camera; swung out wide it reads
+ * more stride by coming over the trouser seat at the camera; swung out wide it reads
  * as a leg flung sideways.
  */
 const STOMP_RUN_KNEE_OUT = 0.06;
@@ -1078,7 +1105,7 @@ export function stompRunStampingSide(entry: number): number {
  * - A foot still in the air short of its contact is brought down on it: the
  *   airborne approach is hurried so the stamp lands on the contact itself.
  */
-export function stompRunDown(frame: number, entry: number): CarlPose {
+export function stompRunDown(frame: number, entry: number): BipedPose {
   const phase = stompRunPhase(entry, frame);
   const keyed = keyedFrame(frame);
   const pose = runFacing(phase, false);

@@ -29,7 +29,7 @@
  * measured in device pixels and would not survive the caller's scale.
  */
 
-import { addCapsule } from './carl/paint';
+import { addCapsule } from './biped/paint';
 import {
   blitLayer,
   crossOffsets,

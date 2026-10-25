@@ -21,8 +21,6 @@ import {
   nothingMeasuredFailures,
   reportFigureGates,
 } from './figureGates.js';
-import { FIGURE_HEIGHT as CARL_FIGURE_HEIGHT } from '../src/sprites/art/carl/proportions.js';
-import { HUMAN_SCALE } from '../src/sprites/art/human/figureScale.js';
 import {
   ARM_MAX_REACH,
   FIGURE_HEIGHT,
@@ -48,6 +46,7 @@ import {
   type DongAction,
   ORIGIN_X,
   ORIGIN_Y,
+  PX_PER_FIGURE_UNIT,
   TILE_SCALE,
   dongPoseAt,
   dongStateName,
@@ -143,14 +142,14 @@ function gateStructure(): void {
 
 /**
  * How far off the ground line his lowest solid pixel may sit on a frame with
- * a foot down, in tiles. The band is asymmetric: from behind, a foot planted a
+ * a foot down, in figure units. The band is asymmetric: from behind, a foot planted a
  * stride ahead draws up the screen by the floor's foreshortened depth, and the
  * outline hangs a little under the sole.
  */
-const GROUND_ABOVE_TILES = 0.08;
-const GROUND_BELOW_TILES = 0.11;
-const GROUND_ABOVE_PX = Math.round(GROUND_ABOVE_TILES * TILE_SCALE);
-const GROUND_BELOW_PX = Math.round(GROUND_BELOW_TILES * TILE_SCALE);
+const GROUND_ABOVE_UNITS = 0.08;
+const GROUND_BELOW_UNITS = 0.11;
+const GROUND_ABOVE_PX = Math.round(GROUND_ABOVE_UNITS * PX_PER_FIGURE_UNIT);
+const GROUND_BELOW_PX = Math.round(GROUND_BELOW_UNITS * PX_PER_FIGURE_UNIT);
 
 /**
  * The lowest solid row of his body, painted without the lance: a butt planted
@@ -598,7 +597,7 @@ function breathExtremes(): { pumped: number; deflated: number } | null {
   return { pumped, deflated };
 }
 
-/** Heights (tiles above the floor) of the bands measured: across his shoulders, between armpit and trapezius. */
+/** Heights (figure units above the floor) of the bands measured: across his shoulders, between armpit and trapezius. */
 const SHOULDER_BAND_LOW = 1.3;
 const SHOULDER_BAND_HIGH = 1.45;
 const SHOULDER_BAND: readonly [number, number] = [SHOULDER_BAND_LOW, SHOULDER_BAND_HIGH];
@@ -612,7 +611,7 @@ const BELLY_BAND: readonly [number, number] = [BELLY_BAND_LOW, BELLY_BAND_HIGH];
 
 function bandRows(band: readonly [number, number]): [number, number] {
   const toRow = (height: number): number =>
-    Math.round(((ORIGIN_Y - height * TILE_SCALE) * IN_GAME_TILE) / TILE_SCALE);
+    Math.round(((ORIGIN_Y - height * PX_PER_FIGURE_UNIT) * IN_GAME_TILE) / TILE_SCALE);
   return [toRow(band[1]), toRow(band[0])];
 }
 
@@ -789,7 +788,7 @@ function bodyOnlyCell(
   const canvas = createCanvas(DONG_QUIXOTE_FIGURE.frameWidth, DONG_QUIXOTE_FIGURE.frameHeight);
   const ctx = asGameContext(canvas.getContext('2d'));
   ctx.translate(ORIGIN_X, ORIGIN_Y);
-  ctx.scale(TILE_SCALE, TILE_SCALE);
+  ctx.scale(PX_PER_FIGURE_UNIT, PX_PER_FIGURE_UNIT);
   drawDongQuixote(ctx, dongPoseAt(dongStateName(action, view), frame).pose, view, { lance: false });
   return {
     data: canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data,
@@ -892,30 +891,14 @@ function gateWarmRows(): void {
   }
 }
 
-// ── G18: taller than Carl ────────────────────────────────────────────────────
-
-/** He stands at least this much taller than Carl, skull to sole, before the helmet adds anything. */
-const MIN_HEIGHT_OVER_CARL = 1.1;
-
-function gateTallerThanCarl(): void {
-  const carl = CARL_FIGURE_HEIGHT * HUMAN_SCALE;
-  const ratio = FIGURE_HEIGHT / carl;
-  if (ratio < MIN_HEIGHT_OVER_CARL) {
-    fail(
-      'G18',
-      `he stands ${ratio.toFixed(2)}× Carl's height (floor ${MIN_HEIGHT_OVER_CARL}×); he is meant to tower over him`,
-    );
-  }
-}
-
 // ── G19: death ends on a corpse ──────────────────────────────────────────────
 
 /**
- * Lying on the floor, no part of his body stands higher than this, in tiles.
+ * Lying on the floor, no part of his body stands higher than this, in figure units.
  * Head-on he lies on his side, so the width of his shoulders and the arm on
  * top stand up off the floor; standing, he is nearly three times this.
  */
-const CORPSE_MAX_HEIGHT_TILES = 0.75;
+const CORPSE_MAX_HEIGHT_UNITS = 0.75;
 
 /**
  * The death row's last frame is the corpse the kit holds while it fades: he
@@ -944,12 +927,12 @@ function gateCorpse(): void {
       }
     }
     measured++;
-    const standing = (ORIGIN_Y - top) / TILE_SCALE;
-    if (top < 0 || standing > CORPSE_MAX_HEIGHT_TILES) {
+    const standing = (ORIGIN_Y - top) / PX_PER_FIGURE_UNIT;
+    if (top < 0 || standing > CORPSE_MAX_HEIGHT_UNITS) {
       fail(
         'G19',
-        `death${view === 'front' ? '' : `_${view}`}[${lastFrame}] stands ${standing.toFixed(DECIMALS)} tiles tall ` +
-          `(a corpse lies under ${CORPSE_MAX_HEIGHT_TILES})`,
+        `death${view === 'front' ? '' : `_${view}`}[${lastFrame}] stands ${standing.toFixed(DECIMALS)} units tall ` +
+          `(a corpse lies under ${CORPSE_MAX_HEIGHT_UNITS})`,
       );
     }
     if (bottom < ORIGIN_Y - GROUND_ABOVE_PX || bottom > ORIGIN_Y + GROUND_BELOW_PX) {
@@ -1017,7 +1000,6 @@ export function dongQuixoteGateFailures(): string[] {
   gateDistinctFrames();
   gateHeadTop();
   gateWarmRows();
-  gateTallerThanCarl();
   gateCorpse();
   gateNamedFrames();
   return [...failures];

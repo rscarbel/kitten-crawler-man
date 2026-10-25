@@ -10,7 +10,8 @@
  *  - owner by owner, the route that saw more holds no more than the one that
  *    saw less, within a named tolerance;
  *  - no figure first drawn indoors still has cells in the cache, unless the
- *    direct route holds it too or the street crowd can wear it;
+ *    direct route holds it too, the street crowd can wear it, or the village
+ *    cast's own prewarm keeps it;
  *  - nothing either route walked away from is still reachable after collection.
  *
  * The routes are compared with each other, never with stored megabytes, so a
@@ -104,15 +105,21 @@ function totalBytes(tallies: Readonly<Record<string, OwnerTally>>): number {
 /**
  * Figures that first had cells in the cache at a milestone taken indoors, and
  * that the street crowd cannot wear: the room's own occupants and fixtures.
+ *
+ * The Briar Hollow cast is left out too. Its prewarm starts as the party nears
+ * the palisade, which a tour building near the village can trigger, and keeps
+ * re-asking for the cast while the party stands in the village. Whether a
+ * member is still held at the end then depends on whether the paced queue got
+ * to it, not on anything left behind indoors.
  */
 function figuresFirstDrawnIndoors(result: RouteResult): Set<string> {
-  const crowd = new Set(result.crowdFigureIds);
+  const heldOutdoors = new Set([...result.crowdFigureIds, ...result.standByFigureIds]);
   const indoors = new Set<string>();
   result.snapshots.forEach((snapshot, index) => {
     if (!snapshot.label.startsWith(INTERIOR_MILESTONE_PREFIX) || index === 0) return;
     const before = new Set(result.snapshots[index - 1].figures.map((figure) => figure.id));
     for (const figure of snapshot.figures) {
-      if (!before.has(figure.id) && !crowd.has(figure.id)) indoors.add(figure.id);
+      if (!before.has(figure.id) && !heldOutdoors.has(figure.id)) indoors.add(figure.id);
     }
   });
   return indoors;

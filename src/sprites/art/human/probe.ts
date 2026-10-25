@@ -1,5 +1,5 @@
 /**
- * Where Carl's joints are on any frame of any row, in the pixels of the cell
+ * Where the human's joints are on any frame of any row, in the pixels of the cell
  * that frame is baked into — for gates and review harnesses that need to
  * measure the rig itself rather than its ink.
  *
@@ -8,23 +8,24 @@
  * picture it describes.
  */
 
-import { type Pt } from '../carlArt';
-import { footSoleLandmarks, LEFT_FOOT_OUT, RIGHT_FOOT_OUT } from '../carl/feet';
-import { handLength, wristAngle } from '../carl/limbs';
-import { pt, rotate } from '../carl/geometry';
-import { headAngle, mouthInHeadFrame } from '../carl/head';
+import { type Pt } from '../bipedArt';
+import { footSoleLandmarks, LEFT_FOOT_OUT, RIGHT_FOOT_OUT } from '../biped/feet';
+import { handLength, RIG_LIMBS, wristAngle } from '../biped/limbs';
+import { pt, rotate } from '../biped/geometry';
+import { headAngle, mouthInHeadFrame, scaledHeadPoint } from '../biped/head';
 import {
   aheadScreenSign,
   type BodySide,
   type BoneChain,
   buildSkeleton,
   type GroundPoint,
+  type HandShape,
   HEAD_ON_FLOOR_FORESHORTENING,
   LEG_MAX_REACH,
   poseAsDrawn,
   projectGroundPoint,
   VIEWS,
-} from '../carl/rig';
+} from '../biped/rig';
 import { type CardinalView } from '../../facingView';
 import {
   HUMAN_ROW_TABLE,
@@ -43,6 +44,7 @@ import { SMUSH_GROUND_PX_PER_FRAME } from './stomps';
 import { RUN_FRAMES, WALK_FRAMES } from './timing';
 import { cellPointInTile } from './sockets';
 import { weaponTip } from './weaponReach';
+import { type HumanLook, playerLookAxes, withLookBuild } from '../../looks/humanLook';
 
 /** One leg, solved. Points are cell pixels; reach figures are rig units. */
 export interface ProbedLeg {
@@ -99,7 +101,7 @@ export interface HumanJointProbe {
   readonly view: CardinalView;
   /** The ground line — the y his soles stand on — in cell pixels. */
   readonly groundY: number;
-  /** Cell pixels per rig unit, for converting a rig-unit length. */
+  /** Cell pixels per rig unit down the cell, for converting a rig-unit height. */
   readonly pixelsPerUnit: number;
   /** Centre of the pelvis. */
   readonly pelvis: Pt;
@@ -113,8 +115,14 @@ export interface HumanJointProbe {
 /** The ground line in cell pixels: where the pose's origin, between his feet, is painted. */
 export const HUMAN_GROUND_Y = ORIGIN_Y;
 
-function toCell(p: Pt): Pt {
-  return { x: ORIGIN_X + p.x * HUMAN_CELL_PX_PER_UNIT, y: ORIGIN_Y + p.y * HUMAN_CELL_PX_PER_UNIT };
+/** Figure space to the pixels of one look's cell in one view. */
+type CellMap = (p: Pt) => Pt;
+
+function cellMapOf(look: HumanLook, view: CardinalView): CellMap {
+  const axes = playerLookAxes(look, VIEWS[view].profile);
+  const across = HUMAN_CELL_PX_PER_UNIT * axes.x;
+  const down = HUMAN_CELL_PX_PER_UNIT * axes.y;
+  return (p) => ({ x: ORIGIN_X + p.x * across, y: ORIGIN_Y + p.y * down });
 }
 
 /**
@@ -122,7 +130,7 @@ function toCell(p: Pt): Pt {
  * same point dropped to the floor and drawn through the rig's own projection,
  * so the floor a sole is measured against is foreshortened exactly as the sole.
  */
-function floorCellYUnder(point: GroundPoint, ahead: number): number {
+function floorCellYUnder(point: GroundPoint, ahead: number, toCell: CellMap): number {
   return toCell(projectGroundPoint({ ...point, height: 0 }, ahead)).y;
 }
 
@@ -137,8 +145,11 @@ function headOnSole(
   end: GroundPoint,
   pitch: number,
   ahead: number,
+  toCell: CellMap,
 ): { heel: Pt; toe: Pt; heelGroundY: number; toeGroundY: number } {
-  const offsets = footSoleLandmarks(pt(0, 0), pitch, VIEWS.side, RIGHT_FOOT_OUT);
+  // Head-on a look's build narrows the foot across the picture and leaves its
+  // length into it the rig's, so the sole the rig solved is the one it stands on.
+  const offsets = footSoleLandmarks(pt(0, 0), pitch, VIEWS.side, RIGHT_FOOT_OUT, RIG_LIMBS);
   const landmark = (offset: Pt): GroundPoint => ({
     x: end.x,
     height: end.height - offset.y,
@@ -149,8 +160,8 @@ function headOnSole(
   return {
     heel: toCell(projectGroundPoint(heel, ahead)),
     toe: toCell(projectGroundPoint(toe, ahead)),
-    heelGroundY: floorCellYUnder(heel, ahead),
-    toeGroundY: floorCellYUnder(toe, ahead),
+    heelGroundY: floorCellYUnder(heel, ahead, toCell),
+    toeGroundY: floorCellYUnder(toe, ahead, toCell),
   };
 }
 
@@ -161,16 +172,22 @@ function probeLeg(
   outward: number,
   planted: boolean | undefined,
   point: number | undefined,
+  toCell: CellMap,
 ): ProbedLeg {
+  // The rows roll every look's foot on the rig's sole (`soleOffsets`), so the
+  // sole a planted foot is held to is the rig's.
   const ahead = aheadScreenSign(VIEWS[view]);
   const sole =
     chain.groundEnd === undefined
       ? {
-          ...mapSole(footSoleLandmarks(chain.end, pitch, VIEWS[view], outward, point)),
+          ...mapSole(
+            footSoleLandmarks(chain.end, pitch, VIEWS[view], outward, RIG_LIMBS, point),
+            toCell,
+          ),
           heelGroundY: HUMAN_GROUND_Y,
           toeGroundY: HUMAN_GROUND_Y,
         }
-      : headOnSole(chain.groundEnd, pitch, ahead);
+      : headOnSole(chain.groundEnd, pitch, ahead, toCell);
   const upright =
     chain.groundEnd === undefined
       ? {}
@@ -191,13 +208,19 @@ function probeLeg(
   return planted === undefined ? leg : { ...leg, planted };
 }
 
-function mapSole(sole: { heel: Pt; toe: Pt }): { heel: Pt; toe: Pt } {
+function mapSole(sole: { heel: Pt; toe: Pt }, toCell: CellMap): { heel: Pt; toe: Pt } {
   return { heel: toCell(sole.heel), toe: toCell(sole.toe) };
 }
 
-function probeArm(chain: BoneChain, fist: number): ProbedArm {
+function probeArm(
+  chain: BoneChain,
+  fist: number,
+  shape: HandShape | undefined,
+  look: HumanLook,
+  toCell: CellMap,
+): ProbedArm {
   const angle = wristAngle(chain);
-  const reach = handLength(fist);
+  const reach = handLength(fist, shape ?? 'relaxed', look.limbs);
   const tip = {
     x: chain.end.x + Math.cos(angle) * reach,
     y: chain.end.y + Math.sin(angle) * reach,
@@ -211,17 +234,22 @@ function probeArm(chain: BoneChain, fist: number): ProbedArm {
 }
 
 /**
- * Solves Carl's rig for one frame of one row and reports his key joints in the
- * pixels of that frame's cell.
+ * Solves the biped rig for one frame of one of the human's rows and reports his
+ * key joints in the pixels of that frame's cell.
  *
  * Pure and deterministic in `(row, frame)`, like the painter it mirrors. The
  * frame is passed to the row's pose function as given, so `frameCount` itself
- * probes the frame a loop would play next.
+ * probes the frame a loop would play next. Measured in `look`'s cell.
  */
-export function probeHumanJoints(row: HumanRowName, frame: number): HumanJointProbe {
+export function probeHumanJoints(
+  row: HumanRowName,
+  frame: number,
+  look: HumanLook,
+): HumanJointProbe {
   const spec = HUMAN_ROW_TABLE[row];
+  const toCell = cellMapOf(look, spec.view);
   const view = VIEWS[spec.view];
-  const pose = poseAsDrawn(spec.pose(frame), view);
+  const pose = poseAsDrawn(withLookBuild(spec.pose(frame), look), view);
   const skeleton = buildSkeleton(pose, view);
   const drawnLeftLeg = probeLeg(
     skeleton.leftLeg,
@@ -230,6 +258,7 @@ export function probeHumanJoints(row: HumanRowName, frame: number): HumanJointPr
     LEFT_FOOT_OUT,
     pose.leftFootPlanted,
     pose.leftFootPoint,
+    toCell,
   );
   const drawnRightLeg = probeLeg(
     skeleton.rightLeg,
@@ -238,16 +267,23 @@ export function probeHumanJoints(row: HumanRowName, frame: number): HumanJointPr
     RIGHT_FOOT_OUT,
     pose.rightFootPlanted,
     pose.rightFootPoint,
+    toCell,
   );
-  const drawnLeftArm = probeArm(skeleton.leftArm, pose.leftFist);
-  const drawnRightArm = probeArm(skeleton.rightArm, pose.rightFist);
+  const drawnLeftArm = probeArm(skeleton.leftArm, pose.leftFist, pose.leftHandShape, look, toCell);
+  const drawnRightArm = probeArm(
+    skeleton.rightArm,
+    pose.rightFist,
+    pose.rightHandShape,
+    look,
+    toCell,
+  );
   // A mirrored view draws his right side from the pose's left fields; the
   // probe names each limb by his own side, whichever fields drew it.
   const mirrored = view.mirrored;
   return {
     view: spec.view,
     groundY: HUMAN_GROUND_Y,
-    pixelsPerUnit: HUMAN_CELL_PX_PER_UNIT,
+    pixelsPerUnit: HUMAN_CELL_PX_PER_UNIT * playerLookAxes(look, view.profile).y,
     pelvis: toCell(skeleton.hip),
     headCentre: toCell(skeleton.headCentre),
     leftLeg: mirrored ? drawnRightLeg : drawnLeftLeg,
@@ -277,7 +313,7 @@ const RUN_GROUND_PX_PER_FRAME = RUN_GROUND_PER_CYCLE_PX / RUN_FRAMES;
 const WALK_GROUND_PX_PER_FRAME = WALK_GROUND_PER_CYCLE_PX / WALK_FRAMES;
 
 /**
- * World pixels of ground Carl covers while one frame of a row plays, at his
+ * World pixels of ground the human covers while one frame of a row plays, at his
  * base speed — the one derivation both the animator (which paces a run's
  * start by it) and every gate and review image (which carry a planted foot's
  * ground position by it) read.
@@ -339,8 +375,8 @@ export function floorDriftPerFrameCellPx(row: HumanRowName): number {
  * screen pixels at a `tileSize`-pixel tile: where a waist-deep waterline
  * crosses him.
  */
-export function standingHipAboveSolePx(tileSize: number): number {
-  const standing = probeHumanJoints('idle', 0);
+export function standingHipAboveSolePx(tileSize: number, look: HumanLook): number {
+  const standing = probeHumanJoints('idle', 0, look);
   return ((standing.groundY - standing.pelvis.y) * tileSize) / TILE_SCALE;
 }
 
@@ -357,8 +393,9 @@ export function handTipInTile(
   frame: number,
   flipX: boolean,
   side: HumanHandSide,
+  look: HumanLook,
 ): Pt {
-  const probe = probeHumanJoints(row, frame);
+  const probe = probeHumanJoints(row, frame, look);
   const arm = side === 'left' ? probe.leftArm : probe.rightArm;
   return cellPointInTile(arm.handTip, flipX);
 }
@@ -375,17 +412,18 @@ export function strikeContactInTile(
   frame: number,
   flipX: boolean,
   reachLimb: StrikeReachLimb,
+  look: HumanLook,
 ): Pt {
   const isLeft = reachLimb.startsWith('left');
   if (reachLimb === 'weapon') {
     const spec = HUMAN_ROW_TABLE[row];
-    const tip = weaponTip(spec.pose(frame), spec.view);
-    return cellPointInTile(toCell(pt(tip.x, tip.y)), flipX);
+    const tip = weaponTip(withLookBuild(spec.pose(frame), look), spec.view, look);
+    return cellPointInTile(cellMapOf(look, spec.view)(pt(tip.x, tip.y)), flipX);
   }
   if (reachLimb === 'hand' || reachLimb === 'leftHand') {
-    return handTipInTile(row, frame, flipX, isLeft ? 'left' : 'right');
+    return handTipInTile(row, frame, flipX, isLeft ? 'left' : 'right', look);
   }
-  const probe = probeHumanJoints(row, frame);
+  const probe = probeHumanJoints(row, frame, look);
   if (reachLimb === 'shoulder') {
     // A profile-only blow; in profile his right arm is always the lead one.
     return cellPointInTile(probe.rightArm.shoulder, flipX);
@@ -400,14 +438,19 @@ export function strikeContactInTile(
  * sprite's tile origin, mirrored with the cell; null when the cell shows the
  * back of his head.
  */
-export function mouthInTile(row: HumanRowName, frame: number, flipX: boolean): Pt | null {
+export function mouthInTile(
+  row: HumanRowName,
+  frame: number,
+  flipX: boolean,
+  look: HumanLook,
+): Pt | null {
   const spec = HUMAN_ROW_TABLE[row];
   const view = VIEWS[spec.view];
-  const pose = poseAsDrawn(spec.pose(frame), view);
+  const pose = poseAsDrawn(withLookBuild(spec.pose(frame), look), view);
   const mouth = mouthInHeadFrame(pose, view);
   if (mouth === null) return null;
   const skeleton = buildSkeleton(pose, view);
-  const turned = rotate(mouth, headAngle(pose));
+  const turned = rotate(scaledHeadPoint(mouth, look), headAngle(pose));
   const inFigure = pt(skeleton.headCentre.x + turned.x, skeleton.headCentre.y + turned.y);
-  return cellPointInTile(toCell(inFigure), flipX);
+  return cellPointInTile(cellMapOf(look, spec.view)(inFigure), flipX);
 }

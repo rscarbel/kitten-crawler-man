@@ -5,16 +5,18 @@
  * citizens of the same role and a compatible build can land on the same look
  * and share its cache cells.
  *
- * Two painters share the set. Every adult look paints on Carl's own rig
- * (`carl/figure.ts`, `human/idles.ts`/`locomotion.ts`/`actionsMisc.ts`'s pose
- * functions), because his is the only convincing movement in the game — but
- * never in his look: his crop is hidden for a hairstyle and facial hair of
- * the look's own (`human/castHead.ts`), his boxers, bare legs and bare feet
+ * Two painters share the set. Every adult look paints on the biped rig
+ * (`biped/figure.ts`, `human/idles.ts`/`locomotion.ts`/`actionsMisc.ts`'s pose
+ * functions), because its movement is the only convincing movement in the
+ * game — but never in a player's look. Each starts from the rig's own neutral
+ * build (`looks/humans/rig.ts`): the rig's crop is hidden for a hairstyle and
+ * facial hair of the look's own (`human/castHead.ts`), its bare legs and feet
  * are covered by trousers or stockings and shoes
- * (`garments/human/townsfolkLegwear.ts`), his jacket is recut and recoloured
- * as the look's garment, and no look wears his skin or hair colour. A worn accessory (`human/townAccessories.ts`)
+ * (`garments/human/townsfolkLegwear.ts`), the jacket is recut and recoloured
+ * as the look's garment, and no look wears a crawler's skin or hair colour. A
+ * worn accessory (`human/townAccessories.ts`)
  * gives the role cue. The two child looks stay on the simpler skeleton-based
- * painter from `drawPerson.ts`: Carl's rig is one
+ * painter from `drawPerson.ts`: the rig is one
  * fixed adult's proportions, and a child is not that adult scaled down (a
  * uniform shrink reads as a doll, not a child — the head-count-is-how-size-
  * is-read lesson) — it needs its own larger head fraction and shorter limbs,
@@ -31,19 +33,22 @@ import {
   type TownRole,
 } from './PersonAppearance';
 import { VARIETY_TIERS, type VarietyTier } from '../../core/varietyTier';
-import { deriveGlossRamp, deriveRamp, type GlossRamp, type Ramp } from '../art/carl/palette';
+import { deriveGlossRamp, deriveRamp, type GlossRamp, type Ramp } from '../art/biped/palette';
 import {
   FACING_BROW_DEFAULT,
   FEMININE_FACING_BROW,
   FEMININE_PROFILE_BROW,
+  FLAT_MOUTH,
+  RIG_BROW_TONE,
+  RIG_EYES,
   PROFILE_BROW_DEFAULT,
-  type CarlExpression,
-} from '../art/carl/head';
+  type BipedExpression,
+} from '../art/biped/head';
 import type { AccessorySpec } from '../art/human/townAccessories';
 import type { FacialHairKind, HairStyleKind } from '../art/human/castHead';
 import type { LegwearCut } from '../art/human/legwear';
-import type { CarlAttachments } from '../art/carl/figure';
-import type { CarlPose } from '../art/carl/rig';
+import type { BipedAttachments } from '../art/biped/figure';
+import type { BipedPose } from '../art/biped/rig';
 import { type CardinalView } from '../facingView';
 import {
   WENDELL_ATTACHMENTS,
@@ -58,8 +63,8 @@ import {
  * finished shoes.
  */
 export interface TownCastLookDetails {
-  readonly attachments: CarlAttachments;
-  readonly posture: (pose: CarlPose, view: CardinalView) => CarlPose;
+  readonly attachments: BipedAttachments;
+  readonly posture: (pose: BipedPose, view: CardinalView) => BipedPose;
   /** Mud caked on the shoes, painted with them so it stays on them through the stride. */
   readonly muddyShoes: boolean;
 }
@@ -93,46 +98,46 @@ export interface TownCastLookPerson extends TownCastLookCommon {
   readonly appearance: PersonAppearance;
 }
 
-export interface TownCastLookCarl extends TownCastLookCommon {
-  readonly painter: 'carl';
+export interface TownCastLookBiped extends TownCastLookCommon {
+  readonly painter: 'biped';
   /**
-   * Multiplies Carl's own proportions sideways only — never his height. A
-   * build is a frame, not a size: `slight` is narrower at his own full
+   * Multiplies the rig's own proportions sideways only — never its height. A
+   * build is a frame, not a size: `slight` is narrower at the rig's full
    * standing height and `heavy` is wider at it, so no adult look is ever
    * shorter than a child by construction, and no build reads as merely a
-   * shrunk or stretched Carl (the same axis the person painter's own builds
-   * are careful about, applied the only way Carl's fixed-height rig allows).
+   * shrunk or stretched rig (the same axis the person painter's own builds
+   * are careful about, applied the only way the fixed-height rig allows).
    */
   readonly buildWidthScale: number;
   readonly skinRamp: Ramp;
   readonly hairRamp: Ramp;
-  /** Never Carl's own crop: his hair is hidden and this style is painted in its place. */
+  /** Never Dave's crop: his hair is hidden and this style is painted in its place. */
   readonly hairStyle: HairStyleKind;
   readonly facialHair: FacialHairKind;
   /**
-   * The garment's own material: Carl's torso and sleeve are repainted in this
-   * ramp (`setCarlGarmentRamp`) rather than covered by a shape drawn over his
-   * jacket, so none of his jacket's leather is ever left showing.
+   * The garment's own material: Dave's torso and sleeve are repainted in this
+   * ramp rather than covered by a shape drawn over his jacket, so none of his
+   * jacket's leather is ever left showing.
    */
   readonly garmentRamp: GlossRamp;
-  /** How far past the waist the garment's hem drops, in the torso's own spine units — `setCarlTorsoCut`. */
+  /** How far past the waist the garment's hem drops, in the torso's own spine units. */
   readonly garmentHemDrop: number;
-  /** How far the hem flares past the waist — `setCarlTorsoCut`'s third argument. */
+  /** How far the hem flares past the waist. */
   readonly garmentHemFlare: number;
   /** Whether the garment carries the jacket's own hardware (a zip, a sewn waistband) — false for every civilian cut. */
   readonly garmentHasHardware: boolean;
   readonly accessory: AccessorySpec;
   /** Trousers under a short cut; slim stockings under a hem that already covers the thigh. */
   readonly legwear: LegwearCut;
-  /** Covers Carl's own bare legs — his own look, not the rig's — in the trousers' or stockings' colour. */
+  /** Covers Dave's bare legs — his look, not the rig's — in the trousers' or stockings' colour. */
   readonly pantsColor: string;
-  /** Covers Carl's own bare feet, the other half of his own look. */
+  /** Covers Dave's bare feet, the other half of his look. */
   readonly shoeColor: string;
-  readonly expression: CarlExpression;
+  readonly expression: BipedExpression;
   readonly details?: TownCastLookDetails;
 }
 
-export type TownCastLook = TownCastLookPerson | TownCastLookCarl;
+export type TownCastLook = TownCastLookPerson | TownCastLookBiped;
 
 // ── The two child looks: the person painter, parametrised for a child's own proportions ──
 
@@ -238,14 +243,14 @@ const CHILD_LOOKS: readonly TownCastLookPerson[] = CHILD_SPECS.map((spec, index)
   appearance: childAppearance(spec, index),
 }));
 
-// ── The adult cast: Carl's own rig, dressed ─────────────────────────────────
+// ── The adult cast: the biped rig, dressed ──────────────────────────────────
 
 /**
- * How much a build multiplies Carl's own proportions sideways — his height
+ * How much a build multiplies the rig's own proportions sideways — its height
  * (`buildWidthScale` only ever feeds the horizontal half of the figure's own
- * paint transform, never the vertical one) stays his own for every adult
+ * paint transform, never the vertical one) stays its own for every adult
  * look, so every adult stands the same height regardless of build and no
- * build is ever a shrunk or stretched Carl.
+ * build is ever a shrunk or stretched rig.
  */
 const BUILD_WIDTH_SCALE: Readonly<Record<Exclude<TownCastBuild, 'child'>, number>> = {
   slight: 0.78,
@@ -253,46 +258,52 @@ const BUILD_WIDTH_SCALE: Readonly<Record<Exclude<TownCastBuild, 'child'>, number
   heavy: 1.32,
 };
 
-/** World px a full walk cycle covers, as a fraction of the draw size — Carl's own stride reach, independent of a build's own width. */
+/** World px a full walk cycle covers, as a fraction of the draw size — the rig's own stride reach, independent of a build's own width. */
 export const ADULT_STRIDE_FRACTION = 0.42;
 
 /**
  * A feminine look's shoulders narrow by this share on top of its own build's
  * `BUILD_WIDTH_SCALE` — a real narrowing rather than a uniform shrink, since
  * `buildWidthScale` only ever touches the horizontal half of the paint
- * transform and never Carl's own height.
+ * transform and never the rig's own height.
  */
 const FEMININE_WIDTH_SCALE = 0.93;
 
-/** How calm a townsfolk look's brow sits against Carl's own combat scowl (`pose.brow`, up to 1). */
+/** How calm a townsfolk look's brow sits against the rig's own combat scowl (`pose.brow`, up to 1). */
 const MASCULINE_ANGER_SCALE = 0.22;
 const FEMININE_ANGER_SCALE = 0.14;
 const FEMININE_LIP_FULLNESS = 1.15;
 
-const MASCULINE_EXPRESSION: CarlExpression = {
+const MASCULINE_EXPRESSION: BipedExpression = {
   angerScale: MASCULINE_ANGER_SCALE,
   profileBrow: PROFILE_BROW_DEFAULT,
   facingBrow: FACING_BROW_DEFAULT,
   lipFullness: 1,
+  mouthSmile: FLAT_MOUTH,
+  eyes: RIG_EYES,
+  browTone: RIG_BROW_TONE,
 };
-const FEMININE_EXPRESSION: CarlExpression = {
+const FEMININE_EXPRESSION: BipedExpression = {
   angerScale: FEMININE_ANGER_SCALE,
   profileBrow: FEMININE_PROFILE_BROW,
   facingBrow: FEMININE_FACING_BROW,
   lipFullness: FEMININE_LIP_FULLNESS,
+  mouthSmile: FLAT_MOUTH,
+  eyes: RIG_EYES,
+  browTone: RIG_BROW_TONE,
 };
 
 /**
- * The garment cuts a townsfolk look can wear, each replacing Carl's own
+ * The garment cuts a townsfolk look can wear, each replacing Dave's
  * zipped moto jacket with a different length and none of his jacket's
  * hardware (`garmentHasHardware` is always false here — no civilian look
  * wears a zip). Hem drops are in the torso's own spine units, past the waist
- * line, the same units Carl's own jacket hem (`HEM_DROP_DEFAULT` in
+ * line, the same units Dave's jacket hem (`HEM_DROP_DEFAULT` in
  * `torso.ts`, 0.055) is measured in.
  */
 export type GarmentCut = 'shirt' | 'tunic' | 'dress' | 'robe';
 /**
- * Hem drops derived from `carl/proportions.ts`'s own absolute figure-space
+ * Hem drops derived from `biped/proportions.ts`'s own absolute figure-space
  * landmarks (`HIP_Y` -1.015, `KNEE_Y` -0.55, `ANKLE_Y` -0.085), converted into
  * the torso frame's spine-local units past the waist (`WAIST_Y` -1.17) — the
  * frame's own local "down" units match absolute figure units 1:1 on an
@@ -324,10 +335,10 @@ const GARMENT_LEGWEAR: Readonly<Record<GarmentCut, LegwearCut>> = {
   dress: 'stockings',
 };
 
-/** Skin tones for the cast. Carl's own skin is none of them. */
+/** Skin tones for the cast. Dave's skin is none of them. */
 export const SKIN_TONE_BASES = ['#f0c9a0', '#c78a5a', '#8a5a34', '#5a3a22', '#b08a62'] as const;
 /**
- * Hair colours for the cast. Carl's own red-brown is none of them; the
+ * Hair colours for the cast. Dave's red-brown is none of them; the
  * greying salt-and-pepper and the white are the older heads in the set.
  */
 export const HAIR_COLOR_BASES = [
@@ -377,7 +388,7 @@ interface AdultSpec {
   readonly garmentColor: string;
   readonly cut: GarmentCut;
   readonly accessory: AccessorySpec;
-  /** A softer, unscowled expression, a thinner brow and fuller lips, and a narrower build — never Carl's own face. */
+  /** A softer, unscowled expression, a thinner brow and fuller lips, and a narrower build — never the rig's own scowling face. */
   readonly feminine: boolean;
   readonly details?: TownCastLookDetails;
 }
@@ -547,11 +558,11 @@ const ADULT_SPECS: readonly AdultSpec[] = [
   },
 ];
 
-function adultLook(spec: AdultSpec, index: number): TownCastLookCarl {
+function adultLook(spec: AdultSpec, index: number): TownCastLookBiped {
   const widthScale = BUILD_WIDTH_SCALE[spec.build] * (spec.feminine ? FEMININE_WIDTH_SCALE : 1);
   return {
     id: spec.id,
-    painter: 'carl',
+    painter: 'biped',
     build: spec.build,
     roles: spec.roles,
     hasWork: spec.hasWork,
@@ -576,7 +587,7 @@ function adultLook(spec: AdultSpec, index: number): TownCastLookCarl {
   };
 }
 
-const ADULT_LOOKS: readonly TownCastLookCarl[] = ADULT_SPECS.map(adultLook);
+const ADULT_LOOKS: readonly TownCastLookBiped[] = ADULT_SPECS.map(adultLook);
 
 /** The club dancer's skin and hair, exported so her look is built from the cast's own swatches. */
 export const DANCER_SKIN_RAMP = SKIN_RAMPS.tan;
@@ -584,7 +595,7 @@ export const DANCER_HAIR_RAMP = HAIR_RAMPS.black;
 
 // ── Named residents ──────────────────────────────────────────────────────────
 //
-// One look per named human resident, on the same Carl-rig pipeline the
+// One look per named human resident, on the same biped-rig pipeline the
 // street cast dresses on — `roles: []` keeps each out of `pickTownCastLook`'s
 // pools, so it is never handed to an unnamed citizen; only `residentLooks.ts`
 // looks these up, by id.
@@ -687,7 +698,7 @@ const RESIDENT_ADULT_SPECS: readonly AdultSpec[] = [
   },
 ];
 
-const RESIDENT_ADULT_LOOKS: readonly TownCastLookCarl[] = RESIDENT_ADULT_SPECS.map((spec, i) =>
+const RESIDENT_ADULT_LOOKS: readonly TownCastLookBiped[] = RESIDENT_ADULT_SPECS.map((spec, i) =>
   adultLook(spec, ADULT_SPECS.length + i),
 );
 

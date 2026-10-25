@@ -6,8 +6,8 @@
  * at the top of the meter — and drops back, and the striker calls the swing.
  * Nothing is won and nothing is gated.
  *
- * The swing is the crawler's own overhead work swing (Carl's pick swing, and
- * Donut's), with the striker's mallet put in their hands for it, so the
+ * The swing is the crawler's own overhead work swing (the human's pick swing, and
+ * the cat's), with the striker's mallet put in their hands for it, so the
  * mallet leaning on the striker is drawn live here and left off while it is
  * held. `high_striker_bell` starts on the tick the swing's bite is on screen;
  * a swing short of the bell has the recording cut where its puck peaks (see
@@ -253,9 +253,9 @@ interface Striker {
   holder: Crawler | null;
   /** A swing is on its way down and has not yet struck. */
   strikePending: boolean;
-  /** Carl's swing row is this striker's, so abandoning it stops only that. */
-  carlSwinging: boolean;
-  /** Ticks into Donut's swing, which the system paces itself; null when she is not swinging. */
+  /** The human crawler's swing row is this striker's, so abandoning it stops only that. */
+  humanSwinging: boolean;
+  /** Ticks into the cat's swing, which the system paces itself; null when she is not swinging. */
   catSwingTicks: number | null;
   cycle: Cycle | null;
 }
@@ -280,7 +280,7 @@ export class HighStrikerSystem {
   }
 
   /**
-   * Picks up the grounds on `gameMap`, sweeps any meter and paces Donut's
+   * Picks up the grounds on `gameMap`, sweeps any meter and paces the cat's
    * swing. `worldHalted` is whether the world is stopped under an overlay
    * this tick, as her own animation is; the meter waits with it.
    */
@@ -430,7 +430,7 @@ export class HighStrikerSystem {
           power: 0,
           holder: null,
           strikePending: false,
-          carlSwinging: false,
+          humanSwinging: false,
           catSwingTicks: null,
           cycle: null,
         };
@@ -455,8 +455,8 @@ export class HighStrikerSystem {
     striker.meter = null;
     striker.strikePending = false;
     const holder = striker.holder;
-    if (striker.carlSwinging && holder instanceof HumanPlayer) holder.stopAction();
-    striker.carlSwinging = false;
+    if (striker.humanSwinging && holder instanceof HumanPlayer) holder.stopAction();
+    striker.humanSwinging = false;
     this.putMalletBack(striker);
   }
 
@@ -520,7 +520,7 @@ export class HighStrikerSystem {
     striker.holder = swinger;
     swinger.setWorkingTool(STRIKER_MALLET_TOOL);
     if (swinger instanceof HumanPlayer) {
-      this.swingAsCarl(striker, swinger);
+      this.swingAsHuman(striker, swinger);
       return;
     }
     striker.catSwingTicks = 0;
@@ -573,29 +573,29 @@ export class HighStrikerSystem {
    * press is never lost to the picture — unless he went down part-way, or
    * was knocked out of it.
    */
-  private swingAsCarl(striker: Striker, carl: HumanPlayer): void {
-    const row = carl.rowFacing(MINE_ROWS);
-    const accepted = carl.playAction(row, {
-      faceX: carl.facingX,
-      faceY: carl.facingY,
+  private swingAsHuman(striker: Striker, human: HumanPlayer): void {
+    const row = human.rowFacing(MINE_ROWS);
+    const accepted = human.playAction(row, {
+      faceX: human.facingX,
+      faceY: human.facingY,
       onFrame: [
         { frame: eventFrame(row, 'impact') ?? MINE_IMPACT_FRAME, run: () => this.strike(striker) },
       ],
       onEnd: (reason) => {
-        striker.carlSwinging = false;
-        const wentDown = reason === 'defeated' || carl.isKnockedOut || !carl.isAlive;
+        striker.humanSwinging = false;
+        const wentDown = reason === 'defeated' || human.isKnockedOut || !human.isAlive;
         if (wentDown) striker.strikePending = false;
         else this.strike(striker);
         this.putMalletBack(striker);
       },
     });
-    striker.carlSwinging = accepted;
+    striker.humanSwinging = accepted;
     if (accepted) return;
     this.putMalletBack(striker);
     this.strike(striker);
   }
 
-  /** Donut's swing has no frame events, so its bite is counted here in her own ticks. */
+  /** The cat's swing has no frame events, so its bite is counted here in her own ticks. */
   private paceCatSwing(striker: Striker): void {
     const ticks = striker.catSwingTicks;
     const cat = striker.holder;

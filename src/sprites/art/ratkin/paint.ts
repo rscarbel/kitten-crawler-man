@@ -7,7 +7,7 @@
  * its own copy of the outline weight reads as pasted on at tile size.
  */
 
-import { type Pt, lerp } from '../carlArt';
+import { type Pt, lerp } from '../bipedArt';
 
 type Ctx = CanvasRenderingContext2D;
 

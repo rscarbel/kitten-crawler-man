@@ -2,7 +2,7 @@ import type { Player } from '../Player';
 import { isRecord } from './guards';
 
 /**
- * Cross-scene state for "Carl's Doomsday Scenario" (the finale that follows
+ * Cross-scene state for the Doomsday Scenario (the finale that follows
  * the Lich's death): the soul crystal destabilizes where Miss Quill fell, and
  * one countdown starts. The party must reach and contain the crystal, then get
  * down the escape stairwell by the tower door, before that same clock runs

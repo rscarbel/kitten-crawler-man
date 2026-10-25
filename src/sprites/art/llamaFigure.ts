@@ -54,7 +54,7 @@ export const TILE_SCALE = 64;
  * feet stay on the tile they belong to.
  *
  * A real llama stands well over head height on a human, and drawn to that scale
- * next to Carl it would be a boss rather than a room-filler. This is the
+ * next to the human crawler it would be a boss rather than a room-filler. This is the
  * compromise: tall enough that the neck still reads as the animal's whole
  * silhouette, short enough that two of them in a corridor are not a wall.
  */

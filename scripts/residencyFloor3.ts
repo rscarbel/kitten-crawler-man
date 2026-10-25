@@ -56,6 +56,8 @@ import { DESPERADO_CLUB_NAME, TOWN_TOWER_NAME } from '../src/map/town/townPlan.j
 import { TownLifeSystem } from '../src/systems/TownLifeSystem.js';
 import { MarketSystem } from '../src/systems/market/MarketSystem.js';
 import { citizenFigureRows, type CitizenFigure } from '../src/creatures/citizenFigure.js';
+import { RATKIN_CAST_PREWARM_ORDER } from '../src/sprites/ratkinCastSprite.js';
+import { ratkinCastFigure } from '../src/sprites/art/ratkinCastFigure.js';
 
 export type Floor3Route = (typeof RESIDENCY_FLOORS)['3']['routes'][number];
 
@@ -465,5 +467,6 @@ export async function runFloor3Route(
     measures: [],
     notes,
     crowdFigureIds,
+    standByFigureIds: RATKIN_CAST_PREWARM_ORDER.map((id) => ratkinCastFigure(id).id),
   };
 }

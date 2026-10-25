@@ -19,7 +19,7 @@ import { tileCoordKey } from '../map/tileIndex';
 import type { QuestMarkerType } from './MiniMapSystem';
 import { clamp, pointInRect } from '../utils';
 import { awardPartyXp, type PartyXpApplied } from '../core/awardXp';
-import { CRAWLER_NAMES } from '../core/SkillManager';
+import { crawlerName } from '../characters/characters';
 import {
   bagItemRewardLine,
   itemIconPainter,
@@ -1422,7 +1422,7 @@ export class SpiderQuestSystem implements GameSystem {
           items: [
             bagItemRewardLine(SPIDER_QUEST_BOOK, 1, {
               describe: true,
-              note: `In ${CRAWLER_NAMES.cat}'s bag.`,
+              note: `In ${crawlerName('cat')}'s bag.`,
             }),
             ...(freeSpin ? [wheelFreeSpinRewardLine()] : []),
           ],

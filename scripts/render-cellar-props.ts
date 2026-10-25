@@ -2,7 +2,7 @@
  * Review harness for the cellars' furniture: bakes every cellar sheet through
  * the same plan the game paints from (failing on any frame that inks its
  * cell's border), then lays every row of every sheet out on both floors'
- * ground colours with Carl standing at the end of each row for scale.
+ * ground colours with the human standing at the end of each row for scale.
  *
  *   npx tsx scripts/render-cellar-props.ts
  *   npx tsx scripts/render-cellar-props.ts --scale=3 --out=preview/cellar-props-3x.png
@@ -20,9 +20,8 @@ import { asGameContext } from './nodeGameContext.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 
 installCanvasGlobals();
-const { drawCarlFront } = await import('../src/sprites/art/carl/figure.js');
-const { restingPose } = await import('../src/sprites/art/carl/rig.js');
-const { HUMAN_SCALE } = await import('../src/sprites/art/human/figureScale.js');
+const { drawFigureCached } = await import('../src/sprites/figure/figureFrameCache.js');
+const { HUMAN_FIGURE } = await import('../src/sprites/art/humanFigure.js');
 
 function argValue(name: string): string | undefined {
   const prefix = `--${name}=`;
@@ -36,9 +35,7 @@ const outPath = argValue('out') ?? `${PREVIEW_DIR}/cellar-props-${scale}x.png`;
 const FLOOR_COLOURS = ['#4a4239', '#3b3f44'] as const;
 const ROW_GAP_TILES = 0.4;
 const CELL_GAP_TILES = 0.15;
-const CARL_SPACE_TILES = 1.2;
-/** Carl stands in the middle of the tile after the last frame. */
-const CARL_TILE_CENTRE = 0.5;
+const HUMAN_SPACE_TILES = 1.2;
 
 const plans = cellarPropSheetPlans();
 const problems = bakePropFamily('cellar_props', plans);
@@ -59,7 +56,7 @@ const rowHeight = (plan: (typeof plans)[number]) =>
 const rowWidth = (entry: (typeof rows)[number]) =>
   entry.row.frames.length *
     (entry.sheet.plan.frameWidth * pxPerSource(entry.sheet.plan) + CELL_GAP_TILES * tile) +
-  CARL_SPACE_TILES * tile;
+  HUMAN_SPACE_TILES * tile;
 const width = Math.ceil(Math.max(...rows.map(rowWidth)));
 const floorHeight = rows.reduce((sum, entry) => sum + rowHeight(entry.sheet.plan), 0);
 const canvas = createCanvas(width, Math.ceil(floorHeight * FLOOR_COLOURS.length));
@@ -90,12 +87,7 @@ for (const floor of FLOOR_COLOURS) {
       x += plan.frameWidth * k + CELL_GAP_TILES * tile;
     }
     const footY = y + (plan.tileY + plan.tileScale) * k;
-    ctx.save();
-    ctx.translate(x + tile * CARL_TILE_CENTRE, footY);
-    ctx.scale(tile, tile);
-    ctx.scale(HUMAN_SCALE, HUMAN_SCALE);
-    drawCarlFront(gameCtx, restingPose());
-    ctx.restore();
+    drawFigureCached(gameCtx, HUMAN_FIGURE, 'idle', 0, x, footY - tile, tile);
     y += height;
   }
 }

@@ -1,5 +1,5 @@
 /**
- * Decides which of Carl's reaction rows plays, from what is being done to him:
+ * Decides which of the human crawler's reaction rows plays, from what is being done to him:
  * a blow landing, a shove, a hold on his feet, going down, coming round,
  * dying.
  *
@@ -21,7 +21,7 @@ import {
   STAGGER_REEL_FRAMES,
 } from './art/human/reactions';
 import { type HumanActionFrameEvent, type HumanReactionOptions } from './humanAnimator';
-import { type CarlRowView } from './humanSprite';
+import { type HumanRowView } from './humanSprite';
 
 /** The reaction rows the director plays, by what they are for. */
 type ReactionKind = 'struggle' | 'hurt' | 'stagger' | 'revive' | 'down' | 'death';
@@ -93,7 +93,7 @@ export interface HumanWarmSpan {
  * carries the news, so the first blow he takes is not painted on the tick it
  * lands.
  */
-export function fightReactionSpans(view: CarlRowView): readonly HumanWarmSpan[] {
+export function fightReactionSpans(view: HumanRowView): readonly HumanWarmSpan[] {
   return [
     { row: HURT_ROWS.front[view], frames: HURT_RECOIL_FRAMES },
     { row: HURT_ROWS.behind[view], frames: HURT_RECOIL_FRAMES },

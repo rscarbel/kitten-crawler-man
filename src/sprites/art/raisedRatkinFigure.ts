@@ -26,7 +26,7 @@
  * `npm run render:raised-ratkin`.
  */
 
-import { clamp01, deg, easeInOut, easeOut, lerp } from './carlArt';
+import { clamp01, deg, easeInOut, easeOut, lerp } from './bipedArt';
 import {
   GROUND_Y,
   toeContactHeight,

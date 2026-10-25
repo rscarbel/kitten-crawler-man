@@ -109,7 +109,7 @@ const NECK_SHADOW = '#0b0a09';
 // ── Proportions ──────────────────────────────────────────────────────────────
 
 /**
- * Standing height, crown of the hood to the ground. Shorter than Carl's 2.03
+ * Standing height, crown of the hood to the ground. Shorter than the biped figure's 2.03
  * on purpose: he is hunched, and a bounty-giver who looms over the player reads
  * as a threat rather than as a hanger-on.
  */
@@ -267,8 +267,8 @@ export interface ShadyPose {
    * Head-on there is nowhere for a bent elbow to *go* except backwards, which a
    * flat image cannot show — so an arm folded to hold something at the belt
    * solves into an elbow thrown a fifth of a tile out to the side, and the
-   * figure stands with its arms akimbo. This is the same correction Carl's legs
-   * need head-on, for the same reason.
+   * figure stands with its arms akimbo. This is the same correction the biped
+   * figure's legs need head-on, for the same reason.
    */
   leftArmForeshorten: number;
   rightArmForeshorten: number;

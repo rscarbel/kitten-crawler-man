@@ -1,5 +1,5 @@
 /**
- * The equipment gates: every held thing in Carl's hands, checked by painting
+ * The equipment gates: every held thing in the human's hands, checked by painting
  * it where the game paints it — his two-layer cells, baked at the 32 px tile,
  * with the item composited between the layers at its socket.
  *
@@ -24,7 +24,7 @@
  *   sockets reflected, and the main hand is his right hand in every view.
  * - E8 stowed under the back: seen from behind in a garment that hangs over
  *   his back, a stowed weapon changes none of the pixels he covers.
- * - E1–E4 and E7 for what Donut holds: `gates-equipment-donut.ts`.
+ * - E1–E4 and E7 for what the cat holds: `gates-equipment-cat.ts`.
  *
  *   npm run gates:equipment
  *   npm run gates:equipment -- --item=fury_of_taranis
@@ -32,12 +32,14 @@
 
 import { createCanvas, type Canvas } from 'canvas';
 import { pathToFileURL } from 'node:url';
-import { BARE_CARL_OUTFIT } from '../src/sprites/garments/human/carlDressing.js';
+import { type HumanLook, playerStatureScale } from '../src/sprites/looks/humanLook.js';
+import { HUMAN_LOOKS } from './humanLooks.js';
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { asGameContext } from './nodeGameContext.js';
+import { bakeFigureCell } from './figureSheet.js';
 import { nothingMeasuredFailures, reportFigureGates } from './figureGates.js';
 import { garmentEnvelopeFailures, gatesGarment } from './gates-equipment-garments.js';
-import { donutHeldFailures, gatesDonutHeld } from './gates-equipment-donut.js';
+import { catHeldFailures, gatesCatHeld } from './gates-equipment-cat.js';
 import { type HumanFigure, humanFigureFor } from '../src/sprites/art/human/appearance.js';
 import {
   CHOP_ROWS,
@@ -56,19 +58,24 @@ import {
   TILE_Y,
 } from '../src/sprites/art/humanFigure.js';
 import {
-  carlSocketsAt,
+  humanSocketsAt,
   mirroredSocket,
   type SocketFrame,
   type SocketSource,
 } from '../src/sprites/art/human/sockets.js';
-import { HUMAN_CELL_PX_PER_UNIT, TILE_SCALE } from '../src/sprites/art/human/figureScale.js';
+import {
+  HUMAN_CELL_PX_PER_UNIT,
+  PLAYER_HUMAN_SIZE_OVER_RIG,
+  TILE_SCALE,
+} from '../src/sprites/art/human/figureScale.js';
 import { carriedGripOf } from '../src/sprites/art/human/carry.js';
 import { probeHumanJoints } from '../src/sprites/art/human/probe.js';
-import { HEAD_RX } from '../src/sprites/art/carl/proportions.js';
-import { HEAD_ON_FLOOR_FORESHORTENING, VIEWS } from '../src/sprites/art/carl/rig.js';
+import { HEAD_RX } from '../src/sprites/art/biped/proportions.js';
+import { scaledHeadPoint } from '../src/sprites/art/biped/head.js';
+import { HEAD_ON_FLOOR_FORESHORTENING, VIEWS } from '../src/sprites/art/biped/rig.js';
 import type { CardinalView } from '../src/sprites/facingView.js';
 import {
-  type CarlStowedDraw,
+  type BipedStowedDraw,
   drawHumanFigureSelection,
   motionSetOfRow,
   residentViewSpans,
@@ -76,7 +83,7 @@ import {
 } from '../src/sprites/humanSprite.js';
 import { beginFigureFrame } from '../src/sprites/figure/figureFrameCache.js';
 import { HELD_VISUALS, stowedPlacementOfHeld } from '../src/sprites/held/heldVisuals.js';
-import { garmentsOf } from '../src/sprites/garments/garments.js';
+import { wornGarmentsOf } from '../src/sprites/garments/garments.js';
 import { outfitOf } from '../src/sprites/garments/outfit.js';
 import {
   type HeldVisualId,
@@ -90,7 +97,7 @@ import type { HeldVisualDef, WeaponHeldVisualDef } from '../src/sprites/held/hel
 import { motionSetOf } from '../src/sprites/art/human/motionSets.js';
 import { compositeHeldItem, heldTransformAt } from '../src/sprites/held/heldComposite.js';
 import { scriptedPropVisual } from '../src/sprites/held/art/scriptedPropHeld.js';
-import type { Pt } from '../src/sprites/art/carlArt.js';
+import type { Pt } from '../src/sprites/art/bipedArt.js';
 
 installCanvasGlobals();
 
@@ -115,8 +122,13 @@ const HANDLE_ON_SOCKET_PX = 1.5;
 const SOCKET_ON_FIST_PX = 0.75;
 /** How far the holding hand's front ink may lie from the socket's centre: the fingers sit round it. */
 const FINGERS_ON_SOCKET_PX = 2.5;
-/** The disc round a socket the wrap is judged in: about a fist's half-width at the tile. */
-const WRAP_DISC_PX = 3;
+/** A fist's half-width at the tile, on the rig drawn at its own size. */
+const RIG_FIST_HALF_WIDTH_PX = 3;
+/**
+ * The disc round a socket the wrap is judged in: about a fist's half-width at
+ * the tile, which grows with the player's figure.
+ */
+const WRAP_DISC_PX = RIG_FIST_HALF_WIDTH_PX * PLAYER_HUMAN_SIZE_OVER_RIG;
 /**
  * The handle has to show within this many wrap discs of a palm-out hand: past
  * the fist's own width, since two fists stacked on one haft cover each
@@ -140,6 +152,13 @@ const PARITY_MAX_DIFFERING = 0;
 /** Where the cell sits on the canvases the runtime path is drawn into. */
 const DRAW_ORIGIN = { x: TILE_X * DENSITY, y: TILE_Y * DENSITY };
 const DIGITS = 2;
+
+/**
+ * The human look the held-item checks are painted on. Every look is checked:
+ * two builds share one rig and one set of rows, so a grip or a carry that
+ * fits one can stand off the fist or cross the face of the other.
+ */
+let gateLook: HumanLook = HUMAN_LOOKS[0];
 
 interface Subject {
   readonly id: HeldVisualId;
@@ -168,7 +187,7 @@ function weaponRows(look: WeaponHeldVisualDef): readonly HumanRowName[] {
 }
 
 function subjects(only: string | null): Subject[] {
-  const base = humanFigureFor(BARE_CARL_OUTFIT, null);
+  const base = humanFigureFor(gateLook, outfitOf(gateLook, []), null);
   const list: Subject[] = [];
   for (const id of TOOL_HELD_VISUAL_IDS) {
     const rows = id.includes('pick') ? viewRows(MINE_ROWS) : viewRows(CHOP_ROWS);
@@ -192,7 +211,7 @@ function subjects(only: string | null): Subject[] {
   }
   for (const id of WEAPON_HELD_VISUAL_IDS) {
     const look = HELD_VISUALS[id];
-    const figure = humanFigureFor(BARE_CARL_OUTFIT, carriedGripOf(look));
+    const figure = humanFigureFor(gateLook, outfitOf(gateLook, []), carriedGripOf(look));
     list.push({ id, look, figure, rows: weaponRows(look), bitesGround: false });
   }
   for (const id of THROWN_PROP_VISUAL_IDS) {
@@ -245,7 +264,10 @@ function itemAlone(look: HeldVisualDef, socket: SocketFrame): Uint8ClampedArray 
   compositeHeldItem(
     ctx,
     look,
-    heldTransformAt({ ...socket, centre }, DENSITY * HUMAN_CELL_PX_PER_UNIT),
+    heldTransformAt(
+      { ...socket, centre },
+      DENSITY * HUMAN_CELL_PX_PER_UNIT * playerStatureScale(gateLook),
+    ),
     'cached',
   );
   return canvas.getContext('2d').getImageData(0, 0, CELL_W, CELL_H).data;
@@ -304,7 +326,7 @@ function checkSubject(subject: Subject, failures: string[], counts: Counts): voi
   for (const row of subject.rows) {
     const meta = HUMAN_ROW_TABLE[row];
     for (let frame = 0; frame < meta.frameCount; frame++) {
-      const frames = carlSocketsAt(source, row, frame);
+      const frames = humanSocketsAt(source, row, frame);
       const socket = heldSocketOf(subject.look, frames);
       if (socket === null) continue;
       const name = frameName(subject, row, frame);
@@ -313,7 +335,7 @@ function checkSubject(subject: Subject, failures: string[], counts: Counts): voi
       const centre = inTile(socket.centre);
 
       counts.e1++;
-      const probe = probeHumanJoints(row, frame);
+      const probe = probeHumanJoints(row, frame, gateLook);
       const holding =
         frames.butt === undefined
           ? [{ socket, arm: probe.rightArm }]
@@ -375,8 +397,17 @@ function checkSubject(subject: Subject, failures: string[], counts: Counts): voi
       }
 
       if (VIEWS[meta.view].showsBack) continue;
-      const face = inTile(probe.headCentre);
-      const faceRadius = HEAD_RX * HUMAN_CELL_PX_PER_UNIT * FACE_SHARE * DENSITY;
+      const headDrop = scaledHeadPoint({ x: 0, y: 0 }, gateLook).y * probe.pixelsPerUnit;
+      const face = inTile({ x: probe.headCentre.x, y: probe.headCentre.y + headDrop });
+      const faceRadius =
+        HEAD_RX *
+        HUMAN_CELL_PX_PER_UNIT *
+        gateLook.widthScale *
+        PLAYER_HUMAN_SIZE_OVER_RIG *
+        gateLook.headScale *
+        gateLook.headBreadth *
+        FACE_SHARE *
+        DENSITY;
       const fistAtFace = [frames.sockets.mainHand, frames.sockets.offHand].some(
         (hand) =>
           hand.occupied &&
@@ -402,7 +433,13 @@ function checkSubject(subject: Subject, failures: string[], counts: Counts): voi
  */
 function floorReachPx(view: CardinalView): number {
   if (VIEWS[view].profile) return 0;
-  return HEAD_ON_FLOOR_FORESHORTENING * LONGEST_REACH_UNITS * HUMAN_CELL_PX_PER_UNIT * DENSITY;
+  return (
+    HEAD_ON_FLOOR_FORESHORTENING *
+    LONGEST_REACH_UNITS *
+    HUMAN_CELL_PX_PER_UNIT *
+    playerStatureScale(gateLook) *
+    DENSITY
+  );
 }
 
 /** The farthest any held item reaches ahead of him, rig units: the longest haft and its head. */
@@ -445,7 +482,7 @@ function checkWrap(subject: Subject, failures: string[], counts: Counts): void {
   const source = sourceOf(subject.figure);
   for (const row of subject.rows) {
     for (let frame = 0; frame < HUMAN_ROW_TABLE[row].frameCount; frame++) {
-      const frames = carlSocketsAt(source, row, frame);
+      const frames = humanSocketsAt(source, row, frame);
       const socket = heldSocketOf(subject.look, frames);
       if (socket === null) continue;
       const hands =
@@ -480,7 +517,7 @@ function checkWrap(subject: Subject, failures: string[], counts: Counts): void {
 
 /** Rows that hold one of the row's own props. */
 function propRows(only: string | null): HumanRowName[] {
-  const base = humanFigureFor(BARE_CARL_OUTFIT, null);
+  const base = humanFigureFor(gateLook, outfitOf(gateLook, []), null);
   return HUMAN_ROWS.filter((row) =>
     Array.from({ length: row.frameCount }, (_unused, frame) => frame).some((frame) => {
       const props = base.painting.dress(row.pose(frame), row, frame).heldProps ?? [];
@@ -507,7 +544,7 @@ function differing(a: Uint8ClampedArray, b: Uint8ClampedArray): number {
 }
 
 function checkParity(only: string | null, failures: string[]): void {
-  const base = humanFigureFor(BARE_CARL_OUTFIT, null);
+  const base = humanFigureFor(gateLook, outfitOf(gateLook, []), null);
   let measured = 0;
   for (const row of propRows(only)) {
     for (let frame = 0; frame < HUMAN_ROW_TABLE[row].frameCount; frame++) {
@@ -524,7 +561,7 @@ function checkParity(only: string | null, failures: string[]): void {
       if (props?.length !== 1) continue;
       // Beside a fist closed on an item, the front layer is that item's: the
       // prop is only ever drawn baked, never composited between those layers.
-      const { sockets } = carlSocketsAt(sourceOf(base), row, frame);
+      const { sockets } = humanSocketsAt(sourceOf(base), row, frame);
       if (sockets.mainHand.occupied || sockets.offHand.occupied) continue;
       measured++;
       const baked = createCanvas(CELL_W, CELL_H);
@@ -617,12 +654,12 @@ function checkMirror(subject: Subject, failures: string[], counts: Counts): void
   for (const row of subject.rows) {
     const meta = HUMAN_ROW_TABLE[row];
     for (let frame = 0; frame < meta.frameCount; frame++) {
-      const frames = carlSocketsAt(source, row, frame);
+      const frames = humanSocketsAt(source, row, frame);
       const socket = heldSocketOf(subject.look, frames);
       if (socket === null) continue;
       const name = frameName(subject, row, frame);
       counts.e7++;
-      const probe = probeHumanJoints(row, frame);
+      const probe = probeHumanJoints(row, frame, gateLook);
       const main = frames.sockets.mainHand.centre;
       const toRight = toSegment(main, probe.rightArm.wrist, probe.rightArm.handTip);
       const toLeft = toSegment(main, probe.leftArm.wrist, probe.leftArm.handTip);
@@ -648,9 +685,85 @@ function checkMirror(subject: Subject, failures: string[], counts: Counts): void
   }
 }
 
+/** Standing and walking, head-on and from behind: where a one-sided thing on a forearm shows. */
+const WORN_SIDE_ROWS: readonly HumanRowName[] = ['idle', 'idle_away', 'walk', 'walk_away'];
+
+/** A cell's pixels, baked as the runtime cache bakes it. */
+function bakedPixels(figure: HumanFigure, row: HumanRowName, frame: number): Uint8ClampedArray {
+  const cell = bakeFigureCell(figure.def, row, frame);
+  const { width, height } = cell;
+  return cell.getContext('2d').getImageData(0, 0, width, height).data;
+}
+
+/** Whether a pixel differs between two bakes in any channel by more than {@link INK}. */
+function pixelDiffers(a: Uint8ClampedArray, b: Uint8ClampedArray, pixel: number): boolean {
+  for (let channel = 0; channel < RGBA; channel++) {
+    const index = pixel * RGBA + channel;
+    if (Math.abs(a[index] - b[index]) > INK) return true;
+  }
+  return false;
+}
+
+/**
+ * E7, for what he wears rather than holds: a base garment worn on a forearm
+ * — a watch — is on his left arm in every head-on frame, the same
+ * handedness rule the main hand keeps. The garment is found by painting each
+ * cell with and without it, colour as well as coverage, since a watch lies
+ * over skin and changes little of the silhouette; whichever of his wrists
+ * the difference lies nearer is the arm it is on. A frame of these rows that
+ * shows nothing of it fails: the rows are the ones it shows on.
+ */
+function checkWornSide(failures: string[]): void {
+  const forearmBase = gateLook.baseGarments.filter(
+    (garment) => garment.paint.forearm !== undefined,
+  );
+  if (forearmBase.length === 0) return;
+  const worn = humanFigureFor(gateLook, outfitOf(gateLook, []), null);
+  const unworn: HumanLook = {
+    ...gateLook,
+    id: `${gateLook.id}-without-forearm-wear`,
+    baseGarments: gateLook.baseGarments.filter((garment) => !forearmBase.includes(garment)),
+  };
+  const bare = humanFigureFor(unworn, outfitOf(unworn, []), null);
+  const width = worn.def.frameWidth;
+  let measured = 0;
+  for (const row of WORN_SIDE_ROWS) {
+    for (let frame = 0; frame < HUMAN_ROW_TABLE[row].frameCount; frame++) {
+      const withIt = bakedPixels(worn, row, frame);
+      const withoutIt = bakedPixels(bare, row, frame);
+      let sumX = 0;
+      let sumY = 0;
+      let changed = 0;
+      for (let pixel = 0; pixel < withIt.length / RGBA; pixel++) {
+        if (!pixelDiffers(withIt, withoutIt, pixel)) continue;
+        changed++;
+        sumX += pixel % width;
+        sumY += Math.floor(pixel / width);
+      }
+      if (changed === 0) {
+        failures.push(
+          `E7: ${row}[${frame}] paints nothing of its forearm garments, so which arm they are on cannot be told`,
+        );
+        continue;
+      }
+      measured++;
+      const at = { x: sumX / changed, y: sumY / changed };
+      const probe = probeHumanJoints(row, frame, gateLook);
+      const toLeft = Math.hypot(at.x - probe.leftArm.wrist.x, at.y - probe.leftArm.wrist.y);
+      const toRight = Math.hypot(at.x - probe.rightArm.wrist.x, at.y - probe.rightArm.wrist.y);
+      if (toRight < toLeft) {
+        failures.push(`E7: ${row}[${frame}] wears its forearm garments on his right arm`);
+      }
+    }
+  }
+  failures.push(
+    ...nothingMeasuredFailures(measured, 'forearm-garment frames').map((f) => `E7: ${f}`),
+  );
+}
+
 /** Every row's own prop held in a closed hand is turned in depth. */
 function checkPropsTurned(failures: string[]): number {
-  const base = humanFigureFor(BARE_CARL_OUTFIT, null);
+  const base = humanFigureFor(gateLook, outfitOf(gateLook, []), null);
   let measured = 0;
   for (const row of HUMAN_ROWS) {
     for (let frame = 0; frame < row.frameCount; frame++) {
@@ -682,7 +795,7 @@ function stowedCellAtTile(
   figure: HumanFigure,
   row: HumanRowName,
   frame: number,
-  stowed: CarlStowedDraw | null,
+  stowed: BipedStowedDraw | null,
 ): Uint8ClampedArray {
   const canvas = createCanvas(CELL_W, CELL_H);
   const ctx = asGameContext(canvas.getContext('2d'));
@@ -717,7 +830,9 @@ function opaqueCovered(bare: Uint8ClampedArray, dressed: Uint8ClampedArray): num
 
 /** E8: every stowed weapon under every garment that hangs over his back, seen from behind. */
 function checkStowedUnderBack(only: string | null, failures: string[]): void {
-  const backGarments = garmentsOf('human').filter((garment) => garment.paint.back !== undefined);
+  const backGarments = wornGarmentsOf('human').filter(
+    (garment) => garment.paint.back !== undefined,
+  );
   const stowedWeapons = WEAPON_HELD_VISUAL_IDS.filter(
     (id) => stowedPlacementOfHeld(HELD_VISUALS[id]) !== 'none',
   );
@@ -728,7 +843,7 @@ function checkStowedUnderBack(only: string | null, failures: string[]): void {
   const looks = onlyWeapon.length > 0 ? onlyWeapon : stowedWeapons;
   let measured = 0;
   for (const garment of garments) {
-    const figure = humanFigureFor(outfitOf('human', [garment]), null);
+    const figure = humanFigureFor(gateLook, outfitOf(gateLook, [garment]), null);
     for (const row of STOWED_AWAY_ROWS) {
       for (let frame = 0; frame < HUMAN_ROW_TABLE[row].frameCount; frame++) {
         const bare = stowedCellAtTile(figure, row, frame, null);
@@ -751,7 +866,30 @@ function checkStowedUnderBack(only: string | null, failures: string[]): void {
   failures.push(...nothingMeasuredFailures(measured, 'stowed frames').map((f) => `E8: ${f}`));
 }
 
-export function equipmentGateFailures(only: string | null = null): string[] {
+/**
+ * Whether a run naming `only` gates a scripted prop a row bakes. A thrown
+ * explosive is a scripted prop no row bakes: it is composited at runtime and
+ * gated with the held items.
+ */
+function gatesBakedProp(only: string | null): boolean {
+  if (only === null) return true;
+  const isThrown = THROWN_PROP_VISUAL_IDS.some((id) => id === only);
+  return SCRIPTED_PROP_VISUAL_IDS.some((id) => id === only) && !isThrown;
+}
+
+/** Every held-item check on one look, its failures named for the look. */
+function lookFailures(look: HumanLook, only: string | null): string[] {
+  const previousLook = gateLook;
+  gateLook = look;
+  try {
+    return lookFailuresOfGateLook(only).map((failure) => `${look.id}: ${failure}`);
+  } finally {
+    gateLook = previousLook;
+  }
+}
+
+function lookFailuresOfGateLook(only: string | null): string[] {
+  layersByCell.clear();
   const failures: string[] = [];
   const counts: Counts = { e1: 0, e2: 0, e3: 0, e4: 0, e7: 0 };
   const chosen = subjects(only);
@@ -760,13 +898,10 @@ export function equipmentGateFailures(only: string | null = null): string[] {
     checkWrap(subject, failures, counts);
     checkMirror(subject, failures, counts);
   }
-  // A thrown explosive is a scripted prop no row bakes: it is composited at
-  // runtime and gated with the held items above.
-  const isThrown = THROWN_PROP_VISUAL_IDS.some((id) => id === only);
-  const isProp = only === null || (SCRIPTED_PROP_VISUAL_IDS.some((id) => id === only) && !isThrown);
   if (only === null) {
     const turned = checkPropsTurned(failures);
     failures.push(...nothingMeasuredFailures(turned, 'held props').map((f) => `E1: ${f}`));
+    checkWornSide(failures);
   }
   if (chosen.length > 0) {
     failures.push(...nothingMeasuredFailures(counts.e1, 'held frames').map((f) => `E1: ${f}`));
@@ -775,12 +910,18 @@ export function equipmentGateFailures(only: string | null = null): string[] {
     failures.push(...nothingMeasuredFailures(counts.e4, 'gripping hands').map((f) => `E4: ${f}`));
     failures.push(...nothingMeasuredFailures(counts.e7, 'held frames').map((f) => `E7: ${f}`));
   }
-  if (isProp) checkParity(only, failures);
+  if (gatesBakedProp(only)) checkParity(only, failures);
   checkStowedUnderBack(only, failures);
+  return failures;
+}
+
+export function equipmentGateFailures(only: string | null = null): string[] {
+  const failures = HUMAN_LOOKS.flatMap((look) => lookFailures(look, only));
+  const chosen = subjects(only);
   failures.push(...garmentEnvelopeFailures(only));
-  failures.push(...donutHeldFailures(only));
-  const gatedElsewhere = gatesGarment(only ?? '') || gatesDonutHeld(only ?? '');
-  if (only !== null && chosen.length === 0 && !isProp && !gatedElsewhere) {
+  failures.push(...catHeldFailures(only));
+  const gatedElsewhere = gatesGarment(only ?? '') || gatesCatHeld(only ?? '');
+  if (only !== null && chosen.length === 0 && !gatesBakedProp(only) && !gatedElsewhere) {
     failures.push(`no held visual "${only}" to gate`);
   }
   return failures;
@@ -790,6 +931,6 @@ const invokedDirectly = import.meta.url === pathToFileURL(process.argv[1]).href;
 if (invokedDirectly) {
   const itemArg = process.argv.find((arg) => arg.startsWith('--item='));
   const only = itemArg === undefined ? null : itemArg.slice('--item='.length);
-  console.log(`Gating Carl's equipment${only === null ? '' : ` (${only})`}…`);
+  console.log(`Gating the human's equipment${only === null ? '' : ` (${only})`}…`);
   reportFigureGates('equipment', equipmentGateFailures(only));
 }

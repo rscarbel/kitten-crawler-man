@@ -101,7 +101,6 @@ class Harness {
       documentHidden: () => this.hidden,
       deviceMemoryScale: () => this.deviceMemoryScale,
       sharpRenderScale: () => MAX_SHARP_RENDER_SCALE,
-      onRenderScaleChanged: () => {},
       subscribeCanvasRecovery: (handler) => {
         this.recoveryHandlers.push(handler);
       },

@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * Review harness for GumGum, the murder mystery's victim: the living orc on
- * Carl's rig and the body found in the alley. Runs the gates first, then
+ * the biped rig and the body found in the alley. Runs the gates first, then
  * writes review sheets:
  *
  *   preview/gumgum/figure.png   every row she paints, enlarged, plus the idle

@@ -197,7 +197,7 @@ is a JSON file holding every message the game sent the server, in order:
   "expectations": [
     // the reply to messages[messageIndex] should contain one of these as a whole word or phrase,
     // case-insensitively; none of them is in the question, so an echo never passes
-    { "kind": "recall", "messageIndex": 33, "characterName": "System", "mentionsAny": ["Donut", "knocked", "friendly fire"], "description": "…" }
+    { "kind": "recall", "messageIndex": 33, "characterName": "System", "mentionsAny": ["Belle", "knocked", "friendly fire"], "description": "…" }
   ]
 }
 ```
@@ -210,7 +210,7 @@ beside the fixtures. Fixtures live in the server repo, under
 - `npm run ai:replays` writes the scripted ones there: short sessions acted
   out headlessly through the real AI adapter and context builder with a
   scripted clock, so they are the same on every run. `dynamite-incident` is a
-  goblin fight Carl ends with dynamite that also knocks Donut out, the Trash Gremlin
+  goblin fight Ryan ends with dynamite that also knocks Belle out, the Trash Gremlin
   boss kill, then "Remember the dynamite?"; `challenge-and-death` is an
   accepted and won challenge, a death, then a question about the challenge.
   `-- --out=<dir>` writes elsewhere.

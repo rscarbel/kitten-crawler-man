@@ -31,7 +31,7 @@
  * choreography lives in `src/sprites/art/crocodilianFigure.ts`.
  */
 
-import { type Pt, clamp01, deg, lerp, mix, rgba } from './carlArt';
+import { type Pt, clamp01, deg, lerp, mix, rgba } from './bipedArt';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -203,7 +203,7 @@ export interface CrocBuild {
 }
 
 /**
- * Young, skinny and short — a head and a half shorter than Carl — with a big
+ * Young, skinny and short — a head and a half shorter than the human rig at its own size — with a big
  * head on a narrow frame, because a big head over thin limbs is what reads as
  * young at any size. The stoop is nerves, not age.
  */
@@ -278,8 +278,10 @@ export const BUCKET_BOY_BUILD: CrocBuild = {
  * Big, broad and upright: shoulders twice his width, a head that is a smaller
  * share of her height, and hands and feet that stay a human share of it —
  * oversized extremities on a large figure read as a toddler, not as a bouncer.
+ * Proportioned against the human rig at its own size; {@link CLARABELLE_BUILD}
+ * is this build at the size she is drawn.
  */
-export const CLARABELLE_BUILD: CrocBuild = {
+const CLARABELLE_RIG_SIZED_BUILD: CrocBuild = {
   id: 'clarabelle',
   hipY: -0.82,
   waistY: -1.06,
@@ -345,6 +347,71 @@ export const CLARABELLE_BUILD: CrocBuild = {
   },
   strokeScale: 1.35,
 };
+
+/** Every length of a build times `factor`; head-relative sizes, angles and shares are already scale-free. */
+function scaleCrocBuild(build: CrocBuild, factor: number): CrocBuild {
+  const torso = (span: TorsoSpan): TorsoSpan => ({
+    shoulderLead: span.shoulderLead * factor,
+    shoulderTrail: span.shoulderTrail * factor,
+    chestLead: span.chestLead * factor,
+    chestTrail: span.chestTrail * factor,
+    waistLead: span.waistLead * factor,
+    waistTrail: span.waistTrail * factor,
+    hipLead: span.hipLead * factor,
+    hipTrail: span.hipTrail * factor,
+  });
+  const limb = (shape: LimbShape): LimbShape => ({
+    root: shape.root * factor,
+    joint: shape.joint * factor,
+    belly: shape.belly * factor,
+    tip: shape.tip * factor,
+    bellyAt: shape.bellyAt,
+  });
+  return {
+    ...build,
+    hipY: build.hipY * factor,
+    waistY: build.waistY * factor,
+    chestY: build.chestY * factor,
+    shoulderY: build.shoulderY * factor,
+    neckBaseY: build.neckBaseY * factor,
+    headHeight: build.headHeight * factor,
+    headRise: build.headRise * factor,
+    headForward: build.headForward * factor,
+    thigh: build.thigh * factor,
+    shin: build.shin * factor,
+    ankleHeight: build.ankleHeight * factor,
+    footToBall: build.footToBall * factor,
+    toeLength: build.toeLength * factor,
+    heelLength: build.heelLength * factor,
+    upperArm: build.upperArm * factor,
+    forearm: build.forearm * factor,
+    handLength: build.handLength * factor,
+    legRootHalf: build.legRootHalf * factor,
+    armRootHalf: build.armRootHalf * factor,
+    facingTorso: torso(build.facingTorso),
+    profileTorso: torso(build.profileTorso),
+    arm: limb(build.arm),
+    leg: limb(build.leg),
+    neckWidth: build.neckWidth * factor,
+    tailLength: build.tailLength * factor,
+    tailRootWidth: build.tailRootWidth * factor,
+    tailTipWidth: build.tailTipWidth * factor,
+    strokeScale: build.strokeScale * factor,
+  };
+}
+
+/**
+ * How much larger than her rig-sized build Clarabelle is drawn: a bouncer has
+ * to keep her head and shoulders over the crawler she is turning away at the
+ * door, so she is drawn bigger than the rig she is proportioned on.
+ */
+const CLARABELLE_SIZE_OVER_RIG = 1.2;
+
+/** Clarabelle as drawn: her rig-sized build scaled by {@link CLARABELLE_SIZE_OVER_RIG}. */
+export const CLARABELLE_BUILD = scaleCrocBuild(
+  CLARABELLE_RIG_SIZED_BUILD,
+  CLARABELLE_SIZE_OVER_RIG,
+);
 
 // ── Garment palettes ─────────────────────────────────────────────────────────
 

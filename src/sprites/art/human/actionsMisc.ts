@@ -1,5 +1,5 @@
 /**
- * Carl doing things between fights: casting Protective Shell, drinking a
+ * The human crawler doing things between fights: casting Protective Shell, drinking a
  * potion, picking something up, heaving open a chest, and talking.
  *
  * Every one-shot here starts and ends on the idle's first frame in its view,
@@ -13,19 +13,19 @@
  * elbow out sideways into a chicken wing.
  */
 
-import { mixPt, pt } from '../carl/geometry';
-import { handGrip } from '../carl/limbs';
+import { mixPt, pt } from '../biped/geometry';
+import { handGrip } from '../biped/limbs';
 import {
   type ArmAngles,
   buildSkeleton,
-  type CarlPose,
+  type BipedPose,
   FULL_UPPER_ARM,
   type HandShape,
   setArmAngles,
   VIEWS,
-} from '../carl/rig';
+} from '../biped/rig';
 import { type CardinalView } from '../../facingView';
-import { deg, lerp, type Pt } from '../carlArt';
+import { deg, lerp, type Pt } from '../bipedArt';
 import {
   facingArmAngles,
   fromRest,
@@ -37,7 +37,7 @@ import {
   trackAt,
 } from './gaitShared';
 import { idleBack, idleFront, idleSide } from './idles';
-import { HUMAN_SCALE } from './figureScale';
+import { PLAYER_HUMAN_SCALE } from './figureScale';
 import { KNUCKLES_TO_CAMERA, towards, turnHand } from './handTurn';
 import type { Vec3 } from '../../held/heldPaint';
 
@@ -110,7 +110,7 @@ function handAt(frame: number, path: HandPath): Pt {
 }
 
 /** The idle frame every row here leaves from and returns to. */
-function seamPose(view: CardinalView): CarlPose {
+function seamPose(view: CardinalView): BipedPose {
   if (view === 'front') return idleFront(0);
   if (view === 'back') return idleBack(0);
   return idleSide(0);
@@ -139,7 +139,7 @@ function isSeam(frame: number, last: number): boolean {
 }
 
 /** Hands both arms to their target paths, dropping the seam's joint angles. */
-function placeHands(pose: CarlPose, frame: number, right: HandPath, left: HandPath): void {
+function placeHands(pose: BipedPose, frame: number, right: HandPath, left: HandPath): void {
   pose.rightArmAngles = null;
   pose.leftArmAngles = null;
   pose.rightHand = handAt(frame, right);
@@ -152,7 +152,7 @@ const SQUAT_FORESHORTEN = 0.9;
 const SQUAT_THIGH_NEARNESS = 0.9;
 
 /** Head-on legs for a crouch of `crouch`: a column standing, a squat folded. */
-function squatLegs(pose: CarlPose, crouch: number): void {
+function squatLegs(pose: BipedPose, crouch: number): void {
   const fold = Math.min(1, crouch * 2);
   pose.leftForeshorten = lerp(pose.leftForeshorten, SQUAT_FORESHORTEN, fold);
   pose.rightForeshorten = pose.leftForeshorten;
@@ -169,7 +169,7 @@ function squatLegs(pose: CarlPose, crouch: number): void {
 const STOOP_HEAD_FOLLOWS_SPINE = 0.7;
 
 /** Both feet stay where the idle put them: none of these rows takes a step. */
-function plantFeet(pose: CarlPose): void {
+function plantFeet(pose: BipedPose): void {
   pose.leftFootPlanted = true;
   pose.rightFootPlanted = true;
 }
@@ -241,7 +241,7 @@ function raisedPath(
 }
 
 /** Poses one head-on arm where its raise path has it at `frame`. */
-function raiseArm(pose: CarlPose, side: number, frame: number, path: RaisedPath): void {
+function raiseArm(pose: BipedPose, side: number, frame: number, path: RaisedPath): void {
   const angles = raisedArm(
     side,
     trackAt(frame, path.out),
@@ -263,7 +263,7 @@ function raiseArm(pose: CarlPose, side: number, frame: number, path: RaisedPath)
  * because the grip's own haft angle follows the forearm and the wrist.
  */
 function propAngleFor(
-  pose: CarlPose,
+  pose: BipedPose,
   view: CardinalView,
   hand: 'left' | 'right',
   aim: number,
@@ -291,7 +291,7 @@ const SHELL_LAST = SHELL_CAST_FRAMES - 1;
  * a crouch lets it reach, so the dome visibly comes out of his hand.
  */
 const TILE_CENTRE_ABOVE_GROUND_TILES = 0.4;
-const DOME_CENTRE_Y = -TILE_CENTRE_ABOVE_GROUND_TILES / HUMAN_SCALE;
+const DOME_CENTRE_Y = -TILE_CENTRE_ABOVE_GROUND_TILES / PLAYER_HUMAN_SCALE;
 
 /** He sinks as he gathers it, so the drive's drop is split over two frames. */
 const SHELL_CROUCH: Track = offsetTrack(SHELL_LAST, [
@@ -428,7 +428,7 @@ const SHELL_PALM_GLOW: Track = offsetTrack(SHELL_LAST, [
   [SHELL_CAST_FRAME + 3, 0],
 ]);
 
-function shellShapes(pose: CarlPose, frame: number): void {
+function shellShapes(pose: BipedPose, frame: number): void {
   const gathering = frame === 1;
   const striking = frame >= SHELL_CAST_FRAME && frame <= SHELL_LAST - 2;
   if (gathering) pose.rightFist = SHELL_GATHER_FIST;
@@ -441,7 +441,7 @@ function shellShapes(pose: CarlPose, frame: number): void {
   if (glow > 0) pose.palmGlow = { hand: 'right', strength: glow };
 }
 
-function shellBody(pose: CarlPose, frame: number): void {
+function shellBody(pose: BipedPose, frame: number): void {
   pose.crouch += trackAt(frame, SHELL_CROUCH);
   pose.bob += trackAt(frame, SHELL_BOB);
   pose.chinLift = trackAt(frame, SHELL_CHIN);
@@ -453,7 +453,7 @@ function shellBody(pose: CarlPose, frame: number): void {
 }
 
 /** Protective Shell, toward the camera: the right palm driven down onto the dome's centre. */
-export function shellCastFront(frame: number): CarlPose {
+export function shellCastFront(frame: number): BipedPose {
   const pose = seamPose('front');
   if (isSeam(frame, SHELL_LAST)) return pose;
   shellBody(pose, frame);
@@ -466,7 +466,7 @@ export function shellCastFront(frame: number): CarlPose {
 }
 
 /** From behind the arms are the same; out past his sides, they show. */
-export function shellCastBack(frame: number): CarlPose {
+export function shellCastBack(frame: number): BipedPose {
   const pose = shellCastFront(frame);
   if (isSeam(frame, SHELL_LAST)) return seamPose('back');
   pose.headTurn = -pose.headTurn;
@@ -475,7 +475,7 @@ export function shellCastBack(frame: number): CarlPose {
   return pose;
 }
 
-export function shellCastSide(frame: number): CarlPose {
+export function shellCastSide(frame: number): BipedPose {
   const pose = seamPose('side');
   if (isSeam(frame, SHELL_LAST)) return pose;
   shellBody(pose, frame);
@@ -572,7 +572,7 @@ const DRINK_MOUTHS: readonly MouthShape[] = [
 ];
 
 /** Where his mouth is on the posed body, in figure space. */
-function mouthOf(pose: CarlPose, view: CardinalView): Pt {
+function mouthOf(pose: BipedPose, view: CardinalView): Pt {
   const skeleton = buildSkeleton(pose, VIEWS[view]);
   const head = skeleton.headCentre;
   if (view === 'side') {
@@ -640,7 +640,7 @@ const WIPE_FRONT: readonly Pt[] = [pt(-0.12, 0.04), pt(0.02, 0.03), pt(0.12, 0.0
 /** Edge-on the bottle hand wipes too, its wrist drawn back across the lips toward the cheek. */
 const WIPE_SIDE: readonly Pt[] = [pt(0.14, 0.05), pt(0.05, 0.04), pt(-0.02, 0.07)];
 
-function drinkFace(pose: CarlPose, frame: number): void {
+function drinkFace(pose: BipedPose, frame: number): void {
   const mouth = DRINK_MOUTHS[Math.min(frame, DRINK_MOUTHS.length - 1)];
   pose.mouth = mouth.open;
   pose.mouthWidth = mouth.width;
@@ -649,7 +649,7 @@ function drinkFace(pose: CarlPose, frame: number): void {
   plantFeet(pose);
 }
 
-function holdBottle(pose: CarlPose, view: CardinalView, aim: number): void {
+function holdBottle(pose: BipedPose, view: CardinalView, aim: number): void {
   pose.rightHandShape = 'grip';
   pose.heldProps = [
     {
@@ -686,7 +686,7 @@ function drinkAim(frame: number, level: number, tipped: number): number {
 }
 
 /** Where the mouth-relative bottle hand sits at `frame`, whether or not that frame is actually in the at-mouth range. */
-function drinkMouthTargetFront(pose: CarlPose, view: CardinalView, frame: number): Pt {
+function drinkMouthTargetFront(pose: BipedPose, view: CardinalView, frame: number): Pt {
   const mouth = mouthOf(pose, view);
   const beside = mixPt(
     BOTTLE_FIST_BESIDE_MOUTH_FRONT,
@@ -697,13 +697,13 @@ function drinkMouthTargetFront(pose: CarlPose, view: CardinalView, frame: number
 }
 
 /** Where the lowered bottle hand sits, just under the chin. */
-function drinkLoweredTargetFront(pose: CarlPose, view: CardinalView): Pt {
+function drinkLoweredTargetFront(pose: BipedPose, view: CardinalView): Pt {
   const mouth = mouthOf(pose, view);
   return pt(mouth.x + BOTTLE_LOWERED_FRONT.x, mouth.y + BOTTLE_LOWERED_FRONT.y);
 }
 
 /** Where the wiping hand's knuckles sit against the mouth, at a wipe frame's own offset. */
-function drinkWipeTargetFront(pose: CarlPose, view: CardinalView, knuckles: Pt): Pt {
+function drinkWipeTargetFront(pose: BipedPose, view: CardinalView, knuckles: Pt): Pt {
   const mouth = mouthOf(pose, view);
   return pt(mouth.x + knuckles.x, mouth.y + knuckles.y);
 }
@@ -716,13 +716,13 @@ function drinkWipeTargetFront(pose: CarlPose, view: CardinalView, knuckles: Pt):
  * continued arc rather than a snap.
  */
 function raiseHandPos(
-  pose: CarlPose,
+  pose: BipedPose,
   view: CardinalView,
   side: number,
   frame: number,
   path: RaisedPath,
 ): Pt {
-  const probe: CarlPose = { ...pose };
+  const probe: BipedPose = { ...pose };
   raiseArm(probe, side, frame, path);
   const skeleton = buildSkeleton(probe, VIEWS[view]);
   return side === RIGHT_ARM ? skeleton.rightArm.end : skeleton.leftArm.end;
@@ -736,7 +736,7 @@ function raiseHandPos(
  */
 const DRINK_HANDOFF_EASE = 0.4;
 
-function drinkHeadOn(frame: number, view: 'front' | 'back'): CarlPose {
+function drinkHeadOn(frame: number, view: 'front' | 'back'): BipedPose {
   const pose = seamPose(view);
   if (isSeam(frame, DRINK_LAST)) return pose;
   drinkFace(pose, frame);
@@ -823,7 +823,7 @@ const WIPE_FIST = 0.55;
 const WIPE_ELBOW_FLARE = 0.7;
 
 /** Drinking, toward the camera: bottle to the mouth, head back, and a wipe with the back of the left hand. */
-export function drinkFront(frame: number): CarlPose {
+export function drinkFront(frame: number): BipedPose {
   return drinkHeadOn(frame, 'front');
 }
 
@@ -832,7 +832,7 @@ export function drinkFront(frame: number): CarlPose {
  * out of sight, so the drink reads from the head tipping back, the elbow
  * coming up and the bottle's base rising above his crown.
  */
-export function drinkBack(frame: number): CarlPose {
+export function drinkBack(frame: number): BipedPose {
   const pose = drinkHeadOn(frame, 'back');
   pose.rightArmBehind = true;
   pose.leftArmBehind = true;
@@ -869,7 +869,7 @@ const DRINK_SIDE_RIGHT: HandPath = handPath(SEAM_WRISTS.side.right, DRINK_LAST, 
  */
 const BOTTLE_LOWERED_SIDE = pt(0.12, 0.16);
 
-export function drinkSide(frame: number): CarlPose {
+export function drinkSide(frame: number): BipedPose {
   const pose = seamPose('side');
   if (isSeam(frame, DRINK_LAST)) return pose;
   drinkFace(pose, frame);
@@ -1010,7 +1010,7 @@ const GRAB_SIDE_SWAY: Track = offsetTrack(GRAB_LAST, [
   [4, -0.02],
 ]);
 
-function grabBody(pose: CarlPose, frame: number): void {
+function grabBody(pose: BipedPose, frame: number): void {
   pose.bob += trackAt(frame, GRAB_BOB);
   pose.jacketFlare += trackAt(frame, GRAB_JACKET);
   pose.rightFist = grabFist(frame);
@@ -1020,7 +1020,7 @@ function grabBody(pose: CarlPose, frame: number): void {
 
 const GRAB_BROW = 0.7;
 
-function grabHeadOn(frame: number, view: 'front' | 'back'): CarlPose {
+function grabHeadOn(frame: number, view: 'front' | 'back'): BipedPose {
   const pose = seamPose(view);
   if (isSeam(frame, GRAB_LAST)) return pose;
   grabBody(pose, frame);
@@ -1041,18 +1041,18 @@ function grabHeadOn(frame: number, view: 'front' | 'back'): CarlPose {
 const GRAB_BRACING_FIST = 0.35;
 
 /** Stooping for something at his feet, toward the camera. */
-export function grabFront(frame: number): CarlPose {
+export function grabFront(frame: number): BipedPose {
   return grabHeadOn(frame, 'front');
 }
 
-export function grabBack(frame: number): CarlPose {
+export function grabBack(frame: number): BipedPose {
   const pose = grabHeadOn(frame, 'back');
   pose.rightArmBehind = true;
   pose.leftArmBehind = true;
   return pose;
 }
 
-export function grabSide(frame: number): CarlPose {
+export function grabSide(frame: number): BipedPose {
   const pose = seamPose('side');
   if (isSeam(frame, GRAB_LAST)) return pose;
   grabBody(pose, frame);
@@ -1205,7 +1205,7 @@ const CHEST_SIDE_LEFT = handPath(SEAM_WRISTS.side.left, CHEST_LAST, [
   [8, pt(0.16, -1.0)],
 ]);
 /** Open to reach for the lid, closed on it from the grip to the push. */
-function chestHands(pose: CarlPose, frame: number): void {
+function chestHands(pose: BipedPose, frame: number): void {
   const reaching = frame > 0 && frame < CHEST_GRIP_FRAME;
   const holding = frame >= CHEST_GRIP_FRAME && frame <= CHEST_PUSH_FRAME;
   if (holding) {
@@ -1226,7 +1226,7 @@ function chestHands(pose: CarlPose, frame: number): void {
  */
 const CHEST_GRIP_FIST = 0.9;
 
-function chestBody(pose: CarlPose, frame: number): void {
+function chestBody(pose: BipedPose, frame: number): void {
   pose.bob += trackAt(frame, CHEST_BOB);
   pose.mouth = trackAt(frame, CHEST_MOUTH);
   pose.jacketFlare += trackAt(frame, CHEST_JACKET);
@@ -1235,7 +1235,7 @@ function chestBody(pose: CarlPose, frame: number): void {
   chestHands(pose, frame);
 }
 
-function chestHeadOn(frame: number, view: 'front' | 'back'): CarlPose {
+function chestHeadOn(frame: number, view: 'front' | 'back'): BipedPose {
   const pose = seamPose(view);
   if (isSeam(frame, CHEST_LAST)) return pose;
   chestBody(pose, frame);
@@ -1250,18 +1250,18 @@ function chestHeadOn(frame: number, view: 'front' | 'back'): CarlPose {
 }
 
 /** Heaving open a chest at his feet, toward the camera. */
-export function chestOpenFront(frame: number): CarlPose {
+export function chestOpenFront(frame: number): BipedPose {
   return chestHeadOn(frame, 'front');
 }
 
-export function chestOpenBack(frame: number): CarlPose {
+export function chestOpenBack(frame: number): BipedPose {
   const pose = chestHeadOn(frame, 'back');
   pose.rightArmBehind = true;
   pose.leftArmBehind = true;
   return pose;
 }
 
-export function chestOpenSide(frame: number): CarlPose {
+export function chestOpenSide(frame: number): BipedPose {
   const pose = seamPose('side');
   if (isSeam(frame, CHEST_LAST)) return pose;
   chestBody(pose, frame);
@@ -1425,14 +1425,14 @@ const TALK_SIDE_SECOND_OPEN_FROM = 7;
 const TALK_SIDE_SECOND_OPEN_TO = 9;
 const TALK_SIDE_ELBOW_FLARE = -0.5;
 
-function talkFace(pose: CarlPose, frame: number): void {
+function talkFace(pose: BipedPose, frame: number): void {
   const mouth = TALK_MOUTHS[frame % TALK_MOUTHS.length];
   pose.mouth = mouth.open;
   pose.mouthWidth = mouth.width;
   pose.brow = trackAt(frame, TALK_BROW);
 }
 
-function talkHands(pose: CarlPose, frame: number): void {
+function talkHands(pose: BipedPose, frame: number): void {
   if (frame >= TALK_RIGHT_OPEN_FROM && frame <= TALK_RIGHT_OPEN_TO) {
     pose.rightHandShape = 'open';
     pose.rightFist = 0;
@@ -1444,7 +1444,7 @@ function talkHands(pose: CarlPose, frame: number): void {
   }
 }
 
-function talkHeadOn(frame: number, view: 'front' | 'back'): CarlPose {
+function talkHeadOn(frame: number, view: 'front' | 'back'): BipedPose {
   const pose = seamPose(view);
   if (frame <= 0) return pose;
   talkFace(pose, frame);
@@ -1459,11 +1459,11 @@ function talkHeadOn(frame: number, view: 'front' | 'back'): CarlPose {
 }
 
 /** Talking to someone in front of him, toward the camera: a point made with each hand, a nod on each. */
-export function talkFront(frame: number): CarlPose {
+export function talkFront(frame: number): BipedPose {
   return talkHeadOn(frame, 'front');
 }
 
-export function talkBack(frame: number): CarlPose {
+export function talkBack(frame: number): BipedPose {
   const pose = talkHeadOn(frame, 'back');
   // From behind, the raised forearms are in front of him and out of sight;
   // only the elbows and the shoulders turning say he is gesturing.
@@ -1472,7 +1472,7 @@ export function talkBack(frame: number): CarlPose {
   return pose;
 }
 
-export function talkSide(frame: number): CarlPose {
+export function talkSide(frame: number): BipedPose {
   const pose = seamPose('side');
   if (frame <= 0) return pose;
   talkFace(pose, frame);

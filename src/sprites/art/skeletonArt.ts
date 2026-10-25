@@ -29,7 +29,7 @@
  * Coordinates are tile units with the origin at the point between the feet and
  * +Y pointing down the screen, so heights above the ground are negative. The
  * caller translates to that ground point and scales by one tile before calling
- * a painter, exactly as the llama's and Carl's painters expect.
+ * a painter, exactly as the llama's and the biped figure's painters expect.
  *
  * Light comes from the upper left, matching every other prop in the repo. The
  * witch-light is the one exception: it is emitted, so it lights the bone around
@@ -238,8 +238,8 @@ const LIGHT: Pt = { x: -0.62, y: -0.78 };
 
 /**
  * Standing height, top of skull to ground, and the head that height divides
- * into. Slightly leaner than Carl's 4.8: a skull is smaller than a haired head,
- * and a skeleton that keeps Carl's head fraction reads as a bobblehead. It is
+ * into. Slightly leaner than the biped figure's 4.8: a skull is smaller than a haired head,
+ * and a skeleton that keeps the figure's head fraction reads as a bobblehead. It is
  * still far under a life-drawing seven, because at a 32 px tile a correctly
  * proportioned skull is four pixels of mush.
  */

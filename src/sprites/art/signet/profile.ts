@@ -13,7 +13,7 @@
  */
 
 import { fillSoftEllipse, strokeSoftCrease, taperedCreaseGradient } from '../softShade';
-import { clamp01, lerp, mix } from '../carlArt';
+import { clamp01, lerp, mix } from '../bipedArt';
 import { fillCrescent, traceSmooth, type Ctx } from './paint';
 import {
   EYE_CAST_COLOR,

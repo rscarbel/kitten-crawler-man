@@ -5,9 +5,9 @@
  * code knows them by name.
  */
 
-import type { Pt } from '../../art/carlArt';
-import { addCapsule, shadeForm } from '../../art/carl/paint';
-import { deriveRamp, receded, FAR_LIMB_SHADE } from '../../art/carl/palette';
+import type { Pt } from '../../art/bipedArt';
+import { addCapsule, shadeForm } from '../../art/biped/paint';
+import { deriveRamp, receded, FAR_LIMB_SHADE } from '../../art/biped/palette';
 import { defineHeldVisual, type HeldLook } from '../heldVisualDef';
 import { heldShade, outlineAndFill } from '../heldPaint';
 import { paintBladeEdgeGlint, seenOnEdge } from './bladeEdge';

@@ -10,11 +10,14 @@
 
 import { speakerLines, transientSpeaker } from '../../line';
 import type { BarkLine, DialogLine, NonEmpty } from '../../line';
+import { crawlerName } from '../../../characters/characters';
+
+const HUMAN_NAME = crawlerName('human');
 
 /** The murder mystery's own header, for a narration page with no more specific location to name. */
 const narrator = transientSpeaker('The Krasue Murders', 'narration');
-const carl = speakerLines('carl');
-const donut = speakerLines('donut');
+const ryan = speakerLines('ryan');
+const belle = speakerLines('belle');
 const mordecai = speakerLines('mordecaiInEar');
 const voice = speakerLines('mysteriousVoice');
 const lich = speakerLines('lich');
@@ -23,8 +26,8 @@ export const LICH_REVEAL: NonEmpty<DialogLine> = [
   narrator.line(
     'Miss Quill drops mid-sentence, and for one long moment her floating pen keeps writing without her, striking one last name from a list. Then it clatters to the boards, and the office is quiet.',
   ),
-  carl.line(
-    'The magistrate’s a corpse. The secretary ran the harvest. That should be the end of it. So why does this room still feel like somebody’s in it?',
+  ryan.line(
+    'Okay. The magistrate’s a corpse, the secretary ran the harvest, case closed. So why does this room still feel like somebody’s in it? Hello?',
   ),
   voice.line(
     'Because the magistrate keeps his appointments. He signs his letters. He suspects nothing, and he never will. I have seen to it.',
@@ -32,7 +35,7 @@ export const LICH_REVEAL: NonEmpty<DialogLine> = [
   voice.line(
     'The teacher believed the souls were for her husband. That enough of them would buy him back whole. Grief will sign anything you put in front of it. It does not read the terms.',
   ),
-  donut.line('CARL. THE DEAD THING AT THE DESK IS THE NICE PART OF THIS ROOM.'),
+  belle.line(`${HUMAN_NAME}, the room got cold. I don’t like this voice. It’s not a cuddly voice.`),
   mordecai.button(
     'Ready weapons',
     '*That’s a lich. The letter, the writs, the harvest. You were never chasing the schoolteacher. You were chasing the thing that holds her leash. Kill it, and don’t count it dead until the fire in that hood goes out.*',

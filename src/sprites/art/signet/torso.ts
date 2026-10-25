@@ -17,7 +17,7 @@
  */
 
 import { fillSoftEllipse, strokeSoftCrease, taperedCreaseGradient } from '../softShade';
-import { lerp, rgba } from '../carlArt';
+import { lerp, rgba } from '../bipedArt';
 import {
   applyInkStyle,
   drawDragonMotif,

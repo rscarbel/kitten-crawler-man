@@ -14,7 +14,7 @@
  * tall; a soft wash there averages into grey at in-game size.
  */
 
-import { mix } from '../carlArt';
+import { mix } from '../bipedArt';
 import type { Pt2 } from './skeleton';
 import { resizeSurface, allocCanvas, releaseSurface } from '../../../core/canvasSurface';
 

@@ -1,7 +1,8 @@
 /**
  * Illustrations for the Goblin High Security Prison's explainer: a guard's
- * flashlight and a tower spotlight sweeping a dark floor while Carl keeps to
- * the shadows, a swing at a crate drawing a guard over to look, and Carl
+ * flashlight and a tower spotlight sweeping a dark floor while the human
+ * crawler keeps to the shadows, a swing at a crate drawing a guard over to
+ * look, and the human
  * breaking out of a holding cell's flimsy door with one punch.
  */
 
@@ -89,7 +90,7 @@ function tileTopLeft(cx: number, feetY: number): { x: number; y: number } {
   return { x: cx - ACTOR_TILE * HALF, y: feetY - ACTOR_TILE * FEET_IN_TILE };
 }
 
-function drawCarl(
+function drawHuman(
   ctx: CanvasRenderingContext2D,
   cx: number,
   feetY: number,
@@ -176,7 +177,7 @@ const LENS_FORWARD = 14;
 const LENS_UP = 22;
 const SPOT = { radius: 30, y: 0.66, fromX: 0.58, toX: 0.9, period: 240 } as const;
 const TOWER = { x: 0.74, y: 0.12, w: 16, h: 18 } as const;
-const CARL_PATH = { fromX: 0.34, toX: 0.94, y: 0.92 } as const;
+const HUMAN_PATH = { fromX: 0.34, toX: 0.94, y: 0.92 } as const;
 const HEAD_ABOVE_FEET = 46;
 
 export function drawPrisonLightsPage(
@@ -201,11 +202,12 @@ export function drawPrisonLightsPage(
   const spotY = rect.y + rect.height * SPOT.y;
 
   const walk = (frame % LIGHTS_PERIOD) / LIGHTS_PERIOD;
-  const carlX = rect.x + rect.width * (CARL_PATH.fromX + (CARL_PATH.toX - CARL_PATH.fromX) * walk);
-  const carlFeet = rect.y + rect.height * CARL_PATH.y - FLOOR_INSET;
-  const carlBodyY = carlFeet - SHADOW_RY;
-  const seenByCone = insideCone(cone, carlX, carlBodyY);
-  const seenBySpot = Math.hypot(carlX - spotX, carlBodyY - spotY) <= SPOT.radius;
+  const humanX =
+    rect.x + rect.width * (HUMAN_PATH.fromX + (HUMAN_PATH.toX - HUMAN_PATH.fromX) * walk);
+  const humanFeet = rect.y + rect.height * HUMAN_PATH.y - FLOOR_INSET;
+  const humanBodyY = humanFeet - SHADOW_RY;
+  const seenByCone = insideCone(cone, humanX, humanBodyY);
+  const seenBySpot = Math.hypot(humanX - spotX, humanBodyY - spotY) <= SPOT.radius;
 
   drawCone(ctx, cone, seenByCone);
 
@@ -231,13 +233,13 @@ export function drawPrisonLightsPage(
 
   drawGuard(ctx, guardX, guardFeet, 1, 'sweep', frame);
   if (seenByCone) suspicionMark(ctx, guardX, guardFeet - HEAD_ABOVE_FEET, '?');
-  drawCarl(ctx, carlX, carlFeet, {
+  drawHuman(ctx, humanX, humanFeet, {
     isMoving: true,
     walkFrame: walkPhase(frame),
     facingX: 1,
     facingY: 0,
   });
-  if (seenBySpot) suspicionMark(ctx, carlX, carlFeet - HEAD_ABOVE_FEET, '!');
+  if (seenBySpot) suspicionMark(ctx, humanX, humanFeet - HEAD_ABOVE_FEET, '!');
 }
 
 // ── Page 2: guards hear fighting ────────────────────────────────────────────
@@ -250,7 +252,7 @@ const RING_COUNT = 3;
 const RING_GAP = 14;
 const RING_LIFE = 60;
 const RING_GROWTH = 1.6;
-const NOISE_CARL_X = 0.16;
+const NOISE_HUMAN_X = 0.16;
 const NOISE_CRATE_X = 0.3;
 const NOISE_FEET_Y = 0.8;
 const CRATE_SIZE = 26;
@@ -272,7 +274,7 @@ export function drawPrisonNoisePage(
   floor(ctx, rect);
   const t = frame % NOISE_PERIOD;
   const feetY = rect.y + rect.height * NOISE_FEET_Y;
-  const carlX = rect.x + rect.width * NOISE_CARL_X;
+  const humanX = rect.x + rect.width * NOISE_HUMAN_X;
   const crateX = rect.x + rect.width * NOISE_CRATE_X;
 
   ctx.fillStyle = CRATE_FILL;
@@ -318,7 +320,7 @@ export function drawPrisonNoisePage(
   drawCone(ctx, cone, turned);
 
   const swinging = t >= SWING_AT && t < SWING_AT + SWING_FRAMES;
-  drawCarl(ctx, carlX, feetY, {
+  drawHuman(ctx, humanX, feetY, {
     attackPhase: swinging ? 'jab_side' : null,
     attackTimer: swinging ? SWING_AT + SWING_FRAMES - t : 0,
     attackFrames: SWING_FRAMES,
@@ -378,7 +380,7 @@ export function drawPrisonCellPage(
 
   const feetY = top + h - BAR_WIDTH * 2;
   const stepOut = Math.min(1, Math.max(0, (t - STEP_OUT_AT) / STEP_OUT_FRAMES));
-  const carlX = left + w * HALF + rect.width * STEP_OUT_DISTANCE * stepOut;
+  const humanX = left + w * HALF + rect.width * STEP_OUT_DISTANCE * stepOut;
 
   const plankH = (h - DOOR_PLANK_GAP * (DOOR_PLANKS - 1)) / DOOR_PLANKS;
   const broken = t >= BREAK_AT;
@@ -416,7 +418,7 @@ export function drawPrisonCellPage(
 
   const swinging = t >= CELL_SWING_AT && t < CELL_SWING_AT + CELL_SWING_FRAMES;
   const walkingOut = t >= STEP_OUT_AT && stepOut < 1;
-  drawCarl(ctx, carlX, feetY, {
+  drawHuman(ctx, humanX, feetY, {
     attackPhase: swinging ? 'jab_side' : null,
     attackTimer: swinging ? CELL_SWING_AT + CELL_SWING_FRAMES - t : 0,
     attackFrames: CELL_SWING_FRAMES,

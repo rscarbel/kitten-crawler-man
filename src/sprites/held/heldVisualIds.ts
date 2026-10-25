@@ -40,8 +40,13 @@ export const WEAPON_HELD_VISUAL_IDS = [
   'felling_axe',
 ] as const;
 
-/** Small things Donut carries across her jaws. */
-export const MOUTH_CARRY_VISUAL_IDS = ['carried_wrench'] as const;
+/** Small things the cat crawler carries across her jaws. */
+export const MOUTH_CARRY_VISUAL_IDS = [
+  'carried_wrench',
+  'carried_prison_key',
+  'carried_blueprints',
+] as const;
+export type MouthCarryVisualId = (typeof MOUTH_CARRY_VISUAL_IDS)[number];
 
 /**
  * Working tools that belong to a place rather than to an item: handed to a

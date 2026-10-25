@@ -1,5 +1,5 @@
 /**
- * Illustrations for the Resourcing explainer: Carl chopping, where wood and
+ * Illustrations for the Resourcing explainer: the human crawler chopping, where wood and
  * stone come from, and the tool tiers.
  */
 
@@ -8,8 +8,8 @@ import { drawSpriteKey } from '../../../core/SpriteRenderer';
 import { MAX_TOOL_TIER, TOOL_TIER_BASIC, TOOL_TIERS } from '../../../core/toolTiers';
 import { CHOP_ROWS, humanRowOf } from '../../../sprites/art/humanFigure';
 import { humanFigureFor } from '../../../sprites/art/human/appearance';
-import { DEFAULT_CARL_OUTFIT } from '../../../sprites/garments/human/carlDressing';
-import { drawHumanFigureSelection } from '../../../sprites/humanSprite';
+import { defaultOutfitOf } from '../../../sprites/garments/human/humanDressing';
+import { activeHumanLook, drawHumanFigureSelection } from '../../../sprites/humanSprite';
 import { workingToolHeldVisual } from '../../../sprites/held/heldVisuals';
 import { worldText } from '../../world/worldText';
 import { drawToolIcon, isToolIconId } from '../../../sprites/art/itemIcons/toolIcons';
@@ -53,7 +53,7 @@ const LABEL_GAP = 6;
 const TOOL_ROW_GAP = 10;
 const TOOL_KIND_ROW_GAP = 56;
 const GROUND_EDGE_PX = 2;
-/** Where Carl and the tree stand either side of the band's centre, in tiles. */
+/** Where the human crawler and the tree stand either side of the band's centre, in tiles. */
 const CHOPPER_OFFSET_TILES = 0.35;
 const CHOPPED_TREE_OFFSET_TILES = 0.55;
 const POP_TEXT_SIZE = 13;
@@ -101,7 +101,7 @@ function drawRubble(ctx: CanvasRenderingContext2D, centreX: number, baseY: numbe
   }
 }
 
-/** Carl mid-chop beside a tree, with the wood rising off each blow. */
+/** The human crawler mid-chop beside a tree, with the wood rising off each blow. */
 export function drawGatheringScene(
   ctx: CanvasRenderingContext2D,
   rect: IllustrationRect,
@@ -112,19 +112,19 @@ export function drawGatheringScene(
   const tree = standingTile(rect, centreX + STAGE_TILE * CHOPPED_TREE_OFFSET_TILES);
   drawSpriteKey(ctx, TREE_KEY, 'idle', 0, tree.x, tree.y, STAGE_TILE);
 
-  const carl = standingTile(rect, centreX - STAGE_TILE * CHOPPER_OFFSET_TILES);
-  drawChoppingCarl(ctx, carl, frame);
+  const human = standingTile(rect, centreX - STAGE_TILE * CHOPPER_OFFSET_TILES);
+  drawChoppingHuman(ctx, human, frame);
   drawResourcePop(ctx, '+1 Wood', tree, frame % chopLoopFrames());
 }
 
-/** Frames one of Carl's chops takes, impact to impact. */
+/** Frames one of the human crawler's chops takes, impact to impact. */
 export function chopLoopFrames(): number {
   const frameCount = humanRowOf(CHOP_ROWS.side)?.frameCount ?? 1;
   return frameCount * CHOP_TICKS_PER_FRAME;
 }
 
-/** Carl facing east mid-chop with the basic axe, standing in the tile at `tile`. */
-export function drawChoppingCarl(
+/** The human crawler facing east mid-chop with the basic axe, standing in the tile at `tile`. */
+export function drawChoppingHuman(
   ctx: CanvasRenderingContext2D,
   tile: { readonly x: number; readonly y: number },
   frame: number,
@@ -133,9 +133,10 @@ export function drawChoppingCarl(
   const frameCount = humanRowOf(row)?.frameCount ?? 1;
   const chopFrame = Math.floor(frame / CHOP_TICKS_PER_FRAME) % frameCount;
   const axe = workingToolHeldVisual({ kind: 'axe', tier: TOOL_TIER_BASIC });
+  const look = activeHumanLook();
   drawHumanFigureSelection(
     ctx,
-    humanFigureFor(DEFAULT_CARL_OUTFIT, null),
+    humanFigureFor(look, defaultOutfitOf(look), null),
     tile.x,
     tile.y,
     STAGE_TILE,

@@ -2,8 +2,9 @@
  * The wave Big Rooster drives out of the gym floor when he puts both fists
  * through it.
  *
- * Same physics as Carl's stamp — compressed air bending the light over a ring
- * that runs outward — but a different floor. Carl lands on dungeon stone and
+ * Same physics as the human crawler's stamp — compressed air bending the light
+ * over a ring that runs outward — but a different floor. The human lands on
+ * dungeon stone and
  * throws grit; Big Rooster lands on rubber matting and throws chalk, so the
  * scuff is a black rubber burn, the dust is the pale powder off his hands, and
  * the chunks are torn mat rather than broken flagstone.
@@ -46,7 +47,7 @@ const LENS_LIGHT_ALPHA = 0.5;
 const LENS_DARK_TRAIL = 0.05;
 /** The bands thin as the wave spends itself. */
 const LENS_THIN_TO = 0.4;
-/** Warmer than Carl's cold dungeon air — a gym is lit yellow. */
+/** Warmer than the Smush's cold dungeon air — a gym is lit yellow. */
 const LENS_DARK_TINT = '104, 92, 78';
 const LENS_LIGHT_TINT = '246, 240, 224';
 

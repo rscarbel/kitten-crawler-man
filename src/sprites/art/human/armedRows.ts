@@ -1,5 +1,5 @@
 /**
- * The rows Carl plays with a weapon out, one family per armed set: standing,
+ * The rows the human crawler plays with a weapon out, one family per armed set: standing,
  * on guard and dropping the guard, walking and running with their starts and
  * stops, every blow standing and in each version thrown on the move, and the
  * draw and the stow. Every item of a set's grip and weight plays these same

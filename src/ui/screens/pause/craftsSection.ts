@@ -11,7 +11,8 @@ import {
   nextResourcingUnlock,
   thrallCount,
 } from '../../../core/craftPerks';
-import { CRAWLER_NAMES, type CrawlerKind } from '../../../core/SkillManager';
+import { crawlerName } from '../../../characters/characters';
+import { type CrawlerKind } from '../../../core/SkillManager';
 import { thrallCooldownSecondsLeft } from '../../../core/thrallCooldowns';
 import type { CatPlayer } from '../../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../../creatures/HumanPlayer';
@@ -190,7 +191,7 @@ function renderCrafts(layout: SectionLayout, ctx: PauseContext): void {
     const player = crawler === 'human' ? ctx.human : ctx.cat;
     const titleRow = column.row(lineHeightOf(ui, 'title'), ui.theme.space.sm);
     text(ui, titleRow, {
-      text: CRAWLER_NAMES[crawler],
+      text: crawlerName(crawler),
       role: 'title',
       color: ui.theme.palette.crawler[crawler],
     });

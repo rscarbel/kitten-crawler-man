@@ -6,7 +6,7 @@ import { PersonPreviewScene } from '../scenes/PersonPreviewScene';
 import { TilePreviewScene } from '../scenes/TilePreviewScene';
 import { BopcaPreviewScene } from '../scenes/BopcaPreviewScene';
 import { HumanPreviewScene } from '../scenes/HumanPreviewScene';
-import { DonutPreviewScene } from '../scenes/DonutPreviewScene';
+import { CatPreviewScene } from '../scenes/CatPreviewScene';
 import { GoblinPreviewScene } from '../scenes/GoblinPreviewScene';
 import { RatPreviewScene } from '../scenes/RatPreviewScene';
 import { LlamaPreviewScene } from '../scenes/LlamaPreviewScene';
@@ -388,8 +388,8 @@ export function devBootScene(
     return true;
   }
 
-  if (params.get('donut') !== null) {
-    sceneManager.replace(new DonutPreviewScene());
+  if (params.get('cat') !== null) {
+    sceneManager.replace(new CatPreviewScene());
     return true;
   }
 

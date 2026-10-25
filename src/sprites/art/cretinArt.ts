@@ -40,7 +40,7 @@
  * {@link drawCretin}. Light comes from the upper left, like every other figure.
  */
 
-import { type Pt, clamp01, deg, easeInOut, hump, lerp, mix, rgba } from './carlArt';
+import { type Pt, clamp01, deg, easeInOut, hump, lerp, mix, rgba } from './bipedArt';
 import { fillSoftEllipse } from './softShade';
 
 type Ctx = CanvasRenderingContext2D;
@@ -264,7 +264,7 @@ const CONTACT_SHADOW_ALPHA = 0.32;
 
 /**
  * The Shield's honey: a muted, darker amber with a pale cream highlight and a
- * brown depth. Carl's Protective Shell is blue, or at full power a saturated
+ * brown depth. The human crawler's Protective Shell is blue, or at full power a saturated
  * orange-to-gold (#fd7c0a, #ff8c00, #fbbf24) that sits across the same hues
  * any amber does, so hue alone cannot tell the two apart. The honey keeps its
  * distance in saturation and value instead — at least 25 ΔE from every Shell
@@ -280,8 +280,8 @@ const LIGHT: Pt = { x: -0.66, y: -0.75 };
 // ── Proportions ──────────────────────────────────────────────────────────────
 
 /**
- * Crown of the head to the sole, in tiles. Carl stands about 1.46 tiles on
- * screen, so this is a head and a half taller than him — a seven-foot figure,
+ * Crown of the head to the sole, in tiles. The human crawler stands about 1.46
+ * tiles on screen, so this is a head and a half taller than him — a seven-foot figure,
  * pushed a little further so it reads as towering at 32 px.
  */
 export const FIGURE_HEIGHT = 2;

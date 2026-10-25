@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
- * Idle stillness gates for every figure that stands on Carl's breathing idle —
- * Carl, the human townsfolk cast and named residents, Gum Gum, the city elf
+ * Idle stillness gates for every figure that stands on the human's breathing idle —
+ * The human, the human townsfolk cast and named residents, Gum Gum, the city elf
  * cultists, Mordecai's Incubus — and for the skyfowl cast and the Cretin hirelings that
  * stand beside them, and the goblins (all five archetypes and the plumber), whose
  * camps and bathroom queue stand about in groups.
@@ -130,7 +130,7 @@ interface IdleSubject {
 function idleSubjects(): IdleSubject[] {
   const subjects: IdleSubject[] = [];
   for (const state of ['idle', 'idle_side', 'idle_away']) {
-    subjects.push({ label: `carl.${state}`, def: HUMAN_FIGURE, state });
+    subjects.push({ label: `human.${state}`, def: HUMAN_FIGURE, state });
   }
   for (const look of TOWN_CAST_LOOKS) {
     for (const view of ALL_TOWN_CAST_VIEWS) {
@@ -421,7 +421,7 @@ function gateBreathLength(): void {
   for (const state of ['idle', 'idle_side', 'idle_away'] as const) {
     const seconds = heldLength(HUMAN_ROW_TABLE[state].frameTicks) / TICKS_PER_SECOND;
     if (seconds < MIN_BREATH_SECONDS) {
-      fail('I3', `carl.${state} breathes every ${px(seconds)}s (at least ${MIN_BREATH_SECONDS}s)`);
+      fail('I3', `human.${state} breathes every ${px(seconds)}s (at least ${MIN_BREATH_SECONDS}s)`);
     }
   }
 }
@@ -429,8 +429,8 @@ function gateBreathLength(): void {
 /** Every frame of a few subjects' idles at in-game size, enlarged, with a plumb line through frame 0's head. */
 function writePreview(): void {
   const wanted = new Set([
-    'carl.idle',
-    'carl.idle_side',
+    'human.idle',
+    'human.idle_side',
     'adult_guard.idle',
     'adult_merchant.idle',
     'adult_noble.idle_side',

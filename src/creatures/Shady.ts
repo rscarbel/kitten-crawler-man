@@ -167,7 +167,7 @@ export class Shady extends Mob {
    *
    * Those figures are painted to fill a single tile and have to be enlarged to
    * stand beside the player without looking dwarfed. Shady's art already
-   * encodes his height — 1.42 tiles against Carl's 1.46 — so scaling him again
+   * encodes his height — 1.42 tiles against the rig's 1.46 — so scaling him again
    * would multiply the two and stand him head and shoulders over the party.
    */
   private spriteBox(camX: number, camY: number, tileSize: number) {

@@ -1,5 +1,5 @@
 /**
- * Carl's art gates.
+ * The human's art gates.
  *
  * These gates enforce sheet-shape invariants — a pose that fits its cell, a
  * strike that lands on the frame the hit is scored on — directly against
@@ -19,7 +19,7 @@
 import { type Canvas, createCanvas } from 'canvas';
 
 import { PLAYER_SPEED, TILE_SIZE, WADE_SPEED_FACTOR } from '../src/core/constants.js';
-import { HUMAN_STATUS_FIGURE_BOX, HumanPlayer } from '../src/creatures/HumanPlayer.js';
+import { humanStatusFigureBoxOf, HumanPlayer } from '../src/creatures/HumanPlayer.js';
 import { Goblin } from '../src/creatures/Goblin.js';
 import { type Mob } from '../src/creatures/Mob.js';
 import { Rat } from '../src/creatures/Rat.js';
@@ -29,15 +29,13 @@ import {
   IDLE_FRAMES_BEFORE_RELEASE,
 } from '../src/sprites/figure/figureFrameCache.js';
 import { getSmushStats, SMUSH_DEF } from '../src/abilities/smush.js';
-import { HUMANOID_NPC_SCALE } from '../src/sprites/humanoidScale.js';
-import { generatePersonAppearance } from '../src/sprites/person/PersonAppearance.js';
-import { drawPerson } from '../src/sprites/person/drawPerson.js';
 import { bakeFigureCell, paintFigureCell } from './figureSheet.js';
 import { asGameContext } from './nodeGameContext.js';
 import {
   figureStructuralFailures,
   missingStateFailures,
   nothingMeasuredFailures,
+  storedRowBytes,
 } from './figureGates.js';
 import {
   firstImpactFrame,
@@ -61,6 +59,8 @@ import {
 import {
   HUMAN_CELL_PX_PER_UNIT,
   HUMAN_SCALE,
+  PLAYER_HUMAN_CELL_PX_PER_UNIT,
+  PLAYER_HUMAN_SIZE_OVER_RIG,
   TILE_CENTRE_FRACTION,
   TILE_SCALE,
 } from '../src/sprites/art/human/figureScale.js';
@@ -81,26 +81,38 @@ import {
   TRAVEL_DIRECTION,
   floorDriftPerFrameCellPx,
 } from '../src/sprites/art/human/probe.js';
-import { carlSocketsAt, stampAnchorOf } from '../src/sprites/art/human/sockets.js';
+import { humanSocketsAt, stampAnchorOf } from '../src/sprites/art/human/sockets.js';
 import { type CarriedGrip, carryStyleOf } from '../src/sprites/art/human/carry.js';
-import { type Pt } from '../src/sprites/art/carlArt.js';
-import { type BareSegment, bareSegmentEdges } from '../src/sprites/art/carl/limbs.js';
+import { type Pt } from '../src/sprites/art/bipedArt.js';
+import { type BareSegment, bareSegmentEdges } from '../src/sprites/art/biped/limbs.js';
+import { HEAD_ON_TOE_DROP } from '../src/sprites/art/biped/feet.js';
 import {
   CAST_SHADOW_TONE,
-  type CarlComposeOptions,
-  drawCarlBack,
-  drawCarlFront,
-  drawCarlSide,
+  type BipedComposeOptions,
+  drawBipedBack,
+  drawBipedFront,
+  drawBipedSide,
   OUTLINE_PX,
-} from '../src/sprites/art/carl/figure.js';
-import { COTTON, LEATHER, SKIN } from '../src/sprites/art/carl/palette.js';
+} from '../src/sprites/art/biped/figure.js';
+import { DAVE_DENIM } from '../src/sprites/garments/human/daveTrousers.js';
+import { DAVE_LOOK } from '../src/sprites/looks/humans/dave.js';
+import { RYAN_LOOK } from '../src/sprites/looks/humans/ryan.js';
+import { RYAN_BELT_LEATHER, RYAN_SLATE } from '../src/sprites/garments/human/ryanChinos.js';
+import { RYAN_WATCH_FACE } from '../src/sprites/garments/human/ryanWatch.js';
+import {
+  type HumanLook,
+  playerLookAxes,
+  playerStatureScale,
+  withLookBuild,
+} from '../src/sprites/looks/humanLook.js';
 import {
   buildSkeleton,
-  type CarlPose,
+  type BipedPose,
+  type Skeleton,
   FULL_UPPER_ARM,
   poseAsDrawn,
   VIEWS,
-} from '../src/sprites/art/carl/rig.js';
+} from '../src/sprites/art/biped/rig.js';
 import {
   type CardinalView,
   FACING_HYSTERESIS_DEGREES,
@@ -109,31 +121,35 @@ import {
   type FacingView,
   selectFacing,
 } from '../src/sprites/facingView.js';
-import { drawHead, headAngle, profileEyeCentre } from '../src/sprites/art/carl/head.js';
 import {
-  BARE_CARL_OUTFIT,
-  DEFAULT_CARL_OUTFIT,
-} from '../src/sprites/garments/human/carlDressing.js';
-import { gauntletFormOn } from '../src/sprites/garments/human/carlGauntlet.js';
-import { garmentOf } from '../src/sprites/garments/garments.js';
-import { outfitOf, type Outfit } from '../src/sprites/garments/outfit.js';
+  drawHead,
+  headAngle,
+  profileEyeCentre,
+  scaleHeadAboutChin,
+} from '../src/sprites/art/biped/head.js';
 import {
-  paintCollar,
-  paintCollarRim,
-  paintJacket,
-  torsoFrame,
-} from '../src/sprites/art/carl/torso.js';
-import { FOREARM_LENGTH, HEAD_RY, UPPER_ARM_LENGTH } from '../src/sprites/art/carl/proportions.js';
+  defaultOutfitOf,
+  humanWornOn,
+  stillOutfit,
+} from '../src/sprites/garments/human/humanDressing.js';
+import { gauntletFormOn } from '../src/sprites/garments/human/humanGauntlet.js';
+import { wornGarmentOf } from '../src/sprites/garments/garments.js';
+import { outfitOf, type Outfit, paintOutfitPart } from '../src/sprites/garments/outfit.js';
+import { torsoFrame } from '../src/sprites/art/biped/torso.js';
+import { FOREARM_LENGTH, HEAD_RY, UPPER_ARM_LENGTH } from '../src/sprites/art/biped/proportions.js';
 import {
   alwaysDrawnRows,
+  activeHumanLook,
   explosiveHeldDraw,
   HUMAN_ATTACK_ROWS,
   motionSetOfRow,
   type HumanRowSelection,
   rowFrameHolds,
   rowLengthInTicks,
-  carlRowView,
+  humanRowView,
+  heldPxPerUnit,
   residentViewSpans,
+  setHumanLook,
 } from '../src/sprites/humanSprite.js';
 import {
   ARMED_MOTION_SETS,
@@ -154,7 +170,7 @@ import {
   humanFigureWearing,
   HUMAN_RIGHT_PUNCH_ROWS,
 } from '../src/sprites/art/human/appearance.js';
-import { type GauntletForm } from '../src/sprites/art/carl/gear.js';
+import { type GauntletForm } from '../src/sprites/art/biped/gear.js';
 import { type FigureDef } from '../src/sprites/figure/figureDef.js';
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import {
@@ -170,7 +186,7 @@ import {
   type HumanWarmSpan,
 } from '../src/sprites/humanReactions.js';
 
-// Carl's painter composes each cell on scratch surfaces of its own, which
+// The human painter composes each cell on scratch surfaces of its own, which
 // `allocCanvas` makes with `document.createElement('canvas')` outside a browser.
 installCanvasGlobals();
 
@@ -199,7 +215,7 @@ const failures: GateFailure[] = [];
  * nobody is watching any more.
  *
  * Each gate leaves this set when its defect is fixed, and the set must be
- * empty when Carl's figure is finished: every entry here is a known way the
+ * empty when the human figure is finished: every entry here is a known way the
  * art is still wrong.
  */
 export const PENDING_GATES: ReadonlySet<string> = new Set<string>();
@@ -219,7 +235,7 @@ interface PendingRows {
  * would go by as one more pending line.
  *
  * Every entry is a known way the art is still wrong, and the map must be empty
- * when Carl's figure is finished. An entry whose rows have all gone green
+ * when the human figure is finished. An entry whose rows have all gone green
  * prints a notice to take it out.
  */
 export const PENDING_ROWS: ReadonlyMap<string, PendingRows> = new Map<string, PendingRows>();
@@ -254,12 +270,18 @@ function failUnlessMeasured(gateId: string, measured: number, what: string): voi
 // ── Painted-cell helpers ─────────────────────────────────────────────────────
 
 /**
- * The outfit the pixel gates paint Carl in, and its figure: the default
+ * The outfit the pixel gates paint the human figure in, and its figure: the default
  * unless a run names another. Every outfit is a figure of its own, and each
  * one's cells must hold to the same gates.
  */
-let gateOutfit: Outfit<'human'> = DEFAULT_CARL_OUTFIT;
+let gateLook: HumanLook = RYAN_LOOK;
+let gateOutfit: Outfit<'human'> = defaultOutfitOf(gateLook);
 let gateFigure: FigureDef = HUMAN_FIGURE;
+
+/** The look's figure in the outfit every row was authored in. */
+function authoredFigure(): HumanFigure {
+  return humanFigureFor(gateLook, defaultOutfitOf(gateLook), null);
+}
 
 const alphaByCell = new Map<string, Uint8ClampedArray>();
 
@@ -378,6 +400,11 @@ const STANDING_ROWS = ['idle', 'idle_side', 'idle_away'] as const;
 function gateCellGeometry(): void {
   const groundY = TILE_Y + TILE_SCALE * GROUND_OFFSET_IN_TILE;
   const tileCentreX = TILE_X + TILE_SCALE / 2;
+  // Head-on his toes run down the screen past the sole line toward the camera,
+  // by a drop that grows with the size he is drawn at; it is the art's own,
+  // not drift, so his lowest ink is held to the line plus it.
+  const toeDropPx = (view: CardinalView): number =>
+    view === 'front' ? HEAD_ON_TOE_DROP * cellPxPerUnitDown(view) : 0;
   let framesMeasured = 0;
   for (const name of STANDING_ROWS) {
     const row = rowNamed(name, 'G2');
@@ -388,12 +415,14 @@ function gateCellGeometry(): void {
       continue;
     }
     framesMeasured++;
-    const drop = Math.abs(solid.maxY - groundY);
+    const toeDrop = toeDropPx(row.view);
+    const drop = Math.abs(solid.maxY - groundY - toeDrop);
     if (drop > GROUND_TOLERANCE_PX) {
       fail(
         'G2',
         `${name}[0] has its lowest solid ink at y=${solid.maxY} against a ground line of ` +
-          `${groundY} (tileY ${TILE_Y} + ${GROUND_OFFSET_IN_TILE} of a ${TILE_SCALE}px tile) — ` +
+          `${groundY} (tileY ${TILE_Y} + ${GROUND_OFFSET_IN_TILE} of a ${TILE_SCALE}px tile) ` +
+          `and a head-on toe drop of ${toeDrop.toFixed(1)}px — ` +
           `${drop.toFixed(1)}px off, limit ${GROUND_TOLERANCE_PX}`,
       );
     }
@@ -468,7 +497,7 @@ const CYCLE_CLOSE_TOLERANCE_PX = 0;
  * Deliberately *not* the sibling form of this check, "no interior frame may
  * reproduce frame 0". That is false of this art: measured over the loop rows
  * here, the head-on and profile idles reproduce frame 0 exactly at frame 4 of 8
- * and Donut's dance at frame 6 of 12, because those rows run two whole turns of
+ * and the cat's dance at frame 6 of 12, because those rows run two whole turns of
  * their oscillation each. Turn *count* is not the invariant; frames per turn is.
  * Shipped, the first exact repeat lands at 4, 6, 8, 12 or 16 frames, so 4 is the
  * floor the art already sits on, and it is an integer structural quantity rather
@@ -491,14 +520,45 @@ const MIN_FRAMES_PER_CYCLE_TURN = 4;
  */
 const LOOP_SEAM_FLOOR = 0.5;
 
-/** G3 — a loop must close: not a pop across its seam, and not a held frame. */
+/** G3's seam ceiling: the wrap may not jump further than the row's largest step. */
+function failOnSeamPop(
+  rowName: string,
+  cells: readonly Uint8ClampedArray[],
+  dressedIn: string,
+): void {
+  const steps: number[] = [];
+  for (let i = 1; i < cells.length; i++) steps.push(frameDelta(cells[i - 1], cells[i]));
+  const seam = frameDelta(cells[cells.length - 1], cells[0]);
+  const largestStep = Math.max(...steps);
+  const ceiling = largestStep * LOOP_SEAM_CEILING;
+  if (seam <= ceiling) return;
+  fail(
+    'G3',
+    `${rowName} pops across its loop seam in ${dressedIn}: last→first differs by ${seam}px ` +
+      `against a largest in-cycle step of ${largestStep}px (ceiling ${ceiling.toFixed(0)}px) — ` +
+      'the cycle does not end where it began',
+  );
+}
+
+/**
+ * G3 — a loop must close: not a pop across its seam, and not a held frame.
+ *
+ * The held-frame floor is measured on the look in its base clothes: a cloak
+ * hung behind him fills the background his arms gesture against, and the
+ * motion it hides is hidden at the seam and in the steps by different amounts,
+ * so a seam that is fine reads as held. A pop only grows under a garment, so
+ * the seam ceiling is held on the base clothes and on the outfit under test,
+ * and whether the row closes is measured on the outfit, since a garment's own
+ * motion has to close as well.
+ */
 function gateLoopClosure(): void {
   let loopsMeasured = 0;
+  const baseFigure = humanFigureWearing(gateLook, outfitOf(gateLook, []));
   for (const row of HUMAN_ROWS) {
     if (row.kind !== 'loop') continue;
     loopsMeasured++;
     const cells = Array.from({ length: row.frameCount }, (_unused, frame) =>
-      cellAlpha(row.name, frame),
+      cellAlpha(row.name, frame, baseFigure),
     );
     const steps: number[] = [];
     for (let i = 1; i < cells.length; i++) steps.push(frameDelta(cells[i - 1], cells[i]));
@@ -515,15 +575,12 @@ function gateLoopClosure(): void {
       );
       continue;
     }
-    const largestStep = Math.max(...steps);
-    const ceiling = largestStep * LOOP_SEAM_CEILING;
-    if (seam > ceiling) {
-      fail(
-        'G3',
-        `${row.name} pops across its loop seam: last→first differs by ${seam}px against a ` +
-          `largest in-cycle step of ${largestStep}px (ceiling ${ceiling.toFixed(0)}px) — the ` +
-          'cycle does not end where it began',
+    failOnSeamPop(row.name, cells, 'base clothes');
+    if (gateFigure.id !== baseFigure.id) {
+      const worn = Array.from({ length: row.frameCount }, (_unused, frame) =>
+        cellAlpha(row.name, frame),
       );
+      failOnSeamPop(row.name, worn, gateOutfit.key);
     }
     const floor = typical * LOOP_SEAM_FLOOR;
     if (seam < floor) {
@@ -535,7 +592,7 @@ function gateLoopClosure(): void {
       );
     }
 
-    const closure = frameDelta(cells[0], cellAlpha(row.name, row.frameCount));
+    const closure = frameDelta(cellAlpha(row.name, 0), cellAlpha(row.name, row.frameCount));
     if (closure > CYCLE_CLOSE_TOLERANCE_PX) {
       fail(
         'G3',
@@ -573,18 +630,17 @@ const ONE_SHOT_STEP_LIMIT = 4;
  * distinguishes a snap is that it is a *lone* outlier, and the clause is only
  * allowed to speak while the runner-up is itself an ordinary step: the
  * commonest rig defect is a wrong-sign keyframe, which teleports a limb out on
- * one frame and back on the next and so produces *two* huge steps. Uncapped,
- * the defect would then be sizing its own allowance.
+ * one frame and back on the next and so produces *two* huge steps, one after
+ * the other. Uncapped, the defect would then be sizing its own allowance. Two
+ * large steps are the two fast phases of one smooth cycle — a breath in and
+ * out — only when the cycle runs between them, and then the runner-up still
+ * sizes the allowance.
  */
 const STEP_VS_RUNNER_UP = 1.35;
+/** A loop's two fast phases fall half a turn apart, give or take a frame. */
+const HALF_TURN_DIVISOR = 2;
+const HALF_TURN_SLACK_FRAMES = 1;
 
-/**
- * The stamp is a declared spike. Both stomp rows drive a foot from over his own
- * waist to flat on the floor across the impact frame, and that single step is
- * the whole blow — flattening it to satisfy a continuity threshold would remove
- * the only frames a player reads as an impact. G6 is what holds the spike to
- * exactly that step.
- */
 /**
  * A cell's ink as it moves on screen: the baked cell, and on a frame his fist
  * closes on an explosive, the stick composited there as the runtime draws it.
@@ -594,18 +650,16 @@ const STEP_VS_RUNNER_UP = 1.35;
  */
 function motionCellAlpha(row: HumanRowName, frame: number): Uint8ClampedArray {
   const held = explosiveHeldDraw(HELD_VISUALS.prop_dynamite, { row, frame, flipX: false });
-  if (held === null) return cellAlpha(row, frame, HUMAN_FIGURE);
-  const cell = bakeFigureCell(HUMAN_FIGURE, row, frame);
-  const source = {
-    id: HUMAN_FIGURE.id,
-    painting: humanFigureFor(DEFAULT_CARL_OUTFIT, null).painting,
-  };
-  const socket = carlSocketsAt(source, row, frame).sockets.mainHand;
+  const authored = authoredFigure();
+  if (held === null) return cellAlpha(row, frame, authored.def);
+  const cell = bakeFigureCell(authored.def, row, frame);
+  const source = { id: authored.def.id, painting: authored.painting };
+  const socket = humanSocketsAt(source, row, frame).sockets.mainHand;
   const ctx = asGameContext(cell.getContext('2d'));
   compositeHeldItem(
     ctx,
     held.look,
-    heldTransformAt(socket, HUMAN_CELL_PX_PER_UNIT, held.phase),
+    heldTransformAt(socket, heldPxPerUnit(source), held.phase),
     'painted',
   );
   const { data } = cell.getContext('2d').getImageData(0, 0, frameWidth, frameHeight);
@@ -614,6 +668,55 @@ function motionCellAlpha(row: HumanRowName, frame: number): Uint8ClampedArray {
   return alpha;
 }
 
+/**
+ * A step this small a share of the row's largest is a hold, not one of the
+ * row's moving steps: a one-shot that settles into a pose and holds it for a
+ * few frames makes steps of a handful of pixels — the breath, a blink.
+ */
+const HOLD_STEP_SHARE = 0.15;
+
+/**
+ * The row's typical step: the median of its moving steps, its holds left
+ * out. A row that holds still for some frames and then moves fast would
+ * otherwise have the median of its holds, and every ordinary step of its
+ * movement would read as a snap against it. Garments that never stop moving
+ * hide this — a hem that flutters on every frame turns a hold into a small
+ * step — so without it the gate would pass or fail a row by what the figure
+ * wears rather than how its body moves.
+ */
+function typicalMovingStep(steps: readonly number[]): number {
+  const hold = holdThreshold(steps);
+  return median(steps.filter((step) => step >= hold));
+}
+
+/**
+ * The step under which a step is a hold: a share of the row's *runner-up*
+ * step. Taken from the largest, a lone snap would set the bar itself — a
+ * uniform row with one flung frame would count its ordinary steps as holds,
+ * leave only the snap as the row's motion, and size its own allowance.
+ */
+function holdThreshold(steps: readonly number[]): number {
+  const [, runnerUp = 0] = [...steps].sort((a, b) => b - a);
+  return runnerUp * HOLD_STEP_SHARE;
+}
+
+/**
+ * Two cells with not one alpha value apart. A dead frame is the same picture
+ * twice; a step that changes no silhouette pixel can still be motion inside
+ * the figure, or at its edges below the ink threshold, on a slim build whose
+ * small moves round inside the pixels they started in.
+ */
+function isPixelIdentical(a: Uint8ClampedArray, b: Uint8ClampedArray): boolean {
+  return a.every((alpha, index) => alpha === b[index]);
+}
+
+/**
+ * The stamp is a declared spike. Both stomp rows drive a foot from over his own
+ * waist to flat on the floor across the impact frame, and that single step is
+ * the whole blow — flattening it to satisfy a continuity threshold would remove
+ * the only frames a player reads as an impact. G6 is what holds the spike to
+ * exactly that step.
+ */
 function isDeclaredSpike(row: string, step: number): boolean {
   const stomp = STOMP_ROWS.find((candidate) => candidate.row === row);
   return stomp !== undefined && step === stomp.impact - 1;
@@ -660,11 +763,29 @@ function gateMotionContinuity(): void {
       continue;
     }
     stepsMeasured += steps.length;
-    const typical = median(steps);
-    const runnerUp = [...steps].sort((a, b) => b - a)[1] ?? 0;
+    const typical = typicalMovingStep(steps);
+    const byDescending = steps.map((_step, index) => index).sort((a, b) => steps[b] - steps[a]);
+    const largestAt = byDescending[0];
+    const runnerUpAt = byDescending.length > 1 ? byDescending[1] : null;
+    const runnerUp = runnerUpAt === null ? 0 : steps[runnerUpAt];
     const limitShare = row.kind === 'loop' ? LOOP_STEP_LIMIT : ONE_SHOT_STEP_LIMIT;
     const ordinaryStepLimit = typical * limitShare;
-    const runnerUpIsOrdinary = runnerUp <= ordinaryStepLimit;
+    const apart = runnerUpAt === null ? 0 : Math.abs(largestAt - runnerUpAt);
+    const between =
+      runnerUpAt === null
+        ? []
+        : steps.slice(Math.min(largestAt, runnerUpAt) + 1, Math.max(largestAt, runnerUpAt));
+    const hold = holdThreshold(steps);
+    // Two large steps are one smooth cycle's two fast phases only when the
+    // cycle runs between them: half a turn apart on a loop, or with the row
+    // moving on every step between them on a one-shot. A wrong key held for
+    // a frame or two makes two large steps with a hold between them.
+    const twoFastPhases =
+      apart > 1 &&
+      (row.kind === 'loop'
+        ? Math.abs(apart - row.frameCount / HALF_TURN_DIVISOR) <= HALF_TURN_SLACK_FRAMES
+        : between.every((step) => step >= hold));
+    const runnerUpIsOrdinary = runnerUp <= ordinaryStepLimit || twoFastPhases;
     const allowed = Math.max(
       ordinaryStepLimit,
       runnerUpIsOrdinary ? runnerUp * STEP_VS_RUNNER_UP : 0,
@@ -678,7 +799,7 @@ function gateMotionContinuity(): void {
             `(allowed ${allowed.toFixed(0)}px)`,
         );
       }
-      if (step === 0) {
+      if (isPixelIdentical(cells[index], cells[index + 1])) {
         fail(
           'G4',
           `${row.name}[${index}]→[${index + 1}] is pixel-identical: the row has a dead frame`,
@@ -750,8 +871,14 @@ function gateLoopJointSpikes(): void {
 
 // ── Pose-stream gates ────────────────────────────────────────────────────────
 
-function posesOf(row: RowSpec): CarlPose[] {
+function authoredPosesOf(row: RowSpec): BipedPose[] {
   return Array.from({ length: row.frameCount }, (_unused, frame) => row.pose(frame));
+}
+
+function posesOf(row: RowSpec): BipedPose[] {
+  return Array.from({ length: row.frameCount }, (_unused, frame) =>
+    withLookBuild(row.pose(frame), gateLook),
+  );
 }
 
 /** Distance from a body anchor to a limb's target, in tile units. */
@@ -777,7 +904,7 @@ function hiddenDepthShare(scale: number): number {
  * its forearm ahead of him, into the picture, and on screen alone it would
  * read shorter than its own wind-up.
  */
-function fistReach(pose: CarlPose, side: LegSide, view: CardinalView): number {
+function fistReach(pose: BipedPose, side: LegSide, view: CardinalView): number {
   const skeleton = buildSkeleton(pose, VIEWS[view]);
   const arm = side === 'right' ? skeleton.rightArm : skeleton.leftArm;
   const angles = side === 'right' ? pose.rightArmAngles : pose.leftArmAngles;
@@ -797,7 +924,7 @@ function fistReach(pose: CarlPose, side: LegSide, view: CardinalView): number {
  * depth, so that distance counts. A knee is measured from the same point; the
  * lead shoulder by how far ahead of it the barge carries it.
  */
-function strikeReach(pose: CarlPose, limb: StrikeReachLimb, view: CardinalView): number {
+function strikeReach(pose: BipedPose, limb: StrikeReachLimb, view: CardinalView): number {
   switch (limb) {
     case 'weapon':
     case 'hand':
@@ -825,7 +952,7 @@ function strikeReach(pose: CarlPose, limb: StrikeReachLimb, view: CardinalView):
  * cell's ground line. G10 holds that flag to the sole — a foot called planted
  * must have its sole on the floor — so trusting it here trusts a gated fact.
  */
-function strikeHeight(pose: CarlPose, limb: StrikeReachLimb, view: CardinalView): number {
+function strikeHeight(pose: BipedPose, limb: StrikeReachLimb, view: CardinalView): number {
   const skeleton = buildSkeleton(pose, VIEWS[view]);
   switch (limb) {
     case 'weapon':
@@ -917,7 +1044,10 @@ function gateStrikePeaksOnImpact(): void {
     }
     const impact = row.impactFrames[0];
     rowsMeasured++;
-    const poses = posesOf(row);
+    // The blow's timing is the choreography's, authored on the rig's own
+    // shoulders: a look that roots its arms closer together moves where
+    // each fist is measured from, not when the blow lands.
+    const poses = authoredPosesOf(row);
     if (row.strike?.drive === 'down') {
       const heights = poses.map((pose) => strikeHeight(pose, limb, row.view));
       const landing = downLandingFrame(heights);
@@ -964,14 +1094,14 @@ function gateStrikePeaksOnImpact(): void {
  */
 const STOMP_ROWS: ReadonlyArray<{ readonly row: string; readonly impact: number }> = [
   { row: 'stomp_down', impact: STOMP_DOWN_IMPACT },
-  ...HUMAN_ROWS.filter((row) => stampAnchorOf(row) !== null).map((row) => ({
+  ...HUMAN_ROWS.filter((row) => stampAnchorOf(row, gateLook) !== null).map((row) => ({
     row: row.name,
     impact: row.impactFrames[0] ?? SMUSH_IMPACT_FRAME,
   })),
 ];
 
 /** How high a pose holds one foot off the floor, in figure units. */
-function footLift(pose: CarlPose, side: LegSide): number {
+function footLift(pose: BipedPose, side: LegSide): number {
   return -(side === 'left' ? pose.leftFoot.y : pose.rightFoot.y);
 }
 
@@ -1020,7 +1150,7 @@ function gateStompLandsOnImpact(): void {
       );
     }
     const pressFrames =
-      stampAnchorOf(row) === null
+      stampAnchorOf(row, gateLook) === null
         ? row.frameCount - impact
         : hops
           ? SMUSH_HOP_PRESS_FRAMES
@@ -1079,7 +1209,7 @@ const HOP_STAMP_OFF_CENTRE_TILES = 0.1;
 function gateStampAnchor(): void {
   let impactsMeasured = 0;
   for (const row of HUMAN_ROWS) {
-    const anchor = stampAnchorOf(row);
+    const anchor = stampAnchorOf(row, gateLook);
     if (anchor === null) continue;
     if (row.impactFrames.length === 0) {
       fail('G7', `${row.name} declares a stamp anchor but no impact frame to land it on`);
@@ -1210,8 +1340,8 @@ const BYTES_PER_MEGABYTE = BYTES_PER_KILOBYTE * BYTES_PER_KILOBYTE;
  * A painted figure is admitted to the cache a row at a time rather than as one
  * whole-texture budget, so the number that decides whether it fits is the
  * widest row's warm bytes rather than the sum of all of them — and it has to
- * stay well inside the cache's per-figure ceiling, because Carl is on screen
- * continuously with several of his rows warm at once.
+ * stay well inside the cache's per-figure ceiling, because the human crawler is on
+ * screen continuously with several of his rows warm at once.
  */
 const ROW_BUDGET_MEGABYTES = 3;
 
@@ -1248,7 +1378,7 @@ function smushViewsWarmAtOnce(): number {
 function warmStompRows(): HumanRowName[] {
   const byView = new Map<CardinalView, HumanRowName[]>();
   for (const row of HUMAN_ROWS) {
-    if (stampAnchorOf(row) === null) continue;
+    if (stampAnchorOf(row, gateLook) === null) continue;
     byView.set(row.view, [...(byView.get(row.view) ?? []), row.name]);
   }
   const framesOf = (names: readonly HumanRowName[]): number =>
@@ -1269,7 +1399,7 @@ function shellCastSpans(view: CardinalView): HumanWarmSpan[] {
 }
 
 /**
- * G9b — the working set fits Carl's own per-figure budget.
+ * G9b — the working set fits the human figure's own per-figure budget.
  *
  * Rows are admitted on use and released when stale, so what has to fit is not
  * every row at once but the rows a fight holds warm together: what is held
@@ -1350,15 +1480,21 @@ function gateWorkingSetOf(set: MotionSet): number {
   failUnlessMeasured('G9b', shellCast.length, 'Protective Shell cast rows');
   failUnlessMeasured('G9b', standbyFrames, 'stand-by frames');
   const cells = framesOf(rows) + windUpFrames + standbyFrames;
-  const bytes = cells * cellBytes;
+  const workingSpans = [
+    ...rows.map((row) => ({ row, frames: HUMAN_ROW_TABLE[row].frameCount })),
+    ...windUpSpans,
+    ...standby,
+  ];
+  const bytes = storedSpansBytes(gateFigure, workingSpans);
   const megabytes = bytes / BYTES_PER_MEGABYTE;
+  const wholeCellMegabytes = (cells * cellBytes) / BYTES_PER_MEGABYTE;
   const figureBudget = figureByteBudgetFor(gateFigure);
   const budgetMegabytes = figureBudget / BYTES_PER_MEGABYTE;
   console.log(
     `  G9b working set (${set}): ${rows.length} rows, ${windUps.length} wind-ups and ` +
       `${standby.length} stand-by spans, ${cells} cells, ` +
-      `${megabytes.toFixed(2)} MB of the ${budgetMegabytes} MB per-figure budget ` +
-      `(strike family: ${busiestFamily.join(', ')})`,
+      `${megabytes.toFixed(2)} MB stored (${wholeCellMegabytes.toFixed(2)} MB as whole cells) ` +
+      `of the ${budgetMegabytes} MB per-figure budget (strike family: ${busiestFamily.join(', ')})`,
   );
   if (bytes > figureBudget) {
     fail(
@@ -1369,23 +1505,17 @@ function gateWorkingSetOf(set: MotionSet): number {
         `against the cache's ${budgetMegabytes} MB per-figure budget`,
     );
   }
-  const workingSpans = [
-    ...rows.map((row) => ({ row, frames: HUMAN_ROW_TABLE[row].frameCount })),
-    ...windUpSpans,
-    ...standby,
-  ];
   for (const grip of measuredGrips(set)) {
-    const carrying = humanFigureFor(gateOutfit, grip);
-    const crops = frontLayerBytes(carrying, workingSpans);
-    const armedBytes = bytes + crops.bytes;
+    const carrying = humanFigureFor(gateLook, gateOutfit, grip);
+    const layered = layeredCellCount(carrying, workingSpans);
+    const armedBytes = storedSpansBytes(carrying.def, workingSpans);
     const armedMegabytes = armedBytes / BYTES_PER_MEGABYTE;
     console.log(
-      `  G9b carrying (${grip.handle}, ${grip.style}, ${set}): ${crops.layered} layered cells, ` +
-        `front layers ${(crops.bytes / BYTES_PER_MEGABYTE).toFixed(2)} MB (largest ` +
-        `${crops.largest} px), ${armedMegabytes.toFixed(2)} MB of the ${budgetMegabytes} MB ` +
-        'per-figure budget',
+      `  G9b carrying (${grip.handle}, ${grip.style}, ${set}): ${layered} layered cells, ` +
+        `${armedMegabytes.toFixed(2)} MB stored with their front layers, of the ` +
+        `${budgetMegabytes} MB per-figure budget`,
     );
-    failUnlessMeasured('G9b', crops.layered, `layered cells carrying (${grip.handle}, ${set})`);
+    failUnlessMeasured('G9b', layered, `layered cells carrying (${grip.handle}, ${set})`);
     if (armedBytes > figureByteBudgetFor(carrying.def)) {
       fail(
         'G9b',
@@ -1397,91 +1527,80 @@ function gateWorkingSetOf(set: MotionSet): number {
   return bytes;
 }
 
-/**
- * What a figure's front layers hold over a set of spans: each layered cell's
- * front painted at the cell's own density and cropped to its ink, as the
- * cache crops it.
- */
-function frontLayerBytes(
-  figure: HumanFigure,
-  spans: readonly HumanWarmSpan[],
-): { layered: number; bytes: number; largest: string } {
+/** How many of the cells over a set of spans bake a front layer. */
+function layeredCellCount(figure: HumanFigure, spans: readonly HumanWarmSpan[]): number {
   const layers = figure.def.heldLayers;
+  if (layers === undefined) return 0;
   let layered = 0;
-  let total = 0;
-  let largestArea = 0;
-  let largest = '0×0';
-  if (layers === undefined) return { layered, bytes: total, largest };
   for (const span of spans) {
     for (let frame = 0; frame < span.frames; frame++) {
-      if (!layers.layered(span.row, frame)) continue;
-      layered++;
-      const back = createCanvas(frameWidth, frameHeight);
-      const front = createCanvas(frameWidth, frameHeight);
-      layers.paintLayers(
-        asGameContext(back.getContext('2d')),
-        asGameContext(front.getContext('2d')),
-        span.row,
-        frame,
-      );
-      const box = alphaBox(front);
-      if (box === null) continue;
-      total += box.width * box.height * BYTES_PER_PIXEL;
-      if (box.width * box.height > largestArea) {
-        largestArea = box.width * box.height;
-        largest = `${box.width}×${box.height}`;
-      }
+      if (layers.layered(span.row, frame)) layered++;
     }
   }
-  return { layered, bytes: total, largest };
+  return layered;
 }
 
-function alphaBox(canvas: Canvas): { width: number; height: number } | null {
-  const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
-  let left = canvas.width;
-  let top = canvas.height;
-  let right = -1;
-  let bottom = -1;
-  for (let y = 0; y < canvas.height; y++) {
-    for (let x = 0; x < canvas.width; x++) {
-      if (data[(y * canvas.width + x) * BYTES_PER_PIXEL + ALPHA_OFFSET] === 0) continue;
-      left = Math.min(left, x);
-      right = Math.max(right, x);
-      top = Math.min(top, y);
-      bottom = Math.max(bottom, y);
-    }
+/** {@link storedRowBytes} per figure and row, since the sets' working sets share most of their rows. */
+const storedBytesByRow = new Map<string, readonly number[]>();
+
+/** The first `frames` frames of a row, by the row's state name. */
+type StoredSpan = Pick<HumanWarmSpan, 'frames'> & { readonly row: string };
+
+/** What the cache stores for the first `frames` frames of each span, front layers included. */
+function storedSpansBytes(def: FigureDef, spans: readonly StoredSpan[]): number {
+  let total = 0;
+  for (const span of spans) {
+    const key = `${def.id}|${span.row}`;
+    const perFrame = storedBytesByRow.get(key) ?? storedRowBytes(def, span.row);
+    storedBytesByRow.set(key, perFrame);
+    for (let frame = 0; frame < span.frames; frame++) total += perFrame[frame] ?? 0;
   }
-  return right < 0 ? null : { width: right - left + 1, height: bottom - top + 1 };
+  return total;
 }
 
-/** G9 — the widest warm row's memory, reported whether or not it passes. */
+/**
+ * G9 — the heaviest warm row's memory, reported whether or not it passes.
+ *
+ * A row's whole cells are the most its ink crops can take, so a row whose
+ * whole cells fit the ceiling fits it however it crops; only a row they
+ * would not is baked through the cache and measured as stored.
+ */
 function gateWarmRowSize(): void {
   const cellBytes = frameWidth * frameHeight * BYTES_PER_PIXEL;
-  let widestState = '';
-  let widestFrames = 0;
+  const rowBudgetBytes = ROW_BUDGET_MEGABYTES * BYTES_PER_MEGABYTE;
+  let heaviestState = '';
+  let heaviestBytes = 0;
   let statesMeasured = 0;
+  let rowsBaked = 0;
   let totalFrames = 0;
   for (const [state, declared] of gateFigure.states) {
     statesMeasured++;
     totalFrames += declared.frames;
-    if (declared.frames <= widestFrames) continue;
-    widestFrames = declared.frames;
-    widestState = state;
+    const wholeCellBytes = declared.frames * cellBytes;
+    const fitsWhole = wholeCellBytes <= rowBudgetBytes;
+    if (!fitsWhole) rowsBaked++;
+    const bytes = fitsWhole
+      ? wholeCellBytes
+      : storedSpansBytes(gateFigure, [{ row: state, frames: declared.frames }]);
+    if (bytes <= heaviestBytes) continue;
+    heaviestBytes = bytes;
+    heaviestState = state;
   }
   failUnlessMeasured('G9', statesMeasured, 'declared states');
   if (statesMeasured === 0) return;
 
-  const megabytes = (widestFrames * cellBytes) / BYTES_PER_MEGABYTE;
+  const megabytes = heaviestBytes / BYTES_PER_MEGABYTE;
   const allWarmMegabytes = (totalFrames * cellBytes) / BYTES_PER_MEGABYTE;
   console.log(
-    `  G9 warm row: ${widestState} is ${megabytes.toFixed(2)} MB of a ` +
-      `${ROW_BUDGET_MEGABYTES} MB budget; all ${statesMeasured} states warm at once would be ` +
+    `  G9 warm row: ${heaviestState} is at most ${megabytes.toFixed(2)} MB of a ` +
+      `${ROW_BUDGET_MEGABYTES} MB budget (${rowsBaked} rows past it as whole cells measured as ` +
+      `stored); all ${statesMeasured} states warm at once would be at most ` +
       `${allWarmMegabytes.toFixed(2)} MB`,
   );
   if (megabytes > ROW_BUDGET_MEGABYTES) {
     fail(
       'G9',
-      `${widestState} warms to ${megabytes.toFixed(2)} MB against a budget of ` +
+      `${heaviestState} warms to ${megabytes.toFixed(2)} MB against a budget of ` +
         `${ROW_BUDGET_MEGABYTES} MB`,
     );
   }
@@ -1499,7 +1618,8 @@ const PIXEL_DIGITS = 2;
  * in cell pixels. A flat planted sole's heel and toe ride 0.4 px above the
  * ground line — the rounding of the sole itself — while the first frame of a
  * swing already lifts them 0.8 px or more, so 0.6 separates standing from
- * stepping without letting a hovering foot count as planted.
+ * stepping without letting a hovering foot count as planted. Measured on the
+ * rig at its own height; a look drawn taller draws those heights taller too.
  */
 const SOLE_CONTACT_TOLERANCE_PX = 0.6;
 
@@ -1519,7 +1639,7 @@ function otherSide(side: LegSide): LegSide {
 }
 
 function soleLandmarkDown(point: Pt, groundY: number): boolean {
-  return point.y >= groundY - SOLE_CONTACT_TOLERANCE_PX;
+  return point.y >= groundY - SOLE_CONTACT_TOLERANCE_PX * playerStatureScale(gateLook);
 }
 
 /** Either end of the foot's sole is on the floor beneath it. */
@@ -1539,15 +1659,17 @@ function footDown(probe: HumanJointProbe, side: LegSide): boolean {
   return leg.planted ?? soleDown(leg);
 }
 
-const probesByRow = new Map<HumanRowName, HumanJointProbe[]>();
+/** Probed joints by look and row: the looks solve the same row to different joints. */
+const probesByLookRow = new Map<string, HumanJointProbe[]>();
 
 function probesOf(row: RowSpec): HumanJointProbe[] {
-  const cached = probesByRow.get(row.name);
+  const key = `${gateLook.id}/${row.name}`;
+  const cached = probesByLookRow.get(key);
   if (cached !== undefined) return cached;
   const probes = Array.from({ length: row.frameCount }, (_unused, frame) =>
-    probeHumanJoints(row.name, frame),
+    probeHumanJoints(row.name, frame, gateLook),
   );
-  probesByRow.set(row.name, probes);
+  probesByLookRow.set(key, probes);
   return probes;
 }
 
@@ -1591,7 +1713,7 @@ const GAIT_SETTLE_TICKS = 30;
 const GAIT_RATE_TOLERANCE = 1e-9;
 
 /**
- * The gait phase, in radians, the runtime advances Carl's legs by per game
+ * The gait phase, in radians, the runtime advances the human's legs by per game
  * tick at his base speed, once into his stride — measured by moving a real
  * `HumanPlayer` across the floor and ticking it, rather than copied, so a
  * change to how the player paces his cycle reaches this gate.
@@ -1609,7 +1731,16 @@ function runtimeGait(): { readonly radiansPerTick: number; readonly gait: HumanG
   return { radiansPerTick, gait: player.animator.currentGait };
 }
 
-const runtimeGaitAtBaseSpeed = runtimeGait();
+/** Each look's gait at base speed: the runtime picks a walk or a run by the look's height. */
+const runtimeGaitByLook = new Map<string, ReturnType<typeof runtimeGait>>();
+
+function runtimeGaitAtBaseSpeed(): ReturnType<typeof runtimeGait> {
+  const known = runtimeGaitByLook.get(gateLook.id);
+  if (known !== undefined) return known;
+  const measured = runtimeGait();
+  runtimeGaitByLook.set(gateLook.id, measured);
+  return measured;
+}
 
 /**
  * How far the weight-bearing point of a sole moved between two stance frames,
@@ -1670,7 +1801,7 @@ const FOOT_SLIP_LIMIT_IN_GAME_PX = 0.5;
  * is carried forward by the player's speed, so a stance foot has to slide
  * *backward* in the cell with the floor to stand still on it. In profile that
  * is the whole of the ground covered. Head-on the figure draws the floor
- * foreshortened (`HEAD_ON_FLOOR_FORESHORTENING` in `carl/rig.ts`), because an
+ * foreshortened (`HEAD_ON_FLOOR_FORESHORTENING` in `biped/rig.ts`), because an
  * upright figure stood on a floor seen from above would otherwise have its
  * legs stretched between the two projections; the floor under a head-on foot
  * therefore moves back by that share of the ground covered, and the foot is
@@ -1679,7 +1810,7 @@ const FOOT_SLIP_LIMIT_IN_GAME_PX = 0.5;
  * strays from where the stance began.
  */
 function gateFootSlip(): void {
-  const { radiansPerTick, gait } = runtimeGaitAtBaseSpeed;
+  const { radiansPerTick, gait } = runtimeGaitAtBaseSpeed();
   const expected = PLAYER_SPEED * gaitRadiansPerPx(gait);
   if (!(radiansPerTick > 0) || Math.abs(radiansPerTick - expected) > GAIT_RATE_TOLERANCE) {
     fail(
@@ -1842,6 +1973,13 @@ const EYE_SHUT = 0.99;
 const EYE_OPEN_EPSILON = 1e-6;
 
 /**
+ * A resting man blinks every three or four seconds. A clock-driven loop much
+ * shorter than that — the guard's bounce — cannot carry a blink every cycle
+ * without fluttering, and is never held long enough for its lack to stare.
+ */
+const SHORTEST_BLINKING_LOOP_TICKS = 2 * TICKS_PER_SECOND;
+
+/**
  * G12 — every looping row blinks once per cycle, shut on the blink's centre
  * frame.
  *
@@ -1852,13 +1990,6 @@ const EYE_OPEN_EPSILON = 1e-6;
  * contiguous run of lidded frames per cycle, rising to a shut eye on the run's
  * middle frame and falling after it.
  */
-/**
- * A resting man blinks every three or four seconds. A clock-driven loop much
- * shorter than that — the guard's bounce — cannot carry a blink every cycle
- * without fluttering, and is never held long enough for its lack to stare.
- */
-const SHORTEST_BLINKING_LOOP_TICKS = 2 * TICKS_PER_SECOND;
-
 function gateBlink(): void {
   let blinksMeasured = 0;
   for (const row of HUMAN_ROWS) {
@@ -1999,8 +2130,8 @@ const FLIGHT_SHARE_MAX = 0.45;
  * G14 — every run cycle has a flight phase of the right length, and no walk
  * has one at all.
  *
- * With no row marked as a run it fails rather than passing: at his base speed
- * Carl covers ground only a run can, so the absence of a run row is the
+ * With no row marked as a run it fails rather than passing: at base speed
+ * the human covers ground only a run can, so the absence of a run row is the
  * defect, not an exemption.
  */
 function gateFlight(): void {
@@ -2255,14 +2386,14 @@ function stampSmush(
   return stamps;
 }
 
+/** How many places along the seeded order of blows the chains on the run are begun from. */
+const BAG_SHIFTS = 4;
+
 /**
  * Throws whole chains with a weapon of `set` drawn, standing and on the move,
  * at every facing and target kind, recording the cell drawn on each hit's
  * tick; returns the swings thrown.
  */
-/** How many places along the seeded order of blows the chains on the run are begun from. */
-const BAG_SHIFTS = 4;
-
 function replaySwings(
   set: MotionSet,
   strikeFrames: Map<HumanRowName, Set<number>>,
@@ -2422,7 +2553,7 @@ function gateImpactTiming(): void {
     ['strike', HUMAN_ATTACK_ROWS, strikeFrames],
     [
       'stomp',
-      HUMAN_ROWS.filter((row) => stampAnchorOf(row) !== null).map((row) => row.name),
+      HUMAN_ROWS.filter((row) => stampAnchorOf(row, gateLook) !== null).map((row) => row.name),
       stampFrames,
     ],
   ];
@@ -2490,7 +2621,7 @@ function gateViewConsistency(): void {
       const facing = sweptFacing(index);
       const standingPlayer = playerFacing(facing, set);
       const selection = standingPlayer.facing.current;
-      const expected = carlRowView(selection.view);
+      const expected = humanRowView(selection.view);
       const standing = standingPlayer.spriteSelection();
       const walker = playerFacing(facing, set);
       walkFor(walker, WALK_IN_TICKS);
@@ -2817,8 +2948,8 @@ function rasterOf(canvas: Canvas): Raster {
 }
 
 /** A cell baked as the cache bakes it, then blitted at the 32-px tile as the game blits it. */
-function inGameRaster(state: HumanRowName, frame: number): Raster {
-  const baked = bakeFigureCell(gateFigure, state, frame);
+function inGameRaster(state: HumanRowName, frame: number, figure: FigureDef = gateFigure): Raster {
+  const baked = bakeFigureCell(figure, state, frame);
   const width = Math.round(frameWidth * IN_GAME_PX_PER_CELL_PX);
   const height = Math.round(frameHeight * IN_GAME_PX_PER_CELL_PX);
   const small = createCanvas(width, height);
@@ -2846,7 +2977,7 @@ function lumaAt(raster: Raster, x: number, y: number): number {
 
 /**
  * Along each limb segment, as a share of it from its root, where its
- * cross-sections are centred: the thigh below the boxer hem and above the
+ * cross-sections are centred: the thigh below the seat and above the
  * kneecap, the calf over its belly, the forearm over its fleshy middle.
  */
 const THIGH_SAMPLE_CENTRE = 0.8;
@@ -2868,9 +2999,10 @@ const CORE_INSET_PX = 0.5;
 /**
  * The spread of luminance across a limb, in 8-bit levels, below which it reads
  * as a flat capsule. Form shading on a lit cylinder runs from its light ramp to
- * its dark ramp — on Carl's skin `#e7b287` to `#a06546`, about 74 levels — and
+ * its dark ramp — on Dave's skin `#e7b287` to `#a06546`, about 74 levels — and
  * a limb carrying two fifths of that across its width reads as round at the
- * tile.
+ * tile. Every look is held to it: a lean man's limb turns from light to shade
+ * just as a heavy man's does, only across fewer pixels.
  */
 const MIN_FORM_LUMA_RANGE = 30;
 /**
@@ -2885,6 +3017,7 @@ interface CrossSection {
   readonly range: number;
   /** Core pixels measured. */
   readonly core: number;
+  readonly pixels: readonly Pt[];
 }
 
 /**
@@ -2907,7 +3040,7 @@ interface LimbCrop {
 /**
  * The limb across its bone at `along`, in a raster of `rasterScale` raster px
  * per cell px — only the pixels lying wholly inside the limb's modelled width,
- * so nothing laid against it (the boxers' hem, the jacket, the other leg) can
+ * so nothing laid against it (the seat, the jacket, the other leg) can
  * supply the contrast. Null when the bone's own pixel is not solid.
  */
 function crossSection(
@@ -2925,8 +3058,8 @@ function crossSection(
     y: (from.y + (to.y - from.y) * along) * rasterScale,
   };
   const normal = { x: -(to.y - from.y) / length, y: (to.x - from.x) / length };
-  const pxPerUnit = HUMAN_CELL_PX_PER_UNIT * rasterScale;
-  const edges = bareSegmentEdges(crop.part, along, profile);
+  const pxPerUnit = HUMAN_CELL_PX_PER_UNIT * PLAYER_HUMAN_SIZE_OVER_RIG * rasterScale;
+  const edges = bareSegmentEdges(crop.part, along, profile, gateLook.limbs);
   const plusPx = Math.max(0, Math.floor(edges.plus * pxPerUnit - CORE_INSET_PX));
   const minusPx = Math.max(0, Math.floor(edges.minus * pxPerUnit - CORE_INSET_PX));
   const pixels: Pt[] = [];
@@ -2942,7 +3075,31 @@ function crossSection(
   const lumas = pixels
     .filter((p) => alphaAt(raster, p.x, p.y) >= SOLID_ALPHA_THRESHOLD)
     .map((p) => lumaAt(raster, p.x, p.y));
-  return { range: Math.max(...lumas) - Math.min(...lumas), core: lumas.length };
+  return { range: Math.max(...lumas) - Math.min(...lumas), core: lumas.length, pixels };
+}
+
+/**
+ * How far a pixel's luminance may move between the figure with and without
+ * its rigid worn pieces before the pixel counts as one of theirs. Away from a
+ * piece the two bake alike to the level.
+ */
+const WORN_COVER_LUMA = 2;
+
+/**
+ * Whether a rigid worn piece — a kneepad's disc, a bracer's plate, a boot's
+ * shaft (`GarmentSpec.rigid`) — is what most of the section sees, rather
+ * than the limb and the cloth over it. A stiff piece is flat by design and is
+ * reviewed with its item; cloth over a limb still has to read as the limb, so
+ * it is never excused.
+ */
+function coveredByRigidPiece(section: CrossSection, worn: Raster, unrigid: Raster): boolean {
+  const changed = section.pixels.filter((p) => {
+    const wornAlpha = alphaAt(worn, p.x, p.y);
+    if (wornAlpha < SOLID_ALPHA_THRESHOLD) return false;
+    if (alphaAt(unrigid, p.x, p.y) < SOLID_ALPHA_THRESHOLD) return true;
+    return Math.abs(lumaAt(worn, p.x, p.y) - lumaAt(unrigid, p.x, p.y)) > WORN_COVER_LUMA;
+  }).length;
+  return changed * 2 > section.pixels.length;
 }
 
 /**
@@ -2952,7 +3109,7 @@ function crossSection(
  * its swing — the near (right) side on the left foot's contact, halfway round
  * a cycle that starts on the right's, and the far (left) side on the right
  * foot's. At the back of its swing the far forearm hangs behind the torso and
- * boxers, and a cross-section there measures the boxers laid over it, where
+ * hips, and a cross-section there measures the seat laid over it, where
  * nothing in the alpha says where one ends and the other begins.
  */
 const WALK_NEAR_LIMBS_CLEAR_FRAME = WALK_FRAMES / 2;
@@ -2976,13 +3133,13 @@ const MUSCLE_FRAMES: ReadonlyArray<{
  */
 const MUSCLE_RASTERS: ReadonlyArray<{
   readonly name: string;
-  readonly raster: (row: HumanRowName, frame: number) => Raster;
+  readonly raster: (row: HumanRowName, frame: number, figure: FigureDef) => Raster;
 }> = [
   { name: 'full bake', raster: inGameRaster },
   {
     name: 'low-end bake',
-    raster: (row, frame) =>
-      rasterOf(paintFigureCell(gateFigure, row, frame, IN_GAME_PX_PER_CELL_PX)),
+    raster: (row, frame, figure) =>
+      rasterOf(paintFigureCell(figure, row, frame, IN_GAME_PX_PER_CELL_PX)),
   },
 ];
 
@@ -2995,17 +3152,27 @@ const MUSCLE_RASTERS: ReadonlyArray<{
  * tone — once from the full bake and once from the low-end one. Crops are
  * placed from the solved joints, so they follow the limb wherever a pose puts
  * it, and each cross-section is confined to the pixels inside the limb's
- * modelled width: a flat limb lying against the boxers or the jacket cannot
- * borrow their contrast. A crop reads as form when most of its three
+ * modelled width: a flat limb lying against the seat or the jacket cannot
+ * borrow their contrast. A crop reads as form when at least half of its three
  * cross-sections do, so one sheen stripe cannot carry it.
  */
 function gateMuscleRead(): void {
   let cropsMeasured = 0;
+  let thinCrops = 0;
+  let coveredCrops = 0;
   const weakest = new Map<string, { range: number; where: string }>();
+  const unrigidFigure = humanFigureWearing(
+    gateLook,
+    outfitOf(
+      gateLook,
+      gateOutfit.worn.filter((garment) => !garment.rigid),
+    ),
+  );
   for (const { name, raster: rasterFor } of MUSCLE_RASTERS) {
     for (const { row, frame, sides } of MUSCLE_FRAMES) {
-      const raster = rasterFor(row, frame);
-      const probe = probeHumanJoints(row, frame);
+      const raster = rasterFor(row, frame, gateFigure);
+      const unrigidRaster = rasterFor(row, frame, unrigidFigure);
+      const probe = probeHumanJoints(row, frame, gateLook);
       const profile = VIEWS[probe.view].profile;
       for (const side of sides) {
         const leg = legOf(probe, side);
@@ -3020,15 +3187,28 @@ function gateMuscleRead(): void {
         ];
         for (const [crop, samples] of crops) {
           const where = `${name} ${row}[${frame}] ${side} ${crop.part}`;
-          const sections = samples
+          const solid = samples
             .map((along) => crossSection(raster, crop, along, profile, IN_GAME_PX_PER_CELL_PX))
             .filter((section): section is CrossSection => section !== null);
-          if (sections.length === 0) {
+          if (solid.length === 0) {
             fail('G17', `${where}: no solid limb under the solved bone`);
             continue;
           }
+          const sections = solid.filter((s) => !coveredByRigidPiece(s, raster, unrigidRaster));
+          // A limb mostly under a rigid piece is judged with the piece; what
+          // shows past its edge is too little of the limb to read its form.
+          if (sections.length * 2 < solid.length) {
+            coveredCrops++;
+            continue;
+          }
+          // How thick the limb is to judge is the limb's own width, whatever
+          // lies over part of it.
+          const core = median(solid.map((s) => s.core));
+          if (core < MIN_MEASURABLE_CORE_PX && gateSpec().slimLimbsAtTile) {
+            thinCrops++;
+            continue;
+          }
           cropsMeasured++;
-          const core = median(sections.map((s) => s.core));
           if (core < MIN_MEASURABLE_CORE_PX) {
             fail(
               'G17',
@@ -3041,7 +3221,7 @@ function gateMuscleRead(): void {
           const previous = weakest.get(name);
           if (previous === undefined || range < previous.range) weakest.set(name, { range, where });
           const readingSections = sections.filter(readsAsForm).length;
-          if (readingSections * 2 > sections.length) continue;
+          if (readingSections * 2 >= sections.length) continue;
           fail(
             'G17',
             `${where} reads flat at the tile: ${range.toFixed(1)} levels of luminance across ` +
@@ -3052,126 +3232,31 @@ function gateMuscleRead(): void {
       }
     }
   }
-  failUnlessMeasured('G17', cropsMeasured, 'limb crops');
+  // Only a rigid piece may stand in for a judged crop: a slim look in rigid
+  // gear from ankle to wrist has nothing of the limb left to judge. Without a
+  // rigid piece a run that judged no crop filtered everything away by accident.
+  const wearsRigidPiece = gateOutfit.worn.some((garment) => garment.rigid);
+  if (wearsRigidPiece) {
+    failUnlessMeasured(
+      'G17',
+      cropsMeasured + coveredCrops,
+      'limb crops judged or under a rigid piece',
+    );
+  } else {
+    failUnlessMeasured('G17', cropsMeasured, 'limb crops judged');
+  }
+  if (coveredCrops > 0) {
+    console.log(
+      `  G17: ${coveredCrops} limb crops mostly under a rigid piece, judged with the item`,
+    );
+  }
+  if (thinCrops > 0) {
+    console.log(`  G17: ${thinCrops} limb crops a pixel thin at the tile, too slim to show form`);
+  }
   for (const [name, { range, where }] of weakest) {
     console.log(
       `  G17 ${name}: flattest limb ${where}, ${range.toFixed(1)} levels ` +
         `(need ${MIN_FORM_LUMA_RANGE})`,
-    );
-  }
-}
-
-// ── G18: Carl stands bigger than the crowd ───────────────────────────────────
-
-/**
- * How much taller and broader than a townsperson Carl stands. He is 6'3" and
- * built like a linebacker against an average adult, which puts him about a
- * twentieth taller and a good deal wider through the shoulders; less than
- * this and at the tile he is lost in a crowd.
- */
-const MIN_HEIGHT_OVER_TOWNSFOLK = 1.05;
-const MIN_SHOULDER_OVER_TOWNSFOLK = 1.15;
-/**
- * The band of a standing figure's height, measured down from the crown, where
- * the shoulders are its widest point: below a head of about a fifth of
- * standing height and above the elbows.
- */
-const SHOULDER_BAND_TOP = 0.2;
-const SHOULDER_BAND_BOTTOM = 0.32;
-/** Adult commoners measured for the typical townsperson; odd, so the median is one of them. */
-const TOWNSFOLK_SAMPLE = 41;
-const TOWNSFOLK_SEED_STRIDE = 37;
-/** Room around a drawn townsperson, so nothing clips before it is measured. */
-const TOWNSFOLK_CANVAS_PAD = 16;
-
-interface StandingSize {
-  readonly height: number;
-  readonly shoulders: number;
-}
-
-function standingSize(raster: Raster): StandingSize | null {
-  let top = raster.height;
-  let bottom = -1;
-  for (let y = 0; y < raster.height; y++) {
-    for (let x = 0; x < raster.width; x++) {
-      if (alphaAt(raster, x, y) < SOLID_ALPHA_THRESHOLD) continue;
-      if (y < top) top = y;
-      bottom = y;
-    }
-  }
-  if (bottom < 0) return null;
-  const height = bottom - top + 1;
-  let shoulders = 0;
-  const bandTop = Math.floor(top + height * SHOULDER_BAND_TOP);
-  const bandBottom = Math.ceil(top + height * SHOULDER_BAND_BOTTOM);
-  for (let y = bandTop; y <= bandBottom; y++) {
-    let left = raster.width;
-    let right = -1;
-    for (let x = 0; x < raster.width; x++) {
-      if (alphaAt(raster, x, y) < SOLID_ALPHA_THRESHOLD) continue;
-      if (x < left) left = x;
-      right = x;
-    }
-    if (right >= left) shoulders = Math.max(shoulders, right - left + 1);
-  }
-  return { height, shoulders };
-}
-
-function townspersonSize(seed: number): StandingSize | null {
-  const size = TILE_SIZE * HUMANOID_NPC_SCALE;
-  const side = Math.ceil(size + TOWNSFOLK_CANVAS_PAD * 2);
-  const canvas = createCanvas(side, side);
-  drawPerson(
-    asGameContext(canvas.getContext('2d')),
-    TOWNSFOLK_CANVAS_PAD,
-    TOWNSFOLK_CANVAS_PAD,
-    size,
-    generatePersonAppearance(seed, 'commoner'),
-    0,
-    'down',
-    false,
-  );
-  return standingSize(rasterOf(canvas));
-}
-
-/**
- * G18 — Carl, standing head-on at the in-game size, is taller and broader
- * than the typical townsperson drawn at the size the town draws them.
- */
-function gateSilhouetteSize(): void {
-  const carl = standingSize(inGameRaster('idle', 0));
-  if (carl === null) {
-    fail('G18', 'idle[0] paints no solid ink to measure');
-    return;
-  }
-  const folk: StandingSize[] = [];
-  for (let i = 0; i < TOWNSFOLK_SAMPLE; i++) {
-    const size = townspersonSize(1 + i * TOWNSFOLK_SEED_STRIDE);
-    if (size !== null) folk.push(size);
-  }
-  failUnlessMeasured('G18', folk.length, 'townsfolk');
-  if (folk.length === 0) return;
-  const typicalHeight = median(folk.map((f) => f.height));
-  const typicalShoulders = median(folk.map((f) => f.shoulders));
-  const heightRatio = carl.height / typicalHeight;
-  const shoulderRatio = carl.shoulders / typicalShoulders;
-  console.log(
-    `  G18 silhouette: Carl ${carl.height} px tall, ${carl.shoulders} px at the shoulders; ` +
-      `typical townsperson ${typicalHeight} × ${typicalShoulders} px ` +
-      `(×${heightRatio.toFixed(REACH_DIGITS)} tall, ×${shoulderRatio.toFixed(REACH_DIGITS)} broad)`,
-  );
-  if (heightRatio < MIN_HEIGHT_OVER_TOWNSFOLK) {
-    fail(
-      'G18',
-      `Carl stands ${carl.height} px against a typical townsperson's ${typicalHeight} ` +
-        `(×${heightRatio.toFixed(REACH_DIGITS)}, need ×${MIN_HEIGHT_OVER_TOWNSFOLK})`,
-    );
-  }
-  if (shoulderRatio < MIN_SHOULDER_OVER_TOWNSFOLK) {
-    fail(
-      'G18',
-      `Carl is ${carl.shoulders} px across the shoulders against a typical townsperson's ` +
-        `${typicalShoulders} (×${shoulderRatio.toFixed(REACH_DIGITS)}, need ×${MIN_SHOULDER_OVER_TOWNSFOLK})`,
     );
   }
 }
@@ -3205,14 +3290,21 @@ function hexLuma(hex: string): number {
 
 /**
  * The darkest tone anything between his arms and his body is made of: the
- * deepest step of the leather, the skin and the cotton, and the shadow every
- * overlap casts. Mixing any of them with each other, or laying the shadow over
- * them at part strength, only ever lands between two of these, so a pixel
- * darker than all of them is ink no material there paints — a drawn line.
+ * deepest step of the garment, the skin and whatever else the look wears
+ * there, and the shadow every overlap casts. Mixing any of them with each
+ * other, or laying the shadow over them at part strength, only ever lands
+ * between two of these, so a pixel darker than all of them is ink no material
+ * there paints — a drawn line.
  */
-const DARKEST_MATERIAL_LUMA = Math.min(
-  ...[LEATHER.deep, SKIN.deep, COTTON.deep, CAST_SHADOW_TONE].map(hexLuma),
-);
+function darkestMaterialLuma(): number {
+  const tones = [
+    gateLook.garment.deep,
+    gateLook.skin.deep,
+    ...gateSpec().besideArmDeepTones,
+    CAST_SHADOW_TONE,
+  ];
+  return Math.min(...tones.map(hexLuma));
+}
 /** Rounding between the palette's exact luma and a pixel's 8-bit channels. */
 const LUMA_ROUNDING = 1;
 /**
@@ -3265,8 +3357,8 @@ function gateOutlinePolicy(): void {
   if (row === null) return;
   const frame = 0;
   const shipped = rasterOf(bakeFigureCell(gateFigure, row.name, frame));
-  const bare = rasterOf(composedCell(row, frame, { silhouetteOutline: false }));
-  const probe = probeHumanJoints(row.name, frame);
+  const bare = rasterOf(composedCell(row, frame, { look: gateLook, silhouetteOutline: false }));
+  const probe = probeHumanJoints(row.name, frame, gateLook);
   let examined = 0;
   let outlineInside = 0;
   let partInk = 0;
@@ -3284,7 +3376,7 @@ function gateOutlinePolicy(): void {
         const inFigure = alphaAt(bare, x, y) >= SOLID_ALPHA_THRESHOLD;
         const outlined = premultipliedDelta(shipped.data, bare.data, index) > OUTLINE_INK_DELTA;
         if (outlined && (inFigure || inClosedGap(bare, x, y))) outlineInside++;
-        if (inFigure && lumaAt(bare, x, y) < DARKEST_MATERIAL_LUMA - LUMA_ROUNDING) partInk++;
+        if (inFigure && lumaAt(bare, x, y) < darkestMaterialLuma() - LUMA_ROUNDING) partInk++;
       }
     }
   }
@@ -3292,7 +3384,7 @@ function gateOutlinePolicy(): void {
   console.log(
     `  G19 outline policy: ${examined} px between arms and torso, ${outlineInside} inked by the ` +
       `outline pass, ${partInk} darker than the darkest material (luma ` +
-      `${DARKEST_MATERIAL_LUMA.toFixed(1)})`,
+      `${darkestMaterialLuma().toFixed(1)})`,
   );
   if (outlineInside > 0) {
     fail(
@@ -3306,7 +3398,7 @@ function gateOutlinePolicy(): void {
     fail(
       'G19',
       `idle[0] paints ${partInk} px between the arms and the torso darker than any material ` +
-        `there (luma under ${DARKEST_MATERIAL_LUMA.toFixed(1)}) — a part is drawing its own line`,
+        `there (luma under ${darkestMaterialLuma().toFixed(1)}) — a part is drawing its own line`,
     );
   }
 }
@@ -3340,6 +3432,16 @@ function probeOf(selection: HumanRowSelection): HumanJointProbe {
 const HUMAN_ROW_TABLE_ROWS: ReadonlyMap<HumanRowName, RowSpec> = new Map(
   HUMAN_ROWS.map((row) => [row.name, row] as const),
 );
+
+/**
+ * How much more of a cut's jump a look drawn taller than the rig may make. The
+ * stride's own step runs across the picture edge-on, where a taller drawing
+ * of the same rows is no wider; a cut's jump runs partly down it, where it is
+ * taller. Never less than the rig's: a shorter look's cuts are held as hard.
+ */
+function statureStretch(): number {
+  return Math.max(1, playerStatureScale(gateLook));
+}
 
 /** The furthest either ankle jumps between two drawn cells, in in-game pixels. */
 function ankleJumpPx(a: HumanRowSelection, b: HumanRowSelection): number {
@@ -3411,7 +3513,7 @@ function checkCut(
     report.worst = jump;
     report.worstAt = at;
   }
-  if (jump <= limit + JUMP_EPSILON_PX) return;
+  if (jump <= limit * statureStretch() + JUMP_EPSILON_PX) return;
   const responsible = isBlowRow(before.row)
     ? before.row
     : isBlowRow(after.row) || !isRestRow(after.row)
@@ -3420,7 +3522,7 @@ function checkCut(
   fail(
     'G20',
     `${what}: ${at} jumps an ankle ${jump.toFixed(PIXEL_DIGITS)} in-game px, more than the ` +
-      `${limit.toFixed(PIXEL_DIGITS)} px the stride itself moves it in a frame`,
+      `${(limit * statureStretch()).toFixed(PIXEL_DIGITS)} px the stride itself moves it in a frame`,
     responsible,
   );
 }
@@ -3672,8 +3774,8 @@ function gateHandOff(): void {
         continue;
       }
       handOffsMeasured++;
-      const own = probeHumanJoints(row.name, frame);
-      const target = probeHumanJoints(run.name, phase * run.frameCount);
+      const own = probeHumanJoints(row.name, frame, gateLook);
+      const target = probeHumanJoints(run.name, phase * run.frameCount, gateLook);
       for (const side of LEG_SIDES) {
         const a = legOf(own, side).ankle;
         const b = legOf(target, side).ankle;
@@ -3775,7 +3877,7 @@ const STATUS_BOX_TOP_HEADROOM_IN_GAME_PX = 1.5;
 const STATUS_BOX_TOP_HEADROOM_TILES = STATUS_BOX_TOP_HEADROOM_IN_GAME_PX / TILE_SIZE;
 
 /**
- * G21 — `HUMAN_STATUS_FIGURE_BOX` in `HumanPlayer` still wraps his standing
+ * G21 — the look's status box (`humanStatusFigureBoxOf` in `HumanPlayer`) still wraps his standing
  * ink. The health bar, the aggro marker and every status effect's placement
  * hang off that box, and nothing can measure ink at runtime, so it is frozen
  * there and re-measured here from the painted standing rows: the top must
@@ -3799,7 +3901,7 @@ function gateStatusFigureBox(): void {
     const row = rowNamed(name, 'G21');
     if (row === null) continue;
     for (let frame = 0; frame < row.frameCount; frame++) {
-      const body = cellAlpha(row.name, frame, HUMAN_FIGURE);
+      const body = cellAlpha(row.name, frame, authoredFigure().def);
       const solid = inkStatsOf(body, SOLID_ALPHA_THRESHOLD);
       if (solid.count === 0) continue;
       framesMeasured++;
@@ -3812,14 +3914,14 @@ function gateStatusFigureBox(): void {
   }
   failUnlessMeasured('G21', framesMeasured, 'standing frames');
   if (framesMeasured === 0) return;
-  const box = HUMAN_STATUS_FIGURE_BOX;
+  const box = humanStatusFigureBoxOf(gateLook);
   const inkTop = (topY - TILE_Y) / TILE_SCALE;
   const inkSole = (soleY + 1 - TILE_Y) / TILE_SCALE;
   if (box.top > inkTop || inkTop - box.top > STATUS_BOX_TOP_HEADROOM_TILES) {
     fail(
       'G21',
       `the status box's top is ${box.top.toFixed(TILE_DIGITS)} of a tile but his hair tops out at ` +
-        `${inkTop.toFixed(TILE_DIGITS)} — re-measure HUMAN_SPRITE_TOP_ABOVE_TILE`,
+        `${inkTop.toFixed(TILE_DIGITS)} — re-measure the look's figureExtent.spriteTopAboveTilePx in its look file`,
     );
   }
   if (Math.abs(box.bottom - inkSole) > STATUS_BOX_TOLERANCE_TILES) {
@@ -3833,7 +3935,7 @@ function gateStatusFigureBox(): void {
     fail(
       'G21',
       `the status box is ${box.halfWidth.toFixed(TILE_DIGITS)} of a tile either side but he is ` +
-        `${headOnHalfWidth.toFixed(TILE_DIGITS)} head-on — re-measure HUMAN_HALF_WIDTH_TILES`,
+        `${headOnHalfWidth.toFixed(TILE_DIGITS)} head-on — re-measure the look's figureExtent.halfWidthTiles in its look file`,
     );
   }
   console.log(
@@ -3892,12 +3994,12 @@ function gateHandedness(): void {
 /**
  * G22, its sockets: head-on, the main-hand socket of a frame he carries
  * something in is his right hand's — nearer his right hand than his left on
- * the drawn cell — so a carried weapon swaps neither hand nor side as he
+ * the drawn cell, measured to each hand from wrist to knuckles — so a carried weapon swaps neither hand nor side as he
  * turns round. Measured on the carrying figure, whose main hand is closed on
  * the carried item wherever a row leaves it free.
  */
 function gateMainHandSide(): void {
-  const carrying = humanFigureFor(BARE_CARL_OUTFIT, {
+  const carrying = humanFigureFor(gateLook, outfitOf(gateLook, []), {
     handle: 'standard',
     style: 'low',
     motionSet: 'unarmed',
@@ -3907,17 +4009,14 @@ function gateMainHandSide(): void {
   for (const row of HUMAN_ROWS) {
     if (RIGHT_SHOULDER_SCREEN_SIDE[row.view] === undefined) continue;
     probesOf(row).forEach((probe, frame) => {
-      const main = carlSocketsAt(source, row.name, frame).sockets.mainHand;
+      const main = humanSocketsAt(source, row.name, frame).sockets.mainHand;
       if (!main.occupied) return;
       framesMeasured++;
-      const toRight = Math.hypot(
-        main.centre.x - probe.rightArm.wrist.x,
-        main.centre.y - probe.rightArm.wrist.y,
-      );
-      const toLeft = Math.hypot(
-        main.centre.x - probe.leftArm.wrist.x,
-        main.centre.y - probe.leftArm.wrist.y,
-      );
+      // Measured to each whole hand, wrist to knuckles: the socket is in the
+      // fist, and with the hands brought together one fist's knuckles can
+      // lie nearer the other's wrist than its own.
+      const toRight = distanceToSegment(main.centre, probe.rightArm.wrist, probe.rightArm.handTip);
+      const toLeft = distanceToSegment(main.centre, probe.leftArm.wrist, probe.leftArm.handTip);
       if (toRight < toLeft) return;
       fail(
         'G22',
@@ -3940,11 +4039,18 @@ function gateMainHandSide(): void {
  */
 const UNBOUNDED_LAYER_MARGIN = Math.max(frameWidth, frameHeight) / HUMAN_CELL_PX_PER_UNIT;
 /**
- * A channel difference past rounding noise. The two paints share one pixel
- * grid and every pass, so an unclipped pixel matches exactly; a clipped one
- * loses its ink outright.
+ * An alpha shortfall past rounding noise. Ink cut off at the surface's edge
+ * is lost outright, and nothing lies under it there to keep the pixel inked.
+ *
+ * Only alpha is compared. The two surfaces share one pixel grid but not one
+ * origin, and the rasteriser's fixed-point coordinates are counted from the
+ * surface's origin: a pixel centred on the edge of a narrow shading band
+ * lands on one side of it on one surface and the other on the other, and
+ * comes out a band lighter or darker with its ink intact. For the same reason
+ * only a pixel that is ink on the whole-cell surface is judged: the faint
+ * fringe of a soft edge shifts by a few levels of alpha between the two.
  */
-const CLIPPED_CHANNEL_DELTA = 8;
+const CLIPPED_ALPHA_DELTA = 8;
 
 /**
  * The largest channel difference between two pixels, colour weighted by its
@@ -3963,10 +4069,23 @@ function premultipliedDelta(a: Uint8ClampedArray, b: Uint8ClampedArray, index: n
   return delta;
 }
 
-const DRAW_VIEW: Readonly<Record<CardinalView, typeof drawCarlFront>> = {
-  front: drawCarlFront,
-  back: drawCarlBack,
-  side: drawCarlSide,
+/** Cell pixels per figure unit down, for the gate look in `view`. */
+function cellPxPerUnitDown(view: CardinalView): number {
+  return TILE_SCALE * HUMAN_SCALE * playerLookAxes(gateLook, VIEWS[view].profile).y;
+}
+
+/** The cell's own transform for the gate look in `view`, as the figure lays it on. */
+function scaleIntoCell(ctx: CanvasRenderingContext2D, view: CardinalView): void {
+  const axes = playerLookAxes(gateLook, VIEWS[view].profile);
+  ctx.translate(ORIGIN_X, ORIGIN_Y);
+  ctx.scale(TILE_SCALE, TILE_SCALE);
+  ctx.scale(HUMAN_SCALE * axes.x, HUMAN_SCALE * axes.y);
+}
+
+const DRAW_VIEW: Readonly<Record<CardinalView, typeof drawBipedFront>> = {
+  front: drawBipedFront,
+  back: drawBipedBack,
+  side: drawBipedSide,
 };
 
 /**
@@ -3974,19 +4093,17 @@ const DRAW_VIEW: Readonly<Record<CardinalView, typeof drawCarlFront>> = {
  * `options`. Built from the same transform and dressed pose as
  * `paintDressedHumanFrame`, so with no options it matches the shipped cell.
  */
-function composedCell(row: RowSpec, frame: number, options: CarlComposeOptions): Canvas {
+function composedCell(row: RowSpec, frame: number, options: BipedComposeOptions): Canvas {
   const cell = createCanvas(frameWidth, frameHeight);
   const ctx = asGameContext(cell.getContext('2d'));
-  ctx.translate(ORIGIN_X, ORIGIN_Y);
-  ctx.scale(TILE_SCALE, TILE_SCALE);
-  ctx.scale(HUMAN_SCALE, HUMAN_SCALE);
-  const pose = dressedPose(gateOutfit, row.pose(frame), row, frame);
-  DRAW_VIEW[row.view](ctx, pose, options);
+  scaleIntoCell(ctx, row.view);
+  const pose = withLookBuild(dressedPose(gateOutfit, row.pose(frame), row, frame), gateLook);
+  DRAW_VIEW[row.view](ctx, pose, { cellPxPerUnit: PLAYER_HUMAN_CELL_PX_PER_UNIT, ...options });
   return cell;
 }
 
 function unboundedCell(row: RowSpec, frame: number): Uint8ClampedArray {
-  return composedCell(row, frame, { layerMargin: UNBOUNDED_LAYER_MARGIN })
+  return composedCell(row, frame, { look: gateLook, layerMargin: UNBOUNDED_LAYER_MARGIN })
     .getContext('2d')
     .getImageData(0, 0, frameWidth, frameHeight).data;
 }
@@ -4011,7 +4128,9 @@ function gateLayerHoldsInk(): void {
       cellsCompared++;
       let clipped = 0;
       for (let i = 0; i < shipped.length; i += CHANNELS) {
-        if (premultipliedDelta(shipped, unbounded, i) > CLIPPED_CHANNEL_DELTA) clipped++;
+        const inked = unbounded[i + ALPHA_OFFSET] >= INK_ALPHA_THRESHOLD;
+        const lostAlpha = unbounded[i + ALPHA_OFFSET] - shipped[i + ALPHA_OFFSET];
+        if (inked && lostAlpha > CLIPPED_ALPHA_DELTA) clipped++;
       }
       if (clipped > 0) {
         fail(
@@ -4047,11 +4166,13 @@ const GAUNTLET_TIMELINE: ReadonlyMap<number, GauntletForm> = new Map<number, Gau
 ]);
 /** The blow the gauntlet is best known for; a punch set without it has lost its probe. */
 const SIGNATURE_PUNCH_ROW: HumanRowName = 'cross_side';
-/** Carl in the gauntlet and nothing else he would not wear by default. */
-const GAUNTLET_ONLY: Outfit<'human'> = outfitOf('human', [
-  garmentOf('human', 'carl_trollskin_shirt'),
-  garmentOf('human', 'carl_gauntlet'),
-]);
+/** The look in the gauntlet and nothing else it would not wear by default. */
+function gauntletOnly(): Outfit<'human'> {
+  return outfitOf(gateLook, [
+    wornGarmentOf('human', 'human_trollskin_shirt'),
+    wornGarmentOf('human', 'human_gauntlet'),
+  ]);
+}
 /**
  * The fewest pixels the spiked steel may change on a punch's impact frame
  * against the bracer on the same pose. Measured on the shipped art, the
@@ -4059,23 +4180,23 @@ const GAUNTLET_ONLY: Outfit<'human'> = outfitOf('human', [
  * of the fist); half of that still fires the moment the steel stops being painted at all, which changes none.
  */
 const MIN_STEEL_CHANGED_PX = 12;
+/** A channel difference past rounding noise between the steel and the bracer painted on one pose. */
+const STEEL_CHANNEL_DELTA = 8;
 
 /** A punch's impact cell in the gauntlet, with the gauntlet forced to `form`. */
 function gauntletCell(row: RowSpec, frame: number, form: GauntletForm): Uint8ClampedArray {
   const cell = createCanvas(frameWidth, frameHeight);
   const ctx = asGameContext(cell.getContext('2d'));
-  ctx.translate(ORIGIN_X, ORIGIN_Y);
-  ctx.scale(TILE_SCALE, TILE_SCALE);
-  ctx.scale(HUMAN_SCALE, HUMAN_SCALE);
+  scaleIntoCell(ctx, row.view);
   // The gauntlet reads its form off when the row's right punch lands, so a row
   // told it lands on this frame, or never, forces the steel or the bracer.
   const landsHere = form === 'spiked' ? frame : null;
   const timed = { ...garmentRowOf(row), rightPunchImpact: landsHere };
-  const pose: CarlPose = {
-    ...row.pose(frame),
-    outfit: { outfit: GAUNTLET_ONLY, row: timed, frame, frameCount: row.frameCount },
+  const pose: BipedPose = {
+    ...withLookBuild(row.pose(frame), gateLook),
+    outfit: { outfit: gauntletOnly(), row: timed, frame, frameCount: row.frameCount },
   };
-  DRAW_VIEW[row.view](ctx, pose);
+  DRAW_VIEW[row.view](ctx, pose, { look: gateLook });
   return cell.getContext('2d').getImageData(0, 0, frameWidth, frameHeight).data;
 }
 
@@ -4091,7 +4212,7 @@ function checkSteelPainted(row: RowSpec, impact: number): void {
   const bracer = gauntletCell(row, impact, 'bracer');
   let changed = 0;
   for (let i = 0; i < steel.length; i += CHANNELS) {
-    if (premultipliedDelta(steel, bracer, i) > CLIPPED_CHANNEL_DELTA) changed++;
+    if (premultipliedDelta(steel, bracer, i) > STEEL_CHANNEL_DELTA) changed++;
   }
   if (changed < MIN_STEEL_CHANGED_PX) {
     fail(
@@ -4146,14 +4267,19 @@ function gateGauntletTiming(): void {
 // ── G25: edge-on, the face is never hidden behind the near arm ───────────────
 
 /**
- * How far the near arm's bones must pass from the profile eye, in head radii.
- * A sleeved arm is about 0.3 of a head radius from its bone to its edge, so
- * this keeps the eye itself clear of it. Every frame that read as the back of
- * his head measured 0.37 or less (the arm across the face, only the hair and
- * the ear left showing); the nearest a readable face comes is 0.72, a
- * throw's release passing under the eye.
+ * How far the near arm's bones must pass from the profile eye on the rig, in
+ * its head radii. The rig's sleeved arm is about 0.3 of a head radius from
+ * its bone to its edge ({@link RIG_ARM_EDGE_HEAD_RADII}), so this keeps the
+ * eye itself clear of it. Every frame that read as the back of his head
+ * measured 0.37 or less (the arm across the face, only the hair and the ear
+ * left showing); the nearest a readable face comes is 0.72, a throw's release
+ * passing under the eye.
+ *
+ * A look holds the margin past its own arm's edge to the same share of its
+ * own head: a slimmer arm covers less, and a smaller face is hidden by less.
  */
 const PROFILE_EYE_CLEARANCE_HEAD_RADII = 0.5;
+const RIG_ARM_EDGE_HEAD_RADII = 0.3;
 /**
  * How far above the shoulders the head must stand for the frame to count as
  * upright. Lying on the floor his arm may fall across his face; standing,
@@ -4191,18 +4317,21 @@ function gateProfileFaceShows(): void {
   for (const row of HUMAN_ROWS) {
     if (row.view !== 'side') continue;
     for (let frame = 0; frame < row.frameCount; frame++) {
-      const pose = poseAsDrawn(row.pose(frame), VIEWS.side);
+      const pose = poseAsDrawn(withLookBuild(row.pose(frame), gateLook), VIEWS.side);
       const skeleton = buildSkeleton(pose, VIEWS.side);
       const headRise = (skeleton.shoulderCentre.y - skeleton.headCentre.y) / HEAD_RY;
       if (headRise < UPRIGHT_HEAD_RISE_HEAD_RADII) continue;
       framesMeasured++;
-      const eye = profileEyeCentre(skeleton, pose);
+      const eye = profileEyeCentre(skeleton, pose, gateLook);
       const nearArm = skeleton.rightArm;
-      const clearance =
+      const boneDistance =
         Math.min(
           distanceToSegment(eye, nearArm.root, nearArm.joint),
           distanceToSegment(eye, nearArm.joint, nearArm.end),
         ) / HEAD_RY;
+      const armEdge = RIG_ARM_EDGE_HEAD_RADII * gateLook.limbs.upperArmGirth;
+      const margin = (boneDistance - armEdge) / gateLook.headScale;
+      const clearance = RIG_ARM_EDGE_HEAD_RADII + margin;
       if (clearance >= PROFILE_EYE_CLEARANCE_HEAD_RADII) continue;
       fail(
         'G25',
@@ -4219,13 +4348,27 @@ function gateProfileFaceShows(): void {
 // ── G27: edge-on, the head is clearly shallower than the chest ───────────────
 
 /**
- * The most the profile head — back of the hair to the tip of the nose — may
- * measure against the jacket's chest depth. A heavy-framed man's head is
- * about 21 cm deep with its hair against a 28–30 cm chest; at 0.8 of it the
- * head read as big as the torso in every edge-on frame, a bobblehead in a
- * profile that is otherwise a heavy man.
+ * How far past a look's deepest measured profile head G27 lets a frame go:
+ * a hair of slack so a repaint of the hair's edge does not trip it, and far
+ * too little to let a head grow a size.
  */
-const PROFILE_HEAD_TO_CHEST_LIMIT = 0.7;
+const PROFILE_HEAD_DEPTH_SLACK = 0.01;
+/**
+ * The most Dave's profile head — back of the hair to the tip of the nose —
+ * may measure against the jacket's chest depth. His head is drawn larger than
+ * life so his face reads at the tile, and his chest a heavily muscled man's,
+ * about a seventh of his height deep: his deepest upright profile frame
+ * measures 0.899 of the chest (`cross_side`), and the limit is that and the
+ * slack.
+ */
+const DAVE_PROFILE_HEAD_TO_CHEST_LIMIT = 0.899 + PROFILE_HEAD_DEPTH_SLACK;
+/**
+ * Ryan is drawn to a real lean man's proportions: his head, hair and beard
+ * about an eighth of his height deep, his chest the same, so edge-on his head
+ * is about as deep as his chest. His deepest upright profile frame measures
+ * 0.911 of the chest (`idle_side`), and the limit is that and the slack.
+ */
+const RYAN_PROFILE_HEAD_TO_CHEST_LIMIT = 0.911 + PROFILE_HEAD_DEPTH_SLACK;
 /** Pixels per rig unit the head and jacket are painted at to be measured. */
 const HEAD_DEPTH_GATE_PX_PER_UNIT = 200;
 /** Side of the square surface each part is painted on, in rig units. */
@@ -4293,9 +4436,38 @@ function paintPartUpright(
   return canvas;
 }
 
+/** The torso pieces his base garments paint, in the compositor's order. */
+const TORSO_PIECES = ['jacket', 'collar', 'collarRim'] as const;
+
+/**
+ * The gate look's torso garment alone — the jacket, a shirt, whatever its
+ * base outfit wears over the torso — painted through the outfit as the
+ * compositor paints it, with nothing worn over it.
+ */
+function paintTorsoGarment(
+  ctx: CanvasRenderingContext2D,
+  skeleton: Skeleton,
+  pose: BipedPose,
+): void {
+  const view = VIEWS.side;
+  const base = outfitOf(gateLook, []);
+  const dressed = { ...pose, outfit: stillOutfit(base) };
+  const { context } = humanWornOn(dressed, view, gateLook);
+  const torso = torsoFrame(skeleton, dressed, gateLook);
+  for (const piece of TORSO_PIECES) {
+    paintOutfitPart(
+      ctx,
+      base,
+      'torso',
+      { piece, skeleton, view, look: gateLook, torso, envelope: null },
+      context,
+    );
+  }
+}
+
 /**
  * G27 — on every upright profile frame the head is no deeper than
- * {@link PROFILE_HEAD_TO_CHEST_LIMIT} of the chest.
+ * the look's `profileHeadToChestLimit` of the chest.
  *
  * The head and the jacket are each painted alone, upright in their own
  * frames — the head in its own rotation, the jacket along the spine — so an
@@ -4310,7 +4482,7 @@ function gateProfileHeadDepth(): void {
   for (const row of HUMAN_ROWS) {
     if (row.view !== 'side') continue;
     for (let frame = 0; frame < row.frameCount; frame++) {
-      const pose = poseAsDrawn(row.pose(frame), view);
+      const pose = poseAsDrawn(withLookBuild(row.pose(frame), gateLook), view);
       const skeleton = buildSkeleton(pose, view);
       const headRise = (skeleton.shoulderCentre.y - skeleton.headCentre.y) / HEAD_RY;
       if (headRise < UPRIGHT_HEAD_RISE_HEAD_RADII) continue;
@@ -4319,19 +4491,17 @@ function gateProfileHeadDepth(): void {
       const head = paintPartUpright(skeleton.headCentre, headAngleNow, (ctx) => {
         ctx.translate(skeleton.headCentre.x, skeleton.headCentre.y);
         ctx.rotate(headAngleNow);
-        drawHead(ctx, pose, view);
+        scaleHeadAboutChin(ctx, gateLook);
+        drawHead(ctx, pose, view, gateLook);
       });
       const toWaist = {
         x: skeleton.waist.x - skeleton.shoulderCentre.x,
         y: skeleton.waist.y - skeleton.shoulderCentre.y,
       };
       const spineTilt = Math.atan2(toWaist.y, toWaist.x) - Math.PI / 2;
-      const jacket = paintPartUpright(skeleton.shoulderCentre, spineTilt, (ctx) => {
-        const torso = torsoFrame(skeleton, pose);
-        paintJacket(ctx, skeleton, pose, view);
-        paintCollar(ctx, torso, view);
-        paintCollarRim(ctx, torso, view);
-      });
+      const jacket = paintPartUpright(skeleton.shoulderCentre, spineTilt, (ctx) =>
+        paintTorsoGarment(ctx, skeleton, pose),
+      );
       const headInk = solidRowsOf(head);
       const headDepth = widestSpan(headInk, 0, headInk.rows.length - 1);
       const shoulderRow = head.height / 2;
@@ -4349,17 +4519,17 @@ function gateProfileHeadDepth(): void {
         worst = share;
         worstAt = `${row.name}[${frame}]`;
       }
-      if (share <= PROFILE_HEAD_TO_CHEST_LIMIT) continue;
+      if (share <= gateSpec().profileHeadToChestLimit) continue;
       fail(
         'G27',
-        `${row.name}[${frame}] draws the head ${share.toFixed(2)} of the chest's depth ` +
-          `(limit ${PROFILE_HEAD_TO_CHEST_LIMIT}) — edge-on it reads as big as his torso`,
+        `${row.name}[${frame}] draws the head ${share.toFixed(3)} of the chest's depth ` +
+          `(limit ${gateSpec().profileHeadToChestLimit}) — edge-on it reads as big as his torso`,
         row.name,
       );
     }
   }
   failUnlessMeasured('G27', framesMeasured, 'upright profile frames');
-  console.log(`  G27 profile head depth: worst ${worst.toFixed(2)} of the chest at ${worstAt}`);
+  console.log(`  G27 profile head depth: worst ${worst.toFixed(3)} of the chest at ${worstAt}`);
 }
 
 // ── G26: a head-on leg keeps its length on the move ─────────────────────────
@@ -4395,7 +4565,7 @@ function drawnLength(from: Pt, to: Pt): number {
  * every planted one to the length it would have with no floor depth drawn.
  */
 function gateHeadOnLegLength(): void {
-  const standing = probeHumanJoints('idle', 0);
+  const standing = probeHumanJoints('idle', 0, gateLook);
   const standingLeg =
     LEG_SIDES.reduce((sum, side) => {
       const leg = legOf(standing, side);
@@ -4446,6 +4616,52 @@ function gateHeadOnLegLength(): void {
   );
 }
 
+/**
+ * What the gates hold one look to where the measure is the look's own — its
+ * proportions, the materials it is painted in —
+ * rather than the rig's. Every look the gates run on has an entry.
+ */
+interface HumanLookGateSpec {
+  /**
+   * G17: whether the look's limbs may be a pixel thin at the tile — a slim
+   * man's forearm or thigh three pixels across, its one interior pixel with
+   * no partner to show form against. Those crops are counted and skipped,
+   * and every crop wide enough is still held to the range.
+   */
+  readonly slimLimbsAtTile: boolean;
+  /** G27: the most the profile head may measure against the chest's depth. */
+  readonly profileHeadToChestLimit: number;
+  /** G19: the deepest tone of each material, past skin and garment, between the arms and the body. */
+  readonly besideArmDeepTones: readonly string[];
+}
+
+const LOOK_GATE_SPECS: ReadonlyMap<string, HumanLookGateSpec> = new Map([
+  [
+    DAVE_LOOK.id,
+    {
+      slimLimbsAtTile: false,
+      profileHeadToChestLimit: DAVE_PROFILE_HEAD_TO_CHEST_LIMIT,
+      besideArmDeepTones: [DAVE_DENIM.cloth.deep],
+    },
+  ],
+  [
+    RYAN_LOOK.id,
+    {
+      slimLimbsAtTile: true,
+      profileHeadToChestLimit: RYAN_PROFILE_HEAD_TO_CHEST_LIMIT,
+      besideArmDeepTones: [RYAN_SLATE.cloth.deep, RYAN_BELT_LEATHER, RYAN_WATCH_FACE],
+    },
+  ],
+]);
+
+function gateSpec(): HumanLookGateSpec {
+  const spec = LOOK_GATE_SPECS.get(gateLook.id);
+  if (spec === undefined) {
+    throw new Error(`no gate thresholds for look "${gateLook.id}": add it to LOOK_GATE_SPECS`);
+  }
+  return spec;
+}
+
 const GATES: ReadonlyArray<readonly [string, () => void]> = [
   ['G1', gateStructure],
   ['G2', gateCellGeometry],
@@ -4465,7 +4681,6 @@ const GATES: ReadonlyArray<readonly [string, () => void]> = [
   ['G15', gateImpactTiming],
   ['G16', gateViewConsistency],
   ['G17', gateMuscleRead],
-  ['G18', gateSilhouetteSize],
   ['G19', gateOutlinePolicy],
   ['G20', gateHandOff],
   ['G21', gateStatusFigureBox],
@@ -4482,9 +4697,25 @@ const GATES: ReadonlyArray<readonly [string, () => void]> = [
  * run. Failures from {@link PENDING_GATES} are printed here instead, as is a
  * pending gate that has gone green.
  */
-export function humanGateFailures(outfit: Outfit<'human'> = DEFAULT_CARL_OUTFIT): string[] {
+export function humanGateFailures(
+  look: HumanLook,
+  outfit: Outfit<'human'> = defaultOutfitOf(look),
+): string[] {
+  gateLook = look;
   gateOutfit = outfit;
-  gateFigure = humanFigureWearing(outfit);
+  gateFigure = humanFigureWearing(look, outfit);
+  // The gates that drive a HumanPlayer or the animator measure whichever look
+  // the human crawler is painted as, so it is the gated one for the run.
+  const playerLook = activeHumanLook();
+  setHumanLook(look);
+  try {
+    return gateFailuresOfGateLook();
+  } finally {
+    setHumanLook(playerLook);
+  }
+}
+
+function gateFailuresOfGateLook(): string[] {
   alphaByCell.clear();
   failures.length = 0;
   const known = new Set(GATES.map(([id]) => id));

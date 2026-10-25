@@ -1209,7 +1209,7 @@ const REBAR = 'rgba(78,62,50,0.9)';
 const HOLE_LEFT = 0.12;
 const HOLE_RIGHT = 1.88;
 const HOLE_MIDDLE = 1;
-/** The breach reaches up to about Carl's chest: low and wide, a wall staved in, not a doorway. */
+/** The breach reaches up to about the human crawler's chest: low and wide, a wall staved in, not a doorway. */
 const HOLE_TOP = BODY_TOP_TILES + 0.55;
 /** How much of the hole's height its top edge keeps away from the middle, so it is flat-topped. */
 const HOLE_SHOULDER = 0.35;

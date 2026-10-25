@@ -54,8 +54,8 @@ const GRID_LINE = 'rgba(255,255,255,0.12)';
 const TILE_GUIDE = 'rgba(120,220,255,0.35)';
 const LABEL_COLOR = '#e8e2d8';
 const LABEL_FONT = '13px sans-serif';
-/** Carl's standing row, for the size comparison. */
-const CARL_STATE = 'idle';
+/** The human crawler's standing row, for the size comparison. */
+const HUMAN_STATE = 'idle';
 
 type Mode = 'sheet' | 'ingame' | 'gates';
 const MODES: ReadonlyArray<Mode> = ['sheet', 'ingame', 'gates'];
@@ -210,34 +210,34 @@ function renderRows(states: readonly string[], outPath: string, scale: number): 
 
 /**
  * Every frame of every requested row at the size the game blits it, on the
- * floors he stands on, with Carl at the head of each line for scale. This is
+ * floors he stands on, with the human crawler at the head of each line for scale. This is
  * the size the silhouette has to survive, and the size the gauntlets, the
  * armband and the hair have to read at.
  */
 function renderInGame(states: readonly string[], outPath: string, zoom: number): void {
   const k = IN_GAME_SCALE * zoom;
-  const carlK = (IN_GAME_TILE / HUMAN_FIGURE.tileScale) * zoom;
-  const carlGround = HUMAN_FIGURE.tileY + HUMAN_FIGURE.tileScale * HUMAN_GROUND_OFFSET_IN_TILE;
-  const carl = bakeFigureCell(HUMAN_FIGURE, CARL_STATE, 0);
-  const carlWindow = rowWindow(HUMAN_FIGURE, CARL_STATE, [0]);
+  const humanK = (IN_GAME_TILE / HUMAN_FIGURE.tileScale) * zoom;
+  const humanGround = HUMAN_FIGURE.tileY + HUMAN_FIGURE.tileScale * HUMAN_GROUND_OFFSET_IN_TILE;
+  const human = bakeFigureCell(HUMAN_FIGURE, HUMAN_STATE, 0);
+  const humanWindow = rowWindow(HUMAN_FIGURE, HUMAN_STATE, [0]);
   const rows = states.map((state) => {
     const def = figureFor(state);
     const frames = Array.from({ length: frameCountOf(def, state) }, (_unused, frame) => frame);
     const maxxGround = def.tileY + def.tileScale * GROUND_OFFSET_IN_TILE;
     return { state, def, maxxGround, frames, window: rowWindow(def, state, frames) };
   });
-  const carlAbove = (carlGround - carlWindow.minY) * carlK;
-  const carlWidth = (carlWindow.maxX - carlWindow.minX) * carlK;
+  const humanAbove = (humanGround - humanWindow.minY) * humanK;
+  const humanWidth = (humanWindow.maxX - humanWindow.minX) * humanK;
   const layout = rows.map((row) => {
-    const above = Math.max(carlAbove, (row.maxxGround - row.window.minY) * k);
+    const above = Math.max(humanAbove, (row.maxxGround - row.window.minY) * k);
     const below = Math.max(
-      (carlWindow.maxY - carlGround) * carlK,
+      (humanWindow.maxY - humanGround) * humanK,
       (row.window.maxY - row.maxxGround) * k,
     );
     return { ...row, above, height: above + below, width: (row.window.maxX - row.window.minX) * k };
   });
   const panelWidth = Math.max(
-    ...layout.map((row) => PADDING * 2 + carlWidth + row.frames.length * (row.width + PADDING)),
+    ...layout.map((row) => PADDING * 2 + humanWidth + row.frames.length * (row.width + PADDING)),
   );
   const panelHeight =
     PADDING + layout.reduce((sum, row) => sum + row.height + LABEL_HEIGHT + PADDING, 0);
@@ -250,18 +250,18 @@ function renderInGame(states: readonly string[], outPath: string, zoom: number):
     ctx.fillText(row.state, PADDING, y + LABEL_HEIGHT - PADDING);
     const groundY = y + LABEL_HEIGHT + row.above;
     ctx.drawImage(
-      carl,
-      carlWindow.minX,
-      carlWindow.minY,
-      carlWindow.maxX - carlWindow.minX,
-      carlWindow.maxY - carlWindow.minY,
+      human,
+      humanWindow.minX,
+      humanWindow.minY,
+      humanWindow.maxX - humanWindow.minX,
+      humanWindow.maxY - humanWindow.minY,
       PADDING,
-      groundY - carlAbove,
-      carlWidth,
-      (carlWindow.maxY - carlWindow.minY) * carlK,
+      groundY - humanAbove,
+      humanWidth,
+      (humanWindow.maxY - humanWindow.minY) * humanK,
     );
     row.frames.forEach((frame, column) => {
-      const x = PADDING * 2 + carlWidth + column * (row.width + PADDING);
+      const x = PADDING * 2 + humanWidth + column * (row.width + PADDING);
       const w = row.window;
       ctx.drawImage(
         bakeFigureCell(row.def, row.state, frame),

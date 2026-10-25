@@ -11,7 +11,7 @@
  * table rather than a random draw, so every cell paints the same pixels.
  */
 
-import { type Pt, clamp01, easeOut, hump, lerp, rgba } from './carlArt';
+import { type Pt, clamp01, easeOut, hump, lerp, rgba } from './bipedArt';
 
 type Ctx = CanvasRenderingContext2D;
 

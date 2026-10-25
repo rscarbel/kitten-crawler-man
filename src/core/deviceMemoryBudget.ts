@@ -10,14 +10,17 @@ const SMALL_DEVICE_MAX_GIGABYTES = 2;
 export const FULL_SCALE = 1;
 /**
  * A half-density device's figure and sheet caches hold a quarter of the bytes
- * for the same picture, and the town at that density peaks at 51 MB of figure
- * cells and 35 MB of sheets against full budgets of 188 and 160: half of each
- * still leaves the town's whole working set resident with room over.
+ * for the same picture. The town at that density peaks at 35 MB of sheets
+ * against a full budget of 160, and level 3's arrival, the figure cache's
+ * tightest moment at 53.1 MB of ink crops at full density, needs about 13 MB
+ * of figure cells against a full 80: half of each still leaves the town's
+ * whole working set resident with room over.
  */
 export const HALF_DENSITY_SCALE = 0.5;
 /**
  * For a phone that reports 2 GB or less: a third of each budget still clears
- * the half-density town's peak (63 MB against 51, 53 against 35).
+ * the half-density town's peak (27 MB of figure cells against about 13, 53 of
+ * sheets against 35).
  */
 const SMALL_DEVICE_BUDGET_DIVISOR = 3;
 const SMALL_HALF_DENSITY_SCALE = 1 / SMALL_DEVICE_BUDGET_DIVISOR;
@@ -53,7 +56,7 @@ function reportedDeviceMemoryGigabytes(): number | null {
  * ratio, which zoom or a move to another monitor changes.
  *
  * Only a device that already bakes at half density gets less. At full density
- * the town's crowd, Carl and Donut need the whole figure budget and the town's
+ * the town's crowd and the two crawlers need the whole figure budget and the town's
  * sheets need all but a few megabytes of theirs, and every smaller budget
  * measured there traded memory for stand-in frames and repaints, so a phone
  * with a dense display keeps the full budgets however little memory it reports.

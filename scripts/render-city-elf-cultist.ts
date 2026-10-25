@@ -4,7 +4,7 @@
  *
  * Runs the gates first and exits non-zero if any fails, then writes:
  *   <out>/cultist-sheet.png      every row, enlarged to 96 px per tile (3x)
- *   <out>/cultist-context.png    beside Carl and a robed townsperson, at 32 px
+ *   <out>/cultist-context.png    beside the human and a robed townsperson, at 32 px
  *                                per tile on a light and a dark floor, and 3x
  *   <out>/cultist-ingame.png     the 32 px render blown up pixel-for-pixel
  *   <out>/cultist-closeup.png    the three views well past bake density
@@ -71,10 +71,10 @@ const LINEUP_HEADROOM_TILES = 2.2;
 
 /**
  * An elf has to stand taller than a human, or the "tall and slender" read is
- * gone: the cultist's ink top is held above Carl's by at least this many cell
+ * gone: the cultist's ink top is held above the human crawler's by at least this many cell
  * pixels at the shared 64 px tile.
  */
-const MIN_HEIGHT_OVER_CARL_PX = 4;
+const MIN_HEIGHT_OVER_HUMAN_PX = 4;
 
 function inkTopOf(def: FigureDef, state: string): number | null {
   return inkBoxOf(def, state, 0)?.minY ?? null;
@@ -82,14 +82,16 @@ function inkTopOf(def: FigureDef, state: string): number | null {
 
 function heightFailures(): string[] {
   const cultistTop = inkTopOf(FIGURE, cultistStateName('idle', 'front'));
-  const carlTop = inkTopOf(HUMAN_FIGURE, 'idle');
-  if (cultistTop === null || carlTop === null) return ['the idle rows painted no ink to measure'];
+  const humanTop = inkTopOf(HUMAN_FIGURE, 'idle');
+  if (cultistTop === null || humanTop === null) return ['the idle rows painted no ink to measure'];
   const cultistAboveTile = FIGURE.tileY - cultistTop;
-  const carlAboveTile = HUMAN_FIGURE.tileY - carlTop;
-  console.log(`  info ink above the tile: cultist ${cultistAboveTile}px, Carl ${carlAboveTile}px`);
-  return cultistAboveTile - carlAboveTile >= MIN_HEIGHT_OVER_CARL_PX
+  const humanAboveTile = HUMAN_FIGURE.tileY - humanTop;
+  console.log(
+    `  info ink above the tile: cultist ${cultistAboveTile}px, the human ${humanAboveTile}px`,
+  );
+  return cultistAboveTile - humanAboveTile >= MIN_HEIGHT_OVER_HUMAN_PX
     ? []
-    : ['the cultist stands no taller than Carl: an elf has to read as tall'];
+    : ['the cultist stands no taller than the human: an elf has to read as tall'];
 }
 
 /**
@@ -146,7 +148,7 @@ function runGates(): boolean {
       'drawn states',
       missingStateFailures(FIGURE, CITY_ELF_CULTIST_DRAWN_STATES, 'cityElfCultistSprite'),
     ),
-    reportFigureGates('taller than Carl', heightFailures()),
+    reportFigureGates('taller than the human', heightFailures()),
     reportFigureGates('cast reaches out', castReachFailures()),
     reportFigureGates('cast frame count', castFrameFailures()),
     reportFigureGates('budget', budgetFailures()),
@@ -244,7 +246,7 @@ function contextSubjects(): Subject[] {
   const robed = TOWN_CAST_LOOKS.find((look) => look.id === ROBED_RESIDENT_ID);
   if (robed === undefined) throw new Error(`no town cast look "${ROBED_RESIDENT_ID}"`);
   return [
-    { label: 'Carl', def: HUMAN_FIGURE, state: 'idle', frame: 0 },
+    { label: 'The human', def: HUMAN_FIGURE, state: 'idle', frame: 0 },
     { label: 'cultist', def: FIGURE, state: cultistStateName('idle', 'front'), frame: 0 },
     { label: 'side', def: FIGURE, state: cultistStateName('idle', 'side'), frame: 0 },
     { label: 'away', def: FIGURE, state: cultistStateName('idle', 'away'), frame: 0 },

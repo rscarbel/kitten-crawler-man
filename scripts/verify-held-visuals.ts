@@ -9,6 +9,9 @@
  * - every weapon item names a held visual whose archetype belongs to every
  *   crawler the item allows — one look serves one wearer, so a weapon both
  *   crawlers may hold fails until it has a look for each;
+ * - every quest thing the cat carries in her jaws is a look made to be carried
+ *   there, and every look she holds is held at its socket on every frame she
+ *   plays holding it, on each of her looks;
  * - a held visual built outside its archetype's ranges throws, naming the item
  *   and the range it broke;
  * - the proving weapons are named nowhere in the game but their own item
@@ -20,7 +23,10 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { ITEM_DEF, isItemId, wearerAllows } from '../src/core/ItemDefs.js';
 import type { CrawlerKind } from '../src/core/SkillManager.js';
+import { CAT_ROWS } from '../src/sprites/art/catFigure.js';
+import { catGripOf, catHeldSocketOf, catSocketsAt } from '../src/sprites/art/catSockets.js';
 import { archetypeSpec } from '../src/sprites/held/gripArchetypes.js';
+import { CAT_LOOKS } from './catLooks.js';
 import {
   defineHeldVisual,
   type HeldVisualDef,
@@ -87,6 +93,43 @@ for (const tool of workingTools) {
     `the ${tool.kind} of tier ${tool.tier} names its look on its item, a two-handed haft` +
       (look === null ? ' (names none)' : ` (${look.id}, ${look.archetype})`),
   );
+}
+
+for (const id of Object.keys(ITEM_DEF).filter(isItemId)) {
+  const carried = ITEM_DEF[id].carriedInJaws;
+  if (carried === undefined) continue;
+  const look = HELD_VISUALS[carried];
+  check(
+    catGripOf(look) === 'mouthCarry',
+    `${id} is carried in the cat's jaws as ${look.id}, a ${look.archetype}`,
+  );
+}
+
+/**
+ * Every look made for the cat is held at its socket on every frame of every
+ * row she plays holding it, on each cat: the sockets follow the look's body.
+ */
+for (const catLook of CAT_LOOKS) {
+  for (const id of HELD_VISUAL_IDS) {
+    const look = HELD_VISUALS[id];
+    const grip = catGripOf(look);
+    if (grip === null) continue;
+    const holds = grip === 'mouthCarry' ? ['carry'] : ['chop', 'mine'];
+    const rows = CAT_ROWS.filter((row) => row.hold !== undefined && holds.includes(row.hold));
+    const unheld = rows.flatMap((row) =>
+      Array.from({ length: row.frameCount }, (_unused, frame) => frame)
+        .filter((frame) => {
+          const frames = catSocketsAt(catLook, row.name, frame);
+          return frames === null || catHeldSocketOf(look, frames) === null;
+        })
+        .map((frame) => `${row.name}[${frame}]`),
+    );
+    check(
+      rows.length > 0 && unheld.length === 0,
+      `${catLook.id} holds ${id} at her ${grip === 'mouthCarry' ? 'mouth' : 'forepaw'} on every frame of ${rows.length} rows` +
+        (unheld.length > 0 ? `; not on ${unheld.join(', ')}` : ''),
+    );
+  }
 }
 
 const OUT_OF_RANGE_NAME = 'Overlong test sword';

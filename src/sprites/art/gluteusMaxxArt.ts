@@ -14,7 +14,7 @@
  * forward foreshortens and rises a little at both ends of its swing without
  * anybody authoring that per view. The camera looks down at the floor, so
  * depth along the floor shows as a little screen height near the ground and
- * fades out toward the hips, the way it does for Carl.
+ * fades out toward the hips, the way it does for the biped figure.
  *
  * **Handedness.** Seen from behind his right is at +X; head-on it is mirrored
  * onto the viewer's left. The Meat Shields armband is on his right upper arm,
@@ -34,7 +34,7 @@
  * mottled darker tone and the tufts make a fuzzy edge, which is the read.
  */
 
-import { clamp01, clampAlpha, deg, lerp, mix, type Pt } from './carlArt';
+import { clamp01, clampAlpha, deg, lerp, mix, type Pt } from './bipedArt';
 import { fillSoftEllipse, strokeSoftCrease, withClip, type CreaseLayer } from './softShade';
 
 type Ctx = CanvasRenderingContext2D;
@@ -113,7 +113,7 @@ const LIGHT: Pt = { x: -0.6, y: -0.8 };
 // ── Proportions (tiles; origin between the feet on the floor, +Y down) ───────
 
 /**
- * He stands about 1.3 tiles to the top of his hair, four fifths of Carl, and
+ * He stands about 1.3 tiles to the top of his hair, four fifths of the human crawler, and
  * about four and a third heads tall: a short man with an ordinary-sized head,
  * which is what reads as short rather than as a small person. Everything below
  * is derived from those, never from the head.
@@ -121,8 +121,8 @@ const LIGHT: Pt = { x: -0.6, y: -0.8 };
 export const ANKLE_HEIGHT = 0.055;
 /**
  * The whole painted body is drawn this much smaller than the tables below,
- * about his own ground point, so he stands about three quarters of Carl's
- * height. Applied at draw time rather than to the proportions, so the rig,
+ * about his own ground point, so he stands about three quarters of the
+ * human crawler's height. Applied at draw time rather than to the proportions, so the rig,
  * the choreography and their gates keep their authored numbers; anything
  * that turns rig distances into screen distances multiplies by it.
  */
@@ -211,7 +211,7 @@ export type MaxxView = 'front' | 'side' | 'back';
  * How much of a point's depth along the floor shows as screen height, on the
  * floor itself. The camera looks down at the floor but at the figure level, so
  * the share fades to nothing by hip height — a knee driven at the camera must
- * not hang lower than a straight leg's. Carl's `HEAD_ON_FLOOR_FORESHORTENING`.
+ * not hang lower than a straight leg's. The biped rig's `HEAD_ON_FLOOR_FORESHORTENING`.
  */
 const FLOOR_DEPTH_SHARE = 0.15;
 /** Profile: the far foot sits a little higher than the near one. */

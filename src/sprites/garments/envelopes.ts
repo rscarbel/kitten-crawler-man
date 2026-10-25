@@ -41,33 +41,33 @@ const CAT_ENVELOPES: Readonly<Record<GarmentPart<'cat'>, EnvelopeAllowance>> = {
 };
 
 /** A wrist bracer stands proud of his forearm, and the gauntlet's spikes stand off his fist. */
-const CARL_FOREARM_MARGIN = 0.4;
+const HUMAN_FOREARM_MARGIN = 0.4;
 /** A hat sits on his head and stands above it. */
-const CARL_HEAD_MARGIN = 0.08;
-const CARL_HAT_RISE = 0.3;
+const HUMAN_HEAD_MARGIN = 0.08;
+const HUMAN_HAT_RISE = 0.3;
 /** A shirt shows as a band just above his collar. */
-const CARL_NECK_MARGIN = 0.03;
-const CARL_SHIRT_RISE = 0.04;
+const HUMAN_NECK_MARGIN = 0.03;
+const HUMAN_SHIRT_RISE = 0.04;
 /** His jacket's own silhouette, and its outline's width. */
-const CARL_TORSO_MARGIN = 0.05;
-/** A leg of his boxers brought round a thigh driven at the camera stands off the bone by a thigh's width. */
-const CARL_HIPS_MARGIN = 0.15;
+const HUMAN_TORSO_MARGIN = 0.05;
+/** The seat of his trousers stands off the hips by about a thigh's width. */
+const HUMAN_HIPS_MARGIN = 0.15;
 /** A cloak hangs from his shoulders to his calves, flares past his arms and streams behind a run. */
-const CARL_CLOAK_MARGIN = 0.8;
-const CARL_CLOAK_DROP = 1.2;
-const CARL_FOOT_MARGIN = 0.08;
+const HUMAN_CLOAK_MARGIN = 0.8;
+const HUMAN_CLOAK_DROP = 1.2;
+const HUMAN_FOOT_MARGIN = 0.08;
 /** A kneepad or a boot shaft stands proud of his leg by about a limb's width. */
-const CARL_LEG_MARGIN = 0.15;
+const HUMAN_LEG_MARGIN = 0.15;
 
-const CARL_ENVELOPES: Readonly<Record<GarmentPart<'human'>, EnvelopeAllowance>> = {
-  head: { margin: CARL_HEAD_MARGIN, rise: CARL_HAT_RISE, drop: 0 },
-  torso: { margin: CARL_TORSO_MARGIN, rise: 0, drop: 0 },
-  neck: { margin: CARL_NECK_MARGIN, rise: CARL_SHIRT_RISE, drop: 0 },
-  hips: { margin: CARL_HIPS_MARGIN, rise: 0, drop: 0 },
-  forearm: { margin: CARL_FOREARM_MARGIN, rise: 0, drop: 0 },
-  back: { margin: CARL_CLOAK_MARGIN, rise: 0, drop: CARL_CLOAK_DROP },
-  foot: { margin: CARL_FOOT_MARGIN, rise: 0, drop: 0 },
-  leg: { margin: CARL_LEG_MARGIN, rise: 0, drop: 0 },
+const HUMAN_ENVELOPES: Readonly<Record<GarmentPart<'human'>, EnvelopeAllowance>> = {
+  head: { margin: HUMAN_HEAD_MARGIN, rise: HUMAN_HAT_RISE, drop: 0 },
+  torso: { margin: HUMAN_TORSO_MARGIN, rise: 0, drop: 0 },
+  neck: { margin: HUMAN_NECK_MARGIN, rise: HUMAN_SHIRT_RISE, drop: 0 },
+  hips: { margin: HUMAN_HIPS_MARGIN, rise: 0, drop: 0 },
+  forearm: { margin: HUMAN_FOREARM_MARGIN, rise: 0, drop: 0 },
+  back: { margin: HUMAN_CLOAK_MARGIN, rise: 0, drop: HUMAN_CLOAK_DROP },
+  foot: { margin: HUMAN_FOOT_MARGIN, rise: 0, drop: 0 },
+  leg: { margin: HUMAN_LEG_MARGIN, rise: 0, drop: 0 },
 };
 
 /** Every wearer's allowance per part. */
@@ -75,5 +75,5 @@ export const GARMENT_ENVELOPES: {
   readonly [W in GarmentWearer]: Readonly<Record<GarmentPart<W>, EnvelopeAllowance>>;
 } = {
   cat: CAT_ENVELOPES,
-  human: CARL_ENVELOPES,
+  human: HUMAN_ENVELOPES,
 };

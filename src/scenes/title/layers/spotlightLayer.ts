@@ -1,5 +1,5 @@
 /**
- * The game-show lighting rig: a key light that snaps on over Carl and Donut
+ * The game-show lighting rig: a key light that snaps on over the two crawlers
  * during the reveal and holds there, and two fainter searchlights that sweep
  * the hall slowly while the idle loop runs. Each is a soft cone of haze from
  * above the screen to a pool on the floor, added over the dark.

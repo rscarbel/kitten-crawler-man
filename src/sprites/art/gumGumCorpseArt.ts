@@ -19,7 +19,7 @@
  */
 
 import { type FigureDef, figureStates } from '../figure/figureDef';
-import { mix, rgba, type Pt } from './carlArt';
+import { mix, rgba, type Pt } from './bipedArt';
 import { fillSoftEllipse, withClip } from './softShade';
 import { mulberry32, range, type Rng } from '../person/rng';
 import {
@@ -403,7 +403,7 @@ const NEAR_BARE_FOOT = p(NEAR_FOOT.x + SHOE_REACH, NEAR_FOOT.y);
 
 // ── Outline ──────────────────────────────────────────────────────────────────
 
-/** In floor units: about one screen pixel each side at the 32 px tile, like Carl's silhouette line. */
+/** In floor units: about one screen pixel each side at the 32 px tile, like the biped figure's silhouette line. */
 const OUTLINE_WIDTH = 0.06;
 const OUTLINE_ALPHA = 0.85;
 

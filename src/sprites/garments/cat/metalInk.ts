@@ -1,5 +1,5 @@
 /**
- * The metals Donut's jewellery and armour are painted in, each as a ramp from
+ * The metals the cat crawler's jewellery and armour are painted in, each as a ramp from
  * its shadow to its highlight, and the hard-banded fill they share: at her
  * in-game size a piece of metal is a handful of pixels, and only a fill that
  * steps from a lit band to a shadowed one reads as metal rather than paint.

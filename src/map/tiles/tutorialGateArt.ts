@@ -2,7 +2,7 @@
  * The tutorial's cellar gates: iron portcullises that winch up into a timber
  * headbox, the knee-high iron fence with a double swing gate that the cat's
  * Magic Missile flies over, and the solid iron-strapped cellar door that keeps
- * Carl away from the cat's target.
+ * the human away from the cat's target.
  *
  * The tutorial's gates are not tiles: every tile under them is plain floor so
  * a missile can cross a shut gate. These painters therefore take an explicit

@@ -82,7 +82,7 @@ export function getTownRamp(id: TownRampId): Ramp {
  * rule as `TOWN_RAMPS`.
  */
 export const CIRCUS_RAMPS = {
-  /** Dried-blood red: the warm stripe of every tent panel, valance and pennant, and Donut's red/white props. */
+  /** Dried-blood red: the warm stripe of every tent panel, valance and pennant, and the cat crawler's red/white props. */
   circus_blood: ramp([54, 20, 22], [114, 40, 38], [150, 66, 58], [174, 94, 84]),
   /** Bone cream: the pale stripe paired with `circus_blood`, clown greasepaint and sun-bleached canvas. Warmer and yellower than `oc_plaster`. */
   circus_bone: ramp([104, 90, 70], [168, 152, 120], [204, 190, 154], [222, 210, 176]),
@@ -90,7 +90,7 @@ export const CIRCUS_RAMPS = {
   circus_bruise: ramp([36, 24, 42], [78, 50, 84], [118, 84, 118], [148, 112, 136]),
   /** Tarnished brass and gilt: hoops, follow-spots, mirror frames, finials and star targets. The accent is the one polished glint. */
   circus_brass: ramp([54, 46, 24], [122, 96, 48], [168, 140, 76], [212, 188, 118]),
-  /** Navy faded to slate: the menagerie drapes, Carl's circus-blue props and wagon panels. */
+  /** Navy faded to slate: the menagerie drapes, the human crawler's circus-blue props and wagon panels. */
   circus_navy: ramp([30, 38, 52], [60, 74, 94], [102, 116, 132], [136, 148, 158]),
   /** Mildew green-grey: blooms on the canvas skirt and damp stains on timber — a tint over another material, never a whole surface. */
   circus_mildew: ramp([50, 58, 42], [94, 104, 72], [134, 140, 100], [162, 164, 120]),
@@ -104,11 +104,11 @@ export const CIRCUS_RAMPS = {
   circus_straw: ramp([94, 74, 40], [154, 128, 76], [192, 168, 110], [218, 198, 144]),
   /** Limelight and footlight glass: lit bulbs, lamp lenses and stage-light pools — the only saturated warm in the set, because it is light, not pigment. */
   circus_limelight: ramp([148, 82, 32], [226, 160, 82], [248, 222, 168], [252, 244, 220]),
-  /** Ringmaster blue: Carl's props only. Kept saturated where the navy drapes are faded, because "that one is Carl's" has to read from across a dark lane. */
+  /** Ringmaster blue: the human crawler's props only. Kept saturated where the navy drapes are faded, because "that one is the human's" has to read from across a dark lane. */
   circus_ringmaster: ramp([16, 26, 58], [30, 54, 112], [58, 96, 168], [112, 152, 212]),
-  /** Show gilt: Donut's hoop and trim only, a polished gold kept apart from the tarnished brass hardware for the same reason. */
+  /** Show gilt: the cat crawler's hoop and trim only, a polished gold kept apart from the tarnished brass hardware for the same reason. */
   circus_gilt: ramp([104, 66, 16], [174, 124, 34], [226, 180, 70], [250, 222, 130]),
-  /** Stage red: Donut's stripes, the one red in the tent still bright enough to say "hers" under the stage lights. */
+  /** Stage red: the cat crawler's stripes, the one red in the tent still bright enough to say "hers" under the stage lights. */
   circus_stage_red: ramp([70, 14, 20], [150, 32, 40], [196, 56, 60], [222, 102, 96]),
 } as const satisfies Record<string, Ramp>;
 

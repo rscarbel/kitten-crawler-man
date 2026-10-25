@@ -24,7 +24,7 @@
  * exists to hold.
  */
 
-import { clamp01, easeInOut, lerp, type Pt } from '../carlArt';
+import { clamp01, easeInOut, lerp, type Pt } from '../bipedArt';
 import {
   HALF_PI,
   MIDPOINT,
@@ -348,8 +348,8 @@ function solveGaitChain(hipHeight: number, leg: SkyfowlLegPose): GaitChain {
  * Head-on, how much of a point's "ahead" shows as screen height. The floor
  * is seen steeply from above, so a planted foot slides only a short way up
  * or down the screen as the body passes over it; higher up the leg the body
- * stands upright and depth does not show at all. Matched to Carl's head-on
- * floor so the two casts' feet travel the same way in the same room.
+ * stands upright and depth does not show at all. Matched to the biped rig's
+ * head-on floor so the two casts' feet travel the same way in the same room.
  */
 const HEAD_ON_FLOOR_FORESHORTENING = 0.15;
 const DEPTH_SHOWN_FULLY_BELOW = 0.06;

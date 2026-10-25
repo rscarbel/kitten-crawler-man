@@ -7,8 +7,8 @@
  * beyond what the game has shown by the third floor, when the party can hire
  * them.
  *
- * The cat crawler is "Princess" to the two cretins, because Sledge
- * is devoted to her and Bomo follows his lead.
+ * The two cretins call the cat crawler by name and fuss over her more than
+ * anyone, because Sledge is devoted to her and Bomo follows his lead.
  *
  * `MercenaryBarker` (`src/creatures/mercenaries/MercenaryBarker.ts`) reads
  * every one of these pools generically, through `MercenaryLines` and
@@ -16,9 +16,12 @@
  * unread here is a bark nobody will ever hear.
  */
 
+import { crawlerName } from '../../characters/characters';
 import { speakerLines } from '../line';
 import type { MercenaryLines } from '../roles';
 import type { MercenaryVoice } from '../../creatures/mercenaries/mercenaryVoices';
+
+const CAT_NAME = crawlerName('cat');
 
 const sledge = speakerLines('sledge');
 
@@ -26,12 +29,12 @@ export const SLEDGE_LINES = {
   hired: [
     sledge.bark('Sledge here. Sledge protect.'),
     sledge.bark('Contract good. Sledge walk with you.'),
-    sledge.bark('Where Princess? Sledge go where Princess go.'),
+    sledge.bark(`Where ${CAT_NAME}? Sledge go where ${CAT_NAME} go.`),
     sledge.bark('Sledge ready.'),
   ],
   idle: [
     sledge.bark('Quiet. Sledge like quiet.'),
-    sledge.bark('Princess safe. Good.'),
+    sledge.bark(`${CAT_NAME} safe. Good.`),
     sledge.bark('Bomo like this hallway. Bomo like every hallway.'),
     sledge.bark('Sledge not bored. Sledge guarding.'),
   ],
@@ -66,10 +69,10 @@ export const SLEDGE_LINES = {
     sledge.bark('You okay? Sledge fix.'),
   ],
   catHurt: [
-    sledge.bark('NO touch Princess.'),
-    sledge.bark('Princess! Sledge coming.'),
-    sledge.bark('You hurt Princess. Bad idea.'),
-    sledge.bark('Princess behind Sledge. Now.'),
+    sledge.bark(`NO touch ${CAT_NAME}.`),
+    sledge.bark(`${CAT_NAME}! Sledge coming.`),
+    sledge.bark(`You hurt ${CAT_NAME}. Bad idea.`),
+    sledge.bark(`${CAT_NAME} behind Sledge. Now.`),
   ],
   downed: [
     sledge.bark('Sledge down. Help Sledge up.'),
@@ -88,10 +91,10 @@ export const SLEDGE_LINES = {
     sledge.bark('Glug.'),
   ],
   death: [
-    sledge.bark('Princess... run.'),
+    sledge.bark(`${CAT_NAME}... run.`),
     sledge.bark('Sledge... tried.'),
     sledge.bark('Tell Bomo... Sledge say bye.'),
-    sledge.bark('Keep... Princess... safe.'),
+    sledge.bark(`Keep... ${CAT_NAME}... safe.`),
   ],
   talk: [
     sledge.bark('Bomo say hi. Bomo not here. Still say hi.'),
@@ -101,7 +104,7 @@ export const SLEDGE_LINES = {
   ],
   floorEnd: [
     sledge.bark('Floor done. Contract done. Good work.'),
-    sledge.bark('Sledge go back now. Tell Princess bye.'),
+    sledge.bark(`Sledge go back now. Tell ${CAT_NAME} bye.`),
     sledge.bark('Stairs. Sledge stay. Rules.'),
     sledge.bark('You live. Good.'),
   ],
@@ -153,10 +156,10 @@ export const BOMO_LINES = {
     bomo.bark('That make Bomo mad.'),
   ],
   catHurt: [
-    bomo.bark('Princess! No!'),
-    bomo.bark('Nobody hurt Princess. Sledgy say so.'),
-    bomo.bark('Bomo coming, Princess!'),
-    bomo.bark('Bad! Bad thing hit Princess!'),
+    bomo.bark(`${CAT_NAME}! No!`),
+    bomo.bark(`Nobody hurt ${CAT_NAME}. Sledgy say so.`),
+    bomo.bark(`Bomo coming, ${CAT_NAME}!`),
+    bomo.bark(`Bad! Bad thing hit ${CAT_NAME}!`),
   ],
   downed: [
     bomo.bark('Bomo fall down! Help Bomo!'),
@@ -177,11 +180,11 @@ export const BOMO_LINES = {
   death: [
     bomo.bark('Tell Sledgy... Bomo tried.'),
     bomo.bark('Bomo... sorry.'),
-    bomo.bark('Princess... Bomo protect... little bit.'),
+    bomo.bark(`${CAT_NAME}... Bomo protect... little bit.`),
     bomo.bark('Sledgy...'),
   ],
   talk: [
-    bomo.bark('He buy spell with own money. He buy for Princess protect.'),
+    bomo.bark(`He buy spell with own money. He buy for ${CAT_NAME} protect.`),
     bomo.bark('Sledgy best friend. Bomo best friend too. Of Sledgy.'),
     bomo.bark('Bomo not remember name of this place. Bomo remember you.'),
     bomo.bark('Tux itch. Rosemarie say wear tux.'),
@@ -419,7 +422,7 @@ export const GLUTEUS_MAXX_LINES = {
     gluteusMaxx.bark('Not the kitty! NOT THE KITTY!'),
     gluteusMaxx.bark('You hit the cat? You hit the CAT?'),
     gluteusMaxx.bark('Kitty down! Rage up!'),
-    gluteusMaxx.bark('That cat is a celebrity, you animal!'),
+    gluteusMaxx.bark('That cat is a sweetheart, you animal!'),
   ],
   downed: [
     gluteusMaxx.bark("I'm DOWN! Get me UP!"),
@@ -504,8 +507,8 @@ export const BUCKET_BOY_LINES = {
   ],
   catHurt: [
     bucketBoy.bark('The cat! Is she okay? Is she okay?'),
-    bucketBoy.bark('Miss Donut! Hold on!'),
-    bucketBoy.bark("Oh no, not her, she's famous!"),
+    bucketBoy.bark(`Miss ${CAT_NAME}! Hold on!`),
+    bucketBoy.bark("Oh no, not her, she's so nice!"),
     bucketBoy.bark("I'm coming, kitty! Slowly! But coming!"),
   ],
   downed: [

@@ -1,44 +1,47 @@
 /**
  * Mordecai as an Incubus — his shape on the Over City floor — as a painted
- * figure: Carl's own rig and choreography (`carl/figure.ts`, `human/`), in a
+ * figure: the biped rig and its choreography (`biped/figure.ts`, `human/`), in a
  * dusky grey skin, slicked black hair and a wine silk shirt, with the horns,
  * wings, tail, sash, trousers and boots of `incubusArt.ts` composed into it.
  *
- * Built on Carl's rig rather than a rig of its own for the same reason the
+ * Built on the biped rig rather than a rig of its own for the same reason the
  * town's residents are: it is the only figure in the game whose movement
  * convinces, and it puts Mordecai in the same drawing style as the humans
  * around him in the town.
  *
  * Rows, in three views (profile drawn facing +X and mirrored at runtime):
- *    idle / idle_side / idle_away   — Carl's breathing idle, blink included
- *    walk / walk_side / walk_away   — Carl's walk, paced by ground covered
- *    talk / talk_side / talk_away   — Carl's talking gestures
+ *    idle / idle_side / idle_away   — the figure's breathing idle, blink included
+ *    walk / walk_side / walk_away   — the figure's walk, paced by ground covered
+ *    talk / talk_side / talk_away   — the figure's talking gestures
  */
 
-import { BARE_CARL_OUTFIT, stillOutfit } from '../garments/human/carlDressing';
+import { stillOutfit } from '../garments/human/humanDressing';
+import { DAVE_JACKET } from '../garments/human/daveJacket';
 import {
   resetTownsfolkLegwear,
   setTownsfolkLegwear,
   TOWNSFOLK_SHOES,
   TOWNSFOLK_TROUSERS,
 } from '../garments/human/townsfolkLegwear';
-import type { Outfit } from '../garments/outfit';
+import { outfitOf } from '../garments/outfit';
 import { type FigureDef, figureStates } from '../figure/figureDef';
-import { type CarlComposeOptions, drawCarlBack, drawCarlFront, drawCarlSide } from './carl/figure';
-import { type CarlPose } from './carl/rig';
+import {
+  type BipedComposeOptions,
+  drawBipedBack,
+  drawBipedFront,
+  drawBipedSide,
+} from './biped/figure';
+import { type BipedPose } from './biped/rig';
 import {
   FACING_BROW_DEFAULT,
+  FLAT_MOUTH,
   PROFILE_BROW_DEFAULT,
-  resetCarlExpression,
-  setCarlExpression,
-} from './carl/head';
-import {
-  resetCarlGarmentRamp,
-  resetCarlSkinHairRamp,
-  setCarlGarmentRamp,
-  setCarlSkinHairRamp,
-} from './carl/palette';
-import { resetCarlTorsoCut, setCarlTorsoCut } from './carl/torso';
+  RIG_BROW_TONE,
+  RIG_EYES,
+} from './biped/head';
+import { type HumanLook, lookPxPerUnit } from '../looks/humanLook';
+import { RIG_LOOK } from '../looks/humans/rig';
+import { RIG_GARMENT_CUT } from './biped/torso';
 import { idleBack, idleExhale, idleFront, idleSide } from './human/idles';
 import { walkFacing, walkSide } from './human/locomotion';
 import { talkBack, talkFront, talkSide, TALK_FRAMES } from './human/actionsMisc';
@@ -52,7 +55,7 @@ import {
   type IncubusMotion,
   incubusAttachments,
 } from './incubusArt';
-import { TWO_PI } from './carl/geometry';
+import { TWO_PI } from './biped/geometry';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -75,31 +78,57 @@ export function incubusStateName(role: IncubusRole, view: IncubusView): string {
 // ── Build ────────────────────────────────────────────────────────────────────
 
 /**
- * He stands a little taller than Carl and the townsfolk, and broader again
+ * He stands a little taller than the human crawler and the townsfolk, and broader again
  * than that: a heroic frame reads by shoulders a size too big for the head,
  * never by a bigger head. Height is uniform scale; the extra width is
  * horizontal only.
  */
 export const INCUBUS_HEIGHT_SCALE = 1.06;
 const INCUBUS_WIDTH_SCALE = 1.14;
-const UNIT_PX_Y = HUMAN_CELL_PX_PER_UNIT * INCUBUS_HEIGHT_SCALE;
-const UNIT_PX_X = UNIT_PX_Y * INCUBUS_WIDTH_SCALE;
 
 /**
  * A shirt cut just past the waist, with no zip or waistband of its own: the
- * sash is the waistband. Carl's jacket repainted in silk.
+ * sash is the waistband. Dave's jacket repainted in silk.
  */
 const SHIRT_HEM_DROP = 0.06;
 const SHIRT_HEM_FLARE = 1.04;
 
-/** Calm and faintly amused: Carl's brow, with almost none of his combat scowl. */
+/** Calm and faintly amused: Dave's brow, with almost none of his combat scowl. */
 const INCUBUS_ANGER_SCALE = 0.12;
-const INCUBUS_EXPRESSION = {
-  angerScale: INCUBUS_ANGER_SCALE,
-  profileBrow: PROFILE_BROW_DEFAULT,
-  facingBrow: FACING_BROW_DEFAULT,
-  lipFullness: 1,
-} as const;
+/** Dave's own mouth, at its own width. */
+const INCUBUS_LIP_FULLNESS = 1;
+
+/**
+ * Mordecai's incubus on the rig: Dave's crop under his own hair, Dave's jacket
+ * recut as the shirt, and nothing else of Dave's under it — not his jeans.
+ */
+const INCUBUS_LOOK: HumanLook = {
+  ...RIG_LOOK,
+  id: 'mordecai_incubus',
+  skin: INCUBUS_SKIN,
+  hair: INCUBUS_HAIR,
+  garment: INCUBUS_SHIRT,
+  garmentCut: {
+    ...RIG_GARMENT_CUT,
+    hemDrop: SHIRT_HEM_DROP,
+    hasHardware: false,
+    hemFlare: SHIRT_HEM_FLARE,
+  },
+  expression: {
+    angerScale: INCUBUS_ANGER_SCALE,
+    profileBrow: PROFILE_BROW_DEFAULT,
+    facingBrow: FACING_BROW_DEFAULT,
+    lipFullness: INCUBUS_LIP_FULLNESS,
+    mouthSmile: FLAT_MOUTH,
+    eyes: RIG_EYES,
+    browTone: RIG_BROW_TONE,
+  },
+  heightScale: INCUBUS_HEIGHT_SCALE,
+  // The extra breadth is measured against his own height, not the base figure's.
+  widthScale: INCUBUS_HEIGHT_SCALE * INCUBUS_WIDTH_SCALE,
+  baseGarments: [DAVE_JACKET],
+};
+const UNIT_PX = lookPxPerUnit(INCUBUS_LOOK, HUMAN_CELL_PX_PER_UNIT);
 
 // ── Cell ─────────────────────────────────────────────────────────────────────
 
@@ -170,21 +199,21 @@ function talkMotion(phase: number): IncubusMotion {
 
 interface IncubusRow {
   readonly frames: number;
-  readonly pose: (frame: number) => CarlPose;
+  readonly pose: (frame: number) => BipedPose;
   readonly motion: (frame: number) => IncubusMotion;
 }
 
-const IDLE_POSE: Readonly<Record<IncubusView, (phase: number, lid: number) => CarlPose>> = {
+const IDLE_POSE: Readonly<Record<IncubusView, (phase: number, lid: number) => BipedPose>> = {
   front: idleFront,
   side: idleSide,
   away: idleBack,
 };
-const WALK_POSE: Readonly<Record<IncubusView, (phase: number) => CarlPose>> = {
+const WALK_POSE: Readonly<Record<IncubusView, (phase: number) => BipedPose>> = {
   front: (phase) => walkFacing(phase, false),
   side: walkSide,
   away: (phase) => walkFacing(phase, true),
 };
-const TALK_POSE: Readonly<Record<IncubusView, (frame: number) => CarlPose>> = {
+const TALK_POSE: Readonly<Record<IncubusView, (frame: number) => BipedPose>> = {
   front: talkFront,
   side: talkSide,
   away: talkBack,
@@ -226,54 +255,35 @@ const ROWS: ReadonlyMap<string, NamedRow> = new Map(
 );
 
 const DRAW_BY_VIEW: Readonly<
-  Record<IncubusView, (ctx: Ctx, pose: CarlPose, options: CarlComposeOptions) => void>
+  Record<IncubusView, (ctx: Ctx, pose: BipedPose, options: BipedComposeOptions) => void>
 > = {
-  front: drawCarlFront,
-  side: drawCarlSide,
-  away: drawCarlBack,
+  front: drawBipedFront,
+  side: drawBipedSide,
+  away: drawBipedBack,
 };
 
-const CARL_ONLY_GARMENT = 'carl_boxers';
 /**
- * Nothing of Carl's own: no boxers, no cloak, no gauntlet, no trollskin band
- * at the collar. His jacket is recut as the shirt, and he wears the cast's
- * trousers and shoes in his own colours.
+ * His shirt — the rig's jacket, recut and recoloured by his look — and the
+ * cast's trousers and shoes in his own colours. None of the crawler's gear:
+ * no cloak, no gauntlet, no trollskin band at the collar.
  */
-const INCUBUS_OUTFIT: Outfit<'human'> = {
-  wearer: 'human',
-  garments: [
-    ...BARE_CARL_OUTFIT.garments.filter((garment) => garment.id !== CARL_ONLY_GARMENT),
-    TOWNSFOLK_TROUSERS,
-    TOWNSFOLK_SHOES,
-  ],
-  hidden: new Set(),
-  key: 'mordecai-incubus',
-};
-const NOTHING_OF_CARLS = stillOutfit(INCUBUS_OUTFIT);
+const INCUBUS_OUTFIT = stillOutfit(outfitOf(INCUBUS_LOOK, [TOWNSFOLK_TROUSERS, TOWNSFOLK_SHOES]));
 
 function paintIncubusFrame(ctx: Ctx, state: string, frame: number): void {
   const row = ROWS.get(state);
   if (row === undefined) return;
-  const pose: CarlPose = { ...row.pose(frame), outfit: NOTHING_OF_CARLS };
+  const pose: BipedPose = { ...row.pose(frame), outfit: INCUBUS_OUTFIT };
   const attachments = incubusAttachments(row.motion(frame));
   // Reset in `finally`: a painter that throws mid-bake must not leave the next
-  // figure baked — Carl or a resident — in this one's skin, shirt or face.
-  setCarlSkinHairRamp(INCUBUS_SKIN, INCUBUS_HAIR);
-  setCarlGarmentRamp(INCUBUS_SHIRT);
-  setCarlTorsoCut(SHIRT_HEM_DROP, false, SHIRT_HEM_FLARE);
-  setCarlExpression(INCUBUS_EXPRESSION);
+  // figure baked — the player or a resident — in this one's legwear.
   setTownsfolkLegwear(INCUBUS_LEGWEAR);
   ctx.save();
   try {
     ctx.translate(ORIGIN_X, GROUND_Y);
-    ctx.scale(UNIT_PX_X, UNIT_PX_Y);
-    DRAW_BY_VIEW[row.view](ctx, pose, { attachments });
+    ctx.scale(UNIT_PX.x, UNIT_PX.y);
+    DRAW_BY_VIEW[row.view](ctx, pose, { look: INCUBUS_LOOK, attachments });
   } finally {
     ctx.restore();
-    resetCarlSkinHairRamp();
-    resetCarlGarmentRamp();
-    resetCarlTorsoCut();
-    resetCarlExpression();
     resetTownsfolkLegwear();
   }
 }
@@ -289,7 +299,7 @@ export const INCUBUS_FIGURE: FigureDef = {
   tileX: ORIGIN_X - HALF_TILE,
   tileY: GROUND_Y - INCUBUS_TILE_SCALE,
   tileScale: INCUBUS_TILE_SCALE,
-  // Carl's painter composes on its own surface at the bake's density, with a
+  // The biped painter composes on its own surface at the bake's density, with a
   // one-pixel outline; a supersampled bake would only smear it.
   skipSupersample: true,
   states: figureStates(FRAME_COUNTS),

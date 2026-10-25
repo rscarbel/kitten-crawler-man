@@ -1,5 +1,5 @@
 /**
- * The tutorial's "Enemy Nearby!" card, raised when Carl first walks up to the
+ * The tutorial's "Enemy Nearby!" card, raised when the human crawler first walks up to the
  * tutorial goblin. It floats over the world without a scrim; a fresh press
  * of the attack key puts it away. Escape passes beneath it to
  * the pause menu.

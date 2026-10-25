@@ -7,14 +7,14 @@
  * drift out of step between views, and the lance stays in his right hand
  * whichever way he faces.
  *
- * The gait is Carl's structure, re-derived for a taller, longer-legged man:
+ * The gait is the biped rig's structure, re-derived for a taller, longer-legged man:
  * the stance foot slides back at exactly the ground the stride covers, the
  * pelvis rides the lower of the two stance legs' reach arcs rather than a
  * keyed bob, and the free arm swings from its shoulder by its joint angles,
  * back on the same side as the foot striking the floor.
  */
 
-import { clamp01, easeInOut, lerp } from './carlArt';
+import { clamp01, easeInOut, lerp } from './bipedArt';
 import {
   ANKLE_HEIGHT,
   type ArmAngles,
@@ -23,7 +23,6 @@ import {
   type DongView,
   type FootPose,
   HIP_HEIGHT,
-  LANCE_LENGTH,
   LEG_MAX_REACH,
   STANCE_HALF,
   UPRIGHT_CARRY_HAND,
@@ -40,6 +39,7 @@ import {
   sub3,
   v3,
 } from './dongQuixoteArt';
+import { GROUND_OFFSET_IN_TILE } from './humanFigure';
 import { figureStates, type FigureDef } from '../figure/figureDef';
 import {
   DONG_CHARGE_FRAMES,
@@ -245,7 +245,7 @@ function walkStanceFoot(u: number, x: number): FootPose {
 /**
  * The swing: the foot peels off behind, tucks up with the knee folded, passes
  * low under the hip and reaches forward straight-kneed to strike. His tuck is
- * shallower than Carl's — an old soldier's stiff march — but it is there, or
+ * shallower than the biped figure's — an old soldier's stiff march — but it is there, or
  * the swing is a goose step.
  */
 const WALK_SWING_STOPS: readonly number[] = [0, 0.3, 0.58, 0.84, 1];
@@ -1234,37 +1234,48 @@ export function dongPoseAt(state: string, frame: number): { pose: DongPose; view
 // ── Cell geometry ────────────────────────────────────────────────────────────
 
 /**
- * Cell pixels per tile; the runtime scales by tileSize / TILE_SCALE. Painted
- * just above the 32 px game tile (and baked at twice that) rather than at
- * Carl's 64: every row he can play in a fight is warmed at once, and at 64
- * the set does not fit the frame cache's per-figure budget.
+ * Cell pixels per unit of his rig, the unit every pose, length and reach in
+ * his art is authored in. Kept small (the human crawler paints at 64 per
+ * unit) because every row he can play in a fight is warmed at once, and at
+ * 64 the set does not fit the frame cache's per-figure budget. A tile spans
+ * fewer cell pixels than a unit ({@link TILE_SCALE}), so one unit of his rig
+ * stands taller than a tile in the world.
  */
-export const TILE_SCALE = 36;
+export const PX_PER_FIGURE_UNIT = 36;
 /**
- * How far his ink reaches from his origin, in tiles, a little past the widest
- * pose on each side. Left: the bow's dipped lance and the dropped lance
+ * How many world tiles one unit of his rig is meant to span. He is a lanky
+ * knight on foot who has to tower over the crawlers he jousts, so his rig is
+ * drawn larger than a tile per unit rather than painted into a bigger cell,
+ * which would cost cache bytes on every warmed row.
+ */
+const DONG_SIZE_OVER_RIG = 1.2;
+/**
+ * Cell pixels per world tile; the runtime scales by tileSize / TILE_SCALE.
+ * Rounded so the tile's edges fall on whole cell rows.
+ */
+export const TILE_SCALE = Math.round(PX_PER_FIGURE_UNIT / DONG_SIZE_OVER_RIG);
+/** World tiles one unit of his rig spans, as {@link TILE_SCALE} lands it. */
+export const DONG_TILES_PER_FIGURE_UNIT = PX_PER_FIGURE_UNIT / TILE_SCALE;
+/**
+ * How far his ink reaches from his origin, in figure units, a little past the
+ * widest pose on each side. Left: the bow's dipped lance and the dropped lance
  * head-on. Right: the thrust's point at full reach in profile (the cell is
  * mirrored about his tile's centre for a left facing). Up: the saluting
  * point. Down: a lance lying toward the camera from behind. The cell is cut
  * to these and no wider; the structural gate fails any pose that outgrows it.
  */
-const REACH_LEFT_TILES = 1.25;
-const REACH_RIGHT_TILES = 2.11;
-const REACH_UP_TILES = 2.83;
-const REACH_DOWN_TILES = 0.53;
-/** The ground line's row within his tile: where Carl's feet sit, rounded to a whole row. */
-export const GROUND_ROW_IN_TILE = 33;
-export const ORIGIN_X = Math.round(REACH_LEFT_TILES * TILE_SCALE);
-export const ORIGIN_Y = Math.round(REACH_UP_TILES * TILE_SCALE);
-export const FRAME_W = ORIGIN_X + Math.round(REACH_RIGHT_TILES * TILE_SCALE);
-export const FRAME_H = ORIGIN_Y + Math.round(REACH_DOWN_TILES * TILE_SCALE);
+const REACH_LEFT_UNITS = 1.25;
+const REACH_RIGHT_UNITS = 2.11;
+const REACH_UP_UNITS = 2.83;
+const REACH_DOWN_UNITS = 0.53;
+/** His feet stand on the same line down a tile as the human crawler's, so the two share a floor. */
+const GROUND_ROW_IN_TILE = Math.round(GROUND_OFFSET_IN_TILE * TILE_SCALE);
+export const ORIGIN_X = Math.round(REACH_LEFT_UNITS * PX_PER_FIGURE_UNIT);
+export const ORIGIN_Y = Math.round(REACH_UP_UNITS * PX_PER_FIGURE_UNIT);
+export const FRAME_W = ORIGIN_X + Math.round(REACH_RIGHT_UNITS * PX_PER_FIGURE_UNIT);
+export const FRAME_H = ORIGIN_Y + Math.round(REACH_DOWN_UNITS * PX_PER_FIGURE_UNIT);
 export const TILE_X = ORIGIN_X - TILE_SCALE / 2;
 export const TILE_Y = ORIGIN_Y - GROUND_ROW_IN_TILE;
-
-/** A figure-space point in cell pixels. */
-export function toCellPx(x: number, y: number): { x: number; y: number } {
-  return { x: ORIGIN_X + x * TILE_SCALE, y: ORIGIN_Y + y * TILE_SCALE };
-}
 
 function paintDongFrame(ctx: CanvasRenderingContext2D, state: string, frame: number): void {
   const resolved = STATE_INDEX.get(state);
@@ -1273,7 +1284,7 @@ function paintDongFrame(ctx: CanvasRenderingContext2D, state: string, frame: num
   ctx.save();
   try {
     ctx.translate(ORIGIN_X, ORIGIN_Y);
-    ctx.scale(TILE_SCALE, TILE_SCALE);
+    ctx.scale(PX_PER_FIGURE_UNIT, PX_PER_FIGURE_UNIT);
     drawDongQuixote(ctx, pose, resolved.view);
   } finally {
     ctx.restore();
@@ -1296,6 +1307,3 @@ export const DONG_QUIXOTE_FIGURE: FigureDef = {
   states: figureStates(stateFrames()),
   paintFrame: paintDongFrame,
 };
-
-/** The lance's full length, re-exported for the kit's reach arithmetic. */
-export const DONG_LANCE_LENGTH = LANCE_LENGTH;

@@ -17,7 +17,7 @@
  * harness runs: `npm run render:trash-gremlin`.
  */
 
-import { clamp01, easeInOut, hump, lerp } from './carlArt';
+import { clamp01, easeInOut, hump, lerp } from './bipedArt';
 import {
   type GremlinPose,
   type GremlinView,

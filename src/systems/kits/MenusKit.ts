@@ -15,7 +15,8 @@ import { playDrinkGesture } from '../../creatures/humanGestures';
 import { displayHp } from '../../core/crawlerFormulas';
 import { ITEM_DEF, type InventoryItem, type ItemId } from '../../core/ItemDefs';
 import { itemIsTradable } from '../../core/itemTrade';
-import { CRAWLER_NAMES, type CrawlerKind } from '../../core/SkillManager';
+import { crawlerName } from '../../characters/characters';
+import { type CrawlerKind } from '../../core/SkillManager';
 import { POTION_EFFECT_SOUND_DELAY, TIMED_POTIONS } from '../../core/timedPotions';
 import { eatFood, isFoodId } from '../../core/foods';
 import type { CatPlayer } from '../../creatures/CatPlayer';
@@ -271,12 +272,12 @@ export class MenusKit {
       kind === 'human'
         ? {
             id: 'human',
-            name: CRAWLER_NAMES.human,
+            name: crawlerName('human'),
             owner: pm.human,
             drawnWeaponId: pm.human.drawnWeaponId,
             heldItemId: deps.heldItemId?.() ?? null,
           }
-        : { id: 'cat', name: CRAWLER_NAMES.cat, owner: pm.cat };
+        : { id: 'cat', name: crawlerName('cat'), owner: pm.cat };
     const restrictions = deps.inventoryRestrictions;
     return new InventoryScreen({
       actions: this.inventoryActions,
@@ -288,7 +289,7 @@ export class MenusKit {
       },
       coins: () => partyCoins(pm.human, pm.cat),
       coinSplit: () =>
-        `${CRAWLER_NAMES.human} ${pm.human.coins} · ${CRAWLER_NAMES.cat} ${pm.cat.coins}`,
+        `${crawlerName('human')} ${pm.human.coins} · ${crawlerName('cat')} ${pm.cat.coins}`,
       cooldownFor: (item) => this.itemCooldowns.get(item.abilityId ?? item.id) ?? null,
       restrictions: restrictions === undefined ? undefined : () => restrictions(),
       onBlockedDrag: () => deps.onBlockedInventoryDrag?.(),
@@ -602,7 +603,7 @@ export class MenusKit {
         player: eater === this.world.pm.human ? 'Human' : 'Cat',
         hpRestored: displayHp(eater.hp) - displayHp(hpBefore),
       });
-      // A bowl tipped to the mouth: the closest gesture Carl has to a spoon.
+      // A bowl tipped to the mouth: the closest gesture the human crawler has to a spoon.
       playDrinkGesture(eater);
     }
     this.showPotionEffectNotice(id);

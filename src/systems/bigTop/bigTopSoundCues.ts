@@ -37,7 +37,7 @@ export const BIG_TOP_CUES = {
   actApplause: ['phantom_applause_1', 'phantom_applause_2', 'phantom_applause_3'],
   /** The hall's limelights flaring up as its curtain lifts. */
   limelightIgnite: ['limelight_ignite'],
-  /** Donut ringing a feeding bell. */
+  /** The cat crawler ringing a feeding bell. */
   bellRing: ['feeding_bell_ring'],
   /**
    * A bell's follow-spots swinging away to the trough when it is rung, and

@@ -1,5 +1,5 @@
 /**
- * Carl's locomotion rows — the run he travels in at his base speed, the slow
+ * The human crawler's locomotion rows — the run he travels in at his base speed, the slow
  * walk, and the one-shots that start and stop the run — head-on, in profile and
  * from behind.
  *
@@ -14,7 +14,7 @@
  * Every view is driven from one side-on model of each foot: its ankle's
  * position ahead of the hip, its height, its pitch and whether it bears
  * weight. Profile draws that model as it is; head-on turns "ahead" into depth
- * (`CarlPose.rightFootDepth`), which the rig draws as screen height on a floor
+ * (`BipedPose.rightFootDepth`), which the rig draws as screen height on a floor
  * foreshortened to the upright figure's view (`HEAD_ON_FLOOR_FORESHORTENING`),
  * so head-on a planted foot slides back through the cell by that share of the
  * ground covered and the legs keep their length.
@@ -24,7 +24,8 @@
  */
 
 import { PLAYER_SPEED, TILE_SIZE, WADE_SPEED_FACTOR } from '../../../core/constants';
-import { pt, TWO_PI } from '../carl/geometry';
+import { pt, TWO_PI } from '../biped/geometry';
+import { WRIST_FOLLOW } from '../biped/limbs';
 import {
   ANKLE_Y,
   FIGURE_HEIGHT,
@@ -33,20 +34,21 @@ import {
   LEG_ROOT_HALF,
   PROFILE_LATERAL,
   UPPER_ARM_LENGTH,
-} from '../carl/proportions';
+} from '../biped/proportions';
 import {
   type ArmAngles,
   type BodySide,
   buildSkeleton,
-  type CarlPose,
+  type BipedPose,
   FULL_UPPER_ARM,
   restingPose,
   setArmAngles,
   VIEWS,
-} from '../carl/rig';
+} from '../biped/rig';
 import { type CardinalView } from '../../facingView';
-import { clamp01, deg, easeInOut, lerp, type Pt } from '../carlArt';
-import { HUMAN_SCALE } from './figureScale';
+import { clamp01, deg, easeInOut, lerp, type Pt } from '../bipedArt';
+import { HUMAN_SCALE, PLAYER_HUMAN_SCALE } from './figureScale';
+import { type HumanLook, playerStatureScale } from '../../looks/humanLook';
 import {
   anchorHarmonics,
   anglesThrough,
@@ -488,18 +490,17 @@ const WALK_ARC_BLEND = 0.008;
  */
 function walkHipHeight(phase: number): number {
   const ceilings = [WALK_TOP_HIP];
-  for (const [offset, jointAhead] of [
-    [0, PROFILE_HIP_JOINT_OFFSET],
-    [HALF_CYCLE, -PROFILE_HIP_JOINT_OFFSET],
-  ] as const) {
+  for (const offset of [0, HALF_CYCLE]) {
     const cycle = wrapPhase(phase + offset);
     if (cycle > WALK_TOE_OFF_PHASE) continue;
     const foot = walkStanceFoot(cycle);
     const flex = splineKeys(cycle / WALK_TOE_OFF_PHASE, WALK_STANCE_KNEE_FLEX);
     const span = legSpanAtKneeFlex(flex);
-    // Head-on the hip joint has no fore-and-aft offset at all, so the arc is
-    // held to whichever of the two views asks the leg to reach further.
-    const out = Math.max(Math.abs(foot.ankle.x - jointAhead), Math.abs(foot.ankle.x));
+    // Edge-on one hip joint stands ahead of the pelvis and the other behind
+    // it, so each leg is held to the further of the two reaches: one bob
+    // serves every view, and a leg held to its own joint's reach alone dips
+    // the pelvis deeper on one step than the other — a limp, head-on.
+    const out = Math.abs(foot.ankle.x) + PROFILE_HIP_JOINT_OFFSET;
     ceilings.push(heightOf(foot.ankle) + Math.sqrt(Math.max(0, span * span - out * out)));
   }
   const floor = Math.min(...ceilings);
@@ -511,13 +512,24 @@ const WALK_MID_STANCE = WALK_TOE_OFF_PHASE / 2;
 
 // ── Runtime pacing ───────────────────────────────────────────────────────────
 
-/** World pixels one figure unit spans: a tile is `TILE_SIZE` px, and a figure unit is `HUMAN_SCALE` of one. */
-const WORLD_PX_PER_UNIT = TILE_SIZE * HUMAN_SCALE;
+/**
+ * World pixels one figure unit of the player's human spans: a tile is
+ * `TILE_SIZE` px, and a figure unit is `PLAYER_HUMAN_SCALE` of one.
+ */
+const WORLD_PX_PER_UNIT = TILE_SIZE * PLAYER_HUMAN_SCALE;
+/** World pixels one figure unit spans on a figure drawn at the rig's own size. */
+const RIG_WORLD_PX_PER_UNIT = TILE_SIZE * HUMAN_SCALE;
 
-/** Ground a run cycle covers in the world, in pixels. */
+/** Ground the player's run cycle covers in the world, in pixels. */
 export const RUN_GROUND_PER_CYCLE_PX = RUN_GROUND_PER_CYCLE * WORLD_PX_PER_UNIT;
-/** Ground a walk cycle covers in the world, in pixels. */
+/** Ground the player's walk cycle covers in the world, in pixels. */
 export const WALK_GROUND_PER_CYCLE_PX = WALK_GROUND_PER_CYCLE * WORLD_PX_PER_UNIT;
+/**
+ * Ground the walk cycle covers on a figure drawn at the rig's own size, the
+ * size of everyone but the player built on it: their walks are paced by this
+ * times their own height.
+ */
+export const RIG_WALK_GROUND_PER_CYCLE_PX = WALK_GROUND_PER_CYCLE * RIG_WORLD_PX_PER_UNIT;
 
 /**
  * How far the run's phase turns, in radians, for every world pixel he actually
@@ -547,28 +559,40 @@ export const MAX_GAIT_ADVANCE_PX_PER_TICK = RUN_GROUND_PER_CYCLE_PX / RUN_FRAMES
  *
  * People change gait at a Froude number `v² / (g · leg)` of about 0.5, running
  * above it and walking below; the change back happens a little lower than the
- * change up. At his scale — 6'3" standing {@link FIGURE_HEIGHT_TILES} tiles
- * tall, a leg of {@link STANDING_HIP} figure units — that puts both thresholds
- * a little over a third of his base speed. A wade (`WADE_SPEED_FACTOR` of it)
- * falls just under the change back, so wading is always a walk.
+ * change up. The rig drawn at its own size stands {@link RIG_STATURE_METRES}
+ * tall in {@link FIGURE_HEIGHT_TILES} tiles, a leg of {@link STANDING_HIP}
+ * figure units; a look drawn shorter has a shorter leg in the same world, so
+ * its thresholds come down with the square root of its height. For the rig
+ * both sit a little over a third of his base speed. A wade
+ * (`WADE_SPEED_FACTOR` of it) falls just under the change back, so wading is
+ * always a walk.
  */
-const CARL_HEIGHT_METRES = 1.905;
+const RIG_STATURE_METRES = 1.905;
 const GRAVITY_METRES_PER_SECOND_SQ = 9.81;
 const RUN_ENTER_FROUDE = 0.6;
 const RUN_EXIT_FROUDE = 0.55;
 const FIGURE_HEIGHT_TILES = FIGURE_HEIGHT * HUMAN_SCALE;
-const METRES_PER_WORLD_PX = CARL_HEIGHT_METRES / (FIGURE_HEIGHT_TILES * TILE_SIZE);
-const LEG_METRES = STANDING_HIP * WORLD_PX_PER_UNIT * METRES_PER_WORLD_PX;
+const METRES_PER_WORLD_PX = RIG_STATURE_METRES / (FIGURE_HEIGHT_TILES * TILE_SIZE);
+const RIG_LEG_METRES = STANDING_HIP * RIG_WORLD_PX_PER_UNIT * METRES_PER_WORLD_PX;
 
-function froudeSpeedPxPerTick(froude: number): number {
-  const metresPerSecond = Math.sqrt(froude * GRAVITY_METRES_PER_SECOND_SQ * LEG_METRES);
+function froudeSpeedPxPerTick(froude: number, statureScale: number): number {
+  const legMetres = RIG_LEG_METRES * statureScale;
+  const metresPerSecond = Math.sqrt(froude * GRAVITY_METRES_PER_SECOND_SQ * legMetres);
   return metresPerSecond / METRES_PER_WORLD_PX / TICKS_PER_SECOND;
 }
 
-/** Measured ground speed at or above which a walk turns into a run. */
-export const RUN_SPEED_ENTER_PX_PER_TICK = froudeSpeedPxPerTick(RUN_ENTER_FROUDE);
-/** Measured ground speed below which a run drops back to a walk. */
-export const RUN_SPEED_EXIT_PX_PER_TICK = froudeSpeedPxPerTick(RUN_EXIT_FROUDE);
+/** The measured ground speeds `look` changes gait at: up to a run at `enter`, back to a walk below `exit`. */
+export interface GaitThresholds {
+  readonly enterRunPxPerTick: number;
+  readonly exitRunPxPerTick: number;
+}
+
+export function gaitThresholdsOf(look: Pick<HumanLook, 'heightScale'>): GaitThresholds {
+  return {
+    enterRunPxPerTick: froudeSpeedPxPerTick(RUN_ENTER_FROUDE, playerStatureScale(look)),
+    exitRunPxPerTick: froudeSpeedPxPerTick(RUN_EXIT_FROUDE, playerStatureScale(look)),
+  };
+}
 
 // ── Secondary motion ─────────────────────────────────────────────────────────
 
@@ -583,8 +607,6 @@ interface SpringSpec {
 }
 /** Heavy leather sways slowly and settles in a couple of swings. */
 const JACKET_HEM_SPRING: SpringSpec = { hertz: 3, damping: 0.45 };
-/** Loose cotton is quicker and livelier than the leather. */
-const BOXER_CUFF_SPRING: SpringSpec = { hertz: 5, damping: 0.3 };
 /** Short hair is stiff: it only twitches, and settles fast. */
 const HAIR_SPRING: SpringSpec = { hertz: 6, damping: 0.4 };
 
@@ -594,8 +616,6 @@ const HAIR_SPRING: SpringSpec = { hertz: 6, damping: 0.4 };
  * resolve those cleanly.
  */
 const ANCHOR_SAMPLES = 64;
-/** How far down the thigh a boxer leg's cuff sits, as a share of the thigh. */
-const CUFF_ALONG_THIGH = 0.3;
 /**
  * The drag of the air on the jacket's hem at a run, trailing it straight back
  * — the hem flares behind him for as long as he is running.
@@ -631,32 +651,20 @@ function lagOf(series: AnchorSeries, phase: number, spring: Spring): Pt {
 /** The anchors every loose part hangs from, measured round one loop of a row. */
 interface SecondaryAnchors {
   readonly waist: AnchorSeries;
-  readonly leftCuff: AnchorSeries;
-  readonly rightCuff: AnchorSeries;
   readonly head: AnchorSeries;
 }
 
 function measureAnchors(
-  base: (phase: number) => CarlPose,
+  base: (phase: number) => BipedPose,
   view: CardinalView,
   frames: number,
 ): SecondaryAnchors {
   const skeletons = Array.from({ length: ANCHOR_SAMPLES }, (_unused, i) =>
     buildSkeleton(base(i / ANCHOR_SAMPLES), VIEWS[view]),
   );
-  const cuff = (root: Pt, knee: Pt): Pt =>
-    pt(lerp(root.x, knee.x, CUFF_ALONG_THIGH), lerp(root.y, knee.y, CUFF_ALONG_THIGH));
   return {
     waist: seriesOf(
       skeletons.map((s) => s.waist),
-      frames,
-    ),
-    leftCuff: seriesOf(
-      skeletons.map((s) => cuff(s.leftLeg.root, s.leftLeg.joint)),
-      frames,
-    ),
-    rightCuff: seriesOf(
-      skeletons.map((s) => cuff(s.rightLeg.root, s.rightLeg.joint)),
       frames,
     ),
     head: seriesOf(
@@ -668,20 +676,18 @@ function measureAnchors(
 
 interface SecondarySprings {
   readonly jacket: Spring;
-  readonly cuff: Spring;
   readonly hair: Spring;
 }
 
 function springsFor(loopSeconds: number): SecondarySprings {
   return {
     jacket: springFor(JACKET_HEM_SPRING, loopSeconds),
-    cuff: springFor(BOXER_CUFF_SPRING, loopSeconds),
     hair: springFor(HAIR_SPRING, loopSeconds),
   };
 }
 
 function applySecondary(
-  pose: CarlPose,
+  pose: BipedPose,
   anchors: SecondaryAnchors,
   springs: SecondarySprings,
   phase: number,
@@ -689,15 +695,13 @@ function applySecondary(
 ): void {
   const hem = lagOf(anchors.waist, phase, springs.jacket);
   pose.jacketHemLag = pt(hem.x + drag.x, hem.y + drag.y);
-  pose.leftBoxerFlutter = lagOf(anchors.leftCuff, phase, springs.cuff);
-  pose.rightBoxerFlutter = lagOf(anchors.rightCuff, phase, springs.cuff);
   pose.hairTuftLag = lagOf(anchors.head, phase, springs.hair);
 }
 
 // ── Poses shared by every view ───────────────────────────────────────────────
 
 /** A loosely closed runner's fist: curled, never clenched. */
-const LOOSE_FIST = 0.6;
+const LOOSE_FIST = 0.85;
 const WALK_FIST = 0.55;
 const LOCOMOTION_BROW = 0.6;
 
@@ -735,12 +739,15 @@ function legSwing(phase: number): number {
  * A running arm edge-on: driven from the shoulder, the elbow opening as it
  * swings back and closing as it comes forward. At the back of the swing the
  * arm is nearly straight, the fist well behind the seat; at the front the
- * elbow is folded past a right angle and the fist is up at the chin, ahead of
- * the chest. That opening and closing is what makes the arm read as pumping
- * rather than held at a guard — a forearm that stays level at the same bend
- * all the way round reads as a boxer's hands carried along.
+ * upper arm is only a little ahead of the ribs and the elbow is at a right
+ * angle, the loose fist up at the chest just ahead of it. That opening and
+ * closing is what makes the arm read as pumping rather than held at a guard —
+ * a forearm that stays level at the same bend all the way round reads as a
+ * boxer's hands carried along. Swung further forward than this, the upper arm
+ * comes up toward level and the fist is carried out in front of the face,
+ * which reads as handing something over rather than running.
  */
-const RUN_ARM_FORWARD = deg(55);
+const RUN_ARM_FORWARD = deg(22);
 /**
  * Far enough back that the fist trails clear behind the seat: edge-on the
  * torso hides any backswing short of that, and the far arm's fist, forward at
@@ -748,9 +755,16 @@ const RUN_ARM_FORWARD = deg(55);
  */
 const RUN_ARM_BACK = deg(60);
 /** Nearly straight at the back of the swing, so the fist trails out behind him. */
-const RUN_ELBOW_FLEX = deg(30);
-/** The elbow closes as the arm comes forward, bringing the fist up to the chin. */
+const RUN_ELBOW_FLEX = deg(35);
+/** The elbow closes to a right angle as the arm comes forward, bringing the fist up to the chest. */
 const RUN_ELBOW_PUMP = deg(75);
+/**
+ * A runner's wrist stays straight, the fist in line with the forearm. At the
+ * wrist's default hold the folded arm at the front of the swing cocks the
+ * hand back toward the shoulder→hand line, palm up and out, as if offering
+ * something.
+ */
+const RUN_WRIST_FOLLOW = 0.9;
 
 /** Shoulder swing from `forward` (−1 back to 1 forward), centred so it runs smoothly through vertical. */
 function runUpperArmAngle(forward: number): number {
@@ -759,13 +773,25 @@ function runUpperArmAngle(forward: number): number {
   return centre + amplitude * forward;
 }
 
+/**
+ * The elbow closes early in the forward swing and holds near its bend through
+ * the front of it: closed in step with the shoulder, a forearm passing the hip
+ * is still open and points straight ahead, held out like something offered.
+ */
 function runElbowFlex(forward: number): number {
-  return RUN_ELBOW_FLEX + (RUN_ELBOW_PUMP * (forward + 1)) / 2;
+  const ahead = (forward + 1) / 2;
+  const closed = Math.sin((ahead * Math.PI) / 2);
+  return RUN_ELBOW_FLEX + RUN_ELBOW_PUMP * closed;
 }
 
 function runSideArm(forward: number): ArmAngles {
   const upper = runUpperArmAngle(forward);
-  return { upper, fore: upper + runElbowFlex(forward), foreScale: 1 };
+  return {
+    upper,
+    fore: upper + runElbowFlex(forward),
+    foreScale: 1,
+    wristFollow: RUN_WRIST_FOLLOW,
+  };
 }
 
 /**
@@ -806,14 +832,14 @@ interface FacingSwing {
  * sideways and the pair reads as a bodybuilder's lat spread.
  */
 const RUN_FACING_SWING: FacingSwing = {
-  forward: deg(70),
+  forward: deg(60),
   back: deg(75),
   flexBack: deg(80),
-  flexForward: deg(85),
+  flexForward: deg(75),
   elbowOutBack: deg(22),
   elbowOutForward: deg(6),
   forearmInBack: deg(-10),
-  forearmInForward: deg(45),
+  forearmInForward: deg(25),
 };
 
 /**
@@ -822,10 +848,10 @@ const RUN_FACING_SWING: FacingSwing = {
  * swing. A walking arm swung straight reads as a hang that jiggles.
  */
 const WALK_FACING_SWING: FacingSwing = {
-  forward: deg(45),
-  back: deg(30),
-  flexBack: deg(15),
-  flexForward: deg(70),
+  forward: deg(32),
+  back: deg(28),
+  flexBack: deg(12),
+  flexForward: deg(42),
   elbowOutBack: deg(16),
   elbowOutForward: deg(7),
   forearmInBack: deg(-4),
@@ -865,13 +891,36 @@ function facingSwingArm(side: number, forward: number, swing: FacingSwing): Faci
   };
 }
 
+/**
+ * `swing` with every angle scaled by `share`: the same arm in depth, swung
+ * and bent that much of the way. The forearm's turn in across the body
+ * comes last: only a fist driven up to the chest crosses toward the
+ * sternum, and one partway up that crosses lies against the belt buckle.
+ */
+function partialSwing(swing: FacingSwing, share: number): FacingSwing {
+  const crossing = share ** FOREARM_CROSSING_LAG;
+  return {
+    forward: swing.forward * share,
+    back: swing.back * share,
+    flexBack: swing.flexBack * share,
+    flexForward: swing.flexForward * share,
+    elbowOutBack: swing.elbowOutBack * share,
+    elbowOutForward: swing.elbowOutForward * share,
+    forearmInBack: swing.forearmInBack * crossing,
+    forearmInForward: swing.forearmInForward * crossing,
+  };
+}
+
+/** How far behind the rest of a growing swing its forearm's crossing comes, as a power of the share. */
+const FOREARM_CROSSING_LAG = 3;
+
 function runFacingArm(side: number, forward: number): FacingArm {
   return facingSwingArm(side, forward, RUN_FACING_SWING);
 }
 
 /** Lays both head-on arms on a pose; `rightForward` is the right arm's swing, −1 back to 1 forward. */
 function setFacingArms(
-  pose: CarlPose,
+  pose: BipedPose,
   rightForward: number,
   arm: (side: number, forward: number) => FacingArm,
 ): void {
@@ -887,10 +936,13 @@ function setFacingArms(
 
 /**
  * Head-on, how far out from the centreline each foot tracks. A runner's feet
- * land nearer the line than a walker's, but not on it: at the 32 px tile two
- * legs a hair apart merge into one column and read as a stilt.
+ * fall nearly on one line, well inside his hip joints, so the legs close in a
+ * narrow V from the seat down; tracked as wide as the hips or wider the legs
+ * read as straddling. Not quite on the line: at the 32 px tile two legs a
+ * hair apart merge into one column and read as a stilt. Inside the narrowest
+ * hips any look carries (`hipSpread` narrows the hip joints, never the feet).
  */
-export const RUN_FOOT_SPREAD = 0.1;
+export const RUN_FOOT_SPREAD = 0.07;
 /**
  * How a gait's feet are laid out head-on, beyond their side-on paths.
  *
@@ -918,12 +970,13 @@ interface FacingTrack {
 /**
  * The run seen head-on.
  *
- * The heel recovers up and a little out behind the hip, the way Muybridge's
- * oncoming runner flicks it, so the swinging shin is drawn beside the planted
- * leg rather than hidden behind it: legs sharing one column read as a hop on
- * one leg.
+ * The heel recovers up behind the thigh of its own leg, only a touch outboard
+ * of it, so the swinging shin is drawn on its own side of the planted leg
+ * rather than hidden behind it: legs sharing one column read as a hop on one
+ * leg. Flared further, the shin folds out sideways from the knee and both
+ * legs read as kicking out to the sides.
  */
-const RUN_FACING_TRACK: FacingTrack = { swingFlare: 0.2, kickLift: 1.6, reachLift: 0.45 };
+const RUN_FACING_TRACK: FacingTrack = { swingFlare: 0.11, kickLift: 1.6, reachLift: 0.45 };
 /**
  * How far behind the hip a recovering foot rides fully flared. The flare is
  * the heel's, kicked up behind him; it has mostly gone by the time the foot
@@ -1007,7 +1060,7 @@ const FULLY_NEAR_DEPTH = 0.4;
  * down the screen then reads as close, not as a stilt.
  */
 function placeFacingFoot(
-  pose: CarlPose,
+  pose: BipedPose,
   side: number,
   foot: GaitFoot,
   spread: number,
@@ -1050,7 +1103,7 @@ function placeFacingFoot(
 }
 
 /** Puts one side-on gait foot onto a profile pose. */
-function placeSideFoot(pose: CarlPose, side: number, foot: GaitFoot): void {
+function placeSideFoot(pose: BipedPose, side: number, foot: GaitFoot): void {
   const target = profileFootTarget(foot.ankle, foot.pitch);
   if (side > 0) {
     pose.rightFoot = target;
@@ -1065,7 +1118,7 @@ function placeSideFoot(pose: CarlPose, side: number, foot: GaitFoot): void {
 
 // ── Rows ─────────────────────────────────────────────────────────────────────
 
-function runBody(phase: number): CarlPose {
+function runBody(phase: number): BipedPose {
   const pose = restingPose();
   pose.bob = STANDING_HIP - runHipHeight(phase);
   const pump = runPump(phase);
@@ -1078,7 +1131,7 @@ function runBody(phase: number): CarlPose {
   return pose;
 }
 
-function runSideBase(phase: number): CarlPose {
+function runSideBase(phase: number): BipedPose {
   const pose = runBody(phase);
   placeSideFoot(pose, RIGHT_ARM, runFoot(phase));
   placeSideFoot(pose, LEFT_ARM, runFoot(phase + HALF_CYCLE));
@@ -1102,7 +1155,7 @@ function runSideBase(phase: number): CarlPose {
  */
 const RUN_SIDE_BOB_GAIN = 1;
 
-function runFacingBase(phase: number, away: boolean): CarlPose {
+function runFacingBase(phase: number, away: boolean): BipedPose {
   const pose = runBody(phase);
   pose.lean = 0;
   pose.headTilt = 0;
@@ -1143,7 +1196,7 @@ function runFlightArc(phase: number): number {
 }
 
 /** Carries a head-on body and both its feet, neither planted in flight, up the arc. */
-function liftFacingFlight(pose: CarlPose, arc: number): void {
+function liftFacingFlight(pose: BipedPose, arc: number): void {
   const lift = FACING_FLIGHT_LIFT * arc;
   if (lift <= 0) return;
   pose.bob -= lift;
@@ -1159,7 +1212,7 @@ const FACING_TWIST_SHARE = 0.5;
 /** How far he keeps his face toward the camera while travelling in profile. */
 const SIDE_HEAD_TURN = 0.25;
 
-function walkBody(phase: number): CarlPose {
+function walkBody(phase: number): BipedPose {
   const pose = restingPose();
   pose.bob = STANDING_HIP - walkHipHeight(phase);
   pose.rightFist = WALK_FIST;
@@ -1169,7 +1222,7 @@ function walkBody(phase: number): CarlPose {
   return pose;
 }
 
-function walkSideBase(phase: number): CarlPose {
+function walkSideBase(phase: number): BipedPose {
   const pose = walkBody(phase);
   pose.lean = WALK_LEAN;
   placeSideFoot(pose, RIGHT_ARM, walkFoot(phase));
@@ -1190,7 +1243,7 @@ function walkFacingArm(side: number, forward: number): FacingArm {
   return facingSwingArm(side, forward, WALK_FACING_SWING);
 }
 
-function walkFacingBase(phase: number, away: boolean): CarlPose {
+function walkFacingBase(phase: number, away: boolean): BipedPose {
   const pose = walkBody(phase);
   const view = away ? 'back' : 'front';
   placeFacingFoot(pose, RIGHT_ARM, walkFoot(phase), WALK_FOOT_SPREAD, view, WALK_FACING_TRACK);
@@ -1237,13 +1290,13 @@ const WALK_BACK_ANCHORS = measureAnchors((p) => walkFacingBase(p, true), 'back',
 
 const NO_DRAG = pt(0, 0);
 
-export function runSide(phase: number): CarlPose {
+export function runSide(phase: number): BipedPose {
   const pose = runSideBase(phase);
   applySecondary(pose, RUN_SIDE_ANCHORS, RUN_SPRINGS, phase, pt(-RUN_JACKET_DRAG, 0));
   return pose;
 }
 
-export function runFacing(phase: number, away: boolean): CarlPose {
+export function runFacing(phase: number, away: boolean): BipedPose {
   const pose = runFacingBase(phase, away);
   applySecondary(pose, away ? RUN_BACK_ANCHORS : RUN_FRONT_ANCHORS, RUN_SPRINGS, phase, NO_DRAG);
   return pose;
@@ -1251,23 +1304,33 @@ export function runFacing(phase: number, away: boolean): CarlPose {
 
 /**
  * The head-on run cycle as its own row plays it: {@link runFacing} carried up
- * its flight by {@link FACING_FLIGHT_LIFT}. Rows built over the run — blows
- * and hops thrown on the move — take {@link runFacing} itself, because they
- * put a foot back on the floor in frames the run spends in the air.
+ * its flight by {@link FACING_FLIGHT_LIFT}. A blow that leaves the legs the
+ * run's own takes it whole.
  */
-export function runFacingCycle(phase: number, away: boolean): CarlPose {
+export function runFacingCycle(phase: number, away: boolean): BipedPose {
+  return runFacingCarried(phase, away, 1);
+}
+
+/**
+ * The head-on run carried up `share` of its flight's lift, for a row laid over
+ * the run that puts a foot back on the floor in frames the run spends in the
+ * air: it takes none of the lift there and all of it where its legs are the
+ * run's own again, so it hands off to the run row with the feet where that row
+ * has them.
+ */
+export function runFacingCarried(phase: number, away: boolean, share: number): BipedPose {
   const pose = runFacing(phase, away);
-  liftFacingFlight(pose, runFlightArc(phase));
+  liftFacingFlight(pose, runFlightArc(phase) * share);
   return pose;
 }
 
-export function walkSide(phase: number): CarlPose {
+export function walkSide(phase: number): BipedPose {
   const pose = walkSideBase(phase);
   applySecondary(pose, WALK_SIDE_ANCHORS, WALK_SPRINGS, phase, NO_DRAG);
   return pose;
 }
 
-export function walkFacing(phase: number, away: boolean): CarlPose {
+export function walkFacing(phase: number, away: boolean): BipedPose {
   const pose = walkFacingBase(phase, away);
   applySecondary(pose, away ? WALK_BACK_ANCHORS : WALK_FRONT_ANCHORS, WALK_SPRINGS, phase, NO_DRAG);
   return pose;
@@ -1421,7 +1484,7 @@ const IDLE_FACING_SPREAD = idleFront(0).rightFoot.x;
 
 /** The hip height, lean and arm swing of a start or stop frame, blended from standing. */
 function transitionBody(
-  pose: CarlPose,
+  pose: BipedPose,
   view: CardinalView,
   weight: number,
   runPhase: number,
@@ -1430,8 +1493,12 @@ function transitionBody(
   const standing = STANDING_HIP - idleFront(0).bob;
   pose.bob = STANDING_HIP - lerp(standing, runHipHeight(runPhase), weight) + extraDrop;
   pose.lean = RUN_LEAN * weight;
-  pose.rightFist = lerp(pose.rightFist, LOOSE_FIST, weight);
-  pose.leftFist = lerp(pose.leftFist, LOOSE_FIST, weight);
+  // The hands close as the arms start to pump, a frame in, not across the
+  // whole blend: half-open, a hand swung forward off the hip reads as one held
+  // out offering something.
+  const clench = clamp01(weight * RUN_START_STEPS);
+  pose.rightFist = lerp(pose.rightFist, LOOSE_FIST, clench);
+  pose.leftFist = lerp(pose.leftFist, LOOSE_FIST, clench);
   pose.brow = LOCOMOTION_BROW;
 }
 
@@ -1440,20 +1507,24 @@ function blendAngles(a: ArmAngles, b: ArmAngles, t: number): ArmAngles {
     upper: lerp(a.upper, b.upper, t),
     fore: lerp(a.fore, b.fore, t),
     foreScale: lerp(a.foreScale, b.foreScale, t),
+    wristFollow: lerp(a.wristFollow ?? WRIST_FOLLOW, b.wristFollow ?? WRIST_FOLLOW, t),
   };
 }
 
 /** The run's arms at `runPhase`, swung by `weight` of their full swing. */
-function runArmsAt(pose: CarlPose, view: CardinalView, runPhase: number, weight: number): void {
+function runArmsAt(pose: BipedPose, view: CardinalView, runPhase: number, weight: number): void {
   const swing = legSwing(runPhase);
   const running = (side: number): FacingArm => {
     const forward = side === RIGHT_ARM ? -swing : swing;
     return view === 'side'
       ? { angles: runSideArm(forward), upperScale: FULL_UPPER_ARM, handDepth: 0 }
-      : runFacingArm(side, forward);
+      : facingSwingArm(side, forward, partialSwing(RUN_FACING_SWING, weight));
   };
   // From the idle's own hang in every view, so the arms neither snap into
-  // their bend as he sets off nor out of it as he stands.
+  // their bend as he sets off nor out of it as he stands. Head-on the swing
+  // itself grows in depth before the blend: a forearm's screen angle blended
+  // toward the full run's, while its foreshortening only follows, lays the
+  // forearm flat across his belt partway through.
   const right = running(RIGHT_ARM);
   const left = running(LEFT_ARM);
   blendArmsFromStanding(pose, view, right, left, weight);
@@ -1468,7 +1539,7 @@ function runArmsAt(pose: CarlPose, view: CardinalView, runPhase: number, weight:
 
 /** Both arms `t` of the way from the idle's hang in `view` to `right` / `left`. */
 function blendArmsFromStanding(
-  pose: CarlPose,
+  pose: BipedPose,
   view: CardinalView,
   right: FacingArm,
   left: FacingArm,
@@ -1490,21 +1561,21 @@ function blendArmsFromStanding(
 }
 
 /** A pose's arm as it stands, for blending: its angles and the drawn share of its upper arm. */
-function facingArmOf(pose: CarlPose, view: CardinalView, side: number): FacingArm {
+function facingArmOf(pose: BipedPose, view: CardinalView, side: number): FacingArm {
   const upperScale =
     (side === RIGHT_ARM ? pose.rightUpperArmScale : pose.leftUpperArmScale) ?? FULL_UPPER_ARM;
   return { angles: armAnglesOf(pose, view, side), upperScale, handDepth: 0 };
 }
 
 /** A pose's arm as joint angles, solving an arm it places by the hand. */
-function armAnglesOf(pose: CarlPose, view: CardinalView, side: number): ArmAngles {
+function armAnglesOf(pose: BipedPose, view: CardinalView, side: number): ArmAngles {
   return (
     (side === RIGHT_ARM ? pose.rightArmAngles : pose.leftArmAngles) ??
     solvedArmAngles(pose, view, side)
   );
 }
 
-function standingPose(view: CardinalView): CarlPose {
+function standingPose(view: CardinalView): BipedPose {
   if (view === 'side') return idleSide(0);
   return view === 'back' ? idleBack(0) : idleFront(0);
 }
@@ -1516,7 +1587,7 @@ function standingPose(view: CardinalView): CarlPose {
  * stands somewhere the run never puts it.
  */
 export function placeFoot(
-  pose: CarlPose,
+  pose: BipedPose,
   view: CardinalView,
   side: BodySide,
   foot: GaitFoot,
@@ -1531,7 +1602,7 @@ export function placeFoot(
 /** Jacket hem drag, eased in over a start or shed over a stop by the spring's own response. */
 const START_SETTLE_LOOPS_PER_FRAME = RUN_FRAME_PHASE;
 
-export function runStart(frame: number, view: CardinalView): CarlPose {
+export function runStart(frame: number, view: CardinalView): BipedPose {
   const step = Math.round(frame);
   const weight = startBlend(step);
   const runPhase = RUN_START_EXIT_PHASE - (RUN_START_STEPS - step) * RUN_FRAME_PHASE;
@@ -1571,7 +1642,7 @@ export function runStart(frame: number, view: CardinalView): CarlPose {
  */
 const RUN_START_DRIVE_LEAN = deg(8);
 
-export function runStop(frame: number, view: CardinalView): CarlPose {
+export function runStop(frame: number, view: CardinalView): BipedPose {
   const step = Math.round(frame);
   const weight = 1 - step / (RUN_STOP_FRAMES - 1);
   const pose = standingPose(view);
@@ -1590,17 +1661,18 @@ export function runStop(frame: number, view: CardinalView): CarlPose {
   const feet = stopFeet(step, standing);
   // Once both feet are down in the idle's stance they stand where the idle's do.
   const bothFeetDown = step >= RUN_STOP_SHUFFLE_FRAME;
-  const spread = bothFeetDown
+  const blendedSpread = bothFeetDown
     ? IDLE_FACING_SPREAD
     : lerp(IDLE_FACING_SPREAD, RUN_FOOT_SPREAD, weight);
-  // A foot still planted where the run put it keeps the run's track; moving it
-  // with the blend would slide it over the floor.
+  // A foot still planted where the run put it keeps the run's track and its
+  // spread; moving it with the blend would slide it over the floor.
+  const plantedByRun = (foot: GaitFoot): boolean => foot.planted && step <= RUN_STOP_PLANT_FRAME;
   const trackFor = (foot: GaitFoot): FacingTrack =>
-    foot.planted && step <= RUN_STOP_PLANT_FRAME
-      ? runFacingTrack(view)
-      : facingTrackAt(runFacingTrack(view), weight);
-  placeFoot(pose, view, 'left', feet.left, spread, trackFor(feet.left));
-  placeFoot(pose, view, 'right', feet.right, spread, trackFor(feet.right));
+    plantedByRun(foot) ? runFacingTrack(view) : facingTrackAt(runFacingTrack(view), weight);
+  const spreadFor = (foot: GaitFoot): number =>
+    plantedByRun(foot) ? RUN_FOOT_SPREAD : blendedSpread;
+  placeFoot(pose, view, 'left', feet.left, spreadFor(feet.left), trackFor(feet.left));
+  placeFoot(pose, view, 'right', feet.right, spreadFor(feet.right), trackFor(feet.right));
   if (bothFeetDown && view !== 'side') {
     // Standing, the left foot is the idle's own: drawn on the hip's ground line
     // exactly as the idle draws it, so it does not shift as the idle takes over.
@@ -1677,13 +1749,13 @@ const WALK_START_PEEL_PITCH = deg(25);
 const WALK_START_FACING_PEEL_PITCH = deg(12);
 
 /** The walk's pose at `phase` in any view. */
-function walkPose(view: CardinalView, phase: number): CarlPose {
+function walkPose(view: CardinalView, phase: number): BipedPose {
   if (view === 'side') return walkSide(phase);
   return walkFacing(phase, view === 'back');
 }
 
 /** Joint angles that draw the same arm a pose's solved skeleton has. */
-function solvedArmAngles(pose: CarlPose, view: CardinalView, side: number): ArmAngles {
+function solvedArmAngles(pose: BipedPose, view: CardinalView, side: number): ArmAngles {
   const skeleton = buildSkeleton(pose, VIEWS[view]);
   const chain = side === RIGHT_ARM ? skeleton.rightArm : skeleton.leftArm;
   return anglesThrough(chain.root, chain.joint, chain.end);
@@ -1693,7 +1765,7 @@ function solvedArmAngles(pose: CarlPose, view: CardinalView, side: number): ArmA
  * A pose `stride` of the way from standing to walking — the body, the arms and
  * the loose parts, everything but the feet, which each bridge places itself.
  */
-function bridgeBody(view: CardinalView, walking: CarlPose, stride: number): CarlPose {
+function bridgeBody(view: CardinalView, walking: BipedPose, stride: number): BipedPose {
   const standing = standingPose(view);
   const pose = walkPose(view, 0);
   pose.bob = lerp(standing.bob, walking.bob, stride);
@@ -1716,8 +1788,6 @@ function bridgeBody(view: CardinalView, walking: CarlPose, stride: number): Carl
   pose.leftArmBehind = walking.leftArmBehind;
   const scaled = (p: Pt | undefined): Pt => pt((p?.x ?? 0) * stride, (p?.y ?? 0) * stride);
   pose.jacketHemLag = scaled(walking.jacketHemLag);
-  pose.leftBoxerFlutter = scaled(walking.leftBoxerFlutter);
-  pose.rightBoxerFlutter = scaled(walking.rightBoxerFlutter);
   pose.hairTuftLag = scaled(walking.hairTuftLag);
   return pose;
 }
@@ -1767,7 +1837,7 @@ function settlingHeight(stride: number): number {
  * {@link walkStartExitPhase}; like the run's start it is paced by the ground
  * he covers, one walk frame of it per frame.
  */
-export function walkStart(frame: number, view: CardinalView): CarlPose {
+export function walkStart(frame: number, view: CardinalView): BipedPose {
   const step = Math.round(frame);
   const exit = walkStartExitPhase(view);
   const stride = (step + 1) / WALK_START_FRAMES;
@@ -1796,7 +1866,7 @@ export function walkStart(frame: number, view: CardinalView): CarlPose {
  * the body settles out of the stride. Its first frame is the walk's own pose at
  * {@link walkStopEntryPhase}, and the idle follows its last.
  */
-export function walkStop(frame: number, view: CardinalView): CarlPose {
+export function walkStop(frame: number, view: CardinalView): BipedPose {
   const step = Math.round(frame);
   const entry = walkStopEntryPhase(view);
   const settled = step / WALK_STOP_FRAMES;

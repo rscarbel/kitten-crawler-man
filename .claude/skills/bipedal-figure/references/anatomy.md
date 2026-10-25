@@ -5,12 +5,12 @@ They are ordered roughly by how much time each one cost.
 
 **Numbers here are illustrative of _scale_, not authoritative.** Where a value
 appears, the named constant beside it is the source of truth — grep
-`src/sprites/art/carl/` (the painter) or `src/sprites/art/human/` (the
+`src/sprites/art/biped/` (the painter) or `src/sprites/art/human/` (the
 choreography) for the name before relying on a figure. The _reasoning_ is what
 carries; the digits drift.
 
 **Provenance matters.** Everything under Arms / Legs / Feet / Timing comes from
-Carl, the one figure in this game whose movement actually convinces — treat it as
+the human rig, the one figure in this game whose movement actually convinces — treat it as
 the standard. A handful of entries are marked _(from the goblin rig — a caution,
 not a model)_: those record a specific failure worth avoiding, but goblin gait
 and attack motion are **not** convincing and must never be copied, measured
@@ -23,7 +23,7 @@ against, or cited as "how it's done here".
   oversized head, so any life-drawing ratio hung off it inflates. A hand set to `HEAD_RY * 1.12` — the usual "a hand is as long as
   the face" — came out 80% of its own forearm, and the bare skin below the cuff
   read as a rolled-up sleeve. Derive from the _parent limb_: `HAND_LENGTH` in
-  `carl/limbs.ts` is a share of `FOREARM_LENGTH`.
+  `biped/limbs.ts` is a share of `FOREARM_LENGTH`.
 - **Pin height and heads-tall, derive every joint from those.** `HIP_Y`,
   `WAIST_Y`, `SHOULDER_Y`, `HEAD_CENTRE_Y` are constants in tile units with
   origin between the feet and +Y down (heights are negative). Bone lengths come
@@ -124,19 +124,19 @@ against, or cited as "how it's done here".
   locks straight, and the foot hangs above the floor. **The pelvis must drop at
   contact**, not rise at mid-stance — which is what a real pelvis does anyway.
   Get this backwards and no amount of stride or knee tuning fixes the side walk.
-  Carl's walk derives it rather than keying a bob: the pelvis rides the lower
+  The human's walk derives it rather than keying a bob: the pelvis rides the lower
   of the two stance legs' reach arcs (`walkHipHeight` in
   `human/locomotion.ts`).
 - **A stride that clamps on even one frame reads as a hop.** Check it
   numerically: model hip→ankle distance per frame against
   `THIGH + SHIN - JOINT_SLACK` (`LEG_MAX_REACH`) and require headroom on
-  _every_ frame with a foot down — Carl's G13. A run's flight frames are the
+  _every_ frame with a foot down — the human's G13. A run's flight frames are the
   one exemption: nothing pushes against the floor there.
 - **A stride is solved from the leg, never chosen.** A foot in stance has to
   slide back through the cell at exactly the rate the sprite is carried over
   the floor, so the ground a cycle covers follows from how far the leg reaches
   at contact and at push-off, and the phase is advanced by ground covered. See
-  `carl.md#locomotion-a-planted-foot-does-not-move-relative-to-the-floor`.
+  `human.md#locomotion-a-planted-foot-does-not-move-relative-to-the-floor`.
 - **A raised leg solves into a shin sticking out sideways** unless the pose
   carries an explicit knee-break (−1 folds the knee up in front) plus a foot
   swung outboard.
@@ -156,7 +156,7 @@ against, or cited as "how it's done here".
 - **A hand as wide as its own wrist reads as a stick.** Width at 0.52 of hand
   length came out 0.07 across against a 0.07 wrist — one taper, and the
   cuff→hand step looked like a kink. It must clear the wrist by a pixel each
-  side at the tile: Carl's `HAND_WIDTH` is 0.74 of the hand's length and his
+  side at the tile: the rig's `HAND_WIDTH` is 0.74 of the hand's length and his
   `FIST_WIDTH` 1.4× the wrist's full width — a fist no wider than its wrist
   reads as the arm ending in a stump.
 - **Every digit must read `openness`.** A thumb pinned at its open-hand fan
@@ -236,15 +236,16 @@ against, or cited as "how it's done here".
   half-width is floored at `THIGH_WIDTH * CUFF_SLACK` (a flare-derived width came
   out a third narrower than the leg edge-on, so the thigh stuck out both sides).
 - **A printed motif needs to be at least ~3px on the sheet.** Fifteen hearts at
-  0.03 tiles made each one under two pixels — a polka dot. Few and large
-  (`HEART_SIZE` 0.07 in `carl/boxers.ts`), wrapped round each leg's tube and
-  foreshortened toward its edges.
+  0.03 tiles made each one under two pixels — a polka dot. Few and large (about
+  0.07 tiles each), wrapped round each leg's tube and foreshortened toward its
+  edges.
 - **The arm/hip gap is a chain of widths, not one number.** Hands clear of the
   body means hand-hang-spread > the hem, the hem must still cover
   `LEG_ROOT_HALF + THIGH_WIDTH` (so the hem flare can't drop below ~1.4), and
   pushing the hands out instead tilts the arm off the shoulder root. The gap
-  that survives all three is ~1px at sheet scale, and it took trimming the
-  shorts _and_ moving the hands.
+  that survives all three is ~1px at sheet scale. A gap that narrow is closed
+  by the silhouette outline into an ink sliver (G19): either the arm lies
+  against the body, or the gap is wider than two outline widths.
 
 ## Views and depth {#views}
 
@@ -259,9 +260,9 @@ against, or cited as "how it's done here".
 - **Head-on, depth is a little screen height on the floor and nothing at the
   hip.** The floor is seen from above while the figure stands as if seen
   level, so a foot a stride ahead draws lower on the screen, but a knee driven
-  at the camera must not — it would hang where a straight leg does. Carl's rig
+  at the camera must not — it would hang where a straight leg does. the human rig
   blends the two through the height of the leg (`depthShareAt` in
-  `carl/rig.ts`). **Never draw the floor's depth at the floor's own scale under
+  `biped/rig.ts`). **Never draw the floor's depth at the floor's own scale under
   an upright figure**: a planted foot held to the floor slides the full world
   stride down the screen while the hips ride with the sprite, and the leg
   between them grows to half again its length and shrinks to a stub through
@@ -281,7 +282,7 @@ against, or cited as "how it's done here".
   whole body makes the haft vanish, and the head over it severs it into a hat.
   The socket names the slab it sits in front of, and the front grip bands (and
   the forearm when the back of the hand faces the camera) come back over it —
-  computed per frame by the grip model (`references/carl.md`, "Sockets, the
+  computed per frame by the grip model (`references/human.md`, "Sockets, the
   grip and two-layer cells"), never by reordering a row's draw calls.
 - **Detail does not rescue a wrong outline.** Adding a spike to a war hammer to
   make it a "T" cost the archetype its identity outright: at 32 px the spike is
@@ -301,7 +302,7 @@ against, or cited as "how it's done here".
 
 - **Pace a gait by ground covered, never by scaling the frame index.** The frame
   index maps a phase in radians onto however many frames exist, so more frames
-  buy smoothness and nothing else. Carl's phase advances by radians per world
+  buy smoothness and nothing else. The human's phase advances by radians per world
   pixel actually covered (`HumanAnimator`), which is the only way a stance foot
   stays put; a mob on `Player.walkFrame` gets a phase-speed multiplier instead.
   Either way, never multiply an already-wrapped phase: `Player` wraps
@@ -327,17 +328,17 @@ against, or cited as "how it's done here".
 - **The rebound is the follow keyframes, not a fifth beat.** `follow` is eased
   out, so it moves fastest in the frames right after impact.
 - **An effect whose size is a gameplay value does not belong in a cached cell.**
-  Carl's Smush blast is drawn live because the wave has to stop exactly on the
+  The human's Smush blast is drawn live because the wave has to stop exactly on the
   damage radius, which grows with ability level; a cell keyed on
   `(state, frame)` cannot vary with it.
 
 ## Anchoring and wiring {#anchor}
 
 - **A redraw moves the tile anchor**, so health-bar and active-marker offsets
-  must move with it. Measure off painted cells: Carl's standing solid ink tops
-  out 21.5 px above the tile anchor at the 32 px tile, frozen as
-  `HUMAN_SPRITE_TOP_ABOVE_TILE` (22) in `HumanPlayer.ts` and re-measured by G21
-  with the rest of `HUMAN_STATUS_FIGURE_BOX`.
+  must move with it. Measure off painted cells: the human's standing solid ink tops
+  out above the tile anchor at the 32 px tile by a measured amount, frozen per
+  look as `HumanLook.figureExtent` and re-measured by G21 with the rest of the
+  box `humanStatusFigureBoxOf(look)` in `HumanPlayer.ts` builds from it.
 - **Frame geometry is measured, not authored.** Measure the cell once offline,
   freeze it as named constants in the figure module (`frameWidth`,
   `frameHeight`, `tileX`, `tileY`), and write a gate that paints the art again,

@@ -667,11 +667,11 @@ export function withDecorativeWindow(board: MirrorBoard): {
 }
 
 /**
- * A board with one more of Carl's mirrors, stood beside blue's hot span next
+ * A board with one more of the human's mirrors, stood beside blue's hot span next
  * to the outer wall, whose only other floor neighbours are closed by pillars.
  * Nothing in it touches the light — the mirror and the pillars stand on empty
  * floor the answer never lights — so the hot span, walked as solid, is the
- * only thing between Carl and that glass, and only the reachable row can see
+ * only thing between the human and that glass, and only the reachable row can see
  * it.
  */
 export function withHotSpanBlockingGlass(board: MirrorBoard): {
@@ -746,9 +746,9 @@ export function withMisplacedLimelight(board: MirrorBoard): {
 }
 
 /**
- * The latched three-star hall as board data: two limelights, three of Carl's
- * pivots and three of Donut's swivels, three stars in the divider that each
- * latched on its own, and the encore in Carl's outer wall. Its frame runs
+ * The latched three-star hall as board data: two limelights, three of the human's
+ * pivots and three of the cat's swivels, three stars in the divider that each
+ * latched on its own, and the encore in the human's outer wall. Its frame runs
  * from the gate-row wall down to the menagerie's curtain row, seventeen floor
  * rows deep. Frozen here so the fault that proves the contract rejects it
  * does not depend on the tent still carrying it.

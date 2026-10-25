@@ -1,7 +1,7 @@
 /**
  * Drawing engine for the keyboard-hero mini-game's board art.
  *
- * The fiction is that Carl is jacked into a lab terminal to shut the spider's
+ * The fiction is that the human crawler is jacked into a lab terminal to shut the spider's
  * life machines down, so the housing is intrusion hardware — brushed steel, a
  * cabling loom and vent louvres down the side rails, recessed bezel strips top
  * and bottom — rather than a guitar. What makes it *play* like a rhythm game is

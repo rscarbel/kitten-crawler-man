@@ -9,7 +9,7 @@ import {
   drawTaranisHilt,
   SWORD_CRACKLE_PHASES,
   TARANIS_SWORD_DIMENSIONS,
-} from '../../art/carl/props/sword';
+} from '../../art/biped/props/sword';
 import { defineHeldVisual } from '../heldVisualDef';
 import { paintBladeEdgeGlint, seenOnEdge } from './bladeEdge';
 import { TARANIS_SILVER } from '../../art/taranisPalette';

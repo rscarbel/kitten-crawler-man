@@ -19,7 +19,7 @@
  * painted every frame.
  */
 
-import { mix, type Pt } from '../carlArt';
+import { mix, type Pt } from '../bipedArt';
 import { BitmapCache, type CacheBox, quantize } from './bitmapCache';
 import { type CardSize, cardCorners, paintCardBack, paintDeck } from './cards';
 import { type GripBuild, handPoint, paintGrippingHand } from './grip';

@@ -1,5 +1,5 @@
 /**
- * The Enchanted Fae Scale Quadruped Crupper of the Fleet on Donut: a skirt of
+ * The Enchanted Fae Scale Quadruped Crupper of the Fleet on the cat crawler: a skirt of
  * small overlapping scales of pale, iridescent fae steel over her rump and
  * haunches, edged with a gold trim, held on by a gold ring round the root of
  * her tail. It is armour for the back end of a quadruped, so it shows most

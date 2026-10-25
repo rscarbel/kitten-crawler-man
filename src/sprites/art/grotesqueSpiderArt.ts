@@ -27,7 +27,7 @@
  * solved pose. It knows nothing about animation.
  */
 
-import { clamp01, lerp, mix, rgba } from './carlArt';
+import { clamp01, lerp, mix, rgba } from './bipedArt';
 import { fillSoftEllipse, withClip } from './softShade';
 import { paintEggSac } from './spiderEggArt';
 import {

@@ -1,5 +1,5 @@
 /**
- * The near-goblin hint's combat preview: Carl and a mace goblin trading
+ * The near-goblin hint's combat preview: the human crawler and a mace goblin trading
  * blows in turn, no damage dealt.
  */
 
@@ -9,13 +9,13 @@ import type { IllustrationRect } from './illustration';
 
 const SPRITE_SIZE = 48;
 const SPRITE_GAP = 20;
-/** One full exchange: Carl swings for the first half, the goblin for the second. */
+/** One full exchange: the human crawler swings for the first half, the goblin for the second. */
 const COMBAT_PERIOD = 120;
 const COMBAT_HALF_PERIOD = 60;
 const ATTACK_FRAMES = 60;
-/** The goblin's guard pose while Carl swings. */
+/** The goblin's guard pose while the human crawler swings. */
 const GUARD_FRAME = 0;
-/** The figures stand this far above the band's floor; Carl's head rises above his tile, so they sit low rather than centred. */
+/** The figures stand this far above the band's floor; the human's head rises above his tile, so they sit low rather than centred. */
 const FLOOR_MARGIN = 8;
 
 export function drawNearGoblinCombat(

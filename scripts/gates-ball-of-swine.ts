@@ -415,7 +415,7 @@ const CYCLE_CLOSE_TOLERANCE_PX = 0;
  * Deliberately *not* the sibling form of this check, "no interior frame may
  * reproduce frame 0". That is false of this art: measured over the loop rows
  * here, the head-on and profile idles reproduce frame 0 exactly at frame 4 of 8
- * and Donut's dance at frame 6 of 12, because those rows run two whole turns of
+ * and the cat's dance at frame 6 of 12, because those rows run two whole turns of
  * their oscillation each. Turn *count* is not the invariant; frames per turn is.
  * Shipped, the first exact repeat lands at 4, 6, 8, 12 or 16 frames, so 4 is the
  * floor the art already sits on, and it is an integer structural quantity rather

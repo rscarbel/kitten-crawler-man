@@ -1,6 +1,6 @@
 ---
 name: add-person
-description: Townsfolk and citizens in Kitten Crawler Man — the Over City's closed cast of human and skyfowl looks, the species axis, citizen figures and their cadence and cache rules, plus the seeded person genome and skeleton painter (children, the ?people gallery). Use for any townsperson, crowd, resident or citizen work. NOT for creatures or bosses (use add-creature/add-sprite), and see bipedal-figure for painting on Carl's rig.
+description: Townsfolk and citizens in Kitten Crawler Man — the Over City's closed cast of human and skyfowl looks, the species axis, citizen figures and their cadence and cache rules, plus the seeded person genome and skeleton painter (children, the ?people gallery). Use for any townsperson, crowd, resident or citizen work. NOT for creatures or bosses (use add-creature/add-sprite), and see bipedal-figure for painting on the human rig.
 ---
 
 # Townsfolk and Procedural People
@@ -16,7 +16,7 @@ Two things live here:
   adult citizen is drawn.
 
 **Routing:** use `add-creature` and `add-sprite` for enemies, bosses and animals. A new
-adult look on Carl's rig also follows the `bipedal-figure` skill.
+adult look on the human rig also follows the `bipedal-figure` skill.
 
 Module: `src/sprites/person/`
 
@@ -48,9 +48,10 @@ and a crowd mode of real `Townsperson`s showing the cache's hit rate.
 
 - **Facings:** only `down`/`up`/`right` are built; `left` is a mirror of `right` (flip in
   `drawPerson`). Never special-case `left` in the skeleton.
-- **FK foreshortening:** `FRONTAL_X_SCALE` in `skeleton.ts` squashes the horizontal swing for
-  `down`/`up` so a knee/elbow bend lifts the foot/hand instead of splaying sideways. If a
-  front-facing limb kicks out to the side, that constant (or the gait bend amplitude) is why.
+- **FK foreshortening:** `ARM_FRONTAL_X_SCALE` in `skeleton.ts` squashes an arm's horizontal
+  swing for `down`/`up` so an elbow bend lifts the hand instead of splaying sideways; legs are
+  solved by IK (`ikLeg`). If a front-facing arm swings out to the side, that constant (or the
+  gait's arm amplitude) is why.
 - All proportions are **fractions of draw size**, never pixels — a person looks identical at
   any `size`.
 - These are game-world figures, so **raw `ctx` is correct here** — the `src/ui/*` helpers are
@@ -93,27 +94,31 @@ and why the crowd is rolled from the world seed.
 - **Humans:** the looks are `TOWN_CAST_LOOKS` in `src/sprites/person/townCastLooks.ts`,
   picked by `pickTownCastLook(seed, role, tier)`, and each is painted as one `FigureDef` by
   `src/sprites/art/townCastFigure.ts`.
-  - Adults paint on **Carl's rig** for his movement, never in his look. The
-    outfit drops his boxers and hides his crop; `castAttachments` in
+  - Adults paint on **the human rig** for his movement, never in his look.
+    `castHumanLook` builds each one's `HumanLook` from `RIG_LOOK` (the rig's own build in
+    Dave's colours, `looks/humans/rig.ts`), with the look's own skin, hair, garment ramp
+    and cut (`RIG_GARMENT_CUT` spread and overridden), expression and build. Its
+    `baseGarments` keep only his jacket, so his boxers are gone, and its
+    hairstyle paints nothing, so his crop is gone; `castAttachments` in
     `townCastFigure.ts` paints the trouser seat (`human/legwear.ts`), the look's
     own hairstyle and facial hair (`human/castHead.ts`) and any hat or hood on
     the solved skeleton. The legs and feet are the cast-only `townsfolk_trousers`
     and `townsfolk_shoes` garments (`garments/human/townsfolkLegwear.ts`), sized
     off the rig's own leg contour and coloured per look with
-    `setTownsfolkLegwear` (reset in `finally`). Carl's item garments are
+    `setTownsfolkLegwear` (reset in `finally`). The player looks' item garments are
     `humanItemGarments()`, not every human garment. A role accessory
-    comes from `src/sprites/art/human/townAccessories.ts`. No look uses Carl's
+    comes from `src/sprites/art/human/townAccessories.ts`. No look uses Dave's
     skin or hair ramp, and no hairstyle is his crop.
-  - Children paint on the person skeleton below, because Carl's rig is one adult's
+  - Children paint on the person skeleton below, because the human rig is one adult's
     proportions and a shrunken adult reads as a doll.
-  - Build width scales x only (`buildWidthScale`). Scaling height breaks the
-    adult-versus-child height gate.
+  - Build width scales x only (`buildWidthScale`).
   - A cut's legwear comes from `GARMENT_LEGWEAR`: trousers under a short cut,
     stockings under a long hem. Both paint under the hem, inside the figure.
-  - Carl's palette, torso cut and expression are live module state
-    (`setCarlSkinHairRamp`, `setCarlTorsoCut`, `setCarlExpression`). A look must set them
-    and reset them in `finally`. A constant computed at import time from Carl's palette
-    misses the swap.
+  - The look reaches the rig only as `BipedComposeOptions.look`, and every rig
+    painter and attachment is handed it. A painter that imports a player look's palette
+    instead of reading its `look` argument paints that look's colours on every
+    citizen. Each look's `id` names its figures (`human:<lookId>…`), so two
+    looks never share a cached cell.
 - **Skyfowl:** the rig, painter, outfits, rows and gait are in `src/sprites/art/skyfowl/`,
   assembled in `skyfowlCastFigure.ts`. `SKYFOWL_CIVILIAN_LOOKS` is the only pool the
   street picks from. Resident, dancer and street-tough looks are kept out of it.

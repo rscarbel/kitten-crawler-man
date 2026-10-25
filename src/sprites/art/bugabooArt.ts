@@ -20,17 +20,17 @@
  *
  * Coordinates are tile units with the origin at the point between the feet and
  * +Y pointing down the screen, so heights above the ground are negative — the
- * same frame Carl's rig (`carl/rig.ts`) uses, and for the same reason: the generator
+ * same frame the biped rig (`biped/rig.ts`) uses, and for the same reason: the generator
  * translates to that ground point, scales by one tile, and calls a painter.
  *
  * The rig's structure — the `ViewSpec` table, hand and foot targets solved by a
  * two-bone IK with FK escape hatches for swinging arms, and every pose written
- * as edits to one resting pose — is taken from `carl/rig.ts`, the only figure in
+ * as edits to one resting pose — is taken from `biped/rig.ts`, the only figure in
  * this game whose movement convinces. The anatomy on top of it is not.
  */
 
 import { hash1 } from './ratArt';
-import { type Pt, clamp01, deg, lerp, mix, rgba } from './carlArt';
+import { type Pt, clamp01, deg, lerp, mix, rgba } from './bipedArt';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -129,8 +129,8 @@ const UNSHADED = 0;
 // ── Proportions ──────────────────────────────────────────────────────────────
 
 /**
- * Total height in tile units, crown of the skull to the floor. Carl stands at
- * 2.03 in the same units for a six-foot man, so a seven-foot Bugaboo is a fifth
+ * Total height in tile units, crown of the skull to the floor. The human crawler
+ * stands at 2.03 in the same units for a six-foot man, so a seven-foot Bugaboo is a fifth
  * taller again — and it has to *look* it, because the whole point of the thing
  * is that it towers over either crawler.
  */

@@ -12,10 +12,10 @@
  * body's does.
  */
 
-import { burningDynamite, type DynamiteVariant } from '../../art/carl/props/dynamite';
-import { type HeldProp, PROP_ART, type PropGrip } from '../../art/carl/props';
-import type { Pt } from '../../art/carlArt';
-import { VIEWS, type ViewSpec } from '../../art/carl/rig';
+import { burningDynamite, type DynamiteVariant } from '../../art/biped/props/dynamite';
+import { type HeldProp, PROP_ART, type PropGrip } from '../../art/biped/props';
+import type { Pt } from '../../art/bipedArt';
+import { VIEWS, type ViewSpec } from '../../art/biped/rig';
 import type { GripArchetype, HandleRadius, WeightClass } from '../gripArchetypes';
 import {
   defineHeldVisual,
@@ -233,7 +233,7 @@ export const SCRIPTED_PROP_HELD: Readonly<Record<ScriptedPropVisualId, HeldVisua
   }),
 };
 
-/** A wrench carried across Donut's jaws, held by the middle of its shank. */
+/** A wrench carried across the cat crawler's jaws, held by the middle of its shank. */
 export const CARRIED_WRENCH_HELD = scriptedProp(
   'carried_wrench',
   'Wrench (carried)',

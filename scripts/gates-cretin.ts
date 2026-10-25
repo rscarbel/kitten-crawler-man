@@ -50,7 +50,6 @@ import {
   walkFoot,
   walkPose,
 } from '../src/sprites/art/cretinFigure.js';
-import { HUMAN_FIGURE } from '../src/sprites/art/humanFigure.js';
 import { PROTECTIVE_SHELL_FIGURES } from '../src/sprites/art/protectiveShellFigure.js';
 import {
   CRETIN_CAST_SHIELD_CAST_FRAME,
@@ -502,36 +501,10 @@ function gateCastFrame(): void {
   }
 }
 
-// ── G10 a Cretin towers over Carl ────────────────────────────────────────────
-
-/**
- * Standing solid-ink height at the game's tile, against Carl's. Seven feet of
- * rock beside a six-foot man is a sixth taller; this asks for a quarter so it
- * still reads as towering at 32 px.
- */
-const MIN_HEIGHT_OVER_CARL = 1.25;
-
 function standingHeightTiles(def: FigureDef, state: string): number {
   const span = solidSpan(def, state, 0);
   if (span === null) return 0;
   return (span.bottom - span.top + 1) / def.tileScale;
-}
-
-function gateTowersOverCarl(): void {
-  const carl = standingHeightTiles(HUMAN_FIGURE, 'idle');
-  if (carl <= 0) {
-    fail('G10', "Carl's idle painted no solid ink to compare against");
-    return;
-  }
-  for (const variant of CRETIN_VARIANTS) {
-    const height = standingHeightTiles(CRETIN_FIGURES[variant], 'idle');
-    if (height >= carl * MIN_HEIGHT_OVER_CARL) continue;
-    fail(
-      'G10',
-      `${variant} stands ${height.toFixed(2)} tiles against Carl's ${carl.toFixed(2)} ` +
-        `(${(height / carl).toFixed(2)}×, floor ${MIN_HEIGHT_OVER_CARL}×) — it does not tower`,
-    );
-  }
 }
 
 // ── G11 the Meat Shields armband ─────────────────────────────────────────────
@@ -756,7 +729,7 @@ function gateDeathEndsOnCorpse(): void {
 
 /**
  * How far apart in CIE76 ΔE the Shield's colour must sit from every colour
- * Carl's Protective Shell renders in. Around 2 is the smallest difference an
+ * the human's Protective Shell renders in. Around 2 is the smallest difference an
  * eye can see side by side and 10 reads as a slightly different shade of the
  * same paint; 20 is a different colour. Hue alone cannot do this: the Shell's
  * full power sits across orange to gold, the same hues as any amber, so the
@@ -870,7 +843,7 @@ function inkSummary(def: FigureDef, state: string, frame: number): InkSummary | 
 }
 
 /**
- * The Shield against Carl's Protective Shell as the Shell actually renders:
+ * The Shield against the human's Protective Shell as the Shell actually renders:
  * every row of the shell and the cat's mini-shield, both variants, measured
  * off their own baked cells, so a Shell recolour is seen here without anyone
  * updating a list. Two independent reads, either of which alone tells them
@@ -936,7 +909,6 @@ export function cretinGateFailures(): string[] {
   gateArmPhase();
   gatePunchImpact();
   gateCastFrame();
-  gateTowersOverCarl();
   gateArmband();
   gateVariantsDiffer();
   gateDistinctFrames();

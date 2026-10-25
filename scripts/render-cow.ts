@@ -15,7 +15,7 @@
  *   npx tsx scripts/render-cow.ts --mode=gore
  *   npx tsx scripts/render-cow.ts --mode=review   the blind-review sheet: one
  *                                              labelled strip per figure at 2×
- *   npx tsx scripts/render-cow.ts --mode=attack   Carl's attack cow: its full
+ *   npx tsx scripts/render-cow.ts --mode=attack   the human's attack cow: its full
  *                                              sheet at 3× and every row at
  *                                              in-game size
  *   --skip-gates                               iterate on art without the gates

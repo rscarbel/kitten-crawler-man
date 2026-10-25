@@ -83,7 +83,7 @@ const PARTY_LINGER_MAX_FRAMES = 8 * FRAMES_PER_SECOND;
 const SHORT_PHONE_WIDTH = 568;
 const SHORT_PHONE_HEIGHT = 320;
 const MANY_CHOICES = 8;
-/** The cat walks a few frames behind Carl. */
+/** The cat walks a few frames behind the human. */
 const CAT_TRAIL_FRAMES = 20;
 
 /**
@@ -157,7 +157,7 @@ const FIXED_PARTY: VillagerPartyState = {
   constructionLearned: false,
 };
 
-/** The party: Carl walks from stop to stop; the cat trails him. */
+/** The party: the human walks from stop to stop; the cat trails him. */
 class SimulatedParty {
   readonly human = { x: 0, y: 0 };
   readonly cat = { x: 0, y: 0 };
@@ -465,7 +465,7 @@ function verifyConversation(): void {
   check(system.isConversationOpen && oren.state === 'talking', 'and he stops to talk');
   check(state.talkCounts.oren === 1, 'the talk is counted in the village state');
   check(system.lastOpening?.pages[0] === OREN.firstMeeting, 'he opens with his first meeting');
-  check(system.talkSpeakerFor(talker)?.x === oren.x, 'Carl is told who he is facing');
+  check(system.talkSpeakerFor(talker)?.x === oren.x, 'The human is told who he is facing');
   system.conversation.advance();
   tick(system, frame);
   check(system.conversation.isShowingChoices, 'the choices come up once the line is read');

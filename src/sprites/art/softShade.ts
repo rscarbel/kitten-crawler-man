@@ -21,7 +21,7 @@
  * lower-inner.
  */
 
-import { clamp01, clampAlpha, rgba } from './carlArt';
+import { clamp01, clampAlpha, rgba } from './bipedArt';
 
 /** A gradient can't be built on a zero-length axis; this keeps the radius/length always constructible without changing how anything visible looks. */
 const DEGENERATE_EXTENT_EPSILON = 1e-4;

@@ -3,14 +3,20 @@
  * through to change how a crawler is painted.
  */
 
-import { setCatOutfit } from './catSprite';
-import { setHumanOutfit } from './humanSprite';
-import type { GarmentDef, GarmentWearer } from './garments/garmentDef';
-import { outfitOf, type Outfit } from './garments/outfit';
+import { activeCatLook, setCatOutfit } from './catSprite';
+import { activeHumanLook, setHumanOutfit } from './humanSprite';
+import type { GarmentWearer, WornGarmentDef } from './garments/garmentDef';
+import { outfitOf, type Outfit, type OutfitBase } from './garments/outfit';
 
 const DRESSERS: { readonly [W in GarmentWearer]: (outfit: Outfit<W>) => boolean } = {
   cat: setCatOutfit,
   human: setHumanOutfit,
+};
+
+/** What the outfits of the crawler of each kind start from: the look its sprite is painted as. */
+const BASES: { readonly [W in GarmentWearer]: () => OutfitBase<W> } = {
+  cat: activeCatLook,
+  human: activeHumanLook,
 };
 
 /**
@@ -20,7 +26,7 @@ const DRESSERS: { readonly [W in GarmentWearer]: (outfit: Outfit<W>) => boolean 
  */
 export function setOutfit<W extends GarmentWearer>(
   wearer: W,
-  garments: readonly GarmentDef<W>[],
+  garments: readonly WornGarmentDef<W>[],
 ): boolean {
-  return DRESSERS[wearer](outfitOf(wearer, garments));
+  return DRESSERS[wearer](outfitOf(BASES[wearer](), garments));
 }

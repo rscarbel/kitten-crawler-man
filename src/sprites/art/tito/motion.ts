@@ -8,7 +8,7 @@
  * the cache can hand it back.
  */
 
-import { clamp01, easeInOut, easeOut, hump, lerp, type Pt } from '../carlArt';
+import { clamp01, easeInOut, easeOut, hump, lerp, type Pt } from '../bipedArt';
 import { lerpPt, pt } from '../deuce/paint';
 import { RESTING_EXPRESSION, type TitoExpression } from './head';
 

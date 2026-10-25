@@ -13,6 +13,7 @@ import type { SoundId } from '../audio/sounds';
 import type { PortraitSource, ResolvedSpeaker, RevealMode } from '../ui/DialogBox';
 import { ratkinPortrait } from '../sprites/ratkinPortrait';
 import type { RatkinCastId } from '../sprites/art/ratkin/cast';
+import { crawlerFormalName } from '../characters/characters';
 
 /** How a speaker's text is cased when it's drawn — a written-in rule instead of an author convention to remember. */
 export type TextCase = 'as-written' | 'upper';
@@ -161,20 +162,24 @@ export const SPEAKERS = {
   midge: ratkinVillagerSpeaker('Midge Candleear', 'midge'),
 
   // The two Crawlers.
-  carl: {
-    name: 'Carl',
+  ryan: {
+    name: crawlerFormalName('human'),
     portrait: null,
     voice: { kind: 'typing' },
     reveal: 'sentence',
     textCase: 'as-written',
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
-  donut: {
-    name: 'Princess Donut',
+  /**
+   * Belle's lines are short, simple and affectionate, and spelled correctly:
+   * written speech impediments read as typos.
+   */
+  belle: {
+    name: crawlerFormalName('cat'),
     portrait: null,
     voice: { kind: 'typing' },
     reveal: 'sentence',
-    textCase: 'upper',
+    textCase: 'as-written',
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
 
@@ -583,7 +588,7 @@ export const TRANSIENT_STYLES = {
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
   /**
-   * A questline's own narrated beat — Carl or Donut heading back to a
+   * A questline's own narrated beat — a crawler heading back to a
    * villager, a shouted summons. Shown in full at once rather than typed out;
    * it interrupts play to be read, not overheard.
    */

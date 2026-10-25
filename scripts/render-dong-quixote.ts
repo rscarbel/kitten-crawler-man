@@ -29,6 +29,7 @@ import {
   FRAME_W,
   ORIGIN_X,
   ORIGIN_Y,
+  PX_PER_FIGURE_UNIT,
   TILE_SCALE,
   dongStateName,
 } from '../src/sprites/art/dongQuixoteFigure.js';
@@ -66,34 +67,34 @@ interface CropWindow {
   readonly height: number;
 }
 /**
- * A window around his origin in tiles — across from `left` to `right`, and
+ * A window around his origin in figure units — across from `left` to `right`, and
  * from `low` to `high` above the floor — as fractions of the cell, so a crop
  * keeps framing the same part of him whatever size the cell is cut to.
  */
-interface TileSpan {
+interface FigureSpan {
   readonly left: number;
   readonly right: number;
   readonly low: number;
   readonly high: number;
 }
 
-function tileWindow({ left, right, low, high }: TileSpan): CropWindow {
-  const x0 = ORIGIN_X + left * TILE_SCALE;
-  const y0 = ORIGIN_Y - high * TILE_SCALE;
+function figureWindow({ left, right, low, high }: FigureSpan): CropWindow {
+  const x0 = ORIGIN_X + left * PX_PER_FIGURE_UNIT;
+  const y0 = ORIGIN_Y - high * PX_PER_FIGURE_UNIT;
   return {
     left: x0 / FRAME_W,
     top: y0 / FRAME_H,
-    width: ((right - left) * TILE_SCALE) / FRAME_W,
-    height: ((high - low) * TILE_SCALE) / FRAME_H,
+    width: ((right - left) * PX_PER_FIGURE_UNIT) / FRAME_W,
+    height: ((high - low) * PX_PER_FIGURE_UNIT) / FRAME_H,
   };
 }
 
 const PARTS: ReadonlyMap<string, CropWindow> = new Map([
-  ['body', tileWindow({ left: -0.9, right: 1.1, low: -0.2, high: 2.2 })],
+  ['body', figureWindow({ left: -0.9, right: 1.1, low: -0.2, high: 2.2 })],
   ['wide', { left: 0, top: 0, width: 1, height: 1 }],
-  ['head', tileWindow({ left: -0.45, right: 0.45, low: 1.3, high: 2.1 })],
-  ['torso', tileWindow({ left: -0.6, right: 0.6, low: 0.75, high: 1.6 })],
-  ['legs', tileWindow({ left: -0.6, right: 0.6, low: -0.1, high: 0.95 })],
+  ['head', figureWindow({ left: -0.45, right: 0.45, low: 1.3, high: 2.1 })],
+  ['torso', figureWindow({ left: -0.6, right: 0.6, low: 0.75, high: 1.6 })],
+  ['legs', figureWindow({ left: -0.6, right: 0.6, low: -0.1, high: 0.95 })],
 ]);
 
 /** The in-game strip shows the whole cell: it is already cut to his widest poses. */

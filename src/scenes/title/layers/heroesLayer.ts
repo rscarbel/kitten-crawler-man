@@ -1,32 +1,31 @@
 /**
- * Carl and Donut standing on the floor line at hero scale, and Mongo tearing
+ * The two crawlers standing on the floor line at hero scale, and Mongo tearing
  * across the back of the hall now and then. The heroes stand in the dark until
  * the spotlight (`stage.lights.spotlight`) finds them.
  *
- * Every pose is a pure function of the clock: which stance shift or grooming
- * break plays, and when, is hashed from the time slot it falls in. A frozen
- * moment therefore always shows the same pose, and nothing here keeps state
- * that a resize or a review render could disturb.
+ * Which stance shift or grooming break each slot of time holds, and when it
+ * starts, is hashed from the slot, so a frozen moment always asks for the same
+ * pose. A gesture plays only if its row was baked sharp by the time it was
+ * first due; otherwise the hero keeps breathing through that slot.
  */
 
 import { TILE_SIZE } from '../../../core/constants';
 import { progressFrameIndex, timeFrameIndex } from '../../../core/SpriteRenderer';
 import { mulberry32 } from '../../../sprites/person/rng';
 import {
-  drawHumanSelection,
   emptyHandedHumanFigure,
   rowFrameAtTicks,
   rowLengthInTicks,
 } from '../../../sprites/humanSprite';
-import { prewarmFigureState } from '../../../sprites/figure/figureFrameCache';
 import {
   GROUND_OFFSET_IN_TILE,
   HUMAN_ROW_TABLE,
   type HumanRowName,
 } from '../../../sprites/art/humanFigure';
+import { PLAYER_HUMAN_SIZE_OVER_RIG } from '../../../sprites/art/human/figureScale';
 import { GROUND_Y as CAT_GROUND_BELOW_CENTRE } from '../../../sprites/art/catArt';
 import { GROUND_Y as MONGO_GROUND_BELOW_CENTRE } from '../../../sprites/art/mongoArt';
-import { activeCatFigure, drawCatSprite, type CatState } from '../../../sprites/catSprite';
+import { activeCatFigure, type CatState } from '../../../sprites/catSprite';
 import { figureFrameCount } from '../../../sprites/figure/figureDef';
 import {
   drawMongoSprite,
@@ -40,16 +39,16 @@ import { applyTitleCamera, type TitleCamera, type TitleLayer } from '../titleLay
 import type { TitleStage } from '../titleStage';
 import type { TitleEventFire } from '../titleEvents';
 import { TitleShadeBuffer } from '../titleShade';
-import { TitleHeroCells } from '../titleHeroCells';
+import { IDLE_BAKE_TIMEOUT_MS, TitleHeroCells } from '../titleHeroCells';
 import type { FigureDef } from '../../../sprites/figure/figureDef';
 import { HALL_DEPTH, rowAtHeight, scaleAtDistance, sideWallColumn, titleHall } from '../titleHall';
 import {
-  CARL_FIDGET_ROWS,
-  CARL_HERO_CROP,
-  DONUT_HERO_CROP,
-  CARL_IDLE_ROW,
-  DONUT_BREAK_ROWS,
-  DONUT_IDLE_ROW,
+  HUMAN_FIDGET_ROWS,
+  HUMAN_HERO_CROP,
+  CAT_HERO_CROP,
+  HUMAN_IDLE_ROW,
+  CAT_BREAK_ROWS,
+  CAT_IDLE_ROW,
   prewarmTitleCast,
   TITLE_MONGO_STAGE,
 } from '../titleCast';
@@ -59,21 +58,35 @@ const HEROES_DEPTH = 0.8;
 /** Mongo runs across the hall's own floor, so he rides the hall's plane. */
 const MONGO_DEPTH = HALL_DEPTH;
 
+/**
+ * How much larger than the stage's own scale the heroes stand, and the tile
+ * their placement on the stage is laid out in. The crawlers are drawn to slim,
+ * real proportions, which at the hall's scale read as smaller than the stage
+ * around them.
+ */
+const HERO_ZOOM = 1.27;
+/**
+ * The human already stands larger than the rig everywhere he is drawn, so he
+ * is zoomed only as far as brings him to {@link HERO_ZOOM} of the rig's size;
+ * zoomed the whole way he towers over the cat and runs off a phone's stage.
+ */
+const HUMAN_HERO_ZOOM = HERO_ZOOM / PLAYER_HUMAN_SIZE_OVER_RIG;
+
 /** Where each hero's feet sit, in hero tiles from the stage's hero spot. */
-const CARL_FOOT_OFFSET_TILES = { x: 0.42, y: 0 } as const;
-/** Donut sits at his left, a little in front of him, so she is drawn over his boot. */
-const DONUT_FOOT_OFFSET_TILES = { x: -0.5, y: 0.1 } as const;
+const HUMAN_FOOT_OFFSET_TILES = { x: 0.42, y: 0 } as const;
+/** The cat sits at the human's left, a little in front of him, so she is drawn over his boot. */
+const CAT_FOOT_OFFSET_TILES = { x: -0.5, y: 0.1 } as const;
 
 /** Figures are centred across their tile; their feet sit at a depth into it each figure declares. */
 const HALF = 0.5;
-const DONUT_GROUND_IN_TILE = HALF + CAT_GROUND_BELOW_CENTRE;
+const CAT_GROUND_IN_TILE = HALF + CAT_GROUND_BELOW_CENTRE;
 const MONGO_GROUND_IN_TILE = HALF + MONGO_GROUND_BELOW_CENTRE;
 
 /** The box a hero's shading is painted in, in hero tiles around the feet. */
 const HERO_SHADE_BOX_TILES = { left: -1.6, top: -2.3, width: 3.2, height: 2.7 } as const;
 
 /** The pool of shade each hero stands in, in hero tiles: wide and flat, as a floor sees it. */
-const CONTACT_SHADOW_RADIUS_TILES = { carl: 0.46, donut: 0.36 } as const;
+const CONTACT_SHADOW_RADIUS_TILES = { human: 0.46, cat: 0.36 } as const;
 const CONTACT_SHADOW_SQUASH = 0.28;
 const CONTACT_SHADOW_ALPHA = 0.85;
 const GRADIENT_START = 0;
@@ -85,29 +98,33 @@ const DORMANT_SHADE = 0.74;
 const MS_PER_SECOND = 1000;
 
 /** Each stance shift falls somewhere inside its own slot of this length. */
-const CARL_FIDGET_SLOT_MS = 9000;
+const HUMAN_FIDGET_SLOT_MS = 9000;
 /** Her grooming breaks come round a little less often, and out of step with his shifts. */
-const DONUT_BREAK_SLOT_MS = 11500;
+const CAT_BREAK_SLOT_MS = 11500;
 /** Kept clear at each end of a slot, so a gesture never runs into the next slot's. */
 const SLOT_MARGIN_MS = 1200;
 /** Some slots pass with no gesture at all, so the rhythm never reads as a metronome. */
 const SLOT_SKIP_CHANCE = 0.25;
 /** Salts keep his slot draws and hers apart. */
-const CARL_SLOT_SALT = 0x51ca;
-const DONUT_SLOT_SALT = 0xd0ae;
+const HUMAN_SLOT_SALT = 0x51ca;
+const CAT_SLOT_SALT = 0xd0ae;
 /**
- * How far ahead a gesture's row is asked for again. A gesture plays seconds
- * apart from the last, long enough for the cache to let its row go between
- * them, so each is re-warmed shortly before it plays.
+ * How many cells of a gesture's row can bake between its being asked for and
+ * its start on a device whose idle periods never have room for one, where a
+ * cell bakes once per {@link IDLE_BAKE_TIMEOUT_MS}: a little more than the
+ * longest gesture row. A gesture plays seconds apart from the last, long
+ * enough for its row to be let go between them, so each is asked for again
+ * ahead of its start. The lead stays shorter than either hero's slot.
  */
-const GESTURE_PREWARM_LEAD_MS = 1500;
+const GESTURE_CELLS_WARMED_AHEAD = 14;
+const GESTURE_PREWARM_LEAD_MS = GESTURE_CELLS_WARMED_AHEAD * IDLE_BAKE_TIMEOUT_MS;
 /** Spreads consecutive slots' seeds across the stream. */
 const SLOT_SEED_STRIDE = 7919;
 
-/** Donut's idle loop rate: the rate the game's own idle runs at. */
-const DONUT_IDLE_FPS = 6;
+/** The cat's idle loop rate: the rate the game's own idle runs at. */
+const CAT_IDLE_FPS = 6;
 /** How long each of her breaks plays, in fixed ticks, as the game plays them. */
-const DONUT_BREAK_TICKS: Readonly<Record<(typeof DONUT_BREAK_ROWS)[number], number>> = {
+const CAT_BREAK_TICKS: Readonly<Record<CatBreakRow, number>> = {
   groom_paw: 110,
   groom_flank: 110,
   look_around: 90,
@@ -175,55 +192,84 @@ function gestureAt<Row extends string>(
   return into >= 0 && into < gesture.lengthMs ? gesture : null;
 }
 
-function carlRowLengthMs(row: HumanRowName): number {
+function humanRowLengthMs(row: HumanRowName): number {
   return rowLengthInTicks(HUMAN_ROW_TABLE[row]) * TITLE_STEP_MS;
 }
 
-function donutBreakLengthMs(row: (typeof DONUT_BREAK_ROWS)[number]): number {
-  return DONUT_BREAK_TICKS[row] * TITLE_STEP_MS;
+function catBreakLengthMs(row: CatBreakRow): number {
+  return CAT_BREAK_TICKS[row] * TITLE_STEP_MS;
 }
 
 function ticksOf(ms: number): number {
   return Math.floor(ms / TITLE_STEP_MS);
 }
 
-function carlSelectionAt(timeMs: number): { row: HumanRowName; frame: number } {
+/**
+ * Decides once per gesture, when it is first due, whether it plays: only if
+ * its row is ready then, so a gesture never shows a frame soft or stalls one
+ * to bake it.
+ */
+class GestureGate<Row extends string> {
+  private decidedStartMs: number | null = null;
+  private plays = false;
+
+  constructor(private readonly ready: (row: Row) => boolean) {}
+
+  admits(gesture: Gesture<Row>): boolean {
+    if (gesture.startMs !== this.decidedStartMs) {
+      this.decidedStartMs = gesture.startMs;
+      this.plays = this.ready(gesture.row);
+    }
+    return this.plays;
+  }
+}
+
+type HumanFidgetRow = (typeof HUMAN_FIDGET_ROWS)[number];
+type CatBreakRow = (typeof CAT_BREAK_ROWS)[number];
+
+function humanSelectionAt(
+  timeMs: number,
+  gate: GestureGate<HumanFidgetRow>,
+): { row: HumanRowName; frame: number } {
   const fidget = gestureAt(
     timeMs,
-    CARL_FIDGET_SLOT_MS,
-    CARL_SLOT_SALT,
-    CARL_FIDGET_ROWS,
-    carlRowLengthMs,
+    HUMAN_FIDGET_SLOT_MS,
+    HUMAN_SLOT_SALT,
+    HUMAN_FIDGET_ROWS,
+    humanRowLengthMs,
   );
-  if (fidget !== null) {
+  if (fidget !== null && gate.admits(fidget)) {
     const ticks = ticksOf(timeMs - fidget.startMs);
     return { row: fidget.row, frame: rowFrameAtTicks(HUMAN_ROW_TABLE[fidget.row], ticks) };
   }
-  const idle = HUMAN_ROW_TABLE[CARL_IDLE_ROW];
+  const idle = HUMAN_ROW_TABLE[HUMAN_IDLE_ROW];
   const ticks = ticksOf(timeMs) % rowLengthInTicks(idle);
-  return { row: CARL_IDLE_ROW, frame: rowFrameAtTicks(idle, ticks) };
+  return { row: HUMAN_IDLE_ROW, frame: rowFrameAtTicks(idle, ticks) };
 }
 
-function donutCellAt(timeMs: number): { state: CatState; frame: number } {
+function catCellAt(
+  timeMs: number,
+  gate: GestureGate<CatBreakRow>,
+): { state: CatState; frame: number } {
   const figure = activeCatFigure();
   const groom = gestureAt(
     timeMs,
-    DONUT_BREAK_SLOT_MS,
-    DONUT_SLOT_SALT,
-    DONUT_BREAK_ROWS,
-    donutBreakLengthMs,
+    CAT_BREAK_SLOT_MS,
+    CAT_SLOT_SALT,
+    CAT_BREAK_ROWS,
+    catBreakLengthMs,
   );
-  if (groom !== null) {
+  if (groom !== null && gate.admits(groom)) {
     const progress = (timeMs - groom.startMs) / groom.lengthMs;
     return {
       state: groom.row,
       frame: progressFrameIndex(progress, figureFrameCount(figure, groom.row)),
     };
   }
-  const frames = figureFrameCount(figure, DONUT_IDLE_ROW);
+  const frames = figureFrameCount(figure, CAT_IDLE_ROW);
   return {
-    state: DONUT_IDLE_ROW,
-    frame: timeFrameIndex(timeMs / MS_PER_SECOND, DONUT_IDLE_FPS, Math.max(1, frames)),
+    state: CAT_IDLE_ROW,
+    frame: timeFrameIndex(timeMs / MS_PER_SECOND, CAT_IDLE_FPS, Math.max(1, frames)),
   };
 }
 
@@ -232,8 +278,13 @@ function revealAt(stage: TitleStage): number {
   return Math.min(1, Math.max(0, stage.lights.spotlight));
 }
 
+/** The tile the heroes' placement, shading box and the cat are drawn in. */
 function heroTile(stage: TitleStage): number {
-  return TILE_SIZE * stage.heroScale;
+  return TILE_SIZE * stage.heroScale * HERO_ZOOM;
+}
+
+function humanHeroTile(stage: TitleStage): number {
+  return TILE_SIZE * stage.heroScale * HUMAN_HERO_ZOOM;
 }
 
 function drawContactShadow(
@@ -279,47 +330,56 @@ function pixelRatioOf(ctx: CanvasRenderingContext2D): number {
 export function heroesLayer(): TitleLayer {
   const heroShade = new TitleShadeBuffer();
   const heroCells = new TitleHeroCells((def) =>
-    def.id === activeCatFigure().id ? DONUT_HERO_CROP : CARL_HERO_CROP,
+    def.id === activeCatFigure().id ? CAT_HERO_CROP : HUMAN_HERO_CROP,
   );
-  /** Where the heroes were last drawn: the tile size and pixel ratio their cells are painted for. */
-  let drawnAt: { tile: number; pixelRatio: number } | null = null;
-  const densityOf = (def: FigureDef): number =>
-    drawnAt === null ? 1 : TitleHeroCells.densityFor(def, drawnAt.tile, drawnAt.pixelRatio);
-  const requestIdleRows = (): void => {
-    heroCells.request(emptyHandedHumanFigure(), CARL_IDLE_ROW);
-    heroCells.request(activeCatFigure(), DONUT_IDLE_ROW);
+  /** Where the heroes were last drawn: the tile sizes and pixel ratio their cells are painted for. */
+  let drawnAt: { catTile: number; humanTile: number; pixelRatio: number } | null = null;
+  const densityOf = (def: FigureDef): number => {
+    if (drawnAt === null) return 1;
+    const tile = def.id === activeCatFigure().id ? drawnAt.catTile : drawnAt.humanTile;
+    return TitleHeroCells.densityFor(def, tile, drawnAt.pixelRatio);
   };
+  const holdIdleRows = (): void => {
+    heroCells.holdResident(emptyHandedHumanFigure(), HUMAN_IDLE_ROW);
+    heroCells.holdResident(activeCatFigure(), CAT_IDLE_ROW);
+  };
+  const humanGate = new GestureGate<HumanFidgetRow>((row) => {
+    const figure = emptyHandedHumanFigure();
+    return heroCells.isReady(figure, row, densityOf(figure));
+  });
+  const catGate = new GestureGate<CatBreakRow>((row) => {
+    const figure = activeCatFigure();
+    return heroCells.isReady(figure, row, densityOf(figure));
+  });
   const mongoShade = new TitleShadeBuffer();
   let mongoDash: TitleEventFire | null = null;
-  let lastWarmedCarlStart = -1;
-  let lastWarmedDonutStart = -1;
+  let lastWarmedHumanStart = -1;
+  let lastWarmedCatStart = -1;
 
   const warmUpcomingGestures = (timeMs: number): void => {
-    const carl = gestureStartingSoon(
+    const human = gestureStartingSoon(
       timeMs,
       GESTURE_PREWARM_LEAD_MS,
-      CARL_FIDGET_SLOT_MS,
-      CARL_SLOT_SALT,
-      CARL_FIDGET_ROWS,
-      carlRowLengthMs,
+      HUMAN_FIDGET_SLOT_MS,
+      HUMAN_SLOT_SALT,
+      HUMAN_FIDGET_ROWS,
+      humanRowLengthMs,
     );
-    if (carl !== null && carl.startMs !== lastWarmedCarlStart) {
-      lastWarmedCarlStart = carl.startMs;
-      prewarmFigureState(emptyHandedHumanFigure(), carl.row);
-      heroCells.request(emptyHandedHumanFigure(), carl.row);
+    if (human !== null && human.startMs !== lastWarmedHumanStart) {
+      lastWarmedHumanStart = human.startMs;
+      heroCells.request(emptyHandedHumanFigure(), human.row);
     }
-    const donut = gestureStartingSoon(
+    const cat = gestureStartingSoon(
       timeMs,
       GESTURE_PREWARM_LEAD_MS,
-      DONUT_BREAK_SLOT_MS,
-      DONUT_SLOT_SALT,
-      DONUT_BREAK_ROWS,
-      donutBreakLengthMs,
+      CAT_BREAK_SLOT_MS,
+      CAT_SLOT_SALT,
+      CAT_BREAK_ROWS,
+      catBreakLengthMs,
     );
-    if (donut !== null && donut.startMs !== lastWarmedDonutStart) {
-      lastWarmedDonutStart = donut.startMs;
-      prewarmFigureState(activeCatFigure(), donut.row);
-      heroCells.request(activeCatFigure(), donut.row);
+    if (cat !== null && cat.startMs !== lastWarmedCatStart) {
+      lastWarmedCatStart = cat.startMs;
+      heroCells.request(activeCatFigure(), cat.row);
     }
   };
 
@@ -377,7 +437,7 @@ export function heroesLayer(): TitleLayer {
     depth: HEROES_DEPTH,
     layout: () => {
       prewarmTitleCast();
-      requestIdleRows();
+      holdIdleRows();
     },
     update: (clock) => warmUpcomingGestures(clock.elapsedMs),
     onEvent: (fire) => {
@@ -387,25 +447,26 @@ export function heroesLayer(): TitleLayer {
       renderMongo(ctx, clock, stage, camera);
 
       const tile = heroTile(stage);
+      const humanTile = humanHeroTile(stage);
       const pixelRatio = pixelRatioOf(ctx);
-      drawnAt = { tile, pixelRatio };
-      if (heroCells.beginFrame()) requestIdleRows();
+      drawnAt = { catTile: tile, humanTile, pixelRatio };
+      if (heroCells.beginFrame()) holdIdleRows();
       applyTitleCamera(ctx, camera, HEROES_DEPTH);
-      const carlX = stage.heroSpot.x + CARL_FOOT_OFFSET_TILES.x * tile;
-      const carlY = stage.heroSpot.y + CARL_FOOT_OFFSET_TILES.y * tile;
-      const donutX = stage.heroSpot.x + DONUT_FOOT_OFFSET_TILES.x * tile;
-      const donutY = stage.heroSpot.y + DONUT_FOOT_OFFSET_TILES.y * tile;
+      const humanX = stage.heroSpot.x + HUMAN_FOOT_OFFSET_TILES.x * tile;
+      const humanY = stage.heroSpot.y + HUMAN_FOOT_OFFSET_TILES.y * tile;
+      const catX = stage.heroSpot.x + CAT_FOOT_OFFSET_TILES.x * tile;
+      const catY = stage.heroSpot.y + CAT_FOOT_OFFSET_TILES.y * tile;
       const reveal = revealAt(stage);
 
       ctx.save();
       ctx.globalAlpha *= reveal;
-      drawContactShadow(ctx, carlX, carlY, CONTACT_SHADOW_RADIUS_TILES.carl * tile);
-      drawContactShadow(ctx, donutX, donutY, CONTACT_SHADOW_RADIUS_TILES.donut * tile);
+      drawContactShadow(ctx, humanX, humanY, CONTACT_SHADOW_RADIUS_TILES.human * tile);
+      drawContactShadow(ctx, catX, catY, CONTACT_SHADOW_RADIUS_TILES.cat * tile);
       ctx.restore();
 
       const timeMs = clock.elapsedMs;
-      const carl = carlSelectionAt(timeMs);
-      const donut = donutCellAt(timeMs);
+      const human = humanSelectionAt(timeMs, humanGate);
+      const cat = catCellAt(timeMs, catGate);
       const heroBox = boxAround(stage.heroSpot.x, stage.heroSpot.y, tile, HERO_SHADE_BOX_TILES);
       heroShade.draw(
         ctx,
@@ -413,49 +474,32 @@ export function heroesLayer(): TitleLayer {
         DORMANT_SHADE * (1 - reveal),
         TITLE_INK.cast.shadow,
         (target) => {
-          const carlLeft = carlX - tile * HALF;
-          const carlTop = carlY - tile * GROUND_OFFSET_IN_TILE;
-          const carlFigure = emptyHandedHumanFigure();
-          const carlSharp = heroCells.draw(
+          const humanLeft = humanX - humanTile * HALF;
+          const humanTop = humanY - humanTile * GROUND_OFFSET_IN_TILE;
+          const humanFigure = emptyHandedHumanFigure();
+          heroCells.draw(
             target,
-            carlFigure,
-            carl.row,
-            carl.frame,
-            carlLeft,
-            carlTop,
-            tile,
-            densityOf(carlFigure),
+            humanFigure,
+            human.row,
+            human.frame,
+            humanLeft,
+            humanTop,
+            humanTile,
+            densityOf(humanFigure),
           );
-          if (!carlSharp) {
-            drawHumanSelection(target, carlLeft, carlTop, tile, {
-              row: carl.row,
-              frame: carl.frame,
-              flipX: false,
-            });
-          }
-          const donutLeft = donutX - tile * HALF;
-          const donutTop = donutY - tile * DONUT_GROUND_IN_TILE;
-          const donutFigure = activeCatFigure();
-          const donutSharp = heroCells.draw(
+          const catLeft = catX - tile * HALF;
+          const catTop = catY - tile * CAT_GROUND_IN_TILE;
+          const catFigure = activeCatFigure();
+          heroCells.draw(
             target,
-            donutFigure,
-            donut.state,
-            donut.frame,
-            donutLeft,
-            donutTop,
+            catFigure,
+            cat.state,
+            cat.frame,
+            catLeft,
+            catTop,
             tile,
-            densityOf(donutFigure),
+            densityOf(catFigure),
           );
-          if (!donutSharp) {
-            drawCatSprite(
-              target,
-              donutLeft,
-              donutTop,
-              tile,
-              {},
-              { state: donut.state, frame: donut.frame, flipX: false },
-            );
-          }
         },
       );
       heroCells.bakeQueued(densityOf);

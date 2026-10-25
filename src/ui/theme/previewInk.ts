@@ -105,7 +105,7 @@ export const previewInk = {
     backdrop: '#12111a',
     sublabel: '#93a2c0',
   },
-  donut: {
+  cat: {
     backdrop: '#12111a',
     sublabel: '#93a2c0',
   },

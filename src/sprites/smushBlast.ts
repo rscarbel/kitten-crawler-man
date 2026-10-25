@@ -1,5 +1,5 @@
 /**
- * The Smush blast: the pressure wave Carl's bare heel drives out of the floor.
+ * The Smush blast: the pressure wave the human crawler's heel drives out of the floor.
  *
  * This is force, not fire — nothing here burns. What the player sees is air:
  * a slug of it punched out of the stamp, a ring of compression running out
@@ -15,7 +15,7 @@
  *
  * It is drawn in two layers, split by where each part is in the world. What
  * lies on the floor — the swept patch, the cracks, the compression rings, the
- * dust they drag — goes under the Y-sorted figures, because Carl stands on it:
+ * dust they drag — goes under the Y-sorted figures, because the human crawler stands on it:
  * drawn over him, it washes out the very legs and feet the stamp is about. What
  * is in the air — the slug of air, the thrown chips, the dust spurts and the
  * hanging haze — is split again by which side of the stamp it is on: the half
@@ -125,7 +125,7 @@ const BURST_GLOW_CENTRE_SHARE = 0.2;
 const BURST_GLOW_ALPHA_SHARE = 0.6;
 const BURST_GLOW_RIM_STOP = 0.72;
 /**
- * The dome itself is only its shell: whatever is inside it is Carl's feet,
+ * The dome itself is only its shell: whatever is inside it is the human crawler's feet,
  * and the half of the shell in front of him is drawn over them.
  */
 const BURST_DOME_ALPHA_SHARE = 0.35;
@@ -370,7 +370,7 @@ function drawDustRing(
 
 /**
  * Which side of the stamp an airborne part is on. Behind it is drawn with the
- * floor, under Carl; in front of it is drawn over him.
+ * floor, under the human crawler; in front of it is drawn over him.
  */
 type Side = 'behind' | 'front';
 
@@ -397,7 +397,7 @@ function burstLife(age: number): { size: number; fade: number } | null {
 
 /**
  * The light the slug of air throws on the floor it bursts out of: brightest
- * at its rim, dim at the heel. Under Carl, so it lights the floor around his
+ * at its rim, dim at the heel. Under the human crawler, so it lights the floor around his
  * feet rather than the feet themselves.
  */
 function drawBurstGlow(
@@ -430,7 +430,7 @@ function drawBurstGlow(
 /**
  * The slug of air the heel punches out of the floor, as a shell that swells
  * and is gone. Not a fireball — it has no colour of its own, it only lightens.
- * Hollow, because what is inside it is Carl's feet.
+ * Hollow, because what is inside it is the human crawler's feet.
  */
 function drawBurstDome(
   ctx: CanvasRenderingContext2D,
@@ -801,7 +801,7 @@ function blastClock(blast: SmushBlastFrame): {
  * The floor layer of one blast, drawn under the Y-sorted figures. Floor-upward:
  * the swept patch, the cracks, the ripples behind the front, the dust the front
  * drags, the front itself, the burst's light on the floor, and then everything
- * airborne on the far side of the stamp, which Carl stands in front of.
+ * airborne on the far side of the stamp, which the human crawler stands in front of.
  */
 export function drawSmushBlastGround(ctx: CanvasRenderingContext2D, blast: SmushBlastFrame): void {
   const { cx, cy, damageRadius, age, seed } = blast;

@@ -2,7 +2,7 @@
  * A live Big Top, stood up headless and drawn the way `BuildingInteriorScene`
  * draws it: the map's chunk bake, the maze's ground layer (its furniture, the
  * stage lights, then its warnings), the Y-sorted pass (decoration tiles, the
- * maze's own prop mobs, Carl and Donut), then the maze's effects layer.
+ * maze's own prop mobs, the human and the cat), then the maze's effects layer.
  *
  * Shared by the in-situ render and anything that has to measure pixels of the
  * tent as a player would see them, so both look at one picture. The frame is
@@ -490,7 +490,7 @@ export type TentLighting = 'lit' | 'fullBright' | 'darkTelegraph';
 
 export interface TentFrameOptions {
   readonly scale: number;
-  /** Carl and Donut, where the harness last placed them. */
+  /** The human and the cat, where the harness last placed them. */
   readonly withParty: boolean;
   /**
    * The maze's own mobs — targets, bells, mirrors, Grimaldi. On by default; a

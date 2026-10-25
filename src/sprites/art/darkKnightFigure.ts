@@ -52,9 +52,9 @@ import { type FigureDef, figureStates } from '../figure/figureDef';
 export const TILE_SCALE = 64;
 
 /**
- * How much of a tile the knight fills. Carl stands at 0.72 of his 2.03 units,
- * i.e. 1.46 tiles; the knight at 0.94 of 2.28 stands 2.14 — half again Carl's
- * height, which is the whole point of him.
+ * How much of a tile the knight fills. The human crawler stands at 0.72 of his
+ * 2.03 units, i.e. 1.46 tiles; the knight at 0.94 of 2.28 stands 2.14 — half
+ * again the crawler's height, which is the whole point of him.
  */
 export const KNIGHT_SCALE = 0.94;
 

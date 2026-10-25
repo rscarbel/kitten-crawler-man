@@ -1,5 +1,5 @@
 /**
- * Carl and Donut painted at the density the title actually shows them at.
+ * The two crawlers painted at the density the title actually shows them at.
  *
  * The shared figure cache bakes every figure at one density (64 cell pixels a
  * tile, half that on a one-to-one screen), which suits a floor full of
@@ -8,14 +8,18 @@
  * own cells, painted by the figures' own painters at the screen's density and
  * cropped to the box their art reaches.
  *
- * A cell costs a large share of a frame to paint (Donut's painter most of
+ * Every frame a hero shows comes from one of these cells, never from the
+ * shared cache: mixing the two flickers between sharp and soft from one frame
+ * of a row to the next. A draw of a cell not baked yet bakes it on the spot,
+ * so the rows a hero always shows (the resident rows) are held whole, and a
+ * gesture is asked for ahead and played only once its row {@link isReady}.
+ *
+ * A cell costs a large share of a frame to paint (the cat's painter most of
  * all, whatever the density), so rows asked for ahead of their showing are
  * baked in the browser's idle time between frames, one cell per idle period
- * that has room for it. Where there is no idle callback (a review render) the
- * queue is paced instead: one cell a frame, resting after a slow one. A draw
- * bakes on the spot only the first cell of a row nothing has baked yet; any
- * other cell not baked yet is not drawn here, and the caller falls back to the
- * shared cache, so a figure is soft for a moment, never missing.
+ * that has room for it, or in the next idle period whatever its room once the
+ * queue has waited too long. Where there is no idle callback (Safari, a review
+ * render) the queue is paced instead: one cell a frame, resting after a slow one.
  */
 
 import {
@@ -45,12 +49,12 @@ const DENSITY_STEP = 0.5;
 /**
  * The densest a cell is painted, in device pixels per cell pixel. Past it a
  * cell is upscaled a little on a huge display, which keeps memory bounded
- * whatever the screen: a full set of rows at this density is about 50 MB.
+ * whatever the screen: a full set of rows at this density is about 55 MB.
  */
-const MAX_DENSITY = 4;
+const MAX_DENSITY = 5;
 /**
- * What the cells may hold. The idle rows of both heroes and one gesture row
- * each fit with room to spare; an older gesture row is let go to make room.
+ * What the cells may hold. The resident rows of both heroes and one gesture
+ * row each fit with room to spare; an older gesture row is let go to make room.
  */
 const HERO_CELL_BUDGET_MEGABYTES = 32;
 const HERO_CELL_BUDGET_BYTES = HERO_CELL_BUDGET_MEGABYTES * BYTES_PER_MEGABYTE;
@@ -59,8 +63,13 @@ const BYTES_PER_PIXEL = 4;
 const HERO_BAKE_BUDGET_MS = 4;
 /** What a cell is expected to cost before one of that figure has been timed. */
 const UNMEASURED_BAKE_MS = 12;
-/** An idle period this long overdue bakes anyway, so a busy device still warms its rows. */
-const IDLE_BAKE_TIMEOUT_MS = 400;
+/**
+ * A queue that has gone this long without a bake bakes in the next idle period
+ * whatever room it offers. A browser offers an idle period between nearly
+ * every pair of frames, each shorter than a cell costs on a busy or
+ * high-refresh screen, so waiting for one with room would never bake at all.
+ */
+export const IDLE_BAKE_TIMEOUT_MS = 400;
 
 interface HeroRow {
   readonly def: FigureDef;
@@ -82,12 +91,14 @@ const clockMs = (): number => performance.now();
 
 export class TitleHeroCells {
   private readonly rows = new Map<string, HeroRow>();
+  private readonly residentKeys = new Set<string>();
   private readonly queue: { def: FigureDef; state: string }[] = [];
   private bytes = 0;
   private frame = 0;
   private bakedThisFrame = false;
   private restFrames = 0;
   private lastBakeMs = 0;
+  private queueServedAtMs = clockMs();
   private bakedInGeneration = canvasGeneration();
   private readonly bakeMsByFigure = new Map<string, number>();
   private idleHandle: number | null = null;
@@ -115,8 +126,8 @@ export class TitleHeroCells {
   /**
    * After a canvas recovery (a purged background tab, a lost GPU context, memory
    * pressure) every cell may be blank yet still blit as if it were whole, which
-   * would hide the heroes rather than fall back. Lets everything go; returns
-   * whether it did, so the caller can ask for its rows again.
+   * would hide the heroes. Lets everything go; returns whether it did, so the
+   * caller can ask for its rows again.
    */
   private dropIfRecovered(): boolean {
     const generation = canvasGeneration();
@@ -133,6 +144,7 @@ export class TitleHeroCells {
       for (const cell of row.cells.values()) releaseSurface(cell);
     }
     this.rows.clear();
+    this.residentKeys.clear();
     this.queue.length = 0;
     this.bytes = 0;
   }
@@ -140,7 +152,24 @@ export class TitleHeroCells {
   /** Asks for a whole row ahead of its showing, baked a cell at a time by {@link bakeQueued}. */
   request(def: FigureDef, state: string): void {
     if (this.queue.some((queued) => queued.def === def && queued.state === state)) return;
+    if (this.queue.length === 0) this.queueServedAtMs = clockMs();
     this.queue.push({ def, state });
+  }
+
+  /**
+   * Asks for a row a hero shows whenever it is not gesturing, and keeps it:
+   * it is never let go to make room for another.
+   */
+  holdResident(def: FigureDef, state: string): void {
+    this.residentKeys.add(rowKey(def, state));
+    this.request(def, state);
+  }
+
+  /** Whether every frame of a row is baked at `density`, so it can play from start to end sharp and without a stall. */
+  isReady(def: FigureDef, state: string, density: number): boolean {
+    const row = this.rows.get(rowKey(def, state));
+    if (row?.density !== density) return false;
+    return row.cells.size >= figureFrameCount(def, state);
   }
 
   /**
@@ -160,8 +189,7 @@ export class TitleHeroCells {
       return;
     }
     const next = this.nextQueuedCell();
-    if (next === null) return;
-    this.bake(next.row, next.frame);
+    if (next === null || !this.bakeQueuedCell(next.row, next.frame)) return;
     this.restFrames = Math.max(0, Math.ceil(this.lastBakeMs / HERO_BAKE_BUDGET_MS) - 1);
   }
 
@@ -175,8 +203,10 @@ export class TitleHeroCells {
         const next = this.nextQueuedCell();
         if (next === null) return;
         const expectedMs = this.bakeMsByFigure.get(next.row.def.id) ?? UNMEASURED_BAKE_MS;
-        if (deadline.didTimeout || deadline.timeRemaining() >= expectedMs) {
-          this.bake(next.row, next.frame);
+        const overdue =
+          deadline.didTimeout || clockMs() - this.queueServedAtMs >= IDLE_BAKE_TIMEOUT_MS;
+        if (overdue || deadline.timeRemaining() >= expectedMs) {
+          this.bakeQueuedCell(next.row, next.frame);
         }
         this.scheduleIdleBake();
       },
@@ -198,11 +228,15 @@ export class TitleHeroCells {
     return null;
   }
 
+  /** Bakes a cell asked for ahead, unless making room for it would let go of a row on screen; then it waits. */
+  private bakeQueuedCell(row: HeroRow, frame: number): boolean {
+    if (!this.makeRoom(this.bakedBytes(row), row)) return false;
+    return this.bake(row, frame) !== undefined;
+  }
+
   /**
    * Blits one frame with its tile's top-left at (x, y), as the shared cache
-   * places a cell, baking it first when it would be the row's first and
-   * nothing else has baked this frame. Returns false when the frame is not
-   * ready, for the caller to draw it another way.
+   * places a cell, baking it on the spot if it is not baked yet.
    */
   draw(
     ctx: CanvasRenderingContext2D,
@@ -213,17 +247,14 @@ export class TitleHeroCells {
     y: number,
     tileSize: number,
     density: number,
-  ): boolean {
+  ): void {
     const row = this.rowFor(def, state, density);
     row.lastUsed = this.frame;
     let cell = row.cells.get(frame);
     if (cell === undefined) {
-      if (this.bakedThisFrame || row.cells.size > 0) {
-        this.request(def, state);
-        return false;
-      }
+      this.makeRoom(this.bakedBytes(row), row);
       cell = this.bake(row, frame);
-      if (cell === undefined) return false;
+      if (cell === undefined) return;
     }
     const scale = tileSize / def.tileScale;
     const crop = this.cropOf(def);
@@ -234,7 +265,6 @@ export class TitleHeroCells {
       crop.width * scale,
       crop.height * scale,
     );
-    return true;
   }
 
   dispose(): void {
@@ -259,13 +289,24 @@ export class TitleHeroCells {
     this.rows.delete(key);
   }
 
+  private cellSize(row: HeroRow): { width: number; height: number } {
+    const crop = this.cropOf(row.def);
+    return {
+      width: Math.max(1, Math.ceil(crop.width * row.density)),
+      height: Math.max(1, Math.ceil(crop.height * row.density)),
+    };
+  }
+
+  private bakedBytes(row: HeroRow): number {
+    const { width, height } = this.cellSize(row);
+    return width * height * BYTES_PER_PIXEL;
+  }
+
   private bake(row: HeroRow, frame: number): CanvasSurface | undefined {
     const frames = figureFrameCount(row.def, row.state);
     if (frame < 0 || frame >= frames) return undefined;
     const crop = this.cropOf(row.def);
-    const width = Math.max(1, Math.ceil(crop.width * row.density));
-    const height = Math.max(1, Math.ceil(crop.height * row.density));
-    this.makeRoom(width * height * BYTES_PER_PIXEL, row);
+    const { width, height } = this.cellSize(row);
     const startedMs = clockMs();
     const cell = allocCanvas('title', width, height);
     const ctx = surfaceContext(cell);
@@ -282,21 +323,34 @@ export class TitleHeroCells {
     row.cells.set(frame, cell);
     this.bytes += cellBytes(cell);
     this.bakedThisFrame = true;
-    this.lastBakeMs = clockMs() - startedMs;
+    const finishedMs = clockMs();
+    this.queueServedAtMs = finishedMs;
+    this.lastBakeMs = finishedMs - startedMs;
     this.bakeMsByFigure.set(row.def.id, this.lastBakeMs);
     return cell;
   }
 
-  /** Lets go of the least recently drawn rows, never `keep`, until `incoming` more bytes fit. */
-  private makeRoom(incoming: number, keep: HeroRow): void {
+  /**
+   * Lets go of the least recently drawn rows until `incoming` more bytes fit,
+   * never `keep`, a resident row or a row drawn in the latest frame. Returns
+   * whether they fit.
+   */
+  private makeRoom(incoming: number, keep: HeroRow): boolean {
     while (this.bytes + incoming > HERO_CELL_BUDGET_BYTES) {
       let oldest: [string, HeroRow] | null = null;
       for (const entry of this.rows) {
-        if (entry[1] === keep || entry[1].cells.size === 0) continue;
-        if (oldest === null || entry[1].lastUsed < oldest[1].lastUsed) oldest = entry;
+        const [key, row] = entry;
+        const spared =
+          row === keep ||
+          row.cells.size === 0 ||
+          row.lastUsed >= this.frame ||
+          this.residentKeys.has(key);
+        if (spared) continue;
+        if (oldest === null || row.lastUsed < oldest[1].lastUsed) oldest = entry;
       }
-      if (oldest === null) return;
+      if (oldest === null) return false;
       this.release(oldest[0], oldest[1]);
     }
+    return true;
   }
 }

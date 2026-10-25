@@ -28,10 +28,10 @@ import { asGameContext, type NodeContext } from './nodeGameContext.js';
 import { catLookOf, humanLookOf, isItemId, ITEM_DEF } from '../src/core/ItemDefs.js';
 import type { CatDressing, CatPartFrames, CatPartName } from '../src/sprites/art/catParts.js';
 import type {
-  CarlDressing,
-  CarlPartFrames,
-  CarlPartName,
-} from '../src/sprites/art/carl/carlParts.js';
+  BipedDressing,
+  BipedPartFrames,
+  BipedPartName,
+} from '../src/sprites/art/biped/bipedParts.js';
 import {
   CAT_ROWS,
   FRAME_H as CAT_FRAME_H,
@@ -39,11 +39,12 @@ import {
   TILE_SCALE as CAT_TILE_SCALE,
   paintCatCell,
 } from '../src/sprites/art/catFigure.js';
-import { drawCarlBack, drawCarlFront, drawCarlSide } from '../src/sprites/art/carl/figure.js';
-import type { CarlPose, ViewSpec } from '../src/sprites/art/carl/rig.js';
+import { drawBipedBack, drawBipedFront, drawBipedSide } from '../src/sprites/art/biped/figure.js';
+import { type BipedPose, type ViewSpec, VIEWS } from '../src/sprites/art/biped/rig.js';
 import { dressedPose } from '../src/sprites/art/human/appearance.js';
 import {
   HUMAN_SCALE,
+  PLAYER_HUMAN_CELL_PX_PER_UNIT,
   TILE_SCALE as HUMAN_TILE_SCALE,
 } from '../src/sprites/art/human/figureScale.js';
 import { HUMAN_ROWS, ORIGIN_X, ORIGIN_Y } from '../src/sprites/art/humanFigure.js';
@@ -54,16 +55,26 @@ import type {
   GarmentDef,
   GarmentFrameContext,
   GarmentWearer,
+  WornGarmentDef,
 } from '../src/sprites/garments/garmentDef.js';
-import { carlWornOn } from '../src/sprites/garments/human/carlDressing.js';
-import { garmentOf, garmentsOf } from '../src/sprites/garments/garments.js';
-import { outfitOf, type Outfit } from '../src/sprites/garments/outfit.js';
+import { humanWornOn } from '../src/sprites/garments/human/humanDressing.js';
+import { garmentsOf, wornGarmentOf } from '../src/sprites/garments/garments.js';
+import {
+  fitsOver,
+  outfitOf,
+  type Outfit,
+  type OutfitBase,
+} from '../src/sprites/garments/outfit.js';
+import type { CatLook } from '../src/sprites/looks/catLook.js';
+import { type HumanLook, playerLookAxes, withLookBuild } from '../src/sprites/looks/humanLook.js';
+import { HUMAN_LOOKS } from './humanLooks.js';
+import { CAT_LOOKS } from './catLooks.js';
 
 const TILE = 32;
 const CAT_DENSITY = TILE / CAT_TILE_SCALE;
 const HUMAN_DENSITY = TILE / HUMAN_TILE_SCALE;
 /**
- * Donut's ink lands in her cell. Carl's lands on the surfaces his compositor
+ * The cat's ink lands in her cell. The human's lands on the surfaces his compositor
  * builds round his whole reach, cloak and all, so his are measured on a
  * surface sized for the widest of them at the tile.
  */
@@ -78,7 +89,7 @@ const SWEEP_STEP_SHARE = 0.5;
 const WHITE = '#ffffff';
 
 const CAT_PARTS: readonly CatPartName[] = ['head', 'neck', 'body', 'foreleg', 'hindleg', 'tail'];
-const CARL_PARTS: readonly CarlPartName[] = [
+const HUMAN_PARTS: readonly BipedPartName[] = [
   'head',
   'torso',
   'neck',
@@ -223,20 +234,21 @@ function catMeasuringDressing(
   };
 }
 
-function carlMeasuringDressing(
+function humanMeasuringDressing(
   outfit: Outfit<'human'>,
   measure: Measure,
   context: GarmentFrameContext<'human'>,
-): CarlDressing {
+  look: HumanLook,
+): BipedDressing {
   return {
     hides: (feature) => outfit.hidden.has(feature),
     paints: (part) => outfit.garments.some((garment) => garment.paint[part] !== undefined),
     reach: (skeleton, view) =>
-      outfit.garments.flatMap((garment) => garment.reach?.(skeleton, view, context) ?? []),
-    part: <P extends CarlPartName>(
+      outfit.garments.flatMap((garment) => garment.reach?.(skeleton, view, context, look) ?? []),
+    part: <P extends BipedPartName>(
       ctx: CanvasRenderingContext2D,
       part: P,
-      frame: CarlPartFrames[P],
+      frame: BipedPartFrames[P],
     ) =>
       measurePiece(
         outfit,
@@ -275,6 +287,8 @@ function spill(ink: Uint8ClampedArray, envelope: Uint8ClampedArray): number {
 interface Wearer<W extends GarmentWearer> {
   readonly label: string;
   readonly possessive: string;
+  /** The look whose figure is painted, which every outfit of the pass starts from. */
+  readonly base: OutfitBase<W>;
   readonly parts: readonly string[];
   readonly surfacePx: number;
   readonly rows: readonly { readonly name: string; readonly frameCount: number }[];
@@ -287,56 +301,98 @@ interface Wearer<W extends GarmentWearer> {
   ) => void;
 }
 
-const CAT: Wearer<'cat'> = {
-  label: 'Donut',
-  possessive: 'her',
-  parts: CAT_PARTS,
-  surfacePx: CAT_SURFACE_PX,
-  rows: CAT_ROWS,
-  paintCell: (ctx, row, frame, outfit, measure) => {
-    ctx.scale(CAT_DENSITY, CAT_DENSITY);
-    paintCatCell(ctx, row, frame, (context) => catMeasuringDressing(outfit, measure, context));
-  },
+/** The cat painted as `look`: every cat garment is fitted on each of her looks' bodies. */
+function catWearer(look: CatLook): Wearer<'cat'> {
+  return {
+    label: `The cat (${look.id})`,
+    possessive: `${look.id}'s`,
+    base: look,
+    parts: CAT_PARTS,
+    surfacePx: CAT_SURFACE_PX,
+    rows: CAT_ROWS,
+    paintCell: (ctx, row, frame, outfit, measure) => {
+      ctx.scale(CAT_DENSITY, CAT_DENSITY);
+      paintCatCell(ctx, look, row, frame, (context) =>
+        catMeasuringDressing(outfit, measure, context),
+      );
+    },
+  };
+}
+
+const DRAW_HUMAN: Readonly<Record<CardinalView, typeof drawBipedFront>> = {
+  front: drawBipedFront,
+  side: drawBipedSide,
+  back: drawBipedBack,
 };
 
-const DRAW_CARL: Readonly<Record<CardinalView, typeof drawCarlFront>> = {
-  front: drawCarlFront,
-  side: drawCarlSide,
-  back: drawCarlBack,
-};
+/** The human painted as `look`: every human garment is fitted on each of his looks' builds. */
+function humanWearer(look: HumanLook): Wearer<'human'> {
+  return {
+    label: `The human (${look.id})`,
+    possessive: `${look.id}'s`,
+    base: look,
+    parts: HUMAN_PARTS,
+    surfacePx: HUMAN_SURFACE_PX,
+    rows: HUMAN_ROWS,
+    paintCell: (ctx, rowName, frame, outfit, measure) => {
+      const row = HUMAN_ROWS.find((candidate) => candidate.name === rowName);
+      if (row === undefined) return;
+      const pose = withLookBuild(dressedPose(outfit, row.pose(frame), row, frame), look);
+      const axes = playerLookAxes(look, VIEWS[row.view].profile);
+      ctx.scale(HUMAN_DENSITY, HUMAN_DENSITY);
+      ctx.translate(ORIGIN_X, ORIGIN_Y);
+      ctx.scale(HUMAN_TILE_SCALE, HUMAN_TILE_SCALE);
+      ctx.scale(HUMAN_SCALE * axes.x, HUMAN_SCALE * axes.y);
+      DRAW_HUMAN[row.view](ctx, pose, {
+        look,
+        cellPxPerUnit: PLAYER_HUMAN_CELL_PX_PER_UNIT,
+        dressing: (drawn: BipedPose, view: ViewSpec) =>
+          humanMeasuringDressing(outfit, measure, humanWornOn(drawn, view, look).context, look),
+      });
+    },
+  };
+}
 
-const CARL: Wearer<'human'> = {
-  label: 'Carl',
-  possessive: 'his',
-  parts: CARL_PARTS,
-  surfacePx: HUMAN_SURFACE_PX,
-  rows: HUMAN_ROWS,
-  paintCell: (ctx, rowName, frame, outfit, measure) => {
-    const row = HUMAN_ROWS.find((candidate) => candidate.name === rowName);
-    if (row === undefined) return;
-    const pose = dressedPose(outfit, row.pose(frame), row, frame);
-    ctx.scale(HUMAN_DENSITY, HUMAN_DENSITY);
-    ctx.translate(ORIGIN_X, ORIGIN_Y);
-    ctx.scale(HUMAN_TILE_SCALE, HUMAN_TILE_SCALE);
-    ctx.scale(HUMAN_SCALE, HUMAN_SCALE);
-    DRAW_CARL[row.view](ctx, pose, {
-      dressing: (drawn: CarlPose, view: ViewSpec) =>
-        carlMeasuringDressing(outfit, measure, carlWornOn(drawn, view).context),
-    });
-  },
-};
+/**
+ * Every garment a look can show: what it can put on — less what needs bare
+ * skin its own clothes cover, which no outfit of it paints — and its own base
+ * garments, not another look's.
+ */
+function wornBy(look: HumanLook, garments: readonly GarmentDef<'human'>[]): GarmentDef<'human'>[] {
+  return garments.filter((garment) =>
+    garment.base ? look.baseGarments.includes(garment) : fitsOver(look, garment),
+  );
+}
+
+/**
+ * E5 for a garment no human look can show: every look's own clothes cover the
+ * skin it needs, or it is a base garment of none of them. Its envelope is
+ * never measured, so it would pass E5 unseen.
+ */
+function unwornFailures(garments: readonly GarmentDef<'human'>[]): string[] {
+  return garments
+    .filter((garment) => HUMAN_LOOKS.every((look) => !wornBy(look, [garment]).includes(garment)))
+    .map(
+      (garment) =>
+        `E5: ${garment.id} is worn by no human look (${HUMAN_LOOKS.map((l) => l.id).join(', ')}), ` +
+        'so its envelope is never measured',
+    );
+}
 
 /**
  * The outfits to paint: garments that hide nothing share one, each one that
- * hides something gets its own. Base garments ride along in every outfit.
+ * hides something — by a rule or by covering skin another needs bare — gets
+ * its own. Base garments ride along in every outfit.
  */
 function passes<W extends GarmentWearer>(
-  wearer: W,
-  garments: readonly GarmentDef<W>[],
+  base: OutfitBase<W>,
+  worn: readonly WornGarmentDef<W>[],
 ): Outfit<W>[] {
-  const quiet = garments.filter((garment) => garment.hides.length === 0);
-  const hiding = garments.filter((garment) => garment.hides.length > 0);
-  return [outfitOf(wearer, quiet), ...hiding.map((garment) => outfitOf(wearer, [garment]))];
+  const hidesAny = (garment: WornGarmentDef<W>): boolean =>
+    garment.hides.length > 0 || garment.covers.length > 0;
+  const quiet = worn.filter((garment) => !hidesAny(garment));
+  const hiding = worn.filter(hidesAny);
+  return [outfitOf(base, quiet), ...hiding.map((garment) => outfitOf(base, [garment]))];
 }
 
 function checkPass<W extends GarmentWearer>(
@@ -401,17 +457,16 @@ function garmentsNamed<W extends GarmentWearer>(
 function catGarmentOfItem(id: string): GarmentDef<'cat'> | null {
   if (!isItemId(id)) return null;
   const look = catLookOf(ITEM_DEF[id]);
-  return look?.kind === 'garment' ? garmentOf('cat', look.garment) : null;
+  return look?.kind === 'garment' ? wornGarmentOf('cat', look.garment) : null;
 }
 
-function carlGarmentOfItem(id: string): GarmentDef<'human'> | null {
+function humanGarmentOfItem(id: string): GarmentDef<'human'> | null {
   if (!isItemId(id)) return null;
   const look = humanLookOf(ITEM_DEF[id]);
-  return look?.kind === 'garment' ? garmentOf('human', look.garment) : null;
+  return look?.kind === 'garment' ? wornGarmentOf('human', look.garment) : null;
 }
 
 function wearerFailures<W extends GarmentWearer>(
-  wearer: W,
   harness: Wearer<W>,
   garments: readonly GarmentDef<W>[],
 ): string[] {
@@ -421,8 +476,8 @@ function wearerFailures<W extends GarmentWearer>(
   const measured = new Map<string, number>();
   const toMeasure = new Set(wanted);
   for (const outfit of passes(
-    wearer,
-    garments.filter((garment) => !garment.base),
+    harness.base,
+    garments.flatMap((garment) => (garment.base ? [] : [garment])),
   )) {
     checkPass(harness, outfit, toMeasure, failures, measured);
     for (const garment of outfit.garments) if (garment.base) toMeasure.delete(garment.id);
@@ -439,7 +494,7 @@ function wearerFailures<W extends GarmentWearer>(
 export function gatesGarment(only: string): boolean {
   return (
     garmentsNamed('cat', only, catGarmentOfItem).length > 0 ||
-    garmentsNamed('human', only, carlGarmentOfItem).length > 0
+    garmentsNamed('human', only, humanGarmentOfItem).length > 0
   );
 }
 
@@ -447,8 +502,16 @@ export function gatesGarment(only: string): boolean {
 export function garmentEnvelopeFailures(only: string | null = null): string[] {
   if (typeof document === 'undefined') installCanvasGlobals();
   return [
-    ...wearerFailures('cat', CAT, garmentsNamed('cat', only, catGarmentOfItem)),
-    ...wearerFailures('human', CARL, garmentsNamed('human', only, carlGarmentOfItem)),
+    ...CAT_LOOKS.flatMap((look) =>
+      wearerFailures(catWearer(look), garmentsNamed('cat', only, catGarmentOfItem)),
+    ),
+    ...HUMAN_LOOKS.flatMap((look) =>
+      wearerFailures(
+        humanWearer(look),
+        wornBy(look, garmentsNamed('human', only, humanGarmentOfItem)),
+      ),
+    ),
+    ...unwornFailures(garmentsNamed('human', only, humanGarmentOfItem)),
   ];
 }
 

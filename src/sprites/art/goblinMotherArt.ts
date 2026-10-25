@@ -18,7 +18,7 @@
  * runtime mirrors the whole cell to face them the other way.
  */
 
-import { type Pt, clamp01, lerp, mix, rgba } from './carlArt';
+import { type Pt, clamp01, lerp, mix, rgba } from './bipedArt';
 import { fillSoftEllipse, withClip } from './softShade';
 
 type Ctx = CanvasRenderingContext2D;

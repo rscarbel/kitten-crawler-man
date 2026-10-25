@@ -8,7 +8,7 @@
  * order.
  */
 
-import { type Pt, clamp01, lerp, rgba } from '../carlArt';
+import { type Pt, clamp01, lerp, rgba } from '../bipedArt';
 import { BELLY, BELLY_MOTTLE, BRUISE, CLAW, CLAW_GLINT, HIDE, type Ramp } from './palette';
 import {
   type Ctx,

@@ -42,7 +42,7 @@ import {
   WAIST_Y,
   tileYOf,
 } from './art/signet/proportions';
-import { clamp01 } from './art/carlArt';
+import { clamp01 } from './art/bipedArt';
 import { INK_GLOW_COLOR, SHIMMER_COLOR, SHIMMER_EDGE_COLOR } from './art/signet/palette';
 import {
   SIDES,

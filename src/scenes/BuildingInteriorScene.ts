@@ -49,7 +49,7 @@ import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
 import { ShopSystem } from '../systems/ShopSystem';
 import { TouchMoveState } from '../core/TouchMoveState';
-import { CRAWLER_NAMES } from '../core/SkillManager';
+import { crawlerName } from '../characters/characters';
 import { constructionUnlocked } from '../core/villageUnlocks';
 import { platform } from '../core/Platform';
 import {
@@ -908,7 +908,7 @@ export class BuildingInteriorScene extends GameplayScene {
   private citizenDialogTarget: Townsperson | null = null;
   /** The talk row pinned for {@link citizenDialogTarget}, unpinned with it. */
   private citizenTalkRow: DrawnFigureRow | null = null;
-  /** Keeps Carl talking, turned to whoever he is in conversation with. */
+  /** Keeps the human crawler talking, turned to whoever he is in conversation with. */
   private readonly humanTalk = new HumanTalkDriver();
   /**
    * Whether the interact key has been released since an overlay last spent it:
@@ -1826,7 +1826,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.bus.on('crawlerKnockedOut', (e) => {
       e.player.applyCockroachKnockoutRelief();
       if (e.player === this.cat && this.human.isAlive && !this.human.isKnockedOut) {
-        this.crawlerBarks.say(this.human, [CRAWLER_BARKS.donutKnockedOut.paragraphs[0]]);
+        this.crawlerBarks.say(this.human, [CRAWLER_BARKS.catKnockedOut.paragraphs[0]]);
       }
     });
     barkWhenBlueprintsItemEvicted(
@@ -1895,9 +1895,9 @@ export class BuildingInteriorScene extends GameplayScene {
     if (!isWardExplainerDue(this.gameStats)) return;
     this.gameStats.recordWardExplainerHeard();
     if (humanPending) {
-      this.crawlerBarks.say(this.human, barkTexts(CRAWLER_BARKS.wardExplainer.carl));
+      this.crawlerBarks.say(this.human, barkTexts(CRAWLER_BARKS.wardExplainer.human));
     } else {
-      this.crawlerBarks.say(this.cat, barkTexts(CRAWLER_BARKS.wardExplainer.donut));
+      this.crawlerBarks.say(this.cat, barkTexts(CRAWLER_BARKS.wardExplainer.cat));
     }
   }
 
@@ -2526,7 +2526,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.menus.constructionMenu.surface('construction-menu', () => {
         const menuCrawler = this.active();
         return {
-          crawlerName: menuCrawler === this.human ? 'Carl' : 'Donut',
+          crawlerName: crawlerName(menuCrawler === this.human ? 'human' : 'cat'),
           skills: menuCrawler.craftSkills,
           partyCount: (id) => partyCount(this.human, this.cat, id),
         };
@@ -2901,7 +2901,7 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
-   * Where the one Carl is in conversation with stands, while a street-style
+   * Where the one the human crawler is in conversation with stands, while a street-style
    * conversation is open — a resident, or Mordecai; null otherwise.
    */
   private humanTalkSpeaker(): { x: number; y: number } | null {
@@ -3065,7 +3065,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
     const player = this.active();
     // A cutscene drives both bodies itself. Every input below is withheld for
-    // its whole run, movement included, or the player walks Carl out of the
+    // its whole run, movement included, or the player walks the human out of the
     // scripted walk-up he is halfway through.
     const scriptOwnsParty = this.scriptOwnsParty;
 
@@ -3278,7 +3278,7 @@ export class BuildingInteriorScene extends GameplayScene {
     for (const cue of maze.drainSounds()) {
       audio?.play(cue.id, cue.volume === undefined ? undefined : { volume: cue.volume });
     }
-    // The encore's coins are Carl's: the pivots that aim the light are his.
+    // The encore's coins are the human crawler's: the pivots that aim the light are his.
     // Dropped rather than credited, so they fall from the star and land first.
     for (const reward of maze.drainRewards()) {
       this.destruction.loot.addLoot(
@@ -3680,10 +3680,16 @@ export class BuildingInteriorScene extends GameplayScene {
     const inSafeRoom = (): boolean => this.safeRoom?.isEntityInSafeRoom(this.active()) ?? false;
     return {
       crawlerNameOf: (player) =>
-        player === this.human ? 'Carl' : player === this.cat ? 'Donut' : null,
+        player === this.human
+          ? crawlerName('human')
+          : player === this.cat
+            ? crawlerName('cat')
+            : null,
       isPartyInSafeRoom: inSafeRoom,
       isCrawlerInSafeRoom: (crawler) =>
-        this.safeRoom?.isEntityInSafeRoom(crawler === 'Carl' ? this.human : this.cat) ?? false,
+        this.safeRoom?.isEntityInSafeRoom(
+          crawler === crawlerName('human') ? this.human : this.cat,
+        ) ?? false,
       readSession: () => {
         const levelId = this.aiLevelId();
         const level = allLevelDefs().find((def) => def.id === levelId);
@@ -3716,9 +3722,11 @@ export class BuildingInteriorScene extends GameplayScene {
         const nearbyMobs = readNearbyMobs(this.world.roster.mobs, active);
         const menuOpen = this.aiMenuOpen();
         return {
-          activeCrawler: this.human.isActive ? 'Carl' : 'Donut',
-          carl: readCrawler(this.human, 'Carl'),
-          donut: readCrawler(this.cat, 'Donut'),
+          activeCrawler: crawlerName(this.human.isActive ? 'human' : 'cat'),
+          crawlers: {
+            human: readCrawler(this.human, crawlerName('human')),
+            cat: readCrawler(this.cat, crawlerName('cat')),
+          },
           location: {
             kind: safe ? 'safeRoom' : 'building',
             label: safe ? `safe room in ${this.entry.name}` : this.entry.name,
@@ -3812,7 +3820,7 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
-   * Gives the party Carl's attack cow and stands her beside him in this room
+   * Gives the party the human crawler's attack cow and stands her beside him in this room
    * now, with her arrival moo — the wheel's "A new pet" prize, and the `!cow`
    * cheat. Returns false when she was already owned.
    */
@@ -5056,7 +5064,7 @@ export class BuildingInteriorScene extends GameplayScene {
     dock.push({
       id: 'switch',
       icon: other === 'cat' ? 'cat' : 'user',
-      label: `Switch to ${CRAWLER_NAMES[other]}`,
+      label: `Switch to ${crawlerName(other)}`,
       key: keybindings.labelFor('switchCharacter'),
       onTap: () => this.trySwitchActive(),
     });
@@ -5205,7 +5213,7 @@ export class BuildingInteriorScene extends GameplayScene {
   private triggerTapInteractions(tapScreenX: number, tapScreenY: number): void {
     if (this.ui.worldHalted()) return;
     // The keyboard's swing is withheld for the whole of a scripted beat; the tap
-    // has to be too, or a stray finger spins Carl round mid-walk-up and swings
+    // has to be too, or a stray finger spins the human round mid-walk-up and swings
     // at the vine he is there to save.
     if (this.scriptOwnsParty) return;
     const dialogUpBeforeTap = this.citizenDialogTarget !== null || this.tapTargetOpen();
@@ -5242,7 +5250,7 @@ export class BuildingInteriorScene extends GameplayScene {
       const repaired = this.anchorInterior?.tryRepair(active) ?? false;
       // The Big Top's prompt reads "Tap to pour" on a phone, and the pour is the
       // *only* way out of the finale: a tap that fell through to the swing below
-      // would have Carl beat on a vine that cannot be hurt, forever.
+      // would have the human beat on a vine that cannot be hurt, forever.
       const poured = this.bigTopMaze?.tryInteract(this.buildSystemContext()) ?? false;
       if (
         !repaired &&

@@ -5,7 +5,7 @@
  * that make forty-odd props read as one village rather than forty drawings.
  *
  * The village is a ratkin settlement, and three choices carry that everywhere:
- * everything is **low** (a ratkin stands about two thirds of Carl's height, so
+ * everything is **low** (a ratkin stands about two thirds of the human crawler's height, so
  * a table top sits well under a tile above the floor), everything is **dark,
  * oiled wood on grey-green fieldstone** (one step darker and warmer than the
  * town's plaster and timber, so the two never read as the same place), and the

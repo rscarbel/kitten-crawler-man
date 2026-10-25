@@ -1,25 +1,25 @@
 /**
- * Wendell's own clothes and habits, painted on Carl's rig: an architect's
+ * Wendell's own clothes and habits, painted on the biped rig: an architect's
  * waistcoat worn over builder's rolled shirtsleeves, the spectacles of a man
  * who spent his twenties at a drafting table, a carpenter's pencil behind
  * his ear, and the stoop the drafting table left him with. The mud from the
  * pasture on his shoes is painted with the shoes themselves
  * (`townsfolk_shoes`, `muddyShoes` on his look).
  *
- * The waistcoat, spectacles and pencil are `CarlAttachments`, painted inside
+ * The waistcoat, spectacles and pencil are `BipedAttachments`, painted inside
  * the figure's own composition from the solved skeleton: laid on after the
  * figure is finished (the way `townAccessories.ts` lays its shapes) they sit
  * at fixed figure-space points, and a head that bobs through a walk or turns
  * through a talk leaves its spectacles hanging in the air beside it.
  */
 
-import type { CarlAttachments } from '../carl/figure';
-import { headAngle } from '../carl/head';
-import { HEAD_DEPTH, HEAD_RX, HEAD_RY } from '../carl/proportions';
-import type { CarlPose, Skeleton, ViewSpec } from '../carl/rig';
+import type { BipedAttachments } from '../biped/figure';
+import { headAngle } from '../biped/head';
+import { HEAD_DEPTH, HEAD_RX, HEAD_RY } from '../biped/proportions';
+import type { BipedPose, Skeleton, ViewSpec } from '../biped/rig';
 import { type CardinalView } from '../../facingView';
-import { torsoFrame, traceGarmentTorso, type TorsoFrame } from '../carl/torso';
-import { mix, rgba, type Pt } from '../carlArt';
+import { torsoFrame, traceGarmentTorso, type TorsoFrame, type TorsoLook } from '../biped/torso';
+import { mix, rgba, type Pt } from '../bipedArt';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -94,8 +94,8 @@ function waistcoatFill(ctx: Ctx, base: string, frame: TorsoFrame): void {
   ctx.stroke();
 }
 
-function paintFrontPanels(ctx: Ctx, skeleton: Skeleton, pose: CarlPose): void {
-  const frame = torsoFrame(skeleton, pose);
+function paintFrontPanels(ctx: Ctx, skeleton: Skeleton, pose: BipedPose, look: TorsoLook): void {
+  const frame = torsoFrame(skeleton, pose, look);
   const at = (x: number, y: number): Pt => frame.at(x, y);
   for (const side of [-1, 1]) {
     const neck = at(side * PANEL_NECK_X, PANEL_NECK_Y);
@@ -132,8 +132,8 @@ function paintFrontPanels(ctx: Ctx, skeleton: Skeleton, pose: CarlPose): void {
   }
 }
 
-function paintBackPanel(ctx: Ctx, skeleton: Skeleton, pose: CarlPose): void {
-  const frame = torsoFrame(skeleton, pose);
+function paintBackPanel(ctx: Ctx, skeleton: Skeleton, pose: BipedPose, look: TorsoLook): void {
+  const frame = torsoFrame(skeleton, pose, look);
   const at = (x: number, y: number): Pt => frame.at(x, y);
   const topLeft = at(-BACK_ARMHOLE_X, BACK_TOP_Y);
   const topRight = at(BACK_ARMHOLE_X, BACK_TOP_Y);
@@ -167,8 +167,8 @@ function paintBackPanel(ctx: Ctx, skeleton: Skeleton, pose: CarlPose): void {
   ctx.strokeRect(buckle.x - BUCKLE_HALF, buckle.y - BUCKLE_HALF, BUCKLE_HALF * 2, BUCKLE_HALF * 2);
 }
 
-function paintProfilePanel(ctx: Ctx, skeleton: Skeleton, pose: CarlPose): void {
-  const frame = torsoFrame(skeleton, pose);
+function paintProfilePanel(ctx: Ctx, skeleton: Skeleton, pose: BipedPose, look: TorsoLook): void {
+  const frame = torsoFrame(skeleton, pose, look);
   const at = (x: number, y: number): Pt => frame.at(x, y);
   const topBack = at(PROFILE_BACK_X, PROFILE_TOP_Y);
   const topFront = at(PROFILE_FRONT_X, PROFILE_TOP_Y);
@@ -190,13 +190,19 @@ function paintProfilePanel(ctx: Ctx, skeleton: Skeleton, pose: CarlPose): void {
   }
 }
 
-function paintWaistcoat(ctx: Ctx, skeleton: Skeleton, view: ViewSpec, pose: CarlPose): void {
+function paintWaistcoat(
+  ctx: Ctx,
+  skeleton: Skeleton,
+  view: ViewSpec,
+  pose: BipedPose,
+  look: TorsoLook,
+): void {
   ctx.save();
-  traceGarmentTorso(ctx, skeleton, pose, view);
+  traceGarmentTorso(ctx, skeleton, pose, view, look);
   ctx.clip();
-  if (view.profile) paintProfilePanel(ctx, skeleton, pose);
-  else if (view.showsBack) paintBackPanel(ctx, skeleton, pose);
-  else paintFrontPanels(ctx, skeleton, pose);
+  if (view.profile) paintProfilePanel(ctx, skeleton, pose, look);
+  else if (view.showsBack) paintBackPanel(ctx, skeleton, pose, look);
+  else paintFrontPanels(ctx, skeleton, pose, look);
   ctx.restore();
 }
 
@@ -324,7 +330,7 @@ function paintPencil(ctx: Ctx, view: ViewSpec): void {
   strokeLine(ctx, pointStart, end);
 }
 
-function paintHeadDetails(ctx: Ctx, skeleton: Skeleton, view: ViewSpec, pose: CarlPose): void {
+function paintHeadDetails(ctx: Ctx, skeleton: Skeleton, view: ViewSpec, pose: BipedPose): void {
   ctx.save();
   ctx.translate(skeleton.headCentre.x, skeleton.headCentre.y);
   ctx.rotate(headAngle(pose));
@@ -341,9 +347,9 @@ export const WENDELL_TROUSER_COLOR = '#50483c';
 /** How far past the head's own outline the pencil reaches, as a share of its half-width. */
 const HEAD_DETAIL_REACH = 1.3;
 
-export const WENDELL_ATTACHMENTS: CarlAttachments = {
-  over: (ctx, skeleton, view, pose) => {
-    paintWaistcoat(ctx, skeleton, view, pose);
+export const WENDELL_ATTACHMENTS: BipedAttachments = {
+  over: (ctx, skeleton, view, pose, look) => {
+    paintWaistcoat(ctx, skeleton, view, pose, look);
     paintHeadDetails(ctx, skeleton, view, pose);
   },
   reach: (skeleton) => [
@@ -364,7 +370,7 @@ const STOOP_SPINE_BEND = 0.22;
 const STOOP_TORSO_PITCH = 0.3;
 const STOOP_CHEST_DROP = -0.025;
 
-export function wendellPosture(pose: CarlPose, view: CardinalView): CarlPose {
+export function wendellPosture(pose: BipedPose, view: CardinalView): BipedPose {
   if (view === 'side') return { ...pose, spineBend: (pose.spineBend ?? 0) + STOOP_SPINE_BEND };
   return {
     ...pose,

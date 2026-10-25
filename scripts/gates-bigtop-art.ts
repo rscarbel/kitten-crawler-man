@@ -896,8 +896,8 @@ console.log('\nChecking the hall of mirrors reflects the crawlers, and what it c
     `every extra blit is a reflection (${extraBlits} counted, ${nearReflections} reported)`,
   );
   const perCrawler = [
-    { name: 'Carl', stand: { human: REFLECTION_NEAR.human, cat: REFLECTION_FAR.cat } },
-    { name: 'Donut', stand: { human: REFLECTION_FAR.human, cat: REFLECTION_NEAR.cat } },
+    { name: 'The human', stand: { human: REFLECTION_NEAR.human, cat: REFLECTION_FAR.cat } },
+    { name: 'The cat', stand: { human: REFLECTION_FAR.human, cat: REFLECTION_NEAR.cat } },
   ].map(({ name, stand }) => {
     blitsWith(stand);
     return { name, reflections: tent.maze.lastReflectionBlits };

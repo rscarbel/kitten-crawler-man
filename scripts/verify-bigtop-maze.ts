@@ -1199,10 +1199,10 @@ console.log('\nCrossing the menagerie with the bell rung at the threshold…');
  * than imported so this is an independent claim about the game's controls and
  * not a tautology over the target's own table.
  *
- * Carl's key is two weapons wearing one button: `HumanPlayer.triggerAttack`
+ * The human's key is two weapons wearing one button: `HumanPlayer.triggerAttack`
  * fires the sling and returns early whenever `hasSlingDrawn`, so a stone
  * is the *only* thing that button produces while it is out — there is no
- * fallback swing. Donut's is `missile` while Magic Missile is in the action bar
+ * fallback swing. The cat's is `missile` while Magic Missile is in the action bar
  * (`triggerPlayerAttack` checks the bar, not the tome) and `melee` once it is
  * dragged out.
  *
@@ -1642,9 +1642,9 @@ console.log('\nSolving the maze in order…');
   }
 }
 
-// ── Every one of Donut's targets can be walked up to ──────────────────────────
+// ── Every one of the cat's targets can be walked up to ───────────────────────
 
-console.log("\nWalking to every one of Donut's targets…");
+console.log("\nWalking to every one of the cat's targets…");
 {
   const everyBarrierOpen = new Set(EVERY_BARRIER);
   interface CatTarget {
@@ -1669,7 +1669,7 @@ console.log("\nWalking to every one of Donut's targets…");
     ...bellTargets,
     ...mirrorTargets,
   ];
-  check(catTargets.length > 0, `${catTargets.length} targets belong to Donut`);
+  check(catTargets.length > 0, `${catTargets.length} targets belong to the cat`);
   for (const target of catTargets) {
     const section = required(
       MAZE_SECTIONS.find((candidate) => candidate.id === target.section),
@@ -2025,7 +2025,7 @@ console.log('\nWalking into the centre ring and reaching the last conversation�
   openCurtains(maze, ctx, human, cat);
 
   // One crawler at the pole is not the ending. Both of them standing in front of
-  // him is what the scene is, and Carl is the one holding the bottle.
+  // him is what the scene is, and the human is the one holding the bottle.
   const finaleCurtain = required(
     MAZE_CURTAINS.find((curtain) => curtain.opens === 'finale'),
     "the finale's curtain",
@@ -2034,13 +2034,13 @@ console.log('\nWalking into the centre ring and reaching the last conversation�
   if (finaleCurtain !== null)
     placeAt(cat, { x: finaleCurtain.catRoom.x0, y: finaleCurtain.catRoom.y0 });
   maze.update(ctx);
-  check(!maze.tryInteract(ctx), 'the potion cannot be poured with Donut still outside the ring');
+  check(!maze.tryInteract(ctx), 'the potion cannot be poured with the cat still outside the ring');
 
   placeAt(cat, { x: MAZE_GRIMALDI_TILE.x + 1, y: MAZE_GRIMALDI_TILE.y });
   ctx.active = cat;
   ctx.inactive = human;
   maze.update(ctx);
-  check(!maze.tryInteract(ctx), 'and Donut cannot pour it — she has no hands for a bottle');
+  check(!maze.tryInteract(ctx), 'and the cat cannot pour it — she has no hands for a bottle');
   ctx.active = human;
   ctx.inactive = cat;
 
@@ -2066,7 +2066,7 @@ console.log('\nWalking into the centre ring and reaching the last conversation�
 
   const heldBeforeThePour = activeDifficultyChangeGuard();
   const poured = maze.tryInteract(ctx);
-  check(poured, 'with both of them at the pole, Carl can start the last conversation');
+  check(poured, 'with both of them at the pole, the human can start the last conversation');
   // A restart from here would throw away a finished show and pour a second potion.
   check(
     heldBeforeThePour !== null && activeDifficultyChangeGuard() === null,
@@ -2329,8 +2329,8 @@ console.log('\nDriving the Big Top’s door gate…');
 // ── The hall of mirrors, live ─────────────────────────────────────────────────
 
 /**
- * The weapon each crawler's blow on their own glass lands as: Carl's fist and
- * Donut's missile, through the prop's own hit path.
+ * The weapon each crawler's blow on their own glass lands as: the human's fist
+ * and the cat's missile, through the prop's own hit path.
  */
 const BLOW_DAMAGE_TYPE: Readonly<Record<MazeHalf, PlayerDamageType>> = {
   human: 'melee',

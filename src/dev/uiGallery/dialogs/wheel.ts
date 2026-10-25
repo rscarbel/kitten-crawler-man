@@ -88,8 +88,8 @@ function wheelFixture(name: string, state: WheelState): DialogFixture {
       const human = new HumanPlayer(0, 0, TILE_SIZE);
       const cat = new CatPlayer(1, 0, TILE_SIZE);
       human.coins = FIXTURE_PURSE;
-      const donutSpins = state.kind === 'prize' && state.spinner === 'cat';
-      const seat = donutSpins
+      const catSpins = state.kind === 'prize' && state.spinner === 'cat';
+      const seat = catSpins
         ? { active: () => cat, companion: () => human }
         : { active: () => human, companion: () => cat };
       const ledger = createWheelLedger();
@@ -225,8 +225,8 @@ export const FIXTURES: readonly DialogFixture[] = [
   reveal('wheel-reveal-25k', 'gold_25k', REVEAL_FRAME_MS, WHEEL_MAX_BET),
   reveal('wheel-reveal-silver-prize', 'silver_box', REVEAL_FRAME_MS, WHEEL_MAX_BET),
   reveal('wheel-reveal-heal', 'heal_and_gold', REVEAL_FRAME_MS, WHEEL_MAX_BET),
-  prize('wheel-prize-legendary-weapon-carl', 'legendary_weapon_box', 'human'),
-  prize('wheel-prize-legendary-weapon-donut', 'legendary_weapon_box', 'cat'),
+  prize('wheel-prize-legendary-weapon-human', 'legendary_weapon_box', 'human'),
+  prize('wheel-prize-legendary-weapon-cat', 'legendary_weapon_box', 'cat'),
   prize('wheel-prize-platinum-frost', 'platinum_box_frost', 'human'),
   prize('wheel-prize-platinum-ember', 'platinum_box_ember', 'cat'),
   prize('wheel-prize-legendary-signet', 'legendary_box', 'human'),

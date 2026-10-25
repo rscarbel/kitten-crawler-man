@@ -437,7 +437,7 @@ const talkDrawnExactly =
 // not evict a pinned citizen row, and no citizen may fall to a direct paint
 // while it runs ─────────────────────────────────────────────────────────────
 //
-// Stands in for Carl acting in town — new gear, a spell, anything that queues
+// Stands in for the human acting in town — new gear, a spell, anything that queues
 // fresh rows on his own figure while the plaza's crowd sits pinned nearby.
 
 human.inventory.addItem('nightgaunt_cloak', 1);
@@ -463,13 +463,13 @@ for (let i = 0; i < BURST_FRAMES; i++) {
     (p) => p.x >= viewMinX && p.x <= viewMaxX && p.y >= viewMinY && p.y <= viewMaxY,
   );
   for (const p of visible) p.render(gameCtx, camX, camY, TILE_SIZE);
-  // Snapshotted before Carl draws, so his own figure's first-frame cost after
+  // Snapshotted before the human draws, so his own figure's first-frame cost after
   // an outfit change (a real, one-time cost of a fresh row, not a citizen
   // regression) never counts against the citizens' own count.
   const afterCitizens = getFigureCacheStats();
   human.render(gameCtx, camX, camY, TILE_SIZE);
-  const afterCarl = getFigureCacheStats();
-  burstEvictions += afterCarl.evictions;
+  const afterHuman = getFigureCacheStats();
+  burstEvictions += afterHuman.evictions;
   burstCitizenDirectDraws += afterCitizens.directDraws;
 }
 const burstCleanRun = burstEvictions === 0 && burstCitizenDirectDraws === 0;

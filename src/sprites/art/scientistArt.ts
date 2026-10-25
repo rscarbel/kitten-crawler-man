@@ -1,8 +1,8 @@
 /**
  * Dr. Ignatius Moult, the spider lab's scientist: the painter.
  *
- * A rig of his own rather than Carl's or the person genome's. Carl's rig fixes
- * a stature and a carriage — square shoulders, upright spine, a big head on a
+ * A rig of his own rather than the biped rig or the person genome. The biped
+ * rig fixes a stature and a carriage — square shoulders, upright spine, a big head on a
  * short neck — that are exactly what this figure must not share, and the
  * genome paints a face that dissolves under a pixel at the tile. Everything
  * that makes him read at 32 px is a silhouette decision made here: he is tall
@@ -24,7 +24,7 @@
  */
 
 import type { CardinalView } from '../facingView';
-import { clamp01, lerp, mix, rgba, type Pt } from './carlArt';
+import { clamp01, lerp, mix, rgba, type Pt } from './bipedArt';
 import { withClip } from './softShade';
 import type { RemainsColors } from './spiderLabArt';
 
@@ -202,8 +202,8 @@ const HEAD_ABOVE_NECK = 0.13;
 const HEAD_AHEAD_OF_NECK = 0.035;
 
 /**
- * A small head for his height — seven heads tall, against Carl's five and a
- * half — and narrower than it is tall. The glasses span nearly all of it.
+ * A small head for his height — seven heads tall, against the biped figure's five
+ * and a half — and narrower than it is tall. The glasses span nearly all of it.
  */
 export const HEAD_RX = 0.2;
 export const HEAD_RY = 0.262;
@@ -229,7 +229,7 @@ const ARM_ROOT_HALF = 0.18;
 const FRONT_HEAD_SINK = 0.09;
 const BACK_HEAD_SINK = 0.07;
 /**
- * The shoulders slope steeply off the neck. Level shoulders are Carl's; a
+ * The shoulders slope steeply off the neck. Level shoulders are the biped figure's; a
  * slope this steep is most of what says "old" from across a room.
  */
 const SHOULDER_SLOPE = 0.12;
@@ -1324,7 +1324,7 @@ const STAIN_OUTLINE: readonly Share[] = [
  * Head-on half-widths of the coat at each node. Narrow sloping shoulders, a
  * shallow chest, the paunch pushing it out at the waist, and the skirt
  * falling away in an A from the hips — the shoulders are never the widest
- * thing on him, which is the opposite of Carl's V.
+ * thing on him, which is the opposite of the biped figure's V.
  */
 const FACING_COLLAR_HALF = 0.1;
 const FACING_SHOULDER_HALF = 0.205;

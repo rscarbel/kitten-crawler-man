@@ -393,5 +393,6 @@ export async function runScaledCityRoute(route: ScaledCityRoute): Promise<RouteR
     measures,
     notes,
     crowdFigureIds: [...crowdFigureIds],
+    standByFigureIds: [],
   };
 }

@@ -1,3 +1,4 @@
+import { crawlerName } from '../../characters/characters';
 import type { EventBus } from '../../core/EventBus';
 import type { ChallengeSummary } from '../show/challenges';
 import { ITEM_DEF, type ItemId } from '../../core/ItemDefs';
@@ -7,6 +8,7 @@ import { MORDECAI_CHARACTER_NAME } from '../characters';
 import { EVENT_IMPORTANCE, IMPORTANCE } from './eventImportance';
 import type { EventDraft, GameEventStream } from './gameEventStream';
 import type { JsonObject } from './json';
+import { liveCrawlerNamed } from './liveState';
 import type { PlayerProfileTracker } from './playerProfile';
 import type { AIContextSource, CrawlerName } from './types';
 
@@ -31,11 +33,11 @@ export interface EventMappingHost {
 }
 
 function sideName(side: 'Human' | 'Cat'): CrawlerName {
-  return side === 'Human' ? 'Carl' : 'Donut';
+  return crawlerName(side === 'Human' ? 'human' : 'cat');
 }
 
 function kindName(kind: 'human' | 'cat'): CrawlerName {
-  return kind === 'human' ? 'Carl' : 'Donut';
+  return crawlerName(kind);
 }
 
 /** `trash_gremlin` → `the trashGremlin`. */
@@ -127,10 +129,10 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
       emit({
         type: 'multiKill',
         data: { count: e.count },
-        summary: `Carl killed ${e.count} enemies with a single blow.`,
+        summary: `${crawlerName('human')} killed ${e.count} enemies with a single blow.`,
         importance: EVENT_IMPORTANCE.multiKill,
         witness: 'inSafeRoom',
-        subject: 'Carl',
+        subject: crawlerName('human'),
       });
     }),
     bus.on('dynamiteUsed', (e) => {
@@ -151,11 +153,11 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         type: 'dynamiteKills',
         data: { kills: e.kills, bossKilled: e.bossKilled },
         summary: e.bossKilled
-          ? `Carl blew up a boss with an explosive (${e.kills} dead in the blast).`
-          : `Carl's explosive killed ${e.kills} enemies at once.`,
+          ? `${crawlerName('human')} blew up a boss with an explosive (${e.kills} dead in the blast).`
+          : `${crawlerName('human')}'s explosive killed ${e.kills} enemies at once.`,
         importance: e.bossKilled ? IMPORTANCE.LANDMARK : EVENT_IMPORTANCE.dynamiteKills,
         witness: 'inSafeRoom',
-        subject: 'Carl',
+        subject: crawlerName('human'),
       });
     }),
     bus.on('bossFightInitiated', (e) => {
@@ -193,7 +195,7 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
       const crawler = sideName(e.player);
       host.potionDrunk(crawler);
       const live = source.readLive();
-      const state = crawler === 'Carl' ? live.carl : live.donut;
+      const state = liveCrawlerNamed(live, crawler);
       const hpBefore = Math.max(0, state.hp - e.hpRestored);
       profile.recordPotion(state.maxHp > 0 ? hpBefore / state.maxHp : 0);
       emit({
@@ -576,10 +578,11 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
       });
     }),
     bus.on('bopcaGreeted', (e) => {
+      const crawler = kindName(e.tone === 'toHuman' ? 'human' : 'cat');
       emit({
         type: 'bopcaGreeted',
-        data: { crawler: e.tone === 'toHuman' ? 'Carl' : 'Donut' },
-        summary: `The safe room's Bopca greeted ${e.tone === 'toHuman' ? 'Carl' : 'Donut'}.`,
+        data: { crawler },
+        summary: `The safe room's Bopca greeted ${crawler}.`,
         importance: EVENT_IMPORTANCE.bopcaGreeted,
         witness: 'inSafeRoom',
       });

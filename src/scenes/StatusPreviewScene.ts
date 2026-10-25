@@ -22,8 +22,8 @@ import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { worldText } from '../ui/world/worldText';
 import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { drawWithSilhouetteLayers } from '../core/silhouetteComposite';
-import { drawHumanSprite, prewarmHumanSprite } from '../sprites/humanSprite';
-import { HUMAN_STATUS_FIGURE_BOX } from '../creatures/HumanPlayer';
+import { activeHumanLook, drawHumanSprite, prewarmHumanSprite } from '../sprites/humanSprite';
+import { humanStatusFigureBoxOf } from '../creatures/HumanPlayer';
 import { humanMouthOf } from '../sprites/crawlerMouths';
 import { PLAYER_HIT_FLASH_MARGIN_TILES } from '../Player';
 import type { StatusEffect } from '../core/StatusEffect';
@@ -127,8 +127,8 @@ export class StatusPreviewScene extends PreviewScene {
   private walking = false;
   private expiring = false;
 
-  // Carl is the whole subject of this scene and there is no player object to
-  // have warmed his rows, so the scene warms them itself.
+  // The human crawler is the whole subject of this scene and there is no
+  // player object to have warmed his rows, so the scene warms them itself.
   override onEnter(): void {
     prewarmHumanSprite();
   }
@@ -242,11 +242,12 @@ export class StatusPreviewScene extends PreviewScene {
       // there is no kill for it to be credited to.
       applier: null,
     };
+    const box = humanStatusFigureBoxOf(activeHumanLook());
     const frame: StatusVisualFrame = {
-      centerX: left + size * HUMAN_STATUS_FIGURE_BOX.centerX,
-      footY: top + size * HUMAN_STATUS_FIGURE_BOX.bottom,
-      width: size * HUMAN_STATUS_FIGURE_BOX.halfWidth * 2,
-      height: size * (HUMAN_STATUS_FIGURE_BOX.bottom - HUMAN_STATUS_FIGURE_BOX.top),
+      centerX: left + size * box.centerX,
+      footY: top + size * box.bottom,
+      width: size * box.halfWidth * 2,
+      height: size * (box.bottom - box.top),
       tileSize: size,
       timeMs: performance.now(),
       // Seeded off the status so every cell has its own particle scatter, the

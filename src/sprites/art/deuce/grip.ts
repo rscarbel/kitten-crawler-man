@@ -9,7 +9,7 @@
  *   it, their length showing up to where the card begins, the thumb on top.
  */
 
-import { type Pt } from '../carlArt';
+import { type Pt } from '../bipedArt';
 import { type CardSize, cardCorners, paintCardBack, paintDeck, paintTurningCard } from './cards';
 import { BitmapCache, quantize } from './bitmapCache';
 import {

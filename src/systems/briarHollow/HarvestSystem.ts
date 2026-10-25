@@ -123,9 +123,9 @@ interface Channel {
   hp: number;
   /** Ticks banked toward the next award. */
   ticks: number;
-  /** Ticks since Donut's last work swing. */
+  /** Ticks since the cat's last work swing. */
   catSwingTicks: number;
-  /** Whether Carl's swing row is currently playing for this channel. */
+  /** Whether the human crawler's swing row is currently playing for this channel. */
   animating: boolean;
 }
 
@@ -434,7 +434,7 @@ export class HarvestSystem {
   }
 
   /**
-   * Carl's swing loops until the channel ends. A swing the animator refuses —
+   * The human crawler's swing loops until the channel ends. A swing the animator refuses —
    * he is mid-flinch — is asked for again next tick rather than dropped, so
    * the picture catches back up with the work.
    */

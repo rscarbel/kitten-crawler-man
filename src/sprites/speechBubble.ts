@@ -261,7 +261,7 @@ export interface TimedBubbleStyle {
 /** The cat's calls to Mongo: a cool blue, the colour of her own UI. */
 export const CAT_SPEECH_STYLE: TimedBubbleStyle = { border: '#60a5fa', text: '#e0f2fe' };
 
-/** Carl's own barks: a warm amber, distinct from the cat's cool blue. */
+/** The human crawler's own barks: a warm amber, distinct from the cat's cool blue. */
 export const HUMAN_SPEECH_STYLE: TimedBubbleStyle = { border: '#f59e0b', text: '#fef3c7' };
 
 /**

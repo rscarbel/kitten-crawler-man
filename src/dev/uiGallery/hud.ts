@@ -7,6 +7,7 @@
  * panel online (a question with reply buttons) and offline.
  */
 
+import { crawlerName } from '../../characters/characters';
 import { HOTBAR_COUNT, ITEM_DEF, type InventoryItem, type ItemId } from '../../core/ItemDefs';
 import { DOOMSDAY_CONTAIN_OBJECTIVE } from '../../core/DoomsdayProgress';
 import { CONTAINMENT_LABEL, doomsdayCountdownEntry } from '../../systems/DoomsdayEscapeSystem';
@@ -155,7 +156,7 @@ function crawlers(
   return [
     {
       id: 'human',
-      name: 'Carl',
+      name: crawlerName('human'),
       glyph: 'user',
       level: 7,
       hp: 84,
@@ -167,7 +168,7 @@ function crawlers(
     },
     {
       id: 'cat',
-      name: 'Princess Donut',
+      name: crawlerName('cat'),
       glyph: 'cat',
       level: 8,
       hp: 22,
@@ -203,7 +204,7 @@ function dock(extra: readonly DockButtonModel['id'][]): DockButtonModel[] {
     { id: 'bag', icon: 'bag', label: 'Bag', key: 'I', badge: '2', onTap: record },
     { id: 'journal', icon: 'compass', label: 'Quest Journal', key: 'J', badge: '3', onTap: record },
     { id: 'follower', icon: 'users', label: 'Follower orders', key: 'F', onTap: record },
-    { id: 'switch', icon: 'cat', label: 'Switch to Donut', onTap: record },
+    { id: 'switch', icon: 'cat', label: `Switch to ${crawlerName('cat')}`, onTap: record },
   ];
   if (extra.includes('build')) {
     buttons.push({
@@ -393,7 +394,11 @@ function hudFixture(spec: HudFixtureSpec): DialogFixture {
       const model = (): HudModel => ({
         crawlers: crawlers(spec.status, spec.skillPoints, spec.companionStatus ?? []),
         activeCrawler: 'human',
-        coins: { shown: 1240, split: 'Carl 900 · Donut 340', pulse: 0 },
+        coins: {
+          shown: 1240,
+          split: `${crawlerName('human')} 900 · ${crawlerName('cat')} 340`,
+          pulse: 0,
+        },
         skillPoints: { hidden: false, nag: spec.skillPoints > 0, open: record },
         minimap: {
           expanded: spec.expanded,
@@ -708,7 +713,10 @@ function aiOnline(feed: AIChatFeed): void {
     mood: { label: 'amused', intensity: 1 },
     relationship: { respect: 1 },
   });
-  feed.addIntervention(SYSTEM_CHARACTER_NAME, 'granted Carl a Bronze Adventurer box');
+  feed.addIntervention(
+    SYSTEM_CHARACTER_NAME,
+    `granted ${crawlerName('human')} a Bronze Adventurer box`,
+  );
 }
 
 function aiOffline(feed: AIChatFeed): void {

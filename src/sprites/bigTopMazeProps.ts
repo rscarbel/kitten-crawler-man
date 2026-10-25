@@ -7,14 +7,15 @@
  * long enough to be baked live in `src/sprites/art/bigTop/`.
  *
  * The one rule that governs the whole file is the ownership language. A prop
- * Donut can act on is red-and-white striped canvas with gold trim and a gold
- * hoop drawn round it; a prop Carl can act on is deep circus blue and brass on
+ * the cat can act on is red-and-white striped canvas with gold trim and a gold
+ * hoop drawn round it; a prop the human can act on is deep circus blue and brass on
  * heavy timber, with brass strike chevrons. A player should be able to name the
  * prop and its owner from the colours alone at a 32-pixel tile.
  */
 
 import { worldPlate } from '../ui/world/worldShapes';
 import { worldText } from '../ui/world/worldText';
+import { crawlerName } from '../characters/characters';
 import {
   MIN_VISIBLE_ALPHA,
   flameStamps,
@@ -1064,7 +1065,7 @@ const CHIP_TEXT_MIN_SIZE = 7;
 /** The text sits a hair above the box's own middle, because a cap-height run reads low. */
 const CHIP_TEXT_NUDGE = 0.5;
 
-/** A small floating chip naming whose job this is: DONUT gold-on-red, CARL brass-on-blue. */
+/** A small floating chip naming whose job this is: the cat's name gold-on-red, the human's brass-on-blue. */
 export function drawTargetNameChip(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -1072,7 +1073,7 @@ export function drawTargetNameChip(
   size: number,
   owner: 'human' | 'cat',
 ): void {
-  const donutOwned = owner === 'cat';
+  const catOwned = owner === 'cat';
   const textSize = Math.max(CHIP_TEXT_MIN_SIZE, size * CHIP_TEXT_FRACTION);
   const width = size * CHIP_WIDTH;
   const height = size * CHIP_HEIGHT;
@@ -1082,16 +1083,16 @@ export function drawTargetNameChip(
     w: width,
     h: height,
   };
-  const ink = donutOwned ? GOLD : BRASS_LIGHT;
+  const ink = catOwned ? GOLD : BRASS_LIGHT;
   worldPlate(ctx, box, {
-    fill: donutOwned
+    fill: catOwned
       ? inkRgba(STRIPE_RED_INK, CHIP_FILL_ALPHA)
       : inkRgba(CIRCUS_BLUE_INK, CHIP_FILL_ALPHA),
     border: ink,
     borderWidth: CHIP_BORDER_WIDTH,
     radius: CHIP_RADIUS,
   });
-  worldText(ctx, donutOwned ? 'DONUT' : 'CARL', {
+  worldText(ctx, crawlerName(owner).toUpperCase(), {
     x: box.x + box.w / 2,
     y: box.y + (box.h - textSize) / 2 - CHIP_TEXT_NUDGE,
     size: textSize,
@@ -1118,12 +1119,12 @@ export function drawRingMatRunner(
   owner: 'human' | 'cat',
 ): void {
   ctx.save();
-  const donutOwned = owner === 'cat';
+  const catOwned = owner === 'cat';
   const inset = size * RUNNER_INSET;
   const span = size - inset * 2;
-  ctx.fillStyle = donutOwned ? inkRgba(VELVET_INK, 0.85) : inkRgba(CIRCUS_BLUE_INK, 0.85);
+  ctx.fillStyle = catOwned ? inkRgba(VELVET_INK, 0.85) : inkRgba(CIRCUS_BLUE_INK, 0.85);
   ctx.fillRect(x + inset, y, span, size);
-  ctx.fillStyle = donutOwned ? inkRgba(GOLD_INK, 0.9) : inkRgba(BRASS_LIGHT_INK, 0.9);
+  ctx.fillStyle = catOwned ? inkRgba(GOLD_INK, 0.9) : inkRgba(BRASS_LIGHT_INK, 0.9);
   const border = Math.max(1, size * RUNNER_BORDER_WIDTH);
   ctx.fillRect(x + inset, y, border, size);
   ctx.fillRect(x + inset + span - border, y, border, size);

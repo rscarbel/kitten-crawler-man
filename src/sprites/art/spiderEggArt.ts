@@ -19,7 +19,7 @@
  * working in, so the spider's own lay pose paints the same egg she drops.
  */
 
-import { clamp01, easeOut, lerp, ramp, rgba } from './carlArt';
+import { clamp01, easeOut, lerp, ramp, rgba } from './bipedArt';
 import { fillSoftEllipse, withClip } from './softShade';
 
 type Ctx = CanvasRenderingContext2D;

@@ -9,7 +9,7 @@
 
 import type { WeaponHeldVisualId } from '../sprites/held/heldVisualIds';
 
-/** How far Carl's bare hands reach, in tiles, centre to centre. */
+/** How far the human crawler's bare hands reach, in tiles, centre to centre. */
 export const HUMAN_ARM_REACH_TILES = 1.95;
 
 /** Every cut from the Fury of Taranis, blade or wave, lands this many times the blow a fist would. */

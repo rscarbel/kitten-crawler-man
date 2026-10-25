@@ -4,7 +4,7 @@
  * every state and the snare in every look — and writes review sheets:
  *
  * - `preview/construction-palisade.png`: a small stepped-corner ring per tier
- *   and damage look, then with spikes, at game scale, with Carl for size;
+ *   and damage look, then with spikes, at game scale, with the human for size;
  * - `preview/construction-structures.png`: breach and gap rubble, the gate
  *   closed / half / open, trebuchets and snares in each state.
  *

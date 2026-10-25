@@ -1,5 +1,5 @@
 /**
- * The Talisman of the Slate Butterfly on Donut: a small slate-blue butterfly
+ * The Talisman of the Slate Butterfly on the cat crawler: a small slate-blue butterfly
  * charm with silver edges, hung from a fine silver chain round her neck. It
  * hangs at her throat over the cream of her bib head-on and in profile; from
  * behind only the chain shows, across her nape. It swings a little with her

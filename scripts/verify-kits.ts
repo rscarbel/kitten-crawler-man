@@ -938,7 +938,7 @@ console.log('\nBriarHollowKit is inert until gameMap.briarHollow exists');
   check(kit.questMarkers.length === 0, 'no minimap markers');
   check(kit.trackerEntries().length === 0, 'no Journal rows');
   check(kit.renderEntities().length === 0, 'no Y-sorted renderables');
-  check(kit.humanTalkSpeaker() === null, 'no conversation to place Carl in front of');
+  check(kit.humanTalkSpeaker() === null, 'no conversation to place the human in front of');
 
   // Round-trips without throwing, and restoring twice in a row is safe — the
   // same shape a death rewind on the same scene instance asks of it.

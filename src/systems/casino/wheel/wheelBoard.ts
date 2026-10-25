@@ -25,7 +25,7 @@ export function platinumRingItemId(ring: PlatinumRing) {
     : RING_OF_THE_ASBESTOS_KNUCKLE_ITEM_ID;
 }
 
-/** Each crawler's own Legendary Weapon: Carl's sword, Donut's glasses. */
+/** Each crawler's own Legendary Weapon: the human's sword, the cat's glasses. */
 export function legendaryWeaponItemId(crawler: CrawlerKind) {
   return crawler === 'human' ? FURY_OF_TARANIS_ITEM_ID : EYES_OF_SPLATTER_ITEM_ID;
 }

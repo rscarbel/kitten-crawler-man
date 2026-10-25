@@ -29,6 +29,7 @@
  *
  * Run: npm run verify:ai-actions
  */
+import { crawlerName } from '../src/characters/characters';
 import { AchievementManager, aiAchievementKey } from '../src/core/AchievementManager';
 import { EventBus, type GameEvents } from '../src/core/EventBus';
 import {
@@ -1229,7 +1230,7 @@ section('the show: achievements, questions, favour and every challenge template'
   const reacted = system('viewer_reaction', {
     reaction: 'cheer',
     delta: FAVOR_SWING_MAX,
-    comment: 'DONUT!',
+    comment: `${crawlerName('cat').toUpperCase()}!`,
   });
   check(reacted.ok, `viewer_reaction runs (${reacted.detail})`);
   check(heardOf('viewerFavorChanged').length === 1, 'a reaction is told to the bus');
@@ -1388,16 +1389,16 @@ section('the show: achievements, questions, favour and every challenge template'
   runFrames(CHALLENGE_SECONDS * UPDATE_FRAMES_PER_SECOND);
   check(lostAnother(), 'running out of time fails a kill challenge');
 
-  // donut_finishes: Carl stealing the kill fails it.
+  // belle_finishes: the human stealing the kill fails it.
   spawnRats(CHALLENGE_RATS);
-  offer('donut_finishes', { count: 1, mob_type: 'rat', seconds: CHALLENGE_SECONDS });
+  offer('belle_finishes', { count: 1, mob_type: 'rat', seconds: CHALLENGE_SECONDS });
   world.show.acceptChallenge();
   killRat(world.human);
-  check(lostAnother(), 'a kill by Carl fails a Donut challenge');
-  offer('donut_finishes', { count: 1, mob_type: 'rat', seconds: CHALLENGE_SECONDS });
+  check(lostAnother(), 'a kill by the human fails a cat-finishes challenge');
+  offer('belle_finishes', { count: 1, mob_type: 'rat', seconds: CHALLENGE_SECONDS });
   world.show.acceptChallenge();
   killRat(world.cat);
-  check(wonAnother(), 'Donut’s kill wins it');
+  check(wonAnother(), 'the cat’s kill wins it');
 
   // slay_untouched: won clean.
   offer('slay_untouched', { count: 1, mob_type: 'rat', seconds: CHALLENGE_SECONDS });
@@ -1442,9 +1443,9 @@ section('the show: achievements, questions, favour and every challenge template'
     }
   }
 
-  // donut_finishes: a kill no crawler made neither counts nor fails it.
+  // belle_finishes: a kill no crawler made neither counts nor fails it.
   spawnRats(CHALLENGE_RATS);
-  offer('donut_finishes', { count: 1, mob_type: 'rat', seconds: CHALLENGE_SECONDS });
+  offer('belle_finishes', { count: 1, mob_type: 'rat', seconds: CHALLENGE_SECONDS });
   world.show.acceptChallenge();
   const strayRat = world.mobs.find((mob) => mob.isAlive && mob.spawnTypeKey === 'rat');
   if (strayRat !== undefined) {
@@ -1456,7 +1457,10 @@ section('the show: achievements, questions, favour and every challenge template'
       topDamageDealer: null,
     });
   }
-  check(world.challenges.current !== null, 'a companion’s kill leaves a Donut challenge running');
+  check(
+    world.challenges.current !== null,
+    'a companion’s kill leaves a cat-finishes challenge running',
+  );
 
   // Death ends a running challenge, and so does a checkpoint rewind.
   world.bus.emit('playerDied', { fallen: world.human, cause: 'audit' });

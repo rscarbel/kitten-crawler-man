@@ -15,6 +15,7 @@
  * high-importance game event.
  */
 
+import { crawlerName } from '../characters/characters';
 import type { BoxTier } from '../core/AchievementManager';
 import type { EventBus } from '../core/EventBus';
 import { TILE_SIZE } from '../core/constants';
@@ -244,7 +245,7 @@ export class AIChallengeSystem implements GameSystem {
     if (!rules.countsKills || isBoss || !mobMatches(active.spec.mobType, typeKey)) return;
     const counts = rules.killer === 'party' || killer === this.deps.cat;
     if (!counts) {
-      if (rules.failOnOtherKiller) this.fail('Carl landed the blow');
+      if (rules.failOnOtherKiller) this.fail(`${crawlerName('human')} landed the blow`);
       return;
     }
     active.kills++;
@@ -266,7 +267,7 @@ export class AIChallengeSystem implements GameSystem {
     if (active === null) return;
     this.active = null;
     const side: CrawlerSide = this.deps.human.isActive ? 'Human' : 'Cat';
-    const name = side === 'Human' ? 'Carl' : 'Donut';
+    const name = crawlerName(side === 'Human' ? 'human' : 'cat');
     this.deps.grantReward(side, active.spec.rewardTier);
     this.deps.bus.emit('challengeCompleted', {
       ...this.summaryOf(active),

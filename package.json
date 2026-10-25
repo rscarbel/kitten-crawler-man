@@ -22,7 +22,7 @@
     "check:spawn-funnel": "tsx scripts/check-spawn-funnel.ts",
     "measure:audio": "tsx scripts/measure-audio.ts",
     "add:music": "tsx scripts/add-music.ts",
-    "lint:figure-scripts": "eslint scripts/figureSheet.ts scripts/figureGates.ts scripts/parity-figure-sheet.ts scripts/gates-figure-cache.ts scripts/nodeGameContext.ts scripts/previewOut.ts scripts/report-asset-residency.ts scripts/bench-figure-paint.ts scripts/bench-turn-residency.ts scripts/build-review-index.ts scripts/wave-test-figure.ts scripts/gates-equipment.ts scripts/gates-equipment-garments.ts scripts/gates-equipment-donut.ts scripts/render-garments.ts",
+    "lint:figure-scripts": "eslint scripts/figureSheet.ts scripts/figureGates.ts scripts/parity-figure-sheet.ts scripts/gates-figure-cache.ts scripts/nodeGameContext.ts scripts/previewOut.ts scripts/report-asset-residency.ts scripts/bench-figure-paint.ts scripts/bench-turn-residency.ts scripts/build-review-index.ts scripts/wave-test-figure.ts scripts/gates-equipment.ts scripts/gates-equipment-garments.ts scripts/gates-equipment-cat.ts scripts/render-garments.ts",
     "server": "tsx server/index.ts",
     "ai:sync": "tsx scripts/ai-sync.ts",
     "lint:ai-scripts": "eslint scripts/ai-sync.ts scripts/verify-ai-context.ts scripts/verify-ai-transport.ts scripts/dev-ai.ts scripts/record-ai-replays.ts scripts/aiReplaySchema.ts",

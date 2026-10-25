@@ -22,7 +22,7 @@
  */
 
 import { type CowLook, boundsOfPoints, hash1, ovalPoints, traceSmooth } from './cowArt';
-import { type Pt, deg, lerp, mix, rgba } from './carlArt';
+import { type Pt, deg, lerp, mix, rgba } from './bipedArt';
 import {
   BLOOD_DARK,
   BONE_CORTICAL,

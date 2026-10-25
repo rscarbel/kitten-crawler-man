@@ -25,10 +25,11 @@
  */
 
 import { PAINT_BENCH_SUBJECTS } from '../src/dev/paintBenchSubjects.js';
-import { HUMAN_FIGURE } from '../src/sprites/art/humanFigure.js';
 import { humanFigureWearing } from '../src/sprites/art/human/appearance.js';
 import { humanItemGarments } from '../src/sprites/garments/itemLooks.js';
 import { outfitOf } from '../src/sprites/garments/outfit.js';
+import { HUMAN_LOOKS } from './humanLooks.js';
+import { defaultOutfitOf } from '../src/sprites/garments/human/humanDressing.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 import { FRAME_BAKE_BUDGET_MS } from '../src/sprites/figure/figureFrameCache.js';
 import { bakeFigureCell, paintFigureCell } from './figureSheet.js';
@@ -100,7 +101,7 @@ for (const subject of PAINT_BENCH_SUBJECTS) {
   );
 }
 
-// ── Carl's worst cell ────────────────────────────────────────────────────────
+// ── The human figure's worst cell ────────────────────────────────────────────
 
 /** Timed bakes per cell in the screening pass over every cell. */
 const SCREEN_REPEATS = 3;
@@ -177,18 +178,20 @@ const method =
   `${SCREEN_REPEATS} screen`;
 
 /**
- * His default outfit, and every piece of visible gear at once: gear only ever
- * adds paint to a cell, so the outfit wearing all of it holds the slowest.
+ * Each human look in its default outfit, and in every piece of visible gear at
+ * once: gear only ever adds paint to a cell, so the outfit wearing all of it
+ * holds the slowest.
  */
-const HUMAN_OUTFITS_TIMED: readonly FigureDef[] = [
-  HUMAN_FIGURE,
+const HUMAN_OUTFITS_TIMED: readonly FigureDef[] = HUMAN_LOOKS.flatMap((look) => [
+  humanFigureWearing(look, defaultOutfitOf(look)),
   humanFigureWearing(
+    look,
     outfitOf(
-      'human',
+      look,
       humanItemGarments().filter((garment) => !garment.base),
     ),
   ),
-];
+]);
 
 console.log('');
 for (const figure of HUMAN_OUTFITS_TIMED) {

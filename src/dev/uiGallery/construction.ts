@@ -9,6 +9,7 @@
  * the hover reaches the world.
  */
 
+import { crawlerName } from '../../characters/characters';
 import { CraftSkills } from '../../core/CraftSkills';
 import type { ResourceCost } from '../../core/partyResources';
 import type { ResourceId } from '../../core/resourceIds';
@@ -185,7 +186,7 @@ function constructionFixture(
       };
       const skills = fixtureSkills();
       const screenSurface = screen.surface(name, () => ({
-        crawlerName: 'Carl',
+        crawlerName: crawlerName('human'),
         skills,
         partyCount: stockOf,
       }));

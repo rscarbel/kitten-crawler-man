@@ -1,5 +1,5 @@
 /**
- * Carl's row lengths and the frames his blows land on. Gameplay derives its
+ * The human crawler's row lengths and the frames his blows land on. Gameplay derives its
  * hit ticks from these, so they live in one module every consumer imports.
  */
 

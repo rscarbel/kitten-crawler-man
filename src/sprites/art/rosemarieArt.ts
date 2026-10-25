@@ -13,7 +13,7 @@
  * once lands in the same place from the front and from the side.
  */
 
-import { type Pt, clamp01, lerp, mix, rgba } from './carlArt';
+import { type Pt, clamp01, lerp, mix, rgba } from './bipedArt';
 import { fillSoftEllipse, withClip } from './softShade';
 
 type Ctx = CanvasRenderingContext2D;
@@ -73,7 +73,7 @@ const FINE_WIDTH = 0.01;
 
 /**
  * She stands a little under one tile to the crown of her hair — about half of
- * Carl's two tiles, which puts her at a tall man's waist. The stoop takes the
+ * the human crawler's two tiles, which puts her at a tall man's waist. The stoop takes the
  * rest: upright she would be a head taller.
  */
 const WAIST_Y = -0.47;

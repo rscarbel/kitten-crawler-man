@@ -80,6 +80,11 @@ export class Inventory {
     this.replaceQuestSlot({ ...ITEM_DEF[id], quantity });
   }
 
+  /** The item in the reserved quest slot, or null when it is empty. */
+  get questItemId(): ItemId | null {
+    return this.actionBar.slots[QUEST_SLOT_IDX]?.id ?? null;
+  }
+
   /**
    * Puts `item` in the reserved quest slot. The same item already there is
    * topped up instead; a different one is evicted — gone from this crawler —

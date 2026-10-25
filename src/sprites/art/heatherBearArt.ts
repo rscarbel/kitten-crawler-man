@@ -1,6 +1,6 @@
 // Tile units, origin at the tile centre, +Y down; the profile faces +X, left side to the viewer.
 
-import { type Pt, clamp01, lerp, mix, rgba } from './carlArt';
+import { type Pt, clamp01, lerp, mix, rgba } from './bipedArt';
 import { drawGroundShadow, hash1 } from './cowArt';
 import { withClip } from './softShade';
 

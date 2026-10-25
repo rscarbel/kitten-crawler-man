@@ -824,9 +824,9 @@ const BRIAR_HOLLOW_VILLAGE: PlaytestPreset = {
   spawn: { kind: 'briarHollowGate' },
 };
 
-/** Carl's Construction in the builders preset: the level spikes unlock at. */
+/** The human's Construction in the builders preset: the level spikes unlock at. */
 const BUILDERS_PRESET_HUMAN_CONSTRUCTION = 5;
-/** Donut's: the top level, where her walls double and her trebuchets never run dry. */
+/** The cat's: the top level, where her walls double and her trebuchets never run dry. */
 const BUILDERS_PRESET_CAT_CONSTRUCTION = 15;
 
 /**
@@ -838,7 +838,8 @@ const BUILDERS_PRESET_CAT_CONSTRUCTION = 15;
 const BRIAR_HOLLOW_BUILDERS: PlaytestPreset = {
   ...BRIAR_HOLLOW_VILLAGE,
   id: 'briar-hollow-builders',
-  description: 'Briar Hollow gate, Carl at Construction 5 and Donut at 15, with materials and kits',
+  description:
+    'Briar Hollow gate, the human at Construction 5 and the cat at 15, with materials and kits',
   briarHollowUnlockAll: true,
   human: {
     ...BRIAR_HOLLOW_VILLAGE.human,
@@ -903,7 +904,7 @@ function withQuantities(
 /**
  * Briar Hollow with the questline done up to the siege — the Mayor's asks
  * met, the bell ready to ring — the ring built to a tier (`--walls`, stone
- * unless told), eight loaded trebuchets, and Carl carrying a stockpile and a
+ * unless told), eight loaded trebuchets, and the human carrying a stockpile and a
  * crate of dynamite for the fight. `&assaultNow` on the URL rings the bell on
  * arrival with a short countdown, so the first wave comes without a word
  * with the Mayor, and `&variety=<0-4>` (`--variety=` to the playtest script)
@@ -956,7 +957,7 @@ const BLUEPRINTS_FENCE: PlaytestPreset = {
   briarHollowBlueprints: { phase: 'build_fence', fence: 'unbuilt', grain: 0 },
 };
 
-/** The fence done and the grain to harvest, with Merrit's scythe already in Carl's hands. */
+/** The fence done and the grain to harvest, with Merrit's scythe already in the human's hands. */
 const BLUEPRINTS_HARVEST: PlaytestPreset = {
   ...BLUEPRINTS_OFFER,
   id: 'blueprints-harvest',
@@ -994,7 +995,7 @@ const BLUEPRINTS_SHOW_FENNA: PlaytestPreset = {
   },
 };
 
-/** The blueprints in Carl's hands and the materials for both upgrades. */
+/** The blueprints in the human's hands and the materials for both upgrades. */
 const BLUEPRINTS_STATIONS: PlaytestPreset = {
   ...BLUEPRINTS_OFFER,
   id: 'blueprints-stations',
@@ -1023,7 +1024,7 @@ const CONTRACTS_ANCHOR_HOTBAR_IDX = 6;
 /**
  * Outside Plumbline Farm with the Borrowed Blueprints finished, so Wendell
  * offers construction contracts, and the boards, rope and stone to work one.
- * The Plea is complete, so the Wayfinder's Anchor on Carl's hotbar can carry
+ * The Plea is complete, so the Wayfinder's Anchor on the human's hotbar can carry
  * the party between the town and Briar Hollow.
  */
 const CONTRACTS: PlaytestPreset = {
@@ -1063,20 +1064,20 @@ const CONTRACTS_LAST_SPOT: PlaytestPreset = {
   constructionContracts: { lastSpotAt: 'hall' },
 };
 
-/** Carl's Resourcing in the thralls preset: the level the summon unlocks at. */
+/** The human's Resourcing in the thralls preset: the level the summon unlocks at. */
 const THRALL_PRESET_HUMAN_RESOURCING = 10;
-/** Donut's: the top level, which summons three at once. */
+/** The cat's: the top level, which summons three at once. */
 const THRALL_PRESET_CAT_RESOURCING = 15;
 
 /**
- * Third floor town with Lumberjack's tools, Carl at Resourcing 10 and Donut at
+ * Third floor town with Lumberjack's tools, the human at Resourcing 10 and the cat at
  * 15 — for summoning one thrall and three, and for watching the two crawlers'
  * separate perks and cooldowns side by side.
  */
 const RESOURCING_THRALLS: PlaytestPreset = {
   ...LEVEL3,
   id: 'resourcing-thralls',
-  description: 'Third floor town, long-haft tools, Carl at Resourcing 10 and Donut at 15',
+  description: 'Third floor town, long-haft tools, the human at Resourcing 10 and the cat at 15',
   toolTiers: { axeTier: TOOL_TIER_LONG_HAFT, pickaxeTier: TOOL_TIER_LONG_HAFT },
   human: {
     ...LEVEL3.human,

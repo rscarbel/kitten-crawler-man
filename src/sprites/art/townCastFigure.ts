@@ -1,11 +1,11 @@
 /**
  * The human cast (`townCastLooks.ts`) as painted `FigureDef`s: one figure per
- * look. An adult look paints through Carl's own rig (`carl/figure.ts`) posed
- * by his own walk/idle/talk pose functions, but dressed and groomed as itself
+ * look. An adult look paints through the biped rig (`biped/figure.ts`) posed
+ * by its own walk/idle/talk pose functions, but dressed and groomed as itself
  * (`castAttachments` below) plus a worn accessory
  * (`human/townAccessories.ts`); a child look paints through
  * the simpler person skeleton (`townCastPaint.ts`'s outline-and-glaze
- * wrapper over `drawPerson.ts`), since Carl's rig is one fixed adult build.
+ * wrapper over `drawPerson.ts`), since the biped rig is one fixed adult build.
  *
  * Rows every look paints, in three views (down, side, up — `left` is `side`
  * mirrored at runtime, never baked separately):
@@ -25,22 +25,22 @@ import { TOWN_CAST_LOOKS, type TownCastLook } from '../person/townCastLooks';
 import { HUMANOID_NPC_SCALE } from '../humanoidScale';
 import { type FigureDef, figureStates } from '../figure/figureDef';
 import {
-  type CarlAttachments,
-  type CarlComposeOptions,
-  drawCarlBack,
-  drawCarlFront,
-  drawCarlSide,
-} from '../art/carl/figure';
-import type { CarlPose, ViewSpec } from '../art/carl/rig';
-import { BARE_CARL_OUTFIT, stillOutfit } from '../garments/human/carlDressing';
-import type { HideableFeature } from '../garments/garmentDef';
+  type BipedAttachments,
+  type BipedComposeOptions,
+  drawBipedBack,
+  drawBipedFront,
+  drawBipedSide,
+} from './biped/figure';
+import type { BipedPose, ViewSpec } from './biped/rig';
+import { stillOutfit } from '../garments/human/humanDressing';
+import { DAVE_JACKET } from '../garments/human/daveJacket';
 import {
   resetTownsfolkLegwear,
   setTownsfolkLegwear,
   TOWNSFOLK_SHOES,
   TOWNSFOLK_TROUSERS,
 } from '../garments/human/townsfolkLegwear';
-import type { Outfit } from '../garments/outfit';
+import { outfitOf } from '../garments/outfit';
 import { type CardinalView } from '../facingView';
 import { idleBack, idleFront, idleSide } from '../art/human/idles';
 import { walkFacing, walkSide } from '../art/human/locomotion';
@@ -57,16 +57,11 @@ import { HUMAN_CELL_PX_PER_UNIT } from '../art/human/figureScale';
 import { drawAccessory, drawHeadAccessory } from '../art/human/townAccessories';
 import { castHeadReach, paintCastHead } from '../art/human/castHead';
 import { paintTrouserSeat } from '../art/human/legwear';
-import {
-  deriveGlossRamp,
-  deriveRamp,
-  resetCarlGarmentRamp,
-  resetCarlSkinHairRamp,
-  setCarlGarmentRamp,
-  setCarlSkinHairRamp,
-} from '../art/carl/palette';
-import { resetCarlTorsoCut, setCarlTorsoCut } from '../art/carl/torso';
-import { resetCarlExpression, setCarlExpression } from '../art/carl/head';
+import { deriveGlossRamp, deriveRamp } from './biped/palette';
+import type { HeadFeaturePainter } from './biped/head';
+import { type HumanLook, lookPxPerUnit } from '../looks/humanLook';
+import { RIG_LOOK } from '../looks/humans/rig';
+import { RIG_GARMENT_CUT } from './biped/torso';
 import { WALK_FRAMES, IDLE_FRAMES, TALK_FRAMES, WORK_FRAMES } from './townCastFrameCounts';
 
 export type TownCastView = 'down' | 'side' | 'up';
@@ -76,7 +71,7 @@ const VIEW_TO_FACING: Readonly<Record<TownCastView, Facing>> = {
   side: 'right',
   up: 'up',
 };
-const VIEW_TO_CARL_VIEW: Readonly<Record<TownCastView, CardinalView>> = {
+const VIEW_TO_BIPED_VIEW: Readonly<Record<TownCastView, CardinalView>> = {
   down: 'front',
   side: 'side',
   up: 'back',
@@ -140,26 +135,26 @@ function personCellFor(look: TownCastLook & { painter: 'person' }): Cell {
 }
 
 /**
- * An adult look's fixed cell, in Carl's own unit space scaled by
+ * An adult look's fixed cell, in the rig's own unit space scaled by
  * `HUMAN_CELL_PX_PER_UNIT` and the look's build. Generous rather than
- * measured — Carl's own painter has no offline bounds sampler the way the
+ * measured — the biped painter has no offline bounds sampler the way the
  * person painter does — and held to the ground line the same way every other
- * cast cell is: the tile's own 64px footprint sits bottom-centred under him.
+ * cast cell is: the tile's own 64px footprint sits bottom-centred under the figure.
  */
-const CARL_CELL_WIDTH = 150;
-const CARL_CELL_HEIGHT = 190;
-const CARL_GROUND_MARGIN = 14;
+const BIPED_CELL_WIDTH = 150;
+const BIPED_CELL_HEIGHT = 190;
+const BIPED_GROUND_MARGIN = 14;
 
-function carlCellFor(): Cell & { groundY: number } {
+function bipedCellFor(): Cell & { groundY: number } {
   const halfTile = CAST_TILE_SCALE / 2;
-  const groundY = CARL_CELL_HEIGHT - CARL_GROUND_MARGIN;
+  const groundY = BIPED_CELL_HEIGHT - BIPED_GROUND_MARGIN;
   return {
-    frameWidth: CARL_CELL_WIDTH,
-    frameHeight: CARL_CELL_HEIGHT,
-    originX: CARL_CELL_WIDTH / 2,
+    frameWidth: BIPED_CELL_WIDTH,
+    frameHeight: BIPED_CELL_HEIGHT,
+    originX: BIPED_CELL_WIDTH / 2,
     originY: groundY,
     groundY,
-    tileX: CARL_CELL_WIDTH / 2 - halfTile,
+    tileX: BIPED_CELL_WIDTH / 2 - halfTile,
     tileY: groundY - CAST_TILE_SCALE,
   };
 }
@@ -242,19 +237,19 @@ function buildPersonFigure(look: TownCastLook & { painter: 'person' }): FigureDe
   };
 }
 
-// ── Carl-painter rows (adults) ──────────────────────────────────────────────
+// ── Biped-painter rows (adults) ─────────────────────────────────────────────
 
-const IDLE_POSE_BY_VIEW: Readonly<Record<TownCastView, (phase: number) => CarlPose>> = {
+const IDLE_POSE_BY_VIEW: Readonly<Record<TownCastView, (phase: number) => BipedPose>> = {
   down: (phase) => idleFront(phase),
   side: (phase) => idleSide(phase),
   up: (phase) => idleBack(phase),
 };
-const WALK_POSE_BY_VIEW: Readonly<Record<TownCastView, (phase: number) => CarlPose>> = {
+const WALK_POSE_BY_VIEW: Readonly<Record<TownCastView, (phase: number) => BipedPose>> = {
   down: (phase) => walkFacing(phase, false),
   side: (phase) => walkSide(phase),
   up: (phase) => walkFacing(phase, true),
 };
-const TALK_POSE_BY_VIEW: Readonly<Record<TownCastView, (frame: number) => CarlPose>> = {
+const TALK_POSE_BY_VIEW: Readonly<Record<TownCastView, (frame: number) => BipedPose>> = {
   down: talkFront,
   side: talkSide,
   up: talkBack,
@@ -265,33 +260,33 @@ const DANCE_FACING_VIEW: Readonly<Record<DanceFacing, TownCastView>> = {
   up: 'up',
   left: 'side',
 };
-const CARL_DRAW_BY_VIEW: Readonly<
+const BIPED_DRAW_BY_VIEW: Readonly<
   Record<
     CardinalView,
-    (ctx: CanvasRenderingContext2D, pose: CarlPose, options: CarlComposeOptions) => void
+    (ctx: CanvasRenderingContext2D, pose: BipedPose, options: BipedComposeOptions) => void
   >
 > = {
-  front: drawCarlFront,
-  side: drawCarlSide,
-  back: drawCarlBack,
+  front: drawBipedFront,
+  side: drawBipedSide,
+  back: drawBipedBack,
 };
 
-interface CarlRowSpec {
+interface BipedRowSpec {
   readonly name: string;
   readonly frameCount: number;
   readonly view: TownCastView;
-  readonly poseAt: (frame: number) => CarlPose;
+  readonly poseAt: (frame: number) => BipedPose;
   /** For a row that turns as it plays (the spin), the facing each frame is painted in. */
   readonly facingAt?: (frame: number) => DanceFacing;
 }
 
 /**
- * The rows a Carl-painted look declares. `hasDance` is only true for the
+ * The rows a rig-painted look declares. `hasDance` is only true for the
  * Desperado Club's dancer looks — everything else gets the same base three
  * rows every prior round shipped.
  */
-function carlRows(hasDance: boolean): CarlRowSpec[] {
-  const rows: CarlRowSpec[] = [];
+function bipedRows(hasDance: boolean): BipedRowSpec[] {
+  const rows: BipedRowSpec[] = [];
   for (const view of ALL_TOWN_CAST_VIEWS) {
     rows.push({
       name: townCastStateName('walk', view),
@@ -327,33 +322,46 @@ function carlRows(hasDance: boolean): CarlRowSpec[] {
 }
 
 /** The base rows shared by every look that doesn't dance — built once. */
-const CARL_ROWS: readonly CarlRowSpec[] = carlRows(false);
-
-/** His heart-print boxers are his alone; under a cast look's trousers they would only show at the hem. */
-const CARL_ONLY_GARMENT = 'carl_boxers';
-const HIDDEN_ON_THE_CAST: ReadonlySet<HideableFeature<'human'>> = new Set<HideableFeature<'human'>>(
-  ['hair'],
-);
+const BIPED_ROWS: readonly BipedRowSpec[] = bipedRows(false);
 
 /**
- * What every adult of the cast wears on Carl's rig: his jacket, recut and
- * recoloured as the look's garment by `setCarlTorsoCut`/`setCarlGarmentRamp`,
- * and nothing else of his — not his boxers, not his trollskin collar, none of
- * his loot — with his crop hidden for the look's own hairstyle, and the cast's
- * own trousers or stockings and shoes over his bare legs and feet, in the
- * colours `setTownsfolkLegwear` sets for the look.
+ * The rig paints no hair on a cast look: its own hairstyle is painted over
+ * the head by {@link castAttachments}, in the slab over the torso, where a hat
+ * or hood can sit on it.
  */
-const TOWNSFOLK_OUTFIT: Outfit<'human'> = {
-  wearer: 'human',
-  garments: [
-    ...BARE_CARL_OUTFIT.garments.filter((garment) => garment.id !== CARL_ONLY_GARMENT),
-    TOWNSFOLK_TROUSERS,
-    TOWNSFOLK_SHOES,
-  ],
-  hidden: HIDDEN_ON_THE_CAST,
-  key: 'townsfolk',
-};
-const CAST_OUTFIT = stillOutfit(TOWNSFOLK_OUTFIT);
+const HAIR_PAINTED_BY_ATTACHMENT: HeadFeaturePainter = () => undefined;
+
+/**
+ * A cast look on the biped rig: Dave's jacket, recut and recoloured as the
+ * look's garment, and nothing else of Dave's or the crawler's — not Dave's
+ * jeans, which the cast's own trousers replace, not the trollskin collar, none of the crawler's loot — with the look's own skin, face and build.
+ */
+function castHumanLook(look: TownCastLook & { painter: 'biped' }): HumanLook {
+  return {
+    ...RIG_LOOK,
+    id: look.id,
+    skin: look.skinRamp,
+    hair: look.hairRamp,
+    garment: look.garmentRamp,
+    garmentCut: {
+      ...RIG_GARMENT_CUT,
+      hemDrop: look.garmentHemDrop,
+      hasHardware: look.garmentHasHardware,
+      hemFlare: look.garmentHemFlare,
+    },
+    hairstyle: HAIR_PAINTED_BY_ATTACHMENT,
+    expression: look.expression,
+    widthScale: look.buildWidthScale,
+    baseGarments: [DAVE_JACKET],
+  };
+}
+
+/**
+ * What every adult of the cast wears over the base: the cast's own trousers
+ * or stockings and shoes over Dave's bare legs and feet, in the colours
+ * `setTownsfolkLegwear` sets for the look.
+ */
+const TOWNSFOLK_LEGWEAR = [TOWNSFOLK_TROUSERS, TOWNSFOLK_SHOES];
 
 function cardinalOf(view: ViewSpec): CardinalView {
   if (view.profile) return 'side';
@@ -361,13 +369,13 @@ function cardinalOf(view: ViewSpec): CardinalView {
 }
 
 /**
- * Everything a look wears past Carl's recoloured jacket, painted inside the
+ * Everything a look wears past Dave's recoloured jacket, painted inside the
  * figure's composition from the solved skeleton: the seat of a pair of
- * trousers over his hips, the look's own hair and facial hair in
- * place of his crop, a hat or hood on the head, and whatever a named
+ * trousers over the hips, the look's own hair and facial hair in
+ * place of Dave's crop, a hat or hood on the head, and whatever a named
  * resident's own details add.
  */
-function castAttachments(look: TownCastLook & { painter: 'carl' }): CarlAttachments {
+function castAttachments(look: TownCastLook & { painter: 'biped' }): BipedAttachments {
   const cloth = deriveGlossRamp(look.pantsColor);
   const head = {
     hairStyle: look.hairStyle,
@@ -379,29 +387,31 @@ function castAttachments(look: TownCastLook & { painter: 'carl' }): CarlAttachme
   const own = look.details?.attachments;
   return {
     behind: own?.behind,
-    overLegs: (ctx, skeleton, view, pose) => {
+    overLegs: (ctx, skeleton, view, pose, humanLook) => {
       if (look.legwear === 'trousers') paintTrouserSeat(ctx, skeleton, view, cloth);
-      own?.overLegs?.(ctx, skeleton, view, pose);
+      own?.overLegs?.(ctx, skeleton, view, pose, humanLook);
     },
-    over: (ctx, skeleton, view, pose) => {
+    over: (ctx, skeleton, view, pose, humanLook) => {
       paintCastHead(ctx, skeleton, view, pose, head);
-      own?.over?.(ctx, skeleton, view, pose);
+      own?.over?.(ctx, skeleton, view, pose, humanLook);
       drawHeadAccessory(ctx, cardinalOf(view), look.accessory, skeleton.headCentre);
     },
-    reach: (skeleton, view, pose) => [
+    reach: (skeleton, view, pose, humanLook) => [
       ...castHeadReach(skeleton),
-      ...(own?.reach(skeleton, view, pose) ?? []),
+      ...(own?.reach(skeleton, view, pose, humanLook) ?? []),
     ],
   };
 }
 
-function buildCarlFigure(look: TownCastLook & { painter: 'carl' }): FigureDef {
-  const cell = carlCellFor();
-  const rows = look.hasDance === true ? carlRows(true) : CARL_ROWS;
+function buildBipedFigure(look: TownCastLook & { painter: 'biped' }): FigureDef {
+  const cell = bipedCellFor();
+  const rows = look.hasDance === true ? bipedRows(true) : BIPED_ROWS;
   const rowsByName = new Map(rows.map((row) => [row.name, row]));
   const frames: Record<string, number> = {};
   for (const row of rows) frames[row.name] = row.frameCount;
-  const unitScaleX = HUMAN_CELL_PX_PER_UNIT * look.buildWidthScale;
+  const humanLook = castHumanLook(look);
+  const unitPx = lookPxPerUnit(humanLook, HUMAN_CELL_PX_PER_UNIT);
+  const castOutfit = stillOutfit(outfitOf(humanLook, TOWNSFOLK_LEGWEAR));
   const attachments = castAttachments(look);
   const legwear = {
     cloth: deriveGlossRamp(look.pantsColor),
@@ -409,7 +419,6 @@ function buildCarlFigure(look: TownCastLook & { painter: 'carl' }): FigureDef {
     footwear: deriveGlossRamp(look.shoeColor),
     muddy: look.details?.muddyShoes ?? false,
   };
-  const unitScaleY = HUMAN_CELL_PX_PER_UNIT;
 
   return {
     id: `human_${look.id}`,
@@ -430,31 +439,22 @@ function buildCarlFigure(look: TownCastLook & { painter: 'carl' }): FigureDef {
       if (row === undefined) return;
       const facing = row.facingAt?.(frame);
       const view = facing === undefined ? row.view : DANCE_FACING_VIEW[facing];
-      const carlView = VIEW_TO_CARL_VIEW[view];
+      const bipedView = VIEW_TO_BIPED_VIEW[view];
       const mirror = facing === 'left' ? -1 : 1;
-      const rowPose: CarlPose = { ...row.poseAt(frame), outfit: CAST_OUTFIT };
-      const pose = look.details?.posture(rowPose, carlView) ?? rowPose;
+      const rowPose: BipedPose = { ...row.poseAt(frame), outfit: castOutfit };
+      const pose = look.details?.posture(rowPose, bipedView) ?? rowPose;
       // Reset in `finally`: a painter that throws mid-bake must not leave the
-      // next figure baked — Carl or another look — in this look's skin, hair,
-      // garment, torso cut, expression or legwear (the "a throwing painter poisons
-      // every later frame" trap).
-      setCarlSkinHairRamp(look.skinRamp, look.hairRamp);
-      setCarlGarmentRamp(look.garmentRamp);
-      setCarlTorsoCut(look.garmentHemDrop, look.garmentHasHardware, look.garmentHemFlare);
-      setCarlExpression(look.expression);
+      // next figure baked — the player or another look — in this look's legwear (the
+      // "a throwing painter poisons every later frame" trap).
       setTownsfolkLegwear(legwear);
       try {
         ctx.save();
         ctx.translate(cell.originX, cell.originY);
-        ctx.scale(unitScaleX * mirror, unitScaleY);
-        CARL_DRAW_BY_VIEW[carlView](ctx, pose, { attachments });
-        drawAccessory(ctx, carlView, look.accessory);
+        ctx.scale(unitPx.x * mirror, unitPx.y);
+        BIPED_DRAW_BY_VIEW[bipedView](ctx, pose, { look: humanLook, attachments });
+        drawAccessory(ctx, bipedView, look.accessory);
         ctx.restore();
       } finally {
-        resetCarlSkinHairRamp();
-        resetCarlGarmentRamp();
-        resetCarlTorsoCut();
-        resetCarlExpression();
         resetTownsfolkLegwear();
       }
     },
@@ -464,7 +464,7 @@ function buildCarlFigure(look: TownCastLook & { painter: 'carl' }): FigureDef {
 // ── Dispatch ─────────────────────────────────────────────────────────────────
 
 function buildFigure(look: TownCastLook): FigureDef {
-  return look.painter === 'person' ? buildPersonFigure(look) : buildCarlFigure(look);
+  return look.painter === 'person' ? buildPersonFigure(look) : buildBipedFigure(look);
 }
 
 const FIGURES_BY_LOOK = new Map<string, FigureDef>(

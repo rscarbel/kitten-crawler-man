@@ -1,6 +1,6 @@
 // Rows are painted in profile only; the runtime mirrors them.
 
-import { clamp01, easeInOut, easeOut, hump, lerp, type Pt } from './carlArt';
+import { clamp01, easeInOut, easeOut, hump, lerp, type Pt } from './bipedArt';
 import {
   FORE_FAR_REST,
   FORE_NEAR_REST,

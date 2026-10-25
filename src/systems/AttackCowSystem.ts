@@ -49,11 +49,11 @@ const SILENT_FEEDBACK: AttackCowFeedback = {
 };
 
 /**
- * Carl's attack cow, modelled on `MongoSystem` and `MercenarySystem`.
+ * The human crawler's attack cow, modelled on `MongoSystem` and `MercenarySystem`.
  *
  * Each scene — a floor or a building's interior — builds one from the shared
  * {@link AttackCowState}. If the party owns her and she is not resting, she is
- * stood up beside Carl on the scene's first frame and walks with him from
+ * stood up beside the human crawler on the scene's first frame and walks with him from
  * then on. There is no summon or recall: she is always out.
  *
  * At zero health she goes down for a crawler to revive. Left there past the
@@ -107,7 +107,7 @@ export class AttackCowSystem implements GameSystem {
 
   /**
    * The wheel's prize: the party owns her from now on, and she is standing
-   * beside Carl at once, with a moo. Does nothing if she is already owned.
+   * beside the human crawler at once, with a moo. Does nothing if she is already owned.
    *
    * @returns whether she was granted now.
    */
@@ -282,7 +282,7 @@ export class AttackCowSystem implements GameSystem {
   }
 
   /**
-   * Puts her back behind Carl when she has fallen out of sight or stuck on
+   * Puts her back behind the human crawler when she has fallen out of sight or stuck on
    * the way, as a hireling is, never out of a fight of her own or one a hostile
    * is holding her in.
    */

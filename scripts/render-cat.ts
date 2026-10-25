@@ -1,5 +1,5 @@
 /**
- * Donut's review harness. Art has to be judged as an image, by something that
+ * The cat's review harness. Art has to be judged as an image, by something that
  * only looks at the image — every defect that has ever mattered on a figure in
  * this project was invisible to `typecheck`, `lint` and a code read.
  *
@@ -15,18 +15,27 @@
  *   npx tsx scripts/render-cat.ts --frame=5 --row=cast --scale=8
  *   npx tsx scripts/render-cat.ts --wear=cat_shades --part=head --scale=6
  *   npx tsx scripts/render-cat.ts --wear=cat_crown,cat_butterfly_talisman --scale=3
+ *   npx tsx scripts/render-cat.ts --look=pumpkin
+ *   npx tsx scripts/render-cat.ts --row=walk_side --mode=strip32
+ *
+ * `--look=` picks the cat (belle by default; see `catLooks.ts`). `strip32`
+ * paints every frame of each row at the in-game 32 px tile on the dungeon
+ * floor, with a nearest-neighbour blow-up under it: the size the art is
+ * judged at.
  */
 
 import { createCanvas } from 'canvas';
 
-import { bakeFigureSheet } from './figureSheet.js';
+import { CAT_LOOKS, catLookFlag } from './catLooks.js';
+import { bakeFigureSheet, paintFigureCell } from './figureSheet.js';
 import { reportFigureGates } from './figureGates.js';
 import { catGateFailures } from './gates-cat.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { CAT_ROWS, TILE_SCALE, catFigureFor } from '../src/sprites/art/catFigure.js';
-import type { GarmentDef } from '../src/sprites/garments/garmentDef.js';
-import { garmentsOf } from '../src/sprites/garments/garments.js';
+import type { WornGarmentDef } from '../src/sprites/garments/garmentDef.js';
+import { wornGarmentsOf } from '../src/sprites/garments/garments.js';
 import { outfitOf } from '../src/sprites/garments/outfit.js';
+import { figureBakeDensity } from '../src/sprites/figure/figureDef.js';
 
 /** Matches TILE_SIZE in src/core/constants.ts; the art is painted at 2× that. */
 const IN_GAME_TILE = 32;
@@ -45,8 +54,12 @@ const ONION_ALPHA = 0.4;
 const NO_FRAME = -1;
 const MAX_FRAME_FLAG = 64;
 
-type Mode = 'sheet' | 'onion' | 'delta';
-const MODES: ReadonlyArray<Mode> = ['sheet', 'onion', 'delta'];
+type Mode = 'sheet' | 'onion' | 'delta' | 'strip32';
+const MODES: ReadonlyArray<Mode> = ['sheet', 'onion', 'delta', 'strip32'];
+/** How many times the strip's nearest-neighbour copy blows up the 32 px row. */
+const STRIP_BLOW_UP = 3;
+/** The share of her cell the strip keeps round its tile: she never reaches the outer margin standing. */
+const STRIP_CROP_SHARE = 0.6;
 
 interface PartWindow {
   readonly x: number;
@@ -91,10 +104,10 @@ function parseMode(): Mode {
 }
 
 /** What she is drawn wearing: `--wear=` a comma list of her garment ids, or `none`. */
-function parseWear(): GarmentDef<'cat'>[] {
+function parseWear(): WornGarmentDef<'cat'>[] {
   const raw = parseFlag('wear', 'none');
   if (raw === 'none') return [];
-  const wearable = garmentsOf('cat').filter((garment) => !garment.base);
+  const wearable = wornGarmentsOf('cat');
   return raw.split(',').map((id) => {
     const garment = wearable.find((candidate) => candidate.id === id);
     if (garment === undefined) {
@@ -104,11 +117,13 @@ function parseWear(): GarmentDef<'cat'>[] {
   });
 }
 
-const CAT_FIGURE = catFigureFor(outfitOf('cat', parseWear()));
+const CAT_LOOK = catLookFlag();
+const WORN = parseWear();
+const CAT_FIGURE = catFigureFor(CAT_LOOK, outfitOf(CAT_LOOK, WORN));
 
 function frameCountOf(state: string): number {
   const declared = CAT_FIGURE.states.get(state);
-  if (declared === undefined) throw new Error(`Donut declares no state "${state}"`);
+  if (declared === undefined) throw new Error(`The cat declares no state "${state}"`);
   return declared.frames;
 }
 
@@ -144,8 +159,18 @@ function main(): void {
   // Ahead of the contact sheet rather than after it: the sheet is a
   // tens-of-megapixel allocation, and measuring art on the far side of one is
   // how a gate goes red on art nobody touched.
-  console.log('Gating Donut…');
-  reportFigureGates('cat', catGateFailures());
+  // Every look, not only the one painted: the looks share the rows and the
+  // part frames, so a change made for one can break the other.
+  for (const look of CAT_LOOKS) {
+    console.log(`Gating ${look.id}…`);
+    const figure = look === CAT_LOOK ? CAT_FIGURE : catFigureFor(look, outfitOf(look, WORN));
+    reportFigureGates(`cat:${look.id}`, catGateFailures(look, figure));
+  }
+
+  if (mode === 'strip32') {
+    writeStrip32(outPath, states, CAT_FIGURE.frameWidth, CAT_FIGURE.frameHeight, frameFilter);
+    return;
+  }
 
   const baked = bakeFigureSheet(CAT_FIGURE, states);
   const sheet = baked.canvas;
@@ -266,6 +291,79 @@ function main(): void {
   console.log(
     `Wrote ${writtenPath} (${canvas.width}×${canvas.height}px, scale ${scale}×, mode ${mode})`,
   );
+}
+
+/**
+ * Every frame of each row at the in-game size on the dungeon floor, cropped
+ * round her tile, with a nearest-neighbour copy blown up under it.
+ */
+function writeStrip32(
+  outPath: string,
+  states: readonly string[],
+  frameW: number,
+  frameH: number,
+  frameFilter: number,
+): void {
+  const inGameScale = IN_GAME_TILE / TILE_SCALE;
+  const cropW = Math.round(frameW * STRIP_CROP_SHARE);
+  const cropH = Math.round(frameH * STRIP_CROP_SHARE);
+  const cropX = Math.round((frameW - cropW) / 2);
+  const cropY = Math.round((frameH - cropH) / 2);
+  const cellW = Math.round(cropW * inGameScale);
+  const cellH = Math.round(cropH * inGameScale);
+  const framesOf = (state: string): number[] => {
+    const count = frameCountOf(state);
+    return frameFilter === NO_FRAME
+      ? Array.from({ length: count }, (_unused, i) => i)
+      : [Math.min(count - 1, Math.max(0, frameFilter))];
+  };
+  const maxFrames = Math.max(...states.map((state) => framesOf(state).length));
+  const small = createCanvas(maxFrames * cellW, states.length * cellH);
+  const smallCtx = small.getContext('2d');
+  smallCtx.fillStyle = DUNGEON_FLOOR;
+  smallCtx.fillRect(0, 0, small.width, small.height);
+  // Each cell is painted at the in-game size, supersampled, the way the cache
+  // bakes it for a 32 px tile — not shrunk from the full-size sheet — so
+  // anything the painter sizes to the surface (her tooth) shows as it does
+  // in the game.
+  const bakeDensity = inGameScale * figureBakeDensity(CAT_FIGURE);
+  states.forEach((state, sheetRow) => {
+    framesOf(state).forEach((frame, slot) => {
+      const painted = paintFigureCell(CAT_FIGURE, state, frame, bakeDensity);
+      smallCtx.drawImage(
+        painted,
+        cropX * bakeDensity,
+        cropY * bakeDensity,
+        cropW * bakeDensity,
+        cropH * bakeDensity,
+        slot * cellW,
+        sheetRow * cellH,
+        cellW,
+        cellH,
+      );
+    });
+  });
+
+  const rowLabelsHeight = LABEL_HEIGHT;
+  const blownW = small.width * STRIP_BLOW_UP;
+  const blownH = small.height * STRIP_BLOW_UP;
+  const canvas = createCanvas(
+    Math.max(blownW, small.width) + PADDING * 2,
+    rowLabelsHeight + small.height + PADDING + blownH + PADDING * 2,
+  );
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = BACKDROP;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.font = LABEL_FONT;
+  ctx.fillStyle = LABEL_COLOR;
+  // Unlabelled by row: the strip is for judging whether each row reads as its
+  // action at game size, and a row's name would answer that for the viewer.
+  ctx.fillText(`${states.length} rows — 32px tile`, PADDING, LABEL_HEIGHT - PADDING);
+  ctx.drawImage(small, PADDING, rowLabelsHeight);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(small, PADDING, rowLabelsHeight + small.height + PADDING, blownW, blownH);
+  const writtenPath = writePreviewPng(outPath, canvas.toBuffer('image/png'));
+  console.log(`Wrote ${writtenPath} (${canvas.width}×${canvas.height}px, mode strip32)`);
 }
 
 main();

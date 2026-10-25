@@ -1,5 +1,5 @@
 /**
- * Carl's sockets: the named places on his figure a held or stowed thing
+ * The human crawler's sockets: the named places on his figure a held or stowed thing
  * attaches to, published for every frame of every row.
  *
  * - `mainHand` — his right hand, `offHand` his left. Bound to the hand, not to
@@ -12,7 +12,7 @@
  * draw and stow rows that reach for them.
  *
  * A socket comes out of the same solve the painter composes him from
- * (`carlHandSockets` in `carl/figure.ts`), so it cannot disagree with the
+ * (`bipedHandSockets` in `biped/figure.ts`), so it cannot disagree with the
  * picture. Each is memoised per figure, row and frame: a cell's pose is
  * fixed, and the key space is bounded.
  *
@@ -21,10 +21,10 @@
  */
 
 import type { Vec3 } from '../../held/heldPaint';
-import type { CarlSocket } from '../../held/gripArchetypes';
-import type { Pt } from '../carlArt';
-import { type CarlHandSocket, type CarlHandSockets } from '../carl/figure';
-import { buildSkeleton, drawnSide, poseAsDrawn, VIEWS, type BodySide } from '../carl/rig';
+import type { HumanSocket } from '../../held/gripArchetypes';
+import type { Pt } from '../bipedArt';
+import { type BipedHandSocket, type BipedHandSockets } from '../biped/figure';
+import { buildSkeleton, drawnSide, poseAsDrawn, VIEWS, type BodySide } from '../biped/rig';
 import { type ShownPlacement, stowedAxis, stowedCentre } from './stowedGeometry';
 import {
   GROUND_OFFSET_IN_TILE,
@@ -48,6 +48,7 @@ import {
   TILE_SCALE,
 } from './figureScale';
 import { smushHopStampSide, smushStampPoint } from './stomps';
+import { type HumanLook, type LookAxes, playerLookAxes } from '../../looks/humanLook';
 
 /** The index of the body slab a held thing sits directly in front of, 0 the rearmost. */
 export type SocketLayer = number;
@@ -79,10 +80,10 @@ export interface SocketFrame {
 }
 
 /** Every socket on one frame. */
-export interface CarlSocketFrames {
-  readonly sockets: Readonly<Record<CarlSocket, SocketFrame>>;
+export interface HumanSocketFrames {
+  readonly sockets: Readonly<Record<HumanSocket, SocketFrame>>;
   /** On a two-handed haft, the hand socket holding its butt: the item's grip point is there. */
-  readonly butt?: CarlSocket;
+  readonly butt?: HumanSocket;
 }
 
 /** The figure a socket is read off: its id, for the memo, and how it paints a frame. */
@@ -91,15 +92,40 @@ export interface SocketSource {
   readonly painting: HumanFigurePainting;
 }
 
-function toCell(p: Pt): Pt {
-  return { x: ORIGIN_X + p.x * HUMAN_CELL_PX_PER_UNIT, y: ORIGIN_Y + p.y * HUMAN_CELL_PX_PER_UNIT };
+/** A figure-space point of a look as the cell paints it in a view, the look's own build applied. */
+function toCell(p: Pt, axes: LookAxes): Pt {
+  return {
+    x: ORIGIN_X + p.x * HUMAN_CELL_PX_PER_UNIT * axes.x,
+    y: ORIGIN_Y + p.y * HUMAN_CELL_PX_PER_UNIT * axes.y,
+  };
 }
 
-function handSocket(hand: CarlHandSocket): SocketFrame {
+function isUnstretched(axes: LookAxes): boolean {
+  return axes.x === 1 && axes.y === 1 && axes.z === 1;
+}
+
+/**
+ * A camera-space direction as the look's build stretches it: a direction
+ * along the body scales with the body, a surface normal against it. An
+ * unstretched direction is returned as it is, since renormalising a unit
+ * vector can move its last bit and every cell drawn from it.
+ */
+function stretched(direction: Vec3, axes: LookAxes, kind: 'along' | 'normal'): Vec3 {
+  if (isUnstretched(axes)) return direction;
+  const scale = (value: number, axis: number): number =>
+    kind === 'along' ? value * axis : value / axis;
+  const x = scale(direction.x, axes.x);
+  const y = scale(direction.y, axes.y);
+  const z = scale(direction.z, axes.z);
+  const length = Math.hypot(x, y, z);
+  return length === 0 ? direction : { x: x / length, y: y / length, z: z / length };
+}
+
+function handSocket(hand: BipedHandSocket, axes: LookAxes): SocketFrame {
   return {
-    centre: toCell(hand.centre),
-    axis: hand.axis,
-    palmNormal: hand.palmNormal,
+    centre: toCell(hand.centre, axes),
+    axis: stretched(hand.axis, axes, 'along'),
+    palmNormal: stretched(hand.palmNormal, axes, 'normal'),
     layer: hand.layer,
     occupied: hand.occupant === 'item',
     grips: hand.occupant !== 'empty',
@@ -117,13 +143,14 @@ function stowedSockets(
   painting: HumanFigurePainting,
   row: RowSpec,
   frame: number,
-  hands: CarlHandSockets,
-): Pick<Record<CarlSocket, SocketFrame>, 'back' | 'hip'> {
+  hands: BipedHandSockets,
+): Pick<Record<HumanSocket, SocketFrame>, 'back' | 'hip'> {
   const spec = VIEWS[row.view];
+  const axes = playerLookAxes(painting.look, spec.profile);
   const skeleton = buildSkeleton(poseAsDrawn(paintedPose(painting, row, frame), spec), spec);
   const stowed = (placement: ShownPlacement, overHim: boolean): SocketFrame => ({
-    centre: toCell(stowedCentre(placement, row.view, skeleton)),
-    axis: stowedAxis(placement, row.view),
+    centre: toCell(stowedCentre(placement, row.view, skeleton), axes),
+    axis: stretched(stowedAxis(placement, row.view), axes, 'along'),
     palmNormal: STOWED_FACING,
     layer: overHim ? hands.frontLayer : REARMOST_SOCKET_LAYER,
     occupied: false,
@@ -143,28 +170,29 @@ function stowedSockets(
   };
 }
 
-const framesByCell = new Map<string, CarlSocketFrames>();
+const framesByCell = new Map<string, HumanSocketFrames>();
 
 /** Every socket of `source`'s figure on one frame of one row. */
-export function carlSocketsAt(
+export function humanSocketsAt(
   source: SocketSource,
   rowName: HumanRowName,
   frame: number,
-): CarlSocketFrames {
+): HumanSocketFrames {
   const key = `${source.id}:${rowName}:${frame}`;
   const known = framesByCell.get(key);
   if (known !== undefined) return known;
   const row: RowSpec = { name: rowName, ...HUMAN_ROW_TABLE[rowName] };
   const spec = VIEWS[row.view];
   const hands = paintedHandSockets(source.painting, row, frame);
+  const axes = playerLookAxes(source.painting.look, spec.profile);
   const mainDrawn = drawnSide('right', spec);
   const main = mainDrawn === 'right' ? hands.right : hands.left;
   const off = mainDrawn === 'right' ? hands.left : hands.right;
   const butt = hands.twoHandButt;
-  const found: CarlSocketFrames = {
+  const found: HumanSocketFrames = {
     sockets: {
-      mainHand: handSocket(main),
-      offHand: handSocket(off),
+      mainHand: handSocket(main, axes),
+      offHand: handSocket(off, axes),
       ...stowedSockets(source.painting, row, frame, hands),
     },
     ...(butt === undefined ? {} : { butt: butt === mainDrawn ? 'mainHand' : 'offHand' }),
@@ -204,19 +232,21 @@ export function cellPointInTile(point: Pt, flipX: boolean): Pt {
 }
 
 /**
- * Where a stamp row's heel lands on its impact frame, in tile fractions from
- * the sprite's own tile origin — the choreography's stamp point, painted at
- * `HUMAN_SCALE` of a tile about the ground line — or null on any row that is
- * not a stamp. The art gates re-measure it against the painted pose.
+ * Where a stamp row's heel lands on its impact frame for `look`, in tile
+ * fractions from the sprite's own tile origin — the choreography's stamp
+ * point, painted at `HUMAN_SCALE` of a tile about the ground line and
+ * stretched by the look's build — or null on any row that is not a stamp.
+ * The art gates re-measure it against the painted pose.
  */
-export function stampAnchorOf(row: HumanRowMeta): Pt | null {
+export function stampAnchorOf(row: HumanRowMeta, look: HumanLook): Pt | null {
   if (row.role !== 'stomp') return null;
   const hop = row.locomotion === 'travelling';
   const side: BodySide =
     hop && row.entryFootPhase !== undefined ? smushHopStampSide(row.entryFootPhase) : 'right';
   const point = smushStampPoint(row.view, hop, side);
+  const axes = playerLookAxes(look, VIEWS[row.view].profile);
   return {
-    x: TILE_CENTRE_FRACTION + point.x * HUMAN_SCALE,
-    y: GROUND_OFFSET_IN_TILE + point.y * HUMAN_SCALE,
+    x: TILE_CENTRE_FRACTION + point.x * HUMAN_SCALE * axes.x,
+    y: GROUND_OFFSET_IN_TILE + point.y * HUMAN_SCALE * axes.y,
   };
 }

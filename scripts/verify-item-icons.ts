@@ -27,6 +27,7 @@
  *   npm run verify:item-icons
  */
 
+import { crawlerName } from '../src/characters/characters';
 import type { InventoryItem, ItemId } from '../src/core/ItemDefs.js';
 import type { Surface } from '../src/ui/core/UiRoot.js';
 import type { HotbarInput, HotbarSlotModel } from '../src/ui/hud/hudModel.js';
@@ -198,7 +199,7 @@ function screenRig(width: number, height: number, density: Density): ScreenRig {
   };
   const screen = new InventoryScreen({
     actions: new InventoryActions(),
-    party: () => [{ id: 'human', name: 'Carl', owner }],
+    party: () => [{ id: 'human', name: crawlerName('human'), owner }],
     coins: () => 0,
   });
   screen.open({ tab: 'bag' });

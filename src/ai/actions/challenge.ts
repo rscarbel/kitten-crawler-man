@@ -9,6 +9,7 @@
  * named creature alive, enough time for the kills or the walk, no status
  * already eating HP under a no-damage rule, a living boss for the potion fast.
  */
+import { crawlerName } from '../../characters/characters';
 import { pendingStatusDamage } from '../../Player';
 import {
   ANY_MOB,
@@ -85,7 +86,7 @@ const COUNT = optionalIntParam('count', {
   max: CHALLENGE_MAX_COUNT,
   fallback: CHALLENGE_DEFAULT_COUNT,
   description:
-    'How many kills, for slay, slay_untouched and donut_finishes. That many must be alive on the floor.',
+    'How many kills, for slay, slay_untouched and belle_finishes. That many must be alive on the floor.',
 });
 const MOB_TYPE = optionalEnumParam(
   'mob_type',
@@ -130,7 +131,8 @@ function winnableRefusal(call: AIActionCall, spec: ChallengeSpec): string | null
   }
   if (rules.killer === 'cat') {
     const cat = scene.getCat();
-    if (!cat.isAlive || cat.isKnockedOut) return 'Donut is in no state to land a blow';
+    if (!cat.isAlive || cat.isKnockedOut)
+      return `${crawlerName('cat')} is in no state to land a blow`;
   }
   if (rules.failOnDamage) {
     const bleeding = bothCrawlers(scene).some(

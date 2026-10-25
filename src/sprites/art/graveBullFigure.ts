@@ -16,7 +16,7 @@
  * `npm run render:grave-bull`.
  */
 
-import { clamp01, easeInOut, easeOut } from './carlArt';
+import { clamp01, easeInOut, easeOut } from './bipedArt';
 import { GROUND_Y, drawCow, type CowPose, type CowView } from './cowArt';
 import { TILE_SCALE, cowRowsFor, cowStateName, strideFoot } from './cowFigure';
 import {

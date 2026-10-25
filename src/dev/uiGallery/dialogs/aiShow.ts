@@ -4,6 +4,7 @@
  * typed, and the achievement card for an achievement the AI wrote.
  */
 
+import { crawlerName } from '../../../characters/characters';
 import { AchievementManager } from '../../../core/AchievementManager';
 import { AchievementNotification } from '../../../ui/AchievementNotification';
 import {
@@ -120,8 +121,8 @@ export const FIXTURES: readonly DialogFixture[] = [
     'The loot',
   ]),
   questionFixture('ai-question-four', 'Which of you is carrying this team?', [
-    'Carl',
-    'Donut',
+    crawlerName('human'),
+    crawlerName('cat'),
     'Mongo',
     'Nobody',
   ]),

@@ -11,7 +11,7 @@ const TUTORIAL_TACTICS: readonly TacticsTrait[] = [];
 const MISSILE_DAMAGE_TYPE = 'missile' satisfies PlayerDamageType;
 /**
  * Every tutorial goblin's kill XP, whatever the difficulty or level, because
- * the tutorial teaches spending a stat point on exactly one level-up: Carl's
+ * the tutorial teaches spending a stat point on exactly one level-up: the human's
  * on the smush. At the dealer's 85% share goblin A pays him 4 of the 10 his
  * first level costs and the first guard 4 more, so it is the second guard,
  * dying in the same smush, that carries him over. The cat's small shares and
@@ -28,7 +28,7 @@ export class TutorialGoblin extends Goblin {
   /**
    * When true only a Magic Missile can hurt it. Goblin B exists to teach the
    * cat's spell, and Smush hits everything in its blast with no regard for
-   * walls, so without this Carl could take the lesson from her.
+   * walls, so without this the human could take the lesson from her.
    */
   private readonly missileOnly: boolean;
 

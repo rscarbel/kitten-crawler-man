@@ -120,7 +120,7 @@ function harvestRig(phase: BlueprintsQuestPhase): HarvestRig | null {
   return rig;
 }
 
-/** A rig in `harvest_grain` with Carl holding the scythe, standing on the field's first tile. */
+/** A rig in `harvest_grain` with the human holding the scythe, standing on the field's first tile. */
 function swingingRig(): HarvestRig | null {
   const rig = harvestRig('harvest_grain');
   if (rig === null) return null;

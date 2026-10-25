@@ -12,10 +12,10 @@
  * and which leg a kick or stamp is made with, follow the entry.
  */
 
-import { buildSkeleton, type CarlPose, LEG_MAX_REACH, VIEWS } from '../carl/rig';
+import { buildSkeleton, type BipedPose, LEG_MAX_REACH, VIEWS } from '../biped/rig';
 import { type CardinalView } from '../../facingView';
-import { pt } from '../carl/geometry';
-import { type Pt } from '../carlArt';
+import { pt } from '../biped/geometry';
+import { type Pt } from '../bipedArt';
 import { HALF_CYCLE, LEFT_ARM, RIGHT_ARM, wrapPhase } from './gaitShared';
 import { RUN_TOE_OFF_PHASE, runFacing, runSide } from './locomotion';
 import { RUN_FRAMES } from './timing';
@@ -37,7 +37,7 @@ const TRAVELLING_VERSIONS: Readonly<Record<CardinalView, number>> = {
   back: 4,
 };
 
-function runPose(view: CardinalView, phase: number): CarlPose {
+function runPose(view: CardinalView, phase: number): BipedPose {
   return view === 'side' ? runSide(phase) : runFacing(phase, view === 'back');
 }
 
@@ -221,7 +221,7 @@ const REACH_EASE_STEPS = 12;
  * straight out behind. A planted foot is left where it stands; it holds the
  * floor, and moving it would slide it.
  */
-export function keepSwingFeetInReach(pose: CarlPose, view: CardinalView): void {
+export function keepSwingFeetInReach(pose: BipedPose, view: CardinalView): void {
   for (const side of [RIGHT_ARM, LEFT_ARM]) {
     const planted = side === RIGHT_ARM ? pose.rightFootPlanted : pose.leftFootPlanted;
     if (planted === true) continue;

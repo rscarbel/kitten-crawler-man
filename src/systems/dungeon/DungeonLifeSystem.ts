@@ -2,7 +2,7 @@
  * Small moving things on dungeon floors 1 and 2, all cosmetic: drips landing
  * in puddles, splash rings where anyone walks through water, beetles or
  * roaches that scatter from the party, flies over bones, dust motes hanging
- * in the strongest torchlight, and paper lifting where Carl walks through a
+ * in the strongest torchlight, and paper lifting where the human crawler walks through a
  * drift.
  *
  * Everything here is world: it draws under the darkness pass, so a dark

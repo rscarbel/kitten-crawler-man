@@ -18,7 +18,7 @@
  *   strip32  every row at the in-game 32px tile on the club floor, with a 2×
  *            nearest-neighbour copy underneath — the size the silhouette has to
  *            survive
- *   lineup   both crocodilians and Carl side by side at in-game size and 3×, so
+ *   lineup   both crocodilians and the human side by side at in-game size and 3×, so
  *            their heights can be read against the player's
  *   head     the head crop of the first frame of each view, enlarged
  */
@@ -253,7 +253,7 @@ function renderStrip32(def: FigureDef, states: readonly string[], outPath: strin
 }
 
 /**
- * Carl, Bucket Boy and Clarabelle on one ground line, first idle frame of each
+ * The human crawler, Bucket Boy and Clarabelle on one ground line, first idle frame of each
  * view, so their heights are read against the player's.
  */
 function renderLineup(outPath: string): void {

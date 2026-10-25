@@ -14,7 +14,7 @@
  * outlined as one silhouette, the same way the living figure is.
  */
 
-import { deg, rgba } from './carlArt';
+import { deg, rgba } from './bipedArt';
 import {
   blitLayer,
   dilationOffsets,

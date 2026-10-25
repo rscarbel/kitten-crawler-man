@@ -1,7 +1,7 @@
 /**
  * Drawing engine for the Dark Knight — the bounty board's mace-wielding boss.
  *
- * The skeleton is the one Carl uses (`carl/rig.ts`): a pelvis, a leaning
+ * The skeleton is the biped rig's (`biped/rig.ts`): a pelvis, a leaning
  * spine, four two-bone limbs solved by inverse kinematics from foot and hand
  * targets, plus a forward-kinematic escape hatch for arms that have to swing
  * rather than reach. Plate armour changes what is *painted* over that skeleton,
@@ -230,13 +230,13 @@ const CONTACT_SHADOW_ALPHA = 0.42;
 /**
  * Standing height, sabaton sole to the top of the helm.
  *
- * Half again Carl's 2.03 in the same units, which is what "he is a head and a
+ * Half again the biped figure's 2.03 in the same units, which is what "he is a head and a
  * half taller than you and twice as wide" costs. The generator scales the whole
  * figure once at bake time; nothing here is retuned to change his size.
  */
 export const FIGURE_HEIGHT = 2.28;
 /**
- * Heads tall, counting the great helm as the head. Fewer than Carl's 4.8
+ * Heads tall, counting the great helm as the head. Fewer than the biped figure's 4.8
  * because the helm is a bucket rather than a skull — it has to stay a legible
  * block on top of the silhouette at 32 px.
  */

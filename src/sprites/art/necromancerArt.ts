@@ -32,7 +32,7 @@
  * when he turns round.
  */
 
-import { clamp01, deg, lerp, mix, rgba, type Pt } from './carlArt';
+import { clamp01, deg, lerp, mix, rgba, type Pt } from './bipedArt';
 import { hollowSoulPalette } from '../soulPalette';
 
 type Ctx = CanvasRenderingContext2D;
