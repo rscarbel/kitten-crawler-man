@@ -16,7 +16,7 @@
  * walk is planned afresh from where she stands ({@link EscortReplanner}).
  */
 
-import { MinHeap } from '../../../core/MinHeap';
+import { MinHeap } from '../../../core/util/MinHeap';
 import type { GameMap } from '../../../map/GameMap';
 import type { BriarHollowSite } from '../../../map/overworld/briarHollowSite';
 import { HOLLOW_GATE } from '../../../map/tileTypes';

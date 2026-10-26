@@ -5,10 +5,10 @@
  * so the slot stays empty until it lands and glows as it does.
  */
 
-import type { ItemId } from '../../core/ItemDefs';
+import type { ItemId } from '../../core/items/defs/ItemDefs';
 import { centerIn, inset, type Rect } from '../core/geom';
 import type { Ui } from '../core/UiRoot';
-import { itemIconPainter } from '../questReward/rewardLines';
+import { rewardIconPainter } from '../questReward/rewardLines';
 import { skinsFor } from '../theme/skins';
 import { strokeRounded } from '../widgets/paint';
 import { text } from '../widgets/text';
@@ -55,7 +55,7 @@ function renderHeldPrize(ui: Ui, rect: Rect, opts: HeldPrizeOptions): void {
   }
   const slot = centerIn({ ...body, w: body.h }, body.h, body.h);
   opts.onIconSlot(slot, ui.now);
-  if (opts.showIcon) itemIconPainter(opts.item)(ctx, slot);
+  if (opts.showIcon) rewardIconPainter(opts.item)(ctx, slot);
   const words = inset(body, { l: slot.w + space.sm });
   const titleRow: Rect = { ...words, h: words.h / 2 };
   const detailRow: Rect = { ...words, y: words.y + words.h / 2, h: words.h / 2 };

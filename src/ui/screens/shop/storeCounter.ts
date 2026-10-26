@@ -6,12 +6,14 @@
  * so the session never touches the restock.
  */
 
-import { catalogLineUnits, shopDef, type ShopId } from '../../../economy/shops';
-import { buyFromShop, type ShopStock } from '../../../economy/shopStock';
+import { shopDef, type ShopId } from '../../../economy/shops';
+import type { ShopStock } from '../../../economy/shopStock';
 import {
   SOLD_OUT_LABEL,
   catalogLineRow,
   findCatalogLine,
+  handOverCatalogLine,
+  type GearOwnership,
 } from '../../../systems/market/vendorMenu';
 import type { ShopMenu, ShopSession } from './shopSession';
 
@@ -23,6 +25,8 @@ export interface StoreCounter {
   readonly stock: ShopStock;
   /** Runs after every purchase or sale that went through, for the host's sound. */
   readonly onTraded: () => void;
+  /** Whether the party already has a piece of gear the store sells. */
+  readonly owns: GearOwnership;
 }
 
 function storeMenu(counter: StoreCounter): ShopMenu {
@@ -33,7 +37,7 @@ function storeMenu(counter: StoreCounter): ShopMenu {
     bark: STORE_BARK,
     byline: null,
     emblem: null,
-    options: def.catalog.map((line) => catalogLineRow(shop, line, stock)),
+    options: def.catalog.map((line) => catalogLineRow(shop, line, stock, counter.owns)),
   };
 }
 
@@ -45,9 +49,9 @@ export function openStoreCounter(session: ShopSession, counter: StoreCounter): v
     (option, player) => {
       const line = findCatalogLine(shop, option.key);
       if (line === undefined) return { ok: false, line: '' };
-      const units = catalogLineUnits(line);
-      if (!buyFromShop(stock, shop, line.item, units)) return { ok: false, line: SOLD_OUT_LABEL };
-      player.inventory.addItem(line.item, units);
+      if (!handOverCatalogLine(shop, line, stock, player, counter.owns)) {
+        return { ok: false, line: SOLD_OUT_LABEL };
+      }
       counter.onTraded();
       return { ok: true, line: `Bought ${line.label}!` };
     },

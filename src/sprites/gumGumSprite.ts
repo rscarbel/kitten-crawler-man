@@ -1,5 +1,5 @@
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
-import { walkFrameIndex } from '../core/SpriteRenderer';
+import { walkFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { idleFrameAtSeconds } from './art/human/timing';
 import { figureFrameCount } from './figure/figureDef';
 import { GUMGUM_FIGURE, gumGumStateName } from './art/gumGumFigure';

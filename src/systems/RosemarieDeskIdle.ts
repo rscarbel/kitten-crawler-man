@@ -1,5 +1,5 @@
 import { TILE_SIZE } from '../core/constants';
-import { CLUB_DANCER_TILES } from '../core/clubLayout';
+import { CLUB_DANCER_TILES } from '../core/club/clubLayout';
 import {
   drawRosemarieSprite,
   drawThrownCoin,

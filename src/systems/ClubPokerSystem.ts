@@ -12,11 +12,11 @@
  */
 
 import type { Player } from '../Player';
-import { canAffordCoins, partyCoins, spendPartyCoins } from '../core/partyCoins';
-import { NEVER_LUCKY, type LuckCheck } from '../core/GodMode';
-import { copyPokerReads, type ClubMembership, type PokerReads } from '../core/ClubMembership';
-import { viewportHeight, viewportWidth } from '../core/Viewport';
-import { keybindings } from '../core/Keybindings';
+import { canAffordCoins, partyCoins, spendPartyCoins } from '../core/party/partyCoins';
+import { NEVER_LUCKY, type LuckCheck } from '../core/state/GodMode';
+import { copyPokerReads, type ClubMembership, type PokerReads } from '../core/club/ClubMembership';
+import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
+import { keybindings } from '../core/input/Keybindings';
 import { ACTIVATE_KEYS, type Surface, type Ui, type UiAudio } from '../ui/core/UiRoot';
 import { inset, splitV, type Rect } from '../ui/core/geom';
 import type { ToastTone } from '../ui/hud/toasts';

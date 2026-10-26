@@ -24,7 +24,7 @@ import { mix, type Pt, rgba } from '../../art/bipedArt';
 import { footSoleLandmarks } from '../../art/biped/feet';
 import { LEG_COVER, type LegwearCut } from '../../art/human/legwear';
 import { defineGarment } from '../garmentDef';
-import { BOOT_SOLE, type BootLook, paintBootOnLeg } from './humanBoots';
+import { BOOT_SOLE, type BootLook, paintBootOnLeg } from './footwear';
 import { humanEveryView } from './views';
 
 type Ctx = CanvasRenderingContext2D;
@@ -195,7 +195,6 @@ function shoeLook(footwear: GlossRamp): BootLook {
     leather: footwear,
     sole: deriveRamp(mix(footwear.base, SOLE_DARKEN_TOWARD, SOLE_DARKEN)),
     shaftTopAt: SHOE_SHAFT_TOP_AT,
-    hobnails: false,
     soleBuild: BOOT_SOLE,
   };
 }

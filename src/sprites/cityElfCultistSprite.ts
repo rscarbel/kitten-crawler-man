@@ -5,7 +5,7 @@
  * the clock, and blits it through the shared figure cache.
  */
 
-import { progressFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
+import { progressFrameIndex, walkFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { TILE_SIZE } from '../core/constants';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import { figureFrameCount } from './figure/figureDef';

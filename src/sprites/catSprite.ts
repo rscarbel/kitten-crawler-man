@@ -3,7 +3,7 @@ import {
   walkFrameIndex,
   progressFrameIndex,
   timeFrameIndex,
-} from '../core/SpriteRenderer';
+} from '../core/spriteAssets/SpriteRenderer';
 import {
   drawFigureCached,
   type FigureBetween,
@@ -17,8 +17,8 @@ import type { HeldVisualDef } from './held/heldVisualDef';
 import { ResidentRows, type ResidentSpan } from './figure/residentRows';
 import type { FigureDef } from './figure/figureDef';
 import { figureFrameCount } from './figure/figureDef';
-import { CAT_SWIPE_FRAMES } from '../core/crawlerFormulas';
-import type { WorkingToolKind } from '../core/toolTiers';
+import { CAT_SWIPE_FRAMES } from '../core/party/crawlerFormulas';
+import type { WorkingToolKind } from '../core/items/gathering/toolTiers';
 import {
   ACTION_FRAMES,
   BREAK_FRAMES,
@@ -38,7 +38,7 @@ import {
   MAGIC_MISSILE_PROJECTILE_FIGURE,
 } from './art/magicMissileFigure';
 import { getMagicMissileVisualTier, type MagicMissileVisualTier } from '../abilities/magicMissile';
-import { missileOpacity, type SplatterCopy } from '../abilities/eyesOfSplatter';
+import { missileOpacity, type KaleidoscopeCopy } from '../abilities/kaleidoscopeSpecs';
 import { DEFAULT_FACING_SELECTION, type FacingSelection } from './facingView';
 import { catRowViewOf, type CatRowView } from './catViews';
 import { BARE_CAT_OUTFIT } from './garments/cat/catDressing';
@@ -59,8 +59,8 @@ export interface Missile {
   abilityLevel: number;
   /** Sub-missiles spawned by level-10 never chain-react further. */
   isSubMissile: boolean;
-  /** Present on a copy released by the Eyes of Splatter; copies never release copies. */
-  splatter?: SplatterCopy;
+  /** Present on a copy released by the Kaleidoscope Specs; copies never release copies. */
+  kaleidoscope?: KaleidoscopeCopy;
 }
 
 /**

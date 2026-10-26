@@ -1,7 +1,7 @@
 /**
  * The props scripted rows hold — hammer, board, crate, wrench, zippo,
  * bottle — the explosives the throwing hand of the dynamite rows is handed at
- * runtime (dynamite, a black powder bomb) and the slingshot's carried look,
+ * runtime (dynamite, a black powder bomb) and the sling's carried look,
  * as held visuals.
  *
  * Each is painted by its existing prop painter, which draws handle and head
@@ -243,10 +243,14 @@ export const CARRIED_WRENCH_HELD = scriptedProp(
   { handleLength: 0.36, gripPoint: 0.5, headLength: 0.116, headWidth: 0.116, radius: 'thin' },
 );
 
-/** The slingshot carried loose in his fist, the fork leading. */
-export const SLINGSHOT_HELD = scriptedProp(
-  'slingshot',
-  'Slingshot & Rocks',
+/**
+ * The Rattlestick Sling carried loose in his fist, the fork leading. The
+ * shot rows hold the same picture as their own prop, so the sling he aims is
+ * the sling he carries.
+ */
+export const RATTLESTICK_SLING_HELD = scriptedProp(
+  'rattlestick_sling',
+  'Rattlestick Sling',
   'slingshot',
   'slingshot',
   'light',
@@ -271,7 +275,7 @@ const SCRIPTED_PROP_VISUALS: Readonly<Record<PropKind, ScriptedPropVisual>> = {
   blackPowderBomb: { def: SCRIPTED_PROP_HELD.prop_black_powder_bomb, painterTurn: 0 },
   zippo: { def: SCRIPTED_PROP_HELD.prop_zippo, painterTurn: 0 },
   bottle: { def: SCRIPTED_PROP_HELD.prop_bottle, painterTurn: 0 },
-  slingshot: { def: SLINGSHOT_HELD, painterTurn: SLINGSHOT_TURN },
+  slingshot: { def: RATTLESTICK_SLING_HELD, painterTurn: SLINGSHOT_TURN },
 };
 
 /** The held visual a row's prop is drawn as. */

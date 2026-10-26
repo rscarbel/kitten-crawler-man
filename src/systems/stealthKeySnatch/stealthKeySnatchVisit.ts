@@ -1,5 +1,5 @@
-import type { ItemId } from '../../core/ItemDefs';
-import type { Inventory } from '../../core/Inventory';
+import type { ItemId } from '../../core/items/defs/ItemDefs';
+import type { Inventory } from '../../core/items/inventory/Inventory';
 import type { StealthKeySnatchPhase } from './stealthKeySnatchCheckpoint';
 
 /** The item the prison's pedestal holds and the gate guard takes. */

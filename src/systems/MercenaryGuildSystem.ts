@@ -1,18 +1,18 @@
 import type { Player } from '../Player';
-import { canAffordCoins, partyCoins, spendPartyCoins } from '../core/partyCoins';
+import { canAffordCoins, partyCoins, spendPartyCoins } from '../core/party/partyCoins';
 import type { AudioManager } from '../audio/AudioManager';
-import type { MercenaryRoster } from '../core/MercenaryRoster';
-import { CLUB_MERC_DESK_TILE } from '../core/clubLayout';
+import type { MercenaryRoster } from '../core/party/MercenaryRoster';
+import { CLUB_MERC_DESK_TILE } from '../core/club/clubLayout';
 import {
   MERCENARY_TEMPLATES,
   getMercenaryTemplate,
   type MercenaryTemplate,
   type MercenaryTemplateId,
-} from '../core/mercenaryTemplates';
+} from '../core/party/mercenaryTemplates';
 import { MERCENARY_ART } from '../sprites/mercenaryArt';
 import { drawRosemariePortrait, prewarmRosemarie } from '../sprites/rosemarieSprite';
 import { GROUND_OFFSET_IN_TILE as ROSEMARIE_GROUND_IN_TILE } from '../sprites/art/rosemarieFigure';
-import { activeRunStats } from '../core/GameStats';
+import { activeRunStats } from '../core/progression/GameStats';
 import { ConfirmDialog } from '../ui/screens/dialogs/ConfirmDialog';
 import type { Rect } from '../ui/core/geom';
 import { RosemarieDeskIdle } from './RosemarieDeskIdle';

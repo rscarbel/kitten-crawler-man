@@ -7,7 +7,7 @@
  *
  *  - The tutorial's bag step, opened from the pause menu's Inventory entry:
  *    the Smush tome and the potions dragged to the slots it asks for, the
- *    boxers refusing the hotbar with the tutorial's hint, then put on from
+ *    hoodie refusing the hotbar with the tutorial's hint, then put on from
  *    their context menu until the tutorial moves on.
  *  - A plain dungeon floor: I and G, the HUD's Bag button, a potion drunk from
  *    the bag, a stack dropped through "how many?", and the HUD's own hotbar
@@ -19,7 +19,7 @@
  *   npx tsx scripts/inventoryScreenScene.ts --platform=desktop|phone
  */
 
-import type { ItemId } from '../src/core/ItemDefs.js';
+import type { ItemId } from '../src/core/items/defs/ItemDefs.js';
 
 const platformArg = process.argv.find((arg) => arg.startsWith('--platform='))?.split('=')[1];
 const onPhone = platformArg === 'phone';
@@ -42,13 +42,15 @@ const { mulberry32 } = await import('../src/sprites/person/rng.js');
 Math.random = mulberry32(WORLD_SEED);
 
 const { gameContext } = await import('./nodeGameContext.js');
-const { setViewportSize } = await import('../src/core/Viewport.js');
-const { loadSprites } = await import('../src/core/SpriteLoader.js');
+const { setViewportSize } = await import('../src/core/rendering/Viewport.js');
+const { loadSprites } = await import('../src/core/spriteAssets/SpriteLoader.js');
 const { SceneManager } = await import('../src/core/Scene.js');
-const { InputManager } = await import('../src/core/InputManager.js');
+const { InputManager } = await import('../src/core/input/InputManager.js');
 const { getLevelDef } = await import('../src/levels/index.js');
 const { DungeonScene } = await import('../src/scenes/DungeonScene.js');
-const { QUEST_SLOT_IDX } = await import('../src/core/ItemDefs.js');
+const { AchievementManager } = await import('../src/core/progression/AchievementManager.js');
+const { presentationAwardId } = await import('../src/loot/rewardChest.js');
+const { QUEST_SLOT_IDX } = await import('../src/core/items/defs/ItemDefs.js');
 const { TutorialController } = await import('../src/systems/TutorialController.js');
 const { MOUSE_POINTER_ID, PRIMARY_BUTTON } = await import('../src/ui/core/pointer.js');
 const { toCssRect } = await import('../src/ui/hud/HudSurface.js');
@@ -77,7 +79,7 @@ const HOLD_SLACK_MS = 80;
 const SETTLE_TICKS = 3;
 const SMUSH_HOTBAR_SLOT = 0;
 const POTION_HOTBAR_SLOT = 1;
-const BOXERS_TRY_HOTBAR_SLOT = 2;
+const HOODIE_TRY_HOTBAR_SLOT = 2;
 const DRINK_POTIONS = 3;
 /** Taken off the human so a potion has something to heal. */
 const WOUND_HP = 5;
@@ -282,7 +284,17 @@ section('the tutorial’s bag step, from the pause menu');
   const human = scene['human'];
   const menus = scene['menus'];
   const screen = menus.inventoryScreen;
-  tutorial.onHumanRewardDialogDismissed(human);
+  check(
+    scene['awards'].unlock('human', 'first_kill'),
+    'the first tutorial kill pays the tutorial kit',
+  );
+  // The reward screen is its own gate's subject; here the chest is taken as
+  // read, as closing it would, before the bag step it leads into.
+  check(
+    presentationAwardId(scene['humanAchievements'].takePresentation()) === 'first_kill',
+    'and queues its chest for the reward screen',
+  );
+  tutorial.onHumanRewardDialogDismissed();
   tick(scene);
   check(tutorial.state === 'HUMAN_OPENED_ACHIEVEMENT', 'the tutorial is at its bag step');
 
@@ -317,43 +329,34 @@ section('the tutorial’s bag step, from the pause menu');
     'the potions are dragged to hotbar slot 2',
   );
   check(
-    tutorial.tutorialBlockedDragItemId === 'enchanted_bigboi_boxers',
-    'and the tutorial asks for the boxers to be put on',
+    tutorial.tutorialBlockedDragItemId === 'lucky_hoodie',
+    'and the tutorial asks for the hoodie to be put on',
   );
 
-  const boxersSlot = human.inventory.bag.slots.findIndex(
-    (item) => item?.id === 'enchanted_bigboi_boxers',
-  );
-  await drag(
-    scene,
-    bagCell(scene, 'enchanted_bigboi_boxers'),
-    hotbarCell(scene, BOXERS_TRY_HOTBAR_SLOT),
-  );
-  const hintTimer: unknown = Reflect.get(tutorial, '_boxersDragHintTimer');
+  const hoodieSlot = human.inventory.bag.slots.findIndex((item) => item?.id === 'lucky_hoodie');
+  await drag(scene, bagCell(scene, 'lucky_hoodie'), hotbarCell(scene, HOODIE_TRY_HOTBAR_SLOT));
+  const hintTimer: unknown = Reflect.get(tutorial, '_hoodieDragHintTimer');
   tick(scene, 1);
   check(
-    human.inventory.actionBar.slots[BOXERS_TRY_HOTBAR_SLOT] === null &&
-      human.inventory.bag.slots[boxersSlot]?.id === 'enchanted_bigboi_boxers',
-    'a drag of the boxers to the hotbar moves nothing',
+    human.inventory.actionBar.slots[HOODIE_TRY_HOTBAR_SLOT] === null &&
+      human.inventory.bag.slots[hoodieSlot]?.id === 'lucky_hoodie',
+    'a drag of the hoodie to the hotbar moves nothing',
   );
-  check(
-    typeof hintTimer === 'number' && hintTimer > 0,
-    'and raises the tutorial’s hint about them',
-  );
+  check(typeof hintTimer === 'number' && hintTimer > 0, 'and raises the tutorial’s hint about it');
 
-  await openContextMenu(scene, bagCell(scene, 'enchanted_bigboi_boxers'));
+  await openContextMenu(scene, bagCell(scene, 'lucky_hoodie'));
   check(
-    screen.menu?.kind === 'item' && screen.menu.target.item.id === 'enchanted_bigboi_boxers',
+    screen.menu?.kind === 'item' && screen.menu.target.item.id === 'lucky_hoodie',
     onPhone
-      ? 'a finger held on the boxers opens their context menu'
-      : 'a right-click on the boxers opens their context menu',
+      ? 'a finger held on the hoodie opens its context menu'
+      : 'a right-click on the hoodie opens its context menu',
   );
   const equip = regionPoint(scene, (id) => id === 'inventory/item-menu/equip');
   check(equip !== null, 'which offers Equip');
   if (equip !== null) tap(scene, equip);
   check(
-    human.inventory.equipment.getEquippedId('Legs:Pants') === 'enchanted_bigboi_boxers',
-    'Equip puts the boxers on through the scene',
+    human.inventory.equipment.getEquippedId('Torso:Jacket') === 'lucky_hoodie',
+    'Equip puts the hoodie on through the scene',
   );
   tick(scene);
   check(tutorial.state === 'HUMAN_EQUIPPED_SMUSH', 'and the tutorial moves on');
@@ -364,9 +367,16 @@ section('the tutorial’s bag step, from the pause menu');
 
 section('a dungeon floor');
 {
+  // Already earned, so arriving pays no chest whose reward screen would sit over the bag.
+  const humanAchievements = new AchievementManager();
+  const catAchievements = new AchievementManager();
+  humanAchievements.recordUnlock('down_the_hatch');
+  catAchievements.recordUnlock('down_the_hatch');
   const scene = new DungeonScene(getLevelDef('level1'), new InputManager(), sceneManager, {
     worldSeed: WORLD_SEED,
     skipIntro: true,
+    humanAchievements,
+    catAchievements,
   });
   sceneManager.replace(scene);
   check(await settleArrival(scene), 'the floor finishes arriving');
@@ -468,7 +478,7 @@ section('a dungeon floor');
   section('the HUD’s hotbar beside the bag opened from the pause menu');
   tick(scene, 1);
   human.inventory.addItem('speed_fizz', 1);
-  human.inventory.addItem('marching_boots', 1);
+  human.inventory.addItem('hearthguard_boots', 1);
   const bar = human.inventory.actionBar.slots;
   const freeSlots = bar.flatMap((item, index) =>
     item === null && index !== QUEST_SLOT_IDX ? [index] : [],
@@ -519,9 +529,9 @@ section('a dungeon floor');
       'a tap on the HUD’s hotbar selects the stack as the row does',
     );
     check(bar[first]?.id === 'speed_fizz', 'rather than using it');
-    await drag(scene, bagCell(scene, 'marching_boots'), hudHotbarCell(scene, second));
+    await drag(scene, bagCell(scene, 'hearthguard_boots'), hudHotbarCell(scene, second));
     check(
-      bar[second] === null && screen.notice?.id === 'marching_boots',
+      bar[second] === null && screen.notice?.id === 'hearthguard_boots',
       'gear refuses the HUD’s hotbar and says why, as it refuses the row',
     );
     const grid = screen.geometry.grid;

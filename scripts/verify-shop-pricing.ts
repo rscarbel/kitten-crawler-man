@@ -19,7 +19,7 @@
  * Run: npm run verify:shop-pricing
  */
 
-import { canSellItemId, isItemId, type ItemId } from '../src/core/ItemDefs';
+import { canSellItemId, isItemId, type ItemId } from '../src/core/items/defs/ItemDefs';
 import { ITEM_PRICES } from '../src/economy/itemPrices';
 import {
   MIN_PRICE_COINS,

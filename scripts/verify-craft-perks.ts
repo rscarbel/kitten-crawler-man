@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Headless gate on the craft-perk lookup tables in `src/core/craftPerks.ts`.
+ * Headless gate on the craft-perk lookup tables in `src/core/labour/craftPerks.ts`.
  *
  * Every function in that file is a pure lookup by level, across two tables
  * (Resourcing and Construction). This gate checks each table's numeric
@@ -30,8 +30,8 @@ import {
   describeConstructionPerk,
   nextResourcingUnlock,
   nextConstructionUnlock,
-} from '../src/core/craftPerks';
-import { MAX_CRAFT_LEVEL } from '../src/core/CraftSkills';
+} from '../src/core/labour/craftPerks';
+import { MAX_CRAFT_LEVEL } from '../src/core/labour/CraftSkills';
 
 let failures = 0;
 let checks = 0;

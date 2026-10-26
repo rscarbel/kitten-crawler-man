@@ -8,7 +8,7 @@
  * so a review render replays any frame exactly.
  */
 
-import { allocCanvas, type CanvasSurface, surfaceContext } from '../core/canvasSurface';
+import { allocCanvas, type CanvasSurface, surfaceContext } from '../core/rendering/canvasSurface';
 import { tone } from './art/itemIcons/iconPaint';
 import { drawDynamiteExplosion, type ExplosionPicture } from './dynamiteExplosion';
 import { paintFuseBead, paintFuseSmoke, paintFuseSparks } from './fuseEffects';

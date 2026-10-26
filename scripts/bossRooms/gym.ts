@@ -4,7 +4,7 @@
  */
 
 import { CONSOLE_BEEP_FRAMES, type GymRoomSystem } from '../../src/systems/GymRoomSystem.js';
-import { BIG_ROOSTER_BOSS_TYPE } from '../../src/core/bossTypes.js';
+import { BIG_ROOSTER_BOSS_TYPE } from '../../src/core/mobs/bossTypes.js';
 import {
   DEFAULT_MIN_OPEN_FLOOR_SHARE,
   DOOR_SIDES,

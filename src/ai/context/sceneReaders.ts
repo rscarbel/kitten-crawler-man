@@ -1,6 +1,6 @@
 import { TILE_SIZE } from '../../core/constants';
-import { displayHp } from '../../core/crawlerFormulas';
-import { ITEM_DEF } from '../../core/ItemDefs';
+import { displayHp } from '../../core/party/crawlerFormulas';
+import { ITEM_DEF } from '../../core/items/defs/ItemDefs';
 import type { Mob } from '../../creatures/Mob';
 import type { Player } from '../../Player';
 import { mobLabel } from './eventMapping';

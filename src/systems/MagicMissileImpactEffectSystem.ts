@@ -1,5 +1,5 @@
 import type { GameSystem } from './GameSystem';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import {
   impactDebrisConfigOf,
   type ArcanePalette,

@@ -15,7 +15,10 @@
 
 import { EventBus } from '../../src/core/EventBus.js';
 import { TILE_SIZE } from '../../src/core/constants.js';
-import { DIFFICULTY_PROFILES, applySpawnDifficulty } from '../../src/core/difficultyProfiles.js';
+import {
+  DIFFICULTY_PROFILES,
+  applySpawnDifficulty,
+} from '../../src/core/difficulty/difficultyProfiles.js';
 import { CatPlayer } from '../../src/creatures/CatPlayer.js';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer.js';
 import type { Mob } from '../../src/creatures/Mob.js';
@@ -24,7 +27,7 @@ import type { TrashGremlin } from '../../src/creatures/TrashGremlin.js';
 import { resolveBossLevel } from '../../src/levels/spawner.js';
 import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel.js';
 import { MIN_STAT_VALUE, type DamageSource } from '../../src/Player.js';
-import { bareFistDamage } from '../../src/core/crawlerFormulas.js';
+import { bareFistDamage } from '../../src/core/party/crawlerFormulas.js';
 import { mulberry32 } from '../../src/sprites/person/rng.js';
 import { BossRoomSystem, type BossRoomMiniMap } from '../../src/systems/BossRoomSystem.js';
 import {

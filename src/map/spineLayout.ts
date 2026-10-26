@@ -10,7 +10,7 @@ import {
   type Point,
   type Rect,
 } from './gauntletLayout';
-import { worldRandom } from '../core/WorldRandom';
+import { worldRandom } from '../core/world/WorldRandom';
 
 /**
  * The spine: one forced, winding chain of rooms between two fixed landmarks,

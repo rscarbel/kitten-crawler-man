@@ -45,7 +45,7 @@
 import { createCanvas } from 'canvas';
 
 import { TILE_SIZE } from '../src/core/constants.js';
-import { setViewportSize } from '../src/core/Viewport.js';
+import { setViewportSize } from '../src/core/rendering/Viewport.js';
 import { FLOOR_ART_SEEDS } from '../src/map/ground/artSeedAlphabet.js';
 import {
   MAZE_CURTAINS,

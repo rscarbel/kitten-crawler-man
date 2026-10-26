@@ -13,8 +13,8 @@ import {
   getSpriteDefByKey,
   getSpriteExtentsPxByKey,
   type MapSpriteExtentsPx,
-} from '../../core/SpriteLoader';
-import { drawSprite } from '../../core/SpriteRenderer';
+} from '../../core/spriteAssets/SpriteLoader';
+import { drawSprite } from '../../core/spriteAssets/SpriteRenderer';
 import {
   circusStructureFromSpriteKey,
   type CircusStructureId,

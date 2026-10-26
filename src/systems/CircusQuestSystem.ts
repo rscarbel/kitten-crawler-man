@@ -15,22 +15,22 @@
  * entry-idempotent so building round-trips reconstruct cleanly.
  */
 
-import { awardPartyXp, type CrawlerPair, type PartyXpApplied } from '../core/awardXp';
+import { awardPartyXp, type CrawlerPair, type PartyXpApplied } from '../core/progression/awardXp';
 import { TILE_SIZE } from '../core/constants';
-import { applySpawnDifficulty } from '../core/difficultyProfiles';
-import type { ItemId } from '../core/ItemDefs';
+import { applySpawnDifficulty } from '../core/difficulty/difficultyProfiles';
+import type { ItemId } from '../core/items/defs/ItemDefs';
 import type { GameMap } from '../map/GameMap';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import type { EventBus } from '../core/EventBus';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { despawnMob, type Mob } from '../creatures/Mob';
-import type { SpatialGrid } from '../core/SpatialGrid';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { Player } from '../Player';
-import { QuestManager, type QuestStatus } from '../core/QuestManager';
+import { QuestManager, type QuestId, type QuestStatus } from '../core/quests/QuestManager';
 import { partyLevelOf } from '../levels/spawner';
 import { questMobLevel } from './questMobLevel';
 import { characterTarget, type TrackerEntry } from './questTracker';
-import { CIRCUS_QUEST_NAME, type CircusQuestProgress } from '../core/CircusQuestProgress';
+import { CIRCUS_QUEST_NAME, type CircusQuestProgress } from '../core/quests/CircusQuestProgress';
 import type { MusicClaims } from '../audio/AudioScope';
 import { Signet } from '../creatures/Signet';
 import { SIGNET_OVERLAY_CLEARANCE } from '../sprites/signetSprite';
@@ -46,7 +46,9 @@ import type { ConversationHandle, ConversationRequest } from '../dialog/request'
 import { questBannerEntry, QUEST_BANNER_FRAMES } from '../ui/QuestBanners';
 import type { TopBandEntry } from '../ui/hud/topBand';
 import { partyXpSections } from '../ui/questReward/rewardLines';
-import type { QuestRewardSpec } from '../ui/questReward/types';
+import type { QuestRewardSpec, RewardItemLine } from '../ui/questReward/types';
+import { grantQuestGear } from '../loot/questGear';
+import type { GearId } from '../loot/gearPools';
 import {
   CIRCUS_INTRO,
   CIRCUS_RITUAL_FAILED,
@@ -61,7 +63,13 @@ import { level3 } from '../levels/level3';
 import { placeCompanionBeside, standingCompanions } from './partyCompanions';
 import { travelUnlocksSection, type TravelUnlockState } from './travel/travelDestinations';
 
-export const CIRCUS_QUEST_ID = 'the_show_must_go_on';
+export const CIRCUS_QUEST_ID = 'the_show_must_go_on' as const satisfies QuestId;
+
+/** The ringmaster's hat and coat, handed over when the show is saved. */
+const CIRCUS_QUEST_GEAR = [
+  'showmans_top_hat',
+  'sequin_tailcoat',
+] as const satisfies readonly GearId[];
 
 /** How far a scripted spawn may be nudged to find a walkable tile. */
 const SPAWN_SEARCH_RADIUS_TILES = 6;
@@ -308,10 +316,6 @@ export class CircusQuestSystem implements GameSystem {
         // rescue, not a kill, so the questline has to carry that XP itself or
         // floor-three progression quietly drops by a boss.
         xp: 1800,
-        lootBoxItems: [
-          { id: 'health_potion', minQty: 3, maxQty: 6 },
-          { id: 'stat_boost_potion', minQty: 1, maxQty: 2 },
-        ],
         coins: 100,
       },
     });
@@ -1153,7 +1157,11 @@ export class CircusQuestSystem implements GameSystem {
     if (this.lastCtx) this.gatherCompanionsOntoGrounds(this.lastCtx);
   }
 
-  /** Both crawlers earn the full XP; the coins go into the purse of whoever closed the conversation. */
+  /**
+   * Both crawlers earn the full XP; the coins go into the purse of whoever
+   * closed the conversation, and the showman's hat and coat to whoever the
+   * gear split hands them to.
+   */
   private finishQuest(active: Player, party: CrawlerPair): void {
     this.phase = 'complete';
     this.progress.stage = 'complete';
@@ -1170,20 +1178,28 @@ export class CircusQuestSystem implements GameSystem {
       this.progress.mongoKidnapped = false;
     }
 
+    const earner = active === party.human ? 'human' : 'cat';
+    const gear = CIRCUS_QUEST_GEAR.map((id) => grantQuestGear(party, id, earner));
+
     this.bus.emit('questCompleted', { questId: CIRCUS_QUEST_ID });
-    this.bus.emit('questRewardShown', this.rewardSpec(xpApplied, coins));
+    this.bus.emit('questRewardShown', this.rewardSpec(xpApplied, coins, gear));
   }
 
   /**
    * The finale's quest-complete screen, describing what {@link finishQuest}
    * actually paid. It goes up once Signet's closing conversation has closed.
    */
-  private rewardSpec(xpApplied: PartyXpApplied | null, coins: number): QuestRewardSpec {
+  private rewardSpec(
+    xpApplied: PartyXpApplied | null,
+    coins: number,
+    gear: readonly RewardItemLine[],
+  ): QuestRewardSpec {
     return {
       questTitle: CIRCUS_QUEST_NAME,
       sections: [
         ...(xpApplied === null ? [] : partyXpSections(xpApplied)),
         { kind: 'coins', amount: coins },
+        { kind: 'items', items: gear },
         travelUnlocksSection(['circus'], this.travelUnlocks),
       ],
     };

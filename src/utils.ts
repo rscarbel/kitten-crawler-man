@@ -1,4 +1,4 @@
-import { worldRandom } from './core/WorldRandom';
+import { worldRandom } from './core/world/WorldRandom';
 import { TILE_SIZE } from './core/constants';
 
 /** Tile center offset as a fraction of tile size. */

@@ -10,7 +10,7 @@ import {
   drawWhereScene,
   drawToolTiersScene,
 } from '../../icons/explainerArt/resourcingArt';
-import { keybindings } from '../../../core/Keybindings';
+import { keybindings } from '../../../core/input/Keybindings';
 
 /** The explainer's pages, worded for the player's own bindings and device. */
 export function resourcingExplainerPages(touch: boolean): ExplainerPageContent[] {

@@ -19,19 +19,23 @@ import type {
   BriarHollowState,
   TrebuchetStructureRecord,
   VillageQuestState,
-} from '../../core/briarHollowState';
+} from '../../core/quests/briarHollowState';
 import {
   BRIAR_HOLLOW_QUEST_NAME,
   hasAcceptedMayorRequest,
   type VillageQuestPhase,
-} from '../../core/villageQuestPhase';
-import { grantConstructionUnlocks, TIKKA_PLANS_UNLOCKS } from '../../core/villageUnlocks';
-import { QuestManager, type QuestDef } from '../../core/QuestManager';
-import { teachBoth } from '../../core/CraftSkills';
-import type { PartyCraftsState } from '../../core/partyCrafts';
-import { canAfford, partyCount, type ResourceCost } from '../../core/partyResources';
-import { awardPartyXp, type PartyXpApplied } from '../../core/awardXp';
-import type { GrantedReward } from '../../core/GrantedReward';
+} from '../../core/quests/villageQuestPhase';
+import { grantConstructionUnlocks, TIKKA_PLANS_UNLOCKS } from '../../core/quests/villageUnlocks';
+import { QuestManager, type QuestId, type QuestDef } from '../../core/quests/QuestManager';
+import { teachBoth } from '../../core/labour/CraftSkills';
+import type { PartyCraftsState } from '../../core/labour/partyCrafts';
+import {
+  canAfford,
+  partyCount,
+  type ResourceCost,
+} from '../../core/items/gathering/partyResources';
+import { awardPartyXp, type PartyXpApplied } from '../../core/progression/awardXp';
+import type { GrantedReward } from '../../core/items/loot/GrantedReward';
 import { TILE_SIZE } from '../../core/constants';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
@@ -43,7 +47,13 @@ import {
   partyXpSections,
   wheelFreeSpinRewardLine,
 } from '../../ui/questReward/rewardLines';
-import type { QuestRewardSection, QuestRewardSpec } from '../../ui/questReward/types';
+import type {
+  QuestRewardSection,
+  QuestRewardSpec,
+  RewardItemLine,
+} from '../../ui/questReward/types';
+import { grantQuestGear } from '../../loot/questGear';
+import type { GearId } from '../../loot/gearPools';
 import { drawGlyph } from '../../ui/theme/glyphs';
 import { palette } from '../../ui/theme/tokens';
 import { drawCraftSkillIcon } from '../../ui/icons/craftSkillIcons';
@@ -68,7 +78,7 @@ import {
   WALL_TIERS,
 } from './structureRules';
 import { crawlerName } from '../../characters/characters';
-import type { CrawlerKind } from '../../core/SkillManager';
+import type { CrawlerKind } from '../../core/skills/SkillManager';
 import { BRAMBLEWICK, FENNA, OREN, TIKKA, type VillagerId } from '../../dialog/scripts/briarHollow';
 import type { ConversationRequest, ConversationTopic } from '../../dialog/request';
 import {
@@ -85,7 +95,7 @@ import { ASSAULT_WAVE_COUNT, type VillageAssaultSystem } from './VillageAssaultS
 import { BOARDS_PER_WOOD } from './services/woodProcessing';
 import { travelUnlocksSection, type TravelUnlockState } from '../travel/travelDestinations';
 
-export const BRIAR_HOLLOW_QUEST_ID = 'briar_hollow_plea';
+export const BRIAR_HOLLOW_QUEST_ID = 'briar_hollow_plea' as const satisfies QuestId;
 
 /**
  * The questline's XP, set against the floor's other questlines: the circus's
@@ -98,6 +108,8 @@ export const BRIAR_HOLLOW_QUEST_COINS = 500;
 /** Pipkin's "something special": burgers and stew from the cookhouse. */
 export const BRIAR_HOLLOW_REWARD_BURGERS = 5;
 export const BRIAR_HOLLOW_REWARD_STEW = 3;
+/** The village's own seed, given to the crawlers who held the walls. */
+const BRIAR_HOLLOW_QUEST_GEAR = 'sproutling_seed' as const satisfies GearId;
 /** The heading over the card saying the whole village now saves on entry. */
 export const VILLAGE_SAVE_REWARD_HEADING = 'NEW SAVE POINT';
 const VILLAGE_SAVE_REWARD_TITLE = 'Briar Hollow is a save point';
@@ -877,7 +889,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
   /**
    * Pays out the quest's rewards unless they have been paid already. Returns
    * whether it paid. Both crawlers earn the full XP; the coins and food go to
-   * the active crawler.
+   * the active crawler, and the village's seed to whoever the gear split names.
    */
   grantRewards(): boolean {
     const quest = this.quest;
@@ -893,13 +905,15 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
     active.earnCoins(BRIAR_HOLLOW_QUEST_COINS);
     active.inventory.addItem('hamburger', BRIAR_HOLLOW_REWARD_BURGERS);
     active.inventory.addItem('hollow_stew', BRIAR_HOLLOW_REWARD_STEW);
+    const earner = active === this.deps.human ? 'human' : 'cat';
+    const gear = grantQuestGear(this.deps, BRIAR_HOLLOW_QUEST_GEAR, earner);
     const freeSpin = this.deps.grantWheelFreeSpin(BRIAR_HOLLOW_QUEST_ID);
     this.questManager.startQuest(BRIAR_HOLLOW_QUEST_ID);
     this.questManager.completeQuest(BRIAR_HOLLOW_QUEST_ID);
     this.deps.bus.emit('questCompleted', { questId: BRIAR_HOLLOW_QUEST_ID });
     this.deps.bus.emit(
       'questRewardShown',
-      this.rewardSpec({ xpApplied, coins: BRIAR_HOLLOW_QUEST_COINS, freeSpin }),
+      this.rewardSpec({ xpApplied, coins: BRIAR_HOLLOW_QUEST_COINS, gear, freeSpin }),
     );
     return true;
   }
@@ -911,6 +925,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
   private rewardSpec(paid: {
     readonly xpApplied: PartyXpApplied;
     readonly coins: number;
+    readonly gear: RewardItemLine;
     readonly freeSpin: boolean;
   }): QuestRewardSpec {
     return {
@@ -923,6 +938,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
           items: [
             bagItemRewardLine('hamburger', BRIAR_HOLLOW_REWARD_BURGERS),
             bagItemRewardLine('hollow_stew', BRIAR_HOLLOW_REWARD_STEW),
+            paid.gear,
             ...(paid.freeSpin ? [wheelFreeSpinRewardLine()] : []),
           ],
         },

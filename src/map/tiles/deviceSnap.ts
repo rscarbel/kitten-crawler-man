@@ -11,7 +11,7 @@
  * exactly, with no overlap and no gap, at any scale.
  */
 
-import type { CanvasSurface } from '../../core/canvasSurface';
+import type { CanvasSurface } from '../../core/rendering/canvasSurface';
 
 /** A rect in device pixels, with whole-number corners. */
 export interface DeviceRect {

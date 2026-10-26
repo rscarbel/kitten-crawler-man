@@ -1,15 +1,14 @@
 /**
- * The wet, sickening statuses: `poison`, `sepsis` and `spit_venom`.
+ * The wet, sickening statuses: `poison` and `spit_venom`.
  *
- * All three read as "something is inside you and it is getting worse", and the
+ * Both read as "something is inside you and it is getting worse", and the
  * cue that carries that is the body tint. A green cloud drawn *beside* a
  * character is weather; the same green multiplied *into* the character's own
  * art is illness. The particles on top only say which illness it is — bubbles
- * boiling out of the skin for poison, pustules bursting for sepsis, acid
- * running off and eating the floor for venom.
+ * boiling out of the skin for poison, acid running off and eating the floor for venom.
  */
 
-import type { SilhouetteLayer } from '../../core/silhouetteComposite';
+import type { SilhouetteLayer } from '../../core/spriteAssets/silhouetteComposite';
 import {
   bodyX,
   bodyY,
@@ -32,7 +31,7 @@ interface OozePalette {
   readonly tint: Rgb;
   /** The haze hanging around the body. */
   readonly haze: Rgb;
-  /** Bubbles, pustules and drips. */
+  /** Bubbles and drips. */
   readonly fluid: Rgb;
   /** The bright highlight on those, so they read as wet. */
   readonly sheen: Rgb;
@@ -43,13 +42,6 @@ const POISON: OozePalette = {
   haze: [74, 168, 62],
   fluid: [42, 176, 70],
   sheen: [186, 250, 140],
-};
-
-const SEPSIS: OozePalette = {
-  tint: [138, 150, 44],
-  haze: [96, 104, 28],
-  fluid: [154, 176, 30],
-  sheen: [232, 246, 128],
 };
 
 const VENOM: OozePalette = {
@@ -64,7 +56,6 @@ const VENOM: OozePalette = {
  * sprite's own shading, so this can sit high without flattening the figure.
  */
 const POISON_TINT_ALPHA = 0.55;
-const SEPSIS_TINT_ALPHA = 0.68;
 const VENOM_TINT_ALPHA = 0.4;
 const TINT_PULSE_SPEED = 0.0035;
 const TINT_PULSE_DEPTH = 0.18;
@@ -119,18 +110,6 @@ const DRIP_NECK = 0.16;
 /** Last stretch of the fall, over which the drop fades out. */
 const DRIP_LAND_START = 0.8;
 
-const PUSTULE_COUNT = 4;
-const PUSTULE_RATE_PER_MS = 0.00034;
-const PUSTULE_RADIUS = 0.22;
-const PUSTULE_UP_MIN = 0.25;
-const PUSTULE_UP_MAX = 0.85;
-/** A pustule spends most of its life swelling, then bursts all at once. */
-const PUSTULE_BURST_START = 0.72;
-const PUSTULE_SWELL_FADE_IN = 5;
-const PUSTULE_SPATTER_COUNT = 5;
-const PUSTULE_SPATTER_REACH = 0.8;
-const PUSTULE_SPATTER_RADIUS = 0.09;
-
 const PUDDLE_RADIUS_X = 1.5;
 const PUDDLE_RADIUS_Y = 0.16;
 const PUDDLE_ALPHA = 0.6;
@@ -159,10 +138,6 @@ export function poisonBodyLayer(f: StatusVisualFrame): SilhouetteLayer {
   return tintLayer(f, POISON, POISON_TINT_ALPHA);
 }
 
-export function sepsisBodyLayer(f: StatusVisualFrame): SilhouetteLayer {
-  return tintLayer(f, SEPSIS, SEPSIS_TINT_ALPHA);
-}
-
 export function venomBodyLayer(f: StatusVisualFrame): SilhouetteLayer {
   return tintLayer(f, VENOM, VENOM_TINT_ALPHA);
 }
@@ -171,12 +146,6 @@ export function drawPoison(ctx: CanvasRenderingContext2D, f: StatusVisualFrame):
   drawHaze(ctx, f, POISON, 0);
   drawBubbles(ctx, f, POISON, HAZE_COUNT);
   drawDrips(ctx, f, POISON, HAZE_COUNT + BUBBLE_COUNT);
-}
-
-export function drawSepsis(ctx: CanvasRenderingContext2D, f: StatusVisualFrame): void {
-  drawHaze(ctx, f, SEPSIS, 0);
-  drawPustules(ctx, f, SEPSIS, HAZE_COUNT);
-  drawDrips(ctx, f, SEPSIS, HAZE_COUNT + PUSTULE_COUNT);
 }
 
 export function drawSpitVenom(ctx: CanvasRenderingContext2D, f: StatusVisualFrame): void {
@@ -253,59 +222,6 @@ function drawBubbles(
       ctx.beginPath();
       ctx.arc(x, y, radius * (1 + burst * BUBBLE_POP_REACH), 0, Math.PI * 2);
       ctx.stroke();
-    }
-  }
-}
-
-/** Blisters that swell on the skin and spray when they go. */
-function drawPustules(
-  ctx: CanvasRenderingContext2D,
-  f: StatusVisualFrame,
-  palette: OozePalette,
-  indexOffset: number,
-): void {
-  for (let i = 0; i < PUSTULE_COUNT; i++) {
-    const key = f.seed + (i + indexOffset) * PARTICLE_KEY_STRIDE;
-    const phase = particlePhase(f, i + indexOffset, PUSTULE_RATE_PER_MS);
-    const x = bodyX(f, hashRange(key, HALF - BUBBLE_ACROSS_SPREAD, HALF + BUBBLE_ACROSS_SPREAD));
-    const y = bodyY(f, hashRange(key + 1, PUSTULE_UP_MIN, PUSTULE_UP_MAX));
-    const radius = f.width * PUSTULE_RADIUS;
-
-    if (phase < PUSTULE_BURST_START) {
-      const swell = phase / PUSTULE_BURST_START;
-      ctx.globalAlpha = Math.min(1, swell * PUSTULE_SWELL_FADE_IN) * f.fade;
-      ctx.fillStyle = rgba(palette.fluid, 1);
-      ctx.beginPath();
-      ctx.arc(x, y, radius * swell, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = rgba(palette.sheen, 1);
-      ctx.beginPath();
-      ctx.arc(
-        x - radius * swell * BUBBLE_SHEEN_OFFSET,
-        y - radius * swell * BUBBLE_SHEEN_OFFSET,
-        radius * swell * BUBBLE_SHEEN_SCALE,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-      continue;
-    }
-
-    const burst = (phase - PUSTULE_BURST_START) / (1 - PUSTULE_BURST_START);
-    ctx.globalAlpha = (1 - burst) * f.fade;
-    ctx.fillStyle = rgba(palette.fluid, 1);
-    for (let drop = 0; drop < PUSTULE_SPATTER_COUNT; drop++) {
-      const angle = (drop / PUSTULE_SPATTER_COUNT) * Math.PI * 2 + key;
-      const reach = f.width * PUSTULE_SPATTER_REACH * burst;
-      ctx.beginPath();
-      ctx.arc(
-        x + Math.cos(angle) * reach,
-        y + Math.sin(angle) * reach,
-        f.width * PUSTULE_SPATTER_RADIUS,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
     }
   }
 }

@@ -56,8 +56,8 @@ import {
   forceVarietyTier,
   varietyTier,
   type VarietyTier,
-} from '../src/core/varietyTier.js';
-import { runCanvasRecovery } from '../src/core/canvasRecovery.js';
+} from '../src/core/perf/varietyTier.js';
+import { runCanvasRecovery } from '../src/core/rendering/canvasRecovery.js';
 import { citizenLookKey, pickCitizenFigure } from '../src/creatures/citizenFigure.js';
 import { Townsperson } from '../src/creatures/Townsperson.js';
 import { residentFigure } from '../src/creatures/residentFigures.js';

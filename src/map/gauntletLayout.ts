@@ -1,5 +1,5 @@
 import { randomInt, clamp } from '../utils';
-import { worldRandom } from '../core/WorldRandom';
+import { worldRandom } from '../core/world/WorldRandom';
 
 export type Point = { x: number; y: number };
 export type Rect = { x: number; y: number; w: number; h: number };

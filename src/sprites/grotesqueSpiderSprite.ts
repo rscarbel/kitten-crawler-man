@@ -12,7 +12,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
-import { progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import { progressFrameIndex, timeFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import {
   attackStageAt,
   MAX_EGG_CLUTCH_SIZE,

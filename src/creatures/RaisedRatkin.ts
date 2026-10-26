@@ -20,8 +20,8 @@ import {
   type RaisedRatkinAction,
 } from '../sprites/art/raisedRatkinFigure';
 import { RAISED_RATKIN_LOOKS, type RaisedRatkinLook } from '../sprites/art/raisedRatkinArt';
-import { SHARED_LOOKS_TIER } from '../core/varietyTier';
-import { uniformVariantFamily } from '../core/mobVariantFamily';
+import { SHARED_LOOKS_TIER } from '../core/perf/varietyTier';
+import { uniformVariantFamily } from '../core/mobs/mobVariantFamily';
 import type { RatKinView } from '../sprites/art/ratKinArt';
 import { drawRaisedRatkinSprite, prewarmRaisedRatkinFight } from '../sprites/raisedRatkinSprite';
 

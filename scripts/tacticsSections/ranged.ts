@@ -15,7 +15,7 @@ import { CatPlayer } from '../../src/creatures/CatPlayer';
 import { MAX_MOB_LEVEL } from '../../src/levels/spawner';
 import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
 import type { StandaloneMobKind } from '../../src/levels/mobKinds';
-import { DIFFICULTY_PROFILES } from '../../src/core/difficultyProfiles';
+import { DIFFICULTY_PROFILES } from '../../src/core/difficulty/difficultyProfiles';
 import { mulberry32, type Rng } from '../../src/sprites/person/rng';
 import type { TacticsTrait } from '../../src/creatures/tactics/tacticsTraits';
 import { MobUpdateLoop } from '../../src/systems/MobUpdateLoop';

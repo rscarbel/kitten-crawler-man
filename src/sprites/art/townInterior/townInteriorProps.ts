@@ -289,9 +289,9 @@ import {
   BYTES_PER_MEGABYTE,
   freshSurfaceContext,
   releaseSurface,
-} from '../../../core/canvasSurface';
-import { RecentSurfaceCache } from '../../../core/recentSurfaceCache';
-import { onCanvasRecovery } from '../../../core/canvasRecovery';
+} from '../../../core/rendering/canvasSurface';
+import { RecentSurfaceCache } from '../../../core/rendering/recentSurfaceCache';
+import { onCanvasRecovery } from '../../../core/rendering/canvasRecovery';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -4795,7 +4795,7 @@ export function drawTownInteriorProp(
  * The `InteriorFigure.y` a placed prop instance sorts on: the *top* of the
  * footprint's southmost row. `BuildingInteriorScene.renderSortedEntities`
  * adds one tile to every figure's `y` to get its actual sort line (the row's
- * bottom edge) — the same convention `propSortY` in `src/core/clubProps.ts`
+ * bottom edge) — the same convention `propSortY` in `src/core/club/clubProps.ts`
  * uses for the club's furniture, which this matches so a prop and a club
  * fixture standing on the same row sort identically.
  */

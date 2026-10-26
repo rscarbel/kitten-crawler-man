@@ -39,7 +39,7 @@ import {
   drawSlotCabinetLights,
 } from '../art/clubCasinoFloorArt';
 import type { FrameEdge, PropSheetPlan, FramePainter } from './propSheetPlan';
-import type { SpriteKey } from '../../core/SpriteLoader';
+import type { SpriteKey } from '../../core/spriteAssets/SpriteLoader';
 
 /** Height, in logical tiles, that most counter-height pieces rise above their footprint. */
 const COUNTER_HEADROOM_TILES = 1;

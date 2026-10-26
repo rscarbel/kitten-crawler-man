@@ -1,10 +1,9 @@
-/** Cheap show actions: words on screen, a box, a sound, a sting, a note to self. */
+/** Cheap show actions: words on screen, a reward chest, a sound, a sting, a note to self. */
 import type { MusicBusId, SoundId } from '../../audio/sounds';
-import type { BoxCategory } from '../../core/AchievementManager';
 import {
-  AI_BOX_TIERS,
+  AI_CHEST_RARITIES,
   AI_CHARACTER_MORDECAI,
-  BOX_TIER_POINTS,
+  CHEST_RARITY_POINTS,
   AI_CHARACTER_SYSTEM,
   TARGET_PARAM,
   crawlerKind,
@@ -27,14 +26,14 @@ import { ok, refused, type AIActionDef } from './types';
 
 const SHORT_COOLDOWN_MS = 4_000;
 const SOUND_COOLDOWN_MS = 3_000;
-const LOOT_BOX_COOLDOWN_MS = 90_000;
+const REWARD_CHEST_COOLDOWN_MS = 90_000;
 const STING_COOLDOWN_MS = 120_000;
 const REMEMBER_COOLDOWN_MS = 5_000;
 
 const ANNOUNCE_MAX_CHARS = 160;
 const REASON_MAX_CHARS = 120;
 const REMEMBER_MAX_CHARS = 200;
-const LOOT_BOXES_PER_FLOOR = 2;
+const REWARD_CHESTS_PER_FLOOR = 2;
 const BANNER_DURATION_TICKS = 300;
 
 const STING_MIN_SECONDS = 5;
@@ -79,57 +78,50 @@ const announce: AIActionDef = {
   },
 };
 
-const AI_BOX_CATEGORIES = ['Adventurer', 'Spicy', 'Boss'] as const satisfies readonly BoxCategory[];
-
-const BOX_TIER = enumParam(
-  'tier',
-  AI_BOX_TIERS,
-  'Box tier. Gold is rare; save it for a real moment.',
+const CHEST_RARITY_PARAM = enumParam(
+  'rarity',
+  AI_CHEST_RARITIES,
+  'Chest rarity. Rare is scarce; save it for a real moment.',
 );
-const BOX_CATEGORY = optionalEnumParam(
-  'category',
-  AI_BOX_CATEGORIES,
-  'Which kind of box.',
-  'Adventurer',
-);
-const BOX_REASON = textParam('reason', {
+const CHEST_REASON_PARAM = textParam('reason', {
   minLength: 1,
   maxLength: REASON_MAX_CHARS,
-  description: 'Why they earned it, shown with the box.',
+  description: 'Why they earned it, shown with the chest.',
 });
 
-const grantLootBox: AIActionDef = {
-  name: 'grant_loot_box',
+const grantRewardChest: AIActionDef = {
+  name: 'grant_reward_chest',
   description:
-    'Award a loot box to a crawler, with a reason shown to them. Limited per floor; tiers above Bronze draw more of the allowance.',
-  params: [TARGET_PARAM, BOX_TIER, BOX_CATEGORY, BOX_REASON],
-  policy: { cost: 2, cooldownMs: LOOT_BOX_COOLDOWN_MS, severity: 'benign' },
-  maxPerFloor: LOOT_BOXES_PER_FLOOR,
+    'Award a reward chest to a crawler, with a reason shown to them. Its contents are rolled and paid at once. Limited per floor; rarities above Common draw more of the allowance.',
+  params: [TARGET_PARAM, CHEST_RARITY_PARAM, CHEST_REASON_PARAM],
+  policy: { cost: 2, cooldownMs: REWARD_CHEST_COOLDOWN_MS, severity: 'benign' },
+  maxPerFloor: REWARD_CHESTS_PER_FLOOR,
   characters: [AI_CHARACTER_SYSTEM],
   budget: ({ params }) => ({
-    pool: 'lootBoxPoints',
-    amount: BOX_TIER_POINTS[params.get(BOX_TIER)],
+    pool: 'rewardChestPoints',
+    amount: CHEST_RARITY_POINTS[params.get(CHEST_RARITY_PARAM)],
   }),
   refusal: ({ scene }) =>
-    scene.getAchievements === undefined ? 'loot boxes cannot be granted here' : null,
+    scene.getAwards === undefined ? 'reward chests cannot be granted here' : null,
   execute({ params, scene }) {
-    if (scene.getAchievements === undefined) return refused('loot boxes cannot be granted here');
+    if (scene.getAwards === undefined) return refused('reward chests cannot be granted here');
     const crawler = resolveTarget(scene, params.get(TARGET_PARAM));
-    const tier = params.get(BOX_TIER);
-    const category = params.get(BOX_CATEGORY);
-    scene.getAchievements(crawlerKind(scene, crawler)).grantBox(tier, category, null);
-    const reason = params.get(BOX_REASON);
-    notifyPlayer(scene, `${tier} ${category} Box for ${crawlerName(scene, crawler)}: ${reason}`, {
+    const rarity = params.get(CHEST_RARITY_PARAM);
+    const reason = params.get(CHEST_REASON_PARAM);
+    scene
+      .getAwards()
+      .grantChest(crawlerKind(scene, crawler), { rarity, source: 'audience', subtitle: reason });
+    notifyPlayer(scene, `${rarity} chest for ${crawlerName(scene, crawler)}: ${reason}`, {
       tone: 'success',
       icon: 'sparkle',
     });
-    return ok(`granted a ${tier} ${category} box to ${crawlerName(scene, crawler)}`);
+    return ok(`granted a ${rarity} chest to ${crawlerName(scene, crawler)}`);
   },
 };
 
 const AI_SOUND_CUES = [
   'achievement_unlocked',
-  'loot_box_tier_stinger',
+  'reward_rarity_stinger',
   'drum_burst',
   'clown_horn',
   'caught_alarm_sting',
@@ -244,7 +236,7 @@ const remember: AIActionDef = {
 
 export const NARRATION_ACTIONS: readonly AIActionDef[] = [
   announce,
-  grantLootBox,
+  grantRewardChest,
   playSound,
   musicSting,
   remember,

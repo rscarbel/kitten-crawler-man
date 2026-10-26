@@ -1,7 +1,8 @@
 import { TILE_SIZE, PLAYER_SPEED, WADE_SPEED_FACTOR } from '../core/constants';
-import { platform } from '../core/Platform';
-import { type InputManager } from '../core/InputManager';
-import { keybindings } from '../core/Keybindings';
+import { handWeaponSoundsOf } from '../audio/weaponSoundCues';
+import { platform } from '../core/input/Platform';
+import { type InputManager } from '../core/input/InputManager';
+import { keybindings } from '../core/input/Keybindings';
 import { normalize, clamp } from '../utils';
 import { type GameMap } from '../map/GameMap';
 import { CENTER_COLLISION_OFFSET, SOLE_COLLISION_OFFSET } from '../map/collisionAnchors';
@@ -9,19 +10,24 @@ import { tileSpeedFactor } from '../map/tileSpeed';
 import { type Player } from '../Player';
 import { pushPlayerWithCollision } from './playerDisplacement';
 import { DIAGONAL_PENALTY } from './PlayerMovementSystem';
-import { knockbackStepPx } from '../core/knockbackEase';
+import { knockbackStepPx } from '../core/combat/knockbackEase';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Mob } from '../creatures/Mob';
-import type { SpatialGrid } from '../core/SpatialGrid';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { AudioManager, PlacedCuePlayer, PlacedReach } from '../audio/AudioManager';
 import type { SoundId } from '../audio/sounds';
-import { applyDrunkWalkWobble } from '../core/DrunkEffect';
+import { applyDrunkWalkWobble } from '../core/combat/DrunkEffect';
 import { frameTime } from '../utils';
 import { SkeletonLord } from '../creatures/SkeletonLord';
 import { TheLich } from '../creatures/TheLich';
 import { DarkKnight } from '../creatures/DarkKnight';
 import { BigRooster } from '../creatures/BigRooster';
+import { RoosterMinion } from '../creatures/RoosterMinion';
+import { TrashGremlin } from '../creatures/TrashGremlin';
+import type { RoosterSoundCue } from '../creatures/creatureSoundCues';
+import type { RoosterBuild } from '../sprites/roosterSprite';
+import { ROOSTER_CUES, ROOSTER_STEP_VOLUME, TRASH_GREMLIN_CUES } from './bossSoundCues';
 import { RockGolemBoss } from '../creatures/RockGolemBoss';
 import { Mantid } from '../creatures/Mantid';
 import { BallOfSwine } from '../creatures/BallOfSwine';
@@ -446,9 +452,9 @@ export function triggerPlayerAttack(
     human.triggerAttack(target);
     if (human.pendingSlingshotFireSound) {
       human.pendingSlingshotFireSound = false;
-      // [STAND-IN] The bow release, the library's closest launch cue, until a
-      // sling snap is sourced.
-      audio?.play('shooting_an_arrow');
+      const slingId = human.mainHandWeaponId;
+      const sling = slingId === null ? null : handWeaponSoundsOf(slingId);
+      audio?.playRandom(sling?.swing.takes ?? []);
     }
   } else {
     snapFacingToNearestMob(cat, TILE_SIZE * CAT_ATTACK_RANGE_TILES, mobGrid, gameMap);
@@ -727,6 +733,8 @@ function playCuesOf(mob: Mob, audio: PlacedCuePlayer | null): void {
   playCastWindup(mob, audio);
   playDarkKnightCues(mob, audio);
   playBigRoosterCues(mob, audio);
+  playRoosterFlockCues(mob, audio);
+  playTrashGremlinCues(mob, audio);
   playKrakarenCloneCues(mob, audio);
   playKrakarenTentacleCues(mob, audio);
   playFairyCastCues(mob, audio);
@@ -791,6 +799,33 @@ function playBigRoosterCues(mob: Mob, audio: PlacedCuePlayer | null): void {
     // impact into earth.
     audio?.play('massive_strike_with_dirt_impact');
   }
+}
+
+/** Every rooster's voice, blows and feet, Big Rooster's included, by its build. */
+function playRoosterFlockCues(mob: Mob, audio: PlacedCuePlayer | null): void {
+  if (mob instanceof BigRooster) playRoosterCues('big', mob.takeSoundCues(), audio);
+  else if (mob instanceof RoosterMinion) {
+    playRoosterCues(mob.roosterBuild, mob.takeSoundCues(), audio);
+  }
+}
+
+function playRoosterCues(
+  build: RoosterBuild,
+  cues: readonly RoosterSoundCue[],
+  audio: PlacedCuePlayer | null,
+): void {
+  for (const cue of cues) {
+    const takes = ROOSTER_CUES[build][cue];
+    if (takes.length === 0) continue;
+    const volume = cue === 'step' ? ROOSTER_STEP_VOLUME[build] : 1;
+    audio?.playRandom(takes, { volume });
+  }
+}
+
+/** The Trash Gremlin's own voice; its retch rides `specialSoundPending`. */
+function playTrashGremlinCues(mob: Mob, audio: PlacedCuePlayer | null): void {
+  if (!(mob instanceof TrashGremlin)) return;
+  for (const cue of mob.takeSoundCues()) audio?.playRandom(TRASH_GREMLIN_CUES[cue]);
 }
 
 /** What each of a cow's voices plays; `playRandom` picks one of several takes. */

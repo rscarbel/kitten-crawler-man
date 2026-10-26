@@ -12,7 +12,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
-import { viewportHeight, viewportWidth } from '../core/Viewport';
+import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
 import type { WorldGesture } from '../ui/core/UiRoot';
 import { worldText } from '../ui/world/worldText';
 import { PreviewScene, type PreviewControl } from './PreviewScene';

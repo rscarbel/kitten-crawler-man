@@ -5,7 +5,7 @@
  * action whose piece a scene left out reports itself unavailable there.
  */
 
-import type { BoxTier } from '../../core/AchievementManager';
+import type { Rarity } from '../../core/items/defs/rarity';
 import type { ChallengeSpec } from './challenges';
 
 export const VIEWER_REACTIONS = [
@@ -64,7 +64,7 @@ export interface AIShowHost {
   achievementAwarded(award: {
     readonly title: string;
     readonly description: string;
-    readonly tier: BoxTier;
+    readonly rarity: Rarity;
     readonly player: 'Human' | 'Cat';
     readonly awardedBy: string;
   }): void;

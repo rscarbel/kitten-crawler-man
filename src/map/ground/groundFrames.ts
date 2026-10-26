@@ -18,7 +18,7 @@
  * (`GroundPalette`) — so both the overworld and the dungeon run the same code.
  */
 
-import type { SpriteStateDef } from '../../core/SpriteLoader';
+import type { SpriteStateDef } from '../../core/spriteAssets/SpriteLoader';
 import { positiveMod } from '../../utils';
 
 /** Shared corner-transition masks, composited at draw time over any material pair. */

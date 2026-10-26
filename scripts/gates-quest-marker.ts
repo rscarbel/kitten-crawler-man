@@ -32,7 +32,7 @@ let clockMs = 0;
 Object.defineProperty(performance, 'now', { value: () => clockMs, configurable: true });
 
 const { TILE_SIZE } = await import('../src/core/constants.js');
-const { EMPTY_ALPHA_CUTOFF } = await import('../src/core/spriteFrames.js');
+const { EMPTY_ALPHA_CUTOFF } = await import('../src/core/spriteAssets/spriteFrames.js');
 const { beginFigureFrame, figureRowInkPending } =
   await import('../src/sprites/figure/figureFrameCache.js');
 const { setQuestBeaconViewer } = await import('../src/sprites/questBeacon.js');

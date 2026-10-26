@@ -127,9 +127,13 @@ import {
   type AssaultRoster,
 } from '../src/systems/briarHollow/VillageAssaultSystem.js';
 import { ASSAULT_WAVES } from '../src/systems/briarHollow/assaultWaves.js';
-import type { Difficulty } from '../src/core/difficultyProfiles.js';
-import { FULL_VARIETY_TIER, VARIETY_TIERS, type VarietyTier } from '../src/core/varietyTier.js';
-import { variantsInPlay, type MobVariantFamily } from '../src/core/mobVariantFamily.js';
+import type { Difficulty } from '../src/core/difficulty/difficultyProfiles.js';
+import {
+  FULL_VARIETY_TIER,
+  VARIETY_TIERS,
+  type VarietyTier,
+} from '../src/core/perf/varietyTier.js';
+import { variantsInPlay, type MobVariantFamily } from '../src/core/mobs/mobVariantFamily.js';
 import { MOB_KINDS, allMobKinds, type MobKind, type VariantOf } from '../src/levels/mobKinds.js';
 import {
   BRIAR_HOLLOW_SIEGE,

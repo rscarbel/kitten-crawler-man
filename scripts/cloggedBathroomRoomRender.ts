@@ -34,7 +34,7 @@ import { FLOOR_ART_SEEDS } from '../src/map/ground/artSeedAlphabet.js';
 import { setDungeonFloorTheme } from '../src/map/dungeon/floorTheme.js';
 import { DungeonLightingSystem } from '../src/systems/DungeonLightingSystem.js';
 import { CRAWLER_LIGHT_REACH_TILES } from '../src/systems/lighting/lightKinds.js';
-import { setViewportSize } from '../src/core/Viewport.js';
+import { setViewportSize } from '../src/core/rendering/Viewport.js';
 import { PIPE_WALL_BEACON_FOOTPRINT } from '../src/systems/cloggedBathroom/CloggedBathroomSystem.js';
 import { drawObjectiveBeacon } from '../src/ui/ObjectiveBeacon.js';
 import { worldPalette } from '../src/ui/theme/worldInk.js';

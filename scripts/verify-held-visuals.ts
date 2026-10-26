@@ -9,20 +9,29 @@
  * - every weapon item names a held visual whose archetype belongs to every
  *   crawler the item allows — one look serves one wearer, so a weapon both
  *   crawlers may hold fails until it has a look for each;
+ * - every claw weapon, worn over the paw rather than held, is the cat's alone
+ *   and looks as a garment of hers painted on her forelegs, which E5 of
+ *   `gates:equipment` holds to her paws' envelope;
  * - every quest thing the cat carries in her jaws is a look made to be carried
  *   there, and every look she holds is held at its socket on every frame she
  *   plays holding it, on each of her looks;
  * - a held visual built outside its archetype's ranges throws, naming the item
  *   and the range it broke;
- * - the proving weapons are named nowhere in the game but their own item
- *   definitions, icons and price lines, so no loot table, shop or quest can
- *   hand them out.
+ * - no proving weapon (a `dev_*` item) has an entry in `GEAR_SOURCES`, so no
+ *   loot table, shop or quest hands one out; the type already refuses one.
  */
 
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
-import { ITEM_DEF, isItemId, wearerAllows } from '../src/core/ItemDefs.js';
-import type { CrawlerKind } from '../src/core/SkillManager.js';
+import {
+  catLookOf,
+  clawStatsOf,
+  ITEM_DEF,
+  isItemId,
+  wearerAllows,
+  weaponStatsOf,
+} from '../src/core/items/defs/ItemDefs.js';
+import { wornGarmentOf } from '../src/sprites/garments/garments.js';
+import type { CrawlerKind } from '../src/core/skills/SkillManager.js';
+import { GEAR_SOURCES } from '../src/loot/gearPools.js';
 import { CAT_ROWS } from '../src/sprites/art/catFigure.js';
 import { catGripOf, catHeldSocketOf, catSocketsAt } from '../src/sprites/art/catSockets.js';
 import { archetypeSpec } from '../src/sprites/held/gripArchetypes.js';
@@ -41,7 +50,7 @@ import {
   TOOL_TIER_BASIC,
   TOOL_TIERS,
   type WorkingTool,
-} from '../src/core/toolTiers.js';
+} from '../src/core/items/gathering/toolTiers.js';
 
 const TOOL_KINDS = ['axe', 'pickaxe'] as const satisfies readonly ToolKind[];
 
@@ -68,8 +77,10 @@ for (const id of HELD_VISUAL_IDS) {
 
 for (const id of Object.keys(ITEM_DEF).filter(isItemId)) {
   const def = ITEM_DEF[id];
-  if (def.weapon === undefined) continue;
-  const visual = HELD_VISUALS[def.weapon.heldVisual];
+  // Claws are worn over the paw rather than held, so only hand weapons have a held look.
+  const weapon = weaponStatsOf(id);
+  if (weapon === null || def.wearer === undefined) continue;
+  const visual = HELD_VISUALS[weapon.heldVisual];
   const archetypeWearer = archetypeSpec(visual.archetype).wearer;
   const holders = CRAWLER_KINDS.filter((kind) => wearerAllows(def.wearer, kind));
   const unlooked = holders.filter((kind) => kind !== archetypeWearer);
@@ -77,6 +88,19 @@ for (const id of Object.keys(ITEM_DEF).filter(isItemId)) {
     unlooked.length === 0,
     `${id} (wearer ${def.wearer}) is held as ${visual.id} (${visual.archetype}, a ${archetypeWearer} archetype)` +
       (unlooked.length > 0 ? `; no look for ${unlooked.join(', ')}` : ''),
+  );
+}
+
+for (const id of Object.keys(ITEM_DEF).filter(isItemId)) {
+  const claws = clawStatsOf(id);
+  if (claws === null) continue;
+  const def = ITEM_DEF[id];
+  const look = catLookOf(def);
+  const garment = look?.kind === 'garment' ? wornGarmentOf('cat', look.garment) : null;
+  check(
+    def.wearer === 'cat' && garment?.id === claws.garment && garment.region.includes('foreleg'),
+    `${id} (wearer ${def.wearer ?? 'none'}) is worn by the cat as ${claws.garment}, painted on her forelegs` +
+      (garment === null ? ' (shows as no garment)' : ` (region ${garment.region.join(', ')})`),
   );
 }
 
@@ -151,37 +175,12 @@ check(
   `an out-of-range held visual throws naming the item and the range (${message || 'nothing thrown'})`,
 );
 
-const PROVING_ITEM_IDS = ['dev_plain_sword', 'dev_spiked_club', 'dev_felling_axe'] as const;
-/**
- * The only modules that may name a proving weapon: its definition, its icon
- * and its price line. The price table must list every item id to compile, and
- * a price alone stocks nothing: a shop sells only what a catalog in
- * `src/economy/shops.ts` names, and that file is still scanned.
- */
-const PROVING_ITEM_HOMES: ReadonlySet<string> = new Set([
-  'src/core/ItemDefs.ts',
-  'src/ui/icons/itemIcons.ts',
-  'src/economy/itemPrices.ts',
-]);
-
-function sourceFiles(dir: string): string[] {
-  return readdirSync(dir).flatMap((name) => {
-    const path = join(dir, name);
-    if (statSync(path).isDirectory()) return sourceFiles(path);
-    return path.endsWith('.ts') ? [path] : [];
-  });
-}
-
-const strays: string[] = [];
-for (const path of sourceFiles('src')) {
-  const file = relative('.', path);
-  if (PROVING_ITEM_HOMES.has(file)) continue;
-  const text = readFileSync(path, 'utf8');
-  for (const id of PROVING_ITEM_IDS) if (text.includes(id)) strays.push(`${id} in ${file}`);
-}
+const PROVING_ITEM_PREFIX = 'dev_';
+const provingIds = Object.keys(ITEM_DEF).filter((id) => id.startsWith(PROVING_ITEM_PREFIX));
+const sourcedProving = provingIds.filter((id) => id in GEAR_SOURCES);
 check(
-  strays.length === 0,
-  `the proving weapons are named nowhere loot, shops or quests could reach (${strays.join(', ') || 'none'})`,
+  provingIds.length > 0 && sourcedProving.length === 0,
+  `no proving weapon has a gear source, so no loot table, shop or quest hands one out (${sourcedProving.join(', ') || 'none'})`,
 );
 
 if (failures.length > 0) {

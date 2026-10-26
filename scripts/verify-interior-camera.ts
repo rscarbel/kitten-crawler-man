@@ -532,7 +532,7 @@ function checkRoomNameSlot(
     { name: 'Pause', rect: buttons.pause },
     { name: 'Bag', rect: buttons.bag },
     { name: 'Build', rect: buttons.build },
-    { name: 'achievement chip', rect: buttons.chip },
+    { name: 'rewards chip', rect: buttons.chip },
     { name: 'Journal', rect: buttons.journal },
     { name: 'Switch', rect: buttons.switchButton },
     { name: 'Follow', rect: buttons.follower },

@@ -17,7 +17,7 @@
  */
 
 import { TILE_SIZE } from '../../core/constants';
-import { UINT32_SPAN } from '../../core/WorldRandom';
+import { UINT32_SPAN } from '../../core/world/WorldRandom';
 
 export type CritterLook = 'beetle' | 'roach';
 

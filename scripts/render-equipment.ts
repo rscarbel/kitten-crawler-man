@@ -3,7 +3,7 @@
  * cells' two layers at its socket, exactly as the game composites it.
  *
  *   npm run render:equipment
- *   npx tsx scripts/render-equipment.ts --item=fury_of_taranis
+ *   npx tsx scripts/render-equipment.ts --item=stormcaller
  *   npx tsx scripts/render-equipment.ts --part=hands
  *   npx tsx scripts/render-equipment.ts --item=spiked_club --rows=heavy_smash_run_1,heavy_run
  *
@@ -33,6 +33,7 @@ import { reportFigureGates } from './figureGates.js';
 import { equipmentGateFailures } from './gates-equipment.js';
 import { type HumanFigure, humanFigureFor } from '../src/sprites/art/human/appearance.js';
 import { carriedGripOf } from '../src/sprites/art/human/carry.js';
+import { offHandGripOf } from '../src/sprites/art/human/offHand.js';
 import { outfitOf } from '../src/sprites/garments/outfit.js';
 import { playerLookAxes, playerStatureScale } from '../src/sprites/looks/humanLook.js';
 import { humanLookFlag } from './humanLooks.js';
@@ -67,6 +68,7 @@ import { HELD_VISUALS, stowedPlacementOfHeld } from '../src/sprites/held/heldVis
 import {
   HELD_VISUAL_IDS,
   type HeldVisualId,
+  OFF_HAND_HELD_VISUAL_IDS,
   THROWN_PROP_VISUAL_IDS,
   TOOL_HELD_VISUAL_IDS,
   WEAPON_HELD_VISUAL_IDS,
@@ -142,6 +144,40 @@ const CARRIED_ROWS: readonly HumanRowName[] = [
 ];
 
 /**
+ * Rows a shield is shown on: standing, walking and running, bare-handed blows
+ * in each view, the block, the guard, and the drink, whose hands are busy so
+ * the shield rides stowed.
+ */
+const SHIELD_ROWS: readonly HumanRowName[] = [
+  'idle',
+  'idle_side',
+  'idle_away',
+  'walk',
+  'walk_side',
+  'walk_away',
+  'run',
+  'run_side',
+  'run_away',
+  'jab_side',
+  'cross_side',
+  'uppercut_up',
+  'hammer_down',
+  'guard',
+  'guard_side',
+  'guard_away',
+  'block',
+  'block_side',
+  'block_away',
+  'drink',
+  'drink_side',
+  'drink_away',
+];
+
+function isShield(look: HeldVisualDef): boolean {
+  return OFF_HAND_HELD_VISUAL_IDS.some((id) => id === look.id);
+}
+
+/**
  * Rows a weapon is shown on: every row its grip and weight play, with one
  * version of each blow thrown on the move — the rest differ only in the
  * stride they begin at — or, for a weapon with no rows of its own, the
@@ -197,6 +233,15 @@ function showings(only: string | null): Showing[] {
       figure: base,
       rows: explosiveRowNames(),
     })),
+    ...OFF_HAND_HELD_VISUAL_IDS.map((id) => {
+      const look = HELD_VISUALS[id];
+      return {
+        id,
+        look,
+        figure: humanFigureFor(LOOK, BARE_OUTFIT, null, offHandGripOf(look)),
+        rows: SHIELD_ROWS,
+      };
+    }),
   ];
   if (only === null) return list;
   const tool = TOOL_HELD_VISUAL_IDS.find((id) => id === only);
@@ -227,14 +272,32 @@ function strip(
   const holster = HUMAN_ROW_TABLE[row].holster !== undefined;
   for (let frame = 0; frame < frames; frame++) {
     beginFigureFrame();
+    const x = frame * cellWidth + TILE_LEFT_SHARE * tile;
+    const y = TILE_TOP_SHARE * tile;
+    if (isShield(look)) {
+      // A shield is in his off hand where the row leaves it free, and at its rest where it does not.
+      const offHand = placement === 'none' ? null : { look, stowedAt: placement };
+      drawHumanFigureSelection(
+        ctx,
+        showing.figure,
+        x,
+        y,
+        tile,
+        { row, frame, flipX },
+        null,
+        null,
+        offHand,
+      );
+      continue;
+    }
     // A draw or stow shows the weapon where it rests until the fist closes on it.
     const reaching = holster && humanSocketsAt(source, row, frame).sockets.mainHand.grips !== true;
     const stowed = reaching && placement !== 'none' ? { look, placement } : null;
     drawHumanFigureSelection(
       ctx,
       showing.figure,
-      frame * cellWidth + TILE_LEFT_SHARE * tile,
-      TILE_TOP_SHARE * tile,
+      x,
+      y,
       tile,
       { row, frame, flipX },
       explosiveHeldDraw(look, { row, frame, flipX }) ?? { look, phase: 0 },
@@ -454,7 +517,7 @@ console.log('Gating the human’s equipment…');
 const clean = reportFigureGates('equipment', equipmentGateFailures(only));
 if (part === 'hands') {
   const chosen = HELD_VISUAL_IDS.find((id) => id === only);
-  const look = HELD_VISUALS[chosen ?? 'fury_of_taranis'];
+  const look = HELD_VISUALS[chosen ?? 'stormcaller'];
   writePreviewPng(
     flag('out') ?? `${PREVIEW_DIR}/equipment-grip.png`,
     rollSheet(look).toBuffer('image/png'),

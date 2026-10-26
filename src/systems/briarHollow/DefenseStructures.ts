@@ -61,16 +61,16 @@ import type {
   SnareStructureRecord,
   StructureRecord,
   TrebuchetStructureRecord,
-} from '../../core/briarHollowState';
-import type { CrawlerKind } from '../../core/SkillManager';
+} from '../../core/quests/briarHollowState';
+import type { CrawlerKind } from '../../core/skills/SkillManager';
 import type { EventBus } from '../../core/EventBus';
 import type { AudioManager } from '../../audio/AudioManager';
 import type { SoundId } from '../../audio/sounds';
 import type { Player } from '../../Player';
 import type { Mob } from '../../creatures/Mob';
 import type { MobRoster } from '../kits/SceneWorld';
-import type { ResourceCost } from '../../core/partyResources';
-import { constructionHpMultiplier } from '../../core/craftPerks';
+import type { ResourceCost } from '../../core/items/gathering/partyResources';
+import { constructionHpMultiplier } from '../../core/labour/craftPerks';
 import { TILE_SIZE } from '../../core/constants';
 import { tileCoordKey, tileKeyX, tileKeyY } from '../../map/tileIndex';
 import {

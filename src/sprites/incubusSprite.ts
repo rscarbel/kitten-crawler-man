@@ -4,7 +4,7 @@
  * he has covered or the clock, and blits it through the shared figure cache.
  */
 
-import { walkFrameIndex } from '../core/SpriteRenderer';
+import { walkFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { TILE_SIZE } from '../core/constants';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import { type DrawnFigureRow, figureFrameCount, drawnFigureRow } from './figure/figureDef';

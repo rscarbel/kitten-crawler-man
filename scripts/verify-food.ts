@@ -25,12 +25,15 @@
  */
 
 import { TILE_SIZE } from '../src/core/constants';
-import { AbilityManager } from '../src/core/AbilityManager';
+import { AbilityManager } from '../src/core/skills/AbilityManager';
 import { EventBus } from '../src/core/EventBus';
-import { BAG_PAGE_SLOTS, ITEM_DEF, type ItemId } from '../src/core/ItemDefs';
-import { PlayerManager } from '../src/core/PlayerManager';
-import { HAMBURGER_HEAL_FRACTION, HAMBURGER_STR_BONUS } from '../src/core/foodEffects';
-import { HAMBURGER_FED_STATUS, HAMBURGER_FED_TICKS } from '../src/core/StatusEffect';
+import { BAG_PAGE_SLOTS, ITEM_DEF, type ItemId } from '../src/core/items/defs/ItemDefs';
+import { PlayerManager } from '../src/core/party/PlayerManager';
+import {
+  HAMBURGER_HEAL_FRACTION,
+  HAMBURGER_STR_BONUS,
+} from '../src/core/items/consumables/foodEffects';
+import { HAMBURGER_FED_STATUS, HAMBURGER_FED_TICKS } from '../src/core/combat/StatusEffect';
 import { Mob } from '../src/creatures/Mob';
 import { GameMap } from '../src/map/GameMap';
 import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';

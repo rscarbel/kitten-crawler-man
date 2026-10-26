@@ -17,14 +17,14 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
+} from '../../core/rendering/canvasSurface';
 import { mulberry32 } from '../../sprites/person/rng';
 import { tileHash } from '../../map/tiles/hollowTileHash';
 import type { CellarSpill } from './cellarPropKinds';
 import type { RemainsPropKindDef } from './remainsPropKinds';
 import type { ServiceSpill } from './serviceLevelPropKinds';
 import type { ThemedPropSpill } from './themedPropMaterials';
-import { onCanvasRecovery } from '../../core/canvasRecovery';
+import { onCanvasRecovery } from '../../core/rendering/canvasRecovery';
 
 /** Every spill a break can leave. */
 export type SpillKind = CellarSpill | ServiceSpill | ThemedPropSpill | RemainsPropKindDef['spill'];

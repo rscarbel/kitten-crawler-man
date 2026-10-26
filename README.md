@@ -277,21 +277,21 @@ Switch between them with Tab. The inactive character auto-follows and auto-fight
 
 ### Bosses
 
-- **The Trash Gremlin** — flees, spits acid and shrieks cockroaches out of its trash piles. Drops the Trollskin Shirt
-- **Big Rooster** — clubs you with dumbbells up close, throws them from afar, enrages at 40% HP. Drops the Enchanted Crown of the Sepsis Whore
+- **The Trash Gremlin** — flees, spits acid and shrieks cockroaches out of its trash piles. Drops the Fire Axe and the Scrapmail Vest
+- **Big Rooster** — clubs you with dumbbells up close, throws them from afar, enrages at 40% HP. Drops the Cockscomb Crest and the Plumed Coat
 - **Krakaren Clone** — Immobile 20-ft octopus with human-mouthed tentacles, arena encounter in Level 2
 - **Ball of Swine** — Orbiting arena boss (280 HP), contact-kills while moving, only vulnerable when stopped by barriers. Spawns 8 dazed Tusklings on death
 - **Grotesque Spider** — Spits venom that applies Stuck and Spit Venom status, immobilizing targets for 4 seconds
 
 ### Companion: Mongo
 
-Defeat the Krakaren Clone to unlock Mongo — a blue velociraptor with pink feathers who joins the party. Mongo targets hostile mobs within a 12-tile radius, scales in size with your floor, and stays leashed near the party.
+Kill 200 monsters in the dungeon to earn Mongo — a blue velociraptor with pink feathers who joins the party. Mongo targets hostile mobs within a 12-tile radius, scales in size with your floor, and stays leashed near the party.
 
 ### Combat & Stats
 
 Three stats — STR (melee damage), INT (missile damage), CON (+2 max HP per point). Kill enemies for XP (85% to top damage dealer, 15% to the other). Level up to earn skill points, allocated in the pause menu.
 
-**Status effects:** Burn, Poison (troglodyte tongue lash — 30s, 1 dmg/2 sec), Sepsis (Enchanted Crown — permanent, 1 dmg/2 sec), Spit Venom (Grotesque Spider — 4s immobilization + acid), Electrified (slow + damage), Stuck (immobilized).
+**Status effects:** Burn, Poison (troglodyte tongue lash — 30s, 1 dmg/2 sec), Spit Venom (Grotesque Spider — 4s immobilization + acid), Electrified (slow + damage), Stuck (immobilized).
 
 **Revive:** If a character goes down, the other can revive them by staying close for 90 seconds.
 
@@ -305,9 +305,14 @@ Both abilities level independently through gameplay, unlocking new perks at each
 
 ### Equipment & Items
 
-- **Trollskin Shirt** — 2.5× health regen, negates melee debuffs (stun, knockback, disarm), +3 CON
-- **Enchanted Crown of the Sepsis Whore** — +5 INT, 15% chance to inflict permanent Sepsis on hit
-- **Enchanted BigBoi Boxers** — +2 CON, grants the Protective Shell ability; pre-equipped on Human
+Every piece of gear has a **rarity** on one ladder: Common → Uncommon → Rare → Epic → Legendary → Divine. The rarer the piece, the harder its source: shops and everyday drops give Common and Uncommon pieces, quests and early bosses Rare ones, later bosses and hard achievements Epic, the prize wheel and the kill milestones Legendary and Divine. Each piece is one of a kind per party; a roll that lands on something you already own pays its sell price in coins instead.
+
+**Slots.** The human wears a hat, face piece and neck piece, a shirt, jacket and back piece, trousers and knees, gloves, shoes and two trinkets, and fights from the **Weapon** section: a main hand, an off hand and a relic. The cat wears the same head, torso, shoes and trinkets (a collar, a vest, a cloak), and her Weapon section holds **claws** and a relic. Shared pieces fit either crawler and can be traded between them.
+
+- **Weapons** — the human swings blades and hafts (Rebar Shiv, Pipe Wrench, Fire Axe, Gravedigger's Spade, the Stormcaller) or looses stones from the Rattlestick Sling. The cat's claws (Tin Claw Caps up to the Sunsteel Talons) scale her swipe and leave a coloured trail.
+- **Relics** — a small object that floats at the wearer's shoulder and acts on its own: the Ember Wisp throws burning bolts, the Ward Stone stops an arrow, the Sproutling Seed roots enemies in brambles.
+- **Traits** — pieces carry mechanics beyond stats: poison, chill, web or ink on hit, lifesteal, thorns, a riposte, a combo stun, a once-a-floor second wind, a link between two lockets worn by both crawlers, a cursed mask that cannot come off until the next safe room, and a blade that awakens after enough kills.
+- **Sets** — Hearthguard, Bareknuckle, Demolition Crew, Prowler and Gilded Showman pieces grant extra bonuses when worn together.
 - **Goblin Dynamite** — Throwable AoE (3-tile radius, 8 dmg, friendly fire). Hold to charge throw distance, tap to drop at feet, hold too long and it explodes in hand
 - **Gym Equipment** — Dumbbells, bench presses, treadmills. Place them to create barrier zones that slow enemies to 35% speed
 - **Scroll of Confusing Fog** — Blinds nearby enemies for INT × 5 seconds
@@ -321,18 +326,11 @@ Walk up to a building door in the overworld to enter. Interiors include houses, 
 
 Quest system with NPC interactions. Includes the Defend Quest — protect a goblin mother from waves of Bugaboos. Build barriers from gym equipment to hold them off. Completing it earns the Guardian Angel achievement.
 
-### Achievements & Loot Boxes
+### Achievements & Reward Chests
 
-Six achievements that award loot boxes. Boxes can only be opened in safe rooms and contain potions, coins, and bonus items. Five box tiers: Bronze → Silver → Gold → Legendary → Celestial.
+Each crawler earns their own achievements, from a first kill (Off the Mark) and a first trip downstairs (Down the Hatch) to the dungeon kill milestones (Warming Up, Something Hatched, Body Count, A Thousand Cuts) and a boss killed without a scratch (Not a Scratch). Every achievement pays a **reward chest** of its rarity, and so do audience gifts, challenge wins, repeat boss kills and some wheel prizes.
 
-| Achievement    | Condition                     | Box type   |
-| -------------- | ----------------------------- | ---------- |
-| First Blood    | Get first kill                | Adventurer |
-| Boss Slayer    | Kill a boss                   | Boss       |
-| Smush          | Human kills enemy bare-handed | Spicy      |
-| Safe Haven     | First safe room entry         | Adventurer |
-| Magic Touch    | Cat kills enemy with missile  | Adventurer |
-| Guardian Angel | Complete the defend quest     | Adventurer |
+A chest's contents are rolled and paid the moment it is earned: coins, potions and, often, a piece of gear the crawler can wear, plus any fixed reward the achievement names (Down the Hatch hands out each crawler's starter piece, Something Hatched brings Mongo). Earned chests wait behind a "Rewards waiting" chip on the HUD and can be opened anywhere, whenever you like. The pause menu's Achievements page shows progress toward the counted ones.
 
 ### Minimap
 
@@ -352,23 +350,34 @@ src/
 ├── Player.ts                  ← base class for all entities (players + enemies)
 ├── core/
 │   ├── constants.ts           ← TILE_SIZE=32, speeds, combat parameters
-│   ├── InputManager.ts        ← raw keyboard state
-│   ├── Scene.ts               ← Scene base class + SceneManager (canvas, rAF loop)
-│   ├── Inventory.ts           ← item management, hotbar, equipment slots
-│   ├── ItemDefs.ts            ← item database with stat bonuses
-│   ├── StatusEffect.ts        ← Burn, Poison, Sepsis, Electrified, Stuck, Spit Venom
-│   ├── AchievementManager.ts  ← achievement tracking + loot box rewards
-│   ├── QuestManager.ts        ← quest state machine
-│   ├── AbilityManager.ts      ← Magic Missile & Protective Shell leveling (15 levels)
 │   ├── EventBus.ts            ← decoupled system communication
-│   ├── PlayerSnapshot.ts      ← serializes player state for scene transitions
-│   └── SpatialGrid.ts         ← spatial partitioning for collision checks
+│   ├── Scene.ts               ← Scene base class + SceneManager (canvas, rAF loop)
+│   ├── items/                 ← defs/ (ItemDefs, rarity), inventory/ (Inventory, bag, hotbar),
+│   │                            equipment/ (EquipmentManager, weapons), consumables/, loot/, gathering/ (tools, resources)
+│   ├── save/                  ← PlayerSnapshot, saveFormat, checkpoints, local progress, wipe
+│   ├── quests/                ← QuestManager + each questline's progress and phase state
+│   ├── state/                 ← cross-scene state: TownMemory, GodMode, pets
+│   ├── party/                 ← PlayerManager, crawler formulas, revive, coins, mercenaries
+│   ├── progression/           ← achievements, XP curve and awards, game stats, viewer favour
+│   ├── skills/                ← SkillManager, AbilityManager, tattoos
+│   ├── labour/                ← craft skills and perks, harvest yield, thralls
+│   ├── combat/                ← StatusEffect, dodge, frost, knockback, floating text
+│   ├── difficulty/            ← difficulty profiles, stats, floor reference level
+│   ├── rendering/             ← canvas surfaces and recovery, viewport, frame clock
+│   ├── spriteAssets/          ← SpriteLoader/Renderer, asset groups, silhouettes
+│   ├── perf/                  ← PerfMonitor, render quality, memory budget, LoadRunner
+│   ├── input/                 ← InputManager, keybindings, touch, platform, settings
+│   ├── music/                 ← music library and unlock backfill
+│   ├── world/                 ← SpatialGrid, SeparationGrid, WorldRandom
+│   ├── club/                  ← Desperado Club layout, props, membership
+│   ├── mobs/                  ← boss types, mob variant families
+│   └── util/                  ← guards, plain text, MinHeap
 ├── scenes/
 │   ├── DungeonScene.ts        ← main gameplay orchestrator (~1,400 lines)
 │   ├── BuildingInteriorScene.ts ← interior exploration when entering buildings
 │   └── GameplayScene.ts       ← shared gameplay logic (camera, HUD, companion follow)
 ├── systems/                   ← ~30 modular game systems
-│   ├── CombatSystem.ts        ← damage resolution, sepsis proc
+│   ├── CombatSystem.ts        ← damage resolution, gear procs
 │   ├── CompanionSystem.ts     ← cat AI: kiting, following, auto-attack
 │   ├── PlayerMovementSystem.ts ← input → movement, wall collision
 │   ├── PlayerTickSystem.ts    ← status effect ticks, HP regen
@@ -447,8 +456,6 @@ src/
 │   ├── GearPanel.ts, InventoryPanel.ts
 │   ├── DeathScreen.ts         ← game over screen
 │   ├── LevelCompleteScreen.ts ← floor transition screen
-│   ├── AchievementNotification.ts ← achievement unlock overlay
-│   ├── LootBoxOpener.ts       ← animated loot reveal
 │   ├── AbilityLevelUpDialog.ts ← ability level-up notification
 │   └── TextBox.ts, Box.ts     ← shared canvas UI utilities
 └── utils.ts
@@ -513,16 +520,15 @@ Player (base: position, HP, stats, walk animation)
 
 ### New Item
 
-1. Add to `ItemId` union and `ITEM_DEF` record in `src/core/Inventory.ts`
-2. Add mob loot drop in the creature's `rollLootItems()`
-3. Add hotbar activation in `DungeonScene.onEnter()`
-4. Add inventory icon in `InventoryPanel.renderItemIcon()`
+1. Add the id to the `ItemId` union and its definition to `ITEM_DEF` in `src/core/items/defs/ItemDefs.ts` (gear goes in `GEAR_CATALOGUE`, `src/gear/catalogue.ts`)
+2. Give it a price in `ITEM_PRICES` (`src/economy/itemPrices.ts`) and an icon in `ITEM_ICONS` (`src/ui/icons/itemIcons.ts`)
+3. Gear declares where it comes from in `GEAR_SOURCES` (`src/loot/gearPools.ts`); every loot pool is derived from that
+4. An item used from the hotbar gets its branch in `activateHotbarSlot` (`src/systems/kits/hotbarActions.ts`)
 
 ### New Achievement
 
-1. Add ID to `AchievementId` union in `src/core/AchievementManager.ts`
-2. Add entry to `ACHIEVEMENT_DEFS`
-3. Call `this.achievements.tryUnlock('id')` + `this.maybeStartAchievementNotif()` in `DungeonScene`
+1. Add the id to the `AchievementId` union and its entry to `ACHIEVEMENT_DEFS` in `src/core/progression/AchievementManager.ts`, with the rarity of the reward chest it pays and any fixed reward
+2. Unlock it through the scene's `AchievementAwards` (`src/systems/AchievementAwards.ts`): `awards.unlock(kind, 'id')`, or a counter's `advance` for a counted one. That pays the chest at once; the HUD's "Rewards waiting" chip shows it
 
 ---
 

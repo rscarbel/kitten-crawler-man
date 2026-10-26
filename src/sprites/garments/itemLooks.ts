@@ -3,8 +3,14 @@
  * each item's declared `look`.
  */
 
-import { catLookOf, humanLookOf, ITEM_DEF, type ItemDef, type ItemId } from '../../core/ItemDefs';
-import type { CrawlerKind } from '../../core/SkillManager';
+import {
+  catLookOf,
+  humanLookOf,
+  ITEM_DEF,
+  type ItemDef,
+  type ItemId,
+} from '../../core/items/defs/ItemDefs';
+import type { CrawlerKind } from '../../core/skills/SkillManager';
 import type { GarmentMaterial, WornGarmentDef } from './garmentDef';
 import { wornGarmentOf } from './garments';
 
@@ -40,9 +46,14 @@ export function humanItemGarments(): WornGarmentDef<'human'>[] {
 function materialOnHuman(def: ItemDef): GarmentMaterial | null {
   const look = humanLookOf(def);
   if (look === null) return null;
-  return look.kind === 'garment'
-    ? wornGarmentOf('human', look.garment).material
-    : (look.heardAs ?? null);
+  switch (look.kind) {
+    case 'garment':
+      return wornGarmentOf('human', look.garment).material;
+    case 'offHand':
+      return look.heardAs;
+    case 'none':
+      return look.heardAs ?? null;
+  }
 }
 
 function materialOnCat(def: ItemDef): GarmentMaterial | null {
@@ -56,8 +67,8 @@ function materialOnCat(def: ItemDef): GarmentMaterial | null {
 /**
  * What `id` is made of when a crawler of kind `wearer` puts it on: the
  * material of the garment it shows as on them, or what their look of it is
- * heard as; failing both, the same read off the other crawler, so boxers the
- * human wears out of sight under his trousers are still cloth. Null for an
+ * heard as; failing both, the same read off the other crawler, so something
+ * worn out of sight on one is still heard as what it is on the other. Null for an
  * item nothing gives a material.
  */
 export function garmentMaterialOf(id: ItemId, wearer: CrawlerKind): GarmentMaterial | null {

@@ -80,7 +80,7 @@ globals.document = {
 
 const { mulberry32 } = await import('../src/sprites/person/rng.js');
 const { TILE_SIZE } = await import('../src/core/constants.js');
-const { loadSprites } = await import('../src/core/SpriteLoader.js');
+const { loadSprites } = await import('../src/core/spriteAssets/SpriteLoader.js');
 const { GameMap } = await import('../src/map/GameMap.js');
 const { renderCanvas, renderDecorationsOverlay } = await import('../src/map/TileRenderer.js');
 const { MarketSystem } = await import('../src/systems/market/MarketSystem.js');
@@ -94,12 +94,12 @@ const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
 const { MobRoster } = await import('../src/systems/kits/SceneWorld.js');
 const { SpellSystem } = await import('../src/systems/SpellSystem.js');
-const { setViewportSize, setRenderScaleValue } = await import('../src/core/Viewport.js');
+const { setViewportSize, setRenderScaleValue } = await import('../src/core/rendering/Viewport.js');
 const { beginFigureFrame, setFigureBakeClock, touchFigureState, figureCacheByteBudget } =
   await import('../src/sprites/figure/figureFrameCache.js');
 const { setFigureCacheStatsRecording, getFigureCacheStats } =
   await import('../src/sprites/figure/figureCacheStats.js');
-const { BYTES_PER_MEGABYTE } = await import('../src/core/canvasSurface.js');
+const { BYTES_PER_MEGABYTE } = await import('../src/core/rendering/canvasSurface.js');
 const { prewarmAndPinCitizenTalk } = await import('../src/creatures/citizenFigure.js');
 const { townCastStateFor } = await import('../src/sprites/townCastSprite.js');
 const { townCastOutfitFigure } = await import('../src/sprites/art/townCastFigure.js');
@@ -440,8 +440,8 @@ const talkDrawnExactly =
 // Stands in for the human acting in town — new gear, a spell, anything that queues
 // fresh rows on his own figure while the plaza's crowd sits pinned nearby.
 
-human.inventory.addItem('nightgaunt_cloak', 1);
-human.inventory.equipByItemId('nightgaunt_cloak');
+human.inventory.addItem('patched_duster', 1);
+human.inventory.equipByItemId('patched_duster');
 
 /** Frames the competing bake burst runs for. */
 const BURST_FRAMES = 90;

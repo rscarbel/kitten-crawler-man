@@ -40,7 +40,7 @@ import {
   freshSurfaceContext,
   releaseSurface,
   type CanvasSurface,
-} from '../../core/canvasSurface';
+} from '../../core/rendering/canvasSurface';
 import { hashLattice } from '../../map/tilegen/noise';
 import { chimneyPotMouth } from './materials/roofFurniture';
 import { groundHeightToFrameY, project, type Projection } from './projection';

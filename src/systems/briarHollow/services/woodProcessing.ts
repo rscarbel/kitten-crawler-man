@@ -12,10 +12,10 @@
  * after a successful call, and the paid path does not.
  */
 
-import type { ItemId } from '../../../core/ItemDefs';
-import { CONSTRUCTION_XP_PER_WOODEN_WALL } from '../../../core/CraftSkills';
-import { partyCount, spend } from '../../../core/partyResources';
-import { addToSessionTally } from '../../../core/resourceSessionTally';
+import type { ItemId } from '../../../core/items/defs/ItemDefs';
+import { CONSTRUCTION_XP_PER_WOODEN_WALL } from '../../../core/labour/CraftSkills';
+import { partyCount, spend } from '../../../core/items/gathering/partyResources';
+import { addToSessionTally } from '../../../core/items/gathering/resourceSessionTally';
 import { WALL_TIERS } from '../structureRules';
 import type { ProcessingStationKind } from '../processingStations';
 import type { Crawler, ServiceParty } from './serviceContext';

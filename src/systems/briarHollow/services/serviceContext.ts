@@ -8,7 +8,7 @@
  * so the script stays the only place any of the words are written.
  */
 
-import type { VillageQuestPhase } from '../../../core/villageQuestPhase';
+import type { VillageQuestPhase } from '../../../core/quests/villageQuestPhase';
 import type { HumanPlayer } from '../../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../../creatures/CatPlayer';
 import type { BarkLine } from '../../../dialog/line';

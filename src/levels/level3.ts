@@ -196,7 +196,7 @@ export const level3: LevelDef = {
   ],
   bossRooms: [],
   isOverworld: true,
-  slingshotDrops: true,
+  worldGearDrops: true,
   fairies: {
     roomRatesByRegion: [],
     roomHealerChance: 0,

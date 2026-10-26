@@ -7,9 +7,10 @@
  * had no hotbar at all and nobody could cast anything.
  */
 
-import type { AbilityManager } from '../../core/AbilityManager';
+import { hotbarAbilityOf } from '../../gear/gearHooks';
+import type { AbilityManager } from '../../core/skills/AbilityManager';
 import { castShellWithGesture, isCastingShell } from '../../creatures/humanGestures';
-import { weaponStatsOf, type InventoryItem } from '../../core/ItemDefs';
+import { weaponStatsOf, type InventoryItem } from '../../core/items/defs/ItemDefs';
 import { isThrownExplosive, type DynamiteSystem, type ThrownExplosiveId } from '../DynamiteSystem';
 import type { SkillBookReadRequest } from '../../ui/screens/inventory/InventoryActions';
 import type { SpellSystem } from '../SpellSystem';
@@ -60,7 +61,7 @@ export function activateHotbarSlot(
   hotbarIdx: number,
   dynamiteGrip: DynamiteGrip = 'charge',
 ): void {
-  const { pm, bus, audio } = host.world;
+  const { pm, audio } = host.world;
   const active = pm.active();
   const slot = active.inventory.actionBar.slots[hotbarIdx];
   // Any other slot, even an empty one, takes his hand back, and the
@@ -90,12 +91,14 @@ export function activateHotbarSlot(
     return;
   }
 
-  if (slot.abilityId === 'magic_missile' && !pm.human.isActive) {
+  const ability = hotbarAbilityOf(active.inventory, slot);
+
+  if (ability === 'magic_missile' && !pm.human.isActive) {
     if (pm.cat.triggerMissile()) audio?.play('cat_missile_fire');
     return;
   }
 
-  if (slot.abilityId === 'protective_shell' && pm.human.isActive) {
+  if (ability === 'protective_shell' && pm.human.isActive) {
     // A press while the cooldown runs, or while his palm is still on its way
     // down, changes nothing: the dome goes up where the palm lands.
     if (host.spells.shellCooldown > 0 || isCastingShell(pm.human)) return;
@@ -114,7 +117,7 @@ export function activateHotbarSlot(
     return;
   }
 
-  if (slot.abilityId === 'smush' && pm.human.isActive) {
+  if (ability === 'smush' && pm.human.isActive) {
     if (pm.human.triggerSmush()) {
       audio?.play('human_smush');
     } else if (pm.human.smushRefusedByCooldown) {
@@ -143,13 +146,9 @@ export function activateHotbarSlot(
   // A weapon is drawn rather than spent: the slot takes it in and out of hand,
   // and the attack key does the fighting.
   if (weaponStatsOf(slot.id) !== null && pm.human.isActive) {
-    const wasDrawn = pm.human.drawnWeaponId === slot.id;
+    const wasDrawn = pm.human.mainHandWeaponId === slot.id;
     const drawn = pm.human.toggleWeaponDrawn(slot.id);
-    if (drawn === wasDrawn) {
-      audio?.play('error_taking_action');
-      return;
-    }
-    bus.emit('weaponHolstered', { weaponId: slot.id, motion: drawn ? 'draw' : 'stow' });
+    if (drawn === wasDrawn) audio?.play('error_taking_action');
     return;
   }
 

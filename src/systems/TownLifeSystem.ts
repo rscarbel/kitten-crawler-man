@@ -37,8 +37,8 @@ import { CITIZEN_TALK_RADIUS_TILES, findNearestTownsperson } from '../creatures/
 import type { WanderParams } from '../creatures/townWander';
 import type { TownRole } from '../sprites/person/PersonAppearance';
 import type { GameSystem, SystemContext } from './GameSystem';
-import { SpatialGrid } from '../core/SpatialGrid';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { SpatialGrid } from '../core/world/SpatialGrid';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { allResidents, residentSpecies } from './townResidents';
 import type { TownSpecies } from './townSpecies';
 import { mulberry32, rangeInt, subSeed, type Rng } from '../sprites/person/rng';

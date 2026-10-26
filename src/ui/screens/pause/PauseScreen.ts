@@ -7,16 +7,16 @@
  * {@link PauseScreen.confirmSurfaces}, and opens it with {@link PauseScreen.open}.
  */
 
-import type { AbilityManager } from '../../../core/AbilityManager';
-import type { AchievementManager } from '../../../core/AchievementManager';
-import { activeDifficultyChangeGuard } from '../../../core/difficultyChangeGuard';
-import type { Difficulty } from '../../../core/difficultyProfiles';
-import type { GameStats } from '../../../core/GameStats';
-import { keybindings } from '../../../core/Keybindings';
-import { activeMusicLibrary, type MusicLibrary } from '../../../core/MusicLibrary';
-import { settings } from '../../../core/Settings';
+import type { AbilityManager } from '../../../core/skills/AbilityManager';
+import type { AchievementManager } from '../../../core/progression/AchievementManager';
+import { activeDifficultyChangeGuard } from '../../../core/difficulty/difficultyChangeGuard';
+import type { Difficulty } from '../../../core/difficulty/difficultyProfiles';
+import type { GameStats } from '../../../core/progression/GameStats';
+import { keybindings } from '../../../core/input/Keybindings';
+import { activeMusicLibrary, type MusicLibrary } from '../../../core/music/MusicLibrary';
+import { settings } from '../../../core/input/Settings';
 import { crawlerName } from '../../../characters/characters';
-import { type CrawlerKind } from '../../../core/SkillManager';
+import { type CrawlerKind } from '../../../core/skills/SkillManager';
 import type { CatPlayer } from '../../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../../creatures/HumanPlayer';
 import { inset, splitH, splitV, type Rect } from '../../core/geom';
@@ -57,9 +57,6 @@ export interface PauseFrame {
   readonly humanAchievements: AchievementManager;
   readonly catAchievements: AchievementManager;
   readonly gameStats: GameStats;
-  /** Present only where that crawler's loot boxes can be opened right now. */
-  readonly onOpenHumanBoxes?: () => void;
-  readonly onOpenCatBoxes?: () => void;
 }
 
 /**
@@ -362,10 +359,6 @@ export class PauseScreen {
       journal: this.journalContext,
       audio: this.deps.audio,
       musicLibrary: (this.deps.musicLibrary ?? activeMusicLibrary)(),
-      openBoxes: {
-        human: frame.onOpenHumanBoxes ?? null,
-        cat: frame.onOpenCatBoxes ?? null,
-      },
       guides: this.deps.guides,
       openChat: this.onOpenChat,
       actions: this.actions,

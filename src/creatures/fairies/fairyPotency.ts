@@ -1,4 +1,4 @@
-import type { Difficulty } from '../../core/difficultyProfiles';
+import type { Difficulty } from '../../core/difficulty/difficultyProfiles';
 import { clamp } from '../../utils';
 import {
   FAIRY_LEVELS_PER_EXTRA_TARGET,

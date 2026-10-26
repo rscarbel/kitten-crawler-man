@@ -19,7 +19,7 @@ import {
 } from '../tileTypes';
 import type { TileGrid } from './tileGrid';
 import type { PlannedYard, TileRect, TownPlan, YardKind } from './townPlan';
-import { worldRandom } from '../../core/WorldRandom';
+import { worldRandom } from '../../core/world/WorldRandom';
 
 /** The surface each kind of yard must stand on. */
 const YARD_SURFACE: Record<YardKind, number> = {

@@ -11,7 +11,7 @@
 ## Characters
 
 - Ryan: a human melee fighter. Warm, sociable and clever, he gets along with anyone, but he is confident to a fault and chases adventure even when it probably isn't wise. Abilities: Smush and Protective Shell.
-- Belle: a slim, short-haired tortoiseshell cat who casts spells. She loves heat and loves everyone, wants to cuddle with everyone, and is not very smart. Abilities: Magic Missile and summoning her pet, Mongo.
+- Belle: a slim, short-haired tortoiseshell cat who casts spells. She loves heat and loves everyone, wants to cuddle with everyone, and is not very smart. Abilities: Magic Missile, and summoning her pet raptor Mongo once the party has earned him with 200 dungeon kills.
 - The player switches between them at any time (Tab). The crawler not being controlled follows and fights on its own, and can be given follower orders.
 - Mordecai: the guide who waits in safe rooms.
 
@@ -25,9 +25,9 @@
 ## Features
 
 - Three difficulty levels: Kitten (easy), Crawler (normal), Nightmare (hard).
-- Loot, equipment that visibly changes how Ryan and Belle look, and health potions.
-- Achievements that award loot boxes in six tiers: Bronze, Silver, Gold, Platinum, Legendary and Celestial.
-- Companions: Mongo, plus hireable mercenaries called the Meat Shields.
+- Gear on one rarity ladder (Common, Uncommon, Rare, Epic, Legendary, Divine) that visibly changes how Ryan and Belle look: worn pieces, two trinkets each, Ryan's weapons, Belle's claws, and relics that float at the shoulder and act on their own. Pieces carry traits (poison or chill on hit, lifesteal, thorns, a once-a-floor second wind, a blade that awakens after enough kills), and five gear sets grant bonuses when worn together.
+- Achievements that each pay a reward chest of their rarity: coins, potions and often a piece of gear, paid at once and shown whenever the player opens the "Rewards waiting" chip.
+- Companions: Mongo, earned at 200 dungeon kills, plus hireable mercenaries called the Meat Shields.
 - Crafting skills (Resourcing and Construction) for harvesting, processing and building structures such as walls and trebuchets.
 - A casino in the Desperado Club: blackjack, Texas hold'em poker, slots and a prize wheel.
 - Minigames including a pipe-board puzzle and "Keyboard Hero".

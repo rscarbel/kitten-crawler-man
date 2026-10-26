@@ -26,11 +26,11 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
-import { onCanvasRecovery } from '../../core/canvasRecovery';
+} from '../../core/rendering/canvasSurface';
+import { onCanvasRecovery } from '../../core/rendering/canvasRecovery';
 import { TILE_SIZE } from '../../core/constants';
-import { MILLISECONDS_PER_SECOND } from '../../core/SpriteRenderer';
-import type { WorkingTool } from '../../core/toolTiers';
+import { MILLISECONDS_PER_SECOND } from '../../core/spriteAssets/SpriteRenderer';
+import type { WorkingTool } from '../../core/items/gathering/toolTiers';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { GameMap } from '../../map/GameMap';

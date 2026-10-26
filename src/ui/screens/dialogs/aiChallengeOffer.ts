@@ -10,12 +10,12 @@
 
 import { displayNameOf } from '../../../ai/AIChatFeed';
 import { SYSTEM_CHARACTER_NAME } from '../../../ai/characters';
-import type { BoxTier } from '../../../core/AchievementManager';
+import type { Rarity } from '../../../core/items/defs/rarity';
 import type { Surface, Ui } from '../../core/UiRoot';
 import type { PanelWidth } from '../../theme/tokens';
 import { badge, badgeSize } from '../../widgets/badge';
 import { choiceModalSurface } from '../../widgets/choiceModal';
-import { lootTierColor } from './canvasChrome';
+import { rarityColor } from './canvasChrome';
 import {
   iconUnlessCompact,
   keyboardHint,
@@ -30,7 +30,7 @@ export interface AIChallengeOfferView {
   readonly objective: string;
   /** The AI's sell; may be empty. */
   readonly pitch: string;
-  readonly rewardTier: BoxTier;
+  readonly rewardRarity: Rarity;
   readonly offeredBy: string;
 }
 
@@ -45,11 +45,11 @@ const OFFER_WIDTH: PanelWidth = 'sm';
 const ACCEPT_BUTTON_INDEX = 1;
 const DECLINE_HINT = 'Esc or Decline to pass';
 
-function rewardPart(ui: Ui, tier: BoxTier): ExtraPart {
-  const label = `Reward: ${tier} box`;
+function rewardPart(ui: Ui, rarity: Rarity): ExtraPart {
+  const label = `Reward: ${rarity} chest`;
   return {
     height: badgeSize(ui, { label, kind: 'tag' }).h,
-    draw: (rect) => badge(ui, rect, { label, kind: 'tag', color: lootTierColor(ui.theme, tier) }),
+    draw: (rect) => badge(ui, rect, { label, kind: 'tag', color: rarityColor(ui.theme, rarity) }),
   };
 }
 
@@ -74,7 +74,7 @@ export function aiChallengeOfferSurface(id: string, source: AIChallengeOfferSour
         title: offer?.title ?? '',
         body,
         extra: stackParts(ui, [
-          offer === null ? null : rewardPart(ui, offer.rewardTier),
+          offer === null ? null : rewardPart(ui, offer.rewardRarity),
           keyboardHint(ui, OFFER_WIDTH, DECLINE_HINT),
         ]),
         width: OFFER_WIDTH,

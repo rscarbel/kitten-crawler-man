@@ -1,4 +1,4 @@
-import { noteDrawFailure, recoverDrawState } from '../core/drawFailure';
+import { noteDrawFailure, recoverDrawState } from '../core/rendering/drawFailure';
 import { SERVICE_PROP_TILE_TYPES } from './serviceLevelProps';
 import { stealthGateExtentsPx } from './tiles/stealthGateTiles';
 import { serviceLevelPropExtentsPx } from './tiles/serviceLevelPropTiles';
@@ -69,12 +69,12 @@ import {
   surfaceContext,
   type CanvasSurface,
   releaseSurface,
-} from '../core/canvasSurface';
+} from '../core/rendering/canvasSurface';
 import {
   canvasGeneration,
   registerPurgeProbe,
   reportCanvasAllocationFailure,
-} from '../core/canvasRecovery';
+} from '../core/rendering/canvasRecovery';
 import {
   recordSheetLookups,
   environmentRepaintCursor,
@@ -82,7 +82,7 @@ import {
   repaintedSheetRevision,
   touchEnvironmentSheets,
 } from './environmentArtCache';
-import { perfMonitor } from '../core/PerfMonitor';
+import { perfMonitor } from '../core/perf/PerfMonitor';
 import { drawInteriorTile } from './tiles/interiorTiles';
 import { hollowPropExtentsPx } from './tiles/hollowVillageTiles';
 import { circusStructureExtentsPx } from './tiles/circusStructureTiles';
@@ -95,7 +95,7 @@ import {
   getSpriteExtentsPxByKey,
   getSpriteExtentsPxForTileType,
   type MapSpriteExtentsPx,
-} from '../core/SpriteLoader';
+} from '../core/spriteAssets/SpriteLoader';
 
 import { CHUNK_TILES } from './tiles/chunkTiles';
 

@@ -1,7 +1,8 @@
+import { gearModifiers, wornClaws } from '../gear/gearHooks';
 import { Player, type FigureMouth, type StatName, type StatusFigureBox } from '../Player';
 
 import type { Mob } from './Mob';
-import type { SpatialGrid } from '../core/SpatialGrid';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { Missile } from '../sprites/catSprite';
 import {
   activeCatLook,
@@ -25,23 +26,26 @@ import { drawActivePlayerMarker } from '../sprites/activePlayerMarker';
 import { catMouthOf } from '../sprites/crawlerMouths';
 import type { GameMap } from '../map/GameMap';
 import { normalize } from '../utils';
-import type { AbilityManager } from '../core/AbilityManager';
+import type { AbilityManager } from '../core/skills/AbilityManager';
 import { getMagicMissileStats } from '../abilities/magicMissile';
 import {
-  SplatterCopies,
+  KaleidoscopeCopies,
   steerMissileToward,
-  type SplatterSource,
-} from '../abilities/eyesOfSplatter';
+  type KaleidoscopeSource,
+} from '../abilities/kaleidoscopeSpecs';
 import { TILE_SIZE } from '../core/constants';
-import type { CrawlerKind } from '../core/SkillManager';
-import { carriedToolTier } from '../core/PartyTools';
-import { isOwnedToolKind, type ToolKind, type WorkingTool } from '../core/toolTiers';
+import type { CrawlerKind } from '../core/skills/SkillManager';
+import { carriedToolTier } from '../core/items/gathering/PartyTools';
+import {
+  isOwnedToolKind,
+  type ToolKind,
+  type WorkingTool,
+} from '../core/items/gathering/toolTiers';
 import { HELD_VISUALS, workingToolHeldVisual } from '../sprites/held/heldVisuals';
 import type { HeldVisualDef } from '../sprites/held/heldVisualDef';
 import { heldPhaseAt } from '../sprites/held/heldComposite';
-import { catGripOf } from '../sprites/art/catSockets';
-import { ITEM_DEF, MOUTH_HELD_KEY, weaponStatsOf } from '../core/ItemDefs';
-import { CONSTITUTION_LOCK_SNAPSHOT_VERSION } from '../core/PlayerSnapshot';
+import { ITEM_DEF } from '../core/items/defs/ItemDefs';
+import { CONSTITUTION_LOCK_SNAPSHOT_VERSION } from '../core/save/PlayerSnapshot';
 
 /** Single source for this class's crawler identity — used by the UI and by skill eligibility. */
 const CAT_CRAWLER_KIND: CrawlerKind = 'cat';
@@ -55,8 +59,8 @@ import {
   CAT_STARTING_DEXTERITY,
   CAT_SWIPE_FRAMES,
   missileDamage,
-} from '../core/crawlerFormulas';
-import { CAT_REFLEXES_DODGE_BONUS_PER_LEVEL } from '../core/SkillManager';
+} from '../core/party/crawlerFormulas';
+import { CAT_REFLEXES_DODGE_BONUS_PER_LEVEL } from '../core/skills/SkillManager';
 import type { DynamicLightSink } from '../systems/lighting/dynamicLights';
 
 /** Degrees in π radians, for the one place this class works in degrees. */
@@ -101,9 +105,9 @@ export class CatPlayer extends Player {
 
   /** Sub-missile spawns queued by CombatSystem this frame; flushed after resolvePlayerAttacks. */
   private pendingSubMissileSpawns: Array<{ x: number; y: number }> = [];
-  /** Eyes of Splatter releases queued by CombatSystem this frame, flushed with the sub-missiles. */
-  private pendingSplatterReleases: SplatterSource[] = [];
-  private readonly splatterCopies = new SplatterCopies();
+  /** Kaleidoscope Specs releases queued by CombatSystem this frame, flushed with the sub-missiles. */
+  private pendingKaleidoscopeReleases: KaleidoscopeSource[] = [];
+  private readonly kaleidoscopeCopies = new KaleidoscopeCopies();
 
   /** The mob the cat will automatically shoot at when not player-controlled. */
   autoTarget: Mob | null = null;
@@ -305,11 +309,13 @@ export class CatPlayer extends Player {
   }
 
   getMeleeDamage(): number {
-    return bareClawDamage(this.strength) + this.statusMeleeDamageBonus;
+    const clawMultiplier = wornClaws(this)?.damageMultiplier ?? 1;
+    return bareClawDamage(this.strength) * clawMultiplier + this.statusMeleeDamageBonus;
   }
 
   getMeleeRange(): number {
-    return this.tileSize * CatPlayer.MELEE_RANGE_MULTIPLIER;
+    const clawReachTiles = wornClaws(this)?.reachBonusTiles ?? 0;
+    return this.tileSize * (CatPlayer.MELEE_RANGE_MULTIPLIER + clawReachTiles);
   }
 
   /** The furthest a press of the attack key can reach, in pixels: her missile's full flight. */
@@ -354,8 +360,8 @@ export class CatPlayer extends Player {
   clearAirborneAttacks(): void {
     this.missiles = [];
     this.pendingSubMissileSpawns = [];
-    this.pendingSplatterReleases = [];
-    this.splatterCopies.reset();
+    this.pendingKaleidoscopeReleases = [];
+    this.kaleidoscopeCopies.reset();
   }
 
   get missileCooldownCurrent(): number {
@@ -388,6 +394,7 @@ export class CatPlayer extends Player {
     const stats = getMagicMissileStats(level);
     const baseAngle = Math.atan2(this.facingY, this.facingX) + angleOffset;
     const baseRange = this.missileBaseRangePx();
+    const speed = stats.speed * gearModifiers(this).missileSpeedMultiplier;
     const maxDist = isSubMissile
       ? this.tileSize * CatPlayer.SUBMISSILE_MAX_DIST_TILES
       : baseRange * stats.rangeMultiplier;
@@ -395,8 +402,8 @@ export class CatPlayer extends Player {
     this.missiles.push({
       x: fromX ?? this.x + this.tileSize * CatPlayer.TILE_CENTER_OFFSET,
       y: fromY ?? this.y + this.tileSize * CatPlayer.TILE_CENTER_OFFSET,
-      vx: Math.cos(baseAngle) * stats.speed,
-      vy: Math.sin(baseAngle) * stats.speed,
+      vx: Math.cos(baseAngle) * speed,
+      vy: Math.sin(baseAngle) * speed,
       distTraveled: 0,
       maxDist,
       state: 'flying',
@@ -483,8 +490,8 @@ export class CatPlayer extends Player {
   }
 
   /**
-   * A small thing a scene puts in her jaws to carry, over whatever her mouth
-   * slot holds; null hands the jaws back to her gear.
+   * A small thing a scene puts in her jaws to carry, over the quest item she
+   * would otherwise carry there; null hands the jaws back to that item.
    */
   private scriptedMouthCarry: HeldVisualDef | null = null;
   /** Ticks counted for a carried thing's own pictures — a flicker, a glint. */
@@ -501,18 +508,11 @@ export class CatPlayer extends Player {
   }
 
   /**
-   * What she carries in her jaws: a scene's scripted thing, else the item in
-   * her mouth slot made to be carried, else the quest thing in her pack she
-   * carries in her jaws while she has it.
+   * What she carries in her jaws: a scene's scripted thing, else the quest
+   * thing in her pack she carries in her jaws while she has it.
    */
   private mouthCarry(): HeldVisualDef | null {
     if (this.scriptedMouthCarry !== null) return this.scriptedMouthCarry;
-    const id = this.inventory.equipment.getEquippedId(MOUTH_HELD_KEY);
-    const look = id === undefined ? undefined : weaponStatsOf(id)?.heldVisual;
-    if (look !== undefined) {
-      const def = HELD_VISUALS[look];
-      if (catGripOf(def) === 'mouthCarry') return def;
-    }
     const questItem = this.inventory.questItemId;
     const carried = questItem === null ? undefined : ITEM_DEF[questItem].carriedInJaws;
     return carried === undefined ? null : HELD_VISUALS[carried];
@@ -624,46 +624,47 @@ export class CatPlayer extends Player {
   }
 
   /**
-   * Queue the Eyes of Splatter's copies of a missile that just landed on an
+   * Queue the kaleidoscope copies of a missile that just landed on an
    * enemy (called by CombatSystem). Released by {@link flushPendingSubMissiles},
    * so the list CombatSystem is walking never grows under it.
    */
-  queueSplatterCopies(missile: Missile): void {
-    this.pendingSplatterReleases.push({
+  queueKaleidoscopeCopies(missile: Missile, copies: number): void {
+    this.pendingKaleidoscopeReleases.push({
       x: missile.x,
       y: missile.y,
       abilityLevel: missile.abilityLevel,
       isSubMissile: missile.isSubMissile,
       speed: Math.hypot(missile.vx, missile.vy),
+      copies,
     });
   }
 
-  /** True while any Eyes of Splatter copy is circling her. */
-  get hasOrbitingSplatterCopies(): boolean {
-    return this.splatterCopies.anyOrbiting(this.missiles);
+  /** True while any Kaleidoscope Specs copy is circling her. */
+  get hasOrbitingKaleidoscopeCopies(): boolean {
+    return this.kaleidoscopeCopies.anyOrbiting(this.missiles);
   }
 
   /**
-   * The Eyes of Splatter cues raised since the last call, cleared as they are
+   * the Kaleidoscope Specs cues raised since the last call, cleared as they are
    * read: whether copies were released, and whether circling copies broke off
    * toward an enemy.
    */
-  drainSplatterCues(): { released: boolean; peeledOff: boolean } {
+  drainKaleidoscopeCues(): { released: boolean; peeledOff: boolean } {
     const cues = {
-      released: this.splatterCopies.releaseCuePending,
-      peeledOff: this.splatterCopies.seekCuePending,
+      released: this.kaleidoscopeCopies.releaseCuePending,
+      peeledOff: this.kaleidoscopeCopies.seekCuePending,
     };
-    this.splatterCopies.releaseCuePending = false;
-    this.splatterCopies.seekCuePending = false;
+    this.kaleidoscopeCopies.releaseCuePending = false;
+    this.kaleidoscopeCopies.seekCuePending = false;
     return cues;
   }
 
-  /** Spawns any sub-missiles and splatter copies queued this frame. Call after resolvePlayerAttacks. */
+  /** Spawns any sub-missiles and kaleidoscope copies queued this frame. Call after resolvePlayerAttacks. */
   flushPendingSubMissiles(): void {
-    for (const source of this.pendingSplatterReleases) {
-      this.splatterCopies.release(this.missiles, source, this.EXPLODE_FRAMES);
+    for (const source of this.pendingKaleidoscopeReleases) {
+      this.kaleidoscopeCopies.release(this.missiles, source, this.EXPLODE_FRAMES);
     }
-    this.pendingSplatterReleases = [];
+    this.pendingKaleidoscopeReleases = [];
     for (const { x, y } of this.pendingSubMissileSpawns) {
       const count =
         CatPlayer.SUBMISSILE_COUNT_BASE +
@@ -772,7 +773,7 @@ export class CatPlayer extends Player {
     this.missileCooldown = this.tickCooldown(this.missileCooldown);
 
     for (const m of this.missiles) {
-      if (m.state === 'flying' && m.splatter !== undefined) continue;
+      if (m.state === 'flying' && m.kaleidoscope !== undefined) continue;
       if (m.state === 'flying') {
         // Level 14+ homing: curve toward nearest mob in forward cone
         if (hasHoming && !m.isSubMissile && mobGrid) {
@@ -846,7 +847,7 @@ export class CatPlayer extends Player {
       }
     }
     const centreOffset = this.tileSize * CatPlayer.TILE_CENTER_OFFSET;
-    this.splatterCopies.update(this.missiles, {
+    this.kaleidoscopeCopies.update(this.missiles, {
       mobGrid,
       ownerX: this.x + centreOffset,
       ownerY: this.y + centreOffset,

@@ -29,7 +29,7 @@ import { resolve } from 'node:path';
 
 import { BUILDING_SPECS } from '../src/sprites/buildinggen/buildings.js';
 import { buildingWeatherSeed } from '../src/sprites/buildinggen/runtimeBuildingSheets.js';
-import { getSpriteDoorwayByKey } from '../src/core/SpriteLoader.js';
+import { getSpriteDoorwayByKey } from '../src/core/spriteAssets/SpriteLoader.js';
 import { FLOOR_ART_SEEDS } from '../src/map/ground/artSeedAlphabet.js';
 import { BUILDING_SALT, floorArtSubSeed, setFloorArtSeed } from '../src/map/ground/floorArtSeed.js';
 import { bake, readFixture, runPixelGates } from './buildinggen/bake.js';

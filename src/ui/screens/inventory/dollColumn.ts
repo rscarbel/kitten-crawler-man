@@ -3,12 +3,14 @@
  * crawler's stats and what their worn gear adds up to.
  */
 
-import type { InventoryItem } from '../../../core/ItemDefs';
-import type { CrawlerKind } from '../../../core/SkillManager';
+import { rarityTooltipLines } from '../dialogs/canvasChrome';
+import { subSlotLabel, type InventoryItem } from '../../../core/items/defs/ItemDefs';
+import type { CrawlerKind } from '../../../core/skills/SkillManager';
 import { ALL_STATS } from '../../../Player';
 import { intersect, splitH, type Rect } from '../../core/geom';
 import type { DragHandlers, HitHandlers, HitState, Ui } from '../../core/UiRoot';
-import { itemSlot } from '../../widgets/itemSlot';
+import { badge, badgeSize } from '../../widgets/badge';
+import { itemSlot, slotContent } from '../../widgets/itemSlot';
 import { scrollGutterWidth, scrollView } from '../../widgets/scrollView';
 import { lineHeightOf, measureTextHeight, tabularNumber, text } from '../../widgets/text';
 import { tooltip } from '../../widgets/tooltip';
@@ -17,7 +19,6 @@ import {
   DOLL_SECTION_LABELS,
   dollSectionsFor,
   STAT_LABELS,
-  shortSubSlotLabel,
   wornGearSummary,
   type DollSlot,
 } from './gearRules';
@@ -29,7 +30,11 @@ export interface DollCellInput {
   readonly dragging: boolean;
   readonly dropTarget: boolean;
   readonly disabled: boolean;
+  /** A cursed piece that cannot come off until the party next reaches a safe room. */
+  readonly bound: boolean;
 }
+
+const BOUND_CHIP = 'Bound';
 
 export interface DollColumnOptions {
   readonly id: string;
@@ -84,7 +89,7 @@ function contentHeight(ui: Ui, width: number, kind: CrawlerKind, owner: Inventor
     h += overline + space.xs + rows * side + (rows - 1) * space.xs + space.md;
   }
   h += overline + space.xs + ALL_STATS.length * lineHeightOf(ui, 'label');
-  for (const line of wornGearSummary(owner.inventory)) {
+  for (const line of wornGearSummary(owner)) {
     h += space.xs + measureTextHeight(ui, width, { text: line, role: 'caption' });
   }
   return h;
@@ -150,7 +155,7 @@ function drawDoll(ui: Ui, content: Rect, opts: DollColumnOptions): void {
     }
     y += lineH;
   }
-  for (const line of wornGearSummary(opts.owner.inventory)) {
+  for (const line of wornGearSummary(opts.owner)) {
     y += space.xs;
     const h = measureTextHeight(ui, content.w, { text: line, role: 'caption' });
     text(ui, { x: content.x, y, w: content.w, h }, { text: line, role: 'caption', wrap: true });
@@ -164,7 +169,10 @@ function drawDollCell(ui: Ui, rect: Rect, slot: DollSlot, opts: DollColumnOption
   if (visible !== null) opts.record(slot, visible);
   const state = itemSlot(ui, rect, {
     id: `${opts.id}/${slot.key}`,
-    item: input.item?.id ?? null,
+    ...slotContent(
+      input.item?.id ?? null,
+      input.item !== null && opts.owner.gear.isAwakened(input.item.id),
+    ),
     selected: input.selected,
     dragging: input.dragging,
     dropTarget: input.dropTarget,
@@ -177,20 +185,41 @@ function drawDollCell(ui: Ui, rect: Rect, slot: DollSlot, opts: DollColumnOption
   opts.onState?.(slot, state);
   if (input.item === null) {
     text(ui, rect, {
-      text: shortSubSlotLabel(slot.subSlot),
+      text: subSlotLabel(opts.kind, slot.subSlot),
       role: 'caption',
       color: ui.theme.palette.text.muted,
       align: 'center',
     });
   }
+  if (input.bound) drawBoundChip(ui, rect);
   tooltip(ui, rect, {
     id: `${opts.id}/${slot.key}/tip`,
-    title: slot.subSlot,
-    text:
-      input.item === null
-        ? 'Empty. Tap to see what fits.'
-        : `${input.item.name}. Tap to take it off.`,
+    title: subSlotLabel(opts.kind, slot.subSlot),
+    text: cellTip(input),
+    lines: input.item !== null ? rarityTooltipLines(ui.theme, input.item.id) : undefined,
     show: opts.tooltips && (state.hovered || state.focused),
     immediate: state.focused,
   });
+}
+
+function cellTip(input: DollCellInput): string {
+  if (input.item === null) return 'Empty. Tap to see what fits.';
+  if (input.bound) return `${input.item.name}. Bound: it comes off at the next safe room.`;
+  return `${input.item.name}. Tap to take it off.`;
+}
+
+/** The red chip along a bound piece's cell foot. */
+function drawBoundChip(ui: Ui, rect: Rect): void {
+  const pill = badgeSize(ui, { label: BOUND_CHIP, kind: 'tag' });
+  const pad = ui.theme.space.xxs;
+  badge(
+    ui,
+    {
+      x: rect.x + (rect.w - pill.w) / 2,
+      y: rect.y + rect.h - pill.h - pad,
+      w: pill.w,
+      h: pill.h,
+    },
+    { label: BOUND_CHIP, kind: 'tag', variant: 'solid', tone: 'danger' },
+  );
 }

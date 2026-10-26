@@ -1,4 +1,8 @@
-import { progressFrameIndex, timeFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
+import {
+  progressFrameIndex,
+  timeFrameIndex,
+  walkFrameIndex,
+} from '../core/spriteAssets/SpriteRenderer';
 import { BUGABOO_FIGURE, SWIPE_FRAMES, SWIPE_IMPACT_FRAME } from './art/bugabooFigure';
 import { type DrawnFigureRow, figureFrameCount, drawnFigureRow } from './figure/figureDef';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';

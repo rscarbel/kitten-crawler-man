@@ -13,23 +13,23 @@
  *   busy, and the station's own prompt stays off its "upgraded!" callout.
  */
 
-import { allocCanvas, surfaceContext } from '../../src/core/canvasSurface';
+import { allocCanvas, surfaceContext } from '../../src/core/rendering/canvasSurface';
 import { TILE_SIZE } from '../../src/core/constants';
 import { findNearbyWalkableTile } from '../../src/map/findWalkableTile';
-import { teachBoth } from '../../src/core/CraftSkills';
-import { ITEM_DEF } from '../../src/core/ItemDefs';
-import type { ResourceCost } from '../../src/core/partyResources';
-import { RESOURCE_IDS } from '../../src/core/resourceIds';
+import { teachBoth } from '../../src/core/labour/CraftSkills';
+import { ITEM_DEF } from '../../src/core/items/defs/ItemDefs';
+import type { ResourceCost } from '../../src/core/items/gathering/partyResources';
+import { RESOURCE_IDS } from '../../src/core/items/gathering/resourceIds';
 import type { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { GameMap } from '../../src/map/GameMap';
-import { TIKKA_PLANS_UNLOCKS } from '../../src/core/villageUnlocks';
+import { TIKKA_PLANS_UNLOCKS } from '../../src/core/quests/villageUnlocks';
 import {
   BLUEPRINTS_QUEST_ID,
   grantBlueprintsItem,
 } from '../../src/systems/briarHollow/blueprints/blueprintsProgress';
 import { scytheSwingInstruction } from '../../src/systems/briarHollow/blueprints/ScytheSwingBar';
-import { keybindings } from '../../src/core/Keybindings';
-import { setViewportSize } from '../../src/core/Viewport';
+import { keybindings } from '../../src/core/input/Keybindings';
+import { setViewportSize } from '../../src/core/rendering/Viewport';
 import {
   ROPE_WALK_UPGRADE_COST,
   SAW_UPGRADE_COST,

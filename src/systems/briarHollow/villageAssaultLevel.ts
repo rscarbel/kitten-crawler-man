@@ -5,7 +5,7 @@
  * trivial nor fold at the first wave.
  */
 
-import type { DifficultyProfile } from '../../core/difficultyProfiles';
+import type { DifficultyProfile } from '../../core/difficulty/difficultyProfiles';
 import { resolveAmbientLevel } from '../../levels/spawner';
 import type { LevelDef, MobLevelRange } from '../../levels/types';
 

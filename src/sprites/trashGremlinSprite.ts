@@ -3,7 +3,7 @@ import {
   progressFrameIndex,
   timeFrameIndex,
   walkFrameIndex,
-} from '../core/SpriteRenderer';
+} from '../core/spriteAssets/SpriteRenderer';
 import {
   drawFigureCached,
   pinFigureState,

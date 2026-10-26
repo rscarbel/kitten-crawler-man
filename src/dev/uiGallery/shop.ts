@@ -3,10 +3,10 @@
  * data, one named fixture at a time.
  */
 
-import { createClubMembership } from '../../core/ClubMembership';
+import { createClubMembership } from '../../core/club/ClubMembership';
 import { TILE_SIZE } from '../../core/constants';
-import { createMercenaryRoster } from '../../core/MercenaryRoster';
-import { MERCENARY_TEMPLATES } from '../../core/mercenaryTemplates';
+import { createMercenaryRoster } from '../../core/party/MercenaryRoster';
+import { MERCENARY_TEMPLATES } from '../../core/party/mercenaryTemplates';
 import { CatPlayer } from '../../creatures/CatPlayer';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
 import {
@@ -14,7 +14,7 @@ import {
   TOOL_TIER_LONG_HAFT,
   forgeCoinPrice,
   toolTierDef,
-} from '../../core/toolTiers';
+} from '../../core/items/gathering/toolTiers';
 import { buildForgeMenu } from '../../systems/briarHollow/services/forge';
 import type { ServiceParty } from '../../systems/briarHollow/services/serviceContext';
 import { buyFromShop, createShopStock, sellToShop, type ShopStock } from '../../economy/shopStock';
@@ -49,7 +49,7 @@ import {
   type ShopRow,
 } from '../../ui/screens/shop/shopSession';
 import type { ServiceIconId } from '../../sprites/art/itemIcons/serviceIcons';
-import type { ItemId } from '../../core/ItemDefs';
+import type { ItemId } from '../../core/items/defs/ItemDefs';
 import { buildDrillYardMenu, runDrill } from '../../systems/townDrillYard';
 import { buildInnMenu } from '../../systems/townInn';
 import { buildBlessingMenu } from '../../systems/townTemple';
@@ -78,6 +78,7 @@ const SELL_STACKS = [
   { id: 'health_potion', qty: 6 },
   { id: 'wood_board', qty: 12 },
   { id: 'rope', qty: 1 },
+  { id: 'riot_kneeguards', qty: 1 },
 ] as const;
 const QUIET_CONTEXT: TownDialogContext = {
   circus: 'not_started',
@@ -368,6 +369,7 @@ export const SHOP_FIXTURES: readonly DialogFixture[] = [
       shop: 'general_store',
       stock: createShopStock(),
       onTraded: () => undefined,
+      owns: () => false,
     });
     return { session, party: makeParty(FIXTURE_COINS) };
   }),

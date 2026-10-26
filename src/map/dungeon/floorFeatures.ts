@@ -20,7 +20,7 @@ import type { Point, Rect } from '../roomDoorways';
 import type { RoomRegion } from '../regionMap';
 import { MULTI_TILE_PROP_FOOTPRINTS } from '../serviceLevelProps';
 import type { FloorFeatureId } from './roomCharacters';
-import { UINT32_SPAN } from '../../core/WorldRandom';
+import { UINT32_SPAN } from '../../core/world/WorldRandom';
 
 /** One ripple in a liquid's rim: the outline swells and pinches `frequency` times round. */
 export interface RimWobble {

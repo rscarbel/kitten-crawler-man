@@ -1,6 +1,5 @@
 import type { Player } from '../Player';
 import type { EyePlacement } from '../sprites/eyePlacement';
-import type { LootDrop } from './Mob';
 import { Mob } from './Mob';
 import { TILE_SIZE } from '../core/constants';
 import { randomInt, normalize } from '../utils';
@@ -742,19 +741,5 @@ export class KrakarenClone extends Mob {
     ctx.restore();
 
     this.renderMobHealthBar(ctx, this.x - camX, this.y - camY, artTopY);
-  }
-
-  /**
-   * She already guarantees a slingshot below, so letting the base roll compete
-   * for the same rare drop could only ever produce a wasteful second one.
-   */
-  protected override get slingshotEligible(): boolean {
-    return false;
-  }
-
-  protected override rollLootItems(killer: Player | null): LootDrop['items'] {
-    const items = super.rollLootItems(killer);
-    items.push({ id: 'slingshot', quantity: 1 });
-    return items;
   }
 }

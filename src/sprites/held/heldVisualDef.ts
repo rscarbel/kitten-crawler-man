@@ -17,10 +17,11 @@ import {
   archetypeSpec,
   type GripArchetype,
   type HandleRadius,
+  type OffHandGripArchetype,
   type WeaponGripArchetype,
   type WeightClass,
 } from './gripArchetypes';
-import type { HeldVisualId, WeaponHeldVisualId } from './heldVisualIds';
+import type { HeldVisualId, OffHandHeldVisualId, WeaponHeldVisualId } from './heldVisualIds';
 
 /**
  * Which face of the head is toward the camera: the flat (a blade's full
@@ -137,6 +138,12 @@ export type HeldVisualDef = HeldVisualCommon & HandleSource;
 export type WeaponHeldVisualDef = HeldVisualDef & {
   readonly id: WeaponHeldVisualId;
   readonly archetype: WeaponGripArchetype;
+};
+
+/** A held visual an off-hand armour piece is drawn as: one held in an off-hand grip archetype. */
+export type OffHandHeldVisualDef = HeldVisualDef & {
+  readonly id: OffHandHeldVisualId;
+  readonly archetype: OffHandGripArchetype;
 };
 
 /** A held visual's dimensions fall outside what its archetype accepts. */

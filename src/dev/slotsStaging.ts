@@ -8,7 +8,7 @@
 import { CatPlayer } from '../creatures/CatPlayer';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { TILE_SIZE } from '../core/constants';
-import { createClubMembership } from '../core/ClubMembership';
+import { createClubMembership } from '../core/club/ClubMembership';
 import type { CasinoSeat } from '../systems/ClubCasinoSystem';
 import { ClubSlotsSystem, type SlotsAudio, type SlotsLoops } from '../systems/ClubSlotsSystem';
 import { MAX_BET_PER_LINE, stepBet } from '../systems/casino/slots/slotBets';

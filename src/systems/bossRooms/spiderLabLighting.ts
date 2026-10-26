@@ -1,5 +1,9 @@
 import { TILE_SIZE } from '../../core/constants';
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/rendering/canvasSurface';
 import type { SpiderLabRoomData } from '../../map/DungeonGenerator';
 import { doorFrame } from '../../map/spiderLabLayout';
 

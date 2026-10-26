@@ -15,13 +15,13 @@ import {
 } from '../sprites/worldEffectColors';
 import type { Mob } from '../creatures/Mob';
 import type { Villager } from './briarHollow/Villager';
-import type { SpatialGrid } from '../core/SpatialGrid';
-import type { PlayerManager } from '../core/PlayerManager';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
+import type { PlayerManager } from '../core/party/PlayerManager';
 import { worldText } from '../ui/world/worldText';
 import { inset, type Rect } from '../ui/core/geom';
 import { paintEntityTooltip, type EntityTooltipContent } from '../ui/hud/entityTooltip';
 import { chromeTarget, chromeTheme } from '../ui/screens/dialogs/canvasChrome';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 
 const VIGNETTE_HEALTH_THRESHOLD = 0.25;
 const CRITICAL_HEALTH_THRESHOLD = 0.1;

@@ -6,7 +6,7 @@
  * frame or two rather than stalling the frame to paint it.
  */
 
-import { drawSpriteKey } from '../core/SpriteRenderer';
+import { drawSpriteKey } from '../core/spriteAssets/SpriteRenderer';
 import {
   GYM_BELT_FRAMES,
   GYM_CHALK_FRAMES,

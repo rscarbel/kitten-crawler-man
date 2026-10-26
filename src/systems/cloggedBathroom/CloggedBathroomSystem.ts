@@ -19,14 +19,14 @@
 
 import type { AudioManager } from '../../audio/AudioManager';
 import type { AudioScope } from '../../audio/AudioScope';
-import { awardPartyXp, type CrawlerPair } from '../../core/awardXp';
+import { awardPartyXp, type CrawlerPair } from '../../core/progression/awardXp';
 import { TILE_SIZE } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
-import { QuestManager, type QuestStatus } from '../../core/QuestManager';
-import { settings } from '../../core/Settings';
-import type { Difficulty } from '../../core/difficultyProfiles';
-import { makeRefreshed } from '../../core/StatusEffect';
-import { viewportHeight, viewportWidth } from '../../core/Viewport';
+import { QuestManager, type QuestId, type QuestStatus } from '../../core/quests/QuestManager';
+import { settings } from '../../core/input/Settings';
+import type { Difficulty } from '../../core/difficulty/difficultyProfiles';
+import { makeRefreshed } from '../../core/combat/StatusEffect';
+import { viewportHeight, viewportWidth } from '../../core/rendering/Viewport';
 import {
   BathroomGoblin,
   bathroomSeedFraction,
@@ -112,7 +112,7 @@ import {
 import { createPipeBoardGeneration, type PipeBoardGeneration } from './pipeBoardGenerator';
 import type { CloggedBathroomCheckpoint, CloggedBathroomPhase } from './cloggedBathroomCheckpoint';
 
-export const CLOGGED_BATHROOM_QUEST_ID = 'clogged_bathroom';
+export const CLOGGED_BATHROOM_QUEST_ID = 'clogged_bathroom' as const satisfies QuestId;
 export const CLOGGED_BATHROOM_QUEST_NAME = 'The Clogged Bathroom';
 /** Small on purpose: the real rewards are the open path and the stall. */
 export const CLOGGED_BATHROOM_XP_REWARD = 150;

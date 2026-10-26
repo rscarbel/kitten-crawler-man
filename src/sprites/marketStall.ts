@@ -16,7 +16,7 @@
  * `src/ui/*` helpers are for interface chrome, not sprites.
  */
 
-import { drawSpriteKey } from '../core/SpriteRenderer';
+import { drawSpriteKey } from '../core/spriteAssets/SpriteRenderer';
 import { WOOD, WOOD_DARK, WOOD_LIGHT } from './townPalette';
 import { MARKET_VENDORS } from '../systems/market/vendorDefs';
 import type { GoodsMotif, StallStyle } from '../systems/market/vendorDefs';

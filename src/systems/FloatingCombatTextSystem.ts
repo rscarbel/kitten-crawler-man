@@ -1,7 +1,7 @@
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { Player } from '../Player';
 import type { Mob } from '../creatures/Mob';
-import type { FloatingTextRequest, FloatingTextStyle } from '../core/FloatingText';
+import type { FloatingTextRequest, FloatingTextStyle } from '../core/combat/FloatingText';
 import { TILE_SIZE } from '../core/constants';
 import { worldPalette } from '../ui/theme/worldInk';
 import { measureWorldText, worldText } from '../ui/world/worldText';

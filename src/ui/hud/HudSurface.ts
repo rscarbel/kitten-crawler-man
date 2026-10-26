@@ -17,7 +17,6 @@ import { coinPill } from './coinPill';
 import { dock, summonCard } from './dock';
 import { levelTimerChip, levelTimerEntry } from './levelTimer';
 import { viewerFavorBandEntry, viewerFavorPill } from './viewerFavorPill';
-import { lootBannerEntry } from './lootBanner';
 import { hotbar } from './hotbar';
 import {
   captionAnchor,
@@ -142,16 +141,6 @@ export class HudSurface implements Surface {
   /** Every top-band entry as last drawn, in UI units: what a card floated over play keeps clear of. */
   get bandRects(): readonly Rect[] {
     return this.lastBandSlots.map((slot) => slot.rect);
-  }
-
-  /**
-   * A top-band entry's rect as last drawn, in CSS pixels, or null while it is
-   * not shown (the safe room's loot banner is `'loot-banner'`).
-   */
-  cssBandEntryRect(id: string): Rect | null {
-    const frame = this.drawn;
-    const slot = this.lastBandSlots.find((candidate) => candidate.id === id);
-    return frame === null || slot === undefined ? null : toCssRect(slot.rect, frame.uiScale);
   }
 
   /** The active crawler's skill-point badge as last drawn, in CSS pixels, or null while hidden. */
@@ -296,6 +285,5 @@ function topBandEntries(
     timer !== null && timerInBand ? [levelTimerEntry(timer.frames, timer.paused)] : [];
   const favor = model.favor ?? null;
   const favorCard = favor !== null && favorInBand ? [viewerFavorBandEntry(favor)] : [];
-  const loot = model.lootBanner === null ? [] : [lootBannerEntry(model.lootBanner)];
-  return [...model.topBand, ...timerCard, ...favorCard, ...loot];
+  return [...model.topBand, ...timerCard, ...favorCard];
 }

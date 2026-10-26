@@ -14,18 +14,18 @@ import {
   hasAcceptedBlueprintsQuest,
   isWendellWaitingForCow,
   type BlueprintsQuestPhase,
-} from '../src/core/blueprintsQuestPhase';
+} from '../src/core/quests/blueprintsQuestPhase';
 import {
   captureBriarHollowState,
   createBriarHollowState,
   parseBriarHollowStateSnapshot,
   restoreBriarHollowState,
-} from '../src/core/briarHollowState';
+} from '../src/core/quests/briarHollowState';
 import { playerCharacter } from '../src/characters/characters';
 import { EventBus } from '../src/core/EventBus';
-import { Inventory } from '../src/core/Inventory';
-import { ITEM_DEF, QUEST_SLOT_IDX, type InventoryItem } from '../src/core/ItemDefs';
-import { constructionUnlocked, TIKKA_PLANS_UNLOCKS } from '../src/core/villageUnlocks';
+import { Inventory } from '../src/core/items/inventory/Inventory';
+import { ITEM_DEF, QUEST_SLOT_IDX, type InventoryItem } from '../src/core/items/defs/ItemDefs';
+import { constructionUnlocked, TIKKA_PLANS_UNLOCKS } from '../src/core/quests/villageUnlocks';
 import { PASTURE_FENCE_SECTION_COUNT } from '../src/map/overworld/briarHollowLayout';
 import { SFX_GROUPS } from '../src/audio/sfxGroups';
 import type { SoundId } from '../src/audio/sounds';

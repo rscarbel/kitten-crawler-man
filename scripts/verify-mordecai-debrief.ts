@@ -1,21 +1,21 @@
 /**
  * Gate for Mordecai's post-boss debrief: correct boss naming, wearer/worn/upgrade
- * filtering on real `Inventory` objects, the hushed crown, paging, and the `!` news flag.
+ * filtering on real `Inventory` objects, paging, and the `!` news flag.
  *
  *   npx tsx scripts/verify-mordecai-debrief.ts
  */
 
 import { TILE_SIZE } from '../src/core/constants.js';
-import { Inventory } from '../src/core/Inventory.js';
+import { Inventory } from '../src/core/items/inventory/Inventory.js';
 import {
   ITEM_DEF,
   type InventoryItem,
   type ItemId,
+  type ItemSubSlot,
   type ResistanceType,
-} from '../src/core/ItemDefs.js';
+} from '../src/core/items/defs/ItemDefs.js';
 import type { StatName } from '../src/Player.js';
-import { crawlerName } from '../src/characters/characters.js';
-import { type CrawlerKind } from '../src/core/SkillManager.js';
+import { type CrawlerKind } from '../src/core/skills/SkillManager.js';
 import { BigRooster } from '../src/creatures/BigRooster.js';
 import { KrakarenClone } from '../src/creatures/KrakarenClone.js';
 import { TrashGremlin } from '../src/creatures/TrashGremlin.js';
@@ -29,16 +29,13 @@ import {
   debriefPages,
   isStrictUpgrade,
   isSupersededDebrief,
-  reconcileDebriefMemory,
   rememberDebriefSpoken,
   sameDebriefMemory,
   unwornGear,
-  type BoxCounts,
   type DebriefBossType,
   type DebriefMemory,
   type DebriefState,
 } from '../src/systems/mordecaiDebrief.js';
-import { MORDECAI_DEBRIEF_HUSHED_ONLY_LINE } from '../src/dialog/scripts/mordecai.js';
 
 const failures: string[] = [];
 let checks = 0;
@@ -48,42 +45,32 @@ function check(ok: boolean, message: string): void {
   if (!ok) failures.push(message);
 }
 
-const NO_BOXES: BoxCounts = { human: 0, cat: 0 };
-const ONE_HUMAN_BOX: BoxCounts = { human: 1, cat: 0 };
-
 /** Congratulations already spoken, so each gate sees only the section it measures. */
 const CONGRATULATED: DebriefMemory = { ...EMPTY_DEBRIEF_MEMORY, congratulated: true };
 
 /** Any boss will do where the gate is not about the congratulations. */
 const ANY_BOSS: DebriefBossType = 'trash_gremlin';
 
-const KETTLE_HELM_NAME = ITEM_DEF.issue_kettle_helm.name;
-const CROWN_ID: ItemId = 'enchanted_crown_sepsis_whore';
-/** The word his prose would have to use to name the crown. */
-const CROWN_WORD = 'Crown';
-const HUSHED_ALSO_FRAGMENT = 'something else unworn';
+/** An id the fixtures borrow for the rings and gloves they forge; its own definition is never read. */
+const FORGED_ITEM_ID: ItemId = 'cockscomb_crest';
 const CLOSING_FRAGMENT = "Wear what you're carrying";
 
 const WEAK_HAT_CONSTITUTION = 1;
 const WORN_HAT_CONSTITUTION = 3;
 const BETTER_HAT_CONSTITUTION = 4;
 const SIDEGRADE_HAT_CONSTITUTION = 2;
-/** Far above anything the cat could find, so every other hat is a downgrade on it. */
-const CAT_BEST_HAT_INTELLIGENCE = 9;
 
-const RING_FAMILY = 'Ring';
-const RING_SLOTS_PER_HAND_SET = 4;
+const TRINKET_FAMILY = 'Trinket';
+const TRINKET_SLOTS = 2;
 const WEAKEST_WORN_RING_STRENGTH = 1;
 /**
- * One ring per Ring slot, the low strength repeated twice: `isWorthWearing` lists
- * a candidate that beats any one worn ring, so a candidate only has to clear one
- * of these two, not every ring in the set.
+ * One ring per Trinket slot, the weakest first: `isWorthWearing` lists a
+ * candidate that beats any one worn ring, so a candidate only has to clear the
+ * weakest, not every ring worn.
  */
 const WORN_RING_STRENGTHS: ReadonlyArray<number> = [
   WEAKEST_WORN_RING_STRENGTH,
   WEAKEST_WORN_RING_STRENGTH + 1,
-  WEAKEST_WORN_RING_STRENGTH + 2,
-  WEAKEST_WORN_RING_STRENGTH,
 ];
 
 function inventoryOf(owner: CrawlerKind, ids: ReadonlyArray<ItemId>): Inventory {
@@ -109,14 +96,14 @@ function putInBag(inventory: Inventory, item: InventoryItem): void {
  * equipped map and `unwornGear` key on the id.
  */
 type SyntheticArmorExtra = Partial<
-  Pick<InventoryItem, 'resistances' | 'meleeOnlyStatBonus' | 'skillLevelBonus' | 'stunOnHitChance'>
+  Pick<InventoryItem, 'resistances' | 'meleeOnlyStatBonus' | 'skillLevelBonus'>
 >;
 
 function syntheticArmor(
   id: ItemId,
   name: string,
-  equipSlot: 'Head' | 'Hands',
-  equipSubSlot: string,
+  equipSlot: 'Head' | 'Trinkets',
+  equipSubSlot: ItemSubSlot,
   statBonus: Partial<Record<StatName, number>>,
   extra: SyntheticArmorExtra = {},
 ): InventoryItem {
@@ -158,8 +145,8 @@ function ringWithResistances(
   return syntheticArmor(
     id,
     `Ring of +${strength} STR${resistanceSuffix} (${id})`,
-    'Hands',
-    RING_FAMILY,
+    'Trinkets',
+    TRINKET_FAMILY,
     statBonus,
     { resistances: [...resistances] },
   );
@@ -173,13 +160,8 @@ function wear(inventory: Inventory, item: InventoryItem): void {
   );
 }
 
-function stateOf(
-  human: Inventory,
-  cat: Inventory,
-  pendingBoxes: BoxCounts = NO_BOXES,
-): DebriefState {
+function stateOf(human: Inventory, cat: Inventory): DebriefState {
   return {
-    pendingBoxes,
     unworn: [...unwornGear('human', human), ...unwornGear('cat', cat)],
   };
 }
@@ -226,32 +208,7 @@ check(debriefBossType('ball_of_swine') === null, "debriefBossType('ball_of_swine
 check(debriefBossType(undefined) === null, 'debriefBossType(undefined) is not null');
 
 {
-  const human = inventoryOf('human', ['issue_kettle_helm']);
-  const cat = inventoryOf('cat', []);
-  const boxedText = spoken(CONGRATULATED, stateOf(human, cat, ONE_HUMAN_BOX));
-  const openedText = spoken(CONGRATULATED, stateOf(human, cat));
-
-  check(openedText.includes(KETTLE_HELM_NAME), 'control: with no boxes the kettle helm is named');
-  check(!boxedText.includes(KETTLE_HELM_NAME), 'gear named while a loot box is still unopened');
-  check(boxedText.includes('loot box'), 'no box section while a box is pending');
-  check(!openedText.includes('loot box'), 'box section spoken with no box pending');
-
-  check(
-    boxedText.includes(`${crawlerName('human')}, you're sitting on an unopened loot box`),
-    'a single human box does not address the human by name',
-  );
-  const catText = spoken(CONGRATULATED, stateOf(human, cat, { human: 0, cat: 2 }));
-  check(
-    catText.includes(`${crawlerName('cat')}, you're sitting on unopened loot boxes`),
-    'two cat boxes do not address the cat by name in the plural',
-  );
-  const bothText = spoken(CONGRATULATED, stateOf(human, cat, { human: 1, cat: 1 }));
-  check(bothText.includes('You both'), 'boxes on both crawlers are not addressed to both');
-  check(!boxedText.includes('You both'), 'a human-only box is addressed to both crawlers');
-}
-
-{
-  const talisman: ItemId = 'slate_butterfly_talisman';
+  const talisman: ItemId = 'moonmoth_pendant';
   check(
     !lists('human', inventoryOf('human', [talisman]), talisman),
     "The cat's talisman is recommended to the human",
@@ -263,70 +220,11 @@ check(debriefBossType(undefined) === null, 'debriefBossType(undefined) is not nu
 }
 
 {
-  const human = inventoryOf('human', ['issue_kettle_helm']);
-  check(lists('human', human, 'issue_kettle_helm'), 'control: an unworn kettle helm is not listed');
-  human.equipByItemId('issue_kettle_helm');
-  check(human.equipment.hasEquipped('issue_kettle_helm'), 'fixture: kettle helm would not equip');
-  check(!lists('human', human, 'issue_kettle_helm'), 'a worn kettle helm is still listed');
-}
-
-{
-  const catCrownOnly = inventoryOf('cat', [CROWN_ID]);
-  const crownOnlyState = stateOf(inventoryOf('human', []), catCrownOnly);
-  const crownOnlyText = spoken(CONGRATULATED, crownOnlyState);
-  check(lists('cat', catCrownOnly, CROWN_ID), 'the crown is not counted as unworn gear');
-  check(
-    crownOnlyText.includes(MORDECAI_DEBRIEF_HUSHED_ONLY_LINE),
-    'crown alone: the vague line is missing',
-  );
-  check(!crownOnlyText.includes(CROWN_WORD), 'crown alone: Mordecai names the crown to the cat');
-
-  const humanCrownText = spoken(
-    CONGRATULATED,
-    stateOf(inventoryOf('human', [CROWN_ID]), inventoryOf('cat', [])),
-  );
-  check(
-    humanCrownText.includes(CROWN_WORD),
-    `control: a crown in the human's bag is named — the "${CROWN_WORD}" absence check would otherwise pass on nothing`,
-  );
-
-  const crownAndHelmText = spoken(
-    CONGRATULATED,
-    stateOf(inventoryOf('human', []), inventoryOf('cat', [CROWN_ID, 'issue_kettle_helm'])),
-  );
-  check(crownAndHelmText.includes(KETTLE_HELM_NAME), 'crown + helm: the helm is not named');
-  check(!crownAndHelmText.includes(CROWN_WORD), 'crown + helm: the crown is named');
-  check(
-    crownAndHelmText.includes(HUSHED_ALSO_FRAGMENT),
-    'crown + helm: the "something else unworn" line is missing',
-  );
-  check(
-    !crownOnlyText.includes(HUSHED_ALSO_FRAGMENT),
-    'crown alone: the "something else" line is spoken with nothing else named',
-  );
-
-  const catWellHatted = inventoryOf('cat', [CROWN_ID]);
-  const bestHat = hat('issue_kettle_helm', "The cat's Tiara", {
-    intelligence: CAT_BEST_HAT_INTELLIGENCE,
-  });
-  putInBag(catWellHatted, bestHat);
-  wear(catWellHatted, bestHat);
-  const lesserHat = hat('padded_gambeson', 'Lesser Hat', { constitution: WEAK_HAT_CONSTITUTION });
-  putInBag(catWellHatted, lesserHat);
-  check(
-    !lists('cat', catWellHatted, lesserHat.id),
-    'control: a lesser hat is listed although the cat wears a far better one',
-  );
-  check(
-    lists('cat', catWellHatted, CROWN_ID),
-    'the crown is dropped by the downgrade filter when the cat wears a better hat',
-  );
-  check(
-    spoken(CONGRATULATED, stateOf(inventoryOf('human', []), catWellHatted)).includes(
-      MORDECAI_DEBRIEF_HUSHED_ONLY_LINE,
-    ),
-    'a better-hatted cat with the crown in her bag hears no vague line',
-  );
+  const human = inventoryOf('human', ['hearthguard_cap']);
+  check(lists('human', human, 'hearthguard_cap'), 'control: an unworn cap is not listed');
+  human.equipByItemId('hearthguard_cap');
+  check(human.equipment.hasEquipped('hearthguard_cap'), 'fixture: the cap would not equip');
+  check(!lists('human', human, 'hearthguard_cap'), 'a worn cap is still listed');
 }
 
 check(
@@ -339,8 +237,10 @@ check(
 );
 
 {
-  const wornHat = hat('issue_kettle_helm', 'Worn Helm +3', { constitution: WORN_HAT_CONSTITUTION });
-  const weakHat = hat('padded_gambeson', 'Weak Helm +1', { constitution: WEAK_HAT_CONSTITUTION });
+  const wornHat = hat('hearthguard_cap', 'Worn Helm +3', { constitution: WORN_HAT_CONSTITUTION });
+  const weakHat = hat('hearthguard_quilted_vest', 'Weak Helm +1', {
+    constitution: WEAK_HAT_CONSTITUTION,
+  });
 
   function humanWearing(candidate: InventoryItem, worn: InventoryItem | null): Inventory {
     const human = inventoryOf('human', []);
@@ -362,12 +262,12 @@ check(
   );
 
   const poisonProofHat = hat(
-    'issue_kettle_helm',
+    'hearthguard_cap',
     'Poison-Proof Helm +3',
     { constitution: WORN_HAT_CONSTITUTION },
     { resistances: ['poison'] },
   );
-  const statForResistance = hat('padded_gambeson', 'Bare Helm +4', {
+  const statForResistance = hat('hearthguard_quilted_vest', 'Bare Helm +4', {
     constitution: BETTER_HAT_CONSTITUTION,
   });
   check(
@@ -375,7 +275,7 @@ check(
     'a helm that gains a stat point but drops poison resistance is recommended',
   );
   const resistanceForStat = hat(
-    'padded_gambeson',
+    'hearthguard_quilted_vest',
     'Warded Helm +2',
     { constitution: SIDEGRADE_HAT_CONSTITUTION },
     { resistances: ['poison', 'ice'] },
@@ -385,7 +285,7 @@ check(
     'a helm that gains a resistance but drops a stat point is recommended',
   );
   const strictUpgrade = hat(
-    'padded_gambeson',
+    'hearthguard_quilted_vest',
     'Poison-Proof Helm +4',
     { constitution: BETTER_HAT_CONSTITUTION },
     { resistances: ['poison'] },
@@ -399,17 +299,11 @@ check(
 }
 
 {
-  const wornRingIds: ReadonlyArray<ItemId> = [
-    'riveted_bracers',
-    'marching_boots',
-    'padded_gambeson',
-    'issue_kettle_helm',
-  ];
-  const candidateId: ItemId = CROWN_ID;
+  const wornRingIds: ReadonlyArray<ItemId> = ['hearthguard_bracers', 'hearthguard_boots'];
+  const candidateId: ItemId = FORGED_ITEM_ID;
   check(
-    wornRingIds.length === RING_SLOTS_PER_HAND_SET &&
-      WORN_RING_STRENGTHS.length === RING_SLOTS_PER_HAND_SET,
-    'fixture: ring list is not one hand set',
+    wornRingIds.length === TRINKET_SLOTS && WORN_RING_STRENGTHS.length === TRINKET_SLOTS,
+    'fixture: ring list does not fill the Trinket slots',
   );
 
   /** The human wearing the first `wornCount` of {@link WORN_RING_STRENGTHS}, with one more ring in the bag. */
@@ -425,29 +319,21 @@ check(
   }
 
   check(
-    lists(
-      'human',
-      humanWithRings(RING_SLOTS_PER_HAND_SET - 1, WEAKEST_WORN_RING_STRENGTH),
-      candidateId,
-    ),
-    'a ring is not listed while a Ring slot is still empty',
+    lists('human', humanWithRings(TRINKET_SLOTS - 1, WEAKEST_WORN_RING_STRENGTH), candidateId),
+    'a ring is not listed while a Trinket slot is still empty',
   );
-  const fullHands = humanWithRings(RING_SLOTS_PER_HAND_SET, WEAKEST_WORN_RING_STRENGTH);
-  const occupiedRingSlots = wornRingIds.filter((id) => fullHands.equipment.hasEquipped(id));
+  const fullTrinkets = humanWithRings(TRINKET_SLOTS, WEAKEST_WORN_RING_STRENGTH);
+  const occupiedRingSlots = wornRingIds.filter((id) => fullTrinkets.equipment.hasEquipped(id));
   check(
-    occupiedRingSlots.length === RING_SLOTS_PER_HAND_SET,
-    'fixture: four rings did not fill all four Ring slots',
+    occupiedRingSlots.length === TRINKET_SLOTS,
+    'fixture: two rings did not fill both Trinket slots',
   );
   check(
-    !lists('human', fullHands, candidateId),
-    'a ring that only ties the weakest worn ring is listed with every Ring slot full',
+    !lists('human', fullTrinkets, candidateId),
+    'a ring that only ties the weakest worn ring is listed with every Trinket slot full',
   );
   check(
-    lists(
-      'human',
-      humanWithRings(RING_SLOTS_PER_HAND_SET, WEAKEST_WORN_RING_STRENGTH + 1),
-      candidateId,
-    ),
+    lists('human', humanWithRings(TRINKET_SLOTS, WEAKEST_WORN_RING_STRENGTH + 1), candidateId),
     'a ring that beats the weakest worn ring is not listed',
   );
 }
@@ -455,15 +341,10 @@ check(
 {
   const ZERO_STAT_RING_RESISTANCE: ResistanceType = 'poison';
   const UPGRADE_RING_STRENGTH = 1;
-  const wornRingIds: ReadonlyArray<ItemId> = [
-    'riveted_bracers',
-    'marching_boots',
-    'padded_gambeson',
-    'issue_kettle_helm',
-  ];
-  const candidateId: ItemId = CROWN_ID;
+  const wornRingIds: ReadonlyArray<ItemId> = ['hearthguard_bracers', 'hearthguard_boots'];
+  const candidateId: ItemId = FORGED_ITEM_ID;
 
-  function humanWithFourRings(worn: ReadonlyArray<InventoryItem>): Inventory {
+  function humanWithRings(worn: ReadonlyArray<InventoryItem>): Inventory {
     const human = inventoryOf('human', []);
     for (const item of worn) {
       putInBag(human, item);
@@ -472,15 +353,12 @@ check(
     return human;
   }
 
-  const [zeroResistantId, zeroPlainId, strongAId, strongBId] = wornRingIds;
-  const [, , strongAStrength, strongBStrength] = WORN_RING_STRENGTHS;
+  const [zeroResistantId, zeroPlainId] = wornRingIds;
 
   const resistantZero = ringWithResistances(zeroResistantId, 0, [ZERO_STAT_RING_RESISTANCE]);
   const plainZero = ringWithResistances(zeroPlainId, 0, []);
-  const strongerA = ring(strongAId, strongAStrength);
-  const strongerB = ring(strongBId, strongBStrength);
 
-  const oneBareZeroRing = humanWithFourRings([resistantZero, plainZero, strongerA, strongerB]);
+  const oneBareZeroRing = humanWithRings([resistantZero, plainZero]);
   putInBag(oneBareZeroRing, ring(candidateId, UPGRADE_RING_STRENGTH));
   check(
     lists('human', oneBareZeroRing, candidateId),
@@ -490,10 +368,8 @@ check(
   const resistanceOnEveryRing: ReadonlyArray<InventoryItem> = [
     ringWithResistances(zeroResistantId, WORN_RING_STRENGTHS[0], [ZERO_STAT_RING_RESISTANCE]),
     ringWithResistances(zeroPlainId, WORN_RING_STRENGTHS[1], [ZERO_STAT_RING_RESISTANCE]),
-    ringWithResistances(strongAId, strongAStrength, [ZERO_STAT_RING_RESISTANCE]),
-    ringWithResistances(strongBId, strongBStrength, [ZERO_STAT_RING_RESISTANCE]),
   ];
-  const allResistant = humanWithFourRings(resistanceOnEveryRing);
+  const allResistant = humanWithRings(resistanceOnEveryRing);
   const strongestWornRingStrength = Math.max(...WORN_RING_STRENGTHS);
   putInBag(allResistant, ring(candidateId, strongestWornRingStrength + UPGRADE_RING_STRENGTH));
   check(
@@ -503,36 +379,36 @@ check(
 }
 
 {
-  /** Far above the gauntlet's own +1, so the id-keyed guard is the only reason it is refused. */
+  /** Far above anything the gauntlet's own stats add, so its traits are the only reason it is refused. */
   const OVERWHELMING_GLOVE_STRENGTH = 20;
-  const REAL_GAUNTLET_STAT_TOTAL = ITEM_DEF.grull_war_gauntlet.statBonus?.dexterity ?? 0;
+  const REAL_GAUNTLET_STAT_TOTAL = ITEM_DEF.iron_knuckle_gauntlet.statBonus?.dexterity ?? 0;
   /** Copied from the real gauntlet so every field it guards is matched, not just its stats. */
   const gauntletLike = (id: ItemId, name: string, strength: number): InventoryItem => ({
-    ...ITEM_DEF.grull_war_gauntlet,
+    ...ITEM_DEF.iron_knuckle_gauntlet,
     id,
     name,
     quantity: 1,
     statBonus: { strength },
   });
   const overwhelmingGlove = gauntletLike(
-    CROWN_ID,
+    FORGED_ITEM_ID,
     'Impossible Gauntlet',
     OVERWHELMING_GLOVE_STRENGTH,
   );
 
-  const humanWithGauntlet = inventoryOf('human', ['grull_war_gauntlet']);
-  humanWithGauntlet.equipByItemId('grull_war_gauntlet');
+  const humanWithGauntlet = inventoryOf('human', ['iron_knuckle_gauntlet']);
+  humanWithGauntlet.equipByItemId('iron_knuckle_gauntlet');
   check(
-    humanWithGauntlet.equipment.hasEquipped('grull_war_gauntlet'),
-    'fixture: the War Gauntlet would not equip',
+    humanWithGauntlet.equipment.hasEquipped('iron_knuckle_gauntlet'),
+    'fixture: the Iron Knuckle Gauntlet would not equip',
   );
   putInBag(humanWithGauntlet, overwhelmingGlove);
   check(
     !lists('human', humanWithGauntlet, overwhelmingGlove.id),
-    'a far-stronger glove is recommended over the worn War Gauntlet',
+    'a far-stronger glove is recommended over the worn Iron Knuckle Gauntlet',
   );
 
-  const impostorId: ItemId = 'riveted_bracers';
+  const impostorId: ItemId = 'hearthguard_bracers';
   const humanWithImpostor = inventoryOf('human', []);
   putInBag(humanWithImpostor, gauntletLike(impostorId, 'Gauntlet Copy', REAL_GAUNTLET_STAT_TOTAL));
   humanWithImpostor.equipByItemId(impostorId);
@@ -543,21 +419,20 @@ check(
   putInBag(humanWithImpostor, overwhelmingGlove);
   check(
     lists('human', humanWithImpostor, overwhelmingGlove.id),
-    'control: the glove does not beat an identical gauntlet under an unguarded id, so the id guard is untested',
+    'control: the glove does not beat an identical gauntlet under an id with no traits, so the trait guard is untested',
   );
 }
 
 {
   const humanGear: ReadonlyArray<ItemId> = [
-    'issue_kettle_helm',
-    'padded_gambeson',
-    'riveted_bracers',
-    'marching_boots',
-    'nightgaunt_cloak',
-    'splatter_skunk_toe_ring',
-    'shade_gnoll_kneepads',
+    'hearthguard_cap',
+    'hearthguard_quilted_vest',
+    'hearthguard_bracers',
+    'hearthguard_boots',
+    'patched_duster',
+    'riot_kneeguards',
   ];
-  const catGear: ReadonlyArray<ItemId> = ['slate_butterfly_talisman', 'fae_scale_crupper'];
+  const catGear: ReadonlyArray<ItemId> = ['moonmoth_pendant', 'plumed_coat'];
   const allNames = [...humanGear, ...catGear].map((id) => ITEM_DEF[id].name);
   check(allNames.length > MAX_ITEMS_PER_DEBRIEF_PAGE, 'fixture: too few items to force paging');
 
@@ -593,7 +468,7 @@ check(
 {
   const singlePluralItemText = spoken(
     CONGRATULATED,
-    stateOf(inventoryOf('human', ['marching_boots']), inventoryOf('cat', [])),
+    stateOf(inventoryOf('human', ['hearthguard_boots']), inventoryOf('cat', [])),
   );
   check(
     singlePluralItemText.includes(CLOSING_FRAGMENT),
@@ -602,21 +477,17 @@ check(
 }
 
 {
-  const bareHuman = inventoryOf('human', []);
   const bareCat = inventoryOf('cat', []);
 
   check(
     debriefHasNews(EMPTY_DEBRIEF_MEMORY, emptyState),
     'no `!` before the congratulations are spoken',
   );
-  const boxState = stateOf(bareHuman, bareCat, ONE_HUMAN_BOX);
-  check(debriefHasNews(CONGRATULATED, boxState), 'no `!` for an unheard-of loot box');
-  const helmState = stateOf(inventoryOf('human', ['issue_kettle_helm']), bareCat);
+  const helmState = stateOf(inventoryOf('human', ['hearthguard_cap']), bareCat);
   check(debriefHasNews(CONGRATULATED, helmState), 'no `!` for unnamed gear');
 
   for (const [label, memory, state] of [
     ['congratulations', EMPTY_DEBRIEF_MEMORY, emptyState],
-    ['box', CONGRATULATED, boxState],
     ['gear', CONGRATULATED, helmState],
   ] as const) {
     check(
@@ -625,21 +496,15 @@ check(
     );
   }
 
-  const afterOneBox = rememberDebriefSpoken(CONGRATULATED, boxState);
-  check(
-    debriefHasNews(afterOneBox, stateOf(bareHuman, bareCat, { human: 2, cat: 0 })),
-    'a second box after the talk raises no `!`',
-  );
-
   const afterHelm = rememberDebriefSpoken(CONGRATULATED, helmState);
-  const helmAndShirt = inventoryOf('human', ['issue_kettle_helm', 'padded_gambeson']);
+  const helmAndShirt = inventoryOf('human', ['hearthguard_cap', 'hearthguard_quilted_vest']);
   check(
     debriefHasNews(afterHelm, stateOf(helmAndShirt, bareCat)),
     'a newly found item after the talk raises no `!`',
   );
 
   const bothNamed = rememberDebriefSpoken(CONGRATULATED, stateOf(helmAndShirt, bareCat));
-  helmAndShirt.equipByItemId('issue_kettle_helm');
+  helmAndShirt.equipByItemId('hearthguard_cap');
   const oneLeft = stateOf(helmAndShirt, bareCat);
   check(
     oneLeft.unworn.length === 1,
@@ -652,37 +517,6 @@ check(
   check(
     debriefPages(ANY_BOSS, bothNamed, oneLeft) === null,
     'equipping one of two named items makes him re-read the other',
-  );
-
-  const threeBoxes: BoxCounts = { human: 3, cat: 0 };
-  const afterThree = rememberDebriefSpoken(CONGRATULATED, stateOf(bareHuman, bareCat, threeBoxes));
-  const allOpened = reconcileDebriefMemory(afterThree, NO_BOXES);
-  const earnedOne = reconcileDebriefMemory(allOpened, ONE_HUMAN_BOX);
-  check(
-    debriefHasNews(earnedOne, stateOf(bareHuman, bareCat, ONE_HUMAN_BOX)),
-    'opening every box then earning one more raises no `!`',
-  );
-  check(
-    !debriefHasNews(afterThree, stateOf(bareHuman, bareCat, ONE_HUMAN_BOX)),
-    'control: without reconciling, one box reads as fewer than he last saw — the reconcile is what the gate above measures',
-  );
-
-  const helmHuman = inventoryOf('human', ['issue_kettle_helm']);
-  const boxedHelm = stateOf(helmHuman, bareCat, ONE_HUMAN_BOX);
-  const afterBoxTalk = rememberDebriefSpoken(CONGRATULATED, boxedHelm);
-  check(
-    !debriefHasNews(afterBoxTalk, boxedHelm),
-    'fixture: the `!` did not clear after the box talk',
-  );
-  const boxesOpened = stateOf(helmHuman, bareCat);
-  const reconciled = reconcileDebriefMemory(afterBoxTalk, boxesOpened.pendingBoxes);
-  check(
-    debriefHasNews(reconciled, boxesOpened),
-    'gear held back behind boxes is not news once the boxes are open',
-  );
-  check(
-    spoken(reconciled, boxesOpened).includes(KETTLE_HELM_NAME),
-    'gear held back behind boxes is not named once the boxes are open',
   );
 }
 
@@ -711,21 +545,19 @@ check(
 {
   const memoryA: DebriefMemory = {
     congratulated: true,
-    namedItemIds: ['issue_kettle_helm', 'padded_gambeson'],
-    boxCountsAtLastTalk: { human: 1, cat: 2 },
+    namedItemIds: ['hearthguard_cap', 'hearthguard_quilted_vest'],
   };
   const memoryACopy: DebriefMemory = { ...memoryA, namedItemIds: [...memoryA.namedItemIds] };
   check(sameDebriefMemory(memoryA, memoryA), 'a memory is not equal to itself');
   check(sameDebriefMemory(memoryA, memoryACopy), 'a memory is not equal to a copy of itself');
 
-  const human = inventoryOf('human', ['issue_kettle_helm']);
+  const human = inventoryOf('human', ['hearthguard_cap']);
   const cat = inventoryOf('cat', []);
-  const repeatBoxes: BoxCounts = { human: 1, cat: 2 };
-  const repeatState = stateOf(human, cat, repeatBoxes);
+  const repeatState = stateOf(human, cat);
   const repeatTalk = rememberDebriefSpoken(memoryA, repeatState);
   check(
     sameDebriefMemory(memoryA, repeatTalk),
-    'a boxes-only repeat talk with unchanged counts changes the memory',
+    'a repeat talk with nothing new changes the memory',
   );
 
   const firstCongratsTalk = rememberDebriefSpoken(EMPTY_DEBRIEF_MEMORY, repeatState);
@@ -736,20 +568,11 @@ check(
 
   const newNamedItem: DebriefMemory = {
     ...memoryA,
-    namedItemIds: [...memoryA.namedItemIds, 'marching_boots'],
+    namedItemIds: [...memoryA.namedItemIds, 'hearthguard_boots'],
   };
   check(
     !sameDebriefMemory(memoryA, newNamedItem),
     'a newly named item id does not change the memory',
-  );
-
-  const changedBoxCount: DebriefMemory = {
-    ...memoryA,
-    boxCountsAtLastTalk: { human: 2, cat: 2 },
-  };
-  check(
-    !sameDebriefMemory(memoryA, changedBoxCount),
-    'a changed box count does not change the memory',
   );
 }
 

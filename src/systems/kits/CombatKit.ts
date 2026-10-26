@@ -14,14 +14,16 @@
  * be reached through casts.
  */
 
+import { GearSystem } from '../GearSystem';
+import { RELIC_HUM_HEARING_TILES, RELIC_HUM_LOOP, RELIC_HUM_VOLUME } from '../gearTraitSoundCues';
 import { TILE_SIZE } from '../../core/constants';
-import { makeElectrified } from '../../core/StatusEffect';
+import { makeElectrified } from '../../core/combat/StatusEffect';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { Mob } from '../../creatures/Mob';
 import type { AudioManager } from '../../audio/AudioManager';
 import type { SoundId } from '../../audio/sounds';
-import type { AbilityManager } from '../../core/AbilityManager';
+import type { AbilityManager } from '../../core/skills/AbilityManager';
 import { DeathScreen } from '../../ui/DeathScreen';
 import { BodyPartGoreSystem } from '../BodyPartGoreSystem';
 import {
@@ -41,7 +43,7 @@ import { PlayerTickSystem } from '../PlayerTickSystem';
 import type { SafeRoomSystem } from '../SafeRoomSystem';
 import { SmushEffectSystem } from '../SmushEffectSystem';
 import { StatusChangeWatcher } from '../statusChangeEvents';
-import { TaranisStrikeSystem } from '../TaranisStrikeSystem';
+import { StormcallerStrikeSystem } from '../StormcallerStrikeSystem';
 import type { SpellSystem } from '../SpellSystem';
 import type { DestructiblePropSystem } from '../DestructiblePropSystem';
 import type { TownInteriorPropDestructionSystem } from '../TownInteriorPropDestructionSystem';
@@ -64,9 +66,9 @@ const CHAIN_LIGHTNING_RANGE_TILES = 3;
 const CHAIN_LIGHTNING_MAX_TARGETS = 3;
 const CHAIN_LIGHTNING_DAMAGE = 2;
 
-const SPLATTER_ORBIT_LOOP = 'splatter_orb_orbit_loop' satisfies SoundId;
+const KALEIDOSCOPE_ORBIT_LOOP = 'kaleidoscope_orb_orbit_loop' satisfies SoundId;
 /** Under everything else: a hum that can run for half a minute must not wear on the player. */
-const SPLATTER_ORBIT_LOOP_VOLUME = 0.25;
+const KALEIDOSCOPE_ORBIT_LOOP_VOLUME = 0.25;
 
 export interface CombatKitDeps {
   readonly world: SceneWorld;
@@ -123,8 +125,19 @@ export class CombatKit {
   readonly smushFx = new SmushEffectSystem();
   readonly meleeFx = new MeleeImpactEffectSystem();
   readonly missileFx = new MagicMissileImpactEffectSystem();
-  /** The Fury of Taranis's waves in flight, with what each swing has struck. */
-  readonly taranis = new TaranisStrikeSystem();
+  /** The Stormcaller's waves in flight, with what each swing has struck. */
+  readonly stormcaller = new StormcallerStrikeSystem();
+  readonly gear: GearSystem;
+  /**
+   * Whether the hostile world took its step this frame: false on the frames a
+   * crawler's last stand holds it back, which is how it runs at half speed.
+   * Set by {@link updateMobs}, which skips the mobs' own AI on those frames.
+   * The owning scene skips the hostile systems it runs on the same frames:
+   * the projectile systems, fairies and summons, boss-room dressings, the boss
+   * rooms' shots and acid, and an interior's quest fight. Room locks, timers
+   * and anything friendly keep full pace.
+   */
+  worldStepTaken = true;
   readonly deathScreen = new DeathScreen();
   private readonly statusChanges: StatusChangeWatcher;
 
@@ -143,6 +156,7 @@ export class CombatKit {
     this.statusChanges = deps.statusChanges ?? new StatusChangeWatcher();
     this.spells = deps.world.roster.spells;
     this.bodyPartGore = new BodyPartGoreSystem(deps.world.gameMap);
+    this.gear = new GearSystem(deps.world);
     this.deathScreen.audio = deps.world.audio;
     this.combatCtx = {
       human: deps.world.pm.human,
@@ -157,7 +171,8 @@ export class CombatKit {
       smushFx: this.smushFx,
       meleeFx: this.meleeFx,
       missileFx: this.missileFx,
-      weaponProcs: { taranisStorm: this.taranis },
+      weaponProcs: { stormcallerStorm: this.stormcaller },
+      gearWorld: this.gear,
       hitLanded: false,
     };
   }
@@ -210,7 +225,8 @@ export class CombatKit {
   updateMobs(ctx: SystemContext): void {
     this.world.audio?.setListenerToCrawler(ctx.active);
     this.spells.update(ctx);
-    this.mobLoop.update(ctx);
+    this.worldStepTaken = this.gear.takeWorldStep();
+    if (this.worldStepTaken) this.mobLoop.update(ctx);
   }
 
   /**
@@ -228,7 +244,7 @@ export class CombatKit {
     ctx.trees = extras.trees;
     ctx.structures = extras.structures;
     resolvePlayerAttacks(ctx);
-    this.taranis.update(ctx);
+    this.stormcaller.update(ctx);
     this.world.pm.cat.flushPendingSubMissiles();
     return { hitLanded: ctx.hitLanded };
   }
@@ -295,9 +311,10 @@ export class CombatKit {
   }
 
   /**
-   * Ages the viscera and the smush blast the frame's fighting left behind, and
-   * sounds the blast — the boom belongs here rather than with the mob cues below
-   * because it is raised by the stomp this frame just resolved.
+   * Ages the viscera and the smush blast the frame's fighting left behind,
+   * ticks the crawlers' worn gear, and sounds the blast. The boom belongs here
+   * rather than with the mob cues because the stomp this frame just resolved
+   * raised it.
    */
   updatePostCombat(audio: AudioManager | null): void {
     this.gore.update();
@@ -305,33 +322,63 @@ export class CombatKit {
     this.smushFx.update();
     this.meleeFx.update();
     this.missileFx.update();
+    this.gear.update();
     if (this.smushFx.blastSoundPending) {
       this.smushFx.blastSoundPending = false;
       // `human_smush` plays when the ability fires, a third of a second before
       // the foot lands; this is the boom the landing itself makes.
       audio?.play('dynamite_explosion');
     }
-    this.playSplatterCues(audio);
+    this.playKaleidoscopeCues(audio);
+    this.playGearCues(audio);
     const { human, cat } = this.world.pm;
     this.statusChanges.update(human, cat, this.world.bus);
   }
 
   /**
-   * The Eyes of Splatter's cues. The orbit hum follows whether any copy is
+   * What the crawlers' gear did this frame, and the hum of any relic worn.
+   * Every gear cue is the party's own, so it keeps its side but not its
+   * distance; the hum is the exception, a sound only heard beside the relic.
+   */
+  private playGearCues(audio: AudioManager | null): void {
+    for (const cue of this.gear.drainSoundCues()) {
+      if (cue.takes.length > 0) audio?.playRandomAt(cue.takes, cue.x, cue.y, {}, 'panOnly');
+    }
+    const listener = this.world.pm.active();
+    const listenerX = listener.x + HALF_TILE;
+    const listenerY = listener.y + HALF_TILE;
+    let nearestTiles = Infinity;
+    for (const relic of this.gear.relicHumPoints()) {
+      const distanceTiles = Math.hypot(relic.x - listenerX, relic.y - listenerY) / TILE_SIZE;
+      nearestTiles = Math.min(nearestTiles, distanceTiles);
+    }
+    const loops = this.world.audioScope;
+    if (nearestTiles >= RELIC_HUM_HEARING_TILES) {
+      loops?.stopAmbientLoop(RELIC_HUM_LOOP);
+      return;
+    }
+    const closeness = 1 - nearestTiles / RELIC_HUM_HEARING_TILES;
+    const volume = RELIC_HUM_VOLUME * closeness;
+    loops?.startAmbientLoop(RELIC_HUM_LOOP, volume);
+    loops?.setAmbientLoopVolume(RELIC_HUM_LOOP, volume);
+  }
+
+  /**
+   * The cues of the cat's split missile copies. The orbit hum follows whether any copy is
    * circling the cat this frame rather than a started flag, so every way the
    * copies can vanish — fading, peeling off, a floor change dropping them, her
    * going down — silences it on the next frame without being told.
    */
-  private playSplatterCues(audio: AudioManager | null): void {
+  private playKaleidoscopeCues(audio: AudioManager | null): void {
     const { cat } = this.world.pm;
-    const cues = cat.drainSplatterCues();
-    if (cues.released) audio?.play('splatter_orb_spawn');
-    if (cues.peeledOff) audio?.play('splatter_orb_seek');
+    const cues = cat.drainKaleidoscopeCues();
+    if (cues.released) audio?.play('kaleidoscope_orb_spawn');
+    if (cues.peeledOff) audio?.play('kaleidoscope_orb_seek');
     const loops = this.world.audioScope;
-    if (cat.hasOrbitingSplatterCopies) {
-      loops?.startAmbientLoop(SPLATTER_ORBIT_LOOP, SPLATTER_ORBIT_LOOP_VOLUME);
+    if (cat.hasOrbitingKaleidoscopeCopies) {
+      loops?.startAmbientLoop(KALEIDOSCOPE_ORBIT_LOOP, KALEIDOSCOPE_ORBIT_LOOP_VOLUME);
     } else {
-      loops?.stopAmbientLoop(SPLATTER_ORBIT_LOOP);
+      loops?.stopAmbientLoop(KALEIDOSCOPE_ORBIT_LOOP);
     }
   }
 
@@ -362,9 +409,10 @@ export class CombatKit {
     this.spells.renderShell(ctx, camX, camY);
     this.spells.renderCatMiniShell(ctx, camX, camY, cat);
     this.spells.renderChainLightning(ctx, camX, camY);
-    this.taranis.render(ctx, camX, camY);
+    this.stormcaller.render(ctx, camX, camY);
     this.spells.renderShockwaveRipples(ctx, camX, camY);
     this.spells.renderFogs(ctx, camX, camY);
+    this.gear.render(ctx, camX, camY);
     this.smushFx.render(ctx, camX, camY);
     this.meleeFx.render(ctx, camX, camY);
     this.missileFx.render(ctx, camX, camY);
@@ -378,7 +426,8 @@ export class CombatKit {
    */
   leaveFloor(): void {
     this.spells.dropWorldEffects();
-    this.taranis.reset();
+    this.stormcaller.reset();
+    this.gear.reset();
     this.smushFx.resetForCheckpoint();
     this.meleeFx.resetForCheckpoint();
     this.missileFx.resetForCheckpoint();
@@ -399,7 +448,8 @@ export class CombatKit {
   /** Drops everything in flight, so a rewound world has no leftovers mid-air. */
   resetForCheckpoint(): void {
     this.spells.resetForCheckpoint();
-    this.taranis.reset();
+    this.stormcaller.reset();
+    this.gear.reset();
     this.smushFx.resetForCheckpoint();
     this.meleeFx.resetForCheckpoint();
     this.missileFx.resetForCheckpoint();
@@ -412,7 +462,9 @@ export class CombatKit {
 
   dispose(): void {
     this.floatingText.dispose();
-    this.world.audioScope?.stopAmbientLoop(SPLATTER_ORBIT_LOOP);
+    this.gear.dispose();
+    this.world.audioScope?.stopAmbientLoop(KALEIDOSCOPE_ORBIT_LOOP);
+    this.world.audioScope?.stopAmbientLoop(RELIC_HUM_LOOP);
     // Drops the pack-alert grid. It is a module-level handle, so a scene that
     // exited without this leaves its whole roster — and through it its `GameMap`
     // — reachable for the rest of the page's life.

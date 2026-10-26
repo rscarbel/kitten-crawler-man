@@ -9,20 +9,17 @@ import { STILL_ROW } from '../../art/biped/bipedParts';
 import type { BipedPose, ViewSpec } from '../../art/biped/rig';
 import type { CardinalView } from '../../facingView';
 import type { GarmentFrameContext } from '../garmentDef';
-import { wornGarmentOf } from '../garments';
-import { outfitOf, paintOutfitPart, type Outfit } from '../outfit';
+import { gloveOf, outfitOf, paintOutfitPart, sleevesOf, type Outfit } from '../outfit';
 import type { HumanLook } from '../../looks/humanLook';
 
-const DEFAULT_WORN = [wornGarmentOf('human', 'human_trollskin_shirt')];
-
 /**
- * The outfit every row was authored and reviewed in: the trollskin shirt over
- * `look`'s base garments. A pose that carries no outfit is painted in it.
+ * `look`'s base garments with nothing put on over them: the outfit a pose
+ * that carries none is painted in.
  */
 export function defaultOutfitOf(look: HumanLook): Outfit<'human'> {
   const known = defaultOutfits.get(look);
   if (known !== undefined) return known;
-  const outfit = outfitOf(look, DEFAULT_WORN);
+  const outfit = outfitOf(look, []);
   defaultOutfits.set(look, outfit);
   return outfit;
 }
@@ -65,10 +62,7 @@ export function humanDressingFor(pose: BipedPose, view: ViewSpec, look: HumanLoo
   return {
     part: (ctx, part, frame) => paintOutfitPart(ctx, outfit, part, frame, context),
     paints: (part) => outfit.garments.some((garment) => garment.paint[part] !== undefined),
-    hides: (feature) => outfit.hidden.has(feature),
-    reach: (skeleton, drawnView) =>
-      outfit.garments.flatMap(
-        (garment) => garment.reach?.(skeleton, drawnView, context, look) ?? [],
-      ),
+    sleeves: sleevesOf(outfit),
+    glove: (side) => gloveOf(outfit, side),
   };
 }

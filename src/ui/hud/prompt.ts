@@ -7,7 +7,7 @@
  * prompt shares the HUD's keycap and glass.
  */
 
-import { keybindings } from '../../core/Keybindings';
+import { keybindings } from '../../core/input/Keybindings';
 import type { Rect } from '../core/geom';
 import type { Surface, Ui } from '../core/UiRoot';
 import {

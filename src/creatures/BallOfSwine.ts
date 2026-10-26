@@ -1,3 +1,4 @@
+import { inkSpoilsBlow } from '../gear/incomingBlows';
 import { BOSS_BLAST_DAMAGE_SCALE, Mob } from './Mob';
 import type { EyePlacement } from '../sprites/eyePlacement';
 import type { DamageSource, Player } from '../Player';
@@ -20,7 +21,7 @@ import {
 } from '../sprites/ballOfSwineSheet';
 import { STENCH_ATTACK_TYPE, TRAMPLE_ATTACK_TYPE } from './ballOfSwineAttackTypes';
 import { ARENA_INTERIOR_RADIUS_TILES, ARENA_REACH } from '../map/arenaGeometry';
-import { makePoison, type StatusEffect } from '../core/StatusEffect';
+import { makePoison, type StatusEffect } from '../core/combat/StatusEffect';
 import { prewarmTuskling } from '../sprites/tusklingSprite';
 import type { LootDrop, PlayerDamageType } from './Mob';
 import { deferChromeWhereDark, type ChromePart } from '../systems/lighting/aboveDarkness';
@@ -575,16 +576,6 @@ export class BallOfSwine extends Mob {
   }
 
   /**
-   * The ball is drawn nearly three tiles across, centred on a one-tile footprint, so
-   * anything anchored to its tile lands inside the body. Everything written above it
-   * — the septic label here, the health bar and the vulnerability banner below — is
-   * lifted clear by its own radius.
-   */
-  protected override get statusLabelClearanceTiles(): number {
-    return BOS_BODY_RADIUS_TILES;
-  }
-
-  /**
    * The ball's motion is its own.
    *
    * Separation exists to stop mobs stacking on one tile, and shoving a body that
@@ -659,11 +650,10 @@ export class BallOfSwine extends Mob {
   /**
    * A status effect's damage tick.
    *
-   * `Player.takeDamage` is where burn, poison and sepsis land. `Mob` overrides it
-   * so an ordinary mob dies properly and credits whoever applied the status. For
-   * this one that is not enough: its burst has to be *held*, and a plain tick would
-   * end it outright, so no Tusklings and no stairwell, and the Sepsis Crown the
-   * cat can be wearing applies a *permanent* tick. A lethal tick is converted
+   * `Player.takeDamage` is where burn and poison land. `Mob` overrides it so an
+   * ordinary mob dies properly and credits whoever applied the status. For this
+   * one that is not enough: its burst has to be *held*, and a plain tick would
+   * end it outright, so no Tusklings and no stairwell. A lethal tick is converted
    * into a real, credited mob death here instead.
    *
    * Taking the lethal blow off `super` skips its guards, and each one is checked
@@ -1235,14 +1225,18 @@ export class BallOfSwine extends Mob {
       // `takeDamage` dies unattributed — the trample has an owner, and
       // `takeDamageFrom` is what puts it in the ledger the XP split reads.
       if (target instanceof Mob) target.takeDamageFrom(damage, this, 'melee');
-      else if (target.takeDamage(damage, trampleDamageSource(this.mobType))) {
+      // An inked miss still spends the pass on her: the cooldown below is set either way.
+      else if (
+        !inkSpoilsBlow(this, target) &&
+        target.takeDamage(damage, trampleDamageSource(this.mobType))
+      ) {
         this.trampleHits++;
         this.lastTramplePx.x = targetX;
         this.lastTramplePx.y = targetY;
         this.noteStruckPlayer(target);
         // A boulder rolling over someone is contact, so reflect gear bites into
         // it exactly as it does into a swing.
-        this.reflectMeleeDamage(target, damage);
+        this.answerContactBlow(target, damage);
       }
       this.attackSoundPending = true;
       this.trampleCooldowns.set(target, TRAMPLE_COOLDOWN);

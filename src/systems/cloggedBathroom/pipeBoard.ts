@@ -17,7 +17,7 @@
  * so a reload restores it.
  */
 
-import type { Difficulty } from '../../core/difficultyProfiles';
+import type { Difficulty } from '../../core/difficulty/difficultyProfiles';
 import { mixSeed, seededStream } from '../../map/bigTop/mirrorBoard';
 
 // ── Tiles ────────────────────────────────────────────────────────────────────

@@ -10,9 +10,9 @@
  */
 
 import { crawlerName } from '../../characters/characters';
-import { CraftSkills } from '../../core/CraftSkills';
-import type { ResourceCost } from '../../core/partyResources';
-import type { ResourceId } from '../../core/resourceIds';
+import { CraftSkills } from '../../core/labour/CraftSkills';
+import type { ResourceCost } from '../../core/items/gathering/partyResources';
+import type { ResourceId } from '../../core/items/gathering/resourceIds';
 import { TILE_SIZE } from '../../core/constants';
 import type { BuildOption, OptionStatus } from '../../systems/briarHollow/ConstructionSystem';
 import {

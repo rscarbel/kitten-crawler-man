@@ -33,7 +33,7 @@ import {
   type ResidencySnapshot,
   type RouteResult,
 } from './residencyRoutes.js';
-import type { SurfaceOwner } from '../src/core/canvasSurface.js';
+import type { SurfaceOwner } from '../src/core/rendering/canvasSurface.js';
 
 const SCRIPT = 'scripts/verify-residency.ts';
 /**

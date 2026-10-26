@@ -9,7 +9,7 @@
  * passes may turn a transparent pixel opaque.
  */
 
-import { surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import { surfaceContext, type CanvasSurface } from '../../core/rendering/canvasSurface';
 
 /** The game's own 2D context — the offline bakers bridge node-canvas to it. */
 type Ctx = CanvasRenderingContext2D;

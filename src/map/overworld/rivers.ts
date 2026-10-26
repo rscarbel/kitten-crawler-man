@@ -36,7 +36,7 @@ import type { TilePoint, TownPlan } from '../town/townPlan';
 import type { ElevationField } from './elevation';
 import type { KeepOut } from './keepOut';
 import { NO_REGION, Reachability } from './reachability';
-import { worldRandom } from '../../core/WorldRandom';
+import { worldRandom } from '../../core/world/WorldRandom';
 
 /**
  * How many rivers a map gets.

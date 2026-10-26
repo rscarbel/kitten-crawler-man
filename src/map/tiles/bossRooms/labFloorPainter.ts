@@ -3,12 +3,12 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../../core/canvasSurface';
+} from '../../../core/rendering/canvasSurface';
 import { tileCoordKey } from '../../tileIndex';
 import { LAB_WEB, positionHash, type TileContent } from '../../tileTypes';
 import { drawWallShadow } from '../helpers';
 import { spiderLabFloorPlanFor, type SpiderLabFloorPlan } from './labFloorPlan';
-import { onCanvasRecovery } from '../../../core/canvasRecovery';
+import { onCanvasRecovery } from '../../../core/rendering/canvasRecovery';
 
 /**
  * The spider lab's floor: sealed vinyl squares, scuffed and grimed, with the

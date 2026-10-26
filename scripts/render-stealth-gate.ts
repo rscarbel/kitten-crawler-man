@@ -28,7 +28,7 @@ import type { StealthGateRoomData } from '../src/map/stealthGateLayout.js';
 import { FLOOR_ART_SEEDS } from '../src/map/ground/artSeedAlphabet.js';
 import { setDungeonFloorTheme } from '../src/map/dungeon/floorTheme.js';
 import { DungeonLightingSystem } from '../src/systems/DungeonLightingSystem.js';
-import { setViewportSize } from '../src/core/Viewport.js';
+import { setViewportSize } from '../src/core/rendering/Viewport.js';
 
 const OUT_DIR = `${PREVIEW_DIR}/stealth-gate`;
 const DEFAULT_SEED_LIMIT = 60;

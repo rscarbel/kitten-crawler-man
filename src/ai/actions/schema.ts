@@ -5,7 +5,7 @@
  * executor reads its arguments through.
  */
 
-import { plainLine } from '../../core/plainText';
+import { plainLine } from '../../core/util/plainText';
 
 export type JsonSchema =
   | {

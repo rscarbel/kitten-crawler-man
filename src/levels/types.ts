@@ -4,9 +4,9 @@ import type { StealthGateRequest } from '../map/spineLayout';
 import type { MusicTrackId } from '../audio/sounds';
 import type { DungeonFloorThemeId } from '../map/dungeon/floorTheme';
 import type { XpDiminishingTier } from './xpDiminishing';
-import type { AssetGroup } from '../core/assetGroups';
+import type { AssetGroup } from '../core/spriteAssets/assetGroups';
 import type { LevelledCurve } from '../creatures/mobLevelScaling';
-import type { Difficulty } from '../core/difficultyProfiles';
+import type { Difficulty } from '../core/difficulty/difficultyProfiles';
 import type { DefendQuestIntensity } from './defendQuestIntensity';
 import type { StandaloneMobKind } from './mobKinds';
 
@@ -337,12 +337,12 @@ export interface LevelDef {
   /** Side length of the square tile grid this floor is generated on. */
   mapSize: number;
   /**
-   * The sprite groups (`src/core/assetGroups.ts`) this floor's *base* content
+   * The sprite groups (`src/core/spriteAssets/assetGroups.ts`) this floor's *base* content
    * needs: `roomMobs`, `hallwayMobs`, `extraSpawns`, `campSpawns`, `bossRooms`
    * and the ground/wall theme. Does NOT include creatures introduced by
    * bounty/quest/companion systems that never touch this def — those are
    * declared separately in `SYSTEM_ASSET_REQUIREMENTS`
-   * (`src/core/systemAssetRequirements.ts`) and unioned in by floor id at
+   * (`src/core/spriteAssets/systemAssetRequirements.ts`) and unioned in by floor id at
    * `verify:assets` time. See that file's header for why: a floor's `LevelDef`
    * does not list everything that can appear on it.
    */
@@ -470,8 +470,8 @@ export interface LevelDef {
    * means `BASE_DEFEND_QUEST_INTENSITY`.
    */
   defendQuestIntensity?: DefendQuestIntensity;
-  /** Whether mobs on this floor may roll the rare Slingshot world drop. */
-  slingshotDrops?: boolean;
+  /** Whether mobs on this floor may roll the rare world gear drops no one creature carries. */
+  worldGearDrops?: boolean;
   /** Position-relative spawn rules evaluated at level construction time. */
   extraSpawns?: ExtraSpawnRule[];
   /**

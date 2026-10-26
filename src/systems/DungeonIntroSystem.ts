@@ -1,7 +1,7 @@
 import { worldTint } from '../ui/world/worldShapes';
 import { worldPalette } from '../ui/theme/worldInk';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
-import { getSpriteDefByKey } from '../core/SpriteLoader';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import { getSpriteDefByKey } from '../core/spriteAssets/SpriteLoader';
 
 const HOLD_FRAMES = 125;
 const FADE_OUT_FRAMES = 80;

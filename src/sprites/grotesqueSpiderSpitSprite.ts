@@ -14,7 +14,7 @@
  * `art/grotesqueSpiderSpitFigure.ts`.
  */
 
-import { progressFrameIndex } from '../core/SpriteRenderer';
+import { progressFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import {
   GROTESQUE_SPIDER_SPIT_PROJECTILE_FIGURE,
   GROTESQUE_SPIDER_SPIT_TRAP_FIGURE,

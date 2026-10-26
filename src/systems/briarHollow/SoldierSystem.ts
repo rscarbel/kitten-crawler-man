@@ -22,11 +22,11 @@ import type {
   ActiveContract,
   BriarHollowState,
   SoldierOrderRecord,
-} from '../../core/briarHollowState';
-import type { CrawlerKind } from '../../core/SkillManager';
-import type { VillageQuestPhase } from '../../core/villageQuestPhase';
-import { applySpawnDifficulty } from '../../core/difficultyProfiles';
-import { REVIVE_RANGE_PX } from '../../core/reviveRules';
+} from '../../core/quests/briarHollowState';
+import type { CrawlerKind } from '../../core/skills/SkillManager';
+import type { VillageQuestPhase } from '../../core/quests/villageQuestPhase';
+import { applySpawnDifficulty } from '../../core/difficulty/difficultyProfiles';
+import { REVIVE_RANGE_PX } from '../../core/party/reviveRules';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import {

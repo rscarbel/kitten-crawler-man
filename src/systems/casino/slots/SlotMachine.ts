@@ -30,7 +30,7 @@ import {
   pickLuckyOutcome,
   type ForcedOutcome,
 } from './forcedOutcomes';
-import { NEVER_LUCKY, type LuckCheck } from '../../../core/GodMode';
+import { NEVER_LUCKY, type LuckCheck } from '../../../core/state/GodMode';
 import {
   REEL_COUNT,
   REEL_STRIPS,

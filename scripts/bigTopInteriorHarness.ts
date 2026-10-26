@@ -11,13 +11,13 @@
  * to re-implement the scene's draw order.
  */
 
-import type { Difficulty } from '../src/core/difficultyProfiles.js';
+import type { Difficulty } from '../src/core/difficulty/difficultyProfiles.js';
 import { createCanvas, type Canvas } from 'canvas';
 
 import { TILE_SIZE } from '../src/core/constants.js';
 import { EventBus } from '../src/core/EventBus.js';
-import { setViewportSize } from '../src/core/Viewport.js';
-import { createCircusQuestProgress } from '../src/core/CircusQuestProgress.js';
+import { setViewportSize } from '../src/core/rendering/Viewport.js';
+import { createCircusQuestProgress } from '../src/core/quests/CircusQuestProgress.js';
 import { CatPlayer } from '../src/creatures/CatPlayer.js';
 import { HumanPlayer } from '../src/creatures/HumanPlayer.js';
 import { MazeBellTarget } from '../src/creatures/MazeBellTarget.js';

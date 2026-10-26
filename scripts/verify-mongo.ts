@@ -45,7 +45,7 @@ import {
   mongoFramesUntilReady,
   tickMongoRegen,
   type MongoPetState,
-} from '../src/core/MongoPetState';
+} from '../src/core/state/MongoPetState';
 import {
   getMongoStats,
   MONGO_DAMAGE_PER_XP,

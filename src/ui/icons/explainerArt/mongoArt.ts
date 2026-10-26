@@ -4,7 +4,7 @@
  */
 
 import type { IllustrationRect } from './illustration';
-import { MONGO_KILL_RECOVERY_FRAMES } from '../../../core/MongoPetState';
+import { MONGO_KILL_RECOVERY_FRAMES } from '../../../core/state/MongoPetState';
 import { mongoStageSpeed } from '../../../abilities/mongo';
 import { MONGO_GROUND_FROM_TILE_TOP, mongoHeadTopTiles } from '../../../sprites/art/mongoFigure';
 import { TILE_SIZE } from '../../../core/constants';

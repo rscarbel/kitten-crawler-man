@@ -13,11 +13,11 @@
  * Plays no audio and saves nothing.
  */
 
-import { setViewportSize, viewportHeight, viewportWidth } from '../core/Viewport';
-import { settings } from '../core/Settings';
+import { setViewportSize, viewportHeight, viewportWidth } from '../core/rendering/Viewport';
+import { settings } from '../core/input/Settings';
 import { TILE_SIZE } from '../core/constants';
-import { createWheelLedger } from '../core/WheelLedger';
-import type { WipeStatus } from '../core/progressPersistence';
+import { createWheelLedger } from '../core/save/WheelLedger';
+import type { WipeStatus } from '../core/save/progressPersistence';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
 import type { CasinoSeat } from '../systems/ClubCasinoSystem';

@@ -21,6 +21,5 @@ export const BARE_CAT_OUTFIT: Outfit<'cat'> = bareCatOutfit(playerCharacter('cat
 export function dressCat(outfit: Outfit<'cat'>, context: GarmentFrameContext<'cat'>): CatDressing {
   return {
     part: (ctx, part, frame) => paintOutfitPart(ctx, outfit, part, frame, context),
-    hides: (feature) => outfit.hidden.has(feature),
   };
 }

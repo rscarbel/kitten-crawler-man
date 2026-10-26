@@ -8,8 +8,8 @@
  * draws the whole piece. The clutter is baked flat into the floor.
  */
 
-import { getManifestEntry, type MapSpriteExtentsPx } from '../../core/SpriteLoader';
-import { drawSpriteKey, timeFrameIndex } from '../../core/SpriteRenderer';
+import { getManifestEntry, type MapSpriteExtentsPx } from '../../core/spriteAssets/SpriteLoader';
+import { drawSpriteKey, timeFrameIndex } from '../../core/spriteAssets/SpriteRenderer';
 import { PROP_VARIANT_COUNT } from '../../sprites/art/propPaint';
 import { BOILER_FRAMES } from '../../sprites/art/serviceProps/serviceFurnitureArt';
 import type { ServicePropKind } from '../../sprites/art/serviceProps/serviceFurnitureArt';

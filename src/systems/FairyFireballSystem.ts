@@ -16,12 +16,13 @@
  * telling the player what standing in it costs.
  */
 
+import { crawlerTurnsShot } from '../gear/incomingBlows';
 import type { DamageSource, Player } from '../Player';
 import type { EventBus } from '../core/EventBus';
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
 import { TILE_SIZE } from '../core/constants';
-import { makeBurn } from '../core/StatusEffect';
+import { makeBurn } from '../core/combat/StatusEffect';
 import { FireFairy } from '../creatures/fairies/FireFairy';
 import {
   DEATH_EXPLOSION_DAMAGE,
@@ -331,6 +332,9 @@ export class FairyFireballSystem implements GameSystem, GroundHazardSource {
     for (const target of party) {
       if (!target.isAlive || distanceToCentre(target, x, y) > FIREBALL_HIT_RADIUS_PX) continue;
       if (this.immunity.blocks(target, 'fire')) continue;
+      const flightX = ball.toX - ball.fromX;
+      const flightY = ball.toY - ball.fromY;
+      if (crawlerTurnsShot(target, ball.owner, flightX, flightY)) continue;
       const connected = target.takeDamage(ball.damage, source);
       if (connected) this.noteBlood(ball.owner, target);
     }

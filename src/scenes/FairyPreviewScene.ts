@@ -10,7 +10,7 @@
  * whole life) that never appear on a mob's own figure.
  */
 
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { worldText } from '../ui/world/worldText';
 import { worldPlate, worldTint } from '../ui/world/worldShapes';
 import { PreviewScene, type PreviewControl } from './PreviewScene';

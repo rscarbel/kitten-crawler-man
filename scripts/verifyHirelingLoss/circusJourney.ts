@@ -23,23 +23,23 @@
 
 import { TILE_SIZE } from '../../src/core/constants';
 import { EventBus } from '../../src/core/EventBus';
-import { AbilityManager } from '../../src/core/AbilityManager';
-import { setViewportSize } from '../../src/core/Viewport';
-import { withWorldSeed } from '../../src/core/WorldRandom';
+import { AbilityManager } from '../../src/core/skills/AbilityManager';
+import { setViewportSize } from '../../src/core/rendering/Viewport';
+import { withWorldSeed } from '../../src/core/world/WorldRandom';
 import {
   BIG_TOP_BUILDING_NAME,
   createCircusQuestProgress,
   type CircusQuestProgress,
-} from '../../src/core/CircusQuestProgress';
-import { createAnchorQuestProgress } from '../../src/core/AnchorQuestProgress';
+} from '../../src/core/quests/CircusQuestProgress';
+import { createAnchorQuestProgress } from '../../src/core/quests/AnchorQuestProgress';
 import {
   captureMercenaryRoster,
   createMercenaryRoster,
   restoreMercenaryRoster,
   type MercenaryRoster,
-} from '../../src/core/MercenaryRoster';
-import { getMercenaryTemplate } from '../../src/core/mercenaryTemplates';
-import { parseMercenaryRosterCheckpoint } from '../../src/core/PersistedWorldState';
+} from '../../src/core/party/MercenaryRoster';
+import { getMercenaryTemplate } from '../../src/core/party/mercenaryTemplates';
+import { parseMercenaryRosterCheckpoint } from '../../src/core/save/PersistedWorldState';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import type { Mercenary } from '../../src/creatures/Mercenary';

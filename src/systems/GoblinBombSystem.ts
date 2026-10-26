@@ -22,7 +22,7 @@ import type { EventBus } from '../core/EventBus';
 import type { GameMap } from '../map/GameMap';
 import { Mob, type MobDamageSource } from '../creatures/Mob';
 import { TILE_SIZE } from '../core/constants';
-import { viewportHeight, viewportWidth } from '../core/Viewport';
+import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
 import { drawLitDynamiteStick } from '../sprites/dynamiteSprite';
 import { type FuseBurnOptions, paintFuseFloorGlow } from '../sprites/fuseEffects';
 import {

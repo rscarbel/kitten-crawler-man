@@ -10,7 +10,7 @@ import {
   createConstructionContractsState,
   type ActiveContract,
   type ConstructionContractsState,
-} from '../../src/core/briarHollowState';
+} from '../../src/core/quests/briarHollowState';
 import {
   contractSiteFor,
   type ContractSiteDef,

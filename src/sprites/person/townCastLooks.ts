@@ -32,7 +32,7 @@ import {
   type PersonHead,
   type TownRole,
 } from './PersonAppearance';
-import { VARIETY_TIERS, type VarietyTier } from '../../core/varietyTier';
+import { VARIETY_TIERS, type VarietyTier } from '../../core/perf/varietyTier';
 import { deriveGlossRamp, deriveRamp, type GlossRamp, type Ramp } from '../art/biped/palette';
 import {
   FACING_BROW_DEFAULT,

@@ -13,10 +13,10 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
+} from '../../core/rendering/canvasSurface';
 import type { Rect } from '../core/geom';
 import { iconSquare } from './iconSquare';
-import { onCanvasRecovery } from '../../core/canvasRecovery';
+import { onCanvasRecovery } from '../../core/rendering/canvasRecovery';
 
 /**
  * Texture resolution. Comfortably above the ~28px the button draws it at, so

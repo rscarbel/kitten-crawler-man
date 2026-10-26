@@ -70,7 +70,7 @@ import {
   type VillagePropKind,
 } from './briarHollowLayout';
 import { isInsideRing, rectContains, type BriarHollowSite } from './briarHollowSite';
-import { worldRandom } from '../../core/WorldRandom';
+import { worldRandom } from '../../core/world/WorldRandom';
 import { DRESSED_STONE_SPRITE_KEYS } from '../tiles/rockDepositTiles';
 
 /** Tiles of wild ground cleared round the palisade, so the stockade stands in its own clearing. */

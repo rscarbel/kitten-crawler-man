@@ -18,10 +18,10 @@ import type { EventBus } from '../core/EventBus';
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
-import type { SpatialGrid } from '../core/SpatialGrid';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
 import { TILE_SIZE } from '../core/constants';
-import { makeFairyAegis } from '../core/StatusEffect';
-import { applyChillOnly } from '../core/frostStatus';
+import { makeFairyAegis } from '../core/combat/StatusEffect';
+import { applyChillOnly } from '../core/combat/frostStatus';
 import { applyFairyRateUpgrade, type FairyRoomLedger } from '../levels/fairySpawner';
 import { Fairy } from '../creatures/fairies/Fairy';
 import { NecroFairy } from '../creatures/fairies/NecroFairy';
@@ -45,7 +45,7 @@ import {
   RESURRECT_RISE_FRAMES,
 } from '../creatures/fairies/fairyTuning';
 import { necroSkeletonLevel } from '../creatures/fairies/fairyPotency';
-import { statusRemainingFraction } from '../core/StatusEffect';
+import { statusRemainingFraction } from '../core/combat/StatusEffect';
 import {
   drawAegisChain,
   drawChillBlastRing,

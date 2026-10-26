@@ -1,7 +1,7 @@
 import type { AudioManager } from '../audio/AudioManager';
 import type { EventBus } from '../core/EventBus';
 import { crawlerName } from '../characters/characters';
-import { describeConstructionPerk, describeResourcingPerk } from '../core/craftPerks';
+import { describeConstructionPerk, describeResourcingPerk } from '../core/labour/craftPerks';
 import { drawCraftSkillIcon } from '../ui/icons/craftSkillIcons';
 import type { MenusKit } from './kits/MenusKit';
 

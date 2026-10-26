@@ -12,7 +12,10 @@ import { floorEncounter } from './encounters';
 import { type StandaloneMobKind } from './mobKinds';
 import { hasRoomToMove } from '../map/findWalkableTile';
 import { TILE_SIZE } from '../core/constants';
-import { applySpawnDifficulty, type DifficultyProfile } from '../core/difficultyProfiles';
+import {
+  applySpawnDifficulty,
+  type DifficultyProfile,
+} from '../core/difficulty/difficultyProfiles';
 import type { EscortSpawnRule, MobLevelRange, MobSpawnRule, LevelDef } from './types';
 
 /** Maximum attempts to find a walkable spawn position. */
@@ -459,7 +462,7 @@ export function spawnExtraMobs(
         def.levelledCurve,
       );
       applySpawnDifficulty(mob, profile);
-      mob.allowSlingshotDrop = def.slingshotDrops === true;
+      mob.allowWorldGearDrop = def.worldGearDrops === true;
       if (rule.setup) {
         SPAWN_SETUP[rule.setup]?.(mob, map, origin);
       }
@@ -525,7 +528,7 @@ function spawnCampResidents(
           def.levelledCurve,
         );
         applySpawnDifficulty(mob, profile);
-        mob.allowSlingshotDrop = def.slingshotDrops === true;
+        mob.allowWorldGearDrop = def.worldGearDrops === true;
         // Its own spawn tile, **not** the camp's centre. The centre is a
         // `CAMPFIRE` — solid — and `followTargetAStar` would be asked to path to
         // a tile nothing can stand on, which is a resident that never walks home
@@ -716,7 +719,7 @@ export function spawnForLevel(
           def.levelledCurve,
         );
         applySpawnDifficulty(mob, profile);
-        mob.allowSlingshotDrop = def.slingshotDrops === true;
+        mob.allowWorldGearDrop = def.worldGearDrops === true;
         mobs.push(mob);
       };
       for (let i = 0; i < count; i++) spawnInRoom(rule, rule.type);
@@ -743,7 +746,7 @@ export function spawnForLevel(
           def.levelledCurve,
         );
         applySpawnDifficulty(mob, profile);
-        mob.allowSlingshotDrop = def.slingshotDrops === true;
+        mob.allowWorldGearDrop = def.worldGearDrops === true;
         mobs.push(mob);
       };
       spawnAt(rule, rule.type, x, y);
@@ -770,7 +773,7 @@ export function spawnForLevel(
     const boss = spawnMob(bossEntry.type, brData.centre, map, bossContext);
     boss.applyMobLevel(resolveBossLevel(bossEntry, partyLevel, profile), def.levelledCurve);
     applySpawnDifficulty(boss, profile);
-    boss.allowSlingshotDrop = def.slingshotDrops === true;
+    boss.allowWorldGearDrop = def.worldGearDrops === true;
     mobs.push(boss);
   }
 
@@ -816,7 +819,7 @@ export function spawnTreasureRoomMobs(
         def.levelledCurve,
       );
       applySpawnDifficulty(mob, profile);
-      mob.allowSlingshotDrop = def.slingshotDrops === true;
+      mob.allowWorldGearDrop = def.worldGearDrops === true;
       mobs.push(mob);
     }
   }

@@ -27,7 +27,7 @@ import { castIdlePose, castWalkPose, castWorkPose } from './ratkin/castRows';
 import { hood, patches, trousers, tunic } from './ratkin/garments';
 import type { HeldPropKind, RatkinOutfit } from './ratkin/outfit';
 import type { Ramp } from './ratkin/paint';
-import type { ToolKind } from '../../core/toolTiers';
+import type { ToolKind } from '../../core/items/gathering/toolTiers';
 
 function ramp(dark: string, mid: string, light: string): Ramp {
   return { dark, mid, light };

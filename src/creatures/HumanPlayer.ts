@@ -17,6 +17,7 @@ import {
   stampPointOf,
   activeHumanSocketSource,
   type BipedHeldDraw,
+  type BipedOffHandDraw,
   type BipedStowedDraw,
   drawHumanSelection,
   explosiveHeldDraw,
@@ -27,6 +28,7 @@ import {
   activeHumanLook,
   type HumanRowSelection,
   setHumanHeld,
+  setHumanOffHand,
   humanRowView,
   type HumanRowView,
   viewRow,
@@ -55,10 +57,25 @@ import {
   type ViewRows,
 } from '../sprites/art/humanFigure';
 import { drawActivePlayerMarker } from '../sprites/activePlayerMarker';
-import type { AbilityManager } from '../core/AbilityManager';
+import type { AbilityManager } from '../core/skills/AbilityManager';
 import { getSmushStats } from '../abilities/smush';
-import { EQUIP_SUBSLOTS, MAIN_HAND_KEY, weaponStatsOf, type ItemId } from '../core/ItemDefs';
-import { HUMAN_ARM_REACH_TILES, type MeleeWeaponStats, type WeaponStats } from '../core/weapons';
+import {
+  humanLookOf,
+  ITEM_DEF,
+  MAIN_HAND_KEY,
+  OFF_HAND_KEY,
+  subSlotsOf,
+  weaponStatsOf,
+  type ItemId,
+} from '../core/items/defs/ItemDefs';
+import type { EquipmentChange } from '../core/items/equipment/EquipmentManager';
+import { gearModifiers } from '../gear/gearHooks';
+import {
+  heldVisualIdOf,
+  HUMAN_ARM_REACH_TILES,
+  type HandWeaponStats,
+  type MeleeWeaponStats,
+} from '../core/items/equipment/weapons';
 import type { GameMap } from '../map/GameMap';
 import {
   drawSlingshotRocks,
@@ -77,23 +94,29 @@ import {
 } from '../sprites/held/heldVisuals';
 import { heldPhaseAt } from '../sprites/held/heldComposite';
 import { carriedGripOf } from '../sprites/art/human/carry';
-import type { HeldVisualDef, WeaponHeldVisualDef } from '../sprites/held/heldVisualDef';
+import type {
+  HeldVisualDef,
+  OffHandHeldVisualDef,
+  WeaponHeldVisualDef,
+} from '../sprites/held/heldVisualDef';
+import { offHandGripOf } from '../sprites/art/human/offHand';
+import type { ShownPlacement } from '../sprites/art/human/stowedGeometry';
 import type { ThrownPropVisualId } from '../sprites/held/heldVisualIds';
 import { motionSetOf } from '../sprites/art/human/motionSets';
 import { humanSocketsAt } from '../sprites/art/human/sockets';
-import type { WorkingTool } from '../core/toolTiers';
-import type { CrawlerKind } from '../core/SkillManager';
+import type { WorkingTool } from '../core/items/gathering/toolTiers';
+import type { CrawlerKind } from '../core/skills/SkillManager';
 import type { HumanLook } from '../sprites/looks/humanLook';
 import {
   bareFistDamage,
   HUMAN_BASE_HP_OFFSET,
   HUMAN_STARTING_DEXTERITY,
   HUMAN_SWING_FRAMES,
-} from '../core/crawlerFormulas';
+} from '../core/party/crawlerFormulas';
 import {
   IRON_PUNCH_DAMAGE_FRACTION_PER_LEVEL,
   PUGILISM_DAMAGE_PER_LEVEL,
-} from '../core/SkillManager';
+} from '../core/skills/SkillManager';
 
 /**
  * How far his ground line sits above the bottom edge of his tile. The rig is
@@ -240,10 +263,10 @@ export class HumanPlayer extends Player {
   autoTarget: Mob | null = null;
 
   /**
-   * Whether the weapon equipped in his main hand is out and ready, rather than
-   * stowed. Meaningless while the hand is empty, and cleared when it empties.
+   * Set while a restore or a harness puts a weapon in his hand or takes it out
+   * with no gesture; every other equip or unequip of his main hand plays one.
    */
-  private weaponDrawn = false;
+  private holsterGestureMuted = false;
   /**
    * The weapon being put away while its stow plays: still in his fist on the
    * frames the stow holds it, though no longer drawn.
@@ -346,16 +369,13 @@ export class HumanPlayer extends Player {
     // scene change builds him bare and restores his gear a moment later, and
     // dressing him bare in between would release the outfit he is wearing.
     prewarmHumanSprite();
-    // Pre-equip Enchanted BigBoi Boxers — adds +2 CON (+4 maxHp)
-    this.inventory.addItem('enchanted_bigboi_boxers', 1);
-    this.inventory.equipByItemId('enchanted_bigboi_boxers');
-    this.syncHpToMaxHp();
     this.inventory.addItem('smush_tome', 1);
     this.inventory.placeOnHotbar('smush_tome', HumanPlayer.TOME_HOTBAR_SLOT);
     // The base player already granted the starting potions; moving that one
     // stack keeps it a single stack, where re-granting it here would not.
     this.inventory.placeOnHotbar('health_potion', HumanPlayer.POTION_HOTBAR_SLOT);
     this.dressesOnChange = true;
+    this.inventory.equipment.onChange((change) => this.gestureMainHand(change));
   }
 
   /** Dresses his sprite in the garments of what he has equipped; returns whether the look changed. */
@@ -375,18 +395,70 @@ export class HumanPlayer extends Player {
     const outfitChanged = this.outfitStale && this.wearEquipped();
     this.outfitStale = false;
     const look = this.inHandLook();
-    const handChanged = setHumanHeld(look === null ? null : carriedGripOf(look));
+    const mainHandChanged = setHumanHeld(look === null ? null : carriedGripOf(look));
+    const shield = this.shieldInHand();
+    const offHandChanged = setHumanOffHand(shield === null ? null : offHandGripOf(shield));
     const drawn = this.drawnLook();
     this.animator.setMotionSet(drawn === null ? 'unarmed' : motionSetOf(drawn));
-    if (!outfitChanged && !handChanged) return;
+    if (!outfitChanged && !mainHandChanged && !offHandChanged) return;
     this.standbys.clear();
     this.animator.forgetWarmRequests();
   }
 
+  /** The shield equipped on his off hand, or null when it is free. */
+  private shieldLook(): OffHandHeldVisualDef | null {
+    const id = this.inventory.equipment.getEquippedId(OFF_HAND_KEY);
+    if (id === undefined) return null;
+    const look = humanLookOf(ITEM_DEF[id]);
+    return look?.kind === 'offHand' ? HELD_VISUALS[look.heldVisual] : null;
+  }
+
+  /**
+   * The shield his off hand closes on: none while a weapon that wants both
+   * hands is in them, coming out or going away, when the shield rides stowed.
+   */
+  private shieldInHand(): OffHandHeldVisualDef | null {
+    const weapon = this.inHandLook();
+    if (weapon !== null && motionSetOf(weapon) === 'twoHand') return null;
+    return this.shieldLook();
+  }
+
+  override get shieldAtTheReady(): boolean {
+    return this.isAlive && !this.isSwinging && this.shieldInHand() !== null;
+  }
+
+  /**
+   * Where his shield rests when his off hand is wanted elsewhere: its own
+   * place, unless the weapon he carries already rests there, and then the
+   * other.
+   */
+  private shieldRestingPlace(shield: OffHandHeldVisualDef): ShownPlacement | null {
+    const own = stowedPlacementOfHeld(shield);
+    if (own === 'none') return null;
+    const weapon = this.inHandLook() ?? this.carriedLook();
+    const taken = weapon === null ? 'none' : stowedPlacementOfHeld(weapon);
+    if (taken !== own) return own;
+    return own === 'back' ? 'hip' : 'back';
+  }
+
+  /** The shield on his off hand on this draw, in hand or stowed as the cell's row has it. */
+  private offHandDraw(): BipedOffHandDraw | null {
+    if (!this.isAlive) return null;
+    const shield = this.shieldLook();
+    if (shield === null) return null;
+    const stowedAt = this.shieldRestingPlace(shield);
+    return stowedAt === null ? null : { look: shield, stowedAt };
+  }
+
+  /** A shot glanced off his shield: he takes it behind the shield, if nothing more pressing is playing. */
+  raiseOffHandBlock(): void {
+    if (this.isAlive && !this.isKnockedOut) this.reactions.block(this.facingX, this.facingY);
+  }
+
   /** The look of the weapon out in his hand, or null for bare fists. */
   private drawnLook(): WeaponHeldVisualDef | null {
-    const weapon = this.drawnWeapon;
-    return weapon === null ? null : HELD_VISUALS[weapon.heldVisual];
+    const id = this.mainHandWeaponId;
+    return id === null ? null : this.weaponLook(id);
   }
 
   /** The look of what his fist may close on: the drawn weapon, or the one being put away. */
@@ -394,29 +466,45 @@ export class HumanPlayer extends Player {
     return this.drawnLook() ?? this.stowing;
   }
 
-  /** The look of the weapon equipped in his main hand, drawn or stowed. */
-  private mainHandLook(): WeaponHeldVisualDef | null {
-    const id = this.mainHandWeaponId;
-    const weapon = id === null ? null : weaponStatsOf(id);
-    return weapon === null ? null : HELD_VISUALS[weapon.heldVisual];
+  /**
+   * The look of the weapon he carries stowed: the first one on his hotbar that
+   * is not in his hand. A weapon in the bag alone is not shown.
+   */
+  private carriedLook(): WeaponHeldVisualDef | null {
+    const drawn = this.mainHandWeaponId;
+    for (const slot of this.inventory.actionBar.slots) {
+      if (slot === null || slot.id === drawn) continue;
+      const look = this.weaponLook(slot.id);
+      if (look !== null) return look;
+    }
+    return null;
   }
 
   /**
-   * The equipped weapon where it rests, on the cell being drawn: always while
-   * it is stowed, and while it is out on any frame his main hand is not
-   * closed on it — reaching for it on a draw, letting go of it on a stow.
+   * The look weapon `id` is drawn with in his hands: its awakened look once it
+   * has woken. Read on every draw, so a weapon that wakes mid-fight changes in
+   * his fist on the next frame.
+   */
+  private weaponLook(id: ItemId): WeaponHeldVisualDef | null {
+    const weapon = weaponStatsOf(id);
+    if (weapon === null) return null;
+    return HELD_VISUALS[heldVisualIdOf(weapon, this.gear.isAwakened(id))];
+  }
+
+  /**
+   * The weapon drawn where it rests, on the cell being drawn: the one coming
+   * out or going away on any frame his main hand is not closed on it —
+   * reaching for it on a draw, letting go of it on a stow — and otherwise the
+   * one he carries stowed on his hotbar, if any.
    */
   private stowedDraw(selection: HumanRowSelection): BipedStowedDraw | null {
-    const look = this.mainHandLook();
-    if (look === null) return null;
-    const placement = stowedPlacementOfHeld(look);
-    if (placement === 'none') return null;
-    const inHand = this.drawnWeaponId !== null || this.stowing !== null;
-    if (inHand) {
+    const moving = this.inHandLook();
+    if (moving !== null) {
       const frames = humanSocketsAt(activeHumanSocketSource(), selection.row, selection.frame);
-      if (frames.sockets.mainHand.grips === true) return null;
+      if (frames.sockets.mainHand.grips !== true) return restingDraw(moving);
     }
-    return { look, placement };
+    const carried = this.carriedLook();
+    return carried === null ? null : restingDraw(carried);
   }
 
   /**
@@ -493,9 +581,9 @@ export class HumanPlayer extends Player {
       bareFistDamage(this.strength + meleeOnlyStrength) +
       this.statusMeleeDamageBonus +
       pugilismBonus;
-    // Iron Punch is a technique of the gauntlet, not of the hand: without one
-    // worn the banked levels are inert, however they were granted.
-    const ironPunchMultiplier = this.inventory.hasEquipped('grull_war_gauntlet')
+    // Iron Punch is a technique of the gear that carries it, not of the hand:
+    // without such a piece worn the banked levels are inert, however they were granted.
+    const ironPunchMultiplier = gearModifiers(this).ironPunch
       ? 1 + IRON_PUNCH_DAMAGE_FRACTION_PER_LEVEL * this.effectiveSkillLevel('iron_punch')
       : 1;
     return flatDamage * ironPunchMultiplier;
@@ -528,19 +616,14 @@ export class HumanPlayer extends Player {
     this.workingTool = tool;
   }
 
-  /** The weapon equipped in his main hand, drawn or stowed; null when the hand is empty. */
+  /** The weapon equipped in his main hand, which is the weapon in his hand; null when it is empty. */
   get mainHandWeaponId(): ItemId | null {
     return this.inventory.equipment.getEquippedId(MAIN_HAND_KEY) ?? null;
   }
 
-  /** The weapon out in his hand, or null for bare fists: an empty hand, or a weapon stowed. */
-  get drawnWeaponId(): ItemId | null {
-    return this.weaponDrawn ? this.mainHandWeaponId : null;
-  }
-
   /** How the drawn weapon fights, or null for bare fists. */
-  get drawnWeapon(): WeaponStats | null {
-    const id = this.drawnWeaponId;
+  get drawnWeapon(): HandWeaponStats | null {
+    const id = this.mainHandWeaponId;
     return id === null ? null : weaponStatsOf(id);
   }
 
@@ -556,46 +639,22 @@ export class HumanPlayer extends Player {
   }
 
   /**
-   * Takes `weaponId` out, equipping it in his main hand first when it is not
-   * there already — displacing whatever was. Reports whether it is now drawn:
-   * false when he has none, or cannot hold it.
+   * Takes `weaponId` out by equipping it in his main hand, displacing whatever
+   * was there. Reports whether it is now drawn: false when he has none, or
+   * cannot hold it.
    */
   drawWeapon(weaponId: ItemId): boolean {
-    if (this.drawnWeaponId === weaponId) return true;
-    if (this.mainHandWeaponId !== weaponId) {
-      this.inventory.equipment.equipById(weaponId);
-      if (this.mainHandWeaponId !== weaponId) return false;
-    }
-    this.weaponDrawn = true;
-    this.stowing = null;
-    const look = this.drawnLook();
-    if (look !== null) {
-      this.animator.beginHolster('draw', motionSetOf(look), this.facingX, this.facingY);
-    }
-    this.settleHeldWeapon();
-    return true;
+    if (this.mainHandWeaponId !== weaponId) this.inventory.equipment.equipById(weaponId);
+    return this.mainHandWeaponId === weaponId;
   }
 
   /**
-   * Puts the drawn weapon away, leaving it equipped in his main hand. Its stow
-   * keeps it in his fist until the frame he lets go of it where it rests.
+   * Puts the drawn weapon away by taking it out of his main hand: it rides
+   * stowed while it sits on his hotbar, and is not shown otherwise.
    */
   stowWeapon(): void {
-    const look = this.drawnLook();
-    if (look === null) return;
-    this.weaponDrawn = false;
-    this.stowing = look;
-    const row = this.animator.beginHolster(
-      'stow',
-      motionSetOf(look),
-      this.facingX,
-      this.facingY,
-      () => {
-        this.stowing = null;
-      },
-    );
-    if (row === null) this.stowing = null;
-    this.settleHeldWeapon();
+    if (this.mainHandWeaponId === null) return;
+    this.inventory.equipment.unequip(MAIN_HAND_KEY);
   }
 
   /**
@@ -603,26 +662,68 @@ export class HumanPlayer extends Player {
    * press of a weapon. Reports whether it is now drawn.
    */
   toggleWeaponDrawn(weaponId: ItemId): boolean {
-    if (this.drawnWeaponId !== weaponId) return this.drawWeapon(weaponId);
+    if (this.mainHandWeaponId !== weaponId) return this.drawWeapon(weaponId);
     this.stowWeapon();
-    return false;
+    return this.mainHandWeaponId === weaponId;
   }
 
-  /** Sets whether the main-hand weapon is out with no gesture, for a snapshot restore. */
-  restoreWeaponDrawn(drawn: boolean): void {
-    this.weaponDrawn = drawn;
+  /**
+   * Puts `weaponId` in his hand, or empties it for null, with no gesture: for
+   * a harness that poses him armed, never for play.
+   */
+  holdWithoutGesture(weaponId: ItemId | null): void {
+    this.holsterGestureMuted = true;
+    try {
+      if (weaponId === null) this.inventory.equipment.unequip(MAIN_HAND_KEY);
+      else this.inventory.equipment.equipById(weaponId);
+    } finally {
+      this.holsterGestureMuted = false;
+    }
+  }
+
+  /**
+   * Plays the draw of whatever came into his main hand and the stow of
+   * whatever left it, whichever path changed it — the hotbar, the doll, the
+   * bag's menu, the AI. A restore replaces the whole set silently.
+   */
+  private gestureMainHand(change: EquipmentChange): void {
+    if (change.reason === 'restore' || change.key !== MAIN_HAND_KEY) return;
+    if (this.holsterGestureMuted) {
+      this.stowing = null;
+      return;
+    }
+    const drawn = this.drawnLook();
+    if (drawn !== null) {
+      this.stowing = null;
+      this.animator.beginHolster('draw', motionSetOf(drawn), this.facingX, this.facingY);
+      return;
+    }
+    const removed = change.removedItemId === null ? null : this.weaponLook(change.removedItemId);
+    if (removed === null) return;
+    this.stowing = removed;
+    const row = this.animator.beginHolster(
+      'stow',
+      motionSetOf(removed),
+      this.facingX,
+      this.facingY,
+      () => {
+        this.stowing = null;
+      },
+    );
+    if (row === null) this.stowing = null;
+    // Settled again now the stow holds it: the equipment change settled his
+    // hand empty before the stow had begun.
     this.settleHeldWeapon();
   }
 
   /**
-   * Keeps the drawn bit and the sling's pose true to what is in his hand: an
-   * emptied hand has nothing drawn; a drawn sling has its shot warmed for the
+   * Keeps his outfit and the sling's pose true to what is in his hand: a drawn
+   * sling has its shot warmed for the
    * way he faces, so the first release is not baked on the tick the stone
    * leaves; and a sling no longer drawn lowers any draw held at full stretch,
    * or he would be left aiming an empty fist.
    */
   private settleHeldWeapon(): void {
-    if (this.mainHandWeaponId === null) this.weaponDrawn = false;
     if (this.dressesOnChange) this.dressInGear();
     if (this.hasSlingDrawn) prewarmHumanRow(this.slingShotRow());
     else this.lowerSlingshot();
@@ -640,8 +741,8 @@ export class HumanPlayer extends Player {
    * the equipped map only ever names an item and never checks it is still held.
    */
   override onInventoryChanged(): void {
-    for (const subSlot of EQUIP_SUBSLOTS.Hand) {
-      const key = `Hand:${subSlot}`;
+    for (const subSlot of subSlotsOf('human', 'Weapon')) {
+      const key = `Weapon:${subSlot}`;
       const heldId = this.inventory.equipment.getEquippedId(key);
       if (heldId !== undefined && this.inventory.countOf(heldId) === 0) {
         this.inventory.equipment.unequip(key);
@@ -689,6 +790,8 @@ export class HumanPlayer extends Player {
       maxDist: this.tileSize * SLINGSHOT_RANGE_TILES,
       state: 'flying',
       hit: false,
+      bounces: 0,
+      bouncedOff: null,
     });
     this.slingshotCooldown = SLINGSHOT_COOLDOWN_FRAMES;
     this.pendingSlingshotFireSound = true;
@@ -1267,8 +1370,9 @@ export class HumanPlayer extends Player {
     const selection = this.spriteSelection();
     const held = this.heldDraw(selection);
     const stowed = this.stowedDraw(selection);
+    const offHand = this.offHandDraw();
     this.drawRetching(ctx, sx, sy, s, () =>
-      drawHumanSelection(ctx, sx, sy, s, selection, held, stowed),
+      drawHumanSelection(ctx, sx, sy, s, selection, held, stowed, offHand),
     );
 
     if (!this.paintingBodyOnly) drawSlingshotRocks(ctx, this.rocks, camX, camY, s);
@@ -1277,4 +1381,10 @@ export class HumanPlayer extends Player {
     this.renderHealthBar(ctx, sx, sy - healthBarAboveAnchor);
     this.renderKnockedOutOverlay(ctx, sx, sy);
   }
+}
+
+/** `look` drawn where it rests, or null for a look that rests nowhere. */
+function restingDraw(look: WeaponHeldVisualDef): BipedStowedDraw | null {
+  const placement = stowedPlacementOfHeld(look);
+  return placement === 'none' ? null : { look, placement };
 }

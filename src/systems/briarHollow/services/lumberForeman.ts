@@ -11,9 +11,9 @@
  */
 
 import type { AudioManager } from '../../../audio/AudioManager';
-import type { BriarHollowState } from '../../../core/briarHollowState';
+import type { BriarHollowState } from '../../../core/quests/briarHollowState';
 import type { EventBus } from '../../../core/EventBus';
-import { ITEM_DEF } from '../../../core/ItemDefs';
+import { ITEM_DEF } from '../../../core/items/defs/ItemDefs';
 import type { BarkLine, NonEmpty } from '../../../dialog/line';
 import { FENNA } from '../../../dialog/scripts/briarHollow';
 import type { ProcessingStationKind } from '../processingStations';
@@ -21,7 +21,7 @@ import { onceFlagFor } from '../villagerCircumstances';
 import type { ConversationHandle, ConversationTopic } from '../../../dialog/request';
 import type { TopicProvider, VillagerConversationFlow } from '../villagerTopics';
 import { otherCrawler, type ServiceParty, shopTrades } from './serviceContext';
-import { canAffordCoins, spendPartyCoins } from '../../../core/partyCoins';
+import { canAffordCoins, spendPartyCoins } from '../../../core/party/partyCoins';
 import { SERVICE_PRICES } from '../../../economy/servicePrices';
 import { outputFor, outputItem, partyWood, processWood } from './woodProcessing';
 

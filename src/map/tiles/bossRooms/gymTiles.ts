@@ -8,7 +8,7 @@ import {
 } from '../../../sprites/gymRoomSprites';
 import { gymLayoutOf, type GymLayout, type GymWallRun } from './gymLayout';
 import { gymRackFill, gymSquatRackLoaded } from './gymPropState';
-import { UINT32_SPAN } from '../../../core/WorldRandom';
+import { UINT32_SPAN } from '../../../core/world/WorldRandom';
 
 /**
  * Paints the boss-room tile types of Big Rooster's gym. Returns false for any other type.

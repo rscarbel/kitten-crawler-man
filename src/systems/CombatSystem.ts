@@ -1,5 +1,5 @@
 import { TILE_SIZE } from '../core/constants';
-import { awardXp } from '../core/awardXp';
+import { awardXp } from '../core/progression/awardXp';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { Mongo } from '../creatures/Mongo';
 import { MONGO_ASSIST_XP } from '../abilities/mongo';
@@ -7,28 +7,35 @@ import { CatPlayer } from '../creatures/CatPlayer';
 import type { Mob } from '../creatures/Mob';
 import { Fairy } from '../creatures/fairies/Fairy';
 import type { Player } from '../Player';
-import type { SpatialGrid } from '../core/SpatialGrid';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { GameMap } from '../map/GameMap';
 import type { SafeRoomSystem } from './SafeRoomSystem';
 import type { EventBus } from '../core/EventBus';
-import type { AbilityManager } from '../core/AbilityManager';
+import type { AbilityManager } from '../core/skills/AbilityManager';
 import type { SpellSystem } from './SpellSystem';
-import { makeSepsis, makeMagicBurn, makeStun, makePoison } from '../core/StatusEffect';
+import { makeMagicBurn, makePoison, makeStun } from '../core/combat/StatusEffect';
+import {
+  gearModifiers,
+  runHitHooks,
+  runKillHooks,
+  runStrikeHooks,
+  runSwingHooks,
+} from '../gear/gearHooks';
+import type { GearWorld } from '../gear/traits';
 import {
   COILED_FIST_UNCOIL_DAMAGE_SHARE,
   QUICK_SERPENT_BITE_DAMAGE_SHARE,
   QUICK_SERPENT_POISON_TICKS,
   UNCOIL_TEXT,
   VENOM_TEXT,
-} from '../core/tattoos';
+} from '../core/skills/tattoos';
 import { getSmushStats } from '../abilities/smush';
 import { getMagicMissileVisualTier } from '../abilities/magicMissile';
 import {
-  EYES_OF_SPLATTER_ID,
   missileCanStrike,
   missileMayHitMob,
   missileStrikesScenery,
-} from '../abilities/eyesOfSplatter';
+} from '../abilities/kaleidoscopeSpecs';
 import type { ExplosionVariant } from '../sprites/art/magicMissileArt';
 import type { MagicMissileImpactEffectSystem } from './MagicMissileImpactEffectSystem';
 import type { MeleeImpactEffectSystem } from './MeleeImpactEffectSystem';
@@ -40,17 +47,13 @@ import type { TreeSystem } from './TreeSystem';
 import {
   POWERFUL_STRIKE_CHANCE_PER_LEVEL,
   POWERFUL_STRIKE_DAMAGE_MULTIPLIER,
-} from '../core/SkillManager';
-import { SLINGSHOT_HIT_RADIUS_FRACTION } from '../sprites/slingshotSprite';
-import type { ItemId } from '../core/ItemDefs';
-import type { MeleeWeaponStats, WeaponProcId } from '../core/weapons';
+} from '../core/skills/SkillManager';
+import { SLINGSHOT_HIT_RADIUS_FRACTION, type SlingshotRock } from '../sprites/slingshotSprite';
+import { CLAWS_KEY, type ItemId } from '../core/items/defs/ItemDefs';
+import type { MeleeWeaponStats, WeaponProcId } from '../core/items/equipment/weapons';
 
 /** From an entity's tile origin to the centre of its tile. */
 const HALF_TILE = TILE_SIZE / 2;
-/** Sepsis proc chance per hit when enchanted crown is equipped. */
-const SEPSIS_PROC_CHANCE = 0.15;
-/** How long a gear-procced melee stun holds a mob, in ticks (1.5 s at 60 fps). */
-const GAUNTLET_STUN_TICKS = 90;
 /** Melee hit cone: targets within this range ignore the facing-dot check. */
 export const MELEE_POINT_BLANK_RANGE = TILE_SIZE * 1;
 /** Fraction of total kill XP awarded to the top damage dealer. */
@@ -209,6 +212,12 @@ export interface CombatContext {
    * its own context; a weapon then swings without its proc.
    */
   weaponProcs?: WeaponProcs;
+  /**
+   * What worn gear can reach of the scene — enemies round a point, the relics'
+   * shots. Absent where a scene builds its own context; gear that needs the
+   * world then does nothing beyond the blow itself.
+   */
+  gearWorld?: GearWorld;
   /** Set to true by resolvePlayerAttacks when any hit connected this frame. */
   hitLanded: boolean;
 }
@@ -243,29 +252,35 @@ export function crawlerMeleeStrikeDamage(crawler: HumanPlayer | CatPlayer): numb
 }
 
 /**
- * The riders the human crawler's gear puts on a blow that landed on `mob`: the crown's
- * sepsis and the gauntlet's stun. Shared by every blow he lands in melee, fist
- * or blade, so a weapon in hand never quietly drops what the gear promises.
+ * The riders a crawler's worn gear puts on a hit that landed on `mob`, melee
+ * blow or missile alike: every worn trait's hit hook. Shared by every blow a
+ * crawler lands, fist, claw or blade, so a weapon in hand never quietly drops
+ * what the gear promises.
  */
-export function landHumanGearProcs(human: HumanPlayer, mob: Mob): void {
+export function landGearProcs(
+  ctx: Pick<CombatContext, 'gearWorld'>,
+  crawler: HumanPlayer | CatPlayer,
+  mob: Mob,
+  delivery: 'melee' | 'spell',
+  damage: number,
+): void {
   // A guarded blow never touched the mob, so nothing rides in on it.
-  const bladeConnected = !mob.lastBlowWasGuarded;
-  if (
-    bladeConnected &&
-    human.inventory.hasEquipped('enchanted_crown_sepsis_whore') &&
-    Math.random() < SEPSIS_PROC_CHANCE
-  ) {
-    mob.applyStatus(makeSepsis(human));
-  }
-  // Bosses are exempt here even though smush's own boss stun is not: smush's
-  // is capped at a low chance and gated behind a high ability level, while
-  // this is a flat per-swing gear proc that stacks with attack speed — left
-  // unchecked it can hold a boss in a permanent stun loop, which stops being
-  // a fight.
-  const stunChance = human.inventory.equipment.getStunOnHitChance();
-  if (bladeConnected && stunChance > 0 && !mob.isBoss && Math.random() < stunChance) {
-    mob.applyStatus(makeStun(GAUNTLET_STUN_TICKS));
-  }
+  if (delivery === 'melee' && mob.lastBlowWasGuarded) return;
+  runHitHooks(crawler, { mob, delivery, damage, world: ctx.gearWorld ?? null });
+}
+
+/**
+ * `damage` as worn gear scales it for a blow about to land on `mob` — an
+ * armed riposte, a strike on an enemy that never saw her coming. Asked once
+ * per blow, before it lands, since landing it is what makes the mob notice.
+ */
+export function gearScaledDamage(
+  crawler: HumanPlayer | CatPlayer,
+  mob: Mob,
+  delivery: 'melee' | 'spell',
+  damage: number,
+): number {
+  return damage * runStrikeHooks(crawler, { mob, delivery });
 }
 
 /**
@@ -334,10 +349,12 @@ export type WeaponProcs = Readonly<Record<WeaponProcId, WeaponProc>>;
  */
 export function cutWithWeapon(ctx: CombatContext, mob: Mob, damageMultiplier: number): boolean {
   const { human } = ctx;
-  mob.takeDamageFrom(damageMultiplier * crawlerMeleeStrikeDamage(human), human, 'melee');
+  const blow = damageMultiplier * crawlerMeleeStrikeDamage(human);
+  const damage = mob.blowsEarnNothing ? blow : gearScaledDamage(human, mob, 'melee', blow);
+  mob.takeDamageFrom(damage, human, 'melee');
   if (mob.blowsEarnNothing) return false;
   ctx.hitLanded = true;
-  landHumanGearProcs(human, mob);
+  landGearProcs(ctx, human, mob, 'melee', damage);
   landTattooStrikeProcs(human, mob);
   return true;
 }
@@ -410,7 +427,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
 
   const humanSwings = human.isAttackPeak() && !inSafeRoom(human);
   const swungWeapon = human.drawnMeleeWeapon;
-  const swungWeaponId = human.drawnWeaponId;
+  const swungWeaponId = human.mainHandWeaponId;
   if (humanSwings && swungWeapon !== null && swungWeaponId !== null) {
     strikeWithWeapon(ctx, swungWeaponId, swungWeapon);
   } else if (humanSwings) {
@@ -443,10 +460,11 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         continue;
       }
       if (!human.zeroDamage) {
-        mob.takeDamageFrom(crawlerMeleeStrikeDamage(human), human, 'melee');
+        const blow = gearScaledDamage(human, mob, 'melee', crawlerMeleeStrikeDamage(human));
+        mob.takeDamageFrom(blow, human, 'melee');
         ctx.hitLanded = true;
         humanHit = true;
-        landHumanGearProcs(human, mob);
+        landGearProcs(ctx, human, mob, 'melee', blow);
         landTattooStrikeProcs(human, mob);
       }
     }
@@ -476,6 +494,14 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     const cc = centerOf(cat);
     const range = cat.getMeleeRange();
     const damage = cat.getMeleeDamage();
+    runSwingHooks(cat, {
+      originX: cc.x,
+      originY: cc.y,
+      dirX: cat.facingX,
+      dirY: cat.facingY,
+      reachPx: range,
+      damage,
+    });
     const nearCat = mobGrid.queryCircle(cc.x, cc.y, range + TILE_SIZE);
     let catHit = false;
     for (const mob of nearCat) {
@@ -496,16 +522,11 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         continue;
       }
       if (!cat.zeroDamage) {
-        mob.takeDamageFrom(crawlerMeleeStrikeDamage(cat), cat, 'melee');
+        const blow = gearScaledDamage(cat, mob, 'melee', crawlerMeleeStrikeDamage(cat));
+        mob.takeDamageFrom(blow, cat, 'melee');
         ctx.hitLanded = true;
         catHit = true;
-        if (
-          !mob.lastBlowWasGuarded &&
-          cat.inventory.hasEquipped('enchanted_crown_sepsis_whore') &&
-          Math.random() < SEPSIS_PROC_CHANCE
-        ) {
-          mob.applyStatus(makeSepsis(cat));
-        }
+        landGearProcs(ctx, cat, mob, 'melee', blow);
         landTattooStrikeProcs(cat, mob);
       }
     }
@@ -515,7 +536,8 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       catHit = (ctx.trees?.tryMeleeHit(cat, range, damage) ?? false) || catHit;
       catHit = (ctx.structures?.tryMeleeHit(cat, range) ?? false) || catHit;
     }
-    ctx.bus.emit('catMeleeSwing', { hit: catHit });
+    const clawsId = cat.inventory.equipment.getEquippedId(CLAWS_KEY) ?? null;
+    ctx.bus.emit('catMeleeSwing', { hit: catHit, clawsId });
   }
 
   // ── Smush AoE stomp ──
@@ -635,7 +657,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     const hitRadius = TILE_SIZE * MISSILE_HIT_RADIUS_FRACTION;
     const splashRadius = TILE_SIZE * MISSILE_SPLASH_RADIUS_TILES;
 
-    const wearsSplatterEyes = cat.inventory.hasEquipped(EYES_OF_SPLATTER_ID);
+    const missileSplitCopies = gearModifiers(cat).missileSplitCopies;
 
     for (const missile of cat.getMissiles()) {
       if (missile.state !== 'flying' || missile.hit || !missileCanStrike(missile)) continue;
@@ -714,16 +736,12 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
             mob.takeDamageFrom(damage, cat, 'missile');
             ctx.bus.emit('missileImpact', { x: missile.x, y: missile.y });
           } else if (!cat.zeroDamage) {
-            mob.takeDamageFrom(damage, cat, 'missile');
+            const blow = gearScaledDamage(cat, mob, 'spell', damage);
+            mob.takeDamageFrom(blow, cat, 'missile');
             ctx.hitLanded = true;
             ctx.bus.emit('missileImpact', { x: missile.x, y: missile.y });
 
-            if (
-              cat.inventory.hasEquipped('enchanted_crown_sepsis_whore') &&
-              Math.random() < SEPSIS_PROC_CHANCE
-            ) {
-              mob.applyStatus(makeSepsis(cat));
-            }
+            landGearProcs(ctx, cat, mob, 'spell', blow);
 
             // Level 5+: AoE magic splash
             if (missileLevel >= MISSILE_SPLASH_LEVEL) {
@@ -744,15 +762,17 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
               }
             }
 
-            const isSplatterCopy = missile.splatter !== undefined;
+            const isKaleidoscopeCopy = missile.kaleidoscope !== undefined;
             if (
               missileLevel >= MISSILE_SUB_MISSILE_LEVEL &&
               !missile.isSubMissile &&
-              !isSplatterCopy
+              !isKaleidoscopeCopy
             ) {
               cat.queueSubMissileSpawn(missile.x, missile.y);
             }
-            if (wearsSplatterEyes && !isSplatterCopy) cat.queueSplatterCopies(missile);
+            if (missileSplitCopies > 0 && !isKaleidoscopeCopy) {
+              cat.queueKaleidoscopeCopies(missile, missileSplitCopies);
+            }
 
             // Level 15: slow bosses and grant kill XP tracked separately in resolveKills
             if (missileLevel >= MISSILE_SLOW_BOSS_LEVEL && mob.isBoss) {
@@ -773,6 +793,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
   if (!inSafeRoom(human)) {
     const rockHitRadius = TILE_SIZE * SLINGSHOT_HIT_RADIUS_FRACTION;
 
+    const ricochetBounces = gearModifiers(human).ricochetBounces;
     for (const rock of human.getRocks()) {
       if (rock.state !== 'flying' || rock.hit) continue;
       const damage = human.getSlingshotDamage();
@@ -821,6 +842,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         // reason a missile does: a shot aimed correctly must not be spent on an
         // ally who wandered into the line.
         if (!mob.isAlive || !mob.takesPlayerDamage('slingshot')) continue;
+        if (mob === rock.bouncedOff) continue;
         const mc = centerOf(mob);
         if (Math.hypot(rock.x - mc.x, rock.y - mc.y) >= rockHitRadius) continue;
         if (!human.zeroDamage) {
@@ -828,12 +850,53 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
           if (!mob.blowsEarnNothing) ctx.hitLanded = true;
           ctx.bus.emit('slingshotImpact', { x: rock.x, y: rock.y });
         }
+        if (rock.bounces < ricochetBounces && bounceRock(rock, mob, mobGrid, gameMap)) break;
         rock.hit = true;
         rock.state = 'done';
         break;
       }
     }
   }
+}
+
+/** How far a ricocheting stone looks for its next enemy. */
+const RICOCHET_SEEK_TILES = 4;
+
+/**
+ * Sends a stone that just struck `struck` on to the nearest other enemy it can
+ * see, with a fresh flight of the seek distance. Returns false, leaving the
+ * stone spent, when nothing is in reach.
+ */
+function bounceRock(
+  rock: SlingshotRock,
+  struck: Mob,
+  mobGrid: SpatialGrid<Mob>,
+  gameMap: GameMap,
+): boolean {
+  const seekPx = RICOCHET_SEEK_TILES * TILE_SIZE;
+  let next: Mob | null = null;
+  let nearest = Infinity;
+  for (const mob of mobGrid.queryCircle(rock.x, rock.y, seekPx + TILE_SIZE)) {
+    if (mob === struck || !mob.isAlive || !mob.takesPlayerDamage('slingshot')) continue;
+    const dx = mob.x + HALF_TILE - rock.x;
+    const dy = mob.y + HALF_TILE - rock.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist > seekPx || dist >= nearest) continue;
+    if (!gameMap.hasLineOfSight(rock.x, rock.y, mob.x + HALF_TILE, mob.y + HALF_TILE)) continue;
+    nearest = dist;
+    next = mob;
+  }
+  if (next === null || nearest === 0) return false;
+  const speed = Math.hypot(rock.vx, rock.vy);
+  rock.vx = ((next.x + HALF_TILE - rock.x) / nearest) * speed;
+  rock.vy = ((next.y + HALF_TILE - rock.y) / nearest) * speed;
+  rock.distTraveled = 0;
+  rock.maxDist = seekPx;
+  rock.launchOffsetX = 0;
+  rock.launchOffsetY = 0;
+  rock.bounces++;
+  rock.bouncedOff = struck;
+  return true;
 }
 
 export function resolveKills(ctx: CombatContext): void {
@@ -905,6 +968,9 @@ export function resolveKills(ctx: CombatContext): void {
       mob.killedBy instanceof HumanPlayer || mob.killedBy instanceof CatPlayer
         ? mob.killedBy
         : null;
+    if (killer !== null && paysRewards) {
+      runKillHooks(killer, { mob, world: ctx.gearWorld ?? null });
+    }
 
     // A kill the pet finished feeds the pet's own ability, and the cat keeps the
     // crawler XP through the credit mapping above. A kill he only contributed to

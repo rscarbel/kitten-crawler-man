@@ -62,7 +62,7 @@ export const EVENT_IMPORTANCE = {
   craftSkillLevelUp: IMPORTANCE.LOW,
   achievementUnlocked: IMPORTANCE.SIGNIFICANT,
   rewardGranted: IMPORTANCE.MODERATE,
-  boxOpened: IMPORTANCE.SIGNIFICANT,
+  rewardChestOpened: IMPORTANCE.SIGNIFICANT,
   equipmentChanged: IMPORTANCE.LOW,
   stairwellFound: IMPORTANCE.MAJOR,
   levelComplete: IMPORTANCE.LANDMARK,

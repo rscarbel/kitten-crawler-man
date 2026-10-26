@@ -1,6 +1,6 @@
 import type { GameSystem, SystemContext } from './GameSystem';
-import { difficultyStats } from '../core/DifficultyStats';
-import type { StairwellHuntCheckpoint } from '../core/DifficultyStats';
+import { difficultyStats } from '../core/difficulty/DifficultyStats';
+import type { StairwellHuntCheckpoint } from '../core/difficulty/DifficultyStats';
 import { isEngagedInFight } from '../creatures/tactics/tacticalFrame';
 import { drainTacticsTelemetry } from '../creatures/tactics/tacticsTelemetry';
 

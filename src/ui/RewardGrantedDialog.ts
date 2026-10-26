@@ -1,4 +1,4 @@
-import type { GrantedReward, GrantedRewardKind } from '../core/GrantedReward';
+import type { GrantedReward, GrantedRewardKind } from '../core/items/loot/GrantedReward';
 import type { AudioManager } from '../audio/AudioManager';
 
 const POWER_UP_FRAMES = 60;

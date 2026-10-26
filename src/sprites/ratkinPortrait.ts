@@ -11,11 +11,11 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../core/canvasSurface';
+} from '../core/rendering/canvasSurface';
 import { RATKIN_BUILDS } from './art/ratkin/outfit';
 import { RATKIN_CAST_OUTFITS, type RatkinCastId } from './art/ratkin/cast';
 import { drawRatkinCastSprite } from './ratkinCastSprite';
-import { onCanvasRecovery } from '../core/canvasRecovery';
+import { onCanvasRecovery } from '../core/rendering/canvasRecovery';
 
 /** Side of the portrait, in pixels. Twice the panel's icon, so it stays crisp on a dense screen. */
 const PORTRAIT_PX = 40;

@@ -3,8 +3,8 @@
  * names, draws and describes the same reward the same way.
  */
 
-import type { PartyXpApplied } from '../../core/awardXp';
-import { ITEM_DEF, type ItemId } from '../../core/ItemDefs';
+import type { PartyXpApplied } from '../../core/progression/awardXp';
+import { ITEM_DEF, type ItemId } from '../../core/items/defs/ItemDefs';
 import { crawlerName } from '../../characters/characters';
 import { cachedWheelFace, paintWheelFace } from '../../sprites/art/wheelFaceArt';
 import { BASE_WHEEL_BOARD, tapedBoard } from '../../systems/casino/wheel/wheelBoard';
@@ -21,7 +21,7 @@ export interface BagItemLineOptions {
 }
 
 /** The icon a bag item wears in the inventory. */
-export function itemIconPainter(id: ItemId): IconPainter {
+export function rewardIconPainter(id: ItemId): IconPainter {
   const item = { ...ITEM_DEF[id], quantity: 1 };
   return (ctx, rect) => drawItemIcon(ctx, rect, item);
 }
@@ -37,7 +37,7 @@ export function bagItemRewardLine(
     name: def.name,
     count,
     itemId: options.flyToBag === false ? undefined : id,
-    renderIcon: itemIconPainter(id),
+    renderIcon: rewardIconPainter(id),
     description: options.describe === true ? def.description : undefined,
     note: options.note,
   };

@@ -1,4 +1,4 @@
-import { timeFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
+import { timeFrameIndex, walkFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import { type DrawnFigureRow, figureFrameCount, drawnFigureRow } from './figure/figureDef';
 import { RAT_KIN_FIGURE } from './art/ratKinFigure';

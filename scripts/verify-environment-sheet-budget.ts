@@ -32,8 +32,8 @@
  *   npm run verify:environment-sheet-budget
  */
 
-import type { AssetGroup } from '../src/core/assetGroups.js';
-import type { SpriteKey } from '../src/core/SpriteLoader.js';
+import type { AssetGroup } from '../src/core/spriteAssets/assetGroups.js';
+import type { SpriteKey } from '../src/core/spriteAssets/SpriteLoader.js';
 import type { LevelDef } from '../src/levels/types.js';
 import type { TileRect } from '../src/map/town/townPlan.js';
 import type { SheetRing } from '../src/systems/EnvironmentSheetResidentSet.js';
@@ -42,12 +42,13 @@ import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 
 installCanvasGlobals();
 
-const { ASSET_GROUPS } = await import('../src/core/assetGroups.js');
-const { getManifestEntry, sheetSizePx } = await import('../src/core/SpriteLoader.js');
-const { BYTES_PER_MEGABYTE } = await import('../src/core/canvasSurface.js');
+const { ASSET_GROUPS } = await import('../src/core/spriteAssets/assetGroups.js');
+const { getManifestEntry, sheetSizePx } = await import('../src/core/spriteAssets/SpriteLoader.js');
+const { BYTES_PER_MEGABYTE } = await import('../src/core/rendering/canvasSurface.js');
 const { TILE_SIZE } = await import('../src/core/constants.js');
-const { setViewportSize } = await import('../src/core/Viewport.js');
-const { requiredSpriteKeysForLevel } = await import('../src/core/systemAssetRequirements.js');
+const { setViewportSize } = await import('../src/core/rendering/Viewport.js');
+const { requiredSpriteKeysForLevel } =
+  await import('../src/core/spriteAssets/systemAssetRequirements.js');
 const { allLevelDefs, getLevelDef } = await import('../src/levels/index.js');
 const { dungeonOptionsForLevel } = await import('../src/levels/dungeonOptions.js');
 const { GameMap } = await import('../src/map/GameMap.js');

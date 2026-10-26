@@ -5,7 +5,7 @@
 
 import { speakerLines } from '../../line';
 import type { LineText } from '../../line';
-import type { Difficulty } from '../../../core/difficultyProfiles';
+import type { Difficulty } from '../../../core/difficulty/difficultyProfiles';
 
 const say = speakerLines('shady');
 

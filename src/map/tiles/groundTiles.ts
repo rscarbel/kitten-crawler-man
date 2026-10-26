@@ -60,14 +60,14 @@ import {
   type SpriteDef,
   type SpriteStateDef,
   type TileOffset,
-} from '../../core/SpriteLoader';
+} from '../../core/spriteAssets/SpriteLoader';
 import {
   allocCanvas,
   surfaceContext,
   type CanvasSurface,
   releaseSurface,
-} from '../../core/canvasSurface';
-import { onCanvasRecovery } from '../../core/canvasRecovery';
+} from '../../core/rendering/canvasSurface';
+import { onCanvasRecovery } from '../../core/rendering/canvasRecovery';
 import { isFaceMountedSign } from '../dungeon/wallShape';
 import { inferFloorType } from './helpers';
 import { floorSurfaceOf } from '../dungeon/floorSurface';
@@ -99,7 +99,7 @@ import { drawRiverWaterColumn, warmRiverWaterColumn } from './riverWaterColumn';
  */
 const RIVER_BED_MATERIAL = 'water';
 import { floorArtSubSeed, GROUND_TONE_SALT, GROUND_VARIANT_SALT } from '../ground/floorArtSeed';
-import { UINT32_SPAN } from '../../core/WorldRandom';
+import { UINT32_SPAN } from '../../core/world/WorldRandom';
 
 export interface ResolvedMaterial {
   readonly def: SpriteDef;

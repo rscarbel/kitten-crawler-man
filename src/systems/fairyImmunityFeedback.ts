@@ -1,6 +1,6 @@
 import type { Player } from '../Player';
-import type { FairyElement } from '../core/ItemDefs';
-import { isImmuneToFairyElement } from '../core/fairyImmunity';
+import type { FairyElement } from '../core/items/defs/ItemDefs';
+import { isImmuneToFairyElement } from '../core/items/equipment/fairyImmunity';
 
 const IMMUNE_TEXT = 'IMMUNE';
 

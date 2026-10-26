@@ -1,6 +1,6 @@
 import { TILE_SIZE } from '../../core/constants';
-import type { MercenaryTemplate, MercenaryTemplateId } from '../../core/mercenaryTemplates';
-import { makeShield, isAbsorbing, SHIELD_STATUS } from '../../core/StatusEffect';
+import type { MercenaryTemplate, MercenaryTemplateId } from '../../core/party/mercenaryTemplates';
+import { makeShield, isAbsorbing, SHIELD_STATUS } from '../../core/combat/StatusEffect';
 import type { Player } from '../../Player';
 import { normalize } from '../../utils';
 import { CatPlayer } from '../CatPlayer';

@@ -9,7 +9,7 @@
  * craft skill.
  */
 
-import type { CraftSkillId } from '../../../core/CraftSkills';
+import type { CraftSkillId } from '../../../core/labour/CraftSkills';
 import type { Surface } from '../../core/UiRoot';
 import {
   pagedOverlaySurface,

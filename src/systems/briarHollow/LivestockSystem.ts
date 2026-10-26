@@ -19,9 +19,9 @@
 
 import { TILE_SIZE } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
-import { activeRunStats } from '../../core/GameStats';
-import type { VillageQuestPhase } from '../../core/villageQuestPhase';
-import { applySpawnDifficulty } from '../../core/difficultyProfiles';
+import { activeRunStats } from '../../core/progression/GameStats';
+import type { VillageQuestPhase } from '../../core/quests/villageQuestPhase';
+import { applySpawnDifficulty } from '../../core/difficulty/difficultyProfiles';
 import { Cow, type CowRowWarmer, LIVESTOCK_LEVEL } from '../../creatures/Cow';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';

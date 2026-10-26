@@ -1,4 +1,4 @@
-import { setViewportSize } from '../../../core/Viewport';
+import { setViewportSize } from '../../../core/rendering/Viewport';
 import { crawlerName } from '../../../characters/characters';
 import { Conversation } from '../../../dialog/Conversation';
 import {
@@ -203,7 +203,7 @@ export const FIXTURES: readonly DialogFixture[] = [
     'conversation-system-ai',
     request([
       systemAi.line(
-        'New achievement! You have been awarded a Bronze Adventurer Box. Try not to cry about it.',
+        'A special award! You have been handed a Common chest. Try not to cry about it.',
       ),
     ]),
     false,

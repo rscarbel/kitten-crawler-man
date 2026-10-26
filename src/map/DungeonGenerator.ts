@@ -103,7 +103,7 @@ import {
   type RoomDoorway,
   type RoomWall,
 } from './roomDoorways';
-import { UINT32_SPAN, worldRandom } from '../core/WorldRandom';
+import { UINT32_SPAN, worldRandom } from '../core/world/WorldRandom';
 import { BASE_NURSERY_GRATE_COUNT } from '../levels/defendQuestIntensity';
 import {
   buildRegionMap,

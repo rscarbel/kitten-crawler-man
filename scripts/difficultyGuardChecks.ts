@@ -13,9 +13,9 @@
  */
 
 import { AudioManager } from '../src/audio/AudioManager.js';
-import { AbilityManager } from '../src/core/AbilityManager.js';
-import { AchievementManager } from '../src/core/AchievementManager.js';
-import { GameStats } from '../src/core/GameStats.js';
+import { AbilityManager } from '../src/core/skills/AbilityManager.js';
+import { AchievementManager } from '../src/core/progression/AchievementManager.js';
+import { GameStats } from '../src/core/progression/GameStats.js';
 import { CatPlayer } from '../src/creatures/CatPlayer.js';
 import { HumanPlayer } from '../src/creatures/HumanPlayer.js';
 import { TILE_SIZE } from '../src/core/constants.js';
@@ -25,10 +25,10 @@ import {
   registerDifficultyChangeGuard,
   type DifficultyChangeGuard,
   type DifficultyGuardHandle,
-} from '../src/core/difficultyChangeGuard.js';
-import { settings } from '../src/core/Settings.js';
-import type { Difficulty } from '../src/core/difficultyProfiles.js';
-import { setViewportSize } from '../src/core/Viewport.js';
+} from '../src/core/difficulty/difficultyChangeGuard.js';
+import { settings } from '../src/core/input/Settings.js';
+import type { Difficulty } from '../src/core/difficulty/difficultyProfiles.js';
+import { setViewportSize } from '../src/core/rendering/Viewport.js';
 import { MOUSE_POINTER_ID, PRIMARY_BUTTON } from '../src/ui/core/pointer.js';
 import { UiRoot, type HitRegion } from '../src/ui/core/UiRoot.js';
 import { NO_INSETS, type ViewportInput } from '../src/ui/core/viewport.js';

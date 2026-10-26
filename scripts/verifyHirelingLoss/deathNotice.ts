@@ -15,8 +15,8 @@
  */
 
 import { TILE_SIZE } from '../../src/core/constants';
-import { createMercenaryRoster, type MercenaryRoster } from '../../src/core/MercenaryRoster';
-import { getMercenaryTemplate } from '../../src/core/mercenaryTemplates';
+import { createMercenaryRoster, type MercenaryRoster } from '../../src/core/party/MercenaryRoster';
+import { getMercenaryTemplate } from '../../src/core/party/mercenaryTemplates';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import type { Mercenary } from '../../src/creatures/Mercenary';

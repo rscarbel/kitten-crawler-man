@@ -24,10 +24,10 @@ import {
 } from '../../dialog/scripts/briarHollow';
 import { SOLDIER_SCRIPTS, VILLAGER_SCRIPTS } from '../../dialog/villagerRegistry';
 import type { SoldierLines } from '../../dialog/roles';
-import type { ToolTier } from '../../core/toolTiers';
-import type { SoldierOrder, VillageQuestState } from '../../core/briarHollowState';
-import type { VillageQuestPhase } from '../../core/villageQuestPhase';
-import type { VillageUnlocks } from '../../core/villageUnlocks';
+import type { ToolTier } from '../../core/items/gathering/toolTiers';
+import type { SoldierOrder, VillageQuestState } from '../../core/quests/briarHollowState';
+import type { VillageQuestPhase } from '../../core/quests/villageQuestPhase';
+import type { VillageUnlocks } from '../../core/quests/villageUnlocks';
 import type { NPCMarkerType } from '../../creatures/QuestNPC';
 import type { ConversationRequest } from '../../dialog/request';
 import type { VillagerConversationFlow } from './villagerTopics';

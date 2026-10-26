@@ -27,7 +27,7 @@ import {
   type CanvasSurface,
   releaseSurface,
   surfaceContext,
-} from '../../core/canvasSurface';
+} from '../../core/rendering/canvasSurface';
 
 type Ctx = CanvasRenderingContext2D;
 

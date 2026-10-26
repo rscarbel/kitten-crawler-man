@@ -5,11 +5,11 @@ import {
   DIFFICULTY_LABELS,
   DIFFICULTY_ORDER,
   type Difficulty,
-} from '../../../core/difficultyProfiles';
-import { renderQuality } from '../../../core/RenderQuality';
-import { settings, type QualityPreset, type UiSize } from '../../../core/Settings';
+} from '../../../core/difficulty/difficultyProfiles';
+import { renderQuality } from '../../../core/perf/RenderQuality';
+import { settings, type QualityPreset, type UiSize } from '../../../core/input/Settings';
 import { choiceRow, wideButton, type Choice } from './parts';
-import { keybindings } from '../../../core/Keybindings';
+import { keybindings } from '../../../core/input/Keybindings';
 import type { PauseAudio, PauseContext, PauseSection, SectionLayout } from './section';
 import { slider, sliderHeight, stepSlider } from './slider';
 

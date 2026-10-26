@@ -1,10 +1,10 @@
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { Player } from '../Player';
 import type { EventBus } from '../core/EventBus';
-import type { SkillEvent, SkillId } from '../core/SkillManager';
-import { getSkillDef } from '../core/SkillManager';
-import type { CraftSkillEvent } from '../core/CraftSkills';
-import type { CrawlerKind } from '../core/SkillManager';
+import type { SkillEvent, SkillId } from '../core/skills/SkillManager';
+import { getSkillDef } from '../core/skills/SkillManager';
+import type { CraftSkillEvent } from '../core/labour/CraftSkills';
+import type { CrawlerKind } from '../core/skills/SkillManager';
 import type { HudToasts, ToastOptions } from '../ui/hud/toasts';
 
 /**
@@ -16,7 +16,6 @@ const UNLOCK_LINES: Record<SkillId, string> = {
   cat_reflexes: 'Skill unlocked: Cat-like Reflexes',
   pugilism: 'Skill unlocked: Pugilism',
   iron_stomach: 'Skill unlocked: Iron Stomach',
-  night_vision: 'Skill unlocked: Night Vision',
   iron_punch: 'Skill unlocked: Iron Punch',
   powerful_strike: 'Skill unlocked: Powerful Strike',
 };
@@ -160,7 +159,6 @@ const TRIGGER_LINES: Record<SkillId, string> = {
   cat_reflexes: 'Cat-like Reflexes engaged.',
   pugilism: 'Pugilism engaged.',
   iron_stomach: 'Iron Stomach engaged.',
-  night_vision: 'Night Vision engaged.',
   iron_punch: 'Iron Punch engaged.',
   powerful_strike: 'Powerful Strike — double damage',
 };

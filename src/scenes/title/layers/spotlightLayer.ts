@@ -16,9 +16,9 @@ import {
   surfaceContext,
   type CanvasSurface,
   releaseSurface,
-} from '../../../core/canvasSurface';
-import { canvasGeneration } from '../../../core/canvasRecovery';
-import { renderQuality } from '../../../core/RenderQuality';
+} from '../../../core/rendering/canvasSurface';
+import { canvasGeneration } from '../../../core/rendering/canvasRecovery';
+import { renderQuality } from '../../../core/perf/RenderQuality';
 import { TITLE_INK, titleRgba, type TitleRgb } from '../../../ui/theme/titleInk';
 import type { TitleClock } from '../titleClock';
 import { applyTitleCamera, type TitleDepth, type TitleLayer, type TitlePoint } from '../titleLayer';

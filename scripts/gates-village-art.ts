@@ -70,7 +70,7 @@ import {
 } from '../src/sprites/sheets/villageSheets.js';
 import { propSheetPlanMismatches, propSheetSize } from '../src/sprites/sheets/propSheetPlan.js';
 import type { FramePainter, PropSheetPlan } from '../src/sprites/sheets/propSheetPlan.js';
-import { getSpriteDefByKey } from '../src/core/SpriteLoader.js';
+import { getSpriteDefByKey } from '../src/core/spriteAssets/SpriteLoader.js';
 
 const fault = process.argv.find((arg) => arg.startsWith('--fault='))?.slice('--fault='.length);
 

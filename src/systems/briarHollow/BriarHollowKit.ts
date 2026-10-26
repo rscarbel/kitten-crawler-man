@@ -34,10 +34,10 @@ import {
 } from '../GameLoopPhases';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { AudioManager } from '../../audio/AudioManager';
-import type { PartyTools } from '../../core/PartyTools';
-import type { PartyCraftsState } from '../../core/partyCrafts';
-import type { BriarHollowState } from '../../core/briarHollowState';
-import type { keybindings } from '../../core/Keybindings';
+import type { PartyTools } from '../../core/items/gathering/PartyTools';
+import type { PartyCraftsState } from '../../core/labour/partyCrafts';
+import type { BriarHollowState } from '../../core/quests/briarHollowState';
+import type { keybindings } from '../../core/input/Keybindings';
 import type { SceneWorld } from '../kits/SceneWorld';
 import type { MenusKit } from '../kits/MenusKit';
 import type { KeyModifiers, Surface } from '../../ui/core/UiRoot';
@@ -48,15 +48,20 @@ import type { TrackerEntry } from '../questTracker';
 import type { ProcessingStationKind } from './processingStations';
 import { RatkinCastPrewarm } from './ratkinCastPrewarm';
 import { VillageAmbience } from './VillageAmbience';
-import { viewportHeight, viewportWidth } from '../../core/Viewport';
-import { MAX_TOOL_TIER, TOOL_TIER_BASIC, isToolTier, type ToolTier } from '../../core/toolTiers';
+import { viewportHeight, viewportWidth } from '../../core/rendering/Viewport';
+import {
+  MAX_TOOL_TIER,
+  TOOL_TIER_BASIC,
+  isToolTier,
+  type ToolTier,
+} from '../../core/items/gathering/toolTiers';
 import { VILLAGER_TALK_RANGE_TILES, VillagerSystem } from './VillagerSystem';
 import { TILE_SIZE } from '../../core/constants';
 import { drawQuestMarker, questMarkerColorFor } from '../../sprites/questNPCSprite';
 import { hollowPropInkTop } from '../../map/tiles/hollowVillageTiles';
 import { noticeBoardMarkerFor } from '../constructionContracts/contractIssue';
 import type { VillagerPartyState } from './villagerCircumstances';
-import { partyCount } from '../../core/partyResources';
+import { partyCount } from '../../core/items/gathering/partyResources';
 import { hostileWithinAttackRange } from '../interactionPromptGate';
 import {
   drawInteractionPrompt,
@@ -76,7 +81,7 @@ import { VillageServices } from './services/VillageServices';
 import { SoldierSystem } from './SoldierSystem';
 import type { Player } from '../../Player';
 import { renderNecromancerTelegraphs } from '../../creatures/Necromancer';
-import { activeDifficultyProfile } from '../../core/difficultyProfiles';
+import { activeDifficultyProfile } from '../../core/difficulty/difficultyProfiles';
 import type { Rect } from '../../ui/core/geom';
 import type { TopBandEntry } from '../../ui/hud/topBand';
 import { VillageAssaultSystem } from './VillageAssaultSystem';
@@ -102,8 +107,8 @@ import type { Conversation } from '../../dialog/Conversation';
 import type { ConversationHandle } from '../../dialog/request';
 import { transientSpeaker } from '../../dialog/line';
 import { BRAMBLEWICK } from '../../dialog/scripts/briarHollow';
-import { blueprintsPhaseAtLeast } from '../../core/blueprintsQuestPhase';
-import { createMidgeEscortCarry, type MidgeEscortCarry } from '../../core/midgeEscortCarry';
+import { blueprintsPhaseAtLeast } from '../../core/quests/blueprintsQuestPhase';
+import { createMidgeEscortCarry, type MidgeEscortCarry } from '../../core/quests/midgeEscortCarry';
 import type { BlueprintsCue } from './blueprints/blueprintsSoundCues';
 import type { TravelUnlockState } from '../travel/travelDestinations';
 

@@ -15,7 +15,7 @@
  *   npm run gates:hud-column
  */
 
-import type { UiSize } from '../src/core/Settings';
+import type { UiSize } from '../src/core/input/Settings';
 import { overlaps, type Rect } from '../src/ui/core/geom';
 import type { Density } from '../src/ui/theme/tokens';
 import { LEADING_BARS, hudStates, representativeTopBand } from './phoneHudLayouts';

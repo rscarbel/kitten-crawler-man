@@ -3,7 +3,7 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../../core/canvasSurface';
+} from '../../../core/rendering/canvasSurface';
 import { dungeonFloorTheme } from '../../dungeon/floorTheme';
 import { NoiseField, hashLattice } from '../../tilegen/noise';
 import { drawGroundTile } from '../groundTiles';
@@ -24,7 +24,7 @@ import {
   type ColosseumLayout,
   type ColosseumSpectatorSeat,
 } from './colosseumGeometry';
-import { canvasGeneration, onCanvasRecovery } from '../../../core/canvasRecovery';
+import { canvasGeneration, onCanvasRecovery } from '../../../core/rendering/canvasRecovery';
 
 /**
  * The Iron Colosseum, painted tile by tile against its true circles.

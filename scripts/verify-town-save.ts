@@ -26,6 +26,12 @@
  * achievements, since closing the tab on the floor-complete screen resumes
  * from exactly that save.
  *
+ * And the party's dungeon kill tally, which is saved with the human's
+ * achievements: the kill that crosses Something Hatched queues the chest that
+ * brings Mongo, but he joins only when that chest is opened, once, even after
+ * a save and reload; the tally survives a save, and a kill on the overworld
+ * never counts.
+ *
  *   npx tsx scripts/verify-town-save.ts
  */
 
@@ -41,7 +47,7 @@ import type { TileRect } from '../src/map/town/townPlan.js';
 import type { GameProgressInput } from '../src/auth/AuthClient.js';
 import { HumanPlayer } from '../src/creatures/HumanPlayer.js';
 import { CatPlayer } from '../src/creatures/CatPlayer.js';
-import { snapPlayer } from '../src/core/PlayerSnapshot.js';
+import { snapPlayer } from '../src/core/save/PlayerSnapshot.js';
 import {
   carriedSaveRegeneratesFloor,
   owesArrivalSave,
@@ -49,18 +55,22 @@ import {
   respawnRouteFor,
   savePointAfterWrite,
   type SavePoint,
-} from '../src/core/SavePoint.js';
-import { WORLD_GENERATOR_VERSION } from '../src/core/SavedWorld.js';
+} from '../src/core/save/SavePoint.js';
+import { WORLD_GENERATOR_VERSION } from '../src/core/save/SavedWorld.js';
 import { sceneSetupFromSave } from '../src/scenes/resumeFromSave.js';
 import type { DungeonSceneOptions } from '../src/scenes/DungeonScene.js';
-import { parseTownMemoryCheckpoint } from '../src/core/PersistedWorldState.js';
+import { parseTownMemoryCheckpoint } from '../src/core/save/PersistedWorldState.js';
 import {
   createTownMemory,
   interiorPropPayoutKey,
   restoreTownMemory,
   roomKey,
-} from '../src/core/TownMemory.js';
-import { AchievementManager, type AchievementId } from '../src/core/AchievementManager.js';
+} from '../src/core/state/TownMemory.js';
+import {
+  AchievementManager,
+  DUNGEON_KILLS_SOMETHING_HATCHED,
+  type AchievementId,
+} from '../src/core/progression/AchievementManager.js';
 import { installBrowserShim } from './browserShim.js';
 import { settleArrival } from './settleArrival.js';
 
@@ -540,7 +550,11 @@ function checkRenamedInteriorPropMemory(): void {
 const DESCENT_VIEWPORT = { width: 1280, height: 720, devicePixelRatio: 1 } as const;
 /** One achievement per crawler, neither of which arriving on a floor unlocks. */
 const DESCENT_HUMAN_ACHIEVEMENT = 'boss_slayer' as const satisfies AchievementId;
-const DESCENT_CAT_ACHIEVEMENT = 'smush' as const satisfies AchievementId;
+const DESCENT_CAT_ACHIEVEMENT = 'magic_touch' as const satisfies AchievementId;
+/** Kills short of Something Hatched, so the next dungeon kill crosses it. */
+const KILLS_BEFORE_MONGO = DUNGEON_KILLS_SOMETHING_HATCHED - 1;
+/** Dungeon kills landed past the threshold, which must not pay Mongo again. */
+const KILLS_PAST_MONGO = 3;
 
 /**
  * Takes the stairs on a real floor and reloads the save that wrote from the
@@ -549,15 +563,16 @@ const DESCENT_CAT_ACHIEVEMENT = 'smush' as const satisfies AchievementId;
 async function checkDescentSaveKeepsAchievements(): Promise<void> {
   installBrowserShim(DESCENT_VIEWPORT);
   const { SceneManager } = await import('../src/core/Scene.js');
-  const { InputManager } = await import('../src/core/InputManager.js');
+  const { InputManager } = await import('../src/core/input/InputManager.js');
   const { DungeonScene } = await import('../src/scenes/DungeonScene.js');
   const { level2 } = await import('../src/levels/level2.js');
-  const { readLocalProgress, writeLocalProgress } = await import('../src/core/LocalProgress.js');
+  const { readLocalProgress, writeLocalProgress } =
+    await import('../src/core/save/LocalProgress.js');
 
   const humanAchievements = new AchievementManager();
   const catAchievements = new AchievementManager();
-  humanAchievements.tryUnlock(DESCENT_HUMAN_ACHIEVEMENT);
-  catAchievements.tryUnlock(DESCENT_CAT_ACHIEVEMENT);
+  humanAchievements.recordUnlock(DESCENT_HUMAN_ACHIEVEMENT);
+  catAchievements.recordUnlock(DESCENT_CAT_ACHIEVEMENT);
 
   const sceneManager = new SceneManager();
   const scene = new DungeonScene(level2, new InputManager(), sceneManager, {
@@ -597,6 +612,125 @@ async function checkDescentSaveKeepsAchievements(): Promise<void> {
   );
 }
 
+/** How many of a crawler's queued, unopened reward chests bring Mongo, read without taking any. */
+function mongoChestsQueued(manager: AchievementManager): number {
+  return manager
+    .serialize()
+    .presentations.filter((presentation) =>
+      presentation.rewards.some((line) => line.kind === 'companion'),
+    ).length;
+}
+
+/** A save and reload of one crawler's achievements, as the device's storage round-trips them. */
+function reloadAchievements(manager: AchievementManager): AchievementManager {
+  return AchievementManager.fromSerialized(JSON.parse(JSON.stringify(manager.serialize())));
+}
+
+async function checkDungeonKillLadder(): Promise<void> {
+  installBrowserShim(DESCENT_VIEWPORT);
+  const { SceneManager } = await import('../src/core/Scene.js');
+  const { InputManager } = await import('../src/core/input/InputManager.js');
+  const { DungeonScene } = await import('../src/scenes/DungeonScene.js');
+  const { level2 } = await import('../src/levels/level2.js');
+  const { Rat } = await import('../src/creatures/Rat.js');
+  const { MONGO_DEF } = await import('../src/abilities/mongo.js');
+  const { presentsMongo } = await import('../src/systems/mongoArrival.js');
+
+  const humanAchievements = new AchievementManager();
+  const catAchievements = new AchievementManager();
+  for (let kill = 0; kill < KILLS_BEFORE_MONGO; kill++) {
+    humanAchievements.advanceCounter('dungeonKills');
+  }
+  const dungeon = new DungeonScene(level2, new InputManager(), new SceneManager(), {
+    worldSeed: HARNESS_WORLD_SEED,
+    skipIntro: true,
+    humanAchievements,
+    catAchievements,
+  });
+  const killRat = (scene: typeof dungeon): void => {
+    const killer = scene['human'];
+    const rat = new Rat(0, 0, TILE_SIZE);
+    scene['bus'].emit('mobKilled', {
+      mob: rat,
+      killer,
+      killType: 'melee',
+      topDamageDealer: killer,
+    });
+  };
+  check(
+    !dungeon['mongoSystem'].unlocked,
+    'fixture: Mongo is unlocked before the ladder is crossed',
+  );
+  killRat(dungeon);
+  check(
+    humanAchievements.counter('dungeonKills') === DUNGEON_KILLS_SOMETHING_HATCHED,
+    `a dungeon kill does not advance the party's tally (${humanAchievements.counter('dungeonKills')})`,
+  );
+  check(
+    catAchievements.isUnlocked('dungeon_kills_200'),
+    'crossing the threshold does not unlock it for the cat',
+  );
+  check(
+    !dungeon['mongoSystem'].unlocked,
+    'crossing Something Hatched brings Mongo before his chest is opened',
+  );
+  for (let kill = 0; kill < KILLS_PAST_MONGO; kill++) killRat(dungeon);
+  check(
+    mongoChestsQueued(catAchievements) === 1,
+    `the cat does not hold exactly one unopened chest bringing Mongo (${mongoChestsQueued(catAchievements)})`,
+  );
+  check(!dungeon['mongoSystem'].unlocked, 'more dungeon kills bring Mongo with his chest unopened');
+
+  const reloadedHuman = reloadAchievements(humanAchievements);
+  const reloadedCat = reloadAchievements(catAchievements);
+  check(
+    reloadedHuman.counter('dungeonKills') === humanAchievements.counter('dungeonKills'),
+    'the dungeon kill tally does not survive a save',
+  );
+  check(mongoChestsQueued(reloadedCat) === 1, "Mongo's unopened chest does not survive a save");
+  const resumed = new DungeonScene(level2, new InputManager(), new SceneManager(), {
+    worldSeed: HARNESS_WORLD_SEED,
+    skipIntro: true,
+    humanAchievements: reloadedHuman,
+    catAchievements: reloadedCat,
+  });
+  check(!resumed['mongoSystem'].unlocked, 'a reload with his chest unopened brings Mongo');
+  let mongoIntroductions = 0;
+  resumed['bus'].on('rewardGranted', (e) => {
+    mongoIntroductions += e.rewards.filter((reward) => reward.name === MONGO_DEF.name).length;
+  });
+  const rewardScreen = resumed['achievementUI'];
+  const sceneOpened = rewardScreen.onPresentationOpened;
+  let broughtByAnotherChest = false;
+  rewardScreen.onPresentationOpened = (presentation) => {
+    sceneOpened?.(presentation);
+    if (!presentsMongo(presentation) && resumed['mongoSystem'].unlocked) {
+      broughtByAnotherChest = true;
+    }
+  };
+  while (rewardScreen.openRewards()) rewardScreen.dismiss();
+  check(!broughtByAnotherChest, 'opening a chest that does not bring Mongo brings him');
+  check(resumed['mongoSystem'].unlocked, 'opening his chest after a reload does not bring Mongo');
+  check(
+    mongoIntroductions === 1,
+    `opening his chest does not introduce Mongo exactly once (${mongoIntroductions})`,
+  );
+  check(mongoChestsQueued(reloadedCat) === 0, "Mongo's chest is still waiting after it was opened");
+
+  const overworldTally = humanAchievements.counter('dungeonKills');
+  const overworld = new DungeonScene(level3, new InputManager(), new SceneManager(), {
+    worldSeed: HARNESS_WORLD_SEED,
+    skipIntro: true,
+    humanAchievements,
+    catAchievements,
+  });
+  killRat(overworld);
+  check(
+    humanAchievements.counter('dungeonKills') === overworldTally,
+    'an overworld kill advances the dungeon kill tally',
+  );
+}
+
 for (const seed of SEEDS) {
   checkOverworld(seed);
   checkDungeon(seed);
@@ -606,6 +740,7 @@ checkArrivalSaves();
 checkRenamedBuildingMemory();
 checkRenamedInteriorPropMemory();
 await checkDescentSaveKeepsAchievements();
+await checkDungeonKillLadder();
 
 console.log(`${checks - failures}/${checks} checks passed`);
 if (failures > 0) process.exit(1);

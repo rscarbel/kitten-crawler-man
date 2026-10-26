@@ -21,7 +21,7 @@
  * as shrapnel, and the dust it kicks up rolls outward along the floor.
  */
 
-import type { CanvasSurface } from '../core/canvasSurface';
+import type { CanvasSurface } from '../core/rendering/canvasSurface';
 import {
   bakeSoftDisc,
   FLAME_BODY_TIERS,

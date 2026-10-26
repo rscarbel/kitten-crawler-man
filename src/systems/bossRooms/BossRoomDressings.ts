@@ -24,7 +24,7 @@ import {
   type MoodLightSink,
 } from './bossRoomMoodLights';
 import type { SpiderLabDressing } from './SpiderLabDressing';
-import { BIG_ROOSTER_BOSS_TYPE } from '../../core/bossTypes';
+import { BIG_ROOSTER_BOSS_TYPE } from '../../core/mobs/bossTypes';
 
 /** The boss-type ids from `levelDef.bossRooms[].type` that own a rectangular boss room. */
 export const TRASH_GREMLIN_BOSS_TYPE = 'trash_gremlin';

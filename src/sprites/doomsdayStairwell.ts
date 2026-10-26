@@ -1,5 +1,5 @@
 import { TILE_SIZE } from '../core/constants';
-import { drawSpriteKey } from '../core/SpriteRenderer';
+import { drawSpriteKey } from '../core/spriteAssets/SpriteRenderer';
 
 /** The Doomsday escape stairwell is drawn this many tiles across. */
 export const STAIRWELL_SCALE = 2;

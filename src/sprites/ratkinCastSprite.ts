@@ -9,7 +9,11 @@
  * name this wrapper can produce against what each figure actually paints.
  */
 
-import { progressFrameIndex, timeFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
+import {
+  progressFrameIndex,
+  timeFrameIndex,
+  walkFrameIndex,
+} from '../core/spriteAssets/SpriteRenderer';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import { type DrawnFigureRow, figureFrameCount, drawnFigureRow } from './figure/figureDef';
 import type { RatKinView } from './art/ratKinArt';

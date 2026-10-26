@@ -78,7 +78,7 @@ and why the crowd is rolled from the world seed.
   `prewarmAndPinCitizenTalk` dispatch on it. `Townsperson` never reads a look directly.
   A third species is a case here.
 - **Variety tiers trim the street's looks, never its roles.** The pick reads the
-  variety tier (`src/core/varietyTier.ts`): humans by `TOWN_CAST_TIER_PLANS` (role
+  variety tier (`src/core/perf/varietyTier.ts`): humans by `TOWN_CAST_TIER_PLANS` (role
   groups wearing their first role's looks), skyfowl by `skyfowlStreetLookAllowance`.
   A `Townsperson` re-picks only after a purged canvas recovery, never while `frozen`
   in a conversation, and a named resident never. A `Townsperson` warms and pins nothing

@@ -3,7 +3,7 @@
  * system so the save format can parse it without loading the bathroom itself.
  */
 
-import { isRecord } from '../../core/guards';
+import { isRecord } from '../../core/util/guards';
 
 /**
  * Where the quest stands:

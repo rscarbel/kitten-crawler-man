@@ -40,7 +40,7 @@ import {
   surfaceContext,
   type CanvasSurface,
   releaseSurface,
-} from '../core/canvasSurface';
+} from '../core/rendering/canvasSurface';
 import {
   paintBoardFrame,
   paintChordLink,
@@ -64,7 +64,7 @@ import {
   type LaneIndex,
 } from './keyboardHeroLayout';
 import { LANE_PALETTES } from '../sprites/art/keyboardHeroLanePalettes';
-import { onCanvasRecovery } from '../core/canvasRecovery';
+import { onCanvasRecovery } from '../core/rendering/canvasRecovery';
 
 /** Paints one piece into a surface already sized to `w`×`h` supersampled pixels. */
 type PiecePainter = (ctx: CanvasRenderingContext2D, w: number, h: number) => void;

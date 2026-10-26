@@ -1,4 +1,4 @@
-import type { AchievementManager } from '../../core/AchievementManager';
+import type { AchievementAwards } from '../../systems/AchievementAwards';
 import type { AudioManager } from '../../audio/AudioManager';
 import type { MusicClaims } from '../../audio/AudioScope';
 import type { CatPlayer } from '../../creatures/CatPlayer';
@@ -37,7 +37,8 @@ export interface AISceneContext {
   isInCombat?(): boolean;
   isIndoors?(): boolean;
   postToast?(text: string, opts?: ToastOptions): void;
-  getAchievements?(target: AITargetCrawler): AchievementManager;
+  /** The scene's award payer: every chest and achievement the AI grants is paid through it. */
+  getAwards?(): AchievementAwards;
   getAudio?(): AudioManager | null;
   getAudioScope?(): MusicClaims | null;
   getLevelTimer?(): AILevelTimer | null;
@@ -113,7 +114,7 @@ export const AI_BUDGET_POOLS = [
   'itemValue',
   'coinsGiven',
   'coinsFined',
-  'lootBoxPoints',
+  'rewardChestPoints',
   'timerSeconds',
 ] as const;
 export type AIBudgetPool = (typeof AI_BUDGET_POOLS)[number];

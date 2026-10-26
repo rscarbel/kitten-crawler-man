@@ -10,7 +10,7 @@
  */
 
 import { TILE_SIZE } from '../../../core/constants';
-import { progressFrameIndex, timeFrameIndex } from '../../../core/SpriteRenderer';
+import { progressFrameIndex, timeFrameIndex } from '../../../core/spriteAssets/SpriteRenderer';
 import { mulberry32 } from '../../../sprites/person/rng';
 import {
   emptyHandedHumanFigure,

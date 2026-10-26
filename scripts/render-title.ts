@@ -24,7 +24,7 @@ const { createCanvas } = await import('canvas');
 const { asGameContext } = await import('./nodeGameContext.js');
 const { PREVIEW_DIR, writePreviewPng } = await import('./previewOut.js');
 const { SceneManager } = await import('../src/core/Scene.js');
-const { InputManager } = await import('../src/core/InputManager.js');
+const { InputManager } = await import('../src/core/input/InputManager.js');
 const { NO_INSETS } = await import('../src/ui/core/viewport.js');
 const { TitleScene } = await import('../src/scenes/title/TitleScene.js');
 const {

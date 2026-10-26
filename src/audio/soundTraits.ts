@@ -332,6 +332,81 @@ const EXPLOSIVE_HANDLING_IDS = [
 ] as const satisfies readonly SoundId[];
 
 /**
+ * A claw trail sounds on every swipe the cat makes, so it keeps to two voices
+ * and sits under the swing it rides on.
+ */
+const CLAW_SWIPE = {
+  maxVoices: 2,
+  priority: 'low',
+  ...VARIED,
+} as const satisfies Partial<SoundTraits>;
+
+/**
+ * Rare turns in a fight that the player must hear over it: a life saved, the
+ * world slowing, gear awakening or binding, a set completed, and the cat
+ * going down.
+ */
+const GEAR_MOMENT_IDS = [
+  'halo_revive',
+  'hourglass_slow_in',
+  'hourglass_slow_out',
+  'gear_awaken',
+  'cursed_bind',
+  'set_bonus_complete',
+  'belle_downed',
+] as const satisfies readonly SoundId[];
+
+const GEAR_MOMENT = { priority: 'high' } as const satisfies Partial<SoundTraits>;
+
+/**
+ * Both crawlers' lockets link on the same frame, and a pair walking along the
+ * edge of the link's range would chime at every step across it.
+ */
+const PARTNER_LINK_MIN_INTERVAL_MS = 4000;
+const PARTNER_LINK = {
+  maxVoices: 1,
+  minIntervalMs: PARTNER_LINK_MIN_INTERVAL_MS,
+} as const satisfies Partial<SoundTraits>;
+
+const CLAW_SWIPE_IDS = [
+  'claw_swipe_frost_1',
+  'claw_swipe_frost_2',
+  'claw_swipe_frost_3',
+  'claw_swipe_frost_4',
+  'claw_swipe_venom_1',
+  'claw_swipe_venom_2',
+  'claw_swipe_venom_3',
+  'claw_swipe_venom_4',
+  'claw_swipe_ink_1',
+  'claw_swipe_ink_2',
+  'claw_swipe_ink_3',
+  'claw_swipe_ink_4',
+] as const satisfies readonly SoundId[];
+
+/** What a relic throws (a bolt, a ward catching a shot, a bramble planted) and what a blade throws. */
+const RELIC_EFFECT_IDS = [
+  'sunsteel_slash_wave_1',
+  'sunsteel_slash_wave_2',
+  'sunsteel_slash_wave_3',
+  'sunsteel_slash_wave_4',
+  'last_word_chain_spark_1',
+  'last_word_chain_spark_2',
+  'last_word_chain_spark_3',
+  'last_word_chain_spark_4',
+  'ember_wisp_bolt_1',
+  'ember_wisp_bolt_2',
+  'ember_wisp_bolt_3',
+  'ember_wisp_bolt_4',
+  'ember_wisp_bolt_5',
+  'ward_stone_block_2',
+  'ward_stone_block_3',
+  'bramble_seed_burst_1',
+  'bramble_seed_burst_2',
+  'bramble_seed_burst_3',
+  'bramble_seed_burst_4',
+] as const satisfies readonly SoundId[];
+
+/**
  * A bomber goblin's voice. A pack throws together, so each take sounds once
  * at a time and a repeat inside the gap is dropped rather than stacked.
  */
@@ -395,6 +470,42 @@ export const STINGER_IDS = [
 ] as const satisfies readonly SoundId[];
 
 /** One id's own departures from its folder. */
+/** Every rooster's talons on the gym floor. */
+const ROOSTER_STEP_IDS = [
+  'rooster_talon_step_1',
+  'rooster_talon_step_2',
+  'rooster_talon_step_3',
+  'rooster_talon_step_4',
+] as const satisfies readonly SoundId[];
+
+/** A rooster's beak, fist or swung dumbbell, struck many times a fight. */
+const ROOSTER_BLOW_IDS = [
+  'rooster_peck_1',
+  'rooster_peck_2',
+  'rooster_peck_3',
+  'rooster_peck_4',
+  'rooster_punch_whoosh_1',
+  'rooster_punch_whoosh_2',
+  'rooster_punch_whoosh_3',
+  'rooster_punch_whoosh_4',
+  'dumbbell_club_impact_1',
+  'dumbbell_club_impact_2',
+  'dumbbell_club_impact_3',
+] as const satisfies readonly SoundId[];
+
+/**
+ * A minion clucks when it notices, winds up and is hit, so a scrap can raise
+ * them back to back; one voice per take keeps a flurry from stacking up.
+ */
+const ROOSTER_CLUCK_IDS = [
+  'little_rooster_cluck_1',
+  'little_rooster_cluck_2',
+  'little_rooster_cluck_3',
+  'bent_rooster_cluck_1',
+  'bent_rooster_cluck_2',
+  'bent_rooster_cluck_3',
+] as const satisfies readonly SoundId[];
+
 const ID_TRAITS: Readonly<Partial<Record<SoundId, Partial<SoundTraits>>>> = {
   ...Object.fromEntries(IMPACT_IDS.map((id) => [id, VARIED])),
   ...Object.fromEntries(FOOTSTEP_IDS.map((id) => [id, FOOTSTEPS])),
@@ -407,6 +518,13 @@ const ID_TRAITS: Readonly<Partial<Record<SoundId, Partial<SoundTraits>>>> = {
   ...Object.fromEntries(FIREWORK_BURST_IDS.map((id) => [id, FIREWORK_BURST])),
   ...Object.fromEntries(EXPLOSION_IDS.map((id) => [id, EXPLOSION])),
   ...Object.fromEntries(EXPLOSIVE_HANDLING_IDS.map((id) => [id, VARIED])),
+  ...Object.fromEntries(ROOSTER_STEP_IDS.map((id) => [id, FOOTSTEPS])),
+  ...Object.fromEntries(ROOSTER_BLOW_IDS.map((id) => [id, VARIED])),
+  ...Object.fromEntries(ROOSTER_CLUCK_IDS.map((id) => [id, ONE_SPEAKER])),
+  ...Object.fromEntries(CLAW_SWIPE_IDS.map((id) => [id, CLAW_SWIPE])),
+  ...Object.fromEntries(RELIC_EFFECT_IDS.map((id) => [id, VARIED])),
+  ...Object.fromEntries(GEAR_MOMENT_IDS.map((id) => [id, GEAR_MOMENT])),
+  twin_locket_link: PARTNER_LINK,
   ...Object.fromEntries(BOMBER_GRUNT_IDS.map((id) => [id, BOMBER_VOICE])),
   ...Object.fromEntries(FIRE_IN_THE_HOLE_IDS.map((id) => [id, BOMBER_VOICE])),
   ...Object.fromEntries(BOMBS_AWAY_IDS.map((id) => [id, BOMBER_VOICE])),

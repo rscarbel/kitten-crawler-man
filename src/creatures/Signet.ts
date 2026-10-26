@@ -136,15 +136,6 @@ export class Signet extends Mob {
     return SIGNET_EYES;
   }
 
-  /**
-   * Her horns and elite marker sit well above her tile, so a status label
-   * anchored to the tile would land across her face. Same clearance the rest of
-   * her overlays use.
-   */
-  protected override get statusLabelClearanceTiles(): number {
-    return SIGNET_OVERLAY_CLEARANCE;
-  }
-
   readonly xpValue = 0;
   protected coinDropMin = 0;
   protected coinDropMax = 0;
@@ -260,7 +251,7 @@ export class Signet extends Mob {
   /**
    * Signet is quest-critical and must never die, from any direction: some
    * hostile AI (e.g. the Vespa-stage BrindleGrub) targets any mob in range
-   * regardless of hostility, and a blast or a sepsis proc reaches her without
+   * regardless of hostility, and a blast or a gear poison proc reaches her without
    * anyone aiming at all.
    *
    * The shield goes here rather than on `takeDamageFrom` because this is the

@@ -5,12 +5,11 @@
  * then the standing views large. `--compare` paints each row without the
  * garment beside it. No art gates run here: this is for looking.
  *
- *   npx tsx scripts/render-garments.ts --wear=human_crown
- *   npx tsx scripts/render-garments.ts --wear=cat_crown,cat_butterfly_talisman --compare
- *   npx tsx scripts/render-garments.ts --wear=human_boots --rows=walk_side:0,walk_side:8
- *   npx tsx scripts/render-garments.ts --wear=human_crown --out=crown.png
- *   npx tsx scripts/render-garments.ts --wear=cat_crown --look=pumpkin
- *   npx tsx scripts/render-garments.ts --wear=human_boots --look=dave
+ *   npx tsx scripts/render-garments.ts --wear=townsfolk_shoes
+ *   npx tsx scripts/render-garments.ts --wear=townsfolk_trousers,townsfolk_shoes --compare
+ *   npx tsx scripts/render-garments.ts --wear=townsfolk_shoes --rows=walk_side:0,walk_side:8
+ *   npx tsx scripts/render-garments.ts --wear=townsfolk_shoes --out=shoes.png
+ *   npx tsx scripts/render-garments.ts --wear=townsfolk_shoes --look=dave
  *
  * A garment is drawn on the look `--look=` names: a cat look for a cat garment
  * (see `catLooks.ts`), a human look for a human one (see `humanLooks.ts`).

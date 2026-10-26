@@ -14,10 +14,10 @@ import {
   releaseSurface,
   type CanvasSurface,
   freshSurfaceContext,
-} from '../core/canvasSurface';
+} from '../core/rendering/canvasSurface';
 import { drawFigureCached } from './figure/figureFrameCache';
 import { thrallFigure } from './art/thrallFigure';
-import type { ToolKind } from '../core/toolTiers';
+import type { ToolKind } from '../core/items/gathering/toolTiers';
 import { SOUL_CORE, SOUL_DEEP, SOUL_MID, soulRgba } from './soulPalette';
 
 /** How opaque a thrall is at full presence. */

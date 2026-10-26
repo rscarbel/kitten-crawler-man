@@ -9,10 +9,10 @@ import {
   surfaceContext,
   type CanvasSurface,
   releaseSurface,
-} from '../../../core/canvasSurface';
+} from '../../../core/rendering/canvasSurface';
 import { smoothstepUnit } from '../../../map/overworld/elevation';
-import { canvasGeneration } from '../../../core/canvasRecovery';
-import { renderQuality } from '../../../core/RenderQuality';
+import { canvasGeneration } from '../../../core/rendering/canvasRecovery';
+import { renderQuality } from '../../../core/perf/RenderQuality';
 import { NoiseField } from '../../../map/tilegen/noise';
 import { TITLE_INK } from '../../../ui/theme/titleInk';
 import { rowAtHeight, scaleAtDistance, titleHall } from '../titleHall';

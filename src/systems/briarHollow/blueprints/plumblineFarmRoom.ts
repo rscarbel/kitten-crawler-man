@@ -12,7 +12,7 @@
 import {
   blueprintsPhaseAtLeast,
   type BlueprintsQuestPhase,
-} from '../../../core/blueprintsQuestPhase';
+} from '../../../core/quests/blueprintsQuestPhase';
 import type { BarkLine } from '../../../dialog/line';
 import { DAIRY_LIVE_EXAMINE_LINES } from '../../../dialog/scripts/interiorObjects';
 import type { GameMap } from '../../../map/GameMap';

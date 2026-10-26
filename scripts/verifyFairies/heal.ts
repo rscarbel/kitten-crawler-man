@@ -19,8 +19,8 @@
  */
 
 import { TILE_SIZE } from '../../src/core/constants';
-import { OVERHEAL_STATUS } from '../../src/core/StatusEffect';
-import { REFERENCE_CRAWLERS, referenceStats } from '../../src/core/referenceCrawler';
+import { OVERHEAL_STATUS } from '../../src/core/combat/StatusEffect';
+import { REFERENCE_CRAWLERS, referenceStats } from '../../src/core/party/referenceCrawler';
 import type { Mob } from '../../src/creatures/Mob';
 import type { Player } from '../../src/Player';
 import type { ActiveFairyCast, FairyCast } from '../../src/creatures/fairies/Fairy';
@@ -56,7 +56,10 @@ import {
 import { MAX_MOB_LEVEL } from '../../src/levels/spawner';
 import type { FairyGateReport } from './report';
 import { LETHAL_BLOW, WHOLE_ARENA_VIEW, buildStage, placeOnTile, type TileSpec } from './stage';
-import { setVisibleWorldView, type VisibleWorldView } from '../../src/core/visibleWorldView';
+import {
+  setVisibleWorldView,
+  type VisibleWorldView,
+} from '../../src/core/rendering/visibleWorldView';
 import type { SoundId } from '../../src/audio/sounds';
 import {
   playFairyCastCues,

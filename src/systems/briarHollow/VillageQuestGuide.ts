@@ -17,8 +17,8 @@
  */
 
 import { TILE_SIZE } from '../../core/constants';
-import { ITEM_DEF, type ItemId } from '../../core/ItemDefs';
-import type { BriarHollowState } from '../../core/briarHollowState';
+import { ITEM_DEF, type ItemId } from '../../core/items/defs/ItemDefs';
+import type { BriarHollowState } from '../../core/quests/briarHollowState';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { GameMap } from '../../map/GameMap';

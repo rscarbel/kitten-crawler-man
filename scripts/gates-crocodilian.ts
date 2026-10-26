@@ -58,7 +58,7 @@ import {
   bucketBoyTriageReleaseProgress,
 } from '../src/sprites/crocodilianTiming.js';
 import { crocodilianReachableStates } from '../src/sprites/crocodilianSprite.js';
-import { progressFrameIndex } from '../src/core/SpriteRenderer.js';
+import { progressFrameIndex } from '../src/core/spriteAssets/SpriteRenderer.js';
 import { figureByteBudgetFor } from '../src/sprites/figure/figureFrameCache.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 

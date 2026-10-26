@@ -39,11 +39,11 @@ import { GameMap } from '../src/map/GameMap';
 import { hasRoomToMove } from '../src/map/findWalkableTile';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
 import { EventBus } from '../src/core/EventBus';
-import { createBriarHollowState } from '../src/core/briarHollowState';
-import { createAnchorQuestProgress } from '../src/core/AnchorQuestProgress';
-import type { VillageQuestPhase } from '../src/core/villageQuestPhase';
-import { AbilityManager } from '../src/core/AbilityManager';
-import { ITEM_DEF } from '../src/core/ItemDefs';
+import { createBriarHollowState } from '../src/core/quests/briarHollowState';
+import { createAnchorQuestProgress } from '../src/core/quests/AnchorQuestProgress';
+import type { VillageQuestPhase } from '../src/core/quests/villageQuestPhase';
+import { AbilityManager } from '../src/core/skills/AbilityManager';
+import { ITEM_DEF } from '../src/core/items/defs/ItemDefs';
 import { MAGIC_MISSILE_DEF } from '../src/abilities/magicMissile';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
@@ -52,7 +52,7 @@ import { Mongo } from '../src/creatures/Mongo';
 import { Mercenary } from '../src/creatures/Mercenary';
 import type { PlayerDamageType } from '../src/creatures/Mob';
 import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
-import { applySpawnDifficulty } from '../src/core/difficultyProfiles';
+import { applySpawnDifficulty } from '../src/core/difficulty/difficultyProfiles';
 import { mulberry32 } from '../src/sprites/person/rng';
 import type { TilePoint, TileRect } from '../src/map/town/townPlan';
 import type { BriarHollowSite } from '../src/map/overworld/briarHollowSite';
@@ -64,13 +64,13 @@ import { GroundPickupSystem } from '../src/systems/GroundPickupSystem';
 import { DynamiteSystem, dynamiteCrawlerDamage } from '../src/systems/DynamiteSystem';
 import { resolveKills } from '../src/systems/CombatSystem';
 import { triggerPlayerAttack } from '../src/systems/GameLoopPhases';
-import { GameStats } from '../src/core/GameStats';
-import { PlayerManager } from '../src/core/PlayerManager';
+import { GameStats } from '../src/core/progression/GameStats';
+import { PlayerManager } from '../src/core/party/PlayerManager';
 import type { SceneWorld } from '../src/systems/kits/SceneWorld';
 import { MenusKit } from '../src/systems/kits/MenusKit';
-import { createPartyCraftsState } from '../src/core/partyCrafts';
-import { PartyTools } from '../src/core/PartyTools';
-import { keybindings } from '../src/core/Keybindings';
+import { createPartyCraftsState } from '../src/core/labour/partyCrafts';
+import { PartyTools } from '../src/core/items/gathering/PartyTools';
+import { keybindings } from '../src/core/input/Keybindings';
 import { BriarHollowKit } from '../src/systems/briarHollow/BriarHollowKit';
 import {
   type BlastThreat,
@@ -1120,8 +1120,11 @@ function routingSection(): void {
     ...ITEM_DEF.magic_missile_tome,
     quantity: 1,
   };
-  human.inventory.actionBar.slots[DYNAMITE_HOTBAR_SLOT] = { ...ITEM_DEF.slingshot, quantity: 1 };
-  human.drawWeapon('slingshot');
+  human.inventory.actionBar.slots[DYNAMITE_HOTBAR_SLOT] = {
+    ...ITEM_DEF.rattlestick_sling,
+    quantity: 1,
+  };
+  human.drawWeapon('rattlestick_sling');
 
   // The cat, missile slotted, beside a cow.
   const cow = livestock.herd[0];

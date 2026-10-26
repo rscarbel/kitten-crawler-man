@@ -7,7 +7,7 @@
  * player's state once a tick and asks the animator for the matching row. The
  * reactions rank against each other: dying outranks everything, then going
  * down and lying out cold, then getting back up, then the stumble, then the
- * flinch, then the struggle. A reaction only replaces one of equal or lower
+ * flinch and the block, then the struggle. A reaction only replaces one of equal or lower
  * rank, and one that ends hands back to whatever the state then asks for.
  */
 
@@ -20,16 +20,18 @@ import {
   KNOCKDOWN_FALL_FRAMES,
   STAGGER_REEL_FRAMES,
 } from './art/human/reactions';
+import { BLOCK_ROWS } from './art/human/offHandBlock';
 import { type HumanActionFrameEvent, type HumanReactionOptions } from './humanAnimator';
 import { type HumanRowView } from './humanSprite';
 
 /** The reaction rows the director plays, by what they are for. */
-type ReactionKind = 'struggle' | 'hurt' | 'stagger' | 'revive' | 'down' | 'death';
+type ReactionKind = 'struggle' | 'hurt' | 'block' | 'stagger' | 'revive' | 'down' | 'death';
 
 /** Higher outranks lower; a reaction replaces only one of equal or lower rank. */
 const REACTION_RANK: Readonly<Record<ReactionKind, number>> = {
   struggle: 0,
   hurt: 1,
+  block: 1,
   stagger: 2,
   revive: 3,
   down: 4,
@@ -141,6 +143,16 @@ export class HumanReactionDirector {
     const side: HurtFrom = towardBlowX * facingX + towardBlowY * facingY >= 0 ? 'front' : 'behind';
     const row = this.host.rowFacing(HURT_ROWS[side], facingX, facingY);
     this.play('hurt', row, { cancelOnMove: true });
+  }
+
+  /**
+   * A shot glanced off the shield on his off hand. He takes it facing the way
+   * he faces, which is where a shield turns shots from; like the flinch, he
+   * cancels it by moving.
+   */
+  block(facingX: number, facingY: number): void {
+    if (!this.mayPlay('block')) return;
+    this.play('block', this.host.rowFacing(BLOCK_ROWS, facingX, facingY), { cancelOnMove: true });
   }
 
   /**

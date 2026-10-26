@@ -15,9 +15,9 @@
  * - {@link showLoadingScreen} is the boot-time variant, which runs its own
  *   animation loop because there is no scene yet to host it.
  */
-import { viewportWidth, viewportHeight } from '../core/Viewport';
-import { keybindings } from '../core/Keybindings';
-import { LoadRunner, type LoadRunnerOptions, type LoadTask } from '../core/LoadRunner';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import { keybindings } from '../core/input/Keybindings';
+import { LoadRunner, type LoadRunnerOptions, type LoadTask } from '../core/perf/LoadRunner';
 import { chromeTarget, drawBar, drawRule } from './screens/dialogs/canvasChrome';
 import { withAlpha } from './theme/color';
 import { skinsFor } from './theme/skins';

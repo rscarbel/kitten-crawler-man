@@ -23,8 +23,8 @@ import {
 } from '../../map/tileTypes';
 import { inferFloorType } from '../../map/tiles/helpers';
 import { ROCK_DAMAGE_STAGE_INTACT, rockDamageStageFor } from '../../map/rockDamage';
-import type { HarvestKind } from '../../core/craftPerks';
-import type { HarvestNodeState } from '../../core/briarHollowState';
+import type { HarvestKind } from '../../core/labour/craftPerks';
+import type { HarvestNodeState } from '../../core/quests/briarHollowState';
 
 /** Harvests a tree holds, fewest and most. */
 export const TREE_HARVESTS_MIN = 5;

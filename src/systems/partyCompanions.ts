@@ -1,5 +1,5 @@
 import { TILE_SIZE } from '../core/constants';
-import type { SpatialGrid } from '../core/SpatialGrid';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
 import { AttackCow } from '../creatures/AttackCow';
 import { Mercenary } from '../creatures/Mercenary';
 import type { Mob } from '../creatures/Mob';

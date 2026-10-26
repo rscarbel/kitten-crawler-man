@@ -1,7 +1,7 @@
 import type { Player } from '../Player';
 import { BOSS_BLAST_DAMAGE_SCALE, Mob, type LootDrop, type PlayerDamageType } from './Mob';
 import { MAX_MOB_CULL_MARGIN_TILES, PLAYER_SPEED } from '../core/constants';
-import { makeStuck } from '../core/StatusEffect';
+import { makeStuck } from '../core/combat/StatusEffect';
 import { drawDangerCone } from '../sprites/dangerTelegraph';
 import {
   LICH_BODY_PART_KEY,

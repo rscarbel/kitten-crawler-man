@@ -9,8 +9,8 @@
  */
 
 import type { EventBus } from '../core/EventBus';
-import type { CrawlerKind } from '../core/SkillManager';
-import type { Inventory } from '../core/Inventory';
+import type { CrawlerKind } from '../core/skills/SkillManager';
+import type { Inventory } from '../core/items/inventory/Inventory';
 
 interface EquippedCrawler {
   readonly inventory: Inventory;

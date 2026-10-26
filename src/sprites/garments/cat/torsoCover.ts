@@ -21,6 +21,18 @@ export interface TorsoCoverSpec {
   readonly hemWidth: number;
   /** Paints the fabric's own detail (seams, a pattern) over a covered piece, inside its clip. */
   readonly detail: (ctx: Ctx, area: CatEllipse, view: CardinalView) => void;
+  /** Where its hems fall, when it is cut shorter or longer than a dog's coat. */
+  readonly cut?: Partial<TorsoCoverCut>;
+}
+
+/** Where a cover's hems fall on her, each as a share of the piece it crosses. */
+export interface TorsoCoverCut {
+  /** Head-on, below the middle of her chest. */
+  readonly frontHem: number;
+  /** From behind, below the middle of her barrel. */
+  readonly backHem: number;
+  /** In profile, the back edge, from the barrel's middle toward her nose. */
+  readonly profileBackEdge: number;
 }
 
 /** Head-on the hem crosses her chest this share of its half-height below its middle, sagging. */
@@ -30,12 +42,21 @@ const BACK_HEM = 0.35;
 const HEM_SAG = 0.15;
 /** In profile it runs back from her chest to this share of her barrel's half-length behind its middle. */
 const PROFILE_BACK_EDGE = -0.3;
+const DOG_COAT_CUT: TorsoCoverCut = {
+  frontHem: FRONT_HEM,
+  backHem: BACK_HEM,
+  profileBackEdge: PROFILE_BACK_EDGE,
+};
 /** Its back edge bows toward her tail at the flank's middle. */
 const PROFILE_EDGE_BOW = 0.12;
 /** The back edge runs past the barrel's top and bottom by this share, so the clip leaves no gap. */
 const PROFILE_EDGE_REACH = 1.3;
 /** Room past a piece's ellipse every clip rectangle gives, as a share of its radii. */
 const CLIP_SPREAD = 2;
+
+function cutOf(spec: TorsoCoverSpec): TorsoCoverCut {
+  return { ...DOG_COAT_CUT, ...spec.cut };
+}
 
 function fillPiece(ctx: Ctx, spec: TorsoCoverSpec, area: CatEllipse, view: CardinalView): void {
   ctx.fillStyle = fabricFill(
@@ -95,15 +116,15 @@ function coverDownTo(
 
 function paintFront(spec: TorsoCoverSpec) {
   return (ctx: Ctx, frame: CatBodyFrame): void => {
-    if (frame.piece !== 'barrel' && frame.piece !== 'ruff') return;
-    coverDownTo(ctx, spec, frame, FRONT_HEM, 'front');
+    if (frame.piece !== 'barrel' && frame.piece !== 'blade' && frame.piece !== 'ruff') return;
+    coverDownTo(ctx, spec, frame, cutOf(spec).frontHem, 'front');
   };
 }
 
 function paintBack(spec: TorsoCoverSpec) {
   return (ctx: Ctx, frame: CatBodyFrame): void => {
     if (frame.piece !== 'barrel') return;
-    coverDownTo(ctx, spec, frame, BACK_HEM, 'back');
+    coverDownTo(ctx, spec, frame, cutOf(spec).backHem, 'back');
   };
 }
 
@@ -123,7 +144,7 @@ function paintSide(spec: TorsoCoverSpec) {
     }
     if (frame.piece !== 'barrel') return;
     const barrel = frame.shape;
-    const edgeX = barrel.cx + barrel.rx * PROFILE_BACK_EDGE;
+    const edgeX = barrel.cx + barrel.rx * cutOf(spec).profileBackEdge;
     const top = { x: edgeX, y: barrel.cy - barrel.ry * PROFILE_EDGE_REACH };
     const bottom = { x: edgeX, y: barrel.cy + barrel.ry * PROFILE_EDGE_REACH * CLIP_SPREAD };
     const bow = { x: edgeX - barrel.rx * PROFILE_EDGE_BOW, y: barrel.cy };

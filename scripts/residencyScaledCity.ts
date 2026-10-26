@@ -43,12 +43,12 @@ import {
   type ScaledCityCitizen,
 } from './scaledCity.js';
 import { TILE_SIZE } from '../src/core/constants.js';
-import { loadSprites } from '../src/core/SpriteLoader.js';
-import { settings } from '../src/core/Settings.js';
-import { forceVarietyTier, FULL_VARIETY_TIER } from '../src/core/varietyTier.js';
-import { setRenderScaleValue, setViewportSize } from '../src/core/Viewport.js';
-import { beginRenderFrame } from '../src/core/renderFrameClock.js';
-import { BYTES_PER_MEGABYTE } from '../src/core/canvasSurface.js';
+import { loadSprites } from '../src/core/spriteAssets/SpriteLoader.js';
+import { settings } from '../src/core/input/Settings.js';
+import { forceVarietyTier, FULL_VARIETY_TIER } from '../src/core/perf/varietyTier.js';
+import { setRenderScaleValue, setViewportSize } from '../src/core/rendering/Viewport.js';
+import { beginRenderFrame } from '../src/core/rendering/renderFrameClock.js';
+import { BYTES_PER_MEGABYTE } from '../src/core/rendering/canvasSurface.js';
 import { level3 } from '../src/levels/level3.js';
 import { BUILDING_SALT, floorArtSubSeed, setFloorArtSeed } from '../src/map/ground/floorArtSeed.js';
 import { requestBuildingSheets } from '../src/sprites/buildinggen/runtimeBuildingSheets.js';
@@ -56,7 +56,7 @@ import {
   groundSheetKeysAmong,
   requestGroundSheets,
 } from '../src/map/ground/runtimeGroundSheets.js';
-import { requiredSpriteKeysForLevel } from '../src/core/systemAssetRequirements.js';
+import { requiredSpriteKeysForLevel } from '../src/core/spriteAssets/systemAssetRequirements.js';
 import { requestEnvironmentSheetsForGroups } from '../src/sprites/sheets/environmentSheets.js';
 import {
   beginEnvironmentArtFrame,

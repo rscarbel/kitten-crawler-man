@@ -18,8 +18,8 @@
  */
 
 import { TILE_SIZE } from '../../../core/constants';
-import type { BlueprintsQuestPhase } from '../../../core/blueprintsQuestPhase';
-import { isVillageUnderSiege } from '../../../core/villageQuestPhase';
+import type { BlueprintsQuestPhase } from '../../../core/quests/blueprintsQuestPhase';
+import { isVillageUnderSiege } from '../../../core/quests/villageQuestPhase';
 import type { Cow } from '../../../creatures/Cow';
 import type { QuestMarkerState } from '../../../sprites/questNPCSprite';
 import { worldText } from '../../../ui/world/worldText';

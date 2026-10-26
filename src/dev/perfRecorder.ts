@@ -14,7 +14,7 @@ import {
   type PerfFrameListener,
   type PerfGauge,
   type PerfTimer,
-} from '../core/PerfMonitor';
+} from '../core/perf/PerfMonitor';
 import {
   emptyDirectDrawCauses,
   FIGURE_DIRECT_DRAW_CAUSES,

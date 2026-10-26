@@ -9,12 +9,12 @@
  * harness: game modules read the browser at import.
  */
 
-import type { Difficulty } from '../src/core/difficultyProfiles.js';
+import type { Difficulty } from '../src/core/difficulty/difficultyProfiles.js';
 import type { PrisonLayout } from '../src/map/goblinPrisonLayouts.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import { SceneManager } from '../src/core/Scene.js';
-import { InputManager } from '../src/core/InputManager.js';
-import { snapPlayer } from '../src/core/PlayerSnapshot.js';
+import { InputManager } from '../src/core/input/InputManager.js';
+import { snapPlayer } from '../src/core/save/PlayerSnapshot.js';
 import { HumanPlayer } from '../src/creatures/HumanPlayer.js';
 import { CatPlayer } from '../src/creatures/CatPlayer.js';
 import { level2 } from '../src/levels/level2.js';

@@ -1,9 +1,9 @@
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
-import type { SkillId } from '../core/SkillManager';
-import { getSkillDef } from '../core/SkillManager';
-import type { GrantedReward } from '../core/GrantedReward';
-import type { LevelUpEntry } from '../core/LevelUpEntry';
+import type { SkillId } from '../core/skills/SkillManager';
+import { getSkillDef } from '../core/skills/SkillManager';
+import type { GrantedReward } from '../core/items/loot/GrantedReward';
+import type { LevelUpEntry } from '../core/progression/LevelUpEntry';
 import type { AudioManager } from '../audio/AudioManager';
 import type {
   SkillBookChoice,

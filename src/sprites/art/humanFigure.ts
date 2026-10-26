@@ -191,6 +191,7 @@ import { playerCharacter } from '../../characters/characters';
 import { sideOfSign } from './human/gaitShared';
 import { travellingEntryPhase } from './human/travelling';
 import { REACTION_ROW_NAMES, REACTION_ROW_TABLE } from './human/reactions';
+import { BLOCK_ROW_NAMES, BLOCK_ROW_TABLE } from './human/offHandBlock';
 import { ARMED_ROW_NAMES, ARMED_ROW_TABLE } from './human/armedRows';
 import type { ArmedMotionSet, HolsterMotion } from './human/motionSets';
 import {
@@ -466,6 +467,7 @@ export const HUMAN_ROW_NAMES = [
   'build_rise_side',
   'build_rise_away',
   ...REACTION_ROW_NAMES,
+  ...BLOCK_ROW_NAMES,
   'place',
   'place_side',
   'place_away',
@@ -652,7 +654,7 @@ interface StrikeMeta {
    * impact frame is the frame that part is driven furthest in `drive`'s
    * direction — the hit is scored on that frame, so a blow whose extreme
    * falls a frame either side lands its damage on a picture of a limb still
-   * travelling. On a punch it is also which fist wears the gauntlet's steel.
+   * travelling.
    */
   readonly reachLimb: StrikeReachLimb;
   /** Which way `reachLimb` is driven to land the blow; absent is `'out'`. */
@@ -1983,6 +1985,7 @@ export const HUMAN_ROW_TABLE = {
     pose: (f) => buildRise(f, 'back'),
   },
   ...REACTION_ROW_TABLE,
+  ...BLOCK_ROW_TABLE,
   // Setting a piece of gym equipment down: a straight-backed squat with the
   // case, and up again once it is placed.
   place: {
@@ -2131,8 +2134,7 @@ export function eventFrame(row: HumanRowName, event: HumanRowEvent): number | un
 /**
  * Lays what he is wearing — and holding, on a figure that holds something —
  * onto a row's pose. It sees the row and frame the pose was authored for, so
- * gear that changes with the action — steel that forms round a fist on the
- * frames a blow lands — is decided per cell.
+ * gear that changes with the action is decided per cell.
  */
 export type HumanPoseDresser = (pose: BipedPose, row: RowSpec, frame: number) => BipedPose;
 

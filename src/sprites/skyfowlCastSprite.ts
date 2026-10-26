@@ -8,7 +8,11 @@
  * through the one shared figure cache the same way.
  */
 
-import { progressFrameIndex, timeFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
+import {
+  progressFrameIndex,
+  timeFrameIndex,
+  walkFrameIndex,
+} from '../core/spriteAssets/SpriteRenderer';
 import { evenIdleFrameAtSeconds } from './art/human/timing';
 import {
   drawFigureCached,

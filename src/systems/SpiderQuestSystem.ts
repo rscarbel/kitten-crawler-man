@@ -7,8 +7,9 @@
  *   awaiting_hacking → hacking → hacking_failed → cutscene → boss_fight → complete
  */
 
+import type { QuestId } from '../core/quests/QuestManager';
 import { TILE_SIZE } from '../core/constants';
-import type { Difficulty } from '../core/difficultyProfiles';
+import type { Difficulty } from '../core/difficulty/difficultyProfiles';
 import { SpiderLabDressing, type SpiderLabQuestView } from './bossRooms/SpiderLabDressing';
 import type { DressingRenderable } from './bossRooms/BossRoomDressing';
 import { EGG_OPENING_FRAMES } from '../sprites/art/spiderLabArt';
@@ -18,15 +19,11 @@ import { characterTarget, type TrackerEntry } from './questTracker';
 import { tileCoordKey } from '../map/tileIndex';
 import type { QuestMarkerType } from './MiniMapSystem';
 import { clamp, pointInRect } from '../utils';
-import { awardPartyXp, type PartyXpApplied } from '../core/awardXp';
-import { crawlerName } from '../characters/characters';
-import {
-  bagItemRewardLine,
-  itemIconPainter,
-  partyXpSections,
-  wheelFreeSpinRewardLine,
-} from '../ui/questReward/rewardLines';
-import type { QuestRewardSpec } from '../ui/questReward/types';
+import { awardPartyXp, type PartyXpApplied } from '../core/progression/awardXp';
+import { partyXpSections, wheelFreeSpinRewardLine } from '../ui/questReward/rewardLines';
+import type { QuestRewardSpec, RewardItemLine } from '../ui/questReward/types';
+import { grantQuestGear } from '../loot/questGear';
+import type { GearId } from '../loot/gearPools';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import type { GameMap } from '../map/GameMap';
 import type { SpiderLabRoomData } from '../map/GameMap';
@@ -87,14 +84,15 @@ import {
 } from '../ui/screens/dialogs/spiderTutorial';
 import type { SpiderQuestCue } from './spiderQuest/spiderQuestSoundCues';
 
-export const SPIDER_QUEST_ID = 'grotesque_spider';
+export const SPIDER_QUEST_ID = 'grotesque_spider' as const satisfies QuestId;
+
+/** The claws the lab hands over for clearing the nest. */
+const SPIDER_QUEST_GEAR = 'frostbite_claws' as const satisfies GearId;
 export const SPIDER_QUEST_NAME = 'Pest Control';
 /** The Journal's name for the thread before Dr. Moult has asked for anything. */
 const SPIDER_QUEST_OFFERED_NAME = `Optional: ${SPIDER_QUEST_NAME}`;
 /** How far south of the egg sac the Grotesque Spider climbs out. */
 const SPIDER_EMERGE_TILES_SOUTH_OF_EGG = 2;
-/** The skill book the lab pays out. */
-const SPIDER_QUEST_BOOK = 'skill_book_night_vision';
 export const SPIDER_QUEST_COMPLETION_XP = 2000;
 
 const SCIENTIST_INTERACT_RANGE_TILES = 2.5;
@@ -1398,36 +1396,27 @@ export class SpiderQuestSystem implements GameSystem {
   }
 
   /**
-   * Both crawlers earn the XP, and the night-vision book goes straight to the
-   * cat: the lab's dark is what the book is about, and she is the only crawler
-   * who can read it. The screen describing it is held until her death has played.
+   * Both crawlers earn the XP and the cat the quest's claws. The screen describing it is held until the
+   * spider's death has played.
    */
   private payRewards(human: HumanPlayer, cat: CatPlayer): void {
     const xpApplied = awardPartyXp(human, cat, SPIDER_QUEST_COMPLETION_XP, this.bus);
-    cat.inventory.addItem(SPIDER_QUEST_BOOK, 1);
+    const gear = grantQuestGear({ human, cat }, SPIDER_QUEST_GEAR, 'cat');
     const freeSpin = this.grantWheelFreeSpin(SPIDER_QUEST_ID);
-    this.pendingRewardSpec = this.rewardSpec(xpApplied, freeSpin);
+    this.pendingRewardSpec = this.rewardSpec(xpApplied, gear, freeSpin);
     this.rewardScreenDelay = QUEST_REWARD_SCREEN_DELAY_FRAMES;
   }
 
   /** The lab's quest-complete screen, describing what {@link payRewards} actually paid. */
-  private rewardSpec(xpApplied: PartyXpApplied, freeSpin: boolean): QuestRewardSpec {
+  private rewardSpec(
+    xpApplied: PartyXpApplied,
+    gear: RewardItemLine,
+    freeSpin: boolean,
+  ): QuestRewardSpec {
+    const items = freeSpin ? [gear, wheelFreeSpinRewardLine()] : [gear];
     return {
       questTitle: SPIDER_QUEST_NAME,
-      renderQuestIcon: itemIconPainter(SPIDER_QUEST_BOOK),
-      sections: [
-        ...partyXpSections(xpApplied),
-        {
-          kind: 'items',
-          items: [
-            bagItemRewardLine(SPIDER_QUEST_BOOK, 1, {
-              describe: true,
-              note: `In ${crawlerName('cat')}'s bag.`,
-            }),
-            ...(freeSpin ? [wheelFreeSpinRewardLine()] : []),
-          ],
-        },
-      ],
+      sections: [...partyXpSections(xpApplied), { kind: 'items', items }],
     };
   }
 

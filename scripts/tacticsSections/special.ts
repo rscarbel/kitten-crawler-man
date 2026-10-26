@@ -16,7 +16,7 @@ import type { GameMap } from '../../src/map/GameMap';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
 import { TACTICAL_RETREAT_MAX_SPEED, type Mob } from '../../src/creatures/Mob';
-import type { SpatialGrid } from '../../src/core/SpatialGrid';
+import type { SpatialGrid } from '../../src/core/world/SpatialGrid';
 import { MAX_MOB_LEVEL } from '../../src/levels/spawner';
 import {
   isStandaloneMobKind,
@@ -24,7 +24,7 @@ import {
   type StandaloneMobKind,
 } from '../../src/levels/mobKinds';
 import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
-import { DIFFICULTY_PROFILES } from '../../src/core/difficultyProfiles';
+import { DIFFICULTY_PROFILES } from '../../src/core/difficulty/difficultyProfiles';
 import { mulberry32, type Rng } from '../../src/sprites/person/rng';
 import {
   TACTICS_MIN_MOB_LEVEL,

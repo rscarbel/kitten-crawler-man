@@ -84,8 +84,8 @@ for (const arg of process.argv.slice(2)) {
 
 const { gameContext } = await import('./nodeGameContext.js');
 const { TILE_SIZE } = await import('../src/core/constants.js');
-const { setViewportSize } = await import('../src/core/Viewport.js');
-const { makeStun } = await import('../src/core/StatusEffect.js');
+const { setViewportSize } = await import('../src/core/rendering/Viewport.js');
+const { makeStun } = await import('../src/core/combat/StatusEffect.js');
 const { Rat } = await import('../src/creatures/Rat.js');
 const { isPrisonCrawlerWalkable } = await import('../src/map/goblinPrisonPlan.js');
 const { guardPoseAt } = await import('../src/systems/stealthKeySnatch/prisonPatrols.js');
@@ -368,8 +368,8 @@ const missileSplash = (harness: PrisonHarness): void => {
 };
 const slingshot = (harness: PrisonHarness): void => {
   const { human } = harness;
-  human.inventory.addItem('slingshot', 1);
-  human.drawWeapon('slingshot');
+  human.inventory.addItem('rattlestick_sling', 1);
+  human.drawWeapon('rattlestick_sling');
   standAtCellDoor(harness, true);
   human.triggerAttack(null);
 };

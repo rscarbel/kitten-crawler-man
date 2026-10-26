@@ -1,4 +1,4 @@
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { drawLightBeam, lightBeamBounds, type LightBeamPlacement } from '../sprites/lightBeam';
 
 /**

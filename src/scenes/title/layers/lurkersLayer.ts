@@ -8,8 +8,12 @@
  */
 
 import { TILE_SIZE } from '../../../core/constants';
-import { renderQuality } from '../../../core/RenderQuality';
-import { progressFrameIndex, timeFrameIndex, walkFrameIndex } from '../../../core/SpriteRenderer';
+import { renderQuality } from '../../../core/perf/RenderQuality';
+import {
+  progressFrameIndex,
+  timeFrameIndex,
+  walkFrameIndex,
+} from '../../../core/spriteAssets/SpriteRenderer';
 import { mulberry32, type Rng } from '../../../sprites/person/rng';
 import { drawRadialGlow, type GlowStop } from '../../../sprites/radialGlow';
 import {

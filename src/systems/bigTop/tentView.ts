@@ -1,5 +1,5 @@
 import { TILE_SIZE } from '../../core/constants';
-import { viewportHeight, viewportWidth } from '../../core/Viewport';
+import { viewportHeight, viewportWidth } from '../../core/rendering/Viewport';
 
 /**
  * Whether a tile drawn at this screen position is worth the paint.

@@ -9,8 +9,11 @@
  * real `Conversation` whose own handles run his choices.
  */
 
-import { createAnchorQuestProgress } from '../../src/core/AnchorQuestProgress';
-import { createBriarHollowState, type BriarHollowState } from '../../src/core/briarHollowState';
+import { createAnchorQuestProgress } from '../../src/core/quests/AnchorQuestProgress';
+import {
+  createBriarHollowState,
+  type BriarHollowState,
+} from '../../src/core/quests/briarHollowState';
 import { TILE_SIZE } from '../../src/core/constants';
 import { EventBus } from '../../src/core/EventBus';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
@@ -25,7 +28,7 @@ import {
   CONSTRUCTION_CONTRACT_QUEST_ID,
   releaseContractAutoPinOnEnd,
 } from '../../src/systems/constructionContracts/contractQuest';
-import { createJournalProgress } from '../../src/core/JournalProgress';
+import { createJournalProgress } from '../../src/core/quests/JournalProgress';
 import { WendellContractsHook } from '../../src/systems/constructionContracts/WendellContractsHook';
 import type { Check } from './shared';
 

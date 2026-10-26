@@ -1,8 +1,6 @@
 import type { AudioManager } from '../audio/AudioManager';
-import { MAGIC_MISSILE_TALISMAN_LEVEL } from '../abilities/magicMissile';
-import type { AbilityManager } from '../core/AbilityManager';
-import type { AchievementManager } from '../core/AchievementManager';
-import type { EventBus } from '../core/EventBus';
+import { MAGIC_MISSILE_SPARK_LEVEL } from '../abilities/magicMissile';
+import type { AbilityManager } from '../core/skills/AbilityManager';
 import type { MenusKit } from './kits/MenusKit';
 
 /** What a scene hands over for its ability level-ups to land on it. */
@@ -12,8 +10,8 @@ export interface AbilityLevelUpTarget {
   readonly audio: AudioManager | null;
   /** Mongo grew: his stored health has to be rescaled onto the bigger animal. */
   onPetLevelUp(): void;
-  /** Magic Missile reached the level that earns the cat her talisman. */
-  onTalismanLevel(): void;
+  /** Magic Missile reached the level its achievement asks for. */
+  onSparkLevel(): void;
 }
 
 /**
@@ -30,8 +28,8 @@ export function bindAbilityLevelUps(target: AbilityLevelUpTarget): void {
   const { abilityManager, menus, audio } = target;
   abilityManager.onLevelUp = (id, newLevel) => {
     if (id === 'mongo') target.onPetLevelUp();
-    if (id === 'magic_missile' && newLevel >= MAGIC_MISSILE_TALISMAN_LEVEL) {
-      target.onTalismanLevel();
+    if (id === 'magic_missile' && newLevel >= MAGIC_MISSILE_SPARK_LEVEL) {
+      target.onSparkLevel();
     }
     const def = abilityManager.getDef(id);
     if (def === null) return;
@@ -43,11 +41,4 @@ export function bindAbilityLevelUps(target: AbilityLevelUpTarget): void {
     });
     audio?.play('ability_level_up');
   };
-}
-
-/** Awards the cat's First Hundred, once, and announces it. */
-export function awardFirstHundred(catAchievements: AchievementManager, bus: EventBus): void {
-  if (catAchievements.tryUnlock('first_hundred')) {
-    bus.emit('achievementUnlocked', { achievementId: 'first_hundred', player: 'Cat' });
-  }
 }

@@ -29,7 +29,7 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
+} from '../../core/rendering/canvasSurface';
 import type { GameMap } from '../../map/GameMap';
 import {
   BIG_TOP_KING_POLES,

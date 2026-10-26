@@ -2,7 +2,7 @@ import {
   MILLISECONDS_PER_SECOND,
   walkFrameIndex,
   progressFrameIndex,
-} from '../core/SpriteRenderer';
+} from '../core/spriteAssets/SpriteRenderer';
 import {
   drawFigureCached,
   type FigureBetween,
@@ -47,6 +47,7 @@ import type { ShownPlacement } from './art/human/stowedGeometry';
 import { archetypeSpec } from './held/gripArchetypes';
 import { HUMAN_VIEW_FALLBACK } from './humanViews';
 import { type CarriedGrip, carriedGripKey } from './art/human/carry';
+import { type OffHandGrip, offHandGripKey } from './art/human/offHand';
 import type { HeldVisualDef } from './held/heldVisualDef';
 import { compositeHeldItem, heldTransformAt } from './held/heldComposite';
 import { fusePhaseOf } from './held/art/scriptedPropHeld';
@@ -257,6 +258,7 @@ const RESIDENT_SPANS_BY_SET: Readonly<Record<MotionSet, readonly HumanWarmSpan[]
 let activeLook: HumanLook = playerCharacter('human').look;
 let activeOutfit: Outfit<'human'> = outfitOf(activeLook, []);
 let activeHeld: CarriedGrip | null = null;
+let activeOffHand: OffHandGrip | null = null;
 let activeFigure: HumanFigure = humanFigureFor(activeLook, activeOutfit, null);
 /**
  * Every figure of the outfit he wears that has been drawn: the one in hand,
@@ -280,7 +282,7 @@ export function setHumanLook(look: HumanLook): void {
   outfitFigures.clear();
   activeLook = look;
   activeOutfit = outfitOf(look, activeOutfit.worn);
-  activeFigure = humanFigureFor(look, activeOutfit, activeHeld);
+  activeFigure = humanFigureFor(look, activeOutfit, activeHeld, activeOffHand);
   outfitFigures.add(activeFigure.def);
   prewarmHumanSprite();
 }
@@ -316,7 +318,7 @@ export function setHumanOutfit(outfit: Outfit<'human'>): boolean {
   for (const figure of outfitFigures) releaseFigure(figure);
   outfitFigures.clear();
   activeOutfit = outfit;
-  activeFigure = humanFigureFor(activeLook, outfit, activeHeld);
+  activeFigure = humanFigureFor(activeLook, outfit, activeHeld, activeOffHand);
   outfitFigures.add(activeFigure.def);
   prewarmHumanSprite();
   return true;
@@ -338,7 +340,25 @@ export function setHumanHeld(held: CarriedGrip | null): boolean {
   const set = held?.motionSet ?? 'unarmed';
   if (key === activeKey && set === activeMotionSet()) return false;
   activeHeld = held;
-  activeFigure = humanFigureFor(activeLook, activeOutfit, held);
+  activeFigure = humanFigureFor(activeLook, activeOutfit, held, activeOffHand);
+  outfitFigures.add(activeFigure.def);
+  prewarmHumanSprite();
+  return true;
+}
+
+/**
+ * Closes his off hand on a shield the way `grip` says, or leaves it free. Like
+ * {@link setHumanHeld}, the figure he leaves stays until the cache releases it
+ * unused, and the new one's always-drawn rows are queued at once.
+ *
+ * Returns whether the figure changed.
+ */
+export function setHumanOffHand(grip: OffHandGrip | null): boolean {
+  const key = grip === null ? null : offHandGripKey(grip);
+  const activeKey = activeOffHand === null ? null : offHandGripKey(activeOffHand);
+  if (key === activeKey) return false;
+  activeOffHand = grip;
+  activeFigure = humanFigureFor(activeLook, activeOutfit, activeHeld, grip);
   outfitFigures.add(activeFigure.def);
   prewarmHumanSprite();
   return true;
@@ -467,21 +487,30 @@ export function drawHumanSelection(
   selection: HumanRowSelection,
   held: BipedHeldDraw | null = null,
   stowed: BipedStowedDraw | null = null,
+  offHand: BipedOffHandDraw | null = null,
 ): void {
   // A picture that hands him nothing to hold — a preview, a bust, a portrait,
   // his body once he is down — is drawn empty-handed, never as a fist closed
   // round nothing.
-  const figure = held === null ? emptyHandedFigure() : activeFigure;
+  const figure = figureHolding(held !== null, offHand !== null);
   const set = held === null ? 'unarmed' : activeMotionSet();
   RESIDENT_VIEWS[set].hold(figure.def);
-  drawHumanFigureSelection(ctx, figure, sx, sy, s, selection, held, stowed);
+  drawHumanFigureSelection(ctx, figure, sx, sy, s, selection, held, stowed, offHand);
+}
+
+/** The outfit he wears, his fists closed on what each hand is handed and on nothing else. */
+function figureHolding(mainHand: boolean, offHand: boolean): HumanFigure {
+  const held = mainHand ? activeHeld : null;
+  const shield = offHand ? activeOffHand : null;
+  if (held === activeHeld && shield === activeOffHand) return activeFigure;
+  const figure = humanFigureFor(activeLook, activeOutfit, held, shield);
+  outfitFigures.add(figure.def);
+  return figure;
 }
 
 /** The outfit he wears, holding nothing of equipment's choosing. */
 function emptyHandedFigure(): HumanFigure {
-  const figure = humanFigureFor(activeLook, activeOutfit, null);
-  outfitFigures.add(figure.def);
-  return figure;
+  return figureHolding(false, false);
 }
 
 /** The figure a picture of him that holds nothing is drawn as — what `drawHumanSprite` paints. */
@@ -503,18 +532,66 @@ export function drawHumanFigureSelection(
   selection: HumanRowSelection,
   held: BipedHeldDraw | null,
   stowed: BipedStowedDraw | null = null,
+  offHand: BipedOffHandDraw | null = null,
 ): void {
   const opts = selection.flipX ? { flipX: true } : {};
   const source = { id: figure.def.id, painting: figure.painting };
-  const between = held === null ? undefined : heldBetween(source, held, selection);
-  const resting = stowed === null ? null : stowedAt(source, stowed, selection);
-  const drawResting = (): void => {
-    if (resting === null) return;
-    withFigureCellPlacement(ctx, figure.def, sx, sy, s, opts, resting.draw);
+  const mainInHand = held === null ? null : heldBetween(source, held, selection);
+  const shieldInHand =
+    offHand === null
+      ? null
+      : heldBetween(source, { look: offHand.look, phase: STILL_PICTURE }, selection);
+  const inHands: InHandDraw[] = [];
+  if (mainInHand !== null) inHands.push(mainInHand);
+  if (shieldInHand !== null) inHands.push(shieldInHand);
+  const shieldStowed =
+    offHand !== null && shieldInHand === null
+      ? stowedAt(source, { look: offHand.look, placement: offHand.stowedAt }, selection)
+      : null;
+  const resting = [
+    ...(stowed === null ? [] : [stowedAt(source, stowed, selection)]),
+    ...(shieldStowed === null ? [] : [shieldStowed]),
+  ];
+  const drawResting = (behind: boolean): void => {
+    for (const rest of resting) {
+      if (rest.behind !== behind) continue;
+      withFigureCellPlacement(ctx, figure.def, sx, sy, s, opts, rest.draw);
+    }
   };
-  if (resting?.behind === true) drawResting();
-  drawFigureCached(ctx, figure.def, selection.row, selection.frame, sx, sy, s, opts, between);
-  if (resting?.behind === false) drawResting();
+  drawResting(true);
+  drawFigureCached(
+    ctx,
+    figure.def,
+    selection.row,
+    selection.frame,
+    sx,
+    sy,
+    s,
+    opts,
+    betweenAll(inHands),
+  );
+  drawResting(false);
+}
+
+/** Every item drawn between a cell's layers, deepest first; undefined when there is none. */
+function betweenAll(items: readonly InHandDraw[]): FigureBetween | undefined {
+  if (items.length === 0) return undefined;
+  const ordered = [...items].sort((a, b) => a.layer - b.layer);
+  return (ctx, place) => {
+    for (const item of ordered) item.draw(ctx, place);
+  };
+}
+
+/** A shield has one picture: nothing on it crackles or burns. */
+const STILL_PICTURE = 0;
+
+/**
+ * A shield on his off hand on one draw: its look, and where it rests on a
+ * cell whose rows want that hand for something else.
+ */
+export interface BipedOffHandDraw {
+  readonly look: HeldVisualDef;
+  readonly stowedAt: ShownPlacement;
 }
 
 /** What equipment has on him but not in his hands on one draw: the item's look, and where it rests. */
@@ -535,13 +612,13 @@ export function heldPxPerUnit(source: SocketSource): number {
 /**
  * Where a stowed item is drawn on the cell being drawn: behind the whole
  * figure where its place is on his far side, over it where his body does
- * not cover it. Null where the place is not shown.
+ * not cover it.
  */
 function stowedAt(
   source: SocketSource,
   stowed: BipedStowedDraw,
   selection: HumanRowSelection,
-): { readonly draw: FigureBetween; readonly behind: boolean } | null {
+): { readonly draw: FigureBetween; readonly behind: boolean } {
   const socket = humanSocketsAt(source, selection.row, selection.frame).sockets[stowed.placement];
   return {
     behind: socket.layer === REARMOST_SOCKET_LAYER,
@@ -583,15 +660,26 @@ export function explosiveHeldDraw(
 /**
  * The socket `look` is held at on a frame, or null where it is not held: a
  * two-handed haft at the fist on its butt, while both fists close on it; a
- * one-handed item in his main hand, while that hand is closed on it alone.
+ * shield in his off hand, while that hand is closed on it; a one-handed item
+ * in his main hand, while that hand is closed on it alone.
  */
 export function heldSocketOf(look: HeldVisualDef, frames: HumanSocketFrames): SocketFrame | null {
   const { sockets, butt } = frames;
+  const heldIn = archetypeSpec(look.archetype).heldIn;
   if (butt !== undefined) {
-    const shared = archetypeSpec(look.archetype).heldIn.length > 1;
+    const shared = heldIn.length > 1;
     return shared && sockets.mainHand.occupied && sockets.offHand.occupied ? sockets[butt] : null;
   }
+  if (heldIn.length === 1 && heldIn[0] === 'offHand') {
+    return sockets.offHand.occupied ? sockets.offHand : null;
+  }
   return sockets.mainHand.occupied ? sockets.mainHand : null;
+}
+
+/** An item drawn between a cell's layers, and the slab it sits in front of. */
+interface InHandDraw {
+  readonly layer: number;
+  readonly draw: FigureBetween;
 }
 
 /** Composites `held` at its socket on the cell being drawn, between the cell's two layers. */
@@ -599,11 +687,11 @@ function heldBetween(
   source: SocketSource,
   held: BipedHeldDraw,
   selection: HumanRowSelection,
-): FigureBetween | undefined {
+): InHandDraw | null {
   const frames = humanSocketsAt(source, selection.row, selection.frame);
   const socket = heldSocketOf(held.look, frames);
-  if (socket === null) return undefined;
-  return (ctx, place) => {
+  if (socket === null) return null;
+  const draw: FigureBetween = (ctx, place) => {
     const centre = {
       x: place.x + socket.centre.x * place.scale,
       y: place.y + socket.centre.y * place.scale,
@@ -615,6 +703,7 @@ function heldBetween(
     );
     compositeHeldItem(ctx, held.look, transform, 'cached');
   };
+  return { layer: socket.layer, draw };
 }
 
 /** Whether both his fists close on one haft on the cell being drawn: a tool's swing. */

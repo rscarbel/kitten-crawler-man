@@ -62,9 +62,9 @@ Math.random = mulberry32(WORLD_SEED);
 
 const { createCanvas } = await import('canvas');
 const { PLAYER_SPEED, TILE_SIZE } = await import('../src/core/constants.js');
-const { loadSprites } = await import('../src/core/SpriteLoader.js');
+const { loadSprites } = await import('../src/core/spriteAssets/SpriteLoader.js');
 const { SceneManager } = await import('../src/core/Scene.js');
-const { InputManager } = await import('../src/core/InputManager.js');
+const { InputManager } = await import('../src/core/input/InputManager.js');
 const { DungeonScene } = await import('../src/scenes/DungeonScene.js');
 const { TownLifeSystem } = await import('../src/systems/TownLifeSystem.js');
 const { RecallSystem } = await import('../src/systems/RecallSystem.js');
@@ -72,17 +72,17 @@ const { MarketSystem } = await import('../src/systems/market/MarketSystem.js');
 const { devBootScene } = await import('../src/dev/devBoot.js');
 const { GameMap } = await import('../src/map/GameMap.js');
 const { level3 } = await import('../src/levels/level3.js');
-const { renderQuality } = await import('../src/core/RenderQuality.js');
+const { renderQuality } = await import('../src/core/perf/RenderQuality.js');
 const { SPEED_FIZZ_MULTIPLIER } = await import('../src/Player.js');
-const { REFRESHED_SPEED_FACTOR } = await import('../src/core/StatusEffect.js');
+const { REFRESHED_SPEED_FACTOR } = await import('../src/core/combat/StatusEffect.js');
 const { citizenFigureRows } = await import('../src/creatures/citizenFigure.js');
 const { figureStates } = await import('../src/sprites/figure/figureDef.js');
 const { environmentPaintDepth } = await import('../src/map/environmentArtCache.js');
 const { buildScaledCity, cityFocus } = await import('./scaledCity.js');
 const { CrowdResidentSet } = await import('../src/systems/CrowdResidentSet.js');
 const { WorldResidency } = await import('../src/systems/WorldResidency.js');
-const { beginRenderFrame } = await import('../src/core/renderFrameClock.js');
-const { viewportHeight, viewportWidth } = await import('../src/core/Viewport.js');
+const { beginRenderFrame } = await import('../src/core/rendering/renderFrameClock.js');
+const { viewportHeight, viewportWidth } = await import('../src/core/rendering/Viewport.js');
 const {
   PREWARM_BAKE_BUDGET_MS,
   figurePrewarmBudgetMs,

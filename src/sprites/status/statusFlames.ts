@@ -23,9 +23,9 @@
  * the same fire.
  */
 
-import type { SilhouetteLayer } from '../../core/silhouetteComposite';
-import type { CanvasSurface } from '../../core/canvasSurface';
-import { onCanvasRecovery } from '../../core/canvasRecovery';
+import type { SilhouetteLayer } from '../../core/spriteAssets/silhouetteComposite';
+import type { CanvasSurface } from '../../core/rendering/canvasSurface';
+import { onCanvasRecovery } from '../../core/rendering/canvasRecovery';
 import {
   FLAME_BODY_TIERS,
   MIN_VISIBLE_ALPHA,

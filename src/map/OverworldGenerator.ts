@@ -35,7 +35,10 @@ import {
   type TileRect,
   type TownPlan,
 } from './town/townPlan';
-import { getBlockedTileOffsets, getBlockedTileOffsetsByKey } from '../core/SpriteLoader';
+import {
+  getBlockedTileOffsets,
+  getBlockedTileOffsetsByKey,
+} from '../core/spriteAssets/SpriteLoader';
 import {
   placeSpriteBuilding,
   towerBasePlot,
@@ -90,7 +93,7 @@ import {
   type WeightedTile,
 } from './overworld/landformScatter';
 import { paintSlopeScars } from './overworld/slopeScars';
-import { worldRandom } from '../core/WorldRandom';
+import { worldRandom } from '../core/world/WorldRandom';
 import { grownRect, KeepOut } from './overworld/keepOut';
 import {
   CIRCUS_FOREST_CLEARANCE_TILES,

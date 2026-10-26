@@ -7,6 +7,7 @@ import type { ShopId } from '../economy/shops';
 import type { ShopStock } from '../economy/shopStock';
 import { ShopSession } from '../ui/screens/shop/shopSession';
 import { openStoreCounter } from '../ui/screens/shop/storeCounter';
+import type { GearOwnership } from './market/vendorMenu';
 
 const SHOPKEEPER_HALF_TILE = 0.5;
 const SHOPKEEPER_INTERACT_RANGE = 3.5;
@@ -39,6 +40,8 @@ export class ShopSystem implements GameSystem {
     interiorWidth: number,
     private readonly shop: ShopId,
     private readonly stock: ShopStock,
+    /** Whether the party already has a piece of gear, so the counter never sells one twice. */
+    private readonly owns: GearOwnership,
   ) {
     this.fallbackKeeperX = Math.floor(interiorWidth / 2) * TILE_SIZE;
   }
@@ -64,6 +67,7 @@ export class ShopSystem implements GameSystem {
     openStoreCounter(this.session, {
       shop: this.shop,
       stock: this.stock,
+      owns: this.owns,
       onTraded: () => {
         this.purchasePending = true;
       },

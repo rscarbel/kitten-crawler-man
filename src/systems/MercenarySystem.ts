@@ -6,15 +6,15 @@ import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Mob } from '../creatures/Mob';
-import type { SpatialGrid } from '../core/SpatialGrid';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { GameMap } from '../map/GameMap';
 import {
   contractIsCurrent,
   hirelingStartingHp,
   type MercenaryRoster,
-} from '../core/MercenaryRoster';
-import { REVIVE_RANGE_PX } from '../core/reviveRules';
-import { activeRunStats } from '../core/GameStats';
+} from '../core/party/MercenaryRoster';
+import { REVIVE_RANGE_PX } from '../core/party/reviveRules';
+import { activeRunStats } from '../core/progression/GameStats';
 import type { SoundId } from '../audio/sounds';
 import { prewarmTriageSparkle } from '../sprites/crocodilianSprite';
 import { hirelingDownedArrowCandidate, renderHirelingDownedMarker } from '../ui/HirelingDownedUI';
@@ -25,7 +25,7 @@ import type { MobRoster } from './kits/SceneWorld';
 import { hasAiAttention } from './MobUpdateLoop';
 import type { CarriedCompanion } from './companionCarry';
 import { hirelingShouldCatchUp } from '../creatures/mercenaries/hirelingCatchUp';
-import { viewportHeight, viewportWidth } from '../core/Viewport';
+import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
 
 /**
  * A point-in-time copy of the spawn state, for the in-run safe-room checkpoint.

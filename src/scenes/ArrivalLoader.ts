@@ -13,11 +13,11 @@
  * recall landing — that would otherwise put the party down among art not yet
  * ready ({@link ArrivalLoader.coverWarp}).
  */
-import type { LoadTask } from '../core/LoadRunner';
-import { renderQuality } from '../core/RenderQuality';
-import { viewportHeight, viewportWidth } from '../core/Viewport';
+import type { LoadTask } from '../core/perf/LoadRunner';
+import { renderQuality } from '../core/perf/RenderQuality';
+import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
 import { holdFigureIdleSweep, releaseFigureIdleSweep } from '../sprites/figure/figureFrameCache';
-import { holdIdleClock, releaseIdleClock } from '../core/renderFrameClock';
+import { holdIdleClock, releaseIdleClock } from '../core/rendering/renderFrameClock';
 import type { Surface, UiRoot } from '../ui/core/UiRoot';
 import { LoadingOverlay } from '../ui/LoadingScreen';
 import type { ArrivalLoadingScreen } from '../levels/types';

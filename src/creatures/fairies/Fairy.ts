@@ -1,3 +1,4 @@
+import { gearModifiers } from '../../gear/gearHooks';
 import type { EyePlacement } from '../../sprites/eyePlacement';
 import {
   ASTAR_FAILURE_BACKOFF_FRAMES,
@@ -6,11 +7,11 @@ import {
   type PlayerDamageType,
 } from '../Mob';
 import type { Player } from '../../Player';
-import type { Difficulty } from '../../core/difficultyProfiles';
+import type { Difficulty } from '../../core/difficulty/difficultyProfiles';
 import { scaledCooldownFramesForLevel } from '../mobLevelScaling';
 import { isMarkedGround } from '../tactics/markedGround';
 import { isInsideAirspaceBody } from '../airspace';
-import { isWorldPointInView } from '../../core/visibleWorldView';
+import { isWorldPointInView } from '../../core/rendering/visibleWorldView';
 import {
   drawFairySprite,
   fairyChestPoint,
@@ -600,6 +601,10 @@ export abstract class Fairy extends Mob {
    * unless this fairy was set loose to ignore the zone.
    */
   protected mayFight(target: Player): boolean {
+    // A wearer of fairy-truce gear is left be — until she draws blood from this
+    // fairy, which then fights her like anyone else.
+    const truceHolds = gearModifiers(target).fairyTruce && !this.damageTakenBy.has(target);
+    if (truceHolds) return false;
     return this.ignoresTownSafeZone || this.map?.isInTownSafeZone(target.x, target.y) !== true;
   }
 

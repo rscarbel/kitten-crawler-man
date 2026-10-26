@@ -12,7 +12,7 @@
  */
 
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
-import { keybindings, type GameAction } from '../core/Keybindings';
+import { keybindings, type GameAction } from '../core/input/Keybindings';
 import type { AISceneContext } from '../ai/actions/types';
 import type { GameMap } from '../map/GameMap';
 import type { MobKind } from '../levels/mobKinds';

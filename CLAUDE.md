@@ -13,6 +13,16 @@ Type safety is the highest priority in this codebase. The tsconfig has strict mo
 - **No `any`.** The linter already enforces `@typescript-eslint/no-explicit-any` as an error — never circumvent it. Use `unknown` and narrow, or use proper generics.
 - **Use type utilities.** Prefer `Partial`, `Required`, `Pick`, `Omit`, `Record`, `Extract`, `Exclude`, `NonNullable`, `ReturnType`, `Parameters`, etc. over hand-rolling equivalent types.
 - **Infer where possible.** Let TypeScript infer return types and variable types when the inference is clear. Add explicit annotations when inference is ambiguous or at module boundaries.
+- **Make the type system enforce the rules.** When a constraint or piece of logic is known at compile time, encode it in types rather than in runtime checks, comments or conventions. A compile error eliminates a whole class of bugs and tells the next agent exactly what to fix. Reach for:
+  - discriminated unions instead of optional fields that only make sense together
+  - exhaustive `switch`es that end in a `never` check, so adding a variant fails to compile until every site handles it
+  - `Record<Union, …>` tables, so a new id can't ship without its entry
+  - literal and template-literal types for ids instead of `string`
+  - `satisfies` to check a table's shape without widening its literals
+  - branded types for values that share a primitive but must not mix (tiles vs pixels, ids of different kinds)
+  - `readonly` for data that must not change
+
+  A runtime check is for what the compiler cannot know: parsed saves, network data and user input.
 
 - if you discover a case of a violation of any of these rules, consider it in-scope to fix it, even if it is a pre-existing violation
 

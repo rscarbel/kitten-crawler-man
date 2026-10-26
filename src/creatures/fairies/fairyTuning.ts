@@ -7,7 +7,7 @@
  */
 
 import { PLAYER_SPEED } from '../../core/constants';
-import type { Difficulty } from '../../core/difficultyProfiles';
+import type { Difficulty } from '../../core/difficulty/difficultyProfiles';
 
 // ── Shared body ──────────────────────────────────────────────────────────────
 
@@ -279,7 +279,7 @@ export const SHIELD_ENGAGED_RECENT_FRAMES = 180;
 export const AEGIS_CHAIN_RADIUS_TILES = 5;
 /** How long the death chains' damage reduction lasts. */
 export const AEGIS_DURATION_FRAMES = 300;
-export { AEGIS_DAMAGE_SCALE } from '../../core/statusTuning';
+export { AEGIS_DAMAGE_SCALE } from '../../core/combat/statusTuning';
 
 // ── Healing fairy ────────────────────────────────────────────────────────────
 

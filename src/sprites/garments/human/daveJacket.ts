@@ -28,5 +28,6 @@ export const DAVE_JACKET = defineGarment({
   base: true,
   layer: 'over',
   region: ['torso'],
+  covers: ['chest'],
   paint: { torso: humanEveryView(paintTorso) },
 });

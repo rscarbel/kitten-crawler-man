@@ -1,6 +1,6 @@
 import { Mob } from './Mob';
 import type { EyePlacement } from '../sprites/eyePlacement';
-import type { Player } from './../Player';
+import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
 import { drawShadySprite, SCRATCH_DURATION_FRAMES } from '../sprites/shadySprite';
 import {

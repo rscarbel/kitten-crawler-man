@@ -8,9 +8,9 @@
  * Pure rules over durable progress records: no scene, no map.
  */
 
-import type { AnchorQuestProgress } from '../core/AnchorQuestProgress';
-import { BIG_TOP_BUILDING_NAME } from '../core/CircusQuestProgress';
-import type { MurderQuestStage } from '../core/MurderQuestProgress';
+import type { AnchorQuestProgress } from '../core/quests/AnchorQuestProgress';
+import { BIG_TOP_BUILDING_NAME } from '../core/quests/CircusQuestProgress';
+import type { MurderQuestStage } from '../core/quests/MurderQuestProgress';
 import { BOOKSHELF, CHAIR, TABLE } from '../map/tileTypes';
 import type { BuildingKind, PlannedBuildingName } from '../map/town/townPlan';
 

@@ -18,7 +18,7 @@
  * `interiorHostiles.ts` states the arrangement.
  */
 
-import type { AnchorQuestProgress } from '../core/AnchorQuestProgress';
+import type { AnchorQuestProgress } from '../core/quests/AnchorQuestProgress';
 import type { AudioManager } from '../audio/AudioManager';
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
@@ -26,8 +26,8 @@ import type { Player } from '../Player';
 import type { ResidentId } from './townResidents';
 import type { NPCMarkerType } from '../creatures/QuestNPC';
 import { TILE_SIZE } from '../core/constants';
-import { QUEST_SLOT_IDX } from '../core/ItemDefs';
-import type { ItemId } from '../core/ItemDefs';
+import { QUEST_SLOT_IDX } from '../core/items/defs/ItemDefs';
+import type { ItemId } from '../core/items/defs/ItemDefs';
 import {
   BOOKSHELF,
   BROKEN_BOOKSHELF,
@@ -43,7 +43,7 @@ import { REPAIR_ROWS } from '../sprites/art/humanFigure';
 import { distinctSpawnTiles, inPlainViewOnTheWayIn } from './interiorHostiles';
 import type { ShrineVermin } from '../creatures/ShrineVermin';
 import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
-import { applySpawnDifficulty } from '../core/difficultyProfiles';
+import { applySpawnDifficulty } from '../core/difficulty/difficultyProfiles';
 import type { Conversation } from '../dialog/Conversation';
 import type { DialogLine, NonEmpty } from '../dialog/line';
 import type { ConversationHandle } from '../dialog/request';

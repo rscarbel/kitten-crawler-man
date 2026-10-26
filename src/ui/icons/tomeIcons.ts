@@ -1,4 +1,4 @@
-import { drawSpriteKey } from '../../core/SpriteRenderer';
+import { drawSpriteKey } from '../../core/spriteAssets/SpriteRenderer';
 import { drawDynamiteInventoryIcon } from '../../sprites/dynamiteSprite';
 import type { Rect } from '../core/geom';
 import { iconSquare } from './iconSquare';

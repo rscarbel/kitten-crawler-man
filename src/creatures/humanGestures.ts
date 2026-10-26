@@ -17,6 +17,7 @@
  * a stoop toward a pickup behind him must not aim those away from the fight.
  */
 
+import { hotbarAbilityOf } from '../gear/gearHooks';
 import { TILE_SIZE } from '../core/constants';
 import type { Player } from '../Player';
 import { type Pt } from '../sprites/art/bipedArt';
@@ -129,7 +130,7 @@ export function castShellWithGesture(human: HumanPlayer, cast: () => void): void
  */
 export function standByForShellCast(human: HumanPlayer, offCooldown: boolean): void {
   const slotted = human.inventory.actionBar.slots.some(
-    (slot) => slot?.abilityId === 'protective_shell',
+    (slot) => slot !== null && hotbarAbilityOf(human.inventory, slot) === 'protective_shell',
   );
   if (!slotted || !offCooldown || !human.isActive) {
     human.standBy('shell_cast', []);

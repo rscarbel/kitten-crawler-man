@@ -44,7 +44,7 @@ import {
   splashZoneStateName,
   type SplashZoneRow,
 } from '../src/sprites/art/splashZoneFigure.js';
-import { CLUB_ZONES } from '../src/core/clubLayout.js';
+import { CLUB_ZONES } from '../src/core/club/clubLayout.js';
 import { figureByteBudgetFor } from '../src/sprites/figure/figureFrameCache.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 import {

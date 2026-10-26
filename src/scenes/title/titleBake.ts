@@ -15,8 +15,8 @@ import {
   type CanvasSurface,
   releaseSurface,
   resizeSurface,
-} from '../../core/canvasSurface';
-import { canvasGeneration } from '../../core/canvasRecovery';
+} from '../../core/rendering/canvasSurface';
+import { canvasGeneration } from '../../core/rendering/canvasRecovery';
 import type { TitleStage } from './titleStage';
 
 /** Above this, a bake costs more memory than the sharpness is worth on a full-screen layer. */

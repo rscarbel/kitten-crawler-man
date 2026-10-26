@@ -55,7 +55,7 @@ globals.document = {
 };
 
 const { TILE_SIZE } = await import('../src/core/constants.js');
-const { loadSprites } = await import('../src/core/SpriteLoader.js');
+const { loadSprites } = await import('../src/core/spriteAssets/SpriteLoader.js');
 const { GameMap, TOWER_FLOOR_COUNT } = await import('../src/map/GameMap.js');
 const { createTownPlan } = await import('../src/map/town/townPlan.js');
 const { stampSafeRoomCounters } = await import('../src/map/safeRoomCounterLayout.js');

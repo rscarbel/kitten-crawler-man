@@ -16,15 +16,15 @@ import {
   surfaceTallies,
   BYTES_PER_MEGABYTE,
   SURFACE_BYTES_PER_PIXEL,
-} from '../src/core/canvasSurface.js';
-import { ASSET_GROUPS, type AssetGroup } from '../src/core/assetGroups.js';
+} from '../src/core/rendering/canvasSurface.js';
+import { ASSET_GROUPS, type AssetGroup } from '../src/core/spriteAssets/assetGroups.js';
 import {
   getManifestEntry,
   sheetSizePx,
   shouldDownscaleForLowEndDevice,
   DOWNSCALE_FACTOR,
   type SpriteKey,
-} from '../src/core/SpriteLoader.js';
+} from '../src/core/spriteAssets/SpriteLoader.js';
 import {
   environmentArtBytes,
   residentEnvironmentSheetKeys,
@@ -41,7 +41,7 @@ import {
 import type { LevelDef } from '../src/levels/types.js';
 import { PLAYER_SPEED } from '../src/core/constants.js';
 import { SPEED_FIZZ_MULTIPLIER } from '../src/Player.js';
-import { REFRESHED_SPEED_FACTOR } from '../src/core/StatusEffect.js';
+import { REFRESHED_SPEED_FACTOR } from '../src/core/combat/StatusEffect.js';
 import {
   ABANDONED_LABEL_PROPERTY,
   retainerSearchSchema,

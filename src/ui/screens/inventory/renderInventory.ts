@@ -4,16 +4,20 @@
  * lays out and wires.
  */
 
-import { BAG_SORT_LABELS, BAG_SORT_MODES } from '../../../core/bagSort';
+import { rarityTooltipLines } from '../dialogs/canvasChrome';
+import { BAG_SORT_LABELS, BAG_SORT_MODES } from '../../../core/items/inventory/bagSort';
 import {
   BAG_PAGE_SLOTS,
   HOTBAR_COUNT,
   ITEM_DEF,
   QUEST_SLOT_IDX,
   isWearable,
+  wearerOf,
   type InventoryItem,
-} from '../../../core/ItemDefs';
-import { HOTBAR_ACTIONS, keybindings } from '../../../core/Keybindings';
+} from '../../../core/items/defs/ItemDefs';
+import { itemTraits } from '../../../gear/gearHooks';
+import { crawlerSetProgress } from '../../../gear/setProgress';
+import { HOTBAR_ACTIONS, keybindings } from '../../../core/input/Keybindings';
 import { describeItemEffects } from '../../itemEffectLines';
 import { ITEM_ICONS } from '../../icons/itemIcons';
 import {
@@ -36,7 +40,7 @@ import { card } from '../../widgets/card';
 import { contextMenu, type ContextMenuItem } from '../../widgets/contextMenu';
 import { iconButton, iconButtonSize } from '../../widgets/iconButton';
 import { fillRounded, strokeRounded } from '../../widgets/paint';
-import { itemSlot } from '../../widgets/itemSlot';
+import { itemSlot, slotContent } from '../../widgets/itemSlot';
 import { listRow } from '../../widgets/listRow';
 import { panel, panelBodyWidth } from '../../widgets/panel';
 import { scrollGutterWidth, scrollIntoView, scrollView } from '../../widgets/scrollView';
@@ -701,6 +705,7 @@ function drawBagCell(
     dragging: lifted,
     dropTarget: over && !lifted && view.rearrangeable,
     equipped: worn,
+    awakened: member.owner.gear.isAwakened(item.id),
     onTap: () => screen.tapStack({ source: 'inv', slotIdx: cell.slotIdx, id: item.id }, item),
     onDrag: dragHandlers(screen, 'inv', cell.slotIdx, null, item, regionId),
     handlers: pressHandlers(screen, regionId, target),
@@ -713,7 +718,10 @@ function drawBagCell(
       title: item.name,
       accent: ui.theme.palette.category[ITEM_DEF[item.id].category],
       text: item.description ?? FILTER_LABELS[ITEM_DEF[item.id].category],
-      lines: describeItemEffects(item).map((line) => ({ text: line, role: 'label' as const })),
+      lines: [
+        ...rarityTooltipLines(ui.theme, item.id),
+        ...describeItemEffects(item).map((line) => ({ text: line, role: 'label' as const })),
+      ],
       show: state.hovered && screen.drag === null && screen.menu === null,
     });
   }
@@ -782,14 +790,11 @@ function drawHotbarRow(
     );
     const state = itemSlot(ui, cell, {
       id: regionId,
-      item: item?.id ?? null,
+      ...slotContent(item?.id ?? null, item !== null && member.owner.gear.isAwakened(item.id)),
       quantity: item?.quantity,
       keycap: isQuest ? QUEST_KEYCAP : keybindings.labelFor(HOTBAR_ACTIONS[index]),
       cooldown: cooldown === null || cooldown.max <= 0 ? 0 : cooldown.current / cooldown.max,
-      equipped:
-        item !== null &&
-        (item.id === member.heldItemId ||
-          inventory.showsInUse(item.id, member.drawnWeaponId ?? null)),
+      equipped: item !== null && (item.id === member.heldItemId || inventory.hasEquipped(item.id)),
       ...arrangement,
     });
     afterDraw(state);
@@ -851,6 +856,30 @@ export function hotbarSlotArrangement(
 
 const GENERIC_DANGER_ACTION = 'Drop';
 
+/** The rarity, wearer, set progress and awakening a piece of gear shows in the detail pane. */
+function gearDetail(
+  item: InventoryItem,
+  member: InventoryMember,
+): Pick<DetailModel, 'rarity' | 'wearer' | 'set' | 'awakening'> {
+  const id = item.id;
+  const def = ITEM_DEF[id];
+  const owner = member.owner;
+  const awakeningTrait = itemTraits(id, false).find((trait) => trait.kind === 'awakening');
+  const state = owner.gear.of(id);
+  return {
+    rarity: def.rarity ?? null,
+    wearer: wearerOf(id) ?? null,
+    set: def.set === undefined ? null : crawlerSetProgress(owner, def.set),
+    awakening:
+      awakeningTrait === undefined || state.awakened
+        ? null
+        : {
+            kills: Math.min(state.awakeningKills, awakeningTrait.kills),
+            target: awakeningTrait.kills,
+          },
+  };
+}
+
 function detailModel(ui: Ui, screen: InventoryScreen, member: InventoryMember): DetailModel | null {
   const inventory = member.owner.inventory;
   const item = screen.selectedItem(inventory);
@@ -899,7 +928,9 @@ function detailModel(ui: Ui, screen: InventoryScreen, member: InventoryMember): 
   return {
     item,
     worn: inventory.hasEquipped(item.id),
+    awakened: member.owner.gear.isAwakened(item.id),
     slotLabel: equipSlotLabel(item),
+    ...gearDetail(item, member),
     effectLines: describeItemEffects(item),
     deltas: armorDeltas(item, inventory, screen.dollKey),
     notice: notice !== null && notice.id === item.id && notice.text !== hint ? notice.text : null,
@@ -1008,12 +1039,14 @@ function drawCharacterTab(
     cell: (slot, cellRect) => {
       const over = pointerOver(screen, cellRect);
       const fits = drag !== null && fitsDollSlot(drag.item, slot.key);
+      const worn = inventory.getEquippedItem(slot.key);
       return {
-        item: inventory.getEquippedItem(slot.key),
+        item: worn,
         selected: screen.dollKey === slot.key,
         dragging: drag?.from === 'doll' && drag.dollKey === slot.key,
         dropTarget: over && fits,
         disabled: over && !fits,
+        bound: worn !== null && inventory.equipment.isRemovalLocked(worn.id),
       };
     },
     onTap: (slot) => screen.tapDollSlot(slot.key),

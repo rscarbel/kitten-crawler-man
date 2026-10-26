@@ -29,8 +29,11 @@
  *
  * Run: npm run verify:ai-actions
  */
+import { partyOwnsGear } from '../src/loot/gearPools';
 import { crawlerName } from '../src/characters/characters';
-import { AchievementManager, aiAchievementKey } from '../src/core/AchievementManager';
+import { AchievementManager, aiAchievementKey } from '../src/core/progression/AchievementManager';
+import { AchievementAwards } from '../src/systems/AchievementAwards';
+import { presentationAwardId } from '../src/loot/rewardChest';
 import { EventBus, type GameEvents } from '../src/core/EventBus';
 import {
   FAVOR_MAX,
@@ -39,7 +42,7 @@ import {
   ViewerFavor,
   favorPerk,
   parseViewerFavor,
-} from '../src/core/viewerFavor';
+} from '../src/core/progression/viewerFavor';
 import { AIShowStage } from '../src/ai/show/AIShowStage';
 import {
   CHALLENGE_MAX_SECONDS,
@@ -52,10 +55,15 @@ import { SpellSystem } from '../src/systems/SpellSystem';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
 import { FAVOR_SWING_MAX } from '../src/ai/actions/show';
 import { TILE_SIZE } from '../src/core/constants';
-import { makeBloodVomit, makeBurn, makePoison, type StatusEffect } from '../src/core/StatusEffect';
-import { BLOOD_VOMIT_MAX_HP_SHARE } from '../src/core/statusTuning';
+import {
+  makeBloodVomit,
+  makeBurn,
+  makePoison,
+  type StatusEffect,
+} from '../src/core/combat/StatusEffect';
+import { BLOOD_VOMIT_MAX_HP_SHARE } from '../src/core/combat/statusTuning';
 import { pendingStatusDamage } from '../src/Player';
-import { isItemId, ITEM_DEF, type ItemId } from '../src/core/ItemDefs';
+import { isItemId, ITEM_DEF, type ItemId } from '../src/core/items/defs/ItemDefs';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import type { Mob } from '../src/creatures/Mob';
@@ -188,6 +196,12 @@ const BURN_FORECAST_INTERVAL = 60;
 const POISON_FORECAST_INTERVAL = 120;
 const FORECAST_MAX_HP = 100;
 const HURT_TEST_FRACTION = 0.3;
+/**
+ * Constitution the test human carries past a fresh crawler's, as a crawler a
+ * floor into a run does: at a fresh crawler's 10 HP the HP shields' fractions
+ * round onto the same whole hit point and every check between them is moot.
+ */
+const TEST_CRAWLER_EXTRA_CONSTITUTION = 2;
 const PERCENT_SCALE = 100;
 /** Frames a status is ticked for: past the longest one the AI applies. */
 const STATUS_RUN_FRAMES = 2400;
@@ -399,6 +413,21 @@ endSection();
 
 // ── Fuzz through the governor ───────────────────────────────────────────────
 
+/** What an award changes the moment it is paid: the crawler's purse and the reward screen's queue. */
+interface PaidState {
+  readonly coins: number;
+  readonly presentations: number;
+}
+
+function paidState(manager: AchievementManager, crawler: HumanPlayer | CatPlayer): PaidState {
+  return { coins: crawler.coins, presentations: manager.presentationCount };
+}
+
+/** Every chest pays coins, so a paid award always grows the purse and queues one presentation. */
+function paidAtOnce(before: PaidState, after: PaidState): boolean {
+  return after.coins > before.coins && after.presentations === before.presentations + 1;
+}
+
 interface FakeWorld {
   readonly scene: AISceneContext;
   readonly human: HumanPlayer;
@@ -429,6 +458,8 @@ function buildWorld(): FakeWorld {
   const human = new HumanPlayer(start.x, start.y, TILE_SIZE);
   const cat = new CatPlayer(start.x + 1, start.y, TILE_SIZE);
   human.isActive = true;
+  human.applyPermanentStat('constitution', TEST_CRAWLER_EXTRA_CONSTITUTION);
+  human.hp = human.maxHp;
   const mobs: Mob[] = [];
   const toasts: string[] = [];
   const musicClaims = new Set<string>();
@@ -436,6 +467,15 @@ function buildWorld(): FakeWorld {
   const catAchievements = new AchievementManager();
   const bus = new EventBus();
   const favor = new ViewerFavor();
+  const awards = new AchievementAwards({
+    humanAchievements,
+    catAchievements,
+    human,
+    cat,
+    bus,
+    activeCrawler: () => (cat.isActive ? 'cat' : 'human'),
+    owns: (id) => partyOwnsGear([human, cat], id),
+  });
   const postToast = (text: string): void => void toasts.push(text);
   const challenges = new AIChallengeSystem({
     bus,
@@ -443,8 +483,8 @@ function buildWorld(): FakeWorld {
     human,
     cat,
     postToast,
-    grantReward: (side, tier) =>
-      (side === 'Human' ? humanAchievements : catAchievements).grantBox(tier, 'Adventurer', null),
+    grantReward: (side, rarity) =>
+      void awards.grantChest(side === 'Human' ? 'human' : 'cat', { rarity, source: 'challenge' }),
   });
   const show = new AIShowStage({ bus, favor, challenges, postToast });
   const world: FakeWorld = {
@@ -473,7 +513,7 @@ function buildWorld(): FakeWorld {
       isInSafeRoom: () => world.flags.safeRoom,
       isInCombat: () => world.flags.combat,
       postToast: (text) => toasts.push(text),
-      getAchievements: (target) => (target === 'human' ? humanAchievements : catAchievements),
+      getAwards: () => awards,
       getAudio: () => null,
       getAudioScope: () => ({
         claimMusic: (claim) => musicClaims.add(claim.owner),
@@ -975,14 +1015,14 @@ section(
   }
   world.human.hp = world.human.maxHp;
 
-  world.human.inventory.addItem('trollskin_shirt', 1);
-  world.human.inventory.equipByItemId('trollskin_shirt');
-  check(world.human.inventory.equipment.isEquipped('trollskin_shirt'), 'the test shirt is worn');
+  world.human.inventory.addItem('scrapmail_vest', 1);
+  world.human.inventory.equipByItemId('scrapmail_vest');
+  check(world.human.inventory.equipment.isEquipped('scrapmail_vest'), 'the test shirt is worn');
   check(
-    !system('remove_item', { item_id: 'trollskin_shirt', target_player: 'Human' }).ok,
+    !system('remove_item', { item_id: 'scrapmail_vest', target_player: 'Human' }).ok,
     'worn gear is never confiscated',
   );
-  check(world.human.inventory.equipment.isEquipped('trollskin_shirt'), 'the shirt is still worn');
+  check(world.human.inventory.equipment.isEquipped('scrapmail_vest'), 'the shirt is still worn');
   step();
 
   const landing = tileOf(world.human);
@@ -1085,9 +1125,9 @@ section('the show: achievements, questions, favour and every challenge template'
   const award = {
     title: 'Fled From A Rat',
     description: 'Ran from the weakest thing alive.',
-    tier: 'Silver',
+    rarity: 'Uncommon',
   };
-  const boxesBefore = world.achievements.human.pendingBoxes.length;
+  const paidBefore = paidState(world.achievements.human, world.human);
   check(
     system('grant_achievement', { ...award, target_player: 'Human' }).ok,
     'an AI achievement is awarded',
@@ -1096,12 +1136,14 @@ section('the show: achievements, questions, favour and every challenge template'
     world.achievements.human.hasAIAchievement(award.title),
     'it is filed under the AI category',
   );
-  check(world.achievements.human.pendingBoxes.length === boxesBefore + 1, 'it pays its loot box');
   check(
-    world.achievements.human.pendingNotifications.some(
-      (def) => def.id === aiAchievementKey(award.title),
-    ),
-    'it waits on the achievement card like any other',
+    paidAtOnce(paidBefore, paidState(world.achievements.human, world.human)),
+    'it pays its chest at once: coins land and one presentation is queued',
+  );
+  check(
+    presentationAwardId(world.achievements.human.peekPresentation()) ===
+      aiAchievementKey(award.title),
+    'it waits for the reward screen like any other',
   );
   check(heardOf('aiAchievementAwarded').length === 1, 'the award is told to the bus');
   check(
@@ -1117,8 +1159,19 @@ section('the show: achievements, questions, favour and every challenge template'
   );
   check(restored.hasAIAchievement(award.title), 'an AI achievement survives a save');
   check(
-    restored.pendingNotifications.some((def) => def.id === aiAchievementKey(award.title)),
-    'and so does its unread card',
+    presentationAwardId(restored.peekPresentation()) === aiAchievementKey(award.title),
+    'and so does its unseen presentation',
+  );
+
+  const giftBefore = paidState(world.achievements.cat, world.cat);
+  check(
+    system('grant_reward_chest', { rarity: 'Common', reason: 'For style.', target_player: 'Cat' })
+      .ok,
+    'the audience can gift a reward chest',
+  );
+  check(
+    paidAtOnce(giftBefore, paidState(world.achievements.cat, world.cat)),
+    'a gifted chest pays at once: coins land and one presentation is queued',
   );
   check(
     AchievementManager.fromSerialized({
@@ -1130,7 +1183,7 @@ section('the show: achievements, questions, favour and every challenge template'
   const messy = system('grant_achievement', {
     title: 'Stair\n\n\u200BMaster\u202E',
     description: 'Line one.\nLine two.\r\n\tLine three.',
-    tier: 'Bronze',
+    rarity: 'Common',
     target_player: 'Cat',
   });
   check(messy.ok, `a messy achievement is still awarded (${messy.detail})`);
@@ -1153,7 +1206,7 @@ section('the show: achievements, questions, favour and every challenge template'
       {
         name: 'Saved\n\nTitle\u2066',
         description: 'From\u0000 a save',
-        lootBox: { tier: 'Bronze', category: 'Adventurer' },
+        rarity: 'Common',
         awardedBy: 'System',
         awardedAt: 0,
       },
@@ -1209,9 +1262,9 @@ section('the show: achievements, questions, favour and every challenge template'
   for (let swing = 0; swing < FAVOR_MAX; swing++) world.favor.adjust(-FAVOR_SWING_MAX, 'boo');
   check(world.favor.value === FAVOR_MIN, 'favour stops at its bottom');
   for (let value = FAVOR_MIN; value <= FAVOR_MAX; value++) {
-    check(favorPerk(value).boxCoinMultiplier >= 1, `favour ${value} never cuts a box's coins`);
+    check(favorPerk(value).chestCoinMultiplier >= 1, `favour ${value} never cuts a chest's coins`);
   }
-  check(favorPerk(FAVOR_MIN).boxCoinMultiplier === 1, 'the lowest favour costs nothing');
+  check(favorPerk(FAVOR_MIN).chestCoinMultiplier === 1, 'the lowest favour costs nothing');
   check(parseViewerFavor('lots') === undefined, 'a junk saved favour is ignored');
   check(parseViewerFavor(FAVOR_MAX * 2) === FAVOR_MAX, 'a saved favour is clamped');
   const fresh = new ViewerFavor();
@@ -1274,7 +1327,7 @@ section('the show: achievements, questions, favour and every challenge template'
     return system('offer_challenge', {
       template,
       title: `Test ${template}`,
-      reward_tier: 'Bronze',
+      reward_rarity: 'Common',
       taunt: 'The viewers saw that.',
       ...extra,
     });
@@ -1341,12 +1394,12 @@ section('the show: achievements, questions, favour and every challenge template'
   check(!offer('untouched').ok, 'one challenge at a time');
   world.show.acceptChallenge();
   check(heardOf('challengeAccepted').length === 1, 'accepting is told to the bus');
-  const boxesBeforeWin = world.achievements.human.pendingBoxes.length;
+  const paidBeforeWin = paidState(world.achievements.human, world.human);
   for (let kill = 0; kill < CHALLENGE_KILLS; kill++) killRat(world.human);
   check(wonAnother(), 'winning is told to the bus');
   check(
-    world.achievements.human.pendingBoxes.length === boxesBeforeWin + 1,
-    'winning pays the box to the crawler being driven',
+    paidAtOnce(paidBeforeWin, paidState(world.achievements.human, world.human)),
+    'winning pays a chest at once to the crawler being driven',
   );
   check(
     world.challenges.current === null && !world.challenges.busy,

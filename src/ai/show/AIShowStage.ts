@@ -11,7 +11,12 @@
  */
 
 import type { EventBus } from '../../core/EventBus';
-import { FAVOR_MAX, favorPerk, favorTier, type ViewerFavor } from '../../core/viewerFavor';
+import {
+  FAVOR_MAX,
+  favorPerk,
+  favorTier,
+  type ViewerFavor,
+} from '../../core/progression/viewerFavor';
 import type { AIChallengeSystem } from '../../systems/AIChallengeSystem';
 import { CHALLENGE_WARNING_FRAMES } from '../../systems/AIChallengeSystem';
 import type { Surface } from '../../ui/core/UiRoot';
@@ -152,7 +157,7 @@ export class AIShowStage
       title: offer.spec.title,
       objective: offer.objective,
       pitch: offer.spec.pitch,
-      rewardTier: offer.spec.rewardTier,
+      rewardRarity: offer.spec.rewardRarity,
       offeredBy: offer.spec.offeredBy,
     };
   }
@@ -239,8 +244,8 @@ export class AIShowStage
     };
   }
 
-  /** What every loot box's coins are multiplied by at the current favour. */
-  boxCoinMultiplier(): number {
-    return favorPerk(this.deps.favor.value).boxCoinMultiplier;
+  /** What every reward chest's coins are multiplied by at the current favour. */
+  chestCoinMultiplier(): number {
+    return favorPerk(this.deps.favor.value).chestCoinMultiplier;
   }
 }

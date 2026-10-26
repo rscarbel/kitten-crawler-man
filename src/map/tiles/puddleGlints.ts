@@ -20,7 +20,7 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
+} from '../../core/rendering/canvasSurface';
 import type { FloorSurface } from '../dungeon/floorSurface';
 import {
   LIQUID_EDGE_FIELD,
@@ -28,7 +28,7 @@ import {
   WATER_FEATURES,
   type PlacedFloorFeature,
 } from '../dungeon/floorFeatures';
-import { onCanvasRecovery } from '../../core/canvasRecovery';
+import { onCanvasRecovery } from '../../core/rendering/canvasRecovery';
 
 /** Light level below which a puddle shows no glint at all. */
 const GLINT_MIN_LIGHT = 0.15;

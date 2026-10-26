@@ -1,4 +1,4 @@
-import { drawSpriteKey, timeFrameIndex } from '../../../core/SpriteRenderer';
+import { drawSpriteKey, timeFrameIndex } from '../../../core/spriteAssets/SpriteRenderer';
 import {
   VAT_BUBBLE_FRAMES,
   VAT_BURST_FRAMES,
@@ -21,9 +21,9 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../../core/canvasSurface';
+} from '../../../core/rendering/canvasSurface';
 import type { TilePoint } from '../../../systems/bossRooms/bossRoomLayout';
-import { onCanvasRecovery } from '../../../core/canvasRecovery';
+import { onCanvasRecovery } from '../../../core/rendering/canvasRecovery';
 
 type Ctx = CanvasRenderingContext2D;
 

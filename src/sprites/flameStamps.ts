@@ -16,8 +16,8 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../core/canvasSurface';
-import { onCanvasRecovery } from '../core/canvasRecovery';
+} from '../core/rendering/canvasSurface';
+import { onCanvasRecovery } from '../core/rendering/canvasRecovery';
 
 /** A colour with its own opacity, for a stamp that is baked rather than composed. */
 export interface FlameInk {

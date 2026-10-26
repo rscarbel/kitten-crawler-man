@@ -324,7 +324,7 @@ const DRAW_BY_VIEW: Readonly<
   away: drawBipedBack,
 };
 
-/** Nothing over the rig's base garments: no cloak, no gauntlet, no trollskin band at the collar. */
+/** Nothing over the rig's base garments: none of the crawler's gear. */
 const NOTHING_OVER_HIS_BASE = stillOutfit(outfitOf(CULTIST_LOOK, []));
 
 function paintCultistFrame(ctx: Ctx, state: string, frame: number): void {

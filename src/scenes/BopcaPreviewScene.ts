@@ -9,7 +9,7 @@
  * at it at 32 px next to the same face at 128 px.
  */
 
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { worldText } from '../ui/world/worldText';
 import type { WorldGesture } from '../ui/core/UiRoot';
 import { PreviewScene, type PreviewControl } from './PreviewScene';

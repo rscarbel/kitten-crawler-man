@@ -13,9 +13,9 @@
  * its guards the moment the player stepped back through the door.
  */
 
-import { applySpawnDifficulty } from '../core/difficultyProfiles';
-import { roomKey, type TownMemory } from '../core/TownMemory';
-import type { MurderQuestProgress } from '../core/MurderQuestProgress';
+import { applySpawnDifficulty } from '../core/difficulty/difficultyProfiles';
+import { roomKey, type TownMemory } from '../core/state/TownMemory';
+import type { MurderQuestProgress } from '../core/quests/MurderQuestProgress';
 import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
 import { CULT_HIDEOUT_CULTIST_LEVEL } from './CultHideoutSystem';
 import { questMobLevel } from './questMobLevel';

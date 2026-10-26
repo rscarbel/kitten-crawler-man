@@ -58,14 +58,14 @@ const { mulberry32 } = await import('../src/sprites/person/rng.js');
 Math.random = mulberry32(WORLD_SEED);
 
 const { TILE_SIZE } = await import('../src/core/constants.js');
-const { loadSprites } = await import('../src/core/SpriteLoader.js');
+const { loadSprites } = await import('../src/core/spriteAssets/SpriteLoader.js');
 const { SceneManager } = await import('../src/core/Scene.js');
-const { InputManager } = await import('../src/core/InputManager.js');
+const { InputManager } = await import('../src/core/input/InputManager.js');
 const { DungeonScene } = await import('../src/scenes/DungeonScene.js');
 const { BuildingInteriorScene } = await import('../src/scenes/BuildingInteriorScene.js');
 const { GameMap } = await import('../src/map/GameMap.js');
 const { level3 } = await import('../src/levels/level3.js');
-const { renderQuality } = await import('../src/core/RenderQuality.js');
+const { renderQuality } = await import('../src/core/perf/RenderQuality.js');
 const { environmentPaintDepth } = await import('../src/map/environmentArtCache.js');
 const {
   figureCacheByteBudget,
@@ -77,7 +77,7 @@ const {
 } = await import('../src/sprites/figure/figureFrameCache.js');
 const { setFigureCacheStatsRecording, getFigureCacheStats } =
   await import('../src/sprites/figure/figureCacheStats.js');
-const { BIG_TOP_BUILDING_NAME } = await import('../src/core/CircusQuestProgress.js');
+const { BIG_TOP_BUILDING_NAME } = await import('../src/core/quests/CircusQuestProgress.js');
 
 const cyclesArg = process.argv.find((arg) => arg.startsWith('--cycles='));
 const DEFAULT_TRIPS = 20;

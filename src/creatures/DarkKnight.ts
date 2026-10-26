@@ -1,3 +1,4 @@
+import { inkSpoilsBlow } from '../gear/incomingBlows';
 import { BOSS_BLAST_DAMAGE_SCALE, Mob } from './Mob';
 import type { EyePlacement } from '../sprites/eyePlacement';
 import type { LootDrop } from './Mob';
@@ -757,6 +758,7 @@ export class DarkKnight extends Mob {
     // becomes unavoidable.
     if (Math.hypot(target.x - this.x, target.y - this.y) > this.punchResolveRangePx()) return;
     const damage = this.scaledDamage(PUNCH_DAMAGE);
+    if (inkSpoilsBlow(this, target)) return;
     const connected = target.takeDamage(
       damage,
       this.stampHarmLimits({
@@ -768,7 +770,7 @@ export class DarkKnight extends Mob {
     );
     if (connected) {
       this.noteStruckPlayer(target);
-      this.reflectMeleeDamage(target, damage);
+      this.answerContactBlow(target, damage);
     }
   }
 

@@ -9,7 +9,7 @@
 import { HumanPlayer } from '../../../creatures/HumanPlayer';
 import { CatPlayer } from '../../../creatures/CatPlayer';
 import { TILE_SIZE } from '../../../core/constants';
-import { createWheelLedger, grantQuestFreeSpin } from '../../../core/WheelLedger';
+import { createWheelLedger, grantQuestFreeSpin } from '../../../core/save/WheelLedger';
 import { mulberry32 } from '../../../sprites/person/rng';
 import { ClubWheelSystem, WHEEL_ARMING_MS } from '../../../systems/ClubWheelSystem';
 import {
@@ -214,25 +214,25 @@ export const FIXTURES: readonly DialogFixture[] = [
   reveal('wheel-reveal-pet', 'pet', PET_FRAME_MS),
   reveal('wheel-reveal-50k', 'gold_50k'),
   reveal('wheel-reveal-500k', 'gold_500k', JACKPOT_FRAME_MS),
-  reveal('wheel-reveal-legendary-weapon', 'legendary_weapon_box'),
+  reveal('wheel-reveal-legendary-weapon', 'legendary_weapon'),
   reveal('wheel-reveal-free-handies', 'free_handies'),
-  reveal('wheel-reveal-platinum-frost', 'platinum_box_frost'),
-  reveal('wheel-reveal-platinum-ember', 'platinum_box_ember'),
-  reveal('wheel-reveal-legendary-ring', 'legendary_box'),
+  reveal('wheel-reveal-epic-frost', 'epic_charm_frost'),
+  reveal('wheel-reveal-epic-ember', 'epic_charm_ember'),
+  reveal('wheel-reveal-legendary-ring', 'legendary_charm'),
   reveal('wheel-reveal-spin-again', 'spin_again_1'),
   reveal('wheel-reveal-10k', 'gold_10k', REVEAL_FRAME_MS, WHEEL_MAX_BET),
-  reveal('wheel-reveal-gold-prize', 'gold_box', REVEAL_FRAME_MS, WHEEL_MAX_BET),
+  reveal('wheel-reveal-rare-prize', 'rare_chest', REVEAL_FRAME_MS, WHEEL_MAX_BET),
   reveal('wheel-reveal-25k', 'gold_25k', REVEAL_FRAME_MS, WHEEL_MAX_BET),
-  reveal('wheel-reveal-silver-prize', 'silver_box', REVEAL_FRAME_MS, WHEEL_MAX_BET),
+  reveal('wheel-reveal-uncommon-prize', 'uncommon_chest', REVEAL_FRAME_MS, WHEEL_MAX_BET),
   reveal('wheel-reveal-heal', 'heal_and_gold', REVEAL_FRAME_MS, WHEEL_MAX_BET),
-  prize('wheel-prize-legendary-weapon-human', 'legendary_weapon_box', 'human'),
-  prize('wheel-prize-legendary-weapon-cat', 'legendary_weapon_box', 'cat'),
-  prize('wheel-prize-platinum-frost', 'platinum_box_frost', 'human'),
-  prize('wheel-prize-platinum-ember', 'platinum_box_ember', 'cat'),
-  prize('wheel-prize-legendary-signet', 'legendary_box', 'human'),
-  prize('wheel-prize-gold', 'gold_box', 'human', WHEEL_MAX_BET),
-  prize('wheel-prize-silver', 'silver_box', 'cat', WHEEL_MAX_BET),
-  prize('wheel-prize-opening', 'legendary_weapon_box', 'human', WHEEL_MIN_BET, PRIZE_OPENING_MS),
+  prize('wheel-prize-legendary-weapon-human', 'legendary_weapon', 'human'),
+  prize('wheel-prize-legendary-weapon-cat', 'legendary_weapon', 'cat'),
+  prize('wheel-prize-epic-frost', 'epic_charm_frost', 'human'),
+  prize('wheel-prize-epic-ember', 'epic_charm_ember', 'cat'),
+  prize('wheel-prize-legendary-signet', 'legendary_charm', 'human'),
+  prize('wheel-prize-rare', 'rare_chest', 'human', WHEEL_MAX_BET),
+  prize('wheel-prize-uncommon', 'uncommon_chest', 'cat', WHEEL_MAX_BET),
+  prize('wheel-prize-opening', 'legendary_weapon', 'human', WHEEL_MIN_BET, PRIZE_OPENING_MS),
   reveal('wheel-nothing-bulbs', 'nothing', NOTHING_BULBS_FRAME_MS),
   reveal('wheel-nothing', 'nothing', NOTHING_TEXT_FRAME_MS),
 ];

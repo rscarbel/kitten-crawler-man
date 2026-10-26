@@ -1,6 +1,6 @@
 import type { Mob } from '../Mob';
 import type { Player } from '../../Player';
-import type { GameStats } from '../../core/GameStats';
+import type { GameStats } from '../../core/progression/GameStats';
 import { isInPublishedRoster } from '../packAlert';
 import { BrindleGrub } from '../BrindleGrub';
 import { drawWardCrushBubble, drawWardGlyph } from '../../sprites/art/fairyEffectsArt';

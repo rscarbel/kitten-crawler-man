@@ -46,7 +46,7 @@ import {
   MERCENARY_TEMPLATE_IDS,
   getMercenaryTemplate,
   type MercenaryTemplateId,
-} from '../src/core/mercenaryTemplates';
+} from '../src/core/party/mercenaryTemplates';
 import {
   captureMercenaryRoster,
   createMercenaryRoster,
@@ -54,8 +54,8 @@ import {
   type HiredMercenary,
   type MercenaryRoster,
   type MercenaryRosterCheckpoint,
-} from '../src/core/MercenaryRoster';
-import { parseMercenaryRosterCheckpoint } from '../src/core/PersistedWorldState';
+} from '../src/core/party/MercenaryRoster';
+import { parseMercenaryRosterCheckpoint } from '../src/core/save/PersistedWorldState';
 import { MERCENARY_VOICES } from '../src/creatures/mercenaries/mercenaryVoices';
 import { MERCENARY_ART } from '../src/sprites/mercenaryArt';
 import { createMercenaryKit } from '../src/creatures/mercenaries/mercenaryKits';
@@ -66,7 +66,7 @@ import { MobRoster } from '../src/systems/kits/SceneWorld';
 import type { SystemContext } from '../src/systems/GameSystem';
 import { resolveKills, type CombatContext } from '../src/systems/CombatSystem';
 import { EventBus } from '../src/core/EventBus';
-import { AbilityManager } from '../src/core/AbilityManager';
+import { AbilityManager } from '../src/core/skills/AbilityManager';
 import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
 import { gameContext } from './nodeGameContext.js';
 import type { ShopSystem } from '../src/systems/ShopSystem';
@@ -726,7 +726,7 @@ const STAT_BOOST_BUY = 'buy-stat_boost_potion';
  * unit granted.
  */
 function purchasePastNormalStockIsRefused(stock: ShopStock, normalStock: number): boolean {
-  const shop = createClubMarketShop(stock);
+  const shop = createClubMarketShop(stock, () => false);
   const buyer = new HumanPlayer(0, 0, TILE_SIZE);
   buyer.coins = AMPLE_COINS;
   const companion = new CatPlayer(1, 0, TILE_SIZE);
@@ -750,7 +750,7 @@ function purchasePastNormalStockIsRefused(stock: ShopStock, normalStock: number)
 
 function checkClubShopSellsAStack(): void {
   section('Club market: selling part of a stack through the quantity card');
-  const shop = createClubMarketShop(createShopStock());
+  const shop = createClubMarketShop(createShopStock(), () => false);
   const seller = new HumanPlayer(0, 0, TILE_SIZE);
   const companion = new CatPlayer(1, 0, TILE_SIZE);
   seller.inventory.addItem(SOLD_STACK_ITEM, STACK_ADDED);
@@ -857,7 +857,7 @@ function checkClubStock(): void {
   // a checkpoint restore and a save/parse round trip land on the right side
   // of the sale — through the same factory the club builds its market with.
   const stock = createShopStock();
-  const shop = createClubMarketShop(stock);
+  const shop = createClubMarketShop(stock, () => false);
   const buyer = new HumanPlayer(0, 0, TILE_SIZE);
   buyer.coins = price;
   const companion = new CatPlayer(1, 0, TILE_SIZE);

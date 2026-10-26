@@ -31,8 +31,11 @@ import { Mongo } from '../../src/creatures/Mongo';
 import type { Mob } from '../../src/creatures/Mob';
 import type { Mercenary } from '../../src/creatures/Mercenary';
 import type { DamageSource, Player } from '../../src/Player';
-import { createMercenaryRoster } from '../../src/core/MercenaryRoster';
-import { getMercenaryTemplate, type MercenaryTemplateId } from '../../src/core/mercenaryTemplates';
+import { createMercenaryRoster } from '../../src/core/party/MercenaryRoster';
+import {
+  getMercenaryTemplate,
+  type MercenaryTemplateId,
+} from '../../src/core/party/mercenaryTemplates';
 import { MercenarySystem } from '../../src/systems/MercenarySystem';
 import { SpellSystem } from '../../src/systems/SpellSystem';
 import { MobRoster } from '../../src/systems/kits/SceneWorld';
@@ -44,8 +47,8 @@ import {
   makeShield,
   statusRemainingFraction,
   type StatusEffect,
-} from '../../src/core/StatusEffect';
-import { checkpointSnapshot, restorePlayer, snapPlayer } from '../../src/core/PlayerSnapshot';
+} from '../../src/core/combat/StatusEffect';
+import { checkpointSnapshot, restorePlayer, snapPlayer } from '../../src/core/save/PlayerSnapshot';
 import { MERCENARY_VOICES } from '../../src/creatures/mercenaries/mercenaryVoices';
 import {
   BODY_BLOCK_STANDOFF_TILES,

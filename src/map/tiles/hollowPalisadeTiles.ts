@@ -33,8 +33,8 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
-import type { MapSpriteExtentsPx } from '../../core/SpriteLoader';
+} from '../../core/rendering/canvasSurface';
+import type { MapSpriteExtentsPx } from '../../core/spriteAssets/SpriteLoader';
 import { briarHollowSiteFor } from './hollowSiteRegistry';
 import { tileHash } from './hollowTileHash';
 import { mulberry32, range, type Rng } from '../../sprites/person/rng';
@@ -52,7 +52,7 @@ import {
   fillRoundRect,
 } from '../../sprites/art/villageArt';
 import { tileCoordKey } from '../tileIndex';
-import { onCanvasRecovery } from '../../core/canvasRecovery';
+import { onCanvasRecovery } from '../../core/rendering/canvasRecovery';
 
 // ── Geometry, in tiles ────────────────────────────────────────────────────────
 

@@ -5,15 +5,15 @@
  * can be rearranged; every other view collects its matches.
  */
 
-import { sortStacks, type BagSortMode } from '../../../core/bagSort';
-import type { Inventory } from '../../../core/Inventory';
+import { sortStacks, type BagSortMode } from '../../../core/items/inventory/bagSort';
+import type { Inventory } from '../../../core/items/inventory/Inventory';
 import {
   ITEM_CATEGORIES,
   BAG_PAGE_SLOTS,
   ITEM_DEF,
   type InventoryItem,
   type ItemCategory,
-} from '../../../core/ItemDefs';
+} from '../../../core/items/defs/ItemDefs';
 import type { BagFilter } from './inventoryTypes';
 
 export interface BagCell {

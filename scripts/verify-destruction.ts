@@ -29,7 +29,7 @@ import { createCanvas } from 'canvas';
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { asGameContext } from './nodeGameContext.js';
 import { TILE_SIZE } from '../src/core/constants.js';
-import { setViewportSize } from '../src/core/Viewport.js';
+import { setViewportSize } from '../src/core/rendering/Viewport.js';
 import { GameMap } from '../src/map/GameMap.js';
 import {
   BRAZIER,

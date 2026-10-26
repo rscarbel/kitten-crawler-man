@@ -11,7 +11,7 @@
  * the room tables, and the top-up's on a real floor 2 beside the upgrade.
  */
 
-import type { Difficulty } from '../../src/core/difficultyProfiles';
+import type { Difficulty } from '../../src/core/difficulty/difficultyProfiles';
 import {
   REGULAR_FAIRY_KINDS,
   fairyRoomRate,

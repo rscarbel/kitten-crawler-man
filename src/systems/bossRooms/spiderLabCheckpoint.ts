@@ -1,4 +1,4 @@
-import { isRecord } from '../../core/guards';
+import { isRecord } from '../../core/util/guards';
 import { FIRST_DARK_PHASE, LAST_LIGHT_PHASE, type LabLightPhase } from './spiderLabLighting';
 
 /** A cocoon's life: hanging whole, woken and splitting, or torn open. */

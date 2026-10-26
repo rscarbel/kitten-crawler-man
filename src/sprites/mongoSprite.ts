@@ -1,4 +1,8 @@
-import { walkFrameIndex, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import {
+  walkFrameIndex,
+  progressFrameIndex,
+  timeFrameIndex,
+} from '../core/spriteAssets/SpriteRenderer';
 import { drawFigureCached, drawFigureFitted, prewarmFigureState } from './figure/figureFrameCache';
 import { MONGO_FIGURES } from './art/mongoFigure';
 import {

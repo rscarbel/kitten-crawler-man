@@ -13,14 +13,14 @@
  *    no-repeat and money-conservation invariants and prints a line per check.
  */
 
-import { setViewportSize, viewportWidth, viewportHeight } from '../core/Viewport';
+import { setViewportSize, viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { worldText } from '../ui/world/worldText';
 import type { WorldGesture } from '../ui/core/UiRoot';
 import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
 import { TILE_SIZE } from '../core/constants';
-import { createClubMembership, type ClubMembership } from '../core/ClubMembership';
+import { createClubMembership, type ClubMembership } from '../core/club/ClubMembership';
 import { ClubCasinoSystem, type CasinoAction } from '../systems/ClubCasinoSystem';
 import { casinoFit, fitRectToScreen } from '../ui/casino/casinoLayout';
 import { chromeTarget } from '../ui/screens/dialogs/canvasChrome';

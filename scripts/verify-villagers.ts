@@ -26,7 +26,7 @@ import { GameMap } from '../src/map/GameMap';
 import { installCanvasGlobals } from './nodeCanvasGlobals';
 import { asGameContext } from './nodeGameContext';
 import { createCanvas } from 'canvas';
-import { setViewportSize } from '../src/core/Viewport';
+import { setViewportSize } from '../src/core/rendering/Viewport';
 import { Conversation } from '../src/dialog/Conversation';
 import { speakerLines } from '../src/dialog/line';
 import { OREN } from '../src/dialog/scripts/briarHollow';
@@ -42,7 +42,7 @@ import {
   type VillagerConversationFlow,
 } from '../src/systems/briarHollow/villagerTopics';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
-import { createBriarHollowState } from '../src/core/briarHollowState';
+import { createBriarHollowState } from '../src/core/quests/briarHollowState';
 import { Mob } from '../src/creatures/Mob';
 import { Player } from '../src/Player';
 import { mulberry32 } from '../src/sprites/person/rng';

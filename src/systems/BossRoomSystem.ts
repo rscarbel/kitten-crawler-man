@@ -1,11 +1,12 @@
-import { displayHp } from '../core/crawlerFormulas';
+import { crawlerTurnsShot } from '../gear/incomingBlows';
+import { displayHp } from '../core/party/crawlerFormulas';
 import { BOSS_IDENTITY_COLOR, SEALED_ROOM_BORDER_COLOR } from '../sprites/bossRoomColors';
 import type { GameMap } from '../map/GameMap';
 import type { DamageSource, Player } from '../Player';
 import { MAX_MOB_CULL_MARGIN_TILES, TILE_SIZE } from '../core/constants';
-import { applySpawnDifficulty } from '../core/difficultyProfiles';
+import { applySpawnDifficulty } from '../core/difficulty/difficultyProfiles';
 import { clamp } from '../utils';
-import type { SpatialGrid } from '../core/SpatialGrid';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
 import { hasLivingBossHealer } from '../creatures/fairies/bossHealerBond';
 import type { Fairy, FairyConfinement } from '../creatures/fairies/Fairy';
@@ -21,7 +22,7 @@ import {
   unpinTrashGremlinEncounterRows,
 } from '../sprites/trashGremlinSprite';
 import { pinGremlinBile, prewarmGremlinBile, unpinGremlinBile } from '../sprites/gremlinBileSprite';
-import { viewportHeight, viewportWidth } from '../core/Viewport';
+import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { MiniMapSystem } from './MiniMapSystem';
@@ -1256,8 +1257,23 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     this.syncTrashGremlins(ctx.roster, human.isActive ? human : cat);
     this.spawnKrakarenTentacles(ctx.roster);
     this.tickSummonedMobTTLs(mobs, mobGrid);
-    this.processVomitProjectiles(mobs, human, cat);
-    this.tickAcidPuddles(human, cat);
+    // The boss's shots and the acid they leave run on the hostile world's
+    // clock, which a crawler's last stand slows.
+    if (this.hostileWorldSteps()) {
+      this.processVomitProjectiles(mobs, human, cat);
+      this.tickAcidPuddles(human, cat);
+    }
+  }
+
+  /**
+   * Whether the hostile world takes its step this frame. Always, until a
+   * scene hands over its own clock (`CombatKit.worldStepTaken`).
+   */
+  private hostileWorldSteps: () => boolean = () => true;
+
+  /** Runs the boss's shots and acid only on frames `steps` says the hostile world moves. */
+  setHostileWorldClock(steps: () => boolean): void {
+    this.hostileWorldSteps = steps;
   }
 
   /**
@@ -1588,10 +1604,16 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       const hitPlayer = humanHit || catHit;
       if (hitWall || proj.ttl <= 0 || hitPlayer) {
         this.vomitProjectiles.splice(i, 1);
-        if (humanHit && human.takeDamage(VOMIT_IMPACT_DAMAGE, VOMIT_IMPACT_DAMAGE_SOURCE)) {
-          proj.owner.noteStruckPlayer(human);
-        }
-        if (catHit && cat.takeDamage(VOMIT_IMPACT_DAMAGE, VOMIT_IMPACT_DAMAGE_SOURCE)) {
+        const humanStruck =
+          humanHit &&
+          !crawlerTurnsShot(human, proj.owner, proj.dx, proj.dy) &&
+          human.takeDamage(VOMIT_IMPACT_DAMAGE, VOMIT_IMPACT_DAMAGE_SOURCE);
+        if (humanStruck) proj.owner.noteStruckPlayer(human);
+        const catStruck =
+          catHit &&
+          !crawlerTurnsShot(cat, proj.owner, proj.dx, proj.dy) &&
+          cat.takeDamage(VOMIT_IMPACT_DAMAGE, VOMIT_IMPACT_DAMAGE_SOURCE);
+        if (catStruck) {
           proj.owner.noteStruckPlayer(cat);
         }
         // Acid only ever pools on open floor. A bolus over open floor pools

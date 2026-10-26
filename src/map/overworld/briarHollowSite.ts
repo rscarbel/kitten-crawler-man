@@ -71,7 +71,7 @@ import {
   type VillagerAnchorKind,
   type WallSide,
 } from './briarHollowLayout';
-import { worldRandom } from '../../core/WorldRandom';
+import { worldRandom } from '../../core/world/WorldRandom';
 
 export type {
   PropPlacement,

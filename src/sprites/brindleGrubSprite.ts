@@ -1,4 +1,4 @@
-import { walkFrameIndex, progressFrameIndex } from '../core/SpriteRenderer';
+import { walkFrameIndex, progressFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { BRINDLE_GRUB_FIGURE, COW_TAILED_GRUB_FIGURE } from './art/grubFigure';
 import { figureFrameCount, type FigureDef } from './figure/figureDef';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';

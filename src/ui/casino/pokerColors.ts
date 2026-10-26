@@ -90,7 +90,7 @@ export function pokerTableColors(theme: Theme): PokerTableColors {
     avatarRing: palette.border.strong,
     actingRing: palette.accent.base,
     actingGlow: withAlpha(palette.accent.base, ACTING_GLOW_ALPHA),
-    winnerGlow: withAlpha(palette.tier.gold, WINNER_GLOW_ALPHA),
+    winnerGlow: withAlpha(palette.accent.celebrate, WINNER_GLOW_ALPHA),
     tiltFlush: withAlpha(palette.state.danger, TILT_FLUSH_ALPHA),
     name: palette.text.primary,
     stack: palette.accent.hover,

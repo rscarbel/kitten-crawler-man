@@ -27,7 +27,7 @@ import { Mongo } from '../src/creatures/Mongo';
 import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
 import type { StandaloneMobKind } from '../src/levels/mobKinds';
 import { BallOfSwine } from '../src/creatures/BallOfSwine';
-import { makeSepsis, makeBurn } from '../src/core/StatusEffect';
+import { makeBurn, makePoison } from '../src/core/combat/StatusEffect';
 import { CompanionSystem } from '../src/systems/CompanionSystem';
 import { MELEE_POINT_BLANK_RANGE } from '../src/systems/CombatSystem';
 import { MIN_STAT_VALUE } from '../src/Player';
@@ -44,6 +44,9 @@ import { SpellSystem } from '../src/systems/SpellSystem';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
 import type { SystemContext } from '../src/systems/GameSystem';
 import type { GroundHazardSource } from '../src/systems/GroundHazardSource';
+
+/** A credited damage-over-time that outlasts every watch here: poison held on far past its usual run. */
+const LASTING_POISON_TICKS = 999999;
 
 /**
  * The one browser global the minimap reaches for when `OffscreenCanvas` is
@@ -72,7 +75,7 @@ const MAP_GENERATION_ATTEMPTS = 20;
  */
 const MAP_OPTIONS = { mapSize: MAP_SIZE, tileHeight: TILE_SIZE } as const;
 /**
- * Long enough for a one-damage-per-two-seconds sepsis tick to finish any
+ * Long enough for a one-damage-per-two-seconds poison tick to finish any
  * ordinary floor-1 mob, with room to spare. The loops below stop on death, so
  * this only bounds a failure.
  */
@@ -127,7 +130,7 @@ const SWARM_SIZE = 3;
 const CAT_STANDOFF_TILES = 3;
 /** Low enough that a single unblocked tick would be visible, high enough not to be a rounding artefact. */
 const SHIELDED_DUMMY_HP = 20;
-/** Several sepsis intervals — one unblocked tick anywhere in there fails the check. */
+/** Several poison intervals — one unblocked tick anywhere in there fails the check. */
 const SHIELDED_TICK_FRAMES = 900;
 /** Where the chasing rat starts: outside claw reach, inside the cat's acquisition range. */
 const CHASER_START_TILES = 5;
@@ -427,12 +430,12 @@ console.log('A status-effect kill is an attributable kill');
   const party = makeParty(new GameMap(MAP_OPTIONS));
   const victim = addMob(party, 'goblin', party.map.startTile.x + 3, party.map.startTile.y);
   const startingHp = victim.hp;
-  victim.applyStatus(makeSepsis(party.human));
+  victim.applyStatus(makePoison(party.human, LASTING_POISON_TICKS));
   const frames = tickUntilDead(victim);
 
-  check(victim.hp === 0, `sepsis alone finishes the mob (${frames} frames)`);
+  check(victim.hp === 0, `poison alone finishes the mob (${frames} frames)`);
   check(victim.justDied, 'a death nobody swung for still latches justDied');
-  check(victim.killedBy === party.human, 'the crawler who applied the sepsis is the killer');
+  check(victim.killedBy === party.human, 'the crawler who applied the poison is the killer');
   check(
     victim.damageTakenBy.get(party.human) === startingHp,
     `every tick lands in the damage ledger (${victim.damageTakenBy.get(party.human) ?? 0}/${startingHp})`,
@@ -452,10 +455,10 @@ console.log('\nThe one boss with its own death path credits the same crawler');
   // The ball is inert until ArenaSystem opens the fight; this harness has no arena.
   if (swine instanceof BallOfSwine) swine.fightStarted = true;
   swine.currentTarget = party.human;
-  swine.applyStatus(makeSepsis(party.cat));
+  swine.applyStatus(makePoison(party.cat, LASTING_POISON_TICKS));
   tickUntilDead(swine);
 
-  check(swine.hp === 0, 'sepsis finishes the ball');
+  check(swine.hp === 0, 'poison finishes the ball');
   check(swine.killedBy === party.cat, 'and credits the crawler whose crown did it');
   check(swine.killType === null, 'without calling a status a punch');
 }
@@ -478,7 +481,7 @@ console.log('\nA damage-over-time tick cannot walk through a boss shield');
    * Stands in for Grimaldi behind his tendrils and Miss Quill behind her
    * capacitor: both refuse damage while the thing guarding them lives.
    *
-   * The shield used to live only on the swung route, so one sepsis proc — which
+   * The shield used to live only on the swung route, so one poison proc — which
    * lands even on a blow the shield swallowed — dissolved the whole "kill the
    * adds first" mechanic, and after the attribution work it would have been
    * paid the kill credit, the XP and the boss chest for doing it.
@@ -504,7 +507,7 @@ console.log('\nA damage-over-time tick cannot walk through a boss shield');
     SHIELDED_DUMMY_HP,
     0,
   );
-  shielded.applyStatus(makeSepsis(party.human));
+  shielded.applyStatus(makePoison(party.human, LASTING_POISON_TICKS));
   check(shielded.statusEffects.length === 0, 'the shield refuses the status, not just its damage');
 
   // Driven straight at the damage door as well, because the refusal above means
@@ -512,7 +515,7 @@ console.log('\nA damage-over-time tick cannot walk through a boss shield');
   // went through.
   shielded.takeDamage(SHIELDED_DUMMY_HP, {
     kind: 'status',
-    effectType: 'sepsis',
+    effectType: 'poison',
     applier: party.human,
   });
   shielded.takeDamageFrom(SHIELDED_DUMMY_HP, party.human, 'melee');
@@ -663,7 +666,7 @@ console.log('\nA boss the party pokes from the corridor and abandons goes back t
     // A clock any ongoing damage could reset is a clock the companion cat's
     // fire rate makes unreachable, and a boss that can be emptied from the
     // corridor is a boss fight with no fight, no intro and no room lock.
-    boss.applyStatus(makeSepsis(party.human));
+    boss.applyStatus(makePoison(party.human, LASTING_POISON_TICKS));
     let sniped = 0;
     for (let frame = 0; frame < EXPECTED_UNENTERED_REGEN_FRAMES * SNIPE_ROUNDS; frame++) {
       if (frame % SNIPE_INTERVAL_FRAMES === 0) {

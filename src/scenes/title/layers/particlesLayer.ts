@@ -14,9 +14,9 @@ import {
   surfaceContext,
   type CanvasSurface,
   releaseSurface,
-} from '../../../core/canvasSurface';
-import { renderQuality } from '../../../core/RenderQuality';
-import { getRenderScale } from '../../../core/Viewport';
+} from '../../../core/rendering/canvasSurface';
+import { renderQuality } from '../../../core/perf/RenderQuality';
+import { getRenderScale } from '../../../core/rendering/Viewport';
 import { mulberry32, subSeed, type Rng } from '../../../sprites/person/rng';
 import { TITLE_INK } from '../../../ui/theme/titleInk';
 import type { TitleClock } from '../titleClock';

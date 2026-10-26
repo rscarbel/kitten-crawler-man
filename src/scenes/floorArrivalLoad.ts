@@ -13,7 +13,7 @@
  * gameplay scene runs them through its `ArrivalLoader`, so a new environment
  * that queues its art and figures the usual way is covered without a line here.
  */
-import { steppedWork, promiseWork, type LoadTask } from '../core/LoadRunner';
+import { steppedWork, promiseWork, type LoadTask } from '../core/perf/LoadRunner';
 import type { GameMap } from '../map/GameMap';
 import {
   environmentPaintDepth,

@@ -14,7 +14,7 @@
 
 import type { PlayedCue } from '../../audio/AudioManager';
 import { soundTraits } from '../../audio/soundTraits';
-import { isPointInWorldView, type VisibleWorldView } from '../../core/visibleWorldView';
+import { isPointInWorldView, type VisibleWorldView } from '../../core/rendering/visibleWorldView';
 import type { Rect } from '../core/geom';
 import type { Ui } from '../core/UiRoot';
 import { drawGlyph } from '../theme/glyphs';

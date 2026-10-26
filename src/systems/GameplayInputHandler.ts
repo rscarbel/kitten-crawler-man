@@ -19,7 +19,7 @@
  * menu.
  */
 
-import { keybindings, HOTBAR_ACTIONS, type GameAction } from '../core/Keybindings';
+import { keybindings, HOTBAR_ACTIONS, type GameAction } from '../core/input/Keybindings';
 
 /** Action callbacks the scene provides to the input handler. */
 export interface GameplayInputActions {

@@ -1,4 +1,4 @@
-import type { StatusEffect } from './core/StatusEffect';
+import type { StatusEffect } from './core/combat/StatusEffect';
 import {
   makeSpeedFizz,
   makeJuggJuice,
@@ -21,7 +21,7 @@ import {
   INCURABLE_STATUSES,
   CURABLE_AILMENT_STATUSES,
   isBloodVomitBoutFrame,
-} from './core/StatusEffect';
+} from './core/combat/StatusEffect';
 import {
   BRASS_BELCH_TEXT,
   BRASS_GULLET_SKILL,
@@ -34,7 +34,7 @@ import {
   QUICK_SERPENT_PRIMED_FRAMES,
   THIRD_EYE_FORESIGHT_COOLDOWN_MS,
   type StatTattooId,
-} from './core/tattoos';
+} from './core/skills/tattoos';
 import { applyRetchPose, retchPoseOf } from './sprites/status/statusBloodVomit';
 import type { StatusMouth } from './sprites/status/statusPaint';
 import {
@@ -43,18 +43,26 @@ import {
   CHILLED_ACTION_SPEED_FACTOR,
   CHILLED_MOVE_SPEED_FACTOR,
   FREEZE_GRACE_FRAMES,
-} from './core/statusTuning';
-import { Inventory } from './core/Inventory';
-import type { ResistanceType } from './core/ItemDefs';
+} from './core/combat/statusTuning';
+import { Inventory } from './core/items/inventory/Inventory';
+import { GearState } from './gear/gearState';
+import {
+  gearMaxHpScale,
+  gearModifiers,
+  gearStatBonus,
+  runEquipChangeHooks,
+  runHurtHooks,
+} from './gear/gearHooks';
+import type { ResistanceType } from './core/items/defs/ItemDefs';
 import { normalize } from './utils';
 import { worldPlate } from './ui/world/worldShapes';
 import { worldText } from './ui/world/worldText';
-import { DRUNK_MELEE_DAMAGE_BONUS } from './core/DrunkEffect';
-import { computeDodgeChance } from './core/dodge';
+import { DRUNK_MELEE_DAMAGE_BONUS } from './core/combat/DrunkEffect';
+import { computeDodgeChance } from './core/combat/dodge';
 import { xpMultiplierForPlayerLevel, type XpDiminishingTier } from './levels/xpDiminishing';
-import { crawlerMaxHp, STAT_POINTS_PER_LEVEL } from './core/crawlerFormulas';
-import { activeDifficultyProfile } from './core/difficultyProfiles';
-import { activeRunStats } from './core/GameStats';
+import { crawlerMaxHp, STAT_POINTS_PER_LEVEL } from './core/party/crawlerFormulas';
+import { activeDifficultyProfile } from './core/difficulty/difficultyProfiles';
+import { activeRunStats } from './core/progression/GameStats';
 import {
   SkillManager,
   cockroachRechargeMs,
@@ -63,15 +71,18 @@ import {
   getSkillDef,
   type CrawlerKind,
   type SkillId,
-} from './core/SkillManager';
-import { CraftSkills } from './core/CraftSkills';
+} from './core/skills/SkillManager';
+import { CraftSkills } from './core/labour/CraftSkills';
 import type {
   FloatingTextOptions,
   FloatingTextRequest,
   FloatingTextStyle,
-} from './core/FloatingText';
-import { hitFlashLayer } from './core/hitFlash';
-import { drawWithSilhouetteLayers, type SilhouetteLayer } from './core/silhouetteComposite';
+} from './core/combat/FloatingText';
+import { hitFlashLayer } from './core/combat/hitFlash';
+import {
+  drawWithSilhouetteLayers,
+  type SilhouetteLayer,
+} from './core/spriteAssets/silhouetteComposite';
 import {
   statusBodyLayers,
   statusFade,
@@ -83,7 +94,7 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from './core/canvasSurface';
+} from './core/rendering/canvasSurface';
 import {
   deferChrome,
   type AboveDarknessDrawer,
@@ -232,6 +243,8 @@ const DENOMINATOR_OFFSET = 30;
 const NUMERATOR_ASYMPTOTE_SLOPE = 3;
 
 const INITIAL_HEALTH_POTIONS = 10;
+/** How solid a crawler hidden from enemies is drawn. */
+const VANISHED_FIGURE_ALPHA = 0.45;
 /** Ceiling on undrained feedback labels, so a scene with no drainer can't leak. */
 const MAX_PENDING_FLOATING_TEXT = 16;
 /** Same, for queued System lines. */
@@ -323,7 +336,6 @@ const MIN_IRON_STOMACH_TIME_SCALE = 0.4;
 /** Tick intervals (in ticks) for each status effect type */
 const BURN_TICK_INTERVAL = 60;
 const POISON_TICK_INTERVAL = 120;
-const SEPSIS_TICK_INTERVAL = 120;
 const MAGIC_BURN_TICK_INTERVAL = 60;
 const ELECTRIFIED_TICK_INTERVAL = 60;
 const SPIT_VENOM_TICK_INTERVAL = 40;
@@ -335,7 +347,6 @@ const STATUS_TICK_DAMAGE = 1;
 const STATUS_DAMAGE_INTERVALS: ReadonlyMap<string, number> = new Map([
   ['burn', BURN_TICK_INTERVAL],
   ['poison', POISON_TICK_INTERVAL],
-  ['sepsis', SEPSIS_TICK_INTERVAL],
   ['magic_burn', MAGIC_BURN_TICK_INTERVAL],
   ['electrified', ELECTRIFIED_TICK_INTERVAL],
   ['spit_venom', SPIT_VENOM_TICK_INTERVAL],
@@ -379,7 +390,7 @@ export function pendingStatusDamage(effects: readonly StatusEffect[], maxHp: num
 export const RESISTED_DAMAGE_FRACTION = 0.5;
 
 /** The status effects a poison resistance blunts. */
-const POISON_RESISTED_EFFECTS: ReadonlySet<string> = new Set(['poison', 'spit_venom', 'sepsis']);
+const POISON_RESISTED_EFFECTS: ReadonlySet<string> = new Set(['poison', 'spit_venom']);
 
 /**
  * Default wading depth, used by every mob. Half a tile puts the surface at about
@@ -630,6 +641,8 @@ export abstract class Player implements AboveDarknessDrawer {
    * and a field initializer cannot see the constructor's config.
    */
   readonly inventory: Inventory;
+  /** What each piece of this crawler's gear remembers: awakening progress, a curse's binding, recharges. */
+  readonly gear = new GearState();
   /** Trained skills. Starts empty — every skill has to be found in the dungeon. */
   readonly skills: SkillManager;
   /**
@@ -705,6 +718,15 @@ export abstract class Player implements AboveDarknessDrawer {
    * harmed. Only the system that shut the door clears it.
    */
   concealed = false;
+
+  /**
+   * Whether enemies can pick this character out at all: not behind a shut
+   * stall door, and not hidden by a kill her gear vanishes her on. Being
+   * unseen is not being unharmable — a blow already swung still lands.
+   */
+  get hiddenFromMobs(): boolean {
+    return this.concealed || this.gear.live.vanished;
+  }
   /** When true, incoming damage is ignored permanently (god mode). */
   godMode = false;
   /** When true, all damage this player deals to mobs is suppressed. */
@@ -851,6 +873,13 @@ export abstract class Player implements AboveDarknessDrawer {
     this.craftSkills = new CraftSkills(config.crawlerKind ?? null);
     this.inventory = new Inventory(config.crawlerKind ?? null);
     this.inventory.equipment.onChange(() => this.onEquipmentChanged());
+    this.inventory.equipment.onChange((change) => {
+      runEquipChangeHooks(this, change);
+      if (change.reason === 'restore') {
+        this.gear.releaseBindsNotWorn(new Set(this.inventory.equipment.equippedIds()));
+      }
+    });
+    this.inventory.equipment.setRemovalLock((id) => this.gear.isBound(id));
     this._maxHpOverride = config.maxHp ?? null;
     this.hp = this.maxHp;
     this._maxHpAtLastSync = this.maxHp;
@@ -870,6 +899,7 @@ export abstract class Player implements AboveDarknessDrawer {
    */
   private effectiveStat(stat: StatName): number {
     let total = this.baseStats[stat] + this.inventory.getEquippedStatBonus()[stat];
+    if (this.isCrawler) total += gearStatBonus(this, stat);
     for (const mod of this.tempStatMods) {
       if (mod.stat === stat) total += mod.delta;
     }
@@ -943,7 +973,9 @@ export abstract class Player implements AboveDarknessDrawer {
    * fixed value to the constructor and keep it.
    */
   get maxHp(): number {
-    const base = this._maxHpOverride ?? crawlerMaxHp(this.baseHpOffset, this.constitution);
+    const base =
+      this._maxHpOverride ??
+      Math.round(crawlerMaxHp(this.baseHpOffset, this.constitution) * gearMaxHpScale(this));
     return Math.max(1, base + this._juggJuiceHpBoost);
   }
 
@@ -967,7 +999,7 @@ export abstract class Player implements AboveDarknessDrawer {
    *
    * Both halves are load-bearing, and they have to mirror. Crediting growth
    * alone would make an equip/unequip round trip a free full heal — put the
-   * Trollskin Shirt on at 2 HP, take it off, walk away at full — while clamping
+   * a Constitution piece on at 2 HP, take it off, walk away at full — while clamping
    * alone would bleed HP away on every gear swap. Mirroring is also what makes
    * Jugg Juice's expiry actually repay the max-HP loan rather than gifting it.
    */
@@ -1074,7 +1106,8 @@ export abstract class Player implements AboveDarknessDrawer {
     // A blow the ward swallowed whole never reached her: no flash, no wound, and
     // no poison or other rider coming in behind it.
     if (soaked <= 0) return false;
-    const unabsorbed = source?.kind === 'mob' ? this.braceWithIronRibs(soaked) : soaked;
+    const braced = source?.kind === 'mob' ? this.braceWithIronRibs(soaked) : soaked;
+    const unabsorbed = this.isCrawler ? runHurtHooks(this, { damage: braced, source }) : braced;
     const hpBeforeBlow = this.hp;
     const remainingHp = Math.max(0, this.hp - unabsorbed);
     this.damageFlash = DAMAGE_FLASH_FRAMES;
@@ -1285,7 +1318,11 @@ export abstract class Player implements AboveDarknessDrawer {
   /** The chance this player has of dodging the next mob attack, 0–1. */
   get dodgeChance(): number {
     if (!this.canDodge) return 0;
-    return computeDodgeChance(this.dexterity + this._luckyDodgeBonus, this.dodgeFlatBonus);
+    const gearDodge = gearModifiers(this).dodgeChance;
+    return computeDodgeChance(
+      this.dexterity + this._luckyDodgeBonus,
+      this.dodgeFlatBonus + gearDodge,
+    );
   }
 
   private rollDodge(): boolean {
@@ -1744,9 +1781,6 @@ export abstract class Player implements AboveDarknessDrawer {
       if (effect.type === 'poison' && elapsed > 0 && elapsed % POISON_TICK_INTERVAL === 0) {
         this.applyStatusTickDamage(effect);
       }
-      if (effect.type === 'sepsis' && elapsed > 0 && elapsed % SEPSIS_TICK_INTERVAL === 0) {
-        this.applyStatusTickDamage(effect);
-      }
       if (effect.type === 'magic_burn' && elapsed > 0 && elapsed % MAGIC_BURN_TICK_INTERVAL === 0) {
         this.applyStatusTickDamage(effect);
       }
@@ -1868,6 +1902,15 @@ export abstract class Player implements AboveDarknessDrawer {
     return false;
   }
 
+  /**
+   * Whether a shield is in this body's hand and ready to turn a shot: carried,
+   * not stowed for a weapon that wants both hands, and not swung out of the
+   * way in a blow. Only the human crawler carries one.
+   */
+  get shieldAtTheReady(): boolean {
+    return false;
+  }
+
   /** Register (or overwrite) a named regen bonus. Value is a multiplier where 1 = no effect; bonuses above 1 stack additively. */
   setRegenModifier(key: string, multiplier: number): void {
     this._regenModifiers.set(key, multiplier);
@@ -1975,11 +2018,7 @@ export abstract class Player implements AboveDarknessDrawer {
   /** Returns the combined HP regen rate multiplier from all equipped gear and active modifiers.
    *  Item modifiers stack multiplicatively; _regenModifiers bonuses (value − 1) stack additively on top. */
   get regenMultiplier(): number {
-    let result = 1;
-    for (const item of this.inventory.equippedItems()) {
-      const m = item.regenMultiplier;
-      if (m !== undefined) result *= m;
-    }
+    let result = this.inventory.equipment.getRegenMultiplier();
     for (const m of this._regenModifiers.values()) {
       result += m - 1;
     }
@@ -2181,6 +2220,13 @@ export abstract class Player implements AboveDarknessDrawer {
       this.allegianceRim !== null;
     const layers = needsComposite ? this.silhouetteLayers(sx, sy, tileSize) : NO_SILHOUETTE_LAYERS;
 
+    // A crawler hidden from enemies is drawn see-through, so the player can
+    // tell at a glance that nothing is coming for her.
+    const vanished = this.gear.live.vanished;
+    if (vanished) {
+      ctx.save();
+      ctx.globalAlpha *= VANISHED_FIGURE_ALPHA;
+    }
     if (layers.length === 0) {
       this.drawSelf(ctx, camX, camY, tileSize);
     } else {
@@ -2195,6 +2241,7 @@ export abstract class Player implements AboveDarknessDrawer {
         this.drawSelf(target, camX, camY, tileSize),
       );
     }
+    if (vanished) ctx.restore();
 
     // Deliberately outside the composite. Anything drawn inside it becomes part
     // of the silhouette every layer is masked by — so flames drawn in there

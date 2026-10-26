@@ -23,7 +23,7 @@ import {
   type PropStatePlan,
 } from './destructiblePropSheets';
 import type { PropSheetPlan } from './propSheetPlan';
-import type { SpriteKey } from '../../core/SpriteLoader';
+import type { SpriteKey } from '../../core/spriteAssets/SpriteLoader';
 
 /** The lamp stays lit at both wear stages; struck, its bulb stutters. */
 const WORK_LAMP_STATES: ReadonlyArray<PropStatePlan> = [

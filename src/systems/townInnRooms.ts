@@ -25,7 +25,7 @@ import {
   ROOM_BOON_DURATION_MINUTES,
   ROOM_BOON_STATUSES,
   type StatusEffect,
-} from '../core/StatusEffect';
+} from '../core/combat/StatusEffect';
 import type { Player } from '../Player';
 import {
   offerUnless,

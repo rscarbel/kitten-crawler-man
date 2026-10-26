@@ -10,8 +10,8 @@
  * party with coin to spare can skip some of the gathering.
  */
 
-import { ITEM_DEF, type ItemId } from '../../../core/ItemDefs';
-import type { BriarHollowState } from '../../../core/briarHollowState';
+import { ITEM_DEF, type ItemId } from '../../../core/items/defs/ItemDefs';
+import type { BriarHollowState } from '../../../core/quests/briarHollowState';
 import type { Player } from '../../../Player';
 import { SOLD_OUT_LABEL, catalogLineRow } from '../../market/vendorMenu';
 import { SHOPS, type CatalogLine, type ShopId } from '../../../economy/shops';

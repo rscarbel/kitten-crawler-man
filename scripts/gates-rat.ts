@@ -44,7 +44,7 @@ import {
   RAT_LOCOMOTION_STATES,
   RAT_STATES,
 } from '../src/sprites/ratSprite.js';
-import { progressFrameIndex } from '../src/core/SpriteRenderer.js';
+import { progressFrameIndex } from '../src/core/spriteAssets/SpriteRenderer.js';
 import { asGameContext } from './nodeGameContext.js';
 
 /** Alpha above which a pixel counts as painted. */

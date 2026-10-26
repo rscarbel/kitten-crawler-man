@@ -153,8 +153,8 @@ const LOOK = humanLookFlag();
 const WEARABLE = humanItemGarments().filter((garment) => !garment.base);
 
 /**
- * The outfit to paint and gate him in: `--gear=human_cloak+human_gauntlet`,
- * garment ids joined by `+`, or `bare`. Absent is his default outfit. Each
+ * The outfit to paint and gate him in: `--gear=<id>+<id>`, the ids of
+ * garments an item paints on him joined by `+`, or `bare`. Absent is his default outfit. Each
  * outfit is a figure of its own, so each is gated on its own.
  */
 function parseOutfit(look: HumanLook): Outfit<'human'> {
@@ -178,16 +178,19 @@ const OUTFIT = parseOutfit(LOOK);
 const FIGURE = humanFigureWearing(LOOK, OUTFIT);
 
 /**
- * The outfits a run gates. A named `--gear` is gated alone. Otherwise three
- * are: the default the rows were authored in; bare, which is how every new
- * game's human crawler is drawn until he finds his shirt; and every piece at once,
- * where the gear crowds the cell the most. Each is held to every gate —
- * most of the time goes to the pixel gates, which are the ones an outfit can
- * turn red, so a shorter list for the extra outfits would save little.
+ * The outfits a run gates. A named `--gear` is gated alone. Otherwise the
+ * default, bare and every piece at once, where the gear crowds the cell the
+ * most, each once: outfits that paint the same figure are gated as one. Each
+ * is held to every gate — most of the time goes to the pixel gates, which are
+ * the ones an outfit can turn red, so a shorter list for the extra outfits
+ * would save little.
  */
 function gatedOutfits(look: HumanLook): readonly Outfit<'human'>[] {
   if (GEAR_FLAG !== null) return [parseOutfit(look)];
-  return [defaultOutfitOf(look), outfitOf(look, []), outfitOf(look, WEARABLE)];
+  const candidates = [defaultOutfitOf(look), outfitOf(look, []), outfitOf(look, WEARABLE)];
+  return candidates.filter(
+    (outfit, index) => candidates.findIndex((other) => other.key === outfit.key) === index,
+  );
 }
 
 function parseMode(): Mode {

@@ -1,8 +1,8 @@
 import { TILE_SIZE } from '../../core/constants';
-import { isRecord } from '../../core/guards';
-import { getSpriteDef } from '../../core/SpriteLoader';
-import { drawSpriteKey } from '../../core/SpriteRenderer';
-import { viewportHeight, viewportWidth } from '../../core/Viewport';
+import { isRecord } from '../../core/util/guards';
+import { getSpriteDef } from '../../core/spriteAssets/SpriteLoader';
+import { drawSpriteKey } from '../../core/spriteAssets/SpriteRenderer';
+import { viewportHeight, viewportWidth } from '../../core/rendering/Viewport';
 import { BallOfSwine } from '../../creatures/BallOfSwine';
 import type { Mob } from '../../creatures/Mob';
 import type { ArenaExterior } from '../../map/DungeonGenerator';

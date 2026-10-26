@@ -9,9 +9,9 @@ import {
   surfaceContext,
   type CanvasSurface,
   releaseSurface,
-} from '../../../core/canvasSurface';
-import { canvasGeneration } from '../../../core/canvasRecovery';
-import { renderQuality } from '../../../core/RenderQuality';
+} from '../../../core/rendering/canvasSurface';
+import { canvasGeneration } from '../../../core/rendering/canvasRecovery';
+import { renderQuality } from '../../../core/perf/RenderQuality';
 import { hashUnit } from '../../../sprites/flameStamps';
 import { mulberry32 } from '../../../sprites/person/rng';
 import { TITLE_INK, titleRgba } from '../../../ui/theme/titleInk';

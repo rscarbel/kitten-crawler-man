@@ -2,9 +2,9 @@ import { Mob, type LootDrop, type PlayerDamageType } from './Mob';
 import type { Player } from '../Player';
 import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Point } from '../map/roomDoorways';
-import type { SpatialGrid } from '../core/SpatialGrid';
-import type { StatusEffect } from '../core/StatusEffect';
-import { timeFrameIndex } from '../core/SpriteRenderer';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
+import type { StatusEffect } from '../core/combat/StatusEffect';
+import { timeFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { GoblinPassiveAnimator } from '../sprites/goblinSprite';
 import {
   GOBLIN_GUARD_EYES,

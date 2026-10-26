@@ -1,5 +1,5 @@
 import { crawlerName, PLAYER_CHARACTERS } from '../../characters/characters';
-import type { CrawlerKind } from '../../core/SkillManager';
+import type { CrawlerKind } from '../../core/skills/SkillManager';
 import type { JsonObject } from './json';
 import { crawlerKindNamed } from './liveState';
 import type { CrawlerName, LiveInput } from './types';
@@ -41,7 +41,7 @@ export class PlayerProfileTracker {
   private stockpilingMoments = 0;
   private coinsGained = 0;
   private purchases = 0;
-  private boxesOpened = 0;
+  private chestsOpened = 0;
   private systemChats = 0;
   private mordecaiChats = 0;
   private adviceGiven = 0;
@@ -76,8 +76,8 @@ export class PlayerProfileTracker {
     this.purchases++;
   }
 
-  recordBoxOpened(): void {
-    this.boxesOpened++;
+  recordChestOpened(): void {
+    this.chestsOpened++;
   }
 
   recordChat(characterName: string): void {
@@ -137,7 +137,7 @@ export class PlayerProfileTracker {
       lootGreed: {
         coinsPerMinute: round2(this.coinsGained / minutes),
         purchases: this.purchases,
-        boxesOpened: this.boxesOpened,
+        chestsOpened: this.chestsOpened,
       },
       exploration: {
         roomsSeen: this.roomsSeen.size,

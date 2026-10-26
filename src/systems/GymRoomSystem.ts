@@ -1,5 +1,5 @@
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
-import { timeFrameIndex } from '../core/SpriteRenderer';
+import { timeFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { WOOD_SMASHING_SOUNDS, type SoundId } from '../audio/sounds';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';

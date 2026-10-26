@@ -8,7 +8,7 @@
 import { inset, splitH, type Rect } from '../../ui/core/geom';
 import type { Surface, Ui } from '../../ui/core/UiRoot';
 import { ITEM_ICONS } from '../../ui/icons/itemIcons';
-import type { ItemId } from '../../core/ItemDefs';
+import type { ItemId } from '../../core/items/defs/ItemDefs';
 import { button } from '../../ui/widgets/button';
 import { choiceModalSurface, type ChoiceModalConfig } from '../../ui/widgets/choiceModal';
 import { costChips, measureCostChips, type CostEntry } from '../../ui/widgets/costChips';

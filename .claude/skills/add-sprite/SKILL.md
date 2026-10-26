@@ -94,20 +94,20 @@ look at cannot be different art.
 ## Pipeline
 
 1. **The painter and its layout.** For environment art this is a `PropSheetPlan` in `src/sprites/sheets/`, and the game paints it — see "Environment art is painted, not fetched" above; the `scripts/generate-*` entry points bake the same plans into `preview/props/` for review and never write into `src/images/`. For the remaining fetched sheets, a generator script under `scripts/` uses the `canvas` package (`createCanvas`) to draw each frame, tiles them into a grid (one row per state) and writes a PNG into `src/images/<category>/`. Either way the geometry constants — `FRAME_W`, `FRAME_H`, `TILE_SCALE`, `TILE_X`, `TILE_Y` — **must match the manifest entry**, and for a plan that agreement is proved by `propSheetPlanMismatches` rather than trusted.
-2. **Manifest entry** in that category's `manifest.json`. Shape (`SpriteManifestEntry` in `src/core/SpriteLoader.ts`):
+2. **Manifest entry** in that category's `manifest.json`. Shape (`SpriteManifestEntry` in `src/core/spriteAssets/SpriteLoader.ts`):
    - `path`, `frameWidth`, `frameHeight`
    - `tileX`/`tileY` — top-left of the logical tile within each frame (anchor offset)
    - `tileScale` — tile size the art was drawn at (runtime scales by `tileSize / tileScale`)
    - `states: { <name>: { row, colOffset?, frameCount } }` — standard state names: `walk`, `idle`, `attack`, plus `gore_*` colOffset states for body-part gore
    - optional `tileTypeId`/`blockedRegions` for environment collision
-3. **Loader**: `src/core/SpriteLoader.ts` imports every category `manifest.json` and merges them; `SpriteKey` and `SpriteStates` are **compile-time types derived from the JSON**, so a new manifest key is immediately type-safe. A brand-new manifest _file_ (new category, or a boss with its own manifest) must be added to the import list at the top of `SpriteLoader.ts`. `loadSprites()` preloads everything; missing files are skipped silently — a blank sprite at runtime usually means a path typo.
-4. **Draw wrapper**: `src/sprites/<camelName>Sprite.ts` exporting `draw<PascalName>Sprite(...)`. It picks a state from animation flags and calls `drawSpriteKey(ctx, key, state, frame, sx, sy, tileSize, { flipX, alpha, rotation })` from `src/core/SpriteRenderer.ts`. Frame helpers: `walkFrameIndex(walkFrame, count)`, `progressFrameIndex(progress, count)`, `timeFrameIndex(...)`.
+3. **Loader**: `src/core/spriteAssets/SpriteLoader.ts` imports every category `manifest.json` and merges them; `SpriteKey` and `SpriteStates` are **compile-time types derived from the JSON**, so a new manifest key is immediately type-safe. A brand-new manifest _file_ (new category, or a boss with its own manifest) must be added to the import list at the top of `SpriteLoader.ts`. `loadSprites()` preloads everything; missing files are skipped silently — a blank sprite at runtime usually means a path typo.
+4. **Draw wrapper**: `src/sprites/<camelName>Sprite.ts` exporting `draw<PascalName>Sprite(...)`. It picks a state from animation flags and calls `drawSpriteKey(ctx, key, state, frame, sx, sy, tileSize, { flipX, alpha, rotation })` from `src/core/spriteAssets/SpriteRenderer.ts`. Frame helpers: `walkFrameIndex(walkFrame, count)`, `progressFrameIndex(progress, count)`, `timeFrameIndex(...)`.
 
 ## Conventions
 
 - Manifest keys are `snake_case` (`goblin_tent_a`); sprite modules are `src/sprites/<camelName>Sprite.ts` exporting `draw<PascalName>Sprite`.
 - Multi-layer sprites (e.g. goblin body + weapon overlay): separate manifest keys drawn at the same frame — see `src/sprites/goblinSprite.ts`.
-- **Every off-screen surface has an owner.** Allocate with `allocCanvas(owner, w, h)` (or `allocReadableCanvas` for one read back with `getImageData`) from `src/core/canvasSurface.ts`, naming the specific `SurfaceOwner` the pixels belong to (add one to `SURFACE_OWNERS` for a new pool). Resize with `resizeSurface`, never by assigning `width`/`height`, and call `releaseSurface` on every eviction and drop path so the pixels go back at once. A new cache gets a byte budget; `RecentSurfaceCache` (`src/core/recentSurfaceCache.ts`) is the ready-made LRU that never lets go of what was just drawn. The owners, their limits and how to measure them are in `docs/asset-management.md`.
+- **Every off-screen surface has an owner.** Allocate with `allocCanvas(owner, w, h)` (or `allocReadableCanvas` for one read back with `getImageData`) from `src/core/rendering/canvasSurface.ts`, naming the specific `SurfaceOwner` the pixels belong to (add one to `SURFACE_OWNERS` for a new pool). Resize with `resizeSurface`, never by assigning `width`/`height`, and call `releaseSurface` on every eviction and drop path so the pixels go back at once. A new cache gets a byte budget; `RecentSurfaceCache` (`src/core/rendering/recentSurfaceCache.ts`) is the ready-made LRU that never lets go of what was just drawn. The owners, their limits and how to measure them are in `docs/asset-management.md`.
 - Reference shape (`src/sprites/ratSprite.ts`): attack anim → `attack` state via `progressFrameIndex`; moving → `walk` via `walkFrameIndex`; else `idle` frame 0. `flipX = facingX < 0`.
 
 ## Painted figures and the frame cache
@@ -121,7 +121,7 @@ Creatures are not sheets at all: each is a `FigureDef` (`src/sprites/figure/figu
 - **Attachments on the human rig.** A humanoid built on the human rig grows extra anatomy or clothing (wings, a tail, horns, trousers) through `BipedAttachments` (`biped/figure.ts`, passed as `BipedComposeOptions.attachments`), so the parts share his silhouette outline and cast shadows instead of reading as stickers. The Incubus (`incubusArt.ts`, `incubusFigure.ts`) is the worked example; see the `bipedal-figure` skill.
 - **`prewarmFigureState(def, state, frameLimit?)`.** `frameLimit` warms only a row's first frames — a blow's wind-up up to its impact frame — so the rest can bake while those play. Repeated requests for the same row merge to the larger limit.
 - **The cache caps are tunable numbers, not platform limits.** `CACHE_BUDGET_MEGABYTES` (80), the 24 MB per-figure default, the human's 28, the cat's 28 and the held-art cache's `HELD_ART_BUDGET_MEGABYTES` (4) were chosen to catch leaks and to stay far below the old sprite-sheet era (about 800 MB decoded). None is a device ceiling. When a figure genuinely needs more room, measure the need (G9b for the human, cat G9 and `bench:turn-residency` for the cat), raise its number to that measurement with a little slack, and say why in the constant's JSDoc — never raise one to make a red gate pass without the measurement.
-- **Held item art has its own cache.** A held visual (`src/sprites/held/`) is not part of any figure: `drawHeldVisual` in `heldVisualCache.ts` draws it at a socket transform from pictures keyed by look id × on-screen angle step (`AXIS_ANGLE_STEPS`, 32) × foreshortening step (`FORESHORTENING_STEPS`, 4) × flat/edge-on × mirrored × reversed × lit/shaded × phase. Each picture is painted already turned to its step (so the key light falls correctly for that angle) and cropped to its ink; the blit turns and stretches only the residue, so a swing never visibly snaps. Least-recently-drawn pictures go first past `HELD_ART_BUDGET_MEGABYTES`; it survives a canvas recovery. Measured: the Fury of Taranis in every look it has (3072 pictures, three crackle phases) is 5.4 MB at cell density, 0.5 s to paint in node; the common subset (lit, flat, one handedness) about 0.67 MB. Painting at twice the cell density measured 20.9 MB with no visible difference at the tile, so `HELD_ART_SUPERSAMPLE` is 1. `measureHeldVisualSet(def)` reports one look's whole set; `heldVisualCacheBytes()` / `heldVisualCacheCount()` what is resident. `paintHeldVisual` (`heldPaint.ts`) is the uncached path, used at bake time and for icons.
+- **Held item art has its own cache.** A held visual (`src/sprites/held/`) is not part of any figure: `drawHeldVisual` in `heldVisualCache.ts` draws it at a socket transform from pictures keyed by look id × on-screen angle step (`AXIS_ANGLE_STEPS`, 32) × foreshortening step (`FORESHORTENING_STEPS`, 4) × flat/edge-on × mirrored × reversed × lit/shaded × phase. Each picture is painted already turned to its step (so the key light falls correctly for that angle) and cropped to its ink; the blit turns and stretches only the residue, so a swing never visibly snaps. Least-recently-drawn pictures go first past `HELD_ART_BUDGET_MEGABYTES`; it survives a canvas recovery. Measured: the Stormcaller in every look it has (3072 pictures, three crackle phases) is 6.7 MB at cell density, about 2 s to paint in node; only the looks actually drawn are ever baked. Painting at twice the cell density measured 20.9 MB with no visible difference at the tile, so `HELD_ART_SUPERSAMPLE` is 1. `measureHeldVisualSet(def)` reports one look's whole set; `heldVisualCacheBytes()` / `heldVisualCacheCount()` what is resident. `paintHeldVisual` (`heldPaint.ts`) is the uncached path, used at bake time and for icons.
 - **The crawlers hold every view warm.** The human and the cat are drawn through one facing model (`src/sprites/facingView.ts`: eight 45° sectors, five views, a hysteresis margin), and each holds the rows a turn changes warm in every view they are drawn in, for as long as they are on screen: the human's `residentViewSpans(set)` in `humanSprite.ts` for the motion set in his hand (every always-drawn row whole, every opening blow to its impact frame; a weapon out swaps the bare-handed rows for its own) and the cat's `RESIDENT_VIEW_ROWS` in `catSprite.ts` (walk, idle, swipe and cast in every view). Both are held by a `ResidentRows` (`src/sprites/figure/residentRows.ts`) from the crawler's own draw function, on the cache's clock: every draw touches each held row and re-queues any that is cold. It runs from the draw path, not a tick, because a world halted under a menu keeps drawing but stops ticking, and a tick-paced re-ask let the sweep take the far views during a long menu; it also notices a flushed cache on the next draw. Without it the idle sweep releases a view he has not faced for its release window, and the turn back into it bakes on the render path. Only the view faced and its two neighbours was tried and rejected: a keyboard turns a crawler a quarter or a half turn in one tick, and a half turn from head-on lands on the away view, which is never a neighbour. Measured headlessly by `npm run bench:turn-residency` (real cache, node bakes, about three times Chrome's cost) after a 12 s run one way and a snap turn, at 60 Hz:
 
   | the human, full bake           | nothing held            | view and neighbours held | every view held |
@@ -294,39 +294,18 @@ default.
 ## The cat's garments
 
 Everything the cat wears is a `GarmentDef` (`src/sprites/garments/cat/`): her
-coat (`cat_coat`, the base garment that paints every piece of her fur), the
-Eyes of Splatter (`cat_shades`), the crown, the kettle helm, the slate
-butterfly talisman, the fae scale crupper, the bracelet of DEX, and the
-armour and clothes the human also wears in his own cut — `cat_trollskin_shirt`,
-`cat_gambeson`, `cat_bracers`, `cat_boots` and `cat_bigboi_boxers`. The shirt
-and gambeson share `torsoCover.ts`, which clips a cover to her barrel and
-chest in each view; the cloth garments take their fills and shading from
-`clothInk.ts`, the metal ones from `metalInk.ts`; the hats fit themselves to
-her skull through `headwear.ts`. Her anatomy (`catArt.ts`) never paints
-fur itself: it hands each piece to a `CatDressing` with a part frame
+coat (`cat_coat`, the base garment that paints every piece of her fur) and
+whatever she puts on over it, registered as a `CatWornGarmentId` (none is
+painted yet, so that union is empty). Her anatomy (`catArt.ts`) never
+paints fur itself: it hands each piece to a `CatDressing` with a part frame
 (`catParts.ts`), and every garment covering that part paints there, so later
 pieces cover it like fur. `setOutfit('cat', garments)` (`src/sprites/outfits.ts`)
 dresses her sprite; the figure id is `cat:<look id>` bare, else `cat:<look id>:<sorted garment ids>`.
 An item's `look` in `ItemDefs.ts` names the garment. Gate:
 `npm run gates:equipment -- --item=<item or garment id>` (E5, the envelope).
-
-How the garments read at the 32 px tile (renders in `preview/cat-garments/`):
-
-- **Every garment is named and placed right**: crown on her head, helm on her
-  head with the ears hidden, a charm at her throat, scale armour over her rump,
-  a gold band on her right foreleg. Each stays on her own side facing west.
-- **The talisman reads as a bow, not a butterfly.** The charm is about 5×3 px
-  head-on; at that size two wing lobes and a pinch are all a butterfly can be,
-  whatever the wing size, body line, antennae or slate.
-- **The bracelet is about 3×2 px** on a leg 2–3 px wide: it reads as a band
-  on the right foreleg, and small.
-- **The crupper reads as cloth from far off**: the scales are one or two
-  pixels. Head-on only her hips show it; a full head-on skirt reads as a
-  cushion she sits on.
-- **The kettle helm's ear pockets read as "a hat with ears"** to a viewer who
-  is not told it is made for a cat; they are the cat-shaped part of it.
-- **Lying down**, both hats are turned back against her head's tilt
-  (`lyingTipBack`): turned with her head they cover her face.
+At the 32 px tile a garment is a patch of a few pixels on her: it reads by a
+clean colour against her coat and a darker edge where it ends, and it stays on
+her own side facing west.
 
 ## What the cat holds: sockets, her tool swing and her jaws
 
@@ -368,9 +347,9 @@ grip she uses, so the tool tiers need no second definition.
   swing. `carry_walk` and `carry_idle` in every view: jaws a little open, head up,
   ears forward. `CatPlayer.playWorkSwing` plays her tool's swing (a pick at
   stone, a chop at anything else, the swipe bare-pawed); a thing in her jaws
-  comes from `setMouthCarry` or from her `Mouth:Held` item when its look is a
-  `mouthCarry` one, or from the quest item in her quest slot when it names
-  `carriedInJaws` (the prison key, Tikka's blueprints).
+  comes from `setMouthCarry`, or from the quest item in her quest slot when it
+  names `carriedInJaws` (the prison key, Tikka's blueprints). She has no mouth
+  equipment slot.
 - **Memory and warmth.** Those 16 rows are not in `PREWARMED_ROWS`:
   `HELD_ROWS` in `catSprite.ts` is warmed when the hold begins, the view she
   faces first, and while she holds something her resident set swaps

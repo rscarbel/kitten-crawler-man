@@ -4,8 +4,8 @@
  */
 
 import type { IllustrationRect } from './illustration';
-import { getSpriteDefByKey } from '../../../core/SpriteLoader';
-import { drawSprite } from '../../../core/SpriteRenderer';
+import { getSpriteDefByKey } from '../../../core/spriteAssets/SpriteLoader';
+import { drawSprite } from '../../../core/spriteAssets/SpriteRenderer';
 import { BUILD_ROWS, humanRowOf } from '../../../sprites/art/humanFigure';
 import { emptyHandedHumanFigure } from '../../../sprites/humanSprite';
 import { drawFigureCached } from '../../../sprites/figure/figureFrameCache';

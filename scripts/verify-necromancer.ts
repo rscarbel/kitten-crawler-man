@@ -19,8 +19,8 @@
 import { gameContext } from './nodeGameContext';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
 import { EventBus } from '../src/core/EventBus';
-import { createBriarHollowState } from '../src/core/briarHollowState';
-import type { CrawlerKind } from '../src/core/SkillManager';
+import { createBriarHollowState } from '../src/core/quests/briarHollowState';
+import type { CrawlerKind } from '../src/core/skills/SkillManager';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import type { Mob } from '../src/creatures/Mob';

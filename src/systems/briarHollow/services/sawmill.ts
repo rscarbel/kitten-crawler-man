@@ -17,7 +17,7 @@ import type { AudioManager } from '../../../audio/AudioManager';
 import type { SoundId } from '../../../audio/sounds';
 import { TILE_SIZE } from '../../../core/constants';
 import type { EventBus } from '../../../core/EventBus';
-import { ITEM_DEF } from '../../../core/ItemDefs';
+import { ITEM_DEF } from '../../../core/items/defs/ItemDefs';
 import type { BriarHollowSite } from '../../../map/overworld/briarHollowSite';
 import { BUILD_ROWS } from '../../../sprites/art/humanFigure';
 import { worldBar } from '../../../ui/world/worldShapes';

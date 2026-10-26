@@ -60,11 +60,23 @@ Entry shape:
 - **Size:** S
 - **Found:** 2026-10-23, moving the biped rig's look into `HumanLook`.
 
+## Town and interiors
+
+### Buildings are identified by their display name
+
+- **Where:** `PlannedBuildingName` (`src/map/town/townPlan.ts`); `INTERIOR_BY_NAME` (`GameMap`); `BUILDING_OCCUPANTS` (`InteriorOccupantSystem`); `INTERIOR_SERVICES` (`townServices`); `TownMemory` room and prop keys; `musicBackfill`'s remembered buildings; `RENAMED_BUILDINGS` and `RENAMED_INTERIOR_PROPS` (`TownMemory`). Also the positional prop ids built by `stableInteriorPropId` (`` `${propId}@${x},${y}` ``).
+- **Problem:** a building's player-facing name ("The Barracks", "Old Hilda's Cottage") is also its identity. It is repeated as a string literal in a dozen or more files per building, and it is the key saved data is stored under. Renaming the text therefore changes the identity, which is why alias maps from old names to new ones exist. Interior props without an explicit id are keyed by their tile, so moving one forgets its saved state.
+- **Cost:** every rename is a cross-cutting edit with a save break or a new alias entry. A typo in one literal silently detaches that system from the building. Display text can't be changed freely or localised.
+- **Better shape:** a stable building id (a slug union) as the only key across layout, occupants, services, memory and saves, with the display name as data on the building's definition. Interior props keyed by stable ids instead of tile positions.
+- **Until then:** refer to a building through its name constant, never a fresh string literal. Don't add entries to the rename alias maps; give a moved prop an explicit id instead.
+- **Size:** L
+- **Found:** 2026-10-26, planning the floor 3 copyright rework (club and cottage renames).
+
 ## Rendering and memory
 
 ### The game's memory tally misses about 40% of what Chrome counts
 
-- **Where:** `surfaceTallies()` in `src/core/canvasSurface.ts`, `src/dev/perfMemory.ts`.
+- **Where:** `surfaceTallies()` in `src/core/rendering/canvasSurface.ts`, `src/dev/perfMemory.ts`.
 - **Problem:** the tally counts canvas pixels the game allocated, decoded audio and the JS heap. It doesn't count GPU-side copies, the compositor or decoded images held by the browser.
 - **Cost:** in the siege the tally read about 725 MB while Chrome reported 1.2 GB for the tab. Budgets tuned against the tally leave less headroom than they appear to.
 - **Better shape:** keep the tally, but tune budgets against measured browser totals: Chrome's Task Manager, and `performance.measureUserAgentSpecificMemory` where it is available.
@@ -143,11 +155,31 @@ Entry shape:
 - **Size:** M
 - **Found:** 2026-10-24, incubus idle stillness on the shared biped painter.
 
+### A base belt stacks over every worn shirt-slot garment
+
+- **Where:** `RYAN_BELT` in `src/sprites/garments/human/ryanChinos.ts` (layer `outer`), `GARMENT_LAYERS` in `src/sprites/garments/garmentDef.ts`, the id tie-break in `outfitOf` (`src/sprites/garments/outfit.ts`).
+- **Problem:** the belt has to paint over his chinos, which share its `over` layer and sort after it by id, so it sits on `outer`. Every shirt-slot garment (apron, vest, quilted vest) is also `outer`, and `human_*` sorts before `ryan_belt`, so his belt paints over their hips skirts.
+- **Cost:** stacking within a layer is decided by id spelling, so a garment's place in the outfit depends on its name; a belted coat today is an accident.
+- **Better shape:** let a base garment order its own pieces (or give fastenings their own layer between `over` and `outer`) so stacking never falls to the id tie-break between garments that overlap.
+- **Until then:** don't rename garment ids to win a tie-break.
+- **Size:** S.
+- **Found:** 2026-10-26, painting the human's shirt-slot gear.
+
+### G17 reads a sleeved far forearm through the sleeve roll's darkness
+
+- **Where:** the G17 limb-form check run by `scripts/render-human.ts`; `withDeepShade` in `src/sprites/garments/human/torsoCover.ts`; the sleeve roll painted from `sleevesOf` in `src/sprites/garments/outfit.ts`.
+- **Problem:** at the 32 px tile, the cross-sections of the far forearm nearest the elbow blend in pixels from the pushed-up sleeve roll. Dave's far forearm under a sleeved coat clears the threshold only because the roll is dark: the Lucky Hoodie reads 30.0 and the Sequin Tailcoat 30.4 against a bar of 30, and `withDeepShade` darkens coat ramps toward the jacket crevice partly to keep that margin.
+- **Cost:** a new sleeved garment in a lighter cloth on Dave is likely to fail G17 for a reason that has nothing to do with the forearm's own shading, and the easy response is to darken cloth that should not be dark.
+- **Better shape:** have G17 sample the forearm's form clear of the sleeve roll (excluding the roll's footprint, or measuring from the wrist to a set share below the elbow) so the reading belongs to the limb.
+- **Until then:** don't lower the G17 bar or exempt garments; if a sleeved garment fails on Dave's far forearm, check the roll's contribution before reshading the cloth.
+- **Size:** S.
+- **Found:** 2026-10-26, painting the human's sleeved coats.
+
 ## Shared types
 
 ### Tile geometry types are declared five times, and the shared one lives in the town plan
 
-- **Where:** `TileRect` in `src/map/town/townPlan.ts`, `src/map/pastSafeRoom.ts`, `src/systems/briarHollow/questGuidance.ts`, `src/creatures/fairies/fairyRefuge.ts` and `src/systems/bossRooms/bossRoomLayout.ts`; `TilePoint` in `townPlan.ts`, `bossRoomLayout.ts`, `src/map/bigTopMazeDecor.ts`, `src/systems/dungeon/dungeonEmitters.ts`, `src/core/SavedWorld.ts`, `src/ai/actions/world.ts` and `src/dev/perfWalk.ts`.
+- **Where:** `TileRect` in `src/map/town/townPlan.ts`, `src/map/pastSafeRoom.ts`, `src/systems/briarHollow/questGuidance.ts`, `src/creatures/fairies/fairyRefuge.ts` and `src/systems/bossRooms/bossRoomLayout.ts`; `TilePoint` in `townPlan.ts`, `bossRoomLayout.ts`, `src/map/bigTopMazeDecor.ts`, `src/systems/dungeon/dungeonEmitters.ts`, `src/core/save/SavedWorld.ts`, `src/ai/actions/world.ts` and `src/dev/perfWalk.ts`.
 - **Problem:** the same tile rectangle and point are redeclared per feature, and code with nothing to do with a town (`WorldResidency`, and dozens of files under `src/` and `scripts/`) imports them from the town plan because it is the most complete copy.
 - **Cost:** a floor-agnostic system depends on the town generator's module, and the copies can drift (some fields are `readonly`, some not).
 - **Better shape:** one `src/map/tileGeometry.ts` holding `TilePoint` and `TileRect`, imported everywhere; the feature modules drop their copies.

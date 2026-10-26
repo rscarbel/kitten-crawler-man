@@ -2,7 +2,7 @@ import type { Player } from '../Player';
 import type { EyePlacement } from '../sprites/eyePlacement';
 import { BOSS_BLAST_DAMAGE_SCALE, Mob, type LootDrop, type PlayerDamageType } from './Mob';
 import { MAX_MOB_CULL_MARGIN_TILES } from '../core/constants';
-import { makeStuck } from '../core/StatusEffect';
+import { makeStuck } from '../core/combat/StatusEffect';
 import { drawDangerCone } from '../sprites/dangerTelegraph';
 import { SKELETON_LORD_BODY_PART_KEY, drawSkeletonLordSprite } from '../sprites/skeletonSprite';
 import { skeletonEyePlacement } from '../sprites/art/skeletonFigure';
@@ -12,7 +12,6 @@ import {
   prewarmSoulBoltCast,
 } from '../sprites/skeletonEffectsSprite';
 import { SOUL_BOLT_CAST_FRAMES, soulBoltReleaseFrame } from '../sprites/skeletonTiming';
-import { maybeDropSkillBook } from './skillBookDrop';
 import type { SkeletonShot } from '../systems/SkeletonProjectileSystem';
 
 /**
@@ -583,12 +582,9 @@ export class SkeletonLord extends Mob {
   }
 
   /**
-   * Boss-tier loot.
-   *
-   * There is no rarity model in this game, so "high quality" means a curated
-   * handful of the strong consumables plus the level-scaled coins the base class
-   * already rolls. The night-vision book is the thematic one: he is the thing
-   * that hunts by green light in the dark.
+   * Boss-tier consumables: a curated handful of the strong potions on top of
+   * the level-scaled coins the base class rolls. His gear comes from the boss
+   * roll in `gearPools.ts`, not from this table.
    */
   protected override rollLootItems(killer: Player | null): LootDrop['items'] {
     const items = super.rollLootItems(killer);
@@ -601,7 +597,6 @@ export class SkeletonLord extends Mob {
     if (this.mobLevel >= LOOT_TIER_THREE_LEVEL) {
       items.push({ id: 'stat_boost_potion', quantity: 1 });
     }
-    maybeDropSkillBook(items, 'skill_book_night_vision');
     return items;
   }
 

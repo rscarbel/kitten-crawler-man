@@ -37,7 +37,10 @@ import {
   readSheetCell,
   type BlockedRegion,
 } from './gates.js';
-import type { SpriteManifestEntry, SpriteStateDef } from '../../src/core/SpriteLoader.js';
+import type {
+  SpriteManifestEntry,
+  SpriteStateDef,
+} from '../../src/core/spriteAssets/SpriteLoader.js';
 import {
   BUILDING_IDLE_STATE,
   BUILDING_LIFE_STATE,

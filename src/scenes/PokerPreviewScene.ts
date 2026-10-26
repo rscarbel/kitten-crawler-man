@@ -17,8 +17,8 @@
  */
 
 import { crawlerName } from '../characters/characters';
-import { setViewportSize, viewportHeight, viewportWidth } from '../core/Viewport';
-import { settings } from '../core/Settings';
+import { setViewportSize, viewportHeight, viewportWidth } from '../core/rendering/Viewport';
+import { settings } from '../core/input/Settings';
 import { TILE_SIZE } from '../core/constants';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';

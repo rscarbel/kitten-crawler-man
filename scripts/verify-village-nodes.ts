@@ -15,9 +15,9 @@
  */
 
 import { TILE_SIZE } from '../src/core/constants';
-import { ASSET_GROUPS } from '../src/core/assetGroups';
-import { createBriarHollowState, type HarvestNodeState } from '../src/core/briarHollowState';
-import { getManifestEntry } from '../src/core/SpriteLoader';
+import { ASSET_GROUPS } from '../src/core/spriteAssets/assetGroups';
+import { createBriarHollowState, type HarvestNodeState } from '../src/core/quests/briarHollowState';
+import { getManifestEntry } from '../src/core/spriteAssets/SpriteLoader';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { GameMap } from '../src/map/GameMap';

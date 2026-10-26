@@ -1484,6 +1484,8 @@ const CLAW_COUNT = 4;
 const TOE_COUNT = 3;
 const TOE_LINE_ALPHA = 0.65;
 const CLAW_ALPHA = 0.95;
+/** Claws out less than this are drawn sheathed. */
+const SHEATHED_CLAW = 0.02;
 const PAW_ANKLE_SHADE_ALPHA = 0.42;
 /** How far the toes bulge past the ankle's width. */
 const PAW_TOE_BULGE = 0.3;
@@ -1537,7 +1539,7 @@ function drawPaw(
   const sized = scale * look.proportions.pawScale;
   ctx.scale(sized, sized);
 
-  if (claw > 0.02 && !closed) drawClaws(ctx, look, claw);
+  if (claw > SHEATHED_CLAW && !closed) drawClaws(ctx, look, claw);
 
   const pawCoat = look.coat.headOn.paw;
   const pawFur: FurPart = {
@@ -1556,6 +1558,7 @@ function drawPaw(
     side: legSide,
     radiusX: PAW_RX,
     radiusY: PAW_RY,
+    claw: closed || claw <= SHEATHED_CLAW ? 0 : claw,
     shade,
     fur: pawFur,
     envelope: pawFur.outline,
@@ -1592,23 +1595,52 @@ function drawPaw(
   ctx.restore();
 }
 
+/** One claw of a forepaw, in the paw's frame: it roots at `root` and curls through `bend` to `tip`. */
+export interface CatClaw {
+  readonly root: Pt;
+  readonly bend: Pt;
+  readonly tip: Pt;
+}
+
+/** The claws spread across this share of the paw's half-width, the middle two longest. */
+const CLAW_SPREAD = 0.8;
+const CLAW_ROOT_Y = 0.3;
+const CLAW_SHORTEST_SHARE = 0.75;
+const CLAW_MIDDLE_EXTRA_SHARE = 0.4;
+/** A claw curls forward of its root as it comes out: the hook at its bend, less so at its tip. */
+const CLAW_BEND_FORWARD = 0.25;
+const CLAW_BEND_DOWN = 0.7;
+const CLAW_TIP_FORWARD = 0.15;
+
+/**
+ * Where each claw of a paw lies at `claw` (0 sheathed, 1 fully out), in the
+ * paw's frame before its paw scale: what the paw paints, and what anything
+ * worn over her claws is fitted to.
+ */
+export function catPawClaws(claw: number): readonly CatClaw[] {
+  return Array.from({ length: CLAW_COUNT }, (_unused, i) => {
+    const t = (i + 0.5) / CLAW_COUNT;
+    const x = lerp(-PAW_RX * CLAW_SPREAD, PAW_RX * CLAW_SPREAD, t);
+    const rootY = PAW_RY * CLAW_ROOT_Y;
+    const len =
+      CLAW_LEN * claw * (CLAW_SHORTEST_SHARE + CLAW_MIDDLE_EXTRA_SHARE * Math.sin(t * Math.PI));
+    return {
+      root: { x, y: rootY },
+      bend: { x: x + len * CLAW_BEND_FORWARD, y: rootY + len * CLAW_BEND_DOWN },
+      tip: { x: x + len * CLAW_TIP_FORWARD, y: rootY + len },
+    };
+  });
+}
+
 function drawClaws(ctx: Ctx, look: CatLook, claw: number): void {
   ctx.save();
   ctx.strokeStyle = rgba(look.paws.claw, CLAW_ALPHA);
   ctx.lineWidth = 0.011;
   ctx.lineCap = 'round';
-  for (let i = 0; i < CLAW_COUNT; i++) {
-    const t = (i + 0.5) / CLAW_COUNT;
-    const cx = lerp(-PAW_RX * 0.8, PAW_RX * 0.8, t);
-    const len = CLAW_LEN * claw * (0.75 + 0.4 * Math.sin(t * Math.PI));
+  for (const { root, bend, tip } of catPawClaws(claw)) {
     ctx.beginPath();
-    ctx.moveTo(cx, PAW_RY * 0.3);
-    ctx.quadraticCurveTo(
-      cx + len * 0.25,
-      PAW_RY * 0.3 + len * 0.7,
-      cx + len * 0.15,
-      PAW_RY * 0.3 + len,
-    );
+    ctx.moveTo(root.x, root.y);
+    ctx.quadraticCurveTo(bend.x, bend.y, tip.x, tip.y);
     ctx.stroke();
   }
   ctx.restore();
@@ -2325,7 +2357,7 @@ function drawBladeBumps(
       BLADE_OUTLINE_STEPS,
     );
     dressing.part(ctx, 'body', {
-      piece: 'barrel',
+      piece: 'blade',
       side: null,
       shape: { cx, cy, rx: radius, ry: radius * BLADE_ASPECT },
       fur: {
@@ -2506,39 +2538,37 @@ function drawHeadFront(
     EAR_DX * look.proportions.earSpread * (back ? 1 - look.proportions.backView.earInset : 1);
   const leftEarRoot = { x: -earDx + earShiftL, y: EAR_DY };
   const rightEarRoot = { x: earDx + earShiftL, y: EAR_DY };
-  if (!dressing.hides('ears')) {
-    const leftSide = headOnSide(-1, back);
-    const rightSide = headOnSide(1, back);
-    // Seen from behind her ears stand against the dome of her skull rather
-    // than above her face, and a look may carry them taller there to read.
-    const earHeight = back ? look.proportions.backView.earHeight : 1;
-    drawEar(
-      ctx,
-      dressing,
-      look,
-      leftSide,
-      leftEarRoot.x,
-      leftEarRoot.y,
-      -1,
-      p.earL,
-      back,
-      1,
-      earHeight,
-    );
-    drawEar(
-      ctx,
-      dressing,
-      look,
-      rightSide,
-      rightEarRoot.x,
-      rightEarRoot.y,
-      1,
-      p.earR,
-      back,
-      1,
-      earHeight,
-    );
-  }
+  const leftSide = headOnSide(-1, back);
+  const rightSide = headOnSide(1, back);
+  // Seen from behind her ears stand against the dome of her skull rather
+  // than above her face, and a look may carry them taller there to read.
+  const earHeight = back ? look.proportions.backView.earHeight : 1;
+  drawEar(
+    ctx,
+    dressing,
+    look,
+    leftSide,
+    leftEarRoot.x,
+    leftEarRoot.y,
+    -1,
+    p.earL,
+    back,
+    1,
+    earHeight,
+  );
+  drawEar(
+    ctx,
+    dressing,
+    look,
+    rightSide,
+    rightEarRoot.x,
+    rightEarRoot.y,
+    1,
+    p.earR,
+    back,
+    1,
+    earHeight,
+  );
 
   const headCoat = back ? look.coat.headOn.backOfHead : look.coat.headOn.face;
   const skullCentreX = turn * 0.02;
@@ -3618,12 +3648,11 @@ function drawHeadSide(
   ctx.translate(head.x, head.y);
   ctx.rotate(head.angle);
 
-  const earsShow = !dressing.hides('ears');
   // Far ear first so the near ear overlaps it.
   const sideOnEars = look.proportions.profileEars === 'sideOn';
-  if (earsShow && sideOnEars) {
+  if (sideOnEars) {
     drawSideOnEar(ctx, dressing, look, otherSide(near), SIDE_ON_FAR_EAR, p.earL, true);
-  } else if (earsShow) {
+  } else {
     const farEar = otherSide(near);
     drawEar(
       ctx,
@@ -3760,9 +3789,9 @@ function drawHeadSide(
     turn: 0,
   };
   dressing.part(ctx, 'head', { piece: 'features', landmarks, envelope: null });
-  if (earsShow && sideOnEars) {
+  if (sideOnEars) {
     drawSideOnEar(ctx, dressing, look, near, SIDE_ON_NEAR_EAR, p.earR, false);
-  } else if (earsShow) {
+  } else {
     drawEar(
       ctx,
       dressing,

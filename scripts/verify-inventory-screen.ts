@@ -18,8 +18,8 @@ import { spawnSync } from 'node:child_process';
 
 import { createCanvas } from 'canvas';
 
-import type { Inventory as InventoryT } from '../src/core/Inventory.js';
-import type { ItemId } from '../src/core/ItemDefs.js';
+import type { Inventory as InventoryT } from '../src/core/items/inventory/Inventory.js';
+import type { ItemId } from '../src/core/items/defs/ItemDefs.js';
 import type { KeyModifiers, UiRoot as UiRootT } from '../src/ui/core/UiRoot.js';
 import type {
   InventoryMember as Member,
@@ -31,8 +31,9 @@ import { asGameContext } from './nodeGameContext.js';
 
 installCanvasGlobals();
 
-const { Inventory } = await import('../src/core/Inventory.js');
-const { BAG_PAGE_SLOTS, ITEM_DEF, isItemId } = await import('../src/core/ItemDefs.js');
+const { Inventory } = await import('../src/core/items/inventory/Inventory.js');
+const { GearState } = await import('../src/gear/gearState.js');
+const { BAG_PAGE_SLOTS, ITEM_DEF, isItemId } = await import('../src/core/items/defs/ItemDefs.js');
 const { UiRoot } = await import('../src/ui/core/UiRoot.js');
 const { MOUSE_POINTER_ID, PRIMARY_BUTTON } = await import('../src/ui/core/pointer.js');
 const { NO_INSETS } = await import('../src/ui/core/viewport.js');
@@ -128,7 +129,7 @@ console.log('Inventory.sortBag');
   inv.bag.slots[SCATTERED_SLOTS.firstWood] = { ...ITEM_DEF.wood, quantity: SPLIT_STACK };
   inv.bag.slots[SCATTERED_SLOTS.fizz] = { ...ITEM_DEF.speed_fizz, quantity: 1 };
   inv.bag.slots[SCATTERED_SLOTS.secondWood] = { ...ITEM_DEF.wood, quantity: SPLIT_STACK };
-  inv.bag.slots[SCATTERED_SLOTS.boots] = { ...ITEM_DEF.marching_boots, quantity: 1 };
+  inv.bag.slots[SCATTERED_SLOTS.boots] = { ...ITEM_DEF.hearthguard_boots, quantity: 1 };
   inv.actionBar.slots[0] = { ...ITEM_DEF.health_potion, quantity: 2 };
   inv.sortBag('manual');
   check(
@@ -247,9 +248,9 @@ function makeRig(platform: PlatformSpec, opts: RigOptions = {}): Rig {
   inv.actionBar.slots.fill(null);
   inv.addItem('dirty_shirley', 2);
   inv.addItem('wood', WOOD_STACK);
-  inv.addItem('marching_boots', 1);
+  inv.addItem('hearthguard_boots', 1);
   inv.addItem('health_potion', POTION_STACK);
-  inv.addItem('issue_kettle_helm', 1);
+  inv.addItem('hearthguard_cap', 1);
   inv.addItem('speed_fizz', 1);
   const catInv = new Inventory('cat');
   catInv.bag.slots.fill(null);
@@ -263,7 +264,14 @@ function makeRig(platform: PlatformSpec, opts: RigOptions = {}): Rig {
     inventory.equipment.onChange(() => {
       equipmentChanges.count++;
     });
-    return { inventory, strength: 1, intelligence: 1, constitution: 1, dexterity: 1 };
+    return {
+      inventory,
+      gear: new GearState(),
+      strength: 1,
+      intelligence: 1,
+      constitution: 1,
+      dexterity: 1,
+    };
   };
   const party: readonly Member[] = opts.companion
     ? [
@@ -451,7 +459,7 @@ function runScreenCases(platform: PlatformSpec): void {
     }
     rig.interaction.pendingDrinkSlot = null;
     rig.hideSheet();
-    const boots = slotOf(rig.inv, 'marching_boots');
+    const boots = slotOf(rig.inv, 'hearthguard_boots');
     rig.tap(`bag/${boots}`);
     rig.key('3');
     check(
@@ -464,16 +472,16 @@ function runScreenCases(platform: PlatformSpec): void {
   console.log(`\nInventoryScreen ${on}: a number key moves the stack that was picked`);
   {
     const rig = makeRig(platform);
-    rig.inv.actionBar.slots[COPY_ON_BAR_SLOT] = { ...ITEM_DEF.slingshot, quantity: 1 };
-    rig.inv.addItem('slingshot', 1);
+    rig.inv.actionBar.slots[COPY_ON_BAR_SLOT] = { ...ITEM_DEF.rattlestick_sling, quantity: 1 };
+    rig.inv.addItem('rattlestick_sling', 1);
     rig.frame();
-    const picked = slotOf(rig.inv, 'slingshot');
+    const picked = slotOf(rig.inv, 'rattlestick_sling');
     rig.tap(`bag/${picked}`);
     rig.key('3');
     check(
-      rig.inv.actionBar.slots[DIGIT_THREE_SLOT]?.id === 'slingshot' &&
-        rig.inv.actionBar.slots[COPY_ON_BAR_SLOT]?.id === 'slingshot' &&
-        rig.inv.bag.slots[picked]?.id !== 'slingshot',
+      rig.inv.actionBar.slots[DIGIT_THREE_SLOT]?.id === 'rattlestick_sling' &&
+        rig.inv.actionBar.slots[COPY_ON_BAR_SLOT]?.id === 'rattlestick_sling' &&
+        rig.inv.bag.slots[picked]?.id !== 'rattlestick_sling',
       'the bag copy goes to the bar; the copy already there stays put',
     );
   }
@@ -701,7 +709,7 @@ function runScreenCases(platform: PlatformSpec): void {
   console.log(`\nInventoryScreen ${on}: equip from the Bag tab`);
   {
     const rig = makeRig(platform);
-    const helm = slotOf(rig.inv, 'issue_kettle_helm');
+    const helm = slotOf(rig.inv, 'hearthguard_cap');
     rig.openMenu(`bag/${helm}`);
     check(rig.has('item-menu/equip'), 'gear’s menu offers Equip');
     rig.tap('item-menu/equip');
@@ -710,7 +718,7 @@ function runScreenCases(platform: PlatformSpec): void {
       'Equip queues the slot for the scene',
     );
     resolveEquipPending(rig);
-    check(rig.inv.hasEquipped('issue_kettle_helm'), 'which puts it on');
+    check(rig.inv.hasEquipped('hearthguard_cap'), 'which puts it on');
     rig.openMenu(`bag/${helm}`);
     check(rig.has('item-menu/unequip'), 'worn gear’s menu offers Unequip');
     rig.tap('item-menu/unequip');
@@ -719,7 +727,7 @@ function runScreenCases(platform: PlatformSpec): void {
       'Unequip queues the slot for the scene',
     );
     resolveEquipPending(rig);
-    check(!rig.inv.hasEquipped('issue_kettle_helm'), 'which takes it off');
+    check(!rig.inv.hasEquipped('hearthguard_cap'), 'which takes it off');
     rig.tap(`bag/${helm}`);
     check(rig.has(detailRegion(rig, 'Equip')), 'the detail pane offers Equip');
     rig.tap(detailRegion(rig, 'Equip'));
@@ -735,7 +743,7 @@ function runScreenCases(platform: PlatformSpec): void {
     const rig = makeRig(platform);
     rig.tap('tabs/character');
     check(rig.screen.tab === 'character', 'the Character tab opens');
-    const helm = slotOf(rig.inv, 'issue_kettle_helm');
+    const helm = slotOf(rig.inv, 'hearthguard_cap');
     check(
       shownIds(rig, rig.inv).every((id) => ITEM_DEF[id].type === 'armor'),
       'its grid shows only what can be worn',
@@ -743,7 +751,7 @@ function runScreenCases(platform: PlatformSpec): void {
     const changes = rig.equipmentChanges.count;
     rig.tap(`bag/${helm}`);
     check(
-      rig.inv.getEquippedItem(HELM_DOLL_KEY)?.id === 'issue_kettle_helm' &&
+      rig.inv.getEquippedItem(HELM_DOLL_KEY)?.id === 'hearthguard_cap' &&
         rig.equipmentChanges.count === changes + 1,
       'a tap on gear in the grid puts it on',
     );
@@ -754,7 +762,7 @@ function runScreenCases(platform: PlatformSpec): void {
     );
     rig.drag(`bag/${helm}`, `doll/${HELM_DOLL_KEY}`);
     check(
-      rig.inv.getEquippedItem(HELM_DOLL_KEY)?.id === 'issue_kettle_helm',
+      rig.inv.getEquippedItem(HELM_DOLL_KEY)?.id === 'hearthguard_cap',
       'a drag from the grid onto the doll puts it on',
     );
     const grid = rig.screen.geometry.grid;
@@ -843,9 +851,9 @@ function runScreenCases(platform: PlatformSpec): void {
     check(rig.interaction.pendingDrinkSlot === null, 'Enter runs no lead action while steered');
     rig.hideSheet();
 
-    rig.restrictions = { blockedItems: ['marching_boots'], contextMenu: true };
+    rig.restrictions = { blockedItems: ['hearthguard_boots'], contextMenu: true };
     rig.frame();
-    rig.drag(`bag/${slotOf(rig.inv, 'marching_boots')}`, `hotbar/${BLOCKED_TRY_HOTBAR_SLOT}`);
+    rig.drag(`bag/${slotOf(rig.inv, 'hearthguard_boots')}`, `hotbar/${BLOCKED_TRY_HOTBAR_SLOT}`);
     check(rig.blocked.count === 1, 'a blocked item reports the attempt');
     check(rig.inv.actionBar.slots[BLOCKED_TRY_HOTBAR_SLOT] === null, 'and does not move');
   }

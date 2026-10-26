@@ -1,5 +1,5 @@
 import { crawlerName, PLAYER_CHARACTERS } from '../../characters/characters';
-import type { CrawlerKind } from '../../core/SkillManager';
+import type { CrawlerKind } from '../../core/skills/SkillManager';
 import { createMergePatch, type JsonObject } from './json';
 import type { CrawlerName, CrawlerState, LiveInput } from './types';
 

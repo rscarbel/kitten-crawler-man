@@ -17,8 +17,8 @@
  * restored on checkpoints with {@link captureShopStock} / {@link restoreShopStock}.
  */
 
-import { isRecord } from '../core/guards';
-import { isItemId, type ItemId } from '../core/ItemDefs';
+import { isRecord } from '../core/util/guards';
+import { isItemId, type ItemId } from '../core/items/defs/ItemDefs';
 import { isShopId, primaryCatalogLine, type ShopId } from './shops';
 
 /**

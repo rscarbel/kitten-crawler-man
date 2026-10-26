@@ -24,7 +24,7 @@ const { HP_BAR_HEIGHT } = await import('../src/Player.js');
 const { beginFigureFrame, figureRowInkPending } =
   await import('../src/sprites/figure/figureFrameCache.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
-const { getMercenaryTemplate } = await import('../src/core/mercenaryTemplates.js');
+const { getMercenaryTemplate } = await import('../src/core/party/mercenaryTemplates.js');
 const { BallOfSwine } = await import('../src/creatures/BallOfSwine.js');
 const { BrindleGrub } = await import('../src/creatures/BrindleGrub.js');
 const { Bugaboo } = await import('../src/creatures/Bugaboo.js');

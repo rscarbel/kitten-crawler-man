@@ -41,9 +41,9 @@ import { NECROMANCER_FIGURE, necromancerStateName } from './art/necromancerFigur
 import { GRAVE_BULL_ARRIVAL_ROWS } from './graveBullSprite';
 import { NECROMANCER_ARRIVAL_ROWS } from './necromancerSprite';
 import { RAISED_ARRIVAL_ROWS } from './raisedRatkinSprite';
-import { variantsInPlay } from '../core/mobVariantFamily';
+import { variantsInPlay } from '../core/mobs/mobVariantFamily';
 import { BRIAR_HOLLOW_SIEGE, lookTierFor, NECROMANCER_RAISES } from '../levels/encounters';
-import type { VarietyTier } from '../core/varietyTier';
+import type { VarietyTier } from '../core/perf/varietyTier';
 import { MOB_KINDS, type MobKind } from '../levels/mobKinds';
 import type { Roster } from '../levels/ladder';
 

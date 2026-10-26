@@ -5,8 +5,8 @@
  * sees it.
  */
 
-import type { PartyCraftsState } from '../../core/partyCrafts';
-import { sessionTallyOf } from '../../core/resourceSessionTally';
+import type { PartyCraftsState } from '../../core/labour/partyCrafts';
+import { sessionTallyOf } from '../../core/items/gathering/resourceSessionTally';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HarvestSystem } from './HarvestSystem';

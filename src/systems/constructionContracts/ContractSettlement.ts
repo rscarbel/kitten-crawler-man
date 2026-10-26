@@ -4,11 +4,13 @@
  * HUD, `questCompleted`, and Wendell's note once the box is clear.
  *
  * A repeatable job settles quietly: no quest-complete screen, just the purse
- * and a short line from Wendell that floats over a running world.
+ * and a short line from Wendell that floats over a running world. The one
+ * exception is the milestone job that earns the foreman's hardhat, which is a
+ * piece of gear and so is shown like any other quest's.
  */
 
 import type { AudioManager } from '../../audio/AudioManager';
-import type { BriarHollowState } from '../../core/briarHollowState';
+import type { BriarHollowState } from '../../core/quests/briarHollowState';
 import type { EventBus } from '../../core/EventBus';
 import type { Conversation } from '../../dialog/Conversation';
 import type { DialogLine } from '../../dialog/line';
@@ -17,7 +19,9 @@ import { wendellFollowUp } from '../../dialog/scripts/wendellContracts';
 import type { Player } from '../../Player';
 import { contractSiteFor } from './contractCatalog';
 import { completeContract } from './contractGenerator';
-import { CONSTRUCTION_CONTRACT_QUEST_ID } from './contractQuest';
+import { CONSTRUCTION_CONTRACT_QUEST_ID, CONSTRUCTION_CONTRACT_QUEST_NAME } from './contractQuest';
+import type { GearId } from '../../loot/gearPools';
+import { grantQuestGear, type GearParty } from '../../loot/questGear';
 import { playContractCue } from './contractSoundCues';
 
 /** Whoever collects a contract's payment. */
@@ -33,7 +37,13 @@ export interface ContractSettlementDeps {
   readonly conversation: Conversation;
   /** Flies `coins` from a world position to the HUD's coin pill. */
   readonly flyCoins: (coins: number, worldX: number, worldY: number) => void;
+  /** Both crawlers, for the milestone's gear: it goes to whichever one can wear it. */
+  readonly party: GearParty;
 }
+
+/** How many finished contracts earn the foreman's hardhat. */
+const HARDHAT_CONTRACTS = 10;
+const HARDHAT = 'foremans_hardhat' as const satisfies GearId;
 
 export class ContractSettlement {
   /** Wendell's note, waiting for the conversation box to be free. */
@@ -57,6 +67,7 @@ export class ContractSettlement {
     playContractCue(this.deps.audio, 'payout');
     playContractCue(this.deps.audio, 'payoutFanfare');
     this.deps.bus.emit('questCompleted', { questId: CONSTRUCTION_CONTRACT_QUEST_ID });
+    if (this.deps.state.contracts.contractsCompleted === HARDHAT_CONTRACTS) this.payHardhat();
     if (site !== undefined) {
       this.pendingFollowUp = wendellFollowUp(
         site.name,
@@ -64,6 +75,15 @@ export class ContractSettlement {
       );
     }
     return payout;
+  }
+
+  /** The milestone's hardhat and the quest-complete screen that shows it. */
+  private payHardhat(): void {
+    const line = grantQuestGear(this.deps.party, HARDHAT, 'human');
+    this.deps.bus.emit('questRewardShown', {
+      questTitle: CONSTRUCTION_CONTRACT_QUEST_NAME,
+      sections: [{ kind: 'items', items: [line] }],
+    });
   }
 
   /** Whether Wendell's note is waiting for the box to clear. */

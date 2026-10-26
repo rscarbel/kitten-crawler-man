@@ -168,7 +168,7 @@ export abstract class MazePropTarget<K extends MazeTargetKind = MazeTargetKind> 
    * `takeDamageFrom` is the only entry point these classes override, and the
    * base class has two more that never ask `takesPlayerDamage` at all:
    * `takeDamage`, which every status tick and pool of acid arrives through, and
-   * `applyStatus`. Left open, one sepsis proc — a flat chance on every landed
+   * `applyStatus`. Left open, one poison proc — a flat chance on every landed
    * hit for a crawler wearing the crown — ticks the nominal HP away and *kills*
    * the prop with its own bookkeeping untouched. The barrier never opens, the
    * corpse leaves the mob grid, and nothing can ever hit it again: the act

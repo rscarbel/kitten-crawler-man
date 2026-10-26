@@ -5,18 +5,18 @@
  */
 
 import { crawlerName } from '../../../characters/characters';
-import { createAnchorQuestProgress } from '../../../core/AnchorQuestProgress';
+import { createAnchorQuestProgress } from '../../../core/quests/AnchorQuestProgress';
 import { blueprintsRewardSpec } from '../../../systems/briarHollow/blueprints/blueprintsRewardSpec';
 import type { TreasureChest } from '../../../systems/TreasureChestSystem';
 import { travelUnlocksSection } from '../../../systems/travel/travelDestinations';
 import { ChestRewardDialog, type ChestLootSplit } from '../../../ui/ChestRewardDialog';
 import type { Surface } from '../../../ui/core/UiRoot';
 import { DeathScreen, type RespawnMode } from '../../../ui/DeathScreen';
-import { drawLootBoxRewardIcon } from '../../../ui/icons/rewardIcons';
+import { drawRewardChestIcon } from '../../../ui/icons/rewardIcons';
 import { QuestRewardScreen } from '../../../ui/questReward/QuestRewardScreen';
 import {
   bagItemRewardLine,
-  itemIconPainter,
+  rewardIconPainter,
   partyXpSections,
 } from '../../../ui/questReward/rewardLines';
 import type { QuestRewardSpec } from '../../../ui/questReward/types';
@@ -123,7 +123,7 @@ function runCompleteFixture(name: string, frameCount: number): DialogFixture {
 
 const DEFEND_SPEC: QuestRewardSpec = {
   questTitle: 'Defend the Goblin Mother',
-  renderQuestIcon: itemIconPainter('goblin_dynamite'),
+  renderQuestIcon: rewardIconPainter('goblin_dynamite'),
   quote: {
     text: 'You kept my babies breathing. That is worth more than coin. Take the coin anyway.',
     speaker: 'The Goblin Mother',
@@ -135,13 +135,13 @@ const DEFEND_SPEC: QuestRewardSpec = {
       kind: 'items',
       items: [
         {
-          name: 'Silver Loot Box',
+          name: 'Uncommon reward chest',
           count: 1,
-          renderIcon: (ctx, rect) => drawLootBoxRewardIcon(ctx, rect, 'Silver'),
-          note: 'Open it in a Safe Room.',
+          renderIcon: (ctx, rect) => drawRewardChestIcon(ctx, rect, 'Uncommon'),
+          note: 'One for each crawler.',
         },
         bagItemRewardLine('health_potion', POTIONS_GIVEN),
-        bagItemRewardLine('skill_book_night_vision', 1, {
+        bagItemRewardLine('skill_book_cat_reflexes', 1, {
           describe: true,
           note: `In ${crawlerName('cat')}'s bag.`,
         }),
@@ -198,14 +198,13 @@ const SAMPLE_SPLIT: ChestLootSplit = {
     coins: 140,
     items: [
       { id: 'health_potion', quantity: 2 },
-      { id: 'riveted_bracers', quantity: 1 },
+      { id: 'hearthguard_bracers', quantity: 1 },
     ],
   },
   catLoot: {
     coins: 135,
     items: [{ id: 'speed_fizz', quantity: 1 }],
   },
-  customCatEntries: ['Mongo joins the party'],
 };
 
 function chestFixture(
@@ -257,7 +256,7 @@ export const FIXTURES: readonly DialogFixture[] = [
   questRewardFixture('quest-reward-unlocks', PLEA_SPEC, QUEST_REWARD_SETTLED_FRAMES),
   questRewardFixture(
     'quest-reward-blueprints',
-    blueprintsRewardSpec(() => undefined),
+    blueprintsRewardSpec(null, () => undefined),
     QUEST_REWARD_SETTLED_FRAMES,
   ),
   chestFixture('chest-opening', 'wooden', SAMPLE_SPLIT, CHEST_OPENING_TICKS),

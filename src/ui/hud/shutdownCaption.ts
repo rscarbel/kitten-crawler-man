@@ -3,7 +3,7 @@
  * and a glowing caption fades out over its opening beat.
  */
 
-import { viewportHeight, viewportWidth } from '../../core/Viewport';
+import { viewportHeight, viewportWidth } from '../../core/rendering/Viewport';
 import { chromeTarget } from '../screens/dialogs/canvasChrome';
 import { text } from '../widgets/text';
 

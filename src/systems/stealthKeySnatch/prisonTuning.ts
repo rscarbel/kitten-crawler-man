@@ -9,7 +9,7 @@
  * proves every layout at every difficulty against these same values.
  */
 
-import type { Difficulty } from '../../core/difficultyProfiles';
+import type { Difficulty } from '../../core/difficulty/difficultyProfiles';
 import type { PlayerDamageType } from '../../creatures/Mob';
 import type { PrisonTier } from '../../map/goblinPrisonLayouts';
 

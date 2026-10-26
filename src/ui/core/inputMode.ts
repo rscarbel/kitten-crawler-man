@@ -11,7 +11,7 @@
  * record lasts until that root is disposed or {@link resetInputMode} runs.
  */
 
-import { keybindings, type GameAction } from '../../core/Keybindings';
+import { keybindings, type GameAction } from '../../core/input/Keybindings';
 import type { Density } from '../theme/tokens';
 import { detectDensity } from './viewport';
 

@@ -1,15 +1,17 @@
 import { TILE_SIZE } from '../core/constants';
-import { NEVER_LUCKY, type LuckCheck } from '../core/GodMode';
+import type { GearOwnership } from './market/vendorMenu';
+import { NEVER_LUCKY, type LuckCheck } from '../core/state/GodMode';
 import { playInteriorCue } from './interiorInteractionSoundCues';
 import type { Player } from '../Player';
 import type { AudioManager } from '../audio/AudioManager';
 import type { AudioScope, MusicClaims } from '../audio/AudioScope';
 import { CASINO_MUSIC_TRACKS } from '../audio/sounds';
-import type { ClubMembership } from '../core/ClubMembership';
-import type { MercenaryRoster } from '../core/MercenaryRoster';
-import type { AchievementManager, AchievementId } from '../core/AchievementManager';
+import type { ClubMembership } from '../core/club/ClubMembership';
+import type { MercenaryRoster } from '../core/party/MercenaryRoster';
+import type { AchievementId } from '../core/progression/AchievementManager';
+import type { AchievementAwards } from './AchievementAwards';
 import type { GameMap } from '../map/GameMap';
-import type { InteriorFigure } from '../core/InteriorFigure';
+import type { InteriorFigure } from '../core/rendering/InteriorFigure';
 import {
   CLUB_STATIONS,
   CLUB_DANCE_FLOOR,
@@ -19,8 +21,8 @@ import {
   CLUB_INTERIOR_W,
   type ClubStation,
   type ClubStationId,
-} from '../core/clubLayout';
-import { CLUB_PROPS, propSortY } from '../core/clubProps';
+} from '../core/club/clubLayout';
+import { CLUB_PROPS, propSortY } from '../core/club/clubProps';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import type { Conversation } from '../dialog/Conversation';
 import type { ConversationHandle } from '../dialog/request';
@@ -52,7 +54,7 @@ import { ClubCasinoSystem, type CasinoSeat } from './ClubCasinoSystem';
 import { ClubPokerSystem, POKER_MIN_BUY_IN } from './ClubPokerSystem';
 import { TABLE_MAXIMUM, TABLE_MINIMUM } from './casino/BlackjackTable';
 import { POKER_DEV_SEED } from './casino/poker/npc/personality';
-import { canAffordCoins } from '../core/partyCoins';
+import { canAffordCoins } from '../core/party/partyCoins';
 import { casinoGamePickerSurface } from '../ui/screens/dialogs/casinoGamePicker';
 import { ClubSlotsSystem } from './ClubSlotsSystem';
 import {
@@ -63,7 +65,7 @@ import {
 } from './casino/CasinoGameHost';
 import type { ToastTone } from '../ui/hud/toasts';
 import type { Surface } from '../ui/core/UiRoot';
-import { keybindings } from '../core/Keybindings';
+import { keybindings } from '../core/input/Keybindings';
 import { shopScreenSurface } from '../ui/screens/shop/ShopScreen';
 import { priceBreakdownsShown } from '../ui/screens/shop/priceBreakdowns';
 import type { ShopParty } from '../ui/screens/shop/shopSession';
@@ -173,8 +175,8 @@ function prewarmEscort(pair: EscortPair): void {
  * `SHOPS` entry and the same stock wiring the club actually plays with,
  * rather than a copy that could drift from it unnoticed.
  */
-export function createClubMarketShop(shopStock: ShopStock): ShopSystem {
-  return new ShopSystem(CLUB_INTERIOR_W, 'club_market', shopStock);
+export function createClubMarketShop(shopStock: ShopStock, owns: GearOwnership): ShopSystem {
+  return new ShopSystem(CLUB_INTERIOR_W, 'club_market', shopStock, owns);
 }
 
 /** The bar, the market and the VIP host all sell at any hour, so each wears the coin. */
@@ -297,15 +299,15 @@ export class DesperadoClubSystem {
     hasPassTattoo: boolean,
     arrivingCrawler: Player,
     shopStock: ShopStock,
-    private readonly humanAchievements?: AchievementManager,
-    private readonly catAchievements?: AchievementManager,
+    owns: GearOwnership,
+    private readonly awards?: AchievementAwards,
     worldSeed: number = POKER_DEV_SEED,
     isLucky: LuckCheck = NEVER_LUCKY,
   ) {
     this.music = audioScope;
     this.crowd = new ClubCrowdSystem(map);
-    this.barShop = new ShopSystem(CLUB_INTERIOR_W, 'club_bar', shopStock);
-    this.marketShop = createClubMarketShop(shopStock);
+    this.barShop = new ShopSystem(CLUB_INTERIOR_W, 'club_bar', shopStock, owns);
+    this.marketShop = createClubMarketShop(shopStock, owns);
     this.casino = new ClubCasinoSystem(audio, membership);
     this.casino.isLucky = isLucky;
     this.casino.onWinnings = (coins, screenX, screenY) =>
@@ -330,7 +332,7 @@ export class DesperadoClubSystem {
     this.vip = new ClubVipLoungeSystem(audio, roster, membership);
     prewarmClarabelle();
     if (membership.hasDesperadoPass) {
-      this.unlockAchievement('desperado_member');
+      this.unlockAchievement('members_only');
     } else if (hasPassTattoo) {
       // The tattoo is the pass; the door only has to read it, so membership is
       // granted here rather than waiting on the dialog the way the giveaway does.
@@ -341,10 +343,9 @@ export class DesperadoClubSystem {
     }
   }
 
-  /** Unlock a club achievement for both crawlers (idempotent), mirroring the doomsday-containment pattern. */
+  /** Unlock a club achievement for both crawlers; one already held is left alone. */
   private unlockAchievement(id: AchievementId): void {
-    this.humanAchievements?.tryUnlock(id);
-    this.catAchievements?.tryUnlock(id);
+    this.awards?.unlockParty(id);
   }
 
   /**
@@ -608,7 +609,7 @@ export class DesperadoClubSystem {
   private consumePendingUnlocks(): void {
     if (this.guild.hirePending) {
       this.guild.hirePending = false;
-      this.unlockAchievement('merc_hired');
+      this.unlockAchievement('on_retainer');
     }
     if (this.casino.jackpotPending) {
       this.casino.jackpotPending = false;
@@ -616,7 +617,7 @@ export class DesperadoClubSystem {
     }
     if (this.vip.escortPending) {
       this.vip.escortPending = false;
-      this.unlockAchievement('club_bodyguards');
+      this.unlockAchievement('entourage');
     }
   }
 
@@ -670,7 +671,7 @@ export class DesperadoClubSystem {
     this.openConversation(CLARABELLE.greeting(crawler instanceof CatPlayer), () => {
       if (this.membership.hasDesperadoPass) return;
       this.membership.hasDesperadoPass = true;
-      this.unlockAchievement('desperado_member');
+      this.unlockAchievement('members_only');
       this.audio?.play('achievement_awarded');
     });
   }
@@ -678,7 +679,7 @@ export class DesperadoClubSystem {
   /** Clarabelle waving through a crawler wearing Big Rooster's ink. */
   private openTattooGreeting(crawler: Player): void {
     this.openConversation(CLARABELLE.tattooGreeting(crawler instanceof CatPlayer), () => {
-      this.unlockAchievement('desperado_member');
+      this.unlockAchievement('members_only');
       this.audio?.play('achievement_awarded');
     });
   }

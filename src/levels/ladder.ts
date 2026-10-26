@@ -1,4 +1,4 @@
-import type { VarietyTier } from '../core/varietyTier';
+import type { VarietyTier } from '../core/perf/varietyTier';
 import { isProtectedKind, threatOf, type MobKind } from './mobKinds';
 
 /**

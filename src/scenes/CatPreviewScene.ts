@@ -30,9 +30,20 @@ import {
   playerCharacter,
 } from '../characters/characters';
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
-import { catLookOf, ITEM_DEF, isItemId, wearerAllows, type ItemId } from '../core/ItemDefs';
-import { isToolTier, TOOL_TIER_BASIC, TOOL_TIERS, type ToolKind } from '../core/toolTiers';
-import type { WorkingTool } from '../core/toolTiers';
+import {
+  catLookOf,
+  ITEM_DEF,
+  isItemId,
+  wearerAllows,
+  type ItemId,
+} from '../core/items/defs/ItemDefs';
+import {
+  isToolTier,
+  TOOL_TIER_BASIC,
+  TOOL_TIERS,
+  type ToolKind,
+} from '../core/items/gathering/toolTiers';
+import type { WorkingTool } from '../core/items/gathering/toolTiers';
 import { WALK_FRAME_SPEED } from '../Player';
 import { CatPlayer } from '../creatures/CatPlayer';
 import { CAT_ROWS, type CatHold } from '../sprites/art/catFigure';
@@ -543,6 +554,8 @@ export class CatPreviewScene extends PreviewScene {
     const previous = this.outfit;
     this.outfitIndex = (this.outfitIndex + 1) % this.outfits.length;
     for (const cat of this.cats) {
+      // A preview steps through outfits; a cursed piece's binding is play, not dress-up.
+      cat.gear.releaseBinds();
       for (const id of previous.items) cat.inventory.unequipById(id);
       for (const id of this.outfit.items) cat.inventory.equipByItemId(id);
     }

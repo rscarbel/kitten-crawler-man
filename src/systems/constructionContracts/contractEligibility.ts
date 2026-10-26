@@ -10,9 +10,9 @@
  * only ever comes from their room being owned.
  */
 
-import type { AnchorQuestProgress } from '../../core/AnchorQuestProgress';
-import type { MurderQuestStage } from '../../core/MurderQuestProgress';
-import { isVillageUnderSiege, type VillageQuestPhase } from '../../core/villageQuestPhase';
+import type { AnchorQuestProgress } from '../../core/quests/AnchorQuestProgress';
+import type { MurderQuestStage } from '../../core/quests/MurderQuestProgress';
+import { isVillageUnderSiege, type VillageQuestPhase } from '../../core/quests/villageQuestPhase';
 import {
   HILDA_COTTAGE_NAME,
   hildasWreckMended,

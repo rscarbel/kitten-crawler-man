@@ -99,20 +99,22 @@ const { mulberry32 } = await import('../src/sprites/person/rng.js');
 Math.random = mulberry32(WORLD_SEED);
 
 const { TILE_SIZE } = await import('../src/core/constants.js');
-const { loadSprites, getSpriteMissCounts } = await import('../src/core/SpriteLoader.js');
+const { loadSprites, getSpriteMissCounts } =
+  await import('../src/core/spriteAssets/SpriteLoader.js');
 const { SceneManager } = await import('../src/core/Scene.js');
 const { AudioManager } = await import('../src/audio/AudioManager.js');
-const { InputManager } = await import('../src/core/InputManager.js');
+const { InputManager } = await import('../src/core/input/InputManager.js');
 const { getLevelDef } = await import('../src/levels/index.js');
 const { level3 } = await import('../src/levels/level3.js');
-const { requiredSpriteKeysForLevel } = await import('../src/core/systemAssetRequirements.js');
+const { requiredSpriteKeysForLevel } =
+  await import('../src/core/spriteAssets/systemAssetRequirements.js');
 const { GameMap } = await import('../src/map/GameMap.js');
 const { DungeonScene } = await import('../src/scenes/DungeonScene.js');
 const { BuildingInteriorScene } = await import('../src/scenes/BuildingInteriorScene.js');
 const { TutorialController } = await import('../src/systems/TutorialController.js');
 const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
-const { snapPlayer } = await import('../src/core/PlayerSnapshot.js');
+const { snapPlayer } = await import('../src/core/save/PlayerSnapshot.js');
 const { createShopStock } = await import('../src/economy/shopStock.js');
 const { environmentPaintDepth, environmentPaintedStepCount } =
   await import('../src/map/environmentArtCache.js');

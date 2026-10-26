@@ -3,7 +3,7 @@
  * from the system so the save format can parse it without loading the quest.
  */
 
-import { isRecord } from '../../core/guards';
+import { isRecord } from '../../core/util/guards';
 
 /**
  * Where the quest stands:

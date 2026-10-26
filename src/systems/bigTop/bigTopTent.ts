@@ -10,7 +10,7 @@
  */
 
 import { TILE_SIZE } from '../../core/constants';
-import type { Difficulty } from '../../core/difficultyProfiles';
+import type { Difficulty } from '../../core/difficulty/difficultyProfiles';
 import type { Conversation } from '../../dialog/Conversation';
 import type { GameMap } from '../../map/GameMap';
 import {

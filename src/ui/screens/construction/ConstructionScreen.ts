@@ -21,11 +21,11 @@
  * the rest of the hotbar cannot act behind it.
  */
 
-import { ITEM_DEF } from '../../../core/ItemDefs';
-import type { CraftSkills } from '../../../core/CraftSkills';
-import { keybindings } from '../../../core/Keybindings';
-import type { ResourceCost } from '../../../core/partyResources';
-import { RESOURCE_IDS, type ResourceId } from '../../../core/resourceIds';
+import { ITEM_DEF } from '../../../core/items/defs/ItemDefs';
+import type { CraftSkills } from '../../../core/labour/CraftSkills';
+import { keybindings } from '../../../core/input/Keybindings';
+import type { ResourceCost } from '../../../core/items/gathering/partyResources';
+import { RESOURCE_IDS, type ResourceId } from '../../../core/items/gathering/resourceIds';
 import {
   NOT_ENOUGH_MATERIALS_STATUS,
   OPTION_LOCKED_STATUS,

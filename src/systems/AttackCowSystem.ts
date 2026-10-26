@@ -1,8 +1,8 @@
 import { TILE_SIZE } from '../core/constants';
-import type { AttackCowState } from '../core/AttackCowState';
-import { REVIVE_RANGE_PX } from '../core/reviveRules';
-import type { SpatialGrid } from '../core/SpatialGrid';
-import { viewportHeight, viewportWidth } from '../core/Viewport';
+import type { AttackCowState } from '../core/state/AttackCowState';
+import { REVIVE_RANGE_PX } from '../core/party/reviveRules';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
+import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
 import type { SoundId } from '../audio/sounds';
 import { AttackCow, attackCowMaxHpForFloor } from '../creatures/AttackCow';
 import type { Mob } from '../creatures/Mob';

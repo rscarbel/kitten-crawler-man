@@ -7,7 +7,7 @@
  * has no cooldown at all, so it is worth a little over half a potion.
  */
 
-import type { BriarHollowState } from '../../../core/briarHollowState';
+import type { BriarHollowState } from '../../../core/quests/briarHollowState';
 import type { Player } from '../../../Player';
 import { SHOPS, type ShopId } from '../../../economy/shops';
 import { buyFromShop } from '../../../economy/shopStock';

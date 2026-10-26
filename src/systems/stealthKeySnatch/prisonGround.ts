@@ -21,10 +21,10 @@ import {
   surfaceContext,
   type CanvasSurface,
   releaseSurface,
-} from '../../core/canvasSurface';
-import { canvasGeneration } from '../../core/canvasRecovery';
-import type { InteriorFigure } from '../../core/InteriorFigure';
-import type { SpriteKey } from '../../core/SpriteLoader';
+} from '../../core/rendering/canvasSurface';
+import { canvasGeneration } from '../../core/rendering/canvasRecovery';
+import type { InteriorFigure } from '../../core/rendering/InteriorFigure';
+import type { SpriteKey } from '../../core/spriteAssets/SpriteLoader';
 import {
   PRISON_TILE,
   prisonTileAt,

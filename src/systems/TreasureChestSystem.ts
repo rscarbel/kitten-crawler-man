@@ -1,13 +1,14 @@
+import type { ItemId } from '../core/items/defs/ItemDefs';
 import { TILE_SIZE } from '../core/constants';
-import type { CanvasSurface } from '../core/canvasSurface';
+import type { CanvasSurface } from '../core/rendering/canvasSurface';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import type { LootDrop } from '../creatures/Mob';
 import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
-import { getSpriteDefByKey } from '../core/SpriteLoader';
-import { cloneLootDrop } from '../core/lootDrop';
+import { getSpriteDefByKey } from '../core/spriteAssets/SpriteLoader';
+import { cloneLootDrop } from '../core/items/loot/lootDrop';
 import { drawBouncingArrowAboveEntity } from '../ui/WorldArrow';
 import { countsTowardRoomClear } from '../creatures/roomClear';
 
@@ -219,6 +220,17 @@ export class TreasureChestSystem {
   /** Whether this boss room still has a chest nobody has opened, whatever its lock state. */
   hasUnopenedBossChest(bossRoomIndex: number): boolean {
     return this.chests.some((c) => c.bossRoomIndex === bossRoomIndex && c.state !== 'opened');
+  }
+
+  /**
+   * Whether an unopened chest holds `id` — boss loot parked in a chest still
+   * locked or unlocking — so a roll elsewhere does not hand over a second copy.
+   */
+  holds(id: ItemId): boolean {
+    return this.chests.some(
+      (chest) =>
+        chest.state !== 'opened' && chest.loot?.items.some((item) => item.id === id) === true,
+    );
   }
 
   /**

@@ -27,8 +27,8 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../../core/canvasSurface';
-import { onCanvasRecovery } from '../../../core/canvasRecovery';
+} from '../../../core/rendering/canvasSurface';
+import { onCanvasRecovery } from '../../../core/rendering/canvasRecovery';
 
 type Ctx = CanvasRenderingContext2D;
 

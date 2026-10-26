@@ -23,20 +23,21 @@ import type { AudioManager } from '../audio/AudioManager';
 import type { AudioScope } from '../audio/AudioScope';
 import type { SoundId } from '../audio/sounds';
 import type { Player } from '../Player';
-import { ITEM_DEF, type ItemId } from '../core/ItemDefs';
-import { LootBoxOpener } from '../ui/LootBoxOpener';
-import { partyCoins, spendPartyCoins, canAffordCoins } from '../core/partyCoins';
+import { ITEM_DEF, type ItemId } from '../core/items/defs/ItemDefs';
+import { RewardChestScreen } from '../ui/screens/rewardChest/RewardChestScreen';
+import { CHEST_SOURCE_TITLES, type GrantedLine } from '../loot/rewardChest';
+import { partyCoins, spendPartyCoins, canAffordCoins } from '../core/party/partyCoins';
 import {
   saveOutcomeCommitted,
   type SaveWriteOutcome,
   type WipeStatus,
-} from '../core/progressPersistence';
+} from '../core/save/progressPersistence';
 import {
   questFreeSpinsLeft,
   tapedChainOwed,
   type WheelCrawler,
   type WheelLedger,
-} from '../core/WheelLedger';
+} from '../core/save/WheelLedger';
 import { CatPlayer } from '../creatures/CatPlayer';
 import { pickTitoLine, type TitoTrigger } from '../dialog/scripts/tito';
 import type { TitoBustPose } from '../sprites/titoSprite';
@@ -69,7 +70,7 @@ import {
   type WheelWedge,
 } from './casino/wheel/wheelBoard';
 import { pickLuckyOutcome, pickOutcome, type WheelOutcome } from './casino/wheel/wheelOutcome';
-import type { LuckCheck } from '../core/GodMode';
+import type { LuckCheck } from '../core/state/GodMode';
 import {
   landingAngle,
   rotationForPointerAt,
@@ -335,17 +336,14 @@ function revealEffectFor(wedge: WheelWedge): WheelRevealEffect {
       return 'handies';
     case 'spin_again':
       return 'spin_again';
-    case 'legendary_weapon_box':
-    case 'platinum_box':
-    case 'legendary_box':
-    case 'gold_box':
-    case 'silver_box':
+    case 'legendary_weapon':
+    case 'epic_charm':
+    case 'legendary_charm':
+    case 'rare_chest':
+    case 'uncommon_chest':
       return 'item';
   }
 }
-
-/** Skips that take the prize screen from any point to closed: to the reveal, then past it. */
-const PRIZE_SKIPS_TO_CLOSE = 2;
 
 function plural(name: string): string {
   return name.endsWith('s') ? name : `${name}s`;
@@ -364,7 +362,7 @@ function prizeLine(wedge: WheelWedge, effect: WheelPrizeEffect, recipient: Wheel
   if (prize.kind === 'heal_and_gold') {
     return `${name} is healed to full and paid ${prize.amount.toLocaleString()} gold`;
   }
-  if (effect.tier === null || effect.items.length === 0) return wedge.label;
+  if (effect.rarity === null || effect.items.length === 0) return wedge.label;
   const names = effect.items.map(({ id, quantity }) =>
     quantity > 1 ? `${quantity} ${plural(ITEM_DEF[id].name)}` : ITEM_DEF[id].name,
   );
@@ -372,9 +370,10 @@ function prizeLine(wedge: WheelWedge, effect: WheelPrizeEffect, recipient: Wheel
   return `For ${name}: ${[...names, ...coins].join(' and ')}`;
 }
 
-/** What a single named item does, for under the prize screen's reward line. */
-function prizeDetail(items: ReadonlyArray<{ readonly id: ItemId }>): string | undefined {
-  return items.length === 1 ? ITEM_DEF[items[0].id].description : undefined;
+/** What a single named item does, for under the prize screen's title. */
+function prizeDetail(items: ReadonlyArray<{ readonly id: ItemId }>): string {
+  const only = items.length === 1 ? items[0] : undefined;
+  return only === undefined ? '' : (ITEM_DEF[only.id].description ?? '');
 }
 
 function titoTriggerFor(effect: WheelRevealEffect): TitoTrigger {
@@ -453,8 +452,8 @@ export class ClubWheelSystem implements WheelGameHost {
   /** The scene is tearing the wheel down: nothing it closes may raise the picker again. */
   private tearingDown = false;
   private readonly view = new WheelView();
-  /** The item prize screen: the loot reveal, showing what the wheel already handed over. */
-  private readonly prizes = new LootBoxOpener();
+  /** The item prize screen: a reward chest showing what the wheel already handed over. */
+  private readonly prizes: RewardChestScreen;
   private readonly clock: () => number;
   private readonly random: () => number;
   private readonly titoRandom: () => number;
@@ -463,7 +462,7 @@ export class ClubWheelSystem implements WheelGameHost {
     this.clock = deps.clock ?? (() => performance.now());
     this.random = deps.random ?? Math.random;
     this.titoRandom = deps.titoRandom ?? Math.random;
-    this.prizes.setAudio(deps.audio);
+    this.prizes = new RewardChestScreen(deps.audio);
   }
 
   // ── CasinoGameHost ──────────────────────────────────────────────────────
@@ -519,7 +518,7 @@ export class ClubWheelSystem implements WheelGameHost {
     this.syncLoops();
     if (this.screen !== 'wheel' && this.screen !== 'nothing') return;
     this.tickHold(now);
-    if (this.prizes.isOpen) this.prizes.tick();
+    this.prizes.tick();
     this.tickPhase(now);
     this.advanceBulbs(dt);
     if (this.chuckleAt !== null && now >= this.chuckleAt) {
@@ -1176,7 +1175,7 @@ export class ClubWheelSystem implements WheelGameHost {
       coinsTaken: 0,
       coinsWon: 0,
       items: [],
-      tier: null,
+      rarity: null,
     };
     this.phase = {
       kind: 'revealing',
@@ -1189,7 +1188,7 @@ export class ClubWheelSystem implements WheelGameHost {
         wedge,
         effect: effectKind,
         durationMs: REVEAL_MS[effectKind],
-        itemTier: effect.tier,
+        itemRarity: effect.rarity,
         items: effect.items,
         prizeLine: prizeLine(wedge, effect, spin.recipientKind),
         coinsTaken: effect.coinsTaken,
@@ -1223,15 +1222,23 @@ export class ClubWheelSystem implements WheelGameHost {
   /** Raises the item prize screen over the wheel; false for a prize with no items to show. */
   private presentPrize(phase: Extract<WheelPhase, { kind: 'revealing' }>): boolean {
     const { reveal } = phase;
-    if (reveal.itemTier !== null && reveal.items.length > 0) {
+    if (reveal.itemRarity !== null && reveal.items.length > 0) {
       phase.prizeShown = true;
+      const items = reveal.items.map(({ id, quantity }): GrantedLine => ({
+        kind: 'item',
+        id,
+        quantity,
+      }));
+      const coins: GrantedLine[] =
+        reveal.coinsWon > 0 ? [{ kind: 'coins', amount: reveal.coinsWon }] : [];
       this.prizes.present(
         {
-          tier: reveal.itemTier,
-          title: `${reveal.itemTier} prize`,
-          playerName: crawlerFormalName(phase.spin.recipientKind),
-          contents: { coins: reveal.coinsWon, itemRewards: reveal.items },
-          detail: prizeDetail(reveal.items),
+          origin: { kind: 'chest', source: 'wheel' },
+          rarity: reveal.itemRarity,
+          title: CHEST_SOURCE_TITLES.wheel,
+          subtitle: prizeDetail(reveal.items),
+          crawler: phase.spin.recipientKind,
+          rewards: [...coins, ...items],
         },
         () => this.finishReveal(),
       );
@@ -1251,42 +1258,22 @@ export class ClubWheelSystem implements WheelGameHost {
     if (chainResolved) this.closeToFloor(true);
   }
 
-  /** Hurries the prize screen to its end; the items in it are already the crawler's. */
+  /** Puts the prize screen away at once; the items in it are already the crawler's. */
   private dismissPrizes(): void {
-    for (let press = 0; press < PRIZE_SKIPS_TO_CLOSE && this.prizes.isOpen; press++) {
-      this.prizes.skip();
-    }
+    this.prizes.dismiss();
   }
 
   private prizeSurface(id: string): Surface {
-    return {
-      id,
-      band: 'modal',
-      haltsWorld: true,
-      locksKeyboard: true,
-      isOpen: () => this.prizes.isOpen,
-      close: () => this.prizes.skip(),
-      onKey: (key, mods) => {
-        if (key !== 'Enter' && key !== WHEEL_SPIN_KEY) return false;
-        if (mods.repeat !== true && mods.predatesSurface !== true) this.prizes.skip();
-        return true;
-      },
-      render: (ui) => {
-        this.prizes.paint(ui, ui.screen.w, ui.screen.h);
-        ui.hit('skip', ui.screen, {
-          onTap: () => this.prizes.skip(),
-          focusable: false,
-          sound: null,
-        });
-      },
-    };
+    return this.prizes.surface(id);
   }
 
   private prizeTarget(crawler: Player, kind?: WheelCrawler): WheelPrizeTarget {
     const crawlerKind: WheelCrawler = kind ?? (crawler instanceof CatPlayer ? 'cat' : 'human');
+    const seat = this.seat;
     return {
       crawler,
       kind: crawlerKind,
+      party: seat === null ? [crawler] : [seat.active(), seat.companion()],
       grantAttackCow: this.deps.grantAttackCow,
     };
   }

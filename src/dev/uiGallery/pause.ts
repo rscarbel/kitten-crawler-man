@@ -7,25 +7,30 @@ import { MAGIC_MISSILE_DEF } from '../../abilities/magicMissile';
 import { MONGO_DEF } from '../../abilities/mongo';
 import { PROTECTIVE_SHELL_DEF } from '../../abilities/protectiveShell';
 import { SMUSH_DEF } from '../../abilities/smush';
-import { AbilityManager } from '../../core/AbilityManager';
+import { AbilityManager } from '../../core/skills/AbilityManager';
 import {
   ACHIEVEMENT_DEFS,
   AchievementManager,
   isAchievementId,
-} from '../../core/AchievementManager';
-import { awardXp } from '../../core/awardXp';
+} from '../../core/progression/AchievementManager';
+import { awardXp } from '../../core/progression/awardXp';
 import { TILE_SIZE } from '../../core/constants';
 import { EventBus } from '../../core/EventBus';
 import {
   clearDifficultyChangeGuard,
   registerDifficultyChangeGuard,
-} from '../../core/difficultyChangeGuard';
-import { MusicLibrary } from '../../core/MusicLibrary';
-import { settings } from '../../core/Settings';
-import { GameStats } from '../../core/GameStats';
-import { createJournalProgress } from '../../core/JournalProgress';
-import { getSkillDef, isEligible, SKILL_IDS, type CrawlerKind } from '../../core/SkillManager';
-import { BRASS_GULLET_SKILL } from '../../core/tattoos';
+} from '../../core/difficulty/difficultyChangeGuard';
+import { MusicLibrary } from '../../core/music/MusicLibrary';
+import { settings } from '../../core/input/Settings';
+import { GameStats } from '../../core/progression/GameStats';
+import { createJournalProgress } from '../../core/quests/JournalProgress';
+import {
+  getSkillDef,
+  isEligible,
+  SKILL_IDS,
+  type CrawlerKind,
+} from '../../core/skills/SkillManager';
+import { BRASS_GULLET_SKILL } from '../../core/skills/tattoos';
 import { CatPlayer } from '../../creatures/CatPlayer';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { Surface } from '../../ui/core/UiRoot';
@@ -87,6 +92,9 @@ function grantSkills(player: HumanPlayer | CatPlayer, crawler: CrawlerKind): voi
     .forEach((id) => player.skills.unlockSkill(id));
 }
 
+/** Partway up the kill ladder, so its meters read part full. */
+const FIXTURE_DUNGEON_KILLS = 143;
+
 function grantAchievements(manager: AchievementManager, crawler: CrawlerKind): void {
   Object.keys(ACHIEVEMENT_DEFS)
     .filter(isAchievementId)
@@ -95,7 +103,7 @@ function grantAchievements(manager: AchievementManager, crawler: CrawlerKind): v
       return owner === 'both' || owner === crawler;
     })
     .slice(0, ACHIEVEMENTS_PER_CRAWLER)
-    .forEach((id) => manager.tryUnlock(id));
+    .forEach((id) => manager.recordUnlock(id));
 }
 
 export function pauseFixtureData(): PauseFixtureData {
@@ -127,6 +135,9 @@ export function pauseFixtureData(): PauseFixtureData {
   const catAchievements = new AchievementManager();
   grantAchievements(humanAchievements, 'human');
   grantAchievements(catAchievements, 'cat');
+  for (let kill = 0; kill < FIXTURE_DUNGEON_KILLS; kill++) {
+    humanAchievements.advanceCounter('dungeonKills');
+  }
 
   const gameStats = new GameStats();
   for (const [name, count] of KILLS) {
@@ -145,7 +156,6 @@ export function pauseFixtureData(): PauseFixtureData {
       humanAchievements,
       catAchievements,
       gameStats,
-      onOpenHumanBoxes: () => undefined,
     },
   };
 }

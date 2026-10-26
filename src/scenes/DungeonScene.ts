@@ -1,10 +1,13 @@
+import { coinBonusFor } from '../gear/gearHooks';
+import { TRASH_PILE_ROACH_BURST } from '../systems/bossSoundCues';
+import { ABILITY_DEFS } from '../abilities/abilityDefs';
 import { labApproachZoneAt } from '../map/labApproach';
 import { VILLAGE_CUES } from '../audio/villageSoundCues';
 import { forwardQuestItemEvictions } from '../systems/questItemEvictions';
 import { forwardEquipmentChanges } from '../systems/equipmentChangeEvents';
 import { type SceneManager } from '../core/Scene';
-import { type InputManager } from '../core/InputManager';
-import { platform } from '../core/Platform';
+import { type InputManager } from '../core/input/InputManager';
+import { platform } from '../core/input/Platform';
 import { TILE_SIZE } from '../core/constants';
 import { clamp, frameTime } from '../utils';
 import {
@@ -31,7 +34,7 @@ import { interiorRoomOwnedByStory } from '../systems/interiorStoryOwnership';
 import { GameMap } from '../map/GameMap';
 import { DEFAULT_DUNGEON_FLOOR_THEME, setDungeonFloorTheme } from '../map/dungeon/floorTheme';
 import type { GameProgressInput } from '../auth/AuthClient';
-import { parseSavedWorld, WORLD_GENERATOR_VERSION } from '../core/SavedWorld';
+import { parseSavedWorld, WORLD_GENERATOR_VERSION } from '../core/save/SavedWorld';
 import { setFloorArtSeed } from '../map/ground/floorArtSeed';
 import { prepareGroundTone } from '../map/tiles/groundTiles';
 import { groundSheetKeysAmong, requestGroundSheets } from '../map/ground/runtimeGroundSheets';
@@ -41,9 +44,9 @@ import { type HumanPlayer } from '../creatures/HumanPlayer';
 import { type CatPlayer } from '../creatures/CatPlayer';
 import { despawnMob, type Mob, type LootDrop } from '../creatures/Mob';
 import type { Player } from '../Player';
-import { PlayerManager } from '../core/PlayerManager';
+import { PlayerManager } from '../core/party/PlayerManager';
 import { setSkillBookReaders } from '../creatures/skillBookDrop';
-import { TouchMoveState } from '../core/TouchMoveState';
+import { TouchMoveState } from '../core/input/TouchMoveState';
 import type { LevelDef, MobLevelRange } from '../levels/types';
 import type { MobKind } from '../levels/mobKinds';
 import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
@@ -63,11 +66,15 @@ import {
   DIFFICULTY_LABELS,
   DIFFICULTY_PROFILES,
   type Difficulty,
-} from '../core/difficultyProfiles';
-import { setFloorReferencePartyLevel } from '../core/floorReferenceLevel';
-import { getSpriteMissCounts, prewarmGroups, releaseSpritesExcept } from '../core/SpriteLoader';
+} from '../core/difficulty/difficultyProfiles';
+import { setFloorReferencePartyLevel } from '../core/difficulty/floorReferenceLevel';
+import {
+  getSpriteMissCounts,
+  prewarmGroups,
+  releaseSpritesExcept,
+} from '../core/spriteAssets/SpriteLoader';
 import { flushFigureFrameCache } from '../sprites/figure/figureFrameCache';
-import { requiredSpriteKeysForLevel } from '../core/systemAssetRequirements';
+import { requiredSpriteKeysForLevel } from '../core/spriteAssets/systemAssetRequirements';
 import { getLevelDef, levelLoadingKicker } from '../levels';
 import { dungeonOptionsForLevel } from '../levels/dungeonOptions';
 import { TUTORIAL_LEVEL_ID } from '../levels/tutorial';
@@ -90,11 +97,25 @@ import {
   isStatSpendButtonOf,
   statSpendButtonId,
 } from '../ui/screens/pause/characterSection';
-import { LOOT_BANNER_ENTRY_ID } from '../ui/hud/lootBanner';
 import { SpellSystem } from '../systems/SpellSystem';
-import type { InventoryItem } from '../core/ItemDefs';
-import { AchievementManager } from '../core/AchievementManager';
+import type { InventoryItem } from '../core/items/defs/ItemDefs';
+import {
+  ACHIEVEMENT_DEFS,
+  AchievementManager,
+  DYNAMITE_MULTIKILL_THRESHOLD,
+  MULTIKILL_ACHIEVEMENT_THRESHOLD,
+} from '../core/progression/AchievementManager';
+import { presentationAwardId, type RewardPresentation } from '../loot/rewardChest';
+import {
+  partyOwnsGear,
+  rollChestGear,
+  rollKillGear,
+  withGearLoot,
+  type GearId,
+} from '../loot/gearPools';
 import { AchievementUISystem } from '../systems/AchievementUISystem';
+import { AchievementAwards } from '../systems/AchievementAwards';
+import { introduceMongo, joinMongoOnOpen, presentsMongo } from '../systems/mongoArrival';
 
 import { MiniMapSystem, type QuestMarkerType } from '../systems/MiniMapSystem';
 import {
@@ -102,7 +123,7 @@ import {
   createJournalProgress,
   restoreJournalProgress,
   type JournalProgress,
-} from '../core/JournalProgress';
+} from '../core/quests/JournalProgress';
 import {
   ARROW_PRIORITY,
   drawArrowAbovePlayer,
@@ -139,7 +160,7 @@ import {
 import { contractContactName } from '../systems/constructionContracts/contractContacts';
 import { playContractCue } from '../systems/constructionContracts/contractSoundCues';
 import { WORK_ORDERS } from '../dialog/scripts/workOrders';
-import { isVillageUnderSiege } from '../core/villageQuestPhase';
+import { isVillageUnderSiege } from '../core/quests/villageQuestPhase';
 import { playInteriorCue } from '../systems/interiorInteractionSoundCues';
 import { SafeRoomSystem, type SafeRoomInfo } from '../systems/SafeRoomSystem';
 import { SkillPointReminderSystem } from '../systems/SkillPointReminderSystem';
@@ -149,7 +170,7 @@ import { TacticsNoticeSystem } from '../systems/TacticsNoticeSystem';
 import type { TacticsTrait } from '../creatures/tactics/tacticsTraits';
 import { isEngagedInFight } from '../creatures/tactics/tacticalFrame';
 import { crawlerName } from '../characters/characters';
-import { getSkillDef, type CrawlerKind } from '../core/SkillManager';
+import { CRAWLER_KINDS, getSkillDef, type CrawlerKind } from '../core/skills/SkillManager';
 import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
 import { BossRoomSystem, BOSS_META } from '../systems/BossRoomSystem';
@@ -157,7 +178,7 @@ import { LavaBallSystem } from '../systems/LavaBallSystem';
 import { RockThrowSystem } from '../systems/RockThrowSystem';
 import { HirelingBoltSystem } from '../systems/HirelingBoltSystem';
 import { playHirelingProjectileCues } from '../systems/hirelingProjectileCues';
-import { awardFirstHundred, bindAbilityLevelUps } from '../systems/abilityLevelUps';
+import { bindAbilityLevelUps } from '../systems/abilityLevelUps';
 import { bindCraftLevelUps } from '../systems/craftLevelUps';
 import { SkeletonProjectileSystem } from '../systems/SkeletonProjectileSystem';
 import { GoblinArrowSystem } from '../systems/GoblinArrowSystem';
@@ -326,8 +347,8 @@ import {
   checkpointSnapshot,
   withoutIncurableStatuses,
   type PlayerSnapshot,
-} from '../core/PlayerSnapshot';
-import type { LevelCheckpoint } from '../core/LevelCheckpoint';
+} from '../core/save/PlayerSnapshot';
+import type { LevelCheckpoint } from '../core/save/LevelCheckpoint';
 import {
   carriedSaveRegeneratesFloor,
   owesArrivalSave,
@@ -335,10 +356,10 @@ import {
   respawnRouteFor,
   savePointAfterWrite,
   type SavePoint,
-} from '../core/SavePoint';
+} from '../core/save/SavePoint';
 import { progressForRespawn, sceneSetupFromSave } from './resumeFromSave';
 import { DESPERADO_CLUB_NAME, type TilePoint } from '../map/town/townPlan';
-import type { WorldCheckpoint } from '../core/WorldCheckpoint';
+import type { WorldCheckpoint } from '../core/save/WorldCheckpoint';
 import {
   toPersistedArenaCheckpoint,
   fromPersistedArenaCheckpoint,
@@ -355,27 +376,24 @@ import {
   toPersistedBountyCheckpoint,
   fromPersistedBountyCheckpoint,
   type PersistedWorldState,
-} from '../core/PersistedWorldState';
-import { assertNoFieldsLeft } from '../core/guards';
+} from '../core/save/PersistedWorldState';
+import { assertNoFieldsLeft } from '../core/util/guards';
 import { BossIntroSystem } from '../systems/BossIntroSystem';
 import { DungeonIntroSystem } from '../systems/DungeonIntroSystem';
 import { TreeSystem } from '../systems/TreeSystem';
 import { WaterAnimationSystem } from '../systems/WaterAnimationSystem';
-import { AbilityManager, type AbilityId } from '../core/AbilityManager';
+import { AbilityManager, type AbilityId } from '../core/skills/AbilityManager';
 import { FollowerScreen } from '../ui/screens/follower/FollowerScreen';
-import { MAGIC_MISSILE_DEF, MAGIC_MISSILE_TALISMAN_LEVEL } from '../abilities/magicMissile';
-import { MONGO_DEF, getMongoStats } from '../abilities/mongo';
+import { MAGIC_MISSILE_SPARK_LEVEL } from '../abilities/magicMissile';
+import { getMongoStats } from '../abilities/mongo';
 import {
   captureMongoPetState,
   createMongoPetState,
   restoreMongoPetState,
   type MongoPetState,
-} from '../core/MongoPetState';
+} from '../core/state/MongoPetState';
 
-import { PROTECTIVE_SHELL_DEF } from '../abilities/protectiveShell';
-import { SMUSH_DEF } from '../abilities/smush';
-import type { GrantedReward } from '../core/GrantedReward';
-import { drawMongoIcon } from '../sprites/mongoSprite';
+import type { GrantedReward } from '../core/items/loot/GrantedReward';
 import { EventBus } from '../core/EventBus';
 import { CrawlerBarkSystem } from '../systems/CrawlerBarkSystem';
 import { siegeHudKeepouts } from '../ui/hud/siegeBellAlert';
@@ -395,7 +413,7 @@ import {
 } from '../systems/GameLoopPhases';
 import { OverworldMusicSystem } from '../systems/OverworldMusicSystem';
 import { AmbientSoundSystem, type AmbientEmitter } from '../systems/AmbientSoundSystem';
-import { drunkCameraOffset } from '../core/DrunkEffect';
+import { drunkCameraOffset } from '../core/combat/DrunkEffect';
 import {
   BIG_TOP_BUILDING_NAME,
   BIG_TOP_SEALED_MESSAGE,
@@ -406,7 +424,7 @@ import {
   restoreCircusQuestProgress,
   type CircusQuestProgress,
   type CircusQuestStage,
-} from '../core/CircusQuestProgress';
+} from '../core/quests/CircusQuestProgress';
 import {
   FloorSfxGates,
   groupsActiveAnywhere,
@@ -421,20 +439,20 @@ import {
   createMurderQuestProgress,
   restoreMurderQuestProgress,
   type MurderQuestProgress,
-} from '../core/MurderQuestProgress';
+} from '../core/quests/MurderQuestProgress';
 import {
   captureAnchorQuestProgress,
   createAnchorQuestProgress,
   restoreAnchorQuestProgress,
   type AnchorQuestProgress,
-} from '../core/AnchorQuestProgress';
+} from '../core/quests/AnchorQuestProgress';
 import {
   captureBountyProgress,
   createBountyProgress,
   restoreBountyProgress,
   type BountyProgress,
-} from '../core/BountyProgress';
-import { createMidgeEscortCarry, type MidgeEscortCarry } from '../core/midgeEscortCarry';
+} from '../core/quests/BountyProgress';
+import { createMidgeEscortCarry, type MidgeEscortCarry } from '../core/quests/midgeEscortCarry';
 import { BountySystem, BOUNTY_TRACKER_ID } from '../systems/BountySystem';
 import { findBountyDef } from '../systems/bountyDefs';
 import {
@@ -458,11 +476,7 @@ import {
   interiorArt,
   type InteriorFloorContext,
 } from './interiorFloorContext';
-import {
-  DEFEND_LOOT_BOX_TIER,
-  DEFEND_QUEST_ID,
-  DefendQuestSystem,
-} from '../systems/DefendQuestSystem';
+import { DEFEND_QUEST_ID, DefendQuestSystem } from '../systems/DefendQuestSystem';
 import { CloggedBathroomSystem } from '../systems/cloggedBathroom/CloggedBathroomSystem';
 import { StealthKeySnatchSystem } from '../systems/stealthKeySnatch/StealthKeySnatchSystem';
 import { prisonDoorRefusal } from '../systems/stealthKeySnatch/prisonDoorGate';
@@ -499,30 +513,30 @@ import {
   rearmExpiredDoomsday,
   restoreDoomsdayProgress,
   type DoomsdayProgress,
-} from '../core/DoomsdayProgress';
+} from '../core/quests/DoomsdayProgress';
 import {
   captureClubMembership,
   createClubMembership,
   restoreClubMembership,
   type ClubMembership,
-} from '../core/ClubMembership';
+} from '../core/club/ClubMembership';
 import {
   createWheelLedger,
   createWheelQuestFreeSpins,
   grantQuestFreeSpin,
   type WheelLedger,
-} from '../core/WheelLedger';
+} from '../core/save/WheelLedger';
 import {
   captureAttackCowState,
   createAttackCowState,
   restoreAttackCowState,
   type AttackCowState,
-} from '../core/AttackCowState';
-import { bloodVomitRemainingOf } from '../core/bloodVomitSave';
+} from '../core/state/AttackCowState';
+import { bloodVomitRemainingOf } from '../core/save/bloodVomitSave';
 import { drainBloodVomitRetches } from '../systems/bloodVomitRetches';
-import { PAGE_SAVE_LATCH, type SaveWriteOutcome } from '../core/progressPersistence';
+import { PAGE_SAVE_LATCH, type SaveWriteOutcome } from '../core/save/progressPersistence';
 import type { InteriorPartyRun, SaveParty } from './interiorPartyRun';
-import type { RunSaveFields } from '../core/saveFormat';
+import type { RunSaveFields } from '../core/save/saveFormat';
 import { WipeHold, type ProgressWipe } from '../ui/screens/dialogs/wipeHold';
 import {
   captureTownMemory,
@@ -531,22 +545,22 @@ import {
   noteCampCasualty,
   restoreTownMemory,
   type TownMemory,
-} from '../core/TownMemory';
+} from '../core/state/TownMemory';
 import {
   clonePartyCraftsState,
   createPartyCraftsState,
   restorePartyCraftsState,
   type PartyCraftsState,
-} from '../core/partyCrafts';
+} from '../core/labour/partyCrafts';
 import {
   captureBriarHollowState,
   createBriarHollowState,
   isVillageSavePoint,
   restoreBriarHollowState,
   type BriarHollowState,
-} from '../core/briarHollowState';
-import { PartyTools } from '../core/PartyTools';
-import { keybindings } from '../core/Keybindings';
+} from '../core/quests/briarHollowState';
+import { PartyTools } from '../core/items/gathering/PartyTools';
+import { keybindings } from '../core/input/Keybindings';
 import {
   BriarHollowKit,
   type BriarHollowKitCheckpoint,
@@ -566,12 +580,12 @@ import {
   restoreMercenaryRoster,
   type MercenaryRoster,
   type MercenaryRosterCheckpoint,
-} from '../core/MercenaryRoster';
-import { createGodModeState, type GodModeState } from '../core/GodMode';
+} from '../core/party/MercenaryRoster';
+import { createGodModeState, type GodModeState } from '../core/state/GodMode';
 import { MercenarySystem } from '../systems/MercenarySystem';
 import { AttackCowSystem } from '../systems/AttackCowSystem';
 import { settleWheelLedger } from '../systems/casino/wheel/wheelPrizes';
-import { adoptWhenCommitted } from '../core/adoptWhenCommitted';
+import { adoptWhenCommitted } from '../core/save/adoptWhenCommitted';
 import {
   DOOMSDAY_TRACKER_ID,
   DoomsdayEscapeSystem,
@@ -580,17 +594,17 @@ import {
 import {
   clearSightOf,
   RenderPipeline,
-  visibilityRadiusPx,
+  VISIBILITY_RADIUS_PX,
   type RenderContext,
 } from '../systems/RenderPipeline';
-import { cameraWorldView, setVisibleWorldView } from '../core/visibleWorldView';
+import { cameraWorldView, setVisibleWorldView } from '../core/rendering/visibleWorldView';
 import type { SystemContext } from '../systems/GameSystem';
 import { GameplayInputHandler } from '../systems/GameplayInputHandler';
 import { GameplayScene } from './GameplayScene';
 import { TutorialController, type TutorialRenderContext } from '../systems/TutorialController';
 import { TUTORIAL_CUES, tutorialCueSource } from '../systems/tutorialSoundCues';
 import { TUTORIAL_CHEST_POS, TUTORIAL_TREASURE_ROOM_BOUNDS } from '../map/TutorialMap';
-import { HOTBAR_COUNT, ITEM_DEF, type ItemId } from '../core/ItemDefs';
+import { HOTBAR_COUNT, ITEM_DEF, type ItemId } from '../core/items/defs/ItemDefs';
 import { BrindleGrub } from '../creatures/BrindleGrub';
 import { SmallSpider } from '../creatures/SmallSpider';
 import {
@@ -615,7 +629,6 @@ import {
   debriefPages,
   EMPTY_DEBRIEF_MEMORY,
   isSupersededDebrief,
-  reconcileDebriefMemory,
   rememberDebriefSpoken,
   sameDebriefMemory,
   unwornGear,
@@ -631,19 +644,19 @@ import type { QuestMarkerState } from '../sprites/questNPCSprite';
 import type { AISceneContext } from '../ai/aiActions';
 import { AIShowStage } from '../ai/show/AIShowStage';
 import { AIChallengeSystem } from '../systems/AIChallengeSystem';
-import { viewerFavor } from '../core/viewerFavor';
+import { viewerFavor } from '../core/progression/viewerFavor';
 import { forwardSceneHooksToBus } from '../systems/sceneHookEvents';
 import { aiFloorKey, type AILevelTimer } from '../ai/actions/types';
 import { aiCameraSpotlight } from '../ai/actions/cameraSpotlight';
 import type { AIContextSource, SemanticLocation, SessionInput } from '../ai/context/types';
 import { readCrawler, readNearbyMobs, tileOf } from '../ai/context/sceneReaders';
 import { mobLabel } from '../ai/context/eventMapping';
-import { GameStats, bindRunStats, type GameStatsSnapshot } from '../core/GameStats';
-import { MusicLibrary, bindMusicLibrary } from '../core/MusicLibrary';
-import { musicUnlocksFromProgress } from '../core/musicBackfill';
+import { GameStats, bindRunStats, type GameStatsSnapshot } from '../core/progression/GameStats';
+import { MusicLibrary, bindMusicLibrary } from '../core/music/MusicLibrary';
+import { musicUnlocksFromProgress } from '../core/music/musicBackfill';
 import { restoreMusicPlayback } from '../audio/music/playerPreference';
-import { difficultyStats } from '../core/DifficultyStats';
-import { settings } from '../core/Settings';
+import { difficultyStats } from '../core/difficulty/DifficultyStats';
+import { settings } from '../core/input/Settings';
 import {
   placedGain,
   type AudioManager,
@@ -670,18 +683,17 @@ import {
   knockedOutBandEntry,
   updateKnockoutState,
 } from '../systems/KnockoutRevive';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
-import { renderQuality } from '../core/RenderQuality';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import { renderQuality } from '../core/perf/RenderQuality';
 import { floorArrivalLoadTasks } from './floorArrivalLoad';
 import { ArrivalLoader, type WarpLoadRequest } from './ArrivalLoader';
-import { steppedWork, type LoadTask } from '../core/LoadRunner';
+import { steppedWork, type LoadTask } from '../core/perf/LoadRunner';
 import { postMusicLibraryNotices, returnUnreadMusicNotices } from '../ui/hud/nowPlaying';
 import { createSceneUi, sceneMouse } from '../ui/core/sceneUi';
 import { byInputMode } from '../ui/core/inputMode';
 import { worldText } from '../ui/world/worldText';
 import { worldPalette } from '../ui/theme/worldInk';
 import { drawUnknownAbilityIcon } from '../ui/icons/rewardIcons';
-import { iconSquare } from '../ui/icons/iconSquare';
 import { dynamiteChargeSurface } from '../systems/DynamiteSystem';
 import type { HitRegion, Surface, UiRoot, WorldGesture } from '../ui/core/UiRoot';
 import { PRIMARY_BUTTON } from '../ui/core/pointer';
@@ -1124,18 +1136,13 @@ const MAX_CONCURRENT_ON_KILL_SPAWNS = 12;
 const ON_KILL_SPAWN_CAP_RADIUS_TILES = 12;
 const ON_KILL_SPAWN_CAP_RADIUS = ON_KILL_SPAWN_CAP_RADIUS_TILES * TILE_SIZE;
 
-/** Kills one attack has to land at once to earn the crowd-control award. */
-const MULTIKILL_ACHIEVEMENT_THRESHOLD = 10;
-/** Enemies one dynamite blast has to kill to earn the Little Boom award. */
-const LITTLE_BOOM_KILL_THRESHOLD = 2;
-
 /**
  * How far around Big Rooster's room a rooster of his flock still counts as one
  * of his guards. His minions stand outside the gym door, not in the room, so
  * the radius has to reach past the room itself.
  */
-const BIG_BRAWLER_GUARD_RADIUS_TILES = 20;
-const BIG_BRAWLER_GUARD_RADIUS = BIG_BRAWLER_GUARD_RADIUS_TILES * TILE_SIZE;
+const PECKING_ORDER_GUARD_RADIUS_TILES = 20;
+const PECKING_ORDER_GUARD_RADIUS = PECKING_ORDER_GUARD_RADIUS_TILES * TILE_SIZE;
 
 /** Spawn-table keys of the roosters that guard Big Rooster's gateway. */
 const ROOSTER_FLOCK_SPAWN_KEYS: ReadonlySet<MobKind> = new Set<MobKind>([
@@ -1193,8 +1200,8 @@ const DUNGEON_FLOOR_TWO = 2;
 const OVERWORLD_FLOOR_THREE = 3;
 const GROTESQUE_SPIDER_WALKING_TRIGGER_DISTANCE_TILES = 12;
 const COMBAT_COOLDOWN_FRAMES = 300;
-/** The cat's reward for her first tutorial kill. */
-const FIRST_BLOOD_POTION_REWARD = 10;
+/** The chest each crawler earns for a boss after Boss Slayer is already theirs. */
+const BOSS_REPEAT_CHEST_RARITY = ACHIEVEMENT_DEFS.boss_slayer.reward.rarity;
 const PLAYER_IDLE_REPORT_INTERVAL_FRAMES = 300;
 const LOW_HEALTH_THRESHOLD = 0.25;
 const FRAMES_PER_SECOND = 60;
@@ -1619,6 +1626,8 @@ export class DungeonScene extends GameplayScene {
   private readonly runCompleteScreen = new RunCompleteScreen();
 
   private achievementUI: AchievementUISystem;
+  /** Pays every award this scene's crawlers earn; see {@link AchievementAwards}. */
+  private awards: AchievementAwards;
   /** The show AI's timed bounties on this floor. */
   private readonly aiChallenges: AIChallengeSystem;
   /** Where the show AI's questions, adverts, challenge offers and the viewers' favour appear. */
@@ -1755,7 +1764,11 @@ export class DungeonScene extends GameplayScene {
 
   private readonly touch = new TouchMoveState();
   private krakarenKilled = false;
-  private krakarenBossRoomIdx = -1;
+  /**
+   * The run's damage-taken total when the current boss fight began, or null
+   * outside one: a boss that dies with the total unchanged was beaten unhurt.
+   */
+  private damageTakenAtBossFightStart: number | null = null;
   private bigRoosterKilled = false;
   private bigRoosterBossRoomIdx = -1;
   private woodBreakSoundIdx = 0;
@@ -1853,10 +1866,7 @@ export class DungeonScene extends GameplayScene {
     // Ahead of the kits: `CombatKit` levels abilities off kills and `MenusKit`
     // draws the ability screen, so both want this before they exist.
     this.abilityManager = options?.abilityManager ?? new AbilityManager();
-    this.abilityManager.register(MAGIC_MISSILE_DEF);
-    this.abilityManager.register(PROTECTIVE_SHELL_DEF);
-    this.abilityManager.register(SMUSH_DEF);
-    this.abilityManager.register(MONGO_DEF);
+    for (const def of Object.values(ABILITY_DEFS)) this.abilityManager.register(def);
 
     const tutorialController = options?.tutorialController ?? null;
     const interiorReturn = options?.interiorReturn ?? null;
@@ -2150,7 +2160,7 @@ export class DungeonScene extends GameplayScene {
         ? {}
         : {
             inventoryRestrictions: () => tutorialController.inventoryRestrictions(),
-            onBlockedInventoryDrag: () => tutorialController.triggerBoxersDragHint(),
+            onBlockedInventoryDrag: () => tutorialController.triggerHoodieDragHint(),
             inventoryCrawlerLock: () => {
               const restriction = tutorialController.pauseRestriction();
               return restriction?.kind === 'inventory' ? restriction.crawler : null;
@@ -2234,7 +2244,7 @@ export class DungeonScene extends GameplayScene {
     // Anchored to the room he spawns into rather than to where his corpse ends
     // up: a knockback onto a doorway or boundary tile can land his death
     // position outside every tracked boss room, which would otherwise pin
-    // this at -1 and make the Big Brawler gauntlet permanently unclearable.
+    // this at -1 and make the Pecking Order gauntlet permanently unclearable.
     this.bigRoosterBossRoomIdx =
       levelDef.bossRooms?.findIndex((b) => b.type === 'big_rooster') ?? -1;
     this.arenaRoom = new ArenaRoomSystem(this.gameMap.arenaExteriors[0]);
@@ -2562,11 +2572,10 @@ export class DungeonScene extends GameplayScene {
             : recommendedPartyLevelFor(nextDef, activeDifficultyProfile());
         difficultyStats.recordDescend(partyLevel(), recommendedLevel);
 
-        // Night Vision trains on floors survived while leading, not on kills — it
-        // is a passive, so a whole floor is the only honest unit of use. Credited
-        // before the save below, or closing the browser on the celebration screen
-        // would lose the floor's progress.
-        if (this.cat.isActive) this.cat.skills.recordUse('night_vision');
+        // Gear's once-per-floor effects are readied for the floor below before
+        // the save, so a reload on arrival finds them ready too.
+        this.human.gear.startNewFloor();
+        this.cat.gear.startNewFloor();
 
         // Save progress immediately so the floor is recorded as complete even if
         // the player closes the browser during the celebration screen.
@@ -2861,20 +2870,30 @@ export class DungeonScene extends GameplayScene {
     this.achievementUI = new AchievementUISystem(
       this.humanAchievements,
       this.catAchievements,
-      this.human,
-      this.cat,
-      this.rewardFly,
       this.audio,
     );
+    this.awards = new AchievementAwards({
+      owns: this.partyOwnsGear,
+      humanAchievements: this.humanAchievements,
+      catAchievements: this.catAchievements,
+      human: this.human,
+      cat: this.cat,
+      bus: this.bus,
+      coinMultiplier: () => this.aiShow.chestCoinMultiplier(),
+      activeCrawler: () => (this.cat.isActive ? 'cat' : 'human'),
+      inTutorial: () => this.tutorial !== null,
+    });
+    this.bossRoom.setHostileWorldClock(() => this.combat.worldStepTaken);
+    this.combat.gear.onSetCompleted = (kind) => this.awards.unlockDressedForTheOccasion(kind);
+    this.combat.gear.onRelicKill = (kind) => this.awards.recordRelicKill(kind);
     this.aiChallenges = new AIChallengeSystem({
       bus: this.bus,
       gameMap: this.gameMap,
       human: this.human,
       cat: this.cat,
       postToast: (text, opts) => this.menus.toasts.post(text, opts),
-      grantReward: (side, tier) => {
-        const achievements = side === 'Human' ? this.humanAchievements : this.catAchievements;
-        achievements.grantBox(tier, 'Adventurer', null);
+      grantReward: (side, rarity) => {
+        this.awards.grantChest(side === 'Human' ? 'human' : 'cat', { rarity, source: 'challenge' });
       },
     });
     this.aiShow = new AIShowStage({
@@ -2883,17 +2902,11 @@ export class DungeonScene extends GameplayScene {
       challenges: this.aiChallenges,
       postToast: (text, opts) => this.menus.toasts.post(text, opts),
     });
-    this.achievementUI.boxCoinMultiplier = () => this.aiShow.boxCoinMultiplier();
-
-    if (tutorialController !== null) {
-      const tut = tutorialController;
-      this.achievementUI.onAllBoxesOpened = () => {
-        tut.onHumanRewardDialogDismissed(this.human);
-        this.bus.emit('rewardGranted', {
-          rewards: [this._makeAbilityReward('smush'), this._makeAbilityReward('protective_shell')],
-        });
-      };
-    }
+    this.achievementUI.presentationGate = () => this.showsAchievementUi;
+    this.achievementUI.onPresentationOpened = (presentation) =>
+      joinMongoOnOpen(presentation, this.mongoSystem);
+    this.achievementUI.onPresentationClosed = (presentation) =>
+      this.onRewardPresentationClosed(presentation);
 
     this.floorEntryHumanAchievements =
       options?.floorEntryHumanAchievements ?? this.humanAchievements.clone();
@@ -2931,7 +2944,7 @@ export class DungeonScene extends GameplayScene {
       menus: this.menus,
       audio: this.audio,
       onPetLevelUp: () => this.mongoSystem.onPetLevelUp(),
-      onTalismanLevel: () => this.unlockFirstHundred(),
+      onSparkLevel: () => this.unlockSparkToFlame(),
     });
     bindCraftLevelUps({ bus: this.bus, menus: this.menus, audio: this.audio });
     this.cat.setAbilityManager(this.abilityManager);
@@ -3205,24 +3218,43 @@ export class DungeonScene extends GameplayScene {
    */
   private checkFloorEntryAchievements(): void {
     if (this.tutorial !== null) return;
-    if (this.levelDef.id === FIRST_DUNGEON_LEVEL_ID) {
-      if (this.humanAchievements.tryUnlock('no_pants')) {
-        this.bus.emit('achievementUnlocked', { achievementId: 'no_pants', player: 'Human' });
-      }
-    }
-    if (this.abilityManager.getRealLevel('magic_missile') >= MAGIC_MISSILE_TALISMAN_LEVEL) {
-      this.unlockFirstHundred();
+    if (this.levelDef.id === FIRST_DUNGEON_LEVEL_ID) this.awards.unlockParty('down_the_hatch');
+    if (this.abilityManager.getRealLevel('magic_missile') >= MAGIC_MISSILE_SPARK_LEVEL) {
+      this.unlockSparkToFlame();
     }
   }
 
-  private unlockFirstHundred(): void {
+  private unlockSparkToFlame(): void {
     if (this.tutorial !== null) return;
-    awardFirstHundred(this.catAchievements, this.bus);
+    this.awards.unlock('cat', 'spark_to_flame');
+  }
+
+  /**
+   * What closing a reward presentation sets going: the tutorial's next step
+   * after its first-kill chest, and Mongo's arrival after the chest that
+   * brought him, each held until the chest is put away so neither stacks
+   * over it.
+   */
+  private onRewardPresentationClosed(presentation: RewardPresentation): void {
+    const tutorial = this.tutorial;
+    if (
+      tutorial !== null &&
+      presentation.crawler === 'human' &&
+      presentationAwardId(presentation) === 'first_kill'
+    ) {
+      tutorial.onHumanRewardDialogDismissed();
+      this.bus.emit('rewardGranted', {
+        rewards: [this._makeAbilityReward('smush'), this._makeAbilityReward('protective_shell')],
+      });
+    }
+    if (presentsMongo(presentation)) {
+      introduceMongo(this.bus, this.menus, () => this.abilityManager.getLevel('mongo'));
+    }
   }
 
   /**
    * Whether Big Rooster is dead and none of his gateway guards are still
-   * standing — the pair of conditions the Big Brawler award needs, which can
+   * standing — the pair of conditions the Pecking Order award needs, which can
    * complete in either order.
    */
   private roosterGauntletFullyCleared(): boolean {
@@ -3235,30 +3267,34 @@ export class DungeonScene extends GameplayScene {
       ROOSTER_FLOCK_SPAWN_KEYS,
       room.centre.x * TILE_SIZE,
       room.centre.y * TILE_SIZE,
-      BIG_BRAWLER_GUARD_RADIUS,
+      PECKING_ORDER_GUARD_RADIUS,
     );
     return guards === 0;
   }
 
-  private tryUnlockBigBrawler(): void {
+  private tryUnlockPeckingOrder(): void {
     if (this.tutorial !== null) return;
     if (!this.roosterGauntletFullyCleared()) return;
-    if (this.humanAchievements.tryUnlock('big_brawler')) {
-      this.bus.emit('achievementUnlocked', { achievementId: 'big_brawler', player: 'Human' });
-    }
+    this.awards.unlock('human', 'pecking_order');
   }
 
-  /** Which boss room holds the given world-pixel position, or -1 if none does. */
-  private bossRoomIndexContaining(x: number, y: number): number {
-    const tileX = Math.round(x / TILE_SIZE);
-    const tileY = Math.round(y / TILE_SIZE);
-    return this.gameMap.bossRooms.findIndex(
-      (br) =>
-        tileX >= br.bounds.x &&
-        tileX < br.bounds.x + br.bounds.w &&
-        tileY >= br.bounds.y &&
-        tileY < br.bounds.y + br.bounds.h,
-    );
+  /** The achievements a kill the party earned can advance or unlock. */
+  private awardKillAchievements(mob: Mob, killer: HumanPlayer | CatPlayer): void {
+    const kind = killer === this.human ? 'human' : 'cat';
+    this.awards.unlock(kind, 'first_kill');
+    if (this.tutorial !== null) return;
+    if (this.levelDef.isOverworld !== true) this.awards.recordDungeonKill();
+    if (kind === 'human' && (mob.killType === 'melee' || mob.killType === 'smush')) {
+      this.awards.unlock('human', 'up_close');
+    }
+    if (kind === 'cat' && mob.killType === 'missile') this.awards.unlock('cat', 'magic_touch');
+    if (kind === 'cat' && mob.killedUnseen) this.awards.advance('unseenKills', 'cat');
+    // The archer is a goblin to the player even though it descends from `Mob`
+    // rather than from `Goblin`, so it is named alongside it.
+    const isGoblin = mob instanceof Goblin || mob instanceof GoblinArcher;
+    if (kind === 'human' && mob.killType === 'smush' && isGoblin) {
+      this.awards.unlock('human', 'flat_out');
+    }
   }
 
   /**
@@ -3320,7 +3356,6 @@ export class DungeonScene extends GameplayScene {
     const bus = this.bus;
     this.stopForwardingSceneHooks = forwardSceneHooksToBus(bus, {
       conversation: this.conversation,
-      achievementUI: this.achievementUI,
     });
 
     bus.on('spawnGore', (e) => {
@@ -3401,50 +3436,17 @@ export class DungeonScene extends GameplayScene {
         this.gameMap.roomIndexAt(Math.floor(cx / TILE_SIZE), Math.floor(cy / TILE_SIZE)),
       );
 
-      if (creditedKiller === this.human && this.humanAchievements.tryUnlock('first_blood')) {
-        bus.emit('achievementUnlocked', { achievementId: 'first_blood', player: 'Human' });
-        if (this.tutorial !== null) {
-          this.humanAchievements.grantBox('Gold', 'Tutorial', 'first_blood');
-        }
-      }
-      if (creditedKiller === this.cat && this.catAchievements.tryUnlock('first_blood')) {
-        bus.emit('achievementUnlocked', { achievementId: 'first_blood', player: 'Cat' });
-        if (this.tutorial !== null) {
-          this.cat.inventory.addItem('health_potion', FIRST_BLOOD_POTION_REWARD);
-        }
-      }
-
-      if (
-        this.tutorial === null &&
-        creditedKiller === this.human &&
-        (mob.killType === 'melee' || mob.killType === 'smush')
-      ) {
-        if (this.humanAchievements.tryUnlock('smush')) {
-          bus.emit('achievementUnlocked', { achievementId: 'smush', player: 'Human' });
-        }
-      }
-
-      if (this.tutorial === null && creditedKiller === this.cat && mob.killType === 'missile') {
-        if (this.catAchievements.tryUnlock('magic_touch')) {
-          bus.emit('achievementUnlocked', { achievementId: 'magic_touch', player: 'Cat' });
-        }
-      }
-
-      // The archer is a goblin to the player even though it descends from `Mob`
-      // rather than from `Goblin`, so it is named alongside it.
-      if (
-        this.tutorial === null &&
-        creditedKiller === this.human &&
-        mob.killType === 'smush' &&
-        (mob instanceof Goblin || mob instanceof GoblinArcher)
-      ) {
-        if (this.humanAchievements.tryUnlock('podophilia')) {
-          bus.emit('achievementUnlocked', { achievementId: 'podophilia', player: 'Human' });
-        }
-      }
+      if (creditedKiller !== null) this.awardKillAchievements(mob, creditedKiller);
 
       if (mob.spawnTypeKey !== null && ROOSTER_FLOCK_SPAWN_KEYS.has(mob.spawnTypeKey)) {
-        this.tryUnlockBigBrawler();
+        this.tryUnlockPeckingOrder();
+      }
+
+      if (this.tutorial === null && mob.paysRewards) {
+        mob.droppedLoot = withGearLoot(
+          mob.droppedLoot,
+          rollKillGear(mob, this.levelDef.floorNumber, Math.random, this.partyOwnsGear),
+        );
       }
 
       if (mob.droppedLoot && topDamageDealer) {
@@ -3488,8 +3490,8 @@ export class DungeonScene extends GameplayScene {
       // mob to a room lock and a clamp it has no room for. Its death is a boss
       // defeat all the same, and the arena's second wave waits on this event.
       if (mob.isBoss || mob instanceof BallOfSwine) {
-        // Every listener that cares which boss died (the Mongo unlock, the
-        // difficulty stats, the arena) matches snake_case spawn keys, so the
+        // Every listener that cares which boss died (the difficulty stats, the
+        // arena, the music) matches snake_case spawn keys, so the
         // event carries the mob's `spawnTypeKey`.
         bus.emit('bossDefeated', {
           bossType: mob.spawnTypeKey ?? (mob.constructor.name || 'unknown'),
@@ -3555,27 +3557,32 @@ export class DungeonScene extends GameplayScene {
       }
     });
 
-    bus.on('bossDefeated', (e) => {
+    bus.on('bossFightInitiated', () => {
+      this.damageTakenAtBossFightStart = this.gameStats.damageTaken;
+    });
+
+    bus.on('bossDefeated', () => {
       if (this.tutorial === null) {
-        if (this.humanAchievements.tryUnlock('boss_slayer')) {
-          bus.emit('achievementUnlocked', { achievementId: 'boss_slayer', player: 'Human' });
-        } else {
-          this.humanAchievements.grantBox('Bronze', 'Boss', 'boss_slayer');
+        for (const kind of CRAWLER_KINDS) {
+          if (!this.awards.unlock(kind, 'boss_slayer')) {
+            this.awards.grantChest(kind, {
+              rarity: BOSS_REPEAT_CHEST_RARITY,
+              source: 'bossRepeat',
+            });
+          }
         }
-        if (this.catAchievements.tryUnlock('boss_slayer')) {
-          bus.emit('achievementUnlocked', { achievementId: 'boss_slayer', player: 'Cat' });
-        } else {
-          this.catAchievements.grantBox('Bronze', 'Boss', 'boss_slayer');
-        }
+        const unhurt = this.gameStats.damageTaken === this.damageTakenAtBossFightStart;
+        if (unhurt) this.awards.advance('flawlessBossKills', 'human');
       }
+      this.damageTakenAtBossFightStart = null;
+    });
+
+    bus.on('bossDefeated', (e) => {
       const bossLabel = `Defeated boss: ${e.bossType.replace(/_/g, ' ')}`;
       this.humanAchievements.logRecentEvent(bossLabel);
       this.catAchievements.logRecentEvent(bossLabel);
 
-      if (e.bossType === 'krakaren_clone' && !this.krakarenKilled) {
-        this.krakarenKilled = true;
-        this.krakarenBossRoomIdx = this.bossRoomIndexContaining(e.mob.x, e.mob.y);
-      }
+      if (e.bossType === 'krakaren_clone') this.krakarenKilled = true;
 
       if (e.bossType === 'big_rooster' && !this.bigRoosterKilled) {
         this.bigRoosterKilled = true;
@@ -3584,30 +3591,21 @@ export class DungeonScene extends GameplayScene {
         // Announced here as well as on the chest, so a player who walks past the
         // chest still learns the Club will now let them in.
         this.human.queueSystemNotice(DESPERADO_TATTOO_NOTICE);
-        this.tryUnlockBigBrawler();
+        this.tryUnlockPeckingOrder();
       }
     });
 
     bus.on('multiKill', (e) => {
       if (this.tutorial !== null) return;
-      if (e.count < MULTIKILL_ACHIEVEMENT_THRESHOLD) return;
-      if (this.humanAchievements.tryUnlock('crowd_control')) {
-        bus.emit('achievementUnlocked', { achievementId: 'crowd_control', player: 'Human' });
-      }
+      if (e.count >= MULTIKILL_ACHIEVEMENT_THRESHOLD) this.awards.unlock('human', 'wrecking_ball');
     });
 
     // Human-only by construction: only the human can light a stick.
     bus.on('dynamiteKills', (e) => {
       if (this.tutorial !== null) return;
-      if (
-        e.kills >= LITTLE_BOOM_KILL_THRESHOLD &&
-        this.humanAchievements.tryUnlock('little_boom')
-      ) {
-        bus.emit('achievementUnlocked', { achievementId: 'little_boom', player: 'Human' });
-      }
-      if (e.bossKilled && this.humanAchievements.tryUnlock('finish_with_a_blow')) {
-        bus.emit('achievementUnlocked', { achievementId: 'finish_with_a_blow', player: 'Human' });
-      }
+      if (e.kills >= DYNAMITE_MULTIKILL_THRESHOLD)
+        this.awards.unlock('human', 'two_birds_one_stick');
+      if (e.bossKilled) this.awards.unlock('human', 'finish_with_a_blow');
     });
 
     bus.on('rewardGranted', (e) => {
@@ -3622,12 +3620,7 @@ export class DungeonScene extends GameplayScene {
     });
 
     bus.on('safeRoomEntered', () => {
-      if (this.tutorial === null && this.humanAchievements.tryUnlock('safe_haven')) {
-        bus.emit('achievementUnlocked', { achievementId: 'safe_haven', player: 'Human' });
-      }
-      if (this.tutorial === null && this.catAchievements.tryUnlock('safe_haven')) {
-        bus.emit('achievementUnlocked', { achievementId: 'safe_haven', player: 'Cat' });
-      }
+      if (this.tutorial === null) this.awards.unlockParty('safe_haven');
       // Reachable mid-fight: the event fires for either crawler, and one left
       // outside a locked boss room can still walk into a safe room. Both the
       // saved game and the death checkpoint are skipped, so neither one can
@@ -3678,11 +3671,19 @@ export class DungeonScene extends GameplayScene {
     });
 
     // Each quest pays its own XP and coins and asks for its reward screen; what
-    // stays here is what only the scene owns: the achievement stack the loot
-    // box goes onto, and both crawlers' quest slots.
+    // stays here is what only the scene owns: the achievements it pays, and
+    // both crawlers' quest slots. Guardian Angel pays once; every later rescue
+    // still earns each crawler a chest of the same rarity.
     bus.on('questCompleted', (e) => {
       if (e.questId === DEFEND_QUEST_ID) {
-        this.humanAchievements.grantBox(DEFEND_LOOT_BOX_TIER, 'Adventurer', 'quest_defend_npc');
+        for (const kind of CRAWLER_KINDS) {
+          if (!this.awards.unlock(kind, 'quest_defend_npc')) {
+            this.awards.grantChest(kind, {
+              rarity: ACHIEVEMENT_DEFS.quest_defend_npc.reward.rarity,
+              source: 'quest',
+            });
+          }
+        }
         this.human.inventory.clearQuestItem('quest_wood_board');
         this.cat.inventory.clearQuestItem('quest_wood_board');
       }
@@ -5137,7 +5138,7 @@ export class DungeonScene extends GameplayScene {
     // Mongo walks back out with the party exactly as he stood at the door.
     const companionsWaitOutside = entry.type === 'prison';
     const departureFor = (indoors: InteriorCompanionDeparture): InteriorCompanionDeparture =>
-      companionsWaitOutside ? { mongoWasOut: companionArrival.mongoWasOut } : indoors;
+      companionsWaitOutside ? { ...indoors, mongoWasOut: companionArrival.mongoWasOut } : indoors;
     const heldFloor = this.floorRegeneratesAroundBuildings
       ? null
       : this.holdFloorForInterior(returnTile);
@@ -5304,7 +5305,7 @@ export class DungeonScene extends GameplayScene {
       ...(entry.type === 'prison' ? this.prisonVisitContext(prisonDifficulty) : {}),
       floorNumber: levelDef.floorNumber,
       ...interiorArt(levelDef.spriteGroups, levelDef),
-      sightRadiusPx: visibilityRadiusPx(this.active()),
+      sightRadiusPx: VISIBILITY_RADIUS_PX,
       ownsMusic: false,
       heldLevelTimerFrames: levelDef.hasCollapseTimer === true ? heldFloor.levelTimerFrames : null,
       aiFloorKey: this.aiFloorKey(),
@@ -5362,7 +5363,7 @@ export class DungeonScene extends GameplayScene {
       humanAchievements: this.humanAchievements,
       catAchievements: this.catAchievements,
       musicLibrary: this.musicLibrary,
-      mongoUnlocked: this.mongoSystem.unlocked,
+      mongoUnlocked: this.mongoSystem.unlocked || companionDeparture.mongoUnlocked,
       mongoPetState: this.mongoPetState,
       wheelLedger: this.wheelLedger,
       attackCowState: this.attackCowState,
@@ -5688,7 +5689,6 @@ export class DungeonScene extends GameplayScene {
       briarHollow: captureBriarHollowState(this.briarHollowState),
 
       krakarenKilled: this.krakarenKilled,
-      krakarenBossRoomIdx: this.krakarenBossRoomIdx,
       bigRoosterKilled: this.bigRoosterKilled,
       bigRoosterBossRoomIdx: this.bigRoosterBossRoomIdx,
     };
@@ -5758,7 +5758,6 @@ export class DungeonScene extends GameplayScene {
     }
 
     this.krakarenKilled = world.krakarenKilled;
-    this.krakarenBossRoomIdx = world.krakarenBossRoomIdx;
     this.bigRoosterKilled = world.bigRoosterKilled;
     this.bigRoosterBossRoomIdx = world.bigRoosterBossRoomIdx;
   }
@@ -5830,7 +5829,6 @@ export class DungeonScene extends GameplayScene {
       briarHollow: captureBriarHollowState(this.briarHollowState),
 
       krakarenKilled: this.krakarenKilled,
-      krakarenBossRoomIdx: this.krakarenBossRoomIdx,
       bigRoosterKilled: this.bigRoosterKilled,
       bigRoosterBossRoomIdx: this.bigRoosterBossRoomIdx,
     };
@@ -5882,7 +5880,6 @@ export class DungeonScene extends GameplayScene {
       bossRoomDressing,
       briarHollow,
       krakarenKilled,
-      krakarenBossRoomIdx,
       bigRoosterKilled,
       bigRoosterBossRoomIdx,
       ...unappliedFields
@@ -5955,7 +5952,6 @@ export class DungeonScene extends GameplayScene {
     }
 
     this.krakarenKilled = krakarenKilled;
-    this.krakarenBossRoomIdx = krakarenBossRoomIdx;
     this.bigRoosterKilled = bigRoosterKilled;
     this.bigRoosterBossRoomIdx = bigRoosterBossRoomIdx;
   }
@@ -6142,8 +6138,7 @@ export class DungeonScene extends GameplayScene {
       settleParty: () =>
         this.mercenarySystem.forfeitDownedHire(this.world.roster.mobs, this.world.roster.grid),
       unlockAchievements: () => {
-        this.humanAchievements.tryUnlock('city_evacuated');
-        this.catAchievements.tryUnlock('city_evacuated');
+        this.awards.unlockParty('out_before_the_fall');
       },
       save: () => this.captureSavePoint(this.saveTileUnder(this.active())),
       summarize: () =>
@@ -7217,7 +7212,6 @@ export class DungeonScene extends GameplayScene {
       humanAchievements: this.humanAchievements,
       catAchievements: this.catAchievements,
       gameStats: this.gameStats,
-      ...this.achievementUI.pauseBoxOpeners(() => this.menus.pauseScreen.close()),
     };
   }
 
@@ -7415,7 +7409,7 @@ export class DungeonScene extends GameplayScene {
     const bossType = this.exitRoomBoss(room);
     if (room === null || bossType === null) return false;
     const state = this.debriefState();
-    const memory = this.debriefMemoryFor(bossType, state);
+    const memory = this.debriefMemoryFor(bossType);
     const line = mordecaiSpokenPages(debriefPages(bossType, memory, state) ?? []);
     if (line === null) return false;
 
@@ -7460,19 +7454,12 @@ export class DungeonScene extends GameplayScene {
     this.mordecaiDebrief = kept;
   }
 
-  private debriefMemoryFor(bossType: DebriefBossType, state: DebriefState): DebriefMemory {
-    const stored = this.mordecaiDebrief[bossType] ?? EMPTY_DEBRIEF_MEMORY;
-    const reconciled = reconcileDebriefMemory(stored, state.pendingBoxes);
-    if (reconciled !== stored) this.mordecaiDebrief[bossType] = reconciled;
-    return reconciled;
+  private debriefMemoryFor(bossType: DebriefBossType): DebriefMemory {
+    return this.mordecaiDebrief[bossType] ?? EMPTY_DEBRIEF_MEMORY;
   }
 
   private debriefState(): DebriefState {
     return {
-      pendingBoxes: {
-        human: this.humanAchievements.pendingBoxes.length,
-        cat: this.catAchievements.pendingBoxes.length,
-      },
       unworn: [
         ...unwornGear('human', this.human.inventory),
         ...unwornGear('cat', this.cat.inventory),
@@ -7485,7 +7472,7 @@ export class DungeonScene extends GameplayScene {
     const bossType = this.exitRoomBoss(room);
     if (bossType === null) return 'none';
     const state = this.debriefState();
-    const hasNews = debriefHasNews(this.debriefMemoryFor(bossType, state), state);
+    const hasNews = debriefHasNews(this.debriefMemoryFor(bossType), state);
     return hasNews ? 'exclamation' : 'none';
   }
 
@@ -7982,14 +7969,6 @@ export class DungeonScene extends GameplayScene {
       this.audio?.play('error');
       return true;
     }
-    if (this.tutorial?.blockBoxersActivation === true && slot.id === 'enchanted_bigboi_boxers') {
-      this.audio?.play('error');
-      this.menus.toasts.post('The boxers are already doing their job — just equip them!', {
-        tone: 'warning',
-        durationTicks: COMPANION_ERROR_DISPLAY_FRAMES,
-      });
-      return true;
-    }
     if (
       (slot.id === 'gym_dumbbell' ||
         slot.id === 'gym_bench_press' ||
@@ -8023,14 +8002,10 @@ export class DungeonScene extends GameplayScene {
       minimap: this.hudMinimap(),
       dock: this.hudDock(),
       summon: this.hudSummon(),
-      lootBanner: this.showsAchievementUi
-        ? this.achievementUI.hudBanner(() => this.menus.pauseScreen.close())
-        : null,
       hotbar: {
         slots: hotbarSlotModels(
           this.menus.itemCooldowns,
-          invPlayer.inventory,
-          this.menus.inventoryDrawnWeaponId(),
+          invPlayer,
           invPlayer === this.human ? this.readiedDynamiteId() : null,
         ),
         input: hotbarPressInput(
@@ -8123,15 +8098,15 @@ export class DungeonScene extends GameplayScene {
         onTap: () => this.briarHollowKit?.openConstruction(),
       });
     }
-    const unread = this.showsAchievementUi ? this.achievementUI.hudChipCount() : null;
-    if (unread !== null) {
+    const waiting = this.achievementUI.hudChipCount();
+    if (waiting !== null) {
       dock.push({
         id: 'chip',
         icon: 'trophy',
-        label: 'New achievements',
-        badge: String(unread),
+        label: 'Rewards waiting',
+        badge: String(waiting),
         pulse: true,
-        onTap: () => void this.achievementUI.showUnread(),
+        onTap: () => void this.achievementUI.openRewards(),
       });
     }
     if (this.hasQuestJournal) {
@@ -8183,6 +8158,7 @@ export class DungeonScene extends GameplayScene {
   /** Every bar the top band stacks this frame. */
   private topBandEntries(): TopBandEntry[] {
     const entries: (TopBandEntry | null)[] = [
+      this.achievementUI.rewardsBanner(this.human.isProtected || this.cat.isProtected),
       this.bossRoom.topBandEntry(this.world.roster.mobs, this.human, this.cat),
       ...this.arena.topBandEntries(this.active()),
       this.defendQuest.topBandEntry(),
@@ -8575,7 +8551,6 @@ export class DungeonScene extends GameplayScene {
       partyLightSource({
         crawlers: () => this.lightedCrawlers(),
         companions: () => this.lightedCompanions(),
-        crawlerReachTiles: (base) => lighting.crawlerReachTiles(base),
       }),
     );
     lighting.addDynamicLightSource(this.cat);
@@ -8586,7 +8561,7 @@ export class DungeonScene extends GameplayScene {
     lighting.addDynamicLightSource(this.knightMissiles);
     lighting.addDynamicLightSource(this.skeletonShots);
     lighting.addDynamicLightSource(this.combat.spells);
-    lighting.addDynamicLightSource(this.combat.taranis);
+    lighting.addDynamicLightSource(this.combat.stormcaller);
     lighting.addDynamicLightSource(this.destruction.destructibles);
     lighting.addDynamicLightSource({
       collectLights: (sink) => {
@@ -8756,9 +8731,6 @@ export class DungeonScene extends GameplayScene {
     const viewW = viewportWidth();
     const viewH = viewportHeight();
     this.renderPipeline.renderFlyingGore(ctx, rc);
-    // The fog's clear disc follows the active crawler's Night Vision; the
-    // dark follows the same crawler, so the two never disagree.
-    lighting.setNightVisionLevel(rc.active.skills.getLevel('night_vision'));
     lighting.render(ctx, camX, camY, viewW, viewH);
     const warnings = this.renderPipeline.hasGroundWarnings(rc);
     const beacons = this.hasObjectiveBeacons(camX, camY);
@@ -8829,7 +8801,8 @@ export class DungeonScene extends GameplayScene {
       dynamite: this.destruction.dynamite,
       smushFx: this.combat.smushFx,
       meleeFx: this.combat.meleeFx,
-      taranisFx: this.combat.taranis,
+      stormcallerFx: this.combat.stormcaller,
+      gearFx: this.combat.gear,
       missileFx: this.combat.missileFx,
       lavaBalls: this.lavaBalls,
       rockThrows: this.rockThrows,
@@ -8950,13 +8923,7 @@ export class DungeonScene extends GameplayScene {
     // exists to answer. The HUD and every menu draw after it and cover it where
     // they meet.
     if (!this.gameOver && !this.menus.pauseScreen.isOpen) {
-      this.mongoSystem.renderOffscreenMarker(
-        ctx,
-        camX,
-        camY,
-        this.active(),
-        visibilityRadiusPx(this.active()),
-      );
+      this.mongoSystem.renderOffscreenMarker(ctx, camX, camY, this.active(), VISIBILITY_RADIUS_PX);
     }
 
     // Rebuilt once here, above every consumer: the pinned world arrow, the
@@ -8992,7 +8959,7 @@ export class DungeonScene extends GameplayScene {
           camX,
           camY,
           this.active(),
-          visibilityRadiusPx(this.active()),
+          VISIBILITY_RADIUS_PX,
           framesRect,
         ),
         this.attackCowSystem.downedArrowCandidate(
@@ -9000,7 +8967,7 @@ export class DungeonScene extends GameplayScene {
           camX,
           camY,
           this.active(),
-          visibilityRadiusPx(this.active()),
+          VISIBILITY_RADIUS_PX,
         ),
         this.stairwellRevealArrowCandidate(ctx, camX, camY),
         this.spiderLabArrowCandidate(ctx, camX, camY),
@@ -9183,7 +9150,7 @@ export class DungeonScene extends GameplayScene {
         bagItemRects: {
           smush_tome: bagItemRect('smush_tome'),
           health_potion: bagItemRect('health_potion'),
-          enchanted_bigboi_boxers: bagItemRect('enchanted_bigboi_boxers'),
+          lucky_hoodie: bagItemRect('lucky_hoodie'),
           magic_missile_tome: bagItemRect('magic_missile_tome'),
         },
         hotbarSlotRects:
@@ -9195,7 +9162,6 @@ export class DungeonScene extends GameplayScene {
           return rect === undefined ? null : toCssRect(rect, uiScale);
         }),
         isDragActive: screen.drag !== null,
-        isAchievementNotifActive: this.achievementUI.notifActive,
         isContextMenuOpen: screen.menu?.kind === 'item',
         contextMenuOptionRects: itemMenuEntryRects(screen.surface.id, this.ui.regions()).map(
           (entry) => ({ id: entry.id, ...toCssRect(entry.rect, uiScale) }),
@@ -9208,8 +9174,8 @@ export class DungeonScene extends GameplayScene {
           ? this.followerMenu.followMeButtonRect
           : null,
         mordecaiPosition: this.safeRoom.mordecaiStandingPositions[0] ?? null,
-        achievementBannerRect: this.hud.cssBandEntryRect(LOOT_BANNER_ENTRY_ID),
-        isLootBoxOpen: this.achievementUI.lootBoxOpener.isOpen,
+        isRewardScreenOpen: this.achievementUI.isBlocking,
+        rewardsChipRect: this.hud.cssDockRect('chip'),
         isChestRewardOpen: this.chestRewardDialog.isOpen,
         switchButtonRect: this.hud.cssDockRect('switch'),
         levelBadgeRect: this.hud.cssSkillBadgeRect(),
@@ -9573,12 +9539,15 @@ export class DungeonScene extends GameplayScene {
     this.overworldMusic?.update(ctx);
     this.updateVillageAmbience(ctx.active);
     this.ambientSound?.update(ctx);
-    this.bossRoomDressings.update(ctx);
+    if (this.combat.worldStepTaken) this.bossRoomDressings.update(ctx);
     const colosseumCue = this.bossRoomDressings.parts.colosseum?.takeSoundCue() ?? null;
     if (colosseumCue !== null) this.audio?.play(colosseumCue);
     for (const takes of this.gymRoom.drainSoundCues()) this.audio?.playRandom(takes);
     for (const cue of this.bossRoomDressings.parts.krakaren?.drainSoundCues() ?? []) {
       this.audio?.play(cue.id, { volume: cue.volume });
+    }
+    for (const burst of this.bossRoomDressings.parts.trashGremlin?.drainRoachBursts() ?? []) {
+      this.audio?.playRandomAt(TRASH_PILE_ROACH_BURST, burst.x, burst.y);
     }
     this.arenaRoom.update(ctx);
     // Advance tutorial state machine; anchor companion when tutorial requires it
@@ -9758,21 +9727,25 @@ export class DungeonScene extends GameplayScene {
     this.treasureChests.update(this.world.roster.mobs);
     this.speechBubblePulse++;
     this.combat.updatePostCombat(this.audio);
-    this.lavaBalls.update(ctx);
-    this.rockThrows.update(ctx);
     this.hirelingShots.update(ctx);
-    // Summons first, so a skeleton raised this frame is already in `ctx.roster.mobs`
-    // when the projectile system walks it. Neither ordering can strand a shot —
-    // the drain reads the whole list every frame — but this one keeps a wave and
-    // the bolts covering it on the same tick.
-    this.skeletonSummons.update(ctx);
-    this.fairies.update(ctx);
-    this.skeletonShots.update(ctx);
-    this.goblinArrows.update(ctx);
-    this.goblinBombs.update(ctx);
-    this.clownGas.update(ctx);
-    this.fairyFireballs.update(ctx);
-    this.knightMissiles.update(ctx);
+    // The hostile world's own step: skipped together on the frames a last
+    // stand holds it back (`CombatKit.worldStepTaken`).
+    if (this.combat.worldStepTaken) {
+      this.lavaBalls.update(ctx);
+      this.rockThrows.update(ctx);
+      // Summons first, so a skeleton raised this frame is already in `ctx.roster.mobs`
+      // when the projectile system walks it. Neither ordering can strand a shot —
+      // the drain reads the whole list every frame — but this one keeps a wave and
+      // the bolts covering it on the same tick.
+      this.skeletonSummons.update(ctx);
+      this.fairies.update(ctx);
+      this.skeletonShots.update(ctx);
+      this.goblinArrows.update(ctx);
+      this.goblinBombs.update(ctx);
+      this.clownGas.update(ctx);
+      this.fairyFireballs.update(ctx);
+      this.knightMissiles.update(ctx);
+    }
     this.trees?.update(ctx);
     this.destruction.update(ctx);
     this.explosionShake.update();
@@ -10196,8 +10169,7 @@ export class DungeonScene extends GameplayScene {
       isPaused: () => this.gameOver || this.menus.pauseScreen.isOpen || this.aiMenuOpen(),
       isInSafeRoom: () => this.safeRoom.isEntityInSafeRoom(this.active()),
       postToast: (text, opts) => this.menus.toasts.post(text, opts),
-      getAchievements: (target) =>
-        target === 'human' ? this.humanAchievements : this.catAchievements,
+      getAwards: () => this.awards,
       getAudio: () => this.audio,
       getAudioScope: () => this.audioScope,
       getLevelTimer: () => this.aiLevelTimer(),
@@ -10442,10 +10414,16 @@ export class DungeonScene extends GameplayScene {
     return null;
   }
 
+  /** Whether the party already has `id`, carried or still on the ground: gear is one of a kind per party. */
+  private readonly partyOwnsGear = (id: GearId): boolean =>
+    partyOwnsGear([this.human, this.cat], id) ||
+    this.destruction.loot.holds(id) ||
+    this.treasureChests.holds(id);
+
   /**
    * Hands over what is inside a chest the moment it is opened, and returns
    * what its reward dialog is to show and what dismissing that dialog grants
-   * (the Mongo unlock, the tutorial's cat reward). The dialog only previews
+   * (the tutorial's cat reward). The dialog only previews
    * the loot already handed over, so showing it never grants twice.
    */
   private grantChestContents(chest: TreasureChest): ChestReward {
@@ -10463,27 +10441,16 @@ export class DungeonScene extends GameplayScene {
       };
     }
 
-    const baseSplit = chest.loot !== null ? splitChestLoot(chest.loot) : null;
-    this._grantChestLootSplit(baseSplit);
-
-    if (chest.bossRoomIndex !== null && chest.bossRoomIndex === this.krakarenBossRoomIdx) {
-      return {
-        split: {
-          humanLoot: baseSplit?.humanLoot ?? { coins: 0, items: [] },
-          catLoot: baseSplit?.catLoot ?? { coins: 0, items: [] },
-          customCatEntries: ['Mongo (pet)'],
-        },
-        onDismissed: () => {
-          this.mongoSystem.unlocked = true;
-          this.bus.emit('rewardGranted', { rewards: [this._makeMongoReward()] });
-          // Only this first grant explains him: the circus quest hands back a pet
-          // the player already knows, and the Abilities tab reopens it on request.
-          this.menus.rewardGrantedDialog.afterQueueDrains(() =>
-            this.menus.craftExplainers.open('mongo'),
-          );
-        },
-      };
-    }
+    // A boss chest holds the boss's own loot, gear roll included, and its
+    // coins took the kill's coin bonus when the boss died; a world chest rolls
+    // its gear and takes the bonus here.
+    const isBossChest = chest.bossRoomIndex !== null;
+    const chestGear = isBossChest
+      ? { items: [], coins: 0 }
+      : rollChestGear(chest.type, this.levelDef.floorNumber, Math.random, this.partyOwnsGear);
+    const loot = withGearLoot(chest.loot, chestGear);
+    const baseSplit = loot !== null ? splitChestLoot(loot) : null;
+    this._grantChestLootSplit(baseSplit, !isBossChest);
 
     if (chest.bossRoomIndex !== null && chest.bossRoomIndex === this.bigRoosterBossRoomIdx) {
       return {
@@ -10570,30 +10537,22 @@ export class DungeonScene extends GameplayScene {
     }
   }
 
-  private _grantChestLootSplit(split: { humanLoot: LootDrop; catLoot: LootDrop } | null): void {
+  /** Pays a chest's split; `coinBonus` is false for coins that already took it. */
+  private _grantChestLootSplit(
+    split: { humanLoot: LootDrop; catLoot: LootDrop } | null,
+    coinBonus: boolean,
+  ): void {
     if (split === null) return;
+    const bonusFor = (crawler: HumanPlayer | CatPlayer): number =>
+      coinBonus ? coinBonusFor(crawler) : 1;
     for (const item of split.humanLoot.items) {
       this.human.inventory.addItem(item.id, item.quantity);
     }
-    this.human.earnCoins(split.humanLoot.coins);
+    this.human.earnCoins(Math.round(split.humanLoot.coins * bonusFor(this.human)));
     for (const item of split.catLoot.items) {
       this.cat.inventory.addItem(item.id, item.quantity);
     }
-    this.cat.earnCoins(split.catLoot.coins);
-  }
-
-  private _makeMongoReward(): GrantedReward {
-    return {
-      kind: 'ability',
-      name: 'Mongo',
-      description:
-        'A loyal velociraptor companion. Summon Mongo to fight alongside the Cat in battle!',
-      renderIcon: (ctx: CanvasRenderingContext2D, rect: Rect) => {
-        const { x, y, size } = iconSquare(rect);
-        const stage = getMongoStats(this.abilityManager.getLevel('mongo')).stage;
-        drawMongoIcon(ctx, stage, x + size / 2, y + size / 2, size);
-      },
-    };
+    this.cat.earnCoins(Math.round(split.catLoot.coins * bonusFor(this.cat)));
   }
 
   /**

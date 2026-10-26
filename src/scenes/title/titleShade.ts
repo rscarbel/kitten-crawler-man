@@ -14,7 +14,7 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
+} from '../../core/rendering/canvasSurface';
 import type { Rect } from '../../ui/core/geom';
 
 /** Below this much shade the tint is invisible, so the figure is drawn straight. */

@@ -1,4 +1,4 @@
-import type { SpriteKey } from '../../../core/SpriteLoader';
+import type { SpriteKey } from '../../../core/spriteAssets/SpriteLoader';
 import {
   BAG_SHATTER_FRAMES,
   BARRICADE_FRAMES,

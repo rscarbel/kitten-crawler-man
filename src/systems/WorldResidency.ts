@@ -19,8 +19,8 @@
  */
 
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
-import { viewportHeight, viewportWidth } from '../core/Viewport';
-import { REFRESHED_SPEED_FACTOR } from '../core/StatusEffect';
+import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
+import { REFRESHED_SPEED_FACTOR } from '../core/combat/StatusEffect';
 import { SPEED_FIZZ_MULTIPLIER } from '../Player';
 import type { TileRect } from '../map/town/townPlan';
 

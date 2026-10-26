@@ -1,6 +1,6 @@
 import type { GameProgressInput } from '../auth/AuthClient';
-import type { SavePoint } from '../core/SavePoint';
-import type { WorldCheckpoint } from '../core/WorldCheckpoint';
+import type { SavePoint } from '../core/save/SavePoint';
+import type { WorldCheckpoint } from '../core/save/WorldCheckpoint';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { Mob } from '../creatures/Mob';

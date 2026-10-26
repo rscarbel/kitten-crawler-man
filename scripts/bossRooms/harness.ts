@@ -16,7 +16,7 @@ import { createCanvas, type Canvas } from 'canvas';
 
 import { TILE_SIZE } from '../../src/core/constants.js';
 import { EventBus } from '../../src/core/EventBus.js';
-import { setViewportSize } from '../../src/core/Viewport.js';
+import { setViewportSize } from '../../src/core/rendering/Viewport.js';
 import { CatPlayer } from '../../src/creatures/CatPlayer.js';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer.js';
 import { getLevelDef } from '../../src/levels/index.js';

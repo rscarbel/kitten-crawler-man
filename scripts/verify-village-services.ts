@@ -23,27 +23,30 @@
 import { installCanvasGlobals } from './nodeCanvasGlobals';
 import { TILE_SIZE } from '../src/core/constants';
 import { EventBus, type GameEvents } from '../src/core/EventBus';
-import { ITEM_DEF, type ItemId } from '../src/core/ItemDefs';
+import { ITEM_DEF, type ItemId } from '../src/core/items/defs/ItemDefs';
 import {
   captureBriarHollowState,
   createBriarHollowState,
   parseBriarHollowStateSnapshot,
   restoreBriarHollowState,
   type BriarHollowState,
-} from '../src/core/briarHollowState';
-import { PartyTools, type ToolOwner } from '../src/core/PartyTools';
-import { createPartyCraftsState, type PartyCraftsState } from '../src/core/partyCrafts';
-import { teachBoth } from '../src/core/CraftSkills';
+} from '../src/core/quests/briarHollowState';
+import { PartyTools, type ToolOwner } from '../src/core/items/gathering/PartyTools';
+import { createPartyCraftsState, type PartyCraftsState } from '../src/core/labour/partyCrafts';
+import { teachBoth } from '../src/core/labour/CraftSkills';
 import {
   TOOL_TIER_HARDENED,
   TOOL_TIER_LONG_HAFT,
   forgeCoinPrice,
   toolTierDef,
   type ToolKind,
-} from '../src/core/toolTiers';
-import type { VillageQuestPhase } from '../src/core/villageQuestPhase';
-import { resetSessionTally, sessionTallyOf } from '../src/core/resourceSessionTally';
-import { referenceStats } from '../src/core/referenceCrawler';
+} from '../src/core/items/gathering/toolTiers';
+import type { VillageQuestPhase } from '../src/core/quests/villageQuestPhase';
+import {
+  resetSessionTally,
+  sessionTallyOf,
+} from '../src/core/items/gathering/resourceSessionTally';
+import { referenceStats } from '../src/core/party/referenceCrawler';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { GameMap } from '../src/map/GameMap';

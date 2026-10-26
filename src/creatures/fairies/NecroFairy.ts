@@ -1,7 +1,7 @@
 import { Mob } from '../Mob';
 import type { Player } from '../../Player';
 import type { SkeletonSummonRequest } from '../SkeletonLord';
-import type { Difficulty } from '../../core/difficultyProfiles';
+import type { Difficulty } from '../../core/difficulty/difficultyProfiles';
 import { randomInt } from '../../utils';
 import {
   Fairy,

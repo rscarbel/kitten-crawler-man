@@ -12,10 +12,10 @@
  * `TownPropSystem` / `NoticeBoard` supply the context and draw the result.
  */
 
-import type { CircusQuestStage } from '../core/CircusQuestProgress';
-import type { MurderQuestStage } from '../core/MurderQuestProgress';
-import type { DoomsdayStage } from '../core/DoomsdayProgress';
-import type { BountyPhase } from '../core/BountyProgress';
+import type { CircusQuestStage } from '../core/quests/CircusQuestProgress';
+import type { MurderQuestStage } from '../core/quests/MurderQuestProgress';
+import type { DoomsdayStage } from '../core/quests/DoomsdayProgress';
+import type { BountyPhase } from '../core/quests/BountyProgress';
 import { asListItem, listed } from '../dialog/scripts/wendellContracts';
 
 /** Visual/priority category for a posting. Sorted DANGER → ACTIVE → OPEN → SOON → DONE. */

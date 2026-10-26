@@ -11,11 +11,14 @@
  */
 
 import { playerCharacter } from '../../src/characters/characters';
-import type { BlueprintsQuestPhase } from '../../src/core/blueprintsQuestPhase';
-import { createBriarHollowState, type BriarHollowState } from '../../src/core/briarHollowState';
+import type { BlueprintsQuestPhase } from '../../src/core/quests/blueprintsQuestPhase';
+import {
+  createBriarHollowState,
+  type BriarHollowState,
+} from '../../src/core/quests/briarHollowState';
 import { TILE_SIZE } from '../../src/core/constants';
 import { EventBus } from '../../src/core/EventBus';
-import { QUEST_SLOT_IDX, type ItemId } from '../../src/core/ItemDefs';
+import { QUEST_SLOT_IDX, type ItemId } from '../../src/core/items/defs/ItemDefs';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { Conversation } from '../../src/dialog/Conversation';

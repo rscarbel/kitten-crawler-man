@@ -4,7 +4,7 @@
  * bottom in whatever width it is given.
  */
 
-import { ITEM_CATEGORIES } from '../../core/ItemDefs';
+import { ITEM_CATEGORIES } from '../../core/items/defs/ItemDefs';
 import { inset, splitH, type Rect } from '../../ui/core/geom';
 import type { HitState, Ui } from '../../ui/core/UiRoot';
 import { BUTTON_VARIANTS, TEXT_ROLES, type ButtonVariant } from '../../ui/theme/skins';

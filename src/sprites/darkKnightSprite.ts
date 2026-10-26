@@ -1,4 +1,8 @@
-import { walkFrameIndex, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import {
+  walkFrameIndex,
+  progressFrameIndex,
+  timeFrameIndex,
+} from '../core/spriteAssets/SpriteRenderer';
 import { drawFigureCached } from './figure/figureFrameCache';
 import {
   DARK_KNIGHT_FIGURE,

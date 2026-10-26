@@ -45,12 +45,13 @@ windowGlobals.window = { devicePixelRatio: REVIEW_DEVICE_PIXEL_RATIO };
 
 const { mulberry32 } = await import('../src/sprites/person/rng.js');
 const { TILE_SIZE } = await import('../src/core/constants.js');
-const { loadSprites } = await import('../src/core/SpriteLoader.js');
+const { loadSprites } = await import('../src/core/spriteAssets/SpriteLoader.js');
 const { GameMap } = await import('../src/map/GameMap.js');
 const { setFloorArtSeed } = await import('../src/map/ground/floorArtSeed.js');
 const { groundSheetKeysAmong, requestGroundSheets } =
   await import('../src/map/ground/runtimeGroundSheets.js');
-const { requiredSpriteKeysForLevel } = await import('../src/core/systemAssetRequirements.js');
+const { requiredSpriteKeysForLevel } =
+  await import('../src/core/spriteAssets/systemAssetRequirements.js');
 const { requestEnvironmentSheetsForGroups } =
   await import('../src/sprites/sheets/environmentSheets.js');
 const { beginEnvironmentArtFrame, environmentPaintDepth, environmentPaintedStepCount } =
@@ -72,7 +73,7 @@ const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
 const { MobRoster } = await import('../src/systems/kits/SceneWorld.js');
 const { SpellSystem } = await import('../src/systems/SpellSystem.js');
-const { setViewportSize, setRenderScaleValue } = await import('../src/core/Viewport.js');
+const { setViewportSize, setRenderScaleValue } = await import('../src/core/rendering/Viewport.js');
 const {
   beginFigureFrame,
   figurePrewarmDepth,
@@ -82,7 +83,7 @@ const {
 } = await import('../src/sprites/figure/figureFrameCache.js');
 const { setFigureCacheStatsRecording, getFigureCacheStats } =
   await import('../src/sprites/figure/figureCacheStats.js');
-const { LoadRunner } = await import('../src/core/LoadRunner.js');
+const { LoadRunner } = await import('../src/core/perf/LoadRunner.js');
 const { floorArrivalLoadTasks, floorArrivalOwesWork } =
   await import('../src/scenes/floorArrivalLoad.js');
 

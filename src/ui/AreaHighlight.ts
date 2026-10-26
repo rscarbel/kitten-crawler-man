@@ -3,7 +3,7 @@ import { roundRectPath } from './widgets/paint';
 import { withAlpha } from './theme/color';
 import { worldPalette } from './theme/worldInk';
 import { TILE_SIZE } from '../core/constants';
-import { viewportHeight, viewportWidth } from '../core/Viewport';
+import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
 
 /**
  * A highlight that hugs a rectangle of any size — one tile, a whole grain

@@ -28,7 +28,7 @@
  */
 
 import { crawlerName } from '../src/characters/characters';
-import type { InventoryItem, ItemId } from '../src/core/ItemDefs.js';
+import type { InventoryItem, ItemId } from '../src/core/items/defs/ItemDefs.js';
 import type { Surface } from '../src/ui/core/UiRoot.js';
 import type { HotbarInput, HotbarSlotModel } from '../src/ui/hud/hudModel.js';
 import type { InventoryOwner, InventoryTab } from '../src/ui/screens/inventory/inventoryTypes.js';
@@ -42,9 +42,10 @@ installCanvasGlobals();
 const { drawItemIcon } = await import('../src/ui/icons/drawItemIcon.js');
 const { InventoryScreen } = await import('../src/ui/screens/inventory/InventoryScreen.js');
 const { InventoryActions } = await import('../src/ui/screens/inventory/InventoryActions.js');
-const { ITEM_DEF, HOTBAR_COUNT, isItemId } = await import('../src/core/ItemDefs.js');
-const { Inventory } = await import('../src/core/Inventory.js');
-const { setViewportSize } = await import('../src/core/Viewport.js');
+const { ITEM_DEF, HOTBAR_COUNT, isItemId } = await import('../src/core/items/defs/ItemDefs.js');
+const { Inventory } = await import('../src/core/items/inventory/Inventory.js');
+const { GearState } = await import('../src/gear/gearState.js');
+const { setViewportSize } = await import('../src/core/rendering/Viewport.js');
 const { UiRoot } = await import('../src/ui/core/UiRoot.js');
 const { NO_INSETS } = await import('../src/ui/core/viewport.js');
 const { hotbar } = await import('../src/ui/hud/hotbar.js');
@@ -102,10 +103,16 @@ const IGNORE_HOTBAR_INPUT: HotbarInput = {
   release: () => undefined,
 };
 
+/**
+ * The hotbar draws every item as awakened, so a weapon's awakened icon is
+ * covered here while the inventory pass covers every dormant one; an item with
+ * no awakened look draws its usual icon either way.
+ */
 function hotbarSlotModel(item: InventoryItem | null): HotbarSlotModel {
   return {
     item,
     equipped: false,
+    awakened: true,
     cooldown: 0,
     cooldownLabel: '',
     unseen: false,
@@ -192,6 +199,7 @@ interface ScreenRig {
 function screenRig(width: number, height: number, density: Density): ScreenRig {
   const owner: InventoryOwner = {
     inventory: new Inventory(),
+    gear: new GearState(),
     strength: OWNER_STAT,
     intelligence: OWNER_STAT,
     constitution: OWNER_STAT,

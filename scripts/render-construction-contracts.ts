@@ -36,8 +36,8 @@ import type { ContractSpotMaterial } from '../src/systems/constructionContracts/
 installCanvasGlobals();
 
 const { TILE_SIZE } = await import('../src/core/constants.js');
-const { loadSprites } = await import('../src/core/SpriteLoader.js');
-const { setViewportSize } = await import('../src/core/Viewport.js');
+const { loadSprites } = await import('../src/core/spriteAssets/SpriteLoader.js');
+const { setViewportSize } = await import('../src/core/rendering/Viewport.js');
 const { GameMap } = await import('../src/map/GameMap.js');
 const { renderCanvas } = await import('../src/map/TileRenderer.js');
 const { FLOOR_ART_SEEDS } = await import('../src/map/ground/artSeedAlphabet.js');
@@ -48,7 +48,7 @@ const { CONTRACT_SITES, contractSiteKey } =
   await import('../src/systems/constructionContracts/contractCatalog.js');
 const { ConstructionContractSystem } =
   await import('../src/systems/constructionContracts/ConstructionContractSystem.js');
-const { createBriarHollowState } = await import('../src/core/briarHollowState.js');
+const { createBriarHollowState } = await import('../src/core/quests/briarHollowState.js');
 const { EventBus } = await import('../src/core/EventBus.js');
 const { Conversation } = await import('../src/dialog/Conversation.js');
 const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');

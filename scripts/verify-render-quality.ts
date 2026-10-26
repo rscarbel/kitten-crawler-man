@@ -18,7 +18,7 @@
  *   npm run verify:render-quality
  */
 
-import type { FrameCost } from '../src/core/frameCost.js';
+import type { FrameCost } from '../src/core/perf/frameCost.js';
 import {
   PAINT_BOUND_SHARE,
   PERFORMANCE_PRESET_VARIETY_TIER,
@@ -29,13 +29,13 @@ import {
   SAFETY_NET_WINDOW_MS,
   STUTTER_INTERVAL_MS,
   startingVarietyTier,
-} from '../src/core/RenderQuality.js';
+} from '../src/core/perf/RenderQuality.js';
 import {
   MAX_SHARP_RENDER_SCALE,
   PERFORMANCE_RENDER_SCALE,
   type QualityPreset,
-} from '../src/core/Settings.js';
-import { FULL_SCALE, HALF_DENSITY_SCALE } from '../src/core/deviceMemoryBudget.js';
+} from '../src/core/input/Settings.js';
+import { FULL_SCALE, HALF_DENSITY_SCALE } from '../src/core/perf/deviceMemoryBudget.js';
 import {
   FULL_VARIETY_TIER,
   LEAN_VARIETY_TIER,
@@ -44,7 +44,7 @@ import {
   TRIMMED_VARIETY_TIER,
   forceVarietyTier,
   varietyTier,
-} from '../src/core/varietyTier.js';
+} from '../src/core/perf/varietyTier.js';
 
 const failures: string[] = [];
 

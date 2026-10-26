@@ -6,7 +6,7 @@
  * are painted and cached by their own renderers.
  */
 
-import type { AssetGroup } from '../../core/assetGroups';
+import type { AssetGroup } from '../../core/spriteAssets/assetGroups';
 import type { PropSheetPlan } from './propSheetPlan';
 import { trashGremlinRoomSheetPlans } from './bossRooms/trashGremlinSheets';
 import { gymRoomSheetPlans } from './bossRooms/gymRoomSheets';

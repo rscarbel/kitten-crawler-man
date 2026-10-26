@@ -1,4 +1,4 @@
-import { progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import { progressFrameIndex, timeFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import {
   BOLT_FRAMES,

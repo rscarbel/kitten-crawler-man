@@ -5,7 +5,7 @@
  *  - Her toddler, from the same painter
  *  - The Anchor quest's wood pile pickup (the nursery's own props are in `nurserySprites.ts`)
  */
-import { timeFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
+import { timeFrameIndex, walkFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { worldText, worldTextInkExtent, type WorldTextInkExtent } from '../ui/world/worldText';
 import {
   GOBLIN_MOTHER_FIGURE,

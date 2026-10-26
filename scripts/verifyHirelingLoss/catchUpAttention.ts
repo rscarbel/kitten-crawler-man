@@ -9,9 +9,9 @@
  */
 
 import { TILE_SIZE } from '../../src/core/constants';
-import { createMercenaryRoster } from '../../src/core/MercenaryRoster';
-import { getMercenaryTemplate } from '../../src/core/mercenaryTemplates';
-import { setViewportSize } from '../../src/core/Viewport';
+import { createMercenaryRoster } from '../../src/core/party/MercenaryRoster';
+import { getMercenaryTemplate } from '../../src/core/party/mercenaryTemplates';
+import { setViewportSize } from '../../src/core/rendering/Viewport';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { HIRELING_CATCH_UP_TILES } from '../../src/creatures/mercenaries/hirelingCatchUp';

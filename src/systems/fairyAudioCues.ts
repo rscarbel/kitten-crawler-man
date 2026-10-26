@@ -2,7 +2,7 @@ import type { AudioManager } from '../audio/AudioManager';
 import type { SoundId } from '../audio/sounds';
 import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
-import { FROZEN_STATUS } from '../core/StatusEffect';
+import { FROZEN_STATUS } from '../core/combat/StatusEffect';
 import { ShieldFairy } from '../creatures/fairies/ShieldFairy';
 import { Fairy, type ActiveFairyCast } from '../creatures/fairies/Fairy';
 import type { FairyCastRow } from '../sprites/art/fairyTiming';

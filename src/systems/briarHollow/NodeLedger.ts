@@ -15,9 +15,9 @@
 
 import type { GameMap } from '../../map/GameMap';
 import type { EventBus } from '../../core/EventBus';
-import type { HarvestKind } from '../../core/craftPerks';
-import type { HarvestNodeState } from '../../core/briarHollowState';
-import { resourcingNodeCapacityBonus } from '../../core/craftPerks';
+import type { HarvestKind } from '../../core/labour/craftPerks';
+import type { HarvestNodeState } from '../../core/quests/briarHollowState';
+import { resourcingNodeCapacityBonus } from '../../core/labour/craftPerks';
 import type { TreeSystem } from '../TreeSystem';
 import { tileKey } from '../tileKey';
 import {

@@ -14,7 +14,7 @@ import {
   recededGloss,
 } from '../../art/biped/palette';
 import { defineGarment } from '../garmentDef';
-import { type BootLook, paintBootOnLeg, type SoleBuild } from './humanBoots';
+import { type BootLook, paintBootOnLeg, type SoleBuild } from './footwear';
 import { humanEveryView } from './views';
 
 /** Black knit: matte, its lights only just lifted off black. */
@@ -55,7 +55,6 @@ const SNEAKERS: BootLook = {
   leather: KNIT,
   sole: WHITE_SOLE,
   shaftTopAt: LOW_TOP_SHAFT_AT,
-  hobnails: false,
   soleBuild: SNEAKER_SOLE,
 };
 

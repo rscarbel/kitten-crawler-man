@@ -23,15 +23,21 @@
  */
 
 import type { SoundId } from '../../../audio/sounds';
-import { partyCoins } from '../../../core/partyCoins';
-import { costShortfall, formatCost, partyCount } from '../../../core/partyResources';
-import { ITEM_DEF, type ItemId } from '../../../core/ItemDefs';
+import { partyCoins } from '../../../core/party/partyCoins';
+import {
+  costShortfall,
+  formatCost,
+  partyCount,
+} from '../../../core/items/gathering/partyResources';
+import { ITEM_DEF, type ItemId } from '../../../core/items/defs/ItemDefs';
 import { centerIn, inset, splitH, splitV, type Rect } from '../../core/geom';
 import { UI_ERROR_SOUND, type Surface, type Ui } from '../../core/UiRoot';
 import { UiStateSlot } from '../../core/uiState';
 import type { PriceQuote, StockTag } from '../../../economy/pricing';
 import { QuantityPickerState } from '../../QuantityPickerState';
 import { badge, badgeSize, type BadgeTone } from '../../widgets/badge';
+import type { Rarity } from '../../../core/items/defs/rarity';
+import { rarityColor } from '../dialogs/canvasChrome';
 import { button, buttonHeight, measureButton } from '../../widgets/button';
 import { card } from '../../widgets/card';
 import { drawGlass, fillRounded, strokeRounded } from '../../widgets/paint';
@@ -107,17 +113,33 @@ const ART_SIDE_COMPACT = 52;
 const ACTION_SIZE = 'md' as const satisfies ControlSize;
 
 /** A short pill under an offer's name, saying something about it ("Low stock", "Quest"). */
-interface OfferTag {
+interface NoteTag {
+  readonly kind?: 'note';
   readonly label: string;
   readonly tone: BadgeTone;
+}
+
+/** A piece of gear's rarity, named and set in the rarity's own colour. */
+interface RarityTag {
+  readonly kind: 'rarity';
+  readonly rarity: Rarity;
+}
+
+type OfferTag = NoteTag | RarityTag;
+
+/** How a tag draws: its words and its colour. */
+function tagLook(ui: Ui, tag: OfferTag): { label: string; tone?: BadgeTone; color?: string } {
+  return tag.kind === 'rarity'
+    ? { label: tag.rarity, color: rarityColor(ui.theme, tag.rarity) }
+    : { label: tag.label, tone: tag.tone };
 }
 
 const STOCK_TAGS = {
   low_stock: { label: 'Low stock', tone: 'warning' },
   overstocked: { label: 'Overstocked', tone: 'info' },
-} as const satisfies Record<StockTag, OfferTag>;
-const SPECIALTY_TAG = { label: 'Specialty', tone: 'success' } as const satisfies OfferTag;
-const QUEST_TAG = { label: 'Quest', tone: 'accent' } as const satisfies OfferTag;
+} as const satisfies Record<StockTag, NoteTag>;
+const SPECIALTY_TAG = { label: 'Specialty', tone: 'success' } as const satisfies NoteTag;
+const QUEST_TAG = { label: 'Quest', tone: 'accent' } as const satisfies NoteTag;
 /** The tone a shut offer's reason reads in, and one with nothing left to sell. */
 const CLOSED_TONE = 'neutral' as const satisfies BadgeTone;
 const SPENT_TONE = 'success' as const satisfies BadgeTone;
@@ -202,8 +224,10 @@ function costPillsFor(cost: ShopCost, party: ShopParty, muted: boolean): CostPil
 }
 
 /** The tags under an offer's name: why stock moves its price, the specialty rate, a quest errand. */
-function tagsFor(quote: PriceQuote | null, quest: boolean): OfferTag[] {
+function tagsFor(quote: PriceQuote | null, quest: boolean, art: ShopArt): OfferTag[] {
   const tags: OfferTag[] = [];
+  const rarity = art.kind === 'item' ? ITEM_DEF[art.item].rarity : undefined;
+  if (rarity !== undefined) tags.push({ kind: 'rarity', rarity });
   if (quest) tags.push(QUEST_TAG);
   if (quote === null) return tags;
   if (quote.stockTag !== null) tags.push(STOCK_TAGS[quote.stockTag]);
@@ -358,7 +382,7 @@ function buyCards(args: RenderShopArgs): OfferCard[] {
       art: row.art,
       title: row.label,
       desc: row.desc,
-      tags: tagsFor(quote, row.questErrand),
+      tags: tagsFor(quote, row.questErrand, row.art),
       quest: row.questErrand,
       faded: !open,
       costs: cost === null ? [] : costPillsFor(cost, party, !open),
@@ -375,7 +399,7 @@ function sellCards(args: RenderShopArgs, rows: readonly SellRow[]): OfferCard[] 
     art: { kind: 'item', item: row.id },
     title: ITEM_DEF[row.id].name,
     desc: `You have ${row.held}`,
-    tags: tagsFor(row.quote, false),
+    tags: tagsFor(row.quote, false, { kind: 'item', item: row.id }),
     quest: false,
     faded: false,
     costs: [coinPill(row.quote.breakdown.final, true, false)],
@@ -681,14 +705,16 @@ function renderCard(
     let tagX = textX;
     const tagH = layout.tagsH - space.xs;
     for (const tag of offer.tags) {
-      const size = badgeSize(ui, { label: tag.label, kind: 'tag' });
+      const look = tagLook(ui, tag);
+      const size = badgeSize(ui, { label: look.label, kind: 'tag' });
       if (tagX + size.w > textX + layout.textW) break;
       badge(
         ui,
         { x: tagX, y: y + space.xs, w: size.w, h: tagH },
         {
-          label: tag.label,
-          tone: tag.tone,
+          label: look.label,
+          tone: look.tone,
+          color: look.color,
           kind: 'tag',
         },
       );

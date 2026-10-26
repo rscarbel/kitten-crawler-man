@@ -25,7 +25,7 @@ import {
   nothingMeasuredFailures,
   reportFigureGates,
 } from './figureGates.js';
-import { getMercenaryTemplate } from '../src/core/mercenaryTemplates.js';
+import { getMercenaryTemplate } from '../src/core/party/mercenaryTemplates.js';
 import {
   LEG_REACH,
   MAXX_BODY_SCALE,

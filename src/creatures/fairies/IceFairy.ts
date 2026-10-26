@@ -1,7 +1,7 @@
 import { Mob } from '../Mob';
 import type { Player } from '../../Player';
 import { TILE_SIZE } from '../../core/constants';
-import { wouldIceHitFreeze } from '../../core/frostStatus';
+import { wouldIceHitFreeze } from '../../core/combat/frostStatus';
 import {
   Fairy,
   type ActiveFairyCast,

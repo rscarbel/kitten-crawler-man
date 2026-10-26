@@ -7,7 +7,7 @@
  * under all read the same from every side, so those rows are single-view.
  */
 
-import { progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import { progressFrameIndex, timeFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import { figureFrameCount } from './figure/figureDef';
 import { KRAKAREN_TENTACLE_FIGURE } from './art/krakarenFigure';

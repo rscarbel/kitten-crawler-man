@@ -23,8 +23,12 @@
  * frame of memory per cell however little of it is inked.
  */
 
-import type { SpriteKey } from '../../core/SpriteLoader';
-import { allocReadableCanvas, releaseSurface, surfaceContext } from '../../core/canvasSurface';
+import type { SpriteKey } from '../../core/spriteAssets/SpriteLoader';
+import {
+  allocReadableCanvas,
+  releaseSurface,
+  surfaceContext,
+} from '../../core/rendering/canvasSurface';
 import { VILLAGE_PROPS } from '../../map/overworld/briarHollowLayout';
 import { mulberry32, subSeed } from '../person/rng';
 import {

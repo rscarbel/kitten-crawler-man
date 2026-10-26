@@ -4,7 +4,7 @@
  * nothing here draws.
  */
 
-import { allocCanvas, surfaceContext } from '../../core/canvasSurface';
+import { allocCanvas, surfaceContext } from '../../core/rendering/canvasSurface';
 import type { Rect } from '../../ui/core/geom';
 import type { PaintTarget } from '../../ui/widgets/paint';
 import { onUiFontLoaded } from '../../ui/theme/fonts';

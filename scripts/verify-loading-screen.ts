@@ -38,7 +38,7 @@ import { watchCanvas } from './strictCanvas.js';
 installCanvasGlobals();
 
 const { LoadRunner, steppedWork, iteratorWork, promiseWork, DEFAULT_MIN_LOAD_DISPLAY_MS } =
-  await import('../src/core/LoadRunner.js');
+  await import('../src/core/perf/LoadRunner.js');
 const { LoadingOverlay, drawLoadingScreen } = await import('../src/ui/LoadingScreen.js');
 const { UiRoot } = await import('../src/ui/core/UiRoot.js');
 const { NO_INSETS } = await import('../src/ui/core/viewport.js');

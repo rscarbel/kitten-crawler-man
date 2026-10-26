@@ -14,7 +14,7 @@ import { TILE_SIZE } from '../core/constants';
 import type { Rect } from '../ui/core/geom';
 import { worldPlate } from '../ui/world/worldShapes';
 import { worldText } from '../ui/world/worldText';
-import { CLUB_ZONES, type ClubZone, type ClubStationId } from '../core/clubLayout';
+import { CLUB_ZONES, type ClubZone, type ClubStationId } from '../core/club/clubLayout';
 
 const TS = TILE_SIZE;
 const RUG_INSET = 4;

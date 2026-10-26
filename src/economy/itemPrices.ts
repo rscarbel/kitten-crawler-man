@@ -36,7 +36,9 @@
  * effect rather than an item belongs in `servicePrices.ts`, not here.
  */
 
-import type { ItemId } from '../core/ItemDefs';
+import type { ItemId } from '../core/items/defs/ItemDefs';
+import type { Rarity } from '../core/items/defs/rarity';
+import { GEAR_CATALOGUE } from '../gear/catalogue';
 
 /** A pricing bucket: how a shop says "I want food" without listing every food. */
 export type ItemCategory =
@@ -61,6 +63,37 @@ export interface ItemPrice {
   readonly category: ItemCategory;
 }
 
+/**
+ * What a piece of gear of each rarity is worth before its own multiplier: the
+ * rarer the piece, the dearer, so a price never undercuts the ladder.
+ */
+const RARITY_BASE_PRICE: Readonly<Record<Rarity, number>> = {
+  Common: 150,
+  Uncommon: 400,
+  Rare: 1000,
+  Epic: 3000,
+  Legendary: 9000,
+  Divine: 20000,
+};
+
+/**
+ * A gear piece's price: its rarity's base times `multiplier`, the piece's own
+ * worth against others of its rarity. Read off the catalogue, so a piece moved
+ * up the ladder is repriced with it.
+ */
+function gearPrice(id: keyof typeof GEAR_CATALOGUE, multiplier: number): ItemPrice {
+  const def = GEAR_CATALOGUE[id];
+  const base = Math.round(RARITY_BASE_PRICE[def.rarity] * multiplier);
+  return { base, category: def.category === 'weapon' ? 'weapon' : 'armor' };
+}
+
+/** A piece that does noticeably more than others of its rarity. */
+const STANDOUT_PIECE = 1.2;
+/** A piece carrying twice the stat its set's other pieces do. */
+const DOUBLE_STAT_PIECE = 1.5;
+/** A piece that does a little less than others of its rarity. */
+const MODEST_PIECE = 0.8;
+
 // prettier-ignore
 export const ITEM_PRICES = {
   // potion
@@ -74,27 +107,65 @@ export const ITEM_PRICES = {
   hamburger:                    { base:     8, category: 'food' },
   hollow_stew:                  { base:     5, category: 'food' },
   // armor
-  trollskin_shirt:              { base:   480, category: 'armor' },
-  enchanted_crown_sepsis_whore: { base:   800, category: 'armor' },
-  issue_kettle_helm:            { base:   160, category: 'armor' },
-  padded_gambeson:              { base:   240, category: 'armor' },
-  riveted_bracers:              { base:   220, category: 'armor' },
-  marching_boots:               { base:   280, category: 'armor' },
-  enchanted_bigboi_boxers:      { base:   720, category: 'armor' },
-  nightgaunt_cloak:             { base:  1000, category: 'armor' },
-  slate_butterfly_talisman:     { base:   800, category: 'armor' },
-  fae_scale_crupper:            { base:   720, category: 'armor' },
-  bracelet_of_dex:              { base:   600, category: 'armor' },
-  eyes_of_splatter:             { base:  9400, category: 'armor' },
-  splatter_skunk_toe_ring:      { base:   880, category: 'armor' },
-  fairy_repellent_signet:       { base: 12000, category: 'armor' },
-  ring_of_the_cold_shoulder:    { base:  8000, category: 'armor' },
-  ring_of_the_asbestos_knuckle: { base:  8000, category: 'armor' },
-  shade_gnoll_kneepads:         { base:    600, category: 'armor' },
-  grull_war_gauntlet:           { base:  1040, category: 'armor' },
+  lucky_hoodie:             gearPrice('lucky_hoodie', 1),
+  scrappers_wraps:          gearPrice('scrappers_wraps', 1),
+  hobnail_boots:            gearPrice('hobnail_boots', 1),
+  riot_kneeguards:          gearPrice('riot_kneeguards', 1),
+  iron_knuckle_gauntlet:    gearPrice('iron_knuckle_gauntlet', STANDOUT_PIECE),
+  patched_duster:           gearPrice('patched_duster', 1),
+  hazard_goggles:           gearPrice('hazard_goggles', 1),
+  demolition_apron:         gearPrice('demolition_apron', 1),
+  foremans_hardhat:         gearPrice('foremans_hardhat', 1),
+  silkspinner_gloves:       gearPrice('silkspinner_gloves', 1),
+  hamhock_boots:            gearPrice('hamhock_boots', 1),
+  pot_lid_buckler:          gearPrice('pot_lid_buckler', 1),
+  velvet_harness:           gearPrice('velvet_harness', 1),
+  mousehide_booties:        gearPrice('mousehide_booties', 1),
+  plumed_coat:           gearPrice('plumed_coat', 1),
+  stargazers_cap:           gearPrice('stargazers_cap', 1),
+  moonmoth_pendant:         gearPrice('moonmoth_pendant', 1),
+  kaleidoscope_specs:       gearPrice('kaleidoscope_specs', 1),
+  halo_of_the_ninth_life:   gearPrice('halo_of_the_ninth_life', 1),
+  prowler_hood:             gearPrice('prowler_hood', 1),
+  prowler_mantle:           gearPrice('prowler_mantle', 1),
+  prowler_booties:          gearPrice('prowler_booties', 1),
+  hearthguard_cap:          gearPrice('hearthguard_cap', 1),
+  hearthguard_quilted_vest: gearPrice('hearthguard_quilted_vest', DOUBLE_STAT_PIECE),
+  hearthguard_bracers:      gearPrice('hearthguard_bracers', 1),
+  hearthguard_boots:        gearPrice('hearthguard_boots', 1),
+  scrapmail_vest:           gearPrice('scrapmail_vest', 1),
+  cockscomb_crest:          gearPrice('cockscomb_crest', 1),
+  stoneheart_amulet:        gearPrice('stoneheart_amulet', 1),
+  sun_locket:               gearPrice('sun_locket', 1),
+  moon_locket:              gearPrice('moon_locket', 1),
+  showmans_top_hat:         gearPrice('showmans_top_hat', 1),
+  sequin_tailcoat:          gearPrice('sequin_tailcoat', 1),
+  gilded_monocle:           gearPrice('gilded_monocle', 1),
+  grinning_mask:            gearPrice('grinning_mask', 1),
+  nimble_bangle:            gearPrice('nimble_bangle', 1),
+  lucky_penny:              gearPrice('lucky_penny', 1),
+  fang_charm:               gearPrice('fang_charm', 1),
+  frostward_charm:          gearPrice('frostward_charm', 1),
+  emberward_charm:          gearPrice('emberward_charm', 1),
+  fae_iron_charm:           gearPrice('fae_iron_charm', 1),
+  hourglass_charm:          gearPrice('hourglass_charm', 1),
+  ember_wisp:               gearPrice('ember_wisp', STANDOUT_PIECE),
+  ward_stone:               gearPrice('ward_stone', STANDOUT_PIECE),
+  sproutling_seed:          gearPrice('sproutling_seed', STANDOUT_PIECE),
   // weapon
-  slingshot:                    { base:   320, category: 'weapon' },
-  fury_of_taranis:              { base: 24000, category: 'weapon' },
+  rebar_shiv:               gearPrice('rebar_shiv', 1),
+  pipe_wrench:              gearPrice('pipe_wrench', 1),
+  rattlestick_sling:        gearPrice('rattlestick_sling', MODEST_PIECE),
+  fire_axe:                 gearPrice('fire_axe', STANDOUT_PIECE),
+  gravediggers_spade:       gearPrice('gravediggers_spade', STANDOUT_PIECE),
+  stormcaller:              gearPrice('stormcaller', 1),
+  the_last_word:            gearPrice('the_last_word', 1),
+  tin_claw_caps:            gearPrice('tin_claw_caps', 1),
+  venom_claws:              gearPrice('venom_claws', 1),
+  frostbite_claws:          gearPrice('frostbite_claws', 1),
+  prowler_claws:            gearPrice('prowler_claws', 1),
+  ink_dipped_claws:         gearPrice('ink_dipped_claws', 1),
+  sunsteel_talons:          gearPrice('sunsteel_talons', 1),
   dev_plain_sword:              { base:     0, category: 'weapon' },
   dev_spiked_club:              { base:     0, category: 'weapon' },
   dev_felling_axe:              { base:     0, category: 'weapon' },
@@ -124,7 +195,6 @@ export const ITEM_PRICES = {
   skill_book_cat_reflexes:      { base:   400, category: 'tome' },
   skill_book_pugilism:          { base:  1400, category: 'tome' },
   skill_book_iron_stomach:      { base:   400, category: 'tome' },
-  skill_book_night_vision:      { base:   400, category: 'tome' },
   // magic scroll
   scroll_of_confusing_fog:      { base:   150, category: 'magic_scroll' },
   // explosive

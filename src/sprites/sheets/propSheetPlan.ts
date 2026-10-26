@@ -14,7 +14,11 @@
  * that shows up as one prop bleeding a neighbour's row.
  */
 
-import { getManifestEntry, sheetSizePx, type SpriteKey } from '../../core/SpriteLoader';
+import {
+  getManifestEntry,
+  sheetSizePx,
+  type SpriteKey,
+} from '../../core/spriteAssets/SpriteLoader';
 
 /** Paints one frame with the anchor tile's top-left corner at (originX, originY). */
 export type FramePainter = (

@@ -112,16 +112,16 @@ import {
   type StealthGateState,
 } from './stealthGateLayout';
 import { drawFloorArtSeed } from './ground/floorArtSeed';
-import { MinHeap, HEAP_EMPTY } from '../core/MinHeap';
-import { drawWorldSeed, withWorldSeed } from '../core/WorldRandom';
+import { MinHeap, HEAP_EMPTY } from '../core/util/MinHeap';
+import { drawWorldSeed, withWorldSeed } from '../core/world/WorldRandom';
 import { TILE_SIZE } from '../core/constants';
 import {
   CLUB_INTERIOR_W,
   CLUB_INTERIOR_H,
   CLUB_DANCE_FLOOR,
   CLUB_DIVIDER_WALLS,
-} from '../core/clubLayout';
-import { CLUB_FURNITURE_TILES } from '../core/clubProps';
+} from '../core/club/clubLayout';
+import { CLUB_FURNITURE_TILES } from '../core/club/clubProps';
 import { ARENA_RADIUS, ARENA_CONCOURSE_REACH } from './arenaGeometry';
 import {
   COLOSSEUM_RIM_PAINT_REACH_TILES,
@@ -185,7 +185,7 @@ import {
   getSpriteDefByKey,
   getSortYAnchorPx,
   type MapSpriteExtentsPx,
-} from '../core/SpriteLoader';
+} from '../core/spriteAssets/SpriteLoader';
 import {
   decorationTileExtentsPx,
   renderCanvas,

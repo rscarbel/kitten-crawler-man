@@ -183,9 +183,6 @@ export interface ToeLandmarks {
   readonly nails: readonly Pt[];
   /** Where the key light catches the top of the foot. */
   readonly instep: Pt;
-  /** Where a ring on his second toe sits, and the line it crosses the toe along. */
-  readonly secondToe: Pt;
-  readonly ringAcross: Pt;
   /** Traces the foot's silhouette. */
   readonly trace: (ctx: Ctx) => void;
 }
@@ -397,13 +394,6 @@ function drawFootInProfile(
   toes?.(ctx, {
     nails: [pt(toeX + toeHalf * PROFILE_NAIL_LEAD, sole - toeHalf * PROFILE_NAIL_RISE)],
     instep: pt(toeX * INSTEP_LIGHT_AT, -FOOT_DEPTH * INSTEP_LIGHT_RISE),
-    // Edge-on the second toe is hidden behind the big toe on the far side of
-    // the foot; a ring on it shows over the top of the toes.
-    secondToe: pt(
-      lerp(toeRoot.x, toeX, PROFILE_RING_ALONG),
-      lerp(toeRoot.y, sole, PROFILE_RING_DOWN),
-    ),
-    ringAcross: pt(0, 1),
     trace: traceFootOn,
   });
 }
@@ -411,9 +401,6 @@ function drawFootInProfile(
 /** The big toe's nail, on its top just behind the tip. */
 const PROFILE_NAIL_LEAD = 0.2;
 const PROFILE_NAIL_RISE = 0.8;
-/** A toe ring sits on the toes about halfway from their root to the tip, near their top. */
-const PROFILE_RING_ALONG = 0.45;
-const PROFILE_RING_DOWN = 0.2;
 
 // ── Head-on ──────────────────────────────────────────────────────────────────
 
@@ -666,8 +653,6 @@ function drawFootHeadOn(
       ...SMALL_TOE_NAILS_AT.map((at) => pt(toes - inner * f * at, nailY)),
     ],
     instep: pt(toes * TOP_LIGHT_AT + inner * f * TOP_LIGHT_INBOARD, sole * TOP_LIGHT_AT),
-    secondToe: pt(toes + inner * f * SECOND_TOE_AT, sole - toeRow * RING_ON_TOE),
-    ringAcross: pt(1, 0),
     trace: traceFootOn,
   });
 }
@@ -676,10 +661,6 @@ function drawFootHeadOn(
 const HEAD_ON_NAIL_RISE = 0.45;
 const BIG_TOE_NAIL_AT = 0.72;
 const SMALL_TOE_NAILS_AT: readonly number[] = [0.05, 0.45];
-/** The second toe, just outboard of the gap that splits off the big toe. */
-const SECOND_TOE_AT = 0.1;
-/** The ring sits at the toe's base, just below the crease where it leaves the foot. */
-const RING_ON_TOE = 0.75;
 
 // ── From behind ──────────────────────────────────────────────────────────────
 

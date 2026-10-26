@@ -14,8 +14,8 @@
  */
 
 import type { EventBus } from '../../../core/EventBus';
-import { QUEST_SLOT_IDX, type ItemId } from '../../../core/ItemDefs';
-import type { CrawlerKind } from '../../../core/SkillManager';
+import { QUEST_SLOT_IDX, type ItemId } from '../../../core/items/defs/ItemDefs';
+import type { CrawlerKind } from '../../../core/skills/SkillManager';
 import type { BarkLine } from '../../../dialog/line';
 import { CRAWLER_BARKS } from '../../../dialog/scripts/crawlerBarks';
 import type { Player } from '../../../Player';

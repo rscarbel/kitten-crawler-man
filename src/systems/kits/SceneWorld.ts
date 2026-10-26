@@ -11,13 +11,13 @@
  */
 
 import { MOB_GRID_CELL_SIZE } from '../../core/constants';
-import { SpatialGrid } from '../../core/SpatialGrid';
+import { SpatialGrid } from '../../core/world/SpatialGrid';
 import type { EventBus } from '../../core/EventBus';
 import type { GameMap } from '../../map/GameMap';
 import type { Mob } from '../../creatures/Mob';
 import type { AudioManager } from '../../audio/AudioManager';
 import type { AudioScope } from '../../audio/AudioScope';
-import type { PlayerManager } from '../../core/PlayerManager';
+import type { PlayerManager } from '../../core/party/PlayerManager';
 import type { SpellSystem } from '../SpellSystem';
 
 /**

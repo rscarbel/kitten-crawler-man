@@ -15,7 +15,7 @@
  * Run: npm run verify:stairwell-mobs
  */
 import { TILE_SIZE } from '../src/core/constants.js';
-import { DIFFICULTY_PROFILES } from '../src/core/difficultyProfiles.js';
+import { DIFFICULTY_PROFILES } from '../src/core/difficulty/difficultyProfiles.js';
 import type { Mob } from '../src/creatures/Mob.js';
 import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions.js';
 import { level1 } from '../src/levels/level1.js';

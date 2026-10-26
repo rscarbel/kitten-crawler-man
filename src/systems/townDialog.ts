@@ -19,9 +19,9 @@
  * `Conversation`.
  */
 
-import { isCircusResolvedStage, type CircusQuestStage } from '../core/CircusQuestProgress';
-import type { MurderQuestStage } from '../core/MurderQuestProgress';
-import type { DoomsdayStage } from '../core/DoomsdayProgress';
+import { isCircusResolvedStage, type CircusQuestStage } from '../core/quests/CircusQuestProgress';
+import type { MurderQuestStage } from '../core/quests/MurderQuestProgress';
+import type { DoomsdayStage } from '../core/quests/DoomsdayProgress';
 import type { TownRole } from '../sprites/person/PersonAppearance';
 import { pickLine, transientSpeaker } from '../dialog/line';
 import type { DialogLine } from '../dialog/line';

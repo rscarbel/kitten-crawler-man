@@ -40,7 +40,7 @@ import {
   type WallFixture,
   type WallFixtureKind,
 } from './dungeon/wallFixtures';
-import { UINT32_SPAN } from '../core/WorldRandom';
+import { UINT32_SPAN } from '../core/world/WorldRandom';
 
 /** What each tutorial room is dressed as. */
 export type TutorialRoomKind = 'start' | 'treasure' | 'safe' | 'exit';

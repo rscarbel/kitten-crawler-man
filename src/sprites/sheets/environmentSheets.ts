@@ -7,8 +7,12 @@
  * vocabulary rather than naming families by hand.
  */
 
-import { ASSET_GROUPS, type AssetGroup } from '../../core/assetGroups';
-import { getManifestEntry, sheetSizePx, type SpriteKey } from '../../core/SpriteLoader';
+import { ASSET_GROUPS, type AssetGroup } from '../../core/spriteAssets/assetGroups';
+import {
+  getManifestEntry,
+  sheetSizePx,
+  type SpriteKey,
+} from '../../core/spriteAssets/SpriteLoader';
 import {
   BOSS_ROOM_SALT,
   CAMP_SALT,

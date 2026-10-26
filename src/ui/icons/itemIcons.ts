@@ -1,5 +1,6 @@
-import type { ItemId } from '../../core/ItemDefs';
-import type { SkillId } from '../../core/SkillManager';
+import { type ItemId, weaponStatsOf } from '../../core/items/defs/ItemDefs';
+import { heldVisualIdOf } from '../../core/items/equipment/weapons';
+import type { SkillId } from '../../core/skills/SkillManager';
 import type { Rect } from '../core/geom';
 import { drawDynamiteInventoryIcon } from '../../sprites/dynamiteSprite';
 import {
@@ -9,22 +10,21 @@ import {
 } from '../../sprites/gymEquipmentSprite';
 import { drawAnchorShardIcon, drawAnchorStoneIcon } from './anchorStoneIcon';
 import { drawBlueprintsQuestIcon, type BlueprintsQuestIconId } from './blueprintsQuestIcons';
+import { drawGearHeadIcon, type GearHeadIconId } from '../../sprites/art/itemIcons/gearHeadIcons';
 import {
-  drawEnchantedGearIcon,
-  type EnchantedGearItemId,
-} from '../../sprites/art/itemIcons/enchantedGearIcons';
+  drawGearTorsoIcon,
+  type GearTorsoIconId,
+} from '../../sprites/art/itemIcons/gearTorsoIcons';
+import { drawGearLimbIcon, type GearLimbIconId } from '../../sprites/art/itemIcons/gearLimbIcons';
 import {
-  drawBigBoiBoxersIcon,
-  drawSepsisCrownIcon,
-  drawTrollskinShirtIcon,
-} from '../../sprites/art/itemIcons/enchantedApparelIcons';
+  drawGearClawRelicIcon,
+  type GearClawRelicIconId,
+} from '../../sprites/art/itemIcons/gearClawRelicIcons';
 import {
-  drawFairyWardRingIcon,
-  type FairyWardRingItemId,
-} from '../../sprites/art/itemIcons/fairyWardRingIcons';
-import { drawEyesOfSplatterIcon } from '../../sprites/art/itemIcons/eyesOfSplatterIcon';
+  drawGearTrinketIcon,
+  type GearTrinketIconId,
+} from '../../sprites/art/itemIcons/gearTrinketIcons';
 import { drawFoodIcon, type FoodIconId } from './foodIcons';
-import { drawIssueKitIcon, type IssueKitItemId } from '../../sprites/art/itemIcons/issueKitIcon';
 import { drawPrisonKeyIcon } from '../../sprites/art/itemIcons/prisonKeyIcon';
 import { drawBlackPowderBombIcon } from '../../sprites/art/itemIcons/blackPowderBombIcon';
 import { drawKitIcon, type KitIconId } from './kitIcons';
@@ -42,7 +42,6 @@ import { drawConfusingFogScrollIcon } from '../../sprites/art/itemIcons/scrollIc
 import { drawSkillBookIcon } from './skillBookIcon';
 import { drawSoulCrystalIcon } from './soulCrystalIcon';
 import { drawToolIcon, type ToolIconId } from '../../sprites/art/itemIcons/toolIcons';
-import { drawTaranisSwordIcon } from '../../sprites/art/itemIcons/taranisSwordIcon';
 import { drawHeldVisualIcon } from '../../sprites/art/itemIcons/heldVisualIcon';
 import type { HeldVisualId } from '../../sprites/held/heldVisualIds';
 import { drawExplosivesTomeIcon, drawMagicMissileTomeIcon, drawSmushTomeIcon } from './tomeIcons';
@@ -58,18 +57,26 @@ const skillBook =
   (skillId: SkillId): ItemIconPainter =>
   (ctx, rect) =>
     drawSkillBookIcon(ctx, rect, skillId);
-const issueKit =
-  (id: IssueKitItemId): ItemIconPainter =>
+const gearHead =
+  (id: GearHeadIconId): ItemIconPainter =>
   (ctx, rect) =>
-    drawIssueKitIcon(ctx, rect, id);
-const enchantedGear =
-  (id: EnchantedGearItemId): ItemIconPainter =>
+    drawGearHeadIcon(ctx, rect, id);
+const gearTorso =
+  (id: GearTorsoIconId): ItemIconPainter =>
   (ctx, rect) =>
-    drawEnchantedGearIcon(ctx, rect, id);
-const fairyWardRing =
-  (id: FairyWardRingItemId): ItemIconPainter =>
+    drawGearTorsoIcon(ctx, rect, id);
+const gearLimb =
+  (id: GearLimbIconId): ItemIconPainter =>
   (ctx, rect) =>
-    drawFairyWardRingIcon(ctx, rect, id);
+    drawGearLimbIcon(ctx, rect, id);
+const gearClawRelic =
+  (id: GearClawRelicIconId): ItemIconPainter =>
+  (ctx, rect) =>
+    drawGearClawRelicIcon(ctx, rect, id);
+const gearTrinket =
+  (id: GearTrinketIconId): ItemIconPainter =>
+  (ctx, rect) =>
+    drawGearTrinketIcon(ctx, rect, id);
 const resource =
   (id: ResourceIconId): ItemIconPainter =>
   (ctx, rect) =>
@@ -110,26 +117,64 @@ export const ITEM_ICONS: Record<ItemId, ItemIconPainter> = {
   hamburger: food('hamburger'),
   hollow_stew: food('hollow_stew'),
 
-  enchanted_bigboi_boxers: drawBigBoiBoxersIcon,
-  trollskin_shirt: drawTrollskinShirtIcon,
-  enchanted_crown_sepsis_whore: drawSepsisCrownIcon,
-  issue_kettle_helm: issueKit('issue_kettle_helm'),
-  padded_gambeson: issueKit('padded_gambeson'),
-  riveted_bracers: issueKit('riveted_bracers'),
-  marching_boots: issueKit('marching_boots'),
-  nightgaunt_cloak: enchantedGear('nightgaunt_cloak'),
-  slate_butterfly_talisman: enchantedGear('slate_butterfly_talisman'),
-  fae_scale_crupper: enchantedGear('fae_scale_crupper'),
-  bracelet_of_dex: enchantedGear('bracelet_of_dex'),
-  eyes_of_splatter: drawEyesOfSplatterIcon,
-  splatter_skunk_toe_ring: enchantedGear('splatter_skunk_toe_ring'),
-  fairy_repellent_signet: fairyWardRing('fairy_repellent_signet'),
-  ring_of_the_cold_shoulder: fairyWardRing('ring_of_the_cold_shoulder'),
-  ring_of_the_asbestos_knuckle: fairyWardRing('ring_of_the_asbestos_knuckle'),
-  shade_gnoll_kneepads: enchantedGear('shade_gnoll_kneepads'),
-  grull_war_gauntlet: enchantedGear('grull_war_gauntlet'),
-  slingshot: enchantedGear('slingshot'),
-  fury_of_taranis: drawTaranisSwordIcon,
+  lucky_hoodie: gearTorso('lucky_hoodie'),
+  scrappers_wraps: gearLimb('scrappers_wraps'),
+  hobnail_boots: gearLimb('hobnail_boots'),
+  riot_kneeguards: gearLimb('riot_kneeguards'),
+  iron_knuckle_gauntlet: gearLimb('iron_knuckle_gauntlet'),
+  patched_duster: gearTorso('patched_duster'),
+  hazard_goggles: gearHead('hazard_goggles'),
+  demolition_apron: gearTorso('demolition_apron'),
+  foremans_hardhat: gearHead('foremans_hardhat'),
+  silkspinner_gloves: gearLimb('silkspinner_gloves'),
+  hamhock_boots: gearLimb('hamhock_boots'),
+  rebar_shiv: heldVisual('rebar_shiv'),
+  pipe_wrench: heldVisual('pipe_wrench'),
+  rattlestick_sling: heldVisual('rattlestick_sling'),
+  fire_axe: heldVisual('fire_axe'),
+  gravediggers_spade: heldVisual('gravediggers_spade'),
+  stormcaller: heldVisual('stormcaller'),
+  the_last_word: heldVisual('the_last_word'),
+  pot_lid_buckler: gearLimb('pot_lid_buckler'),
+  velvet_harness: gearTorso('velvet_harness'),
+  mousehide_booties: gearLimb('mousehide_booties'),
+  plumed_coat: gearTorso('plumed_coat'),
+  stargazers_cap: gearHead('stargazers_cap'),
+  moonmoth_pendant: gearHead('moonmoth_pendant'),
+  kaleidoscope_specs: gearHead('kaleidoscope_specs'),
+  halo_of_the_ninth_life: gearHead('halo_of_the_ninth_life'),
+  prowler_hood: gearHead('prowler_hood'),
+  prowler_mantle: gearTorso('prowler_mantle'),
+  prowler_booties: gearLimb('prowler_booties'),
+  tin_claw_caps: gearClawRelic('tin_claw_caps'),
+  venom_claws: gearClawRelic('venom_claws'),
+  frostbite_claws: gearClawRelic('frostbite_claws'),
+  prowler_claws: gearClawRelic('prowler_claws'),
+  ink_dipped_claws: gearClawRelic('ink_dipped_claws'),
+  sunsteel_talons: gearClawRelic('sunsteel_talons'),
+  hearthguard_cap: gearHead('hearthguard_cap'),
+  hearthguard_quilted_vest: gearTorso('hearthguard_quilted_vest'),
+  hearthguard_bracers: gearLimb('hearthguard_bracers'),
+  hearthguard_boots: gearLimb('hearthguard_boots'),
+  scrapmail_vest: gearTorso('scrapmail_vest'),
+  cockscomb_crest: gearHead('cockscomb_crest'),
+  stoneheart_amulet: gearHead('stoneheart_amulet'),
+  sun_locket: gearHead('sun_locket'),
+  moon_locket: gearHead('moon_locket'),
+  showmans_top_hat: gearHead('showmans_top_hat'),
+  sequin_tailcoat: gearTorso('sequin_tailcoat'),
+  gilded_monocle: gearHead('gilded_monocle'),
+  grinning_mask: gearHead('grinning_mask'),
+  nimble_bangle: gearTrinket('nimble_bangle'),
+  lucky_penny: gearTrinket('lucky_penny'),
+  fang_charm: gearTrinket('fang_charm'),
+  frostward_charm: gearTrinket('frostward_charm'),
+  emberward_charm: gearTrinket('emberward_charm'),
+  fae_iron_charm: gearTrinket('fae_iron_charm'),
+  hourglass_charm: gearTrinket('hourglass_charm'),
+  ember_wisp: gearClawRelic('ember_wisp'),
+  ward_stone: gearClawRelic('ward_stone'),
+  sproutling_seed: gearClawRelic('sproutling_seed'),
   dev_plain_sword: heldVisual('plain_arming_sword'),
   dev_spiked_club: heldVisual('spiked_club'),
   dev_felling_axe: heldVisual('felling_axe'),
@@ -141,7 +186,6 @@ export const ITEM_ICONS: Record<ItemId, ItemIconPainter> = {
   skill_book_cat_reflexes: skillBook('cat_reflexes'),
   skill_book_pugilism: skillBook('pugilism'),
   skill_book_iron_stomach: skillBook('iron_stomach'),
-  skill_book_night_vision: skillBook('night_vision'),
 
   wayfinders_anchor: (ctx, rect) => drawAnchorStoneIcon(ctx, rect),
   anchor_shard_tinker: anchorShard,
@@ -179,3 +223,15 @@ export const ITEM_ICONS: Record<ItemId, ItemIconPainter> = {
   gym_bench_press: drawBenchPressInventoryIcon,
   gym_treadmill: drawTreadmillInventoryIcon,
 };
+
+/**
+ * The icon `id` is drawn with: a weapon that has woken shows its awakened
+ * look, read off the same stat block its held visual is, so the icon and the
+ * blade in his hand always agree.
+ */
+export function itemIconPainter(id: ItemId, awakened: boolean): ItemIconPainter {
+  const weapon = awakened ? weaponStatsOf(id) : null;
+  if (weapon === null) return ITEM_ICONS[id];
+  const look = heldVisualIdOf(weapon, true);
+  return look === weapon.heldVisual ? ITEM_ICONS[id] : heldVisual(look);
+}

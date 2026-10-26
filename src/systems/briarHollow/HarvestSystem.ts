@@ -36,10 +36,10 @@ import { TILE_SIZE } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
 import type { PlayOptions } from '../../audio/AudioManager';
 import type { SoundId } from '../../audio/sounds';
-import { ITEM_DEF, type ItemId } from '../../core/ItemDefs';
-import type { HarvestKind } from '../../core/craftPerks';
-import type { PartyTools, PartyToolsState } from '../../core/PartyTools';
-import type { ToolKind, ToolTier } from '../../core/toolTiers';
+import { ITEM_DEF, type ItemId } from '../../core/items/defs/ItemDefs';
+import type { HarvestKind } from '../../core/labour/craftPerks';
+import type { PartyTools, PartyToolsState } from '../../core/items/gathering/PartyTools';
+import type { ToolKind, ToolTier } from '../../core/items/gathering/toolTiers';
 import {
   harvestAward,
   harvestIntervalTicks,
@@ -48,9 +48,9 @@ import {
   resourceForHarvestKind,
   rollHarvestLuck,
   toolForHarvestKind,
-} from '../../core/harvestYield';
-import { addToSessionTally } from '../../core/resourceSessionTally';
-import type { CrawlerKind } from '../../core/SkillManager';
+} from '../../core/labour/harvestYield';
+import { addToSessionTally } from '../../core/items/gathering/resourceSessionTally';
+import type { CrawlerKind } from '../../core/skills/SkillManager';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { GameMap } from '../../map/GameMap';
@@ -61,6 +61,7 @@ import type { HarvestEffects } from './HarvestEffects';
 import type { NodeLedger } from './NodeLedger';
 import { harvestKindAt } from './harvestNodes';
 import { CAT_WORK_SWING_TICKS } from '../WorkChannel';
+import { gearModifiers } from '../../gear/gearHooks';
 
 type Crawler = HumanPlayer | CatPlayer;
 
@@ -317,7 +318,13 @@ export class HarvestSystem {
     const toolKind = toolForHarvestKind(channel.kind);
     const yieldMultiplier = this.deps.partyTools.yieldMultiplier(toolKind);
     const carries = this.carryOf(harvester.crawlerKind);
-    const { amount, carry } = harvestAward(yieldMultiplier, carries[channel.kind], level);
+    const gearYieldBonus = gearModifiers(harvester).harvestYieldBonus;
+    const { amount, carry } = harvestAward(
+      yieldMultiplier,
+      carries[channel.kind],
+      level,
+      gearYieldBonus,
+    );
     carries[channel.kind] = carry;
 
     const toolSpeedBonus = this.deps.partyTools.toolSpeedBonus(toolKind);

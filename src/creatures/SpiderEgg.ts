@@ -1,7 +1,7 @@
 import { Mob, type LootDrop, type PlayerDamageType } from './Mob';
 import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Player } from '../Player';
-import { CASTER_HELD_STATUSES, type StatusEffect } from '../core/StatusEffect';
+import { CASTER_HELD_STATUSES, type StatusEffect } from '../core/combat/StatusEffect';
 import { drawSpiderEggSprite, type SpiderEggState } from '../sprites/spiderEggSprite';
 
 /**

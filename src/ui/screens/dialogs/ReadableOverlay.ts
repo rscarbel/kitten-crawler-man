@@ -11,7 +11,7 @@
  */
 
 import type { Readable } from '../../../systems/townReadables';
-import { keybindings } from '../../../core/Keybindings';
+import { keybindings } from '../../../core/input/Keybindings';
 import { ACTIVATE_KEYS, type Surface, type Ui } from '../../core/UiRoot';
 import { panelBodyMaxHeight, panelBodyWidth } from '../../widgets/panel';
 import {

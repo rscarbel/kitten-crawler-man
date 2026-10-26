@@ -19,7 +19,7 @@ import {
   type ToolTier,
   type ItemWorkingToolKind,
   TOOL_TIER_LOOKS,
-} from '../../core/toolTiers';
+} from '../../core/items/gathering/toolTiers';
 import { mix, rgba } from './bipedArt';
 
 type Ctx = CanvasRenderingContext2D;

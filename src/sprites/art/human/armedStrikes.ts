@@ -24,7 +24,7 @@
  * hands it back.
  */
 
-import { HUMAN_SWING_FRAMES } from '../../../core/crawlerFormulas';
+import { HUMAN_SWING_FRAMES } from '../../../core/party/crawlerFormulas';
 import { PLAYER_SPEED } from '../../../core/constants';
 import { lerpAngle, pt } from '../biped/geometry';
 import { WRIST_FOLLOW } from '../biped/limbs';
@@ -481,7 +481,7 @@ const TWO_HAND_SIDE_SWEEP: TwoHandPlan = {
     { butt: pt(-0.24, 0.46), haft: -165, spacing: 1.6, depth: HAFT_TOWARD_CAMERA },
     { butt: pt(0.04, 0.56), haft: -60, spacing: 1.4, depth: HAFT_TOWARD_CAMERA },
     { butt: pt(0.26, 0.6), haft: 0, spacing: 2.6 },
-    { butt: pt(0.16, 0.6), haft: 40, spacing: 1, depth: HAFT_AWAY_FROM_CAMERA },
+    { butt: pt(0.16, 0.58), haft: 28, spacing: 1, depth: HAFT_AWAY_FROM_CAMERA },
     { butt: pt(0.06, 0.6), haft: 4, spacing: 1.8, depth: HAFT_AWAY_FROM_CAMERA },
     { butt: pt(0.03, 0.58), haft: -18, spacing: 2.5 },
   ],

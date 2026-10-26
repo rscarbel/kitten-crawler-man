@@ -166,6 +166,16 @@ starts.
   (`motionSetOf`: `unarmed`, `oneHandLight`, `oneHandHeavy`, `twoHand`); the
   animator's lookups and the resident working set are per set. A new item of an
   existing set needs no rows; a new set or archetype is figure work done here.
+- **The off hand.** A shield (`offHandHeld`) is no motion set: a dresser
+  (`human/offHand.ts`, `carryInOffHand`) closes his left fist on it in every
+  armed and unarmed row that leaves that hand free, turned per view, and the
+  `block`, `block_side`, `block_away` reaction rows (`human/offHandBlock.ts`,
+  played by `HumanReactionDirector.block`) square it to a shot. A row that
+  wants his left hand on any frame, and every action and fidget, stows it for
+  the whole row; a `twoHand` weapon in hand stows it for good, on his back, or
+  on his hip when the weapon he carries rests on his back
+  (`stowedGeometry.ts`). Both hands' items are composited between the same
+  two layers, deepest first.
 
 ## The painter contract
 

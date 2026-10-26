@@ -26,7 +26,7 @@ import {
   ALWAYS_UNLOCKED_TRACK_IDS,
   bindMusicLibrary,
   MusicLibrary,
-} from '../../src/core/MusicLibrary.js';
+} from '../../src/core/music/MusicLibrary.js';
 import {
   seededStreams,
   type AudioHarness,

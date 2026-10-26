@@ -1,4 +1,4 @@
-import { progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import { progressFrameIndex, timeFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import { SHADY_FIGURE } from './art/shadyFigure';
 import { type DrawnFigureRow, figureFrameCount, drawnFigureRow } from './figure/figureDef';

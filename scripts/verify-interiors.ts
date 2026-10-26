@@ -54,11 +54,11 @@ import { allResidents, residentById } from '../src/systems/townResidents';
 import { RESIDENT_LINES } from '../src/dialog/scripts/residents';
 import { interiorServiceBuildings, interiorServicesFor } from '../src/systems/townServices';
 import { readableBuildings, readablesFor } from '../src/systems/townReadables';
-import { STAT_BOON_BONUSES } from '../src/core/StatusEffect';
+import { STAT_BOON_BONUSES } from '../src/core/combat/StatusEffect';
 import { statusVisual } from '../src/sprites/status/statusEffectVisuals';
 import { EventBus } from '../src/core/EventBus';
-import { createMurderQuestProgress } from '../src/core/MurderQuestProgress';
-import { createDoomsdayProgress } from '../src/core/DoomsdayProgress';
+import { createMurderQuestProgress } from '../src/core/quests/MurderQuestProgress';
+import { createDoomsdayProgress } from '../src/core/quests/DoomsdayProgress';
 import { QuillConfrontationSystem } from '../src/systems/QuillConfrontationSystem';
 import { MISS_QUILL_CAST_RANGE_TILES } from '../src/creatures/MissQuill';
 import { CITY_ELF_CULTIST_AGGRO_RANGE_TILES } from '../src/creatures/CityElfCultist';
@@ -78,13 +78,13 @@ import {
   forgetClearedCamps,
   noteCampCasualty,
   restoreTownMemory,
-} from '../src/core/TownMemory';
-import { parseTownMemoryCheckpoint } from '../src/core/PersistedWorldState';
-import { DIFFICULTY_PROFILES } from '../src/core/difficultyProfiles';
+} from '../src/core/state/TownMemory';
+import { parseTownMemoryCheckpoint } from '../src/core/save/PersistedWorldState';
+import { DIFFICULTY_PROFILES } from '../src/core/difficulty/difficultyProfiles';
 import type { Mob } from '../src/creatures/Mob';
 import type { SystemContext } from '../src/systems/GameSystem';
 import { Conversation } from '../src/dialog/Conversation';
-import { setViewportSize } from '../src/core/Viewport';
+import { setViewportSize } from '../src/core/rendering/Viewport';
 import { ShopSystem } from '../src/systems/ShopSystem';
 import { createShopStock } from '../src/economy/shopStock';
 
@@ -401,7 +401,7 @@ console.log('\nGeneral Store counter');
   check(kestrel !== undefined, 'the General Store roster actually places Kestrel in the room');
 
   const mapWidth = map.structure[0]?.length ?? 0;
-  const shop = new ShopSystem(mapWidth, 'general_store', createShopStock());
+  const shop = new ShopSystem(mapWidth, 'general_store', createShopStock(), () => false);
   shop.setKeeper(kestrel ?? null);
   if (kestrel !== undefined) {
     const atCounter = new HumanPlayer(

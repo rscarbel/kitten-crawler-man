@@ -1,4 +1,4 @@
-import { isRecord } from '../../core/guards';
+import { isRecord } from '../../core/util/guards';
 
 /** Point-in-time gym state, restorable any number of times. */
 export interface GymRoomCheckpoint {

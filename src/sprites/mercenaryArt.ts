@@ -1,4 +1,4 @@
-import type { MercenaryArtId } from '../core/mercenaryTemplates';
+import type { MercenaryArtId } from '../core/party/mercenaryTemplates';
 import type { EyePlacement } from './eyePlacement';
 import type { MercenaryDrawState, MercenaryRow } from '../creatures/mercenaries/MercenaryKit';
 import {

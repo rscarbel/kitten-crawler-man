@@ -1,18 +1,14 @@
 import type { EventBus } from '../core/EventBus';
 import type { Mob } from '../creatures/Mob';
 import { DISH_DEF } from '../systems/bopcaDialog';
-import { weaponStatsOf } from '../core/ItemDefs';
+import { bindCue, equipChangeCue } from './gearSoundCues';
 import {
-  equipCue,
-  gearHandledBy,
-  heldWeightOf,
-  hitCue,
-  holsterCue,
-  holsterKindOf,
-  swingCue,
-} from './gearSoundCues';
-import { garmentMaterialOf } from '../sprites/garments/itemLooks';
-import { settings } from '../core/Settings';
+  clawSoundsOf,
+  handWeaponSoundsOf,
+  WEAPON_FAMILY_SOUNDS,
+  WEAPON_SOUND_OVERRIDES,
+} from './weaponSoundCues';
+import { settings } from '../core/input/Settings';
 import type { SoundId } from './sounds';
 import {
   musicLoopStartS,
@@ -22,7 +18,7 @@ import {
 } from './sounds';
 import { CORE_SFX_IDS, GATED_SFX_IDS, SFX_GROUPS, type GatedSfxGroup } from './sfxGroups';
 import { TILE_SIZE } from '../core/constants';
-import { isWorldPointInView } from '../core/visibleWorldView';
+import { isWorldPointInView } from '../core/rendering/visibleWorldView';
 import { SOUND_PRIORITY_RANK, soundTraits, type SoundTraits } from './soundTraits';
 import { AudioScope, KEYBOARD_HERO_SONG, type ScopeEngine, type ScopeHooks } from './AudioScope';
 import { LIMITER, sliderGain, VOLUME_RAMP_MS, type OneShotBus } from './buses';
@@ -58,34 +54,7 @@ const BLOOD_VOMIT_TAKES: readonly SoundId[] = [
   'blood_vomit_4',
 ];
 
-/** The swing every magic sword makes, whatever it does once the blow lands. */
-const MAGIC_SWORD_SWING_TAKES: readonly SoundId[] = [
-  'magic_sword_swing_1',
-  'magic_sword_swing_2',
-  'magic_sword_swing_3',
-  'magic_sword_swing_4',
-];
-/**
- * The Fury of Taranis's own sets: a cut landing and a chain-lightning burst.
- * Every crackling electric take belongs to the wave landing, so the
- * electricity is only heard when the wave actually hits something.
- */
-const TARANIS_WAVE_HIT_TAKES: readonly SoundId[] = [
-  'taranis_swing_1',
-  'taranis_swing_2',
-  'taranis_swing_3',
-  'taranis_swing_4',
-  'taranis_wave_hit_1',
-  'taranis_wave_hit_2',
-  'taranis_wave_hit_3',
-  'taranis_wave_hit_4',
-];
-const TARANIS_CHAIN_TAKES: readonly SoundId[] = [
-  'taranis_chain_lightning_1',
-  'taranis_chain_lightning_2',
-  'taranis_chain_lightning_3',
-  'taranis_chain_lightning_4',
-];
+const STORMCALLER_SOUNDS = WEAPON_SOUND_OVERRIDES.stormcaller;
 const GOBLIN_ENCOUNTER_CHANCE = 0.15;
 const MENU_MUSIC_FADE_MS = 200;
 /** How long the music bus takes to settle on a new partial-duck level by default. */
@@ -2214,6 +2183,14 @@ export class AudioManager {
         remains.play('rock_golem_death');
         return;
       }
+      if (e.mob.audioTag === 'big_rooster') {
+        remains.play('big_rooster_death');
+        return;
+      }
+      if (e.mob.audioTag === 'trash_gremlin') {
+        remains.play('trash_gremlin_death');
+        return;
+      }
       // A guard tentacle's death sound cannot be a `playMobAudioCues` flag: it
       // is cut down and compacted out of the mob array well before the next
       // frame's cue drain would see one — see `playKrakarenTentacleCues`.
@@ -2296,48 +2273,42 @@ export class AudioManager {
       this.playRandom(BLOOD_VOMIT_TAKES);
     });
 
-    bus.on('taranisSwing', () => {
-      this.playRandom(MAGIC_SWORD_SWING_TAKES);
+    bus.on('stormcallerSwing', () => {
+      this.playRandom(STORMCALLER_SOUNDS.swing.takes);
     });
 
-    bus.on('taranisStrike', () => {
-      this.playRandom(TARANIS_WAVE_HIT_TAKES);
+    bus.on('stormcallerStrike', () => {
+      this.playRandom(STORMCALLER_SOUNDS.hit.takes);
     });
 
-    bus.on('taranisChain', () => {
-      this.playRandom(TARANIS_CHAIN_TAKES);
+    bus.on('stormcallerChain', () => {
+      this.playRandom(STORMCALLER_SOUNDS.proc.takes);
     });
 
     bus.on('weaponSwing', (e) => {
-      this.playRandom(swingCue(heldWeightOf(e.weaponId)));
-      const weapon = weaponStatsOf(e.weaponId);
-      if (e.hit && weapon?.delivery === 'melee') this.playRandom(hitCue(weapon.strike));
-    });
-
-    bus.on('weaponHolstered', (e) => {
-      const weapon = weaponStatsOf(e.weaponId);
-      if (weapon !== null) this.playRandom(holsterCue(e.motion, holsterKindOf(weapon)));
+      const sounds = handWeaponSoundsOf(e.weaponId);
+      if (sounds === null) return;
+      this.playRandom(sounds.swing.takes);
+      if (e.hit) this.playRandom(sounds.hit.takes);
     });
 
     bus.on('equipmentChanged', (e) => {
-      const handledItemId = gearHandledBy(e);
-      if (handledItemId !== null) {
-        this.playRandom(equipCue(garmentMaterialOf(handledItemId, e.crawler)));
-      }
+      this.playRandom(equipChangeCue(e, e.crawler));
+      this.playRandom(bindCue(e));
     });
 
-    bus.on('catMeleeSwing', () => {
+    bus.on('catMeleeSwing', (e) => {
       this.play('cat_scratch');
+      const claws = e.clawsId === null ? null : clawSoundsOf(e.clawsId);
+      if (claws !== null) this.playRandom(claws.swipe.takes);
     });
 
     bus.on('missileImpact', (e) => {
       this.playAt('cat_missile_impact', e.x, e.y, {}, PARTY_SHOT_REACH);
     });
 
-    // [STAND-IN] The arrow's landing thud, the library's closest "small hard
-    // thing hits something", until a stone impact is sourced.
     bus.on('slingshotImpact', (e) => {
-      this.playAt('arrow_impact', e.x, e.y, {}, PARTY_SHOT_REACH);
+      this.playRandomAt(WEAPON_FAMILY_SOUNDS.sling.hit.takes, e.x, e.y, {}, PARTY_SHOT_REACH);
     });
 
     bus.on('combatStarted', (e) => {

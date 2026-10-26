@@ -11,7 +11,7 @@ export const SYSTEM_CHARACTER_NAME = 'System';
 const SYSTEM_TOOLS = [
   'announce',
   'grant_achievement',
-  'grant_loot_box',
+  'grant_reward_chest',
   'sponsor_message',
   'viewer_reaction',
   'play_sound',

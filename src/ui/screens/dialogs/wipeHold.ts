@@ -1,6 +1,6 @@
 import type { Surface } from '../../core/UiRoot';
 import { choiceModalSurface } from '../../widgets/choiceModal';
-import type { WipeStatus } from '../../../core/progressPersistence';
+import type { WipeStatus } from '../../../core/save/progressPersistence';
 
 /** What a holding screen needs from the page's wipe. `ProgressPersistence` is one. */
 export interface ProgressWipe {

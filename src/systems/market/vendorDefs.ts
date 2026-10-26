@@ -7,6 +7,7 @@
  * who stands behind it, what the cart looks like and where it goes.
  */
 
+import type { GearFreeShopId } from './vendorMenu';
 import type { ShopId } from '../../economy/shops';
 import type { TownRole } from '../../sprites/person/PersonAppearance';
 import type { TownSpecies } from '../townSpecies';
@@ -18,8 +19,12 @@ export type StallStyle = 'produce_cart' | 'tinker_bench' | 'butcher_block' | 'cl
 export type GoodsMotif = 'produce' | 'bottles' | 'meat' | 'trinkets';
 
 export interface VendorDef {
-  /** The stall's `SHOPS` entry: its catalog, its pricing and its key in the shared stock record. */
-  id: ShopId;
+  /**
+   * The stall's `SHOPS` entry: its catalog, its pricing and its key in the
+   * shared stock record. A stall sells no gear, so it is never asked whether
+   * the party already owns a piece.
+   */
+  id: GearFreeShopId;
   /** Vendor's own name, e.g. 'Bess Ottoline'. Shown in the panel header. */
   vendorName: string;
   /** Stall name, e.g. "Greengrocer's Cart". Shown as the panel title. */

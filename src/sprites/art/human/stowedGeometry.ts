@@ -30,6 +30,11 @@ interface StowedGeometry {
   readonly offset: Pt;
   /** The item's axis as drawn, butt to head, camera space. */
   readonly axis: Vec3;
+  /**
+   * Which way the item's flat faces, camera space: it lies against him, so
+   * this is the normal of the part of him it rests on.
+   */
+  readonly flatFacing: Vec3;
 }
 
 function unit(x: number, y: number, z: number): Vec3 {
@@ -57,26 +62,66 @@ function anchorOn(
   return side === 'right' ? skeleton.rightShoulder : skeleton.leftShoulder;
 }
 
+/** Square to the camera: a flat lying against a part of him that faces the viewer. */
+const FACING_CAMERA: Vec3 = { x: 0, y: 0, z: 1 };
+/**
+ * Out of his back in profile, where he faces +X: a flat lying against his
+ * back is seen on its edge, the way a strapped-on axe head shows only its
+ * thickness from the side.
+ */
+const OUT_OF_HIS_BACK: Vec3 = { x: -1, y: 0, z: 0 };
+
 /**
  * The hip: the hilt at his belt over the left hip, the scabbard hanging down
  * and a little back. Head-on and from behind it hangs a little out from the
  * thigh so the blade shows beside it; edge-on it slants back.
  */
 const HIP: Readonly<Record<CardinalView, StowedGeometry>> = {
-  side: { anchor: 'leftHip', offset: pt(0.04, 0.02), axis: unit(-0.45, 0.89, 0) },
-  front: { anchor: 'leftHip', offset: pt(0.06, 0.04), axis: unit(0.26, 0.96, 0) },
-  back: { anchor: 'leftHip', offset: pt(-0.06, 0.04), axis: unit(-0.26, 0.96, 0) },
+  side: {
+    anchor: 'leftHip',
+    offset: pt(0.04, 0.02),
+    axis: unit(-0.45, 0.89, 0),
+    flatFacing: FACING_CAMERA,
+  },
+  front: {
+    anchor: 'leftHip',
+    offset: pt(0.06, 0.04),
+    axis: unit(0.26, 0.96, 0),
+    flatFacing: FACING_CAMERA,
+  },
+  back: {
+    anchor: 'leftHip',
+    offset: pt(-0.06, 0.04),
+    axis: unit(-0.26, 0.96, 0),
+    flatFacing: FACING_CAMERA,
+  },
 };
 
 /**
  * The back: the grip just above and behind his right shoulder, the item
- * slanting down across his back to his left hip. Edge-on it stands off his
- * back, slanting down behind him.
+ * slanting down across his back to his left hip, flat against him. Edge-on
+ * the diagonal across his back runs mostly away from the camera, so it shows
+ * as a short haft lying down the line of his back, the head on its edge.
  */
 const BACK: Readonly<Record<CardinalView, StowedGeometry>> = {
-  side: { anchor: 'rightShoulder', offset: pt(-0.3, 0.12), axis: unit(-0.7, 0.7, 0) },
-  front: { anchor: 'rightShoulder', offset: pt(0.02, -0.06), axis: unit(0.6, 0.8, 0) },
-  back: { anchor: 'rightShoulder', offset: pt(-0.02, -0.06), axis: unit(-0.6, 0.8, 0) },
+  side: {
+    anchor: 'rightShoulder',
+    offset: pt(-0.13, 0.08),
+    axis: unit(-0.14, 0.86, -0.5),
+    flatFacing: OUT_OF_HIS_BACK,
+  },
+  front: {
+    anchor: 'rightShoulder',
+    offset: pt(0.02, -0.06),
+    axis: unit(0.6, 0.8, 0),
+    flatFacing: FACING_CAMERA,
+  },
+  back: {
+    anchor: 'rightShoulder',
+    offset: pt(-0.02, -0.06),
+    axis: unit(-0.6, 0.8, 0),
+    flatFacing: FACING_CAMERA,
+  },
 };
 
 const STOWED: Readonly<Record<ShownPlacement, Readonly<Record<CardinalView, StowedGeometry>>>> = {
@@ -98,6 +143,11 @@ export function stowedCentre(
 /** The axis an item stowed at `placement` rests along, as drawn. */
 export function stowedAxis(placement: ShownPlacement, view: CardinalView): Vec3 {
   return STOWED[placement][view].axis;
+}
+
+/** Which way the flat of an item stowed at `placement` faces, as drawn. */
+export function stowedFlatFacing(placement: ShownPlacement, view: CardinalView): Vec3 {
+  return STOWED[placement][view].flatFacing;
 }
 
 /**

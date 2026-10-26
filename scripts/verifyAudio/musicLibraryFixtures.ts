@@ -7,7 +7,7 @@
  */
 
 import type { MusicTrackId } from '../../src/audio/sounds.js';
-import type { PlayerSnapshot } from '../../src/core/PlayerSnapshot.js';
+import type { PlayerSnapshot } from '../../src/core/save/PlayerSnapshot.js';
 import { JACKPOT_FLOOR } from '../../src/systems/casino/slots/slotBets.js';
 
 /** Any seed: the backfill reads what the floor recorded, never the map it describes. */
@@ -39,9 +39,7 @@ export interface BackfillFixture {
 
 const NO_ACHIEVEMENTS = {
   unlocked: [],
-  pendingNotifications: [],
-  pendingBoxes: [],
-  nextBoxId: 1,
+  presentations: [],
   recentEvents: [],
   menuUnseen: 0,
 } as const;
@@ -200,7 +198,6 @@ function townArrivalState(): Record<string, unknown> {
     tacticsNoticesSeen: [],
     doomsday: { stage: 'inactive', remainingMs: null, crystalTile: null },
     krakarenKilled: false,
-    krakarenBossRoomIdx: -1,
     bigRoosterKilled: false,
     bigRoosterBossRoomIdx: -1,
   };
@@ -300,9 +297,7 @@ export function backfillFixtures(
         ...party,
         humanAchievements: {
           ...NO_ACHIEVEMENTS,
-          unlocked: ['first_blood'],
-          pendingBoxes: [{ id: 1, tier: 'Bronze', category: 'Tutorial', fromAchievement: null }],
-          nextBoxId: 2,
+          unlocked: ['first_kill'],
         },
         catAchievements: NO_ACHIEVEMENTS,
       },
@@ -339,7 +334,7 @@ export function backfillFixtures(
     {
       name: 'a floor-3 save from a night at the Desperado Club, on an older generator',
       save: townSave(bigRoosterSlainParty, staleGeneratorVersion, clubNight, {
-        humanAchievements: { ...NO_ACHIEVEMENTS, unlocked: ['desperado_member'] },
+        humanAchievements: { ...NO_ACHIEVEMENTS, unlocked: ['members_only'] },
       }),
       expected: [
         ...DUNGEON_SONGS_TO_FLOOR_3,

@@ -15,6 +15,7 @@
  * when they arrive.
  */
 
+import { crawlerTurnsShot } from '../gear/incomingBlows';
 import type { WorldPoint } from '../audio/AudioManager';
 import type { Player, DamageSource } from '../Player';
 import type { GameMap } from '../map/GameMap';
@@ -248,7 +249,9 @@ export class SkeletonProjectileSystem implements GameSystem {
         // still flashes the crawler's hit-react and suppresses regen.
         const resistedDamage = target.resistedDamage(projectile.damage, 'piercing');
         const connected =
-          resistedDamage > 0 && target.takeDamage(resistedDamage, projectile.source);
+          resistedDamage > 0 &&
+          !crawlerTurnsShot(target, projectile.owner, projectile.vx, projectile.vy) &&
+          target.takeDamage(resistedDamage, projectile.source);
         if (connected) projectile.owner.noteStruckPlayer(target);
         struck = target;
         break;

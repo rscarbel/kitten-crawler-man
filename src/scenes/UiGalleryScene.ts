@@ -8,7 +8,7 @@
  */
 
 import { Scene } from '../core/Scene';
-import type { UiSize } from '../core/Settings';
+import type { UiSize } from '../core/input/Settings';
 import { GalleryModel } from '../dev/uiGallery/model';
 import { createUiGallery, type GalleryChromeHost } from '../dev/uiGallery/screens';
 import { UiRoot } from '../ui/core/UiRoot';

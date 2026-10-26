@@ -34,7 +34,7 @@ import { isWithinCamp, type CampSite } from './camps';
 import type { ElevationBand, ElevationField } from './elevation';
 import type { KeepOut } from './keepOut';
 import { Reachability } from './reachability';
-import { worldRandom } from '../../core/WorldRandom';
+import { worldRandom } from '../../core/world/WorldRandom';
 import { tileHash01 } from '../tiles/hollowTileHash';
 import { DriftField, scatterSalt, type LandformSampler } from './landformScatter';
 

@@ -3,27 +3,26 @@
  * Pure logic: the scene supplies the state, this decides the pages and the `!`.
  */
 
-import type { Inventory } from '../core/Inventory';
+import type { Inventory } from '../core/items/inventory/Inventory';
 import {
-  EQUIP_SUBSLOTS,
+  ITEM_DEF,
+  isItemId,
   itemFitsSubSlot,
+  subSlotsOf,
   type InventoryItem,
   type ItemId,
   type WearableItem,
-} from '../core/ItemDefs';
+} from '../core/items/defs/ItemDefs';
+import { traitScore, type GearTraitKind } from '../gear/traits';
 import { crawlerName } from '../characters/characters';
-import { type CrawlerKind } from '../core/SkillManager';
+import { type CrawlerKind } from '../core/skills/SkillManager';
 import {
   MORDECAI_DEBRIEF_GEAR_CLOSING,
   MORDECAI_DEBRIEF_TRASH_GREMLIN_CONGRATS,
-  MORDECAI_DEBRIEF_HUSHED_ALSO_LINE,
-  MORDECAI_DEBRIEF_HUSHED_ONLY_LINE,
   MORDECAI_DEBRIEF_BIG_ROOSTER_CONGRATS,
   MORDECAI_DEBRIEF_KRAKAREN_CONGRATS,
-  mordecaiDebriefBothBoxesLine,
   mordecaiDebriefGearFirstSentence,
   mordecaiDebriefGearMoreSentence,
-  mordecaiDebriefOneBoxLine,
 } from '../dialog/scripts/mordecai';
 
 /** In the order the spine meets them; {@link isSupersededDebrief} relies on it. */
@@ -43,7 +42,7 @@ export function debriefBossType(bossType: string | undefined): DebriefBossType |
 
 /**
  * A later gauntlet kill retires this boss's debrief, so only the newest exit room
- * raises a `!` about boxes and gear.
+ * raises a `!` about gear.
  */
 export function isSupersededDebrief(
   bossType: DebriefBossType,
@@ -67,14 +66,6 @@ const CRAWLER_POSSESSIVES = {
 
 const CRAWLER_ORDER: ReadonlyArray<CrawlerKind> = ['human', 'cat'];
 
-/**
- * He never tells the cat to wear the crown by name. It still counts as unworn gear
- * for the `!`; only the wording changes.
- */
-const UNRECOMMENDED_ITEM_IDS: ReadonlySet<ItemId> = new Set<ItemId>([
-  'enchanted_crown_sepsis_whore',
-]);
-
 /** Item names are long and the dialog box is short on phones. */
 export const MAX_ITEMS_PER_DEBRIEF_PAGE = 3;
 
@@ -84,13 +75,7 @@ export interface UnwornItem {
   readonly owner: CrawlerKind;
 }
 
-export interface BoxCounts {
-  readonly human: number;
-  readonly cat: number;
-}
-
 export interface DebriefState {
-  readonly pendingBoxes: BoxCounts;
   readonly unworn: ReadonlyArray<UnwornItem>;
 }
 
@@ -98,7 +83,6 @@ export interface DebriefMemory {
   readonly congratulated: boolean;
   /** Cumulative, so re-unequipping an item he already named is not news. */
   readonly namedItemIds: ReadonlyArray<ItemId>;
-  readonly boxCountsAtLastTalk: BoxCounts;
 }
 
 export type MordecaiDebriefCheckpoint = Partial<Record<DebriefBossType, DebriefMemory>>;
@@ -106,7 +90,6 @@ export type MordecaiDebriefCheckpoint = Partial<Record<DebriefBossType, DebriefM
 export const EMPTY_DEBRIEF_MEMORY: DebriefMemory = {
   congratulated: false,
   namedItemIds: [],
-  boxCountsAtLastTalk: { human: 0, cat: 0 },
 };
 
 function summedStatBonus(item: InventoryItem): number {
@@ -125,50 +108,60 @@ function keepsEveryBonus(
   return true;
 }
 
-/**
- * Effects keyed by id elsewhere (the gauntlet's iron punch, the crown's sepsis
- * proc), invisible to `isStrictUpgrade`.
- */
-const ID_KEYED_EFFECT_ITEM_IDS: ReadonlySet<ItemId> = new Set<ItemId>([
-  'grull_war_gauntlet',
-  'enchanted_crown_sepsis_whore',
-]);
-
 const NEUTRAL_REGEN_MULTIPLIER = 1;
+
+/** Each trait kind `id` carries, with the summed score of its traits of that kind. */
+function traitScoresByKind(id: ItemId): Map<GearTraitKind, number> {
+  const scores = new Map<GearTraitKind, number>();
+  if (!isItemId(id)) return scores;
+  for (const trait of ITEM_DEF[id].traits ?? []) {
+    scores.set(trait.kind, (scores.get(trait.kind) ?? 0) + traitScore(trait));
+  }
+  return scores;
+}
+
+/** Whether `candidate` carries every trait kind `worn` does, each worth at least as much. */
+function keepsEveryTrait(worn: ItemId, candidate: ItemId): boolean {
+  const candidateScores = traitScoresByKind(candidate);
+  for (const [kind, score] of traitScoresByKind(worn)) {
+    const kept = candidateScores.get(kind);
+    if (kept === undefined || kept < score) return false;
+  }
+  return true;
+}
 
 /**
  * More total stats and nothing the worn piece does given up. Deliberately
  * conservative: sidegrades are the player's call, so the worst case is silence.
  */
 export function isStrictUpgrade(candidate: InventoryItem, worn: InventoryItem): boolean {
-  if (ID_KEYED_EFFECT_ITEM_IDS.has(worn.id)) return false;
   if (summedStatBonus(candidate) <= summedStatBonus(worn)) return false;
 
   const candidateResistances = candidate.resistances ?? [];
   if (!(worn.resistances ?? []).every((type) => candidateResistances.includes(type))) return false;
-  if (worn.abilityId !== undefined && candidate.abilityId !== worn.abilityId) return false;
   if (
     (candidate.regenMultiplier ?? NEUTRAL_REGEN_MULTIPLIER) <
     (worn.regenMultiplier ?? NEUTRAL_REGEN_MULTIPLIER)
   ) {
     return false;
   }
-  if ((candidate.damageReflectPct ?? 0) < (worn.damageReflectPct ?? 0)) return false;
   if (worn.cancelsMomentum === true && candidate.cancelsMomentum !== true) return false;
-  if ((candidate.stunOnHitChance ?? 0) < (worn.stunOnHitChance ?? 0)) return false;
+  if (!keepsEveryTrait(worn.id, candidate.id)) return false;
   if (!keepsEveryBonus(worn.skillLevelBonus, candidate.skillLevelBonus)) return false;
   return keepsEveryBonus(worn.meleeOnlyStatBonus, candidate.meleeOnlyStatBonus);
 }
 
 function isWorthWearing(item: WearableItem, inventory: Inventory): boolean {
-  const family = EQUIP_SUBSLOTS[item.equipSlot].filter((subSlot) => itemFitsSubSlot(item, subSlot));
+  const family = subSlotsOf(inventory.equipment.kind, item.equipSlot).filter((subSlot) =>
+    itemFitsSubSlot(item, subSlot),
+  );
   return family.some((subSlot) => {
     const worn = inventory.equipment.getEquippedItem(`${item.equipSlot}:${subSlot}`);
     return worn === null || isStrictUpgrade(item, worn);
   });
 }
 
-/** Wearable, unworn, and not a downgrade. The crown skips the downgrade filter. */
+/** Wearable, unworn, and not a downgrade. */
 export function unwornGear(owner: CrawlerKind, inventory: Inventory): UnwornItem[] {
   const found: UnwornItem[] = [];
   const seen = new Set<ItemId>();
@@ -178,19 +171,10 @@ export function unwornGear(owner: CrawlerKind, inventory: Inventory): UnwornItem
     // A weapon is drawn from the hotbar, so one not in hand is not gear left unworn.
     if (item.type === 'weapon') continue;
     if (!inventory.equipment.canEquip(item)) continue;
-    const hushed = isHushed({ id: item.id, owner });
-    if (!hushed && !isWorthWearing(item, inventory)) continue;
+    if (!isWorthWearing(item, inventory)) continue;
     found.push({ id: item.id, name: item.name, owner });
   }
   return found;
-}
-
-function isHushed(item: Pick<UnwornItem, 'id' | 'owner'>): boolean {
-  return item.owner === 'cat' && UNRECOMMENDED_ITEM_IDS.has(item.id);
-}
-
-function totalBoxes(boxes: BoxCounts): number {
-  return boxes.human + boxes.cat;
 }
 
 function unnamedItems(memory: DebriefMemory, state: DebriefState): UnwornItem[] {
@@ -199,47 +183,33 @@ function unnamedItems(memory: DebriefMemory, state: DebriefState): UnwornItem[] 
 
 interface DebriefSections {
   readonly congratulations: boolean;
-  readonly boxes: boolean;
   readonly gear: boolean;
 }
 
 /**
- * Gear waits for every box to be opened, since boxes hold gear. Unlike boxes it
- * repeats only when something is new: the crown may stay unworn forever, and
- * re-reading it would block the floor advice for good.
+ * Gear repeats only when something is new: the crown may stay unworn forever,
+ * and re-reading it would block the floor advice for good.
  */
 function sectionsFor(memory: DebriefMemory, state: DebriefState): DebriefSections {
-  const boxes = totalBoxes(state.pendingBoxes) > 0;
   return {
     congratulations: !memory.congratulated,
-    boxes,
-    gear: !boxes && unnamedItems(memory, state).length > 0,
+    gear: unnamedItems(memory, state).length > 0,
   };
-}
-
-function hasNewBoxes(memory: DebriefMemory, state: DebriefState): boolean {
-  return (
-    state.pendingBoxes.human > memory.boxCountsAtLastTalk.human ||
-    state.pendingBoxes.cat > memory.boxCountsAtLastTalk.cat
-  );
 }
 
 /** The `!`: cleared by hearing him out, not by acting on it, so it cannot nag forever. */
 export function debriefHasNews(memory: DebriefMemory, state: DebriefState): boolean {
   const sections = sectionsFor(memory, state);
-  return (
-    sections.congratulations || (sections.boxes && hasNewBoxes(memory, state)) || sections.gear
-  );
+  return sections.congratulations || sections.gear;
 }
 
-/** Only gear actually read out counts as named; gear held back behind boxes stays news. */
+/** Only gear actually read out counts as named. */
 export function rememberDebriefSpoken(memory: DebriefMemory, state: DebriefState): DebriefMemory {
   const sections = sectionsFor(memory, state);
   const spokenIds = sections.gear ? state.unworn.map((item) => item.id) : [];
   return {
     congratulated: true,
     namedItemIds: [...new Set([...memory.namedItemIds, ...spokenIds])],
-    boxCountsAtLastTalk: state.pendingBoxes,
   };
 }
 
@@ -247,24 +217,8 @@ export function sameDebriefMemory(a: DebriefMemory, b: DebriefMemory): boolean {
   return (
     a.congratulated === b.congratulated &&
     a.namedItemIds.length === b.namedItemIds.length &&
-    a.namedItemIds.every((id) => b.namedItemIds.includes(id)) &&
-    a.boxCountsAtLastTalk.human === b.boxCountsAtLastTalk.human &&
-    a.boxCountsAtLastTalk.cat === b.boxCountsAtLastTalk.cat
+    a.namedItemIds.every((id) => b.namedItemIds.includes(id))
   );
-}
-
-/**
- * Call whenever the memory is read. Without it, opening three boxes and earning
- * one more reads as fewer than he last saw rather than one new box. Counts, not
- * ids, because box ids restart each session and would collide with a save.
- */
-export function reconcileDebriefMemory(memory: DebriefMemory, boxes: BoxCounts): DebriefMemory {
-  const human = Math.min(memory.boxCountsAtLastTalk.human, boxes.human);
-  const cat = Math.min(memory.boxCountsAtLastTalk.cat, boxes.cat);
-  if (human === memory.boxCountsAtLastTalk.human && cat === memory.boxCountsAtLastTalk.cat) {
-    return memory;
-  }
-  return { ...memory, boxCountsAtLastTalk: { human, cat } };
 }
 
 const CONGRATULATIONS = {
@@ -272,14 +226,6 @@ const CONGRATULATIONS = {
   big_rooster: MORDECAI_DEBRIEF_BIG_ROOSTER_CONGRATS,
   krakaren_clone: MORDECAI_DEBRIEF_KRAKAREN_CONGRATS,
 } as const satisfies Record<DebriefBossType, ReadonlyArray<string>>;
-
-function boxesPage(boxes: BoxCounts): string {
-  if (boxes.human > 0 && boxes.cat > 0) {
-    return mordecaiDebriefBothBoxesLine();
-  }
-  const owner: CrawlerKind = boxes.human > 0 ? 'human' : 'cat';
-  return mordecaiDebriefOneBoxLine(crawlerName(owner), boxes[owner]);
-}
 
 function itemList(items: ReadonlyArray<UnwornItem>): string {
   const names = items.map((item) => `the ${item.name}`);
@@ -333,23 +279,19 @@ function packGearPages(sentences: ReadonlyArray<GearSentence>): GearSentence[] {
 }
 
 function gearPages(unworn: ReadonlyArray<UnwornItem>): string[] {
-  const recommendable = unworn.filter((item) => !isHushed(item));
-  const hasHushed = recommendable.length < unworn.length;
+  if (unworn.length === 0) return [];
 
-  if (recommendable.length === 0) return hasHushed ? [MORDECAI_DEBRIEF_HUSHED_ONLY_LINE] : [];
-
-  const packed = packGearPages(gearSentences(recommendable));
-  // Count-neutral wording: many armour names are plural ("the Marching Boots").
+  const packed = packGearPages(gearSentences(unworn));
+  // Count-neutral wording: many armour names are plural ("the Hearthguard Boots").
   const closing = MORDECAI_DEBRIEF_GEAR_CLOSING;
-  const tail = hasHushed ? `${closing} ${MORDECAI_DEBRIEF_HUSHED_ALSO_LINE}` : closing;
 
   const pages = packed.map((page) => page.text);
   const lastPage = packed.length > 0 ? packed[packed.length - 1] : undefined;
   // A full page of long names plus the closing overflows a phone's dialog box.
   if (lastPage !== undefined && lastPage.itemCount < MAX_ITEMS_PER_DEBRIEF_PAGE) {
-    pages[pages.length - 1] = `${lastPage.text} ${tail}`;
+    pages[pages.length - 1] = `${lastPage.text} ${closing}`;
   } else {
-    pages.push(tail);
+    pages.push(closing);
   }
   return pages;
 }
@@ -363,7 +305,6 @@ export function debriefPages(
   const sections = sectionsFor(memory, state);
   const pages: string[] = [];
   if (sections.congratulations) pages.push(...CONGRATULATIONS[bossType]);
-  if (sections.boxes) pages.push(boxesPage(state.pendingBoxes));
   if (sections.gear) pages.push(...gearPages(state.unworn));
   return pages.length === 0 ? null : pages;
 }

@@ -26,7 +26,7 @@ export const MORDECAI_TUTORIAL_WELCOME: DialogLine = say.line([
   'You will find me in every safe room you encounter. While inside a safe room, you cannot be harmed by any new attacks. Any enemy that strikes at you here will be instantly teleported back outside.',
   'Walking into any safe room immediately saves your progress, so if you die, you will return to the state you were in when you last entered a safe room on that level.',
   'This is a rather new addition to the dungeon that we have never seen before in previous games. They said it has something to do with this being a videogame or whatever.',
-  'Achievement rewards can only be opened inside a safe room. And it looks like you have one waiting right now! Go ahead and open it before pressing on.',
+  'Every achievement pays out a reward chest the moment you earn it. And it looks like you have one waiting right now! Go ahead and open it before pressing on.',
 ]);
 
 export const MORDECAI_TUTORIAL_FAREWELL: DialogLine = say.line(
@@ -34,7 +34,7 @@ export const MORDECAI_TUTORIAL_FAREWELL: DialogLine = say.line(
 );
 
 export const MORDECAI_TUTORIAL_REMINDER_OPEN_ACHIEVEMENT: DialogLine = say.line(
-  'Claim your achievement first. Tap the gold Achievement banner at the top of the screen.',
+  'Claim your achievement first. Open your reward chest.',
 );
 export const MORDECAI_TUTORIAL_REMINDER_SET_UP_ITEMS: DialogLine = say.line(
   'Set up your items from the inventory menu, then come find me.',
@@ -85,20 +85,6 @@ export const MORDECAI_DEBRIEF_KRAKAREN_CONGRATS: Paragraphs = [
   "It was only a copy. I'd keep that to yourselves if you ever meet anyone who remembers the original. And don't let it go to your heads. The dungeon noticed, and the dungeon doesn't reward being noticed.",
 ];
 
-export const MORDECAI_DEBRIEF_WHERE_BOXES_OPEN = "They're under Achievements in the menu.";
-
-/** The line spoken when both crawlers are sitting on unopened loot boxes. */
-export function mordecaiDebriefBothBoxesLine(): string {
-  return `You both have loot boxes you haven't opened. You're in a safe room. This is the one place you can open them, so open them. ${MORDECAI_DEBRIEF_WHERE_BOXES_OPEN}`;
-}
-
-/** The line spoken when only one crawler is sitting on unopened loot boxes. */
-export function mordecaiDebriefOneBoxLine(crawlerName: string, count: number): string {
-  const sittingOn = count === 1 ? 'an unopened loot box' : 'unopened loot boxes';
-  const pronoun = count === 1 ? 'it' : 'them';
-  return `${crawlerName}, you're sitting on ${sittingOn}. Open ${pronoun} while you're somewhere nothing can kill you. ${MORDECAI_DEBRIEF_WHERE_BOXES_OPEN}`;
-}
-
 /** The sentence opening a crawler's unworn-gear list. */
 export function mordecaiDebriefGearFirstSentence(
   crawlerName: string,
@@ -115,9 +101,6 @@ export function mordecaiDebriefGearMoreSentence(crawlerName: string, itemList: s
 
 export const MORDECAI_DEBRIEF_GEAR_CLOSING =
   "Wear what you're carrying. The stat boosts are the point. Gear in a bag does nothing for anyone.";
-
-export const MORDECAI_DEBRIEF_HUSHED_ONLY_LINE = `${crawlerName('cat')}, it looks like you have some unequipped items in your bag.`;
-export const MORDECAI_DEBRIEF_HUSHED_ALSO_LINE = `${crawlerName('cat')}, there's something else unworn in your bag as well.`;
 
 /** Wraps a fully assembled sequence of debrief pages as one spoken `DialogLine`. */
 export function mordecaiSpokenPages(pages: ReadonlyArray<string>): DialogLine | null {

@@ -27,7 +27,7 @@
  * - E1–E4 and E7 for what the cat holds: `gates-equipment-cat.ts`.
  *
  *   npm run gates:equipment
- *   npm run gates:equipment -- --item=fury_of_taranis
+ *   npm run gates:equipment -- --item=stormcaller
  */
 
 import { createCanvas, type Canvas } from 'canvas';
@@ -89,10 +89,13 @@ import {
   type HeldVisualId,
   SCRIPTED_PROP_VISUAL_IDS,
   FIXTURE_TOOL_VISUAL_IDS,
+  OFF_HAND_HELD_VISUAL_IDS,
   THROWN_PROP_VISUAL_IDS,
   TOOL_HELD_VISUAL_IDS,
   WEAPON_HELD_VISUAL_IDS,
 } from '../src/sprites/held/heldVisualIds.js';
+import { offHandGripOf } from '../src/sprites/art/human/offHand.js';
+import { BLOCK_ROW_NAMES } from '../src/sprites/art/human/offHandBlock.js';
 import type { HeldVisualDef, WeaponHeldVisualDef } from '../src/sprites/held/heldVisualDef.js';
 import { motionSetOf } from '../src/sprites/art/human/motionSets.js';
 import { compositeHeldItem, heldTransformAt } from '../src/sprites/held/heldComposite.js';
@@ -186,6 +189,21 @@ function weaponRows(look: WeaponHeldVisualDef): readonly HumanRowName[] {
   return [...new Set(set === 'unarmed' ? carried : [...own, ...carried])];
 }
 
+/**
+ * Rows a shield is checked on: the bare-handed rows he is drawn in on almost
+ * every frame, the block, and every row of the sets a one-handed weapon
+ * plays, which leave his off hand free. The rows of a weapon that wants both
+ * hands are not among them: with one out the shield rides stowed.
+ */
+function offHandRows(): readonly HumanRowName[] {
+  const carried = residentViewSpans('unarmed').map((span) => span.row);
+  const beside = HUMAN_ROWS.filter((row) => {
+    const set = motionSetOfRow(row);
+    return set === 'oneHandLight' || set === 'oneHandHeavy';
+  }).map((row) => row.name);
+  return [...new Set([...carried, ...BLOCK_ROW_NAMES, ...beside])];
+}
+
 function subjects(only: string | null): Subject[] {
   const base = humanFigureFor(gateLook, outfitOf(gateLook, []), null);
   const list: Subject[] = [];
@@ -213,6 +231,11 @@ function subjects(only: string | null): Subject[] {
     const look = HELD_VISUALS[id];
     const figure = humanFigureFor(gateLook, outfitOf(gateLook, []), carriedGripOf(look));
     list.push({ id, look, figure, rows: weaponRows(look), bitesGround: false });
+  }
+  for (const id of OFF_HAND_HELD_VISUAL_IDS) {
+    const look = HELD_VISUALS[id];
+    const figure = humanFigureFor(gateLook, outfitOf(gateLook, []), null, offHandGripOf(look));
+    list.push({ id, look, figure, rows: offHandRows(), bitesGround: false });
   }
   for (const id of THROWN_PROP_VISUAL_IDS) {
     list.push({
@@ -336,9 +359,10 @@ function checkSubject(subject: Subject, failures: string[], counts: Counts): voi
 
       counts.e1++;
       const probe = probeHumanJoints(row, frame, gateLook);
+      const ownArm = socket === frames.sockets.offHand ? probe.leftArm : probe.rightArm;
       const holding =
         frames.butt === undefined
-          ? [{ socket, arm: probe.rightArm }]
+          ? [{ socket, arm: ownArm }]
           : [
               { socket: frames.sockets.mainHand, arm: probe.rightArm },
               { socket: frames.sockets.offHand, arm: probe.leftArm },
@@ -836,6 +860,10 @@ function checkStowedUnderBack(only: string | null, failures: string[]): void {
   const stowedWeapons = WEAPON_HELD_VISUAL_IDS.filter(
     (id) => stowedPlacementOfHeld(HELD_VISUALS[id]) !== 'none',
   );
+  if (backGarments.length === 0) {
+    console.log('  E8: no garment of his paints over his back, so nothing is stowed under one');
+    return;
+  }
   const onlyGarment = backGarments.filter((garment) => garment.id === only);
   const onlyWeapon = stowedWeapons.filter((id) => id === only);
   if (only !== null && onlyGarment.length === 0 && onlyWeapon.length === 0) return;

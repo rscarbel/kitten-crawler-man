@@ -11,7 +11,7 @@ import {
 } from '../sprites/gymEquipmentSprite';
 import { worldPalette } from '../ui/theme/worldInk';
 import { worldText } from '../ui/world/worldText';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { PLACE_ROWS } from '../sprites/art/humanFigure';
 import { PLACE_RELEASE_TICKS } from '../sprites/art/human/actionsBuild';

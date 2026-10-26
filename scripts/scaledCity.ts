@@ -28,7 +28,7 @@ import { TILE_SIZE } from '../src/core/constants.js';
 import { level3 } from '../src/levels/level3.js';
 import { GameMap } from '../src/map/GameMap.js';
 import type { TilePoint, TileRect, TownPlan } from '../src/map/town/townPlan.js';
-import { getSpriteFootprintByKey } from '../src/core/SpriteLoader.js';
+import { getSpriteFootprintByKey } from '../src/core/spriteAssets/SpriteLoader.js';
 import { TownLifeSystem } from '../src/systems/TownLifeSystem.js';
 import { MarketSystem } from '../src/systems/market/MarketSystem.js';
 import { createShopStock } from '../src/economy/shopStock.js';

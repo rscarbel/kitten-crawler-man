@@ -12,8 +12,8 @@
  * at the feet reads as a retch at this size without a frame of new anatomy.
  */
 
-import type { SilhouetteLayer } from '../../core/silhouetteComposite';
-import { bloodVomitRetchProgress, type StatusEffect } from '../../core/StatusEffect';
+import type { SilhouetteLayer } from '../../core/spriteAssets/silhouetteComposite';
+import { bloodVomitRetchProgress, type StatusEffect } from '../../core/combat/StatusEffect';
 import {
   drawDroplet,
   hashRange,

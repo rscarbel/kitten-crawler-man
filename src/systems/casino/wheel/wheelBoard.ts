@@ -1,4 +1,4 @@
-import type { CrawlerKind } from '../../../core/SkillManager';
+import type { CrawlerKind } from '../../../core/skills/SkillManager';
 
 export const WHEEL_MIN_BET = 1000;
 export const WHEEL_MAX_BET = 6000;
@@ -10,24 +10,22 @@ export const WHEEL_BETS: readonly number[] = Array.from(
   (_, step) => WHEEL_MIN_BET + step * WHEEL_BET_STEP,
 );
 
-export const FURY_OF_TARANIS_ITEM_ID = 'fury_of_taranis';
-export const EYES_OF_SPLATTER_ITEM_ID = 'eyes_of_splatter';
-export const FAIRY_REPELLENT_SIGNET_ITEM_ID = 'fairy_repellent_signet';
-export const RING_OF_THE_COLD_SHOULDER_ITEM_ID = 'ring_of_the_cold_shoulder';
-export const RING_OF_THE_ASBESTOS_KNUCKLE_ITEM_ID = 'ring_of_the_asbestos_knuckle';
+export const STORMCALLER_ITEM_ID = 'stormcaller';
+export const KALEIDOSCOPE_SPECS_ITEM_ID = 'kaleidoscope_specs';
+export const FAE_IRON_CHARM_ITEM_ID = 'fae_iron_charm';
+export const FROSTWARD_CHARM_ITEM_ID = 'frostward_charm';
+export const EMBERWARD_CHARM_ITEM_ID = 'emberward_charm';
 
-export type PlatinumRing = 'frost' | 'ember';
+export type EpicCharm = 'frost' | 'ember';
 
-/** The ring a Platinum wedge pays. */
-export function platinumRingItemId(ring: PlatinumRing) {
-  return ring === 'frost'
-    ? RING_OF_THE_COLD_SHOULDER_ITEM_ID
-    : RING_OF_THE_ASBESTOS_KNUCKLE_ITEM_ID;
+/** The charm an Epic wedge pays. */
+export function epicCharmItemId(charm: EpicCharm) {
+  return charm === 'frost' ? FROSTWARD_CHARM_ITEM_ID : EMBERWARD_CHARM_ITEM_ID;
 }
 
-/** Each crawler's own Legendary Weapon: the human's sword, the cat's glasses. */
+/** Each crawler's own Legendary Weapon: the human's sword, the cat's specs. */
 export function legendaryWeaponItemId(crawler: CrawlerKind) {
-  return crawler === 'human' ? FURY_OF_TARANIS_ITEM_ID : EYES_OF_SPLATTER_ITEM_ID;
+  return crawler === 'human' ? STORMCALLER_ITEM_ID : KALEIDOSCOPE_SPECS_ITEM_ID;
 }
 
 /**
@@ -66,16 +64,16 @@ export function legendaryWeaponRecipient(
 export const WHEEL_PRIZE_IDS = [
   'pet',
   'gold_50k',
-  'legendary_weapon_box',
+  'legendary_weapon',
   'free_handies',
-  'platinum_box_frost',
-  'platinum_box_ember',
-  'legendary_box',
+  'epic_charm_frost',
+  'epic_charm_ember',
+  'legendary_charm',
   'gold_500k',
   'gold_10k',
-  'gold_box',
+  'rare_chest',
   'gold_25k',
-  'silver_box',
+  'uncommon_chest',
   'heal_and_gold',
 ] as const;
 
@@ -100,12 +98,12 @@ export type WheelPrize =
   | { readonly kind: 'spin_again' }
   | { readonly kind: 'pet' }
   | { readonly kind: 'gold'; readonly amount: number }
-  | { readonly kind: 'legendary_weapon_box' }
+  | { readonly kind: 'legendary_weapon' }
   | { readonly kind: 'free_handies' }
-  | { readonly kind: 'platinum_box'; readonly ring: PlatinumRing }
-  | { readonly kind: 'legendary_box' }
-  | { readonly kind: 'gold_box' }
-  | { readonly kind: 'silver_box' }
+  | { readonly kind: 'epic_charm'; readonly charm: EpicCharm }
+  | { readonly kind: 'legendary_charm' }
+  | { readonly kind: 'rare_chest' }
+  | { readonly kind: 'uncommon_chest' }
   | { readonly kind: 'heal_and_gold'; readonly amount: number };
 
 export type WheelPrizeKind = WheelPrize['kind'];
@@ -240,9 +238,9 @@ export const BASE_WHEEL_BOARD: WheelBoard = [
   good('pet', 'A new pet', 'A NEW PET', 'green', { kind: 'pet' }),
   red('poisoned_1', POISON_LABEL, 'POISONED', { kind: 'poison' }),
   red('set_on_fire', 'Get set on fire', 'ON FIRE', { kind: 'burn' }),
-  good('platinum_box_frost', 'A Platinum ring (frost)', 'PLATINUM RING', 'purple', {
-    kind: 'platinum_box',
-    ring: 'frost',
+  good('epic_charm_frost', 'An Epic charm (frost)', 'EPIC CHARM', 'purple', {
+    kind: 'epic_charm',
+    charm: 'frost',
   }),
   red('vomit_blood_1', VOMIT_LABEL, 'VOMIT BLOOD', { kind: 'blood_vomit' }),
   spinAgain('spin_again_1'),
@@ -256,8 +254,8 @@ export const BASE_WHEEL_BOARD: WheelBoard = [
   ),
   spinAgain('spin_again_2'),
   red('stabbed_2', STAB_LABEL, 'STABBED', { kind: 'stab' }),
-  good('legendary_box', 'A Legendary ring', 'LEGENDARY RING', 'purple', {
-    kind: 'legendary_box',
+  good('legendary_charm', 'A Legendary charm', 'LEGENDARY CHARM', 'purple', {
+    kind: 'legendary_charm',
   }),
   red('frozen_solid', 'Get frozen solid', 'FROZEN', { kind: 'freeze' }),
   good(
@@ -269,13 +267,13 @@ export const BASE_WHEEL_BOARD: WheelBoard = [
   ),
   red('vomit_blood_2', VOMIT_LABEL, 'VOMIT BLOOD', { kind: 'blood_vomit' }),
   red('robbed', "Robbed: lose half the gold you're carrying", 'ROBBED', { kind: 'robbed' }),
-  good('platinum_box_ember', 'A Platinum ring (ember)', 'PLATINUM RING', 'purple', {
-    kind: 'platinum_box',
-    ring: 'ember',
+  good('epic_charm_ember', 'An Epic charm (ember)', 'EPIC CHARM', 'purple', {
+    kind: 'epic_charm',
+    charm: 'ember',
   }),
   red('poisoned_2', POISON_LABEL, 'POISONED', { kind: 'poison' }),
-  good('legendary_weapon_box', 'A Legendary weapon', 'LEGENDARY WEAPON', 'purple', {
-    kind: 'legendary_weapon_box',
+  good('legendary_weapon', 'A Legendary weapon', 'LEGENDARY WEAPON', 'purple', {
+    kind: 'legendary_weapon',
   }),
 ];
 
@@ -315,7 +313,7 @@ export const WHEEL_UPGRADES: readonly WheelUpgrade[] = [
   ),
   upgrade(
     'frozen_solid',
-    good('gold_box', 'A Gold prize', 'GOLD PRIZE', 'gold', { kind: 'gold_box' }),
+    good('rare_chest', 'A Rare prize', 'RARE PRIZE', 'gold', { kind: 'rare_chest' }),
   ),
   upgrade(
     'robbed',
@@ -323,7 +321,9 @@ export const WHEEL_UPGRADES: readonly WheelUpgrade[] = [
   ),
   upgrade(
     'poisoned_2',
-    good('silver_box', 'A Silver prize', 'SILVER PRIZE', 'green', { kind: 'silver_box' }),
+    good('uncommon_chest', 'An Uncommon prize', 'UNCOMMON PRIZE', 'green', {
+      kind: 'uncommon_chest',
+    }),
   ),
   upgrade(
     'stabbed_2',

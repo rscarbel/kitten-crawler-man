@@ -19,7 +19,7 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
+} from '../../core/rendering/canvasSurface';
 import { mix, rgba } from '../art/bipedArt';
 import { fillSoftEllipse } from '../art/softShade';
 import { OUTLINE_PX } from '../art/biped/figure';

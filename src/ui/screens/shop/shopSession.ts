@@ -10,16 +10,16 @@
  * checks drive one through {@link ShopSession.pressBuy}.
  */
 
-import { canAffordCoins, spendPartyCoins } from '../../../core/partyCoins';
-import { ITEM_DEF, isItemId, type ItemId } from '../../../core/ItemDefs';
-import { canAfford, spend, type ResourceCost } from '../../../core/partyResources';
+import { canAffordCoins, spendPartyCoins } from '../../../core/party/partyCoins';
+import { ITEM_DEF, isItemId, type ItemId } from '../../../core/items/defs/ItemDefs';
+import { canAfford, spend, type ResourceCost } from '../../../core/items/gathering/partyResources';
 import type { Player } from '../../../Player';
 import { itemQuote, sellPrice, type PriceQuote } from '../../../economy/pricing';
 import type { ShopId } from '../../../economy/shops';
 import { cloneShopStock, sellToShop, type ShopStock } from '../../../economy/shopStock';
 import { sellableHoldings } from '../../../systems/market/sellableInventory';
 import type { Rect } from '../../core/geom';
-import { RESOURCE_IDS, type ResourceId } from '../../../core/resourceIds';
+import { RESOURCE_IDS, type ResourceId } from '../../../core/items/gathering/resourceIds';
 import type { ServiceIconId } from '../../../sprites/art/itemIcons/serviceIcons';
 
 /**

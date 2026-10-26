@@ -323,5 +323,6 @@ export const RYAN_SHIRT = defineGarment({
   base: true,
   layer: 'over',
   region: ['torso'],
+  covers: ['chest'],
   paint: { torso: humanEveryView(paintTorso) },
 });

@@ -4,7 +4,7 @@
  * Fen's counter is deliberately not a cheaper General Store: her poultices
  * undercut the store's price but she only has a few made up at a time, and the
  * thing nobody else in town sells is the cure — the only way to get a poison,
- * a burn or a sepsis off a crawler short of waiting it out or dying.
+ * a burn or a poison off a crawler short of waiting it out or dying.
  *
  * What she sells and at what margin lives on `SHOPS.apothecary`; the batch is
  * that line's stock in the shared `ShopStock`, threaded by reference through
@@ -16,8 +16,8 @@
  * `BuildingInteriorScene` owns the sounds and the interaction gating.
  */
 
-import { CURABLE_AILMENT_STATUSES } from '../core/StatusEffect';
-import type { ItemId } from '../core/ItemDefs';
+import { CURABLE_AILMENT_STATUSES } from '../core/combat/StatusEffect';
+import type { ItemId } from '../core/items/defs/ItemDefs';
 import type { Player } from '../Player';
 import {
   offerUnless,

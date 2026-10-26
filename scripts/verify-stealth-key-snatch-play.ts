@@ -90,9 +90,9 @@ const { seeds, fault } = parseArgs();
 
 const { mulberry32 } = await import('../src/sprites/person/rng.js');
 const { TILE_SIZE } = await import('../src/core/constants.js');
-const { loadSprites } = await import('../src/core/SpriteLoader.js');
+const { loadSprites } = await import('../src/core/spriteAssets/SpriteLoader.js');
 const { SceneManager } = await import('../src/core/Scene.js');
-const { InputManager } = await import('../src/core/InputManager.js');
+const { InputManager } = await import('../src/core/input/InputManager.js');
 const { DungeonScene } = await import('../src/scenes/DungeonScene.js');
 const { BuildingInteriorScene } = await import('../src/scenes/BuildingInteriorScene.js');
 const { GameMap } = await import('../src/map/GameMap.js');
@@ -110,11 +110,11 @@ const { PrisonGoblin } = await import('../src/creatures/PrisonGoblin.js');
 const { Mongo } = await import('../src/creatures/Mongo.js');
 const { Mercenary } = await import('../src/creatures/Mercenary.js');
 const { MercenarySystem } = await import('../src/systems/MercenarySystem.js');
-const { createMercenaryRoster } = await import('../src/core/MercenaryRoster.js');
-const { getMercenaryTemplate } = await import('../src/core/mercenaryTemplates.js');
+const { createMercenaryRoster } = await import('../src/core/party/MercenaryRoster.js');
+const { getMercenaryTemplate } = await import('../src/core/party/mercenaryTemplates.js');
 const { PrisonKeySystem } = await import('../src/systems/stealthKeySnatch/PrisonKeySystem.js');
-const { settings } = await import('../src/core/Settings.js');
-const { DIFFICULTY_ORDER } = await import('../src/core/difficultyProfiles.js');
+const { settings } = await import('../src/core/input/Settings.js');
+const { DIFFICULTY_ORDER } = await import('../src/core/difficulty/difficultyProfiles.js');
 
 type Scene = InstanceType<typeof DungeonScene>;
 type LiveMap = InstanceType<typeof GameMap>;

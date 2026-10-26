@@ -1,5 +1,5 @@
 import type { SceneManager } from '../core/Scene';
-import type { InputManager } from '../core/InputManager';
+import type { InputManager } from '../core/input/InputManager';
 import { DungeonScene, type DungeonSceneOptions } from '../scenes/DungeonScene';
 import { PaintBenchScene } from '../scenes/PaintBenchScene';
 import { PersonPreviewScene } from '../scenes/PersonPreviewScene';
@@ -39,17 +39,20 @@ import { TownMapScene } from '../scenes/TownMapScene';
 import { UiGalleryScene } from '../scenes/UiGalleryScene';
 import { TitleScene, type TitleStartState } from '../scenes/title/TitleScene';
 import { getLevelDef } from '../levels/index';
-import { createCircusQuestProgress, type CircusQuestStage } from '../core/CircusQuestProgress';
-import { createPartyCraftsState } from '../core/partyCrafts';
+import {
+  createCircusQuestProgress,
+  type CircusQuestStage,
+} from '../core/quests/CircusQuestProgress';
+import { createPartyCraftsState } from '../core/labour/partyCrafts';
 import {
   createMurderQuestProgress,
   type MurderQuestProgress,
   type MurderQuestStage,
-} from '../core/MurderQuestProgress';
-import { perfMonitor } from '../core/PerfMonitor';
-import { setDeviceMemoryOverride } from '../core/deviceMemoryBudget';
-import { renderQuality } from '../core/RenderQuality';
-import { asVarietyTier } from '../core/varietyTier';
+} from '../core/quests/MurderQuestProgress';
+import { perfMonitor } from '../core/perf/PerfMonitor';
+import { setDeviceMemoryOverride } from '../core/perf/deviceMemoryBudget';
+import { renderQuality } from '../core/perf/RenderQuality';
+import { asVarietyTier } from '../core/perf/varietyTier';
 import { setFigureCacheStatsRecording } from '../sprites/figure/figureCacheStats';
 import { drawPerfOverlay } from './perfOverlay';
 import { installPerfDensity } from './perfDensity';
@@ -66,9 +69,9 @@ import {
   parseWallTier,
   unlockEverythingForPlaytest,
 } from './briarHollowFortify';
-import { DOOMSDAY_COUNTDOWN_MS, createDoomsdayProgress } from '../core/DoomsdayProgress';
-import { settings } from '../core/Settings';
-import { getMercenaryTemplate } from '../core/mercenaryTemplates';
+import { DOOMSDAY_COUNTDOWN_MS, createDoomsdayProgress } from '../core/quests/DoomsdayProgress';
+import { settings } from '../core/input/Settings';
+import { getMercenaryTemplate } from '../core/party/mercenaryTemplates';
 import {
   buildPlaytestBoot,
   playtestStartsPastBathroom,
@@ -77,15 +80,15 @@ import {
   type PlaytestBoot,
 } from './playtestBoot';
 import { PRISON_LAYOUTS, type PrisonLayout } from '../map/goblinPrisonLayouts';
-import type { Difficulty } from '../core/difficultyProfiles';
+import type { Difficulty } from '../core/difficulty/difficultyProfiles';
 import { blueprintsPlaytestState } from './blueprintsPlaytest';
 import { contractsPlaytestState } from './contractsPlaytest';
 import { aiAdapter } from '../ai/AIAdapter';
 import { startBrowserReplayRecording } from './aiReplayRecorder';
 import { startPerfWalkFromParams } from './perfScenes';
 import { DEFAULT_FLOOR_ART_SEED } from '../map/ground/floorArtSeed';
-import { createGodModeState } from '../core/GodMode';
-import { createClubMembership } from '../core/ClubMembership';
+import { createGodModeState } from '../core/state/GodMode';
+import { createClubMembership } from '../core/club/ClubMembership';
 
 /**
  * Dev-only entry points, reachable by query parameter.

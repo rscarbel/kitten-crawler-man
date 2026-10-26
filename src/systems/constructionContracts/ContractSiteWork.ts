@@ -13,8 +13,13 @@
 
 import type { AudioManager } from '../../audio/AudioManager';
 import { TILE_SIZE } from '../../core/constants';
-import type { ActiveContract, BriarHollowState } from '../../core/briarHollowState';
-import { canAfford, costRequirements, spend, type ResourceCost } from '../../core/partyResources';
+import type { ActiveContract, BriarHollowState } from '../../core/quests/briarHollowState';
+import {
+  canAfford,
+  costRequirements,
+  spend,
+  type ResourceCost,
+} from '../../core/items/gathering/partyResources';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { GameMap } from '../../map/GameMap';

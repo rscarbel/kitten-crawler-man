@@ -27,7 +27,7 @@
 
 import { installBrowserShim } from './browserShim.js';
 import { settleArrival } from './settleArrival.js';
-import type { Difficulty } from '../src/core/difficultyProfiles.js';
+import type { Difficulty } from '../src/core/difficulty/difficultyProfiles.js';
 
 const VIEWPORT = { width: 1280, height: 720, devicePixelRatio: 1 } as const;
 installBrowserShim(VIEWPORT);
@@ -114,19 +114,19 @@ const { seeds, fault } = parseArgs();
 
 const { mulberry32 } = await import('../src/sprites/person/rng.js');
 const { TILE_SIZE } = await import('../src/core/constants.js');
-const { loadSprites } = await import('../src/core/SpriteLoader.js');
+const { loadSprites } = await import('../src/core/spriteAssets/SpriteLoader.js');
 const { SceneManager } = await import('../src/core/Scene.js');
-const { InputManager } = await import('../src/core/InputManager.js');
+const { InputManager } = await import('../src/core/input/InputManager.js');
 const { DungeonScene } = await import('../src/scenes/DungeonScene.js');
 const { GameMap } = await import('../src/map/GameMap.js');
 const { dungeonOptionsForLevel } = await import('../src/levels/dungeonOptions.js');
 const { level2 } = await import('../src/levels/level2.js');
-const { AbilityManager } = await import('../src/core/AbilityManager.js');
+const { AbilityManager } = await import('../src/core/skills/AbilityManager.js');
 const { MAGIC_MISSILE_DEF } = await import('../src/abilities/magicMissile.js');
 const { PROTECTIVE_SHELL_DEF } = await import('../src/abilities/protectiveShell.js');
 const { SMUSH_DEF } = await import('../src/abilities/smush.js');
 const { MONGO_DEF } = await import('../src/abilities/mongo.js');
-const { GameStats } = await import('../src/core/GameStats.js');
+const { GameStats } = await import('../src/core/progression/GameStats.js');
 const { BathroomGoblin, OW_THROTTLE_FRAMES } = await import('../src/creatures/BathroomGoblin.js');
 const { despawnMob } = await import('../src/creatures/Mob.js');
 const { CloggedBathroomSystem, STALL_VISIT_FRAMES, STALL_ENTER_FRAMES } =
@@ -134,12 +134,12 @@ const { CloggedBathroomSystem, STALL_VISIT_FRAMES, STALL_ENTER_FRAMES } =
 const { traceFlow, answerMasks, currentMask } =
   await import('../src/systems/cloggedBathroom/pipeBoard.js');
 const { REFRESHED_STATUS, REFRESHED_DURATION_TICKS, REFRESHED_SPEED_FACTOR } =
-  await import('../src/core/StatusEffect.js');
+  await import('../src/core/combat/StatusEffect.js');
 const { sceneSetupFromSave } = await import('../src/scenes/resumeFromSave.js');
-const { parsePersistedWorldState } = await import('../src/core/PersistedWorldState.js');
+const { parsePersistedWorldState } = await import('../src/core/save/PersistedWorldState.js');
 const { tileIndex } = await import('../src/map/tileIndex.js');
-const { settings } = await import('../src/core/Settings.js');
-const { DIFFICULTY_ORDER } = await import('../src/core/difficultyProfiles.js');
+const { settings } = await import('../src/core/input/Settings.js');
+const { DIFFICULTY_ORDER } = await import('../src/core/difficulty/difficultyProfiles.js');
 
 type Scene = InstanceType<typeof DungeonScene>;
 type LiveMap = InstanceType<typeof GameMap>;

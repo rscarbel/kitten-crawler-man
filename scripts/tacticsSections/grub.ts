@@ -17,7 +17,7 @@ import type { Mob } from '../../src/creatures/Mob';
 import type { BrindleGrub, GrubStage } from '../../src/creatures/BrindleGrub';
 import { MAX_MOB_LEVEL } from '../../src/levels/spawner';
 import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
-import { DIFFICULTY_PROFILES } from '../../src/core/difficultyProfiles';
+import { DIFFICULTY_PROFILES } from '../../src/core/difficulty/difficultyProfiles';
 import type { Rng } from '../../src/sprites/person/rng';
 import {
   TACTICS_MIN_MOB_LEVEL,

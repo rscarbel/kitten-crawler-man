@@ -1,5 +1,5 @@
 import { TILE_SIZE } from '../../core/constants';
-import type { MercenaryTemplate } from '../../core/mercenaryTemplates';
+import type { MercenaryTemplate } from '../../core/party/mercenaryTemplates';
 import {
   SPLASH_ZONE_CAST_WAVE_RELEASE_TICK,
   SPLASH_ZONE_CAST_WAVE_TICKS,

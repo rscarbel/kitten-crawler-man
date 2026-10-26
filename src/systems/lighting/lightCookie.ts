@@ -16,7 +16,7 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
+} from '../../core/rendering/canvasSurface';
 import { WALL_FACE_RISE_TILES } from '../../map/dungeon/wallLight';
 
 /** Rows of wall a face reaches into above the floor it stands on. */

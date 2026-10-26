@@ -1,4 +1,4 @@
-import type { AbilityDef } from '../core/AbilityManager';
+import type { AbilityDef } from '../core/skills/AbilityManager';
 import type { Rect } from '../ui/core/geom';
 import { iconSquare } from '../ui/icons/iconSquare';
 

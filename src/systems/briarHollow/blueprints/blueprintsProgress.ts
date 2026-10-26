@@ -9,16 +9,17 @@
  * evicted from the quest slot cannot leave the quest believing it is held.
  */
 
+import type { QuestId } from '../../../core/quests/QuestManager';
 import type { EventBus } from '../../../core/EventBus';
-import type { BlueprintsQuestState } from '../../../core/briarHollowState';
+import type { BlueprintsQuestState } from '../../../core/quests/briarHollowState';
 import {
   hasAcceptedBlueprintsQuest,
   type BlueprintsQuestPhase,
-} from '../../../core/blueprintsQuestPhase';
-import { ITEM_DEF, type InventoryItem, type ItemId } from '../../../core/ItemDefs';
-import type { Inventory } from '../../../core/Inventory';
+} from '../../../core/quests/blueprintsQuestPhase';
+import { ITEM_DEF, type InventoryItem, type ItemId } from '../../../core/items/defs/ItemDefs';
+import type { Inventory } from '../../../core/items/inventory/Inventory';
 
-export const BLUEPRINTS_QUEST_ID = 'borrowed_blueprints';
+export const BLUEPRINTS_QUEST_ID = 'borrowed_blueprints' as const satisfies QuestId;
 export const BLUEPRINTS_QUEST_NAME = 'The Borrowed Blueprints';
 
 /** Wendell's house in the Over City, where the blueprints are kept. */

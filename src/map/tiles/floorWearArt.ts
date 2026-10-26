@@ -18,7 +18,7 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
+} from '../../core/rendering/canvasSurface';
 import type { TileContent } from '../tileTypes';
 import {
   EDGE_LINE_EAST,
@@ -34,7 +34,7 @@ import {
 } from '../dungeon/floorSurface';
 import { drawFeatureTile, drawHallwayMarks } from './floorFeatureArt';
 import { blitAtDevice, fillSnapped, snappedDeviceRect } from './deviceSnap';
-import { onCanvasRecovery } from '../../core/canvasRecovery';
+import { onCanvasRecovery } from '../../core/rendering/canvasRecovery';
 
 /**
  * Steps per unit of wash a vertex is rounded to before a tile's wash surface is

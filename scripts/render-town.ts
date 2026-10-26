@@ -81,7 +81,7 @@ globals.document = {
 };
 
 const { TILE_SIZE } = await import('../src/core/constants');
-const { loadSprites } = await import('../src/core/SpriteLoader');
+const { loadSprites } = await import('../src/core/spriteAssets/SpriteLoader');
 const { GameMap } = await import('../src/map/GameMap');
 const { renderCanvas, renderDecorationsOverlay } = await import('../src/map/TileRenderer');
 const { MarketSystem } = await import('../src/systems/market/MarketSystem');

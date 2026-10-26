@@ -23,7 +23,7 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
+} from '../../core/rendering/canvasSurface';
 import { type FigureDef, figureStates } from '../figure/figureDef';
 import {
   type ArmAngles,

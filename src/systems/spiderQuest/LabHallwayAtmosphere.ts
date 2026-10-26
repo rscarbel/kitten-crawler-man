@@ -16,7 +16,7 @@
 import { TILE_SIZE } from '../../core/constants';
 import type { AudioManager } from '../../audio/AudioManager';
 import type { AudioScope } from '../../audio/AudioScope';
-import { drawSpriteKey } from '../../core/SpriteRenderer';
+import { drawSpriteKey } from '../../core/spriteAssets/SpriteRenderer';
 import type { GameMap } from '../../map/GameMap';
 import { labApproachZoneAt } from '../../map/labApproach';
 import {

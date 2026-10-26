@@ -13,9 +13,12 @@
  */
 
 import { buildSiegeRig, standAt, type SiegeRig } from '../villageSiegeHarness';
-import { createBriarHollowState } from '../../src/core/briarHollowState';
+import { createBriarHollowState } from '../../src/core/quests/briarHollowState';
 import { TILE_SIZE } from '../../src/core/constants';
-import { TIKKA_PLANS_UNLOCKS, grantConstructionUnlocks } from '../../src/core/villageUnlocks';
+import {
+  TIKKA_PLANS_UNLOCKS,
+  grantConstructionUnlocks,
+} from '../../src/core/quests/villageUnlocks';
 import {
   contractPayout,
   issueContract,

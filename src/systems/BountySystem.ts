@@ -20,12 +20,12 @@ import {
   activeDifficultyProfile,
   applySpawnDifficulty,
   type DifficultyProfile,
-} from '../core/difficultyProfiles';
-import { settings } from '../core/Settings';
+} from '../core/difficulty/difficultyProfiles';
+import { settings } from '../core/input/Settings';
 import { clamp } from '../utils';
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
-import type { SpatialGrid } from '../core/SpatialGrid';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { Player } from '../Player';
 import type { EventBus } from '../core/EventBus';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
@@ -49,8 +49,8 @@ import { SHADY_LINES } from '../dialog/scripts/shady';
 import { findBountyDef, type BountyDef } from './bountyDefs';
 import { EncounterCommitment } from './bountyCommit';
 import { BOUNTY_MAX_BLOW_HP_SHARE } from '../creatures/mobLevelScaling';
-import { prewarmGroups } from '../core/SpriteLoader';
-import { SYSTEM_ASSET_REQUIREMENTS } from '../core/systemAssetRequirements';
+import { prewarmGroups } from '../core/spriteAssets/SpriteLoader';
+import { SYSTEM_ASSET_REQUIREMENTS } from '../core/spriteAssets/systemAssetRequirements';
 import {
   advanceBountyType,
   peekNextBountyName,
@@ -58,7 +58,7 @@ import {
   takeNextBountyName,
   type BountyPhase,
   type BountyProgress,
-} from '../core/BountyProgress';
+} from '../core/quests/BountyProgress';
 
 /**
  * Hard ceiling on any mob's level, matching the spawner's own cap.

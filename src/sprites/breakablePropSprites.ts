@@ -5,7 +5,7 @@
  * wreckage — asks here, so all three always show the same object.
  */
 
-import type { SpriteKey } from '../core/SpriteLoader';
+import type { SpriteKey } from '../core/spriteAssets/SpriteLoader';
 import { isOilDrum, onServiceLevel, propVariantIndex } from '../map/dungeon/propVariants';
 import type { PropKind } from './art/destructiblePropArt';
 

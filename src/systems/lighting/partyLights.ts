@@ -5,7 +5,6 @@
 
 import { TILE_SIZE } from '../../core/constants';
 import type { DynamicLightSink, DynamicLightSource } from './dynamicLights';
-import { CRAWLER_LIGHT_REACH_TILES } from './lightKinds';
 
 const HALF_TILE = TILE_SIZE / 2;
 /**
@@ -29,17 +28,14 @@ export interface PartyLightBearers {
   readonly crawlers: () => ReadonlyArray<Positioned>;
   /** The party's own companions — never a stranger who happens not to be hostile. */
   readonly companions: () => ReadonlyArray<PartyCompanion>;
-  /** A crawler light's reach in tiles, given its base reach: Night Vision lengthens it. */
-  readonly crawlerReachTiles: (baseTiles: number) => number;
 }
 
 /** The party's lights as one source for the dungeon's lighting pass. */
 export function partyLightSource(bearers: PartyLightBearers): DynamicLightSource {
   return {
     collectLights(sink: DynamicLightSink): void {
-      const reach = bearers.crawlerReachTiles(CRAWLER_LIGHT_REACH_TILES);
       for (const crawler of bearers.crawlers()) {
-        sink.add(crawler.x + HALF_TILE, crawler.y + HALF_TILE, 'crawler', 1, reach);
+        sink.add(crawler.x + HALF_TILE, crawler.y + HALF_TILE, 'crawler');
       }
       for (const companion of bearers.companions()) {
         const strength = companion.downed ? DOWNED_COMPANION_LIGHT : 1;

@@ -11,7 +11,7 @@
  * under it and the boulder's kill guarantees cover them all.
  */
 
-import type { DifficultyProfile } from '../../core/difficultyProfiles';
+import type { DifficultyProfile } from '../../core/difficulty/difficultyProfiles';
 import { partyTrackedBand } from '../../levels/spawner';
 import { level3 } from '../../levels/level3';
 import { VILLAGE_ASSAULT_LEVEL_BAND } from './villageAssaultLevel';

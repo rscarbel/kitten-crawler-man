@@ -18,8 +18,8 @@
 import { crawlerName } from '../src/characters/characters';
 import { TILE_SIZE } from '../src/core/constants';
 import { EventBus } from '../src/core/EventBus';
-import { makePoison } from '../src/core/StatusEffect';
-import { PlayerManager } from '../src/core/PlayerManager';
+import { makePoison } from '../src/core/combat/StatusEffect';
+import { PlayerManager } from '../src/core/party/PlayerManager';
 import { Mob } from '../src/creatures/Mob';
 import type { Player } from '../src/Player';
 import { MORDECAI_CHARACTER_NAME, SYSTEM_CHARACTER_NAME } from '../src/ai/characters';

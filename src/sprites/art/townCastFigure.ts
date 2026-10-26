@@ -42,21 +42,21 @@ import {
 } from '../garments/human/townsfolkLegwear';
 import { outfitOf } from '../garments/outfit';
 import { type CardinalView } from '../facingView';
-import { idleBack, idleFront, idleSide } from '../art/human/idles';
-import { walkFacing, walkSide } from '../art/human/locomotion';
-import { talkBack, talkFront, talkSide } from '../art/human/actionsMisc';
-import { dancePose } from '../art/human/dance';
+import { idleBack, idleFront, idleSide } from './human/idles';
+import { walkFacing, walkSide } from './human/locomotion';
+import { talkBack, talkFront, talkSide } from './human/actionsMisc';
+import { dancePose } from './human/dance';
 import {
   DANCE_FRAMES,
   DANCE_STYLES,
   danceFacingAt,
   danceStateName,
   type DanceFacing,
-} from '../art/danceStyles';
-import { HUMAN_CELL_PX_PER_UNIT } from '../art/human/figureScale';
-import { drawAccessory, drawHeadAccessory } from '../art/human/townAccessories';
-import { castHeadReach, paintCastHead } from '../art/human/castHead';
-import { paintTrouserSeat } from '../art/human/legwear';
+} from './danceStyles';
+import { HUMAN_CELL_PX_PER_UNIT } from './human/figureScale';
+import { drawAccessory, drawHeadAccessory } from './human/townAccessories';
+import { castHeadReach, paintCastHead } from './human/castHead';
+import { paintTrouserSeat } from './human/legwear';
 import { deriveGlossRamp, deriveRamp } from './biped/palette';
 import type { HeadFeaturePainter } from './biped/head';
 import { type HumanLook, lookPxPerUnit } from '../looks/humanLook';
@@ -334,7 +334,8 @@ const HAIR_PAINTED_BY_ATTACHMENT: HeadFeaturePainter = () => undefined;
 /**
  * A cast look on the biped rig: Dave's jacket, recut and recoloured as the
  * look's garment, and nothing else of Dave's or the crawler's — not Dave's
- * jeans, which the cast's own trousers replace, not the trollskin collar, none of the crawler's loot — with the look's own skin, face and build.
+ * jeans, which the cast's own trousers replace, none of the crawler's loot —
+ * with the look's own skin, face and build.
  */
 function castHumanLook(look: TownCastLook & { painter: 'biped' }): HumanLook {
   return {

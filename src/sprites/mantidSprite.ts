@@ -1,4 +1,8 @@
-import { walkFrameIndex, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import {
+  walkFrameIndex,
+  progressFrameIndex,
+  timeFrameIndex,
+} from '../core/spriteAssets/SpriteRenderer';
 import { MAX_MOB_CULL_MARGIN_TILES } from '../core/constants';
 import {
   figureFrameCount,

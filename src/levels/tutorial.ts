@@ -1,5 +1,5 @@
 import { crawlerName } from '../characters/characters';
-import { keybindings } from '../core/Keybindings';
+import { keybindings } from '../core/input/Keybindings';
 import type { LevelDef } from './types';
 
 /**

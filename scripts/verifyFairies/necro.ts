@@ -32,7 +32,7 @@
  */
 
 import { TILE_SIZE } from '../../src/core/constants';
-import type { Difficulty } from '../../src/core/difficultyProfiles';
+import type { Difficulty } from '../../src/core/difficulty/difficultyProfiles';
 import { Mob } from '../../src/creatures/Mob';
 import type { Player } from '../../src/Player';
 import { RisingSkeleton } from '../../src/creatures/RisingSkeleton';
@@ -80,7 +80,10 @@ import {
   type Stage,
   type TileSpec,
 } from './stage';
-import { setVisibleWorldView, type VisibleWorldView } from '../../src/core/visibleWorldView';
+import {
+  setVisibleWorldView,
+  type VisibleWorldView,
+} from '../../src/core/rendering/visibleWorldView';
 
 const NECRO_TILE = 10;
 /** A crawler this far off is noticed but outside the wave's trigger: a fight on, nobody to shove. */

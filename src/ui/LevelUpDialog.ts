@@ -1,4 +1,4 @@
-import type { LevelUpEntry } from '../core/LevelUpEntry';
+import type { LevelUpEntry } from '../core/progression/LevelUpEntry';
 import type { AudioManager } from '../audio/AudioManager';
 type Phase = 'idle' | 'power_up' | 'count_up' | 'done';
 

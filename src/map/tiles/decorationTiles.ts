@@ -99,16 +99,19 @@ import {
 } from './groundScatterArt';
 import { OVERWORLD_GROUND } from '../town/groundMaterials';
 import { drawSpecialFloorTile } from './specialFloorTiles';
-import { drawSpriteKey, drawSprite, timeFrameIndex } from '../../core/SpriteRenderer';
+import { drawSpriteKey, drawSprite, timeFrameIndex } from '../../core/spriteAssets/SpriteRenderer';
 import { buildingLifeKeyOf } from '../../sprites/buildinggen/runtimeBuildingSheets';
 import { hasEnvironmentSheet } from '../environmentArtCache';
 import { drawFountainTileSlice } from '../../sprites/fountainSprite';
-import { getSpriteDefByKey, getSpriteOverlayStatesByKey } from '../../core/SpriteLoader';
+import {
+  getSpriteDefByKey,
+  getSpriteOverlayStatesByKey,
+} from '../../core/spriteAssets/SpriteLoader';
 import { frameTime } from '../../utils';
 import { drawCircusDecals } from './circusDecalTiles';
 import { drawServiceLevelTile } from './serviceLevelPropTiles';
 import { drawCellarPropTile } from './cellarPropTiles';
-import { UINT32_SPAN } from '../../core/WorldRandom';
+import { UINT32_SPAN } from '../../core/world/WorldRandom';
 
 /** Playback rate and frame count of the main tower's glow overlay. */
 const MAIN_TOWER_GLOW_FPS = 4;

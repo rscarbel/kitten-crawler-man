@@ -33,7 +33,7 @@ lazy loading safe here — and why every miss is logged once per key and dumped 
 
 ## Declared coverage: what a floor can produce
 
-`ASSET_GROUPS` (`src/core/assetGroups.ts`) names the sheets in each group. Its values
+`ASSET_GROUPS` (`src/core/spriteAssets/assetGroups.ts`) names the sheets in each group. Its values
 are typed `readonly SpriteKey[]`, not `string[]`, so a renamed or deleted manifest entry
 fails `tsc` instead of vanishing at runtime. `LevelDef.spriteGroups` declares what a
 floor loads.
@@ -43,7 +43,7 @@ quest creatures, companions and mid-fight summons are constructed by systems gat
 map feature — a live bounty site, `gameMap.circusCentre`, `gameMap.spiderLabRoom`, a
 hired mercenary — and are named in no spawn table. None of the five bounty bosses appears
 in `level3.ts`, and they are among the largest sheets in the game.
-`SYSTEM_ASSET_REQUIREMENTS` (`src/core/systemAssetRequirements.ts`) is where those get
+`SYSTEM_ASSET_REQUIREMENTS` (`src/core/spriteAssets/systemAssetRequirements.ts`) is where those get
 declared, one entry per system or per bounty/quest type.
 
 `requiredSpriteKeysForLevel(levelId, spriteGroups)` computes the union of the two. Both
@@ -97,7 +97,7 @@ floor has been seen is what tips the tab into canvas loss.
   (`PROP_FRAME_IDLE_RELEASE_FRAMES`, half a minute), swept every frame by
   `releaseIdleRecentSurfaces`.
 
-The sheet and prop windows count `idleFrameNumber()` (`src/core/renderFrameClock.ts`):
+The sheet and prop windows count `idleFrameNumber()` (`src/core/rendering/renderFrameClock.ts`):
 render frames, less those spent while something holds the idle clock
 (`holdIdleClock`/`releaseIdleClock`, counted, so holds nest). `ArrivalLoader` holds it
 while its screen is up, beside `holdFigureIdleSweep`, and `BuildingInteriorScene` holds it
@@ -605,7 +605,7 @@ environment sheets, the figure prewarm queue, the fetched sprite groups, then
 the ground chunks and decoration overlay entries for the view the first frame
 draws (after applying any tile marked dirty while the floor was built) — and
 the loader runs them behind a `LoadingOverlay`
-(`src/ui/LoadingScreen.ts`) driven by a `LoadRunner` (`src/core/LoadRunner.ts`)
+(`src/ui/LoadingScreen.ts`) driven by a `LoadRunner` (`src/core/perf/LoadRunner.ts`)
 a few milliseconds a frame.
 
 The screen only drains what was queued, so what makes an arrival hitch-free is
@@ -647,7 +647,7 @@ a floor's fade-in while everything that has landed is already drawn.
 ## Every surface has an owner
 
 Every off-screen canvas comes from `allocCanvas(owner, w, h)` — or
-`allocReadableCanvas` for one read back pixel by pixel — in `src/core/canvasSurface.ts`,
+`allocReadableCanvas` for one read back pixel by pixel — in `src/core/rendering/canvasSurface.ts`,
 against a `SurfaceOwner` from `SURFACE_OWNERS`. The module keeps a live count of
 surfaces and backing-store bytes per owner; decoded `SpriteLoader` images (and their
 half-size copies) count under `spriteSheets`, and the main canvas, the one canvas made
@@ -697,14 +697,14 @@ working set, so it stops growth without ever evicting something visible:
   and each chunk let go after half a minute undrawn.
   **Tile overlays:** `OVERLAY_CACHE_BUDGET_MEGABYTES` (32), evicting in batches down to 24.
 - **Smaller pools:** town interior props 8 MB and nursery poses 4 MB, both through the
-  shared `RecentSurfaceCache` (`src/core/recentSurfaceCache.ts`: a byte budget, LRU,
+  shared `RecentSurfaceCache` (`src/core/rendering/recentSurfaceCache.ts`: a byte budget, LRU,
   nothing drawn within its protected frames let go, and optionally an idle window, which
   the town interior props use); figure rims
   (`RIM_CACHE_BUDGET_MEGABYTES`, 8); Big Top props (6); held item art
   (`HELD_ART_BUDGET_MEGABYTES`, 4); title hero cells (32).
 
 **Only half-density devices get smaller budgets.** `memoryBudgetScale()` in
-`src/core/deviceMemoryBudget.ts` scales the figure and environment-sheet budgets: full
+`src/core/perf/deviceMemoryBudget.ts` scales the figure and environment-sheet budgets: full
 when `navigator.deviceMemory` reports 8 GB or more, or when the device does not bake at
 half density (`shouldDownscaleForLowEndDevice()`); a third on a half-density device
 reporting 2 GB or less; half on any other half-density device. A half-density cell holds
@@ -760,7 +760,7 @@ Rooster's 3.7 MB.
 When a device cannot keep up — it lags, or the browser drops canvases — the game spends
 **variety** before it spends smoothness: fewer distinct enemy and townsfolk looks, so
 fewer figures to paint and cache. Fights stay as hard as they were. The tier is one global
-value, `varietyTier()` in `src/core/varietyTier.ts`, read when something spawns or a
+value, `varietyTier()` in `src/core/perf/varietyTier.ts`, read when something spawns or a
 citizen picks its look:
 
 | tier | name         | enemies                                      | street crowd (human / skyfowl)                |
@@ -790,7 +790,7 @@ citizen picks its look:
 
 **What moves the tier.**
 
-- **Starting tier:** `startingVarietyTier` in `src/core/RenderQuality.ts` — `0` with full
+- **Starting tier:** `startingVarietyTier` in `src/core/perf/RenderQuality.ts` — `0` with full
   cache budgets, `1` when `memoryBudgetScale()` is half, `2` below that. The
   `performance` preset starts at `PERFORMANCE_PRESET_VARIETY_TIER` (2).
 - **Lag:** `RenderQualityController`'s safety net watches play in `SAFETY_NET_WINDOW_MS`
@@ -798,13 +798,13 @@ citizen picks its look:
   a device still slow after a rung takes the next. A window is **paint-bound** when its
   mean bake time is at least `PAINT_BOUND_SHARE` (a third) of its mean frame interval;
   bake time is figure bakes, environment sheet paints and ground chunk bakes, split out
-  of every frame by `src/core/frameCost.ts` in release builds too (`lastFrameCost()`,
+  of every frame by `src/core/perf/frameCost.ts` in release builds too (`lastFrameCost()`,
   also shown by `?perf`). A paint-bound window takes a variety rung first; any other
   takes a render rung first (`auto` only: render scale, then scenery detail). When the
   preferred kind is used up the other is taken. Hidden-tab and loading-cover frames
   never count. `sharp` never gives up variety for lag; `performance` gives up only
   variety.
-- **Canvas loss:** `src/core/canvasRecovery.ts`. A `contextlost` holds every purge check
+- **Canvas loss:** `src/core/rendering/canvasRecovery.ts`. A `contextlost` holds every purge check
   and recovery until `contextrestored`, or `CONTEXT_RESTORE_TIMEOUT_MS` if it never
   comes, then repaints. Each loss lowers demand at most once: its first repaint steps
   the tier down one (or, at the minimal tier, counts toward the budget cut). The pending
@@ -830,7 +830,7 @@ citizen picks its look:
   those still owed are repainted at once; the rest repaint when next wanted, so a recovery does not climb straight back to the peak that was
   just lost.
 - **Last resort:** once `PURGES_AT_MINIMAL_TIER_BEFORE_BUDGET_CUT` purges have been
-  answered at tier 4, `cutMemoryBudgetsForSession()` (`src/core/deviceMemoryBudget.ts`)
+  answered at tier 4, `cutMemoryBudgetsForSession()` (`src/core/perf/deviceMemoryBudget.ts`)
   halves what `memoryBudgetScale()` returns for the rest of the session. It is the only
   path that lowers a cache budget below the device's own share.
 - **Dev:** `?variety=<0-4>` pins the tier (`pinVarietyTier`, from `src/dev/devBoot.ts`):
@@ -851,7 +851,7 @@ rate a new kind by it, not by feel, since every substitution count is a ratio of
 threats.
 
 **Adding a variant family.** A kind with several looks declares a `MobVariantFamily`
-(`src/core/mobVariantFamily.ts`) beside its class — `weightedVariantFamily` or
+(`src/core/mobs/mobVariantFamily.ts`) beside its class — `weightedVariantFamily` or
 `uniformVariantFamily` — with its `canonical` look and the `sharedFromTier` from which
 every spawn wears it; `GOBLIN_MELEE_FAMILY` (`Goblin.ts`), `SKYFOWL_TOUGH_FAMILY` and
 `RAISED_RATKIN_FAMILY` are the examples. Register the kind with `lookKind` and an

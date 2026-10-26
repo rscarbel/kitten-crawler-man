@@ -34,8 +34,8 @@ import type { GroundHazardSource } from './GroundHazardSource';
 import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
-import type { CircusQuestProgress } from '../core/CircusQuestProgress';
-import type { Difficulty } from '../core/difficultyProfiles';
+import type { CircusQuestProgress } from '../core/quests/CircusQuestProgress';
+import type { Difficulty } from '../core/difficulty/difficultyProfiles';
 import { GrimaldiVine } from '../creatures/GrimaldiVine';
 import { MazeBlockTarget } from '../creatures/MazeBlockTarget';
 import type { MazePropTarget } from '../creatures/MazePropTarget';
@@ -50,7 +50,7 @@ import { worldTint } from '../ui/world/worldShapes';
 import { worldPalette } from '../ui/theme/worldInk';
 import { activeInputMode, byInputMode, keycapLabel } from '../ui/core/inputMode';
 import { objectiveBandEntry } from '../ui/hud/objectiveLine';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import {
   drawActArchPost,
   drawFlameVentColumn,
@@ -73,7 +73,7 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../core/canvasSurface';
+} from '../core/rendering/canvasSurface';
 import {
   drawMirrorHallPane,
   drawPaneReflection,
@@ -173,11 +173,11 @@ import {
   clearDifficultyChangeGuard,
   registerDifficultyChangeGuard,
   type DifficultyGuardHandle,
-} from '../core/difficultyChangeGuard';
-import { settings } from '../core/Settings';
+} from '../core/difficulty/difficultyChangeGuard';
+import { settings } from '../core/input/Settings';
 import { isOnScreen } from './bigTop/tentView';
 import { placeOnMark } from './bigTop/bigTopTent';
-import type { InteriorFigure } from '../core/InteriorFigure';
+import type { InteriorFigure } from '../core/rendering/InteriorFigure';
 import {
   MirrorHall,
   type HallBoardId,

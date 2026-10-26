@@ -11,7 +11,7 @@
  * one tile are independent of each other and of every neighbour's.
  */
 
-import { UINT32_SPAN } from '../../core/WorldRandom';
+import { UINT32_SPAN } from '../../core/world/WorldRandom';
 import { HIGHLAND_GRASS, positionHash, SCREE, type TileContent } from '../tileTypes';
 
 /** Spreads a salt across all 32 bits before it is mixed with the tile's hash. */

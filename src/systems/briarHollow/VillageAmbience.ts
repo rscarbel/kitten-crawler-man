@@ -15,7 +15,7 @@
  */
 
 import { TILE_SIZE } from '../../core/constants';
-import { TOOL_TIER_LOOKS, type ToolTier } from '../../core/toolTiers';
+import { TOOL_TIER_LOOKS, type ToolTier } from '../../core/items/gathering/toolTiers';
 import type { GameMap } from '../../map/GameMap';
 import { HOLLOW_WALL } from '../../map/tileTypes';
 import { VILLAGE_PROPS, type VillagePropId } from '../../map/overworld/briarHollowLayout';

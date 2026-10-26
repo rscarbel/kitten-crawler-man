@@ -19,6 +19,7 @@ import { createCanvas, type Canvas, type CanvasRenderingContext2D as NodeCtx } f
 import { installCanvasGlobals, paintEnvironmentArtInNode } from './nodeCanvasGlobals.js';
 import { asGameContext } from './nodeGameContext.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
+import { partyOwnsGear } from '../src/loot/gearPools.js';
 
 interface CanvasGlobals {
   Image?: unknown;
@@ -39,19 +40,19 @@ globals.document = {
 };
 
 const { TILE_SIZE } = await import('../src/core/constants.js');
-const { loadSprites } = await import('../src/core/SpriteLoader.js');
+const { loadSprites } = await import('../src/core/spriteAssets/SpriteLoader.js');
 const { GameMap } = await import('../src/map/GameMap.js');
 const { createTownPlan } = await import('../src/map/town/townPlan.js');
 const { FLOOR_ART_SEEDS } = await import('../src/map/ground/artSeedAlphabet.js');
 const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
 const { Conversation } = await import('../src/dialog/Conversation.js');
-const { createClubMembership } = await import('../src/core/ClubMembership.js');
-const { createMercenaryRoster } = await import('../src/core/MercenaryRoster.js');
+const { createClubMembership } = await import('../src/core/club/ClubMembership.js');
+const { createMercenaryRoster } = await import('../src/core/party/MercenaryRoster.js');
 const { createShopStock } = await import('../src/economy/shopStock.js');
 const { DesperadoClubSystem } = await import('../src/systems/DesperadoClubSystem.js');
-const { CLUB_PROPS } = await import('../src/core/clubProps.js');
-const { CLUB_TITO_POST } = await import('../src/core/clubLayout.js');
+const { CLUB_PROPS } = await import('../src/core/club/clubProps.js');
+const { CLUB_TITO_POST } = await import('../src/core/club/clubLayout.js');
 const { drawClubProp } = await import('../src/sprites/clubFurnitureSprite.js');
 const { drawTitoBust, drawTitoFigure } = await import('../src/sprites/titoSprite.js');
 
@@ -156,6 +157,7 @@ const club = new DesperadoClubSystem(
   false,
   human,
   createShopStock(),
+  (id) => partyOwnsGear([human, cat], id),
 );
 for (let frame = 0; frame < WARM_FRAMES; frame++) club.update(human, cat);
 

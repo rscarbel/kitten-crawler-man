@@ -29,7 +29,7 @@ import {
   isCountdownUrgent,
   isDoomsdayCountdownLive,
   triggerDoomsdayExplosionIfExpired,
-} from '../core/DoomsdayProgress';
+} from '../core/quests/DoomsdayProgress';
 import { renderEscapeStairwell, STAIRWELL_SCALE } from '../sprites/doomsdayStairwell';
 import type { TopBandEntry } from '../ui/hud/topBand';
 import { stackedBandEntry, type BandRow } from '../ui/hud/topBandStack';

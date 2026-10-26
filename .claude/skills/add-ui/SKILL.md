@@ -57,13 +57,13 @@ Settled design decisions, not open questions:
 - **Inter** is the single UI font. A display face, if ever wanted, is one token.
 - **Equipped items keep occupying bag and hotbar slots.** Changing that is a
   game-rule change.
-- **There is no item rarity.** Category colour is the only per-item accent. If
-  rarity tiers are ever wanted, add a `rarity` field and give `itemSlot` a
-  rarity edge from one token map.
+- **Gear has a rarity** (`rarity` on armour and weapon defs, `src/core/items/defs/rarity.ts`).
+  Its colours are `palette.rarity`, read only through `rarityColor` in
+  `canvasChrome.ts`; category colour is still the accent every other item wears.
 - **The phone HUD has no collapse toggle**; the compact unit frames are already
   small.
 - **Achievement and System AI announcements stay big modal moments**, part of
-  the show's flavour.
+  the show's flavour: every award plays on the Reward Chest screen.
 
 ## Surfaces (`src/ui/core/UiRoot.ts`)
 
@@ -157,7 +157,7 @@ routing in this order:
    surface is open.
 2. **The topmost surface's `onKey`**, then each one below it, stopping after the
    first `panel`/`modal`/`system` surface that halts the world or locks the
-   keyboard. A surface that floats over live play (an achievement card) passes
+   keyboard. A surface that floats over live play passes
    what it doesn't take to the menu beneath.
 3. **Focus navigation**, only while the focus scope halts the world or locks the
    keyboard (otherwise Space, Enter, Tab and the arrows stay gameplay keys).
@@ -312,7 +312,7 @@ hover/press treatment). Feature code never calls it; it calls widgets.
 ## Theme (`src/ui/theme/`)
 
 - **`tokens.ts`** — `palette` (surface, border, text, accent, state, meter,
-  crawler, category, tier, material), `space`, `radius`, `type` ramp
+  crawler, category, rarity, material), `space`, `radius`, `type` ramp
   (`caption`, `body`, `label`, `title`, `heading`, `display`, `overline`),
   `elevation`, `motion`, `sizes`, `panelWidths`, `OPEN_SCALE_FROM`,
   `FOCUS_RING`, `PRESS_DROP`, `SHEET_MAX_HEIGHT_FRACTION`. Widgets read them
@@ -404,13 +404,13 @@ host lifts it over its own panels. Mount both.
   that aims at the HUD.
 - **`HudModel`**: `crawlers` (active first), `activeCrawler`, `coins`,
   `skillPoints`, `minimap` (`MinimapModel` with its own `paint`, `toggle`,
-  `pan?`), `dock`, `summon`, `lootBanner`, `hotbar`, `topBand`, `levelTimer`
+  `pan?`), `dock`, `summon`, `hotbar`, `topBand`, `levelTimer`
   (`{ frames, paused } | null`; the HUD decides chip or band card) and
   `favor` (the viewers' favour: a pill on the readout row in the room
   `HudGeometry.favor` leaves inside the frames' width, else a band card).
 - **Dock:** `DockButtonModel { id, icon, label, key?, badge?, selected?, pulse?, bounce?, onTap }`.
   Buttons fire on release. `hudButtonLayout` fixes the column order (Pause, Bag,
-  Build, achievement chip, Journal, then a scene's `extras`, which never shift
+  Build, rewards chip, Journal, then a scene's `extras`, which never shift
   the shared ones); on touch the cluster is packed into free room by
   `hudPacking.ts`, keeping clear of the HP meters, unit frames, the fight-bar
   reserve and the hotbar. Pointer screens show keycap hints.
@@ -558,12 +558,23 @@ shop, the casino).
   mounted through its `surface(id)` (band `system`); gameplay scenes hold it
   through `ArrivalLoader` (`src/scenes/ArrivalLoader.ts`); `npm run
 render:loading-screen`.
-- **`LootBoxOpener.present(reward, onDone)`** (`src/ui/LootBoxOpener.ts`) — the
-  box reveal for rewards **already granted** elsewhere: a `PresentedReward`
-  (`tier`, `title`, `playerName`, `contents`, `detail?`) opens straight at the
-  lid blowing off and grants nothing. Its prize screen is painted by
-  `src/ui/presentedReward.ts`. The Wheel of Fortune pays its item prizes this
-  way; use it whenever the reward has landed before the reveal runs.
+- **`src/ui/screens/rewardChest/`** — `RewardChestScreen`, the one reward
+  screen (band `modal`, halts the world): a procedurally painted treasure
+  chest per rarity (`src/sprites/art/rewardChestArt.ts`, coloured from
+  `theme/rewardChestInk.ts`) drops in, unlocks, swings its lid back and
+  throws each `GrantedLine` into a tray of `itemSlot`s. Everything shown is
+  already paid; it grants nothing. Its timeline (`chestTimeline.ts`) and
+  particles (`chestEffects.ts`) are pure functions of the frame, so skipping
+  jumps to `settledAt` and a fixture is a frame number. Fed from a
+  `PresentationSource` (`AchievementUISystem` binds the crawlers' queues) it
+  never opens by itself. It opens two ways, both through
+  `AchievementUISystem.openRewards()`: the HUD's "Rewards waiting" dock chip,
+  anywhere, and the wider top-band banner `AchievementUISystem.rewardsBanner`
+  (`src/ui/hud/rewardsBanner.ts`) that each scene adds while the party stands
+  in a safe room. Once open it plays the queue back to back with pips; `present(presentation, onClosed)` shows one reward
+  handed over elsewhere, starting at the lid (the Wheel of Fortune's item
+  prizes). Space, Enter, the attack key or a tap skips, then collects after
+  `COLLECT_GUARD_FRAMES`.
 - **`src/ui/questReward/`** — the quest-complete screen model, drawn by
   `questRewardSurface`; see `add-quest`.
 

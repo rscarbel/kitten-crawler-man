@@ -9,8 +9,8 @@
  * and fungus stand in the overlay pass over the floor the bake gave them.
  */
 
-import { getManifestEntry, type MapSpriteExtentsPx } from '../../core/SpriteLoader';
-import { drawSpriteKey, timeFrameIndex } from '../../core/SpriteRenderer';
+import { getManifestEntry, type MapSpriteExtentsPx } from '../../core/spriteAssets/SpriteLoader';
+import { drawSpriteKey, timeFrameIndex } from '../../core/spriteAssets/SpriteRenderer';
 import { CANDLE_FLAME_FRAMES } from '../../sprites/art/cellarProps/candleFlame';
 import { CELLAR_PROP_VARIANTS, type CellarPropKey } from '../../sprites/sheets/cellarPropSheets';
 import { frameTime } from '../../utils';

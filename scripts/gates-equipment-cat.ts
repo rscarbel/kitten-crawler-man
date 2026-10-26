@@ -59,7 +59,7 @@ import {
 } from '../src/sprites/held/heldVisualIds.js';
 import type { HeldVisualDef } from '../src/sprites/held/heldVisualDef.js';
 import { compositeHeldItem, heldTransformAt } from '../src/sprites/held/heldComposite.js';
-import { TOOL_TIERS } from '../src/core/toolTiers.js';
+import { TOOL_TIERS } from '../src/core/items/gathering/toolTiers.js';
 
 /** The in-game tile the gates sample at. */
 const TILE = 32;

@@ -10,8 +10,8 @@ import {
   makeBurn,
   makePoison,
   makeFrozen,
-} from '../../../core/StatusEffect';
-import { frozenFramesFor } from '../../../core/frostStatus';
+} from '../../../core/combat/StatusEffect';
+import { frozenFramesFor } from '../../../core/combat/frostStatus';
 
 const FRAMES_PER_SECOND = 60;
 

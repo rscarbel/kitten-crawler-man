@@ -13,7 +13,7 @@
  * shapes can be compared against each other.
  */
 
-import { getSpriteDoorwayByKey, getSpriteFootprintByKey } from '../core/SpriteLoader';
+import { getSpriteDoorwayByKey, getSpriteFootprintByKey } from '../core/spriteAssets/SpriteLoader';
 import { plannedBuildingSpriteKey } from '../map/town/townPlan';
 import { STALL_CANOPY_HEIGHT_TILES, STALL_WIDTH_TILES } from '../sprites/marketStall';
 import { doorwaySpan, type BuildingEntry } from './BuildingSystem';

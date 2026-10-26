@@ -6,7 +6,7 @@
  * dismiss it.
  */
 
-import { keybindings } from '../../../core/Keybindings';
+import { keybindings } from '../../../core/input/Keybindings';
 import type { CombatStance, MovementMode } from '../../../systems/CompanionSystem';
 import { centerIn, intersect, type Rect } from '../../core/geom';
 import type { Surface, Ui } from '../../core/UiRoot';

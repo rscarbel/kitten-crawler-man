@@ -1,4 +1,4 @@
-import { drawSpriteKey } from '../../../core/SpriteRenderer';
+import { drawSpriteKey } from '../../../core/spriteAssets/SpriteRenderer';
 import {
   BENCH_SEGMENTS,
   BENCH_VARIANTS,

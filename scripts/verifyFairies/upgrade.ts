@@ -26,7 +26,7 @@
  */
 
 import { TILE_SIZE } from '../../src/core/constants';
-import { DIFFICULTY_PROFILES, type Difficulty } from '../../src/core/difficultyProfiles';
+import { DIFFICULTY_PROFILES, type Difficulty } from '../../src/core/difficulty/difficultyProfiles';
 import { EventBus } from '../../src/core/EventBus';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { CatPlayer } from '../../src/creatures/CatPlayer';

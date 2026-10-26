@@ -14,10 +14,10 @@
  *    hit frequency, free spins, jackpots and win tiers. A report, never a gate.
  */
 
-import { setViewportSize, viewportHeight, viewportWidth } from '../core/Viewport';
-import { settings } from '../core/Settings';
+import { setViewportSize, viewportHeight, viewportWidth } from '../core/rendering/Viewport';
+import { settings } from '../core/input/Settings';
 import { TILE_SIZE } from '../core/constants';
-import { createClubMembership } from '../core/ClubMembership';
+import { createClubMembership } from '../core/club/ClubMembership';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
 import {

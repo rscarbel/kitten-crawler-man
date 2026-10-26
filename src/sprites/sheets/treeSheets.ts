@@ -15,7 +15,7 @@
 
 import { drawTree, drawTreeRemains, type TreeSpecies, type TreeState } from '../art/treeArt';
 import type { PropSheetPlan, PropSheetRow, FramePainter } from './propSheetPlan';
-import type { SpriteKey } from '../../core/SpriteLoader';
+import type { SpriteKey } from '../../core/spriteAssets/SpriteLoader';
 
 /** Matches `TILE_SIZE` in `src/core/constants.ts` — a 1:1 blit, never rescaled. */
 export const TREE_TILE_SCALE = 32;

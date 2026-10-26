@@ -1,5 +1,5 @@
-import type { MusicLibrary } from '../../core/MusicLibrary';
-import { settings, type MusicPlaybackPreference } from '../../core/Settings';
+import type { MusicLibrary } from '../../core/music/MusicLibrary';
+import { settings, type MusicPlaybackPreference } from '../../core/input/Settings';
 import type { MusicPlayerControls, MusicPlayerMode } from './MusicDirector';
 
 /** What a player mode leaves behind for the next load; play-once and area music leave nothing. */

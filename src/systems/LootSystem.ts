@@ -4,16 +4,16 @@ import type { LootDrop } from '../creatures/Mob';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { playPickupGesture } from '../creatures/humanGestures';
 import type { CatPlayer } from '../creatures/CatPlayer';
-import type { ItemId } from '../core/ItemDefs';
+import type { ItemId } from '../core/items/defs/ItemDefs';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { Rect } from '../ui/core/geom';
 import { worldPalette } from '../ui/theme/worldInk';
 import { worldPlate } from '../ui/world/worldShapes';
 import { worldText } from '../ui/world/worldText';
 import { drawItemIcon } from '../ui/icons/drawItemIcon';
-import { ITEM_DEF } from '../core/ItemDefs';
+import { ITEM_DEF } from '../core/items/defs/ItemDefs';
 import { drawRadialGlow } from '../sprites/radialGlow';
-import { cloneLootDrop } from '../core/lootDrop';
+import { cloneLootDrop } from '../core/items/loot/lootDrop';
 
 /** Half of TILE_SIZE — used to find the center of a tile from its top-left corner. */
 const HALF_TILE = TILE_SIZE / 2;
@@ -296,6 +296,17 @@ export class LootSystem implements GameSystem {
   onCredited: ((loot: PendingLoot) => void) | null = null;
 
   constructor(private readonly gameMap: GameMap) {}
+
+  /**
+   * Whether `id` is lying on the floor or still falling in a pile nobody has
+   * collected: loot already the party's, so a one-of-a-kind piece in it is owned.
+   */
+  holds(id: ItemId): boolean {
+    const inPile = this.pendingLoots.some(
+      (pile) => !pile.collected && pile.loot.items.some((item) => item.id === id),
+    );
+    return inPile || this.floorItems.some((item) => item.id === id);
+  }
 
   /**
    * Piles collected this frame, split by what they held so the scene can pick

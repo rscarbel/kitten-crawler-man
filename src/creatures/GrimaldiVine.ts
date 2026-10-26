@@ -38,14 +38,6 @@ export class GrimaldiVine extends Mob {
     return null;
   }
 
-  /**
-   * His foliage clears four tiles of air above his own, so an interaction prompt
-   * anchored to the tile would land somewhere inside the mass.
-   */
-  protected override get statusLabelClearanceTiles(): number {
-    return GRIMALDI_VINE_OVERLAY_CLEARANCE;
-  }
-
   readonly xpValue = 0;
   protected coinDropMin = 0;
   protected coinDropMax = 0;

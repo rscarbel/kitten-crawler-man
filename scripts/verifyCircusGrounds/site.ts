@@ -9,13 +9,13 @@
  */
 
 import { TILE_SIZE } from '../../src/core/constants';
-import { AbilityManager } from '../../src/core/AbilityManager';
+import { AbilityManager } from '../../src/core/skills/AbilityManager';
 import { EventBus } from '../../src/core/EventBus';
 import {
   createCircusQuestProgress,
   type CircusQuestStage,
-} from '../../src/core/CircusQuestProgress';
-import { createAnchorQuestProgress } from '../../src/core/AnchorQuestProgress';
+} from '../../src/core/quests/CircusQuestProgress';
+import { createAnchorQuestProgress } from '../../src/core/quests/AnchorQuestProgress';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { Conversation } from '../../src/dialog/Conversation';

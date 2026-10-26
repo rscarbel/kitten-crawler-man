@@ -5,7 +5,7 @@
  *
  * The reported bug was the cat killing her own pet raptor with a magic missile
  * she never aimed at him — and, separately, a quest-critical ally dissolving
- * under a sepsis proc nobody could see land. Neither produces an error; both
+ * under a poison proc nobody could see land. Neither produces an error; both
  * produce a corpse the player did not ask for. So every check below is written
  * as a pair: the ally is refused, and a hostile in the same position is *not*,
  * so a guard that has quietly become "nothing takes damage" fails here.
@@ -30,14 +30,17 @@ import { HeatherTheBear } from '../src/creatures/HeatherTheBear';
 import { SKYFOWL_TOUGH_FAMILY, SkyFowl } from '../src/creatures/SkyFowl';
 import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
 import type { StandaloneMobKind } from '../src/levels/mobKinds';
-import { makeSepsis } from '../src/core/StatusEffect';
-import { SpatialGrid } from '../src/core/SpatialGrid';
-import { AbilityManager } from '../src/core/AbilityManager';
+import { makePoison } from '../src/core/combat/StatusEffect';
+import { SpatialGrid } from '../src/core/world/SpatialGrid';
+import { AbilityManager } from '../src/core/skills/AbilityManager';
 import { MAGIC_MISSILE_DEF } from '../src/abilities/magicMissile';
 import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
 import { BrindleGrub } from '../src/creatures/BrindleGrub';
 import { Mercenary } from '../src/creatures/Mercenary';
-import { getMercenaryTemplate, type MercenaryTemplateId } from '../src/core/mercenaryTemplates';
+import {
+  getMercenaryTemplate,
+  type MercenaryTemplateId,
+} from '../src/core/party/mercenaryTemplates';
 import {
   applyGoblinBlastToBodies,
   GOBLIN_BLAST_DAMAGE_TO_BYSTANDER_MOBS,
@@ -48,6 +51,9 @@ import {
   BLACK_POWDER_BLAST_RADIUS_PX,
   goblinBlastDamage,
 } from '../src/systems/goblinBombConstants';
+
+/** A credited damage-over-time that outlasts every watch here: poison held on far past its usual run. */
+const LASTING_POISON_TICKS = 999999;
 
 const MAP_SIZE = 60;
 /**
@@ -68,7 +74,7 @@ const PET_STARTING_HP = 200;
 const HOMING_LEVEL = 15;
 
 /**
- * A sepsis tick lands once every couple of seconds, so this is several minutes
+ * A poison tick lands once every couple of seconds, so this is several minutes
  * of a debuff that would finish any ordinary mob many times over.
  */
 const STATUS_TICK_FRAMES = 60 * 60 * 5;
@@ -231,20 +237,20 @@ console.log('\nSignet cannot be killed, from any direction');
   check(signet.takeDamage(OVERKILL_DAMAGE) === false, 'raw damage reports that it never connected');
   check(signet.hp === signet.maxHp, `she is still at full health (${signet.hp}/${signet.maxHp})`);
 
-  signet.applyStatus(makeSepsis(cat));
-  check(signet.statusEffects.length === 0, 'a sepsis proc does not even take hold on her');
+  signet.applyStatus(makePoison(cat, LASTING_POISON_TICKS));
+  check(signet.statusEffects.length === 0, 'a poison proc does not even take hold on her');
   for (let frame = 0; frame < STATUS_TICK_FRAMES; frame++) signet.tickTimers();
   check(signet.isAlive, 'and five minutes of ticking leaves her alive');
   check(signet.hp === signet.maxHp, `at full health (${signet.hp}/${signet.maxHp})`);
 
   // The control: the same debuff, applied the same way, has to finish a goblin.
-  goblin.applyStatus(makeSepsis(cat));
+  goblin.applyStatus(makePoison(cat, LASTING_POISON_TICKS));
   let frames = 0;
   while (goblin.hp > 0 && frames < STATUS_TICK_FRAMES) {
     goblin.tickTimers();
     frames++;
   }
-  check(goblin.hp === 0, `the same sepsis finishes a goblin (${frames} frames)`);
+  check(goblin.hp === 0, `the same poison finishes a goblin (${frames} frames)`);
 }
 
 console.log('\nA calm sky fowl is provokable, not protected');

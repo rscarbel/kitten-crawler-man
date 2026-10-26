@@ -40,14 +40,14 @@ import {
   VILLAGE_VICTORY_STING,
   type VillageCue,
 } from '../../audio/villageSoundCues';
-import type { BriarHollowState } from '../../core/briarHollowState';
-import type { VillageQuestPhase } from '../../core/villageQuestPhase';
+import type { BriarHollowState } from '../../core/quests/briarHollowState';
+import type { VillageQuestPhase } from '../../core/quests/villageQuestPhase';
 import {
   DIFFICULTY_PROFILES,
   type Difficulty,
   type DifficultyProfile,
   applySpawnDifficulty,
-} from '../../core/difficultyProfiles';
+} from '../../core/difficulty/difficultyProfiles';
 import type { GameMap } from '../../map/GameMap';
 import {
   ASSAULT_LANE_SPAWN_SEARCH_TILES,
@@ -65,7 +65,7 @@ import type { Fairy } from '../../creatures/fairies/Fairy';
 import { BOUNTY_MAX_BLOW_HP_SHARE } from '../../creatures/mobLevelScaling';
 import { planEncounterRoster, spawnMob, type SpawnContext } from '../../levels/spawnFunnel';
 import { BRIAR_HOLLOW_SIEGE } from '../../levels/encounters';
-import { varietyTier, type VarietyTier } from '../../core/varietyTier';
+import { varietyTier, type VarietyTier } from '../../core/perf/varietyTier';
 import type { ApproachView } from '../../sprites/figure/approachRows';
 import {
   ASSAULT_WAVES,
@@ -109,7 +109,7 @@ import { AssaultWavePrewarm, type AssaultLeadIn } from '../../sprites/assaultPre
 import { drawCrumble } from '../../sprites/art/siegeEffectsArt';
 import { worldPalette } from '../../ui/theme/worldInk';
 import { worldText } from '../../ui/world/worldText';
-import { viewportHeight, viewportWidth } from '../../core/Viewport';
+import { viewportHeight, viewportWidth } from '../../core/rendering/Viewport';
 import type { MobRoster } from '../kits/SceneWorld';
 import type { MusicClaims } from '../../audio/AudioScope';
 import type { DefenseStructures, StructureRef } from './DefenseStructures';
@@ -118,7 +118,7 @@ import { SiegeFlowField } from './SiegeFlowField';
 import { siegeHudEntry, type SiegeHudBar, type SiegeHudView } from './siegeHudEntry';
 import type { TopBandEntry } from '../../ui/hud/topBand';
 import { HOLLOW_BELL_MAX_HP, hollowBellCentre } from './hollowBell';
-import { isWorldPointInView } from '../../core/visibleWorldView';
+import { isWorldPointInView } from '../../core/rendering/visibleWorldView';
 import { VICTORY_FANFARE_FRAMES, fireworkSchedule, type FireworkRocket } from './victoryFireworks';
 import {
   BELL_ALERT_DETAIL,

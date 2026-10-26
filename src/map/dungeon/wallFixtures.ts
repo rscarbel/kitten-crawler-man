@@ -44,7 +44,7 @@ import {
   type LabHallwayWalk,
   type LabApproachTiles,
 } from '../labApproach';
-import { UINT32_SPAN } from '../../core/WorldRandom';
+import { UINT32_SPAN } from '../../core/world/WorldRandom';
 import type { BreakMaterial } from '../../systems/destruction/breakMaterials';
 
 export type WallFixtureKind =

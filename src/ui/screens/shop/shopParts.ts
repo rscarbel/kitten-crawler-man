@@ -4,7 +4,7 @@
  * under the title.
  */
 
-import { ITEM_DEF, type ItemId } from '../../../core/ItemDefs';
+import { ITEM_DEF, type ItemId } from '../../../core/items/defs/ItemDefs';
 import { SERVICE_ICONS } from '../../../sprites/art/itemIcons/serviceIcons';
 import { centerIn, inset, type Rect } from '../../core/geom';
 import type { SoundId } from '../../../audio/sounds';
@@ -12,6 +12,7 @@ import type { Ui } from '../../core/UiRoot';
 import type { ButtonVariant, ControlSize } from '../../theme/skins';
 import { button, buttonHeight } from '../../widgets/button';
 import { ITEM_ICONS } from '../../icons/itemIcons';
+import { drawRarityFrame } from '../dialogs/canvasChrome';
 import { tooltip } from '../../widgets/tooltip';
 import { withAlpha } from '../../theme/color';
 import { drawGlyph } from '../../theme/glyphs';
@@ -139,14 +140,18 @@ export function offerArt(ui: Ui, rect: Rect, art: ShopArt, faded: boolean): void
   const { ctx, theme } = ui;
   const { radius, palette, space } = theme;
   const tint = artTint(theme, art);
+  const rarity = art.kind === 'item' ? ITEM_DEF[art.item].rarity : undefined;
   fillRounded(ctx, rect, radius.md, palette.surface.sunken);
   fillRounded(ctx, rect, radius.md, withAlpha(tint, ART_TINT_FILL_ALPHA));
-  strokeRounded(ctx, rect, radius.md, withAlpha(tint, ART_TINT_BORDER_ALPHA), CHIP_BORDER_WIDTH);
+  if (rarity === undefined) {
+    strokeRounded(ctx, rect, radius.md, withAlpha(tint, ART_TINT_BORDER_ALPHA), CHIP_BORDER_WIDTH);
+  }
   ctx.save();
   if (faded) ctx.globalAlpha *= ART_FADED_ALPHA;
   const picture = inset(rect, space.xs);
   if (art.kind === 'item') ITEM_ICONS[art.item](ctx, picture);
   else SERVICE_ICONS[art.service](ctx, picture);
+  if (rarity !== undefined) drawRarityFrame(ui, rect, radius.md, rarity);
   ctx.restore();
 }
 

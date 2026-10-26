@@ -64,8 +64,8 @@ import {
   themedPropLookFrame,
   themedPropSpriteKey,
 } from '../sprites/breakablePropSprites';
-import type { SpriteKey } from '../core/SpriteLoader';
-import { drawSpriteKey, progressFrameIndex } from '../core/SpriteRenderer';
+import type { SpriteKey } from '../core/spriteAssets/SpriteLoader';
+import { drawSpriteKey, progressFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { randomInt } from '../utils';
 import type { GameSystem } from './GameSystem';
 import type { LootSystem } from './LootSystem';
@@ -74,7 +74,7 @@ import { tileCoordKey } from '../map/tileIndex';
 import type { WallFixture, WallFixtureKind } from '../map/dungeon/wallFixtures';
 import type { Mob } from '../creatures/Mob';
 import type { DamageSource, Player } from '../Player';
-import { viewportHeight, viewportWidth } from '../core/Viewport';
+import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
 import {
   MATERIAL_REACTIONS,
   dentsBeforeBreaking,

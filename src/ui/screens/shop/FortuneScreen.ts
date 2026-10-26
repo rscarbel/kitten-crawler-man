@@ -5,7 +5,7 @@
  * with different readers.
  */
 
-import { canAffordCoins, partyCoins, spendPartyCoins } from '../../../core/partyCoins';
+import { canAffordCoins, partyCoins, spendPartyCoins } from '../../../core/party/partyCoins';
 import { drawFortune, drawHildaReading } from '../../../dialog/scripts/fortuneTeller';
 import type { TownDialogContext } from '../../../systems/townDialog';
 import { centerIn, inset, splitH, splitV } from '../../core/geom';

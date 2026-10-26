@@ -17,13 +17,13 @@
  */
 
 import { crawlerName } from '../../../characters/characters';
-import { ITEM_DEF } from '../../../core/ItemDefs';
-import type { BriarHollowState } from '../../../core/briarHollowState';
+import { ITEM_DEF } from '../../../core/items/defs/ItemDefs';
+import type { BriarHollowState } from '../../../core/quests/briarHollowState';
 import type { EventBus } from '../../../core/EventBus';
-import type { GrantedReward } from '../../../core/GrantedReward';
-import type { PartyTools, PartyToolsState } from '../../../core/PartyTools';
-import type { PartyCraftsState } from '../../../core/partyCrafts';
-import { teachBoth } from '../../../core/CraftSkills';
+import type { GrantedReward } from '../../../core/items/loot/GrantedReward';
+import type { PartyTools, PartyToolsState } from '../../../core/items/gathering/PartyTools';
+import type { PartyCraftsState } from '../../../core/labour/partyCrafts';
+import { teachBoth } from '../../../core/labour/CraftSkills';
 import {
   TOOL_TIER_BASIC,
   forgeCoinPrice,
@@ -32,7 +32,7 @@ import {
   type ToolKind,
   type ToolTier,
   type ToolTierDef,
-} from '../../../core/toolTiers';
+} from '../../../core/items/gathering/toolTiers';
 import { drawItemIcon } from '../../../ui/icons/drawItemIcon';
 import { asPercent } from '../../../ui/itemEffectLines';
 import {
@@ -42,8 +42,8 @@ import {
   type ShopRow,
   type ShopPurchaseResult,
 } from '../../../ui/screens/shop/shopSession';
-import { canAffordCoins } from '../../../core/partyCoins';
-import { canAfford } from '../../../core/partyResources';
+import { canAffordCoins } from '../../../core/party/partyCoins';
+import { canAfford } from '../../../core/items/gathering/partyResources';
 import { SPEAKERS } from '../../../dialog/speakers';
 import { OREN } from '../../../dialog/scripts/briarHollow';
 import type { ConversationRequest, ConversationTopic } from '../../../dialog/request';

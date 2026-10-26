@@ -1,23 +1,21 @@
+import { ABILITY_DEFS } from '../abilities/abilityDefs';
 import type { DungeonSceneOptions } from './DungeonScene';
 import type { GameProgressInput } from '../auth/AuthClient';
 import type { LevelDef } from '../levels/types';
 import { getLevelDef, tutorialLevel } from '../levels/index';
-import { revivedSnapshot, withoutIncurableStatuses } from '../core/PlayerSnapshot';
-import { AbilityManager } from '../core/AbilityManager';
-import { MAGIC_MISSILE_DEF } from '../abilities/magicMissile';
-import { PROTECTIVE_SHELL_DEF } from '../abilities/protectiveShell';
-import { SMUSH_DEF } from '../abilities/smush';
-import { MONGO_DEF, getMongoStats } from '../abilities/mongo';
-import { createMongoPetState } from '../core/MongoPetState';
-import { parseSavedWorld } from '../core/SavedWorld';
-import { AchievementManager } from '../core/AchievementManager';
-import { GameStats, parseGameStatsSnapshot } from '../core/GameStats';
-import { createPartyCraftsState } from '../core/partyCrafts';
-import { createWheelLedger } from '../core/WheelLedger';
-import { createAttackCowState } from '../core/AttackCowState';
-import { withBloodVomitFrames } from '../core/bloodVomitSave';
-import { MusicLibrary } from '../core/MusicLibrary';
-import { viewerFavor } from '../core/viewerFavor';
+import { revivedSnapshot, withoutIncurableStatuses } from '../core/save/PlayerSnapshot';
+import { AbilityManager } from '../core/skills/AbilityManager';
+import { getMongoStats } from '../abilities/mongo';
+import { createMongoPetState } from '../core/state/MongoPetState';
+import { parseSavedWorld } from '../core/save/SavedWorld';
+import { AchievementManager } from '../core/progression/AchievementManager';
+import { GameStats, parseGameStatsSnapshot } from '../core/progression/GameStats';
+import { createPartyCraftsState } from '../core/labour/partyCrafts';
+import { createWheelLedger } from '../core/save/WheelLedger';
+import { createAttackCowState } from '../core/state/AttackCowState';
+import { withBloodVomitFrames } from '../core/save/bloodVomitSave';
+import { MusicLibrary } from '../core/music/MusicLibrary';
+import { viewerFavor } from '../core/progression/viewerFavor';
 
 /**
  * An ability manager carrying a save's progress, or a fresh one at level 1.
@@ -29,10 +27,7 @@ import { viewerFavor } from '../core/viewerFavor';
  */
 function resumedAbilityManager(states: GameProgressInput['abilityStates']): AbilityManager {
   const manager = new AbilityManager();
-  manager.register(MAGIC_MISSILE_DEF);
-  manager.register(PROTECTIVE_SHELL_DEF);
-  manager.register(SMUSH_DEF);
-  manager.register(MONGO_DEF);
+  for (const def of Object.values(ABILITY_DEFS)) manager.register(def);
   if (states !== undefined) manager.restoreSerializedStates(states);
   return manager;
 }

@@ -1,17 +1,25 @@
 import { ALL_STATS, POTION_HEAL_FRACTION, type StatName } from '../Player';
 import {
+  ITEM_DEF,
   wearerOf,
   type FairyElement,
   type InventoryItem,
+  type ItemId,
   type ResistanceType,
-} from '../core/ItemDefs';
-import { getSkillDef, SKILL_IDS } from '../core/SkillManager';
+} from '../core/items/defs/ItemDefs';
+import { getSkillDef, SKILL_IDS, type SkillId } from '../core/skills/SkillManager';
+import type { ClawTrail, WeaponProcId, WeaponStats } from '../core/items/equipment/weapons';
+import { describeTrait } from '../gear/traits';
+import { activeSetBonuses, setProgress, wornSets } from '../gear/setProgress';
+import { grantedAbility } from '../gear/gearHooks';
+import { ABILITY_DEFS } from '../abilities/abilityDefs';
+import { GEAR_SETS, type GearSetBonus } from '../gear/sets';
 import {
   HAMBURGER_FED_DURATION_SECONDS,
   HAMBURGER_HEAL_FRACTION,
   HAMBURGER_STR_BONUS,
-} from '../core/foodEffects';
-import { MAX_TOOL_TIER, toolTierDef, type ToolKind } from '../core/toolTiers';
+} from '../core/items/consumables/foodEffects';
+import { MAX_TOOL_TIER, toolTierDef, type ToolKind } from '../core/items/gathering/toolTiers';
 
 /** Multiplier→percentage conversion for the lines that read as percentages. */
 const PERCENT = 100;
@@ -53,9 +61,94 @@ export function asPercent(fraction: number): number {
   return Math.round(fraction * PERCENT);
 }
 
+/** The line a regen multiplier reads as, or null when it changes nothing. */
+export function regenLine(multiplier: number): string | null {
+  if (multiplier === 1) return null;
+  const change = asPercent(multiplier - 1);
+  return `${change >= 0 ? '+' : ''}${change}% HP regen`;
+}
+
+export function skillBonusLine(id: SkillId, levels: number): string {
+  return `+${levels} ${getSkillDef(id).name}`;
+}
+
+export function meleeOnlyStatLine(stat: StatName, amount: number): string {
+  return `+${amount} ${STAT_LABELS[stat]} (melee only)`;
+}
+
+export const CANCELS_MOMENTUM_LINE = 'Momentum attacks cannot touch you';
+
+/** What each weapon proc adds to every swing, as the detail pane lists it. */
+const WEAPON_PROC_LINES: Readonly<Record<WeaponProcId, string>> = {
+  stormcallerStorm: 'Each swing throws a lightning wave that chains to nearby enemies',
+};
+
+/** The colour words a claw's swipe trail is described by. */
+const CLAW_TRAIL_LINES: Readonly<Record<ClawTrail, string>> = {
+  frost: 'Swipes leave a frost trail',
+  venom: 'Swipes leave a venom trail',
+  ink: 'Swipes leave an ink trail',
+  sunsteel: 'Swipes leave a sunsteel trail',
+};
+
+function weaponLines(weapon: WeaponStats): string[] {
+  if (weapon.delivery === 'sling') return ['Looses stones at range'];
+  if (weapon.delivery === 'claw') {
+    const lines = [`Claws ×${weapon.damageMultiplier} damage`];
+    if (weapon.reachBonusTiles > 0) lines.push(`+${weapon.reachBonusTiles} tile swipe reach`);
+    if (weapon.trail !== null) lines.push(CLAW_TRAIL_LINES[weapon.trail]);
+    return lines;
+  }
+  const lines = [
+    `${weapon.strike === 'blade' ? 'Blade' : 'Blunt'} ×${weapon.damageMultiplier} damage`,
+  ];
+  if (weapon.onStrike !== undefined) lines.push(WEAPON_PROC_LINES[weapon.onStrike]);
+  return lines;
+}
+
+/** One line per set with any piece among `equipped`: its name and how many of its pieces are on. */
+export function setProgressLines(equipped: ReadonlyArray<ItemId>): string[] {
+  return [...wornSets(equipped).keys()].map((set) => {
+    const progress = setProgress(equipped, set);
+    return `${progress.name} set: ${progress.worn}/${progress.pips.length}`;
+  });
+}
+
+/** A set bonus as one line: what it adds, stats first, then each trait. */
+function setBonusLine(bonus: GearSetBonus): string {
+  const stats = ALL_STATS.flatMap((stat) => {
+    const amount = bonus.statBonus?.[stat];
+    return amount === undefined || amount === 0 ? [] : [`+${amount} ${STAT_LABELS[stat]}`];
+  });
+  const traits = (bonus.traits ?? []).map(describeTrait);
+  return [...stats, ...traits].join(', ');
+}
+
 /**
- * Human-readable effect lines for an item: stat bonuses, resistances, fairy
- * immunities, reflect, skill bonuses, stun chance, regen.
+ * What `equipped` adds beyond each piece's own lines, for the Character page:
+ * every set bonus switched on, and every ability a worn piece grants.
+ */
+export function activeGearLines(equipped: ReadonlyArray<ItemId>): string[] {
+  const lines: string[] = [];
+  for (const [set, worn] of wornSets(equipped)) {
+    for (const bonus of activeSetBonuses(set, worn)) {
+      lines.push(`${GEAR_SETS[set].name} (${bonus.pieces} pieces): ${setBonusLine(bonus)}`);
+    }
+  }
+  for (const id of equipped) {
+    const ability = grantedAbility(id);
+    if (ability !== null) {
+      lines.push(`Grants ${ABILITY_DEFS[ability].name} (${ITEM_DEF[id].name})`);
+    }
+  }
+  return lines;
+}
+
+/**
+ * Human-readable effect lines for an item, generated from its data: stat
+ * bonuses, a weapon's blow, resistances, fairy immunities, skill bonuses,
+ * regen and every trait. An item's description is flavour, so this is the
+ * only place what it does is written down.
  *
  * The single source every panel that describes an item draws from, so an item
  * gaining an effect shows up everywhere at once instead of only wherever
@@ -76,9 +169,13 @@ export function describeItemEffects(item: InventoryItem): string[] {
   if (meleeOnly) {
     for (const stat of ALL_STATS) {
       const amount = meleeOnly[stat];
-      if (amount) lines.push(`+${amount} ${STAT_LABELS[stat]} (melee only)`);
+      if (amount) lines.push(meleeOnlyStatLine(stat, amount));
     }
   }
+
+  const def = ITEM_DEF[item.id];
+  const weapon = def.weapon;
+  if (weapon !== undefined) lines.push(...weaponLines(weapon));
 
   const resistances = item.resistances;
   if (resistances && resistances.length > 0) {
@@ -89,28 +186,23 @@ export function describeItemEffects(item: InventoryItem): string[] {
   const fairyImmunity = fairyImmunityLine(item.fairyImmunities ?? []);
   if (fairyImmunity !== null) lines.push(fairyImmunity);
 
-  if (item.damageReflectPct) {
-    lines.push(`Reflects ${asPercent(item.damageReflectPct)}% of melee damage`);
-  }
-
-  if (item.cancelsMomentum) lines.push('Momentum attacks cannot touch you');
+  if (item.cancelsMomentum) lines.push(CANCELS_MOMENTUM_LINE);
 
   const skillLevelBonus = item.skillLevelBonus;
   if (skillLevelBonus) {
     for (const id of SKILL_IDS) {
       const amount = skillLevelBonus[id];
-      if (amount) lines.push(`+${amount} ${getSkillDef(id).name}`);
+      if (amount) lines.push(skillBonusLine(id, amount));
     }
   }
 
-  if (item.stunOnHitChance) {
-    lines.push(`${asPercent(item.stunOnHitChance)}% stun on hit`);
-  }
+  const regen = item.regenMultiplier === undefined ? null : regenLine(item.regenMultiplier);
+  if (regen !== null) lines.push(regen);
 
-  const regen = item.regenMultiplier;
-  if (regen !== undefined && regen !== 1) {
-    lines.push(`${asPercent(regen - 1) >= 0 ? '+' : ''}${asPercent(regen - 1)}% HP regen`);
-  }
+  for (const trait of def.traits ?? []) lines.push(describeTrait(trait));
+
+  const set = def.set;
+  if (set !== undefined) lines.push(`Part of the ${GEAR_SETS[set].name} set`);
 
   const wearer = wearerOf(item.id);
   const wearerLabel = wearer === undefined ? null : WEARER_LABELS[wearer];

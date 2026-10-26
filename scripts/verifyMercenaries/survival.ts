@@ -35,16 +35,23 @@ import type { Mercenary } from '../../src/creatures/Mercenary';
 import type { Mob } from '../../src/creatures/Mob';
 import type { Player } from '../../src/Player';
 import { POTION_HEAL_FRACTION } from '../../src/Player';
-import { getMercenaryTemplate, type MercenaryTemplateId } from '../../src/core/mercenaryTemplates';
+import {
+  getMercenaryTemplate,
+  type MercenaryTemplateId,
+} from '../../src/core/party/mercenaryTemplates';
 import {
   captureMercenaryRoster,
   createMercenaryRoster,
   restoreMercenaryRoster,
   type HiredMercenary,
   type MercenaryRoster,
-} from '../../src/core/MercenaryRoster';
-import { parseMercenaryRosterCheckpoint } from '../../src/core/PersistedWorldState';
-import { REVIVE_FRAMES, REVIVE_HP_FRACTION, REVIVE_RANGE_PX } from '../../src/core/reviveRules';
+} from '../../src/core/party/MercenaryRoster';
+import { parseMercenaryRosterCheckpoint } from '../../src/core/save/PersistedWorldState';
+import {
+  REVIVE_FRAMES,
+  REVIVE_HP_FRACTION,
+  REVIVE_RANGE_PX,
+} from '../../src/core/party/reviveRules';
 import {
   HIRELING_DAMAGE_TAKEN_MULTIPLIER,
   HIRELING_OUT_OF_COMBAT_FRAMES,
@@ -59,7 +66,7 @@ import { MobRoster } from '../../src/systems/kits/SceneWorld';
 import type { SystemContext } from '../../src/systems/GameSystem';
 import { resolveKills, type CombatContext } from '../../src/systems/CombatSystem';
 import { EventBus } from '../../src/core/EventBus';
-import { AbilityManager } from '../../src/core/AbilityManager';
+import { AbilityManager } from '../../src/core/skills/AbilityManager';
 import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
 import {
   CHASE_STALL_LIMIT_FRAMES,

@@ -13,10 +13,10 @@
  * fighting for its life, and Fenna has no time for work-bench upgrades.
  */
 
-import { isBlueprintsQuestUnderWay } from '../../../core/blueprintsQuestPhase';
-import { formatCost } from '../../../core/partyResources';
-import { constructionUnlocked, type CraftLearner } from '../../../core/villageUnlocks';
-import { isVillageUnderSiege } from '../../../core/villageQuestPhase';
+import { isBlueprintsQuestUnderWay } from '../../../core/quests/blueprintsQuestPhase';
+import { formatCost } from '../../../core/items/gathering/partyResources';
+import { constructionUnlocked, type CraftLearner } from '../../../core/quests/villageUnlocks';
+import { isVillageUnderSiege } from '../../../core/quests/villageQuestPhase';
 import type { ConversationRequest, ConversationTopic } from '../../../dialog/request';
 import type { NPCMarkerType } from '../../../creatures/QuestNPC';
 import { KEEP_TALKING, type QuestOpening, type VillagerContext } from '../villagerCircumstances';

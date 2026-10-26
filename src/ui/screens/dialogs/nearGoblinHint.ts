@@ -5,7 +5,7 @@
  * the pause menu.
  */
 
-import { keybindings } from '../../../core/Keybindings';
+import { keybindings } from '../../../core/input/Keybindings';
 import type { Band, Surface } from '../../core/UiRoot';
 import { keyLabel } from '../../core/inputMode';
 import { drawNearGoblinCombat } from '../../icons/explainerArt/nearGoblinArt';

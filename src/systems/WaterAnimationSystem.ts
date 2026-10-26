@@ -27,7 +27,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import type { GameMap } from '../map/GameMap';
 import {
   FloorTypeValue,

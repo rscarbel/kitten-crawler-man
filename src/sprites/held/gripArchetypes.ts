@@ -14,7 +14,7 @@
  * 2.03 units sole to crown).
  */
 
-import type { CrawlerKind } from '../../core/SkillManager';
+import type { CrawlerKind } from '../../core/skills/SkillManager';
 
 export const HUMAN_GRIP_ARCHETYPES = [
   'oneHandHaft',
@@ -23,6 +23,7 @@ export const HUMAN_GRIP_ARCHETYPES = [
   'slingshot',
   'carriedFlat',
   'smallHeld',
+  'offHandHeld',
 ] as const;
 export const CAT_GRIP_ARCHETYPES = ['mouthCarry', 'pawTool'] as const;
 
@@ -37,6 +38,10 @@ export const WEAPON_GRIP_ARCHETYPES = [
   'slingshot',
 ] as const satisfies readonly GripArchetype[];
 export type WeaponGripArchetype = (typeof WEAPON_GRIP_ARCHETYPES)[number];
+
+/** The archetypes the human's off hand carries on its own, beside whatever his main hand holds. */
+export const OFF_HAND_GRIP_ARCHETYPES = ['offHandHeld'] as const satisfies readonly GripArchetype[];
+export type OffHandGripArchetype = (typeof OFF_HAND_GRIP_ARCHETYPES)[number];
 
 /** Where on the human figure a held or stowed item attaches. */
 export type HumanSocket = 'mainHand' | 'offHand' | 'back' | 'hip';
@@ -60,7 +65,7 @@ export const WEIGHT_CLASSES = ['light', 'heavy'] as const satisfies readonly Wei
 export type StowedPlacement = 'hip' | 'back' | 'none';
 
 /**
- * Each radius class's half-thickness, rig units: the Taranis grip's wrapped
+ * Each radius class's half-thickness, rig units: the Stormcaller grip's wrapped
  * leather, a tool haft, and a club's or a dynamite stick's girth.
  */
 export const HANDLE_HALF_WIDTH: Readonly<Record<HandleRadius, number>> = {
@@ -109,11 +114,12 @@ type ArchetypeTable = Readonly<Record<HumanGripArchetype, ArchetypeSpec<HumanSoc
 
 /**
  * The ranges are the shipped art's own measurements with headroom either side:
- * the Taranis sword (handle 0.155, blade 0.76, grip 0.55), the hammer (0.32,
+ * the arming sword (handle 0.17, blade 0.62, grip 0.5), the hammer (0.32,
  * grip 0.3) and wrench (0.36); tool hafts 0.89–1.05 and the scythe's snath
  * 1.35 with the butt fist at 0.04–0.06; the dynamite stick (0.36, grip 0.42);
  * the slingshot (0.15, fork 0.16 by 0.24); a board (0.86) and crate (0.7 by
- * 0.46); the zippo (0.13) and bottle (0.26).
+ * 0.46); the zippo (0.13) and bottle (0.26); the pot-lid buckler's strap
+ * (0.12, grip 0.5) across a lid 0.38 wide.
  */
 export const GRIP_ARCHETYPES: ArchetypeTable = {
   oneHandHaft: {
@@ -186,6 +192,25 @@ export const GRIP_ARCHETYPES: ArchetypeTable = {
     headWidth: { min: 0, max: 0.15 },
     gripPoint: { min: 0.2, max: 0.8 },
     stowed: { light: 'none', heavy: 'none' },
+    heldLevel: false,
+  },
+  /**
+   * A shield on the off hand: the fist closed on a short strap across the
+   * back of it, the shield's face square to the palm. It rides in every row
+   * that leaves that hand free and rests on his back when the hand is wanted
+   * for something else; where a weapon he carries already rests there, the
+   * runtime moves it to the hip.
+   */
+  offHandHeld: {
+    wearer: 'human',
+    heldIn: ['offHand'],
+    radii: ['thin', 'standard'],
+    weights: ['light'],
+    handleLength: { min: 0.08, max: 0.2 },
+    headLength: { min: 0.2, max: 0.4 },
+    headWidth: { min: 0.2, max: 0.4 },
+    gripPoint: { min: 0.3, max: 0.7 },
+    stowed: { light: 'back', heavy: 'back' },
     heldLevel: false,
   },
   mouthCarry: {

@@ -17,9 +17,9 @@
 import type { AudioManager } from '../../../audio/AudioManager';
 import type { AudioScope } from '../../../audio/AudioScope';
 import type { EventBus } from '../../../core/EventBus';
-import type { BriarHollowState } from '../../../core/briarHollowState';
-import type { BlueprintsQuestPhase } from '../../../core/blueprintsQuestPhase';
-import type { VillageQuestPhase } from '../../../core/villageQuestPhase';
+import type { BriarHollowState } from '../../../core/quests/briarHollowState';
+import type { BlueprintsQuestPhase } from '../../../core/quests/blueprintsQuestPhase';
+import type { VillageQuestPhase } from '../../../core/quests/villageQuestPhase';
 import type { CatPlayer } from '../../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../../creatures/HumanPlayer';
 import type { Conversation } from '../../../dialog/Conversation';
@@ -29,7 +29,7 @@ import type { MobRoster } from '../../kits/SceneWorld';
 import type { VillagerSystem } from '../VillagerSystem';
 import type { LivestockSystem } from '../LivestockSystem';
 import type { MusicClaims } from '../../../audio/AudioScope';
-import type { MidgeEscortCarry } from '../../../core/midgeEscortCarry';
+import type { MidgeEscortCarry } from '../../../core/quests/midgeEscortCarry';
 import type { BlueprintsCue } from './blueprintsSoundCues';
 
 export type BlueprintsCrawler = HumanPlayer | CatPlayer;

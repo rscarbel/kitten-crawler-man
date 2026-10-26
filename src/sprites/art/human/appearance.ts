@@ -16,53 +16,23 @@ import { type FigureDef } from '../../figure/figureDef';
 import { defaultOutfitOf } from '../../garments/human/humanDressing';
 import type { Outfit } from '../../garments/outfit';
 import {
-  firstImpactFrame,
   HUMAN_FIGURE,
   HUMAN_FIGURE_PAINTING,
   humanFigureId,
-  HUMAN_ROWS,
   type HumanFigurePainting,
   humanHeldLayers,
-  type HumanRowName,
   paintDressedHumanFrame,
   type RowSpec,
 } from '../humanFigure';
 import { type CarriedGrip, carriedGripKey, carryInMainHand } from './carry';
+import { carryInOffHand, type OffHandGrip, offHandGripKey } from './offHand';
 import { type HumanLook, withLookBuild } from '../../looks/humanLook';
 
 // ── What a row tells the garments that move with it ──────────────────────────
 
-/**
- * Whether a row is a punch his right fist lands, as its strike metadata names
- * the limb. The art gates hold that name to the rig: the named fist is the one
- * driven furthest on the impact frame.
- */
-function rightFistLandsBlow(row: RowSpec): boolean {
-  const strike = row.strike;
-  if (row.role !== 'strike' || strike === undefined) return false;
-  return strike.tags.includes('punch') && strike.reachLimb === 'hand';
-}
-
-const RIGHT_PUNCH_ROWS: ReadonlySet<HumanRowName> = new Set(
-  HUMAN_ROWS.filter(rightFistLandsBlow).map((row) => row.name),
-);
-
-/**
- * The rows on which the gauntlet turns to spiked steel round his right fist.
- * The art gates hold it to a non-empty set with the cross in it.
- */
-export const HUMAN_RIGHT_PUNCH_ROWS: readonly HumanRowName[] = [...RIGHT_PUNCH_ROWS];
-
-/** What `row` tells a garment that moves with it: the right punch it lands, the gait it travels at. */
-export function garmentRowOf(row: RowSpec): HumanGarmentRow {
-  const impact = firstImpactFrame(row);
-  const travelling = row.locomotion === 'travelling';
-  const gait = row.gait ?? row.bridges;
-  return {
-    name: row.name,
-    rightPunchImpact: RIGHT_PUNCH_ROWS.has(row.name) && impact !== undefined ? impact : null,
-    travellingGait: travelling ? (gait === 'walk' ? 'walk' : 'run') : null,
-  };
+/** What `row` tells a garment that moves with it. */
+function garmentRowOf(row: RowSpec): HumanGarmentRow {
+  return { name: row.name };
 }
 
 // ── Figures ──────────────────────────────────────────────────────────────────
@@ -97,25 +67,35 @@ const figuresByKey = new Map<string, HumanFigure>();
 
 const BASE_FIGURE: HumanFigure = { def: HUMAN_FIGURE, painting: HUMAN_FIGURE_PAINTING };
 
-/** The key a figure is cached under: the look, the outfit, and the handle in his main hand if any. */
-function figureKey(look: HumanLook, outfit: Outfit<'human'>, held: CarriedGrip | null): string {
+/**
+ * The key a figure is cached under: the look, the outfit, the handle in his
+ * main hand if any and the shield on his off hand if any.
+ */
+function figureKey(
+  look: HumanLook,
+  outfit: Outfit<'human'>,
+  held: CarriedGrip | null,
+  offHand: OffHandGrip | null,
+): string {
   const dressed = `${humanFigureId(look)}:${outfit.key}`;
-  return held === null ? dressed : `${dressed}:holding-${carriedGripKey(held)}`;
+  const holding = held === null ? dressed : `${dressed}:holding-${carriedGripKey(held)}`;
+  return offHand === null ? holding : `${holding}:${offHandGripKey(offHand)}`;
 }
 
 const BASE_KEY = figureKey(
   HUMAN_FIGURE_PAINTING.look,
   defaultOutfitOf(HUMAN_FIGURE_PAINTING.look),
   null,
+  null,
 );
 
 /**
  * The figure `look` is painted as in `outfit`, his main hand closed on an
- * equipment-chosen item the way `held` says, or holding nothing. The player's
- * look in its default outfit holding nothing is `HUMAN_FIGURE` itself; every
- * other shares its rows, cell and budget and differs in its id, in the look
- * it paints, in the garments laid on each pose and in what closes his right
- * fist.
+ * equipment-chosen item the way `held` says, or holding nothing, and his off
+ * hand on a shield the way `offHand` says, or free. The player's look in its
+ * default outfit holding nothing is `HUMAN_FIGURE` itself; every other shares
+ * its rows, cell and budget and differs in its id, in the look it paints, in
+ * the garments laid on each pose and in what closes his fists.
  *
  * A held item is not part of the figure: only the fist closed round its
  * handle is, and each frame it closes on one is baked in two layers so the
@@ -125,14 +105,17 @@ export function humanFigureFor(
   look: HumanLook,
   outfit: Outfit<'human'>,
   held: CarriedGrip | null,
+  offHand: OffHandGrip | null = null,
 ): HumanFigure {
-  const key = figureKey(look, outfit, held);
+  const key = figureKey(look, outfit, held, offHand);
   if (key === BASE_KEY) return BASE_FIGURE;
   const known = figuresByKey.get(key);
   if (known !== undefined) return known;
   const dress = (pose: BipedPose, row: RowSpec, frame: number): BipedPose => {
     const dressed = withLookBuild(dressedPose(outfit, pose, row, frame), look);
-    return held === null ? dressed : carryInMainHand(dressed, row, held);
+    // The main hand first: it reads a closed left fist as his hands being busy.
+    const inMainHand = held === null ? dressed : carryInMainHand(dressed, row, held);
+    return offHand === null ? inMainHand : carryInOffHand(inMainHand, row, offHand);
   };
   const painting: HumanFigurePainting = {
     look,

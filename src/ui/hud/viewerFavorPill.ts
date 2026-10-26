@@ -81,7 +81,7 @@ export function viewerFavorPill(ui: Ui, slot: Rect, model: ViewerFavorModel): Re
   const skin = skinsFor(theme).panel.hud;
   drawGlass(ui, pill, { ...skin, radius: theme.radius.pill });
   const iconCell: Rect = { x: pill.x + space.sm, y: pill.y, w: icon, h: pill.h };
-  drawGlyph(ctx, 'users', centerIn(iconCell, icon, icon), { color: palette.tier.celestial });
+  drawGlyph(ctx, 'users', centerIn(iconCell, icon, icon), { color: palette.meter.favor });
   const meterH = skinsFor(theme).meter.favor.height;
   const meterRect: Rect = {
     x: iconCell.x + icon + space.xs,

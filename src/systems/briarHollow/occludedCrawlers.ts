@@ -20,7 +20,7 @@ import {
   releaseSurface,
   freshSurfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
+} from '../../core/rendering/canvasSurface';
 
 /** How strongly the hidden crawler shows through: a ghost, not a second body. */
 export const OCCLUDED_CRAWLER_ALPHA = 0.5;

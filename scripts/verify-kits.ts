@@ -41,9 +41,9 @@
  */
 
 import { TILE_SIZE } from '../src/core/constants';
-import { AbilityManager } from '../src/core/AbilityManager';
+import { AbilityManager } from '../src/core/skills/AbilityManager';
 import { EventBus } from '../src/core/EventBus';
-import { PlayerManager } from '../src/core/PlayerManager';
+import { PlayerManager } from '../src/core/party/PlayerManager';
 import { GameMap, type PlacedTownInteriorProp } from '../src/map/GameMap';
 import {
   TOWN_INTERIOR_PROPS,
@@ -68,18 +68,22 @@ import {
   type InteriorHostileContext,
 } from '../src/systems/interiorHostiles';
 import { CULT_HIDEOUT_CULTIST_LEVEL } from '../src/systems/CultHideoutSystem';
-import { createTownMemory } from '../src/core/TownMemory';
-import { createMurderQuestProgress } from '../src/core/MurderQuestProgress';
+import { createTownMemory } from '../src/core/state/TownMemory';
+import { createMurderQuestProgress } from '../src/core/quests/MurderQuestProgress';
 import { MenusKit } from '../src/systems/kits/MenusKit';
 import { BriarHollowKit } from '../src/systems/briarHollow/BriarHollowKit';
-import { createBriarHollowState } from '../src/core/briarHollowState';
-import { createAnchorQuestProgress } from '../src/core/AnchorQuestProgress';
-import { createPartyCraftsState } from '../src/core/partyCrafts';
-import { PartyTools } from '../src/core/PartyTools';
-import { keybindings } from '../src/core/Keybindings';
+import { createBriarHollowState } from '../src/core/quests/briarHollowState';
+import { createAnchorQuestProgress } from '../src/core/quests/AnchorQuestProgress';
+import { createPartyCraftsState } from '../src/core/labour/partyCrafts';
+import { PartyTools } from '../src/core/items/gathering/PartyTools';
+import { keybindings } from '../src/core/input/Keybindings';
 import { GroundPickupSystem } from '../src/systems/GroundPickupSystem';
 import { DynamiteSystem } from '../src/systems/DynamiteSystem';
 import { Conversation } from '../src/dialog/Conversation';
+import { ITEM_DEF, isItemId, wearerAllows, type ItemId } from '../src/core/items/defs/ItemDefs';
+import type { CrawlerKind } from '../src/core/skills/SkillManager';
+import type { GearTraitKind } from '../src/gear/traits';
+import type { Player } from '../src/Player';
 
 /** The level the kit's militia are raised at; nothing here fights them. */
 const MILITIA_LEVEL = 1;
@@ -953,6 +957,150 @@ console.log('\nBriarHollowKit is inert until gameMap.briarHollow exists');
   kit.dispose();
   kit.dispose();
   check(true, 'dispose is idempotent');
+}
+
+/**
+ * The first item whose own traits include one of `kind`, wearable by `crawler`.
+ * Found by its mechanic rather than named, so the check survives the catalogue
+ * being renamed or rebalanced; only a catalogue with no such trait at all fails.
+ */
+function itemWithTrait(kind: GearTraitKind, crawler: CrawlerKind): ItemId | null {
+  for (const id of Object.keys(ITEM_DEF).filter(isItemId)) {
+    const def = ITEM_DEF[id];
+    if (def.wearer === undefined || !wearerAllows(def.wearer, crawler)) continue;
+    if ((def.traits ?? []).some((trait) => trait.kind === kind)) return id;
+  }
+  return null;
+}
+
+/** Puts one copy of `id` in `crawler`'s pack and on her. */
+function wear(crawler: Player, id: ItemId): boolean {
+  crawler.inventory.addItem(id, 1);
+  crawler.inventory.equipByItemId(id);
+  return crawler.inventory.equipment.isEquipped(id);
+}
+
+/** Strength that makes every bare blow large, so a share of it never rounds to nothing. */
+const GEAR_PROBE_STRENGTH = 200;
+/** HP the probe crawler is left on before a blow that heals her. */
+const GEAR_PROBE_LOW_HP = 1;
+/** Far past any crawler's bar: a blow that downs her outright. */
+const GEAR_PROBE_LETHAL_DAMAGE = 100000;
+
+console.log('\nWorn gear traits fire through the kit, one per hook family');
+{
+  const map = makeInterior();
+  const floor = findFloorPairEastward(map);
+  check(floor !== null, 'the generated store has open floor to stage the gear checks on');
+  if (floor !== null) {
+    // onMeleeHit: a landed blow heals the lifesteal wearer.
+    {
+      const stage = makeStage(map, floor.x, floor.y);
+      const combat = makeCombatKit(stage);
+      const { human } = stage.pm;
+      const lifesteal = itemWithTrait('lifesteal', 'human');
+      check(
+        lifesteal !== null && wear(human, lifesteal),
+        'fixture: the human wears a lifesteal piece',
+      );
+      human.setBaseStat('strength', GEAR_PROBE_STRENGTH);
+      const victim = spawnMob(
+        'rat',
+        { x: floor.x + 1, y: floor.y },
+        map,
+        liveSpawnContext('dev:spawn'),
+      );
+      stage.roster.add(victim);
+      standWestFacing(stage, victim.x + HALF_TILE, victim.y + HALF_TILE);
+      human.hp = GEAR_PROBE_LOW_HP;
+      let frames = 0;
+      while (victim.hp === victim.maxHp && frames < MAX_FIGHT_FRAMES) {
+        if (human.attackTimer === 0) human.triggerAttack();
+        combat.updatePlayerAttacks();
+        combat.resolvePlayerAttacks();
+        frames++;
+      }
+      check(victim.hp < victim.maxHp, 'fixture: the blow lands');
+      check(
+        human.hp > GEAR_PROBE_LOW_HP,
+        `onMeleeHit: lifesteal heals the striker (${human.hp} HP)`,
+      );
+      combat.dispose();
+    }
+
+    // onKill: a kill while worn counts toward an awakening.
+    {
+      const stage = makeStage(map, floor.x, floor.y);
+      const combat = makeCombatKit(stage);
+      const { human } = stage.pm;
+      const awakening = itemWithTrait('awakening', 'human');
+      check(
+        awakening !== null && wear(human, awakening),
+        'fixture: the human wears an awakening piece',
+      );
+      human.setBaseStat('strength', GEAR_PROBE_STRENGTH);
+      const victim = spawnMob(
+        'rat',
+        { x: floor.x + 1, y: floor.y },
+        map,
+        liveSpawnContext('dev:spawn'),
+      );
+      stage.roster.add(victim);
+      standWestFacing(stage, victim.x + HALF_TILE, victim.y + HALF_TILE);
+      let frames = 0;
+      while (victim.isAlive && frames < MAX_FIGHT_FRAMES) {
+        if (human.attackTimer === 0) human.triggerAttack();
+        combat.updatePlayerAttacks();
+        combat.resolvePlayerAttacks();
+        combat.resolveKills();
+        frames++;
+      }
+      check(!victim.isAlive, 'fixture: the mob dies');
+      const kills = awakening === null ? 0 : human.gear.of(awakening).awakeningKills;
+      check(kills === 1, `onKill: the kill counts toward the awakening (${kills})`);
+      combat.dispose();
+    }
+
+    // onHurt: a downing blow leaves the ninth-life wearer standing.
+    {
+      const stage = makeStage(map, floor.x, floor.y);
+      const combat = makeCombatKit(stage);
+      const { cat } = stage.pm;
+      const ninthLife = itemWithTrait('ninthLife', 'cat');
+      check(
+        ninthLife !== null && wear(cat, ninthLife),
+        'fixture: the cat wears a ninth-life piece',
+      );
+      cat.takeDamage(GEAR_PROBE_LETHAL_DAMAGE);
+      check(cat.hp > 0, `onHurt: the downing blow leaves her at ${cat.hp} HP`);
+      cat.takeDamage(GEAR_PROBE_LETHAL_DAMAGE);
+      check(cat.hp === 0, 'and only once on the floor');
+      combat.dispose();
+    }
+
+    // onTick: standing still long enough raises regen.
+    {
+      const stage = makeStage(map, floor.x, floor.y);
+      const combat = makeCombatKit(stage);
+      const { human } = stage.pm;
+      const stillness = itemWithTrait('stillnessRegen', 'human');
+      check(
+        stillness !== null && wear(human, stillness),
+        'fixture: the human wears a stillness piece',
+      );
+      const trait = (stillness === null ? [] : (ITEM_DEF[stillness].traits ?? [])).find(
+        (candidate) => candidate.kind === 'stillnessRegen',
+      );
+      const waitFrames = trait?.kind === 'stillnessRegen' ? trait.afterFrames + 1 : 0;
+      const regenBefore = human.regenMultiplier;
+      for (let frame = 0; frame <= waitFrames; frame++) combat.updatePostCombat(null);
+      check(
+        human.regenMultiplier > regenBefore,
+        `onTick: regen rises after standing still (${regenBefore} → ${human.regenMultiplier})`,
+      );
+      combat.dispose();
+    }
+  }
 }
 
 if (failures > 0) {

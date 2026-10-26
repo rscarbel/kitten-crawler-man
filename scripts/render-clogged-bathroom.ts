@@ -26,7 +26,7 @@ import { createCanvas, type Canvas } from 'canvas';
 import { BATHROOM_ROOM_SECTIONS } from './cloggedBathroomRoomRender.js';
 import { asGameContext } from './nodeGameContext.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
-import type { Difficulty } from '../src/core/difficultyProfiles.js';
+import type { Difficulty } from '../src/core/difficulty/difficultyProfiles.js';
 import {
   DevPipeBoardSource,
   fullButLeaking,

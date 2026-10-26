@@ -13,7 +13,7 @@
  * `BuildingInteriorScene` owns the sounds and the interaction gating.
  */
 
-import { makeWhetstone, WHETSTONE_MELEE_DAMAGE_BONUS } from '../core/StatusEffect';
+import { makeWhetstone, WHETSTONE_MELEE_DAMAGE_BONUS } from '../core/combat/StatusEffect';
 import type { Player } from '../Player';
 import {
   offerUnless,

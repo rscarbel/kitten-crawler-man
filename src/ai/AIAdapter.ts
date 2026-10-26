@@ -12,7 +12,7 @@ import {
   type GameAiClientOptions,
 } from '@rscarbel/game-server-llm-sdk';
 import type { EventBus } from '../core/EventBus';
-import { settings } from '../core/Settings';
+import { settings } from '../core/input/Settings';
 import type { Surface } from '../ui/core/UiRoot';
 import { aiPanelSurface } from '../ui/hud/aiPanel';
 import { AIChatFeed } from './AIChatFeed';

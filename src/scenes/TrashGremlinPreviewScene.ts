@@ -8,7 +8,7 @@
  * floors it is judged on.
  */
 
-import { viewportHeight, viewportWidth } from '../core/Viewport';
+import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
 import { worldText } from '../ui/world/worldText';
 import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { TRASH_GREMLIN_FIGURE } from '../sprites/art/trashGremlinFigure';

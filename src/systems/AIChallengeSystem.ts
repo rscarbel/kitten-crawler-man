@@ -9,14 +9,14 @@
  * way refuses the next. Its clock counts gameplay frames, so it stands still
  * whenever the world does (menus, dialogs, the pause screen).
  *
- * Winning pays the template's reward box to the crawler the player is
+ * Winning pays the template's reward chest to the crawler the player is
  * driving; failing shows the AI's taunt to everyone. Accepting, declining,
  * winning and failing are each a bus event, which the AI hears as a
  * high-importance game event.
  */
 
 import { crawlerName } from '../characters/characters';
-import type { BoxTier } from '../core/AchievementManager';
+import type { Rarity } from '../core/items/defs/rarity';
 import type { EventBus } from '../core/EventBus';
 import { TILE_SIZE } from '../core/constants';
 import type { CatPlayer } from '../creatures/CatPlayer';
@@ -49,8 +49,8 @@ export interface AIChallengeDeps {
   readonly human: HumanPlayer;
   readonly cat: CatPlayer;
   postToast(text: string, opts?: ToastOptions): void;
-  /** Pays a won challenge's box to `side`. */
-  grantReward(side: CrawlerSide, tier: BoxTier): void;
+  /** Pays a won challenge's reward chest to `side`. */
+  grantReward(side: CrawlerSide, rarity: Rarity): void;
 }
 
 /** A challenge on the offer card, waiting on the player. */
@@ -268,14 +268,14 @@ export class AIChallengeSystem implements GameSystem {
     this.active = null;
     const side: CrawlerSide = this.deps.human.isActive ? 'Human' : 'Cat';
     const name = crawlerName(side === 'Human' ? 'human' : 'cat');
-    this.deps.grantReward(side, active.spec.rewardTier);
+    this.deps.grantReward(side, active.spec.rewardRarity);
     this.deps.bus.emit('challengeCompleted', {
       ...this.summaryOf(active),
       rewardedTo: side,
       secondsTaken: Math.round(active.framesElapsed / FRAMES_PER_SECOND),
     });
     this.deps.postToast(
-      `Challenge complete: ${active.spec.title}! ${active.spec.rewardTier} box for ${name}.`,
+      `Challenge complete: ${active.spec.title}! ${active.spec.rewardRarity} chest for ${name}.`,
       { tone: 'success', icon: 'trophy', urgent: true, durationTicks: RESULT_TOAST_TICKS },
     );
   }
@@ -306,7 +306,7 @@ export class AIChallengeSystem implements GameSystem {
       title: challenge.spec.title,
       template: challenge.spec.template,
       objective: challengeObjective(challenge.spec),
-      rewardTier: challenge.spec.rewardTier,
+      rewardRarity: challenge.spec.rewardRarity,
       offeredBy: challenge.spec.offeredBy,
     };
   }

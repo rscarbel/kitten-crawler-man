@@ -12,6 +12,7 @@
  * Every fixture is validated against `scripts/aiReplaySchema.ts` before it is
  * written, and `replay.schema.json` is written beside them.
  */
+import { partyOwnsGear } from '../src/loot/gearPools';
 import { crawlerName } from '../src/characters/characters';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import * as prettier from 'prettier';
@@ -42,10 +43,11 @@ import type {
 } from '../src/ai/context/types';
 import type { AIReplayExpectation, AIReplayFixture } from '../src/ai/replay/aiReplayFormat';
 import { AIShowStage } from '../src/ai/show/AIShowStage';
-import { AchievementManager } from '../src/core/AchievementManager';
+import { AchievementManager } from '../src/core/progression/AchievementManager';
+import { AchievementAwards } from '../src/systems/AchievementAwards';
 import { TILE_SIZE } from '../src/core/constants';
 import { EventBus } from '../src/core/EventBus';
-import { ViewerFavor } from '../src/core/viewerFavor';
+import { ViewerFavor } from '../src/core/progression/viewerFavor';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { Mob } from '../src/creatures/Mob';
@@ -257,6 +259,15 @@ async function buildWorld(id: string, title: string, description: string): Promi
   const mobs: Mob[] = [];
   const bus = new EventBus();
   const achievements = { human: new AchievementManager(), cat: new AchievementManager() };
+  const awards = new AchievementAwards({
+    humanAchievements: achievements.human,
+    catAchievements: achievements.cat,
+    human,
+    cat,
+    bus,
+    activeCrawler: () => (cat.isActive ? 'cat' : 'human'),
+    owns: (id) => partyOwnsGear([human, cat], id),
+  });
   const postToast = (): void => undefined;
   const challenges = new AIChallengeSystem({
     bus,
@@ -264,8 +275,8 @@ async function buildWorld(id: string, title: string, description: string): Promi
     human,
     cat,
     postToast,
-    grantReward: (side, tier) =>
-      (side === 'Human' ? achievements.human : achievements.cat).grantBox(tier, 'Adventurer', null),
+    grantReward: (side, rarity) =>
+      void awards.grantChest(side === 'Human' ? 'human' : 'cat', { rarity, source: 'challenge' }),
   });
   const show = new AIShowStage({ bus, favor: new ViewerFavor(), challenges, postToast });
   const session: SessionInput = {
@@ -322,7 +333,7 @@ async function buildWorld(id: string, title: string, description: string): Promi
     isInSafeRoom: () => live.location.inSafeRoom,
     isInCombat: () => live.combatInProgress,
     postToast,
-    getAchievements: (target) => (target === 'human' ? achievements.human : achievements.cat),
+    getAwards: () => awards,
     getShow: () => show,
   };
   const source: AIContextSource = {
@@ -574,7 +585,7 @@ async function challengeAndDeath(): Promise<AIReplayFixture> {
   await world.serverAction('replay-challenge-1', 'offer_challenge', {
     template: 'slay',
     title: 'Rat Race',
-    reward_tier: 'Bronze',
+    reward_rarity: 'Common',
     taunt: 'Three rats. THREE. And you still choked.',
     seconds: CHALLENGE_SECONDS,
     count: RATS_FOR_CHALLENGE,

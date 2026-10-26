@@ -7,7 +7,7 @@
  * the preset asks for. Dev-only, like the rest of `src/dev/`.
  */
 
-import { createBriarHollowState, type BriarHollowState } from '../core/briarHollowState';
+import { createBriarHollowState, type BriarHollowState } from '../core/quests/briarHollowState';
 import type { PlaytestBlueprintsSetup } from './playtestPresets';
 import { unlockEverythingForPlaytest } from './briarHollowFortify';
 

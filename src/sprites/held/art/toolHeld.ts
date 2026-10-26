@@ -3,7 +3,12 @@
  * shared handle in each tier's wood, and the tier's head mounted at its end.
  */
 
-import { TOOL_TIER_LOOKS, TOOL_TIERS, type ToolKind, type ToolTier } from '../../../core/toolTiers';
+import {
+  TOOL_TIER_LOOKS,
+  TOOL_TIERS,
+  type ToolKind,
+  type ToolTier,
+} from '../../../core/items/gathering/toolTiers';
 import {
   paintScytheBlade,
   paintScytheSnath,

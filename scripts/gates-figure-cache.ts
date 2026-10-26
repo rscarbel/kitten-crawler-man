@@ -10,8 +10,8 @@
  *   npm run gates:figure-cache
  */
 
-import { EMPTY_ALPHA_CUTOFF } from '../src/core/spriteFrames.js';
-import { BYTES_PER_MEGABYTE } from '../src/core/canvasSurface.js';
+import { EMPTY_ALPHA_CUTOFF } from '../src/core/spriteAssets/spriteFrames.js';
+import { BYTES_PER_MEGABYTE } from '../src/core/rendering/canvasSurface.js';
 import {
   getFigureCacheStats,
   setFigureCacheStatsRecording,
@@ -29,6 +29,7 @@ import {
   figureResidentBytes,
   figureRowInkPending,
   figureRowInkTop,
+  drawFigureCachedRotatedCenter,
   flushFigureFrameCache,
   markFigureStateDrawn,
   pinFigureState,
@@ -51,14 +52,18 @@ import {
 import { defaultOutfitOf } from '../src/sprites/garments/human/humanDressing.js';
 import { playerCharacter } from '../src/characters/characters.js';
 import { wornGarmentOf } from '../src/sprites/garments/garments.js';
+import { bareCatOutfit } from '../src/sprites/garments/cat/catDressing.js';
 import { outfitOf } from '../src/sprites/garments/outfit.js';
+import { activeCatFigure, activeCatLook, setCatOutfit } from '../src/sprites/catSprite.js';
 import {
   activeHumanFigure,
   drawHumanSelection,
   setHumanOutfit,
 } from '../src/sprites/humanSprite.js';
 import { HumanPlayer } from '../src/creatures/HumanPlayer.js';
-import { restorePlayer, snapPlayer } from '../src/core/PlayerSnapshot.js';
+import { CatPlayer } from '../src/creatures/CatPlayer.js';
+import { catLookOf, humanLookOf, ITEM_DEF } from '../src/core/items/defs/ItemDefs.js';
+import { restorePlayer, snapPlayer } from '../src/core/save/PlayerSnapshot.js';
 import { createCanvas } from 'canvas';
 
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
@@ -1200,9 +1205,8 @@ const ROWS_DRAWN_PER_OUTFIT = 1;
   const warmBytes = figureResidentBytes(before);
   setHumanOutfit(
     outfitOf(PLAYER_LOOK, [
-      wornGarmentOf('human', 'human_trollskin_shirt'),
-      wornGarmentOf('human', 'human_cloak'),
-      wornGarmentOf('human', 'human_gauntlet'),
+      wornGarmentOf('human', 'townsfolk_trousers'),
+      wornGarmentOf('human', 'townsfolk_shoes'),
     ]),
   );
   const after = activeHumanFigure();
@@ -1224,41 +1228,99 @@ const ROWS_DRAWN_PER_OUTFIT = 1;
   setHumanOutfit(defaultOutfitOf(PLAYER_LOOK));
 }
 
-/** Frames the geared player is drawn for, so his outfit is resident before the scene changes. */
+/** Frames the geared player is drawn for, so their outfit is resident before the scene changes. */
 const TRANSIT_WARM_FRAMES = 60;
-/** Where the transit gate's human stands; anywhere on the map serves. */
+/** Where the transit gate's crawler stands; anywhere on the map serves. */
 const TRANSIT_TILE = 3;
 
-// A scene change keeps a geared human's warm outfit: the new scene builds a
-// fresh player, empty-handed, and restores his gear onto him from a snapshot.
-// Dressing that fresh player in what his empty inventory says releases every
-// cell of the outfit he is about to be drawn in again.
+/**
+ * Each crawler a scene change rebuilds: how to build one, what an item looks
+ * like on them, their sprite's figure, and how to put their sprite back in
+ * its default outfit.
+ */
+const TRANSIT_CRAWLERS = [
+  {
+    kind: 'human',
+    build: () => new HumanPlayer(TRANSIT_TILE, TRANSIT_TILE, TILE_SIZE),
+    lookOf: humanLookOf,
+    figure: activeHumanFigure,
+    undress: () => setHumanOutfit(defaultOutfitOf(PLAYER_LOOK)),
+  },
+  {
+    kind: 'cat',
+    build: () => new CatPlayer(TRANSIT_TILE, TRANSIT_TILE, TILE_SIZE),
+    lookOf: catLookOf,
+    figure: activeCatFigure,
+    undress: () => setCatOutfit(bareCatOutfit(activeCatLook())),
+  },
+] as const;
+
+// A scene change keeps a geared crawler's warm outfit: the new scene builds a
+// fresh player, empty-handed, and restores their gear onto them from a
+// snapshot. Dressing that fresh player in what their empty inventory says
+// releases every cell of the outfit they are about to be drawn in again. Each
+// crawler some item shows on is geared in the first such item.
+{
+  let crawlersGeared = 0;
+  for (const crawler of TRANSIT_CRAWLERS) {
+    const shown = Object.values(ITEM_DEF).find((def) => crawler.lookOf(def)?.kind === 'garment');
+    if (shown === undefined) continue;
+    crawlersGeared++;
+    reset();
+    const wearer = crawler.build();
+    wearer.inventory.addItem(shown.id, 1);
+    wearer.inventory.equipByItemId(shown.id);
+    const geared = crawler.figure();
+    for (let i = 0; i < TRANSIT_WARM_FRAMES; i++) {
+      beginFigureFrame();
+      wearer.render(ctx, 0, 0, TILE_SIZE);
+    }
+    const warmBytes = figureResidentBytes(geared);
+    const snapshot = snapPlayer(wearer);
+    const residentAt: Array<readonly [string, number]> = [];
+    const rebuilt = crawler.build();
+    residentAt.push(['construct', figureResidentBytes(geared)]);
+    restorePlayer(rebuilt, snapshot);
+    residentAt.push(['restore', figureResidentBytes(geared)]);
+    beginFigureFrame();
+    rebuilt.render(ctx, 0, 0, TILE_SIZE);
+    residentAt.push(['first draw', figureResidentBytes(geared)]);
+    const dropped = residentAt.filter(([, bytes]) => bytes === 0).map(([step]) => step);
+    check(
+      `a scene change keeps a geared ${crawler.kind}'s outfit resident`,
+      warmBytes > 0 && dropped.length === 0 && crawler.figure() === geared,
+      `${geared.id} held ${warmBytes} bytes before the change; it held none after ` +
+        `${dropped.join(', ') || 'no step'} and is drawing ${crawler.figure().id}`,
+    );
+    crawler.undress();
+  }
+  if (crawlersGeared === 0) {
+    console.log(
+      '  --   no item shows as a garment on either crawler; scene-change gear not replayed',
+    );
+  }
+}
+
+// Building a player never re-dresses the sprite: the outfit on it when a scene
+// change constructs the fresh player stays the one drawn and stays resident.
+// Put on directly, so it holds whether or not any item shows as a garment.
 {
   reset();
-  const human = new HumanPlayer(TRANSIT_TILE, TRANSIT_TILE, TILE_SIZE);
-  human.inventory.addItem('nightgaunt_cloak', 1);
-  human.inventory.equipByItemId('nightgaunt_cloak');
-  const geared = activeHumanFigure();
-  for (let i = 0; i < TRANSIT_WARM_FRAMES; i++) {
-    beginFigureFrame();
-    human.render(ctx, 0, 0, TILE_SIZE);
-  }
-  const warmBytes = figureResidentBytes(geared);
-  const snapshot = snapPlayer(human);
-  const residentAt: Array<readonly [string, number]> = [];
-  const rebuilt = new HumanPlayer(TRANSIT_TILE, TRANSIT_TILE, TILE_SIZE);
-  residentAt.push(['construct', figureResidentBytes(geared)]);
-  restorePlayer(rebuilt, snapshot);
-  residentAt.push(['restore', figureResidentBytes(geared)]);
-  beginFigureFrame();
-  rebuilt.render(ctx, 0, 0, TILE_SIZE);
-  residentAt.push(['first draw', figureResidentBytes(geared)]);
-  const dropped = residentAt.filter(([, bytes]) => bytes === 0).map(([step]) => step);
+  setHumanOutfit(
+    outfitOf(PLAYER_LOOK, [
+      wornGarmentOf('human', 'townsfolk_trousers'),
+      wornGarmentOf('human', 'townsfolk_shoes'),
+    ]),
+  );
+  const dressed = activeHumanFigure();
+  drawHumanSelection(ctx, 0, 0, TILE_SIZE, { row: 'idle', frame: 0, flipX: false });
+  const warmBytes = figureResidentBytes(dressed);
+  new HumanPlayer(TRANSIT_TILE, TRANSIT_TILE, TILE_SIZE);
   check(
-    "a scene change keeps a geared human's outfit resident",
-    warmBytes > 0 && dropped.length === 0 && activeHumanFigure() === geared,
-    `${geared.id} held ${warmBytes} bytes before the change; it held none after ` +
-      `${dropped.join(', ') || 'no step'} and is drawing ${activeHumanFigure().id}`,
+    "building a human keeps his sprite's outfit resident and drawn",
+    warmBytes > 0 && figureResidentBytes(dressed) > 0 && activeHumanFigure() === dressed,
+    `${dressed.id} held ${warmBytes} bytes before the build and ${figureResidentBytes(dressed)} ` +
+      `after; the sprite is drawing ${activeHumanFigure().id}`,
   );
   setHumanOutfit(defaultOutfitOf(PLAYER_LOOK));
 }
@@ -1387,6 +1449,28 @@ const TRANSIT_TILE = 3;
       `${otherRow.approxDraws} approximate draw(s), ${otherRow.bakes} bake(s), ` +
       `${otherRow.directDraws} direct draw(s)`,
   );
+}
+
+// A rotated-centre draw is a piece of its own — a severed limb, an arrow — so
+// it never borrows another state's cell: a gore piece standing in with the
+// creature's walk cell throws whole copies of the creature into the air.
+{
+  reset();
+  const figure = makeFigure('piece-fig', CHEAP_PAINT_MS);
+  drawFigureCached(ctx, figure, 'walk', 0, 0, 0, TILE_SIZE);
+  beginFigureFrame();
+  const allowanceSpender = makeFigure('piece-allowance-spender', SLOW_PAINT_MS);
+  drawFigureCached(ctx, allowanceSpender, 'walk', 0, 0, 0, TILE_SIZE);
+  drawFigureCachedRotatedCenter(ctx, figure, 'attack', 0, 0, 0, 0, TILE_SIZE, 1);
+  const piece = getFigureCacheStats();
+  check(
+    "a rotated-centre draw paints its own state rather than borrow another state's cell",
+    piece.approxDraws === 0 && piece.directDraws === 1,
+    `an unbaked 'attack' piece with only 'walk' warm and no allowance left produced ` +
+      `${piece.approxDraws} approximate draw(s) and ${piece.directDraws} direct draw(s)`,
+  );
+  releaseFigure(figure);
+  releaseFigure(allowanceSpender);
 }
 
 // The safety net: a pinned row with nothing to show gets re-queued for

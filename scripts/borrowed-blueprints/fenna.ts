@@ -13,15 +13,18 @@
 import {
   BLUEPRINTS_QUEST_PHASE_ORDER,
   type BlueprintsQuestPhase,
-} from '../../src/core/blueprintsQuestPhase';
-import { createBriarHollowState, type BriarHollowState } from '../../src/core/briarHollowState';
-import { formatCost } from '../../src/core/partyResources';
+} from '../../src/core/quests/blueprintsQuestPhase';
+import {
+  createBriarHollowState,
+  type BriarHollowState,
+} from '../../src/core/quests/briarHollowState';
+import { formatCost } from '../../src/core/items/gathering/partyResources';
 import { TILE_SIZE } from '../../src/core/constants';
-import { teachBoth } from '../../src/core/CraftSkills';
+import { teachBoth } from '../../src/core/labour/CraftSkills';
 import { EventBus } from '../../src/core/EventBus';
-import { Inventory } from '../../src/core/Inventory';
-import { TIKKA_PLANS_UNLOCKS } from '../../src/core/villageUnlocks';
-import type { VillageQuestPhase } from '../../src/core/villageQuestPhase';
+import { Inventory } from '../../src/core/items/inventory/Inventory';
+import { TIKKA_PLANS_UNLOCKS } from '../../src/core/quests/villageUnlocks';
+import type { VillageQuestPhase } from '../../src/core/quests/villageQuestPhase';
 import type { NPCMarkerType } from '../../src/creatures/QuestNPC';
 import type { ConversationRequest } from '../../src/dialog/request';
 import { FENNA, type VillagerId } from '../../src/dialog/scripts/briarHollow';

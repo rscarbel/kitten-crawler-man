@@ -52,7 +52,8 @@ globals.document = {
   },
 };
 
-const { getSpriteFootprintByKey, getSpriteDoorwayByKey } = await import('../src/core/SpriteLoader');
+const { getSpriteFootprintByKey, getSpriteDoorwayByKey } =
+  await import('../src/core/spriteAssets/SpriteLoader');
 
 const BUILDINGS_DIR = resolve('src/images/environment/buildings');
 const BUILDINGS_MANIFEST_PATH = resolve(BUILDINGS_DIR, 'manifest.json');

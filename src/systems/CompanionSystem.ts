@@ -7,7 +7,7 @@ import {
   COMPANION_LEASH_PX,
   HUMAN_ENGAGE_RANGE,
 } from '../core/constants';
-import type { SpatialGrid } from '../core/SpatialGrid';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';

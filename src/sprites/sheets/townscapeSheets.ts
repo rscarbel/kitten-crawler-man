@@ -66,7 +66,7 @@ import {
   LAUNDRY_ALLEY_NAMES,
   laundryLineSpanTiles,
 } from '../../systems/townDecorPlan';
-import { getManifestKeys, type SpriteKey } from '../../core/SpriteLoader';
+import { getManifestKeys, type SpriteKey } from '../../core/spriteAssets/SpriteLoader';
 import type { PropSheetPlan } from './propSheetPlan';
 
 /**

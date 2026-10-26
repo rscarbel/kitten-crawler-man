@@ -9,7 +9,7 @@
 import { createCanvas } from 'canvas';
 
 import { TILE_SIZE } from '../../src/core/constants.js';
-import { DIFFICULTY_PROFILES } from '../../src/core/difficultyProfiles.js';
+import { DIFFICULTY_PROFILES } from '../../src/core/difficulty/difficultyProfiles.js';
 import {
   BallOfSwine,
   LUNGE_RANGE_TILES,

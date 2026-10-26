@@ -6,8 +6,8 @@
 
 import { TILE_SIZE } from '../../src/core/constants';
 import { EventBus } from '../../src/core/EventBus';
-import { PlayerManager } from '../../src/core/PlayerManager';
-import { AbilityManager } from '../../src/core/AbilityManager';
+import { PlayerManager } from '../../src/core/party/PlayerManager';
+import { AbilityManager } from '../../src/core/skills/AbilityManager';
 import { GameMap } from '../../src/map/GameMap';
 import { FloorTypeValue, type TileContent } from '../../src/map/tileTypes';
 import { SpellSystem } from '../../src/systems/SpellSystem';
@@ -26,7 +26,7 @@ import {
   setVisibleWorldView,
   type VisibleWorldView,
   type WorldSight,
-} from '../../src/core/visibleWorldView';
+} from '../../src/core/rendering/visibleWorldView';
 import { clamp } from '../../src/utils';
 
 /** Side of the square test arena, border walls included, in tiles. */

@@ -7,10 +7,10 @@
  * during the celebration is still dealt with by walking, never by a dismiss.
  */
 
-import type { ItemId } from '../../core/ItemDefs';
+import type { ItemId } from '../../core/items/defs/ItemDefs';
 import { centerIn, inset, type Rect } from '../core/geom';
 import type { Surface, Ui } from '../core/UiRoot';
-import { itemIconPainter } from '../questReward/rewardLines';
+import { rewardIconPainter } from '../questReward/rewardLines';
 import { skinsFor } from '../theme/skins';
 import { drawGlass, strokeRounded } from '../widgets/paint';
 import { lineHeightOf, text } from '../widgets/text';
@@ -244,7 +244,10 @@ function renderFlyingPrize(
   const { ctx } = ui;
   ctx.save();
   ctx.globalAlpha *= alpha;
-  itemIconPainter(prize.item)(ctx, centerIn({ x: centre.x, y: centre.y, w: 0, h: 0 }, size, size));
+  rewardIconPainter(prize.item)(
+    ctx,
+    centerIn({ x: centre.x, y: centre.y, w: 0, h: 0 }, size, size),
+  );
   ctx.restore();
 }
 

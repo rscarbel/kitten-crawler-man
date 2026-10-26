@@ -31,12 +31,12 @@
 import { installCanvasGlobals } from './nodeCanvasGlobals';
 import { buildSiegeRig, villageMap, type SiegeRig } from './villageSiegeHarness';
 import { TILE_SIZE, PLAYER_SPEED } from '../src/core/constants';
-import { createBriarHollowState, type BriarHollowState } from '../src/core/briarHollowState';
-import { createMidgeEscortCarry, type MidgeEscortCarry } from '../src/core/midgeEscortCarry';
-import { activeDifficultyProfile } from '../src/core/difficultyProfiles';
-import { referenceStats } from '../src/core/referenceCrawler';
+import { createBriarHollowState, type BriarHollowState } from '../src/core/quests/briarHollowState';
+import { createMidgeEscortCarry, type MidgeEscortCarry } from '../src/core/quests/midgeEscortCarry';
+import { activeDifficultyProfile } from '../src/core/difficulty/difficultyProfiles';
+import { referenceStats } from '../src/core/party/referenceCrawler';
 import { clearSightOf } from '../src/systems/RenderPipeline';
-import { isWorldPointInView, setVisibleWorldView } from '../src/core/visibleWorldView';
+import { isWorldPointInView, setVisibleWorldView } from '../src/core/rendering/visibleWorldView';
 import { Cow } from '../src/creatures/Cow';
 import { SkeletonArcher } from '../src/creatures/SkeletonArcher';
 import type { Mob } from '../src/creatures/Mob';
@@ -62,7 +62,7 @@ import {
 } from '../src/systems/briarHollow/EscortAmbushSystem';
 import { getPlaytestPreset } from '../src/dev/playtestPresets';
 import { blueprintsPlaytestState } from '../src/dev/blueprintsPlaytest';
-import { blueprintsPhaseAtLeast } from '../src/core/blueprintsQuestPhase';
+import { blueprintsPhaseAtLeast } from '../src/core/quests/blueprintsQuestPhase';
 import {
   MIDGE_CALL_TIMEOUT_SECONDS,
   MIDGE_ESCORT_HP,

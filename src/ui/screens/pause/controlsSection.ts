@@ -14,7 +14,7 @@ import {
   keybindings,
   MAX_KEYS_PER_ACTION,
   type GameAction,
-} from '../../../core/Keybindings';
+} from '../../../core/input/Keybindings';
 import { splitH, type Rect } from '../../core/geom';
 import type { Ui } from '../../core/UiRoot';
 import type { ButtonVariant } from '../../theme/skins';

@@ -35,7 +35,7 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
+} from '../../core/rendering/canvasSurface';
 import { Surface, TILE_PX, positiveMod, type RGB } from '../../map/tilegen/raster';
 import { NoiseField, hashLattice } from '../../map/tilegen/noise';
 import { TILE_SIZE } from '../../core/constants';
@@ -61,7 +61,7 @@ import {
   type Side,
 } from './dungeonWallGeometry';
 import { drawDressing, type NeighbourFace, type WallDressingSet } from './dungeonWallDressing';
-import { onCanvasRecovery } from '../../core/canvasRecovery';
+import { onCanvasRecovery } from '../../core/rendering/canvasRecovery';
 
 type Ctx = CanvasRenderingContext2D;
 

@@ -20,6 +20,7 @@
  *
  * Run: npm run verify:ai-transport
  */
+import { partyOwnsGear } from '../src/loot/gearPools';
 import { crawlerName } from '../src/characters/characters';
 import {
   DEFAULT_LIMITS,
@@ -50,7 +51,8 @@ import type {
   SessionInput,
 } from '../src/ai/context/types';
 import { CHALLENGE_TEMPLATE_IDS, type ChallengeSummary } from '../src/ai/show/challenges';
-import { AchievementManager } from '../src/core/AchievementManager';
+import { AchievementManager } from '../src/core/progression/AchievementManager';
+import { AchievementAwards } from '../src/systems/AchievementAwards';
 import { TILE_SIZE } from '../src/core/constants';
 import { EventBus } from '../src/core/EventBus';
 import { CatPlayer } from '../src/creatures/CatPlayer';
@@ -86,8 +88,8 @@ const FULL_HP = 100;
 const PARTY_LEVEL = 3;
 const PARTY_TILE = 5;
 const LIMITS: WsLimits = DEFAULT_LIMITS;
-/** Past the loot box's cooldown, so a second box is judged on its own. */
-const PAST_LOOT_BOX_COOLDOWN_MS = 91_000;
+/** Past the reward chest's cooldown, so a second chest is judged on its own. */
+const PAST_REWARD_CHEST_COOLDOWN_MS = 91_000;
 const LOW_OPINION = 0.1;
 const HIGH_OPINION = 0.4;
 
@@ -179,6 +181,9 @@ interface Rig {
   readonly clients: FakeClient[];
   readonly world: { paused: boolean; intensity: AIIntensity; indicators: boolean };
   readonly toasts: string[];
+  /** The human's achievements, where an award the AI grants him is queued. */
+  readonly humanAchievements: AchievementManager;
+  readonly human: HumanPlayer;
   tokens: Array<string | null>;
   advance(ms: number): void;
   client(): FakeClient;
@@ -200,13 +205,25 @@ function buildRig(): Rig {
   const mobs: Mob[] = [];
   const toasts: string[] = [];
   const achievements = { human: new AchievementManager(), cat: new AchievementManager() };
+  const sceneBus = new EventBus();
+  const awards = new AchievementAwards({
+    humanAchievements: achievements.human,
+    catAchievements: achievements.cat,
+    human,
+    cat,
+    bus: sceneBus,
+    activeCrawler: () => (cat.isActive ? 'cat' : 'human'),
+    owns: (id) => partyOwnsGear([human, cat], id),
+  });
   let clock = START_MS;
   const clients: FakeClient[] = [];
   const rig: Rig = {
-    bus: new EventBus(),
+    bus: sceneBus,
     clients,
     world: { paused: false, intensity: 'classic', indicators: true },
     toasts,
+    humanAchievements: achievements.human,
+    human,
     tokens: [],
     advance: (ms) => {
       clock += ms;
@@ -245,7 +262,7 @@ function buildRig(): Rig {
     isInSafeRoom: () => false,
     isInCombat: () => false,
     postToast: (text) => toasts.push(text),
-    getAchievements: (target) => (target === 'human' ? achievements.human : achievements.cat),
+    getAwards: () => awards,
   };
   const session: SessionInput = {
     floorNumber: 1,
@@ -293,7 +310,7 @@ function sleep(ms: number): Promise<void> {
 
 /** A heal well inside the action's own range, so only the intensity can refuse it. */
 const HEAL_PERCENT = 20;
-const LOOT_BOX = { tier: 'Bronze', reason: 'Good show.' };
+const REWARD_CHEST = { rarity: 'Common', reason: 'Good show.' };
 const REMEMBER = { fact: `${crawlerName('human')} hums while he fights.`, kind: 'fact' };
 
 function action(
@@ -387,7 +404,9 @@ async function verifyActionResults(): Promise<void> {
   );
 
   rig.world.paused = true;
-  client.fire('ai_action', action('held-2', 'grant_loot_box', LOOT_BOX));
+  const coinsBeforeGift = rig.human.coins;
+  const presentationsBeforeGift = rig.humanAchievements.presentationCount;
+  client.fire('ai_action', action('held-2', 'grant_reward_chest', REWARD_CHEST));
   rig.world.paused = false;
   rig.world.indicators = false;
   rig.adapter.update();
@@ -396,13 +415,18 @@ async function verifyActionResults(): Promise<void> {
     resumed?.ok === true,
     `a held call runs once play resumes (${resumed?.detail ?? 'no result'})`,
   );
+  check(
+    rig.human.coins > coinsBeforeGift &&
+      rig.humanAchievements.presentationCount === presentationsBeforeGift + 1,
+    'the gifted chest pays at once: coins land and one presentation is queued',
+  );
   check(rig.adapter.feed.interventions.length === 0, 'with indicators off, nothing is shown');
 
   rig.world.indicators = true;
-  rig.advance(PAST_LOOT_BOX_COOLDOWN_MS);
-  client.fire('ai_action', action('shown-1', 'grant_loot_box', LOOT_BOX));
+  rig.advance(PAST_REWARD_CHEST_COOLDOWN_MS);
+  client.fire('ai_action', action('shown-1', 'grant_reward_chest', REWARD_CHEST));
   const shown = client.resultFor('shown-1');
-  check(shown?.ok === true, `a second box lands (${shown?.detail ?? 'no result'})`);
+  check(shown?.ok === true, `a second chest lands (${shown?.detail ?? 'no result'})`);
   check(
     rig.adapter.feed.interventions.length === 1,
     'with indicators on, a landed action is shown',
@@ -695,7 +719,7 @@ async function verifySceneHandover(): Promise<void> {
     title: 'Rat Race',
     template: CHALLENGE_TEMPLATE_IDS[0],
     objective: 'Kill rats',
-    rewardTier: 'Bronze',
+    rewardRarity: 'Common',
     offeredBy: SYSTEM_CHARACTER_NAME,
   };
   rig.rebind(rig.bus, () => {

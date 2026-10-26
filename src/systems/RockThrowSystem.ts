@@ -14,6 +14,7 @@
  * injected into a mob at spawn time.
  */
 
+import { crawlerTurnsShot } from '../gear/incomingBlows';
 import type { DamageSource, Player } from '../Player';
 import type { GameMap } from '../map/GameMap';
 import { Mob } from '../creatures/Mob';
@@ -285,6 +286,7 @@ export class RockThrowSystem implements GameSystem {
       target.takeCreditedDamage(damage, rock.owner ?? rock.thrower, 'melee', rock.attacker);
       return;
     }
+    if (crawlerTurnsShot(target, rock.attacker, rock.vx, rock.vy)) return;
     const connected = target.takeDamage(damage, source);
     if (connected) rock.attacker.noteStruckPlayer(target);
   }

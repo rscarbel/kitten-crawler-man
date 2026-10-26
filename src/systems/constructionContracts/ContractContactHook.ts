@@ -9,7 +9,7 @@
  */
 
 import type { AudioManager } from '../../audio/AudioManager';
-import type { BriarHollowState } from '../../core/briarHollowState';
+import type { BriarHollowState } from '../../core/quests/briarHollowState';
 import type { EventBus } from '../../core/EventBus';
 import type { NPCMarkerType } from '../../creatures/QuestNPC';
 import type { Conversation } from '../../dialog/Conversation';
@@ -40,6 +40,7 @@ export interface ContractContactHookDeps {
   readonly audio: Pick<AudioManager, 'playRandom'> | null;
   readonly conversation: Conversation;
   readonly flyCoins: ContractSettlementDeps['flyCoins'];
+  readonly party: ContractSettlementDeps['party'];
   /** The voice a resident standing in this room speaks in, or null when they are not here. */
   readonly speechStyleOf: (residentId: ResidentId) => CitizenSpeechStyle | null;
 }
@@ -59,6 +60,7 @@ export class ContractContactHook implements ResidentQuestHook {
       audio: deps.audio,
       conversation: deps.conversation,
       flyCoins: deps.flyCoins,
+      party: deps.party,
     });
   }
 

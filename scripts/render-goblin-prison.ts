@@ -23,12 +23,12 @@ const { createCanvas } = await import('canvas');
 const { asGameContext } = await import('./nodeGameContext.js');
 const { PREVIEW_DIR, writePreviewPng } = await import('./previewOut.js');
 const { TILE_SIZE } = await import('../src/core/constants.js');
-const { setViewportSize } = await import('../src/core/Viewport.js');
+const { setViewportSize } = await import('../src/core/rendering/Viewport.js');
 const { PRISON_LAYOUTS } = await import('../src/map/goblinPrisonLayouts.js');
 const { isPrisonCrawlerWalkable, rectContainsTile } =
   await import('../src/map/goblinPrisonPlan.js');
 const { enterPrison } = await import('./prisonInteriorHarness.js');
-type Difficulty = import('../src/core/difficultyProfiles.js').Difficulty;
+type Difficulty = import('../src/core/difficulty/difficultyProfiles.js').Difficulty;
 
 const OUT_DIR = `${PREVIEW_DIR}/goblin-prison`;
 /** Moments of the loop drawn per layout, as shares of its cycle. */

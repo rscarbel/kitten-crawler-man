@@ -13,7 +13,7 @@
  * unlisted house falls back to the common round.
  */
 
-import { makeDrunk } from '../core/StatusEffect';
+import { makeDrunk } from '../core/combat/StatusEffect';
 import { playDrinkGesture } from '../creatures/humanGestures';
 import type { Player } from '../Player';
 import {

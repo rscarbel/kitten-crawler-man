@@ -19,7 +19,7 @@
 
 import { TILE_SIZE } from '../core/constants';
 import type { GameMap, PlacedTownInteriorProp } from '../map/GameMap';
-import type { InteriorFigure } from '../core/InteriorFigure';
+import type { InteriorFigure } from '../core/rendering/InteriorFigure';
 import {
   TOWN_INTERIOR_PROPS,
   drawTownInteriorProp,

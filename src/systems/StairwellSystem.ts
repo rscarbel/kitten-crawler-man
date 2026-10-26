@@ -4,13 +4,13 @@ import type { LevelDef } from '../levels/types';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { getLevelDef } from '../levels';
 import { recommendedPartyLevelFor } from '../levels/spawner';
-import { activeDifficultyProfile } from '../core/difficultyProfiles';
-import type { DifficultyProfile } from '../core/difficultyProfiles';
+import { activeDifficultyProfile } from '../core/difficulty/difficultyProfiles';
+import type { DifficultyProfile } from '../core/difficulty/difficultyProfiles';
 import { worldText } from '../ui/world/worldText';
 import { worldPalette } from '../ui/theme/worldInk';
-import { drawSpriteKey } from '../core/SpriteRenderer';
+import { drawSpriteKey } from '../core/spriteAssets/SpriteRenderer';
 import { dungeonFloorTheme } from '../map/dungeon/floorTheme';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { clamp } from '../utils';
 
 const TILE_CENTER_OFFSET = 0.5;

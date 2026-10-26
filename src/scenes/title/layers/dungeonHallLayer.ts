@@ -12,9 +12,9 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../../core/canvasSurface';
+} from '../../../core/rendering/canvasSurface';
 import { smoothstepUnit } from '../../../map/overworld/elevation';
-import { canvasGeneration } from '../../../core/canvasRecovery';
+import { canvasGeneration } from '../../../core/rendering/canvasRecovery';
 import { DEFAULT_DUNGEON_FLOOR_THEME } from '../../../map/dungeon/floorTheme';
 import { getMaterial, paintPatch } from '../../../map/tilegen/materials';
 import { TILE_PX, type Surface } from '../../../map/tilegen/raster';

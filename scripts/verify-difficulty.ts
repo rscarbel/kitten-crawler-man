@@ -37,7 +37,7 @@ import {
   ROOSTER_PECK_WINDUP_FRAMES,
   ROOSTER_PUNCH_WINDUP_FRAMES,
 } from '../src/sprites/bigRoosterAttackTiming';
-import { BIG_ROOSTER_BOSS_TYPE } from '../src/core/bossTypes';
+import { BIG_ROOSTER_BOSS_TYPE } from '../src/core/mobs/bossTypes';
 import { BOLT_SPEED_CAP, lavaBoltSpeedForLevel } from '../src/systems/LavaBallSystem';
 import { GOBLIN_BOW_SHOTS, goblinArrowReleaseFrame } from '../src/sprites/goblinSprite';
 import {
@@ -77,7 +77,7 @@ import {
 } from '../src/systems/StairwellSystem';
 import { Goblin, GOBLIN_MAX_SPEED } from '../src/creatures/Goblin';
 import { BallOfSwine } from '../src/creatures/BallOfSwine';
-import { makeSepsis } from '../src/core/StatusEffect';
+import { makePoison } from '../src/core/combat/StatusEffect';
 import {
   BigRooster,
   type BigRoosterState,
@@ -117,7 +117,7 @@ import {
   NORMAL_AMBIENT_LEVEL_RATIO,
   NORMAL_BOSS_LEVEL_RATIO,
   type Difficulty,
-} from '../src/core/difficultyProfiles';
+} from '../src/core/difficulty/difficultyProfiles';
 import {
   bountyBossLevel,
   bountyMinionLevel,
@@ -126,7 +126,7 @@ import {
 import { generateDungeon } from '../src/map/DungeonGenerator';
 import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions';
 import { level1 } from '../src/levels/level1';
-import { withWorldSeed } from '../src/core/WorldRandom';
+import { withWorldSeed } from '../src/core/world/WorldRandom';
 import { readdirSync, readFileSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
@@ -135,7 +135,7 @@ import { level3 } from '../src/levels/level3';
 import type { LevelDef, MobLevelRange } from '../src/levels/types';
 import type { StandaloneMobKind } from '../src/levels/mobKinds';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
-import { DifficultyStats, type RoomFightDetails } from '../src/core/DifficultyStats';
+import { DifficultyStats, type RoomFightDetails } from '../src/core/difficulty/DifficultyStats';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
@@ -154,14 +154,17 @@ import {
   goblinDynamiteDodgeMarginFrames,
 } from '../src/systems/goblinBombConstants';
 import { GoblinBomber } from '../src/creatures/GoblinBomber';
-import { settings } from '../src/core/Settings';
+import { settings } from '../src/core/input/Settings';
 import { goblinBombReleaseFrame } from '../src/sprites/goblinBomberSprite';
 import { Mercenary } from '../src/creatures/Mercenary';
-import { getMercenaryTemplate, type MercenaryTemplateId } from '../src/core/mercenaryTemplates';
+import {
+  getMercenaryTemplate,
+  type MercenaryTemplateId,
+} from '../src/core/party/mercenaryTemplates';
 import {
   floorReferencePartyLevel,
   setFloorReferencePartyLevel,
-} from '../src/core/floorReferenceLevel';
+} from '../src/core/difficulty/floorReferenceLevel';
 import {
   DynamiteSystem,
   dynamiteCrawlerDamage,
@@ -172,6 +175,9 @@ import { HeatherTheBear } from '../src/creatures/HeatherTheBear';
 import { MissQuill } from '../src/creatures/MissQuill';
 import { Remex } from '../src/creatures/Remex';
 import { DarkKnight } from '../src/creatures/DarkKnight';
+
+/** A credited damage-over-time that outlasts every watch here: poison held on far past its usual run. */
+const LASTING_POISON_TICKS = 999999;
 
 /**
  * Levels probed past {@link MAX_MOB_LEVEL} for the shape checks. A curve that is
@@ -284,7 +290,7 @@ const ARCHER_TEST_DODGE_STEP_PX = 6;
 
 /** Mid-band level the boss re-levelling checks are run at. */
 /** Frames allowed for a permanent status tick to grind a levelled boss to zero. */
-const SEPSIS_SETTLE_FRAMES = 400000;
+const POISON_SETTLE_FRAMES = 400000;
 /** Enough over max HP to kill through the damage reduction a rolling ball carries. */
 const KILLING_BLOW_MULTIPLE = 20;
 /** Frames given to the burst to play out and settle, comfortably past its length. */
@@ -1084,7 +1090,7 @@ const DRIP_XP_AWARD = 10;
 const XP_TEST_START_LEVEL = 17;
 /** The game's source tree, found from this script rather than from wherever it was run. */
 const SOURCE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'src');
-const AWARD_XP_FILE = join(SOURCE_ROOT, 'core', 'awardXp.ts');
+const AWARD_XP_FILE = join(SOURCE_ROOT, 'core', 'progression', 'awardXp.ts');
 const DIRECT_XP_CALL = '.gainXp(';
 
 function sourceFilesUnder(dir: string): string[] {
@@ -1260,33 +1266,35 @@ section('re-levelling');
 
   // The other way a mob can reach zero: a status tick, which lands in
   // `Player.takeDamage` and does none of a mob's death bookkeeping. Left alone, a ball
-  // finished off by the Sepsis Crown's permanent tick — which the cat can be wearing,
-  // and the `swine` playtest preset is — drops to zero without `justDied`, so
+  // finished off by a permanent poison tick drops to zero without `justDied`, so
   // `resolveKills` skips it: no loot, no XP, no `bossDefeated`, and therefore no
   // phase-2 Tusklings and no stairwell out.
-  const septic = new BallOfSwine(0, 0, TILE_SIZE);
-  septic.setArena(0, 0);
-  septic.applyMobLevel(BOSS_TEST_LEVEL);
-  septic.fightStarted = true;
-  septic.applyStatus(makeSepsis());
-  let septicTicks = 0;
-  while (septic.hp > 0 && septicTicks < SEPSIS_SETTLE_FRAMES) {
-    septic.tickTimers();
-    septicTicks++;
+  const poisoned = new BallOfSwine(0, 0, TILE_SIZE);
+  poisoned.setArena(0, 0);
+  poisoned.applyMobLevel(BOSS_TEST_LEVEL);
+  poisoned.fightStarted = true;
+  poisoned.applyStatus(makePoison(null, LASTING_POISON_TICKS));
+  let poisonedTicks = 0;
+  while (poisoned.hp > 0 && poisonedTicks < POISON_SETTLE_FRAMES) {
+    poisoned.tickTimers();
+    poisonedTicks++;
   }
-  check(septic.hp === 0, `sepsis alone can finish the ball off (took ${septicTicks} frames)`);
-  check(septic.isAlive, 'a ball killed by a status effect still bursts rather than just stopping');
+  check(poisoned.hp === 0, `poison alone can finish the ball off (took ${poisonedTicks} frames)`);
+  check(
+    poisoned.isAlive,
+    'a ball killed by a status effect still bursts rather than just stopping',
+  );
 
-  let septicLatches = 0;
+  let poisonedLatches = 0;
   for (let frame = 0; frame < BURST_SETTLE_FRAMES; frame++) {
-    septic.updateAI([]);
-    if (septic.justDied) {
-      septicLatches++;
-      septic.justDied = false;
+    poisoned.updateAI([]);
+    if (poisoned.justDied) {
+      poisonedLatches++;
+      poisoned.justDied = false;
     }
   }
-  check(septicLatches === 1, `a status death resolves exactly once (saw ${septicLatches})`);
-  check(septic.droppedLoot !== null, 'a status death still drops the boss loot');
+  check(poisonedLatches === 1, `a status death resolves exactly once (saw ${poisonedLatches})`);
+  check(poisoned.droppedLoot !== null, 'a status death still drops the boss loot');
 }
 
 // ── Speed caps ───────────────────────────────────────────────────────────────

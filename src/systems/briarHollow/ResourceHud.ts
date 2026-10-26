@@ -9,9 +9,9 @@
  * fades in and out rather than popping.
  */
 
-import { partyCount } from '../../core/partyResources';
-import { RESOURCE_IDS, type ResourceId } from '../../core/resourceIds';
-import { resetSessionTally, sessionTallyOf } from '../../core/resourceSessionTally';
+import { partyCount } from '../../core/items/gathering/partyResources';
+import { RESOURCE_IDS, type ResourceId } from '../../core/items/gathering/resourceIds';
+import { resetSessionTally, sessionTallyOf } from '../../core/items/gathering/resourceSessionTally';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { Rect } from '../../ui/core/geom';

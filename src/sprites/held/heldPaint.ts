@@ -42,6 +42,7 @@ export interface Vec3 {
  * - `phase` — which of the item's pictures (a crackle, a flame) to show.
  * - `shaded` — held in a hand behind the body, in that arm's reduced light.
  * - `scripted` — a scripted row's own prop, painted the way the row poses it.
+ * - `leading` — which way the head's business side faces, when the socket says.
  */
 export interface HeldVisualTransform {
   readonly centre: Pt;
@@ -51,6 +52,12 @@ export interface HeldVisualTransform {
   readonly phase?: number;
   readonly shaded?: boolean;
   readonly scripted?: ScriptedPropPlacement;
+  /**
+   * The way the head's leading edge faces, camera space, where the socket
+   * decides it — a weapon's edge toward what it strikes. Absent, the edge
+   * lies along `palmNormal × axis`.
+   */
+  readonly leading?: Vec3;
 }
 
 /**
@@ -95,7 +102,7 @@ export function heldScreenFrame(
   const screenLength = Math.hypot(axis.x, axis.y);
   const lengthShare = Math.max(MIN_LENGTH_SHARE, Math.min(1, screenLength));
   const facing: HeldFacing = Math.abs(palmNormal.z) >= FLAT_FACING_MIN_Z ? 'flat' : 'edge';
-  const edge = cross(palmNormal, axis);
+  const edge = transform.leading ?? cross(palmNormal, axis);
   const edgeOnScreen = axis.x * edge.y - axis.y * edge.x;
   const mirrored = Math.abs(edgeOnScreen) > SCREEN_EPSILON ? edgeOnScreen < 0 : palmNormal.z < 0;
   if (archetypeSpec(def.archetype).heldLevel) {

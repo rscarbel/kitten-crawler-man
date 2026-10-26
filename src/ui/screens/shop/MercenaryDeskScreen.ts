@@ -6,8 +6,8 @@
  * say why. Dismiss asks through the desk's own confirm dialog, mounted above.
  */
 
-import type { MercenaryTemplate } from '../../../core/mercenaryTemplates';
-import { MERCENARY_TEMPLATES } from '../../../core/mercenaryTemplates';
+import type { MercenaryTemplate } from '../../../core/party/mercenaryTemplates';
+import { MERCENARY_TEMPLATES } from '../../../core/party/mercenaryTemplates';
 import {
   MERCENARY_DESK_SUBTITLE,
   MERCENARY_DESK_TITLE,

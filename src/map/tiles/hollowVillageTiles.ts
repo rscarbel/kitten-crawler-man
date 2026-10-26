@@ -21,8 +21,8 @@ import {
   getSpriteDefByKey,
   getSpriteExtentsPxByKey,
   type MapSpriteExtentsPx,
-} from '../../core/SpriteLoader';
-import { drawSprite, spriteStateInkTop } from '../../core/SpriteRenderer';
+} from '../../core/spriteAssets/SpriteLoader';
+import { drawSprite, spriteStateInkTop } from '../../core/spriteAssets/SpriteRenderer';
 import { isVillageStandingProp, type VillageStandingPropId } from '../../sprites/art/villageArt';
 import { villagePropSheetKey } from '../../sprites/sheets/villageSheets';
 import {

@@ -54,7 +54,7 @@ export const FLOOR_BUDGETS: Readonly<Record<AIBudgetPool, PoolAllowance>> = {
   itemValue: { perFloor: 200, scalesWithDepth: true },
   coinsGiven: { perFloor: 150, scalesWithDepth: true },
   coinsFined: { perFloor: 75, scalesWithDepth: true },
-  lootBoxPoints: { perFloor: 4, scalesWithDepth: false },
+  rewardChestPoints: { perFloor: 4, scalesWithDepth: false },
   timerSeconds: { perFloor: 180, scalesWithDepth: false },
 };
 

@@ -29,7 +29,7 @@ const MAX_SOFTENING_CREDIT = 1;
  * on the size of the hit, with *no effect at all* on the one damage class an
  * ally cannot walk away from: every damage-over-time tick in the game is one
  * point, and one point softened and rounded is still one point, so burn,
- * poison, sepsis and the rest would land at full strength. Charging whole
+ * poison and the rest would land at full strength. Charging whole
  * points off an accumulated balance makes a run of ticks cost exactly the
  * multiplier on average.
  *

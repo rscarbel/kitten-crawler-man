@@ -16,7 +16,7 @@ import {
   partyCount,
   spend,
   type ResourceCost,
-} from '../src/core/partyResources';
+} from '../src/core/items/gathering/partyResources';
 
 let failures = 0;
 function check(ok: boolean, message: string): void {

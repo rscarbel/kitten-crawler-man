@@ -13,8 +13,12 @@ import type { AudioManager } from '../../audio/AudioManager';
 import type { SoundId } from '../../audio/sounds';
 import { TILE_SIZE } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
-import type { ActiveContract, BriarHollowState, VillagerMemory } from '../../core/briarHollowState';
-import type { VillageQuestPhase } from '../../core/villageQuestPhase';
+import type {
+  ActiveContract,
+  BriarHollowState,
+  VillagerMemory,
+} from '../../core/quests/briarHollowState';
+import type { VillageQuestPhase } from '../../core/quests/villageQuestPhase';
 import {
   pickByTalkPriority,
   TALK_TIER_AMBIENT,

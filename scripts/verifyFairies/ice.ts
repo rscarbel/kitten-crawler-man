@@ -31,14 +31,14 @@ import {
   FROZEN_STATUS,
   makeChilled,
   makeFrozen,
-} from '../../src/core/StatusEffect';
-import { applyChillOnly, applyIceHit } from '../../src/core/frostStatus';
+} from '../../src/core/combat/StatusEffect';
+import { applyChillOnly, applyIceHit } from '../../src/core/combat/frostStatus';
 import {
   CHILLED_ACTION_SPEED_FACTOR,
   CHILLED_FRAMES,
   FROZEN_FRAMES,
-} from '../../src/core/statusTuning';
-import type { ResistanceType } from '../../src/core/ItemDefs';
+} from '../../src/core/combat/statusTuning';
+import type { ResistanceType } from '../../src/core/items/defs/ItemDefs';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
 import { Mob } from '../../src/creatures/Mob';

@@ -13,7 +13,7 @@
  * nothing at all.
  */
 
-import { EMPTY_ALPHA_CUTOFF } from '../src/core/spriteFrames.js';
+import { EMPTY_ALPHA_CUTOFF } from '../src/core/spriteAssets/spriteFrames.js';
 import { figureFrameCount, type FigureDef } from '../src/sprites/figure/figureDef.js';
 import {
   bakeFigurePrewarmFor,

@@ -1,4 +1,4 @@
-import { activeMusicLibrary, onMusicLibraryBound } from '../../core/MusicLibrary';
+import { activeMusicLibrary, onMusicLibraryBound } from '../../core/music/MusicLibrary';
 import type { MusicBusId, MusicTrackId } from '../sounds';
 import { musicLoopStartS } from '../sounds';
 

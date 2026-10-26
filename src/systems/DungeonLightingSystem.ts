@@ -33,8 +33,8 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../core/canvasSurface';
-import { canvasGeneration } from '../core/canvasRecovery';
+} from '../core/rendering/canvasSurface';
+import { canvasGeneration } from '../core/rendering/canvasRecovery';
 import type { GameMap } from '../map/GameMap';
 import {
   BOILER,
@@ -87,7 +87,7 @@ import {
 } from './lighting/lightCookie';
 import type { DynamicLightSink, DynamicLightSource } from './lighting/dynamicLights';
 import { drawPuddleGlints } from '../map/tiles/puddleGlints';
-import { UINT32_SPAN } from '../core/WorldRandom';
+import { UINT32_SPAN } from '../core/world/WorldRandom';
 
 // ── Tuning ──────────────────────────────────────────────────────────────────
 
@@ -434,8 +434,6 @@ export class DungeonLightingSystem implements GameSystem {
   /** The strongest static cut on each tile, 0–1, from lights that are on. */
   private readonly staticLightLevel: Float32Array;
   private ambientSurface: CanvasSurface;
-  private darknessCap: number = LIGHTING_TUNING.cap;
-  private nightVisionLevel = 0;
 
   private readonly staticLights: StaticLight[] = [];
   private readonly lightsByTile = new Map<number, StaticLight>();
@@ -685,11 +683,6 @@ export class DungeonLightingSystem implements GameSystem {
     return index < 0 ? 0 : this.tileDarkness[index];
   }
 
-  /** The current ambient cap, lowered by Night Vision. */
-  get ambientCap(): number {
-    return this.darknessCap;
-  }
-
   /**
    * Registers something that may carry lights; it is asked for them every
    * frame. Returns the function that unregisters it.
@@ -700,26 +693,6 @@ export class DungeonLightingSystem implements GameSystem {
       const index = this.sources.indexOf(source);
       if (index >= 0) this.sources.splice(index, 1);
     };
-  }
-
-  /**
-   * The active crawler's Night Vision level: each level lowers the ambient
-   * cap and lengthens the crawlers' lights.
-   */
-  setNightVisionLevel(level: number): void {
-    if (level === this.nightVisionLevel) return;
-    this.nightVisionLevel = level;
-    this.darknessCap = Math.max(
-      LIGHTING_TUNING.nightVisionMinCap,
-      LIGHTING_TUNING.cap - level * LIGHTING_TUNING.nightVisionCapDropPerLevel,
-    );
-    this.applyCap();
-    this.cacheDirty = true;
-  }
-
-  /** A crawler light's reach at the current Night Vision level, in tiles. */
-  crawlerReachTiles(baseTiles: number): number {
-    return baseTiles + this.nightVisionLevel * LIGHTING_TUNING.nightVisionReachPerLevel;
   }
 
   /**
@@ -1169,15 +1142,15 @@ export class DungeonLightingSystem implements GameSystem {
   }
 
   /**
-   * Applies the current cap to the darkness worked out by
+   * Applies the ambient cap to the darkness worked out by
    * {@link computeAmbient} and repaints the ambient image: one pass over
-   * arrays already filled, cheap enough to run when Night Vision changes.
+   * arrays already filled.
    */
   private applyCap(): void {
     const width = this.mapWidth;
     const height = this.mapHeight;
     if (width === 0 || height === 0) return;
-    const cap = this.darknessCap;
+    const cap = LIGHTING_TUNING.cap;
     const ctx = surfaceContext(this.ambientSurface);
     const image = this.ambientImage ?? ctx.createImageData(width, height);
     this.ambientImage = image;
@@ -1519,7 +1492,7 @@ export class DungeonLightingSystem implements GameSystem {
     const srcY = Math.max(0, tileY);
     const srcRight = Math.min(this.mapWidth, tileX + widthTiles);
     const srcBottom = Math.min(this.mapHeight, tileY + heightTiles);
-    c.fillStyle = `rgba(${GLOW_COLOURS[this.floorFallbackColour()].shadowRgb},${this.darknessCap})`;
+    c.fillStyle = `rgba(${GLOW_COLOURS[this.floorFallbackColour()].shadowRgb},${LIGHTING_TUNING.cap})`;
     const fullW = widthTiles * LIGHT_PX_PER_TILE;
     const fullH = heightTiles * LIGHT_PX_PER_TILE;
     const mapLeft = (srcX - tileX) * LIGHT_PX_PER_TILE;

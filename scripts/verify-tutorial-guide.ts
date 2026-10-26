@@ -10,8 +10,8 @@
  *    unless the guide points into the header row, which it then keeps clear;
  *  - a hint that wraps to three lines grows its box rather than spilling;
  *  - on touch, the call-the-cat hint clears the Follower button and its arrow;
- *  - every step points at the exact place to act: the Achievement banner (from
- *    below, at the top of the screen), the hotbar slot to press with a
+ *  - every step points at the exact place to act (the reward chest opens
+ *    itself, so its step points at nothing): the hotbar slot to press with a
  *    keyboard as on touch, the Switch button, the level badge and then a
  *    stat's "+"; a card with a lone OK, or its own "tap to continue", is left
  *    to speak for itself, with no arrow and no hint over it; the arrow to Mordecai
@@ -49,7 +49,7 @@ import { gameContext } from './nodeGameContext.js';
 
 installCanvasGlobals();
 
-const { setViewportSize } = await import('../src/core/Viewport.js');
+const { setViewportSize } = await import('../src/core/rendering/Viewport.js');
 const { TutorialController } = await import('../src/systems/TutorialController.js');
 const { noteFrameInputMode, resetInputMode } = await import('../src/ui/core/inputMode.js');
 const { worldPalette } = await import('../src/ui/theme/worldInk.js');
@@ -173,21 +173,20 @@ function baseRenderContext(overrides: Partial<RenderContext>): RenderContext {
     bagItemRects: {
       smush_tome: null,
       health_potion: null,
-      enchanted_bigboi_boxers: null,
+      lucky_hoodie: null,
       magic_missile_tome: null,
     },
     hotbarSlotRects: [],
     bagHotbarSlotRects: [],
     isDragActive: false,
-    isAchievementNotifActive: false,
     isContextMenuOpen: false,
     contextMenuOptionRects: null,
     isAbilityDialogShowing: false,
     isRewardGrantedDialogShowing: false,
     followerMenuFollowMeRect: null,
     mordecaiPosition: null,
-    achievementBannerRect: null,
-    isLootBoxOpen: false,
+    isRewardScreenOpen: false,
+    rewardsChipRect: null,
     isChestRewardOpen: false,
     switchButtonRect: null,
     levelBadgeRect: null,
@@ -326,7 +325,7 @@ section('a phone the inventory fills, on its Bag tab: the hint takes the top, cl
       bagItemRects: {
         smush_tome: smushTome,
         health_potion: null,
-        enchanted_bigboi_boxers: null,
+        lucky_hoodie: null,
         magic_missile_tome: null,
       },
     }),
@@ -418,43 +417,33 @@ section('on touch, the call-the-cat hint clears the Follower button and its arro
   }
 }
 
-section('the Achievement banner at the top of the screen is pointed at from below');
+section('the step after Mordecai names the reward chest and points at the rewards chip');
 {
-  const banner: Rect = { x: 560, y: 8, w: 320, h: 52 };
+  const chip = { x: 900, y: 120, w: 44, h: 44 };
   const drawing = draw(
     DESKTOP,
     'HUMAN_TALKED_TO_MORDECAI',
-    baseRenderContext({ achievementBannerRect: banner }),
+    baseRenderContext({ rewardsChipRect: chip }),
   );
-  check(hasArrowAt(drawing, banner), 'an arrow rests on the banner');
+  check(hasArrowAt(drawing, chip), 'an arrow rests on the "Rewards waiting" chip');
   check(
-    drawing.arrowTips.every((tip) => tip.y >= 0),
-    'and stays on screen, under the banner rather than above the screen edge',
+    hintMentions(drawing, 'reward chest'),
+    `the hint names the reward chest (${hintText(drawing)})`,
   );
-  check(
-    hintMentions(drawing, 'Achievement banner'),
-    `the hint names the banner (${hintText(drawing)})`,
-  );
+  const hidden = draw(DESKTOP, 'HUMAN_TALKED_TO_MORDECAI', baseRenderContext({}));
+  check(hidden.arrowTips.length === 0, 'no arrow while the chip is not shown');
 }
 
 section('a card with a single OK, or its own “continue”, is left to speak for itself');
 {
-  const card = draw(
-    DESKTOP,
-    'HUMAN_TALKED_TO_MORDECAI',
-    baseRenderContext({ isAchievementNotifActive: true }),
-  );
-  check(card.arrowTips.length === 0, 'the achievement card: no arrow on its lone OK');
-  check(!hintMentions(card, 'banner'), 'and the banner hint is not drawn over the card');
-
   const reveal = draw(
     DESKTOP,
     'HUMAN_TALKED_TO_MORDECAI',
-    baseRenderContext({ isLootBoxOpen: true }),
+    baseRenderContext({ isRewardScreenOpen: true }),
   );
   check(
     reveal.arrowTips.length === 0 && reveal.texts.length === 0,
-    'the loot-box reveal, which says "tap to continue" itself, is left clear',
+    'the reward chest screen, which carries its own controls, is left clear',
   );
 
   const abilityCard = draw(
@@ -611,7 +600,7 @@ section('a menu open with nothing left to do in it says how to leave, and points
 const { TILE_SIZE } = await import('../src/core/constants.js');
 const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
-const { applyGodModeToPlayer } = await import('../src/core/GodMode.js');
+const { applyGodModeToPlayer } = await import('../src/core/state/GodMode.js');
 const { TUTORIAL_CHEST_POS, TUTORIAL_STAIR_FOOTPRINT, TUTORIAL_SAFE_ENTRANCE_TILE } =
   await import('../src/map/TutorialMap.js');
 
@@ -933,10 +922,10 @@ section('a step finished inside a menu completes while the menu halts the world'
   const bag = tutorialAt('HUMAN_OPENED_ACHIEVEMENT');
   bag.human.inventory.addItem('smush_tome', 1);
   bag.human.inventory.addItem('health_potion', 1);
-  bag.human.inventory.addItem('enchanted_bigboi_boxers', 1);
+  bag.human.inventory.addItem('lucky_hoodie', 1);
   bag.human.inventory.placeOnHotbar('smush_tome', 0);
   bag.human.inventory.placeOnHotbar('health_potion', 1);
-  bag.human.inventory.equipment.equipById('enchanted_bigboi_boxers');
+  bag.human.inventory.equipment.equipById('lucky_hoodie');
   bag.tutorial.updateUnderMenus(bag.human, bag.cat);
   check(
     bag.tutorial.state === 'HUMAN_EQUIPPED_SMUSH' && bag.tutorial.needsAutoCloseMenus,

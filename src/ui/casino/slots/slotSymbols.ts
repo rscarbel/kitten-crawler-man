@@ -13,8 +13,8 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../../core/canvasSurface';
-import { onCanvasRecovery } from '../../../core/canvasRecovery';
+} from '../../../core/rendering/canvasSurface';
+import { onCanvasRecovery } from '../../../core/rendering/canvasRecovery';
 import { paintSlotSymbol } from '../../../sprites/art/slotSymbolArt';
 import type { SlotSymbol } from '../../../systems/casino/slots/slotSymbols';
 

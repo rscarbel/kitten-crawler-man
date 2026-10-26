@@ -30,6 +30,14 @@ export const IRON: MetalRamp = {
   glint: '#eef3f8',
 };
 
+/** A warm brass, a shade greener and duller than her gold. */
+export const BRASS: MetalRamp = {
+  shadow: '#3e2a06',
+  base: '#c9a23e',
+  light: '#f2dc8a',
+  glint: '#fffbe6',
+};
+
 export const SILVER: MetalRamp = {
   shadow: '#5c6670',
   base: '#b8c4cf',

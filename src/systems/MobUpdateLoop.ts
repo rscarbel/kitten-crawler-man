@@ -6,7 +6,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
-import { perfMonitor } from '../core/PerfMonitor';
+import { perfMonitor } from '../core/perf/PerfMonitor';
 import type { Player } from '../Player';
 import { BrindleGrub } from '../creatures/BrindleGrub';
 import { BallOfSwine } from '../creatures/BallOfSwine';
@@ -19,12 +19,12 @@ import {
   tryThreatenTrebuchet,
 } from '../creatures/siege/trebuchetThreat';
 import type { DefenseStructures } from './briarHollow/DefenseStructures';
-import { setVisibleWorldView } from '../core/visibleWorldView';
+import { setVisibleWorldView } from '../core/rendering/visibleWorldView';
 import { HealingFairy } from '../creatures/fairies/HealingFairy';
 import { setMarkedGroundSources } from '../creatures/tactics/markedGround';
 import type { GroundHazardSource } from './GroundHazardSource';
-import { SeparationGrid } from '../core/SeparationGrid';
-import type { SpatialGrid } from '../core/SpatialGrid';
+import { SeparationGrid } from '../core/world/SeparationGrid';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
 import {
   accumulateSeparationForces,
   pairContactRadius,
@@ -177,10 +177,10 @@ export class MobUpdateLoop implements GameSystem {
 
     const playerTargets = this.playerTargets;
     playerTargets.length = 0;
-    // A crawler behind a shut stall door is out of the world: nothing may pick
-    // them, and a chase already on them loses them.
-    if (!human.concealed) playerTargets.push(human);
-    if (!cat.concealed) playerTargets.push(cat);
+    // A crawler behind a shut stall door, or vanished by her gear, is out of
+    // sight: nothing may pick them, and a chase already on them loses them.
+    if (!human.hiddenFromMobs) playerTargets.push(human);
+    if (!cat.hiddenFromMobs) playerTargets.push(cat);
     if (extraTargets) {
       for (const t of extraTargets) {
         // Defend-quest NPCs (e.g. Goblin Mother) are handled by Bugaboo's own

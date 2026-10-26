@@ -264,8 +264,7 @@ const DRAW_BY_VIEW: Readonly<
 
 /**
  * His shirt — the rig's jacket, recut and recoloured by his look — and the
- * cast's trousers and shoes in his own colours. None of the crawler's gear:
- * no cloak, no gauntlet, no trollskin band at the collar.
+ * cast's trousers and shoes in his own colours. None of the crawler's gear.
  */
 const INCUBUS_OUTFIT = stillOutfit(outfitOf(INCUBUS_LOOK, [TOWNSFOLK_TROUSERS, TOWNSFOLK_SHOES]));
 

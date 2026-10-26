@@ -1,5 +1,5 @@
 import { TILE_SIZE } from '../core/constants';
-import { viewportHeight, viewportWidth } from '../core/Viewport';
+import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
 import type { Player } from '../Player';
 import {
   HIRELING_REVIVE_WINDOW_FRAMES,

@@ -30,12 +30,12 @@ globals.document = {
 };
 
 const { TILE_SIZE } = await import('../src/core/constants');
-const { loadSprites } = await import('../src/core/SpriteLoader');
+const { loadSprites } = await import('../src/core/spriteAssets/SpriteLoader');
 const { renderCanvas } = await import('../src/map/TileRenderer');
 const { FLOOR_ART_SEEDS } = await import('../src/map/ground/artSeedAlphabet.js');
 const { worldText } = await import('../src/ui/world/worldText');
 const { VillageAmbience } = await import('../src/systems/briarHollow/VillageAmbience');
-const { setViewportSize } = await import('../src/core/Viewport');
+const { setViewportSize } = await import('../src/core/rendering/Viewport');
 const { buildSiegeRig } = await import('./villageSiegeHarness');
 const { IMMINENT_FRAMES } = await import('../src/systems/briarHollow/VillageAssaultSystem');
 const { Necromancer } = await import('../src/creatures/Necromancer');

@@ -4,9 +4,9 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
-import { perfMonitor } from '../../core/PerfMonitor';
-import { viewportHeight, viewportWidth } from '../../core/Viewport';
+} from '../../core/rendering/canvasSurface';
+import { perfMonitor } from '../../core/perf/PerfMonitor';
+import { viewportHeight, viewportWidth } from '../../core/rendering/Viewport';
 import {
   MAZE_CURTAINS,
   MAZE_FINAL_CHAMBER,

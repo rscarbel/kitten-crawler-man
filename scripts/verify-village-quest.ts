@@ -24,7 +24,7 @@
  */
 
 import { installCanvasGlobals } from './nodeCanvasGlobals';
-import { setViewportSize } from '../src/core/Viewport';
+import { setViewportSize } from '../src/core/rendering/Viewport';
 import type { ConversationRequest } from '../src/dialog/request';
 import { crawlerName } from '../src/characters/characters';
 import { TILE_SIZE } from '../src/core/constants';
@@ -32,8 +32,8 @@ import {
   captureBriarHollowState,
   parseBriarHollowStateSnapshot,
   restoreBriarHollowState,
-} from '../src/core/briarHollowState';
-import type { VillageQuestPhase } from '../src/core/villageQuestPhase';
+} from '../src/core/quests/briarHollowState';
+import type { VillageQuestPhase } from '../src/core/quests/villageQuestPhase';
 import type { Mob } from '../src/creatures/Mob';
 import { Necromancer } from '../src/creatures/Necromancer';
 import {
@@ -54,7 +54,7 @@ import {
   IMMINENT_FRAMES,
   assaultDifficulty,
 } from '../src/systems/briarHollow/VillageAssaultSystem';
-import { activeDifficultyProfile } from '../src/core/difficultyProfiles';
+import { activeDifficultyProfile } from '../src/core/difficulty/difficultyProfiles';
 import { BOMBER_SIEGE_STRUCTURE_MULTIPLIER, GoblinBomber } from '../src/creatures/GoblinBomber';
 import { GoblinDynamiter } from '../src/creatures/GoblinDynamiter';
 import {

@@ -19,7 +19,7 @@
 
 import { TILE_SIZE } from '../core/constants';
 import type { GameMap } from '../map/GameMap';
-import type { InteriorFigure } from '../core/InteriorFigure';
+import type { InteriorFigure } from '../core/rendering/InteriorFigure';
 import {
   clubFigureWalkCyclePx,
   clubFigureWalkFrames,
@@ -36,7 +36,7 @@ import {
   CLUB_INTERIOR_H,
   CLUB_PATRON_COUNT,
   isClubPatronTile,
-} from '../core/clubLayout';
+} from '../core/club/clubLayout';
 
 const PATRON_SPEED_MIN = 0.32;
 const PATRON_SPEED_MAX = 0.85;

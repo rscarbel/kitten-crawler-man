@@ -9,23 +9,28 @@
  * hotbar on every platform.
  */
 
+import { BOUND_PIECE_REFUSAL, BOUND_SLOT_REFUSAL } from '../../ui/screens/inventory/gearRules';
+import { cooldownKeyOf } from '../../gear/gearHooks';
 import type { SoundId } from '../../audio/sounds';
-import type { AbilityManager } from '../../core/AbilityManager';
+import type { AbilityManager } from '../../core/skills/AbilityManager';
 import { playDrinkGesture } from '../../creatures/humanGestures';
-import { displayHp } from '../../core/crawlerFormulas';
-import { ITEM_DEF, type InventoryItem, type ItemId } from '../../core/ItemDefs';
-import { itemIsTradable } from '../../core/itemTrade';
+import { displayHp } from '../../core/party/crawlerFormulas';
+import { ITEM_DEF, type InventoryItem, type ItemId } from '../../core/items/defs/ItemDefs';
+import { itemIsTradable } from '../../core/items/inventory/itemTrade';
 import { crawlerName } from '../../characters/characters';
-import { type CrawlerKind } from '../../core/SkillManager';
-import { POTION_EFFECT_SOUND_DELAY, TIMED_POTIONS } from '../../core/timedPotions';
-import { eatFood, isFoodId } from '../../core/foods';
+import { type CrawlerKind } from '../../core/skills/SkillManager';
+import {
+  POTION_EFFECT_SOUND_DELAY,
+  TIMED_POTIONS,
+} from '../../core/items/consumables/timedPotions';
+import { eatFood, isFoodId } from '../../core/items/consumables/foods';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
-import { partyCoins } from '../../core/partyCoins';
+import { partyCoins } from '../../core/party/partyCoins';
 import { NowPlayingCard } from '../../ui/hud/nowPlaying';
 import { listenForCaptions, SoundCaptions } from '../../ui/hud/captions';
-import { settings } from '../../core/Settings';
-import { visibleWorldView } from '../../core/visibleWorldView';
+import { settings } from '../../core/input/Settings';
+import { visibleWorldView } from '../../core/rendering/visibleWorldView';
 import { HudToasts, type ToastOptions } from '../../ui/hud/toasts';
 import {
   InventoryActions,
@@ -131,7 +136,7 @@ export interface MenusKitDeps {
 
 /** What the kit's surfaces need from the scene that mounts them. */
 export interface MenusSurfaceHooks {
-  /** The scene's achievements, stats and loot-box openers the pause screen draws from. */
+  /** The scene's achievements and stats the pause screen draws from. */
   readonly pauseFrame: () => PauseFrame;
   /** Closes the pause menu the way the scene's pause key does, with its side effects. */
   readonly togglePause: () => void;
@@ -274,7 +279,6 @@ export class MenusKit {
             id: 'human',
             name: crawlerName('human'),
             owner: pm.human,
-            drawnWeaponId: pm.human.drawnWeaponId,
             heldItemId: deps.heldItemId?.() ?? null,
           }
         : { id: 'cat', name: crawlerName('cat'), owner: pm.cat };
@@ -290,7 +294,7 @@ export class MenusKit {
       coins: () => partyCoins(pm.human, pm.cat),
       coinSplit: () =>
         `${crawlerName('human')} ${pm.human.coins} · ${crawlerName('cat')} ${pm.cat.coins}`,
-      cooldownFor: (item) => this.itemCooldowns.get(item.abilityId ?? item.id) ?? null,
+      cooldownFor: (item) => this.itemCooldowns.get(cooldownKeyOf(item)) ?? null,
       restrictions: restrictions === undefined ? undefined : () => restrictions(),
       onBlockedDrag: () => deps.onBlockedInventoryDrag?.(),
       onHotbarRefused: (_item, reason) => this.announce(reason, HOTBAR_REFUSED_TOAST),
@@ -406,12 +410,6 @@ export class MenusKit {
     const shown = this.inventoryScreen.isOpen ? this.inventoryScreen.member() : null;
     if (shown === null) return pm.active();
     return shown.id === 'human' ? pm.human : pm.cat;
-  }
-
-  /** The weapon the bag's owner has drawn, for the hotbar's in-hand badge. */
-  inventoryDrawnWeaponId(): ItemId | null {
-    const holder = this.inventoryPlayer();
-    return holder instanceof HumanPlayer ? holder.drawnWeaponId : null;
   }
 
   skillBookFlowHost(): SkillBookFlowHost {
@@ -714,7 +712,10 @@ export class MenusKit {
       actions.pendingEquipSource = null;
       // A refusal — wrong wearer, or the same id already worn elsewhere — must
       // not announce a change that never happened.
-      if (source === 'hotbar') {
+      const toEquip = slotContentsAt(holder, source, equipSlot);
+      if (toEquip !== null && holder.inventory.equipment.boundOccupant(toEquip) !== null) {
+        this.toasts.post(BOUND_SLOT_REFUSAL);
+      } else if (source === 'hotbar') {
         if (holder.inventory.canEquipHotbarSlot(equipSlot)) {
           holder.inventory.equipHotbarSlot(equipSlot);
         }
@@ -729,7 +730,11 @@ export class MenusKit {
       actions.pendingUnequipSlot = null;
       actions.pendingUnequipSource = null;
       const item = slotContentsAt(holder, source, unequipSlot);
-      if (item !== null) holder.inventory.unequipById(item.id);
+      if (item !== null && holder.inventory.equipment.isRemovalLocked(item.id)) {
+        this.toasts.post(BOUND_PIECE_REFUSAL);
+      } else if (item !== null) {
+        holder.inventory.unequipById(item.id);
+      }
     }
 
     const dropped = actions.pendingDropItem;
@@ -777,7 +782,8 @@ export class MenusKit {
     // Clamped to what is still held: the quantity dialog confirms on a later
     // frame than the tap that opened it, and the stack may have shrunk since.
     const drop = Math.min(quantity, holder.inventory.countOf(id));
-    if (drop <= 0) return;
+    // A bound curse cannot come off, so it cannot leave her pack either.
+    if (drop <= 0 || holder.inventory.equipment.isRemovalLocked(id)) return;
     holder.inventory.unequipById(id);
     holder.inventory.removeItems(id, drop);
     // A weapon thrown on the floor is out of hand, for the same reason worn gear
@@ -798,8 +804,13 @@ export class MenusKit {
    * than at each place the menu is opened.
    */
   private itemIsTradableNow(item: InventoryItem): boolean {
-    const partner = this.partnerOf(this.inventoryPlayer());
-    return itemIsTradable(item, partner instanceof HumanPlayer ? 'human' : 'cat');
+    const holder = this.inventoryPlayer();
+    const partner = this.partnerOf(holder);
+    return itemIsTradable(
+      item,
+      partner instanceof HumanPlayer ? 'human' : 'cat',
+      holder.inventory.equipment,
+    );
   }
 
   /**
@@ -818,9 +829,11 @@ export class MenusKit {
     const trade = Math.min(quantity, heldQuantity);
     if (trade <= 0) return;
     const partner = this.partnerOf(holder);
+    if (holder.inventory.equipment.isRemovalLocked(id)) return;
     holder.inventory.unequipById(id);
     holder.inventory.removeItems(id, trade);
     holder.onInventoryChanged();
+    holder.gear.transferTo(id, partner.gear);
     partner.inventory.addItem(id, trade);
     partner.onInventoryChanged();
     this.world.audio?.play(UI_TAP_SOUND);

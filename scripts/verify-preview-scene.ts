@@ -30,7 +30,7 @@ const { createCanvas } = await import('canvas');
 const { asGameContext } = await import('./nodeGameContext.js');
 const { PreviewScene } = await import('../src/scenes/PreviewScene.js');
 const { PRIMARY_BUTTON } = await import('../src/ui/core/pointer.js');
-const { setViewportSize } = await import('../src/core/Viewport.js');
+const { setViewportSize } = await import('../src/core/rendering/Viewport.js');
 const { CatPreviewScene } = await import('../src/scenes/CatPreviewScene.js');
 const { CAT_ROWS } = await import('../src/sprites/art/catFigure.js');
 const { catGripOf } = await import('../src/sprites/art/catSockets.js');
@@ -38,9 +38,9 @@ const { MOUTH_CARRY_VISUAL_IDS } = await import('../src/sprites/held/heldVisualI
 const { activeCatFigure, activeCatLook } = await import('../src/sprites/catSprite.js');
 const { CAT_LOOKS } = await import('./catLooks.js');
 const { FACING_VIEWS } = await import('../src/sprites/facingView.js');
-const { ITEM_DEF, isItemId, wearerAllows } = await import('../src/core/ItemDefs.js');
-const { TOOL_TIERS } = await import('../src/core/toolTiers.js');
-const { EYES_OF_SPLATTER_ID } = await import('../src/abilities/eyesOfSplatter.js');
+const { catLookOf, ITEM_DEF, isItemId, wearerAllows } =
+  await import('../src/core/items/defs/ItemDefs.js');
+const { TOOL_TIERS } = await import('../src/core/items/gathering/toolTiers.js');
 
 setViewportSize(PHONE_VIEWPORT.width, PHONE_VIEWPORT.height);
 
@@ -256,30 +256,41 @@ for (const look of CAT_LOOKS) {
     );
     return new Set(slots).size !== slots.length;
   });
+  const drawnAsGarment = catWear.filter((id) => catLookOf(ITEM_DEF[id])?.kind === 'garment');
+  check(
+    'the picker offers garment sets exactly when something is drawn as a garment on her',
+    garmentSets.length > 0 === drawnAsGarment.length > 0,
+    `${garmentSets.length} set(s), ${drawnAsGarment.length} item(s) drawn as a garment`,
+  );
   check(
     'each garment set can be worn at once',
-    garmentSets.length > 0 && clashing.length === 0,
+    clashing.length === 0,
     clashing.map((outfit) => outfit.label).join(','),
   );
 
-  const bareFigure = activeCatFigure().id;
-  const shadesIndex = scene.outfitChoices.findIndex(
-    (outfit) => outfit.items.length === 1 && outfit.items[0] === EYES_OF_SPLATTER_ID,
-  );
-  for (let i = 0; i < shadesIndex; i++) scene.tap('outfit');
-  scene.step(1);
-  check(
-    'picking the Eyes of Splatter puts the shades on her sprite',
-    activeCatFigure().id !== bareFigure,
-    `${scene.outfit.label}: ${activeCatFigure().id}`,
-  );
-  while (scene.outfit.items.length > 0) scene.tap('outfit');
-  scene.step(1);
-  check(
-    'and stepping round to bare takes them off',
-    activeCatFigure().id === bareFigure,
-    activeCatFigure().id,
-  );
+  const firstGarment = drawnAsGarment.at(0);
+  if (firstGarment === undefined) {
+    console.log('  --   no item is drawn as a garment on her; outfit pick not replayed');
+  } else {
+    const bareFigure = activeCatFigure().id;
+    const garmentIndex = scene.outfitChoices.findIndex(
+      (outfit) => outfit.items.length === 1 && outfit.items[0] === firstGarment,
+    );
+    for (let i = 0; i < garmentIndex; i++) scene.tap('outfit');
+    scene.step(1);
+    check(
+      `picking ${ITEM_DEF[firstGarment].name} puts it on her sprite`,
+      activeCatFigure().id !== bareFigure,
+      `${scene.outfit.label}: ${activeCatFigure().id}`,
+    );
+    while (scene.outfit.items.length > 0) scene.tap('outfit');
+    scene.step(1);
+    check(
+      'and stepping round to bare takes it off',
+      activeCatFigure().id === bareFigure,
+      activeCatFigure().id,
+    );
+  }
 
   const tierCount = TOOL_TIERS.axe.length + TOOL_TIERS.pickaxe.length;
   check(
@@ -333,8 +344,9 @@ for (const look of CAT_LOOKS) {
   check('every compass action renders', rendered, [...actionsSeen].join(','));
 }
 
-const { HumanPreviewScene } = await import('../src/scenes/HumanPreviewScene.js');
-const { weaponStatsOf } = await import('../src/core/ItemDefs.js');
+const { HumanPreviewScene, LIVE_SCRIPT_LAP_TICKS } =
+  await import('../src/scenes/HumanPreviewScene.js');
+const { weaponStatsOf } = await import('../src/core/items/defs/ItemDefs.js');
 const { HELD_VISUALS } = await import('../src/sprites/held/heldVisuals.js');
 const { motionSetOf } = await import('../src/sprites/art/human/motionSets.js');
 const { activeHumanFigure, activeHumanLook, motionSetOfRow } =
@@ -396,7 +408,7 @@ for (const look of HUMAN_LOOKS) {
     scene.tap('weapon');
     const id = scene.pickedWeapon;
     if (id === null) continue;
-    if (scene.livePlayer.drawnWeaponId !== id) wrongHand.push(id);
+    if (scene.livePlayer.mainHandWeaponId !== id) wrongHand.push(id);
     const weapon = weaponStatsOf(id);
     if (weapon === null) continue;
     const set = motionSetOf(HELD_VISUALS[weapon.heldVisual]);

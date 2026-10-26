@@ -23,7 +23,7 @@ import {
   drawSpiderGroundTelegraphs,
   drawSpiderTelegraphOutlines,
 } from './grotesqueSpiderTelegraphs';
-import { makeStuck, makeSpitVenom } from '../core/StatusEffect';
+import { makeStuck, makeSpitVenom } from '../core/combat/StatusEffect';
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import { tileSpeedFactor } from '../map/tileSpeed';
 import {
@@ -31,7 +31,7 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../core/canvasSurface';
+} from '../core/rendering/canvasSurface';
 import { PLAYER_HIT_FLASH_MARGIN_TILES } from '../Player';
 import { hasRoomToMove } from '../map/findWalkableTile';
 import type { GameMap } from '../map/GameMap';

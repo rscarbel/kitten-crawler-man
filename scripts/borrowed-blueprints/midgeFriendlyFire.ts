@@ -14,7 +14,7 @@
  */
 
 import { TILE_SIZE } from '../../src/core/constants';
-import { makeBurn, makePoison } from '../../src/core/StatusEffect';
+import { makeBurn, makePoison } from '../../src/core/combat/StatusEffect';
 import { Cow } from '../../src/creatures/Cow';
 import { Goblin } from '../../src/creatures/Goblin';
 import { Mongo } from '../../src/creatures/Mongo';

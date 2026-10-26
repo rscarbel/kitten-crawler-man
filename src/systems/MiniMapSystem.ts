@@ -4,10 +4,10 @@ import {
   freshSurfaceContext,
   releaseSurface,
   type CanvasSurface,
-} from '../core/canvasSurface';
+} from '../core/rendering/canvasSurface';
 import { TILE_SIZE } from '../core/constants';
 import type { Mob } from '../creatures/Mob';
-import type { SpatialGrid } from '../core/SpatialGrid';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { GameSystem } from './GameSystem';
 import { frameTime } from '../utils';
 import { worldText } from '../ui/world/worldText';

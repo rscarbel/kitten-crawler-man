@@ -15,10 +15,10 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../core/canvasSurface';
+} from '../core/rendering/canvasSurface';
 import { rgb } from './art/town/townArt';
 import { getTownRamp } from './art/town/townPalette';
-import { onCanvasRecovery } from '../core/canvasRecovery';
+import { onCanvasRecovery } from '../core/rendering/canvasRecovery';
 
 const TAU = Math.PI * 2;
 

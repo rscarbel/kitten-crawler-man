@@ -1,5 +1,5 @@
-import type { AbilityDef } from '../core/AbilityManager';
-import { drawSpriteKey } from '../core/SpriteRenderer';
+import type { AbilityDef } from '../core/skills/AbilityManager';
+import { drawSpriteKey } from '../core/spriteAssets/SpriteRenderer';
 import type { Rect } from '../ui/core/geom';
 import { iconSquare } from '../ui/icons/iconSquare';
 

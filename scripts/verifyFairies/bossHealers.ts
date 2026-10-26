@@ -25,15 +25,15 @@
  */
 
 import { MOB_GRID_CELL_SIZE, TILE_SIZE } from '../../src/core/constants';
-import { SpatialGrid } from '../../src/core/SpatialGrid';
+import { SpatialGrid } from '../../src/core/world/SpatialGrid';
 import { EventBus } from '../../src/core/EventBus';
-import { settings } from '../../src/core/Settings';
-import { DIFFICULTY_PROFILES, type Difficulty } from '../../src/core/difficultyProfiles';
-import { createCircusQuestProgress } from '../../src/core/CircusQuestProgress';
-import { createAnchorQuestProgress } from '../../src/core/AnchorQuestProgress';
-import { createMurderQuestProgress } from '../../src/core/MurderQuestProgress';
-import { createDoomsdayProgress } from '../../src/core/DoomsdayProgress';
-import { withWorldSeed } from '../../src/core/WorldRandom';
+import { settings } from '../../src/core/input/Settings';
+import { DIFFICULTY_PROFILES, type Difficulty } from '../../src/core/difficulty/difficultyProfiles';
+import { createCircusQuestProgress } from '../../src/core/quests/CircusQuestProgress';
+import { createAnchorQuestProgress } from '../../src/core/quests/AnchorQuestProgress';
+import { createMurderQuestProgress } from '../../src/core/quests/MurderQuestProgress';
+import { createDoomsdayProgress } from '../../src/core/quests/DoomsdayProgress';
+import { withWorldSeed } from '../../src/core/world/WorldRandom';
 import { GameMap, TOWER_FLOOR_COUNT } from '../../src/map/GameMap';
 import { ARENA_INTERIOR_RADIUS_TILES } from '../../src/map/arenaGeometry';
 import { roomDoorways } from '../../src/map/roomDoorways';

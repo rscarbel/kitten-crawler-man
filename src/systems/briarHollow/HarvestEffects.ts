@@ -8,7 +8,7 @@
  */
 
 import { TILE_SIZE } from '../../core/constants';
-import type { HarvestKind } from '../../core/craftPerks';
+import type { HarvestKind } from '../../core/labour/craftPerks';
 import { worldText } from '../../ui/world/worldText';
 
 /** Chips a single strike throws, fewest and most. */

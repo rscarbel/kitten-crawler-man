@@ -13,7 +13,7 @@ import {
   progressFrameIndex,
   timeFrameIndex,
   walkFrameIndex,
-} from '../core/SpriteRenderer';
+} from '../core/spriteAssets/SpriteRenderer';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import type { EyePlacement } from './eyePlacement';
 import {
@@ -234,6 +234,8 @@ function runsWhenFast(build: RoosterBuild): boolean {
 
 /** More ground than a rooster's sprint or a knockback shove covers in one tick. */
 const TELEPORT_TILES_PER_TICK = 1;
+/** A foot comes down every half turn of a gait's phase. */
+const STRIDE_PHASE_PER_STEP = Math.PI;
 
 /**
  * One rooster's animation clocks.
@@ -255,6 +257,9 @@ export class RoosterAnimationClock {
   private walkAdvance = 0;
   private runClockPhase = 0;
   private outpacingWalk = false;
+  /** The phase of whichever gait he is drawn in, for telling when a foot lands. */
+  private strideClockPhase = 0;
+  private footLanded = false;
 
   /**
    * @param idleOffsetSeconds how far into the idle this bird starts, so a flock
@@ -285,6 +290,17 @@ export class RoosterAnimationClock {
     this.walkAdvance = gaitAdvance(this.build, 'walk', coveredTiles);
     const runAdvance = gaitAdvance(this.build, 'sprint', coveredTiles);
     this.runClockPhase = (this.runClockPhase + runAdvance) % FULL_TURN;
+
+    const shownAdvance = this.outpacingWalk ? runAdvance : this.walkAdvance;
+    const stepBefore = Math.floor(this.strideClockPhase / STRIDE_PHASE_PER_STEP);
+    this.strideClockPhase = (this.strideClockPhase + shownAdvance) % FULL_TURN;
+    const stepAfter = Math.floor(this.strideClockPhase / STRIDE_PHASE_PER_STEP);
+    this.footLanded = shownAdvance > 0 && stepBefore !== stepAfter;
+  }
+
+  /** Whether one of his feet came down this tick. */
+  get footfall(): boolean {
+    return this.footLanded;
   }
 
   /** The walk phase this tick's ground is worth, for `walkFrameSpeed`. */

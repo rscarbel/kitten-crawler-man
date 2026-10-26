@@ -21,7 +21,7 @@
  * Run: npx tsx scripts/bench-separation.ts
  */
 
-import { SeparationGrid } from '../src/core/SeparationGrid';
+import { SeparationGrid } from '../src/core/world/SeparationGrid';
 import { TILE_SIZE } from '../src/core/constants';
 import {
   accumulateFromAllPairs,

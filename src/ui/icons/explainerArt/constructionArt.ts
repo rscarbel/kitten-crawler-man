@@ -4,7 +4,7 @@
  */
 
 import type { IllustrationRect } from './illustration';
-import { RESOURCE_IDS } from '../../../core/resourceIds';
+import { RESOURCE_IDS } from '../../../core/items/gathering/resourceIds';
 import type { PalisadeTier } from '../../../map/tileTypes';
 import { PALISADE_DIRS, paintPalisadeForReview } from '../../../map/tiles/hollowPalisadeTiles';
 import { TREBUCHET_COCKED_ANGLE, drawTrebuchet } from '../../../sprites/art/trebuchetArt';

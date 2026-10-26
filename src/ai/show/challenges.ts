@@ -4,14 +4,14 @@
  * creature, how long), and `AIChallengeSystem` interprets each template's
  * fixed rule set against the floor's events.
  *
- * Fairness: a challenge only ever puts a box at stake. It never stops the
+ * Fairness: a challenge only ever puts a reward chest at stake. It never stops the
  * crawlers doing anything — drinking a potion during a no-potion challenge
  * just fails it — so the worst a challenge can cost is the reward and a
  * taunt in front of the viewers.
  */
 
 import { crawlerName } from '../../characters/characters';
-import type { BoxTier } from '../../core/AchievementManager';
+import type { Rarity } from '../../core/items/defs/rarity';
 
 export const CHALLENGE_TEMPLATE_IDS = [
   'slay',
@@ -127,7 +127,7 @@ export interface ChallengeSpec {
   /** A spawn type key, or {@link ANY_MOB}. */
   readonly mobType: string;
   readonly seconds: number;
-  readonly rewardTier: BoxTier;
+  readonly rewardRarity: Rarity;
   /** The line the offer card shows; may be empty. */
   readonly pitch: string;
   /** Shown to the player, loudly, when the challenge is failed. */
@@ -141,7 +141,7 @@ export interface ChallengeSummary {
   readonly title: string;
   readonly template: ChallengeTemplateId;
   readonly objective: string;
-  readonly rewardTier: BoxTier;
+  readonly rewardRarity: Rarity;
   readonly offeredBy: string;
 }
 

@@ -29,13 +29,16 @@ import {
   parseBriarHollowStateSnapshot,
   restoreBriarHollowState,
   type BriarHollowState,
-} from '../src/core/briarHollowState';
-import { spend, type ResourceCost } from '../src/core/partyResources';
-import { RESOURCE_IDS, type ResourceId } from '../src/core/resourceIds';
-import { constructionDiscount } from '../src/core/craftPerks';
-import { CONSTRUCTION_UNLOCK_IDS, grantConstructionUnlocks } from '../src/core/villageUnlocks';
-import { PlayerManager } from '../src/core/PlayerManager';
-import { AbilityManager } from '../src/core/AbilityManager';
+} from '../src/core/quests/briarHollowState';
+import { spend, type ResourceCost } from '../src/core/items/gathering/partyResources';
+import { RESOURCE_IDS, type ResourceId } from '../src/core/items/gathering/resourceIds';
+import { constructionDiscount } from '../src/core/labour/craftPerks';
+import {
+  CONSTRUCTION_UNLOCK_IDS,
+  grantConstructionUnlocks,
+} from '../src/core/quests/villageUnlocks';
+import { PlayerManager } from '../src/core/party/PlayerManager';
+import { AbilityManager } from '../src/core/skills/AbilityManager';
 import { MenusKit } from '../src/systems/kits/MenusKit';
 import { ConstructionKit } from '../src/systems/briarHollow/ConstructionKit';
 import { StructureHold } from '../src/systems/briarHollow/structureHold';
@@ -44,7 +47,7 @@ import { Bugaboo } from '../src/creatures/Bugaboo';
 import { DefendQuestSystem } from '../src/systems/DefendQuestSystem';
 import { Conversation } from '../src/dialog/Conversation';
 import { GRATE_SPIKES_BASE_HP, GrateSpikesMenu } from '../src/systems/GrateSpikesMenu';
-import type { CrawlerKind } from '../src/core/SkillManager';
+import type { CrawlerKind } from '../src/core/skills/SkillManager';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { Rat } from '../src/creatures/Rat';

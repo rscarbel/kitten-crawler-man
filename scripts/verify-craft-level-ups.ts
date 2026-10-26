@@ -15,7 +15,7 @@ import { HudToasts } from '../src/ui/hud/toasts';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { TILE_SIZE } from '../src/core/constants';
-import { RESOURCING_XP_PER_BASIC_HARVEST } from '../src/core/CraftSkills';
+import { RESOURCING_XP_PER_BASIC_HARVEST } from '../src/core/labour/CraftSkills';
 
 /** Harvests simulated to comfortably cross several Resourcing levels (L1→L2 alone costs 1000 XP at 26 XP/harvest, i.e. ~39 harvests). */
 const SIMULATED_HARVEST_COUNT = 300;

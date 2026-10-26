@@ -1,20 +1,20 @@
-import type { SavedWorld } from '../core/SavedWorld';
-import type { PlayerSnapshot } from '../core/PlayerSnapshot';
-import type { SerializedAbilityState } from '../core/AbilityManager';
-import type { SerializedAchievements } from '../core/AchievementManager';
-import type { GameStatsSnapshot } from '../core/GameStats';
-import type { PartyCraftsState } from '../core/partyCrafts';
+import type { SavedWorld } from '../core/save/SavedWorld';
+import type { PlayerSnapshot } from '../core/save/PlayerSnapshot';
+import type { SerializedAbilityState } from '../core/skills/AbilityManager';
+import type { SerializedAchievements } from '../core/progression/AchievementManager';
+import type { GameStatsSnapshot } from '../core/progression/GameStats';
+import type { PartyCraftsState } from '../core/labour/partyCrafts';
 import type {
   OwedWheelItem,
   PendingWheelOutcome,
   WheelCrawler,
   WheelQuestFreeSpins,
-} from '../core/WheelLedger';
-import type { BloodVomitRemaining } from '../core/bloodVomitSave';
-import type { SerializedMusicLibrary } from '../core/MusicLibrary';
-import { parseGameProgress } from '../core/saveFormat';
-import { PAGE_SAVE_LATCH, type ProgressStorage } from '../core/progressPersistence';
-import { wipeOwed } from '../core/wipeMarker';
+} from '../core/save/WheelLedger';
+import type { BloodVomitRemaining } from '../core/save/bloodVomitSave';
+import type { SerializedMusicLibrary } from '../core/music/MusicLibrary';
+import { parseGameProgress } from '../core/save/saveFormat';
+import { PAGE_SAVE_LATCH, type ProgressStorage } from '../core/save/progressPersistence';
+import { wipeOwed } from '../core/save/wipeMarker';
 
 /** HTTP status code for server error (fallback for API errors). */
 const HTTP_SERVER_ERROR = 500;
@@ -64,8 +64,8 @@ export interface GameProgress {
    */
   crafts?: PartyCraftsState;
   /**
-   * Each crawler's unlocked achievements, unread notices and unopened loot
-   * boxes. Absent on saves written before achievements were persisted — those
+   * Each crawler's unlocked achievements, unread notices and the paid rewards
+   * still waiting for the reward screen. Absent on saves written before achievements were persisted — those
    * resume with none. Unknown until parsed: the server returns this blob as it
    * was stored, so it is screened by `AchievementManager.fromSerialized`.
    */

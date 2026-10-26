@@ -12,8 +12,8 @@ import {
   createConstructionContractsState,
   parseBriarHollowStateSnapshot,
   restoreBriarHollowState,
-} from '../../src/core/briarHollowState';
-import { isRecord, ownEntry } from '../../src/core/guards';
+} from '../../src/core/quests/briarHollowState';
+import { isRecord, ownEntry } from '../../src/core/util/guards';
 import {
   completeContract,
   issueContract,

@@ -19,7 +19,7 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../../core/canvasSurface';
+} from '../../../core/rendering/canvasSurface';
 import { drawRadialGlow, type GlowStop } from '../../radialGlow';
 import { hashUnit } from '../../flameStamps';
 import { fillSoftEllipse } from '../softShade';

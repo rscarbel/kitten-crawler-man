@@ -16,7 +16,7 @@
 
 import type { Player } from '../Player';
 import type { Mob } from './Mob';
-import type { SpatialGrid } from '../core/SpatialGrid';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
 
 let mobGrid: SpatialGrid<Mob> | null = null;
 

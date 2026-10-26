@@ -16,23 +16,23 @@
 
 import { TILE_SIZE } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
-import { ITEM_DEF } from '../../core/ItemDefs';
-import { type HarvestKind, thrallCount } from '../../core/craftPerks';
-import type { PartyTools } from '../../core/PartyTools';
-import type { ToolKind, ToolTier } from '../../core/toolTiers';
+import { ITEM_DEF } from '../../core/items/defs/ItemDefs';
+import { type HarvestKind, thrallCount } from '../../core/labour/craftPerks';
+import type { PartyTools } from '../../core/items/gathering/PartyTools';
+import type { ToolKind, ToolTier } from '../../core/items/gathering/toolTiers';
 import {
   harvestAward,
   harvestIntervalTicks,
   harvestKindForTool,
   resourceForHarvestKind,
   thrallHarvestXp,
-} from '../../core/harvestYield';
+} from '../../core/labour/harvestYield';
 import {
   startThrallCooldown,
   THRALL_DEPLETION_COOLDOWN_SECONDS,
   thrallCooldownTicksLeft,
   tickThrallCooldowns,
-} from '../../core/thrallCooldowns';
+} from '../../core/labour/thrallCooldowns';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { GameMap } from '../../map/GameMap';
@@ -47,6 +47,9 @@ import type { NodeLedger } from './NodeLedger';
 import { harvestKindAt } from './harvestNodes';
 
 type Crawler = HumanPlayer | CatPlayer;
+
+/** A thrall wears no gear, so nothing adds to what it gathers. */
+const THRALL_GEAR_YIELD_BONUS = 0;
 
 const TICKS_PER_SECOND = 60;
 /** How long a thrall works before it fades away. */
@@ -419,7 +422,12 @@ export class ThrallSystem {
       return;
     }
     const yieldMultiplier = this.deps.partyTools.yieldMultiplier(thrall.tool);
-    const { amount, carry } = harvestAward(yieldMultiplier, thrall.carry, level);
+    const { amount, carry } = harvestAward(
+      yieldMultiplier,
+      thrall.carry,
+      level,
+      THRALL_GEAR_YIELD_BONUS,
+    );
     thrall.carry = carry;
     grantResource(summoner, resource, amount);
     summoner.craftSkills.addXp('resourcing', thrallHarvestXp(yieldMultiplier));

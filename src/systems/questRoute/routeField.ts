@@ -10,7 +10,7 @@
  * when it was built, and the guide that owns it decides when to build again.
  */
 
-import { MinHeap } from '../../core/MinHeap';
+import { MinHeap } from '../../core/util/MinHeap';
 import type { GameMap } from '../../map/GameMap';
 import { findNearbyWalkableTile } from '../../map/findWalkableTile';
 import { tileCoordKey, tileIndex } from '../../map/tileIndex';

@@ -1,4 +1,4 @@
-import { progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import { progressFrameIndex, timeFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { figureFrameCount } from './figure/figureDef';
 import {
   drawFigureCached,

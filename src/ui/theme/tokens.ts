@@ -33,12 +33,18 @@ export const palette = {
     muted: '#6C7589',
     inverse: '#0B0E14',
     disabled: '#4A5163',
+    /** A machine voice: the System AI's terminal lines. */
+    terminal: '#5ED3F0',
   },
   accent: {
     base: '#F5B83D',
     hover: '#FFC95C',
     press: '#D99A22',
     soft: 'rgba(245, 184, 61, 0.14)',
+    /** The bright gold of a win: the logo's face, a poker winner's glow, award sparkles. */
+    celebrate: '#F5C84C',
+    /** The cool spark thrown among the gold of an award. */
+    celebrateCool: '#5ED3F0',
   },
   state: { success: '#3DD68C', danger: '#FF5D5D', warning: '#FFB020', info: '#5AA9FF' },
   meter: {
@@ -48,6 +54,8 @@ export const palette = {
     xp: '#9B87FF',
     stamina: '#3DD68C',
     boss: '#B36BFF',
+    /** The viewers' favour, on its meter and its pill. */
+    favor: '#5ED3F0',
     track: 'rgba(255, 255, 255, 0.08)',
     ghost: 'rgba(255, 255, 255, 0.35)',
   },
@@ -62,17 +70,19 @@ export const palette = {
     quest: '#F5B83D',
     kit: '#5ED3D1',
   },
-  /** Loot-box rarity, lowest to highest: the box's frame, rays and reward accents. */
-  tier: {
-    bronze: '#D08A4E',
-    silver: '#C9D1DC',
-    gold: '#F5C84C',
-    /** White-silver, brighter and whiter than Silver, so the two never read as one tier. */
-    platinum: '#F1F6FF',
-    /** The cool blue sheen that sweeps a Platinum box; Platinum's second colour. */
-    platinumSheen: '#8CC4FF',
-    legendary: '#B98CFF',
-    celestial: '#5ED3F0',
+  /**
+   * The rarity ladder, lowest to highest: reward frames, rays and accents.
+   * `base` is the rarity's own colour, `light` its highlight and sheen, `deep`
+   * its shadow and rim, `glow` the halo and burst it throws.
+   */
+  rarity: {
+    common: { base: '#C9B28C', light: '#EADCBF', deep: '#7A5F3C', glow: '#F2E4C6' },
+    uncommon: { base: '#4CC46A', light: '#9EEBAE', deep: '#1E6B35', glow: '#7DFF9C' },
+    rare: { base: '#4C8EFF', light: '#A0C4FF', deep: '#1D4AA6', glow: '#6FB2FF' },
+    epic: { base: '#A86BFF', light: '#D4B6FF', deep: '#562BA3', glow: '#C68EFF' },
+    legendary: { base: '#FF9A2E', light: '#FFCD7C', deep: '#A6530B', glow: '#FFB648' },
+    /** Pearl white whose halo leans prismatic, so it never reads as a pale Common. */
+    divine: { base: '#F4F1FF', light: '#FFFFFF', deep: '#B4ACD9', glow: '#B6F0FF' },
   },
   /** Metal and felt for the game-show set pieces: reward plaques, the merc desk, the casino. */
   material: {

@@ -16,7 +16,7 @@
 
 import { EventBus } from '../../src/core/EventBus.js';
 import { PLAYER_SPEED, TILE_SIZE } from '../../src/core/constants.js';
-import { referenceStats } from '../../src/core/referenceCrawler.js';
+import { referenceStats } from '../../src/core/party/referenceCrawler.js';
 import { CatPlayer } from '../../src/creatures/CatPlayer.js';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer.js';
 import { BigRooster, type BigRoosterState } from '../../src/creatures/BigRooster.js';

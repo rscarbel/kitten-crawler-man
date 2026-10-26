@@ -1,7 +1,7 @@
 import type { Player } from '../Player';
 import type { EyePlacement } from '../sprites/eyePlacement';
-import type { LootDrop } from './Mob';
-import { Mob } from './Mob';
+import { Mob, type PlayerDamageType } from './Mob';
+import { SoundCueQueue, type RoosterSoundCue } from './creatureSoundCues';
 import { TILE_SIZE } from '../core/constants';
 import { normalize } from '../utils';
 import { pickLine } from '../dialog/line';
@@ -356,6 +356,7 @@ export class BigRooster extends Mob {
 
   /** Peck and punch, shared with the whole flock. */
   private readonly strikes = new RoosterStrikes();
+  private readonly soundCues = new SoundCueQueue<RoosterSoundCue>();
 
   private pickupTimer = 0;
   /** The rack spot he bent down to, fixed when the pickup starts. */
@@ -480,6 +481,7 @@ export class BigRooster extends Mob {
     this.crowTimer = 0;
     this.hasCrowed = false;
     this.enrageCrowPending = false;
+    this.soundCues.clear();
     this.tauntTimer = 0;
     this.currentTaunt = null;
     this.plateCooldownTimer = 0;
@@ -600,6 +602,21 @@ export class BigRooster extends Mob {
     };
   }
 
+  /** The sounds he asked for since the last call, emptied by the call. */
+  takeSoundCues(): readonly RoosterSoundCue[] {
+    return this.soundCues.take();
+  }
+
+  override takeDamageFrom(
+    amount: number,
+    attacker: Player | null,
+    damageType: PlayerDamageType | null = 'melee',
+  ): void {
+    const previousHp = this.hp;
+    super.takeDamageFrom(amount, attacker, damageType);
+    if (this.hp < previousHp && this.hp > 0) this.soundCues.raise('hurt');
+  }
+
   /** The dumbbell in flight — centre and velocity in world pixels, frames flown — or null. */
   get thrownDumbbell(): {
     readonly x: number;
@@ -623,6 +640,7 @@ export class BigRooster extends Mob {
     this.aiTick++;
     this.animationClock.tick(this.x, this.y, this.tileSize, this.isEnraged);
     this.walkFrameSpeed = this.animationClock.walkRadians;
+    if (this.animationClock.footfall) this.soundCues.raise('step');
 
     this.framesSinceLastAttack++;
     // A cooldown, unlike an attack clock, runs whether or not anyone is in
@@ -638,6 +656,7 @@ export class BigRooster extends Mob {
       for (const part of ROOSTER_GORE_PARTS) prewarmFigureState(BIG_ROOSTER_FIGURE, part);
       this.isEnraged = true;
       this.enrageCrowPending = true;
+      this.soundCues.raise('ruffle');
       this.setBaseSpeed(BIG_ROOSTER_SPEED_ENRAGED);
     }
 
@@ -765,6 +784,9 @@ export class BigRooster extends Mob {
         this.framesSinceLastAttack = 0;
       },
       scaledCooldown: (baseFrames) => this.scaledCooldownFrames(baseFrames),
+      impact: (kind) => {
+        this.soundCues.raise(kind === 'peck' ? 'peck' : 'swing');
+      },
     };
   }
 
@@ -793,6 +815,7 @@ export class BigRooster extends Mob {
     prewarmBigRoosterRows(CROW_ROWS);
     this.state = 'crow';
     this.crowTimer = CROW_FRAMES;
+    this.soundCues.raise('crow');
     this.hasCrowed = true;
     this.enrageCrowPending = false;
     this.isMoving = false;
@@ -1025,6 +1048,7 @@ export class BigRooster extends Mob {
   private beginSlam(target: Player): void {
     prewarmRoosterRow('big', 'slam');
     this.state = 'slam_windup';
+    this.soundCues.raise('effort');
     this.slamTimer = BIG_ROOSTER_SLAM_WINDUP_FRAMES;
     this.isMoving = false;
     this.clearAStarPath();
@@ -1106,6 +1130,7 @@ export class BigRooster extends Mob {
   private beginClubSwing(target: Player): void {
     prewarmRoosterRow('big', 'club_swing');
     this.state = 'club_windup';
+    this.soundCues.raise('effort');
     this.clubTimer = CLUB_SWING_WINDUP_FRAMES;
     this.isMoving = false;
     this.clearAStarPath();
@@ -1137,6 +1162,7 @@ export class BigRooster extends Mob {
   private resolveClubSwing(targets: Player[]): void {
     const aim = this.clubAim;
     if (aim === null) return;
+    this.soundCues.raise('swing');
     const reach = this.tileSize * CLUB_REACH_TILES;
     const ox = this.x + this.tileSize * CENTER_OFFSET;
     const oy = this.y + this.tileSize * CENTER_OFFSET;
@@ -1158,6 +1184,7 @@ export class BigRooster extends Mob {
       const connected = this.dealDamage(target, CLUB_DAMAGE, CLUB_ATTACK_TYPE);
       if (!connected) continue;
       target.damageFlash = DAMAGE_FLASH_CLUB;
+      this.soundCues.raise('clubImpact');
       // Along the swing when the target stands on top of him, so a blow from
       // the arc never shoves nowhere.
       const pushX = distance === 0 ? aim.x : dx;
@@ -1189,6 +1216,7 @@ export class BigRooster extends Mob {
     this.clearAStarPath();
     this.faceToward(target);
     this.strikes.begin(kind, this.facingX, this.facingY);
+    this.soundCues.raise('effort');
     return true;
   }
 
@@ -1623,13 +1651,6 @@ export class BigRooster extends Mob {
     this.requestDumbbellAt = null;
   }
 
-  protected rollLootItems(killer: Player | null): LootDrop['items'] {
-    const items = super.rollLootItems(killer);
-    items.push({ id: 'enchanted_crown_sepsis_whore', quantity: 1 });
-    items.push({ id: 'fae_scale_crupper', quantity: 1 });
-    return items;
-  }
-
   /** How far through the slam row he is, or null when he is not slamming. */
   private get slamProgress(): number | null {
     const inWindup = this.state === 'slam_windup';
@@ -1724,10 +1745,6 @@ export class BigRooster extends Mob {
    */
   override get cullMarginTiles(): number {
     return BIG_ROOSTER_ART_MARGIN_TILES;
-  }
-
-  protected override get statusLabelClearanceTiles(): number {
-    return this.artClearanceTiles;
   }
 
   /**

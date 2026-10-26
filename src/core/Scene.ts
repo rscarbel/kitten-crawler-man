@@ -1,24 +1,24 @@
-import { errorIdentity, takeSaveStackDrainRequest } from './drawFailure';
+import { errorIdentity, takeSaveStackDrainRequest } from './rendering/drawFailure';
 import { updateFrameTime } from '../utils';
 import { bindPointerEvents, PointerInput } from '../ui/core/pointer';
 import type { UiRoot } from '../ui/core/UiRoot';
 import { rebindCaptureArmed } from '../ui/screens/pause/rebindCapture';
 import { beginFigureFrame, setFigureWorldPixelRatio } from '../sprites/figure/figureFrameCache';
 import { beginEnvironmentArtFrame } from '../map/environmentArtCache';
-import { beginFrameCostTally, closeFrameCost, lastFrameCost } from './frameCost';
-import { beginRenderFrame } from './renderFrameClock';
-import { releaseIdleRecentSurfaces } from './recentSurfaceCache';
-import { beginCanvasRecoveryFrame, watchForCanvasLoss } from './canvasRecovery';
+import { beginFrameCostTally, closeFrameCost, lastFrameCost } from './perf/frameCost';
+import { beginRenderFrame } from './rendering/renderFrameClock';
+import { releaseIdleRecentSurfaces } from './rendering/recentSurfaceCache';
+import { beginCanvasRecoveryFrame, watchForCanvasLoss } from './rendering/canvasRecovery';
 import { closeAboveDarkness } from '../systems/lighting/aboveDarkness';
-import { perfMonitor } from './PerfMonitor';
-import { renderQuality } from './RenderQuality';
+import { perfMonitor } from './perf/PerfMonitor';
+import { renderQuality } from './perf/RenderQuality';
 import {
   getRenderScale,
   setRenderScaleValue,
   setViewportSize,
   viewportHeight,
   viewportWidth,
-} from './Viewport';
+} from './rendering/Viewport';
 
 /** Milliseconds per second. */
 const MS_PER_SECOND = 1000;

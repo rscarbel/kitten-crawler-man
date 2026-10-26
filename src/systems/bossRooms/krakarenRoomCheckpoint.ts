@@ -1,4 +1,4 @@
-import { isRecord } from '../../core/guards';
+import { isRecord } from '../../core/util/guards';
 
 /** What the Krakaren clone lab has to put back after a death. */
 export interface KrakarenRoomCheckpoint {

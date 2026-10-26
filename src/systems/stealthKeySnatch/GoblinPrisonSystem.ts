@@ -52,8 +52,8 @@
  * - **Speed buffs and potions** (the bathroom's `refreshed` included): only
  *   change how fast a crawler walks, which the patrols are timed to survive;
  *   detection is geometric and does not care.
- * - **Night Vision and darkness changes**: being seen is being inside a
- *   shape, never how lit a crawler is, so they change nothing.
+ * - **Darkness changes**: being seen is being inside a shape, never how lit
+ *   a crawler is, so they change nothing.
  * - **Recall and travel**: refused, as in every interior
  *   (`refuseAnchorIndoors`); the only way out is the exit by the entrance.
  * - **Dynamite on walls**: nothing in the prison breaks. Its grid has no
@@ -65,9 +65,9 @@ import type { AudioManager } from '../../audio/AudioManager';
 import type { AudioScope } from '../../audio/AudioScope';
 import { TILE_SIZE } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
-import type { InteriorFigure } from '../../core/InteriorFigure';
-import type { SpatialGrid } from '../../core/SpatialGrid';
-import { viewportHeight, viewportWidth } from '../../core/Viewport';
+import type { InteriorFigure } from '../../core/rendering/InteriorFigure';
+import type { SpatialGrid } from '../../core/world/SpatialGrid';
+import { viewportHeight, viewportWidth } from '../../core/rendering/Viewport';
 import type { Mob, PlayerDamageType } from '../../creatures/Mob';
 import { PrisonCellDoor } from '../../creatures/PrisonCellDoor';
 import { PrisonerGoblin } from '../../creatures/PrisonerGoblin';

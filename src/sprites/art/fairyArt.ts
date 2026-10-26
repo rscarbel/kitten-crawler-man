@@ -32,7 +32,7 @@
  */
 
 import { type Pt, clamp01, clampAlpha, deg, easeOut, lerp, mix, rgba } from './bipedArt';
-import { allocCanvas, releaseSurface, surfaceContext } from '../../core/canvasSurface';
+import { allocCanvas, releaseSurface, surfaceContext } from '../../core/rendering/canvasSurface';
 import { withClip } from './softShade';
 import type { FairyKind } from './fairyTiming';
 

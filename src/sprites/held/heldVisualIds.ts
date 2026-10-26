@@ -33,12 +33,22 @@ export const SCRIPTED_PROP_VISUAL_IDS = [
 
 /** Looks a weapon item may name: each is held in a weapon grip archetype. */
 export const WEAPON_HELD_VISUAL_IDS = [
-  'fury_of_taranis',
-  'slingshot',
+  'rebar_shiv',
+  'pipe_wrench',
+  'rattlestick_sling',
+  'fire_axe',
+  'gravediggers_spade',
+  'stormcaller',
+  'the_last_word',
+  'the_last_word_awakened',
   'plain_arming_sword',
   'spiked_club',
   'felling_axe',
 ] as const;
+
+/** Looks an off-hand armour piece is held as: each is held in an off-hand grip archetype. */
+export const OFF_HAND_HELD_VISUAL_IDS = ['pot_lid_buckler'] as const;
+export type OffHandHeldVisualId = (typeof OFF_HAND_HELD_VISUAL_IDS)[number];
 
 /** Small things the cat crawler carries across her jaws. */
 export const MOUTH_CARRY_VISUAL_IDS = [
@@ -56,6 +66,7 @@ export const FIXTURE_TOOL_VISUAL_IDS = ['striker_mallet'] as const;
 
 export const HELD_VISUAL_IDS = [
   ...WEAPON_HELD_VISUAL_IDS,
+  ...OFF_HAND_HELD_VISUAL_IDS,
   'quest_scythe',
   ...TOOL_HELD_VISUAL_IDS,
   ...SCRIPTED_PROP_VISUAL_IDS,

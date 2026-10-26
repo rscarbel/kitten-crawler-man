@@ -19,10 +19,10 @@ import {
   costRequirements,
   spend,
   type ResourceCost,
-} from '../../../core/partyResources';
+} from '../../../core/items/gathering/partyResources';
 import { TILE_SIZE } from '../../../core/constants';
 import { activeInputMode, byInputMode } from '../../../ui/core/inputMode';
-import { blueprintsPhaseAtLeast } from '../../../core/blueprintsQuestPhase';
+import { blueprintsPhaseAtLeast } from '../../../core/quests/blueprintsQuestPhase';
 import {
   PASTURE_FENCE_SECTION_COUNT,
   pastureFenceSections,

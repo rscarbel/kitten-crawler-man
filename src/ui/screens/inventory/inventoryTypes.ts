@@ -4,8 +4,8 @@
  * `pending*` hand-off the scene resolves.
  */
 
-import type { InventoryItem, ItemCategory, ItemId } from '../../../core/ItemDefs';
-import type { CrawlerKind } from '../../../core/SkillManager';
+import type { InventoryItem, ItemCategory, ItemId } from '../../../core/items/defs/ItemDefs';
+import type { CrawlerKind } from '../../../core/skills/SkillManager';
 import type { Player } from '../../../Player';
 import type { InventoryActions } from './InventoryActions';
 
@@ -14,7 +14,7 @@ export type InventoryTab = 'bag' | 'character';
 /** A crawler whose pack the screen shows. `HumanPlayer` and `CatPlayer` both satisfy it. */
 export type InventoryOwner = Pick<
   Player,
-  'inventory' | 'strength' | 'intelligence' | 'constitution' | 'dexterity'
+  'inventory' | 'gear' | 'strength' | 'intelligence' | 'constitution' | 'dexterity'
 >;
 
 export interface InventoryMember {
@@ -22,8 +22,6 @@ export interface InventoryMember {
   /** What the companion switcher calls them. */
   readonly name: string;
   readonly owner: InventoryOwner;
-  /** The weapon drawn in hand, marked as worn in the hotbar row. */
-  readonly drawnWeaponId?: ItemId | null;
   /** Something else in hand and not yet spent — a readied stick of dynamite — marked the same way. */
   readonly heldItemId?: ItemId | null;
 }

@@ -20,7 +20,7 @@ import { asGameContext } from './nodeGameContext.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import { EventBus } from '../src/core/EventBus.js';
-import { setViewportSize } from '../src/core/Viewport.js';
+import { setViewportSize } from '../src/core/rendering/Viewport.js';
 import { GameMap } from '../src/map/GameMap.js';
 import { renderCanvas, renderDecorationsOverlay } from '../src/map/TileRenderer.js';
 import { getLevelDef } from '../src/levels/index.js';

@@ -15,9 +15,9 @@ import {
   type CanvasSurface,
   releaseSurface,
   resizeSurface,
-} from '../../../core/canvasSurface';
-import { canvasGeneration } from '../../../core/canvasRecovery';
-import { renderQuality } from '../../../core/RenderQuality';
+} from '../../../core/rendering/canvasSurface';
+import { canvasGeneration } from '../../../core/rendering/canvasRecovery';
+import { renderQuality } from '../../../core/perf/RenderQuality';
 import { TITLE_INK, titleRgb, titleRgba, type TitleRgb } from '../../../ui/theme/titleInk';
 import { HALL_DEPTH, floorRowBelow, pxPerTileAt, titleHall } from '../titleHall';
 import { applyTitleCamera, type TitleLayer } from '../titleLayer';

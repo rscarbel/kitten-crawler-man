@@ -5,7 +5,7 @@
  * species-dispatched figure (skyfowl) can present the same shape.
  */
 
-import { walkFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import { walkFrameIndex, timeFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { evenIdleFrameAtSeconds } from './art/human/timing';
 import {
   drawFigureCached,

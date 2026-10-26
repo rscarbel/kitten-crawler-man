@@ -81,11 +81,11 @@ import {
   reportCanvasAllocationFailure,
   runCanvasRecovery,
   watchForCanvasLoss,
-} from '../src/core/canvasRecovery.js';
-import { CanvasContextUnavailableError } from '../src/core/canvasSurface.js';
-import { deviceMemoryBudgetScale, memoryBudgetScale } from '../src/core/deviceMemoryBudget.js';
-import { beginRenderFrame } from '../src/core/renderFrameClock.js';
-import { getSpriteDefByKey } from '../src/core/SpriteLoader.js';
+} from '../src/core/rendering/canvasRecovery.js';
+import { CanvasContextUnavailableError } from '../src/core/rendering/canvasSurface.js';
+import { deviceMemoryBudgetScale, memoryBudgetScale } from '../src/core/perf/deviceMemoryBudget.js';
+import { beginRenderFrame } from '../src/core/rendering/renderFrameClock.js';
+import { getSpriteDefByKey } from '../src/core/spriteAssets/SpriteLoader.js';
 import {
   asVarietyTier,
   FULL_VARIETY_TIER,
@@ -93,8 +93,8 @@ import {
   MINIMAL_VARIETY_TIER,
   stepVarietyTierDown,
   varietyTier,
-} from '../src/core/varietyTier.js';
-import type { MobVariantFamily } from '../src/core/mobVariantFamily.js';
+} from '../src/core/perf/varietyTier.js';
+import type { MobVariantFamily } from '../src/core/mobs/mobVariantFamily.js';
 import type { Mob } from '../src/creatures/Mob.js';
 import { MOB_KINDS } from '../src/levels/mobKinds.js';
 import { liveSpawnContext, spawnMob, type SpawnContext } from '../src/levels/spawnFunnel.js';

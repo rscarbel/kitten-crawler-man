@@ -9,7 +9,7 @@
  * a guard's cone is cast against is the grid the gate proved.
  */
 
-import type { Difficulty } from '../core/difficultyProfiles';
+import type { Difficulty } from '../core/difficulty/difficultyProfiles';
 import {
   PRISON_ANCHOR_CHARS,
   PRISON_CHAR,

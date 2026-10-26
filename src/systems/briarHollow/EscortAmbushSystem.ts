@@ -39,9 +39,12 @@
 
 import { TILE_SIZE } from '../../core/constants';
 import type { AudioManager } from '../../audio/AudioManager';
-import { applySpawnDifficulty, type DifficultyProfile } from '../../core/difficultyProfiles';
-import type { MidgeEscortCarry } from '../../core/midgeEscortCarry';
-import { isWorldPointInView, visibleWorldView } from '../../core/visibleWorldView';
+import {
+  applySpawnDifficulty,
+  type DifficultyProfile,
+} from '../../core/difficulty/difficultyProfiles';
+import type { MidgeEscortCarry } from '../../core/quests/midgeEscortCarry';
+import { isWorldPointInView, visibleWorldView } from '../../core/rendering/visibleWorldView';
 import type { Mob } from '../../creatures/Mob';
 import type { Player } from '../../Player';
 import { RaisedRatkin } from '../../creatures/RaisedRatkin';

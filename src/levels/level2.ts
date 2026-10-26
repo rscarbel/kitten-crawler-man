@@ -303,7 +303,7 @@ export const level2: LevelDef = {
       },
     ],
   },
-  slingshotDrops: true,
+  worldGearDrops: true,
   hasCollapseTimer: true,
   collapseTimeLimitFrames: LEVEL2_COLLAPSE_TIME_LIMIT_FRAMES,
   hasTreasureRoomGuards: true,

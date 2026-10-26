@@ -15,9 +15,9 @@
  * Run: npx tsx scripts/verify-separation.ts
  */
 
-import { MAX_CELLS_PER_BODY, SeparationGrid } from '../src/core/SeparationGrid';
+import { MAX_CELLS_PER_BODY, SeparationGrid } from '../src/core/world/SeparationGrid';
 import { mulberry32 } from '../src/sprites/person/rng';
-import { SpatialGrid } from '../src/core/SpatialGrid';
+import { SpatialGrid } from '../src/core/world/SpatialGrid';
 import { MOB_GRID_CELL_SIZE, TILE_SIZE } from '../src/core/constants';
 import {
   accumulateFromAllPairs,

@@ -92,6 +92,8 @@ export interface RoosterStrikeBody {
   readonly land: (target: Player, spec: RoosterStrikeSpec) => void;
   /** The rooster's level-scaled cooldown for a base length. */
   readonly scaledCooldown: (baseFrames: number) => number;
+  /** Told on the frame each blow comes down, whether or not it lands on anyone. */
+  readonly impact: (kind: RoosterStrikeKind) => void;
 }
 
 interface ActiveStrike {
@@ -186,6 +188,7 @@ export class RoosterStrikes {
     if (active.framesLeft > 0) return;
     const spec = ROOSTER_STRIKES[active.kind];
     if (active.phase === 'windup') {
+      body.impact(active.kind);
       this.resolve(body, targets, active, spec);
       active.phase = 'recover';
       active.framesLeft = spec.recoverFrames;

@@ -34,6 +34,7 @@
     "format:check": "prettier --check --ignore-unknown .",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json",
     "render:held-visuals": "tsx scripts/render-held-visuals.ts",
+    "render:gear-fx": "tsx scripts/render-gear-fx.ts",
     "verify:held-visuals": "tsx scripts/gate.ts tsx scripts/verify-held-visuals.ts",
     "bench:figure-paint": "tsx scripts/bench-figure-paint.ts",
     "bench:turn-residency": "tsx scripts/bench-turn-residency.ts",

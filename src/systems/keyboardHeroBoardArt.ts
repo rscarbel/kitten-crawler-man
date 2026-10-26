@@ -14,7 +14,7 @@
  */
 
 import { worldPlate } from '../ui/world/worldShapes';
-import type { CanvasSurface } from '../core/canvasSurface';
+import type { CanvasSurface } from '../core/rendering/canvasSurface';
 import type { NoteState, ReceptorState, TouchState } from '../sprites/art/keyboardHeroArt';
 import {
   boardFrameArt,

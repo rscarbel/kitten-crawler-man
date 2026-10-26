@@ -55,11 +55,11 @@ import {
   type WipeMarkerStore,
   writePathsThatEscapeTheLatch,
   type LatchedWritePath,
-} from '../src/core/progressPersistence';
-import { LOCAL_PROGRESS_STORAGE, writeLocalProgress } from '../src/core/LocalProgress';
-import { stampGameProgress } from '../src/core/saveFormat';
+} from '../src/core/save/progressPersistence';
+import { LOCAL_PROGRESS_STORAGE, writeLocalProgress } from '../src/core/save/LocalProgress';
+import { stampGameProgress } from '../src/core/save/saveFormat';
 import { AuthClient, type GameProgressInput } from '../src/auth/AuthClient';
-import { snapPlayer } from '../src/core/PlayerSnapshot';
+import { snapPlayer } from '../src/core/save/PlayerSnapshot';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { TILE_SIZE } from '../src/core/constants';
@@ -113,7 +113,7 @@ const EXPECTED_UPGRADE_ORDER = [
   'poisoned_2',
   'stabbed_2',
 ] as const;
-const BIG_GOOD_PRIZES: readonly WheelPrizeId[] = ['gold_50k', 'legendary_weapon_box', 'gold_500k'];
+const BIG_GOOD_PRIZES: readonly WheelPrizeId[] = ['gold_50k', 'legendary_weapon', 'gold_500k'];
 
 // Salts keep every family of streams independent of the others.
 const SIM_SALT = 100;
@@ -683,13 +683,13 @@ async function checkWipeRefusesOtherAccount(): Promise<void> {
  */
 async function checkHostCommitsBeforeTurning(): Promise<void> {
   const { ClubWheelSystem, WHEEL_SPIN_HOLD_MS } = await import('../src/systems/ClubWheelSystem');
-  const { createWheelLedger } = await import('../src/core/WheelLedger');
+  const { createWheelLedger } = await import('../src/core/save/WheelLedger');
   const { settleWheelLedger } = await import('../src/systems/casino/wheel/wheelPrizes');
-  const { parseWheelOwedItems } = await import('../src/core/WheelLedger');
-  const { adoptWhenCommitted } = await import('../src/core/adoptWhenCommitted');
-  const FILLER_ITEM = 'trollskin_shirt';
-  const { BAG_PAGE_SLOTS } = await import('../src/core/ItemDefs');
-  const { FROZEN_STATUS } = await import('../src/core/StatusEffect');
+  const { parseWheelOwedItems } = await import('../src/core/save/WheelLedger');
+  const { adoptWhenCommitted } = await import('../src/core/save/adoptWhenCommitted');
+  const FILLER_ITEM = 'scrapmail_vest';
+  const { BAG_PAGE_SLOTS } = await import('../src/core/items/defs/ItemDefs');
+  const { FROZEN_STATUS } = await import('../src/core/combat/StatusEffect');
   const HOST_STEP_MS = 16;
   const HOST_PURSE = 10_000;
   const forcedPrize = 'gold_50k';
@@ -850,20 +850,20 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
       random: mulberry32(1),
     });
     const board = boardForBet(WHEEL_MIN_BET);
-    const queuedBefore = winner.inventory.countOf('ring_of_the_cold_shoulder');
+    const queuedBefore = winner.inventory.countOf('frostward_charm');
     wheel.landForReview(
       seat,
-      board.findIndex((wedge) => wedge.prizeId === 'platinum_box_frost'),
+      board.findIndex((wedge) => wedge.prizeId === 'epic_charm_frost'),
     );
     return {
-      gained: winner.inventory.countOf('ring_of_the_cold_shoulder') - queuedBefore,
+      gained: winner.inventory.countOf('frostward_charm') - queuedBefore,
     };
   })();
-  check(landed.gained === 1, 'a Platinum (frost) landing puts the ring in the bag at once');
+  check(landed.gained === 1, 'an Epic (frost) landing puts the ring in the bag at once');
   const loader = new HumanPlayer(0, 0, TILE_SIZE);
-  const signetLedger = createWheelLedger(['legendary_box'], {
-    wedgeId: 'legendary_box',
-    prizeId: 'legendary_box',
+  const signetLedger = createWheelLedger(['legendary_charm'], {
+    wedgeId: 'legendary_charm',
+    prizeId: 'legendary_charm',
     crawler: 'human',
     recipient: 'human',
     bet: WHEEL_MIN_BET,
@@ -877,7 +877,7 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
   settleWheelLedger(signetLedger, loadParty);
   settleWheelLedger(signetLedger, loadParty);
   check(
-    loader.inventory.countOf('fairy_repellent_signet') === 1,
+    loader.inventory.countOf('fae_iron_charm') === 1,
     'a pending item prize found on load goes into the bag exactly once',
   );
   // A Spin Again left pending by a closed tab owes its free spin on the board it turned on.
@@ -911,13 +911,13 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
   });
   packedWheel.landForReview(
     { active: () => packed, companion: () => cat },
-    boardForBet(WHEEL_MIN_BET).findIndex((wedge) => wedge.prizeId === 'legendary_box'),
+    boardForBet(WHEEL_MIN_BET).findIndex((wedge) => wedge.prizeId === 'legendary_charm'),
   );
   check(
-    packed.inventory.countOf('fairy_repellent_signet') === 1 && packedLedger.owedItems.length === 0,
+    packed.inventory.countOf('fae_iron_charm') === 1 && packedLedger.owedItems.length === 0,
     'a prize won with a packed bag goes into the bag',
   );
-  const olderSaveOwed = [{ crawler: 'human', id: 'fairy_repellent_signet', quantity: 1 }];
+  const olderSaveOwed = [{ crawler: 'human', id: 'fae_iron_charm', quantity: 1 }];
   const reloaded = createWheelLedger(
     [],
     null,
@@ -930,7 +930,7 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
   settleWheelLedger(reloaded, roomyParty);
   settleWheelLedger(reloaded, roomyParty);
   check(
-    roomy.inventory.countOf('fairy_repellent_signet') === 1 && reloaded.owedItems.length === 0,
+    roomy.inventory.countOf('fae_iron_charm') === 1 && reloaded.owedItems.length === 0,
     'a prize an older save still holds lands in the bag on load, exactly once',
   );
 
@@ -1088,14 +1088,14 @@ async function checkOwedWipeIdentifiesSessionFirst(): Promise<void> {
  */
 async function checkLegendaryWeaponPaysBoth(): Promise<void> {
   const { ClubWheelSystem, WHEEL_SPIN_HOLD_MS } = await import('../src/systems/ClubWheelSystem');
-  const { createWheelLedger } = await import('../src/core/WheelLedger');
+  const { createWheelLedger } = await import('../src/core/save/WheelLedger');
   const { settleWheelLedger } = await import('../src/systems/casino/wheel/wheelPrizes');
-  const { LEGENDARY_WEAPON_CLAIM_IDS, FURY_OF_TARANIS_ITEM_ID, EYES_OF_SPLATTER_ITEM_ID } =
+  const { LEGENDARY_WEAPON_CLAIM_IDS, STORMCALLER_ITEM_ID, KALEIDOSCOPE_SPECS_ITEM_ID } =
     await import('../src/systems/casino/wheel/wheelBoard');
   const HOST_STEP_MS = 16;
   const HOST_PURSE = 10_000;
   const LANDING_SETTLE_MS = 20_000;
-  const weaponWedge = 'legendary_weapon_box';
+  const weaponWedge = 'legendary_weapon';
   const human = new HumanPlayer(0, 0, TILE_SIZE);
   const cat = new CatPlayer(1, 0, TILE_SIZE);
   const ledger = createWheelLedger();
@@ -1139,8 +1139,8 @@ async function checkLegendaryWeaponPaysBoth(): Promise<void> {
 
   await spinWeapon(human, 'saved');
   check(
-    human.inventory.countOf(FURY_OF_TARANIS_ITEM_ID) === 1 &&
-      cat.inventory.countOf(EYES_OF_SPLATTER_ITEM_ID) === 0,
+    human.inventory.countOf(STORMCALLER_ITEM_ID) === 1 &&
+      cat.inventory.countOf(KALEIDOSCOPE_SPECS_ITEM_ID) === 0,
     "The human's first Legendary Weapon is his own sword",
   );
   check(!retired(), 'the wedge stays live after one weapon');
@@ -1149,15 +1149,15 @@ async function checkLegendaryWeaponPaysBoth(): Promise<void> {
   await spinWeapon(human, 'failed');
   check(
     ledger.prizesWon.join(',') === wonBefore.join(',') &&
-      cat.inventory.countOf(EYES_OF_SPLATTER_ITEM_ID) === 0,
+      cat.inventory.countOf(KALEIDOSCOPE_SPECS_ITEM_ID) === 0,
     'a refused save on the second weapon takes back every mark it made',
   );
 
   await spinWeapon(human, 'saved');
   check(
-    cat.inventory.countOf(EYES_OF_SPLATTER_ITEM_ID) === 1 &&
-      human.inventory.countOf(EYES_OF_SPLATTER_ITEM_ID) === 0 &&
-      human.inventory.countOf(FURY_OF_TARANIS_ITEM_ID) === 1,
+    cat.inventory.countOf(KALEIDOSCOPE_SPECS_ITEM_ID) === 1 &&
+      human.inventory.countOf(KALEIDOSCOPE_SPECS_ITEM_ID) === 0 &&
+      human.inventory.countOf(STORMCALLER_ITEM_ID) === 1,
     "The human landing it again sends the cat's glasses to the cat",
   );
   check(retired(), 'the wedge retires once both weapons are out');
@@ -1178,34 +1178,9 @@ async function checkLegendaryWeaponPaysBoth(): Promise<void> {
   );
   settleWheelLedger(pendingSecond, loadParty);
   check(
-    loadHuman.inventory.countOf(FURY_OF_TARANIS_ITEM_ID) === 1 &&
-      loadCat.inventory.countOf(FURY_OF_TARANIS_ITEM_ID) === 0,
+    loadHuman.inventory.countOf(STORMCALLER_ITEM_ID) === 1 &&
+      loadCat.inventory.countOf(STORMCALLER_ITEM_ID) === 0,
     'a pending second weapon found on load goes to the crawler it belongs to',
-  );
-
-  const legacyParty = {
-    human: new HumanPlayer(0, 0, TILE_SIZE),
-    cat: new CatPlayer(1, 0, TILE_SIZE),
-    grantAttackCow: () => undefined,
-  };
-  legacyParty.cat.inventory.addItem(EYES_OF_SPLATTER_ITEM_ID, 1);
-  const legacyHeld = createWheelLedger([weaponWedge]);
-  settleWheelLedger(legacyHeld, legacyParty);
-  check(
-    legacyHeld.prizesWon.join(',') === LEGENDARY_WEAPON_CLAIM_IDS.cat,
-    `a legacy claim with the cat's glasses in hand becomes her claim alone (${legacyHeld.prizesWon.join(',')})`,
-  );
-  const legacyLost = createWheelLedger([weaponWedge]);
-  settleWheelLedger(legacyLost, {
-    human: new HumanPlayer(0, 0, TILE_SIZE),
-    cat: new CatPlayer(1, 0, TILE_SIZE),
-    grantAttackCow: () => undefined,
-  });
-  check(
-    legacyLost.prizesWon.includes(weaponWedge) &&
-      legacyLost.prizesWon.includes(LEGENDARY_WEAPON_CLAIM_IDS.human) &&
-      legacyLost.prizesWon.includes(LEGENDARY_WEAPON_CLAIM_IDS.cat),
-    'a legacy claim with no telling which weapon was won stays retired',
   );
 }
 
@@ -1225,7 +1200,7 @@ async function checkQuestFreeSpin(): Promise<void> {
     parseWheelQuestFreeSpins,
     questFreeSpinsLeft,
     tapedChainOwed,
-  } = await import('../src/core/WheelLedger');
+  } = await import('../src/core/save/WheelLedger');
   const { settleWheelLedger } = await import('../src/systems/casino/wheel/wheelPrizes');
   const { BASE_WHEEL_BOARD, TAPED_NOTHING, WHEEL_BET_STEP, tapedBoard } =
     await import('../src/systems/casino/wheel/wheelBoard');

@@ -38,7 +38,7 @@
  * here; `npm run report:prices` prints the resulting price sheet.
  */
 
-import { ITEM_DEF, type ItemId } from '../core/ItemDefs';
+import { ITEM_DEF, type ItemId } from '../core/items/defs/ItemDefs';
 import { ITEM_PRICES, type ItemCategory } from './itemPrices';
 import {
   SHOPS,

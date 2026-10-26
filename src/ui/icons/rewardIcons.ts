@@ -1,12 +1,12 @@
 /**
- * Small icons for rewards that are not bag items: experience, coins and an
- * achievement loot box. Each paints into the largest square centred in its
+ * Small icons for rewards that are not bag items: experience, coins and a
+ * reward chest. Each paints into the largest square centred in its
  * `rect`, the same contract as `drawItemIcon`.
  */
 
-import type { BoxTier } from '../../core/AchievementManager';
+import type { Rarity } from '../../core/items/defs/rarity';
 import type { Rect } from '../core/geom';
-import { palette } from '../theme/tokens';
+import { chromeTheme, rarityColor } from '../screens/dialogs/canvasChrome';
 import { iconSquare } from './iconSquare';
 
 const FULL_TURN = Math.PI * 2;
@@ -88,16 +88,6 @@ export function drawCoinRewardIcon(ctx: CanvasRenderingContext2D, rect: Rect): v
   ctx.restore();
 }
 
-/** The colour each loot box tier is drawn in, matching the achievement notification. */
-const LOOT_BOX_TIER_COLORS: Record<BoxTier, string> = {
-  Bronze: '#cd7f32',
-  Silver: '#c0c0c0',
-  Gold: '#ffd700',
-  Platinum: palette.tier.platinum,
-  Legendary: '#a855f7',
-  Celestial: '#38bdf8',
-};
-
 const BOX_INSET = 0.12;
 const BOX_BODY_TOP = 0.42;
 const BOX_LID_TOP = 0.28;
@@ -107,14 +97,17 @@ const BOX_BODY_FILL_ALPHA = 0.35;
 const BOX_EDGE_WIDTH = 0.06;
 const BOX_RIBBON_WIDTH = 0.1;
 
-/** A ribboned box in its tier's colour. */
-export function drawLootBoxRewardIcon(
+/**
+ * A reward chest, drawn as a ribboned box in its rarity's colour. Icon painters take no theme, so it
+ * reads the chrome theme, whose palette is the same at either density.
+ */
+export function drawRewardChestIcon(
   ctx: CanvasRenderingContext2D,
   rect: Rect,
-  tier: BoxTier,
+  rarity: Rarity,
 ): void {
   const { x, y, size } = iconSquare(rect);
-  const color = LOOT_BOX_TIER_COLORS[tier];
+  const color = rarityColor(chromeTheme(), rarity);
   const left = x + BOX_INSET * size;
   const width = size * (1 - BOX_INSET * 2);
   const bodyTop = y + BOX_BODY_TOP * size;

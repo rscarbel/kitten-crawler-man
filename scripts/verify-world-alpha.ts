@@ -17,7 +17,7 @@ import { gameContext } from './nodeGameContext.js';
 installCanvasGlobals();
 
 const { drawItemIcon } = await import('../src/ui/icons/drawItemIcon.js');
-const { ITEM_DEF } = await import('../src/core/ItemDefs.js');
+const { ITEM_DEF } = await import('../src/core/items/defs/ItemDefs.js');
 const { drawHealthPage } = await import('../src/ui/icons/explainerArt/mongoArt.js');
 const { WORLD_BAR } = await import('../src/ui/theme/worldInk.js');
 

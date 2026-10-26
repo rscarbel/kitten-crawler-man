@@ -4,8 +4,9 @@
  * gameplay scene shares through `MenusKit`.
  */
 
-import type { Inventory } from '../../core/Inventory';
-import type { ItemId } from '../../core/ItemDefs';
+import { cooldownKeyOf } from '../../gear/gearHooks';
+import type { Player } from '../../Player';
+import type { ItemId } from '../../core/items/defs/ItemDefs';
 import type { HotbarInput, HotbarSlotModel } from '../../ui/hud/hudModel';
 import type { ItemCooldown } from '../../ui/screens/inventory/inventoryTypes';
 import { activeInputMode } from '../../ui/core/inputMode';
@@ -17,30 +18,29 @@ const COOLDOWN_SECONDS_SHOWN_MAX = 99;
 const COOLDOWN_OVERFLOW_LABEL = '…';
 
 /**
- * Each hotbar slot of `inventory`'s bar.
+ * Each hotbar slot of `owner`'s bar.
  *
- * @param drawnWeaponId The weapon the bar's owner has drawn, which reads on
- *   the bar exactly like worn gear: it is in hand and it is not being spent.
+ * A weapon in hand is equipped, so it reads on the bar exactly like worn gear.
+ *
  * @param heldItemId Something else in hand and not yet spent — a readied
  *   stick of dynamite — which reads the same way.
  */
 export function hotbarSlotModels(
   cooldowns: ReadonlyMap<string, ItemCooldown>,
-  inventory: Inventory,
-  drawnWeaponId: ItemId | null,
+  owner: Pick<Player, 'inventory' | 'gear'>,
   heldItemId: ItemId | null = null,
 ): HotbarSlotModel[] {
+  const inventory = owner.inventory;
   return inventory.actionBar.slots.map((item) => {
     // Keyed by ability first, item id second, so a plain item with a cooldown
     // of its own — the Wayfinder's Anchor — wears the same sweep as an ability.
-    const cooldownKey = item?.abilityId ?? item?.id;
-    const cd = cooldownKey === undefined ? undefined : cooldowns.get(cooldownKey);
+    const cd = item === null ? undefined : cooldowns.get(cooldownKeyOf(item));
     const remaining = cd === undefined || cd.max <= 0 ? 0 : Math.max(0, cd.current) / cd.max;
     const seconds = cd === undefined ? 0 : Math.ceil(cd.current / FRAMES_PER_SECOND);
     return {
       item,
-      equipped:
-        item !== null && (item.id === heldItemId || inventory.showsInUse(item.id, drawnWeaponId)),
+      equipped: item !== null && (item.id === heldItemId || inventory.hasEquipped(item.id)),
+      awakened: item !== null && owner.gear.isAwakened(item.id),
       cooldown: Math.min(1, remaining),
       cooldownLabel:
         seconds > COOLDOWN_SECONDS_SHOWN_MAX ? COOLDOWN_OVERFLOW_LABEL : String(seconds),

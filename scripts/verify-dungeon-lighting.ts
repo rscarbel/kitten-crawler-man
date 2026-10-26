@@ -431,7 +431,6 @@ function checkCrawlerLight(gameMap: GameMap, label: string): void {
     partyLightSource({
       crawlers: () => [crawler],
       companions: () => [],
-      crawlerReachTiles: (base) => lit.crawlerReachTiles(base),
     }),
   );
   const withLight = renderOnWhite(lit, centre).pixel(centre.x, centre.y);
@@ -890,7 +889,6 @@ function checkMovingLight(gameMap: GameMap, label: string): void {
     partyLightSource({
       crawlers: () => [position],
       companions: () => [],
-      crawlerReachTiles: (base) => lighting.crawlerReachTiles(base),
     }),
   );
   const startX = (walk.door.x - walk.out.x * WALK_TILES) * TILE_SIZE;

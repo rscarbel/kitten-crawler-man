@@ -19,7 +19,6 @@ export type DeathCause =
   | 'bugaboo'
   | 'burnedStatus'
   | 'poisonStatus'
-  | 'sepsisStatus'
   | 'electrifiedStatus'
   | 'spitVenomStatus'
   | 'bloodVomitStatus'
@@ -299,11 +298,6 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'The poison in your veins finally claimed you.',
     'Slow, ugly, and green. Poison got you.',
     'You died of poisoning. Troglodytes will do that to you.',
-  ],
-  sepsisStatus: [
-    'Sepsis finally claimed you. Should have cleared that infection sooner.',
-    'You died of sepsis. The crown giveth, the crown taketh.',
-    'That crown-inflicted infection festered until it killed you. Maybe reconsider your gear.',
   ],
   electrifiedStatus: [
     'The electricity finally arced through your heart.',

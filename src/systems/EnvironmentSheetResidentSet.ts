@@ -20,8 +20,8 @@
  * repaint behind its arrival card, so the sweep alone is right for them.
  */
 
-import type { AssetGroup } from '../core/assetGroups';
-import { getSpriteFootprintByKey, type SpriteKey } from '../core/SpriteLoader';
+import type { AssetGroup } from '../core/spriteAssets/assetGroups';
+import { getSpriteFootprintByKey, type SpriteKey } from '../core/spriteAssets/SpriteLoader';
 import {
   environmentSheetState,
   paintEnvironmentArtFor,

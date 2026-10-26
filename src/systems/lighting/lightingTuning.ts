@@ -19,15 +19,10 @@ export const LIGHTING_TUNING = {
   } satisfies Record<AmbientLevel, number>,
   /**
    * The most dark the ambient may ever be, an unlit room included. At this a
-   * body, a prop or a spell outside every light still reads clearly.
+   * body, a prop or a spell outside every light still reads clearly. Fixed:
+   * darkness exists only for contrast, so nothing the player has may lower it.
    */
   cap: 0.5,
-  /** How far each level of Night Vision lowers the cap. */
-  nightVisionCapDropPerLevel: 0.04,
-  /** The lowest Night Vision can bring the cap. */
-  nightVisionMinCap: 0.2,
-  /** Extra reach each level of Night Vision gives a crawler's light, in tiles. */
-  nightVisionReachPerLevel: 0.35,
   /**
    * Darkness at or above which a hostile outside every light shows eye-shine:
    * only where its body is genuinely hard to read.

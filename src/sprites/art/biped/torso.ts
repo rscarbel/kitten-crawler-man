@@ -333,15 +333,6 @@ const PROFILE = {
   clavicle: pt(0.2, 0.0),
 } as const;
 
-/**
- * How far forward of the rig's own back a cut's upper back stands edge-on,
- * in figure units: a slim man's shirt stands shallower than the rig's heavy
- * chest, and what hangs from his back hangs that much nearer his spine.
- */
-export function profileBackShift(cut: GarmentCut): number {
-  return PROFILE.upperBack.x * (cut.profileDepth - RIG_TORSO_DEPTH);
-}
-
 function traceProfile(ctx: Ctx, frame: TorsoFrame, pose: BipedPose): void {
   const { at } = frame;
   const kick = frame.cut.hemFlare * (1 + pose.jacketFlare * HEM_KICK);
@@ -926,8 +917,8 @@ const COLLAR_BACK_DROP = 0.0;
 /** The collar's top is a touch narrower than its base, hugging the neck. */
 const COLLAR_TOP_HUG = 0.9;
 const COLLAR_RIM_ALPHA = 0.65;
-/** The width of the lit lip along the collar's top edge, and of anything worn just above it. */
-export const COLLAR_RIM_WIDTH = 0.012;
+/** The width of the lit lip along the collar's top edge. */
+const COLLAR_RIM_WIDTH = 0.012;
 
 /** Profile collar corners, in the torso frame (facing +x). */
 const PROFILE_COLLAR = {

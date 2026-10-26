@@ -1,4 +1,4 @@
-import { isRecord } from '../../core/guards';
+import { isRecord } from '../../core/util/guards';
 import type { TilePoint } from './bossRoomLayout';
 
 /** A tower that has come down, and the tiles its junk spread over. */

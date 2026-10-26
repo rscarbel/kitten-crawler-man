@@ -1,7 +1,7 @@
 import type { Ladder } from './ladder';
 import type { MobKind } from './mobKinds';
 import { BRIAR_HOLLOW_SIEGE_LADDER } from '../systems/briarHollow/assaultWaves';
-import { SHARED_LOOKS_TIER, type VarietyTier } from '../core/varietyTier';
+import { SHARED_LOOKS_TIER, type VarietyTier } from '../core/perf/varietyTier';
 
 /** The parts of a floor that each spawn their own population. */
 type FloorEncounterSlot =

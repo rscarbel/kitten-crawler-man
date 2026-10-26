@@ -66,12 +66,15 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
-import { onCanvasRecovery, reportCanvasAllocationFailure } from '../../core/canvasRecovery';
-import { shouldDownscaleForLowEndDevice } from '../../core/SpriteLoader';
-import { memoryBudgetScale } from '../../core/deviceMemoryBudget';
-import type { DrawSpriteOpts } from '../../core/SpriteRenderer';
-import { EMPTY_ALPHA_CUTOFF, type FrameInkBounds } from '../../core/spriteFrames';
+} from '../../core/rendering/canvasSurface';
+import {
+  onCanvasRecovery,
+  reportCanvasAllocationFailure,
+} from '../../core/rendering/canvasRecovery';
+import { shouldDownscaleForLowEndDevice } from '../../core/spriteAssets/SpriteLoader';
+import { memoryBudgetScale } from '../../core/perf/deviceMemoryBudget';
+import type { DrawSpriteOpts } from '../../core/spriteAssets/SpriteRenderer';
+import { EMPTY_ALPHA_CUTOFF, type FrameInkBounds } from '../../core/spriteAssets/spriteFrames';
 import {
   figureBakeDensity,
   type FigureDef,
@@ -80,7 +83,7 @@ import {
   type DrawnFigureRow,
   drawnFigureRow,
 } from './figureDef';
-import { perfMonitor } from '../../core/PerfMonitor';
+import { perfMonitor } from '../../core/perf/PerfMonitor';
 import { TILE_SIZE } from '../../core/constants';
 import {
   beginFigureCacheStatsFrame,
@@ -2751,9 +2754,19 @@ function clampFrame(def: FigureDef, state: string, frame: number): number {
 }
 
 /**
+ * Which baked cells a draw may show in place of its own while the frame's
+ * bake allowance is spent. `anyState` lets a creature's pose stand in for
+ * another pose of the same body. `ownState` is for a frame that is a thing of
+ * its own — a severed piece, a projectile — where a neighbouring state is
+ * another object entirely: a gore piece standing in with the whole creature's
+ * walk cell throws copies of the creature into the air.
+ */
+type StandInReach = 'anyState' | 'ownState';
+
+/**
  * The baked cell for this frame, a neighbouring one when the frame's bake
  * allowance is spent, or null when a budget refused it or there was nothing
- * of the figure to borrow. Null is the caller's cue to paint directly.
+ * within `reach` to borrow. Null is the caller's cue to paint directly.
  */
 function cellFor(
   ctx: CanvasRenderingContext2D,
@@ -2761,6 +2774,7 @@ function cellFor(
   state: string,
   frame: number,
   scale: number,
+  reach: StandInReach = 'anyState',
 ): PlacedCell | null {
   lastDrawnFrameByFigure.set(def.id, frameCounter);
   const entry = entryFor(def);
@@ -2778,7 +2792,7 @@ function cellFor(
     return placed(rebaked, scale, true);
   }
   recordFigureCacheMiss();
-  return bakeForDraw(entry, row, state, frame, scale);
+  return bakeForDraw(entry, row, state, frame, scale, reach);
 }
 
 /**
@@ -2797,8 +2811,8 @@ function askForRebakeIfStale(
 
 /**
  * Bakes a missed cell on the render path, within what is left of the frame's
- * allowance. Past the allowance it borrows the nearest baked frame of the
- * figure while the exact row warms on the queue, and returns null — having
+ * allowance. Past the allowance it borrows the nearest baked frame within
+ * `reach` while the exact row warms on the queue, and returns null — having
  * noted why — only when there is nothing to borrow or the cell can never be
  * baked, and the caller must paint directly.
  *
@@ -2811,6 +2825,7 @@ function bakeForDraw(
   state: string,
   frame: number,
   scale: number,
+  reach: StandInReach,
 ): PlacedCell | null {
   if (!fitsBakeAllowance(entry, msBakedThisFrame, FRAME_BAKE_BUDGET_MS)) {
     // A live paint costs what a bake would and is thrown away, so a crowd
@@ -2818,7 +2833,8 @@ function bakeForDraw(
     // every one of them, every frame, until the queue caught up. A frame of a
     // neighbouring pose costs one blit, and the urgent request lands the
     // exact row within a few frames.
-    const standIn = nearestBakedCell(row, frame) ?? anyBakedCell(entry);
+    const ownStateStandIn = nearestBakedCell(row, frame);
+    const standIn = ownStateStandIn ?? (reach === 'anyState' ? anyBakedCell(entry) : null);
     dropRowIfEmpty(entry, state, row);
     if (standIn !== null) {
       recordFigureCacheApproxDraw();
@@ -2931,7 +2947,7 @@ function approxCellFor(
   const standIn = (row !== undefined ? nearestBakedCell(row, frame) : null) ?? anyBakedCell(entry);
   if (standIn === null) {
     requeuePinnedRowIfMissing(def, state);
-    return bakeForDraw(entry, rowFor(entry, state), state, frame, scale);
+    return bakeForDraw(entry, rowFor(entry, state), state, frame, scale, 'anyState');
   }
   recordFigureCacheApproxDraw();
   noteUnbakedDraw(def, state, 'standIn');
@@ -3110,7 +3126,7 @@ export function drawFigureCachedRotatedCenter(
   const clamped = clampFrame(def, state, frame);
   const ink = figureInkBounds(def, state, clamped);
   const scale = tileSize / def.tileScale;
-  const cell = cellFor(ctx, def, state, clamped, scale);
+  const cell = cellFor(ctx, def, state, clamped, scale, 'ownState');
 
   ctx.save();
   try {

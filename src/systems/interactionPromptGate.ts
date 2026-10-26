@@ -9,7 +9,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
-import type { SpatialGrid } from '../core/SpatialGrid';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import type { Mob } from '../creatures/Mob';

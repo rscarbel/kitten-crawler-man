@@ -29,9 +29,9 @@ const { mulberry32 } = await import('../src/sprites/person/rng.js');
 Math.random = mulberry32(RNG_SEED);
 
 const { TILE_SIZE } = await import('../src/core/constants.js');
-const { loadSprites } = await import('../src/core/SpriteLoader.js');
+const { loadSprites } = await import('../src/core/spriteAssets/SpriteLoader.js');
 const { SceneManager } = await import('../src/core/Scene.js');
-const { InputManager } = await import('../src/core/InputManager.js');
+const { InputManager } = await import('../src/core/input/InputManager.js');
 const { EventBus } = await import('../src/core/EventBus.js');
 const { DungeonScene } = await import('../src/scenes/DungeonScene.js');
 const { GameMap } = await import('../src/map/GameMap.js');

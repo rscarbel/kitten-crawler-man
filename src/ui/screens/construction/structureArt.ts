@@ -8,7 +8,7 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../../core/canvasSurface';
+} from '../../../core/rendering/canvasSurface';
 import type { Rect } from '../../core/geom';
 import type { BuildOption } from '../../../systems/briarHollow/ConstructionSystem';
 import type { PalisadeTier } from '../../../map/tileTypes';
@@ -20,7 +20,7 @@ import {
   drawTrebuchet,
 } from '../../../sprites/art/trebuchetArt';
 import { drawSnare } from '../../../sprites/art/snareArt';
-import { onCanvasRecovery } from '../../../core/canvasRecovery';
+import { onCanvasRecovery } from '../../../core/rendering/canvasRecovery';
 
 type StructurePainter = (ctx: CanvasRenderingContext2D, box: Rect) => void;
 

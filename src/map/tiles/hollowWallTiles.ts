@@ -40,8 +40,8 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
-import type { MapSpriteExtentsPx } from '../../core/SpriteLoader';
+} from '../../core/rendering/canvasSurface';
+import type { MapSpriteExtentsPx } from '../../core/spriteAssets/SpriteLoader';
 import type { VillageBuildingDef, VillageBuildingId } from '../overworld/briarHollowSite';
 import { briarHollowSiteFor } from './hollowSiteRegistry';
 import type { GroundPalette } from '../ground/GroundPalette';
@@ -66,7 +66,7 @@ import {
   fillRoundRect,
   type ClothColour,
 } from '../../sprites/art/villageArt';
-import { onCanvasRecovery } from '../../core/canvasRecovery';
+import { onCanvasRecovery } from '../../core/rendering/canvasRecovery';
 
 // ── Geometry, in tiles ────────────────────────────────────────────────────────
 

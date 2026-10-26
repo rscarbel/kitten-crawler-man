@@ -22,6 +22,7 @@
  */
 
 import type { BipedDressing } from './bipedParts';
+import type { SleeveCloth } from './sleeve';
 import { FOOT_LEN, footContact, LEFT_FOOT_OUT, RIGHT_FOOT_OUT, type ToesPainter } from './feet';
 import { drawHead, drawNeck, headAngle, scaleHeadAboutChin, traceSkull } from './head';
 import {
@@ -64,6 +65,7 @@ import { HEAD_RX, HEAD_RY, THIGH_LENGTH } from './proportions';
 import {
   aheadScreenSign,
   buildSkeleton,
+  drawnSide,
   poseAsDrawn,
   type BodySide,
   type BoneChain,
@@ -140,11 +142,11 @@ const LAYER_MARGIN = 0.42;
  */
 const HAND_REACH_IN_MARGIN = handLength(0, 'open', RIG_LIMBS);
 /**
- * Gear states its reach as the extreme points of its own ink — the cloak's
- * hem and flare, the spikes and smoke round the gauntlet — so past them there
- * is only a stroke laid along an edge and the outline round the silhouette.
- * Held to the body's generous margin instead, a flared cloak widens every
- * composing pass by the better part of a unit for ink that is not there.
+ * Gear states its reach as the extreme points of its own ink, so past them
+ * there is only a stroke laid along an edge and the outline round the
+ * silhouette. Held to the body's generous margin instead, gear flaring off
+ * him would widen every composing pass by the better part of a unit for ink
+ * that is not there.
  */
 const GEAR_INK_MARGIN = 0.1;
 
@@ -594,6 +596,12 @@ function figureSlabs(
   return { ...slabs, body: [withBehind, ...rest, ...overSlabs] };
 }
 
+/** `look` with the sleeves a worn garment brings over its arms, or `look` itself for none. */
+function sleevedLook(look: HumanLook, sleeves: SleeveCloth | null): HumanLook {
+  if (sleeves === null) return look;
+  return { ...look, garment: sleeves.cloth, sleeveCut: { ...look.sleeveCut, ...sleeves.cut } };
+}
+
 function bodySlabs(
   skeleton: Skeleton,
   view: ViewSpec,
@@ -609,6 +617,12 @@ function bodySlabs(
   // the legs follow: a shade there paints one hand a different colour of skin
   // from the other, and from his bare legs.
   const farArmShade = view.profile ? FAR_LIMB_SHADE : UNSHADED;
+  const armLook = sleevedLook(look, dressing.sleeves);
+  // A drawn side is his own side mirrored back, so the same flip finds the glove.
+  const handLook = (drawn: BodySide): HumanLook => {
+    const glove = dressing.glove(drawnSide(drawn, view));
+    return glove === null ? armLook : { ...armLook, handSkin: glove };
+  };
   const leftBehind = armIsBehind(pose, view, 'left');
   const rightBehind = armIsBehind(pose, view, 'right');
   const rightShade = rightBehind ? farArmShade : UNSHADED;
@@ -635,14 +649,12 @@ function bodySlabs(
         look,
         nails: toes.nails,
         instep: toes.instep,
-        secondToe: toes.secondToe,
-        ringAcross: toes.ringAcross,
         envelope: toes.trace,
       });
   const leftArm = (ctx: Ctx): void => {
     drawArm(
       ctx,
-      look,
+      handLook('left'),
       skeleton.leftArm,
       pose.leftFist,
       farArmShade,
@@ -656,7 +668,7 @@ function bodySlabs(
   const rightArm = (ctx: Ctx): void => {
     drawArm(
       ctx,
-      look,
+      handLook('right'),
       skeleton.rightArm,
       pose.rightFist,
       rightShade,
@@ -671,11 +683,11 @@ function bodySlabs(
   const armShade = { left: farArmShade, right: rightShade };
   const forearm = {
     left: (ctx: Ctx): void => {
-      drawArmWithoutHand(ctx, look, skeleton.leftArm, farArmShade, LEFT_THUMB, view.profile);
+      drawArmWithoutHand(ctx, armLook, skeleton.leftArm, farArmShade, LEFT_THUMB, view.profile);
       dressForearm(ctx, 'left');
     },
     right: (ctx: Ctx): void => {
-      drawArmWithoutHand(ctx, look, skeleton.rightArm, rightShade, RIGHT_THUMB, view.profile);
+      drawArmWithoutHand(ctx, armLook, skeleton.rightArm, rightShade, RIGHT_THUMB, view.profile);
       dressForearm(ctx, 'right');
     },
   };
@@ -744,7 +756,7 @@ function bodySlabs(
   // Whatever hangs off his back is offered a place behind everything he is,
   // and, seen from behind, a slab of its own over his back.
   const backEnvelope = (ctx: Ctx): void => traceGarmentTorso(ctx, skeleton, pose, view, look);
-  const cloakBehind = (ctx: Ctx): void => {
+  const dressBehindBack = (ctx: Ctx): void => {
     dressing.part(ctx, 'back', {
       piece: 'behind',
       skeleton,
@@ -755,7 +767,7 @@ function bodySlabs(
     });
   };
   const backFacesCamera = view.showsBack && !view.profile;
-  const cloakOver: SlabPainter[] =
+  const overBackSlabs: SlabPainter[] =
     backFacesCamera && dressing.paints('back')
       ? [
           (ctx) =>
@@ -783,7 +795,7 @@ function bodySlabs(
   if (view.profile) {
     const profileBody: SlabPainter[] = [
       (ctx) => {
-        cloakBehind(ctx);
+        dressBehindBack(ctx);
         behindArms(ctx);
         leg('left', 'whole')(ctx);
       },
@@ -861,11 +873,11 @@ function bodySlabs(
   // A garment over his back hangs from his shoulders over his arms as well:
   // an arm swung back toward the camera pushes into it rather than through
   // it, so the arms are laid under it and show only past its edge.
-  const armsUnderBack = cloakOver.length > 0;
+  const armsUnderBack = overBackSlabs.length > 0;
   const underBack: SlabPainter[] = armsUnderBack ? [frontArms] : [];
   const torsoAndArms: SlabPainter[] = [
     (ctx) => {
-      cloakBehind(ctx);
+      dressBehindBack(ctx);
       behindArms(ctx);
       for (const l of legs) {
         leg(l.side, l.depth.knee >= KNEE_FORWARD_DEPTH ? 'thigh' : 'whole')(ctx);
@@ -875,7 +887,7 @@ function bodySlabs(
     ...torsoSlabs(skeleton, view, pose, attachments, dressing, look),
     ...underBack,
   ];
-  const body: SlabPainter[] = [...torsoAndArms, ...cloakOver, ...kneeForwardSlab];
+  const body: SlabPainter[] = [...torsoAndArms, ...overBackSlabs, ...kneeForwardSlab];
   return {
     body,
     frontArms: armsUnderBack ? paintsNothing : frontArms,
@@ -885,7 +897,7 @@ function bodySlabs(
     forearm,
     nearLegSlab: null,
     kneeSlab: kneeForwardSlab.length === 0 ? null : body.length - 1,
-    backCovered: cloakOver.length > 0,
+    backCovered: overBackSlabs.length > 0,
   };
 }
 
@@ -993,7 +1005,7 @@ function torsoSlabs(
         ctx.translate(skeleton.headCentre.x, skeleton.headCentre.y);
         ctx.rotate(headAngle(pose));
         scaleHeadAboutChin(ctx, look);
-        drawHead(ctx, pose, view, look, { hair: !dressing.hides('hair') });
+        drawHead(ctx, pose, view, look);
         dressing.part(ctx, 'head', {
           piece: 'top',
           view,
@@ -1497,7 +1509,6 @@ function drawFigure(
   ];
   const bounds = layerBounds(ctx, [
     { points: bodyReach, margin: options.layerMargin ?? LAYER_MARGIN },
-    { points: dressing.reach(skeleton, view), margin: options.layerMargin ?? GEAR_INK_MARGIN },
     {
       points: options.attachments?.reach(skeleton, view, pose, options.look) ?? [],
       margin: options.layerMargin ?? GEAR_INK_MARGIN,

@@ -4,7 +4,7 @@
  *
  * The figure is assembled slab by slab (`figure.ts`); at each piece that
  * clothing can sit on — its jacket, the band of shirt at its collar, the
- * seat over its hips, each forearm, the cloak's place behind or over it, the toes of each
+ * seat over its hips, each forearm, the place behind or over its back, the toes of each
  * foot, the top of its head — the compositor hands the dressing a frame describing that
  * piece, with the context in the piece's own coordinates, and whatever he
  * wears there is painted inside the slab, so it shares the figure's outline,
@@ -17,7 +17,9 @@
 
 import type { Outfit } from '../../garments/outfit';
 import type { HumanLook } from '../../looks/humanLook';
+import type { Ramp } from './palette';
 import type { BodySide, BoneChain, BipedPose, Skeleton, ViewSpec } from './rig';
+import type { SleeveCloth } from './sleeve';
 import type { TorsoFrame } from './torso';
 import type { Pt } from '../bipedArt';
 
@@ -25,9 +27,6 @@ type Ctx = CanvasRenderingContext2D;
 
 /** Traces a piece's silhouette as a path on `ctx`, in the frame's coordinates. */
 export type EnvelopeTrace = (ctx: Ctx) => void;
-
-/** Something of the figure's a garment can hide rather than paint over. */
-export type BipedHideableFeature = 'hair';
 
 interface Solved {
   readonly skeleton: Skeleton;
@@ -78,7 +77,7 @@ export type BipedForearmFrame = Solved &
       }
   );
 
-/** Where a cloak hangs in his draw order: behind everything he is, or over his back. */
+/** Where something hung from his back sits in his draw order: behind everything he is, or over his back. */
 export interface BipedBackFrame extends Solved {
   readonly piece: 'behind' | 'over';
   readonly pose: BipedPose;
@@ -100,9 +99,6 @@ export interface BipedToesFrame {
   readonly nails: readonly Pt[];
   /** Where the key light catches the top of the foot. */
   readonly instep: Pt;
-  /** Where a ring on his second toe sits, and the line it crosses the toe along. */
-  readonly secondToe: Pt;
-  readonly ringAcross: Pt;
   readonly envelope: EnvelopeTrace;
 }
 
@@ -148,37 +144,26 @@ export interface BipedPartFrames {
 
 export type BipedPartName = keyof BipedPartFrames;
 
-/**
- * What a row is, as far as garments that move with it need to know: whether
- * it is a punch his right fist lands, and on which frame, and the gait he
- * travels at in it, if he travels.
- */
+/** What a row is, as far as garments that move with it need to know. */
 export interface HumanGarmentRow {
   readonly name: string;
-  readonly rightPunchImpact: number | null;
-  readonly travellingGait: 'walk' | 'run' | null;
 }
 
 /** A picture of him drawn from no row: a still, a portrait, a cast member's look. */
-export const STILL_ROW: HumanGarmentRow = {
-  name: '',
-  rightPunchImpact: null,
-  travellingGait: null,
-};
+export const STILL_ROW: HumanGarmentRow = { name: '' };
 
 /**
  * What his compositor paints his clothes through. `part` is called at every
- * piece with the context in that piece's coordinates; `hides` says whether
- * something he wears covers a feature; `reach` is every point past his
- * skeleton the garments' ink reaches, so the composing surface is sized round
- * it.
+ * piece with the context in that piece's coordinates.
  */
 export interface BipedDressing {
   readonly part: <P extends BipedPartName>(ctx: Ctx, part: P, frame: BipedPartFrames[P]) => void;
   /** Whether anything he wears paints on `part`, for a slab that exists only to hold it. */
   readonly paints: (part: BipedPartName) => boolean;
-  readonly hides: (feature: BipedHideableFeature) => boolean;
-  readonly reach: (skeleton: Skeleton, view: ViewSpec) => readonly Pt[];
+  /** The sleeves what he wears brings over his arms, or null for his look's own. */
+  readonly sleeves: SleeveCloth | null;
+  /** The ramp a glove paints his own `side` hand in, or null for a bare hand. */
+  readonly glove: (side: BodySide) => Ramp | null;
 }
 
 /**

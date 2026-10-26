@@ -11,13 +11,13 @@
  * bad deck.
  */
 
-import { NEVER_LUCKY, type LuckCheck } from '../core/GodMode';
+import { NEVER_LUCKY, type LuckCheck } from '../core/state/GodMode';
 import type { Player } from '../Player';
-import { canAffordCoins, partyCoins } from '../core/partyCoins';
+import { canAffordCoins, partyCoins } from '../core/party/partyCoins';
 import type { AudioManager } from '../audio/AudioManager';
-import type { ClubMembership } from '../core/ClubMembership';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
-import { keybindings } from '../core/Keybindings';
+import type { ClubMembership } from '../core/club/ClubMembership';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import { keybindings } from '../core/input/Keybindings';
 import { ACTIVATE_KEYS, type Surface, type Ui } from '../ui/core/UiRoot';
 import {
   BlackjackTable,

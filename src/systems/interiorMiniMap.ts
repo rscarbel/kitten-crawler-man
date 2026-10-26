@@ -10,7 +10,7 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../core/canvasSurface';
+} from '../core/rendering/canvasSurface';
 import type { GameMap } from '../map/GameMap';
 import type { Rect } from '../ui/core/geom';
 import { MINIMAP_MARKER_COLORS, minimapTileColor } from '../ui/theme/minimapColors';

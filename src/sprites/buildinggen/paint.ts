@@ -19,7 +19,7 @@ import {
   freshSurfaceContext,
   releaseSurface,
   type CanvasSurface,
-} from '../../core/canvasSurface';
+} from '../../core/rendering/canvasSurface';
 import { NoiseField } from '../../map/tilegen/noise';
 import {
   drawPlane,

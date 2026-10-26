@@ -10,7 +10,7 @@
  * Each entry can contribute two things:
  *
  * - a **body layer**, painted through the character's own silhouette by
- *   {@link ../../core/silhouetteComposite}, so the effect is on the figure
+ *   {@link ../../core/spriteAssets/silhouetteComposite}, so the effect is on the figure
  *   rather than beside it;
  * - an **overlay**, free-form world-space art drawn after the sprite.
  *
@@ -18,7 +18,7 @@
  * `color` are required and the two draw hooks are not.
  */
 
-import type { SilhouetteLayer } from '../../core/silhouetteComposite';
+import type { SilhouetteLayer } from '../../core/spriteAssets/silhouetteComposite';
 import {
   BLOOD_VOMIT_STATUS,
   CHILLED_STATUS,
@@ -31,17 +31,10 @@ import {
   SHIELD_STATUS,
   SPEED_FIZZ_STATUS,
   type StatusEffect,
-} from '../../core/StatusEffect';
+} from '../../core/combat/StatusEffect';
 import type { StatusVisualFrame } from './statusPaint';
 import { ARCANE_FLAME, NATURAL_FLAME, drawFlames, flameBodyLayers } from './statusFlames';
-import {
-  drawPoison,
-  drawSepsis,
-  drawSpitVenom,
-  poisonBodyLayer,
-  sepsisBodyLayer,
-  venomBodyLayer,
-} from './statusAilments';
+import { drawPoison, drawSpitVenom, poisonBodyLayer, venomBodyLayer } from './statusAilments';
 import {
   drawElectrified,
   drawStuck,
@@ -148,16 +141,6 @@ const STATUS_VISUALS = new Map<string, StatusVisual>([
       harmful: true,
       bodyLayers: (f) => [poisonBodyLayer(f)],
       overlay: drawPoison,
-    },
-  ],
-  [
-    'sepsis',
-    {
-      label: 'SEPS',
-      color: '#a3e635',
-      harmful: true,
-      bodyLayers: (f) => [sepsisBodyLayer(f)],
-      overlay: drawSepsis,
     },
   ],
   [

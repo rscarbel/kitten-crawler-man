@@ -8,7 +8,10 @@
  */
 
 import { LANE_STREET, SPRITE_BUILDING } from '../tileTypes';
-import { getSpriteDoorwayByKey, getSpriteFootprintByKey } from '../../core/SpriteLoader';
+import {
+  getSpriteDoorwayByKey,
+  getSpriteFootprintByKey,
+} from '../../core/spriteAssets/SpriteLoader';
 import type { TileGrid } from './tileGrid';
 import { offsetToTile, type PlannedBuilding, type TilePoint, type TileRect } from './townPlan';
 import type { TownPlan } from './townPlan';

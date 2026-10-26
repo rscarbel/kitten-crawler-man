@@ -1,5 +1,5 @@
 import { TILE_SIZE } from '../core/constants';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Player } from '../Player';
@@ -24,8 +24,8 @@ import {
 } from '../map/tileTypes';
 import { inferFloorType } from '../map/tiles/helpers';
 import type { VillageDistrictId } from '../map/overworld/briarHollowSite';
-import { drawSpriteKey } from '../core/SpriteRenderer';
-import { makeBurn } from '../core/StatusEffect';
+import { drawSpriteKey } from '../core/spriteAssets/SpriteRenderer';
+import { makeBurn } from '../core/combat/StatusEffect';
 import { randomInt } from '../utils';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { GroundHazardSource } from './GroundHazardSource';

@@ -4,11 +4,11 @@
  * gestures given in canvas CSS pixels.
  */
 
-import { viewportHeight, viewportWidth } from '../src/core/Viewport';
+import { viewportHeight, viewportWidth } from '../src/core/rendering/Viewport';
 import type { Conversation, ConversationSurfaceOptions } from '../src/dialog/Conversation';
 import { MOUSE_POINTER_ID, PRIMARY_BUTTON, type GestureKind } from '../src/ui/core/pointer';
 import { UiRoot, type KeyModifiers, type KeyOutcome } from '../src/ui/core/UiRoot';
-import type { UiSize } from '../src/core/Settings';
+import type { UiSize } from '../src/core/input/Settings';
 import { NO_INSETS } from '../src/ui/core/viewport';
 
 const FRAME_MS = 16;

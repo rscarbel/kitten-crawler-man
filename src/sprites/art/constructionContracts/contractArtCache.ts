@@ -11,7 +11,7 @@ import {
   surfaceContext,
   type CanvasSurface,
   releaseSurface,
-} from '../../../core/canvasSurface';
+} from '../../../core/rendering/canvasSurface';
 import {
   paintContractDamage,
   type ContractArtMaterial,
@@ -20,7 +20,7 @@ import {
 } from './contractDamageArt';
 import { paintContractBuildSite } from './contractBuildSiteArt';
 import { contractPalette, type ContractSettlement } from './contractPalette';
-import { onCanvasRecovery } from '../../../core/canvasRecovery';
+import { onCanvasRecovery } from '../../../core/rendering/canvasRecovery';
 
 export type { ContractArtMaterial, ContractArtSurface } from './contractDamageArt';
 export type { ContractSettlement } from './contractPalette';

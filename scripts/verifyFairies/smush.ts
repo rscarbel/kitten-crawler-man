@@ -5,8 +5,8 @@
  * kit's attack resolution — with a goblin in the same blast as the control.
  */
 
-import { AbilityManager } from '../../src/core/AbilityManager';
-import type { FloatingTextStyle } from '../../src/core/FloatingText';
+import { AbilityManager } from '../../src/core/skills/AbilityManager';
+import type { FloatingTextStyle } from '../../src/core/combat/FloatingText';
 import type { Mob } from '../../src/creatures/Mob';
 import { CombatKit } from '../../src/systems/kits/CombatKit';
 import { FloatingCombatTextSystem } from '../../src/systems/FloatingCombatTextSystem';

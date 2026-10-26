@@ -1,5 +1,9 @@
 import { drawDumbbellHeld } from '../../sprites/gymEquipmentSprite';
-import { progressFrameIndex, timeFrameIndex, walkFrameIndex } from '../../core/SpriteRenderer';
+import {
+  progressFrameIndex,
+  timeFrameIndex,
+  walkFrameIndex,
+} from '../../core/spriteAssets/SpriteRenderer';
 import { drawFigureCached } from '../../sprites/figure/figureFrameCache';
 import { IRON_IGGY_FIGURE } from './ironIggyFigure';
 import {

@@ -12,7 +12,7 @@
 
 import type { TownDialogContext } from '../../systems/townDialog';
 import type { ResidentId } from '../../systems/townResidents';
-import { isCircusResolvedStage } from '../../core/CircusQuestProgress';
+import { isCircusResolvedStage } from '../../core/quests/CircusQuestProgress';
 import type { ResidentLines } from '../roles';
 
 function circusResolved(ctx: TownDialogContext): boolean {

@@ -4,7 +4,7 @@
  * where the model is cheap to build.
  */
 
-import { getSkillDef } from '../../../core/SkillManager';
+import { getSkillDef } from '../../../core/skills/SkillManager';
 import type { DescentPrompt } from '../../../systems/StairwellSystem';
 import type { TowerStairPrompt } from '../../../systems/TowerStairSystem';
 import type { BuildingEntry } from '../../../systems/BuildingSystem';

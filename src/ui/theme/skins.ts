@@ -717,7 +717,7 @@ function buildMeters(theme: Theme): Record<MeterKind, MeterSkin> {
     warning: meter(palette.state.warning),
     danger: meter(palette.state.danger),
     // The audience's meter wears the System's own terminal colour: the show's voice, not the party's.
-    favor: meter(palette.tier.celestial, palette.text.muted),
+    favor: meter(palette.meter.favor, palette.text.muted),
   };
 }
 
@@ -781,19 +781,19 @@ function buildBrass(theme: Theme): { quest: BrassSkin; mercenary: BrassSkin } {
 }
 
 function buildTitleLogo(theme: Theme): TitleLogoSkin {
-  const { material, tier } = theme.palette;
+  const { material, accent } = theme.palette;
   return {
     style: theme.type.logo,
     face: {
       stops: [
         { at: LOGO_FACE_STOPS.crown, color: lighten(material.brassLight, LOGO_CROWN_LIGHTEN) },
-        { at: LOGO_FACE_STOPS.upper, color: tier.gold },
+        { at: LOGO_FACE_STOPS.upper, color: accent.celebrate },
         { at: LOGO_FACE_STOPS.horizon, color: material.brass },
         {
           at: LOGO_FACE_STOPS.horizonShadow,
           color: darken(material.brass, LOGO_HORIZON_DARKEN),
         },
-        { at: LOGO_FACE_STOPS.lower, color: tier.gold },
+        { at: LOGO_FACE_STOPS.lower, color: accent.celebrate },
         { at: LOGO_FACE_STOPS.lip, color: lighten(material.brassLight, LOGO_LIP_LIGHTEN) },
       ],
     },
@@ -840,7 +840,7 @@ function buildSkins(theme: Theme): Skins {
       glowBlur: space.xl,
     },
     systemAi: {
-      text: { style: type.terminal, color: palette.tier.celestial },
+      text: { style: type.terminal, color: palette.text.terminal },
       halo: palette.surface.sunken,
     },
     soundHint: {

@@ -1,4 +1,4 @@
-import { walkFrameIndex, progressFrameIndex } from '../core/SpriteRenderer';
+import { walkFrameIndex, progressFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import {
   CROUCH_FRAMES,
   DEATH_FRAMES,

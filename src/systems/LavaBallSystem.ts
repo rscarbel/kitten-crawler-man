@@ -15,6 +15,7 @@
  * injected into a mob at spawn time.
  */
 
+import { crawlerTurnsShot } from '../gear/incomingBlows';
 import type { WorldPoint } from '../audio/AudioManager';
 import type { Player } from '../Player';
 import type { DamageSource } from '../Player';
@@ -22,7 +23,7 @@ import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
 import { Llama } from '../creatures/Llama';
 import { projectileSpeedScaleForLevel } from '../creatures/mobLevelScaling';
-import { makeBurn } from '../core/StatusEffect';
+import { makeBurn } from '../core/combat/StatusEffect';
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import { normalize } from '../utils';
 import { drawLavaBolt, drawLavaBurst, drawLavaFlame } from '../sprites/lavaBallSprite';
@@ -270,7 +271,9 @@ export class LavaBallSystem implements GameSystem, GroundHazardSource {
         const cx = target.x + TILE_SIZE * CENTER_OFFSET;
         const cy = target.y + TILE_SIZE * CENTER_OFFSET;
         if (Math.hypot(bolt.x - cx, bolt.y - cy) >= hitRadius) continue;
-        const connected = target.takeDamage(bolt.damage, bolt.source);
+        const connected =
+          !crawlerTurnsShot(target, bolt.owner, bolt.vx, bolt.vy) &&
+          target.takeDamage(bolt.damage, bolt.source);
         if (connected) {
           bolt.owner.noteStruckPlayer(target);
           if (Math.random() < BURN_CHANCE) target.applyStatus(makeBurn());

@@ -34,7 +34,7 @@ import {
   DIFFICULTY_LABELS,
   DIFFICULTY_ORDER,
   type Difficulty,
-} from '../src/core/difficultyProfiles.js';
+} from '../src/core/difficulty/difficultyProfiles.js';
 import {
   KEYBOARD_HERO_GEOMETRY,
   type KeyboardHeroGeometry,
@@ -558,7 +558,7 @@ ${charts[tier].map(formatRow).join('\n')}
  * notes left, high notes right.
  */
 
-import type { Difficulty } from '../core/difficultyProfiles';
+import type { Difficulty } from '../core/difficulty/difficultyProfiles';
 
 /** Which of the four columns a note falls down. */
 export type KeyboardHeroColumn = 0 | 1 | 2 | 3;

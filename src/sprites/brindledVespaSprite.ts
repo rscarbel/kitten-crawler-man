@@ -1,4 +1,4 @@
-import { progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import { progressFrameIndex, timeFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { BRINDLED_VESPA_FIGURE } from './art/brindledVespaFigure';
 import {
   SPIT_STATE,

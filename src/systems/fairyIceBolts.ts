@@ -8,11 +8,12 @@
  * to dodge a shot already fired.
  */
 
+import { crawlerTurnsShot } from '../gear/incomingBlows';
 import type { DamageSource, Player } from '../Player';
 import type { GameMap } from '../map/GameMap';
 import { Mob } from '../creatures/Mob';
 import { TILE_SIZE } from '../core/constants';
-import { applyChillOnly, applyIceHit } from '../core/frostStatus';
+import { applyChillOnly, applyIceHit } from '../core/combat/frostStatus';
 import { ICE_BOLT_ATTACK_TYPE, IceFairy } from '../creatures/fairies/IceFairy';
 import {
   CHILL_BLAST_RADIUS_TILES,
@@ -162,6 +163,7 @@ export class FairyIceBolts {
       attackType: ICE_BOLT_ATTACK_TYPE,
       from: { x, y },
     });
+    if (crawlerTurnsShot(target, bolt.owner, bolt.dirX, bolt.dirY)) return;
     const connected = target.takeDamage(damage, source);
     if (!connected || !target.isAlive) return;
     if (bolt.owner.isAlive) bolt.owner.noteStruckPlayer(target);

@@ -12,7 +12,7 @@
  */
 
 import { TILE_SIZE } from '../../core/constants';
-import { isWorldPointInView, visibleWorldView } from '../../core/visibleWorldView';
+import { isWorldPointInView, visibleWorldView } from '../../core/rendering/visibleWorldView';
 import type { GameMap } from '../../map/GameMap';
 import { findNearbyWalkableTile, hasRoomToMove } from '../../map/findWalkableTile';
 import type { TilePoint } from '../../map/town/townPlan';

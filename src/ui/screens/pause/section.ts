@@ -5,14 +5,14 @@
 
 import type { AudioManager } from '../../../audio/AudioManager';
 import type { MusicPlayerControls } from '../../../audio/music/MusicDirector';
-import type { AbilityManager } from '../../../core/AbilityManager';
-import type { AchievementManager } from '../../../core/AchievementManager';
-import type { CraftSkillId } from '../../../core/CraftSkills';
-import type { Difficulty } from '../../../core/difficultyProfiles';
-import type { GameStats } from '../../../core/GameStats';
-import type { JournalProgress } from '../../../core/JournalProgress';
-import type { MusicLibrary } from '../../../core/MusicLibrary';
-import type { CrawlerKind } from '../../../core/SkillManager';
+import type { AbilityManager } from '../../../core/skills/AbilityManager';
+import type { AchievementManager } from '../../../core/progression/AchievementManager';
+import type { CraftSkillId } from '../../../core/labour/CraftSkills';
+import type { Difficulty } from '../../../core/difficulty/difficultyProfiles';
+import type { GameStats } from '../../../core/progression/GameStats';
+import type { JournalProgress } from '../../../core/quests/JournalProgress';
+import type { MusicLibrary } from '../../../core/music/MusicLibrary';
+import type { CrawlerKind } from '../../../core/skills/SkillManager';
 import type { CatPlayer } from '../../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../../creatures/HumanPlayer';
 import type { TrackerEntry } from '../../../systems/questTracker';
@@ -95,8 +95,6 @@ export interface PauseContext {
   readonly audio: PauseAudio | null;
   /** The run's music library, or null where no run is bound (which hides the music page). */
   readonly musicLibrary: MusicLibrary | null;
-  /** Opens a crawler's loot boxes, or null where they can't be opened here. */
-  readonly openBoxes: Readonly<Record<CrawlerKind, (() => void) | null>>;
   readonly guides: PauseGuides;
   /** Opens the chat window; null where chat isn't offered. */
   readonly openChat: (() => void) | null;

@@ -24,7 +24,7 @@
  */
 
 import { TILE_SIZE } from '../src/core/constants';
-import { getSpriteDef, type SpriteKey } from '../src/core/SpriteLoader';
+import { getSpriteDef, type SpriteKey } from '../src/core/spriteAssets/SpriteLoader';
 import { GameMap } from '../src/map/GameMap';
 import {
   BARREL,

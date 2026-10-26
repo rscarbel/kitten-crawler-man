@@ -12,7 +12,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
-import { viewportHeight, viewportWidth } from '../core/Viewport';
+import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
 import type { FacingSelection } from '../sprites/facingView';
 import {
   advanceScientistPhase,

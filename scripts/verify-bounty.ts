@@ -30,7 +30,7 @@ import {
   createBountyProgress,
   peekNextBountyType,
   takeNextBountyName,
-} from '../src/core/BountyProgress';
+} from '../src/core/quests/BountyProgress';
 import { BOUNTY_DEFS } from '../src/systems/bountyDefs';
 import { Conversation } from '../src/dialog/Conversation';
 import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
@@ -43,8 +43,8 @@ import {
   bountyMinionLevel,
   bountyPayoutCoins,
 } from '../src/systems/BountySystem';
-import { DIFFICULTY_PROFILES } from '../src/core/difficultyProfiles';
-import { settings } from '../src/core/Settings';
+import { DIFFICULTY_PROFILES } from '../src/core/difficulty/difficultyProfiles';
+import { settings } from '../src/core/input/Settings';
 import { PLAYER_SPEED } from '../src/core/constants';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';

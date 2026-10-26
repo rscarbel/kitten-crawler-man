@@ -1,5 +1,5 @@
 import { TILE_SIZE } from '../../core/constants';
-import { drawSpriteKey } from '../../core/SpriteRenderer';
+import { drawSpriteKey } from '../../core/spriteAssets/SpriteRenderer';
 import {
   advanceScientistPhase,
   drawScientist,

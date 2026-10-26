@@ -1,5 +1,5 @@
 import { TILE_SIZE } from '../../core/constants';
-import { drawSpriteKey } from '../../core/SpriteRenderer';
+import { drawSpriteKey } from '../../core/spriteAssets/SpriteRenderer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import { Cockroach } from '../../creatures/Cockroach';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
@@ -107,6 +107,8 @@ const FALL_LINE_SHADOW_PEAK_ALPHA = 0.5;
 const FALL_LINE_SHADOW_START_ALPHA = 0.12;
 
 const HALF = 0.5;
+/** Bursts left undrained past this are dropped, so a scene with no audio cannot grow the list. */
+const MAX_PENDING_ROACH_BURSTS = 8;
 const GOLDEN_ANGLE = 2.399963;
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -171,6 +173,8 @@ export class TrashGremlinRoomSystem
   private landedHold = 0;
   private landedTopple: Topple | null = null;
   private readonly rustles: Rustle[] = [];
+  /** Piles that burst open with a roach since the scene last looked, as world-pixel centres. */
+  private readonly roachBursts: Array<{ x: number; y: number }> = [];
   /** Live roaches as of this frame's update, so a purge can size its roll to the cap. */
   private liveRoaches = 0;
   /** Bags known to be standing, so a burst is noticed once. */
@@ -654,8 +658,19 @@ export class TrashGremlinRoomSystem
       // A roach whose way out was walked onto tries the pile's other sides; a
       // pile with no side open keeps it. It never comes from the gremlin.
       const exits = [rustle.exit, ...this.exitsToward(rustle.pile, rustle.exit)];
-      for (const exit of exits) if (this.spawnRoach(ctx, exit)) break;
+      const hatched = exits.some((exit) => this.spawnRoach(ctx, exit));
+      if (hatched && this.roachBursts.length < MAX_PENDING_ROACH_BURSTS) {
+        this.roachBursts.push({
+          x: (rustle.pile.x + HALF) * TILE_SIZE,
+          y: (rustle.pile.y + HALF) * TILE_SIZE,
+        });
+      }
     }
+  }
+
+  /** Where piles burst open with a roach since the last call, emptied by the call. */
+  drainRoachBursts(): Array<{ x: number; y: number }> {
+    return this.roachBursts.splice(0, this.roachBursts.length);
   }
 
   private isUnderGremlin(tile: TilePoint): boolean {

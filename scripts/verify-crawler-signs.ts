@@ -31,7 +31,7 @@
 
 import { readFileSync } from 'node:fs';
 import { TILE_SIZE } from '../src/core/constants.js';
-import { DIFFICULTY_PROFILES } from '../src/core/difficultyProfiles.js';
+import { DIFFICULTY_PROFILES } from '../src/core/difficulty/difficultyProfiles.js';
 import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions.js';
 import { level1 } from '../src/levels/level1.js';
 import { level2 } from '../src/levels/level2.js';

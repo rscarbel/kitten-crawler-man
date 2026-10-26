@@ -14,6 +14,8 @@ export interface HeldSocketPlacement {
   readonly centre: Pt;
   readonly axis: Vec3;
   readonly palmNormal: Vec3;
+  /** Which way the head's business side faces, where the socket decides it. */
+  readonly leading?: Vec3;
   /** In a hand painted in the body's shade. */
   readonly shaded: boolean;
 }
@@ -32,6 +34,7 @@ export function heldTransformAt(
     centre: socket.centre,
     axis: socket.axis,
     palmNormal: socket.palmNormal,
+    ...(socket.leading === undefined ? {} : { leading: socket.leading }),
     scale,
     phase,
     shaded: socket.shaded,

@@ -113,11 +113,11 @@ import { LootSystem } from '../src/systems/LootSystem.js';
 import { HumanPlayer } from '../src/creatures/HumanPlayer.js';
 import { isWalkableTileType } from '../src/map/walkability.js';
 import { OIL_FIRE_CATCH_FRAMES } from '../src/systems/destruction/wreckageField.js';
-import { setViewportSize } from '../src/core/Viewport.js';
+import { setViewportSize } from '../src/core/rendering/Viewport.js';
 import { DungeonLifeSystem } from '../src/systems/dungeon/DungeonLifeSystem.js';
 import { floorSurfaceOf } from '../src/map/dungeon/floorSurface.js';
 import { buildColosseumDressing } from '../src/systems/bossRooms/BossRoomDressings.js';
-import { UINT32_SPAN } from '../src/core/WorldRandom.js';
+import { UINT32_SPAN } from '../src/core/world/WorldRandom.js';
 import { StairwellSystem } from '../src/systems/StairwellSystem.js';
 import { LabHallwayAtmosphere } from '../src/systems/spiderQuest/LabHallwayAtmosphere.js';
 

@@ -35,7 +35,7 @@ import {
   captureTownMemory,
   restoreTownMemory,
   type TownMemory,
-} from '../src/core/TownMemory.js';
+} from '../src/core/state/TownMemory.js';
 import { TOWN_INTERIOR_PROPS } from '../src/sprites/art/townInterior/townInteriorProps.js';
 
 let failures = 0;

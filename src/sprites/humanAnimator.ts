@@ -24,7 +24,7 @@
  * slide.
  */
 
-import { progressFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
+import { progressFrameIndex, walkFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { FacingState } from './facingView';
 import {
   MAX_GAIT_ADVANCE_PX_PER_TICK,

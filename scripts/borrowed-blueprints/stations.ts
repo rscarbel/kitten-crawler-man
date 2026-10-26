@@ -11,14 +11,21 @@
  * scene.
  */
 
-import { createBriarHollowState, type BriarHollowState } from '../../src/core/briarHollowState';
+import {
+  createBriarHollowState,
+  type BriarHollowState,
+} from '../../src/core/quests/briarHollowState';
 import { TILE_SIZE } from '../../src/core/constants';
-import { teachBoth } from '../../src/core/CraftSkills';
+import { teachBoth } from '../../src/core/labour/CraftSkills';
 import { EventBus } from '../../src/core/EventBus';
-import { createPartyCraftsState } from '../../src/core/partyCrafts';
-import { PartyTools } from '../../src/core/PartyTools';
-import { formatCost, partyCount, type ResourceCost } from '../../src/core/partyResources';
-import { RESOURCE_IDS } from '../../src/core/resourceIds';
+import { createPartyCraftsState } from '../../src/core/labour/partyCrafts';
+import { PartyTools } from '../../src/core/items/gathering/PartyTools';
+import {
+  formatCost,
+  partyCount,
+  type ResourceCost,
+} from '../../src/core/items/gathering/partyResources';
+import { RESOURCE_IDS } from '../../src/core/items/gathering/resourceIds';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { Conversation } from '../../src/dialog/Conversation';
@@ -55,7 +62,7 @@ import {
   ROPE_PER_WOOD,
 } from '../../src/systems/briarHollow/services/woodProcessing';
 import { VillagerSystem } from '../../src/systems/briarHollow/VillagerSystem';
-import { allocCanvas, surfaceContext } from '../../src/core/canvasSurface';
+import { allocCanvas, surfaceContext } from '../../src/core/rendering/canvasSurface';
 import {
   interactionPromptsDrawnThisFrame,
   setInteractionPromptsSuppressed,
@@ -64,10 +71,10 @@ import type { SoundId } from '../../src/audio/sounds';
 import { cueSoundOr } from '../../src/systems/briarHollow/blueprints/blueprintsSoundCues';
 import { PLAIN_SAWING_LOOP, SawmillService } from '../../src/systems/briarHollow/services/sawmill';
 import type { Check } from './fenna';
-import { setViewportSize } from '../../src/core/Viewport';
+import { setViewportSize } from '../../src/core/rendering/Viewport';
 import { WORLD_BAR, WORLD_TEXT } from '../../src/ui/theme/worldInk';
-import type { VillageQuestPhase } from '../../src/core/villageQuestPhase';
-import type { CrawlerKind } from '../../src/core/SkillManager';
+import type { VillageQuestPhase } from '../../src/core/quests/villageQuestPhase';
+import type { CrawlerKind } from '../../src/core/skills/SkillManager';
 import { DefenseStructures } from '../../src/systems/briarHollow/DefenseStructures';
 import type { QuestGuidance } from '../../src/systems/briarHollow/questGuidance';
 import { VillageQuestGuide } from '../../src/systems/briarHollow/VillageQuestGuide';

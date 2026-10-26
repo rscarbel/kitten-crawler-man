@@ -31,7 +31,7 @@ import { TILE_SIZE } from '../src/core/constants';
 import { GameMap } from '../src/map/GameMap';
 import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions';
 import { level3 } from '../src/levels/level3';
-import { PlayerManager } from '../src/core/PlayerManager';
+import { PlayerManager } from '../src/core/party/PlayerManager';
 import { SpellSystem } from '../src/systems/SpellSystem';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
 import type { SystemContext } from '../src/systems/GameSystem';
@@ -51,8 +51,8 @@ import {
   restoreDoomsdayProgress,
   triggerDoomsdayExplosionIfExpired,
   type DoomsdayProgress,
-} from '../src/core/DoomsdayProgress';
-import { GameStats, parseGameStatsSnapshot } from '../src/core/GameStats';
+} from '../src/core/quests/DoomsdayProgress';
+import { GameStats, parseGameStatsSnapshot } from '../src/core/progression/GameStats';
 import {
   RunCompleteScreen,
   buildRunSummary,
@@ -64,8 +64,8 @@ import {
   captureMercenaryRoster,
   createMercenaryRoster,
   type MercenaryRoster,
-} from '../src/core/MercenaryRoster';
-import { getMercenaryTemplate } from '../src/core/mercenaryTemplates';
+} from '../src/core/party/MercenaryRoster';
+import { getMercenaryTemplate } from '../src/core/party/mercenaryTemplates';
 import { loadGameSpritesInNode } from './nodeCanvasGlobals';
 
 const WORLD_SEED = 424242;

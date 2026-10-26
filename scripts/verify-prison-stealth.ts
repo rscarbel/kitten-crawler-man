@@ -25,7 +25,7 @@
  */
 
 import { TILE_SIZE } from '../src/core/constants.js';
-import type { Difficulty } from '../src/core/difficultyProfiles.js';
+import type { Difficulty } from '../src/core/difficulty/difficultyProfiles.js';
 import {
   PRISON_LAYOUTS,
   type PrisonLayout,

@@ -12,7 +12,7 @@
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { ASSET_GROUPS, type AssetGroup } from '../src/core/assetGroups.js';
+import { ASSET_GROUPS, type AssetGroup } from '../src/core/spriteAssets/assetGroups.js';
 
 /** Bytes of PNG header before the IHDR width/height pair. */
 const IHDR_DIMENSION_OFFSET = 16;

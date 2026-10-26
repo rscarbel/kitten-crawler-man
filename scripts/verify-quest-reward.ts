@@ -18,16 +18,19 @@
  */
 
 import { installCanvasGlobals } from './nodeCanvasGlobals';
-import { allocCanvas, surfaceContext } from '../src/core/canvasSurface';
-import { ANCHOR_QUEST_NAME, createAnchorQuestProgress } from '../src/core/AnchorQuestProgress';
-import { createBriarHollowState } from '../src/core/briarHollowState';
-import { createCircusQuestProgress } from '../src/core/CircusQuestProgress';
-import { ANCHOR_SHARD_IDS } from '../src/core/ItemDefs';
-import { createMurderQuestProgress } from '../src/core/MurderQuestProgress';
+import { allocCanvas, surfaceContext } from '../src/core/rendering/canvasSurface';
+import {
+  ANCHOR_QUEST_NAME,
+  createAnchorQuestProgress,
+} from '../src/core/quests/AnchorQuestProgress';
+import { createBriarHollowState } from '../src/core/quests/briarHollowState';
+import { createCircusQuestProgress } from '../src/core/quests/CircusQuestProgress';
+import { ANCHOR_SHARD_IDS } from '../src/core/items/defs/ItemDefs';
+import { createMurderQuestProgress } from '../src/core/quests/MurderQuestProgress';
 import { transientSpeaker } from '../src/dialog/line';
 import { Conversation } from '../src/dialog/Conversation';
 import { crawlerName } from '../src/characters/characters';
-import { type CrawlerKind } from '../src/core/SkillManager';
+import { type CrawlerKind } from '../src/core/skills/SkillManager';
 import { AnchorQuestSystem } from '../src/systems/AnchorQuestSystem';
 import { CircusQuestSystem } from '../src/systems/CircusQuestSystem';
 import {
@@ -39,7 +42,7 @@ import { MurderMysteryQuestSystem } from '../src/systems/MurderMysteryQuestSyste
 import { SpiderQuestSystem } from '../src/systems/SpiderQuestSystem';
 import type { QuestRewardScreen } from '../src/ui/questReward/QuestRewardScreen';
 import type { QuestRewardSpec, RewardUnlockCard } from '../src/ui/questReward/types';
-import type { QuestStatus } from '../src/core/QuestManager';
+import type { QuestStatus } from '../src/core/quests/QuestManager';
 import {
   buildSiegeRig,
   questRewardSurface,

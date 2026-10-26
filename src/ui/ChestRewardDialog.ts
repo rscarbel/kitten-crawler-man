@@ -27,8 +27,6 @@ export interface ChestLootSplit {
   displayLabels?: Record<string, string>;
   /** Extra display-only lines appended to the human column (not real inventory items). */
   customHumanEntries?: string[];
-  /** Extra display-only lines appended to the cat column (not real inventory items). */
-  customCatEntries?: string[];
 }
 
 /** A spark from the chest's burst, relative to the chest's centre. */

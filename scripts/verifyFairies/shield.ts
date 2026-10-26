@@ -32,8 +32,8 @@
  */
 
 import { TILE_SIZE } from '../../src/core/constants';
-import type { Difficulty } from '../../src/core/difficultyProfiles';
-import type { FloatingTextStyle } from '../../src/core/FloatingText';
+import type { Difficulty } from '../../src/core/difficulty/difficultyProfiles';
+import type { FloatingTextStyle } from '../../src/core/combat/FloatingText';
 import {
   FAIRY_AEGIS_STATUS,
   FAIRY_WARD_STATUS,
@@ -42,7 +42,7 @@ import {
   makeFairyWard,
   makeShield,
   type StatusEffect,
-} from '../../src/core/StatusEffect';
+} from '../../src/core/combat/StatusEffect';
 import { Goblin } from '../../src/creatures/Goblin';
 import type { Mob, PlayerDamageType } from '../../src/creatures/Mob';
 import type { Player } from '../../src/Player';
@@ -71,7 +71,7 @@ import {
   setVisibleWorldView,
   visibleWorldView,
   type WorldSight,
-} from '../../src/core/visibleWorldView';
+} from '../../src/core/rendering/visibleWorldView';
 import { MAX_MOB_LEVEL } from '../../src/levels/spawner';
 import { FloatingCombatTextSystem } from '../../src/systems/FloatingCombatTextSystem';
 import type { FairyGateReport } from './report';

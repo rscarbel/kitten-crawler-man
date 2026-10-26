@@ -1,6 +1,6 @@
 import { TILE_SIZE } from '../../core/constants';
-import { drawSpriteKey, timeFrameIndex } from '../../core/SpriteRenderer';
-import { viewportHeight, viewportWidth } from '../../core/Viewport';
+import { drawSpriteKey, timeFrameIndex } from '../../core/spriteAssets/SpriteRenderer';
+import { viewportHeight, viewportWidth } from '../../core/rendering/Viewport';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import { KrakarenClone, SLAM_KILL_RADIUS_PX } from '../../creatures/KrakarenClone';

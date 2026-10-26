@@ -27,8 +27,8 @@
  *   calls `handleLaneTap`, so what is drawn and what is tappable can never drift.
  */
 
-import { keybindings } from '../core/Keybindings';
-import type { Difficulty } from '../core/difficultyProfiles';
+import { keybindings } from '../core/input/Keybindings';
+import type { Difficulty } from '../core/difficulty/difficultyProfiles';
 import {
   KEYBOARD_HERO_CHARTS,
   type KeyboardHeroChart,

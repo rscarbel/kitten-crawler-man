@@ -10,11 +10,11 @@
  * item can be dropped on either.
  */
 
-import { QUEST_SLOT_IDX } from '../../core/ItemDefs';
-import { HOTBAR_ACTIONS, keybindings } from '../../core/Keybindings';
+import { QUEST_SLOT_IDX } from '../../core/items/defs/ItemDefs';
+import { HOTBAR_ACTIONS, keybindings } from '../../core/input/Keybindings';
 import type { Ui } from '../core/UiRoot';
 import { skinsFor } from '../theme/skins';
-import { itemSlot } from '../widgets/itemSlot';
+import { itemSlot, slotContent } from '../widgets/itemSlot';
 import { drawGlass, fillRounded, strokeRounded } from '../widgets/paint';
 import type { HotbarRects } from './hudLayout';
 import type { HotbarModel } from './hudModel';
@@ -47,7 +47,7 @@ export function hotbar(ui: Ui, rects: HotbarRects, model: HotbarModel): void {
     const regionId = `hotbar/${index}`;
     const look = {
       id: regionId,
-      item: item?.id ?? null,
+      ...slotContent(item?.id ?? null, slot.awakened),
       quantity: item?.quantity,
       keycap: keybindings.labelFor(HOTBAR_ACTIONS[index]),
       cooldown: slot.cooldown,

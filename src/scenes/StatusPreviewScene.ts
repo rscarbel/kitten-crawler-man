@@ -18,15 +18,15 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { worldText } from '../ui/world/worldText';
 import { PreviewScene, type PreviewControl } from './PreviewScene';
-import { drawWithSilhouetteLayers } from '../core/silhouetteComposite';
+import { drawWithSilhouetteLayers } from '../core/spriteAssets/silhouetteComposite';
 import { activeHumanLook, drawHumanSprite, prewarmHumanSprite } from '../sprites/humanSprite';
 import { humanStatusFigureBoxOf } from '../creatures/HumanPlayer';
 import { humanMouthOf } from '../sprites/crawlerMouths';
 import { PLAYER_HIT_FLASH_MARGIN_TILES } from '../Player';
-import type { StatusEffect } from '../core/StatusEffect';
+import type { StatusEffect } from '../core/combat/StatusEffect';
 import {
   statusBadge,
   statusBodyLayers,
@@ -49,7 +49,6 @@ const PREVIEW_STATUSES: readonly string[] = [
   'burn',
   'magic_burn',
   'poison',
-  'sepsis',
   'spit_venom',
   'blood_vomit',
   'stuck',

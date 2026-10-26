@@ -3,12 +3,16 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../core/canvasSurface';
-import { progressFrameIndex, timeFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
+} from '../core/rendering/canvasSurface';
+import {
+  progressFrameIndex,
+  timeFrameIndex,
+  walkFrameIndex,
+} from '../core/spriteAssets/SpriteRenderer';
 import { MOLD_LION_FIGURE } from './art/moldLionFigure';
 import { figureFrameCount } from './figure/figureDef';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
-import { onCanvasRecovery } from '../core/canvasRecovery';
+import { onCanvasRecovery } from '../core/rendering/canvasRecovery';
 
 const IDLE_FPS = 6;
 const MILLISECONDS_PER_SECOND = 1000;

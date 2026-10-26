@@ -7,8 +7,8 @@
  * pointer with no insets.
  */
 
-import { settings, type UiSize } from '../../core/Settings';
-import { viewportHeight, viewportWidth } from '../../core/Viewport';
+import { settings, type UiSize } from '../../core/input/Settings';
+import { viewportHeight, viewportWidth } from '../../core/rendering/Viewport';
 import type { Density } from '../theme/tokens';
 import { inset, type Insets, type Rect } from './geom';
 

@@ -14,8 +14,8 @@
  * than one that will not render at all.
  */
 
-import { getSpriteDefByKey } from '../core/SpriteLoader';
-import { drawSprite, spriteStateInkTop } from '../core/SpriteRenderer';
+import { getSpriteDefByKey } from '../core/spriteAssets/SpriteLoader';
+import { drawSprite, spriteStateInkTop } from '../core/spriteAssets/SpriteRenderer';
 
 export function drawTownSheetFrame(
   ctx: CanvasRenderingContext2D,

@@ -10,9 +10,9 @@
  */
 
 import { TILE_SIZE } from '../../src/core/constants';
-import { createBriarHollowState } from '../../src/core/briarHollowState';
-import type { BlueprintsQuestPhase } from '../../src/core/blueprintsQuestPhase';
-import type { MidgeEscortCarry } from '../../src/core/midgeEscortCarry';
+import { createBriarHollowState } from '../../src/core/quests/briarHollowState';
+import type { BlueprintsQuestPhase } from '../../src/core/quests/blueprintsQuestPhase';
+import type { MidgeEscortCarry } from '../../src/core/quests/midgeEscortCarry';
 import { Rat } from '../../src/creatures/Rat';
 import { FENCE } from '../../src/map/tileTypes';
 import type { TilePoint } from '../../src/map/town/townPlan';

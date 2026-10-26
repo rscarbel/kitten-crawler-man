@@ -1,5 +1,11 @@
 /** Economy actions: items in and out of bags, coins in and out of purses, shop prices. */
-import { ITEM_DEF, isItemId, wearerAllows, wearerOf, type ItemId } from '../../core/ItemDefs';
+import {
+  ITEM_DEF,
+  isItemId,
+  wearerAllows,
+  wearerOf,
+  type ItemId,
+} from '../../core/items/defs/ItemDefs';
 import { ITEM_PRICES } from '../../economy/itemPrices';
 import { activePriceAdjustment, setPriceAdjustment } from '../../economy/pricing';
 import {

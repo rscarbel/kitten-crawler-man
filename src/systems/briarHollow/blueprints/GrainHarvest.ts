@@ -34,17 +34,17 @@
  */
 
 import { TILE_SIZE } from '../../../core/constants';
-import { viewportHeight, viewportWidth } from '../../../core/Viewport';
-import type { SpatialGrid } from '../../../core/SpatialGrid';
+import { viewportHeight, viewportWidth } from '../../../core/rendering/Viewport';
+import type { SpatialGrid } from '../../../core/world/SpatialGrid';
 import type { Mob } from '../../../creatures/Mob';
-import { BLUEPRINTS_GRAIN_TARGET } from '../../../core/blueprintsQuestPhase';
+import { BLUEPRINTS_GRAIN_TARGET } from '../../../core/quests/blueprintsQuestPhase';
 import {
   allocCanvas,
   type CanvasSurface,
   releaseSurface,
   surfaceContext,
-} from '../../../core/canvasSurface';
-import { keybindings } from '../../../core/Keybindings';
+} from '../../../core/rendering/canvasSurface';
+import { keybindings } from '../../../core/input/Keybindings';
 import { activeInputMode, byInputMode, keyLabel } from '../../../ui/core/inputMode';
 import { HumanPlayer } from '../../../creatures/HumanPlayer';
 import { rectContains } from '../../../map/overworld/briarHollowSite';
@@ -65,7 +65,7 @@ import {
   scytheSwingBarLayout,
   type ScytheSwingBarView,
 } from './ScytheSwingBar';
-import { onCanvasRecovery } from '../../../core/canvasRecovery';
+import { onCanvasRecovery } from '../../../core/rendering/canvasRecovery';
 
 /** How long one swing of the scythe takes, first press to grain. */
 export const SCYTHE_SWING_SECONDS = 1.5;

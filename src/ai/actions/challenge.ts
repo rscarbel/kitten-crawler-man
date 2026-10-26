@@ -30,9 +30,9 @@ import {
 import { aiSpawnableMobTypes } from './combat';
 import { LOW_HP_FRACTION, anyVulnerable } from './governor';
 import {
-  AI_BOX_TIERS,
+  AI_CHEST_RARITIES,
   AI_CHARACTER_SYSTEM,
-  BOX_TIER_POINTS,
+  CHEST_RARITY_POINTS,
   activeCrawler,
   bothCrawlers,
   tileOf,
@@ -65,10 +65,10 @@ const TITLE = textParam('title', {
   maxLength: TITLE_MAX_CHARS,
   description: 'The challenge’s name on the offer card and the HUD, e.g. "Rat Race".',
 });
-const REWARD_TIER = enumParam(
-  'reward_tier',
-  AI_BOX_TIERS,
-  'The loot box a win pays. Drawn from the floor’s loot-box allowance when offered.',
+const REWARD_RARITY = enumParam(
+  'reward_rarity',
+  AI_CHEST_RARITIES,
+  'The reward chest a win pays. Drawn from the floor’s reward-chest allowance when offered.',
 );
 const TAUNT = textParam('taunt', {
   minLength: TAUNT_MIN_CHARS,
@@ -107,7 +107,7 @@ function specOf({ params, characterName }: AIActionCall): ChallengeSpec {
     count: params.get(COUNT),
     mobType: params.get(MOB_TYPE),
     seconds: params.get(SECONDS),
-    rewardTier: params.get(REWARD_TIER),
+    rewardRarity: params.get(REWARD_RARITY),
     pitch: params.get(PITCH),
     taunt: params.get(TAUNT),
     offeredBy: characterName,
@@ -169,8 +169,8 @@ function challengeRefusal(call: AIActionCall): string | null {
 const offerChallenge: AIActionDef = {
   name: 'offer_challenge',
   description:
-    'Offer the crawlers a timed bounty from a fixed set of templates, with a loot box for winning and a public taunt for failing. They accept or decline on a card; acceptance, the win or the failure arrive later as challengeAccepted / challengeDeclined / challengeCompleted / challengeFailed events. One at a time, never mid-fight or at low HP.',
-  params: [TEMPLATE, TITLE, REWARD_TIER, TAUNT, SECONDS, COUNT, MOB_TYPE, PITCH],
+    'Offer the crawlers a timed bounty from a fixed set of templates, with a reward chest for winning and a public taunt for failing. They accept or decline on a card; acceptance, the win or the failure arrive later as challengeAccepted / challengeDeclined / challengeCompleted / challengeFailed events. One at a time, never mid-fight or at low HP.',
+  params: [TEMPLATE, TITLE, REWARD_RARITY, TAUNT, SECONDS, COUNT, MOB_TYPE, PITCH],
   policy: {
     cost: 3,
     cooldownMs: CHALLENGE_COOLDOWN_MS,
@@ -181,8 +181,8 @@ const offerChallenge: AIActionDef = {
   characters: [AI_CHARACTER_SYSTEM],
   isHarmful: () => false,
   budget: ({ params }) => ({
-    pool: 'lootBoxPoints',
-    amount: BOX_TIER_POINTS[params.get(REWARD_TIER)],
+    pool: 'rewardChestPoints',
+    amount: CHEST_RARITY_POINTS[params.get(REWARD_RARITY)],
   }),
   refusal: challengeRefusal,
   showsIndicator: false,
@@ -196,7 +196,7 @@ const offerChallenge: AIActionDef = {
     const id = challenges.propose(spec);
     if (id === null) return refused('a challenge is already offered or under way');
     return ok(
-      `offered ${id} "${spec.title}": ${challengeObjective(spec)} for a ${spec.rewardTier} box (awaiting the player's answer)`,
+      `offered ${id} "${spec.title}": ${challengeObjective(spec)} for a ${spec.rewardRarity} chest (awaiting the player's answer)`,
     );
   },
 };

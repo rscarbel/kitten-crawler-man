@@ -5,7 +5,7 @@
  */
 
 import type { MusicTrackId } from '../../src/audio/sounds.js';
-import { MusicLibrary, type MusicLibraryNotice } from '../../src/core/MusicLibrary.js';
+import { MusicLibrary, type MusicLibraryNotice } from '../../src/core/music/MusicLibrary.js';
 import {
   NowPlayingCard,
   postMusicLibraryNotices,

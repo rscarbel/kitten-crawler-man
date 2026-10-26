@@ -13,8 +13,6 @@
  *   npx tsx scripts/render-cat.ts --part=head --scale=6
  *   npx tsx scripts/render-cat.ts --row=walk_side --mode=onion --scale=3
  *   npx tsx scripts/render-cat.ts --frame=5 --row=cast --scale=8
- *   npx tsx scripts/render-cat.ts --wear=cat_shades --part=head --scale=6
- *   npx tsx scripts/render-cat.ts --wear=cat_crown,cat_butterfly_talisman --scale=3
  *   npx tsx scripts/render-cat.ts --look=pumpkin
  *   npx tsx scripts/render-cat.ts --row=walk_side --mode=strip32
  *

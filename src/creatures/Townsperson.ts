@@ -26,7 +26,7 @@ import {
   pickCitizenFigure,
   type CitizenFigure,
 } from './citizenFigure';
-import { onCanvasRecovery } from '../core/canvasRecovery';
+import { onCanvasRecovery } from '../core/rendering/canvasRecovery';
 import { residentFigure } from './residentFigures';
 import type { NPCMarkerType } from './QuestNPC';
 import { questMarkerColorFor } from '../sprites/questNPCSprite';

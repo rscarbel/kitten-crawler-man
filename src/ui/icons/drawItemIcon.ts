@@ -1,4 +1,4 @@
-import type { InventoryItem } from '../../core/ItemDefs';
+import type { InventoryItem } from '../../core/items/defs/ItemDefs';
 import { paintIsolated } from '../isolatedPaint';
 import { worldText } from '../world/worldText';
 import { ITEM_ICONS } from './itemIcons';

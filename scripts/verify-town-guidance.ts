@@ -20,7 +20,10 @@
 
 import { GameMap } from '../src/map/GameMap';
 import type { BuildingEntry } from '../src/map/OverworldGenerator';
-import { getSpriteDoorwayByKey, type SpriteManifestEntry } from '../src/core/SpriteLoader';
+import {
+  getSpriteDoorwayByKey,
+  type SpriteManifestEntry,
+} from '../src/core/spriteAssets/SpriteLoader';
 import { createTownPlan, type TileRect, type TownPlan } from '../src/map/town/townPlan';
 import { PLANNED_SIGNPOSTS } from '../src/systems/townDecorPlan';
 import { TILE_SIZE } from '../src/core/constants';

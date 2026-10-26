@@ -13,17 +13,17 @@
 import { TILE_SIZE } from '../src/core/constants';
 import { Conversation } from '../src/dialog/Conversation';
 import { EventBus } from '../src/core/EventBus';
-import { createBriarHollowState, type BriarHollowState } from '../src/core/briarHollowState';
+import { createBriarHollowState, type BriarHollowState } from '../src/core/quests/briarHollowState';
 import {
   createAnchorQuestProgress,
   type AnchorQuestProgress,
-} from '../src/core/AnchorQuestProgress';
-import { createPartyCraftsState, type PartyCraftsState } from '../src/core/partyCrafts';
-import { PartyTools } from '../src/core/PartyTools';
-import { PlayerManager } from '../src/core/PlayerManager';
-import { AbilityManager } from '../src/core/AbilityManager';
-import { keybindings } from '../src/core/Keybindings';
-import type { GrantedReward } from '../src/core/GrantedReward';
+} from '../src/core/quests/AnchorQuestProgress';
+import { createPartyCraftsState, type PartyCraftsState } from '../src/core/labour/partyCrafts';
+import { PartyTools } from '../src/core/items/gathering/PartyTools';
+import { PlayerManager } from '../src/core/party/PlayerManager';
+import { AbilityManager } from '../src/core/skills/AbilityManager';
+import { keybindings } from '../src/core/input/Keybindings';
+import type { GrantedReward } from '../src/core/items/loot/GrantedReward';
 import type { MusicClaims } from '../src/audio/AudioScope';
 import type { HumanPlayer } from '../src/creatures/HumanPlayer';
 import type { CatPlayer } from '../src/creatures/CatPlayer';
@@ -43,11 +43,11 @@ import { SkeletonProjectileSystem } from '../src/systems/SkeletonProjectileSyste
 import { GroundPickupSystem } from '../src/systems/GroundPickupSystem';
 import { DynamiteSystem } from '../src/systems/DynamiteSystem';
 import { GoblinBombSystem } from '../src/systems/GoblinBombSystem';
-import { setFloorReferencePartyLevel } from '../src/core/floorReferenceLevel';
-import { DIFFICULTY_PROFILES } from '../src/core/difficultyProfiles';
+import { setFloorReferencePartyLevel } from '../src/core/difficulty/floorReferenceLevel';
+import { DIFFICULTY_PROFILES } from '../src/core/difficulty/difficultyProfiles';
 import { recommendedPartyLevelFor } from '../src/levels/spawner';
 import { BriarHollowKit } from '../src/systems/briarHollow/BriarHollowKit';
-import type { MidgeEscortCarry } from '../src/core/midgeEscortCarry';
+import type { MidgeEscortCarry } from '../src/core/quests/midgeEscortCarry';
 import type { BlueprintsCue } from '../src/systems/briarHollow/blueprints/blueprintsSoundCues';
 
 /** Briar Hollow stands on floor 3's overworld, so its map is that floor's size. */

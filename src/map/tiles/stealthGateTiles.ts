@@ -19,7 +19,7 @@
  */
 
 import { STEALTH_GATE_CLOSED, STEALTH_GATE_OPEN, type TileContent } from '../tileTypes';
-import type { MapSpriteExtentsPx } from '../../core/SpriteLoader';
+import type { MapSpriteExtentsPx } from '../../core/spriteAssets/SpriteLoader';
 import { isWalkableTileType } from '../walkability';
 import { drawGroundTile } from './groundTiles';
 import { dungeonFloorTheme } from '../dungeon/floorTheme';

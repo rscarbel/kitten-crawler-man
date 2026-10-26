@@ -1,4 +1,4 @@
-import { walkFrameIndex } from '../core/SpriteRenderer';
+import { walkFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { type CretinVariant, type CretinView } from './art/cretinArt';
 import {
   CRETIN_ACTIONS,

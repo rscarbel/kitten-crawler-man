@@ -2,7 +2,7 @@ import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameSystem, SystemContext } from './GameSystem';
-import { firstHealingConsumable } from '../core/foods';
+import { firstHealingConsumable } from '../core/items/consumables/foods';
 
 const FRAMES_PER_SECOND = 60;
 
@@ -99,7 +99,7 @@ export class PlayerTickSystem implements GameSystem {
 
   /**
    * Tick health regeneration for both players.
-   * Respects each player's `regenMultiplier` (e.g. Trollskin Shirt = 2.5×).
+   * Respects each player's `regenMultiplier`, which worn pieces raise.
    */
   tickRegen(human: HumanPlayer, cat: CatPlayer): void {
     this.tickRegenHumanOnly(human);

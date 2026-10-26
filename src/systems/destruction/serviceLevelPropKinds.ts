@@ -8,7 +8,7 @@
  */
 
 import { TILE_SIZE } from '../../core/constants';
-import type { ItemId } from '../../core/ItemDefs';
+import type { ItemId } from '../../core/items/defs/ItemDefs';
 import type { BreakMaterial, SmashCue } from './breakMaterials';
 import type { ServicePropKind } from '../../sprites/art/serviceProps/serviceFurnitureArt';
 import {

@@ -1,10 +1,10 @@
 import { playDrinkGesture } from '../creatures/humanGestures';
-import { displayHp } from '../core/crawlerFormulas';
+import { displayHp } from '../core/party/crawlerFormulas';
 import type { Player } from '../Player';
 import type { AudioManager } from '../audio/AudioManager';
-import type { MercenaryRoster } from '../core/MercenaryRoster';
-import type { ClubMembership } from '../core/ClubMembership';
-import type { MercenaryTemplateId } from '../core/mercenaryTemplates';
+import type { MercenaryRoster } from '../core/party/MercenaryRoster';
+import type { ClubMembership } from '../core/club/ClubMembership';
+import type { MercenaryTemplateId } from '../core/party/mercenaryTemplates';
 import type { CretinVariant } from '../sprites/cretinSprite';
 import { SERVICE_PRICES } from '../economy/servicePrices';
 import type { ServiceIconId } from '../sprites/art/itemIcons/serviceIcons';

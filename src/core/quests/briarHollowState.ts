@@ -1,0 +1,957 @@
+/**
+ * Briar Hollow's durable state: the defense questline's phase and gathering
+ * counters, every palisade segment/trebuchet/snare the party has built, the
+ * militia's standing orders, and the village's talk and stock bookkeeping.
+ *
+ * `BuildingInteriorScene` regenerates its map on every door entry and
+ * `DungeonScene` is rebuilt on every door exit, so — like `TownMemory` — the
+ * live object is threaded by reference through both scenes rather than owned
+ * by either. A system rebuilt on a door visit reads from it and never holds
+ * its own copy.
+ */
+
+import { isRecord } from '../util/guards';
+import {
+  captureShopStock,
+  createShopStock,
+  parseShopStockSnapshot,
+  restoreShopStock,
+  type ShopStock,
+  type ShopStockSnapshot,
+} from '../../economy/shopStock';
+import type { PalisadeTier } from '../../map/tileTypes';
+import type { CrawlerKind } from '../skills/SkillManager';
+import { VILLAGE_QUEST_PHASE_ORDER, type VillageQuestPhase } from './villageQuestPhase';
+import {
+  CONSTRUCTION_UNLOCK_IDS,
+  createVillageUnlocks,
+  unlocksImpliedByPhase,
+  type ConstructionUnlockId,
+  type VillageUnlocks,
+} from './villageUnlocks';
+import { VILLAGER_IDS, type VillagerId } from '../../dialog/scripts/briarHollow';
+import type { RatkinCastId } from '../../sprites/art/ratkin/cast';
+import { HOLLOW_BELL_MAX_HP } from '../../systems/briarHollow/hollowBell';
+import { PALISADE_SEGMENT_SCHEME_VERSION } from '../../map/overworld/briarHollowSite';
+import { PASTURE_FENCE_SECTION_COUNT } from '../../map/overworld/briarHollowLayout';
+import {
+  BLUEPRINTS_QUEST_PHASE_ORDER,
+  BLUEPRINTS_STATION_IDS,
+  type BlueprintsQuestPhase,
+  type BlueprintsStationId,
+} from './blueprintsQuestPhase';
+import {
+  contractSiteBySlug,
+  contractSiteKey,
+  contractSpot,
+  skyfowlContractSite,
+  type ContractSiteDef,
+  type ContractSiteKey,
+  type ContractSpotId,
+} from '../../systems/constructionContracts/contractCatalog';
+
+// ── Quest state ──────────────────────────────────────────────────────────
+
+export interface VillageGatheringProgress {
+  woodChopped: number;
+  stoneMined: number;
+  boardsProcessed: number;
+  ropeProcessed: number;
+}
+
+/** What the last siege cost the village, for the Mayor's word on the damage afterwards. */
+export interface VillageSiegeSummary {
+  segmentsBreached: number;
+  structuresDestroyed: number;
+  soldiersDowned: number;
+}
+
+export interface VillageQuestState {
+  phase: VillageQuestPhase;
+  gathering: VillageGatheringProgress;
+  /** Frames left on the "attack imminent" countdown; 0 when none is running. */
+  imminentCountdownFrames: number;
+  /** Which assault wave is under way, or null outside the `assault` phase. */
+  assaultWaveIndex: number | null;
+  /** The Hollow Bell's health. Full whenever no siege is being fought. */
+  bellHp: number;
+  /** The damage the most recent siege did, or null before the first one ends. */
+  lastSiege: VillageSiegeSummary | null;
+  /** Set the moment the Mayor's rewards are handed over, so a second turn-in pays nothing. */
+  rewardsGranted: boolean;
+  /**
+   * The bell tower lies broken after a lost siege, until the crawlers rebuild
+   * it. Distinct from `bellHp`, which only ever runs down during a siege.
+   */
+  bellTowerBroken: boolean;
+}
+
+function createVillageGatheringProgress(): VillageGatheringProgress {
+  return { woodChopped: 0, stoneMined: 0, boardsProcessed: 0, ropeProcessed: 0 };
+}
+
+function createVillageQuestState(): VillageQuestState {
+  return {
+    phase: 'unmet',
+    gathering: createVillageGatheringProgress(),
+    imminentCountdownFrames: 0,
+    assaultWaveIndex: null,
+    bellHp: HOLLOW_BELL_MAX_HP,
+    lastSiege: null,
+    rewardsGranted: false,
+    bellTowerBroken: false,
+  };
+}
+
+/** The two phases a siege is fought in; neither is ever written to a save or a checkpoint. */
+const UNPERSISTED_SIEGE_PHASES: ReadonlySet<VillageQuestPhase> = new Set(['imminent', 'assault']);
+
+/**
+ * The quest as a save or a checkpoint may record it: a siege in progress is
+ * written as the fortifying it began from, with the bell whole and no
+ * countdown or wave, so a death or a reload mid-siege lands before the siege
+ * rather than halfway through a wave nothing could resume.
+ */
+function persistableQuest(quest: VillageQuestState): VillageQuestState {
+  const lastSiege = quest.lastSiege === null ? null : { ...quest.lastSiege };
+  if (!UNPERSISTED_SIEGE_PHASES.has(quest.phase)) {
+    return { ...quest, gathering: { ...quest.gathering }, lastSiege };
+  }
+  return {
+    ...quest,
+    phase: 'fortifying',
+    gathering: { ...quest.gathering },
+    imminentCountdownFrames: 0,
+    assaultWaveIndex: null,
+    bellHp: HOLLOW_BELL_MAX_HP,
+    lastSiege,
+  };
+}
+
+// ── The Borrowed Blueprints ──────────────────────────────────────────────
+
+/** Which of Fenna's two stations stand upgraded from Tikka's blueprints. */
+export type BlueprintsStationsUpgraded = Record<BlueprintsStationId, boolean>;
+
+/**
+ * "The Borrowed Blueprints", Fenna's side quest. Held items (Merrit's scythe,
+ * the blueprints) are deliberately absent: they are read off both crawlers'
+ * inventories whenever they matter, so an item lost from the quest slot can
+ * never leave this record claiming it is still held. Midge's position is
+ * absent too, because a load or a rewind always stands her back at Merrit's
+ * pasture gate.
+ */
+export interface BlueprintsQuestState {
+  phase: BlueprintsQuestPhase;
+  /** One flag per pasture fence section, in the ring order the sections are cut in. */
+  fenceSectionsBuilt: boolean[];
+  /** Grain harvested toward Merrit's hundred; an overshoot is kept. */
+  grain: number;
+  stationsUpgraded: BlueprintsStationsUpgraded;
+  /**
+   * Whether the party has read the quest-complete screen through to Continue.
+   * Durable so a door visit, a reload or a rewind never raises it a second
+   * time; false after completion only until that screen is dismissed.
+   */
+  completionScreenSeen: boolean;
+}
+
+export function createBlueprintsQuestState(): BlueprintsQuestState {
+  return {
+    phase: 'unoffered',
+    fenceSectionsBuilt: new Array<boolean>(PASTURE_FENCE_SECTION_COUNT).fill(false),
+    grain: 0,
+    stationsUpgraded: { saw: false, ropeWalk: false },
+    completionScreenSeen: false,
+  };
+}
+
+/** A deep copy: the save and the checkpoint must never share arrays with the live record. */
+function copyBlueprintsQuestState(quest: BlueprintsQuestState): BlueprintsQuestState {
+  return {
+    phase: quest.phase,
+    fenceSectionsBuilt: [...quest.fenceSectionsBuilt],
+    grain: quest.grain,
+    stationsUpgraded: { ...quest.stationsUpgraded },
+    completionScreenSeen: quest.completionScreenSeen,
+  };
+}
+
+// ── Construction contracts ───────────────────────────────────────────────
+
+/** The one contract the party holds: a site and the spots chosen from its pool. */
+export interface ActiveContract {
+  site: ContractSiteKey;
+  spotIds: readonly ContractSpotId[];
+  /** Parallel to `spotIds`. Ready to collect when every entry is true; never stored as its own flag. */
+  spotsDone: boolean[];
+}
+
+/** Wendell's repeatable construction contracts, unlocked by finishing the Borrowed Blueprints. */
+export interface ConstructionContractsState {
+  /** Whether Wendell has given his long introduction; afterwards he offers in one line. */
+  introSeen: boolean;
+  /** Also the index of the RNG stream the next contract is drawn from, so a save reproduces it. */
+  contractsIssued: number;
+  contractsCompleted: number;
+  active: ActiveContract | null;
+  /** Slug of the last site finished or dropped, so the same building never comes up twice running. */
+  lastSiteKey: string | null;
+  /** Each site's last spot set, by slug, so a building never repeats its exact set back to back. */
+  lastSpotSetBySite: Record<string, readonly ContractSpotId[]>;
+}
+
+export function createConstructionContractsState(): ConstructionContractsState {
+  return {
+    introSeen: false,
+    contractsIssued: 0,
+    contractsCompleted: 0,
+    active: null,
+    lastSiteKey: null,
+    lastSpotSetBySite: {},
+  };
+}
+
+function copyActiveContract(active: ActiveContract): ActiveContract {
+  return {
+    site: { ...active.site },
+    spotIds: [...active.spotIds],
+    spotsDone: [...active.spotsDone],
+  };
+}
+
+function copyConstructionContractsState(
+  contracts: ConstructionContractsState,
+): ConstructionContractsState {
+  const lastSpotSetBySite: Record<string, readonly ContractSpotId[]> = {};
+  for (const [slug, spotIds] of Object.entries(contracts.lastSpotSetBySite)) {
+    lastSpotSetBySite[slug] = [...spotIds];
+  }
+  return {
+    introSeen: contracts.introSeen,
+    contractsIssued: contracts.contractsIssued,
+    contractsCompleted: contracts.contractsCompleted,
+    active: contracts.active === null ? null : copyActiveContract(contracts.active),
+    lastSiteKey: contracts.lastSiteKey,
+    lastSpotSetBySite,
+  };
+}
+
+// ── Structures ───────────────────────────────────────────────────────────
+
+/** A wall segment's tier, plus the two states a segment reaches at 0 HP. */
+export type WallSegmentTier = PalisadeTier | 'breach' | 'gap';
+
+interface StructureRecordBase {
+  /** Which crawler's own Construction level the structure's level-15 effects read. */
+  builtBy: CrawlerKind;
+  hp: number;
+  /** Spikes' own HP, or null when the structure has none built. */
+  spikesHp: number | null;
+  /**
+   * Which crawler added the spikes, whose kills the spikes' thorn damage is
+   * credited to. Absent on a structure without spikes, or from a save that
+   * never recorded it — the human is credited then.
+   */
+  spikesBy?: CrawlerKind;
+  /**
+   * The level-15 HP multiplier `hp` and `spikesHp` were last scaled under.
+   * When the builder's own multiplier moves, both are rescaled by the ratio so
+   * a half-health wall stays at half health. Absent means 1.
+   */
+  hpMultiplier?: number;
+}
+
+export interface SegmentStructureRecord extends StructureRecordBase {
+  kind: 'segment';
+  id: string;
+  tier: WallSegmentTier;
+  /** The tier a breach remembers, restored by a full repair. Only set while `tier` is `'breach'`. */
+  formerTier?: PalisadeTier;
+}
+
+export interface TrebuchetStructureRecord extends StructureRecordBase {
+  kind: 'trebuchet';
+  x: number;
+  y: number;
+  broken: boolean;
+  ammo: number;
+}
+
+export interface SnareStructureRecord extends StructureRecordBase {
+  kind: 'snare';
+  x: number;
+  y: number;
+  broken: boolean;
+  repairedOnce: boolean;
+}
+
+export type StructureRecord =
+  SegmentStructureRecord | TrebuchetStructureRecord | SnareStructureRecord;
+
+// ── Soldiers ─────────────────────────────────────────────────────────────
+
+export type SoldierOrder = 'follow' | 'hold' | 'patrol';
+
+/** A tile on the map, as a soldier's patrol route records its waypoints. */
+export interface SoldierRouteTile {
+  x: number;
+  y: number;
+}
+
+/**
+ * A soldier's standing orders. A soldier with no record is at their post,
+ * which is also what every new save starts with.
+ */
+export interface SoldierOrderRecord {
+  soldierId: VillagerId;
+  order: SoldierOrder;
+  /** The post a `'hold'` or `'patrol'` order is anchored to; absent while following. */
+  x?: number;
+  y?: number;
+  /** Which crawler a `'follow'` order trails: whoever gave it. */
+  followCrawler?: CrawlerKind;
+  /**
+   * A `'patrol'` order's waypoints, worked out and checked walkable when the
+   * order was given and walked in order, looping, ever after.
+   */
+  patrolRoute?: SoldierRouteTile[];
+}
+
+/** A deep copy of one order, so a snapshot never shares a patrol route with the live state. */
+function copySoldierOrder(order: SoldierOrderRecord): SoldierOrderRecord {
+  const copy: SoldierOrderRecord = { ...order };
+  if (order.patrolRoute !== undefined) {
+    copy.patrolRoute = order.patrolRoute.map((tile) => ({ ...tile }));
+  }
+  return copy;
+}
+
+// ── Top-level state ──────────────────────────────────────────────────────
+
+export interface BriarHollowState {
+  quest: VillageQuestState;
+  /** Fenna's side quest, "The Borrowed Blueprints". */
+  blueprints: BlueprintsQuestState;
+  /** Wendell's construction contracts, once the Borrowed Blueprints is finished. */
+  contracts: ConstructionContractsState;
+  unlocks: VillageUnlocks;
+  structures: StructureRecord[];
+  soldierOrders: SoldierOrderRecord[];
+  talkCounts: Record<VillagerId, number>;
+  /** One-shot lines already spoken, e.g. `"wicker:wooden_wall_built"`. */
+  onceFlags: string[];
+  /**
+   * Vetch's counter and Pipkin's kitchen, apart from the town's shops: each
+   * floor's village has its own state, so a new floor's village opens with
+   * every shelf at normal stock.
+   */
+  shopStock: ShopStock;
+  /**
+   * Every tree and rock anyone has worked, keyed by `tileKey`, so a door visit
+   * never refills a half-chopped tree. Not part of {@link BriarHollowStateSnapshot}:
+   * the gathering system checkpoints it itself, because putting a crumbled rock
+   * back needs the live and the captured states side by side, and it is never
+   * saved, because the map it describes regenerates on reload.
+   */
+  nodes: Map<string, HarvestNodeState>;
+  /**
+   * What the villagers remember between conversations. Not part of
+   * {@link BriarHollowStateSnapshot} either: every entry is a recent-event
+   * stamp or a cooldown on a session clock, and a reload starting them all
+   * fresh is the same as the village simply not having noticed.
+   */
+  villagers: VillagerMemory;
+}
+
+/** Where and when something happened that a villager may remark on. */
+export interface VillageEventMark {
+  /** On {@link VillagerMemory.clockSeconds}. */
+  at: number;
+  tileX: number;
+  tileY: number;
+}
+
+export interface VillagerMemory {
+  /**
+   * Seconds of village life, advanced by the village's own update. Every
+   * stamp below is on this clock, which stops with the pause menu and
+   * carries on across door visits.
+   */
+  clockSeconds: number;
+  lastCowPet: VillageEventMark | null;
+  /** The last rock deposit that crumbled. */
+  lastDepositDepleted: VillageEventMark | null;
+  /** Party stone as of each villager's last conversation. */
+  stoneAtLastTalk: Partial<Record<VillagerId, number>>;
+  /** When Wicker last suggested upgrading a wooden wall to stone. */
+  lastStoneUpgradeHintAt: number | null;
+  /** When each cast member may next bark, keyed by cast id. */
+  barkReadyAt: Map<RatkinCastId, number>;
+}
+
+export function createVillagerMemory(): VillagerMemory {
+  return {
+    clockSeconds: 0,
+    lastCowPet: null,
+    lastDepositDepleted: null,
+    stoneAtLastTalk: {},
+    lastStoneUpgradeHintAt: null,
+    barkReadyAt: new Map(),
+  };
+}
+
+/** A harvest node's worked state, created the first time anyone works it. */
+export interface HarvestNodeState {
+  kind: 'wood' | 'stone';
+  tileX: number;
+  tileY: number;
+  /**
+   * Base-speed harvests the node held when first worked. A faster harvester
+   * spends a fraction of one per award (`harvestNodeWork`), so this measures
+   * the node's life in time, not in awards.
+   */
+  capacity: number;
+  /** Base-speed harvests left, possibly fractional; 0 once felled or crumbled. */
+  remaining: number;
+  /** The node's tile type when first worked, which a rewind stands a crumbled rock back up as. */
+  tileType: number;
+  /**
+   * Fixed-timestep ticks until a run-out village node takes its next step
+   * back, or null for one that is not regrowing. Only the quarry's deposits
+   * and the lumber yard's grove regrow; the wilds stay worked out.
+   */
+  regrowTicksLeft: number | null;
+  /** A grove tree that has come back as far as a sapling, on its way to a full tree. */
+  sapling: boolean;
+}
+
+/**
+ * Every villager listed explicitly, like `VILLAGER_SCRIPTS`, so that a new
+ * villager id fails this function's typecheck until it is added here too,
+ * rather than silently reading as never-talked-to.
+ */
+function emptyTalkCounts(): Record<VillagerId, number> {
+  return {
+    bramblewick: 0,
+    merrit: 0,
+    pipkin: 0,
+    sella: 0,
+    vetch: 0,
+    oren: 0,
+    tikka: 0,
+    fenna: 0,
+    garn: 0,
+    sedge: 0,
+    hobb: 0,
+    marta: 0,
+    pru: 0,
+    nella: 0,
+    cricket: 0,
+    wicker: 0,
+    midge: 0,
+  };
+}
+
+/**
+ * Whether the whole village, not only its square, saves the game on entry: true
+ * once the Plea's rewards have been handed over.
+ */
+export function isVillageSavePoint(state: BriarHollowState): boolean {
+  return state.quest.rewardsGranted;
+}
+
+export function createBriarHollowState(): BriarHollowState {
+  return {
+    quest: createVillageQuestState(),
+    blueprints: createBlueprintsQuestState(),
+    contracts: createConstructionContractsState(),
+    unlocks: createVillageUnlocks(),
+    structures: [],
+    soldierOrders: [],
+    talkCounts: emptyTalkCounts(),
+    onceFlags: [],
+    shopStock: createShopStock(),
+    nodes: new Map(),
+    villagers: createVillagerMemory(),
+  };
+}
+
+/**
+ * A JSON-safe, value-equal copy of a {@link BriarHollowState} at a point in
+ * time. `segmentScheme` records which cut of the palisade ring the segment ids
+ * in `structures` were keyed against, so a save written under an older cut can
+ * be told apart from one written under the current one.
+ */
+export type BriarHollowStateSnapshot = Omit<
+  BriarHollowState,
+  'nodes' | 'villagers' | 'shopStock'
+> & {
+  shopStock: ShopStockSnapshot;
+  segmentScheme: number;
+};
+
+/**
+ * Captures the state for a save file or a world checkpoint — both go through
+ * here. **Invariant:** the `imminent` and `assault` phases are never captured;
+ * a siege under way is recorded as `fortifying` with the bell at full health,
+ * so a death or a page reload during the siege rewinds to before it and no
+ * half-fought wave can ever be resumed. A death always returns to the last
+ * save, and the last save cannot have been taken mid-wave.
+ */
+export function captureBriarHollowState(state: BriarHollowState): BriarHollowStateSnapshot {
+  return {
+    quest: persistableQuest(state.quest),
+    blueprints: copyBlueprintsQuestState(state.blueprints),
+    contracts: copyConstructionContractsState(state.contracts),
+    unlocks: copyUnlocks(state.unlocks),
+    structures: state.structures.map((structure) => ({ ...structure })),
+    soldierOrders: state.soldierOrders.map(copySoldierOrder),
+    talkCounts: { ...state.talkCounts },
+    onceFlags: [...state.onceFlags],
+    shopStock: captureShopStock(state.shopStock),
+    segmentScheme: PALISADE_SEGMENT_SCHEME_VERSION,
+  };
+}
+
+/**
+ * Mutates `target` in place: the same `BriarHollowState` object is threaded by
+ * reference through every scene, so rebinding a fresh one would strand every
+ * system already holding it.
+ */
+export function restoreBriarHollowState(
+  target: BriarHollowState,
+  snapshot: BriarHollowStateSnapshot,
+): void {
+  target.quest = persistableQuest(snapshot.quest);
+  target.blueprints = copyBlueprintsQuestState(snapshot.blueprints);
+  target.contracts = copyConstructionContractsState(snapshot.contracts);
+  target.unlocks = copyUnlocks(snapshot.unlocks);
+  target.structures = snapshot.structures.map((structure) => ({ ...structure }));
+  target.soldierOrders = snapshot.soldierOrders.map(copySoldierOrder);
+  target.talkCounts = { ...snapshot.talkCounts };
+  target.onceFlags = [...snapshot.onceFlags];
+  restoreShopStock(target.shopStock, snapshot.shopStock);
+}
+
+function copyUnlocks(unlocks: VillageUnlocks): VillageUnlocks {
+  return { ...unlocks, construction: [...unlocks.construction] };
+}
+
+// ── Parsing untrusted JSON ───────────────────────────────────────────────
+
+function isNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === 'boolean';
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === 'string';
+}
+
+function stringUnion<T extends string>(value: unknown, allowed: readonly T[]): T | undefined {
+  if (typeof value !== 'string') return undefined;
+  return allowed.find((candidate) => candidate === value);
+}
+
+function isVillagerId(value: unknown): value is VillagerId {
+  return typeof value === 'string' && VILLAGER_IDS.some((id) => id === value);
+}
+
+/**
+ * Phase names a save may hold that no longer exist, and the phase each now
+ * reads as. The single `gathering` step became the guided wood → stone → Tikka
+ * run, whose own progress checks carry a party that already holds the
+ * materials straight through it.
+ */
+const LEGACY_PHASES: Readonly<Record<string, VillageQuestPhase>> = { gathering: 'gather_wood' };
+
+function parsePhase(value: unknown): VillageQuestPhase | undefined {
+  const current = stringUnion(value, VILLAGE_QUEST_PHASE_ORDER);
+  if (current !== undefined) return current;
+  return typeof value === 'string' ? LEGACY_PHASES[value] : undefined;
+}
+
+const PALISADE_TIERS: readonly PalisadeTier[] = ['fence', 'wood', 'stone', 'fortified'];
+const WALL_SEGMENT_TIERS: readonly WallSegmentTier[] = [...PALISADE_TIERS, 'breach', 'gap'];
+const CRAWLER_KINDS: readonly CrawlerKind[] = ['human', 'cat'];
+const SOLDIER_ORDERS: readonly SoldierOrder[] = ['follow', 'hold', 'patrol'];
+
+function parseVillageGatheringProgress(value: unknown): VillageGatheringProgress {
+  const defaults = createVillageGatheringProgress();
+  if (!isRecord(value)) return defaults;
+  return {
+    woodChopped: isNumber(value.woodChopped)
+      ? Math.max(0, value.woodChopped)
+      : defaults.woodChopped,
+    stoneMined: isNumber(value.stoneMined) ? Math.max(0, value.stoneMined) : defaults.stoneMined,
+    boardsProcessed: isNumber(value.boardsProcessed)
+      ? Math.max(0, value.boardsProcessed)
+      : defaults.boardsProcessed,
+    ropeProcessed: isNumber(value.ropeProcessed)
+      ? Math.max(0, value.ropeProcessed)
+      : defaults.ropeProcessed,
+  };
+}
+
+function parseVillageQuestState(value: unknown): VillageQuestState {
+  const defaults = createVillageQuestState();
+  if (!isRecord(value)) return defaults;
+  const parsedPhase = parsePhase(value.phase) ?? defaults.phase;
+  // A save never holds a siege; one that claims to is read as the fortifying
+  // it would have begun from, like the capture writes it.
+  const phase = UNPERSISTED_SIEGE_PHASES.has(parsedPhase) ? 'fortifying' : parsedPhase;
+  const assaultWaveIndex =
+    value.assaultWaveIndex === null
+      ? null
+      : isNumber(value.assaultWaveIndex)
+        ? Math.max(0, Math.floor(value.assaultWaveIndex))
+        : null;
+  return {
+    phase,
+    gathering: parseVillageGatheringProgress(value.gathering),
+    imminentCountdownFrames: isNumber(value.imminentCountdownFrames)
+      ? Math.max(0, value.imminentCountdownFrames)
+      : defaults.imminentCountdownFrames,
+    assaultWaveIndex,
+    bellHp: HOLLOW_BELL_MAX_HP,
+    lastSiege: parseVillageSiegeSummary(value.lastSiege),
+    rewardsGranted: isBoolean(value.rewardsGranted)
+      ? value.rewardsGranted
+      : defaults.rewardsGranted,
+    bellTowerBroken: isBoolean(value.bellTowerBroken)
+      ? value.bellTowerBroken
+      : defaults.bellTowerBroken,
+  };
+}
+
+/**
+ * Reads the side quest back, defaulting every missing or malformed field — a
+ * save written before the quest existed has no `blueprints` at all and reads
+ * as a quest never offered. A fence array of the wrong length (a save written
+ * under a different cut of the ring) keeps only the sections both cuts share.
+ */
+function parseBlueprintsQuestState(value: unknown): BlueprintsQuestState {
+  const defaults = createBlueprintsQuestState();
+  if (!isRecord(value)) return defaults;
+  const phase = stringUnion(value.phase, BLUEPRINTS_QUEST_PHASE_ORDER) ?? defaults.phase;
+  const savedSections = Array.isArray(value.fenceSectionsBuilt) ? value.fenceSectionsBuilt : [];
+  const fenceSectionsBuilt = defaults.fenceSectionsBuilt.map((unbuilt, index) => {
+    const saved: unknown = savedSections[index];
+    return isBoolean(saved) ? saved : unbuilt;
+  });
+  const grain = isNumber(value.grain) ? Math.max(0, Math.floor(value.grain)) : defaults.grain;
+  const savedStations = isRecord(value.stationsUpgraded) ? value.stationsUpgraded : {};
+  const stationsUpgraded = { ...defaults.stationsUpgraded };
+  for (const station of BLUEPRINTS_STATION_IDS) {
+    const saved = savedStations[station];
+    if (isBoolean(saved)) stationsUpgraded[station] = saved;
+  }
+  // A save that finished the quest before the screen existed has no flag; its
+  // party is long past the moment, so it reads as already seen.
+  const completionScreenSeen = isBoolean(value.completionScreenSeen)
+    ? value.completionScreenSeen
+    : phase === 'complete';
+  return { phase, fenceSectionsBuilt, grain, stationsUpgraded, completionScreenSeen };
+}
+
+/** The catalogue site a saved key names, or undefined for a building that no longer hosts one. */
+function parseContractSiteKey(value: unknown): ContractSiteDef | undefined {
+  if (!isRecord(value)) return undefined;
+  if (value.town === 'skyfowl' && isString(value.buildingName)) {
+    return skyfowlContractSite(value.buildingName);
+  }
+  if (value.town === 'briar_hollow' && isString(value.buildingId)) {
+    const site = contractSiteBySlug(value.buildingId);
+    return site?.town === 'briar_hollow' ? site : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Keeps only the spots the site's pool still has, with their done flags. A
+ * contract left with no spot at all reads as no contract; Wendell re-offers.
+ */
+function parseActiveContract(value: unknown): ActiveContract | null {
+  if (!isRecord(value)) return null;
+  const site = parseContractSiteKey(value.site);
+  if (site === undefined) return null;
+  const savedIds = Array.isArray(value.spotIds) ? value.spotIds : [];
+  const savedDone = Array.isArray(value.spotsDone) ? value.spotsDone : [];
+  const spotIds: ContractSpotId[] = [];
+  const spotsDone: boolean[] = [];
+  savedIds.forEach((id: unknown, index) => {
+    if (!isString(id) || contractSpot(site, id) === undefined || spotIds.includes(id)) return;
+    const done: unknown = savedDone[index];
+    spotIds.push(id);
+    spotsDone.push(isBoolean(done) ? done : false);
+  });
+  if (spotIds.length === 0) return null;
+  return { site: contractSiteKey(site), spotIds, spotsDone };
+}
+
+function parseSpotSetsBySite(value: unknown): Record<string, readonly ContractSpotId[]> {
+  const sets: Record<string, readonly ContractSpotId[]> = {};
+  if (!isRecord(value)) return sets;
+  for (const [slug, saved] of Object.entries(value)) {
+    const site = contractSiteBySlug(slug);
+    if (site === undefined || !Array.isArray(saved)) continue;
+    sets[slug] = saved.filter(
+      (id: unknown): id is ContractSpotId => isString(id) && contractSpot(site, id) !== undefined,
+    );
+  }
+  return sets;
+}
+
+/** A save written before contracts existed has no `contracts` and reads as never unlocked or offered. */
+function parseConstructionContractsState(value: unknown): ConstructionContractsState {
+  const defaults = createConstructionContractsState();
+  if (!isRecord(value)) return defaults;
+  const count = (field: unknown): number => (isNumber(field) ? Math.max(0, Math.floor(field)) : 0);
+  const lastSiteKey =
+    isString(value.lastSiteKey) && contractSiteBySlug(value.lastSiteKey) !== undefined
+      ? value.lastSiteKey
+      : null;
+  return {
+    introSeen: isBoolean(value.introSeen) ? value.introSeen : defaults.introSeen,
+    contractsIssued: count(value.contractsIssued),
+    contractsCompleted: count(value.contractsCompleted),
+    active: parseActiveContract(value.active),
+    lastSiteKey,
+    lastSpotSetBySite: parseSpotSetsBySite(value.lastSpotSetBySite),
+  };
+}
+
+function isConstructionUnlockId(value: unknown): value is ConstructionUnlockId {
+  return typeof value === 'string' && CONSTRUCTION_UNLOCK_IDS.some((id) => id === value);
+}
+
+/** A save from before unlocks were recorded is granted what its phase had earned. */
+function parseVillageUnlocks(value: unknown, phase: VillageQuestPhase): VillageUnlocks {
+  if (!isRecord(value)) return unlocksImpliedByPhase(phase);
+  const construction = Array.isArray(value.construction)
+    ? value.construction.filter(isConstructionUnlockId)
+    : [];
+  return {
+    processingStations: isBoolean(value.processingStations) ? value.processingStations : false,
+    soldierCommands: isBoolean(value.soldierCommands) ? value.soldierCommands : false,
+    construction,
+  };
+}
+
+function parseVillageSiegeSummary(value: unknown): VillageSiegeSummary | null {
+  if (!isRecord(value)) return null;
+  const count = (field: unknown): number => (isNumber(field) ? Math.max(0, Math.floor(field)) : 0);
+  return {
+    segmentsBreached: count(value.segmentsBreached),
+    structuresDestroyed: count(value.structuresDestroyed),
+    soldiersDowned: count(value.soldiersDowned),
+  };
+}
+
+function parseSpikesHp(value: unknown): number | null {
+  if (value === null) return null;
+  return isNumber(value) ? Math.max(0, value) : null;
+}
+
+function parseBuiltBy(value: unknown): CrawlerKind | undefined {
+  return stringUnion(value, CRAWLER_KINDS);
+}
+
+/** The optional fields every structure record shares, copied onto `record` only when valid. */
+function parseStructureExtras(value: Record<string, unknown>, record: StructureRecordBase): void {
+  const spikesBy = parseBuiltBy(value.spikesBy);
+  if (spikesBy !== undefined) record.spikesBy = spikesBy;
+  if (isNumber(value.hpMultiplier) && value.hpMultiplier > 0) {
+    record.hpMultiplier = value.hpMultiplier;
+  }
+}
+
+function parseSegmentStructureRecord(
+  value: Record<string, unknown>,
+): SegmentStructureRecord | undefined {
+  const { id, tier, hp, formerTier } = value;
+  const parsedTier = stringUnion(tier, WALL_SEGMENT_TIERS);
+  const builtBy = parseBuiltBy(value.builtBy);
+  if (!isString(id) || parsedTier === undefined || !isNumber(hp) || builtBy === undefined) {
+    return undefined;
+  }
+  const record: SegmentStructureRecord = {
+    kind: 'segment',
+    id,
+    tier: parsedTier,
+    hp: Math.max(0, hp),
+    spikesHp: parseSpikesHp(value.spikesHp),
+    builtBy,
+  };
+  if (parsedTier === 'breach') {
+    const parsedFormerTier = stringUnion(formerTier, PALISADE_TIERS);
+    if (parsedFormerTier !== undefined) record.formerTier = parsedFormerTier;
+  }
+  parseStructureExtras(value, record);
+  return record;
+}
+
+function parseTrebuchetStructureRecord(
+  value: Record<string, unknown>,
+): TrebuchetStructureRecord | undefined {
+  const { x, y, hp, broken, ammo } = value;
+  const builtBy = parseBuiltBy(value.builtBy);
+  if (
+    !isNumber(x) ||
+    !isNumber(y) ||
+    !isNumber(hp) ||
+    !isBoolean(broken) ||
+    !isNumber(ammo) ||
+    builtBy === undefined
+  ) {
+    return undefined;
+  }
+  const record: TrebuchetStructureRecord = {
+    kind: 'trebuchet',
+    x,
+    y,
+    hp: Math.max(0, hp),
+    broken,
+    ammo: Math.max(0, ammo),
+    spikesHp: parseSpikesHp(value.spikesHp),
+    builtBy,
+  };
+  parseStructureExtras(value, record);
+  return record;
+}
+
+function parseSnareStructureRecord(
+  value: Record<string, unknown>,
+): SnareStructureRecord | undefined {
+  const { x, y, hp, broken, repairedOnce } = value;
+  const builtBy = parseBuiltBy(value.builtBy);
+  if (
+    !isNumber(x) ||
+    !isNumber(y) ||
+    !isNumber(hp) ||
+    !isBoolean(broken) ||
+    !isBoolean(repairedOnce) ||
+    builtBy === undefined
+  ) {
+    return undefined;
+  }
+  const record: SnareStructureRecord = {
+    kind: 'snare',
+    x,
+    y,
+    hp: Math.max(0, hp),
+    broken,
+    repairedOnce,
+    spikesHp: parseSpikesHp(value.spikesHp),
+    builtBy,
+  };
+  parseStructureExtras(value, record);
+  return record;
+}
+
+/** A malformed entry returns `undefined` and is dropped by the caller, rather than failing the whole array. */
+function parseStructureRecord(value: unknown): StructureRecord | undefined {
+  if (!isRecord(value)) return undefined;
+  switch (value.kind) {
+    case 'segment':
+      return parseSegmentStructureRecord(value);
+    case 'trebuchet':
+      return parseTrebuchetStructureRecord(value);
+    case 'snare':
+      return parseSnareStructureRecord(value);
+    default:
+      return undefined;
+  }
+}
+
+function parseSoldierOrderRecord(value: unknown): SoldierOrderRecord | undefined {
+  if (!isRecord(value)) return undefined;
+  const { soldierId, order, x, y } = value;
+  const parsedOrder = stringUnion(order, SOLDIER_ORDERS);
+  if (!isVillagerId(soldierId) || parsedOrder === undefined) return undefined;
+  const record: SoldierOrderRecord = { soldierId, order: parsedOrder };
+  if (isNumber(x)) record.x = x;
+  if (isNumber(y)) record.y = y;
+  const followCrawler = stringUnion(value.followCrawler, CRAWLER_KINDS);
+  if (followCrawler !== undefined) record.followCrawler = followCrawler;
+  if (Array.isArray(value.patrolRoute)) {
+    const route: SoldierRouteTile[] = [];
+    for (const tile of value.patrolRoute) {
+      if (isRecord(tile) && isNumber(tile.x) && isNumber(tile.y)) {
+        route.push({ x: tile.x, y: tile.y });
+      }
+    }
+    record.patrolRoute = route;
+  }
+  return record;
+}
+
+function parseTalkCounts(value: unknown): Record<VillagerId, number> {
+  const counts = emptyTalkCounts();
+  if (!isRecord(value)) return counts;
+  for (const id of VILLAGER_IDS) {
+    const count = value[id];
+    if (isNumber(count)) counts[id] = Math.max(0, count);
+  }
+  return counts;
+}
+
+function parseOnceFlags(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isString);
+}
+
+/**
+ * Reads a saved {@link BriarHollowStateSnapshot} back from untrusted JSON.
+ * Tolerant field-by-field, like `parseTownMemoryCheckpoint`: a missing or
+ * malformed field falls back to its empty default rather than failing the
+ * whole snapshot, and a malformed array entry is dropped rather than
+ * rejecting the rest of the array. Only a value that is not an object at all
+ * (not a save missing the field, but the field itself corrupted) is refused.
+ */
+export function parseBriarHollowStateSnapshot(
+  value: unknown,
+): BriarHollowStateSnapshot | undefined {
+  if (!isRecord(value)) return undefined;
+  // A save written under an earlier cut of the palisade ring keys its wall
+  // segments by an index that now names a different, wrongly-sized run —
+  // rather than misapply a stranger's HP and tier to that stretch of wall,
+  // every wall segment from an old-scheme save resets to the untouched fence
+  // it would read as if nobody had ever kept its record at all. Trebuchets and
+  // snares are keyed by tile, not by segment index, so they carry over untouched.
+  const currentScheme =
+    isNumber(value.segmentScheme) && value.segmentScheme === PALISADE_SEGMENT_SCHEME_VERSION;
+  const structures: StructureRecord[] = [];
+  if (Array.isArray(value.structures)) {
+    for (const entry of value.structures) {
+      const parsed = parseStructureRecord(entry);
+      if (parsed === undefined) continue;
+      if (parsed.kind === 'segment' && !currentScheme) continue;
+      structures.push(parsed);
+    }
+  }
+  const soldierOrders: SoldierOrderRecord[] = [];
+  if (Array.isArray(value.soldierOrders)) {
+    for (const entry of value.soldierOrders) {
+      const parsed = parseSoldierOrderRecord(entry);
+      if (parsed !== undefined) soldierOrders.push(parsed);
+    }
+  }
+  const quest = parseVillageQuestState(value.quest);
+  return {
+    quest,
+    blueprints: parseBlueprintsQuestState(value.blueprints),
+    contracts: parseConstructionContractsState(value.contracts),
+    unlocks: parseVillageUnlocks(value.unlocks, quest.phase),
+    structures,
+    soldierOrders,
+    talkCounts: parseTalkCounts(value.talkCounts),
+    onceFlags: parseOnceFlags(value.onceFlags),
+    shopStock: parseShopStockSnapshot(value.shopStock),
+    segmentScheme: PALISADE_SEGMENT_SCHEME_VERSION,
+  };
+}

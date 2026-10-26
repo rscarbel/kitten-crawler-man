@@ -23,7 +23,7 @@
  */
 
 import { overlaps, type Rect } from '../src/ui/core/geom';
-import type { UiSize } from '../src/core/Settings';
+import type { UiSize } from '../src/core/input/Settings';
 import { LEADING_BARS, hudStates, representativeTopBand } from './phoneHudLayouts';
 
 /** Common phone viewports in CSS pixels, portrait; each is also checked in landscape. */

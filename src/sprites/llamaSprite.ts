@@ -1,4 +1,8 @@
-import { walkFrameIndex, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import {
+  walkFrameIndex,
+  progressFrameIndex,
+  timeFrameIndex,
+} from '../core/spriteAssets/SpriteRenderer';
 import { LLAMA_FIGURE } from './art/llamaFigure';
 import { figureFrameCount } from './figure/figureDef';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';

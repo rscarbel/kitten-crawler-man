@@ -40,7 +40,7 @@ import {
   type TilePoint,
 } from './dungeonEmitters';
 import type { DungeonCue } from './dungeonSoundCues';
-import { UINT32_SPAN } from '../../core/WorldRandom';
+import { UINT32_SPAN } from '../../core/world/WorldRandom';
 
 /** Whether standing water covers a tile; the floor surface answers it. */
 export interface PuddleQuery {

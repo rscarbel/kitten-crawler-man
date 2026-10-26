@@ -516,7 +516,7 @@ export class Mantid extends Mob {
   /**
    * Blocks every point of damage for the invincible second and throws a label
    * instead — every route into its health, not only the swung one. A burn or a
-   * crown proc ticking through the invincible second would put a hole in the
+   * gear poison proc ticking through the invincible second would put a hole in the
    * one window this whole fight is built around.
    *
    * Refusing the blow outright also keeps `damageTakenBy` clean: no damage was

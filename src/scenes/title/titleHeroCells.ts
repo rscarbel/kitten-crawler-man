@@ -27,11 +27,11 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
-import { canvasGeneration } from '../../core/canvasRecovery';
+} from '../../core/rendering/canvasSurface';
+import { canvasGeneration } from '../../core/rendering/canvasRecovery';
 import type { FigureDef } from '../../sprites/figure/figureDef';
 import { figureFrameCount } from '../../sprites/figure/figureDef';
-import { BYTES_PER_MEGABYTE } from '../../core/canvasSurface';
+import { BYTES_PER_MEGABYTE } from '../../core/rendering/canvasSurface';
 
 /** Where a figure's art can reach inside its cell, in its own cell pixels. */
 export interface HeroCellCrop {

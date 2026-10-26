@@ -7,7 +7,7 @@
  * along as the hatch timer.
  */
 
-import { progressFrameIndex } from '../core/SpriteRenderer';
+import { progressFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { SPIDER_EGG_FRAMES, type SpiderEggState } from './art/spiderEggArt';
 import { SPIDER_EGG_FIGURE, SPIDER_EGG_STATES } from './art/spiderEggFigure';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';

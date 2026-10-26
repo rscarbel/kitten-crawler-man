@@ -19,7 +19,7 @@ import { Image, createCanvas } from 'canvas';
 
 import './nodeUiFont.js';
 
-import { loadSprites } from '../src/core/SpriteLoader.js';
+import { loadSprites } from '../src/core/spriteAssets/SpriteLoader.js';
 import { GROUND_SHEET_KEYS, requestGroundSheets } from '../src/map/ground/runtimeGroundSheets.js';
 import { paintEnvironmentArtNow } from '../src/map/environmentArtCache.js';
 import { requestEnvironmentSheetsForGroups } from '../src/sprites/sheets/environmentSheets.js';

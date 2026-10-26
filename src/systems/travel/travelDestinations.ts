@@ -9,10 +9,10 @@
  */
 
 import { TILE_SIZE } from '../../core/constants';
-import { ANCHOR_QUEST_NAME, type AnchorQuestProgress } from '../../core/AnchorQuestProgress';
-import { CIRCUS_QUEST_NAME, type CircusQuestProgress } from '../../core/CircusQuestProgress';
-import type { VillageQuestState } from '../../core/briarHollowState';
-import { BRIAR_HOLLOW_QUEST_NAME, isVillageUnderSiege } from '../../core/villageQuestPhase';
+import { ANCHOR_QUEST_NAME, type AnchorQuestProgress } from '../../core/quests/AnchorQuestProgress';
+import { CIRCUS_QUEST_NAME, type CircusQuestProgress } from '../../core/quests/CircusQuestProgress';
+import type { VillageQuestState } from '../../core/quests/briarHollowState';
+import { BRIAR_HOLLOW_QUEST_NAME, isVillageUnderSiege } from '../../core/quests/villageQuestPhase';
 import type { GameMap } from '../../map/GameMap';
 import type { TilePoint } from '../../map/town/townPlan';
 import { drawAnchorStoneIcon } from '../../ui/icons/anchorStoneIcon';

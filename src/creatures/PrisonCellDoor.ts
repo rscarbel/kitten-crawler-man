@@ -1,7 +1,7 @@
 import { Mob, type LootDrop, type PlayerDamageType } from './Mob';
 import type { Player } from '../Player';
 import type { EyePlacement } from '../sprites/eyePlacement';
-import type { StatusEffect } from '../core/StatusEffect';
+import type { StatusEffect } from '../core/combat/StatusEffect';
 import { drawPrisonCellDoor, type CellDoorRun } from '../sprites/art/prisonPropArt';
 
 /**

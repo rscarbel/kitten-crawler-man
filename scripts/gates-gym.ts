@@ -38,7 +38,7 @@
 
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { mulberry32 } from '../src/sprites/person/rng.js';
-import { isRecord } from '../src/core/guards.js';
+import { isRecord } from '../src/core/util/guards.js';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants.js';
 import {
   BigRooster,

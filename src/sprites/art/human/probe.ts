@@ -37,7 +37,7 @@ import {
   type StrikeReachLimb,
 } from '../humanFigure';
 import { PLAYER_SPEED, TILE_SIZE } from '../../../core/constants';
-import { HUMAN_SWING_FRAMES } from '../../../core/crawlerFormulas';
+import { HUMAN_SWING_FRAMES } from '../../../core/party/crawlerFormulas';
 import { HUMAN_CELL_PX_PER_UNIT, TILE_SCALE } from './figureScale';
 import { RUN_GROUND_PER_CYCLE_PX, WALK_GROUND_PER_CYCLE_PX } from './locomotion';
 import { SMUSH_GROUND_PX_PER_FRAME } from './stomps';

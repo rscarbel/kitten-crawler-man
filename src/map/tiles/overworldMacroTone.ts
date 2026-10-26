@@ -16,7 +16,7 @@ import {
   surfaceContext,
   type CanvasSurface,
   releaseSurface,
-} from '../../core/canvasSurface';
+} from '../../core/rendering/canvasSurface';
 import { floorArtSubSeed, GROUND_TONE_SALT } from '../ground/floorArtSeed';
 import {
   buildMacroField,
@@ -27,7 +27,7 @@ import {
 import { BRIDGE, CLIFF, FloorTypeValue, isRiverChannel, type TileContent } from '../tileTypes';
 import { CHUNK_TILES } from './chunkTiles';
 import { overworldTerrainFor } from './overworldTerrainRegistry';
-import { canvasGeneration } from '../../core/canvasRecovery';
+import { canvasGeneration } from '../../core/rendering/canvasRecovery';
 
 /**
  * Samples a smoothed upscale reads either side of the position it shades: a

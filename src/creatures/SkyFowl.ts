@@ -14,8 +14,8 @@ import { gaitCyclesForDistance } from '../sprites/gaitCadence';
 import { SKYFOWL_TOUGH_LOOKS, type SkyfowlLookId } from '../sprites/art/skyfowl/cast';
 import type { LootDrop } from './Mob';
 import { randomInt } from '../utils';
-import { SHARED_LOOKS_TIER } from '../core/varietyTier';
-import { uniformVariantFamily } from '../core/mobVariantFamily';
+import { SHARED_LOOKS_TIER } from '../core/perf/varietyTier';
+import { uniformVariantFamily } from '../core/mobs/mobVariantFamily';
 import type { TacticsTrait } from './tactics/tacticsTraits';
 
 const [FIRST_TOUGH_LOOK, ...OTHER_TOUGH_LOOKS] = SKYFOWL_TOUGH_LOOKS;

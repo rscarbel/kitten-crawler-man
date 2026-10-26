@@ -14,9 +14,9 @@
 
 import type { AudioManager } from '../../../audio/AudioManager';
 import type { EventBus } from '../../../core/EventBus';
-import type { BriarHollowState } from '../../../core/briarHollowState';
-import { isWendellWaitingForCow } from '../../../core/blueprintsQuestPhase';
-import type { ItemId } from '../../../core/ItemDefs';
+import type { BriarHollowState } from '../../../core/quests/briarHollowState';
+import { isWendellWaitingForCow } from '../../../core/quests/blueprintsQuestPhase';
+import type { ItemId } from '../../../core/items/defs/ItemDefs';
 import type { NPCMarkerType } from '../../../creatures/QuestNPC';
 import type { CatPlayer } from '../../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../../creatures/HumanPlayer';

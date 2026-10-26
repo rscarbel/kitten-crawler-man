@@ -11,13 +11,12 @@
  * garment that inks nothing anywhere.
  *
  * Every row and frame of every garment of both crawlers, at the 32 px tile.
- * Garments that hide nothing are painted together; one that hides a feature
- * is painted on its own, so the envelope it is measured against is the one it
- * is worn with.
+ * Garments that cover no skin are painted together; one that covers skin, and
+ * so hides whatever covers it from further in, is painted on its own, so the
+ * envelope it is measured against is the one it is worn with.
  *
  *   npx tsx scripts/gates-equipment-garments.ts
- *   npx tsx scripts/gates-equipment-garments.ts --item=issue_kettle_helm
- *   npx tsx scripts/gates-equipment-garments.ts --item=cat_crown
+ *   npx tsx scripts/gates-equipment-garments.ts --item=townsfolk_shoes
  */
 
 import { createCanvas } from 'canvas';
@@ -25,7 +24,7 @@ import { pathToFileURL } from 'node:url';
 import { nothingMeasuredFailures, reportFigureGates } from './figureGates.js';
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { asGameContext, type NodeContext } from './nodeGameContext.js';
-import { catLookOf, humanLookOf, isItemId, ITEM_DEF } from '../src/core/ItemDefs.js';
+import { catLookOf, humanLookOf, isItemId, ITEM_DEF } from '../src/core/items/defs/ItemDefs.js';
 import type { CatDressing, CatPartFrames, CatPartName } from '../src/sprites/art/catParts.js';
 import type {
   BipedDressing,
@@ -60,8 +59,9 @@ import type {
 import { humanWornOn } from '../src/sprites/garments/human/humanDressing.js';
 import { garmentsOf, wornGarmentOf } from '../src/sprites/garments/garments.js';
 import {
-  fitsOver,
+  gloveOf,
   outfitOf,
+  sleevesOf,
   type Outfit,
   type OutfitBase,
 } from '../src/sprites/garments/outfit.js';
@@ -75,8 +75,8 @@ const CAT_DENSITY = TILE / CAT_TILE_SCALE;
 const HUMAN_DENSITY = TILE / HUMAN_TILE_SCALE;
 /**
  * The cat's ink lands in her cell. The human's lands on the surfaces his compositor
- * builds round his whole reach, cloak and all, so his are measured on a
- * surface sized for the widest of them at the tile.
+ * builds round his whole reach, so his are measured on a surface sized for the
+ * widest of them at the tile.
  */
 const CAT_SURFACE_PX = Math.ceil(Math.max(CAT_FRAME_W, CAT_FRAME_H) * CAT_DENSITY);
 const HUMAN_SURFACE_PX = 256;
@@ -211,7 +211,6 @@ function catMeasuringDressing(
   context: GarmentFrameContext<'cat'>,
 ): CatDressing {
   return {
-    hides: (feature) => outfit.hidden.has(feature),
     part: <P extends CatPartName>(
       ctx: CanvasRenderingContext2D,
       part: P,
@@ -238,13 +237,11 @@ function humanMeasuringDressing(
   outfit: Outfit<'human'>,
   measure: Measure,
   context: GarmentFrameContext<'human'>,
-  look: HumanLook,
 ): BipedDressing {
   return {
-    hides: (feature) => outfit.hidden.has(feature),
     paints: (part) => outfit.garments.some((garment) => garment.paint[part] !== undefined),
-    reach: (skeleton, view) =>
-      outfit.garments.flatMap((garment) => garment.reach?.(skeleton, view, context, look) ?? []),
+    sleeves: sleevesOf(outfit),
+    glove: (side) => gloveOf(outfit, side),
     part: <P extends BipedPartName>(
       ctx: CanvasRenderingContext2D,
       part: P,
@@ -347,27 +344,23 @@ function humanWearer(look: HumanLook): Wearer<'human'> {
         look,
         cellPxPerUnit: PLAYER_HUMAN_CELL_PX_PER_UNIT,
         dressing: (drawn: BipedPose, view: ViewSpec) =>
-          humanMeasuringDressing(outfit, measure, humanWornOn(drawn, view, look).context, look),
+          humanMeasuringDressing(outfit, measure, humanWornOn(drawn, view, look).context),
       });
     },
   };
 }
 
 /**
- * Every garment a look can show: what it can put on — less what needs bare
- * skin its own clothes cover, which no outfit of it paints — and its own base
+ * Every garment a look can show: whatever it can put on, and its own base
  * garments, not another look's.
  */
 function wornBy(look: HumanLook, garments: readonly GarmentDef<'human'>[]): GarmentDef<'human'>[] {
-  return garments.filter((garment) =>
-    garment.base ? look.baseGarments.includes(garment) : fitsOver(look, garment),
-  );
+  return garments.filter((garment) => !garment.base || look.baseGarments.includes(garment));
 }
 
 /**
- * E5 for a garment no human look can show: every look's own clothes cover the
- * skin it needs, or it is a base garment of none of them. Its envelope is
- * never measured, so it would pass E5 unseen.
+ * E5 for a garment no human look can show: a base garment of none of them.
+ * Its envelope is never measured, so it would pass E5 unseen.
  */
 function unwornFailures(garments: readonly GarmentDef<'human'>[]): string[] {
   return garments
@@ -380,16 +373,15 @@ function unwornFailures(garments: readonly GarmentDef<'human'>[]): string[] {
 }
 
 /**
- * The outfits to paint: garments that hide nothing share one, each one that
- * hides something — by a rule or by covering skin another needs bare — gets
- * its own. Base garments ride along in every outfit.
+ * The outfits to paint: garments that cover no skin share one, and each one
+ * that covers skin, hiding whatever else covers it from further in, gets its
+ * own. Base garments ride along in every outfit.
  */
 function passes<W extends GarmentWearer>(
   base: OutfitBase<W>,
   worn: readonly WornGarmentDef<W>[],
 ): Outfit<W>[] {
-  const hidesAny = (garment: WornGarmentDef<W>): boolean =>
-    garment.hides.length > 0 || garment.covers.length > 0;
+  const hidesAny = (garment: WornGarmentDef<W>): boolean => garment.covers.length > 0;
   const quiet = worn.filter((garment) => !hidesAny(garment));
   const hiding = worn.filter(hidesAny);
   return [outfitOf(base, quiet), ...hiding.map((garment) => outfitOf(base, [garment]))];

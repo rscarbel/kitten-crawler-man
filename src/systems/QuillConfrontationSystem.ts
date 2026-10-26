@@ -20,7 +20,7 @@
 
 import { prewarmLichLocomotion } from '../sprites/lichSprite';
 import { TILE_SIZE } from '../core/constants';
-import { applySpawnDifficulty } from '../core/difficultyProfiles';
+import { applySpawnDifficulty } from '../core/difficulty/difficultyProfiles';
 import { TOWN_MUSIC_TRACKS } from '../audio/sounds';
 import type { GameMap } from '../map/GameMap';
 import type { EventBus } from '../core/EventBus';
@@ -31,8 +31,8 @@ import { MUSIC_SILENCE_FADE_MS, type MusicSelection } from '../audio/music/Music
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
-import type { MurderQuestProgress } from '../core/MurderQuestProgress';
-import { DOOMSDAY_COUNTDOWN_MS, type DoomsdayProgress } from '../core/DoomsdayProgress';
+import type { MurderQuestProgress } from '../core/quests/MurderQuestProgress';
+import { DOOMSDAY_COUNTDOWN_MS, type DoomsdayProgress } from '../core/quests/DoomsdayProgress';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import type { MissQuill } from '../creatures/MissQuill';
 import type { Remex } from '../creatures/Remex';
@@ -54,7 +54,7 @@ import { LichBattleSystem, type CompanionDirector } from './LichBattleSystem';
 import { questBannerEntry, QUEST_BANNER_FRAMES } from '../ui/QuestBanners';
 import type { TopBandEntry } from '../ui/hud/topBand';
 import { stackedBandEntry, type BandRow, type BandTone } from '../ui/hud/topBandStack';
-import { displayHp } from '../core/crawlerFormulas';
+import { displayHp } from '../core/party/crawlerFormulas';
 import { paintRevealLighting } from './quillOfficeArt';
 import { objectiveRow, type ObjectiveLine } from '../ui/hud/objectiveLine';
 import { questMobLevel } from './questMobLevel';

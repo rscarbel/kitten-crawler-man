@@ -1,5 +1,5 @@
-import { ASSET_GROUPS, type AssetGroup } from '../core/assetGroups';
-import type { SpriteKey } from '../core/SpriteLoader';
+import { ASSET_GROUPS, type AssetGroup } from '../core/spriteAssets/assetGroups';
+import type { SpriteKey } from '../core/spriteAssets/SpriteLoader';
 import { level3 } from '../levels/level3';
 import type { LevelDef } from '../levels/types';
 import { groundSheetKeysAmong } from '../map/ground/runtimeGroundSheets';

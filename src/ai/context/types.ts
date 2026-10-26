@@ -1,7 +1,7 @@
 import type { Player } from '../../Player';
 import type { JsonObject } from './json';
 import type { PlayerCharacterName } from '../../characters/characters';
-import type { CrawlerKind } from '../../core/SkillManager';
+import type { CrawlerKind } from '../../core/skills/SkillManager';
 
 /** The two crawlers, by the names the AI knows them by. */
 export type CrawlerName = PlayerCharacterName;

@@ -3,10 +3,11 @@
  * packs, one named fixture at a time.
  */
 
+import { GearState } from '../../gear/gearState';
 import { crawlerName } from '../../characters/characters';
-import { Inventory } from '../../core/Inventory';
-import { BAG_PAGE_SLOTS, ITEM_DEF, isItemId, type ItemId } from '../../core/ItemDefs';
-import type { CrawlerKind } from '../../core/SkillManager';
+import { Inventory } from '../../core/items/inventory/Inventory';
+import { BAG_PAGE_SLOTS, ITEM_DEF, isItemId, type ItemId } from '../../core/items/defs/ItemDefs';
+import type { CrawlerKind } from '../../core/skills/SkillManager';
 import type { Surface } from '../../ui/core/UiRoot';
 import { InventoryActions } from '../../ui/screens/inventory/InventoryActions';
 import { InventoryScreen } from '../../ui/screens/inventory/InventoryScreen';
@@ -35,14 +36,14 @@ const HUMAN_BAG: readonly { readonly id: ItemId; readonly quantity: number }[] =
   { id: 'dirty_shirley', quantity: 4 },
   { id: 'goblin_dynamite', quantity: 9 },
   { id: 'scroll_of_confusing_fog', quantity: 2 },
-  { id: 'issue_kettle_helm', quantity: 1 },
-  { id: 'enchanted_crown_sepsis_whore', quantity: 1 },
-  { id: 'padded_gambeson', quantity: 1 },
-  { id: 'marching_boots', quantity: 1 },
-  { id: 'trollskin_shirt', quantity: 1 },
+  { id: 'hearthguard_cap', quantity: 1 },
+  { id: 'cockscomb_crest', quantity: 1 },
+  { id: 'hearthguard_quilted_vest', quantity: 1 },
+  { id: 'hearthguard_boots', quantity: 1 },
+  { id: 'scrapmail_vest', quantity: 1 },
   { id: 'basic_pickaxe', quantity: 1 },
   { id: 'basic_axe', quantity: 1 },
-  { id: 'fury_of_taranis', quantity: 1 },
+  { id: 'stormcaller', quantity: 1 },
   { id: 'wood', quantity: 46 },
   { id: 'stone', quantity: 18 },
   { id: 'wood_board', quantity: 12 },
@@ -54,7 +55,6 @@ const HUMAN_BAG: readonly { readonly id: ItemId; readonly quantity: number }[] =
 const CAT_BAG: readonly { readonly id: ItemId; readonly quantity: number }[] = [
   { id: 'speed_fizz', quantity: 1 },
   { id: 'cooldown_crisp', quantity: 2 },
-  { id: 'splatter_skunk_toe_ring', quantity: 1 },
 ];
 
 function fixtureOwner(
@@ -63,6 +63,7 @@ function fixtureOwner(
 ): InventoryOwner {
   return {
     inventory: new Inventory(kind),
+    gear: new GearState(),
     ...stats,
   };
 }
@@ -114,10 +115,10 @@ export function buildFixture(spec: FixtureSpec): DialogFixture {
       stock(cat, CAT_BAG);
       human.inventory.placeOnHotbar('goblin_dynamite', 2);
       human.inventory.placeOnHotbar('speed_fizz', 1);
-      human.inventory.equipByItemId('issue_kettle_helm');
-      human.inventory.equipByItemId('padded_gambeson');
-      human.inventory.equipByItemId('fury_of_taranis');
-      human.inventory.unseenUpgrades.add('enchanted_crown_sepsis_whore');
+      human.inventory.equipByItemId('hearthguard_cap');
+      human.inventory.equipByItemId('hearthguard_quilted_vest');
+      human.inventory.equipByItemId('stormcaller');
+      human.inventory.unseenUpgrades.add('cockscomb_crest');
       if (spec.packedBag === true) packBag(human);
       const party: readonly InventoryMember[] = [
         { id: 'human', name: crawlerName('human'), owner: human },
@@ -153,7 +154,7 @@ export const INVENTORY_FIXTURES: readonly DialogFixture[] = [
     tab: 'bag',
     arrange: (screen, human) => {
       screen.filter = 'armor';
-      selectBag(screen, human, 'enchanted_crown_sepsis_whore');
+      selectBag(screen, human, 'cockscomb_crest');
       screen.sheetOpen = true;
     },
   }),
@@ -206,6 +207,23 @@ export const INVENTORY_FIXTURES: readonly DialogFixture[] = [
     tab: 'bag',
     packedBag: true,
     arrange: (screen, human) => screen.showPage(human.inventory.bag.pageCount - 1),
+  }),
+  buildFixture({
+    name: 'bag-weapon',
+    tab: 'bag',
+    arrange: (screen, human) => {
+      screen.filter = 'weapon';
+      selectBag(screen, human, 'stormcaller');
+      screen.sheetOpen = true;
+    },
+  }),
+  buildFixture({
+    name: 'character-weapon',
+    tab: 'character',
+    arrange: (screen, human) => {
+      screen.dollKey = 'Weapon:Main';
+      selectBag(screen, human, 'stormcaller');
+    },
   }),
   buildFixture({
     name: 'character',

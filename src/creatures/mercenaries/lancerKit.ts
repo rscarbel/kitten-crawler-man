@@ -1,5 +1,5 @@
 import { TILE_SIZE } from '../../core/constants';
-import type { MercenaryTemplate } from '../../core/mercenaryTemplates';
+import type { MercenaryTemplate } from '../../core/party/mercenaryTemplates';
 import {
   DONG_CHARGE_TILES_PER_CYCLE,
   dongLanceReachTiles,

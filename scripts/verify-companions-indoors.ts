@@ -51,10 +51,13 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TILE_SIZE } from '../src/core/constants';
 import { level3 } from '../src/levels/level3';
-import { setViewportSize } from '../src/core/Viewport';
-import { createMongoPetState, type MongoPetState } from '../src/core/MongoPetState';
-import { createMercenaryRoster, type MercenaryRoster } from '../src/core/MercenaryRoster';
-import { getMercenaryTemplate, type MercenaryTemplateId } from '../src/core/mercenaryTemplates';
+import { setViewportSize } from '../src/core/rendering/Viewport';
+import { createMongoPetState, type MongoPetState } from '../src/core/state/MongoPetState';
+import { createMercenaryRoster, type MercenaryRoster } from '../src/core/party/MercenaryRoster';
+import {
+  getMercenaryTemplate,
+  type MercenaryTemplateId,
+} from '../src/core/party/mercenaryTemplates';
 import { getMongoStats } from '../src/abilities/mongo';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
@@ -79,9 +82,9 @@ import type { SystemContext } from '../src/systems/GameSystem';
 import { MercenarySystem } from '../src/systems/MercenarySystem';
 import { QuillConfrontationSystem } from '../src/systems/QuillConfrontationSystem';
 import { EventBus } from '../src/core/EventBus';
-import { createMurderQuestProgress } from '../src/core/MurderQuestProgress';
-import { createDoomsdayProgress } from '../src/core/DoomsdayProgress';
-import { settings } from '../src/core/Settings';
+import { createMurderQuestProgress } from '../src/core/quests/MurderQuestProgress';
+import { createDoomsdayProgress } from '../src/core/quests/DoomsdayProgress';
+import { settings } from '../src/core/input/Settings';
 import { BOSS_HEALER_DIFFICULTY } from '../src/levels/fairySpawner';
 import { HealingFairy } from '../src/creatures/fairies/HealingFairy';
 import { RockThrowSystem } from '../src/systems/RockThrowSystem';
@@ -108,10 +111,10 @@ const BIG_TOP_DIFFICULTY = 'normal';
 import { TOWN_INTERIOR_PROPS } from '../src/sprites/art/townInterior/townInteriorProps';
 import { AnchorInteriorSystem } from '../src/systems/AnchorInteriorSystem';
 import { SKY_TEMPLE_NAME } from '../src/systems/interiorStoryOwnership';
-import { createAnchorQuestProgress } from '../src/core/AnchorQuestProgress';
+import { createAnchorQuestProgress } from '../src/core/quests/AnchorQuestProgress';
 import { CultHideoutSystem } from '../src/systems/CultHideoutSystem';
 import { interiorHostilesFor } from '../src/systems/interiorHostiles';
-import { createTownMemory } from '../src/core/TownMemory';
+import { createTownMemory } from '../src/core/state/TownMemory';
 import { applyMovement } from '../src/systems/GameLoopPhases';
 import { CompanionSystem } from '../src/systems/CompanionSystem';
 import { hudLayout } from '../src/ui/hud/hudLayout';
@@ -508,7 +511,10 @@ function checkMongoWalksOut(): void {
   const woundedHp = mongo.hp;
 
   // What the interior's `doExit` hands back, and the dismiss it runs.
-  const departure: InteriorCompanionDeparture = { mongoWasOut: inside.followsThroughDoor };
+  const departure: InteriorCompanionDeparture = {
+    mongoWasOut: inside.followsThroughDoor,
+    mongoUnlocked: inside.unlocked,
+  };
   inside.dismiss(storeRoster.mobs, storeRoster.grid);
 
   const out = outdoors();
@@ -1639,7 +1645,7 @@ const INPUT_HANDLER_PATH = resolve(SCENES_DIR, '..', 'systems', 'GameplayInputHa
 const MERC_SYSTEM_PATH = resolve(SCENES_DIR, '..', 'systems', 'MercenarySystem.ts');
 const QUILL_PATH = resolve(SCENES_DIR, '..', 'systems', 'QuillConfrontationSystem.ts');
 const OCCUPANT_SYSTEM_PATH = resolve(SCENES_DIR, '..', 'systems', 'InteriorOccupantSystem.ts');
-const PLAYER_MANAGER_PATH = resolve(SCENES_DIR, '..', 'core', 'PlayerManager.ts');
+const PLAYER_MANAGER_PATH = resolve(SCENES_DIR, '..', 'core', 'party', 'PlayerManager.ts');
 const HUD_SURFACE_PATH = resolve(SCENES_DIR, '..', 'ui', 'hud', 'HudSurface.ts');
 
 /** The source of one method, from its signature to the closing brace at method depth. */

@@ -9,7 +9,7 @@ import { AudioManager } from '../../src/audio/AudioManager.js';
 import { soundTraits } from '../../src/audio/soundTraits.js';
 import type { SoundId } from '../../src/audio/sounds.js';
 import { TILE_SIZE } from '../../src/core/constants.js';
-import type { VisibleWorldView } from '../../src/core/visibleWorldView.js';
+import type { VisibleWorldView } from '../../src/core/rendering/visibleWorldView.js';
 import { listenForCaptions, SoundCaptions } from '../../src/ui/hud/captions.js';
 import {
   FakeChannelMergerNode,

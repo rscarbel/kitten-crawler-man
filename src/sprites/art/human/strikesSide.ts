@@ -15,7 +15,7 @@
  * the poses themselves rather than a curve that happens to pass through them.
  */
 
-import { HUMAN_SWING_FRAMES } from '../../../core/crawlerFormulas';
+import { HUMAN_SWING_FRAMES } from '../../../core/party/crawlerFormulas';
 import { PLAYER_SPEED } from '../../../core/constants';
 import { lerpAngle, mixPt, offset, pt } from '../biped/geometry';
 import { HEAD_RY } from '../biped/proportions';

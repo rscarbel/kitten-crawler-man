@@ -11,7 +11,7 @@
  * Every rect is in UI units.
  */
 
-import { HOTBAR_COUNT, QUEST_SLOT_IDX } from '../../core/ItemDefs';
+import { HOTBAR_COUNT, QUEST_SLOT_IDX } from '../../core/items/defs/ItemDefs';
 import { inset, overlaps, type Rect } from '../core/geom';
 import type { SizeClass } from '../core/viewport';
 import { resolveTheme, type Density, type Theme } from '../theme/tokens';

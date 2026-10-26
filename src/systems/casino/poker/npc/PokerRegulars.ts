@@ -15,7 +15,7 @@
  * each regular is comes from the world seed and never from that source.
  */
 
-import type { LuckCheck } from '../../../../core/GodMode';
+import type { LuckCheck } from '../../../../core/state/GodMode';
 import type { Card } from '../../Deck';
 import { passiveAction, type PokerActionKind } from '../bettingRound';
 import {

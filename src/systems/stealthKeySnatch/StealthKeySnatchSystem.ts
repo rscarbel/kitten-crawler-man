@@ -10,11 +10,14 @@
  */
 
 import type { AudioManager } from '../../audio/AudioManager';
-import { awardPartyXp, type CrawlerPair, type PartyXpApplied } from '../../core/awardXp';
+import {
+  awardPartyXp,
+  type CrawlerPair,
+  type PartyXpApplied,
+} from '../../core/progression/awardXp';
 import { TILE_SIZE } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
-import type { ItemId } from '../../core/ItemDefs';
-import { QuestManager, type QuestStatus } from '../../core/QuestManager';
+import { QuestManager, type QuestId, type QuestStatus } from '../../core/quests/QuestManager';
 import { PrisonGoblin, type PrisonGoblinMarker } from '../../creatures/PrisonGoblin';
 import {
   TALK_TIER_NAMED,
@@ -42,8 +45,10 @@ import type { StealthGateRoomData } from '../../map/stealthGateLayout';
 import { prewarmPrisonGoblins } from '../../sprites/goblinGuardSprite';
 import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
 import type { ToastOptions } from '../../ui/hud/toasts';
-import { bagItemRewardLine, partyXpSections } from '../../ui/questReward/rewardLines';
-import type { QuestRewardSpec } from '../../ui/questReward/types';
+import { partyXpSections } from '../../ui/questReward/rewardLines';
+import type { QuestRewardSpec, RewardItemLine } from '../../ui/questReward/types';
+import { grantQuestGear } from '../../loot/questGear';
+import type { GearId } from '../../loot/gearPools';
 import type { GameSystem, SystemContext } from '../GameSystem';
 import type { MobRoster } from '../kits/SceneWorld';
 import type { QuestMarkerType } from '../MiniMapSystem';
@@ -62,7 +67,7 @@ import {
   type StealthKeySnatchVisit,
 } from './stealthKeySnatchVisit';
 
-export const STEALTH_KEY_SNATCH_QUEST_ID = 'stealth_key_snatch';
+export const STEALTH_KEY_SNATCH_QUEST_ID = 'stealth_key_snatch' as const satisfies QuestId;
 export const STEALTH_KEY_SNATCH_QUEST_NAME = 'The Stealth Key Snatch';
 /** The bathroom's scale: the real reward is the open path. */
 export const STEALTH_KEY_SNATCH_XP_REWARD = 150;
@@ -70,7 +75,7 @@ export const STEALTH_KEY_SNATCH_XP_REWARD = 150;
 const REWARD_COINS_MIN = 15;
 const REWARD_COINS_MAX = 30;
 /** The floor-2 consumables the reward picks one of. */
-const REWARD_ITEM_POOL: readonly ItemId[] = ['health_potion', 'speed_fizz', 'jugg_juice'];
+const REWARD_GEAR = 'prowler_mantle' as const satisfies GearId;
 
 const GET_KEY_OBJECTIVE = 'Get the key from the Goblin High Security Prison';
 const HAND_OVER_OBJECTIVE = 'Bring the key to the gate guard';
@@ -275,7 +280,7 @@ export class StealthKeySnatchSystem
 
   /**
    * Takes the key from whoever carries it, opens the gate and pays the quest.
-   * The crawler who handed it over gets the coins and the item.
+   * The crawler who handed it over gets the coins; the gear goes to the one who can wear it.
    */
   private openGate(active: HumanPlayer | CatPlayer, party: CrawlerPair): void {
     if (this.currentPhase !== 'keyHeld') return;
@@ -295,20 +300,22 @@ export class StealthKeySnatchSystem
     const coins =
       REWARD_COINS_MIN + Math.floor(Math.random() * (REWARD_COINS_MAX - REWARD_COINS_MIN + 1));
     active.earnCoins(coins);
-    const itemIndex = Math.floor(Math.random() * REWARD_ITEM_POOL.length);
-    const item = REWARD_ITEM_POOL[itemIndex] ?? REWARD_ITEM_POOL[0];
-    active.inventory.addItem(item, 1);
+    const gear = grantQuestGear(party, REWARD_GEAR, active === party.human ? 'human' : 'cat');
     this.deps.bus.emit('questCompleted', { questId: STEALTH_KEY_SNATCH_QUEST_ID });
-    this.deps.bus.emit('questRewardShown', this.rewardSpec(xpApplied, coins, item));
+    this.deps.bus.emit('questRewardShown', this.rewardSpec(xpApplied, coins, gear));
   }
 
-  private rewardSpec(xpApplied: PartyXpApplied, coins: number, item: ItemId): QuestRewardSpec {
+  private rewardSpec(
+    xpApplied: PartyXpApplied,
+    coins: number,
+    gear: RewardItemLine,
+  ): QuestRewardSpec {
     return {
       questTitle: STEALTH_KEY_SNATCH_QUEST_NAME,
       sections: [
         ...partyXpSections(xpApplied),
         { kind: 'coins', amount: coins },
-        { kind: 'items', items: [bagItemRewardLine(item, 1)] },
+        { kind: 'items', items: [gear] },
       ],
     };
   }

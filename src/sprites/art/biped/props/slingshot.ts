@@ -1,6 +1,8 @@
 /**
- * A forked wooden slingshot, gripped by its handle below the fork, with its
- * two rubber bands and the leather pouch they carry.
+ * The Rattlestick Sling: a bark-on forked stick gripped by its handle below
+ * the fork, tape wound round the butt, two strips cut from a red inner tube
+ * for bands, the leather pouch they carry, and a knot of pebbles tied to the
+ * butt that rattles as he moves.
  *
  * The bands run from the prong tips to `prop.tether` — the pouch, wherever the
  * choreography has put it: pinched in the drawing hand, snapped forward past
@@ -20,23 +22,36 @@ import { squareAround } from './reach';
 /** The pouch hangs midway between the tips when nothing pulls it. */
 const HALF = 0.5;
 
-/** A pale, freshly whittled fork: it has to separate from the brown jacket behind it. */
+/**
+ * A forked stick with its bark still on, grey-brown rather than whittled
+ * pale: the red bands and black tape carry the read against his clothes, so
+ * the wood can be the dull thing it is.
+ */
 const WOOD: Ramp = {
-  deep: '#3a2413',
-  shadow: '#5c3a1c',
-  dark: '#7d5226',
-  mid: '#9c6a31',
-  base: '#b9833f',
-  light: '#d6a35a',
-  rim: '#efc57c',
+  deep: '#2e2318',
+  shadow: '#45352a',
+  dark: '#5e4a38',
+  mid: '#755d45',
+  base: '#8d7253',
+  light: '#a98d6a',
+  rim: '#c9ad86',
 };
 
 /**
- * Amber latex, lighter than anything else he wears, so the two bands read as
- * lines at the 32 px tile rather than dissolving into the jacket.
+ * Red inner-tube rubber, more saturated than anything he wears, so the two
+ * bands read as lines at the 32 px tile rather than dissolving into his clothes.
  */
-const BAND = '#f2d98a';
-const BAND_SHADE = '#9c6d2c';
+const BAND = '#e2573b';
+const BAND_SHADE = '#7c2216';
+/** Black tape wound round the butt below his fist. */
+const TAPE = '#262427';
+const TAPE_HALF = 0.03;
+/** The rattle: pebbles knotted to the butt on a short cord, either side of the haft. */
+const RATTLE_CORD = '#6b5a44';
+const RATTLE_CORD_WIDTH = 0.01;
+const RATTLE_BEYOND_BUTT = 0.04;
+const RATTLE_SPREAD = 0.024;
+const RATTLE_PEBBLE_R = 0.017;
 const POUCH = '#5a3a26';
 const STONE = '#9a938a';
 const STONE_LIGHT = '#d9d4cb';
@@ -80,9 +95,10 @@ export const SLINGSHOT_TIPS_ABOVE_GRIP =
  */
 const PROFILE_FORK_WIDTH = 0.7;
 
-const BAND_WIDTH = 0.028;
+/** A strip cut from a tube is flat and broad, wider than a bought band. */
+const BAND_WIDTH = 0.032;
 /** The band's darker underside, a hair below it, so the line has a lit and a shaded edge. */
-const BAND_SHADE_WIDTH = 0.034;
+const BAND_SHADE_WIDTH = 0.04;
 const POUCH_RX = 0.034;
 const POUCH_RY = 0.026;
 const STONE_R = 0.026;
@@ -162,6 +178,23 @@ export const drawSlingshot: PropPainter = (ctx, grip, prop, view, behindHand) =>
     halfWidth: HANDLE_HALF,
     frameRotation: frameAngle,
   });
+  const rattleKnot: Pt = { x: butt.x + RATTLE_BEYOND_BUTT, y: 0 };
+  ctx.strokeStyle = RATTLE_CORD;
+  ctx.lineWidth = RATTLE_CORD_WIDTH;
+  ctx.beginPath();
+  ctx.moveTo(butt.x, 0);
+  ctx.lineTo(rattleKnot.x, 0);
+  ctx.stroke();
+  for (const side of [-1, 1]) {
+    ctx.fillStyle = STONE;
+    ctx.beginPath();
+    ctx.arc(rattleKnot.x, side * RATTLE_SPREAD, RATTLE_PEBBLE_R, 0, TWO_PI);
+    ctx.fill();
+  }
+  ctx.fillStyle = TAPE;
+  ctx.beginPath();
+  addCapsule(ctx, butt, { x: 0, y: 0 }, TAPE_HALF, TAPE_HALF);
+  ctx.fill();
   ctx.restore();
 
   const tips = [leftTip, rightTip].map((tip) => toFigure(tip, grip.centre, frameAngle));

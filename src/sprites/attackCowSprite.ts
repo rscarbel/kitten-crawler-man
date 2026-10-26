@@ -1,4 +1,8 @@
-import { progressFrameIndex, timeFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
+import {
+  progressFrameIndex,
+  timeFrameIndex,
+  walkFrameIndex,
+} from '../core/spriteAssets/SpriteRenderer';
 import {
   ATTACK_COW_ACTIONS,
   ATTACK_COW_ACTION_VIEWS,

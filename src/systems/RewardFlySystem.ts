@@ -7,13 +7,13 @@
  * — this system only draws the trip from there to the HUD. `hold()` returns a
  * token; grants enqueued while it's outstanding queue under that token alone
  * and fly (or, on `cancel`, vanish) only for that token's own
- * `release`/`cancel` — never another caller's overlapping hold — so a loot-box
- * reveal and an unrelated chest dialog can be open at once without one's
+ * `release`/`cancel` — never another caller's overlapping hold — so a reward
+ * screen and an unrelated chest dialog can be open at once without one's
  * teardown reaching into the other's queue.
  */
 
-import { ITEM_DEF } from '../core/ItemDefs';
-import type { ItemId } from '../core/ItemDefs';
+import { ITEM_DEF } from '../core/items/defs/ItemDefs';
+import type { ItemId } from '../core/items/defs/ItemDefs';
 import { drawItemIcon } from '../ui/icons/drawItemIcon';
 import type { Rect } from '../ui/core/geom';
 import { worldText } from '../ui/world/worldText';

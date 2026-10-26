@@ -1,4 +1,4 @@
-import { noteDrawFailure, recoverDrawState } from '../core/drawFailure';
+import { noteDrawFailure, recoverDrawState } from '../core/rendering/drawFailure';
 import { firstResidentMarker, type ResidentQuestHook } from '../systems/residentQuestHooks';
 import { drainBloodVomitRetches } from '../systems/bloodVomitRetches';
 import { ExplosionShake } from '../systems/ExplosionShake';
@@ -16,8 +16,8 @@ import { forwardQuestItemEvictions } from '../systems/questItemEvictions';
 import { forwardEquipmentChanges } from '../systems/equipmentChangeEvents';
 import type { XpDiminishingTier } from '../levels/xpDiminishing';
 import { type SceneManager } from '../core/Scene';
-import { type InputManager } from '../core/InputManager';
-import { keybindings } from '../core/Keybindings';
+import { type InputManager } from '../core/input/InputManager';
+import { keybindings } from '../core/input/Keybindings';
 import { TILE_SIZE } from '../core/constants';
 import { GameMap, TOWER_FLOOR_COUNT, TOWER_INTERIOR_W, type InteriorVariant } from '../map/GameMap';
 import { planGoblinPrison, type PrisonPlan } from '../map/goblinPrisonPlan';
@@ -37,21 +37,21 @@ import { PRISON_TRAIL_SPACING_TILES } from '../systems/stealthKeySnatch/prisonTu
 import { setFloorArtSeed } from '../map/ground/floorArtSeed';
 import { requestGroundSheets } from '../map/ground/runtimeGroundSheets';
 import { requestEnvironmentSheetsForGroups } from '../sprites/sheets/environmentSheets';
-import { holdIdleClock, releaseIdleClock } from '../core/renderFrameClock';
+import { holdIdleClock, releaseIdleClock } from '../core/rendering/renderFrameClock';
 import { BRAZIER, FIREPLACE } from '../map/tileTypes';
-import { PlayerManager } from '../core/PlayerManager';
+import { PlayerManager } from '../core/party/PlayerManager';
 import { setSkillBookReaders } from '../creatures/skillBookDrop';
 import type { BuildingEntry } from '../systems/BuildingSystem';
-import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/PlayerSnapshot';
+import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/save/PlayerSnapshot';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
 import { BopcaSystem } from '../systems/BopcaSystem';
 import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
 import { ShopSystem } from '../systems/ShopSystem';
-import { TouchMoveState } from '../core/TouchMoveState';
+import { TouchMoveState } from '../core/input/TouchMoveState';
 import { crawlerName } from '../characters/characters';
-import { constructionUnlocked } from '../core/villageUnlocks';
-import { platform } from '../core/Platform';
+import { constructionUnlocked } from '../core/quests/villageUnlocks';
+import { platform } from '../core/input/Platform';
 import {
   renderEntityTooltip,
   renderLevelUpFlash,
@@ -95,17 +95,19 @@ import { QuestRouteGuide } from '../systems/questRoute/QuestRouteGuide';
 import { crawlerGroundPoint, crawlerSpriteBox } from '../systems/questRoute/routeOrigin';
 import type { TilePoint } from '../map/town/townPlan';
 import { GameplayScene } from './GameplayScene';
-import { AchievementManager } from '../core/AchievementManager';
+import { AchievementManager } from '../core/progression/AchievementManager';
 import { AchievementUISystem } from '../systems/AchievementUISystem';
-import type { JournalProgress } from '../core/JournalProgress';
+import { AchievementAwards } from '../systems/AchievementAwards';
+import { introduceMongo, joinMongoOnOpen, presentsMongo } from '../systems/mongoArrival';
+import type { JournalProgress } from '../core/quests/JournalProgress';
 import { isOutstanding, resolvePinnedEntry, type TrackerEntry } from '../systems/questTracker';
-import { GameStats, bindRunStats } from '../core/GameStats';
+import { GameStats, bindRunStats } from '../core/progression/GameStats';
 import type { PauseScreen } from '../ui/screens/pause/PauseScreen';
 import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import { HumanTalkDriver } from '../creatures/humanGestures';
 import type { CatPlayer } from '../creatures/CatPlayer';
-import { AbilityManager } from '../core/AbilityManager';
+import { AbilityManager } from '../core/skills/AbilityManager';
 import type { AudioManager } from '../audio/AudioManager';
 import type { AudioScope } from '../audio/AudioScope';
 import { Conversation } from '../dialog/Conversation';
@@ -125,16 +127,16 @@ import {
   sfxGroupsForBuildingEntry,
   sfxGroupsForFloorNumber,
 } from '../audio/sfxGroups';
-import { prewarmGroups } from '../core/SpriteLoader';
+import { prewarmGroups } from '../core/spriteAssets/SpriteLoader';
 import { ArrivalLoader } from './ArrivalLoader';
-import { activeMusicLibrary } from '../core/MusicLibrary';
+import { activeMusicLibrary } from '../core/music/MusicLibrary';
 import { postMusicLibraryNotices, returnUnreadMusicNotices } from '../ui/hud/nowPlaying';
 import { floorArrivalLoadTasks } from './floorArrivalLoad';
 import type { ArrivalLoadingScreen } from '../levels/types';
 import { aiAdapter } from '../ai/AIAdapter';
 import type { AISceneContext } from '../ai/aiActions';
 import { AIShowStage } from '../ai/show/AIShowStage';
-import { viewerFavor } from '../core/viewerFavor';
+import { viewerFavor } from '../core/progression/viewerFavor';
 import type { AIContextSource, SessionInput } from '../ai/context/types';
 import { readCrawler, readNearbyMobs } from '../ai/context/sceneReaders';
 import { mobLabel } from '../ai/context/eventMapping';
@@ -152,7 +154,7 @@ import type { TacticsTrait } from '../creatures/tactics/tacticsTraits';
 import type { RespawnMode } from '../ui/DeathScreen';
 import { causeFromDamageSource } from '../systems/DeathCauseSystem';
 import { pickDeathExplanation } from '../ui/DeathExplanations';
-import type { Mob } from '../creatures/Mob';
+import type { LootDrop, Mob } from '../creatures/Mob';
 import type { Townsperson } from '../creatures/Townsperson';
 import { CITIZEN_TALK_RADIUS_TILES } from '../creatures/townInteraction';
 import { safeRoomPressLeavesSpeaker, safeRoomSpeakerFor } from '../systems/safeRoomSpeaker';
@@ -162,11 +164,11 @@ import {
   BIG_TOP_BUILDING_NAME,
   isCircusResolvedStage,
   type CircusQuestProgress,
-} from '../core/CircusQuestProgress';
+} from '../core/quests/CircusQuestProgress';
 import { adviceObjective, MordecaiAdvisor, type AdviceSnapshot } from '../systems/mordecaiAdvice';
-import type { MurderQuestProgress, MurderQuestStage } from '../core/MurderQuestProgress';
-import { createDoomsdayProgress, type DoomsdayProgress } from '../core/DoomsdayProgress';
-import { createClubMembership, type ClubMembership } from '../core/ClubMembership';
+import type { MurderQuestProgress, MurderQuestStage } from '../core/quests/MurderQuestProgress';
+import { createDoomsdayProgress, type DoomsdayProgress } from '../core/quests/DoomsdayProgress';
+import { createClubMembership, type ClubMembership } from '../core/club/ClubMembership';
 import { tickShopStock, type ShopStock } from '../economy/shopStock';
 import type { ShopId } from '../economy/shops';
 import { FollowerScreen } from '../ui/screens/follower/FollowerScreen';
@@ -179,9 +181,9 @@ import {
   createMercenaryRoster,
   type HiredMercenary,
   type MercenaryRoster,
-} from '../core/MercenaryRoster';
-import { createGodModeState, type GodModeState } from '../core/GodMode';
-import { ITEM_DEF, type InventoryItem, type ItemId } from '../core/ItemDefs';
+} from '../core/party/MercenaryRoster';
+import { createGodModeState, type GodModeState } from '../core/state/GodMode';
+import { ITEM_DEF, type InventoryItem, type ItemId } from '../core/items/defs/ItemDefs';
 import { CLUB_STATION_SURFACE_IDS, DesperadoClubSystem } from '../systems/DesperadoClubSystem';
 import { ClubWheelSystem } from '../systems/ClubWheelSystem';
 import { POKER_DEV_SEED } from '../systems/casino/poker/npc/personality';
@@ -270,15 +272,15 @@ import {
   noteResidentTalk,
   residentTalkCount,
   type TownMemory,
-} from '../core/TownMemory';
-import { createPartyCraftsState, type PartyCraftsState } from '../core/partyCrafts';
-import { createBriarHollowState, type BriarHollowState } from '../core/briarHollowState';
+} from '../core/state/TownMemory';
+import { createPartyCraftsState, type PartyCraftsState } from '../core/labour/partyCrafts';
+import { createBriarHollowState, type BriarHollowState } from '../core/quests/briarHollowState';
 import {
   plumblineFarmExamineLine,
   PlumblineFarmRoomSync,
 } from '../systems/briarHollow/blueprints/plumblineFarmRoom';
 import { PLUMBLINE_FARM_NAME } from '../systems/briarHollow/blueprints/blueprintsProgress';
-import { partyCount } from '../core/partyResources';
+import { partyCount } from '../core/items/gathering/partyResources';
 import { indoorsConstructionSource } from '../systems/briarHollow/ConstructionSystem';
 import { FortuneTable, HEDGE_WITCH, fortuneScreenSurface } from '../ui/screens/shop/FortuneScreen';
 import { ReadableOverlay } from '../ui/screens/dialogs/ReadableOverlay';
@@ -311,14 +313,17 @@ import { SkillPointReminderSystem } from '../systems/SkillPointReminderSystem';
 import { interiorHostilesFor, noteRoomCleared } from '../systems/interiorHostiles';
 import { partyLevelOf } from '../levels/spawner';
 import { DESPERADO_CLUB_NAME, TAVERN_BUILDING_NAMES } from '../map/town/townPlan';
-import { CLUB_PROPS } from '../core/clubProps';
+import { CLUB_PROPS } from '../core/club/clubProps';
 import { AnchorInteriorSystem } from '../systems/AnchorInteriorSystem';
 import {
   SKY_TEMPLE_NAME,
   cultHideoutHoldsRoom,
   type InteriorStoryState,
 } from '../systems/interiorStoryOwnership';
-import { createAnchorQuestProgress, type AnchorQuestProgress } from '../core/AnchorQuestProgress';
+import {
+  createAnchorQuestProgress,
+  type AnchorQuestProgress,
+} from '../core/quests/AnchorQuestProgress';
 import { MenusKit } from '../systems/kits/MenusKit';
 import { ChatKit } from '../systems/kits/ChatKit';
 import {
@@ -337,7 +342,7 @@ import type { PendingLoot } from '../systems/LootSystem';
 import { BigTopMazeSystem } from '../systems/BigTopMazeSystem';
 import { restartBigTopTent } from '../systems/bigTop/bigTopTent';
 import type { GroundHazardSource } from '../systems/GroundHazardSource';
-import { DIFFICULTY_LABELS, type Difficulty } from '../core/difficultyProfiles';
+import { DIFFICULTY_LABELS, type Difficulty } from '../core/difficulty/difficultyProfiles';
 import { CultHideoutSystem } from '../systems/CultHideoutSystem';
 import { QuillConfrontationSystem } from '../systems/QuillConfrontationSystem';
 import { SoulCrystalSystem } from '../systems/SoulCrystalSystem';
@@ -346,7 +351,7 @@ import { SkeletonSummonSystem } from '../systems/SkeletonSummonSystem';
 import { FairySystem } from '../systems/FairySystem';
 import { playFairySystemCues } from '../systems/fairyAudioCues';
 import type { SystemContext } from '../systems/GameSystem';
-import type { InteriorFigure } from '../core/InteriorFigure';
+import type { InteriorFigure } from '../core/rendering/InteriorFigure';
 import {
   drawTownInteriorGroundProps,
   townInteriorPropFigures,
@@ -355,7 +360,7 @@ import {
   hostileWithinAttackRange,
   shouldShowInteractionPrompts,
 } from '../systems/interactionPromptGate';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import type { QuestRewardSpec } from '../ui/questReward/types';
 import {
   ClearViewMemo,
@@ -371,13 +376,17 @@ import {
   roomNameEntry,
   type InteriorChrome,
 } from './interiorHud';
-import { cameraWorldView, setVisibleWorldView, visibleWorldView } from '../core/visibleWorldView';
+import {
+  cameraWorldView,
+  setVisibleWorldView,
+  visibleWorldView,
+} from '../core/rendering/visibleWorldView';
 import { captionToward } from '../ui/hud/captions';
-import { createMongoPetState, type MongoPetState } from '../core/MongoPetState';
+import { createMongoPetState, type MongoPetState } from '../core/state/MongoPetState';
 import { detachedPartyRun, type InteriorPartyRun } from './interiorPartyRun';
-import { reloadPage, type SaveWriteOutcome } from '../core/progressPersistence';
-import { settings } from '../core/Settings';
-import { awardFirstHundred, bindAbilityLevelUps } from '../systems/abilityLevelUps';
+import { reloadPage, type SaveWriteOutcome } from '../core/save/progressPersistence';
+import { settings } from '../core/input/Settings';
+import { bindAbilityLevelUps } from '../systems/abilityLevelUps';
 import { bindCraftLevelUps } from '../systems/craftLevelUps';
 import { MongoSystem, mongoXpFraction } from '../systems/MongoSystem';
 import {
@@ -388,6 +397,15 @@ import {
   type InteriorCompanionDeparture,
 } from '../systems/companionCarry';
 import { getMongoStats } from '../abilities/mongo';
+import {
+  isGearBoss,
+  partyOwnsGear,
+  rollBossGear,
+  withGearLoot,
+  type GearId,
+  type GearLoot,
+} from '../loot/gearPools';
+import { gearRecipient } from '../loot/questGear';
 
 /** The shared conversation's surface id: the one overlay a world tap may hand its press past. */
 const CONVERSATION_SURFACE_ID = 'conversation';
@@ -699,8 +717,10 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly tacticsNotices: TacticsNoticeSystem;
   /** Bag, gear, pause menu, award stack, toasts and the hotbar's one routine. */
   private readonly menus: MenusKit;
-  /** The unread-achievement chip, its notifications and the loot-box opener, as outdoors. */
+  /** The reward chest screen, as outdoors. */
   private readonly achievementUI: AchievementUISystem;
+  /** Pays every award this scene's crawlers earn; see {@link AchievementAwards}. */
+  private readonly awards: AchievementAwards;
   /**
    * The show AI's questions, adverts and the viewers' favour. Challenges stay
    * outside: a door is where a challenge ends, so none starts indoors.
@@ -1252,8 +1272,20 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     this.shop =
-      entry.type === 'store' ? new ShopSystem(this.mapW, 'general_store', this.shopStock) : null;
+      entry.type === 'store'
+        ? new ShopSystem(this.mapW, 'general_store', this.shopStock, (id) => this.partyOwnsGear(id))
+        : null;
 
+    this.awards = new AchievementAwards({
+      owns: (id) => this.partyOwnsGear(id),
+      humanAchievements: this.humanAchievements,
+      catAchievements: this.catAchievements,
+      human: this.human,
+      cat: this.cat,
+      bus: this.bus,
+      coinMultiplier: () => this.aiShow.chestCoinMultiplier(),
+      activeCrawler: () => (this.cat.isActive ? 'cat' : 'human'),
+    });
     this.club =
       entry.type === 'club'
         ? new DesperadoClubSystem(
@@ -1266,8 +1298,8 @@ export class BuildingInteriorScene extends GameplayScene {
             this.human.hasDesperadoPassTattoo || this.cat.hasDesperadoPassTattoo,
             this.active(),
             this.shopStock,
-            this.humanAchievements,
-            this.catAchievements,
+            (id) => this.partyOwnsGear(id),
+            this.awards,
             this.circus?.worldSeed ?? POKER_DEV_SEED,
             () => this.godModeState.luckyActive,
           )
@@ -1359,6 +1391,8 @@ export class BuildingInteriorScene extends GameplayScene {
     // the roster), so the fly-to-HUD hook is wired once per floor here rather
     // than once for the building.
     for (const floor of this.floors) {
+      floor.combat.gear.onSetCompleted = (kind) => this.awards.unlockDressedForTheOccasion(kind);
+      floor.combat.gear.onRelicKill = (kind) => this.awards.recordRelicKill(kind);
       floor.destruction.loot.onCredited = (loot) => this.flyLootReward(floor, loot);
       floor.destruction.groundPickups.onCollected = (itemId, quantity, worldX, worldY) => {
         const cam = this.computeCamera(floor.world.gameMap);
@@ -1391,18 +1425,23 @@ export class BuildingInteriorScene extends GameplayScene {
     this.achievementUI = new AchievementUISystem(
       this.humanAchievements,
       this.catAchievements,
-      this.human,
-      this.cat,
-      this.rewardFly,
       this.audio,
     );
+    this.achievementUI.onPresentationOpened = (presentation) =>
+      joinMongoOnOpen(presentation, this.mongoSystem);
+    this.achievementUI.onPresentationClosed = (presentation) => {
+      if (!presentsMongo(presentation)) return;
+      introduceMongo(this.bus, this.menus, () => this.abilityManager.getLevel('mongo'));
+    };
+    this.bus.on('rewardGranted', (e) => {
+      for (const reward of e.rewards) this.menus.rewardGrantedDialog.enqueue(reward);
+    });
     this.aiShow = new AIShowStage({
       bus: this.bus,
       favor: viewerFavor,
       challenges: null,
       postToast: (text, opts) => this.menus.toasts.post(text, opts),
     });
-    this.achievementUI.boxCoinMultiplier = () => this.aiShow.boxCoinMultiplier();
     this.systemNotices = new SystemNoticeSystem(this.bus, this.menus.toasts);
     this.tacticsNotices = new TacticsNoticeSystem(tacticsNoticesSeen ?? new Set<TacticsTrait>());
     this.chat = new ChatKit({
@@ -1418,13 +1457,13 @@ export class BuildingInteriorScene extends GameplayScene {
     });
     this.chat.applyCarriedCheat();
     this.wirePauseScreen();
-    // No tutorial runs indoors, so the talisman needs none of the overworld's guard.
+    // No tutorial runs indoors, so Spark to Flame needs none of the overworld's guard.
     bindAbilityLevelUps({
       abilityManager: this.abilityManager,
       menus: this.menus,
       audio: this.audio,
       onPetLevelUp: () => this.mongoSystem.onPetLevelUp(),
-      onTalismanLevel: () => awardFirstHundred(this.catAchievements, this.bus),
+      onSparkLevel: () => this.awards.unlock('cat', 'spark_to_flame'),
     });
     bindCraftLevelUps({ bus: this.bus, menus: this.menus, audio: this.audio });
     this.wireCombatGore();
@@ -1484,6 +1523,7 @@ export class BuildingInteriorScene extends GameplayScene {
     });
     this.contractContact = ContractContactHook.forBuilding(entry.name, GROUND_FLOOR_INDEX, {
       state: this.briarHollowState,
+      party: { human: this.human, cat: this.cat },
       story: () => ({
         murderStage: this.murderQuestProgress?.stage,
         anchor: this.anchorQuestProgress,
@@ -1791,8 +1831,7 @@ export class BuildingInteriorScene extends GameplayScene {
    */
   private noteDrinkAchievement(id: ItemId): void {
     if (id !== 'dirty_shirley' || this.entry.type !== 'club') return;
-    this.humanAchievements.tryUnlock('ask_for_it_dirty');
-    this.catAchievements.tryUnlock('ask_for_it_dirty');
+    this.awards.unlockParty('bartenders_choice');
   }
 
   private openChat(): void {
@@ -1845,11 +1884,53 @@ export class BuildingInteriorScene extends GameplayScene {
       // there into the pack on the way out.
       const owner = e.topDamageDealer ?? e.killer;
       if (owner !== null && e.mob.droppedLoot !== null) {
-        const { x, y } = this.destruction.loot.findDropPosition(e.mob.x, e.mob.y);
-        this.destruction.loot.addLoot(x, y, e.mob.droppedLoot, owner, false, false, true);
+        this.dropKillLoot(e.mob.x, e.mob.y, e.mob.droppedLoot, owner);
         e.mob.droppedLoot = null;
       }
+      const boss = e.mob.spawnTypeKey;
+      if (owner !== null && boss !== null && isGearBoss(boss) && e.mob.paysRewards) {
+        const gear = rollBossGear(boss, this.floor.floorNumber, Math.random, (id) =>
+          this.partyOwnsGear(id),
+        );
+        this.dropBossGear(e.mob.x, e.mob.y, gear, owner);
+      }
     });
+  }
+
+  /** Whether the party already has `id`, carried or still on the floor: gear is one of a kind. */
+  private partyOwnsGear(id: GearId): boolean {
+    return partyOwnsGear([this.human, this.cat], id) || this.destruction.loot.holds(id);
+  }
+
+  private dropKillLoot(
+    atX: number,
+    atY: number,
+    loot: LootDrop,
+    owner: HumanPlayer | CatPlayer,
+  ): void {
+    const { x, y } = this.destruction.loot.findDropPosition(atX, atY);
+    this.destruction.loot.addLoot(x, y, loot, owner, false, false, true);
+  }
+
+  /**
+   * A boss's gear, each piece in a pile of its own crawler's: a piece only one
+   * of them can wear, or one reserved for one of them, never lands in the
+   * other's pack. Duplicate coins go to whoever earned the kill.
+   */
+  private dropBossGear(
+    atX: number,
+    atY: number,
+    gear: GearLoot,
+    owner: HumanPlayer | CatPlayer,
+  ): void {
+    const earner = owner === this.human ? 'human' : 'cat';
+    for (const crawler of [this.human, this.cat]) {
+      const kind = crawler === this.human ? 'human' : 'cat';
+      const pieces = gear.items.filter((id) => gearRecipient(id, earner) === kind);
+      const coins = crawler === owner ? gear.coins : 0;
+      const loot = withGearLoot(null, { items: pieces, coins });
+      if (loot !== null) this.dropKillLoot(atX, atY, loot, crawler);
+    }
   }
 
   /**
@@ -2240,7 +2321,6 @@ export class BuildingInteriorScene extends GameplayScene {
     bindRunStats(this.gameStats);
     this.stopForwardingSceneHooks = forwardSceneHooksToBus(this.bus, {
       conversation: this.conversation,
-      achievementUI: this.achievementUI,
     });
     aiAdapter.bindScene(this.createAISceneContext(), this.bus, this.createAIContextSource());
     this.stopForwardingQuestItemEvictions?.();
@@ -2519,7 +2599,6 @@ export class BuildingInteriorScene extends GameplayScene {
           humanAchievements: this.humanAchievements,
           catAchievements: this.catAchievements,
           gameStats: this.gameStats,
-          ...this.achievementUI.pauseBoxOpeners(() => this.pauseScreen.close()),
         }),
         togglePause: () => this.togglePause(),
       }),
@@ -2735,7 +2814,10 @@ export class BuildingInteriorScene extends GameplayScene {
 
   /** Who walks out of the door with the party. Read before anything is put away. */
   private companionDeparture(): InteriorCompanionDeparture {
-    return { mongoWasOut: this.mongoSystem.followsThroughDoor };
+    return {
+      mongoWasOut: this.mongoSystem.followsThroughDoor,
+      mongoUnlocked: this.mongoSystem.unlocked,
+    };
   }
 
   /**
@@ -2844,8 +2926,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
   /**
    * The safe room answers as a dungeon floor's does: a crawler inside it is
-   * protected, which is also what lets the pause menu and the HUD banner open
-   * loot boxes, and walking in unlocks `safe_haven` and saves.
+   * protected, and walking in unlocks `safe_haven` and saves.
    */
   private updateSafeRoomProtection(): void {
     const safeRoom = this.safeRoom;
@@ -2859,8 +2940,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
   private onSafeRoomEntered(): void {
     this.bus.emit('safeRoomEntered', {});
-    this.humanAchievements.tryUnlock('safe_haven');
-    this.catAchievements.tryUnlock('safe_haven');
+    this.awards.unlockParty('safe_haven');
     // A reload would stand a downed crawler, hire or cow up for free.
     if (this.isRevivePending || !this.partyRun.maySave()) return;
     void this.saveNow()
@@ -2940,8 +3020,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.updateExitRoute();
     if (this.soulCrystal.crystalContainedPending) {
       this.soulCrystal.crystalContainedPending = false;
-      this.humanAchievements.tryUnlock('doomsday_contained');
-      this.catAchievements.tryUnlock('doomsday_contained');
+      this.awards.unlockParty('disaster_averted');
       const active = this.active();
       const cam = this.computeCamera(this.map);
       this.rewardFly.enqueueItem(
@@ -3349,7 +3428,9 @@ export class BuildingInteriorScene extends GameplayScene {
       ),
     );
     combat.updateMobs(ctx);
-    this.activeEncounter?.update(ctx);
+    // A quest fight's own shots and hazards run on the hostile world's clock,
+    // which a crawler's last stand slows.
+    if (combat.worldStepTaken) this.activeEncounter?.update(ctx);
     // Beside the update that sets it, and ahead of next frame's companion pass:
     // a burnout moves both crawlers itself, but the anchors are the scene's to
     // fix, and an anchored companion still pointing at a corridor walks straight
@@ -3404,13 +3485,17 @@ export class BuildingInteriorScene extends GameplayScene {
       combat.playerTick.tickAutoPotion(this.human, this.cat);
     }
     combat.updatePostCombat(this.audio);
-    // Summons first, so a skeleton raised this frame is already in the roster the
-    // projectile system walks — a wave and the bolts covering it land on one tick.
-    this.rockThrows.update(ctx);
     this.hirelingShots.update(ctx);
-    this.skeletonSummons.update(ctx);
-    this.fairies.update(ctx);
-    this.skeletonShots.update(ctx);
+    // The hostile world's own step, skipped on the frames a last stand holds it
+    // back. Summons first, so a skeleton raised this frame is already in the
+    // roster the projectile system walks — a wave and the bolts covering it land
+    // on one tick.
+    if (combat.worldStepTaken) {
+      this.rockThrows.update(ctx);
+      this.skeletonSummons.update(ctx);
+      this.fairies.update(ctx);
+      this.skeletonShots.update(ctx);
+    }
     this.drainCasterAudioCues();
     destruction.update(ctx);
     this.explosionShake.update();
@@ -3670,8 +3755,7 @@ export class BuildingInteriorScene extends GameplayScene {
       postToast: (text, opts) => this.menus.toasts.post(text, opts),
       getAudio: () => this.audio,
       getAudioScope: () => this.audioScope,
-      getAchievements: (target) =>
-        target === 'human' ? this.humanAchievements : this.catAchievements,
+      getAwards: () => this.awards,
       getShow: () => this.aiShow,
     };
   }
@@ -4277,8 +4361,14 @@ export class BuildingInteriorScene extends GameplayScene {
           return;
         }
         panel.open(
-          () => buildArmouryMenu(turn, host, this.shopStock),
-          confirmed(overCounter(issueArmour(this.shopStock), 'tillDrawer'), never),
+          () => buildArmouryMenu(turn, host, this.shopStock, (id) => this.partyOwnsGear(id)),
+          confirmed(
+            overCounter(
+              issueArmour(this.shopStock, (id) => this.partyOwnsGear(id)),
+              'tillDrawer',
+            ),
+            never,
+          ),
           counterOptions(this.sellConfigFor('armoury')),
         );
         return;
@@ -4935,13 +5025,11 @@ export class BuildingInteriorScene extends GameplayScene {
       minimap: controls ? this.hudMinimap() : null,
       dock: controls ? this.hudDock() : [],
       summon: controls ? this.hudSummon() : null,
-      lootBanner: controls ? this.achievementUI.hudBanner(() => this.pauseScreen.close()) : null,
       hotbar: controls
         ? {
             slots: hotbarSlotModels(
               this.menus.itemCooldowns,
-              this.inventoryPlayer().inventory,
-              this.menus.inventoryDrawnWeaponId(),
+              this.inventoryPlayer(),
               this.inventoryPlayer() === this.human ? this.readiedDynamiteId() : null,
             ),
             input: hotbarPressInput(
@@ -5017,15 +5105,15 @@ export class BuildingInteriorScene extends GameplayScene {
         onTap: () => this.toggleConstructionMenu(),
       });
     }
-    const unread = this.achievementUI.hudChipCount();
-    if (unread !== null) {
+    const waiting = this.achievementUI.hudChipCount();
+    if (waiting !== null) {
       dock.push({
         id: 'chip',
         icon: 'trophy',
-        label: 'New achievements',
-        badge: String(unread),
+        label: 'Rewards waiting',
+        badge: String(waiting),
         pulse: true,
-        onTap: () => void this.achievementUI.showUnread(),
+        onTap: () => void this.achievementUI.openRewards(),
       });
     }
     if (this.overworldJournal !== null) {
@@ -5077,10 +5165,18 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /** Every bar the top band stacks this frame, the room's name last. */
+  /** Whether either crawler stands in this interior's safe room, where there is one. */
+  private partyInSafeRoom(): boolean {
+    const room = this.safeRoom;
+    if (room === null) return false;
+    return room.isEntityInSafeRoom(this.human) || room.isEntityInSafeRoom(this.cat);
+  }
+
   private topBandEntries(): TopBandEntry[] {
     const towerFloor = this.towerFloors.length > 0 ? this.currentFloor : null;
     const entries: (TopBandEntry | null)[] = [
       ...(this.activeEncounter?.topBandEntries() ?? []),
+      this.achievementUI.rewardsBanner(this.partyInSafeRoom()),
       this.soulCrystal.topBandEntry(),
       this.prisonKey?.topBandEntry() ?? null,
       contractCounterEntry(this.briarHollowState.contracts.active),

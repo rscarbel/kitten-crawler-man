@@ -24,7 +24,7 @@
  * is inked.
  */
 
-import type { SpriteKey } from '../../core/SpriteLoader';
+import type { SpriteKey } from '../../core/spriteAssets/SpriteLoader';
 import { CIRCUS_STRUCTURES, type CircusStructureId } from '../../map/overworld/circusGroundsLayout';
 import { subSeed, mulberry32 } from '../person/rng';
 import { CIRCUS_STRUCTURE_ART, CIRCUS_TILE_SCALE } from '../art/circusArt';

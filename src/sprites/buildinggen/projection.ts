@@ -36,7 +36,7 @@ import {
   allocReadableCanvas,
   freshSurfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
+} from '../../core/rendering/canvasSurface';
 import { BUILDING_TILE_SCALE, type BuildingSpec } from './spec';
 
 /** The game's own 2D context — the offline bakers bridge node-canvas to it. */

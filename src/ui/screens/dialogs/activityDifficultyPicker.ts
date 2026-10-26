@@ -9,8 +9,8 @@ import {
   DIFFICULTY_LABELS,
   DIFFICULTY_ORDER,
   type Difficulty,
-} from '../../../core/difficultyProfiles';
-import { settings } from '../../../core/Settings';
+} from '../../../core/difficulty/difficultyProfiles';
+import { settings } from '../../../core/input/Settings';
 import type { Surface } from '../../core/UiRoot';
 import type { GlyphId } from '../../theme/glyphs';
 import type { PanelWidth } from '../../theme/tokens';

@@ -1,17 +1,19 @@
+import { gearModifiers, runStruckHooks } from '../gear/gearHooks';
+import { crawlerTurnsRangedBlow, inkSpoilsBlow } from '../gear/incomingBlows';
 import { Player, HP_BAR_HEIGHT, HP_BAR_Y_OFFSET } from '../Player';
 import type { MobKind } from '../levels/mobKinds';
 import type { EyePlacement } from '../sprites/eyePlacement';
 import type { DamageSource } from '../Player';
-import { FAIRY_AEGIS_STATUS, type StatusEffect } from '../core/StatusEffect';
-import { AEGIS_DAMAGE_SCALE } from '../core/statusTuning';
+import { FAIRY_AEGIS_STATUS, type StatusEffect } from '../core/combat/StatusEffect';
+import { AEGIS_DAMAGE_SCALE } from '../core/combat/statusTuning';
 import { MOB_MAX_PATH_DISTANCE_TILES, type GameMap } from '../map/GameMap';
 import { verticalCollisionOffset } from '../map/collisionAnchors';
-import type { ItemId } from '../core/ItemDefs';
+import type { ItemId } from '../core/items/defs/ItemDefs';
 import { randomInt } from '../utils';
 import { AGGRO_PERSIST_MULTIPLIER, PLAYER_SPEED, WADE_SPEED_FACTOR } from '../core/constants';
 import { tryConsumePathfind } from './pathfindBudget';
 import { alertPackAround } from './packAlert';
-import { activeRunStats } from '../core/GameStats';
+import { activeRunStats } from '../core/progression/GameStats';
 import {
   scaledCooldownFramesForLevel,
   scaledDamageForLevel,
@@ -23,10 +25,10 @@ import {
 import { WORLD_TEXT } from '../ui/theme/worldInk';
 import { worldText } from '../ui/world/worldText';
 import { measureFiguresInkTop } from '../sprites/figure/figureFrameCache';
-import type { SpatialGrid } from '../core/SpatialGrid';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { Rng } from '../sprites/person/rng';
 import type { BombThrower } from '../systems/goblinBombConstants';
-import { knockbackStepPx } from '../core/knockbackEase';
+import { knockbackStepPx } from '../core/combat/knockbackEase';
 import { MobTactics } from './tactics/MobTactics';
 import type { TacticsTrait } from './tactics/tacticsTraits';
 import { retreatTowardHelper } from './tactics/retreat';
@@ -34,7 +36,7 @@ import { isMarkedGround, markedGroundEscape } from './tactics/markedGround';
 import { stepAlongEscape } from '../systems/GroundHazardSource';
 import { SEPARATION_RADIUS } from '../systems/mobSeparation';
 import type { KiteAim, TacticalMove } from './tactics/tacticalFrame';
-import type { SilhouetteLayer } from '../core/silhouetteComposite';
+import type { SilhouetteLayer } from '../core/spriteAssets/silhouetteComposite';
 import type { SiegeCapable, SiegeDirective, SiegeLobber } from './siege/siegeTypes';
 import { deflectAroundAirspaceBodies, isInsideAirspaceBody } from './airspace';
 import { deferChrome, type ChromePart } from '../systems/lighting/aboveDarkness';
@@ -272,9 +274,9 @@ const HEALTH_BAR_VISIBLE_FRAMES = 180;
 /**
  * A tick's share of that.
  *
- * Sized under the two-second gap between sepsis and poison ticks, because those
- * two are the ones that can outlast a fight — sepsis never expires at all — and
- * a bar that outlives the gap between its own ticks never goes out. The faster
+ * Sized under the two-second gap between poison ticks, because poison is the
+ * one that can outlast a fight, and a bar that outlives the gap between its
+ * own ticks never goes out. The faster
  * DoTs (burn, spit venom) do hold the bar unbroken, which is correct: they are
  * seconds long, and a creature visibly on fire is a creature worth a bar.
  */
@@ -316,8 +318,6 @@ const JUGG_JUICE_DROP_CHANCE = 0.005;
 const COOLDOWN_CRISP_DROP_CHANCE = 0.003;
 /** Stat Boost Potion drop chance from mobs (extremely rare — primary source is chests). */
 const STAT_BOOST_DROP_CHANCE = 0.001;
-/** Slingshot world-drop chance, on floors that enable it, per eligible mob kill. */
-const SLINGSHOT_DROP_CHANCE = 0.005;
 
 /** Aggro indicator font size. */
 const AGGRO_INDICATOR_FONT_SIZE = 18;
@@ -325,10 +325,6 @@ const AGGRO_INDICATOR_FONT_SIZE = 18;
 const AGGRO_INDICATOR_LINE_WIDTH = 3;
 /** Gap between the aggro indicator and the art or health bar it stands over. */
 const AGGRO_INDICATOR_Y_OFFSET = 3;
-/** The septic label: sickly green on a darker green edge. */
-const SEPTIC_LABEL_COLOR = '#bef264';
-const SEPTIC_LABEL_OUTLINE = '#65a30d';
-const SEPTIC_LABEL_OUTLINE_WIDTH = 2;
 /** The aggro "!" in alarm red, over a soft dark edge that keeps it legible on any floor. */
 const AGGRO_INDICATOR_COLOR = 'rgba(239, 68, 68, 1)';
 const AGGRO_INDICATOR_OUTLINE = 'rgba(0, 0, 0, 0.55)';
@@ -339,19 +335,6 @@ const HEALTH_BAR_ART_GAP_PX = 1;
 const TACTICS_RANK_MARK = '★';
 /** Gap between the health bar's right edge and the rank mark. */
 const TACTICS_RANK_MARK_GAP = 3;
-
-/** Septic label Y offset above health bar. */
-const SEPTIC_LABEL_Y_OFFSET = 12;
-/** Septic label secondary Y offset. */
-const SEPTIC_LABEL_Y2_OFFSET = 7;
-/** Septic label font size. */
-const SEPTIC_LABEL_SIZE = 9;
-/** Septic pulse amplitude (fraction added to base brightness). */
-const SEPTIC_PULSE_AMP = 0.3;
-/** Septic pulse base brightness. */
-const SEPTIC_PULSE_BASE = 0.7;
-/** Septic pulse oscillation speed. */
-const SEPTIC_PULSE_SPEED = 0.006;
 
 /** Minimal shell API exposed to mobs — avoids a circular import with SpellSystem. */
 export interface ShellContext {
@@ -1406,8 +1389,8 @@ export abstract class Mob extends Player {
     });
   }
 
-  /** Set by the spawner from `LevelDef.slingshotDrops`; gates the rare world-drop roll. */
-  allowSlingshotDrop = false;
+  /** Set by the spawner from `LevelDef.worldGearDrops`; gates the rare world gear drops no one creature carries. */
+  allowWorldGearDrop = false;
 
   /**
    * When set to a live Mob, this mob will chase and attack it as a priority target.
@@ -1553,7 +1536,7 @@ export abstract class Mob extends Player {
   /**
    * Whether the most recent {@link takeDamageFrom} was turned aside by this
    * mob's guard. Read by whoever landed the blow straight after the call, so an
-   * on-hit rider — a sepsis proc, a stun — is not applied through a guard.
+   * on-hit rider — a poison proc, a stun — is not applied through a guard.
    */
   get lastBlowWasGuarded(): boolean {
     return this._lastBlowWasGuarded;
@@ -1916,6 +1899,8 @@ export abstract class Mob extends Player {
 
   /** The type of attack that landed the killing blow. */
   killType: PlayerDamageType | null = null;
+  /** Whether the killing blow landed on this mob before it had noticed whoever struck it. */
+  killedUnseen = false;
 
   constructor(tileX: number, tileY: number, tileSize: number, maxHp: number, speed: number) {
     super(tileX, tileY, tileSize, { maxHp });
@@ -2149,13 +2134,19 @@ export abstract class Mob extends Player {
     // A plain `mob` source names no attacker, so an ally's swing at a warded
     // charge is stopped here, where the attacker is still known.
     if (target instanceof Mob && target.wardRefuses(this)) return false;
+    const turned =
+      delivery === 'ranged' ? crawlerTurnsRangedBlow(target, this) : inkSpoilsBlow(this, target);
+    if (turned) {
+      this.attackSoundPending = true;
+      return false;
+    }
     const connected =
       this.isConverted && target instanceof Mob
         ? this.strikeAsAlly(target, damage)
         : target.takeDamage(damage, source);
     if (connected) {
       this.noteStruckPlayer(target);
-      if (delivery === 'contact') this.reflectMeleeDamage(target, damage);
+      if (delivery === 'contact') this.answerContactBlow(target, damage);
     }
     this.attackSoundPending = true;
     return connected;
@@ -2178,6 +2169,18 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * Everything a contact blow of this mob's that landed on `target` sets off in
+   * the victim's gear: reflect, and a crawler's answer to being struck (an
+   * armed riposte). A boss whose blow lands outside {@link deliverBlow} — a
+   * punch, a boulder, a trample — calls this on the blow it landed, after
+   * asking {@link inkSpoilsBlow} before it.
+   */
+  protected answerContactBlow(target: Player, damage: number): void {
+    this.reflectMeleeDamage(target, damage);
+    if (target.isCrawler) runStruckHooks(target, this);
+  }
+
+  /**
    * Send a share of a landed blow back at this mob when the victim's gear
    * reflects it.
    *
@@ -2185,8 +2188,8 @@ export abstract class Mob extends Player {
    * by reflection credits them — otherwise thorns-style gear would quietly cost
    * the player the XP and loot of everything it killed.
    */
-  protected reflectMeleeDamage(target: Player, damage: number): void {
-    const pct = target.inventory.equipment.getDamageReflectPct();
+  private reflectMeleeDamage(target: Player, damage: number): void {
+    const pct = gearModifiers(target).thornsShare;
     if (pct <= 0) return;
     // Struck by nobody: the mob hurt itself on the gear, so there is no blow
     // to guard and none that should count as breaking a run of guards.
@@ -2633,6 +2636,15 @@ export abstract class Mob extends Player {
     return this.alertedTo.has(target) && this.damageTakenBy.has(target);
   }
 
+  /**
+   * Whether this mob knows `target` is there: chasing it, or alerted to it by
+   * a blow or a packmate's shout. What an unseen strike reads before it lands.
+   */
+  hasNoticed(target: Player): boolean {
+    if (target.hiddenFromMobs) return false;
+    return this.currentTarget === target || this.alertedTo.has(target);
+  }
+
   /** Straight-line distance in pixels from this mob to `target`. */
   protected distanceTo(target: { readonly x: number; readonly y: number }): number {
     return Math.hypot(target.x - this.x, target.y - this.y);
@@ -2919,7 +2931,7 @@ export abstract class Mob extends Player {
    * Grimaldi's tendrils, Miss Quill's capacitor — is the only user. This is
    * *the* switch: every route into this mob's health asks it, the swung one and
    * the damage-over-time one alike. A shield that guarded only the swing let one
-   * crown proc dissolve the whole "kill the adds first" mechanic and be paid the
+   * gear poison proc dissolve the whole "kill the adds first" mechanic and be paid the
    * kill credit, the XP and the boss chest for doing it.
    */
   protected get isDamageImmune(): boolean {
@@ -2988,7 +3000,7 @@ export abstract class Mob extends Player {
   /**
    * A shield that swallows the damage swallows the cause with it.
    *
-   * Otherwise the sepsis a crown proc paid for lands on a boss that cannot be
+   * Otherwise the poison a gear proc paid for lands on a boss that cannot be
    * hurt, counts its duration down against the shield, and is gone by the time
    * the tendrils are — which is worse than not proccing at all, because the
    * player watched it apply.
@@ -3087,6 +3099,8 @@ export abstract class Mob extends Player {
       attacker.noteWardBlockedHit();
     }
     if (unabsorbed <= 0 && scaled > 0) return;
+    // Read before the blow lands, since landing it alerts this mob to the attacker.
+    const struckUnseen = attacker !== null && !this.hasNoticed(attacker);
     const prev = this.hp;
     this.hp = Math.max(0, this.hp - unabsorbed);
     const actual = prev - this.hp;
@@ -3102,7 +3116,10 @@ export abstract class Mob extends Player {
         this.noteAttackedBy(attacker);
       }
     }
-    if (this.hp === 0 && prev > 0) this._resolveDeath(attacker, damageType);
+    if (this.hp === 0 && prev > 0) {
+      this._resolveDeath(attacker, damageType);
+      this.killedUnseen = struckUnseen;
+    }
   }
 
   /**
@@ -3372,6 +3389,7 @@ export abstract class Mob extends Player {
    */
   private _resolveDeath(attacker: Player | null, damageType: PlayerDamageType | null): void {
     this.justDied = true;
+    this.killedUnseen = false;
     // Credited rather than literal: a pet attacks in its own name so that mobs
     // retaliate against *it*, but every killer-keyed reward in the game — loot
     // chances, achievements, kill XP — belongs to the owner who sent it in.
@@ -3412,8 +3430,8 @@ export abstract class Mob extends Player {
    *
    * A damage-over-time tick that somebody *applied* is a blow they landed, just
    * a late one: it goes into the damage ledger and credits the kill, so the
-   * sepsis crown's proc earns its wearer the XP, the loot, the achievement and
-   * the boss chest exactly as the hit that applied it would have.
+   * poison a piece of gear applied earns its wearer the XP, the loot, the
+   * achievement and the boss chest exactly as the hit that applied it would have.
    *
    * `killType` stays null even then. The union names weapons — melee, missile,
    * shell, smush, explosion — and a status is none of them; a DoT finish trains
@@ -3433,10 +3451,9 @@ export abstract class Mob extends Player {
     const dealt = prev - this.hp;
     if (dealt > 0) {
       // Raised to the tick's share, never lowered to it. Without a bar at all a
-      // mob melting to the sepsis crown gives the player nothing to read but
-      // the corpse at the end; with a bar held longer than the gap between
-      // ticks it never lapses, and sepsis is permanent, so every mob ever
-      // procced would wear one for the rest of the run. And a plain assignment
+      // mob melting to poison gives the player nothing to read but the corpse
+      // at the end; with a bar held longer than the gap between ticks it never
+      // lapses while the poison runs. And a plain assignment
       // would let a tick landing mid-fight cut short the longer bar the blow
       // before it had earned.
       this.healthBarTimer = Math.max(this.healthBarTimer, STATUS_TICK_HEALTH_BAR_FRAMES);
@@ -3467,14 +3484,7 @@ export abstract class Mob extends Player {
       items.push({ id: 'cooldown_crisp', quantity: 1 });
     if (Math.random() < STAT_BOOST_DROP_CHANCE)
       items.push({ id: 'stat_boost_potion', quantity: 1 });
-    if (this.allowSlingshotDrop && this.slingshotEligible && Math.random() < SLINGSHOT_DROP_CHANCE)
-      items.push({ id: 'slingshot', quantity: 1 });
     return items;
-  }
-
-  /** Whether this mob may roll the rare Slingshot world drop. */
-  protected get slingshotEligible(): boolean {
-    return true;
   }
 
   /** Extends Player.tickTimers to also decrement the health bar visibility timer. */
@@ -3503,7 +3513,9 @@ export abstract class Mob extends Player {
     if (this.noticeCacheFrames > 0) this.noticeCacheFrames--;
     if (this.alertedTo.size > 0) {
       for (const [target, framesLeft] of this.alertedTo) {
-        if (framesLeft <= 1) this.alertedTo.delete(target);
+        // A crawler gone from sight is forgotten, not merely out of reach:
+        // when she reappears she is someone this mob never saw.
+        if (framesLeft <= 1 || target.hiddenFromMobs) this.alertedTo.delete(target);
         else this.alertedTo.set(target, framesLeft - 1);
       }
     }
@@ -3802,7 +3814,7 @@ export abstract class Mob extends Player {
   }
 
   /**
-   * Status art and the septic label, drawn by {@link Player.render} *after* the
+   * Status art, drawn by {@link Player.render} *after* the
    * silhouette composite rather than from `drawSelf` — see the note there. The
    * anchor is the mob's own tile, so a mob that draws its art offset from its
    * tile (Signet stacks her overlay above hers) still gets its flames at its
@@ -3811,43 +3823,6 @@ export abstract class Mob extends Player {
   protected override drawWorldFeedback(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
     if (!this.wearsStatusPaint) return;
     super.drawWorldFeedback(ctx, sx, sy);
-    this.renderSepticLabel(ctx, sx, sy);
-  }
-
-  /**
-   * How far above its tile a mob's written status label has to start, in tiles,
-   * to clear its own art. Zero suits a mob drawn inside its tile; a mob drawn
-   * larger than that — Signet stands two tiles tall and has horns — must say so
-   * or the label lands across its face.
-   */
-  protected get statusLabelClearanceTiles(): number {
-    return 0;
-  }
-
-  /**
-   * The one status that also gets a written label. Sepsis is permanent and its
-   * whole point is that the mob is already dead on its feet, which no amount of
-   * green haze conveys on its own.
-   */
-  private renderSepticLabel(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
-    if (!this.hasStatus('sepsis')) return;
-    // The label and the status art want different origins. Flames belong at the
-    // mob's feet, so they anchor to its tile; a written label belongs clear of
-    // whatever the mob draws above that tile, which only the mob knows.
-    const labelY = sy - this.statusLabelClearanceTiles * this.tileSize;
-    const t = Date.now();
-    const pulse = SEPTIC_PULSE_BASE + SEPTIC_PULSE_AMP * Math.sin(t * SEPTIC_PULSE_SPEED);
-    worldText(ctx, 'Septic', {
-      x: sx + this.tileSize * MOB_TILE_CENTER,
-      y: labelY - SEPTIC_LABEL_Y_OFFSET - SEPTIC_LABEL_Y2_OFFSET,
-      size: SEPTIC_LABEL_SIZE,
-      bold: true,
-      color: SEPTIC_LABEL_COLOR,
-      align: 'center',
-      alpha: pulse,
-      outline: SEPTIC_LABEL_OUTLINE,
-      outlineWidth: SEPTIC_LABEL_OUTLINE_WIDTH,
-    });
   }
 
   /**

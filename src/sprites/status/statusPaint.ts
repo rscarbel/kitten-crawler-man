@@ -21,8 +21,8 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
-import { onCanvasRecovery } from '../../core/canvasRecovery';
+} from '../../core/rendering/canvasSurface';
+import { onCanvasRecovery } from '../../core/rendering/canvasRecovery';
 
 /** A colour as raw channels, so alpha can be varied per-particle without string surgery. */
 export type Rgb = readonly [number, number, number];

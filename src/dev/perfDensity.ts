@@ -21,7 +21,7 @@
  * `devBoot.ts`; it slows drawing slightly, so it is for a run that is not timed.
  */
 
-import { surfaceOwnerOf } from '../core/canvasSurface';
+import { surfaceOwnerOf } from '../core/rendering/canvasSurface';
 
 /** Every draw is sampled until an owner has had this many. */
 const FULL_SAMPLE_CALLS = 256;

@@ -1,8 +1,8 @@
 import { Mob, type LootDrop, type PlayerDamageType } from './Mob';
 import type { Player } from '../Player';
 import type { EyePlacement } from '../sprites/eyePlacement';
-import type { StatusEffect } from '../core/StatusEffect';
-import { timeFrameIndex } from '../core/SpriteRenderer';
+import type { StatusEffect } from '../core/combat/StatusEffect';
+import { timeFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import {
   GOBLIN_PRISONER_EYES,
   drawGoblinPrisonerSprite,

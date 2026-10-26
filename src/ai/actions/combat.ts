@@ -1,5 +1,8 @@
 /** Challenge and combat actions: hostiles, statuses, stats, HP and the collapse clock. */
-import { activeDifficultyProfile, applySpawnDifficulty } from '../../core/difficultyProfiles';
+import {
+  activeDifficultyProfile,
+  applySpawnDifficulty,
+} from '../../core/difficulty/difficultyProfiles';
 import {
   AILMENT_STATUSES,
   makeBurn,
@@ -8,7 +11,7 @@ import {
   makePoison,
   makeWhetstone,
   type StatusEffect,
-} from '../../core/StatusEffect';
+} from '../../core/combat/StatusEffect';
 import { BOUNTY_MAX_BLOW_HP_SHARE } from '../../creatures/mobLevelScaling';
 import type { Mob } from '../../creatures/Mob';
 import { allLevelDefs, type LevelDef } from '../../levels';

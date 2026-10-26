@@ -11,9 +11,9 @@
  */
 
 import type { Player } from '../../Player';
-import { canAffordCoins, partyCoins, spendPartyCoins } from '../../core/partyCoins';
+import { canAffordCoins, partyCoins, spendPartyCoins } from '../../core/party/partyCoins';
 import { Deck, LUCKY_RANK, type Card, type ShoeState } from './Deck';
-import { NEVER_LUCKY, type LuckCheck } from '../../core/GodMode';
+import { NEVER_LUCKY, type LuckCheck } from '../../core/state/GodMode';
 import {
   BLACKJACK_TOTAL,
   dealerShouldHit,

@@ -15,15 +15,15 @@
  * look drawn longest ago is released first.
  */
 
-import { onCanvasRecovery } from '../../core/canvasRecovery';
+import { onCanvasRecovery } from '../../core/rendering/canvasRecovery';
 import {
   allocCanvas,
   allocReadableCanvas,
   type CanvasSurface,
   surfaceContext,
   releaseSurface,
-} from '../../core/canvasSurface';
-import { BYTES_PER_MEGABYTE } from '../../core/canvasSurface';
+} from '../../core/rendering/canvasSurface';
+import { BYTES_PER_MEGABYTE } from '../../core/rendering/canvasSurface';
 import { HUMAN_CELL_PX_PER_UNIT } from '../art/human/figureScale';
 import { archetypeSpec } from './gripArchetypes';
 import { HELD_FACINGS, type HeldFacing, type HeldVisualDef } from './heldVisualDef';
@@ -53,7 +53,7 @@ export const FORESHORTENING_STEPS = 4;
  * Pixels per rig unit a look is painted at, over the cell's own. The cell is
  * already twice the 32 px tile's density; painting held art denser still was
  * measured to change nothing visible at the tile while holding four times the
- * memory (the Fury of Taranis's every look: 20.9 MB against 5.4 MB).
+ * memory (the Stormcaller's every look: 20.9 MB against 5.4 MB).
  */
 const HELD_ART_SUPERSAMPLE = 1;
 export const HELD_ART_PX_PER_UNIT = HUMAN_CELL_PX_PER_UNIT * HELD_ART_SUPERSAMPLE;

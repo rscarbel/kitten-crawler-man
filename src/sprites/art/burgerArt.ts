@@ -18,9 +18,9 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
+} from '../../core/rendering/canvasSurface';
 import { HAMBURGER_PALETTE as PALETTE } from '../../ui/icons/foodIcons';
-import { onCanvasRecovery } from '../../core/canvasRecovery';
+import { onCanvasRecovery } from '../../core/rendering/canvasRecovery';
 
 const FULL_CIRCLE = Math.PI * 2;
 const HALF = 0.5;

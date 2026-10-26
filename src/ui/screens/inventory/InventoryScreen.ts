@@ -10,8 +10,8 @@
  */
 
 import type { SoundId } from '../../../audio/sounds';
-import { type BagSortMode } from '../../../core/bagSort';
-import type { Inventory } from '../../../core/Inventory';
+import { type BagSortMode } from '../../../core/items/inventory/bagSort';
+import type { Inventory } from '../../../core/items/inventory/Inventory';
 import {
   HOTBAR_COUNT,
   QUEST_SLOT_IDX,
@@ -19,16 +19,22 @@ import {
   itemCanHotlist,
   type InventoryItem,
   type ItemId,
-} from '../../../core/ItemDefs';
-import { HOTBAR_ACTIONS, keybindings } from '../../../core/Keybindings';
-import type { ToolKind } from '../../../core/toolTiers';
+} from '../../../core/items/defs/ItemDefs';
+import { HOTBAR_ACTIONS, keybindings } from '../../../core/input/Keybindings';
+import type { ToolKind } from '../../../core/items/gathering/toolTiers';
 import { byInputMode, keyLabel, type InputMode } from '../../core/inputMode';
 import type { Rect } from '../../core/geom';
 import type { KeyModifiers, Surface } from '../../core/UiRoot';
 import { UI_ERROR_SOUND } from '../../core/UiRoot';
 import { DESCRIPTION_ACTION, type MenuEntry, type MenuTarget } from './InventoryActions';
 import { SearchInput } from '../../widgets/searchField';
-import { ALREADY_WORN_REFUSAL, equipRefusal, slotFitRefusal } from './gearRules';
+import {
+  ALREADY_WORN_REFUSAL,
+  BOUND_PIECE_REFUSAL,
+  BOUND_SLOT_REFUSAL,
+  equipRefusal,
+  slotFitRefusal,
+} from './gearRules';
 import {
   NO_RESTRICTIONS,
   type BagFilter,
@@ -744,16 +750,24 @@ export class InventoryScreen {
   ): void {
     const fromKey = drag.dollKey;
     if (fromKey === null || dollTarget === fromKey) return;
+    if (dollTarget === null && !overGrid) return;
+    if (inventory.equipment.isRemovalLocked(drag.item.id)) {
+      this.refuse(BOUND_PIECE_REFUSAL, drag.item.id);
+      return;
+    }
     if (dollTarget !== null) {
       const refusal = slotFitRefusal(drag.item, dollTarget);
       if (refusal !== null) {
         this.refuse(refusal, drag.item.id);
         return;
       }
+      if (inventory.equipment.boundOccupant(drag.item, dollTarget) !== null) {
+        this.refuse(BOUND_SLOT_REFUSAL, drag.item.id);
+        return;
+      }
       inventory.equipment.move(drag.item, fromKey, dollTarget);
       return;
     }
-    if (!overGrid) return;
     inventory.unequip(fromKey);
   }
 
@@ -782,7 +796,12 @@ export class InventoryScreen {
     const member = this.member();
     if (member === null) return;
     const inventory = member.owner.inventory;
-    if (inventory.getEquippedItem(key) !== null) {
+    const worn = inventory.getEquippedItem(key);
+    if (worn !== null) {
+      if (inventory.equipment.isRemovalLocked(worn.id)) {
+        this.refuse(BOUND_PIECE_REFUSAL, worn.id);
+        return;
+      }
       inventory.unequip(key);
       this.dollKey = null;
       return;

@@ -3,9 +3,9 @@
  * crawler is maxed in its skill or cannot read it) is swapped for a random
  * book someone can, and nothing drops once no book could help anyone.
  */
-import { ITEM_DEF } from '../core/ItemDefs';
-import type { ItemDef, ItemId } from '../core/ItemDefs';
-import type { SkillId } from '../core/SkillManager';
+import { ITEM_DEF } from '../core/items/defs/ItemDefs';
+import type { ItemDef, ItemId } from '../core/items/defs/ItemDefs';
+import type { SkillId } from '../core/skills/SkillManager';
 import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
 

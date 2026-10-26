@@ -20,7 +20,7 @@ import { TILE_SIZE } from '../src/core/constants.js';
 import { GameMap } from '../src/map/GameMap.js';
 import { CRATE } from '../src/map/tileTypes.js';
 import { TILE_TYPE_FOR_KIND } from '../src/systems/DestructiblePropSystem.js';
-import type { Difficulty } from '../src/core/difficultyProfiles.js';
+import type { Difficulty } from '../src/core/difficulty/difficultyProfiles.js';
 import {
   PRISON_LAYOUTS,
   PRISON_SECTION_ORDER,

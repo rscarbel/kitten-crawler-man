@@ -24,7 +24,7 @@ import {
   setVisibleWorldView,
   visibleWorldView,
   type VisibleWorldView,
-} from '../../src/core/visibleWorldView.js';
+} from '../../src/core/rendering/visibleWorldView.js';
 import {
   FakeBiquadFilterNode,
   FakeGainNode,

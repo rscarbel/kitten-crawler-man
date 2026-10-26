@@ -13,7 +13,7 @@
 
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
-import { partyCount, type ResourceCost } from '../../core/partyResources';
+import { partyCount, type ResourceCost } from '../../core/items/gathering/partyResources';
 import type { TilePoint } from '../../map/town/townPlan';
 import type { TrackerTarget } from '../questTracker';
 import { BOARDS_PER_WOOD, ROPE_PER_WOOD } from './services/woodProcessing';

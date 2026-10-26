@@ -30,8 +30,8 @@ import {
   playerCharacter,
 } from '../characters/characters';
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
-import { progressFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
-import { HUMAN_SWING_FRAMES } from '../core/crawlerFormulas';
+import { progressFrameIndex, walkFrameIndex } from '../core/spriteAssets/SpriteRenderer';
+import { HUMAN_SWING_FRAMES } from '../core/party/crawlerFormulas';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { worldText } from '../ui/world/worldText';
 import { worldPlate, worldTint } from '../ui/world/worldShapes';
@@ -60,7 +60,7 @@ import {
   MAIN_HAND_KEY,
   weaponStatsOf,
   wearerAllows,
-} from '../core/ItemDefs';
+} from '../core/items/defs/ItemDefs';
 import { HELD_VISUALS, stowedPlacementOfHeld } from '../sprites/held/heldVisuals';
 import type { WeaponHeldVisualDef } from '../sprites/held/heldVisualDef';
 import { type MotionSet, motionSetOf } from '../sprites/art/human/motionSets';
@@ -213,8 +213,9 @@ export class HumanPreviewScene extends PreviewScene {
   }
 
   /**
-   * Picks the next weapon: puts it out in the live player's hand, and turns
-   * the row pane to the first row its grip and weight play.
+   * Picks the next weapon: puts it out in the live player's hand, starts the
+   * live script over at its stow and draw, and turns the row pane to the
+   * first row its grip and weight play.
    */
   nextWeapon(): void {
     this.weaponIndex = (this.weaponIndex + 1) % this.weaponChoices.length;
@@ -224,6 +225,10 @@ export class HumanPreviewScene extends PreviewScene {
       return;
     }
     this.live.drawWeapon(id);
+    // Back to the script's first step, so a weapon just picked is stowed and
+    // drawn straight away rather than whenever the lap next comes round.
+    this.scriptStep = 0;
+    this.stepTicks = 0;
     const look = weaponLook(id);
     const set: MotionSet = look === null ? 'unarmed' : motionSetOf(look);
     const first = HUMAN_ROWS.findIndex((row) => motionSetOfRow(row) === set);

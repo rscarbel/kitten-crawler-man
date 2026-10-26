@@ -7,8 +7,8 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
-import { drawSpriteKey } from '../core/SpriteRenderer';
-import type { ClubProp } from '../core/clubProps';
+import { drawSpriteKey } from '../core/spriteAssets/SpriteRenderer';
+import type { ClubProp } from '../core/club/clubProps';
 import clubSpriteManifest from '../images/environment/club/manifest.json';
 
 /**

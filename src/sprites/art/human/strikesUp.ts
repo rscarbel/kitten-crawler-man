@@ -13,7 +13,7 @@
  * written down frame by frame rather than left to an easing curve.
  */
 
-import { HUMAN_SWING_FRAMES } from '../../../core/crawlerFormulas';
+import { HUMAN_SWING_FRAMES } from '../../../core/party/crawlerFormulas';
 import { PLAYER_SPEED } from '../../../core/constants';
 import { pt } from '../biped/geometry';
 import { type ArmAngles, buildSkeleton, type BipedPose, FULL_UPPER_ARM, VIEWS } from '../biped/rig';

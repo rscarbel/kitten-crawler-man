@@ -1985,13 +1985,6 @@ const PROFILE_BROW_X = 0.74;
 /** Edge-on the face points +X, so the outer corner of the eye and the brow's outer end point back. */
 const PROFILE_OUTWARD = -1;
 
-/** What of his head a hat may leave unpainted: false hides the hair under it. */
-export interface HeadOptions {
-  readonly hair: boolean;
-}
-
-const WHOLE_HEAD: HeadOptions = { hair: true };
-
 /**
  * What a hairstyle or facial-hair painter is told of the head it grows on,
  * painted in head-local space with the face toward +X edge-on.
@@ -2021,19 +2014,13 @@ function headFeatureFrame(
 }
 
 /** Draw the head in head-local space: origin at its centre, the face toward +X edge-on. */
-export function drawHead(
-  ctx: Ctx,
-  pose: BipedPose,
-  view: ViewSpec,
-  look: HumanLook,
-  options: HeadOptions = WHOLE_HEAD,
-): void {
+export function drawHead(ctx: Ctx, pose: BipedPose, view: ViewSpec, look: HumanLook): void {
   const profile = view.profile;
   const lift = pose.chinLift ?? 0;
   ctx.save();
   // A head tipped back rides up on the neck as it turns, as well as turning.
   if (!profile && !view.showsBack) ctx.translate(0, -Math.max(0, lift) * HEAD_PITCH_RISE);
-  paintHead(ctx, pose, view, lift, options, look);
+  paintHead(ctx, pose, view, lift, look);
   ctx.restore();
 }
 
@@ -2053,14 +2040,7 @@ export function mouthInHeadFrame(pose: BipedPose, view: ViewSpec): Pt | null {
   return pt(0, MOUTH_Y - Math.max(0, pose.chinLift ?? 0) * HEAD_PITCH_RISE);
 }
 
-function paintHead(
-  ctx: Ctx,
-  pose: BipedPose,
-  view: ViewSpec,
-  lift: number,
-  options: HeadOptions,
-  look: HumanLook,
-): void {
+function paintHead(ctx: Ctx, pose: BipedPose, view: ViewSpec, lift: number, look: HumanLook): void {
   const profile = view.profile;
   const skin = look.skin;
   const expression = look.expression;
@@ -2093,7 +2073,7 @@ function paintHead(
           softness: SKULL_SOFTNESS,
         }),
     );
-    if (options.hair) look.hairstyle(ctx, headFeatureFrame(look, false, true, pose, hairLag));
+    look.hairstyle(ctx, headFeatureFrame(look, false, true, pose, hairLag));
     return;
   }
 
@@ -2220,7 +2200,7 @@ function paintHead(
     ctx.scale(1, hairPitchScale(lift));
     ctx.translate(0, -HAIR_PITCH_PIVOT_Y);
   }
-  if (options.hair) look.hairstyle(ctx, face);
+  look.hairstyle(ctx, face);
   ctx.restore();
   if (profile) {
     // After the hair: a short cut is trimmed round the top of the ear, so the
@@ -2234,4 +2214,40 @@ function paintHead(
       skin,
     );
   }
+}
+
+/**
+ * Where the face's features sit, in head-local units before any pitch of the
+ * face, for anything worn over them: goggles, a monocle, a mask. Head-on they
+ * are painted inside {@link withFacePlane}, which rides them up and
+ * foreshortens them with the face; edge-on the face points +X.
+ */
+export const FACE_FEATURES = {
+  eyeY: EYE_Y,
+  eyeDx: EYE_DX,
+  eyeRx: EYE_RX,
+  eyeRy: EYE_RY,
+  browY: BROW_Y,
+  mouthY: MOUTH_Y,
+  mouthHalfWidth: MOUTH_HALF_WIDTH,
+  profileEyeX: HEAD_DEPTH * PROFILE_EYE_X,
+  profileEyeRx: EYE_RX * PROFILE_EYE_WIDTH_SHARE,
+} as const;
+
+/**
+ * Runs `paint` in the plane the face's features are painted on: head-on the
+ * face rides up the skull and shortens as the head tips back
+ * (`BipedPose.chinLift`), and something worn over the eyes has to move with
+ * them or it slides off them. Edge-on and from behind it is the head's own
+ * frame.
+ */
+export function withFacePlane(ctx: Ctx, pose: BipedPose, view: ViewSpec, paint: () => void): void {
+  ctx.save();
+  if (!view.profile && !view.showsBack) {
+    const lift = pose.chinLift ?? 0;
+    ctx.translate(0, -Math.max(0, lift) * HEAD_PITCH_RISE);
+    applyFacePitch(ctx, lift);
+  }
+  paint();
+  ctx.restore();
 }

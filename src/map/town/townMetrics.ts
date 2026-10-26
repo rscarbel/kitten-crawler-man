@@ -21,7 +21,10 @@ import {
   VERGE_GRASS,
   YARD_GRAVEL,
 } from '../tileTypes';
-import { getSpriteDoorwayByKey, getSpriteFootprintByKey } from '../../core/SpriteLoader';
+import {
+  getSpriteDoorwayByKey,
+  getSpriteFootprintByKey,
+} from '../../core/spriteAssets/SpriteLoader';
 import type { BuildingKind, TilePoint, TileRect } from './townPlan';
 
 /** Manifest key of the town's main tower, whose anchor tile carries no sprite key. */

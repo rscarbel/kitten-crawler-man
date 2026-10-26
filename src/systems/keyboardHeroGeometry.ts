@@ -7,7 +7,7 @@
  * only make sense against the speed and hit window defined here.
  */
 
-import type { Difficulty } from '../core/difficultyProfiles';
+import type { Difficulty } from '../core/difficulty/difficultyProfiles';
 
 /**
  * The band the note had to overlap under the original overlap rule. Nothing draws

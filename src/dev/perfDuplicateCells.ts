@@ -10,7 +10,7 @@
  * `scripts/report-duplicate-cells.ts` counts the same way.
  */
 
-import { SURFACE_BYTES_PER_PIXEL, surfaceContext } from '../core/canvasSurface';
+import { SURFACE_BYTES_PER_PIXEL, surfaceContext } from '../core/rendering/canvasSurface';
 import { residentFigureCells } from '../sprites/figure/figureFrameCache';
 
 /** One cell's pixels, RGBA in row order, as `getImageData` returns them. */

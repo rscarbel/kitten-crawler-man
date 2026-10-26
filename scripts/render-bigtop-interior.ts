@@ -31,7 +31,7 @@ import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { TILE_SIZE } from '../src/core/constants.js';
-import type { Difficulty } from '../src/core/difficultyProfiles.js';
+import type { Difficulty } from '../src/core/difficulty/difficultyProfiles.js';
 import { FLOOR_ART_SEEDS } from '../src/map/ground/artSeedAlphabet.js';
 import { MAZE_CURTAINS, type MazeSectionId, type MazeTile } from '../src/map/bigTopMazeLayout.js';
 import {

@@ -17,7 +17,7 @@
  * does the drawing.
  */
 
-import type { SpriteStates } from '../../core/SpriteLoader';
+import type { SpriteStates } from '../../core/spriteAssets/SpriteLoader';
 import type { GroundPalette, GroundSpill } from '../ground/GroundPalette';
 import { FloorTypeValue } from '../tileTypes';
 

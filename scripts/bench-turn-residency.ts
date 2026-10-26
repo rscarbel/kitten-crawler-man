@@ -28,10 +28,10 @@ import { gameContext } from './nodeGameContext.js';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants.js';
 import { HumanPlayer } from '../src/creatures/HumanPlayer.js';
 import { CatPlayer } from '../src/creatures/CatPlayer.js';
-import { TOOL_TIER_BASIC, type WorkingTool } from '../src/core/toolTiers.js';
+import { TOOL_TIER_BASIC, type WorkingTool } from '../src/core/items/gathering/toolTiers.js';
 import { CAT_WORK_SWING_TICKS } from '../src/systems/WorkChannel.js';
 import { HELD_VISUALS } from '../src/sprites/held/heldVisuals.js';
-import { ITEM_DEF, isItemId, weaponStatsOf } from '../src/core/ItemDefs.js';
+import { ITEM_DEF, isItemId, weaponStatsOf } from '../src/core/items/defs/ItemDefs.js';
 import {
   ARMED_MOTION_SETS,
   type ArmedMotionSet,
@@ -48,7 +48,7 @@ import {
   setFigureBakeClock,
   touchFigureState,
 } from '../src/sprites/figure/figureFrameCache.js';
-import { BYTES_PER_MEGABYTE } from '../src/core/canvasSurface.js';
+import { BYTES_PER_MEGABYTE } from '../src/core/rendering/canvasSurface.js';
 import {
   getFigureCacheStats,
   setFigureCacheStatsRecording,
@@ -247,8 +247,7 @@ function humanHolding(set: ArmedMotionSet): HumanPlayer {
     });
   if (weapon === undefined) throw new Error(`no weapon item plays the ${set} rows`);
   human.inventory.addItem(weapon, 1);
-  human.inventory.equipment.equipById(weapon);
-  human.restoreWeaponDrawn(true);
+  human.holdWithoutGesture(weapon);
   return human;
 }
 

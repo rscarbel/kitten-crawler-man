@@ -8,7 +8,7 @@
  * from coordinates held by the catalogue.
  */
 
-import { ownEntry } from '../../core/guards';
+import { ownEntry } from '../../core/util/guards';
 import type { ContractArea } from '../../map/contractAreas';
 import type { GameMap } from '../../map/GameMap';
 import { BRIAR_HOLLOW_CONTRACT_AREAS } from '../../map/overworld/briarHollowLayout';

@@ -1,5 +1,5 @@
-import { drawSpriteKey, timeFrameIndex } from '../../../core/SpriteRenderer';
-import { getSpriteDef } from '../../../core/SpriteLoader';
+import { drawSpriteKey, timeFrameIndex } from '../../../core/spriteAssets/SpriteRenderer';
+import { getSpriteDef } from '../../../core/spriteAssets/SpriteLoader';
 import {
   FLOOR_DECALS,
   GRIME_EDGE_ORDER,

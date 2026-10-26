@@ -5,7 +5,8 @@
  *
  *  1. It opens after the reward queue drains — never under a reward the player
  *     has not dismissed yet — and exactly once.
- *  2. The only automatic opener is the Krakaren chest's first grant. The circus
+ *  2. The only automatic opener is his arrival as a reward, in either scene
+ *     that can show the chest bringing him. The circus
  *     quest hands back a pet the player already knows; the pause menu's
  *     Abilities tab is the one other way in.
  *  3. The explainers' host, driven through a `UiRoot`: Next walks forward and
@@ -20,7 +21,7 @@
  *
  * Check 2 reads the source, because the trigger is a line inside a scene no
  * headless harness can construct; the scene-level behaviour still wants a look
- * in the browser — open the Krakaren chest, and hand Mongo back in the circus.
+ * in the browser — earn Something Hatched, and hand Mongo back in the circus.
  *
  * Run: npx tsx scripts/verify-mongo-explainer.ts
  */
@@ -30,9 +31,9 @@ import { join } from 'node:path';
 
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { gameContext } from './nodeGameContext.js';
-import { keybindings } from '../src/core/Keybindings.js';
+import { keybindings } from '../src/core/input/Keybindings.js';
 import { RewardGrantedDialog } from '../src/ui/RewardGrantedDialog.js';
-import type { GrantedReward } from '../src/core/GrantedReward.js';
+import type { GrantedReward } from '../src/core/items/loot/GrantedReward.js';
 import { BANDS, UiRoot, type HitRegion } from '../src/ui/core/UiRoot.js';
 import { MOUSE_POINTER_ID, PRIMARY_BUTTON } from '../src/ui/core/pointer.js';
 import { NO_INSETS } from '../src/ui/core/viewport.js';
@@ -119,28 +120,29 @@ function collectSources(dir: string, out: Map<string, string>): Map<string, stri
   const sources = collectSources('src', new Map());
   const openers = [...sources.entries()].filter(([, text]) => text.includes(MONGO_OPEN));
   const openerFiles = openers.map(([path]) => path).sort();
-  const expectedFiles = ['src/scenes/DungeonScene.ts', 'src/systems/kits/MenusKit.ts'];
+  const expectedFiles = ['src/systems/kits/MenusKit.ts', 'src/systems/mongoArrival.ts'];
   check(
     JSON.stringify(openerFiles) === JSON.stringify(expectedFiles),
     `the explainer is opened from ${openerFiles.join(', ') || 'nowhere'}; expected exactly ${expectedFiles.join(', ')}`,
   );
 
-  const scene = sources.get('src/scenes/DungeonScene.ts') ?? '';
-  const sceneOpens = scene.split(MONGO_OPEN).length - 1;
-  check(sceneOpens === 1, `DungeonScene opens the explainer ${sceneOpens} times, expected 1`);
-  const krakarenBranchStart = scene.indexOf('chest.bossRoomIndex === this.krakarenBossRoomIdx');
-  const nextBranch = scene.indexOf('chest.bossRoomIndex', krakarenBranchStart + 1);
-  const opener = scene.indexOf(MONGO_OPEN);
+  const arrival = sources.get('src/systems/mongoArrival.ts') ?? '';
+  const arrivalOpens = arrival.split(MONGO_OPEN).length - 1;
+  check(arrivalOpens === 1, `mongoArrival opens the explainer ${arrivalOpens} times, expected 1`);
+  const drainedOpen = /afterQueueDrains\(\s*\(\)\s*=>\s*menus\.craftExplainers\.open\('mongo'\)/;
   check(
-    krakarenBranchStart >= 0 && opener > krakarenBranchStart && opener < nextBranch,
-    'the scene opens the explainer outside the Krakaren chest branch of grantChestContents',
+    drainedOpen.test(arrival),
+    'his arrival opens the explainer directly instead of after the reward queue drains',
   );
-  const drainedOpen =
-    /afterQueueDrains\(\s*\(\)\s*=>\s*this\.menus\.craftExplainers\.open\('mongo'\)/;
-  check(
-    drainedOpen.test(scene),
-    'the Krakaren grant opens the explainer directly instead of after the reward queue drains',
-  );
+  for (const scenePath of ['src/scenes/DungeonScene.ts', 'src/scenes/BuildingInteriorScene.ts']) {
+    const scene = sources.get(scenePath) ?? '';
+    check(
+      /if \(presentsMongo\(presentation\)\) \{|if \(!presentsMongo\(presentation\)\) return;/.test(
+        scene,
+      ) && scene.includes('introduceMongo(this.bus, this.menus'),
+      `${scenePath} does not introduce Mongo when the chest that brought him closes`,
+    );
+  }
 
   const menus = sources.get('src/systems/kits/MenusKit.ts') ?? '';
   check(

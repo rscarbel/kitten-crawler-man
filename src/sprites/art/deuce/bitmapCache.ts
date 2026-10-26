@@ -16,7 +16,7 @@ import {
   type CanvasSurface,
   surfaceContext,
   releaseSurface,
-} from '../../../core/canvasSurface';
+} from '../../../core/rendering/canvasSurface';
 import { type Ctx } from './paint';
 
 export interface CacheBox {

@@ -21,9 +21,9 @@ galaxy watch the crawl live. Popular crawlers attract **sponsors**, who send gif
 crawlers get forgotten, and forgotten crawlers die.
 
 The **System** is the dungeon's administrative AI and the show's host. It narrates, hands out
-**achievements** (each with a snarky title) and **loot boxes** (Bronze, Silver, Gold, Platinum,
-Legendary, Celestial; categories such as Adventurer, Boss and Spicy), enforces the rules, and
-keeps the audience entertained. It is bound by rules it did not write and resents. It sees
+**achievements** (each with a snarky title) and **reward chests**, ranked by rarity from Common
+through Uncommon, Rare, Epic and Legendary up to Divine, enforces the rules, and keeps the
+audience entertained. It is bound by rules it did not write and resents. It sees
 everything.
 
 Every floor has a **collapse timer**. When it runs out, the floor collapses and anyone still on
@@ -31,8 +31,8 @@ it dies. The only way on is a **stairwell** down to the next floor.
 
 **Safe rooms** are the one refuge: no monster may enter, the collapse timer stops while the
 active crawler is inside, there is a Bopca (a small cook who serves food that heals), and
-there is Mordecai. Loot boxes are opened in safe rooms. Saves happen in safe rooms, at
-stairwells and on floor changes; a death sends the party back to the last save.
+there is Mordecai. Saves happen in safe rooms, at stairwells and on floor changes; a death
+sends the party back to the last save.
 
 ## The crawlers
 

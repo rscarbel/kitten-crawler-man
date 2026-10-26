@@ -19,10 +19,10 @@ import {
   releaseSurface,
   resizeSurface,
   type CanvasSurface,
-} from '../../core/canvasSurface';
+} from '../../core/rendering/canvasSurface';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { AudioManager } from '../../audio/AudioManager';
-import type { BriarHollowState } from '../../core/briarHollowState';
+import type { BriarHollowState } from '../../core/quests/briarHollowState';
 import type { BriarHollowSite } from '../../map/overworld/briarHollowSite';
 import type { MobRoster, SceneWorld } from '../kits/SceneWorld';
 import type { Mob } from '../../creatures/Mob';
@@ -30,15 +30,15 @@ import type { MenusKit } from '../kits/MenusKit';
 import type { KeyModifiers, Surface } from '../../ui/core/UiRoot';
 import type { TownPropRenderable } from '../townPropRenderable';
 import type { Player } from '../../Player';
-import type { CrawlerKind } from '../../core/SkillManager';
-import type { ResourceCost } from '../../core/partyResources';
-import { canAfford, formatCost, partyCount } from '../../core/partyResources';
-import { partyCoins } from '../../core/partyCoins';
-import { constructionUnlocked } from '../../core/villageUnlocks';
-import { RESOURCE_IDS } from '../../core/resourceIds';
-import { ITEM_DEF } from '../../core/ItemDefs';
+import type { CrawlerKind } from '../../core/skills/SkillManager';
+import type { ResourceCost } from '../../core/items/gathering/partyResources';
+import { canAfford, formatCost, partyCount } from '../../core/items/gathering/partyResources';
+import { partyCoins } from '../../core/party/partyCoins';
+import { constructionUnlocked } from '../../core/quests/villageUnlocks';
+import { RESOURCE_IDS } from '../../core/items/gathering/resourceIds';
+import { ITEM_DEF } from '../../core/items/defs/ItemDefs';
 import { TILE_SIZE } from '../../core/constants';
-import { keybindings } from '../../core/Keybindings';
+import { keybindings } from '../../core/input/Keybindings';
 import {
   actionPrompt,
   activeInputMode,
@@ -57,7 +57,7 @@ import {
   type StructurePopoverOption,
 } from '../../ui/screens/construction/StructurePopover';
 import type { ConstructionScreenSource } from '../../ui/screens/construction/ConstructionScreen';
-import { infernalTrebuchets } from '../../core/craftPerks';
+import { infernalTrebuchets } from '../../core/labour/craftPerks';
 import {
   drawTrebuchet,
   TREBUCHET_COCKED_ANGLE,
@@ -77,7 +77,7 @@ import { SnareSystem } from './SnareSystem';
 import { ConvertedAllyController } from './ConvertedAllyController';
 import { resolveSiegeLevel } from './siegeLevel';
 import { partyLevelOf } from '../../levels/spawner';
-import { activeDifficultyProfile } from '../../core/difficultyProfiles';
+import { activeDifficultyProfile } from '../../core/difficulty/difficultyProfiles';
 import { drawOccludedCrawler } from './occludedCrawlers';
 import { HOLLOW_GATE, HOLLOW_PALISADE } from '../../map/tileTypes';
 import {

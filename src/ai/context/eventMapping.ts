@@ -1,7 +1,7 @@
 import { crawlerName } from '../../characters/characters';
 import type { EventBus } from '../../core/EventBus';
 import type { ChallengeSummary } from '../show/challenges';
-import { ITEM_DEF, type ItemId } from '../../core/ItemDefs';
+import { ITEM_DEF, type ItemId } from '../../core/items/defs/ItemDefs';
 import type { Mob } from '../../creatures/Mob';
 import type { DamageSource } from '../../Player';
 import { MORDECAI_CHARACTER_NAME } from '../characters';
@@ -52,7 +52,7 @@ function challengeData(e: ChallengeSummary): JsonObject {
     title: e.title,
     template: e.template,
     objective: e.objective,
-    rewardTier: e.rewardTier,
+    rewardRarity: e.rewardRarity,
   };
 }
 
@@ -371,8 +371,8 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         witness: 'inSafeRoom',
       });
     }),
-    bus.on('boxOpened', (e) => {
-      profile.recordBoxOpened();
+    bus.on('rewardChestOpened', (e) => {
+      profile.recordChestOpened();
       const crawler = nameOf(e.owner) ?? 'A crawler';
       const contents = [
         e.coins > 0 ? `${e.coins} coins` : null,
@@ -380,11 +380,11 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         ...e.items,
       ].filter((part): part is string => part !== null);
       emit({
-        type: 'boxOpened',
-        data: { crawler, tier: e.tier, category: e.category, contents },
-        summary: `${crawler} opened a ${e.tier} ${e.category} box: ${contents.join(', ') || 'nothing'}.`,
-        importance: EVENT_IMPORTANCE.boxOpened,
-        witness: 'inSafeRoom',
+        type: 'rewardChestOpened',
+        data: { crawler, rarity: e.rarity, contents },
+        summary: `${crawler} earned a ${e.rarity} chest: ${contents.join(', ') || 'nothing'}.`,
+        importance: EVENT_IMPORTANCE.rewardChestOpened,
+        witness: 'always',
         subject: nameOf(e.owner) ?? undefined,
       });
     }),
@@ -661,7 +661,7 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
       emit({
         type: 'challengeCompleted',
         data: { ...challengeData(e), rewardedTo: winner, secondsTaken: e.secondsTaken },
-        summary: `The crawlers won the challenge "${e.title}" in ${e.secondsTaken}s; ${winner} got the ${e.rewardTier} box.`,
+        summary: `The crawlers won the challenge "${e.title}" in ${e.secondsTaken}s; ${winner} got the ${e.rewardRarity} chest.`,
         importance: EVENT_IMPORTANCE.challengeCompleted,
         witness: 'always',
       });
@@ -706,7 +706,7 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
       const crawler = sideName(e.player);
       emit({
         type: 'aiAchievementAwarded',
-        data: { crawler, title: e.title, tier: e.tier, awardedBy: e.awardedBy },
+        data: { crawler, title: e.title, rarity: e.rarity, awardedBy: e.awardedBy },
         summary: `${crawler} was awarded the achievement "${e.title}" by the ${e.awardedBy}.`,
         importance: EVENT_IMPORTANCE.aiAchievementAwarded,
         witness: 'always',

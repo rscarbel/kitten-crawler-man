@@ -1,6 +1,6 @@
 import { DamageLedger } from '../damageLedger';
 import { POTION_HEAL_FRACTION } from '../../Player';
-import { REVIVE_FRAMES, REVIVE_HP_FRACTION } from '../../core/reviveRules';
+import { REVIVE_FRAMES, REVIVE_HP_FRACTION } from '../../core/party/reviveRules';
 
 /**
  * How a Meat Shields hireling stays alive between the desk and the end of its

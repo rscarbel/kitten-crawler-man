@@ -35,9 +35,9 @@
  */
 
 import { PLAYER_SPEED, TILE_SIZE } from '../../src/core/constants';
-import { CHILLED_STATUS, FROZEN_STATUS, makeBurn } from '../../src/core/StatusEffect';
-import type { ItemId } from '../../src/core/ItemDefs';
-import { applyIceHit } from '../../src/core/frostStatus';
+import { CHILLED_STATUS, FROZEN_STATUS, makeBurn } from '../../src/core/combat/StatusEffect';
+import type { ItemId } from '../../src/core/items/defs/ItemDefs';
+import { applyIceHit } from '../../src/core/combat/frostStatus';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import {
@@ -60,7 +60,7 @@ import {
   FIREBALL_MAX_RANGE_TILES,
   FIREBALL_RETICLE_RADIUS_FRACTION,
 } from '../../src/creatures/fairies/fairyTuning';
-import { CHILLED_MOVE_SPEED_FACTOR, FROZEN_FRAMES } from '../../src/core/statusTuning';
+import { CHILLED_MOVE_SPEED_FACTOR, FROZEN_FRAMES } from '../../src/core/combat/statusTuning';
 import { LOCKED_TELEGRAPH_MIN_FRAMES } from '../../src/creatures/mobLevelScaling';
 import { MAX_MOB_LEVEL } from '../../src/levels/spawner';
 import type { Player } from '../../src/Player';
@@ -71,7 +71,7 @@ import {
   MERCENARY_TEMPLATE_IDS,
   getMercenaryTemplate,
   type MercenaryTemplateId,
-} from '../../src/core/mercenaryTemplates';
+} from '../../src/core/party/mercenaryTemplates';
 import { isMarkedGround, setMarkedGroundSources } from '../../src/creatures/tactics/markedGround';
 import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
 import { CompanionSystem } from '../../src/systems/CompanionSystem';
@@ -115,7 +115,7 @@ const THROW_LIMIT_FRAMES = 400;
 /** Frames granted for a landed charge to go off. */
 const CHARGE_LIMIT_FRAMES = 600;
 /** A ring that turns fire fairy magic away and nothing else. */
-const FIRE_FAIRY_RING: ItemId = 'ring_of_the_asbestos_knuckle';
+const FIRE_FAIRY_RING: ItemId = 'emberward_charm';
 /** Frames a sealed-off or out-of-range fairy is given to (fail to) throw. */
 const REFUSAL_FRAMES = 200;
 /** The frozen crawler's walk: due east, one unit of input. */

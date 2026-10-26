@@ -5,13 +5,13 @@
  */
 
 import type { SceneManager } from '../../core/Scene';
-import type { InputManager } from '../../core/InputManager';
+import type { InputManager } from '../../core/input/InputManager';
 import { DungeonScene, type DungeonSceneOptions } from '../DungeonScene';
 import { TutorialController } from '../../systems/TutorialController';
 import { getLevelDef } from '../../levels';
-import { difficultyStats } from '../../core/DifficultyStats';
-import { bindRunStats } from '../../core/GameStats';
-import { MusicLibrary, bindMusicLibrary } from '../../core/MusicLibrary';
+import { difficultyStats } from '../../core/difficulty/DifficultyStats';
+import { bindRunStats } from '../../core/progression/GameStats';
+import { MusicLibrary, bindMusicLibrary } from '../../core/music/MusicLibrary';
 import { inset, splitV, type Rect } from '../../ui/core/geom';
 import type { Surface, Ui } from '../../ui/core/UiRoot';
 import { button, buttonHeight } from '../../ui/widgets/button';
@@ -20,7 +20,7 @@ import { skinsFor, type ButtonVariant, type ControlSize } from '../../ui/theme/s
 import type { TitleClock } from './titleClock';
 import { stageRectInUi, type TitleStage } from './titleStage';
 import { LOGO_IMPACT_AT_MS } from './titleTimeline';
-import { viewerFavor } from '../../core/viewerFavor';
+import { viewerFavor } from '../../core/progression/viewerFavor';
 
 export const TITLE_MENU_SURFACE_ID = 'title-menu';
 const MENU_STRIP_ID = 'menu-strip';

@@ -39,7 +39,7 @@
  *   npx tsx scripts/verify-dungeon-placement.ts
  *   npx tsx scripts/verify-dungeon-placement.ts --seeds=40
  */
-import { withWorldSeed } from '../src/core/WorldRandom.js';
+import { withWorldSeed } from '../src/core/world/WorldRandom.js';
 import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions.js';
 import { level1 } from '../src/levels/level1.js';
 import { level2 } from '../src/levels/level2.js';

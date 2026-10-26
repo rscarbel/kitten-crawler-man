@@ -4,8 +4,12 @@
  */
 
 import type { IllustrationRect } from './illustration';
-import { drawSpriteKey } from '../../../core/SpriteRenderer';
-import { MAX_TOOL_TIER, TOOL_TIER_BASIC, TOOL_TIERS } from '../../../core/toolTiers';
+import { drawSpriteKey } from '../../../core/spriteAssets/SpriteRenderer';
+import {
+  MAX_TOOL_TIER,
+  TOOL_TIER_BASIC,
+  TOOL_TIERS,
+} from '../../../core/items/gathering/toolTiers';
 import { CHOP_ROWS, humanRowOf } from '../../../sprites/art/humanFigure';
 import { humanFigureFor } from '../../../sprites/art/human/appearance';
 import { defaultOutfitOf } from '../../../sprites/garments/human/humanDressing';

@@ -22,7 +22,7 @@
  * a blend order is still a compile error at the declaration site.
  */
 
-import type { SpriteKey } from '../../core/SpriteLoader';
+import type { SpriteKey } from '../../core/spriteAssets/SpriteLoader';
 
 /** How a material's loose material spills onto a harder neighbour. */
 export interface GroundSpill {

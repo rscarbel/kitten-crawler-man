@@ -14,7 +14,7 @@ import {
 import type { MusicPlayerControls, MusicPlayerMode } from '../../../audio/music/MusicDirector';
 import { rememberMusicPlayback } from '../../../audio/music/playerPreference';
 import { MUSIC_TRACK_IDS, type MusicBusId, type MusicTrackId } from '../../../audio/sounds';
-import type { MusicLibrary } from '../../../core/MusicLibrary';
+import type { MusicLibrary } from '../../../core/music/MusicLibrary';
 import { splitH, type Rect } from '../../core/geom';
 import { skinsFor } from '../../theme/skins';
 import { badge, badgeSize } from '../../widgets/badge';

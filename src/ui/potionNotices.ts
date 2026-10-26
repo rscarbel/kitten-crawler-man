@@ -1,7 +1,10 @@
-import type { ItemId } from '../core/ItemDefs';
+import type { ItemId } from '../core/items/defs/ItemDefs';
 import type { StatName } from '../Player';
-import { HAMBURGER_FED_DURATION_SECONDS, HAMBURGER_STR_BONUS } from '../core/foodEffects';
-import { REFRESHED_DURATION_SECONDS, REFRESHED_SPEED_FACTOR } from '../core/StatusEffect';
+import {
+  HAMBURGER_FED_DURATION_SECONDS,
+  HAMBURGER_STR_BONUS,
+} from '../core/items/consumables/foodEffects';
+import { REFRESHED_DURATION_SECONDS, REFRESHED_SPEED_FACTOR } from '../core/combat/StatusEffect';
 import type { ToastOptions } from './hud/toasts';
 
 /**

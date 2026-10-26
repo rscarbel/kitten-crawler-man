@@ -9,7 +9,7 @@
  * not drawn yet.
  *
  * The order down the right-hand column is fixed: Pause, Bag, Build, the
- * achievement chip, the Journal, then whatever a scene adds of its own. A
+ * rewards chip, the Journal, then whatever a scene adds of its own. A
  * touch screen puts the Follower button ahead of Pause, all of it packed into
  * whatever room the screen leaves (see `hudPacking.ts`); a pointer screen
  * stands the Follower button at the bottom right, above the hotbar.
@@ -73,7 +73,7 @@ export interface HudButtonRects {
   readonly follower: Rect;
   /** The Build button, where its slot is held. */
   readonly build: Rect | null;
-  /** The achievement chip's slot, held whether or not anything is unread. */
+  /** The rewards chip's slot, held whether or not a reward is waiting. */
   readonly chip: Rect;
   readonly journal: Rect;
   /** The crawler switch, on a touch screen; a keyboard switches with its key. */
@@ -217,7 +217,7 @@ function summonRect(input: HudButtonLayoutInput, switchButton: Rect | null): Rec
 
 /**
  * A pointer screen's right-hand column: Pause under the minimap, Bag under
- * it, then the Build button (where it is reserved), the achievement chip's
+ * it, then the Build button (where it is reserved), the rewards chip's
  * slot, the Journal and a scene's extras.
  *
  * Each takes the next slot down the column while that slot is clear of the

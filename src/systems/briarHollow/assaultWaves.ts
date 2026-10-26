@@ -13,7 +13,7 @@ import {
   LEAN_VARIETY_TIER,
   MINIMAL_VARIETY_TIER,
   TRIMMED_VARIETY_TIER,
-} from '../../core/varietyTier';
+} from '../../core/perf/varietyTier';
 
 /** The fewest undead any wave raises, whatever the difficulty takes off it. */
 export const MIN_UNDEAD_PER_WAVE = 10;

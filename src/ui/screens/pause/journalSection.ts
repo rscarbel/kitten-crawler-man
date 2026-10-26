@@ -6,7 +6,7 @@
  * sources, and the pin lives on the run-scoped `JournalProgress`.
  */
 
-import type { JournalProgress } from '../../../core/JournalProgress';
+import type { JournalProgress } from '../../../core/quests/JournalProgress';
 import {
   isOutstanding,
   pinMatchesEntry,

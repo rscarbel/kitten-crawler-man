@@ -538,7 +538,7 @@ empty strip still passes.
 ### The Desperado Club's casino corner
 
 The club is not built from a layout file: its rooms and stations are fixed in
-`src/core/clubLayout.ts` and its furniture in `src/core/clubProps.ts`
+`src/core/club/clubLayout.ts` and its furniture in `src/core/club/clubProps.ts`
 (`CLUB_PROPS`, with `CLUB_FURNITURE_TILES` derived from it). Club props block their
 footprint **and** the rows their art rises into, so a crawler can never stand where a
 counter is painted over them.
@@ -584,7 +584,7 @@ A prop def may carry an `interaction` (`{ kind: 'examine' | 'search' | 'use', id
 
 ### Remembered between visits
 
-`TownMemory` (`src/core/TownMemory.ts`) is threaded by reference through `DungeonScene`
+`TownMemory` (`src/core/state/TownMemory.ts`) is threaded by reference through `DungeonScene`
 and `BuildingInteriorScene`. It holds resident talk counts, Fen's poultice batch,
 `clearedRooms`, `clearedCamps` and `paidOutInteriorProps`.
 
@@ -1012,7 +1012,7 @@ indoors, where the kit does not run, so his side is `WendellBlueprintsHook`, one
 `questCompleted` at the end. Its lines are in `blueprintsDialog.ts`, `fenna.ts` and
 `merrit.ts` under `src/dialog/scripts/briarHollow/`, and `src/dialog/scripts/wendellBlueprints.ts`.
 
-**The steps** (`BlueprintsQuestPhase`, `src/core/blueprintsQuestPhase.ts`):
+**The steps** (`BlueprintsQuestPhase`, `src/core/quests/blueprintsQuestPhase.ts`):
 
 | Phase             | Entered when                                      | Guided to                                                                                                                   |
 | ----------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -1228,7 +1228,7 @@ party and is snapped beside them if that takes longer than `MIDGE_CALL_TIMEOUT_S
   pen built from the yard (`CowPen.forYard`), and is set down inside if the walk takes
   too long. A door visit mid-walk finds her already there.
 - **Doors and rewinds.** Every door rebuilds the overworld and throws its roster away, so
-  `MidgeEscortCarry` (`src/core/midgeEscortCarry.ts`), handed by reference from scene to
+  `MidgeEscortCarry` (`src/core/quests/midgeEscortCarry.ts`), handed by reference from scene to
   scene like `BountyProgress`, carries her position and health while she is led on the
   escort, and the count of waves already sprung. The next scene raises her there, still
   led. It is never saved or checkpointed: after a load or a death rewind in
@@ -1372,7 +1372,7 @@ Code lives in `src/systems/constructionContracts/`; the Journal id and quest id 
 `construction_contract` (`CONSTRUCTION_CONTRACT_QUEST_ID`). There is no `QuestManager`.
 
 **State.** `BriarHollowState.contracts` (`ConstructionContractsState`,
-`src/core/briarHollowState.ts`): `introSeen`, `contractsIssued`, `contractsCompleted`,
+`src/core/quests/briarHollowState.ts`): `introSeen`, `contractsIssued`, `contractsCompleted`,
 `active` (`ActiveContract`: a `ContractSiteKey`, `spotIds`, a parallel `spotsDone`),
 `lastSiteKey` and `lastSpotSetBySite`. "Ready to collect" is derived (`isContractReady`),
 never stored. The parser defaults the whole record for a save without it, and drops any
@@ -2116,7 +2116,7 @@ window for each coloured star in the other lane.
 #### Changing difficulty mid-show
 
 The board's tier is fixed for the life of a `BigTopMazeSystem`: it holds its `plan`
-and never reads the live difficulty. `src/core/difficultyChangeGuard.ts` holds one guard
+and never reads the live difficulty. `src/core/difficulty/difficultyChangeGuard.ts` holds one guard
 at a time (`registerDifficultyChangeGuard` returns a handle, and
 `clearDifficultyChangeGuard` with a stale handle is a no-op). `BigTopMazeSystem`
 registers the guard last in its constructor (`holdDifficulty`). It releases the guard in

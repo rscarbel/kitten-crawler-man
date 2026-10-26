@@ -19,8 +19,8 @@
  */
 
 import { PLAYER_SPEED, TILE_SIZE } from '../../src/core/constants';
-import { createMidgeEscortCarry } from '../../src/core/midgeEscortCarry';
-import { blueprintsPhaseAtLeast } from '../../src/core/blueprintsQuestPhase';
+import { createMidgeEscortCarry } from '../../src/core/quests/midgeEscortCarry';
+import { blueprintsPhaseAtLeast } from '../../src/core/quests/blueprintsQuestPhase';
 import type { BriarHollowGate, BriarHollowSite } from '../../src/map/overworld/briarHollowSite';
 import { ESCORT_WAVE_COUNT } from '../../src/systems/briarHollow/EscortAmbushSystem';
 import type { SiegeRig } from '../villageSiegeHarness';

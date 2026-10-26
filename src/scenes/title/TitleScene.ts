@@ -6,7 +6,7 @@
  */
 
 import { Scene, type SceneManager } from '../../core/Scene';
-import type { InputManager } from '../../core/InputManager';
+import type { InputManager } from '../../core/input/InputManager';
 import type { AudioManager } from '../../audio/AudioManager';
 import { GATED_SFX_GROUPS } from '../../audio/sfxGroups';
 import type { AudioScope } from '../../audio/AudioScope';

@@ -10,7 +10,7 @@ import {
   drawRopeWalkPage,
   drawFennaPage,
 } from '../../icons/explainerArt/processingArt';
-import { keybindings } from '../../../core/Keybindings';
+import { keybindings } from '../../../core/input/Keybindings';
 import {
   BOARDS_PER_WOOD,
   ROPE_PER_WOOD,

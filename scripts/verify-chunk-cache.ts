@@ -33,10 +33,10 @@ const { TILE_SIZE, PLAYER_SPEED } = await import('../src/core/constants.js');
 const { GameMap } = await import('../src/map/GameMap.js');
 const { level3 } = await import('../src/levels/level3.js');
 const { TileChunkCache, renderCanvas } = await import('../src/map/TileRenderer.js');
-const { perfMonitor } = await import('../src/core/PerfMonitor.js');
+const { perfMonitor } = await import('../src/core/perf/PerfMonitor.js');
 const { CHUNK_TILES } = await import('../src/map/tiles/chunkTiles.js');
 const { FloorTypeValue } = await import('../src/map/tileTypes.js');
-const { surfaceTallies } = await import('../src/core/canvasSurface.js');
+const { surfaceTallies } = await import('../src/core/rendering/canvasSurface.js');
 
 const WORLD_SEED = 7919;
 const VIEW_W = 1280;

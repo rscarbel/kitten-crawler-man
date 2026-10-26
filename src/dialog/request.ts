@@ -7,7 +7,7 @@
  * through `onShown`/`endAfterPages`/`afterClose`.
  */
 
-import type { ItemId } from '../core/ItemDefs';
+import type { ItemId } from '../core/items/defs/ItemDefs';
 import type { DialogLine, NonEmpty } from './line';
 
 /**

@@ -1,8 +1,8 @@
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
-import { onCanvasRecovery } from '../core/canvasRecovery';
-import { varietyTier, type VarietyTier } from '../core/varietyTier';
-import { isLookShared, resolveVariant, type MobVariantFamily } from '../core/mobVariantFamily';
+import { onCanvasRecovery } from '../core/rendering/canvasRecovery';
+import { varietyTier, type VarietyTier } from '../core/perf/varietyTier';
+import { isLookShared, resolveVariant, type MobVariantFamily } from '../core/mobs/mobVariantFamily';
 import {
   MOB_KINDS,
   type KindOptionArgs,

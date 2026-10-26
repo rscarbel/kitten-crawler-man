@@ -5,7 +5,7 @@
  */
 
 import type { SoundId } from '../../audio/sounds';
-import type { InventoryItem } from '../../core/ItemDefs';
+import type { InventoryItem } from '../../core/items/defs/ItemDefs';
 import type { Rect } from '../core/geom';
 import type { HitState } from '../core/UiRoot';
 import type { ItemSlotOptions } from '../widgets/itemSlot';
@@ -109,18 +109,12 @@ export interface SummonModel {
   onTap(): void;
 }
 
-/** The safe room's left-edge banner: unread achievements, or loot boxes to open. */
-export interface LootBannerModel {
-  readonly glyph: GlyphId;
-  readonly title: string;
-  readonly detail: string;
-  onTap(): void;
-}
-
 export interface HotbarSlotModel {
   readonly item: InventoryItem | null;
   /** Worn or wielded: reads as in hand, not as a consumable. */
   readonly equipped: boolean;
+  /** The item has awakened for the bar's owner: it shows its awakened icon. */
+  readonly awakened: boolean;
   /** Fraction of a cooldown still to run, 0 when ready. */
   readonly cooldown: number;
   /** The wait left, as the slot reads it over the sweep. */
@@ -183,7 +177,6 @@ export interface HudModel {
   /** In column order; a button missing here is simply not shown. */
   readonly dock: readonly DockButtonModel[];
   readonly summon: SummonModel | null;
-  readonly lootBanner: LootBannerModel | null;
   /** Null while a scene's own menu stands over the bar. */
   readonly hotbar: HotbarModel | null;
   readonly topBand: readonly TopBandEntry[];

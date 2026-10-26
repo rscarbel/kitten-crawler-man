@@ -29,7 +29,7 @@ import { level2 } from '../src/levels/level2';
 import type { LevelDef } from '../src/levels/types';
 import { GameMap } from '../src/map/GameMap';
 import { TILE_SIZE } from '../src/core/constants';
-import { DIFFICULTY_PROFILES } from '../src/core/difficultyProfiles';
+import { DIFFICULTY_PROFILES } from '../src/core/difficulty/difficultyProfiles';
 import { roomSpawnBounds, spawnForLevel } from '../src/levels/spawner';
 import { mulberry32 } from '../src/sprites/person/rng';
 

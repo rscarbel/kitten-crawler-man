@@ -12,8 +12,8 @@ import {
   surfaceContext,
   type CanvasSurface,
   releaseSurface,
-} from '../../../core/canvasSurface';
-import { getRenderScale } from '../../../core/Viewport';
+} from '../../../core/rendering/canvasSurface';
+import { getRenderScale } from '../../../core/rendering/Viewport';
 import type { Rect } from '../../../ui/core/geom';
 import { mix } from '../../../ui/theme/color';
 import { skinsFor, type TextFillSkin } from '../../../ui/theme/skins';

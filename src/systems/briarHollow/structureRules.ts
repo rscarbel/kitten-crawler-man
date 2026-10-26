@@ -9,15 +9,15 @@
  * its numbers without building a map.
  */
 
-import type { ResourceCost } from '../../core/partyResources';
-import { applyDiscount } from '../../core/partyResources';
-import { RESOURCE_IDS } from '../../core/resourceIds';
+import type { ResourceCost } from '../../core/items/gathering/partyResources';
+import { applyDiscount } from '../../core/items/gathering/partyResources';
+import { RESOURCE_IDS } from '../../core/items/gathering/resourceIds';
 import {
   constructionDiscount,
   constructionHpMultiplier,
   constructionTimeFactor,
-} from '../../core/craftPerks';
-import { CONSTRUCTION_XP_PER_WOODEN_WALL } from '../../core/CraftSkills';
+} from '../../core/labour/craftPerks';
+import { CONSTRUCTION_XP_PER_WOODEN_WALL } from '../../core/labour/CraftSkills';
 import type { PalisadeTier } from '../../map/tileTypes';
 
 /** The fixed-step loop runs sixty updates a second; every timer below is counted in them. */

@@ -5,7 +5,7 @@
  * from here rather than spelling them out.
  */
 
-import type { CrawlerKind } from '../core/SkillManager';
+import type { CrawlerKind } from '../core/skills/SkillManager';
 import type { SpeakerId } from '../dialog/speakers';
 import type { CatLook } from '../sprites/looks/catLook';
 import { BELLE_LOOK } from '../sprites/looks/cats/belle';

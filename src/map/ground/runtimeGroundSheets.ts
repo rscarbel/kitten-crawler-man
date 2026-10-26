@@ -19,8 +19,8 @@ import {
   sheetSizePx,
   type SpriteKey,
   type SpriteStateDef,
-} from '../../core/SpriteLoader';
-import { allocCanvas, surfaceContext, releaseSurface } from '../../core/canvasSurface';
+} from '../../core/spriteAssets/SpriteLoader';
+import { allocCanvas, surfaceContext, releaseSurface } from '../../core/rendering/canvasSurface';
 import { getMaterial, paintPatch } from '../tilegen/materials';
 import { buildMaskSet } from '../tilegen/masks';
 import { slicePatch } from '../tilegen/patchSlice';

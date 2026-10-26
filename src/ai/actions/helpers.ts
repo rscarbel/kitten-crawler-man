@@ -1,6 +1,6 @@
 import { playerCharacter } from '../../characters/characters';
-import type { BoxTier } from '../../core/AchievementManager';
 import { TILE_SIZE } from '../../core/constants';
+import type { Rarity } from '../../core/items/defs/rarity';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import { getLevelDef, type LevelDef } from '../../levels';
@@ -15,14 +15,18 @@ export const AI_CHARACTER_SYSTEM = 'System';
 export const AI_CHARACTER_MORDECAI = 'Mordecai';
 export const AI_CHARACTER_VIEWERS = 'Viewers';
 
-/** The box tiers the AI may hand out; the rarer ones are not its to give. */
-export const AI_BOX_TIERS = ['Bronze', 'Silver', 'Gold'] as const satisfies readonly BoxTier[];
-export type AIBoxTier = (typeof AI_BOX_TIERS)[number];
-/** Allowance points each tier draws from the floor's loot-box pool. */
-export const BOX_TIER_POINTS: Readonly<Record<AIBoxTier, number>> = {
-  Bronze: 1,
-  Silver: 2,
-  Gold: 3,
+/** The reward chest rarities the AI may hand out; the rarer ones are not its to give. */
+export const AI_CHEST_RARITIES = [
+  'Common',
+  'Uncommon',
+  'Rare',
+] as const satisfies readonly Rarity[];
+export type AIChestRarity = (typeof AI_CHEST_RARITIES)[number];
+/** Allowance points each rarity draws from the floor's reward-chest pool. */
+export const CHEST_RARITY_POINTS: Readonly<Record<AIChestRarity, number>> = {
+  Common: 1,
+  Uncommon: 2,
+  Rare: 3,
 };
 
 export const TARGET_PARAM = optionalEnumParam(

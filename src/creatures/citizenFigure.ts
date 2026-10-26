@@ -32,7 +32,7 @@ import {
   townCastLookRows,
 } from '../sprites/townCastSprite';
 import type { TownSpecies } from '../systems/townSpecies';
-import { VARIETY_TIERS, varietyTier, type VarietyTier } from '../core/varietyTier';
+import { VARIETY_TIERS, varietyTier, type VarietyTier } from '../core/perf/varietyTier';
 import type { CitizenSpeechStyle } from '../dialog/speakers';
 import {
   WALK_FRAMES as SKYFOWL_WALK_FRAMES,

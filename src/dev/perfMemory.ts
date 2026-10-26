@@ -13,7 +13,7 @@ import {
   surfaceTallies,
   type CanvasSurface,
   type SurfaceOwner,
-} from '../core/canvasSurface';
+} from '../core/rendering/canvasSurface';
 import type { AudioManager } from '../audio/AudioManager';
 
 /** Holders of memory that are not canvas surfaces; their tallies count no surfaces. */

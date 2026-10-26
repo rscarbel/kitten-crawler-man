@@ -1,17 +1,19 @@
 /**
  * One item cell: the bag grid, the hotbar, gear slots, shop and reward lines.
- * Draws the item's icon from `ITEM_ICONS`, its category accent, quantity, an
+ * Draws the item's icon from `itemIconPainter`, its category accent, quantity, an
  * optional key hint, a cooldown sweep, and the selected / dragged / drop-target
  * looks.
  */
 
-import { ITEM_DEF, type ItemId } from '../../core/ItemDefs';
+import { ITEM_DEF, type ItemId } from '../../core/items/defs/ItemDefs';
+import type { Rarity } from '../../core/items/defs/rarity';
+import { drawRarityFrame, rarityTooltipLines } from '../screens/dialogs/canvasChrome';
 import { centerIn, inset, type Rect } from '../core/geom';
 import type { DragHandlers, HitHandlers, HitState, Ui } from '../core/UiRoot';
 import { withAlpha } from '../theme/color';
 import { drawGlyph, type GlyphId } from '../theme/glyphs';
 import { skinsFor } from '../theme/skins';
-import { ITEM_ICONS } from '../icons/itemIcons';
+import { itemIconPainter } from '../icons/itemIcons';
 import { paintIsolated } from '../isolatedPaint';
 import { keycap, keycapSize } from './keycap';
 import {
@@ -26,10 +28,9 @@ import {
 import { tabularNumber, text } from './text';
 import { tooltip } from './tooltip';
 
-export interface ItemSlotOptions {
+/** What every slot takes, whatever it holds. */
+interface ItemSlotCommon {
   readonly id: string;
-  /** `null` draws an empty slot. */
-  readonly item: ItemId | null;
   /** Drawn bottom-right when above one. */
   readonly quantity?: number;
   /** A key hint in the top-left corner (hotbar). */
@@ -38,8 +39,6 @@ export interface ItemSlotOptions {
   readonly cooldown?: number;
   /** Seconds left, drawn in the middle of the sweep. */
   readonly cooldownText?: string;
-  /** A glyph shown faintly in an empty slot (a gear slot's silhouette). */
-  readonly placeholder?: GlyphId;
   readonly selected?: boolean;
   /** This slot's item is being dragged elsewhere: it shows as a ghost. */
   readonly dragging?: boolean;
@@ -65,6 +64,34 @@ export interface ItemSlotOptions {
     HitHandlers,
     'onSecondaryTap' | 'onDown' | 'onRelease' | 'dragSlop' | 'sound'
   >;
+}
+
+/** A slot holding an item: its icon, its category accent and its rarity frame. */
+interface HeldItemSlot extends ItemSlotCommon {
+  readonly item: ItemId;
+  /** The item has awakened for its owner: it shows its awakened icon. */
+  readonly awakened?: boolean;
+}
+
+/** A slot with no item in it: empty, or showing a picture of a reward that is not an item. */
+interface EmptyItemSlot extends ItemSlotCommon {
+  readonly item: null;
+  /** Paints the slot's picture: coins, a companion. */
+  readonly picture?: (ctx: CanvasRenderingContext2D, rect: Rect) => void;
+  /** The rarity frame round the picture. */
+  readonly rarity?: Rarity;
+  /** A glyph shown faintly in an empty slot (a gear slot's silhouette). */
+  readonly placeholder?: GlyphId;
+}
+
+export type ItemSlotOptions = HeldItemSlot | EmptyItemSlot;
+
+/** What a slot holds, for a caller whose stack may be empty. */
+export type ItemSlotContent = Pick<HeldItemSlot, 'item' | 'awakened'> | Pick<EmptyItemSlot, 'item'>;
+
+/** The slot's content for `item`, awake or not; an empty slot for null. */
+export function slotContent(item: ItemId | null, awakened: boolean): ItemSlotContent {
+  return item === null ? { item: null } : { item, awakened };
 }
 
 const CATEGORY_TINT_ALPHA = 0.1;
@@ -123,6 +150,7 @@ export function itemSlot(ui: Ui, rect: Rect, opts: ItemSlotOptions): HitState {
   const accent =
     category === null || opts.categoryAccent === false ? null : palette.category[category];
   const selected = opts.selected === true;
+  const frameRarity = opts.item === null ? opts.rarity : ITEM_DEF[opts.item].rarity;
 
   fillRounded(ctx, r, corner, palette.surface.sunken);
   if (accent !== null) {
@@ -153,9 +181,13 @@ export function itemSlot(ui: Ui, rect: Rect, opts: ItemSlotOptions): HitState {
       if (opts.dragging === true) ctx.globalAlpha *= DRAG_GHOST_ALPHA;
       else if (disabled) ctx.globalAlpha *= DISABLED_ALPHA;
       const id = opts.item;
-      paintIsolated(ctx, `item icon "${id}"`, () => ITEM_ICONS[id](ctx, art));
+      const paintIcon = itemIconPainter(id, opts.awakened === true);
+      paintIsolated(ctx, `item icon "${id}"`, () => paintIcon(ctx, art));
       ctx.restore();
     }
+  } else if (opts.picture !== undefined) {
+    const picture = opts.picture;
+    if (artHasArea) paintIsolated(ctx, 'slot picture', () => picture(ctx, art));
   } else if (opts.placeholder !== undefined) {
     const side = r.w * EMPTY_GLYPH_SCALE;
     ctx.save();
@@ -242,6 +274,8 @@ export function itemSlot(ui: Ui, rect: Rect, opts: ItemSlotOptions): HitState {
     ctx.restore();
   } else if (selected) {
     strokeRounded(ctx, r, corner, palette.accent.base, SELECTED_BORDER_WIDTH);
+  } else if (frameRarity !== undefined) {
+    drawRarityFrame(ui, r, corner, frameRarity);
   } else {
     strokeRounded(
       ctx,
@@ -259,6 +293,7 @@ export function itemSlot(ui: Ui, rect: Rect, opts: ItemSlotOptions): HitState {
     tooltip(ui, rect, {
       id: `${opts.id}/tip`,
       title: def.name,
+      lines: rarityTooltipLines(theme, tooltipItem),
       accent: accent ?? undefined,
       text: reason ?? def.description ?? def.category,
       show: state.hovered || state.focused || (reason !== null && state.pressed),

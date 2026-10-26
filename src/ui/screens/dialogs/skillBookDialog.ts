@@ -4,7 +4,7 @@
  * Cancel put the book back. A tap outside the card does nothing.
  */
 
-import { getSkillDef } from '../../../core/SkillManager';
+import { getSkillDef } from '../../../core/skills/SkillManager';
 import type { SkillBookReadRequest } from '../inventory/InventoryActions';
 import {
   SKILL_BOOK_CONSUMED_WARNING,

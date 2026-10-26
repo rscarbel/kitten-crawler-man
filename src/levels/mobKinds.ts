@@ -1,7 +1,7 @@
 import type { Mob } from '../creatures/Mob';
 import { TILE_SIZE } from '../core/constants';
-import type { VarietyTier } from '../core/varietyTier';
-import { variantsInPlay, type MobVariantFamily } from '../core/mobVariantFamily';
+import type { VarietyTier } from '../core/perf/varietyTier';
+import { variantsInPlay, type MobVariantFamily } from '../core/mobs/mobVariantFamily';
 import { Goblin, GOBLIN_MELEE_FAMILY } from '../creatures/Goblin';
 import { TutorialGoblin } from '../creatures/TutorialGoblin';
 import { GoblinArcher } from '../creatures/GoblinArcher';

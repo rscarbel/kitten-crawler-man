@@ -25,11 +25,11 @@ import {
   type CanvasSurface,
   releaseSurface,
   BYTES_PER_MEGABYTE,
-} from '../core/canvasSurface';
-import { onCanvasRecovery, reportCanvasAllocationFailure } from '../core/canvasRecovery';
+} from '../core/rendering/canvasSurface';
+import { onCanvasRecovery, reportCanvasAllocationFailure } from '../core/rendering/canvasRecovery';
 import { floorArtSeed } from './ground/floorArtSeed';
-import { idleFrameNumber, renderFrameNumber } from '../core/renderFrameClock';
-import { memoryBudgetScale } from '../core/deviceMemoryBudget';
+import { idleFrameNumber, renderFrameNumber } from '../core/rendering/renderFrameClock';
+import { memoryBudgetScale } from '../core/perf/deviceMemoryBudget';
 import {
   onPaintedSpriteMiss,
   registerPaintedSprite,
@@ -37,7 +37,7 @@ import {
   unregisterPaintedSprite,
   DOWNSCALE_FACTOR,
   type SpriteKey,
-} from '../core/SpriteLoader';
+} from '../core/spriteAssets/SpriteLoader';
 
 /**
  * Milliseconds of painting the cache may spend on a render frame, on average.

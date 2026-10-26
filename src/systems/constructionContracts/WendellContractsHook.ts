@@ -10,7 +10,7 @@
  */
 
 import type { AudioManager } from '../../audio/AudioManager';
-import type { ActiveContract, BriarHollowState } from '../../core/briarHollowState';
+import type { ActiveContract, BriarHollowState } from '../../core/quests/briarHollowState';
 import type { EventBus } from '../../core/EventBus';
 import type { NPCMarkerType } from '../../creatures/QuestNPC';
 import type { Conversation } from '../../dialog/Conversation';

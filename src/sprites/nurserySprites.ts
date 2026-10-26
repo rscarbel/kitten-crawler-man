@@ -15,8 +15,8 @@ import {
   BYTES_PER_MEGABYTE,
   surfaceContext,
   type CanvasSurface,
-} from '../core/canvasSurface';
-import { RecentSurfaceCache } from '../core/recentSurfaceCache';
+} from '../core/rendering/canvasSurface';
+import { RecentSurfaceCache } from '../core/rendering/recentSurfaceCache';
 import {
   BARRIER_ART_MARGIN,
   BARRIER_DAMAGE_STAGES,
@@ -31,7 +31,7 @@ import {
   type BarrierPose,
 } from './art/nurseryArt';
 import { drawRadialGlow, type GlowStop } from './radialGlow';
-import { onCanvasRecovery } from '../core/canvasRecovery';
+import { onCanvasRecovery } from '../core/rendering/canvasRecovery';
 
 /** Surface pixels per logical pixel: enough for a zoomed-in or high-DPI view to stay crisp. */
 const ART_SCALE = 3;

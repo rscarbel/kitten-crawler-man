@@ -53,7 +53,7 @@ globals.document = {
 };
 
 const { TILE_SIZE } = await import('../src/core/constants');
-const { loadSprites } = await import('../src/core/SpriteLoader');
+const { loadSprites } = await import('../src/core/spriteAssets/SpriteLoader');
 const { renderCanvas } = await import('../src/map/TileRenderer');
 const { FLOOR_ART_SEEDS } = await import('../src/map/ground/artSeedAlphabet.js');
 const { worldText } = await import('../src/ui/world/worldText');
@@ -66,7 +66,7 @@ const { buildCircusSite, buildQuestRig, approachHeading } =
   await import('./verifyCircusGrounds/site.js');
 const { CircusGroundsAmbience } = await import('../src/systems/circus/CircusGroundsAmbience');
 const { HighStrikerSystem } = await import('../src/systems/circus/HighStrikerSystem');
-const { isCircusResolvedStage } = await import('../src/core/CircusQuestProgress');
+const { isCircusResolvedStage } = await import('../src/core/quests/CircusQuestProgress');
 
 type CircusSite = Exclude<ReturnType<typeof buildCircusSite>, string>;
 type CircusQuestStage = Parameters<typeof buildQuestRig>[1];

@@ -5,7 +5,7 @@
  * covered entry shows its need as its count ("30/30", never "41/30").
  */
 
-import type { ItemId } from '../../core/ItemDefs';
+import type { ItemId } from '../../core/items/defs/ItemDefs';
 import { centerIn, inset, type Rect } from '../core/geom';
 import type { Ui } from '../core/UiRoot';
 import { withAlpha } from '../theme/color';

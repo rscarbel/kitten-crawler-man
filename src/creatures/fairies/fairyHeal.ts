@@ -5,7 +5,7 @@
  */
 
 import type { Mob } from '../Mob';
-import { makeOverheal } from '../../core/StatusEffect';
+import { makeOverheal } from '../../core/combat/StatusEffect';
 import { OVERHEAL_DURATION_FRAMES, OVERHEAL_MAX_HP_FRACTION } from './fairyTuning';
 
 /** How long a healed mob's health bar stays up, so the player sees the heal land. */

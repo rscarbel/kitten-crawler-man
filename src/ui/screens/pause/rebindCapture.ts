@@ -3,7 +3,7 @@
  * is listening, and the one-line notice explaining what the last change did.
  */
 
-import { ACTION_LABELS, keybindings, type GameAction } from '../../../core/Keybindings';
+import { ACTION_LABELS, keybindings, type GameAction } from '../../../core/input/Keybindings';
 
 /** How long a steal or rejection notice stays on screen. */
 const NOTICE_LIFETIME_MS = 4000;

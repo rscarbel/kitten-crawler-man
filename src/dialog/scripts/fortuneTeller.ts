@@ -14,7 +14,7 @@
 
 import { pickLine, speakerLines } from '../line';
 import type { BarkLine, NonEmpty } from '../line';
-import { isCircusResolvedStage } from '../../core/CircusQuestProgress';
+import { isCircusResolvedStage } from '../../core/quests/CircusQuestProgress';
 import type { TownDialogContext } from '../../systems/townDialog';
 
 const voss = speakerLines('voss');

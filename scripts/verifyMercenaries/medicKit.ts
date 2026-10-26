@@ -23,14 +23,14 @@ import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
 import type { Mercenary } from '../../src/creatures/Mercenary';
 import type { Mob } from '../../src/creatures/Mob';
-import { createMercenaryRoster } from '../../src/core/MercenaryRoster';
+import { createMercenaryRoster } from '../../src/core/party/MercenaryRoster';
 import { MercenarySystem } from '../../src/systems/MercenarySystem';
 import { SpellSystem } from '../../src/systems/SpellSystem';
 import { MobRoster } from '../../src/systems/kits/SceneWorld';
 import type { SystemContext } from '../../src/systems/GameSystem';
 import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
-import { getMercenaryTemplate } from '../../src/core/mercenaryTemplates';
-import { withWorldSeed } from '../../src/core/WorldRandom';
+import { getMercenaryTemplate } from '../../src/core/party/mercenaryTemplates';
+import { withWorldSeed } from '../../src/core/world/WorldRandom';
 import { resetPathfindBudget } from '../../src/creatures/pathfindBudget';
 import {
   CORNERED_FRAMES,
@@ -64,6 +64,11 @@ const ROOM_SIZE_TILES = 20;
 const ROOM_MIDDLE_TILE = Math.floor(ROOM_SIZE_TILES / 2);
 /** Well under the trigger, so the patient is unambiguous. */
 const WOUNDED_HP_FRACTION = 0.3;
+/**
+ * Deep enough that one heal still leaves the patient under the trigger, for
+ * any max HP: two heals' worth below it.
+ */
+const DEEP_WOUND_HP_FRACTION = TRIAGE_TRIGGER_HP_FRACTION - 2 * TRIAGE_HEAL_FRACTION;
 /** Comfortably over the trigger. */
 const HEALTHY_HP_FRACTION = 0.8;
 /** Long enough for any cooldown-free channel to start, play and land. */
@@ -345,7 +350,7 @@ function checkTriage(): void {
 function checkCooldown(): void {
   const h = build();
   if (h === null) return;
-  woundTo(h.human, WOUNDED_HP_FRACTION);
+  woundTo(h.human, DEEP_WOUND_HP_FRACTION);
   const channelStarts: number[] = [];
   let heals = 0;
   let wasChanneling = false;

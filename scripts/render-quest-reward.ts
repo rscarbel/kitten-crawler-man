@@ -26,16 +26,16 @@ const { UiRoot } = await import('../src/ui/core/UiRoot.js');
 const { NO_INSETS } = await import('../src/ui/core/viewport.js');
 const { questRewardSurface } = await import('../src/ui/screens/dialogs/questRewardScreen.js');
 const { QuestRewardScreen } = await import('../src/ui/questReward/QuestRewardScreen.js');
-const { bagItemRewardLine, itemIconPainter, partyXpSections, wheelFreeSpinRewardLine } =
+const { bagItemRewardLine, rewardIconPainter, partyXpSections, wheelFreeSpinRewardLine } =
   await import('../src/ui/questReward/rewardLines.js');
-const { drawLootBoxRewardIcon } = await import('../src/ui/icons/rewardIcons.js');
+const { drawRewardChestIcon } = await import('../src/ui/icons/rewardIcons.js');
 const { travelUnlocksSection, unlockedDestinationIds } =
   await import('../src/systems/travel/travelDestinations.js');
 const { ANCHOR_QUEST_NAME, createAnchorQuestProgress } =
-  await import('../src/core/AnchorQuestProgress.js');
-const { createCircusQuestProgress } = await import('../src/core/CircusQuestProgress.js');
+  await import('../src/core/quests/AnchorQuestProgress.js');
+const { createCircusQuestProgress } = await import('../src/core/quests/CircusQuestProgress.js');
 const { crawlerName } = await import('../src/characters/characters.js');
-const { createBriarHollowState } = await import('../src/core/briarHollowState.js');
+const { createBriarHollowState } = await import('../src/core/quests/briarHollowState.js');
 const { VILLAGE_SAVE_REWARD_SECTION } =
   await import('../src/systems/briarHollow/VillageQuestSystem.js');
 const { blueprintsRewardSpec } =
@@ -85,7 +85,7 @@ function anchorEveryDestinationSpec(): QuestRewardSpec {
   const state = { circus, briarHollow, anchor };
   return {
     questTitle: ANCHOR_QUEST_NAME,
-    renderQuestIcon: itemIconPainter('wayfinders_anchor'),
+    renderQuestIcon: rewardIconPainter('wayfinders_anchor'),
     sections: [
       ...partyXpSections(SAMPLE_ANCHOR_XP),
       {
@@ -113,10 +113,10 @@ const CASES: ReadonlyArray<{ readonly name: string; readonly spec: QuestRewardSp
           kind: 'items',
           items: [
             {
-              name: 'Silver Loot Box',
+              name: 'Uncommon reward chest',
               count: 1,
-              renderIcon: (ctx, rect) => drawLootBoxRewardIcon(ctx, rect, 'Silver'),
-              note: 'Open it in a Safe Room.',
+              renderIcon: (ctx, rect) => drawRewardChestIcon(ctx, rect, 'Uncommon'),
+              note: 'One for each crawler.',
             },
             bagItemRewardLine('health_potion', SAMPLE_POTION_COUNT),
           ],
@@ -124,7 +124,7 @@ const CASES: ReadonlyArray<{ readonly name: string; readonly spec: QuestRewardSp
       ],
     },
   },
-  { name: 'c-blueprints-unlocks', spec: blueprintsRewardSpec(() => undefined) },
+  { name: 'c-blueprints-unlocks', spec: blueprintsRewardSpec(null, () => undefined) },
   {
     name: 'd-plea-conditional-unlock',
     spec: {
@@ -153,14 +153,14 @@ const CASES: ReadonlyArray<{ readonly name: string; readonly spec: QuestRewardSp
     name: 'e-long-title',
     spec: {
       questTitle: 'The Extraordinarily Long-Winded Affair of the Seventeen Borrowed Wheelbarrows',
-      renderQuestIcon: itemIconPainter('skill_book_night_vision'),
+      renderQuestIcon: rewardIconPainter('skill_book_cat_reflexes'),
       sections: [
         { kind: 'xp', amount: 1934, recipient: crawlerName('human') },
         { kind: 'xp', amount: 2000, recipient: crawlerName('cat') },
         {
           kind: 'items',
           items: [
-            bagItemRewardLine('skill_book_night_vision', 1, {
+            bagItemRewardLine('skill_book_cat_reflexes', 1, {
               describe: true,
               note: `In ${crawlerName('cat')}'s bag.`,
             }),

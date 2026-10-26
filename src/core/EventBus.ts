@@ -15,24 +15,23 @@ import type { Mob, PlayerDamageType } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Player } from '../Player';
-import type { GrantedReward } from './GrantedReward';
+import type { GrantedReward } from './items/loot/GrantedReward';
 import type { QuestRewardSpec } from '../ui/questReward/types';
 import type { DishId } from '../systems/bopcaDialog';
 import type { TravelDestinationId } from '../systems/travel/travelDestinations';
-import type { SkillId, CrawlerKind } from './SkillManager';
-import type { CraftSkillId } from './CraftSkills';
-import type { StructureKind } from './structureKinds';
+import type { SkillId, CrawlerKind } from './skills/SkillManager';
+import type { CraftSkillId } from './labour/CraftSkills';
+import type { StructureKind } from './world/structureKinds';
 import type { PalisadeTier } from '../map/tileTypes';
-import type { ResourceId } from './resourceIds';
-import type { HarvestKind } from './craftPerks';
-import type { VillageQuestPhase } from './villageQuestPhase';
-import type { BlueprintsQuestPhase } from './blueprintsQuestPhase';
-import type { ItemId } from './ItemDefs';
-import type { EquipmentChange } from './EquipmentManager';
-import type { HolsterMotion } from '../sprites/art/human/motionSets';
-import type { ToolKind, ToolTier } from './toolTiers';
+import type { ResourceId } from './items/gathering/resourceIds';
+import type { HarvestKind } from './labour/craftPerks';
+import type { VillageQuestPhase } from './quests/villageQuestPhase';
+import type { BlueprintsQuestPhase } from './quests/blueprintsQuestPhase';
+import type { ItemId } from './items/defs/ItemDefs';
+import type { EquipmentChange } from './items/equipment/EquipmentManager';
+import type { ToolKind, ToolTier } from './items/gathering/toolTiers';
 import type { ProcessingStationKind } from '../systems/briarHollow/processingStations';
-import type { BoxCategory, BoxTier } from './AchievementManager';
+import type { Rarity } from './items/defs/rarity';
 import type { ChallengeSummary } from '../ai/show/challenges';
 import type { ExplosionVariant } from '../sprites/dynamiteExplosion';
 
@@ -154,14 +153,14 @@ export interface GameEvents {
   /** Human melee attack's swing-animation peak. */
   humanMeleeSwing: { hit: boolean };
 
-  /** The Fury of Taranis was swung, in place of `humanMeleeSwing`: its wave has left the blade. */
-  taranisSwing: Record<string, never>;
+  /** The Stormcaller was swung, in place of `humanMeleeSwing`: its wave has left the blade. */
+  stormcallerSwing: Record<string, never>;
 
   /** The sword's blade or its wave cut at least one enemy this frame. */
-  taranisStrike: Record<string, never>;
+  stormcallerStrike: Record<string, never>;
 
   /** At least one enemy the sword cut threw chain lightning this frame. */
-  taranisChain: Record<string, never>;
+  stormcallerChain: Record<string, never>;
 
   /**
    * A weapon was swung through the generic weapon strike with no proc run to
@@ -170,17 +169,14 @@ export interface GameEvents {
    */
   weaponSwing: { weaponId: ItemId; hit: boolean };
 
-  /** The human crawler drew the weapon in his main hand, or stowed it. */
-  weaponHolstered: { weaponId: ItemId; motion: HolsterMotion };
-
   /**
    * A crawler's equipped set changed. `restore` replaces the whole set at once
    * (a snapshot, a reset), with no key or item named.
    */
   equipmentChanged: { crawler: CrawlerKind } & EquipmentChange;
 
-  /** Cat claw-swipe attack's animation peak. */
-  catMeleeSwing: { hit: boolean };
+  /** Cat claw-swipe attack's animation peak, with the claws she wears, if any. */
+  catMeleeSwing: { hit: boolean; clawsId: ItemId | null };
 
   /** A missile struck something, at this world point. */
   missileImpact: { x: number; y: number };
@@ -339,11 +335,10 @@ export interface GameEvents {
   /** A status effect the crawler had is gone: cured, cleared or worn off. */
   statusCured: { player: Player; status: string };
 
-  /** A loot box was opened and paid out to `owner`. */
-  boxOpened: {
+  /** A reward chest was earned and its contents paid straight to `owner`. */
+  rewardChestOpened: {
     owner: Player;
-    tier: BoxTier;
-    category: BoxCategory;
+    rarity: Rarity;
     coins: number;
     potions: number;
     items: string[];
@@ -368,7 +363,7 @@ export interface GameEvents {
   /** The player turned down a challenge the show's AI offered. */
   challengeDeclined: ChallengeSummary;
 
-  /** An accepted challenge was won; its box went to `rewardedTo`. */
+  /** An accepted challenge was won; its reward chest went to `rewardedTo`. */
   challengeCompleted: ChallengeSummary & { rewardedTo: 'Human' | 'Cat'; secondsTaken: number };
 
   /**
@@ -402,7 +397,7 @@ export interface GameEvents {
   aiAchievementAwarded: {
     title: string;
     description: string;
-    tier: BoxTier;
+    rarity: Rarity;
     player: 'Human' | 'Cat';
     awardedBy: string;
   };

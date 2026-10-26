@@ -79,7 +79,7 @@ import { DUNGEON_GROUND } from '../dungeon/groundMaterials';
 import { inferFloorType } from './helpers';
 import { drawTerrainTile } from './terrainTiles';
 import { drawSpecialFloorTile } from './specialFloorTiles';
-import { drawSpriteKey } from '../../core/SpriteRenderer';
+import { drawSpriteKey } from '../../core/spriteAssets/SpriteRenderer';
 import { drawTowerStaircaseTile } from '../../sprites/towerStaircase';
 import { frameTime } from '../../utils';
 

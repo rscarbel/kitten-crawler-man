@@ -9,7 +9,7 @@ import {
 import { ROOSTER_PECK_ATTACK_TYPE, ROOSTER_PUNCH_ATTACK_TYPE } from '../creatures/roosterStrikes';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { DamageSource } from '../Player';
-import { BLOOD_VOMIT_STATUS, FROZEN_STATUS } from '../core/StatusEffect';
+import { BLOOD_VOMIT_STATUS, FROZEN_STATUS } from '../core/combat/StatusEffect';
 import type { DeathCause } from '../ui/DeathExplanations';
 import { KNOCKOUT_TIMEOUT_FRAMES } from './GameLoopPhases';
 import { MANTID_FLURRY_ATTACK_TYPE } from '../creatures/Mantid';
@@ -107,7 +107,6 @@ export function causeFromDamageSource(source: DamageSource): DeathCause {
     const { effectType } = source;
     if (effectType === 'burn' || effectType === 'magic_burn') return 'burnedStatus';
     if (effectType === 'poison') return 'poisonStatus';
-    if (effectType === 'sepsis') return 'sepsisStatus';
     if (effectType === 'electrified') return 'electrifiedStatus';
     if (effectType === 'spit_venom') return 'spitVenomStatus';
     if (effectType === BLOOD_VOMIT_STATUS) return 'bloodVomitStatus';

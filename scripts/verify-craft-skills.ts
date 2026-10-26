@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Headless gate on `src/core/CraftSkills.ts`.
+ * Headless gate on `src/core/labour/CraftSkills.ts`.
  *
  * Simulates the XP a crawler earns from the actions the request describes
  * (basic-tool harvests for Resourcing, wooden-wall builds for Construction)
@@ -20,7 +20,7 @@ import {
   THRALL_XP_FRACTION,
   MAX_CRAFT_LEVEL,
   type CraftSkillId,
-} from '../src/core/CraftSkills';
+} from '../src/core/labour/CraftSkills';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { TILE_SIZE } from '../src/core/constants';

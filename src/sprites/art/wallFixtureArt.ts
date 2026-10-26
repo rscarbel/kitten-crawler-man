@@ -16,7 +16,7 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
+} from '../../core/rendering/canvasSurface';
 import type { DungeonFloorThemeId } from '../../map/dungeon/floorTheme';
 import {
   BANNER_TEAR_STAGES,
@@ -24,8 +24,8 @@ import {
   FIXTURE_SWING_FRAMES,
   type WallFixture,
 } from '../../map/dungeon/wallFixtures';
-import { UINT32_SPAN } from '../../core/WorldRandom';
-import { onCanvasRecovery } from '../../core/canvasRecovery';
+import { UINT32_SPAN } from '../../core/world/WorldRandom';
+import { onCanvasRecovery } from '../../core/rendering/canvasRecovery';
 
 type Ctx = CanvasRenderingContext2D;
 

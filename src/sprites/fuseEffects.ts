@@ -11,7 +11,7 @@
  * is what makes a lobbed bomb trail sparks and smoke behind it.
  */
 
-import type { CanvasSurface } from '../core/canvasSurface';
+import type { CanvasSurface } from '../core/rendering/canvasSurface';
 import {
   bakeSoftDisc,
   FLAME_EMBER_INK,

@@ -50,12 +50,12 @@ const { mulberry32 } = await import('../src/sprites/person/rng.js');
 Math.random = mulberry32(WORLD_SEED);
 
 const { gameContext } = await import('./nodeGameContext.js');
-const { setViewportSize } = await import('../src/core/Viewport.js');
+const { setViewportSize } = await import('../src/core/rendering/Viewport.js');
 const { TILE_SIZE } = await import('../src/core/constants.js');
-const { ITEM_DEF } = await import('../src/core/ItemDefs.js');
-const { loadSprites } = await import('../src/core/SpriteLoader.js');
+const { ITEM_DEF } = await import('../src/core/items/defs/ItemDefs.js');
+const { loadSprites } = await import('../src/core/spriteAssets/SpriteLoader.js');
 const { SceneManager } = await import('../src/core/Scene.js');
-const { InputManager } = await import('../src/core/InputManager.js');
+const { InputManager } = await import('../src/core/input/InputManager.js');
 const { GameMap } = await import('../src/map/GameMap.js');
 const { level3 } = await import('../src/levels/level3.js');
 const { DungeonScene } = await import('../src/scenes/DungeonScene.js');
@@ -63,7 +63,9 @@ const { MOUSE_POINTER_ID, PRIMARY_BUTTON } = await import('../src/ui/core/pointe
 const { signLine } = await import('../src/dialog/scripts/crawlerSigns.js');
 const { toCssRect } = await import('../src/ui/hud/HudSurface.js');
 const { LONG_PRESS_MS } = await import('../src/ui/screens/inventory/InventoryScreen.js');
-const { ACHIEVEMENT_DEFS } = await import('../src/core/AchievementManager.js');
+const { ACHIEVEMENT_DEFS } = await import('../src/core/progression/AchievementManager.js');
+const { COLLECT_GUARD_FRAMES } = await import('../src/ui/screens/rewardChest/chestTimeline.js');
+const { keybindings } = await import('../src/core/input/Keybindings.js');
 const { BigRooster } = await import('../src/creatures/BigRooster.js');
 
 type Scene = InstanceType<typeof DungeonScene>;
@@ -928,35 +930,50 @@ section('a Keyboard Hero lane tap that slides a little still counts');
   frame(street);
 }
 
-// ── The achievement card ───────────────────────────────────────────────────
+// ── The reward chest ──────────────────────────────────────────────────────
 
 {
-  section('the achievement card answers Space, Enter and the attack key');
+  section(
+    'the reward chest answers Space, Enter and the attack key, and keeps them from the world',
+  );
   const achievementUI = street['achievementUI'];
   const achievements = street['humanAchievements'];
-  /** Past the card's fade-in, after which OK answers. */
-  const CARD_SETTLE_FRAMES = 30;
-  const ACCEPT_KEYS = [' ', 'Enter'] as const;
-  for (const key of ACCEPT_KEYS) {
+  const attackKey = keybindings.keysFor('attack')[0];
+  check(attackKey !== undefined, 'the attack action has a key to press');
+  const acceptKeys = [' ', 'Enter', ...(attackKey === undefined ? [] : [attackKey])];
+  const award = ACHIEVEMENT_DEFS.first_kill;
+  for (const key of acceptKeys) {
     closeEverything(street);
-    achievements.pendingNotifications.length = 0;
-    achievements.pendingNotifications.push(ACHIEVEMENT_DEFS.first_blood);
-    check(
-      achievementUI.showUnread() && achievementUI.notifActive,
-      `the card is up for ${JSON.stringify(key)}`,
-    );
+    achievements.queuePresentation({
+      origin: { kind: 'award', award },
+      title: award.name,
+      subtitle: award.description,
+      crawler: 'human',
+      rarity: award.reward.rarity,
+      rewards: [{ kind: 'coins', amount: 1 }],
+    });
     frame(street);
-    street.ui.key(key);
-    check(
-      achievementUI.notifActive,
-      `${JSON.stringify(key)} before the fade-in does not dismiss it`,
-    );
-    for (let tick = 0; tick < CARD_SETTLE_FRAMES; tick++) achievementUI.tick();
+    const label = JSON.stringify(key);
+    check(!achievementUI.isBlocking, `the chest waits for the player for ${label}`);
+    check(achievementUI.hudChipCount() === 1, 'and the HUD chip counts it');
+    achievementUI.openRewards();
     frame(street);
-    const result = street.ui.key(key);
+    check(achievementUI.isBlocking, `the chip's tap opens the chest for ${label}`);
+    check(street.ui.worldHalted(), 'and halts the world while it plays');
+    const skip = street.ui.key(key);
+    check(skip === 'consumed' && achievementUI.isBlocking, `${label} skips the reveal (${skip})`);
+    frame(street);
+    const early = street.ui.key(key);
     check(
-      result === 'consumed' && !achievementUI.notifActive,
-      `${JSON.stringify(key)} presses OK once the card has faded in (${result})`,
+      early === 'consumed' && achievementUI.isBlocking,
+      `${label} straight after the skip does not collect a chest nobody has seen (${early})`,
+    );
+    for (let tick = 0; tick < COLLECT_GUARD_FRAMES; tick++) achievementUI.tick();
+    frame(street);
+    const collect = street.ui.key(key);
+    check(
+      collect === 'consumed' && !achievementUI.isBlocking,
+      `${label} collects it once the guard has passed (${collect})`,
     );
     frame(street);
   }

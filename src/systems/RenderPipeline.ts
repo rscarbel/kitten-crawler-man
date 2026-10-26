@@ -6,23 +6,18 @@
  * Usage: create once, call `renderAll(ctx, context)` each frame.
  */
 
+import type { GearSystem } from './GearSystem';
 import { MAX_MOB_CULL_MARGIN_TILES, TILE_SIZE } from '../core/constants';
-import { nightVisionBonusTiles } from '../core/SkillManager';
-import { drawSpriteKey } from '../core/SpriteRenderer';
-import {
-  allocCanvas,
-  releaseSurface,
-  surfaceContext,
-  type CanvasSurface,
-} from '../core/canvasSurface';
-import { noteDrawFailure, recoverDrawState } from '../core/drawFailure';
-import type { WorldSight } from '../core/visibleWorldView';
+import { drawSpriteKey } from '../core/spriteAssets/SpriteRenderer';
+import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/rendering/canvasSurface';
+import { noteDrawFailure, recoverDrawState } from '../core/rendering/drawFailure';
+import type { WorldSight } from '../core/rendering/visibleWorldView';
 import { setQuestBeaconViewer } from '../sprites/questBeacon';
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
-import type { SpatialGrid } from '../core/SpatialGrid';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { GoreSystem } from './GoreSystem';
 import type { BodyPartGoreSystem } from './BodyPartGoreSystem';
 import type { SafeRoomSystem } from './SafeRoomSystem';
@@ -36,7 +31,7 @@ import type { SpellSystem } from './SpellSystem';
 import type { DynamiteSystem } from './DynamiteSystem';
 import type { MagicMissileImpactEffectSystem } from './MagicMissileImpactEffectSystem';
 import type { MeleeImpactEffectSystem } from './MeleeImpactEffectSystem';
-import type { TaranisStrikeSystem } from './TaranisStrikeSystem';
+import type { StormcallerStrikeSystem } from './StormcallerStrikeSystem';
 import type { SmushEffectSystem } from './SmushEffectSystem';
 import type { LavaBallSystem } from './LavaBallSystem';
 import type { RockThrowSystem } from './RockThrowSystem';
@@ -59,11 +54,11 @@ import type { MongoSystem } from './MongoSystem';
 import type { AttackCowSystem } from './AttackCowSystem';
 import type { MercenarySystem } from './MercenarySystem';
 import type { CrawlerBarkSystem } from './CrawlerBarkSystem';
-import type { PlayerManager } from '../core/PlayerManager';
+import type { PlayerManager } from '../core/party/PlayerManager';
 import type { TreasureChest, TreasureChestSystem } from './TreasureChestSystem';
 import type { Townsperson } from '../creatures/Townsperson';
 import type { TownPropRenderable } from './townPropRenderable';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { isStandingInWater } from './GameLoopPhases';
 import {
   DEFAULT_DUNGEON_FLOOR_THEME,
@@ -133,20 +128,19 @@ const MOB_QUERY_MARGIN = TILE_SIZE * MAX_MOB_CULL_MARGIN_TILES;
 /** Colour of the fully fogged area outside the falloff disc. */
 const FOG_SOLID_COLOR = 'rgba(0,0,0,1)';
 
-/** Visibility inner radius in tiles, before any Night Vision bonus. */
+/**
+ * Visibility inner radius in tiles. Fixed: darkness exists only for contrast,
+ * so nothing the player has may widen it.
+ */
 const VISIBILITY_INNER_TILES = 30;
 
-/** Visibility outer radius in tiles, before any Night Vision bonus. */
+/** Visibility outer radius in tiles. */
 const VISIBILITY_OUTER_TILES = 35;
+
+const VISIBILITY_INNER_RADIUS_PX = VISIBILITY_INNER_TILES * TILE_SIZE;
 
 /** Frame index for tower balcony overlay. */
 const TOWER_BALCONY_OVERLAY_FRAME = 4;
-
-/** Extra fog radius the active crawler's Night Vision is worth, in tiles. */
-function nightVisionBonusFor(active: HumanPlayer | CatPlayer): number {
-  const level = active.skills.getLevel('night_vision');
-  return level === 0 ? 0 : nightVisionBonusTiles(level);
-}
 
 /**
  * How far the active crawler can see, in world pixels — the radius past which
@@ -158,9 +152,7 @@ function nightVisionBonusFor(active: HumanPlayer | CatPlayer): number {
  * at a map border the party sits off-centre, and a wide swathe of the canvas is
  * inside the rect and beyond this radius — fogged out completely.
  */
-export function visibilityRadiusPx(active: HumanPlayer | CatPlayer): number {
-  return (VISIBILITY_OUTER_TILES + nightVisionBonusFor(active)) * TILE_SIZE;
-}
+export const VISIBILITY_RADIUS_PX = VISIBILITY_OUTER_TILES * TILE_SIZE;
 
 /**
  * The disc around the active crawler that {@link RenderPipeline.renderVisibilityFog}
@@ -171,7 +163,7 @@ export function clearSightOf(active: HumanPlayer | CatPlayer): WorldSight {
   return {
     x: active.x + TILE_SIZE / 2,
     y: active.y + TILE_SIZE / 2,
-    radiusPx: (VISIBILITY_INNER_TILES + nightVisionBonusFor(active)) * TILE_SIZE,
+    radiusPx: VISIBILITY_INNER_RADIUS_PX,
   };
 }
 
@@ -231,8 +223,10 @@ export interface RenderContext {
   dynamite: DynamiteSystem;
   smushFx: SmushEffectSystem;
   meleeFx: MeleeImpactEffectSystem;
-  /** The Fury of Taranis's waves; drawn beside the chain lightning they throw. */
-  taranisFx: Pick<TaranisStrikeSystem, 'render'>;
+  /** The Stormcaller's waves; drawn beside the chain lightning they throw. */
+  stormcallerFx: Pick<StormcallerStrikeSystem, 'render'>;
+  /** Worn gear's relics, trails, arcs and marks. */
+  gearFx: Pick<GearSystem, 'render'>;
   missileFx: MagicMissileImpactEffectSystem;
   lavaBalls: LavaBallSystem;
   rockThrows: RockThrowSystem;
@@ -299,10 +293,8 @@ export interface RenderContext {
 }
 
 export class RenderPipeline {
-  /** Baked visibility-fog falloff disc, rebuilt only if the radii change. */
+  /** Baked visibility-fog falloff disc. */
   private _fogDisc: CanvasSurface | null = null;
-  private _fogDiscInnerR = 0;
-  private _fogDiscOuterR = 0;
 
   /** Reusable draw-entry pool to avoid per-frame allocations. */
   private _drawPool: DrawEntry[] = [];
@@ -738,7 +730,8 @@ export class RenderPipeline {
     spells.renderShell(ctx, camX, camY);
     spells.renderCatMiniShell(ctx, camX, camY, pm.cat);
     spells.renderChainLightning(ctx, camX, camY);
-    rc.taranisFx.render(ctx, camX, camY);
+    rc.stormcallerFx.render(ctx, camX, camY);
+    rc.gearFx.render(ctx, camX, camY);
     spells.renderShockwaveRipples(ctx, camX, camY);
     spells.renderFogs(ctx, camX, camY);
     renderLevelUpFlash(ctx, camX, camY);
@@ -784,11 +777,8 @@ export class RenderPipeline {
   renderVisibilityFog(ctx: CanvasRenderingContext2D, rc: RenderContext): void {
     const { camX, camY, active } = rc;
 
-    // Night Vision widens both radii for whoever is leading. The baked falloff
-    // disc is keyed on the radii, so it simply rebuilds when the pair changes.
-    const bonusTiles = nightVisionBonusFor(active);
-    const innerR = (VISIBILITY_INNER_TILES + bonusTiles) * TILE_SIZE;
-    const outerR = visibilityRadiusPx(active);
+    const innerR = VISIBILITY_INNER_RADIUS_PX;
+    const outerR = VISIBILITY_RADIUS_PX;
 
     // Skip the (cheap) gradient if the whole canvas fits inside the clear zone.
     const halfDiag = Math.hypot(viewportWidth() / 2, viewportHeight() / 2);
@@ -799,7 +789,7 @@ export class RenderPipeline {
 
     // The gradient depends only on the two radii, so it is baked once into a
     // disc and blitted; everything outside the disc is solid black anyway.
-    const disc = this.visibilityFogDisc(innerR, outerR);
+    const disc = this.visibilityFogDisc();
     const discLeft = cx - outerR;
     const discTop = cy - outerR;
     ctx.drawImage(disc, discLeft, discTop);
@@ -815,12 +805,13 @@ export class RenderPipeline {
     ctx.fillRect(discRight, bandTop, Math.max(0, viewportWidth() - discRight), bandHeight);
   }
 
-  /** Lazily bakes (and caches) the fog's radial falloff disc for the given radii. */
-  private visibilityFogDisc(innerR: number, outerR: number): CanvasSurface {
+  /** Lazily bakes (and caches) the fog's radial falloff disc. */
+  private visibilityFogDisc(): CanvasSurface {
     const cached = this._fogDisc;
-    if (cached && this._fogDiscInnerR === innerR && this._fogDiscOuterR === outerR) return cached;
-    if (cached !== null) releaseSurface(cached);
+    if (cached !== null) return cached;
 
+    const innerR = VISIBILITY_INNER_RADIUS_PX;
+    const outerR = VISIBILITY_RADIUS_PX;
     const size = Math.ceil(outerR * 2);
     const disc = allocCanvas('lighting', size, size);
     const dctx = surfaceContext(disc);
@@ -832,8 +823,6 @@ export class RenderPipeline {
     dctx.fillRect(0, 0, size, size);
 
     this._fogDisc = disc;
-    this._fogDiscInnerR = innerR;
-    this._fogDiscOuterR = outerR;
     return disc;
   }
 

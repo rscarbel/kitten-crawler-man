@@ -1,7 +1,6 @@
 import { Mob } from './Mob';
 import type { EyePlacement } from '../sprites/eyePlacement';
 import { scaledCooldownFramesForLevel } from './mobLevelScaling';
-import { maybeDropSkillBook } from './skillBookDrop';
 import type { Player } from '../Player';
 import {
   TROGLODYTE_BODY_PART_KEY,
@@ -15,7 +14,7 @@ import {
   TROGLODYTE_TONGUE_RANGE_TILES,
 } from '../sprites/troglodyteTongue';
 import { LASH_IMPACT_PROGRESS } from '../sprites/art/troglodyteFigure';
-import { makePoison } from '../core/StatusEffect';
+import { makePoison } from '../core/combat/StatusEffect';
 import { normalize } from '../utils';
 import type { LootDrop } from './Mob';
 import { riposteCooldown } from './tactics/riposte';
@@ -196,11 +195,9 @@ export class Troglodyte extends Mob {
     return TROGLODYTE_TACTICS;
   }
 
-  /** No coins, no gear — only, very rarely, a lifetime in the dark written down. */
+  /** No coins, no gear. */
   protected override rollLootItems(_killer: Player | null): LootDrop['items'] {
-    const items: LootDrop['items'] = [];
-    maybeDropSkillBook(items, 'skill_book_night_vision');
-    return items;
+    return [];
   }
 
   updateAI(targets: Player[]): void {

@@ -1,3 +1,4 @@
+import { inkSpoilsBlow } from '../gear/incomingBlows';
 import type { Player } from '../Player';
 import { RockGolem, FRAMES_PER_SHEET_FRAME } from './RockGolem';
 import {
@@ -415,11 +416,15 @@ export class RockGolemBoss extends RockGolem {
       // plain `takeDamage` dies unattributed — the boulder has a thrower, and
       // `takeDamageFrom` is what puts him in the ledger the XP split reads.
       if (target instanceof Mob) target.takeDamageFrom(damage, this, 'melee');
-      else if (target.takeDamage(damage, this.stampHarmLimits(rollDamageSource(this.mobType)))) {
+      // An inked miss still spends the pass on her: the cooldown below is set either way.
+      else if (
+        !inkSpoilsBlow(this, target) &&
+        target.takeDamage(damage, this.stampHarmLimits(rollDamageSource(this.mobType)))
+      ) {
         this.noteStruckPlayer(target);
         // A boulder rolling over someone is contact, so reflect gear bites into
         // it exactly as it does into a swing.
-        this.reflectMeleeDamage(target, damage);
+        this.answerContactBlow(target, damage);
       }
       this.attackSoundPending = true;
       this.rollHitCooldowns.set(target, ROLL_HIT_COOLDOWN);

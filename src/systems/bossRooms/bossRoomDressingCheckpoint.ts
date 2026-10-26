@@ -1,4 +1,4 @@
-import { isRecord } from '../../core/guards';
+import { isRecord } from '../../core/util/guards';
 import {
   parseColosseumDressingCheckpoint,
   type ColosseumDressingCheckpoint,

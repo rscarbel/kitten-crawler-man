@@ -20,7 +20,7 @@
  * `?prices`.
  */
 
-import type { ItemId } from '../core/ItemDefs';
+import { ITEM_DEF, type ItemId } from '../core/items/defs/ItemDefs';
 import type { ItemCategory } from './itemPrices';
 import {
   FRONTIER,
@@ -283,7 +283,10 @@ export const SHOPS = {
     name: 'The Market',
     markup: 1,
     categoryMarkup: {},
-    itemMarkup: {},
+    itemMarkup: {
+      /** A charm for the tables, sold to gamblers by people who know what gamblers pay. */
+      lucky_penny: 2.5,
+    },
     specialties: [],
     stockCurve: PREMIUM,
     categoryStockCurve: {},
@@ -298,18 +301,10 @@ export const SHOPS = {
         gate: null,
       },
       {
-        item: 'trollskin_shirt',
-        normalStock: 'unlimited',
-        label: 'Trollskin Shirt',
-        desc: '+3 CON, 2.5x regen, negates melee debuffs',
-        bundle: null,
-        gate: null,
-      },
-      {
-        item: 'enchanted_crown_sepsis_whore',
-        normalStock: 'unlimited',
-        label: 'Crown of the Sepsis Whore',
-        desc: '+5 INT, attacks can inflict Sepsis',
+        item: 'lucky_penny',
+        normalStock: 1,
+        label: ITEM_DEF.lucky_penny.name,
+        desc: 'A little extra coin from every kill and chest',
         bundle: null,
         gate: null,
       },
@@ -364,42 +359,42 @@ export const SHOPS = {
     // work it out from four stat lines.
     catalog: [
       {
-        item: 'issue_kettle_helm',
+        item: 'hearthguard_cap',
         normalStock: 'unlimited',
-        desc: 'Iron, wide brim, one dent. +1 Constitution',
-        label: 'Issue Kettle Helm',
+        desc: 'Padded wool, garrison brown. +1 Constitution',
+        label: ITEM_DEF.hearthguard_cap.name,
         bundle: null,
         gate: null,
       },
       {
-        item: 'riveted_bracers',
+        item: 'hearthguard_bracers',
         normalStock: 'unlimited',
         desc: 'Boiled leather on the blocking arm. +1 Strength',
-        label: 'Riveted Bracers',
+        label: ITEM_DEF.hearthguard_bracers.name,
         bundle: null,
         gate: null,
       },
       {
-        item: 'padded_gambeson',
+        item: 'hearthguard_boots',
         normalStock: 'unlimited',
-        desc: 'Twenty layers, quilted through. +2 Constitution',
-        label: 'Padded Gambeson',
+        desc: 'Hard-soled and broken in. +1 Dexterity',
+        label: ITEM_DEF.hearthguard_boots.name,
         bundle: null,
         gate: null,
       },
       {
-        item: 'marching_boots',
+        item: 'nimble_bangle',
         normalStock: 'unlimited',
-        desc: 'Hobnailed and already broken in. +1 Dexterity',
-        label: 'Marching Boots',
+        desc: 'A thin copper band. +1 Dexterity',
+        label: ITEM_DEF.nimble_bangle.name,
         bundle: null,
         gate: null,
       },
       {
-        item: 'bracelet_of_dex',
+        item: 'hearthguard_quilted_vest',
         normalStock: 'unlimited',
-        desc: 'An agility boosting accessory equipped on the front leg. +2 Dexterity',
-        label: 'Bracelet of +2 DEX',
+        desc: 'Quilted through, in every size. +2 Constitution',
+        label: ITEM_DEF.hearthguard_quilted_vest.name,
         bundle: null,
         gate: null,
       },

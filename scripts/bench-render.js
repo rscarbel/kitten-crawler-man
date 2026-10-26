@@ -9,7 +9,7 @@
  *   - the canvas is pinned to its original CSS size
  *   - the 2D context carries a permanent `scale` transform
  *
- * The engine reads its viewport from `src/core/Viewport.ts` in CSS pixels, not
+ * The engine reads its viewport from `src/core/rendering/Viewport.ts` in CSS pixels, not
  * from `canvas.width`, so enlarging the backing store measures "more pixels"
  * rather than "more world" — no shadowing of the canvas attributes is needed,
  * and shadowing them would in fact break `SceneManager.applyViewportSize`,

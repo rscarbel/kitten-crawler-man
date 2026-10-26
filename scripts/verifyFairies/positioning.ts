@@ -20,7 +20,7 @@
  */
 
 import { PLAYER_SPEED, TILE_SIZE } from '../../src/core/constants';
-import { PlayerManager } from '../../src/core/PlayerManager';
+import { PlayerManager } from '../../src/core/party/PlayerManager';
 import { Goblin } from '../../src/creatures/Goblin';
 import type { Mob } from '../../src/creatures/Mob';
 import { setPackAlertGrid } from '../../src/creatures/packAlert';

@@ -17,10 +17,10 @@ import {
   type CanvasSurface,
   releaseSurface,
   resizeSurface,
-} from '../../../core/canvasSurface';
-import { canvasGeneration } from '../../../core/canvasRecovery';
-import { renderQuality } from '../../../core/RenderQuality';
-import { drawSpriteKey } from '../../../core/SpriteRenderer';
+} from '../../../core/rendering/canvasSurface';
+import { canvasGeneration } from '../../../core/rendering/canvasRecovery';
+import { renderQuality } from '../../../core/perf/RenderQuality';
+import { drawSpriteKey } from '../../../core/spriteAssets/SpriteRenderer';
 import { flameStamps, hashUnit, type FlameStamps } from '../../../sprites/flameStamps';
 import { TITLE_INK } from '../../../ui/theme/titleInk';
 import { pixelRatioOf } from '../titleBake';

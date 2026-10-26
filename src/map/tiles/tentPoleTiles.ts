@@ -9,7 +9,7 @@
  */
 
 import type { TileContent } from '../tileTypes';
-import type { MapSpriteExtentsPx } from '../../core/SpriteLoader';
+import type { MapSpriteExtentsPx } from '../../core/spriteAssets/SpriteLoader';
 import { MAST_RISE_TILES, paintTentMast } from '../../sprites/art/bigTop/bigTopShellArt';
 import { paintTrapeze, TRAPEZE_REACH_WEST_TILES } from '../../sprites/art/bigTop/finaleProps';
 import { poleCellAt } from './interiorTiles';

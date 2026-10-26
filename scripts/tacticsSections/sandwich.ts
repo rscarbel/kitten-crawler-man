@@ -24,7 +24,7 @@ import type { Mob } from '../../src/creatures/Mob';
 import { MAX_MOB_LEVEL } from '../../src/levels/spawner';
 import { standaloneMobKinds, type StandaloneMobKind } from '../../src/levels/mobKinds';
 import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
-import { DIFFICULTY_PROFILES } from '../../src/core/difficultyProfiles';
+import { DIFFICULTY_PROFILES } from '../../src/core/difficulty/difficultyProfiles';
 import { mulberry32, type Rng } from '../../src/sprites/person/rng';
 import { TACTICS_TRAITS, type TacticsTrait } from '../../src/creatures/tactics/tacticsTraits';
 import { MobUpdateLoop } from '../../src/systems/MobUpdateLoop';

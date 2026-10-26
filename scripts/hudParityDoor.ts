@@ -27,11 +27,11 @@ const { mulberry32 } = await import('../src/sprites/person/rng.js');
 Math.random = mulberry32(WORLD_SEED);
 
 const { gameContext } = await import('./nodeGameContext.js');
-const { setViewportSize } = await import('../src/core/Viewport.js');
+const { setViewportSize } = await import('../src/core/rendering/Viewport.js');
 const { TILE_SIZE } = await import('../src/core/constants.js');
-const { loadSprites } = await import('../src/core/SpriteLoader.js');
+const { loadSprites } = await import('../src/core/spriteAssets/SpriteLoader.js');
 const { SceneManager } = await import('../src/core/Scene.js');
-const { InputManager } = await import('../src/core/InputManager.js');
+const { InputManager } = await import('../src/core/input/InputManager.js');
 const { GameMap } = await import('../src/map/GameMap.js');
 const { level3 } = await import('../src/levels/level3.js');
 const { DungeonScene } = await import('../src/scenes/DungeonScene.js');

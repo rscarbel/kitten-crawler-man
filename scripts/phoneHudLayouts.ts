@@ -14,7 +14,7 @@ import { TOP_BAND_PRIORITIES, layoutTopBand, type TopBandPriority } from '../src
 import { TOP_BAND_WIDTH } from '../src/ui/hud/topBandStack';
 import { hudLayout, type HudGeometry } from '../src/ui/hud/hudLayout';
 import { NO_INSETS, resolveViewport } from '../src/ui/core/viewport';
-import type { UiSize } from '../src/core/Settings';
+import type { UiSize } from '../src/core/input/Settings';
 import type { Rect } from '../src/ui/core/geom';
 import type { Density } from '../src/ui/theme/tokens';
 
@@ -122,8 +122,8 @@ export function hudPieces(geometry: HudGeometry): HudPiece[] {
     { name: 'pause', kind: 'button', rect: buttons.pause },
     { name: 'bag', kind: 'button', rect: buttons.bag },
     { name: 'follower', kind: 'button', rect: buttons.follower },
-    { name: 'summon', kind: 'button', rect: buttons.summon },
     { name: 'chip', kind: 'button', rect: buttons.chip },
+    { name: 'summon', kind: 'button', rect: buttons.summon },
     { name: 'journal', kind: 'button', rect: buttons.journal },
   ];
   if (buttons.build !== null) pieces.push({ name: 'build', kind: 'button', rect: buttons.build });

@@ -1,6 +1,7 @@
 import type { Player } from '../Player';
 import type { EyePlacement } from '../sprites/eyePlacement';
-import { Mob } from './Mob';
+import { Mob, type PlayerDamageType } from './Mob';
+import { SoundCueQueue, type RoosterSoundCue } from './creatureSoundCues';
 import {
   drawRoosterSprite,
   prewarmRoosterRow,
@@ -70,15 +71,10 @@ export abstract class RoosterMinion extends Mob {
   readonly xpValue: number;
 
   private readonly strikes = new RoosterStrikes();
+  private readonly soundCues = new SoundCueQueue<RoosterSoundCue>();
   /** Whether this encounter has warmed his fight rows yet. */
   private fightRowsWarmed = false;
   private readonly animationClock: RoosterAnimationClock;
-  /**
-   * How far his drawn art stands over his tile, in tiles, read off the row he
-   * was last drawn in. Zero until his first draw, which comes before any label
-   * is hung over him.
-   */
-  private artClearanceTiles = 0;
 
   protected constructor(
     tileX: number,
@@ -109,10 +105,6 @@ export abstract class RoosterMinion extends Mob {
     return roosterArtMarginTiles(this.build.art);
   }
 
-  protected override get statusLabelClearanceTiles(): number {
-    return this.artClearanceTiles;
-  }
-
   /** Which blow he is winding up and the aim it locked, or null outside a wind-up. */
   get strikeWindupAim(): {
     readonly kind: RoosterStrikeKind;
@@ -125,12 +117,34 @@ export abstract class RoosterMinion extends Mob {
   protected override clearEncounterPhase(): void {
     this.strikes.reset();
     this.fightRowsWarmed = false;
+    this.soundCues.clear();
+  }
+
+  /** Which painted build he is, for the scene to pick his voice by. */
+  get roosterBuild(): RoosterMinionArt {
+    return this.build.art;
+  }
+
+  /** The sounds he asked for since the last call, emptied by the call. */
+  takeSoundCues(): readonly RoosterSoundCue[] {
+    return this.soundCues.take();
+  }
+
+  override takeDamageFrom(
+    amount: number,
+    attacker: Player | null,
+    damageType: PlayerDamageType | null = 'melee',
+  ): void {
+    const previousHp = this.hp;
+    super.takeDamageFrom(amount, attacker, damageType);
+    if (this.hp < previousHp && this.hp > 0) this.soundCues.raise('hurt');
   }
 
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
     this.animationClock.tick(this.x, this.y, this.tileSize, false);
     this.walkFrameSpeed = this.animationClock.walkRadians;
+    if (this.animationClock.footfall) this.soundCues.raise('step');
     this.strikes.update(this.strikeBody(), targets);
 
     const nearest = this.acquireTarget(targets, this.tileSize * AGGRO_RANGE_TILES);
@@ -147,6 +161,7 @@ export abstract class RoosterMinion extends Mob {
     if (!this.fightRowsWarmed) {
       prewarmRoosterMinionFight(this.build.art);
       this.fightRowsWarmed = true;
+      this.soundCues.raise('notice');
     }
     this.updateLastKnown(nearest);
     const distance = this.distanceTo(nearest);
@@ -157,6 +172,7 @@ export abstract class RoosterMinion extends Mob {
       this.faceToward(nearest);
       prewarmRoosterRow(this.build.art, kind);
       this.strikes.begin(kind, this.facingX, this.facingY);
+      this.soundCues.raise('effort');
       return;
     }
 
@@ -194,6 +210,9 @@ export abstract class RoosterMinion extends Mob {
         this.dealDamage(target, spec.damage, spec.attackType);
       },
       scaledCooldown: (baseFrames) => this.scaledCooldownFrames(baseFrames),
+      impact: (kind) => {
+        this.soundCues.raise(kind === 'peck' ? 'peck' : 'swing');
+      },
     };
   }
 
@@ -220,7 +239,6 @@ export abstract class RoosterMinion extends Mob {
         idleSeconds: this.animationClock.idleSeconds,
       });
     });
-    this.artClearanceTiles = (sy - artTopY) / tileSize;
     this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }

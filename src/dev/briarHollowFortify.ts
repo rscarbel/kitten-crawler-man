@@ -30,7 +30,7 @@ import {
   grantConstructionUnlocks,
   TIKKA_PLANS_UNLOCKS,
   type VillageUnlocks,
-} from '../core/villageUnlocks';
+} from '../core/quests/villageUnlocks';
 
 /**
  * Grants what the Mayor's, Fenna's and Tikka's own scenes would have opened

@@ -19,12 +19,16 @@
  * boundary against a reimplementation of it would be worth nothing.
  */
 
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { worldText } from '../ui/world/worldText';
 import { PRIMARY_BUTTON } from '../ui/core/pointer';
 import type { WorldGesture } from '../ui/core/UiRoot';
 import { PreviewScene, type PreviewControl } from './PreviewScene';
-import { getSpriteDef, type SpriteDef, type SpriteStateDef } from '../core/SpriteLoader';
+import {
+  getSpriteDef,
+  type SpriteDef,
+  type SpriteStateDef,
+} from '../core/spriteAssets/SpriteLoader';
 import { TILE_SIZE } from '../core/constants';
 import { groundFrameIndex, groundVariantCount } from '../map/ground/groundFrames';
 import { drawFringe, type FringeMaterial, type ResolvedMaterial } from '../map/tiles/groundTiles';

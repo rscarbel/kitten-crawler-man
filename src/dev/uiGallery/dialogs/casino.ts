@@ -12,12 +12,12 @@
 import { HumanPlayer } from '../../../creatures/HumanPlayer';
 import { CatPlayer } from '../../../creatures/CatPlayer';
 import { TILE_SIZE } from '../../../core/constants';
-import { createClubMembership } from '../../../core/ClubMembership';
+import { createClubMembership } from '../../../core/club/ClubMembership';
 import { ClubCasinoSystem, type CasinoAction } from '../../../systems/ClubCasinoSystem';
 import { CHIP_DENOMINATIONS } from '../../../systems/casino/BlackjackTable';
 import { RANKS, SUITS, type Card, type Rank, type Suit } from '../../../systems/casino/Deck';
 import { KeyboardHeroSystem } from '../../../systems/KeyboardHeroSystem';
-import type { Difficulty } from '../../../core/difficultyProfiles';
+import type { Difficulty } from '../../../core/difficulty/difficultyProfiles';
 import {
   KEYBOARD_HERO_CHARTS,
   type KeyboardHeroChartNote,

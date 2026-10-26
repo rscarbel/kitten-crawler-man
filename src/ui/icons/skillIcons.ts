@@ -1,4 +1,4 @@
-import type { SkillId } from '../../core/SkillManager';
+import type { SkillId } from '../../core/skills/SkillManager';
 import type { Rect } from '../core/geom';
 import { iconSquare } from './iconSquare';
 
@@ -64,13 +64,6 @@ const SKILL_PALETTES: Record<SkillId, EmblemPalette> = {
     field: '#131f06',
     rim: '#a3e635',
     mark: '#d9f99d',
-    accent: '#ffffff',
-  },
-  night_vision: {
-    glow: '#1e3a8a',
-    field: '#080f26',
-    rim: '#60a5fa',
-    mark: '#bfdbfe',
     accent: '#ffffff',
   },
   iron_punch: {
@@ -378,66 +371,6 @@ function drawIronStomachEmblem(
   }
 }
 
-// ── Night Vision: a slit-pupilled eye, lit from inside ──────────────────────
-
-const EYE_RX = 0.27;
-const EYE_RY = 0.17;
-const IRIS_RADIUS = 0.13;
-const PUPIL_RX = 0.035;
-const PUPIL_RY = 0.125;
-const GLINT_RADIUS = 0.035;
-const GLINT_OFFSET_X = -0.06;
-const GLINT_OFFSET_Y = -0.05;
-const LASH_COUNT = 3;
-const LASH_INNER = 0.3;
-const LASH_OUTER = 0.42;
-/** Three lashes fanned above the eye, in radians off the positive x axis. */
-const LASH_INNERMOST_ANGLE = -0.55;
-const LASH_ANGLE_STEP = -0.35;
-const LASH_WIDTH_FRACTION = 0.035;
-
-function drawNightVisionEmblem(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  size: number,
-  palette: EmblemPalette,
-): void {
-  ctx.strokeStyle = palette.rim;
-  ctx.lineWidth = Math.max(1, size * LASH_WIDTH_FRACTION);
-  ctx.lineCap = 'round';
-  for (let i = 0; i < LASH_COUNT; i++) {
-    const angle = LASH_INNERMOST_ANGLE + i * LASH_ANGLE_STEP;
-    ctx.beginPath();
-    ctx.moveTo(cx + Math.cos(angle) * size * LASH_INNER, cy + Math.sin(angle) * size * LASH_INNER);
-    ctx.lineTo(cx + Math.cos(angle) * size * LASH_OUTER, cy + Math.sin(angle) * size * LASH_OUTER);
-    ctx.stroke();
-  }
-
-  ctx.fillStyle = palette.mark;
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, size * EYE_RX, size * EYE_RY, 0, 0, TWO_PI);
-  ctx.fill();
-
-  const iris = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * IRIS_RADIUS);
-  iris.addColorStop(0, palette.rim);
-  iris.addColorStop(1, palette.glow);
-  ctx.fillStyle = iris;
-  ctx.beginPath();
-  ctx.arc(cx, cy, size * IRIS_RADIUS, 0, TWO_PI);
-  ctx.fill();
-
-  ctx.fillStyle = palette.field;
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, size * PUPIL_RX, size * PUPIL_RY, 0, 0, TWO_PI);
-  ctx.fill();
-
-  ctx.fillStyle = palette.accent;
-  ctx.beginPath();
-  ctx.arc(cx + size * GLINT_OFFSET_X, cy + size * GLINT_OFFSET_Y, size * GLINT_RADIUS, 0, TWO_PI);
-  ctx.fill();
-}
-
 // ── Iron Punch: the pugilist's fist, plated and spiked ─────────────────────
 
 /** How far the gauntlet plate overhangs the bare fist on each side. */
@@ -575,7 +508,6 @@ const SKILL_EMBLEMS: Record<SkillId, EmblemRenderer> = {
   cat_reflexes: drawCatReflexesEmblem,
   pugilism: drawPugilismEmblem,
   iron_stomach: drawIronStomachEmblem,
-  night_vision: drawNightVisionEmblem,
   iron_punch: drawIronPunchEmblem,
   powerful_strike: drawPowerfulStrikeEmblem,
 };

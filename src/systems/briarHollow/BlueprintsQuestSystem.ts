@@ -25,16 +25,16 @@
  * guidance, and the journal row says the village is under attack.
  */
 
-import type { BlueprintsQuestState } from '../../core/briarHollowState';
+import type { BlueprintsQuestState } from '../../core/quests/briarHollowState';
 import {
   BLUEPRINTS_GRAIN_TARGET,
   BLUEPRINTS_STATION_IDS,
   hasAcceptedBlueprintsQuest,
   type BlueprintsQuestPhase,
-} from '../../core/blueprintsQuestPhase';
-import { canAfford } from '../../core/partyResources';
-import { constructionUnlocked } from '../../core/villageUnlocks';
-import { isVillageUnderSiege } from '../../core/villageQuestPhase';
+} from '../../core/quests/blueprintsQuestPhase';
+import { canAfford } from '../../core/items/gathering/partyResources';
+import { constructionUnlocked } from '../../core/quests/villageUnlocks';
+import { isVillageUnderSiege } from '../../core/quests/villageQuestPhase';
 import { TILE_SIZE } from '../../core/constants';
 import type { NPCMarkerType } from '../../creatures/QuestNPC';
 import type { VillagerId } from '../../dialog/scripts/briarHollow';
@@ -75,7 +75,9 @@ import {
 import { playBlueprintsCue, type BlueprintsCue } from './blueprints/blueprintsSoundCues';
 import { FennaBlueprintsLines } from './blueprints/FennaBlueprintsLines';
 import { BlueprintsStepMoments } from './blueprints/BlueprintsStepMoments';
-import { blueprintsRewardSpec } from './blueprints/blueprintsRewardSpec';
+import { BLUEPRINTS_QUEST_GEAR, blueprintsRewardSpec } from './blueprints/blueprintsRewardSpec';
+import { grantQuestGear } from '../../loot/questGear';
+import type { RewardItemLine } from '../../ui/questReward/types';
 import { GrainHarvest } from './blueprints/GrainHarvest';
 import { MerritBlueprintsLines } from './blueprints/MerritBlueprintsLines';
 import { MidgeEscort } from './blueprints/MidgeEscort';
@@ -84,7 +86,7 @@ import { FENCE_SECTION_COST, PastureFenceWork } from './blueprints/PastureFenceW
 import { stationUpgradeCost, StationUpgrades } from './blueprints/StationUpgrades';
 import type { ProcessingStationKind } from './processingStations';
 import { PASTURE_FENCE_SECTION_COUNT } from '../../map/overworld/briarHollowLayout';
-import { createMidgeEscortCarry } from '../../core/midgeEscortCarry';
+import { createMidgeEscortCarry } from '../../core/quests/midgeEscortCarry';
 
 /** The journal's hint while the Plea's siege has the village's questlines standing down. */
 export const BLUEPRINTS_SIEGE_HINT = 'Briar Hollow is under attack.';
@@ -140,6 +142,12 @@ export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, 
    * rebuild after a screen dropped unread (a rewind) asks again.
    */
   private rewardScreenRequested = false;
+  /**
+   * The coat's line as it was paid, so a coat already owned shows the coins it
+   * paid instead. Not durable: a screen asked for again after a reload shows
+   * the coat itself.
+   */
+  private paidGearLine: RewardItemLine | null = null;
   /** Takes rotated per cue, so a cue with several recordings walks through them. */
   private readonly cueTakesPlayed = new Map<BlueprintsCue, number>();
   private readonly ctx: BlueprintsQuestContext;
@@ -241,13 +249,14 @@ export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, 
 
   /**
    * Both stations stand upgraded: Fenna's shout, the blueprints retired from
-   * whichever crawler carries them, and the quest complete. Idempotent, so a
+   * whichever crawler carries them, the quest's coat paid, and the quest complete. Idempotent, so a
    * second call after completion does nothing.
    */
   complete(): void {
     if (this.phase === 'complete') return;
     this.ctx.villagers.bark('fenna', FENNA_COMPLETION_BARK, true);
     takeBlueprintsItem(this.crawlers(), 'quest_blueprints');
+    this.paidGearLine = grantQuestGear(this.ctx, BLUEPRINTS_QUEST_GEAR, 'human');
     this.setPhase('complete');
   }
 
@@ -264,7 +273,7 @@ export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, 
     this.rewardScreenRequested = true;
     this.ctx.bus.emit(
       'questRewardShown',
-      blueprintsRewardSpec(() => {
+      blueprintsRewardSpec(this.paidGearLine, () => {
         quest.completionScreenSeen = true;
       }),
     );

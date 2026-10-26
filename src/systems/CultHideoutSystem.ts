@@ -6,12 +6,12 @@
  * crosses scenes via MurderQuestProgress.
  */
 
-import { applySpawnDifficulty } from '../core/difficultyProfiles';
+import { applySpawnDifficulty } from '../core/difficulty/difficultyProfiles';
 import type { GameMap } from '../map/GameMap';
 import type { EventBus } from '../core/EventBus';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { Mob } from '../creatures/Mob';
-import type { MurderQuestProgress } from '../core/MurderQuestProgress';
+import type { MurderQuestProgress } from '../core/quests/MurderQuestProgress';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import type { CityElfCultist } from '../creatures/CityElfCultist';
 import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';

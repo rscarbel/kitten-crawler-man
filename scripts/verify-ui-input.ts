@@ -57,9 +57,9 @@ import {
 } from '../src/ui/core/pointer.js';
 import { UiStateSlot } from '../src/ui/core/uiState.js';
 import { activeInputMode } from '../src/ui/core/inputMode.js';
-import { keybindings } from '../src/core/Keybindings.js';
+import { keybindings } from '../src/core/input/Keybindings.js';
 import { NO_INSETS, type ViewportInput } from '../src/ui/core/viewport.js';
-import type { UiSize } from '../src/core/Settings.js';
+import type { UiSize } from '../src/core/input/Settings.js';
 import { GLYPH_IDS, GLYPH_PATHS, parsePathData } from '../src/ui/theme/glyphs.js';
 import { resolveTheme } from '../src/ui/theme/tokens.js';
 import { skinsFor } from '../src/ui/theme/skins.js';
@@ -2519,7 +2519,7 @@ section('the poker table: the Game over prompt answers Escape, Space, Enter and 
   const { ClubPokerSystem, gameOverBody } = await import('../src/systems/ClubPokerSystem.js');
   const { POKER_DEV_SEED } = await import('../src/systems/casino/poker/npc/personality.js');
   const { POKER_STAKES } = await import('../src/systems/casino/poker/pokerStakes.js');
-  const { partyCoins } = await import('../src/core/partyCoins.js');
+  const { partyCoins } = await import('../src/core/party/partyCoins.js');
   const { playUntilBust, playUntilGameOver } =
     await import('../src/dev/uiGallery/dialogs/poker.js');
   const { mulberry32 } = await import('../src/sprites/person/rng.js');
@@ -2677,7 +2677,7 @@ section('the Wheel of Fortune warnings and SPIN, on a desktop and on phones');
   const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
   const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
   const { TILE_SIZE } = await import('../src/core/constants.js');
-  const { createWheelLedger } = await import('../src/core/WheelLedger.js');
+  const { createWheelLedger } = await import('../src/core/save/WheelLedger.js');
   const { ClubWheelSystem, WHEEL_ARMING_MS, WHEEL_SPIN_HOLD_MS, WHEEL_SPIN_KEY } =
     await import('../src/systems/ClubWheelSystem.js');
   const WHEEL_FRAME_MS = 16;

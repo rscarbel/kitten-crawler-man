@@ -4,7 +4,8 @@
  * follower and mercenary lists are all this.
  */
 
-import type { ItemId } from '../../core/ItemDefs';
+import { ITEM_DEF, type ItemId } from '../../core/items/defs/ItemDefs';
+import { drawRarityFrame } from '../screens/dialogs/canvasChrome';
 import { centerIn, inset, type Rect } from '../core/geom';
 import type { HitState, Ui } from '../core/UiRoot';
 import { withAlpha } from '../theme/color';
@@ -214,9 +215,12 @@ function drawLeading(ui: Ui, box: Rect, leading: RowLeading, disabled: boolean):
   if (disabled) ctx.globalAlpha *= DISABLED_ICON_ALPHA;
   const art = inset(box, theme.space.xs);
   switch (leading.kind) {
-    case 'item':
+    case 'item': {
       ITEM_ICONS[leading.item](ctx, art);
+      const rarity = ITEM_DEF[leading.item].rarity;
+      if (rarity !== undefined) drawRarityFrame(ui, box, theme.radius.sm, rarity);
       break;
+    }
     case 'glyph': {
       const side = box.w * LEADING_GLYPH_SCALE;
       drawGlyph(ctx, leading.glyph, centerIn(box, side, side), {

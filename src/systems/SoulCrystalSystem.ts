@@ -20,7 +20,7 @@ import {
   DOOMSDAY_CONTAIN_OBJECTIVE,
   type DoomsdayProgress,
   triggerDoomsdayExplosionIfExpired,
-} from '../core/DoomsdayProgress';
+} from '../core/quests/DoomsdayProgress';
 import { worldText } from '../ui/world/worldText';
 import { worldPalette } from '../ui/theme/worldInk';
 import { drawObjectiveBeacon } from '../ui/ObjectiveBeacon';

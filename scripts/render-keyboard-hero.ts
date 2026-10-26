@@ -57,7 +57,7 @@ import {
   DIFFICULTY_LABELS,
   DIFFICULTY_ORDER,
   type Difficulty,
-} from '../src/core/difficultyProfiles.js';
+} from '../src/core/difficulty/difficultyProfiles.js';
 import { palette } from '../src/ui/theme/tokens.js';
 import {
   BOARD_BAKE_SCALE,

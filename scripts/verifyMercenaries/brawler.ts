@@ -24,13 +24,13 @@ import { CatPlayer } from '../../src/creatures/CatPlayer';
 import { Mob } from '../../src/creatures/Mob';
 import { TerrorTheClown } from '../../src/creatures/TerrorTheClown';
 import type { Mercenary } from '../../src/creatures/Mercenary';
-import { getMercenaryTemplate } from '../../src/core/mercenaryTemplates';
-import { createMercenaryRoster } from '../../src/core/MercenaryRoster';
+import { getMercenaryTemplate } from '../../src/core/party/mercenaryTemplates';
+import { createMercenaryRoster } from '../../src/core/party/MercenaryRoster';
 import { MercenarySystem } from '../../src/systems/MercenarySystem';
 import { SpellSystem } from '../../src/systems/SpellSystem';
 import { MobRoster } from '../../src/systems/kits/SceneWorld';
 import type { SystemContext } from '../../src/systems/GameSystem';
-import { progressFrameIndex } from '../../src/core/SpriteRenderer';
+import { progressFrameIndex } from '../../src/core/spriteAssets/SpriteRenderer';
 import { MERCENARY_VOICES } from '../../src/creatures/mercenaries/mercenaryVoices';
 import {
   BrawlerKit,

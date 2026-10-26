@@ -14,7 +14,7 @@
  */
 
 import { Deck, LUCKY_RANK, type Card } from '../Deck';
-import { NEVER_LUCKY, type LuckCheck } from '../../../core/GodMode';
+import { NEVER_LUCKY, type LuckCheck } from '../../../core/state/GodMode';
 import {
   BettingRound,
   isLegal,

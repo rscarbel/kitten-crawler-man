@@ -11,8 +11,8 @@
  */
 
 import { writeFileSync } from 'node:fs';
-import type { Difficulty } from '../src/core/difficultyProfiles';
-import { withWorldSeed, worldRandom } from '../src/core/WorldRandom';
+import type { Difficulty } from '../src/core/difficulty/difficultyProfiles';
+import { withWorldSeed, worldRandom } from '../src/core/world/WorldRandom';
 import { seededStream } from '../src/map/bigTop/mirrorBoard';
 import {
   assessPipeBoard,
@@ -834,7 +834,7 @@ const FALLBACK_HEADER = `/**
  * this file with \`npm run verify:pipe-board -- --write-fallbacks\`.
  */
 
-import type { Difficulty } from '../../core/difficultyProfiles';
+import type { Difficulty } from '../../core/difficulty/difficultyProfiles';
 import type { PipeBoardLayout } from './pipeBoard';
 
 /**

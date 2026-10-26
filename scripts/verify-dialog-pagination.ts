@@ -32,7 +32,7 @@ import { computeLineSpans, paginate, type Page } from '../src/dialog/paginate';
 import type { DialogLine, NonEmpty, Paragraphs } from '../src/dialog/line';
 import { installCanvasGlobals } from './nodeCanvasGlobals';
 import { gameContext } from './nodeGameContext';
-import { setViewportSize } from '../src/core/Viewport';
+import { setViewportSize } from '../src/core/rendering/Viewport';
 import { DialogBox, type DialogLayout, type ResolvedSpeaker } from '../src/ui/DialogBox';
 import { SPEECH_REVEAL_INTERVAL_MS } from '../src/dialog/speakers';
 

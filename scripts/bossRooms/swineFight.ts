@@ -15,11 +15,14 @@
  */
 
 import { PLAYER_SPEED, TILE_SIZE } from '../../src/core/constants.js';
-import { AbilityManager } from '../../src/core/AbilityManager.js';
-import { DIFFICULTY_PROFILES, type Difficulty } from '../../src/core/difficultyProfiles.js';
+import { AbilityManager } from '../../src/core/skills/AbilityManager.js';
+import {
+  DIFFICULTY_PROFILES,
+  type Difficulty,
+} from '../../src/core/difficulty/difficultyProfiles.js';
 import { EventBus } from '../../src/core/EventBus.js';
-import { referenceStats } from '../../src/core/referenceCrawler.js';
-import { settings } from '../../src/core/Settings.js';
+import { referenceStats } from '../../src/core/party/referenceCrawler.js';
+import { settings } from '../../src/core/input/Settings.js';
 import { BallOfSwine } from '../../src/creatures/BallOfSwine.js';
 import { CatPlayer } from '../../src/creatures/CatPlayer.js';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer.js';

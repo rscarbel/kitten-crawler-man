@@ -10,7 +10,7 @@
  * its check green for the wrong reason.
  */
 
-import type { Difficulty } from '../src/core/difficultyProfiles';
+import type { Difficulty } from '../src/core/difficulty/difficultyProfiles';
 import {
   BIG_TOP_MAZE_ROWS,
   MIRROR_HALL_GLASS_COLUMNS,

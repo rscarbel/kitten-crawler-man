@@ -24,7 +24,7 @@
  */
 
 import { installCanvasGlobals } from './nodeCanvasGlobals';
-import { setViewportSize } from '../src/core/Viewport';
+import { setViewportSize } from '../src/core/rendering/Viewport';
 import { gameContext } from './nodeGameContext';
 import { mulberry32 } from '../src/sprites/person/rng';
 import { GameMap } from '../src/map/GameMap';
@@ -38,8 +38,8 @@ import {
 import { isWalkableTileType } from '../src/map/walkability';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
 import { EventBus } from '../src/core/EventBus';
-import { AbilityManager } from '../src/core/AbilityManager';
-import { referenceStats, type ReferenceAttack } from '../src/core/referenceCrawler';
+import { AbilityManager } from '../src/core/skills/AbilityManager';
+import { referenceStats, type ReferenceAttack } from '../src/core/party/referenceCrawler';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { Mob, type PlayerDamageType } from '../src/creatures/Mob';
@@ -111,7 +111,7 @@ import { DIAGONAL_PENALTY } from '../src/systems/PlayerMovementSystem';
 import { footingSpeedFactor } from '../src/systems/GameLoopPhases';
 import { FairyCorpseLedger } from '../src/creatures/fairies/fairyCorpses';
 import { clamp } from '../src/utils';
-import { makeStuck } from '../src/core/StatusEffect';
+import { makeStuck } from '../src/core/combat/StatusEffect';
 import { SEPARATION_RADIUS } from '../src/systems/mobSeparation';
 import type { SystemContext } from '../src/systems/GameSystem';
 import { SpiderQuestSystem, type SpiderQuestCheckpoint } from '../src/systems/SpiderQuestSystem';

@@ -14,7 +14,7 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../../core/canvasSurface';
+} from '../../../core/rendering/canvasSurface';
 import { shadePlane } from '../../buildinggen/lighting';
 import type { Plane } from '../../buildinggen/projection';
 import { drawRadialGlow, type GlowStop } from '../../radialGlow';

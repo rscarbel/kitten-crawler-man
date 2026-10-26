@@ -42,7 +42,7 @@ import {
   type CircusStructureSpec,
 } from '../../map/overworld/circusGroundsLayout';
 import { drawPlane, makePlane, quadPath, type Point, type Quad } from '../buildinggen/projection';
-import { releaseSurface } from '../../core/canvasSurface';
+import { releaseSurface } from '../../core/rendering/canvasSurface';
 import { paintEdgeAo, shadePlane } from '../buildinggen/lighting';
 import { applyMossPatches, applyStreaks, applyWeatherPatches } from '../buildinggen/texture';
 import { NoiseField } from '../../map/tilegen/noise';

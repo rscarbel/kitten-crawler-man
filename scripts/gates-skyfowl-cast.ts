@@ -43,7 +43,11 @@ import {
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 import { pickCitizenFigure, skyfowlStreetLookAllowance } from '../src/creatures/citizenFigure.js';
 import { TOWN_ROLES, type TownRole } from '../src/sprites/person/PersonAppearance.js';
-import { FULL_VARIETY_TIER, VARIETY_TIERS, type VarietyTier } from '../src/core/varietyTier.js';
+import {
+  FULL_VARIETY_TIER,
+  VARIETY_TIERS,
+  type VarietyTier,
+} from '../src/core/perf/varietyTier.js';
 
 const CHANNELS = 4;
 const ALPHA_OFFSET = 3;

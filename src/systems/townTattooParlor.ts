@@ -8,7 +8,7 @@
  */
 
 import type { Player } from '../Player';
-import { getSkillDef } from '../core/SkillManager';
+import { getSkillDef } from '../core/skills/SkillManager';
 import {
   BRASS_GULLET_LABEL,
   BRASS_GULLET_SKILL,
@@ -17,7 +17,7 @@ import {
   brassGulletDesc,
   isStatTattooId,
   type StatTattooId,
-} from '../core/tattoos';
+} from '../core/skills/tattoos';
 import type { ServiceIconId } from '../sprites/art/itemIcons/serviceIcons';
 import {
   offerUnless,

@@ -1,17 +1,18 @@
 /**
  * Theme-drawn chrome for the conversation box and the big modal moments
- * (loading screen, loot-box reveal, achievement card) that still render onto a
+ * (loading screen, reward chest) that still render onto a
  * bare context. Every helper takes a {@link PaintTarget}, which a `Ui` also
  * satisfies, so a surface rendering with `ui` calls the same painters.
  */
 
-import type { BoxTier } from '../../../core/AchievementManager';
-import { ITEM_DEF, type ItemId } from '../../../core/ItemDefs';
+import type { Rarity } from '../../../core/items/defs/rarity';
+import { ITEM_DEF, type ItemId } from '../../../core/items/defs/ItemDefs';
 import { inset, type Rect } from '../../core/geom';
 import { ITEM_ICONS } from '../../icons/itemIcons';
 import { withAlpha } from '../../theme/color';
 import { resolveTheme, type Theme } from '../../theme/tokens';
 import { fillRounded, roundRectPath, strokeRounded, type PaintTarget } from '../../widgets/paint';
+import type { TooltipLine } from '../../widgets/tooltip';
 
 /**
  * Chrome painted outside a surface has no density of its own to resolve; the
@@ -29,18 +30,86 @@ export function chromeTarget(ctx: CanvasRenderingContext2D): PaintTarget {
   return { ctx, theme: chromeTheme() };
 }
 
-/** A loot box's rarity colour. */
-export function lootTierColor(theme: Theme, tier: BoxTier): string {
-  const tiers = theme.palette.tier;
-  const byTier: Record<BoxTier, string> = {
-    Bronze: tiers.bronze,
-    Silver: tiers.silver,
-    Gold: tiers.gold,
-    Platinum: tiers.platinum,
-    Legendary: tiers.legendary,
-    Celestial: tiers.celestial,
+const RARITY_FRAME_WIDTH = 2;
+const RARITY_GLOW_ALPHA = 0.6;
+const RARITY_GLOW_BLUR = 8;
+/** The corner gem's size as a share of the frame's width, never under `space.sm`. */
+const RARITY_GEM_SHARE = 0.18;
+const RARITY_GEM_HIGHLIGHT_SHARE = 0.45;
+const RARITY_GEM_EDGE_WIDTH = 1;
+
+/**
+ * The rarity frame every item cell wears where its item has a rarity: the
+ * border in the rarity's colour with a soft glow of it, and a small cut gem
+ * of the colour in the bottom-left corner.
+ */
+export function drawRarityFrame(
+  target: PaintTarget,
+  rect: Rect,
+  corner: number,
+  rarity: Rarity,
+): void {
+  const { ctx, theme } = target;
+  const color = rarityColor(theme, rarity);
+  ctx.save();
+  ctx.shadowColor = withAlpha(rarityColor(theme, rarity, 'glow'), RARITY_GLOW_ALPHA);
+  ctx.shadowBlur = RARITY_GLOW_BLUR;
+  strokeRounded(ctx, rect, corner, color, RARITY_FRAME_WIDTH);
+  ctx.restore();
+  const size = Math.max(theme.space.sm, rect.w * RARITY_GEM_SHARE);
+  const cx = rect.x + theme.space.xs + size * HALF;
+  const cy = rect.y + rect.h - theme.space.xs - size * HALF;
+  const half = size * HALF;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - half);
+  ctx.lineTo(cx + half, cy);
+  ctx.lineTo(cx, cy + half);
+  ctx.lineTo(cx - half, cy);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.strokeStyle = rarityColor(theme, rarity, 'deep');
+  ctx.lineWidth = RARITY_GEM_EDGE_WIDTH;
+  ctx.stroke();
+  const shine = half * RARITY_GEM_HIGHLIGHT_SHARE;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - half);
+  ctx.lineTo(cx + shine, cy - half + shine);
+  ctx.lineTo(cx, cy);
+  ctx.lineTo(cx - shine, cy - half + shine);
+  ctx.closePath();
+  ctx.fillStyle = rarityColor(theme, rarity, 'light');
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * An item's rarity as a tooltip line in the rarity's colour, so the name is
+ * there in words wherever its frame is; empty for an item with no rarity.
+ */
+export function rarityTooltipLines(theme: Theme, item: ItemId): TooltipLine[] {
+  const rarity = ITEM_DEF[item].rarity;
+  return rarity === undefined
+    ? []
+    : [{ text: rarity, role: 'label', color: rarityColor(theme, rarity) }];
+}
+
+/** One shade of a rarity's colour record. */
+export type RarityShade = keyof Theme['palette']['rarity']['common'];
+
+/** A rarity's colour, in the requested shade: the one mapping from the ladder to the palette. */
+export function rarityColor(theme: Theme, rarity: Rarity, shade: RarityShade = 'base'): string {
+  const shades = theme.palette.rarity;
+  const byRarity: Record<Rarity, Readonly<Record<RarityShade, string>>> = {
+    Common: shades.common,
+    Uncommon: shades.uncommon,
+    Rare: shades.rare,
+    Epic: shades.epic,
+    Legendary: shades.legendary,
+    Divine: shades.divine,
   };
-  return byTier[tier];
+  return byRarity[rarity][shade];
 }
 
 const CATEGORY_TINT_ALPHA = 0.12;
@@ -81,7 +150,12 @@ export function drawItemFrame(target: PaintTarget, rect: Rect, item: ItemId): vo
     radius.pill,
     withAlpha(accent, CATEGORY_EDGE_ALPHA),
   );
-  strokeRounded(ctx, rect, corner, palette.border.subtle, FRAME_BORDER_WIDTH);
+  const rarity = ITEM_DEF[item].rarity;
+  if (rarity === undefined) {
+    strokeRounded(ctx, rect, corner, palette.border.subtle, FRAME_BORDER_WIDTH);
+  } else {
+    drawRarityFrame(target, rect, corner, rarity);
+  }
 }
 
 /** A hairline rule across `width` at `y`, fading out at both ends. */

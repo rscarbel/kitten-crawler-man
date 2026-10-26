@@ -1,6 +1,6 @@
 /** Small building blocks the pause pages share: a row of choices, a full-width button, a two-up column split. */
 
-import type { CrawlerKind } from '../../../core/SkillManager';
+import type { CrawlerKind } from '../../../core/skills/SkillManager';
 import { splitH, type Rect } from '../../core/geom';
 import type { GlyphId } from '../../theme/glyphs';
 import type { ButtonVariant } from '../../theme/skins';

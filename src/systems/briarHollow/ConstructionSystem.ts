@@ -24,15 +24,15 @@ import { findNearbyWalkableTile } from '../../map/findWalkableTile';
 import { tileCoordKey } from '../../map/tileIndex';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
-import type { CrawlerKind } from '../../core/SkillManager';
+import type { CrawlerKind } from '../../core/skills/SkillManager';
 import type { AudioManager } from '../../audio/AudioManager';
 import type { AudioScope } from '../../audio/AudioScope';
 import type { SoundId } from '../../audio/sounds';
 import type { MobRoster } from '../kits/SceneWorld';
-import type { ResourceCost } from '../../core/partyResources';
-import { canAfford, spend } from '../../core/partyResources';
-import { canAffordCoins, spendPartyCoins } from '../../core/partyCoins';
-import { constructionTimeFactor, spikesUnlocked } from '../../core/craftPerks';
+import type { ResourceCost } from '../../core/items/gathering/partyResources';
+import { canAfford, spend } from '../../core/items/gathering/partyResources';
+import { canAffordCoins, spendPartyCoins } from '../../core/party/partyCoins';
+import { constructionTimeFactor, spikesUnlocked } from '../../core/labour/craftPerks';
 import { TILE_SIZE } from '../../core/constants';
 import { worldBar } from '../../ui/world/worldShapes';
 import {
@@ -85,13 +85,13 @@ import {
   villagerAnchorKeys,
   FACING_STEP,
 } from './constructionPlacement';
-import { unlimitedAmmo } from '../../core/craftPerks';
+import { unlimitedAmmo } from '../../core/labour/craftPerks';
 import type { ConstructionScreenSource } from '../../ui/screens/construction/ConstructionScreen';
 import {
   hasConstructionUnlock,
   type ConstructionUnlockId,
   type VillageUnlocks,
-} from '../../core/villageUnlocks';
+} from '../../core/quests/villageUnlocks';
 import { JOB_MOTION_TOLERANCE_PX } from '../WorkChannel';
 
 type Crawler = HumanPlayer | CatPlayer;

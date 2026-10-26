@@ -7,7 +7,7 @@
  * notes left, high notes right.
  */
 
-import type { Difficulty } from '../core/difficultyProfiles';
+import type { Difficulty } from '../core/difficulty/difficultyProfiles';
 
 /** Which of the four columns a note falls down. */
 export type KeyboardHeroColumn = 0 | 1 | 2 | 3;

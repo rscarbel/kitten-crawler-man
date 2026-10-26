@@ -1,4 +1,4 @@
-import type { StatusEffect } from '../../core/StatusEffect';
+import type { StatusEffect } from '../../core/combat/StatusEffect';
 import { drawCretinShieldSprite, type CretinShieldRow } from '../cretinSprite';
 import {
   CRETIN_SHIELD_APPEAR_FRAMES,

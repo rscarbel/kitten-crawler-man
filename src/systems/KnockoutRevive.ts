@@ -2,7 +2,7 @@ import { TILE_SIZE } from '../core/constants';
 import type { AudioManager } from '../audio/AudioManager';
 import type { EventBus } from '../core/EventBus';
 import type { Player } from '../Player';
-import { REVIVE_FRAMES, REVIVE_HP_FRACTION, REVIVE_RANGE_PX } from '../core/reviveRules';
+import { REVIVE_FRAMES, REVIVE_HP_FRACTION, REVIVE_RANGE_PX } from '../core/party/reviveRules';
 import { KNOCKOUT_TIMEOUT_FRAMES } from './GameLoopPhases';
 import { worldText } from '../ui/world/worldText';
 import { worldBar } from '../ui/world/worldShapes';
@@ -117,7 +117,7 @@ export function updateKnockoutState(party: KnockoutParty): void {
     inactive.reviveProgress = 0;
     inactive.clearStatusEffects();
     inactive.clearKnockback();
-    audio?.play(inactiveIsHuman ? 'human_knocked_out' : 'cat_knocked_out');
+    audio?.play(inactiveIsHuman ? 'human_knocked_out' : 'belle_downed');
     bus.emit('crawlerKnockedOut', { player: inactive });
   }
 

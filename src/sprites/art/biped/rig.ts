@@ -389,8 +389,8 @@ export interface BipedPose {
   jacketHemLag?: Pt;
   hairTuftLag?: Pt;
   /**
-   * What he is wearing on this frame. Absent is his default outfit: his
-   * jacket and jeans with the trollskin shirt under the jacket.
+   * What he is wearing on this frame. Absent is his look's base garments
+   * with nothing over them (`defaultOutfitOf`).
    */
   outfit?: BipedPoseOutfit;
   /**

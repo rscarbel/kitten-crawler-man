@@ -17,7 +17,7 @@ import type { Conversation } from '../dialog/Conversation';
 import type { BarkLine } from '../dialog/line';
 import type { LootSystem } from './LootSystem';
 import type { GameMap, PlacedTownInteriorProp } from '../map/GameMap';
-import { interiorPropPayoutKey, type TownMemory } from '../core/TownMemory';
+import { interiorPropPayoutKey, type TownMemory } from '../core/state/TownMemory';
 import {
   TOWN_INTERIOR_PROPS,
   type TownInteriorExamineId,

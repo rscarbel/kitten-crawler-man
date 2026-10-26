@@ -263,6 +263,15 @@ export const worldPalette = {
     vendorOutline: '#0a2010',
     districtLabel: '#e8d9a0',
   },
+  /**
+   * Worn gear's marks painted with the world painters: the combo pips under a
+   * crawler. The rest of gear's world art is painted in `gearFxArt`.
+   */
+  gear: {
+    comboPipLit: '#ffd45a',
+    comboPipDim: 'rgba(0,0,0,0.55)',
+    comboPipEdge: 'rgba(0,0,0,0.85)',
+  },
   bar: {
     track: 'rgba(0,0,0,0.5)',
     trackDeep: 'rgba(0,0,0,0.65)',
@@ -550,6 +559,8 @@ export const STRIKER_METER_LOOK = {
   hotPulseHz: 6,
 } as const;
 const PLATE_BORDER_WIDTH = 1.5;
+/** Half a combo pip's size, so the pip is round. */
+const COMBO_PIP_RADIUS = 2;
 
 export const WORLD_PLATE = {
   /** Over a job the party can do right now: gold, so "ready" reads from across the screen. */
@@ -602,6 +613,20 @@ export const WORLD_PLATE = {
     fill: worldPalette.plate.safeFill,
     border: worldPalette.plate.safeEdge,
     borderWidth: PLATE_BORDER_WIDTH,
+  },
+  /** A landed blow toward a combo, in the row of pips over the crawler. */
+  comboPipLit: {
+    fill: worldPalette.gear.comboPipLit,
+    border: worldPalette.gear.comboPipEdge,
+    borderWidth: 1,
+    radius: COMBO_PIP_RADIUS,
+  },
+  /** A blow still to land before the combo goes off. */
+  comboPipDim: {
+    fill: worldPalette.gear.comboPipDim,
+    border: worldPalette.gear.comboPipEdge,
+    borderWidth: 1,
+    radius: COMBO_PIP_RADIUS,
   },
 } as const satisfies Record<string, WorldPlateStyle>;
 

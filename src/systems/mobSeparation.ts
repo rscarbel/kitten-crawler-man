@@ -11,8 +11,8 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
-import type { SeparationGrid } from '../core/SeparationGrid';
-import { perfMonitor } from '../core/PerfMonitor';
+import type { SeparationGrid } from '../core/world/SeparationGrid';
+import { perfMonitor } from '../core/perf/PerfMonitor';
 
 /** Anything that takes part in separation: a position and a weight. */
 export interface SeparationBody {

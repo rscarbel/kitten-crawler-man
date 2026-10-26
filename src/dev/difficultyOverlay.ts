@@ -13,8 +13,8 @@ import {
   DIFFICULTY_SEGMENTS,
   difficultyStats,
   type DifficultySegment,
-} from '../core/DifficultyStats';
-import { DIFFICULTY_LABELS } from '../core/difficultyProfiles';
+} from '../core/difficulty/DifficultyStats';
+import { DIFFICULTY_LABELS } from '../core/difficulty/difficultyProfiles';
 import { inset, type Rect } from '../ui/core/geom';
 import { WORLD_TEXT } from '../ui/theme/worldInk';
 import { worldPlate } from '../ui/world/worldShapes';

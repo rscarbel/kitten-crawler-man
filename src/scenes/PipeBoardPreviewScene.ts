@@ -9,8 +9,8 @@
  * reach the controls.
  */
 
-import type { Difficulty } from '../core/difficultyProfiles';
-import { viewportHeight, viewportWidth } from '../core/Viewport';
+import type { Difficulty } from '../core/difficulty/difficultyProfiles';
+import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
 import { DevPipeBoardSource, nextSolverTurn } from '../dev/pipeBoardDevSource';
 import {
   PIPE_BOARD_DIFFICULTIES,

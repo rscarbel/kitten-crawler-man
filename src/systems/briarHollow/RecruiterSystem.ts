@@ -12,8 +12,8 @@
 import type { AudioManager } from '../../audio/AudioManager';
 import { TILE_SIZE } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
-import type { BriarHollowState } from '../../core/briarHollowState';
-import { hasAcceptedMayorRequest } from '../../core/villageQuestPhase';
+import type { BriarHollowState } from '../../core/quests/briarHollowState';
+import { hasAcceptedMayorRequest } from '../../core/quests/villageQuestPhase';
 import type { GameMap } from '../../map/GameMap';
 import { findNearbyWalkableTile } from '../../map/findWalkableTile';
 import type { TilePoint } from '../../map/town/townPlan';

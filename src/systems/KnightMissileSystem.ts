@@ -11,6 +11,7 @@
  * injected into a mob at spawn time.
  */
 
+import { crawlerTurnsShot } from '../gear/incomingBlows';
 import type { WorldPoint } from '../audio/AudioManager';
 import type { Player, DamageSource } from '../Player';
 import type { GameMap } from '../map/GameMap';
@@ -144,7 +145,9 @@ export class KnightMissileSystem implements GameSystem {
 
       const victim = this.victimAt(missile, targets);
       if (victim !== null) {
-        const connected = victim.takeDamage(missile.damage, missile.source);
+        const connected =
+          !crawlerTurnsShot(victim, missile.owner, missile.dirX, missile.dirY) &&
+          victim.takeDamage(missile.damage, missile.source);
         if (connected) missile.owner.noteStruckPlayer(victim);
         this.burstAt(missile);
         continue;

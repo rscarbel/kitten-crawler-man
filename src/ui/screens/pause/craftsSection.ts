@@ -3,17 +3,21 @@
  * so the two never read as one shared meter.
  */
 
-import { MAX_CRAFT_LEVEL, type CraftSkillId, type CraftSkills } from '../../../core/CraftSkills';
+import {
+  MAX_CRAFT_LEVEL,
+  type CraftSkillId,
+  type CraftSkills,
+} from '../../../core/labour/CraftSkills';
 import {
   describeConstructionPerk,
   describeResourcingPerk,
   nextConstructionUnlock,
   nextResourcingUnlock,
   thrallCount,
-} from '../../../core/craftPerks';
+} from '../../../core/labour/craftPerks';
 import { crawlerName } from '../../../characters/characters';
-import { type CrawlerKind } from '../../../core/SkillManager';
-import { thrallCooldownSecondsLeft } from '../../../core/thrallCooldowns';
+import { type CrawlerKind } from '../../../core/skills/SkillManager';
+import { thrallCooldownSecondsLeft } from '../../../core/labour/thrallCooldowns';
 import type { CatPlayer } from '../../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../../creatures/HumanPlayer';
 import { inset, splitH, type Rect } from '../../core/geom';

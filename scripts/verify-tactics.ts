@@ -26,7 +26,7 @@ import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import type { Mob, PlayerDamageType } from '../src/creatures/Mob';
-import type { SpatialGrid } from '../src/core/SpatialGrid';
+import type { SpatialGrid } from '../src/core/world/SpatialGrid';
 import { MAX_MOB_LEVEL } from '../src/levels/spawner';
 import { standaloneMobKinds } from '../src/levels/mobKinds';
 import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
@@ -34,8 +34,8 @@ import {
   DIFFICULTY_PROFILES,
   applySpawnDifficulty,
   type Difficulty,
-} from '../src/core/difficultyProfiles';
-import { withWorldSeed } from '../src/core/WorldRandom';
+} from '../src/core/difficulty/difficultyProfiles';
+import { withWorldSeed } from '../src/core/world/WorldRandom';
 import { mulberry32, type Rng } from '../src/sprites/person/rng';
 import {
   TACTICS_MIN_MOB_LEVEL,
@@ -51,7 +51,8 @@ import {
   GUARD_KNOCKBACK_TILES,
   GUARD_LOW_HP_FRACTION,
 } from '../src/creatures/tactics/blockGuard';
-import { ITEM_DEF, type ItemId } from '../src/core/ItemDefs';
+import { ITEM_DEF, type ItemId } from '../src/core/items/defs/ItemDefs';
+import { gearModifiers } from '../src/gear/gearHooks';
 import { MobUpdateLoop } from '../src/systems/MobUpdateLoop';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
 import { SpellSystem } from '../src/systems/SpellSystem';
@@ -77,7 +78,7 @@ import {
   FIGHT_END_GRACE_FRAMES,
   MIN_COUNTED_FIGHT_FRAMES,
 } from '../src/systems/DifficultyTelemetrySystem';
-import { difficultyStats } from '../src/core/DifficultyStats';
+import { difficultyStats } from '../src/core/difficulty/DifficultyStats';
 import {
   noteGuardBlock,
   noteKiteEnd,
@@ -858,7 +859,7 @@ const NORTH_STRIKER_OFFSET_TILES = 3;
 /** How closely a shove must line up with "away from the striker" (cosine). */
 const SHOVE_ALIGNMENT_MIN = 0.99;
 /** The reflect gear the thorns probe wears. */
-const REFLECT_GEAR: ItemId = 'shade_gnoll_kneepads';
+const REFLECT_GEAR: ItemId = 'riot_kneeguards';
 
 type ReflectOutcome = 'landed' | 'guarded' | 'timeout';
 
@@ -901,10 +902,7 @@ function checkCreditedBlows(map: GameMap): void {
   section('Block: reflected and hireling damage is judged by whoever struck');
 
   const thornsHuman = makeThornsHuman(ROOM_MIDDLE_TILE - 1, ROOM_MIDDLE_TILE);
-  check(
-    thornsHuman.inventory.equipment.getDamageReflectPct() > 0,
-    'fixture: the thorns probe wears reflect gear',
-  );
+  check(gearModifiers(thornsHuman).thornsShare > 0, 'fixture: the thorns probe wears reflect gear');
 
   // Thorns is never guarded.
   const target = makeBlocker(map, ROOM_MIDDLE_TILE, ROOM_MIDDLE_TILE);

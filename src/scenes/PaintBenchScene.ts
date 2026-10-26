@@ -12,9 +12,9 @@
  * the console as well as drawn, so a run can be read out of browser automation.
  */
 
-import { viewportHeight, viewportWidth } from '../core/Viewport';
+import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
 import { PAINT_BENCH_SUBJECTS, type PaintBenchSubject } from '../dev/paintBenchSubjects';
-import { allocCanvas, releaseSurface, surfaceContext } from '../core/canvasSurface';
+import { allocCanvas, releaseSurface, surfaceContext } from '../core/rendering/canvasSurface';
 import { worldText } from '../ui/world/worldText';
 import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { figureBakeDensity } from '../sprites/figure/figureDef';

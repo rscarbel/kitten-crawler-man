@@ -20,8 +20,8 @@ import {
   surfaceContext,
   type CanvasSurface,
   releaseSurface,
-} from '../core/canvasSurface';
-import { canvasGeneration, reportCanvasAllocationFailure } from '../core/canvasRecovery';
+} from '../core/rendering/canvasSurface';
+import { canvasGeneration, reportCanvasAllocationFailure } from '../core/rendering/canvasRecovery';
 
 /**
  * Steps per unit the bake scale is rounded to, so a canvas whose backing store

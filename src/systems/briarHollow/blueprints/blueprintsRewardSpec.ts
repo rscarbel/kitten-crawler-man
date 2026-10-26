@@ -6,13 +6,19 @@
  * hands out.
  */
 
-import type { BlueprintsStationId } from '../../../core/blueprintsQuestPhase';
+import type { BlueprintsStationId } from '../../../core/quests/blueprintsQuestPhase';
 import type { Rect } from '../../../ui/core/geom';
 import { drawBlueprintsQuestIcon } from '../../../ui/icons/blueprintsQuestIcons';
 import { drawConstructionIcon } from '../../../ui/icons/constructionIcon';
 import { iconSquare } from '../../../ui/icons/iconSquare';
 import { drawRopeCoilGlyph, drawSawBladeGlyph } from '../../../ui/icons/stationGlyphs';
-import type { QuestRewardSpec, RewardUnlockCard } from '../../../ui/questReward/types';
+import type {
+  QuestRewardSpec,
+  RewardItemLine,
+  RewardUnlockCard,
+} from '../../../ui/questReward/types';
+import { bagItemRewardLine } from '../../../ui/questReward/rewardLines';
+import type { GearId } from '../../../loot/gearPools';
 import { PLAIN_WOOD_PER_PRESS } from '../processingStations';
 import { BOARDS_PER_WOOD, MANUAL_PROCESS_SECONDS, ROPE_PER_WOOD } from '../services/woodProcessing';
 import { BLUEPRINTS_QUEST_NAME } from './blueprintsProgress';
@@ -104,16 +110,25 @@ function stationCard(reward: StationReward): RewardUnlockCard {
   };
 }
 
+/** The coat the quest pays once both stations stand upgraded. */
+export const BLUEPRINTS_QUEST_GEAR = 'patched_duster' as const satisfies GearId;
+
 /**
- * The finished quest's screen. `onDismissed` records that it has been read,
- * so a door visit, a reload or a rewind never raises it again.
+ * The finished quest's screen. `paidGear` is the coat's line as it was paid,
+ * or null when the payment was made before a reload and only the coat is
+ * known. `onDismissed` records that the screen has been read, so a door
+ * visit, a reload or a rewind never raises it again.
  */
-export function blueprintsRewardSpec(onDismissed: () => void): QuestRewardSpec {
+export function blueprintsRewardSpec(
+  paidGear: RewardItemLine | null,
+  onDismissed: () => void,
+): QuestRewardSpec {
   return {
     questTitle: BLUEPRINTS_QUEST_NAME,
     renderQuestIcon: (ctx, rect) => drawBlueprintsQuestIcon(ctx, rect, 'quest_blueprints'),
     quote: { text: FENNA_QUOTE, speaker: FENNA },
     sections: [
+      { kind: 'items', items: [paidGear ?? bagItemRewardLine(BLUEPRINTS_QUEST_GEAR, 1)] },
       {
         kind: 'unlocks',
         heading: BLUEPRINTS_REWARDS_HEADING,

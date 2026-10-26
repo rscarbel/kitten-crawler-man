@@ -3,8 +3,8 @@
  * them, the skills they have found, and the run's statistics.
  */
 
-import { CON_HP_BONUS_PER_POINT, displayHp } from '../../../core/crawlerFormulas';
-import { formatPlayTime, type GameStats } from '../../../core/GameStats';
+import { CON_HP_BONUS_PER_POINT, displayHp } from '../../../core/party/crawlerFormulas';
+import { formatPlayTime, type GameStats } from '../../../core/progression/GameStats';
 import { crawlerName } from '../../../characters/characters';
 import {
   getSkillDef,
@@ -13,13 +13,13 @@ import {
   usesToNextLevel,
   type CrawlerKind,
   type SkillState,
-} from '../../../core/SkillManager';
+} from '../../../core/skills/SkillManager';
 import {
   BRASS_GULLET_LABEL,
   BRASS_GULLET_SKILL,
   STAT_TATTOO_DESIGNS,
   brassGulletDesc,
-} from '../../../core/tattoos';
+} from '../../../core/skills/tattoos';
 import { HumanPlayer } from '../../../creatures/HumanPlayer';
 import type { Player, StatName } from '../../../Player';
 import { DYN_MOB_DAMAGE_FRACTION_PER_HANDLING_LEVEL } from '../../../systems/DynamiteSystem';
@@ -36,6 +36,7 @@ import { meter } from '../../widgets/meter';
 import { fillRounded } from '../../widgets/paint';
 import { lineHeightOf, measureTextHeight, text } from '../../widgets/text';
 import { choiceRow, perCrawler, type Choice } from './parts';
+import { activeGearLines } from '../../itemEffectLines';
 import type { PauseContext, PauseSection, SectionLayout } from './section';
 
 type CharacterTab = 'attributes' | 'skills' | 'run';
@@ -307,6 +308,8 @@ function renderAttributes(layout: SectionLayout, ctx: PauseContext): void {
     crawlerHeader(column, ctx, crawler);
     for (const stat of STATS_BY_CRAWLER[crawler]) statCard(column, ctx, crawler, stat);
     for (const line of tattooLines(crawlerOf(ctx, crawler))) column.paragraph(line, 'muted');
+    const gear = activeGearLines([...crawlerOf(ctx, crawler).inventory.equipment.equippedIds()]);
+    for (const line of gear) column.paragraph(line, 'success');
     column.space(column.ui.theme.space.md);
   });
 }

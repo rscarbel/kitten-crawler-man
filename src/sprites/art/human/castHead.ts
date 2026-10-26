@@ -2,9 +2,9 @@
  * Hair and facial hair for the people built on the biped rig.
  *
  * Dave's tufted crop is his and nobody else's: a look painted on the rig
- * hides it (the `hair` feature its outfit hides) and wears one of these
- * styles instead, so no townsperson shares his head at the 32 px tile. Each
- * style is painted as the rig's `over` attachment in the head's own frame —
+ * paints none of the rig's own hair (its `hairstyle` draws nothing) and wears
+ * one of these styles instead, so no townsperson shares his head at the 32 px
+ * tile. Each style is painted as the rig's `over` attachment in the head's own frame —
  * translated to the solved head centre and turned with it — so it rides every
  * bob, nod and turn of the head it sits on.
  *

@@ -19,8 +19,8 @@
  * time, so a slow device lands on the same board as a fast one.
  */
 
-import type { Difficulty } from '../../core/difficultyProfiles';
-import { worldRandom } from '../../core/WorldRandom';
+import type { Difficulty } from '../../core/difficulty/difficultyProfiles';
+import { worldRandom } from '../../core/world/WorldRandom';
 import { mixSeed, seededStream } from '../../map/bigTop/mirrorBoard';
 import { subSeed } from '../../sprites/person/rng';
 import {

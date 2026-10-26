@@ -8,8 +8,11 @@
  * contract and a headless check is deterministic.
  */
 
-import { ownEntry } from '../../core/guards';
-import type { ActiveContract, ConstructionContractsState } from '../../core/briarHollowState';
+import { ownEntry } from '../../core/util/guards';
+import type {
+  ActiveContract,
+  ConstructionContractsState,
+} from '../../core/quests/briarHollowState';
 import { mulberry32, subSeed, type Rng } from '../../sprites/person/rng';
 import {
   CONTRACT_SITES,

@@ -31,7 +31,7 @@ import {
 } from './trashGremlinArt';
 import { type GorePiece, trashGremlinGorePieces } from './trashGremlinGore';
 import { type FigureDef, figureStates } from '../figure/figureDef';
-import { BYTES_PER_MEGABYTE } from '../../core/canvasSurface';
+import { BYTES_PER_MEGABYTE } from '../../core/rendering/canvasSurface';
 
 // ── Cell geometry ────────────────────────────────────────────────────────────
 

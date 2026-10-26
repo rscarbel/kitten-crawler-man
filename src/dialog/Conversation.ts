@@ -24,8 +24,8 @@
 import type { AudioManager } from '../audio/AudioManager';
 import type { SoundId } from '../audio/sounds';
 import { TILE_SIZE } from '../core/constants';
-import { keybindings } from '../core/Keybindings';
-import { viewportHeight } from '../core/Viewport';
+import { keybindings } from '../core/input/Keybindings';
+import { viewportHeight } from '../core/rendering/Viewport';
 import { countDisplayPages, DialogBox } from '../ui/DialogBox';
 import {
   ACTIVATE_KEYS,

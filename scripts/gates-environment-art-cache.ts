@@ -57,9 +57,9 @@ const {
 const { GROUND_SHEET_KEYS, requestGroundSheets } =
   await import('../src/map/ground/runtimeGroundSheets.js');
 const { getManifestEntry, getSpriteDefByKey, getSpriteMissCounts } =
-  await import('../src/core/SpriteLoader.js');
+  await import('../src/core/spriteAssets/SpriteLoader.js');
 const { drawDecorationLifeLayer } = await import('../src/map/tiles/decorationTiles.js');
-const { drawSprite } = await import('../src/core/SpriteRenderer.js');
+const { drawSprite } = await import('../src/core/spriteAssets/SpriteRenderer.js');
 const { BUILDING_SPECS } = await import('../src/sprites/buildinggen/buildings.js');
 const { paintLifeFrame } = await import('../src/sprites/buildinggen/animate.js');
 const { frameHeightPx, frameWidthPx } = await import('../src/sprites/buildinggen/spec.js');
@@ -95,12 +95,12 @@ const { clubFurnitureSheetPlans } = await import('../src/sprites/sheets/clubFurn
 const { allBossRoomSheetPlans } = await import('../src/sprites/sheets/bossRoomSheets.js');
 const { bathroomSheetPlans } = await import('../src/sprites/sheets/bathroomSheets.js');
 const { getLevelDef } = await import('../src/levels/index.js');
-const { runCanvasRecovery } = await import('../src/core/canvasRecovery.js');
+const { runCanvasRecovery } = await import('../src/core/rendering/canvasRecovery.js');
 const { BYTES_PER_MEGABYTE, CanvasContextUnavailableError } =
-  await import('../src/core/canvasSurface.js');
+  await import('../src/core/rendering/canvasSurface.js');
 const { beginRenderFrame, holdIdleClock, releaseIdleClock } =
-  await import('../src/core/renderFrameClock.js');
-const { setViewportSize } = await import('../src/core/Viewport.js');
+  await import('../src/core/rendering/renderFrameClock.js');
+const { setViewportSize } = await import('../src/core/rendering/Viewport.js');
 const { TILE_SIZE } = await import('../src/core/constants.js');
 const { EnvironmentSheetResidentSet, FACADE_LIFE_RING, FACADE_RING } =
   await import('../src/systems/EnvironmentSheetResidentSet.js');

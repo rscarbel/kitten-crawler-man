@@ -19,7 +19,7 @@
  * caller passes the state it wants drawn.
  */
 
-import { drawSpriteKey } from '../core/SpriteRenderer';
+import { drawSpriteKey } from '../core/spriteAssets/SpriteRenderer';
 import type { BathroomPlumbing, BathroomRoomData } from '../map/bathroomLayout';
 import type { Point } from '../map/roomDoorways';
 import type { TileContent } from '../map/tileTypes';

@@ -14,7 +14,7 @@
  * that timing is written down.
  */
 
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { worldText } from '../ui/world/worldText';
 import { worldBar } from '../ui/world/worldShapes';
 import { PreviewScene, type PreviewControl } from './PreviewScene';

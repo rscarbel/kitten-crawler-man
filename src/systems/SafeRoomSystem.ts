@@ -9,7 +9,7 @@ import {
 import { SAFE_ROOM_LANTERN, SAFE_ROOM_STOVE } from '../map/tileTypes';
 import { isFieldStation, mordecaiAndBedTiles } from '../map/safeRoomFixtures';
 import { TILE_SIZE } from '../core/constants';
-import type { SpatialGrid } from '../core/SpatialGrid';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
 import {
   drawMordecaiForLevel,
@@ -29,13 +29,13 @@ import {
   questMarkerColorFor,
   type QuestMarkerState,
 } from '../sprites/questNPCSprite';
-import type { InteriorFigure } from '../core/InteriorFigure';
+import type { InteriorFigure } from '../core/rendering/InteriorFigure';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawInteractionPrompt, interactionPromptTop } from '../ui/InteractionPrompt';
 import { randomFromArray, frameTime } from '../utils';
 import { worldText } from '../ui/world/worldText';
 import { worldPalette } from '../ui/theme/worldInk';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { drawRadialGlow, type GlowStop } from '../sprites/radialGlow';
 import type { Conversation } from '../dialog/Conversation';
 import type { DialogLine, NonEmpty } from '../dialog/line';

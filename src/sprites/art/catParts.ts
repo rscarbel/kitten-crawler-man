@@ -24,9 +24,6 @@ type Ctx = CanvasRenderingContext2D;
 /** Her own left or right, whichever way she faces on screen. */
 export type CatSide = 'left' | 'right';
 
-/** Something of hers a garment can hide rather than paint over. */
-export type CatHideableFeature = 'ears';
-
 /** An ellipse in the coordinates of the frame that carries it. */
 export interface CatEllipse {
   readonly cx: number;
@@ -88,9 +85,12 @@ export interface CatNeckFrame {
   readonly envelope: readonly Pt[];
 }
 
-/** One piece of her barrel, in pose space. */
+/**
+ * One piece of her barrel, in pose space. A `blade` is a shoulder blade
+ * standing up off the top of her barrel head-on, on a look that has them.
+ */
 export interface CatBodyFrame extends FurPiece {
-  readonly piece: 'barrel' | 'haunch' | 'ruff' | 'belly' | 'chest';
+  readonly piece: 'barrel' | 'blade' | 'haunch' | 'ruff' | 'belly' | 'chest';
   /** Which haunch, for a haunch; null for a piece on her midline. */
   readonly side: CatSide | null;
   /** The ellipse the piece's outline is wobbled from. */
@@ -119,6 +119,12 @@ export type CatLegFrame =
       /** The paw's half-width and half-height before its toes bulge. */
       readonly radiusX: number;
       readonly radiusY: number;
+      /**
+       * How far her claws are out, 0 sheathed to 1 fully extended, for a paw
+       * that shows them; `catPawClaws` places them. A paw closed on a haft
+       * reads 0: its claws are painted over the haft after the paw.
+       */
+      readonly claw: number;
       readonly shade: number;
     });
 
@@ -148,11 +154,8 @@ export type CatPartName = keyof CatPartFrames;
 
 /**
  * What her anatomy paints her clothes through. `part` is called at every
- * piece of every part, with the context in that piece's coordinates; `hides`
- * says whether something she wears covers a feature, so the anatomy leaves it
- * unpainted.
+ * piece of every part, with the context in that piece's coordinates.
  */
 export interface CatDressing {
   readonly part: <P extends CatPartName>(ctx: Ctx, part: P, frame: CatPartFrames[P]) => void;
-  readonly hides: (feature: CatHideableFeature) => boolean;
 }

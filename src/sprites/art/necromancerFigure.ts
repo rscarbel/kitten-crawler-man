@@ -19,7 +19,7 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
+} from '../../core/rendering/canvasSurface';
 import { type FigureDef, figureStates } from '../figure/figureDef';
 import { clamp01, deg, easeInOut, easeOut, hump, lerp, ramp, rgba, type Pt } from './bipedArt';
 import {

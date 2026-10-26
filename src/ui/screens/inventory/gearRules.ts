@@ -3,51 +3,51 @@
  * where it was aimed, what wearing it would change, and the worn-gear totals.
  */
 
-import type { Inventory } from '../../../core/Inventory';
+import type { Inventory } from '../../../core/items/inventory/Inventory';
 import {
   ALL_FAIRY_ELEMENTS,
   ALL_RESISTANCE_TYPES,
-  EQUIP_SLOT_WEARER,
+  EQUIP_SLOTS,
   EQUIP_SUBSLOTS,
+  equipAddressOfKey,
   isWearable,
   itemFitsSubSlot,
-  wearerAllows,
+  subSlotsOf,
   wearerOf,
   type EquipSlot,
   type InventoryItem,
   type ResistanceType,
-} from '../../../core/ItemDefs';
-import type { CrawlerKind } from '../../../core/SkillManager';
+  type SubSlotId,
+} from '../../../core/items/defs/ItemDefs';
+import { SKILL_IDS, type CrawlerKind } from '../../../core/skills/SkillManager';
+import { gearModifiers, itemTraits, type GearWearer } from '../../../gear/gearHooks';
+import { describeTrait } from '../../../gear/traits';
 import { ALL_STATS, type StatName } from '../../../Player';
-import { asPercent, fairyImmunityLine } from '../../itemEffectLines';
+import {
+  CANCELS_MOMENTUM_LINE,
+  fairyImmunityLine,
+  meleeOnlyStatLine,
+  regenLine,
+  setProgressLines,
+  skillBonusLine,
+} from '../../itemEffectLines';
 
-/** Head to foot, which is the order the doll's sections stack. */
-export const EQUIP_SLOT_ORDER = [
-  'Head',
-  'Mouth',
-  'Torso',
-  'Legs',
-  'Hands',
-  'Hand',
-  'Feet',
-] as const satisfies readonly EquipSlot[];
-
-/** What the doll titles each section. The held sections read as what they hold, not as body parts. */
+/** What the doll titles each section. */
 export const DOLL_SECTION_LABELS: Readonly<Record<EquipSlot, string>> = {
+  Weapon: 'Weapon',
   Head: 'Head',
-  Mouth: 'In Mouth',
   Torso: 'Torso',
   Legs: 'Legs',
   Hands: 'Hands',
-  Hand: 'In Hand',
   Feet: 'Feet',
+  Trinkets: 'Trinkets',
 };
 
 export interface DollSlot {
   /** The `"Slot:SubSlot"` key the equipment map is keyed on. */
   readonly key: string;
   readonly slot: EquipSlot;
-  readonly subSlot: string;
+  readonly subSlot: SubSlotId;
 }
 
 export interface DollSection {
@@ -55,53 +55,43 @@ export interface DollSection {
   readonly cells: readonly DollSlot[];
 }
 
-const ALL_DOLL_SECTIONS: readonly DollSection[] = EQUIP_SLOT_ORDER.map((slot) => ({
-  slot,
-  cells: EQUIP_SUBSLOTS[slot].map((subSlot) => ({ key: `${slot}:${subSlot}`, slot, subSlot })),
-}));
+/** Every sub-slot a crawler of `kind` has, in the order the doll lays them out. */
+export function dollSectionsFor(kind: CrawlerKind): readonly DollSection[] {
+  // `EQUIP_SLOTS` runs what a crawler fights with first, then head to foot.
+  return EQUIP_SLOTS.flatMap((slot) => {
+    const cells = subSlotsOf(kind, slot).map((subSlot) => ({
+      key: `${slot}:${subSlot}`,
+      slot,
+      subSlot,
+    }));
+    return cells.length === 0 ? [] : [{ slot, cells }];
+  });
+}
 
 /**
- * Every sub-slot a crawler of `kind` has, head to foot, in the order the doll
- * lays them out: the human's doll has hands to hold with, the cat's a mouth.
+ * The most cells one doll section holds on either crawler. Every doll is laid
+ * out to this width, so the two crawlers' dolls line up when the screen swaps.
  */
-export function dollSectionsFor(kind: CrawlerKind): readonly DollSection[] {
-  return ALL_DOLL_SECTIONS.filter((section) => wearerAllows(EQUIP_SLOT_WEARER[section.slot], kind));
-}
-
-/** The most cells one doll section holds (hands and feet). */
 export const DOLL_MAX_SECTION_CELLS = Math.max(
-  ...ALL_DOLL_SECTIONS.map((section) => section.cells.length),
+  ...Object.values(EQUIP_SUBSLOTS).flatMap((sections) =>
+    EQUIP_SLOTS.map((slot) => sections[slot]?.length ?? 0),
+  ),
 );
-
-const TOE_RING = /^Toe Ring (\d+)$/;
-
-/** A sub-slot name short enough to sit inside an empty cell. */
-export function shortSubSlotLabel(subSlot: string): string {
-  const toe = TOE_RING.exec(subSlot);
-  if (toe !== null) return `Toe ${toe[1]}`;
-  if (subSlot === 'Knee Pads') return 'Knees';
-  return subSlot;
-}
-
-export function keySlot(key: string): string {
-  return key.split(':')[0] ?? '';
-}
-
-export function keySubSlot(key: string): string {
-  return key.split(':')[1] ?? '';
-}
 
 const CRAWLER_LABELS: Readonly<Record<CrawlerKind, string>> = { human: 'Human', cat: 'Cat' };
 
 export const NOT_WEARABLE_REFUSAL = "That isn't something you can wear.";
 export const WRONG_SLOT_REFUSAL = "That doesn't go there.";
 export const ALREADY_WORN_REFUSAL = "That's already being worn.";
+export const BOUND_SLOT_REFUSAL = "What's there is cursed. It won't come off until a safe room.";
+export const BOUND_PIECE_REFUSAL = "It's cursed. It won't come off until a safe room.";
 
 /** Why `item` cannot sit in `targetKey`, or null when it fits there. Says nothing about whether it is worn. */
 export function slotFitRefusal(item: InventoryItem, targetKey: string): string | null {
   if (!isWearable(item)) return NOT_WEARABLE_REFUSAL;
-  if (item.equipSlot !== keySlot(targetKey)) return WRONG_SLOT_REFUSAL;
-  if (!itemFitsSubSlot(item, keySubSlot(targetKey))) return WRONG_SLOT_REFUSAL;
+  const address = equipAddressOfKey(null, targetKey);
+  if (item.equipSlot !== address?.slot) return WRONG_SLOT_REFUSAL;
+  if (!itemFitsSubSlot(item, address.subSlot)) return WRONG_SLOT_REFUSAL;
   return null;
 }
 
@@ -117,6 +107,9 @@ export function equipRefusal(
     if (fitRefusal !== null) return fitRefusal;
   }
   if (inventory.hasEquipped(item.id)) return ALREADY_WORN_REFUSAL;
+  if (inventory.equipment.boundOccupant(item, targetKey ?? undefined) !== null) {
+    return BOUND_SLOT_REFUSAL;
+  }
   const ownerKind = inventory.equipment.kind;
   // Read before the guard: `canEquip` is a type predicate, so its false branch
   // narrows the item to `never`.
@@ -181,11 +174,11 @@ const RESISTANCE_NAMES: Readonly<Record<ResistanceType, string>> = {
 /**
  * The worn-gear summary: real totals from the equipment aggregators rather
  * than a merge of per-item lines, because two items that each reflect 10%
- * reflect 20% together.
+ * reflect 20% together. Traits with no total read as their own line, once.
  */
-export function wornGearSummary(inventory: Inventory): string[] {
+export function wornGearSummary(wearer: GearWearer): string[] {
   const lines: string[] = [];
-  const equipment = inventory.equipment;
+  const equipment = wearer.inventory.equipment;
   const resisted = ALL_RESISTANCE_TYPES.filter((type) => equipment.hasResistance(type)).map(
     (type) => RESISTANCE_NAMES[type],
   );
@@ -194,11 +187,27 @@ export function wornGearSummary(inventory: Inventory): string[] {
     ALL_FAIRY_ELEMENTS.filter((element) => equipment.hasFairyImmunity(element)),
   );
   if (fairyImmunity !== null) lines.push(fairyImmunity);
-  const reflect = equipment.getDamageReflectPct();
-  if (reflect > 0) lines.push(`Reflects ${asPercent(reflect)}% of melee damage`);
-  const stun = equipment.getStunOnHitChance();
-  if (stun > 0) lines.push(`${asPercent(stun)}% stun on hit`);
-  if (equipment.getCancelsMomentum()) lines.push('Momentum attacks cannot touch you');
+  const regen = regenLine(equipment.getRegenMultiplier());
+  if (regen !== null) lines.push(regen);
+  for (const id of SKILL_IDS) {
+    const bonus = equipment.getSkillLevelBonus(id);
+    if (bonus > 0) lines.push(skillBonusLine(id, bonus));
+  }
+  for (const stat of ALL_STATS) {
+    const bonus = equipment.getMeleeOnlyStatBonus(stat);
+    if (bonus > 0) lines.push(meleeOnlyStatLine(stat, bonus));
+  }
+  const thorns = gearModifiers(wearer).thornsShare;
+  if (thorns > 0) lines.push(describeTrait({ kind: 'thorns', share: thorns }));
+  if (equipment.getCancelsMomentum()) lines.push(CANCELS_MOMENTUM_LINE);
+  const traitLines = new Set<string>();
+  for (const id of equipment.equippedIds()) {
+    for (const trait of itemTraits(id, wearer.gear.of(id).awakened)) {
+      if (trait.kind !== 'thorns') traitLines.add(describeTrait(trait));
+    }
+  }
+  lines.push(...traitLines);
+  lines.push(...setProgressLines([...equipment.equippedIds()]));
   return lines;
 }
 

@@ -11,9 +11,9 @@
  * refusals: a siege, a party short of materials, and a dropped contract.
  */
 
-import type { BriarHollowState } from '../../src/core/briarHollowState';
-import type { VillageQuestPhase } from '../../src/core/villageQuestPhase';
-import { createBriarHollowState } from '../../src/core/briarHollowState';
+import type { BriarHollowState } from '../../src/core/quests/briarHollowState';
+import type { VillageQuestPhase } from '../../src/core/quests/villageQuestPhase';
+import { createBriarHollowState } from '../../src/core/quests/briarHollowState';
 import { TILE_SIZE } from '../../src/core/constants';
 import { EventBus } from '../../src/core/EventBus';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
@@ -23,7 +23,7 @@ import type { ConversationHandle, ConversationRequest } from '../../src/dialog/r
 import type { NPCMarkerType } from '../../src/creatures/QuestNPC';
 import { InteriorOccupantSystem } from '../../src/systems/InteriorOccupantSystem';
 import type { InteriorStoryState } from '../../src/systems/interiorStoryOwnership';
-import { createAnchorQuestProgress } from '../../src/core/AnchorQuestProgress';
+import { createAnchorQuestProgress } from '../../src/core/quests/AnchorQuestProgress';
 import {
   CONTRACT_SITES,
   type BriarHollowContractSiteDef,
@@ -42,7 +42,7 @@ import {
   CONSTRUCTION_CONTRACT_QUEST_ID,
   releaseContractAutoPinOnEnd,
 } from '../../src/systems/constructionContracts/contractQuest';
-import { createJournalProgress, type PinSource } from '../../src/core/JournalProgress';
+import { createJournalProgress, type PinSource } from '../../src/core/quests/JournalProgress';
 import {
   CONTRACT_SHORT_MESSAGE,
   contractSpotFrames,
@@ -279,6 +279,7 @@ function verifySkyfowlSite(check: Check, site: SkyfowlContractSiteDef): void {
     audio: null,
     conversation,
     flyCoins: (coins) => coinsFlown.push(coins),
+    party: { human, cat },
     speechStyleOf: (residentId) =>
       occupants?.people.find((person) => person.residentId === residentId)?.speechStyle ?? null,
   });

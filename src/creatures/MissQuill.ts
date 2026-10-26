@@ -6,7 +6,7 @@ import { drawMissQuillSprite } from '../sprites/missQuillSprite';
 import { type SoulBolt, fireSoulBolt, advanceSoulBolts, renderSoulBolts } from './soulBolt';
 import type { Krasue } from './Krasue';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
-import { applySpawnDifficulty } from '../core/difficultyProfiles';
+import { applySpawnDifficulty } from '../core/difficulty/difficultyProfiles';
 import { questMobLevel } from '../systems/questMobLevel';
 import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
 

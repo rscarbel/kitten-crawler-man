@@ -19,7 +19,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { worldText } from '../ui/world/worldText';
 import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { Townsperson } from '../creatures/Townsperson';
@@ -32,7 +32,7 @@ import {
 } from '../sprites/person/PersonAppearance';
 import { drawPerson } from '../sprites/person/drawPerson';
 import { walkCycleDistance } from '../sprites/person/gait';
-import { BYTES_PER_MEGABYTE } from '../core/canvasSurface';
+import { BYTES_PER_MEGABYTE } from '../core/rendering/canvasSurface';
 import {
   getFigureCacheStats,
   setFigureCacheStatsRecording,

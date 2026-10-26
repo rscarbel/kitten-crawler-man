@@ -4,14 +4,15 @@
  * eligibility reads, built from the state either floor-3 scene threads.
  */
 
-import type { AnchorQuestProgress } from '../../core/AnchorQuestProgress';
-import type { BriarHollowState } from '../../core/briarHollowState';
+import type { QuestId } from '../../core/quests/QuestManager';
+import type { AnchorQuestProgress } from '../../core/quests/AnchorQuestProgress';
+import type { BriarHollowState } from '../../core/quests/briarHollowState';
 import type { EventBus } from '../../core/EventBus';
-import { releaseAutoPin, type JournalProgress } from '../../core/JournalProgress';
-import type { MurderQuestProgress } from '../../core/MurderQuestProgress';
+import { releaseAutoPin, type JournalProgress } from '../../core/quests/JournalProgress';
+import type { MurderQuestProgress } from '../../core/quests/MurderQuestProgress';
 import type { ContractWorld } from './contractEligibility';
 
-export const CONSTRUCTION_CONTRACT_QUEST_ID = 'construction_contract';
+export const CONSTRUCTION_CONTRACT_QUEST_ID = 'construction_contract' as const satisfies QuestId;
 export const CONSTRUCTION_CONTRACT_QUEST_NAME = 'Construction Contract';
 
 /** Wendell hands out contracts once "The Borrowed Blueprints" is finished. */

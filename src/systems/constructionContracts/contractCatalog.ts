@@ -8,7 +8,7 @@
  * moves with the layout. `contractTargets.ts` resolves both into tiles.
  */
 
-import type { ResourceCost } from '../../core/partyResources';
+import type { ResourceCost } from '../../core/items/gathering/partyResources';
 import type { VillagerId } from '../../dialog/scripts/briarHollow';
 import { contractPropId } from '../../map/contractAreas';
 import { BUILDINGS, type VillageBuildingId } from '../../map/overworld/briarHollowLayout';

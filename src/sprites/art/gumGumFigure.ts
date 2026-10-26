@@ -201,7 +201,7 @@ const DRAW_BY_VIEW: Readonly<
   away: drawBipedBack,
 };
 
-/** Nothing over her base garments: no cloak, no gauntlet, no trollskin band at the collar. */
+/** Nothing over her base garments: none of the crawler's gear. */
 const NOTHING_OVER_HER_BASE = stillOutfit(outfitOf(GUMGUM_LOOK, []));
 
 function paintGumGumFrame(ctx: Ctx, state: string, frame: number): void {

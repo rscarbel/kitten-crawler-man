@@ -41,7 +41,7 @@ import {
   type BlueprintsQuestIconId,
 } from '../src/ui/icons/blueprintsQuestIcons.js';
 import { drawItemIcon } from '../src/ui/icons/drawItemIcon.js';
-import type { InventoryItem } from '../src/core/ItemDefs.js';
+import type { InventoryItem } from '../src/core/items/defs/ItemDefs.js';
 import type { Rect } from '../src/ui/core/geom.js';
 
 type Draw = (ctx: CanvasRenderingContext2D, rect: Rect) => void;

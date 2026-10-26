@@ -15,17 +15,17 @@
 
 import { EventBus } from '../../src/core/EventBus.js';
 import { TILE_SIZE } from '../../src/core/constants.js';
-import { referenceStats } from '../../src/core/referenceCrawler.js';
+import { referenceStats } from '../../src/core/party/referenceCrawler.js';
 import { KrakarenClone } from '../../src/creatures/KrakarenClone.js';
 import { KrakarenTentacle } from '../../src/creatures/KrakarenTentacle.js';
 import type { Mob } from '../../src/creatures/Mob.js';
-import { applySpawnDifficulty } from '../../src/core/difficultyProfiles.js';
+import { applySpawnDifficulty } from '../../src/core/difficulty/difficultyProfiles.js';
 import type { DamageSource } from '../../src/Player.js';
 import { KRAKAREN_WADE } from '../../src/map/tileTypes.js';
 import { mulberry32 } from '../../src/sprites/person/rng.js';
 import { BossRoomSystem } from '../../src/systems/BossRoomSystem.js';
 import { resolveKills, type CombatContext } from '../../src/systems/CombatSystem.js';
-import { AbilityManager } from '../../src/core/AbilityManager.js';
+import { AbilityManager } from '../../src/core/skills/AbilityManager.js';
 import { applyMovement } from '../../src/systems/GameLoopPhases.js';
 import { MobUpdateLoop } from '../../src/systems/MobUpdateLoop.js';
 import { SpellSystem } from '../../src/systems/SpellSystem.js';

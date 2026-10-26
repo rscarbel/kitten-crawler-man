@@ -6,8 +6,8 @@
  * a board is the one Wendell would have handed over.
  */
 
-import type { ActiveContract, BriarHollowState } from '../../core/briarHollowState';
-import { formatCost } from '../../core/partyResources';
+import type { ActiveContract, BriarHollowState } from '../../core/quests/briarHollowState';
+import { formatCost } from '../../core/items/gathering/partyResources';
 import type { WorkOrderNoticeState } from '../townNotices';
 import type { QuestMarkerState } from '../../sprites/questNPCSprite';
 import { contractSiteFor, contractSpot, type ContractSiteDef } from './contractCatalog';

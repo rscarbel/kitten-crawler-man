@@ -23,7 +23,7 @@ import { humanStatusFigureBoxOf, HumanPlayer } from '../src/creatures/HumanPlaye
 import { Goblin } from '../src/creatures/Goblin.js';
 import { type Mob } from '../src/creatures/Mob.js';
 import { Rat } from '../src/creatures/Rat.js';
-import { makeStun } from '../src/core/StatusEffect.js';
+import { makeStun } from '../src/core/combat/StatusEffect.js';
 import {
   figureByteBudgetFor,
   IDLE_FRAMES_BEFORE_RELEASE,
@@ -38,7 +38,6 @@ import {
   storedRowBytes,
 } from './figureGates.js';
 import {
-  firstImpactFrame,
   GROUND_OFFSET_IN_TILE,
   HUMAN_FIGURE,
   HUMAN_ROW_NAMES,
@@ -132,8 +131,6 @@ import {
   humanWornOn,
   stillOutfit,
 } from '../src/sprites/garments/human/humanDressing.js';
-import { gauntletFormOn } from '../src/sprites/garments/human/humanGauntlet.js';
-import { wornGarmentOf } from '../src/sprites/garments/garments.js';
 import { outfitOf, type Outfit, paintOutfitPart } from '../src/sprites/garments/outfit.js';
 import { torsoFrame } from '../src/sprites/art/biped/torso.js';
 import { FOREARM_LENGTH, HEAD_RY, UPPER_ARM_LENGTH } from '../src/sprites/art/biped/proportions.js';
@@ -161,16 +158,13 @@ import {
 import { GRIP_ARCHETYPES } from '../src/sprites/held/gripArchetypes.js';
 import { HELD_VISUALS } from '../src/sprites/held/heldVisuals.js';
 import { compositeHeldItem, heldTransformAt } from '../src/sprites/held/heldComposite.js';
-import { ITEM_DEF, isItemId, type ItemId, weaponStatsOf } from '../src/core/ItemDefs.js';
+import { ITEM_DEF, isItemId, type ItemId, weaponStatsOf } from '../src/core/items/defs/ItemDefs.js';
 import {
   dressedPose,
-  garmentRowOf,
   type HumanFigure,
   humanFigureFor,
   humanFigureWearing,
-  HUMAN_RIGHT_PUNCH_ROWS,
 } from '../src/sprites/art/human/appearance.js';
-import { type GauntletForm } from '../src/sprites/art/biped/gear.js';
 import { type FigureDef } from '../src/sprites/figure/figureDef.js';
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import {
@@ -543,8 +537,8 @@ function failOnSeamPop(
 /**
  * G3 — a loop must close: not a pop across its seam, and not a held frame.
  *
- * The held-frame floor is measured on the look in its base clothes: a cloak
- * hung behind him fills the background his arms gesture against, and the
+ * The held-frame floor is measured on the look in its base clothes: a garment
+ * hung behind him would fill the background his arms gesture against, and the
  * motion it hides is hidden at the seam and in the steps by different amounts,
  * so a seam that is fine reads as held. A pop only grows under a garment, so
  * the seam ceiling is held on the base clothes and on the outfit under test,
@@ -743,12 +737,11 @@ function isDeclaredSpike(row: string, step: number): boolean {
  * after it sees the snaps this silhouette step cannot.
  *
  * Measured on his body in the default outfit, whatever outfit the run gates:
- * the step is counted in silhouette pixels, and a cloak hung behind him
- * swallows every arm movement made in front of it — a drink raised over the
- * cloak changes no silhouette pixel at all — so the same motion would read as
- * a dead frame followed by a snap. Gear moves only as the pose it is laid on
- * moves — the cloak's hem by the jacket hem's own spring — so the body's steps
- * are the steps to hold.
+ * the step is counted in silhouette pixels, and a garment hung behind him
+ * would swallow every arm movement made in front of it — a drink raised over
+ * it changes no silhouette pixel at all — so the same motion would read as a
+ * dead frame followed by a snap. Gear moves only as the pose it is laid on
+ * moves, so the body's steps are the steps to hold.
  */
 function gateMotionContinuity(): void {
   let stepsMeasured = 0;
@@ -1019,7 +1012,7 @@ function downLandingFrame(heights: readonly number[]): number {
  * table is gated by the type, and one that reaches the table without naming
  * its part fails here rather than passing unmeasured. On a punch the named
  * fist must also be one that is out on the impact frame, since it is the fist
- * the gauntlet's steel is painted round.
+ * the picture shows landing the blow.
  */
 function gateStrikePeaksOnImpact(): void {
   let rowsMeasured = 0;
@@ -2233,9 +2226,7 @@ function playerFacing(facing: Pt, set: MotionSet = 'unarmed'): HumanPlayer {
   const weapon = weaponPlaying(set);
   if (weapon !== null) {
     player.inventory.addItem(weapon, 1);
-    player.restoreWeaponDrawn(false);
-    player.inventory.equipment.equipById(weapon);
-    player.restoreWeaponDrawn(true);
+    player.holdWithoutGesture(weapon);
   }
   player.facingX = facing.x;
   player.facingY = facing.y;
@@ -2687,12 +2678,11 @@ function gateViewConsistency(): void {
 function holdSet(player: HumanPlayer, set: MotionSet): void {
   const weapon = weaponPlaying(set);
   if (weapon === null) {
-    player.restoreWeaponDrawn(false);
+    player.holdWithoutGesture(null);
     return;
   }
   player.inventory.addItem(weapon, 1);
-  player.inventory.equipment.equipById(weapon);
-  player.restoreWeaponDrawn(true);
+  player.holdWithoutGesture(weapon);
 }
 
 /** Long enough for a stride stopped in any frame to settle, play its stop and stand. */
@@ -3017,7 +3007,6 @@ interface CrossSection {
   readonly range: number;
   /** Core pixels measured. */
   readonly core: number;
-  readonly pixels: readonly Pt[];
 }
 
 /**
@@ -3075,31 +3064,7 @@ function crossSection(
   const lumas = pixels
     .filter((p) => alphaAt(raster, p.x, p.y) >= SOLID_ALPHA_THRESHOLD)
     .map((p) => lumaAt(raster, p.x, p.y));
-  return { range: Math.max(...lumas) - Math.min(...lumas), core: lumas.length, pixels };
-}
-
-/**
- * How far a pixel's luminance may move between the figure with and without
- * its rigid worn pieces before the pixel counts as one of theirs. Away from a
- * piece the two bake alike to the level.
- */
-const WORN_COVER_LUMA = 2;
-
-/**
- * Whether a rigid worn piece — a kneepad's disc, a bracer's plate, a boot's
- * shaft (`GarmentSpec.rigid`) — is what most of the section sees, rather
- * than the limb and the cloth over it. A stiff piece is flat by design and is
- * reviewed with its item; cloth over a limb still has to read as the limb, so
- * it is never excused.
- */
-function coveredByRigidPiece(section: CrossSection, worn: Raster, unrigid: Raster): boolean {
-  const changed = section.pixels.filter((p) => {
-    const wornAlpha = alphaAt(worn, p.x, p.y);
-    if (wornAlpha < SOLID_ALPHA_THRESHOLD) return false;
-    if (alphaAt(unrigid, p.x, p.y) < SOLID_ALPHA_THRESHOLD) return true;
-    return Math.abs(lumaAt(worn, p.x, p.y) - lumaAt(unrigid, p.x, p.y)) > WORN_COVER_LUMA;
-  }).length;
-  return changed * 2 > section.pixels.length;
+  return { range: Math.max(...lumas) - Math.min(...lumas), core: lumas.length };
 }
 
 /**
@@ -3159,19 +3124,10 @@ const MUSCLE_RASTERS: ReadonlyArray<{
 function gateMuscleRead(): void {
   let cropsMeasured = 0;
   let thinCrops = 0;
-  let coveredCrops = 0;
   const weakest = new Map<string, { range: number; where: string }>();
-  const unrigidFigure = humanFigureWearing(
-    gateLook,
-    outfitOf(
-      gateLook,
-      gateOutfit.worn.filter((garment) => !garment.rigid),
-    ),
-  );
   for (const { name, raster: rasterFor } of MUSCLE_RASTERS) {
     for (const { row, frame, sides } of MUSCLE_FRAMES) {
       const raster = rasterFor(row, frame, gateFigure);
-      const unrigidRaster = rasterFor(row, frame, unrigidFigure);
       const probe = probeHumanJoints(row, frame, gateLook);
       const profile = VIEWS[probe.view].profile;
       for (const side of sides) {
@@ -3187,23 +3143,14 @@ function gateMuscleRead(): void {
         ];
         for (const [crop, samples] of crops) {
           const where = `${name} ${row}[${frame}] ${side} ${crop.part}`;
-          const solid = samples
+          const sections = samples
             .map((along) => crossSection(raster, crop, along, profile, IN_GAME_PX_PER_CELL_PX))
             .filter((section): section is CrossSection => section !== null);
-          if (solid.length === 0) {
+          if (sections.length === 0) {
             fail('G17', `${where}: no solid limb under the solved bone`);
             continue;
           }
-          const sections = solid.filter((s) => !coveredByRigidPiece(s, raster, unrigidRaster));
-          // A limb mostly under a rigid piece is judged with the piece; what
-          // shows past its edge is too little of the limb to read its form.
-          if (sections.length * 2 < solid.length) {
-            coveredCrops++;
-            continue;
-          }
-          // How thick the limb is to judge is the limb's own width, whatever
-          // lies over part of it.
-          const core = median(solid.map((s) => s.core));
+          const core = median(sections.map((s) => s.core));
           if (core < MIN_MEASURABLE_CORE_PX && gateSpec().slimLimbsAtTile) {
             thinCrops++;
             continue;
@@ -3232,24 +3179,7 @@ function gateMuscleRead(): void {
       }
     }
   }
-  // Only a rigid piece may stand in for a judged crop: a slim look in rigid
-  // gear from ankle to wrist has nothing of the limb left to judge. Without a
-  // rigid piece a run that judged no crop filtered everything away by accident.
-  const wearsRigidPiece = gateOutfit.worn.some((garment) => garment.rigid);
-  if (wearsRigidPiece) {
-    failUnlessMeasured(
-      'G17',
-      cropsMeasured + coveredCrops,
-      'limb crops judged or under a rigid piece',
-    );
-  } else {
-    failUnlessMeasured('G17', cropsMeasured, 'limb crops judged');
-  }
-  if (coveredCrops > 0) {
-    console.log(
-      `  G17: ${coveredCrops} limb crops mostly under a rigid piece, judged with the item`,
-    );
-  }
+  failUnlessMeasured('G17', cropsMeasured, 'limb crops judged');
   if (thinCrops > 0) {
     console.log(`  G17: ${thinCrops} limb crops a pixel thin at the tile, too slim to show form`);
   }
@@ -3888,8 +3818,8 @@ const STATUS_BOX_TOP_HEADROOM_TILES = STATUS_BOX_TOP_HEADROOM_IN_GAME_PX / TILE_
  * not count as his soles.
  *
  * Measured on his body in the default outfit, whatever outfit the run gates:
- * the box wraps him, not his clothes, and gear standing off him — a cloak
- * flaring past his arms — lies outside it by design, the same in every outfit.
+ * the box wraps him, not his clothes, and gear standing off him lies outside
+ * it by design, the same in every outfit.
  */
 function gateStatusFigureBox(): void {
   const tileCentreX = TILE_X + TILE_SCALE / 2;
@@ -4143,125 +4073,6 @@ function gateLayerHoldsInk(): void {
     }
   }
   failUnlessMeasured('G23', cellsCompared, 'cells');
-}
-
-// ── G24: the gauntlet turns to steel on the blow ─────────────────────────────
-
-/**
- * What the gauntlet is on each frame of a right-fisted punch, by frames from
- * the one the blow lands on: steel from the frame before to the frame after,
- * the puff it vanishes in, and that puff thinning. Every other frame, and
- * every frame of any other row, it is the bracer.
- */
-const STEEL_FRAMES_BEFORE_IMPACT = 1;
-const STEEL_FRAMES_AFTER_IMPACT = 1;
-const SMOKE_FRAMES_AFTER_IMPACT = 2;
-const WISP_FRAMES_AFTER_IMPACT = 3;
-const GAUNTLET_TIMELINE: ReadonlyMap<number, GauntletForm> = new Map<number, GauntletForm>([
-  [-STEEL_FRAMES_BEFORE_IMPACT, 'spiked'],
-  [0, 'spiked'],
-  [STEEL_FRAMES_AFTER_IMPACT, 'spiked'],
-  [SMOKE_FRAMES_AFTER_IMPACT, 'smoke'],
-  [WISP_FRAMES_AFTER_IMPACT, 'wisp'],
-]);
-/** The blow the gauntlet is best known for; a punch set without it has lost its probe. */
-const SIGNATURE_PUNCH_ROW: HumanRowName = 'cross_side';
-/** The look in the gauntlet and nothing else it would not wear by default. */
-function gauntletOnly(): Outfit<'human'> {
-  return outfitOf(gateLook, [
-    wornGarmentOf('human', 'human_trollskin_shirt'),
-    wornGarmentOf('human', 'human_gauntlet'),
-  ]);
-}
-/**
- * The fewest pixels the spiked steel may change on a punch's impact frame
- * against the bracer on the same pose. Measured on the shipped art, the
- * smallest punch changes 25 px (the back-view hammer fist, the head in front
- * of the fist); half of that still fires the moment the steel stops being painted at all, which changes none.
- */
-const MIN_STEEL_CHANGED_PX = 12;
-/** A channel difference past rounding noise between the steel and the bracer painted on one pose. */
-const STEEL_CHANNEL_DELTA = 8;
-
-/** A punch's impact cell in the gauntlet, with the gauntlet forced to `form`. */
-function gauntletCell(row: RowSpec, frame: number, form: GauntletForm): Uint8ClampedArray {
-  const cell = createCanvas(frameWidth, frameHeight);
-  const ctx = asGameContext(cell.getContext('2d'));
-  scaleIntoCell(ctx, row.view);
-  // The gauntlet reads its form off when the row's right punch lands, so a row
-  // told it lands on this frame, or never, forces the steel or the bracer.
-  const landsHere = form === 'spiked' ? frame : null;
-  const timed = { ...garmentRowOf(row), rightPunchImpact: landsHere };
-  const pose: BipedPose = {
-    ...withLookBuild(row.pose(frame), gateLook),
-    outfit: { outfit: gauntletOnly(), row: timed, frame, frameCount: row.frameCount },
-  };
-  DRAW_VIEW[row.view](ctx, pose, { look: gateLook });
-  return cell.getContext('2d').getImageData(0, 0, frameWidth, frameHeight).data;
-}
-
-/**
- * G24's timeline is read off `gauntletFormOn`, which says what the gauntlet
- * *is* on a frame and never that the painter drew it: a painter that paints
- * the bracer whatever the form passes the timeline on every frame. So on each
- * punch's impact frame the cell is painted with the steel and with the bracer,
- * and the two must differ.
- */
-function checkSteelPainted(row: RowSpec, impact: number): void {
-  const steel = gauntletCell(row, impact, 'spiked');
-  const bracer = gauntletCell(row, impact, 'bracer');
-  let changed = 0;
-  for (let i = 0; i < steel.length; i += CHANNELS) {
-    if (premultipliedDelta(steel, bracer, i) > STEEL_CHANNEL_DELTA) changed++;
-  }
-  if (changed < MIN_STEEL_CHANGED_PX) {
-    fail(
-      'G24',
-      `${row.name}[${impact}] paints the same cell with the gauntlet spiked as with the bracer ` +
-        `(${changed} px differ, need ${MIN_STEEL_CHANGED_PX}) — the steel is not painted`,
-      row.name,
-    );
-  }
-}
-
-/**
- * The set of punches the steel appears on is read off each strike's
- * `reachLimb`, so a row re-declared to another limb drops out of it silently —
- * and an empty set means the gauntlet never spikes at all while every picture
- * of it still looks right. G5 holds the declared fist to the rig.
- */
-function gateGauntletTiming(): void {
-  const punches = new Set<HumanRowName>(HUMAN_RIGHT_PUNCH_ROWS);
-  if (punches.size === 0) {
-    fail('G24', 'no row is a right-fisted punch, so the gauntlet never turns to steel');
-  }
-  if (!punches.has(SIGNATURE_PUNCH_ROW)) {
-    fail('G24', `${SIGNATURE_PUNCH_ROW} is not among the right-fisted punches`);
-  }
-  let punchRowsTimed = 0;
-  for (const row of HUMAN_ROWS) {
-    const impact = firstImpactFrame(row);
-    const punch = punches.has(row.name) && impact !== undefined;
-    if (punch) {
-      punchRowsTimed++;
-      checkSteelPainted(row, impact);
-    }
-    for (let frame = 0; frame < row.frameCount; frame++) {
-      const fromImpact = impact === undefined ? undefined : frame - impact;
-      const timed =
-        punch && fromImpact !== undefined ? GAUNTLET_TIMELINE.get(fromImpact) : undefined;
-      const expected: GauntletForm = timed ?? 'bracer';
-      const actual = gauntletFormOn(garmentRowOf(row), frame);
-      if (actual === expected) continue;
-      fail(
-        'G24',
-        `${row.name}[${frame}] paints the gauntlet as ${actual}; ${fromImpact ?? 'no'} frame(s) ` +
-          `from impact it should be ${expected}`,
-        row.name,
-      );
-    }
-  }
-  failUnlessMeasured('G24', punchRowsTimed, 'right-fisted punch rows');
 }
 
 // ── G25: edge-on, the face is never hidden behind the near arm ───────────────
@@ -4686,7 +4497,6 @@ const GATES: ReadonlyArray<readonly [string, () => void]> = [
   ['G21', gateStatusFigureBox],
   ['G22', gateHandedness],
   ['G23', gateLayerHoldsInk],
-  ['G24', gateGauntletTiming],
   ['G25', gateProfileFaceShows],
   ['G26', gateHeadOnLegLength],
   ['G27', gateProfileHeadDepth],

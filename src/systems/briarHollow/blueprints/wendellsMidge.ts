@@ -12,7 +12,7 @@
  */
 
 import { TILE_SIZE } from '../../../core/constants';
-import { applySpawnDifficulty } from '../../../core/difficultyProfiles';
+import { applySpawnDifficulty } from '../../../core/difficulty/difficultyProfiles';
 import { Cow, LIVESTOCK_LEVEL } from '../../../creatures/Cow';
 import type { Player } from '../../../Player';
 import type { GameMap } from '../../../map/GameMap';

@@ -8,11 +8,11 @@
  * shows whether that cost tracks the roster size or the local crowding.
  */
 
-import { PERF_TIMERS, perfMonitor } from '../core/PerfMonitor';
-import { viewportWidth } from '../core/Viewport';
-import { BYTES_PER_MEGABYTE } from '../core/canvasSurface';
-import { lastFrameCost } from '../core/frameCost';
-import { varietyTier } from '../core/varietyTier';
+import { PERF_TIMERS, perfMonitor } from '../core/perf/PerfMonitor';
+import { viewportWidth } from '../core/rendering/Viewport';
+import { BYTES_PER_MEGABYTE } from '../core/rendering/canvasSurface';
+import { lastFrameCost } from '../core/perf/frameCost';
+import { varietyTier } from '../core/perf/varietyTier';
 import { getFigureCacheStats } from '../sprites/figure/figureCacheStats';
 import {
   environmentArtBytes,

@@ -16,22 +16,31 @@
  * rather than the other way round.
  */
 
-import { awardPartyXp, type CrawlerPair, type PartyXpApplied } from '../core/awardXp';
+import { awardPartyXp, type CrawlerPair, type PartyXpApplied } from '../core/progression/awardXp';
 import type { GameSystem } from './GameSystem';
 import type { TrackerEntry, TrackerSource, TrackerTarget } from './questTracker';
 import type { QuestMarkerType } from './MiniMapSystem';
 import type { QuestMarkerState } from '../sprites/questNPCSprite';
-import { QuestManager, type QuestStatus } from '../core/QuestManager';
+import { QuestManager, type QuestId, type QuestStatus } from '../core/quests/QuestManager';
 import type { EventBus } from '../core/EventBus';
 import type { AudioManager } from '../audio/AudioManager';
 import type { Player } from '../Player';
-import { canAffordCoins, spendPartyCoins } from '../core/partyCoins';
-import { ANCHOR_QUEST_NAME, type AnchorQuestProgress } from '../core/AnchorQuestProgress';
-import { ANCHOR_SHARD_IDS, ITEM_DEF, QUEST_SLOT_IDX, type ItemId } from '../core/ItemDefs';
+import { canAffordCoins, spendPartyCoins } from '../core/party/partyCoins';
+import { ANCHOR_QUEST_NAME, type AnchorQuestProgress } from '../core/quests/AnchorQuestProgress';
+import {
+  ANCHOR_SHARD_IDS,
+  ITEM_DEF,
+  QUEST_SLOT_IDX,
+  type ItemId,
+} from '../core/items/defs/ItemDefs';
 import type { Conversation } from '../dialog/Conversation';
 import type { DialogLine, NonEmpty } from '../dialog/line';
 import type { ConversationHandle, DialogReward } from '../dialog/request';
-import { bagItemRewardLine, itemIconPainter, partyXpSections } from '../ui/questReward/rewardLines';
+import {
+  bagItemRewardLine,
+  rewardIconPainter,
+  partyXpSections,
+} from '../ui/questReward/rewardLines';
 import type { QuestRewardSpec, RewardItemLine } from '../ui/questReward/types';
 import type { VendorLineGate } from '../economy/shops';
 import { HILDA_COTTAGE_NAME, SKY_TEMPLE_NAME } from './interiorStoryOwnership';
@@ -51,7 +60,7 @@ import {
   VOSS_PROGRESS,
 } from '../dialog/scripts/scenes/anchor';
 
-const ANCHOR_QUEST_ID = 'anchor_shards';
+const ANCHOR_QUEST_ID = 'anchor_shards' as const satisfies QuestId;
 
 /** Voss's cut for four seconds of work and thirty years of knowing which four. */
 const ANCHOR_ASSEMBLY_FEE_COINS = 25;
@@ -121,9 +130,6 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
       id: ANCHOR_QUEST_ID,
       name: ANCHOR_QUEST_NAME,
       type: 'mini',
-      // The health potions promised by the offer's reward strip are granted
-      // directly in `assemble()`, not through `lootBoxItems` — no payout path
-      // in this codebase reads that field.
       rewards: { xp: ANCHOR_QUEST_XP },
     });
     // The record outlives this object, so it seeds the manager rather than the
@@ -410,8 +416,6 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
     const xp = this.questManager.getDef(ANCHOR_QUEST_ID)?.rewards.xp ?? ANCHOR_QUEST_XP;
     const { human, cat } = this.party();
     const xpApplied = awardPartyXp(human, cat, xp, this.bus);
-    // `QuestManager`'s generic `lootBoxItems` field is never read by any payout
-    // path in this codebase, so the potions are granted directly here.
     const potionCount =
       ANCHOR_REWARD_POTIONS_MIN +
       Math.floor(Math.random() * (ANCHOR_REWARD_POTIONS_MAX - ANCHOR_REWARD_POTIONS_MIN + 1));
@@ -434,7 +438,7 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
     if (potionCount > 0) items.push(bagItemRewardLine('health_potion', potionCount));
     return {
       questTitle: ANCHOR_QUEST_NAME,
-      renderQuestIcon: itemIconPainter('wayfinders_anchor'),
+      renderQuestIcon: rewardIconPainter('wayfinders_anchor'),
       sections: [
         ...partyXpSections(xpApplied),
         { kind: 'items', items },

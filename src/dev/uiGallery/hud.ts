@@ -1,15 +1,20 @@
 /**
  * The gallery's HUD sheet: the real `HudSurface` drawn from fixture models —
  * a quiet moment with skill points to spend and toasts up, a boss fight with
- * the top band full and statuses ticking, the safe room's call to collect,
- * a building with its room-name banner, the sound captions beside a toast and
+ * the top band full and statuses ticking, a building with its room-name banner, the sound captions beside a toast and
  * a credit card, a hotbar slot's tooltip read over the open bag, and the AI
  * panel online (a question with reply buttons) and offline.
  */
 
+import { rewardsBannerEntry } from '../../ui/hud/rewardsBanner';
 import { crawlerName } from '../../characters/characters';
-import { HOTBAR_COUNT, ITEM_DEF, type InventoryItem, type ItemId } from '../../core/ItemDefs';
-import { DOOMSDAY_CONTAIN_OBJECTIVE } from '../../core/DoomsdayProgress';
+import {
+  HOTBAR_COUNT,
+  ITEM_DEF,
+  type InventoryItem,
+  type ItemId,
+} from '../../core/items/defs/ItemDefs';
+import { DOOMSDAY_CONTAIN_OBJECTIVE } from '../../core/quests/DoomsdayProgress';
 import { CONTAINMENT_LABEL, doomsdayCountdownEntry } from '../../systems/DoomsdayEscapeSystem';
 import type { Rect } from '../../ui/core/geom';
 import type { Surface } from '../../ui/core/UiRoot';
@@ -18,7 +23,7 @@ import { SYSTEM_CHARACTER_NAME } from '../../ai/characters';
 import { aiPanelSurface } from '../../ui/hud/aiPanel';
 import { aiChallengeBandEntry } from '../../ui/hud/aiChallengeBand';
 import type { ViewerFavorModel } from '../../ui/hud/viewerFavorPill';
-import { FAVOR_MAX, favorPerk, favorTier } from '../../core/viewerFavor';
+import { FAVOR_MAX, favorPerk, favorTier } from '../../core/progression/viewerFavor';
 import { HudSurface } from '../../ui/hud/HudSurface';
 import type {
   DockButtonModel,
@@ -141,6 +146,7 @@ function hotbarSlots(cooling: boolean): HotbarSlotModel[] {
     return {
       item: slotItem,
       equipped: false,
+      awakened: false,
       cooldown: onCooldown ? COOLDOWN_FRACTION : 0,
       cooldownLabel: String(COOLDOWN_SECONDS),
       unseen: index === 1,
@@ -197,6 +203,8 @@ const COMPANION_ROACH_STATUS: readonly StatusPillModel[] = [
 ];
 
 const record = (): void => undefined;
+/** Rewards the safe-room banner fixture says are waiting. */
+const SAFE_ROOM_REWARDS_WAITING = 2;
 
 function dock(extra: readonly DockButtonModel['id'][]): DockButtonModel[] {
   const buttons: DockButtonModel[] = [
@@ -220,7 +228,7 @@ function dock(extra: readonly DockButtonModel['id'][]): DockButtonModel[] {
     buttons.push({
       id: 'chip',
       icon: 'trophy',
-      label: 'New achievements',
+      label: 'Rewards waiting',
       badge: '2',
       pulse: true,
       onTap: record,
@@ -339,7 +347,6 @@ interface HudFixtureSpec {
   readonly topBand: () => TopBandEntry[];
   /** Frames left on the floor's collapse timer; absent on a floor without one. */
   readonly levelTimerFrames?: number;
-  readonly lootBanner: boolean;
   readonly toasts: FixtureToasts;
   readonly expanded: boolean;
   /** Fills the AI panel; absent leaves it unmounted. */
@@ -382,7 +389,7 @@ function hudFixture(spec: HudFixtureSpec): DialogFixture {
         toasts.post('Not enough coins', { tone: 'warning', icon: 'coin' });
         toasts.post('Game Saved', { tone: 'success', icon: 'save' });
         toasts.post('Mongo recovering −3.6s', { tone: 'info', icon: 'hourglass' });
-        toasts.post('The boxers are already doing their job — just equip them!', {
+        toasts.post(`Wear the ${ITEM_DEF.lucky_hoodie.name} — it does nothing in the bag!`, {
           tone: 'warning',
         });
       }
@@ -427,9 +434,6 @@ function hudFixture(spec: HudFixtureSpec): DialogFixture {
             ),
           onTap: record,
         },
-        lootBanner: spec.lootBanner
-          ? { glyph: 'sparkle', title: 'Open loot!', detail: '2 boxes', onTap: record }
-          : null,
         hotbar: {
           slots: hotbarSlots(spec.status.length > 0),
           input: { press: record, release: record },
@@ -538,7 +542,6 @@ function siegeHud(
     skillPoints: 0,
     dockExtras: ['build'],
     topBand: () => [siegeHudEntry({ headline, bars })],
-    lootBanner: false,
     toasts: 'none',
     expanded: false,
   });
@@ -674,7 +677,6 @@ function hotbarTooltipOverMenu(): DialogFixture {
     skillPoints: 0,
     dockExtras: [],
     topBand: () => [],
-    lootBanner: false,
     toasts: 'none',
     expanded: false,
   });
@@ -694,7 +696,7 @@ function aiOnline(feed: AIChatFeed): void {
   feed.onChat({
     messageId: 'fixture-question',
     characterName: SYSTEM_CHARACTER_NAME,
-    text: 'Crawler! The viewers demand a choice. Fight the goblin champion for a Gold box, or flee and keep your dignity. Such as it is.',
+    text: 'Crawler! The viewers demand a choice. Fight the goblin champion for a Rare chest, or flee and keep your dignity. Such as it is.',
     done: true,
     choices: [
       { id: 'fight', label: 'Fight' },
@@ -713,10 +715,7 @@ function aiOnline(feed: AIChatFeed): void {
     mood: { label: 'amused', intensity: 1 },
     relationship: { respect: 1 },
   });
-  feed.addIntervention(
-    SYSTEM_CHARACTER_NAME,
-    `granted ${crawlerName('human')} a Bronze Adventurer box`,
-  );
+  feed.addIntervention(SYSTEM_CHARACTER_NAME, `granted ${crawlerName('human')} a Common chest`);
 }
 
 function aiOffline(feed: AIChatFeed): void {
@@ -755,7 +754,6 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
     skillPoints: 0,
     dockExtras: [],
     topBand: () => [showChallengeEntry()],
-    lootBanner: false,
     toasts: 'none',
     expanded: false,
     favor: SHOW_FAVOR,
@@ -767,7 +765,6 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
     dockExtras: [],
     topBand: () => [showChallengeEntry()],
     levelTimerFrames: LATE_TIMER_FRAMES,
-    lootBanner: false,
     toasts: 'none',
     expanded: false,
     favor: SHOW_FAVOR,
@@ -778,7 +775,6 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
     skillPoints: 0,
     dockExtras: [],
     topBand: () => [],
-    lootBanner: false,
     toasts: 'none',
     expanded: false,
     ai: aiOnline,
@@ -789,7 +785,6 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
     skillPoints: 0,
     dockExtras: [],
     topBand: () => [],
-    lootBanner: false,
     toasts: 'none',
     expanded: false,
     ai: aiOffline,
@@ -800,8 +795,16 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
     skillPoints: 2,
     dockExtras: ['chip'],
     topBand: () => [],
-    lootBanner: false,
     toasts: 'mixed',
+    expanded: false,
+  }),
+  hudFixture({
+    name: 'safe-room-rewards',
+    status: [],
+    skillPoints: 0,
+    dockExtras: ['chip'],
+    topBand: () => [rewardsBannerEntry({ count: SAFE_ROOM_REWARDS_WAITING, onTap: record })],
+    toasts: 'none',
     expanded: false,
   }),
   hudFixture({
@@ -820,7 +823,6 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
       }),
     ],
     levelTimerFrames: LATE_TIMER_FRAMES,
-    lootBanner: false,
     toasts: 'none',
     expanded: false,
   }),
@@ -832,7 +834,6 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
     dockExtras: ['build'],
     topBand: () => [bugabooEntry(), reviveEntry()],
     levelTimerFrames: EARLY_TIMER_FRAMES,
-    lootBanner: false,
     toasts: 'none',
     expanded: false,
   }),
@@ -851,7 +852,6 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
       });
       return banner === null ? [] : [banner];
     },
-    lootBanner: true,
     toasts: 'none',
     expanded: true,
   }),
@@ -861,7 +861,6 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
     skillPoints: 0,
     dockExtras: [],
     topBand: () => [],
-    lootBanner: false,
     toasts: 'saving',
     expanded: false,
   }),
@@ -871,7 +870,6 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
     skillPoints: 0,
     dockExtras: [],
     topBand: () => [],
-    lootBanner: false,
     toasts: 'lootSeal',
     expanded: false,
   }),
@@ -882,7 +880,6 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
       skillPoints: 0,
       dockExtras: [],
       topBand: () => [],
-      lootBanner: false,
       toasts,
       expanded: false,
     }),
@@ -902,7 +899,6 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
       });
       return banner === null ? [] : [banner];
     },
-    lootBanner: true,
     toasts: 'clubArrival',
     expanded: false,
   }),
@@ -912,7 +908,6 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
     skillPoints: 0,
     dockExtras: [],
     topBand: () => [],
-    lootBanner: false,
     toasts: 'captions',
     expanded: false,
   }),

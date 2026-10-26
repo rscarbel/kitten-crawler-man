@@ -29,6 +29,10 @@ export interface SlingshotRock {
   maxDist: number;
   state: 'flying' | 'done';
   hit: boolean;
+  /** Times the stone has bounced on from one enemy to the next. */
+  bounces: number;
+  /** The enemy the stone last bounced off, which it passes through on the way to the next. */
+  bouncedOff: object | null;
 }
 
 /** Frames between shots — roughly one stone every three quarters of a second. */

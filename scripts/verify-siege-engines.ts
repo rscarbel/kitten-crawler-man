@@ -20,13 +20,13 @@
 
 import { TILE_SIZE } from '../src/core/constants';
 import { EventBus } from '../src/core/EventBus';
-import { createBriarHollowState, type BriarHollowState } from '../src/core/briarHollowState';
-import type { CrawlerKind } from '../src/core/SkillManager';
-import { computeDodgeChance } from '../src/core/dodge';
-import { makeBurn, makePoison } from '../src/core/StatusEffect';
+import { createBriarHollowState, type BriarHollowState } from '../src/core/quests/briarHollowState';
+import type { CrawlerKind } from '../src/core/skills/SkillManager';
+import { computeDodgeChance } from '../src/core/combat/dodge';
+import { makeBurn, makePoison } from '../src/core/combat/StatusEffect';
 import { LOCKED_TELEGRAPH_MIN_FRAMES } from '../src/creatures/mobLevelScaling';
 import { Mercenary } from '../src/creatures/Mercenary';
-import { getMercenaryTemplate } from '../src/core/mercenaryTemplates';
+import { getMercenaryTemplate } from '../src/core/party/mercenaryTemplates';
 import type { Player } from '../src/Player';
 import { CompanionSystem } from '../src/systems/CompanionSystem';
 import { HirelingBoltSystem, type HirelingShot } from '../src/systems/HirelingBoltSystem';

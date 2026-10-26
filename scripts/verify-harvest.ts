@@ -19,14 +19,22 @@ import {
   rollHarvestLuck,
   thrallHarvestXp,
   type LuckyDrop,
-} from '../src/core/harvestYield';
-import { type HarvestKind, resourcingNodeCapacityBonus } from '../src/core/craftPerks';
-import { MAX_CRAFT_LEVEL } from '../src/core/CraftSkills';
-import { PartyTools, type PartyToolsState } from '../src/core/PartyTools';
-import { isToolTier, MAX_TOOL_TIER, TOOL_TIERS, type ToolTier } from '../src/core/toolTiers';
-import { createBriarHollowState, type HarvestNodeState } from '../src/core/briarHollowState';
-import { ITEM_DEF, type ItemId } from '../src/core/ItemDefs';
-import { resetThrallCooldownsForTests, thrallCooldownTicksLeft } from '../src/core/thrallCooldowns';
+} from '../src/core/labour/harvestYield';
+import { type HarvestKind, resourcingNodeCapacityBonus } from '../src/core/labour/craftPerks';
+import { MAX_CRAFT_LEVEL } from '../src/core/labour/CraftSkills';
+import { PartyTools, type PartyToolsState } from '../src/core/items/gathering/PartyTools';
+import {
+  isToolTier,
+  MAX_TOOL_TIER,
+  TOOL_TIERS,
+  type ToolTier,
+} from '../src/core/items/gathering/toolTiers';
+import { createBriarHollowState, type HarvestNodeState } from '../src/core/quests/briarHollowState';
+import { ITEM_DEF, type ItemId } from '../src/core/items/defs/ItemDefs';
+import {
+  resetThrallCooldownsForTests,
+  thrallCooldownTicksLeft,
+} from '../src/core/labour/thrallCooldowns';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { Rat } from '../src/creatures/Rat';
@@ -162,6 +170,8 @@ const TOP_TIER_YIELD_MULTIPLE = 4;
 const CARRY_SEQUENCE_TICKS = 4;
 const EXPECTED_CARRY_SEQUENCE = '1,2,1,2';
 const FRACTIONAL_YIELD_MULTIPLIER_FOR_CARRY_TEST = 1.5;
+/** The harvest arithmetic is checked bare-handed: no gear adds to any award. */
+const NO_GEAR_YIELD_BONUS = 0;
 /** Summons at the top level bring this many thralls. */
 const TOP_LEVEL_THRALLS = 3;
 /** Independent luck streams, one per rate measured. */
@@ -232,7 +242,7 @@ section('Award table: every tier × level × kind, 1,000 ticks, exact');
         let carry = 0;
         let total = 0;
         for (let tick = 0; tick < TICKS; tick++) {
-          const award = harvestAward(def.yieldMultiplier, carry, level);
+          const award = harvestAward(def.yieldMultiplier, carry, level, NO_GEAR_YIELD_BONUS);
           carry = award.carry;
           total += award.amount;
         }
@@ -257,7 +267,12 @@ section('Award table: every tier × level × kind, 1,000 ticks, exact');
   const sequence: number[] = [];
   let carry = 0;
   for (let tick = 0; tick < CARRY_SEQUENCE_TICKS; tick++) {
-    const award = harvestAward(FRACTIONAL_YIELD_MULTIPLIER_FOR_CARRY_TEST, carry, 1);
+    const award = harvestAward(
+      FRACTIONAL_YIELD_MULTIPLIER_FOR_CARRY_TEST,
+      carry,
+      1,
+      NO_GEAR_YIELD_BONUS,
+    );
     carry = award.carry;
     sequence.push(award.amount);
   }

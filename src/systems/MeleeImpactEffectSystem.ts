@@ -1,5 +1,5 @@
 import type { GameSystem } from './GameSystem';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 
 /**
  * The small dust puff and streak burst a crawler's fist or foot throws at the

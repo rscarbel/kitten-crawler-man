@@ -7,7 +7,7 @@
  * crawler is carrying always agree.
  */
 
-import type { ItemId } from '../../../core/ItemDefs';
+import type { ItemId } from '../../../core/items/defs/ItemDefs';
 import {
   TOOL_TIER_BASIC,
   TOOL_TIER_DEEPWOOD,
@@ -19,7 +19,7 @@ import {
   type ToolKind,
   type ToolTier,
   type ToolTierLook,
-} from '../../../core/toolTiers';
+} from '../../../core/items/gathering/toolTiers';
 import type { Rect } from '../../../ui/core/geom';
 import {
   BOLD_DETAIL,

@@ -19,7 +19,7 @@ import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
 import type { StandaloneMobKind } from '../../src/levels/mobKinds';
 import { level1, level2, level3 } from '../../src/levels';
 import type { LevelDef, MobLevelRange } from '../../src/levels/types';
-import { DIFFICULTY_PROFILES } from '../../src/core/difficultyProfiles';
+import { DIFFICULTY_PROFILES } from '../../src/core/difficulty/difficultyProfiles';
 import type { Rng } from '../../src/sprites/person/rng';
 import {
   TACTICS_MIN_MOB_LEVEL,

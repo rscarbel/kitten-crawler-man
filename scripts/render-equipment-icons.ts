@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Review sheet for the worn-equipment, tool, explosive and Scroll of Confusing Fog icons,
+ * Review sheet for every gear icon, slot by slot, and the tool, explosive and Scroll of Confusing Fog icons,
  * drawn through the real `drawItemIcon` dispatcher onto a slot-coloured cell.
  *
  * Each row is one item at the sizes a player actually meets it — the hotbar's
@@ -16,24 +16,27 @@ import { createCanvas } from 'canvas';
 
 import { asGameContext } from './nodeGameContext.js';
 import { writePreviewPng } from './previewOut.js';
-import { ITEM_DEF, type ItemId, type InventoryItem } from '../src/core/ItemDefs.js';
+import {
+  EQUIP_SLOTS,
+  ITEM_DEF,
+  type ItemId,
+  type InventoryItem,
+} from '../src/core/items/defs/ItemDefs.js';
+import { GEAR_SOURCES, isGearId } from '../src/loot/gearPools.js';
 import { drawItemIcon } from '../src/ui/icons/drawItemIcon.js';
 
+/** Every piece of gear on one sheet each, grouped by the slot it is worn in. */
+const GEAR_FAMILIES: Readonly<Record<string, readonly ItemId[]>> = Object.fromEntries(
+  EQUIP_SLOTS.map((slot) => [
+    slot.toLowerCase(),
+    Object.keys(GEAR_SOURCES)
+      .filter(isGearId)
+      .filter((id) => ITEM_DEF[id].equipSlot === slot),
+  ]),
+);
+
 const FAMILIES: Readonly<Record<string, readonly ItemId[]>> = {
-  head: [
-    'issue_kettle_helm',
-    'enchanted_crown_sepsis_whore',
-    'slate_butterfly_talisman',
-    'eyes_of_splatter',
-  ],
-  torso: ['padded_gambeson', 'trollskin_shirt', 'nightgaunt_cloak', 'fae_scale_crupper'],
-  hands: ['riveted_bracers', 'bracelet_of_dex', 'grull_war_gauntlet'],
-  legsFeet: [
-    'enchanted_bigboi_boxers',
-    'shade_gnoll_kneepads',
-    'marching_boots',
-    'splatter_skunk_toe_ring',
-  ],
+  ...GEAR_FAMILIES,
   axes: [
     'basic_axe',
     'hardened_axe',
@@ -52,11 +55,6 @@ const FAMILIES: Readonly<Record<string, readonly ItemId[]>> = {
   ],
   scroll: ['scroll_of_confusing_fog'],
   explosives: ['goblin_dynamite', 'black_powder_bomb'],
-  fairyRings: [
-    'ring_of_the_cold_shoulder',
-    'ring_of_the_asbestos_knuckle',
-    'fairy_repellent_signet',
-  ],
 };
 
 /** The hotbar slot (52 px) less its 14% art inset on each side. */

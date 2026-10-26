@@ -87,6 +87,16 @@ export interface SleeveCut {
   readonly shadeContrast: number;
 }
 
+/**
+ * The sleeves a garment worn over the torso brings with it: a hoodie or a coat
+ * has sleeves of its own over whatever shirt is under it. `cut` replaces the
+ * look's own sleeve cut where it says otherwise.
+ */
+export interface SleeveCloth {
+  readonly cloth: GlossRamp;
+  readonly cut?: Partial<SleeveCut>;
+}
+
 /** Padded leather's own sleeve shading, its whole ramp. */
 export const LEATHER_SLEEVE_CONTRAST = 1;
 
@@ -146,7 +156,7 @@ const RYAN_CUFF_BULK = 1.2;
 /** A lean man's deltoid, a little less than the rig's heavy cap. */
 const RYAN_CAP_SWELL = 0.2;
 /** Cotton chambray: its shade lies light round the arm. */
-const COTTON_SLEEVE_CONTRAST = 0.6;
+export const COTTON_SLEEVE_CONTRAST = 0.6;
 /** His shoulders slope: the cap carries the trapezius's fall on out over the arm. */
 const RYAN_CAP_SLOPE = 1;
 /** The roll lies just below the elbow, a twelfth of the way down the forearm. */

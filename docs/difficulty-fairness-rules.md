@@ -90,7 +90,7 @@ to every XP award earned there — kills, bosses and quest rewards alike — and
 `Player.gainXp` prices each level at the tier of the level being bought. A single
 large award therefore buys what the same XP earned kill by kill would, and cannot
 carry a crawler past a floor's tiers at full value. Every award goes through
-`awardXp` (`src/core/awardXp.ts`), which announces the level-up, and every party is
+`awardXp` (`src/core/progression/awardXp.ts`), which announces the level-up, and every party is
 built with its floor's curve (`PlayerManager` requires it), interiors included.
 `verify:difficulty` asserts both.
 
@@ -150,7 +150,7 @@ counterweight that lets the fights themselves be hard.
 
 ## P4 — Tune with data
 
-`?difficulty` boots the run-scoped counters in `src/core/DifficultyStats.ts`. They are
+`?difficulty` boots the run-scoped counters in `src/core/difficulty/DifficultyStats.ts`. They are
 deliberately _not_ fields on `GameStats`, which is rebuilt along with its `DungeonScene`
 and would therefore lose every counter at each stairwell. `?perf` and `?difficulty`
 compose rather than replacing one another.
@@ -567,7 +567,7 @@ pressure a crawler; it never ambushes a beaten one:
   `MIN_SPAWN_DISTANCE_TILES`, and every spawn levelled once inside the floor's
   own band (P5).
 - **Limits.** Per-action cooldowns, per-floor caps, no stacking stat changes, and
-  per-floor budgets for spawns, gifts, fines, loot boxes and clock changes, kept
+  per-floor budgets for spawns, gifts, fines, reward chests and clock changes, kept
   across reloads and shared with every building on the floor.
 
 ## The show AI's challenges and favour
@@ -575,7 +575,7 @@ pressure a crawler; it never ambushes a beaten one:
 The show's AI may set a challenge (`offer_challenge`) and move the viewers'
 favour (`viewer_reaction`). Both are held to the rules above:
 
-- **A challenge only puts its own box at stake.** It never stops the crawlers
+- **A challenge only puts its own reward chest at stake.** It never stops the crawlers
   doing anything: drinking a potion during a no-potion challenge simply fails
   it. The worst a challenge costs is the reward and a taunt.
 - **Offers are fair when made.** None while either crawler is under a quarter
@@ -587,7 +587,7 @@ favour (`viewer_reaction`). Both are held to the rules above:
   potion fast). Templates and their bounds live in `src/ai/show/challenges.ts`;
   the clock counts gameplay frames, so it stops whenever the world does.
 - **Favour only ever helps.** From `FAVOR_PERKS`' thresholds up
-  (`src/core/viewerFavor.ts`) loot boxes pay a little more coin; at the bottom
+  (`src/core/progression/viewerFavor.ts`) reward chests pay a little more coin; at the bottom
   of the meter nothing is taken away. One reaction moves it at most
   `FAVOR_SWING_MAX`.
 

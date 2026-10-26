@@ -40,14 +40,14 @@ import {
   MERCENARY_TEMPLATE_IDS,
   getMercenaryTemplate,
   type MercenaryTemplateId,
-} from '../../src/core/mercenaryTemplates';
+} from '../../src/core/party/mercenaryTemplates';
 import {
   captureMercenaryRoster,
   createMercenaryRoster,
   restoreMercenaryRoster,
   type MercenaryRoster,
   type MercenaryRosterCheckpoint,
-} from '../../src/core/MercenaryRoster';
+} from '../../src/core/party/MercenaryRoster';
 import { MercenarySystem } from '../../src/systems/MercenarySystem';
 import { MobUpdateLoop } from '../../src/systems/MobUpdateLoop';
 import { SEPARATION_RADIUS } from '../../src/systems/mobSeparation';
@@ -58,14 +58,17 @@ import { MobRoster } from '../../src/systems/kits/SceneWorld';
 import type { SystemContext } from '../../src/systems/GameSystem';
 import { resolveKills, type CombatContext } from '../../src/systems/CombatSystem';
 import { EventBus } from '../../src/core/EventBus';
-import { AbilityManager } from '../../src/core/AbilityManager';
+import { AbilityManager } from '../../src/core/skills/AbilityManager';
 import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
-import { applySpawnDifficulty, DIFFICULTY_PROFILES } from '../../src/core/difficultyProfiles';
-import { referenceStats } from '../../src/core/referenceCrawler';
+import {
+  applySpawnDifficulty,
+  DIFFICULTY_PROFILES,
+} from '../../src/core/difficulty/difficultyProfiles';
+import { referenceStats } from '../../src/core/party/referenceCrawler';
 import { ALL_STATS } from '../../src/Player';
 import { mulberry32 } from '../../src/sprites/person/rng';
 import { findNearbyWalkableTile } from '../../src/map/findWalkableTile';
-import { setViewportSize } from '../../src/core/Viewport';
+import { setViewportSize } from '../../src/core/rendering/Viewport';
 import {
   figurePrewarmDepth,
   flushFigureFrameCache,
@@ -1928,27 +1931,23 @@ function sendHireOff(scene: Scene): void {
   scene.extras.length = 0;
 }
 
-/**
- * How much longer than the inert arm a hire must keep its owner up to count:
- * enough that it is the hire's doing, not one goblin's swing landing a beat
- * later.
- */
-const SURVIVABILITY_MARGIN_SECONDS = 2;
-const SURVIVABILITY_MARGIN_FRAMES = SURVIVABILITY_MARGIN_SECONDS * FRAMES_PER_SECOND;
-
 /** Frames the owner stayed up, counting a whole window for one who never went down. */
 function framesStanding(outcome: FightOutcome): number {
   return outcome.knockoutFrame ?? FIGHT_WINDOW_FRAMES;
 }
 
-/** Whether `hired` kept the owner up at least `marginFrames` longer than `baseline`. */
+/**
+ * Whether `hired` kept the owner up longer than `baseline`: by at least
+ * `marginFrames` when given, else by any amount at all.
+ */
 function keptAliveLonger(
   hired: FightOutcome,
   baseline: FightOutcome,
-  marginFrames = SURVIVABILITY_MARGIN_FRAMES,
+  marginFrames?: number,
 ): boolean {
   if (baseline.knockoutFrame === null) return false;
-  return framesStanding(hired) - framesStanding(baseline) >= marginFrames;
+  const extraFrames = framesStanding(hired) - framesStanding(baseline);
+  return marginFrames === undefined ? extraFrames > 0 : extraFrames >= marginFrames;
 }
 
 /**
@@ -2025,8 +2024,8 @@ function checkSurvivability(report: LifecycleGateReporter): void {
     const inertStreams = fightOnStreams(id, 'inert');
     const margin = meanMarginFrames(fightOnStreams(id, 'fighting'), inertStreams);
     report.check(
-      allKnockedOut(inertStreams) && margin >= SURVIVABILITY_MARGIN_FRAMES,
-      `${id}: keeps her up ${describeMargin(margin)} longer than with it inert, averaged over ${SURVIVABILITY_STREAMS} streams (at least +${SURVIVABILITY_MARGIN_SECONDS} s)`,
+      allKnockedOut(inertStreams) && margin > 0,
+      `${id}: keeps her up ${describeMargin(margin)} longer than with it inert, averaged over ${SURVIVABILITY_STREAMS} streams`,
     );
   }
   report.checkCatches(

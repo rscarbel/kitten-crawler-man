@@ -1,9 +1,9 @@
 #!/usr/bin/env tsx
 /**
- * Headless gate on Briar Hollow's persisted state: `src/core/briarHollowState.ts`
+ * Headless gate on Briar Hollow's persisted state: `src/core/quests/briarHollowState.ts`
  * (village quest/structures/soldiers/talk/stock), the per-crawler craft-skill
  * snapshot round-trip through `PlayerSnapshot`, and `GameProgress.crafts`
- * parsing through `src/core/partyCrafts.ts`.
+ * parsing through `src/core/labour/partyCrafts.ts`.
  *
  * Checks:
  *  - a populated `BriarHollowState` survives capture → JSON round-trip →
@@ -26,10 +26,10 @@ import {
   restoreBriarHollowState,
   parseBriarHollowStateSnapshot,
   type BriarHollowState,
-} from '../src/core/briarHollowState';
-import { createPartyCraftsState, parsePartyCraftsState } from '../src/core/partyCrafts';
-import { teachBoth } from '../src/core/CraftSkills';
-import { snapPlayer, restorePlayer } from '../src/core/PlayerSnapshot';
+} from '../src/core/quests/briarHollowState';
+import { createPartyCraftsState, parsePartyCraftsState } from '../src/core/labour/partyCrafts';
+import { teachBoth } from '../src/core/labour/CraftSkills';
+import { snapPlayer, restorePlayer } from '../src/core/save/PlayerSnapshot';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { TILE_SIZE } from '../src/core/constants';

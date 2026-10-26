@@ -19,12 +19,12 @@
  */
 
 import { crawlerName } from '../../src/characters/characters';
-import { createAnchorQuestProgress } from '../../src/core/AnchorQuestProgress';
-import { createBriarHollowState } from '../../src/core/briarHollowState';
-import { BLUEPRINTS_GRAIN_TARGET } from '../../src/core/blueprintsQuestPhase';
+import { createAnchorQuestProgress } from '../../src/core/quests/AnchorQuestProgress';
+import { createBriarHollowState } from '../../src/core/quests/briarHollowState';
+import { BLUEPRINTS_GRAIN_TARGET } from '../../src/core/quests/blueprintsQuestPhase';
 import { TILE_SIZE } from '../../src/core/constants';
-import { QUEST_SLOT_IDX, type ItemId } from '../../src/core/ItemDefs';
-import type { CrawlerKind } from '../../src/core/SkillManager';
+import { QUEST_SLOT_IDX, type ItemId } from '../../src/core/items/defs/ItemDefs';
+import type { CrawlerKind } from '../../src/core/skills/SkillManager';
 import type { CatPlayer } from '../../src/creatures/CatPlayer';
 import type { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { Conversation } from '../../src/dialog/Conversation';

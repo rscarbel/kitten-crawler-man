@@ -1,361 +1,103 @@
 /**
- * Owns all achievement/loot-box UI state: the notification queue, what the
- * HUD's achievement chip and safe-room banner show, and the loot-box-opener
- * lifecycle.
+ * Owns the reward screen's side of awards: the HUD's "Rewards waiting" chip
+ * and the Reward Chest surface it opens. Every award is already paid by
+ * `AchievementAwards` when it is earned; this only presents them, and only
+ * when the player asks, so a chest never interrupts play.
  */
 
-import type { AchievementManager, BoxContents, LootBox } from '../core/AchievementManager';
-import type { AwardDef } from '../core/AchievementManager';
-import { ACHIEVEMENT_DEFS, getBoxContents } from '../core/AchievementManager';
-import { AchievementNotification } from '../ui/AchievementNotification';
-import { LootBoxOpener } from '../ui/LootBoxOpener';
-import type { HumanPlayer } from '../creatures/HumanPlayer';
-import type { CatPlayer } from '../creatures/CatPlayer';
+import type { AchievementManager } from '../core/progression/AchievementManager';
 import type { AudioManager } from '../audio/AudioManager';
-import { isItemId } from '../core/ItemDefs';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
-import { ITEM_DEF } from '../core/ItemDefs';
-import type { RewardFlySystem } from './RewardFlySystem';
-import { keybindings } from '../core/Keybindings';
-import { ACTIVATE_KEYS, UI_TAP_SOUND, type Surface } from '../ui/core/UiRoot';
-import type { LootBannerModel } from '../ui/hud/hudModel';
-import type { PauseFrame } from '../ui/screens/pause/PauseScreen';
-
-interface QueueEntry {
-  def: AwardDef;
-  mgr: AchievementManager;
-  player: 'Human' | 'Cat';
-}
+import type { RewardPresentation } from '../loot/rewardChest';
+import type { Surface } from '../ui/core/UiRoot';
+import { RewardChestScreen } from '../ui/screens/rewardChest/RewardChestScreen';
+import { rewardsBannerEntry } from '../ui/hud/rewardsBanner';
+import type { TopBandEntry } from '../ui/hud/topBand';
 
 export class AchievementUISystem {
-  private readonly achievementNotif = new AchievementNotification();
-  readonly lootBoxOpener = new LootBoxOpener();
-
-  private _notifActive = false;
-  private _notifQueue: QueueEntry[] = [];
+  private readonly screen: RewardChestScreen;
 
   /**
-   * When set, called once after every pending loot box queue has been fully opened.
-   * Cleared after first call. Used by the tutorial to give tutorial items and advance
-   * state immediately after the normal loot box opener finishes.
+   * Whether the chip may offer the waiting rewards now. While it is false the
+   * chip stays hidden and the rewards wait in their crawlers' queues: the
+   * tutorial holds them until the player has spoken to Mordecai.
    */
-  onAllBoxesOpened: (() => void) | null = null;
-  /** Told as each box's contents are paid out to its owner. */
-  onBoxOpened:
-    | ((opened: { owner: HumanPlayer | CatPlayer; box: LootBox; contents: BoxContents }) => void)
-    | null = null;
-  /**
-   * What every box's coins are multiplied by when it opens: the viewers'
-   * favour bonus where the scene has one. Read as each box opens, so the
-   * reveal shows the coins that are actually paid.
-   */
-  boxCoinMultiplier: () => number = () => 1;
+  presentationGate: () => boolean = () => true;
+
+  /** Told as each presentation is taken off its queue to be shown, before its reveal plays. */
+  onPresentationOpened: ((presentation: RewardPresentation) => void) | null = null;
+
+  /** Told as each presentation is put away, with the presentation that closed. */
+  onPresentationClosed: ((presentation: RewardPresentation) => void) | null = null;
 
   constructor(
     private readonly humanAchievements: AchievementManager,
     private readonly catAchievements: AchievementManager,
-    private readonly human: HumanPlayer,
-    private readonly cat: CatPlayer,
-    private readonly rewardFly: RewardFlySystem,
-    private readonly audio: AudioManager | null = null,
+    audio: AudioManager | null = null,
   ) {
-    this.lootBoxOpener.setAudio(audio);
+    this.screen = new RewardChestScreen(audio);
+    this.screen.bindSource({
+      take: () => this.takeNextPresentation(),
+      waiting: () => (this.presentationGate() ? this.waitingCount : 0),
+      closed: (presentation) => this.onPresentationClosed?.(presentation),
+    });
   }
 
-  /** True when a blocking overlay (notification or loot box opener) is active. */
+  /** True while the reward screen is up. */
   get isBlocking(): boolean {
-    return this._notifActive || this.lootBoxOpener.isOpen;
+    return this.screen.isOpen;
   }
 
-  get notifActive(): boolean {
-    return this._notifActive;
-  }
-
-  /** Call once per frame (before pause/game-over checks). */
-  tick(): void {
-    if (this.lootBoxOpener.isOpen) this.lootBoxOpener.tick();
-    if (this._notifActive) this.achievementNotif.tick();
-  }
-
-  private _advanceNotifQueue(): void {
-    const shown = this._notifQueue.shift();
-    if (shown) {
-      const idx = shown.mgr.pendingNotifications.indexOf(shown.def);
-      if (idx >= 0) shown.mgr.pendingNotifications.splice(idx, 1);
-      shown.mgr.clearMenuUnseenOne();
-    }
-    if (this._notifQueue.length > 0) {
-      this.achievementNotif.reset();
-    } else {
-      this._notifActive = false;
-      const inSafe = this.human.isProtected || this.cat.isProtected;
-      if (inSafe) {
-        if (this.humanAchievements.pendingBoxes.length > 0) {
-          this.openBoxQueue('human', () => void 0);
-        } else if (this.catAchievements.pendingBoxes.length > 0) {
-          this.openBoxQueue('cat', () => void 0);
-        }
-      }
-    }
-  }
-
-  /** Unread achievements across both crawlers. */
-  private get unreadCount(): number {
-    return this.humanAchievements.unreadCount + this.catAchievements.unreadCount;
-  }
-
-  private get pendingBoxCount(): number {
-    return this.humanAchievements.pendingBoxes.length + this.catAchievements.pendingBoxes.length;
-  }
-
-  private get partyInSafeRoom(): boolean {
-    return this.human.isProtected || this.cat.isProtected;
-  }
-
-  /** The award overlays own the screen while either is up; the HUD's entries to them hide. */
-  private get awardsShowing(): boolean {
-    return this.lootBoxOpener.isOpen || this._notifActive;
+  /** Paid awards waiting for the reward screen, across both crawlers. */
+  private get waitingCount(): number {
+    return this.humanAchievements.presentationCount + this.catAchievements.presentationCount;
   }
 
   /**
-   * How many achievements the HUD's chip counts, or null when it does not
-   * show: nothing unread, inside a safe room (its banner says it instead), or
-   * an award already on screen.
+   * The next paid award to show, taken off its crawler's queue (the human's
+   * first), or null when none is waiting or the gate is shut.
    */
+  private takeNextPresentation(): RewardPresentation | null {
+    if (!this.presentationGate()) return null;
+    const next =
+      this.humanAchievements.takePresentation() ?? this.catAchievements.takePresentation();
+    if (next !== null) this.onPresentationOpened?.(next);
+    return next;
+  }
+
+  /** The count the HUD's "Rewards waiting" chip shows, or null while it is hidden. */
   hudChipCount(): number | null {
-    if (this.awardsShowing || this.partyInSafeRoom) return null;
-    const unread = this.unreadCount;
-    return unread > 0 ? unread : null;
+    if (this.screen.isOpen || !this.presentationGate()) return null;
+    const waiting = this.waitingCount;
+    return waiting > 0 ? waiting : null;
   }
 
   /**
-   * The safe room's left-edge banner: unread achievements first, then loot
-   * boxes waiting to be opened. Null outside a safe room, with nothing
-   * waiting, or while an award is on screen.
-   *
-   * @param onClose Called as the boxes start opening, to put away whatever
-   *   menu the banner was reached through.
+   * The safe room's wide "rewards waiting" banner for the top band, or null
+   * outside a safe room or with nothing waiting. Tapping it opens the screen.
    */
-  hudBanner(onClose: () => void): LootBannerModel | null {
-    if (this.awardsShowing || !this.partyInSafeRoom) return null;
-    const unread = this.unreadCount;
-    if (unread > 0) {
-      return {
-        glyph: 'trophy',
-        title: 'Achievement!',
-        detail: unread === 1 ? '1 new' : `${unread} new`,
-        onTap: () => void this.showUnread(),
-      };
-    }
-    const boxes = this.pendingBoxCount;
-    if (boxes === 0) return null;
-    return {
-      glyph: 'sparkle',
-      title: 'Open loot!',
-      detail: boxes === 1 ? '1 box' : `${boxes} boxes`,
-      onTap: () => void this.openPendingBoxes(onClose),
-    };
+  rewardsBanner(inSafeRoom: boolean): TopBandEntry | null {
+    const count = this.hudChipCount();
+    if (!inSafeRoom || count === null) return null;
+    return rewardsBannerEntry({ count, onTap: () => void this.openRewards() });
   }
 
-  /** Shows every unread achievement in turn. Returns whether there were any. */
-  showUnread(): boolean {
-    if (this.unreadCount === 0) return false;
-    this._notifQueue = [
-      ...this.humanAchievements.pendingNotifications.map((def) => ({
-        def,
-        mgr: this.humanAchievements,
-        player: 'Human' as const,
-      })),
-      ...this.catAchievements.pendingNotifications.map((def) => ({
-        def,
-        mgr: this.catAchievements,
-        player: 'Cat' as const,
-      })),
-    ];
-    if (this._notifQueue.length > 0) {
-      this._notifActive = true;
-      this.achievementNotif.reset();
-      this.audio?.play('achievement_awarded');
-    }
-    return true;
+  /** Opens the reward screen on the waiting rewards. Returns whether any were waiting. */
+  openRewards(): boolean {
+    return this.screen.open();
   }
 
-  /**
-   * Opens the human's loot boxes, then the cat's. Declined while an
-   * achievement is still unread, which is read first. Returns whether any
-   * box opened.
-   */
-  openPendingBoxes(onClose: () => void): boolean {
-    if (this.unreadCount > 0) return false;
-    if (this.humanAchievements.pendingBoxes.length > 0) {
-      this.openBoxQueue('human', onClose);
-      return true;
-    }
-    if (this.catAchievements.pendingBoxes.length > 0) {
-      this.openBoxQueue('cat', onClose);
-      return true;
-    }
-    return false;
+  /** Call once per frame, ahead of the pause and game-over returns, so the reveal never freezes. */
+  tick(): void {
+    this.screen.tick();
   }
 
-  /**
-   * The pause menu's loot-box buttons: each present only while the party is in
-   * a safe room and that crawler has boxes waiting.
-   *
-   * @param closePause Puts the pause menu away as the boxes start opening.
-   */
-  pauseBoxOpeners(closePause: () => void): Pick<PauseFrame, 'onOpenHumanBoxes' | 'onOpenCatBoxes'> {
-    const inSafe = this.partyInSafeRoom;
-    return {
-      onOpenHumanBoxes:
-        inSafe && this.humanAchievements.pendingBoxes.length > 0
-          ? () => this.openBoxQueue('human', closePause)
-          : undefined,
-      onOpenCatBoxes:
-        inSafe && this.catAchievements.pendingBoxes.length > 0
-          ? () => this.openBoxQueue('cat', closePause)
-          : undefined,
-    };
+  /** Puts the chest on screen away at once, its guard or not; it is already paid. */
+  dismiss(): void {
+    this.screen.dismiss();
   }
 
-  /** Start opening loot box queue for a player, then chain to the other player's boxes. */
-  openBoxQueue(player: 'human' | 'cat', onClose: () => void): void {
-    const mgr = player === 'human' ? this.humanAchievements : this.catAchievements;
-    const target = player === 'human' ? this.human : this.cat;
-    const boxes = [...mgr.pendingBoxes];
-    if (boxes.length === 0) return;
-    onClose();
-    const playerName = player === 'human' ? 'Human' : 'Cat';
-    // Held for this player's whole reveal sequence: every box's coins/items
-    // queue up and fly together once the opener actually closes, rather than
-    // streaming in behind the cards while they're still being read. Passed
-    // explicitly to every enqueue call below so a chest or another system's
-    // overlapping hold can never end up owning this queue.
-    const flyHold = this.rewardFly.hold();
-    const origin = { x: viewportWidth() / 2, y: viewportHeight() / 2 };
-    this.lootBoxOpener.startQueue(
-      boxes,
-      playerName,
-      (box) => this.contentsFor(box),
-      (box, contents) => {
-        mgr.openBox(box.id);
-        this.onBoxOpened?.({ owner: target, box, contents });
-        if (contents.potions) {
-          target.inventory.addItem('health_potion', contents.potions);
-          this.rewardFly.enqueueItem(
-            'health_potion',
-            ITEM_DEF.health_potion.name,
-            origin.x,
-            origin.y,
-            flyHold,
-          );
-        }
-        if (contents.coins > 0) {
-          target.earnCoins(contents.coins);
-          this.rewardFly.enqueueCoins(contents.coins, origin.x, origin.y, flyHold);
-        }
-        if (contents.bonus && isItemId(contents.bonus.id)) {
-          this.human.inventory.addItem(contents.bonus.id, contents.bonus.quantity);
-          this.rewardFly.enqueueItem(
-            contents.bonus.id,
-            ITEM_DEF[contents.bonus.id].name,
-            origin.x,
-            origin.y,
-            flyHold,
-          );
-        }
-        for (const reward of contents.itemRewards ?? []) {
-          target.inventory.addItem(reward.id, reward.quantity);
-          this.rewardFly.enqueueItem(
-            reward.id,
-            ITEM_DEF[reward.id].name,
-            origin.x,
-            origin.y,
-            flyHold,
-          );
-        }
-      },
-      () => {
-        this.rewardFly.release(flyHold);
-        const otherPlayer = player === 'human' ? 'cat' : 'human';
-        const otherMgr = player === 'human' ? this.catAchievements : this.humanAchievements;
-        if (otherMgr.pendingBoxes.length > 0) {
-          this.openBoxQueue(otherPlayer, () => void 0);
-        } else {
-          const cb = this.onAllBoxesOpened;
-          this.onAllBoxesOpened = null;
-          cb?.();
-        }
-      },
-      () => {
-        this.audio?.play('opening_reward_box');
-      },
-    );
-  }
-
-  /**
-   * What a box holds: its shared tier/category contents, plus the granting
-   * achievement's own item rewards and the box's own named items, kept apart
-   * from the shared bonus so the reveal shows both.
-   */
-  private contentsFor(box: LootBox): BoxContents {
-    const shared = getBoxContents(box.tier, box.category);
-    const base = { ...shared, coins: Math.round(shared.coins * this.boxCoinMultiplier()) };
-    const achievementRewards =
-      box.fromAchievement === null ? [] : (ACHIEVEMENT_DEFS[box.fromAchievement].itemRewards ?? []);
-    const itemRewards = [...achievementRewards, ...(box.itemRewards ?? [])];
-    if (itemRewards.length === 0) return base;
-    return { ...base, itemRewards: itemRewards.map((reward) => ({ ...reward })) };
-  }
-
-  // ── Rendering ──
-
-  /**
-   * The notification and the loot-box reveal as one surface. It takes every
-   * press while up, over the death screen included, but floats: the world
-   * runs on and the keyboard is not locked. A tap anywhere or the attack key
-   * skips the reveal; once the card has faded in, its OK button, Space, Enter
-   * or the attack key dismisses it.
-   */
-  surface(id = 'achievement-overlay'): Surface {
-    return {
-      id,
-      band: 'system',
-      haltsWorld: false,
-      locksKeyboard: false,
-      isOpen: () => this.isBlocking,
-      render: (ui) => {
-        const revealing = this.lootBoxOpener.isOpen;
-        if (revealing) this.lootBoxOpener.paint(ui, ui.screen.w, ui.screen.h);
-        if (this._notifActive && this._notifQueue.length > 0) {
-          const shown = this._notifQueue[0];
-          this.achievementNotif.paint(ui, shown.def, shown.player, () => this._advanceNotifQueue());
-        }
-        // Registered last so it sits over everything: while a box is opening, any tap skips it.
-        if (revealing) {
-          ui.hit('skip', ui.screen, {
-            onTap: () => this.lootBoxOpener.skip(),
-            focusable: false,
-            sound: null,
-          });
-        }
-      },
-      onKey: (key, mods) => {
-        const isAttack = keybindings.actionFor(key) === 'attack';
-        const fresh = mods.repeat !== true && mods.predatesSurface !== true;
-        if (this.lootBoxOpener.isOpen) {
-          if (!isAttack) return false;
-          if (fresh) this.lootBoxOpener.skip();
-          return true;
-        }
-        if (!isAttack && !ACTIVATE_KEYS.has(key)) return false;
-        // The surface neither halts nor locks, so the focus ring never sees these keys: OK is pressed here.
-        if (fresh && this.achievementNotif.isFadedIn) {
-          this.audio?.play(UI_TAP_SOUND);
-          this._advanceNotifQueue();
-        }
-        return true;
-      },
-    };
+  /** The Reward Chest surface, mounted once on the scene's `UiRoot`; it halts the world while open. */
+  surface(id = 'reward-chest'): Surface {
+    return this.screen.surface(id);
   }
 }

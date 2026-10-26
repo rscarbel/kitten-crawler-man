@@ -10,8 +10,8 @@
  */
 
 import { TILE_SIZE } from '../../core/constants';
-import type { InteriorFigure } from '../../core/InteriorFigure';
-import type { BriarHollowState } from '../../core/briarHollowState';
+import type { InteriorFigure } from '../../core/rendering/InteriorFigure';
+import type { BriarHollowState } from '../../core/quests/briarHollowState';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { GameMap } from '../../map/GameMap';

@@ -13,9 +13,9 @@
  * entry-idempotent so building round-trips reconstruct cleanly.
  */
 
-import { awardPartyXp, type PartyXpApplied } from '../core/awardXp';
+import { awardPartyXp, type PartyXpApplied } from '../core/progression/awardXp';
 import { TILE_SIZE } from '../core/constants';
-import { applySpawnDifficulty } from '../core/difficultyProfiles';
+import { applySpawnDifficulty } from '../core/difficulty/difficultyProfiles';
 import type { GameMap } from '../map/GameMap';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import { WELL } from '../map/tileTypes';
@@ -23,16 +23,16 @@ import type { EventBus } from '../core/EventBus';
 import type { AudioManager } from '../audio/AudioManager';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { despawnMob, type Mob } from '../creatures/Mob';
-import type { SpatialGrid } from '../core/SpatialGrid';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { Player } from '../Player';
-import { QuestManager, type QuestStatus } from '../core/QuestManager';
-import type { ItemId } from '../core/ItemDefs';
+import { QuestManager, type QuestId, type QuestStatus } from '../core/quests/QuestManager';
+import type { ItemId } from '../core/items/defs/ItemDefs';
 import { partyLevelOf } from '../levels/spawner';
 import { worldPalette } from '../ui/theme/worldInk';
 import { withAlpha } from '../ui/theme/color';
 import { questMobLevel } from './questMobLevel';
 import { characterTarget, type TrackerEntry, type TrackerTarget } from './questTracker';
-import type { MurderQuestProgress } from '../core/MurderQuestProgress';
+import type { MurderQuestProgress } from '../core/quests/MurderQuestProgress';
 import type { MusicClaims } from '../audio/AudioScope';
 import type { QuestMarkerType } from './MiniMapSystem';
 import { GumGum } from '../creatures/GumGum';
@@ -51,7 +51,9 @@ import type { ConversationHandle } from '../dialog/request';
 import { questBannerEntry, QUEST_BANNER_FRAMES } from '../ui/QuestBanners';
 import type { TopBandEntry } from '../ui/hud/topBand';
 import { partyXpSections } from '../ui/questReward/rewardLines';
-import type { QuestRewardSpec } from '../ui/questReward/types';
+import type { QuestRewardSpec, RewardItemLine } from '../ui/questReward/types';
+import { grantQuestGear } from '../loot/questGear';
+import type { GearId } from '../loot/gearPools';
 import {
   MURDER_HOOK,
   MURDER_BODY_FOUND,
@@ -63,7 +65,10 @@ import {
   MURDER_HIDEOUT_CLEARED,
 } from '../dialog/scripts/scenes/murder';
 
-export const MURDER_QUEST_ID = 'krasue_murders';
+export const MURDER_QUEST_ID = 'krasue_murders' as const satisfies QuestId;
+
+/** The mask the case leaves behind once it is solved. */
+const MURDER_QUEST_GEAR = 'grinning_mask' as const satisfies GearId;
 const MURDER_QUEST_NAME = 'The Krasue Murders';
 
 /** The two papers tucked in GumGum's coat, handed over when the alley scene closes. */
@@ -293,10 +298,6 @@ export class MurderMysteryQuestSystem implements GameSystem {
       type: 'story',
       rewards: {
         xp: 800,
-        lootBoxItems: [
-          { id: 'health_potion', minQty: 3, maxQty: 5 },
-          { id: 'stat_boost_potion', minQty: 1, maxQty: 1 },
-        ],
         coins: 150,
       },
     });
@@ -1145,7 +1146,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
     this.bus.emit('objectiveComplete', { objectiveId: 'krasue_night_attack_survived' });
   }
 
-  /** Both crawlers earn the full XP; the coins go into the active crawler's purse. */
+  /** Both crawlers earn the full XP; the coins and the mask go to the active crawler. */
   private finishQuest(ctx: Pick<SystemContext, 'human' | 'cat' | 'active'>): void {
     this.phase = 'complete';
     this.progress.stage = 'complete';
@@ -1157,9 +1158,12 @@ export class MurderMysteryQuestSystem implements GameSystem {
     const coins = def?.rewards.coins ?? 0;
     ctx.active.earnCoins(coins);
 
+    const earner = ctx.active === ctx.human ? 'human' : 'cat';
+    const gear = grantQuestGear(ctx, MURDER_QUEST_GEAR, earner);
+
     this.bus.emit('questCompleted', { questId: MURDER_QUEST_ID });
     const questTitle = def?.name ?? MURDER_QUEST_NAME;
-    this.bus.emit('questRewardShown', this.rewardSpec(questTitle, xpApplied, coins));
+    this.bus.emit('questRewardShown', this.rewardSpec(questTitle, xpApplied, coins, gear));
   }
 
   /**
@@ -1170,12 +1174,14 @@ export class MurderMysteryQuestSystem implements GameSystem {
     questTitle: string,
     xpApplied: PartyXpApplied | null,
     coins: number,
+    gear: RewardItemLine,
   ): QuestRewardSpec {
     return {
       questTitle,
       sections: [
         ...(xpApplied === null ? [] : partyXpSections(xpApplied)),
         { kind: 'coins', amount: coins },
+        { kind: 'items', items: [gear] },
       ],
     };
   }

@@ -13,7 +13,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/rendering/canvasSurface';
 
 /** How long one burst of hearts lasts, from the first heart to the last fading out. */
 export const PET_HEARTS_SECONDS = 3;

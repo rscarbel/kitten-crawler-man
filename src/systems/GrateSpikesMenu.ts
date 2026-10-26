@@ -14,9 +14,9 @@ import type { AudioManager } from '../audio/AudioManager';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { DefendQuestSystem } from './DefendQuestSystem';
-import { canAfford, partyCount, spend } from '../core/partyResources';
-import { constructionHpMultiplier, spikesUnlocked } from '../core/craftPerks';
-import { keybindings } from '../core/Keybindings';
+import { canAfford, partyCount, spend } from '../core/items/gathering/partyResources';
+import { constructionHpMultiplier, spikesUnlocked } from '../core/labour/craftPerks';
+import { keybindings } from '../core/input/Keybindings';
 import { TILE_SIZE } from '../core/constants';
 import {
   StructurePopover,

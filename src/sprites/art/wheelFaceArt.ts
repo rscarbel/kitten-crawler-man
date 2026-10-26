@@ -16,8 +16,8 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
-import { onCanvasRecovery } from '../../core/canvasRecovery';
+} from '../../core/rendering/canvasSurface';
+import { onCanvasRecovery } from '../../core/rendering/canvasRecovery';
 import type { WheelBoard, WheelWedge } from '../../systems/casino/wheel/wheelBoard';
 import { wedgeEndAngle, wedgeStartAngle } from '../../systems/casino/wheel/wheelGeometry';
 import { MARKER_FONT_STACK, UI_FONT_STACK } from '../../ui/theme/fonts';

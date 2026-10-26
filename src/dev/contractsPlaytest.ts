@@ -5,8 +5,8 @@
  * Dev-only, like the rest of `src/dev/`.
  */
 
-import { BLUEPRINTS_GRAIN_TARGET } from '../core/blueprintsQuestPhase';
-import type { BriarHollowState } from '../core/briarHollowState';
+import { BLUEPRINTS_GRAIN_TARGET } from '../core/quests/blueprintsQuestPhase';
+import type { BriarHollowState } from '../core/quests/briarHollowState';
 import type { VillageBuildingId } from '../map/overworld/briarHollowLayout';
 import { issueContract } from '../systems/constructionContracts/contractGenerator';
 import { blueprintsPlaytestState } from './blueprintsPlaytest';

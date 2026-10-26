@@ -1,4 +1,8 @@
-import { walkFrameIndex, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import {
+  walkFrameIndex,
+  progressFrameIndex,
+  timeFrameIndex,
+} from '../core/spriteAssets/SpriteRenderer';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import { figureFrameCount } from './figure/figureDef';
 import { LICH_FIGURE } from './art/lichFigure';

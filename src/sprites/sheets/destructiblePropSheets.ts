@@ -27,7 +27,7 @@ import {
 } from '../art/destructiblePropArt';
 import { PROP_VARIANT_COUNT } from '../art/propPaint';
 import type { PropSheetPlan, PropSheetRow, FramePainter } from './propSheetPlan';
-import type { SpriteKey } from '../../core/SpriteLoader';
+import type { SpriteKey } from '../../core/spriteAssets/SpriteLoader';
 
 /**
  * Source pixels per game tile. Twice the game's own tile: the props are drawn

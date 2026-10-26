@@ -20,8 +20,8 @@ import {
   applySpawnDifficulty,
   type Difficulty,
   type DifficultyProfile,
-} from '../core/difficultyProfiles';
-import { settings } from '../core/Settings';
+} from '../core/difficulty/difficultyProfiles';
+import { settings } from '../core/input/Settings';
 import { hasRoomToMove } from '../map/findWalkableTile';
 import { RUINS_CIRCUS_BUFFER } from '../map/OverworldGenerator';
 import { pastSafeRoomTest } from '../map/pastSafeRoom';
@@ -276,7 +276,7 @@ function placeRoomFairy(
     difficulty,
     def.floorNumber,
   );
-  fairy.allowSlingshotDrop = def.slingshotDrops === true;
+  fairy.allowWorldGearDrop = def.worldGearDrops === true;
   room.fairies.push(fairy);
   return fairy;
 }
@@ -585,7 +585,7 @@ export function spawnOverworldFairies(
         difficulty,
         def.floorNumber,
       );
-      fairy.allowSlingshotDrop = def.slingshotDrops === true;
+      fairy.allowWorldGearDrop = def.worldGearDrops === true;
       placed.push(fairy);
     }
   }

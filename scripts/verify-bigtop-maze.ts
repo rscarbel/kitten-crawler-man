@@ -14,7 +14,7 @@
  *
  * Run: npx tsx scripts/verify-bigtop-maze.ts
  */
-import type { Difficulty } from '../src/core/difficultyProfiles';
+import type { Difficulty } from '../src/core/difficulty/difficultyProfiles';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
 import { GameMap } from '../src/map/GameMap';
 import { hasRoomToMove } from '../src/map/findWalkableTile';
@@ -49,8 +49,11 @@ import { SpellSystem } from '../src/systems/SpellSystem';
 import type { Mob, PlayerDamageType } from '../src/creatures/Mob';
 import type { SystemContext } from '../src/systems/GameSystem';
 import { EventBus } from '../src/core/EventBus';
-import { makeSepsis } from '../src/core/StatusEffect';
-import { BIG_TOP_SEALED_MESSAGE, createCircusQuestProgress } from '../src/core/CircusQuestProgress';
+import { makePoison } from '../src/core/combat/StatusEffect';
+import {
+  BIG_TOP_SEALED_MESSAGE,
+  createCircusQuestProgress,
+} from '../src/core/quests/CircusQuestProgress';
 import { Conversation } from '../src/dialog/Conversation';
 import { readFileSync } from 'node:fs';
 import { SFX_GROUPS } from '../src/audio/sfxGroups';
@@ -60,7 +63,7 @@ import {
   BIG_TOP_MUSIC,
   bigTopCueSoundIds,
 } from '../src/systems/bigTop/bigTopSoundCues';
-import type { CircusQuestProgress } from '../src/core/CircusQuestProgress';
+import type { CircusQuestProgress } from '../src/core/quests/CircusQuestProgress';
 import {
   BELL_HOLD_FRAMES,
   BIG_TOP_MAZE_ROWS,
@@ -131,9 +134,12 @@ import {
 } from '../src/systems/bigTop/hallMarquees';
 import { MirrorHall, type HallBoardId, type SettlingBoard } from '../src/systems/bigTop/MirrorHall';
 import { restartBigTopTent } from '../src/systems/bigTop/bigTopTent';
-import { activeDifficultyChangeGuard } from '../src/core/difficultyChangeGuard';
-import { settings } from '../src/core/Settings';
+import { activeDifficultyChangeGuard } from '../src/core/difficulty/difficultyChangeGuard';
+import { settings } from '../src/core/input/Settings';
 import { runMirrorBoardChecks, SWEEP_ATTEMPTS } from './bigTopMirrorBoardChecks';
+
+/** A credited damage-over-time that outlasts every watch here: poison held on far past its usual run. */
+const LASTING_POISON_TICKS = 999999;
 
 /** Faults a run can inject; each must turn its own check red. */
 const FAULTS = ['latch-stars', 'unguarded-difficulty'] as const;
@@ -1329,7 +1335,7 @@ console.log('\nChecking every prop answers to everything its crawler can swing�
 // on a hit that was landing correctly.
 console.log('\nChecking a prop cannot be killed out from under the puzzle…');
 {
-  const crownWearer = new HumanPlayer(0, 0, TILE_SIZE);
+  const gearWearer = new HumanPlayer(0, 0, TILE_SIZE);
   const probes = [
     new MazeBlockTarget(0, 0, TILE_SIZE, 'brace', 'east'),
     new MazeBlockTarget(0, 0, TILE_SIZE, 'capstan', 'east'),
@@ -1341,8 +1347,8 @@ console.log('\nChecking a prop cannot be killed out from under the puzzle…');
     // accident: a prop that spawns dead is skipped by every combat loop and
     // never leaves the mob grid's dead list, so nothing can hit it at all.
     check(probe.isAlive, `${probe.kind}: a fresh prop starts alive, or no weapon can reach it`);
-    probe.applyStatus(makeSepsis(crownWearer));
-    check(!probe.hasStatus('sepsis'), `${probe.kind}: the sepsis crown’s proc never lands on it`);
+    probe.applyStatus(makePoison(gearWearer, LASTING_POISON_TICKS));
+    check(!probe.hasStatus('poison'), `${probe.kind}: a gear poison proc never lands on it`);
     // The door every damage-over-time tick and every pool of acid comes through,
     // which is *not* the door `takesPlayerDamage` guards.
     probe.takeDamage(BLOCK_TARGET_PROBE_DAMAGE);

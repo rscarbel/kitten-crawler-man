@@ -23,13 +23,13 @@ import {
   costRequirements,
   spend,
   type ResourceCost,
-} from '../../../core/partyResources';
-import { viewportHeight, viewportWidth } from '../../../core/Viewport';
-import { isVillageUnderSiege } from '../../../core/villageQuestPhase';
+} from '../../../core/items/gathering/partyResources';
+import { viewportHeight, viewportWidth } from '../../../core/rendering/Viewport';
+import { isVillageUnderSiege } from '../../../core/quests/villageQuestPhase';
 import {
   BLUEPRINTS_STATION_IDS,
   type BlueprintsStationId,
-} from '../../../core/blueprintsQuestPhase';
+} from '../../../core/quests/blueprintsQuestPhase';
 import type { TilePoint } from '../../../map/town/townPlan';
 import { BUILD_ROWS } from '../../../sprites/art/humanFigure';
 import {

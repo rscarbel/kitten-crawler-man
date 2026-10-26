@@ -17,9 +17,12 @@ import {
   CanvasContextUnavailableError,
   surfaceContext,
   releaseSurface,
-} from '../../core/canvasSurface';
-import type { CanvasSurface } from '../../core/canvasSurface';
-import { canvasGeneration, reportCanvasAllocationFailure } from '../../core/canvasRecovery';
+} from '../../core/rendering/canvasSurface';
+import type { CanvasSurface } from '../../core/rendering/canvasSurface';
+import {
+  canvasGeneration,
+  reportCanvasAllocationFailure,
+} from '../../core/rendering/canvasRecovery';
 
 const GLOW_CORE_COLOR = 'rgba(255,190,110,1)';
 const GLOW_EDGE_COLOR = 'rgba(255,150,60,0)';

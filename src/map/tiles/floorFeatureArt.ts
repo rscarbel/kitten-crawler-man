@@ -12,7 +12,11 @@
  * something the floor has, not something that competes with what stands on it.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/rendering/canvasSurface';
 import { blitAtDevice, fillSnapped, snappedDeviceRect } from './deviceSnap';
 import type { FloorFeatureId } from '../dungeon/roomCharacters';
 import {

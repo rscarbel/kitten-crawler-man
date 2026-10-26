@@ -23,8 +23,8 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../core/canvasSurface';
-import { onCanvasRecovery } from '../core/canvasRecovery';
+} from '../core/rendering/canvasSurface';
+import { onCanvasRecovery } from '../core/rendering/canvasRecovery';
 
 /** Where and how big one beam is, in screen pixels. */
 export interface LightBeamPlacement {

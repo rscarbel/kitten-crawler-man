@@ -31,7 +31,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
-import { ITEM_DEF, type ItemId } from '../core/ItemDefs';
+import { ITEM_DEF, type ItemId } from '../core/items/defs/ItemDefs';
 import { playPickupGesture } from '../creatures/humanGestures';
 import type { GameMap } from '../map/GameMap';
 import type { Player } from '../Player';

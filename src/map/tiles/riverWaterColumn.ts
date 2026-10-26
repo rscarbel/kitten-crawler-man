@@ -25,9 +25,9 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
+} from '../../core/rendering/canvasSurface';
 import { isRiverChannel, MAX_WATER_DEPTH, VOID_TYPE, type TileContent } from '../tileTypes';
-import { canvasGeneration } from '../../core/canvasRecovery';
+import { canvasGeneration } from '../../core/rendering/canvasRecovery';
 
 /** Samples a smoothed upscale reads either side of a position: a cubic filter reaches two. */
 const FILTER_REACH_SAMPLES = 2;

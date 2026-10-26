@@ -1,7 +1,7 @@
 import { TILE_SIZE } from '../../core/constants';
-import type { CanvasSurface } from '../../core/canvasSurface';
-import { drawSpriteKey } from '../../core/SpriteRenderer';
-import { viewportHeight, viewportWidth } from '../../core/Viewport';
+import type { CanvasSurface } from '../../core/rendering/canvasSurface';
+import { drawSpriteKey } from '../../core/spriteAssets/SpriteRenderer';
+import { viewportHeight, viewportWidth } from '../../core/rendering/Viewport';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { GrotesqueSpider } from '../../creatures/GrotesqueSpider';
 import {
@@ -11,7 +11,7 @@ import {
 } from '../../creatures/grotesqueSpiderTimeline';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import { EGG_HATCH_FRAMES } from '../../creatures/SpiderEgg';
-import type { ItemId } from '../../core/ItemDefs';
+import type { ItemId } from '../../core/items/defs/ItemDefs';
 import type { GameMap, SpiderLabRoomData } from '../../map/GameMap';
 import {
   registerSpiderLabFloorPlan,

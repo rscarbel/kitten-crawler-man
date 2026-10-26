@@ -10,7 +10,7 @@
  *
  * Run: npx tsx scripts/render-bigtop-maze.ts
  */
-import type { Difficulty } from '../src/core/difficultyProfiles';
+import type { Difficulty } from '../src/core/difficulty/difficultyProfiles';
 import { createCanvas } from 'canvas';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
@@ -21,10 +21,10 @@ import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
 import { SpellSystem } from '../src/systems/SpellSystem';
-import { createCircusQuestProgress } from '../src/core/CircusQuestProgress';
+import { createCircusQuestProgress } from '../src/core/quests/CircusQuestProgress';
 import { Conversation } from '../src/dialog/Conversation';
 import { BigTopMazeSystem } from '../src/systems/BigTopMazeSystem';
-import { setViewportSize } from '../src/core/Viewport';
+import { setViewportSize } from '../src/core/rendering/Viewport';
 import type { Mob, PlayerDamageType } from '../src/creatures/Mob';
 import type { SystemContext } from '../src/systems/GameSystem';
 import { MazeBlockTarget } from '../src/creatures/MazeBlockTarget';

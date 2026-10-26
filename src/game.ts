@@ -1,4 +1,4 @@
-import { InputManager } from './core/InputManager';
+import { InputManager } from './core/input/InputManager';
 import { SceneManager } from './core/Scene';
 import { DungeonScene } from './scenes/DungeonScene';
 import type { DungeonSceneOptions } from './scenes/DungeonScene';
@@ -9,20 +9,20 @@ import { devBootScene, installDevLoopFallback } from './dev/devBoot';
 import { AuthClient, isUnauthorizedError, type AuthUser } from './auth/AuthClient';
 import type { GameProgress, GameProgressInput } from './auth/AuthClient';
 import { LoginUI } from './auth/LoginUI';
-import { prewarmGroups } from './core/SpriteLoader';
+import { prewarmGroups } from './core/spriteAssets/SpriteLoader';
 import { AudioManager } from './audio/AudioManager';
 import { CORE_SFX_IDS } from './audio/sfxGroups';
 import { showLoadingScreen } from './ui/LoadingScreen';
 import { dismissBootSplash } from './ui/bootSplash';
-import { LOCAL_PROGRESS_STORAGE, readLocalProgress } from './core/LocalProgress';
+import { LOCAL_PROGRESS_STORAGE, readLocalProgress } from './core/save/LocalProgress';
 import {
   PAGE_SAVE_LATCH,
   ProgressPersistence,
   bootProgress,
   reloadPage,
-} from './core/progressPersistence';
-import type { OwedWipe, ProgressStorage, WipeAccount } from './core/progressPersistence';
-import { LOCAL_WIPE_MARKER } from './core/wipeMarker';
+} from './core/save/progressPersistence';
+import type { OwedWipe, ProgressStorage, WipeAccount } from './core/save/progressPersistence';
+import { LOCAL_WIPE_MARKER } from './core/save/wipeMarker';
 import { WipeHoldScene } from './scenes/WipeHoldScene';
 import { loadUiFont } from './ui/theme/fonts';
 import { prewarmTitleCast } from './scenes/title/titleCast';

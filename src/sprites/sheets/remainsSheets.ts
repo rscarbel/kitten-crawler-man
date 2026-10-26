@@ -20,7 +20,7 @@ import {
   breakablePropSheet,
 } from './destructiblePropSheets';
 import type { FramePainter, PropSheetPlan } from './propSheetPlan';
-import type { SpriteKey } from '../../core/SpriteLoader';
+import type { SpriteKey } from '../../core/spriteAssets/SpriteLoader';
 
 const BREAKABLE_KINDS: ReadonlyArray<RemainsKind & SpriteKey> = ['bone_pile', 'slumped_skeleton'];
 

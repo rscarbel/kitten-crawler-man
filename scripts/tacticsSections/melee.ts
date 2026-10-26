@@ -36,7 +36,7 @@ import { SWORD_SLASH_FRAMES } from '../../src/sprites/skeletonTiming';
 import { MAX_MOB_LEVEL } from '../../src/levels/spawner';
 import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
 import type { StandaloneMobKind } from '../../src/levels/mobKinds';
-import { DIFFICULTY_PROFILES } from '../../src/core/difficultyProfiles';
+import { DIFFICULTY_PROFILES } from '../../src/core/difficulty/difficultyProfiles';
 import type { Rng } from '../../src/sprites/person/rng';
 import { mulberry32 } from '../../src/sprites/person/rng';
 import {

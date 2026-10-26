@@ -20,7 +20,7 @@
  */
 
 import { TILE_SIZE } from '../../core/constants';
-import type { InteriorFigure } from '../../core/InteriorFigure';
+import type { InteriorFigure } from '../../core/rendering/InteriorFigure';
 import type { MazeMirrorTarget } from '../../creatures/MazeMirrorTarget';
 import {
   boardHotSpan,

@@ -1,11 +1,11 @@
-import { displayHp } from '../core/crawlerFormulas';
-import { activeRunStats } from '../core/GameStats';
+import { displayHp } from '../core/party/crawlerFormulas';
+import { activeRunStats } from '../core/progression/GameStats';
 import { TILE_SIZE } from '../core/constants';
 import { Mongo } from '../creatures/Mongo';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import type { Mob } from '../creatures/Mob';
-import type { SpatialGrid } from '../core/SpatialGrid';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { GameMap } from '../map/GameMap';
 import { EmoteEffectSystem } from './EmoteEffectSystem';
 import { hostileWithinRadius } from './interactionPromptGate';
@@ -19,18 +19,18 @@ import {
   mongoTotalRecoveryFrames,
   tickMongoRegen,
   type MongoPetState,
-} from '../core/MongoPetState';
+} from '../core/state/MongoPetState';
 import { getMongoStats, MONGO_DAMAGE_PER_XP } from '../abilities/mongo';
 import { drawMongoIcon, prewarmMongoPet } from '../sprites/mongoSprite';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { CarriedCompanion } from './companionCarry';
-import type { AbilityManager } from '../core/AbilityManager';
+import type { AbilityManager } from '../core/skills/AbilityManager';
 import type { HudToasts, ToastOptions } from '../ui/hud/toasts';
 import type { SummonModel } from '../ui/hud/hudModel';
 import { paintOffscreenPetMarker } from '../ui/hud/offscreenPetMarker';
 import { CAT_SPEECH_STYLE, TimedSpeech, drawTimedSpeechBubble } from '../sprites/speechBubble';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
-import { viewportHeight, viewportWidth } from '../core/Viewport';
+import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
 import { MONGO_LINES } from '../dialog/scripts/mongo';
 
 /**
@@ -174,7 +174,7 @@ export interface MongoCheckpoint {
 }
 
 export class MongoSystem implements GameSystem {
-  /** Whether the player has unlocked Mongo by defeating the Krakaren Clone. */
+  /** Whether Mongo has joined the party: the reward for the party's two-hundredth dungeon kill. */
   unlocked = false;
 
   /** The currently active Mongo instance (null when not summoned). */
@@ -931,7 +931,7 @@ export class MongoSystem implements GameSystem {
   }
 
   /**
-   * Snapshots the Krakaren-chest unlock so a death rewinds it.
+   * Snapshots the unlock so a death rewinds it.
    *
    * The live creature is deliberately not part of this. The death path already
    * calls {@link dismiss} before restoring, which runs the full despawn —

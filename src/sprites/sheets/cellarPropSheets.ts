@@ -37,7 +37,7 @@ import { RUBBLE_HEAP_PAINTER, RUBBLE_SLOPE_PAINTER } from '../art/cellarProps/ru
 import { SARCOPHAGUS_PAINTER } from '../art/cellarProps/sarcophagus';
 import { WINE_CASK_PAINTER } from '../art/cellarProps/wineCask';
 import { mulberry32 } from '../person/rng';
-import type { SpriteKey } from '../../core/SpriteLoader';
+import type { SpriteKey } from '../../core/spriteAssets/SpriteLoader';
 import type { FramePainter, PropSheetPlan, PropSheetRow } from './propSheetPlan';
 
 /** Source pixels per game tile: twice the game's tile, downscaled at draw time. */

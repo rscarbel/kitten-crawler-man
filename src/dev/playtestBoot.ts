@@ -1,15 +1,12 @@
+import { ABILITY_DEFS } from '../abilities/abilityDefs';
 import { TILE_SIZE } from '../core/constants';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
-import { ITEM_DEF, QUEST_SLOT_IDX } from '../core/ItemDefs';
+import { ITEM_DEF, QUEST_SLOT_IDX } from '../core/items/defs/ItemDefs';
 import { ALL_STATS, type Player } from '../Player';
-import { AbilityManager, isAbilityId, type AbilityId } from '../core/AbilityManager';
-import { isSkillId, type SkillId, type SkillState } from '../core/SkillManager';
-import { snapPlayer, type PlayerSnapshot } from '../core/PlayerSnapshot';
-import { MAGIC_MISSILE_DEF } from '../abilities/magicMissile';
-import { PROTECTIVE_SHELL_DEF } from '../abilities/protectiveShell';
-import { SMUSH_DEF } from '../abilities/smush';
-import { MONGO_DEF } from '../abilities/mongo';
+import { AbilityManager, isAbilityId, type AbilityId } from '../core/skills/AbilityManager';
+import { isSkillId, type SkillId, type SkillState } from '../core/skills/SkillManager';
+import { snapPlayer, type PlayerSnapshot } from '../core/save/PlayerSnapshot';
 import { getLevelDef, type LevelDef } from '../levels/index';
 import type { GameMap } from '../map/GameMap';
 import type { MobKind } from '../levels/mobKinds';
@@ -122,10 +119,7 @@ function catSnapshotFor(preset: PlaytestPreset): PlayerSnapshot {
 
 function abilityManagerFor(levels: Partial<Record<AbilityId, number>>): AbilityManager {
   const manager = new AbilityManager();
-  manager.register(MAGIC_MISSILE_DEF);
-  manager.register(PROTECTIVE_SHELL_DEF);
-  manager.register(SMUSH_DEF);
-  manager.register(MONGO_DEF);
+  for (const def of Object.values(ABILITY_DEFS)) manager.register(def);
   for (const [id, level] of Object.entries(levels)) {
     if (!isAbilityId(id)) continue;
     manager.setLevel(id, level);

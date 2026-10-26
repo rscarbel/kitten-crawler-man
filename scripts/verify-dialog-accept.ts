@@ -37,11 +37,11 @@ import { installCanvasGlobals } from './nodeCanvasGlobals';
 import { gameContext } from './nodeGameContext';
 import { TILE_SIZE } from '../src/core/constants';
 import { EventBus } from '../src/core/EventBus';
-import { setViewportSize } from '../src/core/Viewport';
+import { setViewportSize } from '../src/core/rendering/Viewport';
 import {
   createAnchorQuestProgress,
   type AnchorQuestProgress,
-} from '../src/core/AnchorQuestProgress';
+} from '../src/core/quests/AnchorQuestProgress';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { Conversation } from '../src/dialog/Conversation';
@@ -56,8 +56,8 @@ import { RewardGrantedDialog } from '../src/ui/RewardGrantedDialog';
 import { UiRoot } from '../src/ui/core/UiRoot';
 import { NO_INSETS } from '../src/ui/core/viewport';
 import { rewardGrantedSurface } from '../src/ui/screens/dialogs/rewardGrantedDialog';
-import { createBriarHollowState } from '../src/core/briarHollowState';
-import { createCircusQuestProgress } from '../src/core/CircusQuestProgress';
+import { createBriarHollowState } from '../src/core/quests/briarHollowState';
+import { createCircusQuestProgress } from '../src/core/quests/CircusQuestProgress';
 import { mountConversation, type ConversationRig } from './conversationHarness';
 import { buildSiegeRig } from './villageSiegeHarness';
 

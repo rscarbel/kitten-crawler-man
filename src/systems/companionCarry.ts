@@ -1,5 +1,5 @@
 import { TILE_SIZE } from '../core/constants';
-import type { SpatialGrid } from '../core/SpatialGrid';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
 import type { GameMap } from '../map/GameMap';
 import type { MobRoster } from './kits/SceneWorld';
@@ -47,6 +47,8 @@ export interface InteriorCompanionArrival {
 export interface InteriorCompanionDeparture {
   /** Whether he was out beside the party at the door, and so walks out with them. */
   readonly mongoWasOut: boolean;
+  /** Whether he has joined the party, which opening his reward chest indoors can do. */
+  readonly mongoUnlocked: boolean;
 }
 
 /** Nobody came in with the party, and nothing about Mongo is known. */

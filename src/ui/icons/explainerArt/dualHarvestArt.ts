@@ -28,8 +28,8 @@ import {
   keycapWidth,
   MOBILE_SWITCH_SIZE,
 } from './controlsArt';
-import { drawSpriteKey } from '../../../core/SpriteRenderer';
-import { TOOL_TIER_BASIC } from '../../../core/toolTiers';
+import { drawSpriteKey } from '../../../core/spriteAssets/SpriteRenderer';
+import { TOOL_TIER_BASIC } from '../../../core/items/gathering/toolTiers';
 import { drawActivePlayerMarker } from '../../../sprites/activePlayerMarker';
 import {
   CAT_WORK_SWING_DURATION_TICKS,

@@ -4,8 +4,9 @@ import type { DestructiblePropSystem } from './DestructiblePropSystem';
 import type { TownInteriorPropDestructionSystem } from './TownInteriorPropDestructionSystem';
 import { EXPLOSION_IGNITE_RING_TILES, type TreeSystem } from './TreeSystem';
 import { TILE_SIZE } from '../core/constants';
-import type { SpatialGrid } from '../core/SpatialGrid';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
+import { gearModifiers } from '../gear/gearHooks';
 import { MAX_MOB_HP_MULTIPLIER } from '../creatures/mobLevelScaling';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
@@ -15,7 +16,7 @@ import {
   drawDynamiteThrowPath,
 } from '../sprites/dynamiteSprite';
 import { drawBlackPowderBombFlight, drawThrownBombShadow } from '../sprites/blackPowderBombSprite';
-import type { ItemId } from '../core/ItemDefs';
+import type { ItemId } from '../core/items/defs/ItemDefs';
 import type { ThrownPropVisualId } from '../sprites/held/heldVisualIds';
 import type { Rect } from '../ui/core/geom';
 import type { Surface, Ui } from '../ui/core/UiRoot';
@@ -330,6 +331,8 @@ interface LiveDynamite {
   mobDamage: number;
   /** Taken at throw time, for the same reason as {@link mobDamage}. */
   crawlerDamage: number;
+  /** What the thrower's gear adds to the blast's reach, taken at throw time. */
+  radiusBonusPx: number;
   /**
    * The world point the stick left his hand at, which its drawn position
    * closes from onto its body over the lob — null on a stick that never left
@@ -342,7 +345,7 @@ interface LiveDynamite {
 }
 
 /** What one stick brings to a blast, whether lying on the floor or still in his hand. */
-type BlastCharge = Pick<LiveDynamite, 'x' | 'y' | 'mobDamage' | 'crawlerDamage'>;
+type BlastCharge = Pick<LiveDynamite, 'x' | 'y' | 'mobDamage' | 'crawlerDamage' | 'radiusBonusPx'>;
 
 /**
  * A black powder bomb on its lob. Unlike a stick it has no physics body: its
@@ -361,6 +364,7 @@ interface LiveBomb {
   readonly handFrom: Pt | null;
   readonly mobDamage: number;
   readonly crawlerDamage: number;
+  readonly radiusBonusPx: number;
   /** Keeps two bombs in the air from sparking in step. */
   readonly seed: number;
   frame: number;
@@ -530,10 +534,11 @@ export class DynamiteSystem implements GameSystem {
       x: stick.x,
       y: stick.y,
       inHand: false,
-      radiusPx: DYN_RADIUS,
+      radiusPx: DYN_RADIUS + stick.radiusBonusPx,
     }));
     for (const bomb of this.liveBombs) {
-      points.push({ x: bomb.landX, y: bomb.landY, inHand: false, radiusPx: DYN_RADIUS });
+      const radiusPx = DYN_RADIUS + bomb.radiusBonusPx;
+      points.push({ x: bomb.landX, y: bomb.landY, inHand: false, radiusPx });
     }
     const pendingLanding = this.pendingThrow?.landing ?? null;
     if (pendingLanding !== null) {
@@ -541,7 +546,7 @@ export class DynamiteSystem implements GameSystem {
         x: pendingLanding.x,
         y: pendingLanding.y,
         inHand: false,
-        radiusPx: DYN_RADIUS,
+        radiusPx: DYN_RADIUS + gearBlastBonusPx(human),
       });
     }
     // A bomb never goes off in his hand, so only a stick warns from there.
@@ -553,7 +558,7 @@ export class DynamiteSystem implements GameSystem {
         x: human.x + HALF_TILE,
         y: human.y + HALF_TILE,
         inHand: true,
-        radiusPx: DYN_RADIUS,
+        radiusPx: DYN_RADIUS + gearBlastBonusPx(human),
       });
     }
     return points;
@@ -634,7 +639,7 @@ export class DynamiteSystem implements GameSystem {
     const readied = this._readied;
     if (readied === null || !human.canAct) return false;
     this._readied = null;
-    if (!human.inventory.removeOne(readied.item)) {
+    if (!spendExplosive(human, readied.item)) {
       this.stopDynamiteAction(human);
       return false;
     }
@@ -665,6 +670,7 @@ export class DynamiteSystem implements GameSystem {
       state: dropsAtFeet ? 'stopped' : 'flying',
       mobDamage: dynamiteMobDamage(human.level, expLvl),
       crawlerDamage: dynamiteCrawlerDamage(expLvl),
+      radiusBonusPx: gearBlastBonusPx(human),
       lobFrom: null,
       lobArc: 0,
       lobFrame: 0,
@@ -739,6 +745,7 @@ export class DynamiteSystem implements GameSystem {
         handFrom: hand,
         mobDamage,
         crawlerDamage,
+        radiusBonusPx: gearBlastBonusPx(human),
         seed,
         frame: 0,
       });
@@ -774,7 +781,7 @@ export class DynamiteSystem implements GameSystem {
 
     // With none left to throw — the last one sold or dropped mid-charge —
     // the light or the hold he is posed in has nothing in its hand.
-    if (!human.inventory.removeOne(item)) {
+    if (!spendExplosive(human, item)) {
       this.stopDynamiteAction(human);
       return;
     }
@@ -798,6 +805,7 @@ export class DynamiteSystem implements GameSystem {
       state: isTap ? 'stopped' : 'flying',
       mobDamage: dynamiteMobDamage(human.level, expLvl),
       crawlerDamage: dynamiteCrawlerDamage(expLvl),
+      radiusBonusPx: gearBlastBonusPx(human),
       lobFrom: null,
       lobArc: 0,
       lobFrame: 0,
@@ -971,6 +979,7 @@ export class DynamiteSystem implements GameSystem {
         y: gas.y,
         mobDamage: Math.round(dynamiteMobDamage(human.level, 0) * GAS_CYLINDER_MOB_DAMAGE_FRACTION),
         crawlerDamage: GAS_CYLINDER_CRAWLER_DAMAGE,
+        radiusBonusPx: 0,
       };
       this.detonate(charge, 'dynamite', human, cat, mobGrid, gas.radiusPx);
     }
@@ -1021,6 +1030,7 @@ export class DynamiteSystem implements GameSystem {
       y: human.y + HALF_TILE,
       mobDamage: dynamiteMobDamage(human.level, human.explosivesHandling),
       crawlerDamage: dynamiteCrawlerDamage(human.explosivesHandling),
+      radiusBonusPx: gearBlastBonusPx(human),
     };
     this.detonate(inHand, 'dynamite', human, cat, mobGrid);
   }
@@ -1054,7 +1064,7 @@ export class DynamiteSystem implements GameSystem {
       x: blast.x,
       y: blast.y,
       radius: blast.radius,
-      coreRadius: (fixedRadiusPx ?? DYN_RADIUS) * fireballScale,
+      coreRadius: (fixedRadiusPx ?? DYN_RADIUS + trigger.radiusBonusPx) * fireballScale,
       cores: chain.map((stick, index) => ({
         x: stick.x,
         y: stick.y,
@@ -1236,6 +1246,7 @@ export class DynamiteSystem implements GameSystem {
         y: bomb.landY,
         mobDamage: bomb.mobDamage,
         crawlerDamage: bomb.crawlerDamage,
+        radiusBonusPx: bomb.radiusBonusPx,
       };
       this.detonate(charge, 'black_powder', human, cat, mobGrid);
     }
@@ -1495,6 +1506,26 @@ export class DynamiteSystem implements GameSystem {
   }
 }
 
+/** What the thrower's worn gear adds to a blast's reach, in world pixels. */
+function gearBlastBonusPx(human: HumanPlayer): number {
+  return gearModifiers(human).explosiveRadiusTiles * TILE_SIZE;
+}
+
+/**
+ * Takes one `item` out of his pack to throw, and puts it straight back — in
+ * the hotbar slot it was thrown from — when his gear's refund chance comes up:
+ * the throw still happens either way. Returns false when he had none to throw.
+ */
+function spendExplosive(human: HumanPlayer, item: ThrownExplosiveId): boolean {
+  const { inventory } = human;
+  const thrownFrom = inventory.actionBar.slots.findIndex((slot) => slot?.id === item);
+  if (!inventory.removeOne(item)) return false;
+  if (Math.random() >= gearModifiers(human).explosiveRefundChance) return true;
+  inventory.addItem(item, 1);
+  if (thrownFrom !== -1) inventory.placeOnHotbar(item, thrownFrom);
+  return true;
+}
+
 /**
  * The single blast a chain of sticks makes.
  *
@@ -1512,9 +1543,10 @@ function chainedBlast(chain: ReadonlyArray<BlastCharge>): Blast {
     (furthest, stick) => Math.max(furthest, Math.hypot(stick.x - centreX, stick.y - centreY)),
     0,
   );
+  const radiusBonus = chain.reduce((most, stick) => Math.max(most, stick.radiusBonusPx), 0);
   const radius = Math.min(
-    CHAIN_MAX_RADIUS_TILES * TILE_SIZE,
-    DYN_RADIUS * Math.cbrt(stickCount) + furthestStick,
+    CHAIN_MAX_RADIUS_TILES * TILE_SIZE + radiusBonus,
+    (DYN_RADIUS + radiusBonus) * Math.cbrt(stickCount) + furthestStick,
   );
   const totalMobDamage = chain.reduce((sum, stick) => sum + stick.mobDamage, 0);
   const isChain = stickCount > 1;

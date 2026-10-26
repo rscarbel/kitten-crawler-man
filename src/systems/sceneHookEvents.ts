@@ -1,17 +1,14 @@
 import type { EventBus } from '../core/EventBus';
-import { isItemId, ITEM_DEF } from '../core/ItemDefs';
 import type { Conversation } from '../dialog/Conversation';
 import { onShopTrade } from '../ui/screens/shop/shopSession';
-import type { AchievementUISystem } from './AchievementUISystem';
 
 /**
  * The scene-owned objects that report through callbacks rather than a bus
  * (they are built before, or without, one), forwarded onto the scene's bus
- * as `conversation` and `boxOpened`.
+ * as `conversation`.
  */
 export interface HookedSceneObjects {
   conversation: Conversation;
-  achievementUI: AchievementUISystem;
 }
 
 /**
@@ -21,19 +18,6 @@ export interface HookedSceneObjects {
  */
 export function forwardSceneHooksToBus(bus: EventBus, objects: HookedSceneObjects): () => void {
   objects.conversation.onTalk = (change) => bus.emit('conversation', change);
-  objects.achievementUI.onBoxOpened = ({ owner, box, contents }) => {
-    const items: string[] = (contents.itemRewards ?? []).map((reward) => ITEM_DEF[reward.id].name);
-    const bonusId = contents.bonus?.id;
-    if (bonusId !== undefined) items.push(isItemId(bonusId) ? ITEM_DEF[bonusId].name : bonusId);
-    bus.emit('boxOpened', {
-      owner,
-      tier: box.tier,
-      category: box.category,
-      coins: contents.coins,
-      potions: contents.potions ?? 0,
-      items,
-    });
-  };
   return onShopTrade((trade) => {
     if (trade.kind === 'buy') {
       bus.emit('shopPurchase', {

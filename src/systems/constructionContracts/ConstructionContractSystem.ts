@@ -19,11 +19,16 @@
  * Hollow contact's thanks and payout once the work is done.
  */
 
-import type { ActiveContract, BriarHollowState } from '../../core/briarHollowState';
+import type { ActiveContract, BriarHollowState } from '../../core/quests/briarHollowState';
 import { TILE_SIZE } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
-import { canAfford, formatCost, partyCount, type ResourceCost } from '../../core/partyResources';
-import { isVillageUnderSiege, type VillageQuestPhase } from '../../core/villageQuestPhase';
+import {
+  canAfford,
+  formatCost,
+  partyCount,
+  type ResourceCost,
+} from '../../core/items/gathering/partyResources';
+import { isVillageUnderSiege, type VillageQuestPhase } from '../../core/quests/villageQuestPhase';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { NPCMarkerType } from '../../creatures/QuestNPC';
@@ -173,6 +178,7 @@ export class ConstructionContractSystem implements GameSystem, QuestLineProvider
       audio: deps.audio,
       conversation: deps.conversation,
       flyCoins: deps.flyCoins,
+      party: { human: deps.human, cat: deps.cat },
     });
     this.syncHiddenTiles();
     // Ahead of every other questline: it speaks only while a client owes the

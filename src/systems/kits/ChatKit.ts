@@ -15,12 +15,12 @@ import {
   removeGodModeFromPlayer,
   removeLuckFromPlayer,
   type GodModeState,
-} from '../../core/GodMode';
-import type { AbilityManager } from '../../core/AbilityManager';
+} from '../../core/state/GodMode';
+import type { AbilityManager } from '../../core/skills/AbilityManager';
 import { aiAdapter } from '../../ai/AIAdapter';
-import { ITEM_DEF, isItemId } from '../../core/ItemDefs';
-import { makeBloodVomit } from '../../core/StatusEffect';
-import { BLOOD_VOMIT_INTERVAL_FRAMES } from '../../core/statusTuning';
+import { ITEM_DEF, isItemId } from '../../core/items/defs/ItemDefs';
+import { makeBloodVomit } from '../../core/combat/StatusEffect';
+import { BLOOD_VOMIT_INTERVAL_FRAMES } from '../../core/combat/statusTuning';
 import { PlayerChatSystem } from '../PlayerChatSystem';
 import type { SceneWorld } from './SceneWorld';
 import type { Surface } from '../../ui/core/UiRoot';

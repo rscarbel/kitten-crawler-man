@@ -10,11 +10,14 @@
  * a hand-driven clock, so every tick and every press timestamp is exact.
  */
 
-import { createBriarHollowState, type BriarHollowState } from '../../src/core/briarHollowState';
-import type { BlueprintsQuestPhase } from '../../src/core/blueprintsQuestPhase';
+import {
+  createBriarHollowState,
+  type BriarHollowState,
+} from '../../src/core/quests/briarHollowState';
+import type { BlueprintsQuestPhase } from '../../src/core/quests/blueprintsQuestPhase';
 import { MOB_GRID_CELL_SIZE, TILE_SIZE } from '../../src/core/constants';
-import { SpatialGrid } from '../../src/core/SpatialGrid';
-import { ITEM_DEF, QUEST_SLOT_IDX } from '../../src/core/ItemDefs';
+import { SpatialGrid } from '../../src/core/world/SpatialGrid';
+import { ITEM_DEF, QUEST_SLOT_IDX } from '../../src/core/items/defs/ItemDefs';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import type { Mob } from '../../src/creatures/Mob';

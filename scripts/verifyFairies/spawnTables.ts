@@ -9,7 +9,7 @@
  * the guarantee sits outside the count cap. A boss's healer never brings one.
  */
 
-import type { Difficulty } from '../../src/core/difficultyProfiles';
+import type { Difficulty } from '../../src/core/difficulty/difficultyProfiles';
 import type { Mob } from '../../src/creatures/Mob';
 import { Fairy } from '../../src/creatures/fairies/Fairy';
 import type { FairyKind } from '../../src/sprites/art/fairyTiming';

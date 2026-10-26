@@ -10,7 +10,7 @@
  */
 
 import { MUSIC_TRACK_IDS, type MusicTrackId } from '../../audio/sounds';
-import type { MusicLibraryNotice } from '../../core/MusicLibrary';
+import type { MusicLibraryNotice } from '../../core/music/MusicLibrary';
 import { formatAttribution, MUSIC_CATALOG } from '../../audio/music/catalog';
 import type { Rect } from '../core/geom';
 import type { Ui } from '../core/UiRoot';

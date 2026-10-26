@@ -1,4 +1,8 @@
-import { progressFrameIndex, timeFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
+import {
+  progressFrameIndex,
+  timeFrameIndex,
+  walkFrameIndex,
+} from '../core/spriteAssets/SpriteRenderer';
 import { drawKnife } from './art/circusLemurArt';
 import { CIRCUS_LEMUR_FIGURE } from './art/circusLemurFigure';
 import { figureFrameCount } from './figure/figureDef';

@@ -18,8 +18,8 @@
 import type { Mob } from '../creatures/Mob';
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import type { GameMap } from '../map/GameMap';
-import { settings } from '../core/Settings';
-import type { Difficulty } from '../core/difficultyProfiles';
+import { settings } from '../core/input/Settings';
+import type { Difficulty } from '../core/difficulty/difficultyProfiles';
 
 /** Which explosive a goblin threw. */
 export type GoblinBombKind = 'dynamite' | 'black_powder';

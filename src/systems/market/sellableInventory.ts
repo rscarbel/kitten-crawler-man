@@ -4,7 +4,7 @@
  * counters can disagree about which items are on offer.
  */
 
-import { ITEM_DEF, canSellItemId, type ItemId } from '../../core/ItemDefs';
+import { ITEM_DEF, canSellItemId, type ItemId } from '../../core/items/defs/ItemDefs';
 import type { Player } from '../../Player';
 
 /**

@@ -21,7 +21,7 @@ import type { TileGrid } from './tileGrid';
 import type { TileRect, TownPlan } from './townPlan';
 import type { KeepOut } from '../overworld/keepOut';
 import { isWithinCamp, type CampSite } from '../overworld/camps';
-import { worldRandom } from '../../core/WorldRandom';
+import { worldRandom } from '../../core/world/WorldRandom';
 import { MEADOW_MAX, smoothstepUnit } from '../overworld/elevation';
 import {
   chooseWeighted,

@@ -1,4 +1,4 @@
-import type { MercenaryVoiceId } from '../../core/mercenaryTemplates';
+import type { MercenaryVoiceId } from '../../core/party/mercenaryTemplates';
 import { HIRELING_POTION_COOLDOWN_FRAMES } from './hirelingSurvival';
 import type { BarkLine, NonEmpty } from '../../dialog/line';
 import type { MercenaryLines } from '../../dialog/roles';

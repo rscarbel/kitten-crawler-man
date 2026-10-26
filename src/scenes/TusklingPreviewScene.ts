@@ -15,7 +15,7 @@
  * about their own centres rather than orbiting them.
  */
 
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { TUSKLING_BODY_PART_KEY, drawTusklingSprite } from '../sprites/tusklingSprite';
 import {
   TUSKLING_CHARGE_FRAMES,

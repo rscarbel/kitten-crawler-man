@@ -2,18 +2,18 @@
  * Review sheet for every held visual, beside the art it reproduces.
  *
  *   npm run render:held-visuals
- *   npx tsx scripts/render-held-visuals.ts --item=fury_of_taranis --out=preview/held.png
+ *   npx tsx scripts/render-held-visuals.ts --item=stormcaller --out=preview/held.png
  *   npx tsx scripts/render-held-visuals.ts --measure
  *
  * One band per held visual. The large row starts with the item's own painter
- * (the sword's, a tool's, or the prop painter a row calls) at two angles, in
+ * (a tool's, or the prop painter a row calls) at two angles, in
  * its own frame, then the held visual painted directly through the
  * shared painter: a sweep of eight on-screen angles flat to the camera, two
  * foreshortenings, edge-on, mirrored (palm away) and shaded (in the far
  * hand). The second row is the same set at the 32 px tile on a dungeon floor,
  * drawn through the item-art cache, blown up nearest-neighbour.
  *
- * `--measure` also bakes every look of the Fury of Taranis and prints what the
+ * `--measure` also bakes every look of the Stormcaller and prints what the
  * whole set would hold.
  */
 
@@ -21,14 +21,18 @@ import { createCanvas } from 'canvas';
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { asGameContext, type NodeContext } from './nodeGameContext.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
-import { BYTES_PER_MEGABYTE } from '../src/core/canvasSurface.js';
+import { BYTES_PER_MEGABYTE } from '../src/core/rendering/canvasSurface.js';
 import { PLAYER_HUMAN_SCALE } from '../src/sprites/art/human/figureScale.js';
 import { VIEWS } from '../src/sprites/art/biped/rig.js';
 import { PROP_ART } from '../src/sprites/art/biped/props.js';
 import { burningDynamite } from '../src/sprites/art/biped/props/dynamite.js';
-import { drawTaranisSword } from '../src/sprites/art/biped/props/sword.js';
 import { paintWorkingTool } from '../src/sprites/art/toolArt.js';
-import { TOOL_TIERS, type ToolKind, type ToolTier, isToolTier } from '../src/core/toolTiers.js';
+import {
+  TOOL_TIERS,
+  type ToolKind,
+  type ToolTier,
+  isToolTier,
+} from '../src/core/items/gathering/toolTiers.js';
 import { HELD_VISUALS } from '../src/sprites/held/heldVisuals.js';
 import { HELD_VISUAL_IDS, type HeldVisualId } from '../src/sprites/held/heldVisualIds.js';
 import type { HeldVisualDef } from '../src/sprites/held/heldVisualDef.js';
@@ -201,10 +205,6 @@ function paintOld(
     paint();
     ctx.restore();
   };
-  if (def.id === 'fury_of_taranis') {
-    inOwnFrame(() => drawTaranisSword(ctx, false, 0));
-    return true;
-  }
   const tool = TOOL_TIER_BY_ID.get(def.id);
   if (tool !== undefined) {
     inOwnFrame(() => paintWorkingTool(ctx, tool.kind, tool.tier));
@@ -214,7 +214,7 @@ function paintOld(
     inOwnFrame(() => paintWorkingTool(ctx, 'scythe', 0));
     return true;
   }
-  if (def.id === 'slingshot') {
+  if (def.id === 'rattlestick_sling') {
     const view = index === 0 ? VIEWS.front : VIEWS.side;
     const carryDeg = index === 0 ? SLINGSHOT_CARRY_DEG.front : SLINGSHOT_CARRY_DEG.side;
     // The painter's haft runs from the fork to the butt, so a fork pointing
@@ -252,7 +252,7 @@ function paintOld(
 
 /** The angle the held visual is drawn at to match source entry `index`, in degrees. */
 function matchingHeldAngle(def: HeldVisualDef, index: number): number {
-  if (def.id === 'slingshot')
+  if (def.id === 'rattlestick_sling')
     return index === 0 ? SLINGSHOT_CARRY_DEG.front : SLINGSHOT_CARRY_DEG.side;
   return SOURCE_ANGLES_DEG[index] ?? 0;
 }
@@ -280,10 +280,10 @@ function bandFor(def: HeldVisualDef, sheetWidth: number): ReturnType<typeof crea
     { length: SOURCE_ENTRY_COUNT },
     (_, index) => index,
   ).map((index) => ({
-    caption: `held ${matchingHeldAngle(def, index)}°${def.id === 'slingshot' && index === 1 ? ' edge' : ''}`,
+    caption: `held ${matchingHeldAngle(def, index)}°${def.id === 'rattlestick_sling' && index === 1 ? ' edge' : ''}`,
     axis: inScreen(matchingHeldAngle(def, index)),
     palmNormal:
-      def.id === 'slingshot' && index === 1
+      def.id === 'rattlestick_sling' && index === 1
         ? {
             x: -Math.sin(radians(SLINGSHOT_CARRY_DEG.side)),
             y: Math.cos(radians(SLINGSHOT_CARRY_DEG.side)),
@@ -419,11 +419,11 @@ console.log(
 
 if (process.argv.includes('--measure')) {
   const started = performance.now();
-  const set = measureHeldVisualSet(HELD_VISUALS.fury_of_taranis);
+  const set = measureHeldVisualSet(HELD_VISUALS.stormcaller);
   const elapsed = performance.now() - started;
   const perPicture = set.bytes / set.pictures;
   console.log(
-    `fury_of_taranis, every look: ${set.pictures} pictures, ${megabytes(set.bytes)} MB ` +
+    `stormcaller, every look: ${set.pictures} pictures, ${megabytes(set.bytes)} MB ` +
       `(${(perPicture / BYTES_PER_KIBIBYTE).toFixed(1)} KiB each), baked in ${(elapsed / MS_PER_SECOND).toFixed(1)} s`,
   );
 }

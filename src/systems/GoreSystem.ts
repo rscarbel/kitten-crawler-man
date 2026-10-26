@@ -1,7 +1,7 @@
 import type { GameSystem } from './GameSystem';
 import { randomInt } from '../utils';
-import { getSpriteDef } from '../core/SpriteLoader';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { getSpriteDef } from '../core/spriteAssets/SpriteLoader';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 
 const PUDDLE_LIFETIME = 18000; // 300s @ 60fps
 const PUDDLE_FADE_START = 3000; // start fading 50s before despawn

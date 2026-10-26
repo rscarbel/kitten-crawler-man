@@ -15,8 +15,8 @@
  */
 
 import type { NPCMarkerType } from '../../../creatures/QuestNPC';
-import type { BlueprintsQuestPhase } from '../../../core/blueprintsQuestPhase';
-import { isVillageUnderSiege } from '../../../core/villageQuestPhase';
+import type { BlueprintsQuestPhase } from '../../../core/quests/blueprintsQuestPhase';
+import { isVillageUnderSiege } from '../../../core/quests/villageQuestPhase';
 import type { ConversationHandle } from '../../../dialog/request';
 import {
   KEEP_TALKING,

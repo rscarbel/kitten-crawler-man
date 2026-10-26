@@ -1,4 +1,8 @@
-import { walkFrameIndex, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import {
+  walkFrameIndex,
+  progressFrameIndex,
+  timeFrameIndex,
+} from '../core/spriteAssets/SpriteRenderer';
 import { BITE_FRAMES, GORE_STATES, IDLE_FRAMES, RAT_FIGURE, WALK_FRAMES } from './art/ratFigure';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import { type DrawnFigureRow, drawnFigureRow } from './figure/figureDef';

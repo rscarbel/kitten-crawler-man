@@ -7,9 +7,9 @@
 
 import type { BossFightHooks } from './bossRooms/BossRoomDressing';
 import { clampIntoDrum } from './bossRooms/colosseumSlide';
-import { displayHp } from '../core/crawlerFormulas';
+import { displayHp } from '../core/party/crawlerFormulas';
 import { TILE_SIZE } from '../core/constants';
-import { applySpawnDifficulty } from '../core/difficultyProfiles';
+import { applySpawnDifficulty } from '../core/difficulty/difficultyProfiles';
 import type { EventBus } from '../core/EventBus';
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
@@ -28,8 +28,8 @@ import { spawnHardModeBossHealer } from '../levels/fairySpawner';
 import { hasLivingBossHealer } from '../creatures/fairies/bossHealerBond';
 import { HealingFairy } from '../creatures/fairies/HealingFairy';
 import type { FairyConfinement } from '../creatures/fairies/Fairy';
-import { settings } from '../core/Settings';
-import type { SpatialGrid } from '../core/SpatialGrid';
+import { settings } from '../core/input/Settings';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
 import { level2 } from '../levels/level2';
 
 /** The Ball of Swine's fight, which its loosed Tusklings belong to. */

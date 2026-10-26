@@ -29,10 +29,10 @@ import {
   parseBriarHollowStateSnapshot,
   restoreBriarHollowState,
   type BriarHollowState,
-} from '../src/core/briarHollowState';
-import { applySpawnDifficulty } from '../src/core/difficultyProfiles';
-import { hasAcceptedMayorRequest } from '../src/core/villageQuestPhase';
-import { getMercenaryTemplate, MERCENARY_TEMPLATE_IDS } from '../src/core/mercenaryTemplates';
+} from '../src/core/quests/briarHollowState';
+import { applySpawnDifficulty } from '../src/core/difficulty/difficultyProfiles';
+import { hasAcceptedMayorRequest } from '../src/core/quests/villageQuestPhase';
+import { getMercenaryTemplate, MERCENARY_TEMPLATE_IDS } from '../src/core/party/mercenaryTemplates';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { Mercenary } from '../src/creatures/Mercenary';

@@ -8,7 +8,7 @@
  * strobes the whole figure white.
  */
 
-import type { SilhouetteLayer } from '../../core/silhouetteComposite';
+import type { SilhouetteLayer } from '../../core/spriteAssets/silhouetteComposite';
 import {
   bodyTop,
   bodyX,

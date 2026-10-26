@@ -1,5 +1,5 @@
-import type { AbilityDef } from '../core/AbilityManager';
-import { drawSpriteKey } from '../core/SpriteRenderer';
+import type { AbilityDef } from '../core/skills/AbilityManager';
+import { drawSpriteKey } from '../core/spriteAssets/SpriteRenderer';
 import type { Rect } from '../ui/core/geom';
 import { iconSquare } from '../ui/icons/iconSquare';
 
@@ -117,8 +117,8 @@ function renderMagicMissileIcon(ctx: CanvasRenderingContext2D, rect: Rect, level
   drawSpriteKey(ctx, 'magic_missile_icon', state, 0, x, y, size);
 }
 
-/** Magic Missile level that earns the cat the slate butterfly talisman. */
-export const MAGIC_MISSILE_TALISMAN_LEVEL = 3;
+/** Magic Missile level that earns the cat Spark to Flame. */
+export const MAGIC_MISSILE_SPARK_LEVEL = 3;
 
 export const MAGIC_MISSILE_DEF: AbilityDef = {
   id: 'magic_missile',

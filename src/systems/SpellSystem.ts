@@ -4,9 +4,9 @@ import {
   freshSurfaceContext,
   releaseSurface,
   type CanvasSurface,
-} from '../core/canvasSurface';
-import { platform } from '../core/Platform';
-import type { SpatialGrid } from '../core/SpatialGrid';
+} from '../core/rendering/canvasSurface';
+import { platform } from '../core/input/Platform';
+import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
@@ -15,7 +15,7 @@ import { getProtectiveShellStats, type ProtectiveShellStats } from '../abilities
 import { normalize } from '../utils';
 import { worldPalette } from '../ui/theme/worldInk';
 import { worldText } from '../ui/world/worldText';
-import { progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import { progressFrameIndex, timeFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import {
   drawFigureCached,
   prewarmFigureState,
@@ -35,7 +35,7 @@ import {
   SHOCKWAVE_STATE,
   shellTileSizeFor,
 } from '../sprites/art/protectiveShellFigure';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { standByForShellCast } from '../creatures/humanGestures';
 import type { DynamicLightSink } from './lighting/dynamicLights';
 

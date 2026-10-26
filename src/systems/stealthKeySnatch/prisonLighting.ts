@@ -22,8 +22,7 @@
  *    one is catching them.
  *
  * Darkness never changes detection: a crawler is seen by being inside a
- * shape, never by how lit it is. Night Vision therefore has nothing to do in
- * here and is not read.
+ * shape, never by how lit it is.
  */
 
 import { TILE_SIZE } from '../../core/constants';
@@ -32,8 +31,8 @@ import {
   releaseSurface,
   surfaceContext,
   type CanvasSurface,
-} from '../../core/canvasSurface';
-import { perfMonitor } from '../../core/PerfMonitor';
+} from '../../core/rendering/canvasSurface';
+import { perfMonitor } from '../../core/perf/PerfMonitor';
 import { rectContainsTile, type ParsedPrisonLayout } from '../../map/goblinPrisonPlan';
 import { drawRadialGlow, type GlowStop } from '../../sprites/radialGlow';
 import { worldPalette } from '../../ui/theme/worldInk';

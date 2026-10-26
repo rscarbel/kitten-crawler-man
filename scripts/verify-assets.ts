@@ -9,7 +9,7 @@
  *
  * 1. The `LevelDef`'s own spawn tables (`roomMobs`, `hallwayMobs`,
  *    `extraSpawns`, `campSpawns`, `onMobKilledSpawns`, `bossRooms`).
- * 2. `SYSTEM_ASSET_REQUIREMENTS` (`src/core/systemAssetRequirements.ts`) —
+ * 2. `SYSTEM_ASSET_REQUIREMENTS` (`src/core/spriteAssets/systemAssetRequirements.ts`) —
  *    creatures introduced by a bounty/quest/companion system that never
  *    touches the level def at all (`BountySystem`, `CircusQuestSystem`,
  *    `SpiderQuestSystem`, `MongoSystem`, ...).
@@ -36,12 +36,12 @@ import {
   MOB_SPRITE_KEYS,
   type AssetGroup,
   type CreatureKind,
-} from '../src/core/assetGroups';
-import { getManifestKeys, type SpriteKey } from '../src/core/SpriteLoader';
+} from '../src/core/spriteAssets/assetGroups';
+import { getManifestKeys, type SpriteKey } from '../src/core/spriteAssets/SpriteLoader';
 import {
   SYSTEM_ASSET_REQUIREMENTS,
   requiredSpriteKeysForLevel,
-} from '../src/core/systemAssetRequirements';
+} from '../src/core/spriteAssets/systemAssetRequirements';
 
 const LEVELS: readonly LevelDef[] = [tutorialLevel, level1, level2, level3];
 
@@ -95,7 +95,7 @@ const keysInSomeGroup = new Set<string>(Object.values(ASSET_GROUPS).flat());
 for (const key of getManifestKeys()) {
   if (!keysInSomeGroup.has(key)) {
     fail(
-      `Manifest key "${key}" belongs to no ASSET_GROUPS entry (src/core/assetGroups.ts), so ` +
+      `Manifest key "${key}" belongs to no ASSET_GROUPS entry (src/core/spriteAssets/assetGroups.ts), so ` +
         `nothing ever preloads it — add it to the group of whatever draws it, or delete the ` +
         `sheet and its manifest entry if nothing does.`,
     );

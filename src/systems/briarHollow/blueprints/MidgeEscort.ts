@@ -30,12 +30,15 @@
  */
 
 import { TILE_SIZE } from '../../../core/constants';
-import { activeDifficultyProfile, applySpawnDifficulty } from '../../../core/difficultyProfiles';
+import {
+  activeDifficultyProfile,
+  applySpawnDifficulty,
+} from '../../../core/difficulty/difficultyProfiles';
 import {
   blueprintsPhaseAtLeast,
   type BlueprintsQuestPhase,
-} from '../../../core/blueprintsQuestPhase';
-import { isVillageUnderSiege } from '../../../core/villageQuestPhase';
+} from '../../../core/quests/blueprintsQuestPhase';
+import { isVillageUnderSiege } from '../../../core/quests/villageQuestPhase';
 import { Cow, LIVESTOCK_LEVEL, type CowLeadBand } from '../../../creatures/Cow';
 import type { Player } from '../../../Player';
 import type { ConversationHandle } from '../../../dialog/request';

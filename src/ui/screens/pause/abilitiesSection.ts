@@ -10,11 +10,11 @@ import {
   type AbilityId,
   type AbilityManager,
   type AbilityState,
-} from '../../../core/AbilityManager';
-import type { Inventory } from '../../../core/Inventory';
-import { HOTBAR_COUNT } from '../../../core/ItemDefs';
+} from '../../../core/skills/AbilityManager';
+import type { Inventory } from '../../../core/items/inventory/Inventory';
+import { HOTBAR_COUNT } from '../../../core/items/defs/ItemDefs';
 import { crawlerName } from '../../../characters/characters';
-import { type CrawlerKind } from '../../../core/SkillManager';
+import { type CrawlerKind } from '../../../core/skills/SkillManager';
 import { centerIn, grid, inset, splitV, type Rect } from '../../core/geom';
 import type { Ui } from '../../core/UiRoot';
 import { ITEM_ICONS } from '../../icons/itemIcons';

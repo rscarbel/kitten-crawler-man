@@ -11,12 +11,12 @@ import {
   MusicLibrary,
   activeMusicLibrary,
   type MusicLibraryNotice,
-} from '../../src/core/MusicLibrary.js';
-import { parseGameProgress, stampGameProgress } from '../../src/core/saveFormat.js';
-import { WORLD_GENERATOR_VERSION } from '../../src/core/SavedWorld.js';
-import { parsePersistedWorldState } from '../../src/core/PersistedWorldState.js';
-import { isRecord } from '../../src/core/guards.js';
-import { snapPlayer } from '../../src/core/PlayerSnapshot.js';
+} from '../../src/core/music/MusicLibrary.js';
+import { parseGameProgress, stampGameProgress } from '../../src/core/save/saveFormat.js';
+import { WORLD_GENERATOR_VERSION } from '../../src/core/save/SavedWorld.js';
+import { parsePersistedWorldState } from '../../src/core/save/PersistedWorldState.js';
+import { isRecord } from '../../src/core/util/guards.js';
+import { snapPlayer } from '../../src/core/save/PlayerSnapshot.js';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer.js';
 import { CatPlayer } from '../../src/creatures/CatPlayer.js';
 import { TILE_SIZE } from '../../src/core/constants.js';
@@ -107,10 +107,11 @@ export async function checkSaveRoundTrip(check: Check): Promise<void> {
   expectLibraryKept(check, 'a stored save', MusicLibrary.forSave(loaded));
 
   const { SceneManager } = await import('../../src/core/Scene.js');
-  const { InputManager } = await import('../../src/core/InputManager.js');
+  const { InputManager } = await import('../../src/core/input/InputManager.js');
   const { DungeonScene } = await import('../../src/scenes/DungeonScene.js');
   const { level2 } = await import('../../src/levels/level2.js');
-  const { readLocalProgress, writeLocalProgress } = await import('../../src/core/LocalProgress.js');
+  const { readLocalProgress, writeLocalProgress } =
+    await import('../../src/core/save/LocalProgress.js');
 
   const sceneManager = new SceneManager();
   const scene = new DungeonScene(level2, new InputManager(), sceneManager, {
@@ -237,7 +238,7 @@ function checkAlwaysUnlocked(check: Check): void {
  */
 async function checkSkipToLevel1(check: Check): Promise<void> {
   const { SceneManager } = await import('../../src/core/Scene.js');
-  const { InputManager } = await import('../../src/core/InputManager.js');
+  const { InputManager } = await import('../../src/core/input/InputManager.js');
   const { TitleScene } = await import('../../src/scenes/title/TitleScene.js');
   const { TITLE_MENU_SURFACE_ID } = await import('../../src/scenes/title/titleMenu.js');
   const { DIVE_DURATION_MS } = await import('../../src/scenes/title/titleTimeline.js');
@@ -303,7 +304,7 @@ const FLOOR_3_PLAYTEST_PRESET_ID = 'level3';
  */
 async function checkPlaytestDropIn(check: Check): Promise<void> {
   const { SceneManager } = await import('../../src/core/Scene.js');
-  const { InputManager } = await import('../../src/core/InputManager.js');
+  const { InputManager } = await import('../../src/core/input/InputManager.js');
   const { DungeonScene } = await import('../../src/scenes/DungeonScene.js');
   const { getPlaytestPreset } = await import('../../src/dev/playtestPresets.js');
   const { buildPlaytestBoot } = await import('../../src/dev/playtestBoot.js');

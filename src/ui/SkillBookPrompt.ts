@@ -1,6 +1,6 @@
-import type { SkillId } from '../core/SkillManager';
-import { getSkillDef } from '../core/SkillManager';
-import type { ItemId } from '../core/ItemDefs';
+import type { SkillId } from '../core/skills/SkillManager';
+import { getSkillDef } from '../core/skills/SkillManager';
+import type { ItemId } from '../core/items/defs/ItemDefs';
 import type { SkillBookReadRequest } from './screens/inventory/InventoryActions';
 import type { AudioManager } from '../audio/AudioManager';
 

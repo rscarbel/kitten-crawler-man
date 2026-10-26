@@ -34,24 +34,24 @@ import type {
 } from './residencyRoutes.js';
 import { installFakeAudio } from './audioHarness.js';
 import { TILE_SIZE } from '../src/core/constants.js';
-import { loadSprites } from '../src/core/SpriteLoader.js';
+import { loadSprites } from '../src/core/spriteAssets/SpriteLoader.js';
 import { SceneManager } from '../src/core/Scene.js';
-import { InputManager } from '../src/core/InputManager.js';
+import { InputManager } from '../src/core/input/InputManager.js';
 import { AudioManager } from '../src/audio/AudioManager.js';
-import { settings } from '../src/core/Settings.js';
-import { forceVarietyTier, FULL_VARIETY_TIER } from '../src/core/varietyTier.js';
+import { settings } from '../src/core/input/Settings.js';
+import { forceVarietyTier, FULL_VARIETY_TIER } from '../src/core/perf/varietyTier.js';
 import { DungeonScene } from '../src/scenes/DungeonScene.js';
 import { BuildingInteriorScene } from '../src/scenes/BuildingInteriorScene.js';
 import { GameplayScene } from '../src/scenes/GameplayScene.js';
 import { GameMap } from '../src/map/GameMap.js';
 import { level3 } from '../src/levels/level3.js';
-import { renderQuality } from '../src/core/RenderQuality.js';
+import { renderQuality } from '../src/core/perf/RenderQuality.js';
 import { environmentPaintDepth, RECENTLY_DRAWN_FRAMES } from '../src/map/environmentArtCache.js';
 import {
   figurePrewarmDepth,
   IDLE_FRAMES_BEFORE_RELEASE,
 } from '../src/sprites/figure/figureFrameCache.js';
-import { BIG_TOP_BUILDING_NAME } from '../src/core/CircusQuestProgress.js';
+import { BIG_TOP_BUILDING_NAME } from '../src/core/quests/CircusQuestProgress.js';
 import { DESPERADO_CLUB_NAME, TOWN_TOWER_NAME } from '../src/map/town/townPlan.js';
 import { TownLifeSystem } from '../src/systems/TownLifeSystem.js';
 import { MarketSystem } from '../src/systems/market/MarketSystem.js';

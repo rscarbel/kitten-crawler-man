@@ -28,7 +28,7 @@ import type { TileGrid } from '../town/tileGrid';
 import type { TilePoint, TownPlan } from '../town/townPlan';
 import type { ElevationField } from './elevation';
 import type { KeepOut } from './keepOut';
-import { worldRandom } from '../../core/WorldRandom';
+import { worldRandom } from '../../core/world/WorldRandom';
 
 /** Which kind of camp a site is. Consumed by `LevelDef.campSpawns`. */
 export type CampKind = 'goblin' | 'troglodyte';

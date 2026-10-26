@@ -6,7 +6,7 @@ import {
   GROUND_OFFSET_PX,
   roosterStateName,
 } from '../sprites/art/roosterFigure';
-import { BIG_ROOSTER_BOSS_TYPE } from '../core/bossTypes';
+import { BIG_ROOSTER_BOSS_TYPE } from '../core/mobs/bossTypes';
 import {
   drawTrashGremlinSprite,
   prewarmTrashGremlinLocomotion,
@@ -38,7 +38,7 @@ import { measureWorldText, worldText } from '../ui/world/worldText';
 import { worldPlate, worldTint } from '../ui/world/worldShapes';
 import { worldPalette } from '../ui/theme/worldInk';
 import { withAlpha } from '../ui/theme/color';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { crawlerName } from '../characters/characters';
 
 const CRAWLER_TEAM_LABEL = `TEAM ${crawlerName('human').toUpperCase()} & ${crawlerName('cat').toUpperCase()}`;

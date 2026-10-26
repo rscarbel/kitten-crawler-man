@@ -26,8 +26,8 @@
  */
 
 import { TILE_SIZE } from '../src/core/constants';
-import { PlayerManager } from '../src/core/PlayerManager';
-import { withWorldSeed } from '../src/core/WorldRandom';
+import { PlayerManager } from '../src/core/party/PlayerManager';
+import { withWorldSeed } from '../src/core/world/WorldRandom';
 import type { LootDrop } from '../src/creatures/Mob';
 import { LOCKED_TELEGRAPH_MIN_FRAMES } from '../src/creatures/mobLevelScaling';
 import type { CatPlayer } from '../src/creatures/CatPlayer';

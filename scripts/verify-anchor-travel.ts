@@ -56,19 +56,19 @@ import {
   captureCircusQuestProgress,
   createCircusQuestProgress,
   restoreCircusQuestProgress,
-} from '../src/core/CircusQuestProgress';
+} from '../src/core/quests/CircusQuestProgress';
 import {
   captureBriarHollowState,
   createBriarHollowState,
   restoreBriarHollowState,
-} from '../src/core/briarHollowState';
-import { createAnchorQuestProgress } from '../src/core/AnchorQuestProgress';
-import { BRIAR_HOLLOW_QUEST_NAME } from '../src/core/villageQuestPhase';
+} from '../src/core/quests/briarHollowState';
+import { createAnchorQuestProgress } from '../src/core/quests/AnchorQuestProgress';
+import { BRIAR_HOLLOW_QUEST_NAME } from '../src/core/quests/villageQuestPhase';
 import type { LevelDef } from '../src/levels/types';
-import { AbilityManager } from '../src/core/AbilityManager';
-import { ITEM_DEF, type InventoryItem, type ItemId } from '../src/core/ItemDefs';
-import { PlayerManager } from '../src/core/PlayerManager';
-import { setViewportSize } from '../src/core/Viewport';
+import { AbilityManager } from '../src/core/skills/AbilityManager';
+import { ITEM_DEF, type InventoryItem, type ItemId } from '../src/core/items/defs/ItemDefs';
+import { PlayerManager } from '../src/core/party/PlayerManager';
+import { setViewportSize } from '../src/core/rendering/Viewport';
 import { MenusKit } from '../src/systems/kits/MenusKit';
 import { ANCHOR_INDOORS_REFUSAL, refuseAnchorIndoors } from '../src/systems/kits/hotbarActions';
 import type { SceneWorld } from '../src/systems/kits/SceneWorld';

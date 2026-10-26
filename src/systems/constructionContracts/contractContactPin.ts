@@ -10,8 +10,8 @@
  * man the walls as they always do.
  */
 
-import type { ActiveContract, BriarHollowState } from '../../core/briarHollowState';
-import { isVillageUnderSiege } from '../../core/villageQuestPhase';
+import type { ActiveContract, BriarHollowState } from '../../core/quests/briarHollowState';
+import { isVillageUnderSiege } from '../../core/quests/villageQuestPhase';
 import type { BriarHollowSite, VillageBuildingDef } from '../../map/overworld/briarHollowSite';
 import { rectCentre } from '../../map/overworld/briarHollowSite';
 import type { TilePoint } from '../../map/town/townPlan';

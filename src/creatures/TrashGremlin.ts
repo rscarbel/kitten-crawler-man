@@ -2,7 +2,8 @@ import type { Player } from '../Player';
 import { usefulSkillBook } from './skillBookDrop';
 import type { EyePlacement } from '../sprites/eyePlacement';
 import { Mob } from './Mob';
-import type { LootDrop } from './Mob';
+import type { LootDrop, PlayerDamageType } from './Mob';
+import { SoundCueQueue, type TrashGremlinSoundCue } from './creatureSoundCues';
 import { TILE_SIZE } from '../core/constants';
 import { randomInt } from '../utils';
 import {
@@ -168,6 +169,7 @@ export class TrashGremlin extends Mob {
 
   isEnraged = false;
 
+  private readonly soundCues = new SoundCueQueue<TrashGremlinSoundCue>();
   private trashGremlinState: TrashGremlinState = 'fleeing';
   private vomitTimer = VOMIT_INTERVAL;
   private purgeTimer = PURGE_INTERVAL;
@@ -276,17 +278,6 @@ export class TrashGremlin extends Mob {
     return TRASH_GREMLIN_CULL_MARGIN_TILES;
   }
 
-  /**
-   * Read off the row it was last drawn in rather than frozen, so a label clears
-   * the summon's rear-up as well as the crouch. Zero until its first draw,
-   * which comes before any label is hung over it.
-   */
-  private artClearanceTiles = 0;
-
-  protected override get statusLabelClearanceTiles(): number {
-    return this.artClearanceTiles;
-  }
-
   private gaitSampleX: number;
   private gaitSampleY: number;
 
@@ -390,6 +381,7 @@ export class TrashGremlin extends Mob {
     this.wanderActive = false;
     this.cockroachAtCap = false;
     this.pendingVomitProjectiles = [];
+    this.soundCues.clear();
     this.attacksWarmedAt = NEVER_WARMED;
     this.goreWarmedAt = NEVER_WARMED;
     this.engaged = false;
@@ -434,6 +426,22 @@ export class TrashGremlin extends Mob {
     if (this.isEnraged || this.hp / this.maxHp >= ENRAGE_THRESHOLD) return;
     this.isEnraged = true;
     this.setBaseSpeed(TRASH_GREMLIN_SPEED_ENRAGED);
+    this.soundCues.raise('cackle');
+  }
+
+  /** The sounds it asked for since the last call, emptied by the call. */
+  takeSoundCues(): readonly TrashGremlinSoundCue[] {
+    return this.soundCues.take();
+  }
+
+  override takeDamageFrom(
+    amount: number,
+    attacker: Player | null,
+    damageType: PlayerDamageType | null = 'melee',
+  ): void {
+    const previousHp = this.hp;
+    super.takeDamageFrom(amount, attacker, damageType);
+    if (this.hp < previousHp && this.hp > 0) this.soundCues.raise('hurt');
   }
 
   updateAI(targets: Player[]): void {
@@ -531,6 +539,7 @@ export class TrashGremlin extends Mob {
         this.trashGremlinState = 'vomit_windup';
         this.vomitWindupTimer = VOMIT_WINDUP_FRAMES;
         this.vomitFired = false;
+        this.soundCues.raise('gurgle');
       }
     }
 
@@ -795,6 +804,7 @@ export class TrashGremlin extends Mob {
     prewarmTrashGremlinSummon();
     this.trashGremlinState = 'summon';
     this.summonTimer = SUMMON_WINDUP_FRAMES;
+    this.soundCues.raise('shriek');
     this.summonFired = false;
     this.summonTarget = target;
     this.isMoving = false;
@@ -838,7 +848,6 @@ export class TrashGremlin extends Mob {
 
   protected rollLootItems(killer: Player | null): LootDrop['items'] {
     const items = super.rollLootItems(killer);
-    items.push({ id: 'trollskin_shirt', quantity: 1 });
     // Guaranteed, not rolled: Cockroach is the safety net for the cat's locked
     // constitution, and a 0.5% vermin drop is no way to hand out a safety net.
     const book = usefulSkillBook('skill_book_cockroach');
@@ -880,7 +889,6 @@ export class TrashGremlin extends Mob {
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
-    this.artClearanceTiles = (sy - artTopY) / tileSize;
     this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }

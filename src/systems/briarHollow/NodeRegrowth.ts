@@ -18,9 +18,9 @@
  */
 
 import { TILE_SIZE } from '../../core/constants';
-import type { HarvestNodeState } from '../../core/briarHollowState';
-import type { HarvestKind } from '../../core/craftPerks';
-import { drawSpriteKey } from '../../core/SpriteRenderer';
+import type { HarvestNodeState } from '../../core/quests/briarHollowState';
+import type { HarvestKind } from '../../core/labour/craftPerks';
+import { drawSpriteKey } from '../../core/spriteAssets/SpriteRenderer';
 import type { GameMap } from '../../map/GameMap';
 import type { BriarHollowSite } from '../../map/overworld/briarHollowSite';
 import { ROCK_DEPOSIT, TREE, treeSpriteKeyForTile } from '../../map/tileTypes';

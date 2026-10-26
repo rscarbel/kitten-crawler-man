@@ -27,16 +27,16 @@
 
 import { TILE_SIZE } from '../src/core/constants';
 import { EventBus } from '../src/core/EventBus';
-import { withWorldSeed } from '../src/core/WorldRandom';
-import { createCircusQuestProgress } from '../src/core/CircusQuestProgress';
-import { createAnchorQuestProgress } from '../src/core/AnchorQuestProgress';
+import { withWorldSeed } from '../src/core/world/WorldRandom';
+import { createCircusQuestProgress } from '../src/core/quests/CircusQuestProgress';
+import { createAnchorQuestProgress } from '../src/core/quests/AnchorQuestProgress';
 import {
   captureMercenaryRoster,
   createMercenaryRoster,
   restoreMercenaryRoster,
-} from '../src/core/MercenaryRoster';
-import { getMercenaryTemplate, MERCENARY_TEMPLATE_IDS } from '../src/core/mercenaryTemplates';
-import { parseMercenaryRosterCheckpoint } from '../src/core/PersistedWorldState';
+} from '../src/core/party/MercenaryRoster';
+import { getMercenaryTemplate, MERCENARY_TEMPLATE_IDS } from '../src/core/party/mercenaryTemplates';
+import { parseMercenaryRosterCheckpoint } from '../src/core/save/PersistedWorldState';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { Mercenary } from '../src/creatures/Mercenary';

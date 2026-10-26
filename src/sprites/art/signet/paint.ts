@@ -16,7 +16,7 @@
 
 import { mix } from '../bipedArt';
 import type { Pt2 } from './skeleton';
-import { resizeSurface, allocCanvas, releaseSurface } from '../../../core/canvasSurface';
+import { resizeSurface, allocCanvas, releaseSurface } from '../../../core/rendering/canvasSurface';
 
 export type Ctx = CanvasRenderingContext2D;
 

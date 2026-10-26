@@ -40,12 +40,12 @@ import type { MobRoster } from '../kits/SceneWorld';
 import type { EventBus } from '../../core/EventBus';
 import type { AudioManager } from '../../audio/AudioManager';
 import { VILLAGE_CUES } from '../../audio/villageSoundCues';
-import type { CrawlerKind } from '../../core/SkillManager';
-import type { TrebuchetStructureRecord } from '../../core/briarHollowState';
-import type { VillageQuestPhase } from '../../core/villageQuestPhase';
+import type { CrawlerKind } from '../../core/skills/SkillManager';
+import type { TrebuchetStructureRecord } from '../../core/quests/briarHollowState';
+import type { VillageQuestPhase } from '../../core/quests/villageQuestPhase';
 import type { BriarHollowSite } from '../../map/overworld/briarHollowSite';
-import { infernalTrebuchets, unlimitedAmmo } from '../../core/craftPerks';
-import { makeBurn } from '../../core/StatusEffect';
+import { infernalTrebuchets, unlimitedAmmo } from '../../core/labour/craftPerks';
+import { makeBurn } from '../../core/combat/StatusEffect';
 import {
   TREBUCHET_COCKED_ANGLE,
   TREBUCHET_LOOSED_ANGLE,

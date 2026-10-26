@@ -45,7 +45,7 @@ import { NECROMANCER_RAISES, type EncounterId } from '../levels/encounters';
 import type { SpawnTile } from '../levels/mobKinds';
 import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
 import { hasRoomToMove } from '../map/findWalkableTile';
-import { applySpawnDifficulty } from '../core/difficultyProfiles';
+import { applySpawnDifficulty } from '../core/difficulty/difficultyProfiles';
 import type { GameSystem, SystemContext } from './GameSystem';
 
 /**

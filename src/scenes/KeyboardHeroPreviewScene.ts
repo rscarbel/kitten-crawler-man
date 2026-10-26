@@ -24,14 +24,18 @@
  * Crawler's and Nightmare's double notes included — can be watched in motion.
  */
 
-import { keybindings, type GameAction } from '../core/Keybindings';
-import { setViewportSize, viewportWidth, viewportHeight } from '../core/Viewport';
+import { keybindings, type GameAction } from '../core/input/Keybindings';
+import { setViewportSize, viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { worldText } from '../ui/world/worldText';
 import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { KeyboardHeroSystem } from '../systems/KeyboardHeroSystem';
 import { KEYBOARD_HERO_CHARTS } from '../systems/keyboardHeroChart';
 import { HIT_ZONE_IMG_CENTER, KEYBOARD_HERO_GEOMETRY } from '../systems/keyboardHeroGeometry';
-import { DIFFICULTY_LABELS, DIFFICULTY_ORDER, type Difficulty } from '../core/difficultyProfiles';
+import {
+  DIFFICULTY_LABELS,
+  DIFFICULTY_ORDER,
+  type Difficulty,
+} from '../core/difficulty/difficultyProfiles';
 import {
   LANE_BED_IMG_H,
   LANE_INDICES,

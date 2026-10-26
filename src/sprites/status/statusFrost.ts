@@ -8,8 +8,8 @@
  * time left is on the block itself rather than only on a HUD pill.
  */
 
-import type { SilhouetteLayer } from '../../core/silhouetteComposite';
-import type { StatusEffect } from '../../core/StatusEffect';
+import type { SilhouetteLayer } from '../../core/spriteAssets/silhouetteComposite';
+import type { StatusEffect } from '../../core/combat/StatusEffect';
 import {
   bodyTop,
   bodyX,

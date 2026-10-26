@@ -12,8 +12,8 @@
  * closes it when the crawler walks away.
  */
 
-import type { ResourceCost } from '../../../core/partyResources';
-import { RESOURCE_IDS, type ResourceId } from '../../../core/resourceIds';
+import type { ResourceCost } from '../../../core/items/gathering/partyResources';
+import { RESOURCE_IDS, type ResourceId } from '../../../core/items/gathering/resourceIds';
 import { inset, splitH, splitV, type Rect } from '../../core/geom';
 import type { KeyModifiers, Surface, Ui, UiAudio } from '../../core/UiRoot';
 import { skinsFor } from '../../theme/skins';

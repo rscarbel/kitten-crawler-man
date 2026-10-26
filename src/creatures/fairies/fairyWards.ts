@@ -12,7 +12,11 @@
 
 import type { Mob } from '../Mob';
 import type { Player } from '../../Player';
-import { FAIRY_WARD_STATUS, makeFairyWard, type StatusEffect } from '../../core/StatusEffect';
+import {
+  FAIRY_WARD_STATUS,
+  makeFairyWard,
+  type StatusEffect,
+} from '../../core/combat/StatusEffect';
 import { Fairy } from './Fairy';
 
 /** The fairy ward `mob` carries, whoever laid it, or null. */

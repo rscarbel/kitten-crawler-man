@@ -20,7 +20,7 @@
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { ITEM_DEF, canSellItemId, isItemId, type ItemId } from '../src/core/ItemDefs';
+import { ITEM_DEF, canSellItemId, isItemId, type ItemId } from '../src/core/items/defs/ItemDefs';
 import { ITEM_PRICES, type ItemCategory } from '../src/economy/itemPrices';
 import {
   DEFAULT_BUYBACK,

@@ -6,9 +6,9 @@
  * inventory screen does all of that.
  */
 
-import type { Inventory } from '../../../core/Inventory';
-import { isWearable, type InventoryItem, type ItemId } from '../../../core/ItemDefs';
-import type { SkillId } from '../../../core/SkillManager';
+import type { Inventory } from '../../../core/items/inventory/Inventory';
+import { isWearable, type InventoryItem, type ItemId } from '../../../core/items/defs/ItemDefs';
+import type { SkillId } from '../../../core/skills/SkillManager';
 
 /** One stack in one of a crawler's two containers, and the item it held when picked. */
 export interface PendingSlotRef {

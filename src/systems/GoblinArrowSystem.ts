@@ -15,6 +15,7 @@
  * that you have to *move*, not that the hit itself is complicated.
  */
 
+import { crawlerTurnsShot } from '../gear/incomingBlows';
 import type { WorldPoint } from '../audio/AudioManager';
 import type { Player, DamageSource } from '../Player';
 import type { GameMap } from '../map/GameMap';
@@ -185,7 +186,10 @@ export class GoblinArrowSystem implements GameSystem {
         // A fully resisted hit must not reach `takeDamage`: a zero-damage arrow
         // still flashes the crawler's hit-react and suppresses regen.
         const resistedDamage = target.resistedDamage(arrow.damage, 'piercing');
-        const connected = resistedDamage > 0 && target.takeDamage(resistedDamage, arrow.source);
+        const connected =
+          resistedDamage > 0 &&
+          !crawlerTurnsShot(target, arrow.owner, arrow.vx, arrow.vy) &&
+          target.takeDamage(resistedDamage, arrow.source);
         if (connected) arrow.owner.noteStruckPlayer(target);
         struck = true;
         // A body hit leaves no shaft, so `land` never runs for it — the cue has

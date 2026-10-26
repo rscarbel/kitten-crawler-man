@@ -12,7 +12,7 @@
  *   dismiss. No sound plays on dismissal.
  */
 
-import { ITEM_DEF, type ItemId } from '../../../core/ItemDefs';
+import { ITEM_DEF, type ItemId } from '../../../core/items/defs/ItemDefs';
 import type { LootDrop } from '../../../creatures/Mob';
 import { getChestImage, getChestSourceScale } from '../../../systems/TreasureChestSystem';
 import type { ChestLootSplit, ChestRewardDialog, ChestRewardView } from '../../ChestRewardDialog';
@@ -67,7 +67,7 @@ interface LootEntry {
 function lootEntries(
   loot: LootDrop,
   displayLabels: ChestLootSplit['displayLabels'],
-  customEntries: readonly string[] | undefined,
+  customEntries: readonly string[] = [],
 ): LootEntry[] {
   const entries: LootEntry[] = [];
   if (loot.coins > 0) entries.push({ label: `${loot.coins} coins`, kind: 'coins' });
@@ -76,7 +76,7 @@ function lootEntries(
     const label = entry.quantity > 1 ? `${entry.quantity}x ${baseName}` : baseName;
     entries.push({ label, kind: 'item', item: entry.id });
   }
-  for (const label of customEntries ?? []) entries.push({ label, kind: 'custom' });
+  for (const label of customEntries) entries.push({ label, kind: 'custom' });
   if (entries.length === 0) entries.push({ label: EMPTY_COLUMN_TEXT, kind: 'empty' });
   return entries;
 }
@@ -182,8 +182,7 @@ function layout(ui: Ui, view: ChestRewardView, width: number): ChestLayout {
     split === null
       ? []
       : lootEntries(split.humanLoot, split.displayLabels, split.customHumanEntries);
-  const right =
-    split === null ? [] : lootEntries(split.catLoot, split.displayLabels, split.customCatEntries);
+  const right = split === null ? [] : lootEntries(split.catLoot, split.displayLabels);
   const listed = view.opened && split !== null;
   const lootH = listed
     ? lineHeightOf(ui, 'label') +

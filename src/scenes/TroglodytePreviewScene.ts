@@ -15,7 +15,7 @@
  * place rather than orbiting.
  */
 
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { TROGLODYTE_BODY_PART_KEY, drawTroglodyteSprite } from '../sprites/troglodyteSprite';
 import { worldText } from '../ui/world/worldText';
 import { PreviewScene, type PreviewControl } from './PreviewScene';

@@ -20,31 +20,31 @@
  */
 
 import { TILE_SIZE } from '../src/core/constants';
-import { AbilityManager } from '../src/core/AbilityManager';
+import { AbilityManager } from '../src/core/skills/AbilityManager';
 import { MAGIC_MISSILE_DEF } from '../src/abilities/magicMissile';
 import { EventBus } from '../src/core/EventBus';
-import { PlayerManager } from '../src/core/PlayerManager';
+import { PlayerManager } from '../src/core/party/PlayerManager';
 import { GameMap } from '../src/map/GameMap';
 import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
 import { Mob } from '../src/creatures/Mob';
-import { ITEM_DEF } from '../src/core/ItemDefs';
+import { ITEM_DEF } from '../src/core/items/defs/ItemDefs';
 import type { SystemContext } from '../src/systems/GameSystem';
 import { SpellSystem } from '../src/systems/SpellSystem';
 import { MobRoster, type SceneWorld } from '../src/systems/kits/SceneWorld';
 import { CombatKit } from '../src/systems/kits/CombatKit';
 import { DynamiteSystem } from '../src/systems/DynamiteSystem';
 import { MercenarySystem } from '../src/systems/MercenarySystem';
-import { createMercenaryRoster } from '../src/core/MercenaryRoster';
+import { createMercenaryRoster } from '../src/core/party/MercenaryRoster';
 import { TheLich } from '../src/creatures/TheLich';
 import { InkMarauder } from '../src/creatures/InkMarauder';
 import { GrotesqueSpider } from '../src/creatures/GrotesqueSpider';
-import { getMercenaryTemplate } from '../src/core/mercenaryTemplates';
+import { getMercenaryTemplate } from '../src/core/party/mercenaryTemplates';
 import {
   GameStats,
   bindRunStats,
   formatPlayTime,
   parseGameStatsSnapshot,
-} from '../src/core/GameStats';
+} from '../src/core/progression/GameStats';
 
 const ROOM_WIDTH_TILES = 30;
 const ROOM_HEIGHT_TILES = 12;

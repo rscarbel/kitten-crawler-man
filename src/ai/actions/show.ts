@@ -7,13 +7,13 @@
 import {
   AI_ACHIEVEMENT_DESCRIPTION_MAX_CHARS,
   AI_ACHIEVEMENT_TITLE_MAX_CHARS,
-} from '../../core/AchievementManager';
+} from '../../core/progression/AchievementManager';
 import { AI_QUESTION_MAX_CHOICES, VIEWER_REACTIONS } from '../show/types';
 import {
-  AI_BOX_TIERS,
+  AI_CHEST_RARITIES,
   AI_CHARACTER_SYSTEM,
   AI_CHARACTER_VIEWERS,
-  BOX_TIER_POINTS,
+  CHEST_RARITY_POINTS,
   TARGET_PARAM,
   crawlerKind,
   crawlerName,
@@ -59,17 +59,17 @@ const ACHIEVEMENT_DESCRIPTION = textParam('description', {
   maxLength: AI_ACHIEVEMENT_DESCRIPTION_MAX_CHARS,
   description: 'What they did to earn it, in your voice. Shown on the achievement card.',
 });
-const ACHIEVEMENT_TIER = enumParam(
-  'tier',
-  AI_BOX_TIERS,
-  'The loot box the achievement pays. Gold is rare; save it for a real moment.',
+const ACHIEVEMENT_RARITY = enumParam(
+  'rarity',
+  AI_CHEST_RARITIES,
+  'The reward chest the achievement pays at once. Rare is scarce; save it for a real moment.',
 );
 
 function achievementRefusal({ params, scene }: AIActionCall): string | null {
-  if (scene.getAchievements === undefined) return 'achievements cannot be awarded here';
+  if (scene.getAwards === undefined) return 'achievements cannot be awarded here';
   const crawler = resolveTarget(scene, params.get(TARGET_PARAM));
   const title = params.get(ACHIEVEMENT_TITLE);
-  if (scene.getAchievements(crawlerKind(scene, crawler)).hasAIAchievement(title)) {
+  if (scene.getAwards().managerOf(crawlerKind(scene, crawler)).hasAIAchievement(title)) {
     return `${crawlerName(scene, crawler)} already holds "${title}"`;
   }
   return null;
@@ -78,8 +78,8 @@ function achievementRefusal({ params, scene }: AIActionCall): string | null {
 const grantAchievement: AIActionDef = {
   name: 'grant_achievement',
   description:
-    'Write and award a brand-new achievement on the spot: your own title and description, shown on the achievement card and kept in the crawler’s achievements, with a loot box of the tier you choose. Limited per floor.',
-  params: [ACHIEVEMENT_TITLE, ACHIEVEMENT_DESCRIPTION, ACHIEVEMENT_TIER, TARGET_PARAM],
+    'Write and award a brand-new achievement on the spot: your own title and description, shown on the achievement card and kept in the crawler’s achievements, with a reward chest of the rarity you choose, paid at once. Limited per floor.',
+  params: [ACHIEVEMENT_TITLE, ACHIEVEMENT_DESCRIPTION, ACHIEVEMENT_RARITY, TARGET_PARAM],
   policy: {
     cost: 2,
     cooldownMs: ACHIEVEMENT_COOLDOWN_MS,
@@ -89,30 +89,29 @@ const grantAchievement: AIActionDef = {
   maxPerFloor: ACHIEVEMENTS_PER_FLOOR,
   characters: [AI_CHARACTER_SYSTEM],
   budget: ({ params }) => ({
-    pool: 'lootBoxPoints',
-    amount: BOX_TIER_POINTS[params.get(ACHIEVEMENT_TIER)],
+    pool: 'rewardChestPoints',
+    amount: CHEST_RARITY_POINTS[params.get(ACHIEVEMENT_RARITY)],
   }),
   refusal: achievementRefusal,
   showsIndicator: false,
   execute(call) {
     const { params, scene, characterName } = call;
     const refusal = achievementRefusal(call);
-    if (refusal !== null || scene.getAchievements === undefined) {
+    if (refusal !== null || scene.getAwards === undefined) {
       return refused(refusal ?? 'achievements cannot be awarded here');
     }
     const crawler = resolveTarget(scene, params.get(TARGET_PARAM));
     const kind = crawlerKind(scene, crawler);
-    const tier = params.get(ACHIEVEMENT_TIER);
-    const award = scene.getAchievements(kind).grantAIAchievement({
+    const rarity = params.get(ACHIEVEMENT_RARITY);
+    const award = scene.getAwards().grantAIAchievement(kind, {
       title: params.get(ACHIEVEMENT_TITLE),
       description: params.get(ACHIEVEMENT_DESCRIPTION),
-      tier,
-      category: 'Adventurer',
+      rarity,
       awardedBy: characterName,
     });
     if (award === null) return refused('that achievement could not be filed');
     const name = crawlerName(scene, crawler);
-    notifyPlayer(scene, `New achievement for ${name}: ${award.name}`, {
+    notifyPlayer(scene, `Special award for ${name}: ${award.name}`, {
       tone: 'accent',
       icon: 'trophy',
       urgent: true,
@@ -121,11 +120,11 @@ const grantAchievement: AIActionDef = {
     scene.getShow?.()?.achievementAwarded({
       title: award.name,
       description: award.description,
-      tier,
+      rarity,
       player: kind === 'human' ? 'Human' : 'Cat',
       awardedBy: characterName,
     });
-    return ok(`awarded "${award.name}" (${tier} box) to ${name}`);
+    return ok(`awarded "${award.name}" (${rarity} chest) to ${name}`);
   },
 };
 
@@ -183,7 +182,7 @@ const REACTION_DELTA = intParam('delta', {
   min: -FAVOR_SWING_MAX,
   max: FAVOR_SWING_MAX,
   description:
-    'How far the viewers’ favour meter (0–100) moves. Positive when they love it. High favour makes loot boxes pay a little more; low favour costs the crawler nothing.',
+    'How far the viewers’ favour meter (0–100) moves. Positive when they love it. High favour makes reward chests pay a little more; low favour costs the crawler nothing.',
 });
 const REACTION_COMMENT = optionalTextParam('comment', {
   minLength: 1,

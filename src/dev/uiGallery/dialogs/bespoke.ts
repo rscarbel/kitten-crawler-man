@@ -1,14 +1,16 @@
+import { ACHIEVEMENT_DEFS, type AwardDef } from '../../../core/progression/AchievementManager';
+import { ITEM_DEF, isItemId, type ItemId } from '../../../core/items/defs/ItemDefs';
+import { RARITIES, type Rarity } from '../../../core/items/defs/rarity';
 import {
-  ACHIEVEMENT_DEFS,
-  getBoxContents,
-  type BoxContents,
-  type LootBox,
-} from '../../../core/AchievementManager';
-import { AchievementNotification } from '../../../ui/AchievementNotification';
+  CHEST_SOURCE_TITLES,
+  type GrantedLine,
+  type RewardPresentation,
+} from '../../../loot/rewardChest';
 import type { Surface, Ui } from '../../../ui/core/UiRoot';
 import { drawLoadingScreen } from '../../../ui/LoadingScreen';
-import { LootBoxOpener } from '../../../ui/LootBoxOpener';
-import { syncViewport } from './conversation';
+import { COLLECT_GUARD_FRAMES, chestTimeline } from '../../../ui/screens/rewardChest/chestTimeline';
+import { RewardChestScreen } from '../../../ui/screens/rewardChest/RewardChestScreen';
+import { galleryGated, syncViewport } from './conversation';
 import type { DialogFixture } from './fixture';
 
 /** A full-screen fixture surface that paints with `paint` while shown. */
@@ -52,77 +54,162 @@ function loadingFixture(name: string, progress: number, tip: string | undefined)
   });
 }
 
-/** Frames into a box's shake at which the lid has just blown off. */
-const MID_OPEN_TICKS = 48;
-/** Frames into a box at which its reward lines are popping in. */
-const REVEALING_TICKS = 84;
-
-const GALLERY_BOXES: LootBox[] = [
-  { id: 1, tier: 'Bronze', category: 'Adventurer', fromAchievement: 'first_blood' },
-  { id: 2, tier: 'Gold', category: 'Spicy', fromAchievement: 'boss_slayer' },
-];
-
-const PLATINUM_GALLERY_BOXES: LootBox[] = [
-  {
-    id: 1,
-    tier: 'Platinum',
-    category: 'Wheel',
-    fromAchievement: null,
-    itemRewards: [{ id: 'splatter_skunk_toe_ring', quantity: 1 }],
-  },
-];
-
-function galleryContents(box: LootBox): BoxContents {
-  const shared = getBoxContents(box.tier, box.category);
-  if (box.itemRewards !== undefined) return { ...shared, itemRewards: box.itemRewards };
-  if (box.tier !== 'Gold') return shared;
-  return { ...shared, itemRewards: [{ id: 'goblin_dynamite', quantity: 2 }] };
+/** One piece of gear of `rarity` from the catalogue, or null when it has none. */
+function gearOf(rarity: Rarity): ItemId | null {
+  for (const id of Object.keys(ITEM_DEF)) {
+    if (isItemId(id) && ITEM_DEF[id].rarity === rarity) return id;
+  }
+  return null;
 }
 
-/** A loot-box opener on the queue's last box, run `ticks` frames in, or skipped to its reveal. */
-function lootBoxFixture(
+const GALLERY_COINS: Readonly<Record<Rarity, number>> = {
+  Common: 12,
+  Uncommon: 26,
+  Rare: 44,
+  Epic: 75,
+  Legendary: 120,
+  Divine: 215,
+};
+
+const GALLERY_POTIONS: Readonly<Record<Rarity, number>> = {
+  Common: 2,
+  Uncommon: 3,
+  Rare: 4,
+  Epic: 5,
+  Legendary: 6,
+  Divine: 8,
+};
+
+/** What a chest of `rarity` might hold: coins, potions, and gear of its rarity from Rare up. */
+function galleryLines(rarity: Rarity): GrantedLine[] {
+  const lines: GrantedLine[] = [
+    { kind: 'coins', amount: GALLERY_COINS[rarity] },
+    { kind: 'item', id: 'health_potion', quantity: GALLERY_POTIONS[rarity] },
+  ];
+  const index = RARITIES.indexOf(rarity);
+  const tiers = index > 0 ? [RARITIES[index - 1], rarity] : [rarity];
+  for (const tier of tiers) {
+    if (tier === 'Common') continue;
+    const gear = gearOf(tier);
+    if (gear !== null) lines.push({ kind: 'item', id: gear, quantity: 1 });
+  }
+  return lines;
+}
+
+const GALLERY_AWARD: Readonly<Record<Rarity, AwardDef>> = {
+  Common: ACHIEVEMENT_DEFS.first_kill,
+  Uncommon: ACHIEVEMENT_DEFS.dungeon_kills_50,
+  Rare: ACHIEVEMENT_DEFS.night_shift,
+  Epic: ACHIEVEMENT_DEFS.dungeon_kills_200,
+  Legendary: ACHIEVEMENT_DEFS.dungeon_kills_1000,
+  Divine: ACHIEVEMENT_DEFS.boss_slayer,
+};
+
+function awardPresentation(
+  rarity: Rarity,
+  award: AwardDef = GALLERY_AWARD[rarity],
+): RewardPresentation {
+  const rewards = galleryLines(rarity);
+  if (award.id === 'dungeon_kills_200') rewards.push({ kind: 'companion', id: 'mongo' });
+  return {
+    origin: { kind: 'award', award },
+    title: award.name,
+    subtitle: award.description,
+    crawler: rarity === 'Epic' || rarity === 'Divine' ? 'cat' : 'human',
+    rarity,
+    rewards,
+  };
+}
+
+/** A chest holding more lines than a phone's tray shows, so the last cell folds the rest. */
+function crowdedPresentation(): RewardPresentation {
+  const gear = RARITIES.map(gearOf).filter((id) => id !== null);
+  const rewards: GrantedLine[] = [
+    ...galleryLines('Divine'),
+    ...gear.map((id): GrantedLine => ({ kind: 'item', id, quantity: 1 })),
+    { kind: 'duplicate', id: gear[0] ?? 'health_potion', coins: GALLERY_COINS.Rare },
+  ];
+  return {
+    ...awardPresentation('Divine'),
+    origin: { kind: 'chest', source: 'challenge' },
+    title: 'Rat Race',
+    subtitle: 'Kill five rats in ninety seconds without taking a hit.',
+    rewards,
+  };
+}
+
+const AI_AWARD: AwardDef = {
+  id: 'ai:fled-from-a-rat',
+  name: 'Fled From A Rat',
+  description: 'You ran from the single weakest creature in the dungeon. The viewers clipped it.',
+  rarity: 'Rare',
+  awardedBy: 'System',
+  awardedAt: 0,
+};
+
+/** Where in its reveal a chest fixture is captured. */
+type ChestMoment = 'closed' | 'burst' | 'revealed';
+
+/** Frames past landing at which the closed chest idles with its seams lit. */
+const CLOSED_AFTER_LANDING = 24;
+/** Frames past the lid's burst at which the fountain and rays are at their fullest. */
+const BURST_AFTER_LID = 22;
+
+function chestFixture(
   name: string,
-  ticks: number | 'revealed',
-  boxes: LootBox[] = GALLERY_BOXES,
+  presentations: readonly RewardPresentation[],
+  moment: ChestMoment,
 ): DialogFixture {
-  const noop = (): void => undefined;
-  let opener: LootBoxOpener | null = null;
-  const prepared = (): LootBoxOpener => {
-    if (opener !== null) return opener;
-    const created = new LootBoxOpener();
-    created.startQueue(boxes, 'Cat', galleryContents, noop, noop);
-    // One skip finishes a box and a second moves on, so the opener lands on the queue's last box.
-    for (let earlier = 1; earlier < boxes.length; earlier++) {
-      created.skip();
-      created.skip();
+  let screen: RewardChestScreen | null = null;
+  const prepared = (): RewardChestScreen => {
+    if (screen !== null) return screen;
+    const created = new RewardChestScreen(null);
+    const queue = [...presentations];
+    created.bindSource({
+      take: () => queue.shift() ?? null,
+      waiting: () => queue.length,
+      closed: () => undefined,
+    });
+    const first = presentations.length > 0 ? presentations[0] : null;
+    if (first !== null) {
+      const timeline = chestTimeline(first.rarity, first.rewards);
+      const frames =
+        moment === 'closed'
+          ? timeline.dropEnd + CLOSED_AFTER_LANDING
+          : moment === 'burst'
+            ? timeline.anticipationEnd + BURST_AFTER_LID
+            : 0;
+      created.open();
+      for (let frame = 0; frame < frames; frame++) created.tick();
+      if (moment === 'revealed') {
+        created.skip();
+        for (let frame = 0; frame < COLLECT_GUARD_FRAMES; frame++) created.tick();
+      }
     }
-    if (ticks === 'revealed') created.skip();
-    else for (let tick = 0; tick < ticks; tick++) created.tick();
-    opener = created;
+    screen = created;
     return created;
   };
-  return paintedFixture(name, (ui) => {
-    prepared().paint(ui, ui.screen.w, ui.screen.h);
-  });
-}
-
-/** Past the card's fade-in, so the OK button is live. */
-const ACHIEVEMENT_SHOWN_TICKS = 24;
-
-function achievementFixture(name: string): DialogFixture {
-  let notification: AchievementNotification | null = null;
-  const prepared = (): AchievementNotification => {
-    if (notification !== null) return notification;
-    const created = new AchievementNotification();
-    created.reset();
-    for (let tick = 0; tick < ACHIEVEMENT_SHOWN_TICKS; tick++) created.tick();
-    notification = created;
-    return created;
+  return {
+    name,
+    surfaces: (shown): readonly Surface[] => {
+      const live = prepared();
+      return [galleryGated(live.surface(`bespoke-${name}`), shown)];
+    },
   };
-  return paintedFixture(name, (ui) => {
-    prepared().paint(ui, ACHIEVEMENT_DEFS.boss_slayer, 'Human', () => undefined);
-  });
 }
+
+const RARITY_FIXTURES: readonly DialogFixture[] = RARITIES.flatMap((rarity) => [
+  chestFixture(
+    `reward-chest-${rarity.toLowerCase()}-closed`,
+    [awardPresentation(rarity)],
+    'closed',
+  ),
+  chestFixture(
+    `reward-chest-${rarity.toLowerCase()}-revealed`,
+    [awardPresentation(rarity)],
+    'revealed',
+  ),
+]);
 
 export const FIXTURES: readonly DialogFixture[] = [
   loadingFixture(
@@ -131,10 +218,27 @@ export const FIXTURES: readonly DialogFixture[] = [
     'Some shopkeepers buy as well as sell. Look for the Sell tab at the counter.',
   ),
   loadingFixture('loading-screen-done', 1, undefined),
-  lootBoxFixture('loot-box-opening', MID_OPEN_TICKS),
-  lootBoxFixture('loot-box-revealing', REVEALING_TICKS),
-  lootBoxFixture('loot-box-revealed', 'revealed'),
-  lootBoxFixture('loot-box-platinum-opening', MID_OPEN_TICKS, PLATINUM_GALLERY_BOXES),
-  lootBoxFixture('loot-box-platinum-revealed', 'revealed', PLATINUM_GALLERY_BOXES),
-  achievementFixture('achievement-notification'),
+  ...RARITY_FIXTURES,
+  chestFixture('reward-chest-epic-burst', [awardPresentation('Epic')], 'burst'),
+  chestFixture('reward-chest-divine-burst', [awardPresentation('Divine')], 'burst'),
+  chestFixture(
+    'reward-chest-ai-award',
+    [awardPresentation('Rare', AI_AWARD), awardPresentation('Common')],
+    'revealed',
+  ),
+  chestFixture('reward-chest-crowded', [crowdedPresentation()], 'revealed'),
+  chestFixture(
+    'reward-chest-wheel-prize',
+    [
+      {
+        origin: { kind: 'chest', source: 'wheel' },
+        title: CHEST_SOURCE_TITLES.wheel,
+        subtitle: '',
+        crawler: 'human',
+        rarity: 'Legendary',
+        rewards: galleryLines('Legendary'),
+      },
+    ],
+    'revealed',
+  ),
 ];

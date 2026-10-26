@@ -42,10 +42,10 @@ import {
   createMurderQuestProgress,
   type MurderQuestProgress,
   type MurderQuestStage,
-} from '../src/core/MurderQuestProgress';
-import { createDoomsdayProgress } from '../src/core/DoomsdayProgress';
+} from '../src/core/quests/MurderQuestProgress';
+import { createDoomsdayProgress } from '../src/core/quests/DoomsdayProgress';
 import { partyLevelOf } from '../src/levels/spawner';
-import { makeSepsis } from '../src/core/StatusEffect';
+import { makePoison } from '../src/core/combat/StatusEffect';
 import type { SystemContext } from '../src/systems/GameSystem';
 import type { DamageSource } from '../src/Player';
 import {
@@ -73,6 +73,9 @@ import {
 } from '../src/systems/lichBattleRules';
 import { mulberry32 } from '../src/sprites/person/rng';
 import { Conversation } from '../src/dialog/Conversation';
+
+/** A credited damage-over-time that outlasts every watch here: poison held on far past its usual run. */
+const LASTING_POISON_TICKS = 999999;
 
 const failures: string[] = [];
 
@@ -925,7 +928,7 @@ function playWholeFight(stream: number): void {
   // where the player has no control and the phase logic is not running. Without
   // it the harness plays too politely to ever land a blow in one of those
   // windows, and the checks below would pass without ever being tested.
-  if (lich !== null) lich.applyStatus(makeSepsis(human));
+  if (lich !== null) lich.applyStatus(makePoison(human, LASTING_POISON_TICKS));
 
   const context: SystemContext = {
     human,
@@ -1222,7 +1225,7 @@ function playWholeFight(stream: number): void {
     const lockRose = confrontation.playerLocked && !wasPartyLocked;
     wasPartyLocked = confrontation.playerLocked;
     if (lockRose && lich.isAlive) {
-      // Measured across the call, not against maximum health: a sepsis tick has
+      // Measured across the call, not against maximum health: a poison tick has
       // the Lich below maximum from the first second, so "is it hurt?" is true
       // whether or not this blow ever connected.
       // Stood next to the Lich for the swing. The firewall refuses damage from
@@ -1755,7 +1758,7 @@ function playWholeFight(stream: number): void {
     `the firewall stage reset ${firewallResets} times in one run (at most ${MAX_FIREWALL_RESETS} expected) — somebody is being parked in the fire`,
   );
   // Bounded by the descent, not by the whole daze window: a bound as loose as
-  // `DAZE_FRAMES` is satisfied by the sepsis tick that lands halfway through it,
+  // `DAZE_FRAMES` is satisfied by the poison tick that lands halfway through it,
   // which is not the thing under test. Paying out on the first frame after the
   // Lich touches down is the only way both descent blows can have counted.
   const DAZE_PAYOUT_MARGIN_FRAMES = 4;

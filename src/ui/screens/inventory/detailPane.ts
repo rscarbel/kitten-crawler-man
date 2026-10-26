@@ -1,11 +1,18 @@
 /**
- * The selected item, in full: a big icon, its name, category and equip slot,
- * the description, its effect lines, what wearing it would change, and the
- * actions it offers. Shared by the side pane and the phone's bottom sheet.
+ * The selected item, in full: a big icon, its name, category and equip slot;
+ * its rarity as a tag beside its category; then who can wear it, its effect lines, its set's pips and its
+ * awakening's progress; then what wearing it would change, its flavour text in
+ * italics, and the actions it offers. Shared by the side pane and the phone's
+ * bottom sheet.
  */
 
-import type { InventoryItem } from '../../../core/ItemDefs';
-import { ITEM_DEF } from '../../../core/ItemDefs';
+import type { InventoryItem, Wearer } from '../../../core/items/defs/ItemDefs';
+import type { Rarity } from '../../../core/items/defs/rarity';
+import type { SetProgress } from '../../../gear/setProgress';
+import { rarityColor } from '../dialogs/canvasChrome';
+import { drawGlyph } from '../../theme/glyphs';
+import { fillRounded, strokeRounded } from '../../widgets/paint';
+import { ITEM_DEF } from '../../../core/items/defs/ItemDefs';
 import { inset, splitH, splitV, type Rect } from '../../core/geom';
 import type { Ui } from '../../core/UiRoot';
 import type { ButtonVariant } from '../../theme/skins';
@@ -13,8 +20,16 @@ import type { GlyphId } from '../../theme/glyphs';
 import { badge, badgeSize } from '../../widgets/badge';
 import { button } from '../../widgets/button';
 import { itemSlot } from '../../widgets/itemSlot';
+import { meter } from '../../widgets/meter';
 import { scrollGutterWidth, scrollView } from '../../widgets/scrollView';
-import { lineHeightOf, measureTextHeight, text } from '../../widgets/text';
+import {
+  lineHeightOf,
+  measureRichTextHeight,
+  measureText,
+  measureTextHeight,
+  richText,
+  text,
+} from '../../widgets/text';
 import { FILTER_LABELS } from './bagView';
 import { STAT_ABBREVIATIONS, type StatDelta } from './gearRules';
 
@@ -38,8 +53,18 @@ export interface HotbarPickerSlot {
 export interface DetailModel {
   readonly item: InventoryItem;
   readonly worn: boolean;
+  /** The item has awakened for its owner: the big icon shows its awakened look. */
+  readonly awakened: boolean;
   readonly slotLabel: string | null;
+  /** The piece's rarity; null for an item that has none. */
+  readonly rarity: Rarity | null;
+  /** Who can wear it; null for an item nobody wears. */
+  readonly wearer: Wearer | null;
   readonly effectLines: readonly string[];
+  /** Where its owner stands on the piece's set, or null when it belongs to none. */
+  readonly set: SetProgress | null;
+  /** Kills toward the piece's awakening, or null when it has none still to earn. */
+  readonly awakening: { readonly kills: number; readonly target: number } | null;
   readonly deltas: readonly StatDelta[];
   /** Why the last attempt on this item was refused, shown until it fades. */
   readonly notice: string | null;
@@ -60,6 +85,15 @@ const BONUS_PREFIX = '+';
 const UP_ARROW = '▲';
 const DOWN_ARROW = '▼';
 const MINUS_SIGN = '−';
+const PIP_SIZE = 8;
+const AWAKENING_METER_H = 6;
+const PIP_BORDER_WIDTH = 1;
+
+const WEARER_LABELS: Readonly<Record<Wearer, string>> = {
+  human: 'Human',
+  cat: 'Cat',
+  both: 'Either crawler',
+};
 
 function iconSide(ui: Ui): number {
   return Math.round(ui.theme.size.slot * ICON_SCALE);
@@ -89,8 +123,11 @@ const MAX_PINNED_ACTIONS_FRACTION = 0.5;
 interface DetailLayout {
   readonly headerH: number;
   readonly nameH: number;
+  readonly metaH: number;
   readonly descriptionH: number;
   readonly effectHeights: readonly number[];
+  readonly setH: number;
+  readonly awakeningH: number;
   readonly deltaH: number;
   readonly noticeH: number;
   readonly hintH: number;
@@ -117,7 +154,15 @@ function layoutDetail(ui: Ui, width: number, model: DetailModel): DetailLayout {
   const descriptionH =
     description.length === 0
       ? 0
-      : measureTextHeight(ui, width, { text: description, role: 'body' });
+      : measureRichTextHeight(ui, width, {
+          spans: [{ text: description, italic: true }],
+          role: 'secondary',
+        });
+  const metaLines = model.wearer === null ? 0 : 1;
+  const metaH = metaLines * lineHeightOf(ui, 'label');
+  const setH = model.set === null ? 0 : lineHeightOf(ui, 'label') + PIP_SIZE + space.xs;
+  const awakeningH =
+    model.awakening === null ? 0 : lineHeightOf(ui, 'caption') + AWAKENING_METER_H + space.xs;
   const effectHeights = model.effectLines.map((line) =>
     measureTextHeight(ui, width, { text: line, role: 'label' }),
   );
@@ -139,9 +184,12 @@ function layoutDetail(ui: Ui, width: number, model: DetailModel): DetailLayout {
   const pickerRows = picker.length === 0 ? 0 : Math.ceil(picker.length / pickerColumns);
   const blocks = [
     headerH,
-    descriptionH,
+    metaH,
     ...effectHeights,
+    setH,
+    awakeningH,
     deltaH,
+    descriptionH,
     noticeH,
     hintH,
     rowsHeight(actionRows, controlH, space.sm),
@@ -151,8 +199,11 @@ function layoutDetail(ui: Ui, width: number, model: DetailModel): DetailLayout {
   return {
     headerH,
     nameH,
+    metaH,
     descriptionH,
     effectHeights,
+    setH,
+    awakeningH,
     deltaH,
     noticeH,
     hintH,
@@ -245,6 +296,7 @@ function drawInfo(ui: Ui, rect: Rect, id: string, model: DetailModel, layout: De
       item: item.id,
       quantity: item.quantity,
       equipped: model.worn,
+      awakened: model.awakened,
     },
   );
   const textX = rect.x + icon + space.md;
@@ -260,33 +312,29 @@ function drawInfo(ui: Ui, rect: Rect, id: string, model: DetailModel, layout: De
     },
   );
   const tagY = y + layout.nameH + space.xs;
-  const tagLabel = FILTER_LABELS[category];
-  const tag = badgeSize(ui, { label: tagLabel, kind: 'tag' });
-  badge(
-    ui,
-    { x: textX, y: tagY, w: tag.w, h: tag.h },
-    {
-      label: tagLabel,
-      kind: 'tag',
-      color: palette.category[category],
-    },
-  );
-  if (model.worn) {
-    const worn = badgeSize(ui, { label: 'Worn', kind: 'tag' });
+  const tags: { label: string; color?: string; tone?: 'accent' }[] = [];
+  if (model.rarity !== null) {
+    tags.push({ label: model.rarity, color: rarityColor(ui.theme, model.rarity) });
+  }
+  tags.push({ label: FILTER_LABELS[category], color: palette.category[category] });
+  if (model.worn) tags.push({ label: 'Worn', tone: 'accent' });
+  const tagH = badgeSize(ui, { label: FILTER_LABELS[category], kind: 'tag' }).h;
+  // The rarity comes first and always shows; a narrow pane drops the tags after it that do not fit.
+  let tagX = textX;
+  tags.forEach((entry, index) => {
+    const size = badgeSize(ui, { label: entry.label, kind: 'tag' });
+    if (index > 0 && tagX + size.w > textX + textW) return;
     badge(
       ui,
-      { x: textX + tag.w + space.xs, y: tagY, w: worn.w, h: worn.h },
-      {
-        label: 'Worn',
-        kind: 'tag',
-        tone: 'accent',
-      },
+      { x: tagX, y: tagY, w: size.w, h: size.h },
+      { label: entry.label, kind: 'tag', color: entry.color, tone: entry.tone },
     );
-  }
+    tagX += size.w + space.xs;
+  });
   if (model.slotLabel !== null) {
     text(
       ui,
-      { x: textX, y: tagY + tag.h, w: textW, h: lineHeightOf(ui, 'caption') },
+      { x: textX, y: tagY + tagH, w: textW, h: lineHeightOf(ui, 'caption') },
       {
         text: model.slotLabel,
         role: 'caption',
@@ -295,20 +343,10 @@ function drawInfo(ui: Ui, rect: Rect, id: string, model: DetailModel, layout: De
   }
   y += layout.headerH + space.md;
 
-  const description = item.description ?? '';
-  if (layout.descriptionH > 0) {
-    text(
-      ui,
-      { x: rect.x, y, w: rect.w, h: layout.descriptionH },
-      {
-        text: description,
-        role: 'secondary',
-        wrap: true,
-      },
-    );
-    y += layout.descriptionH + space.md;
+  if (layout.metaH > 0) {
+    y = drawMeta(ui, rect, y, model);
+    y += space.md;
   }
-
   model.effectLines.forEach((line, index) => {
     const h = layout.effectHeights[index] ?? 0;
     text(
@@ -323,6 +361,16 @@ function drawInfo(ui: Ui, rect: Rect, id: string, model: DetailModel, layout: De
     );
     y += h + space.md;
   });
+
+  if (model.set !== null) {
+    drawSetPips(ui, { x: rect.x, y, w: rect.w, h: layout.setH }, model.set);
+    y += layout.setH + space.md;
+  }
+
+  if (model.awakening !== null) {
+    drawAwakening(ui, { x: rect.x, y, w: rect.w, h: layout.awakeningH }, id, model.awakening);
+    y += layout.awakeningH + space.md;
+  }
 
   if (layout.deltaH > 0) {
     const cells = splitH(
@@ -339,6 +387,16 @@ function drawInfo(ui: Ui, rect: Rect, id: string, model: DetailModel, layout: De
       });
     });
     y += layout.deltaH + space.md;
+  }
+
+  const description = item.description ?? '';
+  if (layout.descriptionH > 0) {
+    richText(
+      ui,
+      { x: rect.x, y, w: rect.w, h: layout.descriptionH },
+      { spans: [{ text: description, italic: true }], role: 'secondary' },
+    );
+    y += layout.descriptionH + space.md;
   }
 
   if (model.notice !== null) {
@@ -366,6 +424,86 @@ function drawInfo(ui: Ui, rect: Rect, id: string, model: DetailModel, layout: De
     );
     y += layout.hintH + space.md;
   }
+}
+
+/** Who can wear the piece; returns the y below the line. */
+function drawMeta(ui: Ui, rect: Rect, top: number, model: DetailModel): number {
+  const { palette, space, size } = ui.theme;
+  const lineH = lineHeightOf(ui, 'label');
+  let y = top;
+  if (model.wearer !== null) {
+    const label = WEARER_LABELS[model.wearer];
+    text(ui, { x: rect.x, y, w: rect.w, h: lineH }, { text: label, role: 'caption' });
+    if (model.wearer === 'both') {
+      const labelW = measureText(ui, label, { role: 'caption' });
+      const glyph = Math.min(size.icon, lineH);
+      drawGlyph(
+        ui.ctx,
+        'swap',
+        { x: rect.x + labelW + space.xs, y: y + (lineH - glyph) / 2, w: glyph, h: glyph },
+        { color: palette.text.secondary },
+      );
+    }
+    y += lineH;
+  }
+  return y;
+}
+
+/** The set's name and one pip per piece, filled for the ones worn. */
+function drawSetPips(ui: Ui, rect: Rect, set: SetProgress): void {
+  const { palette, space, radius } = ui.theme;
+  const lineH = lineHeightOf(ui, 'label');
+  text(
+    ui,
+    { x: rect.x, y: rect.y, w: rect.w, h: lineH },
+    {
+      text: `${set.name} · ${set.worn}/${set.completeAt}`,
+      role: 'label',
+      color: set.complete ? palette.state.success : palette.text.secondary,
+      tabular: true,
+    },
+  );
+  const pipY = rect.y + lineH + space.xs;
+  set.pips.forEach((pip, index) => {
+    const pipRect = {
+      x: rect.x + index * (PIP_SIZE + space.xs),
+      y: pipY,
+      w: PIP_SIZE,
+      h: PIP_SIZE,
+    };
+    if (pip.worn) fillRounded(ui.ctx, pipRect, radius.pill, palette.accent.base);
+    else strokeRounded(ui.ctx, pipRect, radius.pill, palette.border.strong, PIP_BORDER_WIDTH);
+  });
+}
+
+/** Kills toward the piece's awakening, on a meter. */
+function drawAwakening(
+  ui: Ui,
+  rect: Rect,
+  id: string,
+  awakening: { readonly kills: number; readonly target: number },
+): void {
+  const { space } = ui.theme;
+  const lineH = lineHeightOf(ui, 'caption');
+  text(
+    ui,
+    { x: rect.x, y: rect.y, w: rect.w, h: lineH },
+    {
+      text: `Awakens after ${awakening.target} kills · ${awakening.kills}/${awakening.target}`,
+      role: 'caption',
+      tabular: true,
+    },
+  );
+  meter(
+    ui,
+    { x: rect.x, y: rect.y + lineH + space.xs, w: rect.w, h: AWAKENING_METER_H },
+    {
+      id: `${id}/awakening`,
+      value: awakening.kills,
+      max: awakening.target,
+      ghost: false,
+    },
+  );
 }
 
 function drawActions(

@@ -10,7 +10,11 @@
  */
 
 import { mulberry32, type Rng } from './person/rng';
-import { progressFrameIndex, timeFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
+import {
+  progressFrameIndex,
+  timeFrameIndex,
+  walkFrameIndex,
+} from '../core/spriteAssets/SpriteRenderer';
 import { TILE_SIZE } from '../core/constants';
 import type { FigureDef } from './figure/figureDef';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';

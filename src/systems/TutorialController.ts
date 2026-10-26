@@ -58,12 +58,13 @@ import {
   MORDECAI_TUTORIAL_WELCOME,
 } from '../dialog/scripts/mordecai';
 import { drawArrowAbovePlayer, drawBouncingArrowAboveEntity } from '../ui/WorldArrow';
-import type { ItemId } from '../core/ItemDefs';
+import { ITEM_DEF, type ItemId } from '../core/items/defs/ItemDefs';
+import { TUTORIAL_REWARD_POTIONS } from '../core/progression/AchievementManager';
 import type { InventoryRestrictions } from '../ui/screens/inventory/inventoryTypes';
 import { menuItemId } from '../ui/screens/inventory/renderInventory';
 import { clamp } from '../utils';
 import type { PauseRestriction } from '../ui/screens/pause/PauseScreen';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { TutorialGates, type TutorialGateId, type TutorialGateView } from './tutorialGates';
 import type { TownPropRenderable } from './townPropRenderable';
 import type { TutorialCueAt } from './tutorialSoundCues';
@@ -131,8 +132,6 @@ const TUTORIAL_POTION_HOTBAR_SLOT = 0;
 const TUTORIAL_ABILITY_HOTBAR_SLOT = 0;
 /** The slot each drag step puts the health potions in, after the ability. */
 const TUTORIAL_POTION_DRAG_HOTBAR_SLOT = 1;
-/** The stock each crawler leaves the tutorial with. */
-const TUTORIAL_REWARD_POTIONS = 10;
 const CAMERA_PAN_DURATION_FRAMES = 180;
 const MOVEMENT_DETECT_TILES = 2;
 const MOVEMENT_DETECT_PX = MOVEMENT_DETECT_TILES * TILE_SIZE;
@@ -156,10 +155,13 @@ const HINT_BOX_LINE_WIDTH = 2;
 const HINT_BOX_ALPHA = 0.88;
 const HINT_TEXT_SIZE = 13;
 
-// ── Boxers drag flash hint (shown when player tries to drag boxers to hotbar) ─
-const BOXERS_DRAG_HINT_TEXT = 'You can add this to your hotlist later!';
-const BOXERS_DRAG_HINT_DURATION_FRAMES = 240;
-const BOXERS_DRAG_HINT_FADE_FRAMES = 20;
+// ── Hoodie drag flash hint (shown when player tries to drag the hoodie to the hotbar) ─
+const HOODIE_DRAG_HINT_TEXT = 'You can add this to your hotlist later!';
+const HOODIE_DRAG_HINT_DURATION_FRAMES = 240;
+const HOODIE_DRAG_HINT_FADE_FRAMES = 20;
+/** The piece the tutorial's first-kill chest hands over and its bag step teaches him to wear. */
+const TUTORIAL_GARMENT_ID = 'lucky_hoodie' satisfies ItemId;
+const TUTORIAL_GARMENT_NAME = ITEM_DEF[TUTORIAL_GARMENT_ID].name;
 
 // ── Menu-guide overlay constants ──────────────────────────────────────────────
 
@@ -251,8 +253,7 @@ const TOUCH_HINT_TEXTS: Record<TutorialState, string> = {
   HUMAN_NEAR_GOBLIN: '',
   HUMAN_KILLED_GOBLIN: 'Enemy defeated! Head south to the Safe Room.',
   HUMAN_GETS_TO_SAFE_ROOM: 'Tap Mordecai to talk to him. He is on the left side of the saferoom.',
-  HUMAN_TALKED_TO_MORDECAI:
-    'You have an achievement! Tap the gold Achievement banner to claim your reward.',
+  HUMAN_TALKED_TO_MORDECAI: 'You earned an achievement! Open your reward chest.',
   HUMAN_OPENED_ACHIEVEMENT: '',
   HUMAN_EQUIPPED_SMUSH: 'Stand near the guards and tap Smush (slot 1)!',
   HUMAN_SMUSHED_GUARDS: 'Excellent! The path is clear.',
@@ -281,8 +282,7 @@ function pointerHintTexts(): Record<TutorialState, string> {
     HUMAN_NEAR_GOBLIN: '',
     HUMAN_KILLED_GOBLIN: 'Enemy defeated! Head south through the corridor to the Safe Room.',
     HUMAN_GETS_TO_SAFE_ROOM: `You are safe here. Talk to Mordecai — press ${talkKey} near him.`,
-    HUMAN_TALKED_TO_MORDECAI:
-      'You have an achievement! Click the gold Achievement banner to claim your reward.',
+    HUMAN_TALKED_TO_MORDECAI: 'You earned an achievement! Open your reward chest.',
     HUMAN_OPENED_ACHIEVEMENT: '',
     HUMAN_EQUIPPED_SMUSH: `Two guards block the path. Stand near them and press ${firstSlotKey} to Smush!`,
     HUMAN_SMUSHED_GUARDS: 'Excellent smushery! The path is clear.',
@@ -495,7 +495,7 @@ const PLACE_BEACONS: Record<NonNullable<ObjectivePlace>, ReadonlyArray<TrackerTa
 
 // ── Menu-guide step labels ────────────────────────────────────────────────────
 
-type MenuGuideStep = 'drag_smush' | 'drag_potions' | 'equip_boxers' | 'done';
+type MenuGuideStep = 'drag_smush' | 'drag_potions' | 'equip_hoodie' | 'done';
 
 type CatMenuGuideStep = 'drag_missile' | 'drag_potions' | 'done';
 
@@ -547,7 +547,7 @@ export interface TutorialRenderContext {
   bagItemRects: {
     smush_tome: Rect | null;
     health_potion: Rect | null;
-    enchanted_bigboi_boxers: Rect | null;
+    lucky_hoodie: Rect | null;
     magic_missile_tome: Rect | null;
   };
   /** Screen rects of the HUD's hotbar slots 0–N. */
@@ -556,8 +556,6 @@ export interface TutorialRenderContext {
   bagHotbarSlotRects: ReadonlyArray<Rect | null>;
   /** True when the player is currently dragging the tutorial-required item. */
   isDragActive: boolean;
-  /** True when an achievement notification overlay is currently displayed. */
-  isAchievementNotifActive: boolean;
   /** True when the inventory context menu (right-click options) is currently open. */
   isContextMenuOpen: boolean;
   /** Screen-space rects for each option in the currently open context menu, or null. */
@@ -575,10 +573,10 @@ export interface TutorialRenderContext {
   followerMenuFollowMeRect: Rect | null;
   /** World-pixel top-left of the tutorial's Mordecai where he stands now, or null when there is none. */
   mordecaiPosition: { x: number; y: number } | null;
-  /** Screen-space rect of the safe room's gold Achievement banner, or null while it is not shown. */
-  achievementBannerRect: Rect | null;
-  /** True while the loot-box reveal is playing; it carries its own "tap to continue". */
-  isLootBoxOpen: boolean;
+  /** True while the reward chest screen is up; it carries its own controls. */
+  isRewardScreenOpen: boolean;
+  /** Screen-space rect of the HUD's "Rewards waiting" chip, or null while it is not shown. */
+  rewardsChipRect: Rect | null;
   /** True while the treasure chest's reward card is up; it carries its own "tap to continue". */
   isChestRewardOpen: boolean;
   /** Screen-space rect of the HUD's Switch button, or null while it is not shown. */
@@ -691,8 +689,8 @@ export class TutorialController implements ObjectiveBeaconSource {
   // Menu-guide step for HUMAN_OPENED_ACHIEVEMENT phase
   private _menuGuideStep: MenuGuideStep = 'drag_smush';
 
-  // Countdown timer for the transient boxers-drag flash hint (0 = not showing)
-  private _boxersDragHintTimer = 0;
+  // Countdown timer for the transient hoodie-drag flash hint (0 = not showing)
+  private _hoodieDragHintTimer = 0;
   private hintPlacement: HintPlacement = { kind: 'hotbar', floor: 0 };
 
   // Menu-guide step for CAT_OPENED_TREASURE_BOX phase
@@ -829,17 +827,9 @@ export class TutorialController implements ObjectiveBeaconSource {
     return this.atOrPast('TALKED_TO_MORDECAI_AGAIN');
   }
 
-  /** Achievement icon/loot-box icon should only appear after Mordecai is spoken to. */
+  /** Reward chests wait in their queue until Mordecai has been spoken to. */
   get showAchievementUI(): boolean {
     return this.atOrPast('HUMAN_TALKED_TO_MORDECAI');
-  }
-
-  /**
-   * While true, pressing the hotbar slot containing enchanted_bigboi_boxers plays
-   * an error sound with the message "Protective Shell cannot be activated in this zone".
-   */
-  get blockBoxersActivation(): boolean {
-    return this._state === 'HUMAN_TALKED_TO_MORDECAI' || this._state === 'HUMAN_OPENED_ACHIEVEMENT';
   }
 
   /**
@@ -895,8 +885,8 @@ export class TutorialController implements ObjectiveBeaconSource {
    * sound when attempted).
    */
   get tutorialBlockedDragItemId(): ItemId | null {
-    if (this._state === 'HUMAN_OPENED_ACHIEVEMENT' && this._menuGuideStep === 'equip_boxers') {
-      return 'enchanted_bigboi_boxers';
+    if (this._state === 'HUMAN_OPENED_ACHIEVEMENT' && this._menuGuideStep === 'equip_hoodie') {
+      return TUTORIAL_GARMENT_ID;
     }
     return null;
   }
@@ -913,8 +903,8 @@ export class TutorialController implements ObjectiveBeaconSource {
   }
 
   /** Shows the "You can add this to your hotlist later!" flash hint for a few seconds. */
-  triggerBoxersDragHint(): void {
-    this._boxersDragHintTimer = BOXERS_DRAG_HINT_DURATION_FRAMES;
+  triggerHoodieDragHint(): void {
+    this._hoodieDragHintTimer = HOODIE_DRAG_HINT_DURATION_FRAMES;
   }
 
   /**
@@ -1030,8 +1020,8 @@ export class TutorialController implements ObjectiveBeaconSource {
   update(human: HumanPlayer, cat: CatPlayer): void {
     this.stateFrames++;
     this.animFrame++;
-    if (this._boxersDragHintTimer > 0) {
-      this._boxersDragHintTimer--;
+    if (this._hoodieDragHintTimer > 0) {
+      this._hoodieDragHintTimer--;
     }
 
     switch (this._state) {
@@ -1055,12 +1045,8 @@ export class TutorialController implements ObjectiveBeaconSource {
         break;
 
       case 'HUMAN_GETS_TO_SAFE_ROOM':
-        // Advances via onMordecaiInteracted()
-        break;
-
       case 'HUMAN_TALKED_TO_MORDECAI':
-        // Reward is opened when the player clicks the achievement banner (see AchievementUISystem
-        // tutorialBoxInterceptCallback), not automatically here.
+        // The scene's callbacks move these on: talking to Mordecai, then closing the reward chest.
         break;
 
       case 'HUMAN_OPENED_ACHIEVEMENT':
@@ -1210,9 +1196,11 @@ export class TutorialController implements ObjectiveBeaconSource {
     return this.gates.renderables();
   }
 
-  /** Called by DungeonScene after the human's tutorial reward dialog is dismissed. */
-  onHumanRewardDialogDismissed(human: HumanPlayer): void {
-    this.giveHumanTutorialItems(human);
+  /**
+   * Called by DungeonScene when the reward screen closes on the human's
+   * first-kill chest, which has already put the tutorial's kit in his bag.
+   */
+  onHumanRewardDialogDismissed(): void {
     this._menuGuideStep = 'drag_smush';
     this.advance('HUMAN_OPENED_ACHIEVEMENT');
   }
@@ -1383,10 +1371,9 @@ export class TutorialController implements ObjectiveBeaconSource {
   private checkMenuGuideCompletion(human: HumanPlayer): void {
     const hasSmushInBar = human.inventory.actionBar.slots.some((s) => s?.id === 'smush_tome');
     const hasPotionInBar = human.inventory.actionBar.slots.some((s) => s?.id === 'health_potion');
-    const boxersSlot = human.inventory.equipment.getEquippedId('Legs:Pants');
-    const hasBoxersEquipped = boxersSlot === 'enchanted_bigboi_boxers';
+    const hasHoodieEquipped = this.wearsTutorialGarment(human);
 
-    if (hasSmushInBar && hasPotionInBar && hasBoxersEquipped) {
+    if (hasSmushInBar && hasPotionInBar && hasHoodieEquipped) {
       this.needsAutoCloseMenus = true;
       this.advance('HUMAN_EQUIPPED_SMUSH');
     } else {
@@ -1397,15 +1384,14 @@ export class TutorialController implements ObjectiveBeaconSource {
   private updateMenuGuideStep(human: HumanPlayer): void {
     const hasSmushInBar = human.inventory.actionBar.slots.some((s) => s?.id === 'smush_tome');
     const hasPotionInBar = human.inventory.actionBar.slots.some((s) => s?.id === 'health_potion');
-    const boxersSlot = human.inventory.equipment.getEquippedId('Legs:Pants');
-    const hasBoxersEquipped = boxersSlot === 'enchanted_bigboi_boxers';
+    const hasHoodieEquipped = this.wearsTutorialGarment(human);
 
     if (!hasSmushInBar) {
       this._menuGuideStep = 'drag_smush';
     } else if (!hasPotionInBar) {
       this._menuGuideStep = 'drag_potions';
-    } else if (!hasBoxersEquipped) {
-      this._menuGuideStep = 'equip_boxers';
+    } else if (!hasHoodieEquipped) {
+      this._menuGuideStep = 'equip_hoodie';
     } else {
       this._menuGuideStep = 'done';
     }
@@ -1418,18 +1404,8 @@ export class TutorialController implements ObjectiveBeaconSource {
     this.gates.applyConstraints(human, cat);
   }
 
-  // ── Item grants ───────────────────────────────────────────────────────────
-
-  /**
-   * Puts tutorial items into the human's BAG (not hotbar) so the player must
-   * manually move them to the action bar during the inventory guide. The bag is
-   * empty at this point in the tutorial, so `addItem` lands them there — and it
-   * stacks rather than overwriting, which a direct slot write would not.
-   */
-  private giveHumanTutorialItems(human: HumanPlayer): void {
-    human.inventory.addItem('smush_tome', 1);
-    human.inventory.addItem('health_potion', TUTORIAL_REWARD_POTIONS);
-    human.inventory.addItem('enchanted_bigboi_boxers', 1);
+  private wearsTutorialGarment(human: HumanPlayer): boolean {
+    return human.inventory.equipment.hasEquipped(TUTORIAL_GARMENT_ID);
   }
 
   // ── Camera pan helpers ────────────────────────────────────────────────────
@@ -1583,8 +1559,6 @@ export class TutorialController implements ObjectiveBeaconSource {
     const slots = renderCtx.hotbarSlotRects;
     const slot = (index: number): Rect | null => (index < slots.length ? slots[index] : null);
     switch (this._state) {
-      case 'HUMAN_TALKED_TO_MORDECAI':
-        return renderCtx.achievementBannerRect;
       case 'HUMAN_EQUIPPED_SMUSH':
         // Only once a cast from here would actually catch both guards.
         return this.isWithinSmushRangeOfBothGuards(activePlayerX, activePlayerY)
@@ -1594,6 +1568,8 @@ export class TutorialController implements ObjectiveBeaconSource {
         return slot(TUTORIAL_POTION_HOTBAR_SLOT);
       case 'CAT_EQUIPPED_MAGIC_MISSILE':
         return this.goblinB.hp > 0 ? slot(TUTORIAL_ABILITY_HOTBAR_SLOT) : null;
+      case 'HUMAN_TALKED_TO_MORDECAI':
+        return renderCtx.rewardsChipRect;
       case 'AWAITING_SWITCH_TO_HUMAN':
         return renderCtx.switchButtonRect;
       case 'SWITCHED_TO_HUMAN':
@@ -1621,17 +1597,16 @@ export class TutorialController implements ObjectiveBeaconSource {
   }
 
   /**
-   * Whether a screen handing out a step's reward is up: the achievement card,
-   * the loot-box reveal, the chest's reward card, the "New Ability!" card.
+   * Whether a screen handing out a step's reward is up: the reward chest
+   * screen, the chest's reward card, the "New Ability!" card.
    * Each has a lone OK or its own "tap to continue", which a new player reads
    * unaided, so the guide draws nothing over it: no arrow, and no step hint
    * naming a control the card is covering.
    */
   private isAwardScreenUp(renderCtx: TutorialRenderContext): boolean {
     return (
-      renderCtx.isAchievementNotifActive ||
       renderCtx.isRewardGrantedDialogShowing ||
-      renderCtx.isLootBoxOpen ||
+      renderCtx.isRewardScreenOpen ||
       renderCtx.isChestRewardOpen ||
       renderCtx.isAbilityDialogShowing
     );
@@ -1830,7 +1805,7 @@ export class TutorialController implements ObjectiveBeaconSource {
       return;
     }
 
-    if (step === 'equip_boxers') {
+    if (step === 'equip_hoodie') {
       if (this.renderBagTabGuide(ctx, renderCtx, mode, alpha)) return;
       if (renderCtx.inventoryPanelOpen) {
         if (renderCtx.isContextMenuOpen && renderCtx.contextMenuOptionRects !== null) {
@@ -1846,27 +1821,27 @@ export class TutorialController implements ObjectiveBeaconSource {
           return;
         }
 
-        if (this._boxersDragHintTimer > 0) {
-          const elapsed = BOXERS_DRAG_HINT_DURATION_FRAMES - this._boxersDragHintTimer;
+        if (this._hoodieDragHintTimer > 0) {
+          const elapsed = HOODIE_DRAG_HINT_DURATION_FRAMES - this._hoodieDragHintTimer;
           const fadeIn =
-            Math.min(elapsed, BOXERS_DRAG_HINT_FADE_FRAMES) / BOXERS_DRAG_HINT_FADE_FRAMES;
+            Math.min(elapsed, HOODIE_DRAG_HINT_FADE_FRAMES) / HOODIE_DRAG_HINT_FADE_FRAMES;
           const fadeOut =
-            Math.min(this._boxersDragHintTimer, BOXERS_DRAG_HINT_FADE_FRAMES) /
-            BOXERS_DRAG_HINT_FADE_FRAMES;
+            Math.min(this._hoodieDragHintTimer, HOODIE_DRAG_HINT_FADE_FRAMES) /
+            HOODIE_DRAG_HINT_FADE_FRAMES;
           const flashAlpha = HINT_BOX_ALPHA * Math.min(fadeIn, fadeOut);
-          this.renderHintBox(ctx, BOXERS_DRAG_HINT_TEXT, 0, {
+          this.renderHintBox(ctx, HOODIE_DRAG_HINT_TEXT, 0, {
             alpha: flashAlpha,
             borderColor: worldPalette.guide.noticeEdge,
             textColor: worldPalette.guide.noticeInk,
           });
         } else {
           const hint = byInputMode(mode, {
-            touch: 'Press and hold the Enchanted BigBoi Boxers to equip them.',
-            pointer: 'Right-click the Enchanted BigBoi Boxers to equip them.',
+            touch: `Press and hold the ${TUTORIAL_GARMENT_NAME} to equip it.`,
+            pointer: `Right-click the ${TUTORIAL_GARMENT_NAME} to equip it.`,
           });
           this.renderHintBox(ctx, hint);
         }
-        const itemRect = renderCtx.bagItemRects.enchanted_bigboi_boxers;
+        const itemRect = renderCtx.bagItemRects.lucky_hoodie;
         if (itemRect !== null) {
           this.renderGuideArrowAt(ctx, itemRect, alpha);
           this.renderHintLabel(

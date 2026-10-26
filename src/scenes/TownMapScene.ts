@@ -22,7 +22,7 @@
  * dev-only field.
  */
 
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { worldText } from '../ui/world/worldText';
 import { inset, splitH, splitV, type Rect } from '../ui/core/geom';
 import type { Surface, Ui, WorldGesture } from '../ui/core/UiRoot';

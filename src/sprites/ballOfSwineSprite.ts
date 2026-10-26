@@ -1,5 +1,5 @@
 import { worldText } from '../ui/world/worldText';
-import { progressFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
+import { progressFrameIndex, walkFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import { BALL_OF_SWINE_FIGURE } from './art/ballOfSwineFigure';
 import {

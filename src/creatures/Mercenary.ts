@@ -10,7 +10,7 @@ import {
   getMercenaryTemplate,
   type MercenaryTemplateId,
   type MercenaryTemplate,
-} from '../core/mercenaryTemplates';
+} from '../core/party/mercenaryTemplates';
 import { MERCENARY_ART, type MercenaryArt } from '../sprites/mercenaryArt';
 import {
   SPEECH_DURATION_FRAMES,

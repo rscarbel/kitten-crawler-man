@@ -9,7 +9,7 @@
  */
 
 import { TILE_SIZE } from '../../core/constants';
-import type { ResourceCost } from '../../core/partyResources';
+import type { ResourceCost } from '../../core/items/gathering/partyResources';
 
 /**
  * The bell's health. The assault is lost the moment it reaches zero. Low

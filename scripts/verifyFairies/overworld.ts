@@ -18,8 +18,8 @@
  */
 
 import { TILE_SIZE } from '../../src/core/constants';
-import { DIFFICULTY_PROFILES, type Difficulty } from '../../src/core/difficultyProfiles';
-import { withWorldSeed } from '../../src/core/WorldRandom';
+import { DIFFICULTY_PROFILES, type Difficulty } from '../../src/core/difficulty/difficultyProfiles';
+import { withWorldSeed } from '../../src/core/world/WorldRandom';
 import { GameMap } from '../../src/map/GameMap';
 import { hasRoomToMove } from '../../src/map/findWalkableTile';
 import { RUINS_CIRCUS_BUFFER } from '../../src/map/OverworldGenerator';
@@ -28,7 +28,7 @@ import type { Fairy } from '../../src/creatures/fairies/Fairy';
 import { IceFairy } from '../../src/creatures/fairies/IceFairy';
 import { FireFairy } from '../../src/creatures/fairies/FireFairy';
 import { setPackAlertGrid } from '../../src/creatures/packAlert';
-import { PlayerManager } from '../../src/core/PlayerManager';
+import { PlayerManager } from '../../src/core/party/PlayerManager';
 import type { Player } from '../../src/Player';
 import { SpellSystem } from '../../src/systems/SpellSystem';
 import { MobRoster } from '../../src/systems/kits/SceneWorld';

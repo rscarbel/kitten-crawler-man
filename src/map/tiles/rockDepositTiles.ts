@@ -10,7 +10,7 @@
  * pass, and repainting it here would wipe out a neighbour's overhang.
  */
 
-import { drawSpriteKey } from '../../core/SpriteRenderer';
+import { drawSpriteKey } from '../../core/spriteAssets/SpriteRenderer';
 import { positionHash, type TileContent } from '../tileTypes';
 import { rockDamageState } from '../rockDamage';
 

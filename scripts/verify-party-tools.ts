@@ -10,8 +10,16 @@
 import { TILE_SIZE } from '../src/core/constants';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
-import { createPartyToolsState, parsePartyToolsState, PartyTools } from '../src/core/PartyTools';
-import { MAX_TOOL_TIER, TOOL_TIER_RATKIN_FORGE, toolTierDef } from '../src/core/toolTiers';
+import {
+  createPartyToolsState,
+  parsePartyToolsState,
+  PartyTools,
+} from '../src/core/items/gathering/PartyTools';
+import {
+  MAX_TOOL_TIER,
+  TOOL_TIER_RATKIN_FORGE,
+  toolTierDef,
+} from '../src/core/items/gathering/toolTiers';
 
 let failures = 0;
 function check(ok: boolean, message: string): void {

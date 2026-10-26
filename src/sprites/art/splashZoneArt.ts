@@ -32,7 +32,7 @@
  * left, matching every other figure.
  */
 
-import { allocCanvas, releaseSurface, surfaceContext } from '../../core/canvasSurface';
+import { allocCanvas, releaseSurface, surfaceContext } from '../../core/rendering/canvasSurface';
 import { clamp01, deg, lerp, mix, rgba, type Pt } from './bipedArt';
 
 type Ctx = CanvasRenderingContext2D;

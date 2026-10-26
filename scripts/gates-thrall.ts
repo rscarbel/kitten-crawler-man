@@ -19,7 +19,7 @@ import {
 import { thrallFigure } from '../src/sprites/art/thrallFigure.js';
 import { THRALL_STATES } from '../src/sprites/thrallSprite.js';
 import { FIGURE_BYTE_BUDGET } from '../src/sprites/figure/figureFrameCache.js';
-import type { ToolKind } from '../src/core/toolTiers.js';
+import type { ToolKind } from '../src/core/items/gathering/toolTiers.js';
 
 const TOOLS: readonly ToolKind[] = ['axe', 'pickaxe'];
 const BYTES_PER_PIXEL = 4;

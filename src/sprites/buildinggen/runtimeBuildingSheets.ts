@@ -23,7 +23,7 @@
  * {@link wantBuildingSheet}.
  */
 
-import { CanvasContextUnavailableError, releaseSurface } from '../../core/canvasSurface';
+import { CanvasContextUnavailableError, releaseSurface } from '../../core/rendering/canvasSurface';
 import {
   deferEnvironmentSheet,
   environmentSheetState,
@@ -37,7 +37,7 @@ import {
   type SpriteKey,
   type SpriteManifestEntry,
   type SpriteStateDef,
-} from '../../core/SpriteLoader';
+} from '../../core/spriteAssets/SpriteLoader';
 import { BUILDING_SALT, floorArtSeed, floorArtSubSeed } from '../../map/ground/floorArtSeed';
 import { subSeed } from '../person/rng';
 import { paintLifeFrame } from './animate';

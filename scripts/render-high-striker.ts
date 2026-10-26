@@ -44,7 +44,7 @@ globals.document = {
 
 const { TILE_SIZE } = await import('../src/core/constants');
 const { TICKS_PER_SECOND } = await import('../src/sprites/art/human/timing');
-const { loadSprites } = await import('../src/core/SpriteLoader');
+const { loadSprites } = await import('../src/core/spriteAssets/SpriteLoader');
 const { renderCanvas } = await import('../src/map/TileRenderer');
 const { FLOOR_ART_SEEDS } = await import('../src/map/ground/artSeedAlphabet.js');
 const { worldText } = await import('../src/ui/world/worldText');

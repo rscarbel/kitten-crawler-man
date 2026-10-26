@@ -10,7 +10,7 @@
  * glow around a crawler is something to panic about.
  */
 
-import type { SilhouetteLayer } from '../../core/silhouetteComposite';
+import type { SilhouetteLayer } from '../../core/spriteAssets/silhouetteComposite';
 import {
   bodyTop,
   bodyX,

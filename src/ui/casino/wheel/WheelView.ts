@@ -6,7 +6,8 @@
  * the model's clocks, so a frozen model paints the same frame every time.
  */
 
-import type { BoxTier, ItemReward } from '../../../core/AchievementManager';
+import type { PrizeItem } from '../../../systems/casino/wheel/wheelPrizes';
+import type { Rarity } from '../../../core/items/defs/rarity';
 import type { WheelBoard, WheelWedge } from '../../../systems/casino/wheel/wheelBoard';
 import {
   wedgeCenterAngle,
@@ -63,9 +64,9 @@ export interface WheelReveal {
   readonly effect: WheelRevealEffect;
   readonly durationMs: number;
   /** The rarity an item prize is presented at, or null for a prize with no items. */
-  readonly itemTier: BoxTier | null;
+  readonly itemRarity: Rarity | null;
   /** Items the prize put in the crawler's bag. */
-  readonly items: ReadonlyArray<ItemReward>;
+  readonly items: ReadonlyArray<PrizeItem>;
   /** What the prize paid, said in full under the banner's short name. */
   readonly prizeLine: string;
   readonly coinsTaken: number;

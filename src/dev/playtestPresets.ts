@@ -1,18 +1,18 @@
-import type { ItemId } from '../core/ItemDefs';
+import type { ItemId } from '../core/items/defs/ItemDefs';
 import type { StatName } from '../Player';
-import type { SkillId } from '../core/SkillManager';
-import type { AbilityId } from '../core/AbilityManager';
+import type { SkillId } from '../core/skills/SkillManager';
+import type { AbilityId } from '../core/skills/AbilityManager';
 import type { MobKind } from '../levels/mobKinds';
-import type { Difficulty } from '../core/difficultyProfiles';
-import type { DoomsdayStage } from '../core/DoomsdayProgress';
-import type { MercenaryTemplateId } from '../core/mercenaryTemplates';
-import type { CircusQuestStage } from '../core/CircusQuestProgress';
-import type { PartyToolsState } from '../core/PartyTools';
+import type { Difficulty } from '../core/difficulty/difficultyProfiles';
+import type { DoomsdayStage } from '../core/quests/DoomsdayProgress';
+import type { MercenaryTemplateId } from '../core/party/mercenaryTemplates';
+import type { CircusQuestStage } from '../core/quests/CircusQuestProgress';
+import type { PartyToolsState } from '../core/items/gathering/PartyTools';
 import type { PalisadeTier } from '../map/tileTypes';
-import type { BlueprintsQuestPhase } from '../core/blueprintsQuestPhase';
+import type { BlueprintsQuestPhase } from '../core/quests/blueprintsQuestPhase';
 import type { VillageBuildingId } from '../map/overworld/briarHollowLayout';
 import type { TownBuildingName } from '../map/town/townPlan';
-import { TOOL_TIER_BASIC, TOOL_TIER_LONG_HAFT } from '../core/toolTiers';
+import { TOOL_TIER_BASIC, TOOL_TIER_LONG_HAFT } from '../core/items/gathering/toolTiers';
 import { buyPrice } from '../economy/pricing';
 import { createShopStock } from '../economy/shopStock';
 
@@ -193,7 +193,7 @@ const TRASH_GREMLIN: PlaytestPreset = {
       { id: 'smush_tome', quantity: 1 },
       { id: 'health_potion', quantity: 13 },
       { id: 'goblin_dynamite', quantity: 2 },
-      { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
+      { id: 'lucky_hoodie', quantity: 1, equipped: true },
     ],
     bag: [{ id: 'scroll_of_confusing_fog', quantity: 1 }],
   },
@@ -229,11 +229,11 @@ const BIG_ROOSTER: PlaytestPreset = {
       { id: 'smush_tome', quantity: 1 },
       { id: 'health_potion', quantity: 17 },
       { id: 'goblin_dynamite', quantity: 6 },
-      { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
+      { id: 'lucky_hoodie', quantity: 1, equipped: true },
     ],
     bag: [
       { id: 'scroll_of_confusing_fog', quantity: 3 },
-      { id: 'trollskin_shirt', quantity: 1, equipped: true },
+      { id: 'scrapmail_vest', quantity: 1, equipped: true },
     ],
   },
   cat: {
@@ -268,16 +268,15 @@ const LEVEL2: PlaytestPreset = {
       { id: 'smush_tome', quantity: 1 },
       { id: 'health_potion', quantity: 22 },
       { id: 'goblin_dynamite', quantity: 10 },
-      { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
-      { id: 'slingshot', quantity: 1 },
+      { id: 'lucky_hoodie', quantity: 1, equipped: true },
+      { id: 'rattlestick_sling', quantity: 1 },
     ],
     bag: [
       { id: 'scroll_of_confusing_fog', quantity: 4 },
-      { id: 'trollskin_shirt', quantity: 1, equipped: true },
-      { id: 'nightgaunt_cloak', quantity: 1, equipped: true },
-      { id: 'splatter_skunk_toe_ring', quantity: 1, equipped: true },
-      { id: 'shade_gnoll_kneepads', quantity: 1, equipped: true },
-      { id: 'grull_war_gauntlet', quantity: 1, equipped: true },
+      { id: 'scrapmail_vest', quantity: 1, equipped: true },
+      { id: 'patched_duster', quantity: 1, equipped: true },
+      { id: 'riot_kneeguards', quantity: 1, equipped: true },
+      { id: 'iron_knuckle_gauntlet', quantity: 1, equipped: true },
       { id: 'gym_bench_press', quantity: 2 },
       { id: 'gym_treadmill', quantity: 2 },
       { id: 'jugg_juice', quantity: 1 },
@@ -298,10 +297,10 @@ const LEVEL2: PlaytestPreset = {
     bag: [
       { id: 'goblin_dynamite', quantity: 7 },
       { id: 'gym_bench_press', quantity: 1 },
-      { id: 'enchanted_crown_sepsis_whore', quantity: 1, equipped: true },
-      { id: 'slate_butterfly_talisman', quantity: 1, equipped: true },
-      { id: 'fae_scale_crupper', quantity: 1, equipped: true },
-      { id: 'bracelet_of_dex', quantity: 1, equipped: true },
+      { id: 'cockscomb_crest', quantity: 1, equipped: true },
+      { id: 'moonmoth_pendant', quantity: 1, equipped: true },
+      { id: 'plumed_coat', quantity: 1, equipped: true },
+      { id: 'nimble_bangle', quantity: 1, equipped: true },
     ],
   },
 };
@@ -323,18 +322,17 @@ const KRAKAREN: PlaytestPreset = {
       { id: 'smush_tome', quantity: 1 },
       { id: 'health_potion', quantity: 31 },
       { id: 'goblin_dynamite', quantity: 24 },
-      { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
-      { id: 'slingshot', quantity: 1 },
+      { id: 'lucky_hoodie', quantity: 1, equipped: true },
+      { id: 'rattlestick_sling', quantity: 1 },
       { id: 'gym_bench_press', quantity: 2 },
       { id: 'gym_treadmill', quantity: 2 },
     ],
     bag: [
       { id: 'scroll_of_confusing_fog', quantity: 5 },
-      { id: 'trollskin_shirt', quantity: 1, equipped: true },
-      { id: 'nightgaunt_cloak', quantity: 1, equipped: true },
-      { id: 'splatter_skunk_toe_ring', quantity: 1, equipped: true },
-      { id: 'shade_gnoll_kneepads', quantity: 1, equipped: true },
-      { id: 'grull_war_gauntlet', quantity: 1, equipped: true },
+      { id: 'scrapmail_vest', quantity: 1, equipped: true },
+      { id: 'patched_duster', quantity: 1, equipped: true },
+      { id: 'riot_kneeguards', quantity: 1, equipped: true },
+      { id: 'iron_knuckle_gauntlet', quantity: 1, equipped: true },
       { id: 'jugg_juice', quantity: 1 },
       { id: 'speed_fizz', quantity: 1 },
     ],
@@ -353,10 +351,10 @@ const KRAKAREN: PlaytestPreset = {
     bag: [
       { id: 'goblin_dynamite', quantity: 7 },
       { id: 'gym_bench_press', quantity: 1 },
-      { id: 'enchanted_crown_sepsis_whore', quantity: 1, equipped: true },
-      { id: 'slate_butterfly_talisman', quantity: 1, equipped: true },
-      { id: 'fae_scale_crupper', quantity: 1, equipped: true },
-      { id: 'bracelet_of_dex', quantity: 1, equipped: true },
+      { id: 'cockscomb_crest', quantity: 1, equipped: true },
+      { id: 'moonmoth_pendant', quantity: 1, equipped: true },
+      { id: 'plumed_coat', quantity: 1, equipped: true },
+      { id: 'nimble_bangle', quantity: 1, equipped: true },
     ],
   },
 };
@@ -379,18 +377,17 @@ const SPIDER: PlaytestPreset = {
       { id: 'smush_tome', quantity: 1 },
       { id: 'goblin_dynamite', quantity: 14 },
       { id: 'health_potion', quantity: 34 },
-      { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
-      { id: 'slingshot', quantity: 1 },
+      { id: 'lucky_hoodie', quantity: 1, equipped: true },
+      { id: 'rattlestick_sling', quantity: 1 },
       { id: 'gym_bench_press', quantity: 2 },
       { id: 'gym_treadmill', quantity: 2 },
     ],
     bag: [
       { id: 'scroll_of_confusing_fog', quantity: 5 },
-      { id: 'trollskin_shirt', quantity: 1, equipped: true },
-      { id: 'nightgaunt_cloak', quantity: 1, equipped: true },
-      { id: 'splatter_skunk_toe_ring', quantity: 1, equipped: true },
-      { id: 'shade_gnoll_kneepads', quantity: 1, equipped: true },
-      { id: 'grull_war_gauntlet', quantity: 1, equipped: true },
+      { id: 'scrapmail_vest', quantity: 1, equipped: true },
+      { id: 'patched_duster', quantity: 1, equipped: true },
+      { id: 'riot_kneeguards', quantity: 1, equipped: true },
+      { id: 'iron_knuckle_gauntlet', quantity: 1, equipped: true },
       { id: 'jugg_juice', quantity: 1 },
       { id: 'speed_fizz', quantity: 1 },
     ],
@@ -400,7 +397,7 @@ const SPIDER: PlaytestPreset = {
     xpProgress: 0.5,
     coins: 1903,
     baseStats: { strength: 5, intelligence: 21, constitution: 2, dexterity: 22 },
-    skillLevels: { cockroach: 1, iron_stomach: 1, night_vision: 1 },
+    skillLevels: { cockroach: 1, iron_stomach: 1 },
     hotbar: [
       { id: 'magic_missile_tome', quantity: 1 },
       { id: 'health_potion', quantity: 28 },
@@ -408,10 +405,10 @@ const SPIDER: PlaytestPreset = {
     ],
     bag: [
       { id: 'goblin_dynamite', quantity: 7 },
-      { id: 'enchanted_crown_sepsis_whore', quantity: 1, equipped: true },
-      { id: 'slate_butterfly_talisman', quantity: 1, equipped: true },
-      { id: 'fae_scale_crupper', quantity: 1, equipped: true },
-      { id: 'bracelet_of_dex', quantity: 1, equipped: true },
+      { id: 'cockscomb_crest', quantity: 1, equipped: true },
+      { id: 'moonmoth_pendant', quantity: 1, equipped: true },
+      { id: 'plumed_coat', quantity: 1, equipped: true },
+      { id: 'nimble_bangle', quantity: 1, equipped: true },
       { id: 'gym_bench_press', quantity: 1 },
     ],
   },
@@ -434,18 +431,17 @@ const LEVEL3: PlaytestPreset = {
       { id: 'smush_tome', quantity: 1 },
       { id: 'goblin_dynamite', quantity: 18 },
       { id: 'health_potion', quantity: 38 },
-      { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
-      { id: 'slingshot', quantity: 1 },
+      { id: 'lucky_hoodie', quantity: 1, equipped: true },
+      { id: 'rattlestick_sling', quantity: 1 },
       { id: 'gym_bench_press', quantity: 2 },
       { id: 'gym_treadmill', quantity: 2 },
     ],
     bag: [
       { id: 'scroll_of_confusing_fog', quantity: 5 },
-      { id: 'trollskin_shirt', quantity: 1, equipped: true },
-      { id: 'nightgaunt_cloak', quantity: 1, equipped: true },
-      { id: 'splatter_skunk_toe_ring', quantity: 1, equipped: true },
-      { id: 'shade_gnoll_kneepads', quantity: 1, equipped: true },
-      { id: 'grull_war_gauntlet', quantity: 1, equipped: true },
+      { id: 'scrapmail_vest', quantity: 1, equipped: true },
+      { id: 'patched_duster', quantity: 1, equipped: true },
+      { id: 'riot_kneeguards', quantity: 1, equipped: true },
+      { id: 'iron_knuckle_gauntlet', quantity: 1, equipped: true },
       { id: 'jugg_juice', quantity: 1 },
       { id: 'speed_fizz', quantity: 1 },
     ],
@@ -455,7 +451,7 @@ const LEVEL3: PlaytestPreset = {
     xpProgress: 0.5,
     coins: 2327,
     baseStats: { strength: 5, intelligence: 28, constitution: 2, dexterity: 34 },
-    skillLevels: { cockroach: 1, iron_stomach: 1, night_vision: 1 },
+    skillLevels: { cockroach: 1, iron_stomach: 1 },
     hotbar: [
       { id: 'magic_missile_tome', quantity: 1 },
       { id: 'health_potion', quantity: 34 },
@@ -463,10 +459,10 @@ const LEVEL3: PlaytestPreset = {
     ],
     bag: [
       { id: 'goblin_dynamite', quantity: 7 },
-      { id: 'enchanted_crown_sepsis_whore', quantity: 1, equipped: true },
-      { id: 'slate_butterfly_talisman', quantity: 1, equipped: true },
-      { id: 'fae_scale_crupper', quantity: 1, equipped: true },
-      { id: 'bracelet_of_dex', quantity: 1, equipped: true },
+      { id: 'cockscomb_crest', quantity: 1, equipped: true },
+      { id: 'moonmoth_pendant', quantity: 1, equipped: true },
+      { id: 'plumed_coat', quantity: 1, equipped: true },
+      { id: 'nimble_bangle', quantity: 1, equipped: true },
       { id: 'gym_bench_press', quantity: 1 },
     ],
   },
@@ -496,17 +492,16 @@ const SWINE: PlaytestPreset = {
     skillLevels: { pugilism: 3 },
     hotbar: [
       { id: 'smush_tome', quantity: 1 },
-      { id: 'slingshot', quantity: 1 },
+      { id: 'rattlestick_sling', quantity: 1 },
       { id: 'health_potion', quantity: 30 },
-      { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
+      { id: 'lucky_hoodie', quantity: 1, equipped: true },
       { id: 'gym_bench_press', quantity: 4 },
     ],
     bag: [
-      { id: 'trollskin_shirt', quantity: 1, equipped: true },
-      { id: 'nightgaunt_cloak', quantity: 1, equipped: true },
-      { id: 'splatter_skunk_toe_ring', quantity: 1, equipped: true },
-      { id: 'shade_gnoll_kneepads', quantity: 1, equipped: true },
-      { id: 'grull_war_gauntlet', quantity: 1, equipped: true },
+      { id: 'scrapmail_vest', quantity: 1, equipped: true },
+      { id: 'patched_duster', quantity: 1, equipped: true },
+      { id: 'riot_kneeguards', quantity: 1, equipped: true },
+      { id: 'iron_knuckle_gauntlet', quantity: 1, equipped: true },
       { id: 'gym_treadmill', quantity: 4 },
       { id: 'gym_dumbbell', quantity: 4 },
       { id: 'goblin_dynamite', quantity: 8 },
@@ -527,10 +522,10 @@ const SWINE: PlaytestPreset = {
     ],
     bag: [
       { id: 'scroll_of_confusing_fog', quantity: 6 },
-      { id: 'enchanted_crown_sepsis_whore', quantity: 1, equipped: true },
-      { id: 'slate_butterfly_talisman', quantity: 1, equipped: true },
-      { id: 'fae_scale_crupper', quantity: 1, equipped: true },
-      { id: 'bracelet_of_dex', quantity: 1, equipped: true },
+      { id: 'cockscomb_crest', quantity: 1, equipped: true },
+      { id: 'moonmoth_pendant', quantity: 1, equipped: true },
+      { id: 'plumed_coat', quantity: 1, equipped: true },
+      { id: 'nimble_bangle', quantity: 1, equipped: true },
       { id: 'gym_bench_press', quantity: 4 },
     ],
   },
@@ -558,15 +553,14 @@ const GEAR: PlaytestPreset = {
       { id: 'smush_tome', quantity: 1 },
       { id: 'health_potion', quantity: 38 },
       { id: 'goblin_dynamite', quantity: 18 },
-      { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
-      { id: 'slingshot', quantity: 1 },
+      { id: 'lucky_hoodie', quantity: 1, equipped: true },
+      { id: 'rattlestick_sling', quantity: 1 },
     ],
     bag: [
-      { id: 'nightgaunt_cloak', quantity: 1, equipped: true },
-      { id: 'splatter_skunk_toe_ring', quantity: 1, equipped: true },
-      { id: 'shade_gnoll_kneepads', quantity: 1, equipped: true },
-      { id: 'grull_war_gauntlet', quantity: 1, equipped: true },
-      { id: 'trollskin_shirt', quantity: 1 },
+      { id: 'patched_duster', quantity: 1, equipped: true },
+      { id: 'riot_kneeguards', quantity: 1, equipped: true },
+      { id: 'iron_knuckle_gauntlet', quantity: 1, equipped: true },
+      { id: 'scrapmail_vest', quantity: 1 },
       { id: 'scroll_of_confusing_fog', quantity: 5 },
     ],
   },
@@ -575,17 +569,17 @@ const GEAR: PlaytestPreset = {
     xpProgress: 0.5,
     coins: 2327,
     baseStats: { strength: 5, intelligence: 28, constitution: 2, dexterity: 34 },
-    skillLevels: { cockroach: 1, iron_stomach: 1, night_vision: 1 },
+    skillLevels: { cockroach: 1, iron_stomach: 1 },
     hotbar: [
       { id: 'magic_missile_tome', quantity: 1 },
       { id: 'health_potion', quantity: 34 },
       { id: 'scroll_of_confusing_fog', quantity: 8 },
     ],
     bag: [
-      { id: 'slate_butterfly_talisman', quantity: 1, equipped: true },
-      { id: 'fae_scale_crupper', quantity: 1, equipped: true },
-      { id: 'bracelet_of_dex', quantity: 1, equipped: true },
-      { id: 'enchanted_crown_sepsis_whore', quantity: 1 },
+      { id: 'moonmoth_pendant', quantity: 1, equipped: true },
+      { id: 'plumed_coat', quantity: 1, equipped: true },
+      { id: 'nimble_bangle', quantity: 1, equipped: true },
+      { id: 'cockscomb_crest', quantity: 1 },
       { id: 'goblin_dynamite', quantity: 7 },
     ],
   },
@@ -635,8 +629,8 @@ const ANCHOR_STONE: PlaytestPreset = {
       { id: 'smush_tome', quantity: 1 },
       { id: 'health_potion', quantity: 38 },
       { id: 'goblin_dynamite', quantity: 18 },
-      { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
-      { id: 'slingshot', quantity: 1 },
+      { id: 'lucky_hoodie', quantity: 1, equipped: true },
+      { id: 'rattlestick_sling', quantity: 1 },
       { id: 'gym_bench_press', quantity: 2 },
       { id: 'wayfinders_anchor', quantity: 1 },
     ],
@@ -1100,17 +1094,17 @@ const RESOURCING_THRALLS: PlaytestPreset = {
 };
 
 /**
- * The second floor's start with the Fury of Taranis in the hotbar beside the
+ * The second floor's start with the Stormcaller in the hotbar beside the
  * slingshot, for trying its wave and chains on the floor's goblin packs.
  * Press its slot to draw it; press again, or the slingshot's, to put it away.
  */
-const TARANIS: PlaytestPreset = {
+const STORMCALLER: PlaytestPreset = {
   ...LEVEL2,
-  id: 'taranis',
-  description: 'Start of the second floor, the Fury of Taranis in the hotbar',
+  id: 'stormcaller',
+  description: 'Start of the second floor, the Stormcaller in the hotbar',
   human: {
     ...LEVEL2.human,
-    hotbar: [...LEVEL2.human.hotbar, { id: 'fury_of_taranis', quantity: 1 }],
+    hotbar: [...LEVEL2.human.hotbar, { id: 'stormcaller', quantity: 1 }],
   },
 };
 
@@ -1190,7 +1184,7 @@ export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   CONTRACTS,
   CONTRACTS_LAST_SPOT,
   RESOURCING_THRALLS,
-  TARANIS,
+  STORMCALLER,
   LEVEL1,
   STAIRWELL,
   BIG_TOP,

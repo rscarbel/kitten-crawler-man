@@ -16,8 +16,8 @@
  *   nothing.
  */
 
-import type { AchievementManager } from '../../../core/AchievementManager';
-import { formatPlayTime, type GameStats } from '../../../core/GameStats';
+import type { AchievementManager } from '../../../core/progression/AchievementManager';
+import { formatPlayTime, type GameStats } from '../../../core/progression/GameStats';
 import { centerIn, splitH, splitV, type Rect } from '../../core/geom';
 import type { Surface, Ui } from '../../core/UiRoot';
 import { withAlpha } from '../../theme/color';

@@ -1,6 +1,6 @@
 /** Pieces the choice-modal dialogs share: the power-up hero, the attack-key swallow and the keyboard hint. */
 
-import { keybindings } from '../../../core/Keybindings';
+import { keybindings } from '../../../core/input/Keybindings';
 import { centerIn, splitV, type Rect } from '../../core/geom';
 import { type KeyModifiers, type Ui, ACTIVATE_KEYS } from '../../core/UiRoot';
 import { withAlpha } from '../../theme/color';

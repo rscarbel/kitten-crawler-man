@@ -1,8 +1,10 @@
 /**
- * What the cat crawler's hats share: how they sit when she is lying down.
+ * What the cat crawler's hats share: how they are fitted to her skull, how
+ * they sit when she is lying down, and the painters that put one on her head.
  */
 
-import type { CatHeadLandmarks } from '../../art/catParts';
+import type { CatHeadFrame, CatHeadLandmarks } from '../../art/catParts';
+import type { CardinalView } from '../../facingView';
 import type { GarmentFrameContext } from '../garmentDef';
 
 /** A roll past this is her lying on her side. */
@@ -61,4 +63,61 @@ export function fitHatToSkull(
   ctx.translate(cx, cy);
   ctx.scale(fit.scale, fit.scale);
   ctx.translate(-cx, -cy);
+}
+
+/** Where a hat sits on her head in one view, in the frame {@link hatPainters} fits it into. */
+export interface HatSeat {
+  readonly view: CardinalView;
+  /** The hat's centre across her head: head-on slid with the turn, in profile the skull's centre. */
+  readonly cx: number;
+  /** The top of the skull, where the hat's seat is measured from. */
+  readonly skullTop: number;
+  readonly landmarks: CatHeadLandmarks;
+}
+
+export interface HatShape {
+  /** Paints the hat on its seat; the context is already fitted to her skull. */
+  readonly paint: (ctx: CanvasRenderingContext2D, seat: HatSeat) => void;
+  /** How far a turned head slides the hat across the skull, head-on. */
+  readonly turnSlide: number;
+  /** The hat's own tilt in profile, positive toward her nose, about the top of her skull. */
+  readonly profileTilt: number;
+}
+
+/**
+ * The three cardinal painters of a hat painted once her whole head is on:
+ * each fits the context to her skull, and in profile tilts the hat about the
+ * skull's top and tips it back when she is lying down.
+ */
+export function hatPainters(shape: HatShape) {
+  const headOn =
+    (view: Exclude<CardinalView, 'side'>) =>
+    (ctx: CanvasRenderingContext2D, frame: CatHeadFrame): void => {
+      if (frame.piece !== 'top') return;
+      const { landmarks } = frame;
+      const fit = hatFitFor(landmarks, 'headOn');
+      ctx.save();
+      fitHatToSkull(ctx, landmarks, fit);
+      const cx = landmarks.skull.cx + landmarks.turn * shape.turnSlide;
+      shape.paint(ctx, { view, cx, skullTop: fit.skullTop, landmarks });
+      ctx.restore();
+    };
+  const side = (
+    ctx: CanvasRenderingContext2D,
+    frame: CatHeadFrame,
+    context: GarmentFrameContext<'cat'>,
+  ): void => {
+    if (frame.piece !== 'top') return;
+    const { landmarks } = frame;
+    const fit = hatFitFor(landmarks, 'profile');
+    const cx = landmarks.skull.cx;
+    ctx.save();
+    fitHatToSkull(ctx, landmarks, fit);
+    ctx.translate(cx, fit.skullTop);
+    ctx.rotate(shape.profileTilt - lyingTipBack(context));
+    ctx.translate(-cx, -fit.skullTop);
+    shape.paint(ctx, { view: 'side', cx, skullTop: fit.skullTop, landmarks });
+    ctx.restore();
+  };
+  return { front: headOn('front'), side, back: headOn('back') };
 }

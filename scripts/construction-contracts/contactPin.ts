@@ -10,10 +10,10 @@
  * own round, and a scene rebuilt on a state with no contract holds no one.
  */
 
-import type { BriarHollowState } from '../../src/core/briarHollowState';
-import { createBriarHollowState } from '../../src/core/briarHollowState';
+import type { BriarHollowState } from '../../src/core/quests/briarHollowState';
+import { createBriarHollowState } from '../../src/core/quests/briarHollowState';
 import { TILE_SIZE } from '../../src/core/constants';
-import type { VillageQuestPhase } from '../../src/core/villageQuestPhase';
+import type { VillageQuestPhase } from '../../src/core/quests/villageQuestPhase';
 import type { TilePoint, TileRect } from '../../src/map/town/townPlan';
 import {
   CONTRACT_SITES,

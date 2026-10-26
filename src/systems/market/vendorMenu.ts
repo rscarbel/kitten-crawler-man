@@ -12,6 +12,7 @@ import {
   type CatalogLine,
   type ShopId,
   type VendorLineGate,
+  type SHOPS,
 } from '../../economy/shops';
 import { lineQuote } from '../../economy/pricing';
 import {
@@ -22,6 +23,8 @@ import {
   type ShopStock,
 } from '../../economy/shopStock';
 import type { AudioManager } from '../../audio/AudioManager';
+import type { ItemId } from '../../core/items/defs/ItemDefs';
+import { isGearId, type GearId } from '../../loot/gearPools';
 import type { Player } from '../../Player';
 import {
   offerUnless,
@@ -32,6 +35,30 @@ import {
 } from '../../ui/screens/shop/shopSession';
 
 export const SOLD_OUT_LABEL = 'Sold out';
+
+/** Shown on a piece of gear the party already has: gear is one of a kind per party. */
+const OWNED_LABEL = 'Owned';
+
+/** Whether the party already has a piece of gear, so a counter cannot sell it twice. */
+export type GearOwnership = (id: GearId) => boolean;
+
+type ShopItem<S extends ShopId> = (typeof SHOPS)[S]['catalog'][number]['item'];
+
+/** The shops whose catalog holds no gear at all, read off `SHOPS` itself. */
+export type GearFreeShopId = {
+  [S in ShopId]: [Extract<ShopItem<S>, GearId>] extends [never] ? S : never;
+}[ShopId];
+
+/**
+ * The ownership check a counter for `S` must pass: none for a shop that
+ * stocks no gear, required for every other — so a counter that can sell gear
+ * cannot be built without it, and one that cannot is not asked for it.
+ */
+type OwnershipArgs<S extends ShopId> = [S] extends [GearFreeShopId] ? [] : [owns: GearOwnership];
+
+function ownedGear(item: ItemId, owns: readonly GearOwnership[]): boolean {
+  return isGearId(item) && owns.some((check) => check(item));
+}
 
 /**
  * Shown on a vendor's everyday stock while one of their lines is a live
@@ -73,8 +100,14 @@ export function catalogLineCost(shop: ShopId, line: CatalogLine, stock: ShopStoc
  * with a limited line's count in its description and a short line marked
  * sold out.
  */
-export function catalogLineRow(shop: ShopId, line: CatalogLine, stock: ShopStock): ShopRow {
+export function catalogLineRow<S extends ShopId>(
+  shop: S,
+  line: CatalogLine,
+  stock: ShopStock,
+  ...owns: OwnershipArgs<S>
+): ShopRow {
   const soldOut = isSoldOut(stock, shop, line.item, catalogLineUnits(line));
+  const refusal = ownedGear(line.item, owns) ? OWNED_LABEL : soldOut ? SOLD_OUT_LABEL : null;
   return {
     key: catalogLineKey(line),
     label: line.label,
@@ -82,23 +115,25 @@ export function catalogLineRow(shop: ShopId, line: CatalogLine, stock: ShopStock
       ? `${line.desc} (${currentStock(stock, shop, line.item)} left)`
       : line.desc,
     art: { kind: 'item', item: line.item },
-    offer: offerUnless(soldOut ? SOLD_OUT_LABEL : null, catalogLineCost(shop, line, stock)),
+    offer: offerUnless(refusal, catalogLineCost(shop, line, stock)),
     questErrand: false,
   };
 }
 
 /**
  * Takes one row's units off the shop's shelf and puts them in the buyer's
- * bag. Refuses, handing nothing over, when a limited line is short: the row
- * is already disabled then, so this is the stock invariant's last line of
- * defence against a stale panel selling the same last unit twice.
+ * bag. Refuses, handing nothing over, when a limited line is short or the
+ * party already has the piece of gear it sells: the row is already disabled
+ * then, so this is the last line of defence against a stale panel.
  */
-export function handOverCatalogLine(
-  shop: ShopId,
+export function handOverCatalogLine<S extends ShopId>(
+  shop: S,
   line: CatalogLine,
   stock: ShopStock,
   buyer: Player,
+  ...owns: OwnershipArgs<S>
 ): boolean {
+  if (ownedGear(line.item, owns)) return false;
   const units = catalogLineUnits(line);
   if (!buyFromShop(stock, shop, line.item, units)) return false;
   buyer.inventory.addItem(line.item, units);

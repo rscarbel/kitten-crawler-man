@@ -10,9 +10,9 @@
  */
 
 import { playerCharacter } from '../../src/characters/characters';
-import { setViewportSize } from '../../src/core/Viewport';
-import type { BlueprintsQuestPhase } from '../../src/core/blueprintsQuestPhase';
-import type { VillageQuestPhase } from '../../src/core/villageQuestPhase';
+import { setViewportSize } from '../../src/core/rendering/Viewport';
+import type { BlueprintsQuestPhase } from '../../src/core/quests/blueprintsQuestPhase';
+import type { VillageQuestPhase } from '../../src/core/quests/villageQuestPhase';
 import type { DialogLine } from '../../src/dialog/line';
 import type { ConversationRequest } from '../../src/dialog/request';
 import { MERRIT } from '../../src/dialog/scripts/briarHollow';

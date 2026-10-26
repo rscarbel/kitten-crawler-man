@@ -900,7 +900,7 @@ const HEAD_SEED = 211;
 const SHOULDER_SEEDS: Record<'left' | 'right', number> = { left: 101, right: 103 };
 
 /**
- * The `MEAT SHIELDS` zone colour in `CLUB_ZONES` (`src/core/clubLayout.ts`),
+ * The `MEAT SHIELDS` zone colour in `CLUB_ZONES` (`src/core/club/clubLayout.ts`),
  * repeated here rather than imported so the art module stays free of any
  * dependency on the club's own geometry.
  */

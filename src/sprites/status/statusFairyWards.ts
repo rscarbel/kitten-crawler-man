@@ -8,8 +8,8 @@
  * the player never thinks to break.
  */
 
-import type { SilhouetteLayer } from '../../core/silhouetteComposite';
-import { statusRemainingFraction, type StatusEffect } from '../../core/StatusEffect';
+import type { SilhouetteLayer } from '../../core/spriteAssets/silhouetteComposite';
+import { statusRemainingFraction, type StatusEffect } from '../../core/combat/StatusEffect';
 import {
   bodyTop,
   drawGlow,

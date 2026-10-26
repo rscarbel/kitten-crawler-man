@@ -17,9 +17,9 @@ import {
   restoreBriarHollowState,
   type BriarHollowState,
   type BriarHollowStateSnapshot,
-} from '../../src/core/briarHollowState';
-import { allocCanvas, surfaceContext } from '../../src/core/canvasSurface';
-import { setViewportSize } from '../../src/core/Viewport';
+} from '../../src/core/quests/briarHollowState';
+import { allocCanvas, surfaceContext } from '../../src/core/rendering/canvasSurface';
+import { setViewportSize } from '../../src/core/rendering/Viewport';
 import { transientSpeaker } from '../../src/dialog/line';
 import { PASTURE_FENCE_SECTION_COUNT } from '../../src/map/overworld/briarHollowLayout';
 import { MOUSE_POINTER_ID, PRIMARY_BUTTON } from '../../src/ui/core/pointer';

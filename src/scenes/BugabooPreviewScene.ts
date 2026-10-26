@@ -19,7 +19,7 @@
  */
 
 import { BUGABOO_ATTACK_FRAMES, BUGABOO_EMERGE_FRAMES } from '../creatures/Bugaboo';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { worldText } from '../ui/world/worldText';
 import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { BUGABOO_BREACH_FPS, BUGABOO_IDLE_FPS, drawBugabooSprite } from '../sprites/bugabooSprite';

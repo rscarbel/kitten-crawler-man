@@ -25,11 +25,13 @@ import type { HumanSocket } from '../../held/gripArchetypes';
 import type { Pt } from '../bipedArt';
 import { type BipedHandSocket, type BipedHandSockets } from '../biped/figure';
 import { buildSkeleton, drawnSide, poseAsDrawn, VIEWS, type BodySide } from '../biped/rig';
-import { type ShownPlacement, stowedAxis, stowedCentre } from './stowedGeometry';
+import { type ShownPlacement, stowedAxis, stowedCentre, stowedFlatFacing } from './stowedGeometry';
 import {
+  CHOP_ROWS,
   GROUND_OFFSET_IN_TILE,
   HUMAN_ROW_TABLE,
   type HumanFigurePainting,
+  MINE_ROWS,
   type HumanRowMeta,
   type HumanRowName,
   ORIGIN_X,
@@ -61,6 +63,14 @@ export interface SocketFrame {
   readonly axis: Vec3;
   /** Which way the holding palm faces, unit, camera space. */
   readonly palmNormal: Vec3;
+  /**
+   * Which way the business side of the head faces, unit, camera space: on a
+   * blow, the way the head travels into the impact; otherwise down, and
+   * forward in profile. A palm alone cannot say it — the same grip carries
+   * an axe edge down at rest and swings it edge first — so it is decided
+   * from the row rather than the hand.
+   */
+  readonly leading: Vec3;
   readonly layer: SocketLayer;
   /**
    * Whether an equipment-chosen item is held here on this frame. False while
@@ -121,11 +131,38 @@ function stretched(direction: Vec3, axes: LookAxes, kind: 'along' | 'normal'): V
   return length === 0 ? direction : { x: x / length, y: y / length, z: z / length };
 }
 
-function handSocket(hand: BipedHandSocket, axes: LookAxes): SocketFrame {
+/** Which way round the haft, on screen, the business side lies: 1 clockwise of the axis, −1 anticlockwise. */
+type EdgeSide = 1 | -1;
+
+const SCREEN_EPSILON = 1e-6;
+/** At rest the business side faces down, and in profile as much forward again: an axe edge toward the floor ahead. */
+const PROFILE_FORWARD_BIAS = 1;
+
+/** The direction a side of `axis` faces on screen, a quarter turn from it. */
+function sideOf(axis: Vec3, side: EdgeSide): Vec3 {
+  const length = Math.hypot(axis.x, axis.y);
+  if (length < SCREEN_EPSILON) return { x: 0, y: 1, z: 0 };
+  return { x: (-side * axis.y) / length, y: (side * axis.x) / length, z: 0 };
+}
+
+/** The side of `axis` that faces down, and forward where he faces +X in profile. */
+function restingSide(axis: Vec3, profile: boolean): EdgeSide {
+  const forward = profile ? PROFILE_FORWARD_BIAS : 0;
+  return axis.x - forward * axis.y >= 0 ? 1 : -1;
+}
+
+function handSocket(
+  hand: BipedHandSocket,
+  axes: LookAxes,
+  side: EdgeSide | null,
+  profile: boolean,
+): SocketFrame {
+  const axis = stretched(hand.axis, axes, 'along');
   return {
     centre: toCell(hand.centre, axes),
-    axis: stretched(hand.axis, axes, 'along'),
+    axis,
     palmNormal: stretched(hand.palmNormal, axes, 'normal'),
+    leading: sideOf(axis, side ?? restingSide(axis, profile)),
     layer: hand.layer,
     occupied: hand.occupant === 'item',
     grips: hand.occupant !== 'empty',
@@ -134,8 +171,6 @@ function handSocket(hand: BipedHandSocket, axes: LookAxes): SocketFrame {
   };
 }
 
-/** A stowed thing's flat lies against him, to the camera. */
-const STOWED_FACING: Vec3 = { x: 0, y: 0, z: 1 };
 /** The rearmost slab: behind everything he is. */
 export const REARMOST_SOCKET_LAYER: SocketLayer = 0;
 
@@ -148,16 +183,20 @@ function stowedSockets(
   const spec = VIEWS[row.view];
   const axes = playerLookAxes(painting.look, spec.profile);
   const skeleton = buildSkeleton(poseAsDrawn(paintedPose(painting, row, frame), spec), spec);
-  const stowed = (placement: ShownPlacement, overHim: boolean): SocketFrame => ({
-    centre: toCell(stowedCentre(placement, row.view, skeleton), axes),
-    axis: stretched(stowedAxis(placement, row.view), axes, 'along'),
-    palmNormal: STOWED_FACING,
-    layer: overHim ? hands.frontLayer : REARMOST_SOCKET_LAYER,
-    occupied: false,
-    // Edge-on both places are on his far side, in his shadow.
-    shaded: spec.profile,
-    behind: !overHim,
-  });
+  const stowed = (placement: ShownPlacement, overHim: boolean): SocketFrame => {
+    const axis = stretched(stowedAxis(placement, row.view), axes, 'along');
+    return {
+      centre: toCell(stowedCentre(placement, row.view, skeleton), axes),
+      axis,
+      palmNormal: stretched(stowedFlatFacing(placement, row.view), axes, 'normal'),
+      leading: sideOf(axis, restingSide(axis, spec.profile)),
+      layer: overHim ? hands.frontLayer : REARMOST_SOCKET_LAYER,
+      occupied: false,
+      // Edge-on both places are on his far side, in his shadow.
+      shaded: spec.profile,
+      behind: !overHim,
+    };
+  };
   // Seen from behind his back faces the camera, and a thing stowed on it lies
   // over him; from anywhere else it is behind him. His left hip is on the far
   // side edge-on, and hangs clear of him head-on and from behind. A garment
@@ -171,6 +210,58 @@ function stowedSockets(
 }
 
 const framesByCell = new Map<string, HumanSocketFrames>();
+const strikeSideByRow = new Map<string, EdgeSide | null>();
+
+/** The haft's angle on screen on one frame of a row, from the hand its item turns in. */
+function haftAngleAt(source: SocketSource, row: RowSpec, frame: number): number {
+  const spec = VIEWS[row.view];
+  const hands = paintedHandSockets(source.painting, row, frame);
+  const main = drawnSide('right', spec) === 'right' ? hands.right : hands.left;
+  return Math.atan2(main.axis.y, main.axis.x);
+}
+
+/** The shorter turn from `from` to `to`, radians. */
+function turnBetween(from: number, to: number): number {
+  const turn = to - from;
+  return Math.atan2(Math.sin(turn), Math.cos(turn));
+}
+
+/** Tool swings and an armed set's own blows; a bare-handed blow thrown with something in hand does not swing it. */
+const TOOL_SWING_ROWS: ReadonlySet<HumanRowName> = new Set([
+  ...Object.values(CHOP_ROWS),
+  ...Object.values(MINE_ROWS),
+]);
+
+function strikesWithWhatIsHeld(row: RowSpec): boolean {
+  return row.motionSet !== undefined || TOOL_SWING_ROWS.has(row.name);
+}
+
+/**
+ * The side of the haft a blow's business side lies on for the whole row: the
+ * way the haft turns into its first impact. Held for every frame, so the
+ * wind-up carries the edge trailing and the blow lands edge first, with no
+ * roll of the head between frames. Null for a row that strikes nothing.
+ */
+function strikeSideOf(source: SocketSource, row: RowSpec): EdgeSide | null {
+  const key = `${source.id}:${row.name}`;
+  const known = strikeSideByRow.get(key);
+  if (known !== undefined) return known;
+  let side: EdgeSide | null = null;
+  const hasImpact = row.impactFrames.length > 0;
+  if (hasImpact && strikesWithWhatIsHeld(row)) {
+    const impact = row.impactFrames[0];
+    const before = Math.max(0, impact - 1);
+    const after = Math.min(row.frameCount - 1, impact + 1);
+    const into = turnBetween(haftAngleAt(source, row, before), haftAngleAt(source, row, impact));
+    const through =
+      Math.abs(into) > SCREEN_EPSILON
+        ? into
+        : turnBetween(haftAngleAt(source, row, impact), haftAngleAt(source, row, after));
+    side = through >= 0 ? 1 : -1;
+  }
+  strikeSideByRow.set(key, side);
+  return side;
+}
 
 /** Every socket of `source`'s figure on one frame of one row. */
 export function humanSocketsAt(
@@ -189,10 +280,11 @@ export function humanSocketsAt(
   const main = mainDrawn === 'right' ? hands.right : hands.left;
   const off = mainDrawn === 'right' ? hands.left : hands.right;
   const butt = hands.twoHandButt;
+  const strikeSide = strikeSideOf(source, row);
   const found: HumanSocketFrames = {
     sockets: {
-      mainHand: handSocket(main, axes),
-      offHand: handSocket(off, axes),
+      mainHand: handSocket(main, axes, strikeSide, spec.profile),
+      offHand: handSocket(off, axes, strikeSide, spec.profile),
       ...stowedSockets(source.painting, row, frame, hands),
     },
     ...(butt === undefined ? {} : { butt: butt === mainDrawn ? 'mainHand' : 'offHand' }),
@@ -220,6 +312,7 @@ export function mirroredSocket(socket: SocketFrame, flipX: boolean): SocketFrame
     centre: { x: 2 * MIRROR_AXIS_X - socket.centre.x, y: socket.centre.y },
     axis: mirroredDirection(socket.axis),
     palmNormal: mirroredDirection(socket.palmNormal),
+    leading: mirroredDirection(socket.leading),
   };
 }
 

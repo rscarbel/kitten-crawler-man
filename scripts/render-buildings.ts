@@ -43,7 +43,7 @@ import {
   type FootprintFixtureEntry,
 } from './buildinggen/bake.js';
 import { GateResults, gateDoorway } from './buildinggen/gates.js';
-import { getSpriteDoorwayByKey } from '../src/core/SpriteLoader.js';
+import { getSpriteDoorwayByKey } from '../src/core/spriteAssets/SpriteLoader.js';
 import { BUILDING_TILE_SCALE, type BuildingSpec } from '../src/sprites/buildinggen/spec.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';

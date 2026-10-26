@@ -1,4 +1,4 @@
-import type { ItemId } from '../core/ItemDefs';
+import type { ItemId } from '../core/items/defs/ItemDefs';
 import { GoblinBomber, type BomberCloseMove } from './GoblinBomber';
 
 /** The share of a struck crawler's own max HP one goblin stick's blast takes. */

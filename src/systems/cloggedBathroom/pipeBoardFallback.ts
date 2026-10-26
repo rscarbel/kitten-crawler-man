@@ -11,7 +11,7 @@
  * this file with `npm run verify:pipe-board -- --write-fallbacks`.
  */
 
-import type { Difficulty } from '../../core/difficultyProfiles';
+import type { Difficulty } from '../../core/difficulty/difficultyProfiles';
 import type { PipeBoardLayout } from './pipeBoard';
 
 /**

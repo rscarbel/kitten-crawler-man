@@ -185,7 +185,7 @@ export class BathroomGoblin extends Mob {
 
   /**
    * Every route into his health refuses, so every blow lands in
-   * {@link onDamageBlocked} — the one place he reacts — and a sepsis proc or a
+   * {@link onDamageBlocked} — the one place he reacts — and a poison proc or a
    * burn can never tick him away.
    */
   protected override get isDamageImmune(): boolean {

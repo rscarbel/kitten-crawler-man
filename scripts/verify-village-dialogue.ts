@@ -44,8 +44,11 @@ import {
 } from '../src/systems/briarHollow/VillagerSystem';
 import { Conversation } from '../src/dialog/Conversation';
 import { recordingHandle, testConversationFlow, type Runnable } from './dialogFlowTestHelpers';
-import { createBriarHollowState, type VillageQuestState } from '../src/core/briarHollowState';
-import type { VillageQuestPhase } from '../src/core/villageQuestPhase';
+import {
+  createBriarHollowState,
+  type VillageQuestState,
+} from '../src/core/quests/briarHollowState';
+import type { VillageQuestPhase } from '../src/core/quests/villageQuestPhase';
 import { GameMap } from '../src/map/GameMap';
 import { TILE_SIZE } from '../src/core/constants';
 

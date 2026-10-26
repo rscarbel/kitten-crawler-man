@@ -3,7 +3,7 @@ import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
 import { drawMoldLionSprite } from '../sprites/moldLionSprite';
-import { makePoison } from '../core/StatusEffect';
+import { makePoison } from '../core/combat/StatusEffect';
 import { riposteCooldown } from './tactics/riposte';
 import type { TacticsTrait } from './tactics/tacticsTraits';
 

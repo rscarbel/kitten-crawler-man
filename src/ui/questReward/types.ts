@@ -5,8 +5,8 @@
  * holds the screen.
  */
 
-import type { GrantedReward } from '../../core/GrantedReward';
-import type { ItemId } from '../../core/ItemDefs';
+import type { GrantedReward } from '../../core/items/loot/GrantedReward';
+import type { ItemId } from '../../core/items/defs/ItemDefs';
 
 /** Paints an icon into the largest square centred in `rect`. */
 export type IconPainter = GrantedReward['renderIcon'];
@@ -21,7 +21,7 @@ export interface RewardItemLine extends Pick<GrantedReward, 'name' | 'renderIcon
   /**
    * The bag item this line stands for, so the scene can fly it to the bag once
    * the screen is dismissed. Absent for a reward that never enters a bag (a
-   * loot box goes to the achievements stack).
+   * reward chest, which the reward screen presents itself).
    */
   readonly itemId?: ItemId;
 }

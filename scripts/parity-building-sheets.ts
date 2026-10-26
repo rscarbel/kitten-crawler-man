@@ -22,7 +22,11 @@ import {
   paintEnvironmentArtNow,
   flushEnvironmentArtCache,
 } from '../src/map/environmentArtCache.js';
-import { getManifestKeys, getManifestEntry, getSpriteDefByKey } from '../src/core/SpriteLoader.js';
+import {
+  getManifestKeys,
+  getManifestEntry,
+  getSpriteDefByKey,
+} from '../src/core/spriteAssets/SpriteLoader.js';
 import {
   buildingLifeKeyOf,
   requestBuildingSheets,

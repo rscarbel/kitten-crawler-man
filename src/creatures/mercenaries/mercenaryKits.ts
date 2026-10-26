@@ -1,4 +1,4 @@
-import type { MercenaryKitId, MercenaryTemplate } from '../../core/mercenaryTemplates';
+import type { MercenaryKitId, MercenaryTemplate } from '../../core/party/mercenaryTemplates';
 import type { MercenaryKit } from './MercenaryKit';
 import { BrawlerKit } from './brawlerKit';
 import { CretinGuardKit } from './cretinGuardKit';

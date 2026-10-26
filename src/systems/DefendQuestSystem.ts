@@ -6,7 +6,7 @@
  *   complete_pending → complete | failed
  */
 
-import { awardPartyXp, type CrawlerPair, type PartyXpApplied } from '../core/awardXp';
+import { awardPartyXp, type CrawlerPair, type PartyXpApplied } from '../core/progression/awardXp';
 import { TILE_SIZE } from '../core/constants';
 import type { MusicClaims } from '../audio/AudioScope';
 import { randomInt, pixelToTile } from '../utils';
@@ -24,11 +24,11 @@ import type { Player } from '../Player';
 import { Bugaboo } from '../creatures/Bugaboo';
 import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
 import { prewarmBugaboo } from '../sprites/bugabooSprite';
-import { applySpawnDifficulty } from '../core/difficultyProfiles';
+import { applySpawnDifficulty } from '../core/difficulty/difficultyProfiles';
 import { QuestNPC } from '../creatures/QuestNPC';
 import type { NPCMarkerType } from '../creatures/QuestNPC';
-import { QuestManager } from '../core/QuestManager';
-import type { QuestStatus } from '../core/QuestManager';
+import { QuestManager } from '../core/quests/QuestManager';
+import type { QuestId, QuestStatus } from '../core/quests/QuestManager';
 import { secondsLabel, type TrackerEntry } from './questTracker';
 import { drawChildSprite } from '../sprites/questNPCSprite';
 import {
@@ -53,9 +53,9 @@ import { stackedBandEntry, type BandRow } from '../ui/hud/topBandStack';
 import { lineHeightOf, text } from '../ui/widgets/text';
 import { fillRounded, strokeRounded } from '../ui/widgets/paint';
 import type { Theme } from '../ui/theme/tokens';
-import { drawLootBoxRewardIcon } from '../ui/icons/rewardIcons';
+import { drawRewardChestIcon } from '../ui/icons/rewardIcons';
 import type { QuestRewardSpec } from '../ui/questReward/types';
-import type { BoxTier } from '../core/AchievementManager';
+import { ACHIEVEMENT_DEFS } from '../core/progression/AchievementManager';
 import { partyXpSections } from '../ui/questReward/rewardLines';
 import { drawAreaHighlightFrame, drawAreaHighlightGround } from '../ui/AreaHighlight';
 import type { AreaHighlightMood } from '../ui/AreaHighlight';
@@ -63,7 +63,7 @@ import { worldBar, worldPlate } from '../ui/world/worldShapes';
 import { worldPalette } from '../ui/theme/worldInk';
 import type { Surface, UiAudio } from '../ui/core/UiRoot';
 import type { Rect } from '../ui/core/geom';
-import { keybindings } from '../core/Keybindings';
+import { keybindings } from '../core/input/Keybindings';
 import { drawResourceIcon } from '../ui/icons/resourceIcons';
 import { drawBouncingArrowAboveEntity } from '../ui/WorldArrow';
 import { NurseryEffects } from './nurseryEffects';
@@ -82,9 +82,9 @@ import {
 } from '../sprites/art/humanFigure';
 import { type HumanRowView } from '../sprites/humanSprite';
 
-export const DEFEND_QUEST_ID = 'defend_goblin_mother';
-/** The loot box the rescue earns; the scene grants it onto the achievement stack. */
-export const DEFEND_LOOT_BOX_TIER: BoxTier = 'Silver';
+export const DEFEND_QUEST_ID = 'defend_goblin_mother' as const satisfies QuestId;
+/** The rarity of the reward chest each crawler earns for the rescue, which the scene pays. */
+const DEFEND_CHEST_RARITY = ACHIEVEMENT_DEFS.quest_defend_npc.reward.rarity;
 
 const APPROACH_SECONDS = 25;
 const DEFENSE_SECONDS = 60;
@@ -456,10 +456,6 @@ export class DefendQuestSystem implements GameSystem {
       type: 'mini',
       rewards: {
         xp: 500,
-        lootBoxItems: [
-          { id: 'scroll_of_confusing_fog', minQty: 3, maxQty: 10 },
-          { id: 'health_potion', minQty: 2, maxQty: 5 },
-        ],
         coins: 50,
       },
     });
@@ -1442,8 +1438,8 @@ export class DefendQuestSystem implements GameSystem {
     const coins = def.rewards.coins ?? 0;
     active.earnCoins(coins);
 
-    // The scene's `questCompleted` handler grants the loot box: the
-    // achievement stack it goes onto is the scene's.
+    // The scene's `questCompleted` handler pays the reward chests: the
+    // achievements that pay them are the scene's.
     this.bus.emit('questCompleted', { questId: DEFEND_QUEST_ID });
     this.bus.emit('questRewardShown', this.rewardSpec(def.name, xpApplied, coins));
   }
@@ -1466,10 +1462,10 @@ export class DefendQuestSystem implements GameSystem {
           kind: 'items',
           items: [
             {
-              name: `${DEFEND_LOOT_BOX_TIER} Loot Box`,
+              name: `${DEFEND_CHEST_RARITY} reward chest`,
               count: 1,
-              renderIcon: (ctx, rect) => drawLootBoxRewardIcon(ctx, rect, DEFEND_LOOT_BOX_TIER),
-              note: 'Open it in a Safe Room.',
+              renderIcon: (ctx, rect) => drawRewardChestIcon(ctx, rect, DEFEND_CHEST_RARITY),
+              note: 'One for each crawler.',
             },
           ],
         },

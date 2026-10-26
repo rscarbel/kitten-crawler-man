@@ -57,11 +57,13 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import type { Surface } from '../src/ui/core/UiRoot.js';
 import type { FocusClaimant } from './menuFocusAudit.js';
-import type { UiSize } from '../src/core/Settings.js';
+import type { UiSize } from '../src/core/input/Settings.js';
 import type { SafeAreaInsets, ViewportInput } from '../src/ui/core/viewport.js';
 import type { MenusKit } from '../src/systems/kits/MenusKit.js';
 import type { AIShowStage } from '../src/ai/show/AIShowStage.js';
 import type { AIChallengeSystem } from '../src/systems/AIChallengeSystem.js';
+import type { AchievementUISystem } from '../src/systems/AchievementUISystem.js';
+import type { AchievementManager } from '../src/core/progression/AchievementManager.js';
 import { SPIDER_QUEST_NAME } from '../src/systems/SpiderQuestSystem';
 
 export {};
@@ -194,9 +196,9 @@ const { motion } = await import('../src/ui/theme/tokens.js');
 const { auditFocus, claimsKeyboard, mountedSurfaces, neverClaimsKeyboard } =
   await import('./menuFocusAudit.js');
 const { gameContext } = await import('./nodeGameContext.js');
-const { loadSprites } = await import('../src/core/SpriteLoader.js');
-const { setViewportSize } = await import('../src/core/Viewport.js');
-const { settings } = await import('../src/core/Settings.js');
+const { loadSprites } = await import('../src/core/spriteAssets/SpriteLoader.js');
+const { setViewportSize } = await import('../src/core/rendering/Viewport.js');
+const { settings } = await import('../src/core/input/Settings.js');
 const { UiRoot } = await import('../src/ui/core/UiRoot.js');
 const { NO_INSETS } = await import('../src/ui/core/viewport.js');
 const { MOUSE_POINTER_ID, PRIMARY_BUTTON } = await import('../src/ui/core/pointer.js');
@@ -1060,7 +1062,7 @@ function auditScene<S extends SceneUnderAudit>(
 
 const { TILE_SIZE } = await import('../src/core/constants.js');
 const { SceneManager } = await import('../src/core/Scene.js');
-const { InputManager } = await import('../src/core/InputManager.js');
+const { InputManager } = await import('../src/core/input/InputManager.js');
 const { GameMap } = await import('../src/map/GameMap.js');
 const { level3 } = await import('../src/levels/level3.js');
 const { DungeonScene } = await import('../src/scenes/DungeonScene.js');
@@ -1215,6 +1217,28 @@ function menusKitOpeners<S>(menusOf: (scene: S) => MenusKit): Opener<S>[] {
   ];
 }
 
+/** The Reward Chest, opened by a paid award waiting in the human's queue. */
+function rewardChestOpener<S>(
+  achievementUIOf: (scene: S) => AchievementUISystem,
+  achievementsOf: (scene: S) => AchievementManager,
+): Opener<S> {
+  return opener<S>(
+    'reward-chest',
+    (scene) => {
+      achievementsOf(scene).queuePresentation({
+        origin: { kind: 'chest', source: 'audience' },
+        title: 'Audit',
+        subtitle: '',
+        crawler: 'human',
+        rarity: 'Common',
+        rewards: [{ kind: 'coins', amount: 1 }],
+      });
+      achievementUIOf(scene).openRewards();
+    },
+    (scene) => achievementUIOf(scene).dismiss(),
+  );
+}
+
 /** The show AI's question and sponsor break, and, where the scene runs challenges, its offer card. */
 function aiShowOpeners<S>(
   stageOf: (scene: S) => AIShowStage,
@@ -1250,7 +1274,7 @@ function aiShowOpeners<S>(
           count: 1,
           mobType: 'any',
           seconds: SAMPLE_CHALLENGE_SECONDS,
-          rewardTier: 'Bronze',
+          rewardRarity: 'Common',
           pitch: '',
           taunt: 'Audited.',
           offeredBy: 'System',
@@ -1281,6 +1305,10 @@ function townOpeners(): Opener<Town>[] {
   };
   return [
     ...menusKitOpeners<Town>((scene) => scene['menus']),
+    rewardChestOpener<Town>(
+      (scene) => scene['achievementUI'],
+      (scene) => scene['humanAchievements'],
+    ),
     ...aiShowOpeners<Town>(
       (scene) => scene['aiShow'],
       (scene) => scene['aiChallenges'],
@@ -1652,8 +1680,8 @@ const { WHEEL_MIN_BET, boardForBet } = await import('../src/systems/casino/wheel
 const { ClubSlotsSystem, SLOTS_SURFACE_ID, SLOTS_RULES_SURFACE_ID } =
   await import('../src/systems/ClubSlotsSystem.js');
 const { playUntilBust, playUntilGameOver } = await import('../src/dev/uiGallery/dialogs/poker.js');
-const { snapPlayer } = await import('../src/core/PlayerSnapshot.js');
-const { teachBoth } = await import('../src/core/CraftSkills.js');
+const { snapPlayer } = await import('../src/core/save/PlayerSnapshot.js');
+const { teachBoth } = await import('../src/core/labour/CraftSkills.js');
 const { createShopStock } = await import('../src/economy/shopStock.js');
 const { BuildingInteriorScene } = await import('../src/scenes/BuildingInteriorScene.js');
 const { indoorsConstructionSource } =
@@ -1713,6 +1741,10 @@ function roomOpeners(): Opener<Interior>[] {
   const menu = opener<Interior>;
   return [
     ...menusKitOpeners<Interior>((scene) => scene['menus']),
+    rewardChestOpener<Interior>(
+      (scene) => scene['achievementUI'],
+      (scene) => scene['humanAchievements'],
+    ),
     ...aiShowOpeners<Interior>((scene) => scene['aiShow'], null),
     menu(
       'conversation',
@@ -1961,7 +1993,7 @@ function interiorCases(): InteriorCase[] {
           'wheel-prize',
           (scene) => {
             const board = boardForBet(WHEEL_MIN_BET);
-            const index = board.findIndex((wedge) => wedge.prizeId === 'platinum_box_frost');
+            const index = board.findIndex((wedge) => wedge.prizeId === 'epic_charm_frost');
             wheelOf(scene).presentPrizeForReview(casinoSeat(scene), index);
           },
           closeWheel,
