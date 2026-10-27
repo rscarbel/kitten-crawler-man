@@ -15,6 +15,7 @@ import type { BriarHollowState } from '../../core/quests/briarHollowState';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { GameMap } from '../../map/GameMap';
+import type { BuildingName } from '../../map/buildingEntry';
 import { releaseContractArt } from '../../sprites/art/constructionContracts/contractArtCache';
 import { interiorRoomOwnedByStory, type InteriorStoryState } from '../interiorStoryOwnership';
 import type { WorkChannelBuilder } from '../WorkChannel';
@@ -61,7 +62,7 @@ export class ContractInteriorSite {
   } | null = null;
   private protectedFor: { revision: number; ids: ReadonlySet<string> } | null = null;
 
-  private constructor(buildingName: string, deps: ContractInteriorSiteDeps) {
+  private constructor(buildingName: BuildingName, deps: ContractInteriorSiteDeps) {
     const gameMap = deps.gameMap;
     this.work = new ContractSiteWork({
       state: deps.state,
@@ -87,7 +88,7 @@ export class ContractInteriorSite {
    * the room is free again.
    */
   static forBuilding(
-    buildingName: string,
+    buildingName: BuildingName,
     floor: number,
     deps: ContractInteriorSiteDeps,
   ): ContractInteriorSite | null {

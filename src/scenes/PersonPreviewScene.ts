@@ -24,7 +24,7 @@ import { worldText } from '../ui/world/worldText';
 import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { Townsperson } from '../creatures/Townsperson';
 import { prewarmTownspersonBody } from '../creatures/townspersonBody';
-import { TOWN_SPECIES } from '../systems/townSpecies';
+import { CROWD_SPECIES } from '../systems/townSpecies';
 import {
   generatePersonAppearance,
   type PersonAppearance,
@@ -254,7 +254,7 @@ export class PersonPreviewScene extends PreviewScene {
           x: start.x,
           y: start.y,
           role: ARCHETYPE_ROLES[i % ARCHETYPE_ROLES.length],
-          species: TOWN_SPECIES[i % TOWN_SPECIES.length],
+          species: CROWD_SPECIES[i % CROWD_SPECIES.length],
           seed: CROWD_SEED_BASE + i * CROWD_SEED_STRIDE,
           speed: CROWD_SPEED_MIN + Math.random() * (CROWD_SPEED_MAX - CROWD_SPEED_MIN),
           wander: {

@@ -28,12 +28,14 @@ import type { TilePoint, TileRect } from '../town/townPlan';
 export const CIRCUS_RADIUS_TILES = 14;
 
 /**
- * Tiles past the grounds' rim kept clear of forest. The wagons and booths
- * stand out to half a tile past the rim, and a tree's canopy climbs two
- * tiles up the screen from its trunk, so a forest any closer would bury the
- * south rim's booths in leaves and fence one-tile pockets behind them.
+ * Tiles past the grounds' rim kept clear of forest, boulders and cliff
+ * ledges. The wagons and booths stand out to half a tile past the rim and are
+ * walked round and played from the tiles beside them, and a tree's canopy
+ * climbs two tiles up the screen from its trunk, so anything blocking any
+ * closer would bury the south rim's booths in leaves or fence one-tile
+ * pockets beside them.
  */
-export const CIRCUS_FOREST_CLEARANCE_TILES = 3;
+export const CIRCUS_TERRAIN_CLEARANCE_TILES = 3;
 
 /**
  * The tent's building name: the overworld registers its door under it, and the

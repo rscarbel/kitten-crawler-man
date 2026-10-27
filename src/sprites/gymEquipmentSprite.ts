@@ -1022,6 +1022,11 @@ export function drawBenchPressInventoryIcon(ctx: CanvasRenderingContext2D, rect:
 
 // Treadmill
 
+/** The screen y of the top of a floor-standing treadmill's console, which stands above its tile whose top is at `sy`. */
+export function treadmillFloorArtTop(sy: number, s: number): number {
+  return sy + s * (TREADMILL.groundYFrac + TREADMILL.consoleTopY);
+}
+
 export function drawTreadmillFloor(
   ctx: CanvasRenderingContext2D,
   sx: number,

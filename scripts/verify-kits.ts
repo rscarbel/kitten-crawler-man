@@ -91,12 +91,11 @@ const MILITIA_LEVEL = 1;
 const HALF_TILE = TILE_SIZE / 2;
 
 /**
- * The building whose generated interior these checks run in. The store is the
+ * The kind of unnamed room these checks generate. The store is the
  * kind that lays down barrels, and barrels are what the destruction checks need
  * the generator to have actually produced.
  */
 const INTERIOR_KIND = 'store';
-const INTERIOR_NAME = 'verify-kits store';
 /** Interiors hang off the overworld, which is the floor their drops are rolled against. */
 const OVERWORLD_FLOOR_NUMBER = 3;
 /** The storey a single-room building has, and the one a tower is entered on. */
@@ -212,7 +211,7 @@ class ProbeMob extends Mob {
 /** A generated store interior, at the tile size the rest of the game measures in. */
 function makeInterior(): GameMap {
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  map.generateInterior(INTERIOR_KIND, GROUND_FLOOR, INTERIOR_NAME);
+  map.generateInterior(INTERIOR_KIND, GROUND_FLOOR, null);
   return map;
 }
 
@@ -725,7 +724,7 @@ console.log('\nRoom to move is measured on both axes');
   // alone calls every column past 15 out of bounds, which walls off the eastern
   // strip — where the stair up and the counters are — to the flood fill.
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  map.generateInterior('tower', FIRST_GUARDED_TOWER_FLOOR, TOWER_NAME);
+  map.generateInterior('tower', FIRST_GUARDED_TOWER_FLOOR, null);
   const rows = map.structure.length;
   const columns = map.structure[0].length;
   check(columns > rows, `the storey is wider than it is tall (${columns}x${rows})`);
@@ -745,7 +744,7 @@ console.log('\nA room with hostiles in it is content, not wiring');
   // quarters, and a gate that measures one floor would ship the other broken.
   for (const floor of GUARDED_TOWER_FLOORS) {
     const towerFloor = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-    towerFloor.generateInterior('tower', floor, TOWER_NAME);
+    towerFloor.generateInterior('tower', floor, null);
     const base: InteriorHostileContext = {
       buildingName: TOWER_NAME,
       buildingType: 'tower',
@@ -846,7 +845,7 @@ console.log('\nA room with hostiles in it is content, not wiring');
 
   // One storey's clearing is its own; the roster and the memory are per room.
   const cleared = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  cleared.generateInterior('tower', FIRST_GUARDED_TOWER_FLOOR, TOWER_NAME);
+  cleared.generateInterior('tower', FIRST_GUARDED_TOWER_FLOOR, null);
   const clearedContext: InteriorHostileContext = {
     buildingName: TOWER_NAME,
     buildingType: 'tower',
@@ -905,7 +904,7 @@ console.log('\nA room with hostiles in it is content, not wiring');
 console.log('\nBriarHollowKit is inert until gameMap.briarHollow exists');
 {
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  map.generateInterior(INTERIOR_KIND, GROUND_FLOOR, INTERIOR_NAME);
+  map.generateInterior(INTERIOR_KIND, GROUND_FLOOR, null);
   const stage = makeStage(map, PARKED_TILE, PARKED_TILE);
   const menus = new MenusKit({ world: stage.world, abilityManager: new AbilityManager() });
   const partyCrafts = createPartyCraftsState();

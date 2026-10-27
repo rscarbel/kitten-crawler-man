@@ -107,6 +107,13 @@ import {
   type AboveDarknessDrawer,
   type ChromePart,
 } from './systems/lighting/aboveDarkness';
+import {
+  beginOverheadMeasure,
+  endOverheadMeasure,
+  reportOverheadTop,
+} from './ui/world/overheadStack';
+import { HUMANOID_NPC_SCALE } from './sprites/humanoidScale';
+import type { PromptFigure } from './ui/InteractionPrompt';
 
 const NO_SILHOUETTE_LAYERS: readonly SilhouetteLayer[] = [];
 
@@ -511,7 +518,12 @@ const KO_FONT_REVIVING_FRACTION = 0.28;
 const KO_FONT_KO_FRACTION = 0.38;
 const KO_LABEL_Y_PADDING = 2;
 
-export abstract class Player implements AboveDarknessDrawer {
+/** Draws a character keeps measuring its overhead stack for after the last ask. */
+const OVERHEAD_MEASURE_HOLD_FRAMES = 30;
+/** How far above its tile a humanoid figure stands, for art that reports no ink of its own. */
+const HUMANOID_STAND_IN_RISE_TILES = HUMANOID_NPC_SCALE - 1;
+
+export abstract class Player implements AboveDarknessDrawer, PromptFigure {
   x: number;
   y: number;
   isActive = false;
@@ -2286,6 +2298,8 @@ export abstract class Player implements AboveDarknessDrawer {
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     const sx = this.x - camX;
     const sy = this.y - camY;
+    const measureOverhead = this.overheadMeasureFramesLeft > 0;
+    if (measureOverhead) this.overheadMeasureFramesLeft--;
 
     // Behind everything drawn below: a status that wants to sit under the body
     // (Speed Fizz's trail and afterimages) has to land before the sprite is
@@ -2309,7 +2323,7 @@ export abstract class Player implements AboveDarknessDrawer {
       ctx.globalAlpha *= VANISHED_FIGURE_ALPHA;
     }
     if (layers.length === 0) {
-      this.drawSelf(ctx, camX, camY, tileSize);
+      this.drawSelfMeasured(ctx, camX, camY, tileSize, sy, measureOverhead);
     } else {
       const margin = this.silhouetteMarginTiles * tileSize;
       const bounds = {
@@ -2318,8 +2332,10 @@ export abstract class Player implements AboveDarknessDrawer {
         width: tileSize + margin * 2,
         height: tileSize + margin * 2,
       };
+      // The scratch a composite paints into is shifted so the entity's own
+      // screen maths lands inside it, so a top measured there is in `sy`'s space.
       drawWithSilhouetteLayers(ctx, bounds, layers, (target) =>
-        this.drawSelf(target, camX, camY, tileSize),
+        this.drawSelfMeasured(target, camX, camY, tileSize, sy, measureOverhead),
       );
     }
     if (vanished) ctx.restore();
@@ -2332,6 +2348,86 @@ export abstract class Player implements AboveDarknessDrawer {
     // Over the dungeon's darkness too: a burning or poisoned body is something
     // the player has to read wherever it stands.
     if (!deferChrome(this, 'worldFeedback', sx, sy)) this.drawWorldFeedback(ctx, sx, sy);
+  }
+
+  /**
+   * How far above its tile's top this character's last measured draw reached,
+   * in world pixels: its art, marker or health bar, whichever stood highest.
+   */
+  private overheadReachAboveTilePx = 0;
+
+  /**
+   * Draws left to measure, refilled by every ask of {@link overheadTop}, so
+   * only a character that something is stacked over pays to measure, and one
+   * asked on alternate frames never falls back to the stand-in between asks.
+   */
+  private overheadMeasureFramesLeft = 0;
+
+  /**
+   * Whether any draw has been measured. Once one has, its answer stands
+   * through a lapse in the asking rather than reverting to the stand-in.
+   */
+  private overheadMeasured = false;
+
+  /** How far above its tile the art of the last measured draw reached; null until one reported art. */
+  private measuredArtReachPx: number | null = null;
+
+  private drawSelfMeasured(
+    target: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    tileSize: number,
+    sy: number,
+    measure: boolean,
+  ): void {
+    if (!measure) {
+      this.drawSelf(target, camX, camY, tileSize);
+      return;
+    }
+    let artTop: number | null;
+    let stackTop: number | null;
+    beginOverheadMeasure(target, 'all');
+    beginOverheadMeasure(target, 'art');
+    try {
+      this.drawSelf(target, camX, camY, tileSize);
+    } finally {
+      artTop = endOverheadMeasure();
+      stackTop = endOverheadMeasure();
+    }
+    if (artTop !== null) this.measuredArtReachPx = sy - artTop;
+    const figureTop = artTop ?? this.unmeasuredArtTop(sy);
+    this.overheadReachAboveTilePx = sy - Math.min(figureTop, stackTop ?? figureTop);
+    this.overheadMeasured = true;
+  }
+
+  /**
+   * The top of this character's art as its draws left it on record, for a
+   * tile whose top is at screen `sy`, or null with no record yet. By default
+   * the art reach of the last measured draw; a character that tracks the row
+   * it drew can answer from that instead.
+   */
+  protected rememberedArtTop(sy: number): number | null {
+    return this.measuredArtReachPx === null ? null : sy - this.measuredArtReachPx;
+  }
+
+  /**
+   * The art's top for a draw that reported no ink of its own, or before one
+   * was measured: what the character remembers, else a humanoid figure's height.
+   */
+  private unmeasuredArtTop(sy: number): number {
+    return this.rememberedArtTop(sy) ?? sy - this.tileSize * HUMANOID_STAND_IN_RISE_TILES;
+  }
+
+  /**
+   * The top of everything this character's last measured draw stacked over
+   * its head, for a tile whose top is at screen `sy`. Asking is what turns
+   * measuring on, so the first answer for a character is the stand-in from
+   * {@link rememberedArtTop}.
+   */
+  overheadTop(_ctx: CanvasRenderingContext2D, sy: number): number {
+    this.overheadMeasureFramesLeft = OVERHEAD_MEASURE_HOLD_FRAMES;
+    if (!this.overheadMeasured) return this.unmeasuredArtTop(sy);
+    return sy - this.overheadReachAboveTilePx;
   }
 
   /**
@@ -2550,6 +2646,7 @@ export abstract class Player implements AboveDarknessDrawer {
 
   protected renderHealthBar(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
     if (this.paintingBodyOnly) return;
+    reportOverheadTop(ctx, sx, sy - HP_BAR_Y_OFFSET);
     if (deferChrome(this, 'healthBar', sx, sy)) return;
     const barW = this.tileSize;
     const barH = HP_BAR_HEIGHT;
@@ -2743,8 +2840,12 @@ export abstract class Player implements AboveDarknessDrawer {
   /** Draws an unconscious overlay when this player is in the knocked-out state. */
   protected renderKnockedOutOverlay(ctx: CanvasRenderingContext2D, sx: number, sy: number): void {
     if (!this.isKnockedOut) return;
-    if (deferChrome(this, 'knockedOut', sx, sy)) return;
     const s = this.tileSize;
+    const isReviving = this.reviveProgress > 0;
+    const fontSize = Math.round(s * (isReviving ? KO_FONT_REVIVING_FRACTION : KO_FONT_KO_FRACTION));
+    const labelTop = sy - fontSize - KO_LABEL_Y_PADDING;
+    reportOverheadTop(ctx, sx, labelTop);
+    if (deferChrome(this, 'knockedOut', sx, sy)) return;
     const cx = sx + s / 2;
     const t = Date.now();
     const pulse = HALF + HALF * Math.sin(t * KO_PULSE_SPEED);
@@ -2757,7 +2858,6 @@ export abstract class Player implements AboveDarknessDrawer {
 
     ctx.save();
 
-    // Pulsing red ring
     ctx.globalAlpha = KO_RING_ALPHA_BASE + KO_RING_ALPHA_RANGE * pulse;
     ctx.strokeStyle = '#ef4444';
     ctx.lineWidth = KO_RING_LINE_WIDTH;
@@ -2771,13 +2871,11 @@ export abstract class Player implements AboveDarknessDrawer {
     );
     ctx.stroke();
 
-    const isReviving = this.reviveProgress > 0;
     const label = isReviving ? 'Reviving' : 'KO';
-    const fontSize = Math.round(s * (isReviving ? KO_FONT_REVIVING_FRACTION : KO_FONT_KO_FRACTION));
     worldText(ctx, label, {
       style: isReviving ? 'heading' : 'danger',
       x: cx,
-      y: sy - fontSize - KO_LABEL_Y_PADDING,
+      y: labelTop,
       align: 'center',
       size: fontSize,
       outline: true,

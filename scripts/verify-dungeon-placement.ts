@@ -269,7 +269,7 @@ function checkMap(data: DungeonData, levelDef: LevelDef, totals: SweepTotals | n
     ),
   ];
   protectedTiles.push(
-    ...data.buildingEntries.map((entry) => entry.doorTile),
+    ...data.arenaExteriors.map((arena) => arena.doorTile),
     ...data.arenaExteriors.map((arena) => arena.stairwellTile),
   );
   for (let y = 0; y < grid.length; y++) {

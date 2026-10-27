@@ -1,5 +1,7 @@
+import { TILE_SIZE } from '../core/constants';
+import type { Requirement } from './RequirementRow';
 import { skinsFor } from './theme/skins';
-import { resolveTheme, type Theme } from './theme/tokens';
+import type { Theme } from './theme/tokens';
 
 /** Period of the prompt's bob, in ms per radian. */
 export const PROMPT_BOB_PERIOD_MS = 400;
@@ -8,29 +10,54 @@ export const PROMPT_BOB_AMPLITUDE = 2;
 /** Gap between the prompted object's top edge and the bottom of the pill, in UI units. */
 export const PROMPT_LIFT = 12;
 
-/** Before the first prompt frame there is no live theme; the pill's geometry is the same at either density. */
-const DEFAULT_THEME = resolveTheme('pointer');
-const DEFAULT_UI_SCALE = 1;
-
 /** The pill's height: a keycap with its pressed-edge depth, padded on both sides. */
 export function promptPillHeight(theme: Theme): number {
   const keycap = skinsFor(theme).keycap;
   return keycap.height + keycap.depth + theme.space.xs * 2;
 }
 
-/** A prompt waiting to be drawn, anchored at the top-centre of its object in canvas pixels. */
+/** A prompt waiting to be drawn, anchored at the top-centre of its object's art in canvas pixels. */
 export interface QueuedPrompt {
   readonly canvasX: number;
   readonly canvasY: number;
+  /** The canvas y of the bottom of the object the prompt names; nothing may move the pill onto it. */
+  readonly canvasBottom: number;
   readonly label: string | null;
   readonly keyOverride: string | null;
+  /** What the press costs, shown over the pill wherever the pill ends up; null for a free press. */
+  readonly requirements: readonly Requirement[] | null;
+}
+
+/**
+ * Something drawn taller than its tile that a prompt can float over — a
+ * character, a citizen, a villager. Its tile is `TILE_SIZE` square with its
+ * top-left at (`x`, `y`) in world pixels.
+ */
+export interface PromptFigure {
+  readonly x: number;
+  readonly y: number;
+  /**
+   * The screen y that anything hung over this figure must stay above, for a
+   * figure whose tile top is at screen `sy`: the top of its art, or of
+   * whatever it already wears over its head.
+   */
+  overheadTop(ctx: CanvasRenderingContext2D, sy: number): number;
+}
+
+/** A box in canvas pixels that no prompt may be drawn across. */
+export interface PromptKeepClear {
+  readonly canvasLeft: number;
+  readonly canvasRight: number;
+  readonly canvasTop: number;
+  readonly canvasBottom: number;
 }
 
 const queue: QueuedPrompt[] = [];
+const keepClear: PromptKeepClear[] = [];
+/** Every box ever handed out, reused frame to frame so keeping clear allocates nothing. */
+const keepClearPool: Array<{ -readonly [K in keyof PromptKeepClear]: PromptKeepClear[K] }> = [];
 let promptsSuppressed = false;
 let promptsDrawnThisFrame = 0;
-let lastUiScale = DEFAULT_UI_SCALE;
-let lastTheme = DEFAULT_THEME;
 
 /**
  * Silences every floating prompt for the frame.
@@ -50,6 +77,51 @@ export function setInteractionPromptsSuppressed(suppressed: boolean): void {
   promptsSuppressed = suppressed;
   promptsDrawnThisFrame = 0;
   queue.length = 0;
+  keepClear.length = 0;
+}
+
+/**
+ * Keeps every prompt this frame off a crawler: a tile-wide box from `top`,
+ * the highest thing over their head, down to `bottom`, their tile's foot. A
+ * prompt hangs over the thing it names, and the crawler the player is
+ * steering is always standing right beside that thing, with the companion
+ * often close behind, so a prompt over anything shorter than them would
+ * otherwise sit across a head. A prompt that would overlap one is raised
+ * clear of it instead.
+ *
+ * Call it for each crawler once per frame after
+ * {@link setInteractionPromptsSuppressed}, with `ctx` in the same space the
+ * world is drawn in.
+ */
+export function keepInteractionPromptsClearOf(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  top: number,
+  bottom: number,
+): void {
+  const m = ctx.getTransform();
+  const leftX = m.a * sx + m.c * top + m.e;
+  const rightX = m.a * (sx + TILE_SIZE) + m.c * top + m.e;
+  const topY = m.b * sx + m.d * top + m.f;
+  const bottomY = m.b * sx + m.d * bottom + m.f;
+  const index = keepClear.length;
+  const box = keepClearPool[index] ?? {
+    canvasLeft: 0,
+    canvasRight: 0,
+    canvasTop: 0,
+    canvasBottom: 0,
+  };
+  keepClearPool[index] = box;
+  box.canvasLeft = Math.min(leftX, rightX);
+  box.canvasRight = Math.max(leftX, rightX);
+  box.canvasTop = Math.min(topY, bottomY);
+  box.canvasBottom = Math.max(topY, bottomY);
+  keepClear.push(box);
+}
+
+/** The boxes set by {@link keepInteractionPromptsClearOf} this frame. */
+export function promptKeepClear(): readonly PromptKeepClear[] {
+  return keepClear;
 }
 
 /**
@@ -76,13 +148,20 @@ export function interactionPromptsSuppressed(): boolean {
 }
 
 /**
- * The highest pixel a prompt anchored at `sy` reaches, bob included, for
- * world art stacked above it. The pill is sized in UI units, so the reach is
- * converted with the UI scale of the last frame that drew prompts.
+ * Raises a floating interaction prompt over a figure that stands taller than
+ * its tile, clear of the top of its art rather than of its tile.
  */
-export function interactionPromptTop(sy: number): number {
-  const reachUnits = PROMPT_LIFT + promptPillHeight(lastTheme) + PROMPT_BOB_AMPLITUDE;
-  return sy - reachUnits * lastUiScale;
+export function drawInteractionPromptOver(
+  ctx: CanvasRenderingContext2D,
+  figure: PromptFigure,
+  camX: number,
+  camY: number,
+  label?: string,
+  keyOverride?: string,
+): void {
+  const sy = figure.y - camY;
+  const artTop = figure.overheadTop(ctx, sy);
+  queuePrompt(ctx, figure.x - camX, artTop, TILE_SIZE, sy + TILE_SIZE, label, keyOverride, null);
 }
 
 /**
@@ -97,30 +176,69 @@ export function interactionPromptTop(sy: number): number {
  *
  * Does nothing while {@link setInteractionPromptsSuppressed} is set for the frame.
  *
+ * A figure goes through {@link drawInteractionPromptOver} instead, which
+ * knows how tall it is drawn.
+ *
  * @param ctx      Canvas context the object is being drawn with
- * @param sx       X of the object's top-left corner in `ctx`'s current space
- * @param sy       Y of the object's top-left corner in `ctx`'s current space
+ * @param sx       X of the object's left edge in `ctx`'s current space
+ * @param artTop   Y of the highest pixel the object draws, in `ctx`'s current
+ *                 space — its tile's top only when it is drawn no taller than its tile
  * @param objW     Width of the object in that space (the prompt is centred above it)
+ * @param objBottom  Y of the bottom of the object's footprint in that space: the
+ *                 pill is never moved down onto anything between it and `artTop`
  * @param label    Optional action label shown beside the key, e.g. "Talk"
  * @param keyOverride  Optional key text override (default: the attack key, or "TAP" on touch)
  */
 export function drawInteractionPrompt(
   ctx: CanvasRenderingContext2D,
   sx: number,
-  sy: number,
+  artTop: number,
   objW: number,
+  objBottom: number,
   label?: string,
   keyOverride?: string,
+): void {
+  queuePrompt(ctx, sx, artTop, objW, objBottom, label, keyOverride, null);
+}
+
+/**
+ * {@link drawInteractionPrompt} for a press that costs something: the
+ * prompt surface sets `requirements` as a checklist over the pill, wherever
+ * the pill itself ends up.
+ */
+export function drawInteractionPromptWithCost(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  artTop: number,
+  objW: number,
+  objBottom: number,
+  label: string,
+  requirements: readonly Requirement[],
+): void {
+  queuePrompt(ctx, sx, artTop, objW, objBottom, label, undefined, requirements);
+}
+
+function queuePrompt(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  artTop: number,
+  objW: number,
+  objBottom: number,
+  label: string | undefined,
+  keyOverride: string | undefined,
+  requirements: readonly Requirement[] | null,
 ): void {
   if (promptsSuppressed) return;
   promptsDrawnThisFrame++;
   const anchorX = sx + objW / 2;
   const m = ctx.getTransform();
   queue.push({
-    canvasX: m.a * anchorX + m.c * sy + m.e,
-    canvasY: m.b * anchorX + m.d * sy + m.f,
+    canvasX: m.a * anchorX + m.c * artTop + m.e,
+    canvasY: m.b * anchorX + m.d * artTop + m.f,
+    canvasBottom: m.b * anchorX + m.d * objBottom + m.f,
     label: label === undefined || label === '' ? null : label,
     keyOverride: keyOverride ?? null,
+    requirements,
   });
 }
 
@@ -134,18 +252,8 @@ export function hasQueuedPrompts(): boolean {
   return queue.length > 0;
 }
 
-/**
- * Hands every queued prompt to `draw` and empties the queue. `uiScale` and
- * `theme` are what the prompts are being drawn at, remembered for
- * {@link interactionPromptTop}.
- */
-export function drainQueuedPrompts(
-  uiScale: number,
-  theme: Theme,
-  draw: (prompt: QueuedPrompt) => void,
-): void {
-  lastUiScale = uiScale;
-  lastTheme = theme;
+/** Hands every queued prompt to `draw` and empties the queue. */
+export function drainQueuedPrompts(draw: (prompt: QueuedPrompt) => void): void {
   for (const prompt of queue) draw(prompt);
   queue.length = 0;
 }

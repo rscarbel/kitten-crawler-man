@@ -1,4 +1,11 @@
 import { noteDrawFailure, recoverDrawState } from '../core/rendering/drawFailure';
+import { BOOKSHELF, propSpriteState } from '../map/tileTypes';
+import { themedPropInkTop } from '../sprites/breakablePropSprites';
+import {
+  townInteriorPropArtRiseTiles,
+  townInteriorPropCovers,
+  townInteriorPropFootprintBottom,
+} from '../sprites/art/townInterior/townInteriorProps';
 import { firstResidentMarker, type ResidentQuestHook } from '../systems/residentQuestHooks';
 import { drainBloodVomitRetches } from '../systems/bloodVomitRetches';
 import { drainHpThresholdCrossings } from '../systems/hpThresholdCrossings';
@@ -41,7 +48,7 @@ import { requestEnvironmentSheetsForGroups } from '../sprites/sheets/environment
 import { holdIdleClock, releaseIdleClock } from '../core/rendering/renderFrameClock';
 import { PlayerManager } from '../core/party/PlayerManager';
 import { setSkillBookReaders } from '../creatures/skillBookDrop';
-import type { BuildingEntry } from '../systems/BuildingSystem';
+import type { BuildingEntry, BuildingName } from '../map/buildingEntry';
 import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/save/PlayerSnapshot';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
 import { BopcaSystem } from '../systems/BopcaSystem';
@@ -227,6 +234,7 @@ import { buildApothecaryMenu, serveRemedy } from '../systems/townApothecary';
 import { buildSmithyMenu, sharpenEdges } from '../systems/townSmithy';
 import { buildInnMenu, serveInn } from '../systems/townInn';
 import { isInnRoomKey } from '../systems/townInnRooms';
+import type { TownSpecies } from '../systems/townSpecies';
 import {
   buildCartwrightMenu,
   buildMillerMenu,
@@ -286,6 +294,7 @@ import { exitBuildingPromptSurface } from '../ui/screens/dialogs/exitBuildingPro
 import { towerStairsPromptSurface } from '../ui/screens/dialogs/towerStairsPrompt';
 import {
   drawInteractionPrompt,
+  drawInteractionPromptOver,
   interactionPromptsDrawnThisFrame,
   setInteractionPromptsSuppressed,
 } from '../ui/InteractionPrompt';
@@ -467,7 +476,7 @@ const TALK_PROMPT_LABEL = 'Talk';
 const READ_PROMPT_LABEL = 'Read';
 
 /** Rooms that hum with their own constant ambience regardless of where you stand. */
-const INTERIOR_AMBIENT_BEDS = new Map<string, { soundId: SoundId; volume: number }>([
+const INTERIOR_AMBIENT_BEDS = new Map<BuildingName, { soundId: SoundId; volume: number }>([
   ['The Sunken Stump Pub', { soundId: 'ambient_bar_crowd', volume: BAR_CROWD_AMBIENT_VOLUME }],
   ['The Horned Flagon', { soundId: 'ambient_bar_crowd', volume: BAR_CROWD_AMBIENT_VOLUME }],
   ['The Sleeping Cat Inn', { soundId: 'ambient_bar_crowd', volume: BAR_CROWD_AMBIENT_VOLUME }],
@@ -659,8 +668,15 @@ export interface BuildingInteriorWorldContext {
  */
 const DETACHED_ROOM_WORLD_SEED = 0;
 
-/** A human occupant's reaction to a break. */
-const HUMAN_TUT_SOUNDS: ReadonlyArray<SoundId> = ['townsfolk_tut_1', 'townsfolk_tut_2'];
+const GROUNDFOLK_TUT_SOUNDS: ReadonlyArray<SoundId> = ['townsfolk_tut_1', 'townsfolk_tut_2'];
+/** The sound an occupant makes reacting to a break; Hawkfolk react in caption only. */
+const BREAK_REACTION_SOUNDS: Readonly<Record<TownSpecies, ReadonlyArray<SoundId> | null>> = {
+  human: GROUNDFOLK_TUT_SOUNDS,
+  dwarf: GROUNDFOLK_TUT_SOUNDS,
+  otter: GROUNDFOLK_TUT_SOUNDS,
+  crocodilian: GROUNDFOLK_TUT_SOUNDS,
+  hawkfolk: null,
+};
 /** A townsperson's x/y is their tile's corner; a caption points at the middle of it. */
 const TILE_CENTRE_FRACTION = 0.5;
 /** Wendell's voice for his small talk on the rare frame he is not found standing in his room. */
@@ -3614,7 +3630,8 @@ export class BuildingInteriorScene extends GameplayScene {
       y: reaction.speaker.y + TILE_SIZE * TILE_CENTRE_FRACTION,
     };
     this.menus.captions.post(captionToward(reaction.text, speakerCentre, visibleWorldView()));
-    if (reaction.speaker.species === 'human') this.audio?.playRandom(HUMAN_TUT_SOUNDS);
+    const reactionSounds = BREAK_REACTION_SOUNDS[reaction.speaker.species];
+    if (reactionSounds !== null) this.audio?.playRandom(reactionSounds);
   }
 
   private readonly breakReactions = new InteriorBreakReactions();
@@ -4632,7 +4649,7 @@ export class BuildingInteriorScene extends GameplayScene {
     if (interactionPromptsDrawnThisFrame() > 0) return;
     const merc = this.mercenarySystem.talkTarget(this.active(), this.world.roster.mobs);
     if (merc === null) return;
-    drawInteractionPrompt(ctx, merc.x - camX, merc.y - camY, TILE_SIZE, 'Talk');
+    drawInteractionPromptOver(ctx, merc, camX, camY, 'Talk');
   }
 
   /**
@@ -4656,28 +4673,64 @@ export class BuildingInteriorScene extends GameplayScene {
     }
     const target = this.occupants?.findTalkTarget(active.x, active.y) ?? null;
     if (target !== null) {
-      drawInteractionPrompt(
-        ctx,
-        target.x - camX,
-        target.y - camY,
-        TILE_SIZE,
-        this.promptFor(target),
-      );
+      drawInteractionPromptOver(ctx, target, camX, camY, this.promptFor(target));
       return;
     }
     const page = this.readables?.findReadTarget(active.x, active.y) ?? null;
     if (page !== null) {
-      drawInteractionPrompt(ctx, page.x - camX, page.y - camY, TILE_SIZE, READ_PROMPT_LABEL);
+      const pageTileX = page.x / TILE_SIZE;
+      const pageTileY = page.y / TILE_SIZE;
+      const pageTop = this.furnitureArtTop(pageTileX, pageTileY) - camY;
+      const pageBottom = this.furnitureFootprintBottom(pageTileX, pageTileY) - camY;
+      drawInteractionPrompt(ctx, page.x - camX, pageTop, TILE_SIZE, pageBottom, READ_PROMPT_LABEL);
       return;
     }
     const propTarget = this.propInteractions?.findTarget(active.x, active.y) ?? null;
     if (propTarget === null) return;
+    const { placed } = propTarget;
+    const riseTiles = townInteriorPropArtRiseTiles(placed.propId, placed.variant);
     drawInteractionPrompt(
       ctx,
       propTarget.x - camX,
-      propTarget.y - camY,
+      (placed.tile.y - riseTiles) * TILE_SIZE - camY,
       TILE_SIZE,
+      townInteriorPropFootprintBottom(placed) * TILE_SIZE - camY,
       this.propInteractions?.promptFor(propTarget) ?? '',
+    );
+  }
+
+  /**
+   * The world y of the top of the furniture standing on tile (`tileX`,
+   * `tileY`): the placed prop whose footprint covers it, else a tall shelf
+   * drawn from its tile, else the tile itself.
+   */
+  private furnitureArtTop(tileX: number, tileY: number): number {
+    const tileTop = tileY * TILE_SIZE;
+    const covering = this.propCovering(tileX, tileY);
+    if (covering !== undefined) {
+      const riseTiles = townInteriorPropArtRiseTiles(covering.propId, covering.variant);
+      return (covering.tile.y - riseTiles) * TILE_SIZE;
+    }
+    const tile = this.map.structure[tileY][tileX];
+    if (tile.type !== BOOKSHELF) return tileTop;
+    const state = propSpriteState(tile.damageStage);
+    return themedPropInkTop('bookshelf', tileX, tileY, state, tileTop, TILE_SIZE);
+  }
+
+  /**
+   * The world y of the bottom of the furniture standing on tile (`tileX`,
+   * `tileY`): the covering prop's footprint, which can run deeper than one
+   * tile, else the tile's own foot.
+   */
+  private furnitureFootprintBottom(tileX: number, tileY: number): number {
+    const covering = this.propCovering(tileX, tileY);
+    if (covering === undefined) return (tileY + 1) * TILE_SIZE;
+    return townInteriorPropFootprintBottom(covering) * TILE_SIZE;
+  }
+
+  private propCovering(tileX: number, tileY: number) {
+    return this.map.placedInteriorProps.find((placed) =>
+      townInteriorPropCovers(placed, tileX, tileY),
     );
   }
 
@@ -4851,6 +4904,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // conversation leaves the player free to walk, and the prompt that opened it
     // must not go on hovering over the person now talking.
     setInteractionPromptsSuppressed(surfacesOverHud(this.ui).length > 0);
+    this.keepPromptsClearOfCrawlers(ctx, camX, camY, this.crawlerBarks);
 
     ctx.fillStyle = worldPalette.shade;
     ctx.fillRect(0, 0, viewportWidth(), viewportHeight());

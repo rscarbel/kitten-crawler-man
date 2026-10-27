@@ -4938,3 +4938,26 @@ export function townInteriorPropArtRiseTiles(propId: TownInteriorPropId, variant
   artRiseCache.set(key, rise);
   return rise;
 }
+
+/** The tile row just below a placed prop's footprint: the footprint's bottom edge, in tiles. */
+export function townInteriorPropFootprintBottom(placed: {
+  readonly propId: TownInteriorPropId;
+  readonly tile: { y: number };
+}): number {
+  return placed.tile.y + TOWN_INTERIOR_PROPS[placed.propId].footprint.h;
+}
+
+/**
+ * Whether a placed prop's footprint covers the tile (`tileX`, `tileY`), for
+ * finding the prop a thing standing on that tile belongs to.
+ */
+export function townInteriorPropCovers(
+  placed: { readonly propId: TownInteriorPropId; readonly tile: { x: number; y: number } },
+  tileX: number,
+  tileY: number,
+): boolean {
+  const { w, h } = TOWN_INTERIOR_PROPS[placed.propId].footprint;
+  const insideX = tileX >= placed.tile.x && tileX < placed.tile.x + w;
+  const insideY = tileY >= placed.tile.y && tileY < placed.tile.y + h;
+  return insideX && insideY;
+}

@@ -1,5 +1,5 @@
 import { STREAMING_SOUND_IDS, WOOD_SMASHING_SOUNDS, type SoundId } from './sounds';
-import type { BuildingEntry } from '../systems/BuildingSystem';
+import type { BuildingEntry } from '../map/buildingEntry';
 import { interiorSellsSomething } from '../systems/townServices';
 import { CONTRACT_CUES } from '../systems/constructionContracts/contractSoundCues';
 import { BATHROOM_CUES } from '../systems/cloggedBathroom/bathroomSoundCues';

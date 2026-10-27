@@ -25,6 +25,7 @@ import { TILE_SIZE } from '../src/core/constants.js';
 import { createTownPlan, type BuildingKind } from '../src/map/town/townPlan.js';
 import { TOWN_INTERIOR_PROPS } from '../src/sprites/art/townInterior/townInteriorProps.js';
 import { NAMED_INTERIOR_LAYOUTS } from '../src/map/town/interiors/index.js';
+import type { BuildingName } from '../src/map/buildingEntry.js';
 
 let failures = 0;
 function check(condition: boolean, label: string): void {
@@ -43,11 +44,11 @@ const DOORWAY_EXEMPTION_RADIUS_TILES = 1;
 
 const PLAN_SIZE = 5;
 const plan = createTownPlan(PLAN_SIZE);
-const buildingKindByName = new Map<string, BuildingKind>(
+const buildingKindByName = new Map<BuildingName, BuildingKind>(
   plan.buildings.map((b) => [b.name, b.kind]),
 );
 
-function buildInterior(name: string, kind: BuildingKind): GameMap {
+function buildInterior(name: BuildingName, kind: BuildingKind): GameMap {
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
   map.generateInterior(kind, 0, name, false);
   return map;
@@ -87,7 +88,7 @@ function largestEmptySquare(
   return best;
 }
 
-function checkRoomDensity(name: string, kind: BuildingKind): void {
+function checkRoomDensity(name: BuildingName, kind: BuildingKind): void {
   const map = buildInterior(name, kind);
   const furnished = furnishedTiles(map);
   const start = map.startTile;
@@ -115,7 +116,7 @@ function checkRoomDensity(name: string, kind: BuildingKind): void {
 // about density this codebase actually chose, not about every auto-generated
 // house in a 200-house overworld.
 console.log('Largest empty floor square per named interior\n');
-const namedRoomNames = new Set<string>([...NAMED_INTERIOR_LAYOUTS.keys(), 'General Store']);
+const namedRoomNames = new Set<BuildingName>([...NAMED_INTERIOR_LAYOUTS.keys(), 'General Store']);
 for (const name of namedRoomNames) {
   const kind = buildingKindByName.get(name);
   check(kind !== undefined, `"${name}" is a building the town plan places`);

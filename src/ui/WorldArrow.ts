@@ -182,6 +182,19 @@ function drawBearingArrowAbovePlayer(
 }
 
 /**
+ * The screen y of the highest pixel {@link drawBouncingArrowAboveEntity} paints
+ * at the top of its bounce, for an entity whose tile top is at world y
+ * `worldY` — the line anything else hung over that entity must clear. Pointing
+ * down, the dart's tail and its notch are its highest points.
+ */
+export function bouncingArrowAboveEntityTop(worldY: number, camY: number): number {
+  const tailRatio = Math.max(ARROW_HEAD_HALF_WIDTH_RATIO, ARROW_TAIL_NOTCH_RATIO);
+  const tailReach = ARROW_LENGTH_PIXELS * tailRatio + ARROW_LINE_WIDTH;
+  const restingY = worldY - camY - TILE_SIZE * ARROW_VERTICAL_OFFSET_TILES;
+  return restingY - ARROW_BOUNCE_AMPLITUDE - tailReach;
+}
+
+/**
  * Draws a downward-pointing bouncing arrow directly above a world-space entity.
  * Use for fixed "attack this target" indicators rather than directional navigation.
  *

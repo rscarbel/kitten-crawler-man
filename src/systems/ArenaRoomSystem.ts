@@ -3,7 +3,7 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
-import { drawGymPickupSprite } from '../sprites/gymRoomSprites';
+import { drawGymPickupSprite, gymPickupInkTop } from '../sprites/gymRoomSprites';
 import type { ArenaExterior } from '../map/DungeonGenerator';
 
 type ArenaGymItemId = 'gym_bench_press' | 'gym_treadmill';
@@ -170,16 +170,12 @@ export class ArenaRoomSystem implements GameSystem {
       const sx = pickup.worldX - camX;
       const sy = pickup.worldY - camY;
 
-      drawGymPickupSprite(
-        ctx,
-        pickup.itemId === 'gym_bench_press' ? 'bench' : 'treadmill',
-        sx,
-        sy,
-        TILE_SIZE,
-      );
+      const look = pickup.itemId === 'gym_bench_press' ? 'bench' : 'treadmill';
+      drawGymPickupSprite(ctx, look, sx, sy, TILE_SIZE);
 
       if (activePlayer !== undefined && this.inReach(pickup, activePlayer)) {
-        drawInteractionPrompt(ctx, sx, sy, TILE_SIZE, 'Pick up');
+        const pickupTop = gymPickupInkTop(look, sy, TILE_SIZE);
+        drawInteractionPrompt(ctx, sx, pickupTop, TILE_SIZE, sy + TILE_SIZE, 'Pick up');
       }
     }
   }

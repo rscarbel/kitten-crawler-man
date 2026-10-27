@@ -21,6 +21,7 @@
  */
 
 import type { FenceStyle } from '../tileTypes';
+import type { BuildingName } from '../buildingEntry';
 import {
   COBBLE_STREET,
   FloorTypeValue,
@@ -87,7 +88,7 @@ export type PlannedBuildingName = (typeof PLANNED_BUILDING_NAMES)[number];
 export const TOWN_TOWER_NAME = 'Town Center Tower';
 
 /** The town's drinking houses, which share the rotating tavern soundtrack. */
-export const TAVERN_BUILDING_NAMES: ReadonlySet<string> = new Set([
+export const TAVERN_BUILDING_NAMES: ReadonlySet<BuildingName> = new Set([
   'The Sunken Stump Pub',
   'The Horned Flagon',
   'The Sleeping Cat Inn',
@@ -215,8 +216,7 @@ export interface PlannedBuilding {
    * Whether this building's interior hosts the town's safe room — Mordecai, the
    * Bopca's counter and the lantern light. Stated here rather than derived from
    * `kind`, because a safe room is a property of one specific building and not
-   * of a category: keying it to a kind is what forced The Barracks to be
-   * registered as a restaurant.
+   * of a category: a building's kind says nothing about whether it hosts one.
    */
   readonly hasSafeRoom?: boolean;
   /** Device on the shop sign hung over this building's door. */
@@ -814,153 +814,145 @@ const GATE_TEMPLATES: ReadonlyArray<GateTemplate> = [
  * footprint, so a re-scaled building re-spaces its own band and the overlap
  * assertion in `generateOverworld` catches it if it no longer fits.
  */
-const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
-  // Garrison Row — the north band, either side of the civic terrace.
+const PLANNED_BUILDING_PLOTS: Readonly<Record<PlannedBuildingName, Omit<PlannedBuilding, 'name'>>> =
   {
-    west: OUTER_WEST_PLOT,
-    frontRow: GARRISON_BOTTOM,
-    plotTop: GARRISON_TOP,
-    spriteKey: 'blackwood_lodge',
-    name: 'Blackwood Lodge',
-    kind: 'house',
-    sign: 'moon',
-  },
-  {
-    west: GARRISON_SECOND_COTTAGE,
-    frontRow: GARRISON_BOTTOM,
-    plotTop: GARRISON_TOP,
-    spriteKey: 'plumbline_farm',
-    name: 'Plumbline Farm',
-    kind: 'house',
-    sign: 'plumb_bob',
-  },
-  {
-    west: BARRACKS_PLOT_WEST,
-    frontRow: GARRISON_BOTTOM,
-    plotTop: GARRISON_TOP,
-    spriteKey: 'barracks',
-    name: 'The Barracks',
-    kind: 'house',
-    sign: 'shield',
-  },
-  {
-    west: OUTER_EAST_PLOT,
-    frontRow: GARRISON_BOTTOM,
-    plotTop: GARRISON_TOP,
-    spriteKey: 'cartwrights_workshop',
-    name: "Cartwright's Workshop",
-    kind: 'house',
-    sign: 'wheel',
-  },
+    // Garrison Row — the north band, either side of the civic terrace.
+    'Blackwood Lodge': {
+      west: OUTER_WEST_PLOT,
+      frontRow: GARRISON_BOTTOM,
+      plotTop: GARRISON_TOP,
+      spriteKey: 'blackwood_lodge',
+      kind: 'house',
+      sign: 'moon',
+    },
+    'Plumbline Farm': {
+      west: GARRISON_SECOND_COTTAGE,
+      frontRow: GARRISON_BOTTOM,
+      plotTop: GARRISON_TOP,
+      spriteKey: 'plumbline_farm',
+      kind: 'house',
+      sign: 'plumb_bob',
+    },
+    'The Barracks': {
+      west: BARRACKS_PLOT_WEST,
+      frontRow: GARRISON_BOTTOM,
+      plotTop: GARRISON_TOP,
+      spriteKey: 'barracks',
+      kind: 'house',
+      sign: 'shield',
+    },
+    "Cartwright's Workshop": {
+      west: OUTER_EAST_PLOT,
+      frontRow: GARRISON_BOTTOM,
+      plotTop: GARRISON_TOP,
+      spriteKey: 'cartwrights_workshop',
+      kind: 'house',
+      sign: 'wheel',
+    },
 
-  // Plaza Ring — faith, medicine, supplies and beds around the square.
-  {
-    west: OUTER_WEST_PLOT,
-    frontRow: PLAZA_RING_BOTTOM,
-    plotTop: PLAZA_RING_TOP,
-    spriteKey: 'temple',
-    name: 'Temple of the Sky',
-    kind: 'house',
-    sign: 'sun',
-  },
-  {
-    west: INNER_WEST_PLOT,
-    frontRow: PLAZA_RING_BOTTOM,
-    plotTop: PLAZA_RING_TOP,
-    spriteKey: 'herb_remedy',
-    name: 'Herb & Remedy',
-    kind: 'house',
-    sign: 'mortar',
-  },
-  {
-    west: INNER_EAST_PLOT,
-    frontRow: PLAZA_RING_BOTTOM,
-    plotTop: PLAZA_RING_TOP,
-    spriteKey: 'general_store',
-    name: 'General Store',
-    kind: 'store',
-    sign: 'barrel',
-  },
-  {
-    west: OUTER_EAST_PLOT,
-    frontRow: PLAZA_RING_BOTTOM,
-    plotTop: PLAZA_RING_TOP,
-    spriteKey: 'sleeping_cat_inn',
-    name: 'The Sleeping Cat Inn',
-    kind: 'house',
-    hasSafeRoom: true,
-    sign: 'bed',
-  },
+    // Plaza Ring — faith, medicine, supplies and beds around the square.
+    'Temple of the Sky': {
+      west: OUTER_WEST_PLOT,
+      frontRow: PLAZA_RING_BOTTOM,
+      plotTop: PLAZA_RING_TOP,
+      spriteKey: 'temple',
+      kind: 'house',
+      sign: 'sun',
+    },
+    'Herb & Remedy': {
+      west: INNER_WEST_PLOT,
+      frontRow: PLAZA_RING_BOTTOM,
+      plotTop: PLAZA_RING_TOP,
+      spriteKey: 'herb_remedy',
+      kind: 'house',
+      sign: 'mortar',
+    },
+    'General Store': {
+      west: INNER_EAST_PLOT,
+      frontRow: PLAZA_RING_BOTTOM,
+      plotTop: PLAZA_RING_TOP,
+      spriteKey: 'general_store',
+      kind: 'store',
+      sign: 'barrel',
+    },
+    'The Sleeping Cat Inn': {
+      west: OUTER_EAST_PLOT,
+      frontRow: PLAZA_RING_BOTTOM,
+      plotTop: PLAZA_RING_TOP,
+      spriteKey: 'sleeping_cat_inn',
+      kind: 'house',
+      hasSafeRoom: true,
+      sign: 'bed',
+    },
 
-  // Market Row — the trades, fronting Market Street.
-  {
-    west: OUTER_WEST_PLOT,
-    frontRow: MARKET_ROW_BOTTOM,
-    plotTop: MARKET_ROW_TOP,
-    spriteKey: 'horned_flagon',
-    name: 'The Horned Flagon',
-    kind: 'house',
-    sign: 'horn',
-  },
-  {
-    west: INNER_WEST_PLOT,
-    frontRow: MARKET_ROW_BOTTOM,
-    plotTop: MARKET_ROW_TOP,
-    spriteKey: 'loris_cottage',
-    name: "Old Lori's Cottage",
-    kind: 'house',
-    sign: 'cauldron',
-  },
-  {
-    west: INNER_EAST_PLOT,
-    frontRow: MARKET_ROW_BOTTOM,
-    plotTop: MARKET_ROW_TOP,
-    spriteKey: 'blacksmith',
-    name: 'The Rusty Anvil',
-    kind: 'house',
-    sign: 'hammer',
-  },
+    // Market Row — the trades, fronting Market Street.
+    'The Horned Flagon': {
+      west: OUTER_WEST_PLOT,
+      frontRow: MARKET_ROW_BOTTOM,
+      plotTop: MARKET_ROW_TOP,
+      spriteKey: 'horned_flagon',
+      kind: 'house',
+      sign: 'horn',
+    },
+    "Old Lori's Cottage": {
+      west: INNER_WEST_PLOT,
+      frontRow: MARKET_ROW_BOTTOM,
+      plotTop: MARKET_ROW_TOP,
+      spriteKey: 'loris_cottage',
+      kind: 'house',
+      sign: 'cauldron',
+    },
+    'The Rusty Anvil': {
+      west: INNER_EAST_PLOT,
+      frontRow: MARKET_ROW_BOTTOM,
+      plotTop: MARKET_ROW_TOP,
+      spriteKey: 'blacksmith',
+      kind: 'house',
+      sign: 'hammer',
+    },
 
-  // Low Quarter — nightlife, and the alleys that serve it.
-  {
-    west: OUTER_WEST_PLOT,
-    frontRow: LOW_QUARTER_BOTTOM,
-    plotTop: LOW_QUARTER_TOP,
-    spriteKey: 'sunken_stump',
-    name: 'The Sunken Stump Pub',
-    kind: 'house',
-    sign: 'tankard',
-  },
-  {
-    west: INNER_WEST_PLOT,
-    frontRow: LOW_QUARTER_BOTTOM,
-    plotTop: LOW_QUARTER_TOP,
-    spriteKey: 'quiet_needle',
-    name: 'The Quiet Needle',
-    kind: 'house',
-    sign: 'needle',
-  },
-  {
-    west: SERVICE_ALLEY_EAST + 1,
-    frontRow: LOW_QUARTER_BOTTOM,
-    plotTop: LOW_QUARTER_TOP,
-    spriteKey: 'cloak_and_dagger',
-    name: CLOAK_AND_DAGGER_NAME,
-    kind: 'club',
-    sign: 'cards',
-  },
+    // Low Quarter — nightlife, and the alleys that serve it.
+    'The Sunken Stump Pub': {
+      west: OUTER_WEST_PLOT,
+      frontRow: LOW_QUARTER_BOTTOM,
+      plotTop: LOW_QUARTER_TOP,
+      spriteKey: 'sunken_stump',
+      kind: 'house',
+      sign: 'tankard',
+    },
+    'The Quiet Needle': {
+      west: INNER_WEST_PLOT,
+      frontRow: LOW_QUARTER_BOTTOM,
+      plotTop: LOW_QUARTER_TOP,
+      spriteKey: 'quiet_needle',
+      kind: 'house',
+      sign: 'needle',
+    },
+    [CLOAK_AND_DAGGER_NAME]: {
+      west: SERVICE_ALLEY_EAST + 1,
+      frontRow: LOW_QUARTER_BOTTOM,
+      plotTop: LOW_QUARTER_TOP,
+      spriteKey: 'cloak_and_dagger',
+      kind: 'club',
+      sign: 'cards',
+    },
 
-  // South Green — the farm, against the south-east wall.
-  {
-    west: OUTER_EAST_PLOT,
-    frontRow: LOW_QUARTER_BOTTOM,
-    plotTop: LOW_QUARTER_TOP,
-    spriteKey: 'millers_farm',
-    name: "Miller's Farm",
-    kind: 'house',
-    sign: 'sheaf',
-  },
-];
+    // South Green — the farm, against the south-east wall.
+    "Miller's Farm": {
+      west: OUTER_EAST_PLOT,
+      frontRow: LOW_QUARTER_BOTTOM,
+      plotTop: LOW_QUARTER_TOP,
+      spriteKey: 'millers_farm',
+      kind: 'house',
+      sign: 'sheaf',
+    },
+  };
+
+/** Every plot, in `PLANNED_BUILDING_NAMES` order, which runs north to south as the plots do. */
+const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = PLANNED_BUILDING_NAMES.map((name) => ({
+  ...PLANNED_BUILDING_PLOTS[name],
+  name,
+}));
 
 /**
  * The sprite a named building is drawn from, which is the only route from a

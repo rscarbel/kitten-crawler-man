@@ -1,4 +1,4 @@
-import type { BuildingEntry } from './OverworldGenerator';
+import type { BuildingEntry } from './buildingEntry';
 import { ROOM_WALL_OUTWARD, type Point, type Rect, type RoomDoorway } from './roomDoorways';
 
 /** Whether the stealth gate still shuts the gate room's onward doorway. One value per floor. */
@@ -430,7 +430,6 @@ export function prisonBuildingEntry(room: Pick<StealthGateRoomData, 'prisonDoor'
     doorTile: { x: prisonDoor.x0, y: prisonDoor.approachRow },
     name: PRISON_BUILDING_NAME,
     type: 'prison',
-    doorwayX0: prisonDoor.x0,
-    doorwayWidth: PRISON_DOOR_WIDTH_TILES,
+    doorway: { x0: prisonDoor.x0, width: PRISON_DOOR_WIDTH_TILES },
   };
 }

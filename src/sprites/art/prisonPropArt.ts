@@ -10,6 +10,8 @@
  * and spotlights have to be the brightest thing in the room.
  */
 
+import { reportArtTop } from '../../ui/world/overheadStack';
+
 const IRON_DARK = '#25282d';
 const IRON_MID = '#3d4249';
 const IRON_LIGHT = '#6f767f';
@@ -161,6 +163,7 @@ export function drawPrisonCellDoor(
   ts: number,
   art: CellDoorArt,
 ): void {
+  if (!art.broken) reportArtTop(ctx, x, x + ts, y - ts * DOOR_RISE_SHARE);
   ctx.save();
   if (art.broken) paintBrokenDoor(ctx, x, y, ts, art.run);
   else if (art.run === 'across') paintDoorFaceOn(ctx, x, y, ts);

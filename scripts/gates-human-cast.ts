@@ -66,9 +66,9 @@ import {
 import { runCanvasRecovery } from '../src/core/rendering/canvasRecovery.js';
 import { citizenLookKey, pickCitizenFigure } from '../src/creatures/citizenFigure.js';
 import { Townsperson } from '../src/creatures/Townsperson.js';
-import { residentFigure, residentWearsCastLook } from '../src/creatures/residentFigures.js';
+import { castLookFigure, residentLook } from '../src/creatures/residentFigures.js';
 import { allResidents } from '../src/systems/townResidents.js';
-import { TOWN_SPECIES } from '../src/systems/townSpecies.js';
+import { CROWD_SPECIES } from '../src/systems/townSpecies.js';
 import {
   CACHE_BUDGET_MEGABYTES,
   figureByteBudgetFor,
@@ -425,7 +425,7 @@ function failChanged(
 function gateRelookOnPurge(): void {
   forceVarietyTier(FULL_VARIETY_TIER);
   const watched: WatchedCitizen[] = [];
-  for (const species of TOWN_SPECIES) {
+  for (const species of CROWD_SPECIES) {
     for (const role of TOWN_ROLES) {
       for (let seed = 0; seed < RELOOK_SEEDS_PER_ROLE; seed++) {
         const person = new Townsperson({
@@ -445,18 +445,19 @@ function gateRelookOnPurge(): void {
       }
     }
   }
-  for (const def of allResidents().filter((resident) => residentWearsCastLook(resident.id))) {
+  for (const def of allResidents()) {
+    const look = residentLook(def.id);
+    if (look.kind !== 'cast') continue;
     const person = new Townsperson({
       x: 0,
       y: 0,
       role: def.role,
-      species: def.species,
       seed: 0,
       speed: 1,
       wander: STILL_WANDER,
       residentId: def.id,
     });
-    const ownLook = citizenLookKey(residentFigure(def.id));
+    const ownLook = citizenLookKey(castLookFigure(look));
     if (lookOf(person) !== ownLook) fail('H10', `${def.name} does not wear their own look`);
     watched.push({ person, label: def.name, expectAfterPurge: () => ownLook });
   }

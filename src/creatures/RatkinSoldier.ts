@@ -14,7 +14,7 @@ import {
   ratkinCastTilesPerWalkCycle,
 } from '../sprites/ratkinCastSprite';
 import { ratkinCastRow } from '../sprites/art/ratkinCastFigure';
-import { TimedSpeech } from '../sprites/speechBubble';
+import { TimedSpeech, timedSpeechBubbleTop } from '../sprites/speechBubble';
 import { drawQuestBeacon } from '../sprites/questBeacon';
 import { drawQuestMarker, questMarkerColorFor } from '../sprites/questNPCSprite';
 import type { NPCMarkerType } from './QuestNPC';
@@ -195,6 +195,11 @@ const MAX_SPEECH_FRAMES = 420;
 /** A spear reaches past the tile, so the figure is kept drawing a little off screen. */
 const SOLDIER_CULL_MARGIN_TILES = 2;
 
+/** How far above the tile a call-out's pointer touches: the head's clearance, as a villager's. */
+const CALL_OUT_HEAD_LIFT_TILES = 0.5;
+/** Clear air between the head and a call-out's pointer. */
+const CALL_OUT_GAP_PX = 2;
+
 /**
  * Where a soldier belongs and how far from there it goes after a hostile.
  *
@@ -295,6 +300,18 @@ export class RatkinSoldier extends Mob {
 
   /** What the soldier is calling out; drawn by `SoldierSystem` over every body. */
   readonly speech = new TimedSpeech();
+
+  /** The screen y a call-out's pointer touches, for a soldier whose tile top is at `sy`. */
+  speechHeadY(sy: number): number {
+    return sy - CALL_OUT_HEAD_LIFT_TILES * this.tileSize - CALL_OUT_GAP_PX;
+  }
+
+  /** The body's reach, raised over a call-out while one is up: it is drawn in a later pass. */
+  override overheadTop(ctx: CanvasRenderingContext2D, sy: number): number {
+    const bodyTop = super.overheadTop(ctx, sy);
+    if (this.speech.current === null) return bodyTop;
+    return Math.min(bodyTop, timedSpeechBubbleTop(ctx, this.speech, this.speechHeadY(sy)));
+  }
 
   private downed = false;
   /** Frames on the ground, for the collapse and for the recovery clock. */

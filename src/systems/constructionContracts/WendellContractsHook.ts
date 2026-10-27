@@ -28,6 +28,7 @@ import { dropContract, isContractReady } from './contractGenerator';
 import { issueNextContract, remainingSpotLabels } from './contractIssue';
 import { CONSTRUCTION_CONTRACT_QUEST_ID, contractsUnlocked } from './contractQuest';
 import { playContractCue } from './contractSoundCues';
+import type { BuildingName } from '../../map/buildingEntry';
 
 export interface WendellContractsHookDeps {
   readonly state: BriarHollowState;
@@ -63,7 +64,7 @@ export class WendellContractsHook implements ResidentQuestHook {
 
   /** The hook for this room, or null anywhere but Plumbline Farm's ground floor. */
   static forBuilding(
-    buildingName: string,
+    buildingName: BuildingName,
     floor: number,
     deps: WendellContractsHookDeps,
   ): WendellContractsHook | null {

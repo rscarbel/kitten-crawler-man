@@ -22,6 +22,7 @@
  * a class they never touch.
  */
 import type { ObjectiveBeaconFootprint } from '../ui/ObjectiveBeacon';
+import type { BuildingName } from '../map/buildingEntry';
 
 export type TrackerStatus = 'available' | 'active' | 'completed' | 'failed';
 
@@ -73,7 +74,7 @@ export interface TrackerTarget extends ObjectiveBeaconFootprint {
    * target cannot be routed to, it says whether the party is already inside
    * the place the quest sends them, and so needs no way out pointed at.
    */
-  readonly building?: string;
+  readonly building?: BuildingName;
   /**
    * The source paints its own route to this target, made of straight walkable
    * hops, so the generic route guide neither re-aims the arrow nor paints a

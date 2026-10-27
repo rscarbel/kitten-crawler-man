@@ -107,7 +107,7 @@ import {
   getSpriteDefByKey,
   getSpriteOverlayStatesByKey,
 } from '../../core/spriteAssets/SpriteLoader';
-import { frameTime } from '../../utils';
+import { frameTime, positiveMod } from '../../utils';
 import { drawCircusDecals } from './circusDecalTiles';
 import { drawServiceLevelTile } from './serviceLevelPropTiles';
 import { drawCellarPropTile } from './cellarPropTiles';
@@ -294,6 +294,8 @@ const WATTLE_WEAVE_FRACTIONS = [0.34, 0.52, 0.7] as const;
 const WATTLE_SEGMENT_PX = 6;
 const WATTLE_STAKE_WIDTH_PX = 2;
 const WATTLE_STAKE_STEP_PX = 12;
+/** A weave course alternates between its two shades, segment by segment. */
+const WATTLE_WEAVE_SHADE_COUNT = 2;
 
 /**
  * Wendell's own picket, one yard's worth: a builder's fence rather than a
@@ -401,6 +403,8 @@ const FENCE_STYLE_SPECS: Record<FenceStyle, FenceStyleSpec> = {
   },
 };
 
+const DEFAULT_FENCE_STYLE = 'post_and_rail' as const satisfies FenceStyle;
+
 /**
  * The style a fence tile is drawn in. Recorded on the tile by `paintYardFences`
  * from its yard's plan entry.
@@ -411,7 +415,7 @@ const FENCE_STYLE_SPECS: Record<FenceStyle, FenceStyleSpec> = {
  */
 function fenceStyleAt(structure: TileContent[][], tx: number, ty: number): FenceStyleSpec {
   const style = structure[ty]?.[tx]?.fenceStyle;
-  return FENCE_STYLE_SPECS[style ?? 'post_and_rail'];
+  return FENCE_STYLE_SPECS[style ?? DEFAULT_FENCE_STYLE];
 }
 /** Ground shadow cast by the fence onto its own tile. */
 const FENCE_SHADOW_COLOR = 'rgba(0,0,0,0.22)';
@@ -500,10 +504,7 @@ function drawFence(
     return;
   }
   const style = fenceStyleAt(structure, tx, ty);
-  const hasWest = anchorsRailAt(structure, tx - 1, ty);
-  const hasEast = anchorsRailAt(structure, tx + 1, ty);
-  const hasNorth = anchorsRailAt(structure, tx, ty - 1);
-  const hasSouth = anchorsRailAt(structure, tx, ty + 1);
+  const { hasWest, hasEast, hasNorth, hasSouth } = fenceNeighboursAt(structure, tx, ty);
   const runsEastWest = hasWest || hasEast;
   const runsNorthSouth = hasNorth || hasSouth;
 
@@ -516,7 +517,6 @@ function drawFence(
   const postTop = sy + Math.round(ts * FENCE_POST_TOP_FRACTION);
   const postBottom = sy + Math.round(ts * FENCE_POST_BOTTOM_FRACTION);
   const southEdge = hasSouth ? sy + ts : centreY;
-  drawFenceShadow(ctx, sx, sy, ts, { hasWest, hasEast, hasNorth, hasSouth });
 
   if (runsEastWest) {
     for (const railFraction of style.railFractions) {
@@ -528,7 +528,8 @@ function drawFence(
         ctx.fillRect(westEdge, railY, eastEdge - westEdge, FENCE_HIGHLIGHT_PX);
       }
     }
-    drawFenceInfill(ctx, style, sx, sy, ts, westEdge, eastEdge);
+    const infillPhasePx = fenceInfillPhasePx(style, tx, ts);
+    drawFenceInfill(ctx, style, sx, sy, ts, infillPhasePx, westEdge, eastEdge);
   }
   if (runsNorthSouth) {
     // An end-on run is foreshortened to one line of timber whatever the style —
@@ -558,11 +559,60 @@ function drawFence(
   }
 }
 
+/**
+ * Names a fence tile's picture, so every tile drawing the same one can share a
+ * single cached canvas: a sawn style is drawn from its style, which sides carry
+ * a rail and where its infill's pattern falls on the tile alone. Null for the rickety style, whose posts lean and whose
+ * rails sag by a per-tile hash, so no two of its tiles match.
+ */
+export function fenceArtKey(
+  structure: TileContent[][],
+  tx: number,
+  ty: number,
+  ts: number,
+): string | null {
+  const style = structure[ty]?.[tx]?.fenceStyle ?? DEFAULT_FENCE_STYLE;
+  if (style === 'rickety') return null;
+  const { hasWest, hasEast, hasNorth, hasSouth } = fenceNeighboursAt(structure, tx, ty);
+  const sides = [hasWest, hasEast, hasNorth, hasSouth].map((has) => (has ? '1' : '0')).join('');
+  const infillPhasePx = fenceInfillPhasePx(FENCE_STYLE_SPECS[style], tx, ts);
+  return `${style}:${sides}:${infillPhasePx}`;
+}
+
+/**
+ * How many world pixels an infill's pattern takes to repeat: a pale and its gap,
+ * or a common multiple of a wattle's stake step and its two-shade weave cycle.
+ */
+const FENCE_INFILL_PERIOD_PX: Record<FenceStyleSpec['infill'], number | null> = {
+  none: null,
+  pales: PICKET_PALE_WIDTH_PX + PICKET_PALE_GAP_PX,
+  weave: WATTLE_STAKE_STEP_PX * WATTLE_SEGMENT_PX * WATTLE_WEAVE_SHADE_COUNT,
+};
+
+/**
+ * Where a tile's left edge falls within its infill's period, in pixels. Infill
+ * is phased off world pixels so a run's pales and stakes keep their rhythm
+ * across every tile joint, whatever canvas the tile is drawn into.
+ */
+function fenceInfillPhasePx(style: FenceStyleSpec, tx: number, ts: number): number {
+  const period = FENCE_INFILL_PERIOD_PX[style.infill];
+  return period === null ? 0 : positiveMod(tx * ts, period);
+}
+
 interface FenceNeighbours {
   readonly hasWest: boolean;
   readonly hasEast: boolean;
   readonly hasNorth: boolean;
   readonly hasSouth: boolean;
+}
+
+function fenceNeighboursAt(structure: TileContent[][], tx: number, ty: number): FenceNeighbours {
+  return {
+    hasWest: anchorsRailAt(structure, tx - 1, ty),
+    hasEast: anchorsRailAt(structure, tx + 1, ty),
+    hasNorth: anchorsRailAt(structure, tx, ty - 1),
+    hasSouth: anchorsRailAt(structure, tx, ty + 1),
+  };
 }
 
 /** The ground shadow a fence tile casts on its own tile, shared by every style. */
@@ -1239,13 +1289,7 @@ function drawRicketyFence(
   tx: number,
   ty: number,
 ): void {
-  const neighbours: FenceNeighbours = {
-    hasWest: anchorsRailAt(structure, tx - 1, ty),
-    hasEast: anchorsRailAt(structure, tx + 1, ty),
-    hasNorth: anchorsRailAt(structure, tx, ty - 1),
-    hasSouth: anchorsRailAt(structure, tx, ty + 1),
-  };
-  drawFenceShadow(ctx, sx, sy, ts, neighbours);
+  const neighbours = fenceNeighboursAt(structure, tx, ty);
   ctx.save();
   try {
     ctx.beginPath();
@@ -1495,10 +1539,12 @@ function drawFenceInfill(
   sx: number,
   sy: number,
   ts: number,
+  infillPhasePx: number,
   westEdge: number,
   eastEdge: number,
 ): void {
   if (style.infill === 'none') return;
+  const patternPxAt = (x: number): number => infillPhasePx + (x - sx);
 
   if (style.infill === 'pales') {
     const paleTop = sy + Math.round(ts * PICKET_PALE_TOP_FRACTION);
@@ -1506,12 +1552,8 @@ function drawFenceInfill(
     const step = PICKET_PALE_WIDTH_PX + PICKET_PALE_GAP_PX;
     const paleColor = style.paleColor ?? PICKET_PALE_COLOR;
     const paleShadeColor = style.paleShadeColor ?? PICKET_PALE_SHADE_COLOR;
-    // Phased off `sx` so pales line up across a tile joint instead of restarting
-    // at every tile edge. `sx` is chunk-local on the baked path, not the world
-    // column, so the run of pales does restart at a 16-tile chunk seam —
-    // invisible at a 3-tile pale period.
-    const phase = ((sx % step) + step) % step;
-    for (let x = westEdge - phase; x < eastEdge; x += step) {
+    const firstPaleX = westEdge - positiveMod(patternPxAt(westEdge), step);
+    for (let x = firstPaleX; x < eastEdge; x += step) {
       const left = Math.max(x, westEdge);
       const width = Math.min(x + PICKET_PALE_WIDTH_PX, eastEdge) - left;
       if (width <= 0) continue;
@@ -1527,8 +1569,8 @@ function drawFenceInfill(
   const weaveBottom =
     sy + Math.round(ts * WATTLE_WEAVE_FRACTIONS[WATTLE_WEAVE_FRACTIONS.length - 1]);
   ctx.fillStyle = WATTLE_STAKE_COLOR;
-  const stakePhase = ((sx % WATTLE_STAKE_STEP_PX) + WATTLE_STAKE_STEP_PX) % WATTLE_STAKE_STEP_PX;
-  for (let x = westEdge - stakePhase; x < eastEdge; x += WATTLE_STAKE_STEP_PX) {
+  const firstStakeX = westEdge - positiveMod(patternPxAt(westEdge), WATTLE_STAKE_STEP_PX);
+  for (let x = firstStakeX; x < eastEdge; x += WATTLE_STAKE_STEP_PX) {
     const left = Math.max(x, westEdge);
     const width = Math.min(x + WATTLE_STAKE_WIDTH_PX, eastEdge) - left;
     if (width <= 0) continue;
@@ -1538,14 +1580,14 @@ function drawFenceInfill(
   // behind a stake and back in front of the next one.
   for (let course = 0; course < WATTLE_WEAVE_FRACTIONS.length; course++) {
     const y = sy + Math.round(ts * WATTLE_WEAVE_FRACTIONS[course]);
-    const segmentPhase = ((sx % WATTLE_SEGMENT_PX) + WATTLE_SEGMENT_PX) % WATTLE_SEGMENT_PX;
-    let segment = 0;
-    for (let x = westEdge - segmentPhase; x < eastEdge; x += WATTLE_SEGMENT_PX) {
+    const firstSegmentX = westEdge - positiveMod(patternPxAt(westEdge), WATTLE_SEGMENT_PX);
+    for (let x = firstSegmentX; x < eastEdge; x += WATTLE_SEGMENT_PX) {
       const left = Math.max(x, westEdge);
       const width = Math.min(x + WATTLE_SEGMENT_PX, eastEdge) - left;
-      segment++;
       if (width <= 0) continue;
-      ctx.fillStyle = (segment + course) % 2 === 0 ? WATTLE_WEAVE_COLOR : WATTLE_WEAVE_DARK_COLOR;
+      const segment = Math.floor(patternPxAt(x) / WATTLE_SEGMENT_PX);
+      const shade = (segment + course) % WATTLE_WEAVE_SHADE_COUNT;
+      ctx.fillStyle = shade === 0 ? WATTLE_WEAVE_COLOR : WATTLE_WEAVE_DARK_COLOR;
       ctx.fillRect(left, y, width, WATTLE_WEAVE_THICKNESS_PX);
     }
   }
@@ -2318,6 +2360,12 @@ export function drawDecorationTile(
         drawTerrainTile(ctx, structure, FloorTypeValue.grass, sx, sy, ts, tx, ty);
         drawCircusDecals(ctx, structure, sx, sy, ts, tx, ty);
         return true;
+      // The shadow lies on the ground, so it is baked with it: drawn in the
+      // Y-sorted pass it would darken the feet of anyone standing behind the rails.
+      case FENCE:
+        drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
+        drawFenceShadow(ctx, sx, sy, ts, fenceNeighboursAt(structure, tx, ty));
+        return true;
       case TORCH:
       case WELL:
       case FOUNTAIN:
@@ -2642,8 +2690,8 @@ export function drawDecorationTile(
     }
 
     // Yard fence — a post-and-rail line standing on whatever surface it encloses.
+    // Timber only: the ground and its shadow are baked by the `baseOnly` pass.
     case FENCE: {
-      drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
       drawFence(ctx, structure, sx, sy, ts, tx, ty);
       return true;
     }

@@ -17,6 +17,7 @@ import {
   HUMAN_SPEECH_STYLE,
   TimedSpeech,
   drawTimedSpeechBubble,
+  timedSpeechBubbleTop,
   type TimedBubbleStyle,
 } from '../sprites/speechBubble';
 
@@ -63,6 +64,18 @@ export class CrawlerBarkSystem {
   ): void {
     this.renderFor(ctx, camX, camY, human, HUMAN_SPEECH_STYLE);
     this.renderFor(ctx, camX, camY, cat, CAT_SPEECH_STYLE);
+  }
+
+  /**
+   * The top of the bubble over `crawler`, whose tile top is at screen `sy`,
+   * or null while they are saying nothing. The bubble is drawn in a pass of
+   * its own, so nothing measured over the crawler's body counts it.
+   */
+  barkTop(ctx: CanvasRenderingContext2D, crawler: Player, sy: number): number | null {
+    const speech = this.states.get(crawler)?.speech;
+    if (speech === undefined) return null;
+    if (speech.current === null) return null;
+    return timedSpeechBubbleTop(ctx, speech, sy);
   }
 
   private renderFor(

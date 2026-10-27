@@ -35,7 +35,7 @@
  */
 
 import type { Scene } from '../src/core/Scene.js';
-import type { BuildingEntry } from '../src/map/OverworldGenerator.js';
+import type { BuildingEntry } from '../src/map/buildingEntry.js';
 import { installBrowserShim, ShimEvent } from './browserShim.js';
 
 /**

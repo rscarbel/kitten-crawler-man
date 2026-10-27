@@ -19,7 +19,6 @@
  */
 
 import { GameMap } from '../src/map/GameMap';
-import type { BuildingEntry } from '../src/map/OverworldGenerator';
 import {
   getSpriteDoorwayByKey,
   type SpriteManifestEntry,
@@ -70,8 +69,6 @@ const MAP_SIZE = 280;
 const MAPS_TO_GENERATE = 200;
 /** The gate this plan added, by the `TownPlan`'s own name. */
 const NORTH_GATE_NAME = 'north gate';
-/** An entry stating no doorway span opens on its door tile and nothing else. */
-const SINGLE_TILE_DOORWAY_WIDTH = 1;
 
 let failures = 0;
 function check(ok: boolean, message: string): void {
@@ -91,13 +88,6 @@ function checkOnce(ok: boolean, message: string): void {
   if (reportedOnce.has(message)) return;
   reportedOnce.add(message);
   console.log(` FAIL  ${message}`);
-}
-
-function doorwaySpanOf(entry: BuildingEntry): { x0: number; width: number } {
-  if (entry.doorwayX0 === undefined || entry.doorwayWidth === undefined) {
-    return { x0: entry.doorTile.x, width: SINGLE_TILE_DOORWAY_WIDTH };
-  }
-  return { x0: entry.doorwayX0, width: entry.doorwayWidth };
 }
 
 /**
@@ -273,7 +263,7 @@ for (let mapIndex = 0; mapIndex < MAPS_TO_GENERATE; mapIndex++) {
   // Every tile of every opening, not just the one the entry menu is keyed on —
   // a doorway several tiles wide must be enterable at any column along it.
   for (const entry of map.buildingEntries) {
-    const { x0, width } = doorwaySpanOf(entry);
+    const { x0, width } = entry.doorway;
     for (let x = x0; x < x0 + width; x++) {
       checkOnce(
         map.isWalkable(x, entry.doorTile.y),

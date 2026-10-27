@@ -25,6 +25,8 @@ import {
   drawSpeechBubble,
   drawTimedSpeechBubble,
   speechBubbleOriginAbove,
+  speechBubbleTop,
+  timedSpeechBubbleTop,
   type TimedBubbleStyle,
 } from '../../sprites/speechBubble';
 import { questMarkerColorFor } from '../../sprites/questNPCSprite';
@@ -390,8 +392,25 @@ export class Villager implements TownPropRenderable {
    * The line a bubble over this villager must sit above: their overhead
    * icon's top at the height of its bounce while they wear one, else their art's.
    */
-  private overheadTop(ctx: CanvasRenderingContext2D, sy: number, tileSize: number): number {
+  private overheadTopAt(ctx: CanvasRenderingContext2D, sy: number, tileSize: number): number {
     return overheadIconTopY(ctx, this.artTop(sy, tileSize), tileSize, this.overheadIcon);
+  }
+
+  /**
+   * {@link overheadTopAt} at the world's own tile size, for a prompt hung over
+   * this villager, raised over their bark or the "…" bubble while either
+   * shows: both are drawn in a later pass than the body.
+   */
+  overheadTop(ctx: CanvasRenderingContext2D, sy: number): number {
+    const top = this.overheadTopAt(ctx, sy, TILE_SIZE);
+    const bubbleBottom = top - OVERHEAD_GAP_PX;
+    if (this.bark.current !== null) return timedSpeechBubbleTop(ctx, this.bark, bubbleBottom);
+    if (!this.showsEllipsis) return top;
+    return speechBubbleTop(speechBubbleOriginAbove(bubbleBottom, TILE_SIZE), TILE_SIZE);
+  }
+
+  private get showsEllipsis(): boolean {
+    return this.bark.current === null && this.hushed;
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
@@ -427,7 +446,7 @@ export class Villager implements TownPropRenderable {
     const sx = this.x - camX;
     const sy = this.y - camY;
     if (this.bark.current === null && !this.hushed) return;
-    const bubbleBottom = this.overheadTop(ctx, sy, tileSize) - OVERHEAD_GAP_PX;
+    const bubbleBottom = this.overheadTopAt(ctx, sy, tileSize) - OVERHEAD_GAP_PX;
     if (this.bark.current !== null) {
       drawTimedSpeechBubble(
         ctx,

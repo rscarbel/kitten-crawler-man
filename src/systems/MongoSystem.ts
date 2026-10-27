@@ -10,7 +10,7 @@ import type { GameMap } from '../map/GameMap';
 import { EmoteEffectSystem } from './EmoteEffectSystem';
 import { hostileWithinRadius } from './interactionPromptGate';
 import { playPetGesture } from '../creatures/humanGestures';
-import { drawInteractionPrompt } from '../ui/InteractionPrompt';
+import { drawInteractionPromptOver } from '../ui/InteractionPrompt';
 import {
   advanceMongoRecovery,
   MONGO_KILL_RECOVERY_FRAMES,
@@ -755,7 +755,7 @@ export class MongoSystem implements GameSystem {
     if (!this.wouldPet(active, gameMap, mobs, mobGrid, isOverworld)) return false;
     // The press that would pet him is one step away: warm the row it plays.
     prewarmMongoPet(mongo.stage);
-    drawInteractionPrompt(ctx, mongo.x - camX, mongo.y - camY, TILE_SIZE, 'Pet');
+    drawInteractionPromptOver(ctx, mongo, camX, camY, 'Pet');
     return true;
   }
 

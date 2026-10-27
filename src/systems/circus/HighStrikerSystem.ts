@@ -34,7 +34,14 @@ import type { WorkingTool } from '../../core/items/gathering/toolTiers';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { GameMap } from '../../map/GameMap';
-import { CIRCUS_STRUCTURES, type CircusGroundsSite } from '../../map/overworld/circusGroundsLayout';
+import {
+  CIRCUS_KEEP_CLEAR_BANDS,
+  CIRCUS_STRUCTURES,
+  CIRCUS_TERRAIN_CLEARANCE_TILES,
+  keepClearBandTiles,
+  type CircusGroundsSite,
+} from '../../map/overworld/circusGroundsLayout';
+import type { TilePoint } from '../../map/town/townPlan';
 import {
   CIRCUS_STRUCTURE_ART,
   CIRCUS_TILE_SCALE,
@@ -213,6 +220,51 @@ const STRIKING_SIDES = [-1, 1] as const;
 
 const STRIKER_MALLET_TOOL: WorkingTool = { kind: 'striker_mallet', tier: 0 };
 
+const NEIGHBOUR_STEPS: ReadonlyArray<TilePoint> = [
+  { x: 1, y: 0 },
+  { x: -1, y: 0 },
+  { x: 0, y: 1 },
+  { x: 0, y: -1 },
+];
+
+/**
+ * Whether a crawler on `from` could walk to the forecourt in front of the
+ * Starlight Tent without leaving the grounds and their clearance band. A tile
+ * merely walkable can be a pocket — a ledge shut in by the terrain or the rim's
+ * own props — and a crawler set down in one has no way out. Steps are
+ * four-way because a crawler's collision is tested a step per axis, so two
+ * blocked tiles touching corners are a wall to them.
+ */
+export function walksToForecourt(
+  gameMap: GameMap,
+  site: CircusGroundsSite,
+  from: TilePoint,
+): boolean {
+  if (!gameMap.isWalkable(from.x, from.y)) return false;
+  const reachTiles = site.radiusTiles + CIRCUS_TERRAIN_CLEARANCE_TILES;
+  const rowWidth = gameMap.structure[0]?.length ?? 0;
+  const keyOf = (tile: TilePoint): number => tile.y * rowWidth + tile.x;
+  const forecourt = new Set(
+    keepClearBandTiles(CIRCUS_KEEP_CLEAR_BANDS.forecourt, site.centre).map(keyOf),
+  );
+  const seen = new Set<number>([keyOf(from)]);
+  const frontier: TilePoint[] = [from];
+  for (let tile = frontier.pop(); tile !== undefined; tile = frontier.pop()) {
+    if (forecourt.has(keyOf(tile))) return true;
+    for (const step of NEIGHBOUR_STEPS) {
+      const next = { x: tile.x + step.x, y: tile.y + step.y };
+      const key = keyOf(next);
+      if (seen.has(key)) continue;
+      const withinGrounds =
+        Math.hypot(next.x - site.centre.x, next.y - site.centre.y) <= reachTiles;
+      if (!withinGrounds || !gameMap.isWalkable(next.x, next.y)) continue;
+      seen.add(key);
+      frontier.push(next);
+    }
+  }
+  return false;
+}
+
 /** Seconds on a clock that keeps running whatever the world does. */
 export type HighStrikerClock = () => number;
 
@@ -345,6 +397,7 @@ export class HighStrikerSystem {
       place.centreX - STRIKER_METER_LOOK.widthPx / 2 - camX,
       place.lampTop - camY,
       STRIKER_METER_LOOK.widthPx,
+      place.foot - camY,
       LOCK_PROMPT,
     );
     return true;
@@ -363,12 +416,14 @@ export class HighStrikerSystem {
     return this.strikers.some((striker) => striker.holder === crawler && striker.strikePending);
   }
 
+  /** Hung over the top of the striker's frame, which its bell and crest fill: the mast stands far taller than the crawler beside it. */
   private drawPrompt(ctx: Ctx, striker: Striker, camX: number, camY: number, label: string): void {
     drawInteractionPrompt(
       ctx,
-      striker.tileX * TILE_SIZE - camX,
-      striker.tileY * TILE_SIZE - camY,
-      TILE_SIZE,
+      striker.left - camX,
+      striker.frameTop - camY,
+      FRAME_WIDTH_TILES * TILE_SIZE,
+      striker.ground - camY,
       label,
     );
   }
@@ -531,18 +586,19 @@ export class HighStrikerSystem {
    * Puts the swinger side-on to the pad on whichever side of it is nearer and
    * open, facing it: the swing comes down ahead of them, and from the side
    * that is onto the pad, where from the south it would be at their feet. A
-   * striking spot is an ordinary walkable tile beside the striker, so they
-   * walk off it as from anywhere. With both sides blocked they swing from
-   * where they stand.
+   * striking spot is only taken when it is open ground joined to the rest of
+   * the grounds, so they walk off it as from anywhere. With neither side
+   * open they swing from where they stand, which they walked to.
    */
   private stepToStrikingSpot(striker: Striker, swinger: Crawler): void {
     const gameMap = this.gameMap;
+    const site = this.site;
     const spots = STRIKING_SIDES.map((side) => ({
       side,
       x: striker.tileX + side,
       y: striker.tileY,
     }))
-      .filter((spot) => gameMap?.isWalkable(spot.x, spot.y) === true)
+      .filter((spot) => gameMap !== null && site !== null && walksToForecourt(gameMap, site, spot))
       .map((spot) => ({
         ...spot,
         distance: Math.hypot(spot.x * TILE_SIZE - swinger.x, spot.y * TILE_SIZE - swinger.y),

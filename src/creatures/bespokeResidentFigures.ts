@@ -5,9 +5,9 @@
  *
  * Each entry adapts one existing bespoke painter to the citizen draw state,
  * mapping the actions a resident can be in onto the rows that painter has. A
- * new bespoke resident is a new entry here plus `figure: { kind: 'bespoke',
- * id }` on its occupant spec; nothing in `Townsperson` or the occupant system
- * changes.
+ * new bespoke resident is a new entry here plus `{ kind: 'bespoke', figure: id }`
+ * as their `RESIDENT_LOOKS` entry in `residentFigures.ts`; nothing in
+ * `Townsperson` or the occupant system changes.
  */
 
 import type { CitizenAction, CitizenSpriteState } from './citizenFigure';

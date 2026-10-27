@@ -31,7 +31,7 @@ import {
   prewarmTownCastLook,
   townCastLookRows,
 } from '../sprites/townCastSprite';
-import type { TownSpecies } from '../systems/townSpecies';
+import type { CrowdSpecies } from '../systems/townSpecies';
 import type { RoutinePose } from './routinePose';
 import { VARIETY_TIERS, varietyTier, type VarietyTier } from '../core/perf/varietyTier';
 import type { CitizenSpeechStyle } from '../dialog/speakers';
@@ -162,13 +162,19 @@ function pickHawkfolkLook(seed: number, role: TownRole, tier: VarietyTier): Hawk
 export function pickCitizenFigure(
   seed: number,
   role: TownRole,
-  species: TownSpecies,
+  species: CrowdSpecies,
   tier: VarietyTier = varietyTier(),
 ): CitizenFigure {
-  if (species === 'hawkfolk') {
-    return { species: 'hawkfolk', look: pickHawkfolkLook(seed, role, tier) };
+  switch (species) {
+    case 'hawkfolk':
+      return { species: 'hawkfolk', look: pickHawkfolkLook(seed, role, tier) };
+    case 'human':
+      return { species: 'human', look: pickTownCastLook(seed, role, tier) };
+    default: {
+      const unhandled: never = species;
+      return unhandled;
+    }
   }
-  return { species: 'human', look: pickTownCastLook(seed, role, tier) };
 }
 
 /**

@@ -69,15 +69,31 @@ look to everyone. Every citizen wears one of a closed set of authored looks, and
 only picks which. `docs/town.md` ("Who lives here") covers the cast, the species ratio
 and why the crowd is rolled from the world seed.
 
-- **Species is its own axis.** `TownSpecies` (`src/systems/townSpecies.ts`) is carried
-  by `ResidentDef`, `OccupantSpec` and `Townsperson`. `TownRole` is only a job, so never
-  add a species to it. A service belongs to the occupant who keeps it
-  (`OccupantSpec.service`), not to a role.
+- **Species is its own axis.** `TownSpecies` (`src/systems/townSpecies.ts`: human,
+  Hawkfolk, dwarf, otter, crocodilian) is carried by `ResidentDef`, `OccupantSpec` and
+  `Townsperson`. `TownRole` is only a job, so never add a species to it. A service belongs
+  to the occupant who keeps it (`OccupantSpec.service`), not to a role.
+- **Species is not a look.** Only a `CrowdSpecies` (human, Hawkfolk) has a citizen cast:
+  crowds roll only those and `pickCitizenFigure` takes only those. The types refuse a
+  non-crowd person without a bespoke figure: `TownspersonFigureOptions` and
+  `OccupantIdentity` only take a non-crowd `species` beside a `bespokeFigure`, and a
+  named resident brings species and figure from their own records, so neither can be set
+  beside a `residentId`. A new species is a `TownSpecies` member plus its entries in the
+  `Record<TownSpecies, …>` tables, which fail to compile until filled: `DANGER_LINES` and
+  `AMBIENT_VOICE_OF`
+  (`src/dialog/scripts/townsfolk.ts`, which may share an existing ambient pool or name a
+  new one) and `FRONTAGE_HAWKFOLK_SHARE_BY_KEEPER` (`TownLifeSystem`).
+- **A building's keeper is named.** `BUILDING_KEEPERS` (`src/systems/townResidents.ts`)
+  names who keeps each building a resident lives in; its type requires an entry for every
+  such building and only accepts someone who lives there. The keeper's species leans the
+  door's frontage crowd: Hawkfolk toward Hawkfolk, and every species without wings
+  (human, dwarf, otter, crocodilian) the groundfolk way. A building with no keeper rolls
+  at the plaza ratio.
 - **One dispatch point.** `pickCitizenFigure(seed, role, species, tier?)`
   (`src/creatures/citizenFigure.ts`) returns a `CitizenFigure`. `drawCitizenSprite`,
   `citizenWalkCyclePx`, `citizenFigureRows`, `prewarmCitizenFigure` and
   `prewarmAndPinCitizenTalk` dispatch on it. `Townsperson` never reads a look directly.
-  A third species is a case here.
+  A species that gains a cast joins `CROWD_SPECIES` and becomes a case here.
 - **Room occupants are data.** An interior's people are `OccupantSpec`s in
   `BUILDING_OCCUPANTS` (`src/systems/buildingOccupants.ts`), run by
   `InteriorOccupantSystem`. A spec is five independent parts, each a discriminated union
@@ -88,7 +104,9 @@ and why the crowd is rolled from the world seed.
     facing, for a hand-laid room such as the Cloak & Dagger's) or `roam`.
   - `territory`: `radius`, `rect` (whole tiles from the stand tile, so it always holds
     it) or `room`; absent, the activity's radius from `ACTIVITY_BEHAVIOR`.
-  - `figure`: `citizen` (the default) or `bespoke`, below.
+  - who they are (`OccupantIdentity`): a `residentId`, whose species and figure come
+    from their own records; or an unnamed occupant with an optional crowd `species`
+    (default human) wearing a cast look, or any `species` with a `bespokeFigure`.
   - `routine` (`OccupantRoutine`, `src/systems/occupantRoutines.ts`): `mop` (the
     janitors, Puddles and Grout) or `target_practice` with a `targetProp` (Steve
     Cartwright, who holds fire while any crawler, companion or hireling crosses the line
@@ -109,8 +127,8 @@ and why the crowd is rolled from the world seed.
   janitors on the crocodilian painter, Steve the otter, Old Lori, Brandon) is an entry
   in `BESPOKE_RESIDENT_FIGURES` (`src/creatures/bespokeResidentFigures.ts`) adapting that
   painter to the citizen draw state, mapping citizen actions and routine poses onto its
-  rows, plus `figure: { kind: 'bespoke', id }` on their `OccupantSpec`. Nothing in
-  `Townsperson` or the occupant system changes. `Townsperson.body` is the
+  rows, plus `{ kind: 'bespoke', figure: id }` as their `RESIDENT_LOOKS` entry. Nothing
+  in `Townsperson` or the occupant system changes. `Townsperson.body` is the
   `TownspersonBody` union, and `townspersonBody.ts` dispatches draw, prewarm, cadence and
   voice on it.
 - **Variety tiers trim the street's looks, never its roles.** The pick reads the
@@ -161,9 +179,11 @@ and why the crowd is rolled from the world seed.
   - The leg is solved by IK from the foot. The body rides the hip, so `bob` and `crouch`
     must never translate the whole figure, which would lift the feet off the ground.
   - A Hawkfolk dancer needs wing `flare` to get a wing above its head.
-- **Named residents** each wear a fixed look from `src/creatures/residentFigures.ts`,
-  which throws on a missing entry. Resident looks are never offered to the street
-  picker.
+- **Named residents** each wear a fixed look from `RESIDENT_LOOKS` in
+  `src/creatures/residentFigures.ts`: a cast look from their own species' cast, checked
+  against their `ResidentDef` at compile time, or a bespoke painter. The table is a
+  mapped type over `ResidentId`, so a new resident fails to compile until given one.
+  Resident looks are never offered to the street picker.
 - **Citizens are never `Mob`s.** `npm run verify:citizens-not-targetable` fails a
   target-picking system that mentions `Townsperson`. The fightable `Hawkfolk` mobs wear
   the street-tough looks only.

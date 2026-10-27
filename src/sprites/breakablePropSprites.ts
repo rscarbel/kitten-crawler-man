@@ -6,6 +6,7 @@
  */
 
 import type { SpriteKey } from '../core/spriteAssets/SpriteLoader';
+import { sheetStateInkTop } from '../core/spriteAssets/SpriteRenderer';
 import { isOilDrum, onServiceLevel, propVariantIndex } from '../map/dungeon/propVariants';
 import type { PropKind } from './art/destructiblePropArt';
 
@@ -48,4 +49,19 @@ export function themedPropSpriteKey(kind: PropKind, tileX: number, tileY: number
 export function themedPropLookFrame(kind: PropKind, tileX: number, tileY: number): number {
   if (kind === 'torch' || kind === 'brazier') return 0;
   return propVariantIndex(tileX, tileY);
+}
+
+/**
+ * The screen y of the highest pixel the prop on this tile paints in `state`,
+ * for a tile whose top is at screen `sy`; `sy` before its sheet loads.
+ */
+export function themedPropInkTop(
+  kind: PropKind,
+  tileX: number,
+  tileY: number,
+  state: string,
+  sy: number,
+  ts: number,
+): number {
+  return sheetStateInkTop(themedPropSpriteKey(kind, tileX, tileY), state, sy, ts) ?? sy;
 }

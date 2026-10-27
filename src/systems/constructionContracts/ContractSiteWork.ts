@@ -42,10 +42,9 @@ import {
 import { REPAIR_ROWS } from '../../sprites/art/humanFigure';
 import {
   drawInteractionPrompt,
+  drawInteractionPromptWithCost,
   interactionPromptsSuppressed,
-  interactionPromptTop,
 } from '../../ui/InteractionPrompt';
-import { drawRequirementRow } from '../../ui/RequirementRow';
 import {
   drawAreaHighlightFrame,
   drawAreaHighlightGround,
@@ -112,8 +111,6 @@ const RESOURCE_NOTE_INTERVAL_FRAMES = UPDATES_PER_SECOND;
 const PROGRESS_BAR_WIDTH = 36;
 const PROGRESS_BAR_HEIGHT = 5;
 const PROGRESS_BAR_LIFT_PX = 10;
-/** Gap between the SPACE prompt and the cost line stacked above it. */
-const COST_LINE_GAP_PX = 12;
 /** How far a finished prop's sheen climbs above its footprint: roughly one tile of standing furniture. */
 const PROP_STANDING_HEIGHT_TILES = 1;
 /**
@@ -321,6 +318,11 @@ export function contractSpotHighlightColor(mood: AreaHighlightMood): string {
   return mood === 'ready' ? worldPalette.objective.ready : worldPalette.objective.pending;
 }
 
+/** How far a spot's furniture stands above its footprint, in world pixels; nothing for any other surface. */
+function contractSpotRisePx(footprint: ContractSpotFootprint): number {
+  return footprint.surface === 'prop' ? PROP_STANDING_HEIGHT_TILES * TILE_SIZE : 0;
+}
+
 /**
  * The screen rectangle a standing spot's frame spans, or null for a spot
  * that lies on the floor and is marked by its ground outline alone. A prop's
@@ -333,7 +335,7 @@ export function contractSpotFrameRect(
   into: ScratchRect,
 ): ContractRectPx | null {
   if (!STANDING_SURFACES.has(footprint.surface)) return null;
-  const rise = footprint.surface === 'prop' ? PROP_STANDING_HEIGHT_TILES * TILE_SIZE : 0;
+  const rise = contractSpotRisePx(footprint);
   const { rect } = footprint;
   into.x = rect.x * TILE_SIZE - camX;
   into.y = rect.y * TILE_SIZE - camY - rise;
@@ -874,9 +876,12 @@ export class ContractSiteWork {
     if (spot === null) return false;
     if (this.job !== null) return true;
     const rect = rectOnScreen(spot.footprint.rect, camX, camY, this.scratchRect);
+    // A prop spot's highlight frame climbs to the top of its furniture, so the prompt clears that.
+    const artTop = rect.y - contractSpotRisePx(spot.footprint);
+    const footprintBottom = rect.y + rect.h;
     const standDown = this.standDownReason();
     if (standDown !== null) {
-      drawInteractionPrompt(ctx, rect.x, rect.y, rect.w, standDown);
+      drawInteractionPrompt(ctx, rect.x, artTop, rect.w, footprintBottom, standDown);
       return true;
     }
     // In touch mode the key cap itself reads "TAP", so the label finishes its sentence.
@@ -884,15 +889,9 @@ export class ContractSiteWork {
       touch: `to ${spot.def.label.toLowerCase()}`,
       pointer: spot.def.label,
     });
-    drawInteractionPrompt(ctx, rect.x, rect.y, rect.w, label);
-    if (!interactionPromptsSuppressed()) {
-      drawRequirementRow(
-        ctx,
-        costRequirements(this.deps.human, this.deps.cat, spot.def.cost),
-        rect.x + rect.w / 2,
-        interactionPromptTop(rect.y) - COST_LINE_GAP_PX,
-      );
-    }
+    if (interactionPromptsSuppressed()) return true;
+    const cost = costRequirements(this.deps.human, this.deps.cat, spot.def.cost);
+    drawInteractionPromptWithCost(ctx, rect.x, artTop, rect.w, footprintBottom, label, cost);
     return true;
   }
 

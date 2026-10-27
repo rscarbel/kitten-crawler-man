@@ -27,6 +27,7 @@ import {
 import { CLUB_PROPS, propSortY, type ClubProp } from '../core/club/clubProps';
 import { CLUB_ANIM_FRAMES_PER_SECOND } from '../core/club/clubTiming';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
+import { beginOverheadMeasure, endOverheadMeasure } from '../ui/world/overheadStack';
 import { drawClubCastFigure, type ClubFigureRef } from '../sprites/clubCastFigure';
 import { drawOverheadIcon, overheadIconFor, type ShopSign } from '../sprites/overheadIcon';
 import { scaleHumanoidBox } from '../sprites/humanoidScale';
@@ -201,6 +202,12 @@ export class CloakAndDaggerSystem {
   /** Bodies for whoever moves — crawlers and residents — refilled in place each frame. */
   private readonly movingBodies: CrowdBody[] = [];
   private movingBodiesUsed = 0;
+
+  /**
+   * How far above its tile each staffed station's last draw reached — its
+   * keeper, and the badge they wear — keyed by the station's own tile.
+   */
+  private readonly postOverheadReachPx = new Map<ClubStation['tile'], number>();
 
   /** The club's standing cast — furniture, staff and stages — none of which ever moves. */
   private readonly fixtureFigures: ReadonlyArray<InteriorFigure> = this.buildFixtureFigures();
@@ -670,17 +677,26 @@ export class CloakAndDaggerSystem {
       render: (ctx, camX, camY, tileSize) => {
         const sx = tile.x * TILE_SIZE - camX;
         const sy = tile.y * TILE_SIZE - camY;
-        const drawnRow = drawClubCastFigure(ctx, ref, sx, sy, tileSize, {
-          action,
-          walkPhase: 0,
-          facingX,
-          facingY: 1,
-          loopOffsetSeconds: seed / CLUB_ANIM_FRAMES_PER_SECOND,
-        });
-        if (icon === 'none') return;
-        const box = scaleHumanoidBox(sx, sy, tileSize);
-        const artTop = drawnRow === undefined ? box.sy : figureRowInkTop(drawnRow, sy, tileSize);
-        drawOverheadIcon(ctx, box.sx, artTop, box.s, icon);
+        let overheadTop: number | null;
+        beginOverheadMeasure(ctx, 'all');
+        try {
+          const drawnRow = drawClubCastFigure(ctx, ref, sx, sy, tileSize, {
+            action,
+            walkPhase: 0,
+            facingX,
+            facingY: 1,
+            loopOffsetSeconds: seed / CLUB_ANIM_FRAMES_PER_SECOND,
+          });
+          if (icon !== 'none') {
+            const box = scaleHumanoidBox(sx, sy, tileSize);
+            const artTop =
+              drawnRow === undefined ? box.sy : figureRowInkTop(drawnRow, sy, tileSize);
+            drawOverheadIcon(ctx, box.sx, artTop, box.s, icon);
+          }
+        } finally {
+          overheadTop = endOverheadMeasure();
+        }
+        if (overheadTop !== null) this.postOverheadReachPx.set(tile, sy - overheadTop);
       },
     };
   }
@@ -785,7 +801,30 @@ export class CloakAndDaggerSystem {
     if (station === null) return;
     const sx = station.tile.x * TILE_SIZE - camX;
     const sy = station.tile.y * TILE_SIZE - camY;
-    drawInteractionPrompt(ctx, sx, sy, TILE_SIZE, STATION_PROMPT[station.id]);
+    drawInteractionPrompt(
+      ctx,
+      sx,
+      this.stationTop(station, sx, sy),
+      TILE_SIZE,
+      sy + TILE_SIZE,
+      STATION_PROMPT[station.id],
+    );
+  }
+
+  /**
+   * The line a station's prompt must clear. A staffed station's keeper stands
+   * on its tile, enlarged past it, so the prompt clears them and any badge
+   * they wear; a keeper painted by hand rather than from the figure cache
+   * reports nothing, and is cleared by the box they are drawn in instead.
+   */
+  private stationTop(station: ClubStation, sx: number, sy: number): number {
+    const staffed = CLUB_STAFFED_POSTS.some(
+      (post) => post.x === station.tile.x && post.y === station.tile.y,
+    );
+    if (!staffed) return sy;
+    const reach = this.postOverheadReachPx.get(station.tile);
+    if (reach !== undefined) return sy - reach;
+    return scaleHumanoidBox(sx, sy, TILE_SIZE).sy;
   }
 
   private renderDanceFloorLights(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {

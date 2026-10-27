@@ -167,6 +167,15 @@ function fillEllipse(
   ctx.fill();
 }
 
+/**
+ * The screen y of the highest pixel {@link drawHawkfolkCorpse} paints for a
+ * tile whose top is at `sy`: the chair back or the beak, whichever stands taller.
+ */
+export function hawkfolkCorpseTop(sy: number, s: number): number {
+  const centreY = sy + s / 2;
+  return centreY + Math.min(CHAIR_TOP_Y, UPPER_BEAK_TIP.y) * s;
+}
+
 export function drawHawkfolkCorpse(
   ctx: CanvasRenderingContext2D,
   sx: number,

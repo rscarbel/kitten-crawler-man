@@ -21,7 +21,7 @@ import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { bakeFigureCell } from './figureSheet.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import { allResidents, type ResidentDef } from '../src/systems/townResidents.js';
-import { residentFigure, residentWearsCastLook } from '../src/creatures/residentFigures.js';
+import { castLookFigure, residentLook } from '../src/creatures/residentFigures.js';
 import type { CitizenFigure } from '../src/creatures/citizenFigure.js';
 import { townCastOutfitFigure, townCastStateName } from '../src/sprites/art/townCastFigure.js';
 import { castStateName, hawkfolkCastFigure } from '../src/sprites/art/hawkfolkCastFigure.js';
@@ -84,9 +84,10 @@ function cardFor(name: string, figure: CitizenFigure, isStreet: boolean): Card {
 }
 
 function residentCards(): Card[] {
-  return allResidents()
-    .filter((resident: ResidentDef) => residentWearsCastLook(resident.id))
-    .map((resident: ResidentDef) => cardFor(resident.name, residentFigure(resident.id), false));
+  return allResidents().flatMap((resident: ResidentDef) => {
+    const look = residentLook(resident.id);
+    return look.kind === 'cast' ? [cardFor(resident.name, castLookFigure(look), false)] : [];
+  });
 }
 
 function streetComparisonCards(): Card[] {

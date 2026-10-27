@@ -13,6 +13,7 @@
 
 import { TILE_SIZE } from '../core/constants';
 import type { GameMap } from '../map/GameMap';
+import type { BuildingName } from '../map/buildingEntry';
 import {
   BOOKSHELF,
   TABLE,
@@ -77,7 +78,7 @@ export class InteriorReadableSystem {
    */
   static forBuilding(
     map: GameMap,
-    name: string,
+    name: BuildingName,
     occupiedFurniture: ReadonlySet<string>,
   ): InteriorReadableSystem | null {
     const readables = readablesFor(name);

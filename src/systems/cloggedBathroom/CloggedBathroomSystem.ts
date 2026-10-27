@@ -76,7 +76,7 @@ import {
 import { TimedSpeech, drawTimedSpeechBubble } from '../../sprites/speechBubble';
 import type { Surface } from '../../ui/core/UiRoot';
 import { ActivityDifficultyGate } from '../../ui/screens/dialogs/activityDifficultyPicker';
-import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
+import { drawInteractionPrompt, drawInteractionPromptOver } from '../../ui/InteractionPrompt';
 import type { ToastOptions } from '../../ui/hud/toasts';
 import { REFRESHED_TOAST, refreshedNotice } from '../../ui/potionNotices';
 import { partyXpSections } from '../../ui/questReward/rewardLines';
@@ -1271,16 +1271,18 @@ export class CloggedBathroomSystem
       case 'plumber':
       case 'goblin': {
         const goblin = target.kind === 'plumber' ? target.copy.plumber : target.slot.goblin;
-        drawInteractionPrompt(ctx, goblin.x - camX, goblin.y - camY, TILE_SIZE, 'Talk');
+        drawInteractionPromptOver(ctx, goblin, camX, camY, 'Talk');
         return;
       }
       case 'pipeWall': {
-        const wall = target.copy.room.pipeWallTile;
+        const stand = target.copy.room.pipeWallStandTile;
+        const standTop = stand.y * TILE_SIZE - camY;
         drawInteractionPrompt(
           ctx,
-          wall.x * TILE_SIZE - camX,
-          wall.y * TILE_SIZE - camY,
+          stand.x * TILE_SIZE - camX,
+          standTop - BATHROOM_FACE_REACH_TILES * TILE_SIZE,
           TILE_SIZE,
+          standTop + TILE_SIZE,
           BATHROOM_PROMPTS.fixPipes,
         );
         return;
@@ -1291,8 +1293,9 @@ export class CloggedBathroomSystem
         drawInteractionPrompt(
           ctx,
           door.x * TILE_SIZE - camX,
-          (door.y - 1) * TILE_SIZE - camY,
+          (door.y - BATHROOM_FACE_REACH_TILES) * TILE_SIZE - camY,
           TILE_SIZE * STALL_WIDTH_TILES,
+          (door.y + 1) * TILE_SIZE - camY,
           label,
         );
         return;

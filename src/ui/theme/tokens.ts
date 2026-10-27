@@ -7,6 +7,7 @@
  */
 
 import { UI_FONT_STACK } from './fonts';
+import { worldPalette } from './worldInk';
 
 export const palette = {
   surface: {
@@ -47,6 +48,15 @@ export const palette = {
     celebrateCool: '#5ED3F0',
   },
   state: { success: '#3DD68C', danger: '#FF5D5D', warning: '#FFB020', info: '#5AA9FF' },
+  /**
+   * A cost checklist hung over the world: the same inks and edge as the
+   * world-drawn checklist, so a cost line looks alike wherever it is set.
+   */
+  requirement: {
+    met: worldPalette.ink.success,
+    short: worldPalette.ink.dangerSoft,
+    halo: worldPalette.outline,
+  },
   meter: {
     hp: '#FF5D5D',
     hpLow: '#FF8A3D',

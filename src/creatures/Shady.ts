@@ -6,6 +6,8 @@ import { drawShadySprite, SCRATCH_DURATION_FRAMES } from '../sprites/shadySprite
 import {
   drawQuestMarker,
   questMarkerColorFor,
+  questMarkerTopY,
+  type QuestMarkerGlyph,
   type QuestMarkerState,
 } from '../sprites/questNPCSprite';
 import type { DrawnFigureRow } from '../sprites/figure/figureDef';
@@ -155,10 +157,37 @@ export class Shady extends Mob {
     const markerColor = questMarkerColorFor(this.markerType);
     if (!this.isAlive || markerColor === undefined) return;
     const box = this.spriteBox(camX, camY, tileSize);
-    const artTop =
-      this.drawnRow === undefined ? box.sy : figureRowInkTop(this.drawnRow, box.sy, box.s);
-    const glyph = this.markerType === 'question' ? '?' : '!';
-    drawQuestMarker(ctx, box.sx, artTop, box.s, glyph, markerColor);
+    const artTop = this.markerArtTop(box.sy, box.s);
+    drawQuestMarker(ctx, box.sx, artTop, box.s, this.markerGlyph, markerColor);
+  }
+
+  /**
+   * His body's reach, or his marker's top while he wears one: the marker is
+   * painted in a later pass than his body, so it never reports from his draw.
+   */
+  override overheadTop(ctx: CanvasRenderingContext2D, sy: number): number {
+    const bodyTop = super.overheadTop(ctx, sy);
+    if (!this.isAlive || questMarkerColorFor(this.markerType) === undefined) return bodyTop;
+    const markerTop = questMarkerTopY(
+      ctx,
+      this.markerArtTop(sy, this.tileSize),
+      this.tileSize,
+      this.markerGlyph,
+    );
+    return Math.min(bodyTop, markerTop);
+  }
+
+  protected override rememberedArtTop(sy: number): number | null {
+    return this.drawnRow === undefined ? null : figureRowInkTop(this.drawnRow, sy, this.tileSize);
+  }
+
+  private get markerGlyph(): QuestMarkerGlyph {
+    return this.markerType === 'question' ? '?' : '!';
+  }
+
+  /** The line his marker hangs over: the row his last body paint drew, or his tile's top before one. */
+  private markerArtTop(sy: number, s: number): number {
+    return this.drawnRow === undefined ? sy : figureRowInkTop(this.drawnRow, sy, s);
   }
 
   /**

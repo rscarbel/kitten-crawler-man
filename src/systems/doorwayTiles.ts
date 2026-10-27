@@ -1,6 +1,5 @@
 import type { GameMap } from '../map/GameMap';
 import { tileCoordKey } from '../map/tileIndex';
-import { doorwaySpan } from './BuildingSystem';
 
 /**
  * Every tile of every building's doorway on `gameMap`, as `tileCoordKey`s:
@@ -10,7 +9,7 @@ import { doorwaySpan } from './BuildingSystem';
 export function doorwayKeys(gameMap: Pick<GameMap, 'buildingEntries'>): ReadonlySet<number> {
   const keys = new Set<number>();
   for (const entry of gameMap.buildingEntries) {
-    const { x0, width } = doorwaySpan(entry);
+    const { x0, width } = entry.doorway;
     for (let x = x0; x < x0 + width; x++) keys.add(tileCoordKey(x, entry.doorTile.y));
   }
   return keys;

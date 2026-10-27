@@ -57,6 +57,7 @@
  * which also gives it the cell's hard crop for free.
  */
 
+import { overheadMeasuringOn, reportFigureTop } from '../../ui/world/overheadStack';
 import {
   allocCanvas,
   allocReadableCanvas,
@@ -3260,38 +3261,10 @@ function rowInkTopCellPx(row: DrawnFigureRow): number {
   return 0;
 }
 
-interface InkTopCapture {
-  readonly ctx: CanvasRenderingContext2D;
-  readonly toCallerSpace: DOMMatrix;
-  topY: number | null;
-}
-
-/** A stack, so a nested measurement also counts toward the outer one. */
-const inkTopCaptures: InkTopCapture[] = [];
-
 /**
- * Runs `paint` and returns the highest whole-row ink y of every figure it drew
- * on `ctx`, in `ctx`'s current space, or `null` when it drew none.
+ * Reports a blit's whole-row ink top to the overhead stack. The row is only
+ * looked up, and queued for measuring, when a measurement is running on `ctx`.
  */
-export function measureFiguresInkTop(
-  ctx: CanvasRenderingContext2D,
-  paint: () => void,
-): number | null {
-  const capture: InkTopCapture = {
-    ctx,
-    toCallerSpace: ctx.getTransform().invertSelf(),
-    topY: null,
-  };
-  inkTopCaptures.push(capture);
-  try {
-    paint();
-  } finally {
-    inkTopCaptures.pop();
-  }
-  return capture.topY;
-}
-
-/** Both top corners go through the transform: a mirror or rotation can lift either one. */
 function recordInkTop(
   ctx: CanvasRenderingContext2D,
   def: FigureDef,
@@ -3300,18 +3273,9 @@ function recordInkTop(
   destY: number,
   scale: number,
 ): void {
-  if (inkTopCaptures.length === 0) return;
+  if (!overheadMeasuringOn(ctx)) return;
   const inkTopY = destY + rowInkTopCellPx(drawnFigureRow(def, state)) * scale;
-  const rightX = destX + def.frameWidth * scale;
-  const placement = ctx.getTransform();
-  for (const capture of inkTopCaptures) {
-    if (capture.ctx !== ctx) continue;
-    const toCaller = capture.toCallerSpace.multiply(placement);
-    const leftTopY = toCaller.b * destX + toCaller.d * inkTopY + toCaller.f;
-    const rightTopY = toCaller.b * rightX + toCaller.d * inkTopY + toCaller.f;
-    const placedTopY = Math.min(leftTopY, rightTopY);
-    capture.topY = Math.min(capture.topY ?? placedTopY, placedTopY);
-  }
+  reportFigureTop(ctx, destX, destX + def.frameWidth * scale, inkTopY);
 }
 
 /** Rows {@link figureRowInkTop} has queued and not yet finished measuring. */

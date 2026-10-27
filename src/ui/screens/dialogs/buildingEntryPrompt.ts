@@ -3,7 +3,7 @@
  * default; Escape and Leave keep the party outside until they step off and on.
  */
 
-import type { BuildingEntry } from '../../../systems/BuildingSystem';
+import type { BuildingEntry } from '../../../map/buildingEntry';
 import type { BuildingKind } from '../../../map/town/townPlan';
 import type { Surface } from '../../core/UiRoot';
 import type { PanelWidth } from '../../theme/tokens';

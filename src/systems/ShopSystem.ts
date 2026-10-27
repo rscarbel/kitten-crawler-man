@@ -1,8 +1,11 @@
 import { TILE_SIZE } from '../core/constants';
 import type { Player } from '../Player';
 import type { GameSystem } from './GameSystem';
-import { drawInteractionPrompt } from '../ui/InteractionPrompt';
-import type { Townsperson } from '../creatures/Townsperson';
+import {
+  drawInteractionPrompt,
+  drawInteractionPromptOver,
+  type PromptFigure,
+} from '../ui/InteractionPrompt';
 import type { ShopId } from '../economy/shops';
 import type { ShopStock } from '../economy/shopStock';
 import { ShopSession } from '../ui/screens/shop/shopSession';
@@ -32,7 +35,7 @@ export class ShopSystem implements GameSystem {
    * exists), so it starts `null` and falls back to a fixed spot behind the
    * counter until then.
    */
-  private keeper: Pick<Townsperson, 'x' | 'y'> | null = null;
+  private keeper: PromptFigure | null = null;
   private readonly fallbackKeeperX: number;
   private readonly fallbackKeeperTileY = 1;
 
@@ -47,7 +50,7 @@ export class ShopSystem implements GameSystem {
   }
 
   /** Points this system at Kestrel's own occupant, once the scene has built its roster. */
-  setKeeper(keeper: Pick<Townsperson, 'x' | 'y'> | null): void {
+  setKeeper(keeper: PromptFigure | null): void {
     this.keeper = keeper;
   }
 
@@ -102,8 +105,12 @@ export class ShopSystem implements GameSystem {
    */
   renderObjects(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): void {
     if (this.isOpen || !this.isNearShopkeeper(active)) return;
-    const sx = this.keeperX() - camX;
-    const sy = this.keeperY() - camY;
-    drawInteractionPrompt(ctx, sx, sy, TILE_SIZE, 'Shop');
+    if (this.keeper !== null) {
+      drawInteractionPromptOver(ctx, this.keeper, camX, camY, 'Shop');
+      return;
+    }
+    const keeperTop = this.keeperY() - camY;
+    const keeperX = this.keeperX() - camX;
+    drawInteractionPrompt(ctx, keeperX, keeperTop, TILE_SIZE, keeperTop + TILE_SIZE, 'Shop');
   }
 }

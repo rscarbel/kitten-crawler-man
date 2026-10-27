@@ -7,7 +7,7 @@
 import { getSkillDef } from '../../../core/skills/SkillManager';
 import type { DescentPrompt } from '../../../systems/StairwellSystem';
 import type { TowerStairPrompt } from '../../../systems/TowerStairSystem';
-import type { BuildingEntry } from '../../../systems/BuildingSystem';
+import type { BuildingEntry } from '../../../map/buildingEntry';
 import { LevelUpDialog } from '../../../ui/LevelUpDialog';
 import { RewardGrantedDialog } from '../../../ui/RewardGrantedDialog';
 import { SkillBookPrompt } from '../../../ui/SkillBookPrompt';
@@ -109,6 +109,8 @@ const TAVERN: BuildingEntry = {
   doorTile: { x: 0, y: 0 },
   name: 'The Sunken Stump Pub',
   type: 'store',
+  doorway: { x0: 0, width: 1 },
+  sign: 'tankard',
 };
 
 function towerFixture(name: string, prompt: TowerStairPrompt): DialogFixture {

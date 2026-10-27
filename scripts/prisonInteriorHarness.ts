@@ -24,6 +24,7 @@ import {
   type PrisonTile,
 } from '../src/map/goblinPrisonPlan.js';
 import { PRISON_LAYOUTS } from '../src/map/goblinPrisonLayouts.js';
+import { PRISON_BUILDING_NAME, PRISON_DOOR_WIDTH_TILES } from '../src/map/stealthGateLayout.js';
 import { BuildingInteriorScene } from '../src/scenes/BuildingInteriorScene.js';
 import type { InteriorFloorContext } from '../src/scenes/interiorFloorContext.js';
 import { createShopStock } from '../src/economy/shopStock.js';
@@ -70,10 +71,9 @@ export interface PrisonHarness {
 
 const PRISON_ENTRY = {
   doorTile: { x: 0, y: 0 },
-  name: 'Goblin High Security Prison',
+  name: PRISON_BUILDING_NAME,
   type: 'prison',
-  doorwayX0: 0,
-  doorwayWidth: 2,
+  doorway: { x0: 0, width: PRISON_DOOR_WIDTH_TILES },
 } as const;
 
 /**

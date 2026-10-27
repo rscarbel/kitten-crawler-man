@@ -26,6 +26,9 @@ The layout follows a few rules. They are worth keeping when adding to the town:
 The wall itself is drawn procedurally by `drawTownWallTile` (`src/map/tiles/buildingTiles.ts`):
 coursed ashlar, with a crenellated parapet on any run's exposed north face, phased off the
 tile's world-pixel column so the battlement runs continuous across tile boundaries.
+Its ground is baked into the chunk cache; the stone stands in the Y-sorted pass and
+sorts on the tile's south edge, so it covers the lower body of anyone standing north of
+it. Yard fences (`FENCE`) and the ruins' `RUINED_WALL` are split the same way.
 
 ### Districts
 
@@ -48,29 +51,39 @@ The town is a Hawkfolk city with a human minority. That ratio carries the story:
 doomsday spell is built to kill every non-hawkfolk inhabitant, which only means something
 if there are visibly some.
 
-**Species is not a job.** `TownSpecies` (`src/systems/townSpecies.ts`, `'human' |
-'hawkfolk'`) is its own axis, carried by `ResidentDef.species`, `OccupantSpec.species` and
-every `Townsperson`. `TownRole` is only ever a job: it picks barks and a citizen's look,
+**Species is not a job.** `TownSpecies` (`src/systems/townSpecies.ts`: human, Hawkfolk,
+dwarf, otter, crocodilian) is its own axis, carried by `ResidentDef.species`,
+`OccupantSpec.species` and every `Townsperson`. It is what a person is, not what they are
+drawn as: only a `CrowdSpecies` (human, Hawkfolk) has an authored citizen cast, so only
+those are rolled into the crowd or wear a cast look; anyone else is drawn by a bespoke
+painter, and `TownspersonFigureOptions`, `OccupantIdentity` and `RESIDENT_LOOKS` refuse to
+compile one without it. Each species has its own danger barks (`DANGER_LINES` in
+`src/dialog/scripts/townsfolk.ts`), and `AMBIENT_VOICE_OF` names the ambient pool its
+unnamed citizens talk from. `TownRole` is only ever a job: it picks barks and a citizen's look,
 and a species in the role union would bark as a job. A counter belongs to the person who
 keeps it (`OccupantSpec.service`), so neither species nor role touches it.
 
 **The named cast** is `RESIDENT_DEFS` in `src/systems/townResidents.ts`: twenty residents,
-nine Hawkfolk and eleven on the `'human'` side of the species axis. The humans are Wendell (Plumbline
-Farm), Marta Miller, Apothecary Fen, Innkeep Marlow and Wick, the General Store's clerk.
-Old Lori (a dwarf), Steve Cartwright (an otter), the pub janitors Puddles and Grout and
-Sydney at the Barracks Mercenaries' desk (crocodilians), and Brandon at the Cloak &
-Dagger's front desk are drawn by bespoke painters (see the `figure` part under
-[Furniture is placed props](#furniture-is-placed-props)) and count as `'human'` on the
-species axis, which only has the two values; it picks their danger barks and their door's
-frontage crowd, and their own lines never speak as Hawkfolk. Keeper Brenna
+nine Hawkfolk, six humans, a dwarf, an otter and three crocodilians. The humans are Wendell
+(Plumbline Farm), Marta Miller, Apothecary Fen, Innkeep Marlow, Wick, the General Store's
+clerk, and Brandon at the Cloak & Dagger's front desk. Old Lori (a dwarf), Steve Cartwright
+(an otter), the pub janitors Puddles and Grout and Sydney at the Barracks Mercenaries' desk
+(crocodilians) and Brandon are drawn by bespoke painters. Every resident's figure is their
+entry in `RESIDENT_LOOKS` (`src/creatures/residentFigures.ts`): a look from their own
+species' cast, which the compiler checks against their `ResidentDef`, or a bespoke painter. Each building a resident lives in
+names its keeper in `BUILDING_KEEPERS`, which the compiler holds to one entry per such
+building and to someone who lives there. Keeper Brenna
 Kestrel runs the General Store: she is the counter occupant `ShopSystem.setKeeper` points
 the shop at. The club's counter staff (the bartender, the vendor, Deuce and Donald) belong
 to `CloakAndDaggerSystem`, and Mordecai to `SafeRoomSystem`; both sit outside the ratio.
 
 **The crowd.** `TownLifeSystem` rolls each street cohort's species at its own share:
 `PLAZA_HAWKFOLK_SHARE` and `ANCHOR_HAWKFOLK_SHARE` two thirds, `TRAVELER_HAWKFOLK_SHARE` one
-half (the roads bring outsiders in). A door's loiterers lean toward its resident's species
-(`frontageHawkfolkShare`), and each doorstep anchor's species is fixed with its post
+half (the roads bring outsiders in). A door's loiterers lean toward its keeper's species
+(`FRONTAGE_HAWKFOLK_SHARE_BY_KEEPER`): a Hawkfolk keeper's door rolls three quarters
+Hawkfolk, and every keeper without wings (human, dwarf, otter or crocodilian) leans it the
+groundfolk way, one quarter Hawkfolk. A building with no keeper rolls at the plaza's ratio,
+and each doorstep anchor's species is fixed with its post
 (`DOORSTEP_ANCHOR_ROLES`). Interior occupants state theirs per spec. A named occupant
 always takes the species of its `ResidentDef`.
 
@@ -546,7 +559,8 @@ painters live in `src/sprites/art/townInterior/rooms/`, one file per building pl
   must do the same, because the grid under a prop is still floor.
 
 **Occupants stand by furniture.** An `OccupantSpec` has five parts: `placement`,
-`territory`, `figure`, `routine` and `service` (`src/systems/buildingOccupants.ts`).
+`territory`, who they are (`OccupantIdentity`), `routine` and `service`
+(`src/systems/buildingOccupants.ts`).
 
 - **`anchor` placement.** `scanInteriorFurniture` merges the tile scan with each placed
   prop's `anchors`. A prop is **one** piece per instance, with its whole footprint, so
@@ -564,8 +578,10 @@ painters live in `src/sprites/art/townInterior/rooms/`, one file per building pl
   are placed first; a mark on a solid or reserved tile drops the occupant.
 - **`territory`.** A radius, a rect of tiles round the stand, or the room's open floor.
   It defaults to the activity's radius, or the room for a `roam` placement.
-- **`figure`.** A citizen cast look, or a bespoke painter from `BESPOKE_RESIDENT_FIGURES`
-  (`src/creatures/bespokeResidentFigures.ts`), drawn through `Townsperson` either way.
+- **Who they are.** A `residentId`, whose species and figure come from their own records,
+  or an unnamed occupant: a crowd `species` (default human) wearing a cast look, or any
+  species with a `bespokeFigure` from `BESPOKE_RESIDENT_FIGURES`
+  (`src/creatures/bespokeResidentFigures.ts`). Either is drawn through `Townsperson`.
 - **`routine`.** An optional behaviour on top of idle and wander (`occupantRoutines.ts`).
   It sets `Townsperson.routinePose`, which a bespoke figure maps onto rows of its own and
   a cast look draws as its `work` loop; the figure owns each pose's length and the beats

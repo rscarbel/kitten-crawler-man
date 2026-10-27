@@ -7,6 +7,7 @@
  */
 
 import type { Rect } from '../core/geom';
+import { reportOverheadTop } from './overheadStack';
 import {
   WORLD_BAR,
   WORLD_PLATE,
@@ -104,6 +105,7 @@ function strokeShape(
 
 /** A filled bar: track, fill clipped to the track's rounded shape, optional edge. */
 export function worldBar(ctx: CanvasRenderingContext2D, rect: Rect, opts: WorldBarOptions): void {
+  reportOverheadTop(ctx, rect.x, rect.y);
   const base: Partial<WorldBarStyle> = opts.style === undefined ? {} : WORLD_BAR[opts.style];
   const fill = opts.fill ?? base.fill ?? worldPalette.bar.stamina;
   const track = opts.track ?? base.track ?? worldPalette.bar.track;

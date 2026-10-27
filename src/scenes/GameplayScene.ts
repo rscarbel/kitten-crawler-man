@@ -27,6 +27,8 @@ import type { SkillPointReminderSystem } from '../systems/SkillPointReminderSyst
 import type { SystemContext } from '../systems/GameSystem';
 import type { FlyTargets, RewardFlySystem } from '../systems/RewardFlySystem';
 import { SaveIndicator } from '../ui/SaveIndicator';
+import { keepInteractionPromptsClearOf } from '../ui/InteractionPrompt';
+import type { CrawlerBarkSystem } from '../systems/CrawlerBarkSystem';
 import type { EventBus } from '../core/EventBus';
 import { displayHp } from '../core/party/crawlerFormulas';
 import { partyCoins } from '../core/party/partyCoins';
@@ -49,6 +51,21 @@ const CAMERA_CENTER_OFFSET_MULTIPLIER = 0.5;
 const NO_CAMERA_SHAKE = { x: 0, y: 0 } as const;
 /** The Cockroach pill's label: a standing capability rather than a timed effect. */
 const COCKROACH_PILL_LABEL = 'ROACH';
+
+const NEVER_HIDDEN = (): boolean => false;
+
+function keepPromptsClearOfCrawler(
+  ctx: CanvasRenderingContext2D,
+  crawler: HumanPlayer | CatPlayer,
+  camX: number,
+  camY: number,
+  barks: CrawlerBarkSystem,
+): void {
+  const sy = crawler.y - camY;
+  const bodyTop = crawler.overheadTop(ctx, sy);
+  const top = Math.min(bodyTop, barks.barkTop(ctx, crawler, sy) ?? bodyTop);
+  keepInteractionPromptsClearOf(ctx, crawler.x - camX, top, sy + TILE_SIZE);
+}
 
 export abstract class GameplayScene extends Scene {
   abstract readonly pm: PlayerManager;
@@ -111,6 +128,22 @@ export abstract class GameplayScene extends Scene {
 
   protected inactive(): HumanPlayer | CatPlayer {
     return this.pm.inactive();
+  }
+
+  /**
+   * Keeps this frame's floating prompts off both crawlers and whatever they
+   * are saying, leaving out any crawler `isHidden` says the world is not
+   * drawing this frame.
+   */
+  protected keepPromptsClearOfCrawlers(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    barks: CrawlerBarkSystem,
+    isHidden: (crawler: HumanPlayer | CatPlayer) => boolean = NEVER_HIDDEN,
+  ): void {
+    if (!isHidden(this.human)) keepPromptsClearOfCrawler(ctx, this.human, camX, camY, barks);
+    if (!isHidden(this.cat)) keepPromptsClearOfCrawler(ctx, this.cat, camX, camY, barks);
   }
 
   /**

@@ -49,6 +49,7 @@ import { speakerLines, type NonEmpty } from '../src/dialog/line';
 import type { Choice, ConversationRequest, ConversationTopic } from '../src/dialog/request';
 import { topicMenu } from '../src/dialog/topics';
 import { GameMap } from '../src/map/GameMap';
+import type { BuildingName } from '../src/map/buildingEntry';
 import { AnchorInteriorSystem } from '../src/systems/AnchorInteriorSystem';
 import { LORI_COTTAGE_NAME, SKY_TEMPLE_NAME } from '../src/systems/interiorStoryOwnership';
 import { AnchorQuestSystem } from '../src/systems/AnchorQuestSystem';
@@ -175,7 +176,7 @@ function makeVoss(progress: AnchorQuestProgress, party: Party, conversation: Con
 }
 
 function makeRoom(
-  buildingName: string,
+  buildingName: BuildingName,
   progress: AnchorQuestProgress,
   party: Party,
   conversation: Conversation,

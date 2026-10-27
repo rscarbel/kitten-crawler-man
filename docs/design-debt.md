@@ -80,25 +80,15 @@ Entry shape:
 - **Size:** S
 - **Found:** 2026-10-23, moving the biped rig's look into `HumanLook`.
 
-### The town's species axis has two values, so bespoke residents are filed as human
-
-- **Where:** `TOWN_SPECIES` (`src/systems/townSpecies.ts`); `ResidentDef.species` for `old_lori`, `steve_cartwright`, `janitor_puddles`, `janitor_grout` and `sydney` (`src/systems/townResidents.ts`); `ambientPool` and `dangerBark` (`src/dialog/scripts/townsfolk.ts`); `TownLifeSystem`'s `residentSpeciesByHome`.
-- **Problem:** Old Lori (a dwarf), Steve Cartwright (an otter) and the three crocodilians Puddles, Grout and Sydney are `'human'` because the axis is `'human' | 'hawkfolk'`. The value is what their interior `Townsperson` carries, picks their danger bark and picks the species their door's frontage crowd leans toward. `residentSpeciesByHome` is a `Map` built from every resident in list order, so where two residents share a home the last one listed wins; `RESIDENT_DEFS` lists the janitors ahead of the innkeepers, and Sydney ahead of the Barracks' Hawkfolk garrison, so the keeper sets the frontage, and comments there say so.
-- **Cost:** a non-human, non-Hawkfolk resident can't have a voice pool of their own, and the frontage depends on the order of a list.
-- **Better shape:** split "what voice pools and crowd share does this person draw on" from what they are drawn as, and name a building's owner explicitly (a `keeper` on the building or an `owns` flag on the resident) instead of taking the last resident listed.
-- **Until then:** list any new second resident of a building ahead of its keeper in `RESIDENT_DEFS`; don't give a bespoke resident lines that only make sense for a human.
-- **Size:** M
-- **Found:** 2026-10-26, the pub janitors and Steve Cartwright becoming bespoke residents.
-
 ## Town and interiors
 
 ### Buildings are identified by their display name
 
-- **Where:** `PlannedBuildingName` (`src/map/town/townPlan.ts`); `INTERIOR_BY_NAME` (`GameMap`); `BUILDING_OCCUPANTS` (`buildingOccupants`); `TownMemory` room and prop keys; `musicBackfill`'s remembered buildings. Also the positional prop ids built by `stableInteriorPropId` (`` `${propId}@${x},${y}` ``).
-- **Problem:** a building's player-facing name ("The Barracks", "Old Lori's Cottage") is also its identity. It is repeated as a string literal in a dozen or more files per building, and it is the key saved data is stored under. Renaming the text therefore changes the identity, and a save written before the rename forgets that building's rooms and payouts. Interior props without an explicit id are keyed by their tile, so moving one forgets its saved state.
-- **Cost:** every rename is a cross-cutting edit that forgets saved state for that building. A typo in one literal silently detaches that system from the building. Display text can't be changed freely or localised.
+- **Where:** `BuildingName` and `BUILDING_NAMES` (`src/map/buildingEntry.ts`), built from `PlannedBuildingName` (`src/map/town/townPlan.ts`); every table keyed by it (`INTERIOR_BY_NAME` in `GameMap`, `BUILDING_OCCUPANTS`, `BUILDING_READABLES`, `KEEPER_BY_BUILDING`, `TAVERN_BUILDING_NAMES` in `src/map/town/townPlan.ts`, `HOUSE_DRINKS`/`HOUSE_BARKS` in `src/systems/townPub.ts`); `musicBackfill`'s remembered buildings. Still a plain `string` because the key also holds a parsed save's value or a test's made-up room: `TownMemory`'s `roomKey`/`interiorPropPayoutKey`, `InteriorPropInteractionSystem`'s `buildingName`, `interiorHostiles`' `InteriorHostileContext.buildingName`/`noteRoomCleared`, and `taloncrestContractSite` (read by `briarHollowState`'s save parser). Also the positional prop ids built by `stableInteriorPropId` (`` `${propId}@${x},${y}` ``).
+- **Problem:** a building's player-facing name ("The Barracks", "Old Lori's Cottage") is also its identity. The tables are typed by the name union, so a misspelled key fails to compile, but the name is still written out as a literal in a dozen or more files per building, and it is the key saved data is stored under. Renaming the text therefore changes the identity, and a save written before the rename forgets that building's rooms and payouts. Interior props without an explicit id are keyed by their tile, so moving one forgets its saved state.
+- **Cost:** every rename is a cross-cutting edit through every table and literal, and it forgets saved state for that building. Display text can't be changed freely or localised.
 - **Better shape:** a stable building id (a slug union) as the only key across layout, occupants, services, memory and saves, with the display name as data on the building's definition. Interior props keyed by stable ids instead of tile positions.
-- **Until then:** refer to a building through its name constant, never a fresh string literal. Never add an alias map from old names to new ones; give a moved prop an explicit id instead.
+- **Until then:** key any new building table by `BuildingName` or `TownBuildingName`, never `string`, and narrow a stored name with `isBuildingName` rather than casting it. Never add an alias map from old names to new ones; give a moved prop an explicit id instead.
 - **Size:** L
 - **Found:** 2026-10-26, renaming the club and Old Lori's Cottage.
 
@@ -356,13 +346,3 @@ Entry shape:
 - **Until then:** import `TileRect`/`TilePoint` from `townPlan.ts` rather than declaring another copy.
 - **Size:** S
 - **Found:** 2026-10-22, floor-wide residency system.
-
-### Tables keyed by a town building's name take a free `string`
-
-- **Where:** `ClutterAnchor`'s `name` in `src/systems/TownDecorSystem.ts`, `DOORSTEP_ANCHOR_ROLES` in `src/systems/TownLifeSystem.ts`, the interior shell table in `src/map/GameMap.ts` (`satisfies ReadonlyArray<[string, InteriorShell]>`), the per-building ambience map in `src/scenes/BuildingInteriorScene.ts`, and `TAVERN_BUILDING_NAMES` in `src/map/town/townPlan.ts`. `'Town Center Tower'` is also spelled out in several files beside `TOWN_TOWER_NAME`.
-- **Problem:** `TownBuildingName` / `PlannedBuildingName` already exist, but these tables key by plain `string`, so a misspelled or renamed building compiles and silently loses its decor, doorstep citizen, interior size or ambience.
-- **Cost:** every building rename is a grep hunt instead of a compile error.
-- **Better shape:** type each table's key as `TownBuildingName` (or a `Partial<Record<TownBuildingName, …>>`), and read the names that have a constant from it.
-- **Until then:** type any new building-keyed table with `TownBuildingName`, and use `CLOAK_AND_DAGGER_NAME` / `TOWN_TOWER_NAME` rather than the literal.
-- **Size:** S
-- **Found:** 2026-10-26, Cloak & Dagger rename.

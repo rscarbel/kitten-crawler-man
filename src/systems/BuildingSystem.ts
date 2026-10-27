@@ -1,5 +1,5 @@
 import type { GameMap } from '../map/GameMap';
-import type { BuildingKind } from '../map/town/townPlan';
+import type { BuildingEntry } from '../map/buildingEntry';
 import { TILE_SIZE } from '../core/constants';
 import { tileCoordKey } from '../map/tileIndex';
 
@@ -9,21 +9,6 @@ import type { GameSystem, SystemContext } from './GameSystem';
 import { worldText } from '../ui/world/worldText';
 import { worldPalette } from '../ui/theme/worldInk';
 import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
-
-export type BuildingEntry = {
-  doorTile: { x: number; y: number };
-  name: string;
-  type: BuildingKind;
-  /** Whether this building's interior hosts the town's safe room. */
-  readonly hasSafeRoom?: boolean;
-  /** Westmost column of the opening; absent means the opening is `doorTile` alone. */
-  doorwayX0?: number;
-  /** Tiles wide the opening is; absent means one. */
-  doorwayWidth?: number;
-};
-
-/** An entry with neither doorway field opens on its `doorTile` and nothing else. */
-const SINGLE_TILE_DOORWAY_WIDTH = 1;
 
 /**
  * A door the scene is holding shut, and what to say when the player tries it.
@@ -52,20 +37,6 @@ export function downedPartnerEntryRefusal(
   partnerName: string,
 ): string | null {
   return partner.isKnockedOut ? `${partnerName} is down. Help them up before going inside.` : null;
-}
-
-/**
- * The span of tiles an entrance opens on, as `[x0, x0 + width)` at `doorTile.y`.
- *
- * Both fields are read together and both default together: an entry carrying a
- * width but no start column would otherwise silently open a span beginning at
- * the map's west edge.
- */
-export function doorwaySpan(entry: BuildingEntry): { readonly x0: number; readonly width: number } {
-  if (entry.doorwayX0 === undefined || entry.doorwayWidth === undefined) {
-    return { x0: entry.doorTile.x, width: SINGLE_TILE_DOORWAY_WIDTH };
-  }
-  return { x0: entry.doorwayX0, width: entry.doorwayWidth };
 }
 
 /** Tile center fraction for player position calculation. */
@@ -107,7 +78,7 @@ export class BuildingSystem implements GameSystem {
   ) {
     const byDoorTile = new Map<number, number>();
     gameMap.buildingEntries.forEach((entry, index) => {
-      const { x0, width } = doorwaySpan(entry);
+      const { x0, width } = entry.doorway;
       for (let x = x0; x < x0 + width; x++) {
         // First match wins — two entries sharing a door tile are guarded
         // against but not impossible.
@@ -214,7 +185,7 @@ export class BuildingSystem implements GameSystem {
       // invitation, and pointing the player at a door that refuses them is worse
       // than saying nothing.
       if (this.blockedMessageFor(entry) !== null) continue;
-      const { x0, width } = doorwaySpan(entry);
+      const { x0, width } = entry.doorway;
       // Centred on the whole opening rather than on `doorTile`: on a four-tile
       // front those are two tiles apart, and an arrow that does not sit over the
       // painted door is the game pointing at the wrong place to stand.

@@ -33,6 +33,8 @@ import {
   drawGymConsoleSprite,
   drawGymMirrorCrackSprite,
   drawGymPickupSprite,
+  gymPickupInkTop,
+  gymRackInkTop,
   drawGymPlateSprite,
   drawGymShutterSprite,
 } from '../sprites/gymRoomSprites';
@@ -881,11 +883,15 @@ export class GymRoomSystem
     const target = this.interactTarget(promptFor);
     if (target === null) return;
     const promptTile = target.kind === 'rack' ? target.rack.tile : target.bench.tile;
+    const tileTop = promptTile.y * ts - camY;
+    const artTop =
+      target.kind === 'rack' ? gymRackInkTop(tileTop, ts) : gymPickupInkTop('bench', tileTop, ts);
     drawInteractionPrompt(
       ctx,
       promptTile.x * ts - camX,
-      promptTile.y * ts - camY,
+      artTop,
       ts,
+      tileTop + ts,
       target.kind === 'rack' ? 'Take dumbbell' : 'Pick up',
     );
   }

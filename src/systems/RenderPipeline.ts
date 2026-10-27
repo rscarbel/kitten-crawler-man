@@ -369,7 +369,7 @@ export class RenderPipeline {
     const maxY = camY + viewportHeight() + margin;
     if (prop.x < minX || prop.x > maxX || prop.y < minY || prop.y > maxY) return;
     const e = this._getEntry();
-    e.sortY = prop.y + ENTITY_SORT_Y_OFFSET;
+    e.sortY = prop.sortY ?? prop.y + ENTITY_SORT_Y_OFFSET;
     e.kind = DRAW_KIND_TOWN_PROP;
     e.entity = prop;
     e.chestRef = null;

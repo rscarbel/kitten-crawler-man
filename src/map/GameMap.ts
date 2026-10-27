@@ -79,6 +79,9 @@ import {
   ROCK_DEPOSIT,
   CIRCUS_STRUCTURE_TALL,
   CIRCUS_STRUCTURE_LOW,
+  TOWN_WALL,
+  FENCE,
+  RUINED_WALL,
 } from './tileTypes';
 import {
   isLobBlockingTileType,
@@ -137,7 +140,8 @@ import {
   type SpiderLabRoomData,
   type MobSpawnPoint,
 } from './DungeonGenerator';
-import { generateOverworld, type BuildingEntry } from './OverworldGenerator';
+import { generateOverworld } from './OverworldGenerator';
+import type { BuildingEntry, BuildingName } from './buildingEntry';
 import type { CampSite } from './overworld/camps';
 import type { BriarHollowSite, VillageDistrictId } from './overworld/briarHollowSite';
 import { rectContains } from './overworld/briarHollowSite';
@@ -326,7 +330,7 @@ const INTERIOR_BY_KIND: Record<BuildingKind, InteriorShell> = {
  * box in the same boards is the single largest reason they all felt alike.
  * Anything absent here falls back to its kind's shell.
  */
-const INTERIOR_BY_NAME: ReadonlyMap<string, InteriorShell> = new Map([
+const INTERIOR_BY_NAME: ReadonlyMap<BuildingName, InteriorShell> = new Map([
   [
     'The Sleeping Cat Inn',
     { w: INN_INTERIOR_W, h: INN_INTERIOR_H, floorType: INTERIOR_RUSH_FLOOR },
@@ -366,7 +370,7 @@ const INTERIOR_BY_NAME: ReadonlyMap<string, InteriorShell> = new Map([
   ['Blackwood Lodge', { w: 16, h: 14, floorType: INTERIOR_BOARD_FLOOR }],
   ['General Store', { w: STORE_INTERIOR_W, h: STORE_INTERIOR_H, floorType: INTERIOR_BOARD_FLOOR }],
   [CLOAK_AND_DAGGER_NAME, { w: CLUB_INTERIOR_W, h: CLUB_INTERIOR_H, floorType: CLUB_FLOOR }],
-] satisfies ReadonlyArray<[string, InteriorShell]>);
+] satisfies ReadonlyArray<[BuildingName, InteriorShell]>);
 
 /**
  * The band of a safe-room building's interior the safe room actually covers.
@@ -376,7 +380,7 @@ const INTERIOR_BY_NAME: ReadonlyMap<string, InteriorShell> = new Map([
  * future safe-room building works without an entry here.
  */
 const SAFE_ROOM_BOUNDS_BY_NAME: ReadonlyMap<
-  string,
+  BuildingName,
   { readonly x: number; readonly y: number; readonly w: number; readonly h: number }
 > = new Map([
   /*
@@ -481,6 +485,10 @@ const DECORATION_OVERLAY_TYPES: ReadonlySet<number> = new Set([
   TENT_POLE,
   // Riverbank reeds, standing taller than their tile.
   RIVER_REEDS,
+  // Taloncrest's wall ring, yard fences and ruined walls, sorted on their base.
+  TOWN_WALL,
+  FENCE,
+  RUINED_WALL,
   // The service level's furniture; its part tiles are drawn by their anchor.
   ...SERVICE_PROP_TILE_TYPES,
   // The cellars' furniture, candles and fungus.
@@ -1545,11 +1553,12 @@ export class GameMap {
   }
 
   /** Generates a small interior room for a building (called externally after construction).
-   *  For towers, pass towerFloor (0-3) to generate per-floor stair layout. */
+   *  For towers, pass towerFloor (0-3) to generate per-floor stair layout. A null
+   *  `buildingName` builds the plain room of its kind, with no building's own shell or layout. */
   generateInterior(
     buildingType: BuildingKind,
     towerFloor = 0,
-    buildingName = '',
+    buildingName: BuildingName | null = null,
     hasSafeRoom = false,
     variant: InteriorVariant = 'default',
   ): void {
@@ -1565,8 +1574,8 @@ export class GameMap {
     const isStore = buildingType === 'store';
     const isClub = buildingType === 'club';
     const isHouse = buildingType === 'house';
-    const { w, h, floorType } =
-      INTERIOR_BY_NAME.get(buildingName) ?? INTERIOR_BY_KIND[buildingType];
+    const namedShell = buildingName === null ? undefined : INTERIOR_BY_NAME.get(buildingName);
+    const { w, h, floorType } = namedShell ?? INTERIOR_BY_KIND[buildingType];
 
     const grid: TileContent[][] = Array.from({ length: h }, (_, y) =>
       Array.from({ length: w }, (_, x) => ({
@@ -1597,11 +1606,12 @@ export class GameMap {
     }
 
     // ── Named building interiors — each reads its layout from a per-building file ──
-    const isNamedBuilding = NAMED_INTERIOR_LAYOUTS.has(buildingName);
+    const namedLayout =
+      buildingName === null ? undefined : NAMED_INTERIOR_LAYOUTS.get(buildingName);
+    const isNamedBuilding = namedLayout !== undefined;
 
-    if (isHouse && isNamedBuilding) {
-      const layout = NAMED_INTERIOR_LAYOUTS.get(buildingName);
-      if (layout !== undefined) this.applyTownInteriorLayout(grid, layout(w, h, floorType));
+    if (isHouse && namedLayout !== undefined) {
+      this.applyTownInteriorLayout(grid, namedLayout(w, h, floorType));
     }
 
     // ── Generic house furniture (unnamed / unnamed overworld houses) ──
@@ -1738,7 +1748,9 @@ export class GameMap {
 
     if (hasSafeRoom) {
       const wholeInterior = { x: 1, y: 1, w: w - 2, h: h - 2 };
-      const bounds = SAFE_ROOM_BOUNDS_BY_NAME.get(buildingName) ?? wholeInterior;
+      const namedBounds =
+        buildingName === null ? undefined : SAFE_ROOM_BOUNDS_BY_NAME.get(buildingName);
+      const bounds = namedBounds ?? wholeInterior;
       this.safeRooms = [
         {
           bounds,

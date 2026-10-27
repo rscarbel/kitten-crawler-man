@@ -19,5 +19,11 @@ export interface TownPropRenderable {
    * is real ink and is not in anybody's geometry constants.
    */
   cullMarginTiles?: number;
+  /**
+   * The world-pixel line this prop sorts on in the Y-sorted pass. Omitted means
+   * the foot of its anchor tile, one tile below `y`. State it for a prop whose
+   * art stands on a different row from its anchor.
+   */
+  sortY?: number;
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void;
 }

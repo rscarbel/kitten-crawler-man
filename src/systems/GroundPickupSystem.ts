@@ -129,8 +129,11 @@ const GLINT_Y = 0.42;
 
 /** The prompt floats over a tile-sized box; this centres that box on the pickup. */
 const PROMPT_BOX_PX = TILE_SIZE;
-/** How much the prompt's box sits above the pickup's ground point. */
-const PROMPT_LIFT_PX = TILE_SIZE * HALF;
+
+/** The screen y of the top of the cell a pickup's art is drawn into; none of it paints higher. */
+function pickupCellTop(pickup: GroundPickup, camY: number): number {
+  return pickup.y - camY - pickup.hop - GROUND_BURGER_DRAW_PX * BURGER_BASE_Y;
+}
 
 function clonePickup(pickup: GroundPickup): GroundPickup {
   return { ...pickup };
@@ -380,7 +383,7 @@ export class GroundPickupSystem {
 
     const cell = GROUND_BURGER_DRAW_PX;
     const cellX = groundX - cell * HALF;
-    const cellY = groundY - pickup.hop - cell * BURGER_BASE_Y;
+    const cellY = pickupCellTop(pickup, camY);
     ctx.drawImage(groundBurgerSprite(), cellX, cellY, cell, cell);
 
     const glintFrame = (pickup.ageFrames + pickup.id * GLINT_PHASE_PER_ID) % GLINT_PERIOD_FRAMES;
@@ -415,8 +418,9 @@ export class GroundPickupSystem {
     const nearest = this.nearestInReach(active);
     if (nearest === null) return false;
     const boxX = nearest.x - PROMPT_BOX_PX * HALF - camX;
-    const boxY = nearest.y - PROMPT_LIFT_PX - camY;
-    drawInteractionPrompt(ctx, boxX, boxY, PROMPT_BOX_PX, 'Pick up');
+    const cellTop = pickupCellTop(nearest, camY);
+    const groundY = nearest.y - camY;
+    drawInteractionPrompt(ctx, boxX, cellTop, PROMPT_BOX_PX, groundY, 'Pick up');
     return true;
   }
 

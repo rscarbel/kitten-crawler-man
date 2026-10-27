@@ -15,6 +15,7 @@ import { BUILDINGS, type VillageBuildingId } from '../../map/overworld/briarHoll
 import {
   CLOAK_AND_DAGGER_NAME,
   PLANNED_BUILDING_NAMES,
+  TOWN_TOWER_NAME,
   type TownBuildingName,
 } from '../../map/town/townPlan';
 import type { ResidentId } from '../townResidents';
@@ -54,7 +55,7 @@ export interface ContractSpotDef {
  * Wendell's own farm, where the contracts are handed out.
  */
 export const CONTRACT_EXCLUDED_TOWN_BUILDINGS = [
-  'Town Center Tower',
+  TOWN_TOWER_NAME,
   CLOAK_AND_DAGGER_NAME,
   'Plumbline Farm',
 ] as const satisfies readonly TownBuildingName[];

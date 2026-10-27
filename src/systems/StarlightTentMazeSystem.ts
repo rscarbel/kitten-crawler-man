@@ -41,7 +41,7 @@ import { MazeMirrorTarget } from '../creatures/MazeMirrorTarget';
 import type { Conversation } from '../dialog/Conversation';
 import type { ConversationHandle } from '../dialog/request';
 import type { DialogLine, NonEmpty } from '../dialog/line';
-import { drawInteractionPrompt } from '../ui/InteractionPrompt';
+import { drawInteractionPromptOver } from '../ui/InteractionPrompt';
 import { worldText } from '../ui/world/worldText';
 import { worldTint } from '../ui/world/worldShapes';
 import { worldPalette } from '../ui/theme/worldInk';
@@ -2132,7 +2132,7 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
     // are equally good — which leaves the chip free to say the thing the prop
     // is *for*: a ring wants shooting, a capstan wants turning.
     const draw = (mob: Mob, prompt: string, chip: string): boolean => {
-      drawInteractionPrompt(ctx, mob.x - camX, mob.y - camY, TILE_SIZE, prompt, chip);
+      drawInteractionPromptOver(ctx, mob, camX, camY, prompt, chip);
       return true;
     };
 

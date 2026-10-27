@@ -7,6 +7,7 @@
 import { TILE_SIZE } from '../core/constants';
 import type { GameMap } from '../map/GameMap';
 import type { CrawlerSignPlacement } from '../map/crawlerSigns';
+import { sheetStateInkTop } from '../core/spriteAssets/SpriteRenderer';
 import { CRAWLER_SIGN } from '../map/tileTypes';
 import type { Player } from '../Player';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
@@ -74,12 +75,9 @@ export class CrawlerSignSystem {
   renderPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): void {
     const sign = this.findSignInReach(active);
     if (sign === null) return;
-    drawInteractionPrompt(
-      ctx,
-      sign.tile.x * TILE_SIZE - camX,
-      sign.tile.y * TILE_SIZE - camY,
-      TILE_SIZE,
-      'Read',
-    );
+    const tileTop = sign.tile.y * TILE_SIZE - camY;
+    const boardTop = sheetStateInkTop('crawler_sign', 'board', tileTop, TILE_SIZE) ?? tileTop;
+    const signX = sign.tile.x * TILE_SIZE - camX;
+    drawInteractionPrompt(ctx, signX, boardTop, TILE_SIZE, tileTop + TILE_SIZE, 'Read');
   }
 }

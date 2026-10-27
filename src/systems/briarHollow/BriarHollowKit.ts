@@ -57,7 +57,11 @@ import {
 } from '../../core/items/gathering/toolTiers';
 import { VILLAGER_TALK_RANGE_TILES, VillagerSystem } from './VillagerSystem';
 import { TILE_SIZE } from '../../core/constants';
-import { drawQuestMarker, questMarkerColorFor } from '../../sprites/questNPCSprite';
+import {
+  drawQuestMarker,
+  questMarkerColorFor,
+  questMarkerTopY,
+} from '../../sprites/questNPCSprite';
 import { hollowPropInkTop } from '../../map/tiles/hollowVillageTiles';
 import { noticeBoardMarkerFor } from '../constructionContracts/contractIssue';
 import type { VillagerPartyState } from './villagerCircumstances';
@@ -206,6 +210,10 @@ function alwaysFullDetail(): boolean {
 /** How near the village notice board a crawler must stand to read it: the plaza board's reach. */
 const VILLAGE_BOARD_REACH_TILES = 1.6;
 const NOTICE_BOARD_PROMPT_LABEL = 'Read';
+
+function noticeBoardArtTop(sy: number): number {
+  return hollowPropInkTop('notice_board', sy, TILE_SIZE) ?? sy;
+}
 
 /** The HUD chrome `BriarHollowKit.renderHud` draws around, in CSS pixels. */
 export interface BriarHollowHudChrome {
@@ -757,8 +765,14 @@ export class BriarHollowKit {
     if (board === null || markerColor === undefined) return;
     const sx = board.x * TILE_SIZE - camX;
     const sy = board.y * TILE_SIZE - camY;
-    const artTop = hollowPropInkTop('notice_board', sy, TILE_SIZE) ?? sy;
-    drawQuestMarker(ctx, sx, artTop, TILE_SIZE, '!', markerColor);
+    drawQuestMarker(ctx, sx, noticeBoardArtTop(sy), TILE_SIZE, '!', markerColor);
+  }
+
+  /** The line a prompt over the board must clear: its marker while a contract waits, else the board itself. */
+  private noticeBoardOverheadTop(ctx: CanvasRenderingContext2D, sy: number): number {
+    const artTop = noticeBoardArtTop(sy);
+    if (this.noticeBoardMarkerColor() === undefined) return artTop;
+    return questMarkerTopY(ctx, artTop, TILE_SIZE, '!');
   }
 
   /**
@@ -871,8 +885,9 @@ export class BriarHollowKit {
       drawInteractionPrompt(
         ctx,
         board.x * TILE_SIZE - camX,
-        board.y * TILE_SIZE - camY,
+        this.noticeBoardOverheadTop(ctx, board.y * TILE_SIZE - camY),
         TILE_SIZE,
+        (board.y + 1) * TILE_SIZE - camY,
         NOTICE_BOARD_PROMPT_LABEL,
       );
       return true;

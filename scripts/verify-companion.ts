@@ -161,8 +161,6 @@ const DIRECTIVE_HOLD_FRAMES = 600;
 /** Radius of the staged hazard laid over the ordered spot. */
 const STAGED_HAZARD_RADIUS_TILES = 2;
 
-/** The building a tower interior is generated for; nothing here reads the name but the generator wants one. */
-const INTERIOR_BUILDING_NAME = 'Verification Tower';
 /** Storeys of that tower the interior checks use: one to fight on, one to climb to. */
 const INTERIOR_GROUND_FLOOR = 0;
 const INTERIOR_UPPER_FLOOR = 1;
@@ -347,7 +345,7 @@ function findOpenGround(map: GameMap): { x: number; y: number } | null {
 /** One storey of a tower interior, in the state the scene generates it. */
 function makeInterior(floor: number): GameMap {
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  map.generateInterior('tower', floor, INTERIOR_BUILDING_NAME, false);
+  map.generateInterior('tower', floor, null, false);
   return map;
 }
 

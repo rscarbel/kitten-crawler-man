@@ -371,6 +371,24 @@ geometry, never for UI chrome. Floating "SPACE — Talk" prompts are raised in t
 world pass with `drawInteractionPrompt` (`src/ui/InteractionPrompt.ts`), which
 only queues them; `promptSurface()` (`src/ui/hud/prompt.ts`, band `world`)
 draws the queue above the darkness and fog with the HUD's keycap and glass.
+A prompt over a character goes through `drawInteractionPromptOver(ctx, figure,
+camX, camY, label)`, where `figure` is a `PromptFigure` (every `Player`,
+`Townsperson`, `Villager`) answering `overheadTop` — the top of everything its
+last draw stacked over its head. For a `Player` that answer is read from the
+overhead stack (`src/ui/world/overheadStack.ts`): figure blits, `worldBar`,
+quest markers, shop/medical badges, health bars and the aggro mark report
+their tops to it as they paint (before deferring past darkness), so a new
+overhead painter only has to call `reportOverheadTop` to be cleared. A prop
+passes its real art top as `drawInteractionPrompt`'s `artTop`, never its tile's
+top when it stands taller than one tile. `drawInteractionPrompt` and
+`drawInteractionPromptWithCost` (a prompt with a cost checklist over the
+pill) also take a required `objBottom`: the screen y of the target's
+footprint bottom, in the same space as `artTop`. The prompt surface never
+moves a pill down onto the span between the two. Each scene calls
+`GameplayScene.keepPromptsClearOfCrawlers(ctx, camX, camY, barks, isHidden?)`
+once a frame, right after `setInteractionPromptsSuppressed`, so a prompt over
+something shorter than a crawler lifts off their head and their bark. The
+prompt surface clamps every pill onto the screen.
 
 ## The HUD (`src/ui/hud/`)
 

@@ -65,6 +65,9 @@ const RUIN_RUBBLE_CHUNK_STRIDE = 7;
 const RUIN_REBAR_STRIDE = 5;
 const RUIN_REBAR_X_FRACTION = 0.35;
 const RUIN_REBAR_OVERHANG = 5;
+const RUIN_REBAR_LINE_WIDTH = 1.5;
+/** How far a ruined wall's art reaches above its tile: the rebar and half its stroke. */
+export const RUINED_WALL_OVERHEAD_PX = Math.ceil(RUIN_REBAR_OVERHANG + RUIN_REBAR_LINE_WIDTH);
 
 // Town wall (the ring around the overworld town)
 const TOWN_WALL_STONE = '#8a8175';
@@ -471,9 +474,12 @@ export function drawBuildingTile(
         ctx.fillStyle = '#1a1e22';
         ctx.fillRect(sx, sy, ts, ts);
         return true;
+      // Both stand in the Y-sorted pass, so their stone covers the lower body of
+      // anyone standing north of them. The ground under their crenels and
+      // broken tops is baked here, so whatever stands behind shows through.
       case RUINED_WALL:
-        ctx.fillStyle = '#5c564c';
-        ctx.fillRect(sx, sy, ts, ts);
+      case TOWN_WALL:
+        drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
         return true;
       default:
         return false;
@@ -1285,10 +1291,8 @@ export function drawBuildingTile(
 
     // Ruined city wall — broken stone fragment left standing in Taloncrest's ruins.
     case RUINED_WALL: {
-      // The real grass sprite shows through the broken top, so the fragment
-      // blends with the lawn instead of reading as a solid square.
-      drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
-
+      // The broken top is left unpainted: the ground baked under it by the
+      // `baseOnly` pass shows through, and so does anyone standing behind.
       // Deterministic per-tile hash drives the jagged top silhouette and crack pattern.
       const h1 = (tx * RUIN_HASH_X + ty * RUIN_HASH_Y) % 97;
       const h2 = (tx * RUIN_HASH_X2 + ty * RUIN_HASH_Y2) % 89;
@@ -1335,7 +1339,7 @@ export function drawBuildingTile(
       // Exposed rebar poking through a broken corner
       if ((tx + ty) % RUIN_REBAR_STRIDE === 0) {
         ctx.strokeStyle = '#8a7a5c';
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = RUIN_REBAR_LINE_WIDTH;
         ctx.beginPath();
         ctx.moveTo(sx + ts * RUIN_REBAR_X_FRACTION, sy + notchH);
         ctx.lineTo(sx + ts * RUIN_REBAR_X_FRACTION + 3, sy - RUIN_REBAR_OVERHANG);
@@ -1351,7 +1355,7 @@ export function drawBuildingTile(
     // The town's wall ring — maintained coursed stone, unlike RUINED_WALL's
     // broken shells outside it.
     case TOWN_WALL: {
-      drawTownWallTile(ctx, structure, sx, sy, ts, tx, ty);
+      drawTownWallTile(ctx, townWallLook(structure, tx, ty, ts), sx, sy, ts);
       break;
     }
 
@@ -1362,11 +1366,66 @@ export function drawBuildingTile(
 }
 
 /**
+ * A common multiple of the masonry joints' and the merlons' periods: both run on
+ * world pixels, so a tile's column reaches its picture only through where its
+ * left edge falls within this period.
+ */
+const TOWN_WALL_PATTERN_PERIOD_PX = TOWN_WALL_BLOCK_WIDTH * TOWN_WALL_CRENEL_PERIOD;
+
+/**
+ * Everything a town wall tile's picture depends on: two tiles with equal looks
+ * draw the same pixels.
+ */
+interface TownWallLook {
+  readonly inEastWestRun: boolean;
+  /** Open grass at its foot, where the plinth greens over. */
+  readonly mossy: boolean;
+  /** Where the tile's left edge falls within one pattern period, in pixels. */
+  readonly patternPhasePx: number;
+  /** The weathering hash, on the tiles where it darkens a block; null elsewhere. */
+  readonly darkBlock: number | null;
+}
+
+function townWallLook(
+  structure: TileContent[][],
+  tx: number,
+  ty: number,
+  ts: number,
+): TownWallLook {
+  const isWall = (x: number, y: number) => structure[y]?.[x]?.type === TOWN_WALL;
+  const southType = structure[ty + 1]?.[tx]?.type;
+  const weathering = (tx * TOWN_WALL_HASH_X + ty * TOWN_WALL_HASH_Y) % TOWN_WALL_HASH_MODULUS;
+  const darkensABlock = weathering % TOWN_WALL_DARK_BLOCK_STRIDE === 0;
+  return {
+    inEastWestRun: isWall(tx - 1, ty) || isWall(tx + 1, ty),
+    mossy: southType === FloorTypeValue.grass || southType === VERGE_GRASS,
+    patternPhasePx: positiveMod(tx * ts, TOWN_WALL_PATTERN_PERIOD_PX),
+    darkBlock: darkensABlock ? weathering : null,
+  };
+}
+
+/**
+ * Names a town wall tile's picture, so every tile drawing the same one can
+ * share a single cached canvas.
+ */
+export function townWallArtKey(
+  structure: TileContent[][],
+  tx: number,
+  ty: number,
+  ts: number,
+): string {
+  const look = townWallLook(structure, tx, ty, ts);
+  const run = look.inEastWestRun ? 'run' : 'flank';
+  const foot = look.mossy ? 'moss' : 'bare';
+  return `${run}:${foot}:${look.patternPhasePx}:${look.darkBlock ?? 'clean'}`;
+}
+
+/**
  * One tile of the town's wall ring.
  *
- * Everything is drawn strictly inside the tile's own rect, so the wall bakes
- * into the chunk cache like any other static tile and cannot be clipped at a
- * chunk boundary the way `RUINED_WALL`'s rebar is.
+ * Stone only: the tile stands in the Y-sorted pass so it covers the lower body
+ * of anyone north of it, and its ground is baked by the `baseOnly` pass.
+ * Everything is drawn strictly inside the tile's own rect.
  *
  * The tile is context-aware in one respect only: a tile in an **east-west run**
  * is seen face-on and gets a crenellated parapet, with the ground showing through
@@ -1385,18 +1444,12 @@ export function drawBuildingTile(
  */
 function drawTownWallTile(
   ctx: CanvasRenderingContext2D,
-  structure: TileContent[][],
+  look: TownWallLook,
   sx: number,
   sy: number,
   ts: number,
-  tx: number,
-  ty: number,
 ): void {
-  // The crenels are gaps, so the ground behind them has to be drawn first.
-  drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
-
-  const isWall = (x: number, y: number) => structure[y]?.[x]?.type === TOWN_WALL;
-  const inEastWestRun = isWall(tx - 1, ty) || isWall(tx + 1, ty);
+  const { inEastWestRun, patternPhasePx, darkBlock } = look;
   const stoneTop = sy + (inEastWestRun ? TOWN_WALL_CAP_HEIGHT : 0);
 
   ctx.fillStyle = TOWN_WALL_STONE;
@@ -1412,21 +1465,20 @@ function drawTownWallTile(
     const jointPhase = courseIndex % 2 === 0 ? 0 : TOWN_WALL_JOINT_OFFSET;
     const courseBottom = Math.min(bedY + TOWN_WALL_COURSE_HEIGHT, bodyBottom);
     for (let i = 0; i < ts; i++) {
-      const worldPx = tx * ts + i;
-      if (positiveMod(worldPx + jointPhase, TOWN_WALL_BLOCK_WIDTH) !== 0) continue;
+      const patternPx = patternPhasePx + i;
+      if (positiveMod(patternPx + jointPhase, TOWN_WALL_BLOCK_WIDTH) !== 0) continue;
       ctx.fillRect(sx + i, bedY, TOWN_WALL_MORTAR_WIDTH, courseBottom - bedY);
     }
     courseIndex++;
   }
 
   // A scattering of damper, darker blocks so a long run is not one flat colour.
-  const weathering = (tx * TOWN_WALL_HASH_X + ty * TOWN_WALL_HASH_Y) % TOWN_WALL_HASH_MODULUS;
-  if (weathering % TOWN_WALL_DARK_BLOCK_STRIDE === 0) {
+  if (darkBlock !== null) {
     ctx.fillStyle = TOWN_WALL_STONE_DARK;
-    const course = weathering % TOWN_WALL_DARK_BLOCK_COURSES;
+    const course = darkBlock % TOWN_WALL_DARK_BLOCK_COURSES;
     const blockY = stoneTop + course * TOWN_WALL_COURSE_HEIGHT + TOWN_WALL_MORTAR_WIDTH;
     ctx.fillRect(
-      sx + (weathering % Math.max(1, ts - TOWN_WALL_BLOCK_WIDTH)),
+      sx + (darkBlock % Math.max(1, ts - TOWN_WALL_BLOCK_WIDTH)),
       blockY,
       TOWN_WALL_BLOCK_WIDTH - TOWN_WALL_MORTAR_WIDTH,
       TOWN_WALL_COURSE_HEIGHT - TOWN_WALL_MORTAR_WIDTH,
@@ -1436,8 +1488,7 @@ function drawTownWallTile(
   // Plinth: a wider, darker base course, mossy where it meets open ground.
   ctx.fillStyle = TOWN_WALL_PLINTH;
   ctx.fillRect(sx, bodyBottom, ts, TOWN_WALL_PLINTH_HEIGHT);
-  const southType = structure[ty + 1]?.[tx]?.type;
-  if (southType === FloorTypeValue.grass || southType === VERGE_GRASS) {
+  if (look.mossy) {
     ctx.fillStyle = TOWN_WALL_MOSS;
     ctx.fillRect(sx, bodyBottom, ts, TOWN_WALL_PLINTH_HEIGHT);
   }
@@ -1457,8 +1508,8 @@ function drawTownWallTile(
   // Parapet: merlons on the tile's world-pixel phase, so the battlement is
   // continuous along the whole run.
   for (let i = 0; i < ts; i++) {
-    const worldPx = tx * ts + i;
-    if (positiveMod(worldPx, TOWN_WALL_CRENEL_PERIOD) >= TOWN_WALL_MERLON_WIDTH) continue;
+    const patternPx = patternPhasePx + i;
+    if (positiveMod(patternPx, TOWN_WALL_CRENEL_PERIOD) >= TOWN_WALL_MERLON_WIDTH) continue;
     ctx.fillStyle = TOWN_WALL_CAP;
     ctx.fillRect(sx + i, sy, MERLON_COLUMN_WIDTH, TOWN_WALL_CAP_HEIGHT);
     ctx.fillStyle = TOWN_WALL_CAP_LIT;

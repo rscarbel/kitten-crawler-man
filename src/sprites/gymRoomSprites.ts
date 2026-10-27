@@ -6,7 +6,8 @@
  * frame or two rather than stalling the frame to paint it.
  */
 
-import { drawSpriteKey } from '../core/spriteAssets/SpriteRenderer';
+import { drawSpriteKey, sheetStateInkTop } from '../core/spriteAssets/SpriteRenderer';
+import type { SpriteKey, SpriteStates } from '../core/spriteAssets/SpriteLoader';
 import {
   GYM_BELT_FRAMES,
   GYM_CHALK_FRAMES,
@@ -53,6 +54,26 @@ function drawTurned(
   ctx.rotate(rotation);
   draw(-ts * HALF, -ts * HALF);
   ctx.restore();
+}
+
+/** The highest pixel a sheet state paints for a tile whose top is at `sy`; `sy` before the sheet loads. */
+function gymSheetInkTop<K extends SpriteKey>(
+  key: K,
+  state: SpriteStates[K],
+  sy: number,
+  ts: number,
+): number {
+  return sheetStateInkTop(key, state, sy, ts) ?? sy;
+}
+
+/** The top of a dumbbell rack's art, which stands above its tile, for a tile whose top is at `sy`. */
+export function gymRackInkTop(sy: number, ts: number): number {
+  return gymSheetInkTop('gym_rack', 'rack', sy, ts);
+}
+
+/** The top of a pickup's art, whose console stands above its tile, for a tile whose top is at `sy`. */
+export function gymPickupInkTop(look: GymPickupLook, sy: number, ts: number): number {
+  return gymSheetInkTop('gym_pickups', look, sy, ts);
 }
 
 /** A dumbbell rack holding `filled` dumbbells. */

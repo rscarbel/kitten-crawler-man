@@ -24,6 +24,7 @@ import {
 } from '../ui/screens/shop/shopSession';
 import { hostByline, type ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
+import type { BuildingName } from '../map/buildingEntry';
 import { SERVICE_PRICES } from '../economy/servicePrices';
 import type { ServiceIconId } from '../sprites/art/itemIcons/serviceIcons';
 import type { SHOPS, ShopId } from '../economy/shops';
@@ -148,13 +149,13 @@ const DEFAULT_DRINKS: ReadonlyArray<Drink> = [ALE, BOOZY_MILK, SPEED_FIZZ];
  * Sleeping Cat is a kitchen first, and the only board in town where the mends
  * come as food.
  */
-const HOUSE_DRINKS: ReadonlyMap<string, ReadonlyArray<Drink>> = new Map([
+const HOUSE_DRINKS: ReadonlyMap<BuildingName, ReadonlyArray<Drink>> = new Map([
   ['The Sunken Stump Pub', [ALE, BOOZY_MILK, SPEED_FIZZ]],
   ['The Horned Flagon', [MEAD, GUILD_RESERVE, SPEED_FIZZ]],
   ['The Sleeping Cat Inn', [HONEY_BREAD, STEW, NIGHTCAP]],
 ]);
 
-const HOUSE_BARKS: ReadonlyMap<string, ReadonlyArray<string>> = new Map([
+const HOUSE_BARKS: ReadonlyMap<BuildingName, ReadonlyArray<string>> = new Map([
   [
     'The Sunken Stump Pub',
     [
@@ -188,11 +189,11 @@ const BARKEEP_BARKS: ReadonlyArray<string> = [
 ];
 
 /** A barkeep's greeting, rotated by how many times the player has talked to them. */
-function pubServeLine(house: string, turn: number): string {
+function pubServeLine(house: BuildingName, turn: number): string {
   return rotateLine(HOUSE_BARKS.get(house) ?? BARKEEP_BARKS, turn);
 }
 
-function drinksFor(house: string): ReadonlyArray<Drink> {
+function drinksFor(house: BuildingName): ReadonlyArray<Drink> {
   return HOUSE_DRINKS.get(house) ?? DEFAULT_DRINKS;
 }
 
@@ -238,7 +239,7 @@ function pourDrink(drink: Drink, player: Player): void {
  * has a named one, so the greeting is theirs rather than the generic barkeep's.
  */
 export function buildTavernMenu(
-  house: string,
+  house: BuildingName,
   buyer: Player,
   turn: number,
   host: ResidentHost | null,
@@ -267,7 +268,7 @@ export function buildTavernMenu(
  * The purchase handler for one house — bound to the same board `buildTavernMenu`
  * showed, so a key can never be served from a different tavern's list.
  */
-export function serveDrinkAt(house: string, stock: ShopStock): ShopPurchaseHandler {
+export function serveDrinkAt(house: BuildingName, stock: ShopStock): ShopPurchaseHandler {
   return (option, player) => {
     const drink = drinksFor(house).find((candidate) => drinkKey(candidate) === option.key);
     if (drink === undefined) return { ok: false, line: 'The barkeep shrugs.' };

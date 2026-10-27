@@ -23,12 +23,14 @@ import { figureRowInkTop } from '../../sprites/figure/figureFrameCache';
 import {
   drawQuestMarker,
   questMarkerColorFor,
+  questMarkerTopY,
   type QuestMarkerState,
 } from '../../sprites/questNPCSprite';
+import type { DrawnFigureRow } from '../../sprites/figure/figureDef';
 import type { Conversation } from '../../dialog/Conversation';
 import type { ConversationHandle } from '../../dialog/request';
 import { RECRUITER } from '../../dialog/scripts/briarHollow/recruiter';
-import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
+import { drawInteractionPromptOver } from '../../ui/InteractionPrompt';
 import type { Player } from '../../Player';
 import type { TownPropRenderable } from '../townPropRenderable';
 import { VILLAGER_HEAD_CLEARANCE_TILES } from './Villager';
@@ -51,6 +53,7 @@ export class RecruiterNPC implements TownPropRenderable {
   x: number;
   y: number;
   marker: QuestMarkerState = 'exclamation';
+  private drawnRow: DrawnFigureRow | undefined;
 
   constructor(tile: TilePoint) {
     this.x = tile.x * TILE_SIZE;
@@ -68,18 +71,27 @@ export class RecruiterNPC implements TownPropRenderable {
     if (markerColor !== undefined) {
       drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), markerColor);
     }
-    const drawnRow = drawRatkinCastSprite(ctx, RECRUITER_SPRITE_ID, sx, sy, tileSize, {
+    this.drawnRow = drawRatkinCastSprite(ctx, RECRUITER_SPRITE_ID, sx, sy, tileSize, {
       action: 'idle',
       walkPhase: 0,
       facingX: 0,
       facingY: 1,
     });
     if (markerColor === undefined) return;
-    const artTop =
-      drawnRow === undefined
-        ? sy - VILLAGER_HEAD_CLEARANCE_TILES * tileSize
-        : figureRowInkTop(drawnRow, sy, tileSize);
-    drawQuestMarker(ctx, sx, artTop, tileSize, '!', markerColor);
+    drawQuestMarker(ctx, sx, this.artTop(sy, tileSize), tileSize, '!', markerColor);
+  }
+
+  /** The measured top of the row last drawn, or the villagers' fixed head clearance before the first draw. */
+  private artTop(sy: number, tileSize: number): number {
+    if (this.drawnRow === undefined) return sy - VILLAGER_HEAD_CLEARANCE_TILES * tileSize;
+    return figureRowInkTop(this.drawnRow, sy, tileSize);
+  }
+
+  /** Clear of his quest marker while he wears one, else of his art. */
+  overheadTop(ctx: CanvasRenderingContext2D, sy: number): number {
+    const artTop = this.artTop(sy, TILE_SIZE);
+    if (questMarkerColorFor(this.marker) === undefined) return artTop;
+    return questMarkerTopY(ctx, artTop, TILE_SIZE, '!');
   }
 }
 
@@ -167,7 +179,7 @@ export class RecruiterSystem {
 
   renderPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): boolean {
     if (this.isDialogOpen || this.npc === null || !this.inRange(active)) return false;
-    drawInteractionPrompt(ctx, this.npc.x - camX, this.npc.y - camY, TILE_SIZE, 'Talk');
+    drawInteractionPromptOver(ctx, this.npc, camX, camY, 'Talk');
     return true;
   }
 

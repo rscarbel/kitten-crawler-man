@@ -31,7 +31,8 @@ import {
   WELL,
 } from '../map/tileTypes';
 import { tileCoordKey } from '../map/tileIndex';
-import { CLOAK_AND_DAGGER_NAME } from '../map/town/townPlan';
+import { CLOAK_AND_DAGGER_NAME, type TownBuildingName } from '../map/town/townPlan';
+import type { BuildingName } from '../map/buildingEntry';
 
 import { Townsperson } from '../creatures/Townsperson';
 import { CITIZEN_TALK_RADIUS_TILES, findNearestTownsperson } from '../creatures/townInteraction';
@@ -40,8 +41,8 @@ import type { TownRole } from '../sprites/person/PersonAppearance';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { SpatialGrid } from '../core/world/SpatialGrid';
 import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
-import { allResidents, residentSpecies } from './townResidents';
-import type { TownSpecies } from './townSpecies';
+import { buildingKeeper, residentSpecies } from './townResidents';
+import type { CrowdSpecies, TownSpecies } from './townSpecies';
 import { mulberry32, rangeInt, subSeed, type Rng } from '../sprites/person/rng';
 
 /** The made surfaces of the town, which citizens treat as public space. */
@@ -119,11 +120,23 @@ const PLAZA_HAWKFOLK_SHARE = 2 / HAWKFOLK_MAJORITY_OF_THREE;
 const TRAVELER_HAWKFOLK_SHARE = 1 / 2;
 const ANCHOR_HAWKFOLK_SHARE = 2 / HAWKFOLK_MAJORITY_OF_THREE;
 // A Hawkfolk-run door's loiterers skew further Hawkfolk than the plaza itself;
-// a human-run door skews the other way by the same margin. A building with no
-// named resident (the Cloak & Dagger) has no ownership to skew by, so its
-// loiterers fall back to the plaza's own ratio.
+// a door run by anyone without wings skews the other way by the same margin.
 const FRONTAGE_HAWKFOLK_RUN_SHARE = 0.75;
-const FRONTAGE_HUMAN_RUN_SHARE = 0.25;
+const FRONTAGE_GROUNDFOLK_RUN_SHARE = 0.25;
+
+/**
+ * The Hawkfolk share of a door's loiterers, by its keeper's species. Every
+ * keeper without wings leans the door the same groundfolk way, whether or not
+ * their species has a crowd of its own; a building with no keeper rolls at the
+ * plaza's own ratio.
+ */
+const FRONTAGE_HAWKFOLK_SHARE_BY_KEEPER = {
+  hawkfolk: FRONTAGE_HAWKFOLK_RUN_SHARE,
+  human: FRONTAGE_GROUNDFOLK_RUN_SHARE,
+  dwarf: FRONTAGE_GROUNDFOLK_RUN_SHARE,
+  otter: FRONTAGE_GROUNDFOLK_RUN_SHARE,
+  crocodilian: FRONTAGE_GROUNDFOLK_RUN_SHARE,
+} as const satisfies Record<TownSpecies, number>;
 
 const TALK_RADIUS = TILE_SIZE * CITIZEN_TALK_RADIUS_TILES;
 
@@ -178,7 +191,7 @@ const DOORSTEP_ANCHORS_PER_BUILDING = 1;
  * human here as a plain, arbitrary tie-break rather than rolled, since the
  * club's door staff sit outside the town's species ratio.
  */
-const DOORSTEP_ANCHOR_ROLES: ReadonlyArray<readonly [string, TownRole, TownSpecies]> = [
+const DOORSTEP_ANCHOR_ROLES: ReadonlyArray<readonly [TownBuildingName, TownRole, CrowdSpecies]> = [
   ['The Rusty Anvil', 'smith', 'hawkfolk'],
   [CLOAK_AND_DAGGER_NAME, 'guard', 'human'],
   ['The Sleeping Cat Inn', 'innkeeper', 'hawkfolk'],
@@ -293,8 +306,6 @@ export class TownLifeSystem implements GameSystem {
   private readonly plazaRadius: number;
   private readonly districtRadius: number;
   private readonly plazaWander: WanderParams;
-  /** A building's dominant resident species, keyed by `entry.name` — see `frontageHawkfolkShare`. */
-  private readonly residentSpeciesByHome: ReadonlyMap<string, TownSpecies>;
   private seedCount = 0;
   /**
    * Draws everything that decides who is in the crowd — each citizen's role and
@@ -339,12 +350,6 @@ export class TownLifeSystem implements GameSystem {
     this.districtRadius = Math.min(safeRadius, DISTRICT_RADIUS_TILES);
     this.doorTiles = new Set(
       gameMap.buildingEntries.map((entry) => tileCoordKey(entry.doorTile.x, entry.doorTile.y)),
-    );
-    // General Store has two residents of different species (a mixed-ownership
-    // room by design); later entries win the map, which is an accepted
-    // simplification rather than a deliberate pick of one over the other.
-    this.residentSpeciesByHome = new Map(
-      allResidents().map((def) => [def.home, residentSpecies(def)]),
     );
     this.districtDoors = gameMap.buildingEntries
       .map((entry) => entry.doorTile)
@@ -548,12 +553,11 @@ export class TownLifeSystem implements GameSystem {
     }
   }
 
-  /** The Hawkfolk share a building's own frontage should roll at, per its owning resident's species. */
-  private frontageHawkfolkShare(buildingName: string): number {
-    const owner = this.residentSpeciesByHome.get(buildingName);
-    if (owner === 'hawkfolk') return FRONTAGE_HAWKFOLK_RUN_SHARE;
-    if (owner === 'human') return FRONTAGE_HUMAN_RUN_SHARE;
-    return PLAZA_HAWKFOLK_SHARE;
+  /** The Hawkfolk share a building's own frontage should roll at, per its keeper's species. */
+  private frontageHawkfolkShare(buildingName: BuildingName): number {
+    const keeper = buildingKeeper(buildingName);
+    if (keeper === null) return PLAZA_HAWKFOLK_SHARE;
+    return FRONTAGE_HAWKFOLK_SHARE_BY_KEEPER[residentSpecies(keeper)];
   }
 
   /** Give every building in the district someone loitering on its doorstep. */
@@ -589,7 +593,7 @@ export class TownLifeSystem implements GameSystem {
   }
 
   /** The `buildingEntries` name whose door tile is `door`, or `undefined` for a door not in the list. */
-  private buildingNameAtDoor(door: TileXY): string | undefined {
+  private buildingNameAtDoor(door: TileXY): BuildingName | undefined {
     return this.gameMap.buildingEntries.find(
       (entry) => entry.doorTile.x === door.x && entry.doorTile.y === door.y,
     )?.name;
@@ -683,7 +687,7 @@ export class TownLifeSystem implements GameSystem {
     role: TownRole,
     count: number,
     radiusTiles: number,
-    pickSpecies: () => TownSpecies,
+    pickSpecies: () => CrowdSpecies,
   ): void {
     const radius = TILE_SIZE * radiusTiles;
     const spots = this.gatherAnchorTiles(fixture, radiusTiles);
@@ -730,7 +734,7 @@ export class TownLifeSystem implements GameSystem {
     speedMin: number,
     speedMax: number,
     wander: WanderParams,
-    species: TownSpecies,
+    species: CrowdSpecies,
   ): Townsperson {
     const person = new Townsperson({
       x: tile.x * TILE_SIZE,
@@ -883,7 +887,7 @@ function pickRole(table: RoleTable, rng: Rng): TownRole {
 }
 
 /** Species is a job-independent roll, at the given probability of Hawkfolk. */
-function rollSpecies(hawkfolkShare: number, rng: Rng): TownSpecies {
+function rollSpecies(hawkfolkShare: number, rng: Rng): CrowdSpecies {
   return rng() < hawkfolkShare ? 'hawkfolk' : 'human';
 }
 

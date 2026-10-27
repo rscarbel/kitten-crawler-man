@@ -14,8 +14,8 @@ import { scaleHumanoidBox } from '../sprites/humanoidScale';
 import { gaitCyclesForDistance } from '../sprites/gaitCadence';
 import type { Facing } from '../sprites/person/skeleton';
 import { stepWander, type WanderParams, type WanderState, type WanderStep } from './townWander';
-import type { ResidentId } from '../systems/townResidents';
-import type { TownSpecies } from '../systems/townSpecies';
+import { residentById, type ResidentId } from '../systems/townResidents';
+import type { CrowdSpecies, TownSpecies } from '../systems/townSpecies';
 import {
   citizenDialogSeed,
   citizenLookKey,
@@ -33,7 +33,7 @@ import {
 import type { BespokeResidentFigureId } from './bespokeResidentFigures';
 import type { RoutinePose } from './routinePose';
 import { onCanvasRecovery } from '../core/rendering/canvasRecovery';
-import { residentFigure } from './residentFigures';
+import { residentBody } from './residentFigures';
 import type { NPCMarkerType } from './QuestNPC';
 import { questMarkerColorFor } from '../sprites/questNPCSprite';
 import {
@@ -99,11 +99,37 @@ onCanvasRecovery((cause) => {
   if (cause === 'purged') purgedRecoveries++;
 });
 
-export interface TownspersonOptions {
+/**
+ * Who a person is and what they are drawn as. A cast look exists only for a
+ * crowd species, so an unnamed person of any other species must be handed a
+ * bespoke painter. A named resident brings both their species and their
+ * figure from their own records, so neither can be set beside them.
+ */
+export type TownspersonFigureOptions =
+  | {
+      species: CrowdSpecies;
+      bespokeFigure?: undefined;
+      residentId?: undefined;
+    }
+  | {
+      species: TownSpecies;
+      /** Draws this person with a bespoke resident painter instead of a cast look. */
+      bespokeFigure: BespokeResidentFigureId;
+      residentId?: undefined;
+    }
+  | {
+      /** Names this citizen as a specific person; unset citizens speak from the role pools. */
+      residentId: ResidentId;
+      species?: undefined;
+      bespokeFigure?: undefined;
+    };
+
+export type TownspersonOptions = TownspersonCommonOptions & TownspersonFigureOptions;
+
+interface TownspersonCommonOptions {
   x: number;
   y: number;
   role: TownRole;
-  species: TownSpecies;
   /** Appearance seed; also seeds the role bias. */
   seed: number;
   /** World-pixels advanced per frame while walking. */
@@ -114,10 +140,6 @@ export interface TownspersonOptions {
   initialPause?: number;
   /** Facing to hold until the figure first moves — lets a stationed occupant face its workstation. */
   initialFacing?: Facing;
-  /** Names this citizen as a specific person; unset citizens speak from the role pools. */
-  residentId?: ResidentId;
-  /** Draws this person with a bespoke resident painter instead of a cast look. */
-  bespokeFigure?: BespokeResidentFigureId;
 }
 
 export class Townsperson implements WanderState {
@@ -132,6 +154,8 @@ export class Townsperson implements WanderState {
   private wornSpeechStyle: CitizenSpeechStyle;
   private wornDialogSeed: number;
   private readonly seed: number;
+  /** The cast an unnamed citizen re-picks a look from; null for anyone with a fixed figure. */
+  private readonly repickCast: CrowdSpecies | null;
   /** {@link purgedRecoveries} as of this citizen's last look. */
   private lookPurgeCount = purgedRecoveries;
 
@@ -202,15 +226,17 @@ export class Townsperson implements WanderState {
     this.targetX = opts.x;
     this.targetY = opts.y;
     this.role = opts.role;
-    this.species = opts.species;
+    const identity = resolveIdentity(opts);
+    this.species = identity.species;
     this.residentId = opts.residentId ?? null;
     this.pause = opts.initialPause ?? 0;
     this.wander = opts.wander;
     if (opts.initialFacing !== undefined) this.facing = opts.initialFacing;
     this.seed = opts.seed;
-    this.wornBody = initialBody(opts);
-    // A bespoke resident speaks only from their own lines, so the seed that
-    // rotates an unnamed citizen's role pool is never read for them.
+    this.repickCast = identity.repickCast;
+    this.wornBody = identity.body;
+    // A bespoke figure has no cast dialog seed, so an unnamed one rotates its
+    // role pool by its appearance seed; a named resident never reads it.
     this.wornDialogSeed =
       this.wornBody.kind === 'citizen' ? citizenDialogSeed(this.wornBody.figure) : opts.seed;
     this.wornSpeechStyle = townspersonSpeechStyle(this.wornBody);
@@ -251,10 +277,10 @@ export class Townsperson implements WanderState {
   private followPurgedRecovery(): void {
     if (this.lookPurgeCount === purgedRecoveries) return;
     this.lookPurgeCount = purgedRecoveries;
-    if (this.residentId !== null || this.held) return;
+    if (this.repickCast === null || this.held) return;
     const worn = this.wornBody;
     if (worn.kind !== 'citizen') return;
-    const next = pickCitizenFigure(this.seed, this.role, this.species);
+    const next = pickCitizenFigure(this.seed, this.role, this.repickCast);
     if (citizenLookKey(next) === citizenLookKey(worn.figure)) return;
     this.wornBody = { kind: 'citizen', figure: next };
     this.wornDialogSeed = citizenDialogSeed(next);
@@ -425,11 +451,30 @@ export class Townsperson implements WanderState {
   }
 }
 
-function initialBody(opts: TownspersonOptions): TownspersonBody {
-  if (opts.bespokeFigure !== undefined) return { kind: 'bespoke', id: opts.bespokeFigure };
-  const figure =
-    opts.residentId !== undefined
-      ? residentFigure(opts.residentId)
-      : pickCitizenFigure(opts.seed, opts.role, opts.species);
-  return { kind: 'citizen', figure };
+interface TownspersonIdentity {
+  readonly species: TownSpecies;
+  readonly body: TownspersonBody;
+  readonly repickCast: CrowdSpecies | null;
+}
+
+function resolveIdentity(opts: TownspersonOptions): TownspersonIdentity {
+  if (opts.residentId !== undefined) {
+    return {
+      species: residentById(opts.residentId).species,
+      body: residentBody(opts.residentId),
+      repickCast: null,
+    };
+  }
+  if (opts.bespokeFigure !== undefined) {
+    return {
+      species: opts.species,
+      body: { kind: 'bespoke', id: opts.bespokeFigure },
+      repickCast: null,
+    };
+  }
+  return {
+    species: opts.species,
+    body: { kind: 'citizen', figure: pickCitizenFigure(opts.seed, opts.role, opts.species) },
+    repickCast: opts.species,
+  };
 }

@@ -3,11 +3,13 @@
  * Nobody here has a name of their own — they speak as their role, through a
  * transient speaker `townDialog.ts` builds from {@link roleDisplayName}.
  *
- * Pools are keyed by species first, role second: a Hawkfolk guard and a human
- * guard hold the same post but talk about it differently (Hawkfolk idiom,
- * a minority's caution, a majority's ease). `townDialog.ts`'s `citizenSpecies`
- * and `townResidents.ts`'s `residentSpecies` read each speaker's own species
- * and hand it to `ambientPool`/`dangerBark` below.
+ * Danger barks are keyed by species, then role. Ambient pools are keyed by
+ * voice, then role, and `AMBIENT_VOICE_OF` names the voice each species talks
+ * in: a Hawkfolk guard and a human guard hold the same post but talk about it
+ * differently (Hawkfolk idiom, a minority's caution, a majority's ease).
+ * `townDialog.ts`'s `citizenSpecies` and `townResidents.ts`'s `residentSpecies`
+ * read each speaker's own species and hand it to `ambientPool`/`dangerBark`
+ * below.
  */
 
 import type { NonEmpty } from '../line';
@@ -35,13 +37,10 @@ export function roleDisplayName(role: TownRole): string {
 }
 
 /**
- * Everyday, role-flavoured lines for human citizens. Rotated per citizen so
- * repeats stay fresh. Kept as two flat, single-level pools (one per species)
- * rather than one nested object so each stays a `Record<TownRole, ...>`
- * registry read by computed lookup, per `verify:dialog-lines`'s registry
- * shape — see {@link ambientPool}, the one place that picks between them.
+ * Everyday, role-flavoured lines for citizens who live on the ground. Rotated
+ * per citizen so repeats stay fresh.
  */
-const AMBIENT_LINES_HUMAN = {
+const AMBIENT_LINES_GROUNDFOLK = {
   guard: [
     'Watch’s short-handed again. Pell keeps asking for a second pair of boots and it never comes.',
     'I walk the ground beat, same as you. Feet the whole shift.',
@@ -194,13 +193,31 @@ const AMBIENT_LINES_HAWKFOLK = {
   ],
 } as const satisfies Record<TownRole, NonEmpty<string>>;
 
+/** A shared ambient pool: the everyday talk of the street, as heard from the ground or from the roosts. */
+type AmbientVoice = 'groundfolk' | 'hawkfolk';
+
+const AMBIENT_LINES = {
+  groundfolk: AMBIENT_LINES_GROUNDFOLK,
+  hawkfolk: AMBIENT_LINES_HAWKFOLK,
+} as const satisfies Record<AmbientVoice, Record<TownRole, NonEmpty<string>>>;
+
 /**
- * The citizen's ambient pool for their species. The one place `townDialog.ts`
- * (and any future caller) picks between the two flat pools above, so the
- * species dispatch lives in one function rather than at every call site.
+ * Which ambient pool each species' unnamed citizens talk from. The groundfolk
+ * pool is town gossip from someone without wings and nothing in it is
+ * particular to humans, so a species with no street talk of its own shares it
+ * until it is given a pool here.
  */
+const AMBIENT_VOICE_OF = {
+  human: 'groundfolk',
+  hawkfolk: 'hawkfolk',
+  dwarf: 'groundfolk',
+  otter: 'groundfolk',
+  crocodilian: 'groundfolk',
+} as const satisfies Record<TownSpecies, AmbientVoice>;
+
+/** The citizen's ambient pool, by the voice their species talks in. */
 export function ambientPool(species: TownSpecies, role: TownRole): NonEmpty<string> {
-  return species === 'hawkfolk' ? AMBIENT_LINES_HAWKFOLK[role] : AMBIENT_LINES_HUMAN[role];
+  return AMBIENT_LINES[AMBIENT_VOICE_OF[species]][role];
 }
 
 /** Everyone drops everything and reacts when the town is under threat. */
@@ -234,12 +251,62 @@ const DANGER_LINES_HAWKFOLK = {
   commoner: 'To the roosts, everyone. Don’t look back!',
 } as const satisfies Record<TownRole, string>;
 
-/**
- * The citizen's danger bark for their species — the one place a caller picks
- * between {@link DANGER_LINES_HUMAN} and {@link DANGER_LINES_HAWKFOLK}.
- */
+const DANGER_LINES_DWARF = {
+  guard: 'Shields together! Nothing gets past a dwarf standing still!',
+  merchant: 'Lock the strongbox first, THEN run!',
+  farmer: 'Down the root cellar, every last one of you!',
+  smith: 'Hammers up! It bleeds like anything else!',
+  innkeeper: 'Into the cellar, the barrels will hold a door!',
+  priest: 'Stone wards hold. Get behind me, all of you!',
+  child: 'I can’t see over anyone, which way do I RUN?',
+  drunk: 'Good. I was hoping something would pick a fight!',
+  noble: 'This is NOT what I pay the watch for!',
+  beggar: 'I’ve lived through worse. Keep your heads low!',
+  laborer: 'Pick up anything with a heavy end and HOLD!',
+  commoner: 'Down, low and inside. Go, go, GO!',
+} as const satisfies Record<TownRole, string>;
+
+const DANGER_LINES_OTTER = {
+  guard: 'Whistle’s gone, that means MOVE!',
+  merchant: 'Leave it, leave all of it, it floats or it doesn’t!',
+  farmer: 'Make for the river, it won’t follow us in!',
+  smith: 'Bank the forge and get behind the anvil!',
+  innkeeper: 'Everybody out the back and down to the water!',
+  priest: 'Keep calm and keep moving, that’s the whole prayer!',
+  child: 'I’m small, I can hide, but where?!',
+  drunk: 'Somebody hold my drink. Actually, I’ll hold it. RUN!',
+  noble: 'My good coat! Somebody save my good coat!',
+  beggar: 'Into the reeds, nobody looks in the reeds!',
+  laborer: 'Down tools, grab a pole, and stay together!',
+  commoner: 'Head for the water, it’s the one place it won’t look!',
+} as const satisfies Record<TownRole, string>;
+
+const DANGER_LINES_CROCODILIAN = {
+  guard: 'Behind me. I’m the thickest hide in this street!',
+  merchant: 'Shutters down! Everyone get BEHIND the counter!',
+  farmer: 'Into the mud and stay still, it can’t see what doesn’t move!',
+  smith: 'Let it come close. I bite harder than I hit.',
+  innkeeper: 'Bar the doors and don’t you DARE open them!',
+  priest: 'Patience got us through worse than this. Inside, now!',
+  child: 'I’ll bite it! I WILL bite it!',
+  drunk: 'Lucky thing, whatever it is, that I’m too slow to run.',
+  noble: 'Someone with less expensive scales go and deal with it!',
+  beggar: 'Nobody bothers a croc. Get the little ones out first!',
+  laborer: 'Down tools, everybody in the back, NOW!',
+  commoner: 'Stay low and keep still. Then RUN when I say!',
+} as const satisfies Record<TownRole, string>;
+
+const DANGER_LINES = {
+  human: DANGER_LINES_HUMAN,
+  hawkfolk: DANGER_LINES_HAWKFOLK,
+  dwarf: DANGER_LINES_DWARF,
+  otter: DANGER_LINES_OTTER,
+  crocodilian: DANGER_LINES_CROCODILIAN,
+} as const satisfies Record<TownSpecies, Record<TownRole, string>>;
+
+/** The citizen's danger bark, in their own species' voice. */
 export function dangerBark(species: TownSpecies, role: TownRole): string {
-  return species === 'hawkfolk' ? DANGER_LINES_HAWKFOLK[role] : DANGER_LINES_HUMAN[role];
+  return DANGER_LINES[species][role];
 }
 
 /**

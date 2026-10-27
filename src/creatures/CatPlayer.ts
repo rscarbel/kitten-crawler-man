@@ -62,6 +62,11 @@ import {
 } from '../core/party/crawlerFormulas';
 import { CAT_REFLEXES_DODGE_BONUS_PER_LEVEL } from '../core/skills/SkillManager';
 import type { DynamicLightSink } from '../systems/lighting/dynamicLights';
+import {
+  pauseOverheadMeasure,
+  reportOverheadTop,
+  resumeOverheadMeasure,
+} from '../ui/world/overheadStack';
 
 /** Degrees in π radians, for the one place this class works in degrees. */
 const DEGREES_PER_HALF_TURN = 180;
@@ -891,6 +896,7 @@ export class CatPlayer extends Player {
       const r = CatPlayer.ACTIVE_SPHERE_RADIUS;
       const sphereCX = sx + s * CatPlayer.TILE_CENTER_OFFSET;
       const sphereCY = sy - CatPlayer.ACTIVE_SPHERE_SPRITE_TOP - CatPlayer.ACTIVE_SPHERE_GAP - r;
+      reportOverheadTop(ctx, sphereCX, sphereCY - r);
       drawActivePlayerMarker(ctx, sphereCX, sphereCY, r);
     }
 
@@ -899,7 +905,12 @@ export class CatPlayer extends Player {
     const missileDepthY = this.y + s * CatPlayer.TILE_CENTER_OFFSET;
     const drawMissileLayer = (layer: MissileDepthLayer): void => {
       if (this.paintingBodyOnly) return;
-      drawMissiles(ctx, this.missiles, camX, camY, s, this.EXPLODE_FRAMES, layer, missileDepthY);
+      pauseOverheadMeasure();
+      try {
+        drawMissiles(ctx, this.missiles, camX, camY, s, this.EXPLODE_FRAMES, layer, missileDepthY);
+      } finally {
+        resumeOverheadMeasure();
+      }
     };
     drawMissileLayer('beyond');
     this.drawRetching(ctx, sx, sy, s, () => {

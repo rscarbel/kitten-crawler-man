@@ -33,6 +33,7 @@
  * party, the swinger goes down) is dropped whatever its verdict.
  */
 
+import { hollowPropInkTop } from '../../../map/tiles/hollowVillageTiles';
 import { TILE_SIZE } from '../../../core/constants';
 import { viewportHeight, viewportWidth } from '../../../core/rendering/Viewport';
 import type { SpatialGrid } from '../../../core/world/SpatialGrid';
@@ -52,7 +53,7 @@ import { drawGrainStand, type GrainStage } from '../../../map/tiles/cropRowTiles
 import { tileHash } from '../../../map/tiles/hollowTileHash';
 import type { TilePoint } from '../../../map/town/townPlan';
 import { CHOP_ROWS } from '../../../sprites/art/humanFigure';
-import { drawInteractionPrompt } from '../../../ui/InteractionPrompt';
+import { drawInteractionPrompt, drawInteractionPromptOver } from '../../../ui/InteractionPrompt';
 import type { Rect } from '../../../ui/core/geom';
 import { hostileWithinAttackRange } from '../../interactionPromptGate';
 import type { TileRect } from '../questGuidance';
@@ -686,18 +687,20 @@ export class GrainHarvest {
     const pegs = this.pegs;
     if (pegs !== null && this.canTakeScythe(active)) {
       const label = byInputMode(mode, { touch: 'to take the scythe', pointer: 'Take scythe' });
+      const pegsTileTop = pegs.y * TILE_SIZE - camY;
       drawInteractionPrompt(
         ctx,
         pegs.x * TILE_SIZE - camX,
-        pegs.y * TILE_SIZE - camY,
+        hollowPropInkTop('scythe_pegs', pegsTileTop, TILE_SIZE) ?? pegsTileTop,
         TILE_SIZE,
+        pegsTileTop + TILE_SIZE,
         label,
       );
       return true;
     }
     if (this.standInReach(active) === null) return false;
     const label = byInputMode(mode, { touch: 'to harvest', pointer: 'Harvest' });
-    drawInteractionPrompt(ctx, active.x - camX, active.y - camY, TILE_SIZE, label);
+    drawInteractionPromptOver(ctx, active, camX, camY, label);
     return true;
   }
 

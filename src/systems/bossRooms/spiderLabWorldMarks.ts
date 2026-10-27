@@ -92,6 +92,23 @@ const ARROW_OUTLINE_WIDTH = 3;
 const ARROW_OUTLINE = '#000';
 const ARROW_FILL = '#facc15';
 
+/** The top of the arrow's head, `bounce` pixels up from rest, over a tile whose top is at `tileY`. */
+function arrowHeadTop(tileY: number, ts: number, bounce: number): number {
+  return tileY - ts * TERMINAL_ARROW_RISE_TILES - ts * ARROW_HEAD_TILES - bounce;
+}
+
+/**
+ * The screen y of the highest pixel {@link paintTerminalArrow} paints at the
+ * top of its bounce, over a terminal tile whose top is at `tileY` — the line
+ * anything else hung over the terminal must clear. The shaft's outlined end
+ * is the arrow's highest point.
+ */
+export function terminalArrowTop(tileY: number, ts: number): number {
+  const highestHeadTop = arrowHeadTop(tileY, ts, ts * ARROW_BOUNCE_TILES);
+  const shaftTop = highestHeadTop - ts * ARROW_HEAD_TILES * ARROW_SHAFT_LENGTH;
+  return shaftTop - ARROW_OUTLINE_WIDTH / 2;
+}
+
 /** A gold arrow bouncing over the terminal on the tile whose top-left is (`tileX`, `tileY`) on screen. */
 export function paintTerminalArrow(
   ctx: CanvasRenderingContext2D,
@@ -103,7 +120,7 @@ export function paintTerminalArrow(
   const seconds = nowMs / MS_PER_SECOND;
   const bounce = Math.abs(Math.sin(seconds * ARROW_BOUNCE_RATE)) * ts * ARROW_BOUNCE_TILES;
   const tipX = tileX + ts * CENTRE;
-  const headTop = tileY - ts * TERMINAL_ARROW_RISE_TILES - ts * ARROW_HEAD_TILES - bounce;
+  const headTop = arrowHeadTop(tileY, ts, bounce);
   const width = ts * ARROW_WIDTH_TILES;
   const head = ts * ARROW_HEAD_TILES;
   const shaftHalf = width * ARROW_SHAFT_HALF_WIDTH;

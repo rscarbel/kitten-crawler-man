@@ -21,18 +21,21 @@ import {
 } from '../sprites/mordecaiSprite';
 import { MordecaiWanderer } from './mordecaiWander';
 import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
+import type { DrawnFigureRow } from '../sprites/figure/figureDef';
 import { drawSafeRoomBed, restedPulse } from '../sprites/safeRoomBed';
 import { drawStoveSteam } from '../sprites/safeRoomDecor';
-import { drawSpeechBubble } from '../sprites/speechBubble';
+import { drawSpeechBubble, speechBubbleTop } from '../sprites/speechBubble';
 import { drawQuestBeacon } from '../sprites/questBeacon';
 import {
   drawQuestMarker,
   questMarkerColorFor,
+  questMarkerTopY,
+  type QuestMarkerGlyph,
   type QuestMarkerState,
 } from '../sprites/questNPCSprite';
 import type { InteriorFigure } from '../core/rendering/InteriorFigure';
 import type { GameSystem, SystemContext } from './GameSystem';
-import { drawInteractionPrompt, interactionPromptTop } from '../ui/InteractionPrompt';
+import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { randomFromArray, frameTime } from '../utils';
 import { worldText } from '../ui/world/worldText';
 import { worldPalette } from '../ui/theme/worldInk';
@@ -59,6 +62,10 @@ interface MordecaiMinimapMarker {
 
 /** Keeps boss kills and the players' bags out of this system. */
 export type MordecaiMarkerSource = (room: SafeRoomInfo) => QuestMarkerState;
+
+function mordecaiMarkerGlyph(entry: SafeRoomEntry): QuestMarkerGlyph {
+  return entry.marker === 'question' ? '?' : '!';
+}
 
 interface SafeRoomEntry {
   bounds: { x: number; y: number; w: number; h: number };
@@ -117,6 +124,8 @@ function propTilesOfType(
 
 export class SafeRoomSystem implements GameSystem {
   private readonly entries: SafeRoomEntry[];
+  /** The row each Mordecai's last paint drew, so his prompt hangs over what is on screen. */
+  private readonly mordecaiDrawnRows = new Map<SafeRoomEntry, DrawnFigureRow>();
 
   /** The handle the open Mordecai conversation was returned, if any — `conversation.isActive` on it is what `_mordecaiOwned` reads. */
   private _mordecaiHandle: ConversationHandle | null = null;
@@ -493,6 +502,13 @@ export class SafeRoomSystem implements GameSystem {
     );
   }
 
+  /** The top of the row a Mordecai last drew, or his level's head height before his first paint. */
+  private mordecaiArtTop(entry: SafeRoomEntry, sy: number, ts: number): number {
+    const drawnRow = this.mordecaiDrawnRows.get(entry);
+    if (drawnRow === undefined) return mordecaiHeadTop(this.levelId, sy, ts);
+    return figureRowInkTop(drawnRow, sy, ts);
+  }
+
   private showsTalkPrompt(entry: SafeRoomEntry, active: { x: number; y: number }): boolean {
     return (
       this.isEntityInSafeRoom(active) &&
@@ -619,8 +635,7 @@ export class SafeRoomSystem implements GameSystem {
         markerColor === undefined &&
         SafeRoomSystem.isNearThisMordecai(e, active) &&
         !this._mordecaiOwned;
-      const markerGlyph = e.marker === 'question' ? '?' : '!';
-      const promptShown = this.showsTalkPrompt(e, active);
+      const markerGlyph = mordecaiMarkerGlyph(e);
       this.sortedFigures.push({
         y: wander.y,
         render: (ctx, camX, camY, ts) => {
@@ -647,16 +662,12 @@ export class SafeRoomSystem implements GameSystem {
             },
             this.levelId,
           );
+          if (drawnRow === undefined) this.mordecaiDrawnRows.delete(e);
+          else this.mordecaiDrawnRows.set(e, drawnRow);
           const overheadY = msy - mordecaiOverheadLift(this.levelId, ts);
           if (markerColor !== undefined) {
-            const headTop =
-              drawnRow === undefined
-                ? mordecaiHeadTop(this.levelId, msy, ts)
-                : figureRowInkTop(drawnRow, msy, ts);
-            const clearOf = promptShown
-              ? Math.min(headTop, interactionPromptTop(overheadY))
-              : headTop;
-            drawQuestMarker(ctx, msx, clearOf, ts, markerGlyph, markerColor);
+            const headTop = this.mordecaiArtTop(e, msy, ts);
+            drawQuestMarker(ctx, msx, headTop, ts, markerGlyph, markerColor);
           } else if (showBubble) {
             drawSpeechBubble(ctx, msx, overheadY, ts, speechBubblePulse);
           }
@@ -685,12 +696,17 @@ export class SafeRoomSystem implements GameSystem {
     // Guards the prompt loop only — the HUD banner below it still draws when the
     // Bopca's counter has claimed Space.
     for (const e of suppressWorldPrompt ? [] : this.entries) {
-      // Talk prompt near Mordecai
       const wander = e.wanderer.state;
       const mx = wander.x - camX;
-      const promptY = wander.y - camY - mordecaiOverheadLift(this.levelId, TILE_SIZE);
       if (this.showsTalkPrompt(e, active)) {
-        drawInteractionPrompt(ctx, mx, promptY, TILE_SIZE, 'Talk');
+        const sy = wander.y - camY;
+        const headTop = this.mordecaiArtTop(e, sy, TILE_SIZE);
+        const marked = questMarkerColorFor(e.marker) !== undefined;
+        const bubbleOriginY = sy - mordecaiOverheadLift(this.levelId, TILE_SIZE);
+        const promptY = marked
+          ? questMarkerTopY(ctx, headTop, TILE_SIZE, mordecaiMarkerGlyph(e))
+          : Math.min(headTop, speechBubbleTop(bubbleOriginY, TILE_SIZE));
+        drawInteractionPrompt(ctx, mx, promptY, TILE_SIZE, sy + TILE_SIZE, 'Talk');
         break; // only prompt once
       }
     }

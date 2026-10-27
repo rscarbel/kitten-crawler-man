@@ -52,8 +52,7 @@ export interface SpeciesBearer {
 
 /**
  * A street or interior citizen's species, for dialog-pool selection. Falls
- * back to the default for a `SpeciesBearer` that doesn't carry a real
- * species — this is the one place that fallback lives.
+ * back to the default for a `SpeciesBearer` that doesn't carry a real species.
  */
 export function citizenSpecies(citizen: SpeciesBearer): TownSpecies {
   return citizen.species ?? DEFAULT_TOWN_SPECIES;

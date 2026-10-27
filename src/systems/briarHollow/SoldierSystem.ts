@@ -43,7 +43,7 @@ import { findNearbyWalkableTile } from '../../map/findWalkableTile';
 import { HOLLOW_THRESHOLD } from '../../map/tileTypes';
 import { RATKIN_SOLDIER_IDS, type RatkinSoldierId } from '../../sprites/art/ratkin/cast';
 import { drawTimedSpeechBubble, type TimedBubbleStyle } from '../../sprites/speechBubble';
-import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
+import { drawInteractionPromptOver } from '../../ui/InteractionPrompt';
 import type { MobRoster } from '../kits/SceneWorld';
 import { hostileWithinAttackRange } from '../interactionPromptGate';
 import type { BarkLine } from '../../dialog/line';
@@ -118,7 +118,6 @@ const PATROL_RETURN_CHANCE = 0.25;
 /** Marta's rally reaches soldiers this close to her. */
 const RALLY_RADIUS_TILES = 6;
 
-const OVERHEAD_GAP_PX = 2;
 /** The militia's bubbles: steel and straw, apart from the civilians' warm ones. */
 const SOLDIER_BUBBLE_STYLE: TimedBubbleStyle = { border: '#8fa3b8', text: '#eef2f6' };
 
@@ -1042,7 +1041,7 @@ export class SoldierSystem {
         ctx,
         soldier.speech,
         sx + TILE_SIZE * TILE_CENTRE,
-        sy - VILLAGER_HEAD_CLEARANCE_TILES * TILE_SIZE - OVERHEAD_GAP_PX,
+        soldier.speechHeadY(sy),
         SOLDIER_BUBBLE_STYLE,
       );
     }
@@ -1059,7 +1058,7 @@ export class SoldierSystem {
     const target = this.talkTarget(active);
     if (target === null) return false;
     const { soldier } = target;
-    drawInteractionPrompt(ctx, soldier.x - camX, soldier.y - camY, TILE_SIZE, 'Talk');
+    drawInteractionPromptOver(ctx, soldier, camX, camY, 'Talk');
     return true;
   }
 }

@@ -7,6 +7,7 @@
  */
 import { timeFrameIndex, walkFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { worldText, worldTextInkExtent, type WorldTextInkExtent } from '../ui/world/worldText';
+import { overheadMeasuringOn, reportOverheadTop } from '../ui/world/overheadStack';
 import {
   GOBLIN_MOTHER_FIGURE,
   GOBLIN_TODDLER_FIGURE,
@@ -87,7 +88,8 @@ export function drawQuestNPCSprite(
     const bw = s * NPC_BUBBLE_W;
     const bh = s * NPC_BUBBLE_H;
     const bx = sx + s * NPC_BUBBLE_OFFSET_X;
-    const by = sy - s * NPC_BUBBLE_OFFSET_Y;
+    const by = questNPCHelpBubbleTop(sy, s);
+    reportOverheadTop(ctx, bx, by);
     const r = s * NPC_BUBBLE_CORNER_R;
 
     ctx.fillStyle = '#ffffff';
@@ -245,6 +247,9 @@ export function drawQuestMarker(
   glyph: QuestMarkerGlyph,
   color: string,
 ) {
+  if (overheadMeasuringOn(ctx)) {
+    reportOverheadTop(ctx, sx + s * EXCLAMATION_CENTER_X, questMarkerTopY(ctx, artTopY, s, glyph));
+  }
   // Drawn from inside the entity pass, it waits for the dungeon's darkness so
   // a quest marker is never dimmed by it.
   if (deferAboveDarkness((target) => drawQuestMarker(target, sx, artTopY, s, glyph, color))) {

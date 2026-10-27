@@ -40,6 +40,7 @@ import {
   wendellWaitingPages,
 } from './blueprintsDialog';
 import { playBlueprintsCue, type BlueprintsCue } from './blueprintsSoundCues';
+import type { BuildingName } from '../../../map/buildingEntry';
 
 export interface WendellBlueprintsHookDeps {
   readonly state: BriarHollowState;
@@ -78,7 +79,7 @@ export class WendellBlueprintsHook implements ResidentQuestHook {
 
   /** The hook for this room, or null anywhere but Plumbline Farm's ground floor. */
   static forBuilding(
-    buildingName: string,
+    buildingName: BuildingName,
     floor: number,
     deps: WendellBlueprintsHookDeps,
   ): WendellBlueprintsHook | null {

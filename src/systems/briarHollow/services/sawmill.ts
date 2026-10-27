@@ -23,12 +23,8 @@ import { BUILD_ROWS } from '../../../sprites/art/humanFigure';
 import { worldBar } from '../../../ui/world/worldShapes';
 import { drawInteractionPrompt, interactionPromptsSuppressed } from '../../../ui/InteractionPrompt';
 import { drawRopeCoilGlyph, drawSawBladeGlyph } from '../../../ui/icons/stationGlyphs';
-import {
-  GLYPH_BADGE_BOB_AMPLITUDE,
-  GLYPH_BADGE_SIZE,
-  drawGlyphBadge,
-  glyphBadgeBob,
-} from '../../../ui/world/glyphBadge';
+import { drawGlyphBadge, glyphBadgeBob } from '../../../ui/world/glyphBadge';
+import { badgeLayout } from '../../../sprites/overheadIcon';
 import { cueSoundOr } from '../blueprints/blueprintsSoundCues';
 import { UPGRADED_WOOD_PER_PRESS } from '../blueprints/StationUpgrades';
 import {
@@ -95,15 +91,13 @@ const PROGRESS_BAR_HEIGHT = 5;
 const PROGRESS_BAR_LIFT = 10;
 const TILE_CENTRE = 0.5;
 
-/** Clear air kept between the badge's lowest point and the prop's own art, at rest. */
-const FAR_ICON_GAP_ABOVE_ART = 4;
 /**
- * How far above the machine's actual art-top row (per station, via
- * `stationArtTopTileY` — a "tall" sawmill and a "low" rope walk reach different
- * heights) the badge's centre floats, so that even at the lowest point of its
+ * Clear air kept between the badge's lowest point and the machine's actual
+ * art-top row (per station, via `stationArtTopTileY` — a "tall" sawmill and a
+ * "low" rope walk reach different heights), so that even at the bottom of its
  * bob the whole badge sits clear above the tallest ink the prop's sheet paints.
  */
-const FAR_ICON_LIFT = GLYPH_BADGE_BOB_AMPLITUDE + GLYPH_BADGE_SIZE / 2 + FAR_ICON_GAP_ABOVE_ART;
+const FAR_ICON_GAP_ABOVE_ART = 4;
 /**
  * The badge fades in over this band as the crawler approaches, fully gone by
  * the time the SPACE prompt takes over — so the two affordances never double up.
@@ -427,15 +421,26 @@ export class SawmillService {
     // The rebuild's own bar is the machine's prompt while it runs; claiming
     // the slot keeps a prompt further down the chain from naming the press.
     if (this.deps.rebuilding()) return true;
-    const { x, y, w } = station.footprint;
+    const { x, y, w, h } = station.footprint;
     drawInteractionPrompt(
       ctx,
       x * TILE_SIZE - camX,
-      y * TILE_SIZE - camY,
+      this.stationOverheadTop(station) - camY,
       w * TILE_SIZE,
+      (y + h) * TILE_SIZE - camY,
       PROMPT_LABELS[station.kind],
     );
     return true;
+  }
+
+  /**
+   * The world y a prompt over `station` must clear: its art, or the badge over
+   * it when a quest keeps the badge up all the way to the machine.
+   */
+  private stationOverheadTop(station: ProcessingStation): number {
+    const artTop = stationArtTopTileY(station, this.deps.isUpgraded(station)) * TILE_SIZE;
+    if (!this.questForcedKinds.has(station.kind)) return artTop;
+    return badgeLayout(artTop, TILE_SIZE, FAR_ICON_GAP_ABOVE_ART).topY;
   }
 
   /**
@@ -520,11 +525,8 @@ export class SawmillService {
     const alpha = fade * (hasWood ? 1 : FAR_ICON_NO_WOOD_ALPHA);
     const bob = glyphBadgeBob(performance.now());
     const sx = centre.x - camX;
-    const sy =
-      stationArtTopTileY(station, this.deps.isUpgraded(station)) * TILE_SIZE -
-      camY -
-      FAR_ICON_LIFT +
-      bob;
+    const artTop = stationArtTopTileY(station, this.deps.isUpgraded(station)) * TILE_SIZE - camY;
+    const sy = badgeLayout(artTop, TILE_SIZE, FAR_ICON_GAP_ABOVE_ART).restingCenterY + bob;
 
     ctx.save();
     ctx.globalAlpha = alpha;

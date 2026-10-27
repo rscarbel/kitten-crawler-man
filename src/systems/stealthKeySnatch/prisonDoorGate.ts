@@ -1,4 +1,4 @@
-import type { BuildingEntry } from '../BuildingSystem';
+import type { BuildingEntry } from '../../map/buildingEntry';
 
 /** What the prison door says to a party that has not heard the gate guard out. */
 export const PRISON_DOOR_UNBRIEFED_REFUSAL = 'Talk to the guard first.';

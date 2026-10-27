@@ -48,6 +48,7 @@ import {
   SHOP_SIGN_EMBLEMS,
   type ShopSignEmblem,
   type TileRect,
+  type TownBuildingName,
   type TownOffset,
   type TownPlan,
 } from '../map/town/townPlan';
@@ -104,7 +105,7 @@ const LAMP_FLICKER_PHASE_STRIDE_RAD = GOLDEN_ANGLE_RAD;
  */
 type ClutterAnchor =
   | { readonly at: 'yard'; readonly name: string; readonly offset: TownOffset }
-  | { readonly at: 'door'; readonly name: string; readonly offset: TownOffset }
+  | { readonly at: 'door'; readonly name: TownBuildingName; readonly offset: TownOffset }
   // `surface` reaches a `PlannedSurface` (the drill yards, the crop rows) rather
   // than a `PlannedYard` — the working ground a trade actually stands on, which
   // for the Barracks is gravel the generator plans as a surface, not a fenced
@@ -534,18 +535,6 @@ function pastureKeepClearTiles(plan: TownPlan | undefined): ReadonlySet<string> 
 }
 
 /**
- * A gateway is anchored **on** the wall, at the opening's west or north jamb.
- *
- * An earlier version inset the face-on form one row inward, on the reasoning that
- * a prop anchored on a wall tile "would sort behind the rampart's own art". That
- * is not how the wall is drawn: `TOWN_WALL` is a ground tile baked in the chunk
- * cache, so a prop drawn in the Y-sorted pass is always over it whatever its
- * anchor row. The inset bought nothing and cost the two south-gate torches, whose
- * tiles the arch's piers landed on and occluded almost completely.
- */
-const GATEWAY_INSET_TILES = 0;
-
-/**
  * Slack added to a spanning prop's own span to get its cull margin.
  *
  * A span is measured between the two ends' tile *centres*, and each end's art —
@@ -627,7 +616,7 @@ export class TownDecorSystem implements GameSystem {
         new ShopSignProp(
           entry.doorTile,
           emblem,
-          signWestShiftTiles(entry.doorTile.x, entry.doorwayX0 ?? entry.doorTile.x),
+          signWestShiftTiles(entry.doorTile.x, entry.doorway.x0),
           signIndex * SIGN_SWAY_PHASE_STRIDE_RAD,
           () => this.frame,
         ),
@@ -842,21 +831,28 @@ export class TownDecorSystem implements GameSystem {
    * The north and south gates are openings in an east–west wall: you look through
    * them, and they take the face-on arch. The side gates are four-tile openings in
    * north–south walls, which the wall renderer itself draws top-down, so they take
-   * the gatehouse form. Drawing every gate face-on spanned the side gates *along
-   * Market Street* instead of across their own throats and planted a stone pier in
-   * the carriageway five tiles inside the wall.
+   * the gatehouse form. Drawn face-on, a side gate's arch would span *along
+   * Market Street* instead of across its own throat and plant a stone pier in the
+   * carriageway five tiles inside the wall.
+   *
+   * Either form is anchored on the opening's first tile, in the wall's own row
+   * or column, so its piers land on the jamb tiles and sort with them; anchored
+   * a row inside the town, the face-on piers would cover the torches beside the
+   * south gate.
    */
   private placeGateArches(): void {
     const plan = this.gameMap.townPlan;
     if (plan === undefined) return;
     for (const gate of plan.gates) {
-      const axis: GateArchAxis = gate.bounds.w >= gate.bounds.h ? 'across' : 'along';
-      const spanTiles = Math.max(gate.bounds.w, gate.bounds.h);
-      const anchor = {
-        x: gate.bounds.x - gate.outward.dx * GATEWAY_INSET_TILES,
-        y: gate.bounds.y - gate.outward.dy * GATEWAY_INSET_TILES,
-      };
-      this.renderables.push(new GateArchProp(anchor, spanTiles, axis));
+      const anchor = { x: gate.bounds.x, y: gate.bounds.y };
+      const inEastWestWall = gate.bounds.w >= gate.bounds.h;
+      if (inEastWestWall) {
+        this.renderables.push(new GateArchProp(anchor, gate.bounds.w));
+        continue;
+      }
+      for (const jamb of GATEHOUSE_JAMBS) {
+        this.renderables.push(new GatehousePierProp(anchor, gate.bounds.h, jamb));
+      }
     }
   }
 
@@ -1041,6 +1037,16 @@ const SIGNPOST_SHEET_KEY = 'taloncrest_signpost';
 
 /** A gateway is one picture, so its sheet has a single frame. */
 const GATE_ARCH_FRAME = 0;
+
+/** The two piers of a top-down gatehouse, each drawn and sorted on its own. */
+const GATEHOUSE_JAMBS = ['north', 'south'] as const;
+type GatehouseJamb = (typeof GATEHOUSE_JAMBS)[number];
+
+/**
+ * Where along the throat the two piers' clip bands meet: halfway, clear of both
+ * lanterns' halos, and nothing else is drawn across the throat.
+ */
+const GATEHOUSE_SPLIT_FRACTION = 0.5;
 
 function gateArchSheetKey(axis: GateArchAxis, spanTiles: number): string {
   return `gate_arch_${axis}_${spanTiles}`;
@@ -1238,18 +1244,20 @@ class SignpostProp implements TownPropRenderable {
 }
 
 /**
- * A stone gateway, anchored at its west (face-on) or north (top-down) jamb.
+ * A face-on stone gateway, anchored on the opening's first tile in an east–west
+ * wall.
  *
- * Measured ink at a 32 px tile, anchor-relative: the face-on arch reaches 2.84
- * tiles north and 4.72 east; the top-down gatehouse reaches 4.81 south. Both are
- * outside `RenderPipeline`'s 4-tile default, which is why this class declares its
- * own margin rather than relying on it.
+ * Measured ink at a 32 px tile, anchor-relative: it reaches 2.84 tiles north and
+ * 4.72 east, outside `RenderPipeline`'s 4-tile default, which is why this class
+ * declares its own margin rather than relying on it. It sorts on the foot of its
+ * anchor row, the wall's own row, so it ties with both jamb tiles its piers stand
+ * on and draws over them: props join the Y-sorted pass after the map's
+ * decorations, and the sort is stable.
  */
 class GateArchProp implements TownPropRenderable {
   constructor(
     private readonly tile: TileXY,
     private readonly spanTiles: number,
-    private readonly axis: GateArchAxis,
   ) {}
 
   get cullMarginTiles(): number {
@@ -1267,13 +1275,78 @@ class GateArchProp implements TownPropRenderable {
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     drawTownSheetFrame(
       ctx,
-      gateArchSheetKey(this.axis, this.spanTiles),
+      gateArchSheetKey('across', this.spanTiles),
       'idle',
       GATE_ARCH_FRAME,
       this.tile.x * tileSize - camX,
       this.tile.y * tileSize - camY,
       tileSize,
     );
+  }
+}
+
+/**
+ * One pier of a top-down gatehouse in a north–south wall, drawn from the
+ * gatehouse's sheet clipped to its own half of the gateway.
+ *
+ * The piers stand on the wall tiles at either end of the opening, the opening's
+ * length apart, and each must sort with the tile it stands on. One sort line for
+ * the whole picture cannot do both: on the north jamb's foot, the south jamb's
+ * stone paints over the south pier; on the south pier's foot, the north pier
+ * paints over a crawler in the opening's first row. Each pier sorts on its own
+ * jamb tile's foot and wins the tie with that tile, since props join the Y-sorted
+ * pass after the map's decorations and the sort is stable.
+ *
+ * Measured ink at a 32 px tile: the picture reaches 4.81 tiles south of the
+ * anchor, outside `RenderPipeline`'s 4-tile default cull margin.
+ */
+class GatehousePierProp implements TownPropRenderable {
+  constructor(
+    private readonly tile: TileXY,
+    private readonly spanTiles: number,
+    private readonly jamb: GatehouseJamb,
+  ) {}
+
+  get cullMarginTiles(): number {
+    return this.spanTiles + GATEWAY_CULL_SLACK_TILES;
+  }
+
+  get x(): number {
+    return this.tile.x * TILE_SIZE;
+  }
+
+  get y(): number {
+    return this.tile.y * TILE_SIZE;
+  }
+
+  get sortY(): number {
+    const jambRow = this.jamb === 'north' ? this.tile.y - 1 : this.tile.y + this.spanTiles;
+    const jambFootY = (jambRow + 1) * TILE_SIZE;
+    return jambFootY;
+  }
+
+  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
+    const reach = this.cullMarginTiles * tileSize;
+    const splitY = (this.tile.y + this.spanTiles * GATEHOUSE_SPLIT_FRACTION) * tileSize - camY;
+    const bandTop = this.jamb === 'north' ? splitY - reach : splitY;
+    const anchorX = this.tile.x * tileSize - camX;
+    ctx.save();
+    try {
+      ctx.beginPath();
+      ctx.rect(anchorX - reach, bandTop, reach * 2, reach);
+      ctx.clip();
+      drawTownSheetFrame(
+        ctx,
+        gateArchSheetKey('along', this.spanTiles),
+        'idle',
+        GATE_ARCH_FRAME,
+        anchorX,
+        this.tile.y * tileSize - camY,
+        tileSize,
+      );
+    } finally {
+      ctx.restore();
+    }
   }
 }
 

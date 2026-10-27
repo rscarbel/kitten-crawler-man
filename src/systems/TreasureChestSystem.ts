@@ -9,7 +9,7 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import { getSpriteDefByKey } from '../core/spriteAssets/SpriteLoader';
 import { cloneLootDrop } from '../core/items/loot/lootDrop';
-import { drawBouncingArrowAboveEntity } from '../ui/WorldArrow';
+import { bouncingArrowAboveEntityTop, drawBouncingArrowAboveEntity } from '../ui/WorldArrow';
 import { countsTowardRoomClear } from '../creatures/roomClear';
 import type { InteriorFigure } from '../core/rendering/InteriorFigure';
 import { pointInRect } from '../utils';
@@ -582,7 +582,11 @@ export class TreasureChestSystem {
         active.y - chest.tileY * TILE_SIZE,
       );
       if (playerDist < CHEST_INTERACTION_RANGE) {
-        drawInteractionPrompt(ctx, dx, dy, TILE_SIZE, 'Open Chest');
+        // A boss chest's loot arrow bobs over it until it is opened, so the prompt stacks above that.
+        const chestTop = isAwaitingBossLoot(chest)
+          ? bouncingArrowAboveEntityTop(chest.tileY * TILE_SIZE, camY)
+          : dy;
+        drawInteractionPrompt(ctx, dx, chestTop, TILE_SIZE, dy + TILE_SIZE, 'Open Chest');
       }
     }
   }

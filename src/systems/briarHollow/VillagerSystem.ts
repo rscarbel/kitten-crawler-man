@@ -30,7 +30,7 @@ import type { BriarHollowSite, VillagerAnchorKind } from '../../map/overworld/br
 import type { TilePoint } from '../../map/town/townPlan';
 import { ratkinCastEventFrame, ratkinCastLoopFrame } from '../../sprites/ratkinCastSprite';
 import type { ShopSign } from '../../sprites/overheadIcon';
-import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
+import { drawInteractionPromptOver } from '../../ui/InteractionPrompt';
 import type { NPCMarkerType } from '../../creatures/QuestNPC';
 import type { Conversation } from '../../dialog/Conversation';
 import type { BarkLine, DialogLine, NonEmpty } from '../../dialog/line';
@@ -1541,7 +1541,7 @@ export class VillagerSystem {
     if (this.session !== null) return false;
     const target = this.talkTarget(active);
     if (target === null) return false;
-    drawInteractionPrompt(ctx, target.x - camX, target.y - camY, TILE_SIZE, 'Talk');
+    drawInteractionPromptOver(ctx, target, camX, camY, 'Talk');
     return true;
   }
 

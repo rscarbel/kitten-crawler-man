@@ -44,6 +44,7 @@ import {
 import type { QuestRewardSpec, RewardItemLine } from '../ui/questReward/types';
 import type { VendorLineGate } from '../economy/shops';
 import { LORI_COTTAGE_NAME, SKY_TEMPLE_NAME } from './interiorStoryOwnership';
+import type { BuildingName } from '../map/buildingEntry';
 import {
   travelUnlocksSection,
   unlockedDestinationIds,
@@ -118,7 +119,7 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
      * The caller states the doorway's own span, because only the map knows it:
      * an opening can be wider than the single walkable tile recorded as the door.
      */
-    private readonly doorTileOf: (buildingName: string) => TrackerTarget | null,
+    private readonly doorTileOf: (buildingName: BuildingName) => TrackerTarget | null,
     private readonly toast: (message: string) => void,
     private readonly conversation: Conversation,
     /** Every questline that binds a destination, read when the reward screen is built. */

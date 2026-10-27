@@ -19,6 +19,7 @@
 import { TILE_SIZE } from '../src/core/constants.js';
 import { GameMap } from '../src/map/GameMap.js';
 import { CRATE } from '../src/map/tileTypes.js';
+import { PRISON_BUILDING_NAME } from '../src/map/stealthGateLayout.js';
 import { TILE_TYPE_FOR_KIND } from '../src/systems/DestructiblePropSystem.js';
 import type { Difficulty } from '../src/core/difficulty/difficultyProfiles.js';
 import {
@@ -362,7 +363,7 @@ function checkBuiltMap(parsed: ParsedPrisonLayout): void {
   const label = parsed.layout.id;
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
   const plan = { worldSeed: 0, difficulty: 'normal' as const, parsed };
-  map.generateInterior('prison', 0, '', false, { kind: 'goblin_prison', plan });
+  map.generateInterior('prison', 0, PRISON_BUILDING_NAME, false, { kind: 'goblin_prison', plan });
   const { grid } = parsed;
   const breakableTypes = new Set<number>(Object.values(TILE_TYPE_FOR_KIND));
   for (let y = 0; y < grid.height; y++) {

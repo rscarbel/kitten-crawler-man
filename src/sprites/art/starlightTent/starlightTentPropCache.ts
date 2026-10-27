@@ -29,6 +29,7 @@ import {
   type CanvasSurface,
 } from '../../../core/rendering/canvasSurface';
 import { onCanvasRecovery } from '../../../core/rendering/canvasRecovery';
+import { reportArtTop } from '../../../ui/world/overheadStack';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -225,13 +226,12 @@ export function drawStarlightTentProp(
   size: number,
 ): void {
   const frame = cachedFrame(key, box, painter, bakeResolution(ctx, size));
-  ctx.drawImage(
-    frame.surface,
-    sx + box.left * size,
-    sy + box.top * size,
-    box.width * size,
-    box.height * size,
-  );
+  const left = sx + box.left * size;
+  const top = sy + box.top * size;
+  const width = box.width * size;
+  // A prop's box is drawn to fit its art, so its top is the art's top.
+  reportArtTop(ctx, left, left + width, top);
+  ctx.drawImage(frame.surface, left, top, width, box.height * size);
 }
 
 /**

@@ -93,6 +93,7 @@ import { MobRoster } from '../src/systems/kits/SceneWorld';
 import { SpellSystem } from '../src/systems/SpellSystem';
 import { Conversation } from '../src/dialog/Conversation';
 import { createTownPlan, type BuildingKind } from '../src/map/town/townPlan';
+import type { BuildingName } from '../src/map/buildingEntry';
 import { TOWER_FLOOR_COUNT } from '../src/map/GameMap';
 import { stampSafeRoomCounters } from '../src/map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../src/map/safeRoomDecorLayout';
@@ -144,8 +145,6 @@ const PHONE_LAYOUT_HEIGHT = 844;
 const OUTDOOR_W_TILES = 48;
 const OUTDOOR_H_TILES = 20;
 const OUTDOOR_PARTY_TILE = { x: 6, y: 10 } as const;
-const STORE_NAME = 'Companion Test Store';
-const TOWER_NAME = 'Companion Test Tower';
 const GROUND_STOREY = 0;
 const UPPER_STOREY = 1;
 
@@ -171,13 +170,13 @@ function makeRoom(widthTiles: number, heightTiles: number, wallColumn?: number):
 
 function makeStore(): GameMap {
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  map.generateInterior('store', GROUND_STOREY, STORE_NAME, false);
+  map.generateInterior('store', GROUND_STOREY, null, false);
   return map;
 }
 
 function makeTowerStorey(storey: number): GameMap {
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  map.generateInterior('tower', storey, TOWER_NAME, false);
+  map.generateInterior('tower', storey, null, false);
   return map;
 }
 
@@ -1132,7 +1131,7 @@ interface RoomArrival {
   readonly fixedMarks?: { readonly human: MazeTile; readonly cat: MazeTile };
 }
 
-function buildRoom(name: string, kind: BuildingKind, storey: number, hasSafeRoom: boolean) {
+function buildRoom(name: BuildingName, kind: BuildingKind, storey: number, hasSafeRoom: boolean) {
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
   map.generateInterior(kind, storey, name, hasSafeRoom);
   // The scene stamps these after the map is built; a room checked without
@@ -1156,7 +1155,7 @@ function footOfStair(stairs: ReadonlyArray<{ x: number; y: number }>, map: GameM
 function everyRoomArrival(): RoomArrival[] {
   const plan = createTownPlan(level3.mapSize);
   const arrivals: RoomArrival[] = [];
-  const buildings: Array<{ name: string; kind: BuildingKind; hasSafeRoom: boolean }> = [
+  const buildings: Array<{ name: BuildingName; kind: BuildingKind; hasSafeRoom: boolean }> = [
     ...plan.buildings.map((b) => ({
       name: b.name,
       kind: b.kind,

@@ -10,7 +10,8 @@
 import { TILE_SIZE } from '../../src/core/constants';
 import { level3 } from '../../src/levels/level3';
 import { GameMap } from '../../src/map/GameMap';
-import { OVERWORLD_BORDER_TILES, type BuildingEntry } from '../../src/map/OverworldGenerator';
+import { OVERWORLD_BORDER_TILES } from '../../src/map/OverworldGenerator';
+import type { BuildingEntry } from '../../src/map/buildingEntry';
 import { STARLIGHT_TENT_NAME } from '../../src/map/overworld/circusGroundsLayout';
 import { gateHighwayTiles, widenApproach } from '../../src/map/town/paintStreets';
 import { circusApproachCentreLine } from '../../src/map/overworld/paintCircusGrounds';

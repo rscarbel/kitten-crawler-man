@@ -237,11 +237,8 @@ import {
   TRAVEL_LANDING_STANDOFF_TILES,
   type TravelUnlockState,
 } from '../systems/travel/travelDestinations';
-import {
-  BuildingSystem,
-  downedPartnerEntryRefusal,
-  type BuildingEntry,
-} from '../systems/BuildingSystem';
+import { BuildingSystem, downedPartnerEntryRefusal } from '../systems/BuildingSystem';
+import type { BuildingEntry } from '../map/buildingEntry';
 import { interiorSellsSomething } from '../systems/townServices';
 import { TownLifeSystem } from '../systems/TownLifeSystem';
 import { CrowdResidentSet } from '../systems/CrowdResidentSet';
@@ -296,7 +293,7 @@ import { shopScreenSurface } from '../ui/screens/shop/ShopScreen';
 import { priceBreakdownsShown } from '../ui/screens/shop/priceBreakdowns';
 import { FortuneTable, fortuneScreenSurface } from '../ui/screens/shop/FortuneScreen';
 import {
-  drawInteractionPrompt,
+  drawInteractionPromptOver,
   interactionPromptsDrawnThisFrame,
   setInteractionPromptsSuppressed,
 } from '../ui/InteractionPrompt';
@@ -1397,6 +1394,8 @@ export class DungeonScene extends GameplayScene {
   private defendQuest: DefendQuestSystem;
   /** Floor 2's clogged bathrooms, their queue, their plumber and the floor's one pipe board; inert on every other floor. */
   readonly cloggedBathroom: CloggedBathroomSystem;
+  private readonly isCrawlerHidden = (crawler: HumanPlayer | CatPlayer): boolean =>
+    this.cloggedBathroom.isCrawlerHidden(crawler);
   /** Floor 2's stealth gate, its guard and the prison key quest; inert on every other floor. */
   readonly stealthKeySnatch: StealthKeySnatchSystem;
   /** Light and dark on floors 1 and 2; null on every other map. */
@@ -6707,7 +6706,7 @@ export class DungeonScene extends GameplayScene {
     if (!this.shouldShowInteractionPrompts(active)) return;
     const target = this.townLife.findTalkTarget(active.x, active.y);
     if (target === null) return;
-    drawInteractionPrompt(ctx, target.x - camX, target.y - camY, TILE_SIZE, 'Talk');
+    drawInteractionPromptOver(ctx, target, camX, camY, 'Talk');
   }
 
   /**
@@ -6757,7 +6756,7 @@ export class DungeonScene extends GameplayScene {
     if (this.briarHollowKit?.wouldInteract(active) === true) return;
     const merc = this.mercenarySystem.talkTarget(active, this.world.roster.mobs);
     if (merc === null) return;
-    drawInteractionPrompt(ctx, merc.x - camX, merc.y - camY, TILE_SIZE, 'Talk');
+    drawInteractionPromptOver(ctx, merc, camX, camY, 'Talk');
   }
 
   /** Opens a conversation with the nearest street citizen, if one is in range. */
@@ -8552,6 +8551,7 @@ export class DungeonScene extends GameplayScene {
     // the citizen they are already talking to is the loudest of these.
     setInteractionPromptsSuppressed(this.overlayOpen || this.gameOver);
     const { x: camX, y: camY } = this.camera();
+    this.keepPromptsClearOfCrawlers(ctx, camX, camY, this.crawlerBarks, this.isCrawlerHidden);
     const frontBeams = this.frontObjectiveBeams();
 
     const rc: RenderContext = {
@@ -8617,7 +8617,7 @@ export class DungeonScene extends GameplayScene {
       speechBubblePulse: this.speechBubblePulse,
       goreUnderDarkness: this.dungeonLighting !== null,
       lightShining: this.lightShining,
-      isCrawlerHidden: (crawler) => this.cloggedBathroom.isCrawlerHidden(crawler),
+      isCrawlerHidden: this.isCrawlerHidden,
       sortedFixtures: [
         ...this.cloggedBathroom.sortedFixtures(),
         ...(this.tutorial?.gateRenderables() ?? []),

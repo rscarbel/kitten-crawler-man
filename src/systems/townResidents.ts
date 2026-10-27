@@ -22,7 +22,8 @@ import { transientSpeaker } from '../dialog/line';
 import type { CitizenSpeechStyle } from '../dialog/speakers';
 import type { DialogLine, Paragraphs } from '../dialog/line';
 import type { TownSpecies } from './townSpecies';
-import type { PlannedBuildingName } from '../map/town/townPlan';
+import { CLOAK_AND_DAGGER_NAME, type PlannedBuildingName } from '../map/town/townPlan';
+import { mapByBuildingName, type BuildingName } from '../map/buildingEntry';
 
 export type ResidentId =
   | 'old_lori'
@@ -57,36 +58,33 @@ export interface ResidentDef {
   readonly home: PlannedBuildingName;
 }
 
-const RESIDENT_DEFS: ReadonlyArray<ResidentDef> = [
+const RESIDENT_DEFS = [
   {
     id: 'old_lori',
     name: 'Old Lori',
     role: 'priest',
-    species: 'human',
+    species: 'dwarf',
     home: "Old Lori's Cottage",
   },
   {
     id: 'steve_cartwright',
     name: 'Steve Cartwright',
     role: 'laborer',
-    species: 'human',
+    species: 'otter',
     home: "Cartwright's Workshop",
   },
-  // Ahead of the innkeepers: a building's frontage takes the species of the
-  // last resident listed for it, and that is the house's keeper, not its
-  // janitor.
   {
     id: 'janitor_puddles',
     name: 'Puddles',
     role: 'laborer',
-    species: 'human',
+    species: 'crocodilian',
     home: 'The Sunken Stump Pub',
   },
   {
     id: 'janitor_grout',
     name: 'Grout',
     role: 'laborer',
-    species: 'human',
+    species: 'crocodilian',
     home: 'The Horned Flagon',
   },
   { id: 'wendell', name: 'Wendell', role: 'farmer', species: 'human', home: 'Plumbline Farm' },
@@ -146,10 +144,13 @@ const RESIDENT_DEFS: ReadonlyArray<ResidentDef> = [
     species: 'hawkfolk',
     home: 'Blackwood Lodge',
   },
-  // A crocodilian, drawn by her own painter, keeping the mercenaries' desk.
-  // Listed ahead of the garrison's keepers so they, not she, set the Barracks'
-  // frontage crowd.
-  { id: 'sydney', name: 'Sydney', role: 'merchant', species: 'human', home: 'The Barracks' },
+  {
+    id: 'sydney',
+    name: 'Sydney',
+    role: 'merchant',
+    species: 'crocodilian',
+    home: 'The Barracks',
+  },
   {
     id: 'corporal_pell',
     name: 'Corporal Pell',
@@ -184,7 +185,7 @@ const RESIDENT_DEFS: ReadonlyArray<ResidentDef> = [
     name: 'Brandon',
     role: 'noble',
     species: 'human',
-    home: 'The Cloak & Dagger',
+    home: CLOAK_AND_DAGGER_NAME,
   },
   {
     id: 'keeper_brenna_kestrel',
@@ -193,7 +194,46 @@ const RESIDENT_DEFS: ReadonlyArray<ResidentDef> = [
     species: 'hawkfolk',
     home: 'General Store',
   },
-];
+] as const satisfies ReadonlyArray<ResidentDef>;
+
+type ResidentRecord = (typeof RESIDENT_DEFS)[number];
+
+/** The species the resident with id `Id` is authored as. */
+export type ResidentSpeciesOf<Id extends ResidentId> = Extract<
+  ResidentRecord,
+  { readonly id: Id }
+>['species'];
+
+/** Every building at least one named resident lives in. */
+type ResidentHome = ResidentRecord['home'];
+
+/** The ids of the residents who live in `Home`. */
+type ResidentOf<Home extends ResidentHome> = Extract<ResidentRecord, { readonly home: Home }>['id'];
+
+/**
+ * Who keeps each building a resident lives in: the person the house is
+ * theirs, whose species leans its door's frontage crowd. Every resident's home
+ * needs an entry, and a keeper can only be someone who lives there.
+ */
+const BUILDING_KEEPERS = {
+  "Old Lori's Cottage": 'old_lori',
+  "Cartwright's Workshop": 'steve_cartwright',
+  'The Sunken Stump Pub': 'innkeep_marlow',
+  'The Horned Flagon': 'innkeep_brend',
+  'Plumbline Farm': 'wendell',
+  "Miller's Farm": 'marta_miller',
+  'Herb & Remedy': 'apothecary_fen',
+  'Temple of the Sky': 'deacon_aviel',
+  'The Rusty Anvil': 'smith_varga',
+  'The Sleeping Cat Inn': 'innkeep_ossie',
+  'Blackwood Lodge': 'sgt_kessler',
+  'The Barracks': 'corporal_pell',
+  'General Store': 'keeper_brenna_kestrel',
+  'The Quiet Needle': 'tattooist_nim',
+  [CLOAK_AND_DAGGER_NAME]: 'brandon',
+} as const satisfies { readonly [Home in ResidentHome]: ResidentOf<Home> };
+
+const KEEPER_BY_BUILDING = mapByBuildingName<ResidentId>(BUILDING_KEEPERS);
 
 const RESIDENTS_BY_ID = new Map<ResidentId, ResidentDef>(RESIDENT_DEFS.map((def) => [def.id, def]));
 
@@ -207,6 +247,12 @@ export function residentById(id: ResidentId): ResidentDef {
 /** Every authored resident, for registries and validation sweeps. */
 export function allResidents(): ReadonlyArray<ResidentDef> {
   return RESIDENT_DEFS;
+}
+
+/** The resident who keeps the building named `buildingName`, or null for a building no resident lives in. */
+export function buildingKeeper(buildingName: BuildingName): ResidentDef | null {
+  const keeperId = KEEPER_BY_BUILDING.get(buildingName);
+  return keeperId === undefined ? null : residentById(keeperId);
 }
 
 /** A named resident's species, for danger-line pool selection and for their figure. */

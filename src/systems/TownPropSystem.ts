@@ -25,9 +25,16 @@ import { playDrinkGesture } from '../creatures/humanGestures';
 import { FOUNTAIN, WELL } from '../map/tileTypes';
 import { drawQuestBeacon } from '../sprites/questBeacon';
 import { questMarkerColorFor, type QuestMarkerState } from '../sprites/questNPCSprite';
-import { drawOverheadIcon, overheadIconFor, type ShopSign } from '../sprites/overheadIcon';
-import { drawTownSheetFrame, townSheetStateInkTop } from '../sprites/townSheetProp';
-import { drawInteractionPrompt } from '../ui/InteractionPrompt';
+import {
+  drawOverheadIcon,
+  overheadIconFor,
+  overheadIconTopY,
+  type ShopSign,
+} from '../sprites/overheadIcon';
+import { drawTownSheetFrame } from '../sprites/townSheetProp';
+import { sheetStateInkTop } from '../core/spriteAssets/SpriteRenderer';
+import { drawInteractionPrompt, drawInteractionPromptOver } from '../ui/InteractionPrompt';
+import { getSpriteExtentsPxForTileType } from '../core/spriteAssets/SpriteLoader';
 import { tileKey } from './tileKey';
 import { doorwayKeepClearTiles } from './doorwayKeepClear';
 import type { GameMap } from '../map/GameMap';
@@ -231,32 +238,36 @@ export class TownPropSystem implements GameSystem {
   /** Floats a SPACE prompt over the nearest actionable prop, if one is in range. */
   renderPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): void {
     if (this.board !== null && this.tileWithinReach(active, this.board.tile)) {
-      this.drawPromptAt(ctx, this.board.tile, camX, camY, 'Read');
+      drawInteractionPromptOver(ctx, this.board, camX, camY, 'Read');
       return;
     }
-    if (this.fortuneTile !== null && this.tileWithinReach(active, this.fortuneTile)) {
-      this.drawPromptAt(ctx, this.fortuneTile, camX, camY, 'Consult');
+    const fortuneTeller = this.fortuneTellerProp;
+    if (fortuneTeller !== null && this.tileWithinReach(active, fortuneTeller.tile)) {
+      drawInteractionPromptOver(ctx, fortuneTeller, camX, camY, 'Consult');
       return;
     }
     if (this.healCooldown <= 0 && active.hp < active.maxHp) {
       const near = this.nearestHealSpot(active);
-      if (near !== null) this.drawPromptAt(ctx, near.tile, camX, camY, near.spot.label);
+      if (near !== null) this.drawHealPrompt(ctx, near.spot, near.tile, camX, camY);
     }
   }
 
-  private drawPromptAt(
+  /** Over the top of what the spot draws, which for a well stands well above the tile it is drunk from. */
+  private drawHealPrompt(
     ctx: CanvasRenderingContext2D,
+    spot: HealSpot,
     tile: TileXY,
     camX: number,
     camY: number,
-    label: string,
   ): void {
+    const sy = tile.y * TILE_SIZE - camY;
     drawInteractionPrompt(
       ctx,
       tile.x * TILE_SIZE - camX,
-      tile.y * TILE_SIZE - camY,
+      sy - healSpotArtReachPx(spot.kind),
       TILE_SIZE,
-      label,
+      sy + TILE_SIZE,
+      spot.label,
     );
   }
 
@@ -439,6 +450,28 @@ const FORTUNE_TELLER_SHEET_KEY = 'taloncrest_fortune_teller';
 const FIXTURE_STATE = 'idle';
 const FIXTURE_FRAME = 0;
 
+/**
+ * How far a heal spot's art stands above the tile it is used from. A well is
+ * one sprite on its own tile; a fountain is a basin spread over many tiles,
+ * whose rim stands no taller than any one of them; a bench is a sheet picture.
+ */
+function healSpotArtReachPx(kind: HealKind): number {
+  switch (kind) {
+    case 'well':
+      return getSpriteExtentsPxForTileType(WELL)?.up ?? 0;
+    case 'fountain':
+      return 0;
+    case 'bench':
+      return -(sheetStateInkTop(BENCH_SHEET_KEY, FIXTURE_STATE, 0, TILE_SIZE) ?? 0);
+    default:
+      return unhandledHealKind(kind);
+  }
+}
+
+function unhandledHealKind(kind: never): never {
+  throw new Error(`unhandled heal spot kind: ${String(kind)}`);
+}
+
 /** A board is a thing, not a quest giver, so it wears only the "!" and none of the gold column. */
 const NOTICE_BOARD_SHOWS_BEACON = false;
 const FORTUNE_TELLER_SHOWS_BEACON = true;
@@ -473,8 +506,23 @@ function drawMarkedFixture(
 
   const icon = overheadIconFor(markerState, shopSign);
   if (icon === 'none') return;
-  const artTop = townSheetStateInkTop(sheetKey, FIXTURE_STATE, sy, tileSize) ?? sy;
-  drawOverheadIcon(ctx, sx, artTop, tileSize, icon);
+  drawOverheadIcon(ctx, sx, fixtureArtTop(sheetKey, sy, tileSize), tileSize, icon);
+}
+
+function fixtureArtTop(sheetKey: string, sy: number, tileSize: number): number {
+  return sheetStateInkTop(sheetKey, FIXTURE_STATE, sy, tileSize) ?? sy;
+}
+
+/** The line anything hung over a marked fixture must clear: its icon while it wears one, else its art. */
+function markedFixtureOverheadTop(
+  ctx: CanvasRenderingContext2D,
+  sheetKey: string,
+  markerState: QuestMarkerState,
+  shopSign: ShopSign,
+  sy: number,
+): number {
+  const icon = overheadIconFor(markerState, shopSign);
+  return overheadIconTopY(ctx, fixtureArtTop(sheetKey, sy, TILE_SIZE), TILE_SIZE, icon);
 }
 
 class NoticeBoardProp implements TownPropRenderable {
@@ -489,6 +537,10 @@ class NoticeBoardProp implements TownPropRenderable {
 
   get y(): number {
     return this.tile.y * TILE_SIZE;
+  }
+
+  overheadTop(ctx: CanvasRenderingContext2D, sy: number): number {
+    return markedFixtureOverheadTop(ctx, NOTICE_BOARD_SHEET_KEY, this.markerState, 'closed', sy);
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
@@ -544,6 +596,16 @@ export class FortuneTellerProp implements TownPropRenderable {
 
   get y(): number {
     return this.tile.y * TILE_SIZE;
+  }
+
+  overheadTop(ctx: CanvasRenderingContext2D, sy: number): number {
+    return markedFixtureOverheadTop(
+      ctx,
+      FORTUNE_TELLER_SHEET_KEY,
+      this.markerState,
+      this.shopSign,
+      sy,
+    );
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {

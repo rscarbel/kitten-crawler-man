@@ -10,7 +10,7 @@
 import type { GearFreeShopId } from './vendorMenu';
 import type { ShopId } from '../../economy/shops';
 import type { TownRole } from '../../sprites/person/PersonAppearance';
-import type { TownSpecies } from '../townSpecies';
+import type { CrowdSpecies } from '../townSpecies';
 
 /** Which stall silhouette and palette `src/sprites/marketStall.ts` draws. */
 export type StallStyle = 'produce_cart' | 'tinker_bench' | 'butcher_block' | 'cloth_awning';
@@ -30,7 +30,7 @@ export interface VendorDef {
   /** Stall name, e.g. "Greengrocer's Cart". Shown as the panel title. */
   stallName: string;
   role: TownRole;
-  species: TownSpecies;
+  species: CrowdSpecies;
   /** Seed for `generatePersonAppearance`; fixed so a vendor looks the same every visit. */
   appearanceSeed: number;
   style: StallStyle;

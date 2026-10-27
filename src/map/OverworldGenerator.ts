@@ -26,11 +26,11 @@ import {
 } from './tileTypes';
 import { randomInt } from '../utils';
 import { TileGrid } from './town/tileGrid';
+import type { BuildingEntry } from './buildingEntry';
 import {
   createTownPlan,
   GATE_ARCH_PIER_TILES,
   type BuildingKind,
-  type ShopSignEmblem,
   type TilePoint,
   type TileRect,
   type TownPlan,
@@ -101,7 +101,7 @@ import {
 import { worldRandom } from '../core/world/WorldRandom';
 import { grownRect, KeepOut } from './overworld/keepOut';
 import {
-  CIRCUS_FOREST_CLEARANCE_TILES,
+  CIRCUS_TERRAIN_CLEARANCE_TILES,
   CIRCUS_RADIUS_TILES,
   STARLIGHT_TENT_NAME,
   type CircusGroundsSite,
@@ -120,54 +120,6 @@ import {
   assertBriarHollowIsIntact,
   assertBriarHollowIsReachable,
 } from './overworld/briarHollowChecks';
-
-export interface BuildingEntry {
-  doorTile: TilePoint;
-  name: string;
-  type: BuildingKind;
-  /**
-   * Whether this building's interior hosts the town's safe room.
-   *
-   * Carried on the entry rather than derived from `type`, because a safe room is
-   * a property of one specific building and not of a category — keying it to a
-   * kind is what forced The Barracks to be registered as a restaurant.
-   */
-  hasSafeRoom?: boolean;
-  /**
-   * Device on the shop sign hanging over this door, when the building has one.
-   *
-   * Optional because two entries are not shop fronts: the main tower, and the
-   * circus's Starlight Tent out beyond the walls. Carried on the entry rather than
-   * re-derived by name in the renderer, so the sign is stated once — in the
-   * `TownPlan` — and a building added without one is a compile error there
-   * rather than a silently missing sign here.
-   */
-  sign?: ShopSignEmblem;
-  /**
-   * Width of the opening in the facade, in tiles.
-   *
-   * Doorways are **not** all one tile: measured across the thirteen sprites the
-   * town uses, six are one tile, five are two, the General Store is three and
-   * The Horned Flagon is four. Anything hung beside a door has to know, because
-   * `computeDoorway` reports the *centre* of the opening — so for a four-tile
-   * front, the tile immediately west of `doorTile` is still doorway.
-   *
-   * Optional alongside `sign`, and for the same two entries: the tower's door is
-   * stated by the `TownPlan` rather than derived from a manifest, and the Starlight
-   * Tent's is the two-tile doorway the circus layout leaves in its footprint.
-   */
-  doorwayWidth?: number;
-  /**
-   * Westmost column of the opening, so the whole of it can be walked into.
-   *
-   * `doorTile` alone is one tile of an opening up to four tiles wide, and every
-   * tile of that opening is walkable ground with the door apron painted across
-   * it: an entrance that only triggers on its centre column is an entrance the
-   * player can stand squarely inside and not be offered. Paired with
-   * `doorwayWidth` — both present or both absent.
-   */
-  doorwayX0?: number;
-}
 
 export interface OverworldData {
   grid: TileContent[][];
@@ -428,8 +380,7 @@ export function generateOverworld(size: number): OverworldData {
     doorTile: towerDoor,
     name: plan.tower.name,
     type: plan.tower.kind,
-    doorwayX0: towerSpan.x0,
-    doorwayWidth: towerSpan.width,
+    doorway: { x0: towerSpan.x0, width: towerSpan.width },
   });
 
   // The art rects: what a fence must not be driven through, and what a plot's
@@ -464,8 +415,7 @@ export function generateOverworld(size: number): OverworldData {
       type: planned.kind,
       hasSafeRoom: planned.hasSafeRoom,
       sign: planned.sign,
-      doorwayWidth: placement.doorwayWidth,
-      doorwayX0: placement.doorwayX,
+      doorway: { x0: placement.doorwayX, width: placement.doorwayWidth },
     });
     paintDoorApron(grid, placement);
   }
@@ -474,16 +424,20 @@ export function generateOverworld(size: number): OverworldData {
 
   const tracksInTownBefore = countTracksInsideTown(grid, plan);
   const circus = paintCircus(grid, plan, buildingEntries, villageKeepOut);
-  // The grounds' lot is not paving, so the forest is kept off it by shape: the
-  // disc and a tile past it, so no tree stands against a rim tile.
+  // The grounds' lot is not paving, so every natural pass after this one is
+  // kept off it by shape: the disc and a clearance band past it. The rim's
+  // booths and the high striker stand out to the disc's edge and are played
+  // from the tiles beside them, so a tree, a boulder or a cliff ledge in that
+  // band would fence those tiles into pockets.
   const circusKeepOut = new KeepOut([
     {
       kind: 'disc',
       centre: circus.centre,
-      radiusTiles: circus.radius + CIRCUS_FOREST_CLEARANCE_TILES,
+      radiusTiles: circus.radius + CIRCUS_TERRAIN_CLEARANCE_TILES,
     },
   ]);
-  paintForests(grid, plan, villageKeepOut.union(circusKeepOut));
+  const landmarkKeepOut = villageKeepOut.union(circusKeepOut);
+  paintForests(grid, plan, landmarkKeepOut);
   paintRuins(grid, plan, circus, villageKeepOut, landform);
   // After the forests and the ruins so a camp can clear its own ground — a camp
   // is a place people have cleared — and before the spawn scatter, which
@@ -540,15 +494,22 @@ export function generateOverworld(size: number): OverworldData {
     [...buildingPlots, ...yardPlots(plan)],
     villageKeepOut,
   );
-  scatterWildernessGroundCover(grid, plan, OVERWORLD_BORDER_TILES, villageKeepOut, camps, landform);
+  scatterWildernessGroundCover(
+    grid,
+    plan,
+    OVERWORLD_BORDER_TILES,
+    landmarkKeepOut,
+    camps,
+    landform,
+  );
   // After the ground cover, so a boulder is never scattered onto a wildflower
   // clump and never has one scattered onto it.
-  scatterBoulders(grid, plan, landform, buildingEntries, camps, villageKeepOut);
+  scatterBoulders(grid, plan, landform, buildingEntries, camps, landmarkKeepOut);
   // Last of the natural passes: a cliff defers to everything — roads, water,
   // camps, forests, the town — so it runs once all of them are on the grid.
-  paintCliffs(grid, plan, landform, camps, OVERWORLD_BORDER_TILES, villageKeepOut);
+  paintCliffs(grid, plan, landform, camps, OVERWORLD_BORDER_TILES, landmarkKeepOut);
   // After the cliffs, so a scar never takes ground a ledge was cut from.
-  paintSlopeScars(grid, plan, landform, camps, OVERWORLD_BORDER_TILES, villageKeepOut);
+  paintSlopeScars(grid, plan, landform, camps, OVERWORLD_BORDER_TILES, landmarkKeepOut);
   // Both checks run over the *finished* grid, which is load-bearing rather than
   // tidy. The scatter pass is itself something that can put the wrong material
   // inside the walls, and `paintTownProps` is the only writer of the wells and
@@ -1329,8 +1290,7 @@ function paintCircus(
     doorTile: starlightTentDoor.doorTile,
     name: STARLIGHT_TENT_NAME,
     type: STARLIGHT_TENT_ENTRY_KIND,
-    doorwayX0: starlightTentDoor.doorTile.x,
-    doorwayWidth: starlightTentDoor.doorwayWidth,
+    doorway: { x0: starlightTentDoor.doorTile.x, width: starlightTentDoor.doorwayWidth },
   });
   return { centre, radius: site.radiusTiles, site };
 }

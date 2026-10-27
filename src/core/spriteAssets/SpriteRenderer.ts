@@ -1,11 +1,13 @@
 import {
   getSpriteDef,
+  getSpriteDefByKey,
   type SpriteKey,
   type SpriteStates,
   type SpriteDef,
   type SpriteStateDef,
 } from './SpriteLoader';
 import { frameOrigin, getFrameInkBounds } from './spriteFrames';
+import { overheadMeasuringOn, reportArtTop } from '../../ui/world/overheadStack';
 
 /** Default alpha for full opacity. */
 const DEFAULT_ALPHA = 1;
@@ -32,7 +34,7 @@ export interface DrawSpriteOpts {
  * frames, for a sprite whose tile's top-left is at screen y `sy` — the sheet
  * counterpart of `figureRowInkTop`, for hanging something over baked art.
  */
-export function spriteStateInkTop(
+function spriteStateInkTop(
   def: SpriteDef,
   stateDef: SpriteStateDef,
   sy: number,
@@ -43,6 +45,23 @@ export function spriteStateInkTop(
     topSheetPx = Math.min(topSheetPx, getFrameInkBounds(def, stateDef, frame).top);
   }
   return sy - (def.tileY - topSheetPx) * (tileSize / def.tileScale);
+}
+
+/**
+ * {@link spriteStateInkTop} for a sheet named by key, for a sprite whose
+ * tile's top-left is at screen y `sy`; `undefined` while the sheet or its
+ * state is not loaded, when nothing is drawn to measure.
+ */
+export function sheetStateInkTop(
+  key: string,
+  state: string,
+  sy: number,
+  tileSize: number,
+): number | undefined {
+  const def = getSpriteDefByKey(key);
+  const stateDef = def?.states.get(state);
+  if (def === undefined || stateDef === undefined) return undefined;
+  return spriteStateInkTop(def, stateDef, sy, tileSize);
 }
 
 /**
@@ -70,6 +89,12 @@ export function drawSprite(
   const { srcX, srcY } = frameOrigin(stateDef, frameWidth, frameHeight, clampedFrame);
   const dw = frameWidth * scale;
   const dh = frameHeight * scale;
+
+  // A rotated sprite is an effect in flight, never something stacked over a body.
+  if (rotation === undefined && overheadMeasuringOn(ctx)) {
+    const left = x - tileX * scale;
+    reportArtTop(ctx, left, left + dw, spriteStateInkTop(def, stateDef, y, tileSize));
+  }
 
   const needsSave =
     flipX || rotation !== undefined || (alpha !== undefined && alpha !== DEFAULT_ALPHA);

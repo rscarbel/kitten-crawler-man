@@ -50,14 +50,18 @@ import {
   CIRCUS_STRUCTURE_LOW,
   TENT_POLE,
   RIVER_REEDS,
+  TOWN_WALL,
+  FENCE,
+  RUINED_WALL,
 } from './tileTypes';
 import { drawTerrainTile } from './tiles/terrainTiles';
 import { drawBossRoomTile } from './tiles/bossRoomTiles';
 import { drawSpecialFloorTile } from './tiles/specialFloorTiles';
-import { drawBuildingTile } from './tiles/buildingTiles';
+import { drawBuildingTile, RUINED_WALL_OVERHEAD_PX, townWallArtKey } from './tiles/buildingTiles';
 import {
   drawDecorationTile,
   drawDecorationLifeLayer,
+  fenceArtKey,
   REED_OVERHANG_PX,
   reedStandVariant,
 } from './tiles/decorationTiles';
@@ -466,6 +470,12 @@ const DECORATION_TYPES = new Set([
   // Riverbank reeds stand taller than their tile, so a crawler wading behind
   // a stand is hidden by it.
   RIVER_REEDS,
+  // Taloncrest's wall ring, its yard fences and the ruins' broken walls. Each
+  // sorts on its base, so its stone or timber covers the lower body of anyone
+  // standing north of it; baked flat, it would lie under their feet.
+  TOWN_WALL,
+  FENCE,
+  RUINED_WALL,
   // The service level's furniture. Its part tiles are absent: they bake as
   // floor, and their anchor draws the whole piece over them.
   ...SERVICE_PROP_TILE_TYPES,
@@ -504,6 +514,12 @@ const CACHEABLE_OVERLAY_TYPES = new Set([
   // shared per stand variant, so the cache stays a few dozen canvases however
   // long the river.
   RIVER_REEDS,
+  // Per-pixel masonry joints and merlons, a broken silhouette with cracks and
+  // rubble, and posts, rails and the rickety style's paths: each is many calls
+  // a tile, and the town wall alone puts dozens of tiles on screen.
+  TOWN_WALL,
+  FENCE,
+  RUINED_WALL,
 ]);
 
 /** Tile type used where a neighbour lookup falls off the grid. */
@@ -1460,6 +1476,9 @@ export function decorationTileExtentsPx(
   // sprite fallback below would grow each cached canvas ninefold — and the
   // per-frame blit with it — for slack that can never be drawn into.
   if (ROOF_TILE_TYPES.has(type)) return NO_DECORATION_EXTENTS;
+  // Painted strictly inside their own tile, for the roofs' reason above.
+  if (type === TOWN_WALL || type === FENCE) return NO_DECORATION_EXTENTS;
+  if (type === RUINED_WALL) return { left: 0, up: RUINED_WALL_OVERHEAD_PX, right: 0, down: 0 };
   // A village prop is drawn whole from one tile of its footprint; the rest of
   // the footprint reaches nowhere.
   if (type === HOLLOW_PROP_LOW || type === HOLLOW_PROP_TALL) {
@@ -1508,8 +1527,19 @@ function unregisteredDecorationExtents(ts: number): MapSpriteExtentsPx {
  * The key of the entry a tile shares with every other tile drawing the same
  * picture, or null when its picture is its own.
  */
-function sharedOverlayKey(type: number, tx: number, ty: number): string | null {
+function sharedOverlayKey(
+  structure: TileContent[][],
+  type: number,
+  tx: number,
+  ty: number,
+  ts: number,
+): string | null {
   if (type === RIVER_REEDS) return `${type}:${reedStandVariant(tx, ty)}`;
+  if (type === TOWN_WALL) return `${type}:${townWallArtKey(structure, tx, ty, ts)}`;
+  if (type === FENCE) {
+    const fenceKey = fenceArtKey(structure, tx, ty, ts);
+    return fenceKey === null ? null : `${type}:${fenceKey}`;
+  }
   return null;
 }
 
@@ -1530,6 +1560,10 @@ function surfaceBytes(surface: CanvasSurface): number {
  * Cache sharing rules:
  *  - BUILDING_WALL, ROOF_*: one canvas per tile (tx, ty) — each has position-dependent details.
  *  - RIVER_REEDS: one canvas per stand variant, shared by every tile drawing it.
+ *  - TOWN_WALL, and FENCE in its sawn styles: one canvas per distinct picture,
+ *    keyed by everything the picture is drawn from, so identical tiles share it.
+ *  - RUINED_WALL and the rickety FENCE: one canvas per tile — each is drawn
+ *    from a per-tile hash.
  *  - TREE / TORCH / BRAZIER / WELL / FOUNTAIN: excluded — they already resolve to
  *    one drawImage call.
  */
@@ -1570,7 +1604,7 @@ export class OverlayTileCache {
   /** Whether this tile has an up-to-date entry for its type. */
   has(type: number, tx: number, ty: number): boolean {
     this.syncCanvasGeneration();
-    const sharedKey = sharedOverlayKey(type, tx, ty);
+    const sharedKey = sharedOverlayKey(this.structure, type, tx, ty, this.ts);
     const entry =
       sharedKey === null
         ? this.cache.get(tileIndex(tx, ty, this.gridWidth))
@@ -1602,7 +1636,7 @@ export class OverlayTileCache {
     capStaleRedraws: boolean,
   ): OverlayCacheEntry | null {
     this.syncCanvasGeneration();
-    const sharedKey = sharedOverlayKey(type, tx, ty);
+    const sharedKey = sharedOverlayKey(this.structure, type, tx, ty, this.ts);
     const entries: Map<number | string, OverlayCacheEntry> =
       sharedKey === null ? this.cache : this.shared;
     const key = sharedKey ?? tileIndex(tx, ty, this.gridWidth);

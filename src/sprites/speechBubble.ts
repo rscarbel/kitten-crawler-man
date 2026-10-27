@@ -6,6 +6,7 @@
 
 import { worldPlate } from '../ui/world/worldShapes';
 import { measureWorldText, worldText } from '../ui/world/worldText';
+import { reportOverheadTop } from '../ui/world/overheadStack';
 
 const BUBBLE_PULSE_RATE = 0.12;
 const BUBBLE_ALPHA_BASE = 0.7;
@@ -80,6 +81,11 @@ export function speechBubbleOriginAbove(bottomY: number, s: number): number {
   return bottomY - s * (DOTS_BUBBLE_TOP + DOTS_BUBBLE_HEIGHT + DOTS_TAIL_DROP);
 }
 
+/** The screen y of the top of the "…" bubble {@link drawSpeechBubble} paints for the same `sy` and `s`. */
+export function speechBubbleTop(sy: number, s: number): number {
+  return sy + s * DOTS_BUBBLE_TOP;
+}
+
 /**
  * The wordless "…" bubble that appears over an NPC the player can talk to.
  *
@@ -97,7 +103,7 @@ export function drawSpeechBubble(
   ctx.globalAlpha = BUBBLE_ALPHA_BASE + Math.sin(pulse * BUBBLE_PULSE_RATE) * BUBBLE_ALPHA_SWING;
 
   const bx = sx + s * DOTS_BUBBLE_LEFT;
-  const by = sy + s * DOTS_BUBBLE_TOP;
+  const by = speechBubbleTop(sy, s);
   const bw = s * DOTS_BUBBLE_WIDTH;
   const bh = s * DOTS_BUBBLE_HEIGHT;
 
@@ -135,6 +141,24 @@ export function drawSpeechBubble(
   ctx.restore();
 }
 
+/** The text bubble's size and its top, for a bubble pointing down at `anchorY`. */
+function textBubbleLayout(anchorY: number, s: number, text: string) {
+  // Sized from an average glyph width rather than `measureText`: the bubble is
+  // drawn every frame a bark is up, and the font is fixed, so a measurement per
+  // frame buys nothing that a slightly generous box does not.
+  const textWidth = text.length * TEXT_SIZE * AVERAGE_GLYPH_WIDTH_RATIO;
+  const boxWidth = Math.min(s * TEXT_MAX_WIDTH_TILES, textWidth + TEXT_PADDING * 2);
+  const lineCount = Math.max(1, Math.ceil(textWidth / (boxWidth - TEXT_PADDING * 2)));
+  const boxHeight = lineCount * TEXT_LINE_HEIGHT + TEXT_PADDING * 2;
+  const boxY = anchorY - boxHeight - TEXT_TAIL_DROP - TEXT_BUBBLE_GAP;
+  return { boxWidth, boxHeight, boxY };
+}
+
+/** The screen y of the top of the bubble {@link drawSpeechBubbleWithText} paints for the same arguments. */
+export function speechBubbleWithTextTop(anchorY: number, s: number, text: string): number {
+  return textBubbleLayout(anchorY, s, text).boxY;
+}
+
 /**
  * A bubble with a line of dialog in it, centred over `anchorX` and pointing down
  * at `anchorY`. Used for lines an NPC says unprompted, where opening the whole
@@ -147,15 +171,9 @@ export function drawSpeechBubbleWithText(
   s: number,
   text: string,
 ): void {
-  // Sized from an average glyph width rather than `measureText`: the bubble is
-  // drawn every frame a bark is up, and the font is fixed, so a measurement per
-  // frame buys nothing that a slightly generous box does not.
-  const textWidth = text.length * TEXT_SIZE * AVERAGE_GLYPH_WIDTH_RATIO;
-  const boxWidth = Math.min(s * TEXT_MAX_WIDTH_TILES, textWidth + TEXT_PADDING * 2);
-  const lineCount = Math.max(1, Math.ceil(textWidth / (boxWidth - TEXT_PADDING * 2)));
-  const boxHeight = lineCount * TEXT_LINE_HEIGHT + TEXT_PADDING * 2;
+  const { boxWidth, boxHeight, boxY } = textBubbleLayout(anchorY, s, text);
   const boxX = anchorX - boxWidth / 2;
-  const boxY = anchorY - boxHeight - TEXT_TAIL_DROP - TEXT_BUBBLE_GAP;
+  reportOverheadTop(ctx, anchorX, boxY);
 
   ctx.save();
   ctx.fillStyle = BUBBLE_FILL;
@@ -264,6 +282,45 @@ export const CAT_SPEECH_STYLE: TimedBubbleStyle = { border: '#60a5fa', text: '#e
 /** The human crawler's own barks: a warm amber, distinct from the cat's cool blue. */
 export const HUMAN_SPEECH_STYLE: TimedBubbleStyle = { border: '#f59e0b', text: '#fef3c7' };
 
+/** The wrapped text width and the box size a timed line is drawn in. */
+function timedBubbleSize(ctx: CanvasRenderingContext2D, text: string, italic: boolean) {
+  const singleLineWidth = measureWorldText(ctx, text, {
+    size: TIMED_FONT_SIZE,
+    bold: true,
+    italic,
+  }).width;
+  const textWidth = Math.min(singleLineWidth, TIMED_MAX_TEXT_WIDTH);
+  const { lineCount } = measureWorldText(ctx, text, {
+    size: TIMED_FONT_SIZE,
+    bold: true,
+    italic,
+    width: textWidth,
+    lineHeight: TIMED_LINE_HEIGHT,
+  });
+  const boxWidth = textWidth + TIMED_PADDING_X * 2;
+  const boxHeight = lineCount * TIMED_LINE_HEIGHT + TIMED_PADDING_Y * 2;
+  return { textWidth, boxWidth, boxHeight };
+}
+
+/** The top of a box `boxHeight` tall whose pointer touches `headY`. */
+function timedBoxTop(headY: number, boxHeight: number): number {
+  return headY - TIMED_POINTER_HEIGHT - boxHeight;
+}
+
+/**
+ * The screen y of the top of the bubble {@link drawTimedSpeechBubble} paints
+ * for `speech` over a head at `headY`, or `headY` itself while nothing is said.
+ */
+export function timedSpeechBubbleTop(
+  ctx: CanvasRenderingContext2D,
+  speech: TimedSpeech,
+  headY: number,
+): number {
+  const text = speech.current;
+  if (text === null) return headY;
+  return timedBoxTop(headY, timedBubbleSize(ctx, text, speech.isItalic).boxHeight);
+}
+
 /**
  * Draws a {@link TimedSpeech} line in a dark rounded box with a pointer at its
  * speaker, word-wrapped when it runs long.
@@ -283,25 +340,11 @@ export function drawTimedSpeechBubble(
   const alpha = speech.alpha;
   const italic = speech.isItalic;
 
-  const singleLineWidth = measureWorldText(ctx, text, {
-    size: TIMED_FONT_SIZE,
-    bold: true,
-    italic,
-  }).width;
-  const textWidth = Math.min(singleLineWidth, TIMED_MAX_TEXT_WIDTH);
-  const { lineCount } = measureWorldText(ctx, text, {
-    size: TIMED_FONT_SIZE,
-    bold: true,
-    italic,
-    width: textWidth,
-    lineHeight: TIMED_LINE_HEIGHT,
-  });
-
-  const boxWidth = textWidth + TIMED_PADDING_X * 2;
-  const boxHeight = lineCount * TIMED_LINE_HEIGHT + TIMED_PADDING_Y * 2;
+  const { textWidth, boxWidth, boxHeight } = timedBubbleSize(ctx, text, italic);
   const boxX = anchorX - boxWidth / 2;
   const boxBottom = headY - TIMED_POINTER_HEIGHT;
-  const boxY = boxBottom - boxHeight;
+  const boxY = timedBoxTop(headY, boxHeight);
+  reportOverheadTop(ctx, anchorX, boxY);
   const fill = `rgba(0,0,0,${TIMED_BG_ALPHA})`;
 
   ctx.save();

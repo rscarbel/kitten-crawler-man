@@ -1,7 +1,8 @@
 #!/usr/bin/env tsx
 /**
- * A building under a dungeon floor, walked into and back out of: the real
- * `DungeonScene` on floor 2 and the real `BuildingInteriorScene`, headless.
+ * A building under a dungeon floor, walked into and back out of: floor 2's
+ * prison door, through the real `DungeonScene` and the real
+ * `BuildingInteriorScene`, headless.
  *
  *  - The floor that comes back is the floor that was left: the same creatures
  *    (the dead still dead), the same crawlers, every system's state as it was
@@ -21,6 +22,7 @@
 
 import { installBrowserShim } from './browserShim.js';
 import { settleArrival } from './settleArrival.js';
+import type { Difficulty } from '../src/core/difficulty/difficultyProfiles.js';
 
 const VIEWPORT = { width: 1280, height: 720, devicePixelRatio: 1 } as const;
 installBrowserShim(VIEWPORT);
@@ -92,8 +94,8 @@ type SaveOptions = NonNullable<ConstructorParameters<typeof DungeonScene>[3]>;
 type SavedProgress = Parameters<NonNullable<SaveOptions['saveProgress']>>[0];
 type Tile = { readonly x: number; readonly y: number };
 
-/** The test building: an ordinary house, the shape every town room falls back to. */
-const TEST_BUILDING_NAME = 'Floor Two Test Lodge';
+/** What the prison's difficulty picker is answered with; the visits never move inside it. */
+const PRISON_DIFFICULTY = 'normal' as const satisfies Difficulty;
 /** Creatures killed before the visit, so the way back can be asked about them. */
 const KILLED_MOB_COUNT = 5;
 /**
@@ -116,8 +118,6 @@ const BARRIER_ITEM = 'gym_dumbbell';
 const WOUNDED_HP = 1;
 /** Gold the run earns indoors, which the floor's return must not take back. */
 const GOLD_EARNED_INDOORS = 37;
-/** How many tiles a candidate door keeps clear of a room's walls. */
-const DOOR_WALL_CLEARANCE = 2;
 /** How far from the door step the barrier's tile is looked for. */
 const SIDE_SEARCH_TILES = 3;
 
@@ -194,31 +194,9 @@ function tickPinned(scene: Scene | Inside, frames: number): void {
   }
 }
 
-function inRect(tile: Tile, rect: { x: number; y: number; w: number; h: number }): boolean {
-  return (
-    tile.x >= rect.x && tile.x < rect.x + rect.w && tile.y >= rect.y && tile.y < rect.y + rect.h
-  );
-}
-
-/**
- * A door in an ordinary room — not a safe room, not a boss room — with open
- * floor in front of it and beside it, so the clock runs where the party
- * comes out.
- */
-function chooseDoor(map: LiveMap): { door: Tile; returnTile: Tile } | null {
-  const special = [
-    ...map.safeRooms.map((room) => room.bounds),
-    ...map.bossRooms.map((room) => room.bounds),
-  ];
-  for (const room of map.roomBounds) {
-    const door = { x: room.x + DOOR_WALL_CLEARANCE, y: room.y + DOOR_WALL_CLEARANCE };
-    const returnTile = { x: door.x, y: door.y + 1 };
-    const tiles = [door, returnTile];
-    if (!tiles.every((tile) => map.isWalkable(tile.x, tile.y))) continue;
-    if (tiles.some((tile) => special.some((rect) => inRect(tile, rect)))) continue;
-    return { door, returnTile };
-  }
-  return null;
+/** Walks through the prison door the way its difficulty picker does once answered. */
+function enterPrison(scene: Scene, entry: Entry): void {
+  scene['enterBuilding'](entry, PRISON_DIFFICULTY);
 }
 
 /** An open tile near the door step but off it, for the barrier: the scene's props are down by now. */
@@ -298,12 +276,11 @@ async function verifySeed(worldSeed: number): Promise<void> {
     dungeon: dungeonOptionsForLevel(level2),
     worldSeed,
   });
-  const chosen = chooseDoor(map);
-  check(chosen !== null, `${label}: floor 2 has an ordinary room to put a test door in`);
-  if (chosen === null) return;
-  const { door, returnTile } = chosen;
-  const entry: Entry = { doorTile: door, name: TEST_BUILDING_NAME, type: 'house' };
-  map.buildingEntries.push(entry);
+  const entry = map.buildingEntries.find((candidate) => candidate.type === 'prison');
+  check(entry !== undefined, `${label}: floor 2 has the prison door`);
+  if (entry === undefined) return;
+  const door = entry.doorTile;
+  const returnTile = { x: door.x, y: door.y + 1 };
 
   const saves: SavedProgress[] = [];
   const sceneManager = new SceneManager();
@@ -322,8 +299,11 @@ async function verifySeed(worldSeed: number): Promise<void> {
   check(await settleArrival(outside, ctx), `${label}: the floor's arrival screen finishes`);
   check(
     map.isWalkable(door.x, door.y) && map.isWalkable(returnTile.x, returnTile.y),
-    `${label}: the test door and its step are still open floor once the scene is built`,
+    `${label}: the prison door and its step are open floor once the scene is built`,
   );
+  // The door opens only to a party the gate guard has briefed.
+  const stealth = outside.stealthKeySnatch;
+  stealth.restoreCheckpoint({ ...stealth.captureCheckpoint(), phase: 'briefed' });
   const townOnFloor = townSystemsBuilt(outside);
   check(
     townOnFloor.length === 0,
@@ -395,7 +375,7 @@ async function verifySeed(worldSeed: number): Promise<void> {
   const building = outside['building'];
   check(building !== null, `${label}: a floor with a building entry builds the door system`);
   if (building === null) return;
-  building['onEnterBuilding'](entry);
+  enterPrison(outside, entry);
   const inside = currentScene(sceneManager);
   check(inside instanceof BuildingInteriorScene, `${label}: the door leads into the building`);
   if (!(inside instanceof BuildingInteriorScene)) return;
@@ -537,9 +517,7 @@ async function verifyDefeatIndoors(
   label: string,
 ): Promise<void> {
   for (const crawler of outside.pm.players()) placeAt(crawler, returnTile);
-  const building = outside['building'];
-  if (building === null) return;
-  building['onEnterBuilding'](entry);
+  enterPrison(outside, entry);
   const inside = currentScene(sceneManager);
   if (!(inside instanceof BuildingInteriorScene)) {
     check(false, `${label}: the door leads into the building a second time`);
@@ -591,9 +569,7 @@ async function verifyNoSaveMidFight(
   placeAt(hostile, { x: returnTile.x + 1, y: returnTile.y });
   outside['world'].roster.rebuildGrid();
   const savesBefore = saves.length;
-  const building = outside['building'];
-  if (building === null) return;
-  building['onEnterBuilding'](entry);
+  enterPrison(outside, entry);
   check(
     saves.length === savesBefore,
     `${label}: walking in with a hostile at the door saves nothing`,
@@ -645,9 +621,7 @@ async function verifyDefeatWithoutDoorSave(
   placeAt(hostile, { x: returnTile.x + 1, y: returnTile.y });
   outside['world'].roster.rebuildGrid();
   const savesBefore = saves.length;
-  const building = outside['building'];
-  if (building === null) return;
-  building['onEnterBuilding'](entry);
+  enterPrison(outside, entry);
   check(saves.length === savesBefore, `${label}: the last visit takes no door save`);
   const inside = currentScene(sceneManager);
   if (!(inside instanceof BuildingInteriorScene)) {

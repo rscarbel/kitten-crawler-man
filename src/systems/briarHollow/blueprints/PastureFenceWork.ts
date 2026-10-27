@@ -30,11 +30,9 @@ import {
 import { REPAIR_ROWS } from '../../../sprites/art/humanFigure';
 import { worldBar } from '../../../ui/world/worldShapes';
 import {
-  drawInteractionPrompt,
+  drawInteractionPromptWithCost,
   interactionPromptsSuppressed,
-  interactionPromptTop,
 } from '../../../ui/InteractionPrompt';
-import { drawRequirementRow } from '../../../ui/RequirementRow';
 import { UPDATES_PER_SECOND } from '../structureRules';
 import type { BlueprintsCrawler, BlueprintsQuestContext } from './blueprintsContext';
 import { BLUEPRINTS_CUES } from './blueprintsSoundCues';
@@ -83,8 +81,6 @@ const NEIGHBOURHOOD_OFFSETS: ReadonlyArray<readonly [number, number]> = [
 const PROGRESS_BAR_WIDTH = 36;
 const PROGRESS_BAR_HEIGHT = 5;
 const PROGRESS_BAR_LIFT_PX = 10;
-/** Gap between the SPACE prompt and the cost line stacked above it. */
-const COST_LINE_GAP_PX = 12;
 
 /** The reach glow, matching the sawmill's: a pulsing ellipse on the ground under each tile of the section. */
 const REACH_GLOW_COLOR = worldPalette.village.reachGlow;
@@ -501,21 +497,17 @@ export class PastureFenceWork {
     const anchor = this.tileNearest(this.sections[section], active);
     if (anchor === null) return false;
     const sx = anchor.x * TILE_SIZE - camX;
-    const sy = anchor.y * TILE_SIZE - camY;
+    // A fence never paints above its own tile, so the tile's top is its art's top.
+    const fenceTop = anchor.y * TILE_SIZE - camY;
     // In touch mode the key cap itself reads "TAP", so the label finishes its sentence.
     const label = byInputMode(activeInputMode(), {
       touch: 'to rebuild fence',
       pointer: 'Rebuild fence',
     });
-    drawInteractionPrompt(ctx, sx, sy, TILE_SIZE, label);
-    if (!interactionPromptsSuppressed()) {
-      drawRequirementRow(
-        ctx,
-        costRequirements(this.ctx.human, this.ctx.cat, FENCE_SECTION_COST),
-        sx + TILE_SIZE * TILE_CENTRE,
-        interactionPromptTop(sy) - COST_LINE_GAP_PX,
-      );
-    }
+    if (interactionPromptsSuppressed()) return true;
+    const cost = costRequirements(this.ctx.human, this.ctx.cat, FENCE_SECTION_COST);
+    const fenceBottom = fenceTop + TILE_SIZE;
+    drawInteractionPromptWithCost(ctx, sx, fenceTop, TILE_SIZE, fenceBottom, label, cost);
     return true;
   }
 

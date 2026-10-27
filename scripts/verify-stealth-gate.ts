@@ -393,8 +393,8 @@ function verifyDoorAndSign(
   check(
     entry !== undefined &&
       entry.name === PRISON_BUILDING_NAME &&
-      entry.doorwayWidth === PRISON_DOOR_WIDTH_TILES &&
-      entry.doorwayX0 === room.prisonDoor.x0 &&
+      entry.doorway.width === PRISON_DOOR_WIDTH_TILES &&
+      entry.doorway.x0 === room.prisonDoor.x0 &&
       entry.doorTile.y === room.prisonDoor.approachRow,
     `${label}: the prison door has no building entry on the floor in front of it`,
   );

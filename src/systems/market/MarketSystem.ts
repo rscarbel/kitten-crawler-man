@@ -15,8 +15,9 @@ import { TILE_SIZE } from '../../core/constants';
 import { Townsperson } from '../../creatures/Townsperson';
 import type { WanderParams } from '../../creatures/townWander';
 import { STALL_WIDTH_TILES, stallRippleStep, stallVariantIndex } from '../../sprites/marketStall';
-import { drawTownSheetFrame, townSheetStateInkTop } from '../../sprites/townSheetProp';
-import { drawOverheadIcon } from '../../sprites/overheadIcon';
+import { drawTownSheetFrame } from '../../sprites/townSheetProp';
+import { sheetStateInkTop } from '../../core/spriteAssets/SpriteRenderer';
+import { drawOverheadIcon, overheadIconTopY } from '../../sprites/overheadIcon';
 import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
 import { tileKey } from '../tileKey';
 import { doorwayKeepClearTiles } from '../doorwayKeepClear';
@@ -188,8 +189,9 @@ export class MarketSystem implements GameSystem {
     drawInteractionPrompt(
       ctx,
       west.x * TILE_SIZE - camX,
-      west.y * TILE_SIZE - camY,
+      stallOverheadTop(ctx, stall, west.y * TILE_SIZE - camY),
       TILE_SIZE * STALL_WIDTH_TILES,
+      (west.y + 1) * TILE_SIZE - camY,
       PROMPT_LABEL,
     );
     return true;
@@ -334,6 +336,20 @@ const STALL_CANOPY_SHEET_KEY = 'market_stall_canopy';
 /** The back and front layers hold still, so each is a single-state sheet. */
 const STALL_STATIC_STATE = 'idle';
 
+function canopyState(phase: number): `ripple_${number}` {
+  return `ripple_${stallRippleStep(phase)}`;
+}
+
+function stallCanopyTop(phase: number, sy: number, tileSize: number): number {
+  return sheetStateInkTop(STALL_CANOPY_SHEET_KEY, canopyState(phase), sy, tileSize) ?? sy;
+}
+
+/** The line a prompt over a stall must clear: its vendor's icon over the canopy, or the canopy itself. */
+function stallOverheadTop(ctx: CanvasRenderingContext2D, stall: MarketStall, sy: number): number {
+  const canopyTop = stallCanopyTop(stall.phase, sy, TILE_SIZE);
+  return overheadIconTopY(ctx, canopyTop, TILE_SIZE, stall.vendor.overheadIcon);
+}
+
 /**
  * One stall as a single Y-sorted entity, anchored on the counter's front (south)
  * edge, so a player standing below the cart draws over it and one standing above
@@ -389,10 +405,17 @@ class StallProp implements TownPropRenderable {
       sy,
       tileSize,
     );
-    const canopyState = `ripple_${stallRippleStep(phase)}`;
-    drawTownSheetFrame(ctx, STALL_CANOPY_SHEET_KEY, canopyState, variantFrame, sx, sy, tileSize);
+    drawTownSheetFrame(
+      ctx,
+      STALL_CANOPY_SHEET_KEY,
+      canopyState(phase),
+      variantFrame,
+      sx,
+      sy,
+      tileSize,
+    );
     // The canopy covers the vendor's head, so their icon hangs over it instead.
-    const canopyTop = townSheetStateInkTop(STALL_CANOPY_SHEET_KEY, canopyState, sy, tileSize) ?? sy;
+    const canopyTop = stallCanopyTop(phase, sy, tileSize);
     drawOverheadIcon(ctx, vendor.x - camX, canopyTop, tileSize, vendor.overheadIcon);
     ctx.restore();
   }

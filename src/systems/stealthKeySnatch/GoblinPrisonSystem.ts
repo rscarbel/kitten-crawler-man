@@ -84,7 +84,7 @@ import {
   type PrisonTile,
 } from '../../map/goblinPrisonPlan';
 import type { Player } from '../../Player';
-import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
+import { drawInteractionPromptOver } from '../../ui/InteractionPrompt';
 import { screenFadeSurface } from '../../ui/ScreenFade';
 import type { Surface } from '../../ui/core/UiRoot';
 import { drawSuspicionMarker } from '../../ui/world/suspicionMarker';
@@ -1169,7 +1169,7 @@ export class GoblinPrisonSystem {
     beginAboveDarkness((worldX, worldY) => this.darknessAt(worldX, worldY));
     const door = this.isCapturing ? null : this.doorPromptFor(active);
     if (door !== null) {
-      drawInteractionPrompt(ctx, door.x - camX, door.y - camY, TILE_SIZE, CELL_DOOR_PROMPT);
+      drawInteractionPromptOver(ctx, door, camX, camY, CELL_DOOR_PROMPT);
     }
   }
 

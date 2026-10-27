@@ -27,9 +27,8 @@ import type { GameMap } from '../map/GameMap';
 import { interiorHoldsOccupants } from './interiorStoryOwnership';
 import { findPartyArrivalTiles, hasRoomToMove } from '../map/findWalkableTile';
 import { SOUTHWARD_PROBE_DROP } from '../map/collisionAnchors';
-import { Townsperson } from '../creatures/Townsperson';
+import { Townsperson, type TownspersonFigureOptions } from '../creatures/Townsperson';
 import { prewarmTownspersonBody } from '../creatures/townspersonBody';
-import type { BespokeResidentFigureId } from '../creatures/bespokeResidentFigures';
 import { CITIZEN_TALK_RADIUS_TILES, findNearestTownsperson } from '../creatures/townInteraction';
 import type { WanderParams } from '../creatures/townWander';
 import type { Facing } from '../sprites/person/skeleton';
@@ -45,14 +44,12 @@ import {
   TRAINING_DUMMY,
   MUSTER_BOARD,
 } from '../map/tileTypes';
-import type { BuildingEntry } from './BuildingSystem';
+import type { BuildingEntry, BuildingName } from '../map/buildingEntry';
 import type { GameSystem } from './GameSystem';
-import { residentById, residentSpecies } from './townResidents';
-import { DEFAULT_TOWN_SPECIES, type TownSpecies } from './townSpecies';
+import { DEFAULT_TOWN_SPECIES } from './townSpecies';
 import {
   BUILDING_OCCUPANTS,
   TYPE_OCCUPANTS,
-  type OccupantFigure,
   type OccupantPlacement,
   type OccupantPost,
   type OccupantSpec,
@@ -355,7 +352,7 @@ export class InteriorOccupantSystem implements GameSystem {
   static forBuilding(
     map: GameMap,
     type: BuildingEntry['type'],
-    name: string,
+    name: BuildingName,
     focus: RoamerFocus = () => null,
     bodies: OccupantBodies = () => [],
     playCue: OccupantCuePlayer = () => undefined,
@@ -538,14 +535,12 @@ export class InteriorOccupantSystem implements GameSystem {
       x: stand.tile.x * TILE_SIZE,
       y: stand.tile.y * TILE_SIZE,
       role: spec.role,
-      species: occupantSpecies(spec),
+      ...occupantFigure(spec),
       seed: OCCUPANT_SEED_BASE + index * OCCUPANT_SEED_STRIDE,
       speed: OCCUPANT_SPEED,
       wander: territory.wander,
       initialFacing: stand.facing,
       initialPause: Math.floor(Math.random() * MAX_INITIAL_PAUSE),
-      residentId: spec.residentId,
-      bespokeFigure: bespokeFigureOf(spec.figure),
     });
     this.occupants.push(person);
     if (territory.holdsForPlayer) this.roamers.push(person);
@@ -1236,24 +1231,12 @@ function floorAround(openFloor: ReadonlyMap<string, TileXY>, from: TileXY): Roam
   return { tiles, keys };
 }
 
-function occupantSpecies(spec: OccupantSpec): TownSpecies {
-  return spec.residentId !== undefined
-    ? residentSpecies(residentById(spec.residentId))
-    : (spec.species ?? DEFAULT_TOWN_SPECIES);
-}
-
-function bespokeFigureOf(figure: OccupantFigure | undefined): BespokeResidentFigureId | undefined {
-  if (figure === undefined) return undefined;
-  switch (figure.kind) {
-    case 'citizen':
-      return undefined;
-    case 'bespoke':
-      return figure.id;
-    default: {
-      const unhandled: never = figure;
-      throw new Error(`unhandled occupant figure ${JSON.stringify(unhandled)}`);
-    }
+function occupantFigure(spec: OccupantSpec): TownspersonFigureOptions {
+  if (spec.residentId !== undefined) return { residentId: spec.residentId };
+  if (spec.bespokeFigure !== undefined) {
+    return { species: spec.species, bespokeFigure: spec.bespokeFigure };
   }
+  return { species: spec.species ?? DEFAULT_TOWN_SPECIES };
 }
 
 function pieceCentre(piece: FurniturePiece): { x: number; y: number } {

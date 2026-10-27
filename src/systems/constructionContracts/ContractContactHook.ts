@@ -27,6 +27,7 @@ import {
 } from './contractCatalog';
 import { contractPayout, isContractReady } from './contractGenerator';
 import { ContractSettlement, type ContractSettlementDeps } from './ContractSettlement';
+import type { BuildingName } from '../../map/buildingEntry';
 
 /** Every Taloncrest contract building is paid out on its ground floor. */
 const CONTACT_FLOOR = 0;
@@ -66,7 +67,7 @@ export class ContractContactHook implements ResidentQuestHook {
 
   /** The hook for this room, or null anywhere but the ground floor of a building that can host a contract. */
   static forBuilding(
-    buildingName: string,
+    buildingName: BuildingName,
     floor: number,
     deps: ContractContactHookDeps,
   ): ContractContactHook | null {

@@ -14,6 +14,7 @@
 import { GameMap } from '../src/map/GameMap.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import { createTownPlan, type BuildingKind } from '../src/map/town/townPlan.js';
+import type { BuildingName } from '../src/map/buildingEntry.js';
 import { HumanPlayer } from '../src/creatures/HumanPlayer.js';
 import { LootSystem } from '../src/systems/LootSystem.js';
 import {
@@ -54,7 +55,7 @@ function check(condition: boolean, label: string): void {
 const PLAN_SIZE = 5;
 const plan = createTownPlan(PLAN_SIZE);
 
-function buildInterior(name: string, kind: BuildingKind, hasSafeRoom: boolean): GameMap {
+function buildInterior(name: BuildingName, kind: BuildingKind, hasSafeRoom: boolean): GameMap {
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
   map.generateInterior(kind, 0, name, hasSafeRoom);
   return map;

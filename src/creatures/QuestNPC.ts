@@ -10,6 +10,7 @@ import {
 } from '../sprites/questNPCSprite';
 import { drawQuestBeacon } from '../sprites/questBeacon';
 import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
+import type { DrawnFigureRow } from '../sprites/figure/figureDef';
 
 const NPC_MAX_HP = 40;
 /** Initial health potion count to remove (NPC has no use for potions). */
@@ -39,6 +40,11 @@ export class QuestNPC extends Player {
   readonly questId: string;
   /** Frames remaining on the persistent hurt tint; it fades over the final {@link HURT_FADE_FRAMES}. */
   private hurtTimer = 0;
+  private drawnRow: DrawnFigureRow | undefined;
+
+  protected override rememberedArtTop(sy: number): number | null {
+    return this.drawnRow === undefined ? null : figureRowInkTop(this.drawnRow, sy, this.tileSize);
+  }
 
   constructor(tileX: number, tileY: number, questId: string) {
     super(tileX, tileY, TILE_SIZE, { maxHp: NPC_MAX_HP });
@@ -67,6 +73,7 @@ export class QuestNPC extends Player {
     }
 
     const drawnRow = drawQuestNPCSprite(ctx, sx, sy, tileSize, this.facingX, this.hurtTimer);
+    this.drawnRow = drawnRow;
 
     const hpBarVisible = this.hp < this.maxHp;
     const glyph = this.markerType === 'question' ? '?' : '!';

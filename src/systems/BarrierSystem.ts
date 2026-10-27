@@ -8,6 +8,7 @@ import {
   drawDumbbellFloor,
   drawBenchPressFloor,
   drawTreadmillFloor,
+  treadmillFloorArtTop,
 } from '../sprites/gymEquipmentSprite';
 import { worldPalette } from '../ui/theme/worldInk';
 import { worldText } from '../ui/world/worldText';
@@ -328,7 +329,10 @@ export class BarrierSystem implements GameSystem {
       ctx.stroke();
       ctx.restore();
 
-      if (index === promptIndex) drawInteractionPrompt(ctx, sx, sy, TILE_SIZE, 'Pick up');
+      if (index === promptIndex) {
+        const artTop = b.itemId === 'gym_treadmill' ? treadmillFloorArtTop(sy, TILE_SIZE) : sy;
+        drawInteractionPrompt(ctx, sx, artTop, TILE_SIZE, sy + TILE_SIZE, 'Pick up');
+      }
     });
   }
 

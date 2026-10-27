@@ -26,7 +26,8 @@ export function requirementsMet(requirements: readonly Requirement[]): boolean {
   return requirements.every((requirement) => requirement.have >= requirement.need);
 }
 
-function isMet(requirement: Requirement): boolean {
+/** Whether the party holds enough for this one requirement. */
+export function isRequirementMet(requirement: Requirement): boolean {
   return requirement.have >= requirement.need;
 }
 
@@ -34,14 +35,14 @@ function isMet(requirement: Requirement): boolean {
  * A met entry shows the need as its own count, so a surplus reads as "30/30",
  * not as the confusing "41/30".
  */
-function entryText(requirement: Requirement): string {
+export function requirementEntryText(requirement: Requirement): string {
   const shown = Math.min(requirement.have, requirement.need);
   const count = `${requirement.label} ${shown}/${requirement.need}`;
-  return isMet(requirement) ? `${count} ${MET_MARK}` : count;
+  return isRequirementMet(requirement) ? `${count} ${MET_MARK}` : count;
 }
 
 function entryStyle(requirement: Requirement): WorldTextStyleId {
-  return isMet(requirement) ? 'requirementMet' : 'requirementShort';
+  return isRequirementMet(requirement) ? 'requirementMet' : 'requirementShort';
 }
 
 /** The row's width in pixels, for sizing a panel round it. */
@@ -52,7 +53,7 @@ export function measureRequirementRow(
   let width = 0;
   requirements.forEach((requirement, index) => {
     if (index > 0) width += ENTRY_GAP_PX;
-    width += measureWorldText(ctx, entryText(requirement), {
+    width += measureWorldText(ctx, requirementEntryText(requirement), {
       style: entryStyle(requirement),
     }).width;
   });
@@ -68,7 +69,7 @@ export function drawRequirementRow(
 ): void {
   let x = centreX - measureRequirementRow(ctx, requirements) / 2;
   for (const requirement of requirements) {
-    const text = entryText(requirement);
+    const text = requirementEntryText(requirement);
     const style = entryStyle(requirement);
     x += worldText(ctx, text, { x, y: topY, style }).width + ENTRY_GAP_PX;
   }
@@ -81,7 +82,7 @@ export function measureRequirementColumn(
 ): number {
   let widest = 0;
   for (const requirement of requirements) {
-    const { width } = measureWorldText(ctx, entryText(requirement), {
+    const { width } = measureWorldText(ctx, requirementEntryText(requirement), {
       style: entryStyle(requirement),
     });
     widest = Math.max(widest, width);
@@ -98,7 +99,7 @@ export function drawRequirementColumn(
   lineHeightPx: number,
 ): void {
   requirements.forEach((requirement, index) => {
-    worldText(ctx, entryText(requirement), {
+    worldText(ctx, requirementEntryText(requirement), {
       x: centreX,
       y: topY + index * lineHeightPx,
       align: 'center',

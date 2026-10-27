@@ -36,7 +36,7 @@ import {
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { worldPalette } from '../ui/theme/worldInk';
 import { worldText } from '../ui/world/worldText';
-import { drawSpeechBubbleWithText } from '../sprites/speechBubble';
+import { drawSpeechBubbleWithText, speechBubbleWithTextTop } from '../sprites/speechBubble';
 import {
   BOPCA_FEET_COUNTER_FRACTION,
   counterEdges,
@@ -180,6 +180,24 @@ interface BopcaEntry {
  */
 const CHOICE_ORDER = ['takeDish', 'askForFood', 'chat', 'leave'] as const;
 type ChoiceId = (typeof CHOICE_ORDER)[number];
+
+/** The screen y the Bopca's feet stand on, a little way into the counter's front row. */
+function bopcaFeetY(entry: BopcaEntry, camY: number): number {
+  const frontRowTop = entry.layout.dishTile.y * TILE_SIZE - camY;
+  return frontRowTop + TILE_SIZE * BOPCA_FEET_COUNTER_FRACTION;
+}
+
+/** The screen y of the top of the Bopca's toque, the highest thing it paints. */
+function bopcaToqueTop(entry: BopcaEntry, camY: number): number {
+  return bopcaFeetY(entry, camY) - TILE_SIZE * BOPCA_HEIGHT_TILE_FRACTION;
+}
+
+/** The line a prompt over the Bopca must clear: its bark bubble while it barks, else its toque. */
+function bopcaOverheadTop(entry: BopcaEntry, camY: number): number {
+  const toqueTop = bopcaToqueTop(entry, camY);
+  if (entry.barkFramesLeft <= 0 || entry.barkLine === null) return toqueTop;
+  return speechBubbleWithTextTop(toqueTop, TILE_SIZE, entry.barkLine);
+}
 
 /** `CHOICE_ORDER` always keeps `leave`, so the filtered row is never actually empty. */
 function toNonEmpty<T>(items: readonly T[]): NonEmpty<T> {
@@ -845,10 +863,9 @@ export class BopcaSystem implements GameSystem {
     for (const entry of this.entries) {
       const nearest = this.nearestWatched(entry, active, inactive);
       const home = entry.layout.bopcaHomeTile;
-      const frontRowTop = entry.layout.dishTile.y * TILE_SIZE - camY;
       const homeCentreX = home.x * TILE_SIZE + TILE_SIZE / 2 - camX;
-      const feetY = frontRowTop + TILE_SIZE * BOPCA_FEET_COUNTER_FRACTION;
-      const toqueTopY = feetY - TILE_SIZE * BOPCA_HEIGHT_TILE_FRACTION;
+      const feetY = bopcaFeetY(entry, camY);
+      const toqueTopY = bopcaToqueTop(entry, camY);
 
       this.renderGalleyLight(ctx, entry, camX, camY);
       if (entry.activity === 'cooking') {
@@ -940,8 +957,9 @@ export class BopcaSystem implements GameSystem {
       drawInteractionPrompt(
         ctx,
         withDish.layout.dishTile.x * TILE_SIZE - camX,
-        withDish.layout.dishTile.y * TILE_SIZE - camY,
+        bopcaOverheadTop(withDish, camY),
         TILE_SIZE,
+        bopcaFeetY(withDish, camY),
         'Take',
       );
       return;
@@ -951,8 +969,9 @@ export class BopcaSystem implements GameSystem {
       drawInteractionPrompt(
         ctx,
         near.layout.bopcaHomeTile.x * TILE_SIZE - camX,
-        near.layout.bopcaHomeTile.y * TILE_SIZE - camY,
+        bopcaOverheadTop(near, camY),
         TILE_SIZE,
+        bopcaFeetY(near, camY),
         'Talk',
       );
     }

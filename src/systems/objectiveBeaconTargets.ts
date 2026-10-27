@@ -16,7 +16,7 @@
 import { getSpriteDoorwayByKey, getSpriteFootprintByKey } from '../core/spriteAssets/SpriteLoader';
 import { plannedBuildingSpriteKey } from '../map/town/townPlan';
 import { STALL_CANOPY_HEIGHT_TILES, STALL_WIDTH_TILES } from '../sprites/marketStall';
-import { doorwaySpan, type BuildingEntry } from './BuildingSystem';
+import type { BuildingEntry } from '../map/buildingEntry';
 import type { TrackerTarget } from './questTracker';
 
 /** The counter's own face, rather than the street the shopper stands in. */
@@ -156,7 +156,7 @@ export function doorwayBeaconTarget(entry: BuildingEntry | null): TrackerTarget 
   if (entry === null) return null;
   const facade = facadeExtent(entry);
   if (facade === null) {
-    const span = doorwaySpan(entry);
+    const span = entry.doorway;
     return {
       x: span.x0,
       y: entry.doorTile.y,
@@ -192,7 +192,7 @@ export function doorwayBeaconTarget(entry: BuildingEntry | null): TrackerTarget 
  */
 export function towerApproachBeaconTarget(entry: BuildingEntry | null): TrackerTarget | null {
   if (entry === null) return null;
-  const span = doorwaySpan(entry);
+  const span = entry.doorway;
   return {
     x: span.x0,
     y: entry.doorTile.y + TOWER_APPROACH_ROWS_SOUTH_OF_DOOR,

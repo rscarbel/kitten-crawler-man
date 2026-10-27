@@ -53,6 +53,7 @@ const { RecruiterNPC } = await import('../src/systems/briarHollow/RecruiterSyste
 const { FortuneTellerProp } = await import('../src/systems/TownPropSystem.js');
 const { TOWN_CAST_LOOKS } = await import('../src/sprites/person/townCastLooks.js');
 const { HAWKFOLK_CIVILIAN_LOOKS } = await import('../src/sprites/art/hawkfolk/cast.js');
+const { CROWD_SPECIES } = await import('../src/systems/townSpecies.js');
 
 // ── Layout ───────────────────────────────────────────────────────────────────
 
@@ -129,7 +130,7 @@ function everyCitizenSubject(): Subject[] {
   const roles = [...new Set(TOWN_CAST_LOOKS.flatMap((look) => look.roles))];
   const SEED_SEARCH_LIMIT = 20000;
   for (let seed = 1; seed < SEED_SEARCH_LIMIT && found.size < wanted; seed++) {
-    for (const species of ['human', 'hawkfolk'] as const) {
+    for (const species of CROWD_SPECIES) {
       for (const role of roles) {
         const person = new Townsperson({
           x: WORLD_X,

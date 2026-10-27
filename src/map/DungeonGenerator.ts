@@ -533,7 +533,6 @@ export interface DungeonData {
   mobSpawnPoints: MobSpawnPoint[];
   hallwaySpawnPoints: Point[];
   stairwellTiles: Point[];
-  buildingEntries: Array<{ doorTile: Point; name: string; type: 'arena' }>;
   arenaExteriors: ArenaExterior[];
   /** South-door tile of the arena, when this floor has one. */
   arenaDoorTile?: Point;
@@ -3159,7 +3158,6 @@ function buildDungeon(
   const hallwaySpawnPoints = chosen;
 
   // 11. Arena
-  const buildingEntries: Array<{ doorTile: Point; name: string; type: 'arena' }> = [];
   const arenaExteriors: ArenaExterior[] = [];
 
   /**
@@ -3234,11 +3232,6 @@ function buildDungeon(
 
     setArenaCages(grid, size, acx, acy);
 
-    buildingEntries.push({
-      doorTile: { x: doorX, y: doorY },
-      name: 'The Iron Colosseum',
-      type: 'arena',
-    });
     arenaExteriors.push({
       centre: { x: acx, y: acy },
       radius: ARENA_RADIUS,
@@ -3359,7 +3352,7 @@ function buildDungeon(
       treasureRooms.map((room) => room.centre),
       safeRooms.map((room) => room.centre),
       bossRooms.map((room) => room.centre),
-      buildingEntries.map((entry) => entry.doorTile),
+      arenaExteriors.map((arena) => arena.doorTile),
       arenaExteriors.map((arena) => arena.stairwellTile),
       questRooms.flatMap((quest) => [
         quest.entranceTile,
@@ -3414,7 +3407,7 @@ function buildDungeon(
     mobSpawnPoints,
     hallwaySpawnPoints,
     treasureRooms.map((room) => room.centre),
-    buildingEntries.map((entry) => entry.doorTile),
+    arenaExteriors.map((arena) => arena.doorTile),
     arenaExteriors.map((arena) => arena.stairwellTile),
     bathroomRooms.flatMap(bathroomStandingTiles),
     stealthGateKeepClear(stealthGateRoom),
@@ -3661,7 +3654,6 @@ function buildDungeon(
     mobSpawnPoints: filteredMobSpawns,
     hallwaySpawnPoints,
     stairwellTiles: filteredStairwells,
-    buildingEntries,
     arenaExteriors,
     arenaDoorTile: arenaExteriors[0]?.doorTile,
     progressionLayout,

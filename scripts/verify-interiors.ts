@@ -24,6 +24,7 @@ import { loadGameSpritesInNode } from './nodeCanvasGlobals';
 import { asGameContext } from './nodeGameContext';
 import { CLOAK_AND_DAGGER_NAME, createTownPlan } from '../src/map/town/townPlan';
 import type { BuildingKind } from '../src/map/town/townPlan';
+import type { BuildingName } from '../src/map/buildingEntry';
 import { GameMap, TOWER_FLOOR_COUNT } from '../src/map/GameMap';
 import { findPartyArrivalTiles, hasRoomToMove } from '../src/map/findWalkableTile';
 import {
@@ -236,7 +237,7 @@ const TARGET_PRACTICE_CYCLE_FRAMES = TARGET_PRACTICE_CYCLE_SECONDS * FRAMES_PER_
 const TARGET_PRACTICE_HELD_SECONDS = 15;
 const TARGET_PRACTICE_HELD_FRAMES = TARGET_PRACTICE_HELD_SECONDS * FRAMES_PER_SECOND;
 /** Each pub's janitor, by the building they mop. */
-const JANITOR_HOMES: ReadonlyArray<readonly [string, ResidentId]> = [
+const JANITOR_HOMES: ReadonlyArray<readonly [BuildingName, ResidentId]> = [
   ['The Sunken Stump Pub', 'janitor_puddles'],
   ['The Horned Flagon', 'janitor_grout'],
 ];
@@ -293,11 +294,11 @@ function check(condition: boolean, label: string): void {
 }
 
 const plan = createTownPlan(PLAN_SIZE);
-const buildings = new Map<string, BuildingKind>(plan.buildings.map((b) => [b.name, b.kind]));
+const buildings = new Map<BuildingName, BuildingKind>(plan.buildings.map((b) => [b.name, b.kind]));
 const towerName = plan.tower.name;
 buildings.set(towerName, plan.tower.kind);
 /** Named rather than derived from a kind, exactly as the town plan states it. */
-const safeRoomBuildings = new Set<string>(
+const safeRoomBuildings = new Set<BuildingName>(
   plan.buildings.filter((b) => b.hasSafeRoom === true).map((b) => b.name),
 );
 
@@ -306,9 +307,9 @@ const safeRoomBuildings = new Set<string>(
  * builds, plus the safe-room fittings the scene stamps afterwards. A check that
  * skipped the stamping pass would be inspecting a room nobody ever sees.
  */
-function buildInterior(name: string, kind: BuildingKind, floor: number): GameMap {
+function buildInterior(name: BuildingName | null, kind: BuildingKind, floor: number): GameMap {
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  const hasSafeRoom = safeRoomBuildings.has(name);
+  const hasSafeRoom = name !== null && safeRoomBuildings.has(name);
   map.generateInterior(kind, floor, name, hasSafeRoom);
   if (hasSafeRoom) {
     stampSafeRoomCounters(map);
@@ -385,11 +386,6 @@ function unreachableWalkableTiles(map: GameMap): string[] {
 
 console.log(`\nTown plan: ${buildings.size} buildings\n`);
 
-console.log('Occupant rosters');
-for (const [name] of BUILDING_OCCUPANTS) {
-  check(buildings.has(name), `"${name}" has an occupant roster and is a real building`);
-}
-
 console.log('\nNamed residents');
 for (const resident of allResidents()) {
   check(buildings.has(resident.home), `${resident.name} lives in a building that exists`);
@@ -454,17 +450,8 @@ console.log('\nGeneral Store counter');
   }
 }
 
-console.log('\nRegistry keys name real buildings');
-// Walked from the registry side as well as the building side. Asking each
-// building what it offers can only ever find readables that are keyed
-// correctly — a misspelled key is simply never visited, and the whole section
-// goes green having measured nothing at all. Services hang off roster
-// occupants, whose building keys the roster check above already walks.
 const readableKeys = readableBuildings();
 check(readableKeys.length > 0, 'the readable registry is not empty');
-for (const name of readableKeys) {
-  check(buildings.has(name), `readable key "${name}" is a real building`);
-}
 
 console.log('\nServices');
 // A service belongs to the occupant who keeps it, and the talk router asks the
@@ -1179,8 +1166,8 @@ console.log('\nEvery prop that makes a sound sounds once, from inside its room')
 // silent hearth, and one that gets two plays nothing louder, only doubled work;
 // neither shows in a screenshot. Unnamed houses take the generic layout, so one
 // is built alongside the named rooms: its hearth is a prop like every other.
-const GENERIC_HOUSE_NAME = '';
-const soundingRooms: ReadonlyArray<readonly [string, BuildingKind]> = [
+const GENERIC_HOUSE_NAME = null;
+const soundingRooms: ReadonlyArray<readonly [BuildingName | null, BuildingKind]> = [
   ...buildings,
   [GENERIC_HOUSE_NAME, 'house'],
 ];
@@ -1188,7 +1175,7 @@ let soundingPropCount = 0;
 for (const [name, kind] of soundingRooms) {
   for (let floor = 0; floor < floorCount(kind); floor++) {
     const map = buildInterior(name, kind, floor);
-    const where = kind === 'tower' ? `"${name}" floor ${floor}` : `"${name || 'a generic house'}"`;
+    const where = kind === 'tower' ? `"${name}" floor ${floor}` : `"${name ?? 'a generic house'}"`;
     const emitters = townInteriorPropEmitters(map.placedInteriorProps, undefined);
     const sounding = map.placedInteriorProps.filter(
       (placed) => TOWN_INTERIOR_PROPS[placed.propId].ambientSound !== undefined,

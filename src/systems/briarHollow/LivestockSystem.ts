@@ -30,7 +30,7 @@ import type { GameMap } from '../../map/GameMap';
 import type { BriarHollowSite } from '../../map/overworld/briarHollowSite';
 import type { TilePoint } from '../../map/town/townPlan';
 import type { CowAge, CowCoatId } from '../../sprites/cowSprite';
-import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
+import { drawInteractionPromptOver } from '../../ui/InteractionPrompt';
 import { randomInt } from '../../utils';
 import { EmoteEffectSystem } from '../EmoteEffectSystem';
 import type { GroundPickupSystem } from '../GroundPickupSystem';
@@ -544,7 +544,7 @@ export class LivestockSystem {
   ): boolean {
     const cow = this.petTarget(active);
     if (cow === null) return false;
-    drawInteractionPrompt(ctx, cow.x - camX, cow.y - camY, TILE_SIZE, 'Pet');
+    drawInteractionPromptOver(ctx, cow, camX, camY, 'Pet');
     return true;
   }
 

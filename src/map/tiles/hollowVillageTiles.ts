@@ -22,7 +22,7 @@ import {
   getSpriteExtentsPxByKey,
   type MapSpriteExtentsPx,
 } from '../../core/spriteAssets/SpriteLoader';
-import { drawSprite, spriteStateInkTop } from '../../core/spriteAssets/SpriteRenderer';
+import { drawSprite, sheetStateInkTop } from '../../core/spriteAssets/SpriteRenderer';
 import { isVillageStandingProp, type VillageStandingPropId } from '../../sprites/art/villageArt';
 import { villagePropSheetKey } from '../../sprites/sheets/villageSheets';
 import {
@@ -233,10 +233,7 @@ export function hollowPropInkTop(
   sy: number,
   ts: number,
 ): number | undefined {
-  const def = getSpriteDefByKey(villagePropSheetKey(prop));
-  const stateDef = def?.states.get(prop);
-  if (def === undefined || stateDef === undefined) return undefined;
-  return spriteStateInkTop(def, stateDef, sy, ts);
+  return sheetStateInkTop(villagePropSheetKey(prop), prop, sy, ts);
 }
 
 const NO_EXTENTS: MapSpriteExtentsPx = { left: 0, up: 0, right: 0, down: 0 };

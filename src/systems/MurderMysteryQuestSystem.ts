@@ -41,10 +41,10 @@ import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
 import { drawBaggiCorpse } from '../sprites/baggiSprite';
 import { drawWellClueProp, drawHomeClueProp, drawRoostClueProp } from '../sprites/kraseuClueProps';
 import { drawRadialGlow } from '../sprites/radialGlow';
-import { drawBouncingArrowAboveEntity } from '../ui/WorldArrow';
-import { doorwaySpan, type BuildingEntry } from './BuildingSystem';
+import { bouncingArrowAboveEntityTop, drawBouncingArrowAboveEntity } from '../ui/WorldArrow';
+import type { BuildingEntry, BuildingName } from '../map/buildingEntry';
 import { doorwayBeaconTarget, towerApproachBeaconTarget } from './objectiveBeaconTargets';
-import { drawInteractionPrompt } from '../ui/InteractionPrompt';
+import { drawInteractionPrompt, drawInteractionPromptOver } from '../ui/InteractionPrompt';
 import type { Conversation } from '../dialog/Conversation';
 import type { DialogLine, NonEmpty } from '../dialog/line';
 import type { ConversationHandle } from '../dialog/request';
@@ -54,7 +54,7 @@ import { partyXpSections } from '../ui/questReward/rewardLines';
 import type { QuestRewardSpec, RewardItemLine } from '../ui/questReward/types';
 import { grantQuestGear } from '../loot/questGear';
 import type { GearId } from '../loot/gearPools';
-import { CLOAK_AND_DAGGER_NAME } from '../map/town/townPlan';
+import { CLOAK_AND_DAGGER_NAME, TOWN_TOWER_NAME } from '../map/town/townPlan';
 import {
   MURDER_HOOK,
   MURDER_BODY_FOUND,
@@ -320,7 +320,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
       ? this.findSpawnTile(alleyDoor.x + alleyOffset.dx, alleyDoor.y + alleyOffset.dy)
       : null;
     this.hideoutEntry = this.buildingEntryOf('Blackwood Lodge');
-    this.towerEntry = this.buildingEntryOf('Town Center Tower');
+    this.towerEntry = this.buildingEntryOf(TOWN_TOWER_NAME);
 
     const wellTile = this.findWellTile();
     if (wellTile) {
@@ -414,11 +414,11 @@ export class MurderMysteryQuestSystem implements GameSystem {
     }
   }
 
-  private buildingEntryOf(buildingName: string): BuildingEntry | null {
+  private buildingEntryOf(buildingName: BuildingName): BuildingEntry | null {
     return this.gameMap.buildingEntries.find((b) => b.name === buildingName) ?? null;
   }
 
-  private doorTileOf(buildingName: string): { x: number; y: number } | null {
+  private doorTileOf(buildingName: BuildingName): { x: number; y: number } | null {
     return this.buildingEntryOf(buildingName)?.doorTile ?? null;
   }
 
@@ -486,7 +486,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
    */
   private isClearOfAllDoorways(x: number, y: number): boolean {
     return this.gameMap.buildingEntries.every((entry) => {
-      const { x0, width } = doorwaySpan(entry);
+      const { x0, width } = entry.doorway;
       return y !== entry.doorTile.y || x < x0 || x >= x0 + width;
     });
   }
@@ -1338,7 +1338,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
 
     if (this.phase === 'baggi_waiting' && this.baggi && this.baggiTile) {
       if (this.distToTile(active, this.baggiTile) <= TILE_SIZE * INTERACT_RANGE_TILES) {
-        drawInteractionPrompt(ctx, this.baggi.x - camX, this.baggi.y - camY, TILE_SIZE, 'Talk');
+        drawInteractionPromptOver(ctx, this.baggi, camX, camY, 'Talk');
       }
     }
 
@@ -1412,7 +1412,8 @@ export class MurderMysteryQuestSystem implements GameSystem {
       CLUE_GLOW_CORE_FRACTION,
     );
     const distance = this.distToTile(active, clue.tile);
-    if (distance <= TILE_SIZE * CLUE_ARROW_RANGE_TILES) {
+    const showsArrow = distance <= TILE_SIZE * CLUE_ARROW_RANGE_TILES;
+    if (showsArrow) {
       drawBouncingArrowAboveEntity(
         ctx,
         worldX,
@@ -1424,7 +1425,8 @@ export class MurderMysteryQuestSystem implements GameSystem {
       );
     }
     if (distance <= TILE_SIZE * CLUE_INTERACT_RANGE_TILES) {
-      drawInteractionPrompt(ctx, sx, sy, TILE_SIZE, 'Investigate');
+      const clueTop = showsArrow ? bouncingArrowAboveEntityTop(worldY, camY) : sy;
+      drawInteractionPrompt(ctx, sx, clueTop, TILE_SIZE, sy + TILE_SIZE, 'Investigate');
     }
   }
 

@@ -39,7 +39,7 @@ import type { ArrowCandidate } from '../ui/WorldArrow';
 import type { Rect } from '../ui/core/geom';
 import { ARROW_PRIORITY, drawArrowAbovePlayer } from '../ui/WorldArrow';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
-import { drawSpeechBubbleWithText } from '../sprites/speechBubble';
+import { drawSpeechBubbleWithText, speechBubbleWithTextTop } from '../sprites/speechBubble';
 import type { Conversation } from '../dialog/Conversation';
 import type { ConversationHandle, ConversationRequest } from '../dialog/request';
 import { prewarmShadySprite } from '../sprites/shadySprite';
@@ -99,6 +99,14 @@ const SHADY_BUBBLE_RADIUS_TILES = 3.2;
  * hood, which itself stands well above the tile his feet are on.
  */
 const SHADY_BUBBLE_LIFT_TILES = 0.85;
+
+/** What he says while the party lingers near him. */
+const SHADY_BUBBLE_LINE = SHADY_LINES.proximityBubble.paragraphs[0];
+
+/** The screen y his bubble points down at, for his tile's top at `sy`. */
+function shadyBubbleAnchorY(sy: number): number {
+  return sy - TILE_SIZE * SHADY_BUBBLE_LIFT_TILES;
+}
 
 /**
  * The Journal's id for the bounty loop. Not a quest id — no `QuestManager`
@@ -493,8 +501,17 @@ export class BountySystem implements GameSystem {
     const shady = this.shady;
     if (shady === null || this.conversation.isOpen) return false;
     if (!this.isWithinShadyReach(active)) return false;
-    drawInteractionPrompt(ctx, shady.x - camX, shady.y - camY, TILE_SIZE, 'Talk');
+    const sy = shady.y - camY;
+    const bodyTop = shady.overheadTop(ctx, sy);
+    const bubbleTop = speechBubbleWithTextTop(shadyBubbleAnchorY(sy), TILE_SIZE, SHADY_BUBBLE_LINE);
+    const promptTop = this.showsShadyBubble(active) ? Math.min(bodyTop, bubbleTop) : bodyTop;
+    drawInteractionPrompt(ctx, shady.x - camX, promptTop, TILE_SIZE, sy + TILE_SIZE, 'Talk');
     return true;
+  }
+
+  /** Whether his "…psst" bubble is up; it is drawn in a later pass than his body. */
+  private showsShadyBubble(active: Player): boolean {
+    return !this.conversationOwned && this.isWithinShadyBubbleRange(active);
   }
 
   /**
@@ -511,14 +528,13 @@ export class BountySystem implements GameSystem {
     const shady = this.shady;
     if (shady?.isAlive !== true) return;
     shady.renderMarker(ctx, camX, camY, TILE_SIZE);
-    if (this.conversationOwned) return;
-    if (!this.isWithinShadyBubbleRange(active)) return;
+    if (!this.showsShadyBubble(active)) return;
     drawSpeechBubbleWithText(
       ctx,
       shady.x - camX + TILE_SIZE * TILE_CENTER_OFFSET,
-      shady.y - camY - TILE_SIZE * SHADY_BUBBLE_LIFT_TILES,
+      shadyBubbleAnchorY(shady.y - camY),
       TILE_SIZE,
-      SHADY_LINES.proximityBubble.paragraphs[0],
+      SHADY_BUBBLE_LINE,
     );
   }
 

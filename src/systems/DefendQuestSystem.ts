@@ -10,7 +10,7 @@ import { awardPartyXp, type CrawlerPair, type PartyXpApplied } from '../core/pro
 import { TILE_SIZE } from '../core/constants';
 import type { MusicClaims } from '../audio/AudioScope';
 import { randomInt, pixelToTile } from '../utils';
-import { drawInteractionPrompt } from '../ui/InteractionPrompt';
+import { drawInteractionPrompt, drawInteractionPromptOver } from '../ui/InteractionPrompt';
 import { activeInputMode, byInputMode, keyLabel } from '../ui/core/inputMode';
 import type { GameMap, QuestExitDoorState } from '../map/GameMap';
 import type { QuestRoomData } from '../map/DungeonGenerator';
@@ -1651,11 +1651,7 @@ export class DefendQuestSystem implements GameSystem {
       this.npc.render(ctx, camX, camY, TILE_SIZE);
       if (active && (this.phase === 'npc_waiting' || this.phase === 'complete_pending')) {
         const dist = Math.hypot(active.x - this.npc.x, active.y - this.npc.y);
-        if (dist <= INTERACT_RANGE_PX) {
-          const sx = this.npc.x - camX;
-          const sy = this.npc.y - camY;
-          drawInteractionPrompt(ctx, sx, sy, TILE_SIZE, 'Talk');
-        }
+        if (dist <= INTERACT_RANGE_PX) drawInteractionPromptOver(ctx, this.npc, camX, camY, 'Talk');
       }
     }
 
@@ -1696,6 +1692,7 @@ export class DefendQuestSystem implements GameSystem {
           grate.x * TILE_SIZE - camX,
           grate.y * TILE_SIZE - camY,
           TILE_SIZE,
+          (grate.y + 1) * TILE_SIZE - camY,
           label,
           keyOverride,
         );

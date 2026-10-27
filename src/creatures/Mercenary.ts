@@ -16,6 +16,7 @@ import {
   SPEECH_DURATION_FRAMES,
   TimedSpeech,
   drawTimedSpeechBubble,
+  timedSpeechBubbleTop,
   type TimedBubbleStyle,
 } from '../sprites/speechBubble';
 import type {
@@ -965,8 +966,20 @@ export class Mercenary extends Mob {
   renderSpeech(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     this.kit.renderEffects?.(ctx, camX, camY);
     const anchorX = this.x - camX + this.tileSize * CENTER_OFFSET;
-    const headY = this.y - camY - this.art.headLiftTiles * this.tileSize;
+    const headY = this.speechHeadY(this.y - camY);
     drawTimedSpeechBubble(ctx, this.speech, anchorX, headY, MERCENARY_SPEECH_STYLE);
+  }
+
+  /** The screen y the speech pointer touches, for a hireling whose tile top is at `sy`. */
+  private speechHeadY(sy: number): number {
+    return sy - this.art.headLiftTiles * this.tileSize;
+  }
+
+  /** The body's reach, raised over a line while one is said: it is drawn in a later pass. */
+  override overheadTop(ctx: CanvasRenderingContext2D, sy: number): number {
+    const bodyTop = super.overheadTop(ctx, sy);
+    if (this.speech.current === null) return bodyTop;
+    return Math.min(bodyTop, timedSpeechBubbleTop(ctx, this.speech, this.speechHeadY(sy)));
   }
 
   protected override drawSelf(

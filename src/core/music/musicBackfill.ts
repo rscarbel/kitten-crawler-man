@@ -31,6 +31,7 @@ import {
   TOWN_TOWER_NAME,
 } from '../../map/town/townPlan';
 import { SKY_TEMPLE_NAME } from '../../systems/interiorStoryOwnership';
+import { isBuildingName } from '../../map/buildingEntry';
 import { buildingNameOfRoomKey } from '../state/TownMemory';
 import type { CloggedBathroomPhase } from '../../systems/cloggedBathroom/cloggedBathroomCheckpoint';
 import type { StealthKeySnatchPhase } from '../../systems/stealthKeySnatch/stealthKeySnatchCheckpoint';
@@ -94,6 +95,7 @@ function murderStageAtLeast(stage: MurderQuestStage, threshold: MurderQuestStage
  * is not a town building (a dungeon floor's rooms play the floor's own music).
  */
 function buildingMusic(name: string): ReadonlyArray<MusicTrackId> {
+  if (!isBuildingName(name)) return [];
   if (TAVERN_BUILDING_NAMES.has(name)) return TAVERN_MUSIC_TRACKS;
   if (name === SKY_TEMPLE_NAME) return TEMPLE_MUSIC_TRACKS;
   if (name === TOWN_TOWER_NAME) return TOWER_MUSIC_TRACKS;

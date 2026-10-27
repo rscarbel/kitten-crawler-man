@@ -23,6 +23,7 @@ import { renderCanvas, renderDecorationsOverlay } from '../src/map/TileRenderer.
 import { stampSafeRoomCounters } from '../src/map/safeRoomCounterLayout.js';
 import { stampSafeRoomDecor } from '../src/map/safeRoomDecorLayout.js';
 import type { BuildingKind } from '../src/map/town/townPlan.js';
+import { BUILDING_NAMES, isBuildingName, type BuildingName } from '../src/map/buildingEntry.js';
 
 const DEFAULT_KIND = 'store';
 const DEFAULT_SCALE = 2;
@@ -58,8 +59,14 @@ function parseKind(raw: string): BuildingKind {
   return match;
 }
 
+function parseBuildingName(raw: string): BuildingName | null {
+  if (raw === '') return null;
+  if (!isBuildingName(raw)) throw new Error(`--name must be one of ${BUILDING_NAMES.join(', ')}`);
+  return raw;
+}
+
 const kind = parseKind(stringArg('kind', DEFAULT_KIND));
-const buildingName = stringArg('name', '');
+const buildingName = parseBuildingName(stringArg('name', ''));
 const towerFloor = intArg('floor', DEFAULT_TOWER_FLOOR);
 const scale = intArg('scale', DEFAULT_SCALE);
 const outPath = stringArg('out', DEFAULT_OUT);
@@ -97,4 +104,4 @@ renderCanvas(gameCtx, map.structure, TILE_SIZE, 0, 0, viewW, viewH);
 renderDecorationsOverlay(gameCtx, map.structure, TILE_SIZE, 0, 0, viewW, viewH);
 
 writePreviewPng(outPath, canvas.toBuffer('image/png'));
-console.log(`${outPath}: ${buildingName || kind} — ${tilesW}x${tilesH} tiles at ${scale}x`);
+console.log(`${outPath}: ${buildingName ?? kind} — ${tilesW}x${tilesH} tiles at ${scale}x`);

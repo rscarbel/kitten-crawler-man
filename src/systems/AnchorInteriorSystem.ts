@@ -21,6 +21,7 @@
 import type { AnchorQuestProgress } from '../core/quests/AnchorQuestProgress';
 import type { AudioManager } from '../audio/AudioManager';
 import type { GameMap } from '../map/GameMap';
+import type { BuildingName } from '../map/buildingEntry';
 import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
 import type { ResidentId } from './townResidents';
@@ -128,6 +129,16 @@ const BROKEN_TYPE_FOR_INTACT: ReadonlyMap<number, number> = new Map([
 /** Pulse geometry for the ring that marks a wreck the party can afford to mend. */
 const HIGHLIGHT_RADIUS_FRACTION = 0.62;
 const HIGHLIGHT_LINE_WIDTH = 2;
+
+/**
+ * The top of the ring round a wreck tile whose top is at screen `sy`. A
+ * wreck's own art stays inside its tile, so the ring is the highest thing
+ * either paints.
+ */
+function highlightRingTop(sy: number): number {
+  const ringCentreY = sy + TILE_SIZE / 2;
+  return ringCentreY - TILE_SIZE * HIGHLIGHT_RADIUS_FRACTION - HIGHLIGHT_LINE_WIDTH / 2;
+}
 const HIGHLIGHT_ALPHA_BASE = 0.45;
 const HIGHLIGHT_ALPHA_AMPLITUDE = 0.3;
 const HIGHLIGHT_PULSE_HZ = 2.2;
@@ -151,7 +162,7 @@ export class AnchorInteriorSystem {
     null;
 
   private constructor(
-    private readonly buildingName: string,
+    private readonly buildingName: BuildingName,
     private readonly progress: AnchorQuestProgress,
     private readonly map: GameMap,
     private readonly crawlers: () => ReadonlyArray<Player>,
@@ -180,7 +191,7 @@ export class AnchorInteriorSystem {
    * building gains a storey.
    */
   static forBuilding(
-    buildingName: string,
+    buildingName: BuildingName,
     floor: number,
     progress: AnchorQuestProgress,
     map: GameMap,
@@ -835,8 +846,9 @@ export class AnchorInteriorSystem {
     drawInteractionPrompt(
       ctx,
       promptTile.x * TILE_SIZE - camX,
-      promptTile.y * TILE_SIZE - camY,
+      highlightRingTop(promptTile.y * TILE_SIZE - camY),
       TILE_SIZE,
+      (promptTile.y + 1) * TILE_SIZE - camY,
       byInputMode(mode, { touch: `${tapVerb(mode)} to repair`, pointer: 'Repair' }),
       byInputMode(mode, { touch: undefined, pointer: keyLabel('buildSummon') }),
     );

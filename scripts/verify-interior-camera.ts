@@ -45,6 +45,7 @@ import { TILE_SIZE } from '../src/core/constants';
 import { level3 } from '../src/levels/level3';
 import { GameMap, TOWER_FLOOR_COUNT } from '../src/map/GameMap';
 import { createTownPlan, type BuildingKind } from '../src/map/town/townPlan';
+import type { BuildingName } from '../src/map/buildingEntry';
 import { stampSafeRoomCounters } from '../src/map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../src/map/safeRoomDecorLayout';
 import {
@@ -229,7 +230,7 @@ function fail(label: string): void {
 }
 
 function buildInterior(
-  name: string,
+  name: BuildingName,
   kind: BuildingKind,
   floor: number,
   hasSafeRoom: boolean,
@@ -597,7 +598,7 @@ function checkRoomNameSlot(
 await loadGameSpritesInNode();
 
 const plan = createTownPlan(level3.mapSize);
-const walkIns: Array<{ name: string; kind: BuildingKind; hasSafeRoom: boolean }> = [
+const walkIns: Array<{ name: BuildingName; kind: BuildingKind; hasSafeRoom: boolean }> = [
   ...plan.buildings.map((b) => ({
     name: b.name,
     kind: b.kind,

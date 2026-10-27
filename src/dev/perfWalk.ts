@@ -15,9 +15,9 @@ import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import { keybindings, type GameAction } from '../core/input/Keybindings';
 import type { AISceneContext } from '../ai/actions/types';
 import type { GameMap } from '../map/GameMap';
+import type { BuildingName } from '../map/buildingEntry';
 import type { MobKind } from '../levels/mobKinds';
 import type { Player } from '../Player';
-import { doorwaySpan } from '../systems/BuildingSystem';
 
 interface TilePoint {
   readonly x: number;
@@ -37,7 +37,7 @@ export type PerfWalkAnchor =
   /** The boss room nearest the safe room that waits before this boss. */
   | { readonly kind: 'bossRoomPast'; readonly bossType: MobKind }
   /** A building's door, by its entry name. */
-  | { readonly kind: 'buildingDoor'; readonly name: string };
+  | { readonly kind: 'buildingDoor'; readonly name: BuildingName };
 
 export type PerfWalkStep =
   /**
@@ -248,7 +248,7 @@ function walkGridOf(gameMap: GameMap): WalkGrid {
   const height = gameMap.structure.length;
   const trips = new Set<number>();
   for (const entry of gameMap.buildingEntries) {
-    const { x0, width: doorwayWidth } = doorwaySpan(entry);
+    const { x0, width: doorwayWidth } = entry.doorway;
     for (let x = x0; x < x0 + doorwayWidth; x++) trips.add(tileKey(x, entry.doorTile.y, width));
   }
   const interiorTrips = [

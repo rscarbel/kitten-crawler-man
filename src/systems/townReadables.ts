@@ -12,6 +12,9 @@
  * to sit each one on and `ReadableOverlay` draws it.
  */
 
+import type { BuildingName } from '../map/buildingEntry';
+import type { PlannedBuildingName } from '../map/town/townPlan';
+
 /** The furniture a readable sits on, resolved to real tiles by the owning system. */
 export type ReadableAnchor = 'shelf' | 'table' | 'crate' | 'board';
 
@@ -34,7 +37,7 @@ export interface Readable {
   readonly body: ReadonlyArray<string>;
 }
 
-const BUILDING_READABLES: ReadonlyMap<string, ReadonlyArray<Readable>> = new Map([
+const BUILDING_READABLES: ReadonlyMap<BuildingName, ReadonlyArray<Readable>> = new Map([
   [
     "Old Lori's Cottage",
     [
@@ -348,18 +351,14 @@ const BUILDING_READABLES: ReadonlyMap<string, ReadonlyArray<Readable>> = new Map
       },
     ],
   ],
-]);
+] satisfies ReadonlyArray<readonly [PlannedBuildingName, ReadonlyArray<Readable>]>);
 
-/**
- * Every building this registry names, for the headless check to hold against
- * the town's real buildings: a readable keyed to a misspelled building never
- * surfaces when the check asks each real building what it holds.
- */
-export function readableBuildings(): ReadonlyArray<string> {
+/** Every building with readables authored, for the gallery and the headless check. */
+export function readableBuildings(): ReadonlyArray<BuildingName> {
   return [...BUILDING_READABLES.keys()];
 }
 
 /** Every readable authored for `building`, in the order they should be placed. */
-export function readablesFor(building: string): ReadonlyArray<Readable> {
+export function readablesFor(building: BuildingName): ReadonlyArray<Readable> {
   return BUILDING_READABLES.get(building) ?? [];
 }

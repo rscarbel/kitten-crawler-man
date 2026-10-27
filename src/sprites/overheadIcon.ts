@@ -11,6 +11,7 @@
 
 import { worldPalette } from '../ui/theme/worldInk';
 import { worldText } from '../ui/world/worldText';
+import { reportOverheadTop } from '../ui/world/overheadStack';
 import {
   GLYPH_BADGE_BOB_AMPLITUDE,
   GLYPH_BADGE_SIZE,
@@ -122,13 +123,20 @@ const BADGE_GLYPHS = {
   medical: drawMedicalGlyph,
 } as const satisfies Record<BadgeIcon, BadgeGlyph>;
 
-/** Wearers drawn larger than one world tile get a proportionally larger badge. */
-function badgeLayout(artTopY: number, s: number) {
+/**
+ * Where a glyph badge hangs over art whose highest pixel is `artTopY`: its
+ * centre at rest, and `topY`, its highest pixel at the top of its bob. The
+ * badge's lowest point at the bottom of its bob keeps `gapPx` of clear air
+ * over the art. Wearers drawn larger than one world tile get a proportionally
+ * larger badge.
+ */
+export function badgeLayout(artTopY: number, s: number, gapPx = QUEST_MARKER_HEAD_GAP_PX) {
   const scale = s / TILE_SIZE;
   const halfSize = (GLYPH_BADGE_SIZE * scale) / 2;
   const bobAmplitude = GLYPH_BADGE_BOB_AMPLITUDE * scale;
-  const restingCenterY = artTopY - QUEST_MARKER_HEAD_GAP_PX - bobAmplitude - halfSize;
-  return { scale, halfSize, bobAmplitude, restingCenterY };
+  const restingCenterY = artTopY - gapPx - bobAmplitude - halfSize;
+  const topY = restingCenterY - bobAmplitude - halfSize;
+  return { scale, restingCenterY, topY };
 }
 
 function drawCounterBadge(
@@ -138,10 +146,11 @@ function drawCounterBadge(
   s: number,
   icon: BadgeIcon,
 ) {
-  if (deferAboveDarkness((target) => drawCounterBadge(target, sx, artTopY, s, icon))) return;
-  const { scale, restingCenterY } = badgeLayout(artTopY, s);
-  const cy = restingCenterY + glyphBadgeBob(performance.now()) * scale;
+  const { scale, restingCenterY, topY } = badgeLayout(artTopY, s);
   const cx = sx + s * EXCLAMATION_CENTER_X;
+  reportOverheadTop(ctx, cx, topY);
+  if (deferAboveDarkness((target) => drawCounterBadge(target, sx, artTopY, s, icon))) return;
+  const cy = restingCenterY + glyphBadgeBob(performance.now()) * scale;
   drawGlyphBadge(ctx, cx, cy, BADGE_GLYPHS[icon], scale);
 }
 
@@ -180,8 +189,7 @@ export function overheadIconTopY(
 ): number {
   if (icon === 'none') return artTopY;
   if (icon === 'shop' || icon === 'medical') {
-    const { halfSize, bobAmplitude, restingCenterY } = badgeLayout(artTopY, s);
-    return restingCenterY - bobAmplitude - halfSize;
+    return badgeLayout(artTopY, s).topY;
   }
   return questMarkerTopY(ctx, artTopY, s, glyphOf(icon));
 }

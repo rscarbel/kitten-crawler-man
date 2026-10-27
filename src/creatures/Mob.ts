@@ -23,7 +23,7 @@ import {
 } from './mobLevelScaling';
 import { WORLD_TEXT } from '../ui/theme/worldInk';
 import { worldText } from '../ui/world/worldText';
-import { measureFiguresInkTop } from '../sprites/figure/figureFrameCache';
+import { measureOverheadTop, reportOverheadTop } from '../ui/world/overheadStack';
 import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { Rng } from '../sprites/person/rng';
 import type { BombThrower } from '../systems/goblinBombConstants';
@@ -334,6 +334,12 @@ const HEALTH_BAR_ART_GAP_PX = 1;
 const TACTICS_RANK_MARK = '★';
 /** Gap between the health bar's right edge and the rank mark. */
 const TACTICS_RANK_MARK_GAP = 3;
+
+/** The rank mark's top, centred on a health bar anchored at `barSy`; it stands taller than the bar. */
+function tacticsRankMarkTop(barSy: number): number {
+  const barCenterY = barSy - HP_BAR_Y_OFFSET + HP_BAR_HEIGHT / 2;
+  return barCenterY - WORLD_TEXT.tacticsMark.size / 2;
+}
 
 /** Minimal shell API exposed to mobs — avoids a circular import with SpellSystem. */
 export interface ShellContext {
@@ -3683,7 +3689,18 @@ export abstract class Mob extends Player {
     sy: number,
     paint: () => void,
   ): number {
-    return measureFiguresInkTop(ctx, paint) ?? sy;
+    const artTop = measureOverheadTop(ctx, 'figure', paint);
+    if (artTop === null) return sy;
+    this.paintedArtReachPx = sy - artTop;
+    return artTop;
+  }
+
+  /** How far above its tile the art {@link paintSpriteMeasuringTop} last measured reached. */
+  private paintedArtReachPx: number | null = null;
+
+  protected override rememberedArtTop(sy: number): number | null {
+    if (this.paintedArtReachPx === null) return super.rememberedArtTop(sy);
+    return sy - this.paintedArtReachPx;
   }
 
   /** The aggro "!", stacked above both the art and the health bar. */
@@ -3696,6 +3713,7 @@ export abstract class Mob extends Player {
   ) {
     if (this.paintingBodyOnly) return;
     const clearOfY = this.overheadClearTop(artTopY, barSy);
+    reportOverheadTop(ctx, sx, clearOfY - AGGRO_INDICATOR_Y_OFFSET - AGGRO_INDICATOR_FONT_SIZE);
     if (deferChrome(this, 'aggro', sx, clearOfY, tileSize)) return;
     this.drawAggroIndicator(ctx, sx, clearOfY, tileSize);
   }
@@ -3753,6 +3771,10 @@ export abstract class Mob extends Player {
   ) {
     if (this.healthBarTimer <= 0 || this.paintingBodyOnly) return;
     const anchorY = this.healthBarAnchorOver(artTopY, barSy);
+    reportOverheadTop(ctx, sx, anchorY - HP_BAR_Y_OFFSET);
+    if (this.showsTacticsRankMark) {
+      reportOverheadTop(ctx, this.tacticsRankMarkX(sx), tacticsRankMarkTop(anchorY));
+    }
     if (deferChrome(this, 'mobHealthBar', sx, anchorY)) return;
     this.drawMobHealthBar(ctx, sx, anchorY);
   }
@@ -3772,6 +3794,14 @@ export abstract class Mob extends Player {
     ctx.restore();
   }
 
+  private get showsTacticsRankMark(): boolean {
+    return !this.isBoss && this.hasActiveTactics;
+  }
+
+  private tacticsRankMarkX(sx: number): number {
+    return sx + this.tileSize + TACTICS_RANK_MARK_GAP;
+  }
+
   /**
    * A tiny star beside the health bar of a mob that still acts on at least one
    * tactics trait — enough for a player to tell a smart enemy from a dumb one
@@ -3785,12 +3815,10 @@ export abstract class Mob extends Player {
     sy: number,
     alpha: number,
   ) {
-    if (this.isBoss || !this.hasActiveTactics) return;
-    const barTop = sy - HP_BAR_Y_OFFSET;
-    const barCenterY = barTop + HP_BAR_HEIGHT / 2;
+    if (!this.showsTacticsRankMark) return;
     worldText(ctx, TACTICS_RANK_MARK, {
-      x: sx + this.tileSize + TACTICS_RANK_MARK_GAP,
-      y: barCenterY - WORLD_TEXT.tacticsMark.size / 2,
+      x: this.tacticsRankMarkX(sx),
+      y: tacticsRankMarkTop(sy),
       align: 'left',
       alpha,
       style: 'tacticsMark',

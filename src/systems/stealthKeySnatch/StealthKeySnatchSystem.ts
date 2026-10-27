@@ -9,6 +9,7 @@
  * through {@link StealthKeySnatchVisit}, which this system is.
  */
 
+import { stealthGateExtentsPx } from '../../map/tiles/stealthGateTiles';
 import type { AudioManager } from '../../audio/AudioManager';
 import {
   awardPartyXp,
@@ -43,7 +44,7 @@ import type { GameMap } from '../../map/GameMap';
 import type { Point } from '../../map/roomDoorways';
 import type { StealthGateRoomData } from '../../map/stealthGateLayout';
 import { prewarmPrisonGoblins } from '../../sprites/goblinGuardSprite';
-import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
+import { drawInteractionPrompt, drawInteractionPromptOver } from '../../ui/InteractionPrompt';
 import type { ToastOptions } from '../../ui/hud/toasts';
 import { partyXpSections } from '../../ui/questReward/rewardLines';
 import type { QuestRewardSpec, RewardItemLine } from '../../ui/questReward/types';
@@ -536,24 +537,21 @@ export class StealthKeySnatchSystem
     if (target === null) return;
     switch (target.kind) {
       case 'guard':
-        drawInteractionPrompt(
-          ctx,
-          guard.x - camX,
-          guard.y - camY,
-          TILE_SIZE,
-          STEALTH_GATE_PROMPTS.talkToGuard,
-        );
+        drawInteractionPromptOver(ctx, guard, camX, camY, STEALTH_GATE_PROMPTS.talkToGuard);
         return;
       case 'gate': {
         const label =
           this.currentPhase === 'keyHeld'
             ? STEALTH_GATE_PROMPTS.unlockGate
             : STEALTH_GATE_PROMPTS.tryGate;
+        const { x, y } = target.tile;
+        const gateRisePx = stealthGateExtentsPx(this.deps.gameMap.structure, x, y, TILE_SIZE).up;
         drawInteractionPrompt(
           ctx,
-          target.tile.x * TILE_SIZE - camX,
-          target.tile.y * TILE_SIZE - camY,
+          x * TILE_SIZE - camX,
+          y * TILE_SIZE - camY - gateRisePx,
           TILE_SIZE,
+          (y + 1) * TILE_SIZE - camY,
           label,
         );
         return;
@@ -564,6 +562,7 @@ export class StealthKeySnatchSystem
           room.signTile.x * TILE_SIZE - camX,
           room.signTile.y * TILE_SIZE - camY,
           TILE_SIZE,
+          (room.signTile.y + 1) * TILE_SIZE - camY,
           STEALTH_GATE_PROMPTS.readSign,
         );
         return;

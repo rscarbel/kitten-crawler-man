@@ -38,7 +38,7 @@ import type { MissQuill } from '../creatures/MissQuill';
 import type { Remex } from '../creatures/Remex';
 import type { TheLich } from '../creatures/TheLich';
 import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
-import { drawHawkfolkCorpse } from '../sprites/featherfallCorpseSprite';
+import { drawHawkfolkCorpse, hawkfolkCorpseTop } from '../sprites/featherfallCorpseSprite';
 import { drawSoulBurst, prewarmLichFightEffects } from '../sprites/skeletonEffectsSprite';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import type { Conversation } from '../dialog/Conversation';
@@ -771,7 +771,9 @@ export class QuillConfrontationSystem implements GameSystem {
       !this.conversationOwned &&
       this.distanceToCorpse(active) <= TILE_SIZE * EXAMINE_RANGE_TILES
     ) {
-      drawInteractionPrompt(ctx, corpseX, corpseY, TILE_SIZE, 'Examine');
+      const corpseTop = hawkfolkCorpseTop(corpseY, TILE_SIZE);
+      const corpseBottom = corpseY + TILE_SIZE;
+      drawInteractionPrompt(ctx, corpseX, corpseTop, TILE_SIZE, corpseBottom, 'Examine');
     }
 
     // Last in this pass, so a wave's telegraph and an orb's warning circle land

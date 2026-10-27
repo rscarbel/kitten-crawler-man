@@ -192,11 +192,14 @@ export class InteriorExitFixtureSystem {
     const fixture = this.nearest(active);
     if (fixture === null) return;
     const corner = squareCornerPx(fixture);
+    // A fixture climbs out of the room, so its art rises out of view; the
+    // prompt hangs over the floor square it is used from instead.
     drawInteractionPrompt(
       ctx,
       corner.x - camX,
       corner.y - camY,
       TILE_SIZE,
+      corner.y + TILE_SIZE - camY,
       INTERIOR_EXIT_FIXTURES[fixture.id].prompt,
     );
   }

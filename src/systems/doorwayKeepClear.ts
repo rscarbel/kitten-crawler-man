@@ -1,8 +1,5 @@
-import type { BuildingEntry } from '../map/OverworldGenerator';
+import type { BuildingEntry } from '../map/buildingEntry';
 import { tileKey } from './tileKey';
-
-/** An entry that states no doorway span opens on its door tile alone. */
-const SINGLE_TILE_DOORWAY_WIDTH = 1;
 
 const CARDINAL_STEPS: ReadonlyArray<readonly [number, number]> = [
   [0, 1],
@@ -25,9 +22,8 @@ const CARDINAL_STEPS: ReadonlyArray<readonly [number, number]> = [
 export function doorwayKeepClearTiles(entries: ReadonlyArray<BuildingEntry>): ReadonlySet<string> {
   const keepClear = new Set<string>();
   for (const entry of entries) {
-    const doorwayWest = entry.doorwayX0 ?? entry.doorTile.x;
-    const doorwayWidth = entry.doorwayWidth ?? SINGLE_TILE_DOORWAY_WIDTH;
-    for (let x = doorwayWest; x < doorwayWest + doorwayWidth; x++) {
+    const { x0, width } = entry.doorway;
+    for (let x = x0; x < x0 + width; x++) {
       const y = entry.doorTile.y;
       keepClear.add(tileKey(x, y));
       for (const [dx, dy] of CARDINAL_STEPS) keepClear.add(tileKey(x + dx, y + dy));

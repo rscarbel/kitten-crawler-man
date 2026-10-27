@@ -24,6 +24,7 @@ import { readFileSync } from 'node:fs';
 import { loadGameSpritesInNode } from './nodeCanvasGlobals';
 import { CORE_SFX_IDS, sfxGroupsForLevelId } from '../src/audio/sfxGroups';
 import { GameMap, TOWER_FLOOR_COUNT } from '../src/map/GameMap';
+import { TOWN_TOWER_NAME } from '../src/map/town/townPlan';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
 import { EventBus } from '../src/core/EventBus';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
@@ -888,7 +889,7 @@ function playWholeFight(stream: number): void {
   // measure a different room the day the tower grew a floor.
   const TOWER_TOP_FLOOR = TOWER_FLOOR_COUNT - 1;
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  map.generateInterior('tower', TOWER_TOP_FLOOR, 'Town Center Tower', false);
+  map.generateInterior('tower', TOWER_TOP_FLOOR, TOWN_TOWER_NAME, false);
 
   const arrival = map._interiorStairDownTiles[0] ?? map.startTile;
   const human = new HumanPlayer(arrival.x, arrival.y + 1, TILE_SIZE);

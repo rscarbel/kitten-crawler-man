@@ -10,6 +10,7 @@
 import type { TownInteriorLayoutEntry } from './types';
 import type { ContractAreaRecord } from '../../contractAreas';
 import type { PlannedBuildingName } from '../townPlan';
+import type { BuildingName } from '../../buildingEntry';
 import { buildPlumblineFarmLayout } from './plumblineFarm';
 import { buildBlackwoodLodgeContractAreas, buildBlackwoodLodgeLayout } from './blackwoodLodge';
 import { buildOldLorisCottageContractAreas, buildOldLorisCottageLayout } from './oldLorisCottage';
@@ -39,21 +40,23 @@ export type TownInteriorLayoutBuilder = (
  * (a renamed building silently loses its layout otherwise). `GameMap` falls back to the generic house furniture pass for
  * any `house`-kind building not listed here.
  */
-export const NAMED_INTERIOR_LAYOUTS: ReadonlyMap<string, TownInteriorLayoutBuilder> = new Map([
-  ['Plumbline Farm', buildPlumblineFarmLayout],
-  ['Blackwood Lodge', buildBlackwoodLodgeLayout],
-  ["Old Lori's Cottage", buildOldLorisCottageLayout],
-  ["Cartwright's Workshop", buildCartwrightsWorkshopLayout],
-  ['Herb & Remedy', buildHerbAndRemedyLayout],
-  ['The Sleeping Cat Inn', buildSleepingCatInnLayout],
-  ['The Rusty Anvil', buildRustyAnvilLayout],
-  ["Miller's Farm", buildMillersFarmLayout],
-  ['The Horned Flagon', buildHornedFlagonLayout],
-  ['The Sunken Stump Pub', buildSunkenStumpPubLayout],
-  ['Temple of the Sky', buildTempleOfTheSkyLayout],
-  ['The Quiet Needle', buildQuietNeedleLayout],
-  ['The Barracks', buildBarracksLayout],
-]);
+export const NAMED_INTERIOR_LAYOUTS: ReadonlyMap<BuildingName, TownInteriorLayoutBuilder> = new Map(
+  [
+    ['Plumbline Farm', buildPlumblineFarmLayout],
+    ['Blackwood Lodge', buildBlackwoodLodgeLayout],
+    ["Old Lori's Cottage", buildOldLorisCottageLayout],
+    ["Cartwright's Workshop", buildCartwrightsWorkshopLayout],
+    ['Herb & Remedy', buildHerbAndRemedyLayout],
+    ['The Sleeping Cat Inn', buildSleepingCatInnLayout],
+    ['The Rusty Anvil', buildRustyAnvilLayout],
+    ["Miller's Farm", buildMillersFarmLayout],
+    ['The Horned Flagon', buildHornedFlagonLayout],
+    ['The Sunken Stump Pub', buildSunkenStumpPubLayout],
+    ['Temple of the Sky', buildTempleOfTheSkyLayout],
+    ['The Quiet Needle', buildQuietNeedleLayout],
+    ['The Barracks', buildBarracksLayout],
+  ],
+);
 
 /** The `store`-kind layout (today: only the General Store), applied by building type rather than name. */
 export { buildGeneralStoreLayout, buildGeneralStoreContractAreas };

@@ -13,7 +13,7 @@
 import { TILE_SIZE } from '../../src/core/constants';
 import { GameMap } from '../../src/map/GameMap';
 import { CONTRACT_PROP_ID_PREFIX } from '../../src/map/contractAreas';
-import type { BuildingEntry } from '../../src/map/OverworldGenerator';
+import type { BuildingEntry } from '../../src/map/buildingEntry';
 import type { BriarHollowSite, VillageBuildingDef } from '../../src/map/overworld/briarHollowSite';
 import type { TileRect } from '../../src/map/town/townPlan';
 import { INTERIOR_FLOOR_TYPES, INTERIOR_WALL } from '../../src/map/tileTypes';

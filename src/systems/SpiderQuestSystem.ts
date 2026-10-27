@@ -69,6 +69,7 @@ import {
   paintTerminalArrow,
   paintTerminalBootLine,
   SPIDER_CUTSCENE_GORE_COLORS,
+  terminalArrowTop,
 } from './bossRooms/spiderLabWorldMarks';
 import type { TopBandEntry } from '../ui/hud/topBand';
 import { stackedBandEntry, TOP_BAND_WIDTH } from '../ui/hud/topBandStack';
@@ -1146,16 +1147,20 @@ export class SpiderQuestSystem implements GameSystem {
           compY - TILE_SIZE * HACK_BOOT_LINE_RISE_TILES,
         );
       } else if (dist <= COMPUTER_INTERACT_RANGE_PX * COMPUTER_INTERACT_MULTIPLIER) {
-        drawInteractionPrompt(ctx2d, compX, compY - TILE_SIZE, TILE_SIZE, 'Hack Terminal');
+        const arrowTop = terminalArrowTop(compY, TILE_SIZE);
+        const terminalBottom = compY + TILE_SIZE;
+        drawInteractionPrompt(ctx2d, compX, arrowTop, TILE_SIZE, terminalBottom, 'Hack Terminal');
       }
     }
 
     // Scientist interaction prompt when scientist_waiting
     if (this.phase === 'scientist_waiting' && active !== undefined && !this.scientistDead) {
       if (this.isWithinScientistReach(active)) {
-        const sx = this.scientistX - camX;
-        const sy = this.scientistY - camY;
-        drawInteractionPrompt(ctx2d, sx, sy, TILE_SIZE, 'Talk');
+        const left = this.scientistX - TILE_SIZE * TILE_CENTER_OFFSET_PX - camX;
+        const headTop = this.scientistFigure.headTop(this.scientistY, camY);
+        const markerTop = questMarkerTopY(ctx2d, headTop, TILE_SIZE, '!');
+        const feetY = this.scientistY - camY;
+        drawInteractionPrompt(ctx2d, left, markerTop, TILE_SIZE, feetY, 'Talk');
       }
     }
   }

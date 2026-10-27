@@ -109,6 +109,11 @@ import type { WorkingTool } from '../core/items/gathering/toolTiers';
 import type { CrawlerKind } from '../core/skills/SkillManager';
 import type { HumanLook } from '../sprites/looks/humanLook';
 import {
+  pauseOverheadMeasure,
+  reportOverheadTop,
+  resumeOverheadMeasure,
+} from '../ui/world/overheadStack';
+import {
   bareFistDamage,
   HUMAN_BASE_HP_OFFSET,
   HUMAN_STARTING_DEXTERITY,
@@ -1364,6 +1369,7 @@ export class HumanPlayer extends Player {
       const r = HumanPlayer.ACTIVE_SPHERE_RADIUS;
       const sphereCX = sx + s * HumanPlayer.SPRITE_HORIZONTAL_OFFSET;
       const sphereCY = sy - this.spriteTopAboveTile - HumanPlayer.ACTIVE_SPHERE_GAP - r;
+      reportOverheadTop(ctx, sphereCX, sphereCY - r);
       drawActivePlayerMarker(ctx, sphereCX, sphereCY, r);
     }
 
@@ -1376,7 +1382,14 @@ export class HumanPlayer extends Player {
       drawHumanSelection(ctx, sx, sy, s, selection, held, stowed, offHand),
     );
 
-    if (!this.paintingBodyOnly) drawSlingshotRocks(ctx, this.rocks, camX, camY, s);
+    if (!this.paintingBodyOnly) {
+      pauseOverheadMeasure();
+      try {
+        drawSlingshotRocks(ctx, this.rocks, camX, camY, s);
+      } finally {
+        resumeOverheadMeasure();
+      }
+    }
 
     const healthBarAboveAnchor = this.spriteTopAboveTile + HumanPlayer.BAR_LIFT_ABOVE_SPHERE;
     this.renderHealthBar(ctx, sx, sy - healthBarAboveAnchor);
