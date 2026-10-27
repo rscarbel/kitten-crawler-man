@@ -35,7 +35,7 @@ import type { StormcallerStrikeSystem } from './StormcallerStrikeSystem';
 import type { SmushEffectSystem } from './SmushEffectSystem';
 import type { LavaBallSystem } from './LavaBallSystem';
 import type { RockThrowSystem } from './RockThrowSystem';
-import type { HirelingBoltSystem } from './HirelingBoltSystem';
+import type { HirelingShotSystem } from './HirelingShotSystem';
 import type { SkeletonProjectileSystem } from './SkeletonProjectileSystem';
 import type { GoblinArrowSystem } from './GoblinArrowSystem';
 import type { GoblinBombSystem } from './GoblinBombSystem';
@@ -114,9 +114,8 @@ const PROP_CULL_MARGIN = TILE_SIZE * PROP_CULL_MARGIN_TILES;
 
 /**
  * Mobs are culled by the tile they stand on, but the big ones are drawn far
- * outside it — Signet's ink summons reach nearly three tiles up and to either
- * side. A one-tile margin popped those in at the screen edge with part of them
- * still due on screen.
+ * outside it. A one-tile margin popped those in at the screen edge with part
+ * of them still due on screen.
  *
  * The spatial query has to use the widest margin any mob could need, since a mob
  * it never returns cannot ask for more; each mob is then re-tested against its
@@ -231,7 +230,7 @@ export interface RenderContext {
   lavaBalls: LavaBallSystem;
   rockThrows: RockThrowSystem;
   /** Absent in scenes a hireling never fights in. */
-  hirelingShots?: HirelingBoltSystem;
+  hirelingShots?: HirelingShotSystem;
   skeletonShots: SkeletonProjectileSystem;
   goblinArrows: GoblinArrowSystem;
   /** Absent in scenes no bomber goblin fights in. */
@@ -398,7 +397,7 @@ export class RenderPipeline {
     ctx.fillRect(0, 0, viewportWidth(), viewportHeight());
 
     gameMap.renderCanvas(ctx, camX, camY, viewportWidth(), viewportHeight());
-    // The Big Top's door light is additive, so it goes straight onto the lot:
+    // The Starlight Tent's door light is additive, so it goes straight onto the lot:
     // drawn any later it would also brighten the gore and wash out every
     // telegraph on the forecourt.
     rc.circusGrounds?.renderGround(ctx, camX, camY);

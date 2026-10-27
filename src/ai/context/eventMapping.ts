@@ -82,6 +82,8 @@ export function describeDamageSource(source: DamageSource | null): string {
       return 'the doomsday device';
     case 'siege':
       return 'their own siege engine';
+    case 'wheelPenalty':
+      return 'the Wheel of Fortune';
   }
 }
 

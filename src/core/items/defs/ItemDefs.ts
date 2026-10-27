@@ -1,4 +1,5 @@
 import { crawlerName } from '../../../characters/characters';
+import { ownEntry } from '../../util/guards';
 import type { StatName } from '../../../Player';
 import type { CrawlerKind, SkillId } from '../../skills/SkillManager';
 import type {
@@ -36,7 +37,7 @@ export type ItemId =
   | 'jugg_juice'
   | 'cooldown_crisp'
   | 'stat_boost_potion'
-  | 'dirty_shirley'
+  | 'catnip_tuna_water'
   | 'scroll_of_confusing_fog'
   | 'goblin_dynamite'
   | 'black_powder_bomb'
@@ -118,7 +119,7 @@ export type ItemId =
   | 'dev_felling_axe'
   | 'wayfinders_anchor'
   | 'anchor_shard_tinker'
-  | 'anchor_shard_hilda'
+  | 'anchor_shard_lori'
   | 'anchor_shard_temple'
   | 'magistrates_writ'
   | 'unreadable_letter'
@@ -249,6 +250,11 @@ export interface InventoryItem {
    * to a hotbar slot. Drives the context menu's Drink entry.
    */
   drinkable?: boolean;
+  /**
+   * The one crawler who may drink this, when it is not both. The other is
+   * refused at the bottle, whichever way they reach for it.
+   */
+  drinkableBy?: CrawlerKind;
   /**
    * The context-menu entry that uses this item exactly as a hotbar press of it
    * would, for an item whose use belongs to a scene system rather than to one
@@ -412,17 +418,18 @@ const ITEM_DEFS = defineItemDefs({
     description:
       'Summons a thick fog cloud around the caster. Any enemy caught inside the fog loses all sense of sight and cannot target any entity. Size and duration grow with INT, tapering off at higher values.',
   },
-  dirty_shirley: {
-    id: 'dirty_shirley',
+  catnip_tuna_water: {
+    id: 'catnip_tuna_water',
     category: 'consumable',
-    name: 'The Dirty Shirley',
+    name: 'Catnip Infused Tuna Water',
     stackable: true,
     canHotlist: true,
     type: 'consumable',
     drinkable: true,
+    drinkableBy: 'cat',
     description:
-      'The Desperado Club’s signature: grenadine, ginger ale, a cherry, and far too much vodka. ' +
-      'Restores health and grants liquid courage. You will be drunk.',
+      'The Cloak & Dagger’s house special, poured for the cat: tuna water steeped with fresh catnip. ' +
+      'Restores health and sends her loose and happy. She will be buzzed.',
   },
   health_potion: {
     id: 'health_potion',
@@ -557,7 +564,7 @@ const ITEM_DEFS = defineItemDefs({
     description:
       'Wooden boards scavenged from the wood pile. Place near floor grates to build ' +
       'barriers against Bugaboos. Only the Human can build or repair. Costs 4 boards. ' +
-      'Old Hilda takes the same boards for her broken furniture, at 2 a mend.',
+      'Old Lori takes the same boards for her broken furniture, at 2 a mend.',
   },
   wayfinders_anchor: {
     id: 'wayfinders_anchor',
@@ -590,15 +597,15 @@ const ITEM_DEFS = defineItemDefs({
       'A wedge of grey stone the tinker had priced as scrap, still warm to the touch. ' +
       'Madame Voss can weld it to its brothers.',
   },
-  anchor_shard_hilda: {
-    id: 'anchor_shard_hilda',
+  anchor_shard_lori: {
+    id: 'anchor_shard_lori',
     category: 'quest',
     name: 'Anchor Shard (Hearth)',
     stackable: false,
     canHotlist: false,
     canDrop: false,
     description:
-      'Old Hilda kept this one under a chair leg for thirty years. It gave it up gladly. ' +
+      'Old Lori kept this one under a chair leg for thirty years. It gave it up gladly. ' +
       'Madame Voss can weld it to its brothers.',
   },
   anchor_shard_temple: {
@@ -1236,7 +1243,7 @@ export function itemFitsSubSlot(
 }
 
 export function isItemId(s: string): s is ItemId {
-  return s in ITEM_DEF;
+  return ownEntry(ITEM_DEF, s) !== undefined;
 }
 
 /**
@@ -1249,7 +1256,7 @@ export function isItemId(s: string): s is ItemId {
  */
 export const ANCHOR_SHARD_IDS = [
   'anchor_shard_tinker',
-  'anchor_shard_hilda',
+  'anchor_shard_lori',
   'anchor_shard_temple',
 ] as const satisfies readonly ItemId[];
 

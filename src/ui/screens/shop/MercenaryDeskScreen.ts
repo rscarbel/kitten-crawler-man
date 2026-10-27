@@ -1,6 +1,6 @@
 /**
- * Rosemarie's Meat Shields desk: the hires down the left, the selected one's
- * portrait, stats and pitch on the right, and Rosemarie underneath saying
+ * The Barracks Mercenaries' desk: the hires down the left, the selected one's
+ * portrait, stats and pitch on the right, and Sydney underneath saying
  * whatever she has to say about it. A row never spends coins; only the
  * pane's Hire does, and a Hire she refuses still answers a press so she can
  * say why. Dismiss asks through the desk's own confirm dialog, mounted above.
@@ -17,7 +17,6 @@ import {
 } from '../../../systems/MercenaryGuildSystem';
 import { centerIn, inset, splitH, splitV, type Rect } from '../../core/geom';
 import type { Surface, Ui } from '../../core/UiRoot';
-import { drawGlyph } from '../../theme/glyphs';
 import { skinsFor, type MeterKind } from '../../theme/skins';
 import { button, buttonHeight } from '../../widgets/button';
 import { card } from '../../widgets/card';
@@ -30,11 +29,10 @@ import { coinPurse, measureCoinPurse, refusableButton } from './shopParts';
 import type { ShopParty } from './shopSession';
 
 const LEAVE_LABEL = 'Leave the desk';
-const NOT_AVAILABLE = 'Not available';
 const UNDER_CONTRACT = 'Under contract';
 const HIRED_TAG = 'Hired';
 const KEEP_NOTE = "Yours till the floor's done.";
-const SPEAKER = 'Rosemarie';
+const SPEAKER = 'Sydney';
 
 /** The list takes this share of the body on a wide screen, the pane the rest. */
 const LIST_FRACTION = 0.38;
@@ -45,13 +43,11 @@ const PORTRAIT_ASPECT = 1.25;
 const PORTRAIT_WIDTH = 96;
 /** On a phone the portrait shrinks so the pane fits above the fold. */
 const COMPACT_PORTRAIT_WIDTH = 64;
-/** The unknown hire's question mark fills this fraction of the frame's width. */
-const UNKNOWN_GLYPH_SCALE = 0.4;
-/** Rosemarie's line wraps to at most this many lines. */
+/** Sydney's line wraps to at most this many lines. */
 const SPEECH_MAX_LINES = 2;
 /** A hire's pitch may run to this many lines before it clips. */
 const PITCH_MAX_LINES = 4;
-const ROSEMARIE_FRAME_WIDTH = 52;
+const SPEAKER_FRAME_WIDTH = 52;
 /** The pane's Hire and Dismiss buttons are this many controls wide. */
 const HIRE_BUTTON_CONTROLS = 5;
 const DISMISS_BUTTON_CONTROLS = 6;
@@ -111,16 +107,7 @@ export function mercenaryDeskSurface(opts: MercenaryDeskScreenOptions): Surface 
   };
 }
 
-function entryName(entry: MercenaryDeskEntry): string {
-  return entry.kind === 'hire' ? entry.template.name : entry.name;
-}
-
-function entrySpecies(entry: MercenaryDeskEntry): string {
-  return entry.kind === 'hire' ? entry.template.species : entry.species;
-}
-
 function entryTrailing(entry: MercenaryDeskEntry): string {
-  if (entry.kind === 'refusal') return NOT_AVAILABLE;
   if (entry.underContract) return HIRED_TAG;
   return entry.template.price.toLocaleString('en-US');
 }
@@ -218,25 +205,16 @@ function renderList(
   );
   view.entries.forEach((entry, index) => {
     const cell = cells[index];
-    const muted = entry.kind === 'refusal';
-    const hired = entry.kind === 'hire' && entry.underContract;
     listRow(ui, cell, {
       id: `${opts.id}/row-${index}`,
-      title: entryName(entry),
-      subtitle: entrySpecies(entry),
-      leading:
-        entry.kind === 'hire'
-          ? {
-              kind: 'paint',
-              paint: (_ctx, art) => opts.desk.drawHirePortrait(ui.ctx, entry.template.id, art),
-            }
-          : { kind: 'glyph', glyph: 'lock' },
+      title: entry.template.name,
+      subtitle: entry.template.species,
+      leading: {
+        kind: 'paint',
+        paint: (_ctx, art) => opts.desk.drawHirePortrait(ui.ctx, entry.template.id, art),
+      },
       trailing: entryTrailing(entry),
-      trailingColor: muted
-        ? palette.text.muted
-        : hired
-          ? palette.state.success
-          : palette.accent.base,
+      trailingColor: entry.underContract ? palette.state.success : palette.accent.base,
       selected: index === view.selected,
       onTap: () => opts.desk.pressRow(index, party.active, party.companion),
     });
@@ -260,7 +238,7 @@ function renderPane(
   const actionH = footerActions ? 0 : buttonHeight(ui, 'md');
   // Under contract, Dismiss swaps rows with the note so it never stands where
   // Hire just was: a double click on Hire must not land on Dismiss.
-  const dismissShown = entry.kind === 'hire' && entry.underContract;
+  const dismissShown = entry.underContract;
   const [head, pitchRect, upperRow, lowerRow] = splitV(
     body,
     dismissShown ? [portraitH, 'fill', actionH, noteH] : [portraitH, 'fill', noteH, actionH],
@@ -271,14 +249,8 @@ function renderPane(
   const [portrait, info] = splitH(head, [portraitW, 'fill'], space.md);
 
   card(ui, portrait, { id: `${opts.id}/portrait`, kind: 'raised' });
-  if (entry.kind === 'hire') {
-    opts.desk.drawHirePortrait(ui.ctx, entry.template.id, portrait);
-  } else {
-    const side = portrait.w * UNKNOWN_GLYPH_SCALE;
-    drawGlyph(ui.ctx, 'lock', centerIn(portrait, side, side), {
-      color: ui.theme.palette.text.muted,
-    });
-  }
+  const template = entry.template;
+  opts.desk.drawHirePortrait(ui.ctx, template.id, portrait);
 
   const titleH = lineHeightOf(ui, 'title');
   const captionH = lineHeightOf(ui, 'caption');
@@ -288,17 +260,9 @@ function renderPane(
     [titleH, captionH, labelH, 'fill'],
     space.xxs,
   );
-  text(ui, nameRow, { text: entryName(entry), role: 'title' });
-  const role = entry.kind === 'hire' ? entry.template.role : entry.role;
-  text(ui, kindRow, { text: `${entrySpecies(entry)} · ${role}`, role: 'caption' });
+  text(ui, nameRow, { text: template.name, role: 'title' });
+  text(ui, kindRow, { text: `${template.species} · ${template.role}`, role: 'caption' });
 
-  if (entry.kind === 'refusal') {
-    text(ui, priceRow, { text: NOT_AVAILABLE, role: 'muted' });
-    text(ui, pitchRect, { text: entry.pitch, role: 'secondary', wrap: true });
-    return;
-  }
-
-  const template = entry.template;
   text(ui, priceRow, {
     text: entry.underContract ? UNDER_CONTRACT : `${template.price.toLocaleString('en-US')} coins`,
     role: entry.underContract ? 'success' : 'accent',
@@ -351,7 +315,7 @@ function renderPane(
 /**
  * The pane's actions as footer buttons, for a phone. Leave is the primary, so
  * Space or Enter with nothing focused never spends coins. A refused Hire stays
- * pressable so Rosemarie can say why. Dismiss stands left of Leave while Hire
+ * pressable so Sydney can say why. Dismiss stands left of Leave while Hire
  * stands right of it, so a double tap on Hire cannot land on Dismiss.
  */
 function paneActions(opts: MercenaryDeskScreenOptions, view: MercenaryDeskView): FooterButton[] {
@@ -364,7 +328,6 @@ function paneActions(opts: MercenaryDeskScreenOptions, view: MercenaryDeskView):
     primary: true,
     onTap: () => opts.desk.close(),
   };
-  if (entry.kind !== 'hire') return [leave];
   const template = entry.template;
   if (!entry.underContract) {
     return [
@@ -434,8 +397,8 @@ function renderSpeech(
   card(ui, rect, { id: `${opts.id}/speech`, kind: 'raised' });
   const body = inset(rect, space.sm);
   const purseW = measureCoinPurse(ui, view.coins);
-  const [face, words, purse] = splitH(body, [ROSEMARIE_FRAME_WIDTH, 'fill', purseW], space.md);
-  opts.desk.drawRosemarie(ui.ctx, { ...face, y: rect.y, h: rect.h });
+  const [face, words, purse] = splitH(body, [SPEAKER_FRAME_WIDTH, 'fill', purseW], space.md);
+  opts.desk.drawManager(ui.ctx, { ...face, y: rect.y, h: rect.h });
   const labelH = lineHeightOf(ui, 'label');
   const [nameRow, lineRow] = splitV(words, [labelH, 'fill'], 0);
   text(ui, nameRow, { text: SPEAKER, role: 'accent' });

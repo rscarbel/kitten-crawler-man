@@ -95,7 +95,7 @@ export function constructionContractsCard(): RewardUnlockCard {
     title: 'Construction contracts from Wendell',
     body: [
       { text: 'Paid repair jobs', emphasis: true },
-      { text: 'In Skyfowl Town and Briar Hollow' },
+      { text: 'In Taloncrest and Briar Hollow' },
       { text: 'Work orders on both notice boards' },
     ],
     condition: 'Ask Wendell, or check a notice board',

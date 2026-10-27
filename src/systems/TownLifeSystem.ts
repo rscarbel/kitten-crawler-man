@@ -1,5 +1,5 @@
 /**
- * Populates the Over City with wandering, non-combatant citizens so the town
+ * Populates Taloncrest with wandering, non-combatant citizens so the town
  * reads as inhabited rather than an empty stage. Owned by `DungeonScene` and
  * active only on the overworld.
  *
@@ -31,6 +31,7 @@ import {
   WELL,
 } from '../map/tileTypes';
 import { tileCoordKey } from '../map/tileIndex';
+import { CLOAK_AND_DAGGER_NAME } from '../map/town/townPlan';
 
 import { Townsperson } from '../creatures/Townsperson';
 import { CITIZEN_TALK_RADIUS_TILES, findNearestTownsperson } from '../creatures/townInteraction';
@@ -108,20 +109,20 @@ const LOITERERS_PER_BUILDING_MIN = 1;
 const LOITERERS_PER_BUILDING_MAX = 2;
 
 // The town's species ratio, as the probability a spawned citizen in each
-// cohort comes up skyfowl rather than human. The plaza is where the town's own
-// two-thirds-skyfowl centre of gravity should read most strongly; travelers are
+// cohort comes up Hawkfolk rather than human. The plaza is where the town's own
+// two-thirds-hawkfolk centre of gravity should read most strongly; travelers are
 // drawn as much from outside the wall as from it, so they stay closer to even;
 // fixture anchors (well, fountain) split the same two-thirds-one-third way.
-/** Denominator for the town's "about two thirds skyfowl" ratio. */
-const SKYFOWL_MAJORITY_OF_THREE = 3;
-const PLAZA_SKYFOWL_SHARE = 2 / SKYFOWL_MAJORITY_OF_THREE;
-const TRAVELER_SKYFOWL_SHARE = 1 / 2;
-const ANCHOR_SKYFOWL_SHARE = 2 / SKYFOWL_MAJORITY_OF_THREE;
-// A skyfowl-run door's loiterers skew further skyfowl than the plaza itself;
+/** Denominator for the town's "about two thirds hawkfolk" ratio. */
+const HAWKFOLK_MAJORITY_OF_THREE = 3;
+const PLAZA_HAWKFOLK_SHARE = 2 / HAWKFOLK_MAJORITY_OF_THREE;
+const TRAVELER_HAWKFOLK_SHARE = 1 / 2;
+const ANCHOR_HAWKFOLK_SHARE = 2 / HAWKFOLK_MAJORITY_OF_THREE;
+// A Hawkfolk-run door's loiterers skew further Hawkfolk than the plaza itself;
 // a human-run door skews the other way by the same margin. A building with no
-// named resident (the Desperado Club) has no ownership to skew by, so its
+// named resident (the Cloak & Dagger) has no ownership to skew by, so its
 // loiterers fall back to the plaza's own ratio.
-const FRONTAGE_SKYFOWL_RUN_SHARE = 0.75;
+const FRONTAGE_HAWKFOLK_RUN_SHARE = 0.75;
 const FRONTAGE_HUMAN_RUN_SHARE = 0.25;
 
 const TALK_RADIUS = TILE_SIZE * CITIZEN_TALK_RADIUS_TILES;
@@ -171,17 +172,17 @@ const DOORSTEP_ANCHORS_PER_BUILDING = 1;
  */
 /**
  * Every doorstep anchor's species follows the resident who owns that door —
- * three of the four land skyfowl. The Desperado Club's bouncer is
+ * three of the four land Hawkfolk. The Cloak & Dagger's bouncer is
  * not tied to any named resident or to the club's own fixed cast (that
- * cast is `DesperadoClubSystem`'s, not this generic street citizen); fixed
+ * cast is `CloakAndDaggerSystem`'s, not this generic street citizen); fixed
  * human here as a plain, arbitrary tie-break rather than rolled, since the
  * club's door staff sit outside the town's species ratio.
  */
 const DOORSTEP_ANCHOR_ROLES: ReadonlyArray<readonly [string, TownRole, TownSpecies]> = [
-  ['The Rusty Anvil', 'smith', 'skyfowl'],
-  ['The Desperado Club', 'guard', 'human'],
-  ['The Sleeping Cat Inn', 'innkeeper', 'skyfowl'],
-  ['Temple of the Sky', 'priest', 'skyfowl'],
+  ['The Rusty Anvil', 'smith', 'hawkfolk'],
+  [CLOAK_AND_DAGGER_NAME, 'guard', 'human'],
+  ['The Sleeping Cat Inn', 'innkeeper', 'hawkfolk'],
+  ['Temple of the Sky', 'priest', 'hawkfolk'],
 ];
 // Anchored citizens barely move and mostly stand: the slowest speeds and the
 // longest pauses of any cohort.
@@ -292,7 +293,7 @@ export class TownLifeSystem implements GameSystem {
   private readonly plazaRadius: number;
   private readonly districtRadius: number;
   private readonly plazaWander: WanderParams;
-  /** A building's dominant resident species, keyed by `entry.name` — see `frontageSkyfowlShare`. */
+  /** A building's dominant resident species, keyed by `entry.name` — see `frontageHawkfolkShare`. */
   private readonly residentSpeciesByHome: ReadonlyMap<string, TownSpecies>;
   private seedCount = 0;
   /**
@@ -542,17 +543,17 @@ export class TownLifeSystem implements GameSystem {
         PLAZA_SPEED_MIN,
         PLAZA_SPEED_MAX,
         this.plazaWander,
-        rollSpecies(PLAZA_SKYFOWL_SHARE, this.castRng),
+        rollSpecies(PLAZA_HAWKFOLK_SHARE, this.castRng),
       );
     }
   }
 
-  /** The skyfowl share a building's own frontage should roll at, per its owning resident's species. */
-  private frontageSkyfowlShare(buildingName: string): number {
+  /** The Hawkfolk share a building's own frontage should roll at, per its owning resident's species. */
+  private frontageHawkfolkShare(buildingName: string): number {
     const owner = this.residentSpeciesByHome.get(buildingName);
-    if (owner === 'skyfowl') return FRONTAGE_SKYFOWL_RUN_SHARE;
+    if (owner === 'hawkfolk') return FRONTAGE_HAWKFOLK_RUN_SHARE;
     if (owner === 'human') return FRONTAGE_HUMAN_RUN_SHARE;
-    return PLAZA_SKYFOWL_SHARE;
+    return PLAZA_HAWKFOLK_SHARE;
   }
 
   /** Give every building in the district someone loitering on its doorstep. */
@@ -561,8 +562,10 @@ export class TownLifeSystem implements GameSystem {
       const frontage = this.gatherFrontageTiles(door);
       if (frontage.length === 0) continue;
       const buildingName = this.buildingNameAtDoor(door);
-      const skyfowlShare =
-        buildingName !== undefined ? this.frontageSkyfowlShare(buildingName) : PLAZA_SKYFOWL_SHARE;
+      const hawkfolkShare =
+        buildingName !== undefined
+          ? this.frontageHawkfolkShare(buildingName)
+          : PLAZA_HAWKFOLK_SHARE;
       const wander: WanderParams = {
         pickTarget: () => randomTilePoint(frontage),
         arriveDist: ARRIVE_DIST,
@@ -578,7 +581,7 @@ export class TownLifeSystem implements GameSystem {
           FRONTAGE_SPEED_MIN,
           FRONTAGE_SPEED_MAX,
           wander,
-          rollSpecies(skyfowlShare, this.castRng),
+          rollSpecies(hawkfolkShare, this.castRng),
         );
         this.frontageLoiterers.add(loiterer);
       }
@@ -619,7 +622,7 @@ export class TownLifeSystem implements GameSystem {
         TRAVELER_SPEED_MIN,
         TRAVELER_SPEED_MAX,
         wander,
-        rollSpecies(TRAVELER_SKYFOWL_SHARE, this.castRng),
+        rollSpecies(TRAVELER_HAWKFOLK_SHARE, this.castRng),
       );
     }
   }
@@ -627,7 +630,7 @@ export class TownLifeSystem implements GameSystem {
   /**
    * Someone at every fixture worth being at: a drawer at each well,
    * the smith outside his forge, children on the fountain steps, and a bouncer on
-   * the Desperado Club's door.
+   * the Cloak & Dagger's door.
    *
    * Anchors are derived from the map — well tiles are found by type, the smithy
    * and the club by their `buildingEntries` — rather than from copied offsets.
@@ -642,7 +645,7 @@ export class TownLifeSystem implements GameSystem {
   private spawnActivityAnchors(): void {
     for (const well of this.gameMap.tilesOfType(WELL)) {
       this.addAnchoredCitizen(well, 'commoner', WELL_DRAWERS_PER_WELL, ANCHOR_RADIUS_TILES, () =>
-        rollSpecies(ANCHOR_SKYFOWL_SHARE, this.castRng),
+        rollSpecies(ANCHOR_HAWKFOLK_SHARE, this.castRng),
       );
     }
     const fountain = this.gameMap.fountainCentre;
@@ -652,7 +655,7 @@ export class TownLifeSystem implements GameSystem {
         'child',
         FOUNTAIN_CHILDREN,
         FOUNTAIN_ANCHOR_RADIUS_TILES,
-        () => rollSpecies(ANCHOR_SKYFOWL_SHARE, this.castRng),
+        () => rollSpecies(ANCHOR_HAWKFOLK_SHARE, this.castRng),
       );
     }
     for (const [buildingName, role, species] of DOORSTEP_ANCHOR_ROLES) {
@@ -879,9 +882,9 @@ function pickRole(table: RoleTable, rng: Rng): TownRole {
   return 'commoner';
 }
 
-/** Species is a job-independent roll, at the given probability of skyfowl. */
-function rollSpecies(skyfowlShare: number, rng: Rng): TownSpecies {
-  return rng() < skyfowlShare ? 'skyfowl' : 'human';
+/** Species is a job-independent roll, at the given probability of Hawkfolk. */
+function rollSpecies(hawkfolkShare: number, rng: Rng): TownSpecies {
+  return rng() < hawkfolkShare ? 'hawkfolk' : 'human';
 }
 
 /**

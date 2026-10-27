@@ -1,5 +1,5 @@
 /**
- * Over City's material painters: plaster, timber framing, dressed and
+ * Taloncrest's material painters: plaster, timber framing, dressed and
  * coursed stone, slate and clay roofing, ironwork, awning cloth, glazing and
  * plank boarding.
  *
@@ -289,7 +289,7 @@ const STONE_PIT_RADIUS_FRACTION = 0.05;
  * A coursed dressed-stone wall or plinth: jittered rectangular blocks with
  * mortar joints, a per-block gradient shade and highlight, and the odd
  * weathering pit. Quarried and coursed, not the village's rounded
- * fieldstone — every block here is squared, matching Over City's masonry.
+ * fieldstone — every block here is squared, matching Taloncrest's masonry.
  */
 export function paintStoneCourses(
   ctx: Ctx,
@@ -467,7 +467,7 @@ const IRON_RIVET_INSET_FRACTION = 0.16;
 /**
  * A strap of hinge or bracket ironwork: a dark tapered band with a lit
  * spine and a rivet at each end. The one ironwork element every hinge,
- * bracket and window stay in Over City is built from — hardware stays rare
+ * bracket and window stay in Taloncrest is built from — hardware stays rare
  * and always darkened, never a whole-wall material.
  */
 export function paintIronStrap(

@@ -99,6 +99,7 @@ const { GameMap } = await import('../src/map/GameMap.js');
 const { dungeonOptionsForLevel } = await import('../src/levels/dungeonOptions.js');
 const { level2 } = await import('../src/levels/level2.js');
 const { sceneSetupFromSave } = await import('../src/scenes/resumeFromSave.js');
+const { parsePersistedWorldState } = await import('../src/core/save/PersistedWorldState.js');
 const { StealthKeySnatchSystem } =
   await import('../src/systems/stealthKeySnatch/StealthKeySnatchSystem.js');
 const { PRISON_KEY_ITEM } =
@@ -147,7 +148,7 @@ const CAPTURE_WAIT_FRAMES = 600;
 const REJOIN_FRAMES = 600;
 /** How close, in tiles, a companion must come to count as back with the party. */
 const REJOIN_REACH_TILES = 4;
-const HIRE_ID = 'sledge';
+const HIRE_ID = 'crush';
 
 let failures = 0;
 let checks = 0;
@@ -345,7 +346,7 @@ function sameTile(a: Tile, b: Tile): boolean {
   return a.x === b.x && a.y === b.y;
 }
 
-/** A Meat Shields hire already under contract for floor 2. */
+/** A Barracks hire already under contract for floor 2. */
 function hireRoster(): ReturnType<typeof createMercenaryRoster> {
   const roster = createMercenaryRoster();
   roster.floorLevelId = level2.id;
@@ -417,36 +418,27 @@ function guardMarker(scene: Scene): string {
   return scene.stealthKeySnatch.guard?.marker ?? 'no guard';
 }
 
-/** Saves where the party stands, reloads the save the way a page reload does, and returns the reloaded scene. */
-function saveAndReload(scene: Scene, saves: SavedProgress[], strip: boolean): Scene | null {
+/** Writes a save where the party stands and returns it, or undefined when none was written. */
+function writeSave(scene: Scene, saves: SavedProgress[]): SavedProgress | undefined {
   const tile = {
     x: Math.round(scene.pm.active().x / TILE_SIZE),
     y: Math.round(scene.pm.active().y / TILE_SIZE),
   };
   const before = saves.length;
   scene['captureSavePoint'](tile);
-  const save: SavedProgress | undefined =
-    saves.length > before ? saves[saves.length - 1] : undefined;
+  return saves.length > before ? saves[saves.length - 1] : undefined;
+}
+
+/** Saves where the party stands, reloads the save the way a page reload does, and returns the reloaded scene. */
+function saveAndReload(scene: Scene, saves: SavedProgress[]): Scene | null {
+  const save = writeSave(scene, saves);
   if (save === undefined) return null;
-  const roundTripped = structuredClone(save);
-  const persisted = roundTripped.world?.persisted;
-  if (strip && persisted !== undefined && roundTripped.world !== undefined) {
-    const { stealthKeySnatch, ...withoutQuest } = persisted;
-    check(stealthKeySnatch !== undefined, 'the save carries the stealth gate quest');
-    roundTripped.world = { ...roundTripped.world, persisted: withoutQuest };
-  }
-  const { levelDef, options } = sceneSetupFromSave({ skipIntro: true }, roundTripped);
+  const { levelDef, options } = sceneSetupFromSave({ skipIntro: true }, structuredClone(save));
   return new DungeonScene(levelDef, new InputManager(), new SceneManager(), options);
 }
 
-function verifyReload(
-  scene: Scene,
-  saves: SavedProgress[],
-  expected: Phase,
-  label: string,
-  strip = false,
-): void {
-  const reloaded = saveAndReload(scene, saves, strip);
+function verifyReload(scene: Scene, saves: SavedProgress[], expected: Phase, label: string): void {
+  const reloaded = saveAndReload(scene, saves);
   check(reloaded !== null, `${label}: a save is written`);
   if (reloaded === null) return;
   const phase = reloaded.stealthKeySnatch.phase;
@@ -455,6 +447,19 @@ function verifyReload(
   const expectedGate = expected === 'opened' ? 'open' : 'locked';
   check(gate === expectedGate, `${label}: the gate reloads ${expectedGate} (reloads ${gate})`);
   reloaded.onExit();
+}
+
+/** A stored save missing the stealth gate quest fails validation instead of loading it unmet. */
+function verifySaveWithoutQuestRejected(scene: Scene, saves: SavedProgress[], label: string): void {
+  const persisted = writeSave(scene, saves)?.world?.persisted;
+  check(persisted !== undefined, `${label}: a save with a persisted world is written`);
+  if (persisted === undefined) return;
+  const { stealthKeySnatch: _dropped, ...withoutQuest } = persisted;
+  const stored: unknown = JSON.parse(JSON.stringify(withoutQuest));
+  check(
+    parsePersistedWorldState(stored) === undefined,
+    `${label}: a save without the quest passes validation`,
+  );
 }
 
 /** Nothing the party does hurts, moves or holds the gate guard. */
@@ -777,7 +782,7 @@ async function verifySeed(worldSeed: number): Promise<void> {
   back.update();
   check(guardMarker(back) === 'none', `${label}: the guard's marker goes once the gate is open`);
   verifyReload(back, saves, 'opened', `${label} opened`);
-  verifyReload(back, saves, 'unmet', `${label} save without the quest`, true);
+  verifySaveWithoutQuestRejected(back, saves, `${label} save without the quest`);
   back.onExit();
 
   await verifyGateUnlock(worldSeed, ctx, label);

@@ -40,20 +40,13 @@ export const WHEEL_WARNING_SCRIM_ID = 'scrim';
 /** One line of a prompt, run by run. */
 type PromptLine = readonly TextSpan[];
 
-/** The wedge's name, quoted and set in italics so it reads as a place and not a word. */
-const NOTHING_NAME = '“The Nothing”';
-
 function line(...runs: ReadonlyArray<string | TextSpan>): PromptLine {
   return runs.map((run) => (typeof run === 'string' ? { text: run } : run));
 }
 
-function nothingName(upper = false): TextSpan {
-  return { text: upper ? NOTHING_NAME.toUpperCase() : NOTHING_NAME, italic: true };
-}
-
-const WARNING_HEADLINE = line('WARNING: ', nothingName(true), ' IS PERMANENT DEATH');
+const WARNING_HEADLINE = line('WARNING: PERMANENT DEATH');
 const WARNING_BODY: readonly PromptLine[] = [
-  line('One slot on this wheel sends you to ', nothingName(), '.'),
+  line('One slot on this wheel is Permanent Death.'),
   line('If it lands, the game ends forever.'),
   line('Every save and all of your progress is erased.'),
   line('You start over as if you had never played.'),
@@ -61,7 +54,7 @@ const WARNING_BODY: readonly PromptLine[] = [
 ];
 const CONFIRM_HEADLINE = line('ARE YOU SURE YOU WANT TO RISK EVERYTHING?');
 const CONFIRM_BODY: readonly PromptLine[] = [
-  line(nothingName(), ' takes every save, every level, every item and every achievement.'),
+  line('Landing on it takes every save, every level, every item and every achievement.'),
   line('It cannot be undone.'),
 ];
 const ARMING_REASON = 'Read the warning first';

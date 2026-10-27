@@ -55,7 +55,7 @@ export function partyXpSections(applied: PartyXpApplied): QuestRewardSection[] {
 const WHEEL_ICON_OVERSAMPLE = 2;
 const HALF = 0.5;
 
-/** The Wheel of Fortune with its Nothing taped over, as the free spin's icon. */
+/** The Wheel of Fortune with Permanent Death taped over, as the free spin's icon. */
 const paintFreeSpinIcon: IconPainter = (ctx, rect) => {
   const size = Math.min(rect.w, rect.h);
   const radius = size * HALF;
@@ -74,7 +74,7 @@ export function wheelFreeSpinRewardLine(): RewardItemLine {
     name: 'Free Spin',
     count: 1,
     renderIcon: paintFreeSpinIcon,
-    description: 'One spin on the house at the Wheel of Fortune, with the Nothing taped over.',
-    note: 'Take it from the game picker at the Desperado Club casino.',
+    description: 'One spin on the house at the Wheel of Fortune, with Permanent Death taped over.',
+    note: 'Take it from the game picker at the Cloak & Dagger casino.',
   };
 }

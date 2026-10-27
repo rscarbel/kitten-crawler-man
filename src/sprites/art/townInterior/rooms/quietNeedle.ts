@@ -4,7 +4,7 @@
  * over a low cabinet of portfolios — for the waiting room; the padded
  * reclining ink chair the whole alcove is arranged around, with its pigment
  * cabinet of individually painted ink pots, its needle trolley, its arm lamp
- * and the feather-tract charts a shop that takes skyfowl clients needs; a
+ * and the feather-tract charts a shop that takes Hawkfolk clients needs; a
  * grinding bench for the back room where the pigment is made; and a violet
  * settee, a low table with the flash binder open on it, a side table and a
  * coat stand for the people waiting their turn.
@@ -182,7 +182,7 @@ type FlashDesign =
   | 'skull'
   | 'ship'
   | 'sun'
-  | 'skyfowl'
+  | 'hawkfolk'
   | 'anchor'
   | 'eye'
   | 'moon'
@@ -191,8 +191,8 @@ type FlashDesign =
 
 /** Two sheets of eight, so the two runs of flash on the waiting-room wall never repeat a design. */
 const FLASH_SETS: readonly (readonly FlashDesign[])[] = [
-  ['skyfowl', 'rose', 'dagger_heart', 'ship', 'skull', 'snake', 'sun', 'anchor'],
-  ['panther', 'eye', 'swallow', 'rose', 'moon', 'dagger_heart', 'skyfowl', 'skull'],
+  ['hawkfolk', 'rose', 'dagger_heart', 'ship', 'skull', 'snake', 'sun', 'anchor'],
+  ['panther', 'eye', 'swallow', 'rose', 'moon', 'dagger_heart', 'hawkfolk', 'skull'],
 ];
 
 function strokeBold(ctx: Ctx, ts: number): void {
@@ -401,7 +401,7 @@ function paintFlashDesign(
       strokeBold(ctx, ts);
       break;
     }
-    case 'skyfowl': {
+    case 'hawkfolk': {
       for (const side of [-1, 1]) {
         ctx.beginPath();
         ctx.moveTo(cx, cy - s * 0.05);
@@ -1145,7 +1145,7 @@ function paintWingChart(ctx: Ctx, x: number, y: number, w: number, h: number, ts
   });
 }
 
-/** A skyfowl drawn front-on with its body's feather tracts shaded in, the lines a needle must follow. */
+/** A Hawkfolk drawn front-on with its body's feather tracts shaded in, the lines a needle must follow. */
 function paintBodyChart(ctx: Ctx, x: number, y: number, w: number, h: number, ts: number): void {
   const cx = x + w / 2;
   ctx.fillStyle = rgb([232, 226, 212]);
@@ -1189,7 +1189,7 @@ function paintBodyChart(ctx: Ctx, x: number, y: number, w: number, h: number, ts
 }
 
 /**
- * Two pinned charts on the alcove wall — a whole skyfowl front-on with its
+ * Two pinned charts on the alcove wall — a whole Hawkfolk front-on with its
  * body tracts ruled in, and a wing fanned open — over a narrow washstand
  * with a basin, a ewer and folded towels: the reference a groundfolk needle
  * guide has no equivalent of, beside the one place in the alcove to scrub up.

@@ -154,7 +154,7 @@ function makeHarness(progress = createDoomsdayProgress()): Harness {
   return { progress, system, ctx, toasts, pm };
 }
 
-const HIRE = getMercenaryTemplate('gluteus_maxx');
+const HIRE = getMercenaryTemplate('hammer_hands');
 /** Far past any hireling's health, so one hit is sure to put it down. */
 const LETHAL_DAMAGE = 100_000;
 
@@ -477,11 +477,25 @@ section('The stage and the time left survive a save and a reload');
       'a respawn from an older save does not wind back a countdown already running',
     );
   }
-  check(parsePersistedDoomsday(undefined) === undefined, 'an older save loads as no finale');
-  check(parsePersistedDoomsday({ stage: 'nonsense' }) === undefined, 'a damaged one too');
+  check(parsePersistedDoomsday(undefined) === undefined, 'a save without the finale is rejected');
   check(
-    parsePersistedDoomsday({ stage: 'escape' })?.remainingMs === DOOMSDAY_COUNTDOWN_MS,
-    'a live stage whose time was lost gets a full countdown, not none',
+    parsePersistedDoomsday({ stage: 'nonsense', remainingMs: null, crystalTile: null }) ===
+      undefined,
+    'an unknown stage is rejected',
+  );
+  check(
+    parsePersistedDoomsday({ stage: 'escape', crystalTile: null }) === undefined,
+    'a live stage whose time is missing is rejected, not given a fresh countdown',
+  );
+
+  const clockSteppedBack = createDoomsdayProgress();
+  clockSteppedBack.stage = 'escape';
+  clockSteppedBack.deadlineAt = now + DOOMSDAY_COUNTDOWN_MS;
+  const capturedAfterStep = capturePersistedDoomsday(clockSteppedBack, now - MS_PER_DAY);
+  const reloadedAfterStep = parsePersistedDoomsday(JSON.parse(JSON.stringify(capturedAfterStep)));
+  check(
+    reloadedAfterStep?.remainingMs === DOOMSDAY_COUNTDOWN_MS,
+    'a save made after the wall clock stepped backwards reads back with a full countdown',
   );
 }
 

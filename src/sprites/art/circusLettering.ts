@@ -1,5 +1,5 @@
 /**
- * Sign-painter's capitals for the circus: the marquee over the Big Top's door
+ * Sign-painter's capitals for the circus: the marquee over the Starlight Tent's door
  * and the side-show boards. Every glyph is a few brush strokes painted through
  * `paintBrushStroke`, so the lettering is world paint with a wet edge and dry
  * gaps rather than type.
@@ -46,6 +46,30 @@ const GLYPH_TABLE: Readonly<Record<string, Glyph>> = {
       [
         [0.24, 0.62],
         [0.76, 0.62],
+      ],
+    ],
+  },
+  B: {
+    widthFactor: 0.85,
+    strokes: [
+      [
+        [0.12, 0],
+        [0.12, 1],
+      ],
+      [
+        [0.12, 0.02],
+        [0.58, 0.03],
+        [0.84, 0.16],
+        [0.82, 0.38],
+        [0.56, 0.5],
+        [0.12, 0.5],
+      ],
+      [
+        [0.56, 0.5],
+        [0.88, 0.62],
+        [0.9, 0.84],
+        [0.6, 0.98],
+        [0.12, 0.98],
       ],
     ],
   },
@@ -189,6 +213,20 @@ const GLYPH_TABLE: Readonly<Record<string, Glyph>> = {
     ],
   },
   O: { widthFactor: 1, strokes: [oval()] },
+  P: {
+    widthFactor: 0.85,
+    strokes: [
+      [
+        [0.12, 1],
+        [0.12, 0.02],
+        [0.6, 0.03],
+        [0.88, 0.2],
+        [0.86, 0.4],
+        [0.6, 0.53],
+        [0.12, 0.53],
+      ],
+    ],
+  },
   R: {
     widthFactor: 0.9,
     strokes: [

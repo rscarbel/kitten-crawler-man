@@ -1,6 +1,6 @@
 /**
- * Drawing engine for Grimaldi's corrupted circus performers — the Fat Clown,
- * the Stilt Clown, Terror the Clown and the Evil Clown.
+ * Drawing engine for the corrupted circus performers — the Fat Clown,
+ * the Tall Clown, the Massive Clown and the Evil Clown.
  *
  * Three viewpoints share the one rig (see {@link ClownView}). The skeleton is
  * identical in all three — a head-on figure's "near" limb is simply its right
@@ -183,7 +183,7 @@ interface LimbPaint {
 /**
  * Draw a solved chain as one continuous outlined, tapered, shaded limb.
  *
- * `lowerPaint` repaints the segment past the joint, which is how a stilt clown
+ * `lowerPaint` repaints the segment past the joint, which is how a tall clown
  * gets suit-coloured thighs on bare wooden poles.
  */
 function drawLimb(
@@ -585,34 +585,43 @@ function drawShoeHeadOn(ctx: Ctx, ankle: Point, style: ClownStyle, view: ClownVi
 }
 
 /** Wooden stilt tip: a peg on a wedge foot, strapped to the shin. */
-const STILT_PEG_WIDTH = 0.055;
-const STILT_FOOT_WIDTH = 0.16;
+const WOODEN_PEG_WIDTH = 0.055;
+const WOODEN_FOOT_WIDTH = 0.16;
 /**
  * Height of the stilt's wedge, as a multiple of `shoeHeight`. Derived rather
  * than given its own number because `ankleTarget` lifts the ankle by exactly
  * `shoeHeight`: an independent constant here would let the peg drift off the
  * floor the moment either value was tuned.
  */
-const STILT_FOOT_HEIGHT_FRACTION = 1.2;
-const STILT_STRAP_HEIGHT_FRACTION = 2.2;
+const WOODEN_FOOT_HEIGHT_FRACTION = 1.2;
+const WOODEN_STRAP_HEIGHT_FRACTION = 2.2;
+/** How much of the wedge rises above the ankle, so the strap seats over the joint. */
+const WOODEN_FOOT_RISE_SHARE = 0.2;
+/** The lit upper share of the wedge, above its shaded sole. */
+const WOODEN_FOOT_LIT_SHARE = 0.4;
 
 function drawStiltFoot(ctx: Ctx, ankle: Point, angle: number, style: ClownStyle): void {
-  const footHeight = style.proportions.shoeHeight * STILT_FOOT_HEIGHT_FRACTION;
-  const footTop = -footHeight * 0.2;
+  const footHeight = style.proportions.shoeHeight * WOODEN_FOOT_HEIGHT_FRACTION;
+  const footTop = -footHeight * WOODEN_FOOT_RISE_SHARE;
 
   ctx.save();
   ctx.translate(ankle.x, ankle.y);
   ctx.rotate(angle);
 
   ctx.fillStyle = style.palette.shoeDark;
-  ctx.fillRect(-STILT_FOOT_WIDTH / 2, footTop, STILT_FOOT_WIDTH, footHeight);
+  ctx.fillRect(-WOODEN_FOOT_WIDTH / 2, footTop, WOODEN_FOOT_WIDTH, footHeight);
   ctx.fillStyle = style.palette.shoe;
-  ctx.fillRect(-STILT_FOOT_WIDTH / 2, footTop, STILT_FOOT_WIDTH, footHeight * 0.4);
+  ctx.fillRect(
+    -WOODEN_FOOT_WIDTH / 2,
+    footTop,
+    WOODEN_FOOT_WIDTH,
+    footHeight * WOODEN_FOOT_LIT_SHARE,
+  );
   ctx.fillStyle = style.palette.suitTrim;
   ctx.fillRect(
-    -STILT_PEG_WIDTH,
-    -footHeight * STILT_STRAP_HEIGHT_FRACTION,
-    STILT_PEG_WIDTH * 2,
+    -WOODEN_PEG_WIDTH,
+    -footHeight * WOODEN_STRAP_HEIGHT_FRACTION,
+    WOODEN_PEG_WIDTH * 2,
     footHeight,
   );
 

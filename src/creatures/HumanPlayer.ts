@@ -1,5 +1,6 @@
 import {
   Player,
+  type DamageOptions,
   type DamageSource,
   type FigureMouth,
   type StatName,
@@ -1220,8 +1221,8 @@ export class HumanPlayer extends Player {
     });
   }
 
-  override takeDamage(amount: number, source?: DamageSource): boolean {
-    const landed = super.takeDamage(amount, source);
+  override takeDamage(amount: number, source?: DamageSource, options?: DamageOptions): boolean {
+    const landed = super.takeDamage(amount, source, options);
     // Any wound puts the fidgets off; only a blow from something raises his guard.
     if (landed) this.animator.noteCombat(source?.kind === 'mob');
     // Only a blow flinches him: a burn or poison tick is a steady hurt, and a

@@ -1,5 +1,5 @@
 /**
- * The things you can pick up and read inside the Over City's buildings.
+ * The things you can pick up and read inside Taloncrest's buildings.
  *
  * A resident tells you what they are willing to say out loud. A ledger, a tally
  * board or a half-burnt letter tells you what nobody meant you to see — which is
@@ -36,10 +36,10 @@ export interface Readable {
 
 const BUILDING_READABLES: ReadonlyMap<string, ReadonlyArray<Readable>> = new Map([
   [
-    "Old Hilda's Cottage",
+    "Old Lori's Cottage",
     [
       {
-        id: 'hilda_herbal',
+        id: 'lori_herbal',
         title: 'A Herbal, Annotated',
         where: 'open on the shelf, spine cracked',
         anchor: 'shelf',
@@ -85,7 +85,7 @@ const BUILDING_READABLES: ReadonlyMap<string, ReadonlyArray<Readable>> = new Map
         body: [
           'A thin book, copied by hand, the ink faded to the colour of tea.',
           '"They came down before the walls and they did not help. Record this plainly. A doctrine that flatters is a doctrine that will get somebody killed."',
-          '"The skyfowl are not birds. They are watchers. A watcher observes; a watcher records; a watcher does not intervene, and is not sorry, and does not lie about it either — which is more than can be said for us."',
+          '"The Hawkfolk are not birds. They are watchers. A watcher observes; a watcher records; a watcher does not intervene, and is not sorry, and does not lie about it either — which is more than can be said for us."',
           '"Therefore: build the roof. Feed the hungry under it. Expect nothing from above and you will not be disappointed by it."',
           'A newer hand has written under the last line: "Featherfall read this aloud every seventh day for thirty years. Ask yourself who stopped him."',
         ],
@@ -97,15 +97,15 @@ const BUILDING_READABLES: ReadonlyMap<string, ReadonlyArray<Readable>> = new Map
     [
       {
         id: 'cartwright_playbill',
-        title: "Playbill — Grimaldi's Travelling Circus",
+        title: 'Playbill — The Travelling Circus',
         where: 'nailed above the bench, gone soft with damp',
         anchor: 'table',
         medium: 'sheet',
         body: [
-          "ONE NIGHT ONLY. GRIMALDI'S TRAVELLING CIRCUS. Eleven wagons, forty performers, and the finest tumbling family on any road.",
-          'FEATURING: the Stilt-Men. The Lemurs of the Southern Reach. Heather, the Dancing Bear (do not feed her). Terror the Clown, for the brave only.',
-          'AND: Tsarina Signet, princess of the high wire, in her first season before the crowd.',
-          'Someone has written across the bottom in carpenter\'s pencil: "Paid same day, every time. Asked after my knees. — B.C."',
+          'ONE NIGHT ONLY, UNDER THE STARLIGHT TENT. Eleven wagons, forty performers, and the finest tumbling family on any road.',
+          'TEST YOUR ARM at the High Striker: ring the bell and take home a prize. Clowns on the midway, fire and spotlights in the ring.',
+          'AND, for the first time before any crowd: THE HALL OF MIRRORS. Find the way through, if you can find yourself.',
+          'Someone has written across the bottom in carpenter\'s pencil: "Paid same day, every time. Asked after my knees. — S.C."',
         ],
       },
     ],
@@ -351,9 +351,9 @@ const BUILDING_READABLES: ReadonlyMap<string, ReadonlyArray<Readable>> = new Map
 ]);
 
 /**
- * Every building this registry names. Walked by the headless check for the same
- * reason `interiorServiceBuildings` is: a readable keyed to a misspelled
- * building never surfaces when the check asks each real building what it holds.
+ * Every building this registry names, for the headless check to hold against
+ * the town's real buildings: a readable keyed to a misspelled building never
+ * surfaces when the check asks each real building what it holds.
  */
 export function readableBuildings(): ReadonlyArray<string> {
   return [...BUILDING_READABLES.keys()];

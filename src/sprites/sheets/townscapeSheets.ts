@@ -5,7 +5,7 @@
  * The reusable half of the town's art: nothing here names a street or a shop, so
  * a second town or a later floor can hang the same lamps, signs and bunting. The
  * art that names *this* town — its fingerpost labels — is planned in
- * `overCitySheets.ts` instead, so this module never becomes the place every
+ * `taloncrestSheets.ts` instead, so this module never becomes the place every
  * town's one-off signage accumulates.
  *
  * **The art is not drawn here.** Every picture comes from the game's own
@@ -54,11 +54,11 @@ import {
   PASTURE_GATE_UP_TILES,
   PASTURE_GATE_WEST_TILES,
   PASTURE_GATE_WIDTH_TILES,
-  SKYFOWL_PERCH_UP_TILES,
+  HAWKFOLK_PERCH_UP_TILES,
   drawAwningPost,
   drawMilkingShed,
   drawPastureGate,
-  drawSkyfowlPerch,
+  drawHawkfolkPerch,
 } from '../townDressing';
 import { drawBunting, drawGateArch, type GateArchAxis } from '../townWayfinding';
 import {
@@ -520,21 +520,21 @@ function awningPostSheet(): PropSheetPlan {
   };
 }
 
-function skyfowlPerchSheet(): PropSheetPlan {
+function hawkfolkPerchSheet(): PropSheetPlan {
   return {
-    key: 'town_skyfowl_perch',
-    file: 'skyfowl_perch.png',
+    key: 'town_hawkfolk_perch',
+    file: 'hawkfolk_perch.png',
     tileScale: TOWNSCAPE_TILE_SCALE,
     tileX: px(FIXTURE_MARGIN_TILES),
-    tileY: px(SKYFOWL_PERCH_UP_TILES),
+    tileY: px(HAWKFOLK_PERCH_UP_TILES),
     frameWidth: px(FIXTURE_MARGIN_TILES * 2 + ANCHOR_TILE),
-    frameHeight: px(SKYFOWL_PERCH_UP_TILES + ANCHOR_TILE + FIXTURE_MARGIN_TILES),
+    frameHeight: px(HAWKFOLK_PERCH_UP_TILES + ANCHOR_TILE + FIXTURE_MARGIN_TILES),
     rows: [
       {
         state: 'idle',
         frames: [
           (ctx, ox, oy) => {
-            drawSkyfowlPerch(ctx, ox, oy, TOWNSCAPE_TILE_SCALE);
+            drawHawkfolkPerch(ctx, ox, oy, TOWNSCAPE_TILE_SCALE);
           },
         ],
       },
@@ -599,7 +599,7 @@ export function townscapeSheetPlans(): PropSheetPlan[] {
     noticeBoardSheet(),
     benchSheet(),
     awningPostSheet(),
-    skyfowlPerchSheet(),
+    hawkfolkPerchSheet(),
     milkingShedSheet(),
     pastureGateSheet(),
   ];

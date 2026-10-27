@@ -1,27 +1,18 @@
 /**
- * The words of every named Over City resident — the individuals layered on top of
+ * The words of every named Taloncrest resident — the individuals layered on top of
  * the role system in `townDialog.ts` rather than replacing it. Each entry's
  * `ambient` is everyday chatter in their own voice, `lore` is a multi-page life
  * story told one entry per talk, and `reactive` is a quest-gated pool shown as the
  * lead page when their corner of town has something timelier to say. The lore
- * covers Scolopendra's curse, the skyfowl and their watchers, Featherfall's
- * magistracy, Grimaldi's circus, and the Syndicate's cameras, and the `reactive`
+ * covers Scolopendra's curse, the Hawkfolk and their watchers, Featherfall's
+ * magistracy, the old circus, and the Syndicate's cameras, and the `reactive`
  * hooks read the game's own questlines through the same `TownDialogContext` the
  * street uses.
  */
 
 import type { TownDialogContext } from '../../systems/townDialog';
 import type { ResidentId } from '../../systems/townResidents';
-import { isCircusResolvedStage } from '../../core/quests/CircusQuestProgress';
 import type { ResidentLines } from '../roles';
-
-function circusResolved(ctx: TownDialogContext): boolean {
-  return isCircusResolvedStage(ctx.circus);
-}
-
-function circusUnderway(ctx: TownDialogContext): boolean {
-  return ctx.circus === 'heather_hunt' || ctx.circus === 'bigtop_ready';
-}
 
 function murderResolved(ctx: TownDialogContext): boolean {
   return ctx.murder === 'lich_slain' || ctx.murder === 'complete';
@@ -38,7 +29,7 @@ function murderOpen(ctx: TownDialogContext): boolean {
 }
 
 export const RESIDENT_LINES = {
-  old_hilda: {
+  old_lori: {
     ambient: [
       'Mind the jars by the door, dearie. Two of them are still alive.',
       'Sit if you like. The stool only bites people who lie to me.',
@@ -74,20 +65,6 @@ export const RESIDENT_LINES = {
           'You carried that thing out of the tower. I have no charm big enough to thank you with.',
         ];
       }
-      if (circusResolved(ctx)) {
-        return [
-          'The lights over the Big Top went out. That is the first quiet night the ruins have given us in years.',
-          'Grimaldi was a kind man before the vine had him. Whatever you did up there, you did it to a family, not a monster. Sit with that.',
-        ];
-      }
-      if (circusUnderway(ctx)) {
-        return [
-          'Do not look at the lights over the old circus. Looking is how it starts.',
-          ctx.heatherSlain
-            ? 'You put the bear down. She used to ride a bicycle for the children, you know. Small mercies are still mercies.'
-            : 'There is a bear out there that used to be somebody’s daughter. Be quick about it, for her sake.',
-        ];
-      }
       if (murderOpen(ctx)) {
         return [
           'Bodies by the well, and the guard calling it beasts. Beasts do not take only the head, dearie.',
@@ -100,7 +77,7 @@ export const RESIDENT_LINES = {
       return null;
     },
   },
-  brann_cartwright: {
+  steve_cartwright: {
     ambient: [
       'Wheel’s a circle. Anybody can draw one. Making it stay one — that is the trade.',
       'Mind the shavings. I sweep on feast days and it is not a feast day.',
@@ -111,14 +88,14 @@ export const RESIDENT_LINES = {
     lore: [
       [
         'See that long wagon-bed against the wall? Painted red under the dust.',
-        'I built eleven of those for Grimaldi, back when the circus still toured the villages instead of squatting in the ruins.',
+        'I built eleven of those for the circus, back when it still toured the villages instead of standing empty past the wall.',
         'He paid on the day, every time, and he asked after my knees. You do not forget the ones who ask after your knees.',
         'I have not been able to bring myself to burn it. Stupid, for a man who sells firewood.',
       ],
       [
         'I had an apprentice. Teodo. Good hands, no patience — the usual.',
         'He went out past the west gate on a dare. Boys do. Most of them come back with a story and a scraped elbow.',
-        'The guards found his belt. Just the belt, hung neat on a fencepost, which is the part that keeps me up. Worst molt-year I have had, and I have had a few.',
+        'The guards found his belt. Just the belt, hung neat on a fencepost, which is the part that keeps me up. Worst year I have had, and I have had a few.',
         'So when I tell you the ruins are not a place to prove anything — I am not being careful. I am being specific.',
       ],
       [
@@ -129,17 +106,6 @@ export const RESIDENT_LINES = {
       ],
     ],
     reactive: (ctx) => {
-      if (circusResolved(ctx)) {
-        return [
-          'They tell me the troupe walk free. Eleven wagons I built them, and not one to ride out on. I would build eleven more.',
-          'If any of them want a cart to leave in, my yard is open and the price is nothing.',
-        ];
-      }
-      if (circusUnderway(ctx)) {
-        return [
-          'You are going out to the circus. Take a lamp, take rope, and do not take the road I built — it goes where the wagons went.',
-        ];
-      }
       if (ctx.doomsday === 'complete') {
         return [
           'The whole street shook and the shelf held. That is the best review my joinery will ever get.',
@@ -184,12 +150,6 @@ export const RESIDENT_LINES = {
           "There has been enough disorder lately without people pretending it is ordinary. I have spent too many years repairing the consequences of other people's carelessness.",
           'A person leaves evidence, whether they intend to or not. Broken hinges, disturbed ground, a door opened the wrong way—everything leaves a mark.',
           'I should think the guards ought to pay rather more attention to such details. Then again, no one ever asks the carpenter until after the house has fallen down.',
-        ];
-      }
-      if (circusUnderway(ctx)) {
-        return [
-          'The circus has attracted rather more excitement than I care for. I have nothing against entertainment, provided it remains where one expects to find it.',
-          'My animals have been unsettled by all the noise. I am beginning to suspect they possess better judgment than some of our visitors.',
         ];
       }
       if (ctx.doomsday === 'complete') {
@@ -258,7 +218,7 @@ export const RESIDENT_LINES = {
     ],
     lore: [
       [
-        'I trained in the tower roosts. Under the skyfowl, not beside them — they are very clear on the distinction.',
+        'I trained in the tower roosts. Under the Hawkfolk, not beside them — they are very clear on the distinction.',
         'Nine years grinding for a healer who never once told me his name. Just "the work", and a claw pointing at the next thing.',
         'They mend better than we do. Faster, cleaner, and they will not say why.',
         'What I did learn, I learned by watching. That is most of medicine anyway.',
@@ -288,11 +248,6 @@ export const RESIDENT_LINES = {
           'Whoever was cutting has stopped. My hands stopped shaking about a day after. I notice these things professionally.',
         ];
       }
-      if (circusUnderway(ctx)) {
-        return [
-          'If you are going to the circus, take twice what you think. Nobody has ever come back saying they brought too many potions.',
-        ];
-      }
       return null;
     },
   },
@@ -313,12 +268,12 @@ export const RESIDENT_LINES = {
         'Thirty years under it now. One grows used to a ceiling, the way one grows used to anything that will not move.',
       ],
       [
-        'Thou wilt hear it said in the square: the skyfowl are not birds, they are watchers. I wish the phrase were only ornament, but it is doctrine, and doctrine has teeth.',
+        'Thou wilt hear it said in the square: the Hawkfolk are not birds, they are watchers. I wish the phrase were only ornament, but it is doctrine, and doctrine has teeth.',
         'A watcher does not guard. A watcher observes and sets it down, and does not step in, and does not apologise for the not stepping in.',
         'I built this dome for one regardless, the same as every deacon before me — a room for someone who will only ever take notes on it.',
       ],
       [
-        'Magistrate Featherfall has not come to the dome in six weeks. Thirty years he came every seventh day; it was habit, not devotion, and a skyfowl’s habits do not simply lapse.',
+        'Magistrate Featherfall has not come to the dome in six weeks. Thirty years he came every seventh day; it was habit, not devotion, and a Hawkfolk’s habits do not simply lapse.',
         'I sent word twice. What returned was courteous, and was not in his hand.',
         'I am a deacon. I am not at liberty to say what I make of that. Thou art not a deacon.',
       ],
@@ -386,17 +341,12 @@ export const RESIDENT_LINES = {
       ],
     ],
     reactive: (ctx) => {
-      if (circusUnderway(ctx)) {
-        return [
-          'Going to the circus, are you. Bring the blade by first — I would rather sharpen it than straighten it after.',
-        ];
-      }
       if (ctx.doomsday === 'complete') {
         return [
           'Forge went out when the tower shook. First time in nine years. Relighting it felt like a small argument won.',
         ];
       }
-      if (murderResolved(ctx) || circusResolved(ctx)) {
+      if (murderResolved(ctx)) {
         return [
           'Word gets to the forge eventually. Whatever you have been doing out there, the steel coming back is in better shape for it.',
         ];
@@ -451,11 +401,6 @@ export const RESIDENT_LINES = {
       if (murderResolved(ctx)) {
         return [
           'First full house in a month, and that is down to you. Sit. You will not see a bill in this place again.',
-        ];
-      }
-      if (circusResolved(ctx)) {
-        return [
-          'Two of the circus folk are upstairs. Slept round the clock and woke asking if the fighting was over. Told them near enough.',
         ];
       }
       return null;
@@ -518,11 +463,6 @@ export const RESIDENT_LINES = {
           'The good families have their people walking them home now. From the Flagon. Four streets.',
         ];
       }
-      if (circusResolved(ctx)) {
-        return [
-          'The wool families have decided they always admired the circus folk. Wonderful how that works.',
-        ];
-      }
       return null;
     },
   },
@@ -550,7 +490,7 @@ export const RESIDENT_LINES = {
       ],
       [
         'You want to know how the Low Quarter really works? Everything moves through the club.',
-        'The Desperado takes anybody with a pass and asks nothing, which makes it the safest room in the city and the worst one to be seen in.',
+        'The Cloak & Dagger lets anybody in and asks nothing, which makes it the safest room in the city and the worst one to be seen in.',
         'Deals get struck there and settled out here in the dark. That is the arrangement and it has held for years.',
         'It has stopped holding. Somebody has started settling things that were never struck.',
       ],
@@ -666,11 +606,6 @@ export const RESIDENT_LINES = {
       if (ctx.doomsday === 'complete') {
         return [
           'Every guard in this room was ready to die in it. You made that unnecessary and none of us know how to say thank you for that.',
-        ];
-      }
-      if (circusResolved(ctx) && murderResolved(ctx)) {
-        return [
-          'Two of the ugliest jobs on this floor, both closed, both you. The sergeants have started saying your name properly.',
         ];
       }
       if (murderOpen(ctx)) {
@@ -797,11 +732,6 @@ export const RESIDENT_LINES = {
           'People are buying locks and lamp oil like the wall itself is coming down. I am not complaining about the till, only the reason for it.',
         ];
       }
-      if (circusUnderway(ctx)) {
-        return [
-          'Half the town is stocking up before the circus like it is a siege. The other half is buying nothing and staying home. I stock for both.',
-        ];
-      }
       return null;
     },
   },
@@ -817,9 +747,9 @@ export const RESIDENT_LINES = {
     lore: [
       [
         'The board outside used to carry a name. It is a needle now. That was my doing and I will not be drawn on it.',
-        'Tsarina Signet wears her work. All of it, all at once, and it moves when she is thinking.',
+        'A dancer from the club wears my work. All of it, all at once, and it moves when she is thinking.',
         'She came through once, looked at my line, and corrected it with her thumbnail. Did not say a word.',
-        'The line has been better ever since. I am not sure it is still mine, and I am not sure I want her name over my door.',
+        'The line has been better ever since. I am not sure it is still mine, and I am not sure I want her hand over my door.',
       ],
       [
         'Living ink is not decoration. It is a small agreement with something that wants a place to sit.',
@@ -835,17 +765,6 @@ export const RESIDENT_LINES = {
       ],
     ],
     reactive: (ctx) => {
-      if (circusUnderway(ctx)) {
-        return [
-          'Signet is out at the circus and the ink in here has been restless for days. It knows where she is. I find that unpleasant.',
-        ];
-      }
-      if (circusResolved(ctx)) {
-        return [
-          'The ink settled the night the Big Top went quiet. Whatever happened out there, her work knows it ended.',
-          'She has not come back. I keep the chair clear anyway.',
-        ];
-      }
       if (ctx.doomsday === 'complete') {
         return [
           'Every mark in the shop turned to face the tower that night. Every one. I have not slept in the shop since.',
@@ -853,6 +772,68 @@ export const RESIDENT_LINES = {
       }
       return null;
     },
+  },
+  janitor_puddles: {
+    ambient: [
+      'Mind the wet patch. Mind the other wet patch. It is a pub, it is all wet patch.',
+      'Somebody always spills the first drink of the night. I have a bet with myself on who.',
+      'Marlow says the floor was blue once. I have been mopping eight years and I have never seen blue.',
+      'Stump floods when it rains. Stump floods when it does not rain. I have stopped asking.',
+      'Do not apologise for the mud, love. Just walk in a straight line so I know where it went.',
+    ],
+    lore: [
+      [
+        'People call me Puddles because of the job. My mam called me Puddles first, and that was not because of any job.',
+        'I took this mop off the last fellow when his knees went. Handle is older than the bar.',
+        'Wring it twice, mop with the grain, never mop toward the door. That is the whole trade and it took me two years.',
+      ],
+    ],
+    reactive: null,
+  },
+  janitor_grout: {
+    ambient: [
+      'Flagstones. Thirty-one rows. I know which ones rock.',
+      'Brend wants the guild corner done first, before the factors sit. Factors do not look at floors, but Brend does.',
+      'If you are going to bleed, bleed on the stone, not the rug. Stone forgives.',
+      'Good mop is like a good dog. Comes back wet and does not complain.',
+      'Quiet night is a dry floor. I have not had a quiet night in a while.',
+    ],
+    lore: [
+      [
+        'Grout is a nickname. Got it from the mason who laid this floor, because I kept asking him about the gaps.',
+        'He said the gaps are what hold the stones apart, so they never crack into each other. I liked that.',
+        'Thirty years later the stones are still in one piece and so is the mason. Neither of them needs me, but I scrub the gaps anyway.',
+      ],
+    ],
+    reactive: null,
+  },
+  sydney: {
+    ambient: [
+      'Contracts are on the board. Read the terms before you read the names.',
+      'Every hire signs out with an armband and signs back in without one. That is how I count them.',
+      'The garrison lets us the corner. We keep it tidy and we keep it quiet.',
+      'If you are browsing, browse. If you are buying, the desk is right here.',
+      'I have a form for that. I have a form for most things.',
+    ],
+    lore: [
+      [
+        "I ran a garrison's stores for eleven years. Boots, rations, blankets, bodies. Mostly bodies, by the end.",
+        'Now I sign the bodies out by the floor and sign back in whoever comes home. The paperwork is the same.',
+        'Fees up front, no refunds, one contract at a time. I did not write those rules to be unkind. I wrote them so they would hold.',
+      ],
+    ],
+    reactive: null,
+  },
+  brandon: {
+    ambient: [
+      'Evening. Good to see you again.',
+      'Enjoy yourselves.',
+      'Busy night. Busy is good.',
+      'Mind your purse near the wheel.',
+      'Stay as long as you like.',
+    ],
+    lore: [['Evening. Welcome to the Cloak & Dagger. Enjoy yourselves.']],
+    reactive: null,
   },
 } as const satisfies Record<ResidentId, ResidentLines>;
 

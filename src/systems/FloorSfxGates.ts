@@ -1,7 +1,7 @@
 /**
  * Decides which of floor 3's gated SFX groups stay decoded.
  *
- * The village's siege and the bounty and circus questlines carry tens of
+ * The village's siege, the bounty questline and the circus carry tens of
  * megabytes of decoded sound between them, and most of a session is spent
  * where none of it can play. Each gated group is held while something that
  * plays it is under way, or while the party is near the place it belongs to,
@@ -41,14 +41,12 @@ export interface OverworldActivity {
   readonly escortAmbushersStanding: boolean;
   /** A bounty has been taken and not yet collected. */
   readonly bountyOut: boolean;
-  /** The circus quest's waves or bear are out. */
-  readonly circusMobsOut: boolean;
 }
 
 /**
  * Which gated groups `activity` can play anywhere. A siege fields bounty bosses
- * as its marks and the circus's clowns, lemurs and llamas in its waves, so it
- * holds all three.
+ * as its marks, so it holds the bounty group as well as its own. The circus is
+ * only ever heard on its grounds and in its tent.
  */
 export function groupsActiveAnywhere(
   activity: OverworldActivity,
@@ -57,7 +55,7 @@ export function groupsActiveAnywhere(
   return {
     briarHollowSiege: siege || activity.escortUnderWay || activity.escortAmbushersStanding,
     bounty: activity.bountyOut || siege,
-    circusQuest: activity.circusMobsOut || siege,
+    starlightTent: false,
   };
 }
 

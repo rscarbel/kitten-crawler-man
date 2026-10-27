@@ -29,6 +29,7 @@ export const SCRIPTED_PROP_VISUAL_IDS = [
   'prop_black_powder_bomb',
   'prop_zippo',
   'prop_bottle',
+  'prop_longbow',
 ] as const;
 
 /** Looks a weapon item may name: each is held in a weapon grip archetype. */
@@ -50,6 +51,14 @@ export const WEAPON_HELD_VISUAL_IDS = [
 export const OFF_HAND_HELD_VISUAL_IDS = ['pot_lid_buckler'] as const;
 export type OffHandHeldVisualId = (typeof OFF_HAND_HELD_VISUAL_IDS)[number];
 
+/**
+ * A hireling's own weapon, carried by a figure built on the human rig in a
+ * weapon grip archetype and played on that grip's rows: never an item, so
+ * nothing a crawler can pick up names one.
+ */
+export const HIRELING_HELD_VISUAL_IDS = ['anselm_quarterstaff'] as const;
+export type HirelingHeldVisualId = (typeof HIRELING_HELD_VISUAL_IDS)[number];
+
 /** Small things the cat crawler carries across her jaws. */
 export const MOUTH_CARRY_VISUAL_IDS = [
   'carried_wrench',
@@ -67,6 +76,7 @@ export const FIXTURE_TOOL_VISUAL_IDS = ['striker_mallet'] as const;
 export const HELD_VISUAL_IDS = [
   ...WEAPON_HELD_VISUAL_IDS,
   ...OFF_HAND_HELD_VISUAL_IDS,
+  ...HIRELING_HELD_VISUAL_IDS,
   'quest_scythe',
   ...TOOL_HELD_VISUAL_IDS,
   ...SCRIPTED_PROP_VISUAL_IDS,

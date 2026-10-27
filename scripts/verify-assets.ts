@@ -11,7 +11,7 @@
  *    `extraSpawns`, `campSpawns`, `onMobKilledSpawns`, `bossRooms`).
  * 2. `SYSTEM_ASSET_REQUIREMENTS` (`src/core/spriteAssets/systemAssetRequirements.ts`) —
  *    creatures introduced by a bounty/quest/companion system that never
- *    touches the level def at all (`BountySystem`, `CircusQuestSystem`,
+ *    touches the level def at all (`BountySystem`, `StarlightTentMazeSystem`,
  *    `SpiderQuestSystem`, `MongoSystem`, ...).
  *
  * Every creature's sprite needs come from `MOB_SPRITE_KEYS` and
@@ -90,7 +90,7 @@ function keysForGroups(groups: Iterable<AssetGroup>): Set<string> {
 // names is invisible: the PNG ships, the service worker precaches it, the
 // browser decodes it on first draw, and it pops in mid-frame because no
 // `loadGroups` call ever asked for it. Three sheets shipped that way
-// (`terror_clown`, `golem_rock`, `golem_rock_burst`) before this check existed.
+// (`massive_clown`, `golem_rock`, `golem_rock_burst`) before this check existed.
 const keysInSomeGroup = new Set<string>(Object.values(ASSET_GROUPS).flat());
 for (const key of getManifestKeys()) {
   if (!keysInSomeGroup.has(key)) {

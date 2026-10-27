@@ -3,9 +3,8 @@ import { crawlerTurnsRangedBlow, inkSpoilsBlow } from '../gear/incomingBlows';
 import { Player, HP_BAR_HEIGHT, HP_BAR_Y_OFFSET } from '../Player';
 import type { MobKind } from '../levels/mobKinds';
 import type { EyePlacement } from '../sprites/eyePlacement';
-import type { DamageSource } from '../Player';
-import { FAIRY_AEGIS_STATUS, type StatusEffect } from '../core/combat/StatusEffect';
-import { AEGIS_DAMAGE_SCALE } from '../core/combat/statusTuning';
+import type { DamageOptions, DamageSource } from '../Player';
+import type { StatusEffect } from '../core/combat/StatusEffect';
 import { MOB_MAX_PATH_DISTANCE_TILES, type GameMap } from '../map/GameMap';
 import { verticalCollisionOffset } from '../map/collisionAnchors';
 import type { ItemId } from '../core/items/defs/ItemDefs';
@@ -709,9 +708,8 @@ export abstract class Mob extends Player {
    * Whether killing this counts toward the run's "bosses slain".
    *
    * Separate from {@link isBoss}, which commits a mob to a boss room's lock and
-   * clamp: the Lich, the spider-lab spider, the arena's Ball of Swine and the
-   * circus's Terror are bosses to the player without being room bosses, and
-   * setting the flag on them would drag them into machinery they have no room
+   * clamp: the Lich, the spider-lab spider and the arena's Ball of Swine are
+   * bosses to the player without being room bosses, and setting the flag on them would drag them into machinery they have no room
    * for. Each overrides this instead.
    */
   get countsAsBossKill(): boolean {
@@ -1012,7 +1010,7 @@ export abstract class Mob extends Player {
    * standoff), which a push would knock off the line its attack is timed on.
    * A boss is read off {@link blastDamageScale} as well as {@link isBoss},
    * because the bosses whose own systems leave `isBoss` false on purpose (the
-   * Ball of Swine, Terror the Clown) still resist blasts.
+   * Ball of Swine) still resist blasts.
    */
   get resistsBlastKnockback(): boolean {
     const isAnyBoss = this.isBoss || this.blastDamageScale < 1;
@@ -1785,6 +1783,7 @@ export abstract class Mob extends Player {
       case 'mob':
       case 'environmental':
       case 'doomsday':
+      case 'wheelPenalty':
         return false;
     }
   }
@@ -1809,8 +1808,8 @@ export abstract class Mob extends Player {
    * Defaults to {@link isHostile}: an enemy's spawn tile is where the encounter
    * began, so a death should rewind it there. Override to `true` for a
    * non-hostile mob that is still spawn-anchored rather than a temporary
-   * summon — e.g. Signet, whose spawn tile is the leash anchor she fights
-   * around, unlike Mongo or a hired mercenary, whose "spawn tile" is wherever
+   * summon — e.g. a Briar Hollow cow, whose spawn tile is its place in the
+   * pen, unlike Mongo or a hired mercenary, whose "spawn tile" is wherever
    * they happened to be summoned or hired.
    */
   get resetsFullyOnCheckpoint(): boolean {
@@ -1919,7 +1918,7 @@ export abstract class Mob extends Player {
    * max HP was levelled on.
    *
    * Kept because a good many creatures write those two fields again later in
-   * their lives — a grub that evolves, a boss that enrages, a sky fowl that
+   * their lives — a grub that evolves, a boss that enrages, a Hawkfolk that
    * breaks into a chase, anything reset by `resetToSpawn` — and every one of
    * those writes is a flat authored constant. A plain reassignment silently
    * throws the level away and leaves a boss with levelled HP moving at level-1
@@ -2486,9 +2485,8 @@ export abstract class Mob extends Player {
    * sight both, so a scripted encounter engages whether or not the target is seen.
    *
    * A defend target is refused outright, ahead of `accept` and of `forceAggro`.
-   * Quest-critical bystanders — the defend quest's NPC, Tsarina Signet at her
-   * own circus — must stay out of reach even if one is ever added to a target
-   * list; the single mob that *does* fight one goes through its own
+   * A quest-critical bystander such as the defend quest's NPC must stay out
+   * of reach even if one is ever added to a target list; the single mob that *does* fight one goes through its own
    * `defendTarget` field rather than through this scan.
    */
   protected acquireTarget(
@@ -2928,7 +2926,7 @@ export abstract class Mob extends Player {
    * Whether this mob currently refuses all damage.
    *
    * A scripted boss hiding behind something the party has to destroy first —
-   * Grimaldi's tendrils, Miss Quill's capacitor — is the only user. This is
+   * Miss Quill behind her capacitor — is the only user. This is
    * *the* switch: every route into this mob's health asks it, the swung one and
    * the damage-over-time one alike. A shield that guarded only the swing let one
    * gear poison proc dissolve the whole "kill the adds first" mechanic and be paid the
@@ -2989,12 +2987,12 @@ export abstract class Mob extends Player {
   }
 
   /**
-   * Damage reduction a status grants, kept apart from
-   * {@link incomingDamageScale} so a creature that overrides that for its own
-   * guard still takes the reduction on top of it.
+   * Taken as it comes: a mob's status scale is applied in
+   * {@link scaleIncomingDamage}, the door both {@link takeDamageFrom} and
+   * {@link takeDamage} share, where it is rounded and capped with the rest.
    */
-  get statusDamageScale(): number {
-    return this.hasStatus(FAIRY_AEGIS_STATUS) ? AEGIS_DAMAGE_SCALE : 1;
+  protected override statusScaledDamage(amount: number): number {
+    return amount;
   }
 
   /**
@@ -3438,14 +3436,14 @@ export abstract class Mob extends Player {
    * no ability, which is the deliberate price of not having to teach every
    * `killType` consumer a case for a kill nobody aimed.
    */
-  override takeDamage(amount: number, source?: DamageSource): boolean {
+  override takeDamage(amount: number, source?: DamageSource, options?: DamageOptions): boolean {
     if (this.refusesDamage) {
       this.onDamageBlocked();
       return false;
     }
     if (this.wardRefusesSource(source)) return false;
     const prev = this.hp;
-    const connected = super.takeDamage(this.scaleIncomingDamage(amount), source);
+    const connected = super.takeDamage(this.scaleIncomingDamage(amount), source, options);
     if (!connected) return false;
     const applier = source?.kind === 'status' ? source.applier : null;
     const dealt = prev - this.hp;
@@ -3817,8 +3815,7 @@ export abstract class Mob extends Player {
    * Status art, drawn by {@link Player.render} *after* the
    * silhouette composite rather than from `drawSelf` — see the note there. The
    * anchor is the mob's own tile, so a mob that draws its art offset from its
-   * tile (Signet stacks her overlay above hers) still gets its flames at its
-   * feet instead of over its head.
+   * tile still gets its flames at its feet instead of over its head.
    */
   protected override drawWorldFeedback(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
     if (!this.wearsStatusPaint) return;

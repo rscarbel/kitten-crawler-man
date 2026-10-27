@@ -625,37 +625,6 @@ export function paintGlow(
   ctx.restore();
 }
 
-/** A star badge: its centre, the reach of its points and of the notches between them. */
-export interface StarShape {
-  readonly cx: number;
-  readonly cy: number;
-  readonly outer: number;
-  readonly inner: number;
-  readonly points: number;
-}
-/** The glint sits up-left of centre by this fraction of the notch radius, where the light lands. */
-const STAR_GLINT_OFFSET = 0.6;
-/** A lit, outlined star with a glint, the "VIP" mark. */
-export function paintStar(
-  ctx: CanvasRenderingContext2D,
-  px: number,
-  star: StarShape,
-  color: string,
-): void {
-  const { cx, cy, outer, inner, points } = star;
-  const corners: IconPoint[] = [];
-  const vertexCount = points * 2;
-  const pointingUp = -Math.PI / 2;
-  for (let i = 0; i < vertexCount; i++) {
-    const angle = (i / vertexCount) * FULL_TURN + pointingUp;
-    const reach = i % 2 === 0 ? outer : inner;
-    corners.push([cx + Math.cos(angle) * reach, cy + Math.sin(angle) * reach]);
-  }
-  paintLitPoints(ctx, px, corners, color);
-  const glintShift = inner * STAR_GLINT_OFFSET;
-  glint(ctx, cx - glintShift, cy - glintShift, inner);
-}
-
 /** A straight run to a point, or a quadratic curve given as its control point then its end. */
 export type CurveSegment =
   | readonly [x: number, y: number]

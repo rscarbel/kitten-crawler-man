@@ -28,7 +28,7 @@ const WIPE_STATUS_COPY: Record<WipeStatus, string> = {
  * every save is already latched off, so play carried on under it would be play
  * that can never be kept.
  *
- * Reset Game mounts one with this copy. The Nothing can run the same hold with
+ * Reset Game mounts one with this copy. Permanent Death can run the same hold with
  * its own picture by reading {@link status} and {@link holding}.
  */
 export class WipeHold {

@@ -94,13 +94,13 @@ function stairwellFixture(name: string, prompt: DescentPrompt): DialogFixture {
 }
 
 const UNDER_LEVEL_DESCENT: DescentPrompt = {
-  nextFloorName: 'The Over City',
+  nextFloorName: 'Taloncrest',
   advice: { party: PARTY_LEVEL, recommended: RECOMMENDED_LEVEL, standing: 'below' },
   warning: `The foes below fight like a level-${RECOMMENDED_LEVEL} party. You are level ${PARTY_LEVEL} — this floor still has strength to give.`,
 };
 
 const COMFORTABLE_DESCENT: DescentPrompt = {
-  nextFloorName: 'The Over City',
+  nextFloorName: 'Taloncrest',
   advice: { party: PARTY_LEVEL, recommended: OVER_RECOMMENDED_LEVEL, standing: 'above' },
   warning: null,
 };

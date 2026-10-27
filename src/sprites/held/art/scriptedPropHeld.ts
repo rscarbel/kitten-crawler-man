@@ -1,6 +1,6 @@
 /**
  * The props scripted rows hold — hammer, board, crate, wrench, zippo,
- * bottle — the explosives the throwing hand of the dynamite rows is handed at
+ * bottle, longbow — the explosives the throwing hand of the dynamite rows is handed at
  * runtime (dynamite, a black powder bomb) and the sling's carried look,
  * as held visuals.
  *
@@ -13,6 +13,11 @@
  */
 
 import { burningDynamite, type DynamiteVariant } from '../../art/biped/props/dynamite';
+import {
+  LONGBOW_BRACE_HEIGHT,
+  LONGBOW_LIMB_LENGTH,
+  LONGBOW_RISER_HALF,
+} from '../../art/biped/props/longbow';
 import { type HeldProp, PROP_ART, type PropGrip } from '../../art/biped/props';
 import type { Pt } from '../../art/bipedArt';
 import { VIEWS, type ViewSpec } from '../../art/biped/rig';
@@ -39,6 +44,9 @@ const HANDLE_IN_HEAD: HeldHandlePainter = () => undefined;
  * from item-local +X.
  */
 const SLINGSHOT_TURN = Math.PI;
+
+/** A bow is gripped at the middle of its riser, so the arrow sits on the fist. */
+const LONGBOW_GRIP_AT_RISER_MIDDLE = 0.5;
 
 interface ScriptedPropOptions {
   readonly turn?: number;
@@ -231,6 +239,21 @@ export const SCRIPTED_PROP_HELD: Readonly<Record<ScriptedPropVisualId, HeldVisua
     headWidth: 0.104,
     radius: 'thick',
   }),
+  prop_longbow: scriptedProp(
+    'prop_longbow',
+    'Longbow',
+    'longbow',
+    'bow',
+    'light',
+    {
+      handleLength: LONGBOW_RISER_HALF * 2,
+      gripPoint: LONGBOW_GRIP_AT_RISER_MIDDLE,
+      headLength: LONGBOW_LIMB_LENGTH - LONGBOW_RISER_HALF,
+      headWidth: LONGBOW_BRACE_HEIGHT,
+      radius: 'standard',
+    },
+    { viewFor: flatOrProfile },
+  ),
 };
 
 /** A wrench carried across the cat crawler's jaws, held by the middle of its shank. */
@@ -275,6 +298,7 @@ const SCRIPTED_PROP_VISUALS: Readonly<Record<PropKind, ScriptedPropVisual>> = {
   blackPowderBomb: { def: SCRIPTED_PROP_HELD.prop_black_powder_bomb, painterTurn: 0 },
   zippo: { def: SCRIPTED_PROP_HELD.prop_zippo, painterTurn: 0 },
   bottle: { def: SCRIPTED_PROP_HELD.prop_bottle, painterTurn: 0 },
+  longbow: { def: SCRIPTED_PROP_HELD.prop_longbow, painterTurn: 0 },
   slingshot: { def: RATTLESTICK_SLING_HELD, painterTurn: SLINGSHOT_TURN },
 };
 

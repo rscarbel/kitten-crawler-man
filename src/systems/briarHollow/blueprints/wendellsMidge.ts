@@ -1,6 +1,6 @@
 /**
  * Midge at home: once she is delivered, she lives in Garrison Green, Wendell's
- * pasture in the Over City, for the rest of the run.
+ * pasture in Taloncrest, for the rest of the run.
  *
  * Garrison Green's props are dressed by `TownDecorSystem`, which holds only
  * pictures; Midge is a mob in the scene's roster, so she is raised here, by

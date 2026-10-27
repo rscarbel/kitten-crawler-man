@@ -343,17 +343,17 @@
         "patchTiles": 4,
         "label": "Interior pigment-stained boards (inking shop)"
       },
-      "bigtop_sawdust": {
+      "starlight_tent_sawdust": {
         "row": 8,
         "frameCount": 32,
         "patchTiles": 4,
-        "label": "Big Top raked sawdust"
+        "label": "Starlight Tent raked sawdust"
       },
-      "bigtop_backstage": {
+      "starlight_tent_backstage": {
         "row": 9,
         "frameCount": 32,
         "patchTiles": 4,
-        "label": "Big Top backstage canvas (wall mass)"
+        "label": "Starlight Tent backstage canvas (wall mass)"
       }
     }
   }

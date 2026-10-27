@@ -1,8 +1,7 @@
 /**
  * The circus grounds' ground decals: the chalk ring, sawdust trodden out of
  * the tent doors, wagon ruts, litter, a clown's oversized shoe prints walking
- * into the Big Top, a stain by the cage wagon, and the vine runners fanning
- * out from under the Big Top's skirt.
+ * into the Starlight Tent, and a stain by the cage wagon.
  *
  * Every decal is one shape in map-tile coordinates, compiled once per site.
  * A tile draws whichever shapes cross it, clipped to itself, so a shape that
@@ -11,15 +10,13 @@
  * next.
  *
  * Kept low in contrast and sparse on purpose: the lot is the backdrop the
- * fights are read against, and every decal lies under the mobs and the
- * telegraphs. Dirt here is a tonal shift, never speckle. The geometry is the
+ * bodies on it are read against. Dirt here is a tonal shift, never speckle. The geometry is the
  * layout's; the site's position only picks variants (which litter lies
- * where, how a vine wanders), never where anything is.
+ * where), never where anything is.
  */
 
 import {
   CIRCUS_DECALS,
-  CIRCUS_VINE_RUNNER_ANGLES_DEG,
   type CircusDecal,
   type GroundsPoint,
   type PlacedCircusStructure,
@@ -45,21 +42,13 @@ interface DecalShape {
   readonly minY: number;
   readonly maxX: number;
   readonly maxY: number;
-  /** Whether this shape is a vine runner, which bakes differently once the vine dies. */
-  readonly vine: boolean;
-  /**
-   * Draws the shape with map tile (0, 0)'s north-west corner at
-   * `(originX, originY)`. `withered` is the site's vine state, so one compiled
-   * shape serves both the living vine and the dead one.
-   */
-  draw(ctx: Ctx, originX: number, originY: number, ts: number, withered: boolean): void;
+  /** Draws the shape with map tile (0, 0)'s north-west corner at `(originX, originY)`. */
+  draw(ctx: Ctx, originX: number, originY: number, ts: number): void;
 }
 
 const BONE = getCircusRamp('circus_bone');
 const STRAW = getCircusRamp('circus_straw');
 const BLOOD = getCircusRamp('circus_blood');
-const VINE = getCircusRamp('circus_vine');
-const ROT_TIMBER = getCircusRamp('circus_rot_timber');
 const NAVY = getCircusRamp('circus_navy');
 const BRUISE = getCircusRamp('circus_bruise');
 const BRASS = getCircusRamp('circus_brass');
@@ -67,16 +56,8 @@ const BRASS = getCircusRamp('circus_brass');
 const MUD: RGB = [52, 42, 30];
 
 const FULL_TURN = Math.PI * 2;
-const DEGREES_PER_HALF_TURN = 180;
 
-function toRadians(degrees: number): number {
-  return (degrees * Math.PI) / DEGREES_PER_HALF_TURN;
-}
-
-function boundsOf(
-  points: ReadonlyArray<MapPoint>,
-  reach: number,
-): Omit<DecalShape, 'draw' | 'vine'> {
+function boundsOf(points: ReadonlyArray<MapPoint>, reach: number): Omit<DecalShape, 'draw'> {
   const xs = points.map((point) => point.x);
   const ys = points.map((point) => point.y);
   return {
@@ -115,7 +96,6 @@ function chalkRing(centre: MapPoint, radius: number, rng: Rng): DecalShape {
   };
   return {
     ...boundsOf([centre], radius + CHALK_WIDTH_TILES),
-    vine: false,
     draw(ctx, originX, originY, ts) {
       const cx = originX + centre.x * ts;
       const cy = originY + centre.y * ts;
@@ -157,7 +137,6 @@ function sawdustPath(from: MapPoint, to: MapPoint, width: number, rng: Rng): Dec
   });
   return {
     ...boundsOf([from, to], width),
-    vine: false,
     draw(ctx, originX, originY, ts) {
       const ax = originX + from.x * ts;
       const ay = originY + from.y * ts;
@@ -226,7 +205,6 @@ function litter(centre: MapPoint, radius: number, rng: Rng): DecalShape {
   });
   return {
     ...boundsOf([centre], radius + TICKET_LENGTH_TILES),
-    vine: false,
     draw(ctx, originX, originY, ts) {
       for (const item of items) {
         const x = originX + item.x * ts;
@@ -299,7 +277,6 @@ function shoePrints(from: MapPoint, to: MapPoint): DecalShape {
       [from, to],
       SHOE_SOLE_LENGTH_TILES + SHOE_TOE_FORWARD_TILES + SHOE_TOE_RADIUS_TILES,
     ),
-    vine: false,
     draw(ctx, originX, originY, ts) {
       ctx.fillStyle = rgba(MUD, SHOE_ALPHA);
       for (const print of prints) {
@@ -320,151 +297,6 @@ function shoePrints(from: MapPoint, to: MapPoint): DecalShape {
         );
         ctx.fill();
         ctx.restore();
-      }
-    },
-  };
-}
-
-// ── Vine runners ──────────────────────────────────────────────────────────────
-
-/**
- * The Big Top's skirt, as a plan ellipse on the ground, from the grounds'
- * centre tile's north-west corner. The runners start a little inside it, under
- * the canvas, so each is seen coming out from beneath the skirt.
- */
-const BIG_TOP_SKIRT = { x: 0, y: -1.5, radiusX: 5.9, radiusY: 2.5 } as const;
-const VINE_START_INSET = 0.88;
-const VINE_SEGMENTS = 11;
-const VINE_MIN_LENGTH_TILES = 2.4;
-const VINE_MAX_LENGTH_TILES = 4.6;
-const VINE_WANDER_RADIANS = 0.38;
-/** Each step turns this share of the way back to the runner's heading, so it meanders rather than curls up. */
-const VINE_HEADING_PULL = 0.3;
-/** Branches leave from the middle of the stem, never at its root or its tip. */
-const VINE_BRANCH_FROM_SHARE = 0.3;
-const VINE_BRANCH_TO_SHARE = 0.7;
-const VINE_LEAF_ASPECT = 0.5;
-const VINE_ROOT_WIDTH_TILES = 0.15;
-const VINE_TIP_WIDTH_TILES = 0.03;
-const VINE_ROOT_ALPHA = 0.5;
-const VINE_TIP_ALPHA = 0.12;
-const VINE_BRANCHES_MAX = 2;
-const VINE_BRANCH_LENGTH_SHARE = 0.35;
-const VINE_BRANCH_TURN_RADIANS = 0.7;
-const VINE_LEAVES = 9;
-const VINE_LEAF_LENGTH_TILES = 0.14;
-const VINE_LEAF_ALPHA = 0.36;
-const VINE_LEAF_FAINTEST = 0.5;
-/** Dead vine: dried to the brown of old rope, and drier still at the leaves. */
-const WITHERED_STEM: RGB = mix(ROT_TIMBER.shadow, MUD, 0.4);
-const WITHERED_LEAF: RGB = mix(ROT_TIMBER.mid, STRAW.shadow, 0.5);
-const WITHERED_LEAF_SHARE = 0.6;
-/** Green enough to read as a plant on the lot rather than a crack in it. */
-const LIVING_STEM: RGB = mix(VINE.shadow, VINE.mid, 0.55);
-
-interface VinePath {
-  readonly points: ReadonlyArray<MapPoint>;
-  /** The width share at the path's root, so a branch starts as thin as the stem it leaves. */
-  readonly rootShare: number;
-}
-
-function wander(start: MapPoint, heading: number, length: number, rng: Rng): MapPoint[] {
-  const points: MapPoint[] = [start];
-  let angle = heading;
-  let here = start;
-  const step = length / VINE_SEGMENTS;
-  for (let index = 0; index < VINE_SEGMENTS; index++) {
-    angle += range(rng, -VINE_WANDER_RADIANS, VINE_WANDER_RADIANS);
-    angle += (heading - angle) * VINE_HEADING_PULL;
-    here = { x: here.x + Math.cos(angle) * step, y: here.y + Math.sin(angle) * step };
-    points.push(here);
-  }
-  return points;
-}
-
-function vineRunner(skirtCentre: MapPoint, angleDeg: number, rng: Rng): DecalShape {
-  const angle = toRadians(angleDeg);
-  const start = {
-    x: skirtCentre.x + Math.cos(angle) * BIG_TOP_SKIRT.radiusX * VINE_START_INSET,
-    y: skirtCentre.y + Math.sin(angle) * BIG_TOP_SKIRT.radiusY * VINE_START_INSET,
-  };
-  // Out along the ellipse's normal, the way a runner leaves a rim.
-  const heading = Math.atan2(
-    Math.sin(angle) / BIG_TOP_SKIRT.radiusY,
-    Math.cos(angle) / BIG_TOP_SKIRT.radiusX,
-  );
-  const length = range(rng, VINE_MIN_LENGTH_TILES, VINE_MAX_LENGTH_TILES);
-  const stem = wander(start, heading, length, rng);
-  const paths: VinePath[] = [{ points: stem, rootShare: 1 }];
-  const branches = rangeInt(rng, 1, VINE_BRANCHES_MAX);
-  for (let branch = 0; branch < branches; branch++) {
-    const at = rangeInt(
-      rng,
-      Math.floor(VINE_SEGMENTS * VINE_BRANCH_FROM_SHARE),
-      Math.floor(VINE_SEGMENTS * VINE_BRANCH_TO_SHARE),
-    );
-    const side = rng() < 0.5 ? -1 : 1;
-    paths.push({
-      points: wander(
-        stem[at],
-        heading + side * VINE_BRANCH_TURN_RADIANS,
-        length * VINE_BRANCH_LENGTH_SHARE,
-        rng,
-      ),
-      rootShare: 1 - at / VINE_SEGMENTS,
-    });
-  }
-  const leaves = Array.from({ length: VINE_LEAVES }, () => {
-    const path = paths[rangeInt(rng, 0, paths.length - 1)];
-    const index = rangeInt(rng, 1, path.points.length - 1);
-    return {
-      at: path.points[index],
-      turn: rng() * Math.PI,
-      share: path.rootShare * (1 - index / VINE_SEGMENTS),
-    };
-  });
-  const allPoints = paths.flatMap((path) => path.points);
-  return {
-    ...boundsOf(allPoints, VINE_ROOT_WIDTH_TILES + VINE_LEAF_LENGTH_TILES),
-    vine: true,
-    draw(ctx, originX, originY, ts, withered) {
-      const stemColour = withered ? WITHERED_STEM : LIVING_STEM;
-      ctx.lineCap = 'round';
-      for (const path of paths) {
-        // Segment by segment, each thinner and fainter than the last: the
-        // runner thins with distance from the tent until it gives out.
-        for (let index = 1; index < path.points.length; index++) {
-          const share = path.rootShare * (1 - index / path.points.length);
-          const a = path.points[index - 1];
-          const b = path.points[index];
-          ctx.strokeStyle = rgba(
-            stemColour,
-            VINE_TIP_ALPHA + (VINE_ROOT_ALPHA - VINE_TIP_ALPHA) * share,
-          );
-          ctx.lineWidth =
-            (VINE_TIP_WIDTH_TILES + (VINE_ROOT_WIDTH_TILES - VINE_TIP_WIDTH_TILES) * share) * ts;
-          ctx.beginPath();
-          ctx.moveTo(originX + a.x * ts, originY + a.y * ts);
-          ctx.lineTo(originX + b.x * ts, originY + b.y * ts);
-          ctx.stroke();
-        }
-      }
-      const leafColour = withered ? WITHERED_LEAF : VINE.mid;
-      const leafScale = withered ? WITHERED_LEAF_SHARE : 1;
-      for (const leaf of leaves) {
-        // Leaves near the root read stronger, fading out along the runner.
-        ctx.fillStyle = rgba(leafColour, VINE_LEAF_ALPHA * (VINE_LEAF_FAINTEST + leaf.share));
-        ctx.beginPath();
-        ctx.ellipse(
-          originX + leaf.at.x * ts,
-          originY + leaf.at.y * ts,
-          VINE_LEAF_LENGTH_TILES * ts * leafScale,
-          VINE_LEAF_LENGTH_TILES * ts * VINE_LEAF_ASPECT * leafScale,
-          leaf.turn,
-          0,
-          FULL_TURN,
-        );
-        ctx.fill();
       }
     },
   };
@@ -515,7 +347,6 @@ function wagonRuts(wagon: PlacedCircusStructure, centre: MapPoint): DecalShape {
   const allPoints = tracks.flatMap((track) => [track.start, track.control, track.end]);
   return {
     ...boundsOf(allPoints, RUT_WIDTH_TILES + RUT_LIP_OFFSET_TILES),
-    vine: false,
     draw(ctx, originX, originY, ts) {
       const px = (point: MapPoint): MapPoint => ({
         x: originX + point.x * ts,
@@ -582,7 +413,6 @@ function stainBy(wagon: PlacedCircusStructure, centre: MapPoint, rng: Rng): Deca
   const stain = mix(BLOOD.shadow, MUD, STAIN_MUD_SHARE);
   return {
     ...boundsOf([at], STAIN_RADIUS_TILES + STAIN_SPATTER_REACH.max),
-    vine: false,
     draw(ctx, originX, originY, ts) {
       ctx.fillStyle = rgba(stain, STAIN_ALPHA);
       for (const blot of blots) {
@@ -655,12 +485,9 @@ function shapesFor(record: CircusGroundsRecord): ReadonlyArray<DecalShape> {
   const { site } = record;
   const centre = { x: site.centre.x, y: site.centre.y };
   // Varies with where the grounds stand, and so with the world: which litter
-  // lies where and how each runner wanders, never where a decal is.
+  // lies where, never where a decal is.
   const rng = mulberry32(tileHash(site.centre.x, site.centre.y, VARIANT_SALT));
   const shapes: DecalShape[] = CIRCUS_DECALS.map((decal) => layoutDecal(decal, centre, rng));
-  const skirtCentre = { x: centre.x + BIG_TOP_SKIRT.x, y: centre.y + BIG_TOP_SKIRT.y };
-  for (const angle of CIRCUS_VINE_RUNNER_ANGLES_DEG)
-    shapes.push(vineRunner(skirtCentre, angle, rng));
   for (const placed of site.structures) {
     if (WAGONS_WITH_WHEELS.has(placed.structure)) shapes.push(wagonRuts(placed, centre));
     if (placed.structure === 'cage_wagon') shapes.push(stainBy(placed, centre, rng));
@@ -696,30 +523,7 @@ export function drawCircusDecals(
       ctx.clip();
       clipped = true;
     }
-    shape.draw(ctx, originX, originY, ts, record.vinesWithered);
+    shape.draw(ctx, originX, originY, ts);
   }
   if (clipped) ctx.restore();
-}
-
-/**
- * Every map tile a vine runner can ink: the tiles to re-bake when the vine
- * dies back.
- */
-export function circusVineTiles(structure: TileContent[][]): MapPoint[] {
-  const record = circusGroundsFor(structure);
-  if (record === undefined) return [];
-  const tiles: MapPoint[] = [];
-  const seen = new Set<string>();
-  for (const shape of shapesFor(record)) {
-    if (!shape.vine) continue;
-    for (let y = Math.floor(shape.minY); y <= Math.floor(shape.maxY); y++) {
-      for (let x = Math.floor(shape.minX); x <= Math.floor(shape.maxX); x++) {
-        const key = `${x},${y}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        tiles.push({ x, y });
-      }
-    }
-  }
-  return tiles;
 }

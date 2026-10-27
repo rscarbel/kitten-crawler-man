@@ -34,6 +34,7 @@ import {
   type RGB,
 } from '../../town/townPalette';
 import { paintPlankBoard } from '../../town/townMaterials';
+import type { PropFlameSite } from '../propFlames';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -432,6 +433,27 @@ function paintCoalLumps(
 
 // ── The forge ───────────────────────────────────────────────────────────────
 
+/** The hearth top's front edge and back edge, in tiles above the forge's foot. */
+const FORGE_HEARTH_FRONT_RISE = 0.62;
+const FORGE_HEARTH_BACK_RISE = 1.42;
+/** The firepot sits west of centre, clear of the bar pushed in from the east. */
+const FORGE_FIREPOT_WEST_SHIFT = 0.15;
+/** How far the firepot's centre sits nearer the front than the hearth top's middle. */
+const FORGE_FIREPOT_DROP = 0.04;
+/** The middle of the forge's three-tile footprint. */
+const FORGE_CENTRE_TILES = 1.5;
+const FORGE_FLAME_SIZE = 1.2;
+
+/** The licks of flame rising off the heart of the coal bed. */
+export const FORGE_FLAMES: ReadonlyArray<PropFlameSite> = [
+  {
+    x: FORGE_CENTRE_TILES - FORGE_FIREPOT_WEST_SHIFT,
+    rise: (FORGE_HEARTH_FRONT_RISE + FORGE_HEARTH_BACK_RISE) / 2 - FORGE_FIREPOT_DROP,
+    size: FORGE_FLAME_SIZE,
+    style: 'forge',
+  },
+];
+
 /**
  * A smith's forge as she actually works at it: a waist-high brick hearth
  * with the fire open on top — a bed of coals white at the tuyère, a bar
@@ -446,8 +468,8 @@ export function paintForge(ctx: Ctx, frame: TownPropFrame, _variant: number, rng
     const ts = frame.tileScale;
     bandShadow(ctx, box, ts, 0.45);
 
-    const hearthFrontTop = box.bottom - ts * 0.62;
-    const hearthBackY = box.bottom - ts * 1.42;
+    const hearthFrontTop = box.bottom - ts * FORGE_HEARTH_FRONT_RISE;
+    const hearthBackY = box.bottom - ts * FORGE_HEARTH_BACK_RISE;
     const inset = ts * 0.06;
     const left = box.left + inset;
     const right = box.right - inset;
@@ -531,9 +553,10 @@ export function paintForge(ctx: Ctx, frame: TownPropFrame, _variant: number, rng
     );
     glow(ctx, box.centreX, firebackTop, ts * 0.8, HEAT_ORANGE, 0.5);
 
-    // The firepot: coals heaped in a shallow bowl, white-hot at the heart.
-    const potCx = box.centreX - ts * 0.15;
-    const potCy = (hearthFrontTop + hearthBackY) / 2 + ts * 0.04;
+    // The firepot: coals heaped in a shallow bowl, white-hot at the heart. The
+    // licks of flame off it are live.
+    const potCx = box.centreX - ts * FORGE_FIREPOT_WEST_SHIFT;
+    const potCy = (hearthFrontTop + hearthBackY) / 2 + ts * FORGE_FIREPOT_DROP;
     const potRx = ts * 0.95;
     const potRy = ts * 0.3;
     ctx.fillStyle = rgb(SOOT);
@@ -567,18 +590,6 @@ export function paintForge(ctx: Ctx, frame: TownPropFrame, _variant: number, rng
       }
     }
     glow(ctx, potCx, potCy - ts * 0.05, ts * 0.9, HEAT_YELLOW, 0.45);
-    // Flame licks rising off the heart of the fire.
-    for (let i = 0; i < 4; i++) {
-      const fx = potCx + (i - 1.5) * ts * 0.18 + jitter(coalRng, ts * 0.04);
-      const fh = ts * (0.22 + coalRng() * 0.16);
-      ctx.fillStyle = rgba(i % 2 === 0 ? HEAT_ORANGE : HEAT_YELLOW, 0.85);
-      ctx.beginPath();
-      ctx.moveTo(fx - ts * 0.06, potCy);
-      ctx.quadraticCurveTo(fx - ts * 0.04, potCy - fh * 0.6, fx + ts * 0.02, potCy - fh);
-      ctx.quadraticCurveTo(fx + ts * 0.06, potCy - fh * 0.5, fx + ts * 0.06, potCy);
-      ctx.closePath();
-      ctx.fill();
-    }
 
     // A bar in the fire, its tip at white heat, tongs still clamped on it.
     const barStart = { x: right - ts * 0.18, y: hearthFrontTop - ts * 0.12 };
@@ -1846,7 +1857,7 @@ export function paintSmithCounter(ctx: Ctx, frame: TownPropFrame, _variant: numb
 
 /**
  * A rack of finished blades on the wall: two swords hilt up, a bearded
- * axe, a boar spear, and the talon-grip handles skyfowl customers order —
+ * axe, a boar spear, and the talon-grip handles Hawkfolk customers order —
  * hung across a dark oak board with a pegged shelf of daggers under it.
  * Variant 1 trades a sword for a second axe and a hand scythe.
  */
@@ -1915,7 +1926,7 @@ export function paintBladeRack(ctx: Ctx, frame: TownPropFrame, variant: number, 
           ts * 0.6,
         );
       } else {
-        // A talon-grip handle: a curved grip shaped for a skyfowl's foot, on a short blade.
+        // A talon-grip handle: a curved grip shaped for a hawkfolk's foot, on a short blade.
         ctx.strokeStyle = rgba(TOWN_INK, 0.85);
         ctx.lineWidth = ts * 0.08;
         ctx.lineCap = 'round';

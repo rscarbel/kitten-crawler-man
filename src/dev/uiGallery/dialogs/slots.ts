@@ -1,5 +1,5 @@
 /**
- * Fixtures for the Desperado Club's slot machine: at rest, mid-spin, a reel
+ * Fixtures for the Cloak & Dagger's slot machine: at rest, mid-spin, a reel
  * slowing in anticipation, a line win, the BIG, MEGA and EPIC banners, the
  * free-spin feature, the jackpot, a purse too light to spin and the paytable. Each is a real
  * `ClubSlotsSystem` staged on a fake clock, mounted through its own surfaces,

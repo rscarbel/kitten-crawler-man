@@ -15,7 +15,8 @@ export const randomIntFrom = (random: () => number, min: number, max: number): n
 export const randomInt = (min: number, max: number) => randomIntFrom(worldRandom, min, max);
 
 /** Pick a uniformly random element from a non-empty array. */
-export const randomFromArray = <T>(arr: T[]): T => arr[Math.floor(worldRandom() * arr.length)];
+export const randomFromArray = <T>(arr: readonly T[]): T =>
+  arr[Math.floor(worldRandom() * arr.length)];
 
 const GOLDEN_RATIO_RADICAND = 5;
 const GOLDEN_RATIO_CONJUGATE = (Math.sqrt(GOLDEN_RATIO_RADICAND) - 1) / 2;

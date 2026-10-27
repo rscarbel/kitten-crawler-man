@@ -78,6 +78,9 @@ import {
   HUMAN_NIMBLE_BANGLE,
 } from './human/trinketRings';
 import { TOWNSFOLK_SHOES, TOWNSFOLK_TROUSERS } from './human/townsfolkLegwear';
+import { IVY_BOOTS, IVY_BRACER, IVY_TROUSERS } from './human/ivyAshgroveClothes';
+import { MONK_HABIT, MONK_SANDALS } from './human/monkHabit';
+import { HIRELING_ARMBAND } from './human/hirelingArmband';
 
 const CAT_BASE_GARMENTS: Readonly<Record<CatBaseGarmentId, BaseGarmentDef<'cat'>>> = {
   cat_coat: CAT_COAT,
@@ -151,6 +154,12 @@ const HUMAN_WORN_GARMENTS: Readonly<Record<HumanWornGarmentId, WornGarmentDef<'h
   human_hourglass_ring: HUMAN_HOURGLASS_RING,
   townsfolk_trousers: TOWNSFOLK_TROUSERS,
   townsfolk_shoes: TOWNSFOLK_SHOES,
+  monk_habit: MONK_HABIT,
+  monk_sandals: MONK_SANDALS,
+  hireling_armband: HIRELING_ARMBAND,
+  ivy_trousers: IVY_TROUSERS,
+  ivy_boots: IVY_BOOTS,
+  ivy_bracer: IVY_BRACER,
 };
 
 const WORN_GARMENTS: {

@@ -20,7 +20,7 @@ export const PAYING_SYMBOLS = [
 
 export type PayingSymbol = (typeof PAYING_SYMBOLS)[number];
 
-/** The gold Desperado sheriff star: stands in for every symbol but the scatter. */
+/** The gold dagger seal: stands in for every symbol but the scatter. */
 export const WILD = 'wild';
 /** The glowing loot box: pays anywhere on the glass, not along a line. */
 export const SCATTER = 'scatter';

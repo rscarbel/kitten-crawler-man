@@ -4,9 +4,8 @@
  * cannot wound a friend, and explosives are the single exception.
  *
  * The reported bug was the cat killing her own pet raptor with a magic missile
- * she never aimed at him — and, separately, a quest-critical ally dissolving
- * under a poison proc nobody could see land. Neither produces an error; both
- * produce a corpse the player did not ask for. So every check below is written
+ * she never aimed at him. That produces no error, only a corpse the player
+ * did not ask for. So every check below is written
  * as a pair: the ally is refused, and a hostile in the same position is *not*,
  * so a guard that has quietly become "nothing takes damage" fails here.
  *
@@ -22,15 +21,10 @@ import { GameMap } from '../src/map/GameMap';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import type { Mob, PlayerDamageType } from '../src/creatures/Mob';
-import type { Player } from '../src/Player';
 import { Mongo } from '../src/creatures/Mongo';
-import { Signet } from '../src/creatures/Signet';
-import { MoldLion } from '../src/creatures/MoldLion';
-import { HeatherTheBear } from '../src/creatures/HeatherTheBear';
-import { SKYFOWL_TOUGH_FAMILY, SkyFowl } from '../src/creatures/SkyFowl';
+import { HAWKFOLK_TOUGH_FAMILY, Hawkfolk } from '../src/creatures/Hawkfolk';
 import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
 import type { StandaloneMobKind } from '../src/levels/mobKinds';
-import { makePoison } from '../src/core/combat/StatusEffect';
 import { SpatialGrid } from '../src/core/world/SpatialGrid';
 import { AbilityManager } from '../src/core/skills/AbilityManager';
 import { MAGIC_MISSILE_DEF } from '../src/abilities/magicMissile';
@@ -52,9 +46,6 @@ import {
   goblinBlastDamage,
 } from '../src/systems/goblinBombConstants';
 
-/** A credited damage-over-time that outlasts every watch here: poison held on far past its usual run. */
-const LASTING_POISON_TICKS = 999999;
-
 const MAP_SIZE = 60;
 /**
  * Every map here is built at the game's own tile size. A `GameMap` left on its
@@ -73,12 +64,6 @@ const PET_STARTING_HP = 200;
 /** Ability level at which the missile starts steering itself mid-flight. */
 const HOMING_LEVEL = 15;
 
-/**
- * A poison tick lands once every couple of seconds, so this is several minutes
- * of a debuff that would finish any ordinary mob many times over.
- */
-const STATUS_TICK_FRAMES = 60 * 60 * 5;
-
 /** Every weapon a crawler swings, plus the DoT tick that owns no weapon at all. */
 const AIMED_DAMAGE_TYPES: readonly (PlayerDamageType | null)[] = [
   'melee',
@@ -87,12 +72,6 @@ const AIMED_DAMAGE_TYPES: readonly (PlayerDamageType | null)[] = [
   'smush',
   null,
 ];
-
-/** Where the circus attackers stand, in tiles east of the map's start tile. */
-const CIRCUS_ATTACKER_OFFSET_TILES = 4;
-/** Signet stands between the attacker and the crawler, and nearer to it. */
-const SIGNET_BESIDE_ATTACKER_TILES = 1;
-const CRAWLER_BEHIND_ATTACKER_TILES = 3;
 
 /** Tiles ahead of the cat the homing bait is placed, well inside the 12-tile seek radius. */
 const BAIT_AHEAD_TILES = 6;
@@ -114,7 +93,7 @@ const THROWER_OFFSET_TILES = 6;
 /** A dodge roll no dodge chance reaches, so a crawler's hit cannot be rolled away. */
 const ROLL_THAT_NEVER_DODGES = 1 - Number.EPSILON;
 /** Any hireling serves for the party-side victim. */
-const BLAST_HIRELING = 'sledge' as const satisfies MercenaryTemplateId;
+const BLAST_HIRELING = 'crush' as const satisfies MercenaryTemplateId;
 /** Far more frames than a grub's two evolutions can take. */
 const GRUB_EVOLUTION_FRAME_LIMIT = 60 * 60 * 5;
 
@@ -144,16 +123,10 @@ function makePet(owner: CatPlayer): Mongo {
   return mongo;
 }
 
-function makeSignet(): Signet {
-  const signet = new Signet(start.x, start.y, TILE_SIZE, () => {});
-  signet.setMap(map);
-  return signet;
-}
-
-function makeFowl(): SkyFowl {
-  const fowl = new SkyFowl(start.x, start.y, TILE_SIZE, SKYFOWL_TOUGH_FAMILY.canonical);
-  fowl.setMap(map);
-  return fowl;
+function makeHawkfolk(): Hawkfolk {
+  const hawkfolk = new Hawkfolk(start.x, start.y, TILE_SIZE, HAWKFOLK_TOUGH_FAMILY.canonical);
+  hawkfolk.setMap(map);
+  return hawkfolk;
 }
 
 /** Health lost to one blow of `damageType` dealt by `attacker`. */
@@ -172,12 +145,10 @@ console.log('The rule, stated on the mob itself');
   const { cat } = makeCrawlers();
   const goblin = makeGoblin();
   const pet = makePet(cat);
-  const signet = makeSignet();
 
   for (const type of AIMED_DAMAGE_TYPES) {
     check(goblin.takesPlayerDamage(type), `a goblin takes ${type ?? 'a status tick'}`);
     check(!pet.takesPlayerDamage(type), `the pet does not take ${type ?? 'a status tick'}`);
-    check(!signet.takesPlayerDamage(type), `nor does Signet (${type ?? 'a status tick'})`);
   }
 
   check(goblin.takesPlayerDamage('explosion'), 'a goblin takes an explosion');
@@ -225,42 +196,14 @@ console.log('\nExplosives are the exception, and enemies are not affected at all
   );
 }
 
-console.log('\nSignet cannot be killed, from any direction');
-{
-  const { human, cat } = makeCrawlers();
-  const signet = makeSignet();
-  const goblin = makeGoblin();
-
-  check(hpLostTo(signet, cat, 'missile') === 0, "the cat's missile leaves her untouched");
-  check(hpLostTo(signet, human, 'explosion') === 0, 'so does a stick of dynamite');
-  check(hpLostTo(signet, goblin, 'melee') === 0, 'and so does a goblin that decided to fight her');
-  check(signet.takeDamage(OVERKILL_DAMAGE) === false, 'raw damage reports that it never connected');
-  check(signet.hp === signet.maxHp, `she is still at full health (${signet.hp}/${signet.maxHp})`);
-
-  signet.applyStatus(makePoison(cat, LASTING_POISON_TICKS));
-  check(signet.statusEffects.length === 0, 'a poison proc does not even take hold on her');
-  for (let frame = 0; frame < STATUS_TICK_FRAMES; frame++) signet.tickTimers();
-  check(signet.isAlive, 'and five minutes of ticking leaves her alive');
-  check(signet.hp === signet.maxHp, `at full health (${signet.hp}/${signet.maxHp})`);
-
-  // The control: the same debuff, applied the same way, has to finish a goblin.
-  goblin.applyStatus(makePoison(cat, LASTING_POISON_TICKS));
-  let frames = 0;
-  while (goblin.hp > 0 && frames < STATUS_TICK_FRAMES) {
-    goblin.tickTimers();
-    frames++;
-  }
-  check(goblin.hp === 0, `the same poison finishes a goblin (${frames} frames)`);
-}
-
-console.log('\nA calm sky fowl is provokable, not protected');
+console.log('\nA calm Hawkfolk is provokable, not protected');
 {
   const { cat } = makeCrawlers();
-  const fowl = makeFowl();
-  check(!fowl.isHostile, 'an unprovoked fowl is not hostile');
-  check(!fowl.takesPlayerDamage('melee'), 'and a claw swipe still cannot reach one');
+  const hawkfolk = makeHawkfolk();
+  check(!hawkfolk.isHostile, 'an unprovoked Hawkfolk is not hostile');
+  check(!hawkfolk.takesPlayerDamage('melee'), 'and a claw swipe still cannot reach one');
 
-  const shot = makeFowl();
+  const shot = makeHawkfolk();
   check(hpLostTo(shot, cat, 'missile') > 0, 'but a missile lands');
   check(shot.isHostile, 'and that is what starts the fight');
   check(shot.takesPlayerDamage('melee'), 'after which the claw reaches it too');
@@ -270,16 +213,13 @@ console.log('\nA shout cannot recruit a bystander');
 {
   const { cat } = makeCrawlers();
   const goblin = makeGoblin();
-  const signet = makeSignet();
   const pet = makePet(cat);
 
   goblin.noticeTarget(cat);
   check(goblin.currentTarget === cat, 'a goblin answers a packmate pointing at the cat');
 
-  signet.noticeTarget(cat);
-  check(signet.currentTarget === null, 'Signet does not — she is nobody the party is fighting');
   pet.noticeTarget(cat);
-  check(pet.currentTarget === null, 'and neither does the pet');
+  check(pet.currentTarget === null, 'the pet does not — he is nobody the party is fighting');
 }
 
 console.log('\nHoming seeks enemies only');
@@ -319,64 +259,6 @@ console.log('\nHoming seeks enemies only');
 
   const towardPet = sidewaysDriftPast(makePet(new CatPlayer(start.x, start.y, TILE_SIZE)));
   check(towardPet === 0, `but flies straight past the pet (${towardPet})`);
-
-  const towardSignet = sidewaysDriftPast(makeSignet());
-  check(towardSignet === 0, `and straight past Signet (${towardSignet})`);
-}
-
-console.log("\nThe circus fight is the crawlers' fight");
-{
-  const circusAttackerTileX = start.x + CIRCUS_ATTACKER_OFFSET_TILES;
-  /**
-   * Both attackers are handed a target list Signet is *in*, standing nearer
-   * than the crawler — the shape a future `extraTargets` entry would produce.
-   * Nearest-wins targeting is what makes this the interesting case: a mob that
-   * may take her will, every time.
-   */
-  function nearestTargetOf(mob: Mob, targets: (HumanPlayer | CatPlayer | Mob)[]): Player | null {
-    mob.updateAI(targets);
-    return mob.currentTarget;
-  }
-
-  for (const [name, make] of [
-    ['a mold lion', () => new MoldLion(circusAttackerTileX, start.y, TILE_SIZE)],
-    ['Heather', () => new HeatherTheBear(circusAttackerTileX, start.y, TILE_SIZE)],
-  ] as const) {
-    const cat = new CatPlayer(
-      circusAttackerTileX - CRAWLER_BEHIND_ATTACKER_TILES,
-      start.y,
-      TILE_SIZE,
-    );
-    const signet = makeSignet();
-    signet.x = (circusAttackerTileX - SIGNET_BESIDE_ATTACKER_TILES) * TILE_SIZE;
-    signet.y = start.y * TILE_SIZE;
-
-    const attacker = make();
-    attacker.setMap(map);
-    check(
-      nearestTargetOf(attacker, [signet, cat]) === cat,
-      `${name} walks past the nearer Signet and takes the crawler`,
-    );
-
-    const alone = make();
-    alone.setMap(map);
-    check(nearestTargetOf(alone, [signet]) === null, `${name} left alone with her attacks nobody`);
-
-    // The negative half: with the crawler standing exactly where Signet stood,
-    // the same call does find a target — so neither check above can pass by
-    // failing to see anything at all.
-    const decoy = new CatPlayer(
-      circusAttackerTileX - SIGNET_BESIDE_ATTACKER_TILES,
-      start.y,
-      TILE_SIZE,
-    );
-    const baited = make();
-    baited.setMap(map);
-    check(
-      nearestTargetOf(baited, [decoy]) === decoy,
-      `${name} does take a crawler standing on that same tile`,
-    );
-  }
 }
 
 console.log(

@@ -1,12 +1,12 @@
 /**
- * Which closed-set look draws each of the Desperado Club's non-named figures.
+ * Which closed-set look draws each of the Cloak & Dagger's non-named figures.
  *
  * The club is a mixed crowd, the same as the streets: station staff and the
  * dancers are fixed picks (one look, always the same look — the cache keys on
  * the look, not the instance), and the wandering patrons draw from a small
- * pool split roughly two skyfowl to one human, matching the town's own split.
- * None of this touches Clarabelle, Rosemarie, the Cretins, the DJ or the
- * casino dealer — every one of those keeps its own dedicated painter.
+ * pool split roughly two Hawkfolk to one human, matching the town's own split.
+ * The casino dealer, the croupier and the dancers on the stages each keep their
+ * own dedicated painter.
  */
 
 import type { ClubFigureRef } from './clubCastFigure';
@@ -20,9 +20,9 @@ import {
 import { clubDancerLook } from './person/clubCastLooks';
 import { townCastLook } from './person/townCastLooks';
 
-/** The bar counter: an apron-wearing skyfowl merchant look, reused from the street cast. */
+/** The bar counter: an apron-wearing Hawkfolk merchant look, reused from the street cast. */
 export const CLUB_BARTENDER: ClubFigureRef = {
-  species: 'skyfowl',
+  species: 'hawkfolk',
   lookId: 'merchant_hawkbrown_standard',
 };
 
@@ -32,33 +32,27 @@ export const CLUB_MARKET_VENDOR: ClubFigureRef = {
   look: townCastLook('adult_merchant'),
 };
 
-/** The VIP lounge's host: a skyfowl look dressed for status, reused from the street cast. */
-export const CLUB_VIP_HOST: ClubFigureRef = {
-  species: 'skyfowl',
-  lookId: 'noble_goldenbarred_standard',
-};
-
 /**
- * The dance floor's three looks — two skyfowl, one human, each with its own
+ * The dance floor's three looks — two Hawkfolk, one human, each with its own
  * dance routines — cycled across the floor's tiles so the crowd reads as more
  * than one dancer without a per-instance colour.
  */
 export const CLUB_DANCER_REFS: readonly ClubFigureRef[] = [
-  { species: 'skyfowl', lookId: 'dancer_sparrowfleck_slight' },
-  { species: 'skyfowl', lookId: 'dancer_goldenbarred_standard' },
+  { species: 'hawkfolk', lookId: 'dancer_sparrowfleck_slight' },
+  { species: 'hawkfolk', lookId: 'dancer_goldenbarred_standard' },
   { species: 'human', look: clubDancerLook() },
 ];
 
 /**
- * The wandering patron pool: four skyfowl looks and two human looks, reused
+ * The wandering patron pool: four Hawkfolk looks and two human looks, reused
  * street-cast civilians rather than new content — a nightclub crowd is
  * exactly the closed-set case a shared look cache is for.
  */
 export const CLUB_PATRON_REFS: readonly ClubFigureRef[] = [
-  { species: 'skyfowl', lookId: 'merchant_sparrowfleck_slight' },
-  { species: 'skyfowl', lookId: 'clerk_dovegrey_standard' },
-  { species: 'skyfowl', lookId: 'noble_goldenbarred_heavy' },
-  { species: 'skyfowl', lookId: 'porter_hawkbrown_slight' },
+  { species: 'hawkfolk', lookId: 'merchant_sparrowfleck_slight' },
+  { species: 'hawkfolk', lookId: 'clerk_dovegrey_standard' },
+  { species: 'hawkfolk', lookId: 'noble_goldenbarred_heavy' },
+  { species: 'hawkfolk', lookId: 'porter_hawkbrown_slight' },
   { species: 'human', look: townCastLook('adult_noble') },
   { species: 'human', look: townCastLook('adult_commoner') },
 ];

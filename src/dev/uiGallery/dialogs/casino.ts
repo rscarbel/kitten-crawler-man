@@ -1,5 +1,5 @@
 /**
- * Fixtures for the two mini-games that keep their own layouts: the Desperado
+ * Fixtures for the two mini-games that keep their own layouts: the Cloak & Dagger
  * Club's blackjack table (betting, mid-hand, a won hand, turned away) and the
  * keyboard-hero board (mid-song, a breached firewall, access granted, and a
  * Nightmare double note on its way down). Each is
@@ -12,7 +12,7 @@
 import { HumanPlayer } from '../../../creatures/HumanPlayer';
 import { CatPlayer } from '../../../creatures/CatPlayer';
 import { TILE_SIZE } from '../../../core/constants';
-import { createClubMembership } from '../../../core/club/ClubMembership';
+import { createCasinoState } from '../../../core/club/CasinoState';
 import { ClubCasinoSystem, type CasinoAction } from '../../../systems/ClubCasinoSystem';
 import { CHIP_DENOMINATIONS } from '../../../systems/casino/BlackjackTable';
 import { RANKS, SUITS, type Card, type Rank, type Suit } from '../../../systems/casino/Deck';
@@ -70,12 +70,12 @@ function casinoFixture(name: string, state: TableState): DialogFixture {
     name,
     surfaces: (shown) => {
       let now = 0;
-      const membership = createClubMembership();
-      membership.casinoShoe = { cards: shoe(), cursor: 0 };
+      const casinoState = createCasinoState();
+      casinoState.casinoShoe = { cards: shoe(), cursor: 0 };
       const player = new HumanPlayer(0, 0, TILE_SIZE);
       player.coins = state === 'turned-away' ? BROKE : BANKROLL;
       const companion = new CatPlayer(1, 0, TILE_SIZE);
-      const casino = new ClubCasinoSystem(null, membership, () => now);
+      const casino = new ClubCasinoSystem(null, casinoState, () => now);
       const settle = (): void => {
         for (let i = 0; i < TABLE_SETTLE_STEPS; i++) {
           now += TABLE_STEP_MS;

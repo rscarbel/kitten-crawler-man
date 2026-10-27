@@ -1339,7 +1339,7 @@ const ALLY_FOE_TILE_Y = FAIRY_TILE_Y;
 const ALLY_FOE_HP = 100_000;
 
 /** One of each kind of ally ranged over for the corridor and the broken-escape runs. */
-const CORRIDOR_ALLY_KINDS = ['Mongo', 'sledge'] as const;
+const CORRIDOR_ALLY_KINDS = ['Mongo', 'crush'] as const;
 
 /** What an ally is doing when the balls are thrown. */
 type AllyStance = 'following' | 'fighting';
@@ -1609,7 +1609,7 @@ function checkAlliesDodge(report: FairyGateReport): void {
       );
     }
   }
-  for (const kind of ['Mongo', 'sledge'] as const) {
+  for (const kind of ['Mongo', 'crush'] as const) {
     for (const stance of ['following', 'fighting'] as const) {
       const blind = allyDodgeRun(kind, stance, 'blind');
       report.checkCatches(

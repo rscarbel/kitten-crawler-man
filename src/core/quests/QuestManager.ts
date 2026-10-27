@@ -7,7 +7,6 @@
 export const QUEST_IDS = [
   'anchor_shards',
   'krasue_murders',
-  'the_show_must_go_on',
   'grotesque_spider',
   'defend_goblin_mother',
   'borrowed_blueprints',

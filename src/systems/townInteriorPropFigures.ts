@@ -10,7 +10,7 @@
  *   the figures instead, a rug sorts on its bottom row and paints over anyone
  *   standing on its upper rows.
  * - **Y-sorted pass** (`townInteriorPropFigures`): everything that stands up
- *   off the floor, as `InteriorFigure`s, the same shape the Desperado Club's
+ *   off the floor, as `InteriorFigure`s, the same shape the Cloak & Dagger's
  *   furniture and every room's occupants already draw through.
  *
  * The split is read off the prop def, so a new flat prop lands in the right
@@ -18,6 +18,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
+import { frameTime } from '../utils';
 import type { GameMap, PlacedTownInteriorProp } from '../map/GameMap';
 import type { InteriorFigure } from '../core/rendering/InteriorFigure';
 import {
@@ -25,6 +26,7 @@ import {
   drawTownInteriorProp,
   townInteriorPropSortY,
 } from '../sprites/art/townInterior/townInteriorProps';
+import { drawPropFlames } from '../sprites/art/townInterior/propFlames';
 
 /** A sorted-pass figure that remembers which placed prop it draws, so a gate can ask what entered the sort. */
 export interface TownInteriorPropFigure extends InteriorFigure {
@@ -54,6 +56,19 @@ function drawPlaced(
     camX,
     camY,
     tileSize,
+  );
+  const propDef = TOWN_INTERIOR_PROPS[placed.propId];
+  if (propDef.flames === undefined) return;
+  drawPropFlames(
+    ctx,
+    propDef.flames,
+    propDef.footprint.h,
+    placed.tile.x,
+    placed.tile.y,
+    camX,
+    camY,
+    tileSize,
+    frameTime,
   );
 }
 

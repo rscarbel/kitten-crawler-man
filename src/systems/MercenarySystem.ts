@@ -16,7 +16,7 @@ import {
 import { REVIVE_RANGE_PX } from '../core/party/reviveRules';
 import { activeRunStats } from '../core/progression/GameStats';
 import type { SoundId } from '../audio/sounds';
-import { prewarmTriageSparkle } from '../sprites/crocodilianSprite';
+import { prewarmHealSparkle } from '../sprites/healSparkleSprite';
 import { hirelingDownedArrowCandidate, renderHirelingDownedMarker } from '../ui/HirelingDownedUI';
 import type { ArrowCandidate } from '../ui/WorldArrow';
 import type { Rect } from '../ui/core/geom';
@@ -83,7 +83,7 @@ function leavingDownedToast(name: string): string {
 }
 
 /**
- * Manager for a hired mercenary (the Desperado Club's "Meat Shields" desk),
+ * Manager for a hired mercenary (The Barracks Mercenaries' desk),
  * modelled on `MongoSystem`. Each scene — a floor or a building's interior —
  * constructs a fresh instance from the persisted `MercenaryRoster`; if the
  * roster holds a contract for this floor, the merc is spawned near the active
@@ -97,7 +97,7 @@ function leavingDownedToast(name: string): string {
  *
  * A contract ends two ways. Death is final: the body plays out and fades, the
  * roster forgets the hire and remembers the name for the desk. And the floor
- * ending ends it too, which is how Meat Shields sells them — a roster that still
+ * ending ends it too, which is how the Barracks sells them — a roster that still
  * names a contract from another floor is cleared rather than respawned.
  * Leaving the scene goes through `dismissForTransition`, which despawns the
  * mob and leaves the roster to respawn it from the next scene's system.
@@ -539,7 +539,7 @@ export class MercenarySystem implements GameSystem {
     // the hired figure keeps the other hirelings' cells out of memory.
     MERCENARY_ART[merc.template.art].prewarm();
     // Every hire drinks and heals up, and that is the sparkle it shows.
-    prewarmTriageSparkle();
+    prewarmHealSparkle();
     merc.safeRoomTest = this.isInSafeRoom;
     this.merc = merc;
     roster.add(merc);

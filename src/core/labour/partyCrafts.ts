@@ -7,7 +7,7 @@
  * crawler should never replay for the other.
  */
 
-import { isRecord } from '../util/guards';
+import { isRecord, parseEvery } from '../util/guards';
 import type { CraftSkillId } from './CraftSkills';
 import { isCraftSkillId } from './CraftSkills';
 import {
@@ -83,22 +83,24 @@ export function restorePartyCraftsState(
   target.autoSummonThralls = { ...snapshot.autoSummonThralls };
 }
 
-/**
- * Tolerant, unlike most save parsers here: a missing or malformed field falls
- * back to its empty default rather than failing the whole record, so an old
- * save with no craft progress at all loads as "nothing granted or seen yet".
- */
+/** A saved {@link PartyCraftsState}, or undefined when any field is missing or not one this build wrote. */
 export function parsePartyCraftsState(value: unknown): PartyCraftsState | undefined {
   if (!isRecord(value)) return undefined;
   const tools = parsePartyToolsState(value.tools);
-  const explainersSeen = Array.isArray(value.explainersSeen)
-    ? value.explainersSeen.filter(
-        (id): id is CraftSkillId => typeof id === 'string' && isCraftSkillId(id),
-      )
-    : [];
-  const processingExplainerSeen = value.processingExplainerSeen === true;
-  const dualHarvestHintDone = value.dualHarvestHintDone === true;
+  const explainersSeen = parseEvery(value.explainersSeen, (id) =>
+    typeof id === 'string' && isCraftSkillId(id) ? id : undefined,
+  );
   const autoSummonThralls = parseAutoSummonThralls(value.autoSummonThralls);
+  const { processingExplainerSeen, dualHarvestHintDone } = value;
+  if (
+    tools === undefined ||
+    explainersSeen === undefined ||
+    autoSummonThralls === undefined ||
+    typeof processingExplainerSeen !== 'boolean' ||
+    typeof dualHarvestHintDone !== 'boolean'
+  ) {
+    return undefined;
+  }
   return {
     tools,
     explainersSeen,
@@ -108,11 +110,9 @@ export function parsePartyCraftsState(value: unknown): PartyCraftsState | undefi
   };
 }
 
-function parseAutoSummonThralls(value: unknown): AutoSummonThralls {
-  const fallback = defaultAutoSummonThralls();
-  if (!isRecord(value)) return fallback;
-  return {
-    human: typeof value.human === 'boolean' ? value.human : fallback.human,
-    cat: typeof value.cat === 'boolean' ? value.cat : fallback.cat,
-  };
+function parseAutoSummonThralls(value: unknown): AutoSummonThralls | undefined {
+  if (!isRecord(value)) return undefined;
+  const { human, cat } = value;
+  if (typeof human !== 'boolean' || typeof cat !== 'boolean') return undefined;
+  return { human, cat };
 }

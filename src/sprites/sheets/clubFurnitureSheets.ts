@@ -1,11 +1,12 @@
 /**
- * Which pictures the Desperado Club's furniture sheets carry.
+ * Which pictures the Cloak & Dagger's furniture sheets carry.
  *
  * Each family is one sheet whose single `idle` row holds its *variants* as
  * frames, so a layout picks a counter or a stool by frame index and the club
  * stops reading as five copies of the same prop. The casino's games are painted
- * by `src/sprites/art/clubCasinoFloorArt.ts` and everything else by
- * `src/sprites/art/clubFurnitureArt.ts`, on the same conventions.
+ * by `src/sprites/art/clubCasinoFloorArt.ts`, the stages, the host stand and
+ * the standing tables by `src/sprites/art/clubStageArt.ts`, and everything else
+ * by `src/sprites/art/clubFurnitureArt.ts`, on the same conventions.
  *
  * Geometry convention shared by every family: the frame's bottom tile row is the
  * prop's *footprint* (the tiles it stands on and blocks), and everything above
@@ -22,11 +23,7 @@ import {
   drawDrinkShelf,
   drawMarketBackdrop,
   drawMarketStall,
-  drawMercDesk,
   drawPokerTable,
-  drawVelvetRope,
-  drawVipCounter,
-  drawWeaponRack,
   type ClubFrameGeometry,
 } from '../art/clubFurnitureArt';
 import {
@@ -36,8 +33,15 @@ import {
   drawFortuneWheel,
   drawFortuneWheelLights,
   drawSlotCabinet,
+  drawSlotCabinetBack,
   drawSlotCabinetLights,
 } from '../art/clubCasinoFloorArt';
+import {
+  STANDING_TABLE_VARIANTS,
+  drawClubStage,
+  drawHostStand,
+  drawStandingTable,
+} from '../art/clubStageArt';
 import type { FrameEdge, PropSheetPlan, FramePainter } from './propSheetPlan';
 import type { SpriteKey } from '../../core/spriteAssets/SpriteLoader';
 
@@ -48,6 +52,8 @@ const STOOL_HEADROOM_TILES = 0.5;
 /** The upright wheel stands well over a crawler's head, so it rises two tiles. */
 const WHEEL_HEADROOM_TILES = 2;
 const WHEEL_WIDTH_TILES = 3;
+/** A stage is three tiles square: a deck the dancer can circle a pole on. */
+const STAGE_SIDE_TILES = 3;
 
 /**
  * Paints one variant of a family into a frame whose footprint row is described
@@ -71,7 +77,20 @@ interface ClubFamily {
   readonly headroomTiles: number;
   readonly variants: number;
   readonly draw: ClubPainter;
+  /** Edges this family paints against on purpose, in place of `CLUB_GROUNDED_EDGES`. */
+  readonly groundedEdges?: ReadonlySet<FrameEdge>;
 }
+
+/**
+ * A stage's deck is floor, raised: it fills its three tiles to the frame's
+ * back line as well as its sides and front, so all four edges are its own.
+ */
+const STAGE_GROUNDED_EDGES: ReadonlySet<FrameEdge> = new Set<FrameEdge>([
+  'top',
+  'bottom',
+  'left',
+  'right',
+]);
 
 const FAMILIES: ReadonlyArray<ClubFamily> = [
   {
@@ -115,22 +134,6 @@ const FAMILIES: ReadonlyArray<ClubFamily> = [
     draw: drawMarketBackdrop,
   },
   {
-    key: 'club_weapon_rack',
-    file: 'weapon_rack.png',
-    widthTiles: 3,
-    headroomTiles: COUNTER_HEADROOM_TILES,
-    variants: 3,
-    draw: drawWeaponRack,
-  },
-  {
-    key: 'club_merc_desk',
-    file: 'merc_desk.png',
-    widthTiles: 3,
-    headroomTiles: COUNTER_HEADROOM_TILES,
-    variants: 2,
-    draw: drawMercDesk,
-  },
-  {
     key: 'club_casino_table',
     file: 'casino_table.png',
     widthTiles: 3,
@@ -147,28 +150,21 @@ const FAMILIES: ReadonlyArray<ClubFamily> = [
     draw: drawPokerTable,
   },
   {
-    key: 'club_vip_counter',
-    file: 'vip_counter.png',
-    widthTiles: 6,
-    headroomTiles: COUNTER_HEADROOM_TILES,
-    variants: 2,
-    draw: drawVipCounter,
-  },
-  {
-    key: 'club_velvet_rope',
-    file: 'velvet_rope.png',
-    widthTiles: 2,
-    headroomTiles: COUNTER_HEADROOM_TILES,
-    variants: 2,
-    draw: drawVelvetRope,
-  },
-  {
     key: 'club_slot_cabinet',
     file: 'slot_cabinet.png',
     widthTiles: 1,
     headroomTiles: COUNTER_HEADROOM_TILES,
     variants: SLOT_CABINET_VARIANTS,
     draw: drawSlotCabinet,
+  },
+  // The bank's far row faces away across the aisle, so it is seen from behind.
+  {
+    key: 'club_slot_cabinet_back',
+    file: 'slot_cabinet_back.png',
+    widthTiles: 1,
+    headroomTiles: COUNTER_HEADROOM_TILES,
+    variants: SLOT_CABINET_VARIANTS,
+    draw: drawSlotCabinetBack,
   },
   // A light sheet's frames are chase phases rather than variants: the lit
   // bulbs alone, laid over the cabinet or wheel at the same anchor.
@@ -203,6 +199,31 @@ const FAMILIES: ReadonlyArray<ClubFamily> = [
     headroomTiles: COUNTER_HEADROOM_TILES,
     variants: 1,
     draw: drawCroupierCounter,
+  },
+  {
+    key: 'club_stage',
+    file: 'stage.png',
+    widthTiles: STAGE_SIDE_TILES,
+    headroomTiles: STAGE_SIDE_TILES - 1,
+    variants: 1,
+    draw: drawClubStage,
+    groundedEdges: STAGE_GROUNDED_EDGES,
+  },
+  {
+    key: 'club_host_stand',
+    file: 'host_stand.png',
+    widthTiles: 2,
+    headroomTiles: COUNTER_HEADROOM_TILES,
+    variants: 1,
+    draw: drawHostStand,
+  },
+  {
+    key: 'club_standing_table',
+    file: 'standing_table.png',
+    widthTiles: 1,
+    headroomTiles: COUNTER_HEADROOM_TILES,
+    variants: STANDING_TABLE_VARIANTS,
+    draw: drawStandingTable,
   },
 ];
 
@@ -243,6 +264,7 @@ function clubSheet(family: ClubFamily, seedTerm: number): PropSheetPlan {
     tileY: geo.footTop,
     tileScale: CLUB_TILE_SCALE,
     rows: [{ state: 'idle', frames }],
+    ...(family.groundedEdges === undefined ? {} : { groundedEdges: family.groundedEdges }),
   };
 }
 

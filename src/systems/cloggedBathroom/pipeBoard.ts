@@ -18,7 +18,7 @@
  */
 
 import type { Difficulty } from '../../core/difficulty/difficultyProfiles';
-import { mixSeed, seededStream } from '../../map/bigTop/mirrorBoard';
+import { mixSeed, seededStream } from '../../map/starlightTent/mirrorBoard';
 
 // ── Tiles ────────────────────────────────────────────────────────────────────
 

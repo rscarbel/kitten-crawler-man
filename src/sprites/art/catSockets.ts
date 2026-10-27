@@ -31,6 +31,8 @@ import {
   type CatPose,
   type CatSlab,
   type Pt,
+  catDilatedPupilsFront,
+  catDilatedPupilsSide,
   catFaceFront,
   catFrontHeldUnder,
   catFaceSide,
@@ -74,6 +76,19 @@ export interface CatSocketFrames {
   readonly upperPaw: Pt | null;
   /** The middle of her face on a frame it is drawn, cell pixels, and its half-width. */
   readonly face: { readonly centre: Pt; readonly radius: number } | null;
+  /**
+   * Each open eye's pupil at its widest, cell pixels: where catnip's blown
+   * pupils are painted over the cell. Empty from behind and while she blinks.
+   */
+  readonly dilatedPupils: readonly CatPupilSpot[];
+}
+
+/** One pupil ellipse on the cell, cell pixels. */
+export interface CatPupilSpot {
+  readonly centre: Pt;
+  readonly rx: number;
+  readonly ry: number;
+  readonly angle: number;
 }
 
 /**
@@ -179,6 +194,18 @@ function faceOf(row: RowSpec, pose: CatPose, look: CatLook): { centre: Pt; radiu
   return row.view === 'side' ? catFaceSide(pose, look) : catFaceFront(pose, look);
 }
 
+function dilatedPupilsOf(row: RowSpec, pose: CatPose, look: CatLook): readonly CatPupilSpot[] {
+  if (row.view === 'back') return [];
+  const pupils =
+    row.view === 'side' ? catDilatedPupilsSide(pose, look) : catDilatedPupilsFront(pose, look);
+  return pupils.map((pupil) => ({
+    centre: placed(row, pupil.centre),
+    rx: pupil.rx * CAT_CELL_PX_PER_POSE_UNIT,
+    ry: pupil.ry * CAT_CELL_PX_PER_POSE_UNIT,
+    angle: row.facesWest ? -pupil.angle : pupil.angle,
+  }));
+}
+
 /** How far a pose's own frame is turned on screen: her roll, and her lean too in profile. */
 function screenTurn(row: RowSpec, pose: CatPose): number {
   return row.view === 'side' ? catSideTurn(pose) : pose.roll;
@@ -243,6 +270,7 @@ function solve(row: RowSpec, frame: number, look: CatLook): CatSocketFrames {
       face === null
         ? null
         : { centre: placed(row, face.centre), radius: face.radius * CAT_CELL_PX_PER_POSE_UNIT },
+    dilatedPupils: dilatedPupilsOf(row, pose, look),
   };
 }
 

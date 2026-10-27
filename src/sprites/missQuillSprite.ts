@@ -4,7 +4,7 @@ const QUILL_HEAD_Y = -0.26;
 /** The greying crest knot she wears where a human would wear a bun. */
 const QUILL_BUN_R = 0.06;
 const QUILL_BUN_Y_OFFSET = -0.13;
-/** The single curled topknot feather every sky fowl carries. */
+/** The single curled topknot feather every Hawkfolk carries. */
 const QUILL_TOPKNOT_LENGTH = 0.07;
 const QUILL_TOPKNOT_CURL = 0.055;
 
@@ -61,7 +61,7 @@ const SHIELD_PULSE_SPEED = 2.4;
 const MS_PER_SECOND = 1000;
 
 /**
- * Sky fowl plumage — hand-picked to sit near the citizen cast's hawkbrown
+ * Hawkfolk plumage — hand-picked to sit near the citizen cast's hawkbrown
  * pattern so she reads as one of them at a glance rather than as a
  * bird-shaped stranger.
  */
@@ -82,7 +82,7 @@ const PEN_COLOR = '#f5f0e0';
 const SHIELD_COLOR = '150, 80, 255';
 
 /**
- * Draw Miss Quill — the town's prim sky fowl schoolteacher and the questline's
+ * Draw Miss Quill — the town's prim Hawkfolk schoolteacher and the questline's
  * hidden necromancer: greying crest, hooked beak, spectacles, high-collared
  * mourning dress, and a floating quill pen that never stops taking notes.
  *

@@ -39,8 +39,7 @@ const { setQuestBeaconViewer } = await import('../src/sprites/questBeacon.js');
 const { QuestNPC } = await import('../src/creatures/QuestNPC.js');
 const { Townsperson } = await import('../src/creatures/Townsperson.js');
 const { Shady } = await import('../src/creatures/Shady.js');
-const { GumGum } = await import('../src/creatures/GumGum.js');
-const { Signet } = await import('../src/creatures/Signet.js');
+const { Baggi } = await import('../src/creatures/Baggi.js');
 const { Cow } = await import('../src/creatures/Cow.js');
 const { Rat } = await import('../src/creatures/Rat.js');
 const { ShrineVermin } = await import('../src/creatures/ShrineVermin.js');
@@ -53,7 +52,7 @@ const { VILLAGER_ROUTINES } = await import('../src/systems/briarHollow/villagerR
 const { RecruiterNPC } = await import('../src/systems/briarHollow/RecruiterSystem.js');
 const { FortuneTellerProp } = await import('../src/systems/TownPropSystem.js');
 const { TOWN_CAST_LOOKS } = await import('../src/sprites/person/townCastLooks.js');
-const { SKYFOWL_CIVILIAN_LOOKS } = await import('../src/sprites/art/skyfowl/cast.js');
+const { HAWKFOLK_CIVILIAN_LOOKS } = await import('../src/sprites/art/hawkfolk/cast.js');
 
 // ── Layout ───────────────────────────────────────────────────────────────────
 
@@ -126,11 +125,11 @@ function cameraFor(sx: number, sy: number): { camX: number; camY: number } {
  */
 function everyCitizenSubject(): Subject[] {
   const found = new Map<string, Subject>();
-  const wanted = TOWN_CAST_LOOKS.length + SKYFOWL_CIVILIAN_LOOKS.length;
+  const wanted = TOWN_CAST_LOOKS.length + HAWKFOLK_CIVILIAN_LOOKS.length;
   const roles = [...new Set(TOWN_CAST_LOOKS.flatMap((look) => look.roles))];
   const SEED_SEARCH_LIMIT = 20000;
   for (let seed = 1; seed < SEED_SEARCH_LIMIT && found.size < wanted; seed++) {
-    for (const species of ['human', 'skyfowl'] as const) {
+    for (const species of ['human', 'hawkfolk'] as const) {
       for (const role of roles) {
         const person = new Townsperson({
           x: WORLD_X,
@@ -147,7 +146,9 @@ function everyCitizenSubject(): Subject[] {
           },
           initialFacing: 'down',
         });
-        const key = `${species}:${person.figure.look.id}`;
+        const figure = person.citizenFigure;
+        if (figure === null) throw new Error('a street citizen wears no cast look');
+        const key = `${species}:${figure.look.id}`;
         if (found.has(key)) continue;
         found.set(key, {
           label: key,
@@ -183,8 +184,7 @@ function mobSubject(
 function namedSubjects(): Subject[] {
   const mother = new QuestNPC(WORLD_TILE, WORLD_TILE, 'gate');
   const shady = new Shady(WORLD_TILE, WORLD_TILE, TILE_SIZE);
-  const gumGum = new GumGum(WORLD_TILE, WORLD_TILE, TILE_SIZE);
-  const signet = new Signet(WORLD_TILE, WORLD_TILE, TILE_SIZE, () => undefined);
+  const baggi = new Baggi(WORLD_TILE, WORLD_TILE, TILE_SIZE);
   const cow = new Cow(WORLD_TILE, WORLD_TILE, TILE_SIZE, 'holstein', 'adult', () => 0);
   const calf = new Cow(WORLD_TILE, WORLD_TILE, TILE_SIZE, 'jersey', 'calf', () => 0);
   const vermin = new ShrineVermin(WORLD_TILE, WORLD_TILE, TILE_SIZE);
@@ -223,8 +223,7 @@ function namedSubjects(): Subject[] {
       (m) => (shady.markerType = m ? 'exclamation' : 'none'),
       (ctx, camX, camY) => shady.renderMarker(ctx, camX, camY, TILE_SIZE),
     ),
-    mobSubject('GumGum', gumGum, (m) => (gumGum.markerType = m ? 'exclamation' : 'none')),
-    mobSubject('Signet', signet, (m) => (signet.markerType = m ? 'exclamation' : 'none')),
+    mobSubject('Baggi', baggi, (m) => (baggi.markerType = m ? 'exclamation' : 'none')),
     mobSubject('cow', cow, (m) => (cow.questMarker = m ? 'exclamation' : 'none')),
     mobSubject('calf', calf, (m) => (calf.questMarker = m ? 'exclamation' : 'none')),
     {

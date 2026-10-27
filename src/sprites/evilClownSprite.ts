@@ -16,7 +16,7 @@ import {
 /**
  * The Evil Clown — the bounty troupe's giant, three tiles of stretched clown.
  *
- * Three viewpoints rather than the one the rest of Grimaldi's clowns use: he is
+ * Three viewpoints rather than the one the other clowns use: he is
  * tall enough that a mirrored profile walking straight down the screen reads as
  * a man sliding sideways. Only the profile rows are mirrored; flipping a head-on
  * row would swap his hands every time he changed heading.

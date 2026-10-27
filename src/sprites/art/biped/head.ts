@@ -928,7 +928,7 @@ const EYE_WIDTH = HEAD_RX * 0.4;
 const EYE_RX = EYE_WIDTH / 2;
 const EYE_RY = EYE_RX * 0.62;
 /** Eyes sit one eye-width apart. */
-const EYE_DX = EYE_WIDTH;
+export const EYE_DX = EYE_WIDTH;
 const IRIS_R = EYE_RX * 0.7;
 /**
  * The sclera sits under the brow's shadow, so it is never white: a white
@@ -1939,7 +1939,7 @@ function paintJawUnderside(ctx: Ctx, lift: number, skin: Ramp): void {
 /** How far the eyes track sideways edge-on: toward the front, where he is looking. */
 const PROFILE_EYE_LOOK = 0.4;
 /** Edge-on the eye is set back from the brow, and seen at a steep angle it is half as wide. */
-const PROFILE_EYE_X = 0.7;
+export const PROFILE_EYE_X = 0.7;
 const PROFILE_EYE_WIDTH_SHARE = 0.55;
 
 /** How big a look draws the head: its scale about the chin, and its breadth on top of that. */

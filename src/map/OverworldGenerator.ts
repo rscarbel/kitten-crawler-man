@@ -93,11 +93,17 @@ import {
   type WeightedTile,
 } from './overworld/landformScatter';
 import { paintSlopeScars } from './overworld/slopeScars';
+import {
+  classifySpawnTerrain,
+  isOpenWildernessGround,
+  type HallwaySpawnPoint,
+} from './overworld/spawnTerrain';
 import { worldRandom } from '../core/world/WorldRandom';
 import { grownRect, KeepOut } from './overworld/keepOut';
 import {
   CIRCUS_FOREST_CLEARANCE_TILES,
   CIRCUS_RADIUS_TILES,
+  STARLIGHT_TENT_NAME,
   type CircusGroundsSite,
 } from './overworld/circusGroundsLayout';
 import { circusApproachCentreLine, paintCircusGrounds } from './overworld/paintCircusGrounds';
@@ -131,7 +137,7 @@ export interface BuildingEntry {
    * Device on the shop sign hanging over this door, when the building has one.
    *
    * Optional because two entries are not shop fronts: the main tower, and the
-   * circus's Big Top out beyond the walls. Carried on the entry rather than
+   * circus's Starlight Tent out beyond the walls. Carried on the entry rather than
    * re-derived by name in the renderer, so the sign is stated once — in the
    * `TownPlan` — and a building added without one is a compile error there
    * rather than a silently missing sign here.
@@ -147,8 +153,8 @@ export interface BuildingEntry {
    * front, the tile immediately west of `doorTile` is still doorway.
    *
    * Optional alongside `sign`, and for the same two entries: the tower's door is
-   * stated by the `TownPlan` rather than derived from a manifest, and the Big
-   * Top's is the two-tile doorway the circus layout leaves in its footprint.
+   * stated by the `TownPlan` rather than derived from a manifest, and the Starlight
+   * Tent's is the two-tile doorway the circus layout leaves in its footprint.
    */
   doorwayWidth?: number;
   /**
@@ -183,7 +189,7 @@ export interface OverworldData {
   buildingEntries: BuildingEntry[];
   bossRooms: Array<{ bounds: TileRect; centre: TilePoint }>;
   mobSpawnPoints: TilePoint[];
-  hallwaySpawnPoints: TilePoint[];
+  hallwaySpawnPoints: HallwaySpawnPoint[];
   stairwellTiles: TilePoint[];
   mainTowerAnchor: TilePoint;
   /** Tile where the town's escape route out appears once the Doomsday finale's escape phase begins. */
@@ -333,15 +339,11 @@ const FOREST_EDGE_NOISE_RADIUS = 0.7;
 const FOREST_EDGE_SKIP_CHANCE = 0.45;
 
 /**
- * The Big Top's building-entry identity, exported so anything that needs to
- * recognise its entry (e.g. `scripts/verify-interiors.ts`, which walks it as
- * an enterable interior the town plan does not list) reads it from here
- * rather than restating the literal — a rename or re-kind then propagates to
- * every reader automatically instead of leaving a stale duplicate literal
- * behind.
+ * The kind the Starlight Tent's building entry is registered as, exported so
+ * anything that walks it as an enterable interior the town plan does not list
+ * (e.g. `scripts/verify-interiors.ts`) reads it from here.
  */
-export const BIG_TOP_ENTRY_NAME = 'Big Top';
-export const BIG_TOP_ENTRY_KIND: BuildingKind = 'house';
+export const STARLIGHT_TENT_ENTRY_KIND: BuildingKind = 'house';
 
 /**
  * Generates the third-floor overworld: a town laid out from a declarative
@@ -603,7 +605,11 @@ export function generateOverworld(size: number): OverworldData {
     buildingEntries,
     bossRooms: [],
     mobSpawnPoints: [],
-    hallwaySpawnPoints: reachableSpawnPoints,
+    // Classified off the finished grid, so every tree any pass planted counts.
+    hallwaySpawnPoints: reachableSpawnPoints.map((point) => ({
+      ...point,
+      terrain: classifySpawnTerrain(grid, point.x, point.y),
+    })),
     stairwellTiles: [],
     mainTowerAnchor,
     doomsdayEscapeTile: plan.doomsdayEscapeTile,
@@ -1086,11 +1092,11 @@ function assertTownPlotsDoNotOverlap(plan: TownPlan, plots: ReadonlyArray<TownPl
  * interior has none, and both scatter passes write walkable decorations — so a
  * failure is a layout bug in the `TownPlan` rather than a bad roll of the dice.
  *
- * The **Big Top is deliberately not checked**, and the reason is exactly that
+ * The **Starlight Tent is deliberately not checked**, and the reason is exactly that
  * distinction. It stands outside the walls at a random distance, and below about
  * map size 200 the circus can be placed far enough out to be clipped by the void
  * border: measured over 100 generations, **about half** of them at size 120 and half
- * at size 150 would throw `The door of 'Big Top' cannot be reached from the plaza`.
+ * at size 150 would throw `The door of 'The Starlight Tent' cannot be reached from the plaza`.
  * (Two separate 20-sample runs put 120 above and below 150 respectively, so no
  * ordering between the two sizes is claimed — only that it is a coin toss at both.)
  * The only
@@ -1303,7 +1309,7 @@ function isCircusClearOf(plan: TownPlan, landmarks: KeepOut, centre: TilePoint):
 
 /**
  * Pitches the circus 70+ tiles from the town and stamps its authored grounds
- * there (`paintCircusGrounds`), registering the Big Top's door as a building
+ * there (`paintCircusGrounds`), registering the Starlight Tent's door as a building
  * entry.
  */
 function paintCircus(
@@ -1313,13 +1319,18 @@ function paintCircus(
   landmarks: KeepOut,
 ): CircusGrounds {
   const centre = pickCircusCentre(grid, plan, landmarks);
-  const { site, bigTopDoor } = paintCircusGrounds(grid, plan, centre, OVERWORLD_BORDER_TILES);
+  const { site, starlightTentDoor } = paintCircusGrounds(
+    grid,
+    plan,
+    centre,
+    OVERWORLD_BORDER_TILES,
+  );
   buildingEntries.push({
-    doorTile: bigTopDoor.doorTile,
-    name: BIG_TOP_ENTRY_NAME,
-    type: BIG_TOP_ENTRY_KIND,
-    doorwayX0: bigTopDoor.doorTile.x,
-    doorwayWidth: bigTopDoor.doorwayWidth,
+    doorTile: starlightTentDoor.doorTile,
+    name: STARLIGHT_TENT_NAME,
+    type: STARLIGHT_TENT_ENTRY_KIND,
+    doorwayX0: starlightTentDoor.doorTile.x,
+    doorwayWidth: starlightTentDoor.doorwayWidth,
   });
   return { centre, radius: site.radiusTiles, site };
 }
@@ -1504,20 +1515,6 @@ function paintForests(grid: TileGrid, plan: TownPlan, landmarks: KeepOut): void 
 }
 
 /**
- * The three open, walkable surfaces the wilderness is made of.
- *
- * The elevation bands repaint a third of the map to `HIGHLAND_GRASS` or
- * `SCREE`, so the ruins and the ambient spawn scatter have to test for open
- * ground across all three surfaces rather than `=== grass` alone — a narrower
- * test would silently confine every ruin and every ghoul to the lowlands, and
- * the scatter's ~220 points would collapse with it, since a rejected attempt is
- * not retried.
- */
-function isOpenWildernessGround(type: number | undefined): boolean {
-  return type === FloorTypeValue.grass || type === HIGHLAND_GRASS || type === SCREE;
-}
-
-/**
  * Broken wall shells and loose rubble beyond the town's safe zone, so the land
  * outside the walls reads as a destroyed city rather than open countryside.
  */
@@ -1681,7 +1678,7 @@ function countOpenWilderness(grid: TileGrid, plan: TownPlan, landmarks: KeepOut)
 
 /**
  * Ambient ruins-mob spawn points, scattered outside the town safe zone and the
- * circus footprint — the circus questline gates its own mobs separately.
+ * circus footprint — the circus grounds field no enemies of their own.
  */
 function scatterRuinsSpawnPoints(
   grid: TileGrid,

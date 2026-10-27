@@ -91,7 +91,7 @@
       }
     }
   },
-  "desperado_club": {
+  "cloak_and_dagger": {
     "frameWidth": 576,
     "frameHeight": 480,
     "tileX": 0,
@@ -124,7 +124,7 @@
       }
     }
   },
-  "desperado_club_life": {
+  "cloak_and_dagger_life": {
     "frameWidth": 354,
     "frameHeight": 426,
     "tileX": -48,
@@ -544,7 +544,7 @@
       }
     }
   },
-  "hildas_cottage": {
+  "loris_cottage": {
     "frameWidth": 336,
     "frameHeight": 288,
     "tileX": 0,
@@ -577,7 +577,7 @@
       }
     }
   },
-  "hildas_cottage_life": {
+  "loris_cottage_life": {
     "frameWidth": 36,
     "frameHeight": 36,
     "tileX": -228,

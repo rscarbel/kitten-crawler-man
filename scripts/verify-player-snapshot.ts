@@ -1,20 +1,17 @@
 /**
  * Gate for the player snapshot's held-weapon format, per-item gear state and
- * the equipped-set door every save comes through.
+ * the validation every stored snapshot passes through.
  *
  * A drawn weapon, a drawn sling and an empty hand must each round-trip beside
- * whatever he is wearing, stowed weapons too, and weapon copies saved before
- * weapons had an equip address must still go in a hand. `replaceAll` must drop
- * any key that names no sub-slot the crawler has, any item saved under a
- * sub-slot it does not fit, and any item the crawler could not equip, so
- * nothing sits in the map where no doll cell reaches it or that the crawler
- * could never have put on. Each piece's gear state must round-trip, and a save
- * written before it existed must read as fresh gear.
+ * whatever he is wearing, stowed weapons too. A stored snapshot whose
+ * equipment names a key with no sub-slot the crawler has, an item saved under
+ * a sub-slot it does not fit, or an item the crawler could not equip fails
+ * validation, as does one naming an item this build does not have or missing
+ * its gear state. Each piece's gear state must round-trip.
  *
  * The bag has no fixed size: a bag several pages deep must round-trip slot for
- * slot, a thousand-stack bag must serialize well under the server's smallest
- * plausible body limit, and a save holding a fixed 32 slots of whole item defs,
- * every one of them full, must load with all of them and a page to spare.
+ * slot, and a thousand-stack bag must serialize well under the server's
+ * smallest plausible body limit.
  *
  * The Third Eye's wall-clock recharge must round-trip, since a crawler is
  * rebuilt from its snapshot at every door.
@@ -25,11 +22,9 @@
 import { TILE_SIZE } from '../src/core/constants.js';
 import {
   BAG_PAGE_SLOTS,
-  isWearable,
   ITEM_DEF,
   isItemId,
   MAIN_HAND_KEY,
-  type InventoryItem,
   type ItemId,
 } from '../src/core/items/defs/ItemDefs.js';
 import {
@@ -37,7 +32,7 @@ import {
   STORMCALLER_DAMAGE_MULTIPLIER,
 } from '../src/core/items/equipment/weapons.js';
 import {
-  PLAYER_SNAPSHOT_VERSION,
+  parsePlayerSnapshot,
   restorePlayer,
   snapPlayer,
   type PlayerSnapshot,
@@ -60,7 +55,7 @@ const RING: ItemId = 'fae_iron_charm';
 const RING_KEY = 'Trinkets:Trinket 1';
 const HOODIE: ItemId = 'lucky_hoodie';
 const HOODIE_KEY = 'Torso:Jacket';
-const RETIRED_KEYS = [
+const UNKNOWN_KEYS = [
   'Fingers:Ring 1',
   'Hands:Ring 1',
   'Trinkets:Trinket 9',
@@ -96,6 +91,11 @@ function wearingSnapshot(drawn: ItemId | null): PlayerSnapshot {
   return snapPlayer(human);
 }
 
+/** `snap` as storage hands it back: plain JSON, unvalidated. */
+function stored(snap: Partial<PlayerSnapshot>): unknown {
+  return JSON.parse(JSON.stringify(snap));
+}
+
 function restored(snap: PlayerSnapshot): HumanPlayer {
   const human = new HumanPlayer(0, 0, TILE_SIZE);
   restorePlayer(human, snap);
@@ -105,7 +105,6 @@ function restored(snap: PlayerSnapshot): HumanPlayer {
 // ── The sword drawn and a ring worn ──────────────────────────────────────────
 {
   const snap = wearingSnapshot(SWORD);
-  check(snap.snapshotVersion === PLAYER_SNAPSHOT_VERSION, 'a save writes the current version');
   check(
     snap.equippedEntries.some(([key, id]) => key === MAIN_HAND_KEY && id === SWORD),
     `a save writes the sword as a ${MAIN_HAND_KEY} entry`,
@@ -130,60 +129,6 @@ function restored(snap: PlayerSnapshot): HumanPlayer {
   check(
     human.getStrikeDamage() === human.getBladeDamage(),
     'the drawn sword strikes for blade damage, not a fist',
-  );
-}
-
-// ── Weapon copies saved before weapons had an equip address ──────────────────
-{
-  /**
-   * The slot copies an old save holds for its weapons, written out as the JSON
-   * was stored then: no equip address and no stat block, because the item
-   * definitions had neither when the copies were taken.
-   */
-  const oldSling: InventoryItem = {
-    id: SLING,
-    name: 'Slingshot & Rocks',
-    quantity: 1,
-    stackable: false,
-    canHotlist: true,
-    type: 'weapon',
-  };
-  const oldSword: InventoryItem = {
-    id: SWORD,
-    name: 'The Stormcaller',
-    quantity: 1,
-    stackable: false,
-    canHotlist: true,
-    type: 'weapon',
-  };
-  const oldShaped = (slot: InventoryItem | null): InventoryItem | null => {
-    if (slot?.id === SWORD) return oldSword;
-    if (slot?.id === SLING) return oldSling;
-    return slot;
-  };
-  const fresh = wearingSnapshot(SWORD);
-  const snap: PlayerSnapshot = {
-    ...fresh,
-    inventorySlots: fresh.inventorySlots.map(oldShaped),
-    inventoryHotbar: fresh.inventoryHotbar.map(oldShaped),
-  };
-  const human = restored(snap);
-  check(human.mainHandWeaponId === SWORD, 'an old-shaped drawn sword comes back drawn');
-  const heldCopies = [...human.inventory.bag.slots, ...human.inventory.actionBar.slots].filter(
-    (slot) => slot?.id === SWORD || slot?.id === SLING,
-  );
-  check(
-    heldCopies.length === 2 && heldCopies.every((slot) => isWearable(slot)),
-    'old-shaped weapon copies can be put in a hand slot after a restore',
-  );
-  check(
-    human.toggleWeaponDrawn(SLING) && human.mainHandWeaponId === SLING,
-    'an old-shaped sling can be swapped into his hand for the sword',
-  );
-  human.inventory.equipment.unequip(MAIN_HAND_KEY);
-  check(
-    human.drawWeapon(SWORD) && human.mainHandWeaponId === SWORD,
-    'an old-shaped sword can be re-equipped and drawn after his hand is emptied',
   );
 }
 
@@ -226,11 +171,10 @@ function restored(snap: PlayerSnapshot): HumanPlayer {
       back.cooldownFrames.relic === SAVED_RELIC_COOLDOWN_FRAMES,
     `a piece's gear state round-trips (got ${JSON.stringify(back)})`,
   );
-  const { gearState: _dropped, ...predating } = snapPlayer(human);
-  const fresh = restored(predating).gear.of(RING);
+  const { gearState: _dropped, ...withoutGear } = snapPlayer(human);
   check(
-    fresh.awakeningKills === 0 && !fresh.bound && fresh.floorOnceSpent.length === 0,
-    'a save predating gear state reads as fresh gear',
+    parsePlayerSnapshot(stored(withoutGear), 'human') === undefined,
+    'a stored snapshot with no gear state fails validation',
   );
 }
 
@@ -260,11 +204,47 @@ function restored(snap: PlayerSnapshot): HumanPlayer {
   );
 }
 
-// ── replaceAll validates keys against the sub-slots ──────────────────────────
+// ── A stored snapshot's equipment is validated against the crawler ──────────
+{
+  const fresh = wearingSnapshot(null);
+  check(
+    parsePlayerSnapshot(stored(fresh), 'human') !== undefined,
+    "the human's own written snapshot passes validation",
+  );
+  const withEntries = (entries: [string, ItemId][]): unknown =>
+    stored({ ...fresh, equippedEntries: entries });
+  for (const key of UNKNOWN_KEYS) {
+    check(
+      parsePlayerSnapshot(withEntries([[key, RING]]), 'human') === undefined,
+      `a stored snapshot wearing the ring under "${key}" fails validation`,
+    );
+  }
+  check(
+    parsePlayerSnapshot(withEntries([[CAT_ONLY_KEY, SWORD]]), 'human') === undefined,
+    "a human's stored snapshot filling a cat-only sub-slot fails validation",
+  );
+  check(
+    parsePlayerSnapshot(withEntries([[WRONG_SUB_SLOT_KEY, RING]]), 'human') === undefined,
+    'a stored snapshot wearing an item under a sub-slot it does not fit fails validation',
+  );
+  check(
+    parsePlayerSnapshot(withEntries([['Head:Face', 'kaleidoscope_specs']]), 'human') === undefined,
+    "a human's stored snapshot wearing a cat-only item fails validation",
+  );
+  check(
+    parsePlayerSnapshot(
+      stored({ ...fresh, inventorySlots: [{ id: 'an_item_this_build_never_had', quantity: 1 }] }),
+      'human',
+    ) === undefined,
+    'a stored snapshot holding an item this build does not have fails validation',
+  );
+}
+
+// ── replaceAll keeps the equipped map to what the crawler can wear ───────────
 {
   const human = humanHolding(SWORD, RING);
   const entries: [string, ItemId][] = [
-    ...RETIRED_KEYS.map((key): [string, ItemId] => [key, RING]),
+    ...UNKNOWN_KEYS.map((key): [string, ItemId] => [key, RING]),
     [CAT_ONLY_KEY, SWORD],
     [WRONG_SUB_SLOT_KEY, RING],
     [RING_KEY, RING],
@@ -345,20 +325,6 @@ function restored(snap: PlayerSnapshot): HumanPlayer {
         (slot) => slot === null || slot.name === ITEM_DEF[slot.id].name,
       ),
     `a ${DEEP_BAG_STACKS}-stack bag round-trips, every stack rebuilt from its def`,
-  );
-
-  const fixedSize = new Array<InventoryItem | null>(BAG_PAGE_SLOTS)
-    .fill(null)
-    .map((_, index) => ({ ...ITEM_DEF[nonStacking[index % nonStacking.length]], quantity: 1 }));
-  const legacy = restored({
-    ...snapPlayer(new HumanPlayer(0, 0, TILE_SIZE)),
-    inventorySlots: fixedSize,
-  });
-  check(
-    legacy.inventory.bag.slots.filter((slot) => slot !== null).length === BAG_PAGE_SLOTS &&
-      legacy.inventory.bag.pageCount === 2 &&
-      legacy.inventory.bag.slots.includes(null),
-    'a full fixed-size bag from an older save loads whole, with a page to spare',
   );
 }
 

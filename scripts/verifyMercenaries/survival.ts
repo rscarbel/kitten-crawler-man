@@ -307,9 +307,9 @@ function halvesOnePointHits(body: Mob, attacker: Mob, door: HitDoor): boolean {
 
 function checkHalfDamage(r: SurvivalGateReporter): void {
   r.section('A hireling takes half of every blow, one-point ticks included');
-  const spawned = spawnedScene('sledge');
+  const spawned = spawnedScene('crush');
   if (spawned === null) {
-    r.check(false, 'Sledge spawns for the damage run');
+    r.check(false, 'Crush spawns for the damage run');
     return;
   }
   const { scene, merc } = spawned;
@@ -402,9 +402,9 @@ function addHeldGoblin(scene: Scene, tileX: number, tileY: number): Mob {
 
 function checkRecovery(r: SurvivalGateReporter): void {
   r.section('A hireling left alone is back to full health after the quiet, not before');
-  const quiet = spawnedScene('dong_quixote');
+  const quiet = spawnedScene('crush');
   if (quiet === null) {
-    r.check(false, 'Dong Quixote spawns for the recovery run');
+    r.check(false, 'Crush spawns for the recovery run');
     return;
   }
   const wounded = woundedAtHalf(quiet.merc);
@@ -423,7 +423,7 @@ function checkRecovery(r: SurvivalGateReporter): void {
   );
   r.checkCatches(
     (() => {
-      const early = spawnedScene('dong_quixote');
+      const early = spawnedScene('crush');
       if (early === null) return false;
       woundedAtHalf(early.merc);
       steps(early.scene, earlyFrames);
@@ -434,7 +434,7 @@ function checkRecovery(r: SurvivalGateReporter): void {
 
   r.section('A hit, a hostile engaged, and a fight in progress each restart the quiet');
 
-  const hit = spawnedScene('dong_quixote');
+  const hit = spawnedScene('crush');
   if (hit !== null) {
     woundedAtHalf(hit.merc);
     const healedOn = framesUntilFull(hit.scene, hit.merc, RECOVERY_BUDGET_FRAMES, (frame) => {
@@ -455,9 +455,9 @@ function checkRecovery(r: SurvivalGateReporter): void {
     );
   }
 
-  // A brawler: every attack it has is a fist, so a hostile it cannot reach is
-  // one it has engaged and never swung at.
-  const engaged = spawnedScene('gluteus_maxx');
+  // Hammer Hands' only attack is his punch, so a hostile he cannot reach is
+  // one he has engaged and never swung at.
+  const engaged = spawnedScene('hammer_hands');
   if (engaged !== null) {
     woundedAtHalf(engaged.merc);
     const goblin = addHeldGoblin(engaged.scene, SEALED_CELL_TILE_X, SEALED_CELL_TILE_Y);
@@ -481,7 +481,7 @@ function checkRecovery(r: SurvivalGateReporter): void {
     );
   }
 
-  const fighting = spawnedScene('gluteus_maxx');
+  const fighting = spawnedScene('hammer_hands');
   if (fighting !== null) {
     woundedAtHalf(fighting.merc);
     const besideX = Math.round(fighting.merc.x / TILE_SIZE) + 1;
@@ -510,7 +510,7 @@ function checkRecovery(r: SurvivalGateReporter): void {
 
 // ── Hold-offs ───────────────────────────────────────────────────────────────
 
-/** Open ground a few tiles from the party, well inside a brawler's engage radius and clear of the sealed cell. */
+/** Open ground a few tiles from the party, well inside an earth elemental's engage radius and clear of the sealed cell. */
 const OPEN_GROUND_OFFSET_TILES = 4;
 const OPEN_GROUND_TILE_X = PARTY_TILE_X + OPEN_GROUND_OFFSET_TILES;
 const OPEN_GROUND_TILE_Y = PARTY_TILE_Y - OPEN_GROUND_OFFSET_TILES;
@@ -543,7 +543,7 @@ function retriesOfPartyThreatGotNowhere(): {
   retriesAfter: number;
   heldThroughout: boolean;
 } | null {
-  const spawned = spawnedScene('gluteus_maxx');
+  const spawned = spawnedScene('hammer_hands');
   if (spawned === null) return null;
   const { scene, merc } = spawned;
   const goblin = addHeldGoblin(scene, OPEN_GROUND_TILE_X, OPEN_GROUND_TILE_Y);
@@ -600,7 +600,7 @@ function attacksOnHeldOffGoblin(
 function checkHoldOffs(r: SurvivalGateReporter): void {
   r.section('A hostile written off as unreachable is taken back once it proves otherwise');
 
-  const sealed = spawnedScene('gluteus_maxx');
+  const sealed = spawnedScene('hammer_hands');
   if (sealed !== null) {
     const goblin = addHeldGoblin(sealed.scene, SEALED_CELL_TILE_X, SEALED_CELL_TILE_Y);
     steps(sealed.scene, HOLD_OFF_WATCH_FRAMES);
@@ -616,7 +616,7 @@ function checkHoldOffs(r: SurvivalGateReporter): void {
     );
   }
 
-  const threat = spawnedScene('gluteus_maxx');
+  const threat = spawnedScene('hammer_hands');
   if (threat !== null) {
     const goblin = addHeldGoblin(threat.scene, OPEN_GROUND_TILE_X, OPEN_GROUND_TILE_Y);
     const attacks = attacksOnHeldOffGoblin(
@@ -631,7 +631,7 @@ function checkHoldOffs(r: SurvivalGateReporter): void {
     );
   }
 
-  const onHire = spawnedScene('gluteus_maxx');
+  const onHire = spawnedScene('hammer_hands');
   if (onHire !== null) {
     const goblin = addHeldGoblin(onHire.scene, OPEN_GROUND_TILE_X, OPEN_GROUND_TILE_Y);
     const attacks = attacksOnHeldOffGoblin(onHire, goblin, onHire.merc, HOLD_OFF_WATCH_FRAMES);
@@ -641,7 +641,7 @@ function checkHoldOffs(r: SurvivalGateReporter): void {
     );
   }
 
-  const adjacent = spawnedScene('gluteus_maxx');
+  const adjacent = spawnedScene('hammer_hands');
   if (adjacent !== null) {
     const goblin = addHeldGoblin(adjacent.scene, OPEN_GROUND_TILE_X, OPEN_GROUND_TILE_Y);
     // Inside strike range, so reach and nothing else is what can lift the hold.
@@ -664,7 +664,7 @@ function checkHoldOffs(r: SurvivalGateReporter): void {
     `a goblin on the owner it can get nowhere near is retried once, then held for the full term (gave up: ${retries?.gaveUp ?? 'no spawn'}, ${retries?.retriesAfter ?? 0} retries after)`,
   );
 
-  const idle = spawnedScene('gluteus_maxx');
+  const idle = spawnedScene('hammer_hands');
   if (idle !== null) {
     const goblin = addHeldGoblin(idle.scene, OPEN_GROUND_TILE_X, OPEN_GROUND_TILE_Y);
     const attacks = attacksOnHeldOffGoblin(idle, goblin, null, HOLD_OFF_WATCH_FRAMES);
@@ -705,9 +705,9 @@ function framesUntilDrink(
 
 function checkPotions(r: SurvivalGateReporter): void {
   r.section('A hireling drinks at the threshold, then not again until the cooldown is up');
-  const spawned = spawnedScene('bomo');
+  const spawned = spawnedScene('hammer_hands');
   if (spawned === null) {
-    r.check(false, 'Bomo spawns for the draught run');
+    r.check(false, 'Hammer Hands spawns for the draught run');
     return;
   }
   const { scene, merc } = spawned;
@@ -768,9 +768,9 @@ function knockDownUnintercepted(scene: Scene, merc: Mercenary, attacker: Mob): v
 
 function checkDowned(r: SurvivalGateReporter): void {
   r.section('At zero HP a hireling goes down instead of dying');
-  const spawned = spawnedScene('splash_zone');
+  const spawned = spawnedScene('ivy_ashgrove');
   if (spawned === null) {
-    r.check(false, 'Splash Zone spawns for the downed run');
+    r.check(false, 'Ivy Ashgrove spawns for the downed run');
     return;
   }
   const { scene, merc } = spawned;
@@ -823,7 +823,7 @@ function checkDowned(r: SurvivalGateReporter): void {
     `the fall is announced by name ("${scene.feedback.toasts[0] ?? ''}")`,
   );
 
-  const unintercepted = spawnedScene('splash_zone');
+  const unintercepted = spawnedScene('ivy_ashgrove');
   if (unintercepted !== null) {
     const attacker = spawnMob(
       'goblin',
@@ -866,9 +866,9 @@ const WAIT_AFTER_REVIVE_FRAMES = Math.floor(
 
 function checkRevive(r: SurvivalGateReporter): void {
   r.section('A crawler standing over the body holds the window and fills the revive');
-  const down = downedScene('bucket_boy');
+  const down = downedScene('brother_anselm');
   if (down === null) {
-    r.check(false, 'Bucket Boy goes down for the revive run');
+    r.check(false, 'Brother Anselm goes down for the revive run');
     return;
   }
   const { scene, merc } = down;
@@ -962,10 +962,10 @@ function knockOut(crawler: Player): void {
 function checkWhoRevives(r: SurvivalGateReporter): void {
   r.section('Either crawler can revive a hire, but not one who is down herself');
   r.check(
-    revivedBy('bucket_boy', (scene) => scene.cat),
+    revivedBy('brother_anselm', (scene) => scene.cat),
     'the cat standing over the body revives it, the human far away',
   );
-  const knockedOutCatRevives = revivedBy('bucket_boy', (scene) => scene.cat, knockOut);
+  const knockedOutCatRevives = revivedBy('brother_anselm', (scene) => scene.cat, knockOut);
   r.check(!knockedOutCatRevives, 'a knocked-out cat lying on the body revives nothing');
   r.checkCatches(knockedOutCatRevives, 'a gate expecting the knocked-out cat to revive is caught');
 }
@@ -996,15 +996,16 @@ function swingAfterFall(id: MercenaryTemplateId): SwingAfterFall | null {
   const besideY = Math.round(merc.y / TILE_SIZE);
   const victim = addHeldGoblin(scene, besideX, besideY);
   victim.hp = Number.MAX_SAFE_INTEGER;
-  let swung = false;
+  // Set from inside the kit's own call, which flow analysis cannot see.
+  const swing = { started: false };
   const kit = merc.kit;
   const startAttack = kit.startAttack.bind(kit);
   kit.startAttack = (ctx, target, distance) => {
-    swung = true;
+    swing.started = true;
     startAttack(ctx, target, distance);
   };
-  for (let f = 0; f < SWING_START_BUDGET_FRAMES && !swung; f++) step(scene);
-  if (!swung) return { swungFirst: false, victimHurtAfter: false, rowsAfter: [] };
+  for (let f = 0; f < SWING_START_BUDGET_FRAMES && !swing.started; f++) step(scene);
+  if (!swing.started) return { swungFirst: false, victimHurtAfter: false, rowsAfter: [] };
 
   merc.takeDamage(LETHAL_DAMAGE, { kind: 'status', effectType: 'burn', applier: null });
   step(scene);
@@ -1020,7 +1021,7 @@ function swingAfterFall(id: MercenaryTemplateId): SwingAfterFall | null {
   return { swungFirst: true, victimHurtAfter: victim.hp < hpAtFall, rowsAfter };
 }
 
-const SWINGING_HIRES: readonly MercenaryTemplateId[] = ['gluteus_maxx', 'sledge', 'tumbledown'];
+const SWINGING_HIRES: readonly MercenaryTemplateId[] = ['hammer_hands', 'crush', 'tumbledown'];
 
 function checkSwingCancelledByFall(r: SurvivalGateReporter): void {
   r.section('A hire knocked down mid-swing does not finish the swing when it gets up');
@@ -1040,9 +1041,9 @@ function checkSwingCancelledByFall(r: SurvivalGateReporter): void {
 
 function checkSaveWaits(r: SurvivalGateReporter): void {
   r.section('A save waits while the hire is down');
-  const spawned = spawnedScene('dong_quixote');
+  const spawned = spawnedScene('crush');
   if (spawned === null) {
-    r.check(false, 'Dong Quixote spawns for the save run');
+    r.check(false, 'Crush spawns for the save run');
     return;
   }
   const { scene, merc } = spawned;
@@ -1073,9 +1074,9 @@ const CORPSE_FRAME_BUDGET = 2000;
 
 function checkDeath(r: SurvivalGateReporter): void {
   r.section('A body left for the whole window dies for good');
-  const down = downedScene('sledge');
+  const down = downedScene('crush');
   if (down === null) {
-    r.check(false, 'Sledge goes down for the bleed-out run');
+    r.check(false, 'Crush goes down for the bleed-out run');
     return;
   }
   const { scene, merc } = down;
@@ -1112,7 +1113,7 @@ function checkDeath(r: SurvivalGateReporter): void {
   );
 
   r.section('Leaving the scene with the hire down loses it');
-  const leaving = downedScene('bomo');
+  const leaving = downedScene('hammer_hands');
   if (leaving !== null) {
     leaving.scene.system.warnIfLeavingDowned();
     leaving.scene.system.warnIfLeavingDowned();
@@ -1126,7 +1127,7 @@ function checkDeath(r: SurvivalGateReporter): void {
       'a transition with the hire down ends the contract and takes the body away',
     );
   }
-  const plainDismiss = downedScene('bomo');
+  const plainDismiss = downedScene('hammer_hands');
   if (plainDismiss !== null) {
     plainDismiss.scene.system.dismiss(plainDismiss.scene.mobs.mobs, plainDismiss.scene.mobs.grid);
     r.checkCatches(
@@ -1134,7 +1135,7 @@ function checkDeath(r: SurvivalGateReporter): void {
       'a transition that only despawns the body is caught keeping the contract',
     );
   }
-  const standing = spawnedScene('bomo');
+  const standing = spawnedScene('hammer_hands');
   if (standing !== null) {
     standing.scene.system.dismissForTransition(standing.scene.mobs.mobs, standing.scene.mobs.grid);
     r.check(
@@ -1220,7 +1221,7 @@ const hpForgettingParser: HireParser = (value) => {
 
 function checkPersistence(r: SurvivalGateReporter): void {
   r.section('A hire comes back through a door and a save as hurt as it left');
-  const id: MercenaryTemplateId = 'dong_quixote';
+  const id: MercenaryTemplateId = 'crush';
   const maxHp = getMercenaryTemplate(id).hp;
   r.check(
     hpSurvivesTransition(id, nextSceneRespawn),
@@ -1241,27 +1242,21 @@ function checkPersistence(r: SurvivalGateReporter): void {
   r.checkCatches(hpSurvivesSave(id, hpForgettingParser), 'a parser that drops the HP is caught');
 
   const base = hireOf(id);
-  r.check(
-    hpFromSavedHire(base) === maxHp,
-    `a save from before HP was recorded spawns it full (${maxHp})`,
-  );
-  r.check(
-    hpFromSavedHire({ ...base, hp: 'lots' }) === maxHp,
-    'an unreadable HP keeps the hire, at full health',
-  );
+  r.check(hpFromSavedHire(base) === maxHp, `a hire with no recorded HP spawns full (${maxHp})`);
   r.check(
     hpFromSavedHire({ ...base, hp: OVER_MAX_HP }) === maxHp,
     'an HP over the maximum is held to it',
   );
-  // Read off the parse rather than the spawn: a hire stood up on one hit point
-  // drinks its draught on its first frame.
-  const zeroParsed = parseMercenaryRosterCheckpoint({
-    active: { ...base, hp: 0 },
-    lastDeceased: null,
-  });
+  // A live hire is only ever written with health left, so anything else is not a save the game wrote.
   r.check(
-    zeroParsed?.active?.hp === 1 && hpFromSavedHire({ ...base, hp: 0 }) !== null,
-    'a zero HP is raised to one: a hire the roster still names is alive, and stands up',
+    parseMercenaryRosterCheckpoint({ active: { ...base, hp: 'lots' }, lastDeceased: null }) ===
+      undefined,
+    'an unreadable HP rejects the roster',
+  );
+  r.check(
+    parseMercenaryRosterCheckpoint({ active: { ...base, hp: 0 }, lastDeceased: null }) ===
+      undefined,
+    'a zero HP rejects the roster',
   );
 }
 

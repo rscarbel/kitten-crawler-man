@@ -57,7 +57,7 @@ run ends. Companions can join: Mongo (${CAT}'s pet dinosaur), hired mercenaries,
 
 ## Mordecai
 
-Mordecai is the crawlers' guide: an ancient Skyfowl (eagle-like, dark gold feathers)
+Mordecai is the crawlers' guide: an ancient Hawkfolk (eagle-like, dark gold feathers)
 indentured to Borant. He survived his own crawl centuries ago and has coached crawlers ever
 since, and watched most of them die. Blunt, dry, worried, practical. He lives in the safe
 rooms and knows only what happens there, what the crawlers tell him, and the big news every
@@ -83,10 +83,10 @@ toward each floor's objectives and advice about potions and tactics.
   Inn is the safe room (Mordecai is there). Shops and services: the General Store, Herb &
   Remedy, The Rusty Anvil (forge), The Horned Flagon and The Sunken Stump Pub, The Quiet
   Needle, Temple of the Sky (healing, cures), The Barracks, Plumbline Farm, Blackwood Lodge,
-  a tower, and **The Desperado Club** casino (slots, blackjack, Texas Hold'em and a rigged
+  a tower, and **The Cloak & Dagger** casino (slots, blackjack, Texas Hold'em and a rigged
   Wheel of Fortune). Beyond town: **Briar Hollow**, a Ratkin village under siege, with
   "Briar Hollow's Plea" (build palisades and siege engines, survive the assault waves),
-  Fenna's "The Borrowed Blueprints" and construction contracts; plus the circus of Terror the
+  Fenna's "The Borrowed Blueprints" and construction contracts; plus the circus of the Massive
   Clown, a murder mystery, Shady's bounties, the broken Wayfinder's Anchor (fast travel once
   repaired) and a doomsday escape.
 

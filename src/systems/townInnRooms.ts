@@ -25,6 +25,7 @@ import {
   ROOM_BOON_DURATION_MINUTES,
   ROOM_BOON_STATUSES,
   type StatusEffect,
+  type StatusId,
 } from '../core/combat/StatusEffect';
 import type { Player } from '../Player';
 import {
@@ -42,7 +43,7 @@ interface InnRoom {
   readonly price: number;
   readonly art: ServiceIconId;
   /** The boon's own status type, so a re-rent can be recognised as a refresh. */
-  readonly status: string;
+  readonly status: StatusId;
   /** What the boon is worth, stated on the row — the player is paying for this, not for the bed. */
   readonly boonSummary: string;
   readonly makeBoon: () => StatusEffect;

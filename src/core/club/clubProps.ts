@@ -1,5 +1,5 @@
 /**
- * Furniture layout for the Desperado Club interior.
+ * Furniture layout for the Cloak & Dagger interior.
  *
  * Each entry places one sprite from the club furniture sheets
  * (`src/images/environment/club/`) on a run of tiles. A prop's `tile` is the
@@ -23,37 +23,45 @@
  */
 
 import { TILE_SIZE } from '../constants';
-import { CLUB_TITO_POST } from './clubLayout';
+import type { TilePoint } from '../../map/town/townPlan';
+import {
+  BLACKJACK_TABLE_TILE,
+  CLUB_CASINO_SEATS,
+  CLUB_DONALD_POST,
+  CLUB_HOST_MARK,
+  CLUB_PERFORMER_POSTS,
+  CLUB_STANDING_TABLE_TILES,
+  POKER_TABLE_TILE,
+  SLOT_BANK_CABINETS_PER_ROW,
+  SLOT_BANK_FIRST_X,
+  SLOT_BANK_NORTH_ROW_Y,
+  SLOT_BANK_SOUTH_ROW_Y,
+  type ClubPerformerPost,
+} from './clubLayout';
 import clubSpriteManifest from '../../images/environment/club/manifest.json';
 
 /** Furniture sheets available to the club layout, keyed as in the sprite manifest. */
 export type ClubPropSprite = keyof typeof clubSpriteManifest;
 
 export interface ClubProp {
-  sprite: ClubPropSprite;
+  readonly sprite: ClubPropSprite;
   /** Frame index into the sheet's variant row — what makes two counters look different. */
-  variant: number;
+  readonly variant: number;
   /** Top-left tile of the prop's one-tile-deep footprint. */
-  tile: { x: number; y: number };
-  /**
-   * Tiles to slide the *art* by when drawing, without moving the footprint the
-   * collision box and the Y-sort are derived from. Only the east velvet rope
-   * uses it; see the note on that entry for why the two have to disagree.
-   */
-  artShiftTilesX?: number;
+  readonly tile: TilePoint;
   /** A chasing-bulb sheet laid over the prop's art; see {@link ClubPropLights}. */
-  lights?: ClubPropLights;
+  readonly lights?: ClubPropLights;
   /**
    * Leaves the rows the art rises into walkable, blocking only the footprint.
    * A crawler there sorts before the prop, so the prop's front is painted over
    * them and they read as standing behind it.
    */
-  openBehind?: boolean;
+  readonly openBehind?: boolean;
   /**
    * Whether the prop blocks movement. Stools are deliberately not solid: the
    * player is meant to be able to stand among them at the bar rail.
    */
-  solid: boolean;
+  readonly solid: boolean;
 }
 
 /**
@@ -62,15 +70,15 @@ export interface ClubProp {
  */
 export interface ClubPropLights {
   /** Sheet whose frames are the chase phases, drawn at the prop's own anchor. */
-  sprite: ClubPropSprite;
+  readonly sprite: ClubPropSprite;
   /** Chase phases advanced per second. */
-  stepsPerSecond: number;
+  readonly stepsPerSecond: number;
   /**
    * Phases this prop runs ahead of the clock. Each cabinet in the bank is one
    * phase on from the last, so the chase runs down the row rather than every
    * marquee blinking as one sign.
    */
-  phaseOffset: number;
+  readonly phaseOffset: number;
 }
 
 /** A slot marquee chases briskly, the way a machine begs to be played. */
@@ -78,10 +86,11 @@ const SLOT_CHASE_STEPS_PER_SECOND = 8;
 /** The idle wheel's rim lights walk slowly; it is waiting, not spinning. */
 const WHEEL_CHASE_STEPS_PER_SECOND = 3;
 
-/** Footprint of the westmost cabinet in the slot bank; the rest run east from it. */
-const SLOT_BANK_FIRST_TILE = { x: 20, y: 8 } as const;
-/** Cabinets in the bank, one per livery on the sheet, running to the east wall. */
-const SLOT_BANK_CABINETS = 3;
+/** The slot sheets whose cabinets each play the slot floor from where they stand. */
+export const SLOT_CABINET_SPRITES = [
+  'club_slot_cabinet',
+  'club_slot_cabinet_back',
+] as const satisfies ReadonlyArray<ClubPropSprite>;
 
 function slotLights(phaseOffset: number): ClubPropLights {
   return {
@@ -116,19 +125,67 @@ export function propSortY(prop: ClubProp): number {
   return prop.tile.y * TILE_SIZE;
 }
 
+/** The slot sheet has one livery per frame; the bank deals them out down each row. */
+const SLOT_LIVERY_COUNT = clubSpriteManifest.club_slot_cabinet.states.idle.frameCount;
 /**
- * Half a tile west, which is where the east rope's outer stanchion has to be
- * drawn to stand *against* the divider wall instead of in the middle of it.
- *
- * The rope sheet puts its two stanchions on the centre lines of its two
- * columns, so a footprint at x16 paints the outer post down the middle of the
- * wall tile at x17. A full tile of shift would mirror the west rope exactly,
- * and is deliberately not taken: it would paint rope and stanchion across
- * column 15, the one walkable way into the nook, so the lounge would read as
- * sealed while the player walks straight through the art.
+ * The south row starts its liveries half a row on from the north row, so the
+ * two machines facing each other across the aisle never wear the same one.
  */
-const EAST_ROPE_ART_SHIFT_TILES = -0.5;
+const SOUTH_ROW_LIVERY_SHIFT = Math.ceil(SLOT_BANK_CABINETS_PER_ROW / 2);
 
+/**
+ * Two rows of cabinets facing each other across an aisle: the north row
+ * against the back wall, seen from the front, and the south row seen from
+ * behind. Only the footprint of each blocks; the aisle between the rows is
+ * where the stools stand.
+ */
+function slotBank(): ClubProp[] {
+  return Array.from({ length: SLOT_BANK_CABINETS_PER_ROW }, (_, index): ClubProp[] => [
+    {
+      sprite: 'club_slot_cabinet',
+      variant: index % SLOT_LIVERY_COUNT,
+      tile: { x: SLOT_BANK_FIRST_X + index, y: SLOT_BANK_NORTH_ROW_Y },
+      solid: true,
+      openBehind: true,
+      lights: slotLights(index),
+    },
+    {
+      sprite: 'club_slot_cabinet_back',
+      variant: (index + SOUTH_ROW_LIVERY_SHIFT) % SLOT_LIVERY_COUNT,
+      tile: { x: SLOT_BANK_FIRST_X + index, y: SLOT_BANK_SOUTH_ROW_Y },
+      solid: true,
+      openBehind: true,
+    },
+  ]).flat();
+}
+
+/** The stools every casino seat stands on, one bar-stool look after another. */
+const STOOL_VARIANTS = clubSpriteManifest.club_bar_stool.states.idle.frameCount;
+function casinoStools(): ClubProp[] {
+  return CLUB_CASINO_SEATS.map((seat, index) => ({
+    sprite: 'club_bar_stool',
+    variant: index % STOOL_VARIANTS,
+    tile: seat.tile,
+    solid: false,
+  }));
+}
+
+/** The stage platform's footprint is its front row: the top-left of that row is the prop's tile. */
+function stageProp(post: ClubPerformerPost): ClubProp {
+  return {
+    sprite: 'club_stage',
+    variant: 0,
+    tile: { x: post.stage.x0, y: post.stage.y1 },
+    solid: true,
+  };
+}
+
+/** The host stand's footprint is the row south of Brandon's mark, so he stands behind it. */
+const HOST_STAND_TILE = { x: CLUB_HOST_MARK.x, y: CLUB_HOST_MARK.y + 1 } as const;
+
+const STANDING_TABLE_VARIANTS = clubSpriteManifest.club_standing_table.states.idle.frameCount;
+
+/** High-top tables on the open floor east of Magnum's stage, where the crowd stands to drink. */
 export const CLUB_PROPS: ReadonlyArray<ClubProp> = [
   // ── The Bar — back-bar shelving, the bartender's row, the counter, the rail ──
   { sprite: 'club_drink_shelf', variant: 0, tile: { x: 2, y: 1 }, solid: true },
@@ -137,12 +194,16 @@ export const CLUB_PROPS: ReadonlyArray<ClubProp> = [
   { sprite: 'club_bar_stool', variant: 1, tile: { x: 3, y: 5 }, solid: false },
   { sprite: 'club_bar_stool', variant: 2, tile: { x: 4, y: 5 }, solid: false },
 
-  // ── The Casino — the wheel on the back wall with Tito's counter at its foot,
-  //    the blackjack table in front, and the slot bank facing the east corridor ──
+  // ── The Casino — the slot bank in the west of the wing, the poker table, the
+  //    blackjack table with Deuce behind it, and the wheel in the north-east
+  //    corner with Donald's counter at its foot ──
+  ...slotBank(),
+  { sprite: 'club_poker_table', variant: 0, tile: POKER_TABLE_TILE, solid: true },
+  { sprite: 'club_casino_table', variant: 0, tile: BLACKJACK_TABLE_TILE, solid: true },
   {
     sprite: 'club_fortune_wheel',
     variant: 0,
-    tile: { x: 20, y: 2 },
+    tile: { x: CLUB_DONALD_POST.x - 2, y: CLUB_DONALD_POST.y - 1 },
     solid: true,
     lights: {
       sprite: 'club_fortune_wheel_lights',
@@ -153,55 +214,28 @@ export const CLUB_PROPS: ReadonlyArray<ClubProp> = [
   {
     sprite: 'club_croupier_counter',
     variant: 0,
-    tile: { x: CLUB_TITO_POST.x, y: CLUB_TITO_POST.y + 1 },
+    tile: { x: CLUB_DONALD_POST.x, y: CLUB_DONALD_POST.y + 1 },
     solid: true,
   },
-  { sprite: 'club_casino_table', variant: 0, tile: { x: 19, y: 5 }, solid: true },
-  { sprite: 'club_bar_stool', variant: 1, tile: { x: 18, y: 6 }, solid: false },
-  { sprite: 'club_bar_stool', variant: 2, tile: { x: 22, y: 6 }, solid: false },
-  // Tucked into the corner between the divider and the wheel, rising into the
-  // corner tile itself: one row lower would wall that tile off as floor nobody
-  // can reach. Tito's counter closes the x22 column, so the x18 aisle below it
-  // is the only way into the back-row pocket behind the blackjack table.
-  { sprite: 'club_poker_table', variant: 0, tile: { x: 18, y: 2 }, solid: true },
-  // The bank leaves x18–19 open so the way in from the east corridor reads as
-  // an open doorway rather than a wall of cabinets. The row behind the cabinets
-  // is walkable floor joined to the aisle behind the blackjack stools.
-  ...Array.from({ length: SLOT_BANK_CABINETS }, (_, index): ClubProp => ({
-    sprite: 'club_slot_cabinet',
-    variant: index,
-    tile: { x: SLOT_BANK_FIRST_TILE.x + index, y: SLOT_BANK_FIRST_TILE.y },
-    solid: true,
-    openBehind: true,
-    lights: slotLights(index),
-  })),
+  ...casinoStools(),
+
+  // ── The stages, one either side of the dance floor ──
+  ...CLUB_PERFORMER_POSTS.map(stageProp),
 
   // ── The Market — awninged back stall, the vendor's row, the produce counter ──
-  { sprite: 'club_market_backdrop', variant: 0, tile: { x: 2, y: 13 }, solid: true },
-  { sprite: 'club_market_stall', variant: 0, tile: { x: 2, y: 15 }, solid: true },
+  { sprite: 'club_market_backdrop', variant: 0, tile: { x: 2, y: 15 }, solid: true },
+  { sprite: 'club_market_stall', variant: 0, tile: { x: 2, y: 17 }, solid: true },
 
-  // ── Meat Shields — the arms rack behind Rosemarie, her contract desk in front ──
-  { sprite: 'club_weapon_rack', variant: 0, tile: { x: 19, y: 13 }, solid: true },
-  { sprite: 'club_merc_desk', variant: 0, tile: { x: 19, y: 15 }, solid: true },
+  // ── The front of house — Brandon's stand by the door ──
+  { sprite: 'club_host_stand', variant: 0, tile: HOST_STAND_TILE, solid: true, openBehind: true },
 
-  // ── VIP Lounge — rope, podium, rope, with the admitting gap at the east end ──
-  //
-  // The east rope is anchored into the divider wall rather than sitting one tile
-  // short of it, which leaves column 15 open. That tile is the only way in or out
-  // of the nook: carried unbroken the row makes ten tiles of walkable floor the
-  // player can see and can never reach, and an interior with a region sealed off
-  // from its own entrance has no symptom in the game at all. Its art is nudged
-  // back onto the wall face by `EAST_ROPE_ART_SHIFT_TILES`; the footprint stays
-  // where the reachable gap needs it.
-  { sprite: 'club_velvet_rope', variant: 0, tile: { x: 7, y: 3 }, solid: true },
-  { sprite: 'club_vip_counter', variant: 0, tile: { x: 9, y: 3 }, solid: true },
-  {
-    sprite: 'club_velvet_rope',
-    variant: 1,
-    tile: { x: 16, y: 3 },
+  // ── The open floor ──
+  ...CLUB_STANDING_TABLE_TILES.map((tile, index): ClubProp => ({
+    sprite: 'club_standing_table',
+    variant: index % STANDING_TABLE_VARIANTS,
+    tile,
     solid: true,
-    artShiftTilesX: EAST_ROPE_ART_SHIFT_TILES,
-  },
+  })),
 ];
 
 function collectSolidTiles(): ReadonlyArray<{ x: number; y: number }> {
@@ -227,11 +261,12 @@ function collectSolidTiles(): ReadonlyArray<{ x: number; y: number }> {
  *
  * A station's staff tile is among them: the vendor stands *inside* their own
  * counter's art, which is the point — they are behind the bar, and the player
- * talks to them across it from up to 2.6 tiles away.
- *
- * The VIP row pens the x7–16 nook behind it and leaves one tile open at its east
- * end. Nothing the player needs lives inside the lounge — its host is reachable
- * across the counter — but the floor in there is walkable, and walkable floor
- * with no route to it is the failure this layout is checked for.
+ * talks to them across it from up to 2.6 tiles away. So is every stage tile:
+ * the platform is the dancer's alone.
  */
 export const CLUB_FURNITURE_TILES = collectSolidTiles();
+
+/** Whether a sheet is one of the slot bank's cabinets, front or back. */
+export function isSlotCabinet(sprite: ClubPropSprite): boolean {
+  return SLOT_CABINET_SPRITES.some((cabinet) => cabinet === sprite);
+}

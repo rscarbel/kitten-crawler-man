@@ -19,3 +19,29 @@ export function assertNoFieldsLeft(_rest: Record<string, never>): void {
 export function ownEntry<T>(record: Readonly<Record<string, T>>, key: string): T | undefined {
   return Object.prototype.hasOwnProperty.call(record, key) ? record[key] : undefined;
 }
+
+export function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+export function isNonNegativeFinite(value: unknown): value is number {
+  return isFiniteNumber(value) && value >= 0;
+}
+
+/**
+ * Every entry of `value` parsed by `parseEntry`, or undefined when `value` is
+ * not an array or any one entry fails: a stored list is valid whole or not at all.
+ */
+export function parseEvery<T>(
+  value: unknown,
+  parseEntry: (entry: unknown) => T | undefined,
+): T[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const parsed: T[] = [];
+  for (const entry of value) {
+    const result = parseEntry(entry);
+    if (result === undefined) return undefined;
+    parsed.push(result);
+  }
+  return parsed;
+}

@@ -64,32 +64,6 @@
       }
     }
   },
-  "club_weapon_rack": {
-    "frameWidth": 192,
-    "frameHeight": 128,
-    "tileX": 0,
-    "tileY": 64,
-    "tileScale": 64,
-    "states": {
-      "idle": {
-        "row": 0,
-        "frameCount": 3
-      }
-    }
-  },
-  "club_merc_desk": {
-    "frameWidth": 192,
-    "frameHeight": 128,
-    "tileX": 0,
-    "tileY": 64,
-    "tileScale": 64,
-    "states": {
-      "idle": {
-        "row": 0,
-        "frameCount": 2
-      }
-    }
-  },
   "club_casino_table": {
     "frameWidth": 192,
     "frameHeight": 128,
@@ -116,32 +90,6 @@
       }
     }
   },
-  "club_vip_counter": {
-    "frameWidth": 384,
-    "frameHeight": 128,
-    "tileX": 0,
-    "tileY": 64,
-    "tileScale": 64,
-    "states": {
-      "idle": {
-        "row": 0,
-        "frameCount": 2
-      }
-    }
-  },
-  "club_velvet_rope": {
-    "frameWidth": 128,
-    "frameHeight": 128,
-    "tileX": 0,
-    "tileY": 64,
-    "tileScale": 64,
-    "states": {
-      "idle": {
-        "row": 0,
-        "frameCount": 2
-      }
-    }
-  },
   "club_slot_cabinet": {
     "frameWidth": 64,
     "frameHeight": 128,
@@ -151,7 +99,20 @@
     "states": {
       "idle": {
         "row": 0,
-        "frameCount": 3
+        "frameCount": 6
+      }
+    }
+  },
+  "club_slot_cabinet_back": {
+    "frameWidth": 64,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 6
       }
     }
   },
@@ -204,6 +165,45 @@
       "idle": {
         "row": 0,
         "frameCount": 1
+      }
+    }
+  },
+  "club_stage": {
+    "frameWidth": 192,
+    "frameHeight": 192,
+    "tileX": 0,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "club_host_stand": {
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "club_standing_table": {
+    "frameWidth": 64,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 2
       }
     }
   }

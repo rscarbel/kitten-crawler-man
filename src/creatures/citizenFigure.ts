@@ -1,7 +1,7 @@
 /**
  * The one place a citizen's species picks which cast paints it.
  *
- * `Townsperson` never reads `TownCastLook` or `SkyfowlLook` directly — it asks
+ * `Townsperson` never reads `TownCastLook` or `HawkfolkLook` directly — it asks
  * this module for a `CitizenFigure` at construction, and again only after a
  * purged canvas recovery, and draws through `drawCitizenSprite` every frame.
  * Adding a third species means adding a case here and nowhere else in
@@ -16,34 +16,35 @@ import type { TownRole } from '../sprites/person/PersonAppearance';
 import { pickTownCastLook, type TownCastLook } from '../sprites/person/townCastLooks';
 import { drawTownCastSprite, type TownCastSpriteState } from '../sprites/townCastSprite';
 import {
-  SKYFOWL_CIVILIAN_LOOKS,
-  type SkyfowlLook,
-  type SkyfowlRole,
-} from '../sprites/art/skyfowl/cast';
+  HAWKFOLK_CIVILIAN_LOOKS,
+  type HawkfolkLook,
+  type HawkfolkRole,
+} from '../sprites/art/hawkfolk/cast';
 import {
-  drawSkyfowlCastSprite,
-  prewarmAndPinSkyfowlTalk,
-  prewarmSkyfowlCastMember,
-  skyfowlCastMemberRows,
-} from '../sprites/skyfowlCastSprite';
+  drawHawkfolkCastSprite,
+  prewarmAndPinHawkfolkTalk,
+  prewarmHawkfolkCastMember,
+  hawkfolkCastMemberRows,
+} from '../sprites/hawkfolkCastSprite';
 import {
   prewarmAndPinTownCastTalk,
   prewarmTownCastLook,
   townCastLookRows,
 } from '../sprites/townCastSprite';
 import type { TownSpecies } from '../systems/townSpecies';
+import type { RoutinePose } from './routinePose';
 import { VARIETY_TIERS, varietyTier, type VarietyTier } from '../core/perf/varietyTier';
 import type { CitizenSpeechStyle } from '../dialog/speakers';
 import {
-  WALK_FRAMES as SKYFOWL_WALK_FRAMES,
-  skyfowlWalkCyclePx,
-} from '../sprites/art/skyfowlCastFigure';
+  WALK_FRAMES as HAWKFOLK_WALK_FRAMES,
+  hawkfolkWalkCyclePx,
+} from '../sprites/art/hawkfolkCastFigure';
 import { WALK_FRAMES as HUMAN_WALK_FRAMES } from '../sprites/art/townCastFrameCounts';
 import { HUMANOID_NPC_SCALE } from '../sprites/humanoidScale';
 
 export type CitizenFigure =
   | { readonly species: 'human'; readonly look: TownCastLook }
-  | { readonly species: 'skyfowl'; readonly look: SkyfowlLook };
+  | { readonly species: 'hawkfolk'; readonly look: HawkfolkLook };
 
 /** What a citizen can be doing, as far as either cast's sprite wrapper is concerned. */
 export type CitizenAction = 'idle' | 'walk' | 'talk' | 'work';
@@ -55,17 +56,19 @@ export interface CitizenSpriteState {
   readonly facingX: number;
   readonly facingY: number;
   readonly loopOffsetSeconds?: number;
+  /** The routine pose a `work` action stands for; a cast look draws every one as its work loop. */
+  readonly routinePose?: RoutinePose;
 }
 
-// ── Skyfowl role bucketing ───────────────────────────────────────────────────
+// ── Hawkfolk role bucketing ───────────────────────────────────────────────────
 
 /**
- * Buckets a citizen's job onto the skyfowl look set's own (narrower) role
+ * Buckets a citizen's job onto the Hawkfolk look set's own (narrower) role
  * vocabulary. `farmer`/`smith` read as outdoor hand-labour, `innkeeper` as a
  * trade with a counter, `drunk`/`beggar`/`commoner` as the plainest, most
  * numerous street look — the sparrow-fleck porter, the crowd's default face.
  */
-const SKYFOWL_ROLE_FOR_TOWN_ROLE: Record<TownRole, SkyfowlRole> = {
+const HAWKFOLK_ROLE_FOR_TOWN_ROLE: Record<TownRole, HawkfolkRole> = {
   guard: 'guard',
   merchant: 'merchant',
   farmer: 'laborer',
@@ -80,8 +83,8 @@ const SKYFOWL_ROLE_FOR_TOWN_ROLE: Record<TownRole, SkyfowlRole> = {
   commoner: 'porter',
 };
 
-const STREET_SKYFOWL_ROLES: ReadonlySet<SkyfowlRole> = new Set(
-  Object.values(SKYFOWL_ROLE_FOR_TOWN_ROLE),
+const STREET_HAWKFOLK_ROLES: ReadonlySet<HawkfolkRole> = new Set(
+  Object.values(HAWKFOLK_ROLE_FOR_TOWN_ROLE),
 );
 
 /**
@@ -90,25 +93,27 @@ const STREET_SKYFOWL_ROLES: ReadonlySet<SkyfowlRole> = new Set(
  * hold, in authored order, then every other look in authored order. A trimmed
  * set therefore keeps one look per street role for as long as it has room.
  */
-const SKYFOWL_LOOK_KEEP_ORDER: readonly SkyfowlLook[] = (() => {
-  const leads: SkyfowlLook[] = [];
-  const ledRoles = new Set<SkyfowlRole>();
-  for (const look of SKYFOWL_CIVILIAN_LOOKS) {
-    if (!STREET_SKYFOWL_ROLES.has(look.role) || ledRoles.has(look.role)) continue;
+const HAWKFOLK_LOOK_KEEP_ORDER: readonly HawkfolkLook[] = (() => {
+  const leads: HawkfolkLook[] = [];
+  const ledRoles = new Set<HawkfolkRole>();
+  for (const look of HAWKFOLK_CIVILIAN_LOOKS) {
+    if (!STREET_HAWKFOLK_ROLES.has(look.role) || ledRoles.has(look.role)) continue;
     ledRoles.add(look.role);
     leads.push(look);
   }
-  const rest = SKYFOWL_CIVILIAN_LOOKS.filter((look) => !leads.includes(look));
+  const rest = HAWKFOLK_CIVILIAN_LOOKS.filter((look) => !leads.includes(look));
   return [...leads, ...rest];
 })();
 
-/** Each variety tier keeps this share of the tier above's skyfowl street looks. */
-const SKYFOWL_LOOKS_KEPT_PER_TIER_STEP = 0.5;
+/** Each variety tier keeps this share of the tier above's Hawkfolk street looks. */
+const HAWKFOLK_LOOKS_KEPT_PER_TIER_STEP = 0.5;
 const AT_LEAST_ONE_LOOK = 1;
 
-/** How many skyfowl civilian looks the street wears at `tier`. */
-export function skyfowlStreetLookAllowance(tier: VarietyTier): number {
-  const kept = Math.ceil(SKYFOWL_CIVILIAN_LOOKS.length * SKYFOWL_LOOKS_KEPT_PER_TIER_STEP ** tier);
+/** How many Hawkfolk civilian looks the street wears at `tier`. */
+export function hawkfolkStreetLookAllowance(tier: VarietyTier): number {
+  const kept = Math.ceil(
+    HAWKFOLK_CIVILIAN_LOOKS.length * HAWKFOLK_LOOKS_KEPT_PER_TIER_STEP ** tier,
+  );
   return Math.max(AT_LEAST_ONE_LOOK, kept);
 }
 
@@ -116,33 +121,33 @@ export function skyfowlStreetLookAllowance(tier: VarietyTier): number {
  * A uniform says what its wearer does, so a citizen whose own role has no look
  * left at a tier borrows a plain one rather than a guard's armour.
  */
-const UNIFORMED_SKYFOWL_ROLES: ReadonlySet<SkyfowlRole> = new Set<SkyfowlRole>(['guard']);
+const UNIFORMED_HAWKFOLK_ROLES: ReadonlySet<HawkfolkRole> = new Set<HawkfolkRole>(['guard']);
 
-interface SkyfowlTierPools {
-  readonly byRole: ReadonlyMap<SkyfowlRole, readonly SkyfowlLook[]>;
+interface HawkfolkTierPools {
+  readonly byRole: ReadonlyMap<HawkfolkRole, readonly HawkfolkLook[]>;
   /** What a role with no look of its own at this tier wears. */
-  readonly borrowed: readonly SkyfowlLook[];
+  readonly borrowed: readonly HawkfolkLook[];
 }
 
-function skyfowlTierPools(tier: VarietyTier): SkyfowlTierPools {
-  const kept = SKYFOWL_LOOK_KEEP_ORDER.slice(0, skyfowlStreetLookAllowance(tier));
-  const byRole = new Map<SkyfowlRole, readonly SkyfowlLook[]>();
+function hawkfolkTierPools(tier: VarietyTier): HawkfolkTierPools {
+  const kept = HAWKFOLK_LOOK_KEEP_ORDER.slice(0, hawkfolkStreetLookAllowance(tier));
+  const byRole = new Map<HawkfolkRole, readonly HawkfolkLook[]>();
   for (const look of kept) byRole.set(look.role, [...(byRole.get(look.role) ?? []), look]);
-  const plain = kept.filter((look) => !UNIFORMED_SKYFOWL_ROLES.has(look.role));
+  const plain = kept.filter((look) => !UNIFORMED_HAWKFOLK_ROLES.has(look.role));
   return { byRole, borrowed: plain.length > 0 ? plain : kept };
 }
 
-const SKYFOWL_POOLS_BY_TIER: ReadonlyMap<VarietyTier, SkyfowlTierPools> = new Map(
-  VARIETY_TIERS.map((tier) => [tier, skyfowlTierPools(tier)]),
+const HAWKFOLK_POOLS_BY_TIER: ReadonlyMap<VarietyTier, HawkfolkTierPools> = new Map(
+  VARIETY_TIERS.map((tier) => [tier, hawkfolkTierPools(tier)]),
 );
 
-/** Salt for the skyfowl picker's own stream — kept distinct from the human cast's. */
-const SKYFOWL_LOOK_PICK_SALT = 0x5c1fa7;
+/** Salt for the Hawkfolk picker's own stream — kept distinct from the human cast's. */
+const HAWKFOLK_LOOK_PICK_SALT = 0x5c1fa7;
 
-function pickSkyfowlLook(seed: number, role: TownRole, tier: VarietyTier): SkyfowlLook {
-  const pools = SKYFOWL_POOLS_BY_TIER.get(tier) ?? skyfowlTierPools(tier);
-  const pool = pools.byRole.get(SKYFOWL_ROLE_FOR_TOWN_ROLE[role]) ?? pools.borrowed;
-  const rng = mulberry32(subSeed(seed, SKYFOWL_LOOK_PICK_SALT));
+function pickHawkfolkLook(seed: number, role: TownRole, tier: VarietyTier): HawkfolkLook {
+  const pools = HAWKFOLK_POOLS_BY_TIER.get(tier) ?? hawkfolkTierPools(tier);
+  const pool = pools.byRole.get(HAWKFOLK_ROLE_FOR_TOWN_ROLE[role]) ?? pools.borrowed;
+  const rng = mulberry32(subSeed(seed, HAWKFOLK_LOOK_PICK_SALT));
   return pick(rng, pool);
 }
 
@@ -160,8 +165,8 @@ export function pickCitizenFigure(
   species: TownSpecies,
   tier: VarietyTier = varietyTier(),
 ): CitizenFigure {
-  if (species === 'skyfowl') {
-    return { species: 'skyfowl', look: pickSkyfowlLook(seed, role, tier) };
+  if (species === 'hawkfolk') {
+    return { species: 'hawkfolk', look: pickHawkfolkLook(seed, role, tier) };
   }
   return { species: 'human', look: pickTownCastLook(seed, role, tier) };
 }
@@ -169,18 +174,18 @@ export function pickCitizenFigure(
 /**
  * World pixels one walk cycle covers for a citizen drawn at `tileSize` — the
  * ground its planted foot sweeps, carried through the size the figure is
- * actually drawn at. The skyfowl cast derives it from its own gait's foot
+ * actually drawn at. The Hawkfolk cast derives it from its own gait's foot
  * placement; the human cast carries it on the look as a share of the
  * humanoid-scaled draw box it paints into.
  */
 export function citizenWalkCyclePx(figure: CitizenFigure, tileSize: number): number {
-  if (figure.species === 'skyfowl') return skyfowlWalkCyclePx(figure.look.id, tileSize);
+  if (figure.species === 'hawkfolk') return hawkfolkWalkCyclePx(figure.look.id, tileSize);
   return figure.look.strideFraction * tileSize * HUMANOID_NPC_SCALE;
 }
 
 /** Frames in a citizen's walk row: the most one tick may advance it is one of them. */
 export function citizenWalkFrames(figure: CitizenFigure): number {
-  return figure.species === 'skyfowl' ? SKYFOWL_WALK_FRAMES : HUMAN_WALK_FRAMES;
+  return figure.species === 'hawkfolk' ? HAWKFOLK_WALK_FRAMES : HUMAN_WALK_FRAMES;
 }
 
 const FNV_OFFSET_BASIS = 0x811c9dc5;
@@ -199,25 +204,25 @@ function fnv1a(text: string): number {
 /**
  * A stable, look-scoped seed for dialog line rotation — shared by every
  * citizen wearing this look, the same way its cells are. The human cast
- * already carries one (`TownCastLook.dialogSeed`); the skyfowl cast has no
+ * already carries one (`TownCastLook.dialogSeed`); the Hawkfolk cast has no
  * such field, so one is derived from its look id instead of adding a field
  * that only this caller would read.
  */
 export function citizenDialogSeed(figure: CitizenFigure): number {
-  return figure.species === 'skyfowl' ? fnv1a(figure.look.id) : figure.look.dialogSeed;
+  return figure.species === 'hawkfolk' ? fnv1a(figure.look.id) : figure.look.dialogSeed;
 }
 
-const SKYFOWL_ELDER_ROLES: ReadonlySet<SkyfowlRole> = new Set<SkyfowlRole>(['temple', 'clerk']);
+const HAWKFOLK_ELDER_ROLES: ReadonlySet<HawkfolkRole> = new Set<HawkfolkRole>(['temple', 'clerk']);
 
-function skyfowlSpeechStyle(role: SkyfowlRole): CitizenSpeechStyle {
-  if (role === 'fledgling') return 'townsfolkSkyfowlFledgling';
-  if (SKYFOWL_ELDER_ROLES.has(role)) return 'townsfolkSkyfowlElder';
-  return 'townsfolkSkyfowl';
+function hawkfolkSpeechStyle(role: HawkfolkRole): CitizenSpeechStyle {
+  if (role === 'fledgling') return 'townsfolkHawkfolkFledgling';
+  if (HAWKFOLK_ELDER_ROLES.has(role)) return 'townsfolkHawkfolkElder';
+  return 'townsfolkHawkfolk';
 }
 
 /** The dialog style a citizen speaks in: their species' voice, and for a human the one their look is painted for. */
 export function citizenSpeechStyle(figure: CitizenFigure): CitizenSpeechStyle {
-  if (figure.species === 'skyfowl') return skyfowlSpeechStyle(figure.look.role);
+  if (figure.species === 'hawkfolk') return hawkfolkSpeechStyle(figure.look.role);
   return figure.look.feminine ? 'townsfolkFeminine' : 'townsfolkMasculine';
 }
 
@@ -228,8 +233,8 @@ export function citizenSpeechStyle(figure: CitizenFigure): CitizenSpeechStyle {
  * paid for in the frame that first draws it.
  */
 export function prewarmCitizenFigure(figure: CitizenFigure): void {
-  if (figure.species === 'skyfowl') {
-    prewarmSkyfowlCastMember(figure.look.id);
+  if (figure.species === 'hawkfolk') {
+    prewarmHawkfolkCastMember(figure.look.id);
     return;
   }
   prewarmTownCastLook(figure.look);
@@ -240,7 +245,7 @@ export function prewarmCitizenFigure(figure: CitizenFigure): void {
  * citizen wearing it shares: what a crowd holds of each look.
  */
 export function citizenFigureRows(figure: CitizenFigure): DrawnFigureRow[] {
-  if (figure.species === 'skyfowl') return skyfowlCastMemberRows(figure.look.id);
+  if (figure.species === 'hawkfolk') return hawkfolkCastMemberRows(figure.look.id);
   return townCastLookRows(figure.look);
 }
 
@@ -277,8 +282,8 @@ export function prewarmAndPinCitizenTalk(
   facingX: number,
   facingY: number,
 ): DrawnFigureRow {
-  if (figure.species === 'skyfowl') {
-    return prewarmAndPinSkyfowlTalk(figure.look.id, facingX, facingY);
+  if (figure.species === 'hawkfolk') {
+    return prewarmAndPinHawkfolkTalk(figure.look.id, facingX, facingY);
   }
   return prewarmAndPinTownCastTalk(figure.look, facingX, facingY);
 }
@@ -297,8 +302,8 @@ export function drawCitizenSprite(
   tileSize: number,
   state: CitizenSpriteState,
 ): DrawnFigureRow | undefined {
-  if (figure.species === 'skyfowl') {
-    return drawSkyfowlCastSprite(ctx, figure.look.id, sx, sy, tileSize, state);
+  if (figure.species === 'hawkfolk') {
+    return drawHawkfolkCastSprite(ctx, figure.look.id, sx, sy, tileSize, state);
   }
   const humanState: TownCastSpriteState = state;
   return drawTownCastSprite(ctx, figure.look, sx, sy, tileSize, humanState, true);

@@ -1,15 +1,15 @@
 /**
- * The parts of Grimaldi's grounds that move: the flame lamps' fires, bunting
- * and pennants stirring on their strings, the few festoon bulbs still
- * guttering, the light spilling out of the Big Top's door, the marionette
+ * The parts of the circus grounds that move: the flame lamps' fires, bunting
+ * and pennants stirring on their strings, the festoon bulbs, every one
+ * lit, the light spilling out of the Starlight Tent's door, the marionette
  * clown swaying under the entry arch, balloons bobbing on their tethers (and
  * one red one drifting loose), and a curtain twitching in the caravan window.
  *
  * All of it is drawn live over the baked structure frames rather than baked as
  * extra sheet rows — an overlay row costs a full frame of memory per cell
  * however little of it is inked, and most of this is a flame or a string.
- * Everything is a pure function of the clock and the quest stage, so nothing
- * here accumulates state a checkpoint would need.
+ * Everything is a pure function of the clock, so nothing here accumulates
+ * state a checkpoint would need.
  *
  * Where each piece is drawn is read off the anchors the structure painters
  * leave room for (`circusOverlayAnchors.ts`, the marquee's bulbs and the door
@@ -17,10 +17,8 @@
  * `circusGroundsLayout.ts`), so the painted half of a prop and its live half
  * cannot drift apart.
  *
- * Once Grimaldi is redeemed the grounds wake: every surviving bulb lights, the
- * door's light warms, and the vine runners baked into the lot die back — the
- * one change that reaches the chunk bake, through `markTileDirty` on the
- * tiles the runners cross and nothing more.
+ * The grounds are a working show: every festoon bulb and every unbroken
+ * marquee bulb is lit, and the Starlight Tent's door spills warm light.
  */
 
 import { TILE_SIZE } from '../../core/constants';
@@ -32,8 +30,8 @@ import {
 } from '../../core/rendering/canvasSurface';
 import type { GameMap } from '../../map/GameMap';
 import {
-  BIG_TOP_KING_POLES,
-  BIG_TOP_KING_POLE_DEPTH_TILES,
+  STARLIGHT_TENT_KING_POLES,
+  STARLIGHT_TENT_KING_POLE_DEPTH_TILES,
   CIRCUS_ARCH_POST_HEIGHT_TILES,
   CIRCUS_BUNTING_SPANS,
   CIRCUS_FESTOON_SPANS,
@@ -43,14 +41,12 @@ import {
   type CircusStructureId,
   type PlacedCircusStructure,
 } from '../../map/overworld/circusGroundsLayout';
-import { circusVineTiles } from '../../map/tiles/circusDecalTiles';
-import { circusGroundsFor } from '../../map/tiles/circusSiteRegistry';
 import { tileHash, tileHash01 } from '../../map/tiles/hollowTileHash';
 import {
-  BIG_TOP_DOOR_MOUTH,
-  BIG_TOP_MARQUEE_BULBS,
-  BIG_TOP_MARQUEE_BULB_RADIUS_TILES,
-  BIG_TOP_TENT,
+  STARLIGHT_TENT_DOOR_MOUTH,
+  STARLIGHT_TENT_MARQUEE_BULBS,
+  STARLIGHT_TENT_MARQUEE_BULB_RADIUS_TILES,
+  STARLIGHT_TENT_SHELL,
   CIRCUS_TILE_SCALE,
 } from '../../sprites/art/circusArt';
 import {
@@ -148,19 +144,19 @@ function firstOf(
 /** Where every bunting and festoon anchor name lands on this site, or nothing if it was never stood. */
 function resolveTies(site: CircusGroundsSite): Map<CircusAnchorName, Tie> {
   const ties = new Map<CircusAnchorName, Tie>();
-  const bigTop = firstOf(site, 'big_top');
-  if (bigTop !== undefined) {
-    const foot = footOf(bigTop);
-    const west = itemAt(BIG_TOP_KING_POLES, 0);
-    const east = itemAt(BIG_TOP_KING_POLES, 1);
+  const starlightTent = firstOf(site, 'starlight_tent');
+  if (starlightTent !== undefined) {
+    const foot = footOf(starlightTent);
+    const west = itemAt(STARLIGHT_TENT_KING_POLES, 0);
+    const east = itemAt(STARLIGHT_TENT_KING_POLES, 1);
     const pole = (x: number, heightTiles: number): Tie => ({
-      point: at(foot, { x, up: BIG_TOP_KING_POLE_DEPTH_TILES + heightTiles }),
+      point: at(foot, { x, up: STARLIGHT_TENT_KING_POLE_DEPTH_TILES + heightTiles }),
       sortY: foot.sortY,
     });
     if (west !== undefined) ties.set('king_pole_west', pole(west.x, west.heightTiles));
     if (east !== undefined) ties.set('king_pole_east', pole(east.x, east.heightTiles));
   }
-  const pavilions = ['pavilion_mold_lion', 'pavilion_feats_of_flesh', 'pavilion_fortunes'] as const;
+  const pavilions = ['pavilion_tightrope', 'pavilion_feats_of_flesh', 'pavilion_fortunes'] as const;
   for (const id of pavilions) {
     const placed = firstOf(site, id);
     if (placed === undefined) continue;
@@ -271,21 +267,18 @@ const POLE_PENNANT = {
   stripeTop: 0.3,
   stripeBottom: 0.6,
 } as const;
-/** The pavilions fly shorter pennants than the Big Top. */
+/** The pavilions fly shorter pennants than the Starlight Tent. */
 const PAVILION_PENNANT_SCALE = 0.7;
 
 /** Festoon bulbs. */
 const BULB_SPACING_TILES = 0.5;
 const BULB_RADIUS_TILES = 0.055;
 const BULB_SOCKET_RADIUS_TILES = 0.04;
-/** Most bulbs are dead; this share still gutters on before the grounds wake. */
-const BULB_LIVE_SHARE = 0.14;
 const BULB_GLOW_RADIUS_TILES = 0.42;
 const BULB_GLOW_ALPHA = 0.55;
-/** Dead glass: grey, gone amber-brown with dust. */
+/** Unlit glass, which a lit bulb's colour is mixed up from. */
 const BULB_DEAD: RGB = mix(BACKSTAGE.light, ROT_TIMBER.shadow, 1 / 2);
 const BULB_LIT: RGB = LIMELIGHT.light;
-const BULB_DEAD_FILL = rgba(BULB_DEAD, 1);
 const BULB_SOCKET_FILL = rgba(BACKSTAGE.mid, 1);
 const BULB_GLOW_SHOULDER = { offset: 0.35, alpha: 0.4 } as const;
 const BULB_GLOW_STOPS: ReadonlyArray<GlowStop> = [
@@ -293,24 +286,19 @@ const BULB_GLOW_STOPS: ReadonlyArray<GlowStop> = [
   { offset: BULB_GLOW_SHOULDER.offset, color: rgba(LIMELIGHT.mid, BULB_GLOW_SHOULDER.alpha) },
   { offset: 1, color: rgba(LIMELIGHT.shadow, 0) },
 ];
-/** A guttering bulb's brightness: a stepped noise, so it cuts out rather than pulsing. */
-const GUTTER_STEPS_PER_SECOND = 7;
-const GUTTER_OUT_SHARE = 0.35;
-const GUTTER_DIM = 0.45;
-const REDEEMED_SHIMMER = 0.08;
-const REDEEMED_SHIMMER_RATE = 2.3;
+const BULB_SHIMMER = 0.08;
+const BULB_SHIMMER_RATE = 2.3;
 
-/** The warm light inside the Big Top's open door. */
+/** The warm light inside the Starlight Tent's open door. */
 const DOOR_SPILL = {
   reachTiles: 2.6,
   /** How much wider than the door the spill has spread at its far end. */
   spread: 2.1,
-  alpha: 0.26,
-  redeemedAlpha: 0.4,
+  alpha: 0.4,
   flickerRate: 2.7,
   flickerDepth: 0.2,
   mouthGlowTiles: 0.9,
-  mouthGlowAlpha: 0.26,
+  mouthGlowAlpha: 0.42,
   textureMid: { offset: 0.5, alpha: 0.45 },
   /** How much of each side of the spill fades in, so it has no hard wedge edge. */
   edgeSoftness: 0.3,
@@ -445,19 +433,14 @@ interface Anchors {
 
 export class CircusGroundsAmbience {
   private seconds = 0;
-  private redeemed = false;
   private anchors: Anchors | null = null;
   private readonly renderables: TownPropRenderable[] = [];
   private marionette: CanvasSurface | null = null;
   private doorSpill: CanvasSurface | null = null;
   private readonly glowSprites = new Map<string, CanvasSurface>();
 
-  /**
-   * Advances the clock, picks up the grounds on `gameMap`, and follows the
-   * quest into its redeemed state. `redeemed` is read every frame, and the
-   * vine runners' tiles are re-baked only on the frame it changes.
-   */
-  update(gameMap: GameMap, dtSeconds: number, redeemed: boolean): void {
+  /** Advances the clock and picks up the grounds on `gameMap`. */
+  update(gameMap: GameMap, dtSeconds: number): void {
     this.seconds += dtSeconds;
     const site = gameMap.circusGrounds;
     if (site === null) {
@@ -465,15 +448,6 @@ export class CircusGroundsAmbience {
       return;
     }
     if (this.anchors?.site !== site) this.rebuild(site);
-    this.setRedeemed(gameMap, redeemed);
-  }
-
-  private setRedeemed(gameMap: GameMap, redeemed: boolean): void {
-    this.redeemed = redeemed;
-    const record = circusGroundsFor(gameMap.structure);
-    if (record === undefined || record.vinesWithered === redeemed) return;
-    record.vinesWithered = redeemed;
-    for (const tile of circusVineTiles(gameMap.structure)) gameMap.markTileDirty(tile.x, tile.y);
   }
 
   /**
@@ -506,19 +480,19 @@ export class CircusGroundsAmbience {
     });
 
     const pennants: Array<{ tie: Tie; scale: number }> = [];
-    const bigTopPole = (name: CircusAnchorName): void => {
+    const starlightTentPole = (name: CircusAnchorName): void => {
       const tie = ties.get(name);
       if (tie === undefined) return;
-      const cap = BIG_TOP_TENT.poleCapTiles * TILE_SIZE;
+      const cap = STARLIGHT_TENT_SHELL.poleCapTiles * TILE_SIZE;
       pennants.push({
         tie: { point: { x: tie.point.x, y: tie.point.y - cap }, sortY: tie.sortY },
         scale: 1,
       });
     };
-    bigTopPole('king_pole_west');
-    bigTopPole('king_pole_east');
+    starlightTentPole('king_pole_west');
+    starlightTentPole('king_pole_east');
     for (const name of [
-      'pavilion_mold_lion',
+      'pavilion_tightrope',
       'pavilion_feats_of_flesh',
       'pavilion_fortunes',
     ] as const) {
@@ -571,8 +545,8 @@ export class CircusGroundsAmbience {
       };
     });
 
-    const bigTop = firstOf(site, 'big_top');
-    const bigTopFoot = bigTop === undefined ? null : footOf(bigTop);
+    const starlightTent = firstOf(site, 'starlight_tent');
+    const starlightTentFoot = starlightTent === undefined ? null : footOf(starlightTent);
     this.anchors = {
       site,
       lamps,
@@ -584,14 +558,17 @@ export class CircusGroundsAmbience {
       looseBalloonFrom,
       curtains,
       door:
-        bigTopFoot === null
+        starlightTentFoot === null
           ? null
           : {
-              mouth: at(bigTopFoot, { x: BIG_TOP_DOOR_MOUTH.x, up: BIG_TOP_DOOR_MOUTH.footUp }),
-              halfWidth: BIG_TOP_DOOR_MOUTH.halfWidth * TILE_SIZE,
-              sortY: bigTopFoot.sortY,
+              mouth: at(starlightTentFoot, {
+                x: STARLIGHT_TENT_DOOR_MOUTH.x,
+                up: STARLIGHT_TENT_DOOR_MOUTH.footUp,
+              }),
+              halfWidth: STARLIGHT_TENT_DOOR_MOUTH.halfWidth * TILE_SIZE,
+              sortY: starlightTentFoot.sortY,
             },
-      marquee: bigTopFoot === null ? null : { foot: bigTopFoot },
+      marquee: starlightTentFoot === null ? null : { foot: starlightTentFoot },
     };
     this.buildRenderables();
   }
@@ -655,7 +632,7 @@ export class CircusGroundsAmbience {
 
     if (anchors.marquee !== null) {
       const foot = anchors.marquee.foot;
-      push(foot.left, foot.sortY, CIRCUS_STRUCTURES.big_top.w, (ctx, camX, camY) =>
+      push(foot.left, foot.sortY, CIRCUS_STRUCTURES.starlight_tent.w, (ctx, camX, camY) =>
         this.drawMarqueeAndMouth(ctx, anchors, camX, camY),
       );
     }
@@ -665,7 +642,7 @@ export class CircusGroundsAmbience {
       );
     });
     anchors.pennants.forEach((pennant, index) => {
-      // A pennant flies at its pole's cap, which on the Big Top is the king
+      // A pennant flies at its pole's cap, which on the Starlight Tent is the king
       // pole's height plus the cap above the tent's sort row, so it is kept
       // while any of that climb is on screen, not only its sort row.
       const capRiseTiles = Math.max(0, (pennant.tie.sortY - pennant.tie.point.y) / TILE_SIZE);
@@ -710,7 +687,7 @@ export class CircusGroundsAmbience {
   }
 
   /**
-   * The Big Top's door light on the lot, added onto the chunk-baked ground.
+   * The Starlight Tent's door light on the lot, added onto the chunk-baked ground.
    * The render pipeline calls it straight after the map, before any gore,
    * telegraph or body, because the light is additive and would wash out
    * anything already drawn beneath it.
@@ -722,7 +699,7 @@ export class CircusGroundsAmbience {
     const reach = DOOR_SPILL.reachTiles * TILE_SIZE;
     const halfFar = door.halfWidth * DOOR_SPILL.spread;
     const alpha =
-      (this.redeemed ? DOOR_SPILL.redeemedAlpha : DOOR_SPILL.alpha) *
+      DOOR_SPILL.alpha *
       (1 -
         DOOR_SPILL.flickerDepth / 2 +
         (DOOR_SPILL.flickerDepth / 2) * this.wave(DOOR_SPILL.flickerRate, 0));
@@ -787,21 +764,10 @@ export class CircusGroundsAmbience {
     return Math.sin(this.seconds * rate + phase);
   }
 
-  /** A lit bulb's brightness once the grounds wake: steady, with a faint shimmer. */
+  /** A lit bulb's brightness: steady, with a faint shimmer. */
   private shimmer(index: number): number {
-    const swing = (1 + this.wave(REDEEMED_SHIMMER_RATE, index)) / 2;
-    return 1 - REDEEMED_SHIMMER * swing;
-  }
-
-  /**
-   * A guttering bulb's brightness in [0, 1]: stepped noise off the clock, so
-   * it catches, dims and cuts out rather than breathing like a sine.
-   */
-  private gutter(salt: number): number {
-    const step = Math.floor(this.seconds * GUTTER_STEPS_PER_SECOND);
-    const roll = tileHash01(step, salt, BULB_SALT);
-    if (roll < GUTTER_OUT_SHARE) return 0;
-    return roll < GUTTER_OUT_SHARE + GUTTER_DIM / 2 ? GUTTER_DIM : 1;
+    const swing = (1 + this.wave(BULB_SHIMMER_RATE, index)) / 2;
+    return 1 - BULB_SHIMMER * swing;
   }
 
   // ── Pieces ──────────────────────────────────────────────────────────────────
@@ -1050,30 +1016,15 @@ export class CircusGroundsAmbience {
     const stations = this.stations(points, BULB_SPACING_TILES * TILE_SIZE);
     const radius = BULB_RADIUS_TILES * TILE_SIZE;
     const socket = BULB_SOCKET_RADIUS_TILES * TILE_SIZE;
-    const lit: Array<{ at: WorldPoint; brightness: number }> = [];
-    // The sockets and the dead glass are one path each; only a lit bulb,
-    // whose colour follows its own brightness, is filled on its own.
-    const dead = stations.map((station, index) => {
-      const salt = span.salt * STATIONS_PER_SPAN_SALT + index;
-      const live = tileHash01(index, span.salt, BULB_SALT) < BULB_LIVE_SHARE;
-      const brightness = this.redeemed ? this.shimmer(index) : live ? this.gutter(salt) : 0;
-      const at = { x: station.at.x, y: station.at.y + socket + radius };
-      if (brightness > 0) lit.push({ at, brightness });
-      return brightness > 0 ? null : at;
-    });
+    const lit = stations.map((station, index) => ({
+      at: { x: station.at.x, y: station.at.y + socket + radius },
+      brightness: this.shimmer(index),
+    }));
     ctx.fillStyle = BULB_SOCKET_FILL;
     ctx.beginPath();
     for (const station of stations) {
       ctx.moveTo(station.at.x + socket, station.at.y + socket / 2);
       ctx.arc(station.at.x, station.at.y + socket / 2, socket, 0, FULL_TURN);
-    }
-    ctx.fill();
-    ctx.fillStyle = BULB_DEAD_FILL;
-    ctx.beginPath();
-    for (const at of dead) {
-      if (at === null) continue;
-      ctx.moveTo(at.x + radius, at.y);
-      ctx.arc(at.x, at.y, radius, 0, FULL_TURN);
     }
     ctx.fill();
     for (const bulb of lit) {
@@ -1103,7 +1054,7 @@ export class CircusGroundsAmbience {
     }
   }
 
-  /** The marquee's bulbs, lit where the ambience says, and a warm glow deep in the door's mouth. */
+  /** The marquee's unbroken bulbs, lit, and a warm glow deep in the door's mouth. */
   private drawMarqueeAndMouth(ctx: Ctx, anchors: Anchors, camX: number, camY: number): void {
     const marquee = anchors.marquee;
     if (marquee === null) return;
@@ -1113,12 +1064,11 @@ export class CircusGroundsAmbience {
         1 -
         DOOR_SPILL.flickerDepth / 2 +
         (DOOR_SPILL.flickerDepth / 2) * this.wave(DOOR_SPILL.flickerRate, 1);
-      const mouthY = door.mouth.y - (BIG_TOP_DOOR_MOUTH.height * TILE_SIZE) / 2;
+      const mouthY = door.mouth.y - (STARLIGHT_TENT_DOOR_MOUTH.height * TILE_SIZE) / 2;
       ctx.save();
       try {
         ctx.globalCompositeOperation = 'lighter';
-        ctx.globalAlpha =
-          DOOR_SPILL.mouthGlowAlpha * flicker * (this.redeemed ? REDEEMED_MOUTH_BOOST : 1);
+        ctx.globalAlpha = DOOR_SPILL.mouthGlowAlpha * flicker;
         this.drawGlow(
           ctx,
           door.mouth.x - camX,
@@ -1130,17 +1080,11 @@ export class CircusGroundsAmbience {
         ctx.restore();
       }
     }
-    const radius = BIG_TOP_MARQUEE_BULB_RADIUS_TILES * TILE_SIZE;
+    const radius = STARLIGHT_TENT_MARQUEE_BULB_RADIUS_TILES * TILE_SIZE;
     const lit: Array<{ at: WorldPoint; brightness: number }> = [];
-    BIG_TOP_MARQUEE_BULBS.forEach((bulb, index) => {
+    STARLIGHT_TENT_MARQUEE_BULBS.forEach((bulb, index) => {
       if (bulb.broken) return;
-      // Before the grounds wake only a couple still catch, and gutter out.
-      const brightness = this.redeemed
-        ? this.shimmer(index)
-        : MARQUEE_GUTTERING_BULBS.has(index)
-          ? this.gutter(index + MARQUEE_SALT)
-          : 0;
-      if (brightness <= 0) return;
+      const brightness = this.shimmer(index);
       const point = at(marquee.foot, bulb);
       const x = point.x - camX;
       const y = point.y - camY;
@@ -1384,15 +1328,8 @@ function spanReachTiles(span: Span): number {
 const FLAME_PHASE_STEP = 1.9;
 /** The glow centres a little up the flame, where the fire is hottest. */
 const FLAME_GLOW_RISE_SHARE = 0.4;
-const STATIONS_PER_SPAN_SALT = 97;
-const MARQUEE_SALT = 400;
-/** Which of the marquee's bulbs still gutter before the grounds wake: two, far apart. */
-const MARQUEE_GUTTERING_BULBS: ReadonlySet<number> = new Set(
-  Object.values({ nearWest: 3, nearEast: 17 }),
-);
 const MARQUEE_GLASS_SHARE = 0.72;
 const MARQUEE_GLOW_SHARE = 0.7;
-const REDEEMED_MOUTH_BOOST = 1.6;
 const BALLOON_PHASE_STEP = 2.3;
 /** Every other balloon flies on a shorter string, so a bunch reads as a bunch. */
 const BALLOON_ALTERNATE_SHORTER = 0.18;

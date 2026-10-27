@@ -12,7 +12,11 @@ import type { ResourceCost } from '../../core/items/gathering/partyResources';
 import type { VillagerId } from '../../dialog/scripts/briarHollow';
 import { contractPropId } from '../../map/contractAreas';
 import { BUILDINGS, type VillageBuildingId } from '../../map/overworld/briarHollowLayout';
-import { PLANNED_BUILDING_NAMES, type TownBuildingName } from '../../map/town/townPlan';
+import {
+  CLOAK_AND_DAGGER_NAME,
+  PLANNED_BUILDING_NAMES,
+  type TownBuildingName,
+} from '../../map/town/townPlan';
 import type { ResidentId } from '../townResidents';
 
 /** The three materials a contract is costed in. */
@@ -46,12 +50,12 @@ export interface ContractSpotDef {
 }
 
 /**
- * Skyfowl Town buildings that never host a contract: the tower, the club and
+ * Taloncrest buildings that never host a contract: the tower, the club and
  * Wendell's own farm, where the contracts are handed out.
  */
 export const CONTRACT_EXCLUDED_TOWN_BUILDINGS = [
   'Town Center Tower',
-  'The Desperado Club',
+  CLOAK_AND_DAGGER_NAME,
   'Plumbline Farm',
 ] as const satisfies readonly TownBuildingName[];
 
@@ -64,7 +68,7 @@ export type ContractTownBuildingName = Exclude<
 export type ContractVillageBuildingId = VillageBuildingId;
 
 export type ContractSiteKey =
-  | { readonly town: 'skyfowl'; readonly buildingName: ContractTownBuildingName }
+  | { readonly town: 'taloncrest'; readonly buildingName: ContractTownBuildingName }
   | { readonly town: 'briar_hollow'; readonly buildingId: ContractVillageBuildingId };
 
 interface ContractSiteDefBase {
@@ -78,10 +82,10 @@ interface ContractSiteDefBase {
   readonly spots: readonly ContractSpotDef[];
 }
 
-export interface SkyfowlContractSiteDef extends ContractSiteDefBase {
-  readonly town: 'skyfowl';
+export interface TaloncrestContractSiteDef extends ContractSiteDefBase {
+  readonly town: 'taloncrest';
   readonly buildingName: ContractTownBuildingName;
-  readonly contact: SkyfowlContractContactId;
+  readonly contact: TaloncrestContractContactId;
 }
 
 export interface BriarHollowContractSiteDef extends ContractSiteDefBase {
@@ -90,7 +94,7 @@ export interface BriarHollowContractSiteDef extends ContractSiteDefBase {
   readonly contact: VillageContractContactId;
 }
 
-export type ContractSiteDef = SkyfowlContractSiteDef | BriarHollowContractSiteDef;
+export type ContractSiteDef = TaloncrestContractSiteDef | BriarHollowContractSiteDef;
 
 /** How a pool entry is written before its target is resolved against its site's slug. */
 interface SpotSpec {
@@ -117,7 +121,7 @@ function poolFor(slug: string, specs: readonly SpotSpec[]): readonly ContractSpo
   }));
 }
 
-interface SkyfowlSiteData {
+interface TaloncrestSiteData {
   readonly slug: string;
   readonly contact: ResidentId;
   readonly spots: readonly SpotSpec[];
@@ -129,7 +133,7 @@ interface VillageSiteData {
   readonly spots: readonly SpotSpec[];
 }
 
-const SKYFOWL_SITE_DATA = {
+const TALONCREST_SITE_DATA = {
   'The Barracks': {
     slug: 'barracks',
     contact: 'quartermaster_dann',
@@ -280,7 +284,7 @@ const SKYFOWL_SITE_DATA = {
   },
   "Cartwright's Workshop": {
     slug: 'cartwrights_workshop',
-    contact: 'brann_cartwright',
+    contact: 'steve_cartwright',
     spots: [
       {
         id: 'joiner_bench',
@@ -746,9 +750,9 @@ const SKYFOWL_SITE_DATA = {
       },
     ],
   },
-  "Old Hilda's Cottage": {
-    slug: 'old_hildas_cottage',
-    contact: 'old_hilda',
+  "Old Lori's Cottage": {
+    slug: 'old_loris_cottage',
+    contact: 'old_lori',
     spots: [
       {
         id: 'bed',
@@ -1136,7 +1140,7 @@ const SKYFOWL_SITE_DATA = {
       },
     ],
   },
-} as const satisfies Record<ContractTownBuildingName, SkyfowlSiteData>;
+} as const satisfies Record<ContractTownBuildingName, TaloncrestSiteData>;
 
 /** The north-wall run every roofless village room offers. */
 const REPOINT_NORTH_WALL: SpotSpec = {
@@ -2054,22 +2058,22 @@ const VILLAGE_SITE_DATA = {
   },
 } as const satisfies Record<ContractVillageBuildingId, VillageSiteData>;
 
-/** The Skyfowl Town residents who pay out a contract: one per site, derived so a new site's contact joins the union. */
-export type SkyfowlContractContactId =
-  (typeof SKYFOWL_SITE_DATA)[keyof typeof SKYFOWL_SITE_DATA]['contact'];
+/** The Taloncrest residents who pay out a contract: one per site, derived so a new site's contact joins the union. */
+export type TaloncrestContractContactId =
+  (typeof TALONCREST_SITE_DATA)[keyof typeof TALONCREST_SITE_DATA]['contact'];
 
 /** The Briar Hollow villagers who pay out a contract; one villager may be the contact for several sites. */
 export type VillageContractContactId =
   (typeof VILLAGE_SITE_DATA)[keyof typeof VILLAGE_SITE_DATA]['contact'];
 
 /** Everyone who pays out a contract, in either town. */
-export type ContractContactId = SkyfowlContractContactId | VillageContractContactId;
+export type ContractContactId = TaloncrestContractContactId | VillageContractContactId;
 
-function skyfowlSite(buildingName: ContractTownBuildingName): SkyfowlContractSiteDef {
-  const entry = SKYFOWL_SITE_DATA[buildingName];
-  const data: SkyfowlSiteData = entry;
+function taloncrestSite(buildingName: ContractTownBuildingName): TaloncrestContractSiteDef {
+  const entry = TALONCREST_SITE_DATA[buildingName];
+  const data: TaloncrestSiteData = entry;
   return {
-    town: 'skyfowl',
+    town: 'taloncrest',
     buildingName,
     slug: data.slug,
     name: buildingName,
@@ -2092,12 +2096,12 @@ function villageSite(buildingId: ContractVillageBuildingId): BriarHollowContract
 }
 
 function isContractTownBuildingName(name: TownBuildingName): name is ContractTownBuildingName {
-  return name in SKYFOWL_SITE_DATA;
+  return name in TALONCREST_SITE_DATA;
 }
 
-/** Every contract site in both towns, Skyfowl Town first, in the fixed order the generator draws from. */
+/** Every contract site in both towns, Taloncrest first, in the fixed order the generator draws from. */
 export const CONTRACT_SITES: readonly ContractSiteDef[] = [
-  ...PLANNED_BUILDING_NAMES.filter(isContractTownBuildingName).map(skyfowlSite),
+  ...PLANNED_BUILDING_NAMES.filter(isContractTownBuildingName).map(taloncrestSite),
   ...BUILDINGS.map((building) => villageSite(building.id)),
 ];
 
@@ -2113,23 +2117,25 @@ export function contractSiteBySlug(slug: string): ContractSiteDef | undefined {
 /** The catalogue entry a saved site key names, or undefined when it names none. */
 export function contractSiteFor(key: ContractSiteKey): ContractSiteDef | undefined {
   return CONTRACT_SITES.find((site) =>
-    site.town === 'skyfowl'
-      ? key.town === 'skyfowl' && key.buildingName === site.buildingName
+    site.town === 'taloncrest'
+      ? key.town === 'taloncrest' && key.buildingName === site.buildingName
       : key.town === 'briar_hollow' && key.buildingId === site.buildingId,
   );
 }
 
 /** The durable key for a site, as the contract state stores it. */
 export function contractSiteKey(site: ContractSiteDef): ContractSiteKey {
-  return site.town === 'skyfowl'
-    ? { town: 'skyfowl', buildingName: site.buildingName }
+  return site.town === 'taloncrest'
+    ? { town: 'taloncrest', buildingName: site.buildingName }
     : { town: 'briar_hollow', buildingId: site.buildingId };
 }
 
-/** The Skyfowl Town site for a building, or undefined when that building hosts none. */
-export function skyfowlContractSite(buildingName: string): SkyfowlContractSiteDef | undefined {
+/** The Taloncrest site for a building, or undefined when that building hosts none. */
+export function taloncrestContractSite(
+  buildingName: string,
+): TaloncrestContractSiteDef | undefined {
   for (const site of CONTRACT_SITES) {
-    if (site.town === 'skyfowl' && site.buildingName === buildingName) return site;
+    if (site.town === 'taloncrest' && site.buildingName === buildingName) return site;
   }
   return undefined;
 }

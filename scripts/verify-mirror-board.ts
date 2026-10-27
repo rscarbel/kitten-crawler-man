@@ -18,7 +18,7 @@ import {
   runMirrorBoardChecks,
   SWEEP_ATTEMPTS,
   type MirrorBoardFault,
-} from './bigTopMirrorBoardChecks';
+} from './starlightTentMirrorBoardChecks';
 
 const FAULT_FLAG = '--fault=';
 const ATTEMPTS_FLAG = '--attempts=';

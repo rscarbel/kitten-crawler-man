@@ -24,8 +24,6 @@ const WALK_FRAME = 1.2;
 /** Mid-swing of a telegraphed attack, where the pose is most legible. */
 const ATTACK_MIDPOINT = 0.5;
 const FACING_RIGHT = 1;
-/** A walking pace, so a walk pose shows a walk rather than a run. */
-const BRISK_WALK_TILES_PER_SECOND = 1.7;
 const FACING_TOWARD_CAMERA = 1;
 const FACING_AWAY = -1;
 /** An arbitrary but fixed seed, so a re-export of a seeded character is identical. */
@@ -107,58 +105,26 @@ function sheetViews<Pose, C extends SubjectContext>(
 
 export const SUBJECTS: readonly SvgSubject[] = [
   {
-    name: 'signet',
+    name: 'angel',
     views: async () => {
-      const { drawSignetSprite } = await import('../src/sprites/signetSprite.js');
-      const pose = {
-        walkFrame: STILL_FRAME,
-        locomotion: 0,
-        speedTilesPerSecond: BRISK_WALK_TILES_PER_SECOND,
-        summonProgress: 0,
-        castProgress: 0,
-        facingX: FACING_RIGHT,
-      };
+      const { ANGEL_FIGURE, ANGEL_BIG_MOVE_FRAMES } =
+        await import('../src/sprites/art/angelFigure.js');
+      const paintRow =
+        (routine: string, frame: number) =>
+        ({ dom, unit }: SvgTargets): void => {
+          dom.save();
+          dom.scale(unit / ANGEL_FIGURE.tileScale, unit / ANGEL_FIGURE.tileScale);
+          ANGEL_FIGURE.paintFrame(dom, routine, frame);
+          dom.restore();
+        };
+      const [swingApex, squatLow] = ANGEL_BIG_MOVE_FRAMES.swing_squat;
+      const [archPeak, hairWhip] = ANGEL_BIG_MOVE_FRAMES.arch_flip_look;
       return [
-        {
-          name: 'front',
-          paint: ({ dom, unit }) => drawSignetSprite(dom, 0, 0, unit, { ...pose, view: 'front' }),
-        },
-        {
-          name: 'back',
-          paint: ({ dom, unit }) => drawSignetSprite(dom, 0, 0, unit, { ...pose, view: 'back' }),
-        },
-        {
-          name: 'side',
-          paint: ({ dom, unit }) => drawSignetSprite(dom, 0, 0, unit, { ...pose, view: 'side' }),
-        },
-        {
-          name: 'walk',
-          paint: ({ dom, unit }) =>
-            drawSignetSprite(dom, 0, 0, unit, {
-              ...pose,
-              view: 'front',
-              walkFrame: WALK_FRAME,
-              locomotion: 1,
-            }),
-        },
-        {
-          name: 'cast',
-          paint: ({ dom, unit }) =>
-            drawSignetSprite(dom, 0, 0, unit, {
-              ...pose,
-              view: 'front',
-              castProgress: ATTACK_MIDPOINT,
-            }),
-        },
-        {
-          name: 'summon',
-          paint: ({ dom, unit }) =>
-            drawSignetSprite(dom, 0, 0, unit, {
-              ...pose,
-              view: 'front',
-              summonProgress: ATTACK_MIDPOINT,
-            }),
-        },
+        { name: 'home', paint: paintRow('roll_wave', STILL_FRAME) },
+        { name: 'swing', paint: paintRow('swing_squat', swingApex) },
+        { name: 'squat', paint: paintRow('swing_squat', squatLow) },
+        { name: 'arch', paint: paintRow('arch_flip_look', archPeak) },
+        { name: 'hair-flip', paint: paintRow('arch_flip_look', hairWhip) },
       ];
     },
   },
@@ -513,71 +479,32 @@ export const SUBJECTS: readonly SvgSubject[] = [
     },
   },
   {
-    name: 'grimaldi-vine',
-    views: async () => {
-      const { drawGrimaldiVineSprite } = await import('../src/sprites/grimaldiVineSprite.js');
-      return [
-        {
-          name: 'poisoned',
-          paint: ({ dom, unit }) =>
-            drawGrimaldiVineSprite(dom, 0, 0, unit, 0, {
-              poison: 1,
-              sag: 1,
-              cure: 0,
-              hitFlash: false,
-            }),
-        },
-        {
-          name: 'refused-blow',
-          paint: ({ dom, unit }) =>
-            drawGrimaldiVineSprite(dom, 0, 0, unit, 0, {
-              poison: 1,
-              sag: 1,
-              cure: 0,
-              hitFlash: true,
-            }),
-        },
-        {
-          name: 'cured',
-          paint: ({ dom, unit }) =>
-            drawGrimaldiVineSprite(dom, 0, 0, unit, 0, {
-              poison: 1,
-              sag: 1,
-              cure: 1,
-              hitFlash: false,
-            }),
-        },
-      ];
-    },
-  },
-  {
-    name: 'circus-lemur',
+    name: 'lemur',
     views: async (frame) => {
-      const { CIRCUS_LEMUR_FIGURE, LEMUR_ROWS } =
-        await import('../src/sprites/art/circusLemurFigure.js');
+      const { LEMUR_FIGURE, LEMUR_ROWS } = await import('../src/sprites/art/lemurFigure.js');
       return LEMUR_ROWS.map((row): SvgView => ({
         name: row.name,
         paint: ({ dom, unit }) =>
-          inUnitSpace(dom, unit / CIRCUS_LEMUR_FIGURE.tileScale, (ctx) =>
-            CIRCUS_LEMUR_FIGURE.paintFrame(ctx, row.name, frame % row.frameCount),
+          inUnitSpace(dom, unit / LEMUR_FIGURE.tileScale, (ctx) =>
+            LEMUR_FIGURE.paintFrame(ctx, row.name, frame % row.frameCount),
           ),
       }));
     },
   },
   {
-    name: 'mold-lion',
+    name: 'lion',
     views: async () => {
-      const { drawMoldLionSprite } = await import('../src/sprites/moldLionSprite.js');
+      const { drawLionSprite } = await import('../src/sprites/lionSprite.js');
       return [
-        { name: 'idle', paint: ({ dom, unit }) => drawMoldLionSprite(dom, 0, 0, unit) },
+        { name: 'idle', paint: ({ dom, unit }) => drawLionSprite(dom, 0, 0, unit) },
         {
           name: 'walk',
-          paint: ({ dom, unit }) => drawMoldLionSprite(dom, 0, 0, unit, WALK_FRAME, true),
+          paint: ({ dom, unit }) => drawLionSprite(dom, 0, 0, unit, WALK_FRAME, true),
         },
         {
           name: 'attack',
           paint: ({ dom, unit }) =>
-            drawMoldLionSprite(dom, 0, 0, unit, STILL_FRAME, false, ATTACK_MIDPOINT),
+            drawLionSprite(dom, 0, 0, unit, STILL_FRAME, false, ATTACK_MIDPOINT),
         },
       ];
     },
@@ -621,28 +548,28 @@ export const SUBJECTS: readonly SvgSubject[] = [
     },
   },
   {
-    name: 'heather-bear',
+    name: 'dire-bear',
     views: async (frame) => {
-      const { drawHeatherBear } = await import('../src/sprites/art/heatherBearArt.js');
-      const { HEATHER_ROWS } = await import('../src/sprites/art/heatherBearFigure.js');
-      return HEATHER_ROWS.map((row): SvgView => ({
+      const { drawDireBear } = await import('../src/sprites/art/direBearArt.js');
+      const { DIRE_BEAR_ROWS } = await import('../src/sprites/art/direBearFigure.js');
+      return DIRE_BEAR_ROWS.map((row): SvgView => ({
         name: row.name,
         paint: ({ dom, unit }) =>
-          inUnitSpace(dom, unit, (ctx) => drawHeatherBear(ctx, row.pose(frame))),
+          inUnitSpace(dom, unit, (ctx) => drawDireBear(ctx, row.pose(frame))),
       }));
     },
   },
   {
-    name: 'gum-gum',
+    name: 'baggi',
     views: async () => {
-      const { drawGumGumSprite, drawGumGumCorpse } = await import('../src/sprites/gumGumSprite.js');
+      const { drawBaggiSprite, drawBaggiCorpse } = await import('../src/sprites/baggiSprite.js');
       return [
-        { name: 'idle', paint: ({ dom, unit }) => drawGumGumSprite(dom, 0, 0, unit) },
+        { name: 'idle', paint: ({ dom, unit }) => drawBaggiSprite(dom, 0, 0, unit) },
         {
           name: 'walk',
-          paint: ({ dom, unit }) => drawGumGumSprite(dom, 0, 0, unit, WALK_FRAME, true),
+          paint: ({ dom, unit }) => drawBaggiSprite(dom, 0, 0, unit, WALK_FRAME, true),
         },
-        { name: 'corpse', paint: ({ dom, unit }) => drawGumGumCorpse(dom, 0, 0, unit) },
+        { name: 'corpse', paint: ({ dom, unit }) => drawBaggiCorpse(dom, 0, 0, unit) },
       ];
     },
   },
@@ -664,45 +591,6 @@ export const SUBJECTS: readonly SvgSubject[] = [
           };
         }),
       );
-    },
-  },
-  {
-    name: 'ink-marauder',
-    views: async () => {
-      const { drawInkMarauderSprite, INK_EMERGE_FRAMES } =
-        await import('../src/sprites/inkMarauderSprite.js');
-      const pose = {
-        // A freshly summoned marauder is scaled almost to nothing behind the
-        // emerge swirl; the settled form only exists once the swirl is over.
-        age: INK_EMERGE_FRAMES,
-        lifeFraction: 1,
-        attackProgress: 0,
-        facingX: FACING_RIGHT,
-        walkFrame: STILL_FRAME,
-        isMoving: false,
-        swimBlend: 0,
-      };
-      return [
-        {
-          name: 'ogre',
-          paint: ({ dom, unit }) =>
-            drawInkMarauderSprite(dom, 0, 0, unit, { ...pose, form: 'ogre' }),
-        },
-        {
-          name: 'shark',
-          paint: ({ dom, unit }) =>
-            drawInkMarauderSprite(dom, 0, 0, unit, { ...pose, form: 'shark', swimBlend: 1 }),
-        },
-        {
-          name: 'ogre-attack',
-          paint: ({ dom, unit }) =>
-            drawInkMarauderSprite(dom, 0, 0, unit, {
-              ...pose,
-              form: 'ogre',
-              attackProgress: ATTACK_MIDPOINT,
-            }),
-        },
-      ];
     },
   },
   {

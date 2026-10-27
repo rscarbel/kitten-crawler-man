@@ -43,7 +43,7 @@ import {
 } from '../ui/questReward/rewardLines';
 import type { QuestRewardSpec, RewardItemLine } from '../ui/questReward/types';
 import type { VendorLineGate } from '../economy/shops';
-import { HILDA_COTTAGE_NAME, SKY_TEMPLE_NAME } from './interiorStoryOwnership';
+import { LORI_COTTAGE_NAME, SKY_TEMPLE_NAME } from './interiorStoryOwnership';
 import {
   travelUnlocksSection,
   unlockedDestinationIds,
@@ -75,21 +75,21 @@ const SHARDS_REQUIRED = ANCHOR_SHARD_IDS.length;
 /** Where the shard each giver holds is described, for the Journal's objective line. */
 const SHARD_OBJECTIVES: Record<(typeof ANCHOR_SHARD_IDS)[number], string> = {
   anchor_shard_tinker: "Buy the grey wedge from the tinker's stall",
-  anchor_shard_hilda: "Get the shard from under Old Hilda's chair",
+  anchor_shard_lori: "Get the shard from under Old Lori's chair",
   anchor_shard_temple: "Ask Deacon Aviel for the altar's shard",
 };
 
 /** The same three, phrased as a list Voss reads back at you. */
 const SHARD_REMINDERS: Record<(typeof ANCHOR_SHARD_IDS)[number], string> = {
   anchor_shard_tinker: 'The tinker, who thinks it is scrap.',
-  anchor_shard_hilda: 'Old Hilda, who is using it as furniture.',
+  anchor_shard_lori: 'Old Lori, who is using it as furniture.',
   anchor_shard_temple: 'The temple, and their rat problem.',
 };
 
 /** Short label for a shard's own Journal row, so it reads as a step rather than repeating the quest name. */
 const SHARD_STEP_NAMES: Record<(typeof ANCHOR_SHARD_IDS)[number], string> = {
   anchor_shard_tinker: "The Tinker's Shard",
-  anchor_shard_hilda: "Hilda's Shard",
+  anchor_shard_lori: "Lori's Shard",
   anchor_shard_temple: "The Temple's Shard",
 };
 
@@ -111,7 +111,7 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
     /**
      * A named building's door on the overworld map.
      *
-     * Hilda's shard and the temple's are earned indoors, where this system does
+     * Lori's shard and the temple's are earned indoors, where this system does
      * not run, so the furthest the Journal can point is the door the player has
      * to walk through — which is exactly the answer they need from the plaza.
      *
@@ -196,7 +196,7 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
    * Brings the per-giver step states in line with what the bags actually say.
    *
    * Only the tinker's step is derived here: his shard is bought, so ownership is
-   * the whole of his state machine. Hilda's and the temple's steps are advanced
+   * the whole of his state machine. Lori's and the temple's steps are advanced
    * by the systems that own those rooms, which have work to track that inventory
    * cannot see (repairs made, vermin left).
    */
@@ -490,7 +490,7 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
   /**
    * One Journal row per live step.
    *
-   * Hilda's and the temple's rows point at their front doors rather than at the
+   * Lori's and the temple's rows point at their front doors rather than at the
    * work: the work is indoors, where this system does not run and the chevron
    * would have nothing to aim at anyway.
    */
@@ -550,7 +550,7 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
   /** Where a given shard's step sends the player. */
   private stepTarget(shardId: (typeof ANCHOR_SHARD_IDS)[number]): TrackerTarget | undefined {
     if (shardId === 'anchor_shard_tinker') return this.tinkerStallTile() ?? undefined;
-    if (shardId === 'anchor_shard_hilda') return this.doorTileOf(HILDA_COTTAGE_NAME) ?? undefined;
+    if (shardId === 'anchor_shard_lori') return this.doorTileOf(LORI_COTTAGE_NAME) ?? undefined;
     return this.doorTileOf(SKY_TEMPLE_NAME) ?? undefined;
   }
 }

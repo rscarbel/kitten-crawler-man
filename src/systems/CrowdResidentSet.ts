@@ -75,11 +75,15 @@ const OWED_REWARM_FRAMES = RESIDENCY_CHECK_INTERVAL_UPDATES + 1;
 /** A citizen's footprint, in tiles, for measuring when it comes into view. */
 const CITIZEN_AREA_TILES = 1;
 
-/** A citizen, as far as residency cares: where it stands and what it wears. */
+/**
+ * A citizen, as far as residency cares: where it stands and what it wears.
+ * A bespoke resident wears no cast look, so the crowd has nothing to hold for
+ * them.
+ */
 export interface ResidencyCitizen {
   readonly x: number;
   readonly y: number;
-  readonly figure: CitizenFigure;
+  readonly citizenFigure: CitizenFigure | null;
 }
 
 export interface CrowdResidentSetDeps {
@@ -117,15 +121,21 @@ export class CrowdResidentSet implements ResidentSet<CitizenFigure> {
   }
 
   placements(): ReadonlyArray<ResidentPlacement<CitizenFigure>> {
-    return this.deps.people().map((person) => ({
-      entry: person.figure,
-      area: {
-        x: person.x / TILE_SIZE,
-        y: person.y / TILE_SIZE,
-        w: CITIZEN_AREA_TILES,
-        h: CITIZEN_AREA_TILES,
-      },
-    }));
+    return this.deps.people().flatMap((person) => {
+      const figure = person.citizenFigure;
+      if (figure === null) return [];
+      return [
+        {
+          entry: figure,
+          area: {
+            x: person.x / TILE_SIZE,
+            y: person.y / TILE_SIZE,
+            w: CITIZEN_AREA_TILES,
+            h: CITIZEN_AREA_TILES,
+          },
+        },
+      ];
+    });
   }
 
   hold(figure: CitizenFigure): void {

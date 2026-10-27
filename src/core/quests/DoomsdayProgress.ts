@@ -1,5 +1,5 @@
 import type { Player } from '../../Player';
-import { isRecord } from '../util/guards';
+import { isFiniteNumber, isRecord } from '../util/guards';
 
 /**
  * Cross-scene state for the Doomsday Scenario (the finale that follows
@@ -127,9 +127,16 @@ export function capturePersistedDoomsday(
   progress: DoomsdayProgress,
   now: number,
 ): PersistedDoomsdayProgress {
+  // Clamped to a full countdown as well as to zero: the deadline is wall-clock
+  // time, and a clock stepped backwards would otherwise save more time left
+  // than any countdown holds, which the parser rightly refuses.
+  const remainingMs =
+    progress.deadlineAt === null
+      ? null
+      : Math.min(DOOMSDAY_COUNTDOWN_MS, Math.max(0, progress.deadlineAt - now));
   return {
     stage: progress.stage,
-    remainingMs: progress.deadlineAt === null ? null : Math.max(0, progress.deadlineAt - now),
+    remainingMs,
     crystalTile: progress.crystalTile === null ? null : { ...progress.crystalTile },
   };
 }
@@ -154,30 +161,28 @@ export function restoreDoomsdayProgress(
   target.crystalTile = saved.crystalTile === null ? null : { ...saved.crystalTile };
 }
 
-function parseCrystalTile(value: unknown): { x: number; y: number } | null {
-  if (!isRecord(value)) return null;
+function parseCrystalTile(value: unknown): { x: number; y: number } | null | undefined {
+  if (value === null) return null;
+  if (!isRecord(value)) return undefined;
   const { x, y } = value;
-  if (typeof x !== 'number' || typeof y !== 'number') return null;
-  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  if (!isFiniteNumber(x) || !isFiniteNumber(y)) return undefined;
   return { x, y };
 }
 
-/**
- * Defensive parse of a saved {@link PersistedDoomsdayProgress}. Anything
- * unreadable comes back undefined, which loads as a finale that never started.
- * A live stage whose time did not survive is given a full countdown rather than
- * none: an unkillable countdown would never end the stage it guards.
- */
+function parseRemainingMs(value: unknown): number | null | undefined {
+  if (value === null) return null;
+  const inCountdownRange = isFiniteNumber(value) && value >= 0 && value <= DOOMSDAY_COUNTDOWN_MS;
+  return inCountdownRange ? value : undefined;
+}
+
+/** A saved {@link PersistedDoomsdayProgress}, or undefined when any part of it is invalid. */
 export function parsePersistedDoomsday(value: unknown): PersistedDoomsdayProgress | undefined {
   if (!isRecord(value)) return undefined;
   const stage = DOOMSDAY_STAGES.find((candidate) => candidate === value.stage);
-  if (stage === undefined) return undefined;
-  const rawRemaining = value.remainingMs;
-  const savedRemaining =
-    typeof rawRemaining === 'number' && Number.isFinite(rawRemaining)
-      ? Math.min(DOOMSDAY_COUNTDOWN_MS, Math.max(0, rawRemaining))
-      : null;
-  const countdownLive = stage === 'containment' || stage === 'escape';
-  const remainingMs = countdownLive ? (savedRemaining ?? DOOMSDAY_COUNTDOWN_MS) : null;
-  return { stage, remainingMs, crystalTile: parseCrystalTile(value.crystalTile) };
+  const remainingMs = parseRemainingMs(value.remainingMs);
+  const crystalTile = parseCrystalTile(value.crystalTile);
+  if (stage === undefined || remainingMs === undefined || crystalTile === undefined) {
+    return undefined;
+  }
+  return { stage, remainingMs, crystalTile };
 }

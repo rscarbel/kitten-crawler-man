@@ -489,7 +489,6 @@ const QUIET_OVERWORLD = {
   escortUnderWay: false,
   escortAmbushersStanding: false,
   bountyOut: false,
-  circusMobsOut: false,
 };
 
 /** Where the scripted village stands, in tiles. */
@@ -502,7 +501,7 @@ const FAR_TILE = { x: 0, y: 0 } as const;
 const FIRST_CUES = {
   briarHollowSiege: 'bell_alarm',
   bounty: 'mantid_hiss_1',
-  circusQuest: 'bear_growl_1',
+  starlightTent: 'high_striker_bell',
 } as const satisfies Record<(typeof GATED_SFX_GROUPS)[number], SoundId>;
 
 /** A tile `tiles` west of the scripted village's west edge. */
@@ -523,7 +522,7 @@ async function checkGatedGroups(): Promise<void> {
       places: [GATED_VILLAGE],
     },
     { group: 'bounty', activeAnywhere: anywhere('bounty'), places: [] },
-    { group: 'circusQuest', activeAnywhere: anywhere('circusQuest'), places: [GATED_GROUNDS] },
+    { group: 'starlightTent', activeAnywhere: anywhere('starlightTent'), places: [GATED_GROUNDS] },
   ]);
   const residentAt = async (party: readonly { x: number; y: number }[]): Promise<number> => {
     gates.update(party);
@@ -580,15 +579,19 @@ async function checkGatedGroups(): Promise<void> {
   activity.siegeRunning = true;
   await residentAt([FAR_TILE]);
   check(
-    GATED_SFX_GROUPS.every((group) => audio.holdsSfxGroup(group) && firstCueHeard(group)),
-    'a siege holds the siege, the bounty marks and the circus mobs it fields',
+    audio.holdsSfxGroup('briarHollowSiege') &&
+      firstCueHeard('briarHollowSiege') &&
+      audio.holdsSfxGroup('bounty') &&
+      firstCueHeard('bounty') &&
+      !audio.holdsSfxGroup('starlightTent'),
+    "a siege holds its own group and the bounty marks it fields, not the circus's",
   );
   activity.siegeRunning = false;
   activity.siegeDeadStanding = true;
   await residentAt([FAR_TILE]);
   check(
-    GATED_SFX_GROUPS.every((group) => audio.holdsSfxGroup(group)),
-    'after a siege, its dead walking back out keep all three groups decoded',
+    audio.holdsSfxGroup('briarHollowSiege') && audio.holdsSfxGroup('bounty'),
+    'after a siege, its dead walking back out keep both its groups decoded',
   );
   activity.siegeDeadStanding = false;
   activity.escortAmbushersStanding = true;
@@ -601,7 +604,7 @@ async function checkGatedGroups(): Promise<void> {
   const landing = { x: GATED_GROUNDS.x, y: GATED_GROUNDS.y };
   await residentAt([FAR_TILE, landing]);
   check(
-    audio.holdsSfxGroup('circusQuest') && !audio.holdsSfxGroup('briarHollowSiege'),
+    audio.holdsSfxGroup('starlightTent') && !audio.holdsSfxGroup('briarHollowSiege'),
     "a recall landing on the grounds decodes the circus's group before the party arrives",
   );
   const released = await residentAt([FAR_TILE]);
@@ -632,11 +635,14 @@ const DEFENCE_SOUNDS = [
 ] as const satisfies readonly SoundId[];
 
 /** The Evil Clown bounty's troupe, which fights at a bounty site far from the circus grounds. */
-const CLOWN_TROUPE_SOUNDS = [
+const CLOWN_TROUPE_SOUNDS = ['clown_burp', 'clown_horn'] as const satisfies readonly SoundId[];
+
+/** The clowns and lemurs a Briar Hollow siege sends, far from the circus grounds. */
+const SIEGE_TROUPE_SOUNDS = [
   'clown_burp',
-  'clown_horn',
-  'circus_lemur_attack',
-  'circus_lemur_sound',
+  'clown_laughing_1',
+  'lemur_attack',
+  'lemur_sound',
 ] as const satisfies readonly SoundId[];
 
 async function checkGatedSafetyNet(): Promise<void> {
@@ -644,6 +650,13 @@ async function checkGatedSafetyNet(): Promise<void> {
   check(
     troupeMissing.length === 0,
     `an Evil Clown bounty's troupe is voiced by the bounty group (${troupeMissing.join(', ') || 'all there'})`,
+  );
+  const siegeTroupeMissing = SIEGE_TROUPE_SOUNDS.filter(
+    (id) => !SFX_GROUPS.briarHollowSiege.includes(id),
+  );
+  check(
+    siegeTroupeMissing.length === 0,
+    `a siege's clowns and lemurs are voiced by the siege group (${siegeTroupeMissing.join(', ') || 'all there'})`,
   );
   const floorWide = new Set<SoundId>([...CORE_SFX_IDS, ...sfxGroupsForLevelId('level3')]);
   const defencesMissing = DEFENCE_SOUNDS.filter((id) => !floorWide.has(id));
@@ -665,13 +678,13 @@ async function checkGatedSafetyNet(): Promise<void> {
     startedOf('mantid_hiss_2') === 1,
     'a gated cue played with its group never held still sounds, decoded from its kept file',
   );
-  audio.holdSfxGroup('circusQuest', true);
+  audio.holdSfxGroup('starlightTent', true);
   await harness.flush();
-  audio.holdSfxGroup('circusQuest', false);
+  audio.holdSfxGroup('starlightTent', false);
   await harness.flush();
-  audio.play('bear_growl_1');
+  audio.play('high_striker_bell');
   await harness.flush();
-  check(startedOf('bear_growl_1') === 1, 'and so does one whose group was decoded and let go');
+  check(startedOf('high_striker_bell') === 1, 'and so does one whose group was decoded and let go');
 
   const racing = await freshManager(CORE_SFX_IDS);
   const racingFloor = racing.createScope();
@@ -927,7 +940,7 @@ const CHECKS: readonly AudioCheck[] = [
   { id: 9, name: 'shuffle never repeats', run: () => director.checkShuffle(harness, check) },
   { id: 10, name: 'jingles', run: () => director.checkJingles(harness, check) },
   { id: 11, name: 'save round-trip keeps the music library', run: () => checkSaveRoundTrip(check) },
-  { id: 12, name: 'backfill from a save older than the library', run: () => checkBackfill(check) },
+  { id: 12, name: "what a run's music library starts with", run: () => checkBackfill(check) },
   { id: 13, name: 'voices and rate limits', run: () => voices.checkVoices(harness, check) },
   { id: 14, name: 'scope disposal and background resume', run: checkScopeDisposal },
   { id: 15, name: 'ramped stops', run: checkRampedStops },

@@ -28,6 +28,7 @@ import {
 } from '../../town/townArt';
 import { getTownRamp, sampleRamp, mix, type Ramp, type RGB } from '../../town/townPalette';
 import { paintPlankBoard } from '../../town/townMaterials';
+import type { PropFlameSite } from '../propFlames';
 import {
   PEWTER,
   CHALK,
@@ -1078,6 +1079,32 @@ export function paintSmokyLamp(ctx: Ctx, frame: TownPropFrame, _variant: number,
   });
 }
 
+/** How high the stove's drum stands, in tiles above its foot. */
+const STUMP_STOVE_BODY_RISE = 0.78;
+/** The grate door's top, down from the drum's top, and its height. */
+const STUMP_STOVE_DOOR_DROP = 0.26;
+const STUMP_STOVE_DOOR_HEIGHT = 0.2;
+/** The share of the door the coal bed fills. */
+const STUMP_STOVE_COAL_SHARE = 0.35;
+const STUMP_STOVE_FIREBOX: RGB = [70, 26, 14];
+const STUMP_STOVE_COALS: RGB = [236, 120, 40];
+/** The middle of the stove's one-tile footprint. */
+const STUMP_STOVE_CENTRE_TILES = 0.5;
+const STUMP_STOVE_FLAME_SIZE = 0.6;
+
+/** The fire behind the stove's grate, standing on the coals at the door's foot. */
+export const STUMP_STOVE_FLAMES: ReadonlyArray<PropFlameSite> = [
+  {
+    x: STUMP_STOVE_CENTRE_TILES,
+    rise:
+      STUMP_STOVE_BODY_RISE -
+      STUMP_STOVE_DOOR_DROP -
+      STUMP_STOVE_DOOR_HEIGHT * (1 - STUMP_STOVE_COAL_SHARE),
+    size: STUMP_STOVE_FLAME_SIZE,
+    style: 'stove',
+  },
+];
+
 /**
  * The only heat in the place: a squat iron stove on a scorched hearth
  * plate, its flue pipe run crooked up the wall and patched with a tin
@@ -1097,7 +1124,7 @@ export function paintStumpStove(ctx: Ctx, frame: TownPropFrame, _variant: number
     inkOutline(ctx, ts * 0.8);
     // Flue.
     const flueX = cx + ts * 0.06;
-    const bodyTop = box.bottom - ts * 0.78;
+    const bodyTop = box.bottom - ts * STUMP_STOVE_BODY_RISE;
     inkedRect(
       ctx,
       flueX - ts * 0.07,
@@ -1131,19 +1158,28 @@ export function paintStumpStove(ctx: Ctx, frame: TownPropFrame, _variant: number
     ctx.fillStyle = body;
     ctx.fill();
     inkOutline(ctx, ts);
-    // Grate door, glowing.
-    const doorY = bodyTop + ts * 0.26;
+    // Grate door over a bed of coals; the flames behind it are live.
+    const doorY = bodyTop + ts * STUMP_STOVE_DOOR_DROP;
+    const doorH = ts * STUMP_STOVE_DOOR_HEIGHT;
     paintBloom(ctx, cx, doorY + ts * 0.08, ts * 0.5, FIRE_GLOW, 0.5);
-    roundRectPath(ctx, cx - ts * 0.14, doorY, ts * 0.28, ts * 0.2, ts * 0.04);
-    ctx.fillStyle = rgb([236, 120, 40]);
+    roundRectPath(ctx, cx - ts * 0.14, doorY, ts * 0.28, doorH, ts * 0.04);
+    ctx.fillStyle = rgb(STUMP_STOVE_FIREBOX);
     ctx.fill();
+    ctx.fillStyle = rgb(STUMP_STOVE_COALS);
+    ctx.fillRect(
+      cx - ts * 0.12,
+      doorY + doorH * (1 - STUMP_STOVE_COAL_SHARE),
+      ts * 0.24,
+      doorH * STUMP_STOVE_COAL_SHARE,
+    );
+    roundRectPath(ctx, cx - ts * 0.14, doorY, ts * 0.28, doorH, ts * 0.04);
     inkOutline(ctx, ts * 0.8);
     ctx.strokeStyle = rgb(IRON);
     ctx.lineWidth = ts * 0.025;
     for (const dx of [-0.07, 0, 0.07]) {
       ctx.beginPath();
       ctx.moveTo(cx + dx * ts, doorY);
-      ctx.lineTo(cx + dx * ts, doorY + ts * 0.2);
+      ctx.lineTo(cx + dx * ts, doorY + doorH);
       ctx.stroke();
     }
     // The kettle on top.

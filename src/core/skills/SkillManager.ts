@@ -324,24 +324,18 @@ export class SkillManager {
    * Restore from {@link snapshotStates}, discarding anything already unlocked.
    *
    * Eligibility is re-checked, not assumed: this is the one door into `states`
-   * that doesn't come from {@link unlockSkill}, and it is fed by unvalidated save
-   * JSON. A snapshot naming a cat-only skill must not hand it to the human.
+   * that doesn't come from {@link unlockSkill}. A snapshot naming a cat-only
+   * skill must not hand it to the human.
    */
   restoreStates(states: ReadonlyArray<SkillState>): void {
     this.states.clear();
     for (const saved of states) {
-      if (!isSkillId(saved.id)) continue;
       const def = SKILL_DEFS[saved.id];
       if (this.owner === null || !isEligible(def, this.owner)) continue;
-      // `Math.min(NaN, …)` is NaN, and a NaN cockroach level yields a NaN
-      // recharge deadline that reads as permanently-not-ready — so screen the
-      // numerics as well as the id.
-      const level = Number.isFinite(saved.level) ? saved.level : 1;
-      const uses = Number.isFinite(saved.usesTowardNext) ? saved.usesTowardNext : 0;
       this.states.set(saved.id, {
         id: saved.id,
-        level: Math.max(1, Math.min(level, def.maxLevel)),
-        usesTowardNext: Math.max(0, uses),
+        level: Math.min(saved.level, def.maxLevel),
+        usesTowardNext: saved.usesTowardNext,
       });
     }
   }

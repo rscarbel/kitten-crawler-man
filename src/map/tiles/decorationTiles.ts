@@ -434,8 +434,8 @@ const FENCE_POST_CAP_HEIGHT_PX = 2;
  * building is *one anchor tile*, and that tile is the **top-left of its art
  * rect** — transparent sky above the roof. Including them would fire on two
  * tiles in the whole town, both gate cheeks that sit above an anchor, and hang a
- * rail off into open verge with the roof half a tile (Miller's) and 1.84 tiles
- * (Signet's) further down, measured by alpha-scanning the rendered art. Nor
+ * rail off into open verge with the roof half a tile and 1.84 tiles further
+ * down, measured by alpha-scanning the rendered art. Nor
  * would it anchor the 43 sides that really do abut a facade, because a facade
  * tile carries the *plan's* surface type rather than `SPRITE_BUILDING`.
  *
@@ -2311,8 +2311,8 @@ export function drawDecorationTile(
         drawTerrainTile(ctx, structure, FloorTypeValue.grass, sx, sy, ts, tx, ty);
         return true;
       // A circus structure records the lot it was pitched on the same way, and
-      // the lot's decals run on under it: a vine runner is seen coming out from
-      // beneath the Big Top's skirt, not starting at a tile edge.
+      // the lot's decals run on under it: a sawdust path or a rut is seen
+      // running beneath a structure, not stopping at a tile edge.
       case CIRCUS_STRUCTURE_TALL:
       case CIRCUS_STRUCTURE_LOW:
         drawTerrainTile(ctx, structure, FloorTypeValue.grass, sx, sy, ts, tx, ty);
@@ -2655,7 +2655,7 @@ export function drawDecorationTile(
       return true;
     }
 
-    // Rubble — walkable ground clutter around the Over City's ruins. Drawn over
+    // Rubble — walkable ground clutter around Taloncrest's ruins. Drawn over
     // the ground it recorded, so the debris settles into the meadow, the upland
     // turf or the scree it lies on instead of reading as an opaque square.
     case RUBBLE: {

@@ -39,7 +39,7 @@ function resumeFromProgress(baseOptions: DungeonSceneOptions, progress: GameProg
 /**
  * Erases the run for good: latches every save write on this page, waits out
  * any save already sent, then deletes the save slot, retrying until it is
- * gone. Resolves once the delete has landed. Reset Game and the Nothing both
+ * gone. Resolves once the delete has landed. Reset Game and Permanent Death both
  * run it behind a blocking hold and reload the page afterwards, so nothing
  * held in memory can outlive the wipe.
  */

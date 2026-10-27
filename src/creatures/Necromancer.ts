@@ -1,4 +1,4 @@
-import type { DamageSource, Player } from '../Player';
+import type { DamageOptions, DamageSource, Player } from '../Player';
 import type { EyePlacement } from '../sprites/eyePlacement';
 import { BOSS_BLAST_DAMAGE_SCALE, Mob, type LootDrop, type PlayerDamageType } from './Mob';
 import type { TacticsTrait } from './tactics/tacticsTraits';
@@ -800,9 +800,9 @@ export class Necromancer extends Mob {
     this.noteHurt(before - this.hp);
   }
 
-  override takeDamage(amount: number, source?: DamageSource): boolean {
+  override takeDamage(amount: number, source?: DamageSource, options?: DamageOptions): boolean {
     const before = this.hp;
-    const connected = super.takeDamage(amount, source);
+    const connected = super.takeDamage(amount, source, options);
     this.noteHurt(before - this.hp);
     return connected;
   }

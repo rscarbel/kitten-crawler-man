@@ -1,5 +1,5 @@
 /**
- * Market-cart art for the Over City square: a canopied stall two tiles wide,
+ * Market-cart art for the Taloncrest square: a canopied stall two tiles wide,
  * drawn in three named layers so `MarketSystem` can sandwich its stationed
  * vendor between them — back, then the person, then the counter, then the canopy
  * over everything. A single Y-sort key can't place one figure both behind a

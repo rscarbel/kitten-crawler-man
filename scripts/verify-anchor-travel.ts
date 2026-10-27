@@ -7,7 +7,7 @@
  * shared pieces (`findWarpLandingTile`, `findPartyArrivalTiles` and the travel
  * landing constants), and checks:
  *
- * - a fresh run offers Skyfowl Town alone; each questline's completion opens
+ * - a fresh run offers Taloncrest alone; each questline's completion opens
  *   its own row;
  * - every enabled row ends with both crawlers on walkable ground inside that
  *   place;
@@ -46,17 +46,19 @@ import {
   TRAVEL_LANDING_SEARCH_TILES,
   TRAVEL_LANDING_STANDOFF_TILES,
   YOU_ARE_HERE_REASON,
+  CIRCUS_LOCKED_REASON,
+  recordCircusGroundsVisit,
   travelDestination,
   type TravelDestinationId,
 } from '../src/systems/travel/travelDestinations';
 import { TravelMenu } from '../src/ui/TravelMenu';
 import { offerClosedReason } from '../src/ui/screens/shop/shopSession';
 import {
-  CIRCUS_QUEST_NAME,
-  captureCircusQuestProgress,
-  createCircusQuestProgress,
-  restoreCircusQuestProgress,
-} from '../src/core/quests/CircusQuestProgress';
+  captureTownMemory,
+  createTownMemory,
+  restoreTownMemory,
+  type TownMemory,
+} from '../src/core/state/TownMemory';
 import {
   captureBriarHollowState,
   createBriarHollowState,
@@ -113,7 +115,7 @@ interface Rig {
   readonly menus: MenusKit;
   readonly sceneWorld: SceneWorld;
   readonly toasts: string[];
-  readonly circus: ReturnType<typeof createCircusQuestProgress>;
+  readonly townMemory: TownMemory;
   readonly briarHollow: ReturnType<typeof createBriarHollowState>;
   readonly roster: MobRoster;
   /** Flip to stage the refusals the scene answers through its callbacks. */
@@ -148,9 +150,9 @@ function buildRig(map: GameMap, levelDef: LevelDef = level3): Rig {
   const toasts: string[] = [];
   // Every toast the stone raises goes through the toast stack, as in the scene.
   menus.toasts.post = (message) => toasts.push(message);
-  const circus = createCircusQuestProgress();
+  const townMemory = createTownMemory();
   const briarHollow = createBriarHollowState();
-  const travelState = { circus, briarHollow, anchor: createAnchorQuestProgress() };
+  const travelState = { townMemory, briarHollow, anchor: createAnchorQuestProgress() };
   const world = { bossFight: false, enemyNear: false };
   // The scene's `warpPartyForRecall`, minus the companions it dismisses.
   const teleportParty = (tile: { x: number; y: number }): boolean => {
@@ -201,7 +203,7 @@ function buildRig(map: GameMap, levelDef: LevelDef = level3): Rig {
     menus,
     sceneWorld,
     toasts,
-    circus,
+    townMemory,
     briarHollow,
     roster,
     world,
@@ -221,7 +223,7 @@ function step(rig: Rig, frames: number): void {
   for (let f = 0; f < frames; f++) rig.recall.update(ctx);
 }
 
-/** A roomy tile far from every destination, standing for "out in the Over City". */
+/** A roomy tile far from every destination, standing for "out in Taloncrest". */
 function wildernessTile(map: GameMap): { x: number; y: number } | null {
   const landings = TRAVEL_DESTINATIONS.flatMap((destination) => {
     const tile = destination.landingTile(map);
@@ -280,11 +282,11 @@ function checkFreshState(rig: Rig, wild: { x: number; y: number }): void {
   );
   check(
     enabledRows(rig).join(',') === 'town',
-    `a fresh run offers Skyfowl Town alone (enabled: ${enabledRows(rig).join(',')})`,
+    `a fresh run offers Taloncrest alone (enabled: ${enabledRows(rig).join(',')})`,
   );
   check(
-    rowReason(rig, 'circus') === `Complete "${CIRCUS_QUEST_NAME}"`,
-    `the circus row names its questline (${String(rowReason(rig, 'circus'))})`,
+    rowReason(rig, 'circus') === CIRCUS_LOCKED_REASON,
+    `the circus row asks for a visit first (${String(rowReason(rig, 'circus'))})`,
   );
   check(
     rowReason(rig, 'briar_hollow') === `Complete "${BRIAR_HOLLOW_QUEST_NAME}"`,
@@ -386,13 +388,21 @@ function travelTo(rig: Rig, wild: { x: number; y: number }, id: TravelDestinatio
 function checkUnlocksAndTravel(rig: Rig, wild: { x: number; y: number }): void {
   travelTo(rig, wild, 'town');
 
-  rig.circus.stage = 'complete';
+  recordCircusGroundsVisit(rig.townMemory, rig.map, rig.human);
+  check(
+    !rig.townMemory.visitedPlaces.has('circus_grounds'),
+    'standing in town does not count as a visit to the circus grounds',
+  );
+  const circusCentre = rig.map.circusCentre;
+  check(circusCentre !== undefined, 'the overworld has circus grounds');
+  if (circusCentre !== undefined) placeAt(rig.human, circusCentre);
+  recordCircusGroundsVisit(rig.townMemory, rig.map, rig.human);
   makeReady(rig);
   standInWild(rig, wild);
   rig.recall.requestTravel(rig.human);
   check(
     enabledRows(rig).join(',') === 'town,circus',
-    `completing the circus questline opens its row (enabled: ${enabledRows(rig).join(',')})`,
+    `a first step onto the circus grounds opens its row (enabled: ${enabledRows(rig).join(',')})`,
   );
   travelTo(rig, wild, 'circus');
 
@@ -409,7 +419,7 @@ function checkUnlocksAndTravel(rig: Rig, wild: { x: number; y: number }): void {
   // The questline ends at `complete` today, so a bound village never sees a
   // siege; the rule is asked directly so it still holds if one is ever added.
   const siegeReason = travelDestination('briar_hollow').closedReason({
-    circus: rig.circus,
+    townMemory: rig.townMemory,
     briarHollow: { quest: { phase: 'assault' } },
     anchor: createAnchorQuestProgress(),
   });
@@ -443,7 +453,7 @@ function checkTownSquare(rig: Rig): void {
   check(rig.menu.isOpen, 'a press in the town square opens the menu');
   check(
     rowReason(rig, 'town') === YOU_ARE_HERE_REASON,
-    `with Skyfowl Town disabled as "${YOU_ARE_HERE_REASON}"`,
+    `with Taloncrest disabled as "${YOU_ARE_HERE_REASON}"`,
   );
   rig.menu.pressTravel('town', rig.human, rig.cat);
   step(rig, CHANNEL_WAIT_FRAMES);
@@ -482,12 +492,12 @@ function checkCheckpoint(rig: Rig, wild: { x: number; y: number }): void {
   rig.menu.pressTravel('town', rig.human, rig.cat);
   step(rig, CHANNEL_WAIT_FRAMES);
   const cooldown = rig.recall.captureCheckpoint();
-  const circus = captureCircusQuestProgress(rig.circus);
+  const town = captureTownMemory(rig.townMemory);
   const village = captureBriarHollowState(rig.briarHollow);
 
   const restored = buildRig(rig.map);
   restored.recall.restoreCheckpoint(cooldown);
-  restoreCircusQuestProgress(restored.circus, circus);
+  restoreTownMemory(restored.townMemory, town);
   restoreBriarHollowState(restored.briarHollow, village);
   check(
     restored.recall.cooldownRemainingFrames === cooldown.cooldownFrames &&

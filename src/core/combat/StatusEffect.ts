@@ -1,10 +1,10 @@
 import type { Player, StatName } from '../../Player';
 import {
-  BLOOD_VOMIT_FRAMES,
-  BLOOD_VOMIT_INTERVAL_FRAMES,
   BLOOD_VOMIT_RETCH_FRAMES,
   CHILLED_FRAMES,
+  DOUBLE_DAMAGE_FRAMES,
   FROZEN_FRAMES,
+  STATUS_INCOMING_DAMAGE_SCALE,
 } from './statusTuning';
 import {
   HAMBURGER_FED_DURATION_SECONDS,
@@ -12,15 +12,56 @@ import {
 } from '../items/consumables/foodEffects';
 
 /**
+ * Every status the game can put on a body. A new status is added here first;
+ * the tables keyed by it (`STATUS_INCOMING_DAMAGE_SCALE` in `statusTuning.ts`)
+ * then fail to compile until it declares its entry.
+ */
+export const STATUS_IDS = [
+  'burn',
+  'magic_burn',
+  'poison',
+  'spit_venom',
+  'electrified',
+  'stuck',
+  'stun',
+  'drunk',
+  'catnip_buzz',
+  'ink',
+  'blood_vomit',
+  'double_damage',
+  'chilled',
+  'frozen',
+  'shield',
+  'overheal',
+  'fairy_ward',
+  'fairy_aegis',
+  'speed_fizz',
+  'jugg_juice',
+  'cooldown_crisp',
+  'whetstone',
+  'well_rested',
+  'hearth_warmed',
+  'deep_slumber',
+  'hamburger_fed',
+  'refreshed',
+] as const;
+
+export type StatusId = (typeof STATUS_IDS)[number];
+
+/** Whether `value` names a status this build defines, for ids read back from a save. */
+export function isStatusId(value: string): value is StatusId {
+  return STATUS_IDS.some((id) => id === value);
+}
+
+/**
  * A status effect applied to a Player (e.g. Burn, Frozen, Paralyzed).
  *
- * Add new status types by adding a string literal to the `type` field.
  * Per-type behaviour is handled in Player.tickStatusEffects().
- * Per-type rendering is handled in HUD.drawStatusIcon().
+ * Per-type rendering is handled in `statusEffectVisuals.ts`.
  */
 export interface StatusEffect {
-  /** Unique key identifying this status (e.g. 'burn', 'frozen', 'paralyzed'). */
-  type: string;
+  /** Which status this is; an effect of the same type replaces it rather than stacking. */
+  type: StatusId;
   /** Remaining duration in game ticks (frames at 60 fps). */
   ticksRemaining: number;
   /** Original total duration — used to draw the progress bar in the HUD. */
@@ -48,29 +89,38 @@ export interface StatusEffect {
 }
 
 /** The status every damage-absorbing ward is filed under. */
-export const SHIELD_STATUS = 'shield';
+export const SHIELD_STATUS = 'shield' as const satisfies StatusId;
 
 /** A shield fairy's ward, which makes its carrier invulnerable; see {@link makeFairyWard}. */
-export const FAIRY_WARD_STATUS = 'fairy_ward';
+export const FAIRY_WARD_STATUS = 'fairy_ward' as const satisfies StatusId;
 
 /** Surplus health from a healing wave, held as a decaying ward; see {@link makeOverheal}. */
-export const OVERHEAL_STATUS = 'overheal';
+export const OVERHEAL_STATUS = 'overheal' as const satisfies StatusId;
 
 /** Halved incoming damage; see {@link makeFairyAegis}. */
-export const FAIRY_AEGIS_STATUS = 'fairy_aegis';
+export const FAIRY_AEGIS_STATUS = 'fairy_aegis' as const satisfies StatusId;
 
 /** Slowed walking and slowed swings; see {@link makeChilled}. */
-export const CHILLED_STATUS = 'chilled';
+export const CHILLED_STATUS = 'chilled' as const satisfies StatusId;
 
 /** Encased in ice: no walking, attacking, casting or item use; see {@link makeFrozen}. */
-export const FROZEN_STATUS = 'frozen';
+export const FROZEN_STATUS = 'frozen' as const satisfies StatusId;
 
 /**
- * The Wheel of Fortune's retching: incurable, cleared only by a death. Its
- * remaining time is saved per crawler outside the snapshot too
- * (`bloodVomitSave.ts`), so a reload restores it whatever the snapshot kept.
+ * One retch of blood, which a crawler brings up on entering the lowest HP
+ * band (`CRAWLER_HP_THRESHOLDS.retch`). It costs nothing: it is the warning
+ * that the next blow may be the last, and it lasts only as long as the retch
+ * plays, so it is never restored from a snapshot (`STATUS_PERSISTENCE`).
  */
-export const BLOOD_VOMIT_STATUS = 'blood_vomit';
+export const BLOOD_VOMIT_STATUS = 'blood_vomit' as const satisfies StatusId;
+
+/**
+ * The Wheel of Fortune's curse: every blow taken counts double
+ * (`STATUS_INCOMING_DAMAGE_SCALE`). Incurable, cleared only by a death. Its
+ * remaining time is saved per crawler outside the snapshot too
+ * (`doubleDamageSave.ts`), so a reload restores it whatever the snapshot kept.
+ */
+export const DOUBLE_DAMAGE_STATUS = 'double_damage' as const satisfies StatusId;
 
 /**
  * Statuses nothing clears but a death: not a cure, not a knockout and revive,
@@ -79,35 +129,32 @@ export const BLOOD_VOMIT_STATUS = 'blood_vomit';
  * in-place rewind, `progressForRespawn` for the rebuild from the save), or a
  * crawler with no way to heal would die to them again on every respawn.
  */
-export const INCURABLE_STATUSES: ReadonlyArray<string> = [BLOOD_VOMIT_STATUS];
+export const INCURABLE_STATUSES: ReadonlyArray<StatusId> = [DOUBLE_DAMAGE_STATUS];
 
-/** Blood vomiting for `ticks`, the full five minutes unless a save says otherwise. */
-export function makeBloodVomit(ticks: number = BLOOD_VOMIT_FRAMES): StatusEffect {
-  return { type: BLOOD_VOMIT_STATUS, ticksRemaining: ticks, totalTicks: ticks, applier: null };
-}
-
-/** Frames into the effect's life, which every bout is timed from. */
-function bloodVomitElapsed(effect: StatusEffect): number {
-  return effect.totalTicks - effect.ticksRemaining;
-}
-
-/** Whether this frame of the effect is the one a bout of vomiting lands on. */
-export function isBloodVomitBoutFrame(effect: StatusEffect): boolean {
-  const elapsed = bloodVomitElapsed(effect);
-  return elapsed > 0 && elapsed % BLOOD_VOMIT_INTERVAL_FRAMES === 0;
+/** One retch of blood, from the frame it comes up. */
+export function makeBloodVomit(): StatusEffect {
+  return {
+    type: BLOOD_VOMIT_STATUS,
+    ticksRemaining: BLOOD_VOMIT_RETCH_FRAMES,
+    totalTicks: BLOOD_VOMIT_RETCH_FRAMES,
+    applier: null,
+  };
 }
 
 /**
- * How far through its retch the body is, in 0..1, or null between bouts. Read
- * straight off the effect's own clock, so the pose and the spray stay in step
- * with the damage without the body keeping a timer of its own.
+ * How far through its retch the body is, in 0..1, or null once it is over.
+ * Read straight off the effect's own clock, so the pose and the spray stay in
+ * step without the body keeping a timer of its own.
  */
 export function bloodVomitRetchProgress(effect: StatusEffect): number | null {
-  const elapsed = bloodVomitElapsed(effect);
-  if (elapsed < BLOOD_VOMIT_INTERVAL_FRAMES) return null;
-  const sinceBout = elapsed % BLOOD_VOMIT_INTERVAL_FRAMES;
-  if (sinceBout >= BLOOD_VOMIT_RETCH_FRAMES) return null;
-  return sinceBout / BLOOD_VOMIT_RETCH_FRAMES;
+  const elapsed = effect.totalTicks - effect.ticksRemaining;
+  if (elapsed < 0 || elapsed >= effect.totalTicks) return null;
+  return elapsed / effect.totalTicks;
+}
+
+/** Double damage for `ticks`, the full five minutes unless a save says otherwise. */
+export function makeDoubleDamage(ticks: number = DOUBLE_DAMAGE_FRAMES): StatusEffect {
+  return { type: DOUBLE_DAMAGE_STATUS, ticksRemaining: ticks, totalTicks: ticks, applier: null };
 }
 
 /**
@@ -116,13 +163,13 @@ export function bloodVomitRetchProgress(effect: StatusEffect): number | null {
  * Overheal goes first because it decays on its own clock whatever happens, so
  * spending it before anything else wastes the least.
  */
-export const WARD_STATUSES: ReadonlyArray<string> = [OVERHEAL_STATUS, SHIELD_STATUS];
+export const WARD_STATUSES: ReadonlyArray<StatusId> = [OVERHEAL_STATUS, SHIELD_STATUS];
 
 /**
  * Every status a caster keeps up only while it lives, stripped together by
  * `removeWardsAppliedBy` on its death.
  */
-export const CASTER_HELD_STATUSES: ReadonlyArray<string> = [...WARD_STATUSES, FAIRY_WARD_STATUS];
+export const CASTER_HELD_STATUSES: ReadonlyArray<StatusId> = [...WARD_STATUSES, FAIRY_WARD_STATUS];
 
 /**
  * Long enough to outlast any fight. A fairy's ward has no clock of its own: it
@@ -220,6 +267,19 @@ export function statusRemainingFraction(effect: StatusEffect): number {
 }
 
 /**
+ * What every blow on a body carrying `effects` is multiplied by: the product of
+ * each status's {@link STATUS_INCOMING_DAMAGE_SCALE}. Applied once per blow by
+ * `Player.takeDamage` (crawlers) and `Mob`'s own door (mobs), whatever the
+ * source, so a status that doubles or halves damage does it to a swing, a
+ * status tick and a hazard alike.
+ */
+export function statusIncomingDamageScale(effects: ReadonlyArray<StatusEffect>): number {
+  let scale = 1;
+  for (const effect of effects) scale *= STATUS_INCOMING_DAMAGE_SCALE[effect.type];
+  return scale;
+}
+
+/**
  * The statuses that are done *to* a crawler rather than bought by one.
  *
  * Anything that cures or clears status effects must work from this list rather
@@ -227,7 +287,7 @@ export function statusRemainingFraction(effect: StatusEffect): number {
  * the Speed Fizz the player just paid for is a trap, not a service. `drunk` is
  * on it because it is a real handicap, even when it was self-inflicted.
  */
-export const AILMENT_STATUSES: ReadonlyArray<string> = [
+export const AILMENT_STATUSES: ReadonlyArray<StatusId> = [
   'burn',
   'magic_burn',
   'poison',
@@ -236,17 +296,30 @@ export const AILMENT_STATUSES: ReadonlyArray<string> = [
   'stuck',
   'stun',
   'drunk',
+  'catnip_buzz',
   CHILLED_STATUS,
   FROZEN_STATUS,
 ];
 
 /**
- * The ailments the apothecary's antidote and the Brass Gullet draw out: every
- * one except `drunk`. Sobering up is the inn's service, and leaving it to the
- * inn keeps an antidote and a room from being the same purchase.
+ * The statuses a drink lays on that blur the room: the camera sways, the walk
+ * wanders and the carrier swings harder. `Intoxication.ts` holds how each one
+ * feels.
  */
-export const CURABLE_AILMENT_STATUSES: ReadonlyArray<string> = AILMENT_STATUSES.filter(
-  (type) => type !== 'drunk',
+export const INTOXICATIONS = ['drunk', 'catnip_buzz'] as const satisfies readonly StatusId[];
+export type Intoxication = (typeof INTOXICATIONS)[number];
+
+function isIntoxication(type: StatusId): type is Intoxication {
+  return INTOXICATIONS.some((intoxication) => intoxication === type);
+}
+
+/**
+ * The ailments the apothecary's antidote and the Brass Gullet draw out: every
+ * one except an intoxication. Sobering up is the inn's service, and leaving it
+ * to the inn keeps an antidote and a room from being the same purchase.
+ */
+export const CURABLE_AILMENT_STATUSES: ReadonlyArray<StatusId> = AILMENT_STATUSES.filter(
+  (type) => !isIntoxication(type),
 );
 
 // Preset constructors
@@ -298,7 +371,7 @@ export function makeSpitVenom(applier: Player | null = null): StatusEffect {
  * Ink in the eyes: a mob carrying it misses a share of its blows
  * (`Mob.deliverBlow`). Laid by the party's gear, so only mobs ever carry it.
  */
-export const INK_STATUS = 'ink';
+export const INK_STATUS = 'ink' as const satisfies StatusId;
 
 /** Inked for `ticks`. */
 export function makeInk(ticks: number): StatusEffect {
@@ -311,7 +384,7 @@ export function makeStun(ticks: number): StatusEffect {
 }
 
 /** The status filed under a Speed Fizz potion — its own constant because {@link Player} checks for it by name to draw motion afterimages. */
-export const SPEED_FIZZ_STATUS = 'speed_fizz';
+export const SPEED_FIZZ_STATUS = 'speed_fizz' as const satisfies StatusId;
 
 /** Speed Fizz: doubles movement speed for 25 seconds (1500 ticks at 60 fps). */
 export function makeSpeedFizz(): StatusEffect {
@@ -329,13 +402,37 @@ const DRUNK_TICKS = 1800;
 /**
  * Drunk: 30 seconds (1800 ticks at 60 fps) of swaying camera, a wandering walk and
  * a little extra melee damage. Re-drinking refreshes rather than stacks, which is
- * the intended "keep the round going" loop. See `src/core/combat/DrunkEffect.ts`.
+ * the intended "keep the round going" loop. See `src/core/combat/Intoxication.ts`.
  *
  * @param durationScale Shortens the effect — Iron Stomach passes its time scale.
  */
 export function makeDrunk(durationScale = 1): StatusEffect {
   const ticks = Math.max(1, Math.round(DRUNK_TICKS * durationScale));
   return { type: 'drunk', ticksRemaining: ticks, totalTicks: ticks, applier: null };
+}
+
+/** A catnip buzz runs as long as a drunk round does: the same trade, poured for the cat. */
+const CATNIP_BUZZ_TICKS = DRUNK_TICKS;
+
+/**
+ * Catnip buzz: the cat's intoxication, swaying loose and happy rather than
+ * listing. See `src/core/combat/Intoxication.ts`.
+ *
+ * @param durationScale Shortens the effect — Iron Stomach passes its time scale.
+ */
+export function makeCatnipBuzz(durationScale = 1): StatusEffect {
+  const ticks = Math.max(1, Math.round(CATNIP_BUZZ_TICKS * durationScale));
+  return { type: 'catnip_buzz', ticksRemaining: ticks, totalTicks: ticks, applier: null };
+}
+
+const INTOXICATION_MAKERS = {
+  drunk: makeDrunk,
+  catnip_buzz: makeCatnipBuzz,
+} as const satisfies Record<Intoxication, (durationScale?: number) => StatusEffect>;
+
+/** `intoxication` as a fresh effect, shortened by `durationScale`. */
+export function makeIntoxication(intoxication: Intoxication, durationScale = 1): StatusEffect {
+  return INTOXICATION_MAKERS[intoxication](durationScale);
 }
 
 /** Whetstone: three minutes at 60 fps — long enough to be worth carrying out the door. */
@@ -373,7 +470,10 @@ export function makeCooldownCrisp(): StatusEffect {
  * these has to call `syncHpToMaxHp` — otherwise the HP bar and the max disagree
  * until some unrelated event happens to reconcile them.
  */
-export const STAT_BOON_BONUSES: ReadonlyMap<string, Partial<Record<StatName, number>>> = new Map([
+export const STAT_BOON_BONUSES: ReadonlyMap<StatusId, Partial<Record<StatName, number>>> = new Map<
+  StatusId,
+  Partial<Record<StatName, number>>
+>([
   ['well_rested', { constitution: 2 }],
   ['hearth_warmed', { strength: 2 }],
   ['deep_slumber', { dexterity: 2, intelligence: 2 }],
@@ -392,22 +492,22 @@ export const ROOM_BOON_DURATION_MINUTES = 8;
 
 export const ROOM_BOON_TICKS = ROOM_BOON_DURATION_MINUTES * SECONDS_PER_MINUTE * TICKS_PER_SECOND;
 
-const WELL_RESTED_STATUS = 'well_rested';
-const HEARTH_WARMED_STATUS = 'hearth_warmed';
-const DEEP_SLUMBER_STATUS = 'deep_slumber';
+const WELL_RESTED_STATUS = 'well_rested' as const satisfies StatusId;
+const HEARTH_WARMED_STATUS = 'hearth_warmed' as const satisfies StatusId;
+const DEEP_SLUMBER_STATUS = 'deep_slumber' as const satisfies StatusId;
 
 /**
  * The boons an inn room grants. Exported so the inn can clear the other two when
  * it grants one: three rooms rented in a row would otherwise stack every bonus,
  * and the choice between the rooms would stop being a choice.
  */
-export const ROOM_BOON_STATUSES: ReadonlyArray<string> = [
+export const ROOM_BOON_STATUSES: ReadonlyArray<StatusId> = [
   WELL_RESTED_STATUS,
   HEARTH_WARMED_STATUS,
   DEEP_SLUMBER_STATUS,
 ];
 
-function makeRoomBoon(type: string): StatusEffect {
+function makeRoomBoon(type: StatusId): StatusEffect {
   return { type, ticksRemaining: ROOM_BOON_TICKS, totalTicks: ROOM_BOON_TICKS, applier: null };
 }
 
@@ -429,7 +529,7 @@ export function makeDeepSlumber(): StatusEffect {
 // -- Food boons -----------------------------------------------------------------
 
 /** The strength a Hamburger lends; see {@link makeHamburgerFed}. */
-export const HAMBURGER_FED_STATUS = 'hamburger_fed';
+export const HAMBURGER_FED_STATUS = 'hamburger_fed' as const satisfies StatusId;
 
 export const HAMBURGER_FED_TICKS = HAMBURGER_FED_DURATION_SECONDS * TICKS_PER_SECOND;
 
@@ -450,7 +550,7 @@ export function makeHamburgerFed(): StatusEffect {
 // -- The Clogged Bathroom --------------------------------------------------------
 
 /** A quick turn in a fixed bathroom stall; see {@link makeRefreshed}. */
-export const REFRESHED_STATUS = 'refreshed';
+export const REFRESHED_STATUS = 'refreshed' as const satisfies StatusId;
 
 /** How much faster a refreshed crawler walks. */
 export const REFRESHED_SPEED_FACTOR = 1.1;

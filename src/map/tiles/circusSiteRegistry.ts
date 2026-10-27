@@ -3,8 +3,7 @@
  *
  * A tile painter is handed the map's `structure` grid and a position, never the
  * `GameMap` — the same call shape every renderer in `src/map/tiles/` shares.
- * The grounds' decals (the vine runners, the wagon ruts, the stain by the cage
- * wagon) are placed off where the Big Top and the wagons stood, which is a
+ * The grounds' decals (the wagon ruts, the stain by the cage wagon) are placed off where the Starlight Tent and the wagons stood, which is a
  * fact about the site rather than about any one tile, so the site is looked up
  * by the grid it was painted onto, as `hollowSiteRegistry.ts` does for Briar
  * Hollow.
@@ -17,14 +16,9 @@
 import type { TileContent } from '../tileTypes';
 import type { CircusGroundsSite } from '../overworld/circusGroundsLayout';
 
-/** The grounds painted onto one grid, and the one piece of quest state their ground art shows. */
+/** The grounds painted onto one grid. */
 export interface CircusGroundsRecord {
   readonly site: CircusGroundsSite;
-  /**
-   * Whether the vine runners have died back: once Grimaldi is redeemed the
-   * vine that is Grimaldi lets go of the grounds, and the runners bake brown.
-   */
-  vinesWithered: boolean;
 }
 
 const records = new WeakMap<TileContent[][], CircusGroundsRecord>();
@@ -34,7 +28,7 @@ export function registerCircusGroundsSite(
   structure: TileContent[][],
   site: CircusGroundsSite,
 ): void {
-  records.set(structure, { site, vinesWithered: false });
+  records.set(structure, { site });
 }
 
 /** The grounds painted onto `structure`, if any. */

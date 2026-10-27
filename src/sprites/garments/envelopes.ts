@@ -56,6 +56,12 @@ const HUMAN_SHIRT_RISE = 0.04;
 const HUMAN_TORSO_MARGIN = 0.05;
 /** The seat of his trousers stands off the hips by about a thigh's width. */
 const HUMAN_HIPS_MARGIN = 0.15;
+/**
+ * A robe's skirt hangs from his hips to his ankles: painted over the legs at
+ * the seat, edge-on it closes the gap a stride opens between them, which the
+ * legs' own cloth cannot, each leg's envelope holding only its own leg.
+ */
+const HUMAN_HIPS_DROP = 1;
 /** What hangs from his back may hang from his shoulders to his calves and flare past his arms. */
 const HUMAN_BACK_MARGIN = 0.8;
 const HUMAN_BACK_DROP = 1.2;
@@ -67,7 +73,7 @@ const HUMAN_ENVELOPES: Readonly<Record<GarmentPart<'human'>, EnvelopeAllowance>>
   head: { margin: HUMAN_HEAD_MARGIN, rise: HUMAN_HAT_RISE, drop: 0 },
   torso: { margin: HUMAN_TORSO_MARGIN, rise: 0, drop: 0 },
   neck: { margin: HUMAN_NECK_MARGIN, rise: HUMAN_SHIRT_RISE, drop: 0 },
-  hips: { margin: HUMAN_HIPS_MARGIN, rise: 0, drop: 0 },
+  hips: { margin: HUMAN_HIPS_MARGIN, rise: 0, drop: HUMAN_HIPS_DROP },
   forearm: { margin: HUMAN_FOREARM_MARGIN, rise: 0, drop: 0 },
   back: { margin: HUMAN_BACK_MARGIN, rise: 0, drop: HUMAN_BACK_DROP },
   foot: { margin: HUMAN_FOOT_MARGIN, rise: 0, drop: 0 },

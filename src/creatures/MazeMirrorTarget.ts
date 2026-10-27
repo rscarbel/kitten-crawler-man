@@ -5,12 +5,12 @@ import {
   type MazeMirror,
   type MirrorFacing,
   type MirrorKind,
-} from '../map/bigTopMazeLayout';
+} from '../map/starlightTentMazeLayout';
 import {
   drawMazeMirror,
   drawSwivelMirrorWithGhost,
   type MazeMirrorArt,
-} from '../sprites/art/bigTop/mirrorHallProps';
+} from '../sprites/art/starlightTent/mirrorHallProps';
 
 const DISPLAY_NAME: Readonly<Record<MirrorKind, string>> = {
   pivot_mirror: 'Pivot Mirror',

@@ -57,10 +57,9 @@ export function restoreAttackCowState(
 }
 
 /**
- * A saved HP screened to a usable value: finite and not negative. The upper
+ * A saved HP, or undefined when it is not finite and not negative. The upper
  * bound is the creature's to apply, once it knows its maximum.
  */
 export function parseAttackCowHp(raw: unknown): number | undefined {
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) return undefined;
-  return Math.max(0, raw);
+  return typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? raw : undefined;
 }

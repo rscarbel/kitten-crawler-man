@@ -46,7 +46,7 @@ export interface SlotsLayout {
   readonly cabinet: Rect;
   /** The lit sign on top, with its chasing bulbs. */
   readonly marquee: Rect;
-  /** The DESPERADO JACKPOT progressive meter. */
+  /** The CLOAK & DAGGER JACKPOT progressive meter. */
   readonly meter: Rect;
   /** Whether the meter sits outside the cabinet, in a header strip. */
   readonly meterInHeader: boolean;

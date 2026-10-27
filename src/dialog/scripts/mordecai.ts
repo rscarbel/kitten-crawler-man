@@ -232,14 +232,6 @@ export const MORDECAI_ADVICE = {
     'Another crawler marked the arena {direction} of here.',
   ),
 
-  the_circus: adviceLine(
-    [
-      "The circus has come to town. Given the dungeon, I wouldn't assume that's good news.",
-      "You can have a look if you want. Just be careful about getting involved in anything you don't understand.",
-    ],
-    "It's {direction} of here.",
-  ),
-
   krasue_murders: adviceLine(
     [
       "People have been turning up in pieces. Not necessarily the pieces they started with, either. The city guard thinks it's a wild animal. It isn't.",

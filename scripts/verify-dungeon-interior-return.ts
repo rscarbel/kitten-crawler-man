@@ -700,8 +700,8 @@ function goblinsOnFloor(scene: Scene): number {
 function verifyDoorSave(save: SavedProgress, returnTile: Tile, clock: number, label: string): void {
   check(save.levelId === level2.id, `${label}: the door save is on floor 2 (${save.levelId})`);
   check(
-    sameTile(save.world?.safeRoomTile, returnTile),
-    `${label}: the door save resumes in front of the door (${JSON.stringify(save.world?.safeRoomTile)})`,
+    sameTile(save.world?.resumeTile, returnTile),
+    `${label}: the door save resumes in front of the door (${JSON.stringify(save.world?.resumeTile)})`,
   );
   check(
     save.world?.levelTimerFrames === clock,

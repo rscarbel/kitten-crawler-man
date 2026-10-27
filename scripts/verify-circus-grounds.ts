@@ -1,39 +1,30 @@
 /**
  * The circus grounds on the real generated third floor, across many world
- * seeds, held to the budgets the fights on them depend on:
+ * seeds, held to the budgets a walk round them depends on:
  *
- * - Blocked tiles in the grounds' disc stay at or under their budget. Every
- *   solid tile on the grounds is somewhere a wave mob can wedge.
- * - Every `RITUAL_WAVES` / `ASSAULT_WAVES` spawn lands where it was authored,
- *   or within {@link AUTHORED_SPAWN_TOLERANCE_TILES} of it. A spawn the
- *   grounds are allowed to push further is listed, with its limit, in
- *   {@link SPAWN_NUDGE_BASELINE_TILES}.
- * - From every wave spawn a hostile can walk, inside the arena, to the Big
- *   Top's door, Signet's lookout and the forecourt.
+ * - Blocked tiles in the grounds' disc stay at or under their budget, so the
+ *   field stays open ground rather than lanes between structures.
  * - No walkable ground on the grounds is sealed off from the forecourt.
  * - The keep-clear bands the layout names (`CIRCUS_KEEP_CLEAR_BANDS`: the
- *   forecourt, the lemur and stilt fields, the door and two rows south of it,
- *   Signet's lookout) and the approach road are open, and the waves the quest
- *   authors stand inside the bands kept for them.
+ *   forecourt, and the door and two rows south of it) and the approach road
+ *   are open.
  * - Rim props (the flame lamps, wagons, booths, striker and crate stack)
  *   stand in the rim band, off the road, clear of the entry arch, touching
  *   ground a crawler can walk to, and each is stood on most seeds.
  * - No arch post, flame lamp or rim prop stands on a town gate highway that
  *   crosses the grounds. The highway is read from the town plan, so a lot
  *   pass that paints over it cannot hide it from this check.
- * - The sideshow assault, played headless from several posts, needs the stall
- *   rescue no more often than its budget.
  *
  * Every check counts itself, and a section that ran no checks fails, so a
  * lookup that finds nothing cannot pass.
  *
  *   npm run verify:circus-grounds
- *   npx tsx scripts/verify-circus-grounds.ts --seeds=40 --assault-seeds=3
+ *   npx tsx scripts/verify-circus-grounds.ts --seeds=40
  *   npx tsx scripts/verify-circus-grounds.ts --measure      # print every reading
  *   npx tsx scripts/verify-circus-grounds.ts --fault=forecourt-solid   # must go red
  *
  * Faults (each must turn the gate red): forecourt-solid, blocked-count,
- * spawn-wall, pocket, rim-prop, rim-arch, cut-lookout, wedge, highway-prop.
+ * pocket, rim-prop, rim-arch, highway-prop.
  */
 
 import {
@@ -42,18 +33,15 @@ import {
   CIRCUS_STRUCTURE_TALL,
   TORCH,
 } from '../src/map/tileTypes';
-import { runAssault, type AssaultRun } from './verifyCircusGrounds/assault';
 import {
   BAND_NAMES,
   bandTiles,
   measureGrounds,
-  wavesOutsideTheirBands,
   type BandName,
   type GroundsReading,
 } from './verifyCircusGrounds/geometry';
 import {
   CIRCUS_ARCH_CLEARANCE_TILES,
-  CIRCUS_LOOKOUT_OFFSET,
   CIRCUS_RIM_OUTER_RADIUS_TILES,
   CIRCUS_RIM_PROPS,
   CIRCUS_STRUCTURE_PLACEMENTS,
@@ -72,7 +60,7 @@ import {
 // layout improves on it and never raised.
 
 /**
- * Most tiles of the r14 disc the grounds may block: the Big Top's 54 (its
+ * Most tiles of the r14 disc the grounds may block: the Starlight Tent's 54 (its
  * 12 x 5 rectangle less the doorway and the four corners its ellipse
  * clears), three pavilions of 6 and six flame lamps — 78 — plus whatever of
  * the rim's wagons, booths and crate stack falls inside the disc. The rim
@@ -83,32 +71,19 @@ import {
 const BLOCKED_TILES_BASELINE = 89;
 /**
  * The blocked-tile budget never rises past this: 95 of the disc's 613 tiles,
- * under a sixth, so the fields the waves are fought across stay open ground
- * rather than lanes between structures.
+ * under a sixth, so the field stays open ground rather than lanes between
+ * structures.
  */
 const BLOCKED_TILES_CEILING = 95;
-/** How far a wave spawn may land from its authored tile and still count as placed there. */
-const AUTHORED_SPAWN_TOLERANCE_TILES = 1;
-/**
- * Spawns allowed to land further than the tolerance from their authored
- * tile, with the furthest any seed may push each, in tiles. Every spawn lands
- * exactly where it is authored, so none is listed.
- */
-const SPAWN_NUDGE_BASELINE_TILES: Readonly<Record<string, number>> = {};
-/** How far Signet may be set down from her authored lookout. */
-const SIGNET_NUDGE_BASELINE_TILES = 0;
 /** Blocked tiles each keep-clear band may hold on any seed. */
 const BAND_BLOCKED_BASELINE: Readonly<Record<BandName, number>> = {
   forecourt: 0,
-  'lemur field': 0,
-  'stilt field': 0,
   door: 0,
   road: 0,
-  lookout: 0,
 };
 /** Sealed-off walkable pockets allowed in the rim band on any seed. */
 const RIM_POCKETS_BASELINE = 0;
-/** Walkable pockets smaller than this are the ones a spawn or a knock-back can strand a body in. */
+/** Walkable pockets smaller than this are the ones a knock-back can strand a body in. */
 const POCKET_MIN_TILES = 6;
 /** Where the rim band starts, in tiles from the centre; blocking props belong outside it. */
 const RIM_BAND_INNER_RADIUS_TILES = 12;
@@ -120,24 +95,10 @@ const RIM_BAND_INNER_RADIUS_TILES = 12;
  */
 const RIM_PROP_MIN_PLACED_SHARE = 0.75;
 const PERCENT = 100;
-/** Most stall-rescue lifts the whole default assault sweep may need. */
-const STALL_LIFTS_BASELINE = 711;
-/**
- * Most waves, across the default sweep, that the run has to cut down at the
- * end of their frame budget because some mob of theirs never came within the
- * engage range, in clear sight, of the post. That is mostly mobs that never
- * make for the party at all — Terror holding behind the Big Top, lemurs
- * keeping to their field — rather than mobs wedged on the way, so this is a
- * loose ceiling on how the fight plays out, not a count of wedged mobs; the
- * stall-lift budget above is the wedging measure.
- */
-const STUCK_WAVES_BASELINE = 32;
-
 // ── Sweep ─────────────────────────────────────────────────────────────────
 
 const SEED_STRIDE = 7919;
 const DEFAULT_GEOMETRY_SEEDS = 24;
-const DEFAULT_ASSAULT_SEEDS = 4;
 /**
  * Seeds whose town gate highway crosses the grounds where a rim prop, a lamp
  * or an arch post would otherwise stand, swept for geometry on every run so
@@ -161,12 +122,9 @@ function countArg(name: string, fallback: number): number {
 const FAULTS = [
   'forecourt-solid',
   'blocked-count',
-  'spawn-wall',
   'pocket',
   'rim-prop',
   'rim-arch',
-  'cut-lookout',
-  'wedge',
   'highway-prop',
 ] as const;
 type Fault = (typeof FAULTS)[number];
@@ -186,34 +144,18 @@ const strideSeeds = Array.from(
   { length: countArg('seeds', DEFAULT_GEOMETRY_SEEDS) },
   (_unused, index) => SEED_STRIDE * (index + 1),
 );
-// The crossing seeds go after the stride so the assault, which plays the
-// first few, keeps playing the same ones.
 const geometrySeeds = [
   ...strideSeeds,
   ...HIGHWAY_CROSSING_SEEDS.filter((seed) => !strideSeeds.includes(seed)),
 ];
-const assaultSeedCount = countArg('assault-seeds', DEFAULT_ASSAULT_SEEDS);
 
 // ── Faults ────────────────────────────────────────────────────────────────
 
-/** A lemur spawn the spawn-wall fault buries. */
-const BURIED_SPAWN_OFFSET: TilePoint = { x: -9, y: 1 };
-/** Half the side of the block the spawn-wall fault lays over it. */
-const BURIED_SPAWN_HALF_TILES = 2;
 /** Where the forecourt fault stands its solid tile, from the centre. */
 const FORECOURT_FAULT_OFFSET: TilePoint = { x: 4, y: 2 };
 /** Where the pocket and rim-prop faults work, from the centre: open south-east ground. */
 const POCKET_FAULT_OFFSET: TilePoint = { x: 5, y: 10 };
 const RIM_FAULT_OFFSET: TilePoint = { x: -6, y: 9 };
-/** Radius of the wall ring the cut-lookout fault closes round the lookout. */
-const LOOKOUT_RING_RADIUS_TILES = 2;
-/**
- * The column, west of the centre, the wedge fault runs a wall down: between
- * the lemur field and every post east of it, so the lemurs lose sight of the
- * party and stall.
- */
-const WEDGE_COLUMN_OFFSET = -5;
-
 function offsetTile(site: CircusSite, offset: TilePoint): TilePoint {
   return { x: site.centre.x + offset.x, y: site.centre.y + offset.y };
 }
@@ -254,15 +196,6 @@ function applyFault(site: CircusSite, which: Fault): void {
       if (tile !== null) solid(tile);
       return;
     }
-    case 'spawn-wall': {
-      const buried = offsetTile(site, BURIED_SPAWN_OFFSET);
-      for (let dy = -BURIED_SPAWN_HALF_TILES; dy <= BURIED_SPAWN_HALF_TILES; dy++) {
-        for (let dx = -BURIED_SPAWN_HALF_TILES; dx <= BURIED_SPAWN_HALF_TILES; dx++) {
-          solid({ x: buried.x + dx, y: buried.y + dy });
-        }
-      }
-      return;
-    }
     case 'pocket':
       for (const tile of ringTiles(offsetTile(site, POCKET_FAULT_OFFSET), 1)) solid(tile);
       return;
@@ -281,26 +214,18 @@ function applyFault(site: CircusSite, which: Fault): void {
       stampTileType(site.map, away, CIRCUS_STRUCTURE_LOW);
       return;
     }
-    case 'cut-lookout':
-      for (const tile of ringTiles(site.lookout, LOOKOUT_RING_RADIUS_TILES)) solid(tile);
-      return;
     case 'highway-prop': {
       const templateTiles = templateFootprintKeys(site);
       const open = site.highwayRoute.find((tile) => !templateTiles.has(`${tile.x},${tile.y}`));
       if (open !== undefined) stampTileType(site.map, open, CIRCUS_STRUCTURE_LOW);
       return;
     }
-    case 'wedge':
-      for (let dy = -site.radiusTiles; dy <= site.radiusTiles; dy++) {
-        solid({ x: site.centre.x + WEDGE_COLUMN_OFFSET, y: site.centre.y + dy });
-      }
-      return;
   }
 }
 
 // ── Report ────────────────────────────────────────────────────────────────
 
-type Section = 'blocked' | 'spawns' | 'reach' | 'pockets' | 'bands' | 'rim' | 'highway' | 'assault';
+type Section = 'blocked' | 'pockets' | 'bands' | 'rim' | 'highway';
 const checksRun = new Map<Section, number>();
 const failures: string[] = [];
 
@@ -324,7 +249,7 @@ const TEMPLATE_STRUCTURES = new Set<string>(
 );
 
 /**
- * Every tile under the grounds' fixed structures. The Big Top and the
+ * Every tile under the grounds' fixed structures. The Starlight Tent and the
  * pavilions are pitched where the template puts them whatever runs under
  * them, so a highway through the middle of the grounds ends at their walls;
  * only what is placed by search round the rim must find ground off it.
@@ -377,31 +302,6 @@ function judgeGeometry(site: CircusSite, reading: GroundsReading): void {
     `${label}: ${reading.blockedTiles} blocked tiles in the grounds, over the ${BLOCKED_TILES_BASELINE} budget`,
   );
 
-  for (const spawn of reading.spawns) {
-    const cap = Math.max(
-      AUTHORED_SPAWN_TOLERANCE_TILES,
-      SPAWN_NUDGE_BASELINE_TILES[spawn.key] ?? 0,
-    );
-    check(
-      'spawns',
-      spawn.nudgeTiles <= cap,
-      spawn.resolved === null
-        ? `${label}: ${spawn.key} never spawned`
-        : `${label}: ${spawn.key} landed ${spawn.nudgeTiles.toFixed(2)} tiles from its authored ${describe(spawn.authored, site)}, over ${cap}`,
-    );
-  }
-  check(
-    'spawns',
-    reading.signetNudgeTiles <= SIGNET_NUDGE_BASELINE_TILES,
-    `${label}: Signet set down ${reading.signetNudgeTiles.toFixed(2)} tiles from her lookout, over ${SIGNET_NUDGE_BASELINE_TILES}`,
-  );
-
-  check('reach', reading.reachPairsTried > 0, `${label}: no spawn-to-target walk was tried`);
-  for (const miss of reading.unreachable) {
-    check('reach', false, `${label}: ${miss.spawn} cannot walk to ${miss.target}`);
-  }
-  if (reading.unreachable.length === 0) check('reach', true, '');
-
   const listPockets = (pockets: GroundsReading['pockets']): string =>
     pockets
       .map(
@@ -410,7 +310,7 @@ function judgeGeometry(site: CircusSite, reading: GroundsReading): void {
       )
       .join(', ');
   // A pocket is the rim's only if every tile of it is: one tile reaching into
-  // the field makes it ground a wave can be stranded on.
+  // the field makes it ground a body can be stranded on.
   const inRimBand = (pocket: GroundsReading['pockets'][number]): boolean =>
     pocket.innermostRadius >= RIM_BAND_INNER_RADIUS_TILES;
   const fieldPockets = reading.pockets.filter((pocket) => !inRimBand(pocket));
@@ -487,18 +387,13 @@ function judgeGeometry(site: CircusSite, reading: GroundsReading): void {
 
 function printReading(site: CircusSite, reading: GroundsReading): void {
   const types = [...reading.blockedByType].map(([type, count]) => `${type}:${count}`).join(' ');
-  const nudged = reading.spawns
-    .filter((spawn) => spawn.nudgeTiles > 0)
-    .map((spawn) => `${spawn.key}=${spawn.nudgeTiles.toFixed(2)}`)
-    .join(' ');
   const bands = BAND_NAMES.map((name) => {
     const band = reading.bands.get(name);
     return `${name} ${band?.blocked.length ?? '?'}/${band?.tiles ?? '?'}`;
   }).join(', ');
   console.log(
     `seed ${site.seed} centre (${site.centre.x}, ${site.centre.y}): blocked ${reading.blockedTiles} [${types}]` +
-      `\n  nudges: ${nudged || 'none'}; Signet ${reading.signetNudgeTiles.toFixed(2)}` +
-      `\n  unreachable: ${reading.unreachable.length}/${reading.reachPairsTried}; pockets: ${reading.pockets.map((p) => p.size).join(',') || 'none'}` +
+      `\n  pockets: ${reading.pockets.map((p) => p.size).join(',') || 'none'}` +
       `\n  bands: ${bands}` +
       `\n  rim props: ${reading.rimProps.map((p) => p.radius.toFixed(1)).join(', ')}`,
   );
@@ -506,7 +401,6 @@ function printReading(site: CircusSite, reading: GroundsReading): void {
 
 // ── Run ───────────────────────────────────────────────────────────────────
 
-const maxNudgeByKey = new Map<string, number>();
 /**
  * Counted across the sweep rather than per seed: on some seeds the forest
  * pass has grown a tree over every one of the six torch tiles.
@@ -520,9 +414,6 @@ for (const seed of geometrySeeds) {
   if (site === null) continue;
   const reading = measureGrounds(site);
   worstBlocked = Math.max(worstBlocked, reading.blockedTiles);
-  for (const spawn of reading.spawns) {
-    maxNudgeByKey.set(spawn.key, Math.max(maxNudgeByKey.get(spawn.key) ?? 0, spawn.nudgeTiles));
-  }
   if (measureOnly) printReading(site, reading);
   judgeGeometry(site, reading);
   judgeHighway(site);
@@ -544,84 +435,19 @@ for (const anchor of CIRCUS_RIM_PROPS) {
   );
 }
 
-// The fields the gate keeps clear are the layout's, and the waves are authored
-// in the quest system; the two must describe the same ground.
-for (const problem of wavesOutsideTheirBands()) check('bands', false, problem);
-check('bands', true, '');
-const firstSite = buildCircusSite(geometrySeeds[0]);
-if (typeof firstSite !== 'string') {
-  const lookoutDx = firstSite.lookout.x - firstSite.centre.x;
-  const lookoutDy = firstSite.lookout.y - firstSite.centre.y;
-  check(
-    'bands',
-    lookoutDx === CIRCUS_LOOKOUT_OFFSET.x && lookoutDy === CIRCUS_LOOKOUT_OFFSET.y,
-    `Signet's lookout is authored at (${lookoutDx}, ${lookoutDy}) but the layout keeps (${CIRCUS_LOOKOUT_OFFSET.x}, ${CIRCUS_LOOKOUT_OFFSET.y}) clear`,
-  );
-}
-
-const assaultRuns: AssaultRun[] = [];
-for (const seed of geometrySeeds.slice(0, assaultSeedCount)) {
-  const site = buildSite(seed);
-  if (site === null) continue;
-  for (const result of runAssault(site)) {
-    if (typeof result === 'string') {
-      check('assault', false, `seed ${seed}: ${result}`);
-      continue;
-    }
-    assaultRuns.push(result);
-    if (measureOnly) {
-      console.log(
-        `assault seed ${seed} ${result.post}: ${result.stallLifts} lifts, ${result.stuckWaves} stuck of ${result.wavesFought} waves, ${result.frames} frames`,
-      );
-    }
-  }
-}
-const totalLifts = assaultRuns.reduce((sum, run) => sum + run.stallLifts, 0);
-const totalStuck = assaultRuns.reduce((sum, run) => sum + run.stuckWaves, 0);
-check('assault', assaultRuns.length > 0, 'no assault run finished');
-check(
-  'assault',
-  totalLifts <= STALL_LIFTS_BASELINE,
-  `${totalLifts} stall-rescue lifts across ${assaultRuns.length} assault runs, over the ${STALL_LIFTS_BASELINE} budget`,
-);
-check(
-  'assault',
-  totalStuck <= STUCK_WAVES_BASELINE,
-  `${totalStuck} waves never reached their post across ${assaultRuns.length} assault runs, over the ${STUCK_WAVES_BASELINE} budget`,
-);
-
 check(
   'blocked',
   BLOCKED_TILES_BASELINE <= BLOCKED_TILES_CEILING,
   `the blocked-tile budget ${BLOCKED_TILES_BASELINE} is over its ${BLOCKED_TILES_CEILING} ceiling`,
 );
 
-const sections: readonly Section[] = [
-  'blocked',
-  'spawns',
-  'reach',
-  'pockets',
-  'bands',
-  'rim',
-  'highway',
-  'assault',
-];
+const sections: readonly Section[] = ['blocked', 'pockets', 'bands', 'rim', 'highway'];
 for (const section of sections) {
   if ((checksRun.get(section) ?? 0) === 0) failures.push(`[${section}] ran no checks`);
 }
 
 console.log(
   `circus grounds: ${geometrySeeds.length} seeds, worst ${worstBlocked} blocked (budget ${BLOCKED_TILES_BASELINE})`,
-);
-if (measureOnly) {
-  const nudges = [...maxNudgeByKey]
-    .filter(([, nudge]) => nudge > 0)
-    .map(([key, nudge]) => `${key}=${nudge.toFixed(2)}`)
-    .join(' ');
-  console.log(`worst nudge per spawn: ${nudges || 'none'}`);
-}
-console.log(
-  `assault: ${assaultRuns.length} runs, ${totalLifts} stall lifts (budget ${STALL_LIFTS_BASELINE}), ${totalStuck} stuck waves (budget ${STUCK_WAVES_BASELINE})`,
 );
 const totalChecks = [...checksRun.values()].reduce((sum, count) => sum + count, 0);
 if (fault !== null) console.log(`fault injected: ${fault}`);

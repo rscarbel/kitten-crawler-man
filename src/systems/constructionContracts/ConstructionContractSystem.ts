@@ -11,7 +11,7 @@
  * into a chunk cache. While the village is under siege the spots refuse
  * work.
  *
- * A Skyfowl Town contract is worked indoors (`ContractInteriorSite`); out
+ * A Taloncrest contract is worked indoors (`ContractInteriorSite`); out
  * here it only shows its counter.
  *
  * Because it runs town-wide, it is also the contract's Journal row, the
@@ -87,7 +87,7 @@ import { briarHollowSpotFootprint } from './contractTargets';
 export const CONTRACT_SIEGE_LINE = 'Not while the village is under siege.';
 
 const IDLE_OBJECTIVE = 'Take a construction contract from Wendell or a notice board';
-const IDLE_HINT = 'Notice boards in Skyfowl Town and Briar Hollow carry his work orders.';
+const IDLE_HINT = 'Notice boards in Taloncrest and Briar Hollow carry his work orders.';
 const SIEGE_HINT = 'Wait out the siege.';
 const STORY_OWNED_HINT = 'Come back once things settle down.';
 
@@ -124,10 +124,10 @@ export interface ConstructionContractSystemDeps {
    */
   readonly soldierTile: (id: VillagerId) => TilePoint | null;
   /**
-   * Whether a story state owns a Skyfowl Town room right now, so its spots
+   * Whether a story state owns a Taloncrest room right now, so its spots
    * are inert and its contact away. Absent means none ever does.
    */
-  readonly skyfowlRoomOwnedByStory?: (buildingName: string) => boolean;
+  readonly taloncrestRoomOwnedByStory?: (buildingName: string) => boolean;
   /** A one-line toast over the HUD. */
   readonly announce: (message: string) => void;
   /** Keeps the resource strip up while a spot is being worked. */
@@ -305,10 +305,10 @@ export class ConstructionContractSystem implements GameSystem, QuestLineProvider
 
   // ── Guidance ─────────────────────────────────────────────────────────────
 
-  /** Whether the active site is held by a story state: the siege, or a Skyfowl Town room's fight. */
+  /** Whether the active site is held by a story state: the siege, or a Taloncrest room's fight. */
   private siteHeldByStory(site: ContractSiteDef): boolean {
     if (site.town === 'briar_hollow') return this.underSiege;
-    return this.deps.skyfowlRoomOwnedByStory?.(site.buildingName) === true;
+    return this.deps.taloncrestRoomOwnedByStory?.(site.buildingName) === true;
   }
 
   /**
@@ -331,7 +331,9 @@ export class ConstructionContractSystem implements GameSystem, QuestLineProvider
   /** The site's door, as the guide and the Journal point at it. */
   private siteGuidance(site: ContractSiteDef): TownBuildingGuidance | null {
     const door =
-      site.town === 'skyfowl' ? this.townBuildingDoor(site.buildingName) : this.villageDoor(site);
+      site.town === 'taloncrest'
+        ? this.townBuildingDoor(site.buildingName)
+        : this.villageDoor(site);
     if (door === null) return null;
     return {
       kind: 'town_building',

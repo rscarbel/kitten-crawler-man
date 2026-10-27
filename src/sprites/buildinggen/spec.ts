@@ -359,7 +359,7 @@ export interface FacadeSpec {
    *
    * Zero for a plain wall. Two or more turn an elevation into bays, which is
    * what lets a wide building read as architecture rather than as one long
-   * stretch of masonry — the Desperado's twelve tiles of dressed stone are
+   * stretch of masonry — the Cloak & Dagger's twelve tiles of dressed stone are
    * otherwise a cliff.
    */
   readonly pilasters: number;

@@ -136,7 +136,7 @@ function winnableRefusal(call: AIActionCall, spec: ChallengeSpec): string | null
   }
   if (rules.failOnDamage) {
     const bleeding = bothCrawlers(scene).some(
-      (crawler) => pendingStatusDamage(crawler.statusEffects, crawler.maxHp) > 0,
+      (crawler) => pendingStatusDamage(crawler.statusEffects) > 0,
     );
     if (bleeding) return 'a status is still eating a crawler’s HP';
   }

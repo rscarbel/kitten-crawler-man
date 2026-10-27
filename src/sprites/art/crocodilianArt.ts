@@ -1,11 +1,11 @@
 /**
  * The Crocodilian — one painter for two very different bodies.
  *
- * Bucket Boy is a young, skinny croc in a neon-pink band tee, clutching a tin
- * bucket; Clarabelle is the club's broad-shouldered door bouncer in a dark
- * security suit. They share every bone, every stroke and every view, and differ
- * only in the {@link CrocBuild} handed in: proportions, palette, what they wear,
- * and whether the Meat Shields armband is painted on.
+ * The janitor is a young, skinny croc in a neon-pink band tee with a tin pail
+ * and a string mop; Sydney is the broad-shouldered manager of The Barracks
+ * Mercenaries in a dark suit. They share every bone, every stroke and every
+ * view, and differ only in the {@link CrocBuild} handed in: proportions,
+ * palette and what they wear.
  *
  * What makes a biped read as a crocodile at a 32px tile, in descending order:
  *
@@ -24,8 +24,8 @@
  * drawn squashed by the sine of its yaw, which is exactly what a turn about the
  * vertical axis looks like, over a head-on braincase that does not lose its
  * width when it turns. The away view is the front view mirrored and painted
- * from behind — mirroring puts the bucket and the armband in the figure's
- * *left* hand in both, which is where they belong.
+ * from behind — mirroring keeps the pail in the figure's *left* hand and the
+ * mop in his right in both, which is where they belong.
  *
  * This module knows nothing about animation: it paints one pose. The
  * choreography lives in `src/sprites/art/crocodilianFigure.ts`.
@@ -88,8 +88,6 @@ const EYE_SLIT = '#1a1208';
 /** Pure white, well clear of the tooth ivory, so a glint is never counted as a tooth. */
 const EYE_GLINT = '#ffffff';
 const CLAW = '#2a2418';
-/** The Meat Shields zone colour. Only a hireling carries it. */
-const ARMBAND = '#e06040';
 
 /** Unit vector the key light arrives from, in screen space. */
 const LIGHT_X = -0.6;
@@ -138,7 +136,7 @@ interface LimbShape {
 export type CrocOutfit = 'band_tee' | 'security_suit';
 
 /**
- * Everything that differs between Bucket Boy and Clarabelle. Every length is in
+ * Everything that differs between the janitor and Sydney. Every length is in
  * tiles, with the origin between the feet and +Y down, so heights are negative.
  *
  * Heights are pinned first and bone lengths chosen to span them with a little
@@ -186,7 +184,7 @@ export interface CrocBuild {
   readonly tailTipWidth: number;
   /** Forward stoop of the whole trunk at rest. */
   readonly restLean: number;
-  /** Resting head pitch: a timid kid ducks his snout, a bouncer lifts her chin. */
+  /** Resting head pitch: a timid kid ducks his snout, a manager lifts her chin. */
   readonly restHeadPitch: number;
   /** Head-on stance width, as a share of the leg roots' spread. */
   readonly footSpreadShare: number;
@@ -195,8 +193,6 @@ export interface CrocBuild {
   /** Lashes over the eyes and a pearl at the jaw — how the art says "she". */
   readonly feminine: boolean;
   readonly outfit: CrocOutfit;
-  /** The Meat Shields armband: every hireling wears one; the club's door staff do not. */
-  readonly armband: boolean;
   readonly palette: CrocPalette;
   /** Scales every outline and detail stroke with the body, so a big figure is not drawn in hairlines. */
   readonly strokeScale: number;
@@ -207,8 +203,8 @@ export interface CrocBuild {
  * head on a narrow frame, because a big head over thin limbs is what reads as
  * young at any size. The stoop is nerves, not age.
  */
-export const BUCKET_BOY_BUILD: CrocBuild = {
-  id: 'bucket_boy',
+export const JANITOR_BUILD: CrocBuild = {
+  id: 'janitor',
   hipY: -0.48,
   waistY: -0.6,
   chestY: -0.71,
@@ -263,7 +259,6 @@ export const BUCKET_BOY_BUILD: CrocBuild = {
   skirt: false,
   feminine: false,
   outfit: 'band_tee',
-  armband: true,
   palette: {
     scales: { dark: '#34443a', mid: '#5e7563', light: '#88a08a' },
     belly: { dark: '#8c8a64', mid: '#bab68c', light: '#dcd8ae' },
@@ -278,11 +273,11 @@ export const BUCKET_BOY_BUILD: CrocBuild = {
  * Big, broad and upright: shoulders twice his width, a head that is a smaller
  * share of her height, and hands and feet that stay a human share of it —
  * oversized extremities on a large figure read as a toddler, not as a bouncer.
- * Proportioned against the human rig at its own size; {@link CLARABELLE_BUILD}
+ * Proportioned against the human rig at its own size; {@link SYDNEY_BUILD}
  * is this build at the size she is drawn.
  */
-const CLARABELLE_RIG_SIZED_BUILD: CrocBuild = {
-  id: 'clarabelle',
+const SYDNEY_RIG_SIZED_BUILD: CrocBuild = {
+  id: 'sydney',
   hipY: -0.82,
   waistY: -1.06,
   chestY: -1.32,
@@ -337,7 +332,6 @@ const CLARABELLE_RIG_SIZED_BUILD: CrocBuild = {
   skirt: true,
   feminine: true,
   outfit: 'security_suit',
-  armband: false,
   palette: {
     scales: { dark: '#2e3b2c', mid: '#526747', light: '#7a9066' },
     belly: { dark: '#86845c', mid: '#b0ab80', light: '#d2cda2' },
@@ -401,17 +395,14 @@ function scaleCrocBuild(build: CrocBuild, factor: number): CrocBuild {
 }
 
 /**
- * How much larger than her rig-sized build Clarabelle is drawn: a bouncer has
- * to keep her head and shoulders over the crawler she is turning away at the
- * door, so she is drawn bigger than the rig she is proportioned on.
+ * How much larger than her rig-sized build Sydney is drawn: she looks down at
+ * the crawler across her desk, never up, so she is drawn bigger than the rig
+ * she is proportioned on.
  */
-const CLARABELLE_SIZE_OVER_RIG = 1.2;
+const SYDNEY_SIZE_OVER_RIG = 1.2;
 
-/** Clarabelle as drawn: her rig-sized build scaled by {@link CLARABELLE_SIZE_OVER_RIG}. */
-export const CLARABELLE_BUILD = scaleCrocBuild(
-  CLARABELLE_RIG_SIZED_BUILD,
-  CLARABELLE_SIZE_OVER_RIG,
-);
+/** Sydney as drawn: her rig-sized build scaled by {@link SYDNEY_SIZE_OVER_RIG}. */
+export const SYDNEY_BUILD = scaleCrocBuild(SYDNEY_RIG_SIZED_BUILD, SYDNEY_SIZE_OVER_RIG);
 
 // ── Garment palettes ─────────────────────────────────────────────────────────
 
@@ -445,11 +436,6 @@ const PEARL = '#e8eef8';
 const TIN: Ramp = { dark: '#56606a', mid: '#98a2ac', light: '#dbe3ea' };
 const TIN_INSIDE = '#3d444c';
 const BAIL = '#6d747c';
-
-/** Triage's green, painted additively over the hands. */
-const GLOW_CORE = '#eaffd8';
-const GLOW_MID = '#6cf07a';
-const GLOW_EDGE = '#1ea84a';
 
 // ── Views ────────────────────────────────────────────────────────────────────
 
@@ -582,14 +568,12 @@ export interface CrocArmPose {
 export type BucketPose =
   /** Hanging by its bail from the near hand, swung this far off plumb. */
   | { readonly kind: 'hang'; readonly swing: number }
-  /** Somewhere absolute — on the floor, held overhead, flying loose. */
+  /** Set down somewhere, in figure units. */
   | {
       readonly kind: 'placed';
       /** Centre of the bucket's body, in figure units. */
       readonly centre: Pt;
       readonly tilt: number;
-      /** Mouth down, as when it is held over the head as a shield. */
-      readonly inverted: boolean;
       /** Drawn over the body rather than behind it. */
       readonly front: boolean;
     }
@@ -608,11 +592,6 @@ export interface CrocPose {
   breath: number;
   /** Head pitch, radians; positive noses down. */
   headPitch: number;
-  /**
-   * The head's rotation in the picture plane, in every view — a skull lolling
-   * over on a limp neck, which a pitch cannot express head-on.
-   */
-  headRoll: number;
   /** Added to the view's own head turn; positive turns the snout further toward +X. */
   headYaw: number;
   /** 0 closed, 1 fully agape. */
@@ -625,24 +604,9 @@ export interface CrocPose {
   farArm: CrocArmPose;
   /** How far the tail's root swings off its rest line, radians. */
   tailSwing: number;
-  /** Extra bend along the tail, radians; positive curls the tip down. */
-  tailCurl: number;
   bucket: BucketPose;
-  /** Triage's glow on both hands, 0 to 1. */
-  glow: number;
-  /**
-   * The whole body tipping over about a point on the floor, for the death row.
-   * The shadow and a loose bucket stay on the floor; everything else rotates.
-   */
-  topple: number;
-  /** Pivot of the topple, in figure units. */
-  toppleAt: Pt;
-  /** How far the toppled body is lifted back up off the floor, so it lies on it rather than in it. */
-  toppleLift: number;
-  /** A motion smear trailing the far hand, 0 to 1, for the frame a swing lands. */
-  smear: number;
-  /** How far back along its arc the smear trails, radians; the sign is the swing's direction. */
-  smearSweep: number;
+  /** The mop in his far (right) hand, or none. */
+  mop: MopPose | null;
 }
 
 /** A relaxed arm hangs this share of its full reach, measured from the shoulder joint. */
@@ -698,7 +662,6 @@ export function restingPose(build: CrocBuild): CrocPose {
     breath: 0,
     headPitch: build.restHeadPitch,
     headYaw: 0,
-    headRoll: 0,
     jaw: 0,
     blink: 0,
     near: restFoot(build, REST_FOOT_STAGGER),
@@ -706,14 +669,8 @@ export function restingPose(build: CrocBuild): CrocPose {
     nearArm: hangingArm(shoulderX - REST_HAND_BEHIND),
     farArm: hangingArm(shoulderX - REST_HAND_BEHIND * 2),
     tailSwing: 0,
-    tailCurl: 0,
     bucket: { kind: 'none' },
-    glow: 0,
-    topple: 0,
-    toppleAt: pt(0, 0),
-    toppleLift: 0,
-    smear: 0,
-    smearSweep: 0,
+    mop: null,
   };
 }
 
@@ -1341,20 +1298,10 @@ const PALM_PAD_SIZE = 0.8;
 /** How far down the upper arm the tee's short sleeve reaches. */
 const SLEEVE_END = 0.48;
 const SLEEVE_BULK = 0.014;
-/** The armband sits just below the sleeve, where it cannot be mistaken for the sleeve's hem. */
-const ARMBAND_FROM = 0.62;
-const ARMBAND_TO = 0.88;
-const ARMBAND_BULK = 0.008;
 const SHIRT_CUFF_FROM = 0.84;
 const SHIRT_CUFF_TO = 0.93;
 
-function drawArm(
-  paint: Paint,
-  chain: BoneChain,
-  arm: CrocArmPose,
-  shade: number,
-  wearsArmband: boolean,
-): void {
+function drawArm(paint: Paint, chain: BoneChain, arm: CrocArmPose, shade: number): void {
   const { ctx, build } = paint;
   const suit = build.outfit === 'security_suit';
   const skin = build.palette.scales;
@@ -1382,21 +1329,13 @@ function drawArm(
   outlineCapsule(paint, chain.root, sleeveEnd, rootWidth, endWidth);
   fillCapsule(ctx, chain.root, sleeveEnd, rootWidth, endWidth, mix(TEE.mid, OUTLINE, shade));
   sheenSegment(paint, chain.root, sleeveEnd, rootWidth, mix(TEE.light, OUTLINE, shade));
-
-  if (wearsArmband) {
-    const from = mixPt(chain.root, chain.joint, ARMBAND_FROM);
-    const to = mixPt(chain.root, chain.joint, ARMBAND_TO);
-    const width = lerp(build.arm.root, build.arm.joint, ARMBAND_FROM) + ARMBAND_BULK;
-    outlineCapsule(paint, from, to, width, width);
-    fillCapsule(ctx, from, to, width, width, mix(ARMBAND, OUTLINE, shade));
-  }
 }
 
 /**
  * From behind, an arm hangs at the body's side, so its upper half shows past
  * the back even when its hand is round the front — crossed arms included.
  */
-function drawUpperArmFromBehind(paint: Paint, chain: BoneChain, wearsArmband: boolean): void {
+function drawUpperArmFromBehind(paint: Paint, chain: BoneChain): void {
   const { ctx, build } = paint;
   const upper: BoneChain = {
     root: chain.root,
@@ -1419,36 +1358,6 @@ function drawUpperArmFromBehind(paint: Paint, chain: BoneChain, wearsArmband: bo
   const endWidth = lerp(build.arm.root, build.arm.joint, SLEEVE_END) + SLEEVE_BULK;
   outlineCapsule(paint, chain.root, sleeveEnd, rootWidth, endWidth);
   fillCapsule(ctx, chain.root, sleeveEnd, rootWidth, endWidth, TEE.mid);
-  if (wearsArmband) {
-    const from = mixPt(chain.root, chain.joint, ARMBAND_FROM);
-    const to = mixPt(chain.root, chain.joint, ARMBAND_TO);
-    const width = lerp(build.arm.root, build.arm.joint, ARMBAND_FROM) + ARMBAND_BULK;
-    outlineCapsule(paint, from, to, width, width);
-    fillCapsule(ctx, from, to, width, width, ARMBAND);
-  }
-}
-
-// ── Glow ─────────────────────────────────────────────────────────────────────
-
-const GLOW_RADIUS = 0.11;
-const GLOW_CORE_SHARE = 0.25;
-
-/** Triage's green light cupped in a hand. Additive, so it lifts what is under it. */
-function drawHandGlow(ctx: Ctx, at: Pt, amount: number, scale: number): void {
-  const strength = clamp01(amount);
-  if (strength < MIN_VISIBLE_ALPHA) return;
-  const radius = GLOW_RADIUS * scale * (MIDPOINT + strength * MIDPOINT);
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  const gradient = ctx.createRadialGradient(at.x, at.y, 0, at.x, at.y, radius);
-  gradient.addColorStop(0, rgba(GLOW_CORE, strength));
-  gradient.addColorStop(GLOW_CORE_SHARE, rgba(GLOW_MID, strength * 0.85));
-  gradient.addColorStop(1, rgba(GLOW_EDGE, 0));
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  ctx.arc(at.x, at.y, radius, 0, TWO_PI);
-  ctx.fill();
-  ctx.restore();
 }
 
 // ── Tail ─────────────────────────────────────────────────────────────────────
@@ -1526,23 +1435,6 @@ function tailSpine(root: Pt, base: number, curl: number, length: number, floorY:
   return points;
 }
 
-/**
- * The topple's transform, body frame to floor frame and back: the tail is laid
- * along the floor in the floor's own frame, then drawn in the body's.
- */
-function toppleToWorld(pose: CrocPose, p: Pt): Pt {
-  const r = rotate(pt(p.x - pose.toppleAt.x, p.y - pose.toppleAt.y), pose.topple);
-  return pt(r.x + pose.toppleAt.x, r.y + pose.toppleAt.y - pose.toppleLift);
-}
-
-function toppleToBody(pose: CrocPose, p: Pt): Pt {
-  const r = rotate(
-    pt(p.x - pose.toppleAt.x, p.y - pose.toppleAt.y + pose.toppleLift),
-    -pose.topple,
-  );
-  return pt(r.x + pose.toppleAt.x, r.y + pose.toppleAt.y);
-}
-
 /** The tail's centreline rests this share of its root width above the floor, so it lies on it rather than half in it. */
 const TAIL_FLOOR_CLEARANCE = 0.5;
 
@@ -1555,16 +1447,13 @@ function drawTail(paint: Paint, skeleton: Skeleton, pose: CrocPose): void {
     span.hipTrail * carriage.rootBack,
     (build.waistY - build.hipY) * -carriage.rootDrop,
   );
-  // Laid out in the floor's frame, so a toppling body's tail still drags on
-  // the floor instead of swinging down through it.
-  const worldSpine = tailSpine(
-    toppleToWorld(pose, root),
-    carriage.base + pose.tailSwing + pose.topple,
-    carriage.curl + pose.tailCurl,
+  const spine = tailSpine(
+    root,
+    carriage.base + pose.tailSwing,
+    carriage.curl,
     build.tailLength * carriage.lengthScale,
     -build.tailRootWidth * TAIL_FLOOR_CLEARANCE,
   );
-  const spine = worldSpine.map((p) => toppleToBody(pose, p));
   const last = spine.length - 1;
   const widthAt = (i: number): number =>
     lerp(build.tailRootWidth, build.tailTipWidth, i / last) * carriage.girth;
@@ -2581,12 +2470,17 @@ const BUCKET_RIM_FLATTEN = 0.32;
 /** The bail's height over the rim when it is pulled taut by a carrying hand. */
 const BAIL_RISE = 0.06;
 const BUCKET_RIBS = 2;
+/** The water's surface: a share of the rim's size, sitting this many rim depths down inside it. */
+const WATER_SHARE = 0.78;
+const WATER_BELOW_RIM = 0.25;
+const WATER_GLINT_X = 0.3;
+const WATER_GLINT_SIZE = 0.28;
 
 /**
  * A tin pail, drawn about its body's centre with its mouth toward −Y. Seen a
  * little from above, so the rim is an ellipse and its inside shows dark.
  */
-function drawBucketBody(paint: Paint, inverted: boolean, bailTaut: boolean): void {
+function drawBucketBody(paint: Paint, bailTaut: boolean): void {
   const { ctx } = paint;
   const h = BUCKET_HEIGHT;
   const top = -h / 2;
@@ -2596,7 +2490,7 @@ function drawBucketBody(paint: Paint, inverted: boolean, bailTaut: boolean): voi
   const rimRy = topR * BUCKET_RIM_FLATTEN;
   const stroke = DETAIL_OUTLINE;
 
-  if (!inverted && bailTaut) {
+  if (bailTaut) {
     // The bail behind the body is drawn first; its front half comes after.
     ctx.save();
     ctx.strokeStyle = OUTLINE;
@@ -2656,18 +2550,40 @@ function drawBucketBody(paint: Paint, inverted: boolean, bailTaut: boolean): voi
     ctx.stroke();
   }
   ctx.restore();
-  // The rim; inverted, the viewer sees the base instead of the dark inside.
-  const mouthY = inverted ? bottom : top;
-  const mouthR = inverted ? bottomR : topR;
   ctx.beginPath();
-  ctx.ellipse(0, mouthY, mouthR, mouthR * BUCKET_RIM_FLATTEN, 0, 0, TWO_PI);
-  ctx.fillStyle = inverted ? TIN.mid : TIN_INSIDE;
+  ctx.ellipse(0, top, topR, rimRy, 0, 0, TWO_PI);
+  ctx.fillStyle = TIN_INSIDE;
   ctx.fill();
   ctx.strokeStyle = OUTLINE;
   ctx.lineWidth = stroke;
   ctx.stroke();
+  // Mop water a little below the rim, with the back of the inside wall above it.
+  ctx.beginPath();
+  ctx.ellipse(
+    0,
+    top + rimRy * WATER_BELOW_RIM,
+    topR * WATER_SHARE,
+    rimRy * WATER_SHARE,
+    0,
+    0,
+    TWO_PI,
+  );
+  ctx.fillStyle = WATER;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(
+    -topR * WATER_GLINT_X,
+    top + rimRy * WATER_BELOW_RIM,
+    topR * WATER_GLINT_SIZE,
+    rimRy * WATER_GLINT_SIZE * MIDPOINT,
+    0,
+    0,
+    TWO_PI,
+  );
+  ctx.fillStyle = WATER_LIGHT;
+  ctx.fill();
 
-  if (!inverted && bailTaut) {
+  if (bailTaut) {
     ctx.save();
     ctx.strokeStyle = OUTLINE;
     ctx.lineWidth = stroke * 1.8;
@@ -2689,21 +2605,448 @@ function drawHangingBucket(paint: Paint, grip: Pt, swing: number): void {
   ctx.translate(grip.x, grip.y);
   ctx.rotate(swing);
   ctx.translate(0, BAIL_RISE + BUCKET_HEIGHT / 2);
-  drawBucketBody(paint, false, true);
+  drawBucketBody(paint, true);
   ctx.restore();
 }
 
-function drawPlacedBucket(paint: Paint, centre: Pt, tilt: number, inverted: boolean): void {
+function drawPlacedBucket(paint: Paint, centre: Pt, tilt: number): void {
   const { ctx } = paint;
   ctx.save();
   ctx.translate(centre.x, centre.y);
   ctx.rotate(tilt);
-  drawBucketBody(paint, inverted, false);
+  drawBucketBody(paint, false);
   ctx.restore();
 }
 
 /** Where the centre of the bucket sits when it is set upright on the floor. */
 export const BUCKET_REST_HEIGHT = BUCKET_HEIGHT / 2 + BUCKET_BOTTOM_R * BUCKET_RIM_FLATTEN;
+
+// ── Mop ──────────────────────────────────────────────────────────────────────
+
+/**
+ * How much of a step across the floor toward or away from the camera shows as
+ * height in the picture. The floor is seen from a little above, the same way
+ * the pail's rim is.
+ */
+const GROUND_DEPTH_SHOWS = 0.35;
+
+/**
+ * A point on the floor given in the body's own ground frame — `lateral` toward
+ * the near (left) side, `forward` the way he faces — as drawn in a view, in
+ * figure units. Head-on the near side is +X, a step toward the camera is lower
+ * in the picture, and from behind the same frame is painted mirrored, so
+ * `forward` there is a step away from the camera.
+ */
+export function groundPointFor(viewName: CrocView, lateral: number, forward: number): Pt {
+  const view = VIEWS[viewName];
+  if (view.profile) return pt(forward, lateral * GROUND_DEPTH_SHOWS);
+  const towardCamera = view.showsBack ? -forward : forward;
+  return pt(lateral, towardCamera * GROUND_DEPTH_SHOWS);
+}
+
+/** Pale ash, lighter than his scales and than any floor he mops, so the handle survives at the tile. */
+const MOP_WOOD: Ramp = { dark: '#7a5634', mid: '#c49a66', light: '#ead0a2' };
+/** Cotton string: grey-white where it is dry, by the clamp. */
+const MOP_STRING: Ramp = { dark: '#8e8a7c', mid: '#d3cdb8', light: '#f1ecdc' };
+/** The soaked lower half of the strands: darker, and greyer, than the dry string. */
+const MOP_WET: Ramp = { dark: '#5f6262', mid: '#8f9290', light: '#b9bcb8' };
+const WET_GLINT = '#ffffff';
+const WATER = '#4f7282';
+const WATER_LIGHT = '#bcd8e0';
+
+/** Long enough to stand to his shoulder with the strands on the floor, the way a mop is sized to its user. */
+export const MOP_HANDLE_LENGTH = 0.74;
+export const MOP_HANDLE_HALF = 0.012;
+/** The grip may slide down the handle, but never off its top. */
+export const MOP_GRIP_TOP_MARGIN = 0.06;
+const MOP_CAP_LENGTH = 0.03;
+/** The tin clamp that bunches the strings onto the handle's foot. */
+const MOP_CLAMP_LENGTH = 0.04;
+const MOP_CLAMP_HALF = 0.02;
+/** The clamp narrows to a collar a little wider than the handle it grips. */
+const MOP_CLAMP_NECK = 1.3;
+/**
+ * Height of the clamp's foot over the floor when the mop stands on its
+ * strands: lower than the strands are long, so the rest of their length lies
+ * out across the floor.
+ */
+const MOP_REST_HEIGHT = 0.045;
+/** The strands leave the clamp across most of its width. */
+const MOP_ROOT_SPREAD = 0.8;
+const MOP_STRAND_LENGTH = 0.13;
+const MOP_STRAND_HALF = 0.011;
+/** Each string's length as a share of the rest: cut ragged, so the head is clumps and not a neat fan. */
+const MOP_STRAND_SHARES = [
+  0.9, 1.08, 0.95, 1.12, 1, 0.88, 1.1, 0.94, 1.05,
+] as const satisfies readonly number[];
+const MOP_STRANDS = MOP_STRAND_SHARES.length;
+/** How far apart the strands hang where nothing presses them, as a share of their length. */
+const MOP_HANG_SPREAD = 0.3;
+/** How much of the length that reaches past the floor fans out sideways across it. */
+const MOP_FLOOR_FAN = 0.85;
+/** A pressed stroke fans the strands this much further. */
+const MOP_SPLAY_FAN = 0.6;
+/** Middle strands lie further toward the camera than the outer ones: the head is a fan on the floor, not a fringe. */
+const MOP_FAN_DEPTH = 0.035;
+/** Along each strand, where it is soaked from. */
+const MOP_WET_FROM = 0.45;
+/** Wrung, the strands cross each other this far, in strand half-widths, as they coil round. */
+const MOP_TWIST_COIL = 2.6;
+const MOP_WRUNG_SHORTEN = 0.3;
+/** Wrung, dark spiral bands wrap the rope of strands: the twist that reads at the tile. */
+const MOP_WRAP_BANDS = 3;
+const MOP_WRAP_SLANT = deg(35);
+const MOP_WRAP_REACH = 1.6;
+const MOP_DRIPS = 3;
+const MOP_DRIP_FALL = 0.14;
+const MOP_DRIP_RADIUS = 0.009;
+/** The strands catch the light on the lit side, where they are wettest. */
+const MOP_GLINT_STRANDS: readonly number[] = [1, 3, 4];
+const MOP_GLINT_FROM = 0.58;
+const MOP_GLINT_TO = 0.78;
+const MOP_GLINT_ALPHA = 0.85;
+/** The fist closes about this far along the hand from the wrist, which is where a handle passes through it. */
+const FIST_HANDLE_SHARE = 0.45;
+
+/** A string mop, held by its handle. Every position is in the body's ground frame, so one pose works in every view. */
+export interface MopPose {
+  /** The point on the floor under the strand head: across toward the near side, and ahead of the feet. */
+  readonly lateral: number;
+  readonly forward: number;
+  /** How far the clamp is raised off its resting height, in tiles. */
+  readonly lift: number;
+  /** The near hand is closed on the handle as well as the far one. */
+  readonly twoHanded: boolean;
+  /** The way the strands trail, in the body's ground frame: behind a stroke, behind a push. */
+  readonly dragLateral: number;
+  readonly dragForward: number;
+  /** 0 bunched, 1 pressed flat into a stroke and fanned out. */
+  readonly splay: number;
+  /** 0 hanging loose, 1 wrung into a rope. */
+  readonly twist: number;
+  /** Water running off lifted strands, 0 dry to 1 streaming, and where in its fall the first drop is. */
+  readonly drip: number;
+  readonly dripPhase: number;
+  /** The strands are down in the pail on the floor, so its front wall and the water hide them. */
+  readonly inPail: boolean;
+}
+
+/** Where the mop is in one picture, figure units. */
+export interface MopGeometry {
+  /** The floor point under the strand head. */
+  readonly ground: Pt;
+  /** The clamp's foot, where the strands hang from. */
+  readonly socket: Pt;
+  readonly top: Pt;
+  /** Where the far fist closes on the handle, and the near one's when it holds it too. */
+  readonly grip: Pt;
+  readonly nearGrip: Pt | null;
+  readonly roots: readonly Pt[];
+  readonly bends: readonly Pt[];
+  readonly tips: readonly Pt[];
+}
+
+/** The clamp's foot — where the handle starts and the strands hang from — as drawn in a view. */
+export function mopSocketFor(viewName: CrocView, mop: MopPose): Pt {
+  const ground = groundPointFor(viewName, mop.lateral, mop.forward);
+  return offset(ground, 0, -(MOP_REST_HEIGHT + mop.lift));
+}
+
+/** The wrist position that closes a fist pointed along `handAngle` on `grip`. */
+export function wristForGrip(build: CrocBuild, grip: Pt, handAngle: number): Pt {
+  return along(grip, handAngle + Math.PI, build.handLength * FIST_HANDLE_SHARE);
+}
+
+function fistCentre(build: CrocBuild, chain: BoneChain, arm: CrocArmPose): Pt {
+  const angle = arm.handAngle ?? wristAngle(chain);
+  return along(chain.end, angle, build.handLength * FIST_HANDLE_SHARE);
+}
+
+function unit(from: Pt, to: Pt): Pt {
+  const length = Math.hypot(to.x - from.x, to.y - from.y);
+  return length === 0 ? pt(0, -1) : pt((to.x - from.x) / length, (to.y - from.y) / length);
+}
+
+function mopGeometryOf(
+  build: CrocBuild,
+  skeleton: Skeleton,
+  pose: CrocPose,
+  view: ViewSpec,
+  mop: MopPose,
+): MopGeometry {
+  const ground = groundPointFor(view.name, mop.lateral, mop.forward);
+  const socket = mopSocketFor(view.name, mop);
+  const grip = fistCentre(build, skeleton.farArm, pose.farArm);
+  const up = unit(socket, grip);
+  const top = offset(socket, up.x * MOP_HANDLE_LENGTH, up.y * MOP_HANDLE_LENGTH);
+  const nearGrip = mop.twoHanded ? fistCentre(build, skeleton.nearArm, pose.nearArm) : null;
+  const drag = groundPointFor(view.name, mop.dragLateral, mop.dragForward);
+  const across = pt(-up.y, up.x);
+  const closed = 1 - clamp01(mop.twist);
+  const roots: Pt[] = [];
+  const bends: Pt[] = [];
+  const tips: Pt[] = [];
+  for (let i = 0; i < MOP_STRANDS; i++) {
+    const s = (i / (MOP_STRANDS - 1)) * 2 - 1;
+    const root = offset(
+      socket,
+      across.x * s * MOP_CLAMP_HALF * MOP_ROOT_SPREAD,
+      across.y * s * MOP_CLAMP_HALF * MOP_ROOT_SPREAD,
+    );
+    // Wrung tight, the strands are drawn up shorter into a rope.
+    const length =
+      MOP_STRAND_LENGTH * MOP_STRAND_SHARES[i] * (1 - clamp01(mop.twist) * MOP_WRUNG_SHORTEN);
+    const hangSpread = s * length * MOP_HANG_SPREAD * closed;
+    const hanging = offset(root, hangSpread + drag.x, length + drag.y);
+    const excess = hanging.y - ground.y;
+    if (excess <= 0) {
+      // Clear of the floor the strands hang and, wrung, coil round each other.
+      const coil = (i % 2 === 0 ? 1 : -1) * mop.twist * MOP_STRAND_HALF * MOP_TWIST_COIL;
+      roots.push(root);
+      bends.push(offset(mixPt(root, hanging, MIDPOINT), coil, 0));
+      tips.push(hanging);
+      continue;
+    }
+    const share = clamp01(excess / MOP_STRAND_LENGTH);
+    const fan = excess * MOP_FLOOR_FAN * (1 + mop.splay * MOP_SPLAY_FAN);
+    const depth = (1 - s * s) * MOP_FAN_DEPTH * share * (1 + mop.splay);
+    const tip = pt(hanging.x + s * fan, ground.y + depth);
+    roots.push(root);
+    // The strand drops from the clamp and turns out along the floor.
+    bends.push(pt(lerp(root.x, tip.x, share * MIDPOINT), ground.y + depth * MIDPOINT));
+    tips.push(tip);
+  }
+  return { ground, socket, top, grip, nearGrip, roots, bends, tips };
+}
+
+/**
+ * The mouth of a pail standing on the floor, for the gates: the floor point it
+ * stands on, its rim line and its half-width.
+ */
+export function pailMouth(pose: CrocPose): { floor: Pt; rimY: number; halfWidth: number } | null {
+  if (pose.bucket.kind !== 'placed') return null;
+  const centre = pose.bucket.centre;
+  return {
+    floor: pt(centre.x, centre.y + BUCKET_REST_HEIGHT),
+    rimY: centre.y - BUCKET_HEIGHT / 2,
+    halfWidth: BUCKET_TOP_R,
+  };
+}
+
+/** Where the mop is in a pose, for the gates; null when the pose holds none. */
+export function measureMop(
+  build: CrocBuild,
+  pose: CrocPose,
+  viewName: CrocView,
+): MopGeometry | null {
+  if (pose.mop === null) return null;
+  const view = VIEWS[viewName];
+  return mopGeometryOf(build, buildSkeleton(build, pose, view), pose, view, pose.mop);
+}
+
+function quadAt(a: Pt, c: Pt, b: Pt, t: number): Pt {
+  const u = 1 - t;
+  return pt(
+    u * u * a.x + 2 * u * t * c.x + t * t * b.x,
+    u * u * a.y + 2 * u * t * c.y + t * t * b.y,
+  );
+}
+
+/** Enough straight pieces that a strand's bend never shows a corner at the size it is drawn. */
+const STRAND_STEPS = 6;
+
+/** The part of a quadratic strand between `from` and `to` along it, as a polyline. */
+function traceStrand(ctx: Ctx, a: Pt, c: Pt, b: Pt, from: number, to: number): void {
+  ctx.beginPath();
+  for (let k = 0; k <= STRAND_STEPS; k++) {
+    const p = quadAt(a, c, b, lerp(from, to, k / STRAND_STEPS));
+    if (k === 0) ctx.moveTo(p.x, p.y);
+    else ctx.lineTo(p.x, p.y);
+  }
+}
+
+function strokeStrands(
+  ctx: Ctx,
+  mop: MopGeometry,
+  from: number,
+  to: number,
+  width: number,
+  colourOf: (i: number) => string,
+): void {
+  for (let i = 0; i < mop.tips.length; i++) {
+    traceStrand(ctx, mop.roots[i], mop.bends[i], mop.tips[i], from, to);
+    ctx.strokeStyle = colourOf(i);
+    ctx.lineWidth = width;
+    ctx.stroke();
+  }
+}
+
+function drawStrands(paint: Paint, mop: MopGeometry, pose: MopPose): void {
+  const { ctx } = paint;
+  const half = MOP_STRAND_HALF;
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  // One outline round the whole bundle, so at the tile it reads as one mass of string.
+  strokeStrands(ctx, mop, 0, 1, (half + outlineWidth(paint) * MIDPOINT) * 2, () => OUTLINE);
+  const tone = (ramp: Ramp, i: number): string => (i % 2 === 0 ? ramp.mid : ramp.light);
+  strokeStrands(ctx, mop, 0, 1, half * 2, (i) => tone(MOP_STRING, i));
+  strokeStrands(ctx, mop, MOP_WET_FROM, 1, half * 2, (i) => tone(MOP_WET, i));
+  // The strands on the lit side carry a bright wet glint.
+  ctx.globalAlpha *= MOP_GLINT_ALPHA;
+  for (const i of MOP_GLINT_STRANDS) {
+    const strand = paint.lightX < 0 ? i : MOP_STRANDS - 1 - i;
+    traceStrand(
+      ctx,
+      mop.roots[strand],
+      mop.bends[strand],
+      mop.tips[strand],
+      MOP_GLINT_FROM,
+      MOP_GLINT_TO,
+    );
+    ctx.strokeStyle = WET_GLINT;
+    ctx.lineWidth = half * MIDPOINT;
+    ctx.stroke();
+  }
+  ctx.restore();
+  if (pose.twist > 0) drawWrapBands(paint, mop, pose.twist);
+  if (pose.drip > 0) drawDrips(paint, mop, pose);
+}
+
+/** Slanted dark bands across the wrung rope of strands, the way a twisted cloth shows its turns. */
+function drawWrapBands(paint: Paint, mop: MopGeometry, twist: number): void {
+  const { ctx } = paint;
+  const end = mop.tips.reduce(
+    (sum, tip) => pt(sum.x + tip.x / mop.tips.length, sum.y + tip.y / mop.tips.length),
+    pt(0, 0),
+  );
+  const axis = angleBetween(mop.socket, end);
+  const reach = MOP_CLAMP_HALF * MOP_WRAP_REACH;
+  ctx.save();
+  ctx.globalAlpha *= clamp01(twist);
+  ctx.strokeStyle = MOP_WET.dark;
+  ctx.lineWidth = MOP_STRAND_HALF;
+  ctx.lineCap = 'round';
+  for (let k = 1; k <= MOP_WRAP_BANDS; k++) {
+    const centre = mixPt(mop.socket, end, k / (MOP_WRAP_BANDS + 1));
+    const across = axis + HALF_PI + MOP_WRAP_SLANT;
+    const from = along(centre, across, -reach);
+    const to = along(centre, across, reach);
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawDrips(paint: Paint, mop: MopGeometry, pose: MopPose): void {
+  const { ctx } = paint;
+  const lowest = mop.tips.reduce((low, tip) => (tip.y > low.y ? tip : low), mop.tips[0]);
+  ctx.save();
+  ctx.globalAlpha *= clamp01(pose.drip);
+  for (let k = 0; k < MOP_DRIPS; k++) {
+    const fall = (pose.dripPhase + k / MOP_DRIPS) % 1;
+    const at = offset(lowest, 0, fall * MOP_DRIP_FALL);
+    ctx.beginPath();
+    ctx.ellipse(at.x, at.y, MOP_DRIP_RADIUS, MOP_DRIP_RADIUS * (1 + fall), 0, 0, TWO_PI);
+    ctx.fillStyle = WATER_LIGHT;
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawHandle(paint: Paint, mop: MopGeometry): void {
+  const { ctx } = paint;
+  const up = unit(mop.socket, mop.top);
+  const clampTop = offset(mop.socket, up.x * MOP_CLAMP_LENGTH, up.y * MOP_CLAMP_LENGTH);
+  const capFrom = offset(mop.top, -up.x * MOP_CAP_LENGTH, -up.y * MOP_CAP_LENGTH);
+  outlineCapsule(paint, clampTop, mop.top, MOP_HANDLE_HALF, MOP_HANDLE_HALF);
+  fillCapsule(ctx, clampTop, mop.top, MOP_HANDLE_HALF, MOP_HANDLE_HALF, MOP_WOOD.mid);
+  sheenSegment(paint, clampTop, capFrom, MOP_HANDLE_HALF * 2, MOP_WOOD.light);
+  fillCapsule(ctx, capFrom, mop.top, MOP_HANDLE_HALF, MOP_HANDLE_HALF, MOP_WOOD.dark);
+}
+
+function drawClamp(paint: Paint, mop: MopGeometry): void {
+  const up = unit(mop.socket, mop.top);
+  const clampTop = offset(mop.socket, up.x * MOP_CLAMP_LENGTH, up.y * MOP_CLAMP_LENGTH);
+  const neck = MOP_HANDLE_HALF * MOP_CLAMP_NECK;
+  outlineCapsule(paint, mop.socket, clampTop, MOP_CLAMP_HALF, neck);
+  fillCapsule(paint.ctx, mop.socket, clampTop, MOP_CLAMP_HALF, neck, TIN.mid);
+  sheenSegment(paint, mop.socket, clampTop, MOP_CLAMP_HALF, TIN.light);
+}
+
+/** Far past any cell, in tiles: the clip keeps everything but the cut-out. */
+const CLIP_REACH = 10;
+
+/**
+ * The pail's front wall, and everything under its water line, cut out of
+ * whatever is painted next — so strands dunked in it go into the water rather
+ * than being painted over the tin.
+ */
+function clipToAbovePail(paint: Paint, pail: BucketPose): void {
+  if (pail.kind !== 'placed') return;
+  const { ctx } = paint;
+  const h = BUCKET_HEIGHT;
+  const top = -h / 2;
+  const bottom = h / 2;
+  const rimRy = BUCKET_TOP_R * BUCKET_RIM_FLATTEN;
+  ctx.beginPath();
+  ctx.rect(-CLIP_REACH, -CLIP_REACH, CLIP_REACH * 2, CLIP_REACH * 2);
+  ctx.save();
+  ctx.translate(pail.centre.x, pail.centre.y);
+  ctx.rotate(pail.tilt);
+  ctx.moveTo(-BUCKET_TOP_R, top);
+  ctx.ellipse(0, top, BUCKET_TOP_R, rimRy, 0, Math.PI, TWO_PI, false);
+  ctx.lineTo(BUCKET_BOTTOM_R, bottom);
+  ctx.ellipse(
+    0,
+    bottom,
+    BUCKET_BOTTOM_R,
+    BUCKET_BOTTOM_R * BUCKET_RIM_FLATTEN,
+    0,
+    0,
+    Math.PI,
+    false,
+  );
+  ctx.closePath();
+  ctx.restore();
+  ctx.clip('evenodd');
+}
+
+/** The mop: handle, strands and clamp, painted where the view's draw order puts it. */
+function drawMop(paint: Paint, skeleton: Skeleton, pose: CrocPose): void {
+  const mop = pose.mop;
+  if (mop === null) return;
+  const { ctx, build } = paint;
+  const geometry = mopGeometryOf(build, skeleton, pose, paint.view, mop);
+  ctx.save();
+  if (mop.inPail) clipToAbovePail(paint, pose.bucket);
+  drawHandle(paint, geometry);
+  drawStrands(paint, geometry, mop);
+  drawClamp(paint, geometry);
+  ctx.restore();
+}
+
+/**
+ * The fists closed back over a handle painted after the arms that hold it, so
+ * the hands hold it rather than the handle being laid across them.
+ */
+function drawMopGrips(
+  paint: Paint,
+  skeleton: Skeleton,
+  pose: CrocPose,
+  hands: 'far' | 'both',
+  shade: number,
+): void {
+  if (pose.mop === null) return;
+  const farAngle = pose.farArm.handAngle ?? wristAngle(skeleton.farArm);
+  drawHand(paint, skeleton.farArm.end, farAngle, 1, shade);
+  if (hands === 'both' && pose.mop.twoHanded) {
+    const nearAngle = pose.nearArm.handAngle ?? wristAngle(skeleton.nearArm);
+    drawHand(paint, skeleton.nearArm.end, nearAngle, 1, UNSHADED);
+  }
+}
 
 // ── Figure ───────────────────────────────────────────────────────────────────
 
@@ -2751,8 +3094,8 @@ function drawHeadAt(paint: Paint, skeleton: Skeleton, pose: CrocPose): void {
   const pitch = pose.headPitch + (view.profile ? pose.lean * HEAD_LEAN_FOLLOW : 0);
   // Head-on a pitch nods the snout toward the camera, which shows as the head
   // dropping a little, not as a rotation in the picture plane.
-  if (view.profile) ctx.rotate(pitch + pose.headRoll);
-  else ctx.rotate(pose.roll * MIDPOINT + pitch * 0.35 + pose.headRoll);
+  if (view.profile) ctx.rotate(pitch);
+  else ctx.rotate(pose.roll * MIDPOINT + pitch * 0.35);
   ctx.scale(unit, unit);
   drawHead(paint, pose, look, unit);
   ctx.restore();
@@ -2795,9 +3138,9 @@ function drawTorso(paint: Paint, skeleton: Skeleton, pose: CrocPose): void {
 const NEAR_OUT = 1;
 const FAR_OUT = -1;
 
-/** The armband is on the near (left) arm in every view — the bucket hand. */
+/** The pail hangs from the near (left) hand in every view. */
 function drawNearArm(paint: Paint, skeleton: Skeleton, pose: CrocPose): void {
-  drawArm(paint, skeleton.nearArm, pose.nearArm, UNSHADED, paint.build.armband);
+  drawArm(paint, skeleton.nearArm, pose.nearArm, UNSHADED);
   if (pose.bucket.kind === 'hang') {
     const grip = skeleton.nearArm.end;
     const angle = pose.nearArm.handAngle ?? wristAngle(skeleton.nearArm);
@@ -2812,12 +3155,12 @@ function drawBody(paint: Paint, pose: CrocPose): void {
   const skeleton = buildSkeleton(build, pose, view);
 
   if (view.profile) {
-    // Edge-on the swatting arm is the far one, so its smear is behind the body
-    // too; over the head it merges with the open jaw into one pale block.
-    drawSmear(paint, skeleton.farArm, pose.smear, pose.smearSweep);
-    drawArm(paint, skeleton.farArm, pose.farArm, FAR_LIMB_SHADE, false);
+    drawArm(paint, skeleton.farArm, pose.farArm, FAR_LIMB_SHADE);
     drawLeg(paint, skeleton.farLeg, pose.far, FAR_OUT, FAR_LIMB_SHADE);
     if (build.outfit === 'band_tee') drawShorts(paint, skeleton, FAR_LIMB_SHADE, 'far');
+    // Edge-on the mop is in the far hand, on the far side of the body.
+    drawMop(paint, skeleton, pose);
+    drawMopGrips(paint, skeleton, pose, 'far', FAR_LIMB_SHADE);
     drawTail(paint, skeleton, pose);
     drawLeg(paint, skeleton.nearLeg, pose.near, NEAR_OUT, UNSHADED);
     if (build.outfit === 'band_tee') drawShorts(paint, skeleton, UNSHADED, 'near');
@@ -2826,19 +3169,16 @@ function drawBody(paint: Paint, pose: CrocPose): void {
     drawHeadAt(paint, skeleton, pose);
     drawPlacedFront(paint, pose);
     drawNearArm(paint, skeleton, pose);
-    drawGlows(paint, skeleton, pose);
     return;
   }
 
   const fromBehind = view.showsBack;
   if (!fromBehind) drawTail(paint, skeleton, pose);
+  // From behind the mop is held out beyond him, further off than the hands holding it.
+  if (fromBehind) drawMop(paint, skeleton, pose);
   // From behind the arms swing behind the back; head-on they hang in front.
-  if (pose.farArm.behind || fromBehind)
-    drawArm(paint, skeleton.farArm, pose.farArm, UNSHADED, false);
+  if (pose.farArm.behind || fromBehind) drawArm(paint, skeleton.farArm, pose.farArm, UNSHADED);
   if (pose.nearArm.behind || fromBehind) drawNearArm(paint, skeleton, pose);
-  // From behind, his hands and their light are on the far side of his body:
-  // the glow shows only as a halo round its edges.
-  if (fromBehind) drawGlows(paint, skeleton, pose);
   drawLeg(paint, skeleton.farLeg, pose.far, FAR_OUT, UNSHADED);
   drawLeg(paint, skeleton.nearLeg, pose.near, NEAR_OUT, UNSHADED);
   if (build.outfit === 'band_tee') {
@@ -2847,67 +3187,27 @@ function drawBody(paint: Paint, pose: CrocPose): void {
   }
   drawTorso(paint, skeleton, pose);
   if (fromBehind) {
-    drawUpperArmFromBehind(paint, skeleton.farArm, false);
-    drawUpperArmFromBehind(paint, skeleton.nearArm, build.armband);
+    drawUpperArmFromBehind(paint, skeleton.farArm);
+    drawUpperArmFromBehind(paint, skeleton.nearArm);
   }
   drawNeck(paint, skeleton);
   drawHeadAt(paint, skeleton, pose);
   // From behind, the tail is the nearest thing to the camera.
   if (fromBehind) drawTail(paint, skeleton, pose);
   drawPlacedFront(paint, pose);
-  if (!(pose.farArm.behind || fromBehind))
-    drawArm(paint, skeleton.farArm, pose.farArm, UNSHADED, false);
+  if (!(pose.farArm.behind || fromBehind)) drawArm(paint, skeleton.farArm, pose.farArm, UNSHADED);
   if (!(pose.nearArm.behind || fromBehind)) drawNearArm(paint, skeleton, pose);
-  if (!fromBehind) drawGlows(paint, skeleton, pose);
+  // Head-on the mop is held out in front of him, nearer the camera than his arms.
+  if (!fromBehind) {
+    drawMop(paint, skeleton, pose);
+    drawMopGrips(paint, skeleton, pose, 'both', UNSHADED);
+  }
 }
 
 function drawPlacedFront(paint: Paint, pose: CrocPose): void {
   if (pose.bucket.kind === 'placed' && pose.bucket.front) {
-    drawPlacedBucket(paint, pose.bucket.centre, pose.bucket.tilt, pose.bucket.inverted);
+    drawPlacedBucket(paint, pose.bucket.centre, pose.bucket.tilt);
   }
-}
-
-const SMEAR_ALPHA = 0.55;
-const SMEAR_WIDTH = 0.05;
-const SMEAR_COLOUR = '#f4f0e0';
-
-/**
- * A pale arc trailing the far hand along the swing that brought it here. One
- * frame of it sells a swat that is otherwise two poses a frame apart.
- */
-function drawSmear(paint: Paint, chain: BoneChain, amount: number, sweep: number): void {
-  if (amount < MIN_VISIBLE_ALPHA || sweep === 0) return;
-  const { ctx, build } = paint;
-  const radius = Math.hypot(chain.end.x - chain.root.x, chain.end.y - chain.root.y);
-  const at = angleBetween(chain.root, chain.end);
-  ctx.save();
-  ctx.globalAlpha *= SMEAR_ALPHA * amount;
-  ctx.strokeStyle = SMEAR_COLOUR;
-  ctx.lineCap = 'round';
-  const steps = 4;
-  for (let i = 0; i < steps; i++) {
-    // Tapering: widest at the hand, thinning back along the arc.
-    ctx.lineWidth = SMEAR_WIDTH * build.strokeScale * (1 - i / steps);
-    ctx.beginPath();
-    ctx.arc(
-      chain.root.x,
-      chain.root.y,
-      radius,
-      at + (sweep * i) / steps,
-      at + (sweep * (i + 1)) / steps,
-      sweep < 0,
-    );
-    ctx.stroke();
-  }
-  ctx.restore();
-}
-
-function drawGlows(paint: Paint, skeleton: Skeleton, pose: CrocPose): void {
-  if (!paint.view.profile) drawSmear(paint, skeleton.farArm, pose.smear, pose.smearSweep);
-  if (pose.glow <= 0) return;
-  const scale = paint.build.headHeight / BUCKET_BOY_BUILD.headHeight;
-  drawHandGlow(paint.ctx, skeleton.nearArm.end, pose.glow, scale);
-  drawHandGlow(paint.ctx, skeleton.farArm.end, pose.glow, scale);
 }
 
 /**
@@ -2925,29 +3225,12 @@ export function drawCrocodilian(
   if (view.mirrored) ctx.scale(-1, 1);
   const paint: Paint = { ctx, build, view, lightX: view.mirrored ? -LIGHT_X : LIGHT_X };
 
-  // The floor and anything lying loose on it stay put while the body topples.
-  const toppled = Math.abs(Math.sin(pose.topple));
   const stanceCentre = (pose.near.ball.x + pose.far.ball.x) / 2;
-  const bodyLength = build.neckBaseY * -1;
-  const shadowX = lerp(
-    stanceCentre,
-    pose.toppleAt.x + Math.sign(pose.topple) * bodyLength * MIDPOINT,
-    toppled,
-  );
-  const shadowRx =
-    build.facingTorso.shoulderLead * SHADOW_RX_SHARE + toppled * bodyLength * MIDPOINT;
-  drawGroundShadow(ctx, shadowX, shadowRx, CONTACT_SHADOW_ALPHA);
+  const shadowRx = build.facingTorso.shoulderLead * SHADOW_RX_SHARE;
+  drawGroundShadow(ctx, stanceCentre, shadowRx, CONTACT_SHADOW_ALPHA);
   if (pose.bucket.kind === 'placed' && !pose.bucket.front) {
-    drawPlacedBucket(paint, pose.bucket.centre, pose.bucket.tilt, pose.bucket.inverted);
-  }
-
-  ctx.save();
-  if (pose.topple !== 0 || pose.toppleLift !== 0) {
-    ctx.translate(pose.toppleAt.x, pose.toppleAt.y - pose.toppleLift);
-    ctx.rotate(pose.topple);
-    ctx.translate(-pose.toppleAt.x, -pose.toppleAt.y);
+    drawPlacedBucket(paint, pose.bucket.centre, pose.bucket.tilt);
   }
   drawBody(paint, pose);
-  ctx.restore();
   ctx.restore();
 }

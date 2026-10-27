@@ -478,8 +478,8 @@ console.log('\nAn ownerless damage-over-time still kills, just anonymously');
 console.log('\nA damage-over-time tick cannot walk through a boss shield');
 {
   /**
-   * Stands in for Grimaldi behind his tendrils and Miss Quill behind her
-   * capacitor: both refuse damage while the thing guarding them lives.
+   * Stands in for Miss Quill behind her capacitor: she refuses damage while
+   * the thing guarding her lives.
    *
    * The shield used to live only on the swung route, so one poison proc — which
    * lands even on a blow the shield swallowed — dissolved the whole "kill the

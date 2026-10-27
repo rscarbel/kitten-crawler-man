@@ -41,7 +41,7 @@ function loadingFixture(name: string, progress: number, tip: string | undefined)
     drawLoadingScreen(
       ui.ctx,
       {
-        title: 'The Over City',
+        title: 'Taloncrest',
         kicker: 'Floor 3',
         progress,
         status: progress < 1 ? 'Painting the streets' : 'Ready',

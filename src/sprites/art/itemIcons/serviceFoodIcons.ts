@@ -1,5 +1,5 @@
 /**
- * Service icons for what taverns, farms and lounges pour and plate: a crawler
+ * Service icons for what taverns and farms pour and plate: a crawler
  * buys the meal or the round, not an item for the bag.
  */
 
@@ -555,91 +555,6 @@ const paintNightcap: IconArtPainter = (ctx, px) => {
   for (const [starX, starY, r] of NIGHT_STARS) glint(ctx, starX, starY, r, MOON_CREAM);
 };
 
-const COCKTAIL_GLASS = '#cfe6ee';
-const FIZZ = '#3ac0d0';
-const LIME = '#8ccf3a';
-/** A coupe: a wide shallow bowl on a slim stem and a round foot. */
-const COUPE_START: Vec = [0.14, 0.3];
-const COUPE_PATH: readonly CurveSegment[] = [
-  [0.86, 0.3],
-  [0.84, 0.56, 0.54, 0.56],
-  [0.53, 0.82],
-  [0.72, 0.84, 0.72, 0.9],
-  [0.28, 0.9],
-  [0.28, 0.84, 0.47, 0.82],
-  [0.46, 0.56],
-  [0.16, 0.56, 0.14, 0.3],
-];
-const COUPE_LIGHT_FROM: Vec = [0.14, 0];
-const COUPE_LIGHT_TO: Vec = [0.86, 0];
-const COUPE_BOWL_BOTTOM = 0.56;
-const COUPE_RIM: readonly IconPoint[] = [
-  [0.15, 0.3],
-  [0.85, 0.3],
-];
-const GILT_RIM_WIDTH = 2.5;
-const COCKTAIL_LIQUID_TOP = 0.34;
-const FIZZ_LIT_UNTIL = 0.3;
-const FIZZ_MID_UNTIL = 0.66;
-const FIZZ_SURFACE_WIDTH = 2;
-const COCKTAIL_BUBBLES: readonly Blob[] = [
-  [0.4, 0.42, 0.02],
-  [0.56, 0.46, 0.016],
-  [0.66, 0.4, 0.018],
-  [0.46, 0.24, 0.018],
-  [0.58, 0.16, 0.022],
-  [0.4, 0.1, 0.014],
-];
-const LIME_WHEEL = { cx: 0.8, cy: 0.27, r: 0.11, segments: 6 } as const;
-/** The pale flesh inside the rind. */
-const LIME_FLESH_SCALE = 0.72;
-const LIME_FLESH_LIFT = 0.45;
-const COCKTAIL_GLINT: GlintSpot = [0.24, 0.38, 0.05];
-
-function paintLimeWheel(ctx: CanvasRenderingContext2D, px: number): void {
-  const { cx, cy, r, segments } = LIME_WHEEL;
-  const flesh = r * LIME_FLESH_SCALE;
-  paintLitEllipse(ctx, px, cx, cy, r, r, LIME);
-  traceEllipse(ctx, cx, cy, flesh, flesh);
-  ctx.fillStyle = tone(LIME, LIME_FLESH_LIFT);
-  ctx.fill();
-  for (let segment = 0; segment < segments; segment++) {
-    const angle = (segment / segments) * FULL_TURN;
-    const spoke: readonly IconPoint[] = [
-      [cx, cy],
-      [cx + Math.cos(angle) * flesh, cy + Math.sin(angle) * flesh],
-    ];
-    strokeDetail(ctx, px, spoke, tone(LIME, HALF_SHADE));
-  }
-}
-
-const paintVipCocktail: IconArtPainter = (ctx, px) => {
-  const coupe = (): void => traceCurvePath(ctx, COUPE_START, COUPE_PATH);
-  paintForm(ctx, px, coupe, litFill(ctx, COCKTAIL_GLASS, COUPE_LIGHT_FROM, COUPE_LIGHT_TO));
-  const bubbleColor = tone(FIZZ, LIGHT * 2);
-  withShapeClip(ctx, coupe, () => {
-    ctx.fillStyle = bandedFill(ctx, COUPE_LIGHT_FROM, COUPE_LIGHT_TO, [
-      [tone(FIZZ, LIGHT), FIZZ_LIT_UNTIL],
-      [FIZZ, FIZZ_MID_UNTIL],
-      [tone(FIZZ, SHADE), 1],
-    ]);
-    ctx.fillRect(0, COCKTAIL_LIQUID_TOP, 1, COUPE_BOWL_BOTTOM - COCKTAIL_LIQUID_TOP);
-    const surface: readonly IconPoint[] = [
-      [0, COCKTAIL_LIQUID_TOP],
-      [1, COCKTAIL_LIQUID_TOP],
-    ];
-    strokeDetail(ctx, px, surface, bubbleColor, FIZZ_SURFACE_WIDTH);
-  });
-  strokeDetail(ctx, px, COUPE_RIM, GOLD, GILT_RIM_WIDTH);
-  for (const [bubbleX, bubbleY, r] of COCKTAIL_BUBBLES) {
-    traceEllipse(ctx, bubbleX, bubbleY, r, r);
-    ctx.fillStyle = bubbleColor;
-    ctx.fill();
-  }
-  paintLimeWheel(ctx, px);
-  paintGlintSpot(ctx, COCKTAIL_GLINT);
-};
-
 export const FOOD_SERVICE_ICONS = {
   hot_plate: toIcon(paintHotPlate),
   ale: toIcon(paintAle),
@@ -649,5 +564,4 @@ export const FOOD_SERVICE_ICONS = {
   honey_bread: toIcon(paintHoneyBread),
   stew: toIcon(paintStew),
   nightcap: toIcon(paintNightcap),
-  vip_cocktail: toIcon(paintVipCocktail),
 } as const;

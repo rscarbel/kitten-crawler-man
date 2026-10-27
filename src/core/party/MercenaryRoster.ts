@@ -1,15 +1,15 @@
 import { getMercenaryTemplate, type MercenaryTemplateId } from './mercenaryTemplates';
 
 /**
- * Cross-scene state for the Desperado Club's "Meat Shields" mercenary desk.
+ * Cross-scene state for The Barracks Mercenaries' hire desk.
  *
- * Like `ClubMembership` and the questline progress objects, this is a plain
- * mutable object threaded by reference through the `DungeonScene` ↔
- * `BuildingInteriorScene` constructors so a hired mercenary survives leaving
- * the club and returning to the overworld.
+ * Like the questline progress objects, this is a plain mutable object threaded
+ * by reference through the `DungeonScene` ↔ `BuildingInteriorScene`
+ * constructors so a hired mercenary survives leaving the Barracks and
+ * returning to the overworld.
  *
  * A contract runs to the end of the floor it was signed on, or until the
- * mercenary dies, whichever comes first: that is how Meat Shields sells them.
+ * mercenary dies, whichever comes first: that is how the desk sells them.
  * There is one contract slot; `active` is a single field rather than a list
  * only because nothing yet lets two hires walk together.
  */
@@ -22,8 +22,7 @@ export interface HiredMercenary {
   introduced: boolean;
   /**
    * The hire's health as of the last frame it stood, so walking through a door
-   * is not a free heal. Absent means full: a contract fresh from the desk, or
-   * one saved before health was recorded.
+   * is not a free heal. Absent means full: a contract fresh from the desk.
    */
   hp?: number;
 }
@@ -32,7 +31,7 @@ export interface MercenaryRoster {
   active: HiredMercenary | null;
   /**
    * The name of the last hire to die under contract, until the desk has spoken
-   * about it. Kept so the next visit can open with Rosemarie's condolences —
+   * about it. Kept so the next visit can open with Sydney's condolences —
    * and her reminder that the fee is not coming back.
    */
   lastDeceased: string | null;

@@ -22,7 +22,7 @@ import { TOWN_INTERIOR_PROPS } from '../../sprites/art/townInterior/townInterior
 import type {
   BriarHollowContractSiteDef,
   ContractSpotDef,
-  SkyfowlContractSiteDef,
+  TaloncrestContractSiteDef,
 } from './contractCatalog';
 
 /** The General Store's layout is applied by building kind, so its areas are looked up apart from the named rooms. */
@@ -46,11 +46,11 @@ function areaFootprint(
 }
 
 /**
- * A Skyfowl Town spot's footprint in the interior grid `map` was generated
+ * A Taloncrest spot's footprint in the interior grid `map` was generated
  * with, or null when the layout no longer carries its target.
  */
-export function skyfowlSpotFootprint(
-  site: SkyfowlContractSiteDef,
+export function taloncrestSpotFootprint(
+  site: TaloncrestContractSiteDef,
   spot: ContractSpotDef,
   map: Pick<GameMap, 'placedInteriorProps' | 'structure'>,
 ): ContractSpotFootprint | null {

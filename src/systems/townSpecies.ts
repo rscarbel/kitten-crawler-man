@@ -1,9 +1,9 @@
 /**
- * The species axis for the Over City's people — orthogonal to `TownRole`
+ * The species axis for Taloncrest's people — orthogonal to `TownRole`
  * (a job) and to `ResidentId` (a specific person). Both `Townsperson` and
  * `ResidentDef` carry a real `species` field of this type.
  */
-export const TOWN_SPECIES = ['human', 'skyfowl'] as const;
+export const TOWN_SPECIES = ['human', 'hawkfolk'] as const;
 
 export type TownSpecies = (typeof TOWN_SPECIES)[number];
 

@@ -98,6 +98,7 @@ const PROP_KIND_BY_ID: Partial<Record<HeldVisualId, keyof typeof PROP_ART>> = {
   prop_black_powder_bomb: 'blackPowderBomb',
   prop_zippo: 'zippo',
   prop_bottle: 'bottle',
+  prop_longbow: 'longbow',
 };
 const PROP_SOURCE_VARIANT: Partial<Record<HeldVisualId, string>> = {
   prop_dynamite: burningDynamite(0),

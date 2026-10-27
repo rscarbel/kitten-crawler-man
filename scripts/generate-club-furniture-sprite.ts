@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Bakes the Desperado Club's furniture for review, at a chosen art seed.
+ * Bakes the Cloak & Dagger's furniture for review, at a chosen art seed.
  *
  *   Run: npx tsx scripts/generate-club-furniture-sprite.ts [<artSeedIndex>]
  *

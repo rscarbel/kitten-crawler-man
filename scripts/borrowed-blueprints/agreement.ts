@@ -2,7 +2,7 @@
  * Checks for `verify:borrowed-blueprints` that what the player is told and
  * what the player is shown agree with each other and with what a press does:
  *
- * - Fenna's "the skyfowl town <bearing> of here" names the same compass
+ * - Fenna's "Taloncrest, <bearing> of here" names the same compass
  *   direction the world arrow is drawn in, on maps whose village lies on
  *   either side of the town;
  * - while a press would be taken by the side quest (a live scythe swing, a
@@ -156,7 +156,7 @@ export function verifyTownBearingAgreesWithArrow(check: Check): void {
       continue;
     }
     const said = firstParagraph(opening.after.accept.run(testConversationFlow()));
-    const spoken = /skyfowl town (.+) of here/.exec(said)?.[1] ?? null;
+    const spoken = /Taloncrest, (.+) of here/.exec(said)?.[1] ?? null;
 
     const guidance = rig.quest.guidance();
     const pointed = guidance?.kind === 'town_building' ? pointedGuidanceTarget(guidance) : null;

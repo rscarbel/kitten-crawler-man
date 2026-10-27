@@ -198,7 +198,7 @@ five minutes. `npm run verify:town-residency` covers the crowd's release.
 Some art is only ever drawn inside a floor's buildings. On floor 3 that is
 `town_interior`: `ground_interior`, the rooms' floors and walls; `ground_dungeon`, which
 the Sleeping Cat Inn's safe-room counter, galley and stove stand on; and the sixteen
-`club_*` sheets of the Desperado Club's furniture. Painting it on the floor's arrival
+`club_*` sheets of the Cloak & Dagger's furniture. Painting it on the floor's arrival
 would hold 10.9 MB the street never shows. Such a group is declared in
 `LevelDef.interiorSpriteGroups` and never in `spriteGroups`: `verify:assets` fails on a
 group listed in both, because there it would be painted on arrival anyway. Nothing on
@@ -264,7 +264,7 @@ Four decisions carry that, and each is load-bearing:
   eight tusklings blit the same eight cells; a pack costs what one of it costs. A figure
   whose appearance varies per instance cannot key on `(state, frame)` alone — where the
   variation is a closed set, each variant takes its own `FigureId`. The town's whole
-  cast is the case: every citizen wears one of a closed set of human or skyfowl looks,
+  cast is the case: every citizen wears one of a closed set of human or Hawkfolk looks,
   and a seed only picks which.
 - **A refusal paints rather than blanks.** The painter is present at runtime, so a cell
   the byte ceiling or the per-frame millisecond budget will not admit is drawn straight
@@ -412,12 +412,12 @@ far more cells than a frame can bake, and painting each of them live, every fram
 the siege most of its frame time. A borrowed frame lasts until its row lands from the
 urgent queue, a few frames later.
 
-A companion that follows the party is warmed on arrival, not per floor. The Meat Shields
-hirelings are all painted (the `companion:mercenary` requirement declares no sheets), and
-only the one under contract is ever warmed: its `MERCENARY_ART` entry's `prewarm` runs
+A companion that follows the party is warmed on arrival, not per floor. The Barracks
+Mercenaries' hirelings are all painted (the `companion:mercenary` requirement declares
+no sheets), and only the one under contract is ever warmed: its `MERCENARY_ART` entry's `prewarm` runs
 when the desk signs the contract and again every time `MercenarySystem` spawns it — a
 save restore, a walk out of a building — and `prewarmForFight` when it picks a fight.
-Warming all seven would hold six figures nobody can see.
+Warming all five would hold four figures nobody can see.
 
 The cache is flushed at the stairs transition, beside `releaseSpritesExcept`, for the same
 reason sheets are evicted there, and on a canvas recovery. A render-scale change does not
@@ -700,7 +700,7 @@ working set, so it stops growth without ever evicting something visible:
   shared `RecentSurfaceCache` (`src/core/rendering/recentSurfaceCache.ts`: a byte budget, LRU,
   nothing drawn within its protected frames let go, and optionally an idle window, which
   the town interior props use); figure rims
-  (`RIM_CACHE_BUDGET_MEGABYTES`, 8); Big Top props (6); held item art
+  (`RIM_CACHE_BUDGET_MEGABYTES`, 8); Starlight Tent props (6); held item art
   (`HELD_ART_BUDGET_MEGABYTES`, 4); title hero cells (32).
 
 **Only half-density devices get smaller budgets.** `memoryBudgetScale()` in
@@ -763,7 +763,7 @@ fewer figures to paint and cache. Fights stay as hard as they were. The tier is 
 value, `varietyTier()` in `src/core/perf/varietyTier.ts`, read when something spawns or a
 citizen picks its look:
 
-| tier | name         | enemies                                      | street crowd (human / skyfowl)                |
+| tier | name         | enemies                                      | street crowd (human / Hawkfolk)                |
 | ---- | ------------ | -------------------------------------------- | --------------------------------------------- |
 | 0    | Full         | every look                                   | every look / all 16                           |
 | 1    | Shared looks | each variant family wears its canonical look | one commoner, one child, other roles all / 8  |
@@ -853,7 +853,7 @@ threats.
 **Adding a variant family.** A kind with several looks declares a `MobVariantFamily`
 (`src/core/mobs/mobVariantFamily.ts`) beside its class — `weightedVariantFamily` or
 `uniformVariantFamily` — with its `canonical` look and the `sharedFromTier` from which
-every spawn wears it; `GOBLIN_MELEE_FAMILY` (`Goblin.ts`), `SKYFOWL_TOUGH_FAMILY` and
+every spawn wears it; `GOBLIN_MELEE_FAMILY` (`Goblin.ts`), `HAWKFOLK_TOUGH_FAMILY` and
 `RAISED_RATKIN_FAMILY` are the examples. Register the kind with `lookKind` and an
 `applyVariant`. The class takes its look as a constructor argument, never picks one
 itself, draws the figure its look names, and takes any look-coupled parameter (a goblin
@@ -892,8 +892,8 @@ planned at the tier.
 street citizens, interior occupants and market vendors alike. Humans follow
 `TOWN_CAST_TIER_PLANS` (`src/sprites/person/townCastLooks.ts`): role groups that wear
 their first-listed role's looks, and how many of those looks each keeps. Guards and
-children always keep a look of their own. Skyfowl keep the first
-`skyfowlStreetLookAllowance(tier)` civilian looks, one per street role first while there
+children always keep a look of their own. Hawkfolk keep the first
+`hawkfolkStreetLookAllowance(tier)` civilian looks, one per street role first while there
 is room. A citizen keeps its role, and with it its behaviour and services. Named
 residents keep their own looks at every tier, and a citizen in a conversation keeps the
 face being talked to; any other `Townsperson` re-picks only after a purged recovery.
@@ -914,7 +914,7 @@ face being talked to; any other `Townsperson` re-picks only after a purged recov
   at every tier and difficulty no planned mini-wave brings a removed kind, every
   stand-in is already in the siege, every substitution keeps its threat, and the
   lead-in warms exactly the planned kinds.
-- `npm run gates:human-cast` (H9, H10) and `npm run gates:skyfowl-cast` (G9) — the street
+- `npm run gates:human-cast` (H9, H10) and `npm run gates:hawkfolk-cast` (G9) — the street
   never wears more distinct looks than its tier allows; a citizen of either cast changes
   look only at a purged recovery, and named residents and citizens in a conversation keep
   theirs at every tier.
@@ -971,7 +971,7 @@ compressed files `ON_DEMAND_SOUND_IDS` keep, and `jsHeap` is `usedJSHeapSize` wh
 Chrome reports it. Decoded audio is resampled to the context's rate, so a 16 kHz effect
 costs as much as a 48 kHz one. At a 44.1 kHz context the floor-3 overworld holds about
 161 MB with nothing under way, 176 MB near Briar Hollow and 203 MB in a siege, which
-also holds the bounty and circus groups (`FloorSfxGates`); 1.5 MB of that is the gated
+also holds the bounty group (`FloorSfxGates`); 1.5 MB of that is the gated
 groups' compressed files, kept so a cue whose group was let go still plays. Use Chrome's Task Manager
 for the per-tab total and cross-check with `ps -Ao rss,command | grep Renderer`.
 Unregister the service worker first — it precaches every shipped asset and will serve a

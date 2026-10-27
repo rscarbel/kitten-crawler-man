@@ -1,9 +1,10 @@
 /**
  * A hushed hall built around its sanctuary. A raised stone dais spans the
- * whole north end; on it the long altar stands under the great sky window,
- * framed by iron candelabra, a brazier and a hanging banner either side and
- * a tall roosting perch at each corner, with the eagle lectern at the
- * deacon's elbow and votive racks along the dais' front edge. Four pew ranks
+ * whole north end; on it the long altar stands against the north wall under
+ * the great sky window, centred on the aisle, framed by iron candelabra, a
+ * brazier and a hanging banner either side and a tall roosting perch at each
+ * corner, with the eagle lectern beside its west end and votive racks along
+ * the dais' front edge. Four pew ranks
  * face it down the red aisle, candle stands at the aisle ends of the front
  * and back ranks; scripture shelves, banners and perches line the side
  * walls; and the narthex by the door holds the font, the offering table and
@@ -16,16 +17,14 @@
  * rat bunched at the door instead of spread down the nave. The dais paints
  * the runner's last stretch up its own step, so the two read as one carpet.
  *
- * Deacon Aviel anchors on the altar (`'table'`, posted north), and an
- * occupant's stand tile is the first walkable tile found in rings round the
- * anchor prop's north-west tile, north row first. The lectern blocks the
- * tile north-west of the altar, so that first free tile is the one directly
- * behind the altar's west end: he stands behind his altar under the window,
- * facing the nave. The tiles behind the altar stay open to the east so that
- * spot is reachable.
+ * Deacon Aviel is placed on the altar's south side, centred on it (see the
+ * temple's roster in `BUILDING_OCCUPANTS`), and keeps to the strip of dais
+ * between the altar and the step, so the dais row in front of the altar must
+ * stay open floor.
  */
 
 import { RUG } from '../../tileTypes';
+import { TOWN_INTERIOR_PROPS } from '../../../sprites/art/townInterior/townInteriorProps';
 import { contractTarget, prop, tile, type TownInteriorLayoutEntry } from './types';
 import type { ContractAreaRecord } from '../../contractAreas';
 
@@ -55,8 +54,7 @@ function templeGeometry() {
   const westBrazierCol = westBannerCol + 1;
   const westVotiveCol = westBrazierCol;
   const daisRow = 1;
-  const altarRow = daisRow + 1;
-  const daisFrontRow = altarRow + 1;
+  const daisFrontRow = daisRow + TOWN_INTERIOR_PROPS.temple_dais.footprint.h - 1;
   const aisleStartCol = 8;
   const aisleEndCol = aisleStartCol + 1;
   const aisleStartRow = daisFrontRow + 1;
@@ -73,7 +71,6 @@ function templeGeometry() {
     westBrazierCol,
     westVotiveCol,
     daisRow,
-    altarRow,
     daisFrontRow,
     aisleStartCol,
     aisleEndCol,
@@ -121,7 +118,6 @@ export function buildTempleOfTheSkyLayout(w: number, h: number): TownInteriorLay
     westBrazierCol,
     westVotiveCol,
     daisRow,
-    altarRow,
     daisFrontRow,
     aisleStartCol,
     aisleEndCol,
@@ -177,7 +173,7 @@ export function buildTempleOfTheSkyLayout(w: number, h: number): TownInteriorLay
   const entries: TownInteriorLayoutEntry[] = [
     prop(daisCol, daisRow, 'temple_dais'),
     prop(altarCol, daisRow, 'sky_window'),
-    prop(altarCol, altarRow, 'altar', 0, contractTarget(CONTRACT_SITE, 'altar')),
+    prop(altarCol, daisRow, 'altar', 0, contractTarget(CONTRACT_SITE, 'altar')),
     prop(lecternCol, daisRow, 'lectern', 0, contractTarget(CONTRACT_SITE, 'lectern')),
     prop(westCandelabrumCol, daisRow, 'temple_candelabrum'),
     prop(eastCandelabrumCol, daisRow, 'temple_candelabrum'),

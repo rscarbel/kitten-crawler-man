@@ -60,7 +60,7 @@ const FACADE_DOOR_ROW_TILES = 1;
 /**
  * Height for an entrance whose facade cannot be measured — tall enough to wash
  * up a wall rather than stop at the lintel, but a guess at the roofline rather
- * than a reading of it. Only the tower and the Big Top take this path.
+ * than a reading of it. Only the tower and the Starlight Tent take this path.
  */
 const DOORWAY_BEAM_HEIGHT_TILES = 6.4;
 
@@ -70,7 +70,7 @@ const DOORWAY_BEAM_HEIGHT_TILES = 6.4;
  *
  * A share rather than a fixed distance because the beam's fade is proportional
  * to its own length: a constant clearance leaves the same tiles of light above a
- * cottage and above the Desperado Club, but on the taller beam those tiles sit
+ * cottage and above the Cloak & Dagger, but on the taller beam those tiles sit
  * far further along the ramp and have almost no colour left. Holding the
  * roofline a little past halfway up the beam — where the shaft still has close
  * to half its strength — keeps a comparable band of visible light over every
@@ -106,7 +106,7 @@ interface FacadeExtent {
  * manifest offsets are measured from.
  *
  * Null for an entrance with no sprite building behind it: the tower, whose frame
- * is 23 rows of mostly-transparent spire, and the Big Top, a circus structure
+ * is 23 rows of mostly-transparent spire, and the Starlight Tent, a circus structure
  * rather than a sprite building.
  */
 function facadeExtent(entry: BuildingEntry): FacadeExtent | null {

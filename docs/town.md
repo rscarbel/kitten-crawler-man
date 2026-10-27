@@ -1,6 +1,6 @@
 # The Overworld Town
 
-How the third floor's town is generated, rendered and tuned. This is reference for
+How the third floor's town, **Taloncrest**, is generated, rendered and tuned. This is reference for
 anyone changing the town's layout, ground, props or the systems anchored to it.
 
 ---
@@ -35,8 +35,8 @@ tile's world-pixel column so the battlement runs continuous across tile boundari
 | **Garrison Row**  | north band     | The Barracks (the garrison), Cartwright's Workshop, Plumbline Farm (Wendell's home), Blackwood Lodge (dead-end alley — the cult hideout)              |
 | **Market Plaza**  | centre         | — fountain, stalls, notice board, fortune teller, benches, well                                                                                       |
 | **Plaza Ring**    | flanking plaza | Temple of the Sky, Herb & Remedy, General Store, The Sleeping Cat Inn (the town's safe room)                                                          |
-| **Market Row**    | south of plaza | Old Hilda's Cottage, The Horned Flagon, The Rusty Anvil                                                                                               |
-| **Low Quarter**   | south band     | The Desperado Club, The Quiet Needle (Shady loiters on Low Street outside it), The Sunken Stump Pub — plus the service alley the murder mystery needs |
+| **Market Row**    | south of plaza | Old Lori's Cottage, The Horned Flagon, The Rusty Anvil                                                                                                |
+| **Low Quarter**   | south band     | The Cloak & Dagger, The Quiet Needle (Shady loiters on Low Street outside it), The Sunken Stump Pub — plus the service alley the murder mystery needs |
 | **South Green**   | inside SE wall | Miller's Farm                                                                                                                                         |
 | **The Ruins**     | outside walls  | ruin shells, rubble, ghouls; the circus 70–90 tiles out                                                                                               |
 
@@ -44,27 +44,33 @@ tile's world-pixel column so the battlement runs continuous across tile boundari
 
 ## Who lives here
 
-The town is a skyfowl city with a human minority. That ratio carries the story: Quill's
-doomsday spell is built to kill every non-skyfowl inhabitant, which only means something
+The town is a Hawkfolk city with a human minority. That ratio carries the story: Quill's
+doomsday spell is built to kill every non-hawkfolk inhabitant, which only means something
 if there are visibly some.
 
 **Species is not a job.** `TownSpecies` (`src/systems/townSpecies.ts`, `'human' |
-'skyfowl'`) is its own axis, carried by `ResidentDef.species`, `OccupantSpec.species` and
-every `Townsperson`. `TownRole` is only ever a job. Services are keyed by role
-(`interiorServiceForRole`), so a resident can change species without touching the counter
-they run, and a species in the role union would sell or bark as a job.
+'hawkfolk'`) is its own axis, carried by `ResidentDef.species`, `OccupantSpec.species` and
+every `Townsperson`. `TownRole` is only ever a job: it picks barks and a citizen's look,
+and a species in the role union would bark as a job. A counter belongs to the person who
+keeps it (`OccupantSpec.service`), so neither species nor role touches it.
 
-**The named cast** is `RESIDENT_DEFS` in `src/systems/townResidents.ts`: sixteen residents,
-ten skyfowl and six human. The humans are Wendell (Plumbline Farm), Old Hilda, Marta
-Miller, Apothecary Fen, Innkeep Marlow and Wick, the General Store's clerk. Keeper Brenna
+**The named cast** is `RESIDENT_DEFS` in `src/systems/townResidents.ts`: twenty residents,
+nine Hawkfolk and eleven on the `'human'` side of the species axis. The humans are Wendell (Plumbline
+Farm), Marta Miller, Apothecary Fen, Innkeep Marlow and Wick, the General Store's clerk.
+Old Lori (a dwarf), Steve Cartwright (an otter), the pub janitors Puddles and Grout and
+Sydney at the Barracks Mercenaries' desk (crocodilians), and Brandon at the Cloak &
+Dagger's front desk are drawn by bespoke painters (see the `figure` part under
+[Furniture is placed props](#furniture-is-placed-props)) and count as `'human'` on the
+species axis, which only has the two values; it picks their danger barks and their door's
+frontage crowd, and their own lines never speak as Hawkfolk. Keeper Brenna
 Kestrel runs the General Store: she is the counter occupant `ShopSystem.setKeeper` points
-the shop at. The club's cast (Clarabelle, Rosemarie and the rest) belongs to
-`DesperadoClubSystem`, and Mordecai to `SafeRoomSystem`; both sit outside the ratio.
+the shop at. The club's counter staff (the bartender, the vendor, Deuce and Donald) belong
+to `CloakAndDaggerSystem`, and Mordecai to `SafeRoomSystem`; both sit outside the ratio.
 
 **The crowd.** `TownLifeSystem` rolls each street cohort's species at its own share:
-`PLAZA_SKYFOWL_SHARE` and `ANCHOR_SKYFOWL_SHARE` two thirds, `TRAVELER_SKYFOWL_SHARE` one
+`PLAZA_HAWKFOLK_SHARE` and `ANCHOR_HAWKFOLK_SHARE` two thirds, `TRAVELER_HAWKFOLK_SHARE` one
 half (the roads bring outsiders in). A door's loiterers lean toward its resident's species
-(`frontageSkyfowlShare`), and each doorstep anchor's species is fixed with its post
+(`frontageHawkfolkShare`), and each doorstep anchor's species is fixed with its post
 (`DOORSTEP_ANCHOR_ROLES`). Interior occupants state theirs per spec. A named occupant
 always takes the species of its `ResidentDef`.
 
@@ -84,11 +90,11 @@ place species chooses a cast:
   Adults are painted on the biped rig (`src/sprites/art/biped/`), each dressed and groomed
   as itself plus a role accessory. The two child looks use the person skeleton, because
   the biped rig is one fixed adult build.
-- **Skyfowl:** `src/sprites/art/skyfowl/` and `skyfowlCastFigure.ts`.
+- **Hawkfolk:** `src/sprites/art/hawkfolk/` and `hawkfolkCastFigure.ts`.
 - **Named residents:** each wears a fixed look from `src/creatures/residentFigures.ts`,
   which throws on a resident with no entry.
 
-The twelve fightable `SkyFowl` mobs (`extraSpawns` in `level3.ts`) are combat creatures,
+The twelve fightable `Hawkfolk` mobs (`extraSpawns` in `level3.ts`) are combat creatures,
 not citizens. They wear the four street-tough looks: rust and plum leathers and a hunched
 posture that no citizen wears, so a player never mistakes a citizen for a target. A
 citizen is never a `Mob`, and `npm run verify:citizens-not-targetable` fails any
@@ -386,7 +392,7 @@ that, and each answers a different half of "I don't know what to do":
   It lives behind a pause rather than on the HUD because it has to be able to show
   _everything_: a corner panel had to cap its rows and squeeze its text, and a "+N more"
   line the player cannot open is worse than a menu they have to press a button for. Only
-  floors from `JOURNAL_FIRST_FLOOR` up offer it, which is where more than one thread runs
+  floors from `OVERWORLD_FLOOR_THREE` up offer it (outside the tutorial), which is where more than one thread runs
   at once.
 - **The tracker seam** (`src/systems/questTracker.ts`) — every quest system grows a
   `trackerEntries()` getter beside its existing `questMarkers` one, rebuilt from its own
@@ -426,7 +432,7 @@ contents are data: one layout file per building in `src/map/town/interiors/`, li
 `NAMED_INTERIOR_LAYOUTS` (`index.ts`), each a pure function of the shell's size that
 returns layout entries. `generateInterior` holds no per-building logic.
 
-Only the Desperado Club's rooms and stations are fixed. Every other
+Only the Cloak & Dagger's rooms and stations are fixed. Every other
 room's shell and layout may change freely, as long as its function holds: quest beats,
 services, the safe room, the murder mystery's alley and cellar, the cult hideout, and the
 gates below. A room's layout follows from what the building is, and every room should
@@ -443,8 +449,8 @@ so inserting one re-rolls the art of every material after it.
 
 **Every walkable tile must be reachable from `startTile`.** A partition wall that seals a
 wing produces no error, no log and no symptom except a room the player can see across and
-never enter. `verify:interiors` flood-fills every interior — all fifteen walk-ins, the Big
-Top and all four tower storeys — and the only tiles it excuses are the Bopca's galley
+never enter. `verify:interiors` flood-fills every interior — all fifteen walk-ins, the Starlight
+Tent and all four tower storeys — and the only tiles it excuses are the Bopca's galley
 strip, which the counter's own side returns seal on purpose.
 
 **The safe room is the inn's taproom.** `hasSafeRoom` on the planned building is what
@@ -455,12 +461,20 @@ bounds** — which is why the taproom's archways to the landing are deliberately
 and why the middle of the taproom's top rows carry no authored furniture. A run laid
 across an archway would wall off the entire guest wing.
 
-**A building may run more than one counter.** `interiorServicesFor(name)` returns every
-service a building offers and `interiorServiceForRole(name, role)` picks the one the
-NPC the player walked up to provides, so the two services must never share a role — the
-talk router would have no way to tell the counters apart and one would be silently
-unreachable. The Barracks uses both: a quartermaster's armoury and a drill yard selling
-permanent stat points up to `DRILL_TRAINING_CAP` at an escalating price. The inn's three
+**A building may run more than one counter.** A service is declared on the occupant who
+keeps it (`OccupantSpec.service` in `BUILDING_OCCUPANTS`, `src/systems/buildingOccupants.ts`),
+and the talk router asks `InteriorOccupantSystem.serviceOf` for the service of the exact
+person the player walked up to, so any number of counters may stand in one room whatever
+roles their keepers hold. A priced counter names its menu (`ServiceCounter`), which
+`openServiceMenu` switches on exhaustively. A desk with a screen of its own names its
+desk instead (`ServiceDesk`, `{ surface: 'desk' }`), and the scene builds the system behind
+it only in a room whose roster keeps one (`interiorKeepsDesk`), so no system names the
+building it lives in. The Barracks runs three: a quartermaster's armoury, a drill yard
+selling permanent stat points up to `DRILL_TRAINING_CAP` at an escalating price, and The
+Barracks Mercenaries' hire desk (`MercenaryGuildSystem`), kept by Sydney at the `merc_desk`
+in the east of the muster hall, clear of the cracked flags the `muster_floor` contract
+marks. A contract signed there stands the hire up in the room at once:
+`BuildingInteriorScene` follows the roster's live contract. The inn's three
 guest rooms are the timed counterpart — a full mend plus one time-bounded stat boon, and
 granting one cures the other two so the choice stays a choice. Occupants carry a `post`
 hint that decides which piece of their anchor group they take; without one they are placed
@@ -489,7 +503,7 @@ A layout entry is either a `'tile'` (walls, doorway gaps, floor overrides, and t
 bespoke fixtures with no painted prop) or a `'prop'`: an instance from
 `TOWN_INTERIOR_PROPS` (`src/sprites/art/townInterior/townInteriorProps.ts`). Room-specific
 painters live in `src/sprites/art/townInterior/rooms/`, one file per building plus a shared
-`tavernKit.ts`. A prop is multi-tile furniture, the model the Desperado Club's
+`tavernKit.ts`. A prop is multi-tile furniture, the model the Cloak & Dagger's
 `clubProps.ts` established:
 
 - **A prop entry's `(x, y)` is the footprint's north-west tile.** The footprint runs east
@@ -507,10 +521,20 @@ painters live in `src/sprites/art/townInterior/rooms/`, one file per building pl
   under every figure. Only standing props join the Y-sort, through
   `townInteriorPropFigures`. Use the sized rugs (`rug_runner*`, `rug_small`, `rug_medium`,
   `rug_large`, `rug_ring`), never a row of 1×1 `rug`s.
+- **A fire is declared, not painted.** A prop body is baked once and cannot move, so a
+  hearth, stove, brazier, forge or torchère paints its firebox, coals and logs without
+  flames and lists `flames` sites (`PropFlameSite` in `propFlames.ts`: prop-local `x` and
+  `rise` in tiles, a `size`, a `PropFlameStyle`). `drawPropFlames` draws them over the body
+  every frame from a short baked loop, offset per site by world position. A prop that makes
+  a sound declares `ambientSound` (`{ cue, radiusTiles, maxVolume }`, cues from
+  `INTERIOR_AMBIENCE_CUES`); `townInteriorPropEmitters` gives the scene one emitter per
+  standing instance at its footprint centre, and a smashed or contract-hidden instance
+  falls silent. Keep every fire under the tavern crowd bed. Interiors have no dynamic
+  light, so a fire's glow is part of its own art.
 - **Wall finish is per building.** `WALL_MATERIAL_BY_BUILDING_NAME`
   (`src/map/town/interiorWallMaterial.ts`) picks plaster, stone or timber.
   `interiorWallFace.ts` paints the face.
-- **Some systems still scan raw tile types.** `ANCHOR_TILE_TYPES`, Old Hilda's repairable
+- **Some systems still scan raw tile types.** `ANCHOR_TILE_TYPES`, Old Lori's repairable
   wreck (`TABLE`, `CHAIR`, `BOOKSHELF`) and the temple's nave spawns (`RUG` tiles) read
   tile types. A `'prop'` entry never writes one, so converting those tiles to props
   empties those scans without an error.
@@ -521,43 +545,83 @@ painters live in `src/sprites/art/townInterior/rooms/`, one file per building pl
   reads `placedInteriorPropFootprintTiles()`. Anything that reads "is this floor free"
   must do the same, because the grid under a prop is still floor.
 
-**Occupants anchor to furniture.** `scanInteriorFurniture` merges the tile scan with each
-placed prop's `anchors`. A prop contributes **one** anchor tile per instance, its
-north-west tile, so replacing two 1×1 tables with one 2×1 table drops an occupant. The
-`post` hint orders the group, and `findStandTile` picks the first walkable tile round the
-anchor. A layout steers where someone stands by blocking the tiles it doesn't want them
-on. An occupant whose group matches nothing is dropped silently; `verify:interiors` names
-the room and anchor for each roster entry. `InteriorReadableSystem` has its own scan, which
-must stay in step.
+**Occupants stand by furniture.** An `OccupantSpec` has five parts: `placement`,
+`territory`, `figure`, `routine` and `service` (`src/systems/buildingOccupants.ts`).
+
+- **`anchor` placement.** `scanInteriorFurniture` merges the tile scan with each placed
+  prop's `anchors`. A prop is **one** piece per instance, with its whole footprint, so
+  replacing two 1×1 tables with one 2×1 table drops an occupant. The `post` hint orders
+  the pieces by their centres, and `findStandTile` takes the first free tile in rings
+  round the piece's north-west tile, then slides it along that side of the piece to the
+  side's middle, so nobody keeps a long counter from its end or its corner.
+- **`prop` placement.** Stands on one side of a named prop, centred on its footprint
+  (`offset` shifts it along the side, `distance` steps it further out, `post` picks among
+  several of that prop). Prop placements are made before anchors and claim their piece, so
+  an anchored extra can't take it. The Quiet Needle's Nim, the temple's Deacon Aviel and
+  Steve Cartwright (four tiles west of his target board) are placed this way.
+- **`mark` placement.** Stands on one authored tile, facing a given way, for a room
+  laid out by hand whose furniture the scan can't see (the Cloak & Dagger's host). Marks
+  are placed first; a mark on a solid or reserved tile drops the occupant.
+- **`territory`.** A radius, a rect of tiles round the stand, or the room's open floor.
+  It defaults to the activity's radius, or the room for a `roam` placement.
+- **`figure`.** A citizen cast look, or a bespoke painter from `BESPOKE_RESIDENT_FIGURES`
+  (`src/creatures/bespokeResidentFigures.ts`), drawn through `Townsperson` either way.
+- **`routine`.** An optional behaviour on top of idle and wander (`occupantRoutines.ts`).
+  It sets `Townsperson.routinePose`, which a bespoke figure maps onto rows of its own and
+  a cast look draws as its `work` loop; the figure owns each pose's length and the beats
+  its sounds land on (`routinePoses`), and the routine raises `OCCUPANT_ROUTINE_CUES`
+  through the scene. `mop` (the pub janitors) works a few strokes and a wring wherever a
+  stroll ends. `target_practice` (Steve) aims, shoots a cosmetic bolt that sticks in the
+  target, and reloads; it holds fire while any crawler, companion or hireling box crosses
+  the line from the crossbow to the target, and waits a beat after it clears.
+
+A layout steers where someone stands by blocking the tiles it doesn't want them on. An
+occupant whose placement finds nothing is dropped silently; `verify:interiors` names the
+room and anchor for each roster entry, and checks that every prop placement lands on free
+floor beside its prop and that every territory holds its stand. `InteriorReadableSystem`
+has its own scan, which must stay in step.
 
 **Every room is lived in.** `npm run verify:interior-density` fails a room with a square of
 undressed floor bigger than `MAX_EMPTY_SQUARE_TILES` (4×4). A walkable prop counts as
 dressed, and a one-tile ring round the entrance is exempt. It bounds a square, so a long
 empty strip still passes.
 
-### The Desperado Club's casino corner
+### The Cloak & Dagger
 
-The club is not built from a layout file: its rooms and stations are fixed in
-`src/core/club/clubLayout.ts` and its furniture in `src/core/club/clubProps.ts`
-(`CLUB_PROPS`, with `CLUB_FURNITURE_TILES` derived from it). Club props block their
-footprint **and** the rows their art rises into, so a crawler can never stand where a
-counter is painted over them.
+The club is not built from a layout file: its rooms, stations, stages, seats and
+gatherings are fixed in `src/core/club/clubLayout.ts` and its furniture in
+`src/core/club/clubProps.ts` (`CLUB_PROPS`, with `CLUB_FURNITURE_TILES` derived from it).
+Club props block their footprint **and** the rows their art rises into, so a crawler can
+never stand where a counter is painted over them. The shell is 28 × 20 tiles.
 
-- **The casino zone** is the north-east alcove, tiles x18–22, y1–8 (`CLUB_ZONES`), with
-  no painted label because its back wall is dressed corner to corner.
-- **The station** is tile (20, 4) (`CLUB_STATIONS`), behind the blackjack table; its
-  prompt verb is "Play", and every game is reached from it.
-- **The Wheel of Fortune** stands on the back wall, footprint x20–22 on row 2. Tito's
-  counter sits below its east end, and **`CLUB_TITO_POST`** (22, 3) is his mark behind it;
-  the counter's art covers that tile, and `isClubPatronTile` keeps patrons off it. The
-  poker table is tucked into the corner at (18, 2), the blackjack table at (19, 5).
-- **The slot bank** is three cabinets on row 8 from x20 (`SLOT_BANK_FIRST_TILE`,
-  `SLOT_BANK_CABINETS`), leaving x18–19 open as the way in from the east corridor. Each
-  cabinet sets `openBehind`, which blocks only its footprint: the row behind the
-  cabinets stays walkable floor, joined to the aisle behind the blackjack stools, and a
-  crawler there sorts before the cabinet and reads as standing behind it.
-- The wheel and the slot cabinets carry chasing-bulb overlays (`ClubPropLights`) on
-  their own sheets, so the lights animate without repainting the prop.
+- **West:** the bar (north-west) and the market (south-west), each walled from the
+  corridor on its east side (`CLUB_DIVIDER_WALLS`).
+- **Middle:** the dance floor (`CLUB_DANCE_FLOOR`) with its cast dancers, and a raised
+  stage either side of it (`CLUB_PERFORMER_POSTS`): Angel on the west, Magnum on the east.
+  A stage blocks its whole 3 × 3 footprint; two open rows run above and below each one.
+  The act is drawn at the pole, lifted by the stage's riser (`CLUB_STAGE_RISER_TILES`), and
+  each act (`CLUB_PERFORMER_ACTS`) plants its pole on the socket painted at the stage's
+  centre.
+- **The casino** is the whole north wing (`CLUB_ZONES`, no painted label): two facing
+  rows of slot cabinets with an aisle between them (the south row drawn from behind),
+  the poker table, the blackjack table with Deuce, and the Wheel of Fortune in the
+  north-east corner with Donald's counter at its foot (`CLUB_DONALD_POST`). Every game
+  has a "Play" station, and each opens the same game picker.
+- **Gamblers** sit on the casino's stools (`CLUB_CASINO_SEATS`, run by
+  `ClubGamblerSystem`) in the cast's seated rows. Poker stools are indexed by the poker
+  screen's seat numbers, so while the player is at the table its stools hold exactly the
+  regulars the screen deals; the player's own stool stays empty. Blackjack's stools
+  empty while that table is open.
+- **The open floor** east of Magnum's stage holds the high-top tables.
+- **The crowd** (`ClubCrowdSystem`) never strolls for its own sake. Each patron stands
+  with a gathering (`CLUB_GATHERINGS`: the ring round a high-top table, or an open circle
+  of friends) facing its middle and talking in turn, or watches a stage, and after a while
+  moves on to another.
+- **Brandon** greets the door from behind his host stand. He is the club's one rostered
+  occupant (`BUILDING_OCCUPANTS`), stood on `CLUB_HOST_MARK` by a `mark` placement.
+- Every slot cabinet plays the slot floor from where it stands; the emitters follow the
+  cabinets the room places, not the building's name. The wheel and the slot fronts carry
+  chasing-bulb overlays (`ClubPropLights`) on their own sheets.
 
 ### Examine, search, use, break
 
@@ -603,7 +667,7 @@ and `BuildingInteriorScene`. It holds resident talk counts, Fen's poultice batch
 
 A room is framed by `src/scenes/interiorCamera.ts` through `GameplayScene`'s camera hooks
 (`cameraWorldBounds`, `cameraClearView`, `cameraFocusRange`). Every building interior uses
-it, as do the tower storeys, the club and the Big Top.
+it, as do the tower storeys, the club and the Starlight Tent.
 
 - **Bounds are visual, not the grid.** Prop art rising above row 0 is measured from the
   baked frame (`townInteriorPropArtRiseTiles`) and grown by `INTERIOR_CAMERA_MARGIN_PX`.
@@ -663,7 +727,7 @@ room the Bopca and Mordecai's ranges overlap. `safeRoomSpeakerFor`
 
 **Voice.** People talk about their own lives, and the world reaches the player through
 them. A person gives at most one fact about the wider world per conversation, and only
-one they would plausibly know. Residents mention each other. Skyfowl call anyone who does
+one they would plausibly know. Residents mention each other. Hawkfolk call anyone who does
 not fly "groundfolk". Avoid these:
 
 - the aphorism-then-reversal ("It is not X. It is Y.");
@@ -686,7 +750,7 @@ not hard-coded twice.
 **Building names.** All 16 `buildingEntries` names and `type` values, verbatim. Quests,
 dialog, interiors, mercenaries, the club, the murder mystery and the cult hideout key
 off these strings across ~20 files. The tattoo parlour is **The Quiet Needle**
-(sprite key `quiet_needle`); Tsarina Signet is a character, not a building, and the
+(sprite key `quiet_needle`), and the
 facade's `replaces: 'tattoo_parlor'` stays as it is — the frozen footprint fixture the
 building gates measure against is keyed by `replaces`, not by the sprite key.
 
@@ -694,13 +758,11 @@ A misspelled key is invisible from both directions: the building reports no serv
 the service names no building, so nothing throws and nothing logs. `verify:interiors`
 walks both sides for exactly that reason.
 
-**A rename needs a save migration.** `clearedRooms` and `paidOutInteriorProps` are keyed
-by building name, so a save from before a rename would forget every room cleared or
-searched there. `RENAMED_BUILDINGS` in `TownMemory.ts` maps each old name to the current
-one, and `migrateRoomKey` rewrites both sets when a save is parsed. Entries are never
-removed, because a save can sit unloaded for any length of time. Wendell's home was
-"Shepherd's Cabin" and is now **Plumbline Farm** (facade `plumbline_farm`).
-`verify:town-save` covers the migration.
+**A rename forgets what the town remembered there.** `clearedRooms` and
+`paidOutInteriorProps` are keyed by building name, so a save written before a rename
+forgets every room cleared or searched there. Saves carry no compatibility promise (see
+CLAUDE.md), so there is no alias map; the run simply re-stocks that building. Wendell's
+home is **Plumbline Farm** (facade `plumbline_farm`).
 
 **Safe-room-ness is `hasSafeRoom` on the planned building**, not a `BuildingKind`.
 `BuildingKind` is `'house' | 'tower' | 'store' | 'club'` — there is no `restaurant`
@@ -731,7 +793,7 @@ layout and they must be re-tuned, not left stale:
 | Consumer               | Constants                                                                                |
 | ---------------------- | ---------------------------------------------------------------------------------------- |
 | `market/vendorDefs.ts` | `WEST_STALL_DX`, `EAST_STALL_DX`, `STALL_ROW_DY`                                         |
-| `TownPropSystem`       | `BOARD_SOUTH_OFFSET`, `FOUNTAIN_FLANK_ROW_OFFSET`, `BENCH_*_COL_OFFSET`, `FORTUNE_DX/DY` |
+| `TownPropSystem`       | `BOARD_OFFSET`, `FORTUNE_OFFSET`                                                         |
 | `TownLifeSystem`       | `PLAZA_RADIUS_TILES`, `DISTRICT_RADIUS_TILES`, `FRONTAGE_RADIUS_TILES`                   |
 | `DungeonScene`         | `FOUNTAIN_AMBIENT_RADIUS_TILES`, `TOWN_SQUARE_AMBIENT_RADIUS_TILES`, `CITY_CROWD_*`      |
 | `OverworldGenerator`   | `TOWN_SAFE_RADIUS_TILES`, `RUINS_*`, `FOREST_MIN_DIST_TILES`                             |
@@ -946,7 +1008,7 @@ Vordrick leads every wave. In the first three he comes with a share of his healt
 (`Necromancer.beginFadingAway`) and is released with nothing paid. His death in the
 fourth wave wins the siege.
 
-In a siege, each of his raises calls up `NECRO_SIEGE_RAISE_BATCH` bodies: raised ratkin,
+In a siege, each of his raises calls up `NECRO_SIEGE_TROOPS_PER_RAISE` bodies: raised ratkin,
 skeleton warriors and skeleton archers (`SIEGE_RAISE_KIND_WEIGHTS`). Up to
 `NECRO_INNER_RAISES` of their sigils open **inside the palisade**, so the walls do not keep
 the whole fight outside. They open in a band just inside the wall, between
@@ -993,7 +1055,7 @@ trebuchet when nothing needs mending.
 ### The Borrowed Blueprints
 
 Fenna's side quest. She wants the saw and the rope walk upgraded to Tikka's design, but
-she lent the blueprints to Wendell at Plumbline Farm in the Over City. Wendell will lend
+she lent the blueprints to Wendell at Plumbline Farm in Taloncrest. Wendell will lend
 them back for a dairy cow. Merrit parts with one, Midge, once the party has rebuilt her
 pasture fence and brought in a hundred grain. The party walks Midge across the wilds to
 Wendell's pasture while the road's dead go for her, brings the blueprints home, and
@@ -1053,8 +1115,8 @@ you". While she answers the call the journal points at her instead of Merrit.
   (`villageUnlocks.ts`), the same rule the Build button reads, so the `!` and the button
   can never disagree. The Plea registers its quest-line provider first, so wherever the
   Plea still needs Fenna its opening and marker win. Her line naming where Wendell lives
-  computes the town's bearing from the village (`skyfowlTownWhereabouts`, falling back to
-  "the skyfowl town past the road"). In `show_fenna`, while a crawler holds the
+  computes the town's bearing from the village (`taloncrestWhereabouts`, falling back to
+  "Taloncrest, past the road"). In `show_fenna`, while a crawler holds the
   blueprints, she wears a `?` and opens with a briefing that names both upgrade costs
   (`stationUpgradeCost`); closing it moves the phase to `build_stations`. At every other step while the quest is under way she opens
   with "Any luck with those blueprints?", and at the end she barks the completion line.
@@ -1116,7 +1178,7 @@ out unpressed is judged a miss as it lands. A miss still lands like any swing �
 grain, a `+1 Grain` float, the gather sound and a cut on the stand — and the bar shows a
 dimmed "+1 grain" beside the red "Miss!". Each verdict raises its cue once
 (`scytheTimingPerfect`, `scytheTimingGood`, `scytheMiss`), and the bar stays up with it for
-`SWING_VERDICT_LINGER_SECONDS` (0.7 s) after the swing unless the next swing starts first.
+the rest of the swing, which lasts `SCYTHE_SWING_SECONDS` in all.
 Only the first second press counts; repeats and later presses are swallowed so they
 reach neither the grade nor the attack. The press is graded by the input event's own
 `e.timeStamp` (a tap by its touchstart), never the handler's clock, and time spent with
@@ -1328,7 +1390,7 @@ design, and each quest recovers from the derived state:
   behind." or "We left the blueprints behind." (their partner, if they are knocked out),
   through `barkWhenBlueprintsItemEvicted`. Swapping one of this quest's items for the
   other, and the quest taking its own items away, stay quiet.
-- The Anchor's wood pile (Hilda's cottage) gives its boards to whichever crawler walks
+- The Anchor's wood pile (Lori's cottage) gives its boards to whichever crawler walks
   onto it, evicting any other quest item in their slot — the blueprints go back to
   Wendell exactly as above. Only when both crawlers are in reach on the same frame does
   the one whose slot is empty or already holds boards take them. The boards respawn
@@ -1363,7 +1425,7 @@ list and stays silent. Every id a cue names must be preloaded in the `briarHollo
 Wendell's repeatable jobs, opened by finishing The Borrowed Blueprints
 (`contractsUnlocked`: `blueprints.phase === 'complete'`; the reward screen's unlock card
 "Construction contracts from Wendell" is in `blueprintsRewardSpec`). Each contract sends the
-party to one building in Skyfowl Town or Briar Hollow with 4–6 marked spots to repair or
+party to one building in Taloncrest or Briar Hollow with 4–6 marked spots to repair or
 rebuild. When every spot is done the building's contact pays out, and Wendell sends a note
 asking them back. One contract is active at a time. Nothing in the world stays broken
 between contracts: damage and build sites exist only while their contract does.
@@ -1380,10 +1442,10 @@ saved site or spot id the catalogue no longer has; an active contract left with 
 reads as none, and Wendell re-offers.
 
 **The catalogue** (`contractCatalog.ts`, pure data). `CONTRACT_SITES` holds every
-enterable building in both towns, 13 in Skyfowl Town and 15 in Briar Hollow, except
-`CONTRACT_EXCLUDED_TOWN_BUILDINGS` (Town Center Tower, The Desperado Club, Plumbline Farm),
+enterable building in both towns, 13 in Taloncrest and 15 in Briar Hollow, except
+`CONTRACT_EXCLUDED_TOWN_BUILDINGS` (Town Center Tower, The Cloak & Dagger, Plumbline Farm),
 which the `ContractTownBuildingName` type rules out at compile time. Each site has a
-`slug` unique across both towns, a contact (a `ResidentId` in Skyfowl Town, a `VillagerId`
+`slug` unique across both towns, a contact (a `ResidentId` in Taloncrest, a `VillagerId`
 in Briar Hollow; the name is read from the contact's own record by `contractContactName`)
 and a pool of `ContractSpotDef`s: `kind`, `label`, `cost` in `wood_board` / `rope` /
 `stone`, `material` (`wood`, `stone`, `rope`, `plaster`; picks the art and the sounds) and
@@ -1395,16 +1457,16 @@ a `target`. Spot kinds:
   blocked; finishing the spot brings the prop back.
 
 The catalogue holds no coordinates. A prop spot names the placed prop whose explicit id is
-`contract:<slug>:<spot>` (`contractPropId`, `src/map/contractAreas.ts`): Skyfowl Town
+`contract:<slug>:<spot>` (`contractPropId`, `src/map/contractAreas.ts`): Taloncrest
 layouts give it through `contractTarget(slug, spot)` in `src/map/town/interiors/*`, Briar
 Hollow's `PropTemplate`s through `contractSpotId` in `briarHollowLayout.ts`. An area spot
 names a `ContractArea` (`floor`, `wall`, `doorway`, `open_side`) exported beside the
-layout: each Skyfowl Town interior's `build<Building>ContractAreas(w, h)`, gathered in
+layout: each Taloncrest interior's `build<Building>ContractAreas(w, h)`, gathered in
 `NAMED_INTERIOR_CONTRACT_AREAS` (`src/map/town/interiors/index.ts`; the General Store's
 `buildGeneralStoreContractAreas` is looked up by kind), in the interior's own grid; and
 `BRIAR_HOLLOW_CONTRACT_AREAS`, relative to the building rect's north-west corner (an area
 may lie just outside it, as the quarry hut's step does). `contractTargets.ts`
-(`skyfowlSpotFootprint`, `briarHollowSpotFootprint`) resolves both against the built map.
+(`taloncrestSpotFootprint`, `briarHollowSpotFootprint`) resolves both against the built map.
 
 Rules for picking targets, to keep when tuning a pool:
 
@@ -1412,11 +1474,11 @@ Rules for picking targets, to keep when tuning a pool:
 - **Never a quest or encounter piece:** Merrit's `scythe_pegs`; the sawmill's
   `sawmill_machine` and `rope_walk` (they have quest upgrade variants); Blackwood Lodge's
   `cellar_trapdoor` and `kessler_footlocker`; the Sunken Stump's `bolted_door`; Old
-  Hilda's raw `TABLE` / `CHAIR` / `BOOKSHELF` tiles (`HILDA_REPAIRABLE_TYPES`, the
+  Lori's raw `TABLE` / `CHAIR` / `BOOKSHELF` tiles (`LORI_REPAIRABLE_TYPES`, the
   anchor-quest wreck); the Inn's safe-room counters and Mordecai.
 - **Temple floor spots never touch `RUG` tiles**: `AnchorInteriorSystem.naveSpawnAnchors`
   scans for them to spread the vermin down the nave.
-- **Wall runs sit where the wall face shows**: the north wall's face in Skyfowl Town; in
+- **Wall runs sit where the wall face shows**: the north wall's face in Taloncrest; in
   Briar Hollow the full-height north wall plus the cut-down south, east and west walls.
   Wall runs stay off corner posts and doorways; floor rects stay off furniture, rugs and
   threshold tiles.
@@ -1425,8 +1487,8 @@ Rules for picking targets, to keep when tuning a pool:
   the work channel's own measure, from a tile's centre). Movement collides one axis at a
   time, so the walk is orthogonal and never squeezes between two blocked corners. A wall
   run behind wall-to-wall furniture is out of reach from the row in front of it (two
-  tiles), so the Skyfowl Town rooms leave a bare north-wall tile beside each wall spot
-  (Blackwood Lodge, the General Store, Herb & Remedy, the Horned Flagon, Old Hilda's,
+  tiles), so the Taloncrest rooms leave a bare north-wall tile beside each wall spot
+  (Blackwood Lodge, the General Store, Herb & Remedy, the Horned Flagon, Old Lori's,
   the Sunken Stump, the Quiet Needle), and the Cartwright's wall spot is the foot of the
   timber bay's partition. Villagers and occupants never block the party (movement tests
   map tiles only), so a contact pinned indoors cannot wall off a spot.
@@ -1453,7 +1515,7 @@ contract is issued; a contract already held waits out whatever blocks it.
 (`src/systems/interiorStoryOwnership.ts`), the same rule `BuildingInteriorScene` uses to
 decide who stands in a room: Blackwood Lodge while the cult hideout is pending or live, the
 Temple while the anchor quest's vermin are loose. Every Briar Hollow site is owned while
-`isVillageUnderSiege`. Old Hilda's Cottage is eligible only once `hildasWreckMended`. No
+`isVillageUnderSiege`. Old Lori's Cottage is eligible only once `lorisWreckMended`. No
 contact is ever written out of the world by a story flag, so a contact is absent only when
 their room is owned. While a held contract's site is owned its spots go inert, its contact
 does not pay, the guide stands down, and the Journal hint reads "Wait out the siege." or
@@ -1512,7 +1574,7 @@ floats "Repaired" / "Rebuilt", and grants Construction XP (`CONTRACT_XP_PER_MATE
 material). The last spot toasts "<site> is done. See <contact>." The top band shows
 "Repairs N/M" (`contractCounterEntry`) in both scenes while spots remain.
 
-- **Skyfowl Town:** `ContractInteriorSite.forBuilding` in `BuildingInteriorScene`, only
+- **Taloncrest:** `ContractInteriorSite.forBuilding` in `BuildingInteriorScene`, only
   on the ground floor of the building holding the active contract and never while an
   encounter owns the room. Its Space handling runs before examine/search/use, a nearer
   occupant still wins the talk, and taps arrive through `handleWorldPointer`. Rebuild
@@ -1531,7 +1593,7 @@ ready: `ContractContactHook` indoors, and `ConstructionContractSystem` as a
 heads `BuildingInteriorScene`'s resident hook list and the provider registers with
 `addQuestLineProvider(this, { first: true })`. They answer only while a payment is owed,
 so they never talk over anything else; behind the others, the Anchor's terms for Aviel or
-Hilda and the Mayor's lines after the Plea would take every talk and the payment could
+Lori and the Mayor's lines after the Plea would take every talk and the payment could
 never be made. A press in reach of a client owed a payment reaches them ahead of a shop
 counter or safe room indoors and of the recruiter or a nearer soldier in the village, but
 never ahead of a nearer sawmill machine or a cut in progress. Their thanks
@@ -1668,19 +1730,19 @@ anything built or damaged since the party last saved.
   seed the village state before the scene is built (`contractsPlaytestState`).
 - `npm run render:construction-contracts` renders every material's damage on every target
   kind, a rebuild site per material, the reach glow and the finish puff, then every spot
-  of one Skyfowl Town and one Briar Hollow pool, highlights included, on the real room (`--skyfowl=<slug>`,
+  of one Taloncrest and one Briar Hollow pool, highlights included, on the real room (`--taloncrest=<slug>`,
   `--hollow=<buildingId>`), each at 1x, 1x zoomed and 2x.
 - `npm run verify:construction-contracts` is the contracts' headless gate: every catalogue
   target resolves in its built layout and no two spots share one, no excluded building
   appears, every pool offers `CONTRACT_MIN_DISTINCT_SETS`, the generator stays in the
   bands with payout 7 × materials and no back-to-back site or set, save round-trip and
   old-save parsing, and an issue-work-payout flow through the real finish path. Its
-  reachability pass floods the walkable tiles of every site (Skyfowl Town rooms from their
+  reachability pass floods the walkable tiles of every site (Taloncrest rooms from their
   spawn and exit tiles, Briar Hollow from the main gate, every prop spot's footprint
   blocked) on four world seeds and names every spot of every pool no reached tile can
   work; a negative check walls one spot in and proves it is named.
 - `npm run verify:borrowed-blueprints` is the quest's headless gate: the phase order and
-  every transition, persistence (an old save with no `blueprints` included), provider
+  every transition, persistence (a save missing or malforming `blueprints` is refused), provider
   order, quest-slot eviction and recovery with its barks, markers and journal rows,
   Merrit's and Wendell's beats (hand-over and hand-back included), the fence (only in
   `build_fence`, taps, cancel, refusal), grain grading and regrowth, the X precedence,
@@ -1703,11 +1765,12 @@ anything built or damaged since the party last saved.
 
 ## Circus grounds
 
-Grimaldi's circus is a disc of `CIRCUS_RADIUS_TILES` (14) about 70–90 tiles from the
-map centre, sited after Briar Hollow and clear of it. The quest's waves
-(`RITUAL_WAVES`, `ASSAULT_WAVES` in `CircusQuestSystem`) name their spawns as offsets
-from the same centre the grounds are laid out from, so the grounds are authored,
-not scattered.
+The circus is a disc of `CIRCUS_RADIUS_TILES` (14) about 70–90 tiles from the map
+centre, sited after Briar Hollow and clear of it. The grounds are authored, not
+scattered. They field no enemies: the generator's floor spawns keep off them
+(`RUINS_CIRCUS_BUFFER`), and nothing spawns there of its own. The party's first step
+onto them binds the Wayfinder's Anchor to the circus (`recordCircusGroundsVisit`,
+`TownMemory.visitedPlaces`).
 
 ```
 src/map/overworld/
@@ -1731,19 +1794,20 @@ from the layout, and it only writes them down at one centre and bends the rim ro
 the one road. The result, `CircusGroundsSite`, rides out on `OverworldData.circusGrounds`
 and `GameMap.circusGrounds`, so gates, minimap and ambience read the grounds off the
 map instead of re-deriving them. **The world seed never reaches geometry.** It only
-picks paint variants: litter, how a vine wanders, which pennant is torn.
+picks paint variants: litter, which pennant is torn.
 
 ### Layout
 
-- **Fixed:** the 12 × 5 Big Top stands north of the centre with its two-tile door
+- **Fixed:** the 12 × 5 Starlight Tent stands north of the centre with its two-tile door
   facing south on the centre row, because the interior is entered from the south. Its
   plan is an ellipse, so the rectangle's four corner tiles stay walkable. The three
   3 × 2 side-show pavilions stand north-west, north-east and north, behind the door
-  line, which leaves the south field open for the fat clowns and mold lions.
+  line, which leaves the south field open. The north pavilion's board bills the
+  Amazing Tightrope Twins (`pavilion_tightrope`); the Starlight Tent's marquee reads STARLIGHT TENT.
 - **The approach road** (`circusApproachCentreLine`) starts on the doorstep, runs out
   along the forecourt row and on to the nearest town gate at any angle. A road that
   must leave northward first runs along the forecourt to a flank column
-  (`CIRCUS_ROAD_FLANK_COLUMNS`) between the Big Top and a pavilion, so it always
+  (`CIRCUS_ROAD_FLANK_COLUMNS`) between the Starlight Tent and a pavilion, so it always
   delivers the party to the door. It is paved after the tents, so it stops at their
   walls instead of running under them.
 - **Gate highways stay paved.** The lot pass skips any paved tile, so a town highway
@@ -1754,17 +1818,15 @@ picks paint variants: litter, how a vine wanders, which pennant is torn.
   unpaved tile. The crossbar spans 4–8 tiles across or up the screen, so it cannot be a
   sheet frame. `CircusGroundsAmbience` paints it once per site from `circusArchArt.ts`
   and swings the marionette live.
-- **Keep-clear bands** (`CIRCUS_KEEP_CLEAR_BANDS`): forecourt, lemur field, stilt
-  field, door plus two rows, and Signet's lookout. The road is kept clear by measuring
-  the road itself.
+- **Keep-clear bands** (`CIRCUS_KEEP_CLEAR_BANDS`): the forecourt, and the door plus
+  two rows. The road is kept clear by measuring the road itself.
 - **Forest keep-out:** the generator adds a disc of radius + `CIRCUS_FOREST_CLEARANCE_TILES`
   (3) to the `KeepOut` handed to `paintForests`, because the rim props stand half a tile
   past the rim and a canopy climbs two tiles up the screen.
 
 ### The rim rule
 
-Anything that blocks goes on the rim, where nothing fights: `CircusQuestSystem` holds
-mobs inside r13. The field the waves fight over gets decals only.
+Anything that blocks goes on the rim. The open field gets decals only.
 
 - The six flame lamps sit at r13 on fixed bearings (`CIRCUS_TORCH_BEARINGS_DEG`). The
   wagons, booths, high striker and crate stack (`CIRCUS_RIM_PROPS`) take a fixed bearing
@@ -1772,8 +1834,7 @@ mobs inside r13. The field the waves fight over gets decals only.
 - Every tile of a rim footprint lies in **r12–r14.5**. The outermost fit wins, and the
   resolver walks `CIRCUS_RIM_BEARING_NUDGES_DEG` round the ring when a bearing is taken.
 - A rim tile must be on the map, unpaved, outside every keep-clear band, not touching
-  another structure, more than 2 tiles (Chebyshev) from an arch post and more than 3
-  from Terror's spawn behind the Big Top. `leavesRimConnected` refuses a prop that would
+  another structure and more than 2 tiles (Chebyshev) from an arch post. `leavesRimConnected` refuses a prop that would
   seal a pocket or cut the rim path.
 - A prop with no legal footprint on its arc is left out, never jammed in.
 
@@ -1782,7 +1843,7 @@ mobs inside r13. The field the waves fight over gets decals only.
 | Type                    | Walkable | Sight     | Drawn by                                          |
 | ----------------------- | -------- | --------- | ------------------------------------------------- |
 | `CIRCUS_LOT`            | yes      | —         | chunk bake: `circus_lot` ground material + decals |
-| `CIRCUS_STRUCTURE_TALL` | no       | blocks    | Y-sorted pass: Big Top, pavilions, crate stack    |
+| `CIRCUS_STRUCTURE_TALL` | no       | blocks    | Y-sorted pass: Starlight Tent, pavilions, crate stack    |
 | `CIRCUS_STRUCTURE_LOW`  | no       | seen past | Y-sorted pass: arch posts, lamps, wagons, booths  |
 
 Structures use the Briar Hollow anchor pattern: the drawing tile, always in the
@@ -1802,8 +1863,8 @@ bare floor and still typechecks, so both structure types are in all of these:
 
 They are deliberately **absent** from `GROUND_OCCLUDER_TYPES`: a tent is round and
 paints its own contact shadow, and a band along its rectangle draws a dark box on the
-lot. `CIRCUS_LOT` is absent from `NON_WALKABLE_TILE_TYPES`, since it is the ground every
-circus fight is fought on. `gates:circus-art` checks the registry membership.
+lot. `CIRCUS_LOT` is absent from `NON_WALKABLE_TILE_TYPES`, since it is the ground the
+party walks. `gates:circus-art` checks the registry membership.
 
 ### The art
 
@@ -1816,7 +1877,7 @@ the row, so adding a structure re-rolls nothing else.
 
 The painters are on the town vocabulary ([One art vocabulary](#one-art-vocabulary)) with
 their own ramps, `CIRCUS_RAMPS` / `getCircusRamp` in `townPalette.ts`: dried-blood and
-bone stripes, bruise, tarnished brass, slate navy, mildew and vine. A tent is modelled
+bone stripes, bruise, tarnished brass, slate navy and mildew. A tent is modelled
 and then projected: stripe panels run from the eave to a king pole's peak and are warped
 onto their quads with `drawPlane`, so they converge instead of reading as striped
 wallpaper. Frame contract: ink stays inside the blocked columns and no lower than each
@@ -1829,8 +1890,7 @@ king poles, pavilion peaks and lamps by name), pennants, balloons and the marion
 overhead: they block nothing and are not tiles.
 
 Decals (`circusDecalTiles.ts`) are the chalk ring, sawdust trodden out of the doors,
-wagon ruts, litter, clown shoe prints, a stain by the cage wagon, and vine runners from
-under the Big Top's skirt. Each decal is one shape in map tiles, compiled once per site.
+wagon ruts, litter, clown shoe prints and a stain by the cage wagon. Each decal is one shape in map tiles, compiled once per site.
 Every tile draws the shapes crossing it, clipped to itself, so there are no seams and no
 tile reads its neighbours. They stay low-contrast and sparse, because every telegraph is
 read against the lot.
@@ -1838,10 +1898,10 @@ read against the lot.
 ### Live ambience
 
 `CircusGroundsAmbience` draws the moving parts over the baked frames: lamp fires, strings
-stirring, guttering festoon bulbs, the marquee bulbs, the door's light, the marionette,
-balloons and the caravan's curtain. Baked rows would cost a full frame per cell. Each
-piece is a pure function of the clock and the quest stage, so a checkpoint has nothing
-to capture. Positions come from the shared anchors (`circusOverlayAnchors.ts`, the
+stirring, the festoon bulbs, the marquee bulbs, the door's warm light, the marionette,
+balloons and the caravan's curtain. Every bulb on the grounds is lit. Baked rows would
+cost a full frame per cell. Each piece is a pure function of the clock, so a checkpoint
+has nothing to capture. Positions come from the shared anchors (`circusOverlayAnchors.ts`, the
 marquee bulbs and door mouth in `circusArt.ts`, the king poles and arch height in the
 layout), so the painted and live halves cannot drift apart.
 
@@ -1851,67 +1911,61 @@ layout), so the painted and live halves cannot drift apart.
   would wash out anything beneath it.
 - `renderAbove()` draws the loose balloon over everything.
 
-**Redeemed.** Once the quest reaches a resolved stage, every surviving bulb lights, the
-door light warms, and the vine runners die back. That last change reaches the chunk
-bake: `circusSiteRegistry.ts` holds a `vinesWithered` flag beside the site, and the
-ambience flips it and calls `markTileDirty` on only the tiles the runners cross.
-
 ### Gates
 
 - `npm run verify:circus-grounds` sweeps generated floors and holds several budgets:
   - blocked tiles in the r14 disc, a ratchet baseline (`BLOCKED_TILES_BASELINE`) under a
     fixed `BLOCKED_TILES_CEILING` of 95, which the baseline may never pass;
   - zero blocked tiles in every keep-clear band and the road, and zero sealed rim
-    pockets;
-  - every wave spawn within one tile of where it is authored (no exceptions are
-    listed), and able to walk to the door, lookout and forecourt;
+    pockets: every walkable tile, the door included, reaches the forecourt;
   - rim props in the band, off the road and highways, clear of the arch, each stood on
-    at least 75% of seeds;
-  - a headless assault whose stall-rescue lifts stay under `STALL_LIFTS_BASELINE`,
-    which measures wedging.
+    at least 75% of seeds.
 
-  `--fault=` forecourt-solid, blocked-count, spawn-wall, pocket, rim-prop, rim-arch,
-  cut-lookout, wedge or highway-prop must each turn it red. `--measure` prints every
+  `--fault=` forecourt-solid, blocked-count, pocket, rim-prop, rim-arch or highway-prop
+  must each turn it red. `--measure` prints every
   reading.
 
 - `npm run gates:circus-art` checks the frame contract and the footprint ink, canvas
   convergence, the texture band against the lot, the registries, the arch and marionette
   surfaces, and a 6 MB sheet budget. Faults: wide-prop, flat-canvas, sheet-budget,
   loose-crossbar.
-- `npm run render:circus-grounds` renders the real floor with both crawlers and the
-  quest's cast (`--stage=`, `--seeds=`, `--time=`, `--label=`) into `preview/`.
-- Dev: `?level=level3&spawn=circus`, `?level=level3&quest=<CircusQuestStage>`, the
-  `circus-hire` playtest preset.
+- `npm run render:circus-grounds` renders the real floor with both crawlers
+  (`--seeds=`, `--time=`, `--label=`) into `preview/`.
+- Dev: `?level=level3&spawn=circus`, the `starlight-tent` playtest preset.
 
 ---
 
-## Big Top
+## The Starlight Tent
 
-The tent's interior is a `BuildingInteriorScene` room. When the quest is `bigtop_ready`
-it is the three-act maze run by `BigTopMazeSystem` (`src/map/bigTopMazeLayout.ts`:
-fire walk, menagerie, hall of mirrors, the finale ring, and paired curtain rooms
-between acts). Otherwise it is a plain ring whose curb and king pole `GameMap` lays out.
-The maze is built from a `BigTopMazePlan` (`planBigTopMaze(worldSeed, difficulty)`),
-which deals the hall of mirrors its board and writes it into `BIG_TOP_MAZE_ROWS`
-before `GameMap.generateBigTopMaze` lays the tiles. Everything else built from the
+The tent's interior is a `BuildingInteriorScene` room, and it is always the three-act
+maze run by `StarlightTentMazeSystem` (`src/map/starlightTentMazeLayout.ts`: fire walk, menagerie,
+hall of mirrors, the finale ring, and paired curtain rooms between acts). The door is
+open from the start. The acts cost no health: a crawler caught by a hazard is sent back
+to the act's marks. The finale ring is the tent's one fight (see
+[The finale ring](#the-finale-ring)). What the tent must remember between performances lives on
+`StarlightTentProgress` (`src/core/state/StarlightTentProgress.ts`), which is persisted with the
+world state, and its first entry is recorded in `TownMemory.visitedPlaces` (it unlocks
+`circus_battle` in the music library).
+The maze is built from a `StarlightTentMazePlan` (`planStarlightTentMaze(worldSeed, difficulty)`),
+which deals the hall of mirrors its board and writes it into `STARLIGHT_TENT_MAZE_ROWS`
+before `GameMap.generateStarlightTentMaze` lays the tiles. Everything else built from the
 plan — tiles, floor marks, chunk bake, the lighting mask — is built once from what it
-says. `GameMap.generateInterior` calls `setBigTopDecorLayout` on every entry. It is module
+says. `GameMap.generateInterior` calls `setStarlightTentDecorPlan` on every entry. It is module
 state, like the wall finish, because nothing between the chunk bake and a tile painter
 knows which room is live.
 
 ### Shell and floor
 
 - **Walls** use the `'canvas'` finish (`WALL_MATERIAL_BY_BUILDING_NAME`). A wall tile
-  facing no floor is the dark backstage mass, the `bigtop_backstage` material of the
+  facing no floor is the dark backstage mass, the `starlight_tent_backstage` material of the
   interior ground sheet, with dim clutter at least `BACKSTAGE_CLUTTER_CLEARANCE_TILES`
-  (2) from any floor. A wall facing floor hangs a striped drape (`bigTopWallFace`).
+  (2) from any floor. A wall facing floor hangs a striped drape (`starlightTentWallFace`).
   **A drape takes the act of the floor it faces, never the wall's own row**, because a
   dividing row belongs to the act below while its face is the south edge of the room
-  above. Styles are `firewalk`, `menagerie`, `mirrors` and `ring`; the curtain rooms and
-  the plain ring hang the house's `ring` drapes.
-- **Floor** is `bigtop_sawdust` (`SAWDUST_FLOOR`, `CIRCUS_RING_EDGE` and `TENT_POLE` all
-  resolve to it).
-- **Floor marks** (`bigTopMazeDecor.ts` data, `bigTopFloorArt.ts` painters) are baked
+  above. Styles are `firewalk`, `menagerie`, `mirrors` and `ring`; the curtain rooms
+  hang the house's `ring` drapes.
+- **Floor** is `starlight_tent_sawdust` (`SAWDUST_FLOOR` and `TENT_POLE` both resolve to it).
+- **Floor marks** (`starlightTentMazeDecor.ts` data, `starlightTentFloorArt.ts` painters) are baked
   into the chunk per act: scorch and iron plates round the vents, straw drifts and paw
   trails in the menagerie, the harlequin cloth and stanchions in the mirror halls, the
   ring curb, spot mark and guy shadows in the finale, hold marks in the interval rooms.
@@ -1924,16 +1978,44 @@ knows which room is live.
 - **The king pole** is a `TENT_POLE` block drawn in the Y-sorted pass from its
   bottom-left tile (`tentPoleTiles.ts`). A crawler north of it walks behind the mast,
   and one south of it in front. A pole 2 × 2 or larger is the king pole and also carries
-  the trapeze. Its foot and shadow are baked into the floor, and it is in the same
+  the trapeze, the flap cut in the roof where it passes through (painted before the
+  mast) and the rope ladder down its south face (painted after it), all from
+  `finaleProps.ts`. Its foot and shadow are baked into the floor, and it is in the same
   decoration and overlay-cache registries as the circus structures.
+
+### The finale ring
+
+`StarlightTentFinale` (`src/systems/starlightTent/StarlightTentFinale.ts`) is built once per visit inside the
+maze's encounter, from the fixtures `startEncounter` hands it, and carried across a
+difficulty restart so the ring never gets a second chest or ladder.
+
+- **Chest:** a wooden chest at `MAZE_RING_CHEST_TILE`, just east of the mast
+  (straight north of it the mast would hide it), placed through the interior `ChestKit`
+  (`src/systems/kits/ChestKit.ts`) with `ChestPlacer.heldByBand`. It pays every piece whose
+  `GEAR_SOURCES` entry is `{ kind: 'starlightTentChest' }` (`starlightTentChestGear`) plus
+  the chest kit's floor-3 roll.
+- **Guards:** `RING_GUARD_POSTS` (two Tall, two Fat, one Massive Clown) are spawned
+  through `spawnMob` under `quest:starlight-tent-maze` the first frame a crawler stands in
+  `MAZE_FINAL_CHAMBER` with the finale act on stage, levelled by `questMobLevel` and forced
+  aggro. `postChestBand` hands the chest to the guards themselves rather than to an area,
+  so the last clown chasing the party out through the curtains still holds it; the chest
+  unlocks when the last falls. This is the Massive Clown's only spawn.
+- **Claim:** the frame the chest is opened, `StarlightTentProgress.chestClaimed` is set. Every
+  later visit places the chest already open and calls no guards.
+- **Ladder:** a `rope_ladder` exit fixture (`InteriorExitFixtureSystem`,
+  `src/systems/interiorExitFixtures.ts`) at `MAZE_RING_CENTRE_TILE`, always usable.
+  Like every exit fixture it asks the door mat's leave question first (the exit menu,
+  whose frame warns about a downed hire), then fades out and takes the room's own exit
+  to the Starlight Tent door. The two entry flaps stay exits too.
+- **Death** in the ring is any interior death: back to the last save.
 
 ### Act III: the hall of mirrors
 
-Act III is a light puzzle. The pure model lives in `src/map/bigTop/`:
+Act III is a light puzzle. The pure model lives in `src/map/starlightTent/`:
 `mirrorBoard.ts` holds the board type, the light walk, the solver, the simulated players,
 the acceptance contract and the tiers. `mirrorBoardGenerator.ts` builds boards and
 `mirrorBoardFallback.ts` holds one committed board per tier. At runtime,
-`src/systems/bigTop/MirrorHall.ts` watches the light, and `BigTopMazeSystem` stands the
+`src/systems/starlightTent/MirrorHall.ts` watches the light, and `StarlightTentMazeSystem` stands the
 mirrors up, opens the barriers and plays the cues.
 
 **The one rule: light every star at once.** A star shows only the light on it right
@@ -1945,7 +2027,7 @@ turnable, and the exits stay open whatever is turned afterwards. A burned crawle
 reset moves the party back to the act's marks but leaves every mirror where it was
 turned, and a solved board stays solved. The rule sits in one seam,
 `MirrorHall.settleStars`, which the gate swaps out to prove it (`--fault=latch-stars`).
-The act card (`BIGTOP_ACT_THREE_CARD`) states the rule and the colours, and there is no
+The act card (`STARLIGHT_TENT_ACT_THREE_CARD`) states the rule and the colours, and there is no
 hint system.
 
 #### The frame
@@ -1960,7 +2042,7 @@ floor rows (`TEACHING_STRIP_ROWS`, tent rows 33–36) sit below that, and
 is west, the cat's east. Each lane walks in at `MIRROR_BOARD_ENTRIES` and leaves by
 `MIRROR_BOARD_EXITS`.
 
-`BIG_TOP_MAZE_ROWS` leaves the hall's floor rows bare. `writeBoardIntoRows` writes each
+`STARLIGHT_TENT_MAZE_ROWS` leaves the hall's floor rows bare. `writeBoardIntoRows` writes each
 board's limelights (`P` `Q`), stars (`*`), windows (`|`) and pillars (`o`) in, and
 `tentMirrorsOf` stands the mirrors up as `MazeMirrorTarget` props.
 
@@ -1995,7 +2077,7 @@ board's limelights (`P` `Q`), stars (`*`), windows (`|`) and pillars (`o`) in, a
 - **The encore** is optional and opens nothing. The generator puts it where some
   arrangement lights it but the constructed solution does not. It can be lit any time,
   including after the solve. It pays `MAZE_ENCORE_REWARD_COINS` (75) at its foot
-  (`starFootTile`) **once per run**. `bigTopEncorePaid` lives on `CircusQuestProgress`
+  (`starFootTile`) **once per run**. `StarlightTentProgress.encorePaid` records it
   and is persisted, because a party sent back in gets a fresh tent with every star dark.
 - **Pillars** block light and movement. They are decoys.
 
@@ -2046,7 +2128,7 @@ this mirror do", never "where should the light go".
 
 #### Board generation
 
-`planBigTopMaze` deals the board when the tent is built, inside the door's loading fade.
+`planStarlightTentMaze` deals the board when the tent is built, inside the door's loading fade.
 Everything built from the plan needs the board first, and an attempt costs about a
 millisecond. `generateBoardNow` runs the generation to completion. A sliced
 `createBoardGeneration` also exists, doing half an attempt per `step()`.
@@ -2115,31 +2197,30 @@ window for each coloured star in the other lane.
 
 #### Changing difficulty mid-show
 
-The board's tier is fixed for the life of a `BigTopMazeSystem`: it holds its `plan`
+The board's tier is fixed for the life of a `StarlightTentMazeSystem`: it holds its `plan`
 and never reads the live difficulty. `src/core/difficulty/difficultyChangeGuard.ts` holds one guard
 at a time (`registerDifficultyChangeGuard` returns a handle, and
-`clearDifficultyChangeGuard` with a stale handle is a no-op). `BigTopMazeSystem`
+`clearDifficultyChangeGuard` with a stale handle is a no-op). `StarlightTentMazeSystem`
 registers the guard last in its constructor (`holdDifficulty`). It releases the guard in
-`dispose`, and when the last conversation with Grimaldi begins, because a restart then
-would throw the finale away.
+`dispose`.
 
 The Settings tab reads `activeDifficultyChangeGuard()` at click time, never when the tab
 is built. While a guard is active, picking a different tier opens **Restart the
-Big Top?** ("Keep playing", the primary action, or "Change and restart") instead of
+Starlight Tent?** ("Keep playing", the primary action, or "Change and restart") instead of
 applying it. Confirming hands the tier to the guard, which calls `settings.setDifficulty`
-and restarts through `restartBigTopTent` (`src/systems/bigTop/bigTopTent.ts`). That
+and restarts through `restartStarlightTent` (`src/systems/starlightTent/starlightTentRestart.ts`). That
 function deals the new plan, closes any open notice, disposes the old maze and its mobs,
-rebuilds the map in place with `generateBigTopMaze`, raises a new maze and puts the party
+rebuilds the map in place with `generateStarlightTentMaze`, raises a new maze and puts the party
 back at the flaps in Act I. If the guard was released while the prompt was up, the pick
 applies as an ordinary change. `settings.setDifficultyForSession` (dev presets) bypasses
 the guard.
 
 ### Lighting
 
-`src/systems/bigTop/bigTopLighting.ts`: the tent is dark and the act on stage is lit.
+`src/systems/starlightTent/starlightTentLighting.ts`: the tent is dark and the act on stage is lit.
 
 - **The mask** is painted once for the whole tent at quarter resolution
-  (`BIG_TOP_MASK_SCALE`), with a padded border so a stretched blit never samples the
+  (`STARLIGHT_TENT_MASK_SCALE`), with a padded border so a stretched blit never samples the
   edge. Each act has its own tint of dark (`ACT_DARK`), and every fixture cuts a soft
   pool (`POOL_SPECS`): footlights, arch posts, interval lamps, limelights, act boards,
   hall lamps, marquees and the ring wash. The limelights and marquees move with the
@@ -2147,14 +2228,11 @@ the guard.
   floor plan. `lighting.prewarm()` bakes it while the door loads.
 - **The house board** lays a feathered translucent fill per band that is not on stage.
   The next act comes up over `LIGHTS_UP_FRAMES` (60) when its curtain rises. The act
-  behind dims to `STRUCK_ACT_LEVEL` (0.4), and acts ahead stay dark. Once Grimaldi is
-  freed, the house lights come up over 120 frames to 30% of the mask.
+  behind dims to `STRUCK_ACT_LEVEL` (0.4), and acts ahead stay dark.
 - **Live light** is additive: vent flare, lantern pools, the hall's light, lit stars,
-  spill through an opened curtain, and the follow-spot on Grimaldi. The follow-spot
-  cross-fades from sick green to warm white as the cure runs, through
-  `FOLLOW_SPOT_TINT_STEPS` (12) baked glows.
+  and spill through an opened curtain.
 
-**The fairness contract.** `BigTopMazeSystem.renderWorld` draws in one order:
+**The fairness contract.** `StarlightTentMazeSystem.renderWorld` draws in one order:
 `renderProps` (dressing, act boards, shut barriers, and the hall's limelight housings,
 teaching lamps and windows via `MirrorHall.renderPieces`) → `renderLighting` (mask,
 live light, follow-spot cones, reflections) → `renderTelegraphs`. The last draws the
@@ -2168,30 +2246,30 @@ not behind it. Everything a player reads to stay alive or find the way is drawn
 
 ### Props
 
-The act props live in `src/sprites/art/bigTop/`:
+The act props live in `src/sprites/art/starlightTent/`:
 
 - one module per act (`fireWalkProps`, `menagerieProps`, `mirrorHallProps`,
   `curtainProps`, `finaleProps`);
 - the hall's puzzle pieces in `mirrorPuzzleProps` (splitters, windows, stars, the
   marquee, the coloured light and the teaching lamps) and its turn preview in
   `turnPreviewProps`;
-- the shared hand in `bigTopPropKit.ts` and `stagePropKit.ts`;
-- the shell in `bigTopShellArt.ts`.
+- the shared hand in `starlightTentPropKit.ts` and `stagePropKit.ts`;
+- the shell in `starlightTentShellArt.ts`.
 
-Each is baked once per `(prop, state, frame)` into `bigTopPropCache.ts`. Frames bake at
+Each is baked once per `(prop, state, frame)` into `starlightTentPropCache.ts`. Frames bake at
 device resolution, snapped to a step. The cache is capped at
-`BIG_TOP_PROP_CACHE_BUDGET_BYTES` (6 MB) and evicts least-recently drawn. An animated
-prop quantises its motion to at least four frames a cycle. `BigTopMazeSystem.dispose`
+`STARLIGHT_TENT_PROP_CACHE_BUDGET_BYTES` (6 MB) and evicts least-recently drawn. An animated
+prop quantises its motion to at least four frames a cycle. `StarlightTentMazeSystem.dispose`
 clears the cache and the reflection scratch when the party leaves. While either crawler
 stands in an interval room, `queueNextActWarm` bakes the next act's props one
 screen-sized window a frame, so the curtain does not hitch. The draws that change every
 frame (fire, opened ways, act gates, lantern warnings, name chips) stay live in
-`src/sprites/bigTopMazeProps.ts`. The hall's moving parts are drawn live over their
+`src/sprites/starlightTentMazeProps.ts`. The hall's moving parts are drawn live over their
 baked frames: a red beam's marching dashes, a blue beam's glints, a star's sparks, the
 marquee chase and the turn preview's dots.
 
 - **Ownership colours are load-bearing** for the two-crawler split. The cat's props are
-  stage red and bone stripes with gilt trim and a gilt hoop. The human's are ringmaster blue
+  stage red and bone stripes with gilt trim and a gilt hoop. The human's are royal blue
   and brass on timber with brass strike chevrons. A player must name prop and owner from
   colour alone at 32 px under the stage lights. The owner's pulse and hit flash are live
   overlays over the cached frame.
@@ -2205,25 +2283,23 @@ marquee chase and the turn preview's dots.
 
 ### Sound
 
-Every Big Top play site raises a cue from `src/systems/bigTop/bigTopSoundCues.ts`
-(`BIG_TOP_CUES`, `BIG_TOP_BLOCK_CLEARED_CUES`), never a raw id. A cue is a list of takes
+Every Starlight Tent play site raises a cue from `src/systems/starlightTent/starlightTentSoundCues.ts`
+(`STARLIGHT_TENT_CUES`, `STARLIGHT_TENT_BLOCK_CLEARED_CUES`), never a raw id. A cue is a list of takes
 rotated by the system's cue queue. Until each recording lands, a cue either borrows a
 stand-in or is an empty list, which is silent.
 Each cue's JSDoc names the file it waits for. To swap one in:
 
 1. Register the id in `src/audio/sounds.ts`.
-2. Add it to the `circusQuest` group in `src/audio/sfxGroups.ts`. `AudioManager.play` is
-   silent on an unpreloaded buffer, and `verify:bigtop` fails on any cue id missing from
-   the group.
-3. Replace the cue's list.
+2. Replace the cue's list. The `starlightTent` group in `src/audio/sfxGroups.ts` is built from
+   this table, so the new id is preloaded with the tent.
 
 The hall raises `mirrorTurn` per blow, and each settle of the light raises at most one
 of each: `starLights`, `starWrongFizzle` (which takes precedence over `starDims`), and
-on a solve `starLatch`, `marqueeChase` and `starOpensWay` (`BigTopMazeSystem.answerHall`).
+on a solve `starLatch`, `marqueeChase` and `starOpensWay` (`StarlightTentMazeSystem.answerHall`).
 `starLights`, `starDims`, `starWrongFizzle` and `marqueeChase` are silent until their
 recordings land.
 
-The ambience bed goes in `STREAMING_SOUND_IDS` and `BIG_TOP_AMBIENT_BED`, which is
+The ambience bed goes in `STREAMING_SOUND_IDS` and `STARLIGHT_TENT_AMBIENT_BED`, which is
 `null` until it lands.
 
 ### Gates
@@ -2231,7 +2307,7 @@ The ambience bed goes in `STREAMING_SOUND_IDS` and `BIG_TOP_AMBIENT_BED`, which 
 Each negative test (`--fault=`) must turn its own check red, and every fault asserts
 that it was actually applied, so a fault that silently misses cannot pass as green.
 
-- `npm run verify:mirror-board`: the board-level checks (`scripts/bigTopMirrorBoardChecks.ts`),
+- `npm run verify:mirror-board`: the board-level checks (`scripts/starlightTentMirrorBoardChecks.ts`),
   pure and fast. They cover the board's frame in the tent, the light walk against brute
   force, every fallback against its tier's full contract, and a 500-attempt sweep per
   tier (`SWEEP_ATTEMPTS`, `--attempts=` to change it). A tier fails below a 10% pass
@@ -2248,7 +2324,7 @@ that it was actually applied, so a fault that silently misses cannot pass as gre
   - `misplaced-limelight` turns `fairHotSpan` red;
   - `star-over-teaching-glass` turns `legible` red;
   - `kitten-twin` turns the tier ordering red.
-- `npm run verify:bigtop`: timing feasibility at `MAZE_TIMING_MARGIN`, bell solvability,
+- `npm run verify:starlight-tent`: timing feasibility at `MAZE_TIMING_MARGIN`, bell solvability,
   resets, the door gate, and more. It runs the board-level checks too. On the live hall
   it:
   - lights the teaching strip through real blows;
@@ -2272,7 +2348,7 @@ that it was actually applied, so a fault that silently misses cannot pass as gre
   Keep playing and closing the menu both cancel, that Change and restart hands the tier
   to the guard, and that `setDifficultyForSession` is not held. Its fault is
   `--fault=unguarded-difficulty`.
-- `npm run gates:bigtop-art` measures the real tent through `bigTopInteriorHarness`:
+- `npm run gates:starlight-tent-art` measures the real tent through `starlightTentInteriorHarness`:
   - **Hazards:** every forced hazard state (including the hall's `beam-hot`) keeps its
     full-bright contrast and salience, and its own pixels keep at least 0.85 of their
     full-bright colour (0.7 for a hazard over its own pool). That is the fidelity
@@ -2290,14 +2366,14 @@ that it was actually applied, so a fault that silently misses cannot pass as gre
   state red. `--fault=ink-overrun` must turn the act-prop section red. Browser cost is
   the `lighting` row of `?perf`.
 
-- `npm run render:bigtop-interior` renders one frame per act, a curtain room and every
-  forced hazard state, at 32 and 64 px, into `preview/bigtop-interior/<label>/` with
+- `npm run render:starlight-tent-interior` renders one frame per act, a curtain room and every
+  forced hazard state, at 32 and 64 px, into `preview/starlight-tent-interior/<label>/` with
   `fairness.json`. It also renders the dealt hall for five worlds across the tiers,
   unsolved and solved. `--lighting=lit|fullBright|darkTelegraph`, `--only=`,
   `--label=`.
-- `npm run render:bigtop` renders the prop contact sheet and smoke-runs every maze draw
+- `npm run render:starlight-tent` renders the prop contact sheet and smoke-runs every maze draw
   function. It also writes a puzzle-piece sheet in colour and in greyscale
-  (`bigtop-mirror-puzzle-*.png`), where the shape twin of every colour cue is checked
+  (`starlight-tent-mirror-puzzle-*.png`), where the shape twin of every colour cue is checked
   by eye.
 
 ---
@@ -2326,7 +2402,7 @@ Review harnesses for the town's art, each writing into `preview/`:
 - `npm run render:town-interiors -- --only=<name> --probes` renders every room, with the human
   standing at a counter, a table and the door for scale.
 - `npm run render:buildings -- --only=<id>` renders the facades.
-- `npm run render:residents`, `render:human-cast` and `render:skyfowl-cast` render the
+- `npm run render:residents`, `render:human-cast` and `render:hawkfolk-cast` render the
   cast.
 - `npm run render:cast-motion` renders gait and dance; its gates are
   `npm run gates:cast-motion`.

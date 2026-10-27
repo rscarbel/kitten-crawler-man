@@ -26,7 +26,6 @@ import {
   TABLE,
   BOOKSHELF,
   BED,
-  FIREPLACE,
   BARREL,
   CHAIR,
   BARREL_SIDE,
@@ -148,10 +147,9 @@ const NON_FLOOR_TYPES = new Set<number>([
   TABLE,
   BOOKSHELF,
   BED,
-  FIREPLACE,
   BARREL,
   CHAIR,
-  // Old Hilda's wrecked furniture is written by the same bare tile assignment as
+  // Old Lori's wrecked furniture is written by the same bare tile assignment as
   // the intact pieces above, so it needs the same probe exclusion or the floor
   // beneath a splintered chair goes unpainted.
   BROKEN_TABLE,

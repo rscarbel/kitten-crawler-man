@@ -5,13 +5,24 @@
  * baked into the chunk like any floor; the mast is drawn once, from the
  * pole's bottom-left tile, so it sorts on the pole's foot: a crawler north of
  * the pole walks behind the mast as it rises out of view, one south of it in
- * front. The king pole also carries the trapeze hanging over the ring.
+ * front. The king pole also carries the trapeze hanging over the ring, the
+ * flap cut in the roof where it passes through, and the rope ladder up its
+ * south face to that flap.
  */
 
 import type { TileContent } from '../tileTypes';
 import type { MapSpriteExtentsPx } from '../../core/spriteAssets/SpriteLoader';
-import { MAST_RISE_TILES, paintTentMast } from '../../sprites/art/bigTop/bigTopShellArt';
-import { paintTrapeze, TRAPEZE_REACH_WEST_TILES } from '../../sprites/art/bigTop/finaleProps';
+import {
+  MAST_RISE_TILES,
+  paintTentMast,
+} from '../../sprites/art/starlightTent/starlightTentShellArt';
+import {
+  paintRoofFlap,
+  paintRopeLadder,
+  paintTrapeze,
+  ROOF_FLAP_OVERHANG_TILES,
+  TRAPEZE_REACH_WEST_TILES,
+} from '../../sprites/art/starlightTent/finaleProps';
 import { poleCellAt } from './interiorTiles';
 
 /** A pole at least this many tiles across both ways is the ring's king pole. */
@@ -41,13 +52,18 @@ export function drawTentPoleTile(
   const cell = poleCellAt(structure, tx, ty);
   const originX = sx - cell.column * ts;
   const originY = sy - cell.row * ts;
-  if (isKingPole(cell.blockWidth, cell.blockHeight)) paintTrapeze(ctx, originX, originY, ts);
+  const king = isKingPole(cell.blockWidth, cell.blockHeight);
+  if (king) {
+    paintTrapeze(ctx, originX, originY, ts);
+    paintRoofFlap(ctx, originX, originY, ts, cell.blockWidth, cell.blockHeight);
+  }
   paintTentMast(ctx, originX, originY, ts, cell.blockWidth, cell.blockHeight);
+  if (king) paintRopeLadder(ctx, originX, originY, ts, cell.blockWidth, cell.blockHeight);
 }
 
 const NO_EXTENTS: MapSpriteExtentsPx = { left: 0, up: 0, right: 0, down: 0 };
 
-/** How far the drawing tile's art reaches past its own square: the rest of the pole, the rise, and the trapeze. */
+/** How far the drawing tile's art reaches past its own square: the rest of the pole, the rise, the trapeze and the roof flap. */
 export function tentPoleExtentsPx(
   structure: TileContent[][],
   tx: number,
@@ -60,7 +76,7 @@ export function tentPoleExtentsPx(
   return {
     left: king ? Math.ceil(TRAPEZE_REACH_WEST_TILES * ts) : 0,
     up: (cell.blockHeight - 1 + MAST_RISE_TILES) * ts,
-    right: (cell.blockWidth - 1) * ts,
+    right: (cell.blockWidth - 1) * ts + (king ? Math.ceil(ROOF_FLAP_OVERHANG_TILES * ts) : 0),
     down: 0,
   };
 }

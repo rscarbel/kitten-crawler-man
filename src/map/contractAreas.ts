@@ -5,7 +5,7 @@
  * file that owns the building exports these next to its props, so the
  * geometry moves with the layout.
  *
- * Coordinates are tiles. Skyfowl Town interiors give them in the interior's
+ * Coordinates are tiles. Taloncrest interiors give them in the interior's
  * own grid; Briar Hollow gives them relative to the building rect's
  * north-west corner. `w`/`h` are the rect's size in tiles, at least 1.
  */

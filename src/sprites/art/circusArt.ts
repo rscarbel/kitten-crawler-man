@@ -1,5 +1,5 @@
 /**
- * Painters for Grimaldi's circus grounds: the Big Top, the side-show
+ * Painters for the circus grounds: the Starlight Tent, the side-show
  * pavilions and the entry arch's posts.
  *
  * Written on the town's vocabulary (`src/sprites/art/town/`): the circus ramps
@@ -28,14 +28,14 @@
  *
  * Ink stays inside the blocked footprint's columns and never below a
  * column's lowest blocked tile, except over a doorway and for soft shadow;
- * above that it may rise as high as the sheet's headroom allows. The Big
- * Top's plan ellipse is sized so its base clears the four corner tiles its
+ * above that it may rise as high as the sheet's headroom allows. The Starlight
+ * Tent's plan ellipse is sized so its base clears the four corner tiles its
  * layout leaves walkable.
  */
 
 import {
-  BIG_TOP_KING_POLES,
-  BIG_TOP_KING_POLE_DEPTH_TILES,
+  STARLIGHT_TENT_KING_POLES,
+  STARLIGHT_TENT_KING_POLE_DEPTH_TILES,
   CIRCUS_ARCH_POST_HEIGHT_TILES,
   CIRCUS_STRUCTURES,
   type CircusStructureId,
@@ -196,7 +196,6 @@ const BRUISE = getCircusRamp('circus_bruise');
 const BRASS = getCircusRamp('circus_brass');
 const NAVY = getCircusRamp('circus_navy');
 const MILDEW = getCircusRamp('circus_mildew');
-const VINE = getCircusRamp('circus_vine');
 const BACKSTAGE = getCircusRamp('circus_backstage');
 const ROT_TIMBER = getCircusRamp('circus_rot_timber');
 const STRAW = getCircusRamp('circus_straw');
@@ -279,7 +278,7 @@ function eaveAt(model: TentModel, angle: number, h: number): Vec3 {
 /**
  * Radius of the collar ring round each king pole the canvas is laced to, in
  * tiles. The panels stop on it rather than meeting in a point, which is how a
- * big top is rigged — and a panel warped down to a zero-width edge would hand
+ * circus tent is rigged — and a panel warped down to a zero-width edge would hand
  * `drawPlane` a singular transform, which node-canvas never recovers from.
  */
 const PEAK_COLLAR_RADIUS = 0.12;
@@ -962,85 +961,6 @@ function paintTent(stage: Stage, model: TentModel, rng: Rng): void {
   paintQuarterPoles(stage, model);
 }
 
-// ── Vines ─────────────────────────────────────────────────────────────────────
-
-const VINE_RUNNERS = 5;
-const VINE_MIN_RISE = 0.45;
-const VINE_MAX_RISE = 1.25;
-const VINE_WIDTH = 0.045;
-const VINE_SEGMENTS = 6;
-const VINE_WANDER = 0.12;
-const VINE_LEAVES_PER_RUNNER = 4;
-const VINE_LEAF_RADIUS = 0.05;
-const VINE_DOOR_MARGIN = 0.5;
-/** Runners keep this far in from each end of the front arc, in radians, off the tent's flanks. */
-const VINE_ARC_MARGIN = 0.25;
-/** Where in its share of the arc each runner roots. */
-const VINE_ROOT_MIN_SHARE = 0.2;
-const VINE_ROOT_MAX_SHARE = 0.8;
-/** Above the wall the vine climbs the sloping canvas, which rises less up the frame than the wall does. */
-const VINE_CANVAS_CLIMB = 0.7;
-const VINE_LEAF_ASPECT = 0.6;
-
-/** Grimaldi's vine, climbing out from under the skirt and up the canvas. */
-function paintVines(stage: Stage, model: TentModel, rng: Rng): void {
-  const { ctx, ts } = stage;
-  const arc = FRONT_ARC;
-  for (let runner = 0; runner < VINE_RUNNERS; runner++) {
-    const angle = lerp(
-      arc.from + VINE_ARC_MARGIN,
-      arc.to - VINE_ARC_MARGIN,
-      (runner + range(rng, VINE_ROOT_MIN_SHARE, VINE_ROOT_MAX_SHARE)) / VINE_RUNNERS,
-    );
-    const foot = eaveAt(model, angle, 0);
-    // Kept off the doorway and its tied-back flaps.
-    if (
-      model.door !== null &&
-      Math.abs(foot.u - model.door.centreU) < model.door.halfWidth + VINE_DOOR_MARGIN
-    ) {
-      continue;
-    }
-    const rise = range(rng, VINE_MIN_RISE, VINE_MAX_RISE);
-    const points: Point[] = [];
-    let wander = 0;
-    for (let segment = 0; segment <= VINE_SEGMENTS; segment++) {
-      wander += range(rng, -VINE_WANDER, VINE_WANDER);
-      const h = (segment / VINE_SEGMENTS) * rise;
-      const along = eaveAt(model, angle + wander / model.radiusU, Math.min(h, model.wallHeight));
-      const above = h > model.wallHeight ? h - model.wallHeight : 0;
-      const point = project(stage, along);
-      points.push({ x: point.x, y: point.y - above * ts * VINE_CANVAS_CLIMB });
-    }
-    ctx.strokeStyle = rgb(VINE.shadow);
-    ctx.lineWidth = VINE_WIDTH * ts;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    points.forEach((point, index) => {
-      if (index === 0) ctx.moveTo(point.x, point.y);
-      else ctx.lineTo(point.x, point.y);
-    });
-    ctx.stroke();
-    ctx.strokeStyle = rgb(VINE.mid);
-    ctx.lineWidth = VINE_WIDTH * ts * 0.5;
-    ctx.stroke();
-    for (let leaf = 0; leaf < VINE_LEAVES_PER_RUNNER; leaf++) {
-      const at = points[rangeInt(rng, 1, points.length - 1)];
-      ctx.fillStyle = rgb(leaf % 2 === 0 ? VINE.light : VINE.mid);
-      ctx.beginPath();
-      ctx.ellipse(
-        at.x + range(rng, -VINE_LEAF_RADIUS, VINE_LEAF_RADIUS) * ts,
-        at.y,
-        VINE_LEAF_RADIUS * ts,
-        VINE_LEAF_RADIUS * ts * VINE_LEAF_ASPECT,
-        range(rng, 0, Math.PI),
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-    }
-  }
-}
-
 // ── Guy lines ─────────────────────────────────────────────────────────────────
 
 interface GuyLine {
@@ -1266,23 +1186,23 @@ function paintSignBoard(stage: Stage, board: SignBoard, rng: Rng): void {
   }
 }
 
-// ── The Big Top ───────────────────────────────────────────────────────────────
+// ── The Starlight Tent ────────────────────────────────────────────────────────
 
-const BIG_TOP = CIRCUS_STRUCTURES.big_top;
+const STARLIGHT_TENT = CIRCUS_STRUCTURES.starlight_tent;
 /**
  * A tenth of a tile in from the footprint's east and west edges, so the
  * canvas never touches the frame's border; at that size the ellipse's base
  * is still more than a tile in from the long sides at a corner column.
  */
-const BIG_TOP_EDGE_INSET = 0.1;
+const STARLIGHT_TENT_EDGE_INSET = 0.1;
 
-const BIG_TOP_MODEL: TentModel = {
-  centreU: BIG_TOP.w / 2,
-  centreD: BIG_TOP_KING_POLE_DEPTH_TILES,
-  radiusU: BIG_TOP.w / 2 - BIG_TOP_EDGE_INSET,
-  radiusD: BIG_TOP.h / 2,
+const STARLIGHT_TENT_MODEL: TentModel = {
+  centreU: STARLIGHT_TENT.w / 2,
+  centreD: STARLIGHT_TENT_KING_POLE_DEPTH_TILES,
+  radiusU: STARLIGHT_TENT.w / 2 - STARLIGHT_TENT_EDGE_INSET,
+  radiusD: STARLIGHT_TENT.h / 2,
   wallHeight: 0.85,
-  peaks: BIG_TOP_KING_POLES.map((pole) => ({ u: pole.x, h: pole.heightTiles })),
+  peaks: STARLIGHT_TENT_KING_POLES.map((pole) => ({ u: pole.x, h: pole.heightTiles })),
   ridgeSag: 0.55,
   panelCount: 48,
   stripes: [BLOOD, BONE],
@@ -1291,10 +1211,10 @@ const BIG_TOP_MODEL: TentModel = {
   valanceDrop: 0.2,
   quarterPoleEvery: 4,
   door:
-    BIG_TOP.door === undefined
+    STARLIGHT_TENT.door === undefined
       ? null
       : {
-          centreU: BIG_TOP.door.dx + BIG_TOP.door.width / 2,
+          centreU: STARLIGHT_TENT.door.dx + STARLIGHT_TENT.door.width / 2,
           halfWidth: 0.72,
           height: 1.3,
           open: true,
@@ -1303,7 +1223,7 @@ const BIG_TOP_MODEL: TentModel = {
 };
 
 /** Stakes stand on the ground the ellipse leaves inside the blocked tiles: the front corners and the ends. */
-const BIG_TOP_GUY_LINES: ReadonlyArray<GuyLine> = [
+const STARLIGHT_TENT_GUY_LINES: ReadonlyArray<GuyLine> = [
   { angle: Math.PI * 1.1, stake: { u: 0.3, d: 1.25, h: 0 } },
   { angle: Math.PI * 1.25, stake: { u: 1.5, d: 0.2, h: 0 } },
   { angle: Math.PI * 1.75, stake: { u: 10.5, d: 0.2, h: 0 } },
@@ -1315,7 +1235,7 @@ const MARQUEE: Omit<SignBoard, 'bottomH' | 'topH'> = {
   eastU: 7.75,
   d: 0.02,
   face: BRUISE,
-  lines: [{ text: "GRIMALDI'S", heightFraction: 1 }],
+  lines: [{ text: 'STARLIGHT TENT', heightFraction: 1 }],
   posts: true,
   bulbs: true,
 };
@@ -1323,47 +1243,48 @@ const MARQUEE: Omit<SignBoard, 'bottomH' | 'topH'> = {
 const MARQUEE_BOTTOM_ABOVE_DOOR = 0.06;
 const MARQUEE_HEIGHT = 0.72;
 
-const BIG_TOP_DOOR_HEIGHT = BIG_TOP_MODEL.door?.height ?? BIG_TOP_MODEL.wallHeight;
+const STARLIGHT_TENT_DOOR_HEIGHT =
+  STARLIGHT_TENT_MODEL.door?.height ?? STARLIGHT_TENT_MODEL.wallHeight;
 
-const BIG_TOP_MARQUEE: SignBoard = {
+const STARLIGHT_TENT_MARQUEE: SignBoard = {
   ...MARQUEE,
-  bottomH: BIG_TOP_DOOR_HEIGHT + MARQUEE_BOTTOM_ABOVE_DOOR,
-  topH: BIG_TOP_DOOR_HEIGHT + MARQUEE_BOTTOM_ABOVE_DOOR + MARQUEE_HEIGHT,
+  bottomH: STARLIGHT_TENT_DOOR_HEIGHT + MARQUEE_BOTTOM_ABOVE_DOOR,
+  topH: STARLIGHT_TENT_DOOR_HEIGHT + MARQUEE_BOTTOM_ABOVE_DOOR + MARQUEE_HEIGHT,
 };
 
 /** The marquee's bulbs, where the painter sets their dead glass and the live glow lights them. */
-export const BIG_TOP_MARQUEE_BULBS: ReadonlyArray<CircusBulb> = boardBulbs(BIG_TOP_MARQUEE);
-export const BIG_TOP_MARQUEE_BULB_RADIUS_TILES = BULB_RADIUS;
+export const STARLIGHT_TENT_MARQUEE_BULBS: ReadonlyArray<CircusBulb> =
+  boardBulbs(STARLIGHT_TENT_MARQUEE);
+export const STARLIGHT_TENT_MARQUEE_BULB_RADIUS_TILES = BULB_RADIUS;
 
 /**
- * The Big Top's open doorway, in tiles on its footprint: `x` is the door's
+ * The Starlight Tent's open doorway, in tiles on its footprint: `x` is the door's
  * centre from the west edge, `footUp` where its threshold meets the frame,
  * `height` its head above that. The warm light inside spills from here.
  */
-export const BIG_TOP_DOOR_MOUTH: {
+export const STARLIGHT_TENT_DOOR_MOUTH: {
   readonly x: number;
   readonly halfWidth: number;
   readonly height: number;
   readonly footUp: number;
 } = {
-  x: BIG_TOP_MODEL.door?.centreU ?? BIG_TOP.w / 2,
-  halfWidth: BIG_TOP_MODEL.door?.halfWidth ?? 0,
-  height: BIG_TOP_DOOR_HEIGHT,
-  footUp: doorFootDepth(BIG_TOP_MODEL),
+  x: STARLIGHT_TENT_MODEL.door?.centreU ?? STARLIGHT_TENT.w / 2,
+  halfWidth: STARLIGHT_TENT_MODEL.door?.halfWidth ?? 0,
+  height: STARLIGHT_TENT_DOOR_HEIGHT,
+  footUp: doorFootDepth(STARLIGHT_TENT_MODEL),
 };
 
-const paintBigTop: CircusPainter = (ctx, frame, _variant, rng) => {
-  const stage = stageFor(ctx, frame, BIG_TOP);
-  paintTent(stage, BIG_TOP_MODEL, forkRng(rng));
-  paintVines(stage, BIG_TOP_MODEL, forkRng(rng));
-  paintGuyLines(stage, BIG_TOP_MODEL, BIG_TOP_GUY_LINES);
-  paintSignBoard(stage, BIG_TOP_MARQUEE, forkRng(rng));
-  paintKingPoles(stage, BIG_TOP_MODEL);
+const paintStarlightTent: CircusPainter = (ctx, frame, _variant, rng) => {
+  const stage = stageFor(ctx, frame, STARLIGHT_TENT);
+  paintTent(stage, STARLIGHT_TENT_MODEL, forkRng(rng));
+  paintGuyLines(stage, STARLIGHT_TENT_MODEL, STARLIGHT_TENT_GUY_LINES);
+  paintSignBoard(stage, STARLIGHT_TENT_MARQUEE, forkRng(rng));
+  paintKingPoles(stage, STARLIGHT_TENT_MODEL);
 };
 
 // ── The side-show pavilions ───────────────────────────────────────────────────
 
-const PAVILION = CIRCUS_STRUCTURES.pavilion_mold_lion;
+const PAVILION = CIRCUS_STRUCTURES.pavilion_tightrope;
 const PAVILION_EDGE_INSET = 0.1;
 
 function pavilionModel(stripe: Ramp, open: boolean): TentModel {
@@ -3983,7 +3904,7 @@ function malletGeometry(stage: Stage): { handle: Point[]; head: Point[] } {
 
 // ── Registry ──────────────────────────────────────────────────────────────────
 
-const BIG_TOP_HEADROOM_TILES = 3;
+const STARLIGHT_TENT_HEADROOM_TILES = 3;
 const PAVILION_HEADROOM_TILES = 3;
 const ARCH_POST_HEADROOM_TILES = 3;
 /** The flame lamp's brazier and the striker's bell stand well above a tile. */
@@ -3994,19 +3915,19 @@ const BOOTH_HEADROOM_TILES = 2;
 const FLAME_LAMP_VARIANTS = 2;
 
 export const CIRCUS_STRUCTURE_ART: Readonly<Record<CircusStructureId, CircusStructureArt>> = {
-  big_top: {
+  starlight_tent: {
     variants: 1,
-    headroomTiles: BIG_TOP_HEADROOM_TILES,
-    paint: aboveGround(BIG_TOP, paintBigTop),
+    headroomTiles: STARLIGHT_TENT_HEADROOM_TILES,
+    paint: aboveGround(STARLIGHT_TENT, paintStarlightTent),
   },
-  pavilion_mold_lion: {
+  pavilion_tightrope: {
     variants: 1,
     headroomTiles: PAVILION_HEADROOM_TILES,
     paint: aboveGround(
       PAVILION,
       pavilionPainter(NAVY, BLOOD, false, [
         { text: 'THE AMAZING', heightFraction: 0.32 },
-        { text: 'MOLD LION', heightFraction: 0.5 },
+        { text: 'TIGHTROPE TWINS', heightFraction: 0.5 },
       ]),
     ),
   },
@@ -4077,8 +3998,8 @@ export const CIRCUS_STRUCTURE_ART: Readonly<Record<CircusStructureId, CircusStru
 };
 
 /** Exposed for the art gate: the geometry the painters draw from, to measure against. */
-export const BIG_TOP_TENT = {
-  peakHeightTiles: Math.max(...BIG_TOP_KING_POLES.map((pole) => pole.heightTiles)),
-  eaveHeightTiles: BIG_TOP_MODEL.wallHeight,
-  poleCapTiles: BIG_TOP_MODEL.poleCap,
+export const STARLIGHT_TENT_SHELL = {
+  peakHeightTiles: Math.max(...STARLIGHT_TENT_KING_POLES.map((pole) => pole.heightTiles)),
+  eaveHeightTiles: STARLIGHT_TENT_MODEL.wallHeight,
+  poleCapTiles: STARLIGHT_TENT_MODEL.poleCap,
 } as const;

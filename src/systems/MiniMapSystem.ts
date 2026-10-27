@@ -473,7 +473,7 @@ export class MiniMapSystem implements GameSystem {
         mmX + (mobTX - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       const mmDotY =
         mmY + (mobTY - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
-      // Read every frame, so a fowl the player provokes turns red the moment it turns.
+      // Read every frame, so a Hawkfolk the player provokes turns red the moment it turns.
       ctx.fillStyle = mob.isHostile ? worldPalette.minimap.hostile : worldPalette.minimap.friendly;
       ctx.beginPath();
       ctx.arc(mmDotX, mmDotY, MOB_DOT_RADIUS, 0, Math.PI * 2);

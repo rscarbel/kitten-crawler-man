@@ -12,8 +12,18 @@ import {
 } from '../../core/items/gathering/toolTiers';
 import { ITEM_DEF, type ItemId } from '../../core/items/defs/ItemDefs';
 import { archetypeSpec, type StowedPlacement } from './gripArchetypes';
-import type { HeldVisualDef, OffHandHeldVisualDef, WeaponHeldVisualDef } from './heldVisualDef';
-import type { HeldVisualId, OffHandHeldVisualId, WeaponHeldVisualId } from './heldVisualIds';
+import type {
+  HeldVisualDef,
+  HirelingHeldVisualDef,
+  OffHandHeldVisualDef,
+  WeaponHeldVisualDef,
+} from './heldVisualDef';
+import type {
+  HeldVisualId,
+  HirelingHeldVisualId,
+  OffHandHeldVisualId,
+  WeaponHeldVisualId,
+} from './heldVisualIds';
 import { FELLING_AXE, PLAIN_ARMING_SWORD, SPIKED_CLUB } from './art/provingWeapons';
 import { CARRIED_BLUEPRINTS_HELD, CARRIED_PRISON_KEY_HELD } from './art/carriedHeld';
 import {
@@ -31,13 +41,18 @@ import { THE_LAST_WORD_AWAKENED_HELD, THE_LAST_WORD_HELD } from './art/lastWordH
 import { POT_LID_BUCKLER_HELD } from './art/potLidBucklerHeld';
 import { STORMCALLER_HELD } from './art/stormcallerHeld';
 import { STRIKER_MALLET_HELD } from './art/strikerMalletHeld';
+import { ANSELM_QUARTERSTAFF } from './art/quarterstaffHeld';
 import { SCYTHE_HELD, TOOL_HELD } from './art/toolHeld';
 
 /** Every held visual by id. Each entry's own `id` is its key. */
 export const HELD_VISUALS: Readonly<
   Record<WeaponHeldVisualId, WeaponHeldVisualDef> &
     Record<OffHandHeldVisualId, OffHandHeldVisualDef> &
-    Record<Exclude<HeldVisualId, WeaponHeldVisualId | OffHandHeldVisualId>, HeldVisualDef>
+    Record<HirelingHeldVisualId, HirelingHeldVisualDef> &
+    Record<
+      Exclude<HeldVisualId, WeaponHeldVisualId | OffHandHeldVisualId | HirelingHeldVisualId>,
+      HeldVisualDef
+    >
 > = {
   rebar_shiv: REBAR_SHIV_HELD,
   pipe_wrench: PIPE_WRENCH_HELD,
@@ -48,6 +63,7 @@ export const HELD_VISUALS: Readonly<
   the_last_word: THE_LAST_WORD_HELD,
   the_last_word_awakened: THE_LAST_WORD_AWAKENED_HELD,
   pot_lid_buckler: POT_LID_BUCKLER_HELD,
+  anselm_quarterstaff: ANSELM_QUARTERSTAFF,
   quest_scythe: SCYTHE_HELD,
   plain_arming_sword: PLAIN_ARMING_SWORD,
   spiked_club: SPIKED_CLUB,

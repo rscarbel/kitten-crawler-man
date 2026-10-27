@@ -273,7 +273,7 @@ Switch between them with Tab. The inactive character auto-follows and auto-fight
 
 **Level 2: Safe Haven** — A larger dungeon with tougher enemies (troglodytes, llamas, goblins, brindle grubs). Features the Krakaren Clone boss, an arena with the Ball of Swine and Grotesque Spider, and Bugaboos that spawn from floor grates.
 
-**Level 3: The Overworld** — An outdoor town with grass, roads, forests, a town square, and enterable buildings (houses, a tower, and Mordecai's Kitchen restaurant). Sky Fowl roam the outskirts.
+**Level 3: The Overworld** — An outdoor town with grass, roads, forests, a town square, and enterable buildings (houses, a tower, and Mordecai's Kitchen restaurant). Hawkfolk roam the outskirts.
 
 ### Bosses
 
@@ -369,7 +369,7 @@ src/
 │   ├── input/                 ← InputManager, keybindings, touch, platform, settings
 │   ├── music/                 ← music library and unlock backfill
 │   ├── world/                 ← SpatialGrid, SeparationGrid, WorldRandom
-│   ├── club/                  ← Desperado Club layout, props, membership
+│   ├── club/                  ← Cloak & Dagger layout, props, casino state
 │   ├── mobs/                  ← boss types, mob variant families
 │   └── util/                  ← guards, plain text, MinHeap
 ├── scenes/
@@ -421,7 +421,7 @@ src/
 │   ├── TrashGremlin.ts, BigRooster.ts
 │   ├── RoosterMinion.ts, LittleRooster.ts, SlightlyBentRooster.ts
 │   ├── KrakarenClone.ts, BallOfSwine.ts, GrotesqueSpider.ts
-│   ├── SkyFowl.ts
+│   ├── Hawkfolk.ts
 │   ├── Mongo.ts               ← raptor companion
 │   ├── QuestNPC.ts, NonCombatantNPC.ts
 │   └── ...
@@ -437,7 +437,7 @@ src/
 │       │                        (shop signs, street lamps, clutter, gateways,
 │       │                        bunting, laundry lines, market stalls, benches)
 │       └── towns/
-│           └── over_city/     ← art only correct in THIS town (fingerposts whose
+│           └── taloncrest/     ← art only correct in THIS town (fingerposts whose
 │                                arms name its streets, its named seer)
 ├── audio/
 │   ├── AudioManager.ts        ← centralized audio playback

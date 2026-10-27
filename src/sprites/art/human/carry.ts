@@ -27,7 +27,7 @@ import type { CardinalView } from '../../facingView';
 import type { RowSpec } from '../humanFigure';
 import { towards } from './handTurn';
 import type { HandleRadius } from '../../held/gripArchetypes';
-import type { WeaponHeldVisualDef } from '../../held/heldVisualDef';
+import type { HirelingHeldVisualDef, WeaponHeldVisualDef } from '../../held/heldVisualDef';
 import { type MotionSet, motionSetOf } from './motionSets';
 
 /**
@@ -228,7 +228,7 @@ export function carryStyleOf(set: MotionSet): CarryStyle {
 }
 
 /** How the weapon `look` is carried: its handle, and the set of rows its grip and weight play. */
-export function carriedGripOf(look: WeaponHeldVisualDef): CarriedGrip {
+export function carriedGripOf(look: WeaponHeldVisualDef | HirelingHeldVisualDef): CarriedGrip {
   const motionSet = motionSetOf(look);
   return { handle: look.handle.radius, style: CARRY_STYLE[motionSet], motionSet };
 }

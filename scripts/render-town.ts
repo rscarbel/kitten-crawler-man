@@ -1,5 +1,5 @@
 /**
- * Headless renderer for the Over City — the town as pixels, without a browser.
+ * Headless renderer for Taloncrest — the town as pixels, without a browser.
  *
  * The town is judged on a screenshot ("no visible grid", "every named building
  * identifiable from the street"), and every defect that has survived the

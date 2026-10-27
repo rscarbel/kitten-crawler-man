@@ -74,7 +74,15 @@ export type HumanWornGarmentId =
   | HumanLimbGarmentId
   | HumanTrinketGarmentId
   | 'townsfolk_trousers'
-  | 'townsfolk_shoes';
+  | 'townsfolk_shoes'
+  | HirelingGarmentId
+  | IvyAshgroveGarmentId;
+
+/** Ivy Ashgrove's clothes under her jerkin: what she wears over the rig, as a hireling. */
+type IvyAshgroveGarmentId = 'ivy_trousers' | 'ivy_boots' | 'ivy_bracer';
+
+/** What the hirelings built on the biped rig wear: Brother Anselm's habit and sandals, and every hire's armband. */
+type HirelingGarmentId = 'monk_habit' | 'monk_sandals' | 'hireling_armband';
 
 /** What the human crawler wears on his hands, forearms, knees and feet. */
 type HumanLimbGarmentId =

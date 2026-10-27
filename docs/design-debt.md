@@ -39,12 +39,32 @@ Entry shape:
 - **Size:** M
 - **Found:** 2026-10-21, spawn funnel work.
 
+### A creature's audio tag is a free string matched by unchecked switches
+
+- **Where:** `Mob.audioTag` (`readonly audioTag: string`, `src/creatures/Mob.ts`) and the `switch (mob.audioTag)` blocks and `mob.audioTag === '…'` chains in `playCuesOf` (`src/systems/GameLoopPhases.ts`).
+- **Problem:** the tag is typed `string`, so a misspelled tag or a creature whose tag has no `case` compiles and plays nothing; each switch handles a different subset of tags, and a tag that should be silent (the lion's, until its recordings land) can only say so with an empty `case`.
+- **Cost:** a new creature silently has no voice, and nothing fails when a tag is renamed on one side only.
+- **Better shape:** a literal union of tags with a `Record<AudioTag, { attack, projectile, damage, special }>` cue table (each slot a cue list or explicitly none), so a new tag cannot ship without saying what it plays.
+- **Until then:** when adding a tag, add its `case` in every switch that should voice it, and write an explicit empty `case` with a reason where it should stay silent.
+- **Size:** M
+- **Found:** 2026-10-26, the lion's audio tag.
+
+### An earth elemental hire's guard config falls back silently
+
+- **Where:** `EARTH_ELEMENTAL_GUARD_CONFIGS` and `earthElementalGuardConfigFor` (`src/creatures/mercenaries/earthElementalGuardKit.ts`).
+- **Problem:** the per-hire guard config is a `Partial<Record<MercenaryTemplateId, …>>` keyed by template id, and any template on the `earth_elemental_guard` kit without an entry is handed Hammer Hands' config without a word.
+- **Cost:** a new earth elemental hire compiles and plays as Hammer Hands by accident; the kit branches on template ids, which the template table's own header says code must not do.
+- **Better shape:** carry a kit's per-hire config on the template (a `kit` that is a discriminated union with its config), so a hire on that kit cannot be declared without one.
+- **Until then:** give every new hire on this kit its own config entry.
+- **Size:** S
+- **Found:** 2026-10-27, The Barracks Mercenaries' roster rework.
+
 ## Townsfolk
 
-### Two skyfowl civilian looks are painted and gated but never worn
+### Two Hawkfolk civilian looks are painted and gated but never worn
 
-- **Where:** `SKYFOWL_CIVILIAN_LOOKS` (`src/sprites/art/skyfowl/cast.ts`), `SKYFOWL_ROLE_FOR_TOWN_ROLE` (`src/creatures/citizenFigure.ts`).
-- **Problem:** the two `clerk` looks are in the civilian pool, but no `TownRole` maps to the skyfowl `clerk` role, so the street wears only 14 of the 16 civilian looks. The art and cast-motion gates still paint and check both.
+- **Where:** `HAWKFOLK_CIVILIAN_LOOKS` (`src/sprites/art/hawkfolk/cast.ts`), `HAWKFOLK_ROLE_FOR_TOWN_ROLE` (`src/creatures/citizenFigure.ts`).
+- **Problem:** the two `clerk` looks are in the civilian pool, but no `TownRole` maps to the Hawkfolk `clerk` role, so the street wears only 14 of the 16 civilian looks. The art and cast-motion gates still paint and check both.
 - **Cost:** gate time and review effort spent on looks no player sees, and a "16 looks" count that overstates the street's real variety.
 - **Better shape:** map a town role (`commoner` or `priest`) onto `clerk`, or move the clerk looks out of the civilian pool to wherever they are meant to be used.
 - **Size:** S
@@ -60,17 +80,106 @@ Entry shape:
 - **Size:** S
 - **Found:** 2026-10-23, moving the biped rig's look into `HumanLook`.
 
+### The town's species axis has two values, so bespoke residents are filed as human
+
+- **Where:** `TOWN_SPECIES` (`src/systems/townSpecies.ts`); `ResidentDef.species` for `old_lori`, `steve_cartwright`, `janitor_puddles`, `janitor_grout` and `sydney` (`src/systems/townResidents.ts`); `ambientPool` and `dangerBark` (`src/dialog/scripts/townsfolk.ts`); `TownLifeSystem`'s `residentSpeciesByHome`.
+- **Problem:** Old Lori (a dwarf), Steve Cartwright (an otter) and the three crocodilians Puddles, Grout and Sydney are `'human'` because the axis is `'human' | 'hawkfolk'`. The value is what their interior `Townsperson` carries, picks their danger bark and picks the species their door's frontage crowd leans toward. `residentSpeciesByHome` is a `Map` built from every resident in list order, so where two residents share a home the last one listed wins; `RESIDENT_DEFS` lists the janitors ahead of the innkeepers, and Sydney ahead of the Barracks' Hawkfolk garrison, so the keeper sets the frontage, and comments there say so.
+- **Cost:** a non-human, non-Hawkfolk resident can't have a voice pool of their own, and the frontage depends on the order of a list.
+- **Better shape:** split "what voice pools and crowd share does this person draw on" from what they are drawn as, and name a building's owner explicitly (a `keeper` on the building or an `owns` flag on the resident) instead of taking the last resident listed.
+- **Until then:** list any new second resident of a building ahead of its keeper in `RESIDENT_DEFS`; don't give a bespoke resident lines that only make sense for a human.
+- **Size:** M
+- **Found:** 2026-10-26, the pub janitors and Steve Cartwright becoming bespoke residents.
+
 ## Town and interiors
 
 ### Buildings are identified by their display name
 
-- **Where:** `PlannedBuildingName` (`src/map/town/townPlan.ts`); `INTERIOR_BY_NAME` (`GameMap`); `BUILDING_OCCUPANTS` (`InteriorOccupantSystem`); `INTERIOR_SERVICES` (`townServices`); `TownMemory` room and prop keys; `musicBackfill`'s remembered buildings; `RENAMED_BUILDINGS` and `RENAMED_INTERIOR_PROPS` (`TownMemory`). Also the positional prop ids built by `stableInteriorPropId` (`` `${propId}@${x},${y}` ``).
-- **Problem:** a building's player-facing name ("The Barracks", "Old Hilda's Cottage") is also its identity. It is repeated as a string literal in a dozen or more files per building, and it is the key saved data is stored under. Renaming the text therefore changes the identity, which is why alias maps from old names to new ones exist. Interior props without an explicit id are keyed by their tile, so moving one forgets its saved state.
-- **Cost:** every rename is a cross-cutting edit with a save break or a new alias entry. A typo in one literal silently detaches that system from the building. Display text can't be changed freely or localised.
+- **Where:** `PlannedBuildingName` (`src/map/town/townPlan.ts`); `INTERIOR_BY_NAME` (`GameMap`); `BUILDING_OCCUPANTS` (`buildingOccupants`); `TownMemory` room and prop keys; `musicBackfill`'s remembered buildings. Also the positional prop ids built by `stableInteriorPropId` (`` `${propId}@${x},${y}` ``).
+- **Problem:** a building's player-facing name ("The Barracks", "Old Lori's Cottage") is also its identity. It is repeated as a string literal in a dozen or more files per building, and it is the key saved data is stored under. Renaming the text therefore changes the identity, and a save written before the rename forgets that building's rooms and payouts. Interior props without an explicit id are keyed by their tile, so moving one forgets its saved state.
+- **Cost:** every rename is a cross-cutting edit that forgets saved state for that building. A typo in one literal silently detaches that system from the building. Display text can't be changed freely or localised.
 - **Better shape:** a stable building id (a slug union) as the only key across layout, occupants, services, memory and saves, with the display name as data on the building's definition. Interior props keyed by stable ids instead of tile positions.
-- **Until then:** refer to a building through its name constant, never a fresh string literal. Don't add entries to the rename alias maps; give a moved prop an explicit id instead.
+- **Until then:** refer to a building through its name constant, never a fresh string literal. Never add an alias map from old names to new ones; give a moved prop an explicit id instead.
 - **Size:** L
-- **Found:** 2026-10-26, planning the floor 3 copyright rework (club and cottage renames).
+- **Found:** 2026-10-26, renaming the club and Old Lori's Cottage.
+
+### The Anchor quest finds its giver by resident id and building name
+
+- **Where:** `AnchorInteriorSystem` (`src/systems/AnchorInteriorSystem.ts`): the dialog opener and the quest marker both test `residentId === 'old_lori' && this.buildingName === LORI_COTTAGE_NAME`.
+- **Problem:** which resident gives the Anchor quest, and where, is a pair of literals in the system rather than data on the quest or the resident.
+- **Cost:** moving the quest to another giver, or giving a second resident a quest, means another hand-written pair check in the same shape.
+- **Better shape:** quest-giver wiring declared as data (a quest giver field on the resident or on the quest definition) that the interior systems read.
+- **Until then:** don't add another `residentId === … && buildingName === …` check for a new quest; declare the giver in data.
+- **Size:** S
+- **Found:** 2026-10-26, renaming the cottage's resident.
+
+### Construction contracts name the two towns with two different unions
+
+- **Where:** `ContractSiteDef.town` (`'taloncrest' | 'briar_hollow'`, `src/systems/constructionContracts/contractCatalog.ts`); `ContractSettlement` (`'taloncrest' | 'hollow'`, `src/sprites/art/constructionContracts/contractPalette.ts`); the `Settlement` type and `--hollow=` flag in `scripts/render-construction-contracts.ts`; the `settlement:` literals in `ConstructionContractSystem` and `ContractInteriorSite`.
+- **Problem:** the same two towns have one id in the catalogue and saves and another in the palette and render harness, and neither union is derived from the other, so each site owner restates its town as a second literal (`settlement: 'hollow'`, `settlement: 'taloncrest'`) instead of reading it from the site.
+- **Cost:** a third contract town needs entries in both unions plus every restated literal, and nothing makes the two lists agree.
+- **Better shape:** one town-id union owned by the catalogue, with the palette keyed by it (`Record<ContractTown, ContractPalette>`).
+- **Until then:** don't add a third spelling; take new per-town data by `ContractSiteDef['town']`.
+- **Size:** S
+- **Found:** 2026-10-26, Hawkfolk / Taloncrest rename.
+
+### Interior prop art heights are a string-keyed table read by fallback
+
+- **Where:** `PROP_ART_HEIGHT_TILES`, `frameHeightFor` and `frameHeadroomTilesFor` in `src/sprites/art/townInterior/townInteriorProps.ts`; `paintHearth`, which reads `frameHeightFor('hearth')`.
+- **Problem:** the table is a `Record<string, number>` read with `?? 1`, because the prop ids are themselves derived from `TOWN_INTERIOR_PROPS`, whose `def` calls read it. `paintHearth` asks for `'hearth'`, which is no prop id and has no row, so the generic hearth's chimney breast is one tile tall by the fallback while the `hearth_wide` row it was meant to read says 1.6.
+- **Cost:** a misspelled or renamed id compiles and silently paints and frames its prop at the one-tile default; nothing ties a row to a prop.
+- **Better shape:** the art height as a field each `def` passes in, so the table and the lookup by name go away.
+- **Until then:** read a prop's height through its own id, never a shared name like `'hearth'`; add a row for every new prop taller than a tile.
+- **Size:** S
+- **Found:** 2026-10-26, interior fire props.
+
+### An interior holds each scripted encounter by its own type beside `encounter`
+
+- **Where:** `BuildingInteriorScene`'s `starlightTentMaze`, `towerConfrontation` and `prison` fields, each also stored in `encounter`; the reads of them in `scriptOwnsParty`, the `update` dialog returns, the Space and tap chains, `cameraFocus`, the sorted render pass and `mountSurfaces`.
+- **Problem:** `InteriorEncounter` covers update, drawing and teardown, but whether an encounter locks the party, owns a conversation, takes a press, moves the camera or adds figures is asked of each concrete system by name, so the scene grows a branch per encounter.
+- **Cost:** a new scripted room means editing every one of those sites in the scene; missing one (a tap chain that does not know the new encounter locks the party) compiles.
+- **Better shape:** optional members on `InteriorEncounter` for each of those questions (`playerLocked`, `isDialogOpen`, `tryInteract`, `sortedFigures`, `cameraTarget`, `surfaces`), asked through `activeEncounter`, so the typed handles go away.
+- **Until then:** give a new encounter what it needs through `InteriorEncounter` and the fixtures `startEncounter` hands it (the storey's chest placer and exit fixtures) rather than another typed field on the scene.
+- **Size:** M
+- **Found:** 2026-10-26, interior chests and exit fixtures.
+
+### Readables keep their own copy of the occupant furniture scan
+
+- **Where:** `scanFurniture` and `pickTile` in `src/systems/InteriorReadableSystem.ts`, beside `scanInteriorFurniture` in `src/systems/InteriorOccupantSystem.ts`; the `occupiedFurniture` set the occupant system hands the readables.
+- **Problem:** the readable system re-walks the grid and the placed props itself, filtered to its own anchor kinds, and seats a readable on a prop's north-west tile, while occupants scan whole footprints. The two agree only because each piece is keyed by its north-west tile in both.
+- **Cost:** a change to how furniture is scanned (a new source, a footprint rule) has to be made twice, and a readable on a wide prop sits on its end rather than its middle.
+- **Better shape:** one furniture scan returning footprint pieces, read by both systems, with the readable seated at the piece's centre.
+- **Until then:** don't add a third scan; key claimed furniture by the piece's north-west tile so the two keep agreeing.
+- **Size:** S
+- **Found:** 2026-10-26, footprint-aware occupant placement.
+
+### The club's counter staff are hand-built figures, not occupants
+
+- **Where:** `buildFixtureFigures`, `castFigure`, `donaldFigure` and `dealerFigure` in `src/systems/CloakAndDaggerSystem.ts`; the club's stations in `CLUB_STATIONS` (`src/core/club/clubLayout.ts`), which the club routes talk through itself.
+- **Problem:** the club's host (Brandon) is a rostered occupant placed on a `mark`, but the bartender, the market vendor, Deuce and Donald are still `InteriorFigure` closures on fixed tiles, and their counters open through the club's own station routing rather than as occupant services. The club's shops are `ShopSystem`s, which the occupant `service` union has no member for.
+- **Cost:** those four can't take a territory, routine or service the way any other resident can, and every change to how residents are drawn or talked to has a second path in the club.
+- **Better shape:** give `OccupantService` a member for a `ShopSystem` counter (and one for the casino's game picker), roster the four as occupants on `mark` placements, and keep `InteriorFigure` for furniture, stages and seated gamblers.
+- **Until then:** stand any person the club adds through the club's occupant roster in `BUILDING_OCCUPANTS`, not as a new direct painter call in `CloakAndDaggerSystem`.
+- **Size:** M
+- **Found:** 2026-10-26, interior cast placement and figures.
+
+### `INK_BENCH` is a tile type nothing places
+
+- **Where:** `INK_BENCH` in `src/map/tileTypes.ts`, its case in `src/map/tiles/interiorTiles.ts`, and its entries in `src/map/tiles/helpers.ts` and `src/map/walkability.ts`.
+- **Problem:** the Quiet Needle's chair is the `ink_chair` prop, and no layout writes the `INK_BENCH` tile type, so its painter and walkability entries have no reader in a generated room.
+- **Cost:** dead code that reads as live; a reader would assume a second ink bench exists somewhere.
+- **Better shape:** delete the tile type and everything that names it.
+- **Size:** S
+- **Found:** 2026-10-26, retiring the `bench` occupant anchor.
+
+### An exit fixture's art is drawn by whatever stands behind it, not by the fixture
+
+- **Where:** `INTERIOR_EXIT_FIXTURES` and `InteriorExitFixtureSystem` (`src/systems/interiorExitFixtures.ts`), which own a fixture's prompt, departure and sound but draw nothing; the Starlight Tent's rope ladder and roof flap, painted by `drawTentPoleTile` (`src/map/tiles/tentPoleTiles.ts`) on every pole 2 × 2 or larger through `paintRopeLadder` / `paintRoofFlap`; the fixture placed separately by `StarlightTentFinale` at `MAZE_RING_CENTRE_TILE`.
+- **Problem:** the ladder you see and the ladder you use are two pieces of data that agree only because the king pole happens to stand just north of `MAZE_RING_CENTRE_TILE`. Any 2 × 2 pole in another room would grow a ladder with no fixture under it.
+- **Cost:** moving the pole, the tile or adding a second big pole breaks the match silently; a second exit fixture kind (a trapdoor, a window) has nowhere to put its art.
+- **Better shape:** an art field on each `INTERIOR_EXIT_FIXTURES` entry (a painter and its anchor), drawn by the fixture system in the Y-sorted pass at the placed tile, with the pole drawing only the mast.
+- **Until then:** place the rope ladder only under a king pole's south face, and give any new fixture kind its art through the fixture, not through the tile under it.
+- **Size:** S
+- **Found:** 2026-10-27, Starlight Tent finale.
 
 ## Rendering and memory
 
@@ -125,7 +234,7 @@ Entry shape:
 
 ### Figures freeze ink measurements the runtime already measures
 
-- **Where:** the `GORE_RECENTRE` tables and their lookups in `src/sprites/art/darkKnightFigure.ts`, `mantidFigure.ts`, `rockGolemFigure.ts`, `lichFigure.ts`, `llamaFigure.ts`, `krakarenFigure.ts`, `tusklingFigure.ts`, `goblinFigure.ts`, `goblinBomberFigure.ts`, `skeletonFigure.ts`, `brindledVespaFigure.ts`, `ratFigure.ts`, `cockroachFigure.ts`, `troglodyteFigure.ts`, and on the shelf `src/shelf/auntieGorge/auntieGorgeFigure.ts` and `src/shelf/ironIggy/ironIggyFigure.ts`; `GORE_CENTRE_CORRECTION` in `src/sprites/art/cowGore.ts` (gated by `scripts/gates-cow.ts`); frozen head clearances `MONGO_HEAD_CLEARANCE_TILES` (`mongoSprite.ts`), `IRON_IGGY_HEAD_CLEARANCE_TILES` (`src/shelf/ironIggy/ironIggySprite.ts`), `GLUTEUS_MAXX_HEAD_ABOVE_TILE_TILES` (`src/sprites/gluteusMaxxSprite.ts`), `SPLASH_ZONE_STANDING_TOP_ABOVE_TILE` (`src/sprites/art/splashZoneFigure.ts`) and `HUMAN_SPRITE_TOP_ABOVE_TILE` (`src/creatures/HumanPlayer.ts`, gate G21 in `scripts/gates-human.ts`); and the gates that re-measure them (`scripts/gates-*.ts`, `scripts/goblinSubjects.ts`).
+- **Where:** the `GORE_RECENTRE` tables and their lookups in `src/sprites/art/darkKnightFigure.ts`, `mantidFigure.ts`, `rockGolemFigure.ts`, `lichFigure.ts`, `llamaFigure.ts`, `krakarenFigure.ts`, `tusklingFigure.ts`, `goblinFigure.ts`, `goblinBomberFigure.ts`, `skeletonFigure.ts`, `brindledVespaFigure.ts`, `ratFigure.ts`, `cockroachFigure.ts`, `troglodyteFigure.ts`, and on the shelf `src/shelf/auntieGorge/auntieGorgeFigure.ts` and `src/shelf/ironIggy/ironIggyFigure.ts`; `GORE_CENTRE_CORRECTION` in `src/sprites/art/cowGore.ts` (gated by `scripts/gates-cow.ts`); frozen head clearances `MONGO_HEAD_CLEARANCE_TILES` (`mongoSprite.ts`), `IRON_IGGY_HEAD_CLEARANCE_TILES` (`src/shelf/ironIggy/ironIggySprite.ts`), `MAGNUM_STAGE_TOP_ABOVE_TILE_TILES` (`src/sprites/magnumSprite.ts`) and `HUMAN_SPRITE_TOP_ABOVE_TILE` (`src/creatures/HumanPlayer.ts`, gate G21 in `scripts/gates-human.ts`); and the gates that re-measure them (`scripts/gates-*.ts`, `scripts/goblinSubjects.ts`).
 - **Problem:** each figure nudges every gore piece by an offset measured offline so its ink sits on the cell's centre, or freezes how far its art stands above its tile, and a gate re-measures the number on every render. But `figureFrameCache.ts` measures both at runtime: `drawFigureCachedRotatedCenter` spins a piece about `figureInkBounds(...)`, so where the ink sits in its cell does not change how it tumbles, and `figureRowInkTop` gives a drawn row's top.
 - **Cost:** every redraw means re-pasting measured numbers to keep gates green, for values the runtime could read itself. Their doc comments say only an offline pass can measure ink, which the runtime contradicts.
 - **Better shape:** paint each gore piece about the cell's centre with clearance from the edges and hang overhead chrome off `figureRowInkTop`; then delete the tables, the constants, their lookups and the gates that re-measure them. The structural gate's edge check is what still matters.
@@ -134,6 +243,16 @@ Entry shape:
 - **Found:** 2026-10-22, code review of a new boss figure.
 
 ## Human figure
+
+### The bow archetype has rows but no motion set
+
+- **Where:** `bow` in `GRIP_ARCHETYPES` (`src/sprites/held/gripArchetypes.ts`), absent from `WEAPON_GRIP_ARCHETYPES` and `ARMED_MOTION_SETS` (`src/sprites/art/human/motionSets.ts`); the shot and the carry in `src/sprites/art/human/actionsBow.ts` (`bowShotFront` / `bowShotSide` / `bowShotBack`, `carryBow`, `bowGoingDown`); `prop_longbow` (`SCRIPTED_PROP_HELD`, `src/sprites/held/art/scriptedPropHeld.ts`).
+- **Problem:** the bow's rows exist only as pose functions a figure of its own composes (Ivy Ashgrove's, `src/sprites/art/ivyAshgroveFigure.ts`); the human row table has no `bow` rows, no `motionSet`, and the longbow is a row prop baked into the cell rather than an equipment-chosen item composited at the off-hand socket. A bow in a weapon archetype would need a set in `ARMED_MOTION_SETS`, which every set-keyed table (`CARRY_HOLDS`, `SWING_SHARES`, `ARMED_STRIKES`, holster keys, `CARRY_STYLE`, the residency tables) and G9b/G15/G16 in `scripts/gates-human.ts` (which require a weapon item playing every set) then demand.
+- **Cost:** a player bow item cannot be added as data; the gates:equipment checks (E1–E4, E7) do not reach the bow rows, which are held only by the release gate in `scripts/render-ivy-ashgrove.ts` and its review renders.
+- **Better shape:** add `bow` as an armed set whose stance holds the off hand (a `Hold` for the left fist in `armedHold.ts`) and whose one strike is the shot, put the `actionsBow` poses in `armedRows.ts`, and draw the longbow as an equipment-chosen off-hand item so E1–E7 gate it, when the first bow item ships.
+- **Until then:** build any other bow-carrying figure from `actionsBow.ts` and `prop_longbow`, never a second bow painter or a bow painted into a sprite.
+- **Size:** L
+- **Found:** 2026-10-27, Ivy Ashgrove's longbow.
 
 ### The rows roll every look's foot on the rig's sole
 
@@ -175,14 +294,75 @@ Entry shape:
 - **Size:** S.
 - **Found:** 2026-10-26, painting the human's sleeved coats.
 
+### Rows only a hireling plays live in the crawler's row table
+
+- **Where:** `twohand_channel*` and `twohand_brace*` in `ARMED_ROW_NAMES` / `ARMED_ROW_TABLE` (`src/sprites/art/human/armedRows.ts`), posed by `src/sprites/art/human/staffRows.ts`; played only by `BROTHER_ANSELM_ART` (`src/sprites/brotherAnselmSprite.ts`), which draws the human figure through `humanFigureFor` and `drawHumanFigureSelection`.
+- **Problem:** a figure built on the human rig that holds an equipment item has no row table of its own: the held-layer and socket plumbing (`humanHeldLayers`, `humanSocketsAt`, `heldSocketOf`) only knows `HUMAN_ROW_TABLE`. So a hireling's own actions become rows of the player's figure, with no role so his animator never plays them.
+- **Cost:** every hireling action on the rig grows the crawler's table, and the crawler's gates (G1–G27, E1–E7 for every two-hander) pay for rows he never plays; the row table stops describing what the crawler does.
+- **Better shape:** let `HumanFigurePainting` carry its own row table (the crawler's, or one extended per figure) and key sockets and held layers on it, so a figure built on the rig declares its extra rows beside its look.
+- **Until then:** give such rows no `role`, keep them generic to their motion set rather than named after one character, and add them to the motion set they hold an item in so the equipment gates cover them. A stride row of this kind (`twohand_amble`, `twohand_hurry`) declares `gait: 'walk'` so G10 paces it, and is kept out of the crawler's stride only by being declared after his set's own walk, which `cycleRow` finds first; never declare one ahead of it.
+- **Size:** M.
+- **Found:** 2026-10-27, painting Brother Anselm on the human rig.
+
+### Hireling art picks its view with no hysteresis
+
+- **Where:** `MercenaryArtFrame` (`src/sprites/mercenaryArt.ts`) hands each art only `facingX` / `facingY`; `BROTHER_ANSELM_ART.draw` calls `selectFacing` with no previous selection, and the other hires split views by the dominant axis.
+- **Problem:** a hire walking along a sector edge can flip between profile and front or back from one tick to the next, because no `FacingState` is kept per hireling.
+- **Cost:** view flicker on hires that the player's own figure avoids through `FacingState`.
+- **Better shape:** keep a `FacingState` on `Mercenary`, update it once a tick, and hand the selection to the art in `MercenaryArtFrame`.
+- **Size:** S.
+- **Found:** 2026-10-27, painting Brother Anselm on the human rig.
+
+## Combat and statuses
+
+### A status's definition is spread over separately kept lists
+
+- **Where:** `src/core/combat/StatusEffect.ts` (`STATUS_IDS`, `INCURABLE_STATUSES`, `WARD_STATUSES`, `CASTER_HELD_STATUSES`, `AILMENT_STATUSES`, `STAT_BOON_BONUSES`), `STATUS_INCOMING_DAMAGE_SCALE` in `src/core/combat/statusTuning.ts`, and `STATUS_VISUALS` in `src/sprites/status/statusEffectVisuals.ts`.
+- **Problem:** what a status is (curable, incurable, a ward, a boon, how it scales damage, how it looks) is answered by membership in several lists and maps rather than one entry per `StatusId`. Only the damage scale is a `Record<StatusId, …>`; `STATUS_VISUALS` is a `Map<string, StatusVisual>`, so a status with no visual (`ink`) compiles and falls back to a grey pill, and whether it gets a HUD pill at all is an optional `noHudPill` flag on that map's entry. Damage-over-time is a third copy: `STATUS_DAMAGE_INTERVALS` (a `Map<string, number>` in `src/Player.ts`) feeds `pendingStatusDamage`, while `Player.tickStatusEffects` repeats each interval in its own `if (effect.type === …)` branch.
+- **Cost:** a new status must be remembered in each list by hand, and nothing fails when one is missed; a damage-over-time status added to the tick branches but not to the interval map is invisible to the AI's forecast.
+- **Better shape:** one `Record<StatusId, StatusDef>` holding each status's rules (curability, ward, boon stats, damage scale), with the visuals as a `Record<StatusId, StatusVisual | null>` beside it in the sprite layer, and the lists derived from them.
+- **Until then:** key any new per-status table by `StatusId` as a `Record`, never a `Map<string, …>` or a hand-kept array.
+- **Size:** M
+- **Found:** 2026-10-26, status damage scale and HP bands.
+
+### The AI governor keeps its own low-HP line
+
+- **Where:** `LOW_HP_FRACTION` in `src/ai/actions/governor.ts` and `shieldedHp` in `src/ai/actions/combat.ts`, beside `CRAWLER_HP_THRESHOLDS.low_health` in `src/core/combat/hpThresholds.ts`.
+- **Problem:** both are "a quarter of max HP, rounded up", declared twice; the AI's line is exclusive (`hp < shieldedHp`) and the band's inclusive (`hp <= hpThresholdTop`).
+- **Cost:** tuning one leaves the other behind, so the AI may refuse to hurt a crawler the game does not yet call low, or the reverse.
+- **Better shape:** the governor reads the band (`hpThresholdTop(CRAWLER_HP_THRESHOLDS.low_health, maxHp)`) and agrees on which side the line falls.
+- **Until then:** don't add a third copy of the share; read one of these two.
+- **Size:** S
+- **Found:** 2026-10-26, HP bands.
+
+### A treasure chest is one flat record for two kinds of chest
+
+- **Where:** `TreasureChest` and `TreasureChestSystem.addWoodenChest`'s positional `hasGuards = true` (`src/systems/TreasureChestSystem.ts`).
+- **Problem:** `guardBounds` and `hadMobs` only mean anything on a wooden chest and `bossRoomIndex` only on a silver one, but all three sit on every chest as nullable fields, and whether a wooden chest waits for guards is a bare boolean argument.
+- **Cost:** a chest with `type: 'silver'` and `guardBounds` set compiles, and every reader re-derives the kind from which field is null (`isChestOpenable`, `isAwaitingBossLoot`, `ChestKit.payStandard`).
+- **Better shape:** a discriminated union on how the chest unlocks (`{ lock: 'guards'; guardBounds; hadMobs }`, `{ lock: 'boss'; bossRoomIndex }`, `{ lock: 'none' }`), with the save codec in `PersistedWorldState` following it.
+- **Until then:** add chests through `ChestPlacer` (`src/systems/kits/ChestKit.ts`) or the existing `add*Chest` methods rather than building `TreasureChest` literals, and don't add another nullable field that only one kind uses.
+- **Size:** S
+- **Found:** 2026-10-26, interior chests and exit fixtures.
+
 ## Shared types
 
 ### Tile geometry types are declared five times, and the shared one lives in the town plan
 
-- **Where:** `TileRect` in `src/map/town/townPlan.ts`, `src/map/pastSafeRoom.ts`, `src/systems/briarHollow/questGuidance.ts`, `src/creatures/fairies/fairyRefuge.ts` and `src/systems/bossRooms/bossRoomLayout.ts`; `TilePoint` in `townPlan.ts`, `bossRoomLayout.ts`, `src/map/bigTopMazeDecor.ts`, `src/systems/dungeon/dungeonEmitters.ts`, `src/core/save/SavedWorld.ts`, `src/ai/actions/world.ts` and `src/dev/perfWalk.ts`.
+- **Where:** `TileRect` in `src/map/town/townPlan.ts`, `src/map/pastSafeRoom.ts`, `src/systems/briarHollow/questGuidance.ts`, `src/creatures/fairies/fairyRefuge.ts` and `src/systems/bossRooms/bossRoomLayout.ts`; `TilePoint` in `townPlan.ts`, `bossRoomLayout.ts`, `src/map/starlightTentMazeDecor.ts`, `src/systems/dungeon/dungeonEmitters.ts`, `src/core/save/SavedWorld.ts`, `src/ai/actions/world.ts` and `src/dev/perfWalk.ts`.
 - **Problem:** the same tile rectangle and point are redeclared per feature, and code with nothing to do with a town (`WorldResidency`, and dozens of files under `src/` and `scripts/`) imports them from the town plan because it is the most complete copy.
 - **Cost:** a floor-agnostic system depends on the town generator's module, and the copies can drift (some fields are `readonly`, some not).
 - **Better shape:** one `src/map/tileGeometry.ts` holding `TilePoint` and `TileRect`, imported everywhere; the feature modules drop their copies.
 - **Until then:** import `TileRect`/`TilePoint` from `townPlan.ts` rather than declaring another copy.
 - **Size:** S
 - **Found:** 2026-10-22, floor-wide residency system.
+
+### Tables keyed by a town building's name take a free `string`
+
+- **Where:** `ClutterAnchor`'s `name` in `src/systems/TownDecorSystem.ts`, `DOORSTEP_ANCHOR_ROLES` in `src/systems/TownLifeSystem.ts`, the interior shell table in `src/map/GameMap.ts` (`satisfies ReadonlyArray<[string, InteriorShell]>`), the per-building ambience map in `src/scenes/BuildingInteriorScene.ts`, and `TAVERN_BUILDING_NAMES` in `src/map/town/townPlan.ts`. `'Town Center Tower'` is also spelled out in several files beside `TOWN_TOWER_NAME`.
+- **Problem:** `TownBuildingName` / `PlannedBuildingName` already exist, but these tables key by plain `string`, so a misspelled or renamed building compiles and silently loses its decor, doorstep citizen, interior size or ambience.
+- **Cost:** every building rename is a grep hunt instead of a compile error.
+- **Better shape:** type each table's key as `TownBuildingName` (or a `Partial<Record<TownBuildingName, …>>`), and read the names that have a constant from it.
+- **Until then:** type any new building-keyed table with `TownBuildingName`, and use `CLOAK_AND_DAGGER_NAME` / `TOWN_TOWER_NAME` rather than the literal.
+- **Size:** S
+- **Found:** 2026-10-26, Cloak & Dagger rename.

@@ -47,7 +47,7 @@ const RUINS_GHOUL_EYES: EyePlacement = {
 };
 
 /**
- * A former Over City citizen twisted by Scolopendra's poison catastrophe into
+ * A former Taloncrest citizen twisted by Scolopendra's poison catastrophe into
  * a shambling ruins ghoul — the bread-and-butter hostile of the ruined city
  * outside the safety of town.
  */
@@ -60,7 +60,7 @@ export class RuinsGhoul extends Mob {
   protected coinDropMin = 0;
   protected coinDropMax = COIN_DROP_MAX;
   displayName = 'Ruins Ghoul';
-  description = 'A former citizen of the Over City, twisted into a shambling horror.';
+  description = 'A former citizen of Taloncrest, twisted into a shambling horror.';
 
   private attackCooldown = 0;
   private attackAnimTimer = 0;

@@ -3,7 +3,7 @@ import { POTION_HEAL_FRACTION } from '../../Player';
 import { REVIVE_FRAMES, REVIVE_HP_FRACTION } from '../../core/party/reviveRules';
 
 /**
- * How a Meat Shields hireling stays alive between the desk and the end of its
+ * How a Barracks hireling stays alive between the desk and the end of its
  * contract: a flat resistance, a full heal after a spell out of the fight, a
  * bottomless supply of healing draughts on a cooldown, and a downed state a
  * crawler can revive it from before it bleeds out for good.

@@ -1,8 +1,5 @@
 import { MUSIC_TRACK_IDS, type MusicBusId, type MusicTrackId } from '../../audio/sounds';
-import type { GameProgressInput } from '../../auth/AuthClient';
-import { isRecord } from '../util/guards';
-import { musicUnlocksFromProgress } from './musicBackfill';
-import type { PersistedWorldState } from '../save/PersistedWorldState';
+import { isRecord, parseEvery } from '../util/guards';
 
 /** The music library as a save stores it. */
 export interface SerializedMusicLibrary {
@@ -10,13 +7,6 @@ export interface SerializedMusicLibrary {
   readonly heard: readonly MusicTrackId[];
   /** Unlocked songs the music page has not shown since they unlocked: its badge. */
   readonly menuUnseen: readonly MusicTrackId[];
-  /**
-   * Set only on a library a load has just built from the save's progress,
-   * because the save predates the library. Building a {@link MusicLibrary} from
-   * it raises one summary notice in place of an unlock notice per song;
-   * `serialize` never writes it, so the summary is announced once.
-   */
-  readonly backfilled?: boolean;
 }
 
 /**
@@ -24,7 +14,7 @@ export interface SerializedMusicLibrary {
  * HUD drains it:
  * - `unlocked`: a song unlocked the first time its place or activity asked for it.
  * - `attribution`: a song was heard for the first time, so its author is credited.
- * - `backfilled`: a save older than the library unlocked `count` songs from its progress.
+ * - `backfilled`: a dev boot onto a later floor unlocked `count` songs from its starting progress.
  */
 export type MusicLibraryNotice =
   | { readonly kind: 'unlocked'; readonly id: MusicTrackId }
@@ -37,8 +27,7 @@ type UnlockListener = (id: MusicTrackId) => void;
  * Songs every library starts with, new game or loaded save. Every player has
  * heard them before any library exists (the title screen plays with none
  * bound), so they start unlocked and heard but never announced: no unlock
- * notice, no credit and no music-page badge. A standing rule rather than
- * converted save data, so older saves pick them up on load.
+ * notice, no credit and no music-page badge.
  */
 export const ALWAYS_UNLOCKED_TRACK_IDS = [
   'welcome_to_the_dungeon',
@@ -48,9 +37,8 @@ function musicTrackIdOf(value: unknown): MusicTrackId | undefined {
   return MUSIC_TRACK_IDS.find((id) => id === value);
 }
 
-function trackIdsIn(value: unknown): MusicTrackId[] {
-  if (!Array.isArray(value)) return [];
-  return value.map(musicTrackIdOf).filter((id) => id !== undefined);
+function parseTrackIds(value: unknown): MusicTrackId[] | undefined {
+  return parseEvery(value, musicTrackIdOf);
 }
 
 /**
@@ -109,8 +97,7 @@ export class MusicLibrary {
   }
 
   /**
-   * Unlocks `ids` the way a backfilled save does: silently, unheard and
-   * unbadged, so each still credits its author the first time it plays, with
+   * Unlocks `ids` silently, unheard and unbadged, so each still credits its author the first time it plays, with
    * one summary notice for the songs that were not already unlocked.
    */
   absorbBackfill(ids: Iterable<MusicTrackId>): void {
@@ -177,62 +164,30 @@ export class MusicLibrary {
   }
 
   /**
-   * A library from a save's untrusted JSON. Ids no longer in the catalogue are
-   * dropped, and a heard or unseen song is only kept if it is unlocked.
+   * A library from a save's untrusted JSON, or undefined when it names a song
+   * this build does not have, or a heard or unseen song that is not unlocked.
    */
-  static fromSerialized(value: unknown): MusicLibrary {
+  static parse(value: unknown): SerializedMusicLibrary | undefined {
+    if (!isRecord(value)) return undefined;
+    const unlocked = parseTrackIds(value.unlocked);
+    const heard = parseTrackIds(value.heard);
+    const menuUnseen = parseTrackIds(value.menuUnseen);
+    if (unlocked === undefined || heard === undefined || menuUnseen === undefined) {
+      return undefined;
+    }
+    const unlockedSet = new Set(unlocked);
+    const onlyUnlocked = [...heard, ...menuUnseen].every((id) => unlockedSet.has(id));
+    return onlyUnlocked ? { unlocked, heard, menuUnseen } : undefined;
+  }
+
+  /** A library carrying a record {@link parse} has accepted, or {@link serialize} wrote. */
+  static fromSerialized(saved: SerializedMusicLibrary): MusicLibrary {
     const library = new MusicLibrary();
-    if (!isRecord(value)) return library;
-    const unlockedBeforeSave = library.unlockedIds.size;
-    for (const id of trackIdsIn(value.unlocked)) library.unlockedIds.add(id);
-    for (const id of trackIdsIn(value.heard)) {
-      if (library.unlockedIds.has(id)) library.heardIds.add(id);
-    }
-    for (const id of trackIdsIn(value.menuUnseen)) {
-      if (library.unlockedIds.has(id)) library.menuUnseenIds.add(id);
-    }
-    const unlockedBySave = library.unlockedIds.size - unlockedBeforeSave;
-    const backfilledCount = value.backfilled === true ? unlockedBySave : 0;
-    if (backfilledCount > 0) library.notices.push({ kind: 'backfilled', count: backfilledCount });
+    for (const id of saved.unlocked) library.unlockedIds.add(id);
+    for (const id of saved.heard) library.heardIds.add(id);
+    for (const id of saved.menuUnseen) library.menuUnseenIds.add(id);
     return library;
   }
-
-  /**
-   * The library a save older than the library had earned, for a save loaded
-   * with none: see {@link musicUnlocksFromProgress}. Its songs unlock silently
-   * and none is heard, so each one still credits its author the first time it
-   * plays; one summary notice stands in for all their unlock notices.
-   */
-  static backfillFromProgress(
-    progress: GameProgressInput,
-    persisted: PersistedWorldState | undefined,
-  ): MusicLibrary {
-    return MusicLibrary.fromSerialized(backfilledMusicLibrary(progress, persisted));
-  }
-
-  /** The library a save carries, or the one its progress earned when it carries none. */
-  static forSave(progress: GameProgressInput): MusicLibrary {
-    return progress.musicLibrary === undefined
-      ? MusicLibrary.backfillFromProgress(progress, progress.world?.persisted)
-      : MusicLibrary.fromSerialized(progress.musicLibrary);
-  }
-}
-
-/**
- * {@link MusicLibrary.backfillFromProgress} in its stored form, for a load to
- * hand on before any scene exists to build the library.
- */
-export function backfilledMusicLibrary(
-  progress: GameProgressInput,
-  persisted: PersistedWorldState | undefined,
-): SerializedMusicLibrary {
-  const unlockedIds = musicUnlocksFromProgress(progress, persisted);
-  return {
-    unlocked: MUSIC_TRACK_IDS.filter((id) => unlockedIds.has(id)),
-    heard: [],
-    menuUnseen: [],
-    backfilled: true,
-  };
 }
 
 /**

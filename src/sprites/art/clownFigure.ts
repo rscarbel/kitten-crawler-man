@@ -1,5 +1,5 @@
 /**
- * Grimaldi's clowns as painted figures: the choreography, the cell geometry and
+ * The circus clowns as painted figures: the choreography, the cell geometry and
  * the `FigureDef` the runtime cache, the parity run and the review harness all
  * draw through.
  *
@@ -8,7 +8,7 @@
  * placement of a pose or a severed piece inside its cell. Anatomy, palette and
  * every stroke of paint live in `clownArt.ts` and `clownGore.ts`.
  *
- * Grimaldi's three are drawn in profile facing +X and the runtime mirrors them.
+ * The Fat, Tall and Massive Clowns are drawn in profile facing +X and the runtime mirrors them.
  * The Evil Clown is three tiles tall, which a mirrored profile cannot carry
  * when he walks straight down the screen, so he is drawn in all three of the
  * rig's viewpoints and only his profile rows are mirrored.
@@ -259,9 +259,9 @@ function fatSlamPose(progress: number): ClownPose {
   };
 }
 
-// ── Stilt Clown ──────────────────────────────────────────────────────────────
+// ── Tall Clown ──────────────────────────────────────────────────────────────
 
-const STILT_PALETTE: ClownPalette = {
+const TALL_PALETTE: ClownPalette = {
   suitLight: '#7b58a6',
   suitMid: '#432a63',
   suitDark: '#2a1740',
@@ -290,7 +290,7 @@ const STILT_PALETTE: ClownPalette = {
   outline: '#120d18',
 };
 
-const STILT_PROPORTIONS: ClownProportions = {
+const TALL_PROPORTIONS: ClownProportions = {
   torsoLength: 0.5,
   shoulderHalfWidth: 0.2,
   hipHalfWidth: 0.17,
@@ -309,9 +309,9 @@ const STILT_PROPORTIONS: ClownProportions = {
   shoeHeight: 0.05,
 };
 
-export const STILT_STYLE: ClownStyle = {
-  palette: STILT_PALETTE,
-  proportions: STILT_PROPORTIONS,
+export const TALL_STYLE: ClownStyle = {
+  palette: TALL_PALETTE,
+  proportions: TALL_PROPORTIONS,
   hair: 'stringy',
   mouth: 'stitched',
   facePaint: 'tears',
@@ -322,7 +322,7 @@ export const STILT_STYLE: ClownStyle = {
   pompomCount: 2,
 };
 
-const STILT_GAIT: GaitConfig = {
+const TALL_GAIT: GaitConfig = {
   stride: 0.3,
   lift: 0.26,
   bob: 0.05,
@@ -332,7 +332,7 @@ const STILT_GAIT: GaitConfig = {
   armSwing: 0.09,
 };
 
-const STILT_IDLE: IdleConfig = {
+const TALL_IDLE: IdleConfig = {
   breathDepth: 0.025,
   bob: 0.035,
   sway: 0.03,
@@ -340,12 +340,12 @@ const STILT_IDLE: IdleConfig = {
   mouthPulse: 0.2,
 };
 
-/** The stilt clown rears back and coils before every strike. */
-function stiltWindupPose(progress: number): ClownPose {
-  const rest = restingPose(STILT_STYLE);
+/** The tall clown rears back and coils before every strike. */
+function tallWindupPose(progress: number): ClownPose {
+  const rest = restingPose(TALL_STYLE);
   const coil = easeInOut(progress);
-  const armLength = STILT_PROPORTIONS.upperArmLength + STILT_PROPORTIONS.forearmLength;
-  const shoulderY = -shoulderHeight(STILT_PROPORTIONS);
+  const armLength = TALL_PROPORTIONS.upperArmLength + TALL_PROPORTIONS.forearmLength;
+  const shoulderY = -shoulderHeight(TALL_PROPORTIONS);
   const tremor = Math.sin(progress * FULL_CYCLE * 3) * 0.012 * coil;
 
   return {
@@ -371,21 +371,21 @@ function stiltWindupPose(progress: number): ClownPose {
 }
 
 /** …then unfolds, throwing its whole reach at the target. */
-const STILT_LUNGE_STRIKE_END = 0.45;
+const TALL_LUNGE_STRIKE_END = 0.45;
 
-function stiltLungePose(progress: number): ClownPose {
-  const rest = restingPose(STILT_STYLE);
-  const armLength = STILT_PROPORTIONS.upperArmLength + STILT_PROPORTIONS.forearmLength;
-  const shoulderY = -shoulderHeight(STILT_PROPORTIONS);
-  const thrust = easeOut(clamp01(progress / STILT_LUNGE_STRIKE_END));
+function tallLungePose(progress: number): ClownPose {
+  const rest = restingPose(TALL_STYLE);
+  const armLength = TALL_PROPORTIONS.upperArmLength + TALL_PROPORTIONS.forearmLength;
+  const shoulderY = -shoulderHeight(TALL_PROPORTIONS);
+  const thrust = easeOut(clamp01(progress / TALL_LUNGE_STRIKE_END));
   const settle = easeInOut(
-    clamp01((progress - STILT_LUNGE_STRIKE_END) / (1 - STILT_LUNGE_STRIKE_END)),
+    clamp01((progress - TALL_LUNGE_STRIKE_END) / (1 - TALL_LUNGE_STRIKE_END)),
   );
   const extend = thrust * (1 - settle * 0.55);
 
   const REACH_FRACTION = 1.3;
   // The claw finishes at roughly the player's chest, not up by its own head.
-  const STRIKE_HAND_HEIGHT = -groundedHipHeight(STILT_PROPORTIONS) * 0.72;
+  const STRIKE_HAND_HEIGHT = -groundedHipHeight(TALL_PROPORTIONS) * 0.72;
 
   return {
     ...rest,
@@ -409,9 +409,9 @@ function stiltLungePose(progress: number): ClownPose {
   };
 }
 
-// ── Terror the Clown ─────────────────────────────────────────────────────────
+// ── Massive Clown ─────────────────────────────────────────────────────────────
 
-const TERROR_PALETTE: ClownPalette = {
+const MASSIVE_PALETTE: ClownPalette = {
   suitLight: '#7c4090',
   suitMid: '#4a2156',
   suitDark: '#1e0d24',
@@ -441,8 +441,8 @@ const TERROR_PALETTE: ClownPalette = {
 };
 
 /** Enrage repaints the suit and stokes the eyes; the skeleton is unchanged. */
-const TERROR_ENRAGED_PALETTE: ClownPalette = {
-  ...TERROR_PALETTE,
+const MASSIVE_ENRAGED_PALETTE: ClownPalette = {
+  ...MASSIVE_PALETTE,
   suitLight: '#9c2f36',
   suitMid: '#87202e',
   suitDark: '#3d0a12',
@@ -455,7 +455,7 @@ const TERROR_ENRAGED_PALETTE: ClownPalette = {
   eyeGlow: 'rgba(255,170,40,0.95)',
 };
 
-const TERROR_PROPORTIONS: ClownProportions = {
+const MASSIVE_PROPORTIONS: ClownProportions = {
   torsoLength: 0.72,
   shoulderHalfWidth: 0.4,
   hipHalfWidth: 0.38,
@@ -474,10 +474,10 @@ const TERROR_PROPORTIONS: ClownProportions = {
   shoeHeight: 0.15,
 };
 
-export function terrorStyle(enraged: boolean): ClownStyle {
+export function massiveStyle(enraged: boolean): ClownStyle {
   return {
-    palette: enraged ? TERROR_ENRAGED_PALETTE : TERROR_PALETTE,
-    proportions: TERROR_PROPORTIONS,
+    palette: enraged ? MASSIVE_ENRAGED_PALETTE : MASSIVE_PALETTE,
+    proportions: MASSIVE_PROPORTIONS,
     hair: 'mane',
     mouth: 'fanged',
     facePaint: 'slashes',
@@ -489,7 +489,7 @@ export function terrorStyle(enraged: boolean): ClownStyle {
   };
 }
 
-const TERROR_GAIT: GaitConfig = {
+const MASSIVE_GAIT: GaitConfig = {
   stride: 0.22,
   lift: 0.11,
   bob: 0.05,
@@ -499,7 +499,7 @@ const TERROR_GAIT: GaitConfig = {
   armSwing: 0.11,
 };
 
-const TERROR_IDLE: IdleConfig = {
+const MASSIVE_IDLE: IdleConfig = {
   breathDepth: 0.04,
   bob: 0.025,
   sway: 0.015,
@@ -579,12 +579,12 @@ function makeMalletPainter(palette: ClownPalette): PropPainter {
   };
 }
 
-const TERROR_ARM_LENGTH = TERROR_PROPORTIONS.upperArmLength + TERROR_PROPORTIONS.forearmLength;
-const TERROR_SHOULDER_Y = -shoulderHeight(TERROR_PROPORTIONS);
+const MASSIVE_ARM_LENGTH = MASSIVE_PROPORTIONS.upperArmLength + MASSIVE_PROPORTIONS.forearmLength;
+const MASSIVE_SHOULDER_Y = -shoulderHeight(MASSIVE_PROPORTIONS);
 
 /** Mallet hauled back over the shoulder, weight loaded onto the rear foot. */
-function terrorWindupPose(progress: number): ClownPose {
-  const rest = restingPose(terrorStyle(false));
+function massiveWindupPose(progress: number): ClownPose {
+  const rest = restingPose(massiveStyle(false));
   const load = easeInOut(progress);
   const shudder = Math.sin(progress * FULL_CYCLE * 2.5) * deg(2) * load;
 
@@ -597,12 +597,12 @@ function terrorWindupPose(progress: number): ClownPose {
     nearFoot: { x: rest.nearFoot.x + 0.14 * load, y: 0 },
     farFoot: { x: rest.farFoot.x - 0.14 * load, y: 0 },
     nearHand: {
-      x: lerp(rest.nearHand.x, -TERROR_ARM_LENGTH * 0.28, load),
-      y: lerp(rest.nearHand.y, TERROR_SHOULDER_Y - TERROR_ARM_LENGTH * 0.72, load),
+      x: lerp(rest.nearHand.x, -MASSIVE_ARM_LENGTH * 0.28, load),
+      y: lerp(rest.nearHand.y, MASSIVE_SHOULDER_Y - MASSIVE_ARM_LENGTH * 0.72, load),
     },
     farHand: {
-      x: lerp(rest.farHand.x, -TERROR_ARM_LENGTH * 0.5, load),
-      y: lerp(rest.farHand.y, TERROR_SHOULDER_Y - TERROR_ARM_LENGTH * 0.3, load),
+      x: lerp(rest.farHand.x, -MASSIVE_ARM_LENGTH * 0.5, load),
+      y: lerp(rest.farHand.y, MASSIVE_SHOULDER_Y - MASSIVE_ARM_LENGTH * 0.3, load),
     },
     wristTwist: MALLET_GRIP_ANGLE + shudder,
     propBehind: true,
@@ -613,29 +613,29 @@ function terrorWindupPose(progress: number): ClownPose {
 }
 
 /** …and brings it down in a full overhead arc, then drags to a stop. */
-const TERROR_SWING_IMPACT = 0.4;
-/** Progress through the strike at which the mallet crosses in front of Terror. */
+const MASSIVE_SWING_IMPACT = 0.4;
+/** Progress through the strike at which the mallet crosses in front of the Massive Clown. */
 const SWING_OVERHEAD_END = 0.3;
 
-function terrorSwingPose(progress: number): ClownPose {
-  const rest = restingPose(terrorStyle(false));
-  const swing = easeOut(clamp01(progress / TERROR_SWING_IMPACT));
-  const recoil = easeInOut(clamp01((progress - TERROR_SWING_IMPACT) / (1 - TERROR_SWING_IMPACT)));
+function massiveSwingPose(progress: number): ClownPose {
+  const rest = restingPose(massiveStyle(false));
+  const swing = easeOut(clamp01(progress / MASSIVE_SWING_IMPACT));
+  const recoil = easeInOut(clamp01((progress - MASSIVE_SWING_IMPACT) / (1 - MASSIVE_SWING_IMPACT)));
 
-  const startX = -TERROR_ARM_LENGTH * 0.28;
-  const startY = TERROR_SHOULDER_Y - TERROR_ARM_LENGTH * 0.72;
-  const impactX = TERROR_ARM_LENGTH * 0.95;
-  const impactY = TERROR_SHOULDER_Y + TERROR_ARM_LENGTH * 0.5;
+  const startX = -MASSIVE_ARM_LENGTH * 0.28;
+  const startY = MASSIVE_SHOULDER_Y - MASSIVE_ARM_LENGTH * 0.72;
+  const impactX = MASSIVE_ARM_LENGTH * 0.95;
+  const impactY = MASSIVE_SHOULDER_Y + MASSIVE_ARM_LENGTH * 0.5;
 
   const handX = lerp(startX, impactX, swing) + (rest.nearHand.x - impactX) * recoil;
   const handY = lerp(startY, impactY, swing) + (rest.nearHand.y - impactY) * recoil;
 
   // The off hand counterweights the swing and then settles onto the resting
   // pose, so the last frame of the row lines up with idle and walk.
-  const farStartX = -TERROR_ARM_LENGTH * 0.5;
-  const farStartY = TERROR_SHOULDER_Y - TERROR_ARM_LENGTH * 0.3;
-  const farEndX = TERROR_ARM_LENGTH * 0.45;
-  const farEndY = TERROR_SHOULDER_Y + TERROR_ARM_LENGTH * 0.55;
+  const farStartX = -MASSIVE_ARM_LENGTH * 0.5;
+  const farStartY = MASSIVE_SHOULDER_Y - MASSIVE_ARM_LENGTH * 0.3;
+  const farEndX = MASSIVE_ARM_LENGTH * 0.45;
+  const farEndY = MASSIVE_SHOULDER_Y + MASSIVE_ARM_LENGTH * 0.55;
   const farHandX = lerp(farStartX, farEndX, swing) + (rest.farHand.x - farEndX) * recoil;
   const farHandY = lerp(farStartY, farEndY, swing) + (rest.farHand.y - farEndY) * recoil;
 
@@ -1171,10 +1171,10 @@ function shotProgress(frame: number, frameCount: number): number {
 export const WALK_FRAMES = 8;
 export const IDLE_FRAMES = 6;
 export const FAT_SLAM_FRAMES = 10;
-export const STILT_WINDUP_FRAMES = 6;
-export const STILT_LUNGE_FRAMES = 8;
-export const TERROR_WINDUP_FRAMES = 8;
-export const TERROR_SWING_FRAMES = 8;
+export const TALL_WINDUP_FRAMES = 6;
+export const TALL_LUNGE_FRAMES = 8;
+export const MASSIVE_WINDUP_FRAMES = 8;
+export const MASSIVE_SWING_FRAMES = 8;
 export const EVIL_SWIPE_FRAMES = 8;
 export const EVIL_LAUGH_FRAMES = 10;
 export const EVIL_JUGGLE_FRAMES = 8;
@@ -1260,8 +1260,8 @@ function evilRows(): readonly RowSpec[] {
   return rows;
 }
 
-function terrorRows(enraged: boolean): readonly RowSpec[] {
-  const style = terrorStyle(enraged);
+function massiveRows(enraged: boolean): readonly RowSpec[] {
+  const style = massiveStyle(enraged);
   const prop = makeMalletPainter(style.palette);
   const suffix = enraged ? '_enraged' : '';
   return [
@@ -1270,28 +1270,28 @@ function terrorRows(enraged: boolean): readonly RowSpec[] {
       frameCount: WALK_FRAMES,
       style,
       prop,
-      pose: (f) => walkPose(style, cyclePhase(f, WALK_FRAMES), TERROR_GAIT),
+      pose: (f) => walkPose(style, cyclePhase(f, WALK_FRAMES), MASSIVE_GAIT),
     },
     {
       name: `idle${suffix}`,
       frameCount: IDLE_FRAMES,
       style,
       prop,
-      pose: (f) => idlePose(style, cyclePhase(f, IDLE_FRAMES), TERROR_IDLE),
+      pose: (f) => idlePose(style, cyclePhase(f, IDLE_FRAMES), MASSIVE_IDLE),
     },
     {
       name: `windup${suffix}`,
-      frameCount: TERROR_WINDUP_FRAMES,
+      frameCount: MASSIVE_WINDUP_FRAMES,
       style,
       prop,
-      pose: (f) => terrorWindupPose(shotProgress(f, TERROR_WINDUP_FRAMES)),
+      pose: (f) => massiveWindupPose(shotProgress(f, MASSIVE_WINDUP_FRAMES)),
     },
     {
       name: `swing${suffix}`,
-      frameCount: TERROR_SWING_FRAMES,
+      frameCount: MASSIVE_SWING_FRAMES,
       style,
       prop,
-      pose: (f) => terrorSwingPose(shotProgress(f, TERROR_SWING_FRAMES)),
+      pose: (f) => massiveSwingPose(shotProgress(f, MASSIVE_SWING_FRAMES)),
     },
   ];
 }
@@ -1324,7 +1324,7 @@ const SHEETS: readonly SheetSpec[] = [
     ],
   },
   {
-    id: 'stilt_clown',
+    id: 'tall_clown',
     frameWidth: 224,
     frameHeight: 224,
     groundY: 204,
@@ -1332,35 +1332,35 @@ const SHEETS: readonly SheetSpec[] = [
       {
         name: 'walk',
         frameCount: WALK_FRAMES,
-        style: STILT_STYLE,
-        pose: (f) => walkPose(STILT_STYLE, cyclePhase(f, WALK_FRAMES), STILT_GAIT),
+        style: TALL_STYLE,
+        pose: (f) => walkPose(TALL_STYLE, cyclePhase(f, WALK_FRAMES), TALL_GAIT),
       },
       {
         name: 'idle',
         frameCount: IDLE_FRAMES,
-        style: STILT_STYLE,
-        pose: (f) => idlePose(STILT_STYLE, cyclePhase(f, IDLE_FRAMES), STILT_IDLE),
+        style: TALL_STYLE,
+        pose: (f) => idlePose(TALL_STYLE, cyclePhase(f, IDLE_FRAMES), TALL_IDLE),
       },
       {
         name: 'windup',
-        frameCount: STILT_WINDUP_FRAMES,
-        style: STILT_STYLE,
-        pose: (f) => stiltWindupPose(shotProgress(f, STILT_WINDUP_FRAMES)),
+        frameCount: TALL_WINDUP_FRAMES,
+        style: TALL_STYLE,
+        pose: (f) => tallWindupPose(shotProgress(f, TALL_WINDUP_FRAMES)),
       },
       {
         name: 'lunge',
-        frameCount: STILT_LUNGE_FRAMES,
-        style: STILT_STYLE,
-        pose: (f) => stiltLungePose(shotProgress(f, STILT_LUNGE_FRAMES)),
+        frameCount: TALL_LUNGE_FRAMES,
+        style: TALL_STYLE,
+        pose: (f) => tallLungePose(shotProgress(f, TALL_LUNGE_FRAMES)),
       },
     ],
   },
   {
-    id: 'terror_clown',
+    id: 'massive_clown',
     frameWidth: 256,
     frameHeight: 240,
     groundY: 214,
-    rows: [...terrorRows(false), ...terrorRows(true)],
+    rows: [...massiveRows(false), ...massiveRows(true)],
   },
   {
     id: 'evil_clown',
@@ -1486,27 +1486,27 @@ function specNamed(id: FigureId): SheetSpec {
 }
 
 export const FAT_CLOWN_SPEC = specNamed('fat_clown');
-export const STILT_CLOWN_SPEC = specNamed('stilt_clown');
-export const TERROR_CLOWN_SPEC = specNamed('terror_clown');
+export const TALL_CLOWN_SPEC = specNamed('tall_clown');
+export const MASSIVE_CLOWN_SPEC = specNamed('massive_clown');
 export const EVIL_CLOWN_SPEC = specNamed('evil_clown');
 
 export const FAT_CLOWN_FIGURE = figureOf(FAT_CLOWN_SPEC);
-export const STILT_CLOWN_FIGURE = figureOf(STILT_CLOWN_SPEC);
-export const TERROR_CLOWN_FIGURE = figureOf(TERROR_CLOWN_SPEC);
+export const TALL_CLOWN_FIGURE = figureOf(TALL_CLOWN_SPEC);
+export const MASSIVE_CLOWN_FIGURE = figureOf(MASSIVE_CLOWN_SPEC);
 export const EVIL_CLOWN_FIGURE = figureOf(EVIL_CLOWN_SPEC);
 
 /** Every clown figure, in the order the review harness lays them out. */
 export const CLOWN_FIGURES: readonly FigureDef[] = [
   FAT_CLOWN_FIGURE,
-  STILT_CLOWN_FIGURE,
-  TERROR_CLOWN_FIGURE,
+  TALL_CLOWN_FIGURE,
+  MASSIVE_CLOWN_FIGURE,
   EVIL_CLOWN_FIGURE,
 ];
 
 export const CLOWN_SPECS: readonly SheetSpec[] = [
   FAT_CLOWN_SPEC,
-  STILT_CLOWN_SPEC,
-  TERROR_CLOWN_SPEC,
+  TALL_CLOWN_SPEC,
+  MASSIVE_CLOWN_SPEC,
   EVIL_CLOWN_SPEC,
 ];
 

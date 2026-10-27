@@ -30,9 +30,9 @@ export type AssetGroup =
 /**
  * Every creature/effect/environment sheet a group covers.
  *
- * Roughly half of `src/sprites/*` (Krasue, CircusLemur, MoldLion,
- * MissQuill, Remex, Signet, GumGum, HeatherTheBear,
- * RuinsGhoul, GrimaldiVine, InkMarauder, CityElfCultist, all
+ * Roughly half of `src/sprites/*` (Krasue, Lemur, Lion,
+ * MissQuill, Remex, Baggi, DireBear, RuinsGhoul,
+ * CityElfCultist, all
  * townsfolk) is procedural canvas drawing with no manifest entry at all — those
  * creatures cost nothing sprite-wise and deliberately have no key anywhere in
  * this file. See `MOB_SPRITE_KEYS` below for the canonical "does this mob type
@@ -73,10 +73,10 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'blackwood_lodge',
     'blacksmith',
     'cartwrights_workshop',
-    'desperado_club',
+    'cloak_and_dagger',
     'general_store',
     'herb_remedy',
-    'hildas_cottage',
+    'loris_cottage',
     'horned_flagon',
     'millers_farm',
     'overworld_main_tower',
@@ -91,10 +91,10 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'blackwood_lodge_life',
     'blacksmith_life',
     'cartwrights_workshop_life',
-    'desperado_club_life',
+    'cloak_and_dagger_life',
     'general_store_life',
     'herb_remedy_life',
-    'hildas_cottage_life',
+    'loris_cottage_life',
     'horned_flagon_life',
     'millers_farm_life',
     'plumbline_farm_life',
@@ -119,16 +119,16 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'town_milking_shed',
     'town_pasture_gate',
     'town_notice_board',
-    'town_skyfowl_perch',
-    'over_city_fortune_teller',
-    'over_city_signpost',
+    'town_hawkfolk_perch',
+    'taloncrest_fortune_teller',
+    'taloncrest_signpost',
     'ground_overworld',
     'modern_decorations',
   ],
 
   // Drawn only inside the town's buildings: the rooms' floors and walls, the
   // inn's safe-room counter and galley (laid on dungeon ground), and the
-  // Desperado Club's furniture. Level 3 names it in `interiorSpriteGroups`, so
+  // Cloak & Dagger's furniture. Level 3 names it in `interiorSpriteGroups`, so
   // it is painted behind a building's loading card rather than on arrival.
   town_interior: [
     'ground_interior',
@@ -139,16 +139,16 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'club_drink_shelf',
     'club_market_backdrop',
     'club_market_stall',
-    'club_merc_desk',
     'club_poker_table',
-    'club_velvet_rope',
-    'club_vip_counter',
-    'club_weapon_rack',
     'club_slot_cabinet',
+    'club_slot_cabinet_back',
     'club_slot_lights',
     'club_fortune_wheel',
     'club_fortune_wheel_lights',
     'club_croupier_counter',
+    'club_stage',
+    'club_host_stand',
+    'club_standing_table',
   ],
 
   // Level 3's wilderness: trees, boulders, the goblin camps, Briar Hollow and the circus.
@@ -206,7 +206,7 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'village_2x2',
     'village_2x3',
     // The circus grounds' tents, arch posts, flame lamps, wagons and booths.
-    'circus_big_top',
+    'circus_starlight_tent',
     'circus_pavilion',
     'circus_arch_post',
     'circus_rim_post',
@@ -367,12 +367,12 @@ export const MOB_SPRITE_KEYS: Readonly<Record<MobKind, readonly SpriteKey[]>> = 
   small_spider: [],
   ruins_ghoul: [],
   krasue: [],
-  circus_lemur: [],
-  stilt_clown: [],
+  lemur: [],
+  tall_clown: [],
   fat_clown: [],
   evil_clown: [],
-  mold_lion: [],
-  terror_the_clown: [],
+  lion: [],
+  massive_clown: [],
   city_elf_cultist: [],
   skeleton_sword: [],
   skeleton_archer: [],
@@ -382,8 +382,8 @@ export const MOB_SPRITE_KEYS: Readonly<Record<MobKind, readonly SpriteKey[]>> = 
   necromancer: [],
   raised_ratkin: [],
   grave_bull: [],
-  /** Painted by `skyfowlCastSprite.ts`, one figure per street-tough look. */
-  sky_fowl: [],
+  /** Painted by `hawkfolkCastSprite.ts`, one figure per street-tough look. */
+  hawkfolk: [],
   /** The five fairies are painted, not baked. */
   fairy_shield: [],
   fairy_healer: [],
@@ -393,8 +393,8 @@ export const MOB_SPRITE_KEYS: Readonly<Record<MobKind, readonly SpriteKey[]>> = 
 
   /** `bountyDefs.ts`'s `DARK_KNIGHT_DEF` — painted, not baked. */
   dark_knight: [],
-  // Heather the Bear, Miss Quill and Remex are painted procedurally, so none holds a sheet.
-  heather_the_bear: [],
+  // The Dire Bear, Miss Quill and Remex are painted procedurally, so none holds a sheet.
+  dire_bear: [],
   miss_quill: [],
   remex: [],
   /** Boss adds and set-piece hostiles, all procedural or painted. */
@@ -411,7 +411,7 @@ export const MOB_SPRITE_KEYS: Readonly<Record<MobKind, readonly SpriteKey[]>> = 
  * table, so `SYSTEM_ASSET_REQUIREMENTS` is the only place that names them.
  */
 export type FriendlyCreatureKind =
-  'cow' | 'calf' | 'ratkin_soldier' | 'signet' | 'gum_gum' | 'mongo' | 'mercenary';
+  'cow' | 'calf' | 'ratkin_soldier' | 'baggi' | 'mongo' | 'mercenary';
 
 /** Any creature whose sprite needs `verify:assets` checks. */
 export type CreatureKind = MobKind | FriendlyCreatureKind;
@@ -425,9 +425,8 @@ export const FRIENDLY_CREATURE_SPRITE_KEYS: Readonly<
   calf: [],
   /** Briar Hollow's militia, painted by `ratkinCastSprite.ts` like the rest of the ratkin cast. */
   ratkin_soldier: [],
-  /** `Signet` and `GumGum` — procedural. */
-  signet: [],
-  gum_gum: [],
+  /** `Baggi` — procedural. */
+  baggi: [],
   /** `MongoSystem` — a persistent companion, not a spawn-table mob; painted. */
   mongo: [],
   /** `MercenarySystem`'s hirelings, drawn through `MERCENARY_ART` (`src/sprites/mercenaryArt.ts`); painted. */

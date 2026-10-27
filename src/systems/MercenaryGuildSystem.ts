@@ -2,7 +2,6 @@ import type { Player } from '../Player';
 import { canAffordCoins, partyCoins, spendPartyCoins } from '../core/party/partyCoins';
 import type { AudioManager } from '../audio/AudioManager';
 import type { MercenaryRoster } from '../core/party/MercenaryRoster';
-import { CLUB_MERC_DESK_TILE } from '../core/club/clubLayout';
 import {
   MERCENARY_TEMPLATES,
   getMercenaryTemplate,
@@ -10,12 +9,15 @@ import {
   type MercenaryTemplateId,
 } from '../core/party/mercenaryTemplates';
 import { MERCENARY_ART } from '../sprites/mercenaryArt';
-import { drawRosemariePortrait, prewarmRosemarie } from '../sprites/rosemarieSprite';
-import { GROUND_OFFSET_IN_TILE as ROSEMARIE_GROUND_IN_TILE } from '../sprites/art/rosemarieFigure';
+import {
+  drawCrocodilianSprite,
+  prewarmSydney,
+  sydneyPortraitRow,
+} from '../sprites/crocodilianSprite';
+import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
 import { activeRunStats } from '../core/progression/GameStats';
 import { ConfirmDialog } from '../ui/screens/dialogs/ConfirmDialog';
 import type { Rect } from '../ui/core/geom';
-import { RosemarieDeskIdle } from './RosemarieDeskIdle';
 
 /** The largest a portrait tile is drawn: a short hire stops growing before it turns to mush. */
 const PORTRAIT_MAX_TILE = 84;
@@ -23,82 +25,64 @@ const PORTRAIT_MAX_TILE = 84;
 const PORTRAIT_MARGIN = 6;
 /** Every figure stands on a line this far down its tile. */
 const FIGURE_FEET_IN_TILE = 0.95;
-/** She is short even for a dwarf: a tile this size fills the strip without her hat touching the top. */
+/** Sydney's tile in the speech strip: her head and shoulders fill it, the rest is cropped. */
 const SPEECH_PORTRAIT_TILE = 56;
+/** The desk's idle clock runs in game ticks, like every hireling's own. */
+const TICKS_PER_SECOND = 60;
+const MS_PER_SECOND = 1000;
+/** She faces the customer across the desk. */
+const MANAGER_FACING_X = 0;
+const MANAGER_FACING_Y = 1;
 
-// Rosemarie's voice. She is an old dwarf who sells people for a living, and
-// she has made her peace with where most of them end up.
-export const MERCENARY_DESK_TITLE = 'Meat Shields: Mercenaries for Hire';
-export const MERCENARY_DESK_SUBTITLE = 'Rosemarie peers over the desk. Bernie the mole peers too.';
-const GREETING = '"Pick one, sweetheart. They all bleed. Some just take longer about it."';
-const NOT_ENOUGH_COINS = '"Come back when your purse is heavier than my mole."';
+// Sydney's voice. She ran a garrison's stores before she ran this desk, and
+// she runs it the same way: by the form, without raising her voice.
+export const MERCENARY_DESK_TITLE = 'The Barracks Mercenaries';
+export const MERCENARY_DESK_SUBTITLE = 'Sydney runs the desk by the book. She wrote the book.';
+const GREETING = '"Contracts run to the end of the floor or the end of the hire. Pick a file."';
+const NOT_ENOUGH_COINS = '"The fee is paid up front, in full. Come back when it is."';
 const CONTRACT_ACTIVE =
-  '"One at a time, sweetheart. Bring the last one back and I\'ll tear it up."';
-const NO_FLOOR = '"Can\'t sign you up for a floor you ain\'t standing on."';
-const DAMASCUS_REFUSAL =
-  "\"Damascus? He's on my books, but he don't sign for crawlers. Don't ask him twice.\"";
+  '"One contract per party. Bring yours back, or tear it up here, and we start again."';
+const NO_FLOOR = '"I can only sign for the floor you\'re standing on."';
 const hireSuccess = (name: string): string =>
-  `"${name}'s yours till the floor's done or they are. No refunds on either. They're waiting out front."`;
+  `"${name} is signed out to you, to the end of the floor or of them. Reporting to you now."`;
 const dismissed = (name: string): string =>
-  `"${name} goes back on the shelf. Only place you can do that is here, mind. Nice doing business."`;
+  `"${name} goes back on the board. The fee was non-refundable. It says so on the form."`;
 const DISMISS_CONFIRM_TITLE = 'Dismiss Contract';
 const KEEP_LABEL = 'Keep them';
 const TEAR_UP_LABEL = 'Tear it up';
 const confirmDismissal = (name: string): string =>
-  `"Tear up ${name}'s paper? Fee stays in my apron either way, sweetheart. Your call."`;
+  `"Tear up ${name}'s contract? The fee stays with the desk either way."`;
 const condolences = (name: string): string =>
-  `"Heard about ${name}. Contract's paid through the floor all the same. That's the business."`;
-
-/** Damascus Steel is on Meat Shields' books but will not be hired, so his entry is a refusal, not a card. */
-const DAMASCUS = {
-  name: 'Damascus Steel',
-  species: 'Ifrit',
-  role: 'Dancer',
-} as const;
-
-type DeskEntry = { kind: 'hire'; template: MercenaryTemplate } | { kind: 'refusal' };
-
-/** The hires in price order, and Damascus at the foot of the list where nobody can buy him. */
-const DESK_ENTRIES: readonly DeskEntry[] = [
-  ...MERCENARY_TEMPLATES.map((template): DeskEntry => ({ kind: 'hire', template })),
-  { kind: 'refusal' },
-];
+  `"${name} is marked lost on the board. The contract was paid through the floor. I'm sorry for it."`;
 
 /** The only part of a crawler the desk reads or writes. */
 type Purse = Pick<Player, 'coins'>;
 
 /** One line of the desk's list, as the desk screen draws it. */
-export type MercenaryDeskEntry =
-  | {
-      readonly kind: 'hire';
-      readonly template: MercenaryTemplate;
-      readonly underContract: boolean;
-      /** Rosemarie's reason not to sign this hire now, or null when she will. */
-      readonly hireRefusal: string | null;
-      /** Why the Hire button is dimmed, in the player's terms, or null. */
-      readonly hireNote: string | null;
-    }
-  | {
-      readonly kind: 'refusal';
-      readonly name: string;
-      readonly species: string;
-      readonly role: string;
-      /** What Rosemarie says about him. */
-      readonly pitch: string;
-    };
+export interface MercenaryDeskEntry {
+  readonly template: MercenaryTemplate;
+  readonly underContract: boolean;
+  /** Sydney's reason not to sign this hire now, or null when she will. */
+  readonly hireRefusal: string | null;
+  /** Why the Hire button is dimmed, in the player's terms, or null. */
+  readonly hireNote: string | null;
+}
 
 export interface MercenaryDeskView {
   readonly entries: readonly MercenaryDeskEntry[];
   readonly selected: number;
-  /** What Rosemarie is saying. */
+  /** What Sydney is saying. */
   readonly line: string;
   readonly coins: number;
 }
 
 /**
- * Rosemarie's "Meat Shields" desk in the Desperado Club: a list of hires down
- * the left, the selected one's portrait, stats and sales pitch on the right,
- * and Rosemarie herself underneath saying whatever she has to say about it.
+ * The Barracks Mercenaries' hire desk: a list of hires down the left, the
+ * selected one's portrait, stats and sales pitch on the right, and Sydney, who
+ * keeps the desk, underneath saying whatever she has to say about it.
+ *
+ * Which building keeps the desk is not this class's business: a room hosts it
+ * by giving one of its occupants the `mercenary_guild` desk service.
  *
  * Signing a contract deducts coins and records it on the persisted
  * {@link MercenaryRoster}, which the overworld `MercenarySystem` reads to spawn
@@ -118,32 +102,28 @@ export class MercenaryGuildSystem {
   readonly dismissConfirm: ConfirmDialog;
 
   private selected = 0;
-  private rosemarieLine = GREETING;
-  private readonly desk = new RosemarieDeskIdle(CLUB_MERC_DESK_TILE);
+  private managerLine = GREETING;
 
   constructor(
     private readonly roster: MercenaryRoster,
     private readonly audio: AudioManager | null,
   ) {
     this.dismissConfirm = new ConfirmDialog(audio);
-    prewarmRosemarie();
+    prewarmSydney();
   }
 
   openPanel(): void {
     this.open = true;
     this.dismissConfirm.close();
-    prewarmRosemarie({ portrait: true });
     const active = this.roster.active;
     const activeIndex =
-      active === null
-        ? -1
-        : DESK_ENTRIES.findIndex((e) => e.kind === 'hire' && e.template.id === active.id);
+      active === null ? -1 : MERCENARY_TEMPLATES.findIndex((t) => t.id === active.id);
     this.selected = Math.max(0, activeIndex);
     // Said once: cleared on the live roster, which every later save and
     // checkpoint captures, so only rewinding to before this visit repeats it.
     const deceased = this.roster.lastDeceased;
     this.roster.lastDeceased = null;
-    this.rosemarieLine = deceased === null ? GREETING : condolences(deceased);
+    this.managerLine = deceased === null ? GREETING : condolences(deceased);
     this.audio?.play('typing_click');
   }
 
@@ -152,26 +132,11 @@ export class MercenaryGuildSystem {
     this.dismissConfirm.close();
   }
 
-  /** Advances Rosemarie's life behind the desk: her hobble, her coins, the dancers' complaints. */
-  updateDesk(): void {
-    this.desk.update(this.open);
-  }
-
-  /** Draws Rosemarie at her desk for the club's Y-sorted pass. */
-  renderDesk(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
-    this.desk.render(ctx, camX, camY, tileSize);
-  }
-
-  /** The coin she has in the air and whatever the dancer it hit is shouting about. */
-  renderDeskOverlay(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    this.desk.renderOverlay(ctx, camX, camY);
-  }
-
   private say(line: string): void {
-    this.rosemarieLine = line;
+    this.managerLine = line;
   }
 
-  /** Rosemarie's reason not to sign `template` right now, or null when she will. */
+  /** Sydney's reason not to sign `template` right now, or null when she will. */
   private hireRefusal(template: MercenaryTemplate, player: Purse, companion: Purse): string | null {
     // Only a harness builds the desk with no floor under it; a contract with
     // no floor to run to would never end.
@@ -193,7 +158,7 @@ export class MercenaryGuildSystem {
     spendPartyCoins(player, companion, template.price, player);
     activeRunStats()?.recordHirelingHired();
     // Warmed on the signature rather than on the first frame the hire is
-    // drawn: it walks out of the club already moving.
+    // drawn: it steps away from the desk already moving.
     MERCENARY_ART[template.art].prewarm();
     this.roster.active = {
       id: template.id,
@@ -215,18 +180,13 @@ export class MercenaryGuildSystem {
   }
 
   /**
-   * A press on the selected row: Rosemarie says why it cannot be signed, if
+   * A press on the selected row: Sydney says why it cannot be signed, if
    * it cannot. Never signs anything.
    */
   private activateEntry(index: number, player: Purse, companion: Purse): void {
-    const entry = DESK_ENTRIES[index];
-    if (entry.kind === 'refusal') {
-      this.say(DAMASCUS_REFUSAL);
-      this.audio?.play('typing_click');
-      return;
-    }
-    const underContract = this.roster.active?.id === entry.template.id;
-    const refusal = underContract ? null : this.hireRefusal(entry.template, player, companion);
+    const template = MERCENARY_TEMPLATES[index];
+    const underContract = this.roster.active?.id === template.id;
+    const refusal = underContract ? null : this.hireRefusal(template, player, companion);
     if (refusal !== null) {
       this.say(refusal);
       this.audio?.play('error');
@@ -241,29 +201,23 @@ export class MercenaryGuildSystem {
   /** Everything the desk screen draws, read fresh each frame. */
   deskView(player: Purse, companion: Purse): MercenaryDeskView {
     const active = this.roster.active;
-    const entries = DESK_ENTRIES.map((entry): MercenaryDeskEntry => {
-      if (entry.kind === 'refusal')
-        return { kind: 'refusal', ...DAMASCUS, pitch: DAMASCUS_REFUSAL };
-      const template = entry.template;
-      return {
-        kind: 'hire',
-        template,
-        underContract: active?.id === template.id,
-        hireRefusal: this.hireRefusal(template, player, companion),
-        hireNote: this.hireNote(template, player, companion),
-      };
-    });
+    const entries = MERCENARY_TEMPLATES.map((template): MercenaryDeskEntry => ({
+      template,
+      underContract: active?.id === template.id,
+      hireRefusal: this.hireRefusal(template, player, companion),
+      hireNote: this.hireNote(template, player, companion),
+    }));
     return {
       entries,
       selected: this.selected,
-      line: this.rosemarieLine,
+      line: this.managerLine,
       coins: partyCoins(player, companion),
     };
   }
 
-  /** A press on a row: a different row is selected; the selected row hears from Rosemarie whether it can be signed. */
+  /** A press on a row: a different row is selected; the selected row hears from Sydney whether it can be signed. */
   pressRow(index: number, player: Purse, companion: Purse): void {
-    if (index < 0 || index >= DESK_ENTRIES.length) return;
+    if (index < 0 || index >= MERCENARY_TEMPLATES.length) return;
     if (index === this.selected) this.activateEntry(index, player, companion);
     else this.select(index);
   }
@@ -305,16 +259,22 @@ export class MercenaryGuildSystem {
     this.renderPortrait(ctx, getMercenaryTemplate(id), frame);
   }
 
-  /** Draws Rosemarie's head and shoulders, standing on the bottom edge of `frame`. */
-  drawRosemarie(ctx: CanvasRenderingContext2D, frame: Rect): void {
-    const tile = Math.min(SPEECH_PORTRAIT_TILE, frame.h / ROSEMARIE_GROUND_IN_TILE);
+  /** Draws Sydney's head and shoulders, her crown just inside the top of `frame`. */
+  drawManager(ctx: CanvasRenderingContext2D, frame: Rect): void {
+    const tile = SPEECH_PORTRAIT_TILE;
     const sx = frame.x + (frame.w - tile) / 2;
-    const sy = frame.y + frame.h - tile * ROSEMARIE_GROUND_IN_TILE;
+    const crownAboveTileTop = -figureRowInkTop(sydneyPortraitRow(), 0, tile);
+    const sy = frame.y + PORTRAIT_MARGIN + crownAboveTileTop;
     ctx.save();
     ctx.beginPath();
     ctx.rect(frame.x, frame.y, frame.w, frame.h);
     ctx.clip();
-    drawRosemariePortrait(ctx, sx, sy, tile, { row: 'idle', timeSeconds: this.desk.timeSeconds });
+    drawCrocodilianSprite(ctx, sx, sy, tile, {
+      variant: 'sydney',
+      row: 'idle',
+      facingX: MANAGER_FACING_X,
+      facingY: MANAGER_FACING_Y,
+    });
     ctx.restore();
   }
 
@@ -338,7 +298,7 @@ export class MercenaryGuildSystem {
   ): void {
     const art = MERCENARY_ART[template.art];
     // Sized by the figure's own height, so a golem two tiles tall and a
-    // crocodilian barely one both stand head-to-foot in the same frame.
+    // human barely one both stand head-to-foot in the same frame.
     const figureTiles = art.headLiftTiles + FIGURE_FEET_IN_TILE;
     const usableH = frame.h - PORTRAIT_MARGIN * 2;
     const tile = Math.min(PORTRAIT_MAX_TILE, usableH / figureTiles);
@@ -346,7 +306,7 @@ export class MercenaryGuildSystem {
     const feetY = frame.y + frame.h - PORTRAIT_MARGIN;
     const sy = feetY - tile * FIGURE_FEET_IN_TILE;
     // Clipped because a figure's ink runs past its tile — a golem's head, a
-    // raised lance — and the frame is the edge of the picture.
+    // planted staff — and the frame is the edge of the picture.
     ctx.save();
     ctx.beginPath();
     ctx.rect(frame.x, frame.y, frame.w, frame.h);
@@ -357,7 +317,7 @@ export class MercenaryGuildSystem {
       isMoving: false,
       facingX: 0,
       facingY: 1,
-      clock: this.desk.ticks,
+      clock: (performance.now() / MS_PER_SECOND) * TICKS_PER_SECOND,
     });
     ctx.restore();
   }

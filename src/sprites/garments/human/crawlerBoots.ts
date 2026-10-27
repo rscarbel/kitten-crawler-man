@@ -40,7 +40,7 @@ function farBoot(look: BootLook): BootLook {
 }
 
 /** A painter for a pair of `look`, the far one of them sunk into the far leg's shade. */
-function bootPainter(
+export function bootPainter(
   look: BootLook,
 ): (ctx: CanvasRenderingContext2D, frame: BipedLegFrame) => void {
   const far = farBoot(look);

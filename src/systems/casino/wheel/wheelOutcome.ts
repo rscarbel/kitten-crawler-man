@@ -31,7 +31,7 @@ export function pickOutcome(
 }
 
 /**
- * The `!lucky` draw: the same weights with every red wedge (the Nothing and
+ * The `!lucky` draw: the same weights with every red wedge (Permanent Death and
  * every wound, status or robbery) and Spin Again struck out, so each spin pays
  * a real prize. Spin Again never retires, so once every prize is claimed it is
  * the one wedge left that is not a loss, and the draw falls back to it.

@@ -55,10 +55,9 @@ import type { QuestMarkerType } from '../MiniMapSystem';
 import type { ObjectiveBeaconSource, TrackerEntry, TrackerTarget } from '../questTracker';
 import { DUNGEON_BEACON_BRIGHTNESS } from '../../ui/ObjectiveBeacon';
 import { playPrisonCue, type PrisonCue } from './prisonSoundCues';
-import {
-  UNMET_STEALTH_KEY_SNATCH,
-  type StealthKeySnatchCheckpoint,
-  type StealthKeySnatchPhase,
+import type {
+  StealthKeySnatchCheckpoint,
+  StealthKeySnatchPhase,
 } from './stealthKeySnatchCheckpoint';
 import {
   PRISON_KEY_ITEM,
@@ -663,10 +662,9 @@ export class StealthKeySnatchSystem
 
   /**
    * Puts the quest and the gate back as captured. Restored after the map's
-   * own checkpoint, so the gate it sets is the one that sticks; a save written
-   * without the quest restores {@link UNMET_STEALTH_KEY_SNATCH}.
+   * own checkpoint, so the gate it sets is the one that sticks.
    */
-  restoreCheckpoint(snapshot: StealthKeySnatchCheckpoint = UNMET_STEALTH_KEY_SNATCH): void {
+  restoreCheckpoint(snapshot: StealthKeySnatchCheckpoint): void {
     this.seenExplainer = snapshot.explainerSeen;
     this.rattleCooldown = 0;
     this.applyPhase(snapshot.phase);

@@ -57,7 +57,7 @@ const TODDLER_ROW_FRAMES: Readonly<Record<ToddlerRow, number>> = {
 /** Cell pixels per tile. */
 export const TILE_SCALE = 64;
 /**
- * Both figures stand on the same row of their tile as the human crawler and Rosemarie, so
+ * Both figures stand on the same row of their tile as the human crawler and Old Lori, so
  * she and the toddler beside her share one ground line.
  */
 const GROUND_ROW_IN_TILE = 58;

@@ -279,7 +279,7 @@ function idleWindowFrames(): number {
 
 /**
  * Scaled for this device only where sheets paint at half density (see
- * `memoryBudgetScale`): at full density the Over City's 137 MB of sheets is
+ * `memoryBudgetScale`): at full density Taloncrest's 137 MB of sheets is
  * the floor's whole working set, and a smaller limit let go of facades that
  * were then walked back to and repainted.
  */

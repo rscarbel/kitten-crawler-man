@@ -73,7 +73,7 @@ const BUILDING_RAMPS: Readonly<Record<string, Ramp | undefined>> = {
   garrison_stone: ramp([72, 80, 88], [126, 134, 144], [180, 190, 202], [206, 214, 226]),
   /** Pale ashlar, the temple's dressed blocks — desaturated and bright. */
   pale_ashlar: ramp([96, 92, 84], [150, 145, 133], [198, 193, 180], [222, 218, 206]),
-  /** The Desperado's dark dressed stone. */
+  /** The Cloak & Dagger's dark dressed stone. */
   dark_dressed_stone: ramp([46, 43, 47], [86, 82, 88], [132, 127, 134], [168, 162, 170]),
   /** Soot-blackened smithy stone. */
   soot_stone: ramp([62, 57, 51], [118, 110, 100], [176, 165, 150], [208, 197, 182]),
@@ -137,12 +137,12 @@ const BUILDING_RAMPS: Readonly<Record<string, Ramp | undefined>> = {
   shake_brown: ramp([78, 62, 45], [134, 109, 79], [190, 161, 118], [218, 192, 152]),
   /**
    * The temple's half-dome, tuned to `oc_sky_icon` — a muted, desaturated
-   * cousin of the shipped saturated blue, reserved for skyfowl religious and
+   * cousin of the shipped saturated blue, reserved for Hawkfolk religious and
    * civic iconography so it reads as chosen device rather than paint.
    */
   dome_blue: SKY_ICON_RAMP_VALUE,
   /**
-   * Skyfowl sky/feather iconography — relief devices, sign devices, roost
+   * Hawkfolk sky/feather iconography — relief devices, sign devices, roost
    * finials and perched-bird silhouettes. Never a whole-wall fill.
    */
   sky_icon: SKY_ICON_RAMP_VALUE,
@@ -164,7 +164,7 @@ const BUILDING_RAMPS: Readonly<Record<string, Ramp | undefined>> = {
   fire: ramp([132, 40, 12], [216, 104, 26], [248, 182, 72], [255, 236, 168]),
   /** Rising smoke, and the cold grey of a spent fire. */
   smoke: ramp([48, 48, 52], [92, 92, 98], [140, 140, 148], [178, 178, 186]),
-  /** Old Hilda's smoke carries her cauldron's cast. */
+  /** Old Lori's smoke carries her cauldron's cast. */
   witch_smoke: ramp([40, 58, 42], [78, 108, 78], [122, 156, 118], [162, 192, 156]),
 
   // ── cloth, greenery and paint accents ────────────────────────────────────

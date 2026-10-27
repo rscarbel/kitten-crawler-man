@@ -1,5 +1,5 @@
 /**
- * The two indoor halves of "The Anchor is Broken": Old Hilda's repairs and the
+ * The two indoor halves of "The Anchor is Broken": Old Lori's repairs and the
  * Temple of the Sky's vermin.
  *
  * `AnchorQuestSystem` owns the questline out on the plaza, where Madame Voss
@@ -56,20 +56,20 @@ import {
   AVIEL_REQUEST_INTRO,
   AVIEL_REQUEST_TERMS,
   AVIEL_REWARD,
-  HILDA_PROGRESS,
-  HILDA_REQUEST_INTRO,
-  HILDA_REQUEST_TERMS,
-  HILDA_REWARD,
+  LORI_PROGRESS,
+  LORI_REQUEST_INTRO,
+  LORI_REQUEST_TERMS,
+  LORI_REWARD,
 } from '../dialog/scripts/scenes/anchor';
 import {
-  HILDA_COTTAGE_NAME,
+  LORI_COTTAGE_NAME,
   SKY_TEMPLE_NAME,
-  hildasWreckMended,
+  lorisWreckMended,
   templeVerminHoldRoom,
 } from './interiorStoryOwnership';
 
 /** Her worktable, its chair and one wall shelf. */
-const HILDA_REPAIRS_REQUIRED = 3;
+const LORI_REPAIRS_REQUIRED = 3;
 /** What one mend costs, out of whichever bag is carrying the wood. */
 const BOARDS_PER_REPAIR = 2;
 /**
@@ -82,7 +82,7 @@ const BOARDS_PER_PICKUP = BOARDS_PER_REPAIR * 2;
  *
  * The pile exists at all so that boards cannot be wasted into a soft-lock, which
  * is the same reason the defend quest's pile respawns; six seconds is that
- * quest's cadence and there is no reason for Hilda's to differ.
+ * quest's cadence and there is no reason for Lori's to differ.
  */
 export const WOOD_PILE_RESPAWN_SECONDS = 6;
 const FRAMES_PER_SECOND = 60;
@@ -160,12 +160,12 @@ export class AnchorInteriorSystem {
     private readonly conversation: Conversation,
     private readonly audio: AudioManager | null,
   ) {
-    if (this.buildingName === HILDA_COTTAGE_NAME) {
-      this.breakHildasFurniture();
+    if (this.buildingName === LORI_COTTAGE_NAME) {
+      this.breakLorisFurniture();
       // The pile is placed on the step starting, but the room is torn down and
       // rebuilt on every door open — so a re-entry mid-step must put it back, or
       // a player who spent every board before leaving can never earn another.
-      if (this.progress.hilda === 'in_progress') this.placeWoodPile();
+      if (this.progress.lori === 'in_progress') this.placeWoodPile();
     }
     if (this.buildingName === SKY_TEMPLE_NAME) this.restockNave();
   }
@@ -191,7 +191,7 @@ export class AnchorInteriorSystem {
     audio: AudioManager | null,
   ): AnchorInteriorSystem | null {
     if (floor !== 0) return null;
-    if (buildingName !== HILDA_COTTAGE_NAME && buildingName !== SKY_TEMPLE_NAME) return null;
+    if (buildingName !== LORI_COTTAGE_NAME && buildingName !== SKY_TEMPLE_NAME) return null;
     return new AnchorInteriorSystem(
       buildingName,
       progress,
@@ -204,18 +204,18 @@ export class AnchorInteriorSystem {
     );
   }
 
-  // ── Hilda's room, on entry ────────────────────────────────────────────────
+  // ── Lori's room, on entry ────────────────────────────────────────────────
 
   /**
    * Splinters as many of her three furnishings as the record says are still
    * unmended — including before the questline exists, because a room that
    * becomes broken the moment a quest says so reads as a stage flat.
    */
-  private breakHildasFurniture(): void {
-    if (hildasWreckMended(this.progress)) return;
+  private breakLorisFurniture(): void {
+    if (lorisWreckMended(this.progress)) return;
     const furnishings = this.pickRepairableFurnishings();
     for (const furnishing of furnishings) {
-      if (this.progress.hildaRepairedTypes.includes(furnishing.intactType)) continue;
+      if (this.progress.loriRepairedTypes.includes(furnishing.intactType)) continue;
       for (const tile of furnishing.tiles) {
         this.map.structure[tile.y][tile.x].type = furnishing.brokenType;
         this.map.markTileDirty(tile.x, tile.y);
@@ -297,7 +297,7 @@ export class AnchorInteriorSystem {
     return best;
   }
 
-  /** Drops the pile inside the door, once Hilda has actually asked for the work. */
+  /** Drops the pile inside the door, once Lori has actually asked for the work. */
   private placeWoodPile(): void {
     if (this.woodPileTile !== null) return;
     const door = this.map.startTile;
@@ -347,7 +347,7 @@ export class AnchorInteriorSystem {
    * stepped sideways off it into the pews, alternating sides.
    *
    * The aisle is found as the room's run of `RUG` tiles rather than by repeating
-   * the temple's generated column numbers, for the same reason Hilda's
+   * the temple's generated column numbers, for the same reason Lori's
    * furnishings are scanned for.
    */
   private naveSpawnAnchors(count: number): Array<{ x: number; y: number }> {
@@ -385,7 +385,7 @@ export class AnchorInteriorSystem {
     if (tile === null) return;
     // Nothing left to build once the last piece is mended — a pile that kept
     // restocking after the room was whole would just be a free item farm.
-    if (this.progress.hilda !== 'in_progress') return;
+    if (this.progress.lori !== 'in_progress') return;
     if (!this.woodPileAvailable) {
       this.woodPileRespawnTimer--;
       if (this.woodPileRespawnTimer > 0) return;
@@ -494,7 +494,7 @@ export class AnchorInteriorSystem {
 
   /** Whether the party could mend the wreck this crawler is standing at. */
   private canRepairAt(crawler: Player): RepairableFurnishing | null {
-    if (this.progress.hilda !== 'in_progress') return null;
+    if (this.progress.lori !== 'in_progress') return null;
     if (this.boardsHeld < BOARDS_PER_REPAIR) return null;
     return this.wreckWithinReach(crawler);
   }
@@ -528,12 +528,12 @@ export class AnchorInteriorSystem {
     this.wrecks.splice(this.wrecks.indexOf(wreck), 1);
     this.spendBoards();
 
-    this.progress.hildaRepairedTypes.push(wreck.intactType);
+    this.progress.loriRepairedTypes.push(wreck.intactType);
     this.audio?.play('hammer_strike');
     if (crawler instanceof HumanPlayer) this.playMend(crawler, wreck);
-    const done = this.progress.hildaRepairedTypes.length;
-    if (done >= HILDA_REPAIRS_REQUIRED) {
-      this.progress.hilda = 'shard_owed';
+    const done = this.progress.loriRepairedTypes.length;
+    if (done >= LORI_REPAIRS_REQUIRED) {
+      this.progress.lori = 'shard_owed';
       // The room is finished: the pile has nothing left to build, and any spare
       // boards a player over-collected are quest clutter now, not inventory.
       this.woodPileTile = null;
@@ -544,10 +544,10 @@ export class AnchorInteriorSystem {
           crawler.inventory.countOf('quest_wood_board'),
         );
       }
-      this.toast('The room is whole. Old Hilda owes you a stone.');
+      this.toast('The room is whole. Old Lori owes you a stone.');
       return true;
     }
-    const left = HILDA_REPAIRS_REQUIRED - done;
+    const left = LORI_REPAIRS_REQUIRED - done;
     this.toast(left === 1 ? 'One thing left to mend.' : `${left} things left to mend.`);
     // More mending is still owed: the pile is guaranteed ready the moment this
     // one is finished, rather than making the player wait out its respawn timer
@@ -661,14 +661,14 @@ export class AnchorInteriorSystem {
 
   /**
    * The service prompt's first refusal. True when the questline had something to
-   * say and took the press — Hilda's reading and Aviel's blessing are what the
+   * say and took the press — Lori's reading and Aviel's blessing are what the
    * player gets when this returns false.
    */
   tryOpenDialog(residentId: ResidentId, talker: Player): boolean {
     if (this.conversationOwned) return false;
     if (this.progress.status !== 'active') return false;
-    if (residentId === 'old_hilda' && this.buildingName === HILDA_COTTAGE_NAME) {
-      return this.tryOpenHildaDialog(talker);
+    if (residentId === 'old_lori' && this.buildingName === LORI_COTTAGE_NAME) {
+      return this.tryOpenLoriDialog(talker);
     }
     if (residentId === 'deacon_aviel' && this.buildingName === SKY_TEMPLE_NAME) {
       return this.tryOpenAvielDialog(talker);
@@ -676,20 +676,20 @@ export class AnchorInteriorSystem {
     return false;
   }
 
-  private tryOpenHildaDialog(talker: Player): boolean {
-    if (this.progress.hilda === 'offered') {
+  private tryOpenLoriDialog(talker: Player): boolean {
+    if (this.progress.lori === 'offered') {
       this.openTermsConversation(
         [
-          HILDA_REQUEST_INTRO,
-          HILDA_REQUEST_TERMS({
+          LORI_REQUEST_INTRO,
+          LORI_REQUEST_TERMS({
             boardsPerRepair: BOARDS_PER_REPAIR,
-            repairsRequired: HILDA_REPAIRS_REQUIRED,
+            repairsRequired: LORI_REPAIRS_REQUIRED,
           }),
         ],
         {
           label: "I'll do it",
           onAccepted: () => {
-            this.progress.hilda = 'in_progress';
+            this.progress.lori = 'in_progress';
             this.placeWoodPile();
           },
         },
@@ -697,12 +697,12 @@ export class AnchorInteriorSystem {
       );
       return true;
     }
-    if (this.progress.hilda === 'in_progress') {
+    if (this.progress.lori === 'in_progress') {
       this.openConversation(
         [
-          HILDA_PROGRESS({
-            repairsDone: this.progress.hildaRepairedTypes.length,
-            repairsRequired: HILDA_REPAIRS_REQUIRED,
+          LORI_PROGRESS({
+            repairsDone: this.progress.loriRepairedTypes.length,
+            repairsRequired: LORI_REPAIRS_REQUIRED,
             holdsEnoughBoards: this.boardsHeld >= BOARDS_PER_REPAIR,
           }),
         ],
@@ -710,10 +710,10 @@ export class AnchorInteriorSystem {
       );
       return true;
     }
-    if (this.progress.hilda === 'shard_owed') {
-      this.openConversation(HILDA_REWARD, () => {
-        this.grantShard(talker, 'anchor_shard_hilda');
-        this.progress.hilda = 'done';
+    if (this.progress.lori === 'shard_owed') {
+      this.openConversation(LORI_REWARD, () => {
+        this.grantShard(talker, 'anchor_shard_lori');
+        this.progress.lori = 'done';
       });
       return true;
     }
@@ -758,7 +758,7 @@ export class AnchorInteriorSystem {
     return false;
   }
 
-  private grantShard(taker: Player, shardId: 'anchor_shard_hilda' | 'anchor_shard_temple'): void {
+  private grantShard(taker: Player, shardId: 'anchor_shard_lori' | 'anchor_shard_temple'): void {
     taker.inventory.addItem(shardId, 1);
     this.onItemGranted?.(shardId, 1, taker.x, taker.y);
     this.audio?.play('pickup_1');
@@ -772,8 +772,8 @@ export class AnchorInteriorSystem {
    */
   markerFor(residentId: ResidentId): NPCMarkerType | null {
     if (this.progress.status !== 'active') return null;
-    if (residentId === 'old_hilda' && this.buildingName === HILDA_COTTAGE_NAME) {
-      return markerForStep(this.progress.hilda);
+    if (residentId === 'old_lori' && this.buildingName === LORI_COTTAGE_NAME) {
+      return markerForStep(this.progress.lori);
     }
     if (residentId === 'deacon_aviel' && this.buildingName === SKY_TEMPLE_NAME) {
       return markerForStep(this.progress.temple);
@@ -798,7 +798,7 @@ export class AnchorInteriorSystem {
     // No boards, no glow: the highlight's whole job is to answer "what can I do
     // *now*", and with an empty bag the answer is the pile, which has a pointer
     // of its own.
-    if (this.progress.hilda !== 'in_progress') return;
+    if (this.progress.lori !== 'in_progress') return;
     if (this.boardsHeld < BOARDS_PER_REPAIR) return;
 
     const pulse =
@@ -844,7 +844,7 @@ export class AnchorInteriorSystem {
 }
 
 /** The shipped convention: `'exclamation'` offers, `'question'` turns in. */
-function markerForStep(step: AnchorQuestProgress['hilda']): NPCMarkerType {
+function markerForStep(step: AnchorQuestProgress['lori']): NPCMarkerType {
   if (step === 'offered') return 'exclamation';
   if (step === 'shard_owed') return 'question';
   return 'none';

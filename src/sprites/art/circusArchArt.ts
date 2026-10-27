@@ -278,7 +278,7 @@ function paintCrack(ctx: Ctx, board: Board, ts: number, rng: Rng): void {
 }
 
 /** The title every arch carries, and the second line when the board is long enough. */
-const ARCH_TITLE = "GRIMALDI'S";
+const ARCH_TITLE = 'THE GRAND';
 const ARCH_SUBTITLE = 'TRAVELLING CIRCUS';
 /** Up the screen the board is narrow, so the letters are stacked; a short one says only this. */
 const ARCH_STACKED_SHORT = 'CIRCUS';
@@ -506,7 +506,7 @@ function limb(
  * `MARIONETTE.widthTiles` by `MARIONETTE.heightTiles` tiles. The ambience
  * rotates the whole surface about `MARIONETTE_PIVOT` to swing it.
  *
- * A clown, because it is Grimaldi's: greasepaint face, a red nose, a ruff,
+ * A clown, because it is a circus: greasepaint face, a red nose, a ruff,
  * a diamond-patched tunic and shoes too big for it — limp, head lolled, one
  * arm's string gone slack.
  */

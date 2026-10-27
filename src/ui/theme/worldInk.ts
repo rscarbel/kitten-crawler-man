@@ -217,8 +217,8 @@ export const worldPalette = {
     /** The Grotesque Spider's card, in the lab's toxic green. */
     spiderAccent: '#22c55e',
   },
-  /** The Big Top: the hint over a stuck crawler, and the white-out of a failed act. */
-  bigTop: {
+  /** The Starlight Tent: the hint over a stuck crawler, and the white-out of a failed act. */
+  starlightTent: {
     hint: '#ffe9a8',
     hintOutline: 'rgba(0,0,0,0.85)',
     burnoutFlash: '#ffe8c0',
@@ -250,7 +250,7 @@ export const worldPalette = {
     escape: '#4ade80',
     corpse: '#000000',
     hostile: '#ef4444',
-    /** A creature on the map that is not hostile right now: a hireling, a cow, a calm fowl. */
+    /** A creature on the map that is not hostile right now: a hireling, a cow, a calm Hawkfolk. */
     friendly: '#ffffff',
     mordecai: '#ffffff',
     questOffer: '#fbbf24',

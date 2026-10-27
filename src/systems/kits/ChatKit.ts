@@ -19,17 +19,12 @@ import {
 import type { AbilityManager } from '../../core/skills/AbilityManager';
 import { aiAdapter } from '../../ai/AIAdapter';
 import { ITEM_DEF, isItemId } from '../../core/items/defs/ItemDefs';
-import { makeBloodVomit } from '../../core/combat/StatusEffect';
-import { BLOOD_VOMIT_INTERVAL_FRAMES } from '../../core/combat/statusTuning';
 import { PlayerChatSystem } from '../PlayerChatSystem';
 import type { SceneWorld } from './SceneWorld';
 import type { Surface } from '../../ui/core/UiRoot';
 
 /** What `!payday` is worth. */
 const CHEAT_PAYDAY_COINS = 10000;
-
-/** How soon `!vomit` brings up its first bout, so a test need not wait out the interval. */
-const CHEAT_VOMIT_FIRST_BOUT_FRAMES = 60;
 
 const DEFAULT_GIVE_QUANTITY = 1;
 
@@ -205,9 +200,7 @@ export class ChatKit {
       {
         name: '!vomit',
         run: () => {
-          const bloodVomit = makeBloodVomit();
-          bloodVomit.ticksRemaining -= BLOOD_VOMIT_INTERVAL_FRAMES - CHEAT_VOMIT_FIRST_BOUT_FRAMES;
-          this.world.pm.active().applyStatus(bloodVomit);
+          this.world.pm.active().retch();
           return '🩸 BLOOD VOMIT';
         },
       },

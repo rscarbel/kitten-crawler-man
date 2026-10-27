@@ -4,7 +4,7 @@
  * whole north end, the carved altar standing on it, and the stained sky
  * window glowing on the wall behind. Around those, the dome's own worship
  * furniture at a size that reads from the door — iron candelabra, tall
- * roosting perches with skyfowl on them, long hanging sky banners, an eagle
+ * roosting perches with Hawkfolk on them, long hanging sky banners, an eagle
  * lectern holding the great book, votive racks, a font and an offering
  * table — plus the scripture shelves lining the nave.
  */
@@ -79,7 +79,7 @@ const GLASS_GOLD: RGB = [240, 196, 92];
 const GLASS_WHITE: RGB = [246, 244, 236];
 const SUNLIGHT: RGB = [255, 240, 200];
 
-/** Skyfowl plumage for the roosting birds — pale doves' grey with a slate wing. */
+/** Hawkfolk plumage for the roosting birds — pale doves' grey with a slate wing. */
 const BIRD_BODY: RGB = [226, 222, 212];
 const BIRD_SHADE: RGB = [170, 166, 160];
 const BIRD_WING: RGB = [120, 130, 142];
@@ -140,7 +140,7 @@ function paintTaper(ctx: Ctx, x: number, baseY: number, width: number, height: n
 }
 
 /**
- * A skyfowl at roost, seen three-quarter: a plump pale body, a slate wing
+ * A Hawkfolk at roost, seen three-quarter: a plump pale body, a slate wing
  * folded along its side, a fanned tail below the perch, and a small head
  * turned toward `facing` with a gold beak and a dark eye.
  */
@@ -471,7 +471,7 @@ function paintLancet(ctx: Ctx, cx: number, bottom: number, w: number, h: number,
 
 /**
  * The great window over the altar, set into the north wall: a rose of sky
- * glass round a white skyfowl in flight, a pointed lancet either side, all
+ * glass round a white Hawkfolk in flight, a pointed lancet either side, all
  * in a pale stone surround — and the daylight it lets in, falling as soft
  * shafts across the dais. Walkable and drawn with the floor, so the deacon
  * standing under it is painted in front of it.
@@ -574,7 +574,7 @@ export function paintSkyWindow(ctx: Ctx, frame: TownPropFrame, _variant: number,
       }
 
       // The rose: sky glass in a ring of gold petals, stone tracery spokes,
-      // and a white skyfowl in flight across its centre.
+      // and a white Hawkfolk in flight across its centre.
       const roseR = ts * WINDOW_ROSE_RADIUS_TILES;
       const roseCy = sill - roseR - ts * 0.05;
       const glass = ctx.createRadialGradient(cx, roseCy - roseR * 0.3, 1, cx, roseCy, roseR);
@@ -610,7 +610,7 @@ export function paintSkyWindow(ctx: Ctx, frame: TownPropFrame, _variant: number,
       ctx.arc(cx, roseCy, roseR * 0.62, 0, Math.PI * 2);
       ctx.stroke();
 
-      // The bird: a white skyfowl, wings raised, crossing the rose.
+      // The bird: a white Hawkfolk, wings raised, crossing the rose.
       ctx.fillStyle = rgb(GLASS_WHITE);
       ctx.beginPath();
       ctx.ellipse(cx, roseCy + roseR * 0.08, roseR * 0.14, roseR * 0.26, 0, 0, Math.PI * 2);
@@ -1049,7 +1049,7 @@ export function paintTempleCandelabrum(
 // ── Perch stand ─────────────────────────────────────────────────────────────
 
 /**
- * A tall roosting perch, the skyfowl's own pew: a turned post on a cross
+ * A tall roosting perch, the hawkfolk's own pew: a turned post on a cross
  * foot with two crossbars at different heights and a bird roosting on each,
  * facing opposite ways. Variant 1 swaps which side each bird sits.
  */
@@ -1229,7 +1229,7 @@ export function paintSkyBanner(ctx: Ctx, frame: TownPropFrame, _variant: number,
 
 /**
  * The reading desk beside the dais: a turned brass column on a stepped foot
- * topped by a skyfowl with its wings spread, the great book of the office
+ * topped by a Hawkfolk with its wings spread, the great book of the office
  * lying open across its back.
  */
 export function paintLectern(ctx: Ctx, frame: TownPropFrame, _variant: number, rng: Rng): void {
@@ -1278,7 +1278,7 @@ export function paintLectern(ctx: Ctx, frame: TownPropFrame, _variant: number, r
       inkOutline(ctx, ts * 0.8);
     }
 
-    // The bird: a brass skyfowl, wings spread wide under the book.
+    // The bird: a brass Hawkfolk, wings spread wide under the book.
     const birdY = columnTop - ts * 0.06;
     ctx.fillStyle = rgb(BRASS_MID);
     for (const dir of [-1, 1]) {

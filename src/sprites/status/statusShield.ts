@@ -1,15 +1,20 @@
 import type { StatusEffect } from '../../core/combat/StatusEffect';
-import { drawCretinShieldSprite, type CretinShieldRow } from '../cretinSprite';
 import {
-  CRETIN_SHIELD_APPEAR_FRAMES,
-  CRETIN_SHIELD_APPEAR_TICKS_PER_FRAME,
-  CRETIN_SHIELD_FADE_FRAMES,
-  CRETIN_SHIELD_FADE_TICKS_PER_FRAME,
-} from '../cretinTiming';
+  drawEarthElementalShieldSprite,
+  type EarthElementalShieldRow,
+} from '../earthElementalSprite';
+import {
+  EARTH_ELEMENTAL_SHIELD_APPEAR_FRAMES,
+  EARTH_ELEMENTAL_SHIELD_APPEAR_TICKS_PER_FRAME,
+  EARTH_ELEMENTAL_SHIELD_FADE_FRAMES,
+  EARTH_ELEMENTAL_SHIELD_FADE_TICKS_PER_FRAME,
+} from '../earthElementalTiming';
 import type { StatusVisualFrame } from './statusPaint';
 
-const SHIELD_APPEAR_TICKS = CRETIN_SHIELD_APPEAR_FRAMES * CRETIN_SHIELD_APPEAR_TICKS_PER_FRAME;
-const SHIELD_FADE_TICKS = CRETIN_SHIELD_FADE_FRAMES * CRETIN_SHIELD_FADE_TICKS_PER_FRAME;
+const SHIELD_APPEAR_TICKS =
+  EARTH_ELEMENTAL_SHIELD_APPEAR_FRAMES * EARTH_ELEMENTAL_SHIELD_APPEAR_TICKS_PER_FRAME;
+const SHIELD_FADE_TICKS =
+  EARTH_ELEMENTAL_SHIELD_FADE_FRAMES * EARTH_ELEMENTAL_SHIELD_FADE_TICKS_PER_FRAME;
 
 /**
  * The dome's cell is painted to cover the human crawler, whose drawn figure
@@ -30,7 +35,7 @@ const MAX_DOME_SCALE = 1;
  * or the pool was drained, which cuts the clock down to the break's length —
  * and pulsing in between.
  */
-function domeRowFor(effect: StatusEffect): { row: CretinShieldRow; ticks: number } {
+function domeRowFor(effect: StatusEffect): { row: EarthElementalShieldRow; ticks: number } {
   if (effect.ticksRemaining < SHIELD_FADE_TICKS) {
     return { row: 'fade', ticks: SHIELD_FADE_TICKS - effect.ticksRemaining };
   }
@@ -53,5 +58,5 @@ export function drawShieldDome(
   const { row, ticks } = domeRowFor(effect);
   const tileLeft = f.centerX - f.tileSize / 2;
   const tileTop = f.footY - f.tileSize;
-  drawCretinShieldSprite(ctx, tileLeft, tileTop, f.tileSize, { row, ticks, scale });
+  drawEarthElementalShieldSprite(ctx, tileLeft, tileTop, f.tileSize, { row, ticks, scale });
 }

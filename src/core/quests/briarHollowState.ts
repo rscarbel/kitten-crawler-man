@@ -25,18 +25,15 @@ import { VILLAGE_QUEST_PHASE_ORDER, type VillageQuestPhase } from './villageQues
 import {
   CONSTRUCTION_UNLOCK_IDS,
   createVillageUnlocks,
-  unlocksImpliedByPhase,
   type ConstructionUnlockId,
   type VillageUnlocks,
 } from './villageUnlocks';
 import { VILLAGER_IDS, type VillagerId } from '../../dialog/scripts/briarHollow';
 import type { RatkinCastId } from '../../sprites/art/ratkin/cast';
 import { HOLLOW_BELL_MAX_HP } from '../../systems/briarHollow/hollowBell';
-import { PALISADE_SEGMENT_SCHEME_VERSION } from '../../map/overworld/briarHollowSite';
 import { PASTURE_FENCE_SECTION_COUNT } from '../../map/overworld/briarHollowLayout';
 import {
   BLUEPRINTS_QUEST_PHASE_ORDER,
-  BLUEPRINTS_STATION_IDS,
   type BlueprintsQuestPhase,
   type BlueprintsStationId,
 } from './blueprintsQuestPhase';
@@ -44,7 +41,7 @@ import {
   contractSiteBySlug,
   contractSiteKey,
   contractSpot,
-  skyfowlContractSite,
+  taloncrestContractSite,
   type ContractSiteDef,
   type ContractSiteKey,
   type ContractSpotId,
@@ -250,8 +247,7 @@ interface StructureRecordBase {
   spikesHp: number | null;
   /**
    * Which crawler added the spikes, whose kills the spikes' thorn damage is
-   * credited to. Absent on a structure without spikes, or from a save that
-   * never recorded it — the human is credited then.
+   * credited to. Absent on a structure without spikes.
    */
   spikesBy?: CrawlerKind;
   /**
@@ -477,18 +473,12 @@ export function createBriarHollowState(): BriarHollowState {
   };
 }
 
-/**
- * A JSON-safe, value-equal copy of a {@link BriarHollowState} at a point in
- * time. `segmentScheme` records which cut of the palisade ring the segment ids
- * in `structures` were keyed against, so a save written under an older cut can
- * be told apart from one written under the current one.
- */
+/** A JSON-safe, value-equal copy of a {@link BriarHollowState} at a point in time. */
 export type BriarHollowStateSnapshot = Omit<
   BriarHollowState,
   'nodes' | 'villagers' | 'shopStock'
 > & {
   shopStock: ShopStockSnapshot;
-  segmentScheme: number;
 };
 
 /**
@@ -510,7 +500,6 @@ export function captureBriarHollowState(state: BriarHollowState): BriarHollowSta
     talkCounts: { ...state.talkCounts },
     onceFlags: [...state.onceFlags],
     shopStock: captureShopStock(state.shopStock),
-    segmentScheme: PALISADE_SEGMENT_SCHEME_VERSION,
   };
 }
 
@@ -552,27 +541,36 @@ function isString(value: unknown): value is string {
   return typeof value === 'string';
 }
 
+function isCount(value: unknown): value is number {
+  return isNumber(value) && value >= 0;
+}
+
+function isWholeCount(value: unknown): value is number {
+  return isCount(value) && Number.isInteger(value);
+}
+
 function stringUnion<T extends string>(value: unknown, allowed: readonly T[]): T | undefined {
   if (typeof value !== 'string') return undefined;
   return allowed.find((candidate) => candidate === value);
 }
 
-function isVillagerId(value: unknown): value is VillagerId {
-  return typeof value === 'string' && VILLAGER_IDS.some((id) => id === value);
+/** Every entry must parse, or the whole array is refused. */
+function parseEach<T>(
+  value: unknown,
+  parseItem: (item: unknown) => T | undefined,
+): T[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const parsed: T[] = [];
+  for (const item of value) {
+    const entry = parseItem(item);
+    if (entry === undefined) return undefined;
+    parsed.push(entry);
+  }
+  return parsed;
 }
 
-/**
- * Phase names a save may hold that no longer exist, and the phase each now
- * reads as. The single `gathering` step became the guided wood → stone → Tikka
- * run, whose own progress checks carry a party that already holds the
- * materials straight through it.
- */
-const LEGACY_PHASES: Readonly<Record<string, VillageQuestPhase>> = { gathering: 'gather_wood' };
-
-function parsePhase(value: unknown): VillageQuestPhase | undefined {
-  const current = stringUnion(value, VILLAGE_QUEST_PHASE_ORDER);
-  if (current !== undefined) return current;
-  return typeof value === 'string' ? LEGACY_PHASES[value] : undefined;
+function isVillagerId(value: unknown): value is VillagerId {
+  return typeof value === 'string' && VILLAGER_IDS.some((id) => id === value);
 }
 
 const PALISADE_TIERS: readonly PalisadeTier[] = ['fence', 'wood', 'stone', 'fortified'];
@@ -580,89 +578,101 @@ const WALL_SEGMENT_TIERS: readonly WallSegmentTier[] = [...PALISADE_TIERS, 'brea
 const CRAWLER_KINDS: readonly CrawlerKind[] = ['human', 'cat'];
 const SOLDIER_ORDERS: readonly SoldierOrder[] = ['follow', 'hold', 'patrol'];
 
-function parseVillageGatheringProgress(value: unknown): VillageGatheringProgress {
-  const defaults = createVillageGatheringProgress();
-  if (!isRecord(value)) return defaults;
-  return {
-    woodChopped: isNumber(value.woodChopped)
-      ? Math.max(0, value.woodChopped)
-      : defaults.woodChopped,
-    stoneMined: isNumber(value.stoneMined) ? Math.max(0, value.stoneMined) : defaults.stoneMined,
-    boardsProcessed: isNumber(value.boardsProcessed)
-      ? Math.max(0, value.boardsProcessed)
-      : defaults.boardsProcessed,
-    ropeProcessed: isNumber(value.ropeProcessed)
-      ? Math.max(0, value.ropeProcessed)
-      : defaults.ropeProcessed,
-  };
+/** The phases a save may hold: every phase but the two a capture never writes. */
+const PERSISTED_VILLAGE_QUEST_PHASES = VILLAGE_QUEST_PHASE_ORDER.filter(
+  (phase) => !UNPERSISTED_SIEGE_PHASES.has(phase),
+);
+
+function parseVillageGatheringProgress(value: unknown): VillageGatheringProgress | undefined {
+  if (!isRecord(value)) return undefined;
+  const { woodChopped, stoneMined, boardsProcessed, ropeProcessed } = value;
+  if (
+    !isCount(woodChopped) ||
+    !isCount(stoneMined) ||
+    !isCount(boardsProcessed) ||
+    !isCount(ropeProcessed)
+  ) {
+    return undefined;
+  }
+  return { woodChopped, stoneMined, boardsProcessed, ropeProcessed };
 }
 
-function parseVillageQuestState(value: unknown): VillageQuestState {
-  const defaults = createVillageQuestState();
-  if (!isRecord(value)) return defaults;
-  const parsedPhase = parsePhase(value.phase) ?? defaults.phase;
-  // A save never holds a siege; one that claims to is read as the fortifying
-  // it would have begun from, like the capture writes it.
-  const phase = UNPERSISTED_SIEGE_PHASES.has(parsedPhase) ? 'fortifying' : parsedPhase;
-  const assaultWaveIndex =
-    value.assaultWaveIndex === null
-      ? null
-      : isNumber(value.assaultWaveIndex)
-        ? Math.max(0, Math.floor(value.assaultWaveIndex))
-        : null;
+function parseVillageSiegeSummary(value: unknown): VillageSiegeSummary | undefined {
+  if (!isRecord(value)) return undefined;
+  const { segmentsBreached, structuresDestroyed, soldiersDowned } = value;
+  if (
+    !isWholeCount(segmentsBreached) ||
+    !isWholeCount(structuresDestroyed) ||
+    !isWholeCount(soldiersDowned)
+  ) {
+    return undefined;
+  }
+  return { segmentsBreached, structuresDestroyed, soldiersDowned };
+}
+
+function parseVillageQuestState(value: unknown): VillageQuestState | undefined {
+  if (!isRecord(value)) return undefined;
+  const { imminentCountdownFrames, assaultWaveIndex, bellHp, rewardsGranted, bellTowerBroken } =
+    value;
+  const phase = stringUnion(value.phase, PERSISTED_VILLAGE_QUEST_PHASES);
+  const gathering = parseVillageGatheringProgress(value.gathering);
+  const lastSiege = value.lastSiege === null ? null : parseVillageSiegeSummary(value.lastSiege);
+  if (
+    phase === undefined ||
+    gathering === undefined ||
+    !isCount(imminentCountdownFrames) ||
+    (assaultWaveIndex !== null && !isWholeCount(assaultWaveIndex)) ||
+    !isCount(bellHp) ||
+    lastSiege === undefined ||
+    !isBoolean(rewardsGranted) ||
+    !isBoolean(bellTowerBroken)
+  ) {
+    return undefined;
+  }
   return {
     phase,
-    gathering: parseVillageGatheringProgress(value.gathering),
-    imminentCountdownFrames: isNumber(value.imminentCountdownFrames)
-      ? Math.max(0, value.imminentCountdownFrames)
-      : defaults.imminentCountdownFrames,
+    gathering,
+    imminentCountdownFrames,
     assaultWaveIndex,
-    bellHp: HOLLOW_BELL_MAX_HP,
-    lastSiege: parseVillageSiegeSummary(value.lastSiege),
-    rewardsGranted: isBoolean(value.rewardsGranted)
-      ? value.rewardsGranted
-      : defaults.rewardsGranted,
-    bellTowerBroken: isBoolean(value.bellTowerBroken)
-      ? value.bellTowerBroken
-      : defaults.bellTowerBroken,
+    bellHp,
+    lastSiege,
+    rewardsGranted,
+    bellTowerBroken,
   };
 }
 
-/**
- * Reads the side quest back, defaulting every missing or malformed field — a
- * save written before the quest existed has no `blueprints` at all and reads
- * as a quest never offered. A fence array of the wrong length (a save written
- * under a different cut of the ring) keeps only the sections both cuts share.
- */
-function parseBlueprintsQuestState(value: unknown): BlueprintsQuestState {
-  const defaults = createBlueprintsQuestState();
-  if (!isRecord(value)) return defaults;
-  const phase = stringUnion(value.phase, BLUEPRINTS_QUEST_PHASE_ORDER) ?? defaults.phase;
-  const savedSections = Array.isArray(value.fenceSectionsBuilt) ? value.fenceSectionsBuilt : [];
-  const fenceSectionsBuilt = defaults.fenceSectionsBuilt.map((unbuilt, index) => {
-    const saved: unknown = savedSections[index];
-    return isBoolean(saved) ? saved : unbuilt;
-  });
-  const grain = isNumber(value.grain) ? Math.max(0, Math.floor(value.grain)) : defaults.grain;
-  const savedStations = isRecord(value.stationsUpgraded) ? value.stationsUpgraded : {};
-  const stationsUpgraded = { ...defaults.stationsUpgraded };
-  for (const station of BLUEPRINTS_STATION_IDS) {
-    const saved = savedStations[station];
-    if (isBoolean(saved)) stationsUpgraded[station] = saved;
+function parseStationsUpgraded(value: unknown): BlueprintsStationsUpgraded | undefined {
+  if (!isRecord(value)) return undefined;
+  const { saw, ropeWalk } = value;
+  if (!isBoolean(saw) || !isBoolean(ropeWalk)) return undefined;
+  return { saw, ropeWalk };
+}
+
+function parseBlueprintsQuestState(value: unknown): BlueprintsQuestState | undefined {
+  if (!isRecord(value)) return undefined;
+  const { grain, completionScreenSeen } = value;
+  const phase = stringUnion(value.phase, BLUEPRINTS_QUEST_PHASE_ORDER);
+  const fenceSectionsBuilt = parseEach(value.fenceSectionsBuilt, (section) =>
+    isBoolean(section) ? section : undefined,
+  );
+  const stationsUpgraded = parseStationsUpgraded(value.stationsUpgraded);
+  if (
+    phase === undefined ||
+    fenceSectionsBuilt?.length !== PASTURE_FENCE_SECTION_COUNT ||
+    !isWholeCount(grain) ||
+    stationsUpgraded === undefined ||
+    !isBoolean(completionScreenSeen)
+  ) {
+    return undefined;
   }
-  // A save that finished the quest before the screen existed has no flag; its
-  // party is long past the moment, so it reads as already seen.
-  const completionScreenSeen = isBoolean(value.completionScreenSeen)
-    ? value.completionScreenSeen
-    : phase === 'complete';
   return { phase, fenceSectionsBuilt, grain, stationsUpgraded, completionScreenSeen };
 }
 
-/** The catalogue site a saved key names, or undefined for a building that no longer hosts one. */
+/** The catalogue site a saved key names, or undefined when it names none. */
 function parseContractSiteKey(value: unknown): ContractSiteDef | undefined {
   if (!isRecord(value)) return undefined;
-  if (value.town === 'skyfowl' && isString(value.buildingName)) {
-    return skyfowlContractSite(value.buildingName);
+  if (value.town === 'taloncrest' && isString(value.buildingName)) {
+    return taloncrestContractSite(value.buildingName);
   }
   if (value.town === 'briar_hollow' && isString(value.buildingId)) {
     const site = contractSiteBySlug(value.buildingId);
@@ -671,57 +681,67 @@ function parseContractSiteKey(value: unknown): ContractSiteDef | undefined {
   return undefined;
 }
 
-/**
- * Keeps only the spots the site's pool still has, with their done flags. A
- * contract left with no spot at all reads as no contract; Wendell re-offers.
- */
-function parseActiveContract(value: unknown): ActiveContract | null {
-  if (!isRecord(value)) return null;
+/** A list of distinct spot ids, every one of them in `site`'s pool. */
+function parseSiteSpotIds(value: unknown, site: ContractSiteDef): ContractSpotId[] | undefined {
+  const spotIds = parseEach(value, (id) =>
+    isString(id) && contractSpot(site, id) !== undefined ? id : undefined,
+  );
+  if (spotIds === undefined) return undefined;
+  const hasDuplicates = new Set(spotIds).size !== spotIds.length;
+  return hasDuplicates ? undefined : spotIds;
+}
+
+function parseActiveContract(value: unknown): ActiveContract | undefined {
+  if (!isRecord(value)) return undefined;
   const site = parseContractSiteKey(value.site);
-  if (site === undefined) return null;
-  const savedIds = Array.isArray(value.spotIds) ? value.spotIds : [];
-  const savedDone = Array.isArray(value.spotsDone) ? value.spotsDone : [];
-  const spotIds: ContractSpotId[] = [];
-  const spotsDone: boolean[] = [];
-  savedIds.forEach((id: unknown, index) => {
-    if (!isString(id) || contractSpot(site, id) === undefined || spotIds.includes(id)) return;
-    const done: unknown = savedDone[index];
-    spotIds.push(id);
-    spotsDone.push(isBoolean(done) ? done : false);
-  });
-  if (spotIds.length === 0) return null;
+  if (site === undefined) return undefined;
+  const spotIds = parseSiteSpotIds(value.spotIds, site);
+  const spotsDone = parseEach(value.spotsDone, (done) => (isBoolean(done) ? done : undefined));
+  if (spotIds === undefined || spotIds.length === 0) return undefined;
+  if (spotsDone?.length !== spotIds.length) return undefined;
   return { site: contractSiteKey(site), spotIds, spotsDone };
 }
 
-function parseSpotSetsBySite(value: unknown): Record<string, readonly ContractSpotId[]> {
+function parseSpotSetsBySite(
+  value: unknown,
+): Record<string, readonly ContractSpotId[]> | undefined {
+  if (!isRecord(value)) return undefined;
   const sets: Record<string, readonly ContractSpotId[]> = {};
-  if (!isRecord(value)) return sets;
   for (const [slug, saved] of Object.entries(value)) {
     const site = contractSiteBySlug(slug);
-    if (site === undefined || !Array.isArray(saved)) continue;
-    sets[slug] = saved.filter(
-      (id: unknown): id is ContractSpotId => isString(id) && contractSpot(site, id) !== undefined,
-    );
+    if (site === undefined) return undefined;
+    const spotIds = parseSiteSpotIds(saved, site);
+    if (spotIds === undefined) return undefined;
+    sets[slug] = spotIds;
   }
   return sets;
 }
 
-/** A save written before contracts existed has no `contracts` and reads as never unlocked or offered. */
-function parseConstructionContractsState(value: unknown): ConstructionContractsState {
-  const defaults = createConstructionContractsState();
-  if (!isRecord(value)) return defaults;
-  const count = (field: unknown): number => (isNumber(field) ? Math.max(0, Math.floor(field)) : 0);
-  const lastSiteKey =
-    isString(value.lastSiteKey) && contractSiteBySlug(value.lastSiteKey) !== undefined
-      ? value.lastSiteKey
-      : null;
+function parseConstructionContractsState(value: unknown): ConstructionContractsState | undefined {
+  if (!isRecord(value)) return undefined;
+  const { introSeen, contractsIssued, contractsCompleted, lastSiteKey } = value;
+  const active = value.active === null ? null : parseActiveContract(value.active);
+  const lastSpotSetBySite = parseSpotSetsBySite(value.lastSpotSetBySite);
+  const lastSiteKeyValid =
+    lastSiteKey === null ||
+    (isString(lastSiteKey) && contractSiteBySlug(lastSiteKey) !== undefined);
+  if (
+    !isBoolean(introSeen) ||
+    !isWholeCount(contractsIssued) ||
+    !isWholeCount(contractsCompleted) ||
+    active === undefined ||
+    !lastSiteKeyValid ||
+    lastSpotSetBySite === undefined
+  ) {
+    return undefined;
+  }
   return {
-    introSeen: isBoolean(value.introSeen) ? value.introSeen : defaults.introSeen,
-    contractsIssued: count(value.contractsIssued),
-    contractsCompleted: count(value.contractsCompleted),
-    active: parseActiveContract(value.active),
+    introSeen,
+    contractsIssued,
+    contractsCompleted,
+    active,
     lastSiteKey,
-    lastSpotSetBySite: parseSpotSetsBySite(value.lastSpotSetBySite),
+    lastSpotSetBySite,
   };
 }
 
@@ -729,229 +749,178 @@ function isConstructionUnlockId(value: unknown): value is ConstructionUnlockId {
   return typeof value === 'string' && CONSTRUCTION_UNLOCK_IDS.some((id) => id === value);
 }
 
-/** A save from before unlocks were recorded is granted what its phase had earned. */
-function parseVillageUnlocks(value: unknown, phase: VillageQuestPhase): VillageUnlocks {
-  if (!isRecord(value)) return unlocksImpliedByPhase(phase);
-  const construction = Array.isArray(value.construction)
-    ? value.construction.filter(isConstructionUnlockId)
-    : [];
-  return {
-    processingStations: isBoolean(value.processingStations) ? value.processingStations : false,
-    soldierCommands: isBoolean(value.soldierCommands) ? value.soldierCommands : false,
-    construction,
-  };
-}
-
-function parseVillageSiegeSummary(value: unknown): VillageSiegeSummary | null {
-  if (!isRecord(value)) return null;
-  const count = (field: unknown): number => (isNumber(field) ? Math.max(0, Math.floor(field)) : 0);
-  return {
-    segmentsBreached: count(value.segmentsBreached),
-    structuresDestroyed: count(value.structuresDestroyed),
-    soldiersDowned: count(value.soldiersDowned),
-  };
-}
-
-function parseSpikesHp(value: unknown): number | null {
-  if (value === null) return null;
-  return isNumber(value) ? Math.max(0, value) : null;
+function parseVillageUnlocks(value: unknown): VillageUnlocks | undefined {
+  if (!isRecord(value)) return undefined;
+  const { processingStations, soldierCommands } = value;
+  const construction = parseEach(value.construction, (id) =>
+    isConstructionUnlockId(id) ? id : undefined,
+  );
+  if (!isBoolean(processingStations) || !isBoolean(soldierCommands) || construction === undefined) {
+    return undefined;
+  }
+  return { processingStations, soldierCommands, construction };
 }
 
 function parseBuiltBy(value: unknown): CrawlerKind | undefined {
   return stringUnion(value, CRAWLER_KINDS);
 }
 
-/** The optional fields every structure record shares, copied onto `record` only when valid. */
-function parseStructureExtras(value: Record<string, unknown>, record: StructureRecordBase): void {
-  const spikesBy = parseBuiltBy(value.spikesBy);
-  if (spikesBy !== undefined) record.spikesBy = spikesBy;
-  if (isNumber(value.hpMultiplier) && value.hpMultiplier > 0) {
-    record.hpMultiplier = value.hpMultiplier;
+/** The fields every structure record shares, or undefined when any is malformed. */
+function parseStructureBase(value: Record<string, unknown>): StructureRecordBase | undefined {
+  const { hp, spikesHp, spikesBy, hpMultiplier } = value;
+  const builtBy = parseBuiltBy(value.builtBy);
+  const parsedSpikesBy = spikesBy === undefined ? undefined : parseBuiltBy(spikesBy);
+  if (
+    builtBy === undefined ||
+    !isCount(hp) ||
+    (spikesHp !== null && !isCount(spikesHp)) ||
+    (spikesBy !== undefined && parsedSpikesBy === undefined) ||
+    (hpMultiplier !== undefined && !(isNumber(hpMultiplier) && hpMultiplier > 0))
+  ) {
+    return undefined;
   }
+  const base: StructureRecordBase = { builtBy, hp, spikesHp };
+  if (parsedSpikesBy !== undefined) base.spikesBy = parsedSpikesBy;
+  if (hpMultiplier !== undefined) base.hpMultiplier = hpMultiplier;
+  return base;
 }
 
 function parseSegmentStructureRecord(
   value: Record<string, unknown>,
+  base: StructureRecordBase,
 ): SegmentStructureRecord | undefined {
-  const { id, tier, hp, formerTier } = value;
-  const parsedTier = stringUnion(tier, WALL_SEGMENT_TIERS);
-  const builtBy = parseBuiltBy(value.builtBy);
-  if (!isString(id) || parsedTier === undefined || !isNumber(hp) || builtBy === undefined) {
-    return undefined;
-  }
-  const record: SegmentStructureRecord = {
-    kind: 'segment',
-    id,
-    tier: parsedTier,
-    hp: Math.max(0, hp),
-    spikesHp: parseSpikesHp(value.spikesHp),
-    builtBy,
-  };
-  if (parsedTier === 'breach') {
-    const parsedFormerTier = stringUnion(formerTier, PALISADE_TIERS);
-    if (parsedFormerTier !== undefined) record.formerTier = parsedFormerTier;
-  }
-  parseStructureExtras(value, record);
+  const { id, formerTier } = value;
+  const tier = stringUnion(value.tier, WALL_SEGMENT_TIERS);
+  const parsedFormerTier =
+    formerTier === undefined ? undefined : stringUnion(formerTier, PALISADE_TIERS);
+  const formerTierValid =
+    formerTier === undefined || (tier === 'breach' && parsedFormerTier !== undefined);
+  if (!isString(id) || tier === undefined || !formerTierValid) return undefined;
+  const record: SegmentStructureRecord = { ...base, kind: 'segment', id, tier };
+  if (parsedFormerTier !== undefined) record.formerTier = parsedFormerTier;
   return record;
 }
 
 function parseTrebuchetStructureRecord(
   value: Record<string, unknown>,
+  base: StructureRecordBase,
 ): TrebuchetStructureRecord | undefined {
-  const { x, y, hp, broken, ammo } = value;
-  const builtBy = parseBuiltBy(value.builtBy);
-  if (
-    !isNumber(x) ||
-    !isNumber(y) ||
-    !isNumber(hp) ||
-    !isBoolean(broken) ||
-    !isNumber(ammo) ||
-    builtBy === undefined
-  ) {
-    return undefined;
-  }
-  const record: TrebuchetStructureRecord = {
-    kind: 'trebuchet',
-    x,
-    y,
-    hp: Math.max(0, hp),
-    broken,
-    ammo: Math.max(0, ammo),
-    spikesHp: parseSpikesHp(value.spikesHp),
-    builtBy,
-  };
-  parseStructureExtras(value, record);
-  return record;
+  const { x, y, broken, ammo } = value;
+  if (!isNumber(x) || !isNumber(y) || !isBoolean(broken) || !isCount(ammo)) return undefined;
+  return { ...base, kind: 'trebuchet', x, y, broken, ammo };
 }
 
 function parseSnareStructureRecord(
   value: Record<string, unknown>,
+  base: StructureRecordBase,
 ): SnareStructureRecord | undefined {
-  const { x, y, hp, broken, repairedOnce } = value;
-  const builtBy = parseBuiltBy(value.builtBy);
-  if (
-    !isNumber(x) ||
-    !isNumber(y) ||
-    !isNumber(hp) ||
-    !isBoolean(broken) ||
-    !isBoolean(repairedOnce) ||
-    builtBy === undefined
-  ) {
+  const { x, y, broken, repairedOnce } = value;
+  if (!isNumber(x) || !isNumber(y) || !isBoolean(broken) || !isBoolean(repairedOnce)) {
     return undefined;
   }
-  const record: SnareStructureRecord = {
-    kind: 'snare',
-    x,
-    y,
-    hp: Math.max(0, hp),
-    broken,
-    repairedOnce,
-    spikesHp: parseSpikesHp(value.spikesHp),
-    builtBy,
-  };
-  parseStructureExtras(value, record);
-  return record;
+  return { ...base, kind: 'snare', x, y, broken, repairedOnce };
 }
 
-/** A malformed entry returns `undefined` and is dropped by the caller, rather than failing the whole array. */
 function parseStructureRecord(value: unknown): StructureRecord | undefined {
   if (!isRecord(value)) return undefined;
+  const base = parseStructureBase(value);
+  if (base === undefined) return undefined;
   switch (value.kind) {
     case 'segment':
-      return parseSegmentStructureRecord(value);
+      return parseSegmentStructureRecord(value, base);
     case 'trebuchet':
-      return parseTrebuchetStructureRecord(value);
+      return parseTrebuchetStructureRecord(value, base);
     case 'snare':
-      return parseSnareStructureRecord(value);
+      return parseSnareStructureRecord(value, base);
     default:
       return undefined;
   }
 }
 
+function parseRouteTile(value: unknown): SoldierRouteTile | undefined {
+  if (!isRecord(value)) return undefined;
+  const { x, y } = value;
+  if (!isNumber(x) || !isNumber(y)) return undefined;
+  return { x, y };
+}
+
 function parseSoldierOrderRecord(value: unknown): SoldierOrderRecord | undefined {
   if (!isRecord(value)) return undefined;
-  const { soldierId, order, x, y } = value;
-  const parsedOrder = stringUnion(order, SOLDIER_ORDERS);
-  if (!isVillagerId(soldierId) || parsedOrder === undefined) return undefined;
-  const record: SoldierOrderRecord = { soldierId, order: parsedOrder };
-  if (isNumber(x)) record.x = x;
-  if (isNumber(y)) record.y = y;
-  const followCrawler = stringUnion(value.followCrawler, CRAWLER_KINDS);
-  if (followCrawler !== undefined) record.followCrawler = followCrawler;
-  if (Array.isArray(value.patrolRoute)) {
-    const route: SoldierRouteTile[] = [];
-    for (const tile of value.patrolRoute) {
-      if (isRecord(tile) && isNumber(tile.x) && isNumber(tile.y)) {
-        route.push({ x: tile.x, y: tile.y });
-      }
-    }
-    record.patrolRoute = route;
+  const { soldierId, x, y, followCrawler, patrolRoute } = value;
+  const order = stringUnion(value.order, SOLDIER_ORDERS);
+  const parsedFollowCrawler =
+    followCrawler === undefined ? undefined : stringUnion(followCrawler, CRAWLER_KINDS);
+  const parsedRoute =
+    patrolRoute === undefined ? undefined : parseEach(patrolRoute, parseRouteTile);
+  if (
+    !isVillagerId(soldierId) ||
+    order === undefined ||
+    (x !== undefined && !isNumber(x)) ||
+    (y !== undefined && !isNumber(y)) ||
+    (followCrawler !== undefined && parsedFollowCrawler === undefined) ||
+    (patrolRoute !== undefined && parsedRoute === undefined)
+  ) {
+    return undefined;
   }
+  const record: SoldierOrderRecord = { soldierId, order };
+  if (x !== undefined) record.x = x;
+  if (y !== undefined) record.y = y;
+  if (parsedFollowCrawler !== undefined) record.followCrawler = parsedFollowCrawler;
+  if (parsedRoute !== undefined) record.patrolRoute = parsedRoute;
   return record;
 }
 
-function parseTalkCounts(value: unknown): Record<VillagerId, number> {
+function parseTalkCounts(value: unknown): Record<VillagerId, number> | undefined {
+  if (!isRecord(value)) return undefined;
   const counts = emptyTalkCounts();
-  if (!isRecord(value)) return counts;
   for (const id of VILLAGER_IDS) {
     const count = value[id];
-    if (isNumber(count)) counts[id] = Math.max(0, count);
+    if (!isWholeCount(count)) return undefined;
+    counts[id] = count;
   }
   return counts;
 }
 
-function parseOnceFlags(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter(isString);
-}
-
 /**
  * Reads a saved {@link BriarHollowStateSnapshot} back from untrusted JSON.
- * Tolerant field-by-field, like `parseTownMemoryCheckpoint`: a missing or
- * malformed field falls back to its empty default rather than failing the
- * whole snapshot, and a malformed array entry is dropped rather than
- * rejecting the rest of the array. Only a value that is not an object at all
- * (not a save missing the field, but the field itself corrupted) is refused.
+ * Any missing or malformed field, including any one array entry, refuses the
+ * whole snapshot.
  */
 export function parseBriarHollowStateSnapshot(
   value: unknown,
 ): BriarHollowStateSnapshot | undefined {
   if (!isRecord(value)) return undefined;
-  // A save written under an earlier cut of the palisade ring keys its wall
-  // segments by an index that now names a different, wrongly-sized run —
-  // rather than misapply a stranger's HP and tier to that stretch of wall,
-  // every wall segment from an old-scheme save resets to the untouched fence
-  // it would read as if nobody had ever kept its record at all. Trebuchets and
-  // snares are keyed by tile, not by segment index, so they carry over untouched.
-  const currentScheme =
-    isNumber(value.segmentScheme) && value.segmentScheme === PALISADE_SEGMENT_SCHEME_VERSION;
-  const structures: StructureRecord[] = [];
-  if (Array.isArray(value.structures)) {
-    for (const entry of value.structures) {
-      const parsed = parseStructureRecord(entry);
-      if (parsed === undefined) continue;
-      if (parsed.kind === 'segment' && !currentScheme) continue;
-      structures.push(parsed);
-    }
-  }
-  const soldierOrders: SoldierOrderRecord[] = [];
-  if (Array.isArray(value.soldierOrders)) {
-    for (const entry of value.soldierOrders) {
-      const parsed = parseSoldierOrderRecord(entry);
-      if (parsed !== undefined) soldierOrders.push(parsed);
-    }
-  }
   const quest = parseVillageQuestState(value.quest);
+  const blueprints = parseBlueprintsQuestState(value.blueprints);
+  const contracts = parseConstructionContractsState(value.contracts);
+  const unlocks = parseVillageUnlocks(value.unlocks);
+  const structures = parseEach(value.structures, parseStructureRecord);
+  const soldierOrders = parseEach(value.soldierOrders, parseSoldierOrderRecord);
+  const talkCounts = parseTalkCounts(value.talkCounts);
+  const onceFlags = parseEach(value.onceFlags, (flag) => (isString(flag) ? flag : undefined));
+  const shopStock = parseShopStockSnapshot(value.shopStock);
+  if (
+    quest === undefined ||
+    blueprints === undefined ||
+    contracts === undefined ||
+    unlocks === undefined ||
+    structures === undefined ||
+    soldierOrders === undefined ||
+    talkCounts === undefined ||
+    onceFlags === undefined ||
+    shopStock === undefined
+  ) {
+    return undefined;
+  }
   return {
     quest,
-    blueprints: parseBlueprintsQuestState(value.blueprints),
-    contracts: parseConstructionContractsState(value.contracts),
-    unlocks: parseVillageUnlocks(value.unlocks, quest.phase),
+    blueprints,
+    contracts,
+    unlocks,
     structures,
     soldierOrders,
-    talkCounts: parseTalkCounts(value.talkCounts),
-    onceFlags: parseOnceFlags(value.onceFlags),
-    shopStock: parseShopStockSnapshot(value.shopStock),
-    segmentScheme: PALISADE_SEGMENT_SCHEME_VERSION,
+    talkCounts,
+    onceFlags,
+    shopStock,
   };
 }

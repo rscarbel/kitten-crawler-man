@@ -55,6 +55,7 @@ import {
   regionLevelBonusFor,
   rollRoomPopulation,
   partyLevelOf,
+  pickRule,
   recommendedPartyLevelFor,
   regionLevelBand,
   resolveBossLevel,
@@ -65,6 +66,7 @@ import {
   spawnTreasureRoomMobs,
 } from '../src/levels/spawner';
 import { mulberry32 } from '../src/sprites/person/rng';
+import { NO_SPAWN_TERRAIN, type SpawnTerrain } from '../src/map/overworld/spawnTerrain';
 import {
   WAYFINDER_GRACE_FRAMES,
   WAYFINDER_PULSE_PERIOD_FRAMES,
@@ -90,17 +92,17 @@ import {
   GoblinArcher,
   ARCHER_MAX_SPEED as GOBLIN_ARCHER_MAX_SPEED,
 } from '../src/creatures/GoblinArcher';
-import { CircusLemur, LEMUR_MAX_SPEED } from '../src/creatures/CircusLemur';
+import { Lemur, LEMUR_MAX_SPEED } from '../src/creatures/Lemur';
 import {
   SkeletonArcher,
   ARCHER_MAX_SPEED as SKELETON_ARCHER_MAX_SPEED,
 } from '../src/creatures/SkeletonArcher';
 import { SkeletonWarrior, SKELETON_MAX_SPEED } from '../src/creatures/SkeletonWarrior';
-import { StiltClown, CLOWN_MAX_SPEED as STILT_CLOWN_MAX_SPEED } from '../src/creatures/StiltClown';
+import { TallClown, CLOWN_MAX_SPEED as TALL_CLOWN_MAX_SPEED } from '../src/creatures/TallClown';
 import { FatClown, CLOWN_MAX_SPEED as FAT_CLOWN_MAX_SPEED } from '../src/creatures/FatClown';
 import { Mantid, MANTID_MAX_SPEED } from '../src/creatures/Mantid';
 import { MantisCrony, MANTIS_MAX_SPEED } from '../src/creatures/MantisCrony';
-import { SKYFOWL_TOUGH_FAMILY, SkyFowl } from '../src/creatures/SkyFowl';
+import { HAWKFOLK_TOUGH_FAMILY, Hawkfolk } from '../src/creatures/Hawkfolk';
 import { GameMap } from '../src/map/GameMap';
 import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
@@ -133,7 +135,7 @@ import { fileURLToPath } from 'url';
 import { level2 } from '../src/levels/level2';
 import { level3 } from '../src/levels/level3';
 import type { LevelDef, MobLevelRange } from '../src/levels/types';
-import type { StandaloneMobKind } from '../src/levels/mobKinds';
+import type { MobKind, StandaloneMobKind } from '../src/levels/mobKinds';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
 import { DifficultyStats, type RoomFightDetails } from '../src/core/difficulty/DifficultyStats';
 import { CatPlayer } from '../src/creatures/CatPlayer';
@@ -171,7 +173,6 @@ import {
   dynamiteDamageToMob,
   dynamiteMobDamage,
 } from '../src/systems/DynamiteSystem';
-import { HeatherTheBear } from '../src/creatures/HeatherTheBear';
 import { MissQuill } from '../src/creatures/MissQuill';
 import { Remex } from '../src/creatures/Remex';
 import { DarkKnight } from '../src/creatures/DarkKnight';
@@ -1319,7 +1320,7 @@ const SPEED_CAPPED_MOBS: ReadonlyArray<{ name: string; make: () => Mob; cap: num
     make: () => new GoblinArcher(0, 0, TILE_SIZE),
     cap: GOBLIN_ARCHER_MAX_SPEED,
   },
-  { name: 'CircusLemur', make: () => new CircusLemur(0, 0, TILE_SIZE), cap: LEMUR_MAX_SPEED },
+  { name: 'Lemur', make: () => new Lemur(0, 0, TILE_SIZE), cap: LEMUR_MAX_SPEED },
   {
     name: 'SkeletonArcher',
     make: () => new SkeletonArcher(0, 0, TILE_SIZE),
@@ -1330,7 +1331,7 @@ const SPEED_CAPPED_MOBS: ReadonlyArray<{ name: string; make: () => Mob; cap: num
     make: () => new SkeletonWarrior(0, 0, TILE_SIZE),
     cap: SKELETON_MAX_SPEED,
   },
-  { name: 'StiltClown', make: () => new StiltClown(0, 0, TILE_SIZE), cap: STILT_CLOWN_MAX_SPEED },
+  { name: 'TallClown', make: () => new TallClown(0, 0, TILE_SIZE), cap: TALL_CLOWN_MAX_SPEED },
   { name: 'FatClown', make: () => new FatClown(0, 0, TILE_SIZE), cap: FAT_CLOWN_MAX_SPEED },
   { name: 'Mantid', make: () => new Mantid(0, 0, TILE_SIZE), cap: MANTID_MAX_SPEED },
   { name: 'MantisCrony', make: () => new MantisCrony(0, 0, TILE_SIZE), cap: MANTIS_MAX_SPEED },
@@ -1426,14 +1427,14 @@ section('speed caps');
 
 // ── Levelled chase speed ─────────────────────────────────────────────────────
 
-/** Side of the open room the fowl chase is measured in, walls included. */
+/** Side of the open room the Hawkfolk chase is measured in, walls included. */
 const CHASE_ROOM_TILES = 24;
-const CHASE_FOWL_TILE = 3;
-/** Far enough that the fowl is still closing on the target when the run ends. */
+const CHASE_HAWKFOLK_TILE = 3;
+/** Far enough that the Hawkfolk is still closing on the target when the run ends. */
 const CHASE_TARGET_TILE = 20;
 /** Frames the chase is measured over, after the first one that plans its route. */
 const CHASE_MEASURED_FRAMES = 60;
-/** Levels a provoked fowl's chase is compared across: authored, and the top. */
+/** Levels a provoked Hawkfolk's chase is compared across: authored, and the top. */
 const CHASE_LOW_LEVEL = 1;
 const CHASE_HIGH_LEVEL = MAX_MOB_LEVEL;
 /** Rounding room on a mean step measured against a speed, in pixels per frame. */
@@ -1455,41 +1456,41 @@ function openChaseRoom(): GameMap {
   return new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: grid });
 }
 
-/** The mean pixels per frame a provoked fowl of `level` covers chasing a far target. */
-function provokedFowlChase(level: number): { stepPx: number; moveSpeed: number } {
+/** The mean pixels per frame a provoked Hawkfolk of `level` covers chasing a far target. */
+function provokedHawkfolkChase(level: number): { stepPx: number; moveSpeed: number } {
   const map = openChaseRoom();
-  const fowl = new SkyFowl(
-    CHASE_FOWL_TILE,
-    CHASE_FOWL_TILE,
+  const hawkfolk = new Hawkfolk(
+    CHASE_HAWKFOLK_TILE,
+    CHASE_HAWKFOLK_TILE,
     TILE_SIZE,
-    SKYFOWL_TOUGH_FAMILY.canonical,
+    HAWKFOLK_TOUGH_FAMILY.canonical,
   );
-  fowl.setMap(map);
-  fowl.applyMobLevel(level);
-  const target = new HumanPlayer(CHASE_TARGET_TILE, CHASE_FOWL_TILE, TILE_SIZE);
+  hawkfolk.setMap(map);
+  hawkfolk.applyMobLevel(level);
+  const target = new HumanPlayer(CHASE_TARGET_TILE, CHASE_HAWKFOLK_TILE, TILE_SIZE);
   target.godMode = true;
-  fowl.takeDamageFrom(1, target, 'explosion');
-  fowl.updateAI([target]);
-  const startX = fowl.x;
-  const startY = fowl.y;
-  for (let frame = 0; frame < CHASE_MEASURED_FRAMES; frame++) fowl.updateAI([target]);
-  const walkedPx = Math.hypot(fowl.x - startX, fowl.y - startY);
-  return { stepPx: walkedPx / CHASE_MEASURED_FRAMES, moveSpeed: fowl.moveSpeed };
+  hawkfolk.takeDamageFrom(1, target, 'explosion');
+  hawkfolk.updateAI([target]);
+  const startX = hawkfolk.x;
+  const startY = hawkfolk.y;
+  for (let frame = 0; frame < CHASE_MEASURED_FRAMES; frame++) hawkfolk.updateAI([target]);
+  const walkedPx = Math.hypot(hawkfolk.x - startX, hawkfolk.y - startY);
+  return { stepPx: walkedPx / CHASE_MEASURED_FRAMES, moveSpeed: hawkfolk.moveSpeed };
 }
 
 section('levelled chase speed');
 {
-  // A fowl breaks into its chase long after spawn, by re-authoring its speed —
+  // A Hawkfolk breaks into its chase long after spawn, by re-authoring its speed —
   // the moment a flat constant would silently throw its level away.
-  const low = provokedFowlChase(CHASE_LOW_LEVEL);
-  const high = provokedFowlChase(CHASE_HIGH_LEVEL);
+  const low = provokedHawkfolkChase(CHASE_LOW_LEVEL);
+  const high = provokedHawkfolkChase(CHASE_HIGH_LEVEL);
   check(
     low.stepPx > 0 && Math.abs(high.stepPx - high.moveSpeed) <= CHASE_STEP_EPSILON_PX,
-    `a provoked level-${CHASE_HIGH_LEVEL} sky fowl chases at its levelled speed (${high.stepPx.toFixed(CHASE_PRINT_DIGITS)} px/frame, speed ${high.moveSpeed.toFixed(CHASE_PRINT_DIGITS)})`,
+    `a provoked level-${CHASE_HIGH_LEVEL} Hawkfolk chases at its levelled speed (${high.stepPx.toFixed(CHASE_PRINT_DIGITS)} px/frame, speed ${high.moveSpeed.toFixed(CHASE_PRINT_DIGITS)})`,
   );
   check(
     high.stepPx > low.stepPx + CHASE_STEP_EPSILON_PX,
-    `levelling speeds up a sky fowl's chase (${low.stepPx.toFixed(CHASE_PRINT_DIGITS)} at level ${CHASE_LOW_LEVEL}, ${high.stepPx.toFixed(CHASE_PRINT_DIGITS)} at level ${CHASE_HIGH_LEVEL})`,
+    `levelling speeds up a Hawkfolk's chase (${low.stepPx.toFixed(CHASE_PRINT_DIGITS)} at level ${CHASE_LOW_LEVEL}, ${high.stepPx.toFixed(CHASE_PRINT_DIGITS)} at level ${CHASE_HIGH_LEVEL})`,
   );
 }
 
@@ -1812,6 +1813,100 @@ section("floor 1's bombers wait behind Big Rooster");
   );
 }
 
+// ── Floor 3: terrain rules spawn on their own ground ────────────────────────
+
+const TERRAIN_MAP_SEEDS = [0x7e44a1, 0x7e44a2, 0x7e44a3] as const;
+const TERRAIN_SPAWN_SEED = 0x5ca7;
+const TERRAIN_CHECK_PARTY_LEVEL = 20;
+/** Rolls of the terrain-free check, enough that any leak of a terrain rule would show. */
+const TERRAIN_FREE_ROLLS = 2000;
+
+/**
+ * Floor 3's table with every terrain rule weighted at the whole table's weight,
+ * so each one is all but sure to spawn on any map that has its ground. The
+ * shipped weights are the owner's to tune, and a check that a rule ever fires
+ * must not turn red when one is lowered.
+ */
+function terrainRulesBoosted(def: LevelDef): LevelDef {
+  const tableWeight = def.hallwayMobs.reduce((sum, rule) => sum + rule.chance, 0);
+  return {
+    ...def,
+    hallwayMobs: def.hallwayMobs.map((rule) =>
+      rule.terrain === undefined ? rule : { ...rule, chance: tableWeight },
+    ),
+  };
+}
+
+section("floor 3's terrain rules spawn on their own ground");
+{
+  const terrainOf = new Map<MobKind, SpawnTerrain>();
+  for (const rule of level3.hallwayMobs) {
+    if (rule.terrain !== undefined) terrainOf.set(rule.type, rule.terrain);
+  }
+  check(terrainOf.size > 0, 'floor 3 has at least one terrain-bound ambient rule');
+  const unboundTypes = new Set<MobKind>(
+    level3.hallwayMobs.filter((rule) => rule.terrain === undefined).map((rule) => rule.type),
+  );
+  check(
+    [...terrainOf.keys()].every((type) => !unboundTypes.has(type)),
+    'no floor-3 kind is both terrain-bound and free to spawn anywhere',
+  );
+
+  const leakRandom = mulberry32(TERRAIN_SPAWN_SEED);
+  let leaked = 0;
+  for (let roll = 0; roll < TERRAIN_FREE_ROLLS; roll++) {
+    if (pickRule(level3.hallwayMobs, leakRandom, NO_SPAWN_TERRAIN)?.terrain !== undefined) leaked++;
+  }
+  check(leaked === 0, `a point with no terrain never draws a terrain rule (${leaked} drawn)`);
+
+  const profile = DIFFICULTY_PROFILES.normal;
+  const boosted = terrainRulesBoosted(level3);
+  const misplaced: string[] = [];
+  const spawnedOnGround = new Map<MobKind, number>();
+  for (const seed of TERRAIN_MAP_SEEDS) {
+    const map = new GameMap({
+      mapSize: level3.mapSize,
+      mapType: 'overworld',
+      worldSeed: seed,
+      tileHeight: TILE_SIZE,
+    });
+    const terrainAt = new Map(
+      map.hallwaySpawnPoints.map((point) => [`${point.x},${point.y}`, point.terrain]),
+    );
+    for (const def of [level3, boosted]) {
+      const mobs = spawnForLevel(
+        def,
+        map,
+        TERRAIN_CHECK_PARTY_LEVEL,
+        profile,
+        new Set(),
+        mulberry32(TERRAIN_SPAWN_SEED),
+      );
+      for (const mob of mobs) {
+        const kind = mob.spawnTypeKey;
+        const wanted = kind === null ? undefined : terrainOf.get(kind);
+        if (kind === null || wanted === undefined) continue;
+        const tileX = Math.floor(mob.x / TILE_SIZE);
+        const tileY = Math.floor(mob.y / TILE_SIZE);
+        const ground = terrainAt.get(`${tileX},${tileY}`);
+        if (ground?.has(wanted) === true) {
+          spawnedOnGround.set(kind, (spawnedOnGround.get(kind) ?? 0) + 1);
+        } else {
+          misplaced.push(`${kind} at (${tileX}, ${tileY}) on map seed ${seed}`);
+        }
+      }
+    }
+  }
+  check(
+    misplaced.length === 0,
+    `every terrain-bound spawn stands on its terrain${misplaced.length > 0 ? `: ${misplaced.slice(0, 5).join('; ')}` : ''}`,
+  );
+  check(
+    [...terrainOf.keys()].every((kind) => (spawnedOnGround.get(kind) ?? 0) > 0),
+    `every terrain-bound kind does spawn on its ground (${[...terrainOf.keys()].map((kind) => `${kind} ${spawnedOnGround.get(kind) ?? 0}`).join(', ')})`,
+  );
+}
+
 // ── Bomber goblins: a throw the target can walk out of ───────────────────────
 
 /** Where the bomber and its target start, in tiles of the open chase room. */
@@ -1866,7 +1961,7 @@ const BOMBER_DAMAGE_FLOOR_PARTY_LEVELS = [1, BOMBER_LATE_FLOOR_PARTY_LEVEL] as c
 
 const BOMBER_TYPES = ['goblin_dynamiter', 'goblin_bombardier'] as const;
 /** Any hireling serves as the control on the landing; a sturdy one outlives the blast. */
-const BOMBER_CONTROL_HIRELING = 'sledge' as const satisfies MercenaryTemplateId;
+const BOMBER_CONTROL_HIRELING = 'crush' as const satisfies MercenaryTemplateId;
 type BomberType = (typeof BOMBER_TYPES)[number];
 
 /** What one real throw at a moving target did, frame by frame. */
@@ -2944,13 +3039,11 @@ const ARENA_BOSSES: readonly (readonly [string, () => Mob])[] = [
   ['ball_of_swine', registeredMob('ball_of_swine')],
   ['grotesque_spider', registeredMob('grotesque_spider')],
   ['the_lich', registeredMob('the_lich')],
-  ['heather', () => new HeatherTheBear(BOSS_PROBE_TILE, BOSS_PROBE_TILE, TILE_SIZE)],
   [
     'miss_quill',
     () => new MissQuill(BOSS_PROBE_TILE, BOSS_PROBE_TILE, TILE_SIZE, collectProbeSpawn),
   ],
   ['remex', () => new Remex(BOSS_PROBE_TILE, BOSS_PROBE_TILE, TILE_SIZE)],
-  ['terror_the_clown', registeredMob('terror_the_clown')],
 ];
 const BOUNTY_MARKS: readonly (readonly [string, () => Mob])[] = [
   ['evil_clown', registeredMob('evil_clown')],
@@ -2966,7 +3059,7 @@ const BOUNTY_MARKS: readonly (readonly [string, () => Mob])[] = [
  * the rule is that dynamite never turns a tougher escort into throwaway fodder.
  */
 const BOUNTY_ESCORTS = [
-  'stilt_clown',
+  'tall_clown',
   'fat_clown',
   'mantis',
   'skeleton_sword',

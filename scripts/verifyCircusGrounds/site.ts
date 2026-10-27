@@ -1,58 +1,35 @@
 /**
  * The circus grounds as the gates read them: the real generated third-floor
- * map for one world seed, the named places on it the fights are authored
- * against, and a headless rig that runs the real `CircusQuestSystem` over it.
+ * map for one world seed and the named places on it.
  *
- * Shared by `verify-circus-grounds.ts` (the geometry and the assault run) and
- * `render-circus-grounds.ts` (the review render), so the gate and the picture
- * always describe the same site.
+ * Shared by `verify-circus-grounds.ts` (the geometry), the high striker's
+ * gate and render, and `render-circus-grounds.ts` (the review render), so the
+ * gate and the picture always describe the same site.
  */
 
 import { TILE_SIZE } from '../../src/core/constants';
-import { AbilityManager } from '../../src/core/skills/AbilityManager';
-import { EventBus } from '../../src/core/EventBus';
-import {
-  createCircusQuestProgress,
-  type CircusQuestStage,
-} from '../../src/core/quests/CircusQuestProgress';
-import { createAnchorQuestProgress } from '../../src/core/quests/AnchorQuestProgress';
-import { CatPlayer } from '../../src/creatures/CatPlayer';
-import { HumanPlayer } from '../../src/creatures/HumanPlayer';
-import { Conversation } from '../../src/dialog/Conversation';
 import { level3 } from '../../src/levels/level3';
 import { GameMap } from '../../src/map/GameMap';
-import {
-  BIG_TOP_ENTRY_NAME,
-  OVERWORLD_BORDER_TILES,
-  type BuildingEntry,
-} from '../../src/map/OverworldGenerator';
+import { OVERWORLD_BORDER_TILES, type BuildingEntry } from '../../src/map/OverworldGenerator';
+import { STARLIGHT_TENT_NAME } from '../../src/map/overworld/circusGroundsLayout';
 import { gateHighwayTiles, widenApproach } from '../../src/map/town/paintStreets';
 import { circusApproachCentreLine } from '../../src/map/overworld/paintCircusGrounds';
-import { SIGNET_ANCHOR_INSET_TILES } from '../../src/systems/CircusQuestSystem';
-import { CircusQuestSystem } from '../../src/systems/CircusQuestSystem';
-import { resolveKills, type CombatContext } from '../../src/systems/CombatSystem';
-import type { SystemContext } from '../../src/systems/GameSystem';
-import { MobRoster } from '../../src/systems/kits/SceneWorld';
-import { MobUpdateLoop } from '../../src/systems/MobUpdateLoop';
-import { SpellSystem } from '../../src/systems/SpellSystem';
 
 export interface TilePoint {
   readonly x: number;
   readonly y: number;
 }
 
-/** The grounds of one generated world, with the places its fights are authored against. */
+/** The grounds of one generated world, with the places on it the gates read. */
 export interface CircusSite {
   readonly seed: number;
   readonly map: GameMap;
   readonly centre: TilePoint;
   readonly radiusTiles: number;
-  readonly bigTop: BuildingEntry;
-  /** Where Signet's lookout is authored: on the centre row, inset from the east rim. */
-  readonly lookout: TilePoint;
+  readonly starlightTent: BuildingEntry;
   /** Every tile the approach road is laid along, before anything else claims one. */
   readonly roadRoute: readonly TilePoint[];
-  /** The road's centre line, from the Big Top's doorstep out to the town gate. */
+  /** The road's centre line, from the Starlight Tent's doorstep out to the town gate. */
   readonly roadCentreLine: readonly TilePoint[];
   /**
    * Every tile of the grounds' disc a town gate's highway is laid along. Read
@@ -64,7 +41,7 @@ export interface CircusSite {
 
 /**
  * Builds the real third-floor overworld for a seed and names its circus.
- * Returns a reason instead when the map has no circus or no Big Top, which a
+ * Returns a reason instead when the map has no circus or no Starlight Tent, which a
  * gate must count as a failure rather than a skipped seed.
  */
 export function buildCircusSite(seed: number): CircusSite | string {
@@ -77,8 +54,8 @@ export function buildCircusSite(seed: number): CircusSite | string {
   const centre = map.circusCentre;
   const radiusTiles = map.circusRadiusTiles;
   if (centre === undefined || radiusTiles === undefined) return 'the map has no circus';
-  const bigTop = map.buildingEntries.find((entry) => entry.name === BIG_TOP_ENTRY_NAME);
-  if (bigTop === undefined) return 'the circus has no Big Top entry';
+  const starlightTent = map.buildingEntries.find((entry) => entry.name === STARLIGHT_TENT_NAME);
+  if (starlightTent === undefined) return 'the circus has no Starlight Tent entry';
   const plan = map.townPlan;
   if (plan === undefined) return 'the map has no town plan to route the approach road from';
   return {
@@ -86,8 +63,7 @@ export function buildCircusSite(seed: number): CircusSite | string {
     map,
     centre,
     radiusTiles,
-    bigTop,
-    lookout: { x: centre.x + radiusTiles - SIGNET_ANCHOR_INSET_TILES, y: centre.y },
+    starlightTent,
     roadRoute: widenApproach(circusApproachCentreLine(plan, centre)),
     roadCentreLine: circusApproachCentreLine(plan, centre),
     highwayRoute: gateHighwayTiles(plan, map.structure.length, OVERWORLD_BORDER_TILES).filter(
@@ -161,85 +137,4 @@ export function roadRimCrossing(site: CircusSite): TilePoint | null {
     }
   }
   return best;
-}
-
-/** One frame-steppable party and circus quest standing on a site. */
-export interface QuestRig {
-  readonly quest: CircusQuestSystem;
-  readonly human: HumanPlayer;
-  readonly cat: CatPlayer;
-  readonly roster: MobRoster;
-  readonly ctx: SystemContext;
-  /** Runs one frame in the scene's order: mobs, health, kills, quest, timers. */
-  step(): void;
-}
-
-/**
- * Stands the party on `partyTile` and builds a real `CircusQuestSystem` at
- * `stage`, which spawns that stage's first wave exactly as a scene rebuild does.
- */
-export function buildQuestRig(
-  site: CircusSite,
-  stage: CircusQuestStage,
-  partyTile: TilePoint,
-): QuestRig {
-  const human = new HumanPlayer(partyTile.x, partyTile.y, TILE_SIZE);
-  const cat = new CatPlayer(partyTile.x + 1, partyTile.y, TILE_SIZE);
-  human.isActive = true;
-  cat.setMap(site.map);
-  const spells = new SpellSystem();
-  const roster = new MobRoster(site.map, spells);
-  const ctx: SystemContext = {
-    human,
-    cat,
-    active: human,
-    inactive: cat,
-    activeIsMoving: false,
-    roster,
-    gameMap: site.map,
-    extraTargets: [],
-  };
-  const combat: CombatContext = {
-    human,
-    cat,
-    mobs: roster.mobs,
-    mobGrid: roster.grid,
-    gameMap: site.map,
-    safeRoom: null,
-    bus: new EventBus(),
-    abilityManager: new AbilityManager(),
-    spells,
-    hitLanded: false,
-  };
-  const progress = createCircusQuestProgress();
-  progress.stage = stage;
-  const quest = new CircusQuestSystem(
-    site.map,
-    new EventBus(),
-    (mob) => roster.add(mob),
-    null,
-    progress,
-    null,
-    human,
-    new Conversation(null),
-    { anchor: createAnchorQuestProgress() },
-  );
-  const mobLoop = new MobUpdateLoop();
-  return {
-    quest,
-    human,
-    cat,
-    roster,
-    ctx,
-    step() {
-      mobLoop.update(ctx);
-      // The run measures the grounds, not the fight: the party is never put down.
-      human.hp = human.maxHp;
-      cat.hp = cat.maxHp;
-      resolveKills(combat);
-      quest.update(ctx);
-      human.tickTimers();
-      cat.tickTimers();
-    },
-  };
 }

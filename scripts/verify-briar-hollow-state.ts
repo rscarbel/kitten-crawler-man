@@ -8,10 +8,8 @@
  * Checks:
  *  - a populated `BriarHollowState` survives capture → JSON round-trip →
  *    parse → restore with deep equality;
- *  - a save with the `briarHollow` field entirely absent, or with individual
- *    sub-fields absent, is handled gracefully rather than rejected;
- *  - a corrupted field (bad array entries, wrong-typed top-level value) drops
- *    only the bad entries and keeps the rest, or refuses gracefully;
+ *  - a record that is absent, missing a sub-field, or holds any malformed
+ *    entry or wrong-typed value is refused whole;
  *  - the human's and the cat's craft-skill levels round-trip through
  *    `PlayerSnapshot` independently;
  *  - `GameProgress.crafts` parses through absence and garbage.
@@ -29,7 +27,7 @@ import {
 } from '../src/core/quests/briarHollowState';
 import { createPartyCraftsState, parsePartyCraftsState } from '../src/core/labour/partyCrafts';
 import { teachBoth } from '../src/core/labour/CraftSkills';
-import { snapPlayer, restorePlayer } from '../src/core/save/PlayerSnapshot';
+import { parsePlayerSnapshot, snapPlayer, restorePlayer } from '../src/core/save/PlayerSnapshot';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { TILE_SIZE } from '../src/core/constants';
@@ -153,84 +151,58 @@ function populatedState(): BriarHollowState {
   );
 }
 
-// ── Old save: field absent entirely ──
+// ── Missing or corrupted fields: the whole record is refused ──
 {
-  const parsed = parseBriarHollowStateSnapshot(undefined);
-  check(parsed === undefined, 'an absent `briarHollow` field parses to undefined');
-  // The call site's contract, exercised here directly: undefined means "leave
-  // the constructor's default state alone" rather than "fail to load".
-  const fallback = parsed ?? createBriarHollowState();
-  check(
-    isDeepStrictEqual(fallback, createBriarHollowState()),
-    'the caller-side fallback for an absent field is the empty state',
-  );
-}
+  check(parseBriarHollowStateSnapshot(undefined) === undefined, 'an absent record is refused');
+  check(parseBriarHollowStateSnapshot({}) === undefined, 'an empty record is refused');
 
-// ── Old save: object present, but every sub-field absent ──
-{
-  const parsed = parseBriarHollowStateSnapshot({});
-  check(parsed !== undefined, 'an empty object is still a valid (if empty) briarHollow record');
-  check(
-    parsed !== undefined &&
-      isDeepStrictEqual(parsed, captureBriarHollowState(createBriarHollowState())),
-    'a record with every sub-field absent parses to the empty defaults',
-  );
-}
-
-// ── Corrupted field: bad entries dropped, good entries kept ──
-{
-  const good = populatedState();
-  const captured = captureBriarHollowState(good);
-  const corrupted = {
-    ...captured,
-    structures: [
-      captured.structures[0],
-      { kind: 'segment', id: 'seg-bad' /* missing tier, hp, builtBy */ },
-      { kind: 'not_a_real_kind', x: 0, y: 0 },
-      captured.structures[2],
-      'not even an object',
-      null,
+  const captured = captureBriarHollowState(populatedState());
+  const corruptions: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
+    ['a missing quest', { quest: undefined }],
+    [
+      'a siege phase, which a capture never writes',
+      { quest: { ...captured.quest, phase: 'assault' } },
     ],
-    soldierOrders: [
-      captured.soldierOrders[0],
-      { soldierId: 'not-a-villager', order: 'hold' },
-      { soldierId: 'marta', order: 'not-a-real-order' },
+    [
+      'a negative gathering counter',
+      { quest: { ...captured.quest, gathering: { ...captured.quest.gathering, woodChopped: -1 } } },
     ],
-    talkCounts: { ...captured.talkCounts, tikka: 'four' },
-    onceFlags: ['fine', GARBAGE_NUMBER, null, 'also-fine'],
-    shopStock: {
-      offsets: {
-        [shopStockKey('trading_post', 'hamburger')]: SAMPLE_HAMBURGER_OFFSET,
-        [shopStockKey('cookhouse', 'hollow_stew')]: 'lots',
+    ['missing unlocks', { unlocks: undefined }],
+    [
+      'an unknown construction unlock',
+      { unlocks: { ...captured.unlocks, construction: ['no_such_unlock'] } },
+    ],
+    [
+      'a structure missing its tier, hp and builder',
+      { structures: [...captured.structures, { kind: 'segment', id: 'seg-bad' }] },
+    ],
+    [
+      'a structure of an unknown kind',
+      { structures: [...captured.structures, { kind: 'not_a_real_kind', x: 0, y: 0 }] },
+    ],
+    ['a non-object structure', { structures: [...captured.structures, null] }],
+    [
+      'an order for an unknown villager',
+      {
+        soldierOrders: [...captured.soldierOrders, { soldierId: 'not-a-villager', order: 'hold' }],
       },
-      ticksSinceRestock: 'soon',
-    },
-  };
-  const parsed = parseBriarHollowStateSnapshot(corrupted);
-  check(parsed !== undefined, 'a record with corrupted entries still parses');
-  check(
-    parsed?.structures.length === 2,
-    'malformed structure entries are dropped, well-formed ones kept',
-  );
-  check(
-    parsed?.soldierOrders.length === 1,
-    'malformed soldier-order entries are dropped, well-formed ones kept',
-  );
-  check(
-    parsed?.talkCounts.tikka === 0,
-    'a wrong-typed talk count falls back to 0 rather than propagating garbage',
-  );
-  check(
-    parsed !== undefined && isDeepStrictEqual(parsed.onceFlags, ['fine', 'also-fine']),
-    'non-string onceFlags entries are dropped',
-  );
-  check(
-    parsed?.shopStock.offsets[shopStockKey('trading_post', 'hamburger')] ===
-      SAMPLE_HAMBURGER_OFFSET &&
-      !(shopStockKey('cookhouse', 'hollow_stew') in parsed.shopStock.offsets) &&
-      parsed.shopStock.ticksSinceRestock === 0,
-    'a wrong-typed stock offset or restock clock is dropped rather than kept as garbage',
-  );
+    ],
+    [
+      'an unknown order',
+      {
+        soldierOrders: [
+          ...captured.soldierOrders,
+          { soldierId: 'marta', order: 'not-a-real-order' },
+        ],
+      },
+    ],
+    ['a wrong-typed talk count', { talkCounts: { ...captured.talkCounts, tikka: 'four' } }],
+    ['a non-string once flag', { onceFlags: ['fine', GARBAGE_NUMBER] }],
+  ];
+  for (const [label, override] of corruptions) {
+    const corrupted: unknown = JSON.parse(JSON.stringify({ ...captured, ...override }));
+    check(parseBriarHollowStateSnapshot(corrupted) === undefined, `${label} is refused`);
+  }
 }
 
 // ── Corrupted field: the whole value is the wrong shape ──
@@ -284,46 +256,31 @@ function populatedState(): BriarHollowState {
     "restorePlayer puts the human's Construction level back",
   );
 
-  // An old snapshot with no craft-skill field at all resumes as not-learned,
-  // rather than throwing or inheriting whatever the fresh player started with.
-  const { human: legacyHuman } = newCrawlers();
-  const legacySnap = { ...humanSnap, craftSkillStates: undefined };
-  restorePlayer(legacyHuman, legacySnap);
+  const { craftSkillStates: _dropped, ...withoutCraftSkills } = humanSnap;
   check(
-    !legacyHuman.craftSkills.isLearned('resourcing') &&
-      !legacyHuman.craftSkills.isLearned('construction'),
-    'a snapshot with no craftSkillStates restores as neither skill learned',
+    parsePlayerSnapshot(JSON.parse(JSON.stringify(withoutCraftSkills)), 'human') === undefined,
+    'a saved snapshot with no craftSkillStates fails validation',
   );
 }
 
-// ── GameProgress.crafts: absence and garbage ──
+// ── GameProgress.crafts: validation ──
 {
+  check(parsePartyCraftsState(undefined) === undefined, 'an absent crafts field is rejected');
+  check(parsePartyCraftsState('garbage') === undefined, 'a garbage crafts field is rejected');
+  check(parsePartyCraftsState({}) === undefined, 'an empty crafts record is rejected');
+  const fresh = createPartyCraftsState();
   check(
-    parsePartyCraftsState(undefined) === undefined,
-    'an absent crafts field parses to undefined',
+    isDeepStrictEqual(parsePartyCraftsState(JSON.parse(JSON.stringify(fresh))), fresh),
+    'a written crafts record round-trips',
   );
   check(
-    parsePartyCraftsState('garbage') === undefined,
-    'a garbage crafts field parses to undefined',
-  );
-
-  const fromEmpty = parsePartyCraftsState({});
-  check(
-    fromEmpty !== undefined && isDeepStrictEqual(fromEmpty, createPartyCraftsState()),
-    'an empty crafts record parses to the empty defaults',
-  );
-
-  const fromCorrupted = parsePartyCraftsState({
-    tools: { axeTier: 99, pickaxeTier: 'two' },
-    explainersSeen: ['resourcing', 'not_a_skill', GARBAGE_NUMBER],
-  });
-  check(
-    fromCorrupted?.tools.axeTier === null && fromCorrupted.tools.pickaxeTier === null,
-    'an out-of-range or wrong-typed tool tier falls back to null',
+    parsePartyCraftsState({ ...fresh, explainersSeen: ['resourcing', 'not_a_skill'] }) ===
+      undefined,
+    'an unknown explainersSeen entry fails the whole record',
   );
   check(
-    fromCorrupted !== undefined && isDeepStrictEqual(fromCorrupted.explainersSeen, ['resourcing']),
-    'a garbage explainersSeen entry is dropped, a valid one kept',
+    parsePartyCraftsState({ ...fresh, tools: { axeTier: 99, pickaxeTier: null } }) === undefined,
+    'an out-of-range tool tier fails the whole record',
   );
 }
 

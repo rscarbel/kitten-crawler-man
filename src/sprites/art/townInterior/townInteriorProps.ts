@@ -53,11 +53,14 @@ import { paintPlankBoard, paintStoneCourses, paintGlazing } from '../town/townMa
 import { mulberry32 } from '../../person/rng';
 import type { AnchorKind } from '../../../systems/InteriorOccupantSystem';
 import { WOOD_SMASHING_SOUNDS, type SoundId } from '../../../audio/sounds';
+import type { InteriorAmbienceCue } from '../../../systems/interiorAmbienceCues';
+import type { PropFlameSite } from './propFlames';
 import {
   paintCatPortrait,
   paintDairyChurn,
   paintCaskRack,
   paintInnHearth,
+  INN_HEARTH_FLAMES,
   paintInnBackBar,
   paintInnBar,
   paintInnDresser,
@@ -75,6 +78,7 @@ import {
   paintTabLedger,
   paintTrophyBanner,
   paintFlagonHearth,
+  GRAND_HEARTH_FLAMES,
   paintGuildBooth,
   paintBoothScreen,
   paintBoothTable,
@@ -84,6 +88,7 @@ import {
   paintFlagonBar,
   paintFlagonTrophy,
   paintTorchere,
+  TORCHERE_FLAMES,
   paintTrestleTable,
   paintFlagonCarpet,
   paintCoatRack,
@@ -98,6 +103,7 @@ import {
   paintToolWall,
   paintDoorOnTrestles,
   paintBuildersHearth,
+  BUILDERS_HEARTH_FLAMES,
   paintGoodChair,
   paintDairyWall,
   paintChurnStand,
@@ -127,6 +133,7 @@ import {
   paintFloorStain,
   paintSmokyLamp,
   paintStumpStove,
+  STUMP_STOVE_FLAMES,
 } from './rooms/sunkenStumpPub';
 import {
   paintStill,
@@ -149,6 +156,7 @@ import {
   paintMushroomBasket,
   paintJarDresser,
   paintWitchHearth,
+  WITCH_HEARTH_FLAMES,
   paintDryingBeam,
   paintWitchWorktable,
   paintCatArmchair,
@@ -156,7 +164,7 @@ import {
   paintBirdcageStand,
   paintCrockCluster,
   paintCottageBed,
-} from './rooms/oldHildasCottage';
+} from './rooms/oldLorisCottage';
 import {
   paintAltarStone,
   paintLectern,
@@ -185,6 +193,7 @@ import {
 } from './rooms/quietNeedle';
 import {
   paintForge,
+  FORGE_FLAMES,
   paintBarStock,
   paintViceBench,
   paintAnvil,
@@ -205,6 +214,7 @@ import {
   paintLodgeSpearRack,
   paintLodgeDutyBoard,
   paintLodgeStove,
+  LODGE_STOVE_FLAMES,
   paintLodgeKitPegs,
   paintKesslerFootlocker,
   paintCellarTrapdoor,
@@ -214,6 +224,7 @@ import {
   paintWheelBuildStand,
   paintTimberRack,
   paintSawhorse,
+  paintTargetBoard,
   paintWagonBed,
   paintLathe,
   paintJoinerBench,
@@ -234,6 +245,7 @@ import {
   paintMillWorks,
   paintSteelyardScale,
   paintFarmHearth,
+  FARM_HEARTH_FLAMES,
   paintFarmTable,
   paintBakeTrough,
   paintFarmDresser,
@@ -270,6 +282,7 @@ import {
   paintBunkBed,
   paintMusterBoard,
   paintBriefingTable,
+  paintMercDesk,
   paintSparringRing,
 } from './rooms/barracks';
 import {
@@ -349,6 +362,7 @@ export type TownInteriorExamineId =
   | 'lathe'
   | 'shaving_horse'
   | 'firewood_stack'
+  | 'target_board'
   | 'axle_set'
   | 'armour_stand'
   | 'millstone'
@@ -424,6 +438,7 @@ export type TownInteriorExamineId =
   | 'archery_butt'
   | 'drill_slate'
   | 'briefing_table'
+  | 'merc_desk'
   | 'guild_booth'
   | 'feast_bench'
   | 'flagon_back_bar'
@@ -517,6 +532,15 @@ export interface TownInteriorFootprint {
   readonly h: number;
 }
 
+/** A loop a prop makes while it works, heard from the centre of its footprint. */
+export interface TownInteriorAmbientSound {
+  readonly cue: InteriorAmbienceCue;
+  /** Distance in tiles at which it fades to silence. */
+  readonly radiusTiles: number;
+  /** Gain standing at the prop (0–1). */
+  readonly maxVolume: number;
+}
+
 export interface TownInteriorPropDef {
   readonly id: string;
   readonly footprint: TownInteriorFootprint;
@@ -540,6 +564,13 @@ export interface TownInteriorPropDef {
   readonly destructible?: TownInteriorDestructibleSpec;
   /** Absent means the instance offers nothing to examine, search or use. */
   readonly interaction?: TownInteriorInteraction;
+  /**
+   * Live flames drawn over the baked body every frame. A prop that declares
+   * them paints its firebox and fuel but leaves the flames out of `paint`.
+   */
+  readonly flames?: ReadonlyArray<PropFlameSite>;
+  /** Absent means the prop makes no sound of its own. */
+  readonly ambientSound?: TownInteriorAmbientSound;
 }
 
 const ONE_BY_ONE: TownInteriorFootprint = { w: 1, h: 1 };
@@ -1806,13 +1837,18 @@ function paintHearth(ctx: Ctx, frame: TownPropFrame, _variant: number, rng: Rng)
   );
 }
 
-function paintForgeBrazier(ctx: Ctx, frame: TownPropFrame, _variant: number, rng: Rng): void {
+/** Where a forge brazier's bowl sits, in tiles above the footprint's foot. */
+const FORGE_BRAZIER_BOWL_RISE = 0.55;
+const FORGE_BRAZIER_BOWL_WIDTH_SHARE = 0.7;
+const FORGE_BRAZIER_COAL_ALPHA = 0.85;
+
+function paintForgeBrazier(ctx: Ctx, frame: TownPropFrame, _variant: number, _rng: Rng): void {
   withFootprintClip(ctx, frame, () => {
     const box = footprintBox(frame);
     contactShadow(ctx, frame);
     const iron = ironRamp();
-    const bowlY = box.bottom - frame.tileScale * 0.55;
-    const bowlW = box.width * 0.7;
+    const bowlY = box.bottom - frame.tileScale * FORGE_BRAZIER_BOWL_RISE;
+    const bowlW = box.width * FORGE_BRAZIER_BOWL_WIDTH_SHARE;
     ctx.strokeStyle = rgb(sampleRamp(iron, 0.4));
     ctx.lineWidth = frame.tileScale * 0.04;
     ctx.beginPath();
@@ -1826,34 +1862,18 @@ function paintForgeBrazier(ctx: Ctx, frame: TownPropFrame, _variant: number, rng
     ctx.ellipse(box.centreX, bowlY, bowlW / 2, frame.tileScale * 0.1, 0, 0, Math.PI * 2);
     ctx.fill();
     inkOutline(ctx, frame.tileScale);
-    const flameH = frame.tileScale * 0.5;
-    const glow = ctx.createRadialGradient(
-      box.centreX,
-      bowlY - flameH * 0.4,
-      1,
-      box.centreX,
-      bowlY - flameH * 0.4,
-      bowlW * 0.55,
-    );
-    glow.addColorStop(0, rgb(FLAME_CORE));
-    glow.addColorStop(0.6, rgb(FLAME_MID));
-    glow.addColorStop(1, rgba(FLAME_MID, 0));
-    ctx.fillStyle = glow;
+    // The coals heaped in the bowl, which the live flames stand on.
+    ctx.fillStyle = rgba(FLAME_MID, FORGE_BRAZIER_COAL_ALPHA);
     ctx.beginPath();
-    ctx.moveTo(box.centreX - bowlW * 0.24, bowlY);
-    ctx.quadraticCurveTo(
-      box.centreX - bowlW * 0.1,
-      bowlY - flameH,
+    ctx.ellipse(
       box.centreX,
-      bowlY - flameH * jitter(rng, 0.15) - flameH * 0.85,
+      bowlY - frame.tileScale * 0.02,
+      bowlW * 0.36,
+      frame.tileScale * 0.05,
+      0,
+      0,
+      Math.PI * 2,
     );
-    ctx.quadraticCurveTo(
-      box.centreX + bowlW * 0.1,
-      bowlY - flameH,
-      box.centreX + bowlW * 0.24,
-      bowlY,
-    );
-    ctx.closePath();
     ctx.fill();
   });
 }
@@ -2429,6 +2449,7 @@ const PROP_ART_HEIGHT_TILES: Record<string, number> = {
   wheel_build_stand: 0.1,
   timber_rack: 1.0,
   sawhorse: 0.3,
+  target_board: 0.6,
   pot_rack: 0.9,
   flour_bin: 0.7,
   sieve_rack: 1.0,
@@ -2465,6 +2486,7 @@ const PROP_ART_HEIGHT_TILES: Record<string, number> = {
   bunk_bed: 1.3,
   muster_board: 1.3,
   briefing_table: 0.1,
+  merc_desk: 0.9,
   sparring_ring: 0,
   goods_wall: 1.85,
   potion_cabinet: 1.9,
@@ -3075,7 +3097,7 @@ function paintPotionShelf(ctx: Ctx, frame: TownPropFrame, variant: number, rng: 
 
 /**
  * A horizontal perch rail on iron wall brackets, set high enough that a
- * skyfowl reaches it by wing rather than by climbing — the counter's own
+ * Hawkfolk reaches it by wing rather than by climbing — the counter's own
  * off-duty roost, not a piece of shop furniture.
  */
 function paintPerchRail(ctx: Ctx, frame: TownPropFrame): void {
@@ -3336,7 +3358,7 @@ function paintArmourStand(ctx: Ctx, frame: TownPropFrame, _variant: number, rng:
     ctx.stroke();
     inkOutline(ctx, frame.tileScale);
 
-    // Garrison colours: blue-grey leather, never the Meat Shields' orange.
+    // Garrison colours: blue-grey leather, never the mercenaries' orange.
     const cuirassW = box.width * 0.58;
     const cuirassH = frame.tileScale * 0.42;
     const cuirassTop = postTop + frame.tileScale * 0.14;
@@ -3519,10 +3541,39 @@ function paintCellarHatch(ctx: Ctx, frame: TownPropFrame, _variant: number): voi
 
 // ── Registry ─────────────────────────────────────────────────────────────
 
-interface TownInteriorPropExtras {
-  readonly destructible?: TownInteriorDestructibleSpec;
-  readonly interaction?: TownInteriorInteraction;
-}
+/**
+ * How loud each kind of working fire is. Every one sits under a tavern's crowd
+ * bed (`BAR_CROWD_AMBIENT_VOLUME` in `BuildingInteriorScene`) even standing at
+ * the grate, and a room with several plays the nearest, never the sum.
+ */
+const HEARTH_CRACKLE: TownInteriorAmbientSound = {
+  cue: 'fireCrackle',
+  radiusTiles: 7,
+  maxVolume: 0.3,
+};
+const STOVE_CRACKLE: TownInteriorAmbientSound = {
+  cue: 'fireCrackle',
+  radiusTiles: 5,
+  maxVolume: 0.22,
+};
+const BRAZIER_CRACKLE: TownInteriorAmbientSound = {
+  cue: 'fireCrackle',
+  radiusTiles: 5,
+  maxVolume: 0.25,
+};
+/** The smithy has no crowd bed, so its forge is the room's sound. */
+const FORGE_ROAR: TownInteriorAmbientSound = { cue: 'forgeRoar', radiusTiles: 9, maxVolume: 0.45 };
+/** Three candles on a stand: heard only standing beside one. */
+const TORCHERE_BURN: TownInteriorAmbientSound = {
+  cue: 'torchBurn',
+  radiusTiles: 3,
+  maxVolume: 0.12,
+};
+
+type TownInteriorPropExtras = Pick<
+  TownInteriorPropDef,
+  'destructible' | 'interaction' | 'flames' | 'ambientSound'
+>;
 
 function def(
   id: string,
@@ -3545,6 +3596,8 @@ function def(
     paint,
     destructible: extras.destructible,
     interaction: extras.interaction,
+    flames: extras.flames,
+    ambientSound: extras.ambientSound,
   };
 }
 
@@ -3631,7 +3684,7 @@ export const TOWN_INTERIOR_PROPS = {
   hedge_stool: def('hedge_stool', ONE_BY_ONE, false, [], 'free', 1, paintHedgeStool, {
     interaction: { kind: 'use', id: 'biting_stool' },
   }),
-  // Old Hilda's composed centrepieces: the hearth carries the `hearth`
+  // Old Lori's composed centrepieces: the hearth carries the `hearth`
   // anchor her waiting customer stands at, and the dresser the `shelf`
   // anchor she browses, so each big piece also does the job the small props
   // it stands in for used to.
@@ -3645,6 +3698,8 @@ export const TOWN_INTERIOR_PROPS = {
     paintWitchHearth,
     {
       interaction: { kind: 'use', id: 'hearth' },
+      flames: WITCH_HEARTH_FLAMES,
+      ambientSound: HEARTH_CRACKLE,
     },
   ),
   jar_dresser: def('jar_dresser', { w: 3, h: 1 }, false, ['shelf'], 'wall', 1, paintJarDresser, {
@@ -3752,7 +3807,7 @@ export const TOWN_INTERIOR_PROPS = {
   flash_wall: def('flash_wall', { w: 4, h: 1 }, false, [], 'wall', 2, paintFlashWall, {
     interaction: { kind: 'examine', id: 'flash_wall' },
   }),
-  ink_chair: def('ink_chair', { w: 3, h: 1 }, false, ['bench'], 'free', 1, paintInkChair, {
+  ink_chair: def('ink_chair', { w: 3, h: 1 }, false, [], 'free', 1, paintInkChair, {
     interaction: { kind: 'examine', id: 'ink_chair' },
   }),
   pigment_cabinet: def(
@@ -3841,9 +3896,13 @@ export const TOWN_INTERIOR_PROPS = {
   // footprint, so a broad fireplace is the same painter over a wider box.
   hearth_wide: def('hearth_wide', { w: 2, h: 1 }, false, ['hearth'], 'wall', 1, paintHearth, {
     interaction: { kind: 'use', id: 'hearth' },
+    flames: [{ x: 1, rise: 0.08, size: 0.5, style: 'hearth' }],
+    ambientSound: HEARTH_CRACKLE,
   }),
   forge_brazier: def('forge_brazier', ONE_BY_ONE, false, ['forge'], 'free', 1, paintForgeBrazier, {
     destructible: DESTRUCTIBLE_BRAZIER,
+    flames: [{ x: 0.5, rise: FORGE_BRAZIER_BOWL_RISE, size: 1, style: 'brazier' }],
+    ambientSound: BRAZIER_CRACKLE,
   }),
   // A wide runner for a counter or a hearth's own approach — one continuous
   // mat with one border and one fringe. `paintRugRunner` scales to its own
@@ -3962,6 +4021,8 @@ export const TOWN_INTERIOR_PROPS = {
   coal_bin: def('coal_bin', ONE_BY_ONE, false, [], 'free', 1, paintCoalBin),
   forge: def('forge', { w: 3, h: 2 }, false, [], 'free', 1, paintForge, {
     interaction: { kind: 'examine', id: 'forge' },
+    flames: FORGE_FLAMES,
+    ambientSound: FORGE_ROAR,
   }),
   bar_stock: def('bar_stock', { w: 2, h: 1 }, false, [], 'wall', 1, paintBarStock),
   // Carries the smithy's `table` anchor: the forge hall's one bench is
@@ -4053,6 +4114,9 @@ export const TOWN_INTERIOR_PROPS = {
   shaving_horse: def('shaving_horse', { w: 2, h: 1 }, false, [], 'free', 1, paintShavingHorse, {
     interaction: { kind: 'examine', id: 'shaving_horse' },
   }),
+  target_board: def('target_board', ONE_BY_ONE, false, [], 'free', 1, paintTargetBoard, {
+    interaction: { kind: 'examine', id: 'target_board' },
+  }),
   firewood_stack: def('firewood_stack', { w: 3, h: 1 }, false, [], 'wall', 1, paintFirewoodStack, {
     interaction: { kind: 'examine', id: 'firewood_stack' },
   }),
@@ -4133,6 +4197,8 @@ export const TOWN_INTERIOR_PROPS = {
   ),
   lodge_stove: def('lodge_stove', { w: 2, h: 1 }, false, [], 'wall', 1, paintLodgeStove, {
     interaction: { kind: 'examine', id: 'lodge_stove' },
+    flames: LODGE_STOVE_FLAMES,
+    ambientSound: STOVE_CRACKLE,
   }),
   lodge_kit_pegs: def('lodge_kit_pegs', { w: 3, h: 1 }, false, [], 'wall', 2, paintLodgeKitPegs),
   kessler_footlocker: def(
@@ -4174,7 +4240,11 @@ export const TOWN_INTERIOR_PROPS = {
     'wall',
     1,
     paintBuildersHearth,
-    { interaction: { kind: 'use', id: 'hearth' } },
+    {
+      interaction: { kind: 'use', id: 'hearth' },
+      flames: BUILDERS_HEARTH_FLAMES,
+      ambientSound: HEARTH_CRACKLE,
+    },
   ),
   good_chair: def('good_chair', ONE_BY_ONE, false, [], 'free', 1, paintGoodChair, {
     destructible: DESTRUCTIBLE_CHAIR,
@@ -4218,6 +4288,8 @@ export const TOWN_INTERIOR_PROPS = {
   // occupants at tables, and an anchor is one per placed instance.
   farm_hearth: def('farm_hearth', { w: 4, h: 2 }, false, ['hearth'], 'wall', 1, paintFarmHearth, {
     interaction: { kind: 'use', id: 'hearth' },
+    flames: FARM_HEARTH_FLAMES,
+    ambientSound: HEARTH_CRACKLE,
   }),
   farm_table: def('farm_table', { w: 3, h: 2 }, false, ['table'], 'free', 1, paintFarmTable, {
     destructible: DESTRUCTIBLE_TABLE,
@@ -4337,6 +4409,8 @@ export const TOWN_INTERIOR_PROPS = {
   // customer leaning on the near end.
   inn_hearth: def('inn_hearth', { w: 3, h: 2 }, false, ['hearth'], 'wall', 1, paintInnHearth, {
     interaction: { kind: 'use', id: 'hearth' },
+    flames: INN_HEARTH_FLAMES,
+    ambientSound: HEARTH_CRACKLE,
   }),
   inn_back_bar: def('inn_back_bar', { w: 6, h: 1 }, false, [], 'wall', 1, paintInnBackBar, {
     interaction: { kind: 'examine', id: 'slate_menu' },
@@ -4401,6 +4475,8 @@ export const TOWN_INTERIOR_PROPS = {
     paintFlagonHearth,
     {
       interaction: { kind: 'use', id: 'hearth' },
+      flames: GRAND_HEARTH_FLAMES,
+      ambientSound: HEARTH_CRACKLE,
     },
   ),
   guild_booth: def('guild_booth', { w: 4, h: 1 }, false, [], 'wall', 1, paintGuildBooth, {
@@ -4434,6 +4510,8 @@ export const TOWN_INTERIOR_PROPS = {
   }),
   torchere: def('torchere', ONE_BY_ONE, false, [], 'free', 1, paintTorchere, {
     destructible: DESTRUCTIBLE_BRAZIER,
+    flames: TORCHERE_FLAMES,
+    ambientSound: TORCHERE_BURN,
   }),
   trestle_table: def(
     'trestle_table',
@@ -4525,6 +4603,8 @@ export const TOWN_INTERIOR_PROPS = {
   }),
   stump_stove: def('stump_stove', ONE_BY_ONE, false, ['hearth'], 'wall', 1, paintStumpStove, {
     interaction: { kind: 'use', id: 'hearth' },
+    flames: STUMP_STOVE_FLAMES,
+    ambientSound: STOVE_CRACKLE,
   }),
   // The Barracks' composed pieces. The counter, the dummies, the muster board
   // and the briefing table each carry the anchor the one-tile fixtures they
@@ -4593,6 +4673,10 @@ export const TOWN_INTERIOR_PROPS = {
       interaction: { kind: 'examine', id: 'briefing_table' },
     },
   ),
+  merc_desk: def('merc_desk', { w: 2, h: 1 }, false, [], 'free', 1, paintMercDesk, {
+    destructible: DESTRUCTIBLE_TABLE,
+    interaction: { kind: 'examine', id: 'merc_desk' },
+  }),
   sparring_ring: def('sparring_ring', { w: 9, h: 4 }, true, [], 'free', 1, paintSparringRing),
   records_cabinet: def('records_cabinet', ONE_BY_ONE, false, [], 'wall', 2, paintRecordsCabinet, {
     destructible: DESTRUCTIBLE_SHELF,
@@ -4651,7 +4735,11 @@ export const TOWN_INTERIOR_PROPS = {
     'wall',
     1,
     paintTowerHearth,
-    { interaction: { kind: 'use', id: 'hearth' } },
+    {
+      interaction: { kind: 'use', id: 'hearth' },
+      flames: GRAND_HEARTH_FLAMES,
+      ambientSound: HEARTH_CRACKLE,
+    },
   ),
   petition_counter: def(
     'petition_counter',

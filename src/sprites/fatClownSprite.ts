@@ -7,7 +7,7 @@ import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache'
 import { FAT_CLOWN_FIGURE, FAT_SLAM_FRAMES, IDLE_FRAMES, WALK_FRAMES } from './art/clownFigure';
 
 /**
- * Fat Clown sprite — the tanky bruiser of Grimaldi's troupe, painted facing
+ * Fat Clown sprite — the tanky bruiser of the clown troupe, painted facing
  * right and mirrored for the other heading.
  *
  * Review the art with `npm run render:clowns`.

@@ -7,6 +7,7 @@ import {
   AILMENT_STATUSES,
   makeBurn,
   makeDrunk,
+  makeCatnipBuzz,
   makeElectrified,
   makePoison,
   makeWhetstone,
@@ -355,6 +356,7 @@ const AI_STATUS_EFFECTS = {
   burn: plainStatus(true, () => makeBurn()),
   poison: plainStatus(true, () => makePoison()),
   drunk: plainStatus(true, () => makeDrunk()),
+  catnip_buzz: plainStatus(true, () => makeCatnipBuzz()),
   electrified: plainStatus(true, () => makeElectrified()),
   speed_fizz: { harmful: false, apply: (crawler: Crawler) => crawler.activateSpeedFizz() },
   jugg_juice: { harmful: false, apply: (crawler: Crawler) => crawler.activateJuggJuice() },
@@ -374,12 +376,13 @@ function shieldedHp(crawler: Crawler): number {
  */
 function hpAfterStatuses(crawler: Crawler, added: StatusEffect | null): number {
   const effects = added === null ? crawler.statusEffects : [...crawler.statusEffects, added];
-  return crawler.hp - pendingStatusDamage(effects, crawler.maxHp);
+  return crawler.hp - pendingStatusDamage(effects);
 }
 const AI_STATUS_IDS = [
   'burn',
   'poison',
   'drunk',
+  'catnip_buzz',
   'electrified',
   'speed_fizz',
   'jugg_juice',
@@ -390,7 +393,7 @@ const AI_STATUS_IDS = [
 const APPLY_STATUS = enumParam(
   'status',
   AI_STATUS_IDS,
-  'burn, poison, drunk and electrified hurt; speed_fizz, jugg_juice, cooldown_crisp and whetstone help.',
+  'burn, poison, drunk, catnip_buzz and electrified hurt; speed_fizz, jugg_juice, cooldown_crisp and whetstone help.',
 );
 
 const applyStatus: AIActionDef = {
@@ -499,16 +502,18 @@ const modifyStat: AIActionDef = {
     const seconds = params.get(STAT_SECONDS);
     // The stat getters read tempStatMods live, so pushing the entry is the change.
     const hpBefore = crawler.hp;
+    const maxHpBefore = crawler.maxHp;
     const mod = { ticksRemaining: secondsToFrames(seconds), stat, delta };
     crawler.tempStatMods.push(mod);
-    crawler.syncHpToMaxHp();
-    // A constitution cut lowers max HP and HP with it; undone when that crosses the low-HP line.
-    if (delta < 0 && crawler.hp < Math.min(hpBefore, shieldedHp(crawler))) {
+    // A constitution cut lowers max HP and HP with it, one for one. Projected
+    // rather than applied and undone: every write to HP is watched for the
+    // crawler entering a low-HP band, and a trial dip would set one off.
+    const projectedHp = Math.max(1, hpBefore + crawler.maxHp - maxHpBefore);
+    if (delta < 0 && projectedHp < Math.min(hpBefore, shieldedHp(crawler))) {
       crawler.tempStatMods.splice(crawler.tempStatMods.indexOf(mod), 1);
-      crawler.syncHpToMaxHp();
-      crawler.hp = hpBefore;
       return refused(`that would take ${crawlerName(scene, crawler)} under ${LOW_HP_PERCENT}% HP`);
     }
+    crawler.syncHpToMaxHp();
     const signed = delta > 0 ? `+${delta}` : `${delta}`;
     const summary = `${signed} ${STAT_CODE[stat]} for ${crawlerName(scene, crawler)} (${formatSeconds(seconds)})`;
     notifyPlayer(scene, `${summary}: ${params.get(STAT_REASON)}`, {
@@ -572,7 +577,7 @@ const setHp: AIActionDef = {
     if (!crawler.isAlive || crawler.isKnockedOut) return `${crawlerName(scene, crawler)} is down`;
     const target = Math.ceil((crawler.maxHp * params.get(SET_HP_PERCENT)) / PERCENT);
     const lowering = target < crawler.hp;
-    const afterStatuses = target - pendingStatusDamage(crawler.statusEffects, crawler.maxHp);
+    const afterStatuses = target - pendingStatusDamage(crawler.statusEffects);
     if (lowering && afterStatuses < shieldedHp(crawler)) {
       return `${crawlerName(scene, crawler)}'s afflictions would carry them under ${LOW_HP_PERCENT}% HP`;
     }

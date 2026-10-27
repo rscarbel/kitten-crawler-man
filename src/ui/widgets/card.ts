@@ -1,5 +1,5 @@
 /**
- * A raised tile that groups content: a VIP service, a quest summary, a stat
+ * A raised tile that groups content: a service, a quest summary, a stat
  * block. Optionally tappable and selectable; returns the rect its content
  * goes in.
  */

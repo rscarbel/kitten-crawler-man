@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Headless gate on the Meat Shields hire contract and the hireling shell.
+ * Headless gate on The Barracks Mercenaries' hire contract and the hireling shell.
  *
  * - The template table is whole: every id is on the desk once, with a voice,
  *   a figure and a kit behind it.
@@ -70,7 +70,7 @@ import { AbilityManager } from '../src/core/skills/AbilityManager';
 import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
 import { gameContext } from './nodeGameContext.js';
 import type { ShopSystem } from '../src/systems/ShopSystem';
-import { createClubMarketShop } from '../src/systems/DesperadoClubSystem';
+import { createClubMarketShop } from '../src/systems/CloakAndDaggerSystem';
 import { primaryCatalogLine, type CatalogLine } from '../src/economy/shops';
 import { buyPrice } from '../src/economy/pricing';
 import {
@@ -89,11 +89,9 @@ import { shopScreenSurface } from '../src/ui/screens/shop/ShopScreen';
 import { priceBreakdownsShown } from '../src/ui/screens/shop/priceBreakdowns';
 import { mercenaryDeskSurface } from '../src/ui/screens/shop/MercenaryDeskScreen';
 import { MercenaryGuildSystem } from '../src/systems/MercenaryGuildSystem';
-import { verifyBrawlerKit } from './verifyMercenaries/brawler';
-import { verifyWaterMageKit } from './verifyMercenaries/waterMageKit';
-import { verifyLancerKit } from './verifyMercenaries/lancer';
+import { verifyArcherKit } from './verifyMercenaries/archerKit';
 import { verifyMedicKit } from './verifyMercenaries/medicKit';
-import { verifyCretinGuardKit } from './verifyMercenaries/cretinGuardKit';
+import { verifyEarthElementalGuardKit } from './verifyMercenaries/earthElementalGuardKit';
 import { verifyMercenaryLifecycle } from './verifyMercenaries/lifecycle';
 import { verifyHirelingSurvival } from './verifyMercenaries/survival';
 import { HIRELING_REVIVE_WINDOW_FRAMES } from '../src/creatures/mercenaries/hirelingSurvival';
@@ -123,8 +121,8 @@ function checkCatches(ruleHolds: boolean, message: string): void {
 
 const FLOOR = 'level3';
 const OTHER_FLOOR = 'level2';
-/** A template id an old save can still carry that no longer names a hire. */
-const RETIRED_TEMPLATE_ID = 'bruiser';
+/** A template id that names no hire. */
+const UNKNOWN_TEMPLATE_ID = 'bruiser';
 const DECEASED_NAME = 'Somebody Earlier';
 
 function rosterOn(floorLevelId: string): MercenaryRoster {
@@ -197,17 +195,15 @@ function savedRosterWith(active: unknown): unknown {
   return { active, lastDeceased: DECEASED_NAME };
 }
 
-function unknownIdDropsOnlyTheHire(parse: Parser): boolean {
-  const saved = savedRosterWith({ ...hireOf('sledge'), id: RETIRED_TEMPLATE_ID });
-  const parsed = parse(saved);
-  // Undefined is what makes `parsePersistedWorldState` reject the whole save.
-  return parsed?.active === null && parsed.lastDeceased === DECEASED_NAME;
+// Undefined is what makes `parsePersistedWorldState` reject the whole save.
+function unknownIdIsRejected(parse: Parser): boolean {
+  const saved = savedRosterWith({ ...hireOf('crush'), id: UNKNOWN_TEMPLATE_ID });
+  return parse(saved) === undefined;
 }
 
-function malformedHireDropsOnlyTheHire(parse: Parser): boolean {
-  const { contractLevelId: _dropped, ...withoutFloor } = hireOf('bomo');
-  const parsed = parse(savedRosterWith(withoutFloor));
-  return parsed?.active === null && parsed.lastDeceased === DECEASED_NAME;
+function malformedHireIsRejected(parse: Parser): boolean {
+  const { contractLevelId: _dropped, ...withoutFloor } = hireOf('hammer_hands');
+  return parse(savedRosterWith(withoutFloor)) === undefined;
 }
 
 function otherFloorContractStaysEnded(restore: Restorer): boolean {
@@ -220,14 +216,10 @@ function otherFloorContractStaysEnded(restore: Restorer): boolean {
   return roster.active === null;
 }
 
-/** The parser as it would be if it rejected the roster over one bad hire. */
-const strictParser: Parser = (value) => {
-  const parsed = parseMercenaryRosterCheckpoint(value);
-  if (parsed === undefined) return undefined;
-  const record = typeof value === 'object' && value !== null ? value : {};
-  const hadHire = 'active' in record && record.active !== null;
-  return hadHire && parsed.active === null ? undefined : parsed;
-};
+/** The parser as it would be if it repaired a bad hire by dropping it. */
+const hireDroppingParser: Parser = (value) =>
+  parseMercenaryRosterCheckpoint(value) ??
+  parseMercenaryRosterCheckpoint({ active: null, lastDeceased: DECEASED_NAME });
 
 /** A parser that forgets which floor a contract was signed on. */
 const floorForgettingParser: Parser = (value) => {
@@ -251,22 +243,22 @@ function checkSave(): void {
     );
   }
   checkCatches(
-    roundTripHolds('sledge', floorForgettingParser, restoreMercenaryRoster),
+    roundTripHolds('crush', floorForgettingParser, restoreMercenaryRoster),
     'a parser that loses the contract floor fails the round trip',
   );
 
-  section('A hire the save cannot account for drops only the hire');
+  section('A hire the save cannot account for rejects the save');
   check(
-    unknownIdDropsOnlyTheHire(parseMercenaryRosterCheckpoint),
-    `retired id '${RETIRED_TEMPLATE_ID}' parses to no hire, keeping the rest of the roster`,
+    unknownIdIsRejected(parseMercenaryRosterCheckpoint),
+    `unknown template id '${UNKNOWN_TEMPLATE_ID}' rejects the roster`,
   );
   check(
-    malformedHireDropsOnlyTheHire(parseMercenaryRosterCheckpoint),
-    'a hire missing its contract floor parses to no hire, keeping the rest',
+    malformedHireIsRejected(parseMercenaryRosterCheckpoint),
+    'a hire missing its contract floor rejects the roster',
   );
   checkCatches(
-    unknownIdDropsOnlyTheHire(strictParser),
-    'a parser that rejects the roster over a retired id is caught',
+    unknownIdIsRejected(hireDroppingParser),
+    'a parser that drops an unknown hire instead of rejecting is caught',
   );
 
   section('A contract from another floor is never restored');
@@ -469,7 +461,7 @@ function addNearbyHostile(harness: ShellHarness): void {
 
 /** Talking with a fight on, as the scene would: the whole mob list is consulted. */
 function talkRefusedInAFight(talk: (harness: ShellHarness) => boolean): boolean {
-  const harness = buildShell(hireOf('bucket_boy'));
+  const harness = buildShell(hireOf('brother_anselm'));
   const merc = spawned(harness);
   if (merc === null) return false;
   standBesideHuman(harness, merc);
@@ -478,7 +470,7 @@ function talkRefusedInAFight(talk: (harness: ShellHarness) => boolean): boolean 
 }
 
 function floorEndClearsContract(end: (harness: ShellHarness) => void): boolean {
-  const harness = buildShell(hireOf('splash_zone'));
+  const harness = buildShell(hireOf('ivy_ashgrove'));
   const merc = spawned(harness);
   if (merc === null) return false;
   merc.speech.clear();
@@ -499,14 +491,14 @@ function checkShell(): void {
     );
   }
 
-  const stale = buildShell(hireOf('sledge', OTHER_FLOOR));
+  const stale = buildShell(hireOf('crush', OTHER_FLOOR));
   check(
     spawned(stale) === null && stale.roster.active === null,
     'a contract signed on another floor spawns nothing and is cleared',
   );
 
   section('Talking to the hireling');
-  const talker = buildShell(hireOf('dong_quixote'));
+  const talker = buildShell(hireOf('crush'));
   const knight = spawned(talker);
   if (knight !== null) standBesideHuman(talker, knight);
   check(
@@ -557,7 +549,7 @@ function checkShell(): void {
     );
   }
 
-  const unwatched = buildShell(hireOf('bucket_boy'));
+  const unwatched = buildShell(hireOf('brother_anselm'));
   const unwatchedMerc = spawned(unwatched);
   checkCatches(
     unwatchedMerc !== null &&
@@ -565,7 +557,7 @@ function checkShell(): void {
     'a death nobody intercepts is caught',
   );
 
-  const bodiless = buildShell(hireOf('gluteus_maxx'));
+  const bodiless = buildShell(hireOf('hammer_hands'));
   const bodilessMerc = spawned(bodiless);
   if (bodilessMerc !== null) {
     Object.defineProperty(bodilessMerc, 'rendersWhenDead', { value: false });
@@ -779,7 +771,7 @@ function checkClubShopSellsAStack(): void {
 }
 
 function checkDismissAsksFirst(): void {
-  section("Rosemarie's desk: dismissing a contract asks first, and No is the default");
+  section("Sydney's desk: dismissing a contract asks first, and No is the default");
   const roster = createMercenaryRoster();
   roster.floorLevelId = FLOOR;
   const hire = MERCENARY_TEMPLATES[0];
@@ -793,12 +785,12 @@ function checkDismissAsksFirst(): void {
   const { root, settle } = desktopRoot();
   root.mount(
     mercenaryDeskSurface({
-      id: 'club-guild',
+      id: 'mercenary-desk',
       desk,
       party: () => ({ active: human, companion: cat }),
     }),
   );
-  root.mount(desk.dismissConfirm.surface('club-guild-dismiss'));
+  root.mount(desk.dismissConfirm.surface('mercenary-desk-dismiss'));
   desk.openPanel();
   settle();
   desk.askDismiss();
@@ -888,7 +880,9 @@ function checkClubStock(): void {
   // The same validating parser a real save load runs through, not a bare cast,
   // so this proves the sale survives what the disk actually stores.
   const parsedJson: unknown = JSON.parse(JSON.stringify(afterSaleSnapshot));
-  restoreShopStock(stock, parseShopStockSnapshot(parsedJson));
+  const parsedStock = parseShopStockSnapshot(parsedJson);
+  check(parsedStock !== undefined, 'a saved shop stock parses back');
+  if (parsedStock !== undefined) restoreShopStock(stock, parsedStock);
   check(
     statBoostsOnShelf(stock) === afterOneSale,
     'the sold unit stays sold through a save/parse round trip',
@@ -909,11 +903,9 @@ checkShell();
 checkClubStock();
 checkClubShopSellsAStack();
 checkDismissAsksFirst();
-verifyBrawlerKit({ section, check, checkCatches });
-failures += verifyWaterMageKit();
-verifyLancerKit({ section, check, checkCatches });
+failures += verifyArcherKit();
 failures += verifyMedicKit();
-verifyCretinGuardKit({ section, check, checkCatches });
+verifyEarthElementalGuardKit({ section, check, checkCatches });
 verifyMercenaryLifecycle({ section, check, checkCatches });
 verifyHirelingSurvival({ section, check, checkCatches });
 

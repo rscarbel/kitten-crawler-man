@@ -33,7 +33,7 @@ const PACKED_BAG_PAGES = 2.5;
 const HUMAN_BAG: readonly { readonly id: ItemId; readonly quantity: number }[] = [
   { id: 'speed_fizz', quantity: 3 },
   { id: 'jugg_juice', quantity: 2 },
-  { id: 'dirty_shirley', quantity: 4 },
+  { id: 'catnip_tuna_water', quantity: 4 },
   { id: 'goblin_dynamite', quantity: 9 },
   { id: 'scroll_of_confusing_fog', quantity: 2 },
   { id: 'hearthguard_cap', quantity: 1 },
@@ -147,7 +147,7 @@ export const INVENTORY_FIXTURES: readonly DialogFixture[] = [
   buildFixture({
     name: 'bag',
     tab: 'bag',
-    arrange: (screen, human) => selectBag(screen, human, 'dirty_shirley'),
+    arrange: (screen, human) => selectBag(screen, human, 'catnip_tuna_water'),
   }),
   buildFixture({
     name: 'bag-armor',
@@ -171,7 +171,9 @@ export const INVENTORY_FIXTURES: readonly DialogFixture[] = [
     name: 'bag-menu',
     tab: 'bag',
     arrange: (screen, human) => {
-      const slotIdx = human.inventory.bag.slots.findIndex((item) => item?.id === 'dirty_shirley');
+      const slotIdx = human.inventory.bag.slots.findIndex(
+        (item) => item?.id === 'catnip_tuna_water',
+      );
       const item = human.inventory.bag.slots[slotIdx];
       if (item !== null) screen.openItemMenu({ source: 'inv', slotIdx, item }, MENU_AT);
     },

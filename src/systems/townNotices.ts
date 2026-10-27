@@ -1,5 +1,5 @@
 /**
- * The Over City's notice board copy. Given a snapshot of quest progress, this
+ * Taloncrest's notice board copy. Given a snapshot of quest progress, this
  * builds the short list of notices/bounties shown when the player reads the
  * board in the town square. It is the board's analog to `townDialog.ts`:
  * citizens gossip about what the player has done, and the board posts the same
@@ -12,7 +12,6 @@
  * `TownPropSystem` / `NoticeBoard` supply the context and draw the result.
  */
 
-import type { CircusQuestStage } from '../core/quests/CircusQuestProgress';
 import type { MurderQuestStage } from '../core/quests/MurderQuestProgress';
 import type { DoomsdayStage } from '../core/quests/DoomsdayProgress';
 import type { BountyPhase } from '../core/quests/BountyProgress';
@@ -29,9 +28,6 @@ export interface Notice {
 
 /** The quest flags that determine what the board posts. */
 export interface TownNoticeContext {
-  circus: CircusQuestStage;
-  /** Heather the Bear has fallen — the ruins hunt is behind the player. */
-  heatherSlain: boolean;
   murder: MurderQuestStage;
   /** How many of the three murder clues have been gathered so far. */
   murderCluesFound: number;
@@ -70,51 +66,6 @@ const TONE_PRIORITY: Record<NoticeTone, number> = {
 
 function byTonePriority(a: Notice, b: Notice): number {
   return TONE_PRIORITY[a.tone] - TONE_PRIORITY[b.tone];
-}
-
-function circusNotice(ctx: TownNoticeContext): Notice | null {
-  const title = 'The Show Must Go On';
-  switch (ctx.circus) {
-    case 'not_started':
-      return {
-        title,
-        body: 'A grieving performer waits near the old circus grounds, seeking someone brave enough to right an old wrong.',
-        tone: 'available',
-      };
-    case 'ritual_defense':
-      return {
-        title,
-        body: "Signet's ritual is under siege. Hold the line against the horrors it draws out of the ruins.",
-        tone: 'active',
-      };
-    case 'heather_hunt':
-      return {
-        title,
-        body: ctx.heatherSlain
-          ? 'The beast is dead. Ready the assault on the Big Top.'
-          : 'Heather the Bear stalks the ruins. She must fall before the assault can begin.',
-        tone: 'active',
-      };
-    case 'assault':
-      return {
-        title,
-        body: "Storm the circus grounds and break the ringmaster's grip on his troupe.",
-        tone: 'active',
-      };
-    case 'bigtop_ready':
-      return {
-        title,
-        body: 'The Big Top stands open. Whatever Grimaldi has become waits at its centre.',
-        tone: 'active',
-      };
-    case 'grimaldi_redeemed':
-    case 'complete':
-      return {
-        title,
-        body: 'The vine under the Big Top remembers its own name again. The troupe walk free, and nobody had to die for it.',
-        tone: 'done',
-      };
-  }
 }
 
 function murderNotice(ctx: TownNoticeContext): Notice | null {
@@ -294,7 +245,7 @@ export function buildVillageNotices(ctx: VillageNoticeContext): Notice[] {
  */
 export function buildTownNotices(ctx: TownNoticeContext): Notice[] {
   const notices: Notice[] = [];
-  for (const notice of [circusNotice(ctx), murderNotice(ctx), doomsdayNotice(ctx)]) {
+  for (const notice of [murderNotice(ctx), doomsdayNotice(ctx)]) {
     if (notice !== null) notices.push(notice);
   }
   notices.push(bountyNotice(ctx.bounty));

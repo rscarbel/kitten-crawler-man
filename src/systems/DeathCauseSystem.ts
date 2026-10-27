@@ -9,7 +9,7 @@ import {
 import { ROOSTER_PECK_ATTACK_TYPE, ROOSTER_PUNCH_ATTACK_TYPE } from '../creatures/roosterStrikes';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { DamageSource } from '../Player';
-import { BLOOD_VOMIT_STATUS, FROZEN_STATUS } from '../core/combat/StatusEffect';
+import { FROZEN_STATUS } from '../core/combat/StatusEffect';
 import type { DeathCause } from '../ui/DeathExplanations';
 import { KNOCKOUT_TIMEOUT_FRAMES } from './GameLoopPhases';
 import { MANTID_FLURRY_ATTACK_TYPE } from '../creatures/Mantid';
@@ -42,7 +42,7 @@ const MOB_TYPE_TO_CAUSE: Partial<Record<string, DeathCause>> = {
   Troglodyte: 'troglodyte',
   SmallSpider: 'smallSpider',
   SpiderHatchling: 'spiderHatchling',
-  SkyFowl: 'skyFowl',
+  Hawkfolk: 'hawkfolk',
   Llama: 'llama',
   Rat: 'rat',
   Bugaboo: 'bugaboo',
@@ -51,10 +51,10 @@ const MOB_TYPE_TO_CAUSE: Partial<Record<string, DeathCause>> = {
   BrindledVespa: 'brindledVespa',
   RuinsGhoul: 'ruinsGhoul',
   Krasue: 'krasue',
-  CircusLemur: 'circusLemur',
-  StiltClown: 'stiltClown',
+  Lemur: 'lemur',
+  TallClown: 'tallClown',
   FatClown: 'fatClown',
-  TerrorTheClown: 'terrorTheClown',
+  MassiveClown: 'massiveClown',
   EvilClown: 'evilClown',
   Mantid: 'mantid',
   MantisCrony: 'mantis',
@@ -68,9 +68,9 @@ const MOB_TYPE_TO_CAUSE: Partial<Record<string, DeathCause>> = {
   TheLich: 'theLich',
   RockGolem: 'rockGolem',
   RockGolemBoss: 'rockGolem',
-  MoldLion: 'moldLion',
+  Lion: 'lion',
   CityElfCultist: 'cityElfCultist',
-  HeatherTheBear: 'heatherTheBear',
+  DireBear: 'direBear',
   MissQuill: 'missQuill',
   ShieldFairy: 'shieldFairy',
   HealingFairy: 'healingFairy',
@@ -87,6 +87,8 @@ export function causeFromDamageSource(source: DamageSource): DeathCause {
   if (source.kind === 'dynamite') return 'explosiveFriendlyFire';
   if (source.kind === 'doomsday') return 'doomsdayExplosion';
   if (source.kind === 'siege') return 'siegeFriendlyFire';
+  // A wheel penalty stops at 1 HP, so it is never the blow that killed.
+  if (source.kind === 'wheelPenalty') return 'unknown';
   // Standing hazards. Without this the contact damage — which is what actually
   // kills, well before the eight-second `burn` DoT they also apply gets there —
   // reports an unknown cause on the death screen. An untagged source is a
@@ -109,7 +111,6 @@ export function causeFromDamageSource(source: DamageSource): DeathCause {
     if (effectType === 'poison') return 'poisonStatus';
     if (effectType === 'electrified') return 'electrifiedStatus';
     if (effectType === 'spit_venom') return 'spitVenomStatus';
-    if (effectType === BLOOD_VOMIT_STATUS) return 'bloodVomitStatus';
     return 'unknown';
   }
 

@@ -684,7 +684,7 @@ export function drawSpecialFloorTile(
       break;
     }
 
-    // Desperado Club floor — dark polished art-deco stone with gold grout
+    // Cloak & Dagger floor — dark polished art-deco stone with gold grout
     case CLUB_FLOOR: {
       const clubBase = (tx + ty) % 2 === 0 ? '#1a1420' : '#161019';
       ctx.fillStyle = clubBase;
@@ -714,7 +714,7 @@ export function drawSpecialFloorTile(
     }
 
     // Dance floor — dark reflective panels; the pulsing coloured lights are drawn
-    // as a per-frame overlay by DesperadoClubSystem (the static tile cache can't animate).
+    // as a per-frame overlay by CloakAndDaggerSystem (the static tile cache can't animate).
     case DANCE_FLOOR: {
       ctx.fillStyle = '#0b0810';
       ctx.fillRect(sx, sy, ts, ts);

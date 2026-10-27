@@ -26,7 +26,7 @@ import { activeHumanLook, drawHumanSprite, prewarmHumanSprite } from '../sprites
 import { humanStatusFigureBoxOf } from '../creatures/HumanPlayer';
 import { humanMouthOf } from '../sprites/crawlerMouths';
 import { PLAYER_HIT_FLASH_MARGIN_TILES } from '../Player';
-import type { StatusEffect } from '../core/combat/StatusEffect';
+import type { StatusEffect, StatusId } from '../core/combat/StatusEffect';
 import {
   statusBadge,
   statusBodyLayers,
@@ -45,12 +45,13 @@ function previewMouth(left: number, top: number, size: number): StatusMouth | nu
 }
 
 /** Every status the registry knows, in the order they are worth comparing. */
-const PREVIEW_STATUSES: readonly string[] = [
+const PREVIEW_STATUSES: readonly StatusId[] = [
   'burn',
   'magic_burn',
   'poison',
   'spit_venom',
   'blood_vomit',
+  'double_damage',
   'stuck',
   'stun',
   'electrified',
@@ -59,6 +60,7 @@ const PREVIEW_STATUSES: readonly string[] = [
   'cooldown_crisp',
   'whetstone',
   'drunk',
+  'catnip_buzz',
   'well_rested',
   'hearth_warmed',
   'deep_slumber',
@@ -227,7 +229,7 @@ export class StatusPreviewScene extends PreviewScene {
 
   private drawSubject(
     ctx: CanvasRenderingContext2D,
-    type: string,
+    type: StatusId,
     left: number,
     top: number,
     size: number,

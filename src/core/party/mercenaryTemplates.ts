@@ -1,5 +1,5 @@
 /**
- * Hireable mercenary templates for the Desperado Club's "Meat Shields" desk.
+ * Hireable mercenary templates for The Barracks Mercenaries' desk.
  *
  * This is the single source of truth for who can be hired and what they cost,
  * shared by the hire panel (`MercenaryGuildSystem`), the persisted roster
@@ -12,20 +12,31 @@
 
 import { SERVICE_PRICES } from '../../economy/servicePrices';
 
-export type MercenaryTemplateId =
-  'sledge' | 'bomo' | 'dong_quixote' | 'splash_zone' | 'gluteus_maxx' | 'bucket_boy' | 'tumbledown';
+/**
+ * Every hire, in desk order: cheapest first, so the list reads as a price
+ * ladder. The id union is read off this list, so a hire missing from the desk
+ * cannot exist.
+ */
+const DESK_ORDER = [
+  'brother_anselm',
+  'ivy_ashgrove',
+  'tumbledown',
+  'hammer_hands',
+  'crush',
+] as const;
 
-/** How a hireling fights. Sledge and Bomo share one kit with a per-hire config. */
-export type MercenaryKitId =
-  'cretin_guard' | 'lancer' | 'water_mage' | 'brawler' | 'medic' | 'golem';
+export type MercenaryTemplateId = (typeof DESK_ORDER)[number];
+
+/** How a hireling fights. Crush and Hammer Hands share one kit with a per-hire config. */
+export type MercenaryKitId = 'earth_elemental_guard' | 'archer' | 'medic' | 'golem';
 
 /** Which painted figure (and variant of it) draws the hireling. */
 export type MercenaryArtId =
-  'sledge' | 'bomo' | 'dong_quixote' | 'splash_zone' | 'gluteus_maxx' | 'bucket_boy' | 'tumbledown';
+  'crush' | 'hammer_hands' | 'ivy_ashgrove' | 'brother_anselm' | 'tumbledown';
 
 /** Whose lines the hireling speaks. */
 export type MercenaryVoiceId =
-  'sledge' | 'bomo' | 'dong_quixote' | 'splash_zone' | 'gluteus_maxx' | 'bucket_boy' | 'tumbledown';
+  'crush' | 'hammer_hands' | 'ivy_ashgrove' | 'brother_anselm' | 'tumbledown';
 
 /**
  * The `Mob.audioTag` a hireling plays its attack cues under, switched on in
@@ -33,17 +44,17 @@ export type MercenaryVoiceId =
  * its slam sounds like every other golem's.
  */
 export type MercenaryAudioTag =
-  'merc_cretin' | 'merc_lancer' | 'merc_water_mage' | 'merc_brawler' | 'merc_medic' | 'rock_golem';
+  'merc_earth_elemental' | 'merc_archer' | 'merc_medic' | 'rock_golem';
 
 export interface MercenaryTemplate {
   readonly id: MercenaryTemplateId;
   /** The name the hire walks around under. */
   readonly name: string;
-  /** Shown on the hire card, e.g. "Cretin", "Otter". */
+  /** Shown on the hire card, e.g. "Earth Elemental", "Human". */
   readonly species: string;
-  /** A short class label, e.g. "Bodyguard", "Medic". */
+  /** A short class label, e.g. "Bodyguard", "Healer". */
   readonly role: string;
-  /** Rosemarie's one-line sell, in her voice. */
+  /** Sydney's one-line sell, read off the hire's file. */
   readonly pitch: string;
   /** Coin cost of a contract, which runs to the end of the floor or the hire's death. */
   readonly price: number;
@@ -57,129 +68,97 @@ export interface MercenaryTemplate {
   readonly voice: MercenaryVoiceId;
 }
 
-const SLEDGE_HP = 95;
-const BOMO_HP = 85;
-const DONG_QUIXOTE_HP = 60;
-const SPLASH_ZONE_HP = 45;
-const GLUTEUS_MAXX_HP = 42;
-const BUCKET_BOY_HP = 30;
+const CRUSH_HP = 95;
+const HAMMER_HANDS_HP = 85;
+const IVY_ASHGROVE_HP = 48;
+const BROTHER_ANSELM_HP = 40;
 const TUMBLEDOWN_HP = 80;
 
-/** Cretins are seven feet of rock in a tuxedo: slow, but not slower than the party. */
-const CRETIN_SPEED = 1.9;
-const DONG_QUIXOTE_SPEED = 2.2;
-const SPLASH_ZONE_SPEED = 2.5;
-const GLUTEUS_MAXX_SPEED = 3.0;
-const BUCKET_BOY_SPEED = 2.8;
+/** Earth Elementals are seven feet of rock: slow, but not slower than the party. */
+const EARTH_ELEMENTAL_SPEED = 1.9;
+const IVY_ASHGROVE_SPEED = 2.5;
+const BROTHER_ANSELM_SPEED = 2.8;
 const TUMBLEDOWN_SPEED = 2.0;
 
-const CRETIN_DAMAGE = 6;
-const DONG_QUIXOTE_DAMAGE = 8;
-const SPLASH_ZONE_DAMAGE = 5;
-const GLUTEUS_MAXX_DAMAGE = 12;
-const BUCKET_BOY_DAMAGE = 2;
+const EARTH_ELEMENTAL_DAMAGE = 6;
+/** Per arrow. */
+const IVY_ASHGROVE_DAMAGE = 6;
+/** Per staff blow: he strikes only to get room, never to win a fight. */
+const BROTHER_ANSELM_DAMAGE = 3;
 const TUMBLEDOWN_DAMAGE = 6;
 
 /** A `Record` so adding an id to the union fails the typecheck until it has every field. */
 const TEMPLATES_BY_ID: Readonly<Record<MercenaryTemplateId, MercenaryTemplate>> = {
-  sledge: {
-    id: 'sledge',
-    name: 'The Sledge',
-    species: 'Cretin',
+  crush: {
+    id: 'crush',
+    name: 'Crush',
+    species: 'Earth Elemental',
     role: 'Bodyguard',
     pitch:
-      "Seven foot of rock in a rented tux. Sweet on the cat. Scuff the tux and I'll scuff you.",
-    price: SERVICE_PRICES.mercenary_guild.sledge,
-    hp: SLEDGE_HP,
-    speed: CRETIN_SPEED,
-    damage: CRETIN_DAMAGE,
-    kit: 'cretin_guard',
-    art: 'sledge',
-    audioTag: 'merc_cretin',
-    voice: 'sledge',
+      'Eleven years cutting stone. Posts himself beside the smaller of you and stays posted. Rated for impact.',
+    price: SERVICE_PRICES.mercenary_guild.crush,
+    hp: CRUSH_HP,
+    speed: EARTH_ELEMENTAL_SPEED,
+    damage: EARTH_ELEMENTAL_DAMAGE,
+    kit: 'earth_elemental_guard',
+    art: 'crush',
+    audioTag: 'merc_earth_elemental',
+    voice: 'crush',
   },
-  bomo: {
-    id: 'bomo',
-    name: 'Bomo',
-    species: 'Cretin',
+  hammer_hands: {
+    id: 'hammer_hands',
+    name: 'Hammer Hands',
+    species: 'Earth Elemental',
     role: 'Bodyguard',
-    pitch: 'Bought his own shield spell. Uses it on whoever looks worst. Bless him.',
-    price: SERVICE_PRICES.mercenary_guild.bomo,
-    hp: BOMO_HP,
-    speed: CRETIN_SPEED,
-    damage: CRETIN_DAMAGE,
-    kit: 'cretin_guard',
-    art: 'bomo',
-    audioTag: 'merc_cretin',
-    voice: 'bomo',
+    pitch:
+      'Ex-forge. Carries his own warding spell and spends it on whoever is bleeding worst. Return him in one piece.',
+    price: SERVICE_PRICES.mercenary_guild.hammer_hands,
+    hp: HAMMER_HANDS_HP,
+    speed: EARTH_ELEMENTAL_SPEED,
+    damage: EARTH_ELEMENTAL_DAMAGE,
+    kit: 'earth_elemental_guard',
+    art: 'hammer_hands',
+    audioTag: 'merc_earth_elemental',
+    voice: 'hammer_hands',
   },
-  dong_quixote: {
-    id: 'dong_quixote',
-    name: 'Dong Quixote',
+  ivy_ashgrove: {
+    id: 'ivy_ashgrove',
+    name: 'Ivy Ashgrove',
     species: 'Human',
-    role: 'Lancer',
-    pitch: "Seventy if he's a day, and he'll charge a wall if you point at it. No horse.",
-    price: SERVICE_PRICES.mercenary_guild.dong_quixote,
-    hp: DONG_QUIXOTE_HP,
-    speed: DONG_QUIXOTE_SPEED,
-    damage: DONG_QUIXOTE_DAMAGE,
-    kit: 'lancer',
-    art: 'dong_quixote',
-    audioTag: 'merc_lancer',
-    voice: 'dong_quixote',
-  },
-  splash_zone: {
-    id: 'splash_zone',
-    name: 'Splash Zone',
-    species: 'Otter',
-    role: 'Water Mage',
-    pitch: 'Nice lad. Married. Washes a whole crowd off its feet. Front rows get wet.',
-    price: SERVICE_PRICES.mercenary_guild.splash_zone,
-    hp: SPLASH_ZONE_HP,
-    speed: SPLASH_ZONE_SPEED,
-    damage: SPLASH_ZONE_DAMAGE,
-    kit: 'water_mage',
-    art: 'splash_zone',
-    audioTag: 'merc_water_mage',
-    voice: 'splash_zone',
-  },
-  gluteus_maxx: {
-    id: 'gluteus_maxx',
-    name: 'Gluteus Maxx',
-    species: 'Unknown',
-    role: 'Brawler',
+    role: 'Archer',
     pitch:
-      "Hits like a cart, folds like a napkin. Keep him off the uppers, or don't. Your funeral.",
-    price: SERVICE_PRICES.mercenary_guild.gluteus_maxx,
-    hp: GLUTEUS_MAXX_HP,
-    speed: GLUTEUS_MAXX_SPEED,
-    damage: GLUTEUS_MAXX_DAMAGE,
-    kit: 'brawler',
-    art: 'gluteus_maxx',
-    audioTag: 'merc_brawler',
-    voice: 'gluteus_maxx',
+      'Keeps four tiles back and puts arrows where you would have wanted them. Arrows are in the fee. Ask about the arrows.',
+    price: SERVICE_PRICES.mercenary_guild.ivy_ashgrove,
+    hp: IVY_ASHGROVE_HP,
+    speed: IVY_ASHGROVE_SPEED,
+    damage: IVY_ASHGROVE_DAMAGE,
+    kit: 'archer',
+    art: 'ivy_ashgrove',
+    audioTag: 'merc_archer',
+    voice: 'ivy_ashgrove',
   },
-  bucket_boy: {
-    id: 'bucket_boy',
-    name: 'Bucket Boy',
-    species: 'Crocodilian',
-    role: 'Medic',
-    pitch: 'Cheap, loyal, screams a lot. Heals, though.',
-    price: SERVICE_PRICES.mercenary_guild.bucket_boy,
-    hp: BUCKET_BOY_HP,
-    speed: BUCKET_BOY_SPEED,
-    damage: BUCKET_BOY_DAMAGE,
+  brother_anselm: {
+    id: 'brother_anselm',
+    name: 'Brother Anselm',
+    species: 'Human',
+    role: 'Healer',
+    pitch:
+      "Mends what's broken and stays out of the way. If you see him swinging that staff, something has gone wrong.",
+    price: SERVICE_PRICES.mercenary_guild.brother_anselm,
+    hp: BROTHER_ANSELM_HP,
+    speed: BROTHER_ANSELM_SPEED,
+    damage: BROTHER_ANSELM_DAMAGE,
     kit: 'medic',
-    art: 'bucket_boy',
+    art: 'brother_anselm',
     audioTag: 'merc_medic',
-    voice: 'bucket_boy',
+    voice: 'brother_anselm',
   },
   tumbledown: {
     id: 'tumbledown',
     name: 'Tumbledown',
     species: 'Rock Golem',
     role: 'Heavy',
-    pitch: "Doesn't talk, doesn't drink, doesn't unionize.",
+    pitch: 'No speech, no wages, no complaints on file. Point it at something.',
     price: SERVICE_PRICES.mercenary_guild.tumbledown,
     hp: TUMBLEDOWN_HP,
     speed: TUMBLEDOWN_SPEED,
@@ -190,17 +169,6 @@ const TEMPLATES_BY_ID: Readonly<Record<MercenaryTemplateId, MercenaryTemplate>> 
     voice: 'tumbledown',
   },
 };
-
-/** Desk order: cheapest first, so the list reads as a price ladder. */
-const DESK_ORDER: readonly MercenaryTemplateId[] = [
-  'bucket_boy',
-  'gluteus_maxx',
-  'splash_zone',
-  'dong_quixote',
-  'tumbledown',
-  'bomo',
-  'sledge',
-];
 
 export const MERCENARY_TEMPLATES: readonly MercenaryTemplate[] = DESK_ORDER.map(
   (id) => TEMPLATES_BY_ID[id],

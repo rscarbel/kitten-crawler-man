@@ -221,8 +221,8 @@ async function verifyCitizenWithHireling(): Promise<void> {
   });
   const mercenaryRoster = createMercenaryRoster();
   mercenaryRoster.active = {
-    id: 'sledge',
-    name: 'Sledge',
+    id: 'crush',
+    name: 'Crush',
     contractLevelId: level3.id,
     introduced: true,
   };

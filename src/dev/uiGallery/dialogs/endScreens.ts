@@ -187,7 +187,7 @@ function sampleChest(type: TreasureChest['type']): TreasureChest {
     unlockFrame: 0,
     sparkleFrame: 0,
     tryLockedTimer: 0,
-    guardBounds: null,
+    guard: null,
     bossRoomIndex: null,
     hadMobs: false,
   };
@@ -234,7 +234,7 @@ function fadeFixture(name: string, alpha: number): DialogFixture {
 export const FIXTURES: readonly DialogFixture[] = [
   fadeFixture('screen-fade-half', FADE_HALF_ALPHA),
   fadeFixture('screen-fade-black', FADE_BLACK_ALPHA),
-  deathFixture('death', 'A goblin stabbed you. Repeatedly. With enthusiasm.', 'checkpoint'),
+  deathFixture('death', 'A goblin got you. Repeatedly. With enthusiasm.', 'checkpoint'),
   deathFixture(
     'death-long-explanation',
     'The Grotesque Spider slammed down on you from the ceiling, which is a sentence nobody should ever have to read about themselves. Your body has been filed under "abstract art". The viewers at home are already making it into a looping clip with a sad trombone.',

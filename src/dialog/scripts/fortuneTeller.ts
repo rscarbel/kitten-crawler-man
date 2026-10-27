@@ -7,18 +7,17 @@
  * picks the words.
  *
  * Two people read in this town and they are not the same act. Madame Voss works
- * the plaza with cards and showmanship. Old Hilda reads in her own kitchen for
+ * the plaza with cards and showmanship. Old Lori reads in her own kitchen for
  * less, has no cards, and tells you what she actually sees — which is mostly
  * about the curse, the ruins and the thing humming under the tower.
  */
 
 import { pickLine, speakerLines } from '../line';
 import type { BarkLine, NonEmpty } from '../line';
-import { isCircusResolvedStage } from '../../core/quests/CircusQuestProgress';
 import type { TownDialogContext } from '../../systems/townDialog';
 
 const voss = speakerLines('voss');
-const hilda = speakerLines('hilda');
+const lori = speakerLines('lori');
 
 interface ReactiveFortune {
   readonly when: (ctx: TownDialogContext) => boolean;
@@ -89,35 +88,10 @@ export const VOSS_REACTIVE_FORTUNES: ReadonlyArray<ReactiveFortune> = [
     ],
   },
   {
-    when: (ctx) =>
-      ctx.circus === 'ritual_defense' ||
-      ctx.circus === 'heather_hunt' ||
-      ctx.circus === 'assault' ||
-      ctx.circus === 'bigtop_ready',
-    lines: [
-      voss.bark(
-        'A caged bird sings beneath the striped canvas, dear, and a daughter’s grief sings right alongside her. Free them both.',
-      ),
-      voss.bark(
-        'The ringmaster smiles with far too many teeth. His grip will not loosen on its own, dear, I promise you that.',
-      ),
-    ],
-  },
-  {
     when: (ctx) => ctx.doomsday === 'complete',
     lines: [
       voss.bark(
         'I see a hero where a stranger once stood. The cards have never once shown me anything so bright, child.',
-      ),
-    ],
-  },
-  {
-    when: (ctx) =>
-      isCircusResolvedStage(ctx.circus) &&
-      (ctx.murder === 'complete' || ctx.murder === 'lich_slain'),
-    lines: [
-      voss.bark(
-        'Two shadows lifted, dear, and your hand behind both of them. Fortune knows your face now, and will not soon forget it.',
       ),
     ],
   },
@@ -147,58 +121,58 @@ export function drawFortune(ctx: TownDialogContext): string {
   return drawFrom(VOSS_GENERAL_FORTUNES, VOSS_REACTIVE_FORTUNES, ctx);
 }
 
-// -- Old Hilda's kitchen reading --------------------------------------------
+// -- Old Lori's kitchen reading --------------------------------------------
 
-export const HILDA_GENERAL_READINGS: NonEmpty<BarkLine> = [
-  hilda.bark(
+export const LORI_GENERAL_READINGS: NonEmpty<BarkLine> = [
+  lori.bark(
     'Sit, dearie, hands on the table.. You are going to be fine, which is more than I usually get to say.',
   ),
-  hilda.bark(
+  lori.bark(
     'There is a door you have not opened because it looked like a wall, and it is not a wall, dearie, whatever it looks like.',
   ),
-  hilda.bark(
+  lori.bark(
     'Something you are carrying was made by somebody who is dead now. Most things are, I suppose. This one minds, though.',
   ),
-  hilda.bark(
+  lori.bark(
     'You will be offered a bargain by someone who is smiling. Take it, dearie, only read it twice first.',
   ),
-  hilda.bark(
+  lori.bark(
     'The ruins remember the street plan even where the streets themselves are long gone. Walk the old lines and you will not get lost.',
   ),
-  hilda.bark(
+  lori.bark(
     'You have killed something this week that had a name, I think. Nothing to be done about that now, dearie.',
   ),
-  hilda.bark(
+  lori.bark(
     'Water first, then whatever it was you were about to do. You are no good to anyone dried out.',
   ),
-  hilda.bark(
+  lori.bark(
     'I see the number three, and I have not the faintest idea what it means, and I am not going to invent something just to fill the silence.',
   ),
-  hilda.bark(
+  lori.bark(
     'Someone in this town is lying to you kindly, dearie. Let them. It costs you nothing yet.',
   ),
-  hilda.bark(
+  lori.bark(
     'Old bones tell weather, not futures. Rain by evening. That is my honest reading and I will not dress it up as more..',
   ),
 ];
 
-export const HILDA_REACTIVE_READINGS: ReadonlyArray<ReactiveFortune> = [
+export const LORI_REACTIVE_READINGS: ReadonlyArray<ReactiveFortune> = [
   {
     when: (ctx) => ctx.doomsday === 'containment' || ctx.doomsday === 'escape',
     lines: [
-      hilda.bark(
+      lori.bark(
         'The humming has stopped, dearie. Forty years it hummed and now it has not. Whatever you are going to do, do it running.',
       ),
-      hilda.bark('No reading tonight. Get out of my kitchen and get up that tower.'),
+      lori.bark('No reading tonight. Get out of my kitchen and get up that tower.'),
     ],
   },
   {
     when: (ctx) => ctx.doomsday === 'complete',
     lines: [
-      hilda.bark(
+      lori.bark(
         'It hums again, quieter now. Whatever you put back in that box, dearie, it is sleeping.',
       ),
-      hilda.bark(
+      lori.bark(
         'First time in forty years I have nothing to warn you about, and I do not rightly know what to do with my hands.',
       ),
     ],
@@ -206,10 +180,10 @@ export const HILDA_REACTIVE_READINGS: ReadonlyArray<ReactiveFortune> = [
   {
     when: (ctx) => ctx.murder === 'confrontation',
     lines: [
-      hilda.bark(
+      lori.bark(
         'She has a name now, dearie, and a name is a handle. Take hold of it before she sets it back down.',
       ),
-      hilda.bark(
+      lori.bark(
         'The one doing the killing is not the one who wants it done. Do not stop at the knife.',
       ),
     ],
@@ -220,40 +194,17 @@ export const HILDA_REACTIVE_READINGS: ReadonlyArray<ReactiveFortune> = [
       ctx.murder === 'cult_hideout' ||
       ctx.murder === 'investigation',
     lines: [
-      hilda.bark(
+      lori.bark(
         'No beast leaves heads without bodies, dearie. That takes a recipe, and somebody down there is following it proper.',
       ),
-      hilda.bark(
+      lori.bark(
         'Look to the low streets, not the plaza, dearie. The plaza never had anything worth taking.',
-      ),
-    ],
-  },
-  {
-    when: (ctx) =>
-      ctx.circus === 'ritual_defense' ||
-      ctx.circus === 'heather_hunt' ||
-      ctx.circus === 'assault' ||
-      ctx.circus === 'bigtop_ready',
-    lines: [
-      hilda.bark(
-        'That vine under the tent holds them just this side of dead, dearie, and no further. Do not you go calling it healing.',
-      ),
-      hilda.bark(
-        'You will want to swing at it. Do not, dearie. What is under that bark was somebody once, and it still answers to its name.',
-      ),
-    ],
-  },
-  {
-    when: (ctx) => isCircusResolvedStage(ctx.circus),
-    lines: [
-      hilda.bark(
-        'The lights are out over the Big Top, dearie. I had quite forgotten what that side of the sky looked like.',
       ),
     ],
   },
 ];
 
-/** Hilda's reading — the same machinery, a darker and more specific voice. */
-export function drawHildaReading(ctx: TownDialogContext): string {
-  return drawFrom(HILDA_GENERAL_READINGS, HILDA_REACTIVE_READINGS, ctx);
+/** Lori's reading — the same machinery, a darker and more specific voice. */
+export function drawLoriReading(ctx: TownDialogContext): string {
+  return drawFrom(LORI_GENERAL_READINGS, LORI_REACTIVE_READINGS, ctx);
 }

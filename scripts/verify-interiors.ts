@@ -22,7 +22,7 @@ import { createCanvas } from 'canvas';
 
 import { loadGameSpritesInNode } from './nodeCanvasGlobals';
 import { asGameContext } from './nodeGameContext';
-import { createTownPlan } from '../src/map/town/townPlan';
+import { CLOAK_AND_DAGGER_NAME, createTownPlan } from '../src/map/town/townPlan';
 import type { BuildingKind } from '../src/map/town/townPlan';
 import { GameMap, TOWER_FLOOR_COUNT } from '../src/map/GameMap';
 import { findPartyArrivalTiles, hasRoomToMove } from '../src/map/findWalkableTile';
@@ -30,7 +30,8 @@ import {
   TOWN_INTERIOR_PROPS,
   townInteriorPropArtRiseTiles,
 } from '../src/sprites/art/townInterior/townInteriorProps';
-import { drawSkyFowlCorpse } from '../src/sprites/featherfallCorpseSprite';
+import { townInteriorPropEmitters } from '../src/systems/townInteriorPropAmbience';
+import { drawHawkfolkCorpse } from '../src/sprites/featherfallCorpseSprite';
 import { TILE_SIZE } from '../src/core/constants';
 import { VOID_TYPE } from '../src/map/tileTypes';
 import { renderCanvas, renderDecorationsOverlay } from '../src/map/TileRenderer';
@@ -41,18 +42,46 @@ import {
 } from '../src/map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../src/map/safeRoomDecorLayout';
 import {
+  ANCHOR_KINDS,
   ANCHOR_TILE_TYPES,
-  BUILDING_OCCUPANTS,
   InteriorOccupantSystem,
   occupantAnchor,
   scanInteriorFurniture,
 } from '../src/systems/InteriorOccupantSystem';
-import type { AnchorKind } from '../src/systems/InteriorOccupantSystem';
-import { BIG_TOP_ENTRY_NAME, BIG_TOP_ENTRY_KIND } from '../src/map/OverworldGenerator';
+import type { AnchorKind, FurniturePiece } from '../src/systems/InteriorOccupantSystem';
+import { BUILDING_OCCUPANTS } from '../src/systems/buildingOccupants';
+import { Townsperson } from '../src/creatures/Townsperson';
+import {
+  BESPOKE_RESIDENT_FIGURES,
+  type BespokeResidentFigureId,
+} from '../src/creatures/bespokeResidentFigures';
+import { DEFAULT_TOWN_SPECIES } from '../src/systems/townSpecies';
 import { InteriorReadableSystem } from '../src/systems/InteriorReadableSystem';
-import { allResidents, residentById } from '../src/systems/townResidents';
+import {
+  allResidents,
+  residentById,
+  residentSpecies,
+  type ResidentId,
+} from '../src/systems/townResidents';
+import { partyRoutineBodies, type RoutineBody } from '../src/systems/occupantRoutines';
+import type { OccupantRoutineCue } from '../src/systems/occupantRoutineCues';
 import { RESIDENT_LINES } from '../src/dialog/scripts/residents';
-import { interiorServiceBuildings, interiorServicesFor } from '../src/systems/townServices';
+import {
+  CLUB_GATHERINGS,
+  CLUB_HOST_MARK,
+  CLUB_PATRON_COUNT,
+  CLUB_PERFORMER_POSTS,
+} from '../src/core/club/clubLayout';
+import { CLUB_ANIM_FRAMES_PER_SECOND } from '../src/core/club/clubTiming';
+import {
+  CROWD_BODY_RADIUS_TILES,
+  WAYPOINT_MAX_OFF_LINE_TILES,
+  createClubCrowd,
+} from '../src/systems/ClubCrowdSystem';
+import { ClubGamblerSystem } from '../src/systems/ClubGamblerSystem';
+import { REGULAR_IDS } from '../src/systems/casino/poker/npc/regulars';
+import { NPC_SEAT_COUNT } from '../src/systems/casino/poker/PokerTable';
+import { interiorServicesFor } from '../src/systems/townServices';
 import { readableBuildings, readablesFor } from '../src/systems/townReadables';
 import { STAT_BOON_BONUSES } from '../src/core/combat/StatusEffect';
 import { statusVisual } from '../src/sprites/status/statusEffectVisuals';
@@ -87,6 +116,7 @@ import { Conversation } from '../src/dialog/Conversation';
 import { setViewportSize } from '../src/core/rendering/Viewport';
 import { ShopSystem } from '../src/systems/ShopSystem';
 import { createShopStock } from '../src/economy/shopStock';
+import { mulberry32 } from '../src/sprites/person/rng';
 
 // The confrontation's office scene paginates its dialog against the live
 // viewport; without a size set, DialogBox measures against a zero-width box
@@ -112,29 +142,46 @@ const SCRIPTED_KINDS: ReadonlySet<BuildingKind> = new Set<BuildingKind>(['club',
 /** The floor a walk-in gives you; only the tower has any others. */
 const TOWER_GROUND_FLOOR = 0;
 
+/** Simulated seconds the club's crowd is run for, long enough for everyone to move on. */
+const CROWD_SIM_SECONDS = 600;
+/** A fixed seed for the crowd simulation, so its draws repeat run to run. */
+const CROWD_SIM_SEED = 5;
+/** Waiting is only for a patron with nowhere in reach, so it must stay rare. */
+const CROWD_MAX_WAITING_SHARE = 0.1;
+/** Company is at least two people. */
+const MIN_COMPANY = 2;
+/** A shove can turn someone for a moment; nearly everyone else faces in. */
+const CROWD_MIN_FACING_IN_SHARE = 0.9;
 /**
- * Enterable interiors the town plan does not list, with the kind their building
- * entry is pushed with.
- *
- * The circus sits outside the walls and its entries are added by the overworld
- * generator rather than by `createTownPlan`, so walking the plan alone would
- * never open the Big Top's door — and its interior is the largest in the game.
- *
- * Name and kind are imported from `OverworldGenerator` rather than restated
- * here, so a rename or re-kind of the Big Top's building entry there — as
- * long as the push site keeps using these same constants — propagates
- * automatically instead of quietly dropping the Big Top out of the
- * reachability gate below. "The Big Top walk-in matches what the overworld
- * actually generates" (above) checks that the push site does keep using them.
+ * Seeds the capacity check runs the crowd under. An overfull gathering needs
+ * two patrons to change plans on the same tick, which only a
+ * few seeds in forty ever hit.
  */
-const WALK_INS_OUTSIDE_THE_PLAN: ReadonlyArray<readonly [string, BuildingKind]> = [
-  [BIG_TOP_ENTRY_NAME, BIG_TOP_ENTRY_KIND],
-];
+const CAPACITY_SIM_SEEDS = 40;
+
+/** A fixed seed for the gambler simulation, so its stool draws repeat run to run. */
+const GAMBLER_SIM_SEED = 7;
+const GAMBLER_LCG_MULTIPLIER = 1103515245;
+const GAMBLER_LCG_INCREMENT = 12345;
+const GAMBLER_LCG_MODULUS = 2 ** 31;
+/** Long enough for every emptied stool's vacancy to run out. */
+const GAMBLER_SETTLE_SECONDS = 60;
+/** A blackjack session long enough that every stool's vacancy runs out while the table is open. */
+const BLACKJACK_SESSION_SECONDS = 60;
+
+/** Rows of open floor the club keeps above and below each stage. */
+const CLUB_STAGE_LANE_TILES = 2;
 
 /** Bytes per pixel in the `ImageData` the hole scan reads. */
 const RGBA_STRIDE = 4;
 /** Offset of the alpha byte within one such pixel. */
 const ALPHA_OFFSET = 3;
+/** Tiles square of the canvas a bespoke figure is probed on: room for its art above its own tile. */
+const BESPOKE_PROBE_TILES = 3;
+
+function isBespokeResidentFigureId(id: string): id is BespokeResidentFigureId {
+  return id in BESPOKE_RESIDENT_FIGURES;
+}
 
 /**
  * Painted fraction below which a tile counts as a hole rather than as art.
@@ -178,8 +225,27 @@ const FRAMES_PER_SECOND = 60;
 const ARRIVAL_VIGIL_SECONDS = 20;
 const ARRIVAL_VIGIL_FRAMES = ARRIVAL_VIGIL_SECONDS * FRAMES_PER_SECOND;
 
-/** Where Old Hilda lives — the town's roaming resident. */
-const HILDA_HOME = "Old Hilda's Cottage";
+/** Where Steve Cartwright keeps his range. */
+const CARTWRIGHT_HOME = "Cartwright's Workshop";
+/** The shortest lane from his crossbow to the target that reads as a range, in tiles. */
+const MIN_SHOOTING_LANE_TILES = 4;
+/** Comfortably longer than one aim, shot and reload, so a cycle always completes inside it. */
+const TARGET_PRACTICE_CYCLE_SECONDS = 8;
+const TARGET_PRACTICE_CYCLE_FRAMES = TARGET_PRACTICE_CYCLE_SECONDS * FRAMES_PER_SECOND;
+/** How long a crawler stands in his lane. */
+const TARGET_PRACTICE_HELD_SECONDS = 15;
+const TARGET_PRACTICE_HELD_FRAMES = TARGET_PRACTICE_HELD_SECONDS * FRAMES_PER_SECOND;
+/** Each pub's janitor, by the building they mop. */
+const JANITOR_HOMES: ReadonlyArray<readonly [string, ResidentId]> = [
+  ['The Sunken Stump Pub', 'janitor_puddles'],
+  ['The Horned Flagon', 'janitor_grout'],
+];
+/** Long enough for a stroll and several spots worked. */
+const JANITOR_WATCH_SECONDS = 90;
+const JANITOR_WATCH_FRAMES = JANITOR_WATCH_SECONDS * FRAMES_PER_SECOND;
+
+/** Where Old Lori lives — the town's roaming resident. */
+const LORI_HOME = "Old Lori's Cottage";
 /**
  * How far from the room's centre (Chebyshev tiles) she may be set down. Not
  * zero: the cottage's centre is furniture, and she starts in the widest open
@@ -319,31 +385,6 @@ function unreachableWalkableTiles(map: GameMap): string[] {
 
 console.log(`\nTown plan: ${buildings.size} buildings\n`);
 
-console.log('The Big Top walk-in matches what the overworld actually generates');
-// `WALK_INS_OUTSIDE_THE_PLAN` is built from `BIG_TOP_ENTRY_NAME`/`BIG_TOP_ENTRY_KIND`,
-// the same constants `OverworldGenerator` pushes the Big Top's building entry
-// with, so they cannot drift from each other by construction — but that alone
-// does not prove the generator actually produced an entry matching them. This
-// generates a real overworld and checks the entry it produced directly, so a
-// bug that broke the *value* the generator writes (not just a rename) would
-// still be caught here.
-{
-  const overworld = new GameMap({
-    mapSize: PLAN_SIZE,
-    mapType: 'overworld',
-    tileHeight: TILE_SIZE,
-  });
-  const bigTopEntry = overworld.buildingEntries.find((entry) => entry.name === BIG_TOP_ENTRY_NAME);
-  check(
-    bigTopEntry !== undefined,
-    `the overworld generates a "${BIG_TOP_ENTRY_NAME}" building entry`,
-  );
-  check(
-    bigTopEntry?.type === BIG_TOP_ENTRY_KIND,
-    `"${BIG_TOP_ENTRY_NAME}"'s generated entry is a "${BIG_TOP_ENTRY_KIND}"`,
-  );
-}
-
 console.log('Occupant rosters');
 for (const [name] of BUILDING_OCCUPANTS) {
   check(buildings.has(name), `"${name}" has an occupant roster and is a real building`);
@@ -415,47 +456,50 @@ console.log('\nGeneral Store counter');
 
 console.log('\nRegistry keys name real buildings');
 // Walked from the registry side as well as the building side. Asking each
-// building what it offers can only ever find services and readables that are
-// keyed correctly — a misspelled key is simply never visited, and the whole
-// section goes green having measured nothing at all.
-const serviceKeys = interiorServiceBuildings();
+// building what it offers can only ever find readables that are keyed
+// correctly — a misspelled key is simply never visited, and the whole section
+// goes green having measured nothing at all. Services hang off roster
+// occupants, whose building keys the roster check above already walks.
 const readableKeys = readableBuildings();
-check(serviceKeys.length > 0, 'the service registry is not empty');
 check(readableKeys.length > 0, 'the readable registry is not empty');
-for (const name of serviceKeys) {
-  check(buildings.has(name), `service key "${name}" is a real building`);
-}
 for (const name of readableKeys) {
   check(buildings.has(name), `readable key "${name}" is a real building`);
 }
 
 console.log('\nServices');
-for (const [name, kind] of buildings) {
-  const services = interiorServicesFor(name);
-  if (services.length === 0) continue;
+// A service belongs to the occupant who keeps it, and the talk router asks the
+// occupant system for the service of the exact person the player walked up
+// to. So every service must be on a named resident (an extra would sell with
+// no name, no barks and no story), and the person the room actually places
+// for that spec must answer with it — a figure drawn by a bespoke painter
+// included, since the router never looks at how someone is drawn.
+let servicesSeen = 0;
+let bespokeServicesSeen = 0;
+for (const [name, roster] of BUILDING_OCCUPANTS) {
+  const kind = buildings.get(name);
+  if (kind === undefined) continue;
+  const staffed = roster.filter((spec) => spec.service !== undefined);
+  if (staffed.length === 0) continue;
   check(!SCRIPTED_KINDS.has(kind), `"${name}" is not a scripted interior`);
-  // Two counters in one room must not name the same role. The talk router picks
-  // the service by the role of the NPC the player walked up to, so a duplicate
-  // leaves one of the two counters permanently unreachable — and nothing in the
-  // game says so: the player walks up and the wrong menu opens.
-  const roles = new Set(services.map((service) => service.role));
-  check(roles.size === services.length, `"${name}"'s services all name different roles`);
-  const roster = BUILDING_OCCUPANTS.get(name) ?? [];
-  for (const service of services) {
-    const staff = roster.filter((occupant) => occupant.role === service.role);
-    // Exactly one, not at least one. `tryTalkToOccupant` matches the service by
-    // role, so a second occupant of the same role in the same room is a stranger
-    // who sells the resident's goods anonymously — no name, no barks, no story.
-    check(staff.length === 1, `"${name}" stations exactly one ${service.role} to run its counter`);
-    // `some`, not `every`: `[].every()` is true, so an unstaffed counter would
-    // print a FAIL for the line above and then a cheerful ok for this one.
+  const map = buildInterior(name, kind, TOWER_GROUND_FLOOR);
+  const system = InteriorOccupantSystem.forBuilding(map, kind, name);
+  for (const spec of staffed) {
+    servicesSeen++;
+    const who = spec.residentId ?? spec.role;
+    check(spec.residentId !== undefined, `"${name}"'s ${who} service is kept by a named resident`);
+    check((spec.service?.verb.length ?? 0) > 0, `"${name}"'s ${who} service has an interact verb`);
+    const placed = system?.placements.find((placement) => placement.spec === spec);
+    check(placed !== undefined, `"${name}" places the ${who} who keeps its counter`);
+    if (placed === undefined || system === null) continue;
     check(
-      staff.some((occupant) => occupant.residentId !== undefined),
-      `"${name}"'s ${service.role} is a named resident rather than an extra`,
+      system.serviceOf(placed.person) === spec.service,
+      `talking to "${name}"'s ${who} opens their own service`,
     );
-    check(service.verb.length > 0, `"${name}"'s ${service.role} service has an interact verb`);
+    if (placed.person.body.kind === 'bespoke') bespokeServicesSeen++;
   }
 }
+check(servicesSeen > 0, 'some roster occupant keeps a service');
+console.log(`  (${bespokeServicesSeen} of them drawn by a bespoke resident painter)`);
 
 console.log('\nReadables');
 for (const name of readableKeys) {
@@ -492,21 +536,21 @@ for (const name of readableKeys) {
   );
 }
 
-console.log("\nOld Hilda roams her cottage's open floor");
+console.log("\nOld Lori roams her cottage's open floor");
 // Stationed occupants are placed and tested above; a roamer's whole placement
 // is runtime movement, which none of those checks can see. She must start
 // where the player walking in will find her, never stroll onto furniture, a
 // doorstep or a pocket the player cannot reach, and stand still for a player
 // beside her — otherwise walking up to her ends with her strolling out of reach.
 {
-  const kind = buildings.get(HILDA_HOME);
-  check(kind !== undefined, `"${HILDA_HOME}" is a real building`);
+  const kind = buildings.get(LORI_HOME);
+  check(kind !== undefined, `"${LORI_HOME}" is a real building`);
   if (kind !== undefined) {
-    const map = buildInterior(HILDA_HOME, kind, TOWER_GROUND_FLOOR);
+    const map = buildInterior(LORI_HOME, kind, TOWER_GROUND_FLOOR);
     let focus: { x: number; y: number } | null = null;
-    const occupants = InteriorOccupantSystem.forBuilding(map, kind, HILDA_HOME, () => focus);
-    const hilda = occupants?.people.find((person) => person.residentId === 'old_hilda');
-    check(hilda !== undefined, 'Old Hilda is placed in her cottage');
+    const occupants = InteriorOccupantSystem.forBuilding(map, kind, LORI_HOME, () => focus);
+    const lori = occupants?.people.find((person) => person.residentId === 'old_lori');
+    check(lori !== undefined, 'Old Lori is placed in her cottage');
 
     // An independent flood fill, rather than the system's own, so a mistake in
     // its reachability cannot also approve itself.
@@ -540,8 +584,8 @@ console.log("\nOld Hilda roams her cottage's open floor");
     const onOpenFloor = (tile: { x: number; y: number }): boolean =>
       map.isWalkable(tile.x, tile.y) && reachable.has(`${tile.x},${tile.y}`) && !besideExit(tile);
 
-    if (occupants !== null && hilda !== undefined) {
-      const start = tileUnder(hilda);
+    if (occupants !== null && lori !== undefined) {
+      const start = tileUnder(lori);
       const centreX = Math.floor((1 + (map.structure[0]?.length ?? 0) - 2) / 2);
       const centreY = Math.floor((1 + map.structure.length - 2) / 2);
       const fromCentre = Math.max(Math.abs(start.x - centreX), Math.abs(start.y - centreY));
@@ -555,14 +599,14 @@ console.log("\nOld Hilda roams her cottage's open floor");
       const visited = new Set<string>();
       let offFloorFrames = 0;
       let farthestPx = 0;
-      const startX = hilda.x;
-      const startY = hilda.y;
+      const startX = lori.x;
+      const startY = lori.y;
       for (let frame = 0; frame < ROAMER_WANDER_FRAMES; frame++) {
         occupants.update();
-        const tile = tileUnder(hilda);
+        const tile = tileUnder(lori);
         visited.add(`${tile.x},${tile.y}`);
         if (!onOpenFloor(tile)) offFloorFrames++;
-        farthestPx = Math.max(farthestPx, Math.hypot(hilda.x - startX, hilda.y - startY));
+        farthestPx = Math.max(farthestPx, Math.hypot(lori.x - startX, lori.y - startY));
       }
       check(
         offFloorFrames === 0,
@@ -580,31 +624,240 @@ console.log("\nOld Hilda roams her cottage's open floor");
       // Caught mid-stride, so her stopping is the hold's doing and not a pause
       // she happened to be in anyway.
       let strideWait = 0;
-      while (!hilda.moving && strideWait < ROAMER_STRIDE_WAIT_FRAMES) {
+      while (!lori.moving && strideWait < ROAMER_STRIDE_WAIT_FRAMES) {
         occupants.update();
         strideWait++;
       }
-      check(hilda.moving, 'she is caught mid-stride before the player steps up');
-      focus = { x: hilda.x + TILE_SIZE, y: hilda.y };
-      const heldX = hilda.x;
-      const heldY = hilda.y;
+      check(lori.moving, 'she is caught mid-stride before the player steps up');
+      focus = { x: lori.x + TILE_SIZE, y: lori.y };
+      const heldX = lori.x;
+      const heldY = lori.y;
       let driftPx = 0;
       for (let frame = 0; frame < ROAMER_HOLD_TEST_FRAMES; frame++) {
         occupants.update();
-        driftPx = Math.max(driftPx, Math.hypot(hilda.x - heldX, hilda.y - heldY));
+        driftPx = Math.max(driftPx, Math.hypot(lori.x - heldX, lori.y - heldY));
       }
       check(driftPx <= ROAMER_HOLD_SLACK_PX, `she stands still beside the player (${driftPx}px)`);
-      check(hilda.facing === 'right', 'and turns to face them');
+      check(lori.facing === 'right', 'and turns to face them');
 
       focus = null;
       let resumed = false;
       for (let frame = 0; frame < ROAMER_RESUME_FRAMES && !resumed; frame++) {
         occupants.update();
-        resumed = Math.hypot(hilda.x - heldX, hilda.y - heldY) > ROAMER_HOLD_SLACK_PX;
+        resumed = Math.hypot(lori.x - heldX, lori.y - heldY) > ROAMER_HOLD_SLACK_PX;
       }
       check(resumed, 'she strolls on once the player walks off');
     }
   }
+}
+
+console.log('\nSteve Cartwright shoots at his target, and holds fire for anyone in the lane');
+// The routine's whole job is runtime behaviour: a bolt that never leaves, or
+// one loosed through a crawler standing in the lane, is invisible to every
+// placement check above.
+{
+  const kind = buildings.get(CARTWRIGHT_HOME);
+  check(kind !== undefined, `"${CARTWRIGHT_HOME}" is a real building`);
+  if (kind !== undefined) {
+    const map = buildInterior(CARTWRIGHT_HOME, kind, TOWER_GROUND_FLOOR);
+    const inLane: RoutineBody[] = [];
+    const cues: OccupantRoutineCue[] = [];
+    const occupants = InteriorOccupantSystem.forBuilding(
+      map,
+      kind,
+      CARTWRIGHT_HOME,
+      () => null,
+      () => inLane,
+      (cue) => cues.push(cue),
+    );
+    const placed = occupants?.placements.find(
+      (placement) => placement.spec.residentId === 'steve_cartwright',
+    );
+    const routine = placed?.spec.routine;
+    const targetProp = routine?.kind === 'target_practice' ? routine.targetProp : null;
+    const target =
+      targetProp === null
+        ? undefined
+        : map.placedInteriorProps.find((prop) => prop.propId === targetProp);
+    check(placed !== undefined, 'Steve is placed in his workshop');
+    check(
+      placed?.person.species === residentSpecies(residentById('steve_cartwright')),
+      `his figure carries his resident species (${placed?.person.species ?? 'none'}) into his dialog`,
+    );
+    check(targetProp !== null, 'Steve runs a target practice');
+    check(target !== undefined, `the workshop places his ${targetProp ?? 'target'}`);
+    if (occupants !== null && placed !== undefined && targetProp !== null && target !== undefined) {
+      const footprint = TOWN_INTERIOR_PROPS[targetProp].footprint;
+      // The open tiles between his stand and the target's nearest edge, along
+      // whichever row or column he shares with it.
+      const sharesRow =
+        placed.stand.y >= target.tile.y && placed.stand.y < target.tile.y + footprint.h;
+      const sharesColumn =
+        placed.stand.x >= target.tile.x && placed.stand.x < target.tile.x + footprint.w;
+      const lane: Array<{ x: number; y: number }> = [];
+      if (sharesRow) {
+        const step = Math.sign(target.tile.x - placed.stand.x);
+        const edge = step > 0 ? target.tile.x : target.tile.x + footprint.w - 1;
+        for (let x = placed.stand.x + step; x !== edge; x += step)
+          lane.push({ x, y: placed.stand.y });
+      } else if (sharesColumn) {
+        const step = Math.sign(target.tile.y - placed.stand.y);
+        const edge = step > 0 ? target.tile.y : target.tile.y + footprint.h - 1;
+        for (let y = placed.stand.y + step; y !== edge; y += step)
+          lane.push({ x: placed.stand.x, y });
+      }
+      const shootingDistance = lane.length + 1;
+      check(
+        (sharesRow || sharesColumn) && shootingDistance >= MIN_SHOOTING_LANE_TILES,
+        `he stands square to the target, ${MIN_SHOOTING_LANE_TILES} or more tiles back (${shootingDistance})`,
+      );
+      check(
+        lane.every((tile) => map.isWalkable(tile.x, tile.y)),
+        'the lane between him and the target is open floor',
+      );
+
+      const releases = (): number => cues.filter((cue) => cue === 'crossbowRelease').length;
+      for (let frame = 0; frame < TARGET_PRACTICE_CYCLE_FRAMES; frame++) occupants.update();
+      check(releases() > 0, `he looses a bolt within ${TARGET_PRACTICE_CYCLE_FRAMES} frames`);
+      check(cues.includes('boltThunk'), 'and the bolt strikes the target');
+
+      const midLane = lane[Math.floor(lane.length / 2)] ?? placed.stand;
+      const midLanePx = { x: midLane.x * TILE_SIZE, y: midLane.y * TILE_SIZE };
+      const runFrames = (frames: number): void => {
+        for (let frame = 0; frame < frames; frame++) occupants.update();
+      };
+      const holdsFireFor = (
+        who: string,
+        bodies: ReadonlyArray<RoutineBody>,
+        stepOut: () => void = () => undefined,
+      ): void => {
+        inLane.push(...bodies);
+        // One cycle to let a shot already loosed or a reload under way play out.
+        runFrames(TARGET_PRACTICE_CYCLE_FRAMES);
+        const heldFrom = releases();
+        runFrames(TARGET_PRACTICE_HELD_FRAMES);
+        check(
+          releases() === heldFrom,
+          `he looses nothing while ${who} stands in the lane (${releases() - heldFrom} shots)`,
+        );
+        inLane.length = 0;
+        stepOut();
+        runFrames(TARGET_PRACTICE_CYCLE_FRAMES);
+        check(releases() > heldFrom, `he resumes once ${who} is out of the lane`);
+      };
+      const noParty = {
+        crawlers: [],
+        pet: { mongo: null },
+        hire: { activeMerc: null, downedMerc: null },
+        cow: { cow: null },
+      };
+      holdsFireFor('a crawler', partyRoutineBodies({ ...noParty, crawlers: [midLanePx] }));
+      holdsFireFor(
+        'a downed hire',
+        partyRoutineBodies({ ...noParty, hire: { activeMerc: null, downedMerc: midLanePx } }),
+      );
+      holdsFireFor(
+        'a cow not on her feet',
+        partyRoutineBodies({ ...noParty, cow: { cow: midLanePx } }),
+      );
+      holdsFireFor(
+        'a recalling Mongo',
+        partyRoutineBodies({ ...noParty, pet: { mongo: midLanePx } }),
+      );
+
+      const shooter = placed.person;
+      const other = occupants.people.find((person) => person !== shooter);
+      check(other !== undefined, 'his workshop has another occupant to step into the lane');
+      if (other !== undefined) {
+        const otherHome = { x: other.x, y: other.y };
+        other.x = midLanePx.x;
+        other.y = midLanePx.y;
+        other.frozen = true;
+        holdsFireFor('another occupant', [], () => {
+          other.x = otherHome.x;
+          other.y = otherHome.y;
+          other.frozen = false;
+        });
+      }
+
+      // A body stepping into the lane after the bolt has left: the bolt in
+      // flight must not be drawn on through them into the target.
+      const thunks = (): number => cues.filter((cue) => cue === 'boltThunk').length;
+      const releasedBefore = releases();
+      let released = false;
+      for (let frame = 0; frame < TARGET_PRACTICE_CYCLE_FRAMES && !released; frame++) {
+        occupants.update();
+        released = releases() > releasedBefore;
+      }
+      check(released, 'he looses a bolt with the lane clear');
+      const thunksAtRelease = thunks();
+      inLane.push({ ...midLanePx, w: TILE_SIZE, h: TILE_SIZE });
+      runFrames(TARGET_PRACTICE_CYCLE_FRAMES);
+      check(
+        thunks() === thunksAtRelease,
+        `a bolt in flight stops at a body that steps into its path (${thunks() - thunksAtRelease} struck)`,
+      );
+      inLane.length = 0;
+      runFrames(TARGET_PRACTICE_CYCLE_FRAMES);
+
+      // Served: his menu halts the world, so no update runs to clear a pose the
+      // routine left set. Whatever he was doing, he is drawn attending.
+      let aiming = false;
+      for (let frame = 0; frame < TARGET_PRACTICE_CYCLE_FRAMES && !aiming; frame++) {
+        occupants.update();
+        aiming = shooter.shownRoutinePose?.id === 'aim';
+      }
+      check(aiming, 'he is caught mid-aim before he is served');
+      let menuOpen = true;
+      // The customer walks up from below, square across his lane to the target.
+      shooter.faceToward(shooter.x, shooter.y + TILE_SIZE);
+      occupants.serve(shooter, () => menuOpen);
+      check(shooter.shownRoutinePose === null, 'serving him draws him attending, not aiming');
+      runFrames(TARGET_PRACTICE_CYCLE_FRAMES);
+      check(
+        shooter.shownRoutinePose === null && shooter.facing === 'down',
+        'and he stays turned to the customer for as long as the menu is up',
+      );
+      menuOpen = false;
+      let backAtIt = false;
+      for (let frame = 0; frame < TARGET_PRACTICE_CYCLE_FRAMES && !backAtIt; frame++) {
+        occupants.update();
+        backAtIt = shooter.shownRoutinePose !== null;
+      }
+      check(backAtIt, 'he goes back to the target once the menu closes');
+    }
+  }
+}
+
+console.log('\nThe pub janitors mop their rooms');
+for (const [home, residentId] of JANITOR_HOMES) {
+  const kind = buildings.get(home);
+  check(kind !== undefined, `"${home}" is a real building`);
+  if (kind === undefined) continue;
+  const map = buildInterior(home, kind, TOWER_GROUND_FLOOR);
+  const cues: OccupantRoutineCue[] = [];
+  const occupants = InteriorOccupantSystem.forBuilding(
+    map,
+    kind,
+    home,
+    () => null,
+    () => [],
+    (cue) => cues.push(cue),
+  );
+  const janitor = occupants?.people.find((person) => person.residentId === residentId);
+  check(janitor !== undefined, `${residentId} is placed in "${home}"`);
+  if (occupants === null || janitor === undefined) continue;
+  check(janitor.body.kind === 'bespoke', `${residentId} is drawn by the janitor painter`);
+  const posesSeen = new Set<string>();
+  let walked = false;
+  for (let frame = 0; frame < JANITOR_WATCH_FRAMES; frame++) {
+    occupants.update();
+    if (janitor.routinePose !== null) posesSeen.add(janitor.routinePose.id);
+    walked ||= janitor.moving;
+  }
+  check(posesSeen.has('mop') && posesSeen.has('wring'), `${residentId} mops and wrings the mop`);
+  check(walked, `${residentId} moves on between spots`);
+  check(cues.includes('mopSwish'), `${residentId}'s strokes are heard`);
 }
 
 console.log('\nNo interior tile renders as a hole');
@@ -625,10 +878,7 @@ for (const [name, kind] of buildings) {
   const tilesW = map.structure[0].length;
   const tilesH = map.structure.length;
   const canvas = createCanvas(tilesW * TILE_SIZE, tilesH * TILE_SIZE);
-  // node-canvas implements the same drawing surface the game's renderers are
-  // written against, but not the DOM's `CanvasRenderingContext2D` nominal type.
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-  const ctx = canvas.getContext('2d') as unknown as CanvasRenderingContext2D;
+  const ctx = asGameContext(canvas.getContext('2d'));
   const viewW = tilesW * TILE_SIZE;
   const viewH = tilesH * TILE_SIZE;
   renderCanvas(ctx, map.structure, TILE_SIZE, 0, 0, viewW, viewH);
@@ -659,7 +909,7 @@ console.log('\nEvery walkable tile is reachable from the spawn');
 // produces no error, no log and no visible symptom at all — just a room the
 // player can see across and never walk into. Nothing else in the game measures
 // this, and every hand-authored interior is one misplaced wall away from it.
-for (const [name, kind] of [...buildings, ...WALK_INS_OUTSIDE_THE_PLAN]) {
+for (const [name, kind] of buildings) {
   for (let floor = 0; floor < floorCount(kind); floor++) {
     const map = buildInterior(name, kind, floor);
     const stranded = unreachableWalkableTiles(map);
@@ -678,7 +928,7 @@ console.log('\nEvery door opens onto clear floor');
 // prop whose blocking flag failed to land is still caught. A tower's upper
 // storeys are reached by stairs and have no door, so there is nothing to check
 // there; every ground floor must have one, or the check would pass on nothing.
-for (const [name, kind] of [...buildings, ...WALK_INS_OUTSIDE_THE_PLAN]) {
+for (const [name, kind] of buildings) {
   for (let floor = 0; floor < floorCount(kind); floor++) {
     const map = buildInterior(name, kind, floor);
     const where = kind === 'tower' ? `"${name}" floor ${floor}` : `"${name}"`;
@@ -715,6 +965,281 @@ for (const [name, kind] of [...buildings, ...WALK_INS_OUTSIDE_THE_PLAN]) {
     check(plugged.length === 0, `${where} has clear floor inside its door — ${plugged.join(' ')}`);
   }
 }
+
+console.log("\nThe club's stages are solid, and the lanes past them open");
+// A stage is the dancer's alone, so every tile of it must refuse the party;
+// and the walk from the bar side to the tables passes above and below each
+// platform, so the rows either side of it must stay clear the whole way across.
+{
+  const map = buildInterior(CLOAK_AND_DAGGER_NAME, 'club', TOWER_GROUND_FLOOR);
+  for (const post of CLUB_PERFORMER_POSTS) {
+    const open: string[] = [];
+    const blockedLane: string[] = [];
+    for (let ty = post.stage.y0; ty <= post.stage.y1; ty++) {
+      for (let tx = post.stage.x0; tx <= post.stage.x1; tx++) {
+        if (map.isWalkable(tx, ty)) open.push(`${tx},${ty}`);
+      }
+    }
+    const laneRows = [
+      ...Array.from({ length: CLUB_STAGE_LANE_TILES }, (_, i) => post.stage.y0 - 1 - i),
+      ...Array.from({ length: CLUB_STAGE_LANE_TILES }, (_, i) => post.stage.y1 + 1 + i),
+    ];
+    for (const ty of laneRows) {
+      for (let tx = post.stage.x0; tx <= post.stage.x1; tx++) {
+        if (!map.isWalkable(tx, ty)) blockedLane.push(`${tx},${ty}`);
+      }
+    }
+    check(open.length === 0, `${post.performer}'s stage refuses the party — ${open.join(' ')}`);
+    check(
+      blockedLane.length === 0,
+      `the lanes past ${post.performer}'s stage stay open — ${blockedLane.join(' ')}`,
+    );
+  }
+  const host = InteriorOccupantSystem.forBuilding(map, 'club', CLOAK_AND_DAGGER_NAME);
+  const brandon = host?.placements.find((placement) => placement.spec.residentId === 'brandon');
+  check(
+    brandon?.stand.x === CLUB_HOST_MARK.x && brandon.stand.y === CLUB_HOST_MARK.y,
+    `Brandon stands on his mark behind the host stand (${brandon?.stand.x},${brandon?.stand.y})`,
+  );
+}
+
+console.log("\nThe club's crowd stands in company, not wandering");
+// Patrons are meant to stand in knots facing each other, at the high-top
+// tables, or in front of a stage — and move between those, never stroll for
+// the sake of it. Measured over ten simulated minutes, sampled once a second.
+{
+  const map = buildInterior(CLOAK_AND_DAGGER_NAME, 'club', TOWER_GROUND_FLOOR);
+  const crowd = createClubCrowd(map, mulberry32(CROWD_SIM_SEED));
+  // Two gatherings whose rings come within two bodies of each other leave
+  // their members shoving each other off their places forever.
+  const ringClash: string[] = [];
+  const minRingGapPx = 2 * CROWD_BODY_RADIUS_TILES * TILE_SIZE;
+  CLUB_GATHERINGS.forEach((_, a) => {
+    CLUB_GATHERINGS.forEach((__, b) => {
+      if (b <= a) return;
+      for (const p of crowd.openRingPoints(a)) {
+        for (const q of crowd.openRingPoints(b)) {
+          if (Math.hypot(p.x - q.x, p.y - q.y) < minRingGapPx) ringClash.push(`${a}/${b}`);
+        }
+      }
+    });
+  });
+  check(
+    ringClash.length === 0,
+    `no two gatherings stand their people within two bodies of each other — ${[...new Set(ringClash)].join(' ')}`,
+  );
+  const sampleEvery = CLUB_ANIM_FRAMES_PER_SECOND;
+  const totalTicks = CROWD_SIM_SECONDS * CLUB_ANIM_FRAMES_PER_SECOND;
+  const peakCompany = CLUB_GATHERINGS.map(() => 0);
+  let patronSamples = 0;
+  let waiting = 0;
+  let settledGathered = 0;
+  let facingIn = 0;
+  let crowdedTalk = 0;
+  let intentChanges = 0;
+  let pausedOnWaypoint = 0;
+  let worstWaypointOffLine = 0;
+  let lastIntents: string[] = [];
+  for (let tick = 1; tick <= totalTicks; tick++) {
+    crowd.update([]);
+    if (tick % sampleEvery !== 0) continue;
+    const readings = crowd.readings();
+    const intents = readings.map((reading) => JSON.stringify(reading.intent));
+    intentChanges += intents.filter(
+      (intent, i) => lastIntents[i] !== undefined && lastIntents[i] !== intent,
+    ).length;
+    lastIntents = intents;
+    const settledByGathering = CLUB_GATHERINGS.map(() => 0);
+    const talkersByGathering = CLUB_GATHERINGS.map(() => 0);
+    for (const reading of readings) {
+      patronSamples++;
+      if (reading.pausedOnWaypoint) pausedOnWaypoint++;
+      if (reading.waypointOffLineTiles !== null) {
+        worstWaypointOffLine = Math.max(worstWaypointOffLine, reading.waypointOffLineTiles);
+      }
+      if (reading.intent.kind === 'wait') waiting++;
+      if (reading.intent.kind !== 'gather' || !reading.settled) continue;
+      const index = reading.intent.gathering;
+      const gathering = CLUB_GATHERINGS[index];
+      settledByGathering[index]++;
+      if (reading.talking) talkersByGathering[index]++;
+      settledGathered++;
+      const towardX = gathering.centre.x * TILE_SIZE - reading.cx;
+      const towardY = gathering.centre.y * TILE_SIZE - reading.cy;
+      if (towardX * reading.facingX + towardY * reading.facingY > 0) facingIn++;
+    }
+    settledByGathering.forEach((count, index) => {
+      peakCompany[index] = Math.max(peakCompany[index], count);
+      if (talkersByGathering[index] > 1) crowdedTalk++;
+    });
+  }
+  check(
+    waiting / patronSamples < CROWD_MAX_WAITING_SHARE,
+    `patrons almost always have somewhere to be (${waiting} of ${patronSamples} samples waiting)`,
+  );
+  check(
+    peakCompany.every((peak) => peak >= MIN_COMPANY),
+    `every table and circle draws company at some point — peaks ${peakCompany.join(' ')}`,
+  );
+  check(
+    settledGathered > 0 && facingIn / settledGathered >= CROWD_MIN_FACING_IN_SHARE,
+    `people standing in company face its middle (${facingIn} of ${settledGathered})`,
+  );
+  check(
+    crowdedTalk === 0,
+    `one member of a group talks at a time (${crowdedTalk} samples with more)`,
+  );
+  check(pausedOnWaypoint === 0, `nobody stops on a waypoint (${pausedOnWaypoint} samples)`);
+  check(
+    worstWaypointOffLine <= WAYPOINT_MAX_OFF_LINE_TILES,
+    `every waypoint lies near the straight walk (worst ${worstWaypointOffLine.toFixed(2)} tiles off it)`,
+  );
+  check(
+    intentChanges >= CLUB_PATRON_COUNT,
+    `patrons move on between groups and stages (${intentChanges} moves in ${CROWD_SIM_SECONDS} s)`,
+  );
+}
+
+console.log("\nThe club's gatherings never take more people than they have room for");
+// Counted every tick from intents, not from who has settled: a patron walking
+// to a full group is already one too many, and the overfill only happens when
+// two patrons change plans on the same tick, so several seeds are run.
+{
+  const map = buildInterior(CLOAK_AND_DAGGER_NAME, 'club', TOWER_GROUND_FLOOR);
+  const totalTicks = CROWD_SIM_SECONDS * CLUB_ANIM_FRAMES_PER_SECOND;
+  const overfullSeeds: string[] = [];
+  for (let seed = 1; seed <= CAPACITY_SIM_SEEDS; seed++) {
+    const crowd = createClubCrowd(map, mulberry32(seed));
+    let overfullTicks = 0;
+    for (let tick = 1; tick <= totalTicks; tick++) {
+      crowd.update([]);
+      const members = CLUB_GATHERINGS.map(() => 0);
+      for (const reading of crowd.readings()) {
+        if (reading.intent.kind === 'gather') members[reading.intent.gathering]++;
+      }
+      if (members.some((count, index) => count > CLUB_GATHERINGS[index].capacity)) overfullTicks++;
+    }
+    if (overfullTicks > 0) overfullSeeds.push(`seed ${seed}: ${overfullTicks} ticks`);
+  }
+  check(
+    overfullSeeds.length === 0,
+    `no gathering ever counts more members than its capacity — ${overfullSeeds.join(', ')}`,
+  );
+}
+
+console.log("\nThe club's gamblers follow the tables");
+// Blackjack is played one-on-one with Deuce, so its stools empty while the
+// table is open; once it closes they fill again only after a while, not on
+// the tick the panel shuts. The poker stools hold exactly the regulars the
+// poker screen deals, and the player's own stool stays empty.
+{
+  const seededRandom = (() => {
+    let state = GAMBLER_SIM_SEED;
+    return (): number => {
+      state = (state * GAMBLER_LCG_MULTIPLIER + GAMBLER_LCG_INCREMENT) % GAMBLER_LCG_MODULUS;
+      return state / GAMBLER_LCG_MODULUS;
+    };
+  })();
+  const gamblers = new ClubGamblerSystem(seededRandom);
+  const settleTicks = GAMBLER_SETTLE_SECONDS * CLUB_ANIM_FRAMES_PER_SECOND;
+  const blackjackHeld = (): number =>
+    gamblers.occupiedSeats().filter((seat) => seat.fixture.game === 'blackjack').length;
+  let tick = 0;
+  const run = (ticks: number, view: Parameters<ClubGamblerSystem['update']>[1]): void => {
+    for (let i = 0; i < ticks; i++) gamblers.update(++tick, view);
+  };
+  const closed = { blackjackOpen: false, pokerSeats: null };
+  run(settleTicks, closed);
+  run(BLACKJACK_SESSION_SECONDS * CLUB_ANIM_FRAMES_PER_SECOND, {
+    blackjackOpen: true,
+    pokerSeats: null,
+  });
+  check(blackjackHeld() === 0, 'blackjack stools empty while the table is open');
+  run(1, closed);
+  check(blackjackHeld() === 0, 'blackjack stools stay empty the tick the table closes');
+  run(settleTicks, closed);
+  check(blackjackHeld() > 0, `blackjack stools fill again a while after (${blackjackHeld()} held)`);
+
+  const [, ...dealt] = REGULAR_IDS;
+  const seats = [null, ...dealt.slice(0, NPC_SEAT_COUNT)].map((occupantId) => ({ occupantId }));
+  run(1, { blackjackOpen: false, pokerSeats: seats });
+  const pokerSeated = gamblers.occupiedSeats().filter((seat) => seat.fixture.game === 'poker');
+  const matches = pokerSeated.every(
+    (seat) =>
+      seat.fixture.game === 'poker' && seats[seat.fixture.pokerSeat]?.occupantId === seat.regular,
+  );
+  check(
+    pokerSeated.length === NPC_SEAT_COUNT && matches,
+    `the poker stools hold exactly the dealt regulars (${pokerSeated.length} seated)`,
+  );
+}
+
+console.log('\nEvery prop that makes a sound sounds once, from inside its room');
+// A fire whose prop declares a crackle but which never gets an emitter is a
+// silent hearth, and one that gets two plays nothing louder, only doubled work;
+// neither shows in a screenshot. Unnamed houses take the generic layout, so one
+// is built alongside the named rooms: its hearth is a prop like every other.
+const GENERIC_HOUSE_NAME = '';
+const soundingRooms: ReadonlyArray<readonly [string, BuildingKind]> = [
+  ...buildings,
+  [GENERIC_HOUSE_NAME, 'house'],
+];
+let soundingPropCount = 0;
+for (const [name, kind] of soundingRooms) {
+  for (let floor = 0; floor < floorCount(kind); floor++) {
+    const map = buildInterior(name, kind, floor);
+    const where = kind === 'tower' ? `"${name}" floor ${floor}` : `"${name || 'a generic house'}"`;
+    const emitters = townInteriorPropEmitters(map.placedInteriorProps, undefined);
+    const sounding = map.placedInteriorProps.filter(
+      (placed) => TOWN_INTERIOR_PROPS[placed.propId].ambientSound !== undefined,
+    );
+    soundingPropCount += sounding.length;
+    const miscounted = sounding
+      .map((placed) => ({
+        placed,
+        count: emitters.filter((emitter) => emitter.placedId === placed.id).length,
+      }))
+      .filter(({ count }) => count !== 1)
+      .map(({ placed, count }) => `${placed.id} x${count}`);
+    check(
+      miscounted.length === 0 && emitters.length === sounding.length,
+      `${where} plays one loop per sounding prop (${sounding.length}) — ${miscounted.join(' ')}`,
+    );
+    const outside = emitters
+      .filter((emitter) => {
+        const tileX = Math.floor(emitter.x);
+        const tileY = Math.floor(emitter.y);
+        const insideGrid =
+          tileY >= 0 &&
+          tileY < map.structure.length &&
+          tileX >= 0 &&
+          tileX < map.structure[tileY].length;
+        return !insideGrid || map.structure[tileY][tileX].type === VOID_TYPE;
+      })
+      .map((emitter) => `${emitter.placedId}@${emitter.x},${emitter.y}`);
+    check(
+      outside.length === 0,
+      `${where} sounds every prop from inside the room — ${outside.join(' ')}`,
+    );
+    if (sounding.length > 0) {
+      const firstSounding = sounding[0];
+      const withOneHidden = townInteriorPropEmitters(
+        map.placedInteriorProps,
+        new Set([firstSounding.id]),
+      );
+      check(
+        withOneHidden.every((emitter) => emitter.placedId !== firstSounding.id),
+        `${where} silences ${firstSounding.id} once it is smashed or taken down`,
+      );
+    }
+  }
+}
+check(soundingPropCount > 0, `the rooms hold sounding props to check (${soundingPropCount})`);
+const genericHouse = buildInterior(GENERIC_HOUSE_NAME, 'house', TOWER_GROUND_FLOOR);
+check(
+  townInteriorPropEmitters(genericHouse.placedInteriorProps, undefined).length > 0,
+  'a generic house crackles from its hearth',
+);
 
 console.log('\nCounter door avoidance');
 // The archway-seal check below is an outcome assertion: it only ever inspects
@@ -805,7 +1330,7 @@ console.log("\nFurniture scan matches the placer's own border");
 {
   const [sampleName, sampleKind] = [...buildings][0];
   const map = buildInterior(sampleName, sampleKind, TOWER_GROUND_FLOOR);
-  const countTiles = (byKind: Map<AnchorKind, { x: number; y: number }[]>): number =>
+  const countTiles = (byKind: Map<AnchorKind, FurniturePiece[]>): number =>
     [...byKind.values()].reduce((sum, tiles) => sum + tiles.length, 0);
 
   const before = countTiles(scanInteriorFurniture(map));
@@ -856,11 +1381,99 @@ for (const [name, roster] of BUILDING_OCCUPANTS) {
   );
 }
 
+console.log('\nPlacements resolve and territories hold their stands');
+// A prop placement names one piece of furniture and one side of it; the
+// placer centres the stand on that side's middle and gives up on the piece if
+// the whole side is solid, taken or reserved. A territory is the only thing
+// keeping an occupant near their post, and one that excludes the stand would
+// walk them off it on their first stroll and never let them back.
+let propPlacementsSeen = 0;
+for (const [name] of BUILDING_OCCUPANTS) {
+  const kind = buildings.get(name);
+  if (kind === undefined) continue;
+  const map = buildInterior(name, kind, TOWER_GROUND_FLOOR);
+  const system = InteriorOccupantSystem.forBuilding(map, kind, name);
+  if (system === null) continue;
+  for (const placed of system.placements) {
+    const who = placed.spec.residentId ?? placed.spec.role;
+    check(placed.territoryHolds(placed.stand), `"${name}"'s ${who} stands inside their territory`);
+    const placement = placed.spec.placement;
+    if (placement.kind !== 'prop') continue;
+    propPlacementsSeen++;
+    const { x, y } = placed.stand;
+    check(map.isWalkable(x, y), `"${name}"'s ${who} stands on walkable floor`);
+    check(
+      !system.reservedStandTiles.has(`${x},${y}`),
+      `"${name}"'s ${who} stands clear of the door, the spawns and the doorways`,
+    );
+    const piece = placed.furniture;
+    const onProp =
+      piece !== null &&
+      map.placedInteriorProps.some(
+        (prop) =>
+          prop.propId === placement.prop && prop.tile.x === piece.x && prop.tile.y === piece.y,
+      );
+    check(onProp, `"${name}"'s ${who} is stood at a ${placement.prop} the room places`);
+    if (piece === null) continue;
+    const besideSide = ((): boolean => {
+      const withinColumns = x >= piece.x && x < piece.x + piece.w;
+      const withinRows = y >= piece.y && y < piece.y + piece.h;
+      const distance = placement.distance ?? 1;
+      switch (placement.side) {
+        case 'north':
+          return withinColumns && y === piece.y - distance;
+        case 'south':
+          return withinColumns && y === piece.y + piece.h - 1 + distance;
+        case 'west':
+          return withinRows && x === piece.x - distance;
+        case 'east':
+          return withinRows && x === piece.x + piece.w - 1 + distance;
+      }
+    })();
+    check(
+      besideSide,
+      `"${name}"'s ${who} stands ${placement.distance ?? 1} tile(s) off the ${placement.side} side of the ${placement.prop}`,
+    );
+  }
+}
+check(propPlacementsSeen > 0, 'some roster places an occupant by prop');
+
+console.log('\nBespoke resident figures draw through a townsperson');
+// Drawn here the way an occupant draws one, so a broken walk cadence or
+// action mapping on the townsperson path is caught before any room stands the
+// figure up.
+for (const id of Object.keys(BESPOKE_RESIDENT_FIGURES).filter(isBespokeResidentFigureId)) {
+  const person = new Townsperson({
+    x: TILE_SIZE,
+    y: TILE_SIZE,
+    role: 'commoner',
+    species: DEFAULT_TOWN_SPECIES,
+    seed: 1,
+    speed: 1,
+    wander: {
+      pickTarget: () => ({ x: TILE_SIZE, y: TILE_SIZE }),
+      arriveDist: 1,
+      pauseMin: 1,
+      pauseMax: 2,
+    },
+    bespokeFigure: id,
+  });
+  const sizePx = BESPOKE_PROBE_TILES * TILE_SIZE;
+  const canvas = createCanvas(sizePx, sizePx);
+  const probeCtx = canvas.getContext('2d');
+  person.render(asGameContext(probeCtx), 0, 0, TILE_SIZE);
+  const pixels = probeCtx.getImageData(0, 0, sizePx, sizePx).data;
+  let ink = 0;
+  for (let i = ALPHA_OFFSET; i < pixels.length; i += RGBA_STRIDE) if (pixels[i] > 0) ink++;
+  check(person.body.kind === 'bespoke', `a townsperson given "${id}" wears the bespoke figure`);
+  check(ink > 0, `a townsperson wearing "${id}" draws something`);
+}
+
 console.log('\nEvery anchor kind is used by somebody');
 // An anchor kind nobody anchors to is furniture the placer will never look for,
 // and the loop above can only check the kinds a roster names — so an anchor that
 // fell out of every roster would leave both sides of the pairing unmeasured.
-for (const { kind: anchorKind } of ANCHOR_TILE_TYPES) {
+for (const anchorKind of ANCHOR_KINDS) {
   const rostered = [...BUILDING_OCCUPANTS.values()].some((roster) =>
     roster.some((occupant) => occupantAnchor(occupant) === anchorKind),
   );
@@ -1250,13 +1863,6 @@ console.log('\nA cleared camp stays cleared');
       'and still populates the uncleared one',
     );
 
-    const legacySave = { ...captureTownMemory(memory), clearedCamps: undefined };
-    const legacyValue: unknown = JSON.parse(JSON.stringify(legacySave));
-    check(
-      parseTownMemoryCheckpoint(legacyValue)?.clearedCamps.length === 0,
-      'a save written before camps were remembered still loads, remembering none',
-    );
-
     const rewound = createTownMemory();
     restoreTownMemory(rewound, captureTownMemory(memory));
     restoreTownMemory(rewound, checkpointBeforeClear);
@@ -1316,7 +1922,7 @@ console.log("\nNo furniture stands over the magistrate's body");
   const heightPx = map.structure.length * TILE_SIZE;
   const canvas = createCanvas(widthPx, heightPx);
   const bodyCtx = canvas.getContext('2d');
-  drawSkyFowlCorpse(asGameContext(bodyCtx), body.x * TILE_SIZE, body.y * TILE_SIZE, TILE_SIZE);
+  drawHawkfolkCorpse(asGameContext(bodyCtx), body.x * TILE_SIZE, body.y * TILE_SIZE, TILE_SIZE);
   const pixels = bodyCtx.getImageData(0, 0, widthPx, heightPx).data;
   let inkLeft = widthPx;
   let inkRight = 0;

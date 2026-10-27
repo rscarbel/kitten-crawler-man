@@ -54,15 +54,24 @@ import {
   type DanceFacing,
 } from './danceStyles';
 import { HUMAN_CELL_PX_PER_UNIT } from './human/figureScale';
-import { drawAccessory, drawHeadAccessory } from './human/townAccessories';
+import { type AccessorySpec, drawAccessory, drawHeadAccessory } from './human/townAccessories';
 import { castHeadReach, paintCastHead } from './human/castHead';
 import { paintTrouserSeat } from './human/legwear';
-import { deriveGlossRamp, deriveRamp } from './biped/palette';
+import { deriveGlossRamp } from './biped/palette';
 import type { HeadFeaturePainter } from './biped/head';
 import { type HumanLook, lookPxPerUnit } from '../looks/humanLook';
 import { RIG_LOOK } from '../looks/humans/rig';
 import { RIG_GARMENT_CUT } from './biped/torso';
 import { WALK_FRAMES, IDLE_FRAMES, TALK_FRAMES, WORK_FRAMES } from './townCastFrameCounts';
+import {
+  BAR_STOOL_SEAT_HEIGHT_TILES,
+  SEAT_POSE_FRAMES,
+  SEAT_POSES,
+  SEAT_VIEWS,
+  seatStateName,
+} from './seatPoses';
+import { SEATED_LAP_BELOW_HIP, seatedPose } from './human/seated';
+import { HIP_Y } from './biped/proportions';
 
 export type TownCastView = 'down' | 'side' | 'up';
 
@@ -278,11 +287,16 @@ interface BipedRowSpec {
   readonly poseAt: (frame: number) => BipedPose;
   /** For a row that turns as it plays (the spin), the facing each frame is painted in. */
   readonly facingAt?: (frame: number) => DanceFacing;
+  /**
+   * The row is sat on a seat: a worn accessory is painted where the body sits
+   * rather than where it stands, and draped over the lap.
+   */
+  readonly seated?: true;
 }
 
 /**
  * The rows a rig-painted look declares. `hasDance` is only true for the
- * Desperado Club's dancer looks — everything else gets the same base three
+ * Cloak & Dagger's dancer looks — everything else gets the same base three
  * rows every prior round shipped.
  */
 function bipedRows(hasDance: boolean): BipedRowSpec[] {
@@ -382,8 +396,6 @@ function castAttachments(look: TownCastLook & { painter: 'biped' }): BipedAttach
     hairStyle: look.hairStyle,
     facialHair: look.facialHair,
     hair: look.hairRamp,
-    // Cut from the accessory's cloth, so a kerchief matches the shawl worn with it.
-    scarf: deriveRamp(look.accessory.color),
   };
   const own = look.details?.attachments;
   return {
@@ -404,12 +416,20 @@ function castAttachments(look: TownCastLook & { painter: 'biped' }): BipedAttach
   };
 }
 
-function buildBipedFigure(look: TownCastLook & { painter: 'biped' }): FigureDef {
+interface BipedFigureOptions {
+  readonly id: string;
+  readonly rows: readonly BipedRowSpec[];
+}
+
+/** A rig-painted look's figure over `rows`, dressed, groomed and built as the look. */
+function bipedFigureOf(
+  look: TownCastLook & { painter: 'biped' },
+  options: BipedFigureOptions,
+): FigureDef {
   const cell = bipedCellFor();
-  const rows = look.hasDance === true ? bipedRows(true) : BIPED_ROWS;
-  const rowsByName = new Map(rows.map((row) => [row.name, row]));
+  const rowsByName = new Map(options.rows.map((row) => [row.name, row]));
   const frames: Record<string, number> = {};
-  for (const row of rows) frames[row.name] = row.frameCount;
+  for (const row of options.rows) frames[row.name] = row.frameCount;
   const humanLook = castHumanLook(look);
   const unitPx = lookPxPerUnit(humanLook, HUMAN_CELL_PX_PER_UNIT);
   const castOutfit = stillOutfit(outfitOf(humanLook, TOWNSFOLK_LEGWEAR));
@@ -422,7 +442,7 @@ function buildBipedFigure(look: TownCastLook & { painter: 'biped' }): FigureDef 
   };
 
   return {
-    id: `human_${look.id}`,
+    id: options.id,
     frameWidth: cell.frameWidth,
     frameHeight: cell.frameHeight,
     tileX: cell.tileX,
@@ -453,13 +473,84 @@ function buildBipedFigure(look: TownCastLook & { painter: 'biped' }): FigureDef 
         ctx.translate(cell.originX, cell.originY);
         ctx.scale(unitPx.x * mirror, unitPx.y);
         BIPED_DRAW_BY_VIEW[bipedView](ctx, pose, { look: humanLook, attachments });
-        drawAccessory(ctx, bipedView, look.accessory);
+        if (row.seated === true) drawSeatedAccessory(ctx, bipedView, look.accessory, pose.bob);
+        else drawAccessory(ctx, bipedView, look.accessory);
         ctx.restore();
       } finally {
         resetTownsfolkLegwear();
       }
     },
   };
+}
+
+function buildBipedFigure(look: TownCastLook & { painter: 'biped' }): FigureDef {
+  const rows = look.hasDance === true ? bipedRows(true) : BIPED_ROWS;
+  return bipedFigureOf(look, { id: `human_${look.id}`, rows });
+}
+
+/**
+ * The seated rows of a rig-painted look, on a club bar stool. Kept off the
+ * look's own figure so the crowd's figure declares only what the street
+ * plays; the seat height is in the look's own rig units, so a taller build
+ * still sits on the same cushion.
+ */
+function seatedRows(look: TownCastLook & { painter: 'biped' }): BipedRowSpec[] {
+  const unitPxY = lookPxPerUnit(castHumanLook(look), HUMAN_CELL_PX_PER_UNIT).y;
+  const seatHeight = (BAR_STOOL_SEAT_HEIGHT_TILES * CAST_TILE_SCALE) / unitPxY;
+  return SEAT_POSES.flatMap((seatPose) =>
+    SEAT_VIEWS.map((view) => ({
+      name: seatStateName(seatPose, view),
+      frameCount: SEAT_POSE_FRAMES[seatPose],
+      view,
+      poseAt: (frame: number) => seatedPose(seatPose, VIEW_TO_BIPED_VIEW[view], seatHeight, frame),
+      seated: true as const,
+    })),
+  );
+}
+
+/**
+ * An accessory on a seated body: carried up with the hips (`bob`) and cut off
+ * at the front of the lap, which is where cloth hanging from the waist falls
+ * over a sitter's thighs.
+ */
+function drawSeatedAccessory(
+  ctx: CanvasRenderingContext2D,
+  view: CardinalView,
+  accessory: AccessorySpec,
+  bob: number,
+): void {
+  ctx.save();
+  ctx.translate(0, bob);
+  ctx.beginPath();
+  ctx.rect(
+    -ACCESSORY_CLIP_HALF_WIDTH,
+    -ACCESSORY_CLIP_HEIGHT,
+    ACCESSORY_CLIP_HALF_WIDTH * 2,
+    ACCESSORY_CLIP_HEIGHT + HIP_Y + SEATED_LAP_BELOW_HIP,
+  );
+  ctx.clip();
+  drawAccessory(ctx, view, accessory);
+  ctx.restore();
+}
+
+/** A clip box, in figure units, wide and tall enough to hold any accessory above the lap line. */
+const ACCESSORY_CLIP_HALF_WIDTH = 2;
+const ACCESSORY_CLIP_HEIGHT = 4;
+
+const SEATED_FIGURES_BY_LOOK = new Map<string, FigureDef>();
+
+/**
+ * A look's seated figure, built the first time it is asked for: only the
+ * handful of looks a club seats ever need one. A child look has no seated
+ * rows and gets `undefined`.
+ */
+export function townCastSeatedFigure(look: TownCastLook): FigureDef | undefined {
+  if (look.painter !== 'biped') return undefined;
+  const known = SEATED_FIGURES_BY_LOOK.get(look.id);
+  if (known !== undefined) return known;
+  const figure = bipedFigureOf(look, { id: `human_${look.id}_seated`, rows: seatedRows(look) });
+  SEATED_FIGURES_BY_LOOK.set(look.id, figure);
+  return figure;
 }
 
 // ── Dispatch ─────────────────────────────────────────────────────────────────

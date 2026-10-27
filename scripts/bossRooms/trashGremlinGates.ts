@@ -43,7 +43,7 @@ import {
   type TileContent,
 } from '../../src/map/tileTypes.js';
 import { slowestTileSpeedFactor } from '../../src/map/tileSpeed.js';
-import type { DamageSource } from '../../src/Player.js';
+import type { DamageOptions, DamageSource } from '../../src/Player.js';
 import { TRASH_GREMLIN_BOSS_TYPE } from '../../src/systems/bossRooms/BossRoomDressings.js';
 import {
   approachLaneTiles,
@@ -149,10 +149,10 @@ function layoutGates(room: TrashGremlinRoomSystem, gameMap: GameMap, report: Gat
 /** A crawler who counts the towers that land on it. */
 class ToppleTarget extends HumanPlayer {
   avalancheHits = 0;
-  override takeDamage(amount: number, source?: DamageSource): boolean {
+  override takeDamage(amount: number, source?: DamageSource, options?: DamageOptions): boolean {
     if (source?.kind === 'environmental' && source.hazard === 'trashAvalanche')
       this.avalancheHits++;
-    const connected = super.takeDamage(amount, source);
+    const connected = super.takeDamage(amount, source, options);
     this.hp = this.maxHp;
     return connected;
   }
@@ -475,11 +475,11 @@ const PERCENT = 100;
 /** A crawler who counts bile that reaches it, whether or not a dodge roll spares it. */
 class BileTarget extends HumanPlayer {
   reached = 0;
-  override takeDamage(amount: number, source?: DamageSource): boolean {
+  override takeDamage(amount: number, source?: DamageSource, options?: DamageOptions): boolean {
     const isBolus =
       source?.kind === 'mob' && source.mobType === 'TrashGremlin' && source.undodgeable !== true;
     if (isBolus) this.reached++;
-    const connected = super.takeDamage(amount, source);
+    const connected = super.takeDamage(amount, source, options);
     this.hp = this.maxHp;
     return connected;
   }

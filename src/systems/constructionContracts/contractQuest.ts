@@ -43,7 +43,7 @@ export function releaseContractAutoPinOnEnd(bus: EventBus, progress: JournalProg
 export interface ContractWorldSources {
   /** Absent in a harness with no murder questline behind it. */
   readonly murderQuest: Pick<MurderQuestProgress, 'stage'> | undefined;
-  readonly anchorQuest: Pick<AnchorQuestProgress, 'temple' | 'hildaRepairedTypes'>;
+  readonly anchorQuest: Pick<AnchorQuestProgress, 'temple' | 'loriRepairedTypes'>;
   readonly briarHollow: Pick<BriarHollowState, 'quest'>;
 }
 

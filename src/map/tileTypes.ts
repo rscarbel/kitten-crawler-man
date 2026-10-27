@@ -71,8 +71,6 @@ export const TABLE = 32;
 export const BOOKSHELF = 33;
 /** Tile type for a bed — not walkable. */
 export const BED = 34;
-/** Tile type for a stone fireplace/hearth — not walkable. */
-export const FIREPLACE = 35;
 /** Tile type for a storage barrel — not walkable. */
 export const BARREL = 36;
 /** Tile type for a decorative rug — walkable. */
@@ -111,15 +109,11 @@ export const SPIDER_LAB_FLOOR = 47;
 export const RUINED_WALL = 48;
 /** Tile type for scattered rubble — walkable ground decoration in the ruined-city zone. */
 export const RUBBLE = 49;
-/** Tile type for the big top interior floor — packed sawdust, walkable. */
+/** Tile type for the Starlight Tent's interior floor — packed sawdust, walkable. */
 export const SAWDUST_FLOOR = 50;
-/** Tile type for the painted circus ring border — walkable sawdust with a red ring stripe. */
-export const CIRCUS_RING_EDGE = 51;
-/** Tile type for the big top's central tent pole — not walkable. */
+/** Tile type for the Starlight Tent's central pole — not walkable. */
 export const TENT_POLE = 52;
-/** Tile type for wooden bleacher benches along the big top walls — not walkable. */
-export const BLEACHER = 53;
-/** Tile type for the Desperado Club interior floor — dark, polished art-deco stone, walkable. */
+/** Tile type for the Cloak & Dagger interior floor — dark, polished art-deco stone, walkable. */
 export const CLUB_FLOOR = 54;
 /** Tile type for the club's central dance floor — dark reflective panels lit by pulsing overlay lights, walkable. */
 export const DANCE_FLOOR = 55;
@@ -239,7 +233,7 @@ export const SAFE_ROOM_RUG = 76;
 // interior is a decision on the map rather than a side effect of somebody
 // else's.
 //
-// The Desperado Club and the Big Top keep their own floor types (`CLUB_FLOOR`,
+// The Cloak & Dagger and the Starlight Tent keep their own floor types (`CLUB_FLOOR`,
 // `SAWDUST_FLOOR`) — but their *walls* change with everything else, because
 // `generateInterior` rings every interior in one wall type. That is the right
 // answer for both: a town safe room is a Bopca station built inside a building,
@@ -620,13 +614,13 @@ export const PASTURE_GRASS = 138;
 /** Tilled crop rows — walkable ground material. */
 export const CROP_FIELD = 139;
 
-// ── Grimaldi's circus grounds ─────────────────────────────────────────────────
+// ── The circus grounds ────────────────────────────────────────────────────────
 
 /** The circus lot: turf trodden to mud and sawdust inside the grounds — walkable ground material. */
 export const CIRCUS_LOT = 140;
 
 /**
- * A circus structure that blocks sight: the Big Top and the side-show
+ * A circus structure that blocks sight: the Starlight Tent and the side-show
  * pavilions. Solid and Y-sorted. Drawn whole from one tile of its footprint,
  * keyed `circus:<prop>`; every other blocked tile of the footprint carries
  * `circus_part:<dx>,<dy>`, the step to that drawing tile, and draws nothing.

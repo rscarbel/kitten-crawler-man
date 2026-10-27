@@ -1,12 +1,12 @@
 /**
  * The fortune teller's table: a coin per reading, three face-down cards, and
  * the fortune the turned card tells. Then Draw Again for another coin, or
- * Close. The plaza's seer and Old Hilda in her kitchen are the same table
+ * Close. The plaza's seer and Old Lori in her kitchen are the same table
  * with different readers.
  */
 
 import { canAffordCoins, partyCoins, spendPartyCoins } from '../../../core/party/partyCoins';
-import { drawFortune, drawHildaReading } from '../../../dialog/scripts/fortuneTeller';
+import { drawFortune, drawLoriReading } from '../../../dialog/scripts/fortuneTeller';
 import type { TownDialogContext } from '../../../systems/townDialog';
 import { centerIn, inset, splitH, splitV } from '../../core/geom';
 import type { Surface, Ui } from '../../core/UiRoot';
@@ -37,12 +37,12 @@ export const PLAZA_SEER: FortuneReader = {
   draw: drawFortune,
 };
 
-/** Hilda reads at her own table for less, and does not own a deck. */
+/** Lori reads at her own table for less, and does not own a deck. */
 export const HEDGE_WITCH: FortuneReader = {
-  name: 'Old Hilda',
+  name: 'Old Lori',
   cost: SERVICE_PRICES.fortune.hedge_witch,
   invitation: `${SERVICE_PRICES.fortune.hedge_witch} coins, and I will tell you what I actually see.`,
-  draw: drawHildaReading,
+  draw: drawLoriReading,
 };
 
 /** The table's state: who reads, for whom, and the fortune on the turned card. */

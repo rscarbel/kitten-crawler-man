@@ -1,14 +1,10 @@
 /**
  * What each hired mercenary says, and when.
  *
- * The lines are written for each character:
- * the Meat Shields hires are crude, funny and a little bleak, with the cruelty
- * aimed at the dungeon and never at the player. The lines mention nothing
- * beyond what the game has shown by the third floor, when the party can hire
- * them.
- *
- * The two cretins call the cat crawler by name and fuss over her more than
- * anyone, because Sledge is devoted to her and Bomo follows his lead.
+ * The lines are written for each character: The Barracks Mercenaries' hires
+ * are professionals, competent and a little wry, with any edge aimed at the
+ * dungeon and never at the player. The lines mention nothing beyond what the
+ * game has shown by the third floor, when the party can hire them.
  *
  * `MercenaryBarker` (`src/creatures/mercenaries/MercenaryBarker.ts`) reads
  * every one of these pools generically, through `MercenaryLines` and
@@ -23,534 +19,365 @@ import type { MercenaryVoice } from '../../creatures/mercenaries/mercenaryVoices
 
 const CAT_NAME = crawlerName('cat');
 
-const sledge = speakerLines('sledge');
+/** A quarryman: few words, all of them load-bearing. */
+const crush = speakerLines('crush');
 
-export const SLEDGE_LINES = {
+export const CRUSH_LINES = {
   hired: [
-    sledge.bark('Sledge here. Sledge protect.'),
-    sledge.bark('Contract good. Sledge walk with you.'),
-    sledge.bark(`Where ${CAT_NAME}? Sledge go where ${CAT_NAME} go.`),
-    sledge.bark('Sledge ready.'),
+    crush.bark('Signed and here. Point me at the heavy part.'),
+    crush.bark(`I'll walk with ${CAT_NAME}. The small ones get leaned on first.`),
+    crush.bark('Crush. Eleven years in the quarry. Lead on.'),
+    crush.bark('Contract says the floor. I read it twice.'),
   ],
   idle: [
-    sledge.bark('Quiet. Sledge like quiet.'),
-    sledge.bark(`${CAT_NAME} safe. Good.`),
-    sledge.bark('Bomo like this hallway. Bomo like every hallway.'),
-    sledge.bark('Sledge not bored. Sledge guarding.'),
+    crush.bark('Good stone in these walls. Somebody cut it right.'),
+    crush.bark('Quiet. I trust quiet about as far as I can throw it. Which is far.'),
+    crush.bark('You learn to listen for the crack before the fall.'),
+    crush.bark(`${CAT_NAME}, stay where I can see you.`),
   ],
   engage: [
-    sledge.bark('Bad guy. Go away now.'),
-    sledge.bark('Sledge see you.'),
-    sledge.bark('No.'),
-    sledge.bark('Stand back. Sledge handle.'),
+    crush.bark('Here it comes.'),
+    crush.bark('Behind me.'),
+    crush.bark('That one. Mine.'),
+    crush.bark('Hold. I have it.'),
   ],
   kill: [
-    sledge.bark('Surviving is winning.'),
-    sledge.bark('Gone now.'),
-    sledge.bark('Next.'),
-    sledge.bark('That one done.'),
+    crush.bark('Down.'),
+    crush.bark("That one won't get up."),
+    crush.bark('Next.'),
+    crush.bark('Split along the grain.'),
   ],
   lowHp: [
-    sledge.bark('Sledge cracked. Sledge fine.'),
-    sledge.bark('Hurt. Still here.'),
-    sledge.bark('Rock chip. Rock grow back. Maybe.'),
-    sledge.bark('Not dead yet.'),
+    crush.bark('Chipped. Not cracked.'),
+    crush.bark('That one went in deep.'),
+    crush.bark('Still standing. Mostly.'),
+    crush.bark('I have been hit by worse. A mountain, once.'),
   ],
   special: [
-    sledge.bark('Shield. Stay inside.'),
-    sledge.bark('Sledge buy this. Worth it.'),
-    sledge.bark('Glow is good. Stand in glow.'),
-    sledge.bark('Protect.'),
+    crush.bark(`Ward's up, ${CAT_NAME}. Stay under it.`),
+    crush.bark('Shield. Inside the light.'),
+    crush.bark('Stand in the glow.'),
+    crush.bark('Warded. Go.'),
   ],
   ownerHurt: [
-    sledge.bark('Hey. Stop that.'),
-    sledge.bark('Sledge saw that.'),
-    sledge.bark('Nobody hit boss.'),
-    sledge.bark('You okay? Sledge fix.'),
+    crush.bark('I saw that.'),
+    crush.bark('Step back. Let me take the next one.'),
+    crush.bark('You are bleeding. Move behind me.'),
+    crush.bark('Easy. I am coming.'),
   ],
   catHurt: [
-    sledge.bark(`NO touch ${CAT_NAME}.`),
-    sledge.bark(`${CAT_NAME}! Sledge coming.`),
-    sledge.bark(`You hurt ${CAT_NAME}. Bad idea.`),
-    sledge.bark(`${CAT_NAME} behind Sledge. Now.`),
+    crush.bark(`${CAT_NAME}. Behind me, now.`),
+    crush.bark('Wrong one to touch.'),
+    crush.bark(`Nobody lays a hand on ${CAT_NAME} twice.`),
+    crush.bark('You picked the small one. Pick again.'),
   ],
   downed: [
-    sledge.bark('Sledge down. Help Sledge up.'),
-    sledge.bark('Sledge... fall over. Come get Sledge.'),
-    sledge.bark('Floor cold. Sledge want up.'),
-    sledge.bark('Not dead. Sledge wait. Hurry.'),
+    crush.bark('I am down. Lift with your legs.'),
+    crush.bark('Floor got me. Give me a hand.'),
+    crush.bark('Not done. Just down. Help me up.'),
+    crush.bark('Heavy, I know. Pull anyway.'),
   ],
   revived: [
-    sledge.bark('Sledge up. Thank you.'),
-    sledge.bark('Back. Sledge protect again.'),
-    sledge.bark('Good hands. Sledge owe you.'),
+    crush.bark('Up. Thank you.'),
+    crush.bark('Good hands. I owe you one.'),
+    crush.bark('Back on my feet. Where were we.'),
   ],
   potion: [
-    sledge.bark('Sledge drink. Sledge fine.'),
-    sledge.bark('Tastes bad. Works good.'),
-    sledge.bark('Glug.'),
+    crush.bark('Tastes like gravel. Works.'),
+    crush.bark('Drinking. Cover me a breath.'),
+    crush.bark('One swallow. Fine now.'),
   ],
   death: [
-    sledge.bark(`${CAT_NAME}... run.`),
-    sledge.bark('Sledge... tried.'),
-    sledge.bark('Tell Bomo... Sledge say bye.'),
-    sledge.bark(`Keep... ${CAT_NAME}... safe.`),
+    crush.bark(`Get ${CAT_NAME} out.`),
+    crush.bark('Good... stone.'),
+    crush.bark('Held as long as I could.'),
+    crush.bark('Tell the desk... I held.'),
   ],
   talk: [
-    sledge.bark('Bomo say hi. Bomo not here. Still say hi.'),
-    sledge.bark('Sledge not talk much. This is most.'),
-    sledge.bark('You pay. Sledge stay. Simple.'),
-    sledge.bark('Tux is rented. Do not bleed on tux.'),
+    crush.bark('Quarry work is mostly waiting for a rock to tell you where it breaks.'),
+    crush.bark('I do not talk much. This is most of it.'),
+    crush.bark('You paid. I stay. That is the whole arrangement.'),
+    crush.bark(`I watch ${CAT_NAME} because nobody else watches the small ones.`),
   ],
   floorEnd: [
-    sledge.bark('Floor done. Contract done. Good work.'),
-    sledge.bark(`Sledge go back now. Tell ${CAT_NAME} bye.`),
-    sledge.bark('Stairs. Sledge stay. Rules.'),
-    sledge.bark('You live. Good.'),
+    crush.bark('Floor done. Contract done. Good work.'),
+    crush.bark('Stairs are yours. My paper ends here.'),
+    crush.bark(`Look after ${CAT_NAME}.`),
+    crush.bark('You lived. That was the job.'),
   ],
 } satisfies MercenaryLines;
 
-const bomo = speakerLines('bomo');
+/** A forge hand: warm, practical, talks about his work like it is the weather. */
+const hammerHands = speakerLines('hammerHands');
 
-export const BOMO_LINES = {
+export const HAMMER_HANDS_LINES = {
   hired: [
-    bomo.bark('Bomo here! Bomo protect.'),
-    bomo.bark('You pick Bomo? Good pick.'),
-    bomo.bark('Bomo buy spell with own money. Now Bomo use for you.'),
-    bomo.bark('Where we go? Bomo follow.'),
+    hammerHands.bark('Hammer Hands, at your service. Fresh off the anvil, more or less.'),
+    hammerHands.bark('Good choice. I mend people the way I mended steel: quick and hot.'),
+    hammerHands.bark("Ward spell's charged. Point me at whoever looks worst."),
+    hammerHands.bark("Lead on. I'll keep the sparks off you."),
   ],
   idle: [
-    bomo.bark('Where Sledgy? Bomo miss Sledgy.'),
-    bomo.bark('Sledgy say quiet is good. Bomo think quiet is boring.'),
-    bomo.bark('Bomo count steps. Bomo lose count.'),
-    bomo.bark('Bomo like club. Bomo like here also. Less music.'),
+    hammerHands.bark('Forge taught me patience. Then it taught me to stop being patient.'),
+    hammerHands.bark('Smell that? Old iron. Somebody bled here a while back.'),
+    hammerHands.bark("Quiet stretch. I'll take it."),
+    hammerHands.bark('Every wall down here wants repointing. Not my job today.'),
   ],
   engage: [
-    bomo.bark('Bomo smash.'),
-    bomo.bark('Stand behind Bomo.'),
-    bomo.bark('You! Stop!'),
-    bomo.bark('Bomo see bad thing.'),
+    hammerHands.bark('Hot work. Stand clear.'),
+    hammerHands.bark('Behind me, please.'),
+    hammerHands.bark('Here we go. Mind the swing.'),
+    hammerHands.bark("That one's coming for you. Not if I'm there first."),
   ],
   kill: [
-    bomo.bark('Bomo smash good.'),
-    bomo.bark('Down it go.'),
-    bomo.bark('Sledgy would clap.'),
-    bomo.bark('Easy.'),
+    hammerHands.bark('Flattened.'),
+    hammerHands.bark('Struck true.'),
+    hammerHands.bark('One more off the pile.'),
+    hammerHands.bark('Quenched.'),
   ],
   lowHp: [
-    bomo.bark('Bomo hurt... Bomo okay.'),
-    bomo.bark('Ow. Big ow.'),
-    bomo.bark('Bomo need sit down. Later.'),
-    bomo.bark('Rock crack. Not break.'),
+    hammerHands.bark("I've taken a crack. Still holding."),
+    hammerHands.bark('That one rang me like a bell.'),
+    hammerHands.bark('Running hot. Give me a moment.'),
+    hammerHands.bark('Not broken. Bent.'),
   ],
   special: [
-    bomo.bark('Shield! Stay in shield!'),
-    bomo.bark('Bomo protect!'),
-    bomo.bark('Glow keep you. Stay in glow.'),
-    bomo.bark('Bomo spell. Bomo money. You safe.'),
+    hammerHands.bark("Ward's on you. Don't waste it."),
+    hammerHands.bark('Shield up. Stay inside it.'),
+    hammerHands.bark("There. That'll take a hit for you."),
+    hammerHands.bark('Covered. Keep fighting.'),
   ],
   ownerHurt: [
-    bomo.bark('Hey! No hit friend!'),
-    bomo.bark('Stand behind Bomo!'),
-    bomo.bark('Bomo fix. Bomo fix.'),
-    bomo.bark('That make Bomo mad.'),
+    hammerHands.bark("You're hurt. Get behind me."),
+    hammerHands.bark("I'm stepping in. Fall back a pace."),
+    hammerHands.bark("Easy, easy. I've got the front."),
+    hammerHands.bark("That's enough of that."),
   ],
   catHurt: [
-    bomo.bark(`${CAT_NAME}! No!`),
-    bomo.bark(`Nobody hurt ${CAT_NAME}. Sledgy say so.`),
-    bomo.bark(`Bomo coming, ${CAT_NAME}!`),
-    bomo.bark(`Bad! Bad thing hit ${CAT_NAME}!`),
+    hammerHands.bark(`${CAT_NAME}, back to me!`),
+    hammerHands.bark(`Hold on, ${CAT_NAME}.`),
+    hammerHands.bark('Leave the cat alone.'),
+    hammerHands.bark(`I see it, ${CAT_NAME}. Coming.`),
   ],
   downed: [
-    bomo.bark('Bomo fall down! Help Bomo!'),
-    bomo.bark('Ow. Bomo on floor. Come get Bomo?'),
-    bomo.bark('Bomo lie here. Not long, okay?'),
-    bomo.bark('Sledgy would pick Bomo up. You pick Bomo up?'),
+    hammerHands.bark("I'm down. Come and get me, would you?"),
+    hammerHands.bark("Floor's cold. Hand up, please."),
+    hammerHands.bark('Knocked flat. Not finished.'),
+    hammerHands.bark("Give me a pull and I'll be back in it."),
   ],
   revived: [
-    bomo.bark('Bomo up! Bomo up!'),
-    bomo.bark('Thank you! Bomo protect again!'),
-    bomo.bark('Bomo okay now. Mostly.'),
+    hammerHands.bark('Up again. Thank you kindly.'),
+    hammerHands.bark('Back on the line.'),
+    hammerHands.bark('Good as new. Close enough.'),
   ],
   potion: [
-    bomo.bark('Bomo drink medicine!'),
-    bomo.bark('Yuck. Bomo better.'),
-    bomo.bark('Glug glug. Bomo good.'),
+    hammerHands.bark('Bitter. Like forge water.'),
+    hammerHands.bark('Down the hatch.'),
+    hammerHands.bark("That's the stuff."),
   ],
   death: [
-    bomo.bark('Tell Sledgy... Bomo tried.'),
-    bomo.bark('Bomo... sorry.'),
-    bomo.bark(`${CAT_NAME}... Bomo protect... little bit.`),
-    bomo.bark('Sledgy...'),
+    hammerHands.bark("Fire's... going out."),
+    hammerHands.bark('Keep the others... warded.'),
+    hammerHands.bark('Should have... stayed at the forge.'),
+    hammerHands.bark("Go on. Don't wait for me."),
   ],
   talk: [
-    bomo.bark(`He buy spell with own money. He buy for ${CAT_NAME} protect.`),
-    bomo.bark('Sledgy best friend. Bomo best friend too. Of Sledgy.'),
-    bomo.bark('Bomo not remember name of this place. Bomo remember you.'),
-    bomo.bark('Tux itch. Rosemarie say wear tux.'),
-  ],
-  floorEnd: [
-    bomo.bark('Floor done! Bomo go home to Sledgy.'),
-    bomo.bark('Bye bye. Bomo had good time.'),
-    bomo.bark('You live! Bomo do job good.'),
-    bomo.bark('Contract over. Bomo wave.'),
-  ],
-} satisfies MercenaryLines;
-
-const dongQuixote = speakerLines('dongQuixote');
-
-export const DONG_QUIXOTE_LINES = {
-  hired: [
-    dongQuixote.bark('Dong Quixote, knight-errant, at thy service, and at thy price.'),
-    dongQuixote.bark('A quest! Lead on, and I shall follow at a stately pace.'),
-    dongQuixote.bark('Fear not, good crawler. Thy champion is arrived.'),
-    dongQuixote.bark('My lance is thine until this floor is done.'),
-  ],
-  idle: [
-    dongQuixote.bark('Corcunda was the most beautiful man who ever lived. I say it plainly.'),
-    dongQuixote.bark('These halls want for a horse. As do I.'),
-    dongQuixote.bark('Hark, how the dungeon breathes. As do I. Mostly out.'),
-    dongQuixote.bark('I danced the Parade in my day. The crowds wept. From joy, I maintain.'),
-  ],
-  engage: [
-    dongQuixote.bark('Have at thee, knave!'),
-    dongQuixote.bark('Stand and be skewered!'),
-    dongQuixote.bark('A foe! At last, a worthy foe!'),
-    dongQuixote.bark('Villain! Meet the point of my conviction!'),
-  ],
-  kill: [
-    dongQuixote.bark('Another foe unhorsed, and I without a horse!'),
-    dongQuixote.bark('Yield! Ah. Too late for yielding.'),
-    dongQuixote.bark('So fall the wicked. Someone sing of it.'),
-    dongQuixote.bark('Corcunda, didst thou see? No. No, of course not.'),
-  ],
-  lowHp: [
-    dongQuixote.bark('A scratch! A mere... a considerable scratch.'),
-    dongQuixote.bark('I have bled worse in duels over lesser insults.'),
-    dongQuixote.bark('My breath grows short. My resolve does not.'),
-    dongQuixote.bark('Fetch my smelling salts! Afterwards!'),
-  ],
-  special: [
-    dongQuixote.bark('For Corcunda!'),
-    dongQuixote.bark('CHARGE!'),
-    dongQuixote.bark('Clear the lists!'),
-    dongQuixote.bark('Lance down, heart high!'),
-  ],
-  ownerHurt: [
-    dongQuixote.bark('Unhand my patron, cur!'),
-    dongQuixote.bark('Thou shalt answer for that blow!'),
-    dongQuixote.bark('Courage, friend! Help rides to thee. On foot.'),
-    dongQuixote.bark('A wound upon my patron is a wound upon mine honour!'),
-  ],
-  catHurt: [
-    dongQuixote.bark('The fair lady is struck! Villainy!'),
-    dongQuixote.bark('Strike a noble cat? Thou hast chosen poorly.'),
-    dongQuixote.bark('My lady! Behind my lance!'),
-    dongQuixote.bark('Treachery against a lady most feline!'),
-  ],
-  downed: [
-    dongQuixote.bark('I am unhorsed! A hand, good crawler!'),
-    dongQuixote.bark('I merely rest. Help me rise, and swiftly!'),
-    dongQuixote.bark('Lend me thy arm! My dignity I shall retrieve myself.'),
-    dongQuixote.bark('Fallen, but not vanquished! Not yet!'),
-  ],
-  revived: [
-    dongQuixote.bark('Risen! Let the minstrels note it.'),
-    dongQuixote.bark('My thanks, friend. Now, where was the villain?'),
-    dongQuixote.bark('Up again, as all great knights must be.'),
-  ],
-  potion: [
-    dongQuixote.bark('A restorative! Most bracing.'),
-    dongQuixote.bark('To thy health! And mine!'),
-    dongQuixote.bark('Vile tincture. Splendid effect.'),
-  ],
-  death: [
-    dongQuixote.bark('Vale to you all. Vale.'),
-    dongQuixote.bark('Corcunda... I come...'),
-    dongQuixote.bark('Tell them... I fell forward.'),
-    dongQuixote.bark('A gallant end... a most gallant... ow.'),
-  ],
-  talk: [
-    dongQuixote.bark('Ask me of Corcunda. No, do. I insist.'),
-    dongQuixote.bark('My muscles? Mine own. They merely rest between breaths.'),
-    dongQuixote.bark('I have fought for coin before, but never for so little. It is liberating.'),
-    dongQuixote.bark('Chivalry is not dead, friend. It is only very old.'),
-  ],
-  floorEnd: [
-    dongQuixote.bark('The floor is won! I take my leave, with a bow.'),
-    dongQuixote.bark('Our contract ends, and yet our legend begins.'),
-    dongQuixote.bark('Farewell! Remember my charge, if not my name.'),
-    dongQuixote.bark('Back to the Parade with me. Fear not; I shall tell it well.'),
-  ],
-} satisfies MercenaryLines;
-
-const splashZone = speakerLines('splashZone');
-
-export const SPLASH_ZONE_LINES = {
-  hired: [
-    splashZone.bark("Splash Zone! Front rows get wet, that's the deal."),
-    splashZone.bark('Lifeguard on duty! Nobody runs, everybody lives.'),
-    splashZone.bark("Hey, hey! Let's make some waves."),
-    splashZone.bark('You picked the otter. Great call, honestly.'),
-  ],
-  idle: [
-    splashZone.bark("Snail Trail's gonna love this story."),
-    splashZone.bark('No running on the wet floor. Which is every floor down here.'),
-    splashZone.bark('Hydrate! Seriously, drink something.'),
-    splashZone.bark('Nobody down here swims. Wasted opportunity, if you ask me.'),
-  ],
-  engage: [
-    splashZone.bark('Whistle! Everybody out of the water!'),
-    splashZone.bark('Incoming! Stay behind the rope line.'),
-    splashZone.bark("Okay, pal, pool's closed."),
-    splashZone.bark('Got a live one!'),
-  ],
-  kill: [
-    splashZone.bark("And that's a no-diving zone."),
-    splashZone.bark('Sploosh. Next!'),
-    splashZone.bark("Pool's closed. Permanently."),
-    splashZone.bark("Should've read the signs, buddy."),
-  ],
-  lowHp: [
-    splashZone.bark('Okay, okay, lifeguard needs a lifeguard!'),
-    splashZone.bark('Taking on water here!'),
-    splashZone.bark("I'm good! Mostly good! Somewhat good!"),
-    splashZone.bark('Somebody throw me a floatie!'),
-  ],
-  special: [
-    splashZone.bark('Everybody out of the pool!'),
-    splashZone.bark('Wave incoming! Hold your breath!'),
-    splashZone.bark('Wet Spot routine, coming right up!'),
-    splashZone.bark("Surf's up, suckers!"),
-  ],
-  ownerHurt: [
-    splashZone.bark('Whoa, you okay? Stay on your feet!'),
-    splashZone.bark('Buddy system! I got you!'),
-    splashZone.bark('Hey! No roughhousing with my crawler!'),
-    splashZone.bark('Keep your head above water!'),
-  ],
-  catHurt: [
-    splashZone.bark("Kitty's hit! Cover the cat!"),
-    splashZone.bark('Hey, not the cat! Never the cat!'),
-    splashZone.bark('Hang in there, fuzzy!'),
-    splashZone.bark('Cat overboard!'),
-  ],
-  downed: [
-    splashZone.bark('Lifeguard down! Somebody get over here!'),
-    splashZone.bark('Little help? I am very small and very flat.'),
-    splashZone.bark('Man overboard! Me! I am the man!'),
-    splashZone.bark("I'm okay! I'm not okay! Come get me!"),
-  ],
-  revived: [
-    splashZone.bark('Back on duty! Thanks, pal.'),
-    splashZone.bark('Mouth-to-mouth not required. Appreciated anyway.'),
-    splashZone.bark("Whew! Okay, where's the deep end?"),
-  ],
-  potion: [
-    splashZone.bark('Hydrate!'),
-    splashZone.bark('Tastes like pool water. Works, though.'),
-    splashZone.bark('Drink break!'),
-  ],
-  death: [
-    splashZone.bark('Tell Snail Trail... tell her I stuck the landing.'),
-    splashZone.bark("Guess... I'm off duty."),
-    splashZone.bark('Somebody... blow the whistle...'),
-    splashZone.bark("Don't... run... on the wet floor..."),
-  ],
-  talk: [
-    splashZone.bark(
-      "My wife dances at Bitches. Snail Trail. Best in the club, don't let anybody tell you different.",
+    hammerHands.bark(
+      'Spent twenty years at a forge. Turns out people need mending more than kettles.',
     ),
-    splashZone.bark("Crossbow's small, but so am I. We make it work."),
-    splashZone.bark('Water magic is ninety percent timing and ten percent not drowning.'),
-    splashZone.bark("Rule one of lifeguarding: count heads. I'm counting yours."),
+    hammerHands.bark('The ward is just heat, pointed. Same as a weld.'),
+    hammerHands.bark('Crush and I came off the same quarry road. He talks less. I make up for it.'),
+    hammerHands.bark("Scarf's for the soot. Old habit."),
   ],
   floorEnd: [
-    splashZone.bark("Floor's done! Heading home to the missus."),
-    splashZone.bark('Great swim, team. Towel off.'),
-    splashZone.bark('Shift over! Stay safe out there.'),
-    splashZone.bark("That's my whistle. Good luck down there!"),
+    hammerHands.bark("Floor's done. Fine work, all of you."),
+    hammerHands.bark("Contract's run out. I'll bank the fire."),
+    hammerHands.bark("You came through. That's what I like to see."),
+    hammerHands.bark('Off you go. Mind the stairs.'),
   ],
 } satisfies MercenaryLines;
 
-const gluteusMaxx = speakerLines('gluteusMaxx');
+/** A ranger: dry, quick, counts her arrows. */
+const ivyAshgrove = speakerLines('ivyAshgrove');
 
-export const GLUTEUS_MAXX_LINES = {
+export const IVY_ASHGROVE_LINES = {
   hired: [
-    gluteusMaxx.bark("LET'S GOOO. Point me at something."),
-    gluteusMaxx.bark('Gluteus Maxx, baby! Maximum glute!'),
-    gluteusMaxx.bark("Contract signed, pump secured, let's MOVE."),
-    gluteusMaxx.bark("Oh I am SO ready. I've been ready since breakfast."),
+    ivyAshgrove.bark("Ivy Ashgrove. I stand back and I don't miss. Much."),
+    ivyAshgrove.bark("Contract's signed. Keep them off me and I'll keep them off you."),
+    ivyAshgrove.bark("String's fresh, quiver's full. Where to?"),
+    ivyAshgrove.bark("You lead. I'll be the one behind you, aiming past your ear."),
   ],
   idle: [
-    gluteusMaxx.bark("Is it leg day? It's always leg day."),
-    gluteusMaxx.bark("Nobody's hitting me. I hate it. I love it. I hate it."),
-    gluteusMaxx.bark("Feel that? That's my heartbeat. It's fast. Is that normal?"),
-    gluteusMaxx.bark("I could do squats. Should I do squats? I'm doing squats."),
+    ivyAshgrove.bark("Twenty-two arrows. I count when it's quiet."),
+    ivyAshgrove.bark('Long sightlines down here. Somebody built this for archers.'),
+    ivyAshgrove.bark("I'd rather be in a tree. I'm not, but I'd rather."),
+    ivyAshgrove.bark('Listen. No, that was me. Carry on.'),
   ],
   engage: [
-    gluteusMaxx.bark("Oh, it's HAPPENING."),
-    gluteusMaxx.bark('Come here, come here, come HERE!'),
-    gluteusMaxx.bark('Fresh meat! For my FISTS!'),
-    gluteusMaxx.bark("Mine! That one's mine!"),
+    ivyAshgrove.bark('Got it. Drawing.'),
+    ivyAshgrove.bark('Stay out of my line.'),
+    ivyAshgrove.bark('Contact. Give me room.'),
+    ivyAshgrove.bark('That one first.'),
   ],
   kill: [
-    gluteusMaxx.bark('DOWN! Stay down!'),
-    gluteusMaxx.bark("Who's next? Anyone? ANYONE?"),
-    gluteusMaxx.bark("That's cardio, baby."),
-    gluteusMaxx.bark("Feel the burn! They didn't. They're dead."),
+    ivyAshgrove.bark('Down.'),
+    ivyAshgrove.bark('Clean shot.'),
+    ivyAshgrove.bark('One less.'),
+    ivyAshgrove.bark("I'll want that arrow back."),
   ],
   lowHp: [
-    gluteusMaxx.bark("I'm fine! I'm great! Is my arm supposed to do that?"),
-    gluteusMaxx.bark('Pain is just weakness... leaving... quickly...'),
-    gluteusMaxx.bark('More! More! Wait. Less!'),
-    gluteusMaxx.bark("Blood's just sweat that's trying harder!"),
+    ivyAshgrove.bark("I'm hit. Still shooting."),
+    ivyAshgrove.bark('That one got close. Too close.'),
+    ivyAshgrove.bark('Bleeding. Keep them off me.'),
+    ivyAshgrove.bark('Not my best day.'),
   ],
   special: [
-    gluteusMaxx.bark('Game over, pal. Game. Over.'),
-    gluteusMaxx.bark('Glute Crush! Glute! CRUSH!'),
-    gluteusMaxx.bark('Sit DOWN.'),
-    gluteusMaxx.bark('Have a seat. Forever.'),
+    ivyAshgrove.bark('Loose.'),
+    ivyAshgrove.bark('Watch this one.'),
+    ivyAshgrove.bark('Steady...'),
   ],
   ownerHurt: [
-    gluteusMaxx.bark("Hey! HEY! That's my paycheck!"),
-    gluteusMaxx.bark('Nobody touches the client!'),
-    gluteusMaxx.bark('You want some of THIS?'),
-    gluteusMaxx.bark('Oh you did NOT.'),
+    ivyAshgrove.bark("You're hit. Back toward me."),
+    ivyAshgrove.bark('I see it. Covering you.'),
+    ivyAshgrove.bark("Step left. I've got a line."),
+    ivyAshgrove.bark("Hold on. Next one's for whoever did that."),
   ],
   catHurt: [
-    gluteusMaxx.bark('Not the kitty! NOT THE KITTY!'),
-    gluteusMaxx.bark('You hit the cat? You hit the CAT?'),
-    gluteusMaxx.bark('Kitty down! Rage up!'),
-    gluteusMaxx.bark('That cat is a sweetheart, you animal!'),
+    ivyAshgrove.bark(`${CAT_NAME}! Clear the line!`),
+    ivyAshgrove.bark(`I've got the one on ${CAT_NAME}.`),
+    ivyAshgrove.bark('Off the cat. Now.'),
+    ivyAshgrove.bark(`Move, ${CAT_NAME}, I can't shoot through you.`),
   ],
   downed: [
-    gluteusMaxx.bark("I'm DOWN! Get me UP!"),
-    gluteusMaxx.bark('Spot me! SPOT ME!'),
-    gluteusMaxx.bark('This is just a floor stretch! Help me up!'),
-    gluteusMaxx.bark('Nobody saw that. Help me up before somebody sees that.'),
+    ivyAshgrove.bark("I'm down. Somebody, please."),
+    ivyAshgrove.bark("Can't draw lying flat. Help me up."),
+    ivyAshgrove.bark('Still breathing. Come get me.'),
+    ivyAshgrove.bark("I'll owe you an arrow. Hurry."),
   ],
   revived: [
-    gluteusMaxx.bark("BACK! Let's GO!"),
-    gluteusMaxx.bark('Second set! SECOND SET!'),
-    gluteusMaxx.bark("That's what I call a recovery day!"),
+    ivyAshgrove.bark('Thanks. Back to it.'),
+    ivyAshgrove.bark('Up. Where did it go?'),
+    ivyAshgrove.bark("I'll pretend that didn't happen."),
   ],
   potion: [
-    gluteusMaxx.bark('Pre-workout!'),
-    gluteusMaxx.bark('Chug! Chug! Chug!'),
-    gluteusMaxx.bark('Protein shake, baby!'),
+    ivyAshgrove.bark('Drinking. Two seconds.'),
+    ivyAshgrove.bark('Ugh. Better.'),
+    ivyAshgrove.bark("That's the last of that flask. Joking."),
   ],
   death: [
-    gluteusMaxx.bark('Worth it.'),
-    gluteusMaxx.bark('Tell my glutes... they did great.'),
-    gluteusMaxx.bark('Was... that... a PR?'),
-    gluteusMaxx.bark('Totally... worth it.'),
+    ivyAshgrove.bark('Out of... arrows.'),
+    ivyAshgrove.bark('Should have... stayed in the trees.'),
+    ivyAshgrove.bark('Keep your distance... from them.'),
+    ivyAshgrove.bark('Tell the desk... I hit it.'),
   ],
   talk: [
-    gluteusMaxx.bark("Rosemarie says no more uppers. Rosemarie isn't here."),
-    gluteusMaxx.bark('People say I can crush a guy with my butt. People are RIGHT.'),
-    gluteusMaxx.bark('Short king. Big gauntlets. Bigger heart.'),
-    gluteusMaxx.bark("Armour? I've got abs."),
+    ivyAshgrove.bark('Rule one: never stand where you can be reached. Rule two: see rule one.'),
+    ivyAshgrove.bark("Ashgrove is a place. Was. I'm what's left that still has a bow."),
+    ivyAshgrove.bark(
+      "People ask about the arrows. Yes, they're in the fee. No, you can't borrow one.",
+    ),
+    ivyAshgrove.bark('I keep four tiles back. You keep in front. It works if we both do it.'),
   ],
   floorEnd: [
-    gluteusMaxx.bark("Floor's done? Aw, I was just warming up!"),
-    gluteusMaxx.bark('Good sweat, everybody. Good sweat.'),
-    gluteusMaxx.bark('See ya! Stay hydrated! Stay SWOLE!'),
-    gluteusMaxx.bark("That's the set. Rack it."),
+    ivyAshgrove.bark("That's the floor. Nice shooting, if I say so."),
+    ivyAshgrove.bark("Contract's up. Go on, I'll find my arrows."),
+    ivyAshgrove.bark('You stayed alive. Makes my job look good.'),
+    ivyAshgrove.bark('Off you go. Watch the corners.'),
   ],
 } satisfies MercenaryLines;
 
-const bucketBoy = speakerLines('bucketBoy');
+/** A monk: unhurried, kind, with a dry sense of what he has seen. */
+const brotherAnselm = speakerLines('brotherAnselm');
 
-export const BUCKET_BOY_LINES = {
+export const BROTHER_ANSELM_LINES = {
   hired: [
-    bucketBoy.bark("I— I'm Bucket Boy. I'll do my best. I have a bucket."),
-    bucketBoy.bark('You picked me? Really? Okay. Okay!'),
-    bucketBoy.bark("I'll stay close. Very close. Is this too close?"),
-    bucketBoy.bark("I promise I won't run away. Much."),
+    brotherAnselm.bark('Brother Anselm. I mend; I do not fight. Mostly I do not fight.'),
+    brotherAnselm.bark('Peace to you. Bring me your bruises.'),
+    brotherAnselm.bark('I will stay close. Not so close that I am in the way.'),
+    brotherAnselm.bark('Lead on. I will keep you in one piece where I can.'),
   ],
   idle: [
-    bucketBoy.bark("The others remember the old seasons. I don't. Is that bad?"),
-    bucketBoy.bark('I used to catch coins in this bucket. Rosemarie always aimed for my eyes.'),
-    bucketBoy.bark("Is it quiet because it's safe, or quiet because it's waiting?"),
-    bucketBoy.bark("I'm not scared. I'm just standing behind you on purpose."),
+    brotherAnselm.bark('A quiet corridor is a small mercy. I take it as one.'),
+    brotherAnselm.bark('The order taught me to sit still. This place taught me to stop sitting.'),
+    brotherAnselm.bark('Breathe in. Breathe out. Check the ceiling.'),
+    brotherAnselm.bark('I have mended worse than whatever is ahead. I tell myself that.'),
   ],
   engage: [
-    bucketBoy.bark('EEEE— sorry. Sorry.'),
-    bucketBoy.bark("Something's coming! Something's coming!"),
-    bucketBoy.bark('Oh no. Oh no no no.'),
-    bucketBoy.bark("Please don't look at me please don't look at me."),
+    brotherAnselm.bark('Trouble. I will be behind you.'),
+    brotherAnselm.bark('Go carefully. I am watching your back.'),
+    brotherAnselm.bark('Something comes. I will keep my distance.'),
+    brotherAnselm.bark('Ah. Here we are again.'),
   ],
   kill: [
-    bucketBoy.bark("Did I do that? I'm so sorry. I mean, good?"),
-    bucketBoy.bark('Oh! It stopped!'),
-    bucketBoy.bark('Is it... is it dead? Yay?'),
-    bucketBoy.bark("I didn't mean— well, I did mean."),
+    brotherAnselm.bark('Forgive me. It gave me no choice.'),
+    brotherAnselm.bark('Rest, then.'),
+    brotherAnselm.bark('The staff is for walking. Usually.'),
+    brotherAnselm.bark('That was not my intention. It was my result.'),
   ],
   lowHp: [
-    bucketBoy.bark("I'm bleeding! Is this a lot of blood? It feels like a lot!"),
-    bucketBoy.bark("Help! Help! I'm fine, but help!"),
-    bucketBoy.bark('Owww... sorry. Ow.'),
-    bucketBoy.bark("I'll fix myself in a second. After screaming."),
+    brotherAnselm.bark('Physician, heal thyself. I am trying.'),
+    brotherAnselm.bark('I am wounded. Do not wait on me.'),
+    brotherAnselm.bark('That one found me. I will manage.'),
+    brotherAnselm.bark('A little help, if anyone can spare it.'),
   ],
   special: [
-    bucketBoy.bark('Hold still! Hold still, please!'),
-    bucketBoy.bark("Triage! Um, that's the spell. It's working!"),
-    bucketBoy.bark('Here, here, let me fix it.'),
-    bucketBoy.bark('This might sting! Sorry! Sorry!'),
+    brotherAnselm.bark('Be still. This will close it.'),
+    brotherAnselm.bark('There. Mended.'),
+    brotherAnselm.bark('Hold. Let it knit.'),
+    brotherAnselm.bark('Breathe. The worst of it is passing.'),
   ],
   ownerHurt: [
-    bucketBoy.bark('Oh no oh no oh no.'),
-    bucketBoy.bark("You're hurt! I can help! Wait for me!"),
-    bucketBoy.bark("Don't die! Please! I'm not ready!"),
-    bucketBoy.bark('I saw that! That looked bad!'),
+    brotherAnselm.bark('You are hurt. Come to me when you can.'),
+    brotherAnselm.bark('I see the wound. Give me a moment.'),
+    brotherAnselm.bark('Steady. Help is coming.'),
+    brotherAnselm.bark('That needs tending. Soon.'),
   ],
   catHurt: [
-    bucketBoy.bark('The cat! Is she okay? Is she okay?'),
-    bucketBoy.bark(`Miss ${CAT_NAME}! Hold on!`),
-    bucketBoy.bark("Oh no, not her, she's so nice!"),
-    bucketBoy.bark("I'm coming, kitty! Slowly! But coming!"),
+    brotherAnselm.bark(`${CAT_NAME}, come here, little one.`),
+    brotherAnselm.bark(`I see you, ${CAT_NAME}. Hold on.`),
+    brotherAnselm.bark('The cat is bleeding. I am coming.'),
+    brotherAnselm.bark(`Easy, ${CAT_NAME}. Easy.`),
   ],
   downed: [
-    bucketBoy.bark("I fell! I fell and I'm scared! Please come get me!"),
-    bucketBoy.bark("Don't leave me here! Please!"),
-    bucketBoy.bark("I'm still alive! I think! Help!"),
-    bucketBoy.bark("I can't heal myself lying down! Help!"),
+    brotherAnselm.bark('I have fallen. A hand, please.'),
+    brotherAnselm.bark('Help me up. I cannot mend anyone from down here.'),
+    brotherAnselm.bark('Still with you. Only lower.'),
+    brotherAnselm.bark('Patience is a virtue. Speed would also be welcome.'),
   ],
   revived: [
-    bucketBoy.bark('You came back for me! You actually came back!'),
-    bucketBoy.bark("Thank you thank you thank you. I'll be braver. A bit."),
-    bucketBoy.bark("I'm up! Sorry! Thank you! Sorry!"),
+    brotherAnselm.bark('Bless you. Truly.'),
+    brotherAnselm.bark('Back on my feet. Thank you.'),
+    brotherAnselm.bark('There is grace in a helping hand.'),
   ],
   potion: [
-    bucketBoy.bark('Medicine! I know about medicine!'),
-    bucketBoy.bark('Gulp. Okay. Better.'),
-    bucketBoy.bark('This one tastes like my bucket.'),
+    brotherAnselm.bark('Even a healer needs a draught.'),
+    brotherAnselm.bark('Mm. The abbey brewed it stronger.'),
+    brotherAnselm.bark('A sip, and on.'),
   ],
   death: [
-    bucketBoy.bark('Did... did I help?'),
-    bucketBoy.bark('Sorry... I dropped my bucket.'),
-    bucketBoy.bark('Tell Rosemarie... I tried really hard.'),
-    bucketBoy.bark("I think... I'll remember this one."),
+    brotherAnselm.bark('Go... in peace.'),
+    brotherAnselm.bark('I have... no more to give.'),
+    brotherAnselm.bark('Mend each other... when I cannot.'),
+    brotherAnselm.bark('It is... all right.'),
   ],
   talk: [
-    bucketBoy.bark("I'm the cheapest one. That means I'm the best value! Right?"),
-    bucketBoy.bark("My bucket is my friend. You're also my friend. Is that okay?"),
-    bucketBoy.bark("I don't really fight. I mostly worry at things."),
-    bucketBoy.bark("Everybody else is braver than me. But I'm here, and they're not."),
+    brotherAnselm.bark('The order sent me out to do good. The pay is how I keep doing it.'),
+    brotherAnselm.bark('The staff is oak. It has walked further than most pilgrims.'),
+    brotherAnselm.bark('Everyone asks if I pray before a fight. I pray during.'),
+    brotherAnselm.bark('Mending is mostly attention. Most people only need someone to notice.'),
   ],
   floorEnd: [
-    bucketBoy.bark('We made it! We actually made it!'),
-    bucketBoy.bark('I get to go home? Thank you. Thank you so much.'),
-    bucketBoy.bark('I only ran away once! And I came back!'),
-    bucketBoy.bark("Bye! Good luck! Don't die! Sorry! Bye!"),
+    brotherAnselm.bark('The floor is done, and so is my contract. Go well.'),
+    brotherAnselm.bark('You are whole. That is enough for today.'),
+    brotherAnselm.bark('Peace go with you down the stairs.'),
+    brotherAnselm.bark('Rest when you can. You will not, but you should.'),
   ],
 } satisfies MercenaryLines;
 
 const tumbledown = speakerLines('tumbledown');
 
 /**
- * Meat Shields' equipment rental. It has no words, only the golem's stone
+ * The desk's equipment rental. It has no words, only the golem's stone
  * grunts (see `TUMBLEDOWN_GRUNTS` in `mercenaryVoices.ts`) — and a few things
  * a person could say about it, set in italics.
  */
@@ -565,15 +392,13 @@ export const TUMBLEDOWN_ACTIONS = {
   downed: [tumbledown.bark('Tumbledown slumps into a heap. Something in it still grinds.')],
   revived: [tumbledown.bark('Tumbledown heaves itself back together.')],
   death: [tumbledown.bark('Tumbledown comes apart, one boulder at a time.')],
-  floorEnd: [tumbledown.bark('Tumbledown turns and trudges back toward the club.')],
+  floorEnd: [tumbledown.bark('Tumbledown turns and trudges back toward the Barracks.')],
 } satisfies MercenaryLines;
 
-export const SLEDGE = { lines: SLEDGE_LINES } satisfies MercenaryVoice;
-export const BOMO = { lines: BOMO_LINES } satisfies MercenaryVoice;
-export const DONG_QUIXOTE = { lines: DONG_QUIXOTE_LINES } satisfies MercenaryVoice;
-export const SPLASH_ZONE = { lines: SPLASH_ZONE_LINES } satisfies MercenaryVoice;
-export const GLUTEUS_MAXX = { lines: GLUTEUS_MAXX_LINES } satisfies MercenaryVoice;
-export const BUCKET_BOY = { lines: BUCKET_BOY_LINES } satisfies MercenaryVoice;
+export const CRUSH = { lines: CRUSH_LINES } satisfies MercenaryVoice;
+export const HAMMER_HANDS = { lines: HAMMER_HANDS_LINES } satisfies MercenaryVoice;
+export const IVY_ASHGROVE = { lines: IVY_ASHGROVE_LINES } satisfies MercenaryVoice;
+export const BROTHER_ANSELM = { lines: BROTHER_ANSELM_LINES } satisfies MercenaryVoice;
 export const TUMBLEDOWN_BASE = {
   lines: {},
   actions: TUMBLEDOWN_ACTIONS,

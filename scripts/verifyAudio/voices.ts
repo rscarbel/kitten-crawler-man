@@ -58,8 +58,8 @@ const FILLER_IDS = [
   'rat_squeak_1',
   'rat_squeak_2',
   'rat_squeak_3',
-  'skyfowl_1',
-  'skyfowl_2',
+  'hawkfolk_1',
+  'hawkfolk_2',
   'clown_horn',
 ] as const satisfies readonly SoundId[];
 const LOW_PRIORITY_ID = 'coin_land_tick' as const satisfies SoundId;
@@ -153,7 +153,7 @@ export async function checkVoices(harness: AudioHarness, check: Check): Promise<
     ...FILLER_IDS,
     LOW_PRIORITY_ID,
     HIGH_PRIORITY_ID,
-    'skyfowl_talon_steps',
+    'hawkfolk_talon_steps',
   ]);
 
   const perIdBefore = harness.sources.length;
@@ -181,17 +181,17 @@ export async function checkVoices(harness: AudioHarness, check: Check): Promise<
 
   const footstepsBefore = harness.sources.length;
   for (let i = 0; i < OVER_CAP_COPIES; i++) {
-    audio.play('skyfowl_talon_steps');
+    audio.play('hawkfolk_talon_steps');
     harness.advance(PAST_INTERVAL_MS);
   }
-  const footsteps = soundingOf(startedSince(harness, footstepsBefore), 'skyfowl_talon_steps');
+  const footsteps = soundingOf(startedSince(harness, footstepsBefore), 'hawkfolk_talon_steps');
   check(
-    footsteps.length === soundTraits('skyfowl_talon_steps').maxVoices,
-    `footsteps hold ${soundTraits('skyfowl_talon_steps').maxVoices} voices (${footsteps.length} sounding)`,
+    footsteps.length === soundTraits('hawkfolk_talon_steps').maxVoices,
+    `footsteps hold ${soundTraits('hawkfolk_talon_steps').maxVoices} voices (${footsteps.length} sounding)`,
   );
   harness.advance(SETTLE_MS);
   audio.stopSound('goblin_1');
-  audio.stopSound('skyfowl_talon_steps');
+  audio.stopSound('hawkfolk_talon_steps');
   harness.advance(SETTLE_MS);
 
   const dedupeBefore = harness.sources.length;

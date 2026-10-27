@@ -39,10 +39,6 @@ import { TownMapScene } from '../scenes/TownMapScene';
 import { UiGalleryScene } from '../scenes/UiGalleryScene';
 import { TitleScene, type TitleStartState } from '../scenes/title/TitleScene';
 import { getLevelDef } from '../levels/index';
-import {
-  createCircusQuestProgress,
-  type CircusQuestStage,
-} from '../core/quests/CircusQuestProgress';
 import { createPartyCraftsState } from '../core/labour/partyCrafts';
 import {
   createMurderQuestProgress,
@@ -88,7 +84,6 @@ import { startBrowserReplayRecording } from './aiReplayRecorder';
 import { startPerfWalkFromParams } from './perfScenes';
 import { DEFAULT_FLOOR_ART_SEED } from '../map/ground/floorArtSeed';
 import { createGodModeState } from '../core/state/GodMode';
-import { createClubMembership } from '../core/club/ClubMembership';
 
 /**
  * Dev-only entry points, reachable by query parameter.
@@ -103,16 +98,6 @@ import { createClubMembership } from '../core/club/ClubMembership';
  * Anything added here inherits that treatment; anything that a player is
  * *meant* to reach must not live in this file.
  */
-
-const CIRCUS_STAGES: ReadonlyArray<CircusQuestStage> = [
-  'not_started',
-  'ritual_defense',
-  'heather_hunt',
-  'assault',
-  'bigtop_ready',
-  'grimaldi_redeemed',
-  'complete',
-];
 
 const MURDER_STAGES: ReadonlyArray<MurderQuestStage> = [
   'not_started',
@@ -306,9 +291,9 @@ function prisonLayoutNamed(value: string): PrisonLayout | null {
  * Replaces the opening scene when a dev-only parameter asks for one.
  *
  * `?playtest=spider` opens a named preset — a floor, a spawn landmark and a
- * fully kitted party. `?level=level3&quest=bigtop_ready` opens a bare floor,
- * optionally seeding circus-quest state; `?level=level3&murder=cult_hideout`
- * does the same for the Krasue Murders questline. `?prison=1&difficulty=hard`
+ * fully kitted party. `?level=level3` opens a bare floor (`&spawn=circus` puts
+ * the party on the circus grounds); `?level=level3&murder=cult_hideout` also
+ * seeds the Krasue Murders questline. `?prison=1&difficulty=hard`
  * walks the `prison` preset's party straight into the Goblin High Security
  * Prison, built from that layout on that difficulty; leaving it comes out in
  * floor 2's gate room. The rest are art preview harnesses.
@@ -603,9 +588,6 @@ export function devBootScene(
         };
       }
       if (preset.mongoOut === true) floorOptions.mongoWasOut = true;
-      if (preset.clubMember === true) {
-        floorOptions.clubMembership = { ...createClubMembership(), hasDesperadoPass: true };
-      }
       const defences = preset.briarHollowDefences;
       if (defences !== undefined) {
         const wallsFlag = params.get('walls');
@@ -630,13 +612,7 @@ export function devBootScene(
       if (preset.toolTiers !== undefined) {
         floorOptions.partyCrafts = { ...createPartyCraftsState(), tools: { ...preset.toolTiers } };
       }
-      if (preset.circusQuest !== undefined) {
-        const circus = createCircusQuestProgress();
-        circus.stage = preset.circusQuest.stage;
-        circus.heatherSlain = preset.circusQuest.heatherSlain;
-        floorOptions.circusQuestProgress = circus;
-        floorOptions.spawnAtCircus = true;
-      }
+      if (preset.spawnAtCircus === true) floorOptions.spawnAtCircus = true;
       if (boot.doomsdayStage !== undefined) {
         const doomsday = createDoomsdayProgress();
         doomsday.stage = boot.doomsdayStage;
@@ -660,18 +636,6 @@ export function devBootScene(
   if (levelId === null) return false;
 
   const floorOptions: DungeonSceneOptions = { ...options };
-  const questStage = params.get('quest');
-  if (questStage !== null && CIRCUS_STAGES.some((s) => s === questStage)) {
-    const progress = createCircusQuestProgress();
-    // The check above proves membership; find() re-derives the narrow type.
-    const stage = CIRCUS_STAGES.find((s) => s === questStage);
-    if (stage !== undefined) progress.stage = stage;
-    if (stage === 'heather_hunt' && params.get('heatherSlain') === '1') {
-      progress.heatherSlain = true;
-    }
-    floorOptions.circusQuestProgress = progress;
-  }
-
   if (params.get('spawn') === 'circus') floorOptions.spawnAtCircus = true;
 
   try {

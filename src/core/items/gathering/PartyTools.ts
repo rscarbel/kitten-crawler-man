@@ -21,17 +21,18 @@ export function createPartyToolsState(): PartyToolsState {
   return { axeTier: null, pickaxeTier: null };
 }
 
-function parseToolTierField(value: unknown): ToolTier | null {
-  return typeof value === 'number' && isToolTier(value) ? value : null;
+function parseToolTierField(value: unknown): ToolTier | null | undefined {
+  if (value === null) return null;
+  return typeof value === 'number' && isToolTier(value) ? value : undefined;
 }
 
-/** Strict, tolerant validator for a saved {@link PartyToolsState}. */
-export function parsePartyToolsState(value: unknown): PartyToolsState {
-  const state = createPartyToolsState();
-  if (!isRecord(value)) return state;
-  state.axeTier = parseToolTierField(value.axeTier);
-  state.pickaxeTier = parseToolTierField(value.pickaxeTier);
-  return state;
+/** A saved {@link PartyToolsState}, or undefined when either tier is not one this build has. */
+export function parsePartyToolsState(value: unknown): PartyToolsState | undefined {
+  if (!isRecord(value)) return undefined;
+  const axeTier = parseToolTierField(value.axeTier);
+  const pickaxeTier = parseToolTierField(value.pickaxeTier);
+  if (axeTier === undefined || pickaxeTier === undefined) return undefined;
+  return { axeTier, pickaxeTier };
 }
 
 /**

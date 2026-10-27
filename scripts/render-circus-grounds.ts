@@ -3,15 +3,12 @@
  * floor, at game scale (32 px a tile), through the game's real ground and
  * decoration renderers in the Y-sorted order `RenderPipeline` draws in.
  *
- * The human and the cat stand at the Big Top's door, a fat clown on the forecourt and
- * a stilt clown in the east field, so every tent and prop is judged against
- * the bodies that fight round it. The quest's own cast for the chosen stage
- * (Signet, and in the assault the first wave) is stood up by a real
- * `CircusQuestSystem` and drawn too.
+ * The human and the cat stand at the Starlight Tent's door, a fat clown on the forecourt and
+ * a tall clown in the east field, so every tent and prop is judged against
+ * bodies of the sizes that walk round it.
  *
  *   npm run render:circus-grounds
- *   npx tsx scripts/render-circus-grounds.ts --stage=assault
- *   npx tsx scripts/render-circus-grounds.ts --seeds=7919,15838 --stage=redeemed
+ *   npx tsx scripts/render-circus-grounds.ts --seeds=7919,15838
  *   npx tsx scripts/render-circus-grounds.ts --label=after
  *   npx tsx scripts/render-circus-grounds.ts --time=3.2   # the live ambience's clock, in seconds
  *   npx tsx scripts/render-circus-grounds.ts --sheet      # also lay each "before" beside this render
@@ -19,10 +16,10 @@
  * Seeds default to the first of a sweep that each reach the grounds from a
  * different heading, so every approach the road can take is looked at.
  *
- * Writes `preview/circus-grounds-<seed>-<stage>.png`. The first render of a
- * seed and stage is also kept as `preview/circus-grounds-before-<seed>-<stage>.png`
- * and never overwritten, so a later render can be laid beside it; `--label=`
- * writes `preview/circus-grounds-<label>-<seed>-<stage>.png` instead (and
+ * Writes `preview/circus-grounds-<seed>.png`. The first render of a seed is
+ * also kept as `preview/circus-grounds-before-<seed>.png` and never
+ * overwritten, so a later render can be laid beside it; `--label=` writes
+ * `preview/circus-grounds-<label>-<seed>.png` instead (and
  * `--label=before` replaces the kept copy on purpose).
  */
 
@@ -61,15 +58,12 @@ const { findNearbyWalkableTile } = await import('../src/map/findWalkableTile');
 const { HumanPlayer } = await import('../src/creatures/HumanPlayer');
 const { CatPlayer } = await import('../src/creatures/CatPlayer');
 const { FatClown } = await import('../src/creatures/FatClown');
-const { StiltClown } = await import('../src/creatures/StiltClown');
-const { buildCircusSite, buildQuestRig, approachHeading } =
-  await import('./verifyCircusGrounds/site.js');
+const { TallClown } = await import('../src/creatures/TallClown');
+const { buildCircusSite, approachHeading } = await import('./verifyCircusGrounds/site.js');
 const { CircusGroundsAmbience } = await import('../src/systems/circus/CircusGroundsAmbience');
 const { HighStrikerSystem } = await import('../src/systems/circus/HighStrikerSystem');
-const { isCircusResolvedStage } = await import('../src/core/quests/CircusQuestProgress');
 
 type CircusSite = Exclude<ReturnType<typeof buildCircusSite>, string>;
-type CircusQuestStage = Parameters<typeof buildQuestRig>[1];
 
 const SEED_STRIDE = 7919;
 /** Seeds swept for distinct approach headings when none are given. */
@@ -84,22 +78,11 @@ const TITLE_X = 12;
 const TITLE_Y = 10;
 const BEFORE_LABEL = 'before';
 
-const STAGES = {
-  'pre-quest': 'not_started',
-  assault: 'assault',
-  redeemed: 'grimaldi_redeemed',
-} as const satisfies Readonly<Record<string, CircusQuestStage>>;
-type StageName = keyof typeof STAGES;
-
-function isStageName(value: string): value is StageName {
-  return Object.keys(STAGES).some((name) => name === value);
-}
-
 /** Where the scale figures stand, as offsets: the door's for the crawlers, the centre's for the clowns. */
 const CAT_BESIDE_HUMAN_TILES = 1;
 const CRAWLER_ROWS_SOUTH_OF_DOOR = 2;
 const FAT_CLOWN_OFFSET = { x: -2, y: 2 } as const;
-const STILT_CLOWN_OFFSET = { x: 9, y: 1 } as const;
+const TALL_CLOWN_OFFSET = { x: 9, y: 1 } as const;
 /** How far a scale figure may be moved to find ground it can stand on. */
 const FIGURE_SEARCH_RADIUS_TILES = 3;
 
@@ -108,12 +91,6 @@ function stringArg(name: string): string | undefined {
   return raw === undefined ? undefined : raw.slice(`--${name}=`.length);
 }
 
-const stageArg = stringArg('stage') ?? 'pre-quest';
-if (!isStageName(stageArg)) {
-  console.error(`unknown --stage=${stageArg}; one of ${Object.keys(STAGES).join(', ')}`);
-  process.exit(2);
-}
-const stageName: StageName = stageArg;
 const label = stringArg('label');
 /**
  * The ambience's clock at the moment rendered, in seconds. The default
@@ -171,9 +148,9 @@ function standingTile(site: CircusSite, x: number, y: number): { x: number; y: n
   return findNearbyWalkableTile(site.map, x, y, FIGURE_SEARCH_RADIUS_TILES) ?? { x, y };
 }
 
-/** The human, the cat, a fat clown and a stilt clown, stood on open ground for scale. */
+/** The human, the cat, a fat clown and a tall clown, stood on open ground for scale. */
 function scaleFigures(site: CircusSite): Figure[] {
-  const door = site.bigTop.doorTile;
+  const door = site.starlightTent.doorTile;
   const humanTile = standingTile(site, door.x, door.y + CRAWLER_ROWS_SOUTH_OF_DOOR);
   const catTile = standingTile(site, humanTile.x + CAT_BESIDE_HUMAN_TILES, humanTile.y);
   const fatTile = standingTile(
@@ -181,23 +158,17 @@ function scaleFigures(site: CircusSite): Figure[] {
     site.centre.x + FAT_CLOWN_OFFSET.x,
     site.centre.y + FAT_CLOWN_OFFSET.y,
   );
-  const stiltTile = standingTile(
+  const tallClownTile = standingTile(
     site,
-    site.centre.x + STILT_CLOWN_OFFSET.x,
-    site.centre.y + STILT_CLOWN_OFFSET.y,
+    site.centre.x + TALL_CLOWN_OFFSET.x,
+    site.centre.y + TALL_CLOWN_OFFSET.y,
   );
   const human = new HumanPlayer(humanTile.x, humanTile.y, TILE_SIZE);
   const cat = new CatPlayer(catTile.x, catTile.y, TILE_SIZE);
   const fat = new FatClown(fatTile.x, fatTile.y, TILE_SIZE);
-  const stilt = new StiltClown(stiltTile.x, stiltTile.y, TILE_SIZE);
-  for (const figure of [cat, fat, stilt]) figure.setMap(site.map);
-  return [human, cat, fat, stilt];
-}
-
-/** The stage's own cast — Signet, and the first wave in the assault — as the quest stands it up. */
-function stageCast(site: CircusSite, stage: CircusQuestStage): Figure[] {
-  const rig = buildQuestRig(site, stage, site.centre);
-  return rig.roster.mobs.filter((mob) => mob.isAlive);
+  const tall = new TallClown(tallClownTile.x, tallClownTile.y, TILE_SIZE);
+  for (const figure of [cat, fat, tall]) figure.setMap(site.map);
+  return [human, cat, fat, tall];
 }
 
 interface SortedDraw {
@@ -205,7 +176,7 @@ interface SortedDraw {
   readonly draw: () => void;
 }
 
-function renderSite(site: CircusSite, stage: CircusQuestStage): Canvas {
+function renderSite(site: CircusSite): Canvas {
   const reach = site.radiusTiles + FRAME_MARGIN_TILES;
   const viewTiles = reach * 2 + 1;
   const camX = (site.centre.x - reach) * TILE_SIZE;
@@ -217,7 +188,7 @@ function renderSite(site: CircusSite, stage: CircusQuestStage): Canvas {
   const ctx = asGameContext(nodeCtx);
 
   const ambience = new CircusGroundsAmbience();
-  ambience.update(site.map, ambienceSeconds, isCircusResolvedStage(stage));
+  ambience.update(site.map, ambienceSeconds);
   renderCanvas(ctx, site.map.structure, TILE_SIZE, camX, camY, viewPx, viewPx);
   ambience.renderGround(ctx, camX, camY);
 
@@ -233,7 +204,7 @@ function renderSite(site: CircusSite, stage: CircusQuestStage): Canvas {
       draw: () => site.map.drawDecorationAt(ctx, tx, ty, camX, camY),
     });
   }
-  for (const figure of [...scaleFigures(site), ...stageCast(site, stage)]) {
+  for (const figure of scaleFigures(site)) {
     draws.push({
       sortY: figure.y + TILE_SIZE,
       draw: () => figure.render(ctx, camX, camY, TILE_SIZE),
@@ -252,7 +223,7 @@ function renderSite(site: CircusSite, stage: CircusQuestStage): Canvas {
   for (const item of draws) item.draw();
   ambience.renderAbove(ctx, camX, camY);
 
-  worldText(ctx, `seed ${site.seed} — road from the ${approachHeading(site)} — ${stageName}`, {
+  worldText(ctx, `seed ${site.seed} — road from the ${approachHeading(site)}`, {
     style: 'label',
     x: TITLE_X,
     y: TITLE_Y,
@@ -264,19 +235,15 @@ function renderSite(site: CircusSite, stage: CircusQuestStage): Canvas {
 /** Every seed rendered this run whose "before" was already kept, so the sheet never pairs a render with itself. */
 const rendered: Array<{ seed: number; before: string; after: string }> = [];
 for (const site of requestedSites()) {
-  const stage = STAGES[stageName];
-  const png = renderSite(site, stage).toBuffer('image/png');
+  const png = renderSite(site).toBuffer('image/png');
   const tag = label === undefined ? '' : `${label}-`;
-  const written = writePreviewPng(
-    `${PREVIEW_DIR}/circus-grounds-${tag}${site.seed}-${stageName}.png`,
-    png,
-  );
+  const written = writePreviewPng(`${PREVIEW_DIR}/circus-grounds-${tag}${site.seed}.png`, png);
   console.log(`${written}: road from the ${approachHeading(site)}`);
-  const keptBefore = `${PREVIEW_DIR}/circus-grounds-${BEFORE_LABEL}-${site.seed}-${stageName}.png`;
+  const keptBefore = `${PREVIEW_DIR}/circus-grounds-${BEFORE_LABEL}-${site.seed}.png`;
   if (existsSync(keptBefore))
     rendered.push({ seed: site.seed, before: keptBefore, after: written });
   if (label !== undefined) continue;
-  const beforePath = `${PREVIEW_DIR}/circus-grounds-${BEFORE_LABEL}-${site.seed}-${stageName}.png`;
+  const beforePath = `${PREVIEW_DIR}/circus-grounds-${BEFORE_LABEL}-${site.seed}.png`;
   if (!existsSync(beforePath)) {
     copyFileSync(written, beforePath);
     console.log(`  kept as ${beforePath}`);

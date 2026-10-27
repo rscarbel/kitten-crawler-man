@@ -8,7 +8,6 @@
  * - The arena's healer only arrives as the door locks on the Ball of Swine, a
  *   whole entry window after a crawler walks in, inside the ring; the ring
  *   holds it in every frame, and a respawn's re-lock never brings a second.
- * - Terror the Clown's healer only arrives with the finale wave he leads.
  * - While a bound healer lives, a boss room whose boss has fallen stays locked
  *   and unwon, and the arena's stairwell stays shut after the last Tuskling;
  *   both resolve once the healer dies.
@@ -29,8 +28,6 @@ import { SpatialGrid } from '../../src/core/world/SpatialGrid';
 import { EventBus } from '../../src/core/EventBus';
 import { settings } from '../../src/core/input/Settings';
 import { DIFFICULTY_PROFILES, type Difficulty } from '../../src/core/difficulty/difficultyProfiles';
-import { createCircusQuestProgress } from '../../src/core/quests/CircusQuestProgress';
-import { createAnchorQuestProgress } from '../../src/core/quests/AnchorQuestProgress';
 import { createMurderQuestProgress } from '../../src/core/quests/MurderQuestProgress';
 import { createDoomsdayProgress } from '../../src/core/quests/DoomsdayProgress';
 import { withWorldSeed } from '../../src/core/world/WorldRandom';
@@ -43,17 +40,13 @@ import type { Mob } from '../../src/creatures/Mob';
 import { BallOfSwine } from '../../src/creatures/BallOfSwine';
 import { Tuskling } from '../../src/creatures/Tuskling';
 import { GrotesqueSpider } from '../../src/creatures/GrotesqueSpider';
-import { HeatherTheBear } from '../../src/creatures/HeatherTheBear';
-import { TerrorTheClown } from '../../src/creatures/TerrorTheClown';
 import { MissQuill } from '../../src/creatures/MissQuill';
 import { TheLich } from '../../src/creatures/TheLich';
-import { Signet } from '../../src/creatures/Signet';
 import { HealingFairy } from '../../src/creatures/fairies/HealingFairy';
 import { bossOfHealer } from '../../src/creatures/fairies/bossHealerBond';
 import { dungeonOptionsForLevel } from '../../src/levels/dungeonOptions';
 import { level1 } from '../../src/levels/level1';
 import { level2 } from '../../src/levels/level2';
-import { level3 } from '../../src/levels/level3';
 import type { LevelDef } from '../../src/levels/types';
 import { partyLevelOf, spawnExtraMobs, spawnForLevel } from '../../src/levels/spawner';
 import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
@@ -67,7 +60,6 @@ import {
 } from '../../src/levels/fairySpawner';
 import { ArenaSystem } from '../../src/systems/ArenaSystem';
 import { BossRoomSystem, type BossRoomMiniMap } from '../../src/systems/BossRoomSystem';
-import { CircusQuestSystem } from '../../src/systems/CircusQuestSystem';
 import { QuillConfrontationSystem } from '../../src/systems/QuillConfrontationSystem';
 import { SpiderQuestSystem } from '../../src/systems/SpiderQuestSystem';
 import { SpellSystem } from '../../src/systems/SpellSystem';
@@ -98,10 +90,6 @@ const ARENA_IDLE_FRAMES = 60;
  * spawned on the cutscene's camera pan, which lands well inside this.
  */
 const SPIDER_CUTSCENE_FRAMES = 400;
-/** Update passes the circus assault gets per wave; each wave is cleared by hand between them. */
-const ASSAULT_WAVE_BUDGET = 10;
-/** Frames the circus runs after a wave is cleared, for it to send in the next. */
-const ASSAULT_FRAMES_PER_WAVE = 3;
 /** More than any blow in play, so a struck wave mob is dead in one. */
 const OVERKILL_DAMAGE = 1e6;
 /** Offset a healer is dropped at when a spawn path is broken to skip the bond. */
@@ -593,86 +581,6 @@ function spiderSighting(difficulty: Difficulty, seed: number): BossSighting {
   });
 }
 
-// ── The circus: Heather on her hunt, Terror with the assault's last wave ──
-
-function buildOverworld(seed: number): GameMap {
-  return withWorldSeed(
-    seed,
-    () => new GameMap({ mapSize: level3.mapSize, tileHeight: TILE_SIZE, mapType: 'overworld' }),
-  );
-}
-
-function heatherSighting(difficulty: Difficulty, seed: number): BossSighting {
-  return underDifficulty(difficulty, seed, () => {
-    const map = buildOverworld(seed);
-    const roster = new MobRoster(map, new SpellSystem());
-    const progress = createCircusQuestProgress();
-    progress.stage = 'heather_hunt';
-    const party = partyAt(map.startTile.x, map.startTile.y, FLOOR3_PARTY_LEVEL);
-    new CircusQuestSystem(
-      map,
-      new EventBus(),
-      (mob) => roster.add(mob),
-      null,
-      progress,
-      null,
-      party.human,
-      new Conversation(null),
-      { anchor: createAnchorQuestProgress() },
-    );
-    return {
-      name: 'heather_the_bear',
-      boss: roster.mobs.find((mob) => mob instanceof HeatherTheBear) ?? null,
-      healers: healersIn(roster.mobs),
-    };
-  });
-}
-
-interface AssaultRun {
-  /** Healers present at any point before Terror's wave came in. */
-  readonly healersBeforeFinale: number;
-  readonly finale: BossSighting;
-}
-
-function assaultRun(difficulty: Difficulty, seed: number): AssaultRun {
-  return underDifficulty(difficulty, seed, () => {
-    const map = buildOverworld(seed);
-    const roster = new MobRoster(map, new SpellSystem());
-    const progress = createCircusQuestProgress();
-    progress.stage = 'assault';
-    const circus = map.circusCentre ?? map.startTile;
-    const party = partyAt(circus.x, circus.y, FLOOR3_PARTY_LEVEL);
-    const quest = new CircusQuestSystem(
-      map,
-      new EventBus(),
-      (mob) => roster.add(mob),
-      null,
-      progress,
-      null,
-      party.human,
-      new Conversation(null),
-      { anchor: createAnchorQuestProgress() },
-    );
-    const ctx = contextFor(party, roster, map);
-    const terror = (): Mob | null =>
-      roster.mobs.find((mob) => mob instanceof TerrorTheClown) ?? null;
-    let healersBeforeFinale = 0;
-    for (let wave = 0; wave < ASSAULT_WAVE_BUDGET && terror() === null; wave++) {
-      healersBeforeFinale = Math.max(healersBeforeFinale, healersIn(roster.mobs).length);
-      for (const mob of roster.mobs) {
-        if (!mob.isAlive || !mob.isHostile) continue;
-        if (mob instanceof Signet || mob instanceof HealingFairy) continue;
-        mob.takeDamageFrom(OVERKILL_DAMAGE, party.human);
-      }
-      for (let frame = 0; frame < ASSAULT_FRAMES_PER_WAVE; frame++) quest.update(ctx);
-    }
-    return {
-      healersBeforeFinale,
-      finale: { name: 'terror_the_clown', boss: terror(), healers: healersIn(roster.mobs) },
-    };
-  });
-}
-
 // ── The tower: Miss Quill's fight, then the Lich's ──
 
 function towerSighting(
@@ -724,8 +632,6 @@ function collectSightings(): SightingsByDifficulty {
       ...floorBossSightings(level2, difficulty, FLOOR2_PARTY_LEVEL, seed),
       arenaRun(difficulty, seed).afterSeal,
       spiderSighting(difficulty, seed),
-      heatherSighting(difficulty, seed),
-      assaultRun(difficulty, seed).finale,
       towerSighting(difficulty, seed, 'confrontation'),
       towerSighting(difficulty, seed, 'quill_slain'),
     ]);
@@ -1578,14 +1484,6 @@ function checkHealerStaysInFight(report: FairyGateReport, seed: number): void {
   }
 }
 
-function checkTerrorWave(report: FairyGateReport, seed: number): void {
-  const run = assaultRun(HEALER_DIFFICULTY, seed);
-  report.check(
-    run.finale.boss !== null && run.healersBeforeFinale === 0,
-    "hard: no healer joins the circus assault before Terror's own wave",
-  );
-}
-
 export function verifyBossHealers(report: FairyGateReport): void {
   report.section('Boss healers: one per boss fight on hard, none otherwise');
   const sightings = collectSightings();
@@ -1599,5 +1497,4 @@ export function verifyBossHealers(report: FairyGateReport): void {
   checkArenaSeal(report, BOSS_HEALER_SEED);
   checkBossRoomSeals(report, BOSS_HEALER_SEED);
   checkHealerStaysInFight(report, BOSS_HEALER_SEED);
-  checkTerrorWave(report, BOSS_HEALER_SEED);
 }

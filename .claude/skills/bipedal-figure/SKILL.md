@@ -115,8 +115,8 @@ built **on his rig** rather than on a rig of their own. They pose with his chore
   palette. The rig holds no look of its own, so looks bake side by side. Give each look
   its own `id`: figure ids are `human:<lookId>[:outfit][:holding-…]`
   (`humanFigureId`, `human/appearance.ts`) and the frame cache keys cells on them.
-  G5 of `scripts/gates-gumgum.ts` (run by `npm run render:gumgum`) byte-diffs the player's
-  cell around a GumGum bake to prove looks stay apart.
+  G5 of `scripts/gates-baggi.ts` (run by `npm run render:baggi`) byte-diffs the player's
+  cell around a Baggi bake to prove looks stay apart.
 - **Anatomy past the rig is an attachment.** `BipedAttachments` (`biped/figure.ts`), passed
   as `BipedComposeOptions.attachments`, has three optional painters:
   - `behind`: the rearmost slab, under every limb (wings, a tail).
@@ -457,7 +457,7 @@ Three more that are not about vacuity but bite the same way:
   a per-instance colour serves the first instance's clothes to every creature
   after it. "Some females pierce their tusks" painted into the Tuskling turns a
   personal choice into a species marking. Where the variation is a _closed set_,
-  give each variant its own `FigureId` (the sky fowl's eight clothing palettes);
+  give each variant its own `FigureId` (the Hawkfolk's eight clothing palettes);
   otherwise it gets cut.
 - **A big figure exceeding the per-figure cache ceiling with _every_ row warm is
   expected, not a failure.** Rows release when they stop being played, so the

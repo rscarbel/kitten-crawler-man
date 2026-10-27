@@ -1248,8 +1248,8 @@ const SUIT_LANTERN_MIN = 0.25;
 const SUIT_LANTERN_RADIUS_TILES = 0.24;
 
 /**
- * Four card-suit lamps pulsing in sequence — the closest thing the Over City has
- * to neon, and the reason the Desperado reads as the loudest thing in the Low
+ * Four card-suit lamps pulsing in sequence — the closest thing Taloncrest has
+ * to neon, and the reason the Cloak & Dagger reads as the loudest thing in the Low
  * Quarter from three streets away.
  */
 function paintSuitLanterns(
@@ -1306,14 +1306,14 @@ function paintBeadCurtainSway(
   }
 }
 
-// ── Roost ledges: a skyfowl citizen perched on the roofline ─────────────────
+// ── Roost ledges: a Hawkfolk citizen perched on the roofline ─────────────────
 
 /**
- * The idle bird occupying a skyfowl-run building's roost ledge.
+ * The idle bird occupying a Hawkfolk-run building's roost ledge.
  *
  * Painted here rather than as a static facade decal because a baked silhouette
  * would compete pixel-for-pixel with the citizen figure cache for the same
- * shape once the skyfowl cast exists — this is deliberately a `life` effect,
+ * shape once the Hawkfolk cast exists — this is deliberately a `life` effect,
  * not geometry, so the roost reads as *occupied* rather than decorated. The
  * shape is a legible painted silhouette (head, foreshortened beak, a folded
  * wing with feather-tip notches, two digitigrade legs) rather than a stand-in

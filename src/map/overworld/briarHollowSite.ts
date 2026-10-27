@@ -302,15 +302,6 @@ export const SEGMENT_TILES = 12;
 export const SEGMENT_MIN_TILES = SEGMENT_TILES - 1;
 export const SEGMENT_MAX_TILES = SEGMENT_TILES + 1;
 
-/**
- * Bumped whenever `segmentLengths` cuts the ring differently — a segment id is
- * only its index, so a saved wall record keyed under the old cut names a
- * different, wrongly-sized run under the new one. `briarHollowState` reads
- * this to drop stale wall records from an older save rather than misapply
- * them to the wrong stretch of wall.
- */
-export const PALISADE_SEGMENT_SCHEME_VERSION = 4;
-
 // ── Geometry helpers ──────────────────────────────────────────────────────────
 
 function shiftPoint(origin: TilePoint, point: TilePoint): TilePoint {

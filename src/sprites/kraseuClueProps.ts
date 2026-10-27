@@ -4,9 +4,9 @@
  *
  * - The well: talon gouges in the rim, a drag mark hauled away from it, and a
  *   white stub of schoolroom chalk crushed into a patch of mud.
- * - Old Hilda's cottage: claw furrows raked through the paving, a pool, a torn
+ * - Old Lori's cottage: claw furrows raked through the paving, a pool, a torn
  *   plum shawl with its fringe, and the unsigned note.
- * - The tower plaza: a ring of moulted skyfowl feathers burst open, the
+ * - The tower plaza: a ring of moulted Hawkfolk feathers burst open, the
  *   shrine's beeswax candles toppled in it, and blood thrown up the tower.
  *
  * Every scene is drawn in tile units from the clue tile's centre and reaches
@@ -357,7 +357,7 @@ export function drawWellClueProp(
   ctx.restore();
 }
 
-// ── Old Hilda's cottage ─────────────────────────────────────────────────────
+// ── Old Lori's cottage ──────────────────────────────────────────────────────
 
 /**
  * The cottage lies north of this prop — the clue tile stands clear of its
@@ -624,7 +624,7 @@ const FEATHER_HALF_WIDTH_RATIO = 0.3;
 const FEATHER_WIDEST_ALONG_SHAFT = 0.55;
 /** The bare quill showing below the vane. */
 const FEATHER_QUILL_FRACTION = 0.18;
-/** A dark barred tip — a skyfowl flight feather's marking, and its most legible part. */
+/** A dark barred tip — a Hawkfolk flight feather's marking, and its most legible part. */
 const FEATHER_TIP_FRACTION = 0.16;
 const FEATHER_SHAFT_WIDTH = 0.018;
 /** The trailing vane is narrower than the leading one, as on a real flight feather. */

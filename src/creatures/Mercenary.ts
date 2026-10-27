@@ -1,11 +1,11 @@
 import { Mob } from './Mob';
 import type { EyePlacement } from '../sprites/eyePlacement';
 import type { LootDrop, PlayerDamageType } from './Mob';
-import type { DamageSource, Player } from '../Player';
+import type { DamageOptions, DamageSource, Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
 import { normalize } from '../utils';
 import type { GolemRockThrow } from '../systems/RockThrowSystem';
-import type { HirelingShot } from '../systems/HirelingBoltSystem';
+import type { HirelingShot } from '../systems/HirelingShotSystem';
 import {
   getMercenaryTemplate,
   type MercenaryTemplateId,
@@ -31,12 +31,13 @@ import {
   HirelingSurvival,
   type HirelingHeal,
 } from './mercenaries/hirelingSurvival';
-import { drawTriageSparkleSprite } from '../sprites/crocodilianSprite';
+import { drawHealSparkleSprite } from '../sprites/healSparkleSprite';
+import { MERCENARY_ARMBAND } from '../sprites/mercenaryArmband';
 import { HIRELING_STUCK_MIN_STEP_PX } from './mercenaries/hirelingCatchUp';
 import { TargetHoldOffs, type HoldOffQuery } from './targetHoldOffs';
 
 /**
- * A mercenary hired at the Desperado Club's "Meat Shields" desk — a friendly
+ * A mercenary hired at The Barracks Mercenaries' desk — a friendly
  * `Mob` that follows the active player and fights nearby hostiles, never the
  * players.
  *
@@ -80,8 +81,11 @@ const CORPSE_FADE_FRAMES = 90;
 const SPEECH_FRAMES_PER_CHARACTER = 4;
 const MAX_SPEECH_FRAMES = 420;
 
-/** The orange of the `MEAT SHIELDS` desk, so every hireling's bubble reads as one brand. */
-const MERCENARY_SPEECH_STYLE: TimedBubbleStyle = { border: '#e06040', text: '#ffe8dc' };
+/** The hires' armband orange, so every hireling's bubble reads as one brand. */
+const MERCENARY_SPEECH_STYLE: TimedBubbleStyle = {
+  border: MERCENARY_ARMBAND.base,
+  text: '#ffe8dc',
+};
 
 const NO_THROWS: readonly GolemRockThrow[] = [];
 const NO_SHOTS: readonly HirelingShot[] = [];
@@ -232,7 +236,7 @@ export class Mercenary extends Mob {
    * every frame. A merc that dies mid-throw must not take the boulder with it.
    */
   private pendingThrows: GolemRockThrow[] = [];
-  /** Bolts and waves not yet handed to `HirelingBoltSystem`, for the same reason. */
+  /** Arrows not yet handed to `HirelingShotSystem`, for the same reason. */
   private pendingShots: HirelingShot[] = [];
 
   constructor(
@@ -255,7 +259,7 @@ export class Mercenary extends Mob {
     this.kitContext = new ShellKitContext(this);
     this.audioTag = template.audioTag;
     this.displayName = name;
-    this.description = `A Meat Shields ${template.role.toLowerCase()}. Contract runs to the end of the floor.`;
+    this.description = `A Barracks mercenary, ${template.role.toLowerCase()}. Contract runs to the end of the floor.`;
     this.aggroRangePx = tileSize * this.kit.engageRadiusTiles;
     this.strikeRangePx = tileSize * this.kit.strikeRangeTiles;
     this.leashPx = tileSize * this.kit.leashRadiusTiles;
@@ -285,7 +289,7 @@ export class Mercenary extends Mob {
     return throws;
   }
 
-  /** Hands over every bolt and wave loosed since the last call; `HirelingBoltSystem` drains it. */
+  /** Hands over every arrow loosed since the last call; `HirelingShotSystem` drains it. */
   takePendingHirelingShots(): readonly HirelingShot[] {
     if (this.pendingShots.length === 0) return NO_SHOTS;
     const shots = this.pendingShots;
@@ -322,10 +326,10 @@ export class Mercenary extends Mob {
    * `DamageLedger` for why both — and neither lets anything through to a
    * body that is down: it is waiting for a revive, not being finished off.
    */
-  override takeDamage(amount: number, source?: DamageSource): boolean {
+  override takeDamage(amount: number, source?: DamageSource, options?: DamageOptions): boolean {
     if (this.survival.downed) return false;
     const isStatusTick = source?.kind === 'status';
-    return super.takeDamage(this.survival.soften(amount, isStatusTick), source);
+    return super.takeDamage(this.survival.soften(amount, isStatusTick), source, options);
   }
 
   override takeDamageFrom(
@@ -440,7 +444,7 @@ export class Mercenary extends Mob {
     this.followTargetAStar(x, y, this.speed, stopPx);
   }
 
-  /** Steps by a raw offset, respecting walls — for kits that move off the path, like a charge. */
+  /** Steps by a raw offset, respecting walls — for kits that move off the path, like a flee or a step back. */
   stepBy(dx: number, dy: number): void {
     this.moveWithCollision(dx, dy);
   }
@@ -480,7 +484,6 @@ export class Mercenary extends Mob {
     // the grunt for a special and the groan for a damage cue.
     if (utterance.grunt === 'grunt') this.specialSoundPending = true;
     if (utterance.grunt === 'frustrated') this.damageSoundPending = true;
-    this.kit.onBark?.(this.kitContext, trigger);
     return true;
   }
 
@@ -494,7 +497,7 @@ export class Mercenary extends Mob {
    * Called by `MercenarySystem` the frame HP reaches zero. Last words, and the
    * attack in progress is dropped.
    *
-   * Only the kit's swing is cancelled. A bolt or boulder already released this
+   * Only the kit's swing is cancelled. An arrow or boulder already released this
    * frame is still in the outbox, and the projectile systems drain it after
    * death interception runs, so wiping the outbox here would delete a shot the
    * player watched leave. `clearAirborneAttacks` stays the full wipe for a
@@ -619,13 +622,11 @@ export class Mercenary extends Mob {
     this.reactToWounds();
     this.checkLowHp();
     this.kit.tick(ctx);
-    // Marked ground outranks even a committed swing: a salute, a dance or a
-    // triage channel is a long time to stand under a falling ball. The kit's
-    // action is held, not dropped — its timers wait out the flee and it
-    // resumes where it stood, and a strike that has stepped out of reach misses
-    // as it would against a target that walked away. A charge needs no
-    // exemption: marked ground refuses its step like a wall, and a charge that
-    // meets a wall ends.
+    // Marked ground outranks even a committed swing: a shield cast or a mend
+    // channel is a long time to stand under a falling ball. The kit's action
+    // is held, not dropped — its timers wait out the flee and it resumes where
+    // it stood, and a strike that has stepped out of reach misses as it would
+    // against a target that walked away.
     if (this.stepOffMarkedGround(this.speed)) return;
     // A committed swing owns the frame it is playing on: the hireling finishes
     // what it started before it looks for anything else.
@@ -1013,7 +1014,7 @@ export class Mercenary extends Mob {
     this.renderHealFlash(ctx, sx, sy, tileSize);
   }
 
-  /** The medic's triage sparkle, which is what a heal looks like on anyone in the party. */
+  /** The heal sparkle, which is what a heal looks like on anyone in the party. */
   private renderHealFlash(
     ctx: CanvasRenderingContext2D,
     sx: number,
@@ -1023,6 +1024,6 @@ export class Mercenary extends Mob {
     const framesLeft = this.survival.healFlashFrames;
     if (framesLeft <= 0) return;
     const progress = 1 - framesLeft / HIRELING_HEAL_FLASH_FRAMES;
-    drawTriageSparkleSprite(ctx, sx, sy, tileSize, progress);
+    drawHealSparkleSprite(ctx, sx, sy, tileSize, progress);
   }
 }

@@ -9,8 +9,8 @@ import {
   MAZE_PILLAR_CHAR,
   MAZE_POLE_CHAR,
   MAZE_WALL_CHAR,
-  type BigTopMazePlan,
-} from './bigTopMazeLayout';
+  type StarlightTentMazePlan,
+} from './starlightTentMazeLayout';
 import {
   BONE_PILE,
   SLUMPED_SKELETON,
@@ -32,7 +32,6 @@ import {
   BOOKSHELF,
   CRAWLER_SIGN,
   BED,
-  FIREPLACE,
   BARREL,
   RUG,
   CHAIR,
@@ -43,10 +42,8 @@ import {
   SPRITE_BUILDING,
   MODERN_DECORATION,
   SAWDUST_FLOOR,
-  CIRCUS_RING_EDGE,
   TENT_POLE,
   RIVER_REEDS,
-  BLEACHER,
   CLUB_FLOOR,
   DANCE_FLOOR,
   placeProp,
@@ -145,13 +142,14 @@ import type { CampSite } from './overworld/camps';
 import type { BriarHollowSite, VillageDistrictId } from './overworld/briarHollowSite';
 import { rectContains } from './overworld/briarHollowSite';
 import type { CircusGroundsSite } from './overworld/circusGroundsLayout';
+import { NO_SPAWN_TERRAIN, type HallwaySpawnPoint } from './overworld/spawnTerrain';
 import { registerBriarHollowSite } from './tiles/hollowSiteRegistry';
 import { registerCircusGroundsSite } from './tiles/circusSiteRegistry';
 import { registerOverworldTerrain } from './tiles/overworldTerrainRegistry';
 import { hollowPropDrawsAt } from './tiles/hollowVillageTiles';
 import { circusStructureDrawsAt } from './tiles/circusStructureTiles';
 import { tentPoleDrawsAt } from './tiles/tentPoleTiles';
-import type { BuildingKind, TownPlan } from './town/townPlan';
+import { CLOAK_AND_DAGGER_NAME, type BuildingKind, type TownPlan } from './town/townPlan';
 import {
   NAMED_INTERIOR_LAYOUTS,
   buildGeneralStoreLayout,
@@ -162,13 +160,17 @@ import {
   BARRACKS_INTERIOR_W,
   BARRACKS_INTERIOR_H,
 } from './town/interiors/index';
-import { stableInteriorPropId, type TownInteriorLayoutEntry } from './town/interiors/types';
+import {
+  prop as townInteriorProp,
+  stableInteriorPropId,
+  type TownInteriorLayoutEntry,
+} from './town/interiors/types';
 import {
   buildTownCenterTowerLayout,
   type TowerStairOrigins,
 } from './town/interiors/townCenterTower';
 import { setTownInteriorWallMaterial } from './town/interiorWallMaterial';
-import { setBigTopDecorLayout } from './bigTopMazeDecor';
+import { setStarlightTentDecorPlan } from './starlightTentMazeDecor';
 import {
   PRISON_TILE,
   prisonTileAt,
@@ -203,8 +205,6 @@ const DEFAULT_TILE_HEIGHT = 10;
 const DEFAULT_BOSS_ROOM_COUNT = 1;
 /** An entity's pixel position is its top-left corner; this offset reaches its centre. */
 const ENTITY_TILE_CENTER_OFFSET = 0.5;
-/** From a tile's top-left corner to its centre, in tiles. */
-const TILE_CENTRE_OFFSET = 0.5;
 
 // ── Interior building dimensions (width × height in tiles) ────────────────────
 export const TOWER_INTERIOR_W = 20;
@@ -222,15 +222,15 @@ const HOUSE_INTERIOR_H = 14;
 /**
  * Which shape an interior is built in.
  *
- * Only the Big Top has more than one, and only for the length of the circus
+ * Only the Starlight Tent has more than one, and only for the length of the circus
  * questline's final act — every other room is `'default'` forever.
  */
 export type InteriorVariant =
   | 'default'
   | {
-      readonly kind: 'bigtop_maze';
+      readonly kind: 'starlight_tent_maze';
       /** The tent as dealt to this world and difficulty: its board written into the floor plan. */
-      readonly plan: BigTopMazePlan;
+      readonly plan: StarlightTentMazePlan;
     }
   | {
       readonly kind: 'goblin_prison';
@@ -273,22 +273,10 @@ function mazeTileTypeFor(legend: string): number {
       // Gates, barricades, curtains, exit doors, the grates the counterweights
       // hang behind, the hall's lights, its stars and the windows in its
       // dividing wall. All of them start as wall; only a gate, a curtain or a
-      // door ever stops being one, and `BigTopMazeSystem` is what opens it.
+      // door ever stops being one, and `StarlightTentMazeSystem` is what opens it.
       return INTERIOR_WALL;
   }
 }
-
-/** The big top interior is a boss arena — much larger than any other interior. */
-const BIGTOP_INTERIOR_W = 34;
-const BIGTOP_INTERIOR_H = 26;
-
-// ── Big top interior layout ───────────────────────────────────────────────────
-/** Radius of the painted performance ring, in tiles. */
-const BIGTOP_RING_RADIUS = 8;
-/** The ring centre sits this many rows above the map centre, leaving an entrance apron. */
-const BIGTOP_RING_NORTH_SHIFT = 2;
-/** Rows of bleacher benches hugging the north/west/east walls. */
-const BIGTOP_BLEACHER_DEPTH = 2;
 
 // ── Tile types used in interior generation ────────────────────────────────────
 //
@@ -364,7 +352,7 @@ const INTERIOR_BY_NAME: ReadonlyMap<string, InteriorShell> = new Map([
   ['Herb & Remedy', { w: 16, h: 14, floorType: INTERIOR_BOARD_FLOOR }],
   // One small room: a ten-tile floor keeps her furniture crowded in clusters
   // against the walls instead of spread thin across a hall.
-  ["Old Hilda's Cottage", { w: 12, h: 12, floorType: INTERIOR_BOARD_FLOOR }],
+  ["Old Lori's Cottage", { w: 12, h: 12, floorType: INTERIOR_BOARD_FLOOR }],
   // Board, not earth: a wheelwright's own floor is swept clean of shavings
   // by daylight, not left as bare dirt. Sized to the pieces the trade needs —
   // any wider and the wagon, the stand and the bench float in open floor.
@@ -377,8 +365,7 @@ const INTERIOR_BY_NAME: ReadonlyMap<string, InteriorShell> = new Map([
   // still wide enough for the cult-hideout fight around the room's centre.
   ['Blackwood Lodge', { w: 16, h: 14, floorType: INTERIOR_BOARD_FLOOR }],
   ['General Store', { w: STORE_INTERIOR_W, h: STORE_INTERIOR_H, floorType: INTERIOR_BOARD_FLOOR }],
-  ['The Desperado Club', { w: CLUB_INTERIOR_W, h: CLUB_INTERIOR_H, floorType: CLUB_FLOOR }],
-  ['Big Top', { w: BIGTOP_INTERIOR_W, h: BIGTOP_INTERIOR_H, floorType: SAWDUST_FLOOR }],
+  [CLOAK_AND_DAGGER_NAME, { w: CLUB_INTERIOR_W, h: CLUB_INTERIOR_H, floorType: CLUB_FLOOR }],
 ] satisfies ReadonlyArray<[string, InteriorShell]>);
 
 /**
@@ -490,7 +477,7 @@ const DECORATION_OVERLAY_TYPES: ReadonlySet<number> = new Set([
   // The circus grounds' tents, pavilions and arch posts.
   CIRCUS_STRUCTURE_TALL,
   CIRCUS_STRUCTURE_LOW,
-  // The Big Top's tent poles: the mast rises out of view in the Y-sorted pass.
+  // The Starlight Tent's poles: the mast rises out of view in the Y-sorted pass.
   TENT_POLE,
   // Riverbank reeds, standing taller than their tile.
   RIVER_REEDS,
@@ -762,8 +749,8 @@ export class GameMap {
   startTile: { x: number; y: number } = { x: 15, y: 15 };
   /** Tile centres of all rooms except the start and safe rooms — used for mob placement. */
   mobSpawnPoints: MobSpawnPoint[] = [];
-  /** Tile coordinates inside hallways (away from rooms) — used for rat spawning. */
-  hallwaySpawnPoints: Array<{ x: number; y: number }> = [];
+  /** Spawn points outside every room: a dungeon's hallways, or the overworld's ambient scatter. */
+  hallwaySpawnPoints: HallwaySpawnPoint[] = [];
   /** All safe rooms on this map (bounds + centre in tile coords). */
   safeRooms: Array<SafeRoomData & { showBed?: boolean }> = [];
   /** All boss rooms generated on this map (bounds + centre in tile coords). */
@@ -793,7 +780,7 @@ export class GameMap {
   /**
    * Furniture placed by a town interior's layout file — counters, tables,
    * shelving, barrels, a hearth — Y-sorted and rendered the way the
-   * Desperado Club's furniture already is. Reset every `generateInterior`
+   * Cloak & Dagger's furniture already is. Reset every `generateInterior`
    * call; empty on every map that is not a town building interior.
    */
   private _placedInteriorProps: PlacedTownInteriorProp[] = [];
@@ -1259,7 +1246,10 @@ export class GameMap {
     this.treasureRooms = data.treasureRooms;
     this.spiderLabRoom = data.spiderLabRoom;
     this.mobSpawnPoints = data.mobSpawnPoints;
-    this.hallwaySpawnPoints = data.hallwaySpawnPoints;
+    this.hallwaySpawnPoints = data.hallwaySpawnPoints.map((point) => ({
+      ...point,
+      terrain: NO_SPAWN_TERRAIN,
+    }));
     this.setStairwellTiles(data.stairwellTiles);
     this.arenaExteriors = data.arenaExteriors;
     for (const arena of data.arenaExteriors) {
@@ -1525,7 +1515,7 @@ export class GameMap {
    * grid: a 'tile' entry writes a tile type directly (via `placeProp` when
    * `smashable`, matching what the old switch case did for a breakable
    * legacy fixture); a 'prop' entry registers a placed prop instance and
-   * blocks its footprint, mirroring how the Desperado Club's furniture
+   * blocks its footprint, mirroring how the Cloak & Dagger's furniture
    * blocks the tiles `CLUB_FURNITURE_TILES` names.
    */
   private applyTownInteriorLayout(
@@ -1565,9 +1555,9 @@ export class GameMap {
   ): void {
     this._placedInteriorProps = [];
     setTownInteriorWallMaterial(buildingName);
-    setBigTopDecorLayout(null);
+    setStarlightTentDecorPlan(null);
     if (variant !== 'default') {
-      if (variant.kind === 'bigtop_maze') this.generateBigTopMaze(variant.plan);
+      if (variant.kind === 'starlight_tent_maze') this.generateStarlightTentMaze(variant.plan);
       else this.generateGoblinPrison(variant.plan);
       return;
     }
@@ -1575,7 +1565,6 @@ export class GameMap {
     const isStore = buildingType === 'store';
     const isClub = buildingType === 'club';
     const isHouse = buildingType === 'house';
-    const isCarnival = buildingName === 'Big Top';
     const { w, h, floorType } =
       INTERIOR_BY_NAME.get(buildingName) ?? INTERIOR_BY_KIND[buildingType];
 
@@ -1589,7 +1578,7 @@ export class GameMap {
     // Carve interior floor
     for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) grid[y][x].type = floorType;
 
-    if (isStore && !isCarnival) {
+    if (isStore) {
       this.applyTownInteriorLayout(grid, buildGeneralStoreLayout(w, h, floorType));
     }
 
@@ -1616,9 +1605,9 @@ export class GameMap {
     }
 
     // ── Generic house furniture (unnamed / unnamed overworld houses) ──
-    if (isHouse && !isCarnival && !isNamedBuilding) {
-      const genericFireplaceCol1 = 8;
-      const genericFireplaceCol2 = 9;
+    if (isHouse && !isNamedBuilding) {
+      const genericFireplaceCol = 8;
+      const genericFireplaceRow = 1;
       const genericRugStartCol = 7;
       const genericRugEndCol = 10;
       const genericBedNorthRow = 2;
@@ -1642,9 +1631,9 @@ export class GameMap {
       const genericEastWallCol = HOUSE_EAST_WALL_COL;
       const genericEastBarrelRow = HOUSE_BARREL_ROW;
       const genericEastChairRow = 6;
-      // Fireplace centered on north wall
-      grid[1][genericFireplaceCol1].type = FIREPLACE;
-      grid[1][genericFireplaceCol2].type = FIREPLACE;
+      this.applyTownInteriorLayout(grid, [
+        townInteriorProp(genericFireplaceCol, genericFireplaceRow, 'hearth_wide'),
+      ]);
       // Rug in front of fireplace
       for (let x = genericRugStartCol; x <= genericRugEndCol; x++) {
         grid[2][x].type = RUG;
@@ -1671,54 +1660,6 @@ export class GameMap {
       placeProp(grid[genericEastBarrelRow][genericEastWallCol], BARREL);
       // Chair by east wall
       grid[genericEastChairRow][genericEastWallCol].type = CHAIR;
-    }
-
-    if (isCarnival) {
-      // Big top boss arena: painted performance ring, central tent pole
-      // cluster, and bleachers hugging the north/west/east walls.
-      const ringCx = Math.floor(w / 2);
-      const ringCy = Math.floor(h / 2) - BIGTOP_RING_NORTH_SHIFT;
-      // The curb tiles below are the tiles whose centres sit on the ring, so
-      // the painted curb is centred on the middle of the centre tile; the pole
-      // is the 2×2 whose shared corner is that tile's top-left.
-      setBigTopDecorLayout({
-        kind: 'arena',
-        ringCentre: { x: ringCx + TILE_CENTRE_OFFSET, y: ringCy + TILE_CENTRE_OFFSET },
-        ringRadius: BIGTOP_RING_RADIUS,
-        poleCentre: { x: ringCx, y: ringCy },
-      });
-
-      for (let y = 1; y < h - 1; y++) {
-        for (let x = 1; x < w - 1; x++) {
-          const dist = Math.hypot(x - ringCx, y - ringCy);
-          if (Math.round(dist) === BIGTOP_RING_RADIUS) grid[y][x].type = CIRCUS_RING_EDGE;
-        }
-      }
-
-      for (let dy = 0; dy <= 1; dy++) {
-        for (let dx = 0; dx <= 1; dx++) {
-          grid[ringCy - dy][ringCx - dx].type = TENT_POLE;
-        }
-      }
-
-      const bleacherSouthLimit = h - BIGTOP_RING_RADIUS + 1;
-      for (let depth = 1; depth <= BIGTOP_BLEACHER_DEPTH; depth++) {
-        // Wall to wall, so the north stand meets the two side stands rather than
-        // stopping short of them. Insetting it left a pocket of bare floor in
-        // each north corner, walled in by bleachers on both sides — floor the
-        // player could see across the ring and never reach.
-        for (let x = 1; x < w - 1; x++) {
-          grid[depth][x].type = BLEACHER;
-        }
-        for (let y = 1 + BIGTOP_BLEACHER_DEPTH; y < bleacherSouthLimit; y++) {
-          grid[y][depth].type = BLEACHER;
-          grid[y][w - 1 - depth].type = BLEACHER;
-        }
-      }
-
-      this._bigtopRingCentre = { x: ringCx, y: ringCy };
-    } else {
-      this._bigtopRingCentre = null;
     }
 
     // Exit door: 2-tile gap at bottom wall center (leave as road = walkable)
@@ -1813,7 +1754,7 @@ export class GameMap {
   }
 
   /**
-   * The Big Top as it stands during the final act: an authored trap maze with
+   * The Starlight Tent as it stands during the final act: an authored trap maze with
    * two flaps, two sealed halves, and one chamber at the tent pole.
    *
    * Built from the layout table rather than by the ring-arena branch above
@@ -1823,8 +1764,8 @@ export class GameMap {
    * Public so a tent restarted on another difficulty can be rebuilt on the same
    * map, which every system in the room already holds.
    */
-  generateBigTopMaze(plan: BigTopMazePlan): void {
-    setBigTopDecorLayout({ kind: 'maze', plan });
+  generateStarlightTentMaze(plan: StarlightTentMazePlan): void {
+    setStarlightTentDecorPlan(plan);
     const grid: TileContent[][] = plan.rows.map((row, y) =>
       Array.from({ length: row.length }, (_unused, x) => ({
         tileId: `${x}#${y}`,
@@ -1846,8 +1787,6 @@ export class GameMap {
     this._interiorExitTiles = MAZE_EXIT_TILES.map((tile) => ({ x: tile.x, y: tile.y }));
     this._interiorStairUpTiles = [];
     this._interiorStairDownTiles = [];
-    // No performance ring in the maze; the pole is furniture the layout owns.
-    this._bigtopRingCentre = null;
   }
 
   /**
@@ -1888,17 +1827,10 @@ export class GameMap {
     this._interiorExitTiles = parsed.exits.map((tile) => ({ x: tile.x, y: tile.y }));
     this._interiorStairUpTiles = [];
     this._interiorStairDownTiles = [];
-    this._bigtopRingCentre = null;
   }
 
   /** Exit tile positions populated by generateInterior — used by BuildingInteriorScene. */
   _interiorExitTiles: Array<{ x: number; y: number }> = [];
-  /** Centre of the big top's performance ring — set only for the Big Top interior. */
-  private _bigtopRingCentre: { x: number; y: number } | null = null;
-
-  get bigtopRingCentre(): { x: number; y: number } | null {
-    return this._bigtopRingCentre;
-  }
   /** Interior stair-up tile positions (tower floors). */
   _interiorStairUpTiles: Array<{ x: number; y: number }> = [];
   /** Interior stair-down tile positions (tower floors). */

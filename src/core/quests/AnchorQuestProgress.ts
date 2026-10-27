@@ -3,9 +3,9 @@
  * the Wayfinder's Anchor out of three shards.
  *
  * The questline spans two kinds of scene: Madame Voss and the tinker's stall are
- * `DungeonScene`, while Old Hilda's cottage and the Temple of the Sky are
+ * `DungeonScene`, while Old Lori's cottage and the Temple of the Sky are
  * `BuildingInteriorScene` — and an interior is constructed fresh on every entry.
- * So, exactly as `MurderQuestProgress` and `CircusQuestProgress` do, one mutable
+ * So, exactly as `MurderQuestProgress` and `DoomsdayProgress` do, one mutable
  * object is created by the overworld scene and threaded by reference through
  * every scene and every scene reconstruction.
  *
@@ -38,7 +38,7 @@ export interface AnchorQuestProgress {
    */
   status: QuestStatus;
   tinker: AnchorStepState;
-  hilda: AnchorStepState;
+  lori: AnchorStepState;
   temple: AnchorStepState;
   /**
    * Which of her furnishings are mended, identified by their intact tile type
@@ -46,7 +46,7 @@ export interface AnchorQuestProgress {
    * cottage rebuilt fresh on every door open needs to know *which*, or a visit
    * that mends the shelf can re-break the untouched worktable instead.
    */
-  hildaRepairedTypes: number[];
+  loriRepairedTypes: number[];
   /**
    * Vermin still loose in the temple nave. Zero until the step starts, at which
    * point the temple step sets it to the count it spawned — so "no vermin left"
@@ -79,9 +79,9 @@ export function createAnchorQuestProgress(): AnchorQuestProgress {
   return {
     status: 'available',
     tinker: 'offered',
-    hilda: 'offered',
+    lori: 'offered',
     temple: 'offered',
-    hildaRepairedTypes: [],
+    loriRepairedTypes: [],
     templeVerminRemaining: 0,
     recallEverUsed: false,
     speedFizzDiscovered: false,
@@ -91,9 +91,9 @@ export function createAnchorQuestProgress(): AnchorQuestProgress {
 export interface AnchorQuestProgressCheckpoint {
   readonly status: QuestStatus;
   readonly tinker: AnchorStepState;
-  readonly hilda: AnchorStepState;
+  readonly lori: AnchorStepState;
   readonly temple: AnchorStepState;
-  readonly hildaRepairedTypes: readonly number[];
+  readonly loriRepairedTypes: readonly number[];
   readonly templeVerminRemaining: number;
 }
 
@@ -104,9 +104,9 @@ export function captureAnchorQuestProgress(
   return {
     status: progress.status,
     tinker: progress.tinker,
-    hilda: progress.hilda,
+    lori: progress.lori,
     temple: progress.temple,
-    hildaRepairedTypes: [...progress.hildaRepairedTypes],
+    loriRepairedTypes: [...progress.loriRepairedTypes],
     templeVerminRemaining: progress.templeVerminRemaining,
   };
 }
@@ -121,8 +121,8 @@ export function restoreAnchorQuestProgress(
 ): void {
   progress.status = snapshot.status;
   progress.tinker = snapshot.tinker;
-  progress.hilda = snapshot.hilda;
+  progress.lori = snapshot.lori;
   progress.temple = snapshot.temple;
-  progress.hildaRepairedTypes = [...snapshot.hildaRepairedTypes];
+  progress.loriRepairedTypes = [...snapshot.loriRepairedTypes];
   progress.templeVerminRemaining = snapshot.templeVerminRemaining;
 }

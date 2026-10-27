@@ -3,7 +3,7 @@ import type { Player } from '../../Player';
 /**
  * Cross-scene state for the `!god` / `!tough` / `!lucky` developer cheats.
  *
- * Like {@link ClubMembership} and the questline progress objects, this is a
+ * Like {@link CasinoState} and the questline progress objects, this is a
  * plain mutable object threaded by reference through the `DungeonScene` ↔
  * `BuildingInteriorScene` constructors. Without it, the cheats would reset every
  * time the player changed scenes (entering a building, taking stairs, dying):

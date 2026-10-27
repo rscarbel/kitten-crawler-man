@@ -6,9 +6,8 @@
  *  1. It opens after the reward queue drains — never under a reward the player
  *     has not dismissed yet — and exactly once.
  *  2. The only automatic opener is his arrival as a reward, in either scene
- *     that can show the chest bringing him. The circus
- *     quest hands back a pet the player already knows; the pause menu's
- *     Abilities tab is the one other way in.
+ *     that can show the chest bringing him; the pause menu's Abilities tab is
+ *     the one other way in.
  *  3. The explainers' host, driven through a `UiRoot`: Next walks forward and
  *     closes off the last page, Skip on the first page closes, Back and the
  *     arrow keys walk the pages, a click anywhere is consumed while it is
@@ -21,7 +20,7 @@
  *
  * Check 2 reads the source, because the trigger is a line inside a scene no
  * headless harness can construct; the scene-level behaviour still wants a look
- * in the browser — earn Something Hatched, and hand Mongo back in the circus.
+ * in the browser — earn Something Hatched.
  *
  * Run: npx tsx scripts/verify-mongo-explainer.ts
  */
@@ -149,13 +148,6 @@ function collectSources(dir: string, out: Map<string, string>): Map<string, stri
     /mongo:\s*\(\)\s*=>\s*void this\.craftExplainers\.open\('mongo'\)/.test(menus),
     "MenusKit's opener is not the pause screen's How Mongo works guide",
   );
-
-  const circus = sources.get('src/systems/CircusQuestSystem.ts') ?? '';
-  check(
-    circus.length > 0,
-    'CircusQuestSystem.ts was not found, so the circus check proves nothing',
-  );
-  check(!circus.includes(MONGO_OPEN), 'the circus quest opens the Mongo explainer');
 }
 
 // ---------------------------------------------------------------- 3. the frame

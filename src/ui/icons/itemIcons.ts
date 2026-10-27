@@ -26,12 +26,12 @@ import {
 } from '../../sprites/art/itemIcons/gearTrinketIcons';
 import { drawFoodIcon, type FoodIconId } from './foodIcons';
 import { drawPrisonKeyIcon } from '../../sprites/art/itemIcons/prisonKeyIcon';
+import { drawCatnipTunaWaterIcon } from '../../sprites/art/itemIcons/catnipTunaWaterIcon';
 import { drawBlackPowderBombIcon } from '../../sprites/art/itemIcons/blackPowderBombIcon';
 import { drawKitIcon, type KitIconId } from './kitIcons';
 import { drawMagistratesWritIcon, drawUnreadableLetterIcon } from './murderMysteryLetterIcons';
 import {
   drawCooldownCrispIcon,
-  drawDirtyShirleyIcon,
   drawHealthPotionIcon,
   drawJuggJuiceIcon,
   drawSpeedFizzIcon,
@@ -110,7 +110,7 @@ export const ITEM_ICONS: Record<ItemId, ItemIconPainter> = {
   jugg_juice: drawJuggJuiceIcon,
   cooldown_crisp: drawCooldownCrispIcon,
   stat_boost_potion: drawStatBoostIcon,
-  dirty_shirley: drawDirtyShirleyIcon,
+  catnip_tuna_water: drawCatnipTunaWaterIcon,
   scroll_of_confusing_fog: drawConfusingFogScrollIcon,
   goblin_dynamite: drawDynamiteInventoryIcon,
   black_powder_bomb: drawBlackPowderBombIcon,
@@ -189,7 +189,7 @@ export const ITEM_ICONS: Record<ItemId, ItemIconPainter> = {
 
   wayfinders_anchor: (ctx, rect) => drawAnchorStoneIcon(ctx, rect),
   anchor_shard_tinker: anchorShard,
-  anchor_shard_hilda: anchorShard,
+  anchor_shard_lori: anchorShard,
   anchor_shard_temple: anchorShard,
   quest_wood_board: resource('wood_board'),
   magistrates_writ: drawMagistratesWritIcon,

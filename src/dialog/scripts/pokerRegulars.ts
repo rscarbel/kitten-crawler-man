@@ -1,5 +1,5 @@
 /**
- * What the Desperado Club's poker regulars say at the table, keyed by voice
+ * What the Cloak & Dagger's poker regulars say at the table, keyed by voice
  * and then by the moment that sets them off.
  *
  * A voice (banter set) is rolled per run alongside everything else about how a

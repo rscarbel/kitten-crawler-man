@@ -4,7 +4,7 @@
  *
  * Voss is a fraud about the mystical and completely straight about the
  * practical, and she knows exactly which half the audience is watching for.
- * Old Hilda is a hedge-witch with thirty years of practice not noticing her
+ * Old Lori is a hedge-witch with thirty years of practice not noticing her
  * own furniture. Deacon Aviel is unsentimental about the temple's problems
  * and slightly embarrassed that this is one of them.
  */
@@ -14,7 +14,7 @@ import type { DialogLine, LineText, NonEmpty } from '../../line';
 import type { DialogReward } from '../../request';
 
 const voss = speakerLines('voss');
-const hilda = speakerLines('hilda');
+const lori = speakerLines('lori');
 const aviel = speakerLines('aviel');
 
 /**
@@ -27,7 +27,7 @@ export function buildAnchorReward(xp: number): DialogReward {
     itemId: 'wayfinders_anchor',
     displayName: "Wayfinder's Anchor",
     lines: [
-      'Anywhere in the Over City: carries the party to a place it is bound to.',
+      'Anywhere in Taloncrest: carries the party to a place it is bound to.',
       'The town square first; the circus and Briar Hollow later. One minute between trips.',
     ],
     xp,
@@ -47,7 +47,7 @@ export const VOSS_OFFER_HISTORY = voss.line(
 
 /** The last beat: `Ending.confirm` carries the accept/decline labels, so this line's own advance is never shown. */
 export const VOSS_OFFER_PITCH = voss.line(
-  "My cards tell me that all the pieces of this stone have returned home. They are here, within these city walls. Funny how that works; the magic is so powerful that the pieces of the broken stone all still found themselves in the very place they were so deeply attached to. I suppose that is how the name Wayfinder's Anchor came about. It has come to be that one piece was dropped at Old Hilda's by a visitor. The temple received another as an offering. The third I saw changing hands at the market stall just here next to me. Bring me all three parts. I am one of the few people left who know how to invoke the magic to restore it.",
+  "My cards tell me that all the pieces of this stone have returned home. They are here, within these city walls. Funny how that works; the magic is so powerful that the pieces of the broken stone all still found themselves in the very place they were so deeply attached to. I suppose that is how the name Wayfinder's Anchor came about. It has come to be that one piece was dropped at Old Lori's by a visitor. The temple received another as an offering. The third I saw changing hands at the market stall just here next to me. Bring me all three parts. I am one of the few people left who know how to invoke the magic to restore it.",
 );
 
 /** Shown when she is asked again with the errand still unfinished. */
@@ -82,21 +82,21 @@ export const VOSS_CANNOT_AFFORD = voss.fn(
     `${a.feeCoins} coins. You don't seem to have enough, my dear. Come back to me once you have the coin for this.`,
 );
 
-// Old Hilda
+// Old Lori
 
-export const HILDA_REQUEST_INTRO = hilda.button(
+export const LORI_REQUEST_INTRO = lori.button(
   'Can I help?',
   "Oh, hi there! I sure am glad to have visitors like you right now; I've been meaning to replace some of the furniture in here, and wouldn't you know it, some kids came in here to play hide and seek and broke everything.",
 );
 
 /** The last beat: `Ending.confirm` carries the accept/decline labels, so this line's own advance is never shown. */
-export const HILDA_REQUEST_TERMS = hilda.fn(
+export const LORI_REQUEST_TERMS = lori.fn(
   (a: { readonly boardsPerRepair: number; readonly repairsRequired: number }): LineText =>
     `Oh that would be just lovely if you could help! The kids broke the worktable, the chair, and that shelf over on the side. I don't blame them for breaking any of it; they're just kids and the furniture was falling apart anyhow. I don't have very much money, but I did find this funny looking rock a few months ago. I got the sense that it was magic, but even though I've had it for a few months, it's done nothing. Probably because it's just a broken piece of whatever it used to be a part of. If you rebuild all the furniture that's broken in here, the stone is all yours! I won’t even charge you for the wood. There's a pile of boards by the door, help yourself. It takes ${a.boardsPerRepair} to build each piece and there are ${a.repairsRequired} pieces.`,
 );
 
 /** Asked again with work outstanding. */
-export const HILDA_PROGRESS = hilda.fn(
+export const LORI_PROGRESS = lori.fn(
   (a: {
     readonly repairsDone: number;
     readonly repairsRequired: number;
@@ -111,8 +111,8 @@ export const HILDA_PROGRESS = hilda.fn(
 );
 
 /** Everything mended; the shard comes out from under the chair. */
-export const HILDA_REWARD: NonEmpty<DialogLine> = [
-  hilda.button(
+export const LORI_REWARD: NonEmpty<DialogLine> = [
+  lori.button(
     'Take the shard',
     "Well, look at that. This furniture looks better than the originals! You've really got some talent. Here, take it before I get used to the quiet and change my mind.  Whatever that thing is, dearie, it isn't a normal rock.",
   ),

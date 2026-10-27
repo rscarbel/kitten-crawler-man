@@ -204,16 +204,19 @@ section('Snapshot round-trips through parseCraftSkillsSnapshot');
     check(!restored.isLearned('construction'), 'unlearned skill restores as unlearned');
   }
 
-  check(parseCraftSkillsSnapshot(undefined) === undefined, 'an absent field parses to undefined');
-  const damaged = parseCraftSkillsSnapshot({
-    resourcing: { learned: true, level: 'nope', xp: -5 },
-    construction: 'garbage',
-  });
-  check(damaged !== undefined, 'a damaged snapshot still parses');
-  if (damaged !== undefined) {
-    check(damaged.resourcing.level === 0, 'a malformed level field falls back to 0');
-    check(!damaged.construction.learned, "a garbage skill's field falls back to unlearned");
-  }
+  check(parseCraftSkillsSnapshot(undefined) === undefined, 'an absent field is rejected');
+  check(
+    parseCraftSkillsSnapshot({
+      resourcing: { learned: true, level: 'nope', xp: -5 },
+      construction: 'garbage',
+    }) === undefined,
+    'a damaged snapshot is rejected',
+  );
+  const written = skills.snapshot();
+  check(
+    parseCraftSkillsSnapshot({ resourcing: written.resourcing }) === undefined,
+    'a snapshot missing one skill is rejected',
+  );
 }
 
 // ── Negative-test proof: mutate the tuning, watch the landmark gate go red ──

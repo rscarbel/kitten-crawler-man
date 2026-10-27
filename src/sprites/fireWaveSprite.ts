@@ -13,7 +13,7 @@
  * parcel takes its width, lean, bend and sway from a hash salted with the tile's
  * own column, so neighbours differ without anything being remembered per tile.
  *
- * The stamps and the palette are the Big Top's flame vents', imported rather
+ * The stamps and the palette are the Starlight Tent's flame vents', imported rather
  * than matched: fire is one substance in this game.
  */
 

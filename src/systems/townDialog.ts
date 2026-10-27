@@ -1,5 +1,5 @@
 /**
- * The voice of the Over City. Given a citizen's role and a snapshot of world
+ * The voice of Taloncrest. Given a citizen's role and a snapshot of world
  * state, this builds the conversation shown when the player talks to a
  * townsperson (streets via `TownLifeSystem`, interiors via
  * `InteriorOccupantSystem`).
@@ -10,7 +10,7 @@
  *    citizen's seed + how many times you've talked to them means repeats vary
  *    instead of parroting the same greeting.
  *  - **Reactive** — gossip and alarm lines gated on live quest flags
- *    (`CircusQuestStage`, `MurderQuestStage`, `DoomsdayStage`). Citizens comment
+ *    (`MurderQuestStage`, `DoomsdayStage`). Citizens comment
  *    on what the player has actually done: whispers during the murders, relief
  *    once the killer falls, panic when the tower is about to blow.
  *
@@ -19,7 +19,6 @@
  * `Conversation`.
  */
 
-import { isCircusResolvedStage, type CircusQuestStage } from '../core/quests/CircusQuestProgress';
 import type { MurderQuestStage } from '../core/quests/MurderQuestProgress';
 import type { DoomsdayStage } from '../core/quests/DoomsdayProgress';
 import type { TownRole } from '../sprites/person/PersonAppearance';
@@ -62,11 +61,8 @@ export function citizenSpecies(citizen: SpeciesBearer): TownSpecies {
 
 /** A read-only snapshot of the quest flags that colour citizen chatter. */
 export interface TownDialogContext {
-  circus: CircusQuestStage;
   murder: MurderQuestStage;
   doomsday: DoomsdayStage;
-  /** The circus's dancing bear has fallen in the ruins. */
-  heatherSlain: boolean;
   /** The hideout letter has named Miss Quill as the killer. */
   quillNamed: boolean;
 }
@@ -111,22 +107,12 @@ function gossipLine(ctx: TownDialogContext): string | null {
   if (ctx.murder === 'body_waiting' || ctx.murder === 'investigation') {
     return GOSSIP_LINES.murderBodyFound;
   }
-  if (isCircusResolved(ctx.circus)) {
-    return GOSSIP_LINES.circusResolved;
-  }
-  if (isCircusActive(ctx.circus)) {
-    return ctx.heatherSlain ? GOSSIP_LINES.circusHeatherSlain : GOSSIP_LINES.circusOngoing;
-  }
   return null;
 }
 
 function reputationTier(ctx: TownDialogContext): ReputationTier | null {
   if (ctx.doomsday === 'complete') return 'savior';
-  const circusDone = isCircusResolved(ctx.circus);
-  const murderDone = isMurderResolved(ctx.murder);
-  if (circusDone && murderDone) return 'double_hero';
-  if (circusDone) return 'circus_hero';
-  if (murderDone) return 'murder_hero';
+  if (isMurderResolved(ctx.murder)) return 'murder_hero';
   if (isMurderActive(ctx.murder)) return 'murder_wary';
   return null;
 }
@@ -154,19 +140,6 @@ function reactiveLead(ctx: TownDialogContext, seed: number, turn: number): strin
   return pickLine(REPUTATION_GREETINGS[tier], seed + turn);
 }
 
-function isCircusActive(stage: CircusQuestStage): boolean {
-  return (
-    stage === 'ritual_defense' ||
-    stage === 'heather_hunt' ||
-    stage === 'assault' ||
-    stage === 'bigtop_ready'
-  );
-}
-
-function isCircusResolved(stage: CircusQuestStage): boolean {
-  return isCircusResolvedStage(stage);
-}
-
 function isMurderActive(stage: MurderQuestStage): boolean {
   return (
     stage === 'night_attack' ||
@@ -183,11 +156,7 @@ function isMurderResolved(stage: MurderQuestStage): boolean {
 /** True when the town is actively imperilled and every citizen should be panicking. */
 export function isTownInDanger(ctx: TownDialogContext): boolean {
   return (
-    ctx.doomsday === 'containment' ||
-    ctx.doomsday === 'escape' ||
-    ctx.circus === 'ritual_defense' ||
-    ctx.circus === 'assault' ||
-    ctx.murder === 'night_attack'
+    ctx.doomsday === 'containment' || ctx.doomsday === 'escape' || ctx.murder === 'night_attack'
   );
 }
 

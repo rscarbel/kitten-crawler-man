@@ -21,7 +21,7 @@ export interface CloggedBathroomCheckpoint {
   readonly explainerSeen: boolean;
 }
 
-/** Parses the saved bathroom from untrusted JSON; undefined for a save written before it existed. */
+/** Parses the saved bathroom from untrusted JSON; undefined for anything malformed. */
 export function parseCloggedBathroomCheckpoint(
   value: unknown,
 ): CloggedBathroomCheckpoint | undefined {

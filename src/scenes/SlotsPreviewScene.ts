@@ -1,5 +1,5 @@
 /**
- * Localhost-only harness for reviewing the Desperado slot machine, reached via
+ * Localhost-only harness for reviewing the Cloak & Dagger slot machine, reached via
  * `?slots` in `devBootScene`. Ships no behaviour to players, and plays no sound.
  *
  * Four tabs:
@@ -17,7 +17,7 @@
 import { setViewportSize, viewportHeight, viewportWidth } from '../core/rendering/Viewport';
 import { settings } from '../core/input/Settings';
 import { TILE_SIZE } from '../core/constants';
-import { createClubMembership } from '../core/club/ClubMembership';
+import { createCasinoState } from '../core/club/CasinoState';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
 import {
@@ -297,7 +297,7 @@ export class SlotsPreviewScene extends PreviewScene {
   private readonly host = new ClubSlotsSystem(
     null,
     null,
-    createClubMembership(),
+    createCasinoState(),
     () => performance.now(),
     {
       seed: MACHINE_SEED,
@@ -337,7 +337,7 @@ export class SlotsPreviewScene extends PreviewScene {
   }
 
   protected previewTitle(): string {
-    return 'Slots — Desperado Club review harness';
+    return 'Slots — Cloak & Dagger review harness';
   }
 
   protected previewControls(): readonly PreviewControl[] {

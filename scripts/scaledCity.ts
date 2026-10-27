@@ -90,8 +90,15 @@ export class ScaledCityCitizen implements ResidencyCitizen {
     return this.person.y + this.offsetPx.y;
   }
 
+  get citizenFigure(): CitizenFigure | null {
+    return this.person.citizenFigure;
+  }
+
+  /** A street citizen always wears a cast look; only an interior resident is drawn bespoke. */
   get figure(): CitizenFigure {
-    return this.person.figure;
+    const figure = this.person.citizenFigure;
+    if (figure === null) throw new Error('a scaled-city citizen wears no cast look');
+    return figure;
   }
 
   /** Draws the citizen through its real render path, against a camera in city coordinates. */

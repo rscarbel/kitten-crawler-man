@@ -9,7 +9,8 @@
  * around the ring, with every wall lined — practice rack, scoring slate,
  * trough, butt, sandbags, benches — and a line of dummies and pells north
  * and south of the ring; the muster hall around the board and the briefing
- * table, with bunks down both walls.
+ * table, with bunks down both walls and the mercenaries' hire desk east of
+ * the lane.
  *
  * The zone constants are exported for `GameMap` to read: the shell size
  * comes from the same numbers this layout is built from, and a row written
@@ -148,6 +149,14 @@ export function buildBarracksLayout(
   const briefingWidth = widthOf('briefing_table');
   const boardEndCol = boardCol + widthOf('muster_board');
   const southBrazierWestCol = armouryFirstCol + widthOf('bunk_bed');
+  /*
+   * The mercenaries' desk stands east of the lane, a row clear of the drill
+   * archway's landing, and west of the cracked flags a floor contract can
+   * mark. The row north of it is left open: it is both where the manager
+   * stands and the only way from the lane onto those flags.
+   */
+  const mercDeskCol = musterLaneCol + 1;
+  const mercDeskRow = briefingRow;
 
   const entries: TownInteriorLayoutEntry[] = [];
   for (let ry = BARRACKS_UPPER_FIRST_ROW; ry <= BARRACKS_UPPER_LAST_ROW; ry++)
@@ -304,6 +313,7 @@ export function buildBarracksLayout(
     prop(briefingCol + briefingWidth, briefingRow, 'stool', 1),
     prop(eastWallCol, briefingRow - 1, 'barrel'),
     prop(eastWallCol, briefingRow, 'crate'),
+    prop(mercDeskCol, mercDeskRow, 'merc_desk'),
   );
   entries.push(
     prop(armouryFirstCol, southWallRow, 'bunk_bed'),

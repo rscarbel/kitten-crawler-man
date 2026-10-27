@@ -49,7 +49,7 @@ import {
   fennaAcceptedPages,
   merritAskPages,
   merritFenceDonePages,
-  skyfowlTownWhereabouts,
+  taloncrestWhereabouts,
   wendellFirstVisitPages,
 } from '../src/systems/briarHollow/blueprints/blueprintsDialog';
 import { forwardQuestItemEvictions } from '../src/systems/questItemEvictions';
@@ -175,44 +175,38 @@ function verifyPersistence(): void {
     'a restored record shares no array with the snapshot it came from',
   );
 
-  const oldSave: unknown = JSON.parse(
+  const withoutBlueprints: unknown = JSON.parse(
     JSON.stringify(captureBriarHollowState(createBriarHollowState())),
   );
-  if (typeof oldSave === 'object' && oldSave !== null && 'blueprints' in oldSave) {
-    Reflect.deleteProperty(oldSave, 'blueprints');
+  if (typeof withoutBlueprints === 'object' && withoutBlueprints !== null) {
+    Reflect.deleteProperty(withoutBlueprints, 'blueprints');
   }
-  const fromOldSave = parseBriarHollowStateSnapshot(oldSave);
   check(
-    fromOldSave?.blueprints.phase === 'unoffered' &&
-      fromOldSave.blueprints.grain === 0 &&
-      fromOldSave.blueprints.fenceSectionsBuilt.length === PASTURE_FENCE_SECTION_COUNT &&
-      fromOldSave.blueprints.fenceSectionsBuilt.every((built) => !built),
-    'a save from before the quest existed reads as a quest never offered',
+    parseBriarHollowStateSnapshot(withoutBlueprints) === undefined,
+    'a save without the quest record is refused',
   );
 
-  const malformed = parseBriarHollowStateSnapshot({
-    ...snapshot,
-    blueprints: {
-      phase: 'teleport_the_cow',
-      fenceSectionsBuilt: [true, 'yes', true],
-      grain: -5,
-      stationsUpgraded: { saw: 'maybe', ropeWalk: true },
-    },
-  });
-  check(malformed?.blueprints.phase === 'unoffered', 'an unknown phase falls back to unoffered');
-  check(
-    malformed?.blueprints.fenceSectionsBuilt.length === PASTURE_FENCE_SECTION_COUNT &&
-      malformed.blueprints.fenceSectionsBuilt[0] &&
-      !malformed.blueprints.fenceSectionsBuilt[1] &&
-      malformed.blueprints.fenceSectionsBuilt[2],
-    'a short, partly malformed fence array keeps the good flags and pads the rest',
-  );
-  check(malformed?.blueprints.grain === 0, 'negative grain is clamped to zero');
-  check(
-    malformed?.blueprints.stationsUpgraded.saw === false &&
-      malformed.blueprints.stationsUpgraded.ropeWalk,
-    'a malformed station flag falls back while a good one is kept',
-  );
+  const malformedBlueprints: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
+    ['an unknown phase', { phase: 'teleport_the_cow' }],
+    ['a short fence array', { fenceSectionsBuilt: [true, true, true] }],
+    [
+      'a non-boolean fence flag',
+      {
+        fenceSectionsBuilt: snapshot.blueprints.fenceSectionsBuilt.map((built, index) =>
+          index === 1 ? 'yes' : built,
+        ),
+      },
+    ],
+    ['negative grain', { grain: -ROUND_TRIP_GRAIN }],
+    ['a malformed station flag', { stationsUpgraded: { saw: 'maybe', ropeWalk: true } }],
+    ['a missing completion-screen flag', { completionScreenSeen: undefined }],
+  ];
+  for (const [label, override] of malformedBlueprints) {
+    const corrupted: unknown = JSON.parse(
+      JSON.stringify({ ...snapshot, blueprints: { ...snapshot.blueprints, ...override } }),
+    );
+    check(parseBriarHollowStateSnapshot(corrupted) === undefined, `${label} is refused`);
+  }
 }
 
 // ── Quest-line providers ─────────────────────────────────────────────────
@@ -422,19 +416,19 @@ function verifySoundCues(): void {
 // ── Dialog ───────────────────────────────────────────────────────────────
 
 function verifyDialog(): void {
-  const northWest = skyfowlTownWhereabouts({ x: 10, y: 10 }, { x: 0, y: 0 });
+  const northWest = taloncrestWhereabouts({ x: 10, y: 10 }, { x: 0, y: 0 });
   check(
-    northWest === 'the skyfowl town north west of here',
+    northWest === 'Taloncrest, north west of here',
     `the town's bearing is lower-cased into Fenna's line ("${northWest}")`,
   );
   check(
-    skyfowlTownWhereabouts(null, { x: 0, y: 0 }) === 'the skyfowl town past the road',
+    taloncrestWhereabouts(null, { x: 0, y: 0 }) === 'Taloncrest, past the road',
     'with no village centre, Fenna falls back to "past the road"',
   );
   const [accepted] = fennaAcceptedPages(northWest);
   check(
     accepted.paragraphs[0].endsWith(
-      'He lives at Plumbline Farm, in the skyfowl town north west of here.',
+      'He lives at Plumbline Farm, in Taloncrest, north west of here.',
     ),
     "Fenna's directions finish her sentence",
   );

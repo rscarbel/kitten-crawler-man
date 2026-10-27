@@ -56,7 +56,7 @@ const COLUMN_RULE_WIDTH = 1;
 const HALF = 0.5;
 const FULL_TURN = Math.PI * 2;
 
-type EntryKind = 'coins' | 'item' | 'custom' | 'empty';
+type EntryKind = 'coins' | 'item' | 'empty';
 
 interface LootEntry {
   readonly label: string;
@@ -64,11 +64,7 @@ interface LootEntry {
   readonly item?: ItemId;
 }
 
-function lootEntries(
-  loot: LootDrop,
-  displayLabels: ChestLootSplit['displayLabels'],
-  customEntries: readonly string[] = [],
-): LootEntry[] {
+function lootEntries(loot: LootDrop, displayLabels: ChestLootSplit['displayLabels']): LootEntry[] {
   const entries: LootEntry[] = [];
   if (loot.coins > 0) entries.push({ label: `${loot.coins} coins`, kind: 'coins' });
   for (const entry of loot.items) {
@@ -76,7 +72,6 @@ function lootEntries(
     const label = entry.quantity > 1 ? `${entry.quantity}x ${baseName}` : baseName;
     entries.push({ label, kind: 'item', item: entry.id });
   }
-  for (const label of customEntries) entries.push({ label, kind: 'custom' });
   if (entries.length === 0) entries.push({ label: EMPTY_COLUMN_TEXT, kind: 'empty' });
   return entries;
 }
@@ -101,13 +96,11 @@ function drawEntry(ui: Ui, rect: Rect, entry: LootEntry, id: string): void {
     drawGlyph(ui.ctx, 'coin', icon, { color: palette.accent.base });
   } else if (entry.item !== undefined) {
     itemSlot(ui, icon, { id, item: entry.item, categoryAccent: false, tooltip: true });
-  } else if (entry.kind === 'custom') {
-    drawGlyph(ui.ctx, 'sparkle', icon, { color: palette.accent.hover });
   }
   text(ui, labelCol, {
     text: entry.label,
     role: entry.kind === 'empty' ? 'muted' : entry.kind === 'coins' ? 'accent' : 'caption',
-    color: entry.kind === 'item' || entry.kind === 'custom' ? palette.text.primary : undefined,
+    color: entry.kind === 'item' ? palette.text.primary : undefined,
     wrap: true,
     valign: 'top',
   });
@@ -178,10 +171,7 @@ function layout(ui: Ui, view: ChestRewardView, width: number): ChestLayout {
   const titleH = headlineStyle(ui, TITLE, width).lineHeight;
   const columnW = (width - space.lg) / 2;
   const split = view.lootSplit;
-  const left =
-    split === null
-      ? []
-      : lootEntries(split.humanLoot, split.displayLabels, split.customHumanEntries);
+  const left = split === null ? [] : lootEntries(split.humanLoot, split.displayLabels);
   const right = split === null ? [] : lootEntries(split.catLoot, split.displayLabels);
   const listed = view.opened && split !== null;
   const lootH = listed

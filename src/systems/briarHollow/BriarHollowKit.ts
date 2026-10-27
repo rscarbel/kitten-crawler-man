@@ -189,10 +189,10 @@ export interface BriarHollowKitDeps {
   /** Flies paid coins from a world position to the HUD's coin pill. Absent means no flight. */
   readonly flyCoins?: (coins: number, worldX: number, worldY: number) => void;
   /**
-   * Whether a story state owns a Skyfowl Town room right now, for a
+   * Whether a story state owns a Taloncrest room right now, for a
    * construction contract held there. Absent means none ever does.
    */
-  readonly skyfowlRoomOwnedByStory?: (buildingName: string) => boolean;
+  readonly taloncrestRoomOwnedByStory?: (buildingName: string) => boolean;
   /** Opens the village notice board's panel. Absent means the board cannot be read. */
   readonly openNoticeBoard?: () => void;
   /** Whether optional scenery (chimney smoke, lamp glows) is drawn this frame. Absent means always. */
@@ -286,7 +286,7 @@ export class BriarHollowKit {
    * Null on a map with no village.
    */
   readonly questGuide: VillageQuestGuide | null;
-  /** The recruiter posted in the Over City's own square; null on a map with no village. */
+  /** The recruiter posted in Taloncrest's own square; null on a map with no village. */
   readonly recruiter: RecruiterSystem | null;
   /** The village notice board's tile; null on a map with no village or no board. */
   private readonly noticeBoardTile: TilePoint | null;
@@ -488,7 +488,7 @@ export class BriarHollowKit {
             conversation: deps.conversation,
             villagers,
             flyCoins: (coins, worldX, worldY) => deps.flyCoins?.(coins, worldX, worldY),
-            skyfowlRoomOwnedByStory: deps.skyfowlRoomOwnedByStory,
+            taloncrestRoomOwnedByStory: deps.taloncrestRoomOwnedByStory,
             soldierTile: (id) =>
               this.soldiers?.soldiers.find((soldier) => soldier.soldierId === id)?.tile ?? null,
             announce: (message) => deps.menus.announce(message),

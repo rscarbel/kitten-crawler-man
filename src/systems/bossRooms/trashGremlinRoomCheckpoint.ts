@@ -38,16 +38,13 @@ function parseToppled(value: unknown): ToppledTower | undefined {
 
 /**
  * Reads the lair's part of a saved checkpoint back from untrusted JSON: null
- * for a floor with no lair, undefined for anything malformed. A save written
- * before the lair kept any state has an empty record here, which reads as no
- * tower down.
+ * for a floor with no lair, undefined for anything malformed.
  */
 export function parseTrashGremlinRoomCheckpoint(
   value: unknown,
 ): TrashGremlinRoomCheckpoint | null | undefined {
   if (value === null) return null;
   if (!isRecord(value)) return undefined;
-  if (value.toppled === undefined) return { toppled: [] };
   if (!Array.isArray(value.toppled)) return undefined;
   const toppled: ToppledTower[] = [];
   for (const entry of value.toppled) {

@@ -20,7 +20,7 @@ import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
 import { TILE_SIZE } from '../core/constants';
-import { createClubMembership, type ClubMembership } from '../core/club/ClubMembership';
+import { createCasinoState, type CasinoState } from '../core/club/CasinoState';
 import { ClubCasinoSystem, type CasinoAction } from '../systems/ClubCasinoSystem';
 import { casinoFit, fitRectToScreen } from '../ui/casino/casinoLayout';
 import { chromeTarget } from '../ui/screens/dialogs/canvasChrome';
@@ -365,7 +365,7 @@ function checkEveryExitRefunds(): InvariantResult {
     const player = new HumanPlayer(0, 0, TILE_SIZE);
     player.coins = PREVIEW_STARTING_COINS;
     const companion = new CatPlayer(1, 0, TILE_SIZE);
-    const casino = new ClubCasinoSystem(null, createClubMembership());
+    const casino = new ClubCasinoSystem(null, createCasinoState());
     casino.openTable(player, companion);
     casino.dismissRules();
     casino.placeChip(CHIP_DENOMINATIONS[CHIP_DENOMINATIONS.length - 1], player, companion);
@@ -472,10 +472,10 @@ export class CasinoPreviewScene extends PreviewScene {
   /** The table's live controls from the last Panel frame, in the letterboxed viewport's space; later entries sit on top. */
   private tableControls: Array<{ rect: Rect; action: CasinoAction }> = [];
 
-  private readonly membership: ClubMembership = createClubMembership();
+  private readonly casinoState: CasinoState = createCasinoState();
   private readonly player = new HumanPlayer(0, 0, TILE_SIZE);
   private readonly companion = new CatPlayer(1, 0, TILE_SIZE);
-  private readonly casino = new ClubCasinoSystem(null, this.membership);
+  private readonly casino = new ClubCasinoSystem(null, this.casinoState);
 
   constructor() {
     super();
@@ -485,7 +485,7 @@ export class CasinoPreviewScene extends PreviewScene {
   }
 
   protected previewTitle(): string {
-    return 'Blackjack — Desperado Club review harness';
+    return 'Blackjack — Cloak & Dagger review harness';
   }
 
   protected previewControls(): readonly PreviewControl[] {

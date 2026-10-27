@@ -3615,7 +3615,7 @@ const cropRows: Material = {
   },
 };
 
-// ── the Big Top ────────────────────────────────────────────────────────────
+// ── the Starlight Tent ─────────────────────────────────────────────────────
 
 const SAWDUST_RAMP_MID_LIFT = 0.55;
 /**
@@ -3624,13 +3624,17 @@ const SAWDUST_RAMP_MID_LIFT = 0.55;
  * tent. Every hazard in the maze is drawn over it, and a warning read against a
  * busy floor is a warning read late.
  */
-const BIGTOP_SAWDUST_RAMP: Ramp = {
+const STARLIGHT_TENT_SAWDUST_RAMP: Ramp = {
   shadow: CIRCUS_RAMPS.circus_straw.mid,
   mid: mix(CIRCUS_RAMPS.circus_straw.mid, CIRCUS_RAMPS.circus_straw.light, SAWDUST_RAMP_MID_LIFT),
   light: CIRCUS_RAMPS.circus_straw.light,
   accent: CIRCUS_RAMPS.circus_straw.accent,
 };
-const BIGTOP_SAWDUST_GROUND: GroundOptions = { patchPeriod: 8, patchWeight: 0.5, contrast: 0.55 };
+const STARLIGHT_TENT_SAWDUST_GROUND: GroundOptions = {
+  patchPeriod: 8,
+  patchWeight: 0.5,
+  contrast: 0.55,
+};
 const SAWDUST_TREAD_COUNT = 3;
 const SAWDUST_TREAD_MIN_RADIUS = 12;
 const SAWDUST_TREAD_MAX_RADIUS = 26;
@@ -3648,18 +3652,18 @@ const SAWDUST_SHAVING_ALPHA = 0.22;
 const SAWDUST_SHAVING_TAPER = 0.6;
 const SAWDUST_SHAVING_DARK_SHARE = 0.45;
 
-const bigtopSawdust: Material = {
-  id: 'bigtop_sawdust',
-  label: 'Big Top raked sawdust',
+const starlightTentSawdust: Material = {
+  id: 'starlight_tent_sawdust',
+  label: 'Starlight Tent raked sawdust',
   patchTiles: 4,
   variants: 2,
   paint: (ctx) => {
-    paintNoiseGround(ctx, BIGTOP_SAWDUST_RAMP, BIGTOP_SAWDUST_GROUND);
+    paintNoiseGround(ctx, STARLIGHT_TENT_SAWDUST_RAMP, STARLIGHT_TENT_SAWDUST_GROUND);
     paintSpeckles(ctx, ctx.detail + 113, {
       count: SAWDUST_TREAD_COUNT,
       minRadius: SAWDUST_TREAD_MIN_RADIUS,
       maxRadius: SAWDUST_TREAD_MAX_RADIUS,
-      ramp: { ...BIGTOP_SAWDUST_RAMP, mid: BIGTOP_SAWDUST_RAMP.shadow },
+      ramp: { ...STARLIGHT_TENT_SAWDUST_RAMP, mid: STARLIGHT_TENT_SAWDUST_RAMP.shadow },
       alpha: SAWDUST_TREAD_ALPHA,
       softness: SAWDUST_TREAD_SOFTNESS,
     });
@@ -3671,8 +3675,8 @@ const bigtopSawdust: Material = {
         SAWDUST_SHAVING_MIN_LENGTH + hashLattice(i, 6, seed) * SAWDUST_SHAVING_LENGTH_RANGE;
       const color =
         hashLattice(i, 7, seed) < SAWDUST_SHAVING_DARK_SHARE
-          ? BIGTOP_SAWDUST_RAMP.shadow
-          : BIGTOP_SAWDUST_RAMP.accent;
+          ? STARLIGHT_TENT_SAWDUST_RAMP.shadow
+          : STARLIGHT_TENT_SAWDUST_RAMP.accent;
       wrappedStroke(
         ctx.surface,
         hashLattice(i, 1, seed) * ctx.size,
@@ -3720,9 +3724,9 @@ const BACKSTAGE_COIL_FLATTEN = 0.6;
  * there — all kept so faint that the mass reads as the dark back of the tent and
  * never as ground anybody could step onto.
  */
-const bigtopBackstage: Material = {
-  id: 'bigtop_backstage',
-  label: 'Big Top backstage canvas (wall mass)',
+const starlightTentBackstage: Material = {
+  id: 'starlight_tent_backstage',
+  label: 'Starlight Tent backstage canvas (wall mass)',
   patchTiles: 4,
   variants: 2,
   paint: (ctx) => {
@@ -3909,8 +3913,8 @@ export const MATERIALS: ReadonlyArray<Material> = [
   hollowPlanks,
   pastureGrass,
   cropRows,
-  bigtopSawdust,
-  bigtopBackstage,
+  starlightTentSawdust,
+  starlightTentBackstage,
   circusLot,
   cellarEarth,
   cellarHerringbone,

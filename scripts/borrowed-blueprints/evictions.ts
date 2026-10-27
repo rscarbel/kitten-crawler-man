@@ -9,13 +9,13 @@
  * - the crawlers remark on it, but only when another quest's item did it —
  *   never when this quest takes its own items back, or moves one of its
  *   items on to the other;
- * - Hilda's Barricade Boards, evicted by this quest's items, come back from
+ * - Lori's Barricade Boards, evicted by this quest's items, come back from
  *   her wood pile, and a walk over the pile takes the boards even when that
  *   evicts this quest's item — which then comes back from Wendell as usual;
  * - a quest that ends retires only its own item from the slot.
  *
  * Stood up on the same real village and quest system as the station checks,
- * and on real interiors for Wendell and Hilda, so the gate needs no scene.
+ * and on real interiors for Wendell and Lori, so the gate needs no scene.
  */
 
 import { crawlerName } from '../../src/characters/characters';
@@ -35,7 +35,7 @@ import {
   AnchorInteriorSystem,
   WOOD_PILE_RESPAWN_SECONDS,
 } from '../../src/systems/AnchorInteriorSystem';
-import { HILDA_COTTAGE_NAME } from '../../src/systems/interiorStoryOwnership';
+import { LORI_COTTAGE_NAME } from '../../src/systems/interiorStoryOwnership';
 import {
   PLUMBLINE_FARM_NAME,
   grantBlueprintsItem,
@@ -57,7 +57,7 @@ const MAX_PRESSES_PER_BEAT = 2000;
 const UPDATES_PER_SECOND = 60;
 /** A frame past the pile's own restock time, so rounding can never leave it one short. */
 const PILE_RESTOCK_FRAMES = WOOD_PILE_RESPAWN_SECONDS * UPDATES_PER_SECOND + 1;
-/** Far enough from Hilda's pile that it is out of pickup reach. */
+/** Far enough from Lori's pile that it is out of pickup reach. */
 const AWAY_FROM_PILE_TILES = 4;
 
 const SCYTHE_BARK = {
@@ -133,17 +133,17 @@ function wendellHandsBackBlueprints(
   }
 }
 
-/** Hilda's cottage mid-repair, stood up on `rig`'s crawlers, or null when it has no wood pile. */
-function hildaCottage(
+/** Lori's cottage mid-repair, stood up on `rig`'s crawlers, or null when it has no wood pile. */
+function loriCottage(
   rig: EvictionRig,
 ): { readonly room: AnchorInteriorSystem; readonly pile: { x: number; y: number } } | null {
   const progress = createAnchorQuestProgress();
   progress.status = 'active';
-  progress.hilda = 'in_progress';
+  progress.lori = 'in_progress';
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  map.generateInterior('house', 0, HILDA_COTTAGE_NAME, false);
+  map.generateInterior('house', 0, LORI_COTTAGE_NAME, false);
   const room = AnchorInteriorSystem.forBuilding(
-    HILDA_COTTAGE_NAME,
+    LORI_COTTAGE_NAME,
     0,
     progress,
     map,
@@ -345,14 +345,14 @@ export function verifyOwnRemovalsAreQuiet(check: Check): void {
 }
 
 /**
- * Hilda's boards, evicted by this quest's scythe, come back from her pile —
+ * Lori's boards, evicted by this quest's scythe, come back from her pile —
  * and walking over the pile with the scythe takes the boards, evicting it.
  */
-export function verifyHildaBoardsRecover(check: Check): void {
+export function verifyLoriBoardsRecover(check: Check): void {
   const rig = evictionRig(() => undefined);
-  const cottage = rig === null ? null : hildaCottage(rig);
+  const cottage = rig === null ? null : loriCottage(rig);
   if (rig === null || cottage === null) {
-    check(false, "Hilda's cottage stocks a wood pile while her repairs are under way");
+    check(false, "Lori's cottage stocks a wood pile while her repairs are under way");
     return;
   }
   const { human, cat } = rig;
@@ -398,7 +398,7 @@ export function verifyHildaBoardsRecover(check: Check): void {
 }
 
 /**
- * The blueprints held while fetching Hilda's wood: the pile puts the boards in
+ * The blueprints held while fetching Lori's wood: the pile puts the boards in
  * the quest slot anyway, and the blueprints go back to Wendell.
  */
 export function verifyWoodPileEvictsBlueprints(check: Check, kind: CrawlerKind): void {
@@ -406,9 +406,9 @@ export function verifyWoodPileEvictsBlueprints(check: Check, kind: CrawlerKind):
     setup.state.blueprints.phase = 'build_stations';
     setup.state.blueprints.stationsUpgraded.saw = true;
   });
-  const cottage = rig === null ? null : hildaCottage(rig);
+  const cottage = rig === null ? null : loriCottage(rig);
   if (rig === null || cottage === null) {
-    check(false, "the test village stands up, with Hilda's wood pile stocked");
+    check(false, "the test village stands up, with Lori's wood pile stocked");
     return;
   }
   const { room, pile } = cottage;
@@ -471,9 +471,9 @@ export function verifyWoodPilePrefersFreeSlot(check: Check): void {
   const rig = evictionRig((setup) => {
     setup.state.blueprints.phase = 'build_stations';
   });
-  const cottage = rig === null ? null : hildaCottage(rig);
+  const cottage = rig === null ? null : loriCottage(rig);
   if (rig === null || cottage === null) {
-    check(false, "the test village stands up, with Hilda's wood pile stocked");
+    check(false, "the test village stands up, with Lori's wood pile stocked");
     return;
   }
   const { human, cat } = rig;
@@ -525,17 +525,17 @@ export function evictionSections(
       name: 'Evictions: the quest moving its own items is quiet',
       run: () => verifyOwnRemovalsAreQuiet(check),
     },
-    { name: "Evictions: Hilda's boards come back", run: () => verifyHildaBoardsRecover(check) },
+    { name: "Evictions: Lori's boards come back", run: () => verifyLoriBoardsRecover(check) },
     {
-      name: "Evictions: Hilda's pile evicts the human's blueprints",
+      name: "Evictions: Lori's pile evicts the human's blueprints",
       run: () => verifyWoodPileEvictsBlueprints(check, 'human'),
     },
     {
-      name: "Evictions: Hilda's pile evicts the cat's blueprints",
+      name: "Evictions: Lori's pile evicts the cat's blueprints",
       run: () => verifyWoodPileEvictsBlueprints(check, 'cat'),
     },
     {
-      name: "Evictions: both at Hilda's pile, the free slot takes it",
+      name: "Evictions: both at Lori's pile, the free slot takes it",
       run: () => verifyWoodPilePrefersFreeSlot(check),
     },
     {

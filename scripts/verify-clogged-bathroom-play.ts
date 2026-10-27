@@ -74,8 +74,6 @@ const FAULTS = [
   'checkpoint-forgets',
   /** The persisted save leaves the bathroom out. */
   'save-drops-bathroom',
-  /** A save without the bathroom field loads it fixed. */
-  'old-save-loads-solved',
   /** A rewind leaves the bathroom as it is instead of as captured. */
   'restore-ignores-snapshot',
   /** A fixed bathroom never counts as a save point. */
@@ -215,7 +213,6 @@ function injectFault(active: Fault | null): void {
   switch (active) {
     case null:
     case 'goblin-mortal':
-    case 'old-save-loads-solved':
     case 'solve-leaves-blocked':
     case 'stall-harmable':
     case 'visit-ends-early':
@@ -336,10 +333,10 @@ function injectSceneFault(scene: Scene, active: Fault | null): void {
       return;
     case 'save-drops-bathroom': {
       const capture = scene['capturePersistedWorldState'].bind(scene);
-      scene['capturePersistedWorldState'] = () => {
+      Reflect.set(scene, 'capturePersistedWorldState', () => {
         const { cloggedBathroom: _dropped, ...rest } = capture();
         return rest;
-      };
+      });
       return;
     }
     case null:
@@ -353,7 +350,6 @@ function injectSceneFault(scene: Scene, active: Fault | null): void {
     case 'goblin-hostile':
     case 'stall-visible':
     case 'checkpoint-forgets':
-    case 'old-save-loads-solved':
     case 'restore-ignores-snapshot':
     case 'fixed-room-never-saves':
       return;
@@ -958,7 +954,7 @@ function verifyFixedRoomSaves(
     saved?.persisted?.cloggedBathroom?.phase === 'solved',
     `${label}: the fixed room's save does not carry the fix`,
   );
-  const resumeTile = saved?.safeRoomTile ?? null;
+  const resumeTile = saved?.resumeTile ?? null;
   const { bounds } = copy.room;
   const resumesInRoom =
     resumeTile !== null &&
@@ -1136,9 +1132,8 @@ function verifyDeathRewind(rig: Rig, copy: BathroomCopy, label: string): void {
   check(refreshedOf(human).length === 0, `${label}: Refreshed survives a death rewind`);
 }
 
-function freshScene(progress: SavedProgress, solvedAtStart: boolean): Scene {
+function freshScene(progress: SavedProgress): Scene {
   const { levelDef, options } = sceneSetupFromSave({ skipIntro: true }, progress);
-  if (solvedAtStart) options.bathroomSolvedAtStart = () => true;
   return new DungeonScene(levelDef, new InputManager(), new SceneManager(), options);
 }
 
@@ -1165,26 +1160,18 @@ function verifySaves(rig: Rig, copy: BathroomCopy, label: string): void {
     world: { ...writtenWorld, persisted: persistedOnDisk },
   };
 
-  const loaded = freshScene(onDisk, false);
+  const loaded = freshScene(onDisk);
   check(loaded.cloggedBathroom.isSolved, `${label}: a save written after the fix loads it broken`);
   check(loaded.cloggedBathroom.hasSeenExplainer, `${label}: a loaded save forgets the explainer`);
   const loadedFixed = loaded['gameMap'].bathroomPlumbingState === 'fixed';
   check(loadedFixed, `${label}: a loaded save has broken pipes under a fixed bathroom`);
   loaded.onExit();
 
-  const { cloggedBathroom: _dropped, ...older } = persistedOnDisk;
-  const olderSave: SavedProgress = {
-    ...written,
-    world: { ...writtenWorld, persisted: older },
-  };
-  const old = freshScene(olderSave, fault === 'old-save-loads-solved');
-  check(!old.cloggedBathroom.isSolved, `${label}: a save from before the bathroom loads it fixed`);
+  const { cloggedBathroom: _dropped, ...withoutBathroom } = persistedOnDisk;
   check(
-    old['gameMap'].bathroomPlumbingState === 'broken',
-    `${label}: an old save loads open pipes`,
+    parsePersistedWorldState(withoutBathroom) === undefined,
+    `${label}: a save without the bathroom passes validation`,
   );
-  check(!old.cloggedBathroom.hasSeenExplainer, `${label}: an old save loads the explainer as seen`);
-  old.onExit();
 }
 
 // ── Run ────────────────────────────────────────────────────────────────────

@@ -27,7 +27,7 @@ import type { GameSystem, SystemContext } from './GameSystem';
 /**
  * Anything that throws boulders. Structural rather than `instanceof RockGolem`
  * because the hired golem, Tumbledown, shares the golem's attack kit without
- * sharing its class — the requirement is that a hired meat shield fights the
+ * sharing its class — the requirement is that a hired golem fights the
  * same way, and a nominal check would silently strand its rocks in its queue.
  */
 export interface GolemRockThrower {

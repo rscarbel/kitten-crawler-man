@@ -17,12 +17,9 @@ export function parseKrakarenRoomCheckpoint(
   if (!isRecord(value)) return undefined;
   const brokenVats = parseIndexList(value.brokenVats);
   const deadJunctions = parseIndexList(value.deadJunctions);
-  // A save from before the lab had state of its own: an untouched lab.
-  if (value.brokenVats === undefined && value.deadJunctions === undefined) {
-    return { brokenVats: [], deadJunctions: [], defeated: false };
-  }
+  const { defeated } = value;
   if (brokenVats === undefined || deadJunctions === undefined) return undefined;
-  const defeated = value.defeated === true;
+  if (typeof defeated !== 'boolean') return undefined;
   return { brokenVats, deadJunctions, defeated };
 }
 

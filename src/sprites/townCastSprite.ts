@@ -2,7 +2,7 @@
  * Draw wrapper for the human cast: picks a state name from a look's figure and
  * a frame from the caller's own walk phase or clock, and draws it through the
  * shared figure cache. Mirrors `ratkinCastSprite.ts`'s contract so a later
- * species-dispatched figure (skyfowl) can present the same shape.
+ * species-dispatched figure (Hawkfolk) can present the same shape.
  */
 
 import { walkFrameIndex, timeFrameIndex } from '../core/spriteAssets/SpriteRenderer';
@@ -98,8 +98,8 @@ function rowRoleFor(action: TownCastAction, look: TownCastLook): TownCastRowRole
  *
  * `approx` opts into the crowd's own tolerance for a stand-in pose instead of
  * a render-path bake — right for the many near-identical strangers a street
- * cohort draws, wrong for a named, closely-watched figure (the Desperado
- * Club's dancers, a boss room's lab scientist) where the exact pose is worth
+ * cohort draws, wrong for a named, closely-watched figure (the Cloak &
+ * Dagger's dancers, a boss room's lab scientist) where the exact pose is worth
  * paying for. Defaults to exact so every caller that doesn't ask for it keeps
  * today's behaviour.
  */

@@ -3,7 +3,6 @@
  * data, one named fixture at a time.
  */
 
-import { createClubMembership } from '../../core/club/ClubMembership';
 import { TILE_SIZE } from '../../core/constants';
 import { createMercenaryRoster } from '../../core/party/MercenaryRoster';
 import { MERCENARY_TEMPLATES } from '../../core/party/mercenaryTemplates';
@@ -21,7 +20,6 @@ import { buyFromShop, createShopStock, sellToShop, type ShopStock } from '../../
 import type { ShopId } from '../../economy/shops';
 import { buildApothecaryMenu, serveRemedy } from '../../systems/townApothecary';
 import { GATE_LOCKED_LABEL } from '../../systems/market/vendorMenu';
-import { ClubVipLoungeSystem } from '../../systems/ClubVipLoungeSystem';
 import { buildTattooMenu, inkTattoo } from '../../systems/townTattooParlor';
 import { MercenaryGuildSystem } from '../../systems/MercenaryGuildSystem';
 import {
@@ -81,10 +79,8 @@ const SELL_STACKS = [
   { id: 'riot_kneeguards', qty: 1 },
 ] as const;
 const QUIET_CONTEXT: TownDialogContext = {
-  circus: 'not_started',
   murder: 'not_started',
   doomsday: 'inactive',
-  heatherSlain: false,
   quillNamed: false,
 };
 const CONTRACT_FLOOR = 'level3';
@@ -407,13 +403,6 @@ export const SHOP_FIXTURES: readonly DialogFixture[] = [
     const session = new ShopSession();
     session.open(travelMenu, () => ({ ok: true, line: '' }), NO_COUNTER_EXTRAS);
     return { session, party: makeParty(FIXTURE_COINS) };
-  }),
-  shopFixture('vip', () => {
-    const party = makeParty(FIXTURE_COINS);
-    party.active.hp = Math.ceil(party.active.maxHp * WOUNDED_HP_FRACTION);
-    const lounge = new ClubVipLoungeSystem(null, createMercenaryRoster(), createClubMembership());
-    lounge.openPanel(0, party.active);
-    return { session: lounge.session, party };
   }),
   {
     name: 'mercenary',

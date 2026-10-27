@@ -1,7 +1,7 @@
 /**
  * `verify:tactics` sections for the melee brawlers — the troglodyte, the ruins
  * ghoul, the two clowns, the rock golem, the skeleton warrior, the mantis crony
- * and the mold lion — plus the city elf cultist, a caster whose kite and
+ * and the lion — plus the city elf cultist, a caster whose kite and
  * regroup share this group's wiring, and the creatures of the same families
  * that must learn nothing.
  *
@@ -26,12 +26,12 @@ import {
 } from '../../src/creatures/CityElfCultist';
 import { Troglodyte } from '../../src/creatures/Troglodyte';
 import { RuinsGhoul } from '../../src/creatures/RuinsGhoul';
-import { StiltClown } from '../../src/creatures/StiltClown';
+import { TallClown } from '../../src/creatures/TallClown';
 import { FatClown } from '../../src/creatures/FatClown';
 import { RockGolem } from '../../src/creatures/RockGolem';
 import { RockGolemBoss } from '../../src/creatures/RockGolemBoss';
 import { MANTIS_SLASH_TOTAL_FRAMES, MantisCrony } from '../../src/creatures/MantisCrony';
-import { MoldLion } from '../../src/creatures/MoldLion';
+import { Lion } from '../../src/creatures/Lion';
 import { SWORD_SLASH_FRAMES } from '../../src/sprites/skeletonTiming';
 import { MAX_MOB_LEVEL } from '../../src/levels/spawner';
 import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
@@ -97,20 +97,20 @@ const CASTER: readonly TacticsTrait[] = ['kite', 'regroup'];
 /** Reaches restated from each creature, so a retune of one shows up here as a slow arrival. */
 const TROGLODYTE_REACH_TILES = 3;
 const GHOUL_REACH_TILES = 1.2;
-const STILT_CLOWN_REACH_TILES = 2.2;
+const TALL_CLOWN_REACH_TILES = 2.2;
 const FAT_CLOWN_REACH_TILES = 1.2;
 const ROCK_GOLEM_REACH_TILES = 1.5;
 const SKELETON_WARRIOR_REACH_TILES = 1.15;
 const MANTIS_REACH_TILES = 1.15;
-const MOLD_LION_REACH_TILES = 1.3;
+const LION_REACH_TILES = 1.3;
 const CULTIST_CROWDING_TILES = 3;
 
 /** Whole swings restated from each creature, so a riposte that shortens one shows up here. */
 const GHOUL_SWING_FRAMES = 26;
-const STILT_CLOWN_WINDUP_FRAMES = 32;
-const STILT_CLOWN_LUNGE_FRAMES = 18;
+const TALL_CLOWN_WINDUP_FRAMES = 32;
+const TALL_CLOWN_LUNGE_FRAMES = 18;
 const FAT_CLOWN_SWING_FRAMES = 30;
-const MOLD_LION_SWING_FRAMES = 22;
+const LION_SWING_FRAMES = 22;
 
 const MELEE_CASES: readonly MeleeCase[] = [
   {
@@ -129,21 +129,21 @@ const MELEE_CASES: readonly MeleeCase[] = [
     helperType: 'ruins_ghoul',
   },
   {
-    type: 'stilt_clown',
-    isExpectedClass: (mob) => mob instanceof StiltClown,
-    swingFrames: STILT_CLOWN_WINDUP_FRAMES + STILT_CLOWN_LUNGE_FRAMES,
+    type: 'tall_clown',
+    isExpectedClass: (mob) => mob instanceof TallClown,
+    swingFrames: TALL_CLOWN_WINDUP_FRAMES + TALL_CLOWN_LUNGE_FRAMES,
     eligibility: BRAWLER,
-    reachTiles: STILT_CLOWN_REACH_TILES,
+    reachTiles: TALL_CLOWN_REACH_TILES,
     helperType: 'fat_clown',
   },
-  // Falls back on a stilt clown: the troupe is one pack across both classes.
+  // Falls back on a tall clown: the troupe is one pack across both classes.
   {
     type: 'fat_clown',
     isExpectedClass: (mob) => mob instanceof FatClown,
     swingFrames: FAT_CLOWN_SWING_FRAMES,
     eligibility: BRAWLER,
     reachTiles: FAT_CLOWN_REACH_TILES,
-    helperType: 'stilt_clown',
+    helperType: 'tall_clown',
   },
   {
     type: 'rock_golem',
@@ -169,12 +169,12 @@ const MELEE_CASES: readonly MeleeCase[] = [
     helperType: 'mantis',
   },
   {
-    type: 'mold_lion',
-    isExpectedClass: (mob) => mob instanceof MoldLion,
-    swingFrames: MOLD_LION_SWING_FRAMES,
+    type: 'lion',
+    isExpectedClass: (mob) => mob instanceof Lion,
+    swingFrames: LION_SWING_FRAMES,
     eligibility: BRAWLER,
-    reachTiles: MOLD_LION_REACH_TILES,
-    helperType: 'mold_lion',
+    reachTiles: LION_REACH_TILES,
+    helperType: 'lion',
   },
   {
     type: 'city_elf_cultist',
@@ -186,8 +186,8 @@ const MELEE_CASES: readonly MeleeCase[] = [
   },
 ];
 
-/** Relatives of the brawlers above that are bosses or unique, and must learn nothing. */
-const MUST_LEARN_NOTHING: readonly StandaloneMobKind[] = ['rock_golem_boss', 'terror_the_clown'];
+/** Relatives of the brawlers above that are bosses or set-piece guards, and must learn nothing. */
+const MUST_LEARN_NOTHING: readonly StandaloneMobKind[] = ['rock_golem_boss', 'massive_clown'];
 
 /** A source that says yes to every roll, so "no trait" can only mean "not eligible". */
 const ALWAYS_YES: Rng = () => 0;

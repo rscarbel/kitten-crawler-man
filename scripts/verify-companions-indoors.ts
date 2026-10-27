@@ -1,5 +1,5 @@
 /**
- * The party's companions — Mongo and a Meat Shields hire — go wherever the
+ * The party's companions — Mongo and a Barracks hire — go wherever the
  * crawlers go: through a building's door, up and down a tower's storeys, and
  * back out again, at the health they went in with.
  *
@@ -12,8 +12,7 @@
  *
  * Mongo:
  * - Out at the door, he is rebuilt beside the cat indoors at the health he left
- *   with; a pet running home, the circus quest's lock and the knockout latch
- *   all keep him out.
+ *   with; a pet running home and the knockout latch both keep him out.
  * - A tower storey change moves him out of the storey being left, roster and
  *   grid both, into the one arrived on, beside the cat, and whatever was
  *   chasing him lets go.
@@ -88,7 +87,7 @@ import { settings } from '../src/core/input/Settings';
 import { BOSS_HEALER_DIFFICULTY } from '../src/levels/fairySpawner';
 import { HealingFairy } from '../src/creatures/fairies/HealingFairy';
 import { RockThrowSystem } from '../src/systems/RockThrowSystem';
-import { HirelingBoltSystem } from '../src/systems/HirelingBoltSystem';
+import { HirelingShotSystem } from '../src/systems/HirelingShotSystem';
 import { MongoSystem } from '../src/systems/MongoSystem';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
 import { SpellSystem } from '../src/systems/SpellSystem';
@@ -97,17 +96,18 @@ import { createTownPlan, type BuildingKind } from '../src/map/town/townPlan';
 import { TOWER_FLOOR_COUNT } from '../src/map/GameMap';
 import { stampSafeRoomCounters } from '../src/map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../src/map/safeRoomDecorLayout';
-import { BIG_TOP_ENTRY_NAME, BIG_TOP_ENTRY_KIND } from '../src/map/OverworldGenerator';
+import { STARLIGHT_TENT_ENTRY_KIND } from '../src/map/OverworldGenerator';
+import { STARLIGHT_TENT_NAME } from '../src/map/overworld/circusGroundsLayout';
 import {
   MAZE_CAT_SPAWN_TILE,
   MAZE_HUMAN_SPAWN_TILE,
   type MazeTile,
-  planBigTopMaze,
-} from '../src/map/bigTopMazeLayout';
+  planStarlightTentMaze,
+} from '../src/map/starlightTentMazeLayout';
 
 /** Any floor-3 world will do: the arrival marks are the two flaps, whatever board the hall is dealt. */
-const BIG_TOP_WORLD_SEED = 0x5eed_b16;
-const BIG_TOP_DIFFICULTY = 'normal';
+const STARLIGHT_TENT_WORLD_SEED = 0x5eed_b16;
+const STARLIGHT_TENT_DIFFICULTY = 'normal';
 import { TOWN_INTERIOR_PROPS } from '../src/sprites/art/townInterior/townInteriorProps';
 import { AnchorInteriorSystem } from '../src/systems/AnchorInteriorSystem';
 import { SKY_TEMPLE_NAME } from '../src/systems/interiorStoryOwnership';
@@ -370,23 +370,19 @@ function checkMongoThroughTheDoor(): void {
 }
 
 function checkMongoLocks(): void {
-  section('The circus lock and the knockout latch still keep him out indoors');
+  section('The knockout latch still keeps him out indoors');
   const store = makeStore();
   const party = makeParty(store, store.startTile);
   const arrival: InteriorCompanionArrival = { mongoUnlocked: true, mongoWasOut: true };
-
-  const locked = freshPetState();
-  locked.summonLocked = true;
-  const lockedInside = arriveInside(locked, arrival, party, store, makeRoster(store));
-  check(lockedInside.mongo === null, 'held by the circus, he does not walk in');
 
   const resting = freshPetState();
   resting.restingUntilFull = true;
   const restingInside = arriveInside(resting, arrival, party, store, makeRoster(store));
   check(restingInside.mongo === null, 'resting after a knockout, he does not walk in');
 
-  const locker = makeMongoSystem(freshPetState(), true);
-  locker.summonLocked = true;
+  const restingAgain = freshPetState();
+  restingAgain.restingUntilFull = true;
+  const locker = makeMongoSystem(restingAgain, true);
   check(locker.summon(party.cat, store) === null, 'and the Summon key refuses him indoors too');
 
   const unknown = arriveInside(
@@ -424,7 +420,7 @@ function checkStoreyCarry(): void {
   mongo.hp = mongo.maxHp - MONGO_WOUND_HP;
   const mongoHp = mongo.hp;
 
-  const roster = hireRoster('sledge');
+  const roster = hireRoster('crush');
   const mercSystem = new MercenarySystem(roster, null);
   mercSystem.update(contextFor(party, ground, groundRoster));
   const merc = mercSystem.activeMerc;
@@ -580,7 +576,7 @@ function knockDown(system: MercenarySystem, merc: Mercenary): void {
 function checkHireThroughTheDoor(): void {
   section('The hire walks in, stands up beside the party, and walks back out');
   const out = outdoors();
-  const roster = hireRoster('sledge');
+  const roster = hireRoster('crush');
   const outside = new MercenarySystem(roster, HIRE_FLOOR);
   outside.update(contextFor(out.party, out.map, out.roster));
   const merc = outside.activeMerc;
@@ -604,7 +600,7 @@ function checkHireThroughTheDoor(): void {
   const reach = indoor === null ? Infinity : tilesBetween(indoor, party.human);
   check(reach <= LANDING_REACH_TILES, `beside its owner (${reach.toFixed(1)} tiles)`);
 
-  const stamped = hireRoster('sledge');
+  const stamped = hireRoster('crush');
   new MercenarySystem(stamped, OTHER_FLOOR).update(contextFor(party, store, makeRoster(store)));
   check(
     stamped.active === null,
@@ -630,7 +626,7 @@ function checkDownedHireIsLost(): void {
   const groundRoster = makeRoster(ground);
   const upperRoster = makeRoster(upper);
   const party = makeParty(ground, ground.startTile);
-  const roster = hireRoster('sledge');
+  const roster = hireRoster('crush');
   const hireName = roster.active?.name ?? '';
   const system = new MercenarySystem(roster, null);
   system.update(contextFor(party, ground, groundRoster));
@@ -647,7 +643,7 @@ function checkDownedHireIsLost(): void {
   check(roster.lastDeceased === hireName, 'and the desk will hear of it');
   check(!inRoster(groundRoster, merc) && !inRoster(upperRoster, merc), 'and no body is carried');
 
-  const doorRoster = hireRoster('sledge');
+  const doorRoster = hireRoster('crush');
   const store = makeStore();
   const storeRoster = makeRoster(store);
   const storeParty = makeParty(store, store.startTile);
@@ -670,7 +666,7 @@ function checkDeskUnderTheSameRoof(): void {
   const ctx = contextFor(party, store, roster);
   system.update(ctx);
   check(system.activeMerc === null, 'nobody stands for an empty roster');
-  hires.active = hireRoster('bomo').active;
+  hires.active = hireRoster('hammer_hands').active;
   // What the interior does on the frame it sees the roster change.
   system.onContractChanged(roster.mobs, roster.grid);
   system.update(ctx);
@@ -731,7 +727,7 @@ function farBehind(screen: 'small' | 'huge', engaged: boolean): CatchUpRun | nul
   if (screen === 'small') setViewportSize(SMALL_SCREEN_W, SMALL_SCREEN_H);
   else setViewportSize(HUGE_SCREEN_PX, HUGE_SCREEN_PX);
   const out = outdoors();
-  const system = new MercenarySystem(hireRoster('sledge'), HIRE_FLOOR);
+  const system = new MercenarySystem(hireRoster('crush'), HIRE_FLOOR);
   const ctx = contextFor(out.party, out.map, out.roster);
   system.update(ctx);
   const merc = system.activeMerc;
@@ -771,7 +767,7 @@ function checkCatchUp(): void {
   const map = makeRoom(SPLIT_ROOM_W_TILES, SPLIT_ROOM_H_TILES, SPLIT_WALL_COLUMN);
   const roster = makeRoster(map);
   const party = makeParty(map, SPLIT_OWNER_TILE);
-  const system = new MercenarySystem(hireRoster('sledge'), HIRE_FLOOR);
+  const system = new MercenarySystem(hireRoster('crush'), HIRE_FLOOR);
   const ctx = contextFor(party, map, roster);
   system.update(ctx);
   const merc = system.activeMerc;
@@ -805,7 +801,7 @@ function checkCatchUp(): void {
   const open = makeRoom(OUTDOOR_W_TILES, OUTDOOR_H_TILES);
   const openRoster = makeRoster(open);
   const openParty = makeParty(open, OUTDOOR_PARTY_TILE);
-  const openSystem = new MercenarySystem(hireRoster('sledge'), HIRE_FLOOR);
+  const openSystem = new MercenarySystem(hireRoster('crush'), HIRE_FLOOR);
   const openCtx = contextFor(openParty, open, openRoster);
   openSystem.update(openCtx);
   const walker = openSystem.activeMerc;
@@ -909,7 +905,7 @@ function checkHeldMobsAreOffLimits(): void {
   party.human.isActive = true;
   party.cat.isActive = false;
   const hireCtx = contextFor(party, map, roster);
-  const hire = new MercenarySystem(hireRoster('sledge'), HIRE_FLOOR);
+  const hire = new MercenarySystem(hireRoster('crush'), HIRE_FLOOR);
   hire.update(hireCtx);
   const merc = hire.activeMerc;
   if (merc === null) {
@@ -927,20 +923,20 @@ function checkHeldMobsAreOffLimits(): void {
   roster.grid.remove(foe);
   roster.mobs.splice(roster.mobs.indexOf(foe), 1);
 
-  // Sledge answers whoever hurts the cat. A held mob beside her when she bleeds
+  // Crush answers whoever hurts the cat. A held mob beside her when she bleeds
   // is the nearest suspect, and must not be the one he goes for.
-  const guardian = new MercenarySystem(hireRoster('sledge'), HIRE_FLOOR);
+  const guardian = new MercenarySystem(hireRoster('crush'), HIRE_FLOOR);
   const guardCtx = contextFor(party, map, roster);
   hire.dismiss(roster.mobs, roster.grid);
   guardian.update(guardCtx);
-  const sledge = guardian.activeMerc;
-  if (sledge !== null) {
+  const crush = guardian.activeMerc;
+  if (crush !== null) {
     const suspect = heldFoeBeside(map, roster, party.cat);
     let frame = 0;
     const suspectOutcome = watchHeldFoe(suspect, () => {
       frame++;
       if (frame % CAT_WOUND_EVERY_FRAMES === 0) party.cat.hp = Math.max(1, party.cat.hp - 1);
-      sledge.updateAI([]);
+      crush.updateAI([]);
       guardian.update(guardCtx);
     });
     check(
@@ -948,7 +944,7 @@ function checkHeldMobsAreOffLimits(): void {
       `a held mob beside a wounded cat is not taken for her attacker (${suspectOutcome.lostWhileHeld} HP taken)`,
     );
   } else {
-    check(false, 'Sledge stands');
+    check(false, 'Crush stands');
   }
 
   const quill = readFileSync(QUILL_PATH, 'utf8');
@@ -1055,7 +1051,7 @@ function rangedDamageIndoors(id: MercenaryTemplateId, flyShots: boolean): number
   roster.add(foe);
   foe.aiHeld = true;
   const rocks = new RockThrowSystem(store);
-  const bolts = new HirelingBoltSystem(store, () => false);
+  const bolts = new HirelingShotSystem(store, () => false);
   let lostAtRange = 0;
   for (let f = 0; f < RANGED_BUDGET_FRAMES; f++) {
     const before = { x: merc.x, y: merc.y };
@@ -1081,9 +1077,9 @@ function rangedDamageIndoors(id: MercenaryTemplateId, flyShots: boolean): number
 }
 
 function checkHireShotsIndoors(): void {
-  section('A water mage’s bolts and a golem’s boulders land indoors');
+  section('An archer’s arrows and a golem’s boulders land indoors');
   for (const [id, name] of [
-    ['splash_zone', 'the water mage'],
+    ['ivy_ashgrove', 'the archer'],
     ['tumbledown', 'the golem'],
   ] as const) {
     const landed = rangedDamageIndoors(id, true);
@@ -1167,7 +1163,7 @@ function everyRoomArrival(): RoomArrival[] {
       hasSafeRoom: b.hasSafeRoom === true,
     })),
     { name: plan.tower.name, kind: plan.tower.kind, hasSafeRoom: false },
-    { name: BIG_TOP_ENTRY_NAME, kind: BIG_TOP_ENTRY_KIND, hasSafeRoom: false },
+    { name: STARLIGHT_TENT_NAME, kind: STARLIGHT_TENT_ENTRY_KIND, hasSafeRoom: false },
   ];
   for (const { name, kind, hasSafeRoom } of buildings) {
     const storeys = kind === 'tower' ? TOWER_FLOOR_COUNT : 1;
@@ -1192,14 +1188,14 @@ function everyRoomArrival(): RoomArrival[] {
     }
   }
   const maze = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  maze.generateInterior(BIG_TOP_ENTRY_KIND, 0, BIG_TOP_ENTRY_NAME, false, {
-    kind: 'bigtop_maze',
-    plan: planBigTopMaze(BIG_TOP_WORLD_SEED, BIG_TOP_DIFFICULTY),
+  maze.generateInterior(STARLIGHT_TENT_ENTRY_KIND, 0, STARLIGHT_TENT_NAME, false, {
+    kind: 'starlight_tent_maze',
+    plan: planStarlightTentMaze(STARLIGHT_TENT_WORLD_SEED, STARLIGHT_TENT_DIFFICULTY),
   });
   arrivals.push({
-    label: `${BIG_TOP_ENTRY_NAME} maze, two flaps`,
-    buildingName: BIG_TOP_ENTRY_NAME,
-    kind: BIG_TOP_ENTRY_KIND,
+    label: `${STARLIGHT_TENT_NAME} maze, two flaps`,
+    buildingName: STARLIGHT_TENT_NAME,
+    kind: STARLIGHT_TENT_ENTRY_KIND,
     storey: 0,
     map: maze,
     landing: MAZE_HUMAN_SPAWN_TILE,
@@ -1398,7 +1394,7 @@ function checkPartyInEveryRoom(arrival: RoomArrival): void {
   check(mongo !== null, `${arrival.label}: Mongo walks in`);
   if (mongo !== null) checkStandsFree(map, catFacts, mongo, `${arrival.label}: Mongo`);
 
-  const hires = new MercenarySystem(hireRoster('sledge'), null);
+  const hires = new MercenarySystem(hireRoster('crush'), null);
   hires.update(contextFor(party, map, roster));
   const merc = hires.activeMerc;
   check(merc !== null, `${arrival.label}: the hire walks in`);
@@ -1876,7 +1872,7 @@ function checkSceneWiring(): void {
   const floorSetup = between(interior, 'this.floors.push({', '});');
   for (const system of [
     'rockThrows: new RockThrowSystem(',
-    'hirelingShots: new HirelingBoltSystem(',
+    'hirelingShots: new HirelingShotSystem(',
   ]) {
     check(floorSetup?.includes(system) === true, `each storey builds its ${system.split(':')[0]}`);
   }
@@ -1988,7 +1984,7 @@ function checkDownedPartnerKeepsEveryDoorShut(): void {
   const dungeon = readFileSync(DUNGEON_SCENE_PATH, 'utf8');
   const gate = methodBody(dungeon, 'private sealedBuildingMessage(entry: BuildingEntry)');
   check(
-    inOrder(gate, 'downedPartnerEntryRefusal(', 'BIG_TOP_BUILDING_NAME'),
+    inOrder(gate, 'downedPartnerEntryRefusal(', 'prisonDoorRefusal('),
     'the door gate asks about the partner before any single building',
   );
   const interior = readFileSync(INTERIOR_SCENE_PATH, 'utf8');

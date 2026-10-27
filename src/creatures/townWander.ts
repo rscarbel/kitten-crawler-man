@@ -1,7 +1,7 @@
 /**
  * Shared wander behavior for ambient, non-combatant figures: stroll to a random
  * point at a per-agent speed, pause on arrival, then repeat. Generalized from
- * the Desperado Club's patrons so both club patrons and overworld townsfolk run
+ * the Cloak & Dagger's patrons so both club patrons and overworld townsfolk run
  * one implementation (and share one set of tuning knobs) rather than diverging
  * copies.
  */
@@ -30,6 +30,14 @@ export interface WanderParams {
   pauseMin: number;
   pauseMax: number;
   /**
+   * Asked right after `pickTarget`: false when the point just reached was
+   * only a waypoint on the way somewhere, so the agent walks straight on
+   * instead of stopping there. Absent, every arrival pauses.
+   */
+  pausesOnArrival?: () => boolean;
+  /** The draw behind each pause length; absent, `Math.random`, so a gate can seed a crowd. */
+  random?: () => number;
+  /**
    * Optional walkability gate in world pixels. When the next step would land on
    * an unwalkable point the agent abandons its target and picks a new one,
    * rather than walking through a wall.
@@ -56,7 +64,11 @@ function retarget(state: WanderState, params: WanderParams): void {
   const target = params.pickTarget();
   state.targetX = target.x;
   state.targetY = target.y;
-  state.pause = params.pauseMin + Math.floor(Math.random() * (params.pauseMax - params.pauseMin));
+  const pauses = params.pausesOnArrival?.() ?? true;
+  const random = params.random ?? Math.random;
+  state.pause = pauses
+    ? params.pauseMin + Math.floor(random() * (params.pauseMax - params.pauseMin))
+    : 0;
 }
 
 /**

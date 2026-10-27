@@ -7,14 +7,14 @@
 
 import { residentById, type ResidentId } from '../systems/townResidents';
 import { townCastLook } from '../sprites/person/townCastLooks';
-import { skyfowlLookById, type SkyfowlLookId } from '../sprites/art/skyfowl/cast';
+import { hawkfolkLookById, type HawkfolkLookId } from '../sprites/art/hawkfolk/cast';
 import type { CitizenFigure } from './citizenFigure';
 
 /** Every human resident's own look id, from `townCastLooks.ts`'s closed set. */
 const HUMAN_RESIDENT_LOOK_ID: Readonly<Record<ResidentId, string | undefined>> = {
   wendell: 'resident_wendell',
-  old_hilda: 'resident_old_hilda',
-  brann_cartwright: undefined,
+  old_lori: undefined,
+  steve_cartwright: undefined,
   marta_miller: 'resident_marta_miller',
   apothecary_fen: 'resident_apothecary_fen',
   deacon_aviel: undefined,
@@ -28,13 +28,17 @@ const HUMAN_RESIDENT_LOOK_ID: Readonly<Record<ResidentId, string | undefined>> =
   tattooist_nim: undefined,
   stock_clerk_wick: 'resident_stock_clerk_wick',
   keeper_brenna_kestrel: undefined,
+  janitor_puddles: undefined,
+  janitor_grout: undefined,
+  sydney: undefined,
+  brandon: undefined,
 };
 
-/** Every skyfowl resident's own look id, from `skyfowl/cast.ts`'s resident set. */
-const SKYFOWL_RESIDENT_LOOK_ID: Readonly<Record<ResidentId, SkyfowlLookId | undefined>> = {
+/** Every Hawkfolk resident's own look id, from `hawkfolk/cast.ts`'s resident set. */
+const HAWKFOLK_RESIDENT_LOOK_ID: Readonly<Record<ResidentId, HawkfolkLookId | undefined>> = {
   wendell: undefined,
-  old_hilda: undefined,
-  brann_cartwright: 'resident_brann_cartwright',
+  old_lori: undefined,
+  steve_cartwright: undefined,
   marta_miller: undefined,
   apothecary_fen: undefined,
   deacon_aviel: 'resident_deacon_aviel',
@@ -48,15 +52,28 @@ const SKYFOWL_RESIDENT_LOOK_ID: Readonly<Record<ResidentId, SkyfowlLookId | unde
   tattooist_nim: 'resident_tattooist_nim',
   stock_clerk_wick: undefined,
   keeper_brenna_kestrel: 'resident_keeper_brenna_kestrel',
+  janitor_puddles: undefined,
+  janitor_grout: undefined,
+  sydney: undefined,
+  brandon: undefined,
 };
+
+/**
+ * Whether a named resident wears a look from one of the casts. One who does
+ * not is drawn by a bespoke painter their roster spec names, and has no
+ * figure here.
+ */
+export function residentWearsCastLook(id: ResidentId): boolean {
+  return HUMAN_RESIDENT_LOOK_ID[id] !== undefined || HAWKFOLK_RESIDENT_LOOK_ID[id] !== undefined;
+}
 
 /** The fixed figure a named resident always draws with. */
 export function residentFigure(id: ResidentId): CitizenFigure {
   const def = residentById(id);
-  if (def.species === 'skyfowl') {
-    const lookId = SKYFOWL_RESIDENT_LOOK_ID[id];
-    if (lookId === undefined) throw new Error(`no skyfowl figure authored for resident "${id}"`);
-    return { species: 'skyfowl', look: skyfowlLookById(lookId) };
+  if (def.species === 'hawkfolk') {
+    const lookId = HAWKFOLK_RESIDENT_LOOK_ID[id];
+    if (lookId === undefined) throw new Error(`no Hawkfolk figure authored for resident "${id}"`);
+    return { species: 'hawkfolk', look: hawkfolkLookById(lookId) };
   }
   const lookId = HUMAN_RESIDENT_LOOK_ID[id];
   if (lookId === undefined) throw new Error(`no human figure authored for resident "${id}"`);

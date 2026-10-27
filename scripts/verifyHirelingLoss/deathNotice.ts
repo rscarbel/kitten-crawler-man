@@ -30,7 +30,7 @@ import { MobRoster } from '../../src/systems/kits/SceneWorld';
 import { SpellSystem } from '../../src/systems/SpellSystem';
 import type { JourneyGateReporter } from './circusJourney';
 
-const HIRE_ID = 'sledge';
+const HIRE_ID = 'crush';
 const ROOM_W_TILES = 24;
 const ROOM_H_TILES = 16;
 const PARTY_TILE = { x: 6, y: 8 } as const;

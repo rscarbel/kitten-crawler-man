@@ -1,7 +1,7 @@
 /**
  * Colours and type for the Wheel of Fortune's screens: the two danger
  * warnings, the wheel screen around the wheel, the outcome reveals and the
- * Nothing. The wheel itself is painted from `wheelPalette`, shared with the
+ * Permanent Death. The wheel itself is painted from `wheelPalette`, shared with the
  * upright prop on the club floor, so the wheel the player walks past and the
  * wheel they bet on are visibly the same object.
  */
@@ -92,15 +92,10 @@ export const wheelInk = {
     subtext: '#fff1dc',
   },
 
-  /** The stab: a red slash across the screen and a red wash that fades. */
-  slash: '#ff1a2a',
-  slashCore: '#ffe0e0',
-  slashWash: '#b00010',
-
   coin: { face: '#f5c84c', edge: '#8a5a0a', shine: '#fff6d0' },
   cowMoo: '#fff6ea',
 
-  /** The Nothing: a black that swallows the screen and two lines of grey text. */
+  /** Permanent Death: a black that swallows the screen and two lines of grey text. */
   void: '#000000',
   voidText: '#e6e0d6',
   voidMuted: '#6e685e',
@@ -119,5 +114,5 @@ export const WHEEL_BANNER_TYPE: TypeStyle = { size: 34, weight: 900, lineHeight:
 export const WHEEL_FLAG_TYPE: TypeStyle = { size: 13, weight: 900, lineHeight: 16 };
 /** The SPIN label and the big bet readout. */
 export const WHEEL_SPIN_TYPE: TypeStyle = { size: 22, weight: 900, lineHeight: 26 };
-/** The Nothing's two lines. */
+/** Permanent Death's two lines. */
 export const WHEEL_VOID_TYPE: TypeStyle = { size: 30, weight: 300, lineHeight: 38 };

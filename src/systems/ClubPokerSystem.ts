@@ -1,5 +1,5 @@
 /**
- * The Desperado Club's Texas Hold'em table — the presentation and input host
+ * The Cloak & Dagger's Texas Hold'em table — the presentation and input host
  * over {@link PokerTable}, and the one place poker touches the party's purse.
  *
  * Money moves exactly twice: the buy-in (and any rebuy) takes coins out of the
@@ -14,7 +14,7 @@
 import type { Player } from '../Player';
 import { canAffordCoins, partyCoins, spendPartyCoins } from '../core/party/partyCoins';
 import { NEVER_LUCKY, type LuckCheck } from '../core/state/GodMode';
-import { copyPokerReads, type ClubMembership, type PokerReads } from '../core/club/ClubMembership';
+import { copyPokerReads, type CasinoState, type PokerReads } from '../core/club/CasinoState';
 import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
 import { keybindings } from '../core/input/Keybindings';
 import { ACTIVATE_KEYS, type Surface, type Ui, type UiAudio } from '../ui/core/UiRoot';
@@ -78,13 +78,14 @@ import {
   rollPokerPersonalities,
   type PokerPersonalities,
 } from './casino/poker/npc/personality';
-import {
-  createRegularsTable,
-  isRegularId,
-  type PokerRegulars,
-} from './casino/poker/npc/PokerRegulars';
+import { createRegularsTable, type PokerRegulars } from './casino/poker/npc/PokerRegulars';
 import { fadeReadBetweenVisits } from './casino/poker/npc/playerRead';
-import { POKER_REGULARS, REGULAR_IDS, type RegularId } from './casino/poker/npc/regulars';
+import {
+  POKER_REGULARS,
+  REGULAR_IDS,
+  isRegularId,
+  type RegularId,
+} from './casino/poker/npc/regulars';
 import type { CasinoSeat } from './ClubCasinoSystem';
 
 /** Frames longer than this are a tab-away, not a slow frame; the clock refuses to jump. */
@@ -115,9 +116,9 @@ function prefersReducedMotion(): boolean {
   return globalThis.matchMedia(REDUCED_MOTION_QUERY).matches;
 }
 
-/** The table's two toggles and the regulars' reads, which live on the club membership between visits. */
+/** The table's two toggles and the regulars' reads, which live on the casino state between visits. */
 export type PokerTableSettings = Pick<
-  ClubMembership,
+  CasinoState,
   'pokerFast' | 'pokerShowCards' | 'pokerReads' | 'pokerNotes'
 >;
 
@@ -184,8 +185,6 @@ export class ClubPokerSystem {
 
   /** Coins the purse paid into the current sitting: the buy-in plus every rebuy. */
   private sittingBuyIns = 0;
-  /** Chips committed to pots at tables already left this visit. */
-  private committedAtEarlierTables = 0;
   /** The player's row on screen, in canvas CSS pixels, where the winnings fly from. */
   private playerAnchor: { x: number; y: number } | null = null;
 
@@ -285,11 +284,6 @@ export class ClubPokerSystem {
   /** Every card and chip in the air has landed: what the table shows has caught up with the hand. */
   get flightsLanded(): boolean {
     return this.motion.flights.length === 0;
-  }
-
-  /** Chips the player has committed to pots since entering the club, across every sitting. */
-  get coinsWageredThisVisit(): number {
-    return this.committedAtEarlierTables + (this.table?.playerCoinsCommitted ?? 0);
   }
 
   openBuyIn(): void {
@@ -522,7 +516,6 @@ export class ClubPokerSystem {
     this.banter.clear();
     this.history.abandonHand();
     if (!opts.quiet) this.playCue('cash_out');
-    this.committedAtEarlierTables += table.playerCoinsCommitted;
     const regulars = this.regularsValue;
     if (regulars !== null) {
       this.toggles.pokerReads = copyPokerReads(regulars.reads);

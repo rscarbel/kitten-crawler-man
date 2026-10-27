@@ -172,7 +172,7 @@ export class BossRoomDressings implements GroundHazardSource, BossRoomFightListe
   /**
    * Tells every room whose boss is already dead that it was won. A room built
    * after its kill — a dev preset that skips the boss, a floor rebuilt from a
-   * save, a save older than the dressings — never heard the kill itself.
+   * save — never heard the kill itself.
    * Safe to repeat: `onBossDefeated` is idempotent by contract.
    */
   replayDefeats(dead: BossRoomDefeats): void {

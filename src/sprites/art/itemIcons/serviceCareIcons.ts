@@ -1,6 +1,6 @@
 /**
  * Service icons for the counters that patch a crawler up: the apothecary's
- * antidote, the temple's blessing, the infirmary and the VIP lounge's medic.
+ * antidote, the temple's blessing and the infirmary.
  */
 
 import {
@@ -27,7 +27,6 @@ import {
   paintGlow,
   paintLitPoints,
   paintLitRect,
-  paintStar,
   rectPoints,
   SHADE,
   DEEP_SHADE,
@@ -425,17 +424,8 @@ const paintTreatment: IconArtPainter = (ctx, px) => {
   paintDoctorsBag(ctx, px, BAG_LEATHER, BAG_TRIM, CROSS_RED);
 };
 
-const VELVET = '#7a1838';
-const VIP_STAR = { cx: 0.8, cy: 0.2, outer: 0.15, inner: 0.065, points: 5 } as const;
-
-const paintVipRecovery: IconArtPainter = (ctx, px) => {
-  paintDoctorsBag(ctx, px, VELVET, GOLD, GOLD);
-  paintStar(ctx, px, VIP_STAR, GOLD);
-};
-
 export const CARE_SERVICE_ICONS = {
   antidote: toIcon(paintAntidote),
   blessing: toIcon(paintBlessing),
   treatment: toIcon(paintTreatment),
-  vip_recovery: toIcon(paintVipRecovery),
 } as const;

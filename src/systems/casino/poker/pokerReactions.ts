@@ -18,9 +18,9 @@ export const BLUFF_STRENGTH_BELOW = 0.35;
 export const GROAN_LOSS_BIG_BLINDS = 30;
 
 /** Whose voice a seat's reaction is in; the recordings are one species' each. */
-export type ReactionVoice = 'human' | 'skyfowl';
+export type ReactionVoice = 'human' | 'hawkfolk';
 
-export type PokerReaction = 'reaction_chuckle' | 'skyfowl_chuckle' | 'reaction_groan';
+export type PokerReaction = 'reaction_chuckle' | 'hawkfolk_chuckle' | 'reaction_groan';
 
 /** What a pot winner's hand showed, for judging whether they won it on a bluff. */
 export interface ShownBluffFacts {
@@ -99,7 +99,7 @@ export class PokerHandReactions {
    * The one reaction a completed hand draws: a regular who won any pot on a
    * shown bluff chuckles, in their own species' voice; otherwise the biggest
    * loss at a human regular's seat groans when it reaches
-   * {@link GROAN_LOSS_BIG_BLINDS}. The player never reacts, and skyfowl have
+   * {@link GROAN_LOSS_BIG_BLINDS}. The player never reacts, and Hawkfolk have
    * no groan.
    */
   reactionTo(
@@ -114,7 +114,7 @@ export class PokerHandReactions {
         hole: complete.holeCards[seat] ?? [],
         boardsAtAggression: this.boardsAtAggression.get(seat) ?? [],
       });
-      if (bluffWon) return voice === 'human' ? 'reaction_chuckle' : 'skyfowl_chuckle';
+      if (bluffWon) return voice === 'human' ? 'reaction_chuckle' : 'hawkfolk_chuckle';
     }
     let biggestHumanLoss = 0;
     complete.netBySeat.forEach((net, seat) => {

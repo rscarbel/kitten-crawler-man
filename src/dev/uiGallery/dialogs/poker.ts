@@ -18,7 +18,7 @@ import { EMPTY_PLAYER_READ } from '../../../systems/casino/poker/npc/playerRead'
 import { REGULAR_IDS } from '../../../systems/casino/poker/npc/regulars';
 import { PokerRules } from '../../../ui/screens/dialogs/PokerRules';
 import { SEAT_INFO_BIO_HANDS } from '../../../ui/casino/pokerSeatInfo';
-import type { PokerReads } from '../../../core/club/ClubMembership';
+import type { PokerReads } from '../../../core/club/CasinoState';
 import { POKER_STAKES } from '../../../systems/casino/poker/pokerStakes';
 import { buildPots } from '../../../systems/casino/poker/pots';
 import {

@@ -18,16 +18,14 @@ import {
   SPIDER_QUEST_PHASE_ORDER,
   type PersistedWorldState,
 } from '../save/PersistedWorldState';
-import { CIRCUS_QUEST_STAGE_ORDER, type CircusQuestStage } from '../quests/CircusQuestProgress';
 import { MURDER_QUEST_STAGE_ORDER, type MurderQuestStage } from '../quests/MurderQuestProgress';
 import { phaseAtLeast, type VillageQuestPhase } from '../quests/villageQuestPhase';
 import { blueprintsPhaseAtLeast } from '../quests/blueprintsQuestPhase';
 import { JACKPOT_FLOOR } from '../../systems/casino/slots/slotBets';
-import { parseCraftSkillsSnapshot } from '../labour/CraftSkills';
 import type { PlayerSnapshot } from '../save/PlayerSnapshot';
 import { allResidents, type ResidentId } from '../../systems/townResidents';
 import {
-  DESPERADO_CLUB_NAME,
+  CLOAK_AND_DAGGER_NAME,
   PLANNED_BUILDING_NAMES,
   TAVERN_BUILDING_NAMES,
   TOWN_TOWER_NAME,
@@ -61,9 +59,7 @@ const RUINS_GHOUL_NAME = 'Ruins Ghoul';
 const SHRINE_VERMIN_NAME = 'Shrine Vermin';
 
 const CLUB_ACHIEVEMENTS: readonly AchievementId[] = [
-  'members_only',
   'on_retainer',
-  'entourage',
   'bartenders_choice',
   'casino_jackpot',
 ];
@@ -89,10 +85,6 @@ function atLeast<T>(order: readonly T[], value: T, threshold: T): boolean {
   return order.indexOf(value) >= order.indexOf(threshold);
 }
 
-function circusStageAtLeast(stage: CircusQuestStage, threshold: CircusQuestStage): boolean {
-  return atLeast(CIRCUS_QUEST_STAGE_ORDER, stage, threshold);
-}
-
 function murderStageAtLeast(stage: MurderQuestStage, threshold: MurderQuestStage): boolean {
   return atLeast(MURDER_QUEST_STAGE_ORDER, stage, threshold);
 }
@@ -105,32 +97,29 @@ function buildingMusic(name: string): ReadonlyArray<MusicTrackId> {
   if (TAVERN_BUILDING_NAMES.has(name)) return TAVERN_MUSIC_TRACKS;
   if (name === SKY_TEMPLE_NAME) return TEMPLE_MUSIC_TRACKS;
   if (name === TOWN_TOWER_NAME) return TOWER_MUSIC_TRACKS;
-  if (name === DESPERADO_CLUB_NAME) return CLUB_MUSIC_TRACKS;
+  if (name === CLOAK_AND_DAGGER_NAME) return CLUB_MUSIC_TRACKS;
   const isTownBuilding = PLANNED_BUILDING_NAMES.some((planned) => planned === name);
   return isTownBuilding ? DEFAULT_BUILDING_MUSIC_TRACKS : [];
 }
 
-/** A tattoo from the parlour; the Desperado Pass tattoo is Big Rooster's reward, not the parlour's. */
+/** Whether either of the parlour's tattoos has been inked. */
 function hasParlourTattoo(snap: PlayerSnapshot): boolean {
-  return (snap.tattoo ?? null) !== null || (snap.skillTattoo ?? null) !== null;
+  return snap.tattoo !== null || snap.skillTattoo !== null;
 }
 
 function hasLearnedResourcing(snap: PlayerSnapshot): boolean {
-  return parseCraftSkillsSnapshot(snap.craftSkillStates)?.resourcing.learned === true;
+  return snap.craftSkillStates.resourcing.learned;
 }
 
 /**
- * The songs a save had already earned before the music library existed, read
- * off its progress: every song whose place or activity the evidence proves,
- * or makes likely where a wrong guess costs little. A playlist unlocks whole
- * once its place is proven, as a claim of it would.
+ * The songs a run's progress has already earned, read off that progress:
+ * every song whose place or activity the evidence proves, or makes likely
+ * where a wrong guess costs little. A playlist unlocks whole once its place is
+ * proven, as a claim of it would. A dev boot onto a later floor runs it over
+ * its starting state, so the library matches the ground it skipped.
  *
- * `persisted` is the save's floor state read straight from its JSON, whatever
- * generator wrote it, so a save whose floor is about to be regenerated still
- * records what the party did there. It describes only the floor the save is
- * on, so floor-specific evidence is read only on that floor. A save written on
- * the stairs has neither it nor achievements and is read from `levelId` and
- * the run-level fields alone.
+ * `persisted` describes only the floor the progress is on, so floor-specific
+ * evidence is read only on that floor.
  */
 export function musicUnlocksFromProgress(
   progress: GameProgressInput,
@@ -148,30 +137,29 @@ export function musicUnlocksFromProgress(
   const level1State = floorState(LEVEL_1_ID);
   const level2State = floorState(LEVEL_2_ID);
 
-  const achievementManagers = [progress.humanAchievements, progress.catAchievements]
-    .filter((serialized) => serialized !== undefined)
-    .map((serialized) => AchievementManager.fromSerialized(serialized));
+  const achievementManagers = [progress.humanAchievements, progress.catAchievements].map(
+    (serialized) => AchievementManager.fromSerialized(serialized),
+  );
   const achieved = (ids: readonly AchievementId[]): boolean =>
     achievementManagers.some((manager) => ids.some((id) => manager.isUnlocked(id)));
 
-  const kills = new Map(progress.gameStats?.killsByType ?? []);
+  const kills = new Map(progress.gameStats.killsByType);
   const killed = (name: string): boolean => (kills.get(name) ?? 0) > 0;
 
-  const freeSpinsEarnedBy = progress.wheelQuestFreeSpins?.earnedBy ?? [];
+  const freeSpinsEarnedBy = progress.wheelQuestFreeSpins.earnedBy;
   const earnedFreeSpin = (questId: string): boolean => freeSpinsEarnedBy.includes(questId);
   const snaps = [progress.humanSnap, progress.catSnap];
 
-  const circusStage = persisted?.circusQuestProgress.stage ?? 'not_started';
   const murderStage = persisted?.murderQuestProgress.stage ?? 'not_started';
-  const villagePhase = persisted?.briarHollow?.quest.phase ?? 'unmet';
-  const blueprintsPhase = persisted?.briarHollow?.blueprints.phase ?? 'unoffered';
-  const doomsdayStarted = (persisted?.doomsday?.stage ?? 'inactive') !== 'inactive';
+  const villagePhase = persisted?.briarHollow.quest.phase ?? 'unmet';
+  const blueprintsPhase = persisted?.briarHollow.blueprints.phase ?? 'unoffered';
+  const doomsdayStarted = (persisted?.doomsday.stage ?? 'inactive') !== 'inactive';
   const bountiesCompleted = (persisted?.bountyProgress.bountiesCompleted ?? 0) > 0;
   const villageQuestBegun = villagePhase !== 'unmet';
   const briarHollowPleaPaid = earnedFreeSpin(BRIAR_HOLLOW_QUEST_ID);
 
-  const tools = progress.crafts?.tools;
-  const hasToolTier = tools !== undefined && (tools.axeTier !== null || tools.pickaxeTier !== null);
+  const { tools } = progress.crafts;
+  const hasToolTier = tools.axeTier !== null || tools.pickaxeTier !== null;
 
   const townMemory = persisted?.townMemory;
   const talkedTo = new Set(
@@ -185,6 +173,7 @@ export function musicUnlocksFromProgress(
     ...(townMemory?.paidOutInteriorProps ?? []),
   ].map(buildingNameOfRoomKey);
   const rememberedBuilding = (name: string): boolean => rememberedBuildings.includes(name);
+  const visitedPlaces = new Set(townMemory?.visitedPlaces ?? []);
 
   // A run past the tutorial can never return to it, whether it played it or skipped it.
   if (levelId === TUTORIAL_LEVEL_ID || DUNGEON_FLOOR_IDS.has(levelId)) unlock(['tutorial_island']);
@@ -195,11 +184,11 @@ export function musicUnlocksFromProgress(
   const floor1BossRoomsEntered = level1State?.bossRoom.enteredRoomIndices ?? [];
   if (floor1BossRoomsEntered.includes(FLOOR_1_FIRST_BOSS_ROOM_INDEX)) unlock(['boss_music_1']);
   if (floor1BossRoomsEntered.includes(FLOOR_1_SECOND_BOSS_ROOM_INDEX)) unlock(['boss_music_2']);
-  if (progress.humanSnap.desperadoPassTattoo === true) unlock(['boss_music_2']);
+  if (level1State?.bigRoosterKilled === true) unlock(['boss_music_2']);
 
   if (onLevel3) unlock(['boss_music_3', 'fix_the_plumbing_music', 'stealth_music']);
   if (killed(KRAKAREN_CLONE_NAME) || persisted?.krakarenKilled === true) unlock(['boss_music_3']);
-  const bathroomPhase = level2State?.cloggedBathroom?.phase;
+  const bathroomPhase = level2State?.cloggedBathroom.phase;
   if (bathroomPhase !== undefined && BATHROOM_SOLVED_PHASES.has(bathroomPhase)) {
     unlock(['fix_the_plumbing_music']);
   }
@@ -245,7 +234,7 @@ export function musicUnlocksFromProgress(
   const wildsVisited =
     hasToolTier ||
     villageQuestBegun ||
-    circusStage !== 'not_started' ||
+    visitedPlaces.has('circus_grounds') ||
     (townMemory?.clearedCamps.length ?? 0) > 0 ||
     bountiesCompleted ||
     killed(RUINS_GHOUL_NAME) ||
@@ -256,34 +245,33 @@ export function musicUnlocksFromProgress(
     hasToolTier ||
     snaps.some(hasLearnedResourcing) ||
     villageQuestBegun ||
-    Object.values(persisted?.briarHollow?.talkCounts ?? {}).some((count) => count > 0) ||
+    Object.values(persisted?.briarHollow.talkCounts ?? {}).some((count) => count > 0) ||
     briarHollowPleaPaid;
   if (briarHollowVisited) unlock(['briar_hollow_theme']);
   if (phaseAtLeast(villagePhase, 'gather_stone')) unlock(['under_the_willows']);
   if (blueprintsPhaseAtLeast(blueprintsPhase, 'build_fence')) unlock(['hayfield_afternoon']);
   if (phaseAtLeast(villagePhase, 'report_tikka')) unlock(['medieval_harvest_theme']);
   const siegeFought =
-    (persisted?.briarHollow?.quest.lastSiege ?? null) !== null ||
+    (persisted?.briarHollow.quest.lastSiege ?? null) !== null ||
     POST_SIEGE_PHASES.has(villagePhase) ||
     briarHollowPleaPaid;
   if (siegeFought) unlock(['siege_theme']);
 
-  if (circusStage !== 'not_started') unlock(CIRCUS_MUSIC_TRACKS);
-  if (circusStageAtLeast(circusStage, 'ritual_defense')) unlock(['circus_battle']);
+  if (visitedPlaces.has('circus_grounds')) unlock(CIRCUS_MUSIC_TRACKS);
+  if (visitedPlaces.has('starlight_tent')) unlock(['circus_battle']);
 
-  const club = persisted?.clubMembership;
+  const club = persisted?.casinoState;
   const wheelPlayed =
-    (progress.wheelPrizesWon ?? []).length > 0 ||
-    (progress.wheelQuestFreeSpins?.used ?? 0) > 0 ||
-    progress.attackCowOwned === true;
+    progress.wheelPrizesWon.length > 0 ||
+    progress.wheelQuestFreeSpins.used > 0 ||
+    progress.attackCowOwned;
   const casinoPlayed =
     achieved(['casino_jackpot']) ||
     (club?.casinoShoe ?? null) !== null ||
     Object.keys(club?.pokerReads ?? {}).length > 0 ||
     (club?.slotsJackpotPool ?? JACKPOT_FLOOR) > JACKPOT_FLOOR ||
     wheelPlayed;
-  const clubVisited =
-    achieved(CLUB_ACHIEVEMENTS) || club?.hasDesperadoPass === true || casinoPlayed;
+  const clubVisited = achieved(CLUB_ACHIEVEMENTS) || casinoPlayed;
   if (clubVisited) unlock(CLUB_MUSIC_TRACKS);
   if (casinoPlayed) unlock(CASINO_MUSIC_TRACKS);
 
@@ -291,7 +279,7 @@ export function musicUnlocksFromProgress(
   for (const building of rememberedBuildings) unlock(buildingMusic(building));
   if ([...talkedTo].some((id) => INNKEEPER_IDS.has(id))) unlock(TAVERN_MUSIC_TRACKS);
   const anchorQuest = persisted?.anchorQuestProgress;
-  if ((anchorQuest?.hilda ?? 'offered') !== 'offered' || snaps.some(hasParlourTattoo)) {
+  if ((anchorQuest?.lori ?? 'offered') !== 'offered' || snaps.some(hasParlourTattoo)) {
     unlock(DEFAULT_BUILDING_MUSIC_TRACKS);
   }
 

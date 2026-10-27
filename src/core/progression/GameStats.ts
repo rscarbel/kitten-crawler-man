@@ -1,4 +1,7 @@
-import { isRecord } from '../util/guards';
+import { isNonNegativeFinite, isRecord, parseEvery } from '../util/guards';
+
+/** A saved kill tally is a `[displayName, count]` pair. */
+const KILL_ENTRY_LENGTH = 2;
 
 /** The fixed update rate the scene loop steps at, which is what a played frame is worth. */
 const UPDATE_FRAMES_PER_SECOND = 60;
@@ -45,10 +48,9 @@ export class GameStats {
    * Every `mobKilled` goes through here, in every scene, so a kill is counted
    * the same way everywhere.
    *
-   * An ally that dies with nobody credited is not a kill: an ink marauder
-   * bleeding back into ink when its lifespan runs out raises the same event,
-   * and it would otherwise head the "most slain" list of a run that summoned
-   * a lot of them. Nor is a death the mob itself says is no kill at all
+   * An ally that dies with nobody credited is not a kill: a converted mob cut
+   * down by the side it deserted raises the same event, and it would otherwise
+   * count as one the party slew. Nor is a death the mob itself says is no kill at all
    * (`countsAsKill`), like a cow caught in a blast.
    */
   recordMobKilled(event: {
@@ -262,53 +264,66 @@ export interface GameStatsSnapshot {
   midgePets: number;
 }
 
-function countOrZero(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+function parseKillEntry(value: unknown): [string, number] | undefined {
+  if (!Array.isArray(value) || value.length !== KILL_ENTRY_LENGTH) return undefined;
+  const name: unknown = value[0];
+  const count: unknown = value[1];
+  if (typeof name !== 'string' || !isNonNegativeFinite(count) || count === 0) return undefined;
+  return [name, count];
 }
 
-function isUnknownArray(value: unknown): value is unknown[] {
-  return Array.isArray(value);
-}
-
-function parseKillEntry(value: unknown): [string, number] | null {
-  if (!isUnknownArray(value)) return null;
-  const [name, count] = value;
-  if (typeof name !== 'string') return null;
-  const parsedCount = countOrZero(count);
-  return parsedCount > 0 ? [name, parsedCount] : null;
-}
-
-/**
- * Reads saved tallies back, or undefined when there are none to read.
- *
- * Lenient field by field: a save written before a counter existed, or with one
- * that arrived damaged, loses that one counter to zero rather than the whole
- * run's record.
- */
+/** Saved tallies read back, or undefined when any one of them is missing or damaged. */
 export function parseGameStatsSnapshot(value: unknown): GameStatsSnapshot | undefined {
   if (!isRecord(value)) return undefined;
-  const killsByType: Array<[string, number]> = [];
-  if (isUnknownArray(value.killsByType)) {
-    for (const entry of value.killsByType) {
-      const parsed = parseKillEntry(entry);
-      if (parsed !== null) killsByType.push(parsed);
-    }
+  const killsByType = parseEvery(value.killsByType, parseKillEntry);
+  const {
+    potionsUsed,
+    bossesDefeated,
+    damageDealt,
+    damageTaken,
+    goldEarned,
+    hirelingsHired,
+    hirelingsLost,
+    deaths,
+    framesPlayed,
+    wardExplainerHeard,
+    mongoPets,
+    cowPets,
+    midgePets,
+  } = value;
+  if (
+    killsByType === undefined ||
+    !isNonNegativeFinite(potionsUsed) ||
+    !isNonNegativeFinite(bossesDefeated) ||
+    !isNonNegativeFinite(damageDealt) ||
+    !isNonNegativeFinite(damageTaken) ||
+    !isNonNegativeFinite(goldEarned) ||
+    !isNonNegativeFinite(hirelingsHired) ||
+    !isNonNegativeFinite(hirelingsLost) ||
+    !isNonNegativeFinite(deaths) ||
+    !isNonNegativeFinite(framesPlayed) ||
+    typeof wardExplainerHeard !== 'boolean' ||
+    !isNonNegativeFinite(mongoPets) ||
+    !isNonNegativeFinite(cowPets) ||
+    !isNonNegativeFinite(midgePets)
+  ) {
+    return undefined;
   }
   return {
     killsByType,
-    potionsUsed: countOrZero(value.potionsUsed),
-    bossesDefeated: countOrZero(value.bossesDefeated),
-    damageDealt: countOrZero(value.damageDealt),
-    damageTaken: countOrZero(value.damageTaken),
-    goldEarned: countOrZero(value.goldEarned),
-    hirelingsHired: countOrZero(value.hirelingsHired),
-    hirelingsLost: countOrZero(value.hirelingsLost),
-    deaths: countOrZero(value.deaths),
-    framesPlayed: countOrZero(value.framesPlayed),
-    wardExplainerHeard: value.wardExplainerHeard === true,
-    mongoPets: countOrZero(value.mongoPets),
-    cowPets: countOrZero(value.cowPets),
-    midgePets: countOrZero(value.midgePets),
+    potionsUsed,
+    bossesDefeated,
+    damageDealt,
+    damageTaken,
+    goldEarned,
+    hirelingsHired,
+    hirelingsLost,
+    deaths,
+    framesPlayed,
+    wardExplainerHeard,
+    mongoPets,
+    cowPets,
+    midgePets,
   };
 }
 

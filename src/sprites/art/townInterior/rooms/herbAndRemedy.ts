@@ -2338,7 +2338,7 @@ export function paintPottedBay(ctx: Ctx, frame: TownPropFrame, _variant: number,
   });
 }
 
-// ── Shared with Old Hilda's Cottage ─────────────────────────────────────────
+// ── Shared with Old Lori's Cottage ─────────────────────────────────────────
 
 const HERB_LEAF_DRY: RGB = [140, 132, 66];
 const HERB_LEAF_FRESH: RGB = [96, 118, 58];

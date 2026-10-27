@@ -11,11 +11,25 @@ import { getSpriteDefByKey } from '../core/spriteAssets/SpriteLoader';
 import { cloneLootDrop } from '../core/items/loot/lootDrop';
 import { drawBouncingArrowAboveEntity } from '../ui/WorldArrow';
 import { countsTowardRoomClear } from '../creatures/roomClear';
+import type { InteriorFigure } from '../core/rendering/InteriorFigure';
+import { pointInRect } from '../utils';
 
 /** Half a tile, in pixels — how far a mob's top-left position sits from its centre. */
 const HALF_TILE_PX = TILE_SIZE / 2;
 
 export type ChestType = 'wooden' | 'silver';
+
+/** What keeps a wooden chest locked until it is beaten. */
+export type ChestGuard =
+  /** Any live mob that counts toward a room clear and stands inside `bounds`, in tiles. */
+  | { readonly kind: 'room'; readonly bounds: { x: number; y: number; w: number; h: number } }
+  /**
+   * These mobs, wherever they stand, for as long as each is alive and still in
+   * the room's roster. Empty until the band is posted: a band that chases the
+   * party out of the room still holds the chest, where a room guard would let
+   * it go the moment the last of them stepped over the threshold.
+   */
+  | { readonly kind: 'band'; readonly mobs: ReadonlyArray<Mob> };
 
 export interface TreasureChest {
   tileX: number;
@@ -26,7 +40,7 @@ export interface TreasureChest {
   unlockFrame: number;
   sparkleFrame: number;
   tryLockedTimer: number;
-  guardBounds: { x: number; y: number; w: number; h: number } | null;
+  guard: ChestGuard | null;
   bossRoomIndex: number | null;
   hadMobs: boolean;
 }
@@ -63,6 +77,40 @@ const LOOT_ARROW_COLOR = '#facc15';
 export function isChestOpenable(chest: TreasureChest): boolean {
   if (chest.state === 'unlocked') return true;
   return chest.state === 'unlocking' && chest.bossRoomIndex !== null;
+}
+
+/** How far `player` stands from `chest`, the measure every reach check uses. */
+function chestDistance(player: HumanPlayer | CatPlayer, chest: TreasureChest): number {
+  return Math.hypot(player.x - chest.tileX * TILE_SIZE, player.y - chest.tileY * TILE_SIZE);
+}
+
+/** The mobs of `guard` still holding their chest, out of the room's live `mobs`. */
+function guardsHolding(guard: ChestGuard, mobs: readonly Mob[]): Mob[] {
+  switch (guard.kind) {
+    case 'room': {
+      const { bounds } = guard;
+      const roomMinX = bounds.x * TILE_SIZE;
+      const roomMinY = bounds.y * TILE_SIZE;
+      const roomMaxX = (bounds.x + bounds.w) * TILE_SIZE;
+      const roomMaxY = (bounds.y + bounds.h) * TILE_SIZE;
+      return mobs.filter((mob) => {
+        if (!countsTowardRoomClear(mob)) return false;
+        const centreX = mob.x + HALF_TILE_PX;
+        const centreY = mob.y + HALF_TILE_PX;
+        return (
+          centreX >= roomMinX && centreX < roomMaxX && centreY >= roomMinY && centreY < roomMaxY
+        );
+      });
+    }
+    case 'band':
+      return guard.mobs.filter(
+        (mob) => mob.isAlive && countsTowardRoomClear(mob) && mobs.includes(mob),
+      );
+    default: {
+      const unhandled: never = guard;
+      return unhandled;
+    }
+  }
 }
 
 /** A boss chest holding the loot of a defeated boss that nobody has opened yet. */
@@ -184,7 +232,7 @@ export class TreasureChestSystem {
       unlockFrame: 0,
       sparkleFrame: 0,
       tryLockedTimer: 0,
-      guardBounds: null,
+      guard: null,
       bossRoomIndex,
       hadMobs: false,
     });
@@ -196,8 +244,8 @@ export class TreasureChestSystem {
     guardBounds: { x: number; y: number; w: number; h: number },
     loot: LootDrop,
     hasGuards = true,
-  ): void {
-    this.chests.push({
+  ): TreasureChest {
+    const chest: TreasureChest = {
       tileX,
       tileY,
       type: 'wooden',
@@ -206,10 +254,53 @@ export class TreasureChestSystem {
       unlockFrame: 0,
       sparkleFrame: 0,
       tryLockedTimer: 0,
-      guardBounds,
+      guard: { kind: 'room', bounds: guardBounds },
       bossRoomIndex: null,
       hadMobs: !hasGuards,
-    });
+    };
+    this.chests.push(chest);
+    return chest;
+  }
+
+  /**
+   * A wooden chest held by a band of mobs that has not come out yet: locked,
+   * and unlocked once every mob later posted to its `band` guard is dead.
+   */
+  addBandChest(tileX: number, tileY: number, loot: LootDrop): TreasureChest {
+    const chest: TreasureChest = {
+      tileX,
+      tileY,
+      type: 'wooden',
+      state: 'locked',
+      loot,
+      unlockFrame: 0,
+      sparkleFrame: 0,
+      tryLockedTimer: 0,
+      guard: { kind: 'band', mobs: [] },
+      bossRoomIndex: null,
+      hadMobs: false,
+    };
+    this.chests.push(chest);
+    return chest;
+  }
+
+  /** A chest emptied on an earlier visit: drawn with its lid up and never offered again. */
+  addOpenedChest(tileX: number, tileY: number, type: ChestType): TreasureChest {
+    const chest: TreasureChest = {
+      tileX,
+      tileY,
+      type,
+      state: 'opened',
+      loot: null,
+      unlockFrame: 0,
+      sparkleFrame: 0,
+      tryLockedTimer: 0,
+      guard: null,
+      bossRoomIndex: null,
+      hadMobs: false,
+    };
+    this.chests.push(chest);
+    return chest;
   }
 
   /** Whether this boss room still has a chest waiting to be handed its loot. */
@@ -272,10 +363,7 @@ export class TreasureChestSystem {
     let closestDist = CHEST_INTERACTION_RANGE;
     for (const chest of this.chests) {
       if (chest.state === 'opened') continue;
-      const dist = Math.hypot(
-        player.x - chest.tileX * TILE_SIZE,
-        player.y - chest.tileY * TILE_SIZE,
-      );
+      const dist = chestDistance(player, chest);
       if (dist < closestDist) {
         closestDist = dist;
         closestChest = chest;
@@ -303,14 +391,45 @@ export class TreasureChestSystem {
       return true;
     }
 
-    closestChest.state = 'opened';
-    if (this.onChestOpened !== null) {
-      this.onChestOpened(closestChest);
-    }
+    this.open(closestChest);
     return true;
   }
 
-  update(mobs: Mob[]): void {
+  private open(chest: TreasureChest): void {
+    chest.state = 'opened';
+    this.onChestOpened?.(chest);
+  }
+
+  /**
+   * An openable chest under a click or tap at screen point `(x, y)`, opened by
+   * `player` when it is within her reach. Returns whether one took the press.
+   * The tapped chest is the one opened, never merely the nearest: with two in
+   * reach, tapping the far one must not open the near one.
+   */
+  tryInteractAt(
+    x: number,
+    y: number,
+    camX: number,
+    camY: number,
+    player: HumanPlayer | CatPlayer,
+  ): boolean {
+    for (const chest of this.chests) {
+      if (!isChestOpenable(chest)) continue;
+      const chestRect = {
+        x: chest.tileX * TILE_SIZE - camX,
+        y: chest.tileY * TILE_SIZE - camY,
+        w: TILE_SIZE,
+        h: TILE_SIZE,
+      };
+      if (!pointInRect(x, y, chestRect)) continue;
+      if (chestDistance(player, chest) >= CHEST_INTERACTION_RANGE) continue;
+      this.open(chest);
+      return true;
+    }
+    return false;
+  }
+
+  update(mobs: readonly Mob[]): void {
     for (const chest of this.chests) {
       // Tick tryLockedTimer
       if (chest.tryLockedTimer > 0) {
@@ -333,21 +452,8 @@ export class TreasureChestSystem {
       }
 
       // Check wooden chest room clearing
-      if (chest.state === 'locked' && chest.type === 'wooden' && chest.guardBounds !== null) {
-        const gb = chest.guardBounds;
-        const roomMinX = gb.x * TILE_SIZE;
-        const roomMinY = gb.y * TILE_SIZE;
-        const roomMaxX = (gb.x + gb.w) * TILE_SIZE;
-        const roomMaxY = (gb.y + gb.h) * TILE_SIZE;
-
-        const liveMobsInRoom = mobs.filter((m) => {
-          if (!countsTowardRoomClear(m)) return false;
-          const centreX = m.x + HALF_TILE_PX;
-          const centreY = m.y + HALF_TILE_PX;
-          return (
-            centreX >= roomMinX && centreX < roomMaxX && centreY >= roomMinY && centreY < roomMaxY
-          );
-        });
+      if (chest.state === 'locked' && chest.type === 'wooden' && chest.guard !== null) {
+        const liveMobsInRoom = guardsHolding(chest.guard, mobs);
 
         if (liveMobsInRoom.length > 0) {
           chest.hadMobs = true;
@@ -533,6 +639,18 @@ export class TreasureChestSystem {
       chest.hadMobs = entry.hadMobs;
       this.chests.push(chest);
     }
+  }
+
+  /**
+   * Every chest as a figure for a scene's own Y-sorted pass, sorted by its
+   * tile the way `RenderPipeline` sorts it, so a crawler south of a chest is
+   * drawn in front of it and one north of it behind.
+   */
+  sortedFigures(active: Player): InteriorFigure[] {
+    return this.chests.map((chest) => ({
+      y: chest.tileY * TILE_SIZE,
+      render: (ctx, camX, camY) => this.renderSingle(ctx, camX, camY, active, chest),
+    }));
   }
 
   get allChests(): ReadonlyArray<TreasureChest> {

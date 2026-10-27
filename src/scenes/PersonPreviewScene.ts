@@ -23,7 +23,7 @@ import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { worldText } from '../ui/world/worldText';
 import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { Townsperson } from '../creatures/Townsperson';
-import { prewarmCitizenFigure } from '../creatures/citizenFigure';
+import { prewarmTownspersonBody } from '../creatures/townspersonBody';
 import { TOWN_SPECIES } from '../systems/townSpecies';
 import {
   generatePersonAppearance,
@@ -266,7 +266,7 @@ export class PersonPreviewScene extends PreviewScene {
         }),
       );
     }
-    for (const person of this.crowd) prewarmCitizenFigure(person.figure);
+    for (const person of this.crowd) prewarmTownspersonBody(person.body);
     this.crowdBuiltFor = this.crowdCount;
     this.drawMsTotal = 0;
     this.drawMsSamples = 0;

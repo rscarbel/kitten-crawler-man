@@ -95,7 +95,7 @@ const FLOOR_TO_FLAT_MULTIPLE = 5;
 function calibrateTextureRichness(): void {
   const fixture = readFixture();
   let worstFlat = 0;
-  for (const key of ['temple', 'sleeping_cat_inn', 'desperado_club']) {
+  for (const key of ['temple', 'sleeping_cat_inn', 'cloak_and_dagger']) {
     worstFlat = Math.max(worstFlat, flatFillRichness(key));
   }
   report(`a flat-fill facade scores at most ${worstFlat.toFixed(2)}`);

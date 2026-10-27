@@ -1,8 +1,8 @@
 #!/usr/bin/env tsx
 /**
  * Idle stillness gates for every figure that stands on the human's breathing idle —
- * The human, the human townsfolk cast and named residents, Gum Gum, the city elf
- * cultists, Mordecai's Incubus — and for the skyfowl cast and the Cretin hirelings that
+ * The human, the human townsfolk cast and named residents, Baggi, the city elf
+ * cultists, Mordecai's Incubus — and for the Hawkfolk cast and the Earth Elemental hirelings that
  * stand beside them, and the goblins (all five archetypes and the plumber), whose
  * camps and bathroom queue stand about in groups.
  *
@@ -50,13 +50,16 @@ import {
 } from '../src/sprites/art/incubusFigure.js';
 import {
   castStateName,
-  IDLE_FRAMES as SKYFOWL_IDLE_FRAMES,
-  skyfowlCastFigure,
-} from '../src/sprites/art/skyfowlCastFigure.js';
-import { SKYFOWL_CIVILIAN_LOOKS } from '../src/sprites/art/skyfowl/cast.js';
-import { CRETIN_VARIANTS } from '../src/sprites/art/cretinArt.js';
-import { GUMGUM_FIGURE, GUMGUM_VIEWS, gumGumStateName } from '../src/sprites/art/gumGumFigure.js';
-import { CRETIN_FIGURES, cretinStateName } from '../src/sprites/art/cretinFigure.js';
+  IDLE_FRAMES as HAWKFOLK_IDLE_FRAMES,
+  hawkfolkCastFigure,
+} from '../src/sprites/art/hawkfolkCastFigure.js';
+import { HAWKFOLK_CIVILIAN_LOOKS } from '../src/sprites/art/hawkfolk/cast.js';
+import { EARTH_ELEMENTAL_VARIANTS } from '../src/sprites/art/earthElementalArt.js';
+import { BAGGI_FIGURE, BAGGI_VIEWS, baggiStateName } from '../src/sprites/art/baggiFigure.js';
+import {
+  EARTH_ELEMENTAL_FIGURES,
+  earthElementalStateName,
+} from '../src/sprites/art/earthElementalFigure.js';
 import {
   heldLength,
   idleFrameAtSeconds,
@@ -70,7 +73,7 @@ import {
 } from '../src/sprites/art/goblinFigure.js';
 import { GOBLIN_BOMBER_FIGURES } from '../src/sprites/art/goblinBomberFigure.js';
 import { bathroomGoblinAnimator, type GoblinPassiveAnimator } from '../src/sprites/goblinSprite.js';
-import { skyfowlCastLoopFrame } from '../src/sprites/skyfowlCastSprite.js';
+import { hawkfolkCastLoopFrame } from '../src/sprites/hawkfolkCastSprite.js';
 
 /**
  * The most any of head, hips or silhouette may drift sideways over a whole
@@ -146,22 +149,26 @@ function idleSubjects(): IdleSubject[] {
     const state = incubusStateName('idle', view);
     subjects.push({ label: `incubus.${state}`, def: INCUBUS_FIGURE, state });
   }
-  for (const view of GUMGUM_VIEWS) {
-    const state = gumGumStateName('idle', view);
-    subjects.push({ label: `gumgum.${state}`, def: GUMGUM_FIGURE, state });
+  for (const view of BAGGI_VIEWS) {
+    const state = baggiStateName('idle', view);
+    subjects.push({ label: `baggi.${state}`, def: BAGGI_FIGURE, state });
   }
-  for (const variant of CRETIN_VARIANTS) {
+  for (const variant of EARTH_ELEMENTAL_VARIANTS) {
     for (const view of ['front', 'side', 'away'] as const) {
-      const state = cretinStateName('idle', view);
-      subjects.push({ label: `cretin_${variant}.${state}`, def: CRETIN_FIGURES[variant], state });
+      const state = earthElementalStateName('idle', view);
+      subjects.push({
+        label: `earth_elemental_${variant}.${state}`,
+        def: EARTH_ELEMENTAL_FIGURES[variant],
+        state,
+      });
     }
   }
-  for (const look of SKYFOWL_CIVILIAN_LOOKS) {
+  for (const look of HAWKFOLK_CIVILIAN_LOOKS) {
     for (const view of ['down', 'side', 'up'] as const) {
       const state = castStateName('idle', view);
       subjects.push({
-        label: `skyfowl_${look.id}.${state}`,
-        def: skyfowlCastFigure(look.id),
+        label: `hawkfolk_${look.id}.${state}`,
+        def: hawkfolkCastFigure(look.id),
         state,
       });
     }
@@ -398,9 +405,9 @@ function breathSeconds(frameAt: (seconds: number) => number): number | null {
 function gateBreathLength(): void {
   const goblinAnimator = bathroomGoblinAnimator('sword');
   const clocks: ReadonlyArray<readonly [string, (seconds: number) => number]> = [
-    ['the shared idle clock (Gum Gum, cultists, Incubus)', idleFrameAtSeconds],
+    ['the shared idle clock (Baggi, cultists, Incubus)', idleFrameAtSeconds],
     ['the town cast idle', (t) => townCastLoopFrame('idle', TOWN_CAST_IDLE_FRAMES, t)],
-    ['the skyfowl cast idle', (t) => skyfowlCastLoopFrame('idle', SKYFOWL_IDLE_FRAMES, t)],
+    ['the Hawkfolk cast idle', (t) => hawkfolkCastLoopFrame('idle', HAWKFOLK_IDLE_FRAMES, t)],
     ['the goblin idle', (t) => goblinIdleFrameAt(goblinAnimator, t)],
   ];
   for (const [label, frameAt] of clocks) {
@@ -435,17 +442,16 @@ function writePreview(): void {
     'adult_merchant.idle',
     'adult_noble.idle_side',
     'resident_wendell.idle',
-    'resident_old_hilda.idle',
-    'gumgum.idle',
-    'gumgum.idle_side',
+    'baggi.idle',
+    'baggi.idle_side',
     'cultist.idle',
     'cultist.idle_side',
     'incubus.idle',
-    'cretin_sledge.idle',
+    'earth_elemental_crush.idle',
     'goblin_sword.idle',
     'goblin_bow.idle',
     'goblin_plumber.idle',
-    `skyfowl_${SKYFOWL_CIVILIAN_LOOKS[0].id}.idle`,
+    `hawkfolk_${HAWKFOLK_CIVILIAN_LOOKS[0].id}.idle`,
   ]);
   const subjects = idleSubjects().filter((subject) => wanted.has(subject.label));
   const strips = subjects.map((subject) => idleStrip(subject));

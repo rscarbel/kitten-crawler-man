@@ -24,6 +24,7 @@ export const HUMAN_GRIP_ARCHETYPES = [
   'carriedFlat',
   'smallHeld',
   'offHandHeld',
+  'bow',
 ] as const;
 export const CAT_GRIP_ARCHETYPES = ['mouthCarry', 'pawTool'] as const;
 
@@ -119,7 +120,8 @@ type ArchetypeTable = Readonly<Record<HumanGripArchetype, ArchetypeSpec<HumanSoc
  * 1.35 with the butt fist at 0.04–0.06; the dynamite stick (0.36, grip 0.42);
  * the slingshot (0.15, fork 0.16 by 0.24); a board (0.86) and crate (0.7 by
  * 0.46); the zippo (0.13) and bottle (0.26); the pot-lid buckler's strap
- * (0.12, grip 0.5) across a lid 0.38 wide.
+ * (0.12, grip 0.5) across a lid 0.38 wide; the longbow's riser (0.16, grip
+ * 0.5) between limbs 0.8 long, braced 0.17 off the string.
  */
 export const GRIP_ARCHETYPES: ArchetypeTable = {
   oneHandHaft: {
@@ -210,6 +212,25 @@ export const GRIP_ARCHETYPES: ArchetypeTable = {
     headLength: { min: 0.2, max: 0.4 },
     headWidth: { min: 0.2, max: 0.4 },
     gripPoint: { min: 0.3, max: 0.7 },
+    stowed: { light: 'back', heavy: 'back' },
+    heldLevel: false,
+  },
+  /**
+   * A bow in the off hand, the fist round the riser at the middle of the
+   * stave, the other hand left free to nock and draw the string. Its "handle"
+   * is the leather-wrapped riser and its "head" is one limb, grip to tip; its
+   * width is how far the braced string stands off the riser. Slung across the
+   * back while stowed.
+   */
+  bow: {
+    wearer: 'human',
+    heldIn: ['offHand'],
+    radii: ['standard'],
+    weights: ['light'],
+    handleLength: { min: 0.08, max: 0.24 },
+    headLength: { min: 0.55, max: 1.05 },
+    headWidth: { min: 0.1, max: 0.3 },
+    gripPoint: { min: 0.4, max: 0.6 },
     stowed: { light: 'back', heavy: 'back' },
     heldLevel: false,
   },

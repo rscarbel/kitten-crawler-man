@@ -1,15 +1,13 @@
 /**
  * The contract record through a save, for `verify:construction-contracts`: a
  * half-done contract survives capture, JSON and restore unchanged and shares
- * no array with the live record; a save from before contracts reads as the
- * default; and a saved spot the catalogue no longer has is dropped with its
- * done flag, leaving no contract at all once none survive.
+ * no array with the live record; and a save with a missing, malformed or
+ * unknown contract record is refused outright.
  */
 
 import {
   captureBriarHollowState,
   createBriarHollowState,
-  createConstructionContractsState,
   parseBriarHollowStateSnapshot,
   restoreBriarHollowState,
 } from '../../src/core/quests/briarHollowState';
@@ -116,59 +114,39 @@ function savedActive(): { spotIds: unknown[]; spotsDone: unknown[]; site: unknow
   return { spotIds: [...spotIds], spotsDone: [...spotsDone], site: active.site };
 }
 
-function verifyOldSaves(check: Check): void {
-  const fromBefore = parseBriarHollowStateSnapshot(withContracts(undefined));
+function verifyInvalidSavesRejected(check: Check): void {
   check(
-    fromBefore !== undefined &&
-      JSON.stringify(fromBefore.contracts) === JSON.stringify(createConstructionContractsState()),
-    'a save without contracts parses to the default record',
+    parseBriarHollowStateSnapshot(withContracts(undefined)) === undefined,
+    'a save without contracts is refused',
   );
 
   const saved = savedActive();
-  const keptIds = saved.spotIds.filter((_, index) => index !== 1);
-  const keptDone = saved.spotsDone.filter((_, index) => index !== 1);
   const withUnknown = { ...saved, spotIds: [...saved.spotIds], spotsDone: [...saved.spotsDone] };
   withUnknown.spotIds[1] = UNKNOWN_SPOT_ID;
-  const dropped = parseBriarHollowStateSnapshot(
-    withContracts({ ...savedContracts(), active: withUnknown }),
-  );
-  const droppedActive = dropped?.contracts.active ?? null;
   check(
-    droppedActive !== null && !droppedActive.spotIds.includes(UNKNOWN_SPOT_ID),
-    'an unknown spot id is dropped',
-  );
-  check(
-    droppedActive !== null &&
-      JSON.stringify(droppedActive.spotIds) === JSON.stringify(keptIds) &&
-      JSON.stringify(droppedActive.spotsDone) === JSON.stringify(keptDone),
-    'its done flag goes with it; every other spot keeps its own',
+    parseBriarHollowStateSnapshot(withContracts({ ...savedContracts(), active: withUnknown })) ===
+      undefined,
+    'a contract naming a spot the site does not have is refused',
   );
 
-  const allUnknown = {
-    ...saved,
-    spotIds: saved.spotIds.map((_, index) => `${UNKNOWN_SPOT_ID}_${index}`),
-  };
-  const emptied = parseBriarHollowStateSnapshot(
-    withContracts({ ...savedContracts(), active: allUnknown }),
+  const shortDone = { ...saved, spotsDone: saved.spotsDone.slice(1) };
+  check(
+    parseBriarHollowStateSnapshot(withContracts({ ...savedContracts(), active: shortDone })) ===
+      undefined,
+    'a contract whose done flags do not match its spots is refused',
   );
-  check(emptied?.contracts.active === null, 'no surviving spot → no active contract');
 
   const unknownBuilding = parseBriarHollowStateSnapshot(
     withContracts({
       ...savedContracts(),
-      active: { ...saved, site: { town: 'skyfowl', buildingName: 'Town Center Tower' } },
+      active: { ...saved, site: { town: 'taloncrest', buildingName: 'Town Center Tower' } },
     }),
   );
-  check(
-    unknownBuilding?.contracts.active === null,
-    'a contract at a building that hosts none reads as no contract',
-  );
+  check(unknownBuilding === undefined, 'a contract at a building that hosts none is refused');
 
-  const junk = parseBriarHollowStateSnapshot(withContracts('not a record'));
   check(
-    junk !== undefined &&
-      JSON.stringify(junk.contracts) === JSON.stringify(createConstructionContractsState()),
-    'a malformed contracts field reads as the default',
+    parseBriarHollowStateSnapshot(withContracts('not a record')) === undefined,
+    'a malformed contracts field is refused',
   );
 }
 
@@ -177,5 +155,5 @@ export const saveSections: ReadonlyArray<{
   readonly run: (check: Check) => void;
 }> = [
   { name: 'Save round-trip with a half-done contract', run: verifyRoundTrip },
-  { name: 'Old and stale saves parse', run: verifyOldSaves },
+  { name: 'Invalid contract saves are refused', run: verifyInvalidSavesRejected },
 ];

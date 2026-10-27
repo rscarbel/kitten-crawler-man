@@ -330,12 +330,12 @@ type FixtureToasts =
   | 'captions';
 
 const CLUB_SONGS = [
-  'desperado_club_1',
-  'desperado_club_2',
-  'desperado_club_3',
-  'desperado_club_4',
+  'cloak_and_dagger_1',
+  'cloak_and_dagger_2',
+  'cloak_and_dagger_3',
+  'cloak_and_dagger_4',
 ] as const satisfies readonly MusicTrackId[];
-/** A plausible count for an old save part-way through the Over City. */
+/** A plausible count for an old save part-way through Taloncrest. */
 const BACKFILLED_SONG_COUNT = 21;
 
 interface HudFixtureSpec {
@@ -369,14 +369,14 @@ function hudFixture(spec: HudFixtureSpec): DialogFixture {
         }
         captions.post({ text: 'Mantid hisses', direction: OFFSCREEN_CRY_DIRECTION });
         toasts.post('Game Saved', { tone: 'success', icon: 'save' });
-        nowPlaying.show(musicCredit('desperado_club_1'));
+        nowPlaying.show(musicCredit('cloak_and_dagger_1'));
       }
       if (spec.toasts === 'musicUnlock') postMusicUnlockToast(toasts, 'terrifying_woods');
       if (spec.toasts === 'clubArrival') {
         for (const song of CLUB_SONGS) postMusicUnlockToast(toasts, song);
-        nowPlaying.show(musicCredit('desperado_club_1'));
+        nowPlaying.show(musicCredit('cloak_and_dagger_1'));
       }
-      if (spec.toasts === 'longCredit') nowPlaying.show(musicCredit('desperado_club_3'));
+      if (spec.toasts === 'longCredit') nowPlaying.show(musicCredit('cloak_and_dagger_3'));
       if (spec.toasts === 'musicBackfill') postMusicBackfillToast(toasts, BACKFILLED_SONG_COUNT);
       if (spec.toasts === 'saving') {
         toasts.post('Saving...', { tone: 'neutral', icon: 'save' });
@@ -845,8 +845,8 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
     topBand: () => {
       const banner = questBannerEntry({
         id: 'quest-banner',
-        title: 'THE BIG TOP AWAITS',
-        subtitle: 'Find the ringmaster',
+        title: 'THE MAGISTRACY IS EMPTY',
+        subtitle: 'The murders are over. Return to the streets below.',
         framesLeft: QUEST_BANNER_FRAMES,
         tone: 'success',
       });
@@ -892,8 +892,8 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
     topBand: () => {
       const banner = questBannerEntry({
         id: 'quest-banner',
-        title: 'THE BIG TOP AWAITS',
-        subtitle: 'Find the ringmaster',
+        title: 'THE MAGISTRACY IS EMPTY',
+        subtitle: 'The murders are over. Return to the streets below.',
         framesLeft: QUEST_BANNER_FRAMES,
         tone: 'success',
       });

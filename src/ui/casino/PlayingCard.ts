@@ -1,5 +1,5 @@
 /**
- * Procedural playing-card art for the Desperado Club's blackjack table.
+ * Procedural playing-card art for the Cloak & Dagger's blackjack table.
  *
  * Fifty-two faces at readable size is a large offline bake for art that is
  * fundamentally vector-simple, and the panel scales continuously across

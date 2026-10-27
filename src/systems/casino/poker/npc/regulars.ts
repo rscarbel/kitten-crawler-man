@@ -1,10 +1,10 @@
 /**
- * The Desperado Club's Texas Hold'em regulars: who they are and what they look
+ * The Cloak & Dagger's Texas Hold'em regulars: who they are and what they look
  * like, never how they play. Play style is rolled per run from the world seed
  * by `rollPokerPersonalities`, so a name says nothing about the player's
  * chances against it.
  *
- * Looks come from the town's closed cast, split roughly two skyfowl to one
+ * Looks come from the town's closed cast, split roughly two Hawkfolk to one
  * human like the club crowd, and every regular wears a different one so the
  * player can tell the seats apart at a glance.
  */
@@ -30,6 +30,10 @@ export const REGULAR_IDS = [
 ] as const;
 export type RegularId = (typeof REGULAR_IDS)[number];
 
+export function isRegularId(id: string | null): id is RegularId {
+  return REGULAR_IDS.some((regularId) => regularId === id);
+}
+
 export interface PokerRegular {
   readonly id: RegularId;
   readonly name: string;
@@ -40,7 +44,7 @@ export const POKER_REGULARS: Readonly<Record<RegularId, PokerRegular>> = {
   wren: {
     id: 'wren',
     name: 'Wren Halloway',
-    look: { species: 'skyfowl', lookId: 'merchant_sparrowfleck_slight' },
+    look: { species: 'hawkfolk', lookId: 'merchant_sparrowfleck_slight' },
   },
   grizzle: {
     id: 'grizzle',
@@ -50,22 +54,22 @@ export const POKER_REGULARS: Readonly<Record<RegularId, PokerRegular>> = {
   ottoline: {
     id: 'ottoline',
     name: 'Lady Ottoline Fairweather',
-    look: { species: 'skyfowl', lookId: 'noble_goldenbarred_heavy' },
+    look: { species: 'hawkfolk', lookId: 'noble_goldenbarred_heavy' },
   },
   pell: {
     id: 'pell',
     name: 'Sixfinger Pell',
-    look: { species: 'skyfowl', lookId: 'porter_hawkbrown_slight' },
+    look: { species: 'hawkfolk', lookId: 'porter_hawkbrown_slight' },
   },
   dabney: {
     id: 'dabney',
     name: 'Nervous Dabney',
-    look: { species: 'skyfowl', lookId: 'clerk_dovegrey_slight' },
+    look: { species: 'hawkfolk', lookId: 'clerk_dovegrey_slight' },
   },
   corvina: {
     id: 'corvina',
     name: 'Corvina Lark',
-    look: { species: 'skyfowl', lookId: 'temple_corvidblack_heavy' },
+    look: { species: 'hawkfolk', lookId: 'temple_corvidblack_heavy' },
   },
   reverend: {
     id: 'reverend',
@@ -85,17 +89,17 @@ export const POKER_REGULARS: Readonly<Record<RegularId, PokerRegular>> = {
   quillfeather: {
     id: 'quillfeather',
     name: 'Barnaby Quillfeather',
-    look: { species: 'skyfowl', lookId: 'clerk_dovegrey_standard' },
+    look: { species: 'hawkfolk', lookId: 'clerk_dovegrey_standard' },
   },
   tuppence: {
     id: 'tuppence',
     name: 'Tuppence',
-    look: { species: 'skyfowl', lookId: 'porter_sparrowfleck_standard' },
+    look: { species: 'hawkfolk', lookId: 'porter_sparrowfleck_standard' },
   },
   vane: {
     id: 'vane',
     name: 'Gristle Vane',
-    look: { species: 'skyfowl', lookId: 'laborer_hawkbrown_heavy' },
+    look: { species: 'hawkfolk', lookId: 'laborer_hawkbrown_heavy' },
   },
   brisket: {
     id: 'brisket',
@@ -105,7 +109,7 @@ export const POKER_REGULARS: Readonly<Record<RegularId, PokerRegular>> = {
   mags: {
     id: 'mags',
     name: 'Mags the Molt',
-    look: { species: 'skyfowl', lookId: 'temple_dovegrey_standard' },
+    look: { species: 'hawkfolk', lookId: 'temple_dovegrey_standard' },
   },
 };
 

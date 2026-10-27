@@ -1,5 +1,5 @@
 /**
- * The Over City's shared woodwork colours. The notice board, benches, seer's
+ * Taloncrest's shared woodwork colours. The notice board, benches, seer's
  * table and market carts are all supposed to look like they were built by the
  * same carpenter, so the tones live here instead of being redeclared per sprite.
  *

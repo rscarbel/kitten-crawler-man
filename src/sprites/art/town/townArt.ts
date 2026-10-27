@@ -1,5 +1,5 @@
 /**
- * Shared vocabulary for Over City's painted art: the frame contract every
+ * Shared vocabulary for Taloncrest's painted art: the frame contract every
  * facade, street prop and piece of interior furniture is painted against,
  * the bake scale, and the light/shadow/outline rules that make a plaster
  * shopfront, a dressed-stone temple and a crate at the building line read as
@@ -9,7 +9,7 @@
  * module (`townPalette.ts`), a set of material painters (`townMaterials.ts`)
  * and this file's frame contract and lighting rules — so a caller who
  * already knows the village module recognises this one immediately. Over
- * City is a mixed human-and-skyfowl town rather than a ratkin village, and
+ * City is a mixed human-and-Taloncrest rather than a ratkin village, and
  * three choices carry that everywhere: it is **lighter and cooler** than the
  * village's dark oiled wood, its masonry is **dressed and coursed** rather
  * than rounded fieldstone, and its hardware is **iron** rather than brass.

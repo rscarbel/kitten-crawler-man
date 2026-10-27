@@ -296,7 +296,7 @@ const CLIP_OVERSHOOT = 1.6;
 
 /**
  * The halo steps every crease and cast shadow on the figure is stroked with. Three,
- * not the nine Signet uses: at the 32 px tile a crease is two or three pixels
+ * not the nine Angel's painter uses: at the 32 px tile a crease is two or three pixels
  * across, the extra steps land in the same pixels, and each one is a full
  * stroke of the path.
  */

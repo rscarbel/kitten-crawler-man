@@ -118,11 +118,25 @@ export function paintBloom(
   ctx.fill();
 }
 
-/** A lit candle standing on `baseY`, with a small halo. */
-export function paintCandle(ctx: Ctx, x: number, baseY: number, height: number, ts: number): void {
+/**
+ * A candle standing on `baseY` with its halo but no flame, for a stand whose
+ * flames are drawn live over it.
+ */
+export function paintCandleBody(
+  ctx: Ctx,
+  x: number,
+  baseY: number,
+  height: number,
+  ts: number,
+): void {
   const width = ts * 0.07;
   paintBloom(ctx, x, baseY - height - ts * 0.05, ts * 0.22, FIRE_GLOW, 0.28);
   inkedRect(ctx, x - width / 2, baseY - height, width, height, CANDLE_WAX, ts);
+}
+
+/** A lit candle standing on `baseY`, with a small halo. */
+export function paintCandle(ctx: Ctx, x: number, baseY: number, height: number, ts: number): void {
+  paintCandleBody(ctx, x, baseY, height, ts);
   ctx.fillStyle = rgb(FLAME_OUTER);
   ctx.beginPath();
   ctx.ellipse(x, baseY - height - ts * 0.05, ts * 0.03, ts * 0.055, 0, 0, Math.PI * 2);

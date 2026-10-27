@@ -65,7 +65,7 @@ import {
 } from './personality';
 import { listAt } from './listAt';
 import { lineOf, type PerceivedTendencies } from './ranges';
-import { REGULAR_IDS, type RegularId } from './regulars';
+import { REGULAR_IDS, isRegularId, type RegularId } from './regulars';
 import {
   conditionRate,
   tellConditionPrior,
@@ -136,10 +136,6 @@ function freshTrack(): HandTrack {
     mainWinners: [],
     uncontested: false,
   };
-}
-
-export function isRegularId(id: string | null): id is RegularId {
-  return REGULAR_IDS.some((regularId) => regularId === id);
 }
 
 /** Regulars know each other's games roughly: their read of another regular is half truth, half table average. */

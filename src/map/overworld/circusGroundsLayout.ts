@@ -1,18 +1,17 @@
 /**
- * Grimaldi's circus grounds as an authored template, in tile offsets from the
+ * The circus grounds as an authored template, in tile offsets from the
  * grounds' centre.
  *
  * The grounds are a plan rather than a scatter for the same reason Briar
- * Hollow is (`briarHollowLayout.ts`): every fight on them is authored against
- * fixed ground. `RITUAL_WAVES` and `ASSAULT_WAVES` in `CircusQuestSystem` name
- * their spawns as offsets from the same centre, so a tent that moved by a seed
- * would bury a wave. **Nothing here may depend on the world seed**; the seed
+ * Hollow is (`briarHollowLayout.ts`): the Starlight Tent's door, the pavilions and
+ * the open forecourt are authored ground the gates and the travel landing are
+ * written against. **Nothing here may depend on the world seed**; the seed
  * only picks paint variants when the art is drawn.
  *
  * What is fixed and what rotates:
  *
- * - The Big Top, its forecourt and the side-show pavilions are fixed. The Big
- *   Top's door faces south because the tent's interior is entered from the
+ * - The Starlight Tent, its forecourt and the side-show pavilions are fixed. The Starlight
+ *   Tent's door faces south because the tent's interior is entered from the
  *   south, so the forecourt in front of it is south too.
  * - The approach road comes in from whichever town gate is nearest, at any
  *   angle. The entry arch stands where that road crosses the grounds' rim, and
@@ -20,8 +19,7 @@
  *   ring off the road and clear of the arch — so those follow the approach.
  *
  * Dressing that could block movement lives on the rim (radius 12 and out),
- * where nothing fights: `CircusQuestSystem` holds its mobs inside radius 13.
- * The field the waves fight over gets decals only.
+ * so the field a party crosses stays open; the field gets decals only.
  */
 
 import type { TilePoint, TileRect } from '../town/townPlan';
@@ -37,12 +35,18 @@ export const CIRCUS_RADIUS_TILES = 14;
  */
 export const CIRCUS_FOREST_CLEARANCE_TILES = 3;
 
+/**
+ * The tent's building name: the overworld registers its door under it, and the
+ * interior scene recognises the maze by it.
+ */
+export const STARLIGHT_TENT_NAME = 'The Starlight Tent';
+
 // ── Structures ───────────────────────────────────────────────────────────────
 
 /** Every structure the grounds stamp, as the prop id its sheet row is named by. */
 export type CircusStructureId =
-  | 'big_top'
-  | 'pavilion_mold_lion'
+  | 'starlight_tent'
+  | 'pavilion_tightrope'
   | 'pavilion_feats_of_flesh'
   | 'pavilion_fortunes'
   | 'arch_post'
@@ -88,13 +92,13 @@ export interface CircusStructureSpec {
   readonly door?: { readonly dx: number; readonly dy: number; readonly width: number };
 }
 
-const BIG_TOP_W = 12;
-const BIG_TOP_H = 5;
-const BIG_TOP_LAST_COL = BIG_TOP_W - 1;
-const BIG_TOP_LAST_ROW = BIG_TOP_H - 1;
+const STARLIGHT_TENT_W = 12;
+const STARLIGHT_TENT_H = 5;
+const STARLIGHT_TENT_LAST_COL = STARLIGHT_TENT_W - 1;
+const STARLIGHT_TENT_LAST_ROW = STARLIGHT_TENT_H - 1;
 /** The door's west tile: the middle two columns of the south row. */
-const BIG_TOP_DOOR_DX = BIG_TOP_W / 2 - 1;
-const BIG_TOP_DOOR_WIDTH = 2;
+const STARLIGHT_TENT_DOOR_DX = STARLIGHT_TENT_W / 2 - 1;
+const STARLIGHT_TENT_DOOR_WIDTH = 2;
 const PAVILION_W = 3;
 const PAVILION_H = 2;
 const WAGON_W = 3;
@@ -106,29 +110,33 @@ function rimFootprint(kind: CircusStructureKind, w: number): CircusStructureSpec
 }
 
 /**
- * The Big Top's plan is an ellipse inscribed in its 12 x 5 rectangle, and an
+ * The Starlight Tent's plan is an ellipse inscribed in its 12 x 5 rectangle, and an
  * ellipse that flat clears all four corner tiles of the rectangle outright:
  * at a corner column's inner edge the base is already more than a tile in
  * from the long side. So those four tiles stay walkable ground rather than
  * blocked tiles drawn as empty grass.
  */
 export const CIRCUS_STRUCTURES: Readonly<Record<CircusStructureId, CircusStructureSpec>> = {
-  big_top: {
+  starlight_tent: {
     kind: 'tall',
-    w: BIG_TOP_W,
-    h: BIG_TOP_H,
+    w: STARLIGHT_TENT_W,
+    h: STARLIGHT_TENT_H,
     openTiles: [
       { dx: 0, dy: 0 },
-      { dx: BIG_TOP_LAST_COL, dy: 0 },
-      { dx: 0, dy: BIG_TOP_LAST_ROW },
-      { dx: BIG_TOP_LAST_COL, dy: BIG_TOP_LAST_ROW },
-      { dx: BIG_TOP_DOOR_DX, dy: BIG_TOP_LAST_ROW },
-      { dx: BIG_TOP_DOOR_DX + 1, dy: BIG_TOP_LAST_ROW },
+      { dx: STARLIGHT_TENT_LAST_COL, dy: 0 },
+      { dx: 0, dy: STARLIGHT_TENT_LAST_ROW },
+      { dx: STARLIGHT_TENT_LAST_COL, dy: STARLIGHT_TENT_LAST_ROW },
+      { dx: STARLIGHT_TENT_DOOR_DX, dy: STARLIGHT_TENT_LAST_ROW },
+      { dx: STARLIGHT_TENT_DOOR_DX + 1, dy: STARLIGHT_TENT_LAST_ROW },
     ],
-    drawTile: { dx: 1, dy: BIG_TOP_LAST_ROW },
-    door: { dx: BIG_TOP_DOOR_DX, dy: BIG_TOP_LAST_ROW, width: BIG_TOP_DOOR_WIDTH },
+    drawTile: { dx: 1, dy: STARLIGHT_TENT_LAST_ROW },
+    door: {
+      dx: STARLIGHT_TENT_DOOR_DX,
+      dy: STARLIGHT_TENT_LAST_ROW,
+      width: STARLIGHT_TENT_DOOR_WIDTH,
+    },
   },
-  pavilion_mold_lion: {
+  pavilion_tightrope: {
     kind: 'tall',
     w: PAVILION_W,
     h: PAVILION_H,
@@ -181,32 +189,32 @@ export function blockedSteps(spec: CircusStructureSpec): FootprintStep[] {
 /** Where a fixed structure stands: its footprint's north-west corner, from the centre. */
 export interface CircusStructurePlacement {
   readonly structure:
-    'big_top' | 'pavilion_mold_lion' | 'pavilion_feats_of_flesh' | 'pavilion_fortunes';
+    'starlight_tent' | 'pavilion_tightrope' | 'pavilion_feats_of_flesh' | 'pavilion_fortunes';
   readonly dx: number;
   readonly dy: number;
 }
 
 /**
- * The fixed structures. The Big Top stands north of the centre so its door
+ * The fixed structures. The Starlight Tent stands north of the centre so its door
  * row is the centre row and the forecourt south of it stays open. The
  * pavilions flank it to the north-west and north-east, behind the line of
  * its door, and the fortune teller sits north of it — so the whole south
- * field, where the fat clowns and the mold lions spawn, is open ground.
+ * field is open ground.
  */
 export const CIRCUS_STRUCTURE_PLACEMENTS: ReadonlyArray<CircusStructurePlacement> = [
-  { structure: 'big_top', dx: -BIG_TOP_W / 2, dy: -BIG_TOP_LAST_ROW },
-  { structure: 'pavilion_mold_lion', dx: -11, dy: -5 },
+  { structure: 'starlight_tent', dx: -STARLIGHT_TENT_W / 2, dy: -STARLIGHT_TENT_LAST_ROW },
+  { structure: 'pavilion_tightrope', dx: -11, dy: -5 },
   { structure: 'pavilion_feats_of_flesh', dx: 8, dy: -5 },
   { structure: 'pavilion_fortunes', dx: 3, dy: -9 },
 ];
 
 /**
- * The Big Top's two king poles, in tiles: `x` across the footprint from its
+ * The Starlight Tent's two king poles, in tiles: `x` across the footprint from its
  * west edge, `heightTiles` from the ground to the pole's cap. Shared by the
  * painter, which raises the canvas to them, and by whatever draws a live
  * pennant on each cap, so the two can never disagree about where a cap is.
  */
-export const BIG_TOP_KING_POLES: ReadonlyArray<{
+export const STARLIGHT_TENT_KING_POLES: ReadonlyArray<{
   readonly x: number;
   readonly heightTiles: number;
 }> = [
@@ -214,8 +222,8 @@ export const BIG_TOP_KING_POLES: ReadonlyArray<{
   { x: 8, heightTiles: 4.6 },
 ];
 
-/** Depth into the Big Top's footprint, in tiles from its south edge, at which both king poles stand. */
-export const BIG_TOP_KING_POLE_DEPTH_TILES = BIG_TOP_H / 2;
+/** Depth into the Starlight Tent's footprint, in tiles from its south edge, at which both king poles stand. */
+export const STARLIGHT_TENT_KING_POLE_DEPTH_TILES = STARLIGHT_TENT_H / 2;
 
 // ── The approach road ────────────────────────────────────────────────────────
 
@@ -223,7 +231,7 @@ export const BIG_TOP_KING_POLE_DEPTH_TILES = BIG_TOP_H / 2;
 export const CIRCUS_ROAD_START_ROW = 2;
 /**
  * The columns, from the centre, a road that must leave northward turns up:
- * the two-tile gaps between the Big Top's flanks and the side-show pavilions,
+ * the two-tile gaps between the Starlight Tent's flanks and the side-show pavilions,
  * so the road runs past the tent to the forecourt instead of into its back.
  */
 export const CIRCUS_ROAD_FLANK_COLUMNS = { east: 7, west: -8 } as const;
@@ -238,34 +246,21 @@ export interface KeepClearBand {
   readonly dyTo: number;
 }
 
-export type CircusKeepClearBandName =
-  'forecourt' | 'lemur field' | 'stilt field' | 'door' | 'lookout';
-
-/** Signet's lookout: on the centre row, inset from the east rim, where the ritual is cast from. */
-export const CIRCUS_LOOKOUT_OFFSET: TilePoint = { x: 11, y: 0 };
+export type CircusKeepClearBandName = 'forecourt' | 'door';
 
 /**
- * Ground the fights need open. The forecourt is where the party meets the
- * fat clowns; the lemur and stilt fields are where those waves come up; the
- * door band is the Big Top's doorway and the two rows in front of it; the
- * lookout is Signet's square. The approach road is kept clear too, but it
- * depends on the site's heading, so it is measured from the road itself.
+ * Ground the grounds keep open. The forecourt is the open field in front of
+ * the tent; the door band is the Starlight Tent's doorway and the two rows in front
+ * of it. The approach road is kept clear too, but it depends on the site's
+ * heading, so it is measured from the road itself.
  */
 export const CIRCUS_KEEP_CLEAR_BANDS: Readonly<Record<CircusKeepClearBandName, KeepClearBand>> = {
   forecourt: { dxFrom: -12, dxTo: 12, dyFrom: 1, dyTo: 3 },
-  'lemur field': { dxFrom: -11, dxTo: -7, dyFrom: -1, dyTo: 3 },
-  'stilt field': { dxFrom: 9, dxTo: 11, dyFrom: 0, dyTo: 1 },
   door: {
-    dxFrom: BIG_TOP_DOOR_DX - BIG_TOP_W / 2,
-    dxTo: BIG_TOP_DOOR_DX - BIG_TOP_W / 2 + BIG_TOP_DOOR_WIDTH - 1,
+    dxFrom: STARLIGHT_TENT_DOOR_DX - STARLIGHT_TENT_W / 2,
+    dxTo: STARLIGHT_TENT_DOOR_DX - STARLIGHT_TENT_W / 2 + STARLIGHT_TENT_DOOR_WIDTH - 1,
     dyFrom: 0,
     dyTo: 2,
-  },
-  lookout: {
-    dxFrom: CIRCUS_LOOKOUT_OFFSET.x - 1,
-    dxTo: CIRCUS_LOOKOUT_OFFSET.x + 1,
-    dyFrom: CIRCUS_LOOKOUT_OFFSET.y - 1,
-    dyTo: CIRCUS_LOOKOUT_OFFSET.y + 1,
   },
 };
 
@@ -346,9 +341,7 @@ export function resolveRimTile(
 export const CIRCUS_RIM_OUTER_RADIUS_TILES = 14.5;
 /**
  * The radii a rim prop's footprint centre is tried at, outermost first: a
- * prop pushed out to the grounds' edge leaves the most of the field open, and
- * stands where the fights' pens (mobs inside r13, crawlers inside r14) keep
- * everybody off it anyway.
+ * prop pushed out to the grounds' edge leaves the most of the field open.
  */
 const RIM_PROP_RADIUS_STEP_TILES = 0.25;
 export const CIRCUS_RIM_PROP_RADII_TILES: ReadonlyArray<number> = Array.from(
@@ -361,10 +354,6 @@ export const CIRCUS_RIM_PROP_RADII_TILES: ReadonlyArray<number> = Array.from(
   },
   (_unused, index) => CIRCUS_RIM_OUTER_RADIUS_TILES - index * RIM_PROP_RADIUS_STEP_TILES,
 );
-/** Terror the Clown's spawn, behind the Big Top: no rim prop may crowd it. */
-export const CIRCUS_TERROR_SPAWN_OFFSET: TilePoint = { x: 0, y: -8 };
-/** How close, in tiles (Chebyshev), a rim prop may stand to Terror's spawn. */
-export const CIRCUS_TERROR_SPAWN_CLEARANCE_TILES = 3;
 
 /**
  * Where a rim prop is stood: at a fixed bearing, or a fixed turn either side
@@ -384,7 +373,7 @@ export interface RimPropAnchor {
  * The rim, in placement order. Every footprint is one row, so the long side
  * lies along the rim where the rim runs east-west: the wagons are parked round
  * the back (north), the midway booths face the open south field, and the
- * crate stack sits behind the Big Top, well clear of Terror's spawn. Bearings
+ * crate stack sits behind the Starlight Tent, well clear of the Massive Clown's spawn. Bearings
  * are degrees clockwise from east, between the flame lamps.
  */
 export const CIRCUS_RIM_PROPS: ReadonlyArray<RimPropAnchor> = [
@@ -428,7 +417,7 @@ export function bearingOf(centre: TilePoint, tile: TilePoint): number {
 export type CircusAnchorName =
   | 'king_pole_west'
   | 'king_pole_east'
-  | 'pavilion_mold_lion'
+  | 'pavilion_tightrope'
   | 'pavilion_feats_of_flesh'
   | 'pavilion_fortunes'
   | `torch_${number}`;
@@ -445,7 +434,7 @@ export const CIRCUS_BUNTING_SPANS: ReadonlyArray<BuntingSpan> = [
   { from: 'king_pole_west', to: 'torch_4', dropped: false },
   { from: 'king_pole_east', to: 'torch_0', dropped: false },
   { from: 'king_pole_east', to: 'torch_5', dropped: true },
-  { from: 'king_pole_west', to: 'pavilion_mold_lion', dropped: false },
+  { from: 'king_pole_west', to: 'pavilion_tightrope', dropped: false },
   { from: 'king_pole_east', to: 'pavilion_feats_of_flesh', dropped: false },
   { from: 'king_pole_east', to: 'pavilion_fortunes', dropped: true },
 ];
@@ -468,8 +457,8 @@ export const CIRCUS_FESTOON_SPANS: ReadonlyArray<FestoonSpan> = [
 
 /**
  * A point on the grounds in tiles, measured from the centre tile's north-west
- * corner rather than its middle, so a decal can sit on a tile edge — the Big
- * Top's doorway is two tiles wide, and its middle is the edge between them.
+ * corner rather than its middle, so a decal can sit on a tile edge — the Starlight
+ * Tent's doorway is two tiles wide, and its middle is the edge between them.
  */
 export interface GroundsPoint {
   readonly x: number;
@@ -479,7 +468,7 @@ export interface GroundsPoint {
 /**
  * Flat dressing baked into the ground, placed by the layout. The wagon ruts
  * and the stain by the cage wagon are placed off wherever those wagons stood,
- * and the vine runners off the Big Top's skirt, so they are not listed here.
+ * so they are not listed here.
  */
 export type CircusDecal =
   /** A practice ring's chalk curb, long since scuffed half away. */
@@ -496,19 +485,19 @@ export type CircusDecal =
   /** A clown's oversized shoe prints, walking from `from` to `to`. */
   | { readonly kind: 'shoe_prints'; readonly from: GroundsPoint; readonly to: GroundsPoint };
 
-/** The middle of the Big Top's doorway, on its sill. */
-const BIG_TOP_DOORWAY: GroundsPoint = { x: 0, y: 1 };
+/** The middle of the Starlight Tent's doorway, on its sill. */
+const STARLIGHT_TENT_DOORWAY: GroundsPoint = { x: 0, y: 1 };
 
 /**
- * Low contrast and sparse by rule: every one of these lies under the fights,
- * the mobs and the telegraphs. The chalk ring stands off the road's axes
+ * Low contrast and sparse by rule: every one of these lies under the bodies
+ * that walk the lot. The chalk ring stands off the road's axes
  * (the forecourt row and the door's column), so the road never cuts it.
  */
 export const CIRCUS_DECALS: ReadonlyArray<CircusDecal> = [
   { kind: 'chalk_ring', at: { x: 5.5, y: 7 }, radiusTiles: 2.2 },
   {
     kind: 'sawdust_path',
-    from: BIG_TOP_DOORWAY,
+    from: STARLIGHT_TENT_DOORWAY,
     to: { x: 0.3, y: 4.2 },
     widthTiles: 1.7,
   },
@@ -519,35 +508,6 @@ export const CIRCUS_DECALS: ReadonlyArray<CircusDecal> = [
   { kind: 'litter', at: { x: -4.5, y: 8.5 }, radiusTiles: 2.4 },
   { kind: 'litter', at: { x: 2.5, y: 11 }, radiusTiles: 1.8 },
   { kind: 'litter', at: { x: -2.2, y: 3.6 }, radiusTiles: 1.4 },
-];
-
-/**
- * How the vine runners leave the Big Top's skirt, in degrees clockwise from
- * east round its plan ellipse (90 is the door's side): evenly across the
- * front, where they can be seen, but never through the doorway, and one
- * behind each end.
- */
-const VINE_RUNNER_FAN = {
-  frontFromDeg: 8,
-  frontToDeg: 172,
-  frontRunners: 9,
-  doorwayDeg: 90,
-  doorwayHalfGapDeg: 18,
-  /** How far round behind each end the two rear runners leave. */
-  rearOffsetDeg: 16,
-} as const;
-export const CIRCUS_VINE_RUNNER_ANGLES_DEG: ReadonlyArray<number> = [
-  ...Array.from(
-    { length: VINE_RUNNER_FAN.frontRunners },
-    (_unused, index) =>
-      VINE_RUNNER_FAN.frontFromDeg +
-      ((VINE_RUNNER_FAN.frontToDeg - VINE_RUNNER_FAN.frontFromDeg) * index) /
-        (VINE_RUNNER_FAN.frontRunners - 1),
-  ).filter(
-    (angle) => Math.abs(angle - VINE_RUNNER_FAN.doorwayDeg) > VINE_RUNNER_FAN.doorwayHalfGapDeg,
-  ),
-  DEGREES_PER_HALF_TURN + VINE_RUNNER_FAN.rearOffsetDeg,
-  DEGREES_PER_TURN - VINE_RUNNER_FAN.rearOffsetDeg,
 ];
 
 // ── The entry arch ───────────────────────────────────────────────────────────

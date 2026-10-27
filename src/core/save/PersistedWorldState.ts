@@ -20,30 +20,18 @@ import {
 } from '../../systems/stealthKeySnatch/stealthKeySnatchCheckpoint';
 import type { MurderMysteryQuestCheckpoint } from '../../systems/MurderMysteryQuestSystem';
 import type { SpiderQuestCheckpoint } from '../../systems/SpiderQuestSystem';
-import type { CircusQuestCheckpoint } from '../../systems/CircusQuestSystem';
 import type { BountyCheckpoint } from '../../systems/BountySystem';
-import type { ClubMembershipCheckpoint, PokerReads } from '../club/ClubMembership';
+import type { CasinoStateCheckpoint, PokerReads } from '../club/CasinoState';
 import type { PlayerRead } from '../../systems/casino/poker/npc/playerRead';
-import { REGULAR_IDS } from '../../systems/casino/poker/npc/regulars';
-import { JACKPOT_FLOOR, normalizeJackpotPool } from '../../systems/casino/slots/slotBets';
-import {
-  hirelingStartingHp,
-  type HiredMercenary,
-  type MercenaryRosterCheckpoint,
-} from '../party/MercenaryRoster';
+import { isRegularId } from '../../systems/casino/poker/npc/regulars';
+import { normalizeJackpotPool } from '../../systems/casino/slots/slotBets';
+import type { HiredMercenary, MercenaryRosterCheckpoint } from '../party/MercenaryRoster';
 import type { MongoPetStateCheckpoint } from '../state/MongoPetState';
-import {
-  migrateInteriorPropPayoutKey,
-  migrateRoomKey,
-  type TownMemoryCheckpoint,
-} from '../state/TownMemory';
+import { VISITED_PLACE_IDS, type TownMemoryCheckpoint } from '../state/TownMemory';
 import type { JournalProgressCheckpoint } from '../quests/JournalProgress';
 import { TACTICS_TRAITS, type TacticsTrait } from '../../creatures/tactics/tacticsTraits';
 import { parseShopStockSnapshot, type ShopStockSnapshot } from '../../economy/shopStock';
-import {
-  CIRCUS_QUEST_STAGE_ORDER,
-  type CircusQuestProgressCheckpoint,
-} from '../quests/CircusQuestProgress';
+import type { StarlightTentProgressCheckpoint } from '../state/StarlightTentProgress';
 import type { AnchorQuestProgressCheckpoint } from '../quests/AnchorQuestProgress';
 import {
   MURDER_QUEST_STAGE_ORDER,
@@ -51,7 +39,7 @@ import {
 } from '../quests/MurderQuestProgress';
 import type { BountyProgressCheckpoint } from '../quests/BountyProgress';
 import type { LootDrop } from '../../creatures/Mob';
-import { ITEM_DEF, type ItemId } from '../items/defs/ItemDefs';
+import { isItemId, type ItemId } from '../items/defs/ItemDefs';
 import type { QuestStatus } from '../quests/QuestManager';
 import type { QuestMarkerType } from '../../systems/MiniMapSystem';
 import { SUITS, RANKS, type ShoeState } from '../../systems/casino/Deck';
@@ -86,55 +74,36 @@ export interface PersistedWorldState {
   treasureChests: PersistedTreasureChestCheckpoint;
   defendQuest: PersistedDefendQuestCheckpoint;
   spiderQuest: PersistedSpiderQuestCheckpoint;
-  circusQuest: PersistedCircusQuestCheckpoint;
   murderQuest: PersistedMurderMysteryQuestCheckpoint;
 
   bounty: PersistedBountyCheckpoint | null;
 
-  circusQuestProgress: CircusQuestProgressCheckpoint;
+  starlightTentProgress: StarlightTentProgressCheckpoint;
   anchorQuestProgress: AnchorQuestProgressCheckpoint;
   murderQuestProgress: MurderQuestProgressCheckpoint;
   journal: JournalProgressCheckpoint;
   bountyProgress: BountyProgressCheckpoint;
-  clubMembership: ClubMembershipCheckpoint;
+  casinoState: CasinoStateCheckpoint;
   shopStock: ShopStockSnapshot;
   townMemory: TownMemoryCheckpoint;
   mercenaryRoster: MercenaryRosterCheckpoint;
   mongoPetState: MongoPetStateCheckpoint;
-  /** Optional: an older save costs one repeated congratulation, not a failed load. */
-  mordecaiDebrief?: MordecaiDebriefCheckpoint;
+  mordecaiDebrief: MordecaiDebriefCheckpoint;
+  /** Tactics traits the party has already been told enemies have learned, for the whole run. */
+  tacticsNoticesSeen: readonly TacticsTrait[];
+  /** The doomsday finale's stage and the time left on its countdown. */
+  doomsday: PersistedDoomsdayProgress;
+  /** What each boss room's props and ground looked like. */
+  bossRoomDressing: BossRoomDressingCheckpoint;
   /**
-   * Tactics traits the party has already been told enemies have learned,
-   * for the whole run. Optional for the same reason `mordecaiDebrief` is: an older save
-   * without it just costs a repeated System notice, not a failed load.
+   * Briar Hollow's quest, structures and soldier orders. Written on every
+   * floor, because the village state is threaded through the whole run.
    */
-  tacticsNoticesSeen?: readonly TacticsTrait[];
-  /**
-   * The doomsday finale's stage and the time left on its countdown. Optional:
-   * a save without it loads as a finale that has not started.
-   */
-  doomsday?: PersistedDoomsdayProgress;
-  /**
-   * What each boss room's props and ground looked like. Optional: a save
-   * without it loads every room as it was generated.
-   */
-  bossRoomDressing?: BossRoomDressingCheckpoint;
-  /**
-   * Briar Hollow's quest, structures and soldier orders. Optional: a save
-   * written before the village existed loads with no village progress, and a
-   * save from any floor but 3 simply never carries one.
-   */
-  briarHollow?: BriarHollowStateSnapshot;
-  /**
-   * The clogged bathroom's quest and whether its explainer was seen.
-   * Optional: a save written before the bathroom loads it broken and unmet.
-   */
-  cloggedBathroom?: CloggedBathroomCheckpoint;
-  /**
-   * The stealth gate's key quest and whether the prison's explainer was seen.
-   * Optional: a save written without it loads unmet, with the gate locked.
-   */
-  stealthKeySnatch?: StealthKeySnatchCheckpoint;
+  briarHollow: BriarHollowStateSnapshot;
+  /** The clogged bathroom's quest and whether its explainer was seen. */
+  cloggedBathroom: CloggedBathroomCheckpoint;
+  /** The stealth gate's key quest and whether the prison's explainer was seen. */
+  stealthKeySnatch: StealthKeySnatchCheckpoint;
 
   krakarenKilled: boolean;
   bigRoosterKilled: boolean;
@@ -253,7 +222,7 @@ export function fromPersistedDefendQuestCheckpoint(
 
 export type PersistedMurderMysteryQuestCheckpoint = Omit<
   MurderMysteryQuestCheckpoint,
-  'swarm' | 'gumgum' | 'swarmSpawnGrace'
+  'swarm' | 'baggi' | 'swarmSpawnGrace'
 >;
 
 export function toPersistedMurderMysteryQuestCheckpoint(
@@ -272,7 +241,7 @@ export function toPersistedMurderMysteryQuestCheckpoint(
 export function fromPersistedMurderMysteryQuestCheckpoint(
   persisted: PersistedMurderMysteryQuestCheckpoint,
 ): MurderMysteryQuestCheckpoint {
-  return { ...persisted, swarm: [], swarmSpawnGrace: [], gumgum: null };
+  return { ...persisted, swarm: [], swarmSpawnGrace: [], baggi: null };
 }
 
 export type PersistedSpiderQuestCheckpoint = Omit<
@@ -304,27 +273,6 @@ export function fromPersistedSpiderQuestCheckpoint(
   persisted: PersistedSpiderQuestCheckpoint,
 ): SpiderQuestCheckpoint {
   return { ...persisted, grotesqueSpider: null, smallSpiders: [] };
-}
-
-export type PersistedCircusQuestCheckpoint = Omit<
-  CircusQuestCheckpoint,
-  'waveMobs' | 'signet' | 'heather'
->;
-
-export function toPersistedCircusQuestCheckpoint(
-  cp: CircusQuestCheckpoint,
-): PersistedCircusQuestCheckpoint {
-  return {
-    questStatuses: cp.questStatuses,
-    phase: cp.phase,
-    waveIndex: cp.waveIndex,
-  };
-}
-
-export function fromPersistedCircusQuestCheckpoint(
-  persisted: PersistedCircusQuestCheckpoint,
-): CircusQuestCheckpoint {
-  return { ...persisted, waveMobs: [], signet: null, heather: null };
 }
 
 export type PersistedBountyCheckpoint = Omit<BountyCheckpoint, 'boss' | 'encounter' | 'shady'>;
@@ -370,8 +318,8 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(isString);
 }
 
-function isItemId(value: unknown): value is ItemId {
-  return typeof value === 'string' && value in ITEM_DEF;
+function isItemIdValue(value: unknown): value is ItemId {
+  return typeof value === 'string' && isItemId(value);
 }
 
 function stringUnion<T extends string>(value: unknown, allowed: readonly T[]): T | undefined {
@@ -419,7 +367,7 @@ export function parsePoint(value: unknown): { x: number; y: number } | undefined
 function parseItemStack(value: unknown): { id: ItemId; quantity: number } | undefined {
   if (!isRecord(value)) return undefined;
   const { id, quantity } = value;
-  if (!isItemId(id) || !isNumber(quantity)) return undefined;
+  if (!isItemIdValue(id) || !isNumber(quantity)) return undefined;
   return { id, quantity };
 }
 
@@ -453,31 +401,27 @@ function parseQuestStatuses(value: unknown): Array<[string, QuestStatus]> | unde
 function parseDebriefMemory(value: unknown): DebriefMemory | undefined {
   if (!isRecord(value)) return undefined;
   const { congratulated, namedItemIds } = value;
-  if (!isBoolean(congratulated) || !isUnknownArray(namedItemIds)) return undefined;
-  return { congratulated, namedItemIds: namedItemIds.filter(isItemId) };
+  const parsedItemIds = parseArray(namedItemIds, (item) =>
+    isItemIdValue(item) ? item : undefined,
+  );
+  if (!isBoolean(congratulated) || parsedItemIds === undefined) return undefined;
+  return { congratulated, namedItemIds: parsedItemIds };
 }
 
-/** Lenient, unlike its neighbours: a bad entry only costs a repeated congratulation. */
 function parseMordecaiDebriefCheckpoint(value: unknown): MordecaiDebriefCheckpoint | undefined {
   if (!isRecord(value)) return undefined;
   const parsed: MordecaiDebriefCheckpoint = {};
   for (const [key, entry] of Object.entries(value)) {
     const bossType = debriefBossType(key);
     const memory = parseDebriefMemory(entry);
-    if (bossType !== null && memory !== undefined) parsed[bossType] = memory;
+    if (bossType === null || memory === undefined) return undefined;
+    parsed[bossType] = memory;
   }
   return parsed;
 }
 
-/** Lenient, like its neighbour above: a bad entry only costs one repeated System notice. */
 function parseTacticsNoticesSeen(value: unknown): readonly TacticsTrait[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const parsed: TacticsTrait[] = [];
-  for (const entry of value) {
-    const trait = stringUnion(entry, TACTICS_TRAITS);
-    if (trait !== undefined) parsed.push(trait);
-  }
-  return parsed;
+  return parseArray(value, (entry) => stringUnion(entry, TACTICS_TRAITS));
 }
 
 function parseBossRoomRoom(value: unknown): BossRoomCheckpoint['rooms'][number] | undefined {
@@ -613,11 +557,12 @@ function parseWoodBarrier(value: unknown): WoodBarrier | undefined {
     return undefined;
   }
   const barrier: WoodBarrier = { tileX, tileY, worldX, worldY, hp, maxHp, grateIdx, hitFlash };
-  if (isNumber(value.spikesHp) && value.spikesHp > 0) {
-    barrier.spikesHp = value.spikesHp;
-    const spikesBy = stringUnion(value.spikesBy, ['human', 'cat'] as const);
-    if (spikesBy !== undefined) barrier.spikesBy = spikesBy;
-  }
+  const { spikesHp, spikesBy } = value;
+  if (spikesHp === undefined && spikesBy === undefined) return barrier;
+  const parsedSpikesBy = stringUnion(spikesBy, ['human', 'cat'] as const);
+  if (!isNumber(spikesHp) || spikesHp <= 0 || parsedSpikesBy === undefined) return undefined;
+  barrier.spikesHp = spikesHp;
+  barrier.spikesBy = parsedSpikesBy;
   return barrier;
 }
 
@@ -724,7 +669,7 @@ function parseMurderQuestPhase(
   value: unknown,
 ): PersistedMurderMysteryQuestCheckpoint['phase'] | undefined {
   return stringUnion(value, [
-    'gumgum_waiting',
+    'baggi_waiting',
     'body_waiting',
     'investigation',
     'night_attack',
@@ -924,35 +869,6 @@ function parsePersistedSpiderQuestCheckpoint(
   };
 }
 
-function parseCircusQuestPhase(
-  value: unknown,
-): PersistedCircusQuestCheckpoint['phase'] | undefined {
-  return stringUnion(value, [
-    'awaiting_intro',
-    'ritual_defense',
-    'awaiting_ritual_failed',
-    'heather_hunt',
-    'awaiting_heather_return',
-    'assault',
-    'bigtop_ready',
-    'awaiting_resolution',
-    'complete',
-  ] as const);
-}
-
-function parsePersistedCircusQuestCheckpoint(
-  value: unknown,
-): PersistedCircusQuestCheckpoint | undefined {
-  if (!isRecord(value)) return undefined;
-  const { questStatuses, phase, waveIndex } = value;
-  const parsedQuestStatuses = parseQuestStatuses(questStatuses);
-  const parsedPhase = parseCircusQuestPhase(phase);
-  if (parsedQuestStatuses === undefined || parsedPhase === undefined || !isNumber(waveIndex)) {
-    return undefined;
-  }
-  return { questStatuses: parsedQuestStatuses, phase: parsedPhase, waveIndex };
-}
-
 function parseQuestMarkerType(value: unknown): QuestMarkerType | undefined {
   return stringUnion(value, ['exclamation', 'question', 'red_x', 'elite'] as const);
 }
@@ -990,37 +906,32 @@ function parsePersistedBountyCheckpoint(value: unknown): PersistedBountyCheckpoi
 
 export function parseTownMemoryCheckpoint(value: unknown): TownMemoryCheckpoint | undefined {
   if (!isRecord(value)) return undefined;
-  const { residentTalks, clearedRooms } = value;
-  // Absent from a save written before camps were remembered; such a save
-  // simply remembers none, rather than losing the whole world state over it.
-  const clearedCamps = value.clearedCamps ?? [];
-  // Absent from a save written before interior props remembered their
-  // payouts; such a save simply starts every prop unpaid, which is how that
-  // save already played.
-  const paidOutInteriorProps = value.paidOutInteriorProps ?? [];
+  const { residentTalks, clearedRooms, clearedCamps, paidOutInteriorProps, visitedPlaces } = value;
   const residentIds = allResidents().map((resident) => resident.id);
-  const parsedTalks = parseArray(residentTalks, (entry) =>
-    parseStringKeyedTuple(entry, (v) => (isNumber(v) ? v : undefined)),
+  const parsedTalks = parseArray(residentTalks, (entry) => {
+    const talk = parseStringKeyedTuple(entry, (v) => (isNumber(v) ? v : undefined));
+    if (talk === undefined) return undefined;
+    const residentId = stringUnion(talk[0], residentIds);
+    return residentId === undefined ? undefined : ([residentId, talk[1]] as const);
+  });
+  const parsedVisitedPlaces = parseArray(visitedPlaces, (entry) =>
+    stringUnion(entry, VISITED_PLACE_IDS),
   );
   if (
     parsedTalks === undefined ||
     !isStringArray(clearedRooms) ||
     !isStringArray(clearedCamps) ||
-    !isStringArray(paidOutInteriorProps)
+    !isStringArray(paidOutInteriorProps) ||
+    parsedVisitedPlaces === undefined
   ) {
     return undefined;
   }
-  const validTalks: Array<[(typeof residentIds)[number], number]> = [];
-  for (const [id, count] of parsedTalks) {
-    const residentId = residentIds.find((candidate) => candidate === id);
-    if (residentId === undefined) continue;
-    validTalks.push([residentId, count]);
-  }
   return {
-    residentTalks: validTalks,
-    clearedRooms: clearedRooms.map(migrateRoomKey),
+    residentTalks: parsedTalks,
+    clearedRooms,
     clearedCamps,
-    paidOutInteriorProps: paidOutInteriorProps.map(migrateInteriorPropPayoutKey),
+    paidOutInteriorProps,
+    visitedPlaces: parsedVisitedPlaces,
   };
 }
 
@@ -1028,17 +939,10 @@ function parseJournalProgressCheckpoint(value: unknown): JournalProgressCheckpoi
   if (!isRecord(value)) return undefined;
   const { pinnedTrackerId, pinSource } = value;
   if (pinnedTrackerId !== null && !isString(pinnedTrackerId)) return undefined;
-  // Absent on a save written before the quest-vs-bounty arrow arbitration
-  // existed. Treated as an auto-pin rather than a player one, so an old save's
-  // pin can still be taken over by whichever quest is active — the behaviour
-  // that save was written under.
-  const resolvedPinSource =
-    pinSource === 'auto' || pinSource === 'player'
-      ? pinSource
-      : pinnedTrackerId === null
-        ? null
-        : 'auto';
-  return { pinnedTrackerId, pinSource: resolvedPinSource };
+  const parsedPinSource =
+    pinSource === null ? null : stringUnion(pinSource, ['auto', 'player'] as const);
+  if (parsedPinSource === undefined) return undefined;
+  return { pinnedTrackerId, pinSource: parsedPinSource };
 }
 
 function parseCard(
@@ -1105,75 +1009,62 @@ function parsePlayerRead(value: unknown): PlayerRead | undefined {
   };
 }
 
-/**
- * A regular the game no longer knows, or a read it cannot make sense of, is
- * forgotten on its own: losing one stranger's memory of the player costs a few
- * hands of learning, not the whole run.
- */
-function parsePokerReads(value: unknown): PokerReads {
+/** Every key must be a regular and every read must parse, or the whole record is refused. */
+function parsePokerReads(value: unknown): PokerReads | undefined {
+  if (!isRecord(value)) return undefined;
   const reads: PokerReads = {};
-  if (!isRecord(value)) return reads;
-  for (const id of REGULAR_IDS) {
-    const read = parsePlayerRead(value[id]);
-    if (read !== undefined) reads[id] = read;
+  for (const [id, raw] of Object.entries(value)) {
+    if (!isRegularId(id)) return undefined;
+    const read = parsePlayerRead(raw);
+    if (read === undefined) return undefined;
+    reads[id] = read;
   }
   return reads;
 }
 
-export function parseClubMembershipCheckpoint(
-  value: unknown,
-): ClubMembershipCheckpoint | undefined {
+export function parseCasinoStateCheckpoint(value: unknown): CasinoStateCheckpoint | undefined {
   if (!isRecord(value)) return undefined;
   const {
-    hasDesperadoPass,
     casinoShoe,
     casinoHintsEnabled,
     pokerFast,
     pokerShowCards,
-    escortLevelId,
     slotsJackpotPool,
     slotsTurbo,
   } = value;
   const parsedShoe = casinoShoe === null ? null : parseShoeState(casinoShoe);
-  if (!isBoolean(hasDesperadoPass) || parsedShoe === undefined) return undefined;
-  // A missing or unreadable hints preference reads as "never asked": rejecting
-  // here would throw away the club pass along with it.
-  const hintsEnabled = isBoolean(casinoHintsEnabled) ? casinoHintsEnabled : null;
-  // The poker fields are absent from a save written before the table opened,
-  // which reads as a player who has never sat down.
+  if (parsedShoe === undefined) return undefined;
+  if (casinoHintsEnabled !== null && !isBoolean(casinoHintsEnabled)) return undefined;
+  const pokerReads = parsePokerReads(value.pokerReads);
+  const pokerNotes = parsePokerReads(value.pokerNotes);
+  if (pokerReads === undefined || pokerNotes === undefined) return undefined;
+  if (!isBoolean(pokerFast) || !isBoolean(pokerShowCards) || !isBoolean(slotsTurbo)) {
+    return undefined;
+  }
+  if (!isNumber(slotsJackpotPool)) return undefined;
   return {
-    hasDesperadoPass,
     casinoShoe: parsedShoe,
-    casinoHintsEnabled: hintsEnabled,
-    pokerReads: parsePokerReads(value.pokerReads),
-    pokerNotes: parsePokerReads(value.pokerNotes),
-    pokerFast: isBoolean(pokerFast) ? pokerFast : false,
-    pokerShowCards: isBoolean(pokerShowCards) ? pokerShowCards : false,
-    // A save without the field holds no booking.
-    escortLevelId: isString(escortLevelId) ? escortLevelId : null,
-    // A save from before the slot machine starts its pool at the floor.
-    slotsJackpotPool: normalizeJackpotPool(
-      isNumber(slotsJackpotPool) ? slotsJackpotPool : JACKPOT_FLOOR,
-    ),
-    slotsTurbo: isBoolean(slotsTurbo) ? slotsTurbo : false,
+    casinoHintsEnabled,
+    pokerReads,
+    pokerNotes,
+    pokerFast,
+    pokerShowCards,
+    slotsJackpotPool: normalizeJackpotPool(slotsJackpotPool),
+    slotsTurbo,
   };
 }
 
-/**
- * A hire the save cannot account for — a template id that no longer exists, or
- * a record missing a field — drops the contract and nothing else. The roster is
- * the least important thing in a save, and rejecting the whole world state over
- * it would throw away every quest the player had progressed with it.
- */
-function parseHiredMercenary(value: unknown): HiredMercenary | null {
-  if (!isRecord(value)) return null;
+function parseHiredMercenary(value: unknown): HiredMercenary | undefined {
+  if (!isRecord(value)) return undefined;
   const { id, name, contractLevelId, introduced, hp } = value;
   const parsedId = stringUnion(id, MERCENARY_TEMPLATE_IDS);
-  if (parsedId === undefined || !isString(name) || !isString(contractLevelId)) return null;
-  if (!isBoolean(introduced)) return null;
+  if (parsedId === undefined || !isString(name) || !isString(contractLevelId)) return undefined;
+  if (!isBoolean(introduced)) return undefined;
   const hire: HiredMercenary = { id: parsedId, name, contractLevelId, introduced };
-  // A missing or unreadable health is a hire at full health, not a lost hire.
-  if (isNumber(hp)) hire.hp = hirelingStartingHp({ ...hire, hp });
+  if (hp === undefined) return hire;
+  // A live hire is the only one whose health is written, so it always has some left.
+  if (!isNumber(hp) || hp <= 0) return undefined;
+  hire.hp = hp;
   return hire;
 }
 
@@ -1182,49 +1073,33 @@ export function parseMercenaryRosterCheckpoint(
 ): MercenaryRosterCheckpoint | undefined {
   if (!isRecord(value)) return undefined;
   const { active, lastDeceased } = value;
-  const parsedDeceased = isString(lastDeceased) ? lastDeceased : null;
-  return { active: parseHiredMercenary(active), lastDeceased: parsedDeceased };
+  const parsedActive = active === null ? null : parseHiredMercenary(active);
+  if (parsedActive === undefined) return undefined;
+  if (lastDeceased !== null && !isString(lastDeceased)) return undefined;
+  return { active: parsedActive, lastDeceased };
 }
 
 function parseMongoPetStateCheckpoint(value: unknown): MongoPetStateCheckpoint | undefined {
   if (!isRecord(value)) return undefined;
-  const { hp, regenFrames, scaledAgainstMaxHp, summonLocked, restingUntilFull } = value;
+  const { hp, regenFrames, scaledAgainstMaxHp, restingUntilFull } = value;
   if (
     !isNumber(hp) ||
     !isNumber(regenFrames) ||
     !isNumber(scaledAgainstMaxHp) ||
-    !isBoolean(summonLocked) ||
     !isBoolean(restingUntilFull)
   ) {
     return undefined;
   }
-  return { hp, regenFrames, scaledAgainstMaxHp, summonLocked, restingUntilFull };
+  return { hp, regenFrames, scaledAgainstMaxHp, restingUntilFull };
 }
 
-function parseCircusQuestProgressCheckpoint(
+function parseStarlightTentProgressCheckpoint(
   value: unknown,
-): CircusQuestProgressCheckpoint | undefined {
+): StarlightTentProgressCheckpoint | undefined {
   if (!isRecord(value)) return undefined;
-  const { stage, heatherSlain, mongoKidnapped, bigTopPotionGiven } = value;
-  // Absent from saves written before the encore existed; those runs never paid it.
-  const bigTopEncorePaid = value.bigTopEncorePaid ?? false;
-  const parsedStage = stringUnion(stage, CIRCUS_QUEST_STAGE_ORDER);
-  if (
-    parsedStage === undefined ||
-    !isBoolean(heatherSlain) ||
-    !isBoolean(mongoKidnapped) ||
-    !isBoolean(bigTopPotionGiven) ||
-    !isBoolean(bigTopEncorePaid)
-  ) {
-    return undefined;
-  }
-  return {
-    stage: parsedStage,
-    heatherSlain,
-    mongoKidnapped,
-    bigTopPotionGiven,
-    bigTopEncorePaid,
-  };
+  const { encorePaid, chestClaimed } = value;
+  if (!isBoolean(encorePaid) || !isBoolean(chestClaimed)) return undefined;
+  return { encorePaid, chestClaimed };
 }
 
 function parseAnchorStepState(value: unknown): AnchorQuestProgressCheckpoint['tinker'] | undefined {
@@ -1235,17 +1110,17 @@ function parseAnchorQuestProgressCheckpoint(
   value: unknown,
 ): AnchorQuestProgressCheckpoint | undefined {
   if (!isRecord(value)) return undefined;
-  const { status, tinker, hilda, temple, hildaRepairedTypes, templeVerminRemaining } = value;
+  const { status, tinker, lori, temple, loriRepairedTypes, templeVerminRemaining } = value;
   const parsedStatus = parseQuestStatus(status);
   const parsedTinker = parseAnchorStepState(tinker);
-  const parsedHilda = parseAnchorStepState(hilda);
+  const parsedLori = parseAnchorStepState(lori);
   const parsedTemple = parseAnchorStepState(temple);
   if (
     parsedStatus === undefined ||
     parsedTinker === undefined ||
-    parsedHilda === undefined ||
+    parsedLori === undefined ||
     parsedTemple === undefined ||
-    !isNumberArray(hildaRepairedTypes) ||
+    !isNumberArray(loriRepairedTypes) ||
     !isNumber(templeVerminRemaining)
   ) {
     return undefined;
@@ -1253,9 +1128,9 @@ function parseAnchorQuestProgressCheckpoint(
   return {
     status: parsedStatus,
     tinker: parsedTinker,
-    hilda: parsedHilda,
+    lori: parsedLori,
     temple: parsedTemple,
-    hildaRepairedTypes,
+    loriRepairedTypes,
     templeVerminRemaining,
   };
 }
@@ -1275,7 +1150,9 @@ function parseMurderQuestProgressCheckpoint(
     swarmKrasueDefeated,
   } = value;
   const parsedStage = stringUnion(stage, MURDER_QUEST_STAGE_ORDER);
-  const parsedEvidence = parseArray(evidenceOwed, (item) => (isItemId(item) ? item : undefined));
+  const parsedEvidence = parseArray(evidenceOwed, (item) =>
+    isItemIdValue(item) ? item : undefined,
+  );
   if (
     parsedStage === undefined ||
     !isBoolean(wellClueFound) ||
@@ -1387,15 +1264,14 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
   const treasureChests = parsePersistedTreasureChestCheckpoint(value.treasureChests);
   const defendQuest = parsePersistedDefendQuestCheckpoint(value.defendQuest);
   const spiderQuest = parsePersistedSpiderQuestCheckpoint(value.spiderQuest);
-  const circusQuest = parsePersistedCircusQuestCheckpoint(value.circusQuest);
   const murderQuest = parsePersistedMurderMysteryQuestCheckpoint(value.murderQuest);
   const bounty = value.bounty === null ? null : parsePersistedBountyCheckpoint(value.bounty);
-  const circusQuestProgress = parseCircusQuestProgressCheckpoint(value.circusQuestProgress);
+  const starlightTentProgress = parseStarlightTentProgressCheckpoint(value.starlightTentProgress);
   const anchorQuestProgress = parseAnchorQuestProgressCheckpoint(value.anchorQuestProgress);
   const murderQuestProgress = parseMurderQuestProgressCheckpoint(value.murderQuestProgress);
   const journal = parseJournalProgressCheckpoint(value.journal);
   const bountyProgress = parseBountyProgressCheckpoint(value.bountyProgress);
-  const clubMembership = parseClubMembershipCheckpoint(value.clubMembership);
+  const casinoState = parseCasinoStateCheckpoint(value.casinoState);
   const shopStock = parseShopStockSnapshot(value.shopStock);
   const townMemory = parseTownMemoryCheckpoint(value.townMemory);
   const mercenaryRoster = parseMercenaryRosterCheckpoint(value.mercenaryRoster);
@@ -1415,18 +1291,25 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
     treasureChests === undefined ||
     defendQuest === undefined ||
     spiderQuest === undefined ||
-    circusQuest === undefined ||
     murderQuest === undefined ||
     bounty === undefined ||
-    circusQuestProgress === undefined ||
+    starlightTentProgress === undefined ||
     anchorQuestProgress === undefined ||
     murderQuestProgress === undefined ||
     journal === undefined ||
     bountyProgress === undefined ||
-    clubMembership === undefined ||
+    casinoState === undefined ||
+    shopStock === undefined ||
     townMemory === undefined ||
     mercenaryRoster === undefined ||
     mongoPetState === undefined ||
+    mordecaiDebrief === undefined ||
+    tacticsNoticesSeen === undefined ||
+    doomsday === undefined ||
+    bossRoomDressing === undefined ||
+    briarHollow === undefined ||
+    cloggedBathroom === undefined ||
+    stealthKeySnatch === undefined ||
     !isBoolean(krakarenKilled) ||
     !isBoolean(bigRoosterKilled) ||
     !isNumber(bigRoosterBossRoomIdx)
@@ -1440,15 +1323,14 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
     treasureChests,
     defendQuest,
     spiderQuest,
-    circusQuest,
     murderQuest,
     bounty,
-    circusQuestProgress,
+    starlightTentProgress,
     anchorQuestProgress,
     murderQuestProgress,
     journal,
     bountyProgress,
-    clubMembership,
+    casinoState,
     shopStock,
     townMemory,
     mercenaryRoster,

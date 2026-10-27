@@ -23,7 +23,7 @@ const { GameMap } = await import('../src/map/GameMap.js');
 const { hasRoomToMove } = await import('../src/map/findWalkableTile.js');
 const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
-const { createCircusQuestProgress } = await import('../src/core/quests/CircusQuestProgress.js');
+const { createTownMemory } = await import('../src/core/state/TownMemory.js');
 const { createBriarHollowState } = await import('../src/core/quests/briarHollowState.js');
 const { createAnchorQuestProgress } = await import('../src/core/quests/AnchorQuestProgress.js');
 const { TRAVEL_DESTINATIONS } = await import('../src/systems/travel/travelDestinations.js');
@@ -90,25 +90,25 @@ const cat = new CatPlayer(wild.x + 1, wild.y, TILE_SIZE);
 
 interface Unlocks {
   readonly name: string;
-  readonly circusDone: boolean;
+  readonly circusVisited: boolean;
   readonly villageDone: boolean;
 }
 
 const UNLOCK_SETS: readonly Unlocks[] = [
-  { name: 'one-row', circusDone: false, villageDone: false },
-  { name: 'two-rows', circusDone: true, villageDone: false },
-  { name: 'three-rows', circusDone: true, villageDone: true },
+  { name: 'one-row', circusVisited: false, villageDone: false },
+  { name: 'two-rows', circusVisited: true, villageDone: false },
+  { name: 'three-rows', circusVisited: true, villageDone: true },
 ];
 
 for (const viewport of VIEWPORTS) {
   for (const unlocks of UNLOCK_SETS) {
-    const circus = createCircusQuestProgress();
+    const townMemory = createTownMemory();
     const briarHollow = createBriarHollowState();
-    if (unlocks.circusDone) circus.stage = 'complete';
+    if (unlocks.circusVisited) townMemory.visitedPlaces.add('circus_grounds');
     if (unlocks.villageDone) briarHollow.quest.phase = 'complete';
     const menu = new TravelMenu(
       map,
-      { circus, briarHollow, anchor: createAnchorQuestProgress() },
+      { townMemory, briarHollow, anchor: createAnchorQuestProgress() },
       () => false,
     );
     menu.open(human);

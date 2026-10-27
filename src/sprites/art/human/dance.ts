@@ -1,6 +1,6 @@
 /**
- * The Desperado Club's dance routines on the biped rig: the same three the
- * skyfowl dancers do (`../danceStyles.ts`), so a mixed floor dances one
+ * The Cloak & Dagger's dance routines on the biped rig: the same three the
+ * Hawkfolk dancers do (`../danceStyles.ts`), so a mixed floor dances one
  * vocabulary.
  *
  * Hands are placed by where they go — overhead, out to the side, on the hip —

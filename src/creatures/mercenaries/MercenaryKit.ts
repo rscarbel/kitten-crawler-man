@@ -2,7 +2,7 @@ import type { Player } from '../../Player';
 import type { Mob } from '../Mob';
 import type { Mercenary } from '../Mercenary';
 import type { GolemRockThrow } from '../../systems/RockThrowSystem';
-import type { HirelingShot } from '../../systems/HirelingBoltSystem';
+import type { HirelingShot } from '../../systems/HirelingShotSystem';
 import type { MercenaryBarkTrigger } from './mercenaryVoices';
 
 /**
@@ -18,7 +18,7 @@ import type { MercenaryBarkTrigger } from './mercenaryVoices';
  *
  * 1. {@link MercenaryKit.tick} — cooldowns.
  * 2. {@link MercenaryKit.update} — true when the kit owns the frame (a swing
- *    mid-play, a channel, a charge), and the shell then does nothing else.
+ *    mid-play, a channel, a cast), and the shell then does nothing else.
  * 3. Target choice: the nearest hostile within {@link MercenaryKit.engageRadiusTiles}
  *    of the owner, passed through {@link MercenaryKit.chooseTarget} if the kit has one.
  * 4. No target, or past the leash: the shell walks back to the owner.
@@ -90,13 +90,6 @@ export interface MercenaryKit {
    */
   onFriendHurt?(ctx: MercenaryKitContext, friend: Player, attacker: Mob | null): void;
 
-  /**
-   * The hireling just said something for `trigger` — the hook for a kit whose
-   * figure acts a line out, such as a salute on being hired. Not called when
-   * the barker kept it quiet.
-   */
-  onBark?(ctx: MercenaryKitContext, trigger: MercenaryBarkTrigger): void;
-
   /** Which row the hireling's figure plays, and how far through it. */
   drawState(merc: Mercenary): MercenaryDrawState;
 
@@ -133,41 +126,43 @@ export const DEFAULT_LEASH_RADIUS_TILES = 14;
 /** Close enough to land a fist or blade. */
 export const DEFAULT_STRIKE_RANGE_TILES = 0.9;
 
-/**
- * Every row a hireling figure can be asked to play. A figure without a row
- * draws its nearest equivalent — an attack falls back to its basic swing, a
- * special to its idle — so asking is always safe.
- */
-export type MercenaryRow =
-  | 'idle'
-  | 'walk'
-  | 'hurt'
-  | 'death'
-  | 'punch'
-  | 'cast_shield'
-  | 'robot'
-  | 'slam'
-  | 'stomp'
-  | 'throw'
-  | 'thrust'
-  | 'charge_windup'
-  | 'charge'
-  | 'charge_recover'
-  | 'salute'
-  | 'shoot'
-  | 'cast_wave'
-  | 'jab_left'
-  | 'jab_right'
-  | 'crush'
-  | 'flee'
-  | 'slap'
-  | 'cast_triage'
-  | 'cower';
+/** The rows the shell plays for any hire whatever its kit: standing, walking and the fall. */
+export type ShellRow = 'idle' | 'walk' | 'death';
 
-export interface MercenaryDrawState {
-  readonly row: MercenaryRow;
+/** The rows `EarthElementalGuardKit` asks for. */
+export type EarthElementalGuardRow = ShellRow | 'punch' | 'cast_shield' | 'hurt';
+/** The rows `ArcherKit` asks for. */
+export type ArcherRow = ShellRow | 'shoot' | 'hurt';
+/** The rows `MedicKit` asks for. */
+export type MedicRow = ShellRow | 'staff_strike' | 'mend' | 'cower' | 'hurt' | 'flee';
+/** The rows `GolemKit` asks for. */
+export type GolemRow = ShellRow | 'slam' | 'stomp' | 'throw';
+
+/**
+ * Every row a hireling figure can be asked to play. Each kit names its own
+ * subset, and each figure keys its row table by a `Record` over the subset of
+ * the kit it is hired with, so a kit that gains a row fails the typecheck
+ * until that figure paints it.
+ */
+export type MercenaryRow = EarthElementalGuardRow | ArcherRow | MedicRow | GolemRow;
+
+export interface MercenaryDrawState<R extends MercenaryRow = MercenaryRow> {
+  readonly row: R;
   /** 0 at a one-shot row's first frame, 1 at its last. Ignored by looping rows. */
   readonly progress: number;
+}
+
+/**
+ * Whether a row the shell hands a figure is one its kit's row table covers.
+ * The shell carries every kit's rows under one type, so a figure narrows to
+ * its own kit's here; a row outside the table only reaches it if a template
+ * pairs the figure with a kit it was not painted for.
+ */
+export function isKitRow<R extends MercenaryRow>(
+  table: Readonly<Record<R, unknown>>,
+  row: MercenaryRow,
+): row is R {
+  return row in table;
 }
 
 /**
@@ -206,7 +201,7 @@ export interface MercenaryKitContext {
 }
 
 /** The walk or idle row, for a kit with nothing of its own to play. */
-export function locomotionState(merc: Mercenary): MercenaryDrawState {
+export function locomotionState(merc: Mercenary): MercenaryDrawState<'idle' | 'walk'> {
   return { row: merc.isMoving ? 'walk' : 'idle', progress: 0 };
 }
 

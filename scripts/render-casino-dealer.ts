@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Review harness for Deuce, the Desperado Club's blackjack dealer.
+ * Review harness for Deuce, the Cloak & Dagger's blackjack dealer.
  *
  *   npm run render:casino-dealer
  *
@@ -21,6 +21,7 @@ import { createCanvas, type Canvas, type CanvasRenderingContext2D as NodeCtx } f
 import { installCanvasGlobals, paintEnvironmentArtInNode } from './nodeCanvasGlobals.js';
 import { asGameContext } from './nodeGameContext.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
+import { partyOwnsGear } from '../src/loot/gearPools.js';
 
 interface CanvasGlobals {
   Image?: unknown;
@@ -43,17 +44,15 @@ globals.document = {
 const { TILE_SIZE } = await import('../src/core/constants.js');
 const { loadSprites } = await import('../src/core/spriteAssets/SpriteLoader.js');
 const { GameMap } = await import('../src/map/GameMap.js');
-const { createTownPlan } = await import('../src/map/town/townPlan.js');
+const { createTownPlan, CLOAK_AND_DAGGER_NAME } = await import('../src/map/town/townPlan.js');
 const { FLOOR_ART_SEEDS } = await import('../src/map/ground/artSeedAlphabet.js');
 const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
-const { Conversation } = await import('../src/dialog/Conversation.js');
-const { createClubMembership } = await import('../src/core/club/ClubMembership.js');
-const { createMercenaryRoster } = await import('../src/core/party/MercenaryRoster.js');
+const { createCasinoState } = await import('../src/core/club/CasinoState.js');
 const { createShopStock } = await import('../src/economy/shopStock.js');
-const { DesperadoClubSystem } = await import('../src/systems/DesperadoClubSystem.js');
+const { CloakAndDaggerSystem } = await import('../src/systems/CloakAndDaggerSystem.js');
 const { CLUB_PROPS } = await import('../src/core/club/clubProps.js');
-const { CLUB_STATIONS } = await import('../src/core/club/clubLayout.js');
+const { CLUB_DEALER_POST } = await import('../src/core/club/clubLayout.js');
 const { drawClubProp } = await import('../src/sprites/clubFurnitureSprite.js');
 const { drawCasinoDealer, drawCasinoDealerHands, drawDeucePortrait } =
   await import('../src/sprites/casinoDealerSprite.js');
@@ -63,7 +62,6 @@ type DealerState = Parameters<typeof drawDeucePortrait>[5];
 const OUT_DIR = `${PREVIEW_DIR}/casino-dealer`;
 const TOWN_PLAN_SIZE = 280;
 const WARM_FRAMES = 90;
-const CLUB_BUILDING_NAME = 'The Desperado Club';
 const ZOOM_WORLD = 4;
 const ZOOM_PORTRAIT = 3;
 const ZOOM_BUST = 4;
@@ -113,29 +111,24 @@ paintEnvironmentArtInNode(artSeed);
 installCanvasGlobals();
 
 const plan = createTownPlan(TOWN_PLAN_SIZE);
-const building = plan.buildings.find((b) => b.name === CLUB_BUILDING_NAME);
-if (building === undefined) throw new Error(`town plan has no "${CLUB_BUILDING_NAME}"`);
+const building = plan.buildings.find((b) => b.name === CLOAK_AND_DAGGER_NAME);
+if (building === undefined) throw new Error(`town plan has no "${CLOAK_AND_DAGGER_NAME}"`);
 const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [], artSeed });
 map.generateInterior(building.kind, 0, building.name, false, 'default');
 map.releaseTileArt();
 
 const human = new HumanPlayer(map.startTile.x, map.startTile.y, TILE_SIZE);
 const cat = new CatPlayer(map.startTile.x + 1, map.startTile.y, TILE_SIZE);
-const club = new DesperadoClubSystem(
+const club = new CloakAndDaggerSystem(
   map,
-  createClubMembership(),
-  createMercenaryRoster(),
-  new Conversation(null),
+  createCasinoState(),
   null,
   null,
-  false,
-  human,
   createShopStock(),
+  (id) => partyOwnsGear([human, cat], id),
 );
-for (let frame = 0; frame < WARM_FRAMES; frame++) club.update(human, cat);
+for (let frame = 0; frame < WARM_FRAMES; frame++) club.update(human, cat, []);
 
-const casinoStation = CLUB_STATIONS.find((station) => station.id === 'casino');
-if (casinoStation === undefined) throw new Error('club has no casino station');
 const casinoProps = CLUB_PROPS.filter(
   (prop) =>
     prop.tile.x >= CASINO_CROP.x0 &&
@@ -185,14 +178,14 @@ function paintStage(ctx: NodeCtx, phaseMs: number, dealing: boolean): void {
   const cropH = (CASINO_CROP.y1 - CASINO_CROP.y0) * TILE_SIZE;
   map.renderCanvas(gameCtx, camX, camY, cropW, cropH);
   club.renderFloor(gameCtx, camX, camY);
-  const dealerSortY = casinoStation.tile.y * TILE_SIZE;
+  const dealerSortY = CLUB_DEALER_POST.y * TILE_SIZE;
   for (const prop of casinoProps) {
     if (prop.tile.y * TILE_SIZE <= dealerSortY) drawClubProp(gameCtx, prop, camX, camY, 0);
   }
   drawCasinoDealer(
     gameCtx,
-    casinoStation.tile.x * TILE_SIZE - camX,
-    casinoStation.tile.y * TILE_SIZE - camY,
+    CLUB_DEALER_POST.x * TILE_SIZE - camX,
+    CLUB_DEALER_POST.y * TILE_SIZE - camY,
     TILE_SIZE,
     phaseMs,
     dealing,
@@ -201,8 +194,8 @@ function paintStage(ctx: NodeCtx, phaseMs: number, dealing: boolean): void {
   for (const prop of tableProps) drawClubProp(gameCtx, prop, camX, camY, 0);
   drawCasinoDealerHands(
     gameCtx,
-    casinoStation.tile.x * TILE_SIZE - camX,
-    casinoStation.tile.y * TILE_SIZE - camY,
+    CLUB_DEALER_POST.x * TILE_SIZE - camX,
+    CLUB_DEALER_POST.y * TILE_SIZE - camY,
     TILE_SIZE,
     phaseMs,
     dealing,

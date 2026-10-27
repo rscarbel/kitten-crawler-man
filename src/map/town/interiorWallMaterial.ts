@@ -10,6 +10,7 @@
  * site in between.
  */
 
+import { STARLIGHT_TENT_NAME } from '../overworld/circusGroundsLayout';
 import type { TownInteriorWallMaterialId } from '../../sprites/art/townInterior/interiorWallFace';
 
 /** What a building with no entry below is dressed in. */
@@ -44,7 +45,7 @@ const WALL_MATERIAL_BY_BUILDING_NAME: ReadonlyMap<string, TownInteriorWallMateri
   ['Herb & Remedy', 'timber'],
   // A one-room cabin built of logs, not plastered lath — a hedge-witch's
   // cottage reads as a woodsman's build from the walls in.
-  ["Old Hilda's Cottage", 'timber'],
+  ["Old Lori's Cottage", 'timber'],
   // A dome carried on dressed stone, inside and out — the one finish that
   // matches eighty years of standing.
   ['Temple of the Sky', 'stone'],
@@ -57,7 +58,7 @@ const WALL_MATERIAL_BY_BUILDING_NAME: ReadonlyMap<string, TownInteriorWallMateri
   // A tent has no walls, only sidewall canvas hung in the dark: striped drapes
   // on every face that looks onto the ring or a corridor, and the black back
   // of the tent everywhere else.
-  ['Big Top', 'canvas'],
+  [STARLIGHT_TENT_NAME, 'canvas'],
   // The tower is dressed stone outside to the top of its spire, and the
   // magistrate's seat is not a building anyone plastered over.
   ['Town Center Tower', 'stone'],

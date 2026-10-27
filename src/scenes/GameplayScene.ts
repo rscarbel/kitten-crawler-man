@@ -15,7 +15,7 @@ import { TILE_SIZE } from '../core/constants';
 import { frameTime } from '../utils';
 import { followCamera, type WorldRect } from './interiorCamera';
 import type { ArrivalLoader } from './ArrivalLoader';
-import { drunkCameraOffset } from '../core/combat/DrunkEffect';
+import { intoxicationCameraOffset } from '../core/combat/Intoxication';
 import type { GameMap } from '../map/GameMap';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
@@ -32,7 +32,7 @@ import { displayHp } from '../core/party/crawlerFormulas';
 import { partyCoins } from '../core/party/partyCoins';
 import { crawlerName } from '../characters/characters';
 import { statusRemainingFraction } from '../core/combat/StatusEffect';
-import { statusBadge } from '../sprites/status/statusEffectVisuals';
+import { statusBadge, statusShowsHudPill } from '../sprites/status/statusEffectVisuals';
 import type { Rect } from '../ui/core/geom';
 import { toCssRect, type HudSurface } from '../ui/hud/HudSurface';
 import type { HudToasts } from '../ui/hud/toasts';
@@ -204,7 +204,7 @@ export abstract class GameplayScene extends Scene {
     );
     // Applied after the clamp so the sway still reads in a room smaller than the
     // viewport, where the camera is pinned and every clamped offset would vanish.
-    const sway = player.hasStatus('drunk') ? drunkCameraOffset(frameTime) : { x: 0, y: 0 };
+    const sway = intoxicationCameraOffset(player, frameTime);
     const shake = this.cameraShake();
     return { x: camera.x + sway.x + shake.x, y: camera.y + sway.y + shake.y };
   }
@@ -238,7 +238,8 @@ export abstract class GameplayScene extends Scene {
 
   private unitFrameModel(player: HumanPlayer | CatPlayer): UnitFrameModel {
     const kind = player === this.human ? 'human' : 'cat';
-    const status: StatusPillModel[] = player.statusEffects.map((effect, index) => {
+    const pilled = player.statusEffects.filter((effect) => statusShowsHudPill(effect.type));
+    const status: StatusPillModel[] = pilled.map((effect, index) => {
       const badge = statusBadge(effect.type);
       return {
         id: `${effect.type}-${index}`,

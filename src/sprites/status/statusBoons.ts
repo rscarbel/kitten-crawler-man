@@ -1,6 +1,6 @@
 /**
  * The statuses that are *good* news: `speed_fizz`, `jugg_juice`,
- * `cooldown_crisp`, `drunk`, the smith's `whetstone` edge, and the three boons
+ * `cooldown_crisp`, `drunk`, the cat's `catnip_buzz`, the smith's `whetstone` edge, and the three boons
  * the inn's rented rooms grant.
  *
  * These read differently from the ailments on purpose. An ailment sits on the
@@ -368,6 +368,50 @@ export function drawDrunk(ctx: CanvasRenderingContext2D, f: StatusVisualFrame): 
       f.width * DRUNK_BUBBLE_RADIUS * (HALF + nearness * HALF),
       f.fade * nearness,
     );
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+// -- catnip buzz: loose, happy and pleased with itself -----------------------
+
+const CATNIP_LEAF: Rgb = [132, 196, 92];
+const CATNIP_GLOW: Rgb = [214, 246, 168];
+const CATNIP_BLOSSOM: Rgb = [226, 204, 246];
+
+/** A faint green bloom around the head: the buzz radiates, it does not stain. */
+const CATNIP_HAZE_RADIUS = 0.9;
+const CATNIP_HAZE_ALPHA = 0.16;
+const CATNIP_HAZE_ABOVE = 0.08;
+
+/** Leaves drift up off her in a lazy figure-eight, not a ring: she is not dizzy, she is delighted. */
+const CATNIP_LEAF_COUNT = 4;
+const CATNIP_LEAF_RATE_PER_MS = 0.00045;
+const CATNIP_LEAF_RISE = 0.9;
+const CATNIP_LEAF_DRIFT = 0.55;
+const CATNIP_LEAF_RADIUS = 0.13;
+/** Every other mote is a lilac blossom, so the trail reads as a sprig rather than sparks. */
+const CATNIP_BLOSSOM_EVERY = 2;
+
+export function drawCatnipBuzz(ctx: CanvasRenderingContext2D, f: StatusVisualFrame): void {
+  const headY = bodyTop(f) - f.height * CATNIP_HAZE_ABOVE;
+  ctx.globalCompositeOperation = 'lighter';
+  drawGlow(
+    ctx,
+    CATNIP_GLOW,
+    f.centerX,
+    headY,
+    f.width * CATNIP_HAZE_RADIUS,
+    CATNIP_HAZE_ALPHA * f.fade,
+  );
+  for (let i = 0; i < CATNIP_LEAF_COUNT; i++) {
+    const phase = particlePhase(f, i, CATNIP_LEAF_RATE_PER_MS);
+    const alpha = Math.sin(phase * Math.PI) * f.fade;
+    if (alpha <= 0) continue;
+    const loop = phase * Math.PI * 2 + i;
+    const x = f.centerX + Math.sin(loop) * f.width * CATNIP_LEAF_DRIFT;
+    const y = headY - phase * f.height * CATNIP_LEAF_RISE;
+    const tint = i % CATNIP_BLOSSOM_EVERY === 0 ? CATNIP_LEAF : CATNIP_BLOSSOM;
+    drawEmbermote(ctx, tint, CATNIP_GLOW, x, y, f.width * CATNIP_LEAF_RADIUS, alpha);
   }
   ctx.globalCompositeOperation = 'source-over';
 }

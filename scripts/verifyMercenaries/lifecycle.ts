@@ -21,7 +21,7 @@
  * - Survivability: in a standard floor-3 fight that knocks her out alone, the
  *   owner lasts a margin longer with any hire than with the same hire spawned
  *   and sent off before the fight — so both arms draw the same randomness —
- *   and Bucket Boy's share of that margin is his heals.
+ *   and Brother Anselm's share of that margin is his heals.
  *
  * Every rule is paired with a run where it must go the other way, so a check
  * that cannot see its effect fails rather than passes.
@@ -51,7 +51,7 @@ import {
 import { MercenarySystem } from '../../src/systems/MercenarySystem';
 import { MobUpdateLoop } from '../../src/systems/MobUpdateLoop';
 import { SEPARATION_RADIUS } from '../../src/systems/mobSeparation';
-import { HirelingBoltSystem } from '../../src/systems/HirelingBoltSystem';
+import { HirelingShotSystem } from '../../src/systems/HirelingShotSystem';
 import { RockThrowSystem } from '../../src/systems/RockThrowSystem';
 import { SpellSystem } from '../../src/systems/SpellSystem';
 import { MobRoster } from '../../src/systems/kits/SceneWorld';
@@ -150,7 +150,7 @@ interface Scene {
   readonly combat: CombatContext;
   readonly mobLoop: MobUpdateLoop;
   readonly rocks: RockThrowSystem;
-  readonly bolts: HirelingBoltSystem;
+  readonly shots: HirelingShotSystem;
   /** Everyone on the party's side the scene lists for the hireling, beside it. */
   readonly extras: Player[];
 }
@@ -213,7 +213,7 @@ function buildScene(hire: MercenaryTemplateId | null, layout: SceneLayout): Scen
     combat,
     mobLoop: new MobUpdateLoop(),
     rocks: new RockThrowSystem(map),
-    bolts: new HirelingBoltSystem(map, () => false),
+    shots: new HirelingShotSystem(map, () => false),
     extras,
   };
   system.update(ctx);
@@ -233,7 +233,7 @@ function step(scene: Scene): void {
   scene.human.tickTimers();
   scene.cat.tickTimers();
   scene.rocks.update(scene.ctx);
-  scene.bolts.update(scene.ctx);
+  scene.shots.update(scene.ctx);
 }
 
 function placeAtTile(body: { x: number; y: number }, tileX: number, tileY: number): void {
@@ -383,7 +383,7 @@ function arriveThroughTheSystem(scene: Scene): Mercenary | null {
 /** A hireling put straight into the scene, the way no spawn path should. */
 function arriveBuiltByHand(scene: Scene): Mercenary {
   const hired = scene.roster.active;
-  const id = hired?.id ?? 'sledge';
+  const id = hired?.id ?? 'crush';
   return new Mercenary(
     SPAWN_ROOM_TILE_X,
     SPAWN_ROOM_TILE_Y,
@@ -414,20 +414,20 @@ function checkSpawning(report: LifecycleGateReporter): void {
     );
   }
   const east = FACINGS[0];
-  const eastMerc = spawnFacing('sledge', east);
+  const eastMerc = spawnFacing('crush', east);
   report.checkCatches(
     eastMerc !== null && standsOn(eastMerc, SPAWN_ROOM_TILE_X + east.x, SPAWN_ROOM_TILE_Y + east.y),
     'the behind-the-owner measure tells the tile behind her from the one in front',
   );
   report.checkCatches(
-    spawnsOnFloorFromCorridor('sledge', (merc) => {
+    spawnsOnFloorFromCorridor('crush', (merc) => {
       // The tile under the owner's top-left corner: the masonry she overhangs.
       placeAtTile(merc, CORRIDOR_COLUMN - 1, CORRIDOR_OWNER_ROW);
     }),
     "a hire put on the tile under the owner's top-left corner is caught standing in the wall",
   );
   report.checkCatches(
-    arrivalWarms('sledge', arriveBuiltByHand),
+    arrivalWarms('crush', arriveBuiltByHand),
     'a hireling built outside the spawn path is caught arriving cold',
   );
 }
@@ -475,7 +475,7 @@ function behindEastFacing(tileX: number, tileY: number): { x: number; y: number 
 function spawnsOnOwnersSide(): boolean {
   const map = makePartition();
   const ownerTileX = PARTITION_COLUMN + 1;
-  const scene = buildSceneAround('bomo', map, ownerFacingEast(ownerTileX, PARTITION_ROW));
+  const scene = buildSceneAround('hammer_hands', map, ownerFacingEast(ownerTileX, PARTITION_ROW));
   const merc = scene.system.activeMerc;
   return merc !== null && tileOf(merc).x > PARTITION_COLUMN && standsOnFloor(map, merc);
 }
@@ -503,7 +503,7 @@ function spawnsOffTheStairwell(): { avoided: boolean; blindLandsOnIt: boolean } 
   const blindLandsOnIt =
     map.isWalkable(behind.x, behind.y) && map.isStairwellTile(behind.x, behind.y);
   const scene = buildSceneAround(
-    'splash_zone',
+    'ivy_ashgrove',
     map,
     ownerFacingEast(SPAWN_ROOM_TILE_X, SPAWN_ROOM_TILE_Y),
   );
@@ -545,7 +545,7 @@ interface SealedOutcome {
 function sealedSpawn(walksOut: boolean): SealedOutcome {
   const map = makeSealed();
   const scene = buildSceneAround(
-    'dong_quixote',
+    'crush',
     map,
     ownerFacingEast(SEALED_OWNER_TILE_X, SEALED_OWNER_TILE_Y),
   );
@@ -734,7 +734,7 @@ function checkPartyNotShoved(report: LifecycleGateReporter): void {
   report.section('A hire never moves the party, and gets past it to the fight');
   for (const id of MERCENARY_TEMPLATE_IDS) {
     // A medic never picks a fight, so for him only the standing still is asked.
-    const fights = id !== 'bucket_boy';
+    const fights = getMercenaryTemplate(id).kit !== 'medic';
     const open = shoveOutcome(id, makeRoom(), SHOVE_TILE_Y);
     report.check(
       partyStayedPut(open) && (!fights || open?.foeHit === true),
@@ -746,7 +746,7 @@ function checkPartyNotShoved(report: LifecycleGateReporter): void {
       `${id}, in a one-tile corridor behind both crawlers: ${describeShove(lane)}`,
     );
   }
-  const shoved = shoveOutcome('gluteus_maxx', makeRoom(), SHOVE_TILE_Y, true);
+  const shoved = shoveOutcome('hammer_hands', makeRoom(), SHOVE_TILE_Y, true);
   report.checkCatches(
     partyStayedPut(shoved),
     `a hire that does not yield to the party is caught carrying it (${describeShove(shoved)})`,
@@ -964,13 +964,19 @@ function checkHomecoming(report: LifecycleGateReporter): void {
   }
   const trailing: Homecoming = { gapTiles: 2, lateralTiles: 0, from: APPROACHES[0] };
   const roomOwner = { x: HOMECOMING_OWNER_TILE_X, y: HOMECOMING_OWNER_TILE_Y };
-  const selfGated = homecoming('bucket_boy', makeRoom(), roomOwner, trailing, restsWhileItselfNear);
+  const selfGated = homecoming(
+    'brother_anselm',
+    makeRoom(),
+    roomOwner,
+    trailing,
+    restsWhileItselfNear,
+  );
   report.checkCatches(
     settledClear(selfGated),
     `a rest gated on the hire's own distance is caught flickering against a crawler trailing 2 tiles back (${describeHomecoming(selfGated)})`,
   );
   const touching: Homecoming = { gapTiles: 1, lateralTiles: 0, from: APPROACHES[0] };
-  const blind = homecoming('bucket_boy', makeRoom(), roomOwner, touching, neverRests);
+  const blind = homecoming('brother_anselm', makeRoom(), roomOwner, touching, neverRests);
   report.checkCatches(
     settledClear(blind),
     `a hire that walks on into the crawler in its way is caught inside her (${describeHomecoming(blind)})`,
@@ -1112,7 +1118,7 @@ function checkHomecomingPastMongo(report: LifecycleGateReporter): void {
     );
   }
   const crawlersOnly = homecomingPastMongo(
-    'bucket_boy',
+    'brother_anselm',
     makeRoom(),
     { x: HOMECOMING_OWNER_TILE_X, y: HOMECOMING_OWNER_TILE_Y },
     APPROACHES[0],
@@ -1179,7 +1185,7 @@ function afterWalkaway(
   walk: Walkaway,
   anywhere = false,
 ): WalkawayOutcome | null {
-  const scene = buildScene('bucket_boy', {
+  const scene = buildScene('brother_anselm', {
     map,
     humanTile: { x: ANCHOR_OWNER_TILE_X, y: row },
     catTile: { x: ANCHOR_OWNER_TILE_X - HOMECOMING_CAT_OFFSET_TILES, y: row },
@@ -1219,7 +1225,7 @@ function checkLeavingACrawlerBehind(report: LifecycleGateReporter): void {
     const gap = afterWalkaway(makeRoom(), ANCHOR_OWNER_TILE_Y, walk);
     report.check(
       backInBand(gap),
-      `she walks ${ANCHOR_WALK_TILES} tiles ${walk.label}: Bucket Boy ends ${gapOf(gap)} tiles from her`,
+      `she walks ${ANCHOR_WALK_TILES} tiles ${walk.label}: Brother Anselm ends ${gapOf(gap)} tiles from her`,
     );
   }
   const lane = afterWalkaway(makeLane(), LANE_ROW, WALKAWAYS[0]);
@@ -1326,7 +1332,7 @@ function checkSlowDrift(report: LifecycleGateReporter): void {
       `${id}, over ${DRIFT_TILES} tiles at ${DRIFT_TILES_PER_FRAME} a frame: ${describeDrift(outcome)}`,
     );
   }
-  const unlatched = slowDrift('sledge', true);
+  const unlatched = slowDrift('crush', true);
   report.checkCatches(
     driftsWell(unlatched),
     `a follow re-decided from the raw distance every frame is caught flickering (${describeDrift(unlatched)})`,
@@ -1475,10 +1481,10 @@ function checkFollowing(report: LifecycleGateReporter): void {
     );
   }
   report.checkCatches(
-    catchesUp('bomo', frozen),
+    catchesUp('hammer_hands', frozen),
     'a hireling that cannot move is caught left behind',
   );
-  const loose = leftTheFight('gluteus_maxx', unleashed);
+  const loose = leftTheFight('hammer_hands', unleashed);
   report.checkCatches(
     loose !== null && loose.worstTilesAfterReturn <= loose.leashTiles + LEASH_SLACK_TILES,
     `a hireling with no leash is caught staying at the fight (${describeLeash(loose)})`,
@@ -1491,14 +1497,14 @@ const CORNER_TILE = 1;
 /** Where a pinned body stands off the hireling: inside every kit's reach, off its tile. */
 const PIN_OFFSET_TILES = 0.6;
 const PIN_OFFSET_PX = TILE_SIZE * PIN_OFFSET_TILES;
-/** Splash Zone looses from range, so his pinned target stands where a bolt has room to fly. */
+/** The archer looses from range, so her pinned target stands where an arrow has room to fly. */
 const RANGED_PIN_TILES = 4;
 const CREDIT_BUDGET_FRAMES = 900;
 const ONE_HIT_POINT = 1;
 
 /** Where a hire's target is held while it is measured, off the hireling. */
 function pinOffsetPx(id: MercenaryTemplateId): { x: number; y: number } {
-  if (id === 'splash_zone') return { x: TILE_SIZE * RANGED_PIN_TILES, y: 0 };
+  if (id === 'ivy_ashgrove') return { x: TILE_SIZE * RANGED_PIN_TILES, y: 0 };
   return { x: PIN_OFFSET_PX, y: PIN_OFFSET_PX };
 }
 
@@ -1584,7 +1590,7 @@ function checkCredit(report: LifecycleGateReporter): void {
       `${id}'s kill pays the owner the top share (${outcome.ownerGain} XP to her, ${outcome.otherGain} to the other crawler)`,
     );
   }
-  const uncredited = creditForKill('sledge', (foe, merc) => {
+  const uncredited = creditForKill('crush', (foe, merc) => {
     foe.takeDamageFrom(ONE_HIT_POINT, merc, 'melee');
   });
   report.checkCatches(
@@ -1604,7 +1610,7 @@ const PACK_TILES: readonly (readonly [number, number])[] = [
   [PACK_NEAR_TILE_X, CORNER_TILE + 2],
   [PACK_FAR_TILE_X, CORNER_TILE + 1],
 ];
-/** Mongo stands in the pack, where a wave, charge or boulder aimed at it would find him. */
+/** Mongo stands in the pack, where an arrow or boulder aimed at it would find him. */
 const MONGO_TILE_X = PACK_FAR_TILE_X;
 const MONGO_TILE_Y = CORNER_TILE;
 const STRAY_BLOW_FRAME = 300;
@@ -1617,8 +1623,8 @@ interface BrawlOutcome {
 
 /**
  * A fight in a corner with both crawlers pressed against the hireling and
- * Mongo standing in the pack: every swing, stomp, bolt, wave, charge and
- * boulder the kit has goes off with an ally in reach of it.
+ * Mongo standing in the pack: every swing, stomp, arrow and boulder the
+ * kit has goes off with an ally in reach of it.
  */
 function brawl(id: MercenaryTemplateId, strayBlow = false): BrawlOutcome | null {
   const setup = cornerScene(id);
@@ -1748,7 +1754,7 @@ const floorBlindRestore: Restorer = (roster, snapshot) => {
  * restores that checkpoint on the next floor: true if no hire came back.
  */
 function floorEndStaysEnded(restore: Restorer): boolean {
-  const scene = buildScene('dong_quixote', {
+  const scene = buildScene('crush', {
     map: makeRoom(),
     humanTile: { x: SPAWN_ROOM_TILE_X, y: SPAWN_ROOM_TILE_Y },
     catTile: { x: SPAWN_ROOM_TILE_X, y: SPAWN_ROOM_TILE_Y + 1 },
@@ -1868,7 +1874,7 @@ function seeded<T>(seed: number, build: () => T): T {
 /**
  * How the hire stands in the fight: `fighting`; `inert` — spawned exactly as
  * the fighting arm is, then sent off before the first goblin appears; or
- * `healless` — fighting, but with any Triage it channels landing nothing.
+ * `healless` — fighting, but with any mend it channels landing nothing.
  */
 type HireStance = 'fighting' | 'inert' | 'healless';
 
@@ -1952,7 +1958,7 @@ function keptAliveLonger(
 
 /**
  * How much of a medic's margin must be his heals, found by emptying them: about
- * one Triage's worth of a goblin's damage, so a hire that only soaks attention
+ * one mend's worth of a goblin's damage, so a hire that only soaks attention
  * cannot pass for a healer.
  */
 const HEAL_MARGIN_SECONDS = 1.5;
@@ -1972,9 +1978,9 @@ function meanMarginFrames(
 ): number {
   let total = 0;
   hired.forEach((outcome, stream) => {
-    const base = baseline[stream];
-    total +=
-      framesStanding(outcome) - (base === undefined ? FIGHT_WINDOW_FRAMES : framesStanding(base));
+    const baseFrames =
+      stream < baseline.length ? framesStanding(baseline[stream]) : FIGHT_WINDOW_FRAMES;
+    total += framesStanding(outcome) - baseFrames;
   });
   return total / Math.max(1, hired.length);
 }
@@ -2029,21 +2035,21 @@ function checkSurvivability(report: LifecycleGateReporter): void {
     );
   }
   report.checkCatches(
-    keptAliveLonger(standardFight('sledge', 'inert'), alone),
+    keptAliveLonger(standardFight('crush', 'inert'), alone),
     `an inert hire is not counted as keeping her up`,
   );
 
-  const medicHealless = fightOnStreams('bucket_boy', 'healless');
-  const healMargin = meanMarginFrames(fightOnStreams('bucket_boy', 'fighting'), medicHealless);
+  const medicHealless = fightOnStreams('brother_anselm', 'healless');
+  const healMargin = meanMarginFrames(fightOnStreams('brother_anselm', 'fighting'), medicHealless);
   report.check(
     allKnockedOut(medicHealless) && healMargin >= HEAL_MARGIN_FRAMES,
-    `Bucket Boy's heals are part of it: emptying his Triage costs her ${describeMargin(healMargin)}, averaged over ${SURVIVABILITY_STREAMS} streams (at least +${HEAL_MARGIN_SECONDS} s)`,
+    `Brother Anselm's heals are part of it: emptying his mend costs her ${describeMargin(healMargin)}, averaged over ${SURVIVABILITY_STREAMS} streams (at least +${HEAL_MARGIN_SECONDS} s)`,
   );
-  const brawler = standardFight('gluteus_maxx', 'fighting');
-  const brawlerHealless = standardFight('gluteus_maxx', 'healless');
+  const unhealed = standardFight('crush', 'fighting');
+  const heallessControl = standardFight('crush', 'healless');
   report.checkCatches(
-    keptAliveLonger(brawler, brawlerHealless, HEAL_MARGIN_FRAMES),
-    `the heal measure credits no heals to a hire that has none (Gluteus Maxx: ${marginSeconds(brawler, brawlerHealless)})`,
+    keptAliveLonger(unhealed, heallessControl, HEAL_MARGIN_FRAMES),
+    `the heal measure credits no heals to a hire that has none (Crush: ${marginSeconds(unhealed, heallessControl)})`,
   );
 }
 

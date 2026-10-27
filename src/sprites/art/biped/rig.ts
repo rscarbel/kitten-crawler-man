@@ -404,6 +404,28 @@ export interface BipedPose {
    * is painted, laid on with the shoulders. Absent is the rig's own.
    */
   hipSpread?: number;
+  /**
+   * Head-on only: the share of a leg point's depth drawn as screen height at
+   * every height, for a body sat with its thighs toward the camera. Standing
+   * legs show depth only near the floor ({@link depthShareAt}); a seated
+   * thigh is level with the seat, and without this its knee would draw on the
+   * hips. Absent is a standing body's.
+   */
+  seatedDepthShare?: number;
+  /**
+   * Edge-on only, 0 to 1: how far a seated body's jacket hem is laid along the
+   * top of the near thigh — the front corner out to the knee, the back still
+   * hanging behind the seat — rather than falling plumb past the knees.
+   * Absent is a standing hem.
+   */
+  seatedHemDrape?: number;
+  /**
+   * The lowest a seated body's jacket hem hangs, in figure units. Over a
+   * sitter's lap the hem stops at the knees — and from behind and edge-on,
+   * at the seat — instead of falling past the stool to where a standing coat
+   * would reach. Absent is a standing hem.
+   */
+  seatedHemFloor?: number;
 }
 
 /** Which hand holds a {@link BipedPose.palmGlow}, and how strongly it shines. */
@@ -715,6 +737,9 @@ const POSE_MIRROR: PoseMirror = {
   outfit: (pose) => pose.outfit,
   shoulderSpread: (pose) => pose.shoulderSpread,
   hipSpread: (pose) => pose.hipSpread,
+  seatedDepthShare: (pose) => pose.seatedDepthShare,
+  seatedHemDrape: (pose) => pose.seatedHemDrape,
+  seatedHemFloor: (pose) => pose.seatedHemFloor,
 };
 
 function isPoseField(key: string): key is keyof BipedPose {
@@ -1004,7 +1029,7 @@ export function buildSkeleton(pose: BipedPose, view: ViewSpec): Skeleton {
             ),
             pose.leftForeshorten,
           )
-        : solveHeadOnLeg(leftRoot, pose.leftFoot, pose.leftFootDepth, ahead),
+        : solveHeadOnLeg(leftRoot, pose.leftFoot, pose.leftFootDepth, ahead, pose.seatedDepthShare),
     rightLeg:
       pose.rightFootDepth === undefined || ahead === 0
         ? foreshortenLeg(
@@ -1021,7 +1046,13 @@ export function buildSkeleton(pose: BipedPose, view: ViewSpec): Skeleton {
             ),
             pose.rightForeshorten,
           )
-        : solveHeadOnLeg(rightRoot, pose.rightFoot, pose.rightFootDepth, ahead),
+        : solveHeadOnLeg(
+            rightRoot,
+            pose.rightFoot,
+            pose.rightFootDepth,
+            ahead,
+            pose.seatedDepthShare,
+          ),
     // A positive elbowFlare bows both elbows outward, away from the ribs, which
     // is why the two arms take opposite bend signs.
     //
@@ -1170,8 +1201,9 @@ function depthShareAt(height: number): number {
 }
 
 /** Where a ground-frame point draws, in figure space, for a head-on view. */
-export function projectGroundPoint(p: GroundPoint, ahead: number): Pt {
-  return pt(p.x, -p.height + ahead * depthShareAt(p.height) * p.depth);
+export function projectGroundPoint(p: GroundPoint, ahead: number, seatedDepthShare = 0): Pt {
+  const share = Math.max(depthShareAt(p.height), seatedDepthShare);
+  return pt(p.x, -p.height + ahead * share * p.depth);
 }
 
 /** Below this a vector is treated as having no length at all. */
@@ -1186,7 +1218,13 @@ const DEGENERATE_LENGTH = 1e-9;
  * that reaches straight ahead has no such plane, and the knee then rises
  * instead.
  */
-function solveHeadOnLeg(root: Pt, foot: Pt, depth: number, ahead: number): BoneChain {
+function solveHeadOnLeg(
+  root: Pt,
+  foot: Pt,
+  depth: number,
+  ahead: number,
+  seatedDepthShare = 0,
+): BoneChain {
   const hip: GroundPoint = { x: root.x, height: -root.y, depth: 0 };
   const target: GroundPoint = { x: foot.x, height: -foot.y - ANKLE_Y, depth };
   const dx = target.x - hip.x;
@@ -1221,8 +1259,8 @@ function solveHeadOnLeg(root: Pt, foot: Pt, depth: number, ahead: number): BoneC
   };
   return {
     root,
-    joint: projectGroundPoint(knee, ahead),
-    end: projectGroundPoint(end, ahead),
+    joint: projectGroundPoint(knee, ahead, seatedDepthShare),
+    end: projectGroundPoint(end, ahead, seatedDepthShare),
     demand: raw,
     clamped: dist !== raw,
     groundEnd: end,

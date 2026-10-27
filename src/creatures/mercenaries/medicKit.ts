@@ -5,19 +5,19 @@ import type { Mercenary } from '../Mercenary';
 import { Mongo } from '../Mongo';
 import { normalize } from '../../utils';
 import {
-  BUCKET_BOY_FLEE_FRAMES,
-  BUCKET_BOY_HURT_DURATION_MS,
-  BUCKET_BOY_SLAP_DURATION_MS,
-  BUCKET_BOY_TRIAGE_DURATION_MS,
-  TRIAGE_SPARKLE_DURATION_MS,
-  bucketBoySlapImpactProgress,
-  bucketBoyTriageReleaseProgress,
-} from '../../sprites/crocodilianTiming';
+  ANSELM_HURT_DURATION_MS,
+  ANSELM_MEND_DURATION_MS,
+  ANSELM_MEND_RELEASE_PROGRESS,
+  ANSELM_STAFF_STRIKE_DURATION_MS,
+  ANSELM_STAFF_STRIKE_IMPACT_PROGRESS,
+  ANSELM_TILES_PER_WALK_CYCLE,
+  ANSELM_WALK_FRAMES,
+} from '../../sprites/brotherAnselmTiming';
 import {
-  BUCKET_BOY_TILES_PER_FLEE_CYCLE,
-  drawTriageSparkleSprite,
-  prewarmTriageSparkle,
-} from '../../sprites/crocodilianSprite';
+  HEAL_SPARKLE_DURATION_MS,
+  drawHealSparkleSprite,
+  prewarmHealSparkle,
+} from '../../sprites/healSparkleSprite';
 import {
   DEFAULT_ENGAGE_RADIUS_TILES,
   DEFAULT_LEASH_RADIUS_TILES,
@@ -26,6 +26,7 @@ import {
   locomotionState,
   type FollowBand,
   type HirelingProjectile,
+  type MedicRow,
   type MercenaryDrawState,
   type MercenaryKit,
   type MercenaryKitContext,
@@ -33,11 +34,11 @@ import {
 import { MercenaryStrike, type StrikeTiming } from './mercenaryStrike';
 
 /**
- * Bucket Boy's kit. He is a combat medic who does not look for fights: he
- * never picks a target, trails close behind his owner, runs from anything
- * hostile that gets near him, and patches up whoever on his side is hurt worst
- * with Triage. Only when he is cornered does he hit anything, and then it is a
- * slap.
+ * The healer's kit. He does not look for fights: he never picks a target,
+ * trails close behind his owner, steps away from anything hostile that gets
+ * near him, and mends whoever on his side is hurt worst. Only when he is
+ * cornered does he hit anything, and then it is a short blow of the staff to
+ * make room.
  */
 
 const TICKS_PER_SECOND = 60;
@@ -64,14 +65,14 @@ export const MEDIC_FLEE_ENTER_TILES = 2;
  * hysteresis: a chasing mob rolls back inside a single radius a frame after he
  * stops on its rim, and flee-one-frame, follow-the-next reads as a zigzag.
  */
-export const MEDIC_FLEE_EXIT_TILES = 3.5;
+const MEDIC_FLEE_EXIT_TILES = 3.5;
 /**
  * Inside this, with the flee over, he will not walk toward a hostile to rejoin
  * his owner — he holds where he is. Without it the follow drive walks him
  * straight back inside the flee radius, and he spends a chase running out and
  * walking back in.
  */
-export const MEDIC_WARY_TILES = 4.5;
+const MEDIC_WARY_TILES = 4.5;
 /**
  * Past this from his owner he has been left behind, and rejoining outweighs
  * his nerves: he no longer holds back from a hostile, and runs only from one
@@ -86,12 +87,12 @@ export const MEDIC_LEFT_BEHIND_TILES = 6;
  * for a few frames and back — and a medic who believes each glance away walks
  * straight past it and is struck when it looks back.
  */
-export const HUNTED_MEMORY_FRAMES = 180;
+const HUNTED_MEMORY_FRAMES = 180;
 /** Close enough to be "adjacent": he will not start or keep a channel with one this near. */
 export const MEDIC_ADJACENT_TILES = 1.25;
 
 /** Below this share of max HP an ally is a patient. */
-export const TRIAGE_TRIGGER_HP_FRACTION = 0.5;
+export const MEND_TRIGGER_HP_FRACTION = 0.5;
 /** How close to its victim a melee hostile stands while it swings. */
 const MELEE_CONTACT_TILES = 1.5;
 /**
@@ -100,23 +101,21 @@ const MELEE_CONTACT_TILES = 1.5;
  * that hostile, so his reach must cover both or a crawler under a melee
  * attack is always just out of it — the one crawler who most needs him.
  */
-export const TRIAGE_RANGE_TILES = MEDIC_WARY_TILES + MELEE_CONTACT_TILES;
+const MEND_RANGE_TILES = MEDIC_WARY_TILES + MELEE_CONTACT_TILES;
 /** A patient who walked a little way off during the channel still gets the heal. */
-const TRIAGE_RANGE_SLACK_RATIO = 1.5;
-/** Share of the patient's own max HP one Triage restores. */
-export const TRIAGE_HEAL_FRACTION = 0.15;
+const MEND_RANGE_SLACK_RATIO = 1.5;
+/** Share of the patient's own max HP one Mend restores. */
+export const MEND_HEAL_FRACTION = 0.15;
 /** About nine seconds between casts, counted from the channel's start. */
-export const TRIAGE_COOLDOWN_FRAMES = 540;
+export const MEND_COOLDOWN_FRAMES = 540;
 /** A channel broken off — a hostile closing in, the patient gone — may be tried again after this. */
-const TRIAGE_INTERRUPTED_RETRY_FRAMES = 60;
-export const TRIAGE_CHANNEL_FRAMES = ticksFor(BUCKET_BOY_TRIAGE_DURATION_MS);
-/** The first tick the glow peaks on screen, which is when the heal lands. */
-export const TRIAGE_RELEASE_FRAME = Math.ceil(
-  TRIAGE_CHANNEL_FRAMES * bucketBoyTriageReleaseProgress(),
-);
-const TRIAGE_SPARKLE_FRAMES = ticksFor(TRIAGE_SPARKLE_DURATION_MS);
+const MEND_INTERRUPTED_RETRY_FRAMES = 60;
+export const MEND_CHANNEL_FRAMES = ticksFor(ANSELM_MEND_DURATION_MS);
+/** The tick the heal lands, on the channel's drawn release. */
+export const MEND_RELEASE_FRAME = Math.ceil(MEND_CHANNEL_FRAMES * ANSELM_MEND_RELEASE_PROGRESS);
+const MEND_SPARKLE_FRAMES = ticksFor(HEAL_SPARKLE_DURATION_MS);
 
-/** One shriek-and-shiver when he wanted to heal and something was in his face. */
+/** One flinch behind the staff when he wanted to heal and something was in his face. */
 const COWER_FRAMES = 36;
 /** Frames before he will cower for a missed heal again, so it cannot lock him in place. */
 const COWER_REARM_FRAMES = 150;
@@ -144,26 +143,26 @@ const FLEE_OWNER_PULL_WEIGHT = 0.5;
  */
 const FLEE_MIN_AWAY_COMPONENT = 0.05;
 
-/** A slap is thrown at arm's length; one that steps a little out of it is still caught. */
-const SLAP_REACH_RATIO = 1.3;
+/** The staff is swung at arm's length; a target a little out of it is still caught. */
+const STAFF_STRIKE_REACH_RATIO = 1.3;
 
-const SLAP_TIMING: StrikeTiming = {
-  row: 'slap',
-  frames: ticksFor(BUCKET_BOY_SLAP_DURATION_MS),
-  impactFrame: Math.ceil(ticksFor(BUCKET_BOY_SLAP_DURATION_MS) * bucketBoySlapImpactProgress()),
-  reachRatio: SLAP_REACH_RATIO,
+const STAFF_STRIKE_FRAMES = ticksFor(ANSELM_STAFF_STRIKE_DURATION_MS);
+const STAFF_STRIKE_TIMING: StrikeTiming<MedicRow> = {
+  row: 'staff_strike',
+  frames: STAFF_STRIKE_FRAMES,
+  impactFrame: Math.ceil(STAFF_STRIKE_FRAMES * ANSELM_STAFF_STRIKE_IMPACT_PROGRESS),
+  reachRatio: STAFF_STRIKE_REACH_RATIO,
 };
-/** Frames between slaps while he stays cornered. */
-export const SLAP_COOLDOWN_FRAMES = 50;
+/** Frames between blows while he stays cornered. */
+const STAFF_STRIKE_COOLDOWN_FRAMES = 50;
 
-const HURT_FRAMES = ticksFor(BUCKET_BOY_HURT_DURATION_MS);
+const HURT_FRAMES = ticksFor(ANSELM_HURT_DURATION_MS);
 
 /**
  * The flee cycle is paced by ground he actually covered, capped at one sprite
- * frame per tick: his legs are short and his run is quick, and past that the
- * flee row is undersampled into a strobe.
+ * frame per tick: past that his walk row is undersampled into a strobe.
  */
-const MAX_FLEE_CYCLE_PER_TICK = 1 / BUCKET_BOY_FLEE_FRAMES;
+const MAX_FLEE_CYCLE_PER_TICK = 1 / ANSELM_WALK_FRAMES;
 
 interface Channel {
   readonly patient: Player;
@@ -182,10 +181,10 @@ export class MedicKit implements MercenaryKit {
   readonly strikeRangeTiles = DEFAULT_STRIKE_RANGE_TILES;
   readonly followBand = MEDIC_FOLLOW_BAND;
 
-  private readonly strike = new MercenaryStrike();
+  private readonly strike = new MercenaryStrike<MedicRow>();
   private channel: Channel | null = null;
   private readonly sparkles: Sparkle[] = [];
-  private triageCooldown = 0;
+  private mendCooldown = 0;
   private cowerFrames = 0;
   private cowerRearm = 0;
   private hurtFrames = 0;
@@ -201,7 +200,7 @@ export class MedicKit implements MercenaryKit {
   /** When each hostile last had him as its target. Weak, so a mob gone from the world is not kept. */
   private readonly lastHuntedAt = new WeakMap<Mob, number>();
 
-  constructor(private readonly slapDamage: number) {}
+  constructor(private readonly staffDamage: number) {}
 
   /** Frames of fruitless fleeing so far; he is cornered at {@link CORNERED_FRAMES}. */
   get framesStuck(): number {
@@ -216,8 +215,8 @@ export class MedicKit implements MercenaryKit {
     return this.channel !== null;
   }
 
-  get triageCooldownFrames(): number {
-    return this.triageCooldown;
+  get mendCooldownFrames(): number {
+    return this.mendCooldown;
   }
 
   tick(ctx: MercenaryKitContext): void {
@@ -225,7 +224,7 @@ export class MedicKit implements MercenaryKit {
     for (const mob of ctx.allMobs) {
       if (mob.currentTarget === ctx.merc) this.lastHuntedAt.set(mob, this.clock);
     }
-    if (this.triageCooldown > 0) this.triageCooldown--;
+    if (this.mendCooldown > 0) this.mendCooldown--;
     if (this.cowerRearm > 0) this.cowerRearm--;
     if (this.hurtFrames > 0) this.hurtFrames--;
     const hp = ctx.merc.hp;
@@ -234,7 +233,7 @@ export class MedicKit implements MercenaryKit {
     for (let i = this.sparkles.length - 1; i >= 0; i--) {
       const sparkle = this.sparkles[i];
       sparkle.frame++;
-      if (sparkle.frame >= TRIAGE_SPARKLE_FRAMES) this.sparkles.splice(i, 1);
+      if (sparkle.frame >= MEND_SPARKLE_FRAMES) this.sparkles.splice(i, 1);
     }
   }
 
@@ -254,8 +253,8 @@ export class MedicKit implements MercenaryKit {
     const nearestPx = nearest?.distancePx ?? Infinity;
 
     const channel = this.channel;
-    // Once the heal is out, the rest of the row is only him picking the bucket
-    // back up; he drops that and runs the moment a hostile gets close.
+    // Once the heal is out, the rest of the row is only him lowering his
+    // hands; he drops that and steps away the moment a hostile gets close.
     const channelSpent =
       channel?.released === true && closestPx <= TILE_SIZE * MEDIC_FLEE_ENTER_TILES;
     if (channelSpent) this.channel = null;
@@ -279,7 +278,7 @@ export class MedicKit implements MercenaryKit {
 
     this.updateFleeLatch(ctx, nearestPx, closestPx);
 
-    if (this.triageCooldown === 0) {
+    if (this.mendCooldown === 0) {
       const patient = this.findPatient(ctx);
       // Never from a flee, nor with a hostile inside the flee trigger: a channel
       // started there is cut short by the hostile arriving, and he spends the
@@ -290,7 +289,7 @@ export class MedicKit implements MercenaryKit {
           this.beginChannel(ctx, patient);
           return true;
         }
-        // Caught standing, he freezes and shrieks. Already running, he keeps running.
+        // Caught standing, he braces behind the staff. Already running, he keeps running.
         if (adjacent && !this.fleeing && this.cowerRearm === 0) {
           this.startCower(ctx);
           return true;
@@ -338,15 +337,15 @@ export class MedicKit implements MercenaryKit {
   }
 
   startAttack(_ctx: MercenaryKitContext, _target: Mob, _distancePx: number): void {
-    // Never reached: he never chooses a target. His one blow is the cornered slap in `flee`.
+    // Never reached: he never chooses a target. His one blow is the cornered staff strike in `flee`.
   }
 
-  drawState(merc: Mercenary): MercenaryDrawState {
+  drawState(merc: Mercenary): MercenaryDrawState<MedicRow> {
     const swing = this.strike.drawState();
     if (swing !== null) return swing;
     const channel = this.channel;
     if (channel !== null) {
-      return { row: 'cast_triage', progress: channel.frame / TRIAGE_CHANNEL_FRAMES };
+      return { row: 'mend', progress: channel.frame / MEND_CHANNEL_FRAMES };
     }
     if (this.cowerFrames > 0 || this.stuckFrames > 0) {
       return { row: 'cower', progress: 0 };
@@ -373,8 +372,8 @@ export class MedicKit implements MercenaryKit {
 
   renderEffects(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     for (const sparkle of this.sparkles) {
-      const progress = sparkle.frame / TRIAGE_SPARKLE_FRAMES;
-      drawTriageSparkleSprite(
+      const progress = sparkle.frame / MEND_SPARKLE_FRAMES;
+      drawHealSparkleSprite(
         ctx,
         sparkle.patient.x - camX,
         sparkle.patient.y - camY,
@@ -384,7 +383,7 @@ export class MedicKit implements MercenaryKit {
     }
   }
 
-  // ── Triage ────────────────────────────────────────────────────────────────
+  // ── Mend ────────────────────────────────────────────────────────────────
 
   /**
    * The ally worst off by share of health, below the trigger, in range and in
@@ -394,9 +393,9 @@ export class MedicKit implements MercenaryKit {
    */
   private findPatient(ctx: MercenaryKitContext): Player | null {
     const merc = ctx.merc;
-    const rangePx = TILE_SIZE * TRIAGE_RANGE_TILES;
+    const rangePx = TILE_SIZE * MEND_RANGE_TILES;
     let best: Player | null = null;
-    let bestFraction = TRIAGE_TRIGGER_HP_FRACTION;
+    let bestFraction = MEND_TRIGGER_HP_FRACTION;
     const candidates: readonly Player[] = [...ctx.allies, merc];
     for (const friend of candidates) {
       if (!this.isTreatable(ctx, friend, rangePx)) continue;
@@ -435,18 +434,18 @@ export class MedicKit implements MercenaryKit {
 
   private beginChannel(ctx: MercenaryKitContext, patient: Player): void {
     this.channel = { patient, frame: 0, released: false };
-    this.triageCooldown = TRIAGE_COOLDOWN_FRAMES;
+    this.mendCooldown = MEND_COOLDOWN_FRAMES;
     this.fleeing = false;
     this.stuckFrames = 0;
     ctx.merc.isMoving = false;
     if (patient !== ctx.merc) ctx.merc.faceToward(patient);
-    prewarmTriageSparkle();
+    prewarmHealSparkle();
   }
 
   /** Drops a channel that cannot finish; he may try again soon, not a full cooldown later. */
   private cancelChannel(): void {
     this.channel = null;
-    this.triageCooldown = TRIAGE_INTERRUPTED_RETRY_FRAMES;
+    this.mendCooldown = MEND_INTERRUPTED_RETRY_FRAMES;
   }
 
   private advanceChannel(ctx: MercenaryKitContext, channel: Channel): void {
@@ -456,16 +455,16 @@ export class MedicKit implements MercenaryKit {
     // Advanced before the release test, so the heal lands on the tick whose
     // drawn progress first shows the release frame.
     channel.frame++;
-    if (!channel.released && channel.frame >= TRIAGE_RELEASE_FRAME) {
+    if (!channel.released && channel.frame >= MEND_RELEASE_FRAME) {
       channel.released = true;
-      const reachPx = TILE_SIZE * TRIAGE_RANGE_TILES * TRIAGE_RANGE_SLACK_RATIO;
+      const reachPx = TILE_SIZE * MEND_RANGE_TILES * MEND_RANGE_SLACK_RATIO;
       if (!this.isTreatable(ctx, channel.patient, reachPx)) {
         this.cancelChannel();
         return;
       }
       this.release(ctx, channel.patient);
     }
-    if (channel.frame >= TRIAGE_CHANNEL_FRAMES) this.channel = null;
+    if (channel.frame >= MEND_CHANNEL_FRAMES) this.channel = null;
   }
 
   /**
@@ -474,7 +473,7 @@ export class MedicKit implements MercenaryKit {
    */
   private release(ctx: MercenaryKitContext, patient: Player): void {
     const merc = ctx.merc;
-    const amount = Math.max(1, Math.round(patient.maxHp * TRIAGE_HEAL_FRACTION));
+    const amount = Math.max(1, Math.round(patient.maxHp * MEND_HEAL_FRACTION));
     const before = patient.hp;
     patient.hp = Math.min(patient.maxHp, patient.hp + amount);
     const restored = patient.hp - before;
@@ -514,7 +513,7 @@ export class MedicKit implements MercenaryKit {
 
   /**
    * One frame of running away from `nearest`, or — when running has got him
-   * nowhere for long enough — a slap at it.
+   * nowhere for long enough — a blow of the staff at it.
    */
   private flee(ctx: MercenaryKitContext, nearest: Mob): void {
     const merc = ctx.merc;
@@ -531,16 +530,13 @@ export class MedicKit implements MercenaryKit {
     if (this.stuckFrames < CORNERED_FRAMES) return;
     if (merc.attackCooldown > 0 || ctx.isInSafeRoom(merc)) return;
     const distancePx = Math.hypot(nearest.x - merc.x, nearest.y - merc.y);
-    if (distancePx > merc.strikeRangePx * SLAP_TIMING.reachRatio) return;
-    this.strike.begin(nearest, SLAP_TIMING, this.slapDamage, merc);
-    merc.attackCooldown = SLAP_COOLDOWN_FRAMES;
+    if (distancePx > merc.strikeRangePx * STAFF_STRIKE_TIMING.reachRatio) return;
+    this.strike.begin(nearest, STAFF_STRIKE_TIMING, this.staffDamage, merc);
+    merc.attackCooldown = STAFF_STRIKE_COOLDOWN_FRAMES;
   }
 
   private cycleShareFor(movedPx: number): number {
-    return Math.min(
-      movedPx / (BUCKET_BOY_TILES_PER_FLEE_CYCLE * TILE_SIZE),
-      MAX_FLEE_CYCLE_PER_TICK,
-    );
+    return Math.min(movedPx / (ANSELM_TILES_PER_WALK_CYCLE * TILE_SIZE), MAX_FLEE_CYCLE_PER_TICK);
   }
 
   /**

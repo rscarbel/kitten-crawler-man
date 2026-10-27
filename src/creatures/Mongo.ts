@@ -1,7 +1,7 @@
 import { ASTAR_FAILURE_BACKOFF_FRAMES, ASTAR_MAX_DENIED_FRAMES, Mob } from './Mob';
 import type { EyePlacement } from '../sprites/eyePlacement';
 import { mongoEyePlacement } from '../sprites/art/mongoFigure';
-import type { DamageSource, Player } from '../Player';
+import type { DamageOptions, DamageSource, Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
 import {
   MONGO_HEAD_CLEARANCE_TILES,
@@ -442,9 +442,9 @@ export class Mongo extends Mob {
     return this.damageLedger.charge(amount, mayLandForNothing);
   }
 
-  override takeDamage(amount: number, source?: DamageSource): boolean {
+  override takeDamage(amount: number, source?: DamageSource, options?: DamageOptions): boolean {
     const isStatusTick = source?.kind === 'status';
-    return super.takeDamage(this.soften(amount, isStatusTick), source);
+    return super.takeDamage(this.soften(amount, isStatusTick), source, options);
   }
 
   override takeDamageFrom(

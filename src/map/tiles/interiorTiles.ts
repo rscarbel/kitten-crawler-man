@@ -6,14 +6,11 @@ import {
   TABLE,
   BOOKSHELF,
   BED,
-  FIREPLACE,
   BARREL,
   RUG,
   CHAIR,
   SAWDUST_FLOOR,
-  CIRCUS_RING_EDGE,
   TENT_POLE,
-  BLEACHER,
   SAFE_ROOM_COUNTER,
   SAFE_ROOM_COUNTER_BACK,
   SAFE_ROOM_GALLEY_FLOOR,
@@ -73,15 +70,17 @@ import {
 } from '../../sprites/labStationDecor';
 import { drawGroundTile } from './groundTiles';
 import { TOWN_INTERIOR_GROUND } from '../town/interiorMaterials';
-import { paintBigTopFloorMarks } from '../../sprites/art/bigTop/bigTopFloorArt';
-import { paintTentPoleBase, type PoleCell } from '../../sprites/art/bigTop/bigTopShellArt';
+import { paintStarlightTentFloorMarks } from '../../sprites/art/starlightTent/starlightTentFloorArt';
+import {
+  paintTentPoleBase,
+  type PoleCell,
+} from '../../sprites/art/starlightTent/starlightTentShellArt';
 import { DUNGEON_GROUND } from '../dungeon/groundMaterials';
 import { inferFloorType } from './helpers';
 import { drawTerrainTile } from './terrainTiles';
 import { drawSpecialFloorTile } from './specialFloorTiles';
 import { drawSpriteKey } from '../../core/spriteAssets/SpriteRenderer';
 import { drawTowerStaircaseTile } from '../../sprites/towerStaircase';
-import { frameTime } from '../../utils';
 
 /**
  * Where a pole tile sits in the pole it belongs to: a run of pole tiles is one
@@ -404,69 +403,6 @@ export function drawInteriorTile(
       return true;
     }
 
-    // Fireplace — context-aware: spans 2 tiles wide as one hearth
-    case FIREPLACE: {
-      drawFloorBeneath(ctx, structure, sx, sy, ts, tx, ty);
-
-      const fpLeft = structure[ty]?.[tx - 1]?.type === FIREPLACE;
-      const fpRight = structure[ty]?.[tx + 1]?.type === FIREPLACE;
-      const isLeftHalf = !fpLeft && fpRight;
-      const isRightHalf = fpLeft && !fpRight;
-
-      const t = frameTime;
-
-      // Stone surround — extend to neighbor edge
-      const stoneL = isRightHalf ? 0 : 2;
-      const stoneR = isLeftHalf ? 0 : 2;
-      ctx.fillStyle = '#6b6b6b';
-      ctx.fillRect(sx + stoneL, sy + 1, ts - stoneL - stoneR, ts - 2);
-      // Inner cavity — seamless across both tiles
-      const cavL = isRightHalf ? 0 : 5;
-      const cavR = isLeftHalf ? 0 : 5;
-      ctx.fillStyle = '#1a1a1a';
-      ctx.fillRect(sx + cavL, sy + 4, ts - cavL - cavR, ts - 7);
-      // Fire glow
-      const glow = 0.3 + Math.sin(t * 4.2) * 0.15;
-      ctx.fillStyle = `rgba(255, 120, 20, ${glow})`;
-      ctx.fillRect(sx + cavL, sy + 4, ts - cavL - cavR, ts - 7);
-
-      // Flames — left half gets left flames, right half gets right flames
-      const flameBase = sy + ts - 3;
-      const flameH = Math.floor((ts - 7) * (0.5 + Math.sin(t * 6.1) * 0.2));
-      ctx.fillStyle = `rgba(255, 200, 50, ${0.7 + Math.sin(t * 8.3) * 0.2})`;
-      if (isLeftHalf || (!fpLeft && !fpRight)) {
-        // Left/center flame
-        ctx.fillRect(sx + 8, flameBase - flameH, 3, flameH);
-        ctx.fillRect(
-          sx + Math.floor(ts * 0.65),
-          flameBase - Math.floor(flameH * 0.7),
-          2,
-          Math.floor(flameH * 0.7),
-        );
-      }
-      if (isRightHalf || (!fpLeft && !fpRight)) {
-        // Right/center flame
-        ctx.fillRect(sx + ts - 10, flameBase - flameH * 0.85, 3, Math.floor(flameH * 0.85));
-        ctx.fillRect(
-          sx + Math.floor(ts * 0.3),
-          flameBase - Math.floor(flameH * 0.6),
-          2,
-          Math.floor(flameH * 0.6),
-        );
-      }
-      // Embers
-      ctx.fillStyle = `rgba(255, 80, 0, ${0.5 + Math.sin(t * 3.7) * 0.3})`;
-      ctx.fillRect(sx + cavL + 2, flameBase - 2, ts - cavL - cavR - 4, 2);
-      // Stone mortar lines
-      ctx.fillStyle = '#555';
-      ctx.fillRect(sx + stoneL, sy + Math.floor(ts * 0.35), ts - stoneL - stoneR, 1);
-      ctx.fillRect(sx + stoneL, sy + Math.floor(ts * 0.65), ts - stoneL - stoneR, 1);
-      // Pillar divider only on outer edges
-      if (!fpLeft) ctx.fillRect(sx + 2, sy + 1, 1, ts - 2);
-      if (!fpRight) ctx.fillRect(sx + ts - 3, sy + 1, 1, ts - 2);
-      return true;
-    }
-
     // Barrel — sprite only; the ground under it is drawn by the baseOnly
     // chunk pass, and repainting it here would clip a neighbouring prop's
     // overhang into this tile.
@@ -680,32 +616,10 @@ export function drawInteriorTile(
       return true;
     }
 
-    // The Big Top's sawdust, with its baked floor marks. The ring's curb is
-    // one of those marks, so a curb tile is sawdust like any other.
-    case SAWDUST_FLOOR:
-    case CIRCUS_RING_EDGE: {
+    // The Starlight Tent's sawdust, with its baked floor marks.
+    case SAWDUST_FLOOR: {
       drawGroundTile(ctx, TOWN_INTERIOR_GROUND, structure, sx, sy, ts, tx, ty);
-      paintBigTopFloorMarks(ctx, sx, sy, ts, tx, ty);
-      return true;
-    }
-
-    // Bleacher — stacked wooden bench planks facing the ring
-    case BLEACHER: {
-      ctx.fillStyle = '#2a2118';
-      ctx.fillRect(sx, sy, ts, ts);
-      const plankHeight = Math.floor(ts / BLEACHER_PLANK_COUNT);
-      for (let i = 0; i < BLEACHER_PLANK_COUNT; i++) {
-        const py = sy + i * plankHeight;
-        ctx.fillStyle = i % 2 === 0 ? '#7a5a34' : '#6b4e2c';
-        ctx.fillRect(sx, py + 1, ts, plankHeight - 2);
-        ctx.fillStyle = 'rgba(255,255,255,0.08)';
-        ctx.fillRect(sx, py + 1, ts, 1);
-      }
-      // Support post shadow on alternating tiles
-      if ((tx + ty) % 2 === 0) {
-        ctx.fillStyle = 'rgba(0,0,0,0.25)';
-        ctx.fillRect(sx + Math.floor(ts / 2) - 1, sy, 2, ts);
-      }
+      paintStarlightTentFloorMarks(ctx, sx, sy, ts, tx, ty);
       return true;
     }
 
@@ -1293,5 +1207,3 @@ const SLAB_MULLER = '#6e6a66';
 const SLAB_POT = '#2a2422';
 const SLAB_PESTLE = '#7a746e';
 const SLAB_SMEAR = '#3a4a78';
-
-const BLEACHER_PLANK_COUNT = 4;

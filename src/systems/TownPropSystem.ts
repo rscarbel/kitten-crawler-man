@@ -1,5 +1,5 @@
 /**
- * Interactive fixtures of the Over City square — the "things to do in town"
+ * Interactive fixtures of the Taloncrest square — the "things to do in town"
  * layer. Owned by `DungeonScene` and active only on the overworld, it gives the
  * player standing reasons to linger:
  *
@@ -429,11 +429,11 @@ export class TownPropSystem implements GameSystem {
  * The baked sheets these fixtures draw from. The bench and the board are street
  * furniture any town could have, so they are baked by
  * `scripts/generate-townscape-sprites.ts`; the seer is Madame Voss by name, so
- * she is baked by `generate-over-city-sprites.ts` into this town's own folder.
+ * she is baked by `generate-taloncrest-sprites.ts` into this town's own folder.
  */
 const NOTICE_BOARD_SHEET_KEY = 'town_notice_board';
 const BENCH_SHEET_KEY = 'town_bench';
-const FORTUNE_TELLER_SHEET_KEY = 'over_city_fortune_teller';
+const FORTUNE_TELLER_SHEET_KEY = 'taloncrest_fortune_teller';
 
 /** None of the three moves, so each is one picture in a single-state sheet. */
 const FIXTURE_STATE = 'idle';

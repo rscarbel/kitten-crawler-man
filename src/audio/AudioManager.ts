@@ -46,7 +46,7 @@ declare const __DEV_BUILD__: boolean | undefined;
 
 const WARNS_ON_MISSING_BUFFER = typeof __DEV_BUILD__ !== 'undefined' && __DEV_BUILD__;
 
-/** One take per bout of blood vomiting; the retch and its splash are in each. */
+/** One take per retch of blood; the heave and its splash are in each. */
 const BLOOD_VOMIT_TAKES: readonly SoundId[] = [
   'blood_vomit_1',
   'blood_vomit_2',
@@ -255,7 +255,7 @@ export interface AudioManagerOptions {
  * only comes back once every reason that asked for silence has let go.
  */
 export type MusicPauseReason =
-  'menu' | 'background' | 'slots_big_win' | 'wheel' | 'nothing' | 'siege_victory';
+  'menu' | 'background' | 'slots_big_win' | 'wheel' | 'permanent_death' | 'siege_victory';
 
 /**
  * The pause reasons that also freeze the music where it is, once the bus has
@@ -2329,7 +2329,7 @@ export class AudioManager {
     });
 
     bus.on('questStarted', (e) => {
-      if (e.questId === 'the_show_must_go_on' || e.questId === 'krasue_murders') {
+      if (e.questId === 'krasue_murders') {
         this.play('menu_open');
       }
     });

@@ -52,24 +52,19 @@ export interface BountyDef {
 const CLOWN_TROUPE: ReadonlyArray<{
   readonly dx: number;
   readonly dy: number;
-  readonly kind: 'stilt_clown' | 'fat_clown' | 'circus_lemur';
+  readonly kind: 'tall_clown' | 'fat_clown';
 }> = [
-  { dx: -3, dy: -2, kind: 'stilt_clown' },
-  { dx: 3, dy: -2, kind: 'stilt_clown' },
+  { dx: -3, dy: -2, kind: 'tall_clown' },
+  { dx: 3, dy: -2, kind: 'tall_clown' },
   { dx: -3, dy: 2, kind: 'fat_clown' },
   { dx: 3, dy: 2, kind: 'fat_clown' },
-  { dx: 0, dy: 4, kind: 'circus_lemur' },
 ];
 
 /**
- * The Evil Clown and four of Grimaldi's survivors, plus one lemur.
+ * The Evil Clown and four clowns of its troupe.
  *
- * The escort is reused wholesale from the circus — zero new minion art — and is
- * chosen for the shape of the fight rather than for flavour: the fat clown
- * bodies the player off the boss, the stilt clown reaches over it, and the
- * lemur throws knives from range, so backing out of the gas is never simply
- * safe. The lemur was nearly cut as optional; it stays, because without a
- * ranged threat the whole encounter can be kited in a circle around the clouds.
+ * The escort is chosen for the shape of the fight rather than for flavour: the
+ * fat clowns body the player off the boss and the tall clowns reach over it.
  */
 const EVIL_CLOWN_DEF: BountyDef = {
   id: 'evil_clown',

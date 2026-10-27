@@ -163,7 +163,7 @@ function findPlacedBuildings(grid: MeasurableOverworld['grid']): PlacedBuilding[
  * neighbour's footprint — which is the normal outcome of packing a town
  * tighter, and would silently corrupt the density metric.
  *
- * Entries with no art (the circus Big Top is built from tiles, not a sprite) are
+ * Entries with no art (the circus Starlight Tent is built from tiles, not a sprite) are
  * skipped; art with no entry is a real fault and is reported.
  */
 export function collectBuildingPlots(data: MeasurableOverworld): BuildingPlot[] {

@@ -231,26 +231,22 @@ export class CraftSkills {
 
 function parseCraftSkillState(value: unknown): CraftSkillState | undefined {
   if (!isRecord(value)) return undefined;
-  const learned = typeof value.learned === 'boolean' ? value.learned : false;
-  const level =
-    typeof value.level === 'number' && Number.isFinite(value.level)
-      ? Math.max(0, Math.min(MAX_CRAFT_LEVEL, Math.floor(value.level)))
-      : 0;
-  const xp = typeof value.xp === 'number' && Number.isFinite(value.xp) ? Math.max(0, value.xp) : 0;
+  const { learned, level, xp } = value;
+  if (typeof learned !== 'boolean') return undefined;
+  const levelValid =
+    typeof level === 'number' && Number.isInteger(level) && level >= 0 && level <= MAX_CRAFT_LEVEL;
+  const xpValid = typeof xp === 'number' && Number.isFinite(xp) && xp >= 0;
+  if (!levelValid || !xpValid) return undefined;
   return { learned, level, xp };
 }
 
-/**
- * Tolerant parse of a `CraftSkillsSnapshot` from an unknown save value. A
- * missing or malformed field falls back to "not learned" rather than failing
- * the whole snapshot, so an old save with no craft progress loads cleanly.
- */
+/** A saved {@link CraftSkillsSnapshot}, or undefined when either skill is missing or damaged. */
 export function parseCraftSkillsSnapshot(value: unknown): CraftSkillsSnapshot | undefined {
   if (!isRecord(value)) return undefined;
-  return {
-    resourcing: parseCraftSkillState(value.resourcing) ?? emptyState(),
-    construction: parseCraftSkillState(value.construction) ?? emptyState(),
-  };
+  const resourcing = parseCraftSkillState(value.resourcing);
+  const construction = parseCraftSkillState(value.construction);
+  if (resourcing === undefined || construction === undefined) return undefined;
+  return { resourcing, construction };
 }
 
 /**

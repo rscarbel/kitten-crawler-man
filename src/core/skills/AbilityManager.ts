@@ -14,6 +14,7 @@ import {
   DEFAULT_FINAL_LEVEL_MULTIPLIER,
 } from '../progression/xpCurve';
 import type { Rect } from '../../ui/core/geom';
+import { isFiniteNumber, isRecord, ownEntry, parseEvery } from '../util/guards';
 
 export type AbilityId = 'magic_missile' | 'protective_shell' | 'smush' | 'mongo';
 
@@ -31,7 +32,7 @@ const ABILITY_IDS: Record<AbilityId, true> = {
 
 /** Narrows an item's free-form `abilityId` to one the manager knows about. */
 export function isAbilityId(id: string): id is AbilityId {
-  return id in ABILITY_IDS;
+  return ownEntry(ABILITY_IDS, id) !== undefined;
 }
 
 export interface AbilityPerkDef {
@@ -249,28 +250,21 @@ export class AbilityManager {
   }
 
   /**
-   * Restore progress written by {@link serializeStates}. Registration must have
-   * happened first — an ability with no def has no maxLevel to clamp against.
-   *
-   * Everything is re-screened rather than trusted: this is fed by unvalidated
-   * server JSON, and a `NaN` level would propagate straight into damage numbers
-   * and perk lookups. Entries naming an ability this build no longer has are
-   * dropped, and an ability the save doesn't mention keeps its level-1 default.
+   * Restore progress written by {@link serializeStates}, already validated by
+   * {@link parseSerializedAbilityStates}. Registration must have happened
+   * first: an ability with no def has no maxLevel to clamp against. An ability
+   * the save doesn't mention keeps its level-1 default.
    */
   restoreSerializedStates(states: readonly SerializedAbilityState[]): void {
     for (const saved of states) {
-      if (!isAbilityId(saved.id)) continue;
       const def = this.defs.get(saved.id);
       if (def === undefined) continue;
-      const level = Number.isFinite(saved.level) ? saved.level : 1;
-      const clampedLevel = Math.max(1, Math.min(level, def.maxLevel));
-      const xp = Number.isFinite(saved.xp) ? Math.max(0, saved.xp) : 0;
-      const savedOwner: string = saved.owner;
+      const clampedLevel = Math.min(saved.level, def.maxLevel);
       this.states.set(saved.id, {
         id: saved.id,
-        owner: isAbilityOwner(savedOwner) ? savedOwner : def.owner,
+        owner: saved.owner,
         level: clampedLevel,
-        xp: clampedLevel >= def.maxLevel ? 0 : xp,
+        xp: clampedLevel >= def.maxLevel ? 0 : saved.xp,
         xpToNextLevel: xpToNextLevel(def, clampedLevel),
       });
     }
@@ -287,4 +281,18 @@ export class AbilityManager {
     }
     return copy;
   }
+}
+
+function parseSerializedAbilityState(value: unknown): SerializedAbilityState | undefined {
+  if (!isRecord(value)) return undefined;
+  const { id, owner, level, xp } = value;
+  if (typeof id !== 'string' || !isAbilityId(id)) return undefined;
+  if (typeof owner !== 'string' || !isAbilityOwner(owner)) return undefined;
+  if (!isFiniteNumber(level) || level < 1 || !isFiniteNumber(xp) || xp < 0) return undefined;
+  return { id, owner, level, xp };
+}
+
+/** A save's ability progress, or undefined when any entry is not one this build wrote. */
+export function parseSerializedAbilityStates(value: unknown): SerializedAbilityState[] | undefined {
+  return parseEvery(value, parseSerializedAbilityState);
 }

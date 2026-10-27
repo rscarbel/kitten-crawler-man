@@ -1,17 +1,13 @@
 /**
  * Measurements of the circus grounds' geometry on one generated site: what is
- * blocked, where every wave actually spawns against where it was authored,
- * whether each spawn can walk to the places the fights are about, whether any
- * walkable ground is sealed off, and whether the named keep-clear bands and
- * the rim hold.
+ * blocked, whether any walkable ground is sealed off, and whether the named
+ * keep-clear bands and the rim hold.
  *
  * Measuring and judging are kept apart: this file only reads the site, and
  * `verify-circus-grounds.ts` holds the readings to their budgets. `--measure`
  * prints the same readings, which is how a budget is set.
  */
 
-import { TILE_SIZE } from '../../src/core/constants';
-import type { Mob } from '../../src/creatures/Mob';
 import { CIRCUS_STRUCTURE_LOW, TORCH } from '../../src/map/tileTypes';
 import {
   CIRCUS_KEEP_CLEAR_BANDS,
@@ -21,33 +17,20 @@ import {
   type CircusKeepClearBandName,
   type CircusStructureId,
 } from '../../src/map/overworld/circusGroundsLayout';
-import {
-  ARENA_SPAWN_EDGE_INSET_TILES,
-  ASSAULT_WAVES,
-  RITUAL_WAVES,
-  type WaveSpawn,
-} from '../../src/systems/CircusQuestSystem';
-import {
-  buildQuestRig,
-  discTiles,
-  radiusOf,
-  type CircusSite,
-  type QuestRig,
-  type TilePoint,
-} from './site';
+import { discTiles, radiusOf, type CircusSite, type TilePoint } from './site';
 
 /**
  * Tile types that count as rim dressing wherever they turn up: props allowed
  * to block because they stand where nobody fights — the low structures (the
  * arch's posts, the flame lamps, the wagons and booths) and any plain torch.
  * The tall rim props (the crate stack) are read off the site's record, since
- * the Big Top and the pavilions share their tile type.
+ * the Starlight Tent and the pavilions share their tile type.
  */
 export const RIM_PROP_TILE_TYPES: ReadonlySet<number> = new Set([TORCH, CIRCUS_STRUCTURE_LOW]);
 /** The structures that stand in the field rather than on the rim. */
 const FIELD_STRUCTURES: ReadonlySet<CircusStructureId> = new Set([
-  'big_top',
-  'pavilion_mold_lion',
+  'starlight_tent',
+  'pavilion_tightrope',
   'pavilion_feats_of_flesh',
   'pavilion_fortunes',
 ]);
@@ -61,35 +44,10 @@ const FORECOURT_PROBE_ROWS_SOUTH = 2;
  * not a sealed pocket.
  */
 const POCKET_ESCAPE_MARGIN_TILES = 4;
-/** Far beyond any wave mob's health: each falls to one blow. */
-const OVERKILL_DAMAGE = 1_000_000;
-const WAVE_TABLES = { ritual: RITUAL_WAVES, assault: ASSAULT_WAVES } as const;
-type WaveTableName = keyof typeof WAVE_TABLES;
-export const LEMUR_WAVE_INDEX = 0;
-export const STILT_WAVE_INDEX = 1;
 
 /** The layout's own keep-clear bands, plus the approach road, which only a site can place. */
 export type BandName = CircusKeepClearBandName | 'road';
-export const BAND_NAMES: readonly BandName[] = [
-  'forecourt',
-  'lemur field',
-  'stilt field',
-  'door',
-  'road',
-  'lookout',
-];
-
-export type ReachTarget = 'Big Top door' | "Signet's lookout" | 'forecourt';
-
-export interface ResolvedSpawn {
-  /** Stable across seeds: `ritual w1 s2` is the third spawn of the second ritual wave. */
-  readonly key: string;
-  readonly authored: TilePoint;
-  /** Null when the wave came up short and this spawn could not be matched to a mob. */
-  readonly resolved: TilePoint | null;
-  /** Straight-line tiles from authored to resolved; Infinity when unresolved. */
-  readonly nudgeTiles: number;
-}
+export const BAND_NAMES: readonly BandName[] = ['forecourt', 'door', 'road'];
 
 export interface BandReading {
   readonly tiles: number;
@@ -107,13 +65,6 @@ export interface GroundsReading {
   /** Tiles in the grounds' disc no crawler can stand on. */
   readonly blockedTiles: number;
   readonly blockedByType: ReadonlyMap<number, number>;
-  readonly spawns: readonly ResolvedSpawn[];
-  /** How far Signet was set down from her authored lookout. */
-  readonly signetNudgeTiles: number;
-  /** Every (spawn, target) pair a hostile could not walk between inside the arena. */
-  readonly unreachable: ReadonlyArray<{ readonly spawn: string; readonly target: ReachTarget }>;
-  /** Pairs the reach check actually tried, so an empty `unreachable` is not vacuous. */
-  readonly reachPairsTried: number;
   readonly pockets: readonly Pocket[];
   readonly bands: ReadonlyMap<BandName, BandReading>;
   readonly rimProps: ReadonlyArray<RimPropTile>;
@@ -131,71 +82,11 @@ export interface RimPropTile {
   readonly structure: CircusStructureId | null;
 }
 
-function tileOf(mob: Mob): TilePoint {
-  return { x: Math.round(mob.x / TILE_SIZE), y: Math.round(mob.y / TILE_SIZE) };
-}
-
 /** Wider than any map, so a row and column pack into one number without colliding. */
 const TILE_KEY_ROW_STRIDE = 100_000;
 
 function keyOf(tile: TilePoint): number {
   return tile.y * TILE_KEY_ROW_STRIDE + tile.x;
-}
-
-/**
- * Walks one wave table through a real quest: reads each wave the moment it is
- * spawned, then cuts it down and runs a frame so the quest spawns the next.
- */
-function readWaveTable(
-  rig: QuestRig,
-  table: WaveTableName,
-  originOf: () => TilePoint,
-): ResolvedSpawn[] {
-  const waves = WAVE_TABLES[table];
-  const spawns: ResolvedSpawn[] = [];
-  for (let waveIndex = 0; waveIndex < waves.length; waveIndex++) {
-    const wave: ReadonlyArray<WaveSpawn> = waves[waveIndex];
-    const mobs = rig.quest.captureCheckpoint().waveMobs;
-    const origin = originOf();
-    // A wave that came up short cannot be matched spawn-to-mob by order, so
-    // every spawn of it is reported unresolved rather than guessed at.
-    const matched = mobs.length === wave.length;
-    wave.forEach((spawn, spawnIndex) => {
-      const authored = { x: origin.x + spawn.dx, y: origin.y + spawn.dy };
-      const resolved = matched ? tileOf(mobs[spawnIndex]) : null;
-      spawns.push({
-        key: `${table} w${waveIndex} s${spawnIndex}`,
-        authored,
-        resolved,
-        nudgeTiles:
-          resolved === null
-            ? Infinity
-            : Math.hypot(resolved.x - authored.x, resolved.y - authored.y),
-      });
-    });
-    for (const mob of mobs) mob.takeDamageFrom(OVERKILL_DAMAGE, rig.human);
-    rig.step();
-  }
-  return spawns;
-}
-
-function readSpawns(site: CircusSite): {
-  spawns: ResolvedSpawn[];
-  signetNudgeTiles: number;
-} {
-  const ritual = buildQuestRig(site, 'ritual_defense', site.centre);
-  const signet = ritual.quest.captureCheckpoint().signet;
-  const signetTile = signet === null ? null : tileOf(signet);
-  const signetNudgeTiles =
-    signetTile === null
-      ? Infinity
-      : Math.hypot(signetTile.x - site.lookout.x, signetTile.y - site.lookout.y);
-  // Ritual offsets are authored against the lookout; the quest reads them off
-  // wherever Signet was actually set down, so her own nudge is reported apart.
-  const ritualSpawns = readWaveTable(ritual, 'ritual', () => site.lookout);
-  const assault = buildQuestRig(site, 'assault', site.centre);
-  const assaultSpawns = readWaveTable(assault, 'assault', () => site.centre);
-  return { spawns: [...ritualSpawns, ...assaultSpawns], signetNudgeTiles };
 }
 
 /** Four-connected flood over tiles `passable` admits, from `start`. */
@@ -225,37 +116,6 @@ function flood(start: TilePoint, passable: (tile: TilePoint) => boolean): Set<nu
 
 function forecourtProbe(site: CircusSite): TilePoint {
   return { x: site.centre.x, y: site.centre.y + FORECOURT_PROBE_ROWS_SOUTH };
-}
-
-function doorstep(site: CircusSite): TilePoint {
-  return { x: site.bigTop.doorTile.x, y: site.bigTop.doorTile.y + 1 };
-}
-
-function readReach(
-  site: CircusSite,
-  spawns: readonly ResolvedSpawn[],
-): { unreachable: GroundsReading['unreachable']; tried: number } {
-  const arenaRadius = site.radiusTiles - ARENA_SPAWN_EDGE_INSET_TILES;
-  const hostilePassable = (tile: TilePoint): boolean =>
-    radiusOf(site, tile) <= arenaRadius && site.map.isWalkableForHostile(tile.x, tile.y);
-  const targets: ReadonlyArray<{ name: ReachTarget; tile: TilePoint }> = [
-    { name: 'Big Top door', tile: doorstep(site) },
-    { name: "Signet's lookout", tile: site.lookout },
-    { name: 'forecourt', tile: forecourtProbe(site) },
-  ];
-  const unreachable: Array<{ spawn: string; target: ReachTarget }> = [];
-  let tried = 0;
-  for (const spawn of spawns) {
-    const from = spawn.resolved;
-    if (from === null) continue;
-    const reached = flood(from, hostilePassable);
-    for (const target of targets) {
-      tried++;
-      if (!reached.has(keyOf(target.tile)))
-        unreachable.push({ spawn: spawn.key, target: target.name });
-    }
-  }
-  return { unreachable, tried };
 }
 
 /**
@@ -313,32 +173,6 @@ export function bandTiles(site: CircusSite): ReadonlyMap<BandName, readonly Tile
 
 function isLayoutBandName(name: string): name is CircusKeepClearBandName {
   return name in CIRCUS_KEEP_CLEAR_BANDS;
-}
-
-/**
- * The spawns of the lemur and stilt waves that stand outside the layout's
- * band for them: the two describe one field and must not drift apart.
- */
-export function wavesOutsideTheirBands(): string[] {
-  const outside: string[] = [];
-  const pairs = [
-    { wave: LEMUR_WAVE_INDEX, band: CIRCUS_KEEP_CLEAR_BANDS['lemur field'], name: 'lemur field' },
-    { wave: STILT_WAVE_INDEX, band: CIRCUS_KEEP_CLEAR_BANDS['stilt field'], name: 'stilt field' },
-  ];
-  for (const { wave, band, name } of pairs) {
-    for (const spawn of ASSAULT_WAVES[wave]) {
-      const inside =
-        spawn.dx >= band.dxFrom &&
-        spawn.dx <= band.dxTo &&
-        spawn.dy >= band.dyFrom &&
-        spawn.dy <= band.dyTo;
-      if (!inside)
-        outside.push(
-          `assault wave ${wave} spawn (${spawn.dx}, ${spawn.dy}) is outside the ${name}`,
-        );
-    }
-  }
-  return outside;
 }
 
 function readBands(site: CircusSite): Map<BandName, BandReading> {
@@ -416,7 +250,7 @@ function readUnreachableRimProps(site: CircusSite): GroundsReading['unreachableR
   return unreachable;
 }
 
-/** Every geometry reading for one site. Runs a real quest over it for the spawns. */
+/** Every geometry reading for one site. */
 export function measureGrounds(site: CircusSite): GroundsReading {
   let blockedTiles = 0;
   const blockedByType = new Map<number, number>();
@@ -426,15 +260,9 @@ export function measureGrounds(site: CircusSite): GroundsReading {
     const type = site.map.structure[tile.y][tile.x].type;
     blockedByType.set(type, (blockedByType.get(type) ?? 0) + 1);
   }
-  const { spawns, signetNudgeTiles } = readSpawns(site);
-  const reach = readReach(site, spawns);
   return {
     blockedTiles,
     blockedByType,
-    spawns,
-    signetNudgeTiles,
-    unreachable: reach.unreachable,
-    reachPairsTried: reach.tried,
     pockets: readPockets(site),
     bands: readBands(site),
     rimProps: readRimProps(site),

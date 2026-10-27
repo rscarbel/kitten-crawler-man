@@ -53,7 +53,7 @@ interface Declaration {
 interface ScriptPropertyTarget extends Declaration {
   /** Dotted path from the exported object's own name, e.g. "BRAMBLEWICK.firstMeeting". */
   readonly path: string;
-  /** A registry object's own top-level entry (`RESIDENT_LINES.old_hilda`) — its key, not the lines under it. */
+  /** A registry object's own top-level entry (`RESIDENT_LINES.old_lori`) — its key, not the lines under it. */
   readonly isRegistryEntry: boolean;
 }
 

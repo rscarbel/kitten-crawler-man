@@ -1,12 +1,12 @@
 {
-  "circus_big_top": {
+  "circus_starlight_tent": {
     "frameWidth": 768,
     "frameHeight": 512,
     "tileX": 64,
     "tileY": 448,
     "tileScale": 64,
     "states": {
-      "big_top": { "row": 0, "frameCount": 1 }
+      "starlight_tent": { "row": 0, "frameCount": 1 }
     }
   },
   "circus_pavilion": {
@@ -16,7 +16,7 @@
     "tileY": 256,
     "tileScale": 64,
     "states": {
-      "pavilion_mold_lion": { "row": 0, "frameCount": 1 },
+      "pavilion_tightrope": { "row": 0, "frameCount": 1 },
       "pavilion_feats_of_flesh": { "row": 1, "frameCount": 1 },
       "pavilion_fortunes": { "row": 2, "frameCount": 1 }
     }

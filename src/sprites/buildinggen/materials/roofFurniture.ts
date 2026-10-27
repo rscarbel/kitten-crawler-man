@@ -434,7 +434,7 @@ export function paintDormer(
   const across = acrossFractionForColumn(projection, dormer.col, DORMER_SLOPE_SEAT);
   const surface = roofSurfacePoint(projection.roofQuad, across, DORMER_SLOPE_SEAT);
   // A dormer's own eaves sit on the roof surface, sag and all — a box seated on
-  // the unsagged plane hangs in the air over Old Hilda's bowed ridge.
+  // the unsagged plane hangs in the air over Old Lori's bowed ridge.
   const sagPx = spec.roof.ridgeSagTiles * scale;
   const baseY = surface.y + roofSagPx(across, DORMER_SLOPE_SEAT, sagPx);
 

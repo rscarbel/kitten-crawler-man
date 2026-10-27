@@ -1,6 +1,6 @@
 /**
  * Paints the wheel screen from a model the host builds each frame: the stage,
- * the wheel with its pointer, clapper and chasing rim bulbs, Tito's bust and
+ * the wheel with its pointer, clapper and chasing rim bulbs, Donald's bust and
  * patter, the bet stepper, the press-and-hold SPIN, and whatever reveal an
  * outcome is playing. Holds no game state; every animation is a function of
  * the model's clocks, so a frozen model paints the same frame every time.
@@ -22,7 +22,7 @@ import {
   paintWheelWedge,
 } from '../../../sprites/art/wheelFaceArt';
 import { drawAttackCowSprite } from '../../../sprites/attackCowSprite';
-import { drawTitoBust, type TitoBustPose } from '../../../sprites/titoSprite';
+import { drawDonaldBust, type DonaldBustPose } from '../../../sprites/donaldSprite';
 import type { Rect } from '../../core/geom';
 import { inset } from '../../core/geom';
 import type { Ui } from '../../core/UiRoot';
@@ -46,7 +46,6 @@ import { computeWheelLayout, type WheelDisc, type WheelLayout } from './wheelLay
 /** What kind of show an outcome puts on. */
 export type WheelRevealEffect =
   | 'red'
-  | 'stab'
   | 'robbed'
   | 'freeze'
   | 'pet'
@@ -115,8 +114,8 @@ export interface WheelViewModel {
     readonly disabled: string | null;
   };
   readonly leaveDisabled: string | null;
-  readonly tito: {
-    readonly pose: TitoBustPose;
+  readonly donald: {
+    readonly pose: DonaldBustPose;
     readonly progress: number;
     readonly line: string | null;
     readonly lineAgeMs: number;
@@ -139,7 +138,7 @@ export const WHEEL_LEAVE_REGION_ID = 'leave';
 export const WHEEL_BET_DOWN_REGION_ID = 'bet-down';
 export const WHEEL_BET_UP_REGION_ID = 'bet-up';
 
-const TITLES = ["TITO'S WHEEL OF FORTUNE", 'WHEEL OF FORTUNE', 'THE WHEEL'];
+const TITLES = ["DONALD'S WHEEL OF FORTUNE", 'WHEEL OF FORTUNE', 'THE WHEEL'];
 
 const HALF = 0.5;
 const FULL_TURN = Math.PI * 2;
@@ -186,23 +185,6 @@ const BANNER_OUT_MS = 240;
 const BANNER_FROM_SCALE = 0.6;
 const BANNER_SUBTITLE_GAP = 4;
 
-/**
- * The red landing sting (`wheel_land_bad`, 1.584 s) plays at the start of every
- * stab reveal; the slash and Tito's stab sound wait for it to finish so the two
- * never talk over each other.
- */
-const LAND_BAD_STING_MS = 1584;
-const STAB_AFTER_STING_GAP_MS = 150;
-/** The stab: the slash lands (and is heard), then the red wash and the shake fade. */
-export const STAB_SLASH_AT_MS = LAND_BAD_STING_MS + STAB_AFTER_STING_GAP_MS;
-const STAB_SLASH_DRAW_MS = 140;
-const STAB_WASH_MS = 900;
-const STAB_WASH_ALPHA = 0.45;
-const STAB_SHAKE_MS = 520;
-const STAB_SHAKE_PX = 14;
-const STAB_SHAKE_CYCLES = 9;
-const SLASH_WIDTH_SHARE = 0.018;
-
 /** Coins: how many fall for each size of win, over how long, and the cap on any one shower. */
 const MAX_COIN_PARTICLES = 120;
 const COIN_COUNT: Readonly<Partial<Record<WheelRevealEffect, number>>> = {
@@ -219,7 +201,7 @@ const COIN_SIZE_MIN = 5;
 const JACKPOT_GLOW_PERIOD_MS = 700;
 const JACKPOT_GLOW_ALPHA = 0.16;
 
-/** The robbery: coins drain from the purse to Tito, one after another. */
+/** The robbery: coins drain from the purse to Donald, one after another. */
 const DRAIN_COINS = 16;
 const DRAIN_WINDOW_MS = 1500;
 const DRAIN_FLIGHT_MS = 650;
@@ -236,7 +218,7 @@ const PET_MOO_POP_MS = 220;
 const PET_HAPPY_LOOP_MS = 900;
 const MS_PER_SECOND = 1000;
 
-/** Tito's speech fades in and out at the ends of its life. */
+/** Donald's speech fades in and out at the ends of its life. */
 const LINE_FADE_MS = 220;
 const LINE_LIFE_MS = 4200;
 const SPEECH_TAIL = 10;
@@ -305,16 +287,13 @@ export class WheelView {
     this.paintStage(ui, layout);
     ctx.save();
     ctx.translate(ui.viewport.x, ui.viewport.y);
-    const shake = this.shake(model);
-    ctx.translate(shake.x, shake.y);
     this.paintHeader(ui, layout, model, controls);
     this.paintWheel(ui, layout.wheel, model);
-    this.paintTito(ui, layout, model);
+    this.paintDonald(ui, layout, model);
     this.paintBet(ui, layout, model, controls);
     this.paintSpin(ui, layout, model, controls);
     if (model.reveal !== null) this.paintReveal(ui, layout, model, model.reveal);
     ctx.restore();
-    if (model.reveal?.effect === 'stab') this.paintStab(ui, model.reveal.elapsedMs);
   }
 
   // ── The stage ──────────────────────────────────────────────────────────
@@ -337,19 +316,6 @@ export class WheelView {
     ctx.fillStyle = spot;
     ctx.fillRect(screen.x, screen.y, screen.w, screen.h);
     ctx.restore();
-  }
-
-  private shake(model: WheelViewModel): { x: number; y: number } {
-    const reveal = model.reveal;
-    if (reveal?.effect !== 'stab') return { x: 0, y: 0 };
-    const since = reveal.elapsedMs - STAB_SLASH_AT_MS;
-    if (since < 0 || since > STAB_SHAKE_MS) return { x: 0, y: 0 };
-    const decay = 1 - since / STAB_SHAKE_MS;
-    const phase = (since / STAB_SHAKE_MS) * STAB_SHAKE_CYCLES * FULL_TURN;
-    return {
-      x: Math.sin(phase) * STAB_SHAKE_PX * decay,
-      y: Math.cos(phase * HALF * QUARTER_TURN) * STAB_SHAKE_PX * HALF * decay,
-    };
   }
 
   // ── Header ─────────────────────────────────────────────────────────────
@@ -597,9 +563,9 @@ export class WheelView {
     ctx.restore();
   }
 
-  // ── Tito ───────────────────────────────────────────────────────────────
+  // ── Donald ───────────────────────────────────────────────────────────────
 
-  private paintTito(ui: Ui, layout: WheelLayout, model: WheelViewModel): void {
+  private paintDonald(ui: Ui, layout: WheelLayout, model: WheelViewModel): void {
     const { ctx, theme } = ui;
     const bust = layout.bust;
     if (bust.w > 0) {
@@ -607,13 +573,21 @@ export class WheelView {
       ctx.save();
       roundRectPath(ctx, bust, theme.radius.lg);
       ctx.clip();
-      drawTitoBust(ctx, bust.x, bust.y, bust.w, model.tito.pose, model.tito.progress, model.nowMs);
+      drawDonaldBust(
+        ctx,
+        bust.x,
+        bust.y,
+        bust.w,
+        model.donald.pose,
+        model.donald.progress,
+        model.nowMs,
+      );
       ctx.restore();
       strokeRounded(ctx, bust, theme.radius.lg, wheelInk.stage.plateEdge, 1);
     }
-    const line = model.tito.line;
+    const line = model.donald.line;
     if (line === null || layout.speech.h <= 0) return;
-    const age = model.tito.lineAgeMs;
+    const age = model.donald.lineAgeMs;
     const fade = Math.min(1, age / LINE_FADE_MS, Math.max(0, (LINE_LIFE_MS - age) / LINE_FADE_MS));
     if (fade <= 0) return;
     this.paintSpeech(ui, layout, line, fade);
@@ -625,7 +599,7 @@ export class WheelView {
     const area = layout.speech;
     const pad = theme.space.sm;
     const textW = Math.max(0, area.w - pad * 2);
-    const nameH = measureTextHeight(ui, textW, { text: 'TITO', role: 'overline' });
+    const nameH = measureTextHeight(ui, textW, { text: 'DONALD', role: 'overline' });
     const bodyH = Math.min(
       area.h - pad * 2 - nameH,
       measureTextHeight(ui, textW, { text: line, role: 'body' }),
@@ -639,7 +613,7 @@ export class WheelView {
     ctx.save();
     ctx.globalAlpha *= alpha;
     fillRounded(ctx, bubble, theme.radius.md, ink.speech);
-    // The tail points at Tito: left on a phone, where he sits beside the bubble; up elsewhere.
+    // The tail points at Donald: left on a phone, where he sits beside the bubble; up elsewhere.
     ctx.fillStyle = ink.speech;
     ctx.beginPath();
     if (layout.mode === 'compact') {
@@ -659,7 +633,7 @@ export class WheelView {
     text(
       ui,
       { x: inner.x, y: inner.y, w: inner.w, h: nameH },
-      { text: 'TITO', role: 'overline', color: ink.speechName },
+      { text: 'DONALD', role: 'overline', color: ink.speechName },
     );
     text(
       ui,
@@ -906,7 +880,6 @@ export class WheelView {
         this.paintPet(ui, layout, model, reveal.elapsedMs);
         break;
       case 'red':
-      case 'stab':
       case 'freeze':
       case 'spin_again':
       case 'item':
@@ -1062,7 +1035,7 @@ export class WheelView {
     ctx.restore();
   }
 
-  /** Coins lifted out of the purse one after another and dropped in front of Tito. */
+  /** Coins lifted out of the purse one after another and dropped in front of Donald. */
   private paintDrain(ui: Ui, layout: WheelLayout, elapsedMs: number): void {
     const { ctx } = ui;
     const from = {
@@ -1119,34 +1092,5 @@ export class WheelView {
       { x: disc.cx, y: y - scaled.lineHeight, w: disc.radius, h: scaled.lineHeight },
       { text: 'MOO!', style: scaled, color: wheelInk.cowMoo, halo: wheelInk.banner.good },
     );
-  }
-
-  /** A red slash across the whole screen, then a red wash that fades. */
-  private paintStab(ui: Ui, elapsedMs: number): void {
-    const since = elapsedMs - STAB_SLASH_AT_MS;
-    if (since < 0 || since > STAB_WASH_MS) return;
-    const { ctx, screen } = ui;
-    const wash = 1 - since / STAB_WASH_MS;
-    ctx.save();
-    ctx.fillStyle = withAlpha(wheelInk.slashWash, STAB_WASH_ALPHA * wash);
-    ctx.fillRect(screen.x, screen.y, screen.w, screen.h);
-    const drawn = Math.min(1, since / STAB_SLASH_DRAW_MS);
-    const x0 = screen.x + screen.w;
-    const y0 = screen.y;
-    const x1 = screen.x + screen.w - screen.w * drawn;
-    const y1 = screen.y + screen.h * drawn;
-    const thick = Math.max(2, Math.min(screen.w, screen.h) * SLASH_WIDTH_SHARE);
-    ctx.lineCap = 'round';
-    ctx.globalAlpha = wash;
-    ctx.strokeStyle = wheelInk.slash;
-    ctx.lineWidth = thick * 2;
-    ctx.beginPath();
-    ctx.moveTo(x0, y0);
-    ctx.lineTo(x1, y1);
-    ctx.stroke();
-    ctx.strokeStyle = wheelInk.slashCore;
-    ctx.lineWidth = thick * HALF;
-    ctx.stroke();
-    ctx.restore();
   }
 }

@@ -24,7 +24,7 @@ import {
   createAnchorQuestProgress,
 } from '../src/core/quests/AnchorQuestProgress';
 import { createBriarHollowState } from '../src/core/quests/briarHollowState';
-import { createCircusQuestProgress } from '../src/core/quests/CircusQuestProgress';
+import { createTownMemory } from '../src/core/state/TownMemory';
 import { ANCHOR_SHARD_IDS } from '../src/core/items/defs/ItemDefs';
 import { createMurderQuestProgress } from '../src/core/quests/MurderQuestProgress';
 import { transientSpeaker } from '../src/dialog/line';
@@ -32,7 +32,6 @@ import { Conversation } from '../src/dialog/Conversation';
 import { crawlerName } from '../src/characters/characters';
 import { type CrawlerKind } from '../src/core/skills/SkillManager';
 import { AnchorQuestSystem } from '../src/systems/AnchorQuestSystem';
-import { CircusQuestSystem } from '../src/systems/CircusQuestSystem';
 import {
   CLOGGED_BATHROOM_QUEST_ID,
   CloggedBathroomSystem,
@@ -202,24 +201,6 @@ const QUEST_CASES: readonly QuestCase[] = [
     },
   },
   {
-    questId: 'the_show_must_go_on',
-    paysXp: true,
-    complete: ({ rig, conversation }) => {
-      const quest = new CircusQuestSystem(
-        rig.map,
-        rig.bus,
-        () => undefined,
-        null,
-        createCircusQuestProgress(),
-        null,
-        rig.human,
-        conversation,
-        { anchor: createAnchorQuestProgress() },
-      );
-      callCompletion(quest, 'finishQuest', [rig.human, rig]);
-    },
-  },
-  {
     questId: 'krasue_murders',
     paysXp: true,
     complete: ({ rig, conversation }) => {
@@ -252,7 +233,7 @@ const QUEST_CASES: readonly QuestCase[] = [
         () => null,
         () => undefined,
         conversation,
-        { circus: createCircusQuestProgress(), briarHollow: rig.state, anchor: progress },
+        { townMemory: createTownMemory(), briarHollow: rig.state, anchor: progress },
       );
       callCompletion(quest, 'assemble', [rig.human]);
     },
@@ -374,7 +355,7 @@ function verifyEachQuestOpensOneScreen(): void {
 function verifyScreenBehaviour(): void {
   console.log('\nThe screen holds the world and takes two presses');
   const setup = rewardRig();
-  completeQuest('the_show_must_go_on', setup);
+  completeQuest('krasue_murders', setup);
   stepScreen(setup, OPEN_WITHIN_FRAMES);
   const { screen } = setup;
   const surface = questRewardSurface(setup.rig);
@@ -447,7 +428,7 @@ function verifyWaitsForConversation(): void {
   console.log('\nThe screen never opens over a conversation');
   const setup = rewardRig();
   const handle = setup.conversation.open({
-    lines: [transientSpeaker('Signet', 'questLine').line('Bravo, darlings.')],
+    lines: [transientSpeaker('Voss', 'questLine').line('Mind the step, dears.')],
     reward: null,
     questRelated: true,
     ending: { kind: 'close', onClosed: () => undefined },
@@ -456,7 +437,7 @@ function verifyWaitsForConversation(): void {
     anchor: null,
     locksKeyboard: true,
   });
-  completeQuest('the_show_must_go_on', setup);
+  completeQuest('krasue_murders', setup);
   stepScreen(setup, OPEN_WITHIN_FRAMES);
   check(setup.requested.length === 1, 'the quest asks for its screen while the conversation is up');
   check(!setup.screen.isOpen, 'but the screen waits while the conversation is open');
@@ -469,7 +450,7 @@ function verifyWaitsForConversation(): void {
 function verifyQueue(): void {
   console.log('\nTwo completions in one frame queue up');
   const setup = rewardRig();
-  completeQuest('the_show_must_go_on', setup);
+  completeQuest('defend_goblin_mother', setup);
   completeQuest('krasue_murders', setup);
   stepScreen(setup, OPEN_WITHIN_FRAMES);
   const first = setup.screen.showing;
@@ -495,27 +476,6 @@ function travelCards(spec: QuestRewardSpec | undefined): RewardUnlockCard[] {
   );
 }
 
-/** The circus finale's screen, with the anchor questline at `anchorStatus`. */
-function circusScreen(anchorStatus: QuestStatus): QuestRewardSpec | undefined {
-  const setup = rewardRig();
-  const anchor = createAnchorQuestProgress();
-  anchor.status = anchorStatus;
-  const quest = new CircusQuestSystem(
-    setup.rig.map,
-    setup.rig.bus,
-    () => undefined,
-    null,
-    createCircusQuestProgress(),
-    null,
-    setup.rig.human,
-    setup.conversation,
-    { anchor },
-  );
-  callCompletion(quest, 'finishQuest', [setup.rig.human, setup.rig]);
-  setup.rig.dispose();
-  return setup.requested[0];
-}
-
 /** The Plea's screen, with the anchor questline at `anchorStatus`. */
 function pleaScreen(anchorStatus: QuestStatus): QuestRewardSpec | undefined {
   const setup = rewardRig();
@@ -525,14 +485,14 @@ function pleaScreen(anchorStatus: QuestStatus): QuestRewardSpec | undefined {
   return setup.requested[0];
 }
 
-/** The anchor's own screen, with the circus and the Plea finished or not. */
-function anchorScreen(circusDone: boolean, pleaDone: boolean): QuestRewardSpec | undefined {
+/** The anchor's own screen, with the circus grounds visited and the Plea finished or not. */
+function anchorScreen(circusVisited: boolean, pleaDone: boolean): QuestRewardSpec | undefined {
   const setup = rewardRig();
   const { rig } = setup;
   const progress = createAnchorQuestProgress();
   progress.status = 'active';
-  const circus = createCircusQuestProgress();
-  if (circusDone) circus.stage = 'complete';
+  const townMemory = createTownMemory();
+  if (circusVisited) townMemory.visitedPlaces.add('circus_grounds');
   if (pleaDone) rig.state.quest.phase = 'complete';
   for (const shard of ANCHOR_SHARD_IDS) rig.human.inventory.addItem(shard, 1);
   rig.human.coins = ANCHOR_PURSE;
@@ -545,7 +505,7 @@ function anchorScreen(circusDone: boolean, pleaDone: boolean): QuestRewardSpec |
     () => null,
     () => undefined,
     setup.conversation,
-    { circus, briarHollow: rig.state, anchor: progress },
+    { townMemory, briarHollow: rig.state, anchor: progress },
   );
   callCompletion(quest, 'assemble', [rig.human]);
   rig.dispose();
@@ -564,10 +524,7 @@ function verifyTravelUnlockCards(): void {
     readonly name: string;
     readonly title: string;
     readonly build: (status: QuestStatus) => QuestRewardSpec | undefined;
-  }> = [
-    { name: 'the circus finale', title: 'Anchor travel: Circus', build: circusScreen },
-    { name: "Briar Hollow's Plea", title: 'Anchor travel: Briar Hollow', build: pleaScreen },
-  ];
+  }> = [{ name: "Briar Hollow's Plea", title: 'Anchor travel: Briar Hollow', build: pleaScreen }];
   for (const screen of screens) {
     const before = travelCards(screen.build('available'));
     check(
@@ -587,14 +544,14 @@ function verifyTravelUnlockCards(): void {
 
   const fresh = anchorScreen(false, false);
   check(
-    cardTitles(fresh) === 'Anchor travel: Skyfowl Town',
-    `the anchor's screen alone lists Skyfowl Town (${cardTitles(fresh)})`,
+    cardTitles(fresh) === 'Anchor travel: Taloncrest',
+    `the anchor's screen alone lists Taloncrest (${cardTitles(fresh)})`,
   );
   const everything = anchorScreen(true, true);
   check(
     cardTitles(everything) ===
-      'Anchor travel: Skyfowl Town, Anchor travel: Circus, Anchor travel: Briar Hollow',
-    `after both questlines it lists every destination (${cardTitles(everything)})`,
+      'Anchor travel: Taloncrest, Anchor travel: Circus, Anchor travel: Briar Hollow',
+    `with the grounds visited and the Plea done it lists every destination (${cardTitles(everything)})`,
   );
   check(
     travelCards(everything).every((card) => card.condition === undefined),

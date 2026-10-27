@@ -49,13 +49,13 @@ Object.defineProperty(performance, 'now', { value: () => FROZEN_CLOCK_MS, config
 const { TILE_SIZE } = await import('../src/core/constants.js');
 const { Mob } = await import('../src/creatures/Mob.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
-const { getMercenaryTemplate } = await import('../src/core/party/mercenaryTemplates.js');
+const { getMercenaryTemplate, MERCENARY_TEMPLATE_IDS } =
+  await import('../src/core/party/mercenaryTemplates.js');
 const { RATKIN_SOLDIER_IDS } = await import('../src/sprites/art/ratkin/cast.js');
-const { INK_EMERGE_FRAMES } = await import('../src/sprites/inkMarauderSprite.js');
 const { BallOfSwine } = await import('../src/creatures/BallOfSwine.js');
 const { BrindleGrub } = await import('../src/creatures/BrindleGrub.js');
 const { Bugaboo } = await import('../src/creatures/Bugaboo.js');
-const { CircusLemur } = await import('../src/creatures/CircusLemur.js');
+const { Lemur } = await import('../src/creatures/Lemur.js');
 const { CityElfCultist } = await import('../src/creatures/CityElfCultist.js');
 const { Cockroach } = await import('../src/creatures/Cockroach.js');
 const { Cow } = await import('../src/creatures/Cow.js');
@@ -77,11 +77,9 @@ const { GoblinArcher } = await import('../src/creatures/GoblinArcher.js');
 const { GoblinDynamiter } = await import('../src/creatures/GoblinDynamiter.js');
 const { GoblinBombardier } = await import('../src/creatures/GoblinBombardier.js');
 const { GraveBull } = await import('../src/creatures/GraveBull.js');
-const { GrimaldiVine } = await import('../src/creatures/GrimaldiVine.js');
 const { GrotesqueSpider } = await import('../src/creatures/GrotesqueSpider.js');
-const { GumGum } = await import('../src/creatures/GumGum.js');
-const { HeatherTheBear } = await import('../src/creatures/HeatherTheBear.js');
-const { InkMarauder } = await import('../src/creatures/InkMarauder.js');
+const { Baggi } = await import('../src/creatures/Baggi.js');
+const { DireBear } = await import('../src/creatures/DireBear.js');
 const { BigRooster } = await import('../src/creatures/BigRooster.js');
 const { KrakarenClone } = await import('../src/creatures/KrakarenClone.js');
 const { KrakarenTentacle } = await import('../src/creatures/KrakarenTentacle.js');
@@ -95,7 +93,7 @@ const { MazeBlockTarget } = await import('../src/creatures/MazeBlockTarget.js');
 const { MazeMirrorTarget } = await import('../src/creatures/MazeMirrorTarget.js');
 const { Mercenary } = await import('../src/creatures/Mercenary.js');
 const { MissQuill } = await import('../src/creatures/MissQuill.js');
-const { MoldLion } = await import('../src/creatures/MoldLion.js');
+const { Lion } = await import('../src/creatures/Lion.js');
 const { Mongo } = await import('../src/creatures/Mongo.js');
 const { Necromancer } = await import('../src/creatures/Necromancer.js');
 const { RaisedRatkin } = await import('../src/creatures/RaisedRatkin.js');
@@ -107,17 +105,16 @@ const { RockGolemBoss } = await import('../src/creatures/RockGolemBoss.js');
 const { RuinsGhoul } = await import('../src/creatures/RuinsGhoul.js');
 const { Shady } = await import('../src/creatures/Shady.js');
 const { ShrineVermin } = await import('../src/creatures/ShrineVermin.js');
-const { Signet } = await import('../src/creatures/Signet.js');
 const { SkeletonArcher } = await import('../src/creatures/SkeletonArcher.js');
 const { SkeletonLord } = await import('../src/creatures/SkeletonLord.js');
 const { SkeletonWarrior } = await import('../src/creatures/SkeletonWarrior.js');
-const { SkyFowl, SKYFOWL_TOUGH_FAMILY } = await import('../src/creatures/SkyFowl.js');
+const { Hawkfolk, HAWKFOLK_TOUGH_FAMILY } = await import('../src/creatures/Hawkfolk.js');
 const { SlightlyBentRooster } = await import('../src/creatures/SlightlyBentRooster.js');
 const { SmallSpider } = await import('../src/creatures/SmallSpider.js');
 const { SpiderEgg } = await import('../src/creatures/SpiderEgg.js');
 const { SpiderHatchling } = await import('../src/creatures/SpiderHatchling.js');
-const { StiltClown } = await import('../src/creatures/StiltClown.js');
-const { TerrorTheClown } = await import('../src/creatures/TerrorTheClown.js');
+const { TallClown } = await import('../src/creatures/TallClown.js');
+const { MassiveClown } = await import('../src/creatures/MassiveClown.js');
 const { TrashGremlin } = await import('../src/creatures/TrashGremlin.js');
 const { TheLich } = await import('../src/creatures/TheLich.js');
 const { Troglodyte } = await import('../src/creatures/Troglodyte.js');
@@ -173,19 +170,10 @@ const MONGO_STAGE_LEVELS = [
   MONGO_SECOND_STAGE_LEVEL,
   MONGO_THIRD_STAGE_LEVEL,
 ] as const;
-const MERCENARY_IDS = [
-  'sledge',
-  'bomo',
-  'dong_quixote',
-  'splash_zone',
-  'gluteus_maxx',
-  'bucket_boy',
-  'tumbledown',
-] as const;
+const MERCENARY_IDS = MERCENARY_TEMPLATE_IDS;
 const MAZE_BLOCK_KINDS = ['sandbag', 'brace', 'release_ring', 'capstan'] as const;
 const MAZE_MIRROR_KINDS = ['pivot_mirror', 'swivel_mirror'] as const;
 const BRINDLED_VESPA_STAGE = 3;
-const INK_MARAUDER_LIFESPAN_FRAMES = 600;
 const BROOD_BOUNDS_TILES = 8;
 const NECROMANCER_FACE_HEIGHT = -1.3;
 const NEGATIVE_EYE_SPACING = 0.08;
@@ -208,13 +196,6 @@ function bugabooBreakingIn(): MobInstance {
   const bugaboo = new Bugaboo(...at);
   bugaboo.isBreakingIn = true;
   return bugaboo;
-}
-
-/** A marauder `age` frames after it was summoned, past its emerge when that is long enough. */
-function inkMarauder(form: 'ogre' | 'shark', age: number): MobInstance {
-  const marauder = new InkMarauder(...at, INK_MARAUDER_LIFESPAN_FRAMES, form);
-  Reflect.set(marauder, 'age', age);
-  return marauder;
 }
 
 /** A tentacle is built underground, where it draws only the floor breaking. */
@@ -246,6 +227,7 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
   AttackCow: () => [
     eyed('attack cow', new AttackCow(...at, new CatPlayer(...at), ATTACK_COW_EYE_FLOOR, null)),
   ],
+  Baggi: () => [eyed('Baggi', new Baggi(...at))],
   BallOfSwine: () => [eyeless('Ball of Swine', new BallOfSwine(...at))],
   BrindleGrub: () => [
     eyeless('brindle grub', grubAt(1)),
@@ -256,7 +238,7 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
     eyed('bugaboo', new Bugaboo(...at)),
     eyeless('bugaboo breaking in', bugabooBreakingIn()),
   ],
-  CircusLemur: () => [eyed('circus lemur', new CircusLemur(...at), 'profileOnly')],
+  Lemur: () => [eyed('lemur', new Lemur(...at), 'profileOnly')],
   CityElfCultist: () => [eyed('elf cultist', new CityElfCultist(...at))],
   Cockroach: () => [eyed('cockroach', new Cockroach(...at), 'fromAbove')],
   Cow: () => COW_AGES.map((age) => eyed(`cow ${age}`, new Cow(...at, 'holstein', age, () => 0))),
@@ -284,15 +266,8 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
   GoblinDynamiter: () => [eyed('dynamite goblin', new GoblinDynamiter(...at))],
   GoblinBombardier: () => [eyed('black powder goblin', new GoblinBombardier(...at))],
   GraveBull: () => [eyed('grave bull', new GraveBull(...at))],
-  GrimaldiVine: () => [eyeless('Grimaldi vine', new GrimaldiVine(...at))],
   GrotesqueSpider: () => [eyed('grotesque spider', new GrotesqueSpider(...at), 'turnsToFace')],
-  GumGum: () => [eyed('GumGum', new GumGum(...at))],
-  HeatherTheBear: () => [eyed('Heather the Bear', new HeatherTheBear(...at))],
-  InkMarauder: () => [
-    eyed('ink marauder ogre', inkMarauder('ogre', INK_EMERGE_FRAMES)),
-    eyed('ink marauder shark', inkMarauder('shark', INK_EMERGE_FRAMES), 'profileOnly'),
-    eyeless('ink marauder emerging', inkMarauder('ogre', 0)),
-  ],
+  DireBear: () => [eyed('dire bear', new DireBear(...at))],
   BigRooster: () => [eyed('Big Rooster', new BigRooster(...at))],
   KrakarenClone: () => [eyeless('Krakaren', new KrakarenClone(...at))],
   KrakarenTentacle: () => [
@@ -318,7 +293,7 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
     );
   },
   MissQuill: () => [eyed('Miss Quill', new MissQuill(...at, () => undefined))],
-  MoldLion: () => [eyed('mold lion', new MoldLion(...at))],
+  Lion: () => [eyed('lion', new Lion(...at))],
   Mongo: () => {
     const owner = new CatPlayer(...at);
     return MONGO_STAGE_LEVELS.map((level) => {
@@ -338,14 +313,13 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
   RuinsGhoul: () => [eyed('ruins ghoul', new RuinsGhoul(...at))],
   Shady: () => [eyed('Shady', new Shady(...at))],
   ShrineVermin: () => [eyed('shrine vermin', new ShrineVermin(...at))],
-  Signet: () => [eyed('Signet', new Signet(...at, () => undefined))],
   SkeletonArcher: () => [eyed('skeleton archer', new SkeletonArcher(...at))],
   SkeletonLord: () => [eyed('skeleton lord', new SkeletonLord(...at))],
   SkeletonWarrior: () => [
     eyed('skeleton warrior', new SkeletonWarrior(...at)),
     eyeless('skeleton warrior rising', risingSkeleton()),
   ],
-  SkyFowl: () => [eyed('skyfowl', new SkyFowl(...at, SKYFOWL_TOUGH_FAMILY.canonical))],
+  Hawkfolk: () => [eyed('hawkfolk', new Hawkfolk(...at, HAWKFOLK_TOUGH_FAMILY.canonical))],
   SlightlyBentRooster: () => [eyed('Slightly Bent Rooster', new SlightlyBentRooster(...at))],
   SmallSpider: () => [eyed('small spider', new SmallSpider(...at), 'turnsToFace')],
   SpiderEgg: () => [eyeless('spider egg', new SpiderEgg(...at))],
@@ -361,8 +335,8 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
       'turnsToFace',
     ),
   ],
-  StiltClown: () => [eyed('stilt clown', new StiltClown(...at))],
-  TerrorTheClown: () => [eyed('Terror the Clown', new TerrorTheClown(...at))],
+  TallClown: () => [eyed('tall clown', new TallClown(...at))],
+  MassiveClown: () => [eyed('Massive Clown', new MassiveClown(...at))],
   TrashGremlin: () => [eyed('the Trash Gremlin', new TrashGremlin(...at))],
   TheLich: () => [eyed('the Lich', new TheLich(...at))],
   Troglodyte: () => [eyed('troglodyte', new Troglodyte(...at))],

@@ -1,5 +1,5 @@
 /**
- * A Skyfowl Town contract's contact, indoors: the green `?` over them once
+ * A Taloncrest contract's contact, indoors: the green `?` over them once
  * every spot is done, and the thanks that pays the party out.
  *
  * One of `BuildingInteriorScene`'s resident quest hooks, asked before the
@@ -22,13 +22,13 @@ import type { ResidentQuestHook } from '../residentQuestHooks';
 import type { ResidentId } from '../townResidents';
 import {
   contractSiteFor,
-  skyfowlContractSite,
-  type SkyfowlContractSiteDef,
+  taloncrestContractSite,
+  type TaloncrestContractSiteDef,
 } from './contractCatalog';
 import { contractPayout, isContractReady } from './contractGenerator';
 import { ContractSettlement, type ContractSettlementDeps } from './ContractSettlement';
 
-/** Every Skyfowl Town contract building is paid out on its ground floor. */
+/** Every Taloncrest contract building is paid out on its ground floor. */
 const CONTACT_FLOOR = 0;
 
 export interface ContractContactHookDeps {
@@ -51,7 +51,7 @@ export class ContractContactHook implements ResidentQuestHook {
   private conversationHandle: ConversationHandle | null = null;
 
   private constructor(
-    private readonly site: SkyfowlContractSiteDef,
+    private readonly site: TaloncrestContractSiteDef,
     private readonly deps: ContractContactHookDeps,
   ) {
     this.settlement = new ContractSettlement({
@@ -71,7 +71,7 @@ export class ContractContactHook implements ResidentQuestHook {
     deps: ContractContactHookDeps,
   ): ContractContactHook | null {
     if (floor !== CONTACT_FLOOR) return null;
-    const site = skyfowlContractSite(buildingName);
+    const site = taloncrestContractSite(buildingName);
     return site === undefined ? null : new ContractContactHook(site, deps);
   }
 
@@ -98,7 +98,7 @@ export class ContractContactHook implements ResidentQuestHook {
     const payOut = (): void => void this.settlement.settle(talker);
     this.conversationHandle = this.deps.conversation.open({
       lines: contractThanksLines(
-        { town: 'skyfowl', contact: this.site.contact, speechStyle },
+        { town: 'taloncrest', contact: this.site.contact, speechStyle },
         {
           siteName: this.site.name,
           payout: contractPayout(active),
@@ -121,7 +121,7 @@ export class ContractContactHook implements ResidentQuestHook {
   /**
    * `'question'` over this room's contact while their payment waits. Null
    * otherwise, so another questline's glyph over the same resident (the
-   * Anchor's over Aviel or Hilda) still shows.
+   * Anchor's over Aviel or Lori) still shows.
    */
   markerFor(residentId: ResidentId): NPCMarkerType | null {
     return residentId === this.site.contact && this.awaitingPayment ? 'question' : null;

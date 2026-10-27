@@ -21,7 +21,7 @@ type Ctx = CanvasRenderingContext2D;
  * it. Trousers carry a seat from the waist to the crotch, wide enough to
  * swallow the rig's hips; stockings under a long hem are slim and have none.
  */
-export type LegwearCut = 'trousers' | 'slimTrousers' | 'stockings';
+export type LegwearCut = 'trousers' | 'slimTrousers' | 'stockings' | 'robe';
 
 /**
  * Where the light turns to shadow across a slim trouser leg. A slim leg is two
@@ -45,6 +45,12 @@ export const LEG_COVER: Readonly<
   trousers: { grow: 1.08, margin: 0.018 },
   slimTrousers: { grow: 1, margin: 0.024, terminator: SLIM_LEG_TERMINATOR },
   stockings: { grow: 1.02, margin: 0.012 },
+  /**
+   * A robe's cloth over each leg stands well off it, so head-on the two legs
+   * meet down the middle and the skirt behind them closes what gap is left:
+   * one column of cloth, not a pair of trouser legs.
+   */
+  robe: { grow: 1.35, margin: 0.04 },
 };
 
 /** Half-width of the seat head-on, before the view's girth. */

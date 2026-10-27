@@ -2,11 +2,11 @@
  * Where everything on the wheel screen sits, in UI units relative to the safe
  * area's top left. Three shapes, chosen from the viewport like the card tables':
  *
- * - **compact** (a phone held upright): a header strip, then Tito's bust as a
+ * - **compact** (a phone held upright): a header strip, then Donald's bust as a
  *   header bust beside his speech, the wheel across the full width, and the bet
  *   and SPIN rows under it.
  * - **landscape** (a phone on its side) and **wide** (a desktop): the wheel on
- *   the left at full height, Tito's bust beside it on the right with his
+ *   the left at full height, Donald's bust beside it on the right with his
  *   speech, the bet and SPIN under him.
  *
  * Every control is at least {@link MIN_TOUCH_TARGET_PX} tall in screen pixels.
@@ -30,7 +30,7 @@ export interface WheelLayout {
   readonly purse: Rect;
   readonly leave: Rect;
   readonly wheel: WheelDisc;
-  /** Tito's bust: a square. */
+  /** Donald's bust: a square. */
   readonly bust: Rect;
   readonly speech: Rect;
   readonly betDown: Rect;
@@ -78,9 +78,9 @@ const COMPACT_BUST_MAX = 104;
 const SIDE_COLUMN_SHARE = 0.36;
 const SIDE_COLUMN_MIN = 210;
 const SIDE_COLUMN_MAX = 380;
-/** Tito's bust in the side column, as a share of that column's height, and its ceiling. */
+/** Donald's bust in the side column, as a share of that column's height, and its ceiling. */
 const SIDE_BUST_HEIGHT_SHARE = 0.5;
-/** A phone on its side gives Tito less of the column, so his patter keeps two lines. */
+/** A phone on its side gives Donald less of the column, so his patter keeps two lines. */
 const LANDSCAPE_BUST_HEIGHT_SHARE = 0.3;
 const SIDE_BUST_MAX = 320;
 /** The bet readout between the two steppers, as a share of the bet row. */

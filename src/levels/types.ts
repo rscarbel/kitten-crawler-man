@@ -9,6 +9,7 @@ import type { LevelledCurve } from '../creatures/mobLevelScaling';
 import type { Difficulty } from '../core/difficulty/difficultyProfiles';
 import type { DefendQuestIntensity } from './defendQuestIntensity';
 import type { StandaloneMobKind } from './mobKinds';
+import type { SpawnTerrain } from '../map/overworld/spawnTerrain';
 
 /**
  * One entry of a camp's roster: a mob type, a count and a level range.
@@ -18,9 +19,10 @@ import type { StandaloneMobKind } from './mobKinds';
  * would be a field with no meaning that the spawner silently ignores. `escorts`
  * goes for the same reason and is unnecessary besides — a roster that spawns
  * every entry can simply list the escort as an entry of its own, which is what
- * floor 3's goblin camp does with its archers.
+ * floor 3's goblin camp does with its archers. `terrain` goes because a camp's
+ * ground is the camp, not a classified spawn point.
  */
-export type CampSpawnRule = Omit<MobSpawnRule, 'chance' | 'escorts'>;
+export type CampSpawnRule = Omit<MobSpawnRule, 'chance' | 'escorts' | 'terrain'>;
 
 /**
  * The level band a spawn rule rolls within, shared by every kind of rule that
@@ -62,6 +64,12 @@ export interface MobSpawnRule extends MobLevelRange {
    * room with archers and never once produce the mixed group it is for.
    */
   escorts?: EscortSpawnRule[];
+  /**
+   * The only terrain this rule may be picked on; absent means every point.
+   * Only the overworld classifies its points, so a rule with one never spawns
+   * in a dungeon.
+   */
+  terrain?: SpawnTerrain;
 }
 
 /**

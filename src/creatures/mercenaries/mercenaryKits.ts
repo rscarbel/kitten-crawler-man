@@ -1,20 +1,16 @@
 import type { MercenaryKitId, MercenaryTemplate } from '../../core/party/mercenaryTemplates';
 import type { MercenaryKit } from './MercenaryKit';
-import { BrawlerKit } from './brawlerKit';
-import { CretinGuardKit } from './cretinGuardKit';
+import { ArcherKit } from './archerKit';
+import { EarthElementalGuardKit } from './earthElementalGuardKit';
 import { GolemKit } from './golemKit';
-import { LancerKit } from './lancerKit';
 import { MedicKit } from './medicKit';
-import { WaterMageKit } from './waterMageKit';
 
 /** A `Record` so a new kit id fails the typecheck until it has a constructor here. */
 const KIT_FACTORIES: Readonly<
   Record<MercenaryKitId, (template: MercenaryTemplate) => MercenaryKit>
 > = {
-  cretin_guard: (template) => new CretinGuardKit(template),
-  lancer: (template) => new LancerKit(template),
-  water_mage: (template) => new WaterMageKit(template),
-  brawler: (template) => new BrawlerKit(template),
+  earth_elemental_guard: (template) => new EarthElementalGuardKit(template),
+  archer: (template) => new ArcherKit(template),
   medic: (template) => new MedicKit(template.damage),
   golem: (template) => new GolemKit(template.damage),
 };

@@ -205,38 +205,21 @@ function newCrawlers(): { human: HumanPlayer; cat: CatPlayer } {
   );
 }
 
-// ── parsePartyToolsState tolerance ──
+// ── parsePartyToolsState validation ──
 {
-  const fromGarbage = parsePartyToolsState('not an object');
+  check(parsePartyToolsState('not an object') === undefined, 'a non-object is rejected');
+  check(parsePartyToolsState({}) === undefined, 'a record missing its tiers is rejected');
   check(
-    fromGarbage.axeTier === null && fromGarbage.pickaxeTier === null,
-    'a non-object parses to nulls',
-  );
-
-  const fromNull = parsePartyToolsState(null);
-  check(fromNull.axeTier === null && fromNull.pickaxeTier === null, 'null parses to nulls');
-
-  const fromEmpty = parsePartyToolsState({});
-  check(
-    fromEmpty.axeTier === null && fromEmpty.pickaxeTier === null,
-    'an absent field parses to null',
-  );
-
-  const fromOutOfRange = parsePartyToolsState({ axeTier: 99, pickaxeTier: -1 });
-  check(
-    fromOutOfRange.axeTier === null && fromOutOfRange.pickaxeTier === null,
+    parsePartyToolsState({ axeTier: 99, pickaxeTier: null }) === undefined,
     'an out-of-range tier is rejected rather than trusted',
   );
-
-  const fromWrongType = parsePartyToolsState({ axeTier: 'two', pickaxeTier: [1] });
   check(
-    fromWrongType.axeTier === null && fromWrongType.pickaxeTier === null,
+    parsePartyToolsState({ axeTier: 'two', pickaxeTier: null }) === undefined,
     'a wrong-typed field is rejected rather than trusted',
   );
-
-  const fromValid = parsePartyToolsState({ axeTier: TOOL_TIER_RATKIN_FORGE, pickaxeTier: 0 });
+  const fromValid = parsePartyToolsState({ axeTier: TOOL_TIER_RATKIN_FORGE, pickaxeTier: null });
   check(
-    fromValid.axeTier === TOOL_TIER_RATKIN_FORGE && fromValid.pickaxeTier === 0,
+    fromValid?.axeTier === TOOL_TIER_RATKIN_FORGE && fromValid.pickaxeTier === null,
     'a well-formed state round-trips',
   );
 }

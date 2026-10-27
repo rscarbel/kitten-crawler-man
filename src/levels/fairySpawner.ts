@@ -36,6 +36,7 @@ import {
 } from './spawner';
 import type { FairyRoomRate, FairySpawnTable, LevelDef, MobLevelRange } from './types';
 import type { MobKind } from './mobKinds';
+import { NO_SPAWN_TERRAIN } from '../map/overworld/spawnTerrain';
 import { liveSpawnContext, spawnMob, type SpawnContext } from './spawnFunnel';
 import { floorEncounter } from './encounters';
 
@@ -292,7 +293,8 @@ const BASE_LEVEL_BAND: MobLevelRange = {};
  */
 function roomFairyBand(def: LevelDef, region: number, rng: FairyRng): MobLevelRange {
   if (def.roomMobs.length === 0) return BASE_LEVEL_BAND;
-  return regionLevelBand(pickRule(def.roomMobs, rng), regionLevelBonusFor(def, region));
+  const rule = pickRule(def.roomMobs, rng, NO_SPAWN_TERRAIN) ?? BASE_LEVEL_BAND;
+  return regionLevelBand(rule, regionLevelBonusFor(def, region));
 }
 
 /**
@@ -569,8 +571,8 @@ export function spawnOverworldFairies(
     if (roll.healer) kinds.push('healer');
     if (roll.guaranteedShield) kinds.push('shield');
     if (kinds.length === 0) continue;
-    const band: MobLevelRange =
-      def.hallwayMobs.length > 0 ? pickRule(def.hallwayMobs, rng) : BASE_LEVEL_BAND;
+    const rule = def.hallwayMobs.length > 0 ? pickRule(def.hallwayMobs, rng, point.terrain) : null;
+    const band: MobLevelRange = rule ?? BASE_LEVEL_BAND;
     const taken = new Set<string>();
     for (const kind of kinds) {
       const tile = findScatterTile(map, point, taken, rng);

@@ -21,7 +21,7 @@ import { crease, FIGURE_CREASE_LAYERS, shadeForm } from './paint';
 import type { GlossRamp } from './palette';
 import { CHEST_HALF, NECK_WIDTH, SHOULDER_Y, WAIST_HALF, WAIST_Y } from './proportions';
 import { type BoneChain, type BipedPose, type Skeleton, type ViewSpec } from './rig';
-import { clamp01, deg, type Pt, rgba } from '../bipedArt';
+import { clamp01, deg, lerp, type Pt, rgba } from '../bipedArt';
 import { type LimbBuild, upperArmHalf } from './limbs';
 import { type SleeveCut, sleeveCapHalf } from './sleeve';
 import { fillSoftEllipse, strokeSoftCrease, withClip } from '../softShade';
@@ -170,6 +170,10 @@ export const RIG_GARMENT_CUT: GarmentCut = {
 };
 
 const NO_LAG: Pt = { x: 0, y: 0 };
+/** Edge-on, how far ahead of the side seam a hem point counts as the coat's front. */
+const SEATED_DRAPE_FRONT_X = 0.2;
+/** A draped hem rides the top of the thigh, this far above the knee joint. */
+const SEATED_THIGH_TOP_ABOVE_KNEE = 0.07;
 /**
  * A quadratic curve only reaches halfway to its control point, so a curve
  * meant to dip by `d` at its middle puts the control `d` times this.
@@ -193,11 +197,21 @@ export function torsoFrame(skeleton: Skeleton, pose: BipedPose, look: TorsoLook)
   };
   const hemY = waistY + look.garmentCut.hemDrop;
   const lag = pose.jacketHemLag ?? NO_LAG;
+  const drape = pose.seatedHemDrape ?? 0;
+  const knee = skeleton.rightLeg.joint;
+  const thighTop = pt(knee.x, knee.y - SEATED_THIGH_TOP_ABOVE_KNEE);
   return {
     at,
     hem: (x, dy = 0) => {
       const rest = at(x, hemY + dy);
-      return pt(rest.x + lag.x, rest.y + lag.y);
+      const floor = pose.seatedHemFloor ?? Number.POSITIVE_INFINITY;
+      const hung = pt(rest.x + lag.x, Math.min(rest.y + lag.y, floor));
+      if (drape <= 0) return hung;
+      // Seated edge-on, the hem's front lies along the top of the thigh out to
+      // the knee while its back still hangs behind the seat; the share runs
+      // from nothing at the side seam to all of it at the front corner.
+      const share = clamp01(x / SEATED_DRAPE_FRONT_X) * drape;
+      return pt(lerp(hung.x, thighTop.x, share), lerp(hung.y, thighTop.y, share));
     },
     angle: Math.atan2(down.y, down.x),
     waistY,

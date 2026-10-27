@@ -129,7 +129,7 @@ export interface PersonAppearance {
 }
 
 /**
- * A citizen's occupation in the Over City. Passed to `generatePersonAppearance`
+ * A citizen's occupation in Taloncrest. Passed to `generatePersonAppearance`
  * to nudge a seeded genome toward a role's look (a guard's livery, a farmer's
  * hat, a child's smaller stature) without discarding the underlying variety.
  * `commoner` applies no bias — a plain seeded person.

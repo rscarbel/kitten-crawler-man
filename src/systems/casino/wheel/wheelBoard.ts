@@ -56,7 +56,7 @@ export function legendaryWeaponRecipient(
 
 /**
  * Every once-only prize. A prize id lands in the save's won set when it is won
- * and is never picked again until the Nothing or a reset clears that set. The
+ * and is never picked again until Permanent Death or a reset clears that set. The
  * Legendary Weapon wedge pays twice, one crawler's weapon each time (see
  * {@link LEGENDARY_WEAPON_CLAIM_IDS}), and its id joins the won set only once
  * both have been issued.
@@ -88,10 +88,10 @@ export function isWheelPrizeId(value: unknown): value is WheelPrizeId {
 
 /** What a wedge does when it lands; the host switches on `kind`. */
 export type WheelPrize =
-  | { readonly kind: 'nothing' }
-  | { readonly kind: 'stab' }
+  | { readonly kind: 'permanent_death' }
+  | { readonly kind: 'take_damage' }
   | { readonly kind: 'poison' }
-  | { readonly kind: 'blood_vomit' }
+  | { readonly kind: 'double_damage' }
   | { readonly kind: 'burn' }
   | { readonly kind: 'freeze' }
   | { readonly kind: 'robbed' }
@@ -138,7 +138,7 @@ export interface WheelWedge {
 export type WheelBoard = readonly WheelWedge[];
 
 const NORMAL_UNITS = 1;
-const NOTHING_UNITS = 2;
+const PERMANENT_DEATH_UNITS = 2;
 const SLIVER_UNITS = 0.25;
 
 const GOLD_50K = 50_000;
@@ -193,48 +193,50 @@ function spinAgain(id: string): WheelWedge {
   };
 }
 
-const NOTHING: WheelWedge = {
-  id: 'nothing',
-  label: 'Nothing!',
-  shortLabel: 'NOTHING!',
+const PERMANENT_DEATH: WheelWedge = {
+  id: 'permanent_death',
+  label: 'Permanent Death',
+  shortLabel: 'PERMADEATH',
   flagLabel: null,
-  units: NOTHING_UNITS,
+  units: PERMANENT_DEATH_UNITS,
   tone: 'red',
-  prize: { kind: 'nothing' },
+  prize: { kind: 'permanent_death' },
   prizeId: null,
 };
 
 /**
- * The Nothing as a quest's free spin shows it: taped over with "Spin Again"
- * written on the tape, and paying exactly what Spin Again pays.
+ * Permanent Death as a quest's free spin shows it: taped over with "Spin
+ * Again" written on the tape, and paying exactly what Spin Again pays.
  */
-export const TAPED_NOTHING: WheelWedge = {
-  ...spinAgain('nothing_taped'),
-  units: NOTHING.units,
-  tapedOver: NOTHING,
+export const TAPED_PERMANENT_DEATH: WheelWedge = {
+  ...spinAgain('permanent_death_taped'),
+  units: PERMANENT_DEATH.units,
+  tapedOver: PERMANENT_DEATH,
 };
 
 /**
- * `board` with every Nothing taped over. No wedge on the result wipes the
- * save, so a draw from it cannot reach the Nothing whatever the weights.
+ * `board` with Permanent Death taped over. No wedge on the result wipes the
+ * save, so a draw from it cannot reach the wipe whatever the weights.
  */
 export function tapedBoard(board: WheelBoard): WheelBoard {
-  return board.map((wedge) => (wedge.prize.kind === 'nothing' ? TAPED_NOTHING : wedge));
+  return board.map((wedge) =>
+    wedge.prize.kind === 'permanent_death' ? TAPED_PERMANENT_DEATH : wedge,
+  );
 }
 
-const STAB_LABEL = 'Get stabbed in the stomach by the croupier';
+const TAKE_DAMAGE_LABEL = 'Take Damage';
 const POISON_LABEL = 'Get poisoned';
-const VOMIT_LABEL = 'Vomit blood for ten minutes straight';
+const DOUBLE_DAMAGE_LABEL = 'Double all incoming damage for 5 minutes';
 
 /**
- * Ring order at the minimum bet, clockwise. No two good wedges touch, and the
- * Nothing! sits between the Legendary Weapon and 50,000 gold so a near miss
+ * Ring order at the minimum bet, clockwise. No two good wedges touch, and
+ * Permanent Death sits between the Legendary Weapon and 50,000 gold so a near miss
  * on either side of the biggest prizes costs everything.
  */
 export const BASE_WHEEL_BOARD: WheelBoard = [
-  NOTHING,
+  PERMANENT_DEATH,
   good('gold_50k', '50,000 gold', '50,000 GOLD', 'gold', { kind: 'gold', amount: GOLD_50K }),
-  red('stabbed_1', STAB_LABEL, 'STABBED', { kind: 'stab' }),
+  red('take_damage_1', TAKE_DAMAGE_LABEL, 'TAKE DAMAGE', { kind: 'take_damage' }),
   good('pet', 'A new pet', 'A NEW PET', 'green', { kind: 'pet' }),
   red('poisoned_1', POISON_LABEL, 'POISONED', { kind: 'poison' }),
   red('set_on_fire', 'Get set on fire', 'ON FIRE', { kind: 'burn' }),
@@ -242,7 +244,7 @@ export const BASE_WHEEL_BOARD: WheelBoard = [
     kind: 'epic_charm',
     charm: 'frost',
   }),
-  red('vomit_blood_1', VOMIT_LABEL, 'VOMIT BLOOD', { kind: 'blood_vomit' }),
+  red('double_damage_1', DOUBLE_DAMAGE_LABEL, 'DOUBLE DAMAGE', { kind: 'double_damage' }),
   spinAgain('spin_again_1'),
   good(
     'gold_500k',
@@ -253,7 +255,7 @@ export const BASE_WHEEL_BOARD: WheelBoard = [
     { units: SLIVER_UNITS, flagLabel: '500K' },
   ),
   spinAgain('spin_again_2'),
-  red('stabbed_2', STAB_LABEL, 'STABBED', { kind: 'stab' }),
+  red('take_damage_2', TAKE_DAMAGE_LABEL, 'TAKE DAMAGE', { kind: 'take_damage' }),
   good('legendary_charm', 'A Legendary charm', 'LEGENDARY CHARM', 'purple', {
     kind: 'legendary_charm',
   }),
@@ -265,7 +267,7 @@ export const BASE_WHEEL_BOARD: WheelBoard = [
     'green',
     { kind: 'free_handies' },
   ),
-  red('vomit_blood_2', VOMIT_LABEL, 'VOMIT BLOOD', { kind: 'blood_vomit' }),
+  red('double_damage_2', DOUBLE_DAMAGE_LABEL, 'DOUBLE DAMAGE', { kind: 'double_damage' }),
   red('robbed', "Robbed: lose half the gold you're carrying", 'ROBBED', { kind: 'robbed' }),
   good('epic_charm_ember', 'An Epic charm (ember)', 'EPIC CHARM', 'purple', {
     kind: 'epic_charm',
@@ -279,10 +281,10 @@ export const BASE_WHEEL_BOARD: WheelBoard = [
 
 /** Wedge ids that no bet ever flips. */
 export const PERMANENT_RED_WEDGE_IDS = [
-  'nothing',
-  'vomit_blood_1',
-  'vomit_blood_2',
-  'stabbed_1',
+  'permanent_death',
+  'double_damage_1',
+  'double_damage_2',
+  'take_damage_1',
   'poisoned_1',
 ] as const;
 
@@ -326,7 +328,7 @@ export const WHEEL_UPGRADES: readonly WheelUpgrade[] = [
     }),
   ),
   upgrade(
-    'stabbed_2',
+    'take_damage_2',
     good('heal_and_gold', 'A full heal and 5,000 gold', 'HEAL + 5,000', 'green', {
       kind: 'heal_and_gold',
       amount: HEAL_BONUS_GOLD,

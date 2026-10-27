@@ -2,7 +2,7 @@
  * Fenna's checks for `verify:borrowed-blueprints`: when her "!" shows, the
  * offer's confirm row and what each side does, the re-offer topic after a
  * decline, her opening while the quest runs, the siege standing her down,
- * and the direction she gives to the skyfowl town — plus the "?" over
+ * and the direction she gives to Taloncrest — plus the "?" over
  * Wendell, the quest-giver she sends the party to.
  *
  * Fenna's part is stood up on a real generated map (for the two centres her
@@ -252,7 +252,7 @@ export function verifyFennaOffer(check: Check): void {
   );
   if (villageCentre !== undefined && townCentre !== undefined) {
     const bearing = cardinalDirection(villageCentre, townCentre).toLowerCase();
-    const expected = `He lives at Plumbline Farm, in the skyfowl town ${bearing} of here.`;
+    const expected = `He lives at Plumbline Farm, in Taloncrest, ${bearing} of here.`;
     check(
       firstParagraph(accepted).endsWith(expected),
       `Fenna names the town's real bearing ("${bearing}")`,
@@ -288,8 +288,7 @@ export function verifyFennaOffer(check: Check): void {
       : null;
   lostMap.townPlan = townPlan;
   check(
-    lostAccepted !== null &&
-      firstParagraph(lostAccepted).endsWith('in the skyfowl town past the road.'),
+    lostAccepted !== null && firstParagraph(lostAccepted).endsWith('in Taloncrest, past the road.'),
     'with no town on the map, Fenna falls back to "past the road"',
   );
 }

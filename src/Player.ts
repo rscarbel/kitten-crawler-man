@@ -1,9 +1,16 @@
-import type { StatusEffect } from './core/combat/StatusEffect';
+import type { StatusEffect, StatusId } from './core/combat/StatusEffect';
+import {
+  CRAWLER_HP_THRESHOLDS,
+  HP_THRESHOLD_IDS,
+  hpThresholdTop,
+  isInsideHpThreshold,
+  type HpThresholdId,
+} from './core/combat/hpThresholds';
 import {
   makeSpeedFizz,
   makeJuggJuice,
   makeCooldownCrisp,
-  makeDrunk,
+  makeIntoxication,
   STAT_BOON_BONUSES,
   WHETSTONE_MELEE_DAMAGE_BONUS,
   ABSORB_BREAK_LINGER_TICKS,
@@ -20,7 +27,8 @@ import {
   BLOOD_VOMIT_STATUS,
   INCURABLE_STATUSES,
   CURABLE_AILMENT_STATUSES,
-  isBloodVomitBoutFrame,
+  makeBloodVomit,
+  statusIncomingDamageScale,
 } from './core/combat/StatusEffect';
 import {
   BRASS_BELCH_TEXT,
@@ -38,8 +46,6 @@ import {
 import { applyRetchPose, retchPoseOf } from './sprites/status/statusBloodVomit';
 import type { StatusMouth } from './sprites/status/statusPaint';
 import {
-  BLOOD_VOMIT_INTERVAL_FRAMES,
-  BLOOD_VOMIT_MAX_HP_SHARE,
   CHILLED_ACTION_SPEED_FACTOR,
   CHILLED_MOVE_SPEED_FACTOR,
   FREEZE_GRACE_FRAMES,
@@ -57,7 +63,8 @@ import type { ResistanceType } from './core/items/defs/ItemDefs';
 import { normalize } from './utils';
 import { worldPlate } from './ui/world/worldShapes';
 import { worldText } from './ui/world/worldText';
-import { DRUNK_MELEE_DAMAGE_BONUS } from './core/combat/DrunkEffect';
+import { intoxicationMeleeBonus, intoxicationOf } from './core/combat/Intoxication';
+import type { IntoxicatingDrink } from './core/items/consumables/intoxicatingDrinks';
 import { computeDodgeChance } from './core/combat/dodge';
 import { xpMultiplierForPlayerLevel, type XpDiminishingTier } from './levels/xpDiminishing';
 import { crawlerMaxHp, STAT_POINTS_PER_LEVEL } from './core/party/crawlerFormulas';
@@ -118,13 +125,6 @@ export const STAT_CODE: Record<StatName, string> = {
   constitution: 'CON',
   dexterity: 'DEX',
 };
-
-const STAT_NAME_LOOKUP = new Set<string>(ALL_STATS);
-
-/** Narrows an arbitrary string (AI tool argument, save field) to a known stat. */
-export function isStatName(value: string): value is StatName {
-  return STAT_NAME_LOOKUP.has(value);
-}
 
 /** A stat change that reverts itself after a fixed number of ticks. */
 export interface TempStatMod {
@@ -187,7 +187,7 @@ export type DamageSource =
     }
   | {
       readonly kind: 'status';
-      readonly effectType: string;
+      readonly effectType: StatusId;
       /**
        * Whoever applied the status this tick came from, copied off the effect —
        * see {@link StatusEffect.applier}. `Mob` reads it to credit a kill that
@@ -217,6 +217,11 @@ export type DamageSource =
         | 'krakarenTankBurst';
     }
   | { readonly kind: 'doomsday' }
+  /**
+   * A Wheel of Fortune penalty: a forfeit the crawler bet on, never a blow, so
+   * nothing dodges it. Dealt with a floor of 1 HP, so it never kills.
+   */
+  | { readonly kind: 'wheelPenalty' }
   | {
       /**
        * Shrapnel from the party's own siege engine landing close by. Light and
@@ -236,6 +241,18 @@ function isDodgeableSource(source: DamageSource | undefined): boolean {
   if (source?.kind === 'mob') return source.undodgeable !== true;
   if (source?.kind === 'siege') return source.dodgeable;
   return false;
+}
+
+/**
+ * Options a caller of {@link Player.takeDamage} can attach to one blow.
+ */
+export interface DamageOptions {
+  /**
+   * The lowest HP this blow may leave: a penalty that must hurt but never
+   * kill passes `1`. Never raises HP that is already below it, and a blow
+   * stopped at the floor is not a killing blow, so Cockroach is not spent.
+   */
+  readonly floorHp?: number;
 }
 
 const DEFAULT_POTION_COOLDOWN_SECONDS = 5.75;
@@ -323,12 +340,6 @@ export const STAT_BOOST_FLASH_FRAMES = 90;
 const XP_PER_LEVEL_MULTIPLIER = 10;
 /** Share of max HP a health potion gives back — the crawlers' and the hirelings' alike. */
 export const POTION_HEAL_FRACTION = 0.5;
-/**
- * Half what a health potion gives back. The Dirty Shirley is a cocktail with a
- * drawback attached, not a medicine — matching the pub's Boozy Milk, which is
- * the same trade at a bar you cannot carry home.
- */
-const DIRTY_SHIRLEY_HEAL_FRACTION = 0.25;
 const FRAMES_PER_SECOND = 60;
 /** Iron Stomach can shorten a swallow's timers by a lot, but never to nothing. */
 const MIN_IRON_STOMACH_TIME_SCALE = 0.4;
@@ -365,25 +376,20 @@ function remainingBites(effect: StatusEffect, interval: number): number {
 }
 
 /**
- * The most HP these effects can still take from a crawler with `maxHp` before
- * they run out: every damage-over-time status's remaining ticks, and every
- * remaining bout of blood vomiting (a share of max HP each). Resistances are
+ * The most HP these effects can still take before they run out: every
+ * damage-over-time status's remaining ticks, scaled by whatever the effects
+ * do to incoming damage (double damage doubles every tick). Resistances are
  * ignored, so it is an upper bound for anything that must not let a status
  * kill; regeneration in the meantime is not counted either.
  */
-export function pendingStatusDamage(effects: readonly StatusEffect[], maxHp: number): number {
+export function pendingStatusDamage(effects: readonly StatusEffect[]): number {
   let total = 0;
   for (const effect of effects) {
-    if (effect.type === BLOOD_VOMIT_STATUS) {
-      const bout = Math.max(1, Math.round(maxHp * BLOOD_VOMIT_MAX_HP_SHARE));
-      total += remainingBites(effect, BLOOD_VOMIT_INTERVAL_FRAMES) * bout;
-      continue;
-    }
     const interval = STATUS_DAMAGE_INTERVALS.get(effect.type);
     if (interval === undefined) continue;
     total += remainingBites(effect, interval) * STATUS_TICK_DAMAGE;
   }
-  return total;
+  return total * statusIncomingDamageScale(effects);
 }
 
 /** Share of a damage number that survives a matching resistance. */
@@ -479,7 +485,7 @@ export interface FigureMouth {
 /** How far down its own figure a character's mouth sits when nothing says otherwise. */
 const DEFAULT_MOUTH_DOWN_SHARE = 0.15;
 
-/** How far past the feet, in tiles, a bout of blood vomiting splashes down. */
+/** How far past the feet, in tiles, a retch of blood splashes down. */
 const BLOOD_VOMIT_SPLASH_REACH_TILES = 0.45;
 
 /** The default figure box: exactly the character's tile. */
@@ -511,7 +517,15 @@ export abstract class Player implements AboveDarknessDrawer {
   isActive = false;
   facingX = 1;
   facingY = 0;
-  hp: number;
+  private _hp = 0;
+  /**
+   * The {@link HpThresholdId}s whose band this crawler is inside (or below,
+   * downed), so each fires once on entry and re-arms only once HP climbs back
+   * above it. Kept by the `hp` setter, which is why every write sees it.
+   */
+  private readonly hpThresholdsEntered = new Set<HpThresholdId>();
+  /** Bands entered since the scene last drained them; see {@link takeHpThresholdCrossings}. */
+  private pendingHpThresholdCrossings: HpThresholdId[] = [];
   xp = 0;
   level = 1;
   /**
@@ -602,7 +616,7 @@ export abstract class Player implements AboveDarknessDrawer {
   /** Set when a status effect deals a damage tick; DungeonScene reads and clears it to play the sound. */
   effectDamageSoundPending = false;
   /**
-   * Set on the frame a bout of blood vomiting comes up; a scene drains it into
+   * Set on the frame a retch of blood comes up; a scene drains it into
    * the splatter on the floor and the retch sound, neither of which a body can
    * reach on its own.
    */
@@ -689,11 +703,6 @@ export abstract class Player implements AboveDarknessDrawer {
    * is rebuilt on every floor and door, so a frame counter would reset each time.
    */
   thirdEyeReadyAt: number | null = null;
-  /**
-   * Earned by defeating Big Rooster; the Desperado Club recognizes it at the
-   * door. Permanent, one per crawler.
-   */
-  hasDesperadoPassTattoo = false;
   /**
    * Permanent stat points bought on the garrison's drill sand so far, across
    * every stat. Capped by the drill yard itself; tracked on the crawler and
@@ -886,6 +895,74 @@ export abstract class Player implements AboveDarknessDrawer {
     this.inventory.addItem('health_potion', INITIAL_HEALTH_POTIONS);
   }
 
+  /**
+   * Current HP. Every write runs the crawlers' {@link CRAWLER_HP_THRESHOLDS}
+   * check, so a blow, a status tick and a script setting HP outright are all
+   * seen entering a band; a save restore goes through {@link restoreHp}
+   * instead, which only re-seats the latches.
+   */
+  get hp(): number {
+    return this._hp;
+  }
+
+  set hp(value: number) {
+    this._hp = value;
+    if (this.isCrawler) this.noteHpThresholds();
+  }
+
+  /**
+   * Sets HP read back from a save or snapshot without reacting to it: a
+   * crawler loaded already inside a band entered it earlier and is not
+   * entering it now.
+   */
+  restoreHp(value: number): void {
+    this._hp = value;
+    this.pendingHpThresholdCrossings = [];
+    this.hpThresholdsEntered.clear();
+    for (const id of HP_THRESHOLD_IDS) {
+      if (this._hp <= hpThresholdTop(CRAWLER_HP_THRESHOLDS[id], this.maxHp)) {
+        this.hpThresholdsEntered.add(id);
+      }
+    }
+  }
+
+  /**
+   * The bands this crawler entered since the last call, oldest first; the
+   * caller owns them from here. Drained once a frame by
+   * `drainHpThresholdCrossings` in every gameplay scene.
+   */
+  takeHpThresholdCrossings(): readonly HpThresholdId[] {
+    const crossings = this.pendingHpThresholdCrossings;
+    this.pendingHpThresholdCrossings = [];
+    return crossings;
+  }
+
+  private noteHpThresholds(): void {
+    // A downed crawler is in no band: the knockout is its own event, and the
+    // latches stay shut so a revive into a band is not an entry either.
+    if (this._hp <= 0) {
+      this.pendingHpThresholdCrossings = [];
+      for (const id of HP_THRESHOLD_IDS) this.hpThresholdsEntered.add(id);
+      return;
+    }
+    for (const id of HP_THRESHOLD_IDS) {
+      const threshold = CRAWLER_HP_THRESHOLDS[id];
+      if (!isInsideHpThreshold(threshold, this._hp, this.maxHp)) {
+        this.hpThresholdsEntered.delete(id);
+        // A blow into the band and a heal back out of it in the same frame
+        // is no entry by the time the scene drains: it would cry low health
+        // at healthy HP.
+        this.pendingHpThresholdCrossings = this.pendingHpThresholdCrossings.filter(
+          (pending) => pending !== id,
+        );
+        continue;
+      }
+      if (this.hpThresholdsEntered.has(id)) continue;
+      this.hpThresholdsEntered.add(id);
+      this.pendingHpThresholdCrossings.push(id);
+    }
+  }
+
   get isAlive() {
     return this.hp > 0;
   }
@@ -941,17 +1018,6 @@ export abstract class Player implements AboveDarknessDrawer {
   setBaseStat(stat: StatName, value: number): void {
     this.baseStats[stat] = Math.max(MIN_STAT_VALUE, Math.round(value));
     this.syncHpToMaxHp();
-  }
-
-  /**
-   * Last step of a save restore: a hook for reconciling stored stats with rules
-   * that postdate the save. Base implementation does nothing.
-   *
-   * @param snapshotVersion Format version of the snapshot being restored, so a
-   *   migration can tell an old save from one already written under the rule.
-   */
-  migrateRestoredStats(_snapshotVersion: number): void {
-    // A generic player has nothing to reconcile; subclasses override this.
   }
 
   /**
@@ -1067,11 +1133,14 @@ export abstract class Player implements AboveDarknessDrawer {
 
   /**
    * What a blow of `amount` actually costs this crawler before any dodge: the
-   * difficulty's incoming-damage scale, then the source's cap as a share of her
-   * own max HP. Public so a headless harness prices a blow exactly as it lands.
+   * difficulty's incoming-damage scale, then her statuses' scale, then the
+   * source's cap as a share of her own max HP. The cap comes last so nothing
+   * multiplies a blow past it — a curse doubling damage must not turn a capped
+   * bounty blow into one and a half bars. Public so a headless harness prices
+   * a blow exactly as it lands.
    */
   incomingDamage(amount: number, source?: DamageSource): number {
-    if (source?.kind !== 'mob') return amount;
+    if (source?.kind !== 'mob') return this.statusScaledDamage(amount);
     // Read live rather than stamped at spawn: flipping to Kitten mid-bounty must
     // help immediately, or the toggle fails the player who needed it most.
     // Status ticks and self-inflicted dynamite are unscaled — re-pricing a burn
@@ -1079,8 +1148,9 @@ export abstract class Player implements AboveDarknessDrawer {
     // decision was already made.
     const difficultyScaled =
       amount * activeDifficultyProfile().incomingMobDamageScale * (source.damageScale ?? 1);
-    if (source.maxShareOfTargetHp === undefined) return difficultyScaled;
-    return Math.min(difficultyScaled, this.maxHp * source.maxShareOfTargetHp);
+    const statusScaled = this.statusScaledDamage(difficultyScaled);
+    if (source.maxShareOfTargetHp === undefined) return statusScaled;
+    return Math.min(statusScaled, this.maxHp * source.maxShareOfTargetHp);
   }
 
   /**
@@ -1089,7 +1159,7 @@ export abstract class Player implements AboveDarknessDrawer {
    *   this to hold back the status riders they apply alongside their damage, so a
    *   `MISS!` does not come with a helping of poison.
    */
-  takeDamage(amount: number, source?: DamageSource): boolean {
+  takeDamage(amount: number, source?: DamageSource, options?: DamageOptions): boolean {
     if (amount <= 0 || !this.canBeHarmed) return false;
     const scaledAmount = this.incomingDamage(amount, source);
     if (isDodgeableSource(source)) {
@@ -1107,9 +1177,15 @@ export abstract class Player implements AboveDarknessDrawer {
     // no poison or other rider coming in behind it.
     if (soaked <= 0) return false;
     const braced = source?.kind === 'mob' ? this.braceWithIronRibs(soaked) : soaked;
-    const unabsorbed = this.isCrawler ? runHurtHooks(this, { damage: braced, source }) : braced;
     const hpBeforeBlow = this.hp;
-    const remainingHp = Math.max(0, this.hp - unabsorbed);
+    const lowestHpAllowed = Math.min(hpBeforeBlow, options?.floorHp ?? 0);
+    // Hurt hooks judge whether a blow downs the wearer, so they must see the
+    // blow the floor lets land — a floored penalty must never spend Ninth Life.
+    const landingBlow = Math.min(braced, hpBeforeBlow - lowestHpAllowed);
+    const unabsorbed = this.isCrawler
+      ? runHurtHooks(this, { damage: landingBlow, source })
+      : landingBlow;
+    const remainingHp = Math.max(lowestHpAllowed, this.hp - unabsorbed);
     this.damageFlash = DAMAGE_FLASH_FRAMES;
     // Every route into this method refreshes the counter, which is what makes a
     // damage-over-time effect hold regen off for as long as it is burning
@@ -1128,6 +1204,24 @@ export abstract class Player implements AboveDarknessDrawer {
     this.pendingDamageTaken += hpBeforeBlow - remainingHp;
     if (this.isCrawler) activeRunStats()?.recordDamageTaken(hpBeforeBlow - remainingHp);
     return true;
+  }
+
+  /**
+   * What this body's statuses multiply every blow it takes by, from any
+   * source; see `STATUS_INCOMING_DAMAGE_SCALE`.
+   */
+  get statusDamageScale(): number {
+    return statusIncomingDamageScale(this.statusEffects);
+  }
+
+  /**
+   * `amount` after {@link statusDamageScale}, the step {@link incomingDamage}
+   * takes after the difficulty scale and before the blow cap.
+   * `Mob` applies the scale at its own door instead, which its struck blows
+   * reach without passing through here, and so takes the amount unchanged.
+   */
+  protected statusScaledDamage(amount: number): number {
+    return amount * this.statusDamageScale;
   }
 
   /**
@@ -1622,37 +1716,36 @@ export abstract class Player implements AboveDarknessDrawer {
     this.syncHpToMaxHp();
   }
 
-  /** Liquid courage: a drunk crawler swings harder even as the room tilts. */
-  get drunkDamageBonus(): number {
-    return this.hasStatus('drunk') ? DRUNK_MELEE_DAMAGE_BONUS : 0;
+  /** A drink's courage: an intoxicated crawler swings harder even as the room tilts. */
+  get intoxicationDamageBonus(): number {
+    return intoxicationMeleeBonus(intoxicationOf(this));
   }
 
   /**
-   * The Desperado Club's signature, drunk from the bag: a quarter of your health
-   * back and the liquid courage that comes with it.
+   * A bottled round from the bag: a share of health back and the intoxication
+   * that comes with it.
    *
    * It lives here rather than in a scene branch because both the dungeon and the
-   * building interiors let you drink one, and a house special that heals
-   * differently depending on which room you are standing in is a bug waiting to
-   * be reported.
+   * building interiors let you drink one, and a drink that heals differently
+   * depending on which room you are standing in is a bug waiting to be reported.
    */
-  drinkDirtyShirley(): void {
+  drinkIntoxicant(drink: IntoxicatingDrink): void {
     this.recordSwallowed();
-    this.applyStatus(makeDrunk(this.ironStomachTimeScale));
-    const healed = this.hp + Math.round(this.maxHp * DIRTY_SHIRLEY_HEAL_FRACTION);
+    this.applyStatus(makeIntoxication(drink.intoxication, this.ironStomachTimeScale));
+    const healed = this.hp + Math.round(this.maxHp * drink.healFraction);
     this.hp = Math.min(this.maxHp, healed);
   }
 
   /**
-   * Whether a Dirty Shirley would do anything at all — there is something to
-   * mend, or the courage is not already running.
+   * Whether `drink` would do anything at all — there is something to mend, or
+   * its intoxication is not already running.
    *
    * Asked before the bottle is spent rather than folded into the swallow, so the
    * two can be ordered consume-then-effect: an effect applied ahead of a consume
    * that then fails is a free drink for the rest of the run.
    */
-  get dirtyShirleyWouldHelp(): boolean {
-    return this.hp < this.maxHp || !this.hasStatus('drunk');
+  intoxicantWouldHelp(drink: IntoxicatingDrink): boolean {
+    return this.hp < this.maxHp || !this.hasStatus(drink.intoxication);
   }
 
   /**
@@ -1680,7 +1773,7 @@ export abstract class Player implements AboveDarknessDrawer {
    * both crawlers' swings at once.
    */
   get statusMeleeDamageBonus(): number {
-    return this.drunkDamageBonus + this.whetstoneDamageBonus;
+    return this.intoxicationDamageBonus + this.whetstoneDamageBonus;
   }
 
   /**
@@ -1696,7 +1789,7 @@ export abstract class Player implements AboveDarknessDrawer {
    * The {@link INCURABLE_STATUSES} are never removed, whoever names them: the
    * AI gamemaster's cure action passes through whatever status the model asks for.
    */
-  cureStatuses(types: ReadonlyArray<string>): number {
+  cureStatuses(types: ReadonlyArray<StatusId>): number {
     const kept: StatusEffect[] = [];
     let cleared = 0;
     for (const effect of this.statusEffects) {
@@ -1720,7 +1813,7 @@ export abstract class Player implements AboveDarknessDrawer {
   }
 
   /** Returns true if the player currently has the given status active. */
-  hasStatus(type: string): boolean {
+  hasStatus(type: StatusId): boolean {
     // A plain loop rather than `some`: this is called several times per entity
     // per frame, almost always over an empty list, and the closure was the only
     // allocation in the whole call.
@@ -1794,9 +1887,6 @@ export abstract class Player implements AboveDarknessDrawer {
       if (effect.type === 'spit_venom' && elapsed > 0 && elapsed % SPIT_VENOM_TICK_INTERVAL === 0) {
         this.applyStatusTickDamage(effect);
       }
-      if (effect.type === BLOOD_VOMIT_STATUS && isBloodVomitBoutFrame(effect)) {
-        this.vomitBlood(effect);
-      }
       effect.ticksRemaining--;
       const justExpired = effect.ticksRemaining < 0;
       if (justExpired && effect.type === 'speed_fizz') {
@@ -1837,18 +1927,9 @@ export abstract class Player implements AboveDarknessDrawer {
     // The snapshot is the whole truth, incurable statuses included: one it no
     // longer carries has run out, and keeping the live one would double it.
     this.dropStatusEffects(() => false);
-    for (const effect of effects) {
-      // A ward whose pool did not survive the trip is dropped rather than kept
-      // as a badge that absorbs nothing or, with a non-finite pool, everything.
-      const pool = effect.absorbRemaining;
-      if (pool !== undefined && !Number.isFinite(pool)) continue;
-      this.statusEffects.push({ ...effect });
-    }
+    for (const effect of effects) this.statusEffects.push({ ...effect });
     this._potionSpeedBoost = this.hasStatus('speed_fizz') ? SPEED_FIZZ_MULTIPLIER : 1;
-    // Screened like every other restored numeric: this one feeds max HP directly,
-    // so a non-finite value from a save would make the whole stat block NaN.
-    const boost = Number.isFinite(juggJuiceHpBoost) ? Math.max(0, juggJuiceHpBoost) : 0;
-    this._juggJuiceHpBoost = this.hasStatus('jugg_juice') ? boost : 0;
+    this._juggJuiceHpBoost = this.hasStatus('jugg_juice') ? juggJuiceHpBoost : 0;
     this.syncHpToMaxHp();
   }
 
@@ -2005,14 +2086,14 @@ export abstract class Player implements AboveDarknessDrawer {
   }
 
   /**
-   * One bout of blood vomiting. A body already down brings nothing up: the
-   * retch is the cue that the hit is coming, and a downed crawler takes none.
+   * One retch of blood, which costs no HP. A body already down brings nothing
+   * up: the retch warns that the next blow may be the last, and a downed
+   * crawler is past warning.
    */
-  private vomitBlood(effect: StatusEffect): void {
+  retch(): void {
     if (!this.isAlive || this.isKnockedOut) return;
+    this.applyStatus(makeBloodVomit());
     this.bloodVomitRetchPending = true;
-    const damage = Math.max(1, Math.round(this.maxHp * BLOOD_VOMIT_MAX_HP_SHARE));
-    this.takeDamage(damage, { kind: 'status', effectType: effect.type, applier: effect.applier });
   }
 
   /** Returns the combined HP regen rate multiplier from all equipped gear and active modifiers.
@@ -2586,7 +2667,7 @@ export abstract class Player implements AboveDarknessDrawer {
   }
 
   /**
-   * Where a bout of blood vomiting hits the floor, in world pixels, and the
+   * Where a retch of blood hits the floor, in world pixels, and the
    * way it was thrown: ahead of the feet when side-on, just in front of them
    * when facing the camera, behind the head when facing away.
    */
@@ -2601,7 +2682,7 @@ export abstract class Player implements AboveDarknessDrawer {
     };
   }
 
-  private findStatus(type: string): StatusEffect | undefined {
+  private findStatus(type: StatusId): StatusEffect | undefined {
     for (const effect of this.statusEffects) {
       if (effect.type === type) return effect;
     }

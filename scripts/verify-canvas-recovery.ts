@@ -1145,15 +1145,15 @@ const lookContext = {
   tier: FULL_VARIETY_TIER,
 } satisfies SpawnContext;
 const goblinFamily = MOB_KINDS.goblin.family;
-const fowlFamily = MOB_KINDS.sky_fowl.family;
+const hawkfolkFamily = MOB_KINDS.hawkfolk.family;
 const ratkinFamily = MOB_KINDS.raised_ratkin.family;
 const lookGoblin = spawnMob('goblin', LOOK_TILE, gameMap, {
   ...lookContext,
   variant: unsharedLook(goblinFamily),
 });
-const lookFowl = spawnMob('sky_fowl', LOOK_TILE, gameMap, {
+const lookHawkfolk = spawnMob('hawkfolk', LOOK_TILE, gameMap, {
   ...lookContext,
-  variant: unsharedLook(fowlFamily),
+  variant: unsharedLook(hawkfolkFamily),
 });
 const lookRatkin = spawnMob('raised_ratkin', LOOK_TILE, gameMap, {
   ...lookContext,
@@ -1161,7 +1161,7 @@ const lookRatkin = spawnMob('raised_ratkin', LOOK_TILE, gameMap, {
 });
 const liveLookCases = [
   liveLookCase('goblin', lookGoblin, goblinFamily, () => lookGoblin.weapon),
-  liveLookCase('sky fowl', lookFowl, fowlFamily, () => lookFowl.toughLookId),
+  liveLookCase('Hawkfolk', lookHawkfolk, hawkfolkFamily, () => lookHawkfolk.toughLookId),
   liveLookCase('raised ratkin', lookRatkin, ratkinFamily, () => lookRatkin.look),
 ];
 const sharedLooksTier = asVarietyTier(

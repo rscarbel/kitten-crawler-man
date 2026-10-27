@@ -38,7 +38,7 @@ import type { MissQuill } from '../creatures/MissQuill';
 import type { Remex } from '../creatures/Remex';
 import type { TheLich } from '../creatures/TheLich';
 import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
-import { drawSkyFowlCorpse } from '../sprites/featherfallCorpseSprite';
+import { drawHawkfolkCorpse } from '../sprites/featherfallCorpseSprite';
 import { drawSoulBurst, prewarmLichFightEffects } from '../sprites/skeletonEffectsSprite';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import type { Conversation } from '../dialog/Conversation';
@@ -754,7 +754,7 @@ export class QuillConfrontationSystem implements GameSystem {
       );
     }
 
-    drawSkyFowlCorpse(ctx, corpseX, corpseY, TILE_SIZE);
+    drawHawkfolkCorpse(ctx, corpseX, corpseY, TILE_SIZE);
 
     if (this.phase === 'materialising') {
       const progress = 1 - this.materialiseTimer / MATERIALISE_FRAMES;

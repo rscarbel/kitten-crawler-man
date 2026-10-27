@@ -202,7 +202,7 @@ export interface ApproachCentreTile extends TilePoint {
  * site level with the walls is due east or west and takes that side's gate, and
  * a site north or south of them runs clear of the wall's rows entirely. The gate is the one nearest `site`; the road starts at
  * `start`, which is the site itself unless the site's own centre is not where
- * a road can begin (the circus's Big Top stands on it, so its road begins on
+ * a road can begin (the circus's Starlight Tent stands on it, so its road begins on
  * the forecourt, or round the tent's flank).
  */
 export function approachCentreLine(

@@ -455,7 +455,7 @@ export class PokerPreviewScene extends PreviewScene {
   }
 
   protected previewTitle(): string {
-    return "Texas Hold'em — Desperado Club review harness";
+    return "Texas Hold'em — Cloak & Dagger review harness";
   }
 
   protected previewControls(): readonly PreviewControl[] {

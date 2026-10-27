@@ -70,6 +70,16 @@ Every `verify:*`/`gates:*` script prints one line when it passes. When it fails,
 
 If any gate fails, fix the issue before proceeding. Do not skip or ignore failures.
 
+## Saves
+
+The owner is the only player, so the save format has no backward-compatibility promise. Change the structure of saves, settings and other stored data freely:
+
+- Never write a migration, a version bump, an old-to-new id alias map, a "legacy" branch, or a default that exists only so an older save still parses.
+- Rename and remove persisted ids and fields outright.
+- A stored save that fails validation is discarded with a console warning, and the player starts fresh. It is never repaired.
+
+This rule stays until the owner replaces it. That happens once other people are playing.
+
 ## Design Debt
 
 Take the clean, scalable path, never the shortcut. When you come across hacky code, a breach of common industry practice, or a design that will make later work harder, and it is beyond the scope of your task, add an entry to `docs/design-debt.md`, following the rules at the top of that file. Extend an existing entry rather than duplicating it. Never work around a recorded problem in a way that deepens it; each entry's **Until then** line says what to avoid.

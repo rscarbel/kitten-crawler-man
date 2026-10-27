@@ -176,7 +176,7 @@ export class BuildingSystem implements GameSystem {
     // to be about *which* door, not merely about being on one.
     const arrived = !wasOn || idx !== this.doorUnderfoot;
     // A quest can unseal a door under the player's own feet: the wave that opens
-    // the Big Top can die while they are standing on its mat. That is worth
+    // the Starlight Tent can die while they are standing on its mat. That is worth
     // asking again about, and it is the only thing besides arriving that is.
     const answerChanged = !arrived && sealed !== this.sealedHere;
     this.doorUnderfoot = idx;

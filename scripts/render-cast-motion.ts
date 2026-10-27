@@ -1,9 +1,9 @@
 #!/usr/bin/env tsx
 /**
- * Review harness for the town casts' motion: the skyfowl walk and run in all
+ * Review harness for the town casts' motion: the Hawkfolk walk and run in all
  * three views, a travelling strip that lays each walk frame down where the
  * runtime carries it (so a planted foot that holds its ground shows as one
- * foot, and a skate as a smear), and every Desperado Club dance routine for
+ * foot, and a skate as a smear), and every Cloak & Dagger dance routine for
  * both casts — each enlarged and at the 32px tile.
  *
  * Runs `gates:cast-motion` first and exits non-zero if they fail.
@@ -17,12 +17,12 @@ import { createCanvas, type Canvas } from 'canvas';
 
 import { TILE_SIZE } from '../src/core/constants.js';
 import {
-  SKYFOWL_CAST_TILE_SCALE,
+  HAWKFOLK_CAST_TILE_SCALE,
   castRowsFor,
-  skyfowlCastFigure,
-  skyfowlWalkCyclePx,
-} from '../src/sprites/art/skyfowlCastFigure.js';
-import type { SkyfowlLookId } from '../src/sprites/art/skyfowl/cast.js';
+  hawkfolkCastFigure,
+  hawkfolkWalkCyclePx,
+} from '../src/sprites/art/hawkfolkCastFigure.js';
+import type { HawkfolkLookId } from '../src/sprites/art/hawkfolk/cast.js';
 import { DANCE_STYLES, danceStateName } from '../src/sprites/art/danceStyles.js';
 import { townCastOutfitFigure } from '../src/sprites/art/townCastFigure.js';
 import { clubDancerLook } from '../src/sprites/person/clubCastLooks.js';
@@ -33,7 +33,7 @@ import { castMotionGateFailures } from './gates-cast-motion.js';
 
 const OUT_DIR = `${PREVIEW_DIR}/cast-motion`;
 const ENLARGED = 2;
-const IN_GAME = TILE_SIZE / SKYFOWL_CAST_TILE_SCALE;
+const IN_GAME = TILE_SIZE / HAWKFOLK_CAST_TILE_SCALE;
 const BACKDROP = '#4a4e58';
 const GROUND_LINE = 'rgba(255, 90, 90, 0.6)';
 const LABEL_COLOUR = '#e8e8e8';
@@ -42,13 +42,13 @@ const LABEL_GUTTER = 90;
 const LABEL_INSET = 4;
 const TRAVEL_FRAME_ALPHA = 0.35;
 
-const WALK_LOOKS: readonly SkyfowlLookId[] = [
+const WALK_LOOKS: readonly HawkfolkLookId[] = [
   'merchant_hawkbrown_standard',
   'guard_hawkbrown_standard',
   'fledgling_hawkbrown',
   'tough_hawkbrown_standard',
 ];
-const DANCER_LOOKS: readonly SkyfowlLookId[] = [
+const DANCER_LOOKS: readonly HawkfolkLookId[] = [
   'dancer_sparrowfleck_slight',
   'dancer_goldenbarred_standard',
 ];
@@ -85,11 +85,11 @@ function sheet(def: FigureDef, states: readonly string[], scale: number): Canvas
  * cycle length over its frame count. A foot that holds its ground stacks into
  * one sharp foot; one that skates smears along the floor.
  */
-function travellingStrip(id: SkyfowlLookId): Canvas {
-  const def = skyfowlCastFigure(id);
+function travellingStrip(id: HawkfolkLookId): Canvas {
+  const def = hawkfolkCastFigure(id);
   const frames = def.states.get('walk_side')?.frames ?? 0;
-  const cellPxPerWorldPx = SKYFOWL_CAST_TILE_SCALE / TILE_SIZE;
-  const stepCellPx = (skyfowlWalkCyclePx(id, TILE_SIZE) / frames) * cellPxPerWorldPx;
+  const cellPxPerWorldPx = HAWKFOLK_CAST_TILE_SCALE / TILE_SIZE;
+  const stepCellPx = (hawkfolkWalkCyclePx(id, TILE_SIZE) / frames) * cellPxPerWorldPx;
   const width = Math.ceil(def.frameWidth + stepCellPx * frames);
   const canvas = createCanvas(width * ENLARGED, def.frameHeight * ENLARGED);
   const ctx = canvas.getContext('2d');
@@ -119,7 +119,7 @@ if (failures.length > 0) process.exitCode = 1;
 else console.log('  ok   cast-motion gates');
 
 for (const id of WALK_LOOKS) {
-  const def = skyfowlCastFigure(id);
+  const def = hawkfolkCastFigure(id);
   const states = castRowsFor(id)
     .filter((row) => row.role === 'walk' || row.role === 'run')
     .map((row) => row.name);
@@ -130,7 +130,7 @@ for (const id of WALK_LOOKS) {
 
 const danceStates = DANCE_STYLES.map(danceStateName);
 for (const id of DANCER_LOOKS) {
-  const def = skyfowlCastFigure(id);
+  const def = hawkfolkCastFigure(id);
   write(`dance-${id}`, sheet(def, danceStates, ENLARGED));
   write(`dance-${id}-32px`, sheet(def, danceStates, IN_GAME));
 }

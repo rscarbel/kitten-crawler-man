@@ -1,14 +1,14 @@
 /**
- * Headless checks on Bucket Boy's medic kit, run from `verify-mercenaries.ts`.
+ * Headless checks on the healer's medic kit, run from `verify-mercenaries.ts`.
  *
- * - Triage heals: a crawler below half health nearby gains the heal's worth of
+ * - Mend heals: a crawler below half health nearby gains the heal's worth of
  *   HP — measured on her HP, not by counting casts — and it lands on the frame
  *   the glow peaks, not when the channel starts. He heals himself the same way.
- * - Triage waits: a healthy party gets nothing, and with a hostile at his elbow
+ * - Mend waits: a healthy party gets nothing, and with a hostile at his elbow
  *   he cowers instead of channelling.
  * - He runs: a hostile inside two tiles is left behind, with no back-and-forth
  *   while a slower one chases him.
- * - Cornered, he slaps: the hostile loses HP, the crawler beside him loses none.
+ * - Cornered, he strikes with the staff: the hostile loses HP, the crawler beside him loses none.
  * - The party never loses a talk press to him: parked in his follow band he is
  *   in talk range, and a nearby hostile still wins the press.
  *
@@ -38,11 +38,11 @@ import {
   MedicKit,
   MEDIC_ADJACENT_TILES,
   MEDIC_LEFT_BEHIND_TILES,
-  TRIAGE_CHANNEL_FRAMES,
-  TRIAGE_COOLDOWN_FRAMES,
-  TRIAGE_HEAL_FRACTION,
-  TRIAGE_RELEASE_FRAME,
-  TRIAGE_TRIGGER_HP_FRACTION,
+  MEND_CHANNEL_FRAMES,
+  MEND_COOLDOWN_FRAMES,
+  MEND_HEAL_FRACTION,
+  MEND_RELEASE_FRAME,
+  MEND_TRIGGER_HP_FRACTION,
 } from '../../src/creatures/mercenaries/medicKit';
 
 let failures = 0;
@@ -68,13 +68,13 @@ const WOUNDED_HP_FRACTION = 0.3;
  * Deep enough that one heal still leaves the patient under the trigger, for
  * any max HP: two heals' worth below it.
  */
-const DEEP_WOUND_HP_FRACTION = TRIAGE_TRIGGER_HP_FRACTION - 2 * TRIAGE_HEAL_FRACTION;
+const DEEP_WOUND_HP_FRACTION = MEND_TRIGGER_HP_FRACTION - 2 * MEND_HEAL_FRACTION;
 /** Comfortably over the trigger. */
 const HEALTHY_HP_FRACTION = 0.8;
 /** Long enough for any cooldown-free channel to start, play and land. */
-const TRIAGE_WATCH_CHANNELS = 3;
-const TRIAGE_WATCH_FRAMES = TRIAGE_CHANNEL_FRAMES * TRIAGE_WATCH_CHANNELS;
-/** Long enough for a full triage cooldown and a second chance to go wrong. */
+const MEND_WATCH_CHANNELS = 3;
+const MEND_WATCH_FRAMES = MEND_CHANNEL_FRAMES * MEND_WATCH_CHANNELS;
+/** Long enough for a full mend cooldown and a second chance to go wrong. */
 const QUIET_WATCH_FRAMES = 700;
 const FLEE_WATCH_FRAMES = 120;
 /** A hostile this close is inside the flee trigger. */
@@ -91,10 +91,10 @@ const REVERSAL_DOT = -0.5;
  * measures past thirty; with no hysteresis at all, hundreds.
  */
 const MAX_CHASE_REVERSALS = 20;
-/** Room for the corner to be found, and several slaps after it. */
+/** Room for the corner to be found, and several blows after it. */
 const CORNER_WATCH_SPANS = 4;
 const CORNER_WATCH_FRAMES = CORNERED_FRAMES * CORNER_WATCH_SPANS;
-/** Close enough to slap, far enough not to share his tile. */
+/** Close enough to strike, far enough not to share his tile. */
 const CORNER_THREAT_OFFSET_TILES = 0.6;
 const CORNER_THREAT_OFFSET_PX = TILE_SIZE * CORNER_THREAT_OFFSET_TILES;
 const NEARBY_HOSTILE_OFFSET_TILES = 4;
@@ -110,13 +110,12 @@ const PARTITION_FAR_SIDE_TILE = PARTITION_COLUMN + 2;
 /** Frames into the channel before the patient steps out of sight. */
 const STEP_BEHIND_WALL_FRAME = 10;
 /** Past a full cooldown and a second channel, so a second heal has every chance to land. */
-const COOLDOWN_WATCH_FRAMES =
-  TRIAGE_COOLDOWN_FRAMES + TRIAGE_CHANNEL_FRAMES * TRIAGE_WATCH_CHANNELS;
+const COOLDOWN_WATCH_FRAMES = MEND_COOLDOWN_FRAMES + MEND_CHANNEL_FRAMES * MEND_WATCH_CHANNELS;
 /**
  * Frames a wounded party may leave him within reach of a chaser beyond what a
  * healthy one does: one cut-short channel's worth, not a fight's.
  */
-const CHASE_ADJACENT_ALLOWANCE_FRAMES = TRIAGE_CHANNEL_FRAMES;
+const CHASE_ADJACENT_ALLOWANCE_FRAMES = MEND_CHANNEL_FRAMES;
 /** A long hall, so an owner can walk far past a mob standing in it. */
 const HALL_WIDTH_TILES = 44;
 const HALL_HEIGHT_TILES = 9;
@@ -145,7 +144,7 @@ const FICKLE_STRIKE_COOLDOWN_FRAMES = 30;
 const MAX_FICKLE_FLEE_TOGGLES = 40;
 /** Back at his owner's side, give or take a band. */
 const REJOINED_TILES = 3;
-/** HP a crawler is left on for the slap test — below the triage trigger it would draw a heal. */
+/** HP a crawler is left on for the staff-strike test — below the mend trigger it would draw a heal. */
 const CRAWLER_FULL = 1;
 
 /**
@@ -188,8 +187,8 @@ function build(
   const mobs = new MobRoster(map, new SpellSystem());
   const roster = createMercenaryRoster();
   roster.active = {
-    id: 'bucket_boy',
-    name: getMercenaryTemplate('bucket_boy').name,
+    id: 'brother_anselm',
+    name: getMercenaryTemplate('brother_anselm').name,
     contractLevelId: FLOOR,
     introduced: true,
   };
@@ -248,7 +247,7 @@ function distance(a: { x: number; y: number }, b: { x: number; y: number }): num
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-// ── Triage ─────────────────────────────────────────────────────────────────
+// ── Mend ─────────────────────────────────────────────────────────────────
 
 interface HealOutcome {
   readonly restored: number;
@@ -267,7 +266,7 @@ function watchHeal(
   const start = patient.hp;
   const expected = Math.min(
     patient.maxHp - start,
-    Math.max(1, Math.round(patient.maxHp * TRIAGE_HEAL_FRACTION)),
+    Math.max(1, Math.round(patient.maxHp * MEND_HEAL_FRACTION)),
   );
   let channelStart: number | null = null;
   for (let f = 0; f < frames; f++) {
@@ -285,23 +284,23 @@ function watchHeal(
   return { restored: 0, expected, landedAfter: null, rowAtLanding: null };
 }
 
-function checkTriage(): void {
-  section('Bucket Boy: Triage heals whoever is hurt worst');
+function checkMend(): void {
+  section('Brother Anselm: Mend heals whoever is hurt worst');
 
   const crawler = build();
   if (crawler === null) {
-    check(false, 'fixture: a bucket_boy contract spawns a medic-kit hireling');
+    check(false, 'fixture: a brother_anselm contract spawns a medic-kit hireling');
     return;
   }
   woundTo(crawler.human, WOUNDED_HP_FRACTION);
-  const healed = watchHeal(crawler, crawler.human, TRIAGE_WATCH_FRAMES);
+  const healed = watchHeal(crawler, crawler.human, MEND_WATCH_FRAMES);
   check(
     healed.restored === healed.expected && healed.expected > 0,
     `a crawler at ${percent(WOUNDED_HP_FRACTION)} HP gains ${healed.restored} HP (expected ${healed.expected})`,
   );
   check(
-    healed.landedAfter === TRIAGE_RELEASE_FRAME && healed.rowAtLanding === 'cast_triage',
-    `the heal lands on the release frame, mid-channel (frame ${healed.landedAfter ?? 'never'} of ${TRIAGE_CHANNEL_FRAMES}, want ${TRIAGE_RELEASE_FRAME}; row ${healed.rowAtLanding ?? 'none'})`,
+    healed.landedAfter === MEND_RELEASE_FRAME && healed.rowAtLanding === 'mend',
+    `the heal lands on the release frame, mid-channel (frame ${healed.landedAfter ?? 'never'} of ${MEND_CHANNEL_FRAMES}, want ${MEND_RELEASE_FRAME}; row ${healed.rowAtLanding ?? 'none'})`,
   );
   checkCooldown();
   checkReleaseRecheck();
@@ -309,9 +308,9 @@ function checkTriage(): void {
   const self = build();
   if (self !== null) {
     woundTo(self.merc, WOUNDED_HP_FRACTION);
-    // His own draught would reach him first; this measures Triage alone.
-    self.merc.survival.potionCooldownFrames = TRIAGE_WATCH_FRAMES;
-    const selfHeal = watchHeal(self, self.merc, TRIAGE_WATCH_FRAMES);
+    // His own draught would reach him first; this measures Mend alone.
+    self.merc.survival.potionCooldownFrames = MEND_WATCH_FRAMES;
+    const selfHeal = watchHeal(self, self.merc, MEND_WATCH_FRAMES);
     check(
       selfHeal.restored === selfHeal.expected && selfHeal.expected > 0,
       `wounded himself, he heals himself (+${selfHeal.restored}, expected ${selfHeal.expected})`,
@@ -325,7 +324,7 @@ function checkTriage(): void {
     const quiet = watchHeal(healthy, healthy.human, QUIET_WATCH_FRAMES);
     check(
       quiet.restored === 0 && healthy.human.hp === start,
-      `a crawler at ${percent(HEALTHY_HP_FRACTION)} HP (over the ${percent(TRIAGE_TRIGGER_HP_FRACTION)} trigger) is left alone`,
+      `a crawler at ${percent(HEALTHY_HP_FRACTION)} HP (over the ${percent(MEND_TRIGGER_HP_FRACTION)} trigger) is left alone`,
     );
   }
 
@@ -364,8 +363,8 @@ function checkCooldown(): void {
   }
   const gap = channelStarts.length >= 2 ? channelStarts[1] - channelStarts[0] : null;
   check(
-    heals >= 2 && gap !== null && gap >= TRIAGE_COOLDOWN_FRAMES,
-    `a patient still under the trigger gets a second heal, a cooldown later (${heals} heals; channels ${gap ?? 'never'} frames apart, at least ${TRIAGE_COOLDOWN_FRAMES})`,
+    heals >= 2 && gap !== null && gap >= MEND_COOLDOWN_FRAMES,
+    `a patient still under the trigger gets a second heal, a cooldown later (${heals} heals; channels ${gap ?? 'never'} frames apart, at least ${MEND_COOLDOWN_FRAMES})`,
   );
 }
 
@@ -382,7 +381,7 @@ function healThroughWall(stepsBehind: boolean): boolean {
   woundTo(h.human, WOUNDED_HP_FRACTION);
   const start = h.human.hp;
   let channelFrames = 0;
-  for (let f = 0; f < TRIAGE_CHANNEL_FRAMES; f++) {
+  for (let f = 0; f < MEND_CHANNEL_FRAMES; f++) {
     frame(h);
     if (h.kit.isChanneling) channelFrames++;
     if (stepsBehind && channelFrames === STEP_BEHIND_WALL_FRAME) {
@@ -410,7 +409,7 @@ function adjacentHostileOutcome(withHostile: boolean): { healed: boolean; cowere
   const enemy = withHostile ? addHostile(h, h.merc.x + CORNER_THREAT_OFFSET_PX, h.merc.y) : null;
   const start = h.human.hp;
   let cowered = false;
-  for (let f = 0; f < TRIAGE_WATCH_FRAMES; f++) {
+  for (let f = 0; f < MEND_WATCH_FRAMES; f++) {
     // It stays at his elbow however he runs.
     if (enemy !== null) {
       enemy.x = h.merc.x + CORNER_THREAT_OFFSET_PX;
@@ -423,7 +422,7 @@ function adjacentHostileOutcome(withHostile: boolean): { healed: boolean; cowere
 }
 
 function checkNoChannelUnderThreat(): void {
-  section('Bucket Boy: never channels with a hostile adjacent');
+  section('Brother Anselm: never channels with a hostile adjacent');
   const threatened = adjacentHostileOutcome(true);
   check(
     !threatened.healed && threatened.cowered,
@@ -436,7 +435,7 @@ function checkNoChannelUnderThreat(): void {
 // ── Fear ───────────────────────────────────────────────────────────────────
 
 function checkFlee(): void {
-  section('Bucket Boy: runs from a hostile that gets close');
+  section('Brother Anselm: runs from a hostile that gets close');
   const h = build();
   if (h === null) return;
   placeAt(h.merc, ROOM_MIDDLE_TILE, ROOM_MIDDLE_TILE + 2);
@@ -473,7 +472,7 @@ function checkFlee(): void {
  * find the way along the wall instead.
  */
 function checkWallEscape(): void {
-  section('Bucket Boy: backed against a wall, he runs along it');
+  section('Brother Anselm: backed against a wall, he runs along it');
   const h = build();
   if (h === null) return;
   placeAt(h.merc, ROOM_MIDDLE_TILE, 1);
@@ -515,7 +514,7 @@ function chaseAdjacentFrames(wounded: boolean): { adjacentFrames: number; healed
 }
 
 function checkHealingUnderChase(): void {
-  section('Bucket Boy: a wounded party does not pin him in reach of a chaser');
+  section('Brother Anselm: a wounded party does not pin him in reach of a chaser');
   const healthy = chaseAdjacentFrames(false);
   const wounded = chaseAdjacentFrames(true);
   check(
@@ -530,7 +529,7 @@ function checkHealingUnderChase(): void {
  * hall away. Left behind, he must go past it rather than hold off forever.
  */
 function checkNotStranded(): void {
-  section('Bucket Boy: an idle hostile does not strand him from a departing owner');
+  section('Brother Anselm: an idle hostile does not strand him from a departing owner');
   const h = build(HALL_WIDTH_TILES, HALL_HEIGHT_TILES);
   if (h === null) return;
   placeAt(h.human, HALL_OWNER_START_TILE, HALL_MIDDLE_ROW);
@@ -609,7 +608,7 @@ function checkFlickeringAttention(): void {
  * up as a reversal on most frames.
  */
 function checkNoZigzag(): void {
-  section('Bucket Boy: a chase does not make him zigzag');
+  section('Brother Anselm: a chase does not make him zigzag');
   const h = build();
   if (h === null) return;
   placeAt(h.merc, ROOM_MIDDLE_TILE, ROOM_MIDDLE_TILE + 2);
@@ -643,24 +642,24 @@ function checkNoZigzag(): void {
   );
 }
 
-// ── The cornered slap ──────────────────────────────────────────────────────
+// ── The cornered staff strike ──────────────────────────────────────────────────────
 
 interface CornerOutcome {
   readonly hostileLost: number;
   readonly crawlerLost: number;
-  /** The frame the first slap landed, or null for none. */
-  readonly firstSlapFrame: number | null;
+  /** The frame the first blow landed, or null for none. */
+  readonly firstBlowFrame: number | null;
 }
 
 function cornerOutcome(cornered: boolean): CornerOutcome {
   const h = build();
-  if (h === null) return { hostileLost: 0, crawlerLost: 0, firstSlapFrame: null };
+  if (h === null) return { hostileLost: 0, crawlerLost: 0, firstBlowFrame: null };
   if (cornered) {
     placeAt(h.merc, 1, 1);
   } else {
     placeAt(h.merc, ROOM_MIDDLE_TILE, ROOM_MIDDLE_TILE + 2);
   }
-  // Beside him, inside his swing, so a slap that went the wrong way would find her.
+  // Beside him, inside his swing, so a blow that went the wrong way would find her.
   h.human.x = h.merc.x;
   h.human.y = h.merc.y + CORNER_THREAT_OFFSET_PX;
   h.human.hp = h.human.maxHp * CRAWLER_FULL;
@@ -672,34 +671,34 @@ function cornerOutcome(cornered: boolean): CornerOutcome {
   const enemyStart = enemy.hp;
   const humanStart = h.human.hp;
   const catStart = h.cat.hp;
-  let firstSlapFrame: number | null = null;
+  let firstBlowFrame: number | null = null;
   for (let f = 0; f < CORNER_WATCH_FRAMES; f++) {
     // Cornered, it stays on him. In the open it stands still: a kit that
-    // slapped whatever came near would slap it before he got away.
+    // struck whatever came near would hit it before he got away.
     if (cornered) {
       enemy.x = h.merc.x + CORNER_THREAT_OFFSET_PX;
       enemy.y = h.merc.y + CORNER_THREAT_OFFSET_PX;
     }
     frame(h);
-    if (firstSlapFrame === null && enemy.hp < enemyStart) firstSlapFrame = f;
+    if (firstBlowFrame === null && enemy.hp < enemyStart) firstBlowFrame = f;
   }
   return {
-    firstSlapFrame,
+    firstBlowFrame,
     hostileLost: enemyStart - enemy.hp,
     crawlerLost: humanStart - h.human.hp + (catStart - h.cat.hp),
   };
 }
 
-function checkCorneredSlap(): void {
-  section('Bucket Boy: cornered, he slaps');
+function checkCorneredStrike(): void {
+  section('Brother Anselm: cornered, he strikes with the staff');
   const corner = cornerOutcome(true);
   check(
     corner.hostileLost > 0,
-    `pinned in a corner with a hostile on him, he slaps it (${corner.hostileLost} HP taken)`,
+    `pinned in a corner with a hostile on him, he strikes with the staff it (${corner.hostileLost} HP taken)`,
   );
   check(
-    corner.firstSlapFrame !== null && corner.firstSlapFrame >= CORNERED_FRAMES,
-    `he slaps only after running has failed for ${CORNERED_FRAMES} frames (first slap on frame ${corner.firstSlapFrame ?? 'never'})`,
+    corner.firstBlowFrame !== null && corner.firstBlowFrame >= CORNERED_FRAMES,
+    `he strikes with the staff only after running has failed for ${CORNERED_FRAMES} frames (first blow on frame ${corner.firstBlowFrame ?? 'never'})`,
   );
   check(
     corner.crawlerLost === 0,
@@ -708,14 +707,14 @@ function checkCorneredSlap(): void {
   const open = cornerOutcome(false);
   check(
     open.hostileLost === 0,
-    `control: with room to run he never slaps (${open.hostileLost} HP taken)`,
+    `control: with room to run he never strikes (${open.hostileLost} HP taken)`,
   );
 }
 
 // ── Talking ────────────────────────────────────────────────────────────────
 
 function checkTalkGuard(): void {
-  section('Bucket Boy: parked close, he never takes an attack press');
+  section('Brother Anselm: parked close, he never takes an attack press');
   const h = build();
   if (h === null) return;
   placeAt(h.merc, ROOM_MIDDLE_TILE - NEARBY_HOSTILE_OFFSET_TILES, ROOM_MIDDLE_TILE);
@@ -745,14 +744,14 @@ export function verifyMedicKit(): number {
 
 function runMedicChecks(): number {
   failures = 0;
-  checkTriage();
+  checkMend();
   checkNoChannelUnderThreat();
   checkFlee();
   checkWallEscape();
   checkNoZigzag();
   checkHealingUnderChase();
   checkNotStranded();
-  checkCorneredSlap();
+  checkCorneredStrike();
   checkTalkGuard();
   return failures;
 }

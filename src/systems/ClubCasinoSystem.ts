@@ -1,12 +1,12 @@
 /**
- * The Desperado Club's blackjack table — the presentation and input host over
+ * The Cloak & Dagger's blackjack table — the presentation and input host over
  * {@link BlackjackTable}.
  *
  * No game logic lives here: every button forwards to a table action, and every
  * animation is driven off the model's phase and the events it emits. That split
  * is what lets the money and deck invariants be exercised without a canvas.
  *
- * The shoe outlives the club scene, so it is hydrated from `ClubMembership` on
+ * The shoe outlives the club scene, so it is hydrated from `CasinoState` on
  * construction and written back after every round — walking out cannot reroll a
  * bad deck.
  */
@@ -15,7 +15,7 @@ import { NEVER_LUCKY, type LuckCheck } from '../core/state/GodMode';
 import type { Player } from '../Player';
 import { canAffordCoins, partyCoins } from '../core/party/partyCoins';
 import type { AudioManager } from '../audio/AudioManager';
-import type { ClubMembership } from '../core/club/ClubMembership';
+import type { CasinoState } from '../core/club/CasinoState';
 import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { keybindings } from '../core/input/Keybindings';
 import { ACTIVATE_KEYS, type Surface, type Ui } from '../ui/core/UiRoot';
@@ -330,10 +330,10 @@ export class ClubCasinoSystem {
 
   constructor(
     private readonly audio: AudioManager | null,
-    private readonly membership: ClubMembership,
+    private readonly casinoState: CasinoState,
     private readonly clock: () => number = () => performance.now(),
   ) {
-    this.table = new BlackjackTable(membership.casinoShoe, () => this.isLucky());
+    this.table = new BlackjackTable(casinoState.casinoShoe, () => this.isLucky());
     this.table.onWinnings = (winnings) => {
       if (winnings > 0) this.pendingSessionWinnings += winnings;
     };
@@ -379,11 +379,6 @@ export class ClubCasinoSystem {
     this.onWinnings?.(winnings, x, y);
   }
 
-  /** Total coins staked since entering the club — the free-security perk hook. */
-  get coinsWageredThisVisit(): number {
-    return this.table.coinsWagered;
-  }
-
   get jackpotPending(): boolean {
     return this.table.jackpotPending;
   }
@@ -425,7 +420,7 @@ export class ClubCasinoSystem {
   /**
    * Leaving the table. Refunds anything on the felt, because the felt is the one
    * place a coin could be stranded, and settles the shoe back onto the
-   * membership so the next visit resumes this deck.
+   * casino state so the next visit resumes this deck.
    */
   close(player: Player): void {
     // The chips sliding back to the tray are audible even though the panel is
@@ -444,7 +439,7 @@ export class ClubCasinoSystem {
     this.open = false;
     // The one fly for the whole visit — see `flySessionWinnings`. Reached both
     // from the player actually leaving the table and from a scene teardown
-    // that force-closes every panel underneath it (`DesperadoClubSystem.closeAll`),
+    // that force-closes every panel underneath it (`CloakAndDaggerSystem.closeAll`),
     // so a building exit with the panel still open still tallies correctly;
     // whether that flight is ever seen depends only on whether the scene it
     // was queued in is still around to draw it.
@@ -452,16 +447,16 @@ export class ClubCasinoSystem {
   }
 
   private persistShoe(): void {
-    this.membership.casinoShoe = this.table.shoeState();
+    this.casinoState.casinoShoe = this.table.shoeState();
   }
 
   /** Whether the live advice line is showing, resolving the not-yet-answered default. */
   private get hintsEnabled(): boolean {
-    return this.membership.casinoHintsEnabled ?? this.table.handsPlayed < HINTS_AUTO_FADE_HANDS;
+    return this.casinoState.casinoHintsEnabled ?? this.table.handsPlayed < HINTS_AUTO_FADE_HANDS;
   }
 
   private toggleHints(): void {
-    this.membership.casinoHintsEnabled = !this.hintsEnabled;
+    this.casinoState.casinoHintsEnabled = !this.hintsEnabled;
   }
 
   // ── Frame ────────────────────────────────────────────────────────────────
@@ -522,7 +517,7 @@ export class ClubCasinoSystem {
   /** After a long enough run, Deuce offers to stop calling the plays — once. */
   private maybeOfferHintRetirement(): void {
     if (this.hintsOfferMade) return;
-    if (this.membership.casinoHintsEnabled !== null) return;
+    if (this.casinoState.casinoHintsEnabled !== null) return;
     if (this.table.handsPlayed < HINTS_AUTO_FADE_HANDS) return;
     this.hintsOfferMade = true;
     this.showBanter(HINT_RETIREMENT_LINE);

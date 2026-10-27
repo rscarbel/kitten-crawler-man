@@ -5,7 +5,7 @@ description: Add or modify a sprite in Kitten Crawler Man — sprite sheets (PNG
 
 # Add a Sprite
 
-> **Townsfolk, residents and citizens are NOT sprite sheets** — they are a closed cast of painted human and skyfowl looks, picked per citizen by seed. Use the `add-person` skill for those, not this pipeline.
+> **Townsfolk, residents and citizens are NOT sprite sheets** — they are a closed cast of painted human and Hawkfolk looks, picked per citizen by seed. Use the `add-person` skill for those, not this pipeline.
 >
 > **Bipedal characters (humans, goblins, clowns, humanoid bosses) need the `bipedal-figure` skill first** — the rig/pose/view contract, gait authoring, bake gates and the image-review loop live there. Come back here for the manifest / loader / draw-wrapper wiring.
 >
@@ -18,7 +18,7 @@ description: Add or modify a sprite in Kitten Crawler Man — sprite sheets (PNG
 > in `src/sprites/sheets/`. See "Environment art is painted, not fetched" below
 > before adding or changing any of it.
 
-Runtime rendering uses **sprite sheets described by JSON manifests** under `src/images/<category>/` (`enemies/`, `bosses/`, `characters/`, `npcs/`, `effects/`, `environment/`). Most are PNGs, produced offline by procedural generator scripts in `scripts/` or hand-drawn; the environment ones are painted by the game itself and have no file at all.
+Runtime rendering uses **sprite sheets described by JSON manifests** under `src/images/<category>/` (`effects/`, `environment/`, `interfaces/`, `website/`). Most are PNGs, produced offline by procedural generator scripts in `scripts/` or hand-drawn; the environment ones are painted by the game itself and have no file at all.
 
 ## Environment art is painted, not fetched
 
@@ -51,7 +51,7 @@ look at cannot be different art.
   survives the stairs and is released with its asset group.
   Art drawn only inside buildings goes in a group the floor names in
   `LevelDef.interiorSpriteGroups`, not `spriteGroups` (the town's is
-  `town_interior`: the rooms' ground and the Desperado Club's furniture), so it
+  `town_interior`: the rooms' ground and the Cloak & Dagger's furniture), so it
   is painted behind a building's loading card instead of on the floor's
   arrival. See "Indoor-only art is painted at the door" in
   `docs/asset-management.md`. `npm run verify:environment-sheet-budget` checks
@@ -152,8 +152,7 @@ creatures here, in three disguises:
   Neither the art nor the constant can fix it: a stride long enough to sync
   would step further than the leg extends and the reach gate rejects it. Cap
   the cadence with a ceiling derived from the fastest real locomotion
-  (`MONGO_UNDERSAMPLING_FRAME_LIMIT` in `mongoSprite.ts` and
-  `MAXX_MAX_WALK_FRAMES_PER_TICK` in `gluteusMaxxTiming.ts` are the pattern), so raising the
+  (`MONGO_UNDERSAMPLING_FRAME_LIMIT` in `mongoSprite.ts` is the pattern), so raising the
   sprint speeds the legs up with it instead of clamping to a stale number.
 - A creature that changes speed for one state. A charging Tuskling sampled at
   the walk cadence skipped frames and read as vibrating rather than sprinting;

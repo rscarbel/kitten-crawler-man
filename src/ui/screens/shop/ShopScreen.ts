@@ -1,7 +1,6 @@
 /**
  * The one shop screen: every vendor, tavern, temple, forge, stall, the
- * general store, the VIP lounge and the Anchor's destinations draw through
- * it. A header with the counter's name, the seller's line and the party's
+ * general store and the Anchor's destinations draw through it. A header with the counter's name, the seller's line and the party's
  * purse; Buy / Sell tabs when the counter buys back; then a grid of offer
  * cards — two across where there is room, one on a phone held upright.
  *

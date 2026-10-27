@@ -20,6 +20,7 @@ import {
 } from '../../town/townArt';
 import { getTownRamp, sampleRamp, mix, type RGB } from '../../town/townPalette';
 import { paintPlankBoard } from '../../town/townMaterials';
+import type { PropFlameSite } from '../propFlames';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -998,6 +999,37 @@ function paintBrick(
   ctx.restore();
 }
 
+/** The firebox's centre, in tiles east of the hearth's west edge. */
+const FARM_HEARTH_FIRE_CENTRE_TILES = 1.55;
+/** The hearthstone's top, down from the footprint's top, in tiles. */
+const FARM_HEARTH_SLAB_DROP = 0.98;
+/** How far the chimney breast runs down over the hearthstone. */
+const FARM_HEARTH_BREAST_OVERLAP = 0.02;
+/** The logs' height above the firebox's foot, where the flames stand. */
+const FARM_HEARTH_LOG_LIFT = 0.1;
+const FARM_HEARTH_DEPTH_TILES = 2;
+/**
+ * How far either flame site stands from the firebox centre: just clear of the
+ * stew pot, which hangs in front of the middle of the fire.
+ */
+const FARM_HEARTH_FLAME_SPREAD = 0.62;
+const FARM_HEARTH_FLAME_SIZE = 0.4;
+const FARM_HEARTH_FLAME_RISE =
+  FARM_HEARTH_DEPTH_TILES -
+  FARM_HEARTH_SLAB_DROP -
+  FARM_HEARTH_BREAST_OVERLAP +
+  FARM_HEARTH_LOG_LIFT;
+
+/** The fire licking up either side of the stew pot. */
+export const FARM_HEARTH_FLAMES: ReadonlyArray<PropFlameSite> = [-1, 1].map(
+  (side): PropFlameSite => ({
+    x: FARM_HEARTH_FIRE_CENTRE_TILES + side * FARM_HEARTH_FLAME_SPREAD,
+    rise: FARM_HEARTH_FLAME_RISE,
+    size: FARM_HEARTH_FLAME_SIZE,
+    style: 'hearth',
+  }),
+);
+
 /**
  * Marta's hearth, built for a household that bakes: a brick chimney breast
  * with a wide firebox, a stew pot swung out over the fire on its crane, the
@@ -1023,7 +1055,7 @@ export function paintFarmHearth(ctx: Ctx, frame: TownPropFrame, _variant: number
     );
 
     // Hearthstone flags across the front row.
-    const slabTop = box.top + ts * 0.98;
+    const slabTop = box.top + ts * FARM_HEARTH_SLAB_DROP;
     const slabBottom = box.bottom - ts * 0.06;
     const slabLeft = box.left + ts * 0.08;
     const slabRight = box.right - ts * 0.08;
@@ -1044,7 +1076,7 @@ export function paintFarmHearth(ctx: Ctx, frame: TownPropFrame, _variant: number
     // Chimney breast and the narrower stack above the mantel.
     const breastLeft = box.left + ts * 0.12;
     const breastRight = box.right - ts * 0.12;
-    const breastBottom = slabTop + ts * 0.02;
+    const breastBottom = slabTop + ts * FARM_HEARTH_BREAST_OVERLAP;
     const mantelY = box.top - ts * 0.1;
     const stackLeft = box.left + ts * 0.85;
     const stackRight = box.right - ts * 0.85;
@@ -1083,8 +1115,9 @@ export function paintFarmHearth(ctx: Ctx, frame: TownPropFrame, _variant: number
     ctx.rect(breastLeft, mantelY, breastRight - breastLeft, breastBottom - mantelY);
     inkOutline(ctx, ts);
 
-    // The firebox: a wide arch, soot-black, fire on its dogs.
-    const fireCx = box.left + ts * 1.55;
+    // The firebox: a wide arch, soot-black, the fire's glow and logs on its
+    // dogs. Its flames are live, either side of the stew pot hung over them.
+    const fireCx = box.left + ts * FARM_HEARTH_FIRE_CENTRE_TILES;
     const archLeft = fireCx - ts * 0.95;
     const archRight = fireCx + ts * 0.95;
     const archTop = mantelY + ts * 0.3;
@@ -1112,41 +1145,13 @@ export function paintFarmHearth(ctx: Ctx, frame: TownPropFrame, _variant: number
       [0, 0],
     ] as const) {
       ctx.save();
-      ctx.translate(fireCx + dx * ts, breastBottom - ts * 0.1);
+      ctx.translate(fireCx + dx * ts, breastBottom - ts * FARM_HEARTH_LOG_LIFT);
       ctx.rotate(tilt);
       ctx.fillStyle = rgb(sampleRamp(wood, 0.2));
       ctx.fillRect(-ts * 0.3, -ts * 0.06, ts * 0.6, ts * 0.12);
       ctx.fillStyle = rgba(FIRE_MID, 0.8);
       ctx.fillRect(-ts * 0.3, -ts * 0.06, ts * 0.6, ts * 0.03);
       ctx.restore();
-    }
-    for (const [dx, hgt] of [
-      [-0.2, 0.42],
-      [0.05, 0.55],
-      [0.28, 0.38],
-    ] as const) {
-      const fx = fireCx + dx * ts;
-      ctx.fillStyle = rgb(FIRE_MID);
-      ctx.beginPath();
-      ctx.moveTo(fx - ts * 0.1, breastBottom - ts * 0.1);
-      ctx.quadraticCurveTo(
-        fx - ts * 0.08,
-        breastBottom - ts * hgt * 0.7,
-        fx,
-        breastBottom - ts * hgt,
-      );
-      ctx.quadraticCurveTo(
-        fx + ts * 0.1,
-        breastBottom - ts * hgt * 0.6,
-        fx + ts * 0.1,
-        breastBottom - ts * 0.1,
-      );
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = rgb(FIRE_CORE);
-      ctx.beginPath();
-      ctx.ellipse(fx, breastBottom - ts * 0.16, ts * 0.045, ts * hgt * 0.22, 0, 0, Math.PI * 2);
-      ctx.fill();
     }
 
     // The crane, swung out with the stew pot on its hook.

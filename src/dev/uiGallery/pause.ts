@@ -173,7 +173,7 @@ const FIXTURE_UNLOCKED_SONGS: readonly MusicTrackId[] = [
   'town_music_2',
   'forest_path',
   'circus_theme_1',
-  'desperado_club_1',
+  'cloak_and_dagger_1',
   'casino_background_jazz_1',
 ];
 /** Found since the music page was last opened, so the menu and the rows show them as new. */
@@ -313,7 +313,7 @@ export function pauseFixtureScreen(data: PauseFixtureData): PauseScreen {
       {
         id: 'anchor/shard-1',
         parentId: 'anchor',
-        name: 'Shard in the Big Top',
+        name: 'Shard in the Starlight Tent',
         status: 'active',
         objective: 'Somewhere past the hall of mirrors',
         target: { x: 2, y: 12 },
@@ -475,7 +475,7 @@ export const PAUSE_FIXTURES: readonly DialogFixture[] = [
     name: 'confirm-difficulty',
     section: 'settings',
     interact: (rig, id) => {
-      // A guard stands in for the Big Top, so the pick asks before restarting.
+      // A guard stands in for the Starlight Tent, so the pick asks before restarting.
       const handle = registerDifficultyChangeGuard({ restartWithDifficulty: () => undefined });
       const pick = `${id}/difficulty/${GUARDED_PICK}`;
       // A phone has the difficulty row below the fold; page down to it.

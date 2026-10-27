@@ -1,5 +1,6 @@
 import type { ItemId } from '../core/items/defs/ItemDefs';
 import type { StatName } from '../Player';
+import type { CrawlerKind } from '../core/skills/SkillManager';
 import {
   HAMBURGER_FED_DURATION_SECONDS,
   HAMBURGER_STR_BONUS,
@@ -17,7 +18,7 @@ const FIXED_EFFECT_NOTICES: Partial<Record<ItemId, string>> = {
   speed_fizz: 'Speed temporarily increased',
   jugg_juice: 'Max HP temporarily increased',
   cooldown_crisp: 'Cooldowns temporarily halved',
-  dirty_shirley: 'Health restored — and you are drunk',
+  catnip_tuna_water: 'Health restored — and she is buzzed',
   hollow_stew: 'Health restored',
   hamburger: `Health restored — Strength +${HAMBURGER_STR_BONUS} for ${HAMBURGER_FED_DURATION_SECONDS}s`,
 };
@@ -28,6 +29,14 @@ const FIXED_EFFECT_NOTICES: Partial<Record<ItemId, string>> = {
  */
 export function potionEffectNotice(id: ItemId): string | null {
   return FIXED_EFFECT_NOTICES[id] ?? null;
+}
+
+/** What each crawler is called in a line about whose a thing is. */
+const CRAWLER_NOUN: Record<CrawlerKind, string> = { human: 'human', cat: 'cat' };
+
+/** The toast when a crawler reaches for a drink that belongs to `owner`. */
+export function drinkRefusal(owner: CrawlerKind): string {
+  return `That's the ${CRAWLER_NOUN[owner]}'s.`;
 }
 
 const STAT_LABELS: Record<StatName, string> = {

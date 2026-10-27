@@ -163,8 +163,8 @@ function readableFixture(name: string, page: number): DialogFixture {
 const NOTICES: readonly Notice[] = [
   {
     tone: 'danger',
-    title: 'Heather the Bear',
-    body: 'Sighted again in the ruins north of the square. Do not engage alone. Reward posted at the guard house.',
+    title: 'Dire Bear',
+    body: 'Sighted again at the forest edge north of the square. Do not engage alone. Reward posted at the guard house.',
   },
   {
     tone: 'active',
@@ -184,7 +184,7 @@ const NOTICES: readonly Notice[] = [
   {
     tone: 'done',
     title: 'The circus has left town',
-    body: 'The Big Top is down and the clowns are gone. Thank you to the crawlers who saw them off.',
+    body: 'The Starlight Tent is down and the clowns are gone. Thank you to the crawlers who saw them off.',
   },
   {
     tone: 'danger',

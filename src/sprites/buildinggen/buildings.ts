@@ -1,5 +1,5 @@
 /**
- * The fifteen buildings of the Over City, as data.
+ * The fifteen buildings of Taloncrest, as data.
  *
  * ## What is frozen and why
  *
@@ -26,6 +26,7 @@
  * nine frames drift against each other for a long time before they realign.
  */
 
+import { CLOAK_AND_DAGGER_NAME } from '../../map/town/townPlan';
 import type { BuildingSpec } from './spec';
 
 /**
@@ -42,11 +43,11 @@ const SEED_HERB = 730693;
 const SEED_STORE = 730817;
 const SEED_INN = 730939;
 const SEED_FLAGON = 731063;
-const SEED_HILDA = 731179;
+const SEED_LORI = 731179;
 const SEED_SMITHY = 731291;
 const SEED_STUMP = 731417;
 const SEED_QUIET_NEEDLE = 731533;
-const SEED_DESPERADO = 731659;
+const SEED_CLOAK_AND_DAGGER = 731659;
 const SEED_MILL = 731777;
 
 /** The inn's loop length, set by the cat's breath. */
@@ -1223,8 +1224,8 @@ const GENERAL_STORE: BuildingSpec = {
     ramp: 'clay_terracotta',
     ridgeRamp: 'ridge_clay',
     depthTiles: 1.5,
-    // Widened from the shipped 0.26: a skyfowl-run shop's eave reads as a
-    // roost ledge from across the plaza, before any figure is on screen.
+    // A Hawkfolk-run shop's eave reads as a roost ledge from across the plaza,
+    // before any figure is on screen.
     overhangTiles: 0.4,
     ridgeSagTiles: 0,
     mossy: false,
@@ -1590,15 +1591,15 @@ const HORNED_FLAGON: BuildingSpec = {
   },
 };
 
-/** Old Hilda's Cottage — the crooked one, sagging under moss-heavy thatch. */
-const HILDAS_COTTAGE: BuildingSpec = {
-  key: 'hildas_cottage',
-  file: 'hildas_cottage.png',
-  title: "Old Hilda's Cottage",
+/** Old Lori's Cottage — the crooked one, sagging under moss-heavy thatch. */
+const LORIS_COTTAGE: BuildingSpec = {
+  key: 'loris_cottage',
+  file: 'loris_cottage.png',
+  title: "Old Lori's Cottage",
   replaces: 'village_house_3',
   tilesWide: 7,
   tilesHigh: 6,
-  seed: SEED_HILDA,
+  seed: SEED_LORI,
   stories: 1,
   sideReturnTiles: 0.45,
   facade: {
@@ -2226,15 +2227,15 @@ const QUIET_NEEDLE: BuildingSpec = {
   },
 };
 
-/** The Desperado Club — the biggest canvas in the town, and the loudest. */
-const DESPERADO_CLUB: BuildingSpec = {
-  key: 'desperado_club',
-  file: 'desperado_club.png',
-  title: 'The Desperado Club',
-  replaces: 'desperado_club',
+/** The Cloak & Dagger — the biggest canvas in the town, and the loudest. */
+const CLOAK_AND_DAGGER: BuildingSpec = {
+  key: 'cloak_and_dagger',
+  file: 'cloak_and_dagger.png',
+  title: CLOAK_AND_DAGGER_NAME,
+  replaces: 'cloak_and_dagger',
   tilesWide: 12,
   tilesHigh: 10,
-  seed: SEED_DESPERADO,
+  seed: SEED_CLOAK_AND_DAGGER,
   stories: 2,
   sideReturnTiles: 0.7,
   facade: {
@@ -2355,13 +2356,13 @@ const DESPERADO_CLUB: BuildingSpec = {
   props: [
     {
       kind: 'letter_board',
-      col: 3.6,
+      col: 2.7,
       baseAboveGroundTiles: 4.9,
-      widthTiles: 4.6,
+      widthTiles: 6.4,
       heightTiles: 0.8,
       ramp: 'dark_dressed_stone',
       accentRamp: 'brass_gold',
-      label: 'DESPERADO',
+      label: 'CLOAK & DAGGER',
     },
     {
       kind: 'rope_line',
@@ -2608,11 +2609,11 @@ export const BUILDING_SPECS: ReadonlyArray<BuildingSpec> = [
   HERB_REMEDY,
   GENERAL_STORE,
   HORNED_FLAGON,
-  HILDAS_COTTAGE,
+  LORIS_COTTAGE,
   BLACKSMITH,
   SUNKEN_STUMP,
   QUIET_NEEDLE,
-  DESPERADO_CLUB,
+  CLOAK_AND_DAGGER,
   MILLERS_FARM,
 ];
 

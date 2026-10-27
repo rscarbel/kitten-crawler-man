@@ -77,7 +77,7 @@ const {
 } = await import('../src/sprites/figure/figureFrameCache.js');
 const { setFigureCacheStatsRecording, getFigureCacheStats } =
   await import('../src/sprites/figure/figureCacheStats.js');
-const { BIG_TOP_BUILDING_NAME } = await import('../src/core/quests/CircusQuestProgress.js');
+const { STARLIGHT_TENT_NAME } = await import('../src/map/overworld/circusGroundsLayout.js');
 
 const cyclesArg = process.argv.find((arg) => arg.startsWith('--cycles='));
 const DEFAULT_TRIPS = 20;
@@ -265,8 +265,9 @@ const twinMap = new GameMap({
   mapType: 'overworld',
   worldSeed: WORLD_SEED,
 });
-// The Big Top is sealed until its questline opens it.
-const doors = twinMap.buildingEntries.filter((entry) => entry.name !== BIG_TOP_BUILDING_NAME);
+// The Starlight Tent is the circus's maze, which parks both crawlers at its flaps;
+// the soak walks the town's own doors.
+const doors = twinMap.buildingEntries.filter((entry) => entry.name !== STARLIGHT_TENT_NAME);
 check(doors.length > 0, 'the town has no doors to walk through');
 
 sceneManager.replace(

@@ -1,14 +1,15 @@
 #!/usr/bin/env tsx
 /**
- * Review harness for the Desperado Club's floor: renders the real room (the
+ * Review harness for the Cloak & Dagger's floor: renders the real room (the
  * same interior `BuildingInteriorScene` generates on door entry) with its
- * real cast — station staff, the DJ, the dancers and the wandering patrons —
- * driven through `DesperadoClubSystem`'s own `update()`, so what's on screen
+ * real cast — station staff, the host at the door, the stage acts, the
+ * gamblers, the dancers and the wandering patrons — driven through
+ * `CloakAndDaggerSystem`'s own `update()`, so what's on screen
  * is what the game actually draws, not a hand-picked pose.
  *
  *   npm run render:club-floor
  *
- * Output lands in `preview/desperado-club/`.
+ * Output lands in `preview/cloak-and-dagger/`.
  */
 
 import { createCanvas, type Canvas } from 'canvas';
@@ -39,21 +40,19 @@ globals.document = {
 const { TILE_SIZE } = await import('../src/core/constants.js');
 const { loadSprites } = await import('../src/core/spriteAssets/SpriteLoader.js');
 const { GameMap } = await import('../src/map/GameMap.js');
-const { createTownPlan } = await import('../src/map/town/townPlan.js');
+const { createTownPlan, CLOAK_AND_DAGGER_NAME } = await import('../src/map/town/townPlan.js');
 const { FLOOR_ART_SEEDS } = await import('../src/map/ground/artSeedAlphabet.js');
 const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
-const { Conversation } = await import('../src/dialog/Conversation.js');
-const { createClubMembership } = await import('../src/core/club/ClubMembership.js');
-const { createMercenaryRoster } = await import('../src/core/party/MercenaryRoster.js');
+const { createCasinoState } = await import('../src/core/club/CasinoState.js');
+const { InteriorOccupantSystem } = await import('../src/systems/InteriorOccupantSystem.js');
 const { createShopStock } = await import('../src/economy/shopStock.js');
-const { DesperadoClubSystem } = await import('../src/systems/DesperadoClubSystem.js');
+const { CloakAndDaggerSystem } = await import('../src/systems/CloakAndDaggerSystem.js');
 
 const TOWN_PLAN_SIZE = 280;
 const WARM_FRAMES = 90;
 const SCALE = 2;
-const CLUB_BUILDING_NAME = 'The Desperado Club';
-const OUT_DIR = `${PREVIEW_DIR}/desperado-club`;
+const OUT_DIR = `${PREVIEW_DIR}/cloak-and-dagger`;
 
 await loadSprites('src/images/');
 const artSeed = FLOOR_ART_SEEDS[0];
@@ -61,8 +60,8 @@ paintEnvironmentArtInNode(artSeed);
 installCanvasGlobals();
 
 const plan = createTownPlan(TOWN_PLAN_SIZE);
-const building = plan.buildings.find((b) => b.name === CLUB_BUILDING_NAME);
-if (building === undefined) throw new Error(`town plan has no "${CLUB_BUILDING_NAME}"`);
+const building = plan.buildings.find((b) => b.name === CLOAK_AND_DAGGER_NAME);
+if (building === undefined) throw new Error(`town plan has no "${CLOAK_AND_DAGGER_NAME}"`);
 
 const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [], artSeed });
 map.generateInterior(building.kind, 0, building.name, false, 'default');
@@ -76,20 +75,21 @@ const viewH = mapH * TILE_SIZE;
 const human = new HumanPlayer(map.startTile.x, map.startTile.y, TILE_SIZE);
 const cat = new CatPlayer(map.startTile.x + 1, map.startTile.y, TILE_SIZE);
 
-const club = new DesperadoClubSystem(
+const club = new CloakAndDaggerSystem(
   map,
-  createClubMembership(),
-  createMercenaryRoster(),
-  new Conversation(null),
+  createCasinoState(),
   null,
   null,
-  false,
-  human,
   createShopStock(),
   (id) => partyOwnsGear([human, cat], id),
 );
+const residents = InteriorOccupantSystem.forBuilding(map, building.kind, building.name);
+const people = residents?.people ?? [];
 
-for (let frame = 0; frame < WARM_FRAMES; frame++) club.update(human, cat);
+for (let frame = 0; frame < WARM_FRAMES; frame++) {
+  residents?.update();
+  club.update(human, cat, people);
+}
 
 const canvas: Canvas = createCanvas(viewW * SCALE, viewH * SCALE);
 const ctx = canvas.getContext('2d');
@@ -100,60 +100,50 @@ map.renderCanvas(gameCtx, 0, 0, viewW, viewH);
 map.renderDecorationsOverlay(gameCtx, 0, 0, viewW, viewH);
 club.renderFloor(gameCtx, 0, 0);
 
-const figures = [...club.sortedRenderables()].sort((a, b) => a.y - b.y);
+const figures = [...club.sortedRenderables(), ...people, human, cat].sort((a, b) => a.y - b.y);
 for (const figure of figures) figure.render(gameCtx, 0, 0, TILE_SIZE);
 
 writePreviewPng(`${OUT_DIR}/floor.png`, canvas.toBuffer('image/png'));
 console.log(`wrote ${OUT_DIR}/floor.png (${mapW}x${mapH} tiles)`);
 
-// A tighter crop over the dance floor, enlarged, so the dancers' motion and
-// the mixed-species crowd read clearly rather than as dots in a wide shot.
-const CROP_SCALE = 4;
-const DANCE_FLOOR_TILES = { x0: 8, y0: 5, x1: 15, y1: 12 };
-const cropW = (DANCE_FLOOR_TILES.x1 - DANCE_FLOOR_TILES.x0) * TILE_SIZE;
-const cropH = (DANCE_FLOOR_TILES.y1 - DANCE_FLOOR_TILES.y0) * TILE_SIZE;
-const cropCanvas: Canvas = createCanvas(cropW * CROP_SCALE, cropH * CROP_SCALE);
-const cropCtx = cropCanvas.getContext('2d');
-cropCtx.imageSmoothingEnabled = false;
-cropCtx.scale(CROP_SCALE, CROP_SCALE);
-const cropGameCtx = asGameContext(cropCtx);
-const camX = DANCE_FLOOR_TILES.x0 * TILE_SIZE;
-const camY = DANCE_FLOOR_TILES.y0 * TILE_SIZE;
-map.renderCanvas(cropGameCtx, camX, camY, cropW, cropH);
-map.renderDecorationsOverlay(cropGameCtx, camX, camY, cropW, cropH);
-club.renderFloor(cropGameCtx, camX, camY);
-for (const figure of figures) figure.render(cropGameCtx, camX, camY, TILE_SIZE);
-writePreviewPng(`${OUT_DIR}/dance-floor-4x.png`, cropCanvas.toBuffer('image/png'));
-console.log(`wrote ${OUT_DIR}/dance-floor-4x.png`);
+interface Crop {
+  readonly name: string;
+  readonly tiles: {
+    readonly x0: number;
+    readonly y0: number;
+    readonly x1: number;
+    readonly y1: number;
+  };
+}
 
-// The casino at in-game size and enlarged, so the slot bank, the wheel and the
-// counter are judged both as the player sees them and in detail. The human and
-// the cat stand in the row behind the slot bank, where the cabinets' fronts must
-// be painted over them.
-const CASINO_TILES = { x0: 17, y0: 0, x1: 24, y1: 10 };
-const BEHIND_SLOTS_ROW = 7;
-const HUMAN_BEHIND_SLOTS_X = 21;
-const CAT_BEHIND_SLOTS_X = 22;
-const humanBehindSlots = new HumanPlayer(HUMAN_BEHIND_SLOTS_X, BEHIND_SLOTS_ROW, TILE_SIZE);
-const catBehindSlots = new CatPlayer(CAT_BEHIND_SLOTS_X, BEHIND_SLOTS_ROW, TILE_SIZE);
-const casinoFigures = [...figures, humanBehindSlots, catBehindSlots].sort((a, b) => a.y - b.y);
-const CASINO_SCALES = [1, CROP_SCALE] as const;
-for (const scale of CASINO_SCALES) {
-  const casinoW = (CASINO_TILES.x1 - CASINO_TILES.x0) * TILE_SIZE;
-  const casinoH = (CASINO_TILES.y1 - CASINO_TILES.y0) * TILE_SIZE;
-  const casinoCanvas: Canvas = createCanvas(casinoW * scale, casinoH * scale);
-  const casinoCtx = casinoCanvas.getContext('2d');
-  casinoCtx.scale(scale, scale);
-  const casinoGameCtx = asGameContext(casinoCtx);
-  const casinoCamX = CASINO_TILES.x0 * TILE_SIZE;
-  const casinoCamY = CASINO_TILES.y0 * TILE_SIZE;
-  map.renderCanvas(casinoGameCtx, casinoCamX, casinoCamY, casinoW, casinoH);
-  map.renderDecorationsOverlay(casinoGameCtx, casinoCamX, casinoCamY, casinoW, casinoH);
-  club.renderFloor(casinoGameCtx, casinoCamX, casinoCamY);
-  for (const figure of casinoFigures) {
-    figure.render(casinoGameCtx, casinoCamX, casinoCamY, TILE_SIZE);
+/**
+ * Tighter crops, each at in-game size and enlarged, so the stages, the casino
+ * and the front door are judged both as the player sees them and in detail.
+ */
+const CROP_SCALES = [1, 4] as const;
+const CROPS: ReadonlyArray<Crop> = [
+  { name: 'stages', tiles: { x0: 5, y0: 6, x1: 23, y1: 15 } },
+  { name: 'casino', tiles: { x0: 6, y0: 0, x1: 27, y1: 8 } },
+  { name: 'entrance', tiles: { x0: 9, y0: 13, x1: 27, y1: 20 } },
+];
+
+for (const crop of CROPS) {
+  for (const scale of CROP_SCALES) {
+    const cropW = (crop.tiles.x1 - crop.tiles.x0) * TILE_SIZE;
+    const cropH = (crop.tiles.y1 - crop.tiles.y0) * TILE_SIZE;
+    const cropCanvas: Canvas = createCanvas(cropW * scale, cropH * scale);
+    const cropCtx = cropCanvas.getContext('2d');
+    cropCtx.imageSmoothingEnabled = false;
+    cropCtx.scale(scale, scale);
+    const cropGameCtx = asGameContext(cropCtx);
+    const camX = crop.tiles.x0 * TILE_SIZE;
+    const camY = crop.tiles.y0 * TILE_SIZE;
+    map.renderCanvas(cropGameCtx, camX, camY, cropW, cropH);
+    map.renderDecorationsOverlay(cropGameCtx, camX, camY, cropW, cropH);
+    club.renderFloor(cropGameCtx, camX, camY);
+    for (const figure of figures) figure.render(cropGameCtx, camX, camY, TILE_SIZE);
+    const file = `${OUT_DIR}/${crop.name}-${scale}x.png`;
+    writePreviewPng(file, cropCanvas.toBuffer('image/png'));
+    console.log(`wrote ${file}`);
   }
-  const file = `${OUT_DIR}/casino-${scale}x.png`;
-  writePreviewPng(file, casinoCanvas.toBuffer('image/png'));
-  console.log(`wrote ${file}`);
 }

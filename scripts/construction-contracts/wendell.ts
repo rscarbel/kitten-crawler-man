@@ -140,7 +140,7 @@ function verifyWendell(check: Check): void {
 
   rig.state.blueprints.phase = 'complete';
   check(rig.hook.markerFor(WENDELL) === 'exclamation', 'unlocked and idle: a ! over Wendell');
-  check(rig.hook.markerFor('old_hilda') === null, 'nobody else gets his marker');
+  check(rig.hook.markerFor('old_lori') === null, 'nobody else gets his marker');
 
   const intro = talk(rig);
   const introEnding = intro?.request.ending;

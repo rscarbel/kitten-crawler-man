@@ -42,6 +42,7 @@ import {
   type RGB,
 } from '../../town/townPalette';
 import { paintPlankBoard } from '../../town/townMaterials';
+import type { PropFlameSite } from '../propFlames';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -3842,11 +3843,13 @@ const BUILDERS_HEARTH = {
     glowUp: 0.2,
     glowR: 0.7,
     glowAlpha: 0.35,
-    flames: [
-      { dx: -0.14, up: 0.12, height: 0.36, width: 0.1 },
-      { dx: 0.06, up: 0.14, height: 0.46, width: 0.12 },
-      { dx: 0.22, up: 0.1, height: 0.28, width: 0.08 },
-    ],
+    /**
+     * The live flames' foot on the logs: east of the firebox centre, clear of
+     * the kettle swung in from the west, and up from the dogs.
+     */
+    flameDx: 0.15,
+    flameUp: 0.12,
+    flameSize: 0.45,
   },
   crane: {
     postInset: 0.06,
@@ -3955,6 +3958,23 @@ const BUILDERS_HEARTH = {
     finialR: 0.035,
   },
 } as const;
+
+/** The middle of the builder's hearth's three-tile footprint. */
+const BUILDERS_HEARTH_CENTRE_TILES = 1.5;
+
+/** The builder's fire, standing on the logs across his firedogs. */
+export const BUILDERS_HEARTH_FLAMES: ReadonlyArray<PropFlameSite> = [
+  {
+    x: BUILDERS_HEARTH_CENTRE_TILES + BUILDERS_HEARTH.fire.flameDx,
+    rise:
+      BUILDERS_HEARTH.hearthstone.top -
+      BUILDERS_HEARTH.firebox.bottomOverlap +
+      BUILDERS_HEARTH.dogs.lift +
+      BUILDERS_HEARTH.fire.flameUp,
+    size: BUILDERS_HEARTH.fire.flameSize,
+    style: 'hearth',
+  },
+];
 
 /**
  * The hearth he laid himself: a chimney breast of dressed ashlar in dead-level
@@ -4129,7 +4149,7 @@ export function paintBuildersHearth(
         ar.ink,
       );
     }
-    // Iron dogs, logs and the fire.
+    // Iron dogs, logs and the fire's glow; its flames are live.
     const dg = s.dogs;
     const dogY = fireBottom - ts * dg.lift;
     for (const side of [-1, 1]) {
@@ -4160,9 +4180,6 @@ export function paintBuildersHearth(
     }
     const fi = s.fire;
     glow(ctx, fireCx, dogY - ts * fi.glowUp, ts * fi.glowR, EMBER_GLOW, fi.glowAlpha);
-    for (const f of fi.flames) {
-      flame(ctx, fireCx + ts * f.dx, dogY - ts * f.up, ts * f.height, ts * f.width);
-    }
     // The crane and the kettle, swung in over the fire.
     const cr = s.crane;
     const craneX = fireCx - fireHalf + ts * cr.postInset;

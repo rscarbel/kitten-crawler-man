@@ -1,6 +1,6 @@
 /**
  * The Wheel of Fortune's colours, shared by everything that paints the wheel:
- * the upright prop on the club floor and the wheel screen Tito spins. One
+ * the upright prop on the club floor and the wheel screen Donald spins. One
  * table, so the wheel the player walks past and the wheel they bet on are
  * visibly the same object.
  */
@@ -52,7 +52,7 @@ export const WHEEL_BULB = {
   glowEdge: 'rgba(255,200,90,0)',
 } as const;
 
-/** Masking tape over the Nothing on a free spin, and the marker written on it. */
+/** Masking tape over Permanent Death on a free spin, and the marker written on it. */
 export const WHEEL_TAPE = {
   face: '#efe2b8',
   /** The crinkled band along each strip's edges. */

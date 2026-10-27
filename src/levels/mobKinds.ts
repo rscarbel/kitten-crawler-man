@@ -22,7 +22,7 @@ import { prewarmRoosterMinionArrival } from '../creatures/RoosterMinion';
 import { SlightlyBentRooster } from '../creatures/SlightlyBentRooster';
 import { Troglodyte } from '../creatures/Troglodyte';
 import { Tuskling } from '../creatures/Tuskling';
-import { SkyFowl, SKYFOWL_TOUGH_FAMILY } from '../creatures/SkyFowl';
+import { Hawkfolk, HAWKFOLK_TOUGH_FAMILY } from '../creatures/Hawkfolk';
 import { Necromancer } from '../creatures/Necromancer';
 import { RaisedRatkin, RAISED_RATKIN_FAMILY } from '../creatures/RaisedRatkin';
 import { GraveBull } from '../creatures/GraveBull';
@@ -37,13 +37,13 @@ import { SpiderHatchling } from '../creatures/SpiderHatchling';
 import { SpiderEgg } from '../creatures/SpiderEgg';
 import { RuinsGhoul } from '../creatures/RuinsGhoul';
 import { Krasue } from '../creatures/Krasue';
-import { CircusLemur } from '../creatures/CircusLemur';
-import { StiltClown } from '../creatures/StiltClown';
+import { Lemur } from '../creatures/Lemur';
+import { TallClown } from '../creatures/TallClown';
 import { FatClown } from '../creatures/FatClown';
 import { EvilClown } from '../creatures/EvilClown';
-import { MoldLion } from '../creatures/MoldLion';
-import { TerrorTheClown } from '../creatures/TerrorTheClown';
-import { HeatherTheBear } from '../creatures/HeatherTheBear';
+import { Lion } from '../creatures/Lion';
+import { MassiveClown } from '../creatures/MassiveClown';
+import { DireBear } from '../creatures/DireBear';
 import { CityElfCultist } from '../creatures/CityElfCultist';
 import { MissQuill } from '../creatures/MissQuill';
 import { Remex } from '../creatures/Remex';
@@ -60,9 +60,9 @@ import { NecroFairy } from '../creatures/fairies/NecroFairy';
 import { prewarmGoblin, type GoblinWeapon } from '../sprites/goblinSprite';
 import { prewarmGoblinBomber } from '../sprites/goblinBomberSprite';
 import { prewarmTuskling } from '../sprites/tusklingSprite';
-import { prewarmSkyfowlCastMember } from '../sprites/skyfowlCastSprite';
+import { prewarmHawkfolkCastMember } from '../sprites/hawkfolkCastSprite';
 import { prewarmLlama } from '../sprites/llamaSprite';
-import { prewarmMoldLion } from '../sprites/moldLionSprite';
+import { prewarmLion } from '../sprites/lionSprite';
 import { prewarmBrindleGrub } from '../sprites/brindleGrubSprite';
 import { prewarmSmallSpider } from '../sprites/spiderSprite';
 import { prewarmBugaboo } from '../sprites/bugabooSprite';
@@ -71,7 +71,7 @@ import { prewarmRat } from '../sprites/ratSprite';
 import { prewarmTroglodyte } from '../sprites/troglodyteSprite';
 import { prewarmGraveBull } from '../sprites/graveBullSprite';
 import { prewarmFairy } from '../sprites/fairySprite';
-import type { SkyfowlLookId } from '../sprites/art/skyfowl/cast';
+import type { HawkfolkLookId } from '../sprites/art/hawkfolk/cast';
 import type { FigureDef } from '../sprites/figure/figureDef';
 import {
   NO_APPROACH_ROWS,
@@ -86,7 +86,7 @@ import { GOBLIN_FIGURES } from '../sprites/art/goblinFigure';
 import { GOBLIN_BOMBER_FIGURES } from '../sprites/art/goblinBomberFigure';
 import { RAT_FIGURE } from '../sprites/art/ratFigure';
 import { COCKROACH_FIGURE } from '../sprites/art/cockroachFigure';
-import { skyfowlCastFigure } from '../sprites/art/skyfowlCastFigure';
+import { hawkfolkCastFigure } from '../sprites/art/hawkfolkCastFigure';
 import { TROGLODYTE_FIGURE } from '../sprites/art/troglodyteFigure';
 import {
   BENT_ROOSTER_FIGURE,
@@ -94,10 +94,10 @@ import {
   LITTLE_ROOSTER_FIGURE,
 } from '../sprites/art/roosterFigure';
 import { LLAMA_FIGURE } from '../sprites/art/llamaFigure';
-import { CIRCUS_LEMUR_FIGURE } from '../sprites/art/circusLemurFigure';
-import { FAT_CLOWN_FIGURE, STILT_CLOWN_FIGURE } from '../sprites/art/clownFigure';
+import { LEMUR_FIGURE } from '../sprites/art/lemurFigure';
+import { FAT_CLOWN_FIGURE, TALL_CLOWN_FIGURE } from '../sprites/art/clownFigure';
 import { TUSKLING_FIGURE } from '../sprites/art/tusklingFigure';
-import { MOLD_LION_FIGURE } from '../sprites/art/moldLionFigure';
+import { LION_FIGURE } from '../sprites/art/lionFigure';
 import { CITY_ELF_CULTIST_FIGURE } from '../sprites/art/cityElfCultistFigure';
 import { MANTIS_FIGURE } from '../sprites/art/mantidFigure';
 import { BUGABOO_FIGURE } from '../sprites/art/bugabooFigure';
@@ -456,18 +456,18 @@ const MOB_KIND_DEFS = {
     },
     prewarm: prewarmTuskling,
   }),
-  sky_fowl: lookKind({
-    create: (tile, look: SkyfowlLookId) => new SkyFowl(tile.x, tile.y, TILE_SIZE, look),
+  hawkfolk: lookKind({
+    create: (tile, look: HawkfolkLookId) => new Hawkfolk(tile.x, tile.y, TILE_SIZE, look),
     threat: 5.5,
     role: 'melee',
     protected: null,
-    family: SKYFOWL_TOUGH_FAMILY,
+    family: HAWKFOLK_TOUGH_FAMILY,
     applyVariant: (mob, look) => mob.applyVariant(look),
     approach: {
-      figure: skyfowlCastFigure,
+      figure: hawkfolkCastFigure,
       rows: { walk: 'walk', attacks: ['strike'], views: THREE_VIEW_SUFFIXES },
     },
-    prewarm: prewarmSkyfowlCastMember,
+    prewarm: prewarmHawkfolkCastMember,
   }),
   necromancer: kind({
     create: (tile, _look, random) => new Necromancer(tile.x, tile.y, TILE_SIZE, random),
@@ -580,24 +580,24 @@ const MOB_KIND_DEFS = {
     protected: null,
     prewarm: null,
   }),
-  circus_lemur: kind({
-    create: (tile) => new CircusLemur(tile.x, tile.y, TILE_SIZE),
+  lemur: kind({
+    create: (tile) => new Lemur(tile.x, tile.y, TILE_SIZE),
     threat: 7.5,
     role: 'ranged',
     protected: null,
     approach: {
-      figure: oneFigure(CIRCUS_LEMUR_FIGURE),
+      figure: oneFigure(LEMUR_FIGURE),
       rows: { walk: 'walk', attacks: ['throw', 'attack'], views: 'single' },
     },
     prewarm: null,
   }),
-  stilt_clown: kind({
-    create: (tile) => new StiltClown(tile.x, tile.y, TILE_SIZE),
+  tall_clown: kind({
+    create: (tile) => new TallClown(tile.x, tile.y, TILE_SIZE),
     threat: 3.6,
     role: 'melee',
     protected: null,
     approach: {
-      figure: oneFigure(STILT_CLOWN_FIGURE),
+      figure: oneFigure(TALL_CLOWN_FIGURE),
       rows: { walk: 'walk', attacks: ['windup', 'lunge'], views: 'single' },
     },
     prewarm: null,
@@ -620,29 +620,29 @@ const MOB_KIND_DEFS = {
     protected: 'boss',
     prewarm: null,
   }),
-  mold_lion: kind({
-    create: (tile) => new MoldLion(tile.x, tile.y, TILE_SIZE),
-    threat: 30,
+  lion: kind({
+    create: (tile) => new Lion(tile.x, tile.y, TILE_SIZE),
+    threat: 24,
     role: 'melee',
     protected: null,
     approach: {
-      figure: oneFigure(MOLD_LION_FIGURE),
+      figure: oneFigure(LION_FIGURE),
       rows: { walk: 'walk', attacks: ['attack'], views: 'single' },
     },
-    prewarm: prewarmMoldLion,
+    prewarm: prewarmLion,
   }),
-  terror_the_clown: kind({
-    create: (tile) => new TerrorTheClown(tile.x, tile.y, TILE_SIZE),
+  massive_clown: kind({
+    create: (tile) => new MassiveClown(tile.x, tile.y, TILE_SIZE),
     threat: 67,
     role: 'melee',
-    protected: 'boss',
+    protected: null,
     prewarm: null,
   }),
-  heather_the_bear: kind({
-    create: (tile) => new HeatherTheBear(tile.x, tile.y, TILE_SIZE),
+  dire_bear: kind({
+    create: (tile) => new DireBear(tile.x, tile.y, TILE_SIZE),
     threat: 18,
     role: 'melee',
-    protected: 'boss',
+    protected: null,
     prewarm: null,
   }),
   city_elf_cultist: kind({

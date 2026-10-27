@@ -31,7 +31,7 @@ import { BUILDING_KEYS, buildingLifeKeys } from '../buildinggen/runtimeBuildingS
 import { clubFurnitureSheetPlans } from './clubFurnitureSheets';
 import { destructiblePropSheetPlans } from './destructiblePropSheets';
 import { dungeonSignSheetPlans } from './dungeonSignSheets';
-import { overCitySheetPlans } from './overCitySheets';
+import { taloncrestSheetPlans } from './taloncrestSheets';
 import { requestPropSheets } from './runtimePropSheets';
 import { propSheetSize, type PropSheetPlan } from './propSheetPlan';
 import { floorTwoPropVariantSheetPlans } from './propVariantSheets';
@@ -129,7 +129,7 @@ function environmentFamilies(groups: ReadonlyArray<AssetGroup>): EnvironmentFami
   if (wanted.has('town')) {
     // Street furniture carries no floor seed: a lamp is the same lamp
     // wherever it is hung, and the town's own signage is a picture of a place.
-    families.push(props([...townscapeSheetPlans(), ...overCitySheetPlans()], false));
+    families.push(props([...townscapeSheetPlans(), ...taloncrestSheetPlans()], false));
     families.push({ kind: 'facades' });
   }
   if (wanted.has('overworld')) {

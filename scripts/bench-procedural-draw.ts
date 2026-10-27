@@ -87,8 +87,8 @@ import {
 import {
   EVIL_CLOWN_FIGURE,
   FAT_CLOWN_FIGURE,
-  STILT_CLOWN_FIGURE,
-  TERROR_CLOWN_FIGURE,
+  TALL_CLOWN_FIGURE,
+  MASSIVE_CLOWN_FIGURE,
 } from '../src/sprites/art/clownFigure.js';
 import {
   CLOWN_GAS_FIGURE,
@@ -330,8 +330,8 @@ const SUBJECTS: readonly Subject[] = [
   figureSubject(SKELETON_SWORD_FIGURE, 'walk_side'),
   figureSubject(SKELETON_ARCHER_FIGURE, 'walk_side'),
   figureSubject(FAT_CLOWN_FIGURE, 'idle'),
-  figureSubject(STILT_CLOWN_FIGURE, 'idle'),
-  figureSubject(TERROR_CLOWN_FIGURE, 'idle'),
+  figureSubject(TALL_CLOWN_FIGURE, 'idle'),
+  figureSubject(MASSIVE_CLOWN_FIGURE, 'idle'),
   figureSubject(EVIL_CLOWN_FIGURE, 'idle'),
   figureSubject(CLOWN_VIAL_FIGURE, 'fly'),
   figureSubject(CLOWN_SHATTER_FIGURE, 'shatter'),

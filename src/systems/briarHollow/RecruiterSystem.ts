@@ -1,5 +1,5 @@
 /**
- * The Briar Hollow recruiter — a lone militiaman posted in the Over City's own
+ * The Briar Hollow recruiter — a lone militiaman posted in Taloncrest's own
  * town square, ahead of the village he serves. He carries none of a soldier's
  * standing orders (no follow, hold or patrol) and fights nothing: he exists to
  * say one of two lines and, the first time, to point the party at the Mayor.

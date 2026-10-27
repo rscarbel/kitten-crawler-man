@@ -30,14 +30,6 @@ export interface MongoPetState {
    */
   scaledAgainstMaxHp: number;
   /**
-   * Set while the circus quest holds Mongo as Signet's collateral.
-   *
-   * An explicit flag rather than a very large cooldown: the cooldown it
-   * replaced was cleared by any code that had its own reason to zero a
-   * cooldown, which silently freed a kidnapped pet.
-   */
-  summonLocked: boolean;
-  /**
    * Set when he leaves the field spent, and held until he is back to *full*.
    *
    * Being knocked out is the one thing that costs real time. Without the latch he
@@ -78,7 +70,6 @@ export interface MongoPetStateCheckpoint {
   hp: number;
   regenFrames: number;
   scaledAgainstMaxHp: number;
-  summonLocked: boolean;
   restingUntilFull: boolean;
 }
 
@@ -87,7 +78,6 @@ export function captureMongoPetState(state: MongoPetState): MongoPetStateCheckpo
     hp: state.hp,
     regenFrames: state.regenFrames,
     scaledAgainstMaxHp: state.scaledAgainstMaxHp,
-    summonLocked: state.summonLocked,
     restingUntilFull: state.restingUntilFull,
   };
 }
@@ -107,7 +97,6 @@ export function restoreMongoPetState(
   state.hp = snapshot.hp;
   state.regenFrames = snapshot.regenFrames;
   state.scaledAgainstMaxHp = snapshot.scaledAgainstMaxHp;
-  state.summonLocked = snapshot.summonLocked;
   state.restingUntilFull = snapshot.restingUntilFull;
 }
 
@@ -120,7 +109,6 @@ export function createMongoPetState(
     hp,
     regenFrames: 0,
     scaledAgainstMaxHp: maxHp,
-    summonLocked: false,
     restingUntilFull,
     knockoutRuleExplained: false,
   };

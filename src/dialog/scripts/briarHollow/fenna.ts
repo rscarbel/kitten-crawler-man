@@ -80,7 +80,7 @@ export const FENNA = {
 
   /**
    * Accepted. `townWhereabouts` finishes "He lives at Plumbline Farm, in …":
-   * the skyfowl town and which way it lies from the village.
+   * Taloncrest and which way it lies from the village.
    */
   blueprintsAccepted: say.fn((a: { readonly townWhereabouts: string }) => [
     `Wonderful! Only, I don't have the plans anymore. I gave the blueprints to Wendell. He lives at Plumbline Farm, in ${a.townWhereabouts}.`,

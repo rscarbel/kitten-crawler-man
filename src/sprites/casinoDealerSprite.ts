@@ -1,5 +1,5 @@
 /**
- * Deuce, the Desperado Club's blackjack dealer — drawn at runtime like the rest
+ * Deuce, the Cloak & Dagger's blackjack dealer — drawn at runtime like the rest
  * of the club's cast, in two renderings. The painters live in `art/deuce/`.
  *
  * The **world figure** stands behind the table on the club floor. It is drawn

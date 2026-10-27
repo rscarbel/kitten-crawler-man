@@ -25,8 +25,6 @@ export interface ChestLootSplit {
   catLoot: LootDrop;
   /** Override display names for specific item IDs (keyed by item id string). */
   displayLabels?: Record<string, string>;
-  /** Extra display-only lines appended to the human column (not real inventory items). */
-  customHumanEntries?: string[];
 }
 
 /** A spark from the chest's burst, relative to the chest's centre. */

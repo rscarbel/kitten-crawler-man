@@ -1,4 +1,5 @@
 import type { GameMap } from '../map/GameMap';
+import type { TilePoint } from '../map/town/townPlan';
 import type { SafeRoomService } from '../map/DungeonGenerator';
 import { planSafeRoomCounters } from '../map/safeRoomCounterLayout';
 import {
@@ -509,7 +510,7 @@ export class SafeRoomSystem implements GameSystem {
   }
 
   evictMobs(_mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
-    const fallback =
+    const fallback: ReadonlyArray<TilePoint> =
       this.gameMap.mobSpawnPoints.length > 0
         ? this.gameMap.mobSpawnPoints
         : this.gameMap.hallwaySpawnPoints;

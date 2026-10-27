@@ -44,9 +44,8 @@ function mongoGrantedReward(mongoLevel: () => number): GrantedReward {
 
 /**
  * Announces Mongo once the chest that brought him has closed, then explains
- * him after the reward cards drain. Only this first grant explains him: the
- * circus quest hands back a pet the player already knows, and the Abilities
- * tab reopens the explainer on request.
+ * him after the reward cards drain. Only this first grant explains him; the
+ * Abilities tab reopens the explainer on request.
  */
 export function introduceMongo(bus: EventBus, menus: MenusKit, mongoLevel: () => number): void {
   bus.emit('rewardGranted', { rewards: [mongoGrantedReward(mongoLevel)] });

@@ -1,7 +1,7 @@
 /**
  * Issuing a construction contract, and what the work-order posting says
  * about the contracts, shared by every place a contract can come from:
- * Wendell at Plumbline Farm and the notice boards in Skyfowl Town and Briar
+ * Wendell at Plumbline Farm and the notice boards in Taloncrest and Briar
  * Hollow. Both draw from the same per-world stream, so a contract taken off
  * a board is the one Wendell would have handed over.
  */

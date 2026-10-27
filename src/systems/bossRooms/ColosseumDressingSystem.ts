@@ -861,9 +861,7 @@ function drawBloodDecal(
 
 // ── Save parsing ────────────────────────────────────────────────────────────
 
-/** A decal list from a save; absent means none were laid, as in a save older than the list. */
 function parseDecals(value: unknown): GroundDecal[] | undefined {
-  if (value === undefined) return [];
   if (!Array.isArray(value)) return undefined;
   const decals: GroundDecal[] = [];
   for (const entry of value) {
@@ -877,7 +875,6 @@ function parseDecals(value: unknown): GroundDecal[] | undefined {
 }
 
 function parseCageIndices(value: unknown): number[] | undefined {
-  if (value === undefined) return [];
   if (!Array.isArray(value)) return undefined;
   const indices: number[] = [];
   for (const entry of value) {
@@ -889,8 +886,7 @@ function parseCageIndices(value: unknown): number[] | undefined {
 
 /**
  * Reads the colosseum's part of a saved checkpoint back from untrusted JSON. A
- * field a save does not carry reads as untouched; a field of the wrong shape
- * rejects the whole snapshot.
+ * missing field or a field of the wrong shape rejects the whole snapshot.
  */
 export function parseColosseumDressingCheckpoint(
   value: unknown,
@@ -901,10 +897,10 @@ export function parseColosseumDressingCheckpoint(
   const splatter = parseDecals(mudSplatter);
   const blood = parseDecals(bloodDecals);
   if (cages === undefined || splatter === undefined || blood === undefined) return undefined;
-  if (portcullisDown !== undefined && typeof portcullisDown !== 'boolean') return undefined;
+  if (typeof portcullisDown !== 'boolean') return undefined;
   return {
     openCages: cages,
-    portcullisDown: portcullisDown ?? false,
+    portcullisDown,
     mudSplatter: splatter,
     bloodDecals: blood,
   };

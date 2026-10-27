@@ -51,7 +51,7 @@ import { text } from '../src/ui/widgets/text';
 import type { Density } from '../src/ui/theme/tokens';
 
 const OUT_DIR = `${PREVIEW_DIR}/playtest-r3`;
-const DEFAULT_ROOMS = ['Temple of the Sky', "Old Hilda's Cottage"];
+const DEFAULT_ROOMS = ['Temple of the Sky', "Old Lori's Cottage"];
 const DEFAULT_VIEWPORTS = ['390x844', '844x390'];
 const DEFAULT_DENSITY: Density = 'touch';
 const FULL_CHROME: InteriorChrome = { follow: true, summon: true, build: true, journal: true };

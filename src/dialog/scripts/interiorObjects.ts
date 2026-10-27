@@ -52,6 +52,9 @@ export const EXAMINE_LINES = {
   axle_set: narrator.bark(
     'A new axletree up on trestles with a wheel hung on each arm, a chalk line at its middle. Somebody is getting a cart.',
   ),
+  target_board: narrator.bark(
+    'A round board of offcut planks on a post, rings painted on it, the gold peppered with bolt holes. The red is mostly untouched.',
+  ),
   firewood_stack: narrator.bark(
     "Offcuts split and stacked by the armful: spoke ends, a cracked felloe, somebody's old axle. Nothing in here goes to waste.",
   ),
@@ -79,6 +82,9 @@ export const EXAMINE_LINES = {
   ),
   briefing_table: narrator.bark(
     'A hand-drawn map of the town inside its wall, pinned flat. Red pins mark the watch posts. Some of the posts have no pin.',
+  ),
+  merc_desk: narrator.bark(
+    "A contract book open at the hires' page, a spike of signed contracts under red wax, and a stack of orange armbands, folded square.",
   ),
   millstone: narrator.bark(
     'Two stones, one atop the other, worn glass-smooth at the centre where the grain has passed between them ten thousand times.',
@@ -242,10 +248,10 @@ export const EXAMINE_LINES = {
     "A trolley of corked ink and a fan of clean needles, laid out in the order they get used. Nothing here has touched skin that hasn't already paid.",
   ),
   feather_chart: narrator.bark(
-    "Two pinned diagrams of a skyfowl's own feather-tracts, body and wing, labelled in a hand too neat to be Nim's own client notes — a reference, not a doodle.",
+    "Two pinned diagrams of a Hawkfolk's own feather-tracts, body and wing, labelled in a hand too neat to be Nim's own client notes — a reference, not a doodle.",
   ),
   flash_wall: narrator.bark(
-    'Sheets of flash pinned edge to edge: roses, daggers, a ship, a skull, a skyfowl in flight. Each has a price pencilled under it, and none of the prices have been rubbed out.',
+    'Sheets of flash pinned edge to edge: roses, daggers, a ship, a skull, a Hawkfolk in flight. Each has a price pencilled under it, and none of the prices have been rubbed out.',
   ),
   ink_chair: narrator.bark(
     'A padded chair that tips back on an iron post, the leather worn pale where a hundred arms have rested. There is a towel folded over the headrest and a drop of black on the footrest nobody has got out.',
@@ -334,7 +340,7 @@ export const EXAMINE_LINES = {
     "Magistrate Featherfall's desk. The seal is out and every writ in the tray is signed and sealed — in a hand that is very nearly his.",
   ),
   writ_board: narrator.bark(
-    'Proclamations from the magistrate: curfews, a tithe on lamp oil, a reward for a missing alley-sweeper. Every one is sealed in red. None of them is in a skyfowl hand.',
+    'Proclamations from the magistrate: curfews, a tithe on lamp oil, a reward for a missing alley-sweeper. Every one is sealed in red. None of them is in a Hawkfolk hand.',
   ),
   coil_bench: narrator.bark(
     'Glass jars wrapped in foil, each holding a little violet light that should not stay lit on its own. It does anyway. The wire on the spool is still warm.',

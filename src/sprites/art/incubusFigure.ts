@@ -1,5 +1,5 @@
 /**
- * Mordecai as an Incubus — his shape on the Over City floor — as a painted
+ * Mordecai as an Incubus — his shape on the Taloncrest floor — as a painted
  * figure: the biped rig and its choreography (`biped/figure.ts`, `human/`), in a
  * dusky grey skin, slicked black hair and a wine silk shirt, with the horns,
  * wings, tail, sash, trousers and boots of `incubusArt.ts` composed into it.

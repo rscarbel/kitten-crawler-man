@@ -23,11 +23,11 @@ import {
   CLOWN_FIGURES,
   EVIL_CLOWN_FIGURE,
   FAT_CLOWN_FIGURE,
-  STILT_CLOWN_FIGURE,
-  TERROR_CLOWN_FIGURE,
+  TALL_CLOWN_FIGURE,
+  MASSIVE_CLOWN_FIGURE,
   TILE_SCALE,
   clownSpecOf,
-  terrorStyle,
+  massiveStyle,
 } from '../src/sprites/art/clownFigure.js';
 import {
   CLOWN_GAS_FIGURES,
@@ -48,15 +48,15 @@ import {
   FAT_CLOWN_LOCOMOTION_STATES,
 } from '../src/sprites/fatClownSprite.js';
 import {
-  STILT_CLOWN_ATTACK_STATES,
-  STILT_CLOWN_FRAME_COUNT,
-  STILT_CLOWN_LOCOMOTION_STATES,
-} from '../src/sprites/stiltClownSprite.js';
+  TALL_CLOWN_ATTACK_STATES,
+  TALL_CLOWN_FRAME_COUNT,
+  TALL_CLOWN_LOCOMOTION_STATES,
+} from '../src/sprites/tallClownSprite.js';
 import {
-  TERROR_CLOWN_FRAME_COUNT,
-  TERROR_CLOWN_LOCOMOTION_STATES,
-  terrorClownAttackStates,
-} from '../src/sprites/terrorTheClownSprite.js';
+  MASSIVE_CLOWN_FRAME_COUNT,
+  MASSIVE_CLOWN_LOCOMOTION_STATES,
+  massiveClownAttackStates,
+} from '../src/sprites/massiveClownSprite.js';
 import {
   distinctFrameFailures as sharedDistinctFrameFailures,
   figureStructuralFailures,
@@ -215,8 +215,8 @@ const WRAPPER_FRAME_COUNTS: ReadonlyArray<{
   readonly counts: Readonly<Record<string, number>>;
 }> = [
   { def: FAT_CLOWN_FIGURE, counts: FAT_CLOWN_FRAME_COUNT },
-  { def: STILT_CLOWN_FIGURE, counts: STILT_CLOWN_FRAME_COUNT },
-  { def: TERROR_CLOWN_FIGURE, counts: TERROR_CLOWN_FRAME_COUNT },
+  { def: TALL_CLOWN_FIGURE, counts: TALL_CLOWN_FRAME_COUNT },
+  { def: MASSIVE_CLOWN_FIGURE, counts: MASSIVE_CLOWN_FRAME_COUNT },
   { def: EVIL_CLOWN_FIGURE, counts: EVIL_CLOWN_FRAME_COUNT },
 ];
 
@@ -269,38 +269,38 @@ function gateRuntimeStateNames(): void {
       purpose: 'the fat clown slam prewarm',
     },
     {
-      def: STILT_CLOWN_FIGURE,
-      names: Object.keys(STILT_CLOWN_FRAME_COUNT),
-      purpose: 'the stilt clown wrapper',
+      def: TALL_CLOWN_FIGURE,
+      names: Object.keys(TALL_CLOWN_FRAME_COUNT),
+      purpose: 'the tall clown wrapper',
     },
     {
-      def: STILT_CLOWN_FIGURE,
-      names: [...STILT_CLOWN_LOCOMOTION_STATES],
-      purpose: 'the stilt clown spawn prewarm',
+      def: TALL_CLOWN_FIGURE,
+      names: [...TALL_CLOWN_LOCOMOTION_STATES],
+      purpose: 'the tall clown spawn prewarm',
     },
     {
-      def: STILT_CLOWN_FIGURE,
-      names: [...STILT_CLOWN_ATTACK_STATES],
-      purpose: 'the stilt clown lunge prewarm',
+      def: TALL_CLOWN_FIGURE,
+      names: [...TALL_CLOWN_ATTACK_STATES],
+      purpose: 'the tall clown lunge prewarm',
     },
     {
-      def: TERROR_CLOWN_FIGURE,
-      names: Object.keys(TERROR_CLOWN_FRAME_COUNT),
-      purpose: 'the terror wrapper',
+      def: MASSIVE_CLOWN_FIGURE,
+      names: Object.keys(MASSIVE_CLOWN_FRAME_COUNT),
+      purpose: 'the massive clown wrapper',
     },
     {
-      def: TERROR_CLOWN_FIGURE,
-      names: [...TERROR_CLOWN_LOCOMOTION_STATES],
-      purpose: 'the terror spawn prewarm',
+      def: MASSIVE_CLOWN_FIGURE,
+      names: [...MASSIVE_CLOWN_LOCOMOTION_STATES],
+      purpose: 'the massive clown spawn prewarm',
     },
     {
-      def: TERROR_CLOWN_FIGURE,
-      names: [...terrorClownAttackStates(false)],
-      purpose: 'the terror mallet prewarm',
+      def: MASSIVE_CLOWN_FIGURE,
+      names: [...massiveClownAttackStates(false)],
+      purpose: 'the massive clown mallet prewarm',
     },
     {
-      def: TERROR_CLOWN_FIGURE,
-      names: [...terrorClownAttackStates(true)],
+      def: MASSIVE_CLOWN_FIGURE,
+      names: [...massiveClownAttackStates(true)],
       purpose: 'the enraged mallet prewarm',
     },
     {
@@ -363,8 +363,8 @@ const FLOAT_TOLERANCE_PX = 4;
  *
  * A companion clause allowing a figure to sink 24 px below the ground line
  * stood here and could not fail on its own terms. A cell holds only so much
- * room under its ground line — 19 px for the fat and stilt clowns, 25 and 27
- * for Terror and the Evil Clown — so the sink allowance sat *above* two of the
+ * room under its ground line — 19 px for the fat and tall clowns, 25 and 27
+ * for the Massive Clown and the Evil Clown — so the sink allowance sat *above* two of the
  * four ceilings and within two or three pixels of the other two. Anything
  * driven deep enough to trip it had already run its ink into the bottom cell
  * wall, which G1's clipping check reports first and for every clown; mutation
@@ -414,7 +414,7 @@ const BYTES_PER_MEGABYTE = 1024 * 1024;
  * How many of a figure's rows have to be able to sit in the cache at once.
  *
  * A clown holds its walk and its idle warm all the time and adds an attack pair
- * on top the moment it engages, which is four; Terror carries both palettes of
+ * on top the moment it engages, which is four; the Massive Clown carries both palettes of
  * the pair he is in. Any fewer and a wind-up evicts the walk it interrupted.
  */
 const ROWS_THAT_MUST_FIT_TOGETHER = 4;
@@ -567,7 +567,7 @@ function gateNoOpaqueSmear(): void {
 // ── G8 — enrage is a repaint, not a tint ─────────────────────────────────────
 
 /**
- * How far apart, on a 0–255 channel scale, the mean colour of Terror's two
+ * How far apart, on a 0–255 channel scale, the mean colour of the Massive Clown's two
  * palettes has to sit on the same frame.
  *
  * Enrage swaps the suit, the mane and the eye glow together — that is the whole
@@ -608,25 +608,25 @@ function gateEnrageIsARepaint(): void {
   let pairsCompared = 0;
   // Read off the palettes as well as the pixels: two style objects that have
   // become the same object make every painted comparison agree trivially.
-  const plain = terrorStyle(false).palette;
-  const enraged = terrorStyle(true).palette;
+  const plain = massiveStyle(false).palette;
+  const enraged = massiveStyle(true).palette;
   if (plain.suitMid === enraged.suitMid) {
     fail('G8', 'the enraged and plain suits are the same colour, so enrage repaints nothing');
   }
   for (const [calm, angry] of ENRAGE_PAIRS) {
     const frames = Math.min(
-      figureFrameCount(TERROR_CLOWN_FIGURE, calm),
-      figureFrameCount(TERROR_CLOWN_FIGURE, angry),
+      figureFrameCount(MASSIVE_CLOWN_FIGURE, calm),
+      figureFrameCount(MASSIVE_CLOWN_FIGURE, angry),
     );
     if (frames === 0) {
-      fail('G8', `terror_clown has no pair of rows named "${calm}" and "${angry}"`);
+      fail('G8', `massive_clown has no pair of rows named "${calm}" and "${angry}"`);
       continue;
     }
     for (let frame = 0; frame < frames; frame++) {
-      const before = meanSolidColour(cellOf(TERROR_CLOWN_FIGURE, calm, frame));
-      const after = meanSolidColour(cellOf(TERROR_CLOWN_FIGURE, angry, frame));
+      const before = meanSolidColour(cellOf(MASSIVE_CLOWN_FIGURE, calm, frame));
+      const after = meanSolidColour(cellOf(MASSIVE_CLOWN_FIGURE, angry, frame));
       if (before === null || after === null) {
-        fail('G8', `terror_clown ${calm}/${angry}[${frame}] has no solid pixels to compare`);
+        fail('G8', `massive_clown ${calm}/${angry}[${frame}] has no solid pixels to compare`);
         continue;
       }
       pairsCompared++;
@@ -634,7 +634,7 @@ function gateEnrageIsARepaint(): void {
       if (distance >= ENRAGE_COLOUR_DISTANCE) continue;
       fail(
         'G8',
-        `terror_clown ${calm}[${frame}] and ${angry}[${frame}] differ by only ` +
+        `massive_clown ${calm}[${frame}] and ${angry}[${frame}] differ by only ` +
           `${distance.toFixed(1)} of the ${ENRAGE_COLOUR_DISTANCE} an enrage has to read as`,
       );
     }
@@ -709,8 +709,8 @@ const LOOPING_ROWS: ReadonlyArray<{
   readonly states: readonly string[];
 }> = [
   { def: FAT_CLOWN_FIGURE, states: FAT_CLOWN_LOCOMOTION_STATES },
-  { def: STILT_CLOWN_FIGURE, states: STILT_CLOWN_LOCOMOTION_STATES },
-  { def: TERROR_CLOWN_FIGURE, states: TERROR_CLOWN_LOCOMOTION_STATES },
+  { def: TALL_CLOWN_FIGURE, states: TALL_CLOWN_LOCOMOTION_STATES },
+  { def: MASSIVE_CLOWN_FIGURE, states: MASSIVE_CLOWN_LOCOMOTION_STATES },
   {
     def: EVIL_CLOWN_FIGURE,
     states: [

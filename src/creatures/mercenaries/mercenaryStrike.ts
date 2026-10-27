@@ -4,8 +4,8 @@ import { normalize } from '../../utils';
 import type { MercenaryDrawState, MercenaryKitContext, MercenaryRow } from './MercenaryKit';
 
 /** How one swing plays out, in game frames. */
-export interface StrikeTiming {
-  readonly row: MercenaryRow;
+export interface StrikeTiming<R extends MercenaryRow> {
+  readonly row: R;
   /** Length of the whole swing. */
   readonly frames: number;
   /** The frame the blow connects on — the one where the hit is drawn. */
@@ -26,8 +26,8 @@ export interface StrikeTiming {
  * makes the blow a player watches the blow that connects. The hireling commits
  * to the swing and finishes it, exactly as a wild creature does.
  */
-export class MercenaryStrike {
-  private timing: StrikeTiming | null = null;
+export class MercenaryStrike<R extends MercenaryRow> {
+  private timing: StrikeTiming<R> | null = null;
   private frame = 0;
   private resolved = false;
   private victim: Mob | null = null;
@@ -37,7 +37,7 @@ export class MercenaryStrike {
     return this.timing !== null;
   }
 
-  begin(victim: Mob, timing: StrikeTiming, damage: number, merc: Mercenary): void {
+  begin(victim: Mob, timing: StrikeTiming<R>, damage: number, merc: Mercenary): void {
     this.timing = timing;
     this.frame = 0;
     this.resolved = false;
@@ -81,13 +81,13 @@ export class MercenaryStrike {
     this.victim = null;
   }
 
-  drawState(): MercenaryDrawState | null {
+  drawState(): MercenaryDrawState<R> | null {
     const timing = this.timing;
     if (timing === null) return null;
     return { row: timing.row, progress: this.frame / timing.frames };
   }
 
-  private land(ctx: MercenaryKitContext, timing: StrikeTiming): void {
+  private land(ctx: MercenaryKitContext, timing: StrikeTiming<R>): void {
     const victim = this.victim;
     const merc = ctx.merc;
     if (victim?.isAlive !== true) return;

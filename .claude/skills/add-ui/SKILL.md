@@ -340,7 +340,7 @@ hover/press treatment). Feature code never calls it; it calls widgets.
   plates), `minimapColors.ts` (one tile-colour table for every minimap),
   `previewInk.ts` (review scenes), `townMapInk.ts`, `scytheSwingInk.ts`,
   `slotsInk.ts` (the slot machine's cabinet, reels, win banners and symbols)
-  and `wheelInk.ts` (the Wheel of Fortune's warnings, reveals and the Nothing;
+  and `wheelInk.ts` (the Wheel of Fortune's warnings, reveals and Permanent Death;
   the wheel itself shares `sprites/art/wheelPalette.ts` with the club prop).
 - Item icons are registered in `src/ui/icons/itemIcons.ts` (`ITEM_ICONS:
 Record<ItemId, ItemIconPainter>`, painters take `(ctx, rect)`); `drawItemIcon`
@@ -520,7 +520,7 @@ shop, the casino).
   narrowing is the host's `restrictions()`. `npm run verify:inventory-screen`.
 - **`src/ui/screens/shop/`** — `ShopSession` (state) + `shopScreenSurface` for
   every counter that sells anything: stores, stalls, taverns, services, Oren's
-  forge, the VIP lounge, the Anchor's destinations. Offers are a grid of cards
+  forge, the Anchor's destinations. Offers are a grid of cards
   (two across where there is room) with the thing's picture, its whole
   description and one cost pill per part of the price (coins, each material as
   held/needed, red while short), Buy/Sell `tabs`, and the stepper modal for

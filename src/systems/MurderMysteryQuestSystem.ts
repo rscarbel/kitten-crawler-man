@@ -2,9 +2,9 @@
  * MurderMysteryQuestSystem — the overworld half of "The Krasue Murders",
  * the town's dialog-driven murder mystery:
  *
- *   GumGum's plea (Mordecai warns you off) → her headless body turns up in
+ *   Baggi's plea (Mordecai warns you off) → her headless body turns up in
  *   the alley behind the Sunken Stump → three clue points around town (the
- *   well, Old Hilda's cottage, the tower plaza shrine) → a krasue swarm hits
+ *   well, Old Lori's cottage, the tower plaza shrine) → a krasue swarm hits
  *   the streets at nightfall → the trail leads to the cult nest in Blackwood
  *   Barracks (cleared indoors by CultHideoutSystem) → the letter names Miss
  *   Quill → tower confrontation (QuillConfrontationSystem) → rewards.
@@ -35,10 +35,10 @@ import { characterTarget, type TrackerEntry, type TrackerTarget } from './questT
 import type { MurderQuestProgress } from '../core/quests/MurderQuestProgress';
 import type { MusicClaims } from '../audio/AudioScope';
 import type { QuestMarkerType } from './MiniMapSystem';
-import { GumGum } from '../creatures/GumGum';
+import { Baggi } from '../creatures/Baggi';
 import { type Krasue, AGGRO_RANGE_TILES as KRASUE_AGGRO_RANGE_TILES } from '../creatures/Krasue';
 import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
-import { drawGumGumCorpse } from '../sprites/gumGumSprite';
+import { drawBaggiCorpse } from '../sprites/baggiSprite';
 import { drawWellClueProp, drawHomeClueProp, drawRoostClueProp } from '../sprites/kraseuClueProps';
 import { drawRadialGlow } from '../sprites/radialGlow';
 import { drawBouncingArrowAboveEntity } from '../ui/WorldArrow';
@@ -54,6 +54,7 @@ import { partyXpSections } from '../ui/questReward/rewardLines';
 import type { QuestRewardSpec, RewardItemLine } from '../ui/questReward/types';
 import { grantQuestGear } from '../loot/questGear';
 import type { GearId } from '../loot/gearPools';
+import { CLOAK_AND_DAGGER_NAME } from '../map/town/townPlan';
 import {
   MURDER_HOOK,
   MURDER_BODY_FOUND,
@@ -71,7 +72,7 @@ export const MURDER_QUEST_ID = 'krasue_murders' as const satisfies QuestId;
 const MURDER_QUEST_GEAR = 'grinning_mask' as const satisfies GearId;
 const MURDER_QUEST_NAME = 'The Krasue Murders';
 
-/** The two papers tucked in GumGum's coat, handed over when the alley scene closes. */
+/** The two papers tucked in Baggi's coat, handed over when the alley scene closes. */
 const ALLEY_EVIDENCE: ReadonlyArray<ItemId> = ['magistrates_writ', 'unreadable_letter'];
 
 /** How far a scripted spawn may be nudged to find a walkable tile. */
@@ -90,16 +91,14 @@ const CLUE_INTERACT_RANGE_TILES = 3;
 /** Passing this close to the alley triggers the corpse discovery. */
 const BODY_DISCOVERY_RANGE_TILES = 5;
 
-/** GumGum loiters this far east of the pub door (the fallback hook location). */
-const GUMGUM_DOOR_OFFSET = { dx: 3, dy: 0 };
-/** GumGum loiters this far south of the club door when the hook meets there. */
-const GUMGUM_CLUB_DOOR_OFFSET = { dx: 0, dy: 2 };
-/** The club building whose entrance hosts GumGum's approach. */
-const GUMGUM_HOOK_CLUB_NAME = 'The Desperado Club';
+/** Baggi loiters this far east of the pub door (the fallback hook location). */
+const BAGGI_DOOR_OFFSET = { dx: 3, dy: 0 };
+/** Baggi loiters this far south of the club door when the hook meets there. */
+const BAGGI_CLUB_DOOR_OFFSET = { dx: 0, dy: 2 };
 /**
  * The alley where her body turns up.
  *
- * Preferred: the two-wide alley running down the Desperado Club's east flank,
+ * Preferred: the two-wide alley running down the Cloak & Dagger's east flank,
  * reached from the club door by walking east along Low Street — the "murder
  * alley" the town's street plan exists to provide (`docs/town.md`).
  * The fallback offset from the pub door is kept for a map with no club: it used
@@ -111,7 +110,7 @@ const PUB_ALLEY_DOOR_OFFSET = { dx: -4, dy: 2 };
 /** The shrine of moulted feathers sits just south of the tower door. */
 const ROOST_DOOR_OFFSET = { dx: 0, dy: 3 };
 /**
- * The drag from Hilda's doorstep ends this far out into the street.
+ * The drag from Lori's doorstep ends this far out into the street.
  *
  * Off the doorway deliberately: standing on a doorway tile pops the building
  * entry menu, whose pre-focused Enter button then swallows the Space press the
@@ -181,7 +180,7 @@ const CLUE_PROP_WIDTH_TILES = 2;
 const CLUE_PROP_WEST_OFFSET_TILES = 0.5;
 
 type MurderQuestPhase =
-  | 'gumgum_waiting'
+  | 'baggi_waiting'
   | 'body_waiting'
   | 'investigation'
   | 'night_attack'
@@ -228,7 +227,7 @@ export interface MurderMysteryQuestCheckpoint {
   swarmDefeatedBaseline: number;
   swarmSpawnQueue: ReadonlyArray<SwarmOffset>;
   swarmSpawnGrace: Array<[Krasue, number]>;
-  gumgum: GumGum | null;
+  baggi: Baggi | null;
 }
 
 export class MurderMysteryQuestSystem implements GameSystem {
@@ -243,17 +242,17 @@ export class MurderMysteryQuestSystem implements GameSystem {
     return this.conversationHandle !== null && this.conversation.isActive(this.conversationHandle);
   }
 
-  private gumgum: GumGum | null = null;
+  private baggi: Baggi | null = null;
   /**
-   * Whether the creature `gumgum` points at is still in the scene's mob array.
+   * Whether the creature `baggi` points at is still in the scene's mob array.
    *
    * `finishHook` is the only place she leaves it, and it splices her out for
    * good — the scene's checkpoint rewind can revive a corpse but cannot re-add
    * a mob it no longer holds. Tracked here rather than searched for in the mob
    * array, because "she was removed" is a fact this system alone creates.
    */
-  private gumgumInWorld = false;
-  private readonly gumgumTile: { x: number; y: number } | null;
+  private baggiInWorld = false;
+  private readonly baggiTile: { x: number; y: number } | null;
   private readonly alleyTile: { x: number; y: number } | null;
   private readonly clues: CluePoint[] = [];
   private readonly hideoutEntry: BuildingEntry | null;
@@ -302,17 +301,17 @@ export class MurderMysteryQuestSystem implements GameSystem {
       },
     });
     const pubDoor = this.doorTileOf('The Sunken Stump Pub');
-    // GumGum's opening approach happens at the Desperado Club when it exists
+    // Baggi's opening approach happens at the Cloak & Dagger when it exists
     // on this floor, else at the pub. Gated on the pub
     // too, so on a pub-less map the alley/body anchor and the "is this quest
     // viable?" check below resolve without a club. Dropping this club lookup
     // forces the pub hook; nothing else in the quest depends on it.
-    const clubDoor = pubDoor ? this.doorTileOf(GUMGUM_HOOK_CLUB_NAME) : null;
+    const clubDoor = pubDoor ? this.doorTileOf(CLOAK_AND_DAGGER_NAME) : null;
     // The hook and the corpse anchor separately: she is last seen at the club's
     // door and found in the alley beside it.
     const hookDoor = clubDoor ?? pubDoor;
-    const hookOffset = clubDoor ? GUMGUM_CLUB_DOOR_OFFSET : GUMGUM_DOOR_OFFSET;
-    this.gumgumTile = hookDoor
+    const hookOffset = clubDoor ? BAGGI_CLUB_DOOR_OFFSET : BAGGI_DOOR_OFFSET;
+    this.baggiTile = hookDoor
       ? this.findSpawnTile(hookDoor.x + hookOffset.dx, hookDoor.y + hookOffset.dy)
       : null;
     const alleyDoor = clubDoor ?? pubDoor;
@@ -332,7 +331,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
         drawProp: drawWellClueProp,
       });
     }
-    const homeEntry = this.buildingEntryOf("Old Hilda's Cottage");
+    const homeEntry = this.buildingEntryOf("Old Lori's Cottage");
     const homeTile = homeEntry
       ? this.findTileClearOfAllDoorways(
           homeEntry.doorTile.x + HOME_DOOR_OFFSET.dx,
@@ -363,7 +362,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
       }
     }
 
-    this.phase = this.gumgumTile ? this.phaseFromProgress() : 'complete';
+    this.phase = this.baggiTile ? this.phaseFromProgress() : 'complete';
     this.enterPhase();
   }
 
@@ -372,7 +371,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
   private phaseFromProgress(): MurderQuestPhase {
     switch (this.progress.stage) {
       case 'not_started':
-        return 'gumgum_waiting';
+        return 'baggi_waiting';
       case 'body_waiting':
         return 'body_waiting';
       case 'investigation':
@@ -395,8 +394,8 @@ export class MurderMysteryQuestSystem implements GameSystem {
   /** Rebuild the in-scene state the cross-scene progress object describes. */
   private enterPhase(): void {
     switch (this.phase) {
-      case 'gumgum_waiting':
-        this.spawnGumGum();
+      case 'baggi_waiting':
+        this.spawnBaggi();
         break;
       case 'investigation':
       case 'cult_hideout':
@@ -550,13 +549,13 @@ export class MurderMysteryQuestSystem implements GameSystem {
     return best;
   }
 
-  private spawnGumGum(): void {
-    if (!this.gumgumTile) return;
-    const gumgum = new GumGum(this.gumgumTile.x, this.gumgumTile.y, TILE_SIZE);
-    gumgum.setMap(this.gameMap);
-    this.gumgum = gumgum;
-    this.gumgumInWorld = true;
-    this.addMob(gumgum);
+  private spawnBaggi(): void {
+    if (!this.baggiTile) return;
+    const baggi = new Baggi(this.baggiTile.x, this.baggiTile.y, TILE_SIZE);
+    baggi.setMap(this.gameMap);
+    this.baggi = baggi;
+    this.baggiInWorld = true;
+    this.addMob(baggi);
   }
 
   /**
@@ -567,12 +566,12 @@ export class MurderMysteryQuestSystem implements GameSystem {
    * checkpoint's world: without them the next rewind would read her as a
    * post-checkpoint arrival and drop her, putting the ghost straight back.
    */
-  private respawnGumGumForCheckpoint(): void {
-    this.spawnGumGum();
-    const gumgum = this.gumgum;
-    if (gumgum === null) return;
-    gumgum.presentAtCheckpoint = true;
-    gumgum.aliveAtCheckpoint = true;
+  private respawnBaggiForCheckpoint(): void {
+    this.spawnBaggi();
+    const baggi = this.baggi;
+    if (baggi === null) return;
+    baggi.presentAtCheckpoint = true;
+    baggi.aliveAtCheckpoint = true;
   }
 
   // ── Public surface consumed by DungeonScene ───────────────────────────────
@@ -596,9 +595,9 @@ export class MurderMysteryQuestSystem implements GameSystem {
    *
    * The swarm mobs are stored as references rather than copies: at capture time
    * the field held those exact creatures, and the scene's checkpoint restore
-   * revives the ones that died afterwards. `gumgum` is a reference too, but it
+   * revives the ones that died afterwards. `baggi` is a reference too, but it
    * is read only as "was she on the street at the checkpoint?" — see
-   * `restoreGumGum`, which never hands the stored creature back to the field.
+   * `restoreBaggi`, which never hands the stored creature back to the field.
    *
    * The swarm array is copied here *and* again in `restoreCheckpoint`, because
    * one snapshot is restored once per death — handing the stored array straight
@@ -618,7 +617,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
       swarmDefeatedBaseline: this.swarmDefeatedBaseline,
       swarmSpawnQueue: [...this.swarmSpawnQueue],
       swarmSpawnGrace: [...this.swarmSpawnGrace],
-      gumgum: this.gumgum,
+      baggi: this.baggi,
     };
   }
 
@@ -645,7 +644,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
     this.swarmDefeatedBaseline = snapshot.swarmDefeatedBaseline;
     this.swarmSpawnQueue = [...snapshot.swarmSpawnQueue];
     this.swarmSpawnGrace = new Map(snapshot.swarmSpawnGrace);
-    this.restoreGumGum(snapshot.gumgum, mobs, mobGrid);
+    this.restoreBaggi(snapshot.baggi, mobs, mobGrid);
     // A swarm that has not started yet gets its music from `update()` when it
     // does. One already under way owns the track now, even if the fight the
     // rewind skipped past ended and handed it back to the zone music.
@@ -666,37 +665,33 @@ export class MurderMysteryQuestSystem implements GameSystem {
    * has since been spliced out of the world and re-pointing at it would leave
    * an invisible, un-tickable NPC still offering its dialog.
    *
-   * The live `gumgumInWorld` flag decides, not the snapshot: whichever GumGum is
+   * The live `baggiInWorld` flag decides, not the snapshot: whichever Baggi is
    * currently on the street is the right one to keep — she is stationary, so no
    * repositioning is owed — and only a world with none at all needs a new one.
    *
-   * A save loaded after a reload always has a null `snapshotGumGum`, while the
+   * A save loaded after a reload always has a null `snapshotBaggi`, while the
    * constructor may already have spawned her from default progress. So a null
    * is checked against the restored phase instead of trusted.
    */
-  private restoreGumGum(
-    snapshotGumGum: GumGum | null,
-    mobs: Mob[],
-    mobGrid: SpatialGrid<Mob>,
-  ): void {
-    if (snapshotGumGum !== null) {
-      if (!this.gumgumInWorld) this.respawnGumGumForCheckpoint();
+  private restoreBaggi(snapshotBaggi: Baggi | null, mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
+    if (snapshotBaggi !== null) {
+      if (!this.baggiInWorld) this.respawnBaggiForCheckpoint();
       return;
     }
 
-    const stray = this.gumgumInWorld ? this.gumgum : null;
-    const shouldBeInWorld = this.phase === 'gumgum_waiting';
+    const stray = this.baggiInWorld ? this.baggi : null;
+    const shouldBeInWorld = this.phase === 'baggi_waiting';
     if (shouldBeInWorld) {
-      if (stray === null) this.respawnGumGumForCheckpoint();
+      if (stray === null) this.respawnBaggiForCheckpoint();
     } else {
-      this.gumgum = null;
-      this.gumgumInWorld = false;
+      this.baggi = null;
+      this.baggiInWorld = false;
       if (stray) despawnMob(stray, mobs, mobGrid);
     }
   }
 
   /**
-   * Holds GumGum's beacon state to the phase, every frame.
+   * Holds Baggi's beacon state to the phase, every frame.
    *
    * Deliberately **not** part of `update()`, for the reason `BountySystem`'s
    * `syncShady` is not: an open quest dialog halts gameplay and the scene
@@ -705,20 +700,20 @@ export class MurderMysteryQuestSystem implements GameSystem {
    * whole conversation. The scene calls this above that early return.
    */
   syncMarkers(): void {
-    if (this.gumgum === null) return;
+    if (this.baggi === null) return;
     // The same condition her glyph is drawn under in `render`, held on the
     // creature so her beacon — drawn a pass earlier, by her — agrees with it.
-    this.gumgum.markerType =
-      this.phase === 'gumgum_waiting' && !this.conversationOwned ? 'exclamation' : 'none';
+    this.baggi.markerType =
+      this.phase === 'baggi_waiting' && !this.conversationOwned ? 'exclamation' : 'none';
   }
 
   /** Returns quest markers for the minimap. */
   get questMarkers(): Array<{ x: number; y: number; type: QuestMarkerType }> {
     const markers: Array<{ x: number; y: number; type: QuestMarkerType }> = [];
     switch (this.phase) {
-      case 'gumgum_waiting':
-        if (this.gumgumTile) {
-          markers.push({ x: this.gumgumTile.x, y: this.gumgumTile.y, type: 'exclamation' });
+      case 'baggi_waiting':
+        if (this.baggiTile) {
+          markers.push({ x: this.baggiTile.x, y: this.baggiTile.y, type: 'exclamation' });
         }
         break;
       case 'body_waiting':
@@ -780,14 +775,14 @@ export class MurderMysteryQuestSystem implements GameSystem {
     const base = { id: MURDER_QUEST_ID, name };
 
     switch (this.phase) {
-      case 'gumgum_waiting':
+      case 'baggi_waiting':
         return [
           {
             ...base,
             status: 'available',
-            objective: 'Hear GumGum out',
-            hint: 'The worried orc in the apron outside the Desperado Club.',
-            target: this.gumgumTile === null ? undefined : characterTarget(this.gumgumTile),
+            objective: 'Hear Baggi out',
+            hint: 'The worried orc in the apron outside the Cloak & Dagger.',
+            target: this.baggiTile === null ? undefined : characterTarget(this.baggiTile),
           },
         ];
       case 'body_waiting':
@@ -795,7 +790,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
           {
             ...base,
             status: 'active',
-            objective: 'Find what GumGum was so afraid of',
+            objective: 'Find what Baggi was so afraid of',
             hint: 'She pointed you down the service alley.',
             target: this.alleyTile ?? undefined,
           },
@@ -808,7 +803,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
             ...base,
             status: 'active',
             objective: `Follow the trail — ${found} of ${this.clues.length} clues found`,
-            hint: 'The well, Hilda’s door, and the plaza under the tower. The letter in your pack stays warm.',
+            hint: 'The well, Lori’s door, and the plaza under the tower. The letter in your pack stays warm.',
             target: this.clueBeaconTarget(outstanding[0]),
           },
         ];
@@ -900,7 +895,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
     return Math.hypot(tile.x * TILE_SIZE - entity.x, tile.y * TILE_SIZE - entity.y);
   }
 
-  /** Space-key interaction: GumGum's hook, then clue investigation. */
+  /** Space-key interaction: Baggi's hook, then clue investigation. */
   tryInteract(active: Player): boolean {
     const conversation = this.pendingConversation(active);
     if (conversation === null) return false;
@@ -921,14 +916,14 @@ export class MurderMysteryQuestSystem implements GameSystem {
     return this.pendingConversation(active) !== null;
   }
 
-  /** The conversation a press from `active` would open — GumGum's hook, then a clue — or null. */
+  /** The conversation a press from `active` would open — Baggi's hook, then a clue — or null. */
   private pendingConversation(
     active: Player,
   ): { lines: NonEmpty<DialogLine>; onFinish: () => void; questRelated: boolean } | null {
     if (this.conversationOwned) return null;
 
-    if (this.phase === 'gumgum_waiting' && this.gumgum && this.gumgumTile) {
-      if (this.distToTile(active, this.gumgumTile) <= TILE_SIZE * INTERACT_RANGE_TILES) {
+    if (this.phase === 'baggi_waiting' && this.baggi && this.baggiTile) {
+      if (this.distToTile(active, this.baggiTile) <= TILE_SIZE * INTERACT_RANGE_TILES) {
         return { lines: MURDER_HOOK, onFinish: () => this.finishHook(), questRelated: true };
       }
     }
@@ -1003,13 +998,13 @@ export class MurderMysteryQuestSystem implements GameSystem {
   // ── Phase transitions ─────────────────────────────────────────────────────
 
   private finishHook(): void {
-    // GumGum slips away into the crowd — the next time anyone sees her is the alley.
-    if (this.gumgum && this.lastCtx) {
+    // Baggi slips away into the crowd — the next time anyone sees her is the alley.
+    if (this.baggi && this.lastCtx) {
       const { mobs, grid } = this.lastCtx.roster;
-      despawnMob(this.gumgum, mobs, grid);
+      despawnMob(this.baggi, mobs, grid);
     }
-    this.gumgum = null;
-    this.gumgumInWorld = false;
+    this.baggi = null;
+    this.baggiInWorld = false;
     this.phase = 'body_waiting';
     this.progress.stage = 'body_waiting';
   }
@@ -1031,7 +1026,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
   }
 
   /**
-   * Hands over the papers off GumGum's body on the next frame after the body
+   * Hands over the papers off Baggi's body on the next frame after the body
    * dialog closes, which has no crawler to hand them to. The outstanding list
    * lives on the cross-scene progress record, so a save or a door walked
    * through in between still delivers them.
@@ -1271,7 +1266,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
           );
         }
         break;
-      case 'gumgum_waiting':
+      case 'baggi_waiting':
       case 'cult_hideout':
       case 'lich_confrontation':
       case 'complete':
@@ -1288,14 +1283,14 @@ export class MurderMysteryQuestSystem implements GameSystem {
    * evidence does not evaporate once it has been read, so a found clue keeps its
    * scene and loses only the glow and the arrow that were asking to be noticed.
    *
-   * `'complete'` is also the phase forced on construction when `gumgumTile`
+   * `'complete'` is also the phase forced on construction when `baggiTile`
    * couldn't be resolved, meaning the quest never started at all — that case
    * must not be confused with a genuinely finished quest, so it's gated on
-   * `gumgumTile` rather than trusting the phase alone.
+   * `baggiTile` rather than trusting the phase alone.
    */
   private get cluePropsVisible(): boolean {
     switch (this.phase) {
-      case 'gumgum_waiting':
+      case 'baggi_waiting':
       case 'body_waiting':
         return false;
       case 'investigation':
@@ -1306,7 +1301,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
       case 'awaiting_rewards':
         return true;
       case 'complete':
-        return this.gumgumTile !== null;
+        return this.baggiTile !== null;
     }
   }
 
@@ -1322,7 +1317,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
         this.phase === 'confrontation' ||
         this.phase === 'lich_confrontation')
     ) {
-      drawGumGumCorpse(
+      drawBaggiCorpse(
         ctx,
         this.alleyTile.x * TILE_SIZE - camX,
         this.alleyTile.y * TILE_SIZE - camY,
@@ -1341,9 +1336,9 @@ export class MurderMysteryQuestSystem implements GameSystem {
 
     if (this.conversationOwned) return;
 
-    if (this.phase === 'gumgum_waiting' && this.gumgum && this.gumgumTile) {
-      if (this.distToTile(active, this.gumgumTile) <= TILE_SIZE * INTERACT_RANGE_TILES) {
-        drawInteractionPrompt(ctx, this.gumgum.x - camX, this.gumgum.y - camY, TILE_SIZE, 'Talk');
+    if (this.phase === 'baggi_waiting' && this.baggi && this.baggiTile) {
+      if (this.distToTile(active, this.baggiTile) <= TILE_SIZE * INTERACT_RANGE_TILES) {
+        drawInteractionPrompt(ctx, this.baggi.x - camX, this.baggi.y - camY, TILE_SIZE, 'Talk');
       }
     }
 

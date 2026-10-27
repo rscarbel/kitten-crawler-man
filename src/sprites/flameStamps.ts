@@ -1,7 +1,7 @@
 /**
  * The one fire in this game, as baked stamps and the palette that colours them.
  *
- * Extracted from the Big Top's flame vents so that anything else that burns —
+ * Extracted from the Starlight Tent's flame vents so that anything else that burns —
  * the Lich's fire waves, whatever comes next — is literally the same fire and
  * not a second painter's impression of it. Two hand-matched orange ramps drift
  * apart the first time either is touched.
@@ -32,7 +32,7 @@ export interface FlameInk {
  *
  * A parcel picks its tier by how far it has climbed, so colour follows height
  * rather than which layer drew it. The body stays a deeply saturated orange-red
- * the whole way up and only loses opacity near the top: the big top's ground is
+ * the whole way up and only loses opacity near the top: the Starlight Tent's ground is
  * pale tan, and a pale flame over it reads as smoke. The one white-hot thing in
  * the column is the throat, which is small — brightness has to be bought with
  * value, not with area, or the burner grows an egg in it.

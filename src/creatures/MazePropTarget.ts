@@ -2,7 +2,11 @@ import { Mob, type PlayerDamageType } from './Mob';
 import type { Player } from '../Player';
 import type { EyePlacement } from '../sprites/eyePlacement';
 import type { LootDrop } from './Mob';
-import { MAZE_TARGET_OWNER, type MazeHalf, type MazeTargetKind } from '../map/bigTopMazeLayout';
+import {
+  MAZE_TARGET_OWNER,
+  type MazeHalf,
+  type MazeTargetKind,
+} from '../map/starlightTentMazeLayout';
 
 /**
  * The HP handed to the base class. Never written by anything — but read.

@@ -33,10 +33,7 @@ export function parseBossRoomDressingCheckpoint(
   if (!isRecord(value)) return undefined;
   const trashGremlin = parseTrashGremlinRoomCheckpoint(value.trashGremlin);
   const krakaren = parseKrakarenRoomCheckpoint(value.krakaren);
-  // Absent from saves written before the gym kept any state: that loads as a
-  // gym as generated, not as a failed load.
-  const gym =
-    value.gym === null || value.gym === undefined ? null : parseGymRoomCheckpoint(value.gym);
+  const gym = value.gym === null ? null : parseGymRoomCheckpoint(value.gym);
   const spiderLab =
     value.spiderLab === null ? null : parseSpiderLabDressingCheckpoint(value.spiderLab);
   const colosseum =

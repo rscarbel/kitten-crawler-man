@@ -1,5 +1,5 @@
 /**
- * OverworldMusicSystem — zone-based background music for the Over City
+ * OverworldMusicSystem — zone-based background music for Taloncrest
  * overworld: a shuffled town playlist inside the town wall, a shuffled
  * circus playlist on the circus grounds, Briar Hollow's own zone inside its palisade
  * with the lumber yard's and Merrit's farm's own songs, a harvest theme out at the village quarry, and a

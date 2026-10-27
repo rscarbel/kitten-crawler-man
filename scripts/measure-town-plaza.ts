@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Headless perf/residency baseline for the Over City's plaza.
+ * Headless perf/residency baseline for Taloncrest's plaza.
  *
  * Builds the real level-3 town the way `render-town.ts` does — the real
  * `GameMap` overworld generator, the real `TownPropSystem`/`TownDecorSystem`/
@@ -103,8 +103,8 @@ const { BYTES_PER_MEGABYTE } = await import('../src/core/rendering/canvasSurface
 const { prewarmAndPinCitizenTalk } = await import('../src/creatures/citizenFigure.js');
 const { townCastStateFor } = await import('../src/sprites/townCastSprite.js');
 const { townCastOutfitFigure } = await import('../src/sprites/art/townCastFigure.js');
-const { skyfowlCastStateFor } = await import('../src/sprites/skyfowlCastSprite.js');
-const { skyfowlCastFigure } = await import('../src/sprites/art/skyfowlCastFigure.js');
+const { hawkfolkCastStateFor } = await import('../src/sprites/hawkfolkCastSprite.js');
+const { hawkfolkCastFigure } = await import('../src/sprites/art/hawkfolkCastFigure.js');
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
 
@@ -168,7 +168,7 @@ const warmupFrames = intArg('warmup', DEFAULT_WARMUP_FRAMES);
  * it a spike. Generous enough that the arrival window's own boosted budget
  * admitting a dozen cheap cells in one frame is not, on its own, a failure: a
  * cell's price swings by an order of magnitude across the two casts (a
- * skyfowl cell is a fraction of a human one).
+ * Hawkfolk cell is a fraction of a human one).
  */
 const DEFAULT_PER_FRAME_BAKE_CEILING = 20;
 const perFrameBakeCeiling = intArg('per-frame-bake-ceiling', DEFAULT_PER_FRAME_BAKE_CEILING);
@@ -408,7 +408,9 @@ for (let frame = 0; frame < frameCount; frame++) {
 const talkTarget = townLife.people[0];
 const talkFacing = talkTarget.facingXY();
 talkTarget.frozen = true;
-prewarmAndPinCitizenTalk(talkTarget.figure, talkFacing.x, talkFacing.y);
+const talkFigure = talkTarget.citizenFigure;
+if (talkFigure === null) throw new Error('a street citizen wears no cast look');
+prewarmAndPinCitizenTalk(talkFigure, talkFacing.x, talkFacing.y);
 
 /** Frames given for a frozen citizen's talk row to warm — well under a second at 60 Hz. */
 const TALK_WARM_FRAMES = 30;
@@ -418,13 +420,13 @@ for (let i = 0; i < TALK_WARM_FRAMES; i++) {
 }
 
 const talkCitizenFigure =
-  talkTarget.figure.species === 'skyfowl'
-    ? skyfowlCastFigure(talkTarget.figure.look.id)
-    : townCastOutfitFigure(talkTarget.figure.look);
+  talkFigure.species === 'hawkfolk'
+    ? hawkfolkCastFigure(talkFigure.look.id)
+    : townCastOutfitFigure(talkFigure.look);
 const talkStateKey =
-  talkTarget.figure.species === 'skyfowl'
-    ? skyfowlCastStateFor('talk', talkFacing.x, talkFacing.y)
-    : townCastStateFor('talk', talkTarget.figure.look, talkFacing.x, talkFacing.y);
+  talkFigure.species === 'hawkfolk'
+    ? hawkfolkCastStateFor('talk', talkFacing.x, talkFacing.y)
+    : townCastStateFor('talk', talkFigure.look, talkFacing.x, talkFacing.y);
 const talkRowFullyWarm = touchFigureState(talkCitizenFigure, talkStateKey);
 
 beginFigureFrame();

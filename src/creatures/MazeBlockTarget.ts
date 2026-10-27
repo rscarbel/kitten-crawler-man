@@ -1,11 +1,11 @@
 import { MazePropTarget } from './MazePropTarget';
-import type { MazeBlockKind } from '../map/bigTopMazeLayout';
+import type { MazeBlockKind } from '../map/starlightTentMazeLayout';
 import {
-  drawGrimaldiSandbag,
+  drawStageSandbag,
   drawStageBrace,
   type MazeDestructibleArt,
-} from '../sprites/art/bigTop/fireWalkProps';
-import { drawCageReleaseRing, drawCapstanWinch } from '../sprites/art/bigTop/menagerieProps';
+} from '../sprites/art/starlightTent/fireWalkProps';
+import { drawCageReleaseRing, drawCapstanWinch } from '../sprites/art/starlightTent/menagerieProps';
 
 const DISPLAY_NAME: Readonly<Record<MazeBlockKind, string>> = {
   sandbag: 'Sandbag Counterweight',
@@ -34,7 +34,7 @@ const DESCRIPTION: Readonly<Record<MazeBlockKind, string>> = {
  * twice.
  */
 export class MazeBlockTarget extends MazePropTarget<MazeBlockKind> {
-  /** True once the target has been destroyed. Polled by `BigTopMazeSystem`. */
+  /** True once the target has been destroyed. Polled by `StarlightTentMazeSystem`. */
   broken = false;
 
   constructor(
@@ -77,7 +77,7 @@ export class MazeBlockTarget extends MazePropTarget<MazeBlockKind> {
     const state = this.art;
     switch (this.kind) {
       case 'sandbag':
-        drawGrimaldiSandbag(ctx, sx, sy, tileSize, state);
+        drawStageSandbag(ctx, sx, sy, tileSize, state);
         return;
       case 'brace':
         drawStageBrace(ctx, sx, sy, tileSize, state);

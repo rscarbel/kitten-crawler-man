@@ -1,6 +1,5 @@
 /**
- * The Crocodilians' review harness: Bucket Boy, Clarabelle, and the Triage
- * sparkle.
+ * The Crocodilians' review harness: the janitor and Sydney.
  *
  * Art has to be judged as an image. The contact sheet is painted from the
  * figures the way the runtime cache bakes them, and the art gates run first, so
@@ -8,10 +7,10 @@
  * like".
  *
  *   npm run render:crocodilian
- *   npx tsx scripts/render-crocodilian.ts --figure=clarabelle --row=talk,talk_side --scale=5
- *   npx tsx scripts/render-crocodilian.ts --mode=strip32 --figure=bucket_boy
+ *   npx tsx scripts/render-crocodilian.ts --figure=sydney --row=talk,talk_side --scale=5
+ *   npx tsx scripts/render-crocodilian.ts --mode=strip32 --figure=janitor
  *   npx tsx scripts/render-crocodilian.ts --mode=lineup
- *   npx tsx scripts/render-crocodilian.ts --mode=head --figure=bucket_boy --scale=8
+ *   npx tsx scripts/render-crocodilian.ts --mode=head --figure=janitor --scale=8
  *
  * Modes:
  *   sheet    every row of one figure at `--scale`, with the in-game strip below
@@ -30,17 +29,16 @@ import { reportFigureGates } from './figureGates.js';
 import { crocodilianGateFailures } from './gates-crocodilian.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import {
-  BUCKET_BOY_FIGURE,
-  CLARABELLE_FIGURE,
+  JANITOR_FIGURE,
+  SYDNEY_FIGURE,
   GROUND_OFFSET_IN_TILE,
   TILE_SCALE,
-  TRIAGE_SPARKLE_FIGURE,
   originOf,
-  BUCKET_BOY_CELL,
-  CLARABELLE_CELL,
+  JANITOR_CELL,
+  SYDNEY_CELL,
 } from '../src/sprites/art/crocodilianFigure.js';
 import { HUMAN_FIGURE } from '../src/sprites/art/humanFigure.js';
-import { BUCKET_BOY_BUILD, CLARABELLE_BUILD } from '../src/sprites/art/crocodilianArt.js';
+import { JANITOR_BUILD, SYDNEY_BUILD } from '../src/sprites/art/crocodilianArt.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 
 /** Matches TILE_SIZE in src/core/constants.ts. */
@@ -70,9 +68,8 @@ type Mode = 'sheet' | 'strip32' | 'lineup' | 'head';
 const MODES: ReadonlyArray<Mode> = ['sheet', 'strip32', 'lineup', 'head'];
 
 const FIGURES: ReadonlyMap<string, FigureDef> = new Map([
-  ['bucket_boy', BUCKET_BOY_FIGURE],
-  ['clarabelle', CLARABELLE_FIGURE],
-  ['sparkle', TRIAGE_SPARKLE_FIGURE],
+  ['janitor', JANITOR_FIGURE],
+  ['sydney', SYDNEY_FIGURE],
 ]);
 
 type SheetContext = ReturnType<Canvas['getContext']>;
@@ -104,7 +101,7 @@ function parseMode(): Mode {
 }
 
 function parseFigure(): { key: string; def: FigureDef } {
-  const key = parseFlag('figure', 'bucket_boy');
+  const key = parseFlag('figure', 'janitor');
   const def = FIGURES.get(key);
   if (def === undefined)
     throw new Error(`--figure=${key} is not one of ${[...FIGURES.keys()].join(', ')}`);
@@ -253,14 +250,14 @@ function renderStrip32(def: FigureDef, states: readonly string[], outPath: strin
 }
 
 /**
- * The human crawler, Bucket Boy and Clarabelle on one ground line, first idle frame of each
+ * The human crawler, the janitor and Sydney on one ground line, first idle frame of each
  * view, so their heights are read against the player's.
  */
 function renderLineup(outPath: string): void {
   const entries: ReadonlyArray<{ def: FigureDef; states: readonly string[] }> = [
     { def: HUMAN_FIGURE, states: ['idle', 'idle_side', 'idle_away'] },
-    { def: BUCKET_BOY_FIGURE, states: ['idle', 'idle_side', 'idle_away'] },
-    { def: CLARABELLE_FIGURE, states: ['idle', 'idle_side', 'idle_away'] },
+    { def: JANITOR_FIGURE, states: ['idle', 'idle_side', 'idle_away'] },
+    { def: SYDNEY_FIGURE, states: ['idle', 'idle_side', 'idle_away'] },
   ];
   const groundOf = (def: FigureDef): number => def.tileY + TILE_SCALE * GROUND_OFFSET_IN_TILE;
   const headroom = Math.max(...entries.map((e) => groundOf(e.def)));
@@ -298,10 +295,10 @@ function renderLineup(outPath: string): void {
 /** The head of each view's first idle frame, cropped and enlarged. */
 function renderHeads(def: FigureDef, outPath: string, scale: number): void {
   const views = ['idle', 'idle_side', 'idle_away'];
-  const build = def === CLARABELLE_FIGURE ? CLARABELLE_BUILD : BUCKET_BOY_BUILD;
+  const build = def === SYDNEY_FIGURE ? SYDNEY_BUILD : JANITOR_BUILD;
   const cropW = build.headHeight * HEAD_CROP_WIDTH_HEADS * TILE_SCALE;
   const cropH = build.headHeight * HEAD_CROP_HEIGHT_HEADS * TILE_SCALE;
-  const origin = originOf(def === CLARABELLE_FIGURE ? CLARABELLE_CELL : BUCKET_BOY_CELL);
+  const origin = originOf(def === SYDNEY_FIGURE ? SYDNEY_CELL : JANITOR_CELL);
   const headY = origin.y + (build.neckBaseY - build.headRise) * TILE_SCALE;
   const { canvas, ctx } = newPanel(
     PADDING + views.length * (cropW * scale + PADDING),

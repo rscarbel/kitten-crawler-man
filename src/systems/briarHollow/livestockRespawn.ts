@@ -6,7 +6,7 @@
  *
  * One rule for every animal the village owns, whichever pen it lives in:
  * Merrit's herd in Briar Hollow's paddock, and Midge in Wendell's pasture in
- * the Over City.
+ * Taloncrest.
  */
 
 import { TILE_SIZE } from '../../core/constants';

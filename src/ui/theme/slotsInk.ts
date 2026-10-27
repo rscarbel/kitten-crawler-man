@@ -1,5 +1,5 @@
 /**
- * Colours for the Desperado Club's slot machine: the lacquered cabinet and its
+ * Colours for the Cloak & Dagger's slot machine: the lacquered cabinet and its
  * chrome, the marquee and its bulbs, the progressive meter's LED digits, the
  * reels behind glass, the lit SPIN button and lever, every win tier's banner,
  * the paylines and the symbols painted on the reel strips.
@@ -219,10 +219,16 @@ const symbols = {
   sevenDark: '#5c0610',
   sevenRim: '#f5c84c',
   sevenRimDark: '#7d5510',
-  star: '#f5c84c',
-  starLight: '#fff2b0',
-  starDark: '#8a5c0c',
-  starText: '#5a0e14',
+  seal: '#f5c84c',
+  sealLight: '#fff2b0',
+  sealDark: '#8a5c0c',
+  sealText: '#5a0e14',
+  /** The hooded figure stamped into the wild's seal. */
+  hood: '#2a1838',
+  hoodLight: '#5a3a72',
+  daggerBlade: '#dfe6ee',
+  daggerBladeDark: '#7d8a9a',
+  daggerGrip: '#5a2a16',
   box: '#7c4bc9',
   boxLight: '#c5a0ff',
   boxDark: '#32166a',

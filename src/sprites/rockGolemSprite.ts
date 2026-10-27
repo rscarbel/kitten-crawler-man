@@ -17,7 +17,7 @@ import {
  * `rock_golem`; the bounty target uses `rock_golem_boss`,
  * which is the same figure grown and given the four boulder-roll rows; a hired
  * golem uses `rock_golem_ally`, which is the same rig again with a painted
- * Meat Shields band on one bicep. Each id caches its baked frames separately,
+ * mercenaries' armband on one bicep. Each id caches its baked frames separately,
  * so a hired golem never shares a sheet with a hostile one.
  */
 export type RockGolemSheet = 'rock_golem' | 'rock_golem_boss' | 'rock_golem_ally';

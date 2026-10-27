@@ -1,5 +1,5 @@
 /**
- * The Over City interiors' interactables — shop counters and doors, readables,
+ * The Taloncrest interiors' interactables — shop counters and doors, readables,
  * searchable containers and the props a crawler can use — by what they mean
  * rather than by file.
  *
@@ -94,6 +94,7 @@ export function playInteriorCueWhenReady(
 /** Examines that read paper or weigh goods; every other examine is {@link INTERIOR_CUES.propNoticed}. */
 const EXAMINE_CUES: Partial<Record<TownInteriorExamineId, InteriorCue>> = {
   ledger_desk: 'pageTurn',
+  merc_desk: 'pageTurn',
   field_log: 'pageTurn',
   lectern: 'pageTurn',
   petition_counter: 'pageTurn',

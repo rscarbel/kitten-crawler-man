@@ -1,6 +1,7 @@
 import { noteDrawFailure, recoverDrawState } from '../core/rendering/drawFailure';
 import { firstResidentMarker, type ResidentQuestHook } from '../systems/residentQuestHooks';
 import { drainBloodVomitRetches } from '../systems/bloodVomitRetches';
+import { drainHpThresholdCrossings } from '../systems/hpThresholdCrossings';
 import { ExplosionShake } from '../systems/ExplosionShake';
 import { WendellBlueprintsHook } from '../systems/briarHollow/blueprints/WendellBlueprintsHook';
 import { WendellContractsHook } from '../systems/constructionContracts/WendellContractsHook';
@@ -38,7 +39,6 @@ import { setFloorArtSeed } from '../map/ground/floorArtSeed';
 import { requestGroundSheets } from '../map/ground/runtimeGroundSheets';
 import { requestEnvironmentSheetsForGroups } from '../sprites/sheets/environmentSheets';
 import { holdIdleClock, releaseIdleClock } from '../core/rendering/renderFrameClock';
-import { BRAZIER, FIREPLACE } from '../map/tileTypes';
 import { PlayerManager } from '../core/party/PlayerManager';
 import { setSkillBookReaders } from '../creatures/skillBookDrop';
 import type { BuildingEntry } from '../systems/BuildingSystem';
@@ -158,17 +158,17 @@ import type { LootDrop, Mob } from '../creatures/Mob';
 import type { Townsperson } from '../creatures/Townsperson';
 import { CITIZEN_TALK_RADIUS_TILES } from '../creatures/townInteraction';
 import { safeRoomPressLeavesSpeaker, safeRoomSpeakerFor } from '../systems/safeRoomSpeaker';
-import { prewarmAndPinCitizenTalk, unpinCitizenTalk } from '../creatures/citizenFigure';
+import { unpinCitizenTalk } from '../creatures/citizenFigure';
+import { prewarmAndPinTownspersonTalk } from '../creatures/townspersonBody';
 import type { DrawnFigureRow } from '../sprites/figure/figureDef';
 import {
-  BIG_TOP_BUILDING_NAME,
-  isCircusResolvedStage,
-  type CircusQuestProgress,
-} from '../core/quests/CircusQuestProgress';
-import { adviceObjective, MordecaiAdvisor, type AdviceSnapshot } from '../systems/mordecaiAdvice';
+  createStarlightTentProgress,
+  type StarlightTentProgress,
+} from '../core/state/StarlightTentProgress';
+import { STARLIGHT_TENT_NAME } from '../map/overworld/circusGroundsLayout';
 import type { MurderQuestProgress, MurderQuestStage } from '../core/quests/MurderQuestProgress';
 import { createDoomsdayProgress, type DoomsdayProgress } from '../core/quests/DoomsdayProgress';
-import { createClubMembership, type ClubMembership } from '../core/club/ClubMembership';
+import { createCasinoState, type CasinoState } from '../core/club/CasinoState';
 import { tickShopStock, type ShopStock } from '../economy/shopStock';
 import type { ShopId } from '../economy/shops';
 import { FollowerScreen } from '../ui/screens/follower/FollowerScreen';
@@ -184,10 +184,12 @@ import {
 } from '../core/party/MercenaryRoster';
 import { createGodModeState, type GodModeState } from '../core/state/GodMode';
 import { ITEM_DEF, type InventoryItem, type ItemId } from '../core/items/defs/ItemDefs';
-import { CLUB_STATION_SURFACE_IDS, DesperadoClubSystem } from '../systems/DesperadoClubSystem';
+import { CLUB_STATION_SURFACE_IDS, CloakAndDaggerSystem } from '../systems/CloakAndDaggerSystem';
 import { ClubWheelSystem } from '../systems/ClubWheelSystem';
 import { POKER_DEV_SEED } from '../systems/casino/poker/npc/personality';
 import { InteriorOccupantSystem } from '../systems/InteriorOccupantSystem';
+import { partyRoutineBodies } from '../systems/occupantRoutines';
+import { OCCUPANT_ROUTINE_CUES } from '../systems/occupantRoutineCues';
 import { InteriorReadableSystem } from '../systems/InteriorReadableSystem';
 import {
   type InteriorCue,
@@ -204,7 +206,7 @@ import {
 import { TownInteriorPropDestructionSystem } from '../systems/TownInteriorPropDestructionSystem';
 import { ContractInteriorSite } from '../systems/constructionContracts/ContractInteriorSite';
 import { InteriorBreakReactions } from '../systems/InteriorBreakReactions';
-import { InteriorSkyfowlFoley } from '../systems/InteriorSkyfowlFoley';
+import { InteriorHawkfolkFoley } from '../systems/InteriorHawkfolkFoley';
 import { AmbientSoundSystem, type AmbientEmitter } from '../systems/AmbientSoundSystem';
 import {
   buildCitizenConversation,
@@ -235,19 +237,9 @@ import {
 } from '../systems/townHomesteads';
 import { buildTavernMenu, serveDrinkAt } from '../systems/townPub';
 import { buildBlessingMenu, grantBlessing } from '../systems/townTemple';
-import {
-  QUIET_NEEDLE_NAME,
-  buildTattooMenu,
-  hasTattooForSale,
-  inkTattoo,
-} from '../systems/townTattooParlor';
+import { buildTattooMenu, hasTattooForSale, inkTattoo } from '../systems/townTattooParlor';
 import { buildArmouryMenu, issueArmour } from '../systems/townArmoury';
-import {
-  DRILL_YARD_BUILDING,
-  buildDrillYardMenu,
-  drillYardHasTraining,
-  runDrill,
-} from '../systems/townDrillYard';
+import { buildDrillYardMenu, drillYardHasTraining, runDrill } from '../systems/townDrillYard';
 import { shopSignWhen } from '../sprites/overheadIcon';
 import {
   ShopSession,
@@ -265,8 +257,13 @@ import { worldPalette } from '../ui/theme/worldInk';
 import { dynamiteChargeSurface } from '../systems/DynamiteSystem';
 import type { Surface, UiRoot, WorldGesture } from '../ui/core/UiRoot';
 import { PRIMARY_BUTTON } from '../ui/core/pointer';
-import { interiorServiceForRole, interiorServicesFor } from '../systems/townServices';
-import type { TownRole } from '../sprites/person/PersonAppearance';
+import {
+  interiorKeepsDesk,
+  interiorServicesFor,
+  type OccupantService,
+  type ServiceCounter,
+  type ServiceDesk,
+} from '../systems/townServices';
 import {
   createTownMemory,
   noteResidentTalk,
@@ -293,27 +290,28 @@ import {
   setInteractionPromptsSuppressed,
 } from '../ui/InteractionPrompt';
 import { MercenarySystem } from '../systems/MercenarySystem';
+import { MercenaryGuildSystem } from '../systems/MercenaryGuildSystem';
+import { mercenaryDeskSurface } from '../ui/screens/shop/MercenaryDeskScreen';
 import { AttackCowSystem } from '../systems/AttackCowSystem';
 import { RockThrowSystem } from '../systems/RockThrowSystem';
-import { HirelingBoltSystem } from '../systems/HirelingBoltSystem';
+import { HirelingShotSystem } from '../systems/HirelingShotSystem';
 import { playHirelingProjectileCues } from '../systems/hirelingProjectileCues';
 import { SpellSystem } from '../systems/SpellSystem';
 import {
   MAZE_CAT_SPAWN_TILE,
   MAZE_HUMAN_SPAWN_TILE,
-  planBigTopMaze,
-  type BigTopMazePlan,
-} from '../map/bigTopMazeLayout';
-import { BIG_TOP_AMBIENT_BED } from '../systems/bigTop/bigTopSoundCues';
-import { findPartyArrivalTiles, findNearbyWalkableTile } from '../map/findWalkableTile';
-import { GrimaldiVine } from '../creatures/GrimaldiVine';
+  planStarlightTentMaze,
+  type StarlightTentMazePlan,
+} from '../map/starlightTentMazeLayout';
+import { STARLIGHT_TENT_AMBIENT_BED } from '../systems/starlightTent/starlightTentSoundCues';
+import { findPartyArrivalTiles } from '../map/findWalkableTile';
 import { MobRoster, type SceneWorld } from '../systems/kits/SceneWorld';
 import { CombatKit } from '../systems/kits/CombatKit';
 import { SkillPointReminderSystem } from '../systems/SkillPointReminderSystem';
 import { interiorHostilesFor, noteRoomCleared } from '../systems/interiorHostiles';
 import { partyLevelOf } from '../levels/spawner';
-import { DESPERADO_CLUB_NAME, TAVERN_BUILDING_NAMES } from '../map/town/townPlan';
-import { CLUB_PROPS } from '../core/club/clubProps';
+import { CLOAK_AND_DAGGER_NAME, TAVERN_BUILDING_NAMES } from '../map/town/townPlan';
+import { isSlotCabinet, type ClubProp } from '../core/club/clubProps';
 import { AnchorInteriorSystem } from '../systems/AnchorInteriorSystem';
 import {
   SKY_TEMPLE_NAME,
@@ -337,10 +335,15 @@ import {
 import { GameplayInputHandler } from '../systems/GameplayInputHandler';
 import { DestructionKit } from '../systems/kits/DestructionKit';
 import { RewardFlySystem } from '../systems/RewardFlySystem';
+import { TreasureChestSystem } from '../systems/TreasureChestSystem';
+import { ChestKit, chestPlacer, type ChestPlacer } from '../systems/kits/ChestKit';
+import { InteriorExitFixtureSystem } from '../systems/interiorExitFixtures';
+import { screenFadeSurface } from '../ui/ScreenFade';
 import { playRewardLandingCues } from '../systems/rewardFlyAudio';
 import type { PendingLoot } from '../systems/LootSystem';
-import { BigTopMazeSystem } from '../systems/BigTopMazeSystem';
-import { restartBigTopTent } from '../systems/bigTop/bigTopTent';
+import { StarlightTentMazeSystem } from '../systems/StarlightTentMazeSystem';
+import { StarlightTentFinale } from '../systems/starlightTent/StarlightTentFinale';
+import { restartStarlightTent } from '../systems/starlightTent/starlightTentRestart';
 import type { GroundHazardSource } from '../systems/GroundHazardSource';
 import { DIFFICULTY_LABELS, type Difficulty } from '../core/difficulty/difficultyProfiles';
 import { CultHideoutSystem } from '../systems/CultHideoutSystem';
@@ -356,6 +359,7 @@ import {
   drawTownInteriorGroundProps,
   townInteriorPropFigures,
 } from '../systems/townInteriorPropFigures';
+import { townInteriorPropEmitters } from '../systems/townInteriorPropAmbience';
 import {
   hostileWithinAttackRange,
   shouldShowInteractionPrompts,
@@ -415,11 +419,13 @@ const PRISON_LOADING_KICKER = 'Entering';
 const PRISON_AMBIENT_VOLUME = 0.3;
 const TRAIL_FOLLOW_REFUSAL = 'No orders in here: your partner walks in your footsteps.';
 const SHOP_SURFACE_ID = 'shop';
-const CLUB_SURFACE_ID = 'club';
 const SERVICE_SURFACE_ID = 'priced-menu';
 const READING_SURFACE_ID = 'fortune-teller';
+const MERCENARY_DESK_SURFACE_ID = 'mercenary-desk';
+const MERCENARY_DESK_DISMISS_SURFACE_ID = 'mercenary-desk-dismiss';
 const READABLE_SURFACE_ID = 'readable';
 const EXIT_MENU_SURFACE_ID = 'exit-building';
+const EXIT_FIXTURE_FADE_SURFACE_ID = 'exit-fixture-fade';
 const TOWER_STAIRS_SURFACE_ID = 'tower-stairs';
 const ROOM_STATUS_SURFACE_ID = 'room-status';
 const DYNAMITE_CHARGE_SURFACE_ID = 'dynamite-charge';
@@ -438,7 +444,6 @@ const DOOR_MENU_SURFACE_IDS: ReadonlySet<string> = new Set([
 const ROOM_PANEL_SURFACE_IDS: ReadonlySet<string> = new Set([
   CONVERSATION_SURFACE_ID,
   SHOP_SURFACE_ID,
-  CLUB_SURFACE_ID,
   SERVICE_SURFACE_ID,
   READING_SURFACE_ID,
   READABLE_SURFACE_ID,
@@ -449,9 +454,6 @@ const ROOM_PANEL_SURFACE_IDS: ReadonlySet<string> = new Set([
 /** Where the room's status draws relative to the stack; see `roomStatusLayerPlacement`. */
 type RoomStatusLayer = 'underEverything' | 'overPanel' | 'overDoorMenu';
 
-/** Every hearth and brazier in a room emits its own fire crackle at this reach. */
-const HEARTH_AMBIENT_RADIUS_TILES = 7;
-const HEARTH_AMBIENT_VOLUME = 0.4;
 /** Volume of a room-wide crowd/shop bed, quiet enough to sit under dialog and music. */
 const BAR_CROWD_AMBIENT_VOLUME = 0.35;
 const MAGIC_SHOP_AMBIENT_VOLUME = 0.3;
@@ -469,23 +471,30 @@ const INTERIOR_AMBIENT_BEDS = new Map<string, { soundId: SoundId; volume: number
   ['The Sunken Stump Pub', { soundId: 'ambient_bar_crowd', volume: BAR_CROWD_AMBIENT_VOLUME }],
   ['The Horned Flagon', { soundId: 'ambient_bar_crowd', volume: BAR_CROWD_AMBIENT_VOLUME }],
   ['The Sleeping Cat Inn', { soundId: 'ambient_bar_crowd', volume: BAR_CROWD_AMBIENT_VOLUME }],
-  ['The Desperado Club', { soundId: 'ambient_bar_crowd', volume: BAR_CROWD_AMBIENT_VOLUME }],
+  [CLOAK_AND_DAGGER_NAME, { soundId: 'ambient_bar_crowd', volume: BAR_CROWD_AMBIENT_VOLUME }],
   ['Herb & Remedy', { soundId: 'ambient_magic_shop', volume: MAGIC_SHOP_AMBIENT_VOLUME }],
   ['General Store', { soundId: 'ambient_general_store', volume: GENERAL_STORE_AMBIENT_VOLUME }],
-  // No entry for The Rusty Anvil on purpose: its braziers already emit the
-  // forge crackle through `buildAmbientEmitters`, and a room-wide bed on top of
-  // them would only double the same loop against itself.
 ]);
 
-/** Every slot cabinet in the club plays the slot floor from where it stands. */
-function slotBankEmitters(): AmbientEmitter[] {
-  return CLUB_PROPS.filter((prop) => prop.sprite === 'club_slot_cabinet').map((prop) => ({
-    soundId: 'ambient_slots_floor_bank',
-    x: prop.tile.x,
-    y: prop.tile.y,
-    radiusTiles: SLOT_BANK_AMBIENT_RADIUS_TILES,
-    maxVolume: SLOT_BANK_AMBIENT_VOLUME,
-  }));
+const NO_HIDDEN_PROPS: ReadonlySet<string> = new Set();
+
+function sameIds(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const id of a) if (!b.has(id)) return false;
+  return true;
+}
+
+/** Every slot cabinet a room places plays the slot floor from where it stands. */
+function slotBankEmitters(props: ReadonlyArray<ClubProp>): AmbientEmitter[] {
+  return props
+    .filter((prop) => isSlotCabinet(prop.sprite))
+    .map((prop) => ({
+      soundId: 'ambient_slots_floor_bank',
+      x: prop.tile.x,
+      y: prop.tile.y,
+      radiusTiles: SLOT_BANK_AMBIENT_RADIUS_TILES,
+      maxVolume: SLOT_BANK_AMBIENT_VOLUME,
+    }));
 }
 
 const MAX_TOWER_FLOOR_INDEX = TOWER_FLOOR_COUNT - 1;
@@ -528,12 +537,19 @@ const TOWER_CONFRONTATION_STAGES: ReadonlyArray<MurderQuestStage> = [
 ];
 /** Fade-in for an interior's own music when the building is entered. */
 const INTERIOR_MUSIC_FADE_IN_MS = 800;
-/** The cured vine's own tile hugs the south face of the pole cluster he wraps. */
-const CURED_GRIMALDI_POLE_SOUTH_OFFSET = 1;
-const GRIMALDI_TILE_CENTRE = 0.5;
-const CURED_GRIMALDI_SEARCH_RADIUS_TILES = 4;
 
-/** A quest encounter that runs inside a building (the Big Top maze, cult hideout, tower fight). */
+/**
+ * What an encounter may stand up in the room it runs in, beside its mobs: a
+ * chest its guards keep shut, and a way out that is a thing in the room.
+ * Both are the storey's own, so they are judged, drawn and used exactly as
+ * any other chest or exit there is.
+ */
+interface InteriorEncounterFixtures {
+  readonly chests: ChestPlacer;
+  readonly exits: InteriorExitFixtureSystem;
+}
+
+/** A quest encounter that runs inside a building (the Starlight Tent maze, cult hideout, tower fight). */
 interface InteriorEncounter {
   update(ctx: SystemContext): void;
   /** What the encounter draws over the room that is not a bar in the top band. */
@@ -600,8 +616,12 @@ interface InteriorFloor {
   readonly fairies: FairySystem;
   /** A golem hire's boulders, per storey because each flies over one storey's map. */
   readonly rockThrows: RockThrowSystem;
-  /** A water mage hire's bolts and waves, per storey for the same reason. */
-  readonly hirelingShots: HirelingBoltSystem;
+  /** An archer hire's arrows, per storey for the same reason. */
+  readonly hirelingShots: HirelingShotSystem;
+  /** The storey's chests, each kept shut by the mobs on this storey's roster. */
+  readonly chests: TreasureChestSystem;
+  /** The storey's ways out that are things in the room rather than its door mat. */
+  readonly exits: InteriorExitFixtureSystem;
 }
 
 /**
@@ -619,24 +639,13 @@ export interface InteriorJournalSource {
 }
 
 /**
- * Everything an interior needs to know about the circus questline, in one
- * parameter.
- *
- * Grouped rather than added as another positional argument to an already long
- * constructor, and grouped *here* rather than anywhere else because the two
- * fields are read together: Mordecai's floor-3 advice needs both whether the
- * circus is done and where it is.
+ * What an interior is handed about the overworld behind its door, in one
+ * parameter rather than more positional arguments on an already long
+ * constructor.
  */
-export interface BuildingInteriorCircusContext {
-  readonly progress: CircusQuestProgress;
-  /**
-   * The circus's centre in **overworld** tile coordinates.
-   *
-   * An interior builds its own `GameMap` with its own origin, so nothing inside
-   * this scene can compute an overworld bearing from its own grid — the door the
-   * player came through is the only position that exists in both spaces.
-   */
-  readonly overworldCentre: { x: number; y: number } | undefined;
+export interface BuildingInteriorWorldContext {
+  /** The Starlight Tent's record, which outlives every maze the tent builds. */
+  readonly starlightTent: StarlightTentProgress;
   /**
    * The overworld's `GameMap.worldSeed`. The interior's own map is seeded
    * apart from it, and the tent's hall of mirrors deals one board per world.
@@ -661,25 +670,35 @@ const WENDELL_FALLBACK_SPEECH_STYLE: CitizenSpeechStyle = 'townsfolkMasculine';
  * Which shape this room is built in.
  *
  * The Goblin High Security Prison is always one of its authored layouts,
- * picked by the world seed so every visit is the same prison. The Big Top is
- * the only other building with more than one shape, and only for the length
- * of the circus questline's final act: at `bigtop_ready` the tent is the trap
- * maze, and at every other enterable stage it is the calm ring the questline
- * leaves behind.
+ * picked by the world seed so every visit is the same prison. The Starlight Tent is
+ * always its maze, dealt from the world seed.
  */
 function interiorVariantFor(
   entry: BuildingEntry,
-  circus: BuildingInteriorCircusContext | undefined,
+  world: BuildingInteriorWorldContext | undefined,
 ): InteriorVariant {
+  const worldSeed = world?.worldSeed ?? DETACHED_ROOM_WORLD_SEED;
   if (entry.type === 'prison') {
-    const worldSeed = circus?.worldSeed ?? DETACHED_ROOM_WORLD_SEED;
     return { kind: 'goblin_prison', plan: planGoblinPrison(worldSeed, settings.difficulty) };
   }
-  const isMaze = entry.name === BIG_TOP_BUILDING_NAME && circus?.progress.stage === 'bigtop_ready';
-  if (!isMaze) return 'default';
+  if (entry.name !== STARLIGHT_TENT_NAME) return 'default';
   // Dealt before the room exists: the hall's tiles, its floor marks and its
   // stage lights are all built from the board, once.
-  return { kind: 'bigtop_maze', plan: planBigTopMaze(circus.worldSeed, settings.difficulty) };
+  return {
+    kind: 'starlight_tent_maze',
+    plan: planStarlightTentMaze(worldSeed, settings.difficulty),
+  };
+}
+
+/**
+ * Whether a counter still has something for this party. Only the two that can
+ * run out for good ever say no: the tattoo parlour once neither crawler has a
+ * mark left to buy, the drill yard once both are at the cap.
+ */
+function serviceStillSells(counter: ServiceCounter, party: readonly Player[]): boolean {
+  if (counter === 'tattoo_parlour') return party.some(hasTattooForSale);
+  if (counter === 'drill_yard') return party.some(drillYardHasTraining);
+  return true;
 }
 
 export class BuildingInteriorScene extends GameplayScene {
@@ -690,12 +709,16 @@ export class BuildingInteriorScene extends GameplayScene {
 
   private onExitTile = false;
   private exitMenuOpen = false;
+  /**
+   * What the exit menu's Exit runs: the door's own exit for the mat, or the
+   * climb out for an exit fixture, which asks the same question first.
+   */
+  private exitMenuLeave: () => void = () => this.doExit();
   private exitDismissed = false;
 
   /** Null in every interior but the one the town plan flags with `hasSafeRoom`. */
   private readonly safeRoom: SafeRoomSystem | null;
   private wasInSafeRoom = false;
-  private readonly mordecaiAdvisor = new MordecaiAdvisor();
   /** Null in every interior but the one the town plan flags as the safe room. */
   private readonly bopca: BopcaSystem | null;
   /**
@@ -748,11 +771,11 @@ export class BuildingInteriorScene extends GameplayScene {
   // Shop (store only)
   private readonly shop: ShopSystem | null;
 
-  // Desperado Club (club only)
-  private readonly clubMembership: ClubMembership;
+  // Cloak & Dagger (club only)
+  private readonly casinoState: CasinoState;
   private readonly mercenaryRoster: MercenaryRoster;
   private readonly godModeState: GodModeState;
-  private readonly club: DesperadoClubSystem | null;
+  private readonly club: CloakAndDaggerSystem | null;
 
   private readonly inputHandler = new GameplayInputHandler();
   /** Every overlay in the room, and the one path pointer and key input takes to reach them or the world. */
@@ -776,6 +799,8 @@ export class BuildingInteriorScene extends GameplayScene {
 
   /** Coins/items flying to this scene's own HUD. One instance for the whole building — floors change, this doesn't. */
   protected readonly rewardFly = new RewardFlySystem();
+  /** Opening any storey's chest: the grant, the lid, the reward card and the fly to the HUD. */
+  private readonly chestKit: ChestKit;
 
   // Companion command state + menu, mirrored from the overworld so movement mode
   // and combat stance carry into buildings. The stance is threaded by reference
@@ -789,15 +814,16 @@ export class BuildingInteriorScene extends GameplayScene {
    */
   private readonly mongoSystem: MongoSystem;
   /**
-   * The Meat Shields hire, stood up from the roster on the first frame like
-   * outdoors. Scene-owned for the same reason Mongo is.
+   * The mercenary under contract, stood up from the roster on the first frame
+   * like outdoors. Scene-owned for the same reason Mongo is.
    */
   private readonly mercenarySystem: MercenarySystem;
   private readonly attackCowSystem: AttackCowSystem;
   private readonly crawlerBarks = new CrawlerBarkSystem();
   /**
-   * The contract the standing hire was stood up for. The club's desk can sign
-   * or end one under this roof, and the figure in the room has to follow it.
+   * The contract the standing hire was stood up for. A room that keeps the
+   * mercenaries' desk can sign or end one under its roof, and the figure in
+   * the room has to follow it.
    */
   private hireContract: HiredMercenary | null = null;
   private readonly clearViewMemo = new ClearViewMemo();
@@ -839,14 +865,16 @@ export class BuildingInteriorScene extends GameplayScene {
    */
   private towerConfrontation: QuillConfrontationSystem | null = null;
   /**
-   * The Big Top's trap maze, held by its own type as well as by `encounter`.
+   * The Starlight Tent's trap maze, held by its own type as well as by `encounter`.
    *
    * Like the tower's confrontation it has a conversation in it, and more besides
    * — a camera the script takes over, a follow command it refuses, and a door it
    * sends the party out through — so the conversation's hooks, the Space chain
    * and the render pass all ask it questions no other encounter answers.
    */
-  private bigTopMaze: BigTopMazeSystem | null = null;
+  private starlightTentMaze: StarlightTentMazeSystem | null = null;
+  /** The tent's record; a room built with no overworld behind it keeps a private one. */
+  private readonly starlightTentProgress: StarlightTentProgress;
   /** The prison's key, its guidance and its explainer; null in every other building. */
   private prisonKey: PrisonKeySystem | null = null;
   /**
@@ -866,18 +894,27 @@ export class BuildingInteriorScene extends GameplayScene {
    * whichever tent is standing: registered once, because a restarted tent is a
    * new system and neither list can be told to forget the old one.
    */
-  private readonly bigTopHazards: GroundHazardSource = {
-    getHazardEscapeVector: (x, y) => this.bigTopMaze?.getHazardEscapeVector(x, y) ?? null,
+  private readonly starlightTentHazards: GroundHazardSource = {
+    getHazardEscapeVector: (x, y) => this.starlightTentMaze?.getHazardEscapeVector(x, y) ?? null,
   };
   /** Storeys still holding hostiles that were not put there by a quest encounter. */
   private readonly hostileRoomFloors = new Set<number>();
   // Ambient occupants (null in encounter interiors, towers, the club, and unpopulated buildings)
   private readonly occupants: InteriorOccupantSystem | null;
   private readonly ambientSound: AmbientSoundSystem | null;
+  /**
+   * A copy of the hidden-prop ids the emitters were last built against. A
+   * smashed brazier or a hearth a contract takes down must fall silent, and
+   * the live set is a buffer refilled in place — one prop can swap for
+   * another at the same size — so only its contents can be compared.
+   */
+  private emittersBuiltFor: ReadonlySet<string> = new Set();
   /** Priced-service menu for this room's NPC (drinks, blessing, ink); null where none is offered. */
   private readonly servicePanel: ShopSession | null;
-  /** Old Hilda's reading surface; null in every room that sells rather than reads. */
+  /** Old Lori's reading surface; null in every room that sells rather than reads. */
   private readonly readingPanel: FortuneTable | null;
+  /** The mercenaries' hire desk; null in every room whose roster keeps no such desk. */
+  private readonly mercenaryDesk: MercenaryGuildSystem | null;
   /** Ledgers, letters and tally boards sitting on this room's furniture. */
   private readonly readables: InteriorReadableSystem | null;
   private readonly readablePanel = new ReadableOverlay();
@@ -914,7 +951,7 @@ export class BuildingInteriorScene extends GameplayScene {
    * order: a construction contract's client first, then the Anchor's, then
    * "The Borrowed Blueprints", then Wendell's construction contracts. The
    * client answers only while a payment is owed, so it never talks over the
-   * others, and behind the Anchor its terms for Aviel or Hilda would take
+   * others, and behind the Anchor its terms for Aviel or Lori would take
    * every talk. Talking to a resident, their glyph, and the quest's open
    * conversation all walk this list, so a questline indoors is one more entry
    * rather than a special case.
@@ -986,7 +1023,7 @@ export class BuildingInteriorScene extends GameplayScene {
       companions: InteriorCompanionDeparture,
     ) => void,
     /**
-     * Every shop's stock, threaded by reference like `clubMembership` so a
+     * Every shop's stock, threaded by reference like `casinoState` so a
      * line bought out stays sold out on the next visit and through a
      * checkpoint restore. Ticked here while this scene runs, so every shop
      * restocks on game time wherever the party is.
@@ -996,10 +1033,10 @@ export class BuildingInteriorScene extends GameplayScene {
     catAchievements?: AchievementManager,
     audio?: AudioManager,
     abilityManager?: AbilityManager,
-    private readonly circus?: BuildingInteriorCircusContext,
+    private readonly overworld?: BuildingInteriorWorldContext,
     private readonly murderQuestProgress?: MurderQuestProgress,
     doomsdayQuestProgress?: DoomsdayProgress,
-    clubMembership?: ClubMembership,
+    casinoState?: CasinoState,
     townMemory?: TownMemory,
     mercenaryRoster?: MercenaryRoster,
     godModeState?: GodModeState,
@@ -1017,7 +1054,7 @@ export class BuildingInteriorScene extends GameplayScene {
      * "The Anchor is Broken", two of whose three shards are earned indoors.
      *
      * By reference like `townMemory`, and for the same reason: this scene is
-     * rebuilt on every door entry, so Hilda's mended furniture and the temple's
+     * rebuilt on every door entry, so Lori's mended furniture and the temple's
      * remaining vermin have nowhere else to survive the trip back outside.
      */
     anchorQuestProgress?: AnchorQuestProgress,
@@ -1069,6 +1106,7 @@ export class BuildingInteriorScene extends GameplayScene {
     void this.audioScope?.keepCompressed(compressedSfxForLevelId(`level${floor.floorNumber}`));
     this.abilityManager = abilityManager ?? new AbilityManager();
     this.townMemory = townMemory ?? createTownMemory();
+    this.starlightTentProgress = overworld?.starlightTent ?? createStarlightTentProgress();
     this.partyCrafts = partyCrafts ?? createPartyCraftsState();
     this.briarHollowState = briarHollowState ?? createBriarHollowState();
     this.anchorQuestProgress = anchorQuestProgress ?? createAnchorQuestProgress();
@@ -1077,7 +1115,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.catAchievements = catAchievements ?? new AchievementManager();
     this.doomsdayProgress = doomsdayQuestProgress ?? createDoomsdayProgress();
     this.soulCrystal = new SoulCrystalSystem(this.doomsdayProgress, this.audio);
-    this.clubMembership = clubMembership ?? createClubMembership();
+    this.casinoState = casinoState ?? createCasinoState();
     this.mercenaryRoster = mercenaryRoster ?? createMercenaryRoster();
     this.godModeState = godModeState ?? createGodModeState();
     this.companionStance = companionStance ?? createCompanionStanceState();
@@ -1112,11 +1150,11 @@ export class BuildingInteriorScene extends GameplayScene {
     // Read once and reused below: the room's shape and where the two crawlers are
     // put down have to be the same decision, or the maze gets built and then
     // entered through the ring's single door.
-    const variant = floor.variant ?? interiorVariantFor(entry, this.circus);
-    // Floor 3 holds the circus group only near the grounds; the tent declares
+    const variant = floor.variant ?? interiorVariantFor(entry, this.overworld);
+    // Floor 3 holds the Starlight Tent group only near the grounds; the tent declares
     // it too, so its cues never rest on how the party came to the door.
-    if (variant !== 'default' && variant.kind === 'bigtop_maze') {
-      void this.audioScope?.preload(SFX_GROUPS.circusQuest);
+    if (variant !== 'default' && variant.kind === 'starlight_tent_maze') {
+      void this.audioScope?.preload(SFX_GROUPS.starlightTent);
     }
     const prisonPlan =
       variant !== 'default' && variant.kind === 'goblin_prison' ? variant.plan : null;
@@ -1211,7 +1249,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.pm.setPartyDown(findPartyArrivalTiles(this.map, this.map.startTile));
     // The maze is two people walking two sealed halves, so they come in through
     // two flaps rather than side by side at one door.
-    if (variant !== 'default' && variant.kind === 'bigtop_maze') {
+    if (variant !== 'default' && variant.kind === 'starlight_tent_maze') {
       this.human.x = MAZE_HUMAN_SPAWN_TILE.x * TILE_SIZE;
       this.human.y = MAZE_HUMAN_SPAWN_TILE.y * TILE_SIZE;
       this.cat.x = MAZE_CAT_SPAWN_TILE.x * TILE_SIZE;
@@ -1288,19 +1326,15 @@ export class BuildingInteriorScene extends GameplayScene {
     });
     this.club =
       entry.type === 'club'
-        ? new DesperadoClubSystem(
+        ? new CloakAndDaggerSystem(
             this.map,
-            this.clubMembership,
-            this.mercenaryRoster,
-            this.conversation,
+            this.casinoState,
             this.audio,
             this.audioScope,
-            this.human.hasDesperadoPassTattoo || this.cat.hasDesperadoPassTattoo,
-            this.active(),
             this.shopStock,
             (id) => this.partyOwnsGear(id),
             this.awards,
-            this.circus?.worldSeed ?? POKER_DEV_SEED,
+            this.overworld?.worldSeed ?? POKER_DEV_SEED,
             () => this.godModeState.luckyActive,
           )
         : null;
@@ -1317,7 +1351,7 @@ export class BuildingInteriorScene extends GameplayScene {
           ledger: partyRun.wheelLedger,
           saveNow: () => this.saveNow(),
           progressWipe: partyRun.progressWipe,
-          afterNothing: reloadPage,
+          afterPermanentDeath: reloadPage,
           grantAttackCow: () => {
             this.grantAttackCow();
           },
@@ -1361,11 +1395,17 @@ export class BuildingInteriorScene extends GameplayScene {
         destruction: new DestructionKit(world, floor.floorNumber),
         skeletonShots: new SkeletonProjectileSystem(floorMap),
         rockThrows: new RockThrowSystem(floorMap),
-        hirelingShots: new HirelingBoltSystem(
+        hirelingShots: new HirelingShotSystem(
           floorMap,
           (point) => this.safeRoom?.isEntityInSafeRoom(point) ?? false,
         ),
         skeletonSummons,
+        chests: new TreasureChestSystem(),
+        exits: new InteriorExitFixtureSystem({
+          confirm: (leave) => this.openExitMenu(leave),
+          exit: () => this.doExit(),
+          playSound: (id) => this.audio?.play(id),
+        }),
         fairies: new FairySystem({
           bus: this.bus,
           gameMap: floorMap,
@@ -1387,10 +1427,18 @@ export class BuildingInteriorScene extends GameplayScene {
         }),
       });
     }
+    this.chestKit = new ChestKit({
+      pm: this.pm,
+      audio: this.audio,
+      rewardFly: this.rewardFly,
+      floorNumber: floor.floorNumber,
+      partyOwnsGear: (id) => this.partyOwnsGear(id),
+    });
     // Every storey has its own LootSystem/GroundPickupSystem (per-floor, like
     // the roster), so the fly-to-HUD hook is wired once per floor here rather
     // than once for the building.
     for (const floor of this.floors) {
+      this.chestKit.bind(floor.chests);
       floor.combat.gear.onSetCompleted = (kind) => this.awards.unlockDressedForTheOccasion(kind);
       floor.combat.gear.onRelicKill = (kind) => this.awards.recordRelicKill(kind);
       floor.destruction.loot.onCredited = (loot) => this.flyLootReward(floor, loot);
@@ -1468,13 +1516,12 @@ export class BuildingInteriorScene extends GameplayScene {
     bindCraftLevelUps({ bus: this.bus, menus: this.menus, audio: this.audio });
     this.wireCombatGore();
     this.initEntryEncounter(
-      this.circus,
-      variant !== 'default' && variant.kind === 'bigtop_maze' ? variant.plan : null,
+      variant !== 'default' && variant.kind === 'starlight_tent_maze' ? variant.plan : null,
     );
     if (prisonPlan !== null) this.raiseGoblinPrison(prisonPlan);
     this.populateHostileRooms();
 
-    // Before the occupants are placed, because breaking Hilda's shelf takes it
+    // Before the occupants are placed, because breaking Lori's shelf takes it
     // out of the furniture an occupant may anchor to — a citizen standing at a
     // heap of boards is a citizen standing at nothing.
     const ground = this.floors[GROUND_FLOOR_INDEX].world;
@@ -1511,7 +1558,7 @@ export class BuildingInteriorScene extends GameplayScene {
       bus: this.bus,
       audio: this.audio,
       conversation: this.conversation,
-      worldSeed: this.circus?.worldSeed ?? DETACHED_ROOM_WORLD_SEED,
+      worldSeed: this.overworld?.worldSeed ?? DETACHED_ROOM_WORLD_SEED,
       world: () =>
         buildContractWorld({
           murderQuest: this.murderQuestProgress,
@@ -1540,7 +1587,7 @@ export class BuildingInteriorScene extends GameplayScene {
         null,
     });
     // The contract's contact first: it speaks only while a payment is owed,
-    // and the Anchor's terms for Aviel or Hilda would otherwise take every
+    // and the Anchor's terms for Aviel or Lori would otherwise take every
     // talk and keep the payment from ever being made.
     this.residentQuestHooks = [
       this.contractContact,
@@ -1554,7 +1601,20 @@ export class BuildingInteriorScene extends GameplayScene {
     // confrontation can start after entry, so towers are excluded outright.
     this.occupants =
       this.encounter === null
-        ? InteriorOccupantSystem.forBuilding(this.map, entry.type, entry.name, () => this.active())
+        ? InteriorOccupantSystem.forBuilding(
+            this.map,
+            entry.type,
+            entry.name,
+            () => this.active(),
+            () =>
+              partyRoutineBodies({
+                crawlers: [this.human, this.cat],
+                pet: this.mongoSystem,
+                hire: this.mercenarySystem,
+                cow: this.attackCowSystem,
+              }),
+            (cue, x, y) => this.audio?.playRandomAt(OCCUPANT_ROUTINE_CUES[cue].takes, x, y),
+          )
         : null;
     // Kestrel is a counter-anchored occupant, not a figure `ShopSystem` owns
     // itself; it only needs her position for the "Shop" prompt and interact
@@ -1650,6 +1710,9 @@ export class BuildingInteriorScene extends GameplayScene {
     this.readingPanel = services.some((service) => service.surface === 'reading')
       ? new FortuneTable()
       : null;
+    this.mercenaryDesk = interiorKeepsDesk(entry.name, 'mercenary_guild')
+      ? new MercenaryGuildSystem(this.mercenaryRoster, this.audio)
+      : null;
 
     // Last, once the party stands where it came in and the entry storey's roster
     // exists to receive him.
@@ -1673,30 +1736,22 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
-   * Ambience for the room the player just walked into: every hearth and brazier
-   * in the generated layout crackles from where it stands, and rooms that should
-   * sound busy get a constant crowd or shop bed on top.
+   * Ambience for the room the player just walked into: every standing prop
+   * that makes a sound — a hearth, a brazier, the forge — plays it from where
+   * it stands, and rooms that should sound busy get a constant crowd or shop
+   * bed on top.
    */
   private buildAmbientEmitters(): AmbientEmitter[] {
-    const emitters: AmbientEmitter[] = [];
-    for (let ty = 0; ty < this.map.structure.length; ty++) {
-      const row = this.map.structure[ty];
-      for (let tx = 0; tx < row.length; tx++) {
-        const type = row[tx].type;
-        if (type !== FIREPLACE && type !== BRAZIER) continue;
-        emitters.push({
-          soundId: 'ambient_fire_crackling',
-          x: tx,
-          y: ty,
-          radiusTiles: HEARTH_AMBIENT_RADIUS_TILES,
-          maxVolume: HEARTH_AMBIENT_VOLUME,
-        });
-      }
-    }
-    if (this.entry.name === DESPERADO_CLUB_NAME) emitters.push(...slotBankEmitters());
+    const hidden = this.hiddenInteriorProps();
+    this.emittersBuiltFor = new Set(hidden);
+    const emitters: AmbientEmitter[] = townInteriorPropEmitters(
+      this.map.placedInteriorProps,
+      hidden,
+    );
+    emitters.push(...slotBankEmitters(this.club?.props ?? []));
     const roomBed =
       INTERIOR_AMBIENT_BEDS.get(this.entry.name) ??
-      (this.entry.name === BIG_TOP_BUILDING_NAME ? BIG_TOP_AMBIENT_BED : null) ??
+      (this.entry.name === STARLIGHT_TENT_NAME ? STARLIGHT_TENT_AMBIENT_BED : null) ??
       this.prisonAmbientBed();
     if (roomBed !== null) {
       emitters.push({
@@ -1754,8 +1809,18 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /** That floor's hireling bolts and waves. */
-  private get hirelingShots(): HirelingBoltSystem {
+  private get hirelingShots(): HirelingShotSystem {
     return this.floors[this.currentFloor].hirelingShots;
+  }
+
+  /** That floor's chests. */
+  private get chests(): TreasureChestSystem {
+    return this.floors[this.currentFloor].chests;
+  }
+
+  /** That floor's exit fixtures. */
+  private get exitFixtures(): InteriorExitFixtureSystem {
+    return this.floors[this.currentFloor].exits;
   }
 
   /** That floor's raised skeletons. */
@@ -1825,13 +1890,13 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
-   * The achievement for a Dirty Shirley is for drinking it where it is poured.
-   * Carrying one down a floor and drinking it in a corridor is allowed; it just
-   * isn't this.
+   * The achievement for the club's tuna water is for the cat drinking it where
+   * it is poured. Carrying one down a floor and drinking it in a corridor is
+   * allowed; it just isn't this.
    */
   private noteDrinkAchievement(id: ItemId): void {
-    if (id !== 'dirty_shirley' || this.entry.type !== 'club') return;
-    this.awards.unlockParty('bartenders_choice');
+    if (id !== 'catnip_tuna_water' || this.entry.type !== 'club') return;
+    this.awards.unlock('cat', 'bartenders_choice');
   }
 
   private openChat(): void {
@@ -1899,7 +1964,11 @@ export class BuildingInteriorScene extends GameplayScene {
 
   /** Whether the party already has `id`, carried or still on the floor: gear is one of a kind. */
   private partyOwnsGear(id: GearId): boolean {
-    return partyOwnsGear([this.human, this.cat], id) || this.destruction.loot.holds(id);
+    return (
+      partyOwnsGear([this.human, this.cat], id) ||
+      this.destruction.loot.holds(id) ||
+      this.floors.some((floor) => floor.chests.holds(id))
+    );
   }
 
   private dropKillLoot(
@@ -1997,36 +2066,26 @@ export class BuildingInteriorScene extends GameplayScene {
 
   /**
    * Encounters that are live from the moment the building is entered: the
-   * Big Top's trap maze and the Blackwood Lodge cult hideout. The tower's Quill
+   * Starlight Tent's trap maze and the Blackwood Lodge cult hideout. The tower's Quill
    * confrontation is created later, on reaching the top floor.
    */
   private initEntryEncounter(
-    circus: BuildingInteriorCircusContext | undefined,
     /** The tent as dealt at the door, when this room is the maze. */
-    plan: BigTopMazePlan | null,
+    plan: StarlightTentMazePlan | null,
   ): void {
-    const circusProgress = circus?.progress;
-    if (plan !== null && circusProgress !== undefined) {
-      this.raiseBigTopMaze(circusProgress, plan);
+    if (plan !== null) {
+      this.townMemory.visitedPlaces.add('starlight_tent');
+      this.raiseStarlightTentMaze(plan, null);
       this.parkBothInTheMaze();
       // The maze's fire is ground the companion has to be steered out of, the
       // same as a gas cloud or a boss's puddle.
       //
-      // Registered once, which is only safe because the Big Top is a single
+      // Registered once, which is only safe because the Starlight Tent is a single
       // storey: a storey change clears the companion's hazard list, and an
       // encounter in a building with stairs has to re-register from its own
       // update the way the tower's Lich fight does.
-      this.companion.registerHazardSource(this.bigTopHazards);
-      this.combat.mobLoop.registerHazardSource(this.bigTopHazards);
-      return;
-    }
-
-    if (
-      this.entry.name === BIG_TOP_BUILDING_NAME &&
-      circusProgress !== undefined &&
-      isCircusResolvedStage(circusProgress.stage)
-    ) {
-      this.placeCuredGrimaldi();
+      this.companion.registerHazardSource(this.starlightTentHazards);
+      this.combat.mobLoop.registerHazardSource(this.starlightTentHazards);
       return;
     }
 
@@ -2084,21 +2143,37 @@ export class BuildingInteriorScene extends GameplayScene {
     prison.lighting.prewarm();
   }
 
-  /** Stands the maze up on the map already built from `plan`. */
-  private raiseBigTopMaze(progress: CircusQuestProgress, plan: BigTopMazePlan): BigTopMazeSystem {
-    const { world } = this.floors[GROUND_FLOOR_INDEX];
-    const maze = new BigTopMazeSystem(
-      this.map,
-      this.bus,
-      (mob) => world.roster.add(mob),
-      progress,
-      this.audioScope,
-      this.conversation,
-      plan,
-      (next) => this.restartBigTopMaze(progress, next),
-    );
-    this.startEncounter(GROUND_FLOOR_INDEX, () => maze);
-    this.bigTopMaze = maze;
+  /**
+   * Stands the maze up on the map already built from `plan`, with the ring
+   * `finale` a restart carries over, or a new ring on the way in.
+   */
+  private raiseStarlightTentMaze(
+    plan: StarlightTentMazePlan,
+    finale: StarlightTentFinale | null,
+  ): StarlightTentMazeSystem {
+    const maze = this.startEncounter(GROUND_FLOOR_INDEX, (_bus, addMob, fixtures) => {
+      const ring =
+        finale ??
+        new StarlightTentFinale({
+          map: this.map,
+          chests: fixtures.chests,
+          exits: fixtures.exits,
+          addMob,
+          progress: this.starlightTentProgress,
+          partyLevel: this.partyLevel,
+        });
+      return new StarlightTentMazeSystem(
+        this.map,
+        addMob,
+        this.starlightTentProgress,
+        this.audioScope,
+        this.conversation,
+        plan,
+        (next) => this.restartStarlightTentMaze(next),
+        ring,
+      );
+    });
+    this.starlightTentMaze = maze;
     // Baked while the door is still loading, not on the fire walk's first frame.
     maze.lighting.prewarm();
     return maze;
@@ -2121,17 +2196,17 @@ export class BuildingInteriorScene extends GameplayScene {
    * room on the same map and puts the party at the flaps; around it the scene
    * closes its menu and settles what only it owns.
    */
-  private restartBigTopMaze(progress: CircusQuestProgress, next: Difficulty): void {
-    const old = this.bigTopMaze;
-    const worldSeed = this.circus?.worldSeed;
-    if (old === null || worldSeed === undefined) return;
+  private restartStarlightTentMaze(next: Difficulty): void {
+    const old = this.starlightTentMaze;
+    const worldSeed = this.overworld?.worldSeed ?? DETACHED_ROOM_WORLD_SEED;
+    if (old === null) return;
     this.pauseScreen.close();
     // The same as closing it with Escape: a key still held from the menu must
     // not walk a crawler off the flap the moment the show starts again.
     this.input.clear();
-    this.bigTopMaze = null;
+    this.starlightTentMaze = null;
     this.encounter = null;
-    restartBigTopTent(
+    restartStarlightTent(
       old,
       {
         map: this.map,
@@ -2140,7 +2215,7 @@ export class BuildingInteriorScene extends GameplayScene {
         human: this.human,
         cat: this.cat,
         worldSeed,
-        raise: (plan) => this.raiseBigTopMaze(progress, plan),
+        raise: (plan, finale) => this.raiseStarlightTentMaze(plan, finale),
       },
       next,
     );
@@ -2150,43 +2225,26 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
-   * The vine as the questline leaves him: still wrapped around the tent pole,
-   * cured, in the ordinary ring the tent goes back to being.
-   *
-   * Not an encounter — nothing in the room is live any more — so he joins the
-   * ground floor's roster the way any other furniture-shaped creature would, and
-   * the room keeps its occupants, its readables and its own music.
-   */
-  private placeCuredGrimaldi(): void {
-    const pole = this.map.bigtopRingCentre;
-    if (pole === null) return;
-    const tile = findNearbyWalkableTile(
-      this.map,
-      pole.x,
-      pole.y + CURED_GRIMALDI_POLE_SOUTH_OFFSET,
-      CURED_GRIMALDI_SEARCH_RADIUS_TILES,
-    );
-    if (tile === null) return;
-    const grimaldi = new GrimaldiVine(tile.x, tile.y, TILE_SIZE);
-    // The ring's 2×2 pole is centred on the corner its ring centre names.
-    grimaldi.poleOffsetTiles = pole.x - (tile.x + GRIMALDI_TILE_CENTRE);
-    grimaldi.setMap(this.map);
-    grimaldi.cureAmount = 1;
-    this.floors[GROUND_FLOOR_INDEX].world.roster.add(grimaldi);
-  }
-
-  /**
    * Brings a quest fight to life on one floor. The encounter spawns its mobs
    * through that floor's roster, so it is fought with the kit that floor already
    * had rather than one built around it.
    */
-  private startEncounter(
+  private startEncounter<E extends InteriorEncounter>(
     floor: number,
-    makeEncounter: (bus: EventBus, addMob: (mob: Mob) => void) => InteriorEncounter,
-  ): void {
-    const { world } = this.floors[floor];
+    makeEncounter: (
+      bus: EventBus,
+      addMob: (mob: Mob) => void,
+      fixtures: InteriorEncounterFixtures,
+    ) => E,
+  ): E {
+    const { world, chests, exits } = this.floors[floor];
     this.encounterFloor = floor;
-    this.encounter = makeEncounter(this.bus, (mob) => world.roster.add(mob));
+    const encounter = makeEncounter(this.bus, (mob) => world.roster.add(mob), {
+      chests: chestPlacer(chests, world.gameMap),
+      exits,
+    });
+    this.encounter = encounter;
+    return encounter;
   }
 
   /**
@@ -2299,7 +2357,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
   /**
    * The soundtrack this interior owns: a rotating playlist in the club and the
-   * taverns, the circus playlist in the calm Big Top, the tower's own theme,
+   * taverns, the circus playlist in the Starlight Tent, the tower's own theme,
    * the temple's own theme, and a shared default in every other room. Null
    * in a building with no soundtrack of its own. An encounter's music is
    * claimed over it, and falls back to it when the encounter lets go.
@@ -2307,7 +2365,7 @@ export class BuildingInteriorScene extends GameplayScene {
   private interiorMusicTracks(): ReadonlyArray<MusicTrackId> | null {
     if (!this.floor.ownsMusic) return null;
     if (this.entry.type === 'club') return CLUB_MUSIC_TRACKS;
-    if (this.entry.name === BIG_TOP_BUILDING_NAME) return CIRCUS_MUSIC_TRACKS;
+    if (this.entry.name === STARLIGHT_TENT_NAME) return CIRCUS_MUSIC_TRACKS;
     if (this.entry.type === 'tower') return TOWER_MUSIC_TRACKS;
     if (this.entry.name === SKY_TEMPLE_NAME) return TEMPLE_MUSIC_TRACKS;
     if (TAVERN_BUILDING_NAMES.has(this.entry.name)) return TAVERN_MUSIC_TRACKS;
@@ -2355,7 +2413,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const musicTracks = this.interiorMusicTracks();
     // The tent shares the grounds' playlist, so carrying on the song the party
     // walked in with would make the flap pass unmarked: it skips to another.
-    const changesSongAtTheDoor = this.entry.name === BIG_TOP_BUILDING_NAME;
+    const changesSongAtTheDoor = this.entry.name === STARLIGHT_TENT_NAME;
     if (musicTracks !== null) {
       this.arrivalLoading.whenClosed(() => {
         this.audioScope?.claimMusic({
@@ -2390,7 +2448,7 @@ export class BuildingInteriorScene extends GameplayScene {
       },
       toggleMiniMap: () => this.toggleMiniMap(),
       toggleMute: () => this.menus.toggleMute(),
-      // Indoors this is Old Hilda's hammer rather than the dungeon's barricades,
+      // Indoors this is Old Lori's hammer rather than the dungeon's barricades,
       // but it is the same key doing the same thing: spending boards on a
       // broken thing you are standing at.
       buildAction: () => this.triggerAnchorRepair(),
@@ -2525,6 +2583,8 @@ export class BuildingInteriorScene extends GameplayScene {
     // closes the club's panels itself while the coins can still reach the
     // player. Idempotent, so running twice costs nothing.
     this.club?.closeAll(this.active());
+    this.mercenaryDesk?.close();
+    this.drainMercenaryHire();
     this.humanTalk.stop(this.human);
     // The next scene binds its own; a level-up must never reach this one's menus.
     this.abilityManager.onLevelUp = null;
@@ -2611,6 +2671,10 @@ export class BuildingInteriorScene extends GameplayScene {
         };
       }),
       this.achievementUI.surface(),
+      this.chestKit.surface(),
+      screenFadeSurface(EXIT_FIXTURE_FADE_SURFACE_ID, {
+        alpha: () => this.exitFixtures.fadeAlpha,
+      }),
       this.chat.surface(),
       deathScreenSurface(this.combat.deathScreen, {
         isOpen: () => this.gameOver,
@@ -2637,7 +2701,7 @@ export class BuildingInteriorScene extends GameplayScene {
       exitBuildingPromptSurface(EXIT_MENU_SURFACE_ID, {
         isOpen: () => this.exitMenuOpen,
         buildingName: () => this.entry.name,
-        exit: () => this.doExit(),
+        exit: () => this.leaveByExitMenu(),
         stay: () => this.closeExitMenu(),
       }),
       towerStairsPromptSurface(TOWER_STAIRS_SURFACE_ID, () => this.towerStairs ?? null),
@@ -2665,6 +2729,13 @@ export class BuildingInteriorScene extends GameplayScene {
         fortuneScreenSurface({ id: READING_SURFACE_ID, table: this.readingPanel, party }),
       );
     }
+    const desk = this.mercenaryDesk;
+    if (desk !== null) {
+      surfaces.push(
+        mercenaryDeskSurface({ id: MERCENARY_DESK_SURFACE_ID, desk, party }),
+        desk.dismissConfirm.surface(MERCENARY_DESK_DISMISS_SURFACE_ID),
+      );
+    }
     const shop = this.shop;
     if (shop !== null) {
       surfaces.push(
@@ -2680,7 +2751,6 @@ export class BuildingInteriorScene extends GameplayScene {
     if (club !== null) {
       const casinoSeat = { active: () => this.active(), companion: () => this.inactive() };
       surfaces.push(
-        club.clarabelleSurface(CLUB_SURFACE_ID),
         ...club.stationSurfaces(party),
         ...club.casinoSurfaces(casinoSeat),
         ...club.pokerSurfaces(casinoSeat),
@@ -2692,14 +2762,14 @@ export class BuildingInteriorScene extends GameplayScene {
   /**
    * What Escape does to the conversation on screen, or null to let it pass
    * beneath: only the speakers below may be backed out of. A scripted beat that
-   * holds the party (the Big Top's cure, the tower's load-bearing pages) and a
+   * holds the party (the tower's load-bearing pages) and a
    * line from anyone not listed leave Escape to the pause menu.
    */
   private conversationEscape(): (() => void) | null {
     const bopca = this.bopca;
     if (bopca?.isDialogOpen === true) return () => void bopca.dismissDialog();
-    const maze = this.bigTopMaze;
-    if (maze?.dialogDismissible === true) return () => void maze.dismissDialog();
+    const maze = this.starlightTentMaze;
+    if (maze?.isDialogOpen === true) return () => void maze.dismissDialog();
     const tower = this.towerConfrontation;
     if (tower?.dialogDismissible === true) return () => void tower.dismissDialog();
     const questHook = this.openResidentQuestHook();
@@ -2745,13 +2815,13 @@ export class BuildingInteriorScene extends GameplayScene {
   /**
    * Whether this room refuses the follow command outright.
    *
-   * The Big Top's maze does: it is two people solving one room from opposite
+   * The Starlight Tent's maze does: it is two people solving one room from opposite
    * sides, and a companion trailing the active crawler would walk into a
    * corridor nobody is steering them through. So does the prison, whose
    * follower walks the leader's own trail and takes no orders at all.
    */
   private get followDisabled(): boolean {
-    return this.bigTopMaze?.followDisabled === true || this.companion.followTrail !== null;
+    return this.starlightTentMaze?.followDisabled === true || this.companion.followTrail !== null;
   }
 
   /** Hook the shared follower menu to the companion's commands (same set as the overworld). */
@@ -2877,16 +2947,11 @@ export class BuildingInteriorScene extends GameplayScene {
    *
    * One accessor rather than a condition repeated at each site: the keyboard
    * poll, the switch key and the touch swing are three roads to the same
-   * question, and when the tower fight added a second script only the first of
-   * them learned about it — leaving a tap able to swap bodies mid-slide, out
-   * from under the code writing their positions.
+   * question, and a script taught to only one of them leaves a tap able to
+   * swap bodies mid-slide, out from under the code writing their positions.
    */
   private get scriptOwnsParty(): boolean {
-    return (
-      this.bigTopMaze?.playerLocked === true ||
-      this.towerConfrontation?.playerLocked === true ||
-      this.prison?.playerLocked === true
-    );
+    return this.towerConfrontation?.playerLocked === true || this.prison?.playerLocked === true;
   }
 
   /** Hands control to the companion, unless they're lying knocked out. */
@@ -2912,12 +2977,12 @@ export class BuildingInteriorScene extends GameplayScene {
     // wherever it was set — which indoors is the door they came in by — and the
     // follow drive walks them all the way back to it, through whatever is
     // between. Harmless in a shop, where nothing is anchored; ruinous under the
-    // Big Top, where the room anchors both crawlers and the ground burns.
+    // Starlight Tent, where the room anchors both crawlers and the ground burns.
     const parked = wasHumanActive ? this.human : this.cat;
     // Parked where they stand, unless the room says that spot is about to be on
     // fire — an anchor inside a trap corridor is a crawler walking back into it
     // every time the follow drive goes out.
-    const restingSpot = this.bigTopMaze?.restingSpotFor(parked) ?? parked;
+    const restingSpot = this.starlightTentMaze?.restingSpotFor(parked) ?? parked;
     this.companion.notifyBecameCompanion(restingSpot, wasHumanActive);
     this.human.autoTarget = null;
     this.cat.autoTarget = null;
@@ -3001,6 +3066,7 @@ export class BuildingInteriorScene extends GameplayScene {
     postMusicLibraryNotices(activeMusicLibrary()?.drainNotices() ?? [], this.menus);
     this.tickSaveIndicator();
     this.achievementUI.tick();
+    this.chestKit.tick();
     playRewardLandingCues(this.audio, this.rewardFly.update());
     // Every frame, as in the dungeon: it drains actions held over a pause and ticks timed AI effects.
     aiAdapter.update();
@@ -3057,6 +3123,13 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.menus.questReward.isOpen) return;
     if (this.menus.levelUpDialog.isShowing) return;
     if (this.menus.rewardGrantedDialog.isShowing) return;
+    if (this.chestKit.isOpen) return;
+    // A fixture's fade is the party already leaving: the room holds still
+    // under it, and the exit runs on the frame it goes dark.
+    if (this.exitFixtures.isDeparting) {
+      this.exitFixtures.update();
+      return;
+    }
     // The chat box's surface says it halts the world, and this is where that
     // has to be true: a fight left running under a DOM text field is one
     // the player cannot answer.
@@ -3110,12 +3183,11 @@ export class BuildingInteriorScene extends GameplayScene {
     ) {
       return;
     }
-    if (this.bigTopMaze?.isDialogOpen === true) {
-      // Ticked rather than merely halted, for the same reason the blackjack
-      // table and the Bopca's cook timer are: the box is one beat of a script
-      // that is holding both crawlers still, and the script is what closes it.
-      // A bare `return` here strands the party locked in place forever.
-      this.bigTopMaze.update(this.buildSystemContext());
+    if (this.starlightTentMaze?.isDialogOpen === true) {
+      // Ticked rather than merely halted: the stage lights keep coming up and
+      // the banners keep running under an act card, and the maze holds its own
+      // hazards still while the box is up.
+      this.starlightTentMaze.update(this.buildSystemContext());
       // And its cues are drained here rather than left for the frame the box
       // closes: a barrier that opened on the same frame a reset notice came up
       // would otherwise be heard several seconds later, over nothing.
@@ -3131,6 +3203,8 @@ export class BuildingInteriorScene extends GameplayScene {
       return;
     }
     if (this.readingPanel?.isOpen === true) return;
+    this.drainMercenaryHire();
+    if (this.mercenaryDesk?.open === true) return;
     if (this.readablePanel.isOpen) return;
     this.gameStats.recordPlayedFrame();
     tickShopStock(this.shopStock);
@@ -3224,23 +3298,20 @@ export class BuildingInteriorScene extends GameplayScene {
       this.shop.open();
     }
 
-    // Club: talk to a station NPC (Clarabelle, bar, casino, …) with Space.
+    // Club: talk to a station (bar, casino, market, …) with Space.
     // Only consume when a station actually answered, so a press beside an
     // ambient occupant still reaches the conversation below.
     if (this.club !== null && interactPressed() && this.club.handleInteract(player)) {
       keybindings.release(this.input, 'attack');
     }
 
-    // The tent's one interaction: the potion over the vine. Ahead of the swing
-    // below, because the whole point of the room is that a swing is the wrong
-    // answer here.
-    if (interactPressed() && this.bigTopMaze?.tryInteract(this.buildSystemContext()) === true) {
-      keybindings.release(this.input, 'attack');
-    }
-
     // A crawler in a holding cell breaks its door with one press from
     // anywhere in the cell: the press is the swing, aimed at the door.
     if (interactPressed() && this.prison?.tryInteract(this.buildSystemContext()) === true) {
+      keybindings.release(this.input, 'attack');
+    }
+
+    if (interactPressed() && this.tryUseRoomFixture(player)) {
       keybindings.release(this.input, 'attack');
     }
 
@@ -3293,19 +3364,21 @@ export class BuildingInteriorScene extends GameplayScene {
     this.human.tickTimers();
     this.cat.tickTimers();
     drainBloodVomitRetches([this.human, this.cat], this.bus);
+    drainHpThresholdCrossings({ human: this.human, cat: this.cat }, this.bus);
     this.updateSafeRoomProtection();
     this.safeRoom?.updateWander();
     this.bopca?.tick(this.human, this.cat, player, this.inactive());
     this.shop?.update();
-    this.club?.update(this.active(), this.inactive());
+    this.club?.update(this.active(), this.inactive(), this.occupants?.people ?? []);
     this.occupants?.update();
-    this.skyfowlFoley.update(this.audio, this.occupants?.people ?? [], player.x, player.y);
+    this.hawkfolkFoley.update(this.audio, this.occupants?.people ?? [], player.x, player.y);
     this.syncPlumblineFarmRoom();
     this.applyResidentQuestMarkers();
     this.applyServiceShopSigns();
     for (const hook of this.residentQuestHooks) hook.update();
     this.contractSite?.update();
     this.prisonKey?.update(player);
+    this.refreshAmbientEmittersIfPropsHid();
     this.ambientSound?.updateListener(player.x, player.y);
     if (this.shop !== null) this.playShopTradeSound(this.shop);
 
@@ -3317,7 +3390,7 @@ export class BuildingInteriorScene extends GameplayScene {
     if (!this.onExitTile) {
       this.exitDismissed = false;
     } else if (!wasOnExit && !this.exitDismissed) {
-      this.exitMenuOpen = true;
+      this.openExitMenu(() => this.doExit());
     }
 
     // Tower stair detection
@@ -3333,13 +3406,6 @@ export class BuildingInteriorScene extends GameplayScene {
 
     this.updateCombat();
     this.updateCompanionKnockout();
-
-    // Last, so the frame that ends the tent's cutscene finishes before the scene
-    // that replaces this one is built out of the party it was still moving.
-    if (this.bigTopMaze?.exitPending === true) {
-      this.bigTopMaze.exitPending = false;
-      this.doExit();
-    }
   }
 
   /**
@@ -3351,7 +3417,7 @@ export class BuildingInteriorScene extends GameplayScene {
    * queue nobody empties grows for the length of the session.
    */
   private drainMazeQueues(): void {
-    const maze = this.bigTopMaze;
+    const maze = this.starlightTentMaze;
     if (maze === null) return;
     const audio = this.audio;
     for (const cue of maze.drainSounds()) {
@@ -3435,8 +3501,8 @@ export class BuildingInteriorScene extends GameplayScene {
     // a burnout moves both crawlers itself, but the anchors are the scene's to
     // fix, and an anchored companion still pointing at a corridor walks straight
     // back into the fire that just took them.
-    if (this.bigTopMaze?.partyResetPending === true) {
-      this.bigTopMaze.partyResetPending = false;
+    if (this.starlightTentMaze?.partyResetPending === true) {
+      this.starlightTentMaze.partyResetPending = false;
       this.companion.anchorBoth(this.human, this.cat);
       // Companions go back with the crawlers: a pet left mid-crossing is on the
       // far side of a curtain the party has just been sent back behind.
@@ -3447,6 +3513,12 @@ export class BuildingInteriorScene extends GameplayScene {
       // question about a doorway two tiles from anybody, stacked over the box
       // explaining why they moved.
       this.exitMenuOpen = false;
+    }
+    // The acts park both crawlers; the ring is one fight the party takes
+    // together, and a restart parks them again through `parkBothInTheMaze`.
+    if (this.starlightTentMaze?.partyReleasePending === true) {
+      this.starlightTentMaze.partyReleasePending = false;
+      this.companion.followBoth();
     }
     this.drainMazeQueues();
     combat.drainMobAudioCues(this.audio);
@@ -3462,6 +3534,8 @@ export class BuildingInteriorScene extends GameplayScene {
     this.mercenarySystem.checkHealth((merc) => combat.spawnKillGore(merc, null));
     this.attackCowSystem.checkHealth();
     combat.resolveKills();
+    // After the kills, so the frame the last guard dies is the frame its chest unlocks.
+    this.chests.update(ctx.roster.mobs);
     combat.resolveSpellAftermath();
     // Also where his off-duty recovery ticks, and so only while he is not out,
     // and never behind any of the world-halting returns in `update`.
@@ -3499,16 +3573,26 @@ export class BuildingInteriorScene extends GameplayScene {
     this.drainCasterAudioCues();
     destruction.update(ctx);
     this.explosionShake.update();
-    if (destruction.drainAudioCues(this.audio)) {
-      // A hearth or brazier that has just been smashed is floor now, and the
-      // emitters were scanned off the layout before it was — left alone, the
-      // fire keeps crackling from bare boards for the rest of the visit.
-      this.ambientSound?.setEmitters(this.buildAmbientEmitters());
-    }
+    destruction.drainAudioCues(this.audio);
     this.interiorPropDestruction?.update();
     this.drainInteriorPropBreaks();
 
     if (!active.isAlive) this.raiseDeathScreen();
+  }
+
+  /** Placed props not standing in the room this frame: smashed, or taken down by a contract. */
+  private hiddenInteriorProps(): ReadonlySet<string> | undefined {
+    return (
+      this.contractSite?.hiddenProps(this.interiorPropDestruction?.broken) ??
+      this.interiorPropDestruction?.broken
+    );
+  }
+
+  private refreshAmbientEmittersIfPropsHid(): void {
+    if (this.ambientSound === null) return;
+    const hidden = this.hiddenInteriorProps() ?? NO_HIDDEN_PROPS;
+    if (sameIds(hidden, this.emittersBuiltFor)) return;
+    this.ambientSound.setEmitters(this.buildAmbientEmitters());
   }
 
   /**
@@ -3534,7 +3618,7 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   private readonly breakReactions = new InteriorBreakReactions();
-  private readonly skyfowlFoley = new InteriorSkyfowlFoley();
+  private readonly hawkfolkFoley = new InteriorHawkfolkFoley();
 
   /**
    * The cues a caster's shots and summons leave behind.
@@ -3866,6 +3950,23 @@ export class BuildingInteriorScene extends GameplayScene {
     this.doExit(true);
   }
 
+  /**
+   * Asks whether to leave, the one question every way out of the room asks:
+   * the menu's frame is also where a downed hire about to be left behind is
+   * warned about.
+   */
+  private openExitMenu(leave: () => void): void {
+    this.exitMenuLeave = leave;
+    this.exitMenuOpen = true;
+  }
+
+  /** Exit: shut the menu and leave the way it was opened for. */
+  private leaveByExitMenu(): void {
+    const leave = this.exitMenuLeave;
+    this.exitMenuOpen = false;
+    leave();
+  }
+
   /** Stay: shut the menu and remember the refusal until the player steps off the mat. */
   private closeExitMenu(): void {
     this.exitMenuOpen = false;
@@ -3928,7 +4029,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
   /**
    * Hangs each questline's glyph over the residents it has business with —
-   * Hilda or Deacon Aviel for the Anchor, Wendell for the blueprints — the
+   * Lori or Deacon Aviel for the Anchor, Wendell for the blueprints — the
    * first hook in priority order with an opinion winning.
    *
    * A hook answers `null` for everybody it has no business with. Indoors only
@@ -3954,18 +4055,10 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.occupants === null) return;
     const party = [this.human, this.cat];
     for (const person of this.occupants.people) {
-      const service = interiorServiceForRole(this.entry.name, person.role);
-      if (service === undefined) continue;
-      person.shopSign = shopSignWhen(this.serviceStillSells(person.role, party));
+      const service = this.occupants.serviceOf(person);
+      if (service?.surface !== 'menu') continue;
+      person.shopSign = shopSignWhen(serviceStillSells(service.counter, party));
     }
-  }
-
-  private serviceStillSells(role: TownRole, party: readonly Player[]): boolean {
-    if (this.entry.name === QUIET_NEEDLE_NAME) return party.some(hasTattooForSale);
-    if (this.entry.name === DRILL_YARD_BUILDING && role === 'guard') {
-      return party.some(drillYardHasTraining);
-    }
-    return true;
   }
 
   /**
@@ -4009,13 +4102,18 @@ export class BuildingInteriorScene extends GameplayScene {
     return this.occupants?.people.find((person) => person.residentId === 'wendell') ?? null;
   }
 
-  /** His hayloft rest menu, straight to the counter: his contracts menu is how the player got here. */
+  /**
+   * His own counter, straight to it: his contracts menu is how the player got
+   * here, and the questline check `openService` makes first would only send
+   * them back to it.
+   */
   private openWendellHayloft(): void {
-    if (this.servicePanel === null) return;
+    const figure = this.wendellFigure();
+    const service = figure === null ? undefined : this.occupants?.serviceOf(figure);
+    if (figure === null || service === undefined) return;
     const resident = residentById('wendell');
     const turn = residentTalkCount(this.townMemory, resident.id);
-    this.openServiceMenu(this.servicePanel, turn, residentHost(resident, turn), resident.role);
-    this.audio?.play('menu_open');
+    this.openServiceSurface(figure, turn, resident, service);
   }
 
   /** His ordinary small talk, picked from his lore and ambient lines as any resident's would be. */
@@ -4050,7 +4148,7 @@ export class BuildingInteriorScene extends GameplayScene {
     releaseContractAutoPinOnEnd(this.bus, journal.progress);
   }
 
-  /** The `R` press indoors: Old Hilda's repairs, and nothing else so far. */
+  /** The `R` press indoors: Old Lori's repairs, and nothing else so far. */
   private triggerAnchorRepair(): boolean {
     return this.anchorInterior?.tryRepair(this.active()) ?? false;
   }
@@ -4111,11 +4209,10 @@ export class BuildingInteriorScene extends GameplayScene {
     const ctx = this.townDialogContext();
     const inDanger = isTownInDanger(ctx);
     const resident = target.residentId === null ? null : residentById(target.residentId);
-    const service = interiorServiceForRole(this.entry.name, target.role);
-    const sellsHere = service !== undefined;
+    const service = this.occupants.serviceOf(target);
     const turn = this.turnFor(target);
 
-    // A resident questline outranks even a resident's own untold lore — Hilda,
+    // A resident questline outranks even a resident's own untold lore — Lori,
     // Aviel and Wendell are otherwise still finishing their first-meeting
     // flavor lines (`hasUntoldLore`) for several visits, and a player who has
     // just been asked to fetch boards, clear rats or borrow blueprints should
@@ -4128,17 +4225,17 @@ export class BuildingInteriorScene extends GameplayScene {
     // The tattooist skips straight to the needle while there is a mark left to
     // buy, and leaves the talk uncounted so her lore is still there afterwards.
     // Once nothing is left, her menu would be all spent rows, so she only talks.
-    const isQuietNeedle = this.entry.name === QUIET_NEEDLE_NAME;
-    const tattooForSale = isQuietNeedle && hasTattooForSale(player);
-    if (sellsHere && tattooForSale) {
+    const inks = service?.surface === 'menu' && service.counter === 'tattoo_parlour';
+    const tattooForSale = inks && hasTattooForSale(player);
+    if (service !== undefined && tattooForSale) {
       this.audio?.playRandom(citizenVoiceSounds(target.speechStyle));
-      this.openService(turn, resident, target.role);
+      this.openService(target, turn, resident, service);
       return true;
     }
-    const offersMenu = sellsHere && (!isQuietNeedle || tattooForSale);
+    const offersMenu = service !== undefined && (!inks || tattooForSale);
 
     if (offersMenu && !this.hasUntoldLore(target)) {
-      this.openService(turn, resident, target.role);
+      this.openService(target, turn, resident, service);
       this.noteTalk(target, inDanger);
       return true;
     }
@@ -4166,7 +4263,7 @@ export class BuildingInteriorScene extends GameplayScene {
         kind: 'close',
         onClosed: () => {
           this.releaseCitizenDialogTarget();
-          if (offersMenu) this.openService(turn, resident, target.role);
+          if (offersMenu) this.openService(target, turn, resident, service);
         },
       },
       dismiss: { kind: 'allowed', onDismissed: () => this.releaseCitizenDialogTarget() },
@@ -4182,7 +4279,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // still be the one it finds there, and its talk row unpinned before this
     // one, which may be the same row, is pinned.
     const facing = target.facingXY();
-    this.citizenTalkRow = prewarmAndPinCitizenTalk(target.figure, facing.x, facing.y);
+    this.citizenTalkRow = prewarmAndPinTownspersonTalk(target.body, facing.x, facing.y);
     this.citizenDialogTarget = target;
     this.noteTalk(target, inDanger);
     return true;
@@ -4225,28 +4322,90 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
-   * Opens whatever the NPC in `role` does here — a priced menu almost
-   * everywhere, a reading in Old Hilda's kitchen.
-   *
-   * Keyed on the role rather than on the building, because a building may run
-   * more than one counter and the player walked up to exactly one of them.
+   * Opens what the occupant the player walked up to offers — a priced menu
+   * almost everywhere, a reading in Old Lori's kitchen. The service is the
+   * person's own, so a building may run any number of counters.
    */
-  private openService(turn: number, resident: ResidentDef | null, role: TownRole): void {
-    const service = interiorServiceForRole(this.entry.name, role);
-    if (service === undefined) return;
+  private openService(
+    host: Townsperson,
+    turn: number,
+    resident: ResidentDef | null,
+    service: OccupantService,
+  ): void {
     // A resident questline gets the counter first, exactly as the Anchor gets
     // Madame Voss's Consult prompt first out on the plaza: while it has
-    // something to say, Hilda reads no cards and Aviel sells no blessings.
+    // something to say, Lori reads no cards and Aviel sells no blessings.
     if (resident !== null && this.tryResidentQuestDialog(resident.id, this.active())) return;
-    if (service.surface === 'reading') {
-      if (this.readingPanel === null) return;
-      this.readingPanel.openWith(this.townDialogContext(), HEDGE_WITCH);
-      this.audio?.play('menu_open');
-      return;
+    this.openServiceSurface(host, turn, resident, service);
+  }
+
+  /** Whether a menu, a reading or a desk an occupant keeps is up. */
+  private serviceSurfaceOpen(): boolean {
+    return (
+      this.servicePanel?.isOpen === true ||
+      this.readingPanel?.isOpen === true ||
+      this.mercenaryDesk?.open === true
+    );
+  }
+
+  /**
+   * Opens `host`'s service surface and holds them attending the player while
+   * it stays up: the surface halts the world, so a routine pose left set
+   * under it would be drawn the whole time, aimed wherever the routine last
+   * pointed them.
+   */
+  private openServiceSurface(
+    host: Townsperson,
+    turn: number,
+    resident: ResidentDef | null,
+    service: OccupantService,
+  ): void {
+    switch (service.surface) {
+      case 'reading':
+        if (this.readingPanel === null) return;
+        this.readingPanel.openWith(this.townDialogContext(), HEDGE_WITCH);
+        this.audio?.play('menu_open');
+        break;
+      case 'desk':
+        this.openDesk(service.desk);
+        break;
+      case 'menu':
+        if (this.servicePanel === null) return;
+        this.openServiceMenu(
+          this.servicePanel,
+          turn,
+          residentHost(resident, turn),
+          service.counter,
+        );
+        this.audio?.play('menu_open');
+        break;
+      default: {
+        const unhandled: never = service;
+        throw new Error(`unhandled occupant service ${JSON.stringify(unhandled)}`);
+      }
     }
-    if (this.servicePanel === null) return;
-    this.openServiceMenu(this.servicePanel, turn, residentHost(resident, turn), role);
-    this.audio?.play('menu_open');
+    if (this.serviceSurfaceOpen()) this.occupants?.serve(host, () => this.serviceSurfaceOpen());
+  }
+
+  /** Opens the screen behind a desk this room's roster keeps. */
+  private openDesk(desk: ServiceDesk): void {
+    // The desk plays its own opening cue.
+    const openers: Readonly<Record<ServiceDesk, () => void>> = {
+      mercenary_guild: () => this.mercenaryDesk?.openPanel(),
+    };
+    openers[desk]();
+  }
+
+  /**
+   * The first-hire achievement for a contract signed at this room's desk.
+   * Teardown drains it once more, for a hire signed on the last frame before
+   * the party walked out.
+   */
+  private drainMercenaryHire(): void {
+    const desk = this.mercenaryDesk;
+    if (desk?.hirePending !== true) return;
+    desk.hirePending = false;
+    this.awards.unlockParty('on_retainer');
   }
 
   /**
@@ -4278,16 +4437,14 @@ export class BuildingInteriorScene extends GameplayScene {
    * both the rows and the handler that performs the service, so the two can never
    * drift apart.
    *
-   * Switched on the building's name, and — inside a branch whose building runs
-   * more than one priced counter — on the role of the NPC the player walked up
-   * to. `openService` has already resolved that role from the talk target, so
+   * Switched on the counter the occupant the player walked up to keeps, so
    * this never has to guess which counter is in front of the player.
    */
   private openServiceMenu(
     panel: ShopSession,
     turn: number,
     host: ResidentHost | null,
-    role: TownRole,
+    counter: ServiceCounter,
   ): void {
     const party = [this.human, this.cat];
     // Every service confirms with the same purchase chime; a counter that has a
@@ -4328,8 +4485,8 @@ export class BuildingInteriorScene extends GameplayScene {
       };
     };
 
-    switch (this.entry.name) {
-      case 'Temple of the Sky':
+    switch (counter) {
+      case 'temple_blessing':
         panel.open(
           () => buildBlessingMenu(party, turn, host),
           confirmed(
@@ -4339,7 +4496,7 @@ export class BuildingInteriorScene extends GameplayScene {
           counterOptions(null),
         );
         return;
-      case 'The Quiet Needle':
+      case 'tattoo_parlour':
         // Rebuilt per purchase, so inking one stat design marks the other stat
         // designs as spent — and the skill mark as spent independently of them.
         panel.open(
@@ -4348,18 +4505,14 @@ export class BuildingInteriorScene extends GameplayScene {
           counterOptions(null),
         );
         return;
-      case DRILL_YARD_BUILDING:
-        // The garrison's two counters. Split on role rather than on anything the
-        // room can be asked, because both stand in the same building and only
-        // the NPC the player talked to says which one they are at.
-        if (role === 'guard') {
-          panel.open(
-            () => buildDrillYardMenu(this.active(), turn, host),
-            confirmed(runDrill, never),
-            counterOptions(null),
-          );
-          return;
-        }
+      case 'drill_yard':
+        panel.open(
+          () => buildDrillYardMenu(this.active(), turn, host),
+          confirmed(runDrill, never),
+          counterOptions(null),
+        );
+        return;
+      case 'armoury':
         panel.open(
           () => buildArmouryMenu(turn, host, this.shopStock, (id) => this.partyOwnsGear(id)),
           confirmed(
@@ -4372,42 +4525,42 @@ export class BuildingInteriorScene extends GameplayScene {
           counterOptions(this.sellConfigFor('armoury')),
         );
         return;
-      case 'Herb & Remedy':
+      case 'apothecary':
         panel.open(
           () => buildApothecaryMenu(party, this.shopStock, turn, host),
           confirmed(overCounter(serveRemedy(party, this.shopStock), 'tillDrawer'), never),
           counterOptions(this.sellConfigFor('apothecary')),
         );
         return;
-      case 'The Rusty Anvil':
+      case 'smithy':
         panel.open(
           () => buildSmithyMenu(party, this.active(), turn, host),
           confirmed(sharpenEdges(party, turn), never),
           counterOptions(null),
         );
         return;
-      case "Cartwright's Workshop":
+      case 'cartwright':
         panel.open(
           () => buildCartwrightMenu(turn, host, this.shopStock),
           confirmed(overCounter(sellCartwrightGoods(turn, this.shopStock), 'tillDrawer'), never),
           counterOptions(this.sellConfigFor('cartwright')),
         );
         return;
-      case "Miller's Farm":
+      case 'miller_kitchen':
         panel.open(
           () => buildMillerMenu(this.active(), turn, host, this.shopStock),
           confirmed(overCounter(serveMillerGoods(turn, this.shopStock), 'scaleWeigh'), never),
           counterOptions(this.sellConfigFor('millers_farm')),
         );
         return;
-      case 'Plumbline Farm':
+      case 'plumbline_hayloft':
         panel.open(
           () => buildPlumblineFarmMenu(party, turn, host),
           confirmed(servePlumblineFarmRest(party, turn), never),
           counterOptions(null),
         );
         return;
-      case 'The Sleeping Cat Inn':
+      case 'inn':
         panel.open(
           () =>
             buildInnMenu(
@@ -4426,63 +4579,34 @@ export class BuildingInteriorScene extends GameplayScene {
           counterOptions(null),
         );
         return;
-      default:
+      case 'tavern':
         panel.open(
           () => buildTavernMenu(this.entry.name, this.active(), turn, host, this.shopStock),
           confirmed(serveDrinkAt(this.entry.name, this.shopStock), always),
           counterOptions(null),
         );
+        return;
+      default: {
+        const unhandled: never = counter;
+        throw new Error(`unhandled service counter ${String(unhandled)}`);
+      }
     }
   }
 
   /**
-   * Mordecai's answer, from the highest-ranked source that has one: his floor
-   * advice while anything is left to do, the AI chat once the floor is clear.
-   *
-   * The tutorial's Mordecai never runs in here — it only exists in the dungeon —
-   * so this is the two-way version of the dungeon's three-way chain.
+   * Mordecai's AI chat. His floor advice is the overworld's: every objective it
+   * ranks is out there, and the bearing to it is taken from overworld tiles.
    */
   private talkToMordecai(active: { x: number; y: number }): void {
     if (this.safeRoom === null) return;
-
-    const adviceSnapshot = this.circusAdviceSnapshot();
-    const advised = this.mordecaiAdvisor.nextObjective(adviceSnapshot);
-    if (advised !== null) this.bus.emit('mordecaiAdviceGiven', { objectiveId: advised.id });
-    const line = this.mordecaiAdvisor.nextAdvice(adviceSnapshot);
-    if (line !== null) {
-      this.safeRoom.openMordecaiLine(active, line);
-      return;
-    }
-
     this.safeRoom.openMordecaiDialog(active, aiAdapter.chatWithMordecai());
   }
 
-  /**
-   * The floor-3 objective, measured from the door the player walked in through.
-   *
-   * `this.map` is the interior's own 22x16 grid with its own origin, so nothing
-   * in this scene's coordinate space means anything in overworld terms — the
-   * bearing has to be taken between two overworld positions, and `entry.doorTile`
-   * is the only one this scene holds.
-   */
-  private circusAdviceSnapshot(): AdviceSnapshot {
-    const stage = this.circus?.progress.stage;
-    const complete = stage === 'grimaldi_redeemed' || stage === 'complete';
-    return {
-      floorNumber: this.floor.floorNumber,
-      bearingOrigin: this.entry.doorTile,
-      objectives: [adviceObjective('the_circus', complete, this.circus?.overworldCentre ?? null)],
-    };
-  }
-
   private townDialogContext(): TownDialogContext {
-    const circus = this.circus?.progress;
     const murder = this.murderQuestProgress;
     return {
-      circus: circus?.stage ?? 'not_started',
       murder: murder?.stage ?? 'not_started',
       doomsday: this.doomsdayProgress.stage,
-      heatherSlain: circus?.heatherSlain ?? false,
       quillNamed: murder?.quillNamed ?? false,
     };
   }
@@ -4604,7 +4728,7 @@ export class BuildingInteriorScene extends GameplayScene {
    * the verb only appears once the story is behind them.
    */
   private promptFor(target: Townsperson): string {
-    const service = interiorServiceForRole(this.entry.name, target.role);
+    const service = this.occupants?.serviceOf(target);
     if (service === undefined) return TALK_PROMPT_LABEL;
     if (this.hasUntoldLore(target)) return TALK_PROMPT_LABEL;
     return service.verb;
@@ -4715,14 +4839,6 @@ export class BuildingInteriorScene extends GameplayScene {
     return interiorCameraBounds(map);
   }
 
-  /**
-   * The cure under the Big Top is the one thing that happens in a town interior
-   * the party is not driving, so it is the one thing the camera leaves them for.
-   */
-  protected override cameraFocus(): { x: number; y: number } {
-    return this.bigTopMaze?.cameraTargetOverride ?? super.cameraFocus();
-  }
-
   protected override cameraShake(): { x: number; y: number } {
     return this.explosionShake.cameraOffset;
   }
@@ -4745,9 +4861,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.map.beginTileArtFrame();
       this.prison.renderGround(ctx, camX, camY);
     }
-    const hiddenProps =
-      this.contractSite?.hiddenProps(this.interiorPropDestruction?.broken) ??
-      this.interiorPropDestruction?.broken;
+    const hiddenProps = this.hiddenInteriorProps();
     drawTownInteriorGroundProps(ctx, this.map, camX, camY, TILE_SIZE, hiddenProps);
 
     // Before the entity pass, not after: the Bopca render redraws the counter's
@@ -4799,13 +4913,15 @@ export class BuildingInteriorScene extends GameplayScene {
       this.inactive(),
       this.active(),
       ...(this.occupants?.people ?? []),
+      ...(this.occupants?.sortedFigures() ?? []),
       ...safeRoomFigures,
       ...(this.club?.sortedRenderables() ?? []),
       ...townInteriorPropFigures(this.map, hiddenProps),
       // After the props: a tie in the sort keeps a prop under its own damage.
       ...(this.contractSite?.sortedFigures() ?? []),
       ...destruction.groundPickups.renderEntities(),
-      ...(this.bigTopMaze?.sortedFigures() ?? []),
+      ...this.chests.sortedFigures(this.active()),
+      ...(this.starlightTentMaze?.sortedFigures() ?? []),
       ...(this.prisonKey === null ? [] : [this.prisonKey.sortedFigure()]),
       ...(this.prison?.sortedFigures(camX, camY) ?? []),
     ]);
@@ -4826,7 +4942,10 @@ export class BuildingInteriorScene extends GameplayScene {
     // otherwise a party that walks downstairs mid-fight watches the fire keep
     // burning over the room below at the floor above's coordinates.
     this.activeEncounter?.renderEffects?.(ctx, camX, camY);
-    this.bigTopMaze?.renderPrompts(ctx, camX, camY, this.buildSystemContext());
+    this.starlightTentMaze?.renderPrompts(ctx, camX, camY, this.buildSystemContext());
+    if (shouldShowInteractionPrompts(this.active(), this.world.roster.grid)) {
+      this.exitFixtures.renderPrompt(ctx, camX, camY, this.active());
+    }
     this.prisonKey?.renderOverDarkness(ctx, camX, camY, this.active());
     destruction.renderLoot(ctx, camX, camY, this.active());
     if (shouldShowInteractionPrompts(this.active(), this.world.roster.grid)) {
@@ -5272,7 +5391,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
   private collectLootAt(screenX: number, screenY: number): void {
     const { x: camX, y: camY } = this.computeCamera(this.map);
-    this.destruction.loot.tryCollectLootAt(
+    const collected = this.destruction.loot.tryCollectLootAt(
       screenX,
       screenY,
       camX,
@@ -5280,6 +5399,12 @@ export class BuildingInteriorScene extends GameplayScene {
       this.active(),
       this.inactive(),
     );
+    if (!collected) this.chests.tryInteractAt(screenX, screenY, camX, camY, this.active());
+  }
+
+  /** A chest or an exit fixture in reach of `player` takes the press. */
+  private tryUseRoomFixture(player: HumanPlayer | CatPlayer): boolean {
+    return this.chests.tryInteract(player) || this.exitFixtures.tryInteract(player);
   }
 
   /**
@@ -5309,8 +5434,8 @@ export class BuildingInteriorScene extends GameplayScene {
   private triggerTapInteractions(tapScreenX: number, tapScreenY: number): void {
     if (this.ui.worldHalted()) return;
     // The keyboard's swing is withheld for the whole of a scripted beat; the tap
-    // has to be too, or a stray finger spins the human round mid-walk-up and swings
-    // at the vine he is there to save.
+    // has to be too, or a stray finger spins a crawler round mid-script and
+    // swings at whatever the script has walked them up to.
     if (this.scriptOwnsParty) return;
     const dialogUpBeforeTap = this.citizenDialogTarget !== null || this.tapTargetOpen();
     if (
@@ -5342,15 +5467,11 @@ export class BuildingInteriorScene extends GameplayScene {
       const active = this.active();
       // The prompt already reads "Tap to repair" on mobile (`AnchorInteriorSystem
       // .renderObjects`), and `buildAction` is bound to the `R` key, so without
-      // this a phone player could never earn Hilda's shard.
+      // this a phone player could never earn Lori's shard.
       const repaired = this.anchorInterior?.tryRepair(active) ?? false;
-      // The Big Top's prompt reads "Tap to pour" on a phone, and the pour is the
-      // *only* way out of the finale: a tap that fell through to the swing below
-      // would have the human beat on a vine that cannot be hurt, forever.
-      const poured = this.bigTopMaze?.tryInteract(this.buildSystemContext()) ?? false;
       if (
         !repaired &&
-        !poured &&
+        !this.tryUseRoomFixture(active) &&
         !this.tryGroundPickup(active) &&
         !this.tryContractTap(active, tapScreenX, tapScreenY) &&
         !this.tryTalkToOccupant(active) &&
@@ -5394,6 +5515,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.bopca?.isDialogOpen === true ||
       this.servicePanel?.isOpen === true ||
       this.readingPanel?.isOpen === true ||
+      this.mercenaryDesk?.open === true ||
       this.readablePanel.isOpen
     );
   }

@@ -477,6 +477,8 @@ export interface CatSpriteState {
   readonly carrying?: boolean;
   /** The swing of the tool she has out: standing, she holds it ready in that swing's opening pose. */
   readonly working?: CatWorkSwing | null;
+  /** Catnip has her pupils blown wide: painted over her eyes, so no second set of cells is baked. */
+  readonly pupilsDilated?: boolean;
 }
 
 /** Her row for one view, facing east and facing west. A head-on row is the same both ways. */
@@ -736,6 +738,49 @@ export function drawCatSprite(
   if (resting?.behind === true) drawResting();
   drawFigureCached(ctx, activeFigure, cell.state, cell.frame, sx, sy, s, opts, between);
   if (resting?.behind === false) drawResting();
+  if (state.pupilsDilated === true) drawDilatedPupils(ctx, cell, sx, sy, s, opts);
+}
+
+/** A blown pupil's catchlight: small, high and toward the light, so the eye still reads wet. */
+const DILATED_GLINT_SHARE = 0.32;
+const DILATED_GLINT_LIFT = 0.35;
+const DILATED_GLINT_ALPHA = 0.85;
+
+function drawDilatedPupils(
+  ctx: CanvasRenderingContext2D,
+  cell: CatCell,
+  sx: number,
+  sy: number,
+  s: number,
+  opts: { readonly flipX: boolean },
+): void {
+  const frames = catSocketsAt(activeLook, cell.state, cell.frame);
+  if (frames === null || frames.dilatedPupils.length === 0) return;
+  const { pupil, glint } = activeLook.face;
+  withFigureCellPlacement(ctx, activeFigure, sx, sy, s, opts, (target, place) => {
+    for (const spot of frames.dilatedPupils) {
+      const cx = place.x + spot.centre.x * place.scale;
+      const cy = place.y + spot.centre.y * place.scale;
+      const rx = spot.rx * place.scale;
+      const ry = spot.ry * place.scale;
+      target.fillStyle = pupil;
+      target.beginPath();
+      target.ellipse(cx, cy, rx, ry, spot.angle, 0, Math.PI * 2);
+      target.fill();
+      target.globalAlpha = DILATED_GLINT_ALPHA;
+      target.fillStyle = glint;
+      target.beginPath();
+      target.arc(
+        cx - rx * DILATED_GLINT_LIFT,
+        cy - ry * DILATED_GLINT_LIFT,
+        Math.min(rx, ry) * DILATED_GLINT_SHARE,
+        0,
+        Math.PI * 2,
+      );
+      target.fill();
+      target.globalAlpha = 1;
+    }
+  });
 }
 
 /**

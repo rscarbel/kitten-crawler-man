@@ -1,5 +1,6 @@
 import { gearModifiers, wornClaws } from '../gear/gearHooks';
 import { Player, type FigureMouth, type StatName, type StatusFigureBox } from '../Player';
+import { intoxicationDilatesPupils, intoxicationOf } from '../core/combat/Intoxication';
 
 import type { Mob } from './Mob';
 import type { SpatialGrid } from '../core/world/SpatialGrid';
@@ -45,7 +46,6 @@ import { HELD_VISUALS, workingToolHeldVisual } from '../sprites/held/heldVisuals
 import type { HeldVisualDef } from '../sprites/held/heldVisualDef';
 import { heldPhaseAt } from '../sprites/held/heldComposite';
 import { ITEM_DEF } from '../core/items/defs/ItemDefs';
-import { CONSTITUTION_LOCK_SNAPSHOT_VERSION } from '../core/save/PlayerSnapshot';
 
 /** Single source for this class's crawler identity — used by the UI and by skill eligibility. */
 const CAT_CRAWLER_KIND: CrawlerKind = 'cat';
@@ -65,8 +65,6 @@ import type { DynamicLightSink } from '../systems/lighting/dynamicLights';
 
 /** Degrees in π radians, for the one place this class works in degrees. */
 const DEGREES_PER_HALF_TURN = 180;
-
-const CONSTITUTION_AUDIT_NOTICE = 'Constitution refunded — spend the points';
 
 /** A bursting missile's light, as a share of one in flight. */
 const MISSILE_BURST_LIGHT = 0.7;
@@ -147,6 +145,7 @@ export class CatPlayer extends Player {
       oneShot: this.animator.current,
       carrying: held?.hold === 'carry',
       working: held !== null && held.hold !== 'carry' ? held.hold : null,
+      pupilsDilated: intoxicationDilatesPupils(intoxicationOf(this)),
     };
   }
   private static readonly SUBMISSILE_COUNT_BASE = 3;
@@ -257,25 +256,6 @@ export class CatPlayer extends Player {
    */
   override canSpendPointInto(stat: StatName): boolean {
     return !CAT_LOCKED_STATS.includes(stat);
-  }
-
-  /**
-   * Refund constitution bought before the lock existed.
-   *
-   * Only runs for pre-lock saves. Potion and tattoo constitution in those saves
-   * is refunded too — the snapshot records a single total, so provenance is
-   * unrecoverable and erring toward the player is the right call. Running it on
-   * a modern save would be a bug, not a kindness: potions and tattoos still
-   * raise her base constitution lawfully, and this would confiscate the gain the
-   * next time she walked through a door.
-   */
-  override migrateRestoredStats(snapshotVersion: number): void {
-    if (snapshotVersion >= CONSTITUTION_LOCK_SNAPSHOT_VERSION) return;
-    const excess = this.getBaseStat('constitution') - CAT_BASE_CONSTITUTION;
-    if (excess <= 0) return;
-    this.setBaseStat('constitution', CAT_BASE_CONSTITUTION);
-    this.unspentPoints += excess;
-    this.queueSystemNotice(CONSTITUTION_AUDIT_NOTICE);
   }
 
   /**

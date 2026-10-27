@@ -1,4 +1,3 @@
-import { coinBonusFor } from '../gear/gearHooks';
 import { TRASH_PILE_ROACH_BURST } from '../systems/bossSoundCues';
 import { ABILITY_DEFS } from '../abilities/abilityDefs';
 import { labApproachZoneAt } from '../map/labApproach';
@@ -34,7 +33,7 @@ import { interiorRoomOwnedByStory } from '../systems/interiorStoryOwnership';
 import { GameMap } from '../map/GameMap';
 import { DEFAULT_DUNGEON_FLOOR_THEME, setDungeonFloorTheme } from '../map/dungeon/floorTheme';
 import type { GameProgressInput } from '../auth/AuthClient';
-import { parseSavedWorld, WORLD_GENERATOR_VERSION } from '../core/save/SavedWorld';
+import { WORLD_GENERATOR_VERSION } from '../core/save/SavedWorld';
 import { setFloorArtSeed } from '../map/ground/floorArtSeed';
 import { prepareGroundTone } from '../map/tiles/groundTiles';
 import { groundSheetKeysAmong, requestGroundSheets } from '../map/ground/runtimeGroundSheets';
@@ -51,6 +50,7 @@ import type { LevelDef, MobLevelRange } from '../levels/types';
 import type { MobKind } from '../levels/mobKinds';
 import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
 import { floorEncounter } from '../levels/encounters';
+import { NO_SPAWN_TERRAIN } from '../map/overworld/spawnTerrain';
 import {
   spawnForLevel,
   spawnExtraMobs,
@@ -106,13 +106,7 @@ import {
   MULTIKILL_ACHIEVEMENT_THRESHOLD,
 } from '../core/progression/AchievementManager';
 import { presentationAwardId, type RewardPresentation } from '../loot/rewardChest';
-import {
-  partyOwnsGear,
-  rollChestGear,
-  rollKillGear,
-  withGearLoot,
-  type GearId,
-} from '../loot/gearPools';
+import { partyOwnsGear, rollKillGear, withGearLoot, type GearId } from '../loot/gearPools';
 import { AchievementUISystem } from '../systems/AchievementUISystem';
 import { AchievementAwards } from '../systems/AchievementAwards';
 import { introduceMongo, joinMongoOnOpen, presentsMongo } from '../systems/mongoArrival';
@@ -170,13 +164,13 @@ import { TacticsNoticeSystem } from '../systems/TacticsNoticeSystem';
 import type { TacticsTrait } from '../creatures/tactics/tacticsTraits';
 import { isEngagedInFight } from '../creatures/tactics/tacticalFrame';
 import { crawlerName } from '../characters/characters';
-import { CRAWLER_KINDS, getSkillDef, type CrawlerKind } from '../core/skills/SkillManager';
+import { CRAWLER_KINDS } from '../core/skills/SkillManager';
 import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
 import { BossRoomSystem, BOSS_META } from '../systems/BossRoomSystem';
 import { LavaBallSystem } from '../systems/LavaBallSystem';
 import { RockThrowSystem } from '../systems/RockThrowSystem';
-import { HirelingBoltSystem } from '../systems/HirelingBoltSystem';
+import { HirelingShotSystem } from '../systems/HirelingShotSystem';
 import { playHirelingProjectileCues } from '../systems/hirelingProjectileCues';
 import { bindAbilityLevelUps } from '../systems/abilityLevelUps';
 import { bindCraftLevelUps } from '../systems/craftLevelUps';
@@ -238,6 +232,7 @@ import {
 } from '../systems/RecallSystem';
 import { TravelMenu } from '../ui/TravelMenu';
 import {
+  recordCircusGroundsVisit,
   TRAVEL_LANDING_SEARCH_TILES,
   TRAVEL_LANDING_STANDOFF_TILES,
   type TravelUnlockState,
@@ -264,7 +259,8 @@ import {
 } from '../systems/WorldResidency';
 import type { Townsperson } from '../creatures/Townsperson';
 import { CITIZEN_TALK_RADIUS_TILES } from '../creatures/townInteraction';
-import { prewarmAndPinCitizenTalk, unpinCitizenTalk } from '../creatures/citizenFigure';
+import { unpinCitizenTalk } from '../creatures/citizenFigure';
+import { prewarmAndPinTownspersonTalk } from '../creatures/townspersonBody';
 import type { DrawnFigureRow } from '../sprites/figure/figureDef';
 import { TownDecorSystem } from '../systems/TownDecorSystem';
 import { TownPropSystem } from '../systems/TownPropSystem';
@@ -314,16 +310,12 @@ import {
 import { ArenaRoomSystem } from '../systems/ArenaRoomSystem';
 import { BarrierSystem } from '../systems/BarrierSystem';
 import { ArenaSystem } from '../systems/ArenaSystem';
-import {
-  type TreasureChest,
-  TreasureChestSystem,
-  isChestOpenable,
-} from '../systems/TreasureChestSystem';
-import { HumanTalkDriver, openChestWithGesture } from '../creatures/humanGestures';
+import { type TreasureChest, TreasureChestSystem } from '../systems/TreasureChestSystem';
+import { HumanTalkDriver } from '../creatures/humanGestures';
 import { type Pt } from '../sprites/art/bipedArt';
-import { ChestRewardDialog, type ChestLootSplit } from '../ui/ChestRewardDialog';
+import type { ChestLootSplit } from '../ui/ChestRewardDialog';
+import { ChestKit, forcedRecipientFor, type ChestReward } from '../systems/kits/ChestKit';
 import { ConfirmDialog } from '../ui/screens/dialogs/ConfirmDialog';
-import { chestRewardSurface } from '../ui/screens/dialogs/chestRewardScreen';
 import { deathScreenSurface } from '../ui/screens/dialogs/deathScreen';
 import { nearGoblinHintSurface } from '../ui/screens/dialogs/nearGoblinHint';
 import { defendTutorialSurface } from '../ui/screens/dialogs/defendTutorial';
@@ -333,7 +325,7 @@ import { ActivityDifficultyGate } from '../ui/screens/dialogs/activityDifficulty
 import { keyboardHeroSurface } from '../ui/screens/dialogs/keyboardHeroSurface';
 import { spiderTutorialSurface } from '../ui/screens/dialogs/spiderTutorial';
 import { hackFailedPromptSurface } from '../ui/screens/dialogs/hackFailedPrompt';
-import { RewardFlySystem, type RewardFlyHold } from '../systems/RewardFlySystem';
+import { RewardFlySystem } from '../systems/RewardFlySystem';
 import { playRewardLandingCues } from '../systems/rewardFlyAudio';
 import type { PendingLoot } from '../systems/LootSystem';
 import { BallOfSwine } from '../creatures/BallOfSwine';
@@ -358,7 +350,7 @@ import {
   type SavePoint,
 } from '../core/save/SavePoint';
 import { progressForRespawn, sceneSetupFromSave } from './resumeFromSave';
-import { DESPERADO_CLUB_NAME, type TilePoint } from '../map/town/townPlan';
+import { CLOAK_AND_DAGGER_NAME, type TilePoint } from '../map/town/townPlan';
 import type { WorldCheckpoint } from '../core/save/WorldCheckpoint';
 import {
   toPersistedArenaCheckpoint,
@@ -369,8 +361,6 @@ import {
   fromPersistedDefendQuestCheckpoint,
   toPersistedSpiderQuestCheckpoint,
   fromPersistedSpiderQuestCheckpoint,
-  toPersistedCircusQuestCheckpoint,
-  fromPersistedCircusQuestCheckpoint,
   toPersistedMurderMysteryQuestCheckpoint,
   fromPersistedMurderMysteryQuestCheckpoint,
   toPersistedBountyCheckpoint,
@@ -413,18 +403,13 @@ import {
 } from '../systems/GameLoopPhases';
 import { OverworldMusicSystem } from '../systems/OverworldMusicSystem';
 import { AmbientSoundSystem, type AmbientEmitter } from '../systems/AmbientSoundSystem';
-import { drunkCameraOffset } from '../core/combat/DrunkEffect';
+import { intoxicationCameraOffset } from '../core/combat/Intoxication';
 import {
-  BIG_TOP_BUILDING_NAME,
-  BIG_TOP_SEALED_MESSAGE,
-  captureCircusQuestProgress,
-  createCircusQuestProgress,
-  isBigTopSealed,
-  isCircusResolvedStage,
-  restoreCircusQuestProgress,
-  type CircusQuestProgress,
-  type CircusQuestStage,
-} from '../core/quests/CircusQuestProgress';
+  captureStarlightTentProgress,
+  createStarlightTentProgress,
+  restoreStarlightTentProgress,
+  type StarlightTentProgress,
+} from '../core/state/StarlightTentProgress';
 import {
   FloorSfxGates,
   groupsActiveAnywhere,
@@ -502,7 +487,6 @@ import { beginAboveDarkness, flushAboveDarkness } from '../systems/lighting/abov
 import { SpiderQuestSystem } from '../systems/SpiderQuestSystem';
 import { spiderQuestCueSound, spiderQuestLoop } from '../systems/spiderQuest/spiderQuestSoundCues';
 import type { SafeRoomService } from '../map/DungeonGenerator';
-import { CircusQuestSystem, CIRCUS_QUEST_ID } from '../systems/CircusQuestSystem';
 import { MurderMysteryQuestSystem, MURDER_QUEST_ID } from '../systems/MurderMysteryQuestSystem';
 import { AnchorQuestSystem } from '../systems/AnchorQuestSystem';
 import { stallBeaconTarget, doorwayBeaconTarget } from '../systems/objectiveBeaconTargets';
@@ -515,11 +499,11 @@ import {
   type DoomsdayProgress,
 } from '../core/quests/DoomsdayProgress';
 import {
-  captureClubMembership,
-  createClubMembership,
-  restoreClubMembership,
-  type ClubMembership,
-} from '../core/club/ClubMembership';
+  captureCasinoState,
+  createCasinoState,
+  restoreCasinoState,
+  type CasinoState,
+} from '../core/club/CasinoState';
 import {
   createWheelLedger,
   createWheelQuestFreeSpins,
@@ -532,8 +516,9 @@ import {
   restoreAttackCowState,
   type AttackCowState,
 } from '../core/state/AttackCowState';
-import { bloodVomitRemainingOf } from '../core/save/bloodVomitSave';
+import { doubleDamageRemainingOf } from '../core/save/doubleDamageSave';
 import { drainBloodVomitRetches } from '../systems/bloodVomitRetches';
+import { drainHpThresholdCrossings } from '../systems/hpThresholdCrossings';
 import { PAGE_SAVE_LATCH, type SaveWriteOutcome } from '../core/save/progressPersistence';
 import type { InteriorPartyRun, SaveParty } from './interiorPartyRun';
 import type { RunSaveFields } from '../core/save/saveFormat';
@@ -745,9 +730,10 @@ export interface DungeonSceneOptions {
    */
   musicLibrary?: MusicLibrary;
   /**
-   * Unlocks, as a save's backfill would, every song the floor's starting state
-   * proves the party already passed through, for a dev boot that drops the
-   * party onto a later floor without walking there.
+   * Silently unlocks every song the floor's starting state proves the party
+   * already passed through, before the floor's own music is claimed. For a
+   * dev preset that drops the party onto a later floor without walking there,
+   * whose library would otherwise be empty.
    */
   backfillMusicLibrary?: boolean;
   /** Carry achievement managers across floor transitions. */
@@ -801,8 +787,8 @@ export interface DungeonSceneOptions {
    * holds the player behind a blocking screen until it lands.
    */
   progressWipe?: ProgressWipe;
-  /** Circus questline state, threaded by reference across building/scene transitions. */
-  circusQuestProgress?: CircusQuestProgress;
+  /** The Starlight Tent's record, threaded by reference across building/scene transitions. */
+  starlightTentProgress?: StarlightTentProgress;
   /** Murder-mystery questline state, threaded by reference across building/scene transitions. */
   murderQuestProgress?: MurderQuestProgress;
   /** Wayfinder's Anchor questline state, threaded by reference across building/scene transitions. */
@@ -821,8 +807,8 @@ export interface DungeonSceneOptions {
   midgeEscortCarry?: MidgeEscortCarry;
   /** Doomsday-finale state (soul crystal containment + escape), threaded by reference across building/scene transitions. */
   doomsdayQuestProgress?: DoomsdayProgress;
-  /** Desperado Club membership, threaded by reference across building/scene transitions. */
-  clubMembership?: ClubMembership;
+  /** Cloak & Dagger casino state, threaded by reference across building/scene transitions. */
+  casinoState?: CasinoState;
   /** The Wheel of Fortune's won prizes and pending spin, threaded by reference. */
   wheelLedger?: WheelLedger;
   /** The human crawler's attack cow, threaded by reference like `mongoPetState`. */
@@ -933,7 +919,7 @@ export interface DungeonSceneOptions {
    * Absent on a new floor, which takes its own save on arrival.
    */
   lastSave?: GameProgressInput;
-  /** Floor and run state from a resumed save; absent on a fresh game or an older save. */
+  /** Floor and run state from a resumed save; absent on a fresh game. */
   persistedWorldState?: PersistedWorldState;
   /**
    * The floor this scene was built from, held aside while the party was inside
@@ -974,8 +960,8 @@ const FORGE_AMBIENT_VOLUME = 0.45;
  * The club's beat is heard through its walls, so it carries a street's width
  * past the door but dies out well before the square's crowd bed takes over.
  */
-const DESPERADO_CLUB_EXTERIOR_AMBIENT_RADIUS_TILES = 10;
-const DESPERADO_CLUB_EXTERIOR_AMBIENT_VOLUME = 1;
+const CLOAK_AND_DAGGER_EXTERIOR_AMBIENT_RADIUS_TILES = 10;
+const CLOAK_AND_DAGGER_EXTERIOR_AMBIENT_VOLUME = 1;
 /**
  * The plaza's murmur is a wide, quiet bed rather than a wall of crowd noise —
  * wide enough to carry a little way up every lane off the 17 x 16 slab, which is
@@ -996,41 +982,8 @@ const VILLAGE_AMBIENT_VOLUME = 0.4;
 const VILLAGE_WORKSHOP_AMBIENT_RADIUS_TILES = 9;
 const VILLAGE_WORKSHOP_AMBIENT_VOLUME = 0.5;
 
-/** Toast shown the moment Big Rooster falls and both crawlers take the ink. */
-const DESPERADO_TATTOO_NOTICE = 'New tattoo: the Desperado Pass. The Club will know you.';
-/** Its line in Big Rooster's chest's reward columns — an award, not an inventory item. */
-const DESPERADO_TATTOO_REWARD_LABEL = 'Desperado Pass Tattoo (both crawlers)';
-
-/**
- * What an opened chest's reward dialog shows, and what dismissing it grants
- * over and above the loot, which is already handed over when it is shown.
- */
-interface ChestReward {
-  readonly split: ChestLootSplit | null;
-  readonly onDismissed?: () => void;
-}
-
 /** The tutorial shares `floorNumber: 1` with this level, so the id is what tells them apart. */
 const FIRST_DUNGEON_LEVEL_ID = 'level1';
-
-/**
- * Which crawler must receive this item, or null when either may have it.
- *
- * An item naming a `lootRecipient` goes to that crawler, and gear to the one
- * its `wearer` names. Beyond gear, a book only one of them can study is routed
- * to that one — the alternative is handing the cat's only guaranteed Cockroach
- * book to the human, who cannot read it.
- */
-function forcedRecipientFor(id: ItemId): CrawlerKind | null {
-  const def = ITEM_DEF[id];
-  if (def.lootRecipient !== undefined) return def.lootRecipient;
-  if (def.wearer !== undefined && def.wearer !== 'both') return def.wearer;
-  if (def.explosivesHandlingLevels !== undefined) return 'human';
-  const skillId = def.skillId;
-  if (skillId === undefined) return null;
-  const eligibleFor = getSkillDef(skillId).eligibleFor;
-  return eligibleFor === 'both' ? null : eligibleFor;
-}
 
 // Companion/Follower system
 const FOLLOWER_FOLLOW_RANGE_TILES = 2.5;
@@ -1057,12 +1010,6 @@ const WARP_COVER_MAX_STEPS = 600;
  */
 const WARP_COVER_FORGIVING_STEPS = 10;
 
-/** Circus stages whose waves or bear are out on the grounds and can follow the party off them. */
-const CIRCUS_STAGES_WITH_MOBS_OUT: ReadonlySet<CircusQuestStage> = new Set([
-  'ritual_defense',
-  'heather_hunt',
-  'assault',
-]);
 const COMPANION_ERROR_DISPLAY_FRAMES = 180;
 
 /** Ripples and splashes centre on the wader, not on their tile corner. */
@@ -1098,7 +1045,6 @@ const MOB_SPLASH_AUDIBLE_RADIUS_TILES = 18;
 // Loot and drop rates
 /** Boss chests sit this far north of the boss room centre, clear of the boss itself. */
 const BOSS_CHEST_TILES_NORTH = 2;
-const LOOT_SPLIT_THRESHOLD = 0.5;
 const LOW_HP_LOOT_CHANCE = 0.4;
 const MED_HP_LOOT_CHANCE = 0.6;
 const MIN_COIN_DROP = 15;
@@ -1193,7 +1139,7 @@ const INTRO_BEGIN_HINT_SIZE = 18;
 const DUNGEON_FLOOR_ONE = 1;
 const DUNGEON_FLOOR_TWO = 2;
 /**
- * The Over City: the only floor that is a town rather than a dungeon, and the
+ * Taloncrest: the only floor that is a town rather than a dungeon, and the
  * first with more than one questline running at once — which is why it is also
  * where the Quest Journal starts being offered.
  */
@@ -1203,7 +1149,6 @@ const COMBAT_COOLDOWN_FRAMES = 300;
 /** The chest each crawler earns for a boss after Boss Slayer is already theirs. */
 const BOSS_REPEAT_CHEST_RARITY = ACHIEVEMENT_DEFS.boss_slayer.reward.rarity;
 const PLAYER_IDLE_REPORT_INTERVAL_FRAMES = 300;
-const LOW_HEALTH_THRESHOLD = 0.25;
 const FRAMES_PER_SECOND = 60;
 /** Within this many tiles of a stairwell the AI is told the party is at it. */
 const AI_AT_STAIRWELL_TILES = 3;
@@ -1269,50 +1214,6 @@ const PINNED_ARROW_COLOR = worldPalette.objective.ready;
 /** The span of an objective target that does not say how wide it is. */
 const SINGLE_TILE_TARGET_WIDTH = 1;
 const STAIRWELL_ARROW_COLOR = worldPalette.ink.gold;
-
-function splitChestLoot(loot: LootDrop): { humanLoot: LootDrop; catLoot: LootDrop } {
-  const humanItems: LootDrop['items'] = [];
-  const catItems: LootDrop['items'] = [];
-  const singlePool: LootDrop['items'] = [];
-
-  for (const item of loot.items) {
-    const forced = forcedRecipientFor(item.id);
-    if (forced === 'human') {
-      humanItems.push({ ...item });
-    } else if (forced === 'cat') {
-      catItems.push({ ...item });
-    } else if (item.quantity === 1) {
-      singlePool.push({ ...item });
-    } else {
-      // Split stacks evenly; extra goes to random player
-      const half = Math.floor(item.quantity / 2);
-      const extra = item.quantity - half * 2;
-      const humanGetsExtra = extra > 0 && Math.random() < LOOT_SPLIT_THRESHOLD;
-      humanItems.push({ id: item.id, quantity: half + (humanGetsExtra ? extra : 0) });
-      catItems.push({ id: item.id, quantity: half + (humanGetsExtra ? 0 : extra) });
-    }
-  }
-
-  // Fisher-Yates shuffle, then round-robin distribute single items
-  for (let i = singlePool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [singlePool[i], singlePool[j]] = [singlePool[j], singlePool[i]];
-  }
-  singlePool.forEach((item, i) => {
-    if (i % 2 === 0) humanItems.push(item);
-    else catItems.push(item);
-  });
-
-  // Split coins; odd coin goes to random player
-  const halfCoins = Math.floor(loot.coins / 2);
-  const extraCoin = loot.coins - halfCoins * 2;
-  const humanGetsExtraCoin = extraCoin > 0 && Math.random() < LOOT_SPLIT_THRESHOLD;
-
-  return {
-    humanLoot: { coins: halfCoins + (humanGetsExtraCoin ? extraCoin : 0), items: humanItems },
-    catLoot: { coins: halfCoins + (humanGetsExtraCoin ? 0 : extraCoin), items: catItems },
-  };
-}
 
 /** How far off screen, in tiles, an objective beacon's beam can still reach into view. */
 const BEACON_VIEW_REACH_TILES = 6;
@@ -1430,7 +1331,7 @@ export class DungeonScene extends GameplayScene {
   private readonly tacticsNoticesSeen: Set<TacticsTrait>;
   private lavaBalls: LavaBallSystem;
   private rockThrows: RockThrowSystem;
-  private hirelingShots: HirelingBoltSystem;
+  private hirelingShots: HirelingShotSystem;
   private skeletonShots: SkeletonProjectileSystem;
   private goblinArrows: GoblinArrowSystem;
   private readonly goblinBombs: GoblinBombSystem;
@@ -1514,7 +1415,6 @@ export class DungeonScene extends GameplayScene {
   private holdStartActivePos: { x: number; y: number } | null = null;
   private spiderQuest: SpiderQuestSystem;
   private readonly dungeonCuesPlayed = new Map<DungeonCue, number>();
-  private circusQuest: CircusQuestSystem;
   private murderQuest: MurderMysteryQuestSystem;
   private anchorQuest: AnchorQuestSystem;
   private doomsdayEscape: DoomsdayEscapeSystem;
@@ -1529,14 +1429,14 @@ export class DungeonScene extends GameplayScene {
   private riverAmbientEmitter: AmbientEmitter | null = null;
   /** Briar Hollow's bed, held so `updateVillageAmbience` can switch it with the player's position. */
   private villageAmbientEmitter: AmbientEmitter | null = null;
-  private readonly circusQuestProgress: CircusQuestProgress;
+  private readonly starlightTentProgress: StarlightTentProgress;
   private readonly murderQuestProgress: MurderQuestProgress;
   private readonly anchorQuestProgress: AnchorQuestProgress;
   private readonly journalProgress: JournalProgress;
   private readonly bountyProgress: BountyProgress;
   private readonly midgeEscortCarry: MidgeEscortCarry;
   private readonly doomsdayQuestProgress: DoomsdayProgress;
-  private readonly clubMembership: ClubMembership;
+  private readonly casinoState: CasinoState;
   /** Read and written by the wheel host; saved as top-level fields. */
   readonly wheelLedger: WheelLedger;
   /** Read and written by the attack cow's system; saved as top-level fields. */
@@ -1645,11 +1545,9 @@ export class DungeonScene extends GameplayScene {
 
   private arena: ArenaSystem;
   private readonly treasureChests = new TreasureChestSystem();
-  private readonly chestRewardDialog = new ChestRewardDialog();
+  private readonly chestKit: ChestKit;
   /** Coins/items flying to the HUD from wherever they were earned. Screen-space; ticks and draws every frame regardless of what else is on screen. */
   protected readonly rewardFly = new RewardFlySystem();
-  /** The chest reward dialog's own hold, if one is outstanding — set in `showChestReward`, cleared on release. */
-  private chestRewardFlyHold: RewardFlyHold | null = null;
 
   private floorEntryHumanSnap: PlayerSnapshot;
   private floorEntryCatSnap: PlayerSnapshot;
@@ -1773,8 +1671,6 @@ export class DungeonScene extends GameplayScene {
   private bigRoosterBossRoomIdx = -1;
   private woodBreakSoundIdx = 0;
   private combatCooldownFrames = 0;
-  private humanHealthLow = false;
-  private catHealthLow = false;
   private playerIdleFrames = 0;
   private readonly gameStats: GameStats;
   private readonly musicLibrary: MusicLibrary;
@@ -2322,7 +2218,7 @@ export class DungeonScene extends GameplayScene {
       this.spiderQuest.startAwaitingHacking();
     }
     this.spiderQuest.labDressing?.setLootSink(this.destruction.loot);
-    this.circusQuestProgress = options?.circusQuestProgress ?? createCircusQuestProgress();
+    this.starlightTentProgress = options?.starlightTentProgress ?? createStarlightTentProgress();
     this.murderQuestProgress = options?.murderQuestProgress ?? createMurderQuestProgress();
     this.anchorQuestProgress = options?.anchorQuestProgress ?? createAnchorQuestProgress();
     this.journalProgress = options?.journalProgress ?? createJournalProgress();
@@ -2331,7 +2227,7 @@ export class DungeonScene extends GameplayScene {
     this.bountyProgress = options?.bountyProgress ?? createBountyProgress();
     this.midgeEscortCarry = options?.midgeEscortCarry ?? createMidgeEscortCarry();
     this.doomsdayQuestProgress = options?.doomsdayQuestProgress ?? createDoomsdayProgress();
-    this.clubMembership = options?.clubMembership ?? createClubMembership();
+    this.casinoState = options?.casinoState ?? createCasinoState();
     this.wheelLedger = options?.wheelLedger ?? createWheelLedger();
     this.attackCowState = options?.attackCowState ?? createAttackCowState();
     // Whatever the wheel still owes (a spin a closed tab committed but never
@@ -2406,7 +2302,7 @@ export class DungeonScene extends GameplayScene {
       : null;
     this.lavaBalls = new LavaBallSystem(this.gameMap);
     this.rockThrows = new RockThrowSystem(this.gameMap);
-    this.hirelingShots = new HirelingBoltSystem(this.gameMap, (point) =>
+    this.hirelingShots = new HirelingShotSystem(this.gameMap, (point) =>
       this.safeRoom.isEntityInSafeRoom(point),
     );
     this.skeletonShots = new SkeletonProjectileSystem(this.gameMap);
@@ -2665,7 +2561,7 @@ export class DungeonScene extends GameplayScene {
     );
 
     const travelState: TravelUnlockState = {
-      circus: this.circusQuestProgress,
+      townMemory: this.townMemory,
       briarHollow: this.briarHollowState,
       anchor: this.anchorQuestProgress,
     };
@@ -2848,7 +2744,7 @@ export class DungeonScene extends GameplayScene {
                 const cam = this.camera();
                 this.rewardFly.enqueueCoins(coins, worldX - cam.x, worldY - cam.y);
               },
-              skyfowlRoomOwnedByStory: (buildingName) =>
+              taloncrestRoomOwnedByStory: (buildingName) =>
                 interiorRoomOwnedByStory(buildingName, {
                   murderStage: this.murderQuestProgress.stage,
                   anchor: this.anchorQuestProgress,
@@ -2914,11 +2810,8 @@ export class DungeonScene extends GameplayScene {
       options?.floorEntryCatAchievements ?? this.catAchievements.clone();
 
     // Built here rather than as a field initialiser because it needs both the
-    // shared pet state and a live read of the pet's ability level.
-    // Seeded against whatever level the restored ability manager carries, not
-    // against level 1: an older save with no stored pet HP but a level-10 Mongo
-    // would otherwise boot him at 20 of 130 and make the player wait out a
-    // quarter of an hour of regen he never spent.
+    // shared pet state and a live read of the pet's ability level: a scene
+    // handed no pet state still seeds him at the maximum his level carries.
     const petMaxHp = getMongoStats(this.abilityManager.getLevel('mongo')).maxHp;
     this.mongoPetState = options?.mongoPetState ?? createMongoPetState(petMaxHp, petMaxHp);
     this.mongoSystem = new MongoSystem(
@@ -2969,11 +2862,8 @@ export class DungeonScene extends GameplayScene {
     if (carriedSave !== undefined) {
       this.lastSave = { progress: carriedSave, checkpoint: null };
       // A safe-room save with no room under either crawler names no tile of its
-      // own, so it keeps the resume tile the carried save already had. Parsed,
-      // not read raw: a save from before a generator change names a tile on a
-      // map that no longer exists, and re-saving it would stamp that tile as
-      // belonging to the new one.
-      this.lastSavePointTile = parseSavedWorld(carriedSave.world)?.safeRoomTile ?? null;
+      // own, so it keeps the resume tile the carried save already had.
+      this.lastSavePointTile = carriedSave.world?.resumeTile ?? null;
     }
     // The tutorial is left out because its scripted flow saves at its own safe
     // rooms, and a save of a tutorial just begun would resume without the script.
@@ -3047,26 +2937,7 @@ export class DungeonScene extends GameplayScene {
       levelDef.isOverworld && this.audioScope !== null
         ? new AmbientSoundSystem(this.audioScope, this.buildTownAmbientEmitters())
         : null;
-    // Constructed after audio/music so the quest can drive battle tracks;
-    // stage re-entry may spawn mobs immediately.
-    this.circusQuest = new CircusQuestSystem(
-      this.gameMap,
-      this.bus,
-      (mob) => this.world.roster.add(mob),
-      this.mongoSystem,
-      this.circusQuestProgress,
-      this.audioScope,
-      this.active(),
-      this.conversation,
-      this.travelUnlocks,
-    );
     this.sfxGates = this.buildSfxGates(levelDef);
-    this.circusQuest.onItemGranted = (id, quantity, worldX, worldY) => {
-      const cam = this.camera();
-      for (let i = 0; i < quantity; i++) {
-        this.rewardFly.enqueueItem(id, ITEM_DEF[id].name, worldX - cam.x, worldY - cam.y);
-      }
-    };
     this.murderQuest = new MurderMysteryQuestSystem(
       this.gameMap,
       this.bus,
@@ -3143,27 +3014,15 @@ export class DungeonScene extends GameplayScene {
       this.gameMap.blockTilePermanently(tr.centre.x, tr.centre.y);
     }
 
-    // Wire chest opened callback
-    this.treasureChests.setOnOpen((chest) => {
-      // The loot is his on the press, so nothing that befalls him while he
-      // heaves the lid can lose it; only the showing waits for the lid.
-      const reward = this.grantChestContents(chest);
-      const chestCentre = {
-        x: chest.tileX * TILE_SIZE + TILE_SIZE / 2,
-        y: chest.tileY * TILE_SIZE + TILE_SIZE / 2,
-      };
-      openChestWithGesture(this.active(), chestCentre, (outcome) => {
-        if (outcome === 'shown') this.showChestReward(chest, reward);
-        else reward.onDismissed?.();
-      });
+    this.chestKit = new ChestKit({
+      pm: this.pm,
+      audio: this.audio,
+      rewardFly: this.rewardFly,
+      floorNumber: this.levelDef.floorNumber,
+      partyOwnsGear: this.partyOwnsGear,
+      reward: (chest, payStandard) => this.chestReward(chest, payStandard),
     });
-
-    this.treasureChests.setOnLockedAttempt(() => {
-      this.audio?.play('chest_locked');
-    });
-    this.treasureChests.setOnWoodenChestUnlocked(() => {
-      this.audio?.play('chest_unlocked_in_treasure_room');
-    });
+    this.chestKit.bind(this.treasureChests);
 
     if (options?.persistedWorldState !== undefined) {
       this.applyPersistedWorldState(options.persistedWorldState);
@@ -3586,11 +3445,6 @@ export class DungeonScene extends GameplayScene {
 
       if (e.bossType === 'big_rooster' && !this.bigRoosterKilled) {
         this.bigRoosterKilled = true;
-        this.human.hasDesperadoPassTattoo = true;
-        this.cat.hasDesperadoPassTattoo = true;
-        // Announced here as well as on the chest, so a player who walks past the
-        // chest still learns the Club will now let them in.
-        this.human.queueSystemNotice(DESPERADO_TATTOO_NOTICE);
         this.tryUnlockPeckingOrder();
       }
     });
@@ -3848,8 +3702,8 @@ export class DungeonScene extends GameplayScene {
     const circusCentre = this.gameMap.circusCentre;
     const circusRadius = this.gameMap.circusRadiusTiles ?? 0;
     gates.push({
-      group: 'circusQuest',
-      activeAnywhere: activeAnywhere('circusQuest'),
+      group: 'starlightTent',
+      activeAnywhere: activeAnywhere('starlightTent'),
       places:
         circusCentre === undefined
           ? []
@@ -3874,7 +3728,6 @@ export class DungeonScene extends GameplayScene {
       escortAmbushersStanding:
         this.briarHollowKit?.blueprints?.escort.ambush.hasLivingAmbushers === true,
       bountyOut: this.bountyProgress.phase !== 'available',
-      circusMobsOut: CIRCUS_STAGES_WITH_MOBS_OUT.has(this.circusQuestProgress.stage),
     };
   }
 
@@ -3968,7 +3821,7 @@ export class DungeonScene extends GameplayScene {
 
   /**
    * Ambient emitters for the overworld town: the fountain, the smithy's forges and
-   * the Desperado Club's muffled beat swell as you approach them, a quiet crowd bed fills the square, and city
+   * the Cloak & Dagger's muffled beat swell as you approach them, a quiet crowd bed fills the square, and city
    * chatter carries across the whole town, fading out at its edge.
    */
   private buildTownAmbientEmitters(): AmbientEmitter[] {
@@ -4053,14 +3906,14 @@ export class DungeonScene extends GameplayScene {
         maxVolume: FORGE_AMBIENT_VOLUME,
       });
     }
-    const club = this.gameMap.buildingEntries.find((e) => e.name === DESPERADO_CLUB_NAME);
+    const club = this.gameMap.buildingEntries.find((e) => e.name === CLOAK_AND_DAGGER_NAME);
     if (club !== undefined) {
       emitters.push({
-        soundId: 'ambient_desperado_club_exterior',
+        soundId: 'ambient_cloak_and_dagger_exterior',
         x: club.doorTile.x,
         y: club.doorTile.y,
-        radiusTiles: DESPERADO_CLUB_EXTERIOR_AMBIENT_RADIUS_TILES,
-        maxVolume: DESPERADO_CLUB_EXTERIOR_AMBIENT_VOLUME,
+        radiusTiles: CLOAK_AND_DAGGER_EXTERIOR_AMBIENT_RADIUS_TILES,
+        maxVolume: CLOAK_AND_DAGGER_EXTERIOR_AMBIENT_VOLUME,
       });
     }
     return emitters;
@@ -4594,7 +4447,7 @@ export class DungeonScene extends GameplayScene {
     const partyLevel = partyLevelOf(this.human.level, this.cat.level);
     const floorRules =
       this.levelDef.roomMobs.length > 0 ? this.levelDef.roomMobs : this.levelDef.hallwayMobs;
-    const band: MobLevelRange = floorRules.length > 0 ? pickRule(floorRules, Math.random) : {};
+    const band: MobLevelRange = pickRule(floorRules, Math.random, NO_SPAWN_TERRAIN) ?? {};
     let spawned = 0;
     for (let attempt = 0; attempt < FAIRY_CHEAT_ATTEMPTS && spawned < count; attempt++) {
       const tileX = originX + randomInt(-FAIRY_CHEAT_SPREAD_TILES, FAIRY_CHEAT_SPREAD_TILES);
@@ -5201,7 +5054,7 @@ export class DungeonScene extends GameplayScene {
               // scene would mean nothing there. An exit inside the town wall
               // saves afresh on its first frame whenever a town save is
               // allowed; until then — and for good after an exit outside the
-              // wall, such as the Big Top's — a death respawns from this save.
+              // wall, such as the Starlight Tent's — a death respawns from this save.
               lastSave: this.lastSave?.progress,
               existingRecallState: this.recall.captureCheckpoint(),
               existingGroundPickups: this.destruction.groundPickups.captureCheckpoint(),
@@ -5214,13 +5067,12 @@ export class DungeonScene extends GameplayScene {
         this.audio ?? undefined,
         this.abilityManager,
         {
-          progress: this.circusQuestProgress,
-          overworldCentre: this.gameMap.circusCentre,
+          starlightTent: this.starlightTentProgress,
           worldSeed: this.gameMap.worldSeed,
         },
         this.murderQuestProgress,
         this.doomsdayQuestProgress,
-        this.clubMembership,
+        this.casinoState,
         this.townMemory,
         this.mercenaryRoster,
         this.godModeState,
@@ -5374,14 +5226,14 @@ export class DungeonScene extends GameplayScene {
       audio: this.audio ?? undefined,
       onResetGame: this.onResetGameCallback ?? undefined,
       progressWipe: this.progressWipe ?? undefined,
-      circusQuestProgress: this.circusQuestProgress,
+      starlightTentProgress: this.starlightTentProgress,
       murderQuestProgress: this.murderQuestProgress,
       anchorQuestProgress: this.anchorQuestProgress,
       journalProgress: this.journalProgress,
       bountyProgress: this.bountyProgress,
       midgeEscortCarry: this.midgeEscortCarry,
       doomsdayQuestProgress: this.doomsdayQuestProgress,
-      clubMembership: this.clubMembership,
+      casinoState: this.casinoState,
       townMemory: this.townMemory,
       briarHollowState: this.briarHollowState,
       shopStock: this.shopStock,
@@ -5431,10 +5283,8 @@ export class DungeonScene extends GameplayScene {
    * lost. The doomsday countdown is preserved for the same reason
    * {@link restoreFromCheckpoint} preserves it: rewinding it would make dying a
    * way to buy back time. The run's tallies rewind to the save's copy, but keep
-   * the deaths and time played of the run in progress; a save with no copy
-   * keeps the live tallies as they stand. Achievements
-   * are carried the same way only for a save written before they were
-   * persisted; otherwise the save's copy replaces them.
+   * the deaths and time played of the run in progress. Achievements are the
+   * save's copy.
    */
   private respawnFromSave(progress: GameProgressInput): void {
     // His HP only reaches the shared state through a despawn, and the instance
@@ -5449,8 +5299,6 @@ export class DungeonScene extends GameplayScene {
         saveProgress: this.onSaveProgress,
         onResetGame: this.onResetGameCallback ?? undefined,
         progressWipe: this.progressWipe ?? undefined,
-        humanAchievements: this.humanAchievements,
-        catAchievements: this.catAchievements,
         musicLibrary: this.musicLibrary,
         // A respawn is not a new floor, so a later floor restart still rewinds
         // to where this one began.
@@ -5503,14 +5351,8 @@ export class DungeonScene extends GameplayScene {
     this.releaseCitizenDialogTarget();
     this.releaseSignDialogTarget();
     // Its pending callback grants a chest's reward against a world that is
-    // about to be rewound to before the chest was opened. Cancelling by this
-    // hold's own handle drops only its own queued grants, leaving any other
-    // hold outstanding at the same time (an achievement reveal, say) untouched.
-    if (this.chestRewardFlyHold !== null) {
-      this.rewardFly.cancel(this.chestRewardFlyHold);
-      this.chestRewardFlyHold = null;
-    }
-    this.chestRewardDialog.discard();
+    // about to be rewound to before the chest was opened.
+    this.chestKit.discard();
     // The same for granted-reward cards and whatever waits on them (the
     // Resourcing explainer after Oren's tools): the rewind takes the grant back.
     this.menus.rewardGrantedDialog.discard();
@@ -5599,7 +5441,6 @@ export class DungeonScene extends GameplayScene {
     // A town save can predate a quest fight that was still being fought when
     // the party fell. Rewound to before it, the quest no longer holds its
     // track; one rewound into it has just claimed it again.
-    if (!this.circusQuest.isWaveFightInProgress) this.audioScope?.releaseMusic('circus_waves');
     if (!this.murderQuest.isTownFightInProgress) this.audioScope?.releaseMusic('night_attack');
 
     // The party is standing on the save point right now — the latches have to
@@ -5668,19 +5509,18 @@ export class DungeonScene extends GameplayScene {
       cloggedBathroom: this.cloggedBathroom.captureCheckpoint(),
       stealthKeySnatch: this.stealthKeySnatch.captureCheckpoint(),
       spiderQuest: this.spiderQuest.captureCheckpoint(),
-      circusQuest: this.circusQuest.captureCheckpoint(),
       murderQuest: this.murderQuest.captureCheckpoint(),
       doomsdayEscape: this.doomsdayEscape.captureCheckpoint(),
 
       trees: this.trees?.captureCheckpoint() ?? null,
       bounty: this.bounty?.captureCheckpoint() ?? null,
 
-      circusQuestProgress: captureCircusQuestProgress(this.circusQuestProgress),
+      starlightTentProgress: captureStarlightTentProgress(this.starlightTentProgress),
       murderQuestProgress: captureMurderQuestProgress(this.murderQuestProgress),
       anchorQuestProgress: captureAnchorQuestProgress(this.anchorQuestProgress),
       journal: captureJournalProgress(this.journalProgress),
       bountyProgress: captureBountyProgress(this.bountyProgress),
-      clubMembership: captureClubMembership(this.clubMembership),
+      casinoState: captureCasinoState(this.casinoState),
       townMemory: captureTownMemory(this.townMemory),
       shopStock: captureShopStock(this.shopStock),
       mercenaryRoster: captureMercenaryRoster(this.mercenaryRoster),
@@ -5733,13 +5573,6 @@ export class DungeonScene extends GameplayScene {
     // After the map's restore too: the gate follows the quest's phase.
     this.stealthKeySnatch.restoreCheckpoint(world.stealthKeySnatch);
     this.spiderQuest.restoreCheckpoint(world.spiderQuest);
-    // The grid the mob rewind just rebuilt, not the one the last frame saw:
-    // Signet's move back to the Big Top door has to land in the live one.
-    this.circusQuest.restoreCheckpoint(
-      world.circusQuest,
-      this.world.roster.mobs,
-      this.world.roster.grid,
-    );
     this.murderQuest.restoreCheckpoint(
       world.murderQuest,
       this.world.roster.mobs,
@@ -5773,7 +5606,7 @@ export class DungeonScene extends GameplayScene {
     this.mercenarySystem.restoreCheckpoint(world.mercenary);
     this.mongoSystem.restoreCheckpoint(world.mongo);
 
-    restoreCircusQuestProgress(this.circusQuestProgress, world.circusQuestProgress);
+    restoreStarlightTentProgress(this.starlightTentProgress, world.starlightTentProgress);
     restoreMurderQuestProgress(this.murderQuestProgress, world.murderQuestProgress);
     restoreAnchorQuestProgress(this.anchorQuestProgress, world.anchorQuestProgress);
     restoreJournalProgress(this.journalProgress, world.journal);
@@ -5781,7 +5614,7 @@ export class DungeonScene extends GameplayScene {
     // name and site from this record, so an un-restored cursor would re-stage
     // the wrong contract — or burn a name the player never saw.
     restoreBountyProgress(this.bountyProgress, world.bountyProgress);
-    restoreClubMembership(this.clubMembership, world.clubMembership);
+    restoreCasinoState(this.casinoState, world.casinoState);
     restoreTownMemory(this.townMemory, world.townMemory);
     restoreShopStock(this.shopStock, world.shopStock);
     restoreMercenaryRoster(this.mercenaryRoster, world.mercenaryRoster);
@@ -5807,17 +5640,16 @@ export class DungeonScene extends GameplayScene {
       cloggedBathroom: this.cloggedBathroom.captureCheckpoint(),
       stealthKeySnatch: this.stealthKeySnatch.captureCheckpoint(),
       spiderQuest: toPersistedSpiderQuestCheckpoint(this.spiderQuest.captureCheckpoint()),
-      circusQuest: toPersistedCircusQuestCheckpoint(this.circusQuest.captureCheckpoint()),
       murderQuest: toPersistedMurderMysteryQuestCheckpoint(this.murderQuest.captureCheckpoint()),
       bounty:
         this.bounty === null ? null : toPersistedBountyCheckpoint(this.bounty.captureCheckpoint()),
 
-      circusQuestProgress: captureCircusQuestProgress(this.circusQuestProgress),
+      starlightTentProgress: captureStarlightTentProgress(this.starlightTentProgress),
       anchorQuestProgress: captureAnchorQuestProgress(this.anchorQuestProgress),
       murderQuestProgress: captureMurderQuestProgress(this.murderQuestProgress),
       journal: captureJournalProgress(this.journalProgress),
       bountyProgress: captureBountyProgress(this.bountyProgress),
-      clubMembership: captureClubMembership(this.clubMembership),
+      casinoState: captureCasinoState(this.casinoState),
       shopStock: captureShopStock(this.shopStock),
       townMemory: captureTownMemory(this.townMemory),
       mercenaryRoster: captureMercenaryRoster(this.mercenaryRoster),
@@ -5861,15 +5693,14 @@ export class DungeonScene extends GameplayScene {
       cloggedBathroom,
       stealthKeySnatch,
       spiderQuest,
-      circusQuest,
       murderQuest,
       bounty,
-      circusQuestProgress,
+      starlightTentProgress,
       anchorQuestProgress,
       murderQuestProgress,
       journal,
       bountyProgress,
-      clubMembership,
+      casinoState,
       shopStock,
       townMemory,
       mercenaryRoster,
@@ -5903,23 +5734,18 @@ export class DungeonScene extends GameplayScene {
       fromPersistedTreasureChestCheckpoint(treasureChests, this.treasureChests.allChests),
     );
     this.defendQuest.restoreCheckpoint(fromPersistedDefendQuestCheckpoint(defendQuest));
-    // A save older than the bathroom loads it as the map generated it: broken, unmet.
-    if (cloggedBathroom !== undefined) this.cloggedBathroom.restoreCheckpoint(cloggedBathroom);
-    // A save written without the quest loads it unmet, with the gate locked.
+    this.cloggedBathroom.restoreCheckpoint(cloggedBathroom);
     this.stealthKeySnatch.restoreCheckpoint(stealthKeySnatch);
     this.spiderQuest.restoreCheckpoint(fromPersistedSpiderQuestCheckpoint(spiderQuest));
-    if (bossRoomDressing !== undefined) this.bossRoomDressings.restoreCheckpoint(bossRoomDressing);
-    // A save older than the dressings restores none of them, so the rooms
-    // learn of their dead bosses here instead.
+    this.bossRoomDressings.restoreCheckpoint(bossRoomDressing);
     this.replayBossRoomDefeats();
 
     // Before the quest systems' own restores: they reconcile the NPCs their
     // constructors spawned against this same progress object, and must see the
     // saved progress rather than the default those constructors read.
-    restoreCircusQuestProgress(this.circusQuestProgress, circusQuestProgress);
+    restoreStarlightTentProgress(this.starlightTentProgress, starlightTentProgress);
     restoreMurderQuestProgress(this.murderQuestProgress, murderQuestProgress);
 
-    this.circusQuest.restoreCheckpoint(fromPersistedCircusQuestCheckpoint(circusQuest), mobs, grid);
     this.murderQuest.restoreCheckpoint(
       fromPersistedMurderMysteryQuestCheckpoint(murderQuest),
       mobs,
@@ -5932,24 +5758,20 @@ export class DungeonScene extends GameplayScene {
     restoreAnchorQuestProgress(this.anchorQuestProgress, anchorQuestProgress);
     restoreJournalProgress(this.journalProgress, journal);
     restoreBountyProgress(this.bountyProgress, bountyProgress);
-    restoreClubMembership(this.clubMembership, clubMembership);
+    restoreCasinoState(this.casinoState, casinoState);
     restoreTownMemory(this.townMemory, townMemory);
     restoreShopStock(this.shopStock, shopStock);
     restoreMercenaryRoster(this.mercenaryRoster, mercenaryRoster);
     restoreMongoPetState(this.mongoPetState, mongoPetState);
-    // A save older than the village restores none of it, leaving the
-    // constructor's fresh, empty state in place.
-    if (briarHollow !== undefined) restoreBriarHollowState(this.briarHollowState, briarHollow);
+    restoreBriarHollowState(this.briarHollowState, briarHollow);
 
     this.mordecaiDebrief = { ...mordecaiDebrief };
     // `TacticsNoticeSystem` holds this exact Set by reference, so it's refilled
     // in place rather than replaced — a reassignment here would leave the
     // system watching the stale, pre-load one.
     this.tacticsNoticesSeen.clear();
-    for (const trait of tacticsNoticesSeen ?? []) this.tacticsNoticesSeen.add(trait);
-    if (doomsday !== undefined) {
-      restoreDoomsdayProgress(this.doomsdayQuestProgress, doomsday, Date.now());
-    }
+    for (const trait of tacticsNoticesSeen) this.tacticsNoticesSeen.add(trait);
+    restoreDoomsdayProgress(this.doomsdayQuestProgress, doomsday, Date.now());
 
     this.krakarenKilled = krakarenKilled;
     this.bigRoosterKilled = bigRoosterKilled;
@@ -6048,7 +5870,7 @@ export class DungeonScene extends GameplayScene {
       wheelFreeSpinBet: this.wheelLedger.freeSpinBet,
       wheelOwedFreeze: this.wheelLedger.owedFreeze,
       wheelQuestFreeSpins: createWheelQuestFreeSpins(this.wheelLedger.questFreeSpins),
-      bloodVomitRemaining: bloodVomitRemainingOf(party.human, party.cat),
+      doubleDamageRemaining: doubleDamageRemainingOf(party.human, party.cat),
       attackCowOwned: this.attackCowState.owned,
       attackCowHp: this.attackCowState.hp ?? undefined,
       attackCowResting: this.attackCowState.restingUntilFull,
@@ -6084,7 +5906,7 @@ export class DungeonScene extends GameplayScene {
               generatorVersion: WORLD_GENERATOR_VERSION,
               worldSeed: this.gameMap.worldSeed,
               artSeed: this.gameMap.artSeed,
-              safeRoomTile: resumeTile,
+              resumeTile,
               levelTimerFrames:
                 this.levelDef.hasCollapseTimer === true ? this.levelTimerFrames : null,
               persisted: this.persistedWorldStateFor(party),
@@ -6624,10 +6446,10 @@ export class DungeonScene extends GameplayScene {
         onResetGame: this.onResetGameCallback ?? undefined,
         progressWipe: this.progressWipe ?? undefined,
         // Preserved rather than reset — a death restart shouldn't force-replay an
-        // already-completed boss fight (Grimaldi/Quill), and for the doomsday
+        // already-completed boss fight (Quill), and for the doomsday
         // timer specifically, resetting it here would let a player cancel a
         // lethal countdown for free by simply dying to anything else.
-        circusQuestProgress: this.circusQuestProgress,
+        starlightTentProgress: this.starlightTentProgress,
         murderQuestProgress: this.murderQuestProgress,
         anchorQuestProgress: this.anchorQuestProgress,
         // Carried through a death restart with the questlines it belongs to, so
@@ -6635,7 +6457,7 @@ export class DungeonScene extends GameplayScene {
         journalProgress: this.journalProgress,
         bountyProgress: this.bountyProgress,
         doomsdayQuestProgress: this.doomsdayQuestProgress,
-        clubMembership: this.clubMembership,
+        casinoState: this.casinoState,
         townMemory: this.townMemory,
         partyCrafts: this.partyCrafts,
         // No `briarHollowState`: the village is per-floor and this restart can
@@ -6678,7 +6500,6 @@ export class DungeonScene extends GameplayScene {
       this.treasureChests.wouldInteract(active) ||
       this.defendQuest.wouldInteract(active) ||
       this.spiderQuest.wouldInteract(active) ||
-      this.circusQuest.wouldInteract(active) ||
       this.murderQuest.wouldInteract(active) ||
       this.cloggedBathroom.wouldInteract(active) ||
       this.stealthKeySnatch.wouldInteract(active)
@@ -6730,10 +6551,8 @@ export class DungeonScene extends GameplayScene {
 
   private townDialogContext(): TownDialogContext {
     return {
-      circus: this.circusQuestProgress.stage,
       murder: this.murderQuestProgress.stage,
       doomsday: this.doomsdayQuestProgress.stage,
-      heatherSlain: this.circusQuestProgress.heatherSlain,
       quillNamed: this.murderQuestProgress.quillNamed,
     };
   }
@@ -6744,8 +6563,6 @@ export class DungeonScene extends GameplayScene {
       Boolean,
     ).length;
     return {
-      circus: this.circusQuestProgress.stage,
-      heatherSlain: this.circusQuestProgress.heatherSlain,
       murder: murder.stage,
       murderCluesFound: cluesFound,
       doomsday: this.doomsdayQuestProgress.stage,
@@ -6976,7 +6793,7 @@ export class DungeonScene extends GameplayScene {
     // still be the one it finds there, and its talk row unpinned before this
     // one, which may be the same row, is pinned.
     const facing = target.facingXY();
-    this.citizenTalkRow = prewarmAndPinCitizenTalk(target.figure, facing.x, facing.y);
+    this.citizenTalkRow = prewarmAndPinTownspersonTalk(target.body, facing.x, facing.y);
     this.citizenDialogTarget = target;
     target.conversationCount++;
     return true;
@@ -7048,7 +6865,7 @@ export class DungeonScene extends GameplayScene {
         wantsEscape: () => this.conversationEscapeOwner() !== null,
         offBoxClick: (x, y) => this.pressPastHaltingConversation(x, y),
       }),
-      chestRewardSurface(this.chestRewardDialog),
+      this.chestKit.surface(),
       this.questSwitchConfirm.surface('quest-switch-confirm', 'system'),
       nearGoblinHintSurface({
         get showNearGoblinDialog(): boolean {
@@ -7149,7 +6966,7 @@ export class DungeonScene extends GameplayScene {
    * Who answers Escape on the conversation now up, or null when Escape is the
    * pause key's instead (the pause key then closes the conversation for the
    * menu). Only the speakers listed here take it, in this order: the defend
-   * offer, the lab's scientist, the bounty man, the circus, the murder and the
+   * offer, the lab's scientist, the bounty man, the murder and the
    * Anchor questlines, Mordecai, the Bopca, and, while nothing else has halted
    * the floor, a citizen, a villager or the recruiter, and a sign. A request
    * that must be read to its end still spends the press on its speaker.
@@ -7164,7 +6981,6 @@ export class DungeonScene extends GameplayScene {
     }
     if (
       this.bounty?.isDialogOpen === true ||
-      this.circusQuest.isDialogOpen ||
       this.murderQuest.isDialogOpen ||
       this.anchorQuest.isDialogOpen ||
       this.cloggedBathroom.isDialogOpen ||
@@ -7587,7 +7403,6 @@ export class DungeonScene extends GameplayScene {
         // three errands rather than after them.
         return [
           this.anchorOfferObjective(),
-          this.circusObjective(),
           this.murderQuestObjective(),
           this.bountyObjective(),
           this.anchorStoneObjective(),
@@ -7596,14 +7411,6 @@ export class DungeonScene extends GameplayScene {
       default:
         return [];
     }
-  }
-
-  private circusObjective(): AdviceObjective {
-    return adviceObjective(
-      'the_circus',
-      this.circusQuest.questManager.getStatus(CIRCUS_QUEST_ID) === 'completed',
-      this.gameMap.circusCentre ?? null,
-    );
   }
 
   private murderQuestObjective(): AdviceObjective {
@@ -7851,9 +7658,6 @@ export class DungeonScene extends GameplayScene {
       return true;
     }
     if (this.spiderQuest.tryInteract(active)) {
-      return true;
-    }
-    if (this.circusQuest.tryInteract(active, { human: this.human, cat: this.cat })) {
       return true;
     }
     if (this.murderQuest.tryInteract(active)) {
@@ -8162,7 +7966,6 @@ export class DungeonScene extends GameplayScene {
       this.bossRoom.topBandEntry(this.world.roster.mobs, this.human, this.cat),
       ...this.arena.topBandEntries(this.active()),
       this.defendQuest.topBandEntry(),
-      this.circusQuest.topBandEntry(),
       this.murderQuest.topBandEntry(),
       this.doomsdayEscape.topBandEntry(),
       this.spiderQuest.topBandEntry(),
@@ -8340,16 +8143,7 @@ export class DungeonScene extends GameplayScene {
     if (this.destruction.loot.tryCollectLootAt(x, y, camX, camY, active, this.inactive())) {
       return true;
     }
-    for (const chest of this.treasureChests.allChests) {
-      if (!isChestOpenable(chest)) continue;
-      const chestRect = {
-        x: chest.tileX * TILE_SIZE - camX,
-        y: chest.tileY * TILE_SIZE - camY,
-        w: TILE_SIZE,
-        h: TILE_SIZE,
-      };
-      if (pointInRect(x, y, chestRect) && this.treasureChests.tryInteract(active)) return true;
-    }
+    if (this.treasureChests.tryInteractAt(x, y, camX, camY, active)) return true;
     const worldX = x + camX;
     const worldY = y + camY;
     const gymPieceTaken =
@@ -8395,11 +8189,7 @@ export class DungeonScene extends GameplayScene {
     const introBannerShowing = this.tutorial === null && this.dungeonIntro.isActive;
     if (!introBannerShowing) postMusicLibraryNotices(this.musicLibrary.drainNotices(), this.menus);
     this.tickSaveIndicator();
-    this.chestRewardDialog.tick();
-    if (this.chestRewardDialog.rewardSoundPending) {
-      this.chestRewardDialog.rewardSoundPending = false;
-      this.audio?.play('treasure_chest_reward');
-    }
+    this.chestKit.tick();
 
     // Only tick once audio is ready so the intro visual and sound start together.
     if (this.introStarted && this.tutorial === null) {
@@ -8451,11 +8241,8 @@ export class DungeonScene extends GameplayScene {
       this.townLife?.update(this.buildSystemContext());
       this.briarHollowKit?.update(this.buildSystemContext());
       this.gathering?.update(this.buildSystemContext(), this.overlayOpen);
-      this.circusAmbience?.update(
-        this.gameMap,
-        1 / FRAMES_PER_SECOND,
-        isCircusResolvedStage(this.circusQuestProgress.stage),
-      );
+      this.circusAmbience?.update(this.gameMap, 1 / FRAMES_PER_SECOND);
+      recordCircusGroundsVisit(this.townMemory, this.gameMap, this.active());
       this.highStriker?.update(this.gameMap, this.gameplayHalted);
       this.townProps?.update();
       this.townDecor?.update();
@@ -8470,7 +8257,6 @@ export class DungeonScene extends GameplayScene {
     // different owners. Their marker state is suppressed while their own dialog
     // is open, and an open dialog is a halted frame — so setting it in `update`
     // alone would leave a column of light standing over somebody mid-sentence.
-    this.circusQuest.syncMarkers();
     this.murderQuest.syncMarkers();
     // The board's generation runs behind the explainer and the board, both of
     // which halt the world, so it is stepped ahead of the halt.
@@ -8863,7 +8649,6 @@ export class DungeonScene extends GameplayScene {
       rc.interactionPromptsAllowed && !this.overlayOpen ? activeCrawler : undefined,
     );
     this.spiderQuest.render(ctx, camX, camY, this.active());
-    this.circusQuest.render(ctx, camX, camY, this.active());
     this.murderQuest.render(ctx, camX, camY, this.active());
     // Puddles and telegraphs are floor paint, so players/mobs always appear on top of them
     for (const spider of this.grotesqueSpiders) {
@@ -9176,7 +8961,7 @@ export class DungeonScene extends GameplayScene {
         mordecaiPosition: this.safeRoom.mordecaiStandingPositions[0] ?? null,
         isRewardScreenOpen: this.achievementUI.isBlocking,
         rewardsChipRect: this.hud.cssDockRect('chip'),
-        isChestRewardOpen: this.chestRewardDialog.isOpen,
+        isChestRewardOpen: this.chestKit.isOpen,
         switchButtonRect: this.hud.cssDockRect('switch'),
         levelBadgeRect: this.hud.cssSkillBadgeRect(),
         pauseFrame: pauseFrame === null ? null : toCssRect(pauseFrame, uiScale),
@@ -9202,9 +8987,8 @@ export class DungeonScene extends GameplayScene {
   /**
    * The refusal a doorway answers with, or null when it opens normally.
    *
-   * Every door refuses while the partner is down. Beyond that, two doors are
-   * held shut by a quest: the Big Top in town, and floor 2's prison until the
-   * gate guard has explained it. `BuildingSystem` asks rather than decides, so
+   * Every door refuses while the partner is down. Beyond that, floor 2's
+   * prison is held shut by its quest until the gate guard has explained it. `BuildingSystem` asks rather than decides, so
    * each reason for being closed stays with the questline that closes it.
    */
   private sealedBuildingMessage(entry: BuildingEntry): string | null {
@@ -9213,16 +8997,15 @@ export class DungeonScene extends GameplayScene {
     const partnerDown = downedPartnerEntryRefusal(partner, partnerName);
     if (partnerDown !== null) return partnerDown;
     const prisonRefusal = prisonDoorRefusal(entry, this.stealthKeySnatch.isGuardBriefed);
-    if (prisonRefusal !== null) return prisonRefusal;
-    if (entry.name !== BIG_TOP_BUILDING_NAME) return null;
-    return isBigTopSealed(this.circusQuestProgress.stage) ? BIG_TOP_SEALED_MESSAGE : null;
+    return prisonRefusal;
   }
 
   /**
    * Gathers every seller's minimap position into one reused array: Briar
-   * Hollow's shop villagers plus every town building that takes coin over a
-   * counter, read off `interiorSellsSomething` rather than a hand-kept list of
-   * building names — a shop added to `townServices.ts` shows up here for free.
+   * Hollow's shop villagers plus every town building where an occupant keeps a
+   * menu or a desk, read off `interiorSellsSomething` rather than a hand-kept
+   * list of building names — a service given to an occupant's spec in
+   * `buildingOccupants.ts` shows up here without touching this.
    */
   private collectVendorMinimapPositions(): Array<{ x: number; y: number }> {
     const positions = this._vendorMinimapPositions;
@@ -9243,7 +9026,6 @@ export class DungeonScene extends GameplayScene {
     markers.push(...this.cloggedBathroom.questMarkers);
     markers.push(...this.stealthKeySnatch.questMarkers);
     markers.push(...this.spiderQuest.questMarkers);
-    markers.push(...this.circusQuest.questMarkers);
     markers.push(...this.murderQuest.questMarkers);
     markers.push(...this.anchorQuest.questMarkers);
     if (this.bounty !== null) markers.push(...this.bounty.questMarkers);
@@ -9275,7 +9057,6 @@ export class DungeonScene extends GameplayScene {
         this.cloggedBathroom,
         this.stealthKeySnatch,
         this.spiderQuest,
-        this.circusQuest,
         this.murderQuest,
         this.anchorQuest,
         this.bounty,
@@ -9512,7 +9293,6 @@ export class DungeonScene extends GameplayScene {
       this.defendQuest.barrierBrokenSoundPending = false;
       this.audio?.playRandom(BARRIER_BREAK_SOUNDS);
     }
-    this.circusQuest.update(ctx);
     this.murderQuest.update(ctx);
     this.anchorQuest.update();
     // She is a plaza prop, not a `Player`, so unlike every other quest giver
@@ -9668,24 +9448,6 @@ export class DungeonScene extends GameplayScene {
       }
     }
 
-    for (const [player, name] of [
-      [this.human, 'Human'],
-      [this.cat, 'Cat'],
-    ] as const) {
-      const isLow = player.hp / player.maxHp < LOW_HEALTH_THRESHOLD;
-      if (name === 'Human') {
-        if (isLow && !this.humanHealthLow) {
-          this.bus.emit('healthLow', { player: 'Human', hp: player.hp, maxHp: player.maxHp });
-        }
-        this.humanHealthLow = isLow;
-      } else {
-        if (isLow && !this.catHealthLow) {
-          this.bus.emit('healthLow', { player: 'Cat', hp: player.hp, maxHp: player.maxHp });
-        }
-        this.catHealthLow = isLow;
-      }
-    }
-
     this.mongoSystem.checkHealth();
     this.mercenarySystem.checkHealth((merc) => this.combat.spawnKillGore(merc, null));
     this.attackCowSystem.checkHealth();
@@ -9707,6 +9469,7 @@ export class DungeonScene extends GameplayScene {
     }
     this.pm.tickTimers();
     drainBloodVomitRetches([this.human, this.cat], this.bus);
+    drainHpThresholdCrossings({ human: this.human, cat: this.cat }, this.bus);
 
     if (this.human.effectDamageSoundPending) {
       this.human.effectDamageSoundPending = false;
@@ -10197,7 +9960,6 @@ export class DungeonScene extends GameplayScene {
       this.stairwell.menuOpen ||
       (this.building?.menuOpen ?? false) ||
       this.defendQuest.isDialogOpen ||
-      this.circusQuest.isDialogOpen ||
       this.murderQuest.isDialogOpen ||
       this.anchorQuest.isDialogOpen ||
       this.citizenDialogTarget !== null ||
@@ -10366,7 +10128,7 @@ export class DungeonScene extends GameplayScene {
     const blastShake = this.explosionShake.cameraOffset;
     // Applied after the clamp so the sway can drift past the map edge rather than
     // being flattened to nothing whenever the camera is already against a border.
-    const sway = player.hasStatus('drunk') ? drunkCameraOffset(frameTime) : { x: 0, y: 0 };
+    const sway = intoxicationCameraOffset(player, frameTime);
     return {
       x:
         clamp(camX, 0, mapPxW - viewportWidth()) +
@@ -10421,12 +10183,11 @@ export class DungeonScene extends GameplayScene {
     this.treasureChests.holds(id);
 
   /**
-   * Hands over what is inside a chest the moment it is opened, and returns
-   * what its reward dialog is to show and what dismissing that dialog grants
-   * (the tutorial's cat reward). The dialog only previews
-   * the loot already handed over, so showing it never grants twice.
+   * This floor's answer for an opened chest: the tutorial's scripted first
+   * chest in place of its loot, and the cat's reward once its card is put
+   * away.
    */
-  private grantChestContents(chest: TreasureChest): ChestReward {
+  private chestReward(chest: TreasureChest, payStandard: () => ChestLootSplit | null): ChestReward {
     const tutorial = this.tutorial;
     const tutorialSplit = tutorial?.openTreasureChest() ?? null;
     if (tutorial !== null && tutorialSplit !== null) {
@@ -10441,60 +10202,7 @@ export class DungeonScene extends GameplayScene {
       };
     }
 
-    // A boss chest holds the boss's own loot, gear roll included, and its
-    // coins took the kill's coin bonus when the boss died; a world chest rolls
-    // its gear and takes the bonus here.
-    const isBossChest = chest.bossRoomIndex !== null;
-    const chestGear = isBossChest
-      ? { items: [], coins: 0 }
-      : rollChestGear(chest.type, this.levelDef.floorNumber, Math.random, this.partyOwnsGear);
-    const loot = withGearLoot(chest.loot, chestGear);
-    const baseSplit = loot !== null ? splitChestLoot(loot) : null;
-    this._grantChestLootSplit(baseSplit, !isBossChest);
-
-    if (chest.bossRoomIndex !== null && chest.bossRoomIndex === this.bigRoosterBossRoomIdx) {
-      return {
-        split: {
-          humanLoot: baseSplit?.humanLoot ?? { coins: 0, items: [] },
-          catLoot: baseSplit?.catLoot ?? { coins: 0, items: [] },
-          customHumanEntries: [DESPERADO_TATTOO_REWARD_LABEL],
-        },
-      };
-    }
-
-    return { split: baseSplit };
-  }
-
-  /** A chest's lid is up: show what came out of it. */
-  private showChestReward(chest: TreasureChest, reward: ChestReward): void {
-    // The loot was already granted the moment the chest was pressed
-    // (`grantChestContents`); this only shows it, so the fly is queued here and
-    // held until the dialog the player is looking at actually closes. Kept as
-    // its own handle (not shared with any other hold) so a `restoreFromCheckpoint`
-    // that rewinds this exact chest can cancel only this queue.
-    const flyHold = this.rewardFly.hold();
-    this.chestRewardFlyHold = flyHold;
-    const dialogCenter = { x: viewportWidth() / 2, y: viewportHeight() / 2 };
-    const split = reward.split;
-    if (split !== null) {
-      this.rewardFly.enqueueCoins(split.humanLoot.coins, dialogCenter.x, dialogCenter.y, flyHold);
-      this.rewardFly.enqueueCoins(split.catLoot.coins, dialogCenter.x, dialogCenter.y, flyHold);
-      for (const item of [...split.humanLoot.items, ...split.catLoot.items]) {
-        this.rewardFly.enqueueItem(
-          item.id,
-          ITEM_DEF[item.id].name,
-          dialogCenter.x,
-          dialogCenter.y,
-          flyHold,
-        );
-      }
-    }
-    this.chestRewardDialog.open(chest, reward.split, () => {
-      this.rewardFly.release(flyHold);
-      this.chestRewardFlyHold = null;
-      reward.onDismissed?.();
-    });
-    this.audio?.play('opening_treasure_chest');
+    return { split: payStandard() };
   }
 
   /** Flies a quest's coin reward from the active crawler's own position. */
@@ -10535,24 +10243,6 @@ export class DungeonScene extends GameplayScene {
     for (const item of loot.loot.items) {
       this.rewardFly.enqueueItem(item.id, ITEM_DEF[item.id].name, screenX, screenY);
     }
-  }
-
-  /** Pays a chest's split; `coinBonus` is false for coins that already took it. */
-  private _grantChestLootSplit(
-    split: { humanLoot: LootDrop; catLoot: LootDrop } | null,
-    coinBonus: boolean,
-  ): void {
-    if (split === null) return;
-    const bonusFor = (crawler: HumanPlayer | CatPlayer): number =>
-      coinBonus ? coinBonusFor(crawler) : 1;
-    for (const item of split.humanLoot.items) {
-      this.human.inventory.addItem(item.id, item.quantity);
-    }
-    this.human.earnCoins(Math.round(split.humanLoot.coins * bonusFor(this.human)));
-    for (const item of split.catLoot.items) {
-      this.cat.inventory.addItem(item.id, item.quantity);
-    }
-    this.cat.earnCoins(Math.round(split.catLoot.coins * bonusFor(this.cat)));
   }
 
   /**

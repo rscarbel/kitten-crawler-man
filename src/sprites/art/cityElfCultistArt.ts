@@ -3,10 +3,10 @@
  * as attachments (`BipedAttachments` in `biped/figure.ts`): a deep cowl with a
  * gold-trimmed opening and the brim's shadow over the eyes, long pointed ears
  * thrust out through slits in the hood, an ivory stole, the cult's winged-eye
- * sigil, a rope girdle with a skyfowl feather tied to it, a gold hem band and
+ * sigil, a rope girdle with a Hawkfolk feather tied to it, a gold hem band and
  * soft shoes.
  *
- * The cult believes the skyfowl circling the Over City are angels and that the
+ * The cult believes the Hawkfolk circling Taloncrest are angels and that the
  * Krasue murders are their tithe, so its mark is an eye under spread wings,
  * and every cultist carries a stolen feather at the hip.
  *
@@ -523,7 +523,7 @@ function paintStoleBand(ctx: Ctx, spine: readonly Pt[], ramp: Ramp): void {
 }
 
 /**
- * The cult's mark: an eye under two upswept wings, the skyfowl they call
+ * The cult's mark: an eye under two upswept wings, the Hawkfolk they call
  * angels watching over the tithe. Drawn bold and simple — at the tile it is
  * a gold bird-shape on the chest with a red point in it.
  */
@@ -599,7 +599,7 @@ const KNOT_ACROSS = 0.1;
 const KNOT_R = 0.028;
 const ROPE_END_DROP = 0.22;
 const ROPE_END_SPLAY = 0.03;
-/** The feather tied to the girdle: a skyfowl's, taken from the angels they serve. */
+/** The feather tied to the girdle: a hawkfolk's, taken from the angels they serve. */
 const FEATHER_ACROSS = -0.12;
 const FEATHER_LENGTH = 0.24;
 const FEATHER_HALF = 0.032;

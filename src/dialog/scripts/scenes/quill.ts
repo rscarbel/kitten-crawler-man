@@ -40,7 +40,7 @@ export const QUILL_FEATHERFALL_EXAMINE: NonEmpty<DialogLine> = [
  */
 export const QUILL_OFFICE: NonEmpty<DialogLine> = [
   theTopFloor.line(
-    'The magistrate’s office is spotless. The ledgers are current. The ink is fresh. At the great desk by the north wall, someone sits very still in the gloom. Between you and the desk, at a tidy secretary’s station, perches an elderly skyfowl in spectacles, pen scratching away as though two armed crawlers walk in every day.',
+    'The magistrate’s office is spotless. The ledgers are current. The ink is fresh. At the great desk by the north wall, someone sits very still in the gloom. Between you and the desk, at a tidy secretary’s station, perches an elderly Hawkfolk in spectacles, pen scratching away as though two armed crawlers walk in every day.',
   ),
   quill.line(
     'You are not in the appointment ledger. The magistrate sees petitioners on the seventh day. You may leave your names with me. I keep excellent records.',
@@ -59,7 +59,7 @@ export const QUILL_OFFICE: NonEmpty<DialogLine> = [
   ),
   narrator.button(
     'Ready weapons',
-    'The thing beside the desk unfolds. A skyfowl shape with no feathers left, eyes like black glass, something pale steaming off it like heat off a summer road. It does not want to be here. It does what she says anyway.',
+    'The thing beside the desk unfolds. A Hawkfolk shape with no feathers left, eyes like black glass, something pale steaming off it like heat off a summer road. It does not want to be here. It does what she says anyway.',
   ),
 ];
 
@@ -68,9 +68,9 @@ export const QUILL_VICTORY: NonEmpty<DialogLine> = [
   narrator.line(
     'The robe folds over nothing and settles on the boards. The seal at its belt, Featherfall’s seal, cracks down the middle. Somewhere beneath the floorboards, something enormous begins, very slowly, to wake.',
   ),
-  ryan.line('That one was for GumGum. Somebody looked.'),
+  ryan.line('That one was for Baggi. Somebody looked.'),
   belle.button(
     'It’s not over',
-    `We did it, ${HUMAN_NAME}. GumGum would be happy. Can we have a nap now? The floor is rumbling...`,
+    `We did it, ${HUMAN_NAME}. Baggi would be happy. Can we have a nap now? The floor is rumbling...`,
   ),
 ];

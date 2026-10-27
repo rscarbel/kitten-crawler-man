@@ -1,7 +1,7 @@
 import { inkSpoilsBlow } from '../gear/incomingBlows';
 import { BOSS_BLAST_DAMAGE_SCALE, Mob } from './Mob';
 import type { EyePlacement } from '../sprites/eyePlacement';
-import type { DamageSource, Player } from '../Player';
+import type { DamageOptions, DamageSource, Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
 import {
   type BallOfSwineDraw,
@@ -663,7 +663,7 @@ export class BallOfSwine extends Mob {
    * status tick is not and a mob attacker never uses against another mob. None of them
    * can be true here. A non-lethal tick goes through `super` untouched regardless.
    */
-  override takeDamage(amount: number, source?: DamageSource): boolean {
+  override takeDamage(amount: number, source?: DamageSource, options?: DamageOptions): boolean {
     if (this.isDying) return false;
     // `this.hp > 0` as well as `amount >= this.hp`, so the branch cannot be entered
     // for an already-dead ball and then return `true` having done nothing.
@@ -671,7 +671,7 @@ export class BallOfSwine extends Mob {
       this.takeUnreducedDamage(this.hp, source);
       return true;
     }
-    return super.takeDamage(amount, source);
+    return super.takeDamage(amount, source, options);
   }
 
   private throughHide(amount: number): number {

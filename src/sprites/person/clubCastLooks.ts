@@ -1,9 +1,9 @@
 /**
- * The Desperado Club's human dancer, as a closed-set look outside the street
+ * The Cloak & Dagger's human dancer, as a closed-set look outside the street
  * cast: one fixed figure, painted through the same biped rig and pipeline as
  * every other adult look, with its own dance routines. Station staff (bartender,
- * market, VIP host) and the wandering patrons reuse existing street-cast and
- * skyfowl-cast looks directly (`DesperadoClubSystem.ts`/`ClubCrowdSystem.ts`
+ * market) and the wandering patrons reuse existing street-cast and
+ * Hawkfolk cast looks directly (`CloakAndDaggerSystem.ts`/`ClubCrowdSystem.ts`
  * pick the ids) — the club dancer is the one figure this floor needs that
  * nothing else in the game already draws.
  */

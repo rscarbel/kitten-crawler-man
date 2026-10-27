@@ -61,10 +61,10 @@ export function favorPerk(value: number): {
   return FAVOR_PERKS.find((perk) => value >= perk.min) ?? NO_PERK;
 }
 
-/** A save's `viewerFavor`, or undefined when it holds none or holds junk. */
+/** A save's `viewerFavor`, or undefined when it is not a favour the meter can hold. */
 export function parseViewerFavor(raw: unknown): number | undefined {
   if (typeof raw !== 'number' || !Number.isFinite(raw)) return undefined;
-  return clampFavor(raw);
+  return clampFavor(raw) === raw ? raw : undefined;
 }
 
 export class ViewerFavor {

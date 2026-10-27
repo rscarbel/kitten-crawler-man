@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Headless review harness and bake gates for the Over City's townsfolk.
+ * Headless review harness and bake gates for Taloncrest's townsfolk.
  *
  * The crowd is drawn at runtime from `src/sprites/person/*`, so there is no
  * sheet to open and the only in-game view of it is a plaza you have to walk to.

@@ -18,7 +18,7 @@ import { rotateLine } from './townServiceUtil';
 import { SERVICE_PRICES } from '../economy/servicePrices';
 
 const GRACE_LINES: ReadonlyArray<string> = [
-  'The skyfowl sees you. Rise mended, and go carefully.',
+  'The Hawkfolk sees you. Rise mended, and go carefully.',
   'Feathers over your shoulders, crawler. Walk on.',
   'Wounds are only a debt. Consider it settled.',
 ];

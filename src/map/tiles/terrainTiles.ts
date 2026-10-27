@@ -39,7 +39,7 @@ import type { NeighbourFace } from '../../sprites/art/dungeonWallDressing';
 import { OVERWORLD_GROUND } from '../town/groundMaterials';
 import { dungeonFloorTheme } from '../dungeon/floorTheme';
 import {
-  BIGTOP_BACKSTAGE_MATERIAL,
+  STARLIGHT_TENT_BACKSTAGE_MATERIAL,
   INTERIOR_COUNTER_MATERIAL,
   INTERIOR_WALL_MATERIAL,
   TOWN_INTERIOR_GROUND,
@@ -51,8 +51,14 @@ import {
   paintCanvasDrapeNorthFace,
   paintCanvasDrapeEdgeFace,
 } from '../../sprites/art/townInterior/interiorWallFace';
-import { BACKSTAGE_CLUTTER_CLEARANCE_TILES, bigTopWallFace } from '../bigTopMazeDecor';
-import { backstageClutterAt, paintBackstageClutter } from '../../sprites/art/bigTop/bigTopShellArt';
+import {
+  BACKSTAGE_CLUTTER_CLEARANCE_TILES,
+  starlightTentWallFace,
+} from '../starlightTentMazeDecor';
+import {
+  backstageClutterAt,
+  paintBackstageClutter,
+} from '../../sprites/art/starlightTent/starlightTentShellArt';
 import { drawCircusDecals } from './circusDecalTiles';
 
 /**
@@ -78,11 +84,11 @@ function isDeepInMass(structure: TileContent[][], tx: number, ty: number): boole
 }
 
 /**
- * A Big Top wall: the dark backstage canvas, with the act's drapes hung on
+ * A Starlight Tent wall: the dark backstage canvas, with the act's drapes hung on
  * whichever face looks onto a corridor, and now and then a dim piece of
  * clutter deep in the mass.
  */
-function drawBigTopWall(
+function drawStarlightTentWall(
   ctx: CanvasRenderingContext2D,
   structure: TileContent[][],
   sx: number,
@@ -91,8 +97,21 @@ function drawBigTopWall(
   tx: number,
   ty: number,
 ): void {
-  drawGroundMaterialTile(ctx, TOWN_INTERIOR_GROUND, BIGTOP_BACKSTAGE_MATERIAL, sx, sy, ts, tx, ty);
-  const face = bigTopWallFace((x, y) => isInteriorFloorNeighbor(structure[y]?.[x]?.type), tx, ty);
+  drawGroundMaterialTile(
+    ctx,
+    TOWN_INTERIOR_GROUND,
+    STARLIGHT_TENT_BACKSTAGE_MATERIAL,
+    sx,
+    sy,
+    ts,
+    tx,
+    ty,
+  );
+  const face = starlightTentWallFace(
+    (x, y) => isInteriorFloorNeighbor(structure[y]?.[x]?.type),
+    tx,
+    ty,
+  );
   if (face !== null) {
     if (face.side === 'north') paintCanvasDrapeNorthFace(ctx, sx, sy, ts, ts, face.style, tx);
     else paintCanvasDrapeEdgeFace(ctx, sx, sy, ts, ts, face.style, face.side, tx);
@@ -435,7 +454,7 @@ export function drawTerrainTile(
     case INTERIOR_WALL: {
       const material = townInteriorWallMaterial();
       if (material === 'canvas') {
-        drawBigTopWall(ctx, structure, sx, sy, ts, tx, ty);
+        drawStarlightTentWall(ctx, structure, sx, sy, ts, tx, ty);
         break;
       }
       drawGroundMaterialTile(ctx, TOWN_INTERIOR_GROUND, INTERIOR_WALL_MATERIAL, sx, sy, ts, tx, ty);

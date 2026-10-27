@@ -4,14 +4,12 @@ import type { CasinoSeat } from '../ClubCasinoSystem';
 /**
  * A casino game the club's game picker opens but whose host lives in its own
  * system. The club mounts its surfaces beside the card tables', pumps it while
- * the club's modals tick, counts its wagers toward the VIP lounge perk, and
- * keeps the casino music on while any of its surfaces is up.
+ * the club's modals tick, and keeps the casino music on while any of its surfaces is up.
  */
 export interface CasinoGameHost {
   /** Opens the game's first surface; called as the picker closes. */
   open(seat: CasinoSeat): void;
   readonly anySurfaceOpen: boolean;
-  readonly coinsWageredThisVisit: number;
   /** Runs once per club tick, open or not, for anything with its own clock. */
   update(): void;
   /** Every surface the game shows, in stacking order; mounted once with the club's. */
@@ -55,7 +53,6 @@ export function idleCasinoGameHost(): CasinoGameHost {
   return {
     open: () => undefined,
     anySurfaceOpen: false,
-    coinsWageredThisVisit: 0,
     update: () => undefined,
     surfaces: () => [],
   };

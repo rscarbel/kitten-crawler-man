@@ -10,7 +10,7 @@
  * menu behind it, a tap on the bar under its scrim must not fire a hotbar
  * slot, a press that starts on the shop must not become a hotbar drag, and a
  * press whose shop closes before the finger lifts must not fire the slot it
- * lands on. Under a conversation that halts the room (one of Old Hilda's
+ * lands on. Under a conversation that halts the room (one of Old Lori's
  * beats) only the pause button and the skill-point badge stay live, and
  * Escape closes the beat rather than pausing; a beat that refuses Escape
  * leaves it to the pause menu. With nothing over it, every HUD control a
@@ -55,7 +55,7 @@ const { createBriarHollowState } = await import('../src/core/quests/briarHollowS
 const { BuildingInteriorScene } = await import('../src/scenes/BuildingInteriorScene.js');
 const { PointerInput, PRIMARY_BUTTON } = await import('../src/ui/core/pointer.js');
 const { ITEM_DEF } = await import('../src/core/items/defs/ItemDefs.js');
-const { HILDA_COTTAGE_NAME } = await import('../src/systems/interiorStoryOwnership.js');
+const { LORI_COTTAGE_NAME } = await import('../src/systems/interiorStoryOwnership.js');
 const { createAnchorQuestProgress } = await import('../src/core/quests/AnchorQuestProgress.js');
 const { speakerLines } = await import('../src/dialog/line.js');
 const { toCssRect } = await import('../src/ui/hud/HudSurface.js');
@@ -433,63 +433,63 @@ if (closeCentre !== null) {
 setViewportSize(PHONE.width, PHONE.height);
 ctx = gameContext(PHONE.width, PHONE.height);
 
-// ── Old Hilda's cottage ──────────────────────────────────────────────────────
+// ── Old Lori's cottage ──────────────────────────────────────────────────────
 
-console.log("\nUnder one of Old Hilda's beats, which halts the room");
+console.log("\nUnder one of Old Lori's beats, which halts the room");
 
 const anchorProgress = createAnchorQuestProgress();
 anchorProgress.status = 'active';
 const cottage = await enter(
-  building((entry) => entry.name === HILDA_COTTAGE_NAME),
+  building((entry) => entry.name === LORI_COTTAGE_NAME),
   anchorProgress,
 );
-const hilda = rig(cottage);
-function hildasRoom() {
+const lori = rig(cottage);
+function lorisRoom() {
   const room = cottage['anchorInterior'];
-  if (room === null) throw new Error("Old Hilda's cottage has no questline system");
+  if (room === null) throw new Error("Old Lori's cottage has no questline system");
   return room;
 }
 
-function openHildasBeat(): void {
-  check(hildasRoom().tryOpenDialog('old_hilda', cottage.pm.active()), 'her beat opens');
-  hilda.frame();
-  hilda.frame();
+function openLorisBeat(): void {
+  check(lorisRoom().tryOpenDialog('old_lori', cottage.pm.active()), 'her beat opens');
+  lori.frame();
+  lori.frame();
 }
 
-hilda.frame();
+lori.frame();
 const cottagePause = requireDockPoint(cottage, 'pause');
-openHildasBeat();
-const hildaSlot = hilda.slotPoint();
-hilda.tap(hildaSlot);
-hilda.frame();
+openLorisBeat();
+const loriSlot = lori.slotPoint();
+lori.tap(loriSlot);
+lori.frame();
 check(
-  hilda.potionsLeft() === POTIONS_ON_THE_BAR,
+  lori.potionsLeft() === POTIONS_ON_THE_BAR,
   'a tap on the hotbar under her beat fires no slot',
 );
 check(cottage['conversation'].isOpen, 'and the beat is still open');
 
-hilda.tap(cottagePause);
-hilda.frame();
+lori.tap(cottagePause);
+lori.frame();
 check(cottage['pauseScreen'].isOpen, 'the pause button still answers under her beat');
 if (cottage['pauseScreen'].isOpen) cottage['togglePause']();
-hilda.frame();
+lori.frame();
 
 cottage.pm.human.unspentPoints = 1;
-hilda.frame();
+lori.frame();
 const cottageBadge = badgePoint(cottage);
 check(cottageBadge !== null, 'a skill point to spend puts its badge on the unit frame');
-if (cottageBadge !== null) hilda.tap(cottageBadge);
-hilda.frame();
+if (cottageBadge !== null) lori.tap(cottageBadge);
+lori.frame();
 check(
   cottage['pauseScreen'].isOpen && cottage['pauseScreen'].currentSection === 'character',
   'and so does the skill-point badge, which opens the Spend page',
 );
 if (cottage['pauseScreen'].isOpen) cottage['togglePause']();
 cottage.pm.human.unspentPoints = 0;
-hilda.frame();
+lori.frame();
 
 check(cottage.ui.key('Escape') === 'consumed', 'Escape is spent on her beat');
-hilda.frame();
+lori.frame();
 check(!cottage['conversation'].isOpen, 'and closes it');
 check(!cottage['pauseScreen'].isOpen, 'without pausing');
 
@@ -504,13 +504,13 @@ cottage['conversation'].open({
   anchor: null,
   locksKeyboard: true,
 });
-hilda.frame();
+lori.frame();
 check(
   cottage.ui.key('Escape') === 'gameplay',
   'Escape on a beat that refuses it passes to the pause menu',
 );
 check(cottage['conversation'].isOpen, 'and the beat stays open');
-check(inside(hildaSlot, hudHotbarSlot(POTION_SLOT)), 'the slot point is on the bar');
+check(inside(loriSlot, hudHotbarSlot(POTION_SLOT)), 'the slot point is on the bar');
 
 // ── Every HUD control, with nothing over it ─────────────────────────────────
 

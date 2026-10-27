@@ -464,7 +464,6 @@ function paintHub(ctx: CanvasRenderingContext2D, radius: number): void {
   ctx.strokeStyle = WHEEL_GOLD.deep;
   ctx.lineWidth = Math.max(KEYLINES.minPx, radius * KEYLINES.hub);
   ctx.stroke();
-  // A five-pointed star stamped in the cap: the Desperado's sheriff star.
   const points = HUB.starPoints;
   const outer = hubR * HUB.starOuter;
   const inner = outer * HUB.starInner;

@@ -1,12 +1,12 @@
 #!/usr/bin/env tsx
 /**
- * Motion gates for the town casts: the skyfowl's walk and run holding its feet
+ * Motion gates for the town casts: the hawkfolk's walk and run holding its feet
  * still on the floor at the speeds the game actually moves them, and the
- * Desperado Club's dance rows (both casts) moving like dancing rather than
+ * Cloak & Dagger's dance rows (both casts) moving like dancing rather than
  * swaying on the spot.
  *
  *   M1  foot-lock: at every speed a citizen, a club patron or the fightable
- *       fowl travels, a planted foot moves less than a pixel over the floor
+ *       Hawkfolk travels, a planted foot moves less than a pixel over the floor
  *       from one frame of the row to the next, and barely more over its whole
  *       stance — measured the way the runtime
  *       paces the row (distance covered over the look's own cycle length,
@@ -28,28 +28,28 @@ import { TILE_SIZE } from '../src/core/constants.js';
 import { gaitCyclesForDistance } from '../src/sprites/gaitCadence.js';
 import {
   RUN_FRAMES,
-  SKYFOWL_CAST_SCALE,
+  HAWKFOLK_CAST_SCALE,
   WALK_FRAMES,
   castRow,
-  skyfowlCastFigure,
-  skyfowlRunCyclePx,
-  skyfowlWalkCyclePx,
-} from '../src/sprites/art/skyfowlCastFigure.js';
+  hawkfolkCastFigure,
+  hawkfolkRunCyclePx,
+  hawkfolkWalkCyclePx,
+} from '../src/sprites/art/hawkfolkCastFigure.js';
 import {
-  SKYFOWL_CIVILIAN_LOOKS,
-  SKYFOWL_LOOKS,
-  SKYFOWL_TOUGH_LOOKS,
-  type SkyfowlLook,
-} from '../src/sprites/art/skyfowl/cast.js';
-import { SKYFOWL_BUILDS } from '../src/sprites/art/skyfowl/palette.js';
-import { probeSkyfowlFeet } from '../src/sprites/art/skyfowl/rig.js';
+  HAWKFOLK_CIVILIAN_LOOKS,
+  HAWKFOLK_LOOKS,
+  HAWKFOLK_TOUGH_LOOKS,
+  type HawkfolkLook,
+} from '../src/sprites/art/hawkfolk/cast.js';
+import { HAWKFOLK_BUILDS } from '../src/sprites/art/hawkfolk/palette.js';
+import { probeHawkfolkFeet } from '../src/sprites/art/hawkfolk/rig.js';
 import {
   CONTRALATERAL_PHASE,
-  SKYFOWL_RUN,
-  SKYFOWL_WALK,
+  HAWKFOLK_RUN,
+  HAWKFOLK_WALK,
   footPlanted,
-} from '../src/sprites/art/skyfowl/gait.js';
-import { SKYFOWL_MOB_TRAVEL_SPEEDS, skyfowlMobRunsAt } from '../src/creatures/SkyFowl.js';
+} from '../src/sprites/art/hawkfolk/gait.js';
+import { HAWKFOLK_MOB_TRAVEL_SPEEDS, hawkfolkMobRunsAt } from '../src/creatures/Hawkfolk.js';
 import { citizenWalkCyclePx, citizenWalkFrames } from '../src/creatures/citizenFigure.js';
 import { Townsperson } from '../src/creatures/Townsperson.js';
 import { DANCE_STYLES, danceStateName } from '../src/sprites/art/danceStyles.js';
@@ -106,7 +106,7 @@ const FRAME_CENTRE = 0.5;
 
 interface GaitCase {
   readonly label: string;
-  readonly look: SkyfowlLook;
+  readonly look: HawkfolkLook;
   readonly state: string;
   readonly frames: number;
   readonly cyclePx: number;
@@ -115,8 +115,8 @@ interface GaitCase {
 }
 
 /** World px per figure unit for a look at the 32px tile. */
-function unitPx(look: SkyfowlLook): number {
-  return TILE_SIZE * SKYFOWL_CAST_SCALE * SKYFOWL_BUILDS[look.outfit.build].scale;
+function unitPx(look: HawkfolkLook): number {
+  return TILE_SIZE * HAWKFOLK_CAST_SCALE * HAWKFOLK_BUILDS[look.outfit.build].scale;
 }
 
 /**
@@ -158,8 +158,8 @@ function worstSlip(gait: GaitCase): { slip: number; drift: number; steps: number
     if (next === undefined || here === undefined) continue;
     const frameHere = k % gait.frames;
     const frameNext = (k + 1) % gait.frames;
-    const feetHere = probeSkyfowlFeet('side', row.pose(frameHere), gait.look.outfit.build);
-    const feetNext = probeSkyfowlFeet('side', row.pose(frameNext), gait.look.outfit.build);
+    const feetHere = probeHawkfolkFeet('side', row.pose(frameHere), gait.look.outfit.build);
+    const feetNext = probeHawkfolkFeet('side', row.pose(frameNext), gait.look.outfit.build);
     const phaseHere = frameHere / gait.frames;
     const phaseNext = frameNext / gait.frames;
     for (const [foot, offset] of [
@@ -187,8 +187,8 @@ function worstSlip(gait: GaitCase): { slip: number; drift: number; steps: number
 function gaitCases(): GaitCase[] {
   const cases: GaitCase[] = [];
   const speedSteps = Math.round((CITIZEN_SPEED_MAX - CITIZEN_SPEED_MIN) / CITIZEN_SPEED_STEP);
-  for (const look of SKYFOWL_CIVILIAN_LOOKS) {
-    const figure = { species: 'skyfowl', look } as const;
+  for (const look of HAWKFOLK_CIVILIAN_LOOKS) {
+    const figure = { species: 'hawkfolk', look } as const;
     const fastest = look.outfit.build === 'fledgling' ? FLEDGLING_SPEED_MAX : CITIZEN_SPEED_MAX;
     for (let i = 0; i <= speedSteps; i++) {
       const pxPerTick = CITIZEN_SPEED_MIN + i * CITIZEN_SPEED_STEP;
@@ -200,23 +200,23 @@ function gaitCases(): GaitCase[] {
         frames: citizenWalkFrames(figure),
         cyclePx: citizenWalkCyclePx(figure, TILE_SIZE),
         pxPerTick,
-        planted: (phase) => footPlanted(SKYFOWL_WALK, phase),
+        planted: (phase) => footPlanted(HAWKFOLK_WALK, phase),
       });
     }
   }
-  for (const look of SKYFOWL_TOUGH_LOOKS) {
-    for (const { pxPerTick } of SKYFOWL_MOB_TRAVEL_SPEEDS) {
-      const runs = skyfowlMobRunsAt(pxPerTick / TILE_SIZE);
+  for (const look of HAWKFOLK_TOUGH_LOOKS) {
+    for (const { pxPerTick } of HAWKFOLK_MOB_TRAVEL_SPEEDS) {
+      const runs = hawkfolkMobRunsAt(pxPerTick / TILE_SIZE);
       cases.push({
         label: `${look.id} mob ${runs ? 'run' : 'walk'} at ${pxPerTick.toFixed(2)}px/tick`,
         look,
         state: runs ? 'run_side' : 'walk_side',
         frames: runs ? RUN_FRAMES : WALK_FRAMES,
         cyclePx: runs
-          ? skyfowlRunCyclePx(look.id, TILE_SIZE)
-          : skyfowlWalkCyclePx(look.id, TILE_SIZE),
+          ? hawkfolkRunCyclePx(look.id, TILE_SIZE)
+          : hawkfolkWalkCyclePx(look.id, TILE_SIZE),
         pxPerTick,
-        planted: (phase) => footPlanted(runs ? SKYFOWL_RUN : SKYFOWL_WALK, phase),
+        planted: (phase) => footPlanted(runs ? HAWKFOLK_RUN : HAWKFOLK_WALK, phase),
       });
     }
   }
@@ -268,7 +268,7 @@ function strollingCitizen(seed: number, speed: number): Townsperson {
     x: 0,
     y: 0,
     role: 'commoner',
-    species: 'skyfowl',
+    species: 'hawkfolk',
     seed,
     speed,
     wander: { pickTarget: () => far, arriveDist: 1, pauseMin: 0, pauseMax: 1 },
@@ -279,7 +279,7 @@ function strollingCitizen(seed: number, speed: number): Townsperson {
 }
 
 /**
- * Drives real skyfowl citizens through `Townsperson.update`: at a stroll the
+ * Drives real Hawkfolk citizens through `Townsperson.update`: at a stroll the
  * walk cycle turns by exactly the ground covered over the look's cycle
  * length — distance, not time — and under a shove it turns no more than one
  * frame of the row, so the row is played rather than skipped through.
@@ -289,8 +289,10 @@ function gateCadence(): void {
   for (let seed = 0; seed < CADENCE_SEEDS; seed++) {
     for (const speed of [STROLL_PX_PER_TICK, SHOVE_PX_PER_TICK]) {
       const citizen = strollingCitizen(seed, speed);
-      const cyclePx = citizenWalkCyclePx(citizen.figure, TILE_SIZE);
-      const frames = citizenWalkFrames(citizen.figure);
+      const figure = citizen.citizenFigure;
+      if (figure === null) throw new Error('a strolling citizen wears no cast look');
+      const cyclePx = citizenWalkCyclePx(figure, TILE_SIZE);
+      const frames = citizenWalkFrames(figure);
       const before = citizen.phase;
       citizen.update();
       const turned = (citizen.phase - before + 1) % 1;
@@ -299,7 +301,7 @@ function gateCadence(): void {
       if (Math.abs(turned - expected) > PHASE_EPSILON) {
         fail(
           'M2',
-          `a ${speed}px/tick skyfowl citizen turned its walk ${turned.toFixed(TURN_DIGITS)} of a cycle in ` +
+          `a ${speed}px/tick Hawkfolk citizen turned its walk ${turned.toFixed(TURN_DIGITS)} of a cycle in ` +
             `one tick; the ground it covered asks for ${expected.toFixed(TURN_DIGITS)}` +
             (speed === SHOVE_PX_PER_TICK ? ' (one frame of the row at most)' : ''),
         );
@@ -309,7 +311,7 @@ function gateCadence(): void {
   failUnlessMeasured('M2', measured, 'citizen ticks');
 }
 
-/** Seeds enough to land on several different skyfowl looks. */
+/** Seeds enough to land on several different Hawkfolk looks. */
 const CADENCE_SEEDS = 12;
 
 // ── M3 dance energy ──────────────────────────────────────────────────────────
@@ -393,8 +395,8 @@ interface DanceFigure {
 }
 
 function danceFigures(): DanceFigure[] {
-  const figures: DanceFigure[] = SKYFOWL_LOOKS.filter((look) => look.dances === true).map(
-    (look) => ({ label: look.id, def: skyfowlCastFigure(look.id), idleState: 'idle' }),
+  const figures: DanceFigure[] = HAWKFOLK_LOOKS.filter((look) => look.dances === true).map(
+    (look) => ({ label: look.id, def: hawkfolkCastFigure(look.id), idleState: 'idle' }),
   );
   figures.push({
     label: 'club_dancer',

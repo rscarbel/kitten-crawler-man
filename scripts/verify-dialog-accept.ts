@@ -50,14 +50,14 @@ import type { Choice, ConversationRequest, ConversationTopic } from '../src/dial
 import { topicMenu } from '../src/dialog/topics';
 import { GameMap } from '../src/map/GameMap';
 import { AnchorInteriorSystem } from '../src/systems/AnchorInteriorSystem';
-import { HILDA_COTTAGE_NAME, SKY_TEMPLE_NAME } from '../src/systems/interiorStoryOwnership';
+import { LORI_COTTAGE_NAME, SKY_TEMPLE_NAME } from '../src/systems/interiorStoryOwnership';
 import { AnchorQuestSystem } from '../src/systems/AnchorQuestSystem';
 import { RewardGrantedDialog } from '../src/ui/RewardGrantedDialog';
 import { UiRoot } from '../src/ui/core/UiRoot';
 import { NO_INSETS } from '../src/ui/core/viewport';
 import { rewardGrantedSurface } from '../src/ui/screens/dialogs/rewardGrantedDialog';
 import { createBriarHollowState } from '../src/core/quests/briarHollowState';
-import { createCircusQuestProgress } from '../src/core/quests/CircusQuestProgress';
+import { createTownMemory } from '../src/core/state/TownMemory';
 import { mountConversation, type ConversationRig } from './conversationHarness';
 import { buildSiegeRig } from './villageSiegeHarness';
 
@@ -166,7 +166,7 @@ function makeVoss(progress: AnchorQuestProgress, party: Party, conversation: Con
     () => undefined,
     conversation,
     {
-      circus: createCircusQuestProgress(),
+      townMemory: createTownMemory(),
       briarHollow: createBriarHollowState(),
       anchor: progress,
     },
@@ -199,7 +199,7 @@ function makeRoom(
  * Read back through a call so the compiler does not carry a narrowing from the
  * line that set the step across the conversation that changes it.
  */
-function stepOf(progress: AnchorQuestProgress, giver: 'hilda' | 'temple'): string {
+function stepOf(progress: AnchorQuestProgress, giver: 'lori' | 'temple'): string {
   return progress[giver];
 }
 
@@ -234,11 +234,11 @@ function verifyVossAssembly(): void {
   const conversation = new Conversation(null);
   const progress = activeProgress();
   progress.tinker = 'done';
-  progress.hilda = 'done';
+  progress.lori = 'done';
   progress.temple = 'done';
   const party = makeParty();
   party.human.inventory.addItem('anchor_shard_tinker', 1);
-  party.human.inventory.addItem('anchor_shard_hilda', 1);
+  party.human.inventory.addItem('anchor_shard_lori', 1);
   party.human.inventory.addItem('anchor_shard_temple', 1);
   party.human.coins = PLENTY_OF_COINS;
   const voss = makeVoss(progress, party, conversation);
@@ -276,11 +276,11 @@ function verifyRestingPointerDoesNotPay(): void {
     const conversation = new Conversation(null);
     const progress = activeProgress();
     progress.tinker = 'done';
-    progress.hilda = 'done';
+    progress.lori = 'done';
     progress.temple = 'done';
     const party = makeParty();
     party.human.inventory.addItem('anchor_shard_tinker', 1);
-    party.human.inventory.addItem('anchor_shard_hilda', 1);
+    party.human.inventory.addItem('anchor_shard_lori', 1);
     party.human.inventory.addItem('anchor_shard_temple', 1);
     party.human.coins = PLENTY_OF_COINS;
     const voss = makeVoss(progress, party, conversation);
@@ -316,45 +316,45 @@ function verifyRestingPointerDoesNotPay(): void {
   );
 }
 
-// ── Old Hilda and Deacon Aviel ───────────────────────────────────────────────
+// ── Old Lori and Deacon Aviel ───────────────────────────────────────────────
 
-function verifyHilda(): void {
+function verifyLori(): void {
   section(
-    'Old Hilda: Space through her terms takes the job, and through her thanks takes the shard',
+    'Old Lori: Space through her terms takes the job, and through her thanks takes the shard',
   );
   const conversation = new Conversation(null);
   const progress = activeProgress();
   const party = makeParty();
-  const room = makeRoom(HILDA_COTTAGE_NAME, progress, party, conversation);
+  const room = makeRoom(LORI_COTTAGE_NAME, progress, party, conversation);
   if (room === null) {
-    check(false, "Old Hilda's cottage has a questline system");
+    check(false, "Old Lori's cottage has a questline system");
     return;
   }
   const rig = rigFor(conversation);
-  check(room.tryOpenDialog('old_hilda', party.human), 'her request opens');
+  check(room.tryOpenDialog('old_lori', party.human), 'her request opens');
   const tally = spaceUntilClosed(rig);
-  check(progress.hilda === 'in_progress', `the repair job is accepted (hilda: ${progress.hilda})`);
+  check(progress.lori === 'in_progress', `the repair job is accepted (lori: ${progress.lori})`);
   check(
     tally.ring > 0,
     `her terms were answered through the focus ring (${tally.ring} ring presses)`,
   );
 
-  progress.hilda = 'shard_owed';
-  check(room.tryOpenDialog('old_hilda', party.human), 'her thanks open');
+  progress.lori = 'shard_owed';
+  check(room.tryOpenDialog('old_lori', party.human), 'her thanks open');
   spaceUntilClosed(rig);
-  const hildaAfterThanks = stepOf(progress, 'hilda');
-  check(hildaAfterThanks === 'done', `the shard is handed over (hilda: ${hildaAfterThanks})`);
-  check(party.human.inventory.countOf('anchor_shard_hilda') === 1, 'and it is in the bag');
+  const loriAfterThanks = stepOf(progress, 'lori');
+  check(loriAfterThanks === 'done', `the shard is handed over (lori: ${loriAfterThanks})`);
+  check(party.human.inventory.countOf('anchor_shard_lori') === 1, 'and it is in the bag');
 
-  section('Old Hilda: Escape is the way out, and it agrees to nothing');
+  section('Old Lori: Escape is the way out, and it agrees to nothing');
   const fresh = activeProgress();
-  const escRoom = makeRoom(HILDA_COTTAGE_NAME, fresh, party, conversation);
+  const escRoom = makeRoom(LORI_COTTAGE_NAME, fresh, party, conversation);
   if (escRoom === null) return;
-  escRoom.tryOpenDialog('old_hilda', party.human);
+  escRoom.tryOpenDialog('old_lori', party.human);
   frame(rig);
   check(escRoom.dismissDialog(), 'Escape reaches her conversation');
   check(!conversation.isOpen, 'and closes it');
-  check(fresh.hilda === 'offered', `without taking the job (hilda: ${fresh.hilda})`);
+  check(fresh.lori === 'offered', `without taking the job (lori: ${fresh.lori})`);
 }
 
 function verifyAviel(): void {
@@ -1029,7 +1029,7 @@ verifyRewardCardOwnsSpace();
 verifyVossOffer();
 verifyVossAssembly();
 verifyRestingPointerDoesNotPay();
-verifyHilda();
+verifyLori();
 verifyAviel();
 verifyDefaultResolution();
 verifyTopicMenu();

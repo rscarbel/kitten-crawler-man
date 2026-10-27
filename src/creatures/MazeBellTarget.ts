@@ -1,7 +1,7 @@
 import { MazePropTarget } from './MazePropTarget';
 import type { Player } from '../Player';
-import { BELL_COOLDOWN_FRAMES, BELL_HOLD_FRAMES } from '../map/bigTopMazeLayout';
-import { drawFeedingBell } from '../sprites/art/bigTop/menagerieProps';
+import { BELL_COOLDOWN_FRAMES, BELL_HOLD_FRAMES } from '../map/starlightTentMazeLayout';
+import { drawFeedingBell } from '../sprites/art/starlightTent/menagerieProps';
 
 /**
  * A brass show-bell on its stand.

@@ -149,13 +149,13 @@ const CURVES: ReadonlyArray<readonly [string, LevelledCurve]> = [
   ['shared', SHARED_LEVELLED_CURVE],
   ['learning', LEARNING_FLOOR_LEVELLED_CURVE],
 ];
-/** Every boss whose HP phases carry a heal ceiling, by spawn key. */
+/** Every mob whose HP phases carry a heal ceiling, by spawn key. */
 const PHASED_BOSS_KEYS = [
   'trash_gremlin',
   'big_rooster',
   'krakaren_clone',
   'ball_of_swine',
-  'terror_the_clown',
+  'massive_clown',
   'the_lich',
 ] as const;
 /** Frames the probe healer lets pass between its cast releasing and its heal landing. */

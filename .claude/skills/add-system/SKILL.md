@@ -16,7 +16,7 @@ A boss room's props, slow ground, hazards and interactables are not a new top-le
 ## Reference examples
 
 - `DynamiteSystem` — `constructor(private readonly gameMap: GameMap)`, `update(ctx)`, `render(...)`, exposes an `explosionSoundPending` flag the scene drains.
-- `TreasureChestSystem` — no ctor deps; imperative API (`addWoodenChest`) plus callback setters (`onChestOpened`).
+- `TreasureChestSystem` — no ctor deps; imperative API (`addWoodenChest`, `addBandChest`, `addOpenedChest`) plus callback setters (`setOnOpen`), opened through a `ChestKit` (see "Chests and ways out").
 - `StairwellSystem` — `constructor(gameMap, levelDef, onDescend)`; `update(ctx)`, world render methods, and the state its prompt reads (`menuOpen`, `descentPrompt()`, `descend()`, `closeMenu()`); the prompt itself is a `choiceModalSurface` in `src/ui/screens/dialogs/stairwellPrompt.ts`.
 
 ## Checklist
@@ -159,6 +159,32 @@ the worked example: a table says which room holds what, the scene adds them
 through the roster that room already has, and `TownMemory.clearedRooms` remembers
 that the room was cleared — without which a regenerated interior restocks its
 guards every time the door opens, turning a fight into a farm.
+
+### Chests and ways out
+
+Every scene that has chests owns one `ChestKit` (`src/systems/kits/ChestKit.ts`) and
+`bind`s each of its maps' `TreasureChestSystem`s to it, so a press, the lid heave, the
+reward card and the fly-to-HUD are the same everywhere. `DungeonScene` and
+`BuildingInteriorScene` both do; never copy that wiring into a third place. A scene
+with a reward of its own (the tutorial's first chest) passes `ChestKitDeps.reward`.
+
+Indoors, a quest fight comes to life through `BuildingInteriorScene.startEncounter(floor,
+make)`, whose `make` gets the floor's `addMob` and its `InteriorEncounterFixtures`:
+
+- `chests`, a `ChestPlacer` (`chestPlacer`): `heldByBand(tile, loot)` places a chest locked
+  from the start, `postChestBand(chest, mobs)` posts the band that holds it once they
+  are called out, and it unlocks when the last of them is dead; `opened(tile, type)` is a
+  chest a previous visit emptied. Both block the chest's tile.
+- `exits`, the floor's `InteriorExitFixtureSystem` (`src/systems/interiorExitFixtures.ts`):
+  a way out that is a thing in the room (a ladder, a trapdoor, a window). A kind is one
+  entry in `INTERIOR_EXIT_FIXTURES` (prompt, `departure` immediate or a fade, sound);
+  `place({ id, at })` stands one in the room, and using it asks the door mat's leave
+  question and runs the scene's own exit, so the party comes out at the building's door.
+  A new kind is a data entry, not scene code.
+
+`StarlightTentFinale` (`src/systems/starlightTent/`) is the worked example: a clown band
+called out on first entry to the centre ring, the chest they hold, and the `rope_ladder`
+exit. Its gate is `npm run verify:starlight-tent`.
 
 ## 8. Verify
 

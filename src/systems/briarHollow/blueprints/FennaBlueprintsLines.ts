@@ -31,7 +31,7 @@ import {
   fennaInProgressPages,
   fennaOfferPages,
   fennaShowBlueprintsPages,
-  skyfowlTownWhereabouts,
+  taloncrestWhereabouts,
 } from './blueprintsDialog';
 import { isHeld, type BlueprintsItemHolder } from './blueprintsProgress';
 import { stationUpgradeCost } from './StationUpgrades';
@@ -175,10 +175,10 @@ export class FennaBlueprintsLines {
     return flow.answer(fennaDeclinedPages());
   }
 
-  /** Which way the skyfowl town lies from the village, as Fenna says it. */
+  /** Which way Taloncrest lies from the village, as Fenna says it. */
   private townWhereabouts(): string {
     const villageCentre = this.ctx.gameMap.briarHollow?.centre ?? null;
     const townCentre = this.ctx.gameMap.townPlan?.centre ?? null;
-    return skyfowlTownWhereabouts(villageCentre, townCentre);
+    return taloncrestWhereabouts(villageCentre, townCentre);
   }
 }

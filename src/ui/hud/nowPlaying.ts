@@ -146,7 +146,7 @@ export function postMusicUnlockToast(toasts: HudToasts, id: MusicTrackId): void 
   });
 }
 
-/** The one toast that stands in for every song an old save's progress unlocked at once. */
+/** The one toast that stands in for every song a dev boot's starting progress unlocked at once. */
 export function postMusicBackfillToast(toasts: HudToasts, count: number): void {
   const songs = count === 1 ? 'song' : 'songs';
   toasts.post(`Music Library: ${count} ${songs} unlocked from your progress`, {

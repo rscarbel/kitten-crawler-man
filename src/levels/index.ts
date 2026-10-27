@@ -18,6 +18,11 @@ export function getLevelDef(id: string): LevelDef {
   return def;
 }
 
+/** Whether `id` names a registered level. */
+export function isLevelId(id: string): boolean {
+  return registry.has(id);
+}
+
 /** Every registered level, in the order a run reaches them. */
 export function allLevelDefs(): LevelDef[] {
   return [...registry.values()];

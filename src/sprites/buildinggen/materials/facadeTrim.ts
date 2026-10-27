@@ -124,7 +124,7 @@ export function paintPilasters(options: PilasterPaintOptions): void {
     const centre = (plane.width * pier) / (count - 1);
     const left = Math.min(plane.width - width, Math.max(0, centre - width / 2));
     // Doubled like every other per-element tone in the kit. Without it the piers
-    // spanned half the range the bands beside them do, and the Desperado's six
+    // spanned half the range the bands beside them do, and the Cloak & Dagger's six
     // came out with three of them pixel-identical.
     const tone =
       0.5 + (elementValue(options.seed, STREAM_PILASTER, pier) - 0.5) * 2 * ELEMENT_TONE_JITTER;

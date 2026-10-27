@@ -2708,7 +2708,7 @@ section('the Wheel of Fortune warnings and SPIN, on a desktop and on phones');
         return Promise.resolve('disabled');
       },
       progressWipe: null,
-      afterNothing: () => undefined,
+      afterPermanentDeath: () => undefined,
       grantAttackCow: () => undefined,
       clock: () => now,
       // A drawn Nothing would make its round-trip the wipe, not a save; this checks the save.
@@ -2906,11 +2906,12 @@ section('the slot machine: SPIN spins, a tap mid-celebration skips, Leave and Es
   const idle = machine('idle');
   const spinAt = regionCentre(idle.h, 'spin');
   check(spinAt !== null, 'the machine draws a SPIN control');
-  const wageredBefore = idle.staged.host.coinsWageredThisVisit;
+  const purseBefore = idle.staged.human.coins + idle.staged.cat.coins;
   if (spinAt !== null) idle.h.tap(spinAt);
   idle.h.frame();
   check(
-    idle.staged.host.coinsWageredThisVisit > wageredBefore && idle.staged.host.motion.reelsMoving,
+    idle.staged.human.coins + idle.staged.cat.coins < purseBefore &&
+      idle.staged.host.motion.reelsMoving,
     'a tap on SPIN takes the bet and starts the reels',
   );
   check(

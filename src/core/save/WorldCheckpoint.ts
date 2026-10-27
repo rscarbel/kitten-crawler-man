@@ -7,7 +7,6 @@ import type { BopcaCheckpoint } from '../../systems/BopcaSystem';
 import type { BossRoomCheckpoint } from '../../systems/BossRoomSystem';
 import type { BossRoomDressingCheckpoint } from '../../systems/bossRooms/bossRoomDressingCheckpoint';
 import type { BountyCheckpoint } from '../../systems/BountySystem';
-import type { CircusQuestCheckpoint } from '../../systems/CircusQuestSystem';
 import type { DefendQuestCheckpoint } from '../../systems/DefendQuestSystem';
 import type { CloggedBathroomCheckpoint } from '../../systems/cloggedBathroom/cloggedBathroomCheckpoint';
 import type { StealthKeySnatchCheckpoint } from '../../systems/stealthKeySnatch/stealthKeySnatchCheckpoint';
@@ -25,9 +24,9 @@ import type { TreasureChestCheckpoint } from '../../systems/TreasureChestSystem'
 import type { TreeCheckpoint } from '../../systems/TreeSystem';
 import type { ShopStockSnapshot } from '../../economy/shopStock';
 import type { BountyProgressCheckpoint } from '../quests/BountyProgress';
-import type { CircusQuestProgressCheckpoint } from '../quests/CircusQuestProgress';
+import type { StarlightTentProgressCheckpoint } from '../state/StarlightTentProgress';
 import type { AnchorQuestProgressCheckpoint } from '../quests/AnchorQuestProgress';
-import type { ClubMembershipCheckpoint } from '../club/ClubMembership';
+import type { CasinoStateCheckpoint } from '../club/CasinoState';
 import type { TownMemoryCheckpoint } from '../state/TownMemory';
 import type { GameStatsSnapshot } from '../progression/GameStats';
 import type { MercenaryRosterCheckpoint } from '../party/MercenaryRoster';
@@ -78,7 +77,6 @@ export interface WorldCheckpoint {
   /** Where the stealth gate's key quest stands; the gate itself is in `gameMap`. */
   stealthKeySnatch: StealthKeySnatchCheckpoint;
   spiderQuest: SpiderQuestCheckpoint;
-  circusQuest: CircusQuestCheckpoint;
   murderQuest: MurderMysteryQuestCheckpoint;
   doomsdayEscape: DoomsdayEscapeCheckpoint;
 
@@ -92,12 +90,12 @@ export interface WorldCheckpoint {
    * them is what stops a death refunding the coins for a purchase while leaving
    * the goods bought.
    */
-  circusQuestProgress: CircusQuestProgressCheckpoint;
+  starlightTentProgress: StarlightTentProgressCheckpoint;
   anchorQuestProgress: AnchorQuestProgressCheckpoint;
   murderQuestProgress: MurderQuestProgressCheckpoint;
   journal: JournalProgressCheckpoint;
   bountyProgress: BountyProgressCheckpoint;
-  clubMembership: ClubMembershipCheckpoint;
+  casinoState: CasinoStateCheckpoint;
   shopStock: ShopStockSnapshot;
   townMemory: TownMemoryCheckpoint;
   mercenaryRoster: MercenaryRosterCheckpoint;
@@ -109,9 +107,9 @@ export interface WorldCheckpoint {
 
   /**
    * One-time kill latches the scene owns directly rather than through a system.
-   * `krakarenKilled` records the Krakaren Clone's defeat, which the music
-   * library reads, and `bigRoosterKilled` keeps the Desperado Pass tattoo
-   * from being collectable twice.
+   * `krakarenKilled` and `bigRoosterKilled` record each boss's defeat, which
+   * the music library reads; Big Rooster's also gates the Pecking Order
+   * achievement.
    */
   krakarenKilled: boolean;
   bigRoosterKilled: boolean;

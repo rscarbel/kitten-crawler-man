@@ -39,12 +39,12 @@
  *    their gallery names, e.g. `gallery dialogs/poker-bust`);
  *  - `town <surface id>` in `the town (DungeonScene)`, e.g. `town pause`;
  *  - `<room> <surface id>` in `<room> (BuildingInteriorScene)`, the rooms
- *    being General Store, Herb & Remedy, Old Hilda's Cottage, tower and
- *    Desperado Club, e.g. `Desperado Club poker-table`;
+ *    being General Store, Herb & Remedy, Old Lori's Cottage, tower and
+ *    Cloak & Dagger, e.g. `Cloak & Dagger poker-table`;
  *  - `title with a save` and `title without a save` in `the title screen`.
  *
  * So `--only=shop` takes every shop fixture and every scene's shop surfaces,
- * `--only=gallery` the whole gallery, `--only=Desperado` the club. A selected
+ * `--only=gallery` the whole gallery, `--only=Cloak` the club. A selected
  * scene case is replayed on the phones too (`close buttons on phones, in the
  * scenes`). A filtered run skips the whole-run coverage checks (every surface
  * opened, every phone-only surface reached), which only a full run can make.
@@ -53,6 +53,7 @@
  * a section with a failure prints its cases whatever the flag.
  */
 
+import { exitFixtureOnTile } from '../src/systems/interiorExitFixtures';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import type { Surface } from '../src/ui/core/UiRoot.js';
@@ -60,11 +61,13 @@ import type { FocusClaimant } from './menuFocusAudit.js';
 import type { UiSize } from '../src/core/input/Settings.js';
 import type { SafeAreaInsets, ViewportInput } from '../src/ui/core/viewport.js';
 import type { MenusKit } from '../src/systems/kits/MenusKit.js';
+import type { ChestKit } from '../src/systems/kits/ChestKit.js';
 import type { AIShowStage } from '../src/ai/show/AIShowStage.js';
 import type { AIChallengeSystem } from '../src/systems/AIChallengeSystem.js';
 import type { AchievementUISystem } from '../src/systems/AchievementUISystem.js';
 import type { AchievementManager } from '../src/core/progression/AchievementManager.js';
 import { SPIDER_QUEST_NAME } from '../src/systems/SpiderQuestSystem';
+import type { ResidentId } from '../src/systems/townResidents.js';
 
 export {};
 
@@ -348,7 +351,7 @@ const PHONE_REQUIRED_SURFACES = [
   'priced-menu',
   'club-bar-shop',
   'club-market-shop',
-  'club-guild',
+  'mercenary-desk',
   'follower-menu',
   'chest-reward',
   'quest-reward',
@@ -1011,6 +1014,9 @@ function auditScene<S extends SceneUnderAudit>(
       opener.close(scene);
       continue;
     }
+    // Counted before settling as well as after: a surface that runs its course
+    // and closes on its own, a fade, was still opened and audited open.
+    for (const id of scene.ui.openSurfaceIds()) opened.add(id);
     settle(scene, opener.surfaceId);
     for (const id of scene.ui.openSurfaceIds()) opened.add(id);
     const settledNote = scene.ui.isOpen(opener.surfaceId) ? '' : ' [closed itself while settling]';
@@ -1335,27 +1341,7 @@ function townOpeners(): Opener<Town>[] {
       (scene) => void scene['conversation'].open(haltingRequest()),
       (scene) => scene['conversation'].close(),
     ),
-    menu(
-      'chest-reward',
-      (scene) =>
-        scene['chestRewardDialog'].open(
-          {
-            tileX: 0,
-            tileY: 0,
-            type: 'wooden',
-            state: 'opened',
-            loot: null,
-            unlockFrame: 0,
-            sparkleFrame: 0,
-            tryLockedTimer: 0,
-            guardBounds: null,
-            bossRoomIndex: null,
-            hadMobs: false,
-          },
-          null,
-        ),
-      (scene) => scene['chestRewardDialog'].discard(),
-    ),
+    chestRewardOpener<Town>((scene) => scene['chestKit']),
     menu(
       'quest-switch-confirm',
       (scene) => scene['questSwitchConfirm'].open(SAMPLE_CONFIRM),
@@ -1374,7 +1360,7 @@ function townOpeners(): Opener<Town>[] {
     ),
     menu(
       'level-complete',
-      (scene) => scene['levelCompleteScreen'].activate('The Over City', null, noop),
+      (scene) => scene['levelCompleteScreen'].activate('Taloncrest', null, noop),
       (scene) => {
         scene['levelCompleteScreen']['active'] = false;
       },
@@ -1736,10 +1722,47 @@ function building(label: string, predicate: (entry: Entry) => boolean): Entry {
   return entry;
 }
 
+/** The chest card, shown for an emptied chest the way an opened one shows it. */
+function chestRewardOpener<S>(kitOf: (scene: S) => ChestKit): Opener<S> {
+  return opener<S>(
+    'chest-reward',
+    (scene) =>
+      kitOf(scene)['dialog'].open(
+        {
+          tileX: 0,
+          tileY: 0,
+          type: 'wooden',
+          state: 'opened',
+          loot: null,
+          unlockFrame: 0,
+          sparkleFrame: 0,
+          tryLockedTimer: 0,
+          guard: null,
+          bossRoomIndex: null,
+          hadMobs: false,
+        },
+        null,
+      ),
+    (scene) => kitOf(scene).discard(),
+  );
+}
+
+/** Opens the service the resident keeps in this room, found as the talk router finds it. */
+function openResidentService(scene: Interior, residentId: ResidentId): void {
+  const occupants = scene['occupants'];
+  const keeper = occupants?.people.find((person) => person.residentId === residentId);
+  const service = keeper === undefined ? undefined : occupants?.serviceOf(keeper);
+  if (keeper === undefined || service === undefined) {
+    throw new Error(`${residentId} keeps no service in this room`);
+  }
+  scene['openService'](keeper, 0, null, service);
+}
+
 /** What every room can raise, whatever the building. */
 function roomOpeners(): Opener<Interior>[] {
   const menu = opener<Interior>;
   return [
+    chestRewardOpener<Interior>((scene) => scene['chestKit']),
     ...menusKitOpeners<Interior>((scene) => scene['menus']),
     rewardChestOpener<Interior>(
       (scene) => scene['achievementUI'],
@@ -1861,19 +1884,55 @@ function interiorCases(): InteriorCase[] {
       openers: [
         menu(
           'priced-menu',
-          (scene) => scene['openService'](0, null, 'merchant'),
+          (scene) => openResidentService(scene, 'apothecary_fen'),
           (scene) => scene['servicePanel']?.close(),
+        ),
+        // Last in its room: the fade cannot be called back, and it ends in the
+        // room's exit, after which nothing else here is opened.
+        menu(
+          'exit-fixture-fade',
+          (scene) => {
+            const active = scene.pm.active();
+            const exits = scene['exitFixtures'];
+            exits.place(
+              exitFixtureOnTile('rope_ladder', {
+                x: Math.round(active.x / TILE_SIZE),
+                y: Math.round(active.y / TILE_SIZE),
+              }),
+            );
+            exits.tryInteract(active);
+            // The ladder asks the door mat's question first; Exit is the climb.
+            scene['leaveByExitMenu']();
+            exits.update();
+          },
+          noop,
         ),
       ],
     },
     {
-      label: "Old Hilda's Cottage",
-      entry: building("Old Hilda's Cottage", (entry) => entry.name === "Old Hilda's Cottage"),
+      label: "Old Lori's Cottage",
+      entry: building("Old Lori's Cottage", (entry) => entry.name === "Old Lori's Cottage"),
       openers: [
         menu(
           'fortune-teller',
-          (scene) => scene['openService'](0, null, 'priest'),
+          (scene) => openResidentService(scene, 'old_lori'),
           (scene) => scene['readingPanel']?.close(),
+        ),
+      ],
+    },
+    {
+      label: 'The Barracks',
+      entry: building('The Barracks', (entry) => entry.name === 'The Barracks'),
+      openers: [
+        menu(
+          'mercenary-desk',
+          (scene) => scene['openDesk']('mercenary_guild'),
+          (scene) => scene['mercenaryDesk']?.close(),
+        ),
+        menu(
+          'mercenary-desk-dismiss',
+          (scene) => scene['mercenaryDesk']?.dismissConfirm.open(SAMPLE_CONFIRM),
+          (scene) => scene['mercenaryDesk']?.dismissConfirm.close(),
         ),
       ],
     },
@@ -1895,21 +1954,8 @@ function interiorCases(): InteriorCase[] {
       label: CLUB_LABEL,
       entry: building(CLUB_LABEL, (entry) => entry.type === 'club'),
       openers: [
-        menu('club', (scene) => club(scene)['openGreeting'](scene.pm.active()), closeClub),
         menu('club-bar-shop', (scene) => club(scene)['barShop'].open(), closeClub),
         menu('club-market-shop', (scene) => club(scene)['marketShop'].open(), closeClub),
-        menu(
-          'club-vip',
-          (scene) =>
-            club(scene)['vip'].openPanel(club(scene).coinsWageredThisVisit, scene.pm.active()),
-          closeClub,
-        ),
-        menu('club-guild', (scene) => club(scene)['guild'].openPanel(), closeClub),
-        menu(
-          'club-guild-dismiss',
-          (scene) => club(scene)['guild'].dismissConfirm.open(SAMPLE_CONFIRM),
-          (scene) => club(scene)['guild'].dismissConfirm.close(),
-        ),
         menu(
           'blackjack-rules',
           (scene) => club(scene)['casino'].openTable(scene.pm.active(), scene.pm.inactive()),
@@ -1998,10 +2044,10 @@ function interiorCases(): InteriorCase[] {
           },
           closeWheel,
         ),
-        // Never the real wipe: the review landing plays the Nothing with storage left alone.
+        // Never the real wipe: the review landing plays Permanent Death with storage left alone.
         menu(
-          'wheel-nothing',
-          (scene) => wheelOf(scene).openNothingForReview(casinoSeat(scene)),
+          'wheel-permanent-death',
+          (scene) => wheelOf(scene).openPermanentDeathForReview(casinoSeat(scene)),
           closeWheel,
         ),
       ],
@@ -2009,7 +2055,7 @@ function interiorCases(): InteriorCase[] {
   ];
 }
 
-const CLUB_LABEL = 'Desperado Club';
+const CLUB_LABEL = 'Cloak & Dagger';
 const auditsRooms = scenePass.shard === 'rooms';
 const cases = interiorCases();
 for (const { label, entry, openers } of cases) {

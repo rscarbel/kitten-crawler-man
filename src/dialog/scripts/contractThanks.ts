@@ -1,14 +1,14 @@
 /**
  * What each construction contract's contact says when the party comes to
  * collect: two thanks lines per contact, in their own voice, each closing on
- * the amount paid. Skyfowl Town residents speak as their interior resident
+ * the amount paid. Taloncrest residents speak as their interior resident
  * does, a runtime name in their citizen voice; Briar Hollow villagers speak as
  * their own cast entry.
  */
 
 import type {
   ContractContactId,
-  SkyfowlContractContactId,
+  TaloncrestContractContactId,
   VillageContractContactId,
 } from '../../systems/constructionContracts/contractCatalog';
 import { residentById } from '../../systems/townResidents';
@@ -44,7 +44,7 @@ const CONTRACT_THANKS = {
     ({ coins }) =>
       `Stove draws, wall stands, floor does not give under a boot. I will put that in a report nobody reads. You get ${coins}, which is better.`,
   ],
-  brann_cartwright: [
+  steve_cartwright: [
     ({ coins }) =>
       `Slow work, honest work, and you did both. Shop has not stood this square since I was an apprentice. Here is ${coins}, paid on the day.`,
     ({ coins }) =>
@@ -86,7 +86,7 @@ const CONTRACT_THANKS = {
     ({ coins }) =>
       `Nobody in here is anybody, but they'll all drink at a bar that doesn't wobble. You built that. ${coins}, cash, no questions.`,
   ],
-  old_hilda: [
+  old_lori: [
     ({ coins }) =>
       `The hearth draws and the jars have stopped complaining, dearie. That is a rare thing in this cottage. Here are your ${coins}.`,
     ({ coins }) =>
@@ -189,11 +189,11 @@ const CONTRACT_THANKS = {
   ],
 } as const satisfies Record<ContractContactId, ThanksPool>;
 
-/** Who is speaking the thanks, and for a Skyfowl Town resident, the voice they speak in. */
+/** Who is speaking the thanks, and for a Taloncrest resident, the voice they speak in. */
 export type ContractThanksSpeaker =
   | {
-      readonly town: 'skyfowl';
-      readonly contact: SkyfowlContractContactId;
+      readonly town: 'taloncrest';
+      readonly contact: TaloncrestContractContactId;
       readonly speechStyle: CitizenSpeechStyle;
     }
   | { readonly town: 'briar_hollow'; readonly contact: VillageContractContactId };
@@ -207,7 +207,7 @@ export interface ContractThanksOptions {
 }
 
 function thanksSpeaker(speaker: ContractThanksSpeaker): LineBuilder {
-  return speaker.town === 'skyfowl'
+  return speaker.town === 'taloncrest'
     ? transientSpeaker(residentById(speaker.contact).name, speaker.speechStyle)
     : speakerLines(speaker.contact);
 }

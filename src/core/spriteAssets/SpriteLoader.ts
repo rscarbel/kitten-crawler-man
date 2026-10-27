@@ -13,7 +13,7 @@ import environmentBossKrakarenManifest from '../../images/environment/boss_kraka
 import environmentTrashGremlinManifest from '../../images/environment/trash_gremlin/manifest.json';
 import environmentGymManifest from '../../images/environment/gym/manifest.json';
 import environmentSpiderLabManifest from '../../images/environment/spider_lab/manifest.json';
-import environmentOverCityManifest from '../../images/environment/towns/over_city/manifest.json';
+import environmentTaloncrestManifest from '../../images/environment/towns/taloncrest/manifest.json';
 import interfacesManifest from '../../images/interfaces/manifest.json';
 import environmentColosseumManifest from '../../images/environment/colosseum/manifest.json';
 import environmentServiceLevelManifest from '../../images/environment/service_level/manifest.json';
@@ -38,7 +38,7 @@ const environmentManifest = {
   // that is what `getMapSpriteExtentsPx` widens the map's cull margin by, and a
   // street lamp reaches four tiles above its own tile.
   ...environmentTownscapeManifest,
-  ...environmentOverCityManifest,
+  ...environmentTaloncrestManifest,
   // The forest. Its own directory because `writeSheets` replaces a directory's
   // whole manifest, so a generator must not share one with anything it does
   // not write.

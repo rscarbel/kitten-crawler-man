@@ -24,7 +24,7 @@ import { loadGameSpritesInNode } from './nodeCanvasGlobals.js';
 import { bakePropSheet } from './propSheetBake.js';
 import type { PropSheetPlan } from '../src/sprites/sheets/propSheetPlan.js';
 import { townscapeSheetPlans } from '../src/sprites/sheets/townscapeSheets.js';
-import { overCitySheetPlans } from '../src/sprites/sheets/overCitySheets.js';
+import { taloncrestSheetPlans } from '../src/sprites/sheets/taloncrestSheets.js';
 import { treeSheetPlans } from '../src/sprites/sheets/treeSheets.js';
 import { rockSheetPlans } from '../src/sprites/sheets/rockSheets.js';
 import { campSheetPlans } from '../src/sprites/sheets/campSheets.js';
@@ -69,7 +69,7 @@ const PARITY_BUDGETS: Readonly<Record<string, ParityBudget>> = {
 
 const FAMILIES: Readonly<Record<string, () => PropSheetPlan[]>> = {
   townscape: townscapeSheetPlans,
-  over_city: overCitySheetPlans,
+  taloncrest: taloncrestSheetPlans,
   trees: () => treeSheetPlans(UNVARIED),
   rocks: () => rockSheetPlans(UNVARIED),
   camps: () => campSheetPlans(UNVARIED),

@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * Review harness for the 16 named residents' own figures. Each is a fixed
- * look on its species' cast (`townCastLooks.ts` / `skyfowl/cast.ts`), never
+ * look on its species' cast (`townCastLooks.ts` / `hawkfolk/cast.ts`), never
  * the street crowd's random pick — this harness is what proves that at a
  * glance, both enlarged and at true 32px beside a handful of street looks.
  *
@@ -21,12 +21,12 @@ import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { bakeFigureCell } from './figureSheet.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import { allResidents, type ResidentDef } from '../src/systems/townResidents.js';
-import { residentFigure } from '../src/creatures/residentFigures.js';
+import { residentFigure, residentWearsCastLook } from '../src/creatures/residentFigures.js';
 import type { CitizenFigure } from '../src/creatures/citizenFigure.js';
 import { townCastOutfitFigure, townCastStateName } from '../src/sprites/art/townCastFigure.js';
-import { castStateName, skyfowlCastFigure } from '../src/sprites/art/skyfowlCastFigure.js';
+import { castStateName, hawkfolkCastFigure } from '../src/sprites/art/hawkfolkCastFigure.js';
 import { TOWN_CAST_LOOKS } from '../src/sprites/person/townCastLooks.js';
-import { SKYFOWL_CIVILIAN_LOOKS } from '../src/sprites/art/skyfowl/cast.js';
+import { HAWKFOLK_CIVILIAN_LOOKS } from '../src/sprites/art/hawkfolk/cast.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 import { mulberry32, rangeInt } from '../src/sprites/person/rng.js';
 
@@ -47,9 +47,9 @@ const COLUMNS = 8;
 const CARD_HEIGHT_SHARE = 1.4;
 /** The card's own vertical padding budget: above the large cell, between it and the ground strip, and below the label. */
 const CARD_VERTICAL_PADDING_COUNT = 3;
-/** A handful of street looks — one civilian each of human and skyfowl, plus a second of each — for the "distinct from the crowd" comparison row. */
+/** A handful of street looks — one civilian each of human and Hawkfolk, plus a second of each — for the "distinct from the crowd" comparison row. */
 const STREET_COMPARISON_HUMAN_IDS: readonly string[] = ['adult_commoner', 'adult_merchant'];
-const STREET_COMPARISON_SKYFOWL_IDS: readonly string[] = [
+const STREET_COMPARISON_HAWKFOLK_IDS: readonly string[] = [
   'porter_sparrowfleck_standard',
   'merchant_hawkbrown_standard',
 ];
@@ -67,8 +67,8 @@ interface Card {
 }
 
 function figureAndStateFor(figure: CitizenFigure): { def: FigureDef; state: string } {
-  if (figure.species === 'skyfowl') {
-    return { def: skyfowlCastFigure(figure.look.id), state: castStateName('idle', 'down') };
+  if (figure.species === 'hawkfolk') {
+    return { def: hawkfolkCastFigure(figure.look.id), state: castStateName('idle', 'down') };
   }
   return { def: townCastOutfitFigure(figure.look), state: townCastStateName('idle', 'down') };
 }
@@ -84,9 +84,9 @@ function cardFor(name: string, figure: CitizenFigure, isStreet: boolean): Card {
 }
 
 function residentCards(): Card[] {
-  return allResidents().map((resident: ResidentDef) =>
-    cardFor(resident.name, residentFigure(resident.id), false),
-  );
+  return allResidents()
+    .filter((resident: ResidentDef) => residentWearsCastLook(resident.id))
+    .map((resident: ResidentDef) => cardFor(resident.name, residentFigure(resident.id), false));
 }
 
 function streetComparisonCards(): Card[] {
@@ -97,11 +97,11 @@ function streetComparisonCards(): Card[] {
     if (look === undefined) throw new Error(`no human cast look "${id}"`);
     cards.push(cardFor(`(street) ${id}`, { species: 'human', look }, true));
   }
-  const skyfowlLookById = new Map(SKYFOWL_CIVILIAN_LOOKS.map((look) => [look.id, look]));
-  for (const id of STREET_COMPARISON_SKYFOWL_IDS) {
-    const look = skyfowlLookById.get(id);
-    if (look === undefined) throw new Error(`no skyfowl cast look "${id}"`);
-    cards.push(cardFor(`(street) ${id}`, { species: 'skyfowl', look }, true));
+  const hawkfolkLookById = new Map(HAWKFOLK_CIVILIAN_LOOKS.map((look) => [look.id, look]));
+  for (const id of STREET_COMPARISON_HAWKFOLK_IDS) {
+    const look = hawkfolkLookById.get(id);
+    if (look === undefined) throw new Error(`no Hawkfolk cast look "${id}"`);
+    cards.push(cardFor(`(street) ${id}`, { species: 'hawkfolk', look }, true));
   }
   return cards;
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Headless review harness for the Over City's generated building exteriors.
+ * Headless review harness for Taloncrest's generated building exteriors.
  *
  * The game paints these facades for itself and the review bake writes the eye's
  * copy of each sheet; this writes a picture of the whole family and loads

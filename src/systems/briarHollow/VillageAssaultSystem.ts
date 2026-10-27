@@ -60,7 +60,7 @@ import type { Player } from '../../Player';
 import { RaisedRatkin } from '../../creatures/RaisedRatkin';
 import { RisingSkeleton } from '../../creatures/RisingSkeleton';
 import { Necromancer } from '../../creatures/Necromancer';
-import { SkyFowl } from '../../creatures/SkyFowl';
+import { Hawkfolk } from '../../creatures/Hawkfolk';
 import type { Fairy } from '../../creatures/fairies/Fairy';
 import { BOUNTY_MAX_BLOW_HP_SHARE } from '../../creatures/mobLevelScaling';
 import { planEncounterRoster, spawnMob, type SpawnContext } from '../../levels/spawnFunnel';
@@ -529,7 +529,7 @@ function createSpawn(
 ): Mob {
   const mob = spawnMob(kind, { x: tileX, y: tileY }, map, assaultSpawnContext(random));
   // A town bird is calm until struck; one the necromancer drives is not.
-  if (mob instanceof SkyFowl) mob.provoke();
+  if (mob instanceof Hawkfolk) mob.provoke();
   return mob;
 }
 

@@ -41,8 +41,8 @@
     },
     "textureRichness": 28.259581744608777
   },
-  "desperado_club": {
-    "path": "environment/buildings/desperado_club.png",
+  "cloak_and_dagger": {
+    "path": "environment/buildings/cloak_and_dagger.png",
     "frameWidth": 500,
     "frameHeight": 437,
     "tileX": 0,

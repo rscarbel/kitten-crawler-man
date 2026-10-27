@@ -1,7 +1,7 @@
 /**
  * The slot machine's cabinet as art: the red lacquer body with its gold
  * pin-striping, the polished chrome frame, the lit marquee with the
- * DESPERADO sign, the bezel round the reel glass, the control deck and the
+ * CLOAK & DAGGER sign, the bezel round the reel glass, the control deck and the
  * pull lever. Everything here is still; the view bakes it once per size and
  * paints the moving parts (bulbs, reels, digits, buttons) over it.
  */
@@ -58,7 +58,7 @@ const MARQUEE = {
   bulbBandOfHeight: 0.2,
   bulbBandOfWidth: 0.05,
   titleOfHeight: 0.46,
-  titleOfWidth: 0.13,
+  titleOfWidth: 0.085,
   subtitleOfHeight: 0.16,
   subtitleOfWidth: 0.045,
   /** The title's centre, as a share of the face left between the bulb bands. */
@@ -225,7 +225,7 @@ function paintMarquee(ctx: CanvasRenderingContext2D, r: Rect): void {
   const titleSize = Math.min(r.h * MARQUEE.titleOfHeight, r.w * MARQUEE.titleOfWidth);
   const subtitleSize = Math.min(r.h * MARQUEE.subtitleOfHeight, r.w * MARQUEE.subtitleOfWidth);
   const titleY = r.y + bulbBand + (r.h - bulbBand * 2) * MARQUEE.titleAt;
-  worldText(ctx, 'DESPERADO', {
+  worldText(ctx, 'CLOAK & DAGGER', {
     x: cx,
     y: titleY,
     size: titleSize,

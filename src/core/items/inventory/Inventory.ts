@@ -1,7 +1,7 @@
 import { ItemBag } from './ItemBag';
 import { Hotbar } from './Hotbar';
 import { EquipmentManager, type StatBonuses } from '../equipment/EquipmentManager';
-import { HOTBAR_COUNT, QUEST_SLOT_IDX, ITEM_DEF, isItemId, itemCanHotlist } from '../defs/ItemDefs';
+import { HOTBAR_COUNT, QUEST_SLOT_IDX, ITEM_DEF, itemCanHotlist } from '../defs/ItemDefs';
 import type { InventoryItem, ItemId } from '../defs/ItemDefs';
 import type { CrawlerKind } from '../../skills/SkillManager';
 import { sortStacks, type BagSortMode, type PlacedStack } from './bagSort';
@@ -31,11 +31,9 @@ export class Inventory {
   }
 
   /** Replace `unseenUpgrades` from a snapshot, dropping any id retired since it was written. */
-  restoreUnseenUpgrades(ids: ReadonlyArray<string>): void {
+  restoreUnseenUpgrades(ids: ReadonlyArray<ItemId>): void {
     this.unseenUpgrades.clear();
-    for (const id of ids) {
-      if (isItemId(id)) this.unseenUpgrades.add(id);
-    }
+    for (const id of ids) this.unseenUpgrades.add(id);
   }
 
   // ── Item storage (delegates to bag + actionBar) ──
@@ -132,38 +130,6 @@ export class Inventory {
       this.swapInvToHotbar(bagIdx, hotbarIdx);
     }
     return this.actionBar.slots[hotbarIdx]?.id === id;
-  }
-
-  /**
-   * Fold every duplicate stack of a stackable item into the first slot holding
-   * it, so an id occupies exactly one slot across the hotbar and the bag.
-   *
-   * Saves written before stacks were kept unique still carry split stacks, and
-   * the player has no manual way to rejoin them, so a restore has to repair
-   * them on the way in.
-   */
-  consolidateStacks(): void {
-    const firstHome = new Map<ItemId, { slots: (InventoryItem | null)[]; index: number }>();
-    for (const slots of [this.actionBar.slots, this.bag.slots]) {
-      for (let i = 0; i < slots.length; i++) {
-        const item = slots[i];
-        if (!item || !ITEM_DEF[item.id].stackable) continue;
-        // Quest items are stackable but live in the reserved slot that
-        // replaceQuestSlot owns; folding them by position could empty it.
-        if (ITEM_DEF[item.id].isQuestItem) continue;
-
-        const home = firstHome.get(item.id);
-        if (home === undefined) {
-          firstHome.set(item.id, { slots, index: i });
-          continue;
-        }
-        const kept = home.slots[home.index];
-        if (!kept) continue;
-        home.slots[home.index] = { ...kept, quantity: kept.quantity + item.quantity };
-        slots[i] = null;
-      }
-    }
-    this.bag.fitPages();
   }
 
   /**
@@ -305,15 +271,11 @@ export class Inventory {
 
   swapHotbarToInv(hotbarIdx: number, slotIdx: number): void {
     if (hotbarIdx === QUEST_SLOT_IDX || !this.bag.hasSlot(slotIdx)) return;
-    // No itemCanHotlist guard here: the player is dragging OUT of the hotbar,
-    // and grandfathered gear that predates the hotlist restriction must stay
-    // freely movable off the hotbar even when the bag slot it lands on is
-    // occupied by another non-hotlistable item swapping back in as a side
-    // effect. Only the deliberate bag→hotbar direction (swapInvToHotbar)
-    // refuses.
     if (this.mergeStacks(this.actionBar.slots, hotbarIdx, this.bag.slots, slotIdx)) return;
     const hot = this.actionBar.slots[hotbarIdx];
     const inv = this.bag.slots[slotIdx];
+    // The bag's stack would swap onto the bar in exchange.
+    if (inv && !itemCanHotlist(inv.id)) return;
     this.bag.slots[slotIdx] = hot;
     this.actionBar.slots[hotbarIdx] = inv;
     this.bag.fitPages();

@@ -4,7 +4,7 @@
  *
  * For each site in both towns, every spot in its pool (so every contract the
  * generator can draw), the walkable tiles are flooded from the way in: a
- * Skyfowl Town room's spawn and exit tiles, Briar Hollow's main gate. The
+ * Taloncrest room's spawn and exit tiles, Briar Hollow's main gate. The
  * flood steps orthogonally because movement collides one axis at a time on
  * the body's centre (`applyMovement`), so no diagonal squeezes between two
  * blocked corners. Each spot must then have a reached tile within
@@ -34,7 +34,7 @@ import {
 import {
   briarHollowSpotFootprint,
   footprintTiles,
-  skyfowlSpotFootprint,
+  taloncrestSpotFootprint,
   type ContractSpotFootprint,
 } from '../../src/systems/constructionContracts/contractTargets';
 import type { Check } from './shared';
@@ -158,7 +158,7 @@ function siteReachProblem(site: ContractSiteDef, seed: number): ReachProblem | s
     entrances: [map.startTile, ...map._interiorExitTiles],
     spots: site.spots.map((spot) => ({
       where: spotWhere(site, spot),
-      footprint: skyfowlSpotFootprint(site, spot, map),
+      footprint: taloncrestSpotFootprint(site, spot, map),
     })),
   };
 }
@@ -187,7 +187,7 @@ function verifyEverySpotReachable(check: Check): void {
  */
 function verifyWalledSpotIsCaught(check: Check): void {
   const seed = LAYOUT_WORLD_SEEDS[0];
-  for (const town of ['skyfowl', 'briar_hollow'] as const) {
+  for (const town of ['taloncrest', 'briar_hollow'] as const) {
     const site = CONTRACT_SITES.find((candidate) => candidate.town === town);
     const spot = site?.spots[0];
     if (site === undefined || spot === undefined) {

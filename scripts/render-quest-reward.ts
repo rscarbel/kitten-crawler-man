@@ -33,7 +33,7 @@ const { travelUnlocksSection, unlockedDestinationIds } =
   await import('../src/systems/travel/travelDestinations.js');
 const { ANCHOR_QUEST_NAME, createAnchorQuestProgress } =
   await import('../src/core/quests/AnchorQuestProgress.js');
-const { createCircusQuestProgress } = await import('../src/core/quests/CircusQuestProgress.js');
+const { createTownMemory } = await import('../src/core/state/TownMemory.js');
 const { crawlerName } = await import('../src/characters/characters.js');
 const { createBriarHollowState } = await import('../src/core/quests/briarHollowState.js');
 const { VILLAGE_SAVE_REWARD_SECTION } =
@@ -74,15 +74,15 @@ const SAMPLE_POTION_COUNT = 3;
 const SAMPLE_HAMBURGER_COUNT = 5;
 const SAMPLE_STEW_COUNT = 3;
 
-/** The anchor's own screen once both other questlines are done: every destination at once. */
+/** The anchor's own screen once every destination is bound: all of them at once. */
 function anchorEveryDestinationSpec(): QuestRewardSpec {
-  const circus = createCircusQuestProgress();
-  circus.stage = 'complete';
+  const townMemory = createTownMemory();
+  townMemory.visitedPlaces.add('circus_grounds');
   const briarHollow = createBriarHollowState();
   briarHollow.quest.phase = 'complete';
   const anchor = createAnchorQuestProgress();
   anchor.status = 'completed';
-  const state = { circus, briarHollow, anchor };
+  const state = { townMemory, briarHollow, anchor };
   return {
     questTitle: ANCHOR_QUEST_NAME,
     renderQuestIcon: rewardIconPainter('wayfinders_anchor'),

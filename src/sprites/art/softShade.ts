@@ -2,7 +2,7 @@
  * Shared soft-shading primitives for procedurally painted sprites.
  *
  * Canvas has no cheap Gaussian blur, so every soft shadow, highlight and
- * crease on a hand-painted figure (Tsarina Signet, and any painter built the
+ * crease on a hand-painted figure (Angel, and any painter built the
  * same way) is faked with layered radial/linear gradients instead. Left as
  * flat-alpha shapes, those fades leave a hard rim wherever they are not
  * clipped away — on a body that rim reads as a crease or a seam where there
@@ -195,7 +195,7 @@ export function taperedCreaseGradient(
  *
  * Interior shading is always clipped to its own form's silhouette: a soft
  * fade sized to look right sits far outside the shape it is modelling (see
- * `SEAT_SHADE_*` in `signetSprite.ts`, deliberately oversized so the clip is
+ * `SEAT_SHADE_*` in `angel/profile.ts`, deliberately oversized so the clip is
  * what ends it, not the gradient's own falloff), so nothing else keeps a
  * shadow or highlight from bleeding past the outline it is meant to shade.
  * A painter that throws mid-clip would otherwise leave the clip and alpha of

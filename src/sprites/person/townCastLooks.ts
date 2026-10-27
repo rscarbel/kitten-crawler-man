@@ -78,7 +78,7 @@ interface TownCastLookCommon {
   readonly roles: ReadonlyArray<TownRole>;
   /** Whether this look has a `work` row (stationed trades only). */
   readonly hasWork: boolean;
-  /** Whether this look paints the dance routines (the Desperado Club's dancers only). */
+  /** Whether this look paints the dance routines (the Cloak & Dagger's dancers only). */
   readonly hasDance?: boolean;
   /** World px a full walk cycle covers, as a fraction of the draw size. */
   readonly strideFraction: number;
@@ -339,7 +339,7 @@ const GARMENT_LEGWEAR: Readonly<Record<GarmentCut, LegwearCut>> = {
 export const SKIN_TONE_BASES = ['#f0c9a0', '#c78a5a', '#8a5a34', '#5a3a22', '#b08a62'] as const;
 /**
  * Hair colours for the cast. Dave's red-brown is none of them; the
- * greying salt-and-pepper and the white are the older heads in the set.
+ * greying salt-and-pepper is the older heads' in the set.
  */
 export const HAIR_COLOR_BASES = [
   '#1a1512',
@@ -347,12 +347,11 @@ export const HAIR_COLOR_BASES = [
   '#c9a850',
   '#6a2a20',
   '#8c857a',
-  '#d8d4cc',
   '#b0582a',
 ] as const;
 
 type SkinTone = 'fair' | 'tan' | 'brown' | 'deep' | 'olive';
-type HairColour = 'black' | 'lightBrown' | 'blonde' | 'auburn' | 'greying' | 'white' | 'ginger';
+type HairColour = 'black' | 'lightBrown' | 'blonde' | 'auburn' | 'greying' | 'ginger';
 
 const SKIN_RAMPS: Readonly<Record<SkinTone, Ramp>> = {
   fair: deriveRamp(SKIN_TONE_BASES[0]),
@@ -367,8 +366,7 @@ const HAIR_RAMPS: Readonly<Record<HairColour, Ramp>> = {
   blonde: deriveRamp(HAIR_COLOR_BASES[2]),
   auburn: deriveRamp(HAIR_COLOR_BASES[3]),
   greying: deriveRamp(HAIR_COLOR_BASES[4]),
-  white: deriveRamp(HAIR_COLOR_BASES[5]),
-  ginger: deriveRamp(HAIR_COLOR_BASES[6]),
+  ginger: deriveRamp(HAIR_COLOR_BASES[5]),
 };
 
 /** Worn leather shoes, dark enough to part from any trouser colour at the tile. */
@@ -623,20 +621,6 @@ const RESIDENT_ADULT_SPECS: readonly AdultSpec[] = [
       posture: wendellPosture,
       muddyShoes: true,
     },
-  },
-  {
-    id: 'resident_old_hilda',
-    build: 'slight',
-    roles: [],
-    hasWork: false,
-    pantsColor: '#2a2420',
-    skin: 'fair',
-    hair: 'white',
-    hairStyle: 'headscarf',
-    garmentColor: '#3a2e3c',
-    cut: 'robe',
-    feminine: true,
-    accessory: { kind: 'shawlCharms', color: '#6a4a5a', accentColor: '#c9a24a' },
   },
   {
     id: 'resident_marta_miller',

@@ -5,9 +5,14 @@
  * per step in order, once-won prizes never coming up again while staying on the
  * rim, Spin Again never retiring, landings that always sit inside the chosen
  * wedge, spin plans that come to rest exactly on that landing, the save
- * latch that stops every write once the Nothing's wipe starts, and a quest's
- * free spin: the Nothing unreachable through its whole Spin Again chain, the
+ * latch that stops every write once Permanent Death's wipe starts, and a quest's
+ * free spin: Permanent Death unreachable through its whole Spin Again chain, the
  * spin spent with its commit, and the wheel back at the picker afterwards.
+ *
+ * Also the crawler mechanics the wheel's curses ride on: every status with an
+ * incoming-damage scale scaling a mob blow and a status tick alike, a blow's
+ * HP floor, and each HP band firing once on entry (a blow landing exactly on
+ * its line included), never at 0 HP, and again only after HP climbs above it.
  *
  * Every random source is a seeded `mulberry32` stream, and the spin sims run
  * across many streams so one extra draw anywhere cannot reshuffle the verdict.
@@ -59,7 +64,48 @@ import {
 import { LOCAL_PROGRESS_STORAGE, writeLocalProgress } from '../src/core/save/LocalProgress';
 import { stampGameProgress } from '../src/core/save/saveFormat';
 import { AuthClient, type GameProgressInput } from '../src/auth/AuthClient';
-import { snapPlayer } from '../src/core/save/PlayerSnapshot';
+import { parsePlayerSnapshot, restorePlayer, snapPlayer } from '../src/core/save/PlayerSnapshot';
+import { AbilityManager } from '../src/core/skills/AbilityManager';
+import { AchievementManager } from '../src/core/progression/AchievementManager';
+import { GameStats } from '../src/core/progression/GameStats';
+import { createPartyCraftsState } from '../src/core/labour/partyCrafts';
+import { createWheelQuestFreeSpins } from '../src/core/save/WheelLedger';
+import { MusicLibrary } from '../src/core/music/MusicLibrary';
+import {
+  BLOOD_VOMIT_RETCH_FRAMES,
+  DOUBLE_DAMAGE_FRAMES,
+  DOUBLE_DAMAGE_SCALE,
+  STATUS_INCOMING_DAMAGE_SCALE,
+} from '../src/core/combat/statusTuning';
+import {
+  BLOOD_VOMIT_STATUS,
+  DOUBLE_DAMAGE_STATUS,
+  INCURABLE_STATUSES,
+  STATUS_IDS,
+  makeBloodVomit,
+  makeDoubleDamage,
+  type StatusEffect,
+} from '../src/core/combat/StatusEffect';
+import type { ItemId } from '../src/core/items/defs/ItemDefs';
+import { applyWheelPrize, type WheelPrizeTarget } from '../src/systems/casino/wheel/wheelPrizes';
+import { WHEEL_DAMAGE_MAX_HP_SHARE } from '../src/systems/casino/wheel/wheelPenalties';
+import { doubleDamageRemainingOf, withDoubleDamageFrames } from '../src/core/save/doubleDamageSave';
+import { statusShowsHudPill } from '../src/sprites/status/statusEffectVisuals';
+import {
+  PERMANENT_DEATH_FIRST_LINE,
+  PERMANENT_DEATH_SECOND_LINE,
+} from '../src/ui/casino/wheel/permanentDeathView';
+import { DONALD_LINES } from '../src/dialog/scripts/donald';
+import {
+  CRAWLER_HP_THRESHOLDS,
+  HP_THRESHOLD_IDS,
+  hpThresholdTop,
+} from '../src/core/combat/hpThresholds';
+import { drainHpThresholdCrossings } from '../src/systems/hpThresholdCrossings';
+import { drainBloodVomitRetches } from '../src/systems/bloodVomitRetches';
+import { EventBus } from '../src/core/EventBus';
+import type { DamageSource } from '../src/Player';
+import { BOUNTY_MAX_BLOW_HP_SHARE } from '../src/creatures/mobLevelScaling';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { TILE_SIZE } from '../src/core/constants';
@@ -111,7 +157,7 @@ const EXPECTED_UPGRADE_ORDER = [
   'frozen_solid',
   'robbed',
   'poisoned_2',
-  'stabbed_2',
+  'take_damage_2',
 ] as const;
 const BIG_GOOD_PRIZES: readonly WheelPrizeId[] = ['gold_50k', 'legendary_weapon', 'gold_500k'];
 
@@ -169,13 +215,13 @@ function checkBoard(): void {
     `no two good wedges sit side by side at the minimum bet${goodBesideGood.length === 0 ? '' : ` (${goodBesideGood.map((w) => w.id).join(', ')})`}`,
   );
 
-  const nothingIndex = board.findIndex((wedge) => wedge.prize.kind === 'nothing');
-  const nothingNeighbours = nothingIndex < 0 ? [] : neighbours(board, nothingIndex);
+  const deathIndex = board.findIndex((wedge) => wedge.prize.kind === 'permanent_death');
+  const deathNeighbours = deathIndex < 0 ? [] : neighbours(board, deathIndex);
   check(
-    nothingNeighbours.some(
+    deathNeighbours.some(
       (wedge) => wedge.prizeId !== null && BIG_GOOD_PRIZES.includes(wedge.prizeId),
     ),
-    'one Nothing! edge touches a big good prize',
+    'one Permanent Death edge touches a big good prize',
   );
 
   const sliverIndex = board.findIndex((wedge) => wedge.prizeId === 'gold_500k');
@@ -212,7 +258,7 @@ function checkBets(): void {
     });
     check(
       missing.length === 0 && board.length === BASE_WHEEL_BOARD.length,
-      `bet ${bet}: Nothing!, both Vomit Blood, first Stabbed and first Poisoned are red in place${missing.length === 0 ? '' : ` (missing ${missing.join(', ')})`}`,
+      `bet ${bet}: Permanent Death, both Double Damage, first Take Damage and first Poisoned are red in place${missing.length === 0 ? '' : ` (missing ${missing.join(', ')})`}`,
     );
   }
 
@@ -448,6 +494,23 @@ function latchFixture(): GameProgressInput {
     levelId: level1.id,
     humanSnap: snapPlayer(new HumanPlayer(0, 0, TILE_SIZE)),
     catSnap: snapPlayer(new CatPlayer(0, 0, TILE_SIZE)),
+    abilityStates: new AbilityManager().serializeStates(),
+    mongoUnlocked: false,
+    mongoPetHp: 0,
+    mongoPetResting: false,
+    crafts: createPartyCraftsState(),
+    humanAchievements: new AchievementManager().serialize(),
+    catAchievements: new AchievementManager().serialize(),
+    gameStats: new GameStats().snapshot(),
+    wheelPrizesWon: [],
+    pendingWheelOutcome: null,
+    wheelFreeSpinBet: null,
+    wheelOwedFreeze: null,
+    wheelQuestFreeSpins: createWheelQuestFreeSpins(),
+    doubleDamageRemaining: { human: 0, cat: 0 },
+    attackCowOwned: false,
+    attackCowResting: false,
+    musicLibrary: new MusicLibrary().serialize(),
   };
 }
 
@@ -685,7 +748,6 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
   const { ClubWheelSystem, WHEEL_SPIN_HOLD_MS } = await import('../src/systems/ClubWheelSystem');
   const { createWheelLedger } = await import('../src/core/save/WheelLedger');
   const { settleWheelLedger } = await import('../src/systems/casino/wheel/wheelPrizes');
-  const { parseWheelOwedItems } = await import('../src/core/save/WheelLedger');
   const { adoptWhenCommitted } = await import('../src/core/save/adoptWhenCommitted');
   const FILLER_ITEM = 'scrapmail_vest';
   const { BAG_PAGE_SLOTS } = await import('../src/core/items/defs/ItemDefs');
@@ -714,7 +776,7 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
         });
       },
       progressWipe: null,
-      afterNothing: () => undefined,
+      afterPermanentDeath: () => undefined,
       grantAttackCow: () => undefined,
       clock: () => now,
       random: mulberry32(1),
@@ -812,7 +874,7 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
         ledger,
         saveNow: () => Promise.resolve('saved'),
         progressWipe: null,
-        afterNothing: () => undefined,
+        afterPermanentDeath: () => undefined,
         grantAttackCow: () => undefined,
         clock: () => now,
         random: mulberry32(1),
@@ -845,7 +907,7 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
       ledger: createWheelLedger(),
       saveNow: () => Promise.resolve('saved'),
       progressWipe: null,
-      afterNothing: () => undefined,
+      afterPermanentDeath: () => undefined,
       grantAttackCow: () => undefined,
       random: mulberry32(1),
     });
@@ -861,7 +923,7 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
   })();
   check(landed.gained === 1, 'an Epic (frost) landing puts the ring in the bag at once');
   const loader = new HumanPlayer(0, 0, TILE_SIZE);
-  const signetLedger = createWheelLedger(['legendary_charm'], {
+  const legendaryCharmLedger = createWheelLedger(['legendary_charm'], {
     wedgeId: 'legendary_charm',
     prizeId: 'legendary_charm',
     crawler: 'human',
@@ -874,8 +936,8 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
     cat,
     grantAttackCow: () => undefined,
   };
-  settleWheelLedger(signetLedger, loadParty);
-  settleWheelLedger(signetLedger, loadParty);
+  settleWheelLedger(legendaryCharmLedger, loadParty);
+  settleWheelLedger(legendaryCharmLedger, loadParty);
   check(
     loader.inventory.countOf('fae_iron_charm') === 1,
     'a pending item prize found on load goes into the bag exactly once',
@@ -905,7 +967,7 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
     ledger: packedLedger,
     saveNow: () => Promise.resolve('saved'),
     progressWipe: null,
-    afterNothing: () => undefined,
+    afterPermanentDeath: () => undefined,
     grantAttackCow: () => undefined,
     random: mulberry32(1),
   });
@@ -914,24 +976,8 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
     boardForBet(WHEEL_MIN_BET).findIndex((wedge) => wedge.prizeId === 'legendary_charm'),
   );
   check(
-    packed.inventory.countOf('fae_iron_charm') === 1 && packedLedger.owedItems.length === 0,
+    packed.inventory.countOf('fae_iron_charm') === 1,
     'a prize won with a packed bag goes into the bag',
-  );
-  const olderSaveOwed = [{ crawler: 'human', id: 'fae_iron_charm', quantity: 1 }];
-  const reloaded = createWheelLedger(
-    [],
-    null,
-    null,
-    null,
-    parseWheelOwedItems(JSON.parse(JSON.stringify(olderSaveOwed))) ?? [],
-  );
-  const roomy = new HumanPlayer(0, 0, TILE_SIZE);
-  const roomyParty = { human: roomy, cat, grantAttackCow: () => undefined };
-  settleWheelLedger(reloaded, roomyParty);
-  settleWheelLedger(reloaded, roomyParty);
-  check(
-    roomy.inventory.countOf('fae_iron_charm') === 1 && reloaded.owedItems.length === 0,
-    'a prize an older save still holds lands in the bag on load, exactly once',
   );
 
   // A commit storage refused never becomes the save a death returns to.
@@ -982,7 +1028,7 @@ async function checkOwedWipeFinishesBeforeAnyLoad(): Promise<void> {
   let row: unknown = latchFixture();
   let loads = 0;
   let deletedBeforeLoad = true;
-  let markerHeldUntilDelete = true;
+  const markerWatch = { heldUntilDelete: true };
   const latch = createSaveLatch();
   const boot = await bootProgress({
     marker,
@@ -995,7 +1041,7 @@ async function checkOwedWipeFinishesBeforeAnyLoad(): Promise<void> {
             return Promise.resolve();
           },
           remove: () => {
-            if (markerState === null) markerHeldUntilDelete = false;
+            if (markerState === null) markerWatch.heldUntilDelete = false;
             row = null;
             return Promise.resolve();
           },
@@ -1013,7 +1059,7 @@ async function checkOwedWipeFinishesBeforeAnyLoad(): Promise<void> {
   check(row === null, 'the row a previous page left is deleted at boot');
   check(latch.engaged, 'writes are latched while the owed wipe runs');
   check(
-    markerHeldUntilDelete && markerState === null,
+    markerWatch.heldUntilDelete && marker.read() === null,
     'the marker clears only once the delete lands',
   );
 }
@@ -1110,7 +1156,7 @@ async function checkLegendaryWeaponPaysBoth(): Promise<void> {
       ledger,
       saveNow: () => Promise.resolve(answer),
       progressWipe: null,
-      afterNothing: () => undefined,
+      afterPermanentDeath: () => undefined,
       grantAttackCow: () => undefined,
       clock: () => now,
       random: mulberry32(1),
@@ -1186,11 +1232,11 @@ async function checkLegendaryWeaponPaysBoth(): Promise<void> {
 
 /**
  * A quest's free spin from the picker: the warnings are skipped, every board
- * the chain draws from has no Nothing (a forced Nothing finds nothing to land
- * on, and the taped wedge pays Spin Again), the spin is spent in the commit's
+ * the chain draws from has no Permanent Death (a forced Permanent Death finds
+ * nothing to land on, and the taped wedge pays Spin Again), the spin is spent in the commit's
  * own save, the chain ends at the picker, and the next pick of the wheel shows
- * the warnings again. Then the ledger: one spin per quest, an older save with
- * no record loads with none, and a reload mid-chain still owes a taped spin.
+ * the warnings again. Then the ledger: one spin per quest, a save with no
+ * record fails validation, and a reload mid-chain still owes a taped spin.
  */
 async function checkQuestFreeSpin(): Promise<void> {
   const { ClubWheelSystem, WHEEL_SPIN_HOLD_MS } = await import('../src/systems/ClubWheelSystem');
@@ -1202,7 +1248,7 @@ async function checkQuestFreeSpin(): Promise<void> {
     tapedChainOwed,
   } = await import('../src/core/save/WheelLedger');
   const { settleWheelLedger } = await import('../src/systems/casino/wheel/wheelPrizes');
-  const { BASE_WHEEL_BOARD, TAPED_NOTHING, WHEEL_BET_STEP, tapedBoard } =
+  const { BASE_WHEEL_BOARD, TAPED_PERMANENT_DEATH, WHEEL_BET_STEP, tapedBoard } =
     await import('../src/systems/casino/wheel/wheelBoard');
   const STEP_MS = 16;
   /** Long enough for any spin and its reveal to play out. */
@@ -1217,13 +1263,14 @@ async function checkQuestFreeSpin(): Promise<void> {
 
   check(
     WHEEL_BETS.every((bet) =>
-      tapedBoard(boardForBet(bet)).every((wedge) => wedge.prize.kind !== 'nothing'),
+      tapedBoard(boardForBet(bet)).every((wedge) => wedge.prize.kind !== 'permanent_death'),
     ),
     'no taped board at any bet has a wedge that wipes',
   );
   check(
-    TAPED_NOTHING.prize.kind === 'spin_again' && TAPED_NOTHING.tapedOver?.prize.kind === 'nothing',
-    'the taped Nothing pays Spin Again and still shows the Nothing under the tape',
+    TAPED_PERMANENT_DEATH.prize.kind === 'spin_again' &&
+      TAPED_PERMANENT_DEATH.tapedOver?.prize.kind === 'permanent_death',
+    'the taped Permanent Death pays Spin Again and still shows Permanent Death under the tape',
   );
 
   const ledger = createWheelLedger();
@@ -1234,9 +1281,9 @@ async function checkQuestFreeSpin(): Promise<void> {
 
   let now = 0;
   let saves = 0;
-  let usedAtFirstSave: number | null = null;
+  const firstSave: { used: number | null } = { used: null };
   let forcedCalls = 0;
-  let boardsWithNothing = 0;
+  let boardsWithPermanentDeath = 0;
   let tapedForced = 0;
   const human = new HumanPlayer(0, 0, TILE_SIZE);
   const cat = new CatPlayer(1, 0, TILE_SIZE);
@@ -1248,17 +1295,17 @@ async function checkQuestFreeSpin(): Promise<void> {
     ledger,
     saveNow: () => {
       saves++;
-      usedAtFirstSave ??= ledger.questFreeSpins.used;
+      firstSave.used ??= ledger.questFreeSpins.used;
       return Promise.resolve('saved');
     },
     progressWipe: null,
-    afterNothing: () => undefined,
+    afterPermanentDeath: () => undefined,
     grantAttackCow: () => undefined,
     clock: () => now,
     random: mulberry32(1),
     forcedOutcome: (board) => {
       forcedCalls++;
-      if (board.some((wedge) => wedge.prize.kind === 'nothing')) boardsWithNothing++;
+      if (board.some((wedge) => wedge.prize.kind === 'permanent_death')) boardsWithPermanentDeath++;
       const taped = board.findIndex((wedge) => wedge.tapedOver !== undefined);
       if (tapedForced < TAPED_LANDINGS && taped >= 0) {
         tapedForced++;
@@ -1298,18 +1345,21 @@ async function checkQuestFreeSpin(): Promise<void> {
     human.coins === PURSE - UPGRADE_STEPS * WHEEL_BET_STEP,
     `a free spin charges only the upgrades (spent ${PURSE - human.coins})`,
   );
-  check(usedAtFirstSave === 1, 'the free spin is spent in the save that commits it');
+  check(firstSave.used === 1, 'the free spin is spent in the save that commits it');
   for (let landing = 1; landing < TAPED_LANDINGS && wheel.currentScreen === 'wheel'; landing++) {
     check(
-      wheel.currentBoard.every((wedge) => wedge.prize.kind !== 'nothing'),
+      wheel.currentBoard.every((wedge) => wedge.prize.kind !== 'permanent_death'),
       'the Spin Again chained from a free spin is still taped',
     );
     await spinAndSettle();
   }
-  check(wheel.currentScreen === 'wheel', 'landing on the taped Nothing keeps the wheel spinning');
+  check(
+    wheel.currentScreen === 'wheel',
+    'landing on the taped Permanent Death keeps the wheel spinning',
+  );
   await spinAndSettle();
   check(forcedCalls === TAPED_LANDINGS + 1, `the chain drew three spins (drew ${forcedCalls})`);
-  check(boardsWithNothing === 0, 'no spin in the chain could land on the Nothing');
+  check(boardsWithPermanentDeath === 0, 'no spin in the chain could land on Permanent Death');
   check(
     human.coins === PURSE - UPGRADE_STEPS * WHEEL_BET_STEP + FINAL_PRIZE_GOLD,
     'the chain pays its final prize, and no Spin Again in it charged anything',
@@ -1343,7 +1393,7 @@ async function checkQuestFreeSpin(): Promise<void> {
     ledger: resumed,
     saveNow: () => Promise.resolve('saved'),
     progressWipe: null,
-    afterNothing: () => undefined,
+    afterPermanentDeath: () => undefined,
     grantAttackCow: () => undefined,
     clock: () => now,
     random: mulberry32(1),
@@ -1381,7 +1431,7 @@ async function checkQuestFreeSpin(): Promise<void> {
   );
   resumedWheel.openWheelForReview(resumedSeat);
   check(
-    resumedWheel.currentBoard.every((wedge) => wedge.prize.kind !== 'nothing'),
+    resumedWheel.currentBoard.every((wedge) => wedge.prize.kind !== 'permanent_death'),
     'the owed chain spin is taped on an ordinary visit too',
   );
   await settleResumed();
@@ -1390,13 +1440,15 @@ async function checkQuestFreeSpin(): Promise<void> {
     'a taped chain finished from an ordinary visit returns to the picker',
   );
 
-  const older = createWheelLedger([], null, null, null, [], parseWheelQuestFreeSpins(undefined));
-  check(questFreeSpinsLeft(older) === 0, 'a save from before quest free spins loads with none');
+  check(
+    parseWheelQuestFreeSpins(undefined) === undefined,
+    'a save with no quest free-spin record fails validation',
+  );
 
   const midChain = createWheelLedger(
     [],
     {
-      wedgeId: TAPED_NOTHING.id,
+      wedgeId: TAPED_PERMANENT_DEATH.id,
       prizeId: null,
       crawler: 'human',
       recipient: 'human',
@@ -1405,7 +1457,6 @@ async function checkQuestFreeSpin(): Promise<void> {
     },
     null,
     null,
-    [],
     { earnedBy: ['quest_a'], used: 1, tapedChain: true },
   );
   settleWheelLedger(midChain, { human, cat, grantAttackCow: () => undefined });
@@ -1415,11 +1466,426 @@ async function checkQuestFreeSpin(): Promise<void> {
   );
 }
 
+/** A blow nothing can sidestep, so a measurement never rolls a dodge. */
+const STEADY_MOB_BLOW: DamageSource = { kind: 'mob', mobType: 'goblin', undodgeable: true };
+const STATUS_TICK: DamageSource = { kind: 'status', effectType: 'poison', applier: null };
+/** Unscaled by difficulty, so the HP a blow leaves is exactly HP minus the blow. */
+const FLAT_HAZARD: DamageSource = { kind: 'environmental', hazard: 'lavaFlames' };
+/** Small enough that a doubled blow still fits inside a fresh crawler's HP. */
+const SCALE_TEST_BLOW = 4;
+const SCALE_TOLERANCE = 1e-9;
+/** A bounty mob's blow, held to {@link BOUNTY_MAX_BLOW_HP_SHARE} of the target's bar. */
+const CAPPED_BOUNTY_BLOW: DamageSource = {
+  ...STEADY_MOB_BLOW,
+  maxShareOfTargetHp: BOUNTY_MAX_BLOW_HP_SHARE,
+};
+/** Far past any cap, so the blow is priced by the cap alone. */
+const OVERWHELMING_BLOW_MAX_HP_MULTIPLE = 4;
+const STATUS_SCALE_TICKS = 600;
+const FLOOR_TEST_HP = 1;
+
+function hpLostTo(source: DamageSource, effect: StatusEffect | null): number {
+  const human = new HumanPlayer(0, 0, TILE_SIZE);
+  if (effect !== null) human.applyStatus(effect);
+  const before = human.hp;
+  human.takeDamage(SCALE_TEST_BLOW, source);
+  return before - human.hp;
+}
+
+function checkStatusDamageScale(): void {
+  const scaled = STATUS_IDS.filter((id) => STATUS_INCOMING_DAMAGE_SCALE[id] !== 1);
+  check(scaled.length > 0, 'at least one status scales incoming damage');
+  for (const id of scaled) {
+    const scale = STATUS_INCOMING_DAMAGE_SCALE[id];
+    const effect: StatusEffect = {
+      type: id,
+      ticksRemaining: STATUS_SCALE_TICKS,
+      totalTicks: STATUS_SCALE_TICKS,
+      applier: null,
+    };
+    for (const [label, source] of [
+      ['a mob blow', STEADY_MOB_BLOW],
+      ['a status tick', STATUS_TICK],
+    ] as const) {
+      const bare = hpLostTo(source, null);
+      const carried = hpLostTo(source, effect);
+      check(
+        bare > 0 && Math.abs(carried - bare * scale) < SCALE_TOLERANCE,
+        `${id} scales ${label} on a crawler by ${scale} (${bare} → ${carried})`,
+      );
+    }
+  }
+
+  const floored = new HumanPlayer(0, 0, TILE_SIZE);
+  floored.takeDamage(floored.maxHp * 2, FLAT_HAZARD, { floorHp: FLOOR_TEST_HP });
+  check(
+    floored.hp === FLOOR_TEST_HP,
+    `a blow with an HP floor stops at it (${floored.hp} HP left)`,
+  );
+}
+
+function occurrences<T>(list: readonly T[], item: T): number {
+  return list.filter((entry) => entry === item).length;
+}
+
+function checkHpThresholds(): void {
+  for (const id of HP_THRESHOLD_IDS) {
+    const threshold = CRAWLER_HP_THRESHOLDS[id];
+    const human = new HumanPlayer(0, 0, TILE_SIZE);
+    const top = hpThresholdTop(threshold, human.maxHp);
+    const firesFor = (crawler: HumanPlayer) => occurrences(crawler.takeHpThresholdCrossings(), id);
+
+    human.takeDamage(human.hp - top, FLAT_HAZARD);
+    check(
+      human.hp === top && firesFor(human) === 1,
+      `${id}: a blow landing exactly on ${top} HP fires`,
+    );
+
+    if (top > 1) {
+      human.takeDamage(1, FLAT_HAZARD);
+      check(firesFor(human) === 0, `${id}: a second blow inside the band does not fire again`);
+    }
+    human.hp = top;
+    human.takeDamage(1, FLAT_HAZARD);
+    check(firesFor(human) === 0, `${id}: climbing back only to the line does not re-arm it`);
+
+    human.hp = human.maxHp;
+    human.hp = top;
+    check(firesFor(human) === 1, `${id}: once HP climbs above the band, entering it fires again`);
+
+    const oneShot = new HumanPlayer(0, 0, TILE_SIZE);
+    oneShot.takeDamage(oneShot.maxHp, FLAT_HAZARD);
+    check(
+      oneShot.hp === 0 && firesFor(oneShot) === 0,
+      `${id}: a blow from full straight to 0 HP does not fire`,
+    );
+
+    const restored = new HumanPlayer(0, 0, TILE_SIZE);
+    restorePlayer(restored, { ...snapPlayer(restored), hp: top });
+    check(firesFor(restored) === 0, `${id}: a crawler loaded inside the band does not fire`);
+
+    const healedOut = new HumanPlayer(0, 0, TILE_SIZE);
+    healedOut.takeDamage(healedOut.hp - top, FLAT_HAZARD);
+    healedOut.hp = healedOut.maxHp;
+    check(
+      firesFor(healedOut) === 0,
+      `${id}: a blow into the band healed back out before the drain does not fire`,
+    );
+  }
+
+  const bus = new EventBus();
+  let healthLowEvents = 0;
+  bus.on('healthLow', () => healthLowEvents++);
+  const human = new HumanPlayer(0, 0, TILE_SIZE);
+  const cat = new CatPlayer(1, 0, TILE_SIZE);
+  cat.hp = hpThresholdTop(CRAWLER_HP_THRESHOLDS.low_health, cat.maxHp);
+  drainHpThresholdCrossings({ human, cat }, bus);
+  drainHpThresholdCrossings({ human, cat }, bus);
+  check(healthLowEvents === 1, `entering low health emits healthLow once (${healthLowEvents})`);
+}
+
+/** The wedges each red penalty is printed on, and the size each keeps on the rim. */
+const PENALTY_WEDGES = [
+  { id: 'permanent_death', kind: 'permanent_death', label: 'Permanent Death', units: 2 },
+  { id: 'take_damage_1', kind: 'take_damage', label: 'Take Damage', units: 1 },
+  { id: 'take_damage_2', kind: 'take_damage', label: 'Take Damage', units: 1 },
+  {
+    id: 'double_damage_1',
+    kind: 'double_damage',
+    label: 'Double all incoming damage for 5 minutes',
+    units: 1,
+  },
+  {
+    id: 'double_damage_2',
+    kind: 'double_damage',
+    label: 'Double all incoming damage for 5 minutes',
+    units: 1,
+  },
+] as const;
+const DOUBLE_DAMAGE_SHORT_LABEL = 'DOUBLE DAMAGE';
+/** Words no player-facing wheel text may carry. */
+const RETIRED_WHEEL_WORDS = ['stab', 'knife', 'vomit'];
+const RETCH_TEST_MOB_BLOW = 3;
+const RETCH_SHARE_EXPECTED = 0.05;
+
+function wheelTarget(crawler: HumanPlayer | CatPlayer): WheelPrizeTarget {
+  return {
+    crawler,
+    kind: crawler instanceof HumanPlayer ? 'human' : 'cat',
+    party: [crawler],
+    grantAttackCow: () => undefined,
+  };
+}
+
+function wedgeById(id: string): WheelWedge | undefined {
+  return BASE_WHEEL_BOARD.find((wedge) => wedge.id === id);
+}
+
+function checkPenaltyWedges(): void {
+  for (const expected of PENALTY_WEDGES) {
+    const wedge = wedgeById(expected.id);
+    check(
+      wedge !== undefined &&
+        wedge.prize.kind === expected.kind &&
+        wedge.label === expected.label &&
+        wedge.units === expected.units &&
+        isRedWedge(wedge),
+      `${expected.id} is a red ${expected.kind} wedge of ${expected.units} unit(s) labelled "${expected.label}"`,
+    );
+  }
+  check(
+    BASE_WHEEL_BOARD.filter((wedge) => wedge.prize.kind === 'double_damage').every(
+      (wedge) => wedge.shortLabel === DOUBLE_DAMAGE_SHORT_LABEL,
+    ),
+    `double damage wedges read ${DOUBLE_DAMAGE_SHORT_LABEL} on the face`,
+  );
+  check(
+    PERMANENT_RED_WEDGE_IDS.includes('double_damage_1') &&
+      PERMANENT_RED_WEDGE_IDS.includes('double_damage_2'),
+    'both double damage wedges stay red at every bet',
+  );
+
+  const playerText = [
+    ...boardForBet(WHEEL_MAX_BET).flatMap((wedge) => [wedge.label, wedge.shortLabel]),
+    ...BASE_WHEEL_BOARD.flatMap((wedge) => [wedge.label, wedge.shortLabel]),
+    PERMANENT_DEATH_FIRST_LINE,
+    PERMANENT_DEATH_SECOND_LINE,
+    ...Object.values(DONALD_LINES).flatMap((lines) => lines.map((line) => line.paragraphs[0])),
+  ];
+  const retired = playerText.filter((line) =>
+    RETIRED_WHEEL_WORDS.some((word) => line.toLowerCase().includes(word.toLowerCase())),
+  );
+  check(
+    retired.length === 0,
+    `no wheel label, Permanent Death line or Donald line names a retired penalty${retired.length === 0 ? '' : ` (${retired.join(' | ')})`}`,
+  );
+}
+
+const NINTH_LIFE_ITEM = 'halo_of_the_ninth_life' as const satisfies ItemId;
+/** Under the halo's save share, where a downing blow would lift her rather than leave her. */
+const NINTH_LIFE_TEST_HP_SHARE = 0.4;
+
+function checkTakeDamage(): void {
+  const wedge = wedgeById('take_damage_1');
+  if (wedge === undefined) {
+    check(false, 'take_damage_1 is on the board');
+    return;
+  }
+  const human = new HumanPlayer(0, 0, TILE_SIZE);
+  const wound = Math.round(human.maxHp * WHEEL_DAMAGE_MAX_HP_SHARE);
+  const effect = applyWheelPrize(wedge.prize, wheelTarget(human));
+  check(
+    effect.hpLost === wound && human.hp === human.maxHp - wound,
+    `Take Damage costs ${wound} of ${human.maxHp} HP (lost ${effect.hpLost})`,
+  );
+  check(
+    human.lastDamageSource?.kind === 'wheelPenalty',
+    `Take Damage lands as a wheel penalty through takeDamage (${human.lastDamageSource?.kind ?? 'no source'})`,
+  );
+
+  const cursed = new HumanPlayer(0, 0, TILE_SIZE);
+  cursed.applyStatus(makeDoubleDamage());
+  const cursedWound = Math.min(cursed.maxHp - 1, wound * DOUBLE_DAMAGE_SCALE);
+  const cursedEffect = applyWheelPrize(wedge.prize, wheelTarget(cursed));
+  check(
+    cursedEffect.hpLost === cursedWound,
+    `under double damage Take Damage costs ${cursedWound} (lost ${cursedEffect.hpLost})`,
+  );
+
+  for (const startHp of [1, 2, wound]) {
+    const low = new HumanPlayer(0, 0, TILE_SIZE);
+    low.hp = startHp;
+    applyWheelPrize(wedge.prize, wheelTarget(low));
+    check(low.hp === 1, `Take Damage from ${startHp} HP leaves 1 HP, never a kill (${low.hp})`);
+  }
+
+  const haloed = new CatPlayer(1, 0, TILE_SIZE);
+  haloed.inventory.addItem(NINTH_LIFE_ITEM, 1);
+  haloed.inventory.equipByItemId(NINTH_LIFE_ITEM);
+  const lowHp = Math.floor(haloed.maxHp * NINTH_LIFE_TEST_HP_SHARE);
+  haloed.hp = lowHp;
+  applyWheelPrize(wedge.prize, wheelTarget(haloed));
+  const ninthLifeSpent = haloed.gear.of(NINTH_LIFE_ITEM).floorOnceSpent.includes('ninthLife');
+  check(
+    haloed.inventory.equipment.isEquipped(NINTH_LIFE_ITEM) && !ninthLifeSpent && haloed.hp === 1,
+    `Take Damage from ${lowHp} HP on a Ninth Life wearer is floored before the halo judges it: unspent, not healed (${haloed.hp} HP, ${ninthLifeSpent ? 'spent' : 'unspent'})`,
+  );
+}
+
+function checkDoubleDamage(): void {
+  check(
+    STATUS_INCOMING_DAMAGE_SCALE[DOUBLE_DAMAGE_STATUS] === DOUBLE_DAMAGE_SCALE &&
+      DOUBLE_DAMAGE_SCALE === 2,
+    'double damage doubles every incoming blow',
+  );
+  const curse = makeDoubleDamage();
+  for (const [label, source] of [
+    ['a mob hit', STEADY_MOB_BLOW],
+    ['a status tick', STATUS_TICK],
+  ] as const) {
+    const bare = hpLostTo(source, null);
+    const cursed = hpLostTo(source, curse);
+    check(
+      bare > 0 && cursed === bare * DOUBLE_DAMAGE_SCALE,
+      `double damage doubles ${label} (${bare} → ${cursed})`,
+    );
+  }
+
+  const capped = new HumanPlayer(0, 0, TILE_SIZE);
+  capped.applyStatus(makeDoubleDamage());
+  const blowCap = capped.maxHp * BOUNTY_MAX_BLOW_HP_SHARE;
+  const beforeCapped = capped.hp;
+  capped.takeDamage(capped.maxHp * OVERWHELMING_BLOW_MAX_HP_MULTIPLE, CAPPED_BOUNTY_BLOW);
+  const cappedLoss = beforeCapped - capped.hp;
+  check(
+    cappedLoss > 0 && cappedLoss <= blowCap + SCALE_TOLERANCE,
+    `under double damage a capped bounty blow still costs at most ${blowCap} of ${capped.maxHp} HP (lost ${cappedLoss})`,
+  );
+
+  const wedge = wedgeById('double_damage_1');
+  const human = new HumanPlayer(0, 0, TILE_SIZE);
+  if (wedge !== undefined) applyWheelPrize(wedge.prize, wheelTarget(human));
+  const laid = human.statusEffects.find((effect) => effect.type === DOUBLE_DAMAGE_STATUS);
+  check(
+    laid !== undefined && laid.ticksRemaining === DOUBLE_DAMAGE_FRAMES,
+    `the wedge lays double damage for five minutes (${laid?.ticksRemaining ?? 0} frames)`,
+  );
+  human.clearStatusEffects();
+  human.cureStatuses([DOUBLE_DAMAGE_STATUS]);
+  check(
+    INCURABLE_STATUSES.includes(DOUBLE_DAMAGE_STATUS) &&
+      human.statusEffects.some((effect) => effect.type === DOUBLE_DAMAGE_STATUS),
+    'double damage is incurable: no cure or clear lifts it',
+  );
+  check(statusShowsHudPill(DOUBLE_DAMAGE_STATUS), 'double damage shows a HUD pill');
+
+  const snap = snapPlayer(human);
+  const remaining = doubleDamageRemainingOf(snap, snapPlayer(new CatPlayer(1, 0, TILE_SIZE)));
+  const stripped = { ...snap, statusEffects: [] };
+  const restored = withDoubleDamageFrames(stripped, remaining.human);
+  check(
+    remaining.human > 0 &&
+      remaining.cat === 0 &&
+      restored.statusEffects.some(
+        (effect) =>
+          effect.type === DOUBLE_DAMAGE_STATUS && effect.ticksRemaining === remaining.human,
+      ),
+    `double damage crosses a save through its own field (${remaining.human} frames)`,
+  );
+}
+
+function retchCount(bus: EventBus, crawlers: { human: HumanPlayer; cat: CatPlayer }): number {
+  let retches = 0;
+  const off = bus.on('bloodVomitRetch', () => retches++);
+  drainHpThresholdCrossings(crawlers, bus);
+  drainBloodVomitRetches([crawlers.human, crawlers.cat], bus);
+  off();
+  return retches;
+}
+
+/** A five-minute retch, longer than any bout lasts, so a replayed one would show. */
+const STALE_SAVED_RETCH_FRAMES = DOUBLE_DAMAGE_FRAMES;
+
+function checkRetch(): void {
+  const threshold = CRAWLER_HP_THRESHOLDS.retch;
+  check(
+    threshold.share === RETCH_SHARE_EXPECTED,
+    `the retch band is the bottom ${threshold.share * 100}% of HP`,
+  );
+  check(!INCURABLE_STATUSES.includes(BLOOD_VOMIT_STATUS), 'a retch is not incurable');
+  check(!statusShowsHudPill(BLOOD_VOMIT_STATUS), 'a retch shows no HUD pill');
+
+  const stale = new HumanPlayer(0, 0, TILE_SIZE);
+  const staleRetch = {
+    ...makeBloodVomit(),
+    ticksRemaining: STALE_SAVED_RETCH_FRAMES,
+    totalTicks: STALE_SAVED_RETCH_FRAMES,
+  };
+  stale.statusEffects.push(staleRetch);
+  const snapped = snapPlayer(stale);
+  check(
+    !snapped.statusEffects.some((effect) => effect.type === BLOOD_VOMIT_STATUS),
+    'a retch is never written into a snapshot, however long it has left',
+  );
+  const storedWithRetch: unknown = JSON.parse(
+    JSON.stringify({ ...snapped, statusEffects: [{ ...staleRetch, applier: null }] }),
+  );
+  check(
+    parsePlayerSnapshot(storedWithRetch, 'human') === undefined,
+    'a stored snapshot carrying a retch fails validation',
+  );
+
+  for (const which of ['human', 'cat'] as const) {
+    const bus = new EventBus();
+    const crawlers = {
+      human: new HumanPlayer(0, 0, TILE_SIZE),
+      cat: new CatPlayer(1, 0, TILE_SIZE),
+    };
+    const crawler = crawlers[which];
+    const top = hpThresholdTop(threshold, crawler.maxHp);
+
+    crawler.takeDamage(crawler.hp - top, FLAT_HAZARD);
+    const hpBeforeRetch = crawler.hp;
+    const entered = retchCount(bus, crawlers);
+    const bout = crawler.statusEffects.find((effect) => effect.type === BLOOD_VOMIT_STATUS);
+    check(
+      entered === 1 && crawler.hp === hpBeforeRetch,
+      `${which}: a blow landing exactly on ${top} HP retches once and costs no HP (${entered} retches, ${hpBeforeRetch} → ${crawler.hp} HP)`,
+    );
+    check(
+      bout !== undefined && bout.totalTicks === BLOOD_VOMIT_RETCH_FRAMES,
+      `${which}: the retch lasts one bout (${bout?.totalTicks ?? 0} frames)`,
+    );
+
+    if (top > 1) {
+      crawler.takeDamage(1, FLAT_HAZARD);
+      check(
+        retchCount(bus, crawlers) === 0,
+        `${which}: a second blow inside the band does not retch again`,
+      );
+    }
+    crawler.hp = crawler.maxHp;
+    check(retchCount(bus, crawlers) === 0, `${which}: healing out of the band does not retch`);
+    crawler.takeDamage(crawler.hp - top, FLAT_HAZARD);
+    check(
+      retchCount(bus, crawlers) === 1,
+      `${which}: entering the band again after rising above it retches again`,
+    );
+
+    const killed =
+      which === 'human' ? new HumanPlayer(0, 0, TILE_SIZE) : new CatPlayer(1, 0, TILE_SIZE);
+    const killedCrawlers =
+      killed instanceof HumanPlayer
+        ? { human: killed, cat: new CatPlayer(1, 0, TILE_SIZE) }
+        : { human: new HumanPlayer(0, 0, TILE_SIZE), cat: killed };
+    killed.takeDamage(killed.maxHp, FLAT_HAZARD);
+    check(
+      killed.hp === 0 && retchCount(bus, killedCrawlers) === 0,
+      `${which}: a blow straight to 0 HP does not retch`,
+    );
+  }
+
+  const mobHit = new HumanPlayer(0, 0, TILE_SIZE);
+  mobHit.hp = hpThresholdTop(threshold, mobHit.maxHp) + RETCH_TEST_MOB_BLOW;
+  mobHit.takeHpThresholdCrossings();
+  mobHit.takeDamage(RETCH_TEST_MOB_BLOW, STEADY_MOB_BLOW);
+  check(
+    mobHit.takeHpThresholdCrossings().includes('retch'),
+    'a mob hit carrying a crawler into the band is seen entering it',
+  );
+}
+
 runSection('board', checkBoard);
 runSection('bets', checkBets);
 runSection('picks', checkPicks);
 runSection('landings', checkLandings);
 runSection('spin plans', checkSpinPlans);
+runSection('status damage scale', checkStatusDamageScale);
+runSection('hp thresholds', checkHpThresholds);
+runSection('penalty wedges', checkPenaltyWedges);
+runSection('take damage', checkTakeDamage);
+runSection('double damage', checkDoubleDamage);
+runSection('retch', checkRetch);
 console.log('\nsave latch');
 await checkInFlightSaveCannotResurrectWipe();
 await checkAuthFailureAsksForSignIn();

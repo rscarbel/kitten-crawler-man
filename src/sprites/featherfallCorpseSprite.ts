@@ -5,7 +5,7 @@
  *
  * A pure draw function rather than a `Mob` or a baked
  * palette canvas — nothing here is per-instance. Self-contained rather than
- * reading the live skyfowl cast's palette: his own colours are a fixed,
+ * reading the live Hawkfolk cast's palette: his own colours are a fixed,
  * one-off quote of the town's blue-and-gold civic livery, not a citizen's
  * outfit that changes with the cast.
  */
@@ -29,7 +29,7 @@ const LUMA_BLUE = 0.114;
 /**
  * Pulls a living palette colour toward its own grey and then toward black.
  *
- * The corpse has to be recognisable as the same office the living skyfowl of
+ * The corpse has to be recognisable as the same office the living Hawkfolk of
  * this town wear — the sash is the whole point — while reading as weeks dead at
  * a glance, and a separate hand-picked palette would drift away from the one it
  * is supposed to be quoting.
@@ -109,7 +109,7 @@ const NECK_WIDTH = 0.1;
 const NECK_ROOT = { x: 0.03, y: -0.82 };
 /**
  * The neck has given up: it sags out of the collar and the head has tipped
- * back over it. A skyfowl holding its head level reads as asleep at worst.
+ * back over it. A Hawkfolk holding its head level reads as asleep at worst.
  */
 const NECK_SAG = { x: 0.16, y: -0.76 };
 const HEAD_CENTRE = { x: 0.27, y: -0.94 };
@@ -167,7 +167,7 @@ function fillEllipse(
   ctx.fill();
 }
 
-export function drawSkyFowlCorpse(
+export function drawHawkfolkCorpse(
   ctx: CanvasRenderingContext2D,
   sx: number,
   sy: number,

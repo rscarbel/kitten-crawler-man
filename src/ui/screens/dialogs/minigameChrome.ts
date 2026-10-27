@@ -1,6 +1,6 @@
 /**
  * Theme-drawn chrome for the two mini-games that keep their own layouts: the
- * Desperado Club's blackjack table and the keyboard-hero board. Every painter
+ * Cloak & Dagger's blackjack table and the keyboard-hero board. Every painter
  * takes a {@link PaintTarget}, so the bare-context renders and a future
  * `render(ui)` surface share them.
  */

@@ -1,5 +1,5 @@
 /**
- * The Over City's market: the carts in the square and the people behind them.
+ * Taloncrest's market: the carts in the square and the people behind them.
  * Owned by `DungeonScene` and active only on the overworld. Each vendor in
  * `MARKET_VENDORS` gets a two-tile counter footprint, a stationed `Townsperson`
  * drawn at full citizen scale, and a `Browse` interaction that opens the shared

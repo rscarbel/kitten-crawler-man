@@ -500,7 +500,7 @@ function paintMeetingStile(ctx: Ctx, inner: Rect, leafWidth: number, ramp: Ramp)
   );
 }
 
-/** The heavy surround a grand door is hung in — the Desperado's whole silhouette. */
+/** The heavy surround a grand door is hung in — the Cloak & Dagger's whole silhouette. */
 function paintGrandFrame(ctx: Ctx, leaf: Rect, inner: Rect, ramp: Ramp): void {
   ctx.fillStyle = rgb(sampleRamp(ramp, Math.min(1, 0.5 + PANEL_TONE_LIFT)));
   ctx.fillRect(leaf.x, leaf.y, leaf.width, leaf.height);

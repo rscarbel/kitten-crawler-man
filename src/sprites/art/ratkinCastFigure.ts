@@ -6,7 +6,7 @@
  * keyed on `(figure, state, frame)`, so a painter that read a villager's look
  * off the villager would serve the first one's clothes to everybody. The cast
  * is a closed set of twenty-one, so each gets its own `FigureId`
- * (`ratkin_<id>`), exactly as the sky fowl's palettes do.
+ * (`ratkin_<id>`), exactly as the Hawkfolk's palettes do.
  *
  * Rows every character paints:
  *    walk / walk_side / walk_away     16 frames, Mordecai's gait

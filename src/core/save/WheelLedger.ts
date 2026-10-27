@@ -1,5 +1,4 @@
-import { isRecord } from '../util/guards';
-import { isItemId, type ItemId } from '../items/defs/ItemDefs';
+import { isFiniteNumber, isRecord, parseEvery } from '../util/guards';
 
 /** Which crawler a wheel spin belongs to: the one active when it was spun. */
 export type WheelCrawler = 'human' | 'cat';
@@ -27,20 +26,9 @@ export interface PendingWheelOutcome {
 }
 
 /**
- * A prize item a save may hold for a crawler outside the bag. The wheel itself
- * never adds one and saves never write them; one read from a save is put in
- * the crawler's bag when the ledger is settled on load.
- */
-export interface OwedWheelItem {
-  crawler: WheelCrawler;
-  id: ItemId;
-  quantity: number;
-}
-
-/**
  * Free spins quests hand out, and the taped chain one of them is playing. A
  * quest's free spin covers the minimum bet, skips the warnings and tapes over
- * the Nothing, so the wipe cannot be drawn until the spin and every Spin Again
+ * Permanent Death, so the wipe cannot be drawn until the spin and every Spin Again
  * it chains into have landed.
  */
 export interface WheelQuestFreeSpins {
@@ -58,7 +46,7 @@ export interface WheelQuestFreeSpins {
 /**
  * What the Wheel of Fortune remembers about the run. Party state rather than
  * floor state, so it is threaded by reference through every scene like the
- * club membership, and saved as top-level fields that survive a floor change.
+ * casino state, and saved as top-level fields that survive a floor change.
  */
 export interface WheelLedger {
   /**
@@ -78,8 +66,6 @@ export interface WheelLedger {
    * tab closes first.
    */
   owedFreeze: WheelCrawler | null;
-  /** Prize items read from a save, emptied into the bags when the ledger is settled. */
-  owedItems: OwedWheelItem[];
   questFreeSpins: WheelQuestFreeSpins;
 }
 
@@ -98,7 +84,6 @@ export function createWheelLedger(
   pendingOutcome: PendingWheelOutcome | null = null,
   freeSpinBet: number | null = null,
   owedFreeze: WheelCrawler | null = null,
-  owedItems: ReadonlyArray<OwedWheelItem> = [],
   questFreeSpins: Partial<WheelQuestFreeSpins> = {},
 ): WheelLedger {
   return {
@@ -106,7 +91,6 @@ export function createWheelLedger(
     pendingOutcome,
     freeSpinBet,
     owedFreeze,
-    owedItems: owedItems.map((item) => ({ ...item })),
     questFreeSpins: createWheelQuestFreeSpins(questFreeSpins),
   };
 }
@@ -133,75 +117,56 @@ export function tapedChainOwed(ledger: WheelLedger): boolean {
   return ledger.questFreeSpins.tapedChain && ledger.freeSpinBet !== null;
 }
 
-/** A saved quest free-spin record, screened; anything untrustworthy reads as none. */
+/** A saved quest free-spin record, or undefined when it is not one this build wrote. */
 export function parseWheelQuestFreeSpins(raw: unknown): WheelQuestFreeSpins | undefined {
-  if (raw === undefined) return undefined;
-  if (!isRecord(raw)) return createWheelQuestFreeSpins();
-  const { earnedBy, used, tapedChain } = raw;
-  const quests = Array.isArray(earnedBy)
-    ? [...new Set(earnedBy.filter((entry): entry is string => typeof entry === 'string'))]
-    : [];
-  const spun = typeof used === 'number' && Number.isInteger(used) && used >= 0 ? used : 0;
-  return createWheelQuestFreeSpins({
-    earnedBy: quests,
-    used: Math.min(spun, quests.length),
-    tapedChain: tapedChain === true,
-  });
+  if (!isRecord(raw)) return undefined;
+  const { used, tapedChain } = raw;
+  const earnedBy = parseEvery(raw.earnedBy, (entry) =>
+    typeof entry === 'string' ? entry : undefined,
+  );
+  if (earnedBy === undefined || hasRepeats(earnedBy)) return undefined;
+  const usedValid = typeof used === 'number' && Number.isInteger(used) && used >= 0;
+  if (!usedValid || used > earnedBy.length || typeof tapedChain !== 'boolean') return undefined;
+  return { earnedBy, used, tapedChain };
 }
 
-/** Saved owed items, screened: anything that is not a known item for a known crawler is dropped. */
-export function parseWheelOwedItems(raw: unknown): OwedWheelItem[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
-  const items: OwedWheelItem[] = [];
-  for (const entry of raw) {
-    if (!isRecord(entry)) continue;
-    const { crawler, id, quantity } = entry;
-    if (!isWheelCrawler(crawler) || typeof id !== 'string' || !isItemId(id)) continue;
-    if (typeof quantity !== 'number' || !Number.isInteger(quantity) || quantity <= 0) continue;
-    items.push({ crawler, id, quantity });
-  }
-  return items;
-}
-
-/** A saved free-spin bet, or null when there is none or it cannot be trusted. */
+/** A saved free-spin bet: null for none, undefined when it is not a valid bet. */
 export function parseWheelFreeSpinBet(raw: unknown): number | null | undefined {
-  if (raw === undefined) return undefined;
-  return typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? raw : null;
+  if (raw === null) return null;
+  return isFiniteNumber(raw) && raw > 0 ? raw : undefined;
 }
 
-/** A saved owed freeze, or null when there is none or it cannot be trusted. */
+/** A saved owed freeze: null for none, undefined when it names no crawler. */
 export function parseWheelOwedFreeze(raw: unknown): WheelCrawler | null | undefined {
-  if (raw === undefined) return undefined;
-  return isWheelCrawler(raw) ? raw : null;
+  if (raw === null) return null;
+  return isWheelCrawler(raw) ? raw : undefined;
 }
 
-/** A saved won-prize list, screened: non-strings and repeats are dropped. */
+/** A saved won-prize list, or undefined when it holds a non-string or a repeat. */
 export function parseWheelPrizesWon(raw: unknown): string[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
-  const prizes = new Set<string>();
-  for (const entry of raw) {
-    if (typeof entry === 'string') prizes.add(entry);
-  }
-  return [...prizes];
+  const prizes = parseEvery(raw, (entry) => (typeof entry === 'string' ? entry : undefined));
+  if (prizes === undefined || hasRepeats(prizes)) return undefined;
+  return prizes;
+}
+
+function hasRepeats(entries: readonly string[]): boolean {
+  return new Set(entries).size !== entries.length;
 }
 
 function isWheelCrawler(value: unknown): value is WheelCrawler {
   return value === 'human' || value === 'cat';
 }
 
-/** A saved pending spin, or null when there is none or it cannot be trusted. */
+/** A saved pending spin: null for none, undefined when it is not one this build wrote. */
 export function parsePendingWheelOutcome(raw: unknown): PendingWheelOutcome | null | undefined {
-  if (raw === undefined) return undefined;
-  if (!isRecord(raw)) return null;
+  if (raw === null) return null;
+  if (!isRecord(raw)) return undefined;
   const { wedgeId, prizeId, crawler, recipient, bet, boardBet } = raw;
-  if (typeof wedgeId !== 'string') return null;
-  if (prizeId !== null && typeof prizeId !== 'string') return null;
-  if (!isWheelCrawler(crawler)) return null;
-  if (typeof bet !== 'number' || !Number.isFinite(bet) || bet < 0) return null;
-  // A free spin stakes nothing, so a save without the board's bet falls back to the stake.
-  const board =
-    typeof boardBet === 'number' && Number.isFinite(boardBet) && boardBet > 0 ? boardBet : bet;
-  // A save written without a recipient paid every prize to the spinner.
-  const paid = isWheelCrawler(recipient) ? recipient : crawler;
-  return { wedgeId, prizeId, crawler, recipient: paid, bet, boardBet: board };
+  if (typeof wedgeId !== 'string') return undefined;
+  if (prizeId !== null && typeof prizeId !== 'string') return undefined;
+  if (!isWheelCrawler(crawler) || !isWheelCrawler(recipient)) return undefined;
+  if (!isFiniteNumber(bet) || bet < 0 || !isFiniteNumber(boardBet) || boardBet <= 0) {
+    return undefined;
+  }
+  return { wedgeId, prizeId, crawler, recipient, bet, boardBet };
 }

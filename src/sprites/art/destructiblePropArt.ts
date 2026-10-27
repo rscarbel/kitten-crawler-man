@@ -1831,27 +1831,50 @@ function flamePath(
   ctx.closePath();
 }
 
+/** Where a drawn flame tongue's tip ended up, for whatever rises off it. */
+export interface FlameTongueTip {
+  readonly x: number;
+  readonly y: number;
+}
+
 /**
- * The fire itself, rising from `baseY` at `cx`: three nested teardrops and a
- * column of smoke off the tip. No glow is painted round it — the light a flame
- * throws is drawn by the lighting pass, which knows where the walls are.
- *
- * @param sizeScale Multiplies every dimension, so a brazier's bed of coals burns
- *   visibly bigger than a single brand.
+ * The furthest a flame tongue drawn at `scale` reaches: its half-width plus its
+ * widest sway either side of `cx`, and its tallest flicker above `baseY`. A
+ * caller baking tongues into a frame sizes the frame by it.
  */
-export function drawFlame(
+export function flameTongueExtent(
+  scale: number,
+  swayScale: number,
+): { readonly halfWidth: number; readonly height: number } {
+  return {
+    halfWidth: FLAME_HALF_W * scale + FLAME_SWAY * swayScale,
+    height: (FLAME_BASE_H + FLAME_H_FLICKER) * scale,
+  };
+}
+
+/** A flame tongue's resting height at a `scale` of one, in pixels. */
+export const FLAME_TONGUE_BASE_HEIGHT = FLAME_BASE_H;
+
+/**
+ * Three nested teardrops rising from `baseY` at `cx`, with no smoke: the fire
+ * of {@link drawFlame} for a fire whose smoke goes up a chimney.
+ *
+ * @param scale Multiplies the tongue's height and width.
+ * @param swayScale Multiplies how far the tip swings, which a bigger fire
+ *   needs to read as moving at all.
+ */
+export function drawFlameTongue(
   ctx: Ctx,
   cx: number,
   baseY: number,
   phase: number,
-  damaged: boolean,
-  sizeScale: number,
-): void {
+  scale: number,
+  swayScale: number,
+): FlameTongueTip {
   const wave = Math.sin(phase * TWO_PI);
-  const scale = (damaged ? FLAME_DAMAGED_SCALE : 1) * sizeScale;
   const height = (FLAME_BASE_H + wave * FLAME_H_FLICKER) * scale;
   const halfW = FLAME_HALF_W * scale;
-  const sway = Math.sin(phase * TWO_PI * 2) * FLAME_SWAY;
+  const sway = Math.sin(phase * TWO_PI * 2) * FLAME_SWAY * swayScale;
   const tipY = baseY - height;
 
   ctx.save();
@@ -1888,14 +1911,35 @@ export function drawFlame(
   ctx.fillStyle = FLAME_CORE;
   ctx.fill();
   ctx.restore();
+  return { x: cx + sway, y: tipY };
+}
+
+/**
+ * The fire itself, rising from `baseY` at `cx`: three nested teardrops and a
+ * column of smoke off the tip. No glow is painted round it — the light a flame
+ * throws is drawn by the lighting pass, which knows where the walls are.
+ *
+ * @param sizeScale Multiplies every dimension, so a brazier's bed of coals burns
+ *   visibly bigger than a single brand.
+ */
+export function drawFlame(
+  ctx: Ctx,
+  cx: number,
+  baseY: number,
+  phase: number,
+  damaged: boolean,
+  sizeScale: number,
+): void {
+  const scale = (damaged ? FLAME_DAMAGED_SCALE : 1) * sizeScale;
+  const tip = drawFlameTongue(ctx, cx, baseY, phase, scale, 1);
 
   const smokeAlphaScale = damaged ? SMOKE_DAMAGED_MULTIPLIER : 1;
   for (let i = 0; i < SMOKE_PUFF_COUNT; i++) {
     const drift = Math.sin(phase * TWO_PI + i) * SMOKE_PUFF_SWAY;
     puff(
       ctx,
-      cx + sway + drift,
-      tipY - SMOKE_PUFF_LIFT - i * SMOKE_PUFF_STRIDE,
+      tip.x + drift,
+      tip.y - SMOKE_PUFF_LIFT - i * SMOKE_PUFF_STRIDE,
       (SMOKE_PUFF_BASE_RADIUS + i) * sizeScale,
       Math.max(0, (SMOKE_PUFF_ALPHA_BASE - i * SMOKE_PUFF_ALPHA_DECAY) * smokeAlphaScale),
       SMOKE_RGB,

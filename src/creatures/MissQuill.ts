@@ -54,11 +54,10 @@ const MISS_QUILL_EYES: EyePlacement = {
 };
 
 /**
- * Miss Quill — the sky fowl schoolteacher revealed as the necromancer behind
+ * Miss Quill — the Hawkfolk schoolteacher revealed as the necromancer behind
  * the krasue murders, and the boss of the tower confrontation. A stationary
  * caster: soul-bolt volleys, periodic krasue summons, and — while her
- * husband-capacitor Remex stands — total invulnerability (pattern:
- * Grimaldi's tendril shield).
+ * husband-capacitor Remex stands — total invulnerability.
  */
 export class MissQuill extends Mob {
   protected override get eyePlacement(): EyePlacement {
@@ -76,7 +75,7 @@ export class MissQuill extends Mob {
   override readonly audioTag = 'miss_quill';
   displayName = 'Miss Quill';
   description =
-    'The sky fowl schoolteacher, prim to the last button — every krasue in the city was her handiwork.';
+    'The Hawkfolk schoolteacher, prim to the last button — every krasue in the city was her handiwork.';
 
   private capacitor: Remex | null = null;
   private shielded = false;

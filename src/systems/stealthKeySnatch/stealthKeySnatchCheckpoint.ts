@@ -27,13 +27,7 @@ export interface StealthKeySnatchCheckpoint {
   readonly explainerSeen: boolean;
 }
 
-/** The quest as a floor generates it, and as a save written before the quest loads it. */
-export const UNMET_STEALTH_KEY_SNATCH: StealthKeySnatchCheckpoint = {
-  phase: 'unmet',
-  explainerSeen: false,
-};
-
-/** Parses the saved quest from untrusted JSON; undefined for a save written before it existed. */
+/** Parses the saved quest from untrusted JSON; undefined for anything malformed. */
 export function parseStealthKeySnatchCheckpoint(
   value: unknown,
 ): StealthKeySnatchCheckpoint | undefined {

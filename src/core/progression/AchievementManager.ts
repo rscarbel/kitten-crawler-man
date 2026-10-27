@@ -9,7 +9,8 @@ import {
   type RewardPresentation,
 } from '../../loot/rewardChest';
 import { ITEM_DEF, isItemId, type ItemId } from '../items/defs/ItemDefs';
-import { isRecord } from '../util/guards';
+import { isFiniteNumber, isRecord, ownEntry, parseEvery } from '../util/guards';
+import { CLOAK_AND_DAGGER_NAME } from '../../map/town/townPlan';
 import { plainLine } from '../util/plainText';
 import { isRarity, type Rarity } from '../items/defs/rarity';
 import type { CrawlerKind } from '../skills/SkillManager';
@@ -44,12 +45,6 @@ export const AI_ACHIEVEMENTS_MAX = 200;
 export const AI_ACHIEVEMENT_TITLE_MAX_CHARS = 60;
 export const AI_ACHIEVEMENT_DESCRIPTION_MAX_CHARS = 160;
 const AI_ACHIEVEMENT_AWARDER_MAX_CHARS = 40;
-/**
- * The most unseen reward presentations one crawler keeps. Each is shown and
- * dropped as soon as the screen is free, so play never reaches it; it bounds
- * what a tampered save can make the game hold.
- */
-const PRESENTATIONS_MAX = 100;
 const PRESENTATION_TEXT_MAX_CHARS = 200;
 
 export interface RecentEvent {
@@ -66,10 +61,8 @@ export type AchievementId =
   | 'quest_defend_npc'
   | 'disaster_averted'
   | 'out_before_the_fall'
-  | 'members_only'
   | 'on_retainer'
   | 'casino_jackpot'
-  | 'entourage'
   | 'bartenders_choice'
   | 'down_the_hatch'
   | 'spark_to_flame'
@@ -273,13 +266,6 @@ export const ACHIEVEMENT_DEFS: Readonly<Record<AchievementId, AchievementDef>> =
     playerType: 'both',
     reward: { rarity: 'Legendary' },
   },
-  members_only: {
-    id: 'members_only',
-    name: 'Members Only',
-    description: 'Earn a membership to the club.',
-    playerType: 'both',
-    reward: { rarity: 'Common' },
-  },
   on_retainer: {
     id: 'on_retainer',
     name: 'On Retainer',
@@ -297,21 +283,14 @@ export const ACHIEVEMENT_DEFS: Readonly<Record<AchievementId, AchievementDef>> =
       fixed: [{ kind: 'item', id: 'gilded_monocle', quantity: 1, to: 'active' }],
     },
   },
-  entourage: {
-    id: 'entourage',
-    name: 'Entourage',
-    description: 'Hire a pair of bodyguards to follow you around the club.',
-    playerType: 'both',
-    reward: { rarity: 'Common' },
-  },
   bartenders_choice: {
     id: 'bartenders_choice',
     name: "Bartender's Choice",
-    description: `Drink a ${ITEM_DEF.dirty_shirley.name} at the club bar.`,
-    playerType: 'both',
+    description: `Drink a ${ITEM_DEF.catnip_tuna_water.name} in ${CLOAK_AND_DAGGER_NAME}.`,
+    playerType: 'cat',
     reward: {
       rarity: 'Common',
-      fixed: [{ kind: 'item', id: 'lucky_penny', quantity: 1, to: 'active' }],
+      fixed: [{ kind: 'item', id: 'lucky_penny', quantity: 1, to: 'cat' }],
     },
   },
   down_the_hatch: {
@@ -460,7 +439,7 @@ export const ACHIEVEMENT_DEFS: Readonly<Record<AchievementId, AchievementDef>> =
 };
 
 export function isAchievementId(s: string): s is AchievementId {
-  return s in ACHIEVEMENT_DEFS;
+  return ownEntry(ACHIEVEMENT_DEFS, s) !== undefined;
 }
 
 function isAchievementIdValue(value: unknown): value is AchievementId {
@@ -470,10 +449,6 @@ function isAchievementIdValue(value: unknown): value is AchievementId {
 /** Whether `kind` can earn `def` at all. */
 export function crawlerCanEarn(def: AchievementDef, kind: CrawlerKind): boolean {
   return def.playerType === 'both' || def.playerType === kind;
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
 }
 
 function isCrawlerKind(value: unknown): value is CrawlerKind {
@@ -492,15 +467,25 @@ function parseRecentEvent(value: unknown): RecentEvent | undefined {
   return { label, timestamp };
 }
 
-function arrayOrEmpty(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
+/**
+ * Every entry of a saved list parsed, or undefined when the list is missing,
+ * longer than `max`, or holds one entry that fails.
+ */
+function parseBoundedList<T>(
+  value: unknown,
+  max: number,
+  parseEntry: (entry: unknown) => T | undefined,
+): T[] | undefined {
+  const parsed = parseEvery(value, parseEntry);
+  return parsed === undefined || parsed.length > max ? undefined : parsed;
 }
 
+/** Saved AI text, which was flattened to one plain line before it was ever written. */
 function boundedText(value: unknown, maxChars: number): string | undefined {
   if (typeof value !== 'string') return undefined;
-  const line = plainLine(value);
-  if (line.length === 0 || line.length > maxChars) return undefined;
-  return line;
+  if (plainLine(value) !== value) return undefined;
+  if (value.length === 0 || value.length > maxChars) return undefined;
+  return value;
 }
 
 function parseAIAchievement(value: unknown): AIAchievementDef | undefined {
@@ -510,15 +495,8 @@ function parseAIAchievement(value: unknown): AIAchievementDef | undefined {
   const awardedBy = boundedText(value.awardedBy, AI_ACHIEVEMENT_AWARDER_MAX_CHARS);
   const { rarity, awardedAt } = value;
   if (name === undefined || description === undefined || awardedBy === undefined) return undefined;
-  if (!isRarity(rarity)) return undefined;
-  return {
-    id: aiAchievementKey(name),
-    name,
-    description,
-    rarity,
-    awardedBy,
-    awardedAt: isFiniteNumber(awardedAt) ? awardedAt : 0,
-  };
+  if (!isRarity(rarity) || !isFiniteNumber(awardedAt)) return undefined;
+  return { id: aiAchievementKey(name), name, description, rarity, awardedBy, awardedAt };
 }
 
 function wholeCount(value: unknown): number | undefined {
@@ -588,7 +566,7 @@ function textOrEmpty(value: unknown): string | undefined {
   return boundedText(value, PRESENTATION_TEXT_MAX_CHARS);
 }
 
-/** A saved origin read back, the award looked up again; undefined for one no longer known. */
+/** A saved origin read back, the award looked up again; undefined for one this build does not know. */
 function parseOrigin(
   value: unknown,
   aiAwards: ReadonlyMap<AIAchievementKey, AIAchievementDef>,
@@ -611,18 +589,17 @@ function parsePresentation(
 ): RewardPresentation | undefined {
   if (!isRecord(value)) return undefined;
   const { crawler, rarity } = value;
-  const subtitle = textOrEmpty(value.subtitle);
-  if (subtitle === undefined) return undefined;
   if (!isCrawlerKind(crawler) || !isRarity(rarity)) return undefined;
   const origin = parseOrigin(value.origin, aiAwards);
   if (origin === undefined) return undefined;
-  const rewards = arrayOrEmpty(value.rewards)
-    .map(parseGrantedLine)
-    .filter((line) => line !== undefined);
+  const rewards = parseEvery(value.rewards, parseGrantedLine);
+  if (rewards === undefined) return undefined;
   if (origin.kind === 'award') {
     const { award } = origin;
     return { origin, title: award.name, subtitle: award.description, crawler, rarity, rewards };
   }
+  const subtitle = textOrEmpty(value.subtitle);
+  if (subtitle === undefined) return undefined;
   const title = CHEST_SOURCE_TITLES[origin.source];
   return { origin, title, subtitle, crawler, rarity, rewards };
 }
@@ -631,12 +608,13 @@ function emptyCounters(): Record<AchievementCounterId, number> {
   return { dungeonKills: 0, flawlessBossKills: 0, unseenKills: 0, relicKills: 0 };
 }
 
-function parseCounters(value: unknown): Record<AchievementCounterId, number> {
+function parseCounters(value: unknown): Record<AchievementCounterId, number> | undefined {
+  if (!isRecord(value)) return undefined;
   const counters = emptyCounters();
-  if (!isRecord(value)) return counters;
   for (const id of ACHIEVEMENT_COUNTER_IDS) {
     const count = value[id];
-    if (isFiniteNumber(count)) counters[id] = Math.max(0, Math.floor(count));
+    if (!isFiniteNumber(count) || count < 0 || !Number.isInteger(count)) return undefined;
+    counters[id] = count;
   }
   return counters;
 }
@@ -804,30 +782,61 @@ export class AchievementManager {
   }
 
   /**
-   * A manager carrying what {@link serialize} wrote, or a fresh one when the
-   * save has none. The input is unvalidated JSON from storage or the server, so
-   * every entry is re-screened: one naming an achievement this build no longer
-   * has is dropped rather than failing the whole restore.
+   * A manager carrying what {@link serialize} wrote, or undefined when `value`
+   * is not exactly that: input is unvalidated JSON from storage or the server,
+   * and one entry this build does not know fails the whole record.
    */
-  static fromSerialized(value: unknown): AchievementManager {
+  static parse(value: unknown): AchievementManager | undefined {
+    if (!isRecord(value)) return undefined;
+    const unlocked = parseEvery(value.unlocked, (id) =>
+      isAchievementIdValue(id) ? id : undefined,
+    );
+    const aiAwards = parseBoundedList(
+      value.aiAchievements,
+      AI_ACHIEVEMENTS_MAX,
+      parseAIAchievement,
+    );
+    if (unlocked === undefined || aiAwards === undefined) return undefined;
+    const aiAwardsByKey = new Map(aiAwards.map((def) => [def.id, def] as const));
+    // Unbounded: every queued chest is already paid and waits for the player
+    // to open it, so a cap would either refuse the save or lose rewards.
+    const presentations = parseEvery(value.presentations, (entry) =>
+      parsePresentation(entry, aiAwardsByKey),
+    );
+    const recentEvents = parseBoundedList(
+      value.recentEvents,
+      RECENT_EVENTS_MAX_CAP,
+      parseRecentEvent,
+    );
+    const counters = parseCounters(value.counters);
+    const { menuUnseen } = value;
+    if (
+      presentations === undefined ||
+      recentEvents === undefined ||
+      counters === undefined ||
+      !isFiniteNumber(menuUnseen) ||
+      menuUnseen < 0
+    ) {
+      return undefined;
+    }
     const manager = new AchievementManager();
-    if (!isRecord(value)) return manager;
-    manager.unlocked = new Set(arrayOrEmpty(value.unlocked).filter(isAchievementIdValue));
-    const aiAwards = arrayOrEmpty(value.aiAchievements)
-      .map(parseAIAchievement)
-      .filter((def) => def !== undefined)
-      .slice(0, AI_ACHIEVEMENTS_MAX);
-    manager.aiAwards = new Map(aiAwards.map((def) => [def.id, def] as const));
-    manager.presentations = arrayOrEmpty(value.presentations)
-      .map((entry) => parsePresentation(entry, manager.aiAwards))
-      .filter((presentation) => presentation !== undefined)
-      .slice(0, PRESENTATIONS_MAX);
-    manager.recentEvents = arrayOrEmpty(value.recentEvents)
-      .map(parseRecentEvent)
-      .filter((event) => event !== undefined)
-      .slice(0, RECENT_EVENTS_MAX_CAP);
-    manager.menuUnseen = isFiniteNumber(value.menuUnseen) ? Math.max(0, value.menuUnseen) : 0;
-    manager.counters = parseCounters(value.counters);
+    manager.unlocked = new Set(unlocked);
+    manager.aiAwards = aiAwardsByKey;
+    manager.presentations = presentations;
+    manager.recentEvents = recentEvents;
+    manager.menuUnseen = menuUnseen;
+    manager.counters = counters;
+    return manager;
+  }
+
+  /**
+   * A manager carrying a record {@link serialize} wrote, or one {@link parse}
+   * accepted and re-serialized. `parse` accepts everything `serialize` writes,
+   * so this throws only on a hand-built record no save can hold.
+   */
+  static fromSerialized(saved: SerializedAchievements): AchievementManager {
+    const manager = AchievementManager.parse(saved);
+    if (manager === undefined) throw new Error('Achievements record failed validation');
     return manager;
   }
 

@@ -1,5 +1,5 @@
 /**
- * Localhost-only harness for reviewing Tito's Wheel of Fortune, reached via
+ * Localhost-only harness for reviewing Donald's Wheel of Fortune, reached via
  * `?wheel` in `devBootScene`. A real `ClubWheelSystem` on its own `UiRoot`,
  * letterboxed into a chosen viewport, with:
  *
@@ -7,7 +7,7 @@
  *  - the wheel screen, with a bet stepper in the header that flips the board;
  *  - a forced-outcome picker covering every wedge face the wheel can show,
  *    applied to the next held spin, or landed straight away;
- *  - the Nothing on a dry-run wipe that never touches storage, optionally
+ *  - Permanent Death on a dry-run wipe that never touches storage, optionally
  *    slow to answer, so the "…" hold can be seen.
  *
  * Plays no audio and saves nothing.
@@ -153,7 +153,7 @@ export class WheelPreviewScene extends PreviewScene {
           window.setTimeout(() => resolve('disabled'), FAKE_SAVE_MS);
         }),
       progressWipe: previewWipe(clock, () => this.slowWipe),
-      afterNothing: () => this.reset(),
+      afterPermanentDeath: () => this.reset(),
       grantAttackCow: () => undefined,
       clock,
       forcedOutcome: (board) => this.forcedOutcome(board),
@@ -197,7 +197,7 @@ export class WheelPreviewScene extends PreviewScene {
   }
 
   protected previewTitle(): string {
-    return 'Wheel of Fortune — Desperado Club review harness';
+    return 'Wheel of Fortune — Cloak & Dagger review harness';
   }
 
   protected previewControls(): readonly PreviewControl[] {

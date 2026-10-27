@@ -1,50 +1,50 @@
 import type { LevelDef } from './types';
 
-/** SkyFowl spawn position 1 (west-northwest). */
+/** Hawkfolk spawn position 1 (west-northwest). */
 const SKYF_1_X = -8;
 const SKYF_1_Y = -5;
 
-/** SkyFowl spawn position 2 (east-northeast). */
+/** Hawkfolk spawn position 2 (east-northeast). */
 const SKYF_2_X = 6;
 const SKYF_2_Y = -7;
 
-/** SkyFowl spawn position 3 (west-south). */
+/** Hawkfolk spawn position 3 (west-south). */
 const SKYF_3_X = -6;
 const SKYF_3_Y = 4;
 
-/** SkyFowl spawn position 4 (east-south). */
+/** Hawkfolk spawn position 4 (east-south). */
 const SKYF_4_X = 8;
 const SKYF_4_Y = 3;
 
-/** SkyFowl spawn position 5 (west-south). */
+/** Hawkfolk spawn position 5 (west-south). */
 const SKYF_5_X = -2;
 const SKYF_5_Y = 7;
 
-/** SkyFowl spawn position 6 (east-north). */
+/** Hawkfolk spawn position 6 (east-north). */
 const SKYF_6_X = 7;
 const SKYF_6_Y = -3;
 
-/** SkyFowl spawn position 7 (west-northwest). */
+/** Hawkfolk spawn position 7 (west-northwest). */
 const SKYF_7_X = -5;
 const SKYF_7_Y = -8;
 
-/** SkyFowl spawn position 8 (east-south). */
+/** Hawkfolk spawn position 8 (east-south). */
 const SKYF_8_X = 3;
 const SKYF_8_Y = 6;
 
-/** SkyFowl spawn position 9 (west-center). */
+/** Hawkfolk spawn position 9 (west-center). */
 const SKYF_9_X = -8;
 const SKYF_9_Y = 2;
 
-/** SkyFowl spawn position 10 (east-north). */
+/** Hawkfolk spawn position 10 (east-north). */
 const SKYF_10_X = 5;
 const SKYF_10_Y = -4;
 
-/** SkyFowl spawn position 11 (center-north). */
+/** Hawkfolk spawn position 11 (center-north). */
 const SKYF_11_X = 0;
 const SKYF_11_Y = -8;
 
-/** SkyFowl spawn position 12 (west-northwest). */
+/** Hawkfolk spawn position 12 (west-northwest). */
 const SKYF_12_X = -4;
 const SKYF_12_Y = -4;
 
@@ -99,11 +99,11 @@ const FLOOR3_XP_QUARTER_MULTIPLIER = 0.25;
 const FLOOR3_XP_TENTH_MULTIPLIER = 0.1;
 
 /**
- * Sky fowl level range, kept in line with the floor's weakest regular so this
+ * Hawkfolk level range, kept in line with the floor's weakest regular so this
  * floor-3 creature isn't as fragile as a floor-1 rat.
  */
-const SKY_FOWL_MIN_LEVEL = 5;
-const SKY_FOWL_MAX_LEVEL = 7;
+const HAWKFOLK_MIN_LEVEL = 5;
+const HAWKFOLK_MAX_LEVEL = 7;
 
 /** Ruins ghoul level range — common shambler encountered outside town. */
 const RUINS_GHOUL_MIN_LEVEL = 5;
@@ -112,6 +112,18 @@ const RUINS_GHOUL_MAX_LEVEL = 8;
 /** Krasue level range — uncommon, faster and more dangerous than a ghoul. */
 const KRASUE_MIN_LEVEL = 6;
 const KRASUE_MAX_LEVEL = 9;
+
+/**
+ * Wild bears and lions: occasional encounters on their own ground, each
+ * weighted well under the ruins ghoul. A terrain rule only competes at points
+ * of its terrain, so its weight is its share of those points, not of the floor.
+ */
+const BEAR_CHANCE = 0.06;
+const BEAR_MIN_LEVEL = 6;
+const BEAR_MAX_LEVEL = 9;
+const LION_CHANCE = 0.06;
+const LION_MIN_LEVEL = 6;
+const LION_MAX_LEVEL = 9;
 
 /**
  * The camps' residents.
@@ -155,7 +167,7 @@ export const level3: LevelDef = {
     tips: [
       'Townsfolk have lives of their own. Walk up to one and strike up a conversation.',
       'Some shopkeepers buy as well as sell. Look for the Sell tab at the counter.',
-      'The Meat Shields take contracts at the Desperado Club, if you can stomach the company.',
+      'The Barracks Mercenaries sign contracts at their desk in the Barracks muster hall.',
       'The Sleeping Cat Inn keeps a safe room. Mordecai is waiting inside.',
       'Crates and barrels are worth smashing. There are often coins inside.',
       'Check the notice board in the town square for what the town needs doing.',
@@ -193,6 +205,20 @@ export const level3: LevelDef = {
       maxLevel: RUINS_GHOUL_MAX_LEVEL,
     },
     { type: 'krasue', chance: 0.25, minLevel: KRASUE_MIN_LEVEL, maxLevel: KRASUE_MAX_LEVEL },
+    {
+      type: 'dire_bear',
+      chance: BEAR_CHANCE,
+      minLevel: BEAR_MIN_LEVEL,
+      maxLevel: BEAR_MAX_LEVEL,
+      terrain: 'forest_edge',
+    },
+    {
+      type: 'lion',
+      chance: LION_CHANCE,
+      minLevel: LION_MIN_LEVEL,
+      maxLevel: LION_MAX_LEVEL,
+      terrain: 'open_field',
+    },
   ],
   bossRooms: [],
   isOverworld: true,
@@ -252,10 +278,10 @@ export const level3: LevelDef = {
   },
   extraSpawns: [
     {
-      type: 'sky_fowl',
+      type: 'hawkfolk',
       origin: 'mapCenter',
-      minLevel: SKY_FOWL_MIN_LEVEL,
-      maxLevel: SKY_FOWL_MAX_LEVEL,
+      minLevel: HAWKFOLK_MIN_LEVEL,
+      maxLevel: HAWKFOLK_MAX_LEVEL,
       offsets: [
         [SKYF_1_X, SKYF_1_Y],
         [SKYF_2_X, SKYF_2_Y],

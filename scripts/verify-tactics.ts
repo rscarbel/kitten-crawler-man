@@ -892,10 +892,8 @@ function makeThornsHuman(tileX: number, tileY: number): HumanPlayer {
 const HIRELING_DAMAGE_FILES = [
   'src/creatures/mercenaries/mercenaryStrike.ts',
   'src/creatures/mercenaries/golemKit.ts',
-  'src/creatures/mercenaries/brawlerKit.ts',
-  'src/creatures/mercenaries/lancerKit.ts',
   'src/systems/RockThrowSystem.ts',
-  'src/systems/HirelingBoltSystem.ts',
+  'src/systems/HirelingShotSystem.ts',
 ];
 
 function checkCreditedBlows(map: GameMap): void {

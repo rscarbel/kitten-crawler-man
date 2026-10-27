@@ -25,7 +25,7 @@ import { MobRoster } from '../../src/systems/kits/SceneWorld';
 import { SpellSystem } from '../../src/systems/SpellSystem';
 import type { JourneyGateReporter } from './circusJourney';
 
-const HIRE_ID = 'sledge';
+const HIRE_ID = 'crush';
 const VIEWPORT_W = 1280;
 const VIEWPORT_H = 720;
 const HALL_W_TILES = 90;

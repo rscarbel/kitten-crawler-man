@@ -21,9 +21,8 @@
 import { level3 } from '../src/levels/level3';
 import { generateOverworld } from '../src/map/OverworldGenerator';
 import { GameMap, MOB_MAX_PATH_DISTANCE_TILES } from '../src/map/GameMap';
-import { StiltClown, STILT_CLOWN_AGGRO_RANGE_TILES } from '../src/creatures/StiltClown';
+import { TallClown, TALL_CLOWN_AGGRO_RANGE_TILES } from '../src/creatures/TallClown';
 import { FatClown, FAT_CLOWN_AGGRO_RANGE_TILES } from '../src/creatures/FatClown';
-import { CircusLemur, CIRCUS_LEMUR_AGGRO_RANGE_TILES } from '../src/creatures/CircusLemur';
 import { TILE_SIZE } from '../src/core/constants';
 import {
   advanceBountyType,
@@ -331,8 +330,8 @@ console.log('\nChecking every def’s encounter under every difficulty profile�
         boss.applyMobLevel(bossLevel);
         for (const minion of minions) minion.applyMobLevel(minionLevel);
         // `verify-difficulty.ts`'s speed-cap registry already covers the
-        // lemur's "capped at its own authored base" exception explicitly;
-        // every one of those authored caps also happens to sit at or under
+        // creatures "capped at their own authored base" explicitly; every one
+        // of those authored caps also happens to sit at or under
         // this ratio, so a bounty escort clearing it is the actual guarantee
         // this sweep exists to make — a def cannot field a creature that
         // slips through the shared cap mechanism.
@@ -689,38 +688,32 @@ console.log('\nKilling the mark, then rebuilding the scene before collecting…'
   second.dispose();
 }
 
-// The Evil Clown's escort is three circus classes reused verbatim, and the
-// circus questline widens its *own* wave instances' pursuit so they can hunt
-// across the whole fairground. That widening is instance-scoped by construction
+// The Evil Clown's escort is two circus classes reused verbatim, and the
+// Starlight Tent finale widens its *own* guards' pursuit so they can hunt
+// across the whole ring. That widening is instance-scoped by construction
 // — a per-mob path budget and a per-mob `forceAggro` — and this is what proves
 // it never leaked onto the class: a troupe member built anywhere but the circus
 // still notices at its own documented reach, still needs line of sight, and
 // still searches on the map-wide route budget.
-console.log('\nChecking the clown troupe outside the circus questline…');
+console.log('\nChecking the clown troupe outside the Starlight Tent finale…');
 {
   const map = new GameMap({ mapSize: MAP_SIZE, mapType: 'overworld' });
   const start = map.startTile;
   const troupe: ReadonlyArray<{ mob: Mob; label: string; aggroRangeTiles: number }> = [
     {
-      mob: new StiltClown(start.x, start.y, TILE_SIZE),
-      label: 'StiltClown',
-      aggroRangeTiles: STILT_CLOWN_AGGRO_RANGE_TILES,
+      mob: new TallClown(start.x, start.y, TILE_SIZE),
+      label: 'TallClown',
+      aggroRangeTiles: TALL_CLOWN_AGGRO_RANGE_TILES,
     },
     {
       mob: new FatClown(start.x, start.y, TILE_SIZE),
       label: 'FatClown',
       aggroRangeTiles: FAT_CLOWN_AGGRO_RANGE_TILES,
     },
-    {
-      mob: new CircusLemur(start.x, start.y, TILE_SIZE),
-      label: 'CircusLemur',
-      aggroRangeTiles: CIRCUS_LEMUR_AGGRO_RANGE_TILES,
-    },
   ];
   const expectedAggroRanges: Readonly<Record<string, number>> = {
-    StiltClown: 8,
+    TallClown: 8,
     FatClown: 6,
-    CircusLemur: 7,
   };
   for (const { mob, label, aggroRangeTiles } of troupe) {
     check(!mob.forceAggro, `${label}: a fresh instance does not force aggro`);

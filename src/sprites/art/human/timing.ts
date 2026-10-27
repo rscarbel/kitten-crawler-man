@@ -200,3 +200,32 @@ export const ATTACK_IMPACT_FRAME = 4;
  * player and fails any Smush row not on this frame on the tick its blast fires.
  */
 export const SMUSH_IMPACT_FRAME = 3;
+
+/**
+ * Frames in the bow shot: the arrow put to the string, a four-frame draw to
+ * the anchor, the aim held, the loose, and the bow brought back down. Twelve
+ * so the aim can hold three frames and the recovery still has room to settle.
+ */
+export const BOW_SHOT_FRAMES = 12;
+/**
+ * The frame the string is loosed on: the first with the arrow gone. A kit
+ * spawns the arrow when the frame shown reaches this one.
+ */
+export const BOW_RELEASE_FRAME = 7;
+
+/**
+ * A healing channel with a staff planted: the free hand lifts, the light
+ * gathers in its palm, flares on {@link STAFF_CHANNEL_RELEASE_FRAME} as the
+ * heal is let go, and fades as the hand comes down.
+ */
+export const STAFF_CHANNEL_FRAMES = 14;
+export const STAFF_CHANNEL_RELEASE_FRAME = 8;
+/** Fourteen frames at this hold make a channel of a little under a second. */
+export const STAFF_CHANNEL_TICKS_PER_FRAME = 4;
+/** Braced behind a staff held across him: a held flinch that trembles over a few frames. */
+export const STAFF_BRACE_FRAMES = 6;
+/** Each brace frame is held long enough that the tremble reads as fear, not a vibration. */
+export const STAFF_BRACE_TICKS_PER_FRAME = 6;
+/** A flinch behind the staff from a blow: thrown back on the hit and recovering over the rest. */
+export const STAFF_FLINCH_FRAMES = 6;
+export const STAFF_FLINCH_TICKS_PER_FRAME = 4;

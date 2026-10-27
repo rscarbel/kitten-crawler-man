@@ -101,7 +101,7 @@ export function mordecaiTilesPerWalkCycle(levelId: string): number {
 
 /**
  * Dispatcher: picks the correct Mordecai variant sprite for the given level ID,
- * and returns the row it drew. Level 3 (the Over City) gets the Incubus; level
+ * and returns the row it drew. Level 3 (Taloncrest) gets the Incubus; level
  * 2 gets the Bugaboo; others use the Rat Kin.
  */
 export function drawMordecaiForLevel(

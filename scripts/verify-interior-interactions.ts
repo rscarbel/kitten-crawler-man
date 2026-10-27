@@ -92,7 +92,7 @@ const BREAKABLE_FLOOR_BY_BUILDING: Readonly<Partial<Record<string, number>>> = {
   // herb-drying beam are fixtures — a bed frame no more smashes to kindling
   // than a barracks bunk, and the beam is hung from the wall — so they do
   // not count, which leaves the room at 22.
-  "Old Hilda's Cottage": 22,
+  "Old Lori's Cottage": 22,
   // A smaller smithy built round a few big working pieces: its breakables
   // are the one-tile stock, stools, tubs and barrels around them.
   'The Rusty Anvil': 17,

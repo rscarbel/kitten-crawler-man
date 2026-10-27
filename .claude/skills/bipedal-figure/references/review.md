@@ -28,7 +28,7 @@ not happen:
    32 px strip alone.
 4. **Compare, don't judge in isolation**: against the previous iteration
    (`--mode=compare`), against a real reference for the same pose (`--ref`),
-   and against Signet at the same scale for form shading only.
+   and against Angel at the same scale for form shading only.
 5. **Fix the single worst defect first**, structure before detail. Every real
    fix on these figures has been structural — silhouette, terminator placement,
    joint phase — never another shading pass.

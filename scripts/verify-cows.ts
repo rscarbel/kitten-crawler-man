@@ -904,8 +904,8 @@ function damageSection(): void {
     Math.floor(cow.y / TILE_SIZE),
     TILE_SIZE,
     world.human,
-    'sledge',
-    'Sledge',
+    'crush',
+    'Crush',
   );
   world.roster.add(merc);
   merc.allMobs = [...world.roster.mobs];

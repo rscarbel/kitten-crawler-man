@@ -37,9 +37,15 @@ import {
 import {
   ALL_TOWN_CAST_VIEWS,
   townCastFigure,
+  townCastSeatedFigure,
   townCastStateName,
   WORK_TOWN_CAST_VIEWS,
 } from '../src/sprites/art/townCastFigure.js';
+import {
+  barStoolSeatFailures,
+  seatedFigureFailures,
+  seatedSeamFailures,
+} from './seatedCastGates.js';
 import {
   TOWN_CAST_LOOKS,
   TOWN_CAST_TIER_PLANS,
@@ -60,7 +66,7 @@ import {
 import { runCanvasRecovery } from '../src/core/rendering/canvasRecovery.js';
 import { citizenLookKey, pickCitizenFigure } from '../src/creatures/citizenFigure.js';
 import { Townsperson } from '../src/creatures/Townsperson.js';
-import { residentFigure } from '../src/creatures/residentFigures.js';
+import { residentFigure, residentWearsCastLook } from '../src/creatures/residentFigures.js';
 import { allResidents } from '../src/systems/townResidents.js';
 import { TOWN_SPECIES } from '../src/systems/townSpecies.js';
 import {
@@ -401,7 +407,9 @@ interface WatchedCitizen {
 }
 
 function lookOf(person: Townsperson): string {
-  return citizenLookKey(person.figure);
+  const figure = person.citizenFigure;
+  if (figure === null) throw new Error('a street citizen wears no cast look');
+  return citizenLookKey(figure);
 }
 
 function failChanged(
@@ -437,7 +445,7 @@ function gateRelookOnPurge(): void {
       }
     }
   }
-  for (const def of allResidents()) {
+  for (const def of allResidents().filter((resident) => residentWearsCastLook(resident.id))) {
     const person = new Townsperson({
       x: 0,
       y: 0,
@@ -500,9 +508,24 @@ function gateRelookOnPurge(): void {
   forceVarietyTier(FULL_VARIETY_TIER);
 }
 
+// ── Seated rows ──────────────────────────────────────────────────────────────
+
+function gateSeated(): void {
+  let measured = 0;
+  for (const look of TOWN_CAST_LOOKS) {
+    const seated = townCastSeatedFigure(look);
+    if (seated === undefined) continue;
+    measured++;
+    failures.push(...seatedFigureFailures(seated), ...seatedSeamFailures(seated));
+  }
+  failures.push(...nothingMeasuredFailures(measured, 'seated looks').map((m) => `S1: ${m}`));
+  failures.push(...barStoolSeatFailures());
+}
+
 export function humanCastGateFailures(): string[] {
   failures = [];
   gateStructure();
+  gateSeated();
   gateStateNames();
   gateAnchor();
   gateFrameDistinctness();

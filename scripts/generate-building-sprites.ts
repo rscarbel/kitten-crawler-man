@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Bakes the Over City's building exteriors for review, at a chosen art seed.
+ * Bakes Taloncrest's building exteriors for review, at a chosen art seed.
  *
  *   npm run gen:buildings                     every facade, unseeded
  *   npm run gen:buildings -- 3                every facade under art seed 3

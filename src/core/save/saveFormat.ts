@@ -1,25 +1,23 @@
 import type { GameProgress, GameProgressInput } from '../../auth/AuthClient';
 import { parseSavedWorld } from './SavedWorld';
 import { parseGameStatsSnapshot } from '../progression/GameStats';
-import { isRecord } from '../util/guards';
-import type { PlayerSnapshot } from './PlayerSnapshot';
+import { isNonNegativeFinite, isRecord } from '../util/guards';
+import { parsePlayerSnapshot } from './PlayerSnapshot';
 import { AchievementManager } from '../progression/AchievementManager';
-import type { SerializedAchievements } from '../progression/AchievementManager';
 import { parsePartyCraftsState } from '../labour/partyCrafts';
 import {
   parsePendingWheelOutcome,
   parseWheelFreeSpinBet,
   parseWheelOwedFreeze,
-  parseWheelOwedItems,
   parseWheelPrizesWon,
   parseWheelQuestFreeSpins,
 } from './WheelLedger';
-import { parseBloodVomitRemaining } from './bloodVomitSave';
+import { parseDoubleDamageRemaining } from './doubleDamageSave';
 import { parseAttackCowHp } from '../state/AttackCowState';
-import { MusicLibrary, backfilledMusicLibrary } from '../music/MusicLibrary';
-import type { SerializedMusicLibrary } from '../music/MusicLibrary';
-import { parsePersistedWorldState, type PersistedWorldState } from './PersistedWorldState';
+import { MusicLibrary } from '../music/MusicLibrary';
 import { parseViewerFavor } from '../progression/viewerFavor';
+import { parseSerializedAbilityStates } from '../skills/AbilityManager';
+import { isLevelId } from '../../levels/index';
 
 /**
  * The fields of a save that belong to the whole run rather than to the floor it
@@ -40,7 +38,7 @@ type RunSaveFieldKey =
   | 'wheelFreeSpinBet'
   | 'wheelOwedFreeze'
   | 'wheelQuestFreeSpins'
-  | 'bloodVomitRemaining'
+  | 'doubleDamageRemaining'
   | 'attackCowOwned'
   | 'attackCowHp'
   | 'attackCowResting'
@@ -65,160 +63,90 @@ export type RunSaveFields = Required<
 };
 
 /**
- * The version of the save payload's shape, stamped on every save.
- *
- * Semantic versioning, read from the point of view of a build loading a save:
- * - PATCH — no change to the shape (a fix to how a value is interpreted).
- * - MINOR — optional fields added. Any build of the same major loads it: an
- *   older build ignores the new fields, a newer build treats them as absent.
- * - MAJOR — a field removed, renamed, or re-meant. Builds of another major
- *   refuse the save rather than resume a run from misread state.
- */
-export const SAVE_FORMAT_VERSION = '1.3.0';
-
-interface SemanticVersion {
-  major: number;
-  minor: number;
-  patch: number;
-}
-
-const SEMANTIC_VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-
-/**
- * What an unversioned save is taken to be. Saves predating semantic versioning
- * carry either the local store's integer `1` or, from the server, no version at
- * all — both hold the shape that `1.0.0` names.
- */
-const PRE_SEMVER_SAVE_VERSION = '1.0.0';
-const PRE_SEMVER_LOCAL_VERSION = 1;
-
-function parseSemanticVersion(text: string): SemanticVersion | null {
-  const match = SEMANTIC_VERSION_PATTERN.exec(text);
-  if (match === null) return null;
-  const [, major, minor, patch] = match;
-  return { major: Number(major), minor: Number(minor), patch: Number(patch) };
-}
-
-function formatSemanticVersion({ major, minor, patch }: SemanticVersion): string {
-  return `${major}.${minor}.${patch}`;
-}
-
-function normalizeSaveVersion(raw: unknown): SemanticVersion | null {
-  const isPreSemverSave = raw === undefined || raw === PRE_SEMVER_LOCAL_VERSION;
-  if (isPreSemverSave) return parseSemanticVersion(PRE_SEMVER_SAVE_VERSION);
-  return typeof raw === 'string' ? parseSemanticVersion(raw) : null;
-}
-
-/**
- * The save's version, normalised, when this build can load it; `null` when the
- * version is unreadable or belongs to another major. The place to add a
- * migration is here, once a major bump has an older major worth upgrading.
- */
-function loadableSaveVersion(raw: unknown): string | null {
-  const saveVersion = normalizeSaveVersion(raw);
-  const buildVersion = parseSemanticVersion(SAVE_FORMAT_VERSION);
-  if (saveVersion === null || buildVersion === null) return null;
-  if (saveVersion.major !== buildVersion.major) return null;
-  return formatSemanticVersion(saveVersion);
-}
-
-/**
- * Shallow shape check: the fields a restore cannot survive without. Item ids and
- * numeric ranges are re-screened by `restorePlayer` itself, so this only has to
- * reject a blob that is not a snapshot at all (a hand-edited or truncated save).
- */
-function isPlayerSnapshot(value: unknown): value is PlayerSnapshot {
-  if (!isRecord(value)) return false;
-  const numericFields = [
-    value.hp,
-    value.maxHp,
-    value.level,
-    value.xp,
-    value.unspentPoints,
-    value.strength,
-    value.intelligence,
-    value.constitution,
-    value.coins,
-    value.facingX,
-    value.facingY,
-    value.juggJuiceHpBoost,
-  ];
-  const arrayFields = [
-    value.inventorySlots,
-    value.inventoryHotbar,
-    value.equippedEntries,
-    value.statusEffects,
-  ];
-  return (
-    numericFields.every((field) => typeof field === 'number') && arrayFields.every(Array.isArray)
-  );
-}
-
-function parseAchievements(value: unknown): SerializedAchievements | undefined {
-  return value === undefined ? undefined : AchievementManager.fromSerialized(value).serialize();
-}
-
-/**
- * The floor's persisted state as the save holds it, read past the generator
- * check `parseSavedWorld` applies: a floor about to be regenerated still
- * records what the party did on it.
- */
-function persistedStateWhateverTheGenerator(world: unknown): PersistedWorldState | undefined {
-  return isRecord(world) ? parsePersistedWorldState(world.persisted) : undefined;
-}
-
-/** The save's music library, or one backfilled from its progress when it predates the library. */
-function parseMusicLibrary(
-  raw: Record<string, unknown>,
-  progress: GameProgressInput,
-): SerializedMusicLibrary {
-  if (raw.musicLibrary !== undefined) {
-    return MusicLibrary.fromSerialized(raw.musicLibrary).serialize();
-  }
-  return backfilledMusicLibrary(progress, persistedStateWhateverTheGenerator(raw.world));
-}
-
-/**
- * A stored save screened into a `GameProgress`, or `null` when it is not one or
- * was written in a format this build cannot load. Used for both the device's
- * own save and the one the server hands back, which arrives as it was stored.
+ * A stored save screened into a `GameProgress`, or `null` when any part of it
+ * is missing or is not something this build writes. Used for both the
+ * device's own save and the one the server hands back, which arrives as it
+ * was stored.
  */
 export function parseGameProgress(raw: unknown): GameProgress | null {
   if (!isRecord(raw)) return null;
-  const version = loadableSaveVersion(raw.version);
-  if (version === null) return null;
-  const { levelId, humanSnap, catSnap, savedAt, abilityStates } = raw;
-  if (typeof levelId !== 'string' || typeof savedAt !== 'string') return null;
-  if (!isPlayerSnapshot(humanSnap) || !isPlayerSnapshot(catSnap)) return null;
-  const progress: GameProgressInput = {
+  const { levelId, savedAt } = raw;
+  if (typeof levelId !== 'string' || !isLevelId(levelId) || typeof savedAt !== 'string') {
+    return null;
+  }
+  const humanSnap = parsePlayerSnapshot(raw.humanSnap, 'human');
+  const catSnap = parsePlayerSnapshot(raw.catSnap, 'cat');
+  const world = raw.world === undefined ? undefined : parseSavedWorld(raw.world);
+  if (raw.world !== undefined && world === undefined) return null;
+  const abilityStates = parseSerializedAbilityStates(raw.abilityStates);
+  const humanAchievements = AchievementManager.parse(raw.humanAchievements)?.serialize();
+  const catAchievements = AchievementManager.parse(raw.catAchievements)?.serialize();
+  const gameStats = parseGameStatsSnapshot(raw.gameStats);
+  const crafts = parsePartyCraftsState(raw.crafts);
+  const wheelPrizesWon = parseWheelPrizesWon(raw.wheelPrizesWon);
+  const pendingWheelOutcome = parsePendingWheelOutcome(raw.pendingWheelOutcome);
+  const wheelFreeSpinBet = parseWheelFreeSpinBet(raw.wheelFreeSpinBet);
+  const wheelOwedFreeze = parseWheelOwedFreeze(raw.wheelOwedFreeze);
+  const wheelQuestFreeSpins = parseWheelQuestFreeSpins(raw.wheelQuestFreeSpins);
+  const doubleDamageRemaining = parseDoubleDamageRemaining(raw.doubleDamageRemaining);
+  const musicLibrary = MusicLibrary.parse(raw.musicLibrary);
+  const { mongoUnlocked, mongoPetHp, mongoPetResting, attackCowOwned, attackCowResting } = raw;
+  const attackCowHp = raw.attackCowHp === undefined ? undefined : parseAttackCowHp(raw.attackCowHp);
+  const viewerFavor = raw.viewerFavor === undefined ? undefined : parseViewerFavor(raw.viewerFavor);
+  if (
+    humanSnap === undefined ||
+    catSnap === undefined ||
+    abilityStates === undefined ||
+    humanAchievements === undefined ||
+    catAchievements === undefined ||
+    gameStats === undefined ||
+    crafts === undefined ||
+    wheelPrizesWon === undefined ||
+    pendingWheelOutcome === undefined ||
+    wheelFreeSpinBet === undefined ||
+    wheelOwedFreeze === undefined ||
+    wheelQuestFreeSpins === undefined ||
+    doubleDamageRemaining === undefined ||
+    musicLibrary === undefined ||
+    typeof mongoUnlocked !== 'boolean' ||
+    !isNonNegativeFinite(mongoPetHp) ||
+    typeof mongoPetResting !== 'boolean' ||
+    typeof attackCowOwned !== 'boolean' ||
+    typeof attackCowResting !== 'boolean' ||
+    (raw.attackCowHp !== undefined && attackCowHp === undefined) ||
+    (raw.viewerFavor !== undefined && viewerFavor === undefined)
+  ) {
+    return null;
+  }
+  return {
     levelId,
     humanSnap,
     catSnap,
-    abilityStates: Array.isArray(abilityStates) ? abilityStates : undefined,
-    mongoUnlocked: typeof raw.mongoUnlocked === 'boolean' ? raw.mongoUnlocked : undefined,
-    mongoPetHp: typeof raw.mongoPetHp === 'number' ? raw.mongoPetHp : undefined,
-    mongoPetResting: typeof raw.mongoPetResting === 'boolean' ? raw.mongoPetResting : undefined,
-    humanAchievements: parseAchievements(raw.humanAchievements),
-    catAchievements: parseAchievements(raw.catAchievements),
-    world: parseSavedWorld(raw.world),
-    gameStats: parseGameStatsSnapshot(raw.gameStats),
-    crafts: parsePartyCraftsState(raw.crafts),
-    wheelPrizesWon: parseWheelPrizesWon(raw.wheelPrizesWon),
-    pendingWheelOutcome: parsePendingWheelOutcome(raw.pendingWheelOutcome),
-    wheelFreeSpinBet: parseWheelFreeSpinBet(raw.wheelFreeSpinBet),
-    wheelOwedFreeze: parseWheelOwedFreeze(raw.wheelOwedFreeze),
-    wheelOwedItems: parseWheelOwedItems(raw.wheelOwedItems),
-    wheelQuestFreeSpins: parseWheelQuestFreeSpins(raw.wheelQuestFreeSpins),
-    bloodVomitRemaining: parseBloodVomitRemaining(raw.bloodVomitRemaining),
-    attackCowOwned: typeof raw.attackCowOwned === 'boolean' ? raw.attackCowOwned : undefined,
-    attackCowHp: parseAttackCowHp(raw.attackCowHp),
-    attackCowResting: typeof raw.attackCowResting === 'boolean' ? raw.attackCowResting : undefined,
-    viewerFavor: parseViewerFavor(raw.viewerFavor),
+    abilityStates,
+    mongoUnlocked,
+    mongoPetHp,
+    mongoPetResting,
+    humanAchievements,
+    catAchievements,
+    world,
+    gameStats,
+    crafts,
+    wheelPrizesWon,
+    pendingWheelOutcome,
+    wheelFreeSpinBet,
+    wheelOwedFreeze,
+    wheelQuestFreeSpins,
+    doubleDamageRemaining,
+    attackCowOwned,
+    attackCowHp,
+    attackCowResting,
+    musicLibrary,
+    viewerFavor,
+    savedAt,
   };
-  return { ...progress, version, savedAt, musicLibrary: parseMusicLibrary(raw, progress) };
 }
 
-/** A save as it is written: this build's format version and the time of writing. */
+/** A save as it is written, stamped with the time of writing. */
 export function stampGameProgress(data: GameProgressInput): GameProgress {
-  return { ...data, version: SAVE_FORMAT_VERSION, savedAt: new Date().toISOString() };
+  return { ...data, savedAt: new Date().toISOString() };
 }

@@ -9,8 +9,10 @@
  * things that stand at the edge of a floor, not in the middle of it.
  *
  * Garrison colours throughout are the blue-grey `oc_cloth_sky` leather and
- * wool, never the Meat Shields' orange: the two are different employers, and
- * a crawler reading the room should be able to tell which one this is.
+ * wool. The one exception is the mercenaries' desk in the muster hall, which
+ * rents its corner from the garrison and carries the hires' own orange: the
+ * two are different employers, and a crawler reading the room should be able
+ * to tell whose desk is whose.
  */
 
 import {
@@ -27,6 +29,7 @@ import {
 } from '../../town/townArt';
 import { getTownRamp, sampleRamp, mix, type RGB } from '../../town/townPalette';
 import { paintPlankBoard } from '../../town/townMaterials';
+import { MERCENARY_ARMBAND } from '../../../mercenaryArmband';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -928,6 +931,140 @@ export function paintIssueCounter(
     ctx.fillRect(boxX + ts * 0.13, surfaceY - ts * 0.14, ts * 0.05, ts * 0.06);
 
     paintLantern(ctx, box.left + ts * 4.55, surfaceY, ts);
+  });
+}
+
+// ── The mercenaries' desk ─────────────────────────────────────────────────
+
+/** Folded armbands waiting to be handed out with a contract. */
+const ARMBAND_STACK_COUNT = 4;
+/** Contracts on the spike, each with its seal. */
+const SPIKED_CONTRACT_COUNT = 3;
+
+/**
+ * The hire desk The Barracks Mercenaries keep in the muster hall: a plain
+ * trestle table rather than a counter, because the business is paper, not
+ * stock. On it the contract book open at the hires' page, a spike of signed
+ * contracts under red wax, a stack of the orange armbands every hire is given
+ * with their paper, and a hand bell for anyone the manager has not noticed.
+ */
+export function paintMercDesk(ctx: Ctx, frame: TownPropFrame, _variant: number, rng: Rng): void {
+  withFootprintClip(ctx, frame, () => {
+    const box = footprintBox(frame);
+    const ts = frame.tileScale;
+    const wood = woodRamp();
+    const iron = ironRamp();
+    contactShadow(ctx, frame, 0.46, 0.36);
+
+    const left = box.left + ts * 0.06;
+    const right = box.right - ts * 0.06;
+    const topFront = box.bottom - ts * 0.5;
+    const topBack = topFront - ts * 0.36;
+    const apronH = ts * 0.1;
+    const legW = ts * 0.09;
+
+    // Trestle legs and the stretcher between them.
+    for (const lx of [left + ts * 0.1, right - ts * 0.1 - legW]) {
+      fillOutlinedRect(
+        ctx,
+        lx,
+        topFront + apronH,
+        legW,
+        box.bottom - topFront - apronH - ts * 0.04,
+        sampleRamp(wood, 0.32),
+        ts * 0.7,
+      );
+    }
+    fillOutlinedRect(
+      ctx,
+      left + ts * 0.18,
+      box.bottom - ts * 0.2,
+      right - left - ts * 0.36,
+      ts * 0.05,
+      sampleRamp(wood, 0.28),
+      ts * 0.6,
+    );
+
+    // The top, seen from above, and its lit front edge.
+    ctx.fillStyle = rgb(sampleRamp(wood, 0.62));
+    rectPath(ctx, left, topBack, right - left, topFront - topBack);
+    ctx.fill();
+    paintPlankBoard(ctx, left, topBack, right - left, topFront - topBack, forkRng(rng), {
+      direction: 'horizontal',
+      boardPx: ts * 0.12,
+      ramp: wood,
+    });
+    rectPath(ctx, left, topBack, right - left, topFront - topBack);
+    inkOutline(ctx, ts);
+    fillOutlinedRect(ctx, left, topFront, right - left, apronH, sampleRamp(wood, 0.45), ts * 0.8);
+    ctx.fillStyle = rgb(sampleRamp(wood, 0.82));
+    ctx.fillRect(left, topFront, right - left, ts * 0.025);
+
+    // The contract book, west.
+    paintOpenLedger(ctx, box.left + ts * 0.5, topBack + ts * 0.05, ts, forkRng(rng));
+
+    // The spike of signed contracts, centre.
+    const spikeX = box.left + ts * 1.02;
+    const surfaceY = topFront - ts * 0.04;
+    for (let i = 0; i < SPIKED_CONTRACT_COUNT; i++) {
+      const y = surfaceY - ts * (0.05 + i * 0.05);
+      const skew = jitter(rng, ts * 0.02);
+      fillOutlinedRect(
+        ctx,
+        spikeX - ts * 0.11 + skew,
+        y - ts * 0.05,
+        ts * 0.22,
+        ts * 0.05,
+        i % 2 === 0 ? PAPER : PAPER_SHADOW,
+        ts * 0.5,
+      );
+      ctx.fillStyle = rgb(WAX_RED);
+      ctx.beginPath();
+      ctx.arc(spikeX + ts * 0.07 + skew, y - ts * 0.025, ts * 0.022, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.strokeStyle = rgb(sampleRamp(iron, 0.75));
+    ctx.lineWidth = Math.max(1, ts * 0.02);
+    ctx.beginPath();
+    ctx.moveTo(spikeX, surfaceY);
+    ctx.lineTo(spikeX, surfaceY - ts * 0.26);
+    ctx.stroke();
+
+    // The armbands, folded and stacked, east of the spike.
+    const bandX = box.left + ts * 1.32;
+    const bandW = ts * 0.24;
+    const bandH = ts * 0.045;
+    for (let i = 0; i < ARMBAND_STACK_COUNT; i++) {
+      const y = surfaceY - bandH * (i + 1);
+      ctx.fillStyle =
+        i === ARMBAND_STACK_COUNT - 1 ? MERCENARY_ARMBAND.light : MERCENARY_ARMBAND.base;
+      rectPath(ctx, bandX + jitter(rng, ts * 0.01), y, bandW, bandH);
+      ctx.fill();
+      ctx.fillStyle = MERCENARY_ARMBAND.shadow;
+      ctx.fillRect(bandX, y + bandH * 0.7, bandW, bandH * 0.3);
+      rectPath(ctx, bandX, y, bandW, bandH);
+      inkOutline(ctx, ts * 0.5);
+    }
+
+    // The hand bell, east end.
+    const bellX = box.left + ts * 1.76;
+    ctx.fillStyle = rgb(PIN_BRASS);
+    ctx.beginPath();
+    ctx.moveTo(bellX - ts * 0.09, surfaceY);
+    ctx.quadraticCurveTo(bellX - ts * 0.08, surfaceY - ts * 0.16, bellX, surfaceY - ts * 0.17);
+    ctx.quadraticCurveTo(bellX + ts * 0.08, surfaceY - ts * 0.16, bellX + ts * 0.09, surfaceY);
+    ctx.closePath();
+    ctx.fill();
+    inkOutline(ctx, ts * 0.6);
+    fillOutlinedRect(
+      ctx,
+      bellX - ts * 0.02,
+      surfaceY - ts * 0.24,
+      ts * 0.04,
+      ts * 0.07,
+      sampleRamp(wood, 0.3),
+      ts * 0.5,
+    );
   });
 }
 

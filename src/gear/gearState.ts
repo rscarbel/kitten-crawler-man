@@ -1,5 +1,5 @@
 import { isItemId, type ItemId } from '../core/items/defs/ItemDefs';
-import { isRecord } from '../core/util/guards';
+import { isNonNegativeFinite, isRecord, parseEvery } from '../core/util/guards';
 import type { ClawWeaponStats } from '../core/items/equipment/weapons';
 import type { StatName } from '../Player';
 import { GearLiveState } from './gearLive';
@@ -13,11 +13,7 @@ export type FloorOnceTraitKind = (typeof FLOOR_ONCE_TRAIT_KINDS)[number];
 const PERSISTED_COOLDOWN_TRAIT_KINDS = ['lastStand', 'relic'] as const;
 export type PersistedCooldownTraitKind = (typeof PERSISTED_COOLDOWN_TRAIT_KINDS)[number];
 
-/**
- * What one piece of gear remembers about itself on one crawler. Every field
- * defaults to the state of a piece fresh from the chest, so a save that
- * predates a field reads it as fresh.
- */
+/** What one piece of gear remembers about itself on one crawler. */
 export interface GearItemState {
   /** Kills landed while worn, counted toward an awakening. */
   awakeningKills: number;
@@ -59,34 +55,65 @@ export interface WornGearCache {
 }
 
 /** One saved entry of a crawler's {@link GearState}. */
-export type SavedGearItemState = readonly [string, GearItemState];
+export type SavedGearItemState = readonly [ItemId, GearItemState];
 
 function isFloorOnceTraitKind(value: unknown): value is FloorOnceTraitKind {
   return FLOOR_ONCE_TRAIT_KINDS.some((kind) => kind === value);
 }
 
-function nonNegativeOr(value: unknown, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback;
+/** The length of a saved `[itemId, state]` entry. */
+const SAVED_GEAR_ENTRY_LENGTH = 2;
+
+function parseCooldownFrames(raw: unknown): GearItemState['cooldownFrames'] | undefined {
+  if (!isRecord(raw)) return undefined;
+  const cooldowns: GearItemState['cooldownFrames'] = {};
+  for (const [key, frames] of Object.entries(raw)) {
+    const kind = PERSISTED_COOLDOWN_TRAIT_KINDS.find((candidate) => candidate === key);
+    if (kind === undefined || !isNonNegativeFinite(frames)) return undefined;
+    cooldowns[kind] = frames;
+  }
+  return cooldowns;
 }
 
-/** Rebuilds one saved entry's state from unvalidated JSON, defaulting whatever is missing or malformed. */
-function parsedItemState(raw: unknown): GearItemState {
-  const state = freshItemState();
-  if (!isRecord(raw)) return state;
-  state.awakeningKills = nonNegativeOr(raw.awakeningKills, 0);
-  state.awakened = raw.awakened === true;
-  state.bound = raw.bound === true;
-  if (Array.isArray(raw.floorOnceSpent)) {
-    state.floorOnceSpent = raw.floorOnceSpent.filter(isFloorOnceTraitKind);
+function parseItemState(raw: unknown): GearItemState | undefined {
+  if (!isRecord(raw)) return undefined;
+  const { awakeningKills, awakened, bound } = raw;
+  const floorOnceSpent = parseEvery(raw.floorOnceSpent, (kind) =>
+    isFloorOnceTraitKind(kind) ? kind : undefined,
+  );
+  const cooldownFrames = parseCooldownFrames(raw.cooldownFrames);
+  if (
+    !isNonNegativeFinite(awakeningKills) ||
+    typeof awakened !== 'boolean' ||
+    typeof bound !== 'boolean' ||
+    floorOnceSpent === undefined ||
+    cooldownFrames === undefined
+  ) {
+    return undefined;
   }
-  const cooldowns = raw.cooldownFrames;
-  if (isRecord(cooldowns)) {
-    for (const kind of PERSISTED_COOLDOWN_TRAIT_KINDS) {
-      const frames = nonNegativeOr(cooldowns[kind], 0);
-      if (frames > 0) state.cooldownFrames[kind] = frames;
-    }
-  }
-  return state;
+  return { awakeningKills, awakened, bound, floorOnceSpent, cooldownFrames };
+}
+
+function parseSavedGearEntry(raw: unknown): SavedGearItemState | undefined {
+  if (!Array.isArray(raw) || raw.length !== SAVED_GEAR_ENTRY_LENGTH) return undefined;
+  const id: unknown = raw[0];
+  const state: unknown = raw[1];
+  if (typeof id !== 'string' || !isItemId(id)) return undefined;
+  const parsed = parseItemState(state);
+  return parsed === undefined ? undefined : [id, parsed];
+}
+
+/** A crawler's saved gear memory, or undefined when any entry is not one this build wrote. */
+export function parseSavedGearState(raw: unknown): SavedGearItemState[] | undefined {
+  return parseEvery(raw, parseSavedGearEntry);
+}
+
+function copyItemState(state: GearItemState): GearItemState {
+  return {
+    ...state,
+    floorOnceSpent: [...state.floorOnceSpent],
+    cooldownFrames: { ...state.cooldownFrames },
+  };
 }
 
 /**
@@ -179,23 +206,14 @@ export class GearState {
 
   /** A deep copy for a snapshot, so the save never shares an object with the live state. */
   snapshot(): SavedGearItemState[] {
-    return [...this.items].map(([id, state]) => [
-      id,
-      {
-        ...state,
-        floorOnceSpent: [...state.floorOnceSpent],
-        cooldownFrames: { ...state.cooldownFrames },
-      },
-    ]);
+    return [...this.items].map(([id, state]) => [id, copyItemState(state)]);
   }
 
-  /** Replaces every entry from a snapshot, dropping ids retired since it was written. */
-  restore(saved: ReadonlyArray<SavedGearItemState> | undefined): void {
+  /** Replaces every entry from a snapshot. */
+  restore(saved: ReadonlyArray<SavedGearItemState>): void {
     this.items.clear();
     this.live.reset();
     this.noteChanged();
-    for (const [id, raw] of saved ?? []) {
-      if (isItemId(id)) this.items.set(id, parsedItemState(raw));
-    }
+    for (const [id, state] of saved) this.items.set(id, copyItemState(state));
   }
 }

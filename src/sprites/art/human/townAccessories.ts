@@ -37,7 +37,6 @@ export type AccessoryKind =
   | 'stole'
   | 'patchedHood'
   | 'ledgerPencil'
-  | 'shawlCharms'
   | 'flourApron'
   | 'vialCase'
   | 'builderRule';
@@ -316,45 +315,6 @@ function drawLedgerPencil(ctx: Ctx, view: CardinalView, spec: AccessorySpec): vo
   ctx.stroke();
 }
 
-const SHAWL_TOP = SHOULDER_Y - 0.02;
-const SHAWL_BOTTOM = HIP_Y + 0.05;
-const SHAWL_PROFILE_HALF_WIDTH = 0.08;
-/** Front-on the shawl reaches past the shoulders themselves, draping over them. */
-const SHAWL_FRONT_WIDTH_SCALE = 1.15;
-/** The hem gathers in from the shoulder line's own width. */
-const SHAWL_HEM_TAPER = 0.7;
-const SHAWL_CHARM_RADIUS = 0.014;
-/** How far below the hem a charm hangs. */
-const SHAWL_CHARM_DROP = 0.03;
-const SHAWL_CHARM_PROFILE_X = 0.02;
-const SHAWL_CHARM_FRONT_FRAC = 0.4;
-
-/** Old Hilda's shawl, draped over both shoulders, with two hanging charm trinkets. */
-function drawShawlCharms(ctx: Ctx, view: CardinalView, spec: AccessorySpec): void {
-  const half = view === 'side' ? SHAWL_PROFILE_HALF_WIDTH : SHOULDER_HALF * SHAWL_FRONT_WIDTH_SCALE;
-  ctx.fillStyle = spec.color;
-  ctx.beginPath();
-  ctx.moveTo(-half, SHAWL_TOP);
-  ctx.lineTo(half, SHAWL_TOP);
-  ctx.lineTo(half * SHAWL_HEM_TAPER, SHAWL_BOTTOM);
-  ctx.lineTo(-half * SHAWL_HEM_TAPER, SHAWL_BOTTOM);
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = shaded(spec.color);
-  ctx.lineWidth = PROP_STROKE_WIDTH;
-  ctx.stroke();
-  ctx.fillStyle = spec.accentColor ?? lit(spec.color);
-  const charmXs =
-    view === 'side'
-      ? [SHAWL_CHARM_PROFILE_X]
-      : [-half * SHAWL_CHARM_FRONT_FRAC, half * SHAWL_CHARM_FRONT_FRAC];
-  for (const cx of charmXs) {
-    ctx.beginPath();
-    ctx.arc(cx, SHAWL_BOTTOM + SHAWL_CHARM_DROP, SHAWL_CHARM_RADIUS, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
 const FLOUR_FLECK_COLOR = 'rgba(255,255,255,0.55)';
 const FLOUR_FLECK_RADIUS = 0.008;
 /** Three fleck positions, each a fraction of the apron's own half-width/vertical span. */
@@ -436,7 +396,6 @@ const ACCESSORY_PAINTERS: Readonly<
   stole: drawStole,
   patchedHood: drawPatchedHood,
   ledgerPencil: drawLedgerPencil,
-  shawlCharms: drawShawlCharms,
   flourApron: drawFlourApron,
   vialCase: drawVialCase,
   builderRule: drawBuilderRule,

@@ -1,18 +1,18 @@
 /**
- * Tito's Wheel of Fortune: the host that takes the bet, commits each spin to
+ * Donald's Wheel of Fortune: the host that takes the bet, commits each spin to
  * the save before the wheel moves, plays the spin and the outcome's reveal, and
  * hands the prize to the crawler who spun. It mounts four surfaces: the
- * blaring warning, the "are you sure" prompt, the wheel screen and the
- * Nothing.
+ * blaring warning, the "are you sure" prompt, the wheel screen and
+ * Permanent Death.
  *
  * Every spin does exactly one storage round-trip before the wheel turns, so
  * how long the wheel takes to start never gives the outcome away: a normal
  * outcome writes the save with the bet spent, the prize marked won and the
- * outcome pending; the Nothing's round-trip is the wipe itself. A tab closed
+ * outcome pending; Permanent Death's round-trip is the wipe itself. A tab closed
  * mid-spin leaves the pending outcome in the save, and the next load pays it.
  *
  * A free spin a quest paid for opens straight on the wheel, past both prompts,
- * with the Nothing taped over: the board it draws from has no wedge that wipes,
+ * with Permanent Death taped over: the board it draws from has no wedge that wipes,
  * for that spin and every Spin Again it chains into. The free spin is counted
  * as used in the same save that commits it, so a reload mid-spin cannot hand
  * it back, and the wheel closes back to the picker once the chain resolves.
@@ -39,20 +39,22 @@ import {
   type WheelLedger,
 } from '../core/save/WheelLedger';
 import { CatPlayer } from '../creatures/CatPlayer';
-import { pickTitoLine, type TitoTrigger } from '../dialog/scripts/tito';
-import type { TitoBustPose } from '../sprites/titoSprite';
+import { pickDonaldLine, type DonaldTrigger } from '../dialog/scripts/donald';
+import type { DonaldBustPose } from '../sprites/donaldSprite';
 import type { Surface, Ui } from '../ui/core/UiRoot';
 import type { ToastTone } from '../ui/hud/toasts';
 import type { ProgressWipe } from '../ui/screens/dialogs/wipeHold';
 import { paintWheelWarning, type WheelWarningKind } from '../ui/casino/wheel/wheelWarnings';
 import {
-  STAB_SLASH_AT_MS,
   WheelView,
   type WheelReveal,
   type WheelRevealEffect,
   type WheelViewModel,
 } from '../ui/casino/wheel/WheelView';
-import { paintNothing, type NothingModel } from '../ui/casino/wheel/nothingView';
+import {
+  paintPermanentDeath,
+  type PermanentDeathModel,
+} from '../ui/casino/wheel/permanentDeathView';
 import type { WheelFreeSpinOffer, WheelGameHost } from './casino/CasinoGameHost';
 import type { CasinoSeat } from './ClubCasinoSystem';
 import {
@@ -90,7 +92,7 @@ import {
 export const WHEEL_WARNING_SURFACE_ID = 'wheel-warning';
 export const WHEEL_CONFIRM_SURFACE_ID = 'wheel-confirm';
 export const WHEEL_SURFACE_ID = 'wheel';
-export const NOTHING_SURFACE_ID = 'wheel-nothing';
+export const PERMANENT_DEATH_SURFACE_ID = 'wheel-permanent-death';
 export const WHEEL_PRIZE_SURFACE_ID = 'wheel-prize';
 
 /** Every surface the wheel mounts, in stacking order. */
@@ -99,7 +101,7 @@ export const WHEEL_SURFACE_IDS: readonly string[] = [
   WHEEL_CONFIRM_SURFACE_ID,
   WHEEL_SURFACE_ID,
   WHEEL_PRIZE_SURFACE_ID,
-  NOTHING_SURFACE_ID,
+  PERMANENT_DEATH_SURFACE_ID,
 ];
 
 /**
@@ -120,10 +122,10 @@ export interface ClubWheelDeps {
   readonly ledger: WheelLedger;
   /** Writes the save as the party stands now; resolves once storage has answered. */
   readonly saveNow: () => Promise<SaveWriteOutcome>;
-  /** The page's wipe, or null where nothing is saved: the Nothing then only pretends. */
+  /** The page's wipe, or null where nothing is saved: Permanent Death then only pretends. */
   readonly progressWipe: ProgressWipe | null;
-  /** Runs once the Nothing has played out and the save is gone: the page reload. */
-  readonly afterNothing: () => void;
+  /** Runs once Permanent Death has played out and the save is gone: the page reload. */
+  readonly afterPermanentDeath: () => void;
   /** Gives the human crawler the attack cow and stands her beside him; her arrival moo is the grant's own. */
   readonly grantAttackCow: () => void;
   /** A notice for the scene's toasts. */
@@ -131,10 +133,10 @@ export interface ClubWheelDeps {
   readonly clock?: () => number;
   readonly random?: () => number;
   /**
-   * Picks Tito's patter. Kept apart from `random` so a seeded wheel's draws
+   * Picks Donald's patter. Kept apart from `random` so a seeded wheel's draws
    * stay the same whatever he says; only review fixtures pass one.
    */
-  readonly titoRandom?: () => number;
+  readonly donaldRandom?: () => number;
   /**
    * Picks the next outcome instead of the rigged draw. Only the review harness
    * passes one; the real wheel always draws.
@@ -144,7 +146,7 @@ export interface ClubWheelDeps {
   readonly isLucky?: LuckCheck;
 }
 
-type WheelScreen = 'closed' | 'warning' | 'confirm' | 'wheel' | 'nothing';
+type WheelScreen = 'closed' | 'warning' | 'confirm' | 'wheel' | 'permanent_death';
 
 /** A spin the bet and the save have committed to. */
 interface CommittedSpin {
@@ -169,7 +171,6 @@ interface CommittedSpin {
 interface SpinUndo {
   readonly humanCoins: number;
   readonly catCoins: number;
-  readonly wagered: number;
   readonly freeSpinBet: number | null;
   readonly questFreeSpinsUsed: number;
   readonly tapedChain: boolean;
@@ -202,11 +203,10 @@ type WheelPhase =
       readonly reveal: WheelReveal;
       readonly startedAt: number;
       sirenStarted: boolean;
-      stabSounded: boolean;
       /** The item prize screen has been raised over the wheel. */
       prizeShown: boolean;
     }
-  | { readonly kind: 'nothing'; readonly landedAt: number };
+  | { readonly kind: 'permanent_death'; readonly landedAt: number };
 
 interface WedgeFlipState {
   readonly wedgeIndex: number;
@@ -220,7 +220,7 @@ interface SpinHold {
   readonly byKey: boolean;
 }
 
-/** One rim bulb going dark during the Nothing. */
+/** One rim bulb going dark during Permanent Death. */
 interface DyingBulb {
   readonly at: number;
   sounded: boolean;
@@ -240,18 +240,14 @@ const BULB_IDLE_STEPS_PER_SECOND = 2.5;
 const BULB_SLOWING_EXTRA_STEPS_PER_SECOND = 14;
 /** A peg tick per frame at most: a fast wheel passes several, and a stack of ticks is a buzz. */
 const MAX_TICKS_PER_UPDATE = 1;
-/** Tito holds a line this long before it fades. */
-const TITO_LINE_MS = 4200;
-/** Bet-step quips are skipped when Tito spoke this recently, so the stepper is not a chatterbox. */
-const TITO_QUIP_GAP_MS = 2500;
-/** Tito fills a long silence while the wheel sits idle. */
-const TITO_IDLE_LINE_MS = 14000;
-/** How long Tito's lunge takes, and how far into it the blade lands with the slash. */
-const STAB_POSE_MS = 900;
-const STAB_LUNGE_LEAD_MS = 420;
-const STAB_LUNGE_STARTS_AT_MS = STAB_SLASH_AT_MS - STAB_LUNGE_LEAD_MS;
-/** A stab reveal holds this long after the blade lands. */
-const STAB_HOLD_AFTER_SLASH_MS = 2980;
+/** Donald holds a line this long before it fades. */
+const DONALD_LINE_MS = 4200;
+/** Bet-step quips are skipped when Donald spoke this recently, so the stepper is not a chatterbox. */
+const DONALD_QUIP_GAP_MS = 2500;
+/** Donald fills a long silence while the wheel sits idle. */
+const DONALD_IDLE_LINE_MS = 14000;
+/** One loop of Donald's chuckle while a red landing's reveal holds. */
+const CHUCKLE_CYCLE_MS = 900;
 /** A chuckle this long after a red landing, once the wedge has registered. */
 const CHUCKLE_DELAY_MS = 450;
 /** The siren after the 500,000 sliver's landing sting. */
@@ -260,7 +256,6 @@ const SIREN_DELAY_MS = 900;
 /** How long each kind of reveal holds the screen before the wheel is idle again. */
 const REVEAL_MS: Readonly<Record<WheelRevealEffect, number>> = {
   red: 3000,
-  stab: STAB_SLASH_AT_MS + STAB_HOLD_AFTER_SLASH_MS,
   robbed: 3600,
   freeze: 3000,
   pet: 4200,
@@ -274,16 +269,16 @@ const REVEAL_MS: Readonly<Record<WheelRevealEffect, number>> = {
   spin_again: 2400,
 };
 
-/** The Nothing, from the landing: the pause, each bulb, the swallow and the two lines. */
-const NOTHING_LAND_PAUSE_MS = 1100;
-const NOTHING_BULB_STAGGER_MS = 110;
-const NOTHING_BULB_JITTER_MS = 70;
-const NOTHING_AFTER_BULBS_MS = 500;
-export const NOTHING_SWALLOW_MS = 2600;
-const NOTHING_FIRST_LINE_DELAY_MS = 400;
-const NOTHING_SECOND_LINE_DELAY_MS = 2400;
+/** Permanent Death, from the landing: the pause, each bulb, the swallow and the two lines. */
+const PERMANENT_DEATH_LAND_PAUSE_MS = 1100;
+const PERMANENT_DEATH_BULB_STAGGER_MS = 110;
+const PERMANENT_DEATH_BULB_JITTER_MS = 70;
+const PERMANENT_DEATH_AFTER_BULBS_MS = 500;
+const PERMANENT_DEATH_SWALLOW_MS = 2600;
+const PERMANENT_DEATH_FIRST_LINE_DELAY_MS = 400;
+const PERMANENT_DEATH_SECOND_LINE_DELAY_MS = 2400;
 /** How long "Everything is gone." holds before the reload, when the wipe has finished. */
-const NOTHING_HOLD_MS = 3200;
+const PERMANENT_DEATH_HOLD_MS = 3200;
 /** A dying bulb's pitch varies by up to this much either way, so the cascade is not a drone. */
 const BULB_PITCH_SWING = 0.12;
 const BULB_VOLUME = 0.7;
@@ -304,7 +299,7 @@ const TICKS: readonly SoundId[] = [
   'wheel_peg_tick_3',
   'wheel_peg_tick_4',
 ];
-const CHUCKLES: readonly SoundId[] = ['tito_chuckle_1', 'tito_chuckle_2', 'tito_chuckle_3'];
+const CHUCKLES: readonly SoundId[] = ['donald_chuckle_1', 'donald_chuckle_2', 'donald_chuckle_3'];
 const MS_PER_SECOND = 1000;
 
 /** A big enough cash prize gets the full coin shower; the 500,000 sliver gets the jackpot. */
@@ -314,16 +309,15 @@ const JACKPOT_GOLD = 500_000;
 function revealEffectFor(wedge: WheelWedge): WheelRevealEffect {
   const prize = wedge.prize;
   switch (prize.kind) {
-    case 'stab':
-      return 'stab';
     case 'robbed':
       return 'robbed';
     case 'freeze':
       return 'freeze';
+    case 'take_damage':
     case 'poison':
-    case 'blood_vomit':
+    case 'double_damage':
     case 'burn':
-    case 'nothing':
+    case 'permanent_death':
       return 'red';
     case 'pet':
       return 'pet';
@@ -359,6 +353,7 @@ function prizeLine(wedge: WheelWedge, effect: WheelPrizeEffect, recipient: Wheel
   if (prize.kind === 'pet')
     return `An attack cow of his very own for ${crawlerFormalName('human')}`;
   if (prize.kind === 'gold') return `Paid straight into ${name}'s purse`;
+  if (prize.kind === 'take_damage') return `${name} loses ${effect.hpLost} HP`;
   if (prize.kind === 'heal_and_gold') {
     return `${name} is healed to full and paid ${prize.amount.toLocaleString()} gold`;
   }
@@ -376,10 +371,8 @@ function prizeDetail(items: ReadonlyArray<{ readonly id: ItemId }>): string {
   return only === undefined ? '' : (ITEM_DEF[only.id].description ?? '');
 }
 
-function titoTriggerFor(effect: WheelRevealEffect): TitoTrigger {
+function donaldTriggerFor(effect: WheelRevealEffect): DonaldTrigger {
   switch (effect) {
-    case 'stab':
-      return 'stab';
     case 'robbed':
       return 'robbed';
     case 'pet':
@@ -428,23 +421,22 @@ export class ClubWheelSystem implements WheelGameHost {
   private bet = WHEEL_MIN_BET;
   private flip: WedgeFlipState | null = null;
   private hold: SpinHold | null = null;
-  /** Rests with the Nothing under the pointer, so the first thing seen is what is at stake. */
+  /** Rests with Permanent Death under the pointer, so the first thing seen is what is at stake. */
   private rotation = rotationForPointerAt(wedgeCenterAngle(BASE_WHEEL_BOARD, 0));
   private lastPegAt = Number.NEGATIVE_INFINITY;
   private landedAt = Number.NEGATIVE_INFINITY;
   private bulbPhase = 0;
   private lastUpdateAt: number | null = null;
-  private titoLine: string | null = null;
-  private titoLineAt = Number.NEGATIVE_INFINITY;
+  private donaldLine: string | null = null;
+  private donaldLineAt = Number.NEGATIVE_INFINITY;
   private lastActivityAt = 0;
   private chuckleAt: number | null = null;
-  private wagered = 0;
   private wipe: ProgressWipe | null = null;
   private dyingBulbs: DyingBulb[] = [];
-  private nothingSwallowSounded = false;
-  private nothingToneSounded = false;
-  private nothingFinished = false;
-  private nothingEndsInRestart = true;
+  private permanentDeathSwallowSounded = false;
+  private permanentDeathToneSounded = false;
+  private permanentDeathFinished = false;
+  private permanentDeathEndsInRestart = true;
   /** The wheel was opened from the picker's free spin rather than through the warnings. */
   private freeSpinVisit = false;
   /** Puts the club's game picker back up; null until the club binds it. */
@@ -456,12 +448,12 @@ export class ClubWheelSystem implements WheelGameHost {
   private readonly prizes: RewardChestScreen;
   private readonly clock: () => number;
   private readonly random: () => number;
-  private readonly titoRandom: () => number;
+  private readonly donaldRandom: () => number;
 
   constructor(private readonly deps: ClubWheelDeps) {
     this.clock = deps.clock ?? (() => performance.now());
     this.random = deps.random ?? Math.random;
-    this.titoRandom = deps.titoRandom ?? Math.random;
+    this.donaldRandom = deps.donaldRandom ?? Math.random;
     this.prizes = new RewardChestScreen(deps.audio);
   }
 
@@ -469,10 +461,6 @@ export class ClubWheelSystem implements WheelGameHost {
 
   get anySurfaceOpen(): boolean {
     return this.screen !== 'closed';
-  }
-
-  get coinsWageredThisVisit(): number {
-    return this.wagered;
   }
 
   /**
@@ -500,7 +488,7 @@ export class ClubWheelSystem implements WheelGameHost {
     this.reopenPicker = reopen;
   }
 
-  /** Straight onto the wheel with the Nothing taped over: the warnings guard a wipe it cannot reach. */
+  /** Straight onto the wheel with Permanent Death taped over: the warnings guard a wipe it cannot reach. */
   openFreeSpin(seat: CasinoSeat): boolean {
     const takeable = this.freeSpinOffer?.blocked === null;
     if (this.screen !== 'closed' || !takeable) return false;
@@ -516,7 +504,7 @@ export class ClubWheelSystem implements WheelGameHost {
     const dt = this.lastUpdateAt === null ? 0 : Math.max(0, now - this.lastUpdateAt);
     this.lastUpdateAt = now;
     this.syncLoops();
-    if (this.screen !== 'wheel' && this.screen !== 'nothing') return;
+    if (this.screen !== 'wheel' && this.screen !== 'permanent_death') return;
     this.tickHold(now);
     this.prizes.tick();
     this.tickPhase(now);
@@ -525,7 +513,7 @@ export class ClubWheelSystem implements WheelGameHost {
       this.chuckleAt = null;
       this.deps.audio?.playRandom(CHUCKLES);
     }
-    if (this.phase.kind === 'idle' && now - this.lastActivityAt >= TITO_IDLE_LINE_MS) {
+    if (this.phase.kind === 'idle' && now - this.lastActivityAt >= DONALD_IDLE_LINE_MS) {
       this.say('idle');
     }
     if (this.flip !== null && now - this.flip.startedAt >= WHEEL_FLIP_MS) this.flip = null;
@@ -534,22 +522,23 @@ export class ClubWheelSystem implements WheelGameHost {
   /**
    * The scene is going away under the wheel: a spin already turning lands on
    * the spot so its prize is paid, then everything closes as if the player
-   * had left. The Nothing is never interrupted; the page reload ends it.
+   * had left. Permanent Death is never interrupted; the page reload ends it.
    */
   forceClose(): void {
     if (this.screen === 'closed') return;
     const phase = this.phase;
     const turning = phase.kind === 'spinning' || phase.kind === 'committing' ? phase.spin : null;
-    const nothing = turning?.outcome.wedge.prize.kind === 'nothing' || this.screen === 'nothing';
-    if (nothing) {
+    const wiping =
+      turning?.outcome.wedge.prize.kind === 'permanent_death' || this.screen === 'permanent_death';
+    if (wiping) {
       // The cinematic goes with the scene, but the save is already being
       // erased: the page must still restart once it is gone, or play would
       // carry on with every save silently refused.
       const wipe = this.wipe ?? this.deps.progressWipe ?? dryRunWipe(this.clock);
       this.wipe = wipe;
-      if (this.nothingEndsInRestart && !this.nothingFinished) {
-        this.nothingFinished = true;
-        void wipe.wipe().then(() => this.deps.afterNothing());
+      if (this.permanentDeathEndsInRestart && !this.permanentDeathFinished) {
+        this.permanentDeathFinished = true;
+        void wipe.wipe().then(() => this.deps.afterPermanentDeath());
       }
       return;
     }
@@ -574,7 +563,7 @@ export class ClubWheelSystem implements WheelGameHost {
       this.warningSurface(`${prefix}${WHEEL_CONFIRM_SURFACE_ID}`, 'confirm', seat),
       this.wheelSurface(`${prefix}${WHEEL_SURFACE_ID}`, seat),
       this.prizeSurface(`${prefix}${WHEEL_PRIZE_SURFACE_ID}`),
-      this.nothingSurface(`${prefix}${NOTHING_SURFACE_ID}`),
+      this.permanentDeathSurface(`${prefix}${PERMANENT_DEATH_SURFACE_ID}`),
     ];
   }
 
@@ -632,16 +621,18 @@ export class ClubWheelSystem implements WheelGameHost {
   }
 
   /**
-   * Plays the Nothing without ever calling {@link ClubWheelDeps.afterNothing}:
+   * Plays Permanent Death without ever calling {@link ClubWheelDeps.afterPermanentDeath}:
    * a gate auditing the screen must not reload the page under itself.
    */
-  openNothingForReview(seat: CasinoSeat): void {
-    const index = boardForBet(this.bet).findIndex((wedge) => wedge.prize.kind === 'nothing');
-    this.nothingEndsInRestart = false;
+  openPermanentDeathForReview(seat: CasinoSeat): void {
+    const index = boardForBet(this.bet).findIndex(
+      (wedge) => wedge.prize.kind === 'permanent_death',
+    );
+    this.permanentDeathEndsInRestart = false;
     this.landForReview(seat, Math.max(0, index));
   }
 
-  /** Shuts every wheel screen at once, the Nothing included: review harnesses only. */
+  /** Shuts every wheel screen at once, Permanent Death included: review harnesses only. */
   resetForReview(): void {
     if (this.screen === 'closed') return;
     this.dismissPrizes();
@@ -732,17 +723,17 @@ export class ClubWheelSystem implements WheelGameHost {
    * of leaving the player on the floor.
    */
   private closeToFloor(toPicker = false): void {
-    if (this.screen === 'nothing') return;
+    if (this.screen === 'permanent_death') return;
     this.freeSpinVisit = false;
     this.screen = 'closed';
     this.hold = null;
     this.flip = null;
-    this.titoLine = null;
+    this.donaldLine = null;
     this.deps.audio?.stopSound('wheel_hold_charge');
     this.deps.audio?.stopSound('slots_jackpot_siren');
     this.syncLoops();
     this.deps.audio?.resumeMusic('wheel', MUSIC_FADE_MS);
-    this.deps.audio?.resumeAmbience('nothing');
+    this.deps.audio?.resumeAmbience('permanent_death');
     const ledger = this.deps.ledger;
     const frozen = ledger.owedFreeze;
     const seat = this.seat;
@@ -792,13 +783,13 @@ export class ClubWheelSystem implements WheelGameHost {
 
   private wheelSurface(id: string, seat: CasinoSeat): Surface {
     // `blocksEscape` is read live by the root, so the surface carries it as a getter.
-    const blocking = (): boolean => this.busy || this.screen === 'nothing';
+    const blocking = (): boolean => this.busy || this.screen === 'permanent_death';
     return {
       id,
       band: 'modal',
       haltsWorld: true,
       locksKeyboard: true,
-      isOpen: () => this.screen === 'wheel' || this.screen === 'nothing',
+      isOpen: () => this.screen === 'wheel' || this.screen === 'permanent_death',
       get blocksEscape() {
         return blocking();
       },
@@ -972,14 +963,12 @@ export class ClubWheelSystem implements WheelGameHost {
     const undo: SpinUndo = {
       humanCoins: human.coins,
       catCoins: cat.coins,
-      wagered: this.wagered,
       freeSpinBet: this.freeSpinBet,
       questFreeSpinsUsed: ledger.questFreeSpins.used,
       tapedChain: ledger.questFreeSpins.tapedChain,
       prizesMarked: [],
     };
     if (price > 0 && !spendPartyCoins(human, cat, price, crawler)) return;
-    this.wagered += price;
     this.freeSpinBet = null;
     if (payment.kind === 'quest') {
       // Spent with the commit's own save, so a reload mid-spin never gives it back.
@@ -1010,7 +999,7 @@ export class ClubWheelSystem implements WheelGameHost {
     this.phase = { kind: 'committing', spin, since: now };
     this.lastActivityAt = now;
 
-    if (outcome.wedge.prize.kind === 'nothing') {
+    if (outcome.wedge.prize.kind === 'permanent_death') {
       // The wipe is this spin's round-trip; nothing after it can be saved.
       this.wipe = this.deps.progressWipe ?? dryRunWipe(this.clock);
       void this.wipe.wipe();
@@ -1066,7 +1055,6 @@ export class ClubWheelSystem implements WheelGameHost {
   private undoCommit(human: Player, cat: Player, undo: SpinUndo): void {
     human.coins = undo.humanCoins;
     cat.coins = undo.catCoins;
-    this.wagered = undo.wagered;
     this.freeSpinBet = undo.freeSpinBet;
     const ledger = this.deps.ledger;
     ledger.questFreeSpins.used = undo.questFreeSpinsUsed;
@@ -1106,8 +1094,8 @@ export class ClubWheelSystem implements WheelGameHost {
       case 'revealing':
         this.tickReveal(phase, now);
         return;
-      case 'nothing':
-        this.tickNothing(phase, now);
+      case 'permanent_death':
+        this.tickPermanentDeath(phase, now);
         return;
       case 'idle':
         return;
@@ -1137,9 +1125,9 @@ export class ClubWheelSystem implements WheelGameHost {
     this.landedAt = now;
     const wedge = spin.outcome.wedge;
     const audio = this.deps.audio;
-    if (wedge.prize.kind === 'nothing') {
+    if (wedge.prize.kind === 'permanent_death') {
       audio?.play('wheel_land_bad');
-      this.enterNothing(now);
+      this.enterPermanentDeath(now);
       return;
     }
     if (wedge.prize.kind === 'spin_again') audio?.play('wheel_spin_again');
@@ -1166,7 +1154,7 @@ export class ClubWheelSystem implements WheelGameHost {
     if (effectKind === 'handies') {
       this.deps.onNotice?.('Unlimited Free Handies at Bitches or Penis Parade. Enjoy.', 'accent');
     }
-    this.say(titoTriggerFor(effectKind));
+    this.say(donaldTriggerFor(effectKind));
 
     const seat = this.seat;
     const purseAfter = seat === null ? 0 : partyCoins(seat.active(), seat.companion());
@@ -1182,7 +1170,6 @@ export class ClubWheelSystem implements WheelGameHost {
       spin,
       startedAt: now,
       sirenStarted: false,
-      stabSounded: false,
       prizeShown: false,
       reveal: {
         wedge,
@@ -1208,10 +1195,6 @@ export class ClubWheelSystem implements WheelGameHost {
     ) {
       phase.sirenStarted = true;
       this.deps.audio?.play('slots_jackpot_siren');
-    }
-    if (phase.reveal.effect === 'stab' && !phase.stabSounded && elapsed >= STAB_SLASH_AT_MS) {
-      phase.stabSounded = true;
-      this.deps.audio?.play('tito_stab');
     }
     if (elapsed < phase.reveal.durationMs || phase.prizeShown) return;
     if (this.presentPrize(phase)) return;
@@ -1278,24 +1261,27 @@ export class ClubWheelSystem implements WheelGameHost {
     };
   }
 
-  // ── The Nothing ────────────────────────────────────────────────────────
+  // ── Permanent Death ────────────────────────────────────────────────────────
 
-  private enterNothing(now: number): void {
-    this.phase = { kind: 'nothing', landedAt: now };
-    this.screen = 'nothing';
-    this.say('nothing');
-    // The Nothing is a void, not a corner of the club: the crowd and every
+  private enterPermanentDeath(now: number): void {
+    this.phase = { kind: 'permanent_death', landedAt: now };
+    this.screen = 'permanent_death';
+    this.say('permanent_death');
+    // Permanent Death is a void, not a corner of the club: the crowd and every
     // other world bed fall silent with the lights. Its own cues are one-shots
     // on the effects bus, so they still play over the muted ambience.
-    this.deps.audio?.pauseAmbience('nothing');
-    const firstDeath = now + NOTHING_LAND_PAUSE_MS;
+    this.deps.audio?.pauseAmbience('permanent_death');
+    const firstDeath = now + PERMANENT_DEATH_LAND_PAUSE_MS;
     this.dyingBulbs = Array.from({ length: WHEEL_BULB_COUNT }, (_, index) => ({
-      at: firstDeath + index * NOTHING_BULB_STAGGER_MS + this.random() * NOTHING_BULB_JITTER_MS,
+      at:
+        firstDeath +
+        index * PERMANENT_DEATH_BULB_STAGGER_MS +
+        this.random() * PERMANENT_DEATH_BULB_JITTER_MS,
       sounded: false,
     }));
   }
 
-  private nothingTimeline(landedAt: number): {
+  private permanentDeathTimeline(landedAt: number): {
     bulbsOutAt: number;
     swallowAt: number;
     firstLineAt: number;
@@ -1303,19 +1289,23 @@ export class ClubWheelSystem implements WheelGameHost {
     doneAt: number;
   } {
     const lastBulb = this.dyingBulbs.reduce((latest, bulb) => Math.max(latest, bulb.at), landedAt);
-    const swallowAt = lastBulb + NOTHING_AFTER_BULBS_MS;
-    const firstLineAt = swallowAt + NOTHING_SWALLOW_MS + NOTHING_FIRST_LINE_DELAY_MS;
-    const secondLineAt = firstLineAt + NOTHING_SECOND_LINE_DELAY_MS;
+    const swallowAt = lastBulb + PERMANENT_DEATH_AFTER_BULBS_MS;
+    const firstLineAt =
+      swallowAt + PERMANENT_DEATH_SWALLOW_MS + PERMANENT_DEATH_FIRST_LINE_DELAY_MS;
+    const secondLineAt = firstLineAt + PERMANENT_DEATH_SECOND_LINE_DELAY_MS;
     return {
       bulbsOutAt: lastBulb,
       swallowAt,
       firstLineAt,
       secondLineAt,
-      doneAt: secondLineAt + NOTHING_HOLD_MS,
+      doneAt: secondLineAt + PERMANENT_DEATH_HOLD_MS,
     };
   }
 
-  private tickNothing(phase: Extract<WheelPhase, { kind: 'nothing' }>, now: number): void {
+  private tickPermanentDeath(
+    phase: Extract<WheelPhase, { kind: 'permanent_death' }>,
+    now: number,
+  ): void {
     const audio = this.deps.audio;
     for (const bulb of this.dyingBulbs) {
       if (bulb.sounded || now < bulb.at) continue;
@@ -1323,29 +1313,29 @@ export class ClubWheelSystem implements WheelGameHost {
       const pitch = 1 + (this.random() * 2 - 1) * BULB_PITCH_SWING;
       audio?.play('wheel_light_bulb_dying', { playbackRate: pitch, volume: BULB_VOLUME });
     }
-    const timeline = this.nothingTimeline(phase.landedAt);
-    if (!this.nothingSwallowSounded && now >= timeline.swallowAt) {
-      this.nothingSwallowSounded = true;
-      audio?.play('nothing_void_swallow');
+    const timeline = this.permanentDeathTimeline(phase.landedAt);
+    if (!this.permanentDeathSwallowSounded && now >= timeline.swallowAt) {
+      this.permanentDeathSwallowSounded = true;
+      audio?.play('permanent_death_swallow');
     }
-    if (!this.nothingToneSounded && now >= timeline.secondLineAt) {
-      this.nothingToneSounded = true;
-      audio?.play('nothing_final_tone');
+    if (!this.permanentDeathToneSounded && now >= timeline.secondLineAt) {
+      this.permanentDeathToneSounded = true;
+      audio?.play('permanent_death_final_tone');
     }
     const wiped = this.wipe === null || this.wipe.wipeStatus === 'wiped';
-    if (!this.nothingFinished && now >= timeline.doneAt && wiped) {
-      this.nothingFinished = true;
-      if (this.nothingEndsInRestart) this.deps.afterNothing();
+    if (!this.permanentDeathFinished && now >= timeline.doneAt && wiped) {
+      this.permanentDeathFinished = true;
+      if (this.permanentDeathEndsInRestart) this.deps.afterPermanentDeath();
     }
   }
 
-  private nothingModel(now: number): NothingModel | null {
+  private permanentDeathModel(now: number): PermanentDeathModel | null {
     const phase = this.phase;
-    if (phase.kind !== 'nothing') return null;
-    const timeline = this.nothingTimeline(phase.landedAt);
+    if (phase.kind !== 'permanent_death') return null;
+    const timeline = this.permanentDeathTimeline(phase.landedAt);
     const wiped = this.wipe === null || this.wipe.wipeStatus === 'wiped';
     return {
-      swallow: Math.max(0, Math.min(1, (now - timeline.swallowAt) / NOTHING_SWALLOW_MS)),
+      swallow: Math.max(0, Math.min(1, (now - timeline.swallowAt) / PERMANENT_DEATH_SWALLOW_MS)),
       firstLineAgeMs: now - timeline.firstLineAt,
       secondLineAgeMs: now - timeline.secondLineAt,
       holding: now >= timeline.doneAt && !wiped,
@@ -1354,50 +1344,45 @@ export class ClubWheelSystem implements WheelGameHost {
     };
   }
 
-  private nothingSurface(id: string): Surface {
+  private permanentDeathSurface(id: string): Surface {
     return {
       id,
       band: 'system',
       haltsWorld: true,
       locksKeyboard: true,
       blocksEscape: true,
-      isOpen: () => this.screen === 'nothing',
+      isOpen: () => this.screen === 'permanent_death',
       render: (ui) => {
-        const model = this.nothingModel(this.clock());
-        if (model !== null) paintNothing(ui, model);
+        const model = this.permanentDeathModel(this.clock());
+        if (model !== null) paintPermanentDeath(ui, model);
       },
     };
   }
 
-  // ── Tito ───────────────────────────────────────────────────────────────
+  // ── Donald ───────────────────────────────────────────────────────────────
 
-  private say(trigger: TitoTrigger): void {
-    this.titoLine = pickTitoLine(trigger, this.titoLine, this.titoRandom);
-    this.titoLineAt = this.clock();
-    this.lastActivityAt = this.titoLineAt;
+  private say(trigger: DonaldTrigger): void {
+    this.donaldLine = pickDonaldLine(trigger, this.donaldLine, this.donaldRandom);
+    this.donaldLineAt = this.clock();
+    this.lastActivityAt = this.donaldLineAt;
   }
 
-  /** A quip that waits its turn behind whatever Tito just said. */
-  private quip(trigger: TitoTrigger): void {
-    if (this.clock() - this.titoLineAt < TITO_QUIP_GAP_MS) return;
+  /** A quip that waits its turn behind whatever Donald just said. */
+  private quip(trigger: DonaldTrigger): void {
+    if (this.clock() - this.donaldLineAt < DONALD_QUIP_GAP_MS) return;
     this.say(trigger);
   }
 
-  private titoPose(now: number): { pose: TitoBustPose; progress: number } {
+  private donaldPose(now: number): { pose: DonaldBustPose; progress: number } {
     const phase = this.phase;
     if (phase.kind === 'revealing') {
       const elapsed = now - phase.startedAt;
-      const lungeElapsed = elapsed - STAB_LUNGE_STARTS_AT_MS;
-      const lunging = lungeElapsed >= 0 && lungeElapsed < STAB_POSE_MS;
-      if (phase.reveal.effect === 'stab' && lunging) {
-        return { pose: 'lunge', progress: lungeElapsed / STAB_POSE_MS };
-      }
       const red = isRedWedge(phase.reveal.wedge);
       return red
-        ? { pose: 'chuckle', progress: (elapsed % STAB_POSE_MS) / STAB_POSE_MS }
+        ? { pose: 'chuckle', progress: (elapsed % CHUCKLE_CYCLE_MS) / CHUCKLE_CYCLE_MS }
         : { pose: 'grin', progress: 1 };
     }
-    if (phase.kind === 'nothing') return { pose: 'grin', progress: 1 };
+    if (phase.kind === 'permanent_death') return { pose: 'grin', progress: 1 };
     if (phase.kind === 'spinning') return { pose: 'grin', progress: 1 };
     return { pose: 'idle', progress: 0 };
   }
@@ -1417,7 +1402,7 @@ export class ClubWheelSystem implements WheelGameHost {
   }
 
   private bulbsDark(now: number): number {
-    if (this.phase.kind !== 'nothing') return 0;
+    if (this.phase.kind !== 'permanent_death') return 0;
     return this.dyingBulbs.filter((bulb) => now >= bulb.at).length;
   }
 
@@ -1429,8 +1414,8 @@ export class ClubWheelSystem implements WheelGameHost {
     const blocked = this.spinBlocked(seat);
     const reveal =
       phase.kind === 'revealing' ? { ...phase.reveal, elapsedMs: now - phase.startedAt } : null;
-    const tito = this.titoPose(now);
-    const lineAge = now - this.titoLineAt;
+    const donald = this.donaldPose(now);
+    const lineAge = now - this.donaldLineAt;
     const betLocked = this.betLocked;
     return {
       nowMs: now,
@@ -1449,7 +1434,7 @@ export class ClubWheelSystem implements WheelGameHost {
       landingKick: Math.max(0, 1 - (now - this.landedAt) / LANDING_KICK_MS),
       bulbPhase: this.bulbPhase,
       bulbsDark: this.bulbsDark(now),
-      bulbsSteady: phase.kind === 'nothing',
+      bulbsSteady: phase.kind === 'permanent_death',
       bet: this.freeSpinBet ?? this.bet,
       purse: partyCoins(seat.active(), seat.companion()),
       betDown: betLocked ?? (this.bet <= WHEEL_MIN_BET ? 'Already at the minimum bet' : null),
@@ -1462,10 +1447,10 @@ export class ClubWheelSystem implements WheelGameHost {
         disabled: blocked,
       },
       leaveDisabled: this.busy ? 'Not while the wheel is turning' : null,
-      tito: {
-        pose: tito.pose,
-        progress: tito.progress,
-        line: lineAge < TITO_LINE_MS ? this.titoLine : null,
+      donald: {
+        pose: donald.pose,
+        progress: donald.progress,
+        line: lineAge < DONALD_LINE_MS ? this.donaldLine : null,
         lineAgeMs: lineAge,
       },
       reveal,

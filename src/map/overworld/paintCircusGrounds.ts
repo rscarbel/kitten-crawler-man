@@ -28,8 +28,6 @@ import {
   CIRCUS_ROAD_START_ROW,
   CIRCUS_STRUCTURES,
   CIRCUS_STRUCTURE_PLACEMENTS,
-  CIRCUS_TERROR_SPAWN_CLEARANCE_TILES,
-  CIRCUS_TERROR_SPAWN_OFFSET,
   CIRCUS_TORCH_BEARINGS_DEG,
   CIRCUS_TORCH_RING_RADIUS_TILES,
   bearingOf,
@@ -47,7 +45,7 @@ import {
   type RimPropAnchor,
 } from './circusGroundsLayout';
 
-/** A Big Top door: where it is and how wide, for the building-entry list. */
+/** A Starlight Tent door: where it is and how wide, for the building-entry list. */
 export interface CircusDoor {
   readonly doorTile: TilePoint;
   readonly doorwayWidth: number;
@@ -55,7 +53,7 @@ export interface CircusDoor {
 
 export interface PaintedCircusGrounds {
   readonly site: CircusGroundsSite;
-  readonly bigTopDoor: CircusDoor;
+  readonly starlightTentDoor: CircusDoor;
 }
 
 const STRUCTURE_TILE_TYPE = {
@@ -72,13 +70,13 @@ function isCircusStructureType(type: number | undefined): boolean {
 }
 
 /**
- * The centre line of the circus's approach road, from the Big Top's doorstep
+ * The centre line of the circus's approach road, from the Starlight Tent's doorstep
  * out to the nearest town gate.
  *
  * The road begins on the forecourt rather than at the grounds' centre, because
- * the Big Top stands on the centre and its door faces south. A road that must
+ * the Starlight Tent stands on the centre and its door faces south. A road that must
  * leave northward first runs along the forecourt to one of the flank columns
- * between the Big Top and a side-show pavilion, and only then turns north —
+ * between the Starlight Tent and a side-show pavilion, and only then turns north —
  * so whichever way the party arrives, the road delivers them to the door.
  */
 export function circusApproachCentreLine(plan: TownPlan, centre: TilePoint): ApproachCentreTile[] {
@@ -238,7 +236,7 @@ export function paintCircusGrounds(
   }
 
   const structures: PlacedCircusStructure[] = [];
-  let bigTopDoor: CircusDoor | null = null;
+  let starlightTentDoor: CircusDoor | null = null;
   for (const placement of CIRCUS_STRUCTURE_PLACEMENTS) {
     const origin = { x: centre.x + placement.dx, y: centre.y + placement.dy };
     const spec = CIRCUS_STRUCTURES[placement.structure];
@@ -247,14 +245,15 @@ export function paintCircusGrounds(
     for (const step of blockedSteps(spec))
       grid.set(origin.x + step.dx, origin.y + step.dy, CIRCUS_LOT);
     structures.push(stampStructure(grid, placement.structure, origin));
-    if (placement.structure === 'big_top' && spec.door !== undefined) {
-      bigTopDoor = {
+    if (placement.structure === 'starlight_tent' && spec.door !== undefined) {
+      starlightTentDoor = {
         doorTile: { x: origin.x + spec.door.dx, y: origin.y + spec.door.dy },
         doorwayWidth: spec.door.width,
       };
     }
   }
-  if (bigTopDoor === null) throw new Error('The circus layout places no Big Top with a door');
+  if (starlightTentDoor === null)
+    throw new Error('The circus layout places no Starlight Tent with a door');
 
   const road = circusApproachCentreLine(plan, centre);
   paveApproach(grid, road, plan.wall);
@@ -285,13 +284,13 @@ export function paintCircusGrounds(
 
   return {
     site: { centre, radiusTiles: CIRCUS_RADIUS_TILES, structures, arch, torches },
-    bigTopDoor,
+    starlightTentDoor,
   };
 }
 
 /**
  * The test every rim tile must pass: on the map, on open unpaved ground, out
- * of every keep-clear band, clear of the arch, of Terror's spawn and of every
+ * of every keep-clear band, clear of the arch and of every
  * structure already standing (a prop pressed against a lamp or another wagon
  * reads as a jumble and walls the rim path shut between them).
  */
@@ -306,10 +305,6 @@ function rimTileTest(
     for (const tile of keepClearBandTiles(band, centre)) bandTiles.add(tileKey(tile));
   }
   const archPosts = arch?.posts ?? [];
-  const terror = {
-    x: centre.x + CIRCUS_TERROR_SPAWN_OFFSET.x,
-    y: centre.y + CIRCUS_TERROR_SPAWN_OFFSET.y,
-  };
   const chebyshev = (a: TilePoint, b: TilePoint): number =>
     Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
   const touchesStructure = (tile: TilePoint): boolean => {
@@ -326,7 +321,6 @@ function rimTileTest(
     !grid.isPaved(tile.x, tile.y) &&
     !bandTiles.has(tileKey(tile)) &&
     !touchesStructure(tile) &&
-    chebyshev(tile, terror) > CIRCUS_TERROR_SPAWN_CLEARANCE_TILES &&
     archPosts.every((post) => chebyshev(post, tile) > CIRCUS_ARCH_CLEARANCE_TILES);
 }
 

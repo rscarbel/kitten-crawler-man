@@ -1,10 +1,10 @@
 /**
- * Over City's colour vocabulary: the ramp family every town material painter
+ * Taloncrest's colour vocabulary: the ramp family every town material painter
  * draws from, plus the ground ramps they are authored to sit near.
  *
  * Every ramp is a `{ shadow, mid, light, accent }` four-stop family, the same
  * shape `BUILDING_RAMPS` (`src/sprites/buildinggen/ramps.ts`) and
- * `villageArt.ts`'s palette already use. Over City is lighter and cooler than
+ * `villageArt.ts`'s palette already use. Taloncrest is lighter and cooler than
  * Briar Hollow's dark oiled walnut throughout, so the two settlements never
  * read as the same place even in the same screenshot: cream plaster and ash
  * oak timber over cool dressed stone, against the village's warm dark wood
@@ -51,7 +51,7 @@ export const TOWN_RAMPS = {
   oc_cloth_sky: ramp([34, 50, 68], [62, 90, 120], [110, 142, 172], [110, 142, 172]),
   /** The warm half of the awning pair: guild colours, alternating stripes. */
   oc_cloth_ember: ramp([90, 46, 36], [150, 84, 62], [200, 142, 104], [200, 142, 104]),
-  /** Skyfowl religious and civic iconography — a relief device, a dome, a perch finial. Never a whole wall. */
+  /** Hawkfolk religious and civic iconography — a relief device, a dome, a perch finial. Never a whole wall. */
   oc_sky_icon: ramp([34, 58, 66], [62, 98, 112], [124, 160, 172], [184, 208, 214]),
 } as const satisfies Record<string, Ramp>;
 
@@ -66,13 +66,13 @@ export function getTownRamp(id: TownRampId): Ramp {
 }
 
 /**
- * Grimaldi's circus: the old circus hues gone sick and warm, a travelling
+ * The circus: the old circus hues gone sick and warm, a travelling
  * show that died and kept performing. Red and cream are dried blood and old
  * bone rather than candy stripe, the blues have faded to slate, the brass
- * has tarnished, and mildew and vine greens are the corruption creeping out
- * from under the canvas. The stripe and brass mids share the town's value
+ * has tarnished, and mildew green is the damp creeping out from under the
+ * canvas. The stripe and brass mids share the town's value
  * band so a tent and a townhouse share one lighting world, while the
- * bruise, navy, vine and timber mids sit a step darker so the circus reads
+ * bruise, navy and timber mids sit a step darker so the circus reads
  * as a place gone dim. Blood and brass carry about the town cloth's
  * saturation; the lights and accents fall off toward grey so the stripes
  * read as weathered dye, never as fresh paint.
@@ -94,8 +94,6 @@ export const CIRCUS_RAMPS = {
   circus_navy: ramp([30, 38, 52], [60, 74, 94], [102, 116, 132], [136, 148, 158]),
   /** Mildew green-grey: blooms on the canvas skirt and damp stains on timber — a tint over another material, never a whole surface. */
   circus_mildew: ramp([50, 58, 42], [94, 104, 72], [134, 140, 100], [162, 164, 120]),
-  /** Grimaldi's vine: runners from under the skirt, roots through the sawdust, the king-pole growth. The accent is its sick yellow-green highlight. */
-  circus_vine: ramp([24, 38, 22], [50, 78, 38], [90, 118, 54], [148, 164, 72]),
   /** Backstage canvas in the dark: the solid mass of the tent interior, near-black with just enough warmth for a stripe ghost and rigging to register. */
   circus_backstage: ramp([10, 8, 10], [22, 18, 20], [38, 32, 32], [56, 46, 44]),
   /** Sun-greyed, rotting timber: king poles, stage braces, wagon beds and crates. Greyer and darker than the town's clean `oc_timber`. */
@@ -119,7 +117,7 @@ export function getCircusRamp(id: CircusRampId): Ramp {
   return CIRCUS_RAMPS[id];
 }
 
-/** The warm near-black every Over City silhouette and internal line is inked with — never pure black. */
+/** The warm near-black every Taloncrest silhouette and internal line is inked with — never pure black. */
 export const TOWN_INK: RGB = [16, 12, 12];
 
 /** The dark end of the ground's own shadow ramp, reused for a building's cast shadow onto the street. */

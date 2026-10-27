@@ -37,24 +37,18 @@ export const SERVICE_PRICES = {
   },
   millers_farm: { hot_plate: 6 },
   plumbline_farm: { hayloft: 10 },
-  /** The plaza seer charges for the theatre; Hilda reads at her own table for less. */
+  /** The plaza seer charges for the theatre; Lori reads at her own table for less. */
   fortune: { plaza_seer: 3, hedge_witch: 2 },
-  /**
-   * The escort pair is waived once the party's casino wagers exceed its price.
-   */
-  vip_lounge: { heal: 40, cocktail: 60, bodyguard_pair: 500 },
   /**
    * Tuned against floor-3 coin income: the cheapest hire barely fights, the
    * dearest is the best tank.
    */
   mercenary_guild: {
-    bucket_boy: 120,
-    gluteus_maxx: 220,
-    splash_zone: 260,
-    dong_quixote: 280,
+    brother_anselm: 120,
+    ivy_ashgrove: 260,
     tumbledown: 300,
-    bomo: 300,
-    sledge: 350,
+    hammer_hands: 300,
+    crush: 350,
   },
   /**
    * Sella's treatment scales with the party's missing health; the per-point rate

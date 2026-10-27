@@ -7,16 +7,18 @@
  * racked to the rafters, open along its south side so the stock is behind a
  * wall without being behind a door. The middle of the floor is where the
  * wheels get built — the wheel on its stand, the shaving horse, the sawhorse
- * — each with its shavings lying round it. Along the south wall, beside the
+ * — each with its shavings lying round it. Below them runs his range: a
+ * target board by the east wall with a clear lane west from it, where
+ * he stands and shoots between jobs. Along the south wall, beside the
  * door, the long red circus wagon bed sits up on cribbing under a dust
  * sheet, and across the door from it the firewood a wheelwright sells from
  * his offcuts.
  *
- * The bench is the room's only `table` anchor, so the wheelwright always
- * stands at it. The corner tiles either side of its west end are blocked on
- * purpose: the stand search tries the tile north-west, then west, then
- * south-west of an anchor before due south, and leaving any of those open
- * would stand him beside his bench instead of at it.
+ * The lane is load-bearing: the wheelwright is stood a fixed distance west
+ * of the board (his roster's `prop` placement), and nothing may be placed on
+ * the board's row between it and him, or he would be shooting through it.
+ * It runs east of the door's columns so the way in never crosses it, and it
+ * runs east-west so he is seen in profile while he shoots.
  */
 
 import { INTERIOR_WALL } from '../../tileTypes';
@@ -95,8 +97,6 @@ export function buildCartwrightsWorkshopLayout(w: number, h: number): TownInteri
   const eastCol = w - 2;
   const southRow = h - 2;
   const doorWestCol = Math.floor(w / 2) - 1;
-  // South-west of the bench's anchor tile: blocked so the stand search
-  // lands on the tile directly in front of the bench instead.
   const spokeTubCol = benchCol - 1;
   const aisleRow = northRow + 1;
   const gluePotCol = bayWallCol - 1;
@@ -114,7 +114,12 @@ export function buildCartwrightsWorkshopLayout(w: number, h: number): TownInteri
   const sawhorseCol = bayWallCol - 1;
   const sawhorseRow = wheelStandRow + 1;
   const plankPileCol = eastCol - 2;
-  const plankPileRow = sawhorseRow + 2;
+  const plankPileRow = sawhorseRow + 1;
+  // A column in from the east wall, so the wall's floor stays one open run
+  // round it, and a row clear of the plank pile above, so the lane west of it
+  // runs open across the floor, east of the door's columns.
+  const targetCol = eastCol - 1;
+  const targetRow = plankPileRow + 2;
 
   // South wall: the wagon bed west of the door, firewood east of it.
   const wagonCol = westCol;
@@ -161,6 +166,7 @@ export function buildCartwrightsWorkshopLayout(w: number, h: number): TownInteri
     prop(axleCol, axleRow, 'axle_set'),
     prop(sawhorseCol, sawhorseRow, 'sawhorse'),
     prop(sawhorseCol, sawhorseRow + 1, 'shavings_floor', 1),
+    prop(targetCol, targetRow, 'target_board'),
     prop(plankPileCol, plankPileRow, 'plank_pile'),
   );
 

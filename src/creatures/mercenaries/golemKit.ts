@@ -12,6 +12,7 @@ import {
   NO_PROJECTILES,
   locomotionState,
   type HirelingProjectile,
+  type GolemRow,
   type MercenaryDrawState,
   type MercenaryKit,
   type MercenaryKitContext,
@@ -92,7 +93,7 @@ export class GolemKit implements MercenaryKit {
     this.begin(ctx.merc, this.lastMelee === 'slam' ? 'stomp' : 'slam');
   }
 
-  drawState(merc: Mercenary): MercenaryDrawState {
+  drawState(merc: Mercenary): MercenaryDrawState<GolemRow> {
     const attack = this.attack;
     if (attack === null) return locomotionState(merc);
     const timing = GOLEM_ATTACK_TIMING[attack];

@@ -9,7 +9,7 @@
  * The Skeleton Lord's design is *open*: a robe framing a lit ribcage, and the
  * negative space between the ribs is the whole read. The Lich is the opposite —
  * a closed, near-black column of cloth with nothing showing but a jaw, two eye
- * points and a pair of hands. It has spent weeks impersonating a dead skyfowl
+ * points and a pair of hands. It has spent weeks impersonating a dead Hawkfolk
  * magistrate, signing his letters, and it still wears the office: a clerk's
  * stole down the chest, a frayed sash, a wax seal on a cord, cuffs stained with
  * the ink it forges in.

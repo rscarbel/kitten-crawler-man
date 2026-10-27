@@ -39,7 +39,7 @@ const KRASUE_EYES: EyePlacement = {
 /**
  * A krasue — a disembodied flying head trailing entrails, born from
  * Scolopendra's poison catastrophe. Fast, erratic, and low-HP but
- * dangerous in a straight fight; the Over City ruins' aerial threat.
+ * dangerous in a straight fight; the Taloncrest ruins' aerial threat.
  */
 export class Krasue extends Mob {
   protected override get eyePlacement(): EyePlacement {

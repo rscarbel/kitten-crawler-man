@@ -12,19 +12,20 @@ import {
   type MercenaryDrawState,
   type MercenaryKit,
   type MercenaryKitContext,
+  type MercenaryRow,
 } from './MercenaryKit';
 import { MercenaryStrike, type StrikeTiming } from './mercenaryStrike';
 
 /** A swing starts from a little past strike range, so a victim stepping back is still swung at. */
 const STRIKE_TRIGGER_RANGE_RATIO = 1.2;
 
-export interface BasicMeleeConfig {
+export interface BasicMeleeConfig<R extends MercenaryRow> {
   readonly damage: number;
   /**
    * The swings the kit cycles through in order, one per attack — a single
    * punch, or a left and right jab taking turns.
    */
-  readonly swings: readonly [StrikeTiming, ...StrikeTiming[]];
+  readonly swings: readonly [StrikeTiming<R>, ...StrikeTiming<R>[]];
   readonly cooldownFrames: number;
   readonly strikeRangeTiles?: number;
   readonly engageRadiusTiles?: number;
@@ -39,16 +40,16 @@ export interface BasicMeleeConfig {
  * extends this and adds its own specials by overriding the hooks it needs,
  * calling `super` to keep the swing.
  */
-export class BasicMeleeKit implements MercenaryKit {
+export class BasicMeleeKit<R extends MercenaryRow> implements MercenaryKit {
   readonly engageRadiusTiles: number;
   readonly leashRadiusTiles: number;
   readonly strikeRangeTiles: number;
   readonly followBand: FollowBand;
 
-  protected readonly strike = new MercenaryStrike();
+  protected readonly strike = new MercenaryStrike<R>();
   private nextSwing = 0;
 
-  constructor(protected readonly config: BasicMeleeConfig) {
+  constructor(protected readonly config: BasicMeleeConfig<R>) {
     this.engageRadiusTiles = config.engageRadiusTiles ?? DEFAULT_ENGAGE_RADIUS_TILES;
     this.leashRadiusTiles = config.leashRadiusTiles ?? DEFAULT_LEASH_RADIUS_TILES;
     this.strikeRangeTiles = config.strikeRangeTiles ?? DEFAULT_STRIKE_RANGE_TILES;
@@ -75,7 +76,7 @@ export class BasicMeleeKit implements MercenaryKit {
     ctx.merc.attackCooldown = this.config.cooldownFrames;
   }
 
-  drawState(merc: Mercenary): MercenaryDrawState {
+  drawState(merc: Mercenary): MercenaryDrawState<R | 'idle' | 'walk'> {
     return this.strike.drawState() ?? locomotionState(merc);
   }
 

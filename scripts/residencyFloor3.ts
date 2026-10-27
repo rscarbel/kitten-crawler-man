@@ -6,7 +6,7 @@
  * being moved a fastest-walk step per frame, so the camera streams the ground
  * exactly as a crawler's walk would.
  *
- * - `tour`: the plaza and main streets, the Desperado Club and eleven more
+ * - `tour`: the plaza and main streets, the Cloak & Dagger and eleven more
  *   interiors (the inn with the safe room and a shop among them), then Briar
  *   Hollow, stood in for longer than either cache's idle window.
  * - `direct`: arrival, then straight to Briar Hollow, the same wait.
@@ -51,8 +51,8 @@ import {
   figurePrewarmDepth,
   IDLE_FRAMES_BEFORE_RELEASE,
 } from '../src/sprites/figure/figureFrameCache.js';
-import { BIG_TOP_BUILDING_NAME } from '../src/core/quests/CircusQuestProgress.js';
-import { DESPERADO_CLUB_NAME, TOWN_TOWER_NAME } from '../src/map/town/townPlan.js';
+import { STARLIGHT_TENT_NAME } from '../src/map/overworld/circusGroundsLayout.js';
+import { CLOAK_AND_DAGGER_NAME, TOWN_TOWER_NAME } from '../src/map/town/townPlan.js';
 import { TownLifeSystem } from '../src/systems/TownLifeSystem.js';
 import { MarketSystem } from '../src/systems/market/MarketSystem.js';
 import { citizenFigureRows, type CitizenFigure } from '../src/creatures/citizenFigure.js';
@@ -78,15 +78,12 @@ const ARRIVAL_PAUSE_FRAMES = 5;
 const TOUR_INTERIOR_COUNT = 12;
 /** Visited first, in this order: the casino, the inn with the safe room, and a shop. */
 const TOUR_FIRST_BUILDINGS: readonly string[] = [
-  DESPERADO_CLUB_NAME,
+  CLOAK_AND_DAGGER_NAME,
   'The Sleeping Cat Inn',
   'General Store',
 ];
-/** Never entered: the Big Top is sealed until its questline opens it, and the tower is a fight. */
-const TOUR_SKIPPED_BUILDINGS: ReadonlySet<string> = new Set([
-  BIG_TOP_BUILDING_NAME,
-  TOWN_TOWER_NAME,
-]);
+/** Never entered: the Starlight Tent is the circus's maze, which parks both crawlers, and the tower is a fight. */
+const TOUR_SKIPPED_BUILDINGS: ReadonlySet<string> = new Set([STARLIGHT_TENT_NAME, TOWN_TOWER_NAME]);
 const DOOR_MENU_SURFACE = 'building-entry';
 const EXIT_MENU_SURFACE = 'exit-building';
 const CONVERSATION_SURFACE = 'conversation';
@@ -124,9 +121,11 @@ function mapsOf(scene: object): GameMap[] {
 function crowdFigureIdsOf(scene: object): string[] {
   const figures: CitizenFigure[] = [];
   const townLife: unknown = Reflect.get(scene, 'townLife');
-  if (townLife instanceof TownLifeSystem) figures.push(...townLife.people.map((p) => p.figure));
+  const castLooks = (people: ReadonlyArray<{ citizenFigure: CitizenFigure | null }>) =>
+    people.flatMap((person) => (person.citizenFigure === null ? [] : [person.citizenFigure]));
+  if (townLife instanceof TownLifeSystem) figures.push(...castLooks(townLife.people));
   const market: unknown = Reflect.get(scene, 'market');
-  if (market instanceof MarketSystem) figures.push(...market.vendors.map((v) => v.figure));
+  if (market instanceof MarketSystem) figures.push(...castLooks(market.vendors));
   const ids = new Set<string>();
   for (const figure of figures) for (const row of citizenFigureRows(figure)) ids.add(row.def.id);
   return [...ids];

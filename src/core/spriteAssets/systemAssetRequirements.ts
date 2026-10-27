@@ -3,7 +3,7 @@ import type { SpriteKey } from './SpriteLoader';
 
 /**
  * A `LevelDef` does not list everything that can appear on its floor.
- * `BountySystem`, `CircusQuestSystem`, `BigTopMazeSystem`,
+ * `BountySystem`, `StarlightTentMazeSystem`,
  * `QuillConfrontationSystem`, `MurderMysteryQuestSystem`, `SpiderQuestSystem`,
  * `SkeletonSummonSystem`, `MongoSystem` and `MercenarySystem` all construct
  * creatures no `LevelDef.roomMobs` / `hallwayMobs` / `extraSpawns` /
@@ -52,7 +52,7 @@ export const SYSTEM_ASSET_REQUIREMENTS: readonly SystemAssetRequirement[] = [
   {
     id: 'bounty:evil_clown',
     levelIds: LEVEL3,
-    mobTypes: ['evil_clown', 'stilt_clown', 'fat_clown', 'circus_lemur'],
+    mobTypes: ['evil_clown', 'tall_clown', 'fat_clown'],
     requiredGroups: [],
   },
   // Both builds are painted rather than baked, so no sprite group is needed;
@@ -101,29 +101,14 @@ export const SYSTEM_ASSET_REQUIREMENTS: readonly SystemAssetRequirement[] = [
     requiredGroups: [],
   },
 
-  // CircusQuestSystem (src/systems/CircusQuestSystem.ts) and BigTopMazeSystem
-  // (src/systems/BigTopMazeSystem.ts) — both level 3 only (circus tents and
-  // the Big Top interior only exist on the overworld map). Nearly every
-  // creature in this chain is procedural, so no sprite group is needed; the
-  // entries exist so the mob types are still checked against MOB_SPRITE_KEYS.
+  // StarlightTentMazeSystem (src/systems/StarlightTentMazeSystem.ts) — level 3 only: the
+  // Starlight Tent interior only exists on the overworld map. The finale ring's
+  // guards are procedural, so no sprite group is needed; the entry exists so
+  // the mob types are still checked against MOB_SPRITE_KEYS.
   {
-    id: 'quest:circus',
+    id: 'starlight_tent',
     levelIds: LEVEL3,
-    mobTypes: [
-      'mold_lion',
-      'circus_lemur',
-      'stilt_clown',
-      'fat_clown',
-      'terror_the_clown',
-      'signet',
-      'heather_the_bear',
-    ],
-    requiredGroups: [],
-  },
-  {
-    id: 'quest:big_top',
-    levelIds: LEVEL3,
-    mobTypes: ['circus_lemur', 'stilt_clown', 'fat_clown', 'mold_lion', 'signet'],
+    mobTypes: ['tall_clown', 'fat_clown', 'massive_clown'],
     requiredGroups: [],
   },
 
@@ -154,7 +139,7 @@ export const SYSTEM_ASSET_REQUIREMENTS: readonly SystemAssetRequirement[] = [
   {
     id: 'quest:murder_mystery',
     levelIds: LEVEL3,
-    mobTypes: ['gum_gum', 'krasue'],
+    mobTypes: ['baggi', 'krasue'],
     requiredGroups: [],
   },
 

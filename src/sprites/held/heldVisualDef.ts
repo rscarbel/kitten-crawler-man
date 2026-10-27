@@ -21,7 +21,12 @@ import {
   type WeaponGripArchetype,
   type WeightClass,
 } from './gripArchetypes';
-import type { HeldVisualId, OffHandHeldVisualId, WeaponHeldVisualId } from './heldVisualIds';
+import type {
+  HeldVisualId,
+  HirelingHeldVisualId,
+  OffHandHeldVisualId,
+  WeaponHeldVisualId,
+} from './heldVisualIds';
 
 /**
  * Which face of the head is toward the camera: the flat (a blade's full
@@ -137,6 +142,12 @@ export type HeldVisualDef = HeldVisualCommon & HandleSource;
 /** A held visual a weapon item can carry: one held in a weapon grip archetype. */
 export type WeaponHeldVisualDef = HeldVisualDef & {
   readonly id: WeaponHeldVisualId;
+  readonly archetype: WeaponGripArchetype;
+};
+
+/** A hireling's own weapon: held in a weapon grip archetype, but no item's look. */
+export type HirelingHeldVisualDef = HeldVisualDef & {
+  readonly id: HirelingHeldVisualId;
   readonly archetype: WeaponGripArchetype;
 };
 

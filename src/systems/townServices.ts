@@ -1,90 +1,75 @@
 /**
- * Which of the town's buildings offer a service, who behind the counter
- * provides it, and what pressing interact on them does.
+ * What an interior occupant offers when talked to, and which buildings take
+ * coin over a counter.
  *
- * This is its own module rather than a constant inside `BuildingInteriorScene`
- * because two places need it and they must not disagree: the scene, which opens
- * the surface, and `sfxGroups.ts`, which decides whether an interior needs the
- * commerce cue preloaded before the door opens. A building added to one list and
- * not the other is a shop whose purchase chime never arrives.
+ * A service belongs to the person who provides it: it is declared on their
+ * `OccupantSpec` in `BUILDING_OCCUPANTS`, and the talk router asks the
+ * occupant system which service the person the player walked up to keeps.
+ * Two people of the same role in one room can therefore both run a counter.
  *
- * Keyed by `entry.name`, exactly as `BUILDING_OCCUPANTS` is — and a building is
- * only reachable here if its occupant roster actually stations that role.
+ * The building-level questions live here rather than in `BuildingInteriorScene`
+ * because two places must not disagree about them: the scene, which builds the
+ * surfaces, and `sfxGroups.ts`, which decides whether an interior needs the
+ * commerce cue preloaded before the door opens.
  */
 
-import type { TownRole } from '../sprites/person/PersonAppearance';
+import { BUILDING_OCCUPANTS } from './buildingOccupants';
 
 /**
- * Which surface a building's service opens onto. Most are a priced menu; Old
- * Hilda reads instead of selling, and a reading is the fortune panel's shape
- * rather than a shop's.
+ * Which priced menu a counter opens. Each one is its own menu builder and
+ * purchase handler in `BuildingInteriorScene.openServiceMenu`, which switches
+ * on this exhaustively.
  */
-export type ServiceSurface = 'menu' | 'reading';
-
-export interface InteriorService {
-  readonly role: TownRole;
-  readonly surface: ServiceSurface;
-  /** Interact-prompt verb once this NPC has no story left to tell. */
-  readonly verb: string;
-}
+export type ServiceCounter =
+  | 'tavern'
+  | 'inn'
+  | 'temple_blessing'
+  | 'tattoo_parlour'
+  | 'armoury'
+  | 'drill_yard'
+  | 'apothecary'
+  | 'smithy'
+  | 'cartwright'
+  | 'miller_kitchen'
+  | 'plumbline_hayloft';
 
 /**
- * A building's services in roster order — a list rather than a single entry,
- * because a garrison has both a quartermaster's counter and a drill yard and
- * neither is a special case of the other.
- *
- * Two services in one building must never name the same role: the talk router
- * matches the NPC the player walked up to by role, so a duplicate would leave
- * one of the two counters silently unreachable. `verify:interiors` guards it.
+ * A desk with a screen of its own rather than a priced menu: the system behind
+ * it is built by the scene for any room whose roster keeps one.
  */
-const INTERIOR_SERVICES: ReadonlyMap<string, ReadonlyArray<InteriorService>> = new Map([
-  ['The Sunken Stump Pub', [{ role: 'innkeeper', surface: 'menu', verb: 'Order' }]],
-  ['The Horned Flagon', [{ role: 'innkeeper', surface: 'menu', verb: 'Order' }]],
-  ['The Sleeping Cat Inn', [{ role: 'innkeeper', surface: 'menu', verb: 'Order' }]],
-  ['Temple of the Sky', [{ role: 'priest', surface: 'menu', verb: 'Pray' }]],
-  ['The Quiet Needle', [{ role: 'merchant', surface: 'menu', verb: 'Get inked' }]],
-  // Two counters, and the only building that runs more than one: the
-  // quartermaster issues armour, the drill sergeant sells the training that goes
-  // with it.
-  [
-    'The Barracks',
-    [
-      { role: 'merchant', surface: 'menu', verb: 'Requisition' },
-      { role: 'guard', surface: 'menu', verb: 'Train' },
-    ],
-  ],
-  ['Herb & Remedy', [{ role: 'merchant', surface: 'menu', verb: 'Buy' }]],
-  ['The Rusty Anvil', [{ role: 'smith', surface: 'menu', verb: 'Sharpen' }]],
-  ["Cartwright's Workshop", [{ role: 'laborer', surface: 'menu', verb: 'Buy' }]],
-  ["Miller's Farm", [{ role: 'farmer', surface: 'menu', verb: 'Eat' }]],
-  ['Plumbline Farm', [{ role: 'farmer', surface: 'menu', verb: 'Rest' }]],
-  ["Old Hilda's Cottage", [{ role: 'priest', surface: 'reading', verb: 'Reading' }]],
-] satisfies ReadonlyArray<[string, ReadonlyArray<InteriorService>]>);
+export type ServiceDesk = 'mercenary_guild';
 
 /**
- * Every building this registry names, so a headless check can walk the registry
- * itself rather than only asking each building what it offers. A service keyed
- * to a misspelled building is invisible from that direction — the building
- * simply reports no service, and the gate goes green having measured nothing.
+ * What talking to an occupant opens once their story is told. Most keep a
+ * priced counter; Old Lori reads instead of selling, and a reading is the
+ * fortune panel's shape rather than a shop's. A desk opens its own screen.
  */
-export function interiorServiceBuildings(): ReadonlyArray<string> {
-  return [...INTERIOR_SERVICES.keys()];
+export type OccupantService =
+  | {
+      readonly surface: 'menu';
+      readonly counter: ServiceCounter;
+      /** Interact-prompt verb once this NPC has no story left to tell. */
+      readonly verb: string;
+    }
+  | { readonly surface: 'reading'; readonly verb: string }
+  | { readonly surface: 'desk'; readonly desk: ServiceDesk; readonly verb: string };
+
+/** Every service this building's roster offers, in roster order. Empty when it offers none. */
+export function interiorServicesFor(building: string): ReadonlyArray<OccupantService> {
+  return (BUILDING_OCCUPANTS.get(building) ?? []).flatMap((spec) =>
+    spec.service === undefined ? [] : [spec.service],
+  );
 }
 
-/** Every service this building offers, in roster order. Empty when it offers none. */
-export function interiorServicesFor(building: string): ReadonlyArray<InteriorService> {
-  return INTERIOR_SERVICES.get(building) ?? [];
-}
-
-/** The service the NPC in `role` provides here, or `undefined`. */
-export function interiorServiceForRole(
-  building: string,
-  role: TownRole,
-): InteriorService | undefined {
-  return interiorServicesFor(building).find((service) => service.role === role);
-}
-
-/** Whether this building takes coin over any counter, and so needs the purchase cue. */
+/** Whether this building takes coin over any counter or desk, and so needs the purchase cue. */
 export function interiorSellsSomething(building: string): boolean {
-  return interiorServicesFor(building).some((service) => service.surface === 'menu');
+  return interiorServicesFor(building).some((service) => service.surface !== 'reading');
+}
+
+/** Whether one of this building's occupants keeps `desk`. */
+export function interiorKeepsDesk(building: string, desk: ServiceDesk): boolean {
+  const desks = interiorServicesFor(building).flatMap((service) =>
+    service.surface === 'desk' ? [service.desk] : [],
+  );
+  return desks.includes(desk);
 }

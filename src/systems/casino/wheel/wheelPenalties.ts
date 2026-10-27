@@ -3,11 +3,11 @@
  * host plays the reveal and calls one of these for the effect itself.
  */
 
-import type { Player } from '../../../Player';
+import type { DamageSource, Player } from '../../../Player';
 import {
   CHILLED_STATUS,
-  makeBloodVomit,
   makeBurn,
+  makeDoubleDamage,
   makePoison,
   makeFrozen,
 } from '../../../core/combat/StatusEffect';
@@ -15,10 +15,11 @@ import { frozenFramesFor } from '../../../core/combat/frostStatus';
 
 const FRAMES_PER_SECOND = 60;
 
-/** Share of max HP the croupier's knife takes. */
-export const WHEEL_STAB_MAX_HP_SHARE = 0.5;
-/** The stab never kills: it leaves at least this much. */
-const WHEEL_STAB_HP_FLOOR = 1;
+/** Share of max HP Take Damage costs, before any status scales it. */
+export const WHEEL_DAMAGE_MAX_HP_SHARE = 0.5;
+/** Take Damage is a penalty, never a kill: it leaves at least this much. */
+const WHEEL_DAMAGE_HP_FLOOR = 1;
+const WHEEL_PENALTY_SOURCE: DamageSource = { kind: 'wheelPenalty' };
 
 const WHEEL_POISON_SECONDS = 120;
 /** Far longer than any mob's poison, which is what makes it a wedge rather than a scratch. */
@@ -28,16 +29,19 @@ const WHEEL_FREEZE_SECONDS = 4;
 /** Long enough to be seen as frozen solid on the club floor, before ice-resistant gear halves it. */
 export const WHEEL_FREEZE_FRAMES = WHEEL_FREEZE_SECONDS * FRAMES_PER_SECOND;
 
-/** Share of carried coins Tito takes from a robbed crawler. */
+/** Share of carried coins Donald takes from a robbed crawler. */
 const WHEEL_ROBBED_COIN_SHARE = 0.5;
 
-/** The knife: half of max HP gone, never below 1 HP. Returns the HP actually lost. */
-export function applyWheelStab(crawler: Player): number {
-  const wound = Math.round(crawler.maxHp * WHEEL_STAB_MAX_HP_SHARE);
-  const hpAfter = Math.max(WHEEL_STAB_HP_FLOOR, crawler.hp - wound);
-  const lost = Math.max(0, crawler.hp - hpAfter);
-  crawler.hp = Math.min(crawler.hp, hpAfter);
-  return lost;
+/**
+ * Half of max HP as a blow, never below 1 HP. Dealt through `takeDamage`, so
+ * double damage doubles it and the crawler reacts as to any hit. Returns the
+ * HP actually lost.
+ */
+export function applyWheelDamage(crawler: Player): number {
+  const hpBefore = crawler.hp;
+  const wound = Math.round(crawler.maxHp * WHEEL_DAMAGE_MAX_HP_SHARE);
+  crawler.takeDamage(wound, WHEEL_PENALTY_SOURCE, { floorHp: WHEEL_DAMAGE_HP_FLOOR });
+  return Math.max(0, hpBefore - crawler.hp);
 }
 
 /** A long ordinary poison, so the apothecary and an inn room can still cure it. */
@@ -45,9 +49,9 @@ export function applyWheelPoison(crawler: Player): void {
   crawler.applyStatus(makePoison(null, WHEEL_POISON_FRAMES));
 }
 
-/** The incurable blood vomiting, for its full run. */
-export function applyWheelBloodVomit(crawler: Player): void {
-  crawler.applyStatus(makeBloodVomit());
+/** The incurable double damage, for its full run. */
+export function applyWheelDoubleDamage(crawler: Player): void {
+  crawler.applyStatus(makeDoubleDamage());
 }
 
 export function applyWheelBurn(crawler: Player): void {

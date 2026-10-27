@@ -125,7 +125,6 @@ export type AdviceObjectiveId =
   | 'spider_lab_station'
   | 'ball_of_swine'
   | 'ball_of_swine_distant'
-  | 'the_circus'
   | 'krasue_murders'
   | 'shady_bounties'
   | 'anchor_offer'

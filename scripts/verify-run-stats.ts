@@ -36,7 +36,6 @@ import { DynamiteSystem } from '../src/systems/DynamiteSystem';
 import { MercenarySystem } from '../src/systems/MercenarySystem';
 import { createMercenaryRoster } from '../src/core/party/MercenaryRoster';
 import { TheLich } from '../src/creatures/TheLich';
-import { InkMarauder } from '../src/creatures/InkMarauder';
 import { GrotesqueSpider } from '../src/creatures/GrotesqueSpider';
 import { getMercenaryTemplate } from '../src/core/party/mercenaryTemplates';
 import {
@@ -66,10 +65,8 @@ const DYNAMITE_STICKS = 3;
 const BOSS_SPACING_TILES = 12;
 /** Frames of killing blows: enough for a boss's death to resolve and be reported. */
 const KILL_FRAMES = 120;
-/** A marauder summoned to last a handful of frames, so the gate watches it expire. */
-const MARAUDER_LIFESPAN = 3;
 const FLOOR = 'level3';
-const HIRELING_TEMPLATE = getMercenaryTemplate('gluteus_maxx');
+const HIRELING_TEMPLATE = getMercenaryTemplate('hammer_hands');
 
 const CRAWLER_HIT = 17;
 const COINS_EARNED = 250;
@@ -408,7 +405,7 @@ section('Bosses slain counts the real bosses, once each, and nothing else');
   kit.dispose();
 }
 
-section('An ink marauder bleeding away is not a kill');
+section('An ally that dies with nobody credited is not a kill');
 {
   const stage = makeStage();
   const kit = makeCombatKit(stage);
@@ -416,16 +413,21 @@ section('An ink marauder bleeding away is not a kill');
   stage.world.bus.on('mobKilled', (e) => stats.recordMobKilled(e));
   let deaths = 0;
   stage.world.bus.on('mobKilled', () => deaths++);
-  const marauder = new InkMarauder(PARTY_TILE_X + 2, ROOM_MIDDLE_ROW, TILE_SIZE, MARAUDER_LIFESPAN);
-  stage.roster.add(marauder);
-  const targets = [stage.pm.human, stage.pm.cat];
-  for (let frame = 0; frame < KILL_FRAMES && marauder.hp > 0; frame++) {
-    marauder.updateAI(targets);
-    kit.resolveKills();
+  const ally = new Dummy(PARTY_TILE_X + 2, ROOM_MIDDLE_ROW, false);
+  const foe = new Dummy(PARTY_TILE_X + 2, ROOM_MIDDLE_ROW + 2);
+  for (const mob of [ally, foe]) {
+    stage.roster.add(mob);
+    mob.takeDamage(mob.hp);
   }
   kit.resolveKills();
-  check(deaths === 1, `its lifespan runs out and it dies (${deaths} death reported)`);
-  check(stats.totalKills === 0, `and it is not in the kills (${stats.totalKills})`);
+  check(
+    deaths === 2,
+    `an ally and a foe both die with nobody credited (${deaths} deaths reported)`,
+  );
+  check(
+    stats.totalKills === 1,
+    `only the foe is in the kills, so the ally is left out on purpose (${stats.totalKills})`,
+  );
   kit.dispose();
 }
 
@@ -467,12 +469,16 @@ section('The tallies survive a save, and a rewind keeps deaths and time');
     fromSave.carryRunHistoryFrom(live);
     check(fromSave.deaths === LIVE_DEATHS, 'a respawn from a save keeps the live run’s deaths');
   }
-  const damaged = parseGameStatsSnapshot({ killsByType: 'nope', deaths: -3, potionsUsed: 5 });
+  const written = live.snapshot();
   check(
-    damaged !== undefined && damaged.deaths === 0 && damaged.potionsUsed === 5,
-    'a damaged field costs that one counter, not the record',
+    parseGameStatsSnapshot({ ...written, deaths: -3 }) === undefined,
+    'a damaged counter fails the whole record',
   );
-  check(parseGameStatsSnapshot(undefined) === undefined, 'an older save with no tallies has none');
+  const { midgePets: _missing, ...withoutOneCounter } = written;
+  check(
+    parseGameStatsSnapshot(withoutOneCounter) === undefined,
+    'a record missing a counter fails validation',
+  );
 }
 
 bindRunStats(null);

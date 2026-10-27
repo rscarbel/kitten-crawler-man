@@ -7,7 +7,7 @@ description: Add or modify a level, map feature, or tile type in Kitten Crawler 
 
 ## Levels
 
-A level is pure data: `LevelDef` (`src/levels/types.ts`) — `id, name, mapSize, roomMobs, hallwayMobs`, plus optional `bossRooms`, `nextLevelId` (chaining), `arrivalLoadingScreen`, `hasCollapseTimer`, `hasTreasureRoomGuards`, `numStairwells`, `isOverworld`, `hasArena`, `hasSpiderLab`, `extraSpawns`, `onMobKilledSpawns`. `MobSpawnRule`: `{ type, chance, minCount, maxCount, minLevel, maxLevel, config? }` where `type` is a fixed string union — new mob keys must be added to that union and registered in `spawner.ts` (see `add-creature`).
+A level is pure data: `LevelDef` (`src/levels/types.ts`) — `id, name, mapSize, roomMobs, hallwayMobs`, plus optional `bossRooms`, `nextLevelId` (chaining), `arrivalLoadingScreen`, `hasCollapseTimer`, `hasTreasureRoomGuards`, `numStairwells`, `isOverworld`, `hasArena`, `hasSpiderLab`, `extraSpawns`, `onMobKilledSpawns`. `MobSpawnRule`: `{ type, chance, minCount, maxCount, minLevel, maxLevel, config?, escorts?, terrain? }` (`terrain` limits an overworld rule to forest-edge or open-field points; see `add-creature`) where `type` is a fixed string union — new mob keys must be added to that union and registered in `spawner.ts` (see `add-creature`).
 
 ### Checklist
 
@@ -43,7 +43,7 @@ Every arrival — a floor, a door, a stair, a building exit — places both craw
 
 ### Map generation
 
-`src/map/GameMap.ts` orchestrates; `DungeonGenerator` (rooms + L-hallways + boss/safe rooms), `OverworldGenerator` (the third-floor Over City — used when `isOverworld`), `TutorialMap`. Special rooms (arena, spider lab) are gated by the LevelDef flags.
+`src/map/GameMap.ts` orchestrates; `DungeonGenerator` (rooms + L-hallways + boss/safe rooms), `OverworldGenerator` (the third-floor Taloncrest — used when `isOverworld`), `TutorialMap`. Special rooms (arena, spider lab) are gated by the LevelDef flags.
 
 ### The overworld town
 
@@ -61,9 +61,9 @@ Any wilderness pass that places something (rivers, forests, ruins, camps, cliffs
 
 Village tile types (`tileTypes.ts`): `HOLLOW_WALL` (roofless, neighbour-aware, Y-sorted), `HOLLOW_THRESHOLD`, `HOLLOW_PLANK_FLOOR`, `HOLLOW_PROP_LOW` (solid, sight-transparent) / `HOLLOW_PROP_TALL` (solid, blocks sight) — which prop is keyed by `spriteKey` (`hollow:<propId>` on the drawing tile, `hollow_part:<dx>,<dy>` on the rest of the footprint) — `HOLLOW_DECAL`, `HOLLOW_PALISADE` / `HOLLOW_PALISADE_GAP`, `HOLLOW_GATE` (walkable by type; hostiles are turned away by the `BLOCK_HOSTILE_ONLY` runtime flag, which `GameMap.isWalkableForHostile` reads), `ROCK_DEPOSIT`, `PASTURE_GRASS`, `CROP_FIELD`. Tile painters are handed the grid, not the map, so village painters read the site through `hollowSiteRegistry.ts`.
 
-### Circus grounds and the Big Top
+### Circus grounds and the Starlight Tent
 
-Grimaldi's grounds use the same pattern. `circusGroundsLayout.ts` is the authored template, and `paintCircusGrounds.ts` stamps it. The seed never reaches geometry, and blocking dressing only goes on the r12–14.5 rim. The site record is `gameMap.circusGrounds`, and painters reach it through `circusSiteRegistry.ts`. Tile types: `CIRCUS_LOT` (walkable ground), `CIRCUS_STRUCTURE_TALL` (blocks sight) and `CIRCUS_STRUCTURE_LOW` (seen past). Both structure types are keyed `circus:<id>` on the drawing tile and `circus_part:<dx>,<dy>` on the rest. The "Circus grounds" section of **`docs/town.md`** lists every registry a Y-sorted multi-tile solid must join; use it as the checklist for the next one. The "Big Top" section covers the maze interior's drapes, floor marks, lighting, its fairness render order, and the Act III hall of mirrors (the generated light-puzzle board in `src/map/bigTop/`, one per world seed × difficulty). Gates: `npm run verify:circus-grounds`, `gates:circus-art`, `verify:bigtop`, `verify:mirror-board`, `verify:difficulty-guard`, `gates:bigtop-art`.
+The circus grounds use the same pattern. They field no enemies, and the floor's spawn scatter keeps off them. `circusGroundsLayout.ts` is the authored template, and `paintCircusGrounds.ts` stamps it. The seed never reaches geometry, and blocking dressing only goes on the r12–14.5 rim. The site record is `gameMap.circusGrounds`, and painters reach it through `circusSiteRegistry.ts`. Tile types: `CIRCUS_LOT` (walkable ground), `CIRCUS_STRUCTURE_TALL` (blocks sight) and `CIRCUS_STRUCTURE_LOW` (seen past). Both structure types are keyed `circus:<id>` on the drawing tile and `circus_part:<dx>,<dy>` on the rest. The "Circus grounds" section of **`docs/town.md`** lists every registry a Y-sorted multi-tile solid must join; use it as the checklist for the next one. The Starlight Tent's interior is always the maze, open from the start. The "Starlight Tent" section covers the maze interior's drapes, floor marks, lighting, its fairness render order, and the Act III hall of mirrors (the generated light-puzzle board in `src/map/starlightTent/`, one per world seed × difficulty). Gates: `npm run verify:circus-grounds`, `gates:circus-art`, `verify:starlight-tent`, `verify:mirror-board`, `verify:difficulty-guard`, `gates:starlight-tent-art`.
 
 ### The clogged bathroom (floor 2)
 
@@ -73,7 +73,7 @@ Floor 2's Krakaren gauntlet seats a **clogged bathroom on every branch**, at way
 - **Blocking** is a runtime flag, not the goblins: `BLOCK_BATHROOM` on every blocked doorway, queue and knot tile (`bathroomBlockedTiles`), honoured by `GameMap.isWalkable` only while `gameMap.bathroomPlumbingState` is `'broken'`. `setBathroomPlumbing(state)` flips every copy at once; the key set survives `rebuildBlockedMasks`, and `GameMapCheckpoint.bathroomPlumbing` carries it through a rewind. A crowd alone cannot block (players shove mobs, and validators and A* ignore entities).
 - **`isWalkableIgnoringBathroomQueue`** is `isWalkable` as if the plumbing were fixed. Use it for questions about the route as built (which rooms lie past a safe room) and for shots in flight (a missile or stone meets the goblins as bodies, not as a wall); never for where a crawler may step.
 - **Progression:** S6 in `validateProgression` (expected through `hasBathroomChoke` in `progressionExpectations`): one bathroom per branch at the halfway index, the gateway unreachable with every bathroom rect removed, and each entrance reachable without crossing another bathroom.
-- **Runtime:** `CloggedBathroomSystem` (`src/systems/cloggedBathroom/`, `scene.cloggedBathroom`) owns the queue of `BathroomGoblin`s, the plumber, the floor's one pipe board, the stalls and the "The Clogged Bathroom" mini quest; the solved state is checkpointed and persisted (`PersistedWorldState.cloggedBathroom`, absent in older saves, which load broken).
+- **Runtime:** `CloggedBathroomSystem` (`src/systems/cloggedBathroom/`, `scene.cloggedBathroom`) owns the queue of `BathroomGoblin`s, the plumber, the floor's one pipe board, the stalls and the "The Clogged Bathroom" mini quest; the solved state is checkpointed and persisted (`PersistedWorldState.cloggedBathroom`).
 - **Dev:** `npm run playtest -- bathroom` (spawn `bathroomEntrance`), `?pipeboard`.
 - **Gates:** `npm run verify:clogged-bathroom` (map: blocked while broken, every copy opens, the player never shut out of the stalls, pipes or plumber, checkpoint keeps the state), `verify:clogged-bathroom-play` (headless scene: timer held by the board and explainer, every weapon on the goblins pays nothing and gets an "ow", companions ignore them, the fix opens the gateway, stall visit and Refreshed, checkpoint/save/old-save/death rewind), `verify:pipe-board`, `render:clogged-bathroom`, `verify:progression`. Each takes `--fault=` and must go red on every fault.
 

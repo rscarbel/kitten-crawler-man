@@ -29,7 +29,7 @@ import { Mercenary } from '../src/creatures/Mercenary';
 import { getMercenaryTemplate } from '../src/core/party/mercenaryTemplates';
 import type { Player } from '../src/Player';
 import { CompanionSystem } from '../src/systems/CompanionSystem';
-import { HirelingBoltSystem, type HirelingShot } from '../src/systems/HirelingBoltSystem';
+import { HirelingShotSystem, type HirelingShot } from '../src/systems/HirelingShotSystem';
 import { markMobsAtCheckpoint, rewindMobsToCheckpoint } from '../src/systems/mobCheckpoint';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
@@ -1113,7 +1113,7 @@ section('Converted allies');
     { name: 'Mongo', mob: new Mongo(0, 0, TILE_SIZE, rig.cat, 1, 100) },
     {
       name: 'a hireling',
-      mob: new Mercenary(0, 0, TILE_SIZE, rig.human, 'sledge', getMercenaryTemplate('sledge').name),
+      mob: new Mercenary(0, 0, TILE_SIZE, rig.human, 'crush', getMercenaryTemplate('crush').name),
     },
   ];
   for (const { name, mob } of friends) {
@@ -1162,7 +1162,7 @@ section('Converted allies');
   hireRig.human.y = at.y - TILE_SIZE / 2;
   const hire = spawn(
     hireRig,
-    new Mercenary(0, 0, TILE_SIZE, hireRig.human, 'sledge', getMercenaryTemplate('sledge').name),
+    new Mercenary(0, 0, TILE_SIZE, hireRig.human, 'crush', getMercenaryTemplate('crush').name),
     at.x + TILE_SIZE,
     at.y,
   );
@@ -1182,7 +1182,7 @@ section('Converted allies');
     'a hireling engaged on an enemy drops it once converted (and has no one else to fight)',
   );
 
-  // A hireling's bolt flies through a converted enemy to the hostile behind it.
+  // A hireling's arrow flies through a converted enemy to the hostile behind it.
   const boltRig = makeRig({ seed: 8070, humanLevel: MAX_CONSTRUCTION_LEVEL });
   const shots: HirelingShot[] = [];
   class Shooter extends RuinsGhoul {
@@ -1204,20 +1204,18 @@ section('Converted allies');
   boltRig.allies.convert(shield, boltRig.human);
   const shieldHp = shield.hp;
   const behindHp = behind.hp;
-  const bolts = new HirelingBoltSystem(gameMap, () => false);
+  const bolts = new HirelingShotSystem(gameMap, () => false);
   const owner: Player = boltRig.human;
   shots.push({
-    kind: 'bolt',
-    bolt: {
-      x: at.x - 2 * TILE_SIZE,
-      y: at.y,
-      dirX: 1,
-      dirY: 0,
-      damage: 3,
-      rangePx: 8 * TILE_SIZE,
-      shooter,
-      owner,
-    },
+    kind: 'arrow',
+    x: at.x - 2 * TILE_SIZE,
+    y: at.y,
+    dirX: 1,
+    dirY: 0,
+    damage: 3,
+    rangePx: 8 * TILE_SIZE,
+    shooter,
+    owner,
   });
   const boltCtx: SystemContext = {
     human: boltRig.human,

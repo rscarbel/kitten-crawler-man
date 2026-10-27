@@ -74,7 +74,7 @@ const CULTIST_EYES: EyePlacement = {
 
 /**
  * A city elf cultist — one of Miss Quill's hooded faithful, who believe the
- * skyfowl circling the Over City are angels. A ranged caster that holds its
+ * Hawkfolk circling Taloncrest are angels. A ranged caster that holds its
  * distance and hurls soul bolts (pattern: Lava Llama's spit cycle).
  */
 export class CityElfCultist extends Mob {

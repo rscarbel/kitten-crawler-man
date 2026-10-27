@@ -78,8 +78,8 @@ function frameFor(
 /**
  * Draw a city elf cultist — a tall, pale elf in a hooded violet robe, its
  * pointed ears thrust out through the cowl, eyes smouldering under the brim,
- * the cult's winged-eye sigil on its chest and a skyfowl feather tied at its
- * girdle. They believe the skyfowl are angels; the murders are their tithe.
+ * the cult's winged-eye sigil on its chest and a Hawkfolk feather tied at its
+ * girdle. They believe the Hawkfolk are angels; the murders are their tithe.
  *
  * @param walkFrame walk-cycle angle in radians, advanced by the ground covered.
  * @param castAnim 0–1 progress through the soul-bolt cast (0 = idle/walk).

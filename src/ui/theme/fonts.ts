@@ -31,7 +31,7 @@ export const WORLD_FONT_STACK = 'monospace';
 
 /**
  * The stack for words written by hand in marker on props (the tape over the
- * wheel's Nothing). Whatever face resolves, the painter wobbles each letter,
+ * wheel's Permanent Death wedge). Whatever face resolves, the painter wobbles each letter,
  * so it reads as handwriting even where only `cursive`'s fallback exists.
  */
 export const MARKER_FONT_STACK =

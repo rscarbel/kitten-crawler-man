@@ -1,7 +1,7 @@
 /**
  * Deuce's banter, keyed by the beat that triggers it.
  *
- * Deuce deals the Desperado Club's blackjack and poker tables: unfailingly courteous,
+ * Deuce deals the Cloak & Dagger's blackjack and poker tables: unfailingly courteous,
  * entirely unbothered by either outcome, quietly delighted when someone plays
  * well. The house wins eventually and Deuce knows it, so there is nothing to
  * gloat about — a dealer who taunts on a loss turns a losing streak from a story

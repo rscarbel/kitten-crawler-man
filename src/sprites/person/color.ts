@@ -1,7 +1,6 @@
 /**
- * Palette pools and hex shading for procedural people. Pools are grown from the
- * club-crowd palette in `clubNpcSprite.ts` but broadened so a town reads as a
- * genuinely varied population. `shade`/`tint` derive the darker fold shadows
+ * Palette pools and hex shading for procedural people. The pools are broad so a
+ * town reads as a genuinely varied population. `shade`/`tint` derive the darker fold shadows
  * and lighter highlights every garment and skin patch needs from a single base
  * color, so the genome only has to store one color per feature.
  */

@@ -4,11 +4,11 @@ import type { MusicTrackId } from '../sounds';
 export const MUSIC_AREA_IDS = [
   'title_screen',
   'dungeon',
-  'over_city',
+  'taloncrest',
   'wilds',
   'briar_hollow',
   'circus',
-  'desperado_club',
+  'cloak_and_dagger',
   'interiors',
   'battles',
   'activities',
@@ -19,11 +19,11 @@ export type MusicAreaId = (typeof MUSIC_AREA_IDS)[number];
 export const MUSIC_AREA_LABELS = {
   title_screen: 'Title Screen',
   dungeon: 'Dungeon',
-  over_city: 'Over City',
+  taloncrest: 'Taloncrest',
   wilds: 'Wilds',
   briar_hollow: 'Briar Hollow',
   circus: 'Circus',
-  desperado_club: 'Desperado Club',
+  cloak_and_dagger: 'Cloak & Dagger',
   interiors: 'Interiors',
   battles: 'Battles',
   activities: 'Activities',
@@ -84,7 +84,7 @@ export const MUSIC_CATALOG = {
   },
   town_music_1: {
     title: 'Cobblestones and Coin Purses',
-    area: 'over_city',
+    area: 'taloncrest',
     attribution: {
       authorName: 'Yasuko n',
       authorUsername: '_Yasuko_',
@@ -94,7 +94,7 @@ export const MUSIC_CATALOG = {
   },
   town_music_2: {
     title: 'The Jester Owes Rent',
-    area: 'over_city',
+    area: 'taloncrest',
     attribution: {
       authorUsername: 'VifotoFreeSounds',
       originalTitle: 'Funny Medieval Instrumental',
@@ -103,7 +103,7 @@ export const MUSIC_CATALOG = {
   },
   riverside_welcome: {
     title: 'Riverside Welcome',
-    area: 'over_city',
+    area: 'taloncrest',
     attribution: { authorName: 'Ryan Scarbel', originalTitle: 'Riverside Welcome' },
   },
   forest_path: {
@@ -193,9 +193,9 @@ export const MUSIC_CATALOG = {
       source: 'Pixabay',
     },
   },
-  desperado_club_1: {
-    title: 'Last Call at the Desperado',
-    area: 'desperado_club',
+  cloak_and_dagger_1: {
+    title: 'Last Call at the Cloak & Dagger',
+    area: 'cloak_and_dagger',
     attribution: {
       authorName: 'Louis King',
       authorUsername: 'landomp3',
@@ -203,9 +203,9 @@ export const MUSIC_CATALOG = {
       source: 'Pixabay',
     },
   },
-  desperado_club_2: {
+  cloak_and_dagger_2: {
     title: "Bouncer's Cardio",
-    area: 'desperado_club',
+    area: 'cloak_and_dagger',
     attribution: {
       authorName: 'Daniil Kharlamov',
       authorUsername: 'Watermello',
@@ -213,9 +213,9 @@ export const MUSIC_CATALOG = {
       source: 'Pixabay',
     },
   },
-  desperado_club_3: {
+  cloak_and_dagger_3: {
     title: 'Fog Machine Liturgy',
-    area: 'desperado_club',
+    area: 'cloak_and_dagger',
     attribution: {
       authorName: 'Nicholas Panek',
       authorUsername: 'NickPanek',
@@ -223,9 +223,9 @@ export const MUSIC_CATALOG = {
       source: 'Pixabay',
     },
   },
-  desperado_club_4: {
+  cloak_and_dagger_4: {
     title: 'Strobe Interlude',
-    area: 'desperado_club',
+    area: 'cloak_and_dagger',
     attribution: {
       authorName: 'Daniil Kharlamov',
       authorUsername: 'Watermello',
@@ -235,7 +235,7 @@ export const MUSIC_CATALOG = {
   },
   casino_background_jazz_1: {
     title: 'Chips on the Felt',
-    area: 'desperado_club',
+    area: 'cloak_and_dagger',
     attribution: {
       authorName: 'Art Roseman',
       authorUsername: 'Art_Roseman',
@@ -245,7 +245,7 @@ export const MUSIC_CATALOG = {
   },
   casino_background_jazz_2: {
     title: 'Smoke Over the Card Table',
-    area: 'desperado_club',
+    area: 'cloak_and_dagger',
     attribution: {
       authorUsername: 'Music_Flow',
       originalTitle: 'Royalty Free Jazz YouTube - Whisper Lounge',
@@ -254,7 +254,7 @@ export const MUSIC_CATALOG = {
   },
   casino_background_jazz_3: {
     title: "High Rollers' Swing",
-    area: 'desperado_club',
+    area: 'cloak_and_dagger',
     attribution: {
       authorName: 'Anastasia Chubarova',
       authorUsername: 'Music_For_Videos',
@@ -264,7 +264,7 @@ export const MUSIC_CATALOG = {
   },
   casino_background_jazz_4: {
     title: "Lady Luck's Slow Dance",
-    area: 'desperado_club',
+    area: 'cloak_and_dagger',
     attribution: {
       authorUsername: 'Tunetank',
       originalTitle: 'Romantic Love Jazz',

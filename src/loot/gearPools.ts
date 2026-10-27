@@ -49,6 +49,8 @@ export type GearSource =
   | { readonly kind: 'chest'; readonly chest: ChestType; readonly floors: ReadonlyArray<number> }
   | { readonly kind: 'achievement'; readonly id: AchievementId }
   | { readonly kind: 'quest'; readonly quest: QuestId }
+  /** The chest in the Starlight Tent maze's finale ring, the first time it is opened. */
+  | { readonly kind: 'starlightTentChest' }
   | { readonly kind: 'wheel'; readonly wedge: WheelPrizeId }
   /**
    * The general roll pool for these dungeon floors: the per-kill floor roll,
@@ -150,8 +152,8 @@ export const GEAR_SOURCES: Readonly<Record<GearId, ReadonlyArray<GearSource>>> =
   stoneheart_amulet: [{ kind: 'boss', boss: 'rock_golem_boss', first: true }],
   sun_locket: [{ kind: 'achievement', id: 'quest_defend_npc' }],
   moon_locket: [{ kind: 'achievement', id: 'quest_defend_npc' }],
-  showmans_top_hat: [{ kind: 'quest', quest: 'the_show_must_go_on' }],
-  sequin_tailcoat: [{ kind: 'quest', quest: 'the_show_must_go_on' }],
+  showmans_top_hat: [{ kind: 'starlightTentChest' }],
+  sequin_tailcoat: [{ kind: 'starlightTentChest' }],
   gilded_monocle: [{ kind: 'achievement', id: 'casino_jackpot' }],
   grinning_mask: [{ kind: 'quest', quest: 'krasue_murders' }],
   nimble_bangle: [{ kind: 'shop', shop: 'armoury' }],
@@ -434,6 +436,13 @@ export function rollBossGear(
   if (rarity !== null)
     addRoll(loot, rollGearFromPool({ source: { kind: 'pool' } }, rarity, rng, taken));
   return loot;
+}
+
+/** The pieces the chest in the Starlight Tent's finale ring holds. */
+export function starlightTentChestGear(): GearId[] {
+  return GEAR_IDS.filter((id) =>
+    GEAR_SOURCES[id].some((source) => source.kind === 'starlightTentChest'),
+  );
 }
 
 /** How likely a world chest is to hold a piece of gear, and how rare it may be. */

@@ -222,10 +222,7 @@ export class EquipmentManager {
 
   /** Whether this crawler has the section `slot` and may wear `id` at all. */
   private ownerMayWear(slot: EquipSlot, id: ItemId): boolean {
-    if (this.ownerKind === null) return true;
-    const wearer = wearerOf(id);
-    if (wearer === undefined || !wearerAllows(wearer, this.ownerKind)) return false;
-    return crawlerHasSection(this.ownerKind, slot);
+    return kindMayWear(this.ownerKind, slot, id);
   }
 
   /** The sub-slots of `slot` that `item` fits on this crawler. */
@@ -359,30 +356,15 @@ export class EquipmentManager {
 
   /**
    * Replace the whole equipped set from a snapshot's {@link entries} output.
-   *
-   * Ids are validated here even though the type claims they are `ItemId`: saves
-   * arrive as unvalidated server JSON, and this is the one door they come
-   * through. An id retired since the save was written would otherwise sit in the
-   * map and crash {@link getStatBonuses} — which runs on every stat read — on
-   * the next frame.
-   *
-   * Keys are validated against this crawler's sub-slots for the same reason: a
-   * key written under a since-renamed slot would sit in the map where no doll
-   * cell reaches it, giving its bonus forever with no way to take it off. A
-   * sub-slot this crawler does not have is dropped too, as is an item that does
-   * not fit the sub-slot it was saved under, an item {@link canEquip} would
-   * refuse this crawler, and an id already placed.
+   * An entry {@link mayEquipUnder} refuses, or an id already placed, is left
+   * out, so the map never holds an item no doll cell reaches or the crawler
+   * could never have put on; a save holding one already failed validation.
    */
   replaceAll(entries: ReadonlyArray<readonly [string, ItemId]>): void {
     this.equipped.clear();
     const placed = new Set<ItemId>();
     for (const [key, id] of entries) {
-      if (!isItemId(id) || placed.has(id)) continue;
-      const address = equipAddressOfKey(this.ownerKind, key);
-      if (address === null) continue;
-      const def = ITEM_DEF[id];
-      if (def.equipSlot !== address.slot || !itemFitsSubSlot(def, address.subSlot)) continue;
-      if (!this.ownerMayWear(address.slot, id)) continue;
+      if (placed.has(id) || !mayEquipUnder(this.ownerKind, key, id)) continue;
       this.equipped.set(key, id);
       placed.add(id);
     }
@@ -503,4 +485,24 @@ export class EquipmentManager {
     }
     return total;
   }
+}
+
+function kindMayWear(kind: CrawlerKind | null, slot: EquipSlot, id: ItemId): boolean {
+  if (kind === null) return true;
+  const wearer = wearerOf(id);
+  if (wearer === undefined || !wearerAllows(wearer, kind)) return false;
+  return crawlerHasSection(kind, slot);
+}
+
+/**
+ * Whether `kind` can wear `id` under the sub-slot `key`: the key names a
+ * sub-slot this crawler has, the item fits it, and the crawler may wear the
+ * item. A null kind is a wearer of any kind.
+ */
+export function mayEquipUnder(kind: CrawlerKind | null, key: string, id: ItemId): boolean {
+  const address = equipAddressOfKey(kind, key);
+  if (address === null) return false;
+  const def = ITEM_DEF[id];
+  if (def.equipSlot !== address.slot || !itemFitsSubSlot(def, address.subSlot)) return false;
+  return kindMayWear(kind, address.slot, id);
 }

@@ -23,6 +23,7 @@ import {
 } from '../../town/townArt';
 import { getTownRamp, sampleRamp, mix, type Ramp, type RGB } from '../../town/townPalette';
 import { paintPlankBoard } from '../../town/townMaterials';
+import type { PropFlameSite } from '../propFlames';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -972,6 +973,37 @@ export function paintLodgeDutyBoard(
 
 // ── Stove ───────────────────────────────────────────────────────────────────
 
+/** Where the stove stands across its two-tile footprint, in tiles from its west edge. */
+const LODGE_STOVE_CENTRE_TILES = 0.85;
+/** The pot belly's top and foot, in tiles above the footprint's foot. */
+const LODGE_STOVE_BODY_TOP_RISE = 1.25;
+const LODGE_STOVE_BODY_BOTTOM_RISE = 0.3;
+/** The firebox door's top and height, as shares of the belly's height. */
+const LODGE_STOVE_DOOR_TOP_SHARE = 0.45;
+const LODGE_STOVE_DOOR_HEIGHT_SHARE = 0.36;
+/** The coal bed's centre and half-height, as shares of the door's height. */
+const LODGE_STOVE_COALS_SHARE = 0.7;
+const LODGE_STOVE_COALS_HEIGHT_SHARE = 0.28;
+const LODGE_STOVE_FIREBOX: RGB = [64, 26, 14];
+const LODGE_STOVE_FLAME_SIZE = 0.95;
+
+const LODGE_STOVE_BODY_HEIGHT = LODGE_STOVE_BODY_TOP_RISE - LODGE_STOVE_BODY_BOTTOM_RISE;
+const LODGE_STOVE_DOOR_HEIGHT = LODGE_STOVE_BODY_HEIGHT * LODGE_STOVE_DOOR_HEIGHT_SHARE;
+const LODGE_STOVE_DOOR_BOTTOM_RISE =
+  LODGE_STOVE_BODY_TOP_RISE -
+  LODGE_STOVE_BODY_HEIGHT * LODGE_STOVE_DOOR_TOP_SHARE -
+  LODGE_STOVE_DOOR_HEIGHT;
+
+/** The fire behind the stove's door, standing on the coal bed's crown. */
+export const LODGE_STOVE_FLAMES: ReadonlyArray<PropFlameSite> = [
+  {
+    x: LODGE_STOVE_CENTRE_TILES,
+    rise: LODGE_STOVE_DOOR_BOTTOM_RISE + LODGE_STOVE_DOOR_HEIGHT * (1 - LODGE_STOVE_COALS_SHARE),
+    size: LODGE_STOVE_FLAME_SIZE,
+    style: 'stove',
+  },
+];
+
 /**
  * The watch's cast-iron stove on a slate hearth plate, its flue running up
  * into the wall, a kettle on the plate top, a coal scuttle beside it and a
@@ -994,10 +1026,10 @@ export function paintLodgeStove(ctx: Ctx, frame: TownPropFrame, _variant: number
     ctx.fillStyle = rgba(sampleRamp(slate, 0.8), 0.6);
     ctx.fillRect(box.left + ts * 0.12, box.bottom - ts * 0.39, box.width - ts * 0.24, ts * 0.03);
 
-    const stoveCx = box.left + ts * 0.85;
+    const stoveCx = box.left + ts * LODGE_STOVE_CENTRE_TILES;
     const bodyW = ts * 0.78;
-    const bodyTop = box.bottom - ts * 1.25;
-    const bodyBottom = box.bottom - ts * 0.3;
+    const bodyTop = box.bottom - ts * LODGE_STOVE_BODY_TOP_RISE;
+    const bodyBottom = box.bottom - ts * LODGE_STOVE_BODY_BOTTOM_RISE;
 
     // Flue up into the wall, with a damper collar.
     const flueW = ts * 0.2;
@@ -1063,10 +1095,10 @@ export function paintLodgeStove(ctx: Ctx, frame: TownPropFrame, _variant: number
     for (const fx of [-0.3, 0.3]) {
       ctx.fillRect(stoveCx + bodyW * fx - ts * 0.04, bodyBottom, ts * 0.08, ts * 0.06);
     }
-    // Firebox door, open a crack with the fire showing.
-    const doorY = bodyTop + (bodyBottom - bodyTop) * 0.45;
+    // Firebox door, open a crack on a bed of coals; the flames inside are live.
+    const doorY = bodyTop + (bodyBottom - bodyTop) * LODGE_STOVE_DOOR_TOP_SHARE;
     const doorW = bodyW * 0.5;
-    const doorH = (bodyBottom - bodyTop) * 0.36;
+    const doorH = (bodyBottom - bodyTop) * LODGE_STOVE_DOOR_HEIGHT_SHARE;
     const glow = ctx.createRadialGradient(
       stoveCx,
       doorY + doorH / 2,
@@ -1079,13 +1111,21 @@ export function paintLodgeStove(ctx: Ctx, frame: TownPropFrame, _variant: number
     glow.addColorStop(1, rgba(FIRE_MID, 0));
     ctx.fillStyle = glow;
     ctx.fillRect(stoveCx - ts * 0.8, doorY - ts * 0.4, ts * 1.6, ts * 1.2);
-    ctx.fillStyle = rgb(FIRE_MID);
+    ctx.fillStyle = rgb(LODGE_STOVE_FIREBOX);
     ctx.beginPath();
     ctx.rect(stoveCx - doorW / 2, doorY, doorW, doorH);
     ctx.fill();
     ctx.fillStyle = rgb(FIRE_CORE);
     ctx.beginPath();
-    ctx.ellipse(stoveCx, doorY + doorH * 0.7, doorW * 0.3, doorH * 0.28, 0, 0, Math.PI * 2);
+    ctx.ellipse(
+      stoveCx,
+      doorY + doorH * LODGE_STOVE_COALS_SHARE,
+      doorW * 0.3,
+      doorH * LODGE_STOVE_COALS_HEIGHT_SHARE,
+      0,
+      0,
+      Math.PI * 2,
+    );
     ctx.fill();
     ctx.strokeStyle = rgb(sampleRamp(iron, 0.3));
     ctx.lineWidth = Math.max(1, ts * 0.025);

@@ -136,7 +136,7 @@ export class CowPen {
   }
 
   /**
-   * A fenced yard with no barn — Wendell's pasture in the Over City: the
+   * A fenced yard with no barn — Wendell's pasture in Taloncrest: the
    * ground inside its fence, and the gate tiles in the fence line that lead
    * into it. `rect` is the yard's outer rectangle, fence included.
    */

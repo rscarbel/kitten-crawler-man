@@ -290,7 +290,6 @@ export class MongoSystem implements GameSystem {
    */
   get framesUntilReady(): number {
     if (this.mongo !== null) return 0;
-    if (this.petState.summonLocked) return 0;
     return mongoFramesUntilReady(this.petState, this.maxHp, this.minSummonHp);
   }
 
@@ -301,15 +300,6 @@ export class MongoSystem implements GameSystem {
    */
   private get minSummonHp(): number {
     return MONGO_MIN_SUMMON_HP;
-  }
-
-  /** Blocked while the circus quest holds him as Signet's collateral. */
-  get summonLocked(): boolean {
-    return this.petState.summonLocked;
-  }
-
-  set summonLocked(locked: boolean) {
-    this.petState.summonLocked = locked;
   }
 
   /**
@@ -358,12 +348,12 @@ export class MongoSystem implements GameSystem {
    *
    * Not a summon: nobody pressed anything, so there is no call, no usage XP and
    * no release cry, and the recovery floor a summon demands is not asked again
-   * of a pet who was already out. The story lock and the knockout latch still
-   * refuse him — a door is not a way around either.
+   * of a pet who was already out. The knockout latch still refuses him — a door
+   * is not a way around it.
    */
   carryIn(cat: CatPlayer, gameMap: GameMap): Mongo | null {
     if (!this.unlocked || this.mongo !== null) return null;
-    if (this.petState.summonLocked || this.petState.restingUntilFull) return null;
+    if (this.petState.restingUntilFull) return null;
     if (this.petState.hp <= 0) return null;
     const spawn = this.findSpawnTile(cat, gameMap);
     if (spawn === null) return null;
@@ -595,11 +585,10 @@ export class MongoSystem implements GameSystem {
    * than standing in a cleared corridor watching a countdown — so it is worth
    * being clear about what it does *not* do. It never pays a pet who is out (his
    * live HP lives on the creature, and the stored value this heals is a stale
-   * copy from his last despawn), and never one held by the circus quest, whose
-   * wait is a story beat rather than a cooldown.
+   * copy from his last despawn).
    */
   onKill(isCatActive: boolean): void {
-    if (!this.unlocked || this.summonLocked || this.mongo !== null) return;
+    if (!this.unlocked || this.mongo !== null) return;
     const framesSaved = advanceMongoRecovery(
       this.petState,
       this.maxHp,
@@ -899,7 +888,7 @@ export class MongoSystem implements GameSystem {
    */
   private explainKnockoutOnce(): void {
     if (this.petState.knockoutRuleExplained) return;
-    if (!this.unlocked || this.summonLocked) return;
+    if (!this.unlocked) return;
     if (this.mongo !== null || !this.petState.restingUntilFull) return;
     this.petState.knockoutRuleExplained = true;
     this.toasts.post('Mongo must heal fully before resummoning', HEALING_RULE_TOAST);
@@ -959,7 +948,6 @@ export class MongoSystem implements GameSystem {
     return (
       this.unlocked &&
       this.mongo === null &&
-      !this.petState.summonLocked &&
       !this.petState.restingUntilFull &&
       this.hp >= this.minSummonHp
     );
@@ -990,9 +978,8 @@ export class MongoSystem implements GameSystem {
     // knockout. A pet recalled voluntarily at a third of his health is exactly
     // as unsummonable as a knocked-out one until he heals past the floor, and
     // labelling that state 'Summon' over a countdown says the button is ready
-    // when it is refusing. The circus quest's hold is deliberately not covered:
-    // that is a story beat rather than a wait, and it is not resting.
-    const restingUp = !isActive && !this.summonLocked && !this.canSummon;
+    // when it is refusing.
+    const restingUp = !isActive && !this.canSummon;
     const label = isActive
       ? MONGO_BUTTON_LABELS.recall
       : restingUp

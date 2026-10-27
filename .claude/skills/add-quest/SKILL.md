@@ -42,7 +42,7 @@ Two worked examples stand a quest on people another system owns, instead of on a
   (`src/systems/residentQuestHooks.ts`): `ContractContactHook` first, then the Anchor's
   (`AnchorInteriorSystem`), `WendellBlueprintsHook` and `WendellContractsHook`. The contract's
   client goes first because it answers only while a payment is owed; behind the Anchor, its terms
-  for Aviel or Hilda would take every talk. Each hook gets first refusal on talking to a resident
+  for Aviel or Lori would take every talk. Each hook gets first refusal on talking to a resident
   (`tryOpenDialog`) and a say in the glyph over their head (`markerFor`, folded by
   `firstResidentMarker` in `applyResidentQuestMarkers`; a resident no hook claims wears none). A
   marked resident in reach is talked to ahead of the shop counter or safe room they stand at
@@ -93,15 +93,15 @@ Two traps worth knowing before you wire any of these:
 - A marker state read only in `update()` **freezes while a dialog is open**, because
   `updateGameplay` does not run then. If your beacon or glyph must go quiet during
   the conversation it belongs to, expose a `syncMarkers()` the scene calls above its
-  `gameplayHalted` early return — that is what `CircusQuestSystem` and
-  `MurderMysteryQuestSystem` do.
+  `gameplayHalted` early return — that is what `MurderMysteryQuestSystem`
+  does.
 - A `failed` or `completed` entry that still carries a `target` cannot be pinned:
   `resolvePinnedEntry` requires `isOutstanding(status)` as well as a target. Drop
   the target when the thread stops being somewhere to go, or the row offers a pin
   that quietly does nothing.
 
 The Journal itself is a pause-screen section (`src/ui/screens/pause/journalSection.ts`) offered from the
-Over City up — see `add-ui`. Quests on floors below it still implement
+Taloncrest up — see `add-ui`. Quests on floors below it still implement
 `trackerEntries()`; the gate is `DungeonScene.hasQuestJournal`, not the system.
 
 ## Checklist

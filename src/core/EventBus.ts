@@ -126,7 +126,7 @@ export interface GameEvents {
   /** A thrown explosive left a crawler's hand; `item` is the one spent. */
   dynamiteUsed: { player: 'Human' | 'Cat'; item: ItemId };
 
-  /** A player's HP dropped below 25 % of max. */
+  /** A crawler's HP entered the low-health band (`CRAWLER_HP_THRESHOLDS.low_health`). */
   healthLow: { player: 'Human' | 'Cat'; hp: number; maxHp: number };
 
   /**

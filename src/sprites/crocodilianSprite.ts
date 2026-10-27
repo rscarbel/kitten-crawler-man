@@ -3,37 +3,26 @@ import {
   timeFrameIndex,
   walkFrameIndex,
 } from '../core/spriteAssets/SpriteRenderer';
-import { figureFrameCount, type FigureDef } from './figure/figureDef';
+import {
+  drawnFigureRow,
+  figureFrameCount,
+  type DrawnFigureRow,
+  type FigureDef,
+} from './figure/figureDef';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
-import {
-  BUCKET_BOY_FIGURE,
-  CLARABELLE_FIGURE,
-  TRIAGE_SPARKLE_FIGURE,
-  TRIAGE_SPARKLE_STATE,
-  crocStateName,
-} from './art/crocodilianFigure';
-import {
-  BUCKET_BOY_COWER_FPS,
-  BUCKET_BOY_IDLE_FPS,
-  CLARABELLE_IDLE_FPS,
-  CLARABELLE_TALK_FPS,
-} from './crocodilianTiming';
+import { JANITOR_FIGURE, SYDNEY_FIGURE, crocStateName } from './art/crocodilianFigure';
+import { JANITOR_IDLE_FPS, SYDNEY_IDLE_FPS, SYDNEY_TALK_FPS } from './crocodilianTiming';
 
-export {
-  BUCKET_BOY_TILES_PER_FLEE_CYCLE,
-  BUCKET_BOY_TILES_PER_WALK_CYCLE,
-  CLARABELLE_TILES_PER_WALK_CYCLE,
-} from './art/crocodilianFigure';
+export { JANITOR_TILES_PER_WALK_CYCLE, SYDNEY_TILES_PER_WALK_CYCLE } from './art/crocodilianFigure';
 
 /** Which of the two crocodilians is being drawn. */
-export type CrocodilianVariant = 'bucket_boy' | 'clarabelle';
+export type CrocodilianVariant = 'janitor' | 'sydney';
 
-/** Bucket Boy's rows. */
-export type BucketBoyRow =
-  'idle' | 'walk' | 'flee' | 'slap' | 'cast_triage' | 'cower' | 'hurt' | 'death';
+/** The janitor's rows. Every pub janitor wears this one figure. */
+export type JanitorRow = 'idle' | 'walk_mop' | 'mop' | 'wring';
 
-/** Clarabelle's rows. She works the door; she does not fight. */
-export type ClarabelleRow = 'idle' | 'walk' | 'talk';
+/** Sydney's rows. She keeps the mercenaries' desk; she does not fight. */
+export type SydneyRow = 'idle' | 'walk' | 'talk';
 
 /** Which of the three viewpoints a facing vector selects. */
 export type CrocodilianView = 'front' | 'side' | 'away';
@@ -41,61 +30,68 @@ export type CrocodilianView = 'front' | 'side' | 'away';
 /** What drives each row's frame. */
 type RowClock = 'walk' | 'progress' | 'loop';
 
-const BUCKET_BOY_CLOCKS: Readonly<Record<BucketBoyRow, RowClock>> = {
+/** `mop` loops, but on its routine's progress, so the swish sounds where the stroke is fastest. */
+const JANITOR_CLOCKS: Readonly<Record<JanitorRow, RowClock>> = {
   idle: 'loop',
-  walk: 'walk',
-  flee: 'walk',
-  slap: 'progress',
-  cast_triage: 'progress',
-  cower: 'loop',
-  hurt: 'progress',
-  death: 'progress',
+  walk_mop: 'walk',
+  mop: 'progress',
+  wring: 'progress',
 };
 
-const CLARABELLE_CLOCKS: Readonly<Record<ClarabelleRow, RowClock>> = {
+const SYDNEY_CLOCKS: Readonly<Record<SydneyRow, RowClock>> = {
   idle: 'loop',
   walk: 'walk',
   talk: 'loop',
 };
 
-const BUCKET_BOY_LOOP_FPS: Partial<Record<BucketBoyRow, number>> = {
-  idle: BUCKET_BOY_IDLE_FPS,
-  cower: BUCKET_BOY_COWER_FPS,
+const JANITOR_LOOP_FPS: Partial<Record<JanitorRow, number>> = {
+  idle: JANITOR_IDLE_FPS,
 };
 
-const CLARABELLE_LOOP_FPS: Partial<Record<ClarabelleRow, number>> = {
-  idle: CLARABELLE_IDLE_FPS,
-  talk: CLARABELLE_TALK_FPS,
+const SYDNEY_LOOP_FPS: Partial<Record<SydneyRow, number>> = {
+  idle: SYDNEY_IDLE_FPS,
+  talk: SYDNEY_TALK_FPS,
 };
 
 /** Fields every crocodilian draw takes. All optional but the row. */
 interface CrocodilianCommonState {
   readonly facingX?: number;
   readonly facingY?: number;
-  /** The walk cycle angle, radians (0–2π), for `walk` and `flee`. */
+  /** The walk cycle angle, radians (0–2π), for `walk` and `walk_mop`. */
   readonly walkFrame?: number;
-  /** 0 at a one-shot's first frame, 1 at its last. `death` holds its corpse at 1. */
+  /** 0 at a one-shot's first frame, 1 at its last; for `mop`, 0–1 is one two-stroke cycle. */
   readonly progress?: number;
   /** Seconds on a monotonic clock, for the looping rows; defaults to `performance.now()`. */
   readonly elapsedSeconds?: number;
-  /** Whole-figure opacity, for a corpse fading out. */
+  /** Whole-figure opacity. */
   readonly alpha?: number;
 }
 
-export interface BucketBoySpriteState extends CrocodilianCommonState {
-  readonly variant: 'bucket_boy';
-  readonly row: BucketBoyRow;
+export interface JanitorSpriteState extends CrocodilianCommonState {
+  readonly variant: 'janitor';
+  readonly row: JanitorRow;
 }
 
-export interface ClarabelleSpriteState extends CrocodilianCommonState {
-  readonly variant: 'clarabelle';
-  readonly row: ClarabelleRow;
+export interface SydneySpriteState extends CrocodilianCommonState {
+  readonly variant: 'sydney';
+  readonly row: SydneyRow;
 }
 
-export type CrocodilianSpriteState = BucketBoySpriteState | ClarabelleSpriteState;
+export type CrocodilianSpriteState = JanitorSpriteState | SydneySpriteState;
+
+const FIGURES: Readonly<Record<CrocodilianVariant, FigureDef>> = {
+  janitor: JANITOR_FIGURE,
+  sydney: SYDNEY_FIGURE,
+};
+
+/** The row each variant crosses the ground in. */
+const WALK_ROWS = {
+  janitor: 'walk_mop',
+  sydney: 'walk',
+} as const satisfies Readonly<Record<CrocodilianVariant, JanitorRow | SydneyRow>>;
 
 function figureFor(variant: CrocodilianVariant): FigureDef {
-  return variant === 'clarabelle' ? CLARABELLE_FIGURE : BUCKET_BOY_FIGURE;
+  return FIGURES[variant];
 }
 
 /** Views split on whichever axis the figure faces hardest along. */
@@ -114,10 +110,10 @@ function frameCountOf(def: FigureDef, state: string): number {
 }
 
 function clockOf(state: CrocodilianSpriteState): { clock: RowClock; fps: number | undefined } {
-  if (state.variant === 'clarabelle') {
-    return { clock: CLARABELLE_CLOCKS[state.row], fps: CLARABELLE_LOOP_FPS[state.row] };
+  if (state.variant === 'sydney') {
+    return { clock: SYDNEY_CLOCKS[state.row], fps: SYDNEY_LOOP_FPS[state.row] };
   }
-  return { clock: BUCKET_BOY_CLOCKS[state.row], fps: BUCKET_BOY_LOOP_FPS[state.row] };
+  return { clock: JANITOR_CLOCKS[state.row], fps: JANITOR_LOOP_FPS[state.row] };
 }
 
 /** A loop row's fallback speed when a table entry is missing. */
@@ -125,10 +121,12 @@ const DEFAULT_LOOP_FPS = 6;
 const MS_PER_SECOND = 1000;
 
 /**
- * Draw Bucket Boy or Clarabelle.
+ * Draw the janitor or Sydney, returning the row drawn so a caller can hang
+ * a label or icon over the art's measured top.
  *
- * Only the profile is mirrored: the head-on views are painted with the bucket
- * and armband in the figure's own left hand, and flipping them would swap it.
+ * Only the profile is mirrored: the head-on views are painted with the pail in
+ * the figure's own left hand and the mop in his right, and flipping them would
+ * swap them.
  */
 export function drawCrocodilianSprite(
   ctx: CanvasRenderingContext2D,
@@ -136,7 +134,7 @@ export function drawCrocodilianSprite(
   sy: number,
   tileSize: number,
   state: CrocodilianSpriteState,
-): void {
+): DrawnFigureRow {
   const { facingX = 1, facingY = 0, walkFrame = 0, progress = 0, alpha = 1 } = state;
   const def = figureFor(state.variant);
   const view = viewFor(facingX, facingY);
@@ -150,40 +148,14 @@ export function drawCrocodilianSprite(
   else frame = timeFrameIndex(elapsed, fps ?? DEFAULT_LOOP_FPS, count);
   const flipX = view === 'side' && facingX < 0;
   drawFigureCached(ctx, def, name, frame, sx, sy, tileSize, { flipX, alpha });
-}
-
-/**
- * Draw the Triage sparkle on a healed creature's tile. `progress` runs 0 (the
- * heal lands) to 1 (gone), over `TRIAGE_SPARKLE_DURATION_MS`.
- */
-export function drawTriageSparkleSprite(
-  ctx: CanvasRenderingContext2D,
-  sx: number,
-  sy: number,
-  tileSize: number,
-  progress: number,
-): void {
-  const frame = progressFrameIndex(
-    progress,
-    frameCountOf(TRIAGE_SPARKLE_FIGURE, TRIAGE_SPARKLE_STATE),
-  );
-  drawFigureCached(ctx, TRIAGE_SPARKLE_FIGURE, TRIAGE_SPARKLE_STATE, frame, sx, sy, tileSize);
+  return drawnFigureRow(def, name);
 }
 
 const VIEWS: readonly CrocodilianView[] = ['front', 'side', 'away'];
 
-export const BUCKET_BOY_ROW_NAMES: readonly BucketBoyRow[] = [
-  'idle',
-  'walk',
-  'flee',
-  'slap',
-  'cast_triage',
-  'cower',
-  'hurt',
-  'death',
-];
+const JANITOR_ROW_NAMES: readonly JanitorRow[] = ['idle', 'walk_mop', 'mop', 'wring'];
 
-export const CLARABELLE_ROW_NAMES: readonly ClarabelleRow[] = ['idle', 'walk', 'talk'];
+const SYDNEY_ROW_NAMES: readonly SydneyRow[] = ['idle', 'walk', 'talk'];
 
 /**
  * Every state name the draw path can compose for a variant, built through the
@@ -191,39 +163,38 @@ export const CLARABELLE_ROW_NAMES: readonly ClarabelleRow[] = ['idle', 'walk', '
  * draw call can never name different rows.
  */
 export function crocodilianReachableStates(variant: CrocodilianVariant): readonly string[] {
-  const rows: readonly string[] =
-    variant === 'clarabelle' ? CLARABELLE_ROW_NAMES : BUCKET_BOY_ROW_NAMES;
+  const rows: readonly string[] = variant === 'sydney' ? SYDNEY_ROW_NAMES : JANITOR_ROW_NAMES;
   return rows.flatMap((row) => VIEWS.map((view) => crocStateName(row, view)));
 }
 
 /**
- * Warms a crocodilian's rows at the moment its spawn is scheduled — a hire at
- * the desk, the club being built — rather than when it first renders.
- *
- * With no `rows`, warms what it crosses the ground on (idle and walk in every
- * view); pass the rows a coming action needs to warm those as well.
+ * Warms a crocodilian's `rows` in every view at the moment its figure is
+ * scheduled — a room being built, a desk being opened — rather than when it
+ * first renders.
  */
-export function prewarmCrocodilian(
-  variant: CrocodilianVariant,
-  rows: readonly string[] = ['idle', 'walk'],
-): void {
+function prewarmCrocodilian(variant: CrocodilianVariant, rows: readonly string[]): void {
   const def = figureFor(variant);
   for (const row of rows) {
     for (const view of VIEWS) prewarmFigureState(def, crocStateName(row, view));
   }
 }
 
-/** Bucket Boy's full working set: everything his kit can ask for. */
-export function prewarmBucketBoy(): void {
-  prewarmCrocodilian('bucket_boy', BUCKET_BOY_ROW_NAMES);
+/** The janitor's full working set: every row his mop routine can ask for, in every view. */
+export function prewarmJanitor(): void {
+  prewarmCrocodilian('janitor', JANITOR_ROW_NAMES);
 }
 
-/** Clarabelle's full working set: she stands at the door, turns and talks. */
-export function prewarmClarabelle(): void {
-  prewarmCrocodilian('clarabelle', CLARABELLE_ROW_NAMES);
+/** Frames in a variant's walk row: the most one tick may advance its cycle is one of them. */
+export function crocodilianWalkFrames(variant: CrocodilianVariant): number {
+  return frameCountOf(figureFor(variant), crocStateName(WALK_ROWS[variant], 'side'));
 }
 
-/** The sparkle, warmed when Bucket Boy starts his channel, so it is ready when the heal lands. */
-export function prewarmTriageSparkle(): void {
-  prewarmFigureState(TRIAGE_SPARKLE_FIGURE, TRIAGE_SPARKLE_STATE);
+/** Sydney's face-on idle, for a portrait framed by the art's measured top. */
+export function sydneyPortraitRow(): DrawnFigureRow {
+  return drawnFigureRow(SYDNEY_FIGURE, crocStateName('idle', 'front'));
+}
+
+/** Sydney's full working set: she stands at her desk, turns and talks. */
+export function prewarmSydney(): void {
+  prewarmCrocodilian('sydney', SYDNEY_ROW_NAMES);
 }

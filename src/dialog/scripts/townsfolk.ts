@@ -3,8 +3,8 @@
  * Nobody here has a name of their own — they speak as their role, through a
  * transient speaker `townDialog.ts` builds from {@link roleDisplayName}.
  *
- * Pools are keyed by species first, role second: a skyfowl guard and a human
- * guard hold the same post but talk about it differently (skyfowl idiom,
+ * Pools are keyed by species first, role second: a Hawkfolk guard and a human
+ * guard hold the same post but talk about it differently (Hawkfolk idiom,
  * a minority's caution, a majority's ease). `townDialog.ts`'s `citizenSpecies`
  * and `townResidents.ts`'s `residentSpecies` read each speaker's own species
  * and hand it to `ambientPool`/`dangerBark` below.
@@ -103,22 +103,22 @@ const AMBIENT_LINES_HUMAN = {
     'Marlow lets me sit by his door if I don’t ask for ale. Fair trade.',
   ],
   laborer: [
-    'Brann pays fair for scrap timber. Rare enough to say twice.',
+    'Steve pays fair for scrap timber. Rare enough to say twice.',
     'Hauled crates since sunup. My back has opinions.',
     'That scaffolding by the tower hasn’t moved in a month. Nobody’s in a hurry.',
     'Ground work’s steady work. I’ll take steady.',
   ],
   commoner: [
     'Heard the new shopkeeper counts stock twice a week. Good luck slipping anything past her.',
-    'The tattooist by the club corrected her own sign, twice. Signet’s doing, they say.',
+    'The tattooist by the club corrected her own sign, twice. Spelling was never the part she trained for.',
     'Sleeping badly? Try a room at the Sleeping Cat. Whatever’s out there hasn’t made it past that door yet.',
     'Bess and Orlo have run those two stalls so long I forget the square without them.',
     'You’re new. It shows.',
   ],
 } as const satisfies Record<TownRole, NonEmpty<string>>;
 
-/** Everyday, role-flavoured lines for skyfowl citizens. */
-const AMBIENT_LINES_SKYFOWL = {
+/** Everyday, role-flavoured lines for Hawkfolk citizens. */
+const AMBIENT_LINES_HAWKFOLK = {
   guard: [
     'Corporal Pell drills us twice what the roster admits to. Nineteen spears, not forty — don’t repeat that.',
     'I’d rather stand a roof post. You see trouble coming from up there.',
@@ -181,7 +181,7 @@ const AMBIENT_LINES_SKYFOWL = {
   ],
   laborer: [
     'Wing-side hauling pays better and I still take the ground jobs. Habit, I suppose.',
-    'Brann’s old apprentice worked this crew. We don’t talk about him much.',
+    'Steve’s old apprentice worked this crew. We don’t talk about him much.',
     'Carried timber past the wall and back twice this week. My wings ache worse than my legs ever did.',
     'Molt-year’s coming. Rather be hauling crates than moulting mid-shift.',
   ],
@@ -200,7 +200,7 @@ const AMBIENT_LINES_SKYFOWL = {
  * species dispatch lives in one function rather than at every call site.
  */
 export function ambientPool(species: TownSpecies, role: TownRole): NonEmpty<string> {
-  return species === 'skyfowl' ? AMBIENT_LINES_SKYFOWL[role] : AMBIENT_LINES_HUMAN[role];
+  return species === 'hawkfolk' ? AMBIENT_LINES_HAWKFOLK[role] : AMBIENT_LINES_HUMAN[role];
 }
 
 /** Everyone drops everything and reacts when the town is under threat. */
@@ -219,7 +219,7 @@ const DANGER_LINES_HUMAN = {
   commoner: 'It’s through the gate. Run for the stairs!',
 } as const satisfies Record<TownRole, string>;
 
-const DANGER_LINES_SKYFOWL = {
+const DANGER_LINES_HAWKFOLK = {
   guard: 'Air’s no safer tonight. Hold the line anyway!',
   merchant: 'Leave the stall, nothing on it’s worth this!',
   farmer: 'To the roofs, all of you, NOW!',
@@ -236,10 +236,10 @@ const DANGER_LINES_SKYFOWL = {
 
 /**
  * The citizen's danger bark for their species — the one place a caller picks
- * between {@link DANGER_LINES_HUMAN} and {@link DANGER_LINES_SKYFOWL}.
+ * between {@link DANGER_LINES_HUMAN} and {@link DANGER_LINES_HAWKFOLK}.
  */
 export function dangerBark(species: TownSpecies, role: TownRole): string {
-  return species === 'skyfowl' ? DANGER_LINES_SKYFOWL[role] : DANGER_LINES_HUMAN[role];
+  return species === 'hawkfolk' ? DANGER_LINES_HAWKFOLK[role] : DANGER_LINES_HUMAN[role];
 }
 
 /**
@@ -249,24 +249,13 @@ export function dangerBark(species: TownSpecies, role: TownRole): string {
  * still walks. Every role greets from the same pool, since the tier is about
  * the player's deeds, not the speaker's trade or species.
  */
-export type ReputationTier =
-  'savior' | 'double_hero' | 'circus_hero' | 'murder_hero' | 'murder_wary';
+export type ReputationTier = 'savior' | 'murder_hero' | 'murder_wary';
 
 export const REPUTATION_GREETINGS = {
   savior: [
     'You held that tower together with your bare hands, near enough. We’re alive because of it.',
     'The whole square would be ash by now if not for you. Nobody here forgets that.',
     'Grandchildren not born yet are going to hear about you.',
-  ],
-  double_hero: [
-    'The circus freed, the killer stopped. What haven’t you fixed?',
-    'Two things this town lost sleep over, and you settled both.',
-    'Folk walk this square easy again, day and night. That’s down to you.',
-  ],
-  circus_hero: [
-    'You’re the one who broke Grimaldi’s grip. The whole troupe’s free because of it.',
-    'The performers walk on their own two feet again. Well done, truly.',
-    'First round’s on the house, whenever you want it.',
   ],
   murder_hero: [
     'Whatever was killing people, it isn’t anymore. That’s your doing.',
@@ -293,7 +282,4 @@ export const GOSSIP_LINES = {
   murderQuillNamed: 'They’re saying it was Miss Quill all along. Who’d have guessed?',
   murderActiveUnnamed: 'Bar your door tonight. Someone’s still killing after dark.',
   murderBodyFound: 'Did you hear? They found another one by the well.',
-  circusResolved: 'The circus folk walk free again. Whole town’s talking about it.',
-  circusHeatherSlain: 'They say the bear fell out past the wall. Grim business, that.',
-  circusOngoing: 'Strange lights over the old Big Top again last night.',
 } as const;

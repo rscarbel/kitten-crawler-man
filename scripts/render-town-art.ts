@@ -9,13 +9,13 @@
  *   npx tsx scripts/render-town-art.ts
  *
  * Writes:
- * - `preview/town-art/materials.png` — the material board: Over City's
+ * - `preview/town-art/materials.png` — the material board: Taloncrest's
  *   plaster, timber, dressed stone, slate, clay, iron, cloth and sky-icon
  *   ramps as wall/roof/floor swatches, beside the game's real ground
  *   materials the ramps are authored against, beside Briar Hollow's own
  *   wood/fieldstone swatches for comparison, beside a crop of the current
  *   shipped facade bake if
- *   `preview/over-city-baseline/buildings/buildings-review.png` exists.
+ *   `preview/taloncrest-baseline/buildings/buildings-review.png` exists.
  * - `preview/town-art/props.png` — three sample footprints (1×1, 2×1, 1×2)
  *   painted through `withFootprintClip`, showing the frame contract holding
  *   real material content, not just a placeholder block.
@@ -308,7 +308,7 @@ const VILLAGE_ROWS: SwatchRow[] = [
 async function currentFacadeCrop(): Promise<Canvas | null> {
   try {
     const image = await loadImage(
-      `${PREVIEW_DIR}/over-city-baseline/buildings/buildings-review.png`,
+      `${PREVIEW_DIR}/taloncrest-baseline/buildings/buildings-review.png`,
     );
     const canvas = createCanvas(image.width, image.height);
     canvas.getContext('2d').drawImage(image, 0, 0);

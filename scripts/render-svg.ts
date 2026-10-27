@@ -14,8 +14,8 @@
  * `svgSubjects.ts`), so his export does not scale the way the others do.
  *
  *   npx tsx scripts/render-svg.ts --list
- *   npx tsx scripts/render-svg.ts --subject=signet
- *   npx tsx scripts/render-svg.ts --subject=signet --view=front --out=signet.svg
+ *   npx tsx scripts/render-svg.ts --subject=angel
+ *   npx tsx scripts/render-svg.ts --subject=angel --view=front --out=angel.svg
  *   npx tsx scripts/render-svg.ts --subject=cat --view=walk --frame=3
  *   npx tsx scripts/render-svg.ts --all --out-dir=svg
  *

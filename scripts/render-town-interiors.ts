@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Headless renderer for the Over City's walk-in interiors, populated with
+ * Headless renderer for Taloncrest's walk-in interiors, populated with
  * their real occupants.
  *
  * Every building's interior is generated from `GameMap.generateInterior` —
@@ -25,10 +25,11 @@
  *
  * The tower is drawn one image per storey (`<slug>-floor-<n>.png`); it has no
  * `InteriorOccupantSystem` roster, so its storeys show the furniture alone.
- * Excluded on purpose: the Big Top, a quest-encounter interior whose default
+ * Excluded on purpose: the Starlight Tent, a quest-encounter interior whose default
  * variant is an empty ring.
  */
 
+import { STARLIGHT_TENT_NAME } from '../src/map/overworld/circusGroundsLayout.js';
 import { createCanvas, type Canvas } from 'canvas';
 
 import { installCanvasGlobals, paintEnvironmentArtInNode } from './nodeCanvasGlobals.js';
@@ -75,7 +76,7 @@ const WARM_FRAMES = 60;
 const DEFAULT_SCALE = 2;
 const DEFAULT_OUT_DIR = `${PREVIEW_DIR}/town-interiors`;
 /** Buildings this harness does not cover; see the file doc for why. */
-const EXCLUDED_BUILDING_NAMES: ReadonlySet<string> = new Set(['Big Top']);
+const EXCLUDED_BUILDING_NAMES: ReadonlySet<string> = new Set([STARLIGHT_TENT_NAME]);
 
 /** Length of the `--` prefix and `=` separator around a flag's name. */
 const FLAG_PREFIX_LENGTH = 3;

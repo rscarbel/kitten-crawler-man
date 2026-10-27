@@ -12,8 +12,8 @@
  * Three variants share the whole rig: `regular`, `boss`, and `ally`. The boss
  * is the same creature with a hotter core, lichen on its weathered upper
  * surfaces and a broken stone crown, so the hostile golems and the bounty
- * target read as one species. The ally is the same creature again, with a
- * painted Meat Shields band on one bicep marking it as hired rather than
+ * target read as one species. The ally is the same creature again, with the
+ * mercenary armband painted on one bicep marking it as hired rather than
  * hostile.
  *
  * Poses are authored in **body space** — a lateral axis, a fore/aft axis and a
@@ -30,6 +30,8 @@
  *
  * Light comes from the upper left, matching every other prop in the repo.
  */
+
+import { MERCENARY_ARMBAND } from '../mercenaryArmband';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -187,7 +189,7 @@ interface VariantSpec {
   /** Extra jitter on every silhouette: the boss is the more badly weathered one. */
   readonly weathering: number;
   /**
-   * A painted Meat Shields band on one bicep. Hostile golems exist, so this is
+   * The painted mercenary armband on one bicep. Hostile golems exist, so this is
    * the cue that tells a hired one apart from them at a glance.
    */
   readonly armband: boolean;
@@ -899,13 +901,8 @@ const TORSO_SEED = 7;
 const HEAD_SEED = 211;
 const SHOULDER_SEEDS: Record<'left' | 'right', number> = { left: 101, right: 103 };
 
-/**
- * The `MEAT SHIELDS` zone colour in `CLUB_ZONES` (`src/core/club/clubLayout.ts`),
- * repeated here rather than imported so the art module stays free of any
- * dependency on the club's own geometry.
- */
-const ARMBAND_COLOR = '#e06040';
-const ARMBAND_SHADOW = '#8f3020';
+/** Alpha of the seam stroke round the band's edge, so it softens into the cloth. */
+const ARMBAND_SEAM_ALPHA = 0.85;
 const ARMBAND_SEED = 151;
 /** Which body-space side carries the band; painting both reads as shoulder pads. */
 const ARMBAND_SIDE = 1;
@@ -937,10 +934,10 @@ function drawArmband(ctx: Ctx, chain: ArmChain): void {
   const band = slabPolygon(ARMBAND_SEED, from, to, halfW, halfW, ARMBAND_JITTER);
 
   traceOutline(ctx, band);
-  ctx.fillStyle = ARMBAND_COLOR;
+  ctx.fillStyle = MERCENARY_ARMBAND.base;
   ctx.fill();
 
-  ctx.strokeStyle = rgba(ARMBAND_SHADOW, 0.85);
+  ctx.strokeStyle = rgba(MERCENARY_ARMBAND.shadow, ARMBAND_SEAM_ALPHA);
   ctx.lineWidth = ARMBAND_SEAM_WIDTH;
   ctx.lineJoin = 'round';
   traceOutline(ctx, band);

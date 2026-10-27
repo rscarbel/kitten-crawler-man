@@ -17,7 +17,7 @@ import type { Mob } from '../creatures/Mob';
 import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { AudioManager, PlacedCuePlayer, PlacedReach } from '../audio/AudioManager';
 import type { SoundId } from '../audio/sounds';
-import { applyDrunkWalkWobble } from '../core/combat/DrunkEffect';
+import { applyIntoxicatedWalkWobble, intoxicationOf } from '../core/combat/Intoxication';
 import { frameTime } from '../utils';
 import { SkeletonLord } from '../creatures/SkeletonLord';
 import { TheLich } from '../creatures/TheLich';
@@ -197,8 +197,9 @@ export function applyMovement(
 
   player.isMoving = dx !== 0 || dy !== 0;
 
-  if (player.hasStatus('drunk')) {
-    const wobbled = applyDrunkWalkWobble(dx, dy, frameTime);
+  const intoxication = intoxicationOf(player);
+  if (intoxication !== null) {
+    const wobbled = applyIntoxicatedWalkWobble(intoxication, dx, dy, frameTime);
     dx = wobbled.dx;
     dy = wobbled.dy;
   }
@@ -541,8 +542,8 @@ function playCuesOf(mob: Mob, audio: PlacedCuePlayer | null): void {
           'tuskling_grunt_4',
         ]);
         break;
-      case 'skyfowl':
-        audio?.playRandom(['skyfowl_1', 'skyfowl_2']);
+      case 'hawkfolk':
+        audio?.playRandom(['hawkfolk_1', 'hawkfolk_2']);
         break;
       // The pounce still lands on the claw cue: a dedicated pounce screech is
       // unsourced, and the pounce ends in a raking swipe anyway.
@@ -553,19 +554,14 @@ function playCuesOf(mob: Mob, audio: PlacedCuePlayer | null): void {
           audio?.play('mongo_slash');
         }
         break;
-      // Hired Meat Shields. Tumbledown is a rock golem and swings under the
+      // Hired mercenaries. Tumbledown is a rock golem and swings under the
       // golem's own tag below.
-      case 'merc_cretin':
+      case 'merc_earth_elemental':
         audio?.playRandom(['rock_thud_1', 'rock_thud_2', 'rock_thud_3', 'rock_thud_4']);
         break;
-      case 'merc_lancer':
-        audio?.play('sword_attack_1');
-        break;
-      case 'merc_water_mage':
+      // The archer's cue is raised on the frame the string is loosed.
+      case 'merc_archer':
         audio?.play('shooting_an_arrow');
-        break;
-      case 'merc_brawler':
-        audio?.playRandom(['human_punch_1', 'human_punch_2', 'human_punch_3']);
         break;
       case 'merc_medic':
         audio?.play('human_punch_weak');
@@ -589,7 +585,7 @@ function playCuesOf(mob: Mob, audio: PlacedCuePlayer | null): void {
         audio?.play('massive_strike_with_dirt_impact');
         break;
       case 'lemur':
-        audio?.play('circus_lemur_attack');
+        audio?.play('lemur_attack');
         break;
       case 'clown':
         audio?.playRandom(['clown_laughing_1', 'clown_laughing_2', 'clown_horn', 'clown_burp']);
@@ -613,23 +609,20 @@ function playCuesOf(mob: Mob, audio: PlacedCuePlayer | null): void {
       case 'bear':
         audio?.play('bear_big_attack');
         break;
+      // Its own roars are not recorded yet, and another creature's voice on a
+      // lion would be wrong, so its bite lands silent until they are.
+      case 'lion':
+        break;
       // The lab's hatchlings and the small spiders share this pounce bite.
       case 'small_spider':
         audio?.playRandom(['bite_1', 'bite_2', 'bite_3']);
-        break;
-      case 'grimaldi':
-        audio?.playRandom([
-          'grimaldi_plant_moving_1',
-          'grimaldi_plant_moving_2',
-          'grimaldi_plant_moving_3',
-        ]);
         break;
     }
   }
   if (mob.projectileSoundPending) {
     mob.projectileSoundPending = false;
     if (mob.audioTag === 'llama') audio?.play('llama_fireball');
-    if (mob.audioTag === 'lemur') audio?.play('circus_lemur_sound');
+    if (mob.audioTag === 'lemur') audio?.play('lemur_sound');
     if (mob.audioTag === 'skeleton') audio?.play('shooting_an_arrow');
     // Only the archer among the goblins ever queues one of these — the melee
     // archetypes have nothing to throw.
@@ -646,10 +639,6 @@ function playCuesOf(mob: Mob, audio: PlacedCuePlayer | null): void {
   if (mob.damageSoundPending) {
     // Only tags handled here consume the flag.
     switch (mob.audioTag) {
-      case 'grimaldi':
-        mob.damageSoundPending = false;
-        audio?.play('grimaldi_vine_taking_damage');
-        break;
       case 'bear':
         mob.damageSoundPending = false;
         audio?.play('bear_growl_1');

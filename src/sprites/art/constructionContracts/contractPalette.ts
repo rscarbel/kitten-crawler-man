@@ -1,7 +1,7 @@
 /**
  * The colours construction-contract damage is painted in, per settlement.
  *
- * Damage sits on top of art that already exists — Skyfowl Town's ash-oak,
+ * Damage sits on top of art that already exists — Taloncrest's ash-oak,
  * dressed ashlar and lime plaster, Briar Hollow's oiled walnut and grey-green
  * fieldstone — so every ramp here is resolved from the palette that art was
  * painted from rather than restated. A broken board in the village has to be
@@ -12,7 +12,7 @@ import { getTownRamp, TOWN_INK, type Ramp, type RGB } from '../town/townPalette'
 import { CLOTH, INK, STONE, WOOD } from '../villageArt';
 
 /** Which town a spot stands in, which decides whose wood and stone the damage is cut from. */
-export type ContractSettlement = 'skyfowl' | 'hollow';
+export type ContractSettlement = 'taloncrest' | 'hollow';
 
 export interface ContractPalette {
   /** Planks, posts, offcuts. */
@@ -63,27 +63,27 @@ function ramp(shadow: RGB, mid: RGB, light: RGB, accent: RGB): Ramp {
 const HEMP_ROPE = ramp([92, 70, 40], [158, 126, 80], [204, 176, 124], [226, 204, 158]);
 const IRON_NAIL = ramp([22, 22, 24], [52, 52, 56], [96, 96, 102], [150, 150, 158]);
 const CHALK: RGB = [232, 230, 220];
-const SKYFOWL_FRESH_BREAK: RGB = [226, 206, 166];
-const SKYFOWL_MORTAR: RGB = [170, 166, 152];
-const SKYFOWL_DUST: RGB = [206, 196, 172];
+const TALONCREST_FRESH_BREAK: RGB = [226, 206, 166];
+const TALONCREST_MORTAR: RGB = [170, 166, 152];
+const TALONCREST_DUST: RGB = [206, 196, 172];
 const HOLLOW_FRESH_BREAK: RGB = [214, 178, 126];
 const HOLLOW_MORTAR: RGB = [128, 120, 100];
 const HOLLOW_DUST: RGB = [176, 156, 120];
 /** Raw clay daub over wattle: the linen cloth's dun body, a shade warmer. */
 const HOLLOW_DAUB = ramp([94, 76, 54], [150, 126, 92], [190, 168, 128], [210, 192, 156]);
 
-const SKYFOWL: ContractPalette = {
+const TALONCREST: ContractPalette = {
   wood: getTownRamp('oc_timber'),
-  freshBreak: SKYFOWL_FRESH_BREAK,
+  freshBreak: TALONCREST_FRESH_BREAK,
   stone: getTownRamp('oc_stone'),
-  mortar: SKYFOWL_MORTAR,
+  mortar: TALONCREST_MORTAR,
   plaster: getTownRamp('oc_plaster'),
   lath: getTownRamp('oc_timber'),
   rope: HEMP_ROPE,
   nail: IRON_NAIL,
   ink: TOWN_INK,
   chalk: CHALK,
-  dust: SKYFOWL_DUST,
+  dust: TALONCREST_DUST,
   wallBoardGrain: 'vertical',
   wallMasonry: 'face',
 };
@@ -110,5 +110,5 @@ const HOLLOW: ContractPalette = {
 };
 
 export function contractPalette(settlement: ContractSettlement): ContractPalette {
-  return settlement === 'skyfowl' ? SKYFOWL : HOLLOW;
+  return settlement === 'taloncrest' ? TALONCREST : HOLLOW;
 }

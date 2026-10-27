@@ -68,7 +68,7 @@ npm run bench:slots          # times the slots MEGA WIN celebration on a phone-s
 - `verify:bounty`'s map checks are a random sample, not a deterministic gate: overworld generation runs on unseeded `Math.random()` on purpose, because a fixed seed only ever proves the one map it encodes. Run it more than once when something looks marginal.
 - `verify:separation` checks force math, cell-boundary coverage, and that the grid and all-pairs strategies agree to floating-point rounding across 200 random layouts plus degenerate ones. It also pins `SpatialGrid`'s key-packing assumptions: negative coordinates are safe, and a bucket collision can only cost work rather than produce a wrong answer, because every query re-tests its candidates.
 - `bench:separation` is what makes `SEPARATION_GRID_MIN_MOBS` a measured number rather than a guess. It sweeps roster sizes against three crowding levels and carries a max-force-delta column beside the timings, so a faster shape that quietly computed _different_ forces fails loudly. Treat the crossover as the result and the absolute microseconds as scenery — they are wall-clock on whatever machine runs them.
-- `verify:slots` and `verify:wheel` check behaviour only; payout balance is read from `report:slots-rtp` and tuned by playtest. Their review renders are `npm run render:slot-symbols` (`preview/slots/symbols.png`), `npm run render:tito` (Tito's busts and his corner of the club, `preview/tito/`) and `npm run render:equipment -- --item=stormcaller` (the Stormcaller in the human's hand).
+- `verify:slots` and `verify:wheel` check behaviour only; payout balance is read from `report:slots-rtp` and tuned by playtest. Their review renders are `npm run render:slot-symbols` (`preview/slots/symbols.png`), `npm run render:donald` (Donald's busts and his corner of the club, `preview/donald/`) and `npm run render:equipment -- --item=stormcaller` (the Stormcaller in the human's hand).
 - `npm run lint` also runs `check:audio`, which fails on a file added or swapped without a re-measure: run `npm run measure:audio` (needs ffmpeg and ffprobe) after any audio file change. See `add-sound`.
 - These scripts exist because browser `requestAnimationFrame` throttles to roughly one frame a second when the tab is occluded, so nothing about timing or motion can be honestly claimed from browser automation. Everything that could be made deterministic was moved into them; the rest is left to a human.
 - A new script must be listed by name in `tsconfig.scripts.json`'s `include`. Scripts typecheck is opt-in — an unregistered script is never checked and the gate still passes.
@@ -87,7 +87,7 @@ npx tsx scripts/render-garments.ts --wear=<garment id>[,<id>] [--compare] [--row
                               # one garment on either crawler across rows and views at 32 px; no gates
 npm run render:held-visuals   # every held visual beside the art it reproduces (-- --item=<id>, -- --measure)
 npm run verify:held-visuals   # held-visual registry, archetype ranges, weapon looks vs wearer
-npm run verify:player-snapshot # save shape and migrations: held slots, drawn bit, old saves
+npm run verify:player-snapshot # save shape and validation: held slots, gear state, rejected snapshots
 npm run bench:turn-residency  # no cold frame on a turn, a menu, a flush, a harvest or a carry (-- --scenario=<name>)
 npm run gates:figure-cache    # the figure cache's own contracts
 npm run bench:figure-paint    # per-cell paint cost
@@ -102,7 +102,7 @@ npm run verify:preview-scene  # the ?human and ?cat preview routes
 
 ## Chat cheats
 
-Typed into the in-game chat box. The universal table is in `ChatKit` (`src/systems/kits/ChatKit.ts`): `!god`, `!tough`, `!payday`, `!levelup`, `!give <item_id> [quantity]` (any item, one by default, into the active crawler's bag, or the wearer's for a crawler-specific item; a non-stackable item takes a slot per copy, so only as many as fit are given) and `!vomit` (blood vomiting, its first bout almost due). `DungeonScene` adds scene cheats, among them `!cow` (grants the human the attack cow).
+Typed into the in-game chat box. The universal table is in `ChatKit` (`src/systems/kits/ChatKit.ts`): `!god`, `!tough`, `!payday`, `!levelup`, `!give <item_id> [quantity]` (any item, one by default, into the active crawler's bag, or the wearer's for a crawler-specific item; a non-stackable item takes a slot per copy, so only as many as fit are given) and `!vomit` (one retch of blood on the active crawler, the cue a crawler gives on dropping into the lowest HP band; it costs no HP). `DungeonScene` adds scene cheats, among them `!cow` (grants the human the attack cow).
 
 ## Running the game
 

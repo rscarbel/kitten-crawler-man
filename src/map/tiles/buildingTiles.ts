@@ -1283,7 +1283,7 @@ export function drawBuildingTile(
       break;
     }
 
-    // Ruined city wall — broken stone fragment left standing in the Over City's ruins.
+    // Ruined city wall — broken stone fragment left standing in Taloncrest's ruins.
     case RUINED_WALL: {
       // The real grass sprite shows through the broken top, so the fragment
       // blends with the lawn instead of reading as a solid square.

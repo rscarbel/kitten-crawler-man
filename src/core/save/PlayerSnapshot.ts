@@ -1,24 +1,27 @@
 import type { StatName, Player } from '../../Player';
 import { ALL_STATS } from '../../Player';
-import { INCURABLE_STATUSES, type StatusEffect } from '../combat/StatusEffect';
-import type { SkillId, SkillState } from '../skills/SkillManager';
+import { INCURABLE_STATUSES, isStatusId, type StatusEffect } from '../combat/StatusEffect';
+import { STATUS_PERSISTENCE } from '../combat/statusTuning';
+import { isSkillId, type CrawlerKind, type SkillId, type SkillState } from '../skills/SkillManager';
 import { isStatTattooId, type StatTattooId } from '../skills/tattoos';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
-import { ITEM_DEF, isItemId } from '../items/defs/ItemDefs';
-import type { SavedGearItemState } from '../../gear/gearState';
+import { HOTBAR_COUNT, ITEM_DEF, isItemId } from '../items/defs/ItemDefs';
+import { parseSavedGearState, type SavedGearItemState } from '../../gear/gearState';
 import { REVIVE_HP_FRACTION } from '../party/reviveRules';
 import type { InventoryItem, ItemId } from '../items/defs/ItemDefs';
 import type { CraftSkillsSnapshot } from '../labour/CraftSkills';
 import { parseCraftSkillsSnapshot } from '../labour/CraftSkills';
+import { mayEquipUnder } from '../items/equipment/EquipmentManager';
+import { isFiniteNumber, isNonNegativeFinite, isRecord, parseEvery } from '../util/guards';
 
 /**
  * One held stack as a snapshot stores it. A stack carries nothing of its own
  * beyond its item and count, so everything else is rebuilt from `ITEM_DEF` on
  * restore; storing only these two keeps a save of a deep bag small enough for
- * the server to accept. Older saves stored the whole def and still read as this.
+ * the server to accept.
  */
 export interface SavedStack {
-  readonly id: string;
+  readonly id: ItemId;
   readonly quantity: number;
 }
 
@@ -26,138 +29,92 @@ function savedStack(slot: InventoryItem | null): SavedStack | null {
   return slot === null ? null : { id: slot.id, quantity: slot.quantity };
 }
 
-/**
- * Snapshot format version.
- *
- * v1 (unversioned) stored the *summed* stat values — base plus equipment — so a
- * naive restore would double-count every worn item once stats became derived.
- * v2 stores {@link PlayerSnapshot.baseStats} instead; {@link restorePlayer}
- * reconstructs base stats for v1 saves by subtracting the equipment bonuses back
- * out. v3 is the first version written after the cat's constitution lock, which
- * is what tells a one-time refund apart from a lawful potion or tattoo gain.
- * v4 keeps the human's weapon as equipment.
- * v5 adds {@link PlayerSnapshot.gearState}, each piece of gear's own memory.
- * v6 stores no drawn flag: a weapon equipped in the main hand is drawn.
- */
-export const PLAYER_SNAPSHOT_VERSION = 6;
+/** The length of a saved `[subSlotKey, itemId]` equipment entry. */
+const EQUIPPED_ENTRY_LENGTH = 2;
 
-/** Version assumed for a snapshot that predates the field. */
-const LEGACY_SNAPSHOT_VERSION = 1;
-
-/** First version that stores `baseStats` rather than summed stat totals. */
-const BASE_STATS_SNAPSHOT_VERSION = 2;
-
-/**
- * First version written after the cat's constitution lock existed.
- *
- * Below this, a cat's stored constitution may include points she bought before
- * the lock, and those are refunded once on load. At or above it her stored value
- * is already lawful, so the refund must *not* run again — potions and tattoos
- * legitimately raise base constitution past the floor and would otherwise be
- * confiscated on the next doorway she walked through.
- */
-export const CONSTITUTION_LOCK_SNAPSHOT_VERSION = 3;
+/** The lowest level a crawler can be. */
+const MIN_PLAYER_LEVEL = 1;
 
 /** Serialisable snapshot of a single player's state, used when transitioning
- *  between scenes (e.g. entering/exiting a building interior). */
+ *  between scenes (e.g. entering/exiting a building interior) and in a save. */
 export interface PlayerSnapshot {
-  /** Absent on saves written before the base/effective stat split. */
-  snapshotVersion?: number;
   hp: number;
-  /** Effective max HP at snapshot time. Informational — v2 restores derive it. */
+  /** Effective max HP at snapshot time; a restore re-derives it. */
   maxHp: number;
   level: number;
   xp: number;
   unspentPoints: number;
-  /** Effective stat totals. Informational for v2; authoritative for v1 saves. */
-  strength: number;
-  intelligence: number;
-  constitution: number;
-  /** Stored stat values, excluding equipment and temporary modifiers. v2+. */
-  baseStats?: Partial<Record<StatName, number>>;
+  /** Stored stat values, excluding equipment and temporary modifiers. */
+  baseStats: Record<StatName, number>;
   coins: number;
   facingX: number;
   facingY: number;
   inventorySlots: (SavedStack | null)[];
   inventoryHotbar: (SavedStack | null)[];
   equippedEntries: [string, ItemId][];
+  /** The human's alone; the cat's snapshot never carries it. */
   explosivesHandling?: number;
-  /** The Quiet Needle's stat mark. Validated on restore, so anything unrecognised reads as unmarked. */
-  tattoo?: StatTattooId | null;
-  /** Skill taught by the Quiet Needle's brass mark. Absent on saves predating it. */
-  skillTattoo?: SkillId | null;
-  /** Big Rooster's Desperado Pass ink. Absent on saves predating it. */
-  desperadoPassTattoo?: boolean;
-  /** Each piece of gear's own memory. Absent on saves predating it, which read as fresh gear. */
-  gearState?: SavedGearItemState[];
+  /** The Quiet Needle's stat mark. */
+  tattoo: StatTattooId | null;
+  /** Skill taught by the Quiet Needle's brass mark. */
+  skillTattoo: SkillId | null;
+  /** Each piece of gear's own memory. */
+  gearState: SavedGearItemState[];
   /**
-   * Frames left before the slingshot can fire again. Absent on saves predating
-   * it, and on the cat. Without this, every scene transition zeroed the human's
-   * cooldown and granted a free instant shot on arrival.
+   * Frames left before the slingshot can fire again; the human's alone.
+   * Without this, every scene transition zeroed the human's cooldown and
+   * granted a free instant shot on arrival.
    */
   slingshotCooldown?: number;
-  /** Stat points bought on the garrison's sand. Absent on saves predating the drill yard. */
-  drillTraining?: number;
-  /** Active buffs and DoTs, so a drink or a poison survives a building round-trip. */
+  /** Stat points bought on the garrison's sand. */
+  drillTraining: number;
+  /**
+   * Active buffs and DoTs, so a drink or a poison survives a building
+   * round-trip. Never holds a `transient` status (see `STATUS_PERSISTENCE`).
+   */
   statusEffects: StatusEffect[];
   /** Max-HP loaned by an active Jugg Juice, so it is still repaid on the far side. */
   juggJuiceHpBoost: number;
-  /**
-   * Which crawler the player was controlling. Optional because saves written
-   * before this field existed are still loaded verbatim from the server.
-   */
-  isActive?: boolean;
+  /** Which crawler the player was controlling. */
+  isActive: boolean;
   /**
    * Downed state and its clocks. Without these a knocked-out companion crosses a
    * scene boundary as a plain 0-HP corpse, which reads as an instant game over.
    */
-  isKnockedOut?: boolean;
-  knockedOutFrames?: number;
-  reviveProgress?: number;
-  /** Discovered skills and their progress. Absent on saves predating the skill system. */
-  skillStates?: SkillState[];
+  isKnockedOut: boolean;
+  knockedOutFrames: number;
+  reviveProgress: number;
+  /** Discovered skills and their progress. */
+  skillStates: SkillState[];
   /**
    * Resourcing and Construction levels, saved and restored per crawler like
-   * `skillStates` — the two crawlers' craft progress never mixes. Absent on
-   * saves predating craft skills.
+   * `skillStates` — the two crawlers' craft progress never mixes.
    */
-  craftSkillStates?: CraftSkillsSnapshot;
+  craftSkillStates: CraftSkillsSnapshot;
   /**
    * Wall-clock deadline for Cockroach's recharge. Absolute epoch-ms is the point:
    * a save opened tomorrow should find the skill ready, not still counting down.
    */
-  cockroachReadyAt?: number | null;
+  cockroachReadyAt: number | null;
   /** Wall-clock deadline for the Third Eye's foresight, kept for the same reason as Cockroach's. */
-  thirdEyeReadyAt?: number | null;
-  /** Unseen "new upgrade" item ids, so the bag badge survives a scene round-trip. Absent on saves predating it. */
-  unseenUpgrades?: ItemId[];
-}
-
-/**
- * A finite number from a snapshot, or `fallback`.
- *
- * Saves arrive as unvalidated server JSON. The ids are already screened, but a
- * `NaN` or `Infinity` in a numeric field is worse than a bad id: it propagates
- * silently through the derived stats — `NaN` max HP, `NaN` HP — and leaves an
- * unplayable character with no error anywhere.
- */
-function finiteOr(value: number | undefined, fallback: number): number {
-  return value !== undefined && Number.isFinite(value) ? value : fallback;
+  thirdEyeReadyAt: number | null;
+  /** Unseen "new upgrade" item ids, so the bag badge survives a scene round-trip. */
+  unseenUpgrades: ItemId[];
 }
 
 export function snapPlayer(p: Player): PlayerSnapshot {
-  const baseStats: Partial<Record<StatName, number>> = {};
-  for (const stat of ALL_STATS) baseStats[stat] = p.getBaseStat(stat);
+  const baseStats: Record<StatName, number> = {
+    strength: p.getBaseStat('strength'),
+    intelligence: p.getBaseStat('intelligence'),
+    constitution: p.getBaseStat('constitution'),
+    dexterity: p.getBaseStat('dexterity'),
+  };
   const snap: PlayerSnapshot = {
-    snapshotVersion: PLAYER_SNAPSHOT_VERSION,
     hp: p.hp,
     maxHp: p.maxHp,
     level: p.level,
     xp: p.xp,
     unspentPoints: p.unspentPoints,
-    strength: p.strength,
-    intelligence: p.intelligence,
-    constitution: p.constitution,
     baseStats,
     coins: p.coins,
     facingX: p.facingX,
@@ -167,13 +124,15 @@ export function snapPlayer(p: Player): PlayerSnapshot {
     equippedEntries: p.inventory.equipment.entries(),
     tattoo: p.tattoo,
     skillTattoo: p.skillTattoo,
-    desperadoPassTattoo: p.hasDesperadoPassTattoo,
     drillTraining: p.drillTraining,
     // The applier is dropped rather than copied: a snapshot is how a crawler
     // crosses into another scene, and that scene builds its own crawlers, so a
     // retained reference would credit a Player object nothing on the new map
-    // has ever heard of.
-    statusEffects: p.statusEffects.map((e) => ({ ...e, applier: null })),
+    // has ever heard of. A transient status lasts only as long as its moment
+    // on screen, so it is left behind rather than replayed on arrival.
+    statusEffects: p.statusEffects
+      .filter((effect) => STATUS_PERSISTENCE[effect.type] !== 'transient')
+      .map((effect) => ({ ...effect, applier: null })),
     juggJuiceHpBoost: p.juggJuiceHpBoost,
     isActive: p.isActive,
     isKnockedOut: p.isKnockedOut,
@@ -239,144 +198,260 @@ export function withoutIncurableStatuses(snap: PlayerSnapshot): PlayerSnapshot {
   };
 }
 
-/** What a crawler's craft skills read as when a snapshot has none: neither skill taught yet. */
-const UNLEARNED_CRAFT_SKILLS: CraftSkillsSnapshot = {
-  resourcing: { learned: false, level: 0, xp: 0 },
-  construction: { learned: false, level: 0, xp: 0 },
-};
-
-/** The snapshot's format version, defaulting to v1 for saves predating the field. */
-function snapshotVersionOf(snap: PlayerSnapshot): number {
-  return snap.snapshotVersion ?? LEGACY_SNAPSHOT_VERSION;
-}
-
 /**
  * A bag or hotbar slot as it is restored: its stack rebuilt from the item's
- * current definition, keeping only the quantity from the save.
- *
- * Some saves hold the whole def as it stood when the item was picked up; a
- * field the def has gained since — a weapon's equip address and stat block —
- * would be missing from that copy, and the item could never be put in a slot.
- * A retired id has no definition to rebuild it from, so its slot comes back
- * empty.
- *
- * Always a fresh object: a checkpoint snapshot is restored again on every
- * death until the next safe room, and the bag must never share an object with
- * the snapshot it came from.
+ * current definition, keeping only the quantity from the save. Always a fresh
+ * object: a checkpoint snapshot is restored again on every death until the
+ * next safe room, and the bag must never share an object with the snapshot it
+ * came from.
  */
-function restoredSlot(slot: SavedStack | null | undefined): InventoryItem | null {
-  if (slot === null || slot === undefined) return null;
-  if (!isItemId(slot.id)) return null;
-  return { ...ITEM_DEF[slot.id], quantity: slot.quantity };
-}
-
-/** Total stat bonus the snapshot's equipped items contribute, by stat. */
-function equipmentBonusesOf(snap: PlayerSnapshot): Record<StatName, number> {
-  const totals: Record<StatName, number> = {
-    strength: 0,
-    intelligence: 0,
-    constitution: 0,
-    dexterity: 0,
-  };
-  for (const [, itemId] of snap.equippedEntries) {
-    // Snapshots arrive as unvalidated server JSON, and this is the legacy path —
-    // the one most likely to name an item that has since been renamed or removed.
-    if (!isItemId(itemId)) continue;
-    const bonus = ITEM_DEF[itemId].statBonus;
-    if (!bonus) continue;
-    for (const stat of ALL_STATS) totals[stat] += bonus[stat] ?? 0;
-  }
-  return totals;
-}
-
-/**
- * Stored stat values to restore from a snapshot.
- *
- * v2 saves carry them directly. v1 saves stored the summed totals, so the worn
- * equipment's contribution is subtracted back out — without that, re-deriving
- * effective stats from the restored base would count every worn item twice.
- * Dexterity did not exist in v1; the player's species default is kept.
- */
-function baseStatsFrom(p: Player, snap: PlayerSnapshot): Record<StatName, number> {
-  const speciesDefaults: Record<StatName, number> = {
-    strength: p.getBaseStat('strength'),
-    intelligence: p.getBaseStat('intelligence'),
-    constitution: p.getBaseStat('constitution'),
-    dexterity: p.getBaseStat('dexterity'),
-  };
-
-  const stored = snap.baseStats;
-  if (snapshotVersionOf(snap) >= BASE_STATS_SNAPSHOT_VERSION && stored) {
-    const resolved: Record<StatName, number> = { ...speciesDefaults };
-    for (const stat of ALL_STATS) {
-      resolved[stat] = finiteOr(stored[stat], speciesDefaults[stat]);
-    }
-    return resolved;
-  }
-
-  // Legacy: floored at the species default rather than at 1, because the cat's
-  // guaranteed base constitution of 2 postdates v1 — restoring her at the old
-  // stored 1 would cost her max HP she can no longer buy back.
-  const equipment = equipmentBonusesOf(snap);
-  const recovered = (storedTotal: number, stat: StatName): number =>
-    Math.max(speciesDefaults[stat], finiteOr(storedTotal, speciesDefaults[stat]) - equipment[stat]);
-  return {
-    strength: recovered(snap.strength, 'strength'),
-    intelligence: recovered(snap.intelligence, 'intelligence'),
-    constitution: recovered(snap.constitution, 'constitution'),
-    dexterity: speciesDefaults.dexterity,
-  };
-}
-
-function validDeadline(readyAt: number | null | undefined): number | null {
-  return readyAt !== null && readyAt !== undefined && Number.isFinite(readyAt) ? readyAt : null;
+function restoredSlot(slot: SavedStack | null): InventoryItem | null {
+  return slot === null ? null : { ...ITEM_DEF[slot.id], quantity: slot.quantity };
 }
 
 export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
-  p.level = Math.max(1, finiteOr(snap.level, p.level));
-  p.xp = Math.max(0, finiteOr(snap.xp, 0));
-  p.unspentPoints = Math.max(0, finiteOr(snap.unspentPoints, 0));
-  p.coins = Math.max(0, finiteOr(snap.coins, 0));
-  p.facingX = finiteOr(snap.facingX, p.facingX);
-  p.facingY = finiteOr(snap.facingY, p.facingY);
-  p.tattoo = isStatTattooId(snap.tattoo) ? snap.tattoo : null;
-  p.skillTattoo = snap.skillTattoo ?? null;
-  p.hasDesperadoPassTattoo = snap.desperadoPassTattoo ?? false;
-  p.drillTraining = Math.max(0, finiteOr(snap.drillTraining, 0));
-  p.isActive = snap.isActive ?? p.isActive;
-  p.isKnockedOut = snap.isKnockedOut ?? false;
-  p.knockedOutFrames = snap.knockedOutFrames ?? 0;
-  p.reviveProgress = snap.reviveProgress ?? 0;
-  p.skills.restoreStates(snap.skillStates ?? []);
-  p.craftSkills.restore(parseCraftSkillsSnapshot(snap.craftSkillStates) ?? UNLEARNED_CRAFT_SKILLS);
-  p.cockroachReadyAt = validDeadline(snap.cockroachReadyAt);
-  p.thirdEyeReadyAt = validDeadline(snap.thirdEyeReadyAt);
+  p.level = snap.level;
+  p.xp = snap.xp;
+  p.unspentPoints = snap.unspentPoints;
+  p.coins = snap.coins;
+  p.facingX = snap.facingX;
+  p.facingY = snap.facingY;
+  p.tattoo = snap.tattoo;
+  p.skillTattoo = snap.skillTattoo;
+  p.drillTraining = snap.drillTraining;
+  p.isActive = snap.isActive;
+  p.isKnockedOut = snap.isKnockedOut;
+  p.knockedOutFrames = snap.knockedOutFrames;
+  p.reviveProgress = snap.reviveProgress;
+  p.skills.restoreStates(snap.skillStates);
+  p.craftSkills.restore(snap.craftSkillStates);
+  p.cockroachReadyAt = snap.cockroachReadyAt;
+  p.thirdEyeReadyAt = snap.thirdEyeReadyAt;
   if (p instanceof HumanPlayer) {
-    if (snap.explosivesHandling !== undefined) {
-      p.explosivesHandling = Math.max(1, finiteOr(snap.explosivesHandling, p.explosivesHandling));
-    }
-    p.slingshotCooldown = Math.max(0, finiteOr(snap.slingshotCooldown, 0));
+    if (snap.explosivesHandling !== undefined) p.explosivesHandling = snap.explosivesHandling;
+    p.slingshotCooldown = snap.slingshotCooldown ?? 0;
   }
 
   p.inventory.bag.replaceAll(snap.inventorySlots.map(restoredSlot));
   for (let i = 0; i < snap.inventoryHotbar.length; i++) {
-    p.inventory.actionBar.slots[i] = restoredSlot(snap.inventoryHotbar[i]);
+    p.inventory.actionBar.slots[i] = restoredSlot(snap.inventoryHotbar[i] ?? null);
   }
-  // Snapshots are copied slot-for-slot, so a save written before stacks were
-  // kept unified still carries a split one. Folding here catches every restore
-  // path at once rather than at each of the scenes that call this.
-  p.inventory.consolidateStacks();
-  p.inventory.restoreUnseenUpgrades(snap.unseenUpgrades ?? []);
+  p.inventory.restoreUnseenUpgrades(snap.unseenUpgrades);
   // Equipment first: the stat getters — and therefore max HP — read from it.
   p.inventory.equipment.replaceAll(snap.equippedEntries);
   p.gear.restore(snap.gearState);
 
-  const baseStats = baseStatsFrom(p, snap);
-  for (const stat of ALL_STATS) p.setBaseStat(stat, baseStats[stat]);
-
-  p.migrateRestoredStats(snapshotVersionOf(snap));
+  for (const stat of ALL_STATS) p.setBaseStat(stat, snap.baseStats[stat]);
 
   // Status effects before HP: Jugg Juice's loan is part of max HP.
   p.restoreStatusEffects(snap.statusEffects, snap.juggJuiceHpBoost);
-  p.hp = Math.min(Math.max(0, finiteOr(snap.hp, p.maxHp)), p.maxHp);
+  p.restoreHp(Math.min(snap.hp, p.maxHp));
+}
+
+function parseSavedStack(value: unknown): SavedStack | null | undefined {
+  if (value === null) return null;
+  if (!isRecord(value)) return undefined;
+  const { id, quantity } = value;
+  if (typeof id !== 'string' || !isItemId(id)) return undefined;
+  if (typeof quantity !== 'number' || !Number.isInteger(quantity) || quantity < 1) return undefined;
+  return { id, quantity };
+}
+
+/** Every slot of a saved bag or hotbar, or undefined when one holds what this build cannot rebuild. */
+function parseSavedSlots(value: unknown): (SavedStack | null)[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const slots: (SavedStack | null)[] = [];
+  for (const entry of value) {
+    const slot = parseSavedStack(entry);
+    if (slot === undefined) return undefined;
+    slots.push(slot);
+  }
+  return slots;
+}
+
+function parseEquippedEntry(kind: CrawlerKind, value: unknown): [string, ItemId] | undefined {
+  if (!Array.isArray(value) || value.length !== EQUIPPED_ENTRY_LENGTH) return undefined;
+  const key: unknown = value[0];
+  const id: unknown = value[1];
+  if (typeof key !== 'string' || typeof id !== 'string' || !isItemId(id)) return undefined;
+  return mayEquipUnder(kind, key, id) ? [key, id] : undefined;
+}
+
+function parseEquippedEntries(kind: CrawlerKind, value: unknown): [string, ItemId][] | undefined {
+  const entries = parseEvery(value, (entry) => parseEquippedEntry(kind, entry));
+  if (entries === undefined) return undefined;
+  const distinctIds = new Set(entries.map(([, id]) => id));
+  return distinctIds.size === entries.length ? entries : undefined;
+}
+
+function parseBaseStats(value: unknown): Record<StatName, number> | undefined {
+  if (!isRecord(value)) return undefined;
+  const { strength, intelligence, constitution, dexterity } = value;
+  if (
+    !isNonNegativeFinite(strength) ||
+    !isNonNegativeFinite(intelligence) ||
+    !isNonNegativeFinite(constitution) ||
+    !isNonNegativeFinite(dexterity)
+  ) {
+    return undefined;
+  }
+  return { strength, intelligence, constitution, dexterity };
+}
+
+/**
+ * A saved status, or undefined for one this build does not define, one it
+ * never saves, or one with a damaged clock or ward pool.
+ */
+function parseStatusEffect(value: unknown): StatusEffect | undefined {
+  if (!isRecord(value)) return undefined;
+  const { type, ticksRemaining, totalTicks, absorbRemaining, absorbTotal } = value;
+  if (typeof type !== 'string' || !isStatusId(type)) return undefined;
+  if (STATUS_PERSISTENCE[type] === 'transient') return undefined;
+  if (!isNonNegativeFinite(ticksRemaining) || !isNonNegativeFinite(totalTicks)) return undefined;
+  const effect: StatusEffect = { type, ticksRemaining, totalTicks, applier: null };
+  if (absorbRemaining !== undefined) {
+    if (!isNonNegativeFinite(absorbRemaining)) return undefined;
+    effect.absorbRemaining = absorbRemaining;
+  }
+  if (absorbTotal !== undefined) {
+    if (!isNonNegativeFinite(absorbTotal)) return undefined;
+    effect.absorbTotal = absorbTotal;
+  }
+  return effect;
+}
+
+function parseSkillState(value: unknown): SkillState | undefined {
+  if (!isRecord(value)) return undefined;
+  const { id, level, usesTowardNext } = value;
+  if (typeof id !== 'string' || !isSkillId(id)) return undefined;
+  if (!isFiniteNumber(level) || level < MIN_PLAYER_LEVEL) return undefined;
+  if (!isNonNegativeFinite(usesTowardNext)) return undefined;
+  return { id, level, usesTowardNext };
+}
+
+function parseNullableTattoo(value: unknown): StatTattooId | null | undefined {
+  if (value === null) return null;
+  return isStatTattooId(value) ? value : undefined;
+}
+
+function parseNullableSkillId(value: unknown): SkillId | null | undefined {
+  if (value === null) return null;
+  return typeof value === 'string' && isSkillId(value) ? value : undefined;
+}
+
+function parseNullableDeadline(value: unknown): number | null | undefined {
+  if (value === null) return null;
+  return isFiniteNumber(value) ? value : undefined;
+}
+
+/**
+ * A saved crawler snapshot, or undefined when any field is missing or is not
+ * something this build writes for a crawler of `kind`. Input is unvalidated
+ * JSON from storage or the server.
+ */
+export function parsePlayerSnapshot(value: unknown, kind: CrawlerKind): PlayerSnapshot | undefined {
+  if (!isRecord(value)) return undefined;
+  const {
+    hp,
+    maxHp,
+    level,
+    xp,
+    unspentPoints,
+    coins,
+    facingX,
+    facingY,
+    explosivesHandling,
+    slingshotCooldown,
+    drillTraining,
+    juggJuiceHpBoost,
+    isActive,
+    isKnockedOut,
+    knockedOutFrames,
+    reviveProgress,
+  } = value;
+  const baseStats = parseBaseStats(value.baseStats);
+  const inventorySlots = parseSavedSlots(value.inventorySlots);
+  const inventoryHotbar = parseSavedSlots(value.inventoryHotbar);
+  const equippedEntries = parseEquippedEntries(kind, value.equippedEntries);
+  const tattoo = parseNullableTattoo(value.tattoo);
+  const skillTattoo = parseNullableSkillId(value.skillTattoo);
+  const gearState = parseSavedGearState(value.gearState);
+  const statusEffects = parseEvery(value.statusEffects, parseStatusEffect);
+  const skillStates = parseEvery(value.skillStates, parseSkillState);
+  const craftSkillStates = parseCraftSkillsSnapshot(value.craftSkillStates);
+  const cockroachReadyAt = parseNullableDeadline(value.cockroachReadyAt);
+  const thirdEyeReadyAt = parseNullableDeadline(value.thirdEyeReadyAt);
+  const unseenUpgrades = parseEvery(value.unseenUpgrades, (id) =>
+    typeof id === 'string' && isItemId(id) ? id : undefined,
+  );
+  const isHuman = kind === 'human';
+  const humanOnlyFieldsValid = isHuman
+    ? isNonNegativeFinite(explosivesHandling) && isNonNegativeFinite(slingshotCooldown)
+    : explosivesHandling === undefined && slingshotCooldown === undefined;
+  if (
+    !isNonNegativeFinite(hp) ||
+    !isNonNegativeFinite(maxHp) ||
+    !isFiniteNumber(level) ||
+    level < MIN_PLAYER_LEVEL ||
+    !isNonNegativeFinite(xp) ||
+    !isNonNegativeFinite(unspentPoints) ||
+    !isNonNegativeFinite(coins) ||
+    !isFiniteNumber(facingX) ||
+    !isFiniteNumber(facingY) ||
+    !isNonNegativeFinite(drillTraining) ||
+    !isNonNegativeFinite(juggJuiceHpBoost) ||
+    typeof isActive !== 'boolean' ||
+    typeof isKnockedOut !== 'boolean' ||
+    !isNonNegativeFinite(knockedOutFrames) ||
+    !isNonNegativeFinite(reviveProgress) ||
+    !humanOnlyFieldsValid ||
+    baseStats === undefined ||
+    inventorySlots === undefined ||
+    inventoryHotbar === undefined ||
+    inventoryHotbar.length > HOTBAR_COUNT ||
+    equippedEntries === undefined ||
+    tattoo === undefined ||
+    skillTattoo === undefined ||
+    gearState === undefined ||
+    statusEffects === undefined ||
+    skillStates === undefined ||
+    craftSkillStates === undefined ||
+    cockroachReadyAt === undefined ||
+    thirdEyeReadyAt === undefined ||
+    unseenUpgrades === undefined
+  ) {
+    return undefined;
+  }
+  const snap: PlayerSnapshot = {
+    hp,
+    maxHp,
+    level,
+    xp,
+    unspentPoints,
+    baseStats,
+    coins,
+    facingX,
+    facingY,
+    inventorySlots,
+    inventoryHotbar,
+    equippedEntries,
+    tattoo,
+    skillTattoo,
+    gearState,
+    drillTraining,
+    statusEffects,
+    juggJuiceHpBoost,
+    isActive,
+    isKnockedOut,
+    knockedOutFrames,
+    reviveProgress,
+    skillStates,
+    craftSkillStates,
+    cockroachReadyAt,
+    thirdEyeReadyAt,
+    unseenUpgrades,
+  };
+  if (isNonNegativeFinite(explosivesHandling)) snap.explosivesHandling = explosivesHandling;
+  if (isNonNegativeFinite(slingshotCooldown)) snap.slingshotCooldown = slingshotCooldown;
+  return snap;
 }

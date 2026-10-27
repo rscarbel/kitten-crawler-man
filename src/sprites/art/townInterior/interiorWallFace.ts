@@ -12,7 +12,7 @@
 
 import { rgb, rgba, type Rng } from '../town/townArt';
 import { getCircusRamp, getTownRamp, mix, sampleRamp, type Ramp } from '../town/townPalette';
-import type { BigTopDrapeStyle } from '../../../map/bigTopMazeDecor';
+import type { StarlightTentDrapeStyle } from '../../../map/starlightTentMazeDecor';
 import { paintPlasterWash, paintStoneCourses, paintPlankBoard } from '../town/townMaterials';
 import { mulberry32 } from '../../person/rng';
 
@@ -151,12 +151,12 @@ export function paintEdgeInteriorWallFace(
   else ctx.fillRect(x, y + h - shadowThickness, w, shadowThickness);
 }
 
-// ── Canvas: the Big Top's hanging sidewalls ─────────────────────────────────
+// ── Canvas: the Starlight Tent's hanging sidewalls ───────────────────────────
 
 const DRAPE_FADE_TOWARD_NAVY = 0.35;
 
 /** The two ramps a drape's stripes alternate between, per act. */
-const DRAPE_STRIPES: Readonly<Record<BigTopDrapeStyle, readonly [Ramp, Ramp]>> = {
+const DRAPE_STRIPES: Readonly<Record<StarlightTentDrapeStyle, readonly [Ramp, Ramp]>> = {
   firewalk: [getCircusRamp('circus_blood'), getCircusRamp('circus_bone')],
   menagerie: [
     getCircusRamp('circus_navy'),
@@ -206,7 +206,7 @@ function drapeSag(worldX: number, ts: number): number {
 }
 
 /**
- * The north face of a Big Top corridor: striped sidewall canvas hung from a
+ * The north face of a Starlight Tent corridor: striped sidewall canvas hung from a
  * scalloped valance, sagging between its hanging points, pleated, shaded up
  * into the dark of the tent and dusted with sawdust at the hem.
  *
@@ -219,7 +219,7 @@ export function paintCanvasDrapeNorthFace(
   y: number,
   w: number,
   h: number,
-  style: BigTopDrapeStyle,
+  style: StarlightTentDrapeStyle,
   tx: number,
 ): void {
   const [first, second] = DRAPE_STRIPES[style];
@@ -309,7 +309,7 @@ const FOLD_SHADOW_ALPHA = 0.45;
 const FOLD_SHADOW_FRACTION = 0.08;
 
 /**
- * A side or south wall of a Big Top corridor, seen from above: the backstage
+ * A side or south wall of a Starlight Tent corridor, seen from above: the backstage
  * mass with the drape's edge showing as a narrow rolled fold along the side
  * that faces the floor, shading into the dark behind it.
  */
@@ -319,7 +319,7 @@ export function paintCanvasDrapeEdgeFace(
   y: number,
   w: number,
   h: number,
-  style: BigTopDrapeStyle,
+  style: StarlightTentDrapeStyle,
   side: 'west' | 'east' | 'south',
   tx: number,
 ): void {

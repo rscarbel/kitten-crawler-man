@@ -1,8 +1,8 @@
 /**
  * The music library's save behaviour, for `verify-audio.ts`: what a save
- * keeps of it, and what a save written before it existed backfills. Imported
- * after the browser shim is installed, since the descent check plays a real
- * floor.
+ * keeps of it, what a stored library this build cannot account for does to
+ * the save, and what a run starts with. Imported after the browser shim is
+ * installed, since the descent check plays a real floor.
  */
 
 import type { MusicTrackId } from '../../src/audio/sounds.js';
@@ -10,24 +10,16 @@ import {
   ALWAYS_UNLOCKED_TRACK_IDS,
   MusicLibrary,
   activeMusicLibrary,
-  type MusicLibraryNotice,
 } from '../../src/core/music/MusicLibrary.js';
-import { parseGameProgress, stampGameProgress } from '../../src/core/save/saveFormat.js';
-import { WORLD_GENERATOR_VERSION } from '../../src/core/save/SavedWorld.js';
-import { parsePersistedWorldState } from '../../src/core/save/PersistedWorldState.js';
-import { isRecord } from '../../src/core/util/guards.js';
-import { snapPlayer } from '../../src/core/save/PlayerSnapshot.js';
-import { HumanPlayer } from '../../src/creatures/HumanPlayer.js';
-import { CatPlayer } from '../../src/creatures/CatPlayer.js';
-import { TILE_SIZE } from '../../src/core/constants.js';
-import { backfillFixtures, type FixtureParty } from './musicLibraryFixtures.js';
+import { parseGameProgress } from '../../src/core/save/saveFormat.js';
 import { settleArrival } from '../settleArrival.js';
 
 type Check = (ok: boolean, message: string) => void;
 
 /** The world seed the walk-away and inventory scene harnesses play on. */
 const HARNESS_WORLD_SEED = 7;
-const PARTY_TILE = 4;
+/** An id no catalogue entry has, as a stored library might name one. */
+const UNKNOWN_TRACK_ID = 'a_song_this_build_never_had';
 
 /** Songs the run has unlocked; the first two of them heard, the last still new to the music page. */
 const UNLOCKED_ON_THE_RUN = [
@@ -36,13 +28,6 @@ const UNLOCKED_ON_THE_RUN = [
   'keyboard_hero_music_track_1',
 ] as const satisfies readonly MusicTrackId[];
 const HEARD_ON_THE_RUN = ['bg_level_1', 'boss_music_1'] as const satisfies readonly MusicTrackId[];
-
-function freshParty(): FixtureParty {
-  return {
-    humanSnap: snapPlayer(new HumanPlayer(PARTY_TILE, PARTY_TILE, TILE_SIZE)),
-    catSnap: snapPlayer(new CatPlayer(PARTY_TILE, PARTY_TILE, TILE_SIZE)),
-  };
-}
 
 /** `ids` plus the songs every library starts with. */
 function withAlwaysUnlocked(ids: readonly MusicTrackId[]): MusicTrackId[] {
@@ -91,21 +76,11 @@ function expectLibraryKept(check: Check, label: string, kept: MusicLibrary): voi
 }
 
 /**
- * Check 11: a save keeps the library through storage, and the save the stairs
- * write — which carries no `world` — keeps it too.
+ * Check 11: the save the stairs write — which carries no `world` — keeps the
+ * library through storage, and the same save naming a song this build does not
+ * have fails validation whole.
  */
 export async function checkSaveRoundTrip(check: Check): Promise<void> {
-  const library = playedLibrary();
-  const stored = JSON.stringify(
-    stampGameProgress({ levelId: 'level2', ...freshParty(), musicLibrary: library.serialize() }),
-  );
-  const loaded = parseGameProgress(JSON.parse(stored));
-  if (loaded === null) {
-    check(false, 'a save carrying a music library no longer parses');
-    return;
-  }
-  expectLibraryKept(check, 'a stored save', MusicLibrary.forSave(loaded));
-
   const { SceneManager } = await import('../../src/core/Scene.js');
   const { InputManager } = await import('../../src/core/input/InputManager.js');
   const { DungeonScene } = await import('../../src/scenes/DungeonScene.js');
@@ -134,75 +109,33 @@ export async function checkSaveRoundTrip(check: Check): Promise<void> {
     return;
   }
   check(descended.world === undefined, 'the descent save carries no world, as the stairs write it');
-  expectLibraryKept(check, 'the descent save', MusicLibrary.forSave(descended));
-}
+  expectLibraryKept(check, 'the descent save', MusicLibrary.fromSerialized(descended.musicLibrary));
 
-function backfillSummaryCount(notices: readonly MusicLibraryNotice[]): number | null {
-  const summaries = notices.filter((notice) => notice.kind === 'backfilled');
-  const others = notices.length - summaries.length;
-  const [summary] = summaries;
-  if (summaries.length !== 1 || others !== 0) return null;
-  return summary.count;
+  const withUnknownSong = {
+    ...descended,
+    musicLibrary: {
+      ...descended.musicLibrary,
+      unlocked: [...descended.musicLibrary.unlocked, UNKNOWN_TRACK_ID],
+    },
+  };
+  check(
+    parseGameProgress(JSON.parse(JSON.stringify(withUnknownSong))) === null,
+    'a save whose library names a song this build does not have fails validation',
+  );
+  const { musicLibrary: _dropped, ...withoutLibrary } = descended;
+  check(
+    parseGameProgress(JSON.parse(JSON.stringify(withoutLibrary))) === null,
+    'a save with no music library fails validation',
+  );
 }
 
 /**
- * Check 12: saves written before the library backfill exactly the songs their
- * progress proves, unlocked but unheard, announced by one summary notice.
- * The songs every library starts with are unlocked and heard in any library,
- * new or loaded, without a notice.
+ * Check 12: what a run's library starts with. The songs every library starts
+ * with are unlocked and heard in any library, new or loaded, without a notice;
+ * a new game skipping the tutorial unlocks it; and a dev drop-in onto a later
+ * floor unlocks the songs it skipped, silently.
  */
 export async function checkBackfill(check: Check): Promise<void> {
-  const staleGeneratorVersion = WORLD_GENERATOR_VERSION - 1;
-  for (const fixture of backfillFixtures(
-    freshParty(),
-    WORLD_GENERATOR_VERSION,
-    staleGeneratorVersion,
-  )) {
-    const { world } = fixture.save;
-    if (world !== undefined) {
-      const persisted = isRecord(world) ? world.persisted : undefined;
-      check(
-        parsePersistedWorldState(persisted) !== undefined,
-        `${fixture.name}: the fixture's floor state parses, so its evidence is read at all`,
-      );
-    }
-    const loaded = parseGameProgress(JSON.parse(JSON.stringify(fixture.save)));
-    if (loaded === null) {
-      check(false, `${fixture.name}: the save no longer parses`);
-      continue;
-    }
-    const library = MusicLibrary.forSave(loaded);
-    const expectedUnlocked = withAlwaysUnlocked(fixture.expected);
-    check(
-      sameIds(library.unlocked, expectedUnlocked),
-      `${fixture.name}: backfilled ${describe(library.unlocked)}; expected ${describe(expectedUnlocked)}`,
-    );
-    const heard = library.unlocked.filter((id) => library.isHeard(id) && !isAlwaysUnlocked(id));
-    check(
-      heard.length === 0,
-      `${fixture.name}: backfilled songs count as heard: ${describe(heard)}`,
-    );
-    check(
-      library.menuUnseenCount === 0,
-      `${fixture.name}: ${library.menuUnseenCount} backfilled songs badge the music page`,
-    );
-    const summaryCount = backfillSummaryCount(library.drainNotices());
-    check(
-      summaryCount === fixture.expected.length,
-      `${fixture.name}: one summary notice of ${fixture.expected.length} songs, got ${String(summaryCount)}`,
-    );
-    const resaved = parseGameProgress(
-      JSON.parse(
-        JSON.stringify(stampGameProgress({ ...loaded, musicLibrary: library.serialize() })),
-      ),
-    );
-    const reloadNotices =
-      resaved === null ? null : MusicLibrary.forSave(resaved).drainNotices().length;
-    check(
-      reloadNotices === 0,
-      `${fixture.name}: the next save announces the backfill again (${String(reloadNotices)} notices)`,
-    );
-  }
   checkAlwaysUnlocked(check);
   await checkSkipToLevel1(check);
   await checkPlaytestDropIn(check);
@@ -300,7 +233,7 @@ const FLOOR_3_PLAYTEST_PRESET_ID = 'level3';
 
 /**
  * A playtest preset dropped onto floor 3 starts with the music of the floors
- * it skipped already unlocked, silently, as a save made there backfills.
+ * it skipped already unlocked, silently.
  */
 async function checkPlaytestDropIn(check: Check): Promise<void> {
   const { SceneManager } = await import('../../src/core/Scene.js');

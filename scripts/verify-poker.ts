@@ -66,11 +66,7 @@ import { LABEL_NAME_MIN_PLATE_H } from '../src/ui/casino/pokerSeat';
 import { CARD_ASPECT } from '../src/ui/casino/PlayingCard';
 import { clampedUiScale, NO_INSETS } from '../src/ui/core/viewport';
 import { fontFor, resolveTheme, type TypeStyle } from '../src/ui/theme/tokens';
-import {
-  PokerRegulars,
-  createRegularsTable,
-  isRegularId,
-} from '../src/systems/casino/poker/npc/PokerRegulars';
+import { PokerRegulars, createRegularsTable } from '../src/systems/casino/poker/npc/PokerRegulars';
 import {
   decide,
   legalize,
@@ -84,9 +80,8 @@ import {
   moodAfterHand,
 } from '../src/systems/casino/poker/npc/mood';
 import { EMPTY_PLAYER_READ, type PlayerRead } from '../src/systems/casino/poker/npc/playerRead';
-import { parseClubMembershipCheckpoint } from '../src/core/save/PersistedWorldState';
-import { JACKPOT_FLOOR } from '../src/systems/casino/slots/slotBets';
-import type { ClubMembershipCheckpoint } from '../src/core/club/ClubMembership';
+import { parseCasinoStateCheckpoint } from '../src/core/save/PersistedWorldState';
+import type { CasinoStateCheckpoint } from '../src/core/club/CasinoState';
 import {
   LOOSE_VPIP_AT,
   TIGHT_VPIP_AT,
@@ -99,6 +94,7 @@ import type { PokerTell } from '../src/systems/casino/poker/npc/tells';
 import {
   POKER_REGULARS,
   REGULAR_IDS,
+  isRegularId,
   type RegularId,
 } from '../src/systems/casino/poker/npc/regulars';
 import type { PokerDecisionContext } from '../src/systems/casino/poker/PokerTable';
@@ -637,15 +633,12 @@ interface ForfeitOutcome {
   readonly npcStacksAfter: number;
   readonly eventsAfter: number;
   readonly phaseAfter: string;
-  /** The table's running wager tally grew by exactly this hand's contribution. */
-  readonly committedMatches: boolean;
 }
 
 function forfeit(description: string, table: PokerTable, reached: boolean): ForfeitOutcome {
   const player = table.seats[PLAYER_SEAT];
   const stackBefore = player.stack;
   const contribution = table.playerContribution;
-  const committedBeforeHand = table.playerCoinsCommitted - contribution;
   // Contributions outlive the award for display, so they only count while a pot is still out.
   const potOut = table.handInProgress && table.phase !== 'awarding';
   const npcChipsBefore = sum(
@@ -664,7 +657,6 @@ function forfeit(description: string, table: PokerTable, reached: boolean): Forf
     npcStacksAfter: sum(table.seats.filter((seat) => !seat.isPlayer).map((seat) => seat.stack)),
     eventsAfter: table.drainEvents().length,
     phaseAfter: table.phase,
-    committedMatches: table.playerCoinsCommitted === committedBeforeHand + contribution,
   };
 }
 
@@ -776,7 +768,6 @@ function checkForfeit(): void {
     const returnsStack = outcomes.every((o) => o.returned === o.stackBefore);
     const potStays = outcomes.every((o) => o.npcStacksAfter === o.npcChipsBefore + o.contribution);
     const closed = outcomes.every((o) => o.eventsAfter === 0 && o.phaseAfter === 'left');
-    const committed = outcomes.every((o) => o.committedMatches);
     check(reached, `${description}: scenario reached on every stream`);
     check(returnsStack, `${description}: the purse gets exactly the remaining stack`);
     check(
@@ -784,7 +775,6 @@ function checkForfeit(): void {
       `${description}: the player's contribution stays in the pot and goes to the table`,
     );
     check(closed, `${description}: the hand resolves instantly with no events left to drain`);
-    check(committed, `${description}: the wager tally counts exactly the chips left in the pot`);
   }
 }
 
@@ -1939,9 +1929,9 @@ function canonical(value: unknown): string {
 }
 
 /** Through JSON and back, the way a save actually travels. */
-function viaSave(value: unknown): ClubMembershipCheckpoint | undefined {
+function viaSave(value: unknown): CasinoStateCheckpoint | undefined {
   const saved: unknown = JSON.parse(JSON.stringify(value));
-  return parseClubMembershipCheckpoint(saved);
+  return parseCasinoStateCheckpoint(saved);
 }
 
 const SAMPLE_READ: PlayerRead = {
@@ -1962,76 +1952,53 @@ const SECOND_READ: PlayerRead = { ...SAMPLE_READ, handsSeen: 9, bluffsShown: 0 }
 const SAVED_JACKPOT_POOL = 12345.678;
 
 function checkPersistence(): void {
-  section('Save fields: club membership round trip');
+  section('Save fields: casino state round trip');
   const [firstRegular, secondRegular] = REGULAR_IDS;
-  const full: ClubMembershipCheckpoint = {
-    hasDesperadoPass: true,
+  const full: CasinoStateCheckpoint = {
     casinoShoe: createShoe(stream(PERSISTENCE_SALT)),
     casinoHintsEnabled: false,
     pokerReads: { [firstRegular]: SAMPLE_READ, [secondRegular]: SECOND_READ },
     pokerNotes: { [secondRegular]: SAMPLE_READ },
     pokerFast: true,
     pokerShowCards: true,
-    escortLevelId: 'level-3',
     slotsJackpotPool: SAVED_JACKPOT_POOL,
     slotsTurbo: true,
   };
   const restored = viaSave(full);
   check(
     restored !== undefined && canonical(restored) === canonical(full),
-    'a full membership with reads, notes, Fast, Show cards, the slots jackpot pool and Turbo comes back unchanged',
+    'a full casino state with reads, notes, Fast, Show cards, the slots jackpot pool and Turbo comes back unchanged',
   );
 
-  const beforePoker = viaSave({
-    hasDesperadoPass: true,
-    casinoShoe: null,
-    casinoHintsEnabled: true,
-  });
+  const { pokerFast: _droppedFast, ...missingPokerFast } = full;
   check(
-    beforePoker !== undefined &&
-      beforePoker.hasDesperadoPass &&
-      beforePoker.casinoHintsEnabled === true &&
-      Object.keys(beforePoker.pokerReads).length === 0 &&
-      Object.keys(beforePoker.pokerNotes).length === 0 &&
-      !beforePoker.pokerFast &&
-      !beforePoker.pokerShowCards &&
-      beforePoker.slotsJackpotPool === JACKPOT_FLOOR &&
-      !beforePoker.slotsTurbo,
-    'a save from before the poker table and slots loads with no reads, no notes, Fast, Show cards and Turbo off, and the jackpot at its floor',
+    viaSave(missingPokerFast) === undefined,
+    'a casino state missing one of its fields is refused, not filled in',
   );
 
-  const beforeHints = viaSave({ hasDesperadoPass: true, casinoShoe: null });
+  const { casinoHintsEnabled: _droppedHints, ...missingHints } = full;
   check(
-    beforeHints !== undefined &&
-      beforeHints.hasDesperadoPass &&
-      beforeHints.casinoHintsEnabled === null,
-    'a membership saved without the hints preference keeps its club pass, hints unset',
+    viaSave(missingHints) === undefined,
+    'a casino state missing the hints preference is refused',
   );
 
   const strangers = viaSave({
     ...full,
-    pokerReads: {
-      [firstRegular]: SAMPLE_READ,
-      someone_who_left_the_game: SAMPLE_READ,
-      [secondRegular]: { ...SAMPLE_READ, hands: 'many' },
-    },
+    pokerReads: { [firstRegular]: SAMPLE_READ, someone_who_left_the_game: SAMPLE_READ },
   });
-  check(
-    strangers !== undefined &&
-      canonical(strangers.pokerReads) === canonical({ [firstRegular]: SAMPLE_READ }),
-    'an unknown regular and an unreadable read are each dropped, the good read kept',
-  );
+  check(strangers === undefined, 'a read kept by a regular the game does not know is refused');
+
+  const unreadable = viaSave({
+    ...full,
+    pokerReads: { [firstRegular]: SAMPLE_READ, [secondRegular]: { ...SAMPLE_READ, hands: 'many' } },
+  });
+  check(unreadable === undefined, 'an unreadable read is refused, not dropped');
 
   const negative = viaSave({
     ...full,
     pokerNotes: { [firstRegular]: { ...SAMPLE_READ, vpipHands: -1 }, [secondRegular]: SECOND_READ },
   });
-  check(
-    negative !== undefined &&
-      canonical(negative.pokerNotes) === canonical({ [secondRegular]: SECOND_READ }) &&
-      negative.hasDesperadoPass,
-    'a read with a negative count is dropped on its own, the rest of the membership kept',
-  );
+  check(negative === undefined, 'a read with a negative count is refused');
 }
 
 // ── Shown-bluff chuckles ───────────────────────────────────────────────────
@@ -2169,9 +2136,9 @@ function checkShownBluffs(): void {
         bluffPot(0, BLUFFER),
       ],
       bluffComplete(WEAK_HOLE, FLOP),
-      'skyfowl',
-    ) === 'skyfowl_chuckle',
-    "a skyfowl regular's shown bluff laughs in the skyfowl voice",
+      'hawkfolk',
+    ) === 'hawkfolk_chuckle',
+    "a Hawkfolk regular's shown bluff laughs in the Hawkfolk voice",
   );
   check(
     reactionAfter(

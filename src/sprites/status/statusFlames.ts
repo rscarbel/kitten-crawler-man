@@ -18,7 +18,7 @@
  * - **light pools on the floor** underneath, which is what fixes the fire in the
  *   world instead of leaving it floating in front of the camera.
  *
- * The parcels are the same baked stamps as the Big Top's flame vents
+ * The parcels are the same baked stamps as the Starlight Tent's flame vents
  * ({@link ../flameStamps}), so a burning crawler and a burning vent are visibly
  * the same fire.
  */

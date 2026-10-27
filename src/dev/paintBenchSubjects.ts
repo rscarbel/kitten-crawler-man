@@ -29,12 +29,14 @@ import { BALL_OF_SWINE_FIGURE } from '../sprites/art/ballOfSwineFigure';
 import { RAT_KIN_FIGURE } from '../sprites/art/ratKinFigure';
 import { ratkinCastFigure } from '../sprites/art/ratkinCastFigure';
 import { SHADY_FIGURE } from '../sprites/art/shadyFigure';
-import { skyfowlCastFigure } from '../sprites/art/skyfowlCastFigure';
+import { MAGNUM_STAGE_FIGURE } from '../sprites/art/magnumFigure';
+import { ANGEL_FIGURE } from '../sprites/art/angelFigure';
+import { hawkfolkCastFigure } from '../sprites/art/hawkfolkCastFigure';
 import {
   EVIL_CLOWN_FIGURE,
   FAT_CLOWN_FIGURE,
-  STILT_CLOWN_FIGURE,
-  TERROR_CLOWN_FIGURE,
+  TALL_CLOWN_FIGURE,
+  MASSIVE_CLOWN_FIGURE,
 } from '../sprites/art/clownFigure';
 import { CLOWN_GAS_FIGURE } from '../sprites/art/clownGasFigure';
 import { MANTID_FIGURE, MANTIS_FIGURE } from '../sprites/art/mantidFigure';
@@ -127,15 +129,18 @@ export const PAINT_BENCH_SUBJECTS: readonly PaintBenchSubject[] = [
   { def: ratkinCastFigure('bramblewick'), state: 'idle' },
   { def: ratkinCastFigure('hobb'), state: 'strike_side' },
   { def: SHADY_FIGURE, state: 'idle' },
-  { def: skyfowlCastFigure('tough_hawkbrown_standard'), state: 'walk' },
+  { def: MAGNUM_STAGE_FIGURE, state: 'dance_poleSlide_1' },
+  { def: ANGEL_FIGURE, state: 'swing_squat' },
+  { def: ANGEL_FIGURE, state: 'arch_flip_look' },
+  { def: hawkfolkCastFigure('tough_hawkbrown_standard'), state: 'walk' },
   { def: MONGO_FIGURES.adult, state: 'walk_side' },
   { def: TRASH_GREMLIN_FIGURE, state: 'idle' },
   { def: GREMLIN_BILE_ARC_FIGURE, state: 'arc' },
   { def: GREMLIN_ACID_FIGURE, state: 'pool' },
   { def: BALL_OF_SWINE_FIGURE, state: 'roll' },
   { def: FAT_CLOWN_FIGURE, state: 'idle' },
-  { def: STILT_CLOWN_FIGURE, state: 'idle' },
-  { def: TERROR_CLOWN_FIGURE, state: 'idle' },
+  { def: TALL_CLOWN_FIGURE, state: 'idle' },
+  { def: MASSIVE_CLOWN_FIGURE, state: 'idle' },
   { def: EVIL_CLOWN_FIGURE, state: 'idle' },
   { def: CLOWN_GAS_FIGURE, state: 'billow' },
   { def: MANTID_FIGURE, state: 'idle' },

@@ -3,12 +3,10 @@ import { HIRELING_POTION_COOLDOWN_FRAMES } from './hirelingSurvival';
 import type { BarkLine, NonEmpty } from '../../dialog/line';
 import type { MercenaryLines } from '../../dialog/roles';
 import {
-  BOMO,
-  BUCKET_BOY,
-  DONG_QUIXOTE,
-  GLUTEUS_MAXX,
-  SLEDGE,
-  SPLASH_ZONE,
+  BROTHER_ANSELM,
+  CRUSH,
+  HAMMER_HANDS,
+  IVY_ASHGROVE,
   TUMBLEDOWN_BASE,
 } from '../../dialog/scripts/mercenaries';
 
@@ -25,7 +23,7 @@ import {
 /**
  * The moments a hireling may speak.
  *
- * - `hired`: first appearance outside the club.
+ * - `hired`: first appearance after the contract is signed.
  * - `idle`: nothing hostile in range for a good while.
  * - `engage`: picked a fight (for a medic who never picks one, a hostile came close).
  * - `kill`: its own blow finished something.
@@ -189,11 +187,9 @@ const TUMBLEDOWN_GRUNTS: Partial<Record<MercenaryBarkTrigger, MercenaryGrunt>> =
 };
 
 export const MERCENARY_VOICES: Readonly<Record<MercenaryVoiceId, MercenaryVoice>> = {
-  sledge: SLEDGE,
-  bomo: BOMO,
-  dong_quixote: DONG_QUIXOTE,
-  splash_zone: SPLASH_ZONE,
-  gluteus_maxx: GLUTEUS_MAXX,
-  bucket_boy: BUCKET_BOY,
+  crush: CRUSH,
+  hammer_hands: HAMMER_HANDS,
+  ivy_ashgrove: IVY_ASHGROVE,
+  brother_anselm: BROTHER_ANSELM,
   tumbledown: { ...TUMBLEDOWN_BASE, grunts: TUMBLEDOWN_GRUNTS },
 };

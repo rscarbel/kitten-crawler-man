@@ -22,6 +22,7 @@ import type { SilhouetteLayer } from '../../core/spriteAssets/silhouetteComposit
 import {
   BLOOD_VOMIT_STATUS,
   CHILLED_STATUS,
+  DOUBLE_DAMAGE_STATUS,
   FAIRY_AEGIS_STATUS,
   FAIRY_WARD_STATUS,
   FROZEN_STATUS,
@@ -47,6 +48,7 @@ import {
   deepSlumberBodyLayer,
   drawCooldownCrisp,
   drawDeepSlumber,
+  drawCatnipBuzz,
   drawDrunk,
   drawHearthWarmed,
   drawJuggJuice,
@@ -70,7 +72,7 @@ import {
   drawOverheal,
   overhealBodyLayer,
 } from './statusFairyWards';
-import { SHIELD_AMBER_DEEP } from '../art/cretinArt';
+import { SHIELD_AMBER_DEEP } from '../art/earthElementalArt';
 import { bloodVomitBodyLayers, drawBloodVomit } from './statusBloodVomit';
 
 export type { StatusVisualFrame } from './statusPaint';
@@ -83,6 +85,11 @@ export interface StatusVisual {
   readonly color: string;
   /** Whether this is something to fear. Drives the badge's urgency styling. */
   readonly harmful: boolean;
+  /**
+   * Set on a status too brief to be worth a HUD pill: one that is over before
+   * the eye finds the badge row is noise there, and the body already shows it.
+   */
+  readonly noHudPill?: true;
   /**
    * Coats of paint applied through the character's own shape, in order. A list
    * rather than one coat because a single blend mode cannot both carry a colour
@@ -159,8 +166,18 @@ const STATUS_VISUALS = new Map<string, StatusVisual>([
       label: 'VOMT',
       color: '#dc2626',
       harmful: true,
+      noHudPill: true,
       bodyLayers: bloodVomitBodyLayers,
       overlay: drawBloodVomit,
+    },
+  ],
+  [
+    DOUBLE_DAMAGE_STATUS,
+    {
+      label: 'DMx2',
+      // The wheel's own red wedge, darkened, so the pill reads as the wedge that laid it.
+      color: '#991b1b',
+      harmful: true,
     },
   ],
   [
@@ -352,6 +369,15 @@ const STATUS_VISUALS = new Map<string, StatusVisual>([
       overlay: drawDrunk,
     },
   ],
+  [
+    'catnip_buzz',
+    {
+      label: 'NIP!',
+      color: '#65a30d',
+      harmful: false,
+      overlay: drawCatnipBuzz,
+    },
+  ],
 ]);
 
 /** Badge styling for a status with no registry entry, so one can never be invisible. */
@@ -360,6 +386,11 @@ const UNKNOWN_STATUS_LABEL_LENGTH = 4;
 
 export function statusVisual(type: string): StatusVisual | undefined {
   return STATUS_VISUALS.get(type);
+}
+
+/** Whether the HUD shows a pill for `type`; see {@link StatusVisual.noHudPill}. */
+export function statusShowsHudPill(type: string): boolean {
+  return STATUS_VISUALS.get(type)?.noHudPill !== true;
 }
 
 /** Label and colour for a HUD badge, falling back for an unregistered status. */

@@ -211,7 +211,7 @@ export const SHOPS = {
   },
 
   /**
-   * The Desperado Club's bar pours at a premium: its regulars pay club
+   * The Cloak & Dagger's bar pours at a premium: its regulars pay club
    * prices, not street prices, and its small, curated pour list barely moves
    * with stock. The house special is poured at cost, because it is what
    * brings members to the bar. It buys bottles back only at the ordinary
@@ -223,7 +223,7 @@ export const SHOPS = {
     markup: 1.15,
     categoryMarkup: { potion: 1.67, food: 1.67 },
     itemMarkup: {
-      dirty_shirley: 1,
+      catnip_tuna_water: 1,
       jugg_juice: 1.36,
       /**
        * Not on the pour list, so the bar values a health potion at what it is
@@ -239,10 +239,10 @@ export const SHOPS = {
     // The house special leads the board, because that is what a house special is.
     catalog: [
       {
-        item: 'dirty_shirley',
+        item: 'catnip_tuna_water',
         normalStock: 'unlimited',
-        desc: 'The house special. Ask for it dirty',
-        label: 'The Dirty Shirley',
+        desc: 'The house special, for the cat. Served in the tin',
+        label: 'Catnip Infused Tuna Water',
         bundle: null,
         gate: null,
       },
@@ -445,7 +445,7 @@ export const SHOPS = {
   },
 
   /**
-   * Brann's yard sells the dynamite he clears stumps with, at the General
+   * Steve's yard sells the dynamite he clears stumps with, at the General
    * Store's price rather than under it: the walk out here is worth it for the
    * three-stick bundle, not for a cheaper single stick, which would retire the
    * store's line.

@@ -782,8 +782,8 @@ export class GoblinBombSystem implements GameSystem, GroundHazardSource {
  * Every mob still standing inside the radius is then thrown straight out from
  * the centre, hardest at the centre and not at all at the edge, unless it
  * resists a blast's shove (`Mob.resistsBlastKnockback`). The crawlers are
- * never shoved. A party-side mob that hostiles never target (Signet) still
- * takes the full blast like any other ally. The defend quest's NPC is not a
+ * never shoved. A party-side mob that hostiles never target still takes the
+ * full blast like any other ally. The defend quest's NPC is not a
  * mob and is not handed in, so the blast passes her by.
  */
 export function applyGoblinBlastToBodies(

@@ -1,6 +1,6 @@
 /**
- * Floor dressing for each Desperado Club area — the rug that marks a zone out as
- * its own room, its name across the top, and the scuffs and spill marks that
+ * Floor dressing for each Cloak & Dagger area — the rug that marks a zone out as
+ * its own room, its name along its front edge, and the scuffs and spill marks that
  * keep a large flat floor from reading as empty.
  *
  * Everything here is painted flat on the ground *before* the Y-sorted entity
@@ -23,7 +23,12 @@ const RUG_BORDER_ALPHA = 0.5;
 const RUG_BORDER_WIDTH = 2;
 const RUG_RADIUS = 8;
 const LABEL_SIZE = 12;
-const LABEL_TOP_OFFSET = 6;
+/**
+ * The name sits along the rug's front edge, the side the player walks up
+ * from: the back of every room is where its keeper stands, and a keeper's
+ * coin would sit over a name painted there.
+ */
+const LABEL_BOTTOM_OFFSET = 18;
 
 /** Scuffs are flattened into ovals so they read as marks seen at the game's angle, not as circles. */
 const SCUFF_FLATTEN = 0.55;
@@ -61,7 +66,7 @@ export function drawClubDecor(ctx: CanvasRenderingContext2D, camX: number, camY:
     if (zone.label === null) continue;
     worldText(ctx, zone.label, {
       x: s.x + s.w / 2,
-      y: s.y + LABEL_TOP_OFFSET,
+      y: s.y + s.h - LABEL_BOTTOM_OFFSET,
       size: LABEL_SIZE,
       bold: true,
       color: zone.color,
@@ -92,7 +97,7 @@ function drawZoneRug(ctx: CanvasRenderingContext2D, s: Rect, color: string): voi
 
 /**
  * Spills, ash and worn patches keyed to what the room is for — the tell that a
- * floor has been used, and the cheapest way to give five identical rugs their
+ * floor has been used, and the cheapest way to give three identical rugs their
  * own character.
  */
 function drawFloorWear(
@@ -133,9 +138,6 @@ const FLOOR_STAIN_COLOR: Record<ClubStationId, string> = {
   bar: 'rgba(60,34,12,0.22)',
   market: 'rgba(40,30,50,0.2)',
   casino: 'rgba(12,44,26,0.22)',
-  mercenary: 'rgba(52,18,14,0.22)',
-  vip: 'rgba(46,14,26,0.24)',
-  clarabelle: 'rgba(0,0,0,0.15)',
 };
 
 /** Expand a `#rrggbb` string to an `rgba()` with the given alpha. */

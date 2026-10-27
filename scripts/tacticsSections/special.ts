@@ -1,8 +1,8 @@
 /**
  * `verify:tactics` sections for the creatures whose tactics are a special case
- * of the melee brawler: the rat (a tiny swarmer that only flanks), the circus
+ * of the melee brawler: the rat (a tiny swarmer that only flanks), the
  * lemur (a knife-thrower that outruns the player), the krasue (a flier that
- * steers by its own drift rather than by pathfinding) and the sky fowl (calm
+ * steers by its own drift rather than by pathfinding) and the Hawkfolk (calm
  * until provoked) — plus the creatures deliberately left with none.
  *
  * Each behaviour check drives the real creature through the real mob loop on
@@ -50,15 +50,14 @@ import {
 } from '../../src/creatures/tactics/blockGuard';
 import { Rat } from '../../src/creatures/Rat';
 import { ShrineVermin } from '../../src/creatures/ShrineVermin';
-import { CIRCUS_LEMUR_THROW_STANDOFF_TILES, CircusLemur } from '../../src/creatures/CircusLemur';
+import { LEMUR_THROW_STANDOFF_TILES, Lemur } from '../../src/creatures/Lemur';
 import { Krasue } from '../../src/creatures/Krasue';
-import { SkyFowl } from '../../src/creatures/SkyFowl';
+import { Hawkfolk } from '../../src/creatures/Hawkfolk';
 import { Bugaboo } from '../../src/creatures/Bugaboo';
 import { SmallSpider } from '../../src/creatures/SmallSpider';
 import { Cockroach } from '../../src/creatures/Cockroach';
 import { Tuskling } from '../../src/creatures/Tuskling';
 import { KrakarenTentacle } from '../../src/creatures/KrakarenTentacle';
-import { InkMarauder } from '../../src/creatures/InkMarauder';
 
 /** The pass/fail reporting `verify-tactics.ts` owns, so its failure count covers these too. */
 export interface TacticsHarness {
@@ -105,9 +104,9 @@ const ELIGIBILITY_CASES: readonly EligibilityCase[] = [
     expected: ['flank'],
   },
   {
-    name: 'circus_lemur',
-    build: spawned('circus_lemur'),
-    isExpectedClass: (mob) => mob instanceof CircusLemur,
+    name: 'lemur',
+    build: spawned('lemur'),
+    isExpectedClass: (mob) => mob instanceof Lemur,
     expected: ['flank', 'kite', 'regroup'],
   },
   {
@@ -117,9 +116,9 @@ const ELIGIBILITY_CASES: readonly EligibilityCase[] = [
     expected: ['flank', 'block', 'regroup', 'riposte'],
   },
   {
-    name: 'sky_fowl',
-    build: spawned('sky_fowl'),
-    isExpectedClass: (mob) => mob instanceof SkyFowl,
+    name: 'hawkfolk',
+    build: spawned('hawkfolk'),
+    isExpectedClass: (mob) => mob instanceof Hawkfolk,
     expected: ['flank', 'regroup'],
   },
   {
@@ -159,12 +158,6 @@ const ELIGIBILITY_CASES: readonly EligibilityCase[] = [
     expected: [],
   },
   {
-    name: 'ink marauder',
-    build: () => new InkMarauder(PROBE_TILE, PROBE_TILE, TILE_SIZE),
-    isExpectedClass: (mob) => mob instanceof InkMarauder,
-    expected: [],
-  },
-  {
     name: "Miss Quill's summoned krasue",
     build: () => summonedKrasue(),
     isExpectedClass: (mob) => mob instanceof Krasue && mob.isSummon,
@@ -173,7 +166,7 @@ const ELIGIBILITY_CASES: readonly EligibilityCase[] = [
 ];
 
 /** The spawner keys the shared "nothing below the minimum level" sweep must cover. */
-const SWEPT_TYPES: readonly MobKind[] = ['rat', 'circus_lemur', 'krasue', 'sky_fowl', 'bugaboo'];
+const SWEPT_TYPES: readonly MobKind[] = ['rat', 'lemur', 'krasue', 'hawkfolk', 'bugaboo'];
 
 /** Every trait `mob` could ever roll: the top level, the hard profile, every roll a yes. */
 function eligibilityOf(mob: Mob): readonly TacticsTrait[] {
@@ -291,7 +284,7 @@ const PROBE_BLOW_DAMAGE = 1;
 
 /**
  * Wound `mob` by `share` of its health with a blast — which no guard meets and
- * which provokes a calm fowl — from `crawler`, so it has shed the party's blood
+ * which provokes a calm Hawkfolk — from `crawler`, so it has shed the party's blood
  * and counts as in the fight.
  */
 function bloody(mob: Mob, crawler: HumanPlayer, share: number): void {
@@ -350,11 +343,11 @@ const RANGED_FLANK_GAP_TILES = 6;
 const FLANK_CASES: readonly FlankCase[] = [
   { type: 'rat', startGapTiles: RAT_FLANK_GAP_TILES, bearingAt: 'arrival', mirroredOnly: false },
   {
-    type: 'circus_lemur',
+    type: 'lemur',
     startGapTiles: RANGED_FLANK_GAP_TILES,
     bearingAt: 'settled',
     mirroredOnly: true,
-    minSettledTiles: CIRCUS_LEMUR_THROW_STANDOFF_TILES,
+    minSettledTiles: LEMUR_THROW_STANDOFF_TILES,
   },
   {
     type: 'krasue',
@@ -363,7 +356,7 @@ const FLANK_CASES: readonly FlankCase[] = [
     mirroredOnly: true,
   },
   {
-    type: 'sky_fowl',
+    type: 'hawkfolk',
     startGapTiles: RANGED_FLANK_GAP_TILES,
     bearingAt: 'arrival',
     mirroredOnly: false,
@@ -424,9 +417,9 @@ function flankRun(
     ),
   );
   for (const mob of pack) {
-    // A fowl is calm until struck; everything else is simply told where the
+    // A Hawkfolk is calm until struck; everything else is simply told where the
     // fight is, as a packmate's shout would.
-    if (mob instanceof SkyFowl) mob.takeDamageFrom(PROBE_BLOW_DAMAGE, arena.human, 'explosion');
+    if (mob instanceof Hawkfolk) mob.takeDamageFrom(PROBE_BLOW_DAMAGE, arena.human, 'explosion');
     else mob.noticeTarget(arena.human);
   }
   const bearings = pack.map(() => Number.NaN);
@@ -549,9 +542,9 @@ interface RetreatCase {
 }
 
 const REGROUP_CASES: readonly RetreatCase[] = [
-  { type: 'circus_lemur', mirroredOnly: true, outrunsRetreatCap: true },
+  { type: 'lemur', mirroredOnly: true, outrunsRetreatCap: true },
   { type: 'krasue', mirroredOnly: true, outrunsRetreatCap: true },
-  { type: 'sky_fowl', mirroredOnly: false, outrunsRetreatCap: true },
+  { type: 'hawkfolk', mirroredOnly: false, outrunsRetreatCap: true },
 ];
 
 const RETREAT_HUMAN_TILE = { x: 6, y: 12 };
@@ -826,8 +819,8 @@ const KITE_RUN_FRAMES = 900;
 const CHASE_GAP_SLACK_TILES = 0.25;
 
 function checkLemurKite(map: GameMap, harness: TacticsHarness): void {
-  const type = 'circus_lemur';
-  harness.section('Circus lemur kite: slips behind a friend, briefly, and stays catchable');
+  const type = 'lemur';
+  harness.section('Lemur kite: slips behind a friend, briefly, and stays catchable');
   const layout = retreatLayout(map, type, ['kite'], true, 0, harness);
   const trace = traceRetreat(layout.arena, layout.mob, {
     behaviour: 'kite',

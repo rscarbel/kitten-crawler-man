@@ -10,7 +10,7 @@
 
 import { TILE_SIZE } from '../../core/constants';
 import { ANCHOR_QUEST_NAME, type AnchorQuestProgress } from '../../core/quests/AnchorQuestProgress';
-import { CIRCUS_QUEST_NAME, type CircusQuestProgress } from '../../core/quests/CircusQuestProgress';
+import type { TownMemory } from '../../core/state/TownMemory';
 import type { VillageQuestState } from '../../core/quests/briarHollowState';
 import { BRIAR_HOLLOW_QUEST_NAME, isVillageUnderSiege } from '../../core/quests/villageQuestPhase';
 import type { GameMap } from '../../map/GameMap';
@@ -21,14 +21,14 @@ import type { QuestRewardSection, RewardUnlockCard } from '../../ui/questReward/
 export type TravelDestinationId = 'town' | 'circus' | 'briar_hollow';
 
 /**
- * What the unlock rules read: a narrow view of the three questlines' saved
- * progress. Each field is the live object `DungeonScene` threads through every
- * scene, so a quest finishing is seen by the very next read. The village is
- * held by its whole state rather than by its quest record because a
- * checkpoint restore replaces `quest` outright.
+ * What the unlock rules read: a narrow view of the run's saved progress. Each
+ * field is the live object `DungeonScene` threads through every scene, so a
+ * quest finishing or a place first reached is seen by the very next read. The
+ * village and the town's memory are held whole rather than by the record each
+ * rule reads, because a checkpoint restore replaces that record outright.
  */
 export interface TravelUnlockState {
-  readonly circus: Pick<CircusQuestProgress, 'stage'>;
+  readonly townMemory: Pick<TownMemory, 'visitedPlaces'>;
   readonly briarHollow: { readonly quest: Pick<VillageQuestState, 'phase'> };
   readonly anchor: Pick<AnchorQuestProgress, 'status'>;
 }
@@ -38,8 +38,8 @@ export interface TravelDestination {
   readonly label: string;
   /** One line about the place, shown under its name in the menu. */
   readonly description: string;
-  /** The questline that binds the stone here, or null for a place bound from the start. */
-  readonly unlockQuestTitle: string | null;
+  /** What the menu row says while the stone is not yet bound here. */
+  readonly lockedReason: string;
   /** The tile the stone aims for; the warp searches outward from it for open ground. */
   landingTile(map: GameMap): TilePoint | null;
   isUnlocked(state: TravelUnlockState): boolean;
@@ -62,20 +62,20 @@ export const YOU_ARE_HERE_REASON = 'You are here';
 /** A destination this map does not have, such as any of them off the overworld. */
 export const NOT_ON_THIS_MAP_REASON = 'The stone cannot find that place.';
 const VILLAGE_UNDER_SIEGE_REASON = 'The village is under siege';
-/** Never shown while every place with no questline is bound from the start; a guard for one that is not. */
+/** Never shown while the town is bound from the start; a guard for the day it is not. */
 const NOT_BOUND_REASON = 'The stone is not bound here';
 
 const TOWN: TravelDestination = {
   id: 'town',
-  label: 'Skyfowl Town',
+  label: 'Taloncrest',
   description: 'The town square, by the fountain. The stone’s first home.',
-  unlockQuestTitle: null,
+  lockedReason: NOT_BOUND_REASON,
   landingTile: (map) => map.townSquareCentre ?? null,
   isUnlocked: () => true,
   contains: (map, worldX, worldY) => map.isInTownSafeZone(worldX, worldY),
   closedReason: () => null,
   arrivalToast: 'The stone sets you down in the town square.',
-  channelLabel: 'Travelling to Skyfowl Town…',
+  channelLabel: 'Travelling to Taloncrest…',
 };
 
 /**
@@ -85,13 +85,16 @@ const TOWN: TravelDestination = {
  */
 const CIRCUS_ARCH_APRON_TILES = 3;
 
+/** Shown on the circus row until the party first sets foot on the grounds. */
+export const CIRCUS_LOCKED_REASON = 'Visit the circus grounds first';
+
 const CIRCUS: TravelDestination = {
   id: 'circus',
   label: 'Circus',
-  description: 'The entry arch of the old circus grounds, under the Big Top.',
-  unlockQuestTitle: CIRCUS_QUEST_NAME,
+  description: 'The entry arch of the old circus grounds, under the Starlight Tent.',
+  lockedReason: CIRCUS_LOCKED_REASON,
   landingTile: (map) => map.circusGrounds?.arch?.crossing ?? map.circusCentre ?? null,
-  isUnlocked: (state) => state.circus.stage === 'complete',
+  isUnlocked: (state) => state.townMemory.visitedPlaces.has('circus_grounds'),
   contains: (map, worldX, worldY) => map.isInCircusGrounds(worldX, worldY, CIRCUS_ARCH_APRON_TILES),
   closedReason: () => null,
   arrivalToast: 'The stone sets you down at the circus arch.',
@@ -102,7 +105,7 @@ const BRIAR_HOLLOW: TravelDestination = {
   id: 'briar_hollow',
   label: 'Briar Hollow',
   description: 'Just inside the ratkin village’s south gate.',
-  unlockQuestTitle: BRIAR_HOLLOW_QUEST_NAME,
+  lockedReason: `Complete "${BRIAR_HOLLOW_QUEST_NAME}"`,
   landingTile: (map) => map.briarHollow?.gate.inside ?? null,
   isUnlocked: (state) => state.briarHollow.quest.phase === 'complete',
   contains: (map, worldX, worldY) => map.isInBriarHollow(worldX, worldY),
@@ -126,12 +129,6 @@ export function travelDestination(id: TravelDestinationId): TravelDestination {
   }
 }
 
-/** The locked reason a row shows: the questline that would bind the stone there. */
-export function lockedReason(destination: TravelDestination): string {
-  const title = destination.unlockQuestTitle;
-  return title === null ? NOT_BOUND_REASON : `Complete "${title}"`;
-}
-
 const TILE_CENTRE_FRACTION = 0.5;
 
 /**
@@ -145,7 +142,7 @@ export function travelRefusal(
   map: GameMap,
   caster: { readonly x: number; readonly y: number },
 ): string | null {
-  if (!destination.isUnlocked(state)) return lockedReason(destination);
+  if (!destination.isUnlocked(state)) return destination.lockedReason;
   if (destination.landingTile(map) === null) return NOT_ON_THIS_MAP_REASON;
   const casterCentreX = caster.x + TILE_SIZE * TILE_CENTRE_FRACTION;
   const casterCentreY = caster.y + TILE_SIZE * TILE_CENTRE_FRACTION;
@@ -186,6 +183,19 @@ export function travelUnlocksSection(
     heading: UNLOCKS_HEADING,
     cards: destinationIds.map((id) => travelUnlockCard(id, state)),
   };
+}
+
+/**
+ * Binds the stone to the circus the first time a crawler stands on its
+ * grounds: the place, not a questline, is what earns the trip.
+ */
+export function recordCircusGroundsVisit(
+  memory: Pick<TownMemory, 'visitedPlaces'>,
+  map: GameMap,
+  crawler: { readonly x: number; readonly y: number },
+): void {
+  if (!map.isInCircusGrounds(crawler.x, crawler.y)) return;
+  memory.visitedPlaces.add('circus_grounds');
 }
 
 /** Every destination the stone is bound to right now, in menu order. */

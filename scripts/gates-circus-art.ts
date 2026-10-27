@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Gates for the circus grounds' structure art: the Big Top, the side-show
+ * Gates for the circus grounds' structure art: the Starlight Tent, the side-show
  * pavilions, the entry arch's posts and the rim's props — the flame lamps,
  * the wagons, the midway booths, the high striker and the crate stack.
  *
@@ -54,8 +54,8 @@ import { TILE_SIZE } from '../src/core/constants.js';
 import { GameMap } from '../src/map/GameMap.js';
 import { FLOOR_ART_SEEDS } from '../src/map/ground/artSeedAlphabet.js';
 import {
-  BIG_TOP_KING_POLES,
-  BIG_TOP_KING_POLE_DEPTH_TILES,
+  STARLIGHT_TENT_KING_POLES,
+  STARLIGHT_TENT_KING_POLE_DEPTH_TILES,
   ARCH_POST_MAX_OFFSET_TILES,
   ARCH_POST_OFFSET_TILES,
   CIRCUS_STRUCTURES,
@@ -137,11 +137,11 @@ function widened(paint: FramePainter): FramePainter {
 }
 
 /**
- * The Big Top as the wallpaper it must never be again: one flat-coloured
+ * The Starlight Tent as the wallpaper it must never be again: one flat-coloured
  * block standing on its footprint, with no convergence and no texture.
  */
 function flatCanvas(plan: PropSheetPlan): FramePainter {
-  const spec = CIRCUS_STRUCTURES.big_top;
+  const spec = CIRCUS_STRUCTURES.starlight_tent;
   return (ctx, originX, originY) => {
     const left = originX - spec.drawTile.dx * plan.tileScale;
     const ground = originY + plan.tileScale;
@@ -152,7 +152,7 @@ function flatCanvas(plan: PropSheetPlan): FramePainter {
 }
 
 function painterFor(plan: PropSheetPlan, state: string, frame: FramePainter): FramePainter {
-  if (state !== 'big_top') return frame;
+  if (state !== 'starlight_tent') return frame;
   if (fault === 'wide-prop') return widened(frame);
   if (fault === 'flat-canvas') return flatCanvas(plan);
   return frame;
@@ -320,21 +320,28 @@ function solidSpan(frame: PaintedFrame, y: number): number {
   return max >= min ? max - min + 1 : 0;
 }
 
-const bigTop = painted.find((frame) => frame.state === 'big_top');
-if (bigTop === undefined) {
-  check('convergence', false, 'big_top', 'was not painted, so its roof could not be measured');
+const starlightTent = painted.find((frame) => frame.state === 'starlight_tent');
+if (starlightTent === undefined) {
+  check(
+    'convergence',
+    false,
+    'starlight_tent',
+    'was not painted, so its roof could not be measured',
+  );
 } else {
-  const ts = bigTop.plan.tileScale;
-  const peakHeight = Math.max(...BIG_TOP_KING_POLES.map((pole) => pole.heightTiles));
+  const ts = starlightTent.plan.tileScale;
+  const peakHeight = Math.max(...STARLIGHT_TENT_KING_POLES.map((pole) => pole.heightTiles));
   const peakY =
-    bigTop.ground - (BIG_TOP_KING_POLE_DEPTH_TILES + peakHeight - PEAK_PROBE_TILES) * ts;
+    starlightTent.ground -
+    (STARLIGHT_TENT_KING_POLE_DEPTH_TILES + peakHeight - PEAK_PROBE_TILES) * ts;
   let eaveSpan = 0;
-  for (let y = 0; y < bigTop.height; y++) eaveSpan = Math.max(eaveSpan, solidSpan(bigTop, y));
-  const peakSpan = solidSpan(bigTop, peakY);
+  for (let y = 0; y < starlightTent.height; y++)
+    eaveSpan = Math.max(eaveSpan, solidSpan(starlightTent, y));
+  const peakSpan = solidSpan(starlightTent, peakY);
   check(
     'convergence',
     eaveSpan > 0 && peakSpan > 0 && peakSpan < eaveSpan * MAX_PEAK_TO_EAVE_SPAN,
-    'big_top',
+    'starlight_tent',
     `the canvas is ${peakSpan} px across just under its peaks and ${eaveSpan} px at its widest — ` +
       `a roof climbing to its poles is there and under ${MAX_PEAK_TO_EAVE_SPAN * PERCENT}% as wide; ` +
       'nothing there, or wider, is a striped wall',
@@ -393,7 +400,7 @@ check(
 );
 /**
  * A tent must carry most of the lot's own texture — stripes, seams and
- * weather. Broad stripes put few edges inside an 8 px window, so a big top
+ * weather. Broad stripes put few edges inside an 8 px window, so a striped tent
  * honestly measures about the lot's own value; a flat block of canvas
  * measures near nothing.
  */
@@ -409,8 +416,8 @@ const TEXTURE_CEILING_FRACTION_OF_LOT = 3;
  * and paint, not striped canvas, and the band below is written for canvas.
  */
 const TENT_IDS: ReadonlySet<CircusStructureId> = new Set<CircusStructureId>([
-  'big_top',
-  'pavilion_mold_lion',
+  'starlight_tent',
+  'pavilion_tightrope',
   'pavilion_feats_of_flesh',
   'pavilion_fortunes',
 ]);

@@ -17,14 +17,14 @@ type Check = (ok: boolean, message: string) => void;
 
 /** More unlocks than the toast stack has rows, so some wait for one. */
 const BURST = [
-  'desperado_club_1',
-  'desperado_club_2',
-  'desperado_club_3',
-  'desperado_club_4',
+  'cloak_and_dagger_1',
+  'cloak_and_dagger_2',
+  'cloak_and_dagger_3',
+  'cloak_and_dagger_4',
   'casino_background_jazz_1',
   'casino_background_jazz_2',
 ] as const satisfies readonly MusicTrackId[];
-const HEARD: MusicTrackId = 'desperado_club_1';
+const HEARD: MusicTrackId = 'cloak_and_dagger_1';
 /** Long enough that the toasts on screen have been read, short of any expiring. */
 const TICKS_BEFORE_THE_DOOR = 90;
 

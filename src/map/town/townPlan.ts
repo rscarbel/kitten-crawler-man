@@ -56,6 +56,9 @@ export interface TownOffset {
  */
 export type BuildingKind = 'house' | 'tower' | 'store' | 'club' | 'prison';
 
+/** The nightclub: its casino, and the beat that leaks out of its front door into the street. */
+export const CLOAK_AND_DAGGER_NAME = 'The Cloak & Dagger' as const;
+
 /**
  * Every sprite building's name, exactly as `buildingEntries` and the interior
  * registries key it. A union rather than free strings so a system that names
@@ -71,20 +74,17 @@ export const PLANNED_BUILDING_NAMES = [
   'General Store',
   'The Sleeping Cat Inn',
   'The Horned Flagon',
-  "Old Hilda's Cottage",
+  "Old Lori's Cottage",
   'The Rusty Anvil',
   'The Sunken Stump Pub',
   'The Quiet Needle',
-  'The Desperado Club',
+  CLOAK_AND_DAGGER_NAME,
   "Miller's Farm",
 ] as const;
 
 export type PlannedBuildingName = (typeof PLANNED_BUILDING_NAMES)[number];
 
 export const TOWN_TOWER_NAME = 'Town Center Tower';
-
-/** The members' club: its casino, and the beat that leaks out of its front door into the street. */
-export const DESPERADO_CLUB_NAME = 'The Desperado Club' satisfies PlannedBuildingName;
 
 /** The town's drinking houses, which share the rotating tavern soundtrack. */
 export const TAVERN_BUILDING_NAMES: ReadonlySet<string> = new Set([
@@ -906,8 +906,8 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
     west: INNER_WEST_PLOT,
     frontRow: MARKET_ROW_BOTTOM,
     plotTop: MARKET_ROW_TOP,
-    spriteKey: 'hildas_cottage',
-    name: "Old Hilda's Cottage",
+    spriteKey: 'loris_cottage',
+    name: "Old Lori's Cottage",
     kind: 'house',
     sign: 'cauldron',
   },
@@ -944,8 +944,8 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
     west: SERVICE_ALLEY_EAST + 1,
     frontRow: LOW_QUARTER_BOTTOM,
     plotTop: LOW_QUARTER_TOP,
-    spriteKey: 'desperado_club',
-    name: 'The Desperado Club',
+    spriteKey: 'cloak_and_dagger',
+    name: CLOAK_AND_DAGGER_NAME,
     kind: 'club',
     sign: 'cards',
   },
@@ -968,7 +968,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
  * `BuildingEntry` the rest of the game holds records only the door.
  *
  * Undefined for the two entrances that are not sprite buildings — the tower,
- * whose art is mostly transparent overhang, and the Big Top, a circus structure with its own sheet — so a
+ * whose art is mostly transparent overhang, and the Starlight Tent, a circus structure with its own sheet — so a
  * caller sizing itself against a facade is told to fall back rather than handed
  * a rectangle that means something else.
  */
@@ -1180,7 +1180,7 @@ const PLANNED_YARDS: ReadonlyArray<PlannedYard> = [
     gates: [],
   },
   {
-    name: "Old Hilda's side strip",
+    name: "Old Lori's side strip",
     bounds: span(PLAZA_WEST - 1, MARKET_ROW_TOP, PLAZA_WEST - 1, MARKET_ROW_BOTTOM),
     kind: 'garden',
     fence: 'wattle',

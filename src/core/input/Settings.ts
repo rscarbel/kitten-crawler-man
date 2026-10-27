@@ -14,9 +14,6 @@ import type { Difficulty } from '../difficulty/difficultyProfiles';
 
 const STORAGE_KEY = 'kittenCrawler.settings.v1';
 
-/** Bumped when the stored shape changes incompatibly; older payloads are discarded. */
-const SETTINGS_VERSION = 1;
-
 const MIN_VOLUME = 0;
 const MAX_VOLUME = 1;
 
@@ -90,10 +87,7 @@ interface SettingsData {
   masterVolume: number;
   sfxVolume: number;
   musicVolume: number;
-  /**
-   * The continuous world sounds' own level. Saves from before it existed
-   * have none and start it at their Effects level, which governed it then.
-   */
+  /** The continuous world sounds' own level. */
   ambienceVolume: number;
   bindings: StoredBindings;
   /**
@@ -104,7 +98,7 @@ interface SettingsData {
    */
   catAutoSummonsMongo: boolean;
   uiSize: UiSize;
-  /** Optional so payloads from before the music page load without a version bump. */
+  /** Absent while area music plays: no preference is the default. */
   musicPlayback?: MusicPlaybackPreference;
   /** Silences everything without moving a volume slider, so unmuting restores the same mix. */
   muted: boolean;
@@ -159,22 +153,11 @@ function isDifficulty(value: unknown): value is Difficulty {
   );
 }
 
-function readVolume(source: Record<string, unknown>, key: string, fallback: number): number {
-  const raw = source[key];
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) return fallback;
-  return Math.min(MAX_VOLUME, Math.max(MIN_VOLUME, raw));
+function isVolume(value: unknown): value is number {
+  return typeof value === 'number' && value >= MIN_VOLUME && value <= MAX_VOLUME;
 }
 
-function readBoolean(source: Record<string, unknown>, key: string, fallback: boolean): boolean {
-  const raw = source[key];
-  return typeof raw === 'boolean' ? raw : fallback;
-}
-
-function readMusicPlayback(
-  source: Record<string, unknown>,
-  key: string,
-): MusicPlaybackPreference | undefined {
-  const raw = source[key];
+function parseMusicPlayback(raw: unknown): MusicPlaybackPreference | undefined {
   if (typeof raw !== 'object' || raw === null) return undefined;
   const record: Record<string, unknown> = { ...raw };
   if (record.mode === 'shuffle') return { mode: 'shuffle' };
@@ -185,71 +168,122 @@ function readMusicPlayback(
 
 /**
  * Assigning this key on an object literal re-points its prototype instead of
- * adding a property, so a hand-edited payload carrying it is dropped outright.
+ * adding a property, so a payload carrying it fails validation outright.
  */
 const PROTOTYPE_POLLUTION_KEY = '__proto__';
 
-function readBindings(source: Record<string, unknown>, key: string): StoredBindings {
-  const raw = source[key];
-  if (typeof raw !== 'object' || raw === null) return {};
+function parseBindings(raw: unknown): StoredBindings | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
   const result: StoredBindings = {};
   for (const [action, keys] of Object.entries(raw)) {
-    if (action === PROTOTYPE_POLLUTION_KEY) continue;
-    if (!Array.isArray(keys)) continue;
-    result[action] = keys.filter((entry): entry is string => typeof entry === 'string');
+    if (action === PROTOTYPE_POLLUTION_KEY || !Array.isArray(keys)) return undefined;
+    const keyNames: string[] = [];
+    for (const entry of keys) {
+      if (typeof entry !== 'string') return undefined;
+      keyNames.push(entry);
+    }
+    result[action] = keyNames;
   }
   return result;
 }
 
+/** Stored settings, or undefined when any field is missing or not something this build writes. */
+function parseSettings(stored: Record<string, unknown>): SettingsData | undefined {
+  const {
+    quality,
+    difficulty,
+    masterVolume,
+    sfxVolume,
+    musicVolume,
+    ambienceVolume,
+    catAutoSummonsMongo,
+    uiSize,
+    muted,
+    monoAudio,
+    audioInBackground,
+    soundCaptions,
+    questRouteTrail,
+    aiIntensity,
+    aiInterventionIndicators,
+  } = stored;
+  const bindings = parseBindings(stored.bindings);
+  const musicPlayback =
+    stored.musicPlayback === undefined ? undefined : parseMusicPlayback(stored.musicPlayback);
+  if (
+    !isQualityPreset(quality) ||
+    !isDifficulty(difficulty) ||
+    !isVolume(masterVolume) ||
+    !isVolume(sfxVolume) ||
+    !isVolume(musicVolume) ||
+    !isVolume(ambienceVolume) ||
+    bindings === undefined ||
+    typeof catAutoSummonsMongo !== 'boolean' ||
+    !isUiSize(uiSize) ||
+    (stored.musicPlayback !== undefined && musicPlayback === undefined) ||
+    typeof muted !== 'boolean' ||
+    typeof monoAudio !== 'boolean' ||
+    typeof audioInBackground !== 'boolean' ||
+    typeof soundCaptions !== 'boolean' ||
+    typeof questRouteTrail !== 'boolean' ||
+    !isAIIntensity(aiIntensity) ||
+    typeof aiInterventionIndicators !== 'boolean'
+  ) {
+    return undefined;
+  }
+  const settings: SettingsData = {
+    quality,
+    difficulty,
+    masterVolume,
+    sfxVolume,
+    musicVolume,
+    ambienceVolume,
+    bindings,
+    catAutoSummonsMongo,
+    uiSize,
+    muted,
+    monoAudio,
+    audioInBackground,
+    soundCaptions,
+    questRouteTrail,
+    aiIntensity,
+    aiInterventionIndicators,
+  };
+  if (musicPlayback !== undefined) settings.musicPlayback = musicPlayback;
+  return settings;
+}
+
 /**
- * `localStorage` access throws outright in some privacy modes, so every read
- * and write is guarded and a failure simply means settings do not persist.
+ * The stored payload, or null when nothing is stored. `localStorage` access
+ * throws outright in some privacy modes, so every read and write is guarded and
+ * a failure simply means settings do not persist; a payload that is not JSON
+ * comes back as an empty record, which fails validation.
  */
 function readStoredJson(): Record<string, unknown> | null {
+  let raw: string | null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw === null) return null;
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== 'object' || parsed === null) return null;
-    const record: Record<string, unknown> = { ...parsed };
-    if (record.version !== SETTINGS_VERSION) return null;
-    return record;
+    raw = localStorage.getItem(STORAGE_KEY);
   } catch {
     return null;
   }
+  if (raw === null) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return typeof parsed === 'object' && parsed !== null ? { ...parsed } : {};
+  } catch {
+    return {};
+  }
 }
 
+/** The stored settings, or the defaults when there are none or they fail validation. */
 function load(): SettingsData {
   const stored = readStoredJson();
   if (stored === null) return { ...DEFAULTS };
-  const quality = stored.quality;
-  const difficulty = stored.difficulty;
-  const uiSize = stored.uiSize;
-  const aiIntensity = stored.aiIntensity;
-  const sfxVolume = readVolume(stored, 'sfxVolume', DEFAULTS.sfxVolume);
-  return {
-    quality: isQualityPreset(quality) ? quality : DEFAULTS.quality,
-    difficulty: isDifficulty(difficulty) ? difficulty : DEFAULTS.difficulty,
-    masterVolume: readVolume(stored, 'masterVolume', DEFAULTS.masterVolume),
-    sfxVolume,
-    musicVolume: readVolume(stored, 'musicVolume', DEFAULTS.musicVolume),
-    ambienceVolume: readVolume(stored, 'ambienceVolume', sfxVolume),
-    bindings: readBindings(stored, 'bindings'),
-    catAutoSummonsMongo: readBoolean(stored, 'catAutoSummonsMongo', DEFAULTS.catAutoSummonsMongo),
-    uiSize: isUiSize(uiSize) ? uiSize : DEFAULTS.uiSize,
-    musicPlayback: readMusicPlayback(stored, 'musicPlayback'),
-    muted: readBoolean(stored, 'muted', DEFAULTS.muted),
-    monoAudio: readBoolean(stored, 'monoAudio', DEFAULTS.monoAudio),
-    audioInBackground: readBoolean(stored, 'audioInBackground', DEFAULTS.audioInBackground),
-    soundCaptions: readBoolean(stored, 'soundCaptions', DEFAULTS.soundCaptions),
-    questRouteTrail: readBoolean(stored, 'questRouteTrail', DEFAULTS.questRouteTrail),
-    aiIntensity: isAIIntensity(aiIntensity) ? aiIntensity : DEFAULTS.aiIntensity,
-    aiInterventionIndicators: readBoolean(
-      stored,
-      'aiInterventionIndicators',
-      DEFAULTS.aiInterventionIndicators,
-    ),
-  };
+  const parsed = parseSettings(stored);
+  if (parsed === undefined) {
+    console.warn('Stored settings failed validation; starting from the defaults.');
+    return { ...DEFAULTS };
+  }
+  return parsed;
 }
 
 class Settings {
@@ -429,10 +463,7 @@ class Settings {
 
   private persist(): void {
     try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ version: SETTINGS_VERSION, ...this.data }),
-      );
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
     } catch {
       // Storage unavailable (private browsing, quota); settings stay in-memory.
     }

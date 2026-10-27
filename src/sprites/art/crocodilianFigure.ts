@@ -1,29 +1,29 @@
 /**
  * The Crocodilians as painted figures: the choreography, the cell geometry and
  * the `FigureDef`s the runtime cache and the review harness draw through —
- * Bucket Boy, Clarabelle, and the Triage sparkle that lands on whoever Bucket
- * Boy heals.
+ * the janitor and Sydney.
  *
  * This module is choreography and nothing else: one pose function per row and
  * the row tables. Anatomy, palette and every stroke of paint live in
- * `crocodilianArt.ts`; the sparkle's paint lives in `triageSparkleArt.ts`.
+ * `crocodilianArt.ts`.
  *
- * Bucket Boy's rows, each in three views (`<row>`, `<row>_side`, `<row>_away`):
- *    idle, walk, flee, slap, cast_triage, cower, hurt, death
- * Clarabelle's rows, likewise:
+ * The janitor's rows, each in three views (`<row>`, `<row>_side`, `<row>_away`):
+ *    idle, walk_mop, mop, wring
+ * Sydney's rows, likewise:
  *    idle, walk, talk
- * The sparkle's single row:
- *    sparkle
  *
  * The art invariants live in `scripts/gates-crocodilian.ts`, which the review
  * harness runs: `npm run render:crocodilian`.
  */
 
-import { clamp01, deg, easeInOut, easeOut, hump, lerp, type Pt } from './bipedArt';
+import { clamp01, deg, easeInOut, hump, lerp, type Pt } from './bipedArt';
 import {
-  BUCKET_BOY_BUILD,
   BUCKET_REST_HEIGHT,
-  CLARABELLE_BUILD,
+  JANITOR_BUILD,
+  MOP_GRIP_TOP_MARGIN,
+  MOP_HANDLE_LENGTH,
+  SYDNEY_BUILD,
+  type MopPose,
   type ArmAngles,
   type CrocArmPose,
   type CrocBuild,
@@ -33,28 +33,24 @@ import {
   drawCrocodilian,
   ankleUnderHip,
   facingRestFeet,
+  groundPointFor,
+  mopSocketFor,
   restingPose,
   shoulderJoints,
   skeletonLandmarks,
+  wristForGrip,
 } from './crocodilianArt';
-import { drawTriageSparkle } from './triageSparkleArt';
 import { type FigureDef, figureStates } from '../figure/figureDef';
 import {
-  BUCKET_BOY_COWER_FRAMES,
-  BUCKET_BOY_DEATH_FRAMES,
-  BUCKET_BOY_FLEE_FRAMES,
-  BUCKET_BOY_HURT_FRAMES,
-  BUCKET_BOY_IDLE_FRAMES,
-  BUCKET_BOY_SLAP_FRAMES,
-  BUCKET_BOY_SLAP_IMPACT_FRAME,
-  BUCKET_BOY_TRIAGE_FRAMES,
-  BUCKET_BOY_TRIAGE_RELEASE_FRAME,
-  BUCKET_BOY_WALK_FRAMES,
-  CLARABELLE_IDLE_FRAMES,
-  CLARABELLE_TALK_FRAMES,
-  CLARABELLE_TALK_PALM_FRAME,
-  CLARABELLE_WALK_FRAMES,
-  TRIAGE_SPARKLE_FRAMES,
+  JANITOR_IDLE_FRAMES,
+  JANITOR_MOP_FRAMES,
+  JANITOR_WALK_MOP_FRAMES,
+  JANITOR_WRING_DUNK_FRAME,
+  JANITOR_WRING_FRAMES,
+  SYDNEY_IDLE_FRAMES,
+  SYDNEY_TALK_FRAMES,
+  SYDNEY_TALK_PALM_FRAME,
+  SYDNEY_WALK_FRAMES,
 } from '../crocodilianTiming';
 
 // ── Cell geometry ────────────────────────────────────────────────────────────
@@ -74,28 +70,21 @@ export interface CrocCell {
 }
 
 /**
- * Bucket Boy's cell is wide rather than tall: he is short, but his corpse lies
- * full length across the floor and his tail drags half a tile behind him.
+ * The janitor's cell is wide rather than tall: he is short, but his tail drags
+ * half a tile behind him and his mop's strands reach well out in front.
  */
-export const BUCKET_BOY_CELL: CrocCell = {
+export const JANITOR_CELL: CrocCell = {
   frameWidth: 192,
   frameHeight: 112,
   tileX: 64,
   tileY: 36,
 };
 
-export const CLARABELLE_CELL: CrocCell = {
+export const SYDNEY_CELL: CrocCell = {
   frameWidth: 192,
   frameHeight: 184,
   tileX: 64,
   tileY: 104,
-};
-
-export const TRIAGE_SPARKLE_CELL: CrocCell = {
-  frameWidth: 96,
-  frameHeight: 128,
-  tileX: 16,
-  tileY: 56,
 };
 
 /** The cell pixel a pose's ground point — between the feet — is painted at. */
@@ -148,11 +137,6 @@ function cyclePhase(frame: number, frames: number): number {
   return frame / frames;
 }
 
-/** One-shots run first frame to last, both ends drawn. */
-function shotT(frame: number, frames: number): number {
-  return frames <= 1 ? 1 : frame / (frames - 1);
-}
-
 function wave(phase: number): number {
   return Math.sin(phase * Math.PI * 2);
 }
@@ -173,13 +157,8 @@ const ELBOW_BACK = 1;
 const HALFWAY = 0.5;
 /** A hand hanging from a relaxed arm reaches just short of its full span, so the elbow keeps a soft bend. */
 const HANG_REACH_SHARE = 0.95;
-const SWING_REACH_SHARE = 0.92;
-/** How tightly a hand is closed, 0 open to 1 fist, in the poses that hold one. */
-const LIMP_HAND_CURL = 0.3;
+/** How tightly a folded arm's hand is closed, 0 open to 1 fist. */
 const FOLDED_HAND_CURL = 0.85;
-const FLINCH_HAND_CURL = 0.6;
-const RESTING_HAND_CURL = 0.35;
-const CAST_HAND_CURL = 0.1;
 
 function isProfile(view: CrocView): boolean {
   return view === 'side';
@@ -212,16 +191,6 @@ function facingElbow(side: number): number {
   return -side;
 }
 
-/**
- * The same outward elbow for a hand raised above its shoulder. The solver's
- * bend is relative to the shoulder→hand direction, so an arm reaching up needs
- * the opposite sign to keep the elbow out; the hanging sign folds it in across
- * the chest.
- */
-function facingElbowFor(side: number, shoulderY: number, handY: number): number {
-  return handY < shoulderY ? side : -side;
-}
-
 // ── The gait ─────────────────────────────────────────────────────────────────
 
 /** How one build walks. Lengths are shares of the build's own leg, so both bodies share one gait. */
@@ -242,35 +211,7 @@ interface Gait {
   readonly crouchShare: number;
 }
 
-const BUCKET_BOY_WALK: Gait = {
-  strideShare: 0.3,
-  stanceFraction: 0.58,
-  liftShare: 0.2,
-  dropShare: 0.045,
-  toeOffLift: deg(26),
-  lean: deg(4),
-  armSwing: deg(24),
-  swayShare: 0.2,
-  crouchShare: 0,
-};
-
-/**
- * A hunched, quick scurry: shorter duty, higher knees, a deep stoop and a real
- * flight phase. It is a run in everything but dignity.
- */
-const BUCKET_BOY_FLEE: Gait = {
-  strideShare: 0.33,
-  stanceFraction: 0.4,
-  liftShare: 0.3,
-  dropShare: 0.07,
-  toeOffLift: deg(38),
-  lean: deg(22),
-  armSwing: deg(46),
-  swayShare: 0.3,
-  crouchShare: 0.05,
-};
-
-const CLARABELLE_WALK: Gait = {
+const SYDNEY_WALK: Gait = {
   strideShare: 0.27,
   stanceFraction: 0.6,
   liftShare: 0.12,
@@ -503,7 +444,120 @@ function walkPose(
   return pose;
 }
 
-// ── Bucket Boy: idle ─────────────────────────────────────────────────────────
+// ── The janitor: the mop in hand ─────────────────────────────────────────────
+
+/** Where on the floor the mop and the pail are, in the body's ground frame: across toward his left, and ahead. */
+interface GroundSpot {
+  readonly lateral: number;
+  readonly forward: number;
+}
+
+/**
+ * The mop standing at his right side while he waits, its strands on the floor
+ * by his right foot. Edge-on it stands further out ahead of him, so his body
+ * leaning over it to set the pail down or pick it up does not hide it.
+ */
+const MOP_AT_REST: Readonly<Record<CrocView, GroundSpot>> = {
+  front: { lateral: -0.2, forward: 0.3 },
+  side: { lateral: -0.2, forward: 0.42 },
+  away: { lateral: -0.2, forward: 0.3 },
+};
+
+/** A mop lying still on its strands: no drag, no splay, no twist, dry of drips. */
+function restingMop(spot: GroundSpot): MopPose {
+  return {
+    lateral: spot.lateral,
+    forward: spot.forward,
+    lift: 0,
+    twoHanded: false,
+    dragLateral: 0,
+    dragForward: 0,
+    splay: 0,
+    twist: 0,
+    drip: 0,
+    dripPhase: 0,
+    inPail: false,
+  };
+}
+
+/**
+ * A fist closed across the handle: the knuckles point square off it, out from
+ * the body on whichever side `outward` names, so the fingers wrap the wood.
+ */
+function gripAngle(socket: Pt, grip: Pt, outward: number): number {
+  const handle = Math.atan2(grip.y - socket.y, grip.x - socket.x);
+  const square = handle + HALF_TURN_SQUARE;
+  return Math.cos(square) * outward >= 0 ? square : square + Math.PI;
+}
+
+/** An arm whose fist closes on the mop handle at `grip`. */
+function gripArm(
+  build: CrocBuild,
+  socket: Pt,
+  grip: Pt,
+  bend: number,
+  outward: number,
+  behind = false,
+  turn = 0,
+): CrocArmPose {
+  const angle = gripAngle(socket, grip, outward) + turn;
+  return armAt(wristForGrip(build, grip, angle), bend, 1, angle, behind);
+}
+
+/**
+ * The point on the handle nearest a shoulder, where that arm can reach it:
+ * anywhere from a little above the clamp to just under the handle's top,
+ * below the far fist or above it.
+ */
+function nearestOnHandle(socket: Pt, grip: Pt, shoulder: Pt): Pt {
+  const length = Math.hypot(grip.x - socket.x, grip.y - socket.y);
+  if (length === 0) return grip;
+  const ux = (grip.x - socket.x) / length;
+  const uy = (grip.y - socket.y) / length;
+  const along = (shoulder.x - socket.x) * ux + (shoulder.y - socket.y) * uy;
+  const lowest = length * NEAR_GRIP_LOWEST_SHARE;
+  const highest = MOP_HANDLE_LENGTH - MOP_GRIP_TOP_MARGIN - NEAR_GRIP_BELOW_TOP;
+  const at = Math.min(highest, Math.max(lowest, along));
+  return pt(socket.x + ux * at, socket.y + uy * at);
+}
+
+/** Head-on the knuckles of the right hand point in across the body; edge-on they point ahead. */
+function outwardFor(view: CrocView): number {
+  return isProfile(view) ? 1 : NEAR_SIDE;
+}
+
+/**
+ * The far fist's grip relative to the far shoulder, per view. From behind, a
+ * fist held out ahead of him is further off, so it sits higher in the picture
+ * than the same grip head-on.
+ */
+type GripOffset = Readonly<Record<CrocView, Pt>>;
+
+function farGripFor(build: CrocBuild, pose: CrocPose, view: CrocView, offset: GripOffset): Pt {
+  const shoulder = shoulderJoints(build, pose, view).far;
+  return pt(shoulder.x + offset[view].x, shoulder.y + offset[view].y);
+}
+
+/** Puts the mop in the far hand, gripped at `grip`. */
+function holdMop(build: CrocBuild, pose: CrocPose, view: CrocView, mop: MopPose, grip: Pt): void {
+  pose.mop = mop;
+  // From behind, the tail would lie across the mop's side; it swings the other way.
+  if (view === 'away') pose.tailSwing += AWAY_TAIL_CLEAR_OF_MOP;
+  const socket = mopSocketFor(view, mop);
+  pose.farArm = gripArm(
+    build,
+    socket,
+    grip,
+    isProfile(view) ? ELBOW_BACK : facingElbow(FAR_SIDE),
+    outwardFor(view),
+    view === 'away',
+  );
+}
+
+const HALF_TURN_SQUARE = Math.PI / 2;
+const AWAY_TAIL_CLEAR_OF_MOP = deg(-65);
+
+// ── The janitor: idle ────────────────────────────────────────────────────────
 
 const IDLE_SWAY = 0.05;
 const IDLE_KNEE_PINCH = 0.82;
@@ -527,13 +581,22 @@ const IDLE_BLINK_WIDTH = 0.09;
 const IDLE_BUCKET_SWING = deg(5);
 const IDLE_TAIL_SWING = deg(5);
 const IDLE_BREATH_RISE = 0.006;
-/** The free hand fidgets — it opens and closes once a cycle. */
-const FIDGET_CURL = 0.4;
-/** The fidget runs a quarter-cycle behind the sway, so the hand is not in step with the hips. */
-const FIDGET_LAG = 0.25;
+const IDLE_ARM_DRIFT = 0.12;
+const IDLE_ARM_SWING = deg(10);
+const IDLE_FACING_ARM_DRIFT = 0.2;
+const IDLE_HEEL_PEEL_SIDE = deg(10);
+const IDLE_HEEL_PEEL_FACING = deg(12);
+/** The resting grip: a bent arm holding the upright handle at his waist. */
+const IDLE_GRIP: GripOffset = {
+  front: pt(-0.075, 0.26),
+  side: pt(0.08, 0.15),
+  away: pt(-0.075, 0.18),
+};
+/** The fist rocks with his weight while the strands stay put, so the handle tips a little. */
+const IDLE_GRIP_ROCK = 0.012;
 
-function bucketBoyIdle(view: CrocView, phase: number): CrocPose {
-  const build = BUCKET_BOY_BUILD;
+function janitorIdle(view: CrocView, phase: number): CrocPose {
+  const build = JANITOR_BUILD;
   const pose = restingPose(build);
   const shift = wave(phase);
   const glance = keyedSmooth(phase, GLANCE_KEYS);
@@ -550,350 +613,417 @@ function bucketBoyIdle(view: CrocView, phase: number): CrocPose {
   if (isProfile(view)) {
     pose.lean += shift * IDLE_ROCK;
     pose.headYaw = glance * PROFILE_GLANCE_YAW;
-    const drift = shift * 0.12;
-    pose.nearArm = armByAngles(sideArmAngles(drift, deg(10)), 1);
-    pose.farArm = armByAngles(sideArmAngles(-drift, deg(10)), fidgetCurl(phase));
+    const drift = shift * IDLE_ARM_DRIFT;
+    pose.nearArm = armByAngles(sideArmAngles(drift, IDLE_ARM_SWING), 1);
     // Weight rocks between the feet: the unweighted heel peels a little.
-    pose.near = { ...pose.near, heelLift: Math.max(0, -shift) * deg(10) };
-    pose.far = { ...pose.far, heelLift: Math.max(0, shift) * deg(10) };
-    return pose;
-  }
-  const feet = facingRestFeet(build);
-  // Knees pinched a little toward each other: the timid stance.
-  pose.near = {
-    ...feet.near,
-    heelLift: Math.max(0, -shift) * deg(12),
-    kneeBreak: FAR_SIDE,
-    foreshorten: IDLE_KNEE_PINCH,
-  };
-  pose.far = {
-    ...feet.far,
-    heelLift: Math.max(0, shift) * deg(12),
-    kneeBreak: NEAR_SIDE,
-    foreshorten: IDLE_KNEE_PINCH,
-  };
-  pose.sway = shift * IDLE_SWAY;
-  pose.roll = -shift * IDLE_ROLL;
-  pose.headYaw = glance * FACING_GLANCE_YAW;
-  const away = view === 'away';
-  pose.nearArm = armByAngles(
-    facingArmAngles(NEAR_SIDE, shift * 0.2, FACING_SWING_MIDPOINT, 1),
-    1,
-    away,
-  );
-  pose.farArm = armByAngles(
-    facingArmAngles(FAR_SIDE, -shift * 0.2, FACING_SWING_MIDPOINT, 1),
-    fidgetCurl(phase),
-    away,
-  );
-  return pose;
-}
-
-function fidgetCurl(phase: number): number {
-  return RESTING_HAND_CURL + FIDGET_CURL * (1 + wave(phase + FIDGET_LAG)) * HUMP_PEAK;
-}
-
-// ── Bucket Boy: walk and flee ────────────────────────────────────────────────
-
-function bucketBoyWalk(view: CrocView, phase: number): CrocPose {
-  return walkPose(BUCKET_BOY_BUILD, BUCKET_BOY_WALK, view, phase, true);
-}
-
-const FLEE_HEAD_PITCH = deg(-10);
-const FLEE_JAW = 0.35;
-
-/**
- * The scurry: stooped, the bucket hugged up against his chest by the near arm
- * while the free arm flails, jaw open, eyes wide.
- */
-function bucketBoyFlee(view: CrocView, phase: number): CrocPose {
-  const build = BUCKET_BOY_BUILD;
-  const pose = walkPose(build, BUCKET_BOY_FLEE, view, phase, true);
-  pose.headPitch = FLEE_HEAD_PITCH + wave(phase * 2) * WALK_HEAD_NOD;
-  pose.jaw = FLEE_JAW + wave(phase * 2) * 0.1;
-  pose.blink = 0;
-  pose.tailSwing = wave(phase - BUCKET_LAG) * TAIL_WALK_SWING * 2;
-  const shoulders = shoulderJoints(build, pose, view);
-  if (isProfile(view)) {
-    // The pail clutched to his belly, bail in a fist at the chest.
-    pose.nearArm = armAt(
-      pt(shoulders.near.x + 0.12, shoulders.near.y + 0.14),
-      ELBOW_BACK,
+    pose.near = { ...pose.near, heelLift: Math.max(0, -shift) * IDLE_HEEL_PEEL_SIDE };
+    pose.far = { ...pose.far, heelLift: Math.max(0, shift) * IDLE_HEEL_PEEL_SIDE };
+  } else {
+    const feet = facingRestFeet(build);
+    // Knees pinched a little toward each other: the timid stance.
+    pose.near = {
+      ...feet.near,
+      heelLift: Math.max(0, -shift) * IDLE_HEEL_PEEL_FACING,
+      kneeBreak: FAR_SIDE,
+      foreshorten: IDLE_KNEE_PINCH,
+    };
+    pose.far = {
+      ...feet.far,
+      heelLift: Math.max(0, shift) * IDLE_HEEL_PEEL_FACING,
+      kneeBreak: NEAR_SIDE,
+      foreshorten: IDLE_KNEE_PINCH,
+    };
+    pose.sway = shift * IDLE_SWAY;
+    pose.roll = -shift * IDLE_ROLL;
+    pose.headYaw = glance * FACING_GLANCE_YAW;
+    pose.nearArm = armByAngles(
+      facingArmAngles(NEAR_SIDE, shift * IDLE_FACING_ARM_DRIFT, FACING_SWING_MIDPOINT, 1),
       1,
-      deg(-10),
+      view === 'away',
     );
-    pose.bucket = { kind: 'hang', swing: -wave(phase - BUCKET_LAG) * BUCKET_WALK_SWING * 0.6 };
-    return pose;
   }
-  const away = view === 'away';
-  pose.nearArm = armAt(
-    pt(shoulders.near.x - 0.05, shoulders.near.y + 0.17),
-    facingElbow(NEAR_SIDE),
-    1,
-    deg(100),
-    away,
+  const grip = farGripFor(build, pose, view, IDLE_GRIP);
+  holdMop(
+    build,
+    pose,
+    view,
+    restingMop(MOP_AT_REST[view]),
+    pt(grip.x + shift * IDLE_GRIP_ROCK, grip.y),
   );
-  pose.bucket = { kind: 'hang', swing: -wave(phase - BUCKET_LAG) * BUCKET_WALK_SWING * 0.5 };
   return pose;
 }
 
-// ── Bucket Boy: slap ─────────────────────────────────────────────────────────
+// ── The janitor: walk_mop ────────────────────────────────────────────────────
+
+/** Short, careful steps, leaning into the handle. */
+const JANITOR_WALK_MOP: Gait = {
+  strideShare: 0.26,
+  stanceFraction: 0.6,
+  liftShare: 0.16,
+  dropShare: 0.04,
+  toeOffLift: deg(24),
+  lean: deg(9),
+  armSwing: deg(22),
+  swayShare: 0.18,
+  crouchShare: 0.02,
+};
 
 /**
- * A timid open-handed slap with the free hand: wind back, swat, flinch. His
- * eyes screw shut on the swing — he does not want to see it land.
+ * The strands slide ahead of him. Head-on they run in front of his middle, so
+ * the handle slants down across him; from behind they run out past his right
+ * leg, where they are not lost behind his body.
  */
-const SLAP_LUNGE_LEAN = deg(18);
-const SLAP_LUNGE_STEP = 0.08;
-const SLAP_LUNGE_DROP = 0.03;
-const SLAP_STRIKE_DROP = 0.1;
-/** How far back along the swing the motion smear trails the palm. */
-const SLAP_SMEAR_SWEEP = deg(45);
+const WALK_MOP_LATERAL: Readonly<Record<CrocView, number>> = {
+  front: -0.06,
+  side: -0.13,
+  away: -0.22,
+};
+const WALK_MOP_FORWARD = 0.44;
+/** Each step leans into the handle: the head surges ahead and eases back twice a cycle. */
+const WALK_MOP_PUSH = 0.06;
+/**
+ * Head-on and from behind a push toward or away from the camera barely moves
+ * in the picture, so the head swishes side to side with his steps as well.
+ */
+const WALK_MOP_SWISH = 0.06;
+/** The fist follows the swish a little, steering the handle. */
+const WALK_MOP_SWISH_HAND_SHARE = 0.4;
+/** Pushed along the floor the strands trail back under the clamp. */
+const WALK_MOP_DRAG = -0.035;
+const WALK_MOP_SPLAY = 0.35;
+/** The pushing grip: the arm reaching out and down to the handle ahead of him. */
+const WALK_MOP_GRIP: GripOffset = {
+  front: pt(-0.03, 0.27),
+  side: pt(0.13, 0.17),
+  away: pt(-0.03, 0.19),
+};
 
-/** The slap's beats, around its impact frame: wind-up peak, eyes screwed shut, follow-through, rest. */
-const SLAP_WINDUP_PEAK = BUCKET_BOY_SLAP_IMPACT_FRAME - 2;
-const SLAP_EYES_SHUT = BUCKET_BOY_SLAP_IMPACT_FRAME - 1;
-const SLAP_FOLLOW_THROUGH = BUCKET_BOY_SLAP_IMPACT_FRAME + 1;
-const SLAP_LAST = BUCKET_BOY_SLAP_FRAMES - 1;
-
-function bucketBoySlap(view: CrocView, frame: number): CrocPose {
-  const build = BUCKET_BOY_BUILD;
-  const t = frame;
-  const impact = BUCKET_BOY_SLAP_IMPACT_FRAME;
-  const pose = restingPose(build);
-  pose.bucket = {
-    kind: 'hang',
-    swing: keyed(t, [
-      [0, 0],
-      [SLAP_WINDUP_PEAK, deg(-6)],
-      [impact, deg(10)],
-      [SLAP_LAST, 0],
-    ]),
+function janitorWalkMop(view: CrocView, phase: number): CrocPose {
+  const build = JANITOR_BUILD;
+  const pose = walkPose(build, JANITOR_WALK_MOP, view, phase, true);
+  const push = wave(phase * 2) * WALK_MOP_PUSH;
+  const swish = isProfile(view) ? 0 : wave(phase) * WALK_MOP_SWISH;
+  const mop: MopPose = {
+    ...restingMop({ lateral: WALK_MOP_LATERAL[view] + swish, forward: WALK_MOP_FORWARD + push }),
+    dragForward: WALK_MOP_DRAG,
+    splay: WALK_MOP_SPLAY,
   };
-  pose.blink = keyed(t, [
-    [0, 0],
-    [SLAP_WINDUP_PEAK, 0],
-    [SLAP_EYES_SHUT, 1],
-    [impact + 1, 1],
-    [SLAP_LAST, 0],
-  ]);
-  pose.jaw = keyed(t, [
-    [0, 0],
-    [impact, 0.25],
-    [SLAP_LAST, 0],
-  ]);
-  const windup = keyedSmooth(t, [
-    [0, 0],
-    [SLAP_WINDUP_PEAK, 1],
-    [impact, 0],
-    [SLAP_LAST, 0],
-  ]);
-  const strike = keyedSmooth(t, [
-    [0, 0],
-    [SLAP_WINDUP_PEAK, 0],
-    [impact, 1],
-    [SLAP_FOLLOW_THROUGH, 0.9],
-    [SLAP_LAST, 0],
-  ]);
-  pose.lean += windup * deg(-6) + strike * SLAP_LUNGE_LEAN;
-  pose.headPitch = windup * deg(-6) + strike * deg(8);
-  pose.smear = keyed(t, [
-    [0, 0],
-    [impact - 1, 0],
-    [impact, 1],
-    [impact + 1, 0.35],
-    [impact + 2, 0],
-    [SLAP_LAST, 0],
-  ]);
-
-  const reach = build.upperArm + build.forearm;
-  if (isProfile(view)) {
-    // A lunge: the near foot steps in and the body pitches after the hand,
-    // so the palm lands a forearm past the end of his own snout.
-    pose.near = { ...pose.near, ball: pt(pose.near.ball.x + strike * SLAP_LUNGE_STEP, 0) };
-    pose.bob = strike * SLAP_LUNGE_DROP;
-    const shoulders = shoulderJoints(build, pose, view);
-    const back = pt(shoulders.far.x - 0.12, shoulders.far.y - 0.12);
-    // Swung low, under the jaw: at head height the palm is lost against his own snout.
-    const front = pt(shoulders.far.x + reach, shoulders.far.y + SLAP_STRIKE_DROP);
-    const rest = pt(shoulders.far.x - 0.02, shoulders.far.y + reach * SWING_REACH_SHARE);
-    const hand = blend3(rest, back, front, windup, strike);
-    pose.farArm = armAt(
-      hand,
-      strike > HALFWAY ? ELBOW_BACK : -ELBOW_BACK,
-      0,
-      strike > 0.2 ? deg(-70) : null,
-    );
-    // The swipe came down from over his shoulder: the smear trails up and back.
-    pose.smearSweep = -SLAP_SMEAR_SWEEP;
-    return pose;
-  }
-  const shoulders = shoulderJoints(build, pose, view);
-  const away = view === 'away';
-  pose.roll = windup * deg(5) - strike * deg(6);
-  // Head-on the swat is a flat swing across the body at head height: out to
-  // his own side, then across in front of his chest.
-  const back = pt(shoulders.far.x - 0.2, shoulders.far.y + 0.02);
-  const front = pt(shoulders.near.x + 0.04, shoulders.far.y + 0.06);
-  const rest = pt(shoulders.far.x - 0.03, shoulders.far.y + reach * SWING_REACH_SHARE);
-  const hand = blend3(rest, back, front, windup, strike);
-  pose.farArm = armAt(
-    hand,
-    facingElbowFor(FAR_SIDE, shoulders.far.y, hand.y),
-    0,
-    strike > 0.2 ? deg(-60) : null,
-    false,
-  );
-  // It came across from his far side: the smear trails back out that way.
-  pose.smearSweep = SLAP_SMEAR_SWEEP;
-  pose.nearArm = armByAngles(facingArmAngles(NEAR_SIDE, 0, FACING_SWING_MIDPOINT, 1), 1, away);
-  const feet = facingRestFeet(build);
-  pose.near = feet.near;
-  pose.far = feet.far;
+  const grip = farGripFor(build, pose, view, WALK_MOP_GRIP);
+  // The fist rides out with the push, along the line the handle runs.
+  const pushed = groundPointFor(view, swish * WALK_MOP_SWISH_HAND_SHARE, push);
+  holdMop(build, pose, view, mop, pt(grip.x + pushed.x, grip.y + pushed.y));
   return pose;
 }
 
-function blend3(rest: Pt, back: Pt, front: Pt, windup: number, strike: number): Pt {
-  const settled = 1 - clamp01(windup + strike);
-  return pt(
-    rest.x * settled + back.x * windup + front.x * strike,
-    rest.y * settled + back.y * windup + front.y * strike,
-  );
+// ── The janitor: mop ─────────────────────────────────────────────────────────
+
+/**
+ * The stroke swings the strands round an arc in front of him, out to his right
+ * and across to his left and back. The phase is the row's progress, so the
+ * fastest point of each stroke — where its swish sounds — falls exactly at a
+ * quarter and three quarters.
+ */
+const MOP_STROKE_SWING = deg(52);
+const MOP_STROKE_RADIUS = 0.3;
+/**
+ * Where the stroke's arc is centred. From behind, strands swung across in
+ * front of him are hidden by his body, so that view keeps the arc out past
+ * his right leg, where it shows.
+ */
+const MOP_STROKE_CENTRE: Readonly<Record<CrocView, GroundSpot>> = {
+  front: { lateral: -0.04, forward: 0.2 },
+  side: { lateral: -0.04, forward: 0.1 },
+  away: { lateral: -0.2, forward: 0.1 },
+};
+/** How far the strands trail behind the head at the stroke's fastest point. */
+const MOP_STROKE_DRAG = 0.05;
+/** At each end of a stroke the head eases off the floor a hair as he turns it. */
+const MOP_STROKE_TURN_LIFT = 0.012;
+const MOP_STROKE_GRIP: GripOffset = {
+  front: pt(-0.04, 0.31),
+  side: pt(0.1, 0.18),
+  away: pt(-0.04, 0.19),
+};
+/** The fist swings the opposite way to the head, a lever about the hand. */
+const MOP_STROKE_GRIP_COUNTER = 0.07;
+const MOP_STROKE_ROLL = deg(4);
+const MOP_STROKE_SWAY = 0.02;
+const MOP_STROKE_HEAD_FOLLOW = deg(12);
+const MOP_STROKE_LEAN = deg(6);
+const MOP_STROKE_HEEL_PEEL = deg(9);
+
+function janitorMop(view: CrocView, phase: number): CrocPose {
+  const build = JANITOR_BUILD;
+  const pose = restingPose(build);
+  const across = -Math.cos(phase * Math.PI * 2);
+  const speed = Math.sin(phase * Math.PI * 2);
+  const angle = across * MOP_STROKE_SWING;
+  pose.lean += MOP_STROKE_LEAN;
+  pose.headPitch += MOP_STROKE_LEAN;
+  pose.blink = pulseAt(phase, IDLE_BLINK_AT, IDLE_BLINK_WIDTH);
+  pose.tailSwing = wave(phase - BUCKET_LAG) * IDLE_TAIL_SWING;
+  pose.bucket = { kind: 'hang', swing: -wave(phase - BUCKET_LAG) * IDLE_BUCKET_SWING };
+  pose.breath = wave(phase * 2);
+  pose.headYaw = -across * MOP_STROKE_HEAD_FOLLOW * (isProfile(view) ? 0 : 1);
+
+  if (isProfile(view)) {
+    pose.nearArm = armByAngles(sideArmAngles(0, IDLE_ARM_SWING), 1);
+  } else {
+    const feet = facingRestFeet(build);
+    // His weight follows the stroke: the heel on the far side of it lifts.
+    pose.near = { ...feet.near, heelLift: Math.max(0, -across) * MOP_STROKE_HEEL_PEEL };
+    pose.far = { ...feet.far, heelLift: Math.max(0, across) * MOP_STROKE_HEEL_PEEL };
+    pose.roll = -across * MOP_STROKE_ROLL;
+    pose.sway = across * MOP_STROKE_SWAY;
+    pose.nearArm = armByAngles(
+      facingArmAngles(NEAR_SIDE, 0, FACING_SWING_MIDPOINT, 1),
+      1,
+      view === 'away',
+    );
+  }
+  const mop: MopPose = {
+    ...restingMop({
+      lateral: MOP_STROKE_CENTRE[view].lateral + Math.sin(angle) * MOP_STROKE_RADIUS,
+      forward: MOP_STROKE_CENTRE[view].forward + Math.cos(angle) * MOP_STROKE_RADIUS,
+    }),
+    lift: (1 - Math.abs(speed)) * MOP_STROKE_TURN_LIFT,
+    dragLateral: -speed * MOP_STROKE_DRAG,
+    splay: Math.abs(speed),
+  };
+  const grip = farGripFor(build, pose, view, MOP_STROKE_GRIP);
+  const counter = groundPointFor(view, -across * MOP_STROKE_GRIP_COUNTER, 0);
+  holdMop(build, pose, view, mop, pt(grip.x + counter.x, grip.y + counter.y));
+  return pose;
 }
 
-// ── Bucket Boy: Triage ───────────────────────────────────────────────────────
+// ── The janitor: wring ───────────────────────────────────────────────────────
 
-/** Where he sets the pail down: a short step in front of him. */
-const TRIAGE_BUCKET_FORWARD = 0.2;
-const TRIAGE_BUCKET_FACING_X = 0.13;
-const TRIAGE_BUCKET_FACING_Y = 0.035;
-/** Frames: squat and set down, let go, raise the hands, the heal, squat and pick up. */
-const TRIAGE_SET_DOWN = 2;
-const TRIAGE_PICK_UP = 12;
-const TRIAGE_SQUAT = 0.13;
-const TRIAGE_SQUAT_LEAN = deg(30);
-const TRIAGE_WATCH_LIFT = deg(22);
-/** Head-on, the squat splays the knees rather than shrinking the legs. */
-const TRIAGE_KNEE_SPLAY = 0.6;
-/** Head-on the glowing hands are held apart, one either side of his chest, so the glow reads as two hands and not a lamp on his shirt. */
-const TRIAGE_FACING_HAND_SPREAD = 0.07;
-/** Held out in front of the belly: head-on, hands pushed at the camera draw low on the body, not at the shoulder. */
-const TRIAGE_FACING_HAND_DROP = 0.22;
+/** The pail goes down a short step ahead of him and to his left, clear of the mop at his right. */
+/** From behind, the pail goes down further out to his left, so his body does not hide it and the mop going into it. */
+const WRING_PAIL_SPOT: Readonly<Record<CrocView, GroundSpot>> = {
+  front: { lateral: 0.1, forward: 0.24 },
+  side: { lateral: 0.1, forward: 0.22 },
+  away: { lateral: 0.26, forward: 0.2 },
+};
+/** Frames of the one-shot: the pail set down, the mop over it, the dunk, out, wrung, set back, the pail picked up. */
+const WRING_PAIL_DOWN = 3;
+const WRING_LIFT_CLEAR = 4;
+const WRING_OVER_PAIL = 5;
+const WRING_PLUNGE = JANITOR_WRING_DUNK_FRAME + 1;
+const WRING_LIFTED_OUT = 9;
+const WRING_HAND_ON_STRANDS = 10;
+const WRING_TWISTED = 12;
+const WRING_UNTWISTED = 14;
+const WRING_SWUNG_BACK = 15;
+const WRING_MOP_DOWN = 16;
+const WRING_PAIL_UP = 18;
+/** Clamp heights over its resting height: clear of the rim, down in the water, and the plunge's bottom. */
+const WRING_CLEAR_LIFT = 0.28;
+const WRING_DUNK_LIFT = 0.12;
+const WRING_PLUNGE_LIFT = 0.095;
+const WRING_CROUCH = 0.08;
+/** Wringing he straightens up, his snout lifted clear of the handle he holds at his chest. */
+const WRING_UPRIGHT_STOOP = 0.15;
+/** He picks the pail back up with less of a stoop than he set it down with: the job is done. */
+const WRING_PICK_UP_STOOP = 0.75;
+const WRING_DUNK_CROUCH = 0.05;
+const WRING_PLUNGE_CROUCH = 0.07;
+const WRING_LEAN = deg(16);
+const WRING_PROFILE_LEAN_SHARE = 0.6;
+/** The near fist closes on the handle no lower than this share of the way from the clamp up to the far fist. */
+const NEAR_GRIP_LOWEST_SHARE = 0.3;
+/** How far under the topmost grip the near fist stays, so the handle shows above it. */
+const NEAR_GRIP_BELOW_TOP = 0.05;
+/** Wringing pulls the strands up as it coils them. */
+const WRING_TWIST_RISE = 0.04;
+/** Held up to wring, the strands hang at his chest, where the near fist can close round them. */
+const WRING_HELD_UP_LIFT = 0.42;
+/** The near fist closes this far down the strands from the clamp. */
+const WRING_STRAND_GRIP_DROP = 0.05;
+const WRING_AWAY_REACH_OUT = 0.2;
+/** Held up, the upper fist drops this share of the extra lift as the handle slides through it. */
+const WRING_HELD_UP_GRIP_DROP = 0.3;
+/** Wringing, the lower fist rolls round the handle against the upper one. */
+const WRING_FIST_TURN = deg(55);
+/** From behind the pail is out to his left, so the upper fist reaches across to hold the handle upright over it. */
+const WRING_FAR_GRIP: GripOffset = {
+  front: pt(0.09, 0.12),
+  side: pt(-0.03, 0.06),
+  away: pt(0.24, 0.04),
+};
+const WRING_DRIP_CYCLES = 2;
+/** Swinging back to his side, the mop is still this much of the way over the pail. */
+const WRING_SWUNG_BACK_OVER = 0.15;
+/** Unwrung, he gives the mop one last shake up over the pail before swinging it back. */
+const WRING_SHAKE_RISE = 0.07;
+/** He lowers the mop as he swings it back, so its head comes down beside his leg rather than behind his back. */
+const WRING_SWUNG_BACK_LIFT_SHARE = 0.35;
 
-function bucketBoyTriage(view: CrocView, frame: number): CrocPose {
-  const build = BUCKET_BOY_BUILD;
-  const release = BUCKET_BOY_TRIAGE_RELEASE_FRAME;
-  const last = BUCKET_BOY_TRIAGE_FRAMES - 1;
-  const pose = restingPose(build);
-  const squat = keyedSmooth(frame, [
-    [0, 0.15],
-    [TRIAGE_SET_DOWN, 1],
-    [TRIAGE_SET_DOWN + 2, 0.15],
-    [release, 0],
-    [release + 2, 0.2],
-    [TRIAGE_PICK_UP, 1],
-    [last, 0.1],
-  ]);
-  const raise = keyedSmooth(frame, [
-    [0, 0],
-    [TRIAGE_SET_DOWN + 1, 0],
-    [release - 1, 0.8],
-    [release, 1],
-    [release + 1, 0.8],
-    [release + 3, 0],
-    [last, 0],
-  ]);
-  pose.glow = keyed(frame, [
-    [0, 0],
-    [TRIAGE_SET_DOWN + 1, 0],
-    [release - 2, 0.55],
-    [release, 1],
-    [release + 2, 0.3],
-    [release + 3, 0],
-    [last, 0],
-  ]);
-  pose.bob = squat * TRIAGE_SQUAT;
-  pose.lean += squat * TRIAGE_SQUAT_LEAN - raise * deg(4);
-  // Picking the pail back up he keeps his eyes on the patient, not the floor.
-  const watching = frame > release ? TRIAGE_WATCH_LIFT : 0;
-  pose.headPitch = squat * deg(10) - raise * deg(10) - watching * squat;
-  pose.blink = frame === release ? 0.5 : 0;
-  pose.jaw = raise * 0.2;
+function wringKeys(frame: number, keys: readonly (readonly [number, number])[]): number {
+  return keyedSmooth(frame, keys);
+}
+
+function janitorWring(view: CrocView, frame: number): CrocPose {
+  const build = JANITOR_BUILD;
+  const last = JANITOR_WRING_FRAMES - 1;
   const profile = isProfile(view);
-  const away = view === 'away';
-  const feet = profile ? { near: pose.near, far: pose.far } : facingRestFeet(build);
-  // A squat breaks the knees forward edge-on and splays them head-on.
-  pose.near = {
-    ...feet.near,
-    foreshorten: profile ? 0 : 1 - squat * TRIAGE_KNEE_SPLAY,
-    kneeBreak: profile ? 1 : NEAR_SIDE,
-  };
-  pose.far = {
-    ...feet.far,
-    foreshorten: profile ? 0 : 1 - squat * TRIAGE_KNEE_SPLAY,
-    kneeBreak: profile ? 1 : FAR_SIDE,
-  };
-
-  const bucketCentre = profile
-    ? pt(TRIAGE_BUCKET_FORWARD, -BUCKET_REST_HEIGHT)
-    : pt(TRIAGE_BUCKET_FACING_X, TRIAGE_BUCKET_FACING_Y - BUCKET_REST_HEIGHT);
-  const onFloor = frame > TRIAGE_SET_DOWN && frame < TRIAGE_PICK_UP;
-  const bailTop = pt(bucketCentre.x, bucketCentre.y - BUCKET_BAIL_ABOVE_CENTRE);
-  const shoulders = shoulderJoints(build, pose, view);
-
-  // The bucket hand: carrying, reaching down to the floor, or free.
-  const toFloor = keyedSmooth(frame, [
+  const pose = restingPose(build);
+  const stoop = wringKeys(frame, [
     [0, 0],
-    [TRIAGE_SET_DOWN, 1],
-    [TRIAGE_SET_DOWN + 1, 1],
-    [TRIAGE_SET_DOWN + 2, 0],
-    [release + 2, 0],
-    [TRIAGE_PICK_UP - 1, 1],
-    [TRIAGE_PICK_UP, 1],
+    [WRING_PAIL_DOWN, 1],
+    [JANITOR_WRING_DUNK_FRAME, 1],
+    [WRING_LIFTED_OUT, WRING_UPRIGHT_STOOP],
+    [WRING_UNTWISTED, WRING_UPRIGHT_STOOP],
+    [WRING_PAIL_UP, WRING_PICK_UP_STOOP],
     [last, 0],
   ]);
-  const hangHand = pt(
-    shoulders.near.x + (profile ? 0.03 : 0),
-    shoulders.near.y + (build.upperArm + build.forearm) * HANG_REACH_SHARE,
-  );
-  const castHand = profile
-    ? pt(shoulders.near.x + 0.26 + raise * 0.05, shoulders.near.y + 0.08 - raise * 0.04)
-    : pt(TRIAGE_FACING_HAND_SPREAD, shoulders.near.y + TRIAGE_FACING_HAND_DROP - raise * 0.06);
-  const carrying = !onFloor;
-  const nearHandBase = carrying ? hangHand : castHand;
-  const nearHand = lerpPt(nearHandBase, bailTop, toFloor);
-  const castShare = carrying ? 0 : clamp01(raise * 1.4);
-  const nearTarget = lerpPt(nearHand, castHand, castShare);
-  pose.nearArm = armAt(
-    nearTarget,
-    profile ? ELBOW_BACK : facingElbow(NEAR_SIDE),
-    carrying ? 1 : CAST_HAND_CURL,
-    carrying ? null : profile ? deg(-70) : deg(-95),
-    false,
-  );
-  pose.bucket = onFloor
-    ? { kind: 'placed', centre: bucketCentre, tilt: 0, inverted: false, front: !profile }
+  // He bobs down after the mop as he plunges it, so both fists ride the handle into the water.
+  const plunge = wringKeys(frame, [
+    [0, 0],
+    [WRING_OVER_PAIL, 0],
+    [JANITOR_WRING_DUNK_FRAME, WRING_DUNK_CROUCH],
+    [WRING_PLUNGE, WRING_PLUNGE_CROUCH],
+    [WRING_LIFTED_OUT, 0],
+    [last, 0],
+  ]);
+  pose.bob = stoop * WRING_CROUCH + plunge;
+  // Edge-on he leans less, so his snout stays back from the handle over the pail.
+  const leanShare = profile ? WRING_PROFILE_LEAN_SHARE : 1;
+  pose.lean += stoop * WRING_LEAN * leanShare;
+  pose.headPitch += stoop * WRING_LEAN * leanShare;
+  pose.tailSwing = stoop * IDLE_TAIL_SWING;
+  if (!profile) {
+    const feet = facingRestFeet(build);
+    pose.near = { ...feet.near, kneeBreak: NEAR_SIDE, foreshorten: 1 - stoop * WRING_KNEE_SPLAY };
+    pose.far = { ...feet.far, kneeBreak: FAR_SIDE, foreshorten: 1 - stoop * WRING_KNEE_SPLAY };
+  }
+
+  // Over the pail: 0 at rest at his side, 1 hanging over the pail's mouth.
+  const over = wringKeys(frame, [
+    [0, 0],
+    [WRING_LIFT_CLEAR, 0],
+    [WRING_OVER_PAIL, 1],
+    [WRING_UNTWISTED, 1],
+    [WRING_SWUNG_BACK, WRING_SWUNG_BACK_OVER],
+    [WRING_MOP_DOWN, 0],
+    [last, 0],
+  ]);
+  const lift = wringKeys(frame, [
+    [0, 0],
+    [WRING_PAIL_DOWN, 0],
+    [WRING_LIFT_CLEAR, WRING_CLEAR_LIFT],
+    [WRING_OVER_PAIL, WRING_CLEAR_LIFT],
+    [JANITOR_WRING_DUNK_FRAME, WRING_DUNK_LIFT],
+    [WRING_PLUNGE, WRING_PLUNGE_LIFT],
+    [WRING_LIFTED_OUT, WRING_CLEAR_LIFT],
+    [WRING_HAND_ON_STRANDS, WRING_HELD_UP_LIFT],
+    [WRING_TWISTED, WRING_HELD_UP_LIFT + WRING_TWIST_RISE],
+    [WRING_UNTWISTED, WRING_CLEAR_LIFT + WRING_SHAKE_RISE],
+    [WRING_SWUNG_BACK, WRING_CLEAR_LIFT * WRING_SWUNG_BACK_LIFT_SHARE],
+    [WRING_MOP_DOWN, 0],
+    [last, 0],
+  ]);
+  const twist = wringKeys(frame, [
+    [0, 0],
+    [WRING_HAND_ON_STRANDS, 0],
+    [WRING_TWISTED, 1],
+    [WRING_UNTWISTED, 0],
+    [last, 0],
+  ]);
+  const wet = keyed(frame, [
+    [0, 0],
+    [JANITOR_WRING_DUNK_FRAME, 0],
+    [WRING_LIFTED_OUT, 1],
+    [WRING_UNTWISTED, 1],
+    [WRING_SWUNG_BACK, 0],
+    [last, 0],
+  ]);
+  const inPail = frame >= JANITOR_WRING_DUNK_FRAME && frame < WRING_LIFTED_OUT;
+  const mop: MopPose = {
+    ...restingMop({
+      lateral: lerp(MOP_AT_REST[view].lateral, WRING_PAIL_SPOT[view].lateral, over),
+      forward: lerp(MOP_AT_REST[view].forward, WRING_PAIL_SPOT[view].forward, over),
+    }),
+    lift,
+    twoHanded: frame > WRING_PAIL_DOWN && frame <= WRING_UNTWISTED,
+    twist,
+    // Under the water nothing drips; it runs off once the strands are out.
+    drip: inPail ? 0 : wet,
+    dripPhase: (frame / JANITOR_WRING_FRAMES) * WRING_DRIP_CYCLES,
+    inPail,
+  };
+
+  const pailSpot = WRING_PAIL_SPOT[view];
+  const pailGround = groundPointFor(view, pailSpot.lateral, pailSpot.forward);
+  const pailCentre = pt(pailGround.x, pailGround.y - BUCKET_REST_HEIGHT);
+  const pailDown = frame >= WRING_PAIL_DOWN && frame < WRING_PAIL_UP;
+  pose.bucket = pailDown
+    ? { kind: 'placed', centre: pailCentre, tilt: 0, front: view === 'front' }
     : { kind: 'hang', swing: 0 };
 
-  const farCast = profile
-    ? pt(shoulders.far.x + 0.24 + raise * 0.05, shoulders.far.y + 0.12 - raise * 0.04)
-    : pt(-TRIAGE_FACING_HAND_SPREAD, shoulders.far.y + TRIAGE_FACING_HAND_DROP - raise * 0.06);
-  const farRest = pt(
-    shoulders.far.x - (profile ? 0.02 : 0.03),
-    shoulders.far.y + (build.upperArm + build.forearm) * HANG_REACH_SHARE,
+  const restGrip = farGripFor(build, pose, view, IDLE_GRIP);
+  const raised = farGripFor(build, pose, view, WRING_FAR_GRIP);
+  // The hands ride down with the mop into the water. Held up to wring, the
+  // handle slides up through the upper fist, which drops to his chest, so
+  // the handle's top stays clear of his face.
+  const rideDown = Math.max(0, WRING_CLEAR_LIFT - lift);
+  const slideDown = Math.max(0, lift - WRING_CLEAR_LIFT) * WRING_HELD_UP_GRIP_DROP;
+  const highGrip = pt(raised.x, raised.y + rideDown + slideDown);
+  const carried = lerpPt(restGrip, highGrip, over);
+  // Lifted at his side before it swings over, the mop rises in his fist.
+  const farGrip = pt(carried.x, carried.y - lift * (1 - over));
+  holdMop(build, pose, view, mop, farGrip);
+  const socket = mopSocketFor(view, mop);
+
+  // The near hand: carrying the pail, down to its bail, across to the handle, and back.
+  const shoulders = shoulderJoints(build, pose, view);
+  const hang = pt(
+    shoulders.near.x,
+    shoulders.near.y + (build.upperArm + build.forearm) * HANG_REACH_SHARE,
   );
-  const farShare = clamp01(onFloor ? 0.35 + raise : squat * 0.3);
-  pose.farArm = armAt(
-    lerpPt(farRest, farCast, farShare),
-    profile ? ELBOW_BACK : facingElbow(FAR_SIDE),
-    lerp(HALFWAY, CAST_HAND_CURL, farShare),
-    farShare > HALFWAY ? (profile ? deg(-70) : deg(-85)) : null,
-    away,
-  );
-  if (away) pose.nearArm = { ...pose.nearArm, behind: false };
+  const bail = pt(pailCentre.x, pailCentre.y - BUCKET_BAIL_ABOVE_CENTRE);
+  const toBail = wringKeys(frame, [
+    [0, 0],
+    [WRING_PAIL_DOWN, 1],
+    [WRING_PAIL_DOWN + 1, 0],
+    [WRING_MOP_DOWN, 0],
+    [WRING_PAIL_UP, 1],
+    [last, 0],
+  ]);
+  const nearElbow = profile ? ELBOW_BACK : facingElbow(NEAR_SIDE);
+  if (mop.twoHanded) {
+    // Wringing, the near fist leaves the handle for the strands and twists them.
+    // From behind, a fist on the handle next to his body is hidden by it; he
+    // reaches out over the pail instead, where the fist shows past his side.
+    const reachOut = view === 'away' ? WRING_AWAY_REACH_OUT : 0;
+    const reachFrom = pt(shoulders.near.x + reachOut, shoulders.near.y);
+    const onHandle = nearestOnHandle(socket, farGrip, reachFrom);
+    const onStrands = pt(socket.x, socket.y + WRING_STRAND_GRIP_DROP);
+    const handOnStrands = wringKeys(frame, [
+      [0, 0],
+      [WRING_LIFTED_OUT, 0],
+      [WRING_HAND_ON_STRANDS, 1],
+      [WRING_TWISTED, 1],
+      [WRING_UNTWISTED, 0],
+      [last, 0],
+    ]);
+    pose.nearArm = gripArm(
+      build,
+      socket,
+      lerpPt(onHandle, onStrands, handOnStrands),
+      nearElbow,
+      outwardFor(view),
+      false,
+      twist * WRING_FIST_TURN,
+    );
+  } else {
+    pose.nearArm = armAt(lerpPt(hang, bail, toBail), nearElbow, 1, null, false);
+  }
   return pose;
 }
 
+/** Head-on, the stoop over the pail splays the knees rather than shrinking the legs. */
+const WRING_KNEE_SPLAY = 0.25;
 /** The bail's top, above the bucket's centre, where a hand picks it up. */
 const BUCKET_BAIL_ABOVE_CENTRE = 0.14;
 
@@ -901,296 +1031,7 @@ function lerpPt(a: Pt, b: Pt, t: number): Pt {
   return pt(lerp(a.x, b.x, t), lerp(a.y, b.y, t));
 }
 
-// ── Bucket Boy: cower ────────────────────────────────────────────────────────
-
-const COWER_CROUCH = 0.1;
-const COWER_LEAN = deg(20);
-const COWER_SHIVER = 0.006;
-const COWER_JAW = 1;
-const COWER_KNEE_PINCH = 0.55;
-/**
- * An eighth of a frame off the cycle's zero. A sine sampled six times from zero
- * lands on mirrored pairs — frames 1 and 2 paint the same picture — and this
- * offset is the smallest that makes all six samples distinct.
- */
-const COWER_SHIVER_OFFSET = 1 / 24;
-/**
- * How far down the skull the upturned pail sits, in head heights above the
- * skull's centre. Low enough to cover the crown and the eyes like a helmet;
- * held any higher it reads as something he is showing off rather than hiding in.
- */
-const COWER_BUCKET_RISE = 0.6;
-/** Head-on it rides higher, so the shrieking jaw and the eyes show under it. */
-const COWER_BUCKET_RISE_FACING = 0.55;
-/** The hands grip the pail's sides, just outside its rim. */
-const COWER_GRIP_OUT = 0.07;
-const COWER_GRIP_DROP = 0.02;
-
-/**
- * The shriek: knees together, crouched, the upturned pail jammed down over his
- * head like a helmet and held there with both hands, jaw wide, tail wrapped
- * round his feet.
- */
-function bucketBoyCower(view: CrocView, phase: number): CrocPose {
-  const build = BUCKET_BOY_BUILD;
-  const pose = restingPose(build);
-  const shiver = wave(phase + COWER_SHIVER_OFFSET);
-  // The shudder's second axis runs a quarter-cycle behind the first; folding
-  // the first with an absolute value would double its rate and alias it.
-  const shudder = Math.cos((phase + COWER_SHIVER_OFFSET) * Math.PI * 2);
-  pose.bob = COWER_CROUCH + (1 + shudder) * COWER_SHIVER * 0.25;
-  pose.lean += COWER_LEAN;
-  pose.jaw = COWER_JAW - (1 + shudder) * 0.05;
-  pose.blink = 1;
-  pose.headPitch = deg(-18);
-  pose.tailCurl = deg(40);
-  pose.tailSwing = deg(-12) + shiver * deg(3);
-  const profile = isProfile(view);
-  if (!profile) {
-    const feet = facingRestFeet(build);
-    // Knock-kneed: the knees pinch in, which is what fear looks like head-on.
-    pose.near = { ...feet.near, kneeBreak: FAR_SIDE, foreshorten: COWER_KNEE_PINCH };
-    pose.far = { ...feet.far, kneeBreak: NEAR_SIDE, foreshorten: COWER_KNEE_PINCH };
-    pose.sway = shiver * COWER_SHIVER;
-  }
-  const head = skeletonLandmarks(build, pose, view).headCentre;
-  const rise = profile ? COWER_BUCKET_RISE : COWER_BUCKET_RISE_FACING;
-  const bucket = pt(head.x + shiver * COWER_SHIVER, head.y - build.headHeight * rise);
-  pose.bucket = {
-    kind: 'placed',
-    centre: bucket,
-    tilt: shiver * deg(3),
-    inverted: true,
-    front: true,
-  };
-  const gripY = bucket.y + COWER_GRIP_DROP;
-  if (profile) {
-    pose.nearArm = armAt(pt(bucket.x, gripY), ELBOW_BACK, 1, deg(-90));
-    pose.farArm = armAt(pt(bucket.x - COWER_GRIP_OUT * 0.5, gripY), ELBOW_BACK, 1, deg(-90));
-  } else {
-    pose.nearArm = armAt(
-      pt(bucket.x + COWER_GRIP_OUT, gripY),
-      facingElbowFor(NEAR_SIDE, 0, -1),
-      1,
-      deg(-70),
-    );
-    pose.farArm = armAt(
-      pt(bucket.x - COWER_GRIP_OUT, gripY),
-      facingElbowFor(FAR_SIDE, 0, -1),
-      1,
-      deg(-110),
-    );
-  }
-  return pose;
-}
-
-// ── Bucket Boy: hurt ─────────────────────────────────────────────────────────
-
-/** The flinch, sharpest on the first frame so the hit reads the tick it lands. */
-const HURT_KEYS: readonly number[] = [0.9, 1, 0.5, 0.15];
-/** The eyes squeeze shut through the sharp part of the flinch. */
-const HURT_EYES_SHUT_ABOVE = 0.4;
-
-function hurtAmount(frame: number): number {
-  return HURT_KEYS[Math.min(HURT_KEYS.length - 1, frame)];
-}
-
-function bucketBoyHurt(view: CrocView, frame: number): CrocPose {
-  const build = BUCKET_BOY_BUILD;
-  const amount = hurtAmount(frame);
-  const pose = restingPose(build);
-  pose.lean += amount * deg(-12);
-  pose.headPitch = amount * deg(-22);
-  pose.blink = amount > HURT_EYES_SHUT_ABOVE ? 1 : 0;
-  pose.jaw = amount * 0.55;
-  pose.bob = amount * 0.02;
-  pose.tailSwing = amount * deg(8);
-  pose.bucket = { kind: 'hang', swing: amount * deg(14) };
-  const shoulders = shoulderJoints(build, pose, view);
-  if (isProfile(view)) {
-    pose.farArm = armAt(
-      pt(shoulders.far.x + 0.1, shoulders.far.y + 0.12),
-      ELBOW_BACK,
-      FLINCH_HAND_CURL,
-    );
-    pose.nearArm = armAt(
-      pt(shoulders.near.x + 0.02 + amount * 0.06, shoulders.near.y + 0.3 - amount * 0.08),
-      ELBOW_BACK,
-      1,
-    );
-    return pose;
-  }
-  const feet = facingRestFeet(build);
-  pose.near = feet.near;
-  pose.far = feet.far;
-  pose.roll = amount * deg(-7);
-  pose.sway = amount * -0.02;
-  const away = view === 'away';
-  pose.farArm = armAt(
-    pt(shoulders.far.x + 0.1 * amount, shoulders.far.y + 0.26 - amount * 0.1),
-    facingElbow(FAR_SIDE),
-    FLINCH_HAND_CURL,
-    null,
-    away,
-  );
-  pose.nearArm = armByAngles(
-    facingArmAngles(NEAR_SIDE, amount * 0.6, FACING_SWING_MIDPOINT, 1),
-    1,
-    away,
-  );
-  return pose;
-}
-
-// ── Bucket Boy: death ────────────────────────────────────────────────────────
-
-const DEATH_LAST = BUCKET_BOY_DEATH_FRAMES - 1;
-/** He hits the floor two frames before the end, rebounds a touch, and settles on the last. */
-const DEATH_LANDS = DEATH_LAST - 2;
-const DEATH_REBOUND = DEATH_LAST - 1;
-/** Frames: the hit, the buckle, the fall, the corpse. */
-const DEATH_BUCKLE_END = 3;
-const DEATH_LET_GO = 2;
-/** The corpse lies on its back edge-on, on its side head-on, raised by its own half-thickness. */
-const DEATH_LIFT_PROFILE = 0.045;
-const DEATH_LIFT_FACING = 0.1;
-/** The pail bounces off and rolls clear. */
-const DEATH_BUCKET_ROLL = 0.14;
-/** The pail hits the floor and hops once, on this frame, by this much. */
-const DEATH_BUCKET_BOUNCE_FRAME = DEATH_LET_GO + 3;
-const DEATH_BUCKET_BOUNCE = 0.03;
-const DEATH_HEAD_LOLL = deg(78);
-/** The head goes limp ahead of the body's fall, so it never points straight up on the way down. */
-const DEATH_LOLL_LEAD = 1.5;
-const DEATH_FRONT_HEAD_TURN = deg(32);
-const DEATH_AWAY_HEAD_TURN = deg(-56);
-
-function bucketBoyDeath(view: CrocView, frame: number): CrocPose {
-  const build = BUCKET_BOY_BUILD;
-  const pose = restingPose(build);
-  const profile = isProfile(view);
-  const hit = keyed(frame, [
-    [0, 1],
-    [DEATH_LET_GO, 0.6],
-    [DEATH_BUCKLE_END, 0.2],
-    [DEATH_LAST, 0],
-  ]);
-  // The knees buckle, then straighten as he lands flat.
-  const buckle = keyedSmooth(frame, [
-    [0, 0],
-    [DEATH_BUCKLE_END, 1],
-    [DEATH_LANDS - 1, 0.7],
-    [DEATH_LAST, 0.2],
-  ]);
-
-  const fall = keyed(frame, [
-    [0, 0],
-    [DEATH_BUCKLE_END, 0],
-    [DEATH_LANDS, 1],
-    [DEATH_REBOUND, 0.94],
-    [DEATH_LAST, 1],
-  ]);
-  const fallEase = clamp01(fall) < 1 ? easeInSquare(fall) : fall;
-  pose.lean += hit * deg(-10) + buckle * deg(-8);
-  pose.headPitch = hit * deg(-24) + buckle * deg(10);
-  // The head lolls back as he goes over, until the snout lies along the floor
-  // past the crown: a snout left pointing at the ceiling reads as a box.
-  pose.headRoll = -clamp01(fall * DEATH_LOLL_LEAD) * DEATH_HEAD_LOLL;
-  pose.jaw = keyed(frame, [
-    [0, 0.7],
-    [DEATH_BUCKLE_END, 0.4],
-    [DEATH_LAST, 0.25],
-  ]);
-  pose.blink = frame >= 1 ? 1 : 0.6;
-  pose.bob = buckle * 0.09;
-  pose.topple = -HALF_TURN_OVER * fallEase;
-  pose.toppleLift = (profile ? DEATH_LIFT_PROFILE : DEATH_LIFT_FACING) * fallEase;
-  pose.toppleAt = pt(profile ? -0.05 : -0.06, 0);
-  // Lying on his side head-on, his head rolls into profile on the floor; a
-  // turned head seen lying down reads as a box.
-  if (!profile)
-    pose.headYaw = fallEase * (view === 'away' ? DEATH_AWAY_HEAD_TURN : DEATH_FRONT_HEAD_TURN);
-  // Lying down, the tail runs on along the floor past the pelvis.
-  pose.tailSwing = fallEase * (profile ? deg(-26) : deg(-20));
-  // Straightened out along the floor rather than curling down through it.
-  pose.tailCurl = fallEase * deg(-50);
-
-  if (!profile) {
-    const feet = facingRestFeet(build);
-    pose.near = { ...feet.near, foreshorten: 1 - buckle * 0.5, kneeBreak: NEAR_SIDE };
-    pose.far = { ...feet.far, foreshorten: 1 - buckle * 0.5, kneeBreak: FAR_SIDE };
-    pose.roll = hit * deg(-6);
-  }
-  const shoulders = shoulderJoints(build, pose, view);
-  const reach = (build.upperArm + build.forearm) * HANG_REACH_SHARE;
-  const away = view === 'away';
-  // Arms fly up at the hit and go limp through the fall.
-  const flail = hit * (1 - fallEase);
-  // Limp arms lie close along the body; flung wide they read as spikes.
-  const limpFar = pt(shoulders.far.x - (profile ? 0.08 : 0.06), shoulders.far.y + reach * 0.9);
-  const limpNear = pt(shoulders.near.x + (profile ? 0.08 : 0.06), shoulders.near.y + reach * 0.9);
-  pose.farArm = armAt(
-    lerpPt(limpFar, pt(shoulders.far.x + (profile ? 0.08 : -0.1), shoulders.far.y - 0.05), flail),
-    profile ? ELBOW_BACK : facingElbow(FAR_SIDE),
-    LIMP_HAND_CURL,
-    null,
-    away,
-  );
-  pose.nearArm = armAt(
-    lerpPt(limpNear, pt(shoulders.near.x + 0.1, shoulders.near.y + 0.05), flail),
-    profile ? ELBOW_BACK : facingElbow(NEAR_SIDE),
-    frame < DEATH_LET_GO ? 1 : LIMP_HAND_CURL,
-    null,
-    away,
-  );
-
-  if (frame < DEATH_LET_GO) {
-    pose.bucket = { kind: 'hang', swing: deg(18) * frame };
-  } else {
-    const hands = handPositionAtLetGo(view);
-    const roll = keyed(frame, [
-      [DEATH_LET_GO, 0],
-      [DEATH_BUCKET_BOUNCE_FRAME, 0.7],
-      [DEATH_LAST, 1],
-    ]);
-    const drop = easeOut(
-      keyed(frame, [
-        [DEATH_LET_GO, 0],
-        [DEATH_BUCKET_BOUNCE_FRAME - 1, 1],
-        [DEATH_LAST, 1],
-      ]),
-    );
-    const restY = -BUCKET_LYING_HEIGHT;
-    const x = lerp(hands.x, hands.x + DEATH_BUCKET_ROLL, roll);
-    const bounce = frame === DEATH_BUCKET_BOUNCE_FRAME ? -DEATH_BUCKET_BOUNCE : 0;
-    pose.bucket = {
-      kind: 'placed',
-      centre: pt(x, lerp(hands.y + BUCKET_HANG_BELOW_GRIP, restY, drop) + bounce),
-      tilt: roll * deg(100),
-      inverted: false,
-      front: false,
-    };
-  }
-  return pose;
-}
-
-const HALF_TURN_OVER = Math.PI / 2;
-/** A pail lying on its side rests on its widest radius. */
-const BUCKET_LYING_HEIGHT = 0.072;
-/** From a carrying fist to the pail's centre: bail, then half the pail. */
-const BUCKET_HANG_BELOW_GRIP = 0.14;
-
-function easeInSquare(t: number): number {
-  const c = clamp01(t);
-  return c * c;
-}
-
-/** Where the near hand is on the frame he lets go of the pail, so it falls from there. */
-function handPositionAtLetGo(view: CrocView): Pt {
-  const pose = bucketBoyDeath(view, DEATH_LET_GO - 1);
-  return skeletonLandmarks(BUCKET_BOY_BUILD, pose, view).nearHand;
-}
-
-// ── Clarabelle ───────────────────────────────────────────────────────────────
+// ── Sydney ───────────────────────────────────────────────────────────────
 
 const CLARA_BREATH_RISE = 0.01;
 const CROSSED_ARMS_DROP = 0.4;
@@ -1244,8 +1085,8 @@ function crossedArms(
   };
 }
 
-function clarabelleIdle(view: CrocView, phase: number): CrocPose {
-  const build = CLARABELLE_BUILD;
+function sydneyIdle(view: CrocView, phase: number): CrocPose {
+  const build = SYDNEY_BUILD;
   const pose = restingPose(build);
   const breath = wave(phase);
   pose.breath = breath;
@@ -1267,8 +1108,8 @@ function clarabelleIdle(view: CrocView, phase: number): CrocPose {
   return pose;
 }
 
-function clarabelleWalk(view: CrocView, phase: number): CrocPose {
-  return walkPose(CLARABELLE_BUILD, CLARABELLE_WALK, view, phase, false);
+function sydneyWalk(view: CrocView, phase: number): CrocPose {
+  return walkPose(SYDNEY_BUILD, SYDNEY_WALK, view, phase, false);
 }
 
 /**
@@ -1279,10 +1120,10 @@ function clarabelleWalk(view: CrocView, phase: number): CrocPose {
 const TALK_UNCROSS_FRAMES = 3;
 const TALK_PALM_HOLD_FRAMES = 3;
 
-function clarabelleTalk(view: CrocView, frame: number): CrocPose {
-  const build = CLARABELLE_BUILD;
-  const palm = CLARABELLE_TALK_PALM_FRAME;
-  const frames = CLARABELLE_TALK_FRAMES;
+function sydneyTalk(view: CrocView, frame: number): CrocPose {
+  const build = SYDNEY_BUILD;
+  const palm = SYDNEY_TALK_PALM_FRAME;
+  const frames = SYDNEY_TALK_FRAMES;
   const pose = restingPose(build);
   const out = keyedSmooth(frame, [
     [0, 0],
@@ -1306,7 +1147,7 @@ function clarabelleTalk(view: CrocView, frame: number): CrocPose {
   }
   const arms = crossedArms(build, pose, view);
   const shoulders = shoulderJoints(build, pose, view);
-  // Elbow at the chest, forearm up, the palm turned to whoever is at the door.
+  // Elbow at the chest, forearm up, the palm turned to whoever is across the desk.
   const palmOut = profile
     ? armAt(pt(shoulders.near.x + 0.4, shoulders.near.y + 0.16), ELBOW_BACK, 0, deg(-80))
     : armAt(pt(shoulders.near.x + 0.16, shoulders.near.y + 0.04), ELBOW_BACK, 0, deg(-92));
@@ -1371,104 +1212,71 @@ function expand(templates: readonly RowTemplate[]): RowSpec[] {
   );
 }
 
-export const BUCKET_BOY_ROWS: readonly RowSpec[] = expand([
+export const JANITOR_ROWS: readonly RowSpec[] = expand([
   {
     base: 'idle',
-    frameCount: BUCKET_BOY_IDLE_FRAMES,
+    frameCount: JANITOR_IDLE_FRAMES,
     loops: true,
     gait: null,
-    pose: bucketBoyIdle,
+    pose: janitorIdle,
     byFrame: false,
   },
   {
-    base: 'walk',
-    frameCount: BUCKET_BOY_WALK_FRAMES,
+    base: 'walk_mop',
+    frameCount: JANITOR_WALK_MOP_FRAMES,
     loops: true,
-    gait: BUCKET_BOY_WALK,
-    pose: bucketBoyWalk,
+    gait: JANITOR_WALK_MOP,
+    pose: janitorWalkMop,
     byFrame: false,
   },
   {
-    base: 'flee',
-    frameCount: BUCKET_BOY_FLEE_FRAMES,
+    base: 'mop',
+    frameCount: JANITOR_MOP_FRAMES,
     loops: true,
-    gait: BUCKET_BOY_FLEE,
-    pose: bucketBoyFlee,
+    gait: null,
+    pose: janitorMop,
     byFrame: false,
   },
   {
-    base: 'slap',
-    frameCount: BUCKET_BOY_SLAP_FRAMES,
+    base: 'wring',
+    frameCount: JANITOR_WRING_FRAMES,
     loops: false,
     gait: null,
-    pose: bucketBoySlap,
-    byFrame: true,
-  },
-  {
-    base: 'cast_triage',
-    frameCount: BUCKET_BOY_TRIAGE_FRAMES,
-    loops: false,
-    gait: null,
-    pose: bucketBoyTriage,
-    byFrame: true,
-  },
-  {
-    base: 'cower',
-    frameCount: BUCKET_BOY_COWER_FRAMES,
-    loops: true,
-    gait: null,
-    pose: bucketBoyCower,
-    byFrame: false,
-  },
-  {
-    base: 'hurt',
-    frameCount: BUCKET_BOY_HURT_FRAMES,
-    loops: false,
-    gait: null,
-    pose: bucketBoyHurt,
-    byFrame: true,
-  },
-  {
-    base: 'death',
-    frameCount: BUCKET_BOY_DEATH_FRAMES,
-    loops: false,
-    gait: null,
-    pose: bucketBoyDeath,
+    pose: janitorWring,
     byFrame: true,
   },
 ]);
 
-export const CLARABELLE_ROWS: readonly RowSpec[] = expand([
+export const SYDNEY_ROWS: readonly RowSpec[] = expand([
   {
     base: 'idle',
-    frameCount: CLARABELLE_IDLE_FRAMES,
+    frameCount: SYDNEY_IDLE_FRAMES,
     loops: true,
     gait: null,
-    pose: clarabelleIdle,
+    pose: sydneyIdle,
     byFrame: false,
   },
   {
     base: 'walk',
-    frameCount: CLARABELLE_WALK_FRAMES,
+    frameCount: SYDNEY_WALK_FRAMES,
     loops: true,
-    gait: CLARABELLE_WALK,
-    pose: clarabelleWalk,
+    gait: SYDNEY_WALK,
+    pose: sydneyWalk,
     byFrame: false,
   },
   {
     base: 'talk',
-    frameCount: CLARABELLE_TALK_FRAMES,
+    frameCount: SYDNEY_TALK_FRAMES,
     loops: true,
     gait: null,
-    pose: clarabelleTalk,
+    pose: sydneyTalk,
     byFrame: true,
   },
 ]);
 
 /** Tiles covered per walk cycle, for a kit pacing the walk phase by ground covered. */
-export const BUCKET_BOY_TILES_PER_WALK_CYCLE = tilesPerCycle(BUCKET_BOY_BUILD, BUCKET_BOY_WALK);
-export const BUCKET_BOY_TILES_PER_FLEE_CYCLE = tilesPerCycle(BUCKET_BOY_BUILD, BUCKET_BOY_FLEE);
-export const CLARABELLE_TILES_PER_WALK_CYCLE = tilesPerCycle(CLARABELLE_BUILD, CLARABELLE_WALK);
+export const JANITOR_TILES_PER_WALK_CYCLE = tilesPerCycle(JANITOR_BUILD, JANITOR_WALK_MOP);
+export const SYDNEY_TILES_PER_WALK_CYCLE = tilesPerCycle(SYDNEY_BUILD, SYDNEY_WALK);
 
 // ── Painting ─────────────────────────────────────────────────────────────────
 
@@ -1496,38 +1304,20 @@ function crocPainter(build: CrocBuild, rows: readonly RowSpec[], cell: CrocCell)
   };
 }
 
-export const BUCKET_BOY_FIGURE: FigureDef = {
-  id: 'crocodilian_bucket_boy',
-  ...BUCKET_BOY_CELL,
+export const JANITOR_FIGURE: FigureDef = {
+  id: 'crocodilian_janitor',
+  ...JANITOR_CELL,
   tileScale: TILE_SCALE,
-  states: figureStates(stateFrames(BUCKET_BOY_ROWS)),
-  paintFrame: crocPainter(BUCKET_BOY_BUILD, BUCKET_BOY_ROWS, BUCKET_BOY_CELL),
+  states: figureStates(stateFrames(JANITOR_ROWS)),
+  paintFrame: crocPainter(JANITOR_BUILD, JANITOR_ROWS, JANITOR_CELL),
 };
 
-export const CLARABELLE_FIGURE: FigureDef = {
-  id: 'crocodilian_clarabelle',
-  ...CLARABELLE_CELL,
+export const SYDNEY_FIGURE: FigureDef = {
+  id: 'crocodilian_sydney',
+  ...SYDNEY_CELL,
   tileScale: TILE_SCALE,
-  states: figureStates(stateFrames(CLARABELLE_ROWS)),
-  paintFrame: crocPainter(CLARABELLE_BUILD, CLARABELLE_ROWS, CLARABELLE_CELL),
-};
-
-export const TRIAGE_SPARKLE_STATE = 'sparkle';
-
-export const TRIAGE_SPARKLE_FIGURE: FigureDef = {
-  id: 'triage_sparkle',
-  ...TRIAGE_SPARKLE_CELL,
-  tileScale: TILE_SCALE,
-  states: figureStates({ [TRIAGE_SPARKLE_STATE]: TRIAGE_SPARKLE_FRAMES }),
-  paintFrame: (ctx, state, frame) => {
-    if (state !== TRIAGE_SPARKLE_STATE) return;
-    const origin = originOf(TRIAGE_SPARKLE_CELL);
-    ctx.save();
-    ctx.translate(origin.x, origin.y);
-    ctx.scale(TILE_SCALE, TILE_SCALE);
-    drawTriageSparkle(ctx, shotT(frame, TRIAGE_SPARKLE_FRAMES));
-    ctx.restore();
-  },
+  states: figureStates(stateFrames(SYDNEY_ROWS)),
+  paintFrame: crocPainter(SYDNEY_BUILD, SYDNEY_ROWS, SYDNEY_CELL),
 };
 
 /** Every pose a figure's rows are built from, in row-then-frame order. */
@@ -1543,4 +1333,4 @@ export function poseStream(
   );
 }
 
-export { BUCKET_BOY_WALK, BUCKET_BOY_FLEE, CLARABELLE_WALK, type Gait };
+export { JANITOR_WALK_MOP, SYDNEY_WALK, type Gait };

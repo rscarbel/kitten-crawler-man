@@ -849,6 +849,26 @@ const EYE_DX = 0.101;
 const EYE_DY = -0.02;
 const EYE_RX = 0.068;
 const EYE_RY = 0.057;
+/** How far a head-on eye slides across the face per unit of head turn. */
+const EYE_TURN_SLIDE = 0.05;
+/** A pupil's half-width at its narrowest and widest, as a share of the eye's. */
+const PUPIL_NARROW_WIDTH = 0.16;
+const PUPIL_WIDE_WIDTH = 0.72;
+/** How far a pupil shifts across the eye at full gaze, as a share of the eye's half-width. */
+const PUPIL_GAZE_SHIFT = 0.3;
+/** Below this openness an eye is painted as a closed lid line, with no pupil to show. */
+const EYE_SHUT_OPENNESS = 0.12;
+/** The profile eye is seen a little edge-on: drawn at this share of its head-on size. */
+const SIDE_EYE_SCALE_X = 0.78;
+const SIDE_EYE_SCALE_Y = 0.82;
+/** In profile her pupil sits toward the front of the eye, looking where her nose points. */
+const SIDE_EYE_GAZE = 0.4;
+/**
+ * A pupil blown wide by catnip fills nearly the whole eye opening, across and
+ * down, while leaving a ring of iris to show it is still an eye.
+ */
+const DILATED_PUPIL_WIDTH = 0.56;
+const DILATED_PUPIL_HEIGHT = 0.7;
 
 const MUZZLE_DY = 0.095;
 
@@ -1059,7 +1079,7 @@ function paintEye(
   const openness = clamp01(open);
   const { face } = look;
 
-  if (openness < 0.12) {
+  if (openness < EYE_SHUT_OPENNESS) {
     ctx.strokeStyle = face.ink;
     ctx.lineWidth = 0.011;
     ctx.lineCap = 'round';
@@ -1094,9 +1114,12 @@ function paintEye(
   ctx.fillStyle = iris;
   ctx.fillRect(cx - EYE_RX * 1.2, cy - EYE_RY * 1.4, EYE_RX * 2.4, EYE_RY * 2.8);
 
-  const pupilW = EYE_RX * lerp(0.16, 0.72, clamp01(pupil)) * look.proportions.pupilScale;
+  const pupilW =
+    EYE_RX *
+    lerp(PUPIL_NARROW_WIDTH, PUPIL_WIDE_WIDTH, clamp01(pupil)) *
+    look.proportions.pupilScale;
   const pupilH = ry * face.pupilHeight;
-  const pupilX = cx + gaze * EYE_RX * 0.3;
+  const pupilX = cx + gaze * EYE_RX * PUPIL_GAZE_SHIFT;
   ctx.fillStyle = face.pupil;
   ctx.beginPath();
   ctx.ellipse(pupilX, cy, pupilW, pupilH, 0, 0, TWO_PI);
@@ -2642,8 +2665,8 @@ function drawHeadFront(
 
   const eyeDx = EYE_DX * look.face.eyeSpread;
   const eyeY = EYE_DY + look.face.eyeDrop;
-  const leftEye = { x: -eyeDx + turn * 0.05, y: eyeY };
-  const rightEye = { x: eyeDx + turn * 0.05, y: eyeY };
+  const leftEye = { x: -eyeDx + turn * EYE_TURN_SLIDE, y: eyeY };
+  const rightEye = { x: eyeDx + turn * EYE_TURN_SLIDE, y: eyeY };
   const landmarks: CatHeadLandmarks = {
     skull: { cx: skullCentreX, cy: 0, rx: headSize.rx, ry: headSize.ry },
     eyes: back ? [] : [leftEye, rightEye],
@@ -2707,6 +2730,81 @@ export function catForepawFront(p: CatPose, side: number): Pt {
 }
 
 /** The middle of her face head-on, pose space, and its half-width: the eyes and muzzle, not the ears. */
+/**
+ * A pupil blown as wide as it goes, in pose space: where to paint it over an
+ * open eye so it lands on the eye her painter drew.
+ */
+export interface CatDilatedPupil {
+  readonly centre: Pt;
+  readonly rx: number;
+  readonly ry: number;
+  /** Its tilt, radians: the head's tilt and the body's roll it is painted through. */
+  readonly angle: number;
+}
+
+/** The pupil ellipse of an eye drawn at `scaleX` × `scaleY`, or null for a shut one. */
+function dilatedPupilSize(
+  p: CatPose,
+  look: CatLook,
+  scaleX: number,
+  scaleY: number,
+): { rx: number; ry: number } | null {
+  const openness = clamp01(p.eyeOpen);
+  if (openness < EYE_SHUT_OPENNESS) return null;
+  const eyeScale = look.face.eyeScale;
+  const openingRy = EYE_RY * look.face.eyeRoundness * openness;
+  return {
+    rx: EYE_RX * DILATED_PUPIL_WIDTH * eyeScale * scaleX,
+    ry: openingRy * DILATED_PUPIL_HEIGHT * eyeScale * scaleY,
+  };
+}
+
+/**
+ * Both head-on pupils at their widest, placed by the same head placement, eye
+ * spacing and gaze {@link drawHeadFront} paints the eyes with. Empty on a
+ * frame her eyes are shut.
+ */
+export function catDilatedPupilsFront(p: CatPose, look: CatLook): readonly CatDilatedPupil[] {
+  const head = frontHeadPlacement(p, look, false);
+  const size = dilatedPupilSize(p, look, head.scaleX, head.scaleY);
+  if (size === null) return [];
+  const turn = p.headTurn;
+  const eyeDx = EYE_DX * look.face.eyeSpread;
+  const eyeY = EYE_DY + look.face.eyeDrop;
+  const gazeShift = turn * EYE_RX * PUPIL_GAZE_SHIFT * look.face.eyeScale;
+  return [-1, 1].map((side) => {
+    const local = {
+      x: (side * eyeDx + turn * EYE_TURN_SLIDE + gazeShift) * head.scaleX,
+      y: eyeY * head.scaleY,
+    };
+    const tilted = rotatePoint(local, head.tilt);
+    return {
+      centre: rotatePoint({ x: head.anchor.x + tilted.x, y: head.anchor.y + tilted.y }, p.roll),
+      rx: size.rx,
+      ry: size.ry,
+      angle: head.tilt + p.roll,
+    };
+  });
+}
+
+/** Her profile pupil at its widest, placed as {@link drawHeadSide} paints the eye; empty while it is shut. */
+export function catDilatedPupilsSide(p: CatPose, look: CatLook): readonly CatDilatedPupil[] {
+  const size = dilatedPupilSize(p, look, SIDE_EYE_SCALE_X, SIDE_EYE_SCALE_Y);
+  if (size === null) return [];
+  const head = sideHeadPlacement(p, look);
+  const gazeShift =
+    SIDE_EYE_GAZE * EYE_RX * PUPIL_GAZE_SHIFT * look.face.eyeScale * SIDE_EYE_SCALE_X;
+  const turned = rotatePoint({ x: SIDE_EYE.x + gazeShift, y: SIDE_EYE.y }, head.angle);
+  return [
+    {
+      centre: sidePainted(p, look, { x: head.x + turned.x, y: head.y + turned.y }),
+      rx: size.rx,
+      ry: size.ry,
+      angle: head.angle + catSideTurn(p),
+    },
+  ];
+}
+
 export function catFaceFront(p: CatPose, look: CatLook): { centre: Pt; radius: number } {
   // Her face reaches as far down as her skull does, which on a narrow head is
   // further than it reaches across.
@@ -3759,8 +3857,8 @@ function drawHeadSide(
 
   ctx.save();
   ctx.translate(SIDE_EYE.x, SIDE_EYE.y);
-  ctx.scale(0.78, 0.82);
-  drawEye(ctx, look, 0, 0, 1, p.eyeOpen, p.pupil, 0.4);
+  ctx.scale(SIDE_EYE_SCALE_X, SIDE_EYE_SCALE_Y);
+  drawEye(ctx, look, 0, 0, 1, p.eyeOpen, p.pupil, SIDE_EYE_GAZE);
   ctx.restore();
   ctx.save();
   ctx.scale(look.proportions.profileMuzzle, 1);

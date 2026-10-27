@@ -42,7 +42,7 @@ const SHADY_EYES: EyePlacement = {
  * Shady — the hooded man outside the Quiet Needle who issues and pays out
  * bounties.
  *
- * A stationary, non-combatant hook NPC in the GumGum mould: non-hostile, so
+ * A stationary, non-combatant hook NPC in the Baggi mould: non-hostile, so
  * player attacks pass straight through him. `BountySystem` owns the state
  * machine; this class owns only where he stands, what he is doing with his
  * hands, and which glyph is over his head.

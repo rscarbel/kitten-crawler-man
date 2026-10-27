@@ -56,12 +56,12 @@ import { MobRoster } from '../src/systems/kits/SceneWorld';
 import { FAVOR_SWING_MAX } from '../src/ai/actions/show';
 import { TILE_SIZE } from '../src/core/constants';
 import {
-  makeBloodVomit,
   makeBurn,
+  makeDoubleDamage,
   makePoison,
   type StatusEffect,
 } from '../src/core/combat/StatusEffect';
-import { BLOOD_VOMIT_MAX_HP_SHARE } from '../src/core/combat/statusTuning';
+import { DOUBLE_DAMAGE_SCALE } from '../src/core/combat/statusTuning';
 import { pendingStatusDamage } from '../src/Player';
 import { isItemId, ITEM_DEF, type ItemId } from '../src/core/items/defs/ItemDefs';
 import { CatPlayer } from '../src/creatures/CatPlayer';
@@ -194,7 +194,6 @@ const SALE_MULTIPLIER_MID = 0.8;
 /** The burn and poison clocks, as `Player.tickStatusEffects` runs them. */
 const BURN_FORECAST_INTERVAL = 60;
 const POISON_FORECAST_INTERVAL = 120;
-const FORECAST_MAX_HP = 100;
 const HURT_TEST_FRACTION = 0.3;
 /**
  * Constitution the test human carries past a fresh crawler's, as a crawler a
@@ -711,7 +710,7 @@ section('fuzzed calls through the governor keep the fairness rules');
 
       if (def.name === 'apply_status' && isRecord(args) && DOT_STATUSES.has(String(args.status))) {
         const target = targetOf(world, args.target_player);
-        const projected = target.hp - pendingStatusDamage(target.statusEffects, target.maxHp);
+        const projected = target.hp - pendingStatusDamage(target.statusEffects);
         check(
           projected >= Math.ceil(target.maxHp * LOW_HP_FRACTION),
           `apply_status ${String(args.status)} will carry a crawler under 25% HP`,
@@ -1154,12 +1153,11 @@ section('the show: achievements, questions, favour and every challenge template'
     }).ok,
     'the same title, however it is spaced or cased, is never awarded twice',
   );
-  const restored = AchievementManager.fromSerialized(
-    JSON.parse(JSON.stringify(world.achievements.human.serialize())),
-  );
-  check(restored.hasAIAchievement(award.title), 'an AI achievement survives a save');
+  const storedHuman: unknown = JSON.parse(JSON.stringify(world.achievements.human.serialize()));
+  const restored = AchievementManager.parse(storedHuman);
+  check(restored?.hasAIAchievement(award.title) === true, 'an AI achievement survives a save');
   check(
-    presentationAwardId(restored.peekPresentation()) === aiAchievementKey(award.title),
+    presentationAwardId(restored?.peekPresentation() ?? null) === aiAchievementKey(award.title),
     'and so does its unseen presentation',
   );
 
@@ -1173,11 +1171,13 @@ section('the show: achievements, questions, favour and every challenge template'
     paidAtOnce(giftBefore, paidState(world.achievements.cat, world.cat)),
     'a gifted chest pays at once: coins land and one presentation is queued',
   );
+  const savedHuman = world.achievements.human.serialize();
   check(
-    AchievementManager.fromSerialized({
+    AchievementManager.parse({
+      ...savedHuman,
       aiAchievements: [{ name: 7 }, null, 'junk'],
-    }).aiAchievements().length === 0,
-    'a tampered AI achievement is dropped on load',
+    }) === undefined,
+    'a tampered AI achievement fails the whole record on load',
   );
 
   const messy = system('grant_achievement', {
@@ -1201,7 +1201,8 @@ section('the show: achievements, questions, favour and every challenge template'
       .ok,
     'invisible characters do not get round the one-per-title rule',
   );
-  const smuggledNames = AchievementManager.fromSerialized({
+  const smuggled = AchievementManager.parse({
+    ...savedHuman,
     aiAchievements: [
       {
         name: 'Saved\n\nTitle\u2066',
@@ -1211,10 +1212,9 @@ section('the show: achievements, questions, favour and every challenge template'
         awardedAt: 0,
       },
     ],
-  })
-    .aiAchievements()
-    .map((def) => def.name);
-  check(smuggledNames.includes('Saved Title'), 'a saved AI achievement is flattened on load');
+    presentations: [],
+  });
+  check(smuggled === undefined, 'a saved AI achievement that is not one plain line is rejected');
 
   // Questions: the id comes back at once, the answer later as an event.
   const asked = system('ask_player', {
@@ -1265,8 +1265,8 @@ section('the show: achievements, questions, favour and every challenge template'
     check(favorPerk(value).chestCoinMultiplier >= 1, `favour ${value} never cuts a chest's coins`);
   }
   check(favorPerk(FAVOR_MIN).chestCoinMultiplier === 1, 'the lowest favour costs nothing');
-  check(parseViewerFavor('lots') === undefined, 'a junk saved favour is ignored');
-  check(parseViewerFavor(FAVOR_MAX * 2) === FAVOR_MAX, 'a saved favour is clamped');
+  check(parseViewerFavor('lots') === undefined, 'a junk saved favour is rejected');
+  check(parseViewerFavor(FAVOR_MAX * 2) === undefined, 'an out-of-range saved favour is rejected');
   const fresh = new ViewerFavor();
   check(fresh.serialize() === undefined && !fresh.engaged, 'an untouched run saves no favour');
   fresh.restore(undefined);
@@ -1655,7 +1655,7 @@ section('floor keys, status damage forecasts and indoor spawns');
         const elapsed = probe.totalTicks - left;
         if (elapsed > 0 && elapsed % interval === 0) bites++;
       }
-      const forecast = pendingStatusDamage([probe], FORECAST_MAX_HP);
+      const forecast = pendingStatusDamage([probe]);
       if (forecast !== bites) {
         check(
           false,
@@ -1666,16 +1666,17 @@ section('floor keys, status damage forecasts and indoor spawns');
     }
     check(true, `${effect.type} forecasts match its clock`);
   }
-  const vomit = pendingStatusDamage([makeBloodVomit()], FORECAST_MAX_HP);
+  const burnAlone = pendingStatusDamage([makeBurn()]);
+  const burnCursed = pendingStatusDamage([makeBurn(), makeDoubleDamage()]);
   check(
-    vomit >= Math.round(FORECAST_MAX_HP * BLOOD_VOMIT_MAX_HP_SHARE),
-    `blood vomiting is forecast (${vomit} of ${FORECAST_MAX_HP} max HP)`,
+    burnCursed === burnAlone * DOUBLE_DAMAGE_SCALE,
+    `double damage doubles a burn's forecast (${burnAlone} alone, ${burnCursed} cursed)`,
   );
   const human = outdoors.human;
-  human.statusEffects = [makeBloodVomit()];
-  human.hp = human.maxHp;
-  check(
-    !executeAIAction(
+  const burnWithHpToSpare = (statusEffects: StatusEffect[]): boolean => {
+    human.statusEffects = statusEffects;
+    human.hp = Math.min(human.maxHp, Math.ceil(human.maxHp * LOW_HP_FRACTION) + burnAlone);
+    const ok = executeAIAction(
       {
         name: 'apply_status',
         params: { status: 'burn', target_player: 'Human' },
@@ -1683,8 +1684,14 @@ section('floor keys, status damage forecasts and indoor spawns');
       },
       outdoors.scene,
       new ActionGovernor(() => 0),
-    ).ok,
-    'no damage-over-time status on top of blood vomiting that will carry them under 25% HP',
+    ).ok;
+    human.statusEffects = [];
+    return ok;
+  };
+  check(burnWithHpToSpare([]), 'a burn the crawler has the HP to outlast is allowed');
+  check(
+    !burnWithHpToSpare([makeDoubleDamage()]),
+    'the same burn under double damage, which would carry them under 25% HP, is refused',
   );
 }
 endSection();

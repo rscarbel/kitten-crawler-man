@@ -1,10 +1,10 @@
 import type { AudioManager } from '../audio/AudioManager';
-import type { HirelingBoltSystem } from './HirelingBoltSystem';
+import type { HirelingShotSystem } from './HirelingShotSystem';
 import type { RockThrowSystem } from './RockThrowSystem';
 
 /**
  * Plays and clears the sounds a hireling's shots left behind this frame: the
- * golem's boulder shattering, and a water bolt striking or a wave rolling out.
+ * golem's boulder shattering, and an arrow striking.
  *
  * Drained from the projectile systems rather than from the mob's own audio
  * cues because a shot outlives the hireling that loosed it — one that lands
@@ -13,7 +13,7 @@ import type { RockThrowSystem } from './RockThrowSystem';
  */
 export function playHirelingProjectileCues(
   rockThrows: RockThrowSystem,
-  hirelingShots: HirelingBoltSystem,
+  hirelingShots: HirelingShotSystem,
   audio: AudioManager | null,
 ): void {
   const throwers = rockThrows.landedThrowers;
@@ -25,9 +25,5 @@ export function playHirelingProjectileCues(
   if (hirelingShots.impactSoundPending) {
     hirelingShots.impactSoundPending = false;
     audio?.play('arrow_impact');
-  }
-  if (hirelingShots.waveSoundPending) {
-    hirelingShots.waveSoundPending = false;
-    audio?.play('mob_splash');
   }
 }

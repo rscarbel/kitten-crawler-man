@@ -9,7 +9,7 @@
  * town square centre — where a floor-3 arrival and a blocked-tile fallback put
  * the party — must be inside the wall with room to move, or the arrival would
  * never save and a respawn could land in a pocket. Every building's exit tile
- * must be inside the wall except the Big Top's, out on the circus grounds. A
+ * must be inside the wall except the Starlight Tent's, out on the circus grounds. A
  * dungeon floor, which has no town, must answer false everywhere.
  *
  * Then the rule that a death always lands on the last save: the respawn route
@@ -42,7 +42,7 @@ import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions.js';
 import { level1 } from '../src/levels/level1.js';
 import { level3 } from '../src/levels/level3.js';
 import type { LevelDef } from '../src/levels/types.js';
-import { BIG_TOP_ENTRY_NAME } from '../src/map/OverworldGenerator.js';
+import { STARLIGHT_TENT_NAME } from '../src/map/overworld/circusGroundsLayout.js';
 import type { TileRect } from '../src/map/town/townPlan.js';
 import type { GameProgressInput } from '../src/auth/AuthClient.js';
 import { HumanPlayer } from '../src/creatures/HumanPlayer.js';
@@ -56,21 +56,17 @@ import {
   savePointAfterWrite,
   type SavePoint,
 } from '../src/core/save/SavePoint.js';
-import { WORLD_GENERATOR_VERSION } from '../src/core/save/SavedWorld.js';
+import { parseSavedWorld, WORLD_GENERATOR_VERSION } from '../src/core/save/SavedWorld.js';
 import { sceneSetupFromSave } from '../src/scenes/resumeFromSave.js';
 import type { DungeonSceneOptions } from '../src/scenes/DungeonScene.js';
 import { parseTownMemoryCheckpoint } from '../src/core/save/PersistedWorldState.js';
-import {
-  createTownMemory,
-  interiorPropPayoutKey,
-  restoreTownMemory,
-  roomKey,
-} from '../src/core/state/TownMemory.js';
+import type { VisitedPlaceId } from '../src/core/state/TownMemory.js';
 import {
   AchievementManager,
   DUNGEON_KILLS_SOMETHING_HATCHED,
   type AchievementId,
 } from '../src/core/progression/AchievementManager.js';
+import { CHEST_SOURCE_TITLES } from '../src/loot/rewardChest.js';
 import { installBrowserShim } from './browserShim.js';
 import { settleArrival } from './settleArrival.js';
 
@@ -207,22 +203,22 @@ function checkOverworld(worldSeed: number): void {
   }
 
   // A building exit rebuilds the scene on its return tile, and that first frame
-  // is what saves; the Big Top stands out on the circus grounds and must not.
+  // is what saves; the Starlight Tent stands out on the circus grounds and must not.
   for (const entry of map.buildingEntries) {
     const returnTile = {
       x: entry.doorTile.x,
       y: entry.doorTile.y + RETURN_TILE_ROWS_SOUTH_OF_DOOR,
     };
     const returnsInsideWall = isInsideAtTileCentre(map, returnTile.x, returnTile.y);
-    const expectInside = entry.name !== BIG_TOP_ENTRY_NAME;
+    const expectInside = entry.name !== STARLIGHT_TENT_NAME;
     check(
       returnsInsideWall === expectInside,
       `${label}: ${entry.name} return tile inside the wall is ${returnsInsideWall}, expected ${expectInside}`,
     );
   }
   check(
-    map.buildingEntries.some((entry) => entry.name === BIG_TOP_ENTRY_NAME),
-    `${label}: no Big Top entry to check`,
+    map.buildingEntries.some((entry) => entry.name === STARLIGHT_TENT_NAME),
+    `${label}: no Starlight Tent entry to check`,
   );
 
   const start = map.startTile;
@@ -260,8 +256,41 @@ function checkDungeon(worldSeed: number): void {
   );
 }
 
+/**
+ * A save the real floor-3 scene writes, on the respawn check's seeds, so every
+ * field a save must carry is the one the game writes.
+ */
+async function writtenTownSave(): Promise<GameProgressInput> {
+  installBrowserShim(DESCENT_VIEWPORT);
+  const { SceneManager } = await import('../src/core/Scene.js');
+  const { InputManager } = await import('../src/core/input/InputManager.js');
+  const { DungeonScene } = await import('../src/scenes/DungeonScene.js');
+  const saves: GameProgressInput[] = [];
+  const sceneManager = new SceneManager();
+  const scene = new DungeonScene(level3, new InputManager(), sceneManager, {
+    worldSeed: RESPAWN_CHECK_SEED,
+    artSeed: RESPAWN_CHECK_ART_SEED,
+    skipIntro: true,
+    saveProgress: (progress) => {
+      saves.push(progress);
+      return Promise.resolve('saved');
+    },
+  });
+  sceneManager.replace(scene);
+  const ctx = sceneManager.canvas.getContext('2d');
+  if (ctx === null) throw new Error('the shim canvas has no 2d context');
+  check(await settleArrival(scene, ctx), "the town floor's arrival screen finishes");
+  scene['captureSavePoint'](scene['gameMap'].startTile);
+  const written = saves.length > 0 ? saves[saves.length - 1] : undefined;
+  if (written === undefined) throw new Error('the town floor wrote no save');
+  scene.onExit();
+  return written;
+}
+
 /** The save a town entry writes, with a party that differs from a fresh one. */
-function townSave(tile: { x: number; y: number }): GameProgressInput {
+function townSave(base: GameProgressInput, tile: { x: number; y: number }): GameProgressInput {
+  const baseWorld = base.world;
+  if (baseWorld === undefined) throw new Error('the town floor wrote a save with no world');
   const human = new HumanPlayer(tile.x, tile.y, TILE_SIZE);
   const cat = new CatPlayer(tile.x, tile.y, TILE_SIZE);
   human.level = SAVED_PARTY_LEVEL;
@@ -270,23 +299,22 @@ function townSave(tile: { x: number; y: number }): GameProgressInput {
   // A crawler saved while downed must still resume on its feet.
   humanSnap.isKnockedOut = true;
   return {
+    ...structuredClone(base),
     levelId: level3.id,
     humanSnap,
     catSnap: snapPlayer(cat),
     world: {
-      generatorVersion: WORLD_GENERATOR_VERSION,
-      worldSeed: RESPAWN_CHECK_SEED,
-      artSeed: RESPAWN_CHECK_ART_SEED,
-      safeRoomTile: { ...tile },
+      ...structuredClone(baseWorld),
+      resumeTile: { ...tile },
       levelTimerFrames: SAVED_LEVEL_TIMER_FRAMES,
     },
   };
 }
 
-function checkRespawnRoutes(): void {
+function checkRespawnRoutes(base: GameProgressInput): void {
   const map = buildMap(level3, RESPAWN_CHECK_SEED);
   const saveTile = map.townSquareCentre ?? map.startTile;
-  const save = townSave(saveTile);
+  const save = townSave(base, saveTile);
   const savedJson = JSON.stringify(save);
 
   check(
@@ -370,25 +398,27 @@ function checkRespawnRoutes(): void {
 }
 
 /**
- * A carried save the floor cannot be rebuilt from — no world at all (the
- * level-complete save, or one from before saves carried one) or a world from an
- * older generator — regenerates the floor from a fresh seed, so the first frame
- * owes an arrival save; without one a death resumes the same save and draws
- * another floor. A save that does rebuild its floor owes none.
+ * A carried save the floor cannot be rebuilt from — the level-complete save,
+ * which carries no world — regenerates the floor from a fresh seed, so the
+ * first frame owes an arrival save; without one a death resumes the same save
+ * and draws another floor. A save that does rebuild its floor owes none. A
+ * stored world from another generator fails validation outright.
  */
-function checkArrivalSaves(): void {
-  const withWorld = townSave({ x: 0, y: 0 });
+function checkArrivalSaves(base: GameProgressInput): void {
+  const withWorld = townSave(base, { x: 0, y: 0 });
   const { world: _dropped, ...withoutWorld } = withWorld;
-  const olderGenerator: GameProgressInput = {
-    ...withWorld,
-    world: {
-      generatorVersion: WORLD_GENERATOR_VERSION - 1,
-      worldSeed: RESPAWN_CHECK_SEED,
-      artSeed: RESPAWN_CHECK_ART_SEED,
-      safeRoomTile: null,
-      levelTimerFrames: null,
-    },
+  const otherGeneratorWorld = {
+    ...withWorld.world,
+    generatorVersion: WORLD_GENERATOR_VERSION + 1,
   };
+  check(
+    parseSavedWorld(JSON.parse(JSON.stringify(otherGeneratorWorld))) === undefined,
+    'a stored world from another generator passes validation',
+  );
+  check(
+    parseSavedWorld(JSON.parse(JSON.stringify(withWorld.world))) !== undefined,
+    'a stored world the game wrote fails validation',
+  );
 
   check(!carriedSaveRegeneratesFloor(undefined), 'no carried save reads as a regenerated floor');
   check(
@@ -399,10 +429,6 @@ function checkArrivalSaves(): void {
     carriedSaveRegeneratesFloor(withoutWorld),
     'a save with no world does not read as a regenerated floor',
   );
-  check(
-    carriedSaveRegeneratesFloor(olderGenerator),
-    'a save from an older generator does not read as a regenerated floor',
-  );
 
   check(
     owesArrivalSave(withoutWorld, false, false),
@@ -411,10 +437,6 @@ function checkArrivalSaves(): void {
   check(
     owesArrivalSave(withoutWorld, true, false),
     'a death restart from a save with no world owes no arrival save',
-  );
-  check(
-    owesArrivalSave(olderGenerator, false, false),
-    'a resume from an older-generator save owes no arrival save',
   );
   check(
     !owesArrivalSave(withWorld, false, false),
@@ -434,116 +456,28 @@ function checkArrivalSaves(): void {
   );
 }
 
-/** A building's name as a save written before it was renamed holds it. */
-const PRE_RENAME_BUILDING_NAME = "Shepherd's Cabin";
-/** The name the same building goes by now, which the town plan must still use. */
-const RENAMED_BUILDING_NAME = 'Plumbline Farm';
-const RENAMED_ROOM_FLOOR = 0;
-const RENAMED_ROOM_PROP_ID = 'churn_2';
-/** A room that was never renamed, which must come through a load untouched. */
-const UNRENAMED_BUILDING_NAME = 'Blackwood Lodge';
+/** A place id no build tracks. */
+const UNKNOWN_VISITED_PLACE = 'retired_place';
+const KNOWN_VISITED_PLACE = 'circus_grounds' as const satisfies VisitedPlaceId;
 
-/**
- * A save keys its remembered rooms and prop payouts by building name, so a
- * renamed building would forget the player cleared or searched it unless the
- * load maps the old name onto the new one.
- */
-function checkRenamedBuildingMemory(): void {
-  const oldRoom = roomKey(PRE_RENAME_BUILDING_NAME, RENAMED_ROOM_FLOOR);
-  const oldProp = interiorPropPayoutKey(
-    PRE_RENAME_BUILDING_NAME,
-    RENAMED_ROOM_FLOOR,
-    RENAMED_ROOM_PROP_ID,
-  );
-  const untouchedRoom = roomKey(UNRENAMED_BUILDING_NAME, RENAMED_ROOM_FLOOR);
-  const parsed = parseTownMemoryCheckpoint({
-    residentTalks: [],
-    clearedRooms: [oldRoom, untouchedRoom],
-    clearedCamps: [],
-    paidOutInteriorProps: [oldProp],
-  });
-  if (parsed === undefined) {
-    check(false, 'a town memory naming a renamed building does not parse');
-    return;
-  }
-  const memory = createTownMemory();
-  restoreTownMemory(memory, parsed);
-  check(
-    memory.clearedRooms.has(roomKey(RENAMED_BUILDING_NAME, RENAMED_ROOM_FLOOR)),
-    `a room cleared as ${PRE_RENAME_BUILDING_NAME} is not remembered as ${RENAMED_BUILDING_NAME}`,
-  );
-  check(
-    !memory.clearedRooms.has(oldRoom),
-    `a room cleared as ${PRE_RENAME_BUILDING_NAME} is still remembered under its old name`,
-  );
-  check(
-    memory.clearedRooms.has(untouchedRoom),
-    `${UNRENAMED_BUILDING_NAME}'s cleared room did not survive the load`,
-  );
-  check(
-    memory.paidOutInteriorProps.has(
-      interiorPropPayoutKey(RENAMED_BUILDING_NAME, RENAMED_ROOM_FLOOR, RENAMED_ROOM_PROP_ID),
-    ),
-    `a prop paid out in ${PRE_RENAME_BUILDING_NAME} is not remembered in ${RENAMED_BUILDING_NAME}`,
-  );
-
-  const map = buildMap(level3, RESPAWN_CHECK_SEED);
-  const names = map.buildingEntries.map((entry) => entry.name);
-  check(
-    names.includes(RENAMED_BUILDING_NAME),
-    `the town has no ${RENAMED_BUILDING_NAME} for an old save's record to land on`,
-  );
-  check(
-    !names.includes(PRE_RENAME_BUILDING_NAME),
-    `the town still has a building named ${PRE_RENAME_BUILDING_NAME}`,
-  );
-}
-
-const RENAMED_PROP_BUILDING_NAME = 'Temple of the Sky';
-const RENAMED_PROP_BUILDING_KIND = 'house';
-/** A breakable pew a save keyed by position before its layout entry took an explicit id. */
-const RENAMED_PROP_POSITIONAL_ID = 'pew@14,9';
-
-/**
- * A prop paid out under its positional id must stay paid out once its layout
- * entry carries an explicit id, or breaking it again would pay twice.
- */
-function checkRenamedInteriorPropMemory(): void {
-  const room = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  room.generateInterior(RENAMED_PROP_BUILDING_KIND, RENAMED_ROOM_FLOOR, RENAMED_PROP_BUILDING_NAME);
-  const pew = room.placedInteriorProps.find(
-    (placed) => `${placed.propId}@${placed.tile.x},${placed.tile.y}` === RENAMED_PROP_POSITIONAL_ID,
-  );
-  if (pew === undefined || pew.id === RENAMED_PROP_POSITIONAL_ID) {
-    check(
-      false,
-      `${RENAMED_PROP_BUILDING_NAME} has no explicitly-ided ${RENAMED_PROP_POSITIONAL_ID}`,
-    );
-    return;
-  }
-  const parsed = parseTownMemoryCheckpoint({
+/** A town memory naming an unknown visited place fails validation instead of forgetting it. */
+function checkUnknownVisitedPlace(): void {
+  const memory = {
     residentTalks: [],
     clearedRooms: [],
     clearedCamps: [],
-    paidOutInteriorProps: [
-      interiorPropPayoutKey(
-        RENAMED_PROP_BUILDING_NAME,
-        RENAMED_ROOM_FLOOR,
-        RENAMED_PROP_POSITIONAL_ID,
-      ),
-    ],
-  });
-  if (parsed === undefined) {
-    check(false, 'a town memory naming a positional prop id does not parse');
-    return;
-  }
-  const memory = createTownMemory();
-  restoreTownMemory(memory, parsed);
+    paidOutInteriorProps: [],
+  };
   check(
-    memory.paidOutInteriorProps.has(
-      interiorPropPayoutKey(RENAMED_PROP_BUILDING_NAME, RENAMED_ROOM_FLOOR, pew.id),
-    ),
-    `${RENAMED_PROP_POSITIONAL_ID} paid out by position is not remembered as ${pew.id}`,
+    parseTownMemoryCheckpoint({ ...memory, visitedPlaces: [KNOWN_VISITED_PLACE] }) !== undefined,
+    'a town memory with only known visited places fails validation',
+  );
+  check(
+    parseTownMemoryCheckpoint({
+      ...memory,
+      visitedPlaces: [KNOWN_VISITED_PLACE, UNKNOWN_VISITED_PLACE],
+    }) === undefined,
+    'a town memory with an unknown visited place passes validation',
   );
 }
 
@@ -624,6 +558,35 @@ function mongoChestsQueued(manager: AchievementManager): number {
 /** A save and reload of one crawler's achievements, as the device's storage round-trips them. */
 function reloadAchievements(manager: AchievementManager): AchievementManager {
   return AchievementManager.fromSerialized(JSON.parse(JSON.stringify(manager.serialize())));
+}
+
+/** Far more unopened chests than a floor pays out, so a cap on the queue would show. */
+const LONG_CHEST_BACKLOG = 250;
+const BACKLOG_CHEST_COINS = 1;
+
+/** Every unopened chest survives a save and reload, however many are waiting. */
+function checkLongChestBacklogRoundTrips(): void {
+  const manager = new AchievementManager();
+  for (let i = 0; i < LONG_CHEST_BACKLOG; i++) {
+    manager.queuePresentation({
+      origin: { kind: 'chest', source: 'bossRepeat' },
+      title: CHEST_SOURCE_TITLES.bossRepeat,
+      subtitle: '',
+      crawler: 'human',
+      rarity: 'Common',
+      rewards: [{ kind: 'coins', amount: BACKLOG_CHEST_COINS }],
+    });
+  }
+  const stored: unknown = JSON.parse(JSON.stringify(manager.serialize()));
+  const parsed = AchievementManager.parse(stored);
+  check(
+    parsed?.presentationCount === LONG_CHEST_BACKLOG,
+    `a save with ${LONG_CHEST_BACKLOG} unopened chests reads back with ${String(parsed?.presentationCount)}`,
+  );
+  check(
+    reloadAchievements(manager).presentationCount === LONG_CHEST_BACKLOG,
+    'a long chest backlog does not survive the resume path',
+  );
 }
 
 async function checkDungeonKillLadder(): Promise<void> {
@@ -735,10 +698,11 @@ for (const seed of SEEDS) {
   checkOverworld(seed);
   checkDungeon(seed);
 }
-checkRespawnRoutes();
-checkArrivalSaves();
-checkRenamedBuildingMemory();
-checkRenamedInteriorPropMemory();
+const writtenSave = await writtenTownSave();
+checkRespawnRoutes(writtenSave);
+checkArrivalSaves(writtenSave);
+checkUnknownVisitedPlace();
+checkLongChestBacklogRoundTrips();
 await checkDescentSaveKeepsAchievements();
 await checkDungeonKillLadder();
 

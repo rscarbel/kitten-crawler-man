@@ -26,6 +26,7 @@ import {
 } from '../../town/townArt';
 import { getTownRamp, sampleRamp, mix, type Ramp, type RGB } from '../../town/townPalette';
 import { paintPlankBoard, paintStoneCourses } from '../../town/townMaterials';
+import type { PropFlameSite } from '../propFlames';
 import {
   BRASS,
   COPPER,
@@ -35,7 +36,6 @@ import {
   CROCKERY_WHITE,
   FIRE_GLOW,
   FLAME_CORE,
-  FLAME_OUTER,
   BREAD,
   inkedRect,
   rectPath,
@@ -387,8 +387,21 @@ function paintLogPile(ctx: Ctx, cx: number, baseY: number, ts: number): void {
   });
 }
 
-/** Flames in three nested tongues, banked low over glowing logs. */
-function paintFire(
+/** How far east of the inglenook's centre its fire is laid, clear of the kettle crane. */
+const INN_FIRE_OFFSET_TILES = 0.15;
+/** The middle of the inglenook's three-tile footprint. */
+const INN_HEARTH_CENTRE_TILES = 1.5;
+
+/** The inglenook's fire, standing on its logs at the foot of the firebox arch. */
+export const INN_HEARTH_FLAMES: ReadonlyArray<PropFlameSite> = [
+  { x: INN_HEARTH_CENTRE_TILES + INN_FIRE_OFFSET_TILES, rise: 1.06, size: 0.85, style: 'hearth' },
+];
+
+/**
+ * The fire's bed: its glow, two crossed logs and the embers under them. The
+ * flames themselves are live, drawn over the hearth from its `flames` sites.
+ */
+function paintFireBed(
   ctx: Ctx,
   cx: number,
   baseY: number,
@@ -411,28 +424,6 @@ function paintFire(
   ctx.restore();
   ctx.fillStyle = rgba(EMBER, 0.9);
   ctx.fillRect(cx - width * 0.35, baseY - ts * 0.04, width * 0.7, ts * 0.04);
-  const tongues: ReadonlyArray<readonly [number, number, number]> = [
-    [-0.26, 0.7, 0.2],
-    [0.24, 0.78, 0.22],
-    [0, 1, 0.3],
-  ];
-  for (const [layer, color] of [
-    [1, FLAME_OUTER],
-    [0.62, FLAME_CORE],
-  ] as const) {
-    ctx.fillStyle = rgb(color);
-    for (const [dx, tall, wide] of tongues) {
-      const x = cx + dx * width;
-      const h = height * tall * layer;
-      const w = width * wide * layer;
-      ctx.beginPath();
-      ctx.moveTo(x - w / 2, baseY - ts * 0.05);
-      ctx.quadraticCurveTo(x - w / 2, baseY - h * 0.55, x, baseY - h);
-      ctx.quadraticCurveTo(x + w / 2, baseY - h * 0.55, x + w / 2, baseY - ts * 0.05);
-      ctx.closePath();
-      ctx.fill();
-    }
-  }
 }
 
 /**
@@ -524,7 +515,14 @@ export function paintInnHearth(ctx: Ctx, frame: TownPropFrame, _variant: number,
     ctx.closePath();
     ctx.fill();
     inkOutline(ctx, ts);
-    paintFire(ctx, box.centreX + ts * 0.15, archBottom, ts * 0.9, ts * 0.75, ts);
+    paintFireBed(
+      ctx,
+      box.centreX + ts * INN_FIRE_OFFSET_TILES,
+      archBottom,
+      ts * 0.9,
+      ts * 0.75,
+      ts,
+    );
 
     // The kettle on its crane, hung to the side of the flames.
     const craneX = box.centreX - archHalf + ts * 0.12;

@@ -2,18 +2,18 @@
 /**
  * Review renders for construction-contract art: every material's damage on
  * every kind of target, a rebuild site per material, the reach glow and the
- * finish puff, then every spot in a Skyfowl Town room's and a Briar Hollow
+ * finish puff, then every spot in a Taloncrest room's and a Briar Hollow
  * room's pool, area highlights included, composited onto the real room.
  *
  *   npm run render:construction-contracts
- *   npm run render:construction-contracts -- --skyfowl=sleeping_cat_inn --hollow=forge
+ *   npm run render:construction-contracts -- --taloncrest=sleeping_cat_inn --hollow=forge
  *   npm run render:construction-contracts -- --out-dir=preview/my-pass
  *
  * Every image is written three ways: `-1x` at the game's own 32 px tiles,
  * `-1x-zoom` that same image blown up with hard pixels so a mark's read at
  * game size can be judged, and `-2x` painted at Retina density.
  *
- * In the Skyfowl Town room a repair spot's damage is drawn the way the
+ * In the Taloncrest room a repair spot's damage is drawn the way the
  * interior draws it: floors, doorways and walls under every figure, a prop's
  * damage straight after its prop in the Y-sorted pass. A rebuild spot's prop is
  * hidden and its build site drawn on the floor.
@@ -53,7 +53,7 @@ const { EventBus } = await import('../src/core/EventBus.js');
 const { Conversation } = await import('../src/dialog/Conversation.js');
 const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
-const { skyfowlSpotFootprint, briarHollowSpotFootprint } =
+const { taloncrestSpotFootprint, briarHollowSpotFootprint } =
   await import('../src/systems/constructionContracts/contractTargets.js');
 const { contractSpotArtSeed, drawContractBuildSite, drawContractOverlay, releaseContractArt } =
   await import('../src/sprites/art/constructionContracts/contractArtCache.js');
@@ -76,14 +76,14 @@ const { worldText } = await import('../src/ui/world/worldText.js');
 type GameMapInstance = InstanceType<typeof GameMap>;
 type Material = ContractSpotMaterial;
 type Surface = 'prop' | 'floor' | 'wall' | 'doorway' | 'open_side';
-type Settlement = 'skyfowl' | 'hollow';
+type Settlement = 'taloncrest' | 'hollow';
 
 const MATERIALS: readonly Material[] = ['wood', 'stone', 'rope', 'plaster'];
 const SURFACES: readonly Surface[] = ['prop', 'floor', 'wall', 'doorway', 'open_side'];
-const SETTLEMENTS: readonly Settlement[] = ['skyfowl', 'hollow'];
+const SETTLEMENTS: readonly Settlement[] = ['taloncrest', 'hollow'];
 
 const DEFAULT_OUT_DIR = `${PREVIEW_DIR}/construction-contracts`;
-const DEFAULT_SKYFOWL_SITE = 'sleeping_cat_inn';
+const DEFAULT_TALONCREST_SITE = 'sleeping_cat_inn';
 const DEFAULT_HOLLOW_SITE = 'forge';
 /** Hard-pixel blow-up of the 1x image, so a one-pixel mark is visible as a pixel. */
 const ZOOM = 3;
@@ -111,7 +111,7 @@ function stringArg(name: string, fallback: string): string {
 }
 
 const outDir = stringArg('out-dir', DEFAULT_OUT_DIR);
-const skyfowlSlug = stringArg('skyfowl', DEFAULT_SKYFOWL_SITE);
+const taloncrestSlug = stringArg('taloncrest', DEFAULT_TALONCREST_SITE);
 const hollowSlug = stringArg('hollow', DEFAULT_HOLLOW_SITE);
 
 await loadSprites('src/images/');
@@ -192,7 +192,7 @@ function paintFloor(
   h: number,
 ): void {
   const rng = mulberry32(SWATCH_SEED);
-  if (settlement === 'skyfowl') {
+  if (settlement === 'taloncrest') {
     paintPlankBoard(ctx, x, y, w, h, rng, {
       direction: 'horizontal',
       boardPx: TILE_SIZE * FLOOR_BOARD_TILES,
@@ -222,7 +222,7 @@ function paintPropStandIn(
   const rng = mulberry32(PROP_STANDIN_SEED);
   const top = y - TILE_SIZE * PROP_STANDIN_RISE_TILES;
   const height = h + TILE_SIZE * PROP_STANDIN_RISE_TILES;
-  if (settlement === 'skyfowl') {
+  if (settlement === 'taloncrest') {
     if (material === 'stone')
       paintStoneCourses(ctx, x, top, w, height, getTownRamp('oc_stone'), rng);
     else if (material === 'plaster') {
@@ -259,7 +259,7 @@ function paintWallStandIn(
   w: number,
   h: number,
 ): void {
-  if (settlement === 'skyfowl') {
+  if (settlement === 'taloncrest') {
     const finish = material === 'stone' ? 'stone' : material === 'plaster' ? 'plaster' : 'timber';
     for (let tile = 0; tile * TILE_SIZE < w; tile++) {
       paintNorthInteriorWallFace(ctx, x + tile * TILE_SIZE, y, TILE_SIZE, h, finish, tile, 0);
@@ -391,8 +391,8 @@ function effectsSheet(): void {
     }
     for (let frame = 0; frame < PUFF_FRAMES; frame++) {
       const rect = spotRect(frame, 1);
-      paintFloor(ctx, 'skyfowl', ...floorInCell(frame, 1));
-      paintPropStandIn(ctx, 'skyfowl', 'wood', rect.x, rect.y, rect.w, rect.h);
+      paintFloor(ctx, 'taloncrest', ...floorInCell(frame, 1));
+      paintPropStandIn(ctx, 'taloncrest', 'wood', rect.x, rect.y, rect.w, rect.h);
       drawContractFinishPuff(
         ctx,
         rect,
@@ -475,10 +475,10 @@ function isGroundSpot(spot: PlacedSpot): boolean {
   return spot.kind === 'rebuild' || spot.surface !== 'prop';
 }
 
-function skyfowlRoom(): void {
-  const site = CONTRACT_SITES.find((candidate) => candidate.slug === skyfowlSlug);
-  if (site?.town !== 'skyfowl')
-    throw new Error(`--skyfowl=${skyfowlSlug} names no Skyfowl Town site`);
+function taloncrestRoom(): void {
+  const site = CONTRACT_SITES.find((candidate) => candidate.slug === taloncrestSlug);
+  if (site?.town !== 'taloncrest')
+    throw new Error(`--taloncrest=${taloncrestSlug} names no Taloncrest site`);
   const plan = createTownPlan(TOWN_PLAN_SIZE);
   const building = plan.buildings.find((candidate) => candidate.name === site.buildingName);
   if (building === undefined) throw new Error(`${site.buildingName} is not in the town plan`);
@@ -492,7 +492,7 @@ function skyfowlRoom(): void {
   const spots: PlacedSpot[] = [];
   const hiddenPropIds = new Set<string>();
   for (const spot of site.spots) {
-    const footprint = skyfowlSpotFootprint(site, spot, map);
+    const footprint = taloncrestSpotFootprint(site, spot, map);
     if (footprint === null) {
       console.warn(`  ${spot.id}: target not found in the layout`);
       continue;
@@ -525,7 +525,7 @@ function skyfowlRoom(): void {
       drawTownInteriorGroundProps(ctx, map, 0, 0, TILE_SIZE);
       map.renderDecorationsOverlay(ctx, 0, 0, viewW, viewH);
       if (withSpots) {
-        for (const spot of spots.filter(isGroundSpot)) drawSpot(ctx, spot, 'skyfowl', 0, 0);
+        for (const spot of spots.filter(isGroundSpot)) drawSpot(ctx, spot, 'taloncrest', 0, 0);
         drawSpotHighlights(ctx, spots);
       }
       const figures = townInteriorPropFigures(map, withSpots ? hiddenPropIds : new Set()).sort(
@@ -534,12 +534,12 @@ function skyfowlRoom(): void {
       for (const figure of figures) {
         figure.render(ctx, 0, 0, TILE_SIZE);
         const spot = propSpotByPlacedId.get(figure.placed.id);
-        if (withSpots && spot !== undefined) drawSpot(ctx, spot, 'skyfowl', 0, 0);
+        if (withSpots && spot !== undefined) drawSpot(ctx, spot, 'taloncrest', 0, 0);
       }
       if (withSpots) drawSpotFrames(ctx, spots);
     };
-  writeAllScales(`room-skyfowl-${site.slug}`, viewW, viewH, paintRoom(true));
-  writeAllScales(`room-skyfowl-${site.slug}-before`, viewW, viewH, paintRoom(false));
+  writeAllScales(`room-taloncrest-${site.slug}`, viewW, viewH, paintRoom(true));
+  writeAllScales(`room-taloncrest-${site.slug}-before`, viewW, viewH, paintRoom(false));
   for (const spot of spots)
     console.log(
       `  ${spot.id}: ${spot.kind} ${spot.material} ${spot.surface} ${JSON.stringify(spot.rect)}`,
@@ -650,5 +650,5 @@ function hollowRoom(): void {
 
 for (const settlement of SETTLEMENTS) swatchSheet(settlement);
 effectsSheet();
-skyfowlRoom();
+taloncrestRoom();
 hollowRoom();

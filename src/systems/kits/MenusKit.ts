@@ -24,6 +24,7 @@ import {
   TIMED_POTIONS,
 } from '../../core/items/consumables/timedPotions';
 import { eatFood, isFoodId } from '../../core/items/consumables/foods';
+import { INTOXICATING_DRINKS } from '../../core/items/consumables/intoxicatingDrinks';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
 import { partyCoins } from '../../core/party/partyCoins';
@@ -57,7 +58,7 @@ import { skillBookDialogSurface } from '../../ui/screens/dialogs/skillBookDialog
 import { questRewardSurface } from '../../ui/screens/dialogs/questRewardScreen';
 import { ConstructionScreen } from '../../ui/screens/construction/ConstructionScreen';
 import { QuantityDialog } from '../../ui/screens/dialogs/QuantityDialog';
-import { potionEffectNotice, statBoostNotice } from '../../ui/potionNotices';
+import { drinkRefusal, potionEffectNotice, statBoostNotice } from '../../ui/potionNotices';
 import { RewardGrantedDialog } from '../../ui/RewardGrantedDialog';
 import { QuestRewardScreen } from '../../ui/questReward/QuestRewardScreen';
 import { SkillBookPrompt } from '../../ui/SkillBookPrompt';
@@ -496,6 +497,13 @@ export class MenusKit {
       audio?.play('error_taking_action');
       return false;
     }
+    const onlyFor = ITEM_DEF[id].drinkableBy;
+    const drinkerKind: CrawlerKind = drinker instanceof HumanPlayer ? 'human' : 'cat';
+    if (onlyFor !== undefined && drinkerKind !== onlyFor) {
+      audio?.play('error_taking_action');
+      this.announce(drinkRefusal(onlyFor), HOTBAR_REFUSED_TOAST);
+      return false;
+    }
     const consume = (): boolean =>
       bottle === null
         ? drinker.inventory.removeOne(id)
@@ -521,16 +529,17 @@ export class MenusKit {
       return true;
     }
 
-    if (id === 'dirty_shirley') {
+    const intoxicant = INTOXICATING_DRINKS[id];
+    if (intoxicant !== undefined) {
       // A bottle that would change nothing is refused before it is opened: it
       // comes out of the bag rather than off a bar, so spending one for no
       // effect costs the player twice.
-      if (!drinker.dirtyShirleyWouldHelp) {
+      if (!drinker.intoxicantWouldHelp(intoxicant)) {
         audio?.play('error_taking_action');
         return false;
       }
       if (!consume()) return false;
-      drinker.drinkDirtyShirley();
+      drinker.drinkIntoxicant(intoxicant);
       this.playDrinkSounds('healing_potion');
       this.showPotionEffectNotice(id);
       return true;
@@ -550,7 +559,7 @@ export class MenusKit {
     if (timed === undefined) return false;
     // Refusing rather than refreshing: a second bottle poured over a running one
     // is coins for nothing.
-    if (drinker.hasStatus(id)) {
+    if (drinker.hasStatus(timed.status)) {
       audio?.play('error_taking_action');
       return false;
     }

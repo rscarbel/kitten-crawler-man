@@ -702,7 +702,10 @@ section('Checkpoints round-trip and never alias the live record');
   );
 
   const reloaded = parseShopStockSnapshot(JSON.parse(JSON.stringify(snapshot)));
-  check(snapshotsEqual(reloaded, expected), 'a snapshot did not survive a JSON save and load');
+  check(
+    reloaded !== undefined && snapshotsEqual(reloaded, expected),
+    'a snapshot did not survive a JSON save and load',
+  );
 }
 endSection();
 

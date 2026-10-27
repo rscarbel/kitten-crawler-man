@@ -21,7 +21,7 @@
 
 import type { Difficulty } from '../../core/difficulty/difficultyProfiles';
 import { worldRandom } from '../../core/world/WorldRandom';
-import { mixSeed, seededStream } from '../../map/bigTop/mirrorBoard';
+import { mixSeed, seededStream } from '../../map/starlightTent/mirrorBoard';
 import { subSeed } from '../../sprites/person/rng';
 import {
   assessPipeBoard,

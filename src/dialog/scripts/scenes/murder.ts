@@ -1,5 +1,5 @@
 /**
- * "The Krasue Murders" — the Over City's town murder mystery. GumGum is a
+ * "The Krasue Murders" — Taloncrest's town murder mystery. Baggi is a
  * kindly orc who saw a taking; Mordecai's warning arrives as a voice in the
  * crawlers' ears; the clue text carries the deduction chain that points first
  * at the magistrate, then at his secretary, and finally at the thing that has
@@ -15,11 +15,11 @@ const HUMAN_NAME = crawlerName('human');
 /** The murder mystery's own header, for a narration page with no more specific location to name. */
 const THE_KRASUE_MURDERS = 'The Krasue Murders';
 
-const gumgum = speakerLines('gumgum');
+const baggi = speakerLines('baggi');
 const narrator = transientSpeaker(THE_KRASUE_MURDERS, 'narration');
 const theAlley = transientSpeaker('The Alley', 'narration');
 const theTownWell = transientSpeaker('The Town Well', 'narration');
-const hildasCottage = transientSpeaker('Old Hilda’s Cottage', 'narration');
+const lorisCottage = transientSpeaker('Old Lori’s Cottage', 'narration');
 const theTowerPlaza = transientSpeaker('The Tower Plaza', 'narration');
 const theUnreadableLetter = transientSpeaker('The Unreadable Letter', 'narration');
 const ryan = speakerLines('ryan');
@@ -27,17 +27,17 @@ const belle = speakerLines('belle');
 const mordecai = speakerLines('mordecaiInEar');
 
 export const MURDER_HOOK: NonEmpty<DialogLine> = [
-  gumgum.line(
-    'Psst. Crawlers. Over here. No, don’t look around, look at ME. Name’s GumGum. I got no coin and no class worth spit, but I got eyes. And my eyes have seen where the missing ones go.',
+  baggi.line(
+    'Psst. Crawlers. Over here. No, don’t look around, look at ME. Name’s Baggi. I got no coin and no class worth spit, but I got eyes. And my eyes have seen where the missing ones go.',
   ),
-  gumgum.line(
+  baggi.line(
     'People are vanishing off the night streets. My friends. Low-street folk, the kind nobody files a report about. They turn up mornings, from the shoulders down. The Watch won’t come. Nobody comes for us.',
   ),
   belle.line(
     `${HUMAN_NAME}, she’s so sad. We have to help her. Can I give her a cuddle first? Then we can be detectives. I’ve never been a detective. Is it warm?`,
   ),
-  gumgum.line(
-    'Meet me in the alley beside the Desperado Club after dark and I’ll show you where they take them. Please. You’re the first ones who looked at me instead of through me.',
+  baggi.line(
+    'Meet me in the alley beside the Cloak & Dagger after dark and I’ll show you where they take them. Please. You’re the first ones who looked at me instead of through me.',
   ),
   mordecai.button(
     'After dark, then',
@@ -47,13 +47,13 @@ export const MURDER_HOOK: NonEmpty<DialogLine> = [
 
 export const MURDER_BODY_FOUND: NonEmpty<DialogLine> = [
   theAlley.line(
-    'GumGum lies crumpled behind the Desperado Club, a day cold at least. She never made the meeting. Somebody made certain of that the same night she asked for help. The body ends at the shoulders. There is no head.',
+    'Baggi lies crumpled behind the Cloak & Dagger, a day cold at least. She never made the meeting. Somebody made certain of that the same night she asked for help. The body ends at the shoulders. There is no head.',
   ),
   ryan.line(
     'Hey. Oh, no. She talked to us at noon and she was gone by midnight. That’s not bad luck. Somebody was watching her. Maybe watching us too.',
   ),
   belle.line(
-    `I don’t want to look at the neck part. But ${HUMAN_NAME}, there’s paper in her coat. See? Right there. Poor GumGum.`,
+    `I don’t want to look at the neck part. But ${HUMAN_NAME}, there’s paper in her coat. See? Right there. Poor Baggi.`,
   ),
   theAlley.line(
     'Two papers, tucked where a pickpocket wouldn’t bother to look. The first is a magistrate’s writ, the ink barely dry: ‘The bearer acts on my authority and is not to be detained.’ Signed, Magistrate Featherfall.',
@@ -81,8 +81,8 @@ export const MURDER_WELL_CLUE: NonEmpty<DialogLine> = [
 ];
 
 export const MURDER_HOME_CLUE: NonEmpty<DialogLine> = [
-  hildasCottage.line(
-    'Claw furrows rake the paving outside Hilda’s cottage, ending in a pool and a few torn scraps of a visitor’s shawl. The door stands latched from the inside, untouched. Tucked under the knocker, a note in a neat schoolteacher hand: ‘Evening lessons. Come alone.’ It is unsigned.',
+  lorisCottage.line(
+    'Claw furrows rake the paving outside Lori’s cottage, ending in a pool and a few torn scraps of a visitor’s shawl. The door stands latched from the inside, untouched. Tucked under the knocker, a note in a neat schoolteacher hand: ‘Evening lessons. Come alone.’ It is unsigned.',
   ),
   ryan.button(
     'Noted',
@@ -92,7 +92,7 @@ export const MURDER_HOME_CLUE: NonEmpty<DialogLine> = [
 
 export const MURDER_ROOST_CLUE: NonEmpty<DialogLine> = [
   theTowerPlaza.line(
-    'Beneath the magistrate’s tower, moulted skyfowl feathers lie arranged in a careful ring. A shrine: elf-made candles, fresh wax. Something burst through it since. The feathers are flung wide, and blood is thrown in an arc up the tower stone. Whatever took the victim went up.',
+    'Beneath the magistrate’s tower, moulted Hawkfolk feathers lie arranged in a careful ring. A shrine: elf-made candles, fresh wax. Something burst through it since. The feathers are flung wide, and blood is thrown in an arc up the tower stone. Whatever took the victim went up.',
   ),
   ryan.line(
     'So the cult prays down here, and the blood goes up there. Featherfall’s roost is at the top of this tower. His paperwork was on the body, and now there’s blood on his walls. Everything keeps pointing at the magistrate.',
@@ -111,7 +111,7 @@ export const MURDER_ROOST_CLUE: NonEmpty<DialogLine> = [
  */
 export const MURDER_TAUNT_AND_NIGHTFALL: NonEmpty<DialogLine> = [
   theUnreadableLetter.line(
-    'The letter in your pack grows warm. The ink crawls, rearranges itself, and settles into plain script, in the same neat schoolteacher hand as the note on Hilda’s door: ‘No, you won’t.’',
+    'The letter in your pack grows warm. The ink crawls, rearranges itself, and settles into plain script, in the same neat schoolteacher hand as the note on Lori’s door: ‘No, you won’t.’',
   ),
   ryan.line(
     'Whoa. We didn’t ask anything out loud, and it answered anyway. This isn’t a letter. It’s a window, and somebody’s been watching through it since the alley. Hi there, whoever you are.',
@@ -143,10 +143,10 @@ export const MURDER_AFTERMATH: NonEmpty<DialogLine> = [
 
 export const MURDER_HIDEOUT_CLEARED: NonEmpty<DialogLine> = [
   narrator.line(
-    'In the cellar, under the guttered candles: a duty ledger of names. Low-street names, GumGum’s among them, each struck through in a neat schoolteacher hand. The final page is an instruction: ‘Bring the next lessons to my capacitor at the top of the magistrate’s tower.’ It is signed ‘Miss Quill’, and sealed with a feather pressed into black wax.',
+    'In the cellar, under the guttered candles: a duty ledger of names. Low-street names, Baggi’s among them, each struck through in a neat schoolteacher hand. The final page is an instruction: ‘Bring the next lessons to my capacitor at the top of the magistrate’s tower.’ It is signed ‘Miss Quill’, and sealed with a feather pressed into black wax.',
   ),
   ryan.line(
-    'The schoolteacher! The chalk at the well, the note about evening lessons, handwriting way too neat for a butcher. She does the collecting, and the magistrate’s office keeps the Watch off her back. That writ on GumGum was a leash.',
+    'The schoolteacher! The chalk at the well, the note about evening lessons, handwriting way too neat for a butcher. She does the collecting, and the magistrate’s office keeps the Watch off her back. That writ on Baggi was a leash.',
   ),
   belle.line(
     `A teacher and a magistrate. And they’re both at the top of the tower? ${HUMAN_NAME}, it might be warm up there. Let’s go.`,

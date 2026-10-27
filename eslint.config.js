@@ -119,13 +119,13 @@ export default tseslint.config(
     },
   },
   {
-    // The Big Top's maze is an authored floor plan, and the plan is drawn out in
+    // The Starlight Tent's maze is an authored floor plan, and the plan is drawn out in
     // the same file as an ASCII grid. Every bare number in it is a tile
     // coordinate read off that grid; naming each one would replace a table you
     // can check against the picture above it with forty aliases you cannot. The
     // file's *timings* are all named constants, which is where the rule earns
     // its keep and where it is still being followed.
-    files: ['src/map/bigTopMazeLayout.ts'],
+    files: ['src/map/starlightTentMazeLayout.ts'],
     rules: {
       '@typescript-eslint/no-magic-numbers': 'off',
     },

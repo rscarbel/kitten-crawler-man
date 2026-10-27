@@ -51,7 +51,7 @@ const CULL_MARGIN_TILES = 2;
 const FAT_CLOWN_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'regroup', 'riposte'];
 
 /**
- * Grimaldi's performers fight as one troupe: a stilt clown and a fat clown
+ * The circus's clowns fight as one troupe: a tall clown and a fat clown
  * after the same player fan out around each other and fall back on each
  * other, where two classes left to their own kinds would each see half a pack.
  */
@@ -69,8 +69,8 @@ const FAT_CLOWN_EYES: EyePlacement = {
 };
 
 /**
- * A Fat Clown — one of Grimaldi's corrupted performers, tanky and slow with
- * a heavy shoulder-slam attack. The circus questline's bread-and-butter bruiser.
+ * A Fat Clown — a corrupted circus performer, tanky and slow with a heavy
+ * shoulder-slam attack.
  */
 export class FatClown extends Mob {
   protected override get eyePlacement(): EyePlacement {

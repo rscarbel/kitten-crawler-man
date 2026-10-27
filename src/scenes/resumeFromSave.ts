@@ -2,23 +2,21 @@ import { ABILITY_DEFS } from '../abilities/abilityDefs';
 import type { DungeonSceneOptions } from './DungeonScene';
 import type { GameProgressInput } from '../auth/AuthClient';
 import type { LevelDef } from '../levels/types';
-import { getLevelDef, tutorialLevel } from '../levels/index';
+import { getLevelDef } from '../levels/index';
 import { revivedSnapshot, withoutIncurableStatuses } from '../core/save/PlayerSnapshot';
 import { AbilityManager } from '../core/skills/AbilityManager';
 import { getMongoStats } from '../abilities/mongo';
 import { createMongoPetState } from '../core/state/MongoPetState';
-import { parseSavedWorld } from '../core/save/SavedWorld';
 import { AchievementManager } from '../core/progression/AchievementManager';
-import { GameStats, parseGameStatsSnapshot } from '../core/progression/GameStats';
-import { createPartyCraftsState } from '../core/labour/partyCrafts';
+import { GameStats } from '../core/progression/GameStats';
 import { createWheelLedger } from '../core/save/WheelLedger';
 import { createAttackCowState } from '../core/state/AttackCowState';
-import { withBloodVomitFrames } from '../core/save/bloodVomitSave';
+import { withDoubleDamageFrames } from '../core/save/doubleDamageSave';
 import { MusicLibrary } from '../core/music/MusicLibrary';
 import { viewerFavor } from '../core/progression/viewerFavor';
 
 /**
- * An ability manager carrying a save's progress, or a fresh one at level 1.
+ * An ability manager carrying a save's progress.
  *
  * The defs have to be registered here rather than left to `DungeonScene`:
  * restoring clamps each level against its def's maximum, so a manager with no
@@ -28,7 +26,7 @@ import { viewerFavor } from '../core/progression/viewerFavor';
 function resumedAbilityManager(states: GameProgressInput['abilityStates']): AbilityManager {
   const manager = new AbilityManager();
   for (const def of Object.values(ABILITY_DEFS)) manager.register(def);
-  if (states !== undefined) manager.restoreSerializedStates(states);
+  manager.restoreSerializedStates(states);
   return manager;
 }
 
@@ -44,7 +42,7 @@ export function progressForRespawn(progress: GameProgressInput): GameProgressInp
     ...progress,
     humanSnap: withoutIncurableStatuses(progress.humanSnap),
     catSnap: withoutIncurableStatuses(progress.catSnap),
-    bloodVomitRemaining: { human: 0, cat: 0 },
+    doubleDamageRemaining: { human: 0, cat: 0 },
   };
 }
 
@@ -73,88 +71,63 @@ export function sceneSetupFromSave(
   const options: DungeonSceneOptions = { ...baseOptions };
   // Loading straight into a wipe is never recoverable — the same save would
   // reload into the same wipe — so a resumed party always arrives on its feet.
-  options.humanSnap = withBloodVomitFrames(
+  options.humanSnap = withDoubleDamageFrames(
     revivedSnapshot(progress.humanSnap),
-    progress.bloodVomitRemaining?.human ?? 0,
+    progress.doubleDamageRemaining.human,
   );
-  options.catSnap = withBloodVomitFrames(
+  options.catSnap = withDoubleDamageFrames(
     revivedSnapshot(progress.catSnap),
-    progress.bloodVomitRemaining?.cat ?? 0,
+    progress.doubleDamageRemaining.cat,
   );
   options.wheelLedger = createWheelLedger(
-    progress.wheelPrizesWon ?? [],
-    progress.pendingWheelOutcome ?? null,
-    progress.wheelFreeSpinBet ?? null,
-    progress.wheelOwedFreeze ?? null,
-    progress.wheelOwedItems ?? [],
-    progress.wheelQuestFreeSpins ?? {},
+    progress.wheelPrizesWon,
+    progress.pendingWheelOutcome,
+    progress.wheelFreeSpinBet,
+    progress.wheelOwedFreeze,
+    progress.wheelQuestFreeSpins,
   );
   // A cow saved resting has had her rest by the time the game is loaded again:
   // she comes back whole, as she would on the next floor.
   const savedCowHp = progress.attackCowHp ?? null;
-  const cowRested = progress.attackCowResting === true || (savedCowHp !== null && savedCowHp <= 0);
+  const cowRested = progress.attackCowResting || (savedCowHp !== null && savedCowHp <= 0);
   options.attackCowState = createAttackCowState(
-    progress.attackCowOwned ?? false,
+    progress.attackCowOwned,
     cowRested ? null : savedCowHp,
     false,
   );
   options.abilityManager = resumedAbilityManager(progress.abilityStates);
-  options.mongoUnlocked = progress.mongoUnlocked ?? false;
-  options.partyCrafts = progress.crafts ?? createPartyCraftsState();
-  if (progress.humanAchievements !== undefined) {
-    options.humanAchievements = AchievementManager.fromSerialized(progress.humanAchievements);
-  }
-  if (progress.catAchievements !== undefined) {
-    options.catAchievements = AchievementManager.fromSerialized(progress.catAchievements);
-  }
+  options.mongoUnlocked = progress.mongoUnlocked;
+  options.partyCrafts = progress.crafts;
+  options.humanAchievements = AchievementManager.fromSerialized(progress.humanAchievements);
+  options.catAchievements = AchievementManager.fromSerialized(progress.catAchievements);
   // A death that respawns here hands over the run's live library: a song is
   // no less heard for the death, and rewinding it would announce its unlock
   // and its credit a second time.
-  options.musicLibrary ??= MusicLibrary.forSave(progress);
+  options.musicLibrary ??= MusicLibrary.fromSerialized(progress.musicLibrary);
   viewerFavor.restore(progress.viewerFavor);
-  if (progress.mongoPetHp !== undefined && Number.isFinite(progress.mongoPetHp)) {
-    // Clamped against the maximum the *restored* level implies: this arrives
-    // as unvalidated JSON, and a value above the maximum renders as a
-    // permanently full bar that never regenerates down to the truth.
-    const petMaxHp = getMongoStats(options.abilityManager.getLevel('mongo')).maxHp;
-    const restoredHp = Math.max(0, Math.min(petMaxHp, progress.mongoPetHp));
-    options.mongoPetState = createMongoPetState(
-      restoredHp,
-      petMaxHp,
-      // Absent from saves written before the rest latch existed, where a zeroed
-      // pet is exactly the case the latch is for.
-      progress.mongoPetResting ?? restoredHp <= 0,
-    );
-  }
-  // progress.levelId is unvalidated JSON — a save written against a
-  // since-renamed level must fall back rather than throw at boot.
-  let levelDef: LevelDef;
-  let levelResolved = true;
-  try {
-    levelDef = getLevelDef(progress.levelId);
-  } catch {
-    levelDef = tutorialLevel;
-    levelResolved = false;
-  }
-  // A fallback level has no relationship to the saved seed, and a seed replayed
-  // against different level options would land the safe room in a wall.
-  const savedWorld = levelResolved ? parseSavedWorld(progress.world) : undefined;
+  // Clamped against the maximum the restored ability level implies, which the
+  // save does not store.
+  const petMaxHp = getMongoStats(options.abilityManager.getLevel('mongo')).maxHp;
+  options.mongoPetState = createMongoPetState(
+    Math.min(petMaxHp, progress.mongoPetHp),
+    petMaxHp,
+    progress.mongoPetResting,
+  );
+  const levelDef = getLevelDef(progress.levelId);
+  const savedWorld = progress.world;
   if (savedWorld !== undefined) {
     options.worldSeed = savedWorld.worldSeed;
     options.artSeed = savedWorld.artSeed;
-    options.spawnAt = savedWorld.safeRoomTile ?? undefined;
+    options.spawnAt = savedWorld.resumeTile ?? undefined;
     options.levelTimerFrames = savedWorld.levelTimerFrames ?? undefined;
     options.persistedWorldState = savedWorld.persisted;
   }
-  const savedStats = parseGameStatsSnapshot(progress.gameStats);
-  if (savedStats !== undefined) {
-    const stats = GameStats.fromSnapshot(savedStats);
-    // A death that respawns here hands over the run still in progress, whose
-    // deaths and time played are newer than the save's — including the death
-    // that brought the party back.
-    if (baseOptions.gameStats !== undefined) stats.carryRunHistoryFrom(baseOptions.gameStats);
-    options.gameStats = stats;
-  }
+  const stats = GameStats.fromSnapshot(progress.gameStats);
+  // A death that respawns here hands over the run still in progress, whose
+  // deaths and time played are newer than the save's — including the death
+  // that brought the party back.
+  if (baseOptions.gameStats !== undefined) stats.carryRunHistoryFrom(baseOptions.gameStats);
+  options.gameStats = stats;
   // The scene starts standing on this save, so a death before it takes another
   // comes straight back here rather than to the floor's entry.
   options.lastSave = save;

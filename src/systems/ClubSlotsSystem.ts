@@ -1,11 +1,11 @@
 /**
- * The Desperado Club's slot machine — the host over {@link SlotMachine}.
+ * The Cloak & Dagger's slot machine — the host over {@link SlotMachine}.
  *
  * It owns everything with money or a clock in it that the engine leaves to
  * its host: taking each bet from the party's purse, paying wins with
  * blackjack's split (the returned stake straight back to the purse, the
  * profit through `earnCoins` so it counts as income), storing the
- * progressive pool on the club membership, running autospin and the
+ * progressive pool on the casino state, running autospin and the
  * free-spin feature, deciding when each reel stops and when a celebration is
  * over, and every sound and music cue. The reels and the celebration are
  * animated by {@link SlotsMotion} and painted by {@link SlotsView}.
@@ -19,7 +19,7 @@ import type { Player } from '../Player';
 import type { AudioManager } from '../audio/AudioManager';
 import type { AudioScope } from '../audio/AudioScope';
 import { SLOTS_FREE_SPINS_MUSIC_TRACKS, type SoundId } from '../audio/sounds';
-import type { ClubMembership } from '../core/club/ClubMembership';
+import type { CasinoState } from '../core/club/CasinoState';
 import { NEVER_LUCKY, type LuckCheck } from '../core/state/GodMode';
 import { keybindings } from '../core/input/Keybindings';
 import { canAffordCoins, partyCoins, spendPartyCoins } from '../core/party/partyCoins';
@@ -73,8 +73,8 @@ export type SlotsLoops = Pick<
   'startAmbientLoop' | 'stopAmbientLoop' | 'isAmbientLoopRunning' | 'claimMusic' | 'releaseMusic'
 >;
 
-/** What the machine keeps on the club membership between visits. */
-export type SlotsSettings = Pick<ClubMembership, 'slotsJackpotPool' | 'slotsTurbo'>;
+/** What the machine keeps on the casino state between visits. */
+export type SlotsSettings = Pick<CasinoState, 'slotsJackpotPool' | 'slotsTurbo'>;
 
 export interface ClubSlotsOptions {
   /** Seeds the reels, for the preview and gates. */
@@ -138,7 +138,6 @@ export class ClubSlotsSystem implements CasinoGameHost {
   private leaving = false;
   private nextSpinAt: number | null = null;
 
-  private wagered = 0;
   private sessionWinnings = 0;
   /** The stake the spin being revealed was paid with; zero for a free spin. */
   private inFlightStake = 0;
@@ -191,10 +190,6 @@ export class ClubSlotsSystem implements CasinoGameHost {
 
   get anySurfaceOpen(): boolean {
     return this.isOpen;
-  }
-
-  get coinsWageredThisVisit(): number {
-    return this.wagered;
   }
 
   get rulesOpen(): boolean {
@@ -323,10 +318,7 @@ export class ClubSlotsSystem implements CasinoGameHost {
     });
     if (start.kind === 'refused') return false;
     this.settings.slotsJackpotPool = start.jackpotPool;
-    if (start.charged > 0) {
-      spendPartyCoins(active, companion, start.charged, active);
-      this.wagered += start.charged;
-    }
+    if (start.charged > 0) spendPartyCoins(active, companion, start.charged, active);
     this.inFlightStake = start.charged;
     this.lastWin = null;
     this.nextSpinAt = null;

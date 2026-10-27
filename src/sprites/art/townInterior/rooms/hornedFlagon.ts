@@ -24,18 +24,19 @@ import {
   type Rng,
 } from '../../town/townArt';
 import { getTownRamp, sampleRamp, mix, type Ramp, type RGB } from '../../town/townPalette';
+import type { PropFlameSite } from '../propFlames';
 import { paintPlankBoard, paintStoneCourses } from '../../town/townMaterials';
 import {
   BRASS,
   PEWTER,
   FIRE_GLOW,
   FLAME_CORE,
-  FLAME_OUTER,
   inkedRect,
   rectPath,
   roundRectPath,
   paintBloom,
   paintCandle,
+  paintCandleBody,
   paintCandlestick,
   paintTankard,
   paintBottle,
@@ -310,6 +311,14 @@ export function paintFlagonHearth(
   );
 }
 
+/** The middle of the great fireplace's four-tile footprint. */
+const GRAND_HEARTH_CENTRE_TILES = 2;
+
+/** The great fireplace's fire, banked high on the dogs at the foot of the opening. */
+export const GRAND_HEARTH_FLAMES: ReadonlyArray<PropFlameSite> = [
+  { x: GRAND_HEARTH_CENTRE_TILES, rise: 1.1, size: 1.05, style: 'hearth' },
+];
+
 /**
  * The great fireplace with whatever its house hangs on the chimney breast:
  * `paintCrest` is handed the breast's centre and the scale a crest is drawn
@@ -376,7 +385,7 @@ export function paintGrandHearth(
     ctx.fill();
     inkOutline(ctx, ts);
 
-    // The fire itself, big and banked high on the dogs.
+    // The fire's bed, banked high on the dogs; the flames over it are live.
     const fireBase = hearthTop - ts * 0.04;
     paintBloom(ctx, box.centreX, fireBase - ts * 0.3, ts * 1.3, FIRE_GLOW, 0.6);
     ctx.fillStyle = rgb([70, 46, 30]);
@@ -392,29 +401,6 @@ export function paintGrandHearth(
       ctx.fill();
       inkOutline(ctx, ts * 0.8);
       ctx.restore();
-    }
-    const tongues = [-0.55, -0.28, 0, 0.3, 0.56];
-    for (const [scale, color] of [
-      [1, FLAME_OUTER],
-      [0.6, FLAME_CORE],
-    ] as const) {
-      ctx.fillStyle = rgb(color);
-      tongues.forEach((dx, i) => {
-        const x = box.centreX + dx * ts;
-        const h = ts * (0.55 + (i % 2) * 0.25 + (i === 2 ? 0.2 : 0)) * scale;
-        const w = ts * 0.3 * scale;
-        ctx.beginPath();
-        ctx.moveTo(x - w / 2, fireBase - ts * 0.1);
-        ctx.quadraticCurveTo(
-          x - w / 2,
-          fireBase - h * 0.6,
-          x + jitter(rng, ts * 0.04),
-          fireBase - h,
-        );
-        ctx.quadraticCurveTo(x + w / 2, fireBase - h * 0.6, x + w / 2, fireBase - ts * 0.1);
-        ctx.closePath();
-        ctx.fill();
-      });
     }
     for (const dx of [-0.62, 0.62]) {
       inkedRect(
@@ -1527,6 +1513,39 @@ export function paintFlagonTrophy(
   });
 }
 
+/** How high a torchère's crown stands, in tiles above its foot. */
+const TORCHERE_CROWN_RISE = 1.55;
+/** The middle candle stands proud of the two beside it. */
+const TORCHERE_MIDDLE_CANDLE_LIFT = 0.06;
+/** How far each side candle stands out from the shaft, in tiles. */
+const TORCHERE_CANDLE_SPREAD = 0.22;
+/** A candle's foot sits this far down into its iron cup. */
+const TORCHERE_CANDLE_SEAT = 0.02;
+const TORCHERE_CANDLE_HEIGHT = 0.22;
+const TORCHERE_CANDLE_OFFSETS: ReadonlyArray<number> = [
+  -TORCHERE_CANDLE_SPREAD,
+  0,
+  TORCHERE_CANDLE_SPREAD,
+];
+/** The middle of the torchère's one-tile footprint. */
+const TORCHERE_CENTRE_TILES = 0.5;
+const TORCHERE_FLAME_SIZE = 0.7;
+
+function torchereCandleLift(dx: number): number {
+  return dx === 0 ? TORCHERE_MIDDLE_CANDLE_LIFT : 0;
+}
+
+/** A flame on each of the torchère's three candle wicks. */
+export const TORCHERE_FLAMES: ReadonlyArray<PropFlameSite> = TORCHERE_CANDLE_OFFSETS.map(
+  (dx): PropFlameSite => ({
+    x: TORCHERE_CENTRE_TILES + dx,
+    rise:
+      TORCHERE_CROWN_RISE + torchereCandleLift(dx) + TORCHERE_CANDLE_SEAT + TORCHERE_CANDLE_HEIGHT,
+    size: TORCHERE_FLAME_SIZE,
+    style: 'torch',
+  }),
+);
+
 /** An iron torchère: tripod foot, a tall twisted shaft, a crown of three candles. */
 export function paintTorchere(ctx: Ctx, frame: TownPropFrame, _variant: number, _rng: Rng): void {
   withFootprintClip(ctx, frame, () => {
@@ -1535,7 +1554,7 @@ export function paintTorchere(ctx: Ctx, frame: TownPropFrame, _variant: number, 
     const cx = box.centreX;
     const footY = box.bottom - ts * 0.16;
     drawTownContactShadow(ctx, cx, footY + ts * 0.04, ts * 0.26, ts * 0.08, 0.34);
-    const crownY = box.bottom - ts * 1.55;
+    const crownY = box.bottom - ts * TORCHERE_CROWN_RISE;
     paintBloom(ctx, cx, crownY - ts * 0.18, ts * 0.6, FIRE_GLOW, 0.4);
     ctx.strokeStyle = rgb(IRON);
     ctx.lineWidth = ts * 0.04;
@@ -1555,11 +1574,12 @@ export function paintTorchere(ctx: Ctx, frame: TownPropFrame, _variant: number, 
     ctx.moveTo(cx - ts * 0.22, crownY - ts * 0.02);
     ctx.quadraticCurveTo(cx, crownY + ts * 0.12, cx + ts * 0.22, crownY - ts * 0.02);
     ctx.stroke();
-    for (const dx of [-0.22, 0, 0.22]) {
+    for (const dx of TORCHERE_CANDLE_OFFSETS) {
       const x = cx + dx * ts;
-      const baseY = crownY - (dx === 0 ? ts * 0.06 : 0);
-      inkedRect(ctx, x - ts * 0.05, baseY - ts * 0.02, ts * 0.1, ts * 0.04, IRON_LIGHT, ts * 0.7);
-      paintCandle(ctx, x, baseY - ts * 0.02, ts * 0.22, ts);
+      const baseY = crownY - torchereCandleLift(dx) * ts;
+      const seat = ts * TORCHERE_CANDLE_SEAT;
+      inkedRect(ctx, x - ts * 0.05, baseY - seat, ts * 0.1, seat * 2, IRON_LIGHT, ts * 0.7);
+      paintCandleBody(ctx, x, baseY - seat, ts * TORCHERE_CANDLE_HEIGHT, ts);
     }
   });
 }

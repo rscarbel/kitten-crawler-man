@@ -1,8 +1,8 @@
 /**
- * The human crawler's attack cow: a war cow won at the Desperado Club's wheel, who walks
+ * The human crawler's attack cow: a war cow won at the Cloak & Dagger's wheel, who walks
  * with the party for the rest of the run.
  *
- * She is a meat shield, not a damage dealer. Very high health and a weak
+ * She is a tank, not a damage dealer. Very high health and a weak
  * headbutt: she charges whatever comes near the party, butts it with her
  * helmet, and `AttackCowSystem` turns the hostiles around her onto her
  * (`Mob.tauntedBy`), so the blows meant for the crawlers land on her hide.
@@ -22,7 +22,7 @@
 import { crawlerName } from '../characters/characters';
 import { Cow, type CowLeadBand } from './Cow';
 import type { LootDrop, Mob, PlayerDamageType } from './Mob';
-import type { DamageSource, Player } from '../Player';
+import type { DamageOptions, DamageSource, Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
 import { levelledMaxHp, scaledDamageForLevel } from './mobLevelScaling';
 import { HirelingSurvival } from './mercenaries/hirelingSurvival';
@@ -295,10 +295,10 @@ export class AttackCow extends Cow {
     return { coins: 0, items: [] };
   }
 
-  override takeDamage(amount: number, source?: DamageSource): boolean {
+  override takeDamage(amount: number, source?: DamageSource, options?: DamageOptions): boolean {
     if (!this.isStanding) return false;
     this.quietFrames = 0;
-    return super.takeDamage(amount, source);
+    return super.takeDamage(amount, source, options);
   }
 
   override takeDamageFrom(

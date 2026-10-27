@@ -80,7 +80,7 @@ const { FLOOR_ART_SEEDS } = await import('../src/map/ground/artSeedAlphabet.js')
 const { propSheetPlanMismatches } = await import('../src/sprites/sheets/propSheetPlan.js');
 const { townscapeSheetPlans, OVERWORLD_MAP_SIZE_TILES } =
   await import('../src/sprites/sheets/townscapeSheets.js');
-const { overCitySheetPlans } = await import('../src/sprites/sheets/overCitySheets.js');
+const { taloncrestSheetPlans } = await import('../src/sprites/sheets/taloncrestSheets.js');
 const { treeSheetPlans } = await import('../src/sprites/sheets/treeSheets.js');
 const { rockSheetPlans } = await import('../src/sprites/sheets/rockSheets.js');
 const { campSheetPlans } = await import('../src/sprites/sheets/campSheets.js');
@@ -191,7 +191,7 @@ function drainToCompletion(): DrainReport {
  */
 const PROP_FAMILIES = [
   ...townscapeSheetPlans(),
-  ...overCitySheetPlans(),
+  ...taloncrestSheetPlans(),
   ...treeSheetPlans(0),
   ...rockSheetPlans(0),
   ...campSheetPlans(0),

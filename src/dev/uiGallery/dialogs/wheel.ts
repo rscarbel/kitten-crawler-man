@@ -1,9 +1,10 @@
 /**
- * Fixtures for Tito's Wheel of Fortune: both danger prompts (arming and
+ * Fixtures for Donald's Wheel of Fortune: both danger prompts (arming and
  * armed), the wheel at the minimum and maximum bet, a wedge turning over as
  * the bet rises, SPIN half held, the wheel mid-spin, every outcome's reveal,
- * a quest's free spin with the Nothing taped over, and the Nothing. Each drives a real `ClubWheelSystem` on a fake clock with no
- * storage behind it, so the screens show what the game ships.
+ * a quest's free spin with Permanent Death taped over, and Permanent Death.
+ * Each drives a real `ClubWheelSystem` on a fake clock with no storage behind
+ * it, so the screens show what the game ships.
  */
 
 import { HumanPlayer } from '../../../creatures/HumanPlayer';
@@ -24,18 +25,16 @@ import type { DialogFixture } from './fixture';
 /** Enough coins for any bet, with change to rob. */
 const FIXTURE_PURSE = 18_450;
 const FIXTURE_SEED = 0x77ee1;
-/** Tito's patter draws from its own stream, so every render of a fixture says the same line. */
-const TITO_SEED = 0x7170;
+/** Donald's patter draws from its own stream, so every render of a fixture says the same line. */
+const DONALD_SEED = 0x7170;
 /** Part way through the arming delay, with Yes still disabled. */
 const ARMING_FRAME_MS = 900;
-/** Long enough for Tito's greeting to have faded in. */
+/** Long enough for Donald's greeting to have faded in. */
 const GREETING_FRAME_MS = 600;
 /** One fake clock step. */
 const STEP_MS = 16;
 /** A moment into each reveal: the banner is in, the effect is under way. */
 const REVEAL_FRAME_MS = 900;
-/** The stab is caught just after the slash lands, with the shake and the red still on screen. */
-const STAB_FRAME_MS = 500;
 const ROBBED_FRAME_MS = 1100;
 const PET_FRAME_MS = 900;
 const JACKPOT_FRAME_MS = 1600;
@@ -49,9 +48,9 @@ const HOLD_FRAME_MS = 600;
 const PRIZE_FRAME_MS = 2200;
 /** The prize screen mid-burst, with the item still growing in and the confetti flying. */
 const PRIZE_OPENING_MS = 300;
-/** The Nothing caught as the bulbs go dark, and again on its last words. */
-const NOTHING_BULBS_FRAME_MS = 2600;
-const NOTHING_TEXT_FRAME_MS = 11_000;
+/** Permanent Death caught as the bulbs go dark, and again on its last words. */
+const PERMANENT_DEATH_BULBS_FRAME_MS = 2600;
+const PERMANENT_DEATH_TEXT_FRAME_MS = 11_000;
 
 /** Any quest id: the fixture only needs a free spin on the ledger. */
 const FIXTURE_FREE_SPIN_QUEST = 'grotesque_spider';
@@ -100,11 +99,11 @@ function wheelFixture(name: string, state: WheelState): DialogFixture {
         ledger,
         saveNow: () => Promise.resolve('disabled'),
         progressWipe: null,
-        afterNothing: () => undefined,
+        afterPermanentDeath: () => undefined,
         grantAttackCow: () => undefined,
         clock: () => now,
         random: mulberry32(FIXTURE_SEED),
-        titoRandom: mulberry32(TITO_SEED),
+        donaldRandom: mulberry32(DONALD_SEED),
       });
       const advance = (ms: number): void => {
         for (let elapsed = 0; elapsed < ms; elapsed += STEP_MS) {
@@ -205,9 +204,9 @@ export const FIXTURES: readonly DialogFixture[] = [
   wheelFixture('wheel-bet-flip', { kind: 'flip' }),
   wheelFixture('wheel-hold', { kind: 'hold' }),
   wheelFixture('wheel-spinning', { kind: 'spinning' }),
-  reveal('wheel-reveal-stabbed', 'stabbed_1', STAB_FRAME_MS),
+  reveal('wheel-reveal-take-damage', 'take_damage_1'),
   reveal('wheel-reveal-poisoned', 'poisoned_1'),
-  reveal('wheel-reveal-vomit-blood', 'vomit_blood_1'),
+  reveal('wheel-reveal-double-damage', 'double_damage_1'),
   reveal('wheel-reveal-on-fire', 'set_on_fire'),
   reveal('wheel-reveal-frozen', 'frozen_solid'),
   reveal('wheel-reveal-robbed', 'robbed', ROBBED_FRAME_MS),
@@ -229,10 +228,10 @@ export const FIXTURES: readonly DialogFixture[] = [
   prize('wheel-prize-legendary-weapon-cat', 'legendary_weapon', 'cat'),
   prize('wheel-prize-epic-frost', 'epic_charm_frost', 'human'),
   prize('wheel-prize-epic-ember', 'epic_charm_ember', 'cat'),
-  prize('wheel-prize-legendary-signet', 'legendary_charm', 'human'),
+  prize('wheel-prize-legendary-charm', 'legendary_charm', 'human'),
   prize('wheel-prize-rare', 'rare_chest', 'human', WHEEL_MAX_BET),
   prize('wheel-prize-uncommon', 'uncommon_chest', 'cat', WHEEL_MAX_BET),
   prize('wheel-prize-opening', 'legendary_weapon', 'human', WHEEL_MIN_BET, PRIZE_OPENING_MS),
-  reveal('wheel-nothing-bulbs', 'nothing', NOTHING_BULBS_FRAME_MS),
-  reveal('wheel-nothing', 'nothing', NOTHING_TEXT_FRAME_MS),
+  reveal('wheel-permanent-death-bulbs', 'permanent_death', PERMANENT_DEATH_BULBS_FRAME_MS),
+  reveal('wheel-permanent-death', 'permanent_death', PERMANENT_DEATH_TEXT_FRAME_MS),
 ];

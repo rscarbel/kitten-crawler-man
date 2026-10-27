@@ -1,5 +1,5 @@
 /**
- * Every market vendor in the Over City square, as pure data. `MarketSystem`
+ * Every market vendor in the Taloncrest square, as pure data. `MarketSystem`
  * places the stalls and stations the people, `src/sprites/marketStall.ts` draws
  * the carts, and `vendorMenu.ts` turns a def into the priced menu the player
  * browses. What a stall sells and how it prices lives in its `SHOPS` entry
@@ -61,7 +61,7 @@ const GREENGROCER: VendorDef = {
   vendorName: 'Bess Ottoline',
   stallName: "Greengrocer's Cart",
   role: 'farmer',
-  species: 'skyfowl',
+  species: 'hawkfolk',
   appearanceSeed: GREENGROCER_SEED,
   style: 'produce_cart',
   motif: 'produce',

@@ -834,8 +834,8 @@ function sameSnapshot(a: ColosseumDressingCheckpoint, b: ColosseumDressingCheckp
  * Drives the dressing through a death and an abort and checks it comes back
  * whole: a save's snapshot survives JSON, a rewind restores the cages, the mud
  * and the blood exactly and puts the portcullis where the snapshot had it, and
- * an abort puts back the room as it was at the seal. A save older than the
- * snapshot's fields reads as an untouched room.
+ * an abort puts back the room as it was at the seal. A snapshot missing any of
+ * its fields is rejected.
  */
 export function checkRewinds(env: RoomEnvironment): string[] {
   const failures: string[] = [];
@@ -874,9 +874,13 @@ export function checkRewinds(env: RoomEnvironment): string[] {
   if (parsed === undefined || !sameSnapshot(parsed, saved)) {
     failures.push('a snapshot did not survive a trip through a save');
   }
-  const fromOldSave = parseColosseumDressingCheckpoint({});
-  if (fromOldSave === undefined || fromOldSave.openCages.length > 0 || fromOldSave.portcullisDown) {
-    failures.push("a save older than the room's own state did not read as an untouched room");
+  for (const missing of Object.keys(saved)) {
+    const incomplete = Object.fromEntries(
+      Object.entries(saved).filter(([field]) => field !== missing),
+    );
+    if (parseColosseumDressingCheckpoint(incomplete) !== undefined) {
+      failures.push(`a snapshot missing ${missing} was accepted`);
+    }
   }
   if (parseColosseumDressingCheckpoint({ openCages: 'all' }) !== undefined) {
     failures.push('a malformed snapshot was accepted');

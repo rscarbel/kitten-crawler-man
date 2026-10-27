@@ -3,7 +3,7 @@
  *
  * Every site in both towns is issued a contract, has every spot finished
  * through the real `ContractSiteWork.finishSpot` path (the interior's
- * `ContractInteriorSite` in Skyfowl Town, the kit's `ConstructionContractSystem`
+ * `ContractInteriorSite` in Taloncrest, the kit's `ConstructionContractSystem`
  * in Briar Hollow) and is paid out by its contact through a real conversation
  * read to the end: the materials spent are the contract's bill, the coins
  * earned are its payout, the record is cleared, `questCompleted` goes out
@@ -28,7 +28,7 @@ import {
   CONTRACT_SITES,
   type BriarHollowContractSiteDef,
   type ContractSiteDef,
-  type SkyfowlContractSiteDef,
+  type TaloncrestContractSiteDef,
 } from '../../src/systems/constructionContracts/contractCatalog';
 import { ContractContactHook } from '../../src/systems/constructionContracts/ContractContactHook';
 import {
@@ -208,9 +208,9 @@ function checkPaidOut(
   );
 }
 
-// ── Skyfowl Town ─────────────────────────────────────────────────────────
+// ── Taloncrest ─────────────────────────────────────────────────────────
 
-function verifySkyfowlSite(check: Check, site: SkyfowlContractSiteDef): void {
+function verifyTaloncrestSite(check: Check, site: TaloncrestContractSiteDef): void {
   const entry = worldLayouts(VILLAGE_SEED).entries.find((e) => e.name === site.buildingName);
   if (entry === undefined) {
     check(false, `${site.name}: has a building entry`);
@@ -657,10 +657,10 @@ export const flowSections: ReadonlyArray<{
   readonly run: (check: Check) => void;
 }> = [
   {
-    name: 'Flow: every Skyfowl Town site worked and paid',
+    name: 'Flow: every Taloncrest site worked and paid',
     run: (check) => {
       for (const site of CONTRACT_SITES)
-        if (site.town === 'skyfowl') verifySkyfowlSite(check, site);
+        if (site.town === 'taloncrest') verifyTaloncrestSite(check, site);
     },
   },
   {

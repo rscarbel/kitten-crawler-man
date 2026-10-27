@@ -248,7 +248,7 @@ export interface VillageQuestSystemDeps {
    */
   readonly grantOrenTools: () => (() => void) | null;
   /**
-   * The soldier posted in the Over City's own square who can start this
+   * The soldier posted in Taloncrest's own square who can start this
    * questline before the party has ever reached the village; null when none
    * is posted.
    */

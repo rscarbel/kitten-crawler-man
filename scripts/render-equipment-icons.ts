@@ -1,6 +1,7 @@
 #!/usr/bin/env tsx
 /**
- * Review sheet for every gear icon, slot by slot, and the tool, explosive and Scroll of Confusing Fog icons,
+ * Review sheet for every gear icon, slot by slot, and the tool, explosive, drink and Scroll of
+ * Confusing Fog icons,
  * drawn through the real `drawItemIcon` dispatcher onto a slot-coloured cell.
  *
  * Each row is one item at the sizes a player actually meets it — the hotbar's
@@ -55,6 +56,7 @@ const FAMILIES: Readonly<Record<string, readonly ItemId[]>> = {
   ],
   scroll: ['scroll_of_confusing_fog'],
   explosives: ['goblin_dynamite', 'black_powder_bomb'],
+  drinks: ['catnip_tuna_water', 'health_potion', 'speed_fizz', 'jugg_juice', 'cooldown_crisp'],
 };
 
 /** The hotbar slot (52 px) less its 14% art inset on each side. */

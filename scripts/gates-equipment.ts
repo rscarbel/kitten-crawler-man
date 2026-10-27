@@ -89,6 +89,7 @@ import {
   type HeldVisualId,
   SCRIPTED_PROP_VISUAL_IDS,
   FIXTURE_TOOL_VISUAL_IDS,
+  HIRELING_HELD_VISUAL_IDS,
   OFF_HAND_HELD_VISUAL_IDS,
   THROWN_PROP_VISUAL_IDS,
   TOOL_HELD_VISUAL_IDS,
@@ -96,7 +97,11 @@ import {
 } from '../src/sprites/held/heldVisualIds.js';
 import { offHandGripOf } from '../src/sprites/art/human/offHand.js';
 import { BLOCK_ROW_NAMES } from '../src/sprites/art/human/offHandBlock.js';
-import type { HeldVisualDef, WeaponHeldVisualDef } from '../src/sprites/held/heldVisualDef.js';
+import type {
+  HeldVisualDef,
+  HirelingHeldVisualDef,
+  WeaponHeldVisualDef,
+} from '../src/sprites/held/heldVisualDef.js';
 import { motionSetOf } from '../src/sprites/art/human/motionSets.js';
 import { compositeHeldItem, heldTransformAt } from '../src/sprites/held/heldComposite.js';
 import { scriptedPropVisual } from '../src/sprites/held/art/scriptedPropHeld.js';
@@ -182,7 +187,7 @@ function viewRows(rows: Readonly<Record<string, HumanRowName>>): HumanRowName[] 
  * the bare-handed rows he is drawn in on almost every frame, which carry it
  * where its set has none of its own (all of them, for a slingshot).
  */
-function weaponRows(look: WeaponHeldVisualDef): readonly HumanRowName[] {
+function weaponRows(look: WeaponHeldVisualDef | HirelingHeldVisualDef): readonly HumanRowName[] {
   const set = motionSetOf(look);
   const own = HUMAN_ROWS.filter((row) => motionSetOfRow(row) === set).map((row) => row.name);
   const carried = residentViewSpans('unarmed').map((span) => span.row);
@@ -228,6 +233,11 @@ function subjects(only: string | null): Subject[] {
     });
   }
   for (const id of WEAPON_HELD_VISUAL_IDS) {
+    const look = HELD_VISUALS[id];
+    const figure = humanFigureFor(gateLook, outfitOf(gateLook, []), carriedGripOf(look));
+    list.push({ id, look, figure, rows: weaponRows(look), bitesGround: false });
+  }
+  for (const id of HIRELING_HELD_VISUAL_IDS) {
     const look = HELD_VISUALS[id];
     const figure = humanFigureFor(gateLook, outfitOf(gateLook, []), carriedGripOf(look));
     list.push({ id, look, figure, rows: weaponRows(look), bitesGround: false });

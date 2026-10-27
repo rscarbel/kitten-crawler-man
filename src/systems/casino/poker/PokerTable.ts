@@ -347,8 +347,6 @@ export class PokerTable {
   showCards = false;
   /** NPC answers that were not legal at the time; must stay 0. */
   illegalNpcActions = 0;
-  /** Chips the player has committed to pots this sitting, net of returned uncalled bets. */
-  playerCoinsCommitted = 0;
 
   constructor(options: PokerTableOptions) {
     if (options.npcs.length !== NPC_SEAT_COUNT) {
@@ -819,7 +817,6 @@ export class PokerTable {
     seat.streetBet += amount;
     seat.contributed += amount;
     if (seat.stack === 0) seat.allIn = true;
-    if (seat.isPlayer) this.playerCoinsCommitted += amount;
     this.emit({ kind: 'blind_posted', seat: seatIndex, blind, amount });
   }
 
@@ -916,7 +913,6 @@ export class PokerTable {
   private landAction(applied: AppliedAction): void {
     const seat = this.seatState[applied.seat];
     seat.lastAction = applied.kind;
-    if (seat.isPlayer) this.playerCoinsCommitted += applied.chipsAdded;
     this.handHistory.push({
       seat: applied.seat,
       street: this.street,
@@ -953,7 +949,6 @@ export class PokerTable {
     top.contributed -= uncalled;
     top.stack += uncalled;
     if (top.stack > 0) top.allIn = false;
-    if (top.isPlayer) this.playerCoinsCommitted -= uncalled;
     this.emit({ kind: 'uncalled_returned', seat: top.index, amount: uncalled });
   }
 

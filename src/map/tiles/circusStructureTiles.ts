@@ -1,5 +1,5 @@
 /**
- * Renderer for the circus grounds' structures: the Big Top, the side-show
+ * Renderer for the circus grounds' structures: the Starlight Tent, the side-show
  * pavilions and the entry arch's posts.
  *
  * A structure is stamped as a footprint of blocked tiles. The one tile keyed

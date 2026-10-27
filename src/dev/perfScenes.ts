@@ -12,8 +12,8 @@
  * its warm-up has passed; `globalThis.__perfWalk` says how far it has got.
  */
 
-import { BIG_TOP_ENTRY_NAME } from '../map/OverworldGenerator';
-import { DESPERADO_CLUB_NAME } from '../map/town/townPlan';
+import { STARLIGHT_TENT_NAME } from '../map/overworld/circusGroundsLayout';
+import { CLOAK_AND_DAGGER_NAME } from '../map/town/townPlan';
 import { aiAdapter } from '../ai/AIAdapter';
 import type { SceneManager } from '../core/Scene';
 import {
@@ -161,24 +161,24 @@ const PERF_SCENES: readonly PerfScene[] = [
     ),
   },
   {
-    id: 'bigtop',
-    description: 'Up the circus grounds and in through the Big Top, then laps of the tent',
-    query: pinnedFloor('playtest=bigtop'),
+    id: 'starlight-tent',
+    description: 'Up the circus grounds and in through the Starlight Tent, then laps of the tent',
+    query: pinnedFloor('playtest=starlight-tent'),
     route: leadInThenLap(
       [
         { kind: 'walk', anchor: CIRCUS_CENTRE, dx: CIRCUS_LAP_REACH_TILES },
         { kind: 'walk', anchor: CIRCUS_CENTRE, dx: -CIRCUS_LAP_REACH_TILES },
-        ...takePrompt({ kind: 'buildingDoor', name: BIG_TOP_ENTRY_NAME }),
+        ...takePrompt({ kind: 'buildingDoor', name: STARLIGHT_TENT_NAME }),
       ],
       INTERIOR_LAP,
     ),
   },
   {
     id: 'casino',
-    description: 'In through the Desperado Club door, then laps of the casino floor',
+    description: 'In through the Cloak & Dagger door, then laps of the casino floor',
     query: pinnedFloor('playtest=casino-floor'),
     route: leadInThenLap(
-      takePrompt({ kind: 'buildingDoor', name: DESPERADO_CLUB_NAME }),
+      takePrompt({ kind: 'buildingDoor', name: CLOAK_AND_DAGGER_NAME }),
       INTERIOR_LAP,
     ),
   },

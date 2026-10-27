@@ -26,7 +26,7 @@ import { Cockroach } from '../../src/creatures/Cockroach.js';
 import type { TrashGremlin } from '../../src/creatures/TrashGremlin.js';
 import { resolveBossLevel } from '../../src/levels/spawner.js';
 import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel.js';
-import { MIN_STAT_VALUE, type DamageSource } from '../../src/Player.js';
+import { MIN_STAT_VALUE, type DamageOptions, type DamageSource } from '../../src/Player.js';
 import { bareFistDamage } from '../../src/core/party/crawlerFormulas.js';
 import { mulberry32 } from '../../src/sprites/person/rng.js';
 import { BossRoomSystem, type BossRoomMiniMap } from '../../src/systems/BossRoomSystem.js';
@@ -104,8 +104,8 @@ class ScriptedCrawler extends HumanPlayer {
   /** Landed blows by what dealt them, for reading a change in `hits`. */
   readonly hitsBySource = new Map<string, number>();
 
-  override takeDamage(amount: number, source?: DamageSource): boolean {
-    const connected = super.takeDamage(amount, source);
+  override takeDamage(amount: number, source?: DamageSource, options?: DamageOptions): boolean {
+    const connected = super.takeDamage(amount, source, options);
     if (connected) {
       this.hits++;
       if (source?.kind === 'environmental') this.roomHazardHits++;
@@ -127,6 +127,7 @@ function describeSource(source: DamageSource | undefined): string {
     case 'status':
     case 'dynamite':
     case 'doomsday':
+    case 'wheelPenalty':
     case 'siege':
       return source.kind;
   }

@@ -17,7 +17,7 @@ import {
   BASE_WHEEL_BOARD,
   FAE_IRON_CHARM_ITEM_ID,
   LEGENDARY_WEAPON_CLAIM_IDS,
-  TAPED_NOTHING,
+  TAPED_PERMANENT_DEATH,
   WHEEL_UPGRADES,
   legendaryWeaponItemId,
   legendaryWeaponRecipient,
@@ -27,19 +27,19 @@ import {
   type WheelWedge,
 } from './wheelBoard';
 import {
-  applyWheelBloodVomit,
   applyWheelBurn,
+  applyWheelDamage,
+  applyWheelDoubleDamage,
   applyWheelFreeze,
   applyWheelPoison,
   applyWheelRobbery,
-  applyWheelStab,
 } from './wheelPenalties';
 
 /** Every wedge face the wheel can show at any bet, for looking a saved wedge id back up. */
 const ALL_WEDGE_FACES: readonly WheelWedge[] = [
   ...BASE_WHEEL_BOARD,
   ...WHEEL_UPGRADES.map((upgrade) => upgrade.to),
-  TAPED_NOTHING,
+  TAPED_PERMANENT_DEATH,
 ];
 
 /** The wedge face a saved id names, or null for an id no board has (a save from another build). */
@@ -65,9 +65,9 @@ export interface WheelPrizeTarget {
 
 /** What a prize paid, for the reveal to show. */
 export interface WheelPrizeEffect {
-  /** HP the croupier's knife took. */
+  /** HP Take Damage cost. */
   readonly hpLost: number;
-  /** Coins Tito took off a robbed crawler. */
+  /** Coins Donald took off a robbed crawler. */
   readonly coinsTaken: number;
   /** Coins paid out. */
   readonly coinsWon: number;
@@ -125,23 +125,23 @@ function payCoins(target: WheelPrizeTarget, amount: number): WheelPrizeEffect {
 
 /**
  * Hands over one wedge's prize or penalty, at once: items go straight into
- * the bag. The Nothing and Spin Again do nothing here: the first is the wipe
- * and the second a free spin, both the host's to run.
+ * the bag. Permanent Death and Spin Again do nothing here: the first is the
+ * wipe and the second a free spin, both the host's to run.
  */
 export function applyWheelPrize(prize: WheelPrize, target: WheelPrizeTarget): WheelPrizeEffect {
   const { crawler } = target;
   switch (prize.kind) {
-    case 'nothing':
+    case 'permanent_death':
     case 'spin_again':
     case 'free_handies':
       return NO_EFFECT;
-    case 'stab':
-      return { ...NO_EFFECT, hpLost: applyWheelStab(crawler) };
+    case 'take_damage':
+      return { ...NO_EFFECT, hpLost: applyWheelDamage(crawler) };
     case 'poison':
       applyWheelPoison(crawler);
       return NO_EFFECT;
-    case 'blood_vomit':
-      applyWheelBloodVomit(crawler);
+    case 'double_damage':
+      applyWheelDoubleDamage(crawler);
       return NO_EFFECT;
     case 'burn':
       applyWheelBurn(crawler);
@@ -232,19 +232,9 @@ export function wheelPrizeTarget(party: WheelParty, kind: WheelCrawler): WheelPr
   };
 }
 
-/** Puts every prize item the ledger holds for a crawler into that crawler's bag. */
-function deliverOwedWheelItems(ledger: WheelLedger, party: WheelParty): void {
-  for (const owed of ledger.owedItems) {
-    const crawler = owed.crawler === 'human' ? party.human : party.cat;
-    crawler.inventory.addItem(owed.id, owed.quantity);
-  }
-  ledger.owedItems = [];
-}
-
 /**
  * Settles what the wheel still owes the party, silently, on every load and
- * floor change: prize items held outside the bags, a spin committed but never
- * paid (the bet and the won-prize mark were saved with it, so only the
+ * floor change: a spin committed but never paid (the bet and the won-prize mark were saved with it, so only the
  * effect is left, and a Spin Again's free spin is owed again), and a freeze
  * landed but not yet spent. Returns the pending wedge paid, or null.
  */
@@ -253,7 +243,6 @@ export function settleWheelLedger(ledger: WheelLedger, party: WheelParty): Wheel
 }
 
 function settleOwedPrizes(ledger: WheelLedger, party: WheelParty): WheelWedge | null {
-  deliverOwedWheelItems(ledger, party);
   const pending = ledger.pendingOutcome;
   ledger.pendingOutcome = null;
   const owedFreeze = ledger.owedFreeze;

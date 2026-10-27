@@ -26,16 +26,15 @@ type Ctx = CanvasRenderingContext2D;
 
 /** Every hairstyle a figure on the biped rig can wear; none of them is Dave's crop. */
 export type HairStyleKind =
-  'bald' | 'receding' | 'sidePart' | 'long' | 'bun' | 'ponytail' | 'curly' | 'headscarf';
+  'bald' | 'receding' | 'sidePart' | 'long' | 'bun' | 'ponytail' | 'curly';
 
 export type FacialHairKind = 'none' | 'fullBeard' | 'moustache' | 'goatee';
 
-/** What a cast head wears: the style, its colour, and the cloth a headscarf is cut from. */
+/** What a cast head wears: the style and its colour. */
 export interface CastHeadSpec {
   readonly hairStyle: HairStyleKind;
   readonly facialHair: FacialHairKind;
   readonly hair: Ramp;
-  readonly scarf: Ramp;
 }
 
 // ── Shape tables ─────────────────────────────────────────────────────────────
@@ -296,49 +295,6 @@ const RECEDING_PROFILE: HairMass = {
   ],
 };
 
-/** A kerchief over the whole crown, its edge low on the forehead, knotted at the nape. */
-const SCARF_FRONT: HairMass = {
-  path: [
-    ['M', -1.2, 0.1],
-    ['Q', -1.32, -1.62, 0, -1.52],
-    ['Q', 1.32, -1.62, 1.2, 0.1],
-    ['L', 0.96, -0.14],
-    ['Q', 0, -0.98, -0.96, -0.14],
-  ],
-};
-const SCARF_BACK: HairMass = {
-  path: [
-    ['M', -1.2, 0.1],
-    ['Q', -1.32, -1.62, 0, -1.52],
-    ['Q', 1.32, -1.62, 1.2, 0.1],
-    ['L', 0.86, 0.6],
-    ['Q', 0, 0.78, -0.86, 0.6],
-  ],
-  lobes: [{ x: 0, y: 0.62, r: 0.24 }],
-};
-const SCARF_TAILS_BACK: HairMass = {
-  path: [
-    ['M', -0.06, 0.66],
-    ['L', -0.36, 1.34],
-    ['L', -0.12, 1.3],
-    ['L', 0.04, 0.8],
-    ['L', 0.3, 1.36],
-    ['L', 0.48, 1.24],
-    ['L', 0.12, 0.64],
-  ],
-};
-const SCARF_PROFILE: HairMass = {
-  path: [
-    ['M', 0.98, -0.6],
-    ['Q', 1.06, -1.52, 0, -1.5],
-    ['Q', -1.32, -1.42, -1.22, -0.2],
-    ['L', -1.02, 0.52],
-    ['Q', -0.42, 0.24, -0.22, -0.24],
-    ['Q', 0.3, -0.44, 0.98, -0.6],
-  ],
-  lobes: [{ x: -1.12, y: 0.4, r: 0.26 }],
-};
-
 const STYLE_MASSES: Readonly<Record<Exclude<HairStyleKind, 'bald'>, ViewMasses>> = {
   sidePart: { front: [SIDE_PART_FRONT], profile: [CAP_PROFILE], back: [CAP_BACK] },
   long: {
@@ -358,11 +314,6 @@ const STYLE_MASSES: Readonly<Record<Exclude<HairStyleKind, 'bald'>, ViewMasses>>
   },
   curly: { front: [CURLY_FRONT], profile: [CURLY_PROFILE], back: [CURLY_BACK] },
   receding: { front: RECEDING_FRONT, profile: [RECEDING_PROFILE], back: [RECEDING_BACK] },
-  headscarf: {
-    front: [SCARF_FRONT],
-    profile: [SCARF_PROFILE],
-    back: [SCARF_TAILS_BACK, SCARF_BACK],
-  },
 };
 
 // ── Facial hair ──────────────────────────────────────────────────────────────
@@ -624,7 +575,7 @@ export function paintCastHead(
     }
   }
   if (spec.hairStyle !== 'bald') {
-    const ramp = spec.hairStyle === 'headscarf' ? spec.scarf : hairTone(spec.hair);
+    const ramp = hairTone(spec.hair);
     for (const mass of viewMasses(STYLE_MASSES[spec.hairStyle], view)) {
       paintHairMass(ctx, mass, units, ramp);
     }

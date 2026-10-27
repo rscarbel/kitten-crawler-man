@@ -1,5 +1,5 @@
 /**
- * A lightweight, non-combatant citizen of the Over City. Deliberately *not* a
+ * A lightweight, non-combatant citizen of Taloncrest. Deliberately *not* a
  * `Mob` (no aggro, pathfinding, or loot) and *not* a `Player` — it only strolls,
  * faces where it walks, and draws itself with the procedural person renderer.
  * `TownLifeSystem` (streets) and `InteriorOccupantSystem` (buildings) own the
@@ -18,14 +18,20 @@ import type { ResidentId } from '../systems/townResidents';
 import type { TownSpecies } from '../systems/townSpecies';
 import {
   citizenDialogSeed,
-  citizenWalkCyclePx,
-  citizenWalkFrames,
-  drawCitizenSprite,
-  citizenSpeechStyle,
   citizenLookKey,
   pickCitizenFigure,
+  type CitizenAction,
   type CitizenFigure,
 } from './citizenFigure';
+import {
+  drawTownspersonBody,
+  townspersonSpeechStyle,
+  townspersonWalkCyclePx,
+  townspersonWalkFrames,
+  type TownspersonBody,
+} from './townspersonBody';
+import type { BespokeResidentFigureId } from './bespokeResidentFigures';
+import type { RoutinePose } from './routinePose';
 import { onCanvasRecovery } from '../core/rendering/canvasRecovery';
 import { residentFigure } from './residentFigures';
 import type { NPCMarkerType } from './QuestNPC';
@@ -110,6 +116,8 @@ export interface TownspersonOptions {
   initialFacing?: Facing;
   /** Names this citizen as a specific person; unset citizens speak from the role pools. */
   residentId?: ResidentId;
+  /** Draws this person with a bespoke resident painter instead of a cast look. */
+  bespokeFigure?: BespokeResidentFigureId;
 }
 
 export class Townsperson implements WanderState {
@@ -120,7 +128,7 @@ export class Townsperson implements WanderState {
   readonly species: TownSpecies;
   /** Set when this citizen is a named resident; drives their dialog and speaker label. */
   readonly residentId: ResidentId | null;
-  private wornFigure: CitizenFigure;
+  private wornBody: TownspersonBody;
   private wornSpeechStyle: CitizenSpeechStyle;
   private wornDialogSeed: number;
   private readonly seed: number;
@@ -159,6 +167,18 @@ export class Townsperson implements WanderState {
   /** True while this citizen is mid-conversation — holds them in place facing the player. */
   frozen = false;
   /**
+   * True while a service surface of theirs is open — a menu, a reading, a
+   * desk. Kept apart from {@link frozen}, which a conversation sets and clears
+   * on its own schedule, so ending one hold never ends the other.
+   */
+  attending = false;
+  /**
+   * What an occupant's routine has them doing while they stand still — a mop
+   * stroke, a reload — drawn in place of the idle loop. Walking and talking
+   * still outrank it.
+   */
+  routinePose: RoutinePose | null = null;
+  /**
    * Overhead quest glyph. `'none'` for the whole strolling crowd — only a
    * citizen a questline has business with is ever given one, and the questline
    * that gave it is what sets it back to `'none'`.
@@ -188,19 +208,25 @@ export class Townsperson implements WanderState {
     this.wander = opts.wander;
     if (opts.initialFacing !== undefined) this.facing = opts.initialFacing;
     this.seed = opts.seed;
-    this.wornFigure =
-      this.residentId !== null
-        ? residentFigure(this.residentId)
-        : pickCitizenFigure(opts.seed, opts.role, opts.species);
-    this.wornDialogSeed = citizenDialogSeed(this.wornFigure);
-    this.wornSpeechStyle = citizenSpeechStyle(this.wornFigure);
+    this.wornBody = initialBody(opts);
+    // A bespoke resident speaks only from their own lines, so the seed that
+    // rotates an unnamed citizen's role pool is never read for them.
+    this.wornDialogSeed =
+      this.wornBody.kind === 'citizen' ? citizenDialogSeed(this.wornBody.figure) : opts.seed;
+    this.wornSpeechStyle = townspersonSpeechStyle(this.wornBody);
     this.speed = opts.speed;
-    this.cycleDistance = citizenWalkCyclePx(this.wornFigure, PERSON_DRAW_SIZE);
-    this.walkFrames = citizenWalkFrames(this.wornFigure);
+    this.cycleDistance = townspersonWalkCyclePx(this.wornBody, PERSON_DRAW_SIZE);
+    this.walkFrames = townspersonWalkFrames(this.wornBody);
   }
 
-  get figure(): CitizenFigure {
-    return this.wornFigure;
+  /** What this person is drawn as. */
+  get body(): TownspersonBody {
+    return this.wornBody;
+  }
+
+  /** This person's cast look, or null for a bespoke resident who wears none. */
+  get citizenFigure(): CitizenFigure | null {
+    return this.wornBody.kind === 'citizen' ? this.wornBody.figure : null;
   }
 
   /** The voice this citizen's dialog lines are spoken in. */
@@ -225,21 +251,33 @@ export class Townsperson implements WanderState {
   private followPurgedRecovery(): void {
     if (this.lookPurgeCount === purgedRecoveries) return;
     this.lookPurgeCount = purgedRecoveries;
-    if (this.residentId !== null || this.frozen) return;
+    if (this.residentId !== null || this.held) return;
+    const worn = this.wornBody;
+    if (worn.kind !== 'citizen') return;
     const next = pickCitizenFigure(this.seed, this.role, this.species);
-    if (citizenLookKey(next) === citizenLookKey(this.wornFigure)) return;
-    this.wornFigure = next;
+    if (citizenLookKey(next) === citizenLookKey(worn.figure)) return;
+    this.wornBody = { kind: 'citizen', figure: next };
     this.wornDialogSeed = citizenDialogSeed(next);
-    this.wornSpeechStyle = citizenSpeechStyle(next);
-    this.cycleDistance = citizenWalkCyclePx(next, this.cycleDistanceDrawSize);
-    this.walkFrames = citizenWalkFrames(next);
+    this.wornSpeechStyle = townspersonSpeechStyle(this.wornBody);
+    this.cycleDistance = townspersonWalkCyclePx(this.wornBody, this.cycleDistanceDrawSize);
+    this.walkFrames = townspersonWalkFrames(this.wornBody);
     this.drawnRow = undefined;
+  }
+
+  /** Held in place facing the player, by a conversation or by serving them. */
+  get held(): boolean {
+    return this.frozen || this.attending;
+  }
+
+  /** The routine pose drawn this frame: none while held or walking, which both outrank it. */
+  get shownRoutinePose(): RoutinePose | null {
+    return this.held || this.moving ? null : this.routinePose;
   }
 
   /** Advances one frame of wander, facing, and animation. */
   update(): void {
     this.followPurgedRecovery();
-    if (this.frozen) return;
+    if (this.held) return;
     stepWander(this, this.wander, sharedWanderStep);
     this.moving = sharedWanderStep.moving;
     this.framesSinceTurn++;
@@ -328,7 +366,7 @@ export class Townsperson implements WanderState {
     const box = scaleHumanoidBox(this.x - camX, this.y - camY, drawSize);
     if (drawSize !== this.cycleDistanceDrawSize) {
       this.cycleDistanceDrawSize = drawSize;
-      this.cycleDistance = citizenWalkCyclePx(this.figure, drawSize);
+      this.cycleDistance = townspersonWalkCyclePx(this.wornBody, drawSize);
     }
     // Beacon first, so the column stands behind the figure rather than across
     // it. Both it and the glyph below branch on `markerType` and nothing else,
@@ -340,13 +378,24 @@ export class Townsperson implements WanderState {
     }
 
     const facing = this.facingXY();
-    this.drawnRow = drawCitizenSprite(ctx, this.figure, this.x - camX, this.y - camY, drawSize, {
-      action: this.frozen ? 'talk' : this.moving ? 'walk' : 'idle',
-      walkPhase: this.phase * TWO_PI,
-      facingX: facing.x,
-      facingY: facing.y,
-      loopOffsetSeconds: this.id * LOOP_OFFSET_SECONDS_PER_ID,
-    });
+    const routinePose = this.shownRoutinePose;
+    const standingAction: CitizenAction = routinePose === null ? 'idle' : 'work';
+    const action = this.held ? 'talk' : this.moving ? 'walk' : standingAction;
+    this.drawnRow = drawTownspersonBody(
+      ctx,
+      this.wornBody,
+      this.x - camX,
+      this.y - camY,
+      drawSize,
+      {
+        action,
+        walkPhase: this.phase * TWO_PI,
+        facingX: facing.x,
+        facingY: facing.y,
+        loopOffsetSeconds: this.id * LOOP_OFFSET_SECONDS_PER_ID,
+        routinePose: routinePose ?? undefined,
+      },
+    );
 
     if (this.drawsOwnOverheadIcon) {
       drawOverheadIcon(ctx, box.sx, this.artTop(this.y - camY), box.s, this.overheadIcon);
@@ -374,4 +423,13 @@ export class Townsperson implements WanderState {
     const iconSize = scaleHumanoidBox(this.x, sy, this.cycleDistanceDrawSize).s;
     return overheadIconTopY(ctx, this.artTop(sy), iconSize, this.overheadIcon);
   }
+}
+
+function initialBody(opts: TownspersonOptions): TownspersonBody {
+  if (opts.bespokeFigure !== undefined) return { kind: 'bespoke', id: opts.bespokeFigure };
+  const figure =
+    opts.residentId !== undefined
+      ? residentFigure(opts.residentId)
+      : pickCitizenFigure(opts.seed, opts.role, opts.species);
+  return { kind: 'citizen', figure };
 }

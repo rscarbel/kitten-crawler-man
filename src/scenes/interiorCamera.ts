@@ -72,7 +72,13 @@ function lerp(from: number, to: number, t: number): number {
  * the last row it can reach is still in the middle of the clear span, and the
  * wall beyond is cut off. Given `focusSpan`, the camera eases from centred at
  * the span's middle to fully clamped at each end the centred camera cannot
- * reach, so walking to the far row always shows the far wall.
+ * reach, so walking to the far row shows the far wall.
+ *
+ * The tile the focus stands on stays inside the clear span whatever the ease
+ * and the bounds ask for. A clear span shorter than the distance from a room's
+ * far edge to its outermost standing row cannot hold both, and the party
+ * outranks the wall: the camera then stops short of that edge by as much as
+ * it must.
  */
 export function followCameraAxis(
   focus: number,
@@ -103,7 +109,12 @@ export function followCameraAxis(
       camera = lerp(centredAtMiddle, cameraShowingEndEdge, towardEnd);
     }
   }
-  return clamp(camera, cameraShowingStartEdge, cameraShowingEndEdge);
+  const withinBounds = clamp(camera, cameraShowingStartEdge, cameraShowingEndEdge);
+  const halfTile = TILE_SIZE * CENTRE_OF_TILE;
+  const focusAtClearEnd = focus + halfTile - clearEnd;
+  const focusAtClearStart = focus - halfTile - clearStart;
+  if (focusAtClearEnd > focusAtClearStart) return withinBounds;
+  return clamp(withinBounds, focusAtClearEnd, focusAtClearStart);
 }
 
 /**
@@ -342,7 +353,7 @@ interface CachedBounds {
 
 /**
  * Keyed on the map, and revalidated against the two lists a regeneration
- * replaces, so a room rebuilt in place (a tower storey, a Big Top variant) is
+ * replaces, so a room rebuilt in place (a tower storey, a Starlight Tent variant) is
  * re-measured while the camera's several reads a frame cost a lookup.
  */
 const boundsCache = new WeakMap<GameMap, CachedBounds>();

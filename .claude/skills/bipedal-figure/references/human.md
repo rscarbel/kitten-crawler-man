@@ -499,7 +499,7 @@ wears is resident: `setOutfit('human', …)` (`src/sprites/outfits.ts`, through
 `dressInGear` applies it — at once, or on his next draw for a change made while
 he is being built — and re-asks the animator's and the stand-by warm requests,
 which went to the figure he took off. Figures built on his rig (townsfolk, the
-club cast, Gum Gum, the Incubus, the city elf) carry a fixed outfit on their
+club cast, Baggi, the Incubus, the city elf) carry a fixed outfit on their
 poses. `npm run gates:equipment` (E5) holds every garment inside its part's
 envelope; `scripts/render-garments.ts --wear=<ids>` renders one for review.
 

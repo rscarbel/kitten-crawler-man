@@ -472,6 +472,17 @@ export class CompanionSystem implements GameSystem {
     this._followOverride = false;
   }
 
+  /**
+   * Puts *both* crawlers back on follow, whichever one is active: what a room
+   * that parked the whole party with {@link anchorBoth} hands back once the
+   * party may move together again.
+   */
+  followBoth(): void {
+    this.humanStance.movementMode = 'follow';
+    this.catStance.movementMode = 'follow';
+    this._followOverride = false;
+  }
+
   /** Companion attacks enemies on sight. */
   setAggressive(humanIsActive: boolean): void {
     this.stanceFor(humanIsActive).combatStance = 'aggressive';

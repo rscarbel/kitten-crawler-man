@@ -36,9 +36,7 @@ export interface TownInteriorPropEntry {
    * which is already stable as long as a building's layout doesn't move the
    * instance; set explicitly when a layout wants to keep an id fixed across a
    * future position edit, or when something else names this instance (a
-   * construction contract spot, via {@link contractTarget}). Giving a
-   * breakable that already shipped an explicit id changes its payout key, so
-   * it needs a `RENAMED_INTERIOR_PROPS` entry in `TownMemory`.
+   * construction contract spot, via {@link contractTarget}).
    */
   readonly id?: string;
   /**

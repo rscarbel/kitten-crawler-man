@@ -1,6 +1,6 @@
 /**
- * Service icons for the smithy's edge work, the training yard's four drills
- * and the VIP lounge's hired escort.
+ * Service icons for the smithy's edge work and the training yard's four
+ * drills.
  */
 
 import {
@@ -25,7 +25,6 @@ import {
   DARK_WOOD,
   DEEP_SHADE,
   FLAME_YELLOW,
-  GOLD,
   HALF_LIGHT,
   HALF_SHADE,
   IRON,
@@ -37,7 +36,6 @@ import {
   paintLitPoints,
   paintLitRect,
   paintSpark,
-  paintStar,
   paintStreak,
   paintSword,
   SHADE,
@@ -628,83 +626,6 @@ const paintDrillIntelligence: IconArtPainter = (ctx, px) => {
   paintLantern(ctx, px);
 };
 
-const SUIT = '#23262e';
-const SHIRT = '#e8ecf2';
-const SHADES = '#0e1014';
-const SHADES_SHINE = '#6d7a8c';
-const TIE_RED = '#7a1838';
-const SKIN_LIGHT = '#d9a77c';
-const SKIN_DARK = '#7a4f34';
-/**
- * One hulking bodyguard, front-on: a slab of shoulders in a dark suit, a
- * small head, shades. Every x below is an offset from the figure's centre.
- */
-const BOUNCER_BODY: readonly IconPoint[] = [
-  [-0.08, 0.4],
-  [0.08, 0.4],
-  [0.24, 0.48, 0.08],
-  [0.26, 0.98],
-  [-0.26, 0.98],
-  [-0.24, 0.48, 0.08],
-];
-const BOUNCER_SHIRT: readonly IconPoint[] = [
-  [-0.07, 0.42],
-  [0.07, 0.42],
-  [0, 0.68],
-];
-const BOUNCER_TIE: readonly IconPoint[] = [
-  [-0.025, 0.44],
-  [0.025, 0.44],
-  [0.03, 0.62],
-  [0, 0.67],
-  [-0.03, 0.62],
-];
-const BOUNCER_LAPEL: readonly IconPoint[] = [
-  [-0.09, 0.44],
-  [-0.04, 0.6],
-];
-const LAPEL_WIDTH = 1.4;
-const BOUNCER_NECK = { half: 0.06, top: 0.32, bottom: 0.43 } as const;
-const BOUNCER_HEAD = { cy: 0.24, rx: 0.11, ry: 0.12 } as const;
-const BOUNCER_SHADES: readonly IconPoint[] = [
-  [-0.1, 0.2, 0.01],
-  [0.1, 0.2, 0.01],
-  [0.09, 0.27, 0.03],
-  [0.01, 0.26],
-  [-0.01, 0.26],
-  [-0.09, 0.27, 0.03],
-];
-const BOUNCER_SHADES_SHINE: readonly IconPoint[] = [
-  [-0.07, 0.22],
-  [-0.03, 0.22],
-];
-const SHADES_SHINE_WIDTH = 1.2;
-const BACK_BOUNCER_X = 0.68;
-const FRONT_BOUNCER_X = 0.32;
-const ESCORT_BADGE = { cx: 0.5, cy: 0.82, outer: 0.13, inner: 0.055, points: 5 } as const;
-
-function shifted(points: readonly IconPoint[], dx: number): IconPoint[] {
-  return points.map(([x, y, corner]): IconPoint => [x + dx, y, corner]);
-}
-
-function paintBouncer(ctx: CanvasRenderingContext2D, px: number, cx: number, skin: string): void {
-  paintLitPoints(ctx, px, shifted(BOUNCER_BODY, cx), SUIT);
-  paintForm(ctx, px, () => tracePoints(ctx, shifted(BOUNCER_SHIRT, cx)), SHIRT);
-  paintForm(ctx, px, () => tracePoints(ctx, shifted(BOUNCER_TIE, cx)), TIE_RED);
-  strokeDetail(ctx, px, shifted(BOUNCER_LAPEL, cx), tone(SUIT, LIGHT * 2), LAPEL_WIDTH);
-  const { half, top, bottom } = BOUNCER_NECK;
-  paintLitRect(ctx, px, cx - half, top, cx + half, bottom, tone(skin, HALF_SHADE));
-  paintLitEllipse(ctx, px, cx, BOUNCER_HEAD.cy, BOUNCER_HEAD.rx, BOUNCER_HEAD.ry, skin);
-  paintForm(ctx, px, () => tracePoints(ctx, shifted(BOUNCER_SHADES, cx)), SHADES);
-  strokeDetail(ctx, px, shifted(BOUNCER_SHADES_SHINE, cx), SHADES_SHINE, SHADES_SHINE_WIDTH);
-}
-
-const paintVipEscort: IconArtPainter = (ctx, px) => {
-  paintBouncer(ctx, px, BACK_BOUNCER_X, SKIN_DARK);
-  paintBouncer(ctx, px, FRONT_BOUNCER_X, SKIN_LIGHT);
-  paintStar(ctx, px, ESCORT_BADGE, GOLD);
-};
-
 export const TRAINING_SERVICE_ICONS = {
   edge: toIcon(paintEdge),
   edge_pair: toIcon(paintEdgePair),
@@ -712,5 +633,4 @@ export const TRAINING_SERVICE_ICONS = {
   drill_constitution: toIcon(paintDrillConstitution),
   drill_dexterity: toIcon(paintDrillDexterity),
   drill_intelligence: toIcon(paintDrillIntelligence),
-  vip_escort: toIcon(paintVipEscort),
 } as const;

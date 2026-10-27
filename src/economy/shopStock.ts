@@ -121,18 +121,20 @@ export function restockStep(normal: number | 'unlimited'): number {
   );
 }
 
-/**
- * The normal stock a stored key restocks toward. A key whose shop or item no
- * longer exists (a save from before a catalog edit) is treated as an
- * unlisted item, so it simply drains to 0.
- */
-function normalForKey(key: string): number | 'unlimited' {
+/** The shop and item a {@link shopStockKey} names, or undefined when it names none. */
+function parseShopStockKey(key: string): { shop: ShopId; item: ItemId } | undefined {
   const separatorAt = key.indexOf(KEY_SEPARATOR);
-  if (separatorAt < 0) return 'unlimited';
+  if (separatorAt < 0) return undefined;
   const shop = key.slice(0, separatorAt);
   const item = key.slice(separatorAt + KEY_SEPARATOR.length);
-  if (!isShopId(shop) || !isItemId(item)) return 'unlimited';
-  return normalStockOf(shop, item);
+  if (!isShopId(shop) || !isItemId(item)) return undefined;
+  return { shop, item };
+}
+
+/** The normal stock a stored key restocks toward. */
+function normalForKey(key: string): number | 'unlimited' {
+  const line = parseShopStockKey(key);
+  return line === undefined ? 'unlimited' : normalStockOf(line.shop, line.item);
 }
 
 /** Moves every line one restock step toward normal, never past it. */
@@ -188,19 +190,18 @@ function isFiniteNumber(value: unknown): value is number {
 }
 
 /**
- * Reads a saved {@link ShopStockSnapshot} back from untrusted JSON. Anything
- * missing or malformed reads as normal stock: an offset that is not a whole
- * finite number is dropped, and a bad clock starts from 0.
+ * Reads a saved {@link ShopStockSnapshot} back from untrusted JSON, or
+ * undefined when any offset or the clock is invalid.
  */
-export function parseShopStockSnapshot(value: unknown): ShopStockSnapshot {
-  if (!isRecord(value)) return captureShopStock(createShopStock());
+export function parseShopStockSnapshot(value: unknown): ShopStockSnapshot | undefined {
+  if (!isRecord(value) || !isRecord(value.offsets)) return undefined;
   const offsets: Record<string, number> = {};
-  if (isRecord(value.offsets)) {
-    for (const [key, offset] of Object.entries(value.offsets)) {
-      if (isFiniteNumber(offset) && Number.isInteger(offset)) offsets[key] = offset;
-    }
+  for (const [key, offset] of Object.entries(value.offsets)) {
+    const validOffset = isFiniteNumber(offset) && Number.isInteger(offset);
+    if (!validOffset || parseShopStockKey(key) === undefined) return undefined;
+    offsets[key] = offset;
   }
   const clock = value.ticksSinceRestock;
-  const ticksSinceRestock = isFiniteNumber(clock) && clock >= 0 ? clock : 0;
-  return { offsets, ticksSinceRestock };
+  if (!isFiniteNumber(clock) || clock < 0) return undefined;
+  return { offsets, ticksSinceRestock: clock };
 }

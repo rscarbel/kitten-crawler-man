@@ -1,5 +1,5 @@
 /**
- * Building-line dressing: the awning post, the skyfowl perch, and the milking
+ * Building-line dressing: the awning post, the Hawkfolk perch, and the milking
  * shed and cart gate of Wendell's pasture. Each reaches well past its own tile —
  * a valance, a perch bar, a roof, a pair of gate leaves — so unlike `townClutter.ts`'s single shared envelope, every
  * one of these gets its own frame in `townscapeSheets.ts`.
@@ -111,12 +111,12 @@ export function drawAwningPost(ctx: Ctx, sx: number, sy: number, ts: number): vo
   inkOutline(ctx, ts);
 }
 
-// ── Skyfowl perch ────────────────────────────────────────────────────────────
+// ── Hawkfolk perch ────────────────────────────────────────────────────────────
 //
 // A rail on two posts, roughly roof-shoulder height — furniture a bird
 // chooses to use, not a nest and not baked into any facade.
 
-export const SKYFOWL_PERCH_UP_TILES = 1.6;
+export const HAWKFOLK_PERCH_UP_TILES = 1.6;
 const PERCH_POST_WIDTH_FRACTION = 0.1;
 const PERCH_POST_INSET_FRACTION = 0.2;
 const PERCH_POST_TOP_FRACTION = -1.3;
@@ -129,7 +129,7 @@ const PERCH_CAP_LENGTH_FRACTION = 0.2;
 const PERCH_CORBEL_DROP_FRACTION = 0.28;
 const PERCH_CORBEL_WIDTH_PX = 2;
 
-export function drawSkyfowlPerch(ctx: Ctx, sx: number, sy: number, ts: number): void {
+export function drawHawkfolkPerch(ctx: Ctx, sx: number, sy: number, ts: number): void {
   const rng = mulberry32(DRESSING_SEED + 1);
   drawContactShadow(ctx, sx, sy, ts);
 

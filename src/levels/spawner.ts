@@ -17,6 +17,7 @@ import {
   type DifficultyProfile,
 } from '../core/difficulty/difficultyProfiles';
 import type { EscortSpawnRule, MobLevelRange, MobSpawnRule, LevelDef } from './types';
+import { NO_SPAWN_TERRAIN, type SpawnTerrain } from '../map/overworld/spawnTerrain';
 
 /** Maximum attempts to find a walkable spawn position. */
 const MAX_SPAWN_ATTEMPTS = 20;
@@ -132,15 +133,31 @@ function probeSpawnTile(
   return null;
 }
 
-/** Pick a rule from a weighted list. Weights need not sum to 1. */
-export function pickRule(rules: MobSpawnRule[], random: () => number): MobSpawnRule {
-  const total = rules.reduce((sum, r) => sum + r.chance, 0);
+/** Whether `rule` may be picked at a point classified as `terrain`. */
+function ruleFitsTerrain(rule: MobSpawnRule, terrain: ReadonlySet<SpawnTerrain>): boolean {
+  return rule.terrain === undefined || terrain.has(rule.terrain);
+}
+
+/**
+ * Pick a rule from a weighted list, among the rules whose `terrain` the point
+ * satisfies. Weights need not sum to 1. Null when no rule fits the point.
+ *
+ * Draws exactly one roll whatever fits, so a terrain rule never reshuffles the
+ * rolls after it.
+ */
+export function pickRule(
+  rules: readonly MobSpawnRule[],
+  random: () => number,
+  terrain: ReadonlySet<SpawnTerrain>,
+): MobSpawnRule | null {
+  const eligible = rules.filter((rule) => ruleFitsTerrain(rule, terrain));
+  const total = eligible.reduce((sum, r) => sum + r.chance, 0);
   let roll = random() * total;
-  for (const rule of rules) {
+  for (const rule of eligible) {
     roll -= rule.chance;
     if (roll <= 0) return rule;
   }
-  return rules[rules.length - 1];
+  return eligible[eligible.length - 1] ?? null;
 }
 
 /** The stronger of the two crawlers, which is what every level below keys off. */
@@ -700,7 +717,8 @@ export function spawnForLevel(
     };
     for (const { x, y, w, h, region } of map.mobSpawnPoints) {
       const levelBonus = regionLevelBonusFor(def, region);
-      const rule = pickRule(def.roomMobs, random);
+      const rule = pickRule(def.roomMobs, random, NO_SPAWN_TERRAIN);
+      if (rule === null) continue;
       const { hostCount: count, escorts } = rollRoomPopulation(
         def,
         rule,
@@ -732,8 +750,9 @@ export function spawnForLevel(
       encounter: floorEncounter(def.floorNumber, 'hallway'),
       random,
     };
-    for (const { x, y } of map.hallwaySpawnPoints) {
-      const rule = pickRule(def.hallwayMobs, random);
+    for (const { x, y, terrain } of map.hallwaySpawnPoints) {
+      const rule = pickRule(def.hallwayMobs, random, terrain);
+      if (rule === null) continue;
       const spawnAt = (
         band: MobLevelRange,
         kind: StandaloneMobKind,
@@ -808,9 +827,9 @@ export function spawnTreasureRoomMobs(
     const maxTY = y + h - ROOM_FAR_EDGE_INSET;
 
     for (let i = 0; i < TREASURE_ROOM_EXTRA_MOBS; i++) {
-      const rule = pickRule(def.roomMobs, random);
+      const rule = pickRule(def.roomMobs, random, NO_SPAWN_TERRAIN);
       const tile = findWalkableSpawnTile(map, { minTX, minTY, maxTX, maxTY }, random);
-      if (tile === null) continue;
+      if (rule === null || tile === null) continue;
       const mob = spawnMob(rule.type, tile, map, context);
       const band = partyTrackedBand(regionLevelBand(rule, levelBonus), def, partyLevel, profile);
       const maxLevel = band.maxLevel ?? band.minLevel ?? 1;

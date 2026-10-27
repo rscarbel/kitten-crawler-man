@@ -273,7 +273,7 @@ export function drawDangerCircle(
  * A square ground warning covering one map tile, given its top-left corner.
  *
  * The third shape in the language, for hazards that live on the grid rather than
- * in a radius around a caster — the Big Top's floor vents. The inner radius the
+ * in a radius around a caster — the Starlight Tent's floor vents. The inner radius the
  * fill and stripes are drawn against is the tile's half-diagonal, so the stripes
  * reach the corners rather than stopping short of them.
  */

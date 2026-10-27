@@ -1,7 +1,7 @@
 /**
- * Bespoke furniture for Cartwright's Workshop, Brann's wheelwright shop. The
+ * Bespoke furniture for Cartwright's Workshop, Steve's wheelwright shop. The
  * room is built around a few big composed pieces rather than a scatter of
- * one-tile clutter: the red circus wagon bed from Brann's own story, up on
+ * one-tile clutter: the red circus wagon bed from Steve's own story, up on
  * cribbing with one wheel off and a dust sheet half over it; a wheel mid-build
  * on its stand; a long joiner's bench under a wall board of hung tools; a
  * spring-pole lathe; and a timber bay racked to the rafters. Smaller pieces —
@@ -65,7 +65,7 @@ const WAGON_GOLD_BRIGHT: RGB = [244, 214, 128];
 const WAGON_GOLD_DIM: RGB = [138, 104, 40];
 /** The midnight blue a showman's panel sets its gold star on. */
 const WAGON_BLUE: RGB = [40, 52, 96];
-/** Settled workshop dust — the "painted red under the dust" of Brann's own telling. */
+/** Settled workshop dust — the "painted red under the dust" of Steve's own telling. */
 const DUST: RGB = [200, 188, 166];
 const SHEET: Ramp = {
   shadow: [132, 122, 104],
@@ -505,7 +505,7 @@ function paintWagonPanelOrnament(
 }
 
 /**
- * The long red wagon bed Brann built for the circus and never burned:
+ * The long red wagon bed Steve built for the circus and never burned:
  * a showman's-red body with gold-beaded panels, a star roundel and a
  * scalloped skirt, standing on timber cribbing with its near wheel still
  * on the axle and the far wheel off and leaning, a dust sheet thrown over
@@ -1766,6 +1766,103 @@ export function paintSawhorse(ctx: Ctx, frame: TownPropFrame, _variant: number, 
     const curlRng = forkRng(rng);
     for (let i = 0; i < 3; i++)
       paintCurl(ctx, box.left + ts * (0.3 + curlRng() * 1.4), b - ts * 0.1, ts * 0.05, curlRng, ts);
+  });
+}
+
+// ── Target board ─────────────────────────────────────────────────────────────
+
+/** Paint on the board's face: the rings a crossbow is sighted on. */
+const BOARD_RING_WHITE: RGB = [226, 218, 196];
+const BOARD_RING_BLACK: RGB = [36, 32, 30];
+const BOARD_RING_RED: RGB = [170, 48, 40];
+const BOARD_RING_GOLD: RGB = [214, 172, 70];
+/** Outermost ring first; each is a share of the face's radius. */
+const BOARD_RINGS: ReadonlyArray<readonly [colour: RGB, share: number]> = [
+  [BOARD_RING_WHITE, 1],
+  [BOARD_RING_BLACK, 0.8],
+  [BOARD_RING_WHITE, 0.6],
+  [BOARD_RING_RED, 0.4],
+  [BOARD_RING_GOLD, 0.2],
+];
+/** The face's radius, in tiles. */
+const BOARD_RADIUS = 0.46;
+/**
+ * How far the face's centre stands above the floor, in tiles: chest height to
+ * an otter, and where a bolt aimed at the target strikes.
+ */
+const BOARD_CENTRE_HEIGHT = 0.95;
+/**
+ * How wide the face looks against how tall: the board faces west down the
+ * range, so the room's south-facing view sees it nearly edge-on.
+ */
+const BOARD_FACE_FORESHORTEN = 0.34;
+/** The board's thickness, seen as the rim beside its face. */
+const BOARD_THICKNESS = 0.09;
+const BOARD_POST_WIDTH = 0.08;
+/** How far each foot of the stand splays from the post, in tiles. */
+const BOARD_FOOT_SPLAY = 0.3;
+const BOARD_FOOT_LIFT = 0.06;
+
+/**
+ * A wheelwright's practice target: a round board of planks on a post and
+ * splayed feet, its face painted in rings and turned west down the range, so
+ * it is seen nearly edge-on. Only the face's west half shows paint; the rim
+ * of the board's thickness lies east of it.
+ */
+export function paintTargetBoard(
+  ctx: Ctx,
+  frame: TownPropFrame,
+  _variant: number,
+  _rng: Rng,
+): void {
+  withFootprintClip(ctx, frame, () => {
+    const box = footprintBox(frame);
+    const ts = frame.tileScale;
+    const b = box.bottom;
+    const cx = box.centreX;
+    const cy = b - ts * BOARD_CENTRE_HEIGHT;
+    const ry = ts * BOARD_RADIUS;
+    const rx = ry * BOARD_FACE_FORESHORTEN;
+    const rim = ts * BOARD_THICKNESS;
+    bandShadow(
+      ctx,
+      box.left + ts * BOARD_FOOT_SPLAY,
+      box.right - ts * BOARD_FOOT_SPLAY,
+      b - ts * BOARD_FOOT_LIFT,
+      ts,
+    );
+
+    // The stand: a post up to the board's middle, two feet splayed along the floor.
+    const footY = b - ts * BOARD_FOOT_LIFT;
+    ctx.strokeStyle = rgb(sampleRamp(ELM, 0.45));
+    ctx.lineWidth = ts * BOARD_POST_WIDTH;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cx + rim, cy);
+    ctx.lineTo(cx + rim, footY);
+    ctx.moveTo(cx + rim - ts * BOARD_FOOT_SPLAY, footY);
+    ctx.lineTo(cx + rim + ts * BOARD_FOOT_SPLAY, footY);
+    ctx.stroke();
+
+    // The board's thickness, east of its face, in the darker end grain.
+    ctx.fillStyle = rgb(sampleRamp(NEW_WOOD, 0.3));
+    ctx.beginPath();
+    ctx.ellipse(cx + rim, cy, rx, ry, 0, -Math.PI / 2, Math.PI / 2);
+    ctx.lineTo(cx, cy + ry);
+    ctx.ellipse(cx, cy, rx, ry, 0, Math.PI / 2, (Math.PI * 3) / 2);
+    ctx.closePath();
+    ctx.fill();
+    inkOutline(ctx, ts);
+
+    for (const [colour, share] of BOARD_RINGS) {
+      ctx.fillStyle = rgb(colour);
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx * share, ry * share, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    inkOutline(ctx, ts);
   });
 }
 

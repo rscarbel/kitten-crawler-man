@@ -10,8 +10,9 @@
  *    hoodie refusing the hotbar with the tutorial's hint, then put on from
  *    their context menu until the tutorial moves on.
  *  - A plain dungeon floor: I and G, the HUD's Bag button, a potion drunk from
- *    the bag, a stack dropped through "how many?", and the HUD's own hotbar
- *    taking drags beside the bag exactly as the bag's hotbar row does.
+ *    the bag, the cat's drink refused to the human and drunk by her, a stack
+ *    dropped through "how many?", and the HUD's own hotbar taking drags beside
+ *    the bag exactly as the bag's hotbar row does.
  *
  * Run by `verify-inventory-screen.ts` once per platform, in a child process:
  * the platform is decided once, when the game's modules load.
@@ -54,6 +55,8 @@ const { QUEST_SLOT_IDX } = await import('../src/core/items/defs/ItemDefs.js');
 const { TutorialController } = await import('../src/systems/TutorialController.js');
 const { MOUSE_POINTER_ID, PRIMARY_BUTTON } = await import('../src/ui/core/pointer.js');
 const { toCssRect } = await import('../src/ui/hud/HudSurface.js');
+const { drinkRefusal } = await import('../src/ui/potionNotices.js');
+const { intoxicationOf } = await import('../src/core/combat/Intoxication.js');
 const { LONG_PRESS_MS, TOUCH_PICKUP_HOLD_MS } =
   await import('../src/ui/screens/inventory/InventoryScreen.js');
 
@@ -434,6 +437,30 @@ section('a dungeon floor');
     `one potion goes down (${potionsBefore} → ${human.inventory.countOf('health_potion')})`,
   );
   check(!screen.isOpen, 'and the bag closes to let the fight go on');
+
+  section('a drink only the cat may have');
+  {
+    const cat = scene['cat'];
+    const drinks = 'catnip_tuna_water' satisfies ItemId;
+    human.inventory.addItem(drinks, 1);
+    const humanBottles = human.inventory.countOf(drinks);
+    check(
+      !menus.drinkPotion(human, drinks, null),
+      'the human is refused the bottle he reaches for',
+    );
+    check(human.inventory.countOf(drinks) === humanBottles, 'and keeps it unopened');
+    check(
+      menus.toasts.shown.some((toast) => toast.text === drinkRefusal('cat')),
+      'with a toast saying whose it is',
+    );
+    cat.inventory.addItem(drinks, 1);
+    cat.hp = Math.max(1, cat.maxHp - WOUND_HP);
+    const catBottles = cat.inventory.countOf(drinks);
+    check(menus.drinkPotion(cat, drinks, null), 'the cat drinks it');
+    check(cat.inventory.countOf(drinks) === catBottles - 1, 'spending one bottle');
+    check(cat.hasStatus('catnip_buzz'), 'and comes away buzzed');
+    check(intoxicationOf(cat) === 'catnip_buzz', 'which is how she sways and swings');
+  }
 
   section('a stack dropped through “how many?”');
   human.inventory.addItem('wood', DROP_STACK);

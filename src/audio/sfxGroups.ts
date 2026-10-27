@@ -8,8 +8,11 @@ import { SPIDER_QUEST_CUES } from '../systems/spiderQuest/spiderQuestSoundCues';
 import { TUTORIAL_CUES } from '../systems/tutorialSoundCues';
 import { TUTORIAL_LEVEL_ID } from '../levels/tutorial';
 import { INTERIOR_CUES } from '../systems/interiorInteractionSoundCues';
+import { INTERIOR_AMBIENCE_CUES } from '../systems/interiorAmbienceCues';
+import { occupantRoutineSoundIds } from '../systems/occupantRoutineCues';
 import { POKER_CUES } from '../systems/casino/poker/pokerSoundCues';
 import { BOMBER_GOBLIN_CUES } from '../systems/bomberGoblinSoundCues';
+import { starlightTentCueSoundIds } from '../systems/starlightTent/starlightTentSoundCues';
 
 /**
  * Every take in a cue table that is decoded into a buffer. A cue table also
@@ -45,13 +48,15 @@ export type SfxGroup =
   | 'stealthKeySnatch'
   | 'spiderQuest'
   | 'bounty'
-  | 'circusQuest'
+  | 'starlightTent'
   | 'murderMysteryQuest'
   | 'mongoMercenary'
   | 'interiorBopca'
   | 'interiorCasino'
   | 'interiorCommerce'
   | 'interiorInteractions'
+  | 'interiorAmbience'
+  | 'interiorRoutines'
   | 'tutorial'
   | 'misc';
 
@@ -204,23 +209,23 @@ const DUNGEON_CUE_SFX_IDS: readonly SoundId[] = [
 ];
 
 /**
- * Over City citizens' voices, spoken through the dialog box when a
+ * Taloncrest citizens' voices, spoken through the dialog box when a
  * conversation opens (the `townsfolk*` styles in `src/dialog/speakers.ts`).
  * Streets and every building interior share the floor-3 bundle that carries them.
  */
 const TOWN_VOICE_SFX_IDS: readonly SoundId[] = [
-  'skyfowl_chatter_1',
-  'skyfowl_chatter_2',
-  'skyfowl_greeting_1',
-  'skyfowl_greeting_2',
-  'skyfowl_laugh_1',
-  'skyfowl_elder_chatter_1',
-  'skyfowl_elder_chatter_2',
-  'skyfowl_elder_chatter_3',
-  'skyfowl_fledgling_chirp_1',
-  'skyfowl_wing_ruffle_1',
-  'skyfowl_wing_ruffle_2',
-  'skyfowl_talon_steps',
+  'hawkfolk_chatter_1',
+  'hawkfolk_chatter_2',
+  'hawkfolk_greeting_1',
+  'hawkfolk_greeting_2',
+  'hawkfolk_laugh_1',
+  'hawkfolk_elder_chatter_1',
+  'hawkfolk_elder_chatter_2',
+  'hawkfolk_elder_chatter_3',
+  'hawkfolk_fledgling_chirp_1',
+  'hawkfolk_wing_ruffle_1',
+  'hawkfolk_wing_ruffle_2',
+  'hawkfolk_talon_steps',
   'townsfolk_tut_1',
   'townsfolk_tut_2',
   'townsfolk_hm_male_1',
@@ -633,15 +638,15 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
   ],
 
   /**
-   * The floor-3 overworld/town itself: sky fowl and Krasue in the wilderness,
+   * The floor-3 overworld/town itself: Hawkfolk and Krasue in the wilderness,
    * Mongo/mercenary escorts, the Dark Knight's rumble (shared with
    * `murderMysteryQuest`'s tower confrontation), and the paper of the notice
    * boards in the square and in Briar Hollow.
    */
   level3: [
     ...INTERIOR_CUES.noticeUnfold,
-    'skyfowl_1',
-    'skyfowl_2',
+    'hawkfolk_1',
+    'hawkfolk_2',
     ...TOWN_VOICE_SFX_IDS,
     'candle_stand_topple_1',
     'candle_stand_topple_2',
@@ -656,13 +661,16 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'tree_fall_3',
     'tree_fall_4',
     ...BOMBER_GOBLIN_SFX_IDS,
-    // A hireling's thrown rocks and the cretin mercenary's blows.
+    // A hireling's thrown rocks and the earth elemental mercenaries' blows.
     'rock_thud_1',
     'rock_thud_2',
     'rock_thud_3',
     'rock_thud_4',
     // Shady's offer can be taken anywhere he stands; decoded on its first play.
     'accepted_bounty',
+    // The Dire Bear roams the forest edges of the whole floor.
+    'bear_big_attack',
+    'bear_growl_1',
   ],
 
   /**
@@ -820,9 +828,16 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     // grave bull's collapse.
     'deep_rumbling',
     'bones_rattling',
-    // The lava llamas the waves send.
+    // The lava llamas, clowns and lemurs the waves send.
     'llama_fireball',
     'llama_fireball_explosion',
+    'clown_burp',
+    'clown_come_here',
+    'clown_horn',
+    'clown_laughing_1',
+    'clown_laughing_2',
+    'lemur_attack',
+    'lemur_sound',
   ],
 
   /**
@@ -864,10 +879,8 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
    */
   bounty: [
     'accepted_bounty',
-    // The Evil Clown's troupe: its fat clown's burp and its lemur.
+    // The Evil Clown's troupe: its fat clown's burp.
     'clown_burp',
-    'circus_lemur_attack',
-    'circus_lemur_sound',
     'bones_rattling',
     'bounty_fight_engaged',
     'clown_horn',
@@ -919,67 +932,17 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
   ],
 
   /**
-   * `CircusQuestSystem` + `BigTopMazeSystem` (Grimaldi, Heather the Bear, the
-   * clown troupe), and the grounds' high striker. The siege of Briar Hollow
-   * sends clowns, lemurs and llamas too, so floor 3 holds this group near the
-   * grounds, while the circus quest has mobs out, or while a siege is on; the
-   * Big Top declares it itself.
+   * The Starlight Tent maze's cues (`STARLIGHT_TENT_CUES`), the grounds' high striker, and
+   * the voices of the clowns guarding the finale ring's chest. Floor 3 holds
+   * this group near the circus grounds; the Starlight Tent declares it itself.
    */
-  circusQuest: [
-    'bear_big_attack',
-    'bear_growl_1',
-    'circus_lemur_attack',
-    'circus_lemur_sound',
+  starlightTent: [
+    ...starlightTentCueSoundIds(),
+    'high_striker_bell',
     'clown_burp',
-    'clown_come_here',
     'clown_horn',
     'clown_laughing_1',
     'clown_laughing_2',
-    'grimaldi_plant_moving_1',
-    'grimaldi_plant_moving_2',
-    'grimaldi_plant_moving_3',
-    'grimaldi_vine_taking_damage',
-    // The grounds' high striker (`HighStrikerSystem`).
-    'high_striker_bell',
-    // The lava llama's spit and burst, for the llamas the Briar Hollow siege
-    // sends: floor 3 loads neither the level-1 nor the level-2 group.
-    'llama_fireball',
-    'llama_fireball_explosion',
-    // `BIG_TOP_CUES`, some of them also universal. Declared here so the tent's
-    // audio does not hang on another group keeping a sound it borrowed;
-    // `verify:bigtop` fails on any cue id missing from this group.
-    'cage_door_release',
-    'capstan_ratchet',
-    'curtain_rise',
-    'error',
-    'feeding_bell_ring',
-    'fire_breather_whoosh_1',
-    'fire_breather_whoosh_2',
-    'fire_breather_whoosh_3',
-    'fire_breather_whoosh_4',
-    'fire_breather_whoosh_5',
-    'fire_grate_kindle_1',
-    'fire_grate_kindle_2',
-    'fire_grate_kindle_3',
-    'followspot_swing',
-    'gate_opening',
-    'healing_potion',
-    'limelight_ignite',
-    'mirror_pivot_1',
-    'mirror_pivot_2',
-    'mirror_pivot_3',
-    'mirror_pivot_4',
-    'mirror_pivot_5',
-    'phantom_applause_1',
-    'phantom_applause_2',
-    'phantom_applause_3',
-    'reviving_tone',
-    'sandbag_drop',
-    'slide_whistle_fall',
-    'star_target_lit',
-    'wood_breaking_1',
-    // Heather's and Terror's hard-mode healers.
-    ...FAIRY_SFX_IDS,
   ],
 
   /**
@@ -987,7 +950,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
    * `QuillConfrontationSystem` — including every cue the systems of the finale
    * play directly.
    *
-   * Listed here even where a cue also lives in `bounty` or `circusQuest`, which
+   * Listed here even where a cue also lives in `bounty` or `starlightTent`, which
    * floor 3 happens to load as well: leaning on that makes this fight's audio
    * correct only for as long as an unrelated group keeps a sound it borrowed,
    * and `AudioManager.play` returns silently on a buffer that never loaded, so
@@ -1026,7 +989,6 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
    * own cues are universal.
    */
   mongoMercenary: [
-    'sword_attack_1',
     // Tumbledown, the golem for hire, fights with the rock golem's voice.
     'massive_strike_with_dirt_impact',
     'rock_golem_grunt',
@@ -1042,7 +1004,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'bopca_happy_grunt',
   ],
 
-  /** The Desperado Club's casino games: blackjack, poker, slots and Tito's wheel. */
+  /** The Cloak & Dagger's casino games: blackjack, poker, slots and Donald's wheel. */
   interiorCasino: [
     ...Object.values(POKER_CUES).flat(),
     'casino_blackjack_check',
@@ -1054,8 +1016,8 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'casino_shuffle_1',
     'casino_shuffle_2',
     'powering_off',
-    'nothing_final_tone',
-    'nothing_void_swallow',
+    'permanent_death_final_tone',
+    'permanent_death_swallow',
     'wheel_light_bulb_dying',
     'slots_anticipation_riser',
     'slots_bet_down',
@@ -1083,10 +1045,9 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'slots_scatter_land_2',
     'slots_scatter_land_3',
     'slots_spin_button',
-    'tito_chuckle_1',
-    'tito_chuckle_2',
-    'tito_chuckle_3',
-    'tito_stab',
+    'donald_chuckle_1',
+    'donald_chuckle_2',
+    'donald_chuckle_3',
     'wheel_bet_wedge_flip',
     'wheel_confirm_heartbeat_loop',
     'wheel_hold_charge',
@@ -1103,7 +1064,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'wheel_warning_klaxon_loop',
   ],
 
-  /** Any priced transaction indoors: shops, the tavern, temple, tattoo parlor, mercenary guild, VIP lounge. */
+  /** Any priced transaction indoors: shops, the tavern, temple, tattoo parlor, mercenary guild. */
   interiorCommerce: ['purchase_success'],
 
   /**
@@ -1112,6 +1073,20 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
    * stand in every building, so every interior loads this group.
    */
   interiorInteractions: decodedCueIds(INTERIOR_CUES),
+
+  /**
+   * The loops a room's working furniture makes (`INTERIOR_AMBIENCE_CUES`):
+   * fires and the forge. Any building can hold a fire, so every interior
+   * loads this group.
+   */
+  interiorAmbience: decodedCueIds(INTERIOR_AMBIENCE_CUES),
+
+  /**
+   * What an occupant's routine sounds (`OCCUPANT_ROUTINE_CUES`): a mop, a
+   * crossbow at its target. Any building's roster can run a routine, so every
+   * interior loads this group.
+   */
+  interiorRoutines: occupantRoutineSoundIds().filter((id) => !STREAMING_SOUND_IDS.has(id)),
 
   /** The tutorial's gates (`TUTORIAL_CUES`): only its hand-built cellar raises them. */
   tutorial: decodedCueIds(TUTORIAL_CUES),
@@ -1146,7 +1121,7 @@ const LEVEL3_SFX_GROUPS: readonly SfxGroup[] = [
 export const GATED_SFX_GROUPS = [
   'briarHollowSiege',
   'bounty',
-  'circusQuest',
+  'starlightTent',
 ] as const satisfies readonly SfxGroup[];
 
 export type GatedSfxGroup = (typeof GATED_SFX_GROUPS)[number];
@@ -1210,6 +1185,8 @@ export function sfxGroupsForBuildingEntry(entry: BuildingEntry): readonly SoundI
   const groups: readonly SfxGroup[] = [
     'constructionContracts',
     'interiorInteractions',
+    'interiorAmbience',
+    'interiorRoutines',
     ...(entry.hasSafeRoom === true ? (['interiorBopca'] as const) : []),
     ...(entry.type === 'club' ? (['interiorCasino'] as const) : []),
     ...(sellsSomething ? (['interiorCommerce'] as const) : []),

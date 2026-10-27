@@ -153,6 +153,28 @@ console.log('Inventory.sortBag');
   check(firstCategory === 'armor', 'category puts armor ahead of consumables and materials');
 }
 
+console.log('Inventory: only hotlistable items reach the hotbar');
+{
+  const inv = new Inventory('human');
+  inv.bag.slots.fill(null);
+  inv.actionBar.slots.fill(null);
+  const hotbarIdx = 0;
+  const bagIdx = 0;
+  inv.actionBar.slots[hotbarIdx] = { ...ITEM_DEF.health_potion, quantity: 1 };
+  inv.bag.slots[bagIdx] = { ...ITEM_DEF.wood, quantity: 1 };
+  check(!ITEM_DEF.wood.canHotlist, 'wood is not hotlistable, so it can stand in for any such item');
+  inv.swapHotbarToInv(hotbarIdx, bagIdx);
+  check(
+    inv.actionBar.slots.every((slot) => slot === null || ITEM_DEF[slot.id].canHotlist),
+    'dragging a hotbar item onto a bag item that cannot be hotlisted never swaps it onto the bar',
+  );
+  inv.swapInvToHotbar(bagIdx, hotbarIdx);
+  check(
+    inv.actionBar.slots.every((slot) => slot === null || ITEM_DEF[slot.id].canHotlist),
+    'dragging a bag item that cannot be hotlisted onto the bar never puts it there',
+  );
+}
+
 console.log('Inventory: the bag grows a page at a time and never fills');
 {
   const inv = new Inventory('human');
@@ -246,7 +268,7 @@ function makeRig(platform: PlatformSpec, opts: RigOptions = {}): Rig {
   const inv = new Inventory('human');
   inv.bag.slots.fill(null);
   inv.actionBar.slots.fill(null);
-  inv.addItem('dirty_shirley', 2);
+  inv.addItem('catnip_tuna_water', 2);
   inv.addItem('wood', WOOD_STACK);
   inv.addItem('hearthguard_boots', 1);
   inv.addItem('health_potion', POTION_STACK);
@@ -436,12 +458,12 @@ function runScreenCases(platform: PlatformSpec): void {
   console.log(`\nInventoryScreen ${on}: select, keys, lead action`);
   {
     const rig = makeRig(platform);
-    const shirley = slotOf(rig.inv, 'dirty_shirley');
-    rig.tap(`bag/${shirley}`);
-    check(rig.screen.selection?.id === 'dirty_shirley', 'a tap selects the stack');
+    const tunaWater = slotOf(rig.inv, 'catnip_tuna_water');
+    rig.tap(`bag/${tunaWater}`);
+    check(rig.screen.selection?.id === 'catnip_tuna_water', 'a tap selects the stack');
     rig.key('2');
     check(
-      rig.inv.actionBar.slots[DIGIT_TWO_SLOT]?.id === 'dirty_shirley',
+      rig.inv.actionBar.slots[DIGIT_TWO_SLOT]?.id === 'catnip_tuna_water',
       'a number key puts the selection on that hotbar slot',
     );
     rig.hideSheet();
@@ -532,17 +554,27 @@ function runScreenCases(platform: PlatformSpec): void {
       rig.inv.bag.slots[DRAG_TARGET_SLOT]?.id === 'wood' && rig.inv.bag.slots[wood] === null,
       'a drag rearranges the bag in the All view',
     );
-    const shirley = slotOf(rig.inv, 'dirty_shirley');
-    rig.drag(`bag/${shirley}`, `hotbar/${HOTBAR_REARRANGE_FROM}`);
+    const tunaWater = slotOf(rig.inv, 'catnip_tuna_water');
+    rig.drag(`bag/${tunaWater}`, `hotbar/${HOTBAR_REARRANGE_FROM}`);
     check(
-      rig.inv.actionBar.slots[HOTBAR_REARRANGE_FROM]?.id === 'dirty_shirley',
+      rig.inv.actionBar.slots[HOTBAR_REARRANGE_FROM]?.id === 'catnip_tuna_water',
       'a drag puts an item on the hotbar',
     );
     rig.drag(`hotbar/${HOTBAR_REARRANGE_FROM}`, `hotbar/${HOTBAR_REARRANGE_TO}`);
     check(
-      rig.inv.actionBar.slots[HOTBAR_REARRANGE_TO]?.id === 'dirty_shirley' &&
+      rig.inv.actionBar.slots[HOTBAR_REARRANGE_TO]?.id === 'catnip_tuna_water' &&
         rig.inv.actionBar.slots[HOTBAR_REARRANGE_FROM] === null,
       'a drag along the hotbar rearranges it',
+    );
+    rig.drag(`hotbar/${HOTBAR_REARRANGE_TO}`, `bag/${DRAG_TARGET_SLOT}`);
+    check(
+      rig.inv.actionBar.slots[HOTBAR_REARRANGE_TO]?.id === 'catnip_tuna_water' &&
+        rig.inv.bag.slots[DRAG_TARGET_SLOT]?.id === 'wood',
+      'a hotbar item dropped on a bag item the hotbar cannot hold stays put',
+    );
+    check(
+      rig.screen.notice?.id === 'wood',
+      `and says why (${rig.screen.notice?.text ?? 'no notice'})`,
     );
 
     rig.tap(filterRegion(rig, 'consumable'));
@@ -833,11 +865,11 @@ function runScreenCases(platform: PlatformSpec): void {
     );
     rig.screen.deselect();
     rig.frame();
-    rig.inv.addItem('dirty_shirley', 1);
+    rig.inv.addItem('catnip_tuna_water', 1);
     rig.frame();
-    const shirley = slotOf(rig.inv, 'dirty_shirley');
-    rig.tap(`bag/${shirley}`);
-    rig.tap(`bag/${shirley}`);
+    const tunaWater = slotOf(rig.inv, 'catnip_tuna_water');
+    rig.tap(`bag/${tunaWater}`);
+    rig.tap(`bag/${tunaWater}`);
     check(
       rig.interaction.pendingDrinkSlot === null,
       'a double tap runs no lead action while steered',
@@ -882,15 +914,15 @@ function runRewardMidDrag(platform: PlatformSpec): void {
       },
     }),
   );
-  const shirley = slotOf(rig.inv, 'dirty_shirley');
-  const from = rig.centre(`bag/${shirley}`);
+  const tunaWater = slotOf(rig.inv, 'catnip_tuna_water');
+  const from = rig.centre(`bag/${tunaWater}`);
   const to = rig.centre(`hotbar/${REWARD_HOTBAR_SLOT}`);
   const halfway = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
   rig.send('down', from);
   rig.wait(pickupHold(rig.touch));
   rig.send('move', halfway);
   rig.frame();
-  check(rig.screen.drag?.item.id === 'dirty_shirley', 'the item is in hand');
+  check(rig.screen.drag?.item.id === 'catnip_tuna_water', 'the item is in hand');
   dialog.enqueue({
     kind: 'item',
     name: 'Click-through',
@@ -911,7 +943,7 @@ function runRewardMidDrag(platform: PlatformSpec): void {
   rig.frame();
   check(
     rig.inv.actionBar.slots[REWARD_HOTBAR_SLOT] === null &&
-      rig.inv.bag.slots[shirley]?.id === 'dirty_shirley',
+      rig.inv.bag.slots[tunaWater]?.id === 'catnip_tuna_water',
     'the release over the hotbar under the card moves nothing',
   );
   check(rig.screen.drag === null, 'and lets go of the item');

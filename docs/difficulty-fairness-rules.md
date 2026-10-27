@@ -54,9 +54,10 @@ spent points badly should struggle, never be locked out.
 escorts spawn at the party's own level, the mark a level above — so every bounty mob
 carries a per-blow cap (`Mob.blowCapShareOfTargetHp`, set to
 `BOUNTY_MAX_BLOW_HP_SHARE` by `stageBountyEncounter` in `src/systems/BountySystem.ts`),
-applied after the difficulty scale: no single blow from the mark, its escort or its
-summons takes more than that share of the struck crawler's full bar, whatever the
-curve does. An encounter commits one member at a time (`StaggeredCommit`,
+applied after the difficulty scale and after the struck crawler's status scale
+(`Player.incomingDamage`): no single blow from the mark, its escort or its summons
+takes more than that share of the struck crawler's full bar, whatever the curve does,
+and a curse that multiplies incoming damage cannot carry a capped blow past it. An encounter commits one member at a time (`StaggeredCommit`,
 `src/systems/bountyCommit.ts`), so a mirrored pair of escorts never lands its first
 blows on the same frame. `verify:bounty` asserts both.
 
@@ -113,6 +114,25 @@ Hard rules. Every one of these is asserted by `verify:difficulty`.
 - **Avoidance by movement alone must always remain possible.** Scaling may shrink the
   margin; it may never close it. Damage that is undodgeable once you are already inside
   it — flame patches, radial bursts — stays flat and does not scale at all.
+
+**Statuses that scale incoming damage.** A status changes the damage its carrier
+takes only through its entry in `STATUS_INCOMING_DAMAGE_SCALE`
+(`src/core/combat/statusTuning.ts`), keyed by every status id, so a new status cannot
+ship without saying. Crawlers and mobs read the same table. The wheel's double-damage
+curse (`double_damage`, `DOUBLE_DAMAGE_SCALE` for `DOUBLE_DAMAGE_FRAMES`) is the one
+crawler-side entry above 1, and it multiplies every source: mob blows, status ticks,
+hazards and the wheel's own Take Damage wedge. `Player.incomingDamage` applies the
+difficulty scale, then the status scale, then the source's per-blow cap, so the cap
+always has the last word. The wheel's Take Damage wedge
+(`src/systems/casino/wheel/wheelPenalties.ts`) goes through `Player.takeDamage` with a
+`floorHp` of one HP: it hurts, but never kills.
+
+**Blood vomit costs nothing.** The blood-vomit status is a single retch
+(`BLOOD_VOMIT_RETCH_FRAMES`) that a crawler plays on entering the `retch` band of
+`CRAWLER_HP_THRESHOLDS` (`src/core/combat/hpThresholds.ts`). It deals no damage, is not
+saved and shows no HUD pill; it is a warning that the next blow may be the last. It
+fires once per entry into the band and re-arms only once HP rises back above it.
+`verify:wheel` asserts the double damage and the retch.
 
 ### Dynamite
 
@@ -286,7 +306,7 @@ healers and flight.
   (`Fairy.confineTo`/`respectsConfinement`) by whichever room owns it — `BossRoomSystem`
   for a gauntlet boss's room, `ArenaSystem` for the ring (a circle, not a rectangle: see
   `docs/town.md`'s cousin note on the colosseum's own shape), `SpiderQuestSystem` for
-  the lab, `CircusQuestSystem` for Heather's and Terror's grounds. Positional, not
+  the lab. Positional, not
   bond-based: a healer stripped of its bond to a dead boss, or with no bond at all, is
   held exactly the same as one still healing a live fight — before, during and after,
   whether the boss is alive or dead. Confinement rules out every way a healer could
@@ -561,8 +581,9 @@ pressure a crawler; it never ambushes a beaten one:
   are written into the tool descriptions the model reads.
 - **Nothing the AI does finishes a crawler.** HP actions stop at the low-HP line,
   a constitution cut that would cross it is undone, and a damage-over-time status
-  is refused when everything already eating the crawler's HP (blood vomiting
-  included) would carry them under it.
+  is refused when everything already eating the crawler's HP, scaled by any
+  status that multiplies incoming damage (the wheel's double damage doubles every
+  tick), would carry them under it.
 - **No spawns in menus, boss fights, safe rooms or indoors**, none closer than
   `MIN_SPAWN_DISTANCE_TILES`, and every spawn levelled once inside the floor's
   own band (P5).

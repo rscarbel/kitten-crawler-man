@@ -1,5 +1,5 @@
 /**
- * Draws one piece of Desperado Club furniture from the generated sprite sheets.
+ * Draws one piece of Cloak & Dagger furniture from the generated sprite sheets.
  *
  * The sheets store each variant as a frame of a single `idle` state, so a prop's
  * `variant` is the frame index. The only motion is a prop's chasing bulbs, which
@@ -12,7 +12,7 @@ import type { ClubProp } from '../core/club/clubProps';
 import clubSpriteManifest from '../images/environment/club/manifest.json';
 
 /**
- * Draws `prop` at its layout tile, offset by the camera and by any art shift.
+ * Draws `prop` at its layout tile, offset by the camera.
  * `elapsedSeconds` is the club's own clock, which drives the bulb chase.
  */
 export function drawClubProp(
@@ -22,7 +22,7 @@ export function drawClubProp(
   camY: number,
   elapsedSeconds: number,
 ): void {
-  const screenX = (prop.tile.x + (prop.artShiftTilesX ?? 0)) * TILE_SIZE - camX;
+  const screenX = prop.tile.x * TILE_SIZE - camX;
   const screenY = prop.tile.y * TILE_SIZE - camY;
   drawSpriteKey(ctx, prop.sprite, 'idle', prop.variant, screenX, screenY, TILE_SIZE);
 

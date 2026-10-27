@@ -5,7 +5,6 @@
  * every consumer learning its phases.
  */
 
-import { phaseAtLeast, type VillageQuestPhase } from './villageQuestPhase';
 import type { CraftSkillId } from '../labour/CraftSkills';
 
 /** Construction recipes a quest can open up, one at a time. */
@@ -35,18 +34,6 @@ export interface VillageUnlocks {
 
 export function createVillageUnlocks(): VillageUnlocks {
   return { processingStations: false, soldierCommands: false, construction: [] };
-}
-
-/**
- * The unlocks a save written before unlocks were recorded had earned, read off
- * how far its questline had got.
- */
-export function unlocksImpliedByPhase(phase: VillageQuestPhase): VillageUnlocks {
-  return {
-    processingStations: phaseAtLeast(phase, 'processing'),
-    soldierCommands: phaseAtLeast(phase, 'fortifying'),
-    construction: phaseAtLeast(phase, 'build_trebuchet') ? [...TIKKA_PLANS_UNLOCKS] : [],
-  };
 }
 
 export function hasConstructionUnlock(unlocks: VillageUnlocks, id: ConstructionUnlockId): boolean {

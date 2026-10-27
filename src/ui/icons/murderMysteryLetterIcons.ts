@@ -42,7 +42,7 @@ const WRIT_SEAL_R = 0.16;
 const WRIT_SEAL_FILL = '#8b1e2b';
 const WRIT_SEAL_RIM = '#5c1019';
 const WRIT_SEAL_RIM_WIDTH = 1.5;
-/** The pressed cross a signet leaves — two strokes lighter than the wax around them. */
+/** The pressed cross a seal ring leaves — two strokes lighter than the wax around them. */
 const WRIT_SEAL_CROSS_COLOR = 'rgba(0,0,0,0.35)';
 const WRIT_SEAL_CROSS_WIDTH = 1.5;
 const WRIT_SEAL_CROSS_REACH = 0.7;

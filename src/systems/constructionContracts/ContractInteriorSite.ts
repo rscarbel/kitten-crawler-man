@@ -1,5 +1,5 @@
 /**
- * A Skyfowl Town building's construction contract, worked from inside it.
+ * A Taloncrest building's construction contract, worked from inside it.
  *
  * Built by `BuildingInteriorScene` beside the resident quest hooks, and only
  * for the ground floor of the building that hosts the active contract while
@@ -18,15 +18,15 @@ import type { GameMap } from '../../map/GameMap';
 import { releaseContractArt } from '../../sprites/art/constructionContracts/contractArtCache';
 import { interiorRoomOwnedByStory, type InteriorStoryState } from '../interiorStoryOwnership';
 import type { WorkChannelBuilder } from '../WorkChannel';
-import { contractSiteFor, skyfowlContractSite } from './contractCatalog';
+import { contractSiteFor, taloncrestContractSite } from './contractCatalog';
 import {
   ContractSiteWork,
   decorationFigureLine,
   type ContractSiteWorkDeps,
 } from './ContractSiteWork';
-import { skyfowlSpotFootprint, type ContractSpotFootprint } from './contractTargets';
+import { taloncrestSpotFootprint, type ContractSpotFootprint } from './contractTargets';
 
-/** Every Skyfowl Town contract building is worked on its ground floor. */
+/** Every Taloncrest contract building is worked on its ground floor. */
 const CONTRACT_FLOOR = 0;
 
 export interface ContractInteriorSiteDeps {
@@ -69,11 +69,11 @@ export class ContractInteriorSite {
       cat: deps.cat,
       audio: deps.audio,
       audioScope: deps.audioScope,
-      siteHere: (site) => site.town === 'skyfowl' && site.buildingName === buildingName,
+      siteHere: (site) => site.town === 'taloncrest' && site.buildingName === buildingName,
       resolveFootprint: (site, spot) =>
-        site.town === 'skyfowl' ? skyfowlSpotFootprint(site, spot, gameMap) : null,
+        site.town === 'taloncrest' ? taloncrestSpotFootprint(site, spot, gameMap) : null,
       sortLineFor: (footprint) => interiorSortLine(footprint, gameMap),
-      settlement: 'skyfowl',
+      settlement: 'taloncrest',
       announce: deps.toast,
       worldHalted: deps.worldHalted,
       inert: () => interiorRoomOwnedByStory(buildingName, deps.story()),
@@ -92,7 +92,7 @@ export class ContractInteriorSite {
     deps: ContractInteriorSiteDeps,
   ): ContractInteriorSite | null {
     if (floor !== CONTRACT_FLOOR) return null;
-    const site = skyfowlContractSite(buildingName);
+    const site = taloncrestContractSite(buildingName);
     const active = deps.state.contracts.active;
     if (site === undefined || active === null) return null;
     if (contractSiteFor(active.site) !== site) return null;

@@ -1,6 +1,11 @@
 import type { MercenaryArtId } from '../core/party/mercenaryTemplates';
 import type { EyePlacement } from './eyePlacement';
-import type { MercenaryDrawState, MercenaryRow } from '../creatures/mercenaries/MercenaryKit';
+import {
+  isKitRow,
+  type EarthElementalGuardRow,
+  type GolemRow,
+  type MercenaryDrawState,
+} from '../creatures/mercenaries/MercenaryKit';
 import {
   drawRockGolemSprite,
   prewarmRockGolemApproach,
@@ -8,117 +13,37 @@ import {
   ROCK_GOLEM_SHEET_EYES,
   type GolemAttack,
 } from './rockGolemSprite';
+import { IVY_ASHGROVE_ART } from './ivyAshgroveSprite';
+import { BROTHER_ANSELM_ART } from './brotherAnselmSprite';
 import {
-  drawGluteusMaxxSprite,
-  gluteusMaxxWalkRadiansPerPixel,
-  GLUTEUS_MAXX_HEAD_ABOVE_TILE_TILES,
-  GLUTEUS_MAXX_MAX_WALK_RADIANS_PER_TICK,
-  prewarmGluteusMaxx,
-  prewarmGluteusMaxxCrush,
-  prewarmGluteusMaxxReactions,
-  type MaxxAction,
-} from './gluteusMaxxSprite';
-import { MAXX_DEATH_TICKS } from './gluteusMaxxTiming';
+  drawEarthElementalSprite,
+  prewarmEarthElemental,
+  prewarmEarthElementalRows,
+  prewarmEarthElementalShield,
+  type EarthElementalAction,
+  type EarthElementalVariant,
+} from './earthElementalSprite';
 import {
-  BUCKET_BOY_TILES_PER_WALK_CYCLE,
-  drawCrocodilianSprite,
-  prewarmBucketBoy,
-  type BucketBoyRow,
-} from './crocodilianSprite';
-import { BUCKET_BOY_DEATH_DURATION_MS, BUCKET_BOY_WALK_FRAMES } from './crocodilianTiming';
+  EARTH_ELEMENTAL_CAST_SHIELD_FRAMES,
+  EARTH_ELEMENTAL_CAST_SHIELD_TICKS_PER_FRAME,
+  EARTH_ELEMENTAL_DEATH_FRAMES,
+  EARTH_ELEMENTAL_DEATH_TICKS_PER_FRAME,
+  EARTH_ELEMENTAL_DRAW_SCALE,
+  EARTH_ELEMENTAL_HURT_FRAMES,
+  EARTH_ELEMENTAL_HURT_TICKS_PER_FRAME,
+  EARTH_ELEMENTAL_PUNCH_FRAMES,
+  EARTH_ELEMENTAL_PUNCH_TICKS_PER_FRAME,
+  EARTH_ELEMENTAL_WALK_FRAMES,
+  EARTH_ELEMENTAL_WALK_TILES_PER_CYCLE,
+} from './earthElementalTiming';
+import { FIGURE_HEIGHT as EARTH_ELEMENTAL_FIGURE_HEIGHT_TILES } from './art/earthElementalArt';
 import {
-  drawSplashZoneSprite,
-  prewarmSplashZone,
-  prewarmSplashZoneCombat,
-  splashZoneWalkRadiansPerPixel,
-  SPLASH_ZONE_MAX_WALK_RADIANS_PER_TICK,
-  type SplashZoneAction,
-} from './splashZoneSprite';
-import { SPLASH_ZONE_DEATH_TICKS, SPLASH_ZONE_TICKS_PER_SECOND } from './splashZoneTiming';
-import { SPLASH_ZONE_STANDING_TOP_ABOVE_TILE } from './art/splashZoneFigure';
-import {
-  DONG_HEAD_TOP_ABOVE_TILE,
-  DONG_WALK_TILES_PER_CYCLE,
-  drawDongQuixoteSprite,
-  prewarmDongQuixote,
-  prewarmDongQuixoteAction,
-  type DongAction,
-} from './dongQuixoteSprite';
-import { DONG_DEATH_MS, DONG_WALK_FRAMES } from './dongQuixoteTiming';
-import {
-  FRAME_H as DONG_FRAME_H,
-  FRAME_W as DONG_FRAME_W,
-  TILE_SCALE as DONG_TILE_SCALE,
-  TILE_X as DONG_TILE_X,
-  TILE_Y as DONG_TILE_Y,
-} from './art/dongQuixoteFigure';
-import {
-  drawCretinSprite,
-  prewarmCretin,
-  prewarmCretinRows,
-  prewarmCretinShield,
-  type CretinAction,
-  type CretinVariant,
-} from './cretinSprite';
-import {
-  CRETIN_CAST_SHIELD_FRAMES,
-  CRETIN_CAST_SHIELD_TICKS_PER_FRAME,
-  CRETIN_DEATH_FRAMES,
-  CRETIN_DEATH_TICKS_PER_FRAME,
-  CRETIN_DRAW_SCALE,
-  CRETIN_HURT_FRAMES,
-  CRETIN_HURT_TICKS_PER_FRAME,
-  CRETIN_PUNCH_FRAMES,
-  CRETIN_PUNCH_TICKS_PER_FRAME,
-  CRETIN_ROBOT_FRAMES,
-  CRETIN_ROBOT_TICKS_PER_FRAME,
-  CRETIN_WALK_FRAMES,
-  CRETIN_WALK_TILES_PER_CYCLE,
-} from './cretinTiming';
-import { FIGURE_HEIGHT as CRETIN_FIGURE_HEIGHT_TILES } from './art/cretinArt';
-import { CRETIN_TILE_X, CRETIN_TILE_Y, TILE_SCALE as CRETIN_TILE_SCALE } from './art/cretinFigure';
+  EARTH_ELEMENTAL_TILE_X,
+  EARTH_ELEMENTAL_TILE_Y,
+  TILE_SCALE as EARTH_ELEMENTAL_TILE_SCALE,
+} from './art/earthElementalFigure';
 
-const GLUTEUS_MAXX_EYES: EyePlacement = {
-  sideForward: 0.09,
-  sideHeight: -0.1,
-  sideSpacing: 0.05,
-  frontMirrors: false,
-  frontAcross: 0,
-  frontHeight: -0.07,
-  frontSpacing: 0.1,
-};
-
-const SPLASH_ZONE_EYES: EyePlacement = {
-  sideForward: 0.16,
-  sideHeight: 0.13,
-  sideSpacing: 0.05,
-  frontMirrors: false,
-  frontAcross: 0,
-  frontHeight: 0.17,
-  frontSpacing: 0.16,
-};
-
-const BUCKET_BOY_EYES: EyePlacement = {
-  sideForward: 0.16,
-  sideHeight: -0.05,
-  sideSpacing: 0.05,
-  frontMirrors: false,
-  frontAcross: 0,
-  frontHeight: -0.04,
-  frontSpacing: 0.12,
-};
-
-const DONG_QUIXOTE_EYES: EyePlacement = {
-  sideForward: -0.05,
-  sideHeight: -0.75,
-  sideSpacing: 0.05,
-  frontMirrors: false,
-  frontAcross: -0.07,
-  frontHeight: -0.7,
-  frontSpacing: 0.1,
-};
-
-const CRETIN_HIRE_EYES: EyePlacement = {
+const EARTH_ELEMENTAL_HIRE_EYES: EyePlacement = {
   sideForward: 0.15,
   sideHeight: -1.17,
   sideSpacing: 0.05,
@@ -176,12 +101,12 @@ export interface MercenaryArt {
    */
   readonly goreBodyPartKey?: string | null;
   /**
-   * Warms the rows a hire walks out of the club already needing. Called when
+   * Warms the rows a hire steps away from the desk already needing. Called when
    * the contract is signed, not when the hireling first renders.
    */
   prewarm(): void;
   /**
-   * Warms the rows a fight needs that walking out of the club does not — a
+   * Warms the rows a fight needs that following the party does not — a
    * finisher, the flinch, the fall. Called by the shell each time the hireling
    * picks a fight, so a figure whose cells are costly to paint has them ready
    * before the first blow comes. Omitted when `prewarm` already covers them.
@@ -209,7 +134,11 @@ export interface MercenaryGait {
  */
 const TUMBLEDOWN_DEATH_FRAMES = 60;
 
-const GOLEM_ATTACK_ROWS: Readonly<Partial<Record<MercenaryRow, GolemAttack>>> = {
+/** The golem sheet's attack for each row its kit asks for; null plays its walk or idle. */
+const GOLEM_ATTACK_ROWS: Readonly<Record<GolemRow, GolemAttack | null>> = {
+  idle: null,
+  walk: null,
+  death: null,
   slam: 'slam',
   stomp: 'stomp',
   throw: 'throw',
@@ -227,7 +156,8 @@ const GOLEM_HEAD_LIFT_TILES = 1;
 const TUMBLEDOWN_ART: MercenaryArt = {
   draw(ctx, sx, sy, tileSize, frame) {
     if (frame.state.row === 'death') return;
-    const attack = GOLEM_ATTACK_ROWS[frame.state.row] ?? null;
+    const { row } = frame.state;
+    const attack = isKitRow(GOLEM_ATTACK_ROWS, row) ? GOLEM_ATTACK_ROWS[row] : null;
     drawRockGolemSprite(ctx, 'rock_golem_ally', sx, sy, tileSize, {
       walkFrame: frame.walkFrame,
       isMoving: frame.isMoving,
@@ -245,304 +175,66 @@ const TUMBLEDOWN_ART: MercenaryArt = {
   prewarm: () => prewarmRockGolemApproach('rock_golem_ally'),
 };
 
-/**
- * The one-shot rows Gluteus Maxx paints. A basic swing he has no row for (a
- * `punch`) falls back to a jab; walking and standing are the sprite's own
- * choice from `isMoving`.
- */
-const MAXX_ACTION_ROWS: Readonly<Partial<Record<MercenaryRow, MaxxAction>>> = {
-  jab_left: 'jab_left',
-  jab_right: 'jab_right',
-  punch: 'jab_right',
-  crush: 'crush',
-  hurt: 'hurt',
-  death: 'death',
-};
-/** His widest ink — the crush hop and a gauntlet at full extension — stays within a tile of his own. */
-const MAXX_CULL_MARGIN_TILES = 1;
-
-/**
- * Gluteus Maxx's painted figure. His death row ends on the corpse frame, which
- * a progress of 1 selects, so the shell's hold-and-fade shows the body where
- * it fell.
- */
-const GLUTEUS_MAXX_ART: MercenaryArt = {
-  draw(ctx, sx, sy, tileSize, frame) {
-    const action = MAXX_ACTION_ROWS[frame.state.row] ?? null;
-    drawGluteusMaxxSprite(ctx, sx, sy, tileSize, {
-      walkFrame: frame.walkFrame,
-      isMoving: frame.isMoving,
-      facingX: frame.facingX,
-      facingY: frame.facingY,
-      action,
-      actionProgress: frame.state.progress,
-    });
-  },
-  cullMarginTiles: MAXX_CULL_MARGIN_TILES,
-  headLiftTiles: GLUTEUS_MAXX_HEAD_ABOVE_TILE_TILES,
-  eyes: GLUTEUS_MAXX_EYES,
-  deathFrames: MAXX_DEATH_TICKS,
-  prewarm: prewarmGluteusMaxx,
-  prewarmForFight: () => {
-    prewarmGluteusMaxxReactions();
-    prewarmGluteusMaxxCrush();
-  },
-  gait: {
-    radiansPerPixel: gluteusMaxxWalkRadiansPerPixel,
-    maxRadiansPerTick: GLUTEUS_MAXX_MAX_WALK_RADIANS_PER_TICK,
-  },
-};
-
-/** The one-shot rows Splash Zone paints; a row he has no art for plays his idle or walk. */
-const SPLASH_ZONE_ACTION_ROWS: Readonly<Partial<Record<MercenaryRow, SplashZoneAction>>> = {
-  shoot: 'shoot',
-  cast_wave: 'cast_wave',
-  hurt: 'hurt',
-  death: 'death',
-};
-/** His widest ink — the crossbow held out, the paws flung forward — stays within a tile of his own. */
-const SPLASH_ZONE_CULL_MARGIN_TILES = 1;
-
-/**
- * Splash Zone's painted otter. His death row ends on the corpse frame, which a
- * progress of 1 selects, so the shell's hold-and-fade shows him where he fell.
- * The idle bounce runs on the hireling's own clock, so it never falls into step
- * with anything else on screen.
- */
-const SPLASH_ZONE_ART: MercenaryArt = {
-  draw(ctx, sx, sy, tileSize, frame) {
-    drawSplashZoneSprite(ctx, sx, sy, tileSize, {
-      walkFrame: frame.walkFrame,
-      isMoving: frame.isMoving,
-      facingX: frame.facingX,
-      facingY: frame.facingY,
-      action: SPLASH_ZONE_ACTION_ROWS[frame.state.row] ?? null,
-      actionProgress: frame.state.progress,
-      idleSeconds: frame.clock / SPLASH_ZONE_TICKS_PER_SECOND,
-    });
-  },
-  cullMarginTiles: SPLASH_ZONE_CULL_MARGIN_TILES,
-  headLiftTiles: SPLASH_ZONE_STANDING_TOP_ABOVE_TILE,
-  eyes: SPLASH_ZONE_EYES,
-  deathFrames: SPLASH_ZONE_DEATH_TICKS,
-  prewarm: prewarmSplashZone,
-  prewarmForFight: prewarmSplashZoneCombat,
-  gait: {
-    radiansPerPixel: splashZoneWalkRadiansPerPixel,
-    maxRadiansPerTick: SPLASH_ZONE_MAX_WALK_RADIANS_PER_TICK,
-  },
-};
-
-/** Every hireling row Bucket Boy paints; anything else plays his idle or walk. */
-const BUCKET_BOY_ROWS: Readonly<Partial<Record<MercenaryRow, BucketBoyRow>>> = {
-  idle: 'idle',
-  walk: 'walk',
-  flee: 'flee',
-  slap: 'slap',
-  cast_triage: 'cast_triage',
-  cower: 'cower',
-  hurt: 'hurt',
-  death: 'death',
-};
-const BUCKET_BOY_TICKS_PER_SECOND = 60;
-const BUCKET_BOY_MS_PER_SECOND = 1000;
-const BUCKET_BOY_DEATH_TICKS = Math.round(
-  (BUCKET_BOY_DEATH_DURATION_MS * BUCKET_BOY_TICKS_PER_SECOND) / BUCKET_BOY_MS_PER_SECOND,
-);
-/**
- * His crown stands about 1.2 tiles off the ground and the ground line sits
- * near the tile's foot, so his head clears the tile's top edge by this much.
- */
-const BUCKET_BOY_HEAD_ABOVE_TILE_TILES = 0.3;
-/** His snout and dragged tail reach about a tile past his own either side. */
-const BUCKET_BOY_CULL_MARGIN_TILES = 1;
-const BUCKET_BOY_FULL_TURN = Math.PI * 2;
-
-/**
- * Bucket Boy's painted crocodilian. The walk is paced by ground covered and
- * capped at one sprite frame per tick: his legs are short and he is quick, so
- * the honest cadence would skip frames of the sixteen-frame row and strobe. The
- * flee row's phase comes from the kit, which moves him while he runs and so
- * knows how far he got, and arrives as the row's `progress`.
- */
-const BUCKET_BOY_ART: MercenaryArt = {
-  draw(ctx, sx, sy, tileSize, frame) {
-    const { row, progress } = frame.state;
-    const painted = BUCKET_BOY_ROWS[row] ?? (frame.isMoving ? 'walk' : 'idle');
-    const walkFrame = painted === 'flee' ? progress * BUCKET_BOY_FULL_TURN : frame.walkFrame;
-    drawCrocodilianSprite(ctx, sx, sy, tileSize, {
-      variant: 'bucket_boy',
-      row: painted,
-      facingX: frame.facingX,
-      facingY: frame.facingY,
-      walkFrame,
-      progress,
-      elapsedSeconds: frame.clock / BUCKET_BOY_TICKS_PER_SECOND,
-    });
-  },
-  cullMarginTiles: BUCKET_BOY_CULL_MARGIN_TILES,
-  headLiftTiles: BUCKET_BOY_HEAD_ABOVE_TILE_TILES,
-  eyes: BUCKET_BOY_EYES,
-  deathFrames: BUCKET_BOY_DEATH_TICKS,
-  prewarm: prewarmBucketBoy,
-  gait: {
-    radiansPerPixel: (tileSize) =>
-      BUCKET_BOY_FULL_TURN / (BUCKET_BOY_TILES_PER_WALK_CYCLE * tileSize),
-    maxRadiansPerTick: BUCKET_BOY_FULL_TURN / BUCKET_BOY_WALK_FRAMES,
-  },
-};
-
-/**
- * The rows Dong Quixote paints under the name the kit asks for. A basic swing
- * he has no row for (a `punch`, a jab) falls back to the lance thrust; anything
- * else he has no art for plays his walk or his breathing idle.
- */
-const DONG_ACTION_ROWS: Readonly<Partial<Record<MercenaryRow, DongAction>>> = {
-  idle: 'idle',
-  walk: 'walk',
-  thrust: 'thrust',
-  punch: 'thrust',
-  jab_left: 'thrust',
-  jab_right: 'thrust',
-  charge_windup: 'charge_windup',
-  charge: 'charge',
-  charge_recover: 'charge_recover',
-  salute: 'salute',
-  hurt: 'hurt',
-  death: 'death',
-};
-const DONG_TICKS_PER_SECOND = 60;
-const DONG_MS_PER_SECOND = 1000;
-const DONG_MS_PER_TICK = DONG_MS_PER_SECOND / DONG_TICKS_PER_SECOND;
-const DONG_DEATH_TICKS = Math.round(DONG_DEATH_MS / DONG_MS_PER_TICK);
-const DONG_FULL_TURN = Math.PI * 2;
-/**
- * The furthest his cell reaches past his own tile on any side — the couched
- * lance ahead, the saluting point above — rounded up to whole tiles, so the
- * whole of him stays on screen until it is off. Either side counts as the
- * right, since the profile is mirrored for a left facing.
- */
-const DONG_CULL_MARGIN_TILES = Math.ceil(
-  Math.max(
-    DONG_TILE_X,
-    DONG_TILE_Y,
-    DONG_FRAME_W - DONG_TILE_X - DONG_TILE_SCALE,
-    DONG_FRAME_H - DONG_TILE_Y - DONG_TILE_SCALE,
-  ) / DONG_TILE_SCALE,
-);
-/** The most his walk may turn in a tick: one frame of the row, so a shove never strobes his legs. */
-const DONG_MAX_WALK_RADIANS_PER_TICK = DONG_FULL_TURN / DONG_WALK_FRAMES;
-
-/**
- * Dong Quixote's painted figure. The walk's phase is the shell's walk angle as
- * a share of a turn, which the gait below turns by ground covered; the charge
- * carries its own phase in `progress`, paced by the kit on the ground the
- * charge covers. His death row ends on the corpse frame, which a progress of 1
- * selects, so the shell's hold-and-fade shows him where he fell.
- */
-const DONG_QUIXOTE_ART: MercenaryArt = {
-  draw(ctx, sx, sy, tileSize, frame) {
-    const { row, progress } = frame.state;
-    const fallback: DongAction = frame.isMoving ? 'walk' : 'idle';
-    const action = DONG_ACTION_ROWS[row] ?? fallback;
-    drawDongQuixoteSprite(ctx, sx, sy, tileSize, {
-      facingX: frame.facingX,
-      facingY: frame.facingY,
-      action,
-      progress: action === 'walk' ? frame.walkFrame / DONG_FULL_TURN : progress,
-      clockMs: frame.clock * DONG_MS_PER_TICK,
-    });
-  },
-  cullMarginTiles: DONG_CULL_MARGIN_TILES,
-  headLiftTiles: DONG_HEAD_TOP_ABOVE_TILE,
-  eyes: DONG_QUIXOTE_EYES,
-  deathFrames: DONG_DEATH_TICKS,
-  prewarm: () => {
-    prewarmDongQuixote();
-    // He salutes the moment he first steps out of the club.
-    prewarmDongQuixoteAction('salute');
-  },
-  prewarmForFight: () => {
-    // In the order a fight asks for them: the wind-up can come on the very
-    // next frame, the run half a second after it.
-    for (const action of [
-      'charge_windup',
-      'thrust',
-      'charge',
-      'charge_recover',
-      'hurt',
-      'salute',
-      'death',
-    ] as const) {
-      prewarmDongQuixoteAction(action);
-    }
-  },
-  gait: {
-    radiansPerPixel: (tileSize) => DONG_FULL_TURN / (DONG_WALK_TILES_PER_CYCLE * tileSize),
-    maxRadiansPerTick: DONG_MAX_WALK_RADIANS_PER_TICK,
-  },
-};
-
-/**
- * The Cretin row each hireling row plays. Any blow the kit names is drawn as
- * the punch, the only strike a cretin has; a row it has no art for plays its
- * walk or idle.
- */
-const CRETIN_ACTION_ROWS: Readonly<Partial<Record<MercenaryRow, CretinAction>>> = {
-  idle: 'idle',
-  walk: 'walk',
-  punch: 'punch',
-  jab_left: 'punch',
-  jab_right: 'punch',
-  slam: 'punch',
-  crush: 'punch',
-  slap: 'punch',
-  cast_shield: 'cast_shield',
-  robot: 'robot',
-  hurt: 'hurt',
-  death: 'death',
-};
+/** The Earth Elemental row each row of the guard kit plays. */
+const EARTH_ELEMENTAL_ACTION_ROWS: Readonly<Record<EarthElementalGuardRow, EarthElementalAction>> =
+  {
+    idle: 'idle',
+    walk: 'walk',
+    punch: 'punch',
+    cast_shield: 'cast_shield',
+    hurt: 'hurt',
+    death: 'death',
+  };
 
 /** Ticks each row plays for, one pass, so a kit's `progress` turns back into the row's own clock. */
-const CRETIN_ROW_TICKS: Readonly<Record<Exclude<CretinAction, 'idle' | 'walk'>, number>> = {
-  punch: CRETIN_PUNCH_FRAMES * CRETIN_PUNCH_TICKS_PER_FRAME,
-  cast_shield: CRETIN_CAST_SHIELD_FRAMES * CRETIN_CAST_SHIELD_TICKS_PER_FRAME,
-  robot: CRETIN_ROBOT_FRAMES * CRETIN_ROBOT_TICKS_PER_FRAME,
-  hurt: CRETIN_HURT_FRAMES * CRETIN_HURT_TICKS_PER_FRAME,
-  death: CRETIN_DEATH_FRAMES * CRETIN_DEATH_TICKS_PER_FRAME,
+const EARTH_ELEMENTAL_ROW_TICKS: Readonly<
+  Record<Exclude<EarthElementalAction, 'idle' | 'walk'>, number>
+> = {
+  punch: EARTH_ELEMENTAL_PUNCH_FRAMES * EARTH_ELEMENTAL_PUNCH_TICKS_PER_FRAME,
+  cast_shield: EARTH_ELEMENTAL_CAST_SHIELD_FRAMES * EARTH_ELEMENTAL_CAST_SHIELD_TICKS_PER_FRAME,
+  hurt: EARTH_ELEMENTAL_HURT_FRAMES * EARTH_ELEMENTAL_HURT_TICKS_PER_FRAME,
+  death: EARTH_ELEMENTAL_DEATH_FRAMES * EARTH_ELEMENTAL_DEATH_TICKS_PER_FRAME,
 };
 
-const CRETIN_FULL_TURN = Math.PI * 2;
+const EARTH_ELEMENTAL_FULL_TURN = Math.PI * 2;
 /** The figure's feet stand on its tile's bottom edge, one tile below the top edge. */
-const CRETIN_TILE_HEIGHT_TILES = 1;
+const EARTH_ELEMENTAL_TILE_HEIGHT_TILES = 1;
 /** Crown to sole on screen, less the tile it stands in: how far the head clears the tile's top. */
-const CRETIN_HEAD_ABOVE_TILE_TILES =
-  CRETIN_FIGURE_HEIGHT_TILES * CRETIN_DRAW_SCALE - CRETIN_TILE_HEIGHT_TILES;
+const EARTH_ELEMENTAL_HEAD_ABOVE_TILE_TILES =
+  EARTH_ELEMENTAL_FIGURE_HEIGHT_TILES * EARTH_ELEMENTAL_DRAW_SCALE -
+  EARTH_ELEMENTAL_TILE_HEIGHT_TILES;
 /**
- * His cell runs about a tile past his own to either side for the robot's
+ * His cell runs about a tile past his own to either side for a punch's
  * straight arm and two and a half up for the shield glyph; rounded up so the
  * whole of it stays on screen until it is off.
  */
-const CRETIN_CULL_MARGIN_TILES = Math.ceil(
-  Math.max(CRETIN_TILE_X, CRETIN_TILE_Y) / CRETIN_TILE_SCALE,
+const EARTH_ELEMENTAL_CULL_MARGIN_TILES = Math.ceil(
+  Math.max(EARTH_ELEMENTAL_TILE_X, EARTH_ELEMENTAL_TILE_Y) / EARTH_ELEMENTAL_TILE_SCALE,
 );
 
 /**
- * A hired Cretin's painted figure. One-shot rows are drawn at the kit's
+ * A hired Earth Elemental's painted figure. One-shot rows are drawn at the kit's
  * `progress` through them, so the fist lands on screen on the tick the kit
  * lands the blow; the idle breathes on the hireling's own clock. The death row
  * ends on the rubble pile, which a progress of 1 selects, so the shell's
  * hold-and-fade shows the pile where he fell.
  */
-function cretinHireArt(variant: CretinVariant, fightRows: readonly CretinAction[]): MercenaryArt {
+function earthElementalHireArt(
+  variant: EarthElementalVariant,
+  fightRows: readonly EarthElementalAction[],
+): MercenaryArt {
   return {
     draw(ctx, sx, sy, tileSize, frame) {
       const { row, progress } = frame.state;
-      const fallback: CretinAction = frame.isMoving ? 'walk' : 'idle';
-      const action = CRETIN_ACTION_ROWS[row] ?? fallback;
+      const fallback: EarthElementalAction = frame.isMoving ? 'walk' : 'idle';
+      const action = isKitRow(EARTH_ELEMENTAL_ACTION_ROWS, row)
+        ? EARTH_ELEMENTAL_ACTION_ROWS[row]
+        : fallback;
       const ticks =
-        action === 'idle' || action === 'walk' ? frame.clock : progress * CRETIN_ROW_TICKS[action];
-      drawCretinSprite(ctx, sx, sy, tileSize, {
+        action === 'idle' || action === 'walk'
+          ? frame.clock
+          : progress * EARTH_ELEMENTAL_ROW_TICKS[action];
+      drawEarthElementalSprite(ctx, sx, sy, tileSize, {
         variant,
         row: action,
         facingX: frame.facingX,
@@ -551,34 +243,35 @@ function cretinHireArt(variant: CretinVariant, fightRows: readonly CretinAction[
         ticks,
       });
     },
-    cullMarginTiles: CRETIN_CULL_MARGIN_TILES,
-    headLiftTiles: CRETIN_HEAD_ABOVE_TILE_TILES,
-    eyes: CRETIN_HIRE_EYES,
-    deathFrames: CRETIN_ROW_TICKS.death,
-    prewarm: () => prewarmCretin(variant),
+    cullMarginTiles: EARTH_ELEMENTAL_CULL_MARGIN_TILES,
+    headLiftTiles: EARTH_ELEMENTAL_HEAD_ABOVE_TILE_TILES,
+    eyes: EARTH_ELEMENTAL_HIRE_EYES,
+    deathFrames: EARTH_ELEMENTAL_ROW_TICKS.death,
+    prewarm: () => prewarmEarthElemental(variant),
     prewarmForFight: () => {
-      prewarmCretinRows(variant, fightRows);
-      prewarmCretinShield();
+      prewarmEarthElementalRows(variant, fightRows);
+      prewarmEarthElementalShield();
     },
     gait: {
-      radiansPerPixel: (tileSize) => CRETIN_FULL_TURN / (CRETIN_WALK_TILES_PER_CYCLE * tileSize),
-      maxRadiansPerTick: CRETIN_FULL_TURN / CRETIN_WALK_FRAMES,
+      radiansPerPixel: (tileSize) =>
+        EARTH_ELEMENTAL_FULL_TURN / (EARTH_ELEMENTAL_WALK_TILES_PER_CYCLE * tileSize),
+      maxRadiansPerTick: EARTH_ELEMENTAL_FULL_TURN / EARTH_ELEMENTAL_WALK_FRAMES,
     },
   };
 }
 
 /** In the order a fight asks for them: the punch first, the cast soon after. */
-const CRETIN_FIGHT_ROWS: readonly CretinAction[] = ['punch', 'cast_shield', 'hurt', 'death'];
-/** Sledge alone dances the robot with the cat once the fight is done. */
-const SLEDGE_FIGHT_ROWS: readonly CretinAction[] = [...CRETIN_FIGHT_ROWS, 'robot'];
+const EARTH_ELEMENTAL_FIGHT_ROWS: readonly EarthElementalAction[] = [
+  'punch',
+  'cast_shield',
+  'hurt',
+  'death',
+];
 
 export const MERCENARY_ART: Readonly<Record<MercenaryArtId, MercenaryArt>> = {
-  sledge: cretinHireArt('sledge', SLEDGE_FIGHT_ROWS),
-  bomo: cretinHireArt('bomo', CRETIN_FIGHT_ROWS),
-
-  dong_quixote: DONG_QUIXOTE_ART,
-  splash_zone: SPLASH_ZONE_ART,
-  gluteus_maxx: GLUTEUS_MAXX_ART,
-  bucket_boy: BUCKET_BOY_ART,
+  crush: earthElementalHireArt('crush', EARTH_ELEMENTAL_FIGHT_ROWS),
+  hammer_hands: earthElementalHireArt('hammer_hands', EARTH_ELEMENTAL_FIGHT_ROWS),
+  ivy_ashgrove: IVY_ASHGROVE_ART,
+  brother_anselm: BROTHER_ANSELM_ART,
   tumbledown: TUMBLEDOWN_ART,
 };

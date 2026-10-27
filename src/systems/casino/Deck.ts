@@ -1,5 +1,5 @@
 /**
- * The Desperado Club's 52-card deck, shared by both card games: blackjack keeps
+ * The Cloak & Dagger's 52-card deck, shared by both card games: blackjack keeps
  * one as a persistent shoe across rounds, while Texas Hold'em builds a fresh one
  * for every hand. Either way a deck never repeats a card until it reshuffles.
  *
@@ -32,7 +32,7 @@ export const DECK_SIZE = SUITS.length * RANKS.length;
  */
 export const RESHUFFLE_THRESHOLD = 17;
 
-/** A shoe as a plain value, so it can live on `ClubMembership` across scenes. */
+/** A shoe as a plain value, so it can live on `CasinoState` across scenes. */
 export interface ShoeState {
   readonly cards: ReadonlyArray<Card>;
   readonly cursor: number;

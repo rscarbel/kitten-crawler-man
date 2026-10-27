@@ -39,7 +39,7 @@ const MIRRORED_SIDES: ReadonlyArray<number> = [-1, 1];
  * puts its doorway on its front row, so the lintel is about a tile above the
  * anchor whatever the building's height, while the footprint above that row runs
  * from 4 tiles (five of the thirteen sprites, including the smithy and both
- * taverns) to 9 (the Desperado Club) — measured, not estimated. A sign hung off
+ * taverns) to 9 (the Cloak & Dagger) — measured, not estimated. A sign hung off
  * the roof line would need a per-building offset; hung off the door head it is
  * one offset for all fifteen.
  *

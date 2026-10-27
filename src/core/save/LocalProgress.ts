@@ -6,16 +6,28 @@ import { wipeOwed } from './wipeMarker';
 const STORAGE_KEY = 'kcm.progress';
 
 /**
- * The last checkpoint written on this device, or `null` when there is none or
- * it cannot be trusted. `localStorage` throws outright in some privacy modes, so
- * every access is guarded and a failure simply means there is nothing to resume.
+ * The last checkpoint written on this device, or `null` when there is none.
+ * One that fails validation is discarded with a warning and the run starts
+ * fresh. `localStorage` throws outright in some privacy modes, so every access
+ * is guarded and a failure simply means there is nothing to resume.
  */
 export function readLocalProgress(): GameProgress | null {
   if (wipeOwed()) return null;
+  let raw: string | null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw === null) return null;
-    return parseGameProgress(JSON.parse(raw));
+    raw = localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+  if (raw === null) return null;
+  const progress = parseStoredSave(raw);
+  if (progress === null) console.warn('The save on this device failed validation; starting fresh.');
+  return progress;
+}
+
+function parseStoredSave(text: string): GameProgress | null {
+  try {
+    return parseGameProgress(JSON.parse(text));
   } catch {
     return null;
   }

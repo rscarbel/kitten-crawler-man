@@ -8,7 +8,7 @@
 import { CatPlayer } from '../creatures/CatPlayer';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { TILE_SIZE } from '../core/constants';
-import { createClubMembership } from '../core/club/ClubMembership';
+import { createCasinoState } from '../core/club/CasinoState';
 import type { CasinoSeat } from '../systems/ClubCasinoSystem';
 import { ClubSlotsSystem, type SlotsAudio, type SlotsLoops } from '../systems/ClubSlotsSystem';
 import { MAX_BET_PER_LINE, stepBet } from '../systems/casino/slots/slotBets';
@@ -68,13 +68,13 @@ export function openStagedSlots(
   loops: SlotsLoops | null = null,
 ): StagedSlots {
   let now = 0;
-  const membership = createClubMembership();
-  membership.slotsJackpotPool = STAGE_JACKPOT_POOL;
+  const casinoState = createCasinoState();
+  casinoState.slotsJackpotPool = STAGE_JACKPOT_POOL;
   const human = new HumanPlayer(0, 0, TILE_SIZE);
   const cat = new CatPlayer(1, 0, TILE_SIZE);
   human.coins = STAGE_BANKROLL;
   const seat: CasinoSeat = { active: () => human, companion: () => cat };
-  const host = new ClubSlotsSystem(audio, loops, membership, () => now, {
+  const host = new ClubSlotsSystem(audio, loops, casinoState, () => now, {
     seed: SLOTS_STAGE_SEED,
     effectsRandom: mulberry32(EFFECTS_SEED),
   });

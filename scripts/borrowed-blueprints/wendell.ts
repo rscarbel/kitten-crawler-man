@@ -112,13 +112,13 @@ function questSlotItem(crawler: HumanPlayer | CatPlayer): ItemId | null {
 /** The first visit: his price, in the active crawler's voice, and on to Merrit only once it is read. */
 export function verifyWendellFirstVisit(check: Check): void {
   check(
-    WendellBlueprintsHook.forBuilding('Hilda’s Cottage', WENDELL_FLOOR, wendellRigDeps()) === null,
+    WendellBlueprintsHook.forBuilding('Lori’s Cottage', WENDELL_FLOOR, wendellRigDeps()) === null,
     'no Wendell hook in any other building',
   );
 
   const rig = wendellRig('ask_wendell');
   const hook = rig.visit();
-  check(!hook.tryOpenDialog('old_hilda', rig.human), 'another resident is left to her own lines');
+  check(!hook.tryOpenDialog('old_lori', rig.human), 'another resident is left to her own lines');
   check(hook.tryOpenDialog('wendell', rig.human), 'talking to Wendell at ask_wendell opens a beat');
   check(hook.isDialogOpen, 'and the beat is his');
   const firstLine = firstLineOf(rig.opened[0]);

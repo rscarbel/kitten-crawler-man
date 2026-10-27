@@ -17,7 +17,6 @@ type FloorEncounterSlot =
 
 /** Quests and set pieces that field hostiles of their own. */
 type QuestEncounterName =
-  | 'circus'
   | 'spider'
   | 'defend'
   | 'murder-mystery'
@@ -28,7 +27,7 @@ type QuestEncounterName =
   | 'tutorial'
   | 'clogged-bathroom'
   | 'escort-ambush'
-  | 'big-top-maze'
+  | 'starlight-tent-maze'
   | 'anchor-shrine'
   | 'interior-hostiles';
 
@@ -44,7 +43,7 @@ type QuestEncounterName =
  * - `quest:<name>` — a quest's waves and set pieces.
  * - `fairy:boss-healer` — the healer a boss fight brings on hard.
  * - `siege:briar-hollow` — the village assault.
- * - `town:crowd` — the Over City's street crowd.
+ * - `town:crowd` — Taloncrest's street crowd.
  * - `dev:spawn` — cheats, the AI director's spawns and harnesses.
  */
 export type EncounterId =

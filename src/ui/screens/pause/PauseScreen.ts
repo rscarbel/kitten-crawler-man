@@ -108,7 +108,7 @@ const RESTRICTED_REASON = 'Finish the tutorial step first';
 /** Buildings have no way to restart the run; the dungeon outside does. */
 const RESET_UNAVAILABLE_REASON = 'Leave the building to reset the game';
 
-const DIFFICULTY_CONFIRM_TITLE = 'Restart the Big Top?';
+const DIFFICULTY_CONFIRM_TITLE = 'Restart the Starlight Tent?';
 const DIFFICULTY_CONFIRM_BODY =
   'Changing the difficulty changes the hall of mirrors. The show will start over from Act I.';
 

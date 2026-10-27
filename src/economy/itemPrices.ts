@@ -97,7 +97,7 @@ const MODEST_PIECE = 0.8;
 // prettier-ignore
 export const ITEM_PRICES = {
   // potion
-  dirty_shirley:                { base:    15, category: 'potion' },
+  catnip_tuna_water:            { base:    15, category: 'potion' },
   health_potion:                { base:    15, category: 'potion' },
   speed_fizz:                   { base:   120, category: 'potion' },
   jugg_juice:                   { base:   220, category: 'potion' },
@@ -212,7 +212,7 @@ export const ITEM_PRICES = {
   // quest
   quest_wood_board:             { base:     1, category: 'quest' },
   anchor_shard_tinker:          { base:    20, category: 'quest' },
-  anchor_shard_hilda:           { base:    20, category: 'quest' },
+  anchor_shard_lori:           { base:    20, category: 'quest' },
   anchor_shard_temple:          { base:    20, category: 'quest' },
   magistrates_writ:             { base:     0, category: 'quest' },
   unreadable_letter:            { base:     0, category: 'quest' },

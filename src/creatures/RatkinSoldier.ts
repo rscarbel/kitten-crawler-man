@@ -1,6 +1,6 @@
 import { Mob, type LootDrop, type PlayerDamageType } from './Mob';
 import type { EyePlacement } from '../sprites/eyePlacement';
-import type { DamageSource, Player } from '../Player';
+import type { DamageOptions, DamageSource, Player } from '../Player';
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import { normalize } from '../utils';
 import type { TilePoint, TileRect } from '../map/town/townPlan';
@@ -425,9 +425,9 @@ export class RatkinSoldier extends Mob {
     return this.downed || this.risingFramesLeft > 0;
   }
 
-  override takeDamage(amount: number, source?: DamageSource): boolean {
+  override takeDamage(amount: number, source?: DamageSource, options?: DamageOptions): boolean {
     if (this.downed || this.risingFramesLeft > 0) return false;
-    const connected = super.takeDamage(amount, source);
+    const connected = super.takeDamage(amount, source, options);
     this.fallIfSpent();
     return connected;
   }

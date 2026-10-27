@@ -48,8 +48,8 @@ export const POKER_CUES = {
     'poker_reaction_chuckle_3',
     'poker_reaction_chuckle_4',
   ],
-  /** A skyfowl regular's bluff is shown and wins after the flop: the town's skyfowl laugh. */
-  skyfowl_chuckle: ['skyfowl_laugh_1'],
+  /** A Hawkfolk regular's bluff is shown and wins after the flop: the town's Hawkfolk laugh. */
+  hawkfolk_chuckle: ['hawkfolk_laugh_1'],
   deal_card: ['casino_deal_card'],
   bet_small: ['casino_chips_bet_small'],
   bet_big: ['casino_chips_bet_big'],

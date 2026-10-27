@@ -1,6 +1,6 @@
 /**
  * Cross-scene state for "The Krasue Murders" (the town murder-mystery
- * questline). Like CircusQuestProgress, one mutable object is created by the
+ * questline). Like DoomsdayProgress, one mutable object is created by the
  * overworld DungeonScene and threaded by reference through
  * BuildingInteriorScene and every scene reconstruction — the cult-hideout and
  * tower-confrontation beats advance the stage from inside interiors.
@@ -56,7 +56,7 @@ export interface MurderQuestProgress {
    */
   officeSceneSeen: boolean;
   /**
-   * Papers taken off GumGum's body that have not reached a bag yet.
+   * Papers taken off Baggi's body that have not reached a bag yet.
    *
    * Cross-scene for the same reason `officeSceneSeen` is: the grant happens once,
    * behind a stage advance that never runs again, and a full pack at that moment

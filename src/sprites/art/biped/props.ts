@@ -27,6 +27,7 @@ import { blackPowderBombReach, drawBlackPowderBomb } from './props/blackPowderBo
 import { zippoReach, drawZippo } from './props/zippo';
 import { bottleReach, drawBottle } from './props/bottle';
 import { slingshotReach, drawSlingshot } from './props/slingshot';
+import { longbowReach, drawLongbow } from './props/longbow';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -38,6 +39,7 @@ type BipedPropKind =
   | 'zippo'
   | 'bottle'
   | 'slingshot'
+  | 'longbow'
   | 'board'
   | 'crate'
   | 'wrench';
@@ -132,4 +134,5 @@ export const PROP_ART: Record<BipedPropKind, PropArt> = {
   zippo: { paint: drawZippo, reach: zippoReach },
   bottle: { paint: drawBottle, reach: bottleReach },
   slingshot: { paint: drawSlingshot, reach: slingshotReach },
+  longbow: { paint: drawLongbow, reach: longbowReach },
 };

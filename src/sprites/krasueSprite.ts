@@ -96,7 +96,7 @@ function drawGlowDisc(
 
 /**
  * Draw a krasue — a disembodied flying female head trailing an organ sac and
- * dangling entrails, one of the Over City's ruins-monsters. Bobs and drifts
+ * dangling entrails, one of Taloncrest's ruins-monsters. Bobs and drifts
  * erratically, only viscera hanging below the severed neck.
  *
  * @param floatPhase continuously increasing phase (radians) driving bob + entrail sway.

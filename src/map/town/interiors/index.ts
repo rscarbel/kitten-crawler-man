@@ -12,10 +12,7 @@ import type { ContractAreaRecord } from '../../contractAreas';
 import type { PlannedBuildingName } from '../townPlan';
 import { buildPlumblineFarmLayout } from './plumblineFarm';
 import { buildBlackwoodLodgeContractAreas, buildBlackwoodLodgeLayout } from './blackwoodLodge';
-import {
-  buildOldHildasCottageContractAreas,
-  buildOldHildasCottageLayout,
-} from './oldHildasCottage';
+import { buildOldLorisCottageContractAreas, buildOldLorisCottageLayout } from './oldLorisCottage';
 import {
   buildCartwrightsWorkshopContractAreas,
   buildCartwrightsWorkshopLayout,
@@ -45,7 +42,7 @@ export type TownInteriorLayoutBuilder = (
 export const NAMED_INTERIOR_LAYOUTS: ReadonlyMap<string, TownInteriorLayoutBuilder> = new Map([
   ['Plumbline Farm', buildPlumblineFarmLayout],
   ['Blackwood Lodge', buildBlackwoodLodgeLayout],
-  ["Old Hilda's Cottage", buildOldHildasCottageLayout],
+  ["Old Lori's Cottage", buildOldLorisCottageLayout],
   ["Cartwright's Workshop", buildCartwrightsWorkshopLayout],
   ['Herb & Remedy', buildHerbAndRemedyLayout],
   ['The Sleeping Cat Inn', buildSleepingCatInnLayout],
@@ -75,7 +72,7 @@ export const NAMED_INTERIOR_CONTRACT_AREAS: ReadonlyMap<
   TownInteriorContractAreasBuilder
 > = new Map([
   ['Blackwood Lodge', buildBlackwoodLodgeContractAreas],
-  ["Old Hilda's Cottage", buildOldHildasCottageContractAreas],
+  ["Old Lori's Cottage", buildOldLorisCottageContractAreas],
   ["Cartwright's Workshop", buildCartwrightsWorkshopContractAreas],
   ['Herb & Remedy', buildHerbAndRemedyContractAreas],
   ['The Sleeping Cat Inn', buildSleepingCatInnContractAreas],

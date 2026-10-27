@@ -460,7 +460,7 @@ const DECORATION_TYPES = new Set([
   // standing north of a tent is drawn behind it.
   CIRCUS_STRUCTURE_TALL,
   CIRCUS_STRUCTURE_LOW,
-  // The Big Top's tent poles. Y-sorted so the mast rising out of view passes
+  // The Starlight Tent's poles. Y-sorted so the mast rising out of view passes
   // behind a crawler south of it and in front of one north of it.
   TENT_POLE,
   // Riverbank reeds stand taller than their tile, so a crawler wading behind
@@ -493,7 +493,7 @@ const CACHEABLE_OVERLAY_TYPES = new Set([
   // Static and genuinely multi-op — a face, a stepped block, a lip, three cracks
   // and a shadow — which is exactly what this cache is for.
   CLIFF,
-  // One blit, but of a sheet painted at twice the display scale: the Big Top is
+  // One blit, but of a sheet painted at twice the display scale: the Starlight Tent is
   // twelve tiles wide, and caching skips resampling all of it every frame.
   CIRCUS_STRUCTURE_TALL,
   CIRCUS_STRUCTURE_LOW,

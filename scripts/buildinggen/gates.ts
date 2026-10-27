@@ -383,7 +383,7 @@ export function measureTextureRichness(buffer: PixelBuffer): number {
  * front it clears its floor of 17.36 by only a few percent. That is the honest
  * ceiling for this building.
  *
- * The temple and Old Hilda's Cottage are the two tightest, and any figure quoted
+ * The temple and Old Lori's Cottage are the two tightest, and any figure quoted
  * here is only as good as the bake it was taken from. `npm run gen:buildings`
  * prints all fifteen every run; trust that over this paragraph.
  */
@@ -435,7 +435,7 @@ export function gateTextureRichness(
  *
  * ## What actually binds this number
  *
- * Not the temple, whose roof clears its facade by 30%. Old Hilda's Cottage does,
+ * Not the temple, whose roof clears its facade by 30%. Old Lori's Cottage does,
  * at 1.10, with Plumbline Farm and the Miller's Farm just behind — all
  * three are pale walls under mid-value roofs, which is the pairing this gate is
  * hardest on. So 1.06 sits close to what the current art allows rather than at
@@ -590,7 +590,7 @@ const LIFE_INK_ALPHA_FLOOR = 12;
  * perfectly.
  *
  * Set against the quietest overlay in the town, which is Cartwright's chimney
- * smoke at about 0.14% of its frame (Old Hilda's, Plumbline Farm and the
+ * smoke at about 0.14% of its frame (Old Lori's, Plumbline Farm and the
  * Miller's follow between 0.2% and 0.45%). At under a third of that it passes
  * every real building comfortably, while failing an overlay that has lost most
  * of its ink rather than only one that has lost all of it. The bake prints the

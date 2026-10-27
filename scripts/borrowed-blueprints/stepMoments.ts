@@ -16,7 +16,6 @@ import {
   parseBriarHollowStateSnapshot,
   restoreBriarHollowState,
   type BriarHollowState,
-  type BriarHollowStateSnapshot,
 } from '../../src/core/quests/briarHollowState';
 import { allocCanvas, surfaceContext } from '../../src/core/rendering/canvasSurface';
 import { setViewportSize } from '../../src/core/rendering/Viewport';
@@ -414,32 +413,6 @@ function verifyCompletionScreenWaits(check: Check): void {
   door.rig.dispose();
 }
 
-/** A save from before the flag existed: a finished quest reads as seen, an open one does not. */
-function verifyCompletionFlagParse(check: Check): void {
-  const readWithoutFlag = (
-    phase: 'complete' | 'build_stations',
-  ): BriarHollowStateSnapshot | undefined => {
-    const state = createBriarHollowState();
-    state.blueprints.phase = phase;
-    const snapshot: unknown = JSON.parse(JSON.stringify(captureBriarHollowState(state)));
-    if (typeof snapshot === 'object' && snapshot !== null && 'blueprints' in snapshot) {
-      const quest: unknown = snapshot.blueprints;
-      if (typeof quest === 'object' && quest !== null) {
-        Reflect.deleteProperty(quest, 'completionScreenSeen');
-      }
-    }
-    return parseBriarHollowStateSnapshot(snapshot);
-  };
-  check(
-    readWithoutFlag('complete')?.blueprints.completionScreenSeen === true,
-    'an old save with the quest already finished never springs the screen on load',
-  );
-  check(
-    readWithoutFlag('build_stations')?.blueprints.completionScreenSeen === false,
-    'an old save mid-quest still has the screen to come',
-  );
-}
-
 /**
  * Each station's card states what the sawmill really does, in figures worked
  * out here from the constants the sawmill itself reads.
@@ -481,7 +454,6 @@ export function stepMomentSections(
       name: 'Quest-complete screen: waits for conversations and the siege',
       run: () => verifyCompletionScreenWaits(check),
     },
-    { name: 'Quest-complete screen: old saves', run: () => verifyCompletionFlagParse(check) },
     {
       name: 'Quest-complete screen: rewards match the sawmill',
       run: () => verifyCompletionRewardsMatchConstants(check),

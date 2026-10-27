@@ -49,21 +49,21 @@ export const FENNA_OFFER_DECLINE_LABEL = 'Not right now';
 export const FENNA_REOFFER_TOPIC_LABEL = 'About those work stations';
 
 /** What Fenna's line says when the town's bearing cannot be worked out. */
-const TOWN_WHEREABOUTS_FALLBACK = 'the skyfowl town past the road';
+const TOWN_WHEREABOUTS_FALLBACK = 'Taloncrest, past the road';
 
 /**
- * Where Fenna says the skyfowl town is, finishing "He lives at Plumbline
- * Farm, in …": its bearing from the village, lower-cased ("the skyfowl town
- * north west of here"), or a plain "past the road" when either end is
- * unknown.
+ * Where Fenna says Taloncrest is, finishing "He lives at Plumbline
+ * Farm, in …": the town by name, then its bearing from the village,
+ * lower-cased ("Taloncrest, north west of here"), or a plain "past the road"
+ * when either end is unknown.
  */
-export function skyfowlTownWhereabouts(
+export function taloncrestWhereabouts(
   villageCentre: { readonly x: number; readonly y: number } | null,
   townCentre: { readonly x: number; readonly y: number } | null,
 ): string {
   if (villageCentre === null || townCentre === null) return TOWN_WHEREABOUTS_FALLBACK;
   const direction = cardinalDirection(villageCentre, townCentre).toLowerCase();
-  return `the skyfowl town ${direction} of here`;
+  return `Taloncrest, ${direction} of here`;
 }
 
 /** The offer: ends on the {@link FENNA_OFFER_ACCEPT_LABEL} / {@link FENNA_OFFER_DECLINE_LABEL} row. */

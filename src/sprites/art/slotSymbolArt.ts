@@ -1,7 +1,7 @@
 /**
  * The slot machine's reel symbols as vector art: cherries, a lemon, a bell, a
  * BAR plate, Mongo on his disc, a jewelled tiara, a crawler's boots, a golden
- * 7, the gold sheriff-star wild and the glowing loot-box scatter. Painted into
+ * 7, the gold dagger-seal wild and the glowing loot-box scatter. Painted into
  * a square cell; `ui/casino/slots/slotSymbols` bakes them per size so the
  * reels only ever blit.
  */
@@ -314,16 +314,34 @@ const SEVEN = {
   shine: { x: -0.12, y: -0.31, rx: 0.12, ry: 0.025 },
 } as const;
 
-const STAR_POINTS = 5;
-
-const WILD_STAR = {
-  outerRadius: 0.44,
-  innerRadius: 0.2,
-  studRadius: 0.045,
-  ringRadius: 0.17,
-  ringWidth: 0.02,
-  textDrop: 0.015,
+/** The wild: a gold seal bearing a hooded figure, laid over two crossed daggers. */
+const WILD_SEAL = {
+  centreY: -0.05,
+  radius: 0.2,
+  rimWidth: 0.022,
+  /** Each dagger lies this far off vertical, one each way. */
+  daggerTilt: Math.PI / 4,
+  tipReach: 0.47,
+  bladeHalfWidth: 0.065,
+  guardY: 0.22,
+  guardHalfWidth: 0.12,
+  guardThickness: 0.04,
+  gripEndY: 0.36,
+  gripHalfWidth: 0.03,
+  pommelRadius: 0.045,
+  hood: {
+    peakY: -0.15,
+    crownHalfWidth: 0.09,
+    crownY: -0.06,
+    shoulderHalfWidth: 0.18,
+    shoulderY: 0.09,
+    faceY: -0.03,
+    faceRx: 0.04,
+    faceRy: 0.055,
+  },
+  textY: 0.36,
   textSize: 0.15,
+  textOutline: 0.04,
 } as const;
 
 const LOOT_BOX = {
@@ -750,7 +768,7 @@ const paintSeven: Painter = (ctx, s) => {
   ctx.stroke();
   ctx.lineWidth = s * SEVEN.rimGlintWidth;
   ctx.strokeStyle = linear(ctx, 0, -s * SEVEN.rimSpan, 0, s * SEVEN.rimSpan, [
-    [0, ink.starLight],
+    [0, ink.sealLight],
     [0.5, ink.sevenRim],
     [1, ink.sevenRimDark],
   ]);
@@ -765,46 +783,128 @@ const paintSeven: Painter = (ctx, s) => {
   shine(ctx, s * glint.x, s * glint.y, s * glint.rx, s * glint.ry);
 };
 
-const paintWild: Painter = (ctx, s) => {
-  dropShadow(ctx, s);
-  const outer = s * WILD_STAR.outerRadius;
-  const inner = s * WILD_STAR.innerRadius;
+/** One dagger lying along its own axis, tip up, centred on the seal. */
+function paintDagger(ctx: CanvasRenderingContext2D, s: number, tilt: number): void {
+  const d = WILD_SEAL;
+  ctx.save();
+  ctx.translate(0, s * d.centreY);
+  ctx.rotate(tilt);
   ctx.beginPath();
-  for (let i = 0; i < STAR_POINTS * 2; i++) {
-    const angle = -Math.PI * HALF + (i * Math.PI) / STAR_POINTS;
-    const r = i % 2 === 0 ? outer : inner;
-    const x = Math.cos(angle) * r;
-    const y = Math.sin(angle) * r;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  }
+  ctx.moveTo(0, -s * d.tipReach);
+  ctx.lineTo(s * d.bladeHalfWidth, s * d.guardY);
+  ctx.lineTo(-s * d.bladeHalfWidth, s * d.guardY);
   ctx.closePath();
   outlined(
     ctx,
     s,
-    radial(ctx, 0, 0, outer, [
-      [0, ink.starLight],
-      [0.55, ink.star],
-      [1, ink.starDark],
+    linear(ctx, -s * d.bladeHalfWidth, 0, s * d.bladeHalfWidth, 0, [
+      [0, ink.daggerBlade],
+      [1, ink.daggerBladeDark],
     ]),
   );
-  for (let i = 0; i < STAR_POINTS; i++) {
-    const angle = -Math.PI * HALF + (i * TWO_PI) / STAR_POINTS;
-    ctx.beginPath();
-    ctx.arc(Math.cos(angle) * outer, Math.sin(angle) * outer, s * WILD_STAR.studRadius, 0, TWO_PI);
-    outlined(ctx, s, ink.star);
-  }
   ctx.beginPath();
-  ctx.arc(0, 0, s * WILD_STAR.ringRadius, 0, TWO_PI);
-  ctx.lineWidth = s * WILD_STAR.ringWidth;
-  ctx.strokeStyle = ink.starDark;
+  ctx.rect(
+    -s * d.gripHalfWidth,
+    s * d.guardY,
+    s * d.gripHalfWidth * 2,
+    s * (d.gripEndY - d.guardY),
+  );
+  outlined(ctx, s, ink.daggerGrip);
+  ctx.beginPath();
+  ctx.rect(
+    -s * d.guardHalfWidth,
+    s * (d.guardY - d.guardThickness * HALF),
+    s * d.guardHalfWidth * 2,
+    s * d.guardThickness,
+  );
+  outlined(ctx, s, ink.seal);
+  ctx.beginPath();
+  ctx.arc(0, s * d.gripEndY, s * d.pommelRadius, 0, TWO_PI);
+  outlined(ctx, s, ink.seal);
+  ctx.restore();
+}
+
+function hoodPath(ctx: CanvasRenderingContext2D, s: number): void {
+  const h = WILD_SEAL.hood;
+  const y0 = s * WILD_SEAL.centreY;
+  ctx.beginPath();
+  ctx.moveTo(0, y0 + s * h.peakY);
+  ctx.quadraticCurveTo(
+    s * h.crownHalfWidth,
+    y0 + s * h.peakY,
+    s * h.crownHalfWidth,
+    y0 + s * h.crownY,
+  );
+  ctx.quadraticCurveTo(
+    s * h.crownHalfWidth,
+    y0 + s * h.shoulderY * HALF,
+    s * h.shoulderHalfWidth,
+    y0 + s * h.shoulderY,
+  );
+  ctx.lineTo(s * h.shoulderHalfWidth, y0 + s * WILD_SEAL.radius);
+  ctx.lineTo(-s * h.shoulderHalfWidth, y0 + s * WILD_SEAL.radius);
+  ctx.lineTo(-s * h.shoulderHalfWidth, y0 + s * h.shoulderY);
+  ctx.quadraticCurveTo(
+    -s * h.crownHalfWidth,
+    y0 + s * h.shoulderY * HALF,
+    -s * h.crownHalfWidth,
+    y0 + s * h.crownY,
+  );
+  ctx.quadraticCurveTo(-s * h.crownHalfWidth, y0 + s * h.peakY, 0, y0 + s * h.peakY);
+  ctx.closePath();
+}
+
+const paintWild: Painter = (ctx, s) => {
+  const seal = WILD_SEAL;
+  const cy = s * seal.centreY;
+  const r = s * seal.radius;
+  dropShadow(ctx, s);
+  paintDagger(ctx, s, -seal.daggerTilt);
+  paintDagger(ctx, s, seal.daggerTilt);
+
+  ctx.beginPath();
+  ctx.arc(0, cy, r, 0, TWO_PI);
+  outlined(
+    ctx,
+    s,
+    radial(ctx, 0, cy, r, [
+      [0, ink.sealLight],
+      [0.55, ink.seal],
+      [1, ink.sealDark],
+    ]),
+  );
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(0, cy, r - s * seal.rimWidth, 0, TWO_PI);
+  ctx.clip();
+  hoodPath(ctx, s);
+  ctx.fillStyle = linear(ctx, 0, cy - r, 0, cy + r, [
+    [0, ink.hoodLight],
+    [1, ink.hood],
+  ]);
+  ctx.fill();
+  const h = seal.hood;
+  ctx.beginPath();
+  ctx.ellipse(0, cy + s * h.faceY, s * h.faceRx, s * h.faceRy, 0, 0, TWO_PI);
+  ctx.fillStyle = ink.outline;
+  ctx.fill();
+  ctx.restore();
+
+  ctx.beginPath();
+  ctx.arc(0, cy, r - s * seal.rimWidth, 0, TWO_PI);
+  ctx.lineWidth = s * seal.rimWidth;
+  ctx.strokeStyle = ink.sealDark;
   ctx.stroke();
+
   worldText(ctx, 'WILD', {
     x: 0,
-    y: s * WILD_STAR.textDrop,
-    size: s * WILD_STAR.textSize,
+    y: s * seal.textY,
+    size: s * seal.textSize,
     bold: true,
-    color: ink.starText,
+    color: ink.sealText,
+    outline: ink.sealLight,
+    outlineWidth: s * seal.textOutline,
     family: UI_FONT_STACK,
     align: 'center',
     baseline: 'middle',

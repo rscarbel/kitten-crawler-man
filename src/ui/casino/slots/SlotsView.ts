@@ -188,8 +188,8 @@ const METER_PAD_FRACTION = 0.12;
 const METER_LABEL_FRACTION = 0.32;
 const METER_DIGITS_FRACTION = 0.78;
 const METER_LETTER_SPACING = 0.25;
-/** Narrower than this many label heights and the meter's label drops its first word. */
-const METER_LONG_LABEL_WIDTH = 16;
+/** Narrower than this many label heights and the meter's label drops the club's name. */
+const METER_LONG_LABEL_WIDTH = 20;
 const FREE_PLATE_HEIGHT_FRACTION = 0.13;
 const FREE_PLATE_WIDTH_FRACTION = 0.72;
 /** The free-spin plate names the feature's winnings too once it is this many heights wide. */
@@ -488,7 +488,7 @@ export class SlotsView {
     const pad = meter.h * METER_PAD_FRACTION;
     const body = inset(meter, pad);
     const labelH = body.h * METER_LABEL_FRACTION;
-    const label = body.w < labelH * METER_LONG_LABEL_WIDTH ? 'JACKPOT' : 'DESPERADO JACKPOT';
+    const label = body.w < labelH * METER_LONG_LABEL_WIDTH ? 'JACKPOT' : 'CLOAK & DAGGER JACKPOT';
     text(
       ui,
       { ...body, h: labelH },

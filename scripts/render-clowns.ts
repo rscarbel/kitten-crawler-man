@@ -27,8 +27,8 @@ import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 import {
   EVIL_CLOWN_FIGURE,
   FAT_CLOWN_FIGURE,
-  STILT_CLOWN_FIGURE,
-  TERROR_CLOWN_FIGURE,
+  TALL_CLOWN_FIGURE,
+  MASSIVE_CLOWN_FIGURE,
 } from '../src/sprites/art/clownFigure.js';
 import {
   CLOWN_GAS_FIGURE,
@@ -38,8 +38,8 @@ import {
 
 const SUBJECTS: Readonly<Record<string, FigureDef>> = {
   fat: FAT_CLOWN_FIGURE,
-  stilt: STILT_CLOWN_FIGURE,
-  terror: TERROR_CLOWN_FIGURE,
+  tall: TALL_CLOWN_FIGURE,
+  massive: MASSIVE_CLOWN_FIGURE,
   evil: EVIL_CLOWN_FIGURE,
   vial: CLOWN_VIAL_FIGURE,
   shatter: CLOWN_SHATTER_FIGURE,

@@ -1,15 +1,15 @@
 /**
- * The Wheel of Fortune's blood vomiting, on the body.
+ * The retch of blood a crawler brings up on dropping into the lowest HP band,
+ * on the body.
  *
- * Between bouts it is a sick crawler: skin drained to a pale green-grey and a
- * thread of blood hanging off the mouth. On each bout the body heaves forward
- * and squats under the retch while blood arcs from the mouth to the floor; the
- * floor splatter itself is gore laid by the scene, since it has to outlast the
- * status.
+ * Through the bout the skin drains to a pale green-grey and a thread of blood
+ * hangs off the mouth while the body heaves forward and squats under the
+ * retch, blood arcing from the mouth to the floor; the floor splatter itself
+ * is gore laid by the scene, since it has to outlast the status.
  *
  * The heave is a transform around the figure's own art rather than a painted
- * row: it plays every ten seconds on both crawlers in every view, and a bend
- * at the feet reads as a retch at this size without a frame of new anatomy.
+ * row: it plays on both crawlers in every view, and a bend at the feet reads
+ * as a retch at this size without a frame of new anatomy.
  */
 
 import type { SilhouetteLayer } from '../../core/spriteAssets/silhouetteComposite';
@@ -76,7 +76,7 @@ export function retchPoseAt(progress: number): RetchPose {
   };
 }
 
-/** The pose this effect puts the body in now: resting between bouts. */
+/** The pose this effect puts the body in now: resting once the retch is over. */
 export function retchPoseOf(effect: StatusEffect): RetchPose {
   const progress = bloodVomitRetchProgress(effect);
   return progress === null ? RESTING_POSE : retchPoseAt(progress);

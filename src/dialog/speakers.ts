@@ -51,21 +51,21 @@ const RATKIN_VOICE_SOUNDS: ReadonlyArray<SoundId> = [
   'ratkin_chatter_6',
 ];
 
-/** A skyfowl citizen's voice when a conversation opens: throaty chatter, never the hostile fowl's squawk. */
-const SKYFOWL_CITIZEN_VOICE_SOUNDS: ReadonlyArray<SoundId> = [
-  'skyfowl_chatter_1',
-  'skyfowl_chatter_2',
+/** A Hawkfolk citizen's voice when a conversation opens: throaty chatter, never the hostile Hawkfolk's squawk. */
+const HAWKFOLK_CITIZEN_VOICE_SOUNDS: ReadonlyArray<SoundId> = [
+  'hawkfolk_chatter_1',
+  'hawkfolk_chatter_2',
 ];
 
 /** Slower and deeper: temple keepers and clerks. */
-const SKYFOWL_ELDER_VOICE_SOUNDS: ReadonlyArray<SoundId> = [
-  'skyfowl_elder_chatter_1',
-  'skyfowl_elder_chatter_2',
-  'skyfowl_elder_chatter_3',
+const HAWKFOLK_ELDER_VOICE_SOUNDS: ReadonlyArray<SoundId> = [
+  'hawkfolk_elder_chatter_1',
+  'hawkfolk_elder_chatter_2',
+  'hawkfolk_elder_chatter_3',
 ];
 
-/** Bright peeping for skyfowl children. */
-const SKYFOWL_FLEDGLING_VOICE_SOUNDS: ReadonlyArray<SoundId> = ['skyfowl_fledgling_chirp_1'];
+/** Bright peeping for Hawkfolk children. */
+const HAWKFOLK_FLEDGLING_VOICE_SOUNDS: ReadonlyArray<SoundId> = ['hawkfolk_fledgling_chirp_1'];
 
 /** Wordless murmurs, so no line of dialog is ever contradicted by the audio. */
 const HUMAN_MASCULINE_VOICE_SOUNDS: ReadonlyArray<SoundId> = [
@@ -119,7 +119,7 @@ function ratkinVillagerSpeaker<const Name extends string>(
 }
 
 /**
- * A poker regular at the Desperado Club. Their banter shows as a bubble beside
+ * A poker regular at the Cloak & Dagger. Their banter shows as a bubble beside
  * their seat, but the dialog layer still credits and voices them like any
  * named cast member.
  */
@@ -219,34 +219,9 @@ export const SPEAKERS = {
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
 
-  // The Krasue Murders and the Circus questline.
-  signet: {
-    name: 'Tsarina Signet',
-    portrait: null,
-    voice: { kind: 'typing' },
-    reveal: 'sentence',
-    textCase: 'as-written',
-    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
-  },
-  grimaldi: {
-    name: 'Grimaldi',
-    portrait: null,
-    voice: { kind: 'typing' },
-    reveal: 'sentence',
-    textCase: 'as-written',
-    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
-  },
-  /** Grimaldi's voice calling from inside the Big Top, before Signet can see him again. */
-  grimaldiInTent: {
-    name: 'Grimaldi (from within the tent)',
-    portrait: null,
-    voice: { kind: 'typing' },
-    reveal: 'sentence',
-    textCase: 'as-written',
-    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
-  },
-  gumgum: {
-    name: 'GumGum',
+  // The Krasue Murders.
+  baggi: {
+    name: 'Baggi',
     portrait: null,
     voice: { kind: 'typing' },
     reveal: 'sentence',
@@ -288,8 +263,8 @@ export const SPEAKERS = {
     textCase: 'as-written',
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
-  hilda: {
-    name: 'Old Hilda',
+  lori: {
+    name: 'Old Lori',
     portrait: null,
     voice: { kind: 'typing' },
     reveal: 'sentence',
@@ -324,15 +299,7 @@ export const SPEAKERS = {
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
 
-  // The Desperado Club, Defend and Spider questlines.
-  clarabelle: {
-    name: 'Clarabelle',
-    portrait: null,
-    voice: { kind: 'typing' },
-    reveal: 'sentence',
-    textCase: 'as-written',
-    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
-  },
+  // The Defend and Spider questlines.
   goblinMother: {
     name: 'Goblin Mother',
     portrait: null,
@@ -390,7 +357,7 @@ export const SPEAKERS = {
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
 
-  // The Desperado Club's blackjack table.
+  // The Cloak & Dagger's blackjack table.
   deuce: {
     name: 'Deuce',
     portrait: null,
@@ -400,9 +367,9 @@ export const SPEAKERS = {
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
 
-  // The Desperado Club's Wheel of Fortune.
-  tito: {
-    name: 'Tito',
+  // The Cloak & Dagger's Wheel of Fortune.
+  donald: {
+    name: 'Donald',
     portrait: null,
     voice: { kind: 'typing' },
     reveal: 'sentence',
@@ -410,65 +377,49 @@ export const SPEAKERS = {
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
 
-  // The Desperado Club's Texas Hold'em regulars; names match `POKER_REGULARS`.
-  pokerWren: pokerRegularSpeaker('Wren Halloway', SKYFOWL_CITIZEN_VOICE_SOUNDS),
+  // The Cloak & Dagger's Texas Hold'em regulars; names match `POKER_REGULARS`.
+  pokerWren: pokerRegularSpeaker('Wren Halloway', HAWKFOLK_CITIZEN_VOICE_SOUNDS),
   pokerGrizzle: pokerRegularSpeaker('Grizzle Pott', HUMAN_MASCULINE_VOICE_SOUNDS),
-  pokerOttoline: pokerRegularSpeaker('Lady Ottoline Fairweather', SKYFOWL_CITIZEN_VOICE_SOUNDS),
-  pokerPell: pokerRegularSpeaker('Sixfinger Pell', SKYFOWL_CITIZEN_VOICE_SOUNDS),
-  pokerDabney: pokerRegularSpeaker('Nervous Dabney', SKYFOWL_ELDER_VOICE_SOUNDS),
-  pokerCorvina: pokerRegularSpeaker('Corvina Lark', SKYFOWL_ELDER_VOICE_SOUNDS),
+  pokerOttoline: pokerRegularSpeaker('Lady Ottoline Fairweather', HAWKFOLK_CITIZEN_VOICE_SOUNDS),
+  pokerPell: pokerRegularSpeaker('Sixfinger Pell', HAWKFOLK_CITIZEN_VOICE_SOUNDS),
+  pokerDabney: pokerRegularSpeaker('Nervous Dabney', HAWKFOLK_ELDER_VOICE_SOUNDS),
+  pokerCorvina: pokerRegularSpeaker('Corvina Lark', HAWKFOLK_ELDER_VOICE_SOUNDS),
   pokerReverend: pokerRegularSpeaker('The Reverend Snake-Eyes', HUMAN_MASCULINE_VOICE_SOUNDS),
   pokerMalloy: pokerRegularSpeaker('Odds Malloy', HUMAN_MASCULINE_VOICE_SOUNDS),
   pokerCrumb: pokerRegularSpeaker('Mother Crumb', HUMAN_FEMININE_VOICE_SOUNDS),
-  pokerQuillfeather: pokerRegularSpeaker('Barnaby Quillfeather', SKYFOWL_ELDER_VOICE_SOUNDS),
-  pokerTuppence: pokerRegularSpeaker('Tuppence', SKYFOWL_CITIZEN_VOICE_SOUNDS),
-  pokerVane: pokerRegularSpeaker('Gristle Vane', SKYFOWL_CITIZEN_VOICE_SOUNDS),
+  pokerQuillfeather: pokerRegularSpeaker('Barnaby Quillfeather', HAWKFOLK_ELDER_VOICE_SOUNDS),
+  pokerTuppence: pokerRegularSpeaker('Tuppence', HAWKFOLK_CITIZEN_VOICE_SOUNDS),
+  pokerVane: pokerRegularSpeaker('Gristle Vane', HAWKFOLK_CITIZEN_VOICE_SOUNDS),
   pokerBrisket: pokerRegularSpeaker('Brisket Mulgrew', HUMAN_MASCULINE_VOICE_SOUNDS),
-  pokerMags: pokerRegularSpeaker('Mags the Molt', SKYFOWL_ELDER_VOICE_SOUNDS),
+  pokerMags: pokerRegularSpeaker('Mags the Molt', HAWKFOLK_ELDER_VOICE_SOUNDS),
 
-  // The Meat Shields' hired mercenaries.
-  sledge: {
-    name: 'The Sledge',
+  // The Barracks Mercenaries' hires.
+  crush: {
+    name: 'Crush',
     portrait: null,
     voice: { kind: 'typing' },
     reveal: 'word',
     textCase: 'as-written',
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
-  bomo: {
-    name: 'Bomo',
+  hammerHands: {
+    name: 'Hammer Hands',
     portrait: null,
     voice: { kind: 'typing' },
     reveal: 'word',
     textCase: 'as-written',
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
-  dongQuixote: {
-    name: 'Dong Quixote',
+  ivyAshgrove: {
+    name: 'Ivy Ashgrove',
     portrait: null,
     voice: { kind: 'typing' },
     reveal: 'word',
     textCase: 'as-written',
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
-  splashZone: {
-    name: 'Splash Zone',
-    portrait: null,
-    voice: { kind: 'typing' },
-    reveal: 'word',
-    textCase: 'as-written',
-    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
-  },
-  gluteusMaxx: {
-    name: 'Gluteus Maxx',
-    portrait: null,
-    voice: { kind: 'typing' },
-    reveal: 'word',
-    textCase: 'as-written',
-    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
-  },
-  bucketBoy: {
-    name: 'Bucket Boy',
+  brotherAnselm: {
+    name: 'Brother Anselm',
     portrait: null,
     voice: { kind: 'typing' },
     reveal: 'word',
@@ -530,37 +481,37 @@ export const TRANSIENT_STYLES = {
     textCase: 'as-written',
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
-  /** An Over City human whose look is masculine. */
+  /** A Taloncrest human whose look is masculine. */
   townsfolkMasculine: {
     voice: { kind: 'clips', sounds: HUMAN_MASCULINE_VOICE_SOUNDS },
     reveal: 'word',
     textCase: 'as-written',
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
-  /** An Over City human whose look is feminine. */
+  /** A Taloncrest human whose look is feminine. */
   townsfolkFeminine: {
     voice: { kind: 'clips', sounds: HUMAN_FEMININE_VOICE_SOUNDS },
     reveal: 'word',
     textCase: 'as-written',
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
-  /** An Over City skyfowl. */
-  townsfolkSkyfowl: {
-    voice: { kind: 'clips', sounds: SKYFOWL_CITIZEN_VOICE_SOUNDS },
+  /** A Taloncrest Hawkfolk. */
+  townsfolkHawkfolk: {
+    voice: { kind: 'clips', sounds: HAWKFOLK_CITIZEN_VOICE_SOUNDS },
     reveal: 'word',
     textCase: 'as-written',
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
-  /** An Over City skyfowl elder, clerk or temple keeper. */
-  townsfolkSkyfowlElder: {
-    voice: { kind: 'clips', sounds: SKYFOWL_ELDER_VOICE_SOUNDS },
+  /** A Taloncrest Hawkfolk elder, clerk or temple keeper. */
+  townsfolkHawkfolkElder: {
+    voice: { kind: 'clips', sounds: HAWKFOLK_ELDER_VOICE_SOUNDS },
     reveal: 'word',
     textCase: 'as-written',
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
-  /** An Over City skyfowl child. */
-  townsfolkSkyfowlFledgling: {
-    voice: { kind: 'clips', sounds: SKYFOWL_FLEDGLING_VOICE_SOUNDS },
+  /** A Taloncrest Hawkfolk child. */
+  townsfolkHawkfolkFledgling: {
+    voice: { kind: 'clips', sounds: HAWKFOLK_FLEDGLING_VOICE_SOUNDS },
     reveal: 'word',
     textCase: 'as-written',
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
@@ -614,14 +565,14 @@ export const TRANSIENT_STYLES = {
 
 export type TransientStyleId = keyof typeof TRANSIENT_STYLES;
 
-/** The styles an Over City citizen speaks in; `townsfolk` itself stays the typed-click voice for Briar Hollow's ratkin. */
+/** The styles a Taloncrest citizen speaks in; `townsfolk` itself stays the typed-click voice for Briar Hollow's ratkin. */
 export type CitizenSpeechStyle = Extract<
   TransientStyleId,
   | 'townsfolkMasculine'
   | 'townsfolkFeminine'
-  | 'townsfolkSkyfowl'
-  | 'townsfolkSkyfowlElder'
-  | 'townsfolkSkyfowlFledgling'
+  | 'townsfolkHawkfolk'
+  | 'townsfolkHawkfolkElder'
+  | 'townsfolkHawkfolkFledgling'
 >;
 
 /** The clips a citizen speaking in `style` is voiced with. Every citizen style speaks in clips. */

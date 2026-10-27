@@ -16,8 +16,8 @@ import { prewarmClownGasRows } from '../sprites/clownGasSprite';
 import { EVIL_CLOWN_JUGGLE_HAND_HEIGHT_TILES } from '../sprites/art/clownFigure';
 
 /**
- * The Evil Clown — a bounty target, and the only member of Grimaldi's troupe
- * that was never in the show.
+ * The Evil Clown — a bounty target, and the only clown that was never in the
+ * show.
  *
  * He fights as a slow, heavy melee boss with one signature: every so often he
  * stops hunting, throws his head back and laughs, and then goes for a wander

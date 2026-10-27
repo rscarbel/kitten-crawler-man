@@ -5,12 +5,11 @@ import type { SerializedAchievements } from '../core/progression/AchievementMana
 import type { GameStatsSnapshot } from '../core/progression/GameStats';
 import type { PartyCraftsState } from '../core/labour/partyCrafts';
 import type {
-  OwedWheelItem,
   PendingWheelOutcome,
   WheelCrawler,
   WheelQuestFreeSpins,
 } from '../core/save/WheelLedger';
-import type { BloodVomitRemaining } from '../core/save/bloodVomitSave';
+import type { DoubleDamageRemaining } from '../core/save/doubleDamageSave';
 import type { SerializedMusicLibrary } from '../core/music/MusicLibrary';
 import { parseGameProgress } from '../core/save/saveFormat';
 import { PAGE_SAVE_LATCH, type ProgressStorage } from '../core/save/progressPersistence';
@@ -25,109 +24,86 @@ export interface AuthUser {
 }
 
 export interface GameProgress {
-  /**
-   * The payload's shape, as a semantic version — see `SAVE_FORMAT_VERSION` for
-   * what each part promises. Saves written before it existed load as `1.0.0`.
-   */
-  version: string;
   levelId: string;
   humanSnap: PlayerSnapshot;
   catSnap: PlayerSnapshot;
   /**
    * Ability levels and XP, which belong to the party rather than to either
-   * crawler and so have no home in a `PlayerSnapshot`. Absent on saves written
-   * before abilities were persisted at all — those resume at level 1.
+   * crawler and so have no home in a `PlayerSnapshot`.
    */
-  abilityStates?: SerializedAbilityState[];
-  /**
-   * Whether the Krakaren chest has been opened and Mongo is available at all.
-   *
-   * Optional, like every field added after the fact: the server stores this
-   * payload as one opaque JSON blob, so an older save simply arrives without it
-   * and resumes with the pet still locked.
-   */
-  mongoUnlocked?: boolean;
+  abilityStates: SerializedAbilityState[];
+  /** Whether the Krakaren chest has been opened and Mongo is available at all. */
+  mongoUnlocked: boolean;
   /** The pet's HP, which persists across summons and sessions. */
-  mongoPetHp?: number;
+  mongoPetHp: number;
   /**
    * Whether he is resting off a knockout, which blocks summoning until he is
    * back to full. Stored separately from the HP because it is a latch: the HP
    * alone cannot say whether a half-healed raptor is on his way back up from
    * zero or was simply recalled hurt.
    */
-  mongoPetResting?: boolean;
+  mongoPetResting: boolean;
   /**
    * Shared axe/pickaxe tiers and which craft-skill explainers have already
    * played. Party progress rather than either crawler's own — a tool upgrade
-   * always applies to both inventories at once. Absent on saves predating
-   * craft skills, which resume with no tools granted and every explainer unseen.
+   * always applies to both inventories at once.
    */
-  crafts?: PartyCraftsState;
+  crafts: PartyCraftsState;
   /**
    * Each crawler's unlocked achievements, unread notices and the paid rewards
-   * still waiting for the reward screen. Absent on saves written before achievements were persisted — those
-   * resume with none. Unknown until parsed: the server returns this blob as it
-   * was stored, so it is screened by `AchievementManager.fromSerialized`.
+   * still waiting for the reward screen.
    */
-  humanAchievements?: SerializedAchievements;
-  catAchievements?: SerializedAchievements;
+  humanAchievements: SerializedAchievements;
+  catAchievements: SerializedAchievements;
   /**
-   * The floor's generation seeds and the safe room to stand back in. Absent on
-   * saves that predate it, and dropped on load when the generator has changed;
-   * either way the party resumes on a freshly generated floor.
+   * The floor's generation seeds and the save point to stand back in. Absent
+   * on the tutorial's saves and the level-complete save, whose party resumes
+   * on a freshly generated floor.
    */
   world?: SavedWorld;
   /**
    * The run's tallies for the Stats tab and the run-complete screen. Kept at
    * the top level rather than inside `world`, because the save a floor change
    * writes carries no `world` and the run's record has to cross floors.
-   * Unknown until parsed, like the achievements.
    */
-  gameStats?: GameStatsSnapshot;
+  gameStats: GameStatsSnapshot;
   /**
    * The wheel's good prizes the party has already won, which it never draws
    * again. Top level because a floor change carries no `world`; cleared only by
    * a wipe.
    */
-  wheelPrizesWon?: string[];
+  wheelPrizesWon: string[];
   /**
    * A spin committed before its wheel turned and not yet paid out. A load
    * applies it and clears it, so closing the tab mid-spin cannot undo it.
    */
-  pendingWheelOutcome?: PendingWheelOutcome | null;
+  pendingWheelOutcome: PendingWheelOutcome | null;
   /** The bet whose board a landed Spin Again still owes a free spin on. */
-  wheelFreeSpinBet?: number | null;
+  wheelFreeSpinBet: number | null;
   /** The crawler a wheel freeze is still owed to, spent on the next load. */
-  wheelOwedFreeze?: WheelCrawler | null;
-  /** Prize items held for a crawler outside the bag: read on load, never written. */
-  wheelOwedItems?: OwedWheelItem[];
-  /** Quest-earned wheel spins and the taped chain one is playing; older saves have none. */
-  wheelQuestFreeSpins?: WheelQuestFreeSpins;
-  /** Frames of blood vomiting each crawler has left. */
-  bloodVomitRemaining?: BloodVomitRemaining;
+  wheelOwedFreeze: WheelCrawler | null;
+  /** Quest-earned wheel spins and the taped chain one is playing. */
+  wheelQuestFreeSpins: WheelQuestFreeSpins;
+  /** Frames of double damage each crawler has left. */
+  doubleDamageRemaining: DoubleDamageRemaining;
   /** Whether the human crawler owns the attack cow. */
-  attackCowOwned?: boolean;
+  attackCowOwned: boolean;
   /** The cow's HP; absent while she is at a full health not yet measured. */
   attackCowHp?: number;
   /** Whether the cow is resting off a knockout, which holds her out until she is full. */
-  attackCowResting?: boolean;
-  /**
-   * The songs the run has unlocked and heard. Top level because a floor change
-   * carries no `world`. A save written before the library existed loads with
-   * one backfilled from its progress.
-   */
-  musicLibrary?: SerializedMusicLibrary;
+  attackCowResting: boolean;
+  /** The songs the run has unlocked and heard. Top level because a floor change carries no `world`. */
+  musicLibrary: SerializedMusicLibrary;
   /**
    * The viewers' favour meter, 0–100. Absent until the show's AI first moved
-   * it, and on every save written before it existed; either way the run
-   * carries on at the starting favour with the meter hidden.
+   * it, and the run carries on at the starting favour with the meter hidden.
    */
   viewerFavor?: number;
   savedAt: string;
 }
 
-/** A save as the scene hands it over — the version and timestamp are stamped on write. */
-export type GameProgressInput = Omit<GameProgress, 'version' | 'savedAt'>;
+/** A save as the scene hands it over — the timestamp is stamped on write. */
+export type GameProgressInput = Omit<GameProgress, 'savedAt'>;
 
 const HTTP_UNAUTHORIZED = 401;
 
@@ -217,7 +193,12 @@ export class AuthClient {
     if (wipeOwed()) return null;
     const raw = await apiFetch('/api/progress');
     if (typeof raw !== 'object' || raw === null || !('data' in raw)) return null;
-    return parseGameProgress(raw.data);
+    const noSaveOnServer = raw.data === null;
+    if (noSaveOnServer) return null;
+    const progress = parseGameProgress(raw.data);
+    if (progress === null)
+      console.warn('The save on the server failed validation; starting fresh.');
+    return progress;
   }
 
   async deleteProgress(): Promise<void> {

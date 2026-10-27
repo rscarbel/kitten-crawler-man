@@ -3,7 +3,7 @@
  * Wendell's farm.
  *
  * None of them is a shop in the way the plaza is a shop. Each sells the one
- * thing the people who live there actually have — Brann has explosives because
+ * thing the people who live there actually have — Steve has explosives because
  * he clears stumps, Marta has food because she is the reason the town eats, and
  * Wendell has a hayloft. They are priced against the plaza's versions so no
  * homestead becomes the strictly better place to buy anything; the goods live
@@ -63,7 +63,7 @@ export function sellCartwrightGoods(turn: number, stock: ShopStock): ShopPurchas
   return (option, buyer) => {
     const line = findCatalogLine(CARTWRIGHT_SHOP, option.key);
     if (line === undefined || !handOverCatalogLine(CARTWRIGHT_SHOP, line, stock, buyer)) {
-      return { ok: false, line: 'Brann shrugs at the bench.' };
+      return { ok: false, line: 'Steve shrugs at the bench.' };
     }
     return { ok: true, line: rotateLine(CARTWRIGHT_LINES, turn) };
   };

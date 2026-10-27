@@ -1,5 +1,5 @@
 /**
- * The Desperado Club casino's first question: which game. Slots, blackjack and
+ * The Cloak & Dagger casino's first question: which game. Slots, blackjack and
  * the wheel are always open; Texas Hold'em is offered only when the party can
  * cover the smallest buy-in, and says so when it can't. A free spin a quest
  * paid for stands over the grid as its own button, apart from the wheel's,
@@ -42,7 +42,7 @@ const WHEEL_LABEL = 'Wheel of Fortune';
 /** Four games read as a 2×2 grid wherever the labels fit side by side. */
 const GAME_COLUMNS = 2;
 export const CASINO_FREE_SPIN_BUTTON_ID = 'free-spin';
-const FREE_SPIN_HINT = 'Wheel of Fortune · the Nothing is taped over';
+const FREE_SPIN_HINT = 'Wheel of Fortune · Permanent Death is taped over';
 
 function freeSpinLabel(count: number): string {
   return count > 1 ? `Free Spin ×${count}` : 'Free Spin';
@@ -104,7 +104,7 @@ export function casinoGamePickerSurface(opts: CasinoGamePickerOptions): Surface 
               `${SLOTS_LABEL}: Bright, loud and pays out often`,
               `${POKER_LABEL}: Six-handed · buy-in from ${minBuyIn}`,
               `${BLACKJACK_LABEL}: Deuce's table · ${blackjackBets}`,
-              `${WHEEL_LABEL}: Tito's wheel · one wedge ends your run for good`,
+              `${WHEEL_LABEL}: Donald's wheel · one wedge ends your run for good`,
             ],
         width: 'md',
         extra: freeSpins === null ? undefined : freeSpinExtra(ui, freeSpins, opts.onFreeSpin),

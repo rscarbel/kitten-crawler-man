@@ -1,6 +1,6 @@
 /**
  * Swatch review for `CIRCUS_RAMPS`: one sheet that lays the circus ramps
- * beside Over City's `TOWN_RAMPS`, Briar Hollow's palette constants and the
+ * beside Taloncrest's `TOWN_RAMPS`, Briar Hollow's palette constants and the
  * real grass and dirt ground the circus stands on, so a reviewer can judge
  * whether the circus sits in the same value/saturation world as the town.
  *
@@ -118,7 +118,7 @@ function circusSection(): Section {
 
 function townSection(): Section {
   return {
-    title: 'TOWN_RAMPS (Over City)',
+    title: 'TOWN_RAMPS (Taloncrest)',
     rows: Object.entries(TOWN_RAMPS).map(([id, ramp]) => rampRow(id, ramp)),
   };
 }

@@ -6,12 +6,11 @@ import type { MobKind } from '../levels/mobKinds';
 import type { Difficulty } from '../core/difficulty/difficultyProfiles';
 import type { DoomsdayStage } from '../core/quests/DoomsdayProgress';
 import type { MercenaryTemplateId } from '../core/party/mercenaryTemplates';
-import type { CircusQuestStage } from '../core/quests/CircusQuestProgress';
 import type { PartyToolsState } from '../core/items/gathering/PartyTools';
 import type { PalisadeTier } from '../map/tileTypes';
 import type { BlueprintsQuestPhase } from '../core/quests/blueprintsQuestPhase';
 import type { VillageBuildingId } from '../map/overworld/briarHollowLayout';
-import type { TownBuildingName } from '../map/town/townPlan';
+import { CLOAK_AND_DAGGER_NAME, type TownBuildingName } from '../map/town/townPlan';
 import { TOOL_TIER_BASIC, TOOL_TIER_LONG_HAFT } from '../core/items/gathering/toolTiers';
 import { buyPrice } from '../economy/pricing';
 import { createShopStock } from '../economy/shopStock';
@@ -136,17 +135,12 @@ export interface PlaytestPreset {
   readonly doomsdayStage?: Extract<DoomsdayStage, 'containment' | 'escape'>;
   /** Pest Control already taken up, Dr. Moult at his lab post waiting for the hack. */
   readonly spiderQuestAwaitingHacking?: boolean;
-  /** A Meat Shields hire already under contract for this floor, standing beside the party. */
+  /** A Barracks hire already under contract for this floor, standing beside the party. */
   readonly hire?: MercenaryTemplateId;
   /** Mongo already out beside the cat on the first frame, rather than waiting on a summon. */
   readonly mongoOut?: boolean;
-  /** The Desperado Pass already held, so the club's door opens without Clarabelle's greeting. */
-  readonly clubMember?: boolean;
-  /**
-   * "The Show Must Go On" already at this point, with the party put down on the
-   * circus grounds instead of at `spawn`.
-   */
-  readonly circusQuest?: { readonly stage: CircusQuestStage; readonly heatherSlain: boolean };
+  /** The party put down on the circus grounds instead of at `spawn`. */
+  readonly spawnAtCircus?: boolean;
   /**
    * The party's axe and pickaxe tiers. The tool items in the loadouts are only
    * what the bags hold; this is what says the party owns them, and the scene
@@ -602,7 +596,7 @@ const ANCHOR_SHARDS: PlaytestPreset = {
     bag: [
       ...LEVEL3.human.bag,
       { id: 'anchor_shard_tinker', quantity: 1 },
-      { id: 'anchor_shard_hilda', quantity: 1 },
+      { id: 'anchor_shard_lori', quantity: 1 },
     ],
   },
   cat: {
@@ -660,7 +654,7 @@ const CLUB_STAT_BOOST_PRICE = buyPrice('club_market', 'stat_boost_potion', creat
 const CLUB_STAT_BOOST: PlaytestPreset = {
   ...LEVEL3,
   id: 'club-stat-boost',
-  description: 'Third floor town, coins for exactly one Stat Boost at the Desperado Club market',
+  description: 'Third floor town, coins for exactly one Stat Boost at the Cloak & Dagger market',
   human: { ...LEVEL3.human, coins: CLUB_STAT_BOOST_PRICE },
   cat: { ...LEVEL3.cat, coins: CLUB_STAT_BOOST_PRICE },
 };
@@ -744,7 +738,7 @@ const DOOMSDAY_CONTAINMENT: PlaytestPreset = {
 };
 
 /**
- * The town with both companions already out — Sledge under contract and Mongo
+ * The town with both companions already out — Crush under contract and Mongo
  * at the cat's side — for walking them through shop doors, up the tower's
  * storeys and back out again.
  */
@@ -753,21 +747,8 @@ const COMPANIONS_INDOORS: PlaytestPreset = {
   id: 'companions-indoors',
   description: 'Third floor town, a hire under contract and Mongo out, for taking both indoors',
   abilityLevels: { ...LEVEL3.abilityLevels, mongo: 5 },
-  hire: 'sledge',
+  hire: 'crush',
   mongoOut: true,
-};
-
-/**
- * A hire under contract on the circus grounds, Heather already dead, so the
- * next word with Signet starts the sideshow assault — for following the hire
- * through the assault waves, into the Big Top's maze and back out.
- */
-const CIRCUS_HIRE: PlaytestPreset = {
-  ...LEVEL3,
-  id: 'circus-hire',
-  description: 'Circus grounds with a hire under contract, one word with Signet from the assault',
-  hire: 'sledge',
-  circusQuest: { stage: 'heather_hunt', heatherSlain: true },
 };
 
 /** How many of each raw/refined resource the Briar Hollow preset starts with. */
@@ -1133,21 +1114,20 @@ const STAIRWELL: PlaytestPreset = {
   spawn: { kind: 'stairwellApproach' },
 };
 
-/** The circus grounds with the Big Top open, and the floor-3 party to walk into it. */
-const BIG_TOP: PlaytestPreset = {
+/** The circus grounds and the floor-3 party to walk into the Starlight Tent's maze. */
+const STARLIGHT_TENT: PlaytestPreset = {
   ...LEVEL3,
-  id: 'bigtop',
-  description: 'Circus grounds with the Big Top open, the floor-3 party',
-  circusQuest: { stage: 'bigtop_ready', heatherSlain: true },
+  id: 'starlight-tent',
+  description: 'Circus grounds by the Starlight Tent, the floor-3 party',
+  spawnAtCircus: true,
 };
 
-/** The street outside the members' club, whose casino floor is inside, the pass already held. */
+/** The street outside the Cloak & Dagger, whose casino floor is inside. */
 const CASINO_FLOOR: PlaytestPreset = {
   ...LEVEL3,
   id: 'casino-floor',
-  description: "Outside the Desperado Club's door, a member, the casino floor one step inside",
-  spawn: { kind: 'townBuildingDoor', buildingName: 'The Desperado Club' },
-  clubMember: true,
+  description: "Outside the Cloak & Dagger's door, the casino floor one step inside",
+  spawn: { kind: 'townBuildingDoor', buildingName: CLOAK_AND_DAGGER_NAME },
 };
 
 export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
@@ -1169,7 +1149,6 @@ export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   FAIRIES,
   DOOMSDAY_CONTAINMENT,
   COMPANIONS_INDOORS,
-  CIRCUS_HIRE,
   BRIAR_HOLLOW_KIT,
   BRIAR_HOLLOW_VILLAGE,
   BRIAR_HOLLOW_BUILDERS,
@@ -1187,7 +1166,7 @@ export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   STORMCALLER,
   LEVEL1,
   STAIRWELL,
-  BIG_TOP,
+  STARLIGHT_TENT,
   CASINO_FLOOR,
 ];
 

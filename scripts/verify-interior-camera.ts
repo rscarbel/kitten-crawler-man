@@ -6,7 +6,11 @@
  * - From every corner of every walk-in room, the room's far edges — the top of
  *   the north wall's tallest art included — come fully into the part of the
  *   screen the HUD leaves clear, with a little empty space beyond them; a room
- *   that fits an axis is centred in that clear part.
+ *   that fits an axis is centred in that clear part. Where the clear part is
+ *   shorter than the run from an edge to the outermost tile the party can
+ *   stand on, the party's tile wins and the edge must come in as far as that
+ *   tile allows. "Can reach" is over a whole visit: in the Starlight Tent, every
+ *   barrier the show opens counts as open.
  * - Standing on any floor tile the party can reach, that tile is on screen and
  *   under none of the HUD's rects (unit frames and coins, room name, minimap,
  *   Pause, Bag, Build, Journal, Switch, Follow, Summon). A rat on a tile the
@@ -41,7 +45,6 @@ import { TILE_SIZE } from '../src/core/constants';
 import { level3 } from '../src/levels/level3';
 import { GameMap, TOWER_FLOOR_COUNT } from '../src/map/GameMap';
 import { createTownPlan, type BuildingKind } from '../src/map/town/townPlan';
-import { BIG_TOP_ENTRY_KIND, BIG_TOP_ENTRY_NAME } from '../src/map/OverworldGenerator';
 import { stampSafeRoomCounters } from '../src/map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../src/map/safeRoomDecorLayout';
 import {
@@ -72,6 +75,13 @@ import { NO_INSETS, resolveViewport, type SizeClass } from '../src/ui/core/viewp
 import type { Rect } from '../src/ui/core/geom';
 import type { Density } from '../src/ui/theme/tokens';
 import { measureText } from '../src/ui/widgets/text';
+import { STARLIGHT_TENT_ENTRY_KIND } from '../src/map/OverworldGenerator';
+import { STARLIGHT_TENT_NAME } from '../src/map/overworld/circusGroundsLayout';
+import { isMazeBarrierTile, planStarlightTentMaze } from '../src/map/starlightTentMazeLayout';
+
+/** Any world deals the Starlight Tent a maze of the same shape; only the hall's board differs. */
+const GATE_WORLD_SEED = 1;
+const GATE_DIFFICULTY = 'normal';
 
 interface Viewport {
   readonly w: number;
@@ -225,7 +235,15 @@ function buildInterior(
   hasSafeRoom: boolean,
 ): GameMap {
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  map.generateInterior(kind, floor, name, hasSafeRoom);
+  // The Starlight Tent is always its maze, dealt from the world seed and difficulty.
+  const variant =
+    name === STARLIGHT_TENT_NAME
+      ? {
+          kind: 'starlight_tent_maze' as const,
+          plan: planStarlightTentMaze(GATE_WORLD_SEED, GATE_DIFFICULTY),
+        }
+      : 'default';
+  map.generateInterior(kind, floor, name, hasSafeRoom, variant);
   if (hasSafeRoom) {
     stampSafeRoomCounters(map);
     stampSafeRoomDecor(map);
@@ -269,8 +287,12 @@ function measureDrawnBounds(map: GameMap): WorldRect {
   return { left: minX - pad, top: minY - pad, right: maxX + 1 - pad, bottom: maxY + 1 - pad };
 }
 
-/** Every walkable tile reachable from the door, four-connected. */
-function reachableTiles(map: GameMap): Tile[] {
+/**
+ * Every tile the party can walk to from the door over a whole visit,
+ * four-connected. In the Starlight Tent that is with every barrier the show opens
+ * open: a lane sealed at the door is walked once its act is performed.
+ */
+function reachableTiles(map: GameMap, opensDuringVisit: (x: number, y: number) => boolean): Tile[] {
   const cols = map.structure[0]?.length ?? 0;
   const rows = map.structure.length;
   const seen = new Set<number>();
@@ -289,7 +311,7 @@ function reachableTiles(map: GameMap): Tile[] {
       const y = tile.y + dy;
       if (x < 0 || y < 0 || x >= cols || y >= rows) continue;
       const key = y * cols + x;
-      if (seen.has(key) || !map.isWalkable(x, y)) continue;
+      if (seen.has(key) || !(map.isWalkable(x, y) || opensDuringVisit(x, y))) continue;
       seen.add(key);
       queue.push({ x, y });
     }
@@ -374,6 +396,9 @@ interface AxisSpec {
   readonly name: 'horizontal' | 'vertical';
   readonly drawnStart: number;
   readonly drawnEnd: number;
+  /** The outermost reachable tiles' outer sides along this axis, in world pixels. */
+  readonly standingStart: number;
+  readonly standingEnd: number;
   readonly clearStart: number;
   readonly clearEnd: number;
   readonly cameraOf: (camera: { x: number; y: number }) => number;
@@ -392,11 +417,15 @@ function checkFraming(room: Room, frame: Frame, where: string, cameraFor: Camera
     tile,
     camera: cameraFor(room.map, tile, frame),
   }));
+  const xs = room.reachable.map((tile) => tile.x);
+  const ys = room.reachable.map((tile) => tile.y);
   const axes: AxisSpec[] = [
     {
       name: 'horizontal',
       drawnStart: room.drawn.left,
       drawnEnd: room.drawn.right,
+      standingStart: Math.min(...xs) * TILE_SIZE,
+      standingEnd: (Math.max(...xs) + 1) * TILE_SIZE,
       clearStart: frame.clear.x,
       clearEnd: frame.clear.x + frame.clear.w,
       cameraOf: (camera) => camera.x,
@@ -407,6 +436,8 @@ function checkFraming(room: Room, frame: Frame, where: string, cameraFor: Camera
       name: 'vertical',
       drawnStart: room.drawn.top,
       drawnEnd: room.drawn.bottom,
+      standingStart: Math.min(...ys) * TILE_SIZE,
+      standingEnd: (Math.max(...ys) + 1) * TILE_SIZE,
       clearStart: frame.clear.y,
       clearEnd: frame.clear.y + frame.clear.h,
       cameraOf: (camera) => camera.y,
@@ -436,16 +467,24 @@ function checkFraming(room: Room, frame: Frame, where: string, cameraFor: Camera
       }
       continue;
     }
+    // The party's own tile stays in the clear span, so an edge further from
+    // the outermost standing row than the clear span reaches can only be
+    // shown as far as that tile allows: the most the edge can then clear is
+    // the clear span less the run from the edge to the tile's far side.
+    const startAllows = available - (axis.standingEnd - axis.drawnStart);
+    const endAllows = available - (axis.drawnEnd - axis.standingStart);
+    const startWants = Math.min(INTERIOR_CAMERA_MARGIN_PX, startAllows);
+    const endWants = Math.min(INTERIOR_CAMERA_MARGIN_PX, endAllows);
     const bestBefore = Math.max(...gaps.map((gap) => gap.before));
     const bestAfter = Math.max(...gaps.map((gap) => gap.after));
-    if (bestBefore < INTERIOR_CAMERA_MARGIN_PX - EPSILON_PX) {
+    if (bestBefore < startWants - EPSILON_PX) {
       problems.push(
-        `${where}: ${axis.startEdge} edge never shown clear of the HUD with its margin (best ${bestBefore.toFixed(1)} px)`,
+        `${where}: ${axis.startEdge} edge never shown clear of the HUD as far as it can be (best ${bestBefore.toFixed(1)} px, wants ${startWants.toFixed(1)})`,
       );
     }
-    if (bestAfter < INTERIOR_CAMERA_MARGIN_PX - EPSILON_PX) {
+    if (bestAfter < endWants - EPSILON_PX) {
       problems.push(
-        `${where}: ${axis.endEdge} edge never shown clear of the HUD with its margin (best ${bestAfter.toFixed(1)} px)`,
+        `${where}: ${axis.endEdge} edge never shown clear of the HUD as far as it can be (best ${bestAfter.toFixed(1)} px, wants ${endWants.toFixed(1)})`,
       );
     }
   }
@@ -565,9 +604,11 @@ const walkIns: Array<{ name: string; kind: BuildingKind; hasSafeRoom: boolean }>
     hasSafeRoom: b.hasSafeRoom === true,
   })),
   { name: plan.tower.name, kind: plan.tower.kind, hasSafeRoom: false },
-  { name: BIG_TOP_ENTRY_NAME, kind: BIG_TOP_ENTRY_KIND, hasSafeRoom: false },
+  // Out on the circus grounds rather than in the town plan.
+  { name: STARLIGHT_TENT_NAME, kind: STARLIGHT_TENT_ENTRY_KIND, hasSafeRoom: false },
 ];
 
+const noBarriers = (): boolean => false;
 const rooms: Room[] = [];
 for (const walkIn of walkIns) {
   const floors = walkIn.kind === 'tower' ? TOWER_FLOOR_COUNT : 1;
@@ -576,7 +617,8 @@ for (const walkIn of walkIns) {
     const label = floors > 1 ? `${walkIn.name} (floor ${floor})` : walkIn.name;
     const title = interiorRoomTitle(walkIn.name, floors > 1 ? floor : null);
     const drawn = measureDrawnBounds(map);
-    const reachable = reachableTiles(map);
+    const opensDuringVisit = walkIn.name === STARLIGHT_TENT_NAME ? isMazeBarrierTile : noBarriers;
+    const reachable = reachableTiles(map, opensDuringVisit);
     rooms.push({
       label,
       title,

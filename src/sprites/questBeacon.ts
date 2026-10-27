@@ -6,8 +6,8 @@
  * playtester who cannot find the quest giver never starts the quest. A beam is
  * the one thing on the map that reads from further away than the thing it marks.
  *
- * **Drawn by the creature, not by the map.** A beacon has to follow Signet, who
- * walks, so a decoration tile is out; and drawing it behind the body paint in
+ * **Drawn by the creature, not by the map.** A beacon has to follow a quest
+ * giver who walks, so a decoration tile is out; and drawing it behind the body paint in
  * the creature's own render is what gets it Y-sorted with the figure it belongs
  * to for free, rather than as a stripe painted over everything in the overlay
  * pass.

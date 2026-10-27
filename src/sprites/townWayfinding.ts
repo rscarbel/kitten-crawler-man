@@ -48,7 +48,7 @@ const ARM_PITCH = 0.4;
 /**
  * Minimum arm length. The real length is whatever the label needs — every one of
  * the town's six arms overflowed a fixed 0.92-tile arm, from 125% of the board for
- * "East Gate" to 260% for "The Desperado Club", which put a tile of text out past
+ * "East Gate" to 260% for "The Cloak & Dagger", which put a tile of text out past
  * the end of the plank. An arm is a board with a name written on it, so the board
  * has to be as long as the name.
  */

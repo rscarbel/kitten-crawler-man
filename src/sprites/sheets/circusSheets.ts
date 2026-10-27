@@ -10,7 +10,7 @@
  *
  * Every frame is anchored on the structure's drawing tile — the footprint's
  * bottom row, so a tent sorts on its foot — and the art spreads up from the
- * footprint by the sheet's headroom. The Big Top's drawing tile is its second
+ * footprint by the sheet's headroom. The Starlight Tent's drawing tile is its second
  * column, because the ellipse of its base leaves the first column's bottom
  * tile open ground; its frame still starts at the footprint's west edge.
  *
@@ -18,7 +18,7 @@
  * circus's look varies only in the weathering its painters draw from their
  * own fixed seeds.
  *
- * Live dressing — pennants, the light spilling out of the Big Top's door — is
+ * Live dressing — pennants, the light spilling out of the Starlight Tent's door — is
  * drawn over these frames at runtime rather than baked as extra rows, because
  * an overlay row costs a full frame of memory per cell however little of it
  * is inked.
@@ -40,10 +40,10 @@ interface CircusSheetSpec {
  * the manifest must agree — `propSheetPlanMismatches` holds the two together.
  */
 export const CIRCUS_SHEETS: ReadonlyArray<CircusSheetSpec> = [
-  { key: 'circus_big_top', structures: ['big_top'] },
+  { key: 'circus_starlight_tent', structures: ['starlight_tent'] },
   {
     key: 'circus_pavilion',
-    structures: ['pavilion_mold_lion', 'pavilion_feats_of_flesh', 'pavilion_fortunes'],
+    structures: ['pavilion_tightrope', 'pavilion_feats_of_flesh', 'pavilion_fortunes'],
   },
   { key: 'circus_arch_post', structures: ['arch_post'] },
   { key: 'circus_rim_post', structures: ['flame_lamp', 'high_striker'] },

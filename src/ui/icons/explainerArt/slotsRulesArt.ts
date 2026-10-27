@@ -67,8 +67,8 @@ export const SLOTS_RULES_PAGES: ReadonlyArray<SlotsRulesPage> = [
     height: PAYTABLE_HEIGHT,
   },
   {
-    title: 'The Sheriff Star',
-    body: 'The gold Desperado sheriff star is wild: it stands in for every symbol except the loot box. A line of wilds pays the wild’s own prize when that beats what they would complete, and each line pays only its best reading.',
+    title: 'The Dagger Seal',
+    body: 'The gold seal, a hooded figure over crossed daggers, is wild: it stands in for every symbol except the loot box. A line of wilds pays the wild’s own prize when that beats what they would complete, and each line pays only its best reading.',
     illustration: 'wild',
     height: SMALL_ART_HEIGHT,
   },
@@ -85,7 +85,7 @@ export const SLOTS_RULES_PAGES: ReadonlyArray<SlotsRulesPage> = [
     height: PAYLINES_HEIGHT,
   },
   {
-    title: 'Desperado Jackpot',
+    title: 'Cloak & Dagger Jackpot',
     body: `Five golden 7s on any line at MAX BET (${MAX_BET_PER_LINE} a line, ${coins(totalBetFor(MAX_BET_PER_LINE))} a spin) win the whole progressive jackpot. ${Math.round(JACKPOT_CONTRIBUTION_RATE * PERCENT)}% of every paid bet feeds it, and it starts again at ${coins(JACKPOT_FLOOR)} once it is won. Below max bet, five 7s pay their line prize.`,
     illustration: 'jackpot',
     height: SMALL_ART_HEIGHT,

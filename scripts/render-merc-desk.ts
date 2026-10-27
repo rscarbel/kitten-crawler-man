@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Review harness for the Meat Shields hire desk: renders the desk screen
+ * Review harness for The Barracks Mercenaries' hire desk: renders the desk screen
  * through a real `UiRoot` at the smallest viewport it has to fit and at a
  * desktop one, in each of the states a player can put it in, and checks the
  * desk's rules through taps and keys on what is drawn.
@@ -13,7 +13,7 @@
  *  - a second tap on Hire never hires twice or charges twice;
  *  - mashing Enter never spends more than one hire's coins;
  *  - Dismiss asks first: a bare Enter keeps the contract, Yes tears it up;
- *  - Rosemarie's condolences clear the roster's `lastDeceased`, so she says them once.
+ *  - Sydney's condolences clear the roster's `lastDeceased`, so she says them once.
  *
  * Output lands in `preview/merc-desk/`.
  */
@@ -54,23 +54,20 @@ const DESKTOP: Viewport = {
 };
 const VIEWPORTS: readonly Viewport[] = [SMALLEST, DESKTOP];
 
-const DESK_SURFACE_ID = 'club-guild';
-const CONFIRM_SURFACE_ID = 'club-guild-dismiss';
+const DESK_SURFACE_ID = 'mercenary-desk';
+const CONFIRM_SURFACE_ID = 'mercenary-desk-dismiss';
 /** The confirm dialog's own panel id, under which its answers register. */
 const CONFIRM_PANEL_ID = 'confirm';
 const FLOOR_ID = 'harness_floor';
 const RICH_PURSE = 400;
 const POOR_PURSE = 150;
 const BACKDROP = '#1a1420';
-/** Frames the desk clock runs before a shot, so portraits are mid-idle rather than on frame zero. */
-const WARM_FRAMES = 40;
 const FRAME_MS = 16;
 /** Long enough for every open tween to settle. */
 const SETTLE_MS = 1000;
-const DECEASED_NAME = 'Gluteus Maxx';
-/** The list's last row is Damascus, after every hire. */
-const DAMASCUS_ROW = MERCENARY_TEMPLATES.length;
-const BUCKET_BOY_PRICE = MERCENARY_TEMPLATES.find((t) => t.id === 'bucket_boy')?.price ?? 0;
+const DECEASED_NAME = 'Ivy Ashgrove';
+/** The desk opens on its first row, the cheapest hire, so a bare Hire signs that one. */
+const FIRST_HIRE = MERCENARY_TEMPLATES[0];
 const MASHED_ENTERS = 5;
 /** Wheel steps tried before a row counts as never drawn. */
 const MAX_SCROLL_STEPS = 8;
@@ -101,7 +98,6 @@ function openDesk(
   roster.floorLevelId = FLOOR_ID;
   setup?.(roster);
   const guild = new MercenaryGuildSystem(roster, null);
-  for (let i = 0; i < WARM_FRAMES; i++) guild.updateDesk();
   const human = new HumanPlayer(0, 0, TILE_SIZE);
   human.coins = coins;
   const cat = new CatPlayer(1, 0, TILE_SIZE);
@@ -236,8 +232,8 @@ function save(desk: Desk, state: string): void {
   console.log(`  wrote ${path}`);
 }
 
-function hireSledge(roster: MercenaryRoster): void {
-  roster.active = { id: 'sledge', name: 'The Sledge', contractLevelId: FLOOR_ID, introduced: true };
+function hireCrush(roster: MercenaryRoster): void {
+  roster.active = { id: 'crush', name: 'Crush', contractLevelId: FLOOR_ID, introduced: true };
 }
 
 function hiredId(desk: Desk): string {
@@ -265,9 +261,7 @@ function checkOnScreen(desk: Desk, ids: readonly string[], state: string): void 
   }
 }
 
-const ROW_IDS = [...MERCENARY_TEMPLATES.map((_, row) => row), DAMASCUS_ROW].map((row) =>
-  deskRegionId(`row-${row}`),
-);
+const ROW_IDS = MERCENARY_TEMPLATES.map((_, row) => deskRegionId(`row-${row}`));
 
 function renderStates(viewport: Viewport): void {
   console.log(viewport.name);
@@ -281,7 +275,7 @@ function renderStates(viewport: Viewport): void {
   tap(poor, deskRegionId(`row-${MERCENARY_TEMPLATES.length - 1}`));
   save(poor, '2-too-dear');
 
-  const hired = openDesk(viewport, RICH_PURSE, hireSledge);
+  const hired = openDesk(viewport, RICH_PURSE, hireCrush);
   save(hired, '3-contract-dismiss');
   checkOnScreen(hired, [deskRegionId('dismiss')], 'contract');
   tap(hired, deskRegionId('dismiss'));
@@ -290,16 +284,11 @@ function renderStates(viewport: Viewport): void {
   tap(hired, deskRegionId('row-0'));
   save(hired, '4-contract-blocks-hire');
 
-  const damascus = openDesk(viewport, RICH_PURSE);
-  tap(damascus, deskRegionId(`row-${DAMASCUS_ROW}`));
-  tap(damascus, deskRegionId(`row-${DAMASCUS_ROW}`));
-  save(damascus, '5-damascus');
-
   const mourning = openDesk(viewport, RICH_PURSE, (roster) => {
     roster.lastDeceased = DECEASED_NAME;
   });
   check(mourning.roster.lastDeceased === null, 'opening the desk left lastDeceased set');
-  save(mourning, '6-condolences');
+  save(mourning, '5-condolences');
 }
 
 function checkRules(viewport: Viewport): void {
@@ -319,19 +308,19 @@ function checkRules(viewport: Viewport): void {
   tap(doubleHire, deskRegionId('hire'));
   tapIfDrawn(doubleHire, deskRegionId('hire'));
   check(
-    hiredId(doubleHire) === 'bucket_boy' &&
-      doubleHire.human.coins === RICH_PURSE - BUCKET_BOY_PRICE,
+    hiredId(doubleHire) === FIRST_HIRE.id &&
+      doubleHire.human.coins === RICH_PURSE - FIRST_HIRE.price,
     `${name}: two taps on Hire left ${hiredId(doubleHire)} hired with ${doubleHire.human.coins} coins`,
   );
 
   const mashed = openDesk(viewport, RICH_PURSE);
   for (let i = 0; i < MASHED_ENTERS; i++) key(mashed, 'Enter');
   check(
-    mashed.human.coins >= RICH_PURSE - BUCKET_BOY_PRICE,
+    mashed.human.coins >= RICH_PURSE - FIRST_HIRE.price,
     `${name}: ${MASHED_ENTERS} Enters left ${mashed.human.coins} coins`,
   );
 
-  const dismissing = openDesk(viewport, RICH_PURSE, hireSledge);
+  const dismissing = openDesk(viewport, RICH_PURSE, hireCrush);
   tap(dismissing, deskRegionId('dismiss'));
   check(dismissing.guild.dismissConfirm.isOpen, `${name}: Dismiss did not ask first`);
   key(dismissing, 'Enter');

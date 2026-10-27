@@ -720,14 +720,32 @@ export class InventoryScreen {
       return;
     }
     if (drag.from === 'hotbar') {
-      if (bagTarget !== null && this.isRearrangeable())
-        inventory.swapHotbarToInv(drag.slotIdx, bagTarget);
-      else if (overGrid) inventory.moveHotbarToBag(drag.slotIdx);
+      if (bagTarget !== null && this.isRearrangeable()) {
+        this.swapHotbarIntoBag(drag, bagTarget, inventory);
+      } else if (overGrid) inventory.moveHotbarToBag(drag.slotIdx);
       return;
     }
     if (bagTarget !== null && bagTarget !== drag.slotIdx && this.isRearrangeable()) {
       inventory.swapSlots(drag.slotIdx, bagTarget);
     }
+  }
+
+  /**
+   * A hotbar stack dropped on a bag slot trades places with what is there, so
+   * the bag's stack must be one the hotbar may hold — refused aloud, as a
+   * drag the other way would be, rather than doing nothing.
+   */
+  private swapHotbarIntoBag(drag: DragState, bagTarget: number, inventory: Inventory): void {
+    const displaced = inventory.bag.slots[bagTarget] ?? null;
+    const joinsStack = displaced?.id === drag.item.id;
+    const reason =
+      displaced === null || joinsStack ? null : hotbarRefusal(displaced, this.inputMode());
+    if (displaced !== null && reason !== null) {
+      this.host.onHotbarRefused?.(displaced, reason);
+      this.refuse(reason, displaced.id);
+      return;
+    }
+    inventory.swapHotbarToInv(drag.slotIdx, bagTarget);
   }
 
   /** A stack dropped on the pager: into the first empty slot of the page it turns to. */

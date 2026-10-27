@@ -24,11 +24,12 @@ const { HP_BAR_HEIGHT } = await import('../src/Player.js');
 const { beginFigureFrame, figureRowInkPending } =
   await import('../src/sprites/figure/figureFrameCache.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
-const { getMercenaryTemplate } = await import('../src/core/party/mercenaryTemplates.js');
+const { getMercenaryTemplate, MERCENARY_TEMPLATE_IDS } =
+  await import('../src/core/party/mercenaryTemplates.js');
 const { BallOfSwine } = await import('../src/creatures/BallOfSwine.js');
 const { BrindleGrub } = await import('../src/creatures/BrindleGrub.js');
 const { Bugaboo } = await import('../src/creatures/Bugaboo.js');
-const { CircusLemur } = await import('../src/creatures/CircusLemur.js');
+const { Lemur } = await import('../src/creatures/Lemur.js');
 const { CityElfCultist } = await import('../src/creatures/CityElfCultist.js');
 const { Cockroach } = await import('../src/creatures/Cockroach.js');
 const { Cow } = await import('../src/creatures/Cow.js');
@@ -40,7 +41,7 @@ const { Goblin } = await import('../src/creatures/Goblin.js');
 const { GoblinArcher } = await import('../src/creatures/GoblinArcher.js');
 const { GraveBull } = await import('../src/creatures/GraveBull.js');
 const { GrotesqueSpider } = await import('../src/creatures/GrotesqueSpider.js');
-const { HeatherTheBear } = await import('../src/creatures/HeatherTheBear.js');
+const { DireBear } = await import('../src/creatures/DireBear.js');
 const { BigRooster } = await import('../src/creatures/BigRooster.js');
 const { KrakarenClone } = await import('../src/creatures/KrakarenClone.js');
 const { KrakarenTentacle } = await import('../src/creatures/KrakarenTentacle.js');
@@ -50,7 +51,7 @@ const { MantisCrony } = await import('../src/creatures/MantisCrony.js');
 const { Mantid } = await import('../src/creatures/Mantid.js');
 const { Mercenary } = await import('../src/creatures/Mercenary.js');
 const { MissQuill } = await import('../src/creatures/MissQuill.js');
-const { MoldLion } = await import('../src/creatures/MoldLion.js');
+const { Lion } = await import('../src/creatures/Lion.js');
 const { Mongo } = await import('../src/creatures/Mongo.js');
 const { Necromancer } = await import('../src/creatures/Necromancer.js');
 const { RaisedRatkin } = await import('../src/creatures/RaisedRatkin.js');
@@ -59,14 +60,13 @@ const { RatkinSoldier } = await import('../src/creatures/RatkinSoldier.js');
 const { Remex } = await import('../src/creatures/Remex.js');
 const { RockGolem } = await import('../src/creatures/RockGolem.js');
 const { RuinsGhoul } = await import('../src/creatures/RuinsGhoul.js');
-const { Signet } = await import('../src/creatures/Signet.js');
 const { SkeletonArcher } = await import('../src/creatures/SkeletonArcher.js');
 const { SkeletonLord } = await import('../src/creatures/SkeletonLord.js');
 const { SkeletonWarrior } = await import('../src/creatures/SkeletonWarrior.js');
-const { SkyFowl, SKYFOWL_TOUGH_FAMILY } = await import('../src/creatures/SkyFowl.js');
+const { Hawkfolk, HAWKFOLK_TOUGH_FAMILY } = await import('../src/creatures/Hawkfolk.js');
 const { SmallSpider } = await import('../src/creatures/SmallSpider.js');
-const { StiltClown } = await import('../src/creatures/StiltClown.js');
-const { TerrorTheClown } = await import('../src/creatures/TerrorTheClown.js');
+const { TallClown } = await import('../src/creatures/TallClown.js');
+const { MassiveClown } = await import('../src/creatures/MassiveClown.js');
 const { TrashGremlin } = await import('../src/creatures/TrashGremlin.js');
 const { TheLich } = await import('../src/creatures/TheLich.js');
 const { Troglodyte } = await import('../src/creatures/Troglodyte.js');
@@ -149,17 +149,7 @@ const MONGO_STAGE_LEVELS = [1, 5, 10] as const;
 function subjects(): Subject[] {
   const at = [WORLD_TILE, WORLD_TILE, TILE_SIZE] as const;
   const owner = new CatPlayer(...at);
-  const mercenaries = (
-    [
-      'sledge',
-      'bomo',
-      'dong_quixote',
-      'splash_zone',
-      'gluteus_maxx',
-      'bucket_boy',
-      'tumbledown',
-    ] as const
-  ).map((id) =>
+  const mercenaries = MERCENARY_TEMPLATE_IDS.map((id) =>
     unmarked(
       new Mercenary(...at, owner, id, getMercenaryTemplate(id).name),
       `hireling ${getMercenaryTemplate(id).name}`,
@@ -187,16 +177,15 @@ function subjects(): Subject[] {
     provoke(new RaisedRatkin(...at, 'shroud'), 'raised ratkin'),
     provoke(new FatClown(...at), 'fat clown'),
     provoke(new EvilClown(...at), 'evil clown'),
-    provoke(new StiltClown(...at), 'stilt clown'),
-    provoke(new TerrorTheClown(...at), 'Terror the Clown'),
-    provoke(new Signet(...at, () => undefined), 'Signet'),
+    provoke(new TallClown(...at), 'tall clown'),
+    provoke(new MassiveClown(...at), 'Massive Clown'),
     provoke(new FireFairy(...at), 'fire fairy'),
     provoke(new CityElfCultist(...at), 'elf cultist'),
     provoke(new RuinsGhoul(...at), 'ruins ghoul'),
-    provoke(new CircusLemur(...at), 'circus lemur'),
+    provoke(new Lemur(...at), 'lemur'),
     provoke(new Krasue(...at), 'krasue'),
-    provoke(new MoldLion(...at), 'mold lion'),
-    provoke(new HeatherTheBear(...at), 'Heather the Bear'),
+    provoke(new Lion(...at), 'lion'),
+    provoke(new DireBear(...at), 'dire bear'),
     unmarked(new RatkinSoldier(...at, 'sedge'), 'ratkin soldier'),
     unmarked(new Troglodyte(...at), 'troglodyte'),
     unmarked(new Cockroach(...at), 'cockroach'),
@@ -204,7 +193,7 @@ function subjects(): Subject[] {
     grubAt(2, 'cow-tailed grub'),
     grubAt(3, 'brindled vespa'),
     unmarked(new Remex(...at), 'remex'),
-    unmarked(new SkyFowl(...at, SKYFOWL_TOUGH_FAMILY.canonical), 'skyfowl'),
+    unmarked(new Hawkfolk(...at, HAWKFOLK_TOUGH_FAMILY.canonical), 'hawkfolk'),
     unmarked(new Tuskling(...at), 'tuskling'),
     unmarked(new TrashGremlin(...at), 'the Trash Gremlin'),
     unmarked(new SmallSpider(...at), 'small spider'),

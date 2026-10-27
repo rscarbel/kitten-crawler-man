@@ -152,7 +152,7 @@ const EXPECTED_TARGETING_SYSTEMS: readonly string[] = [
   'src/creatures/Mob.ts',
   'src/creatures/Mongo.ts',
   'src/creatures/Mercenary.ts',
-  'src/systems/HirelingBoltSystem.ts',
+  'src/systems/HirelingShotSystem.ts',
   'src/systems/MercenarySystem.ts',
   'src/systems/MongoSystem.ts',
   'src/systems/SpellSystem.ts',

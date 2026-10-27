@@ -43,9 +43,6 @@ export const SERVICE_ICON_IDS = [
   'travel_town',
   'travel_circus',
   'travel_briar_hollow',
-  'vip_recovery',
-  'vip_cocktail',
-  'vip_escort',
 ] as const;
 
 export type ServiceIconId = (typeof SERVICE_ICON_IDS)[number];

@@ -1,5 +1,5 @@
 /**
- * The people who live in the Over City's buildings — named individuals layered
+ * The people who live in Taloncrest's buildings — named individuals layered
  * on top of the role system in `townDialog.ts` rather than replacing it.
  *
  * A role tells you what someone does for a living; a resident tells you who they
@@ -25,8 +25,8 @@ import type { TownSpecies } from './townSpecies';
 import type { PlannedBuildingName } from '../map/town/townPlan';
 
 export type ResidentId =
-  | 'old_hilda'
-  | 'brann_cartwright'
+  | 'old_lori'
+  | 'steve_cartwright'
   | 'wendell'
   | 'marta_miller'
   | 'apothecary_fen'
@@ -40,7 +40,11 @@ export type ResidentId =
   | 'quartermaster_dann'
   | 'tattooist_nim'
   | 'stock_clerk_wick'
-  | 'keeper_brenna_kestrel';
+  | 'keeper_brenna_kestrel'
+  | 'janitor_puddles'
+  | 'janitor_grout'
+  | 'sydney'
+  | 'brandon';
 
 export interface ResidentDef {
   readonly id: ResidentId;
@@ -55,18 +59,35 @@ export interface ResidentDef {
 
 const RESIDENT_DEFS: ReadonlyArray<ResidentDef> = [
   {
-    id: 'old_hilda',
-    name: 'Old Hilda',
+    id: 'old_lori',
+    name: 'Old Lori',
     role: 'priest',
     species: 'human',
-    home: "Old Hilda's Cottage",
+    home: "Old Lori's Cottage",
   },
   {
-    id: 'brann_cartwright',
-    name: 'Brann Cartwright',
+    id: 'steve_cartwright',
+    name: 'Steve Cartwright',
     role: 'laborer',
-    species: 'skyfowl',
+    species: 'human',
     home: "Cartwright's Workshop",
+  },
+  // Ahead of the innkeepers: a building's frontage takes the species of the
+  // last resident listed for it, and that is the house's keeper, not its
+  // janitor.
+  {
+    id: 'janitor_puddles',
+    name: 'Puddles',
+    role: 'laborer',
+    species: 'human',
+    home: 'The Sunken Stump Pub',
+  },
+  {
+    id: 'janitor_grout',
+    name: 'Grout',
+    role: 'laborer',
+    species: 'human',
+    home: 'The Horned Flagon',
   },
   { id: 'wendell', name: 'Wendell', role: 'farmer', species: 'human', home: 'Plumbline Farm' },
   {
@@ -87,28 +108,28 @@ const RESIDENT_DEFS: ReadonlyArray<ResidentDef> = [
     id: 'deacon_aviel',
     name: 'Deacon Aviel',
     role: 'priest',
-    species: 'skyfowl',
+    species: 'hawkfolk',
     home: 'Temple of the Sky',
   },
   {
     id: 'smith_varga',
     name: 'Smith Varga',
     role: 'smith',
-    species: 'skyfowl',
+    species: 'hawkfolk',
     home: 'The Rusty Anvil',
   },
   {
     id: 'innkeep_ossie',
     name: 'Innkeep Ossie',
     role: 'innkeeper',
-    species: 'skyfowl',
+    species: 'hawkfolk',
     home: 'The Sleeping Cat Inn',
   },
   {
     id: 'innkeep_brend',
     name: 'Innkeep Brend',
     role: 'innkeeper',
-    species: 'skyfowl',
+    species: 'hawkfolk',
     home: 'The Horned Flagon',
   },
   {
@@ -122,21 +143,25 @@ const RESIDENT_DEFS: ReadonlyArray<ResidentDef> = [
     id: 'sgt_kessler',
     name: 'Sgt. Kessler',
     role: 'guard',
-    species: 'skyfowl',
+    species: 'hawkfolk',
     home: 'Blackwood Lodge',
   },
+  // A crocodilian, drawn by her own painter, keeping the mercenaries' desk.
+  // Listed ahead of the garrison's keepers so they, not she, set the Barracks'
+  // frontage crowd.
+  { id: 'sydney', name: 'Sydney', role: 'merchant', species: 'human', home: 'The Barracks' },
   {
     id: 'corporal_pell',
     name: 'Corporal Pell',
     role: 'guard',
-    species: 'skyfowl',
+    species: 'hawkfolk',
     home: 'The Barracks',
   },
   {
     id: 'quartermaster_dann',
     name: 'Quartermaster Dann',
     role: 'merchant',
-    species: 'skyfowl',
+    species: 'hawkfolk',
     home: 'The Barracks',
   },
   {
@@ -150,14 +175,22 @@ const RESIDENT_DEFS: ReadonlyArray<ResidentDef> = [
     id: 'tattooist_nim',
     name: 'Nim',
     role: 'merchant',
-    species: 'skyfowl',
+    species: 'hawkfolk',
     home: 'The Quiet Needle',
+  },
+  // The club's host, drawn by his own painter, at the front desk by the door.
+  {
+    id: 'brandon',
+    name: 'Brandon',
+    role: 'noble',
+    species: 'human',
+    home: 'The Cloak & Dagger',
   },
   {
     id: 'keeper_brenna_kestrel',
     name: 'Keeper Brenna Kestrel',
     role: 'merchant',
-    species: 'skyfowl',
+    species: 'hawkfolk',
     home: 'General Store',
   },
 ];

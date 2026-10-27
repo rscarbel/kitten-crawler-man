@@ -21,7 +21,6 @@ export type DeathCause =
   | 'poisonStatus'
   | 'electrifiedStatus'
   | 'spitVenomStatus'
-  | 'bloodVomitStatus'
   | 'grotesqueSpiderSlam'
   | 'grotesqueSpiderScreech'
   | 'grotesqueSpiderSpit'
@@ -34,7 +33,7 @@ export type DeathCause =
   | 'troglodyte'
   | 'smallSpider'
   | 'spiderHatchling'
-  | 'skyFowl'
+  | 'hawkfolk'
   | 'llama'
   | 'rat'
   | 'brindleGrub'
@@ -42,10 +41,10 @@ export type DeathCause =
   | 'brindledVespa'
   | 'ruinsGhoul'
   | 'krasue'
-  | 'circusLemur'
-  | 'stiltClown'
+  | 'lemur'
+  | 'tallClown'
   | 'fatClown'
-  | 'terrorTheClown'
+  | 'massiveClown'
   | 'evilClown'
   | 'evilClownVial'
   | 'mantid'
@@ -64,9 +63,9 @@ export type DeathCause =
   | 'rockGolemRoll'
   | 'rockGolemRock'
   | 'mantis'
-  | 'moldLion'
+  | 'lion'
   | 'cityElfCultist'
-  | 'heatherTheBear'
+  | 'direBear'
   | 'missQuill'
   | 'shieldFairy'
   | 'healingFairy'
@@ -309,11 +308,6 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'The spit venom worked its way through you. Disgusting way to go.',
     'You died to venom. Keep the poison off next time.',
   ],
-  bloodVomitStatus: [
-    'You threw up more blood than you had. Tito did warn you about that wheel.',
-    'Death by retching. The wheel giveth, mostly it taketh.',
-    'Your insides finished leaving. Keep your health topped up between heaves.',
-  ],
   grotesqueSpiderSlam: [
     'When the red fills to its outline, it lands. Be outside the line.',
     'Her legs came down the moment the red cone filled. When the outline goes solid, step out of it.',
@@ -362,7 +356,7 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
   ],
   troglodyte: [
     "A Troglodyte's tongue lashed you to death.",
-    "Poisoned and stabbed by a cave lizard's tongue. Watch the windup next time.",
+    "Poisoned and speared by a cave lizard's tongue. Watch the windup next time.",
     "The Troglodyte's tongue struck true. Keep moving to avoid it.",
   ],
   smallSpider: [
@@ -371,10 +365,10 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     '8-legged death came for you. Spiders are not your friend.',
   ],
   spiderHatchling: ['A spider egg hatched. Smash eggs before they crack open.'],
-  skyFowl: [
-    "A Sky Fowl's talons finished you off.",
+  hawkfolk: [
+    "A Hawkfolk's talons finished you off.",
     'You were killed by a dungeon bird.',
-    "The Sky Fowl's talons found you at the worst possible moment.",
+    "The Hawkfolk's talons found you at the worst possible moment.",
   ],
   llama: [
     'A Llama spat a lava ball right into your face.',
@@ -403,52 +397,52 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
   ],
   ruinsGhoul: [
     'A Ruins Ghoul tore you apart. It used to be a person, if that helps.',
-    'You were killed by a shambling former citizen of the Over City.',
+    'You were killed by a shambling former citizen of Taloncrest.',
     'The ghoul got its hands on you. There was not much left after that.',
   ],
   krasue: [
-    'A floating head with its guts still attached ate you. Welcome to the Over City.',
+    'A floating head with its guts still attached ate you. Welcome to Taloncrest.',
     'The Krasue drifted in and finished you off. They are hard to pin down.',
     'You were killed by a Krasue. Flying entrails are a genuine threat here.',
   ],
-  circusLemur: [
-    'A circus lemur put a thrown knife through you. The act still holds up.',
+  lemur: [
+    'A lemur put a thrown knife through you. The act still holds up.',
     'You were killed by a knife-throwing lemur. Nobody is going to believe that.',
-    'The Former Circus Lemur landed its blade. Keep out of its throwing lane.',
+    'The Lemur landed its blade. Keep out of its throwing lane.',
   ],
-  stiltClown: [
-    'A Stilt Clown stomped down on you from above.',
+  tallClown: [
+    'A Tall Clown stomped down on you from above.',
     'You were killed by a clown on stilts. That is the whole sentence.',
-    'The Stilt Clown reached further than you thought it could. They always do.',
+    'The Tall Clown reached further than you thought it could. They always do.',
   ],
   fatClown: [
     'A Fat Clown slammed its bulk into you and that was that.',
     'You were flattened by a bloated circus performer.',
     'The Fat Clown body-checked you into the afterlife.',
   ],
-  terrorTheClown: [
-    'Terror the Clown caved you in with an oversized mallet.',
-    "You took Terror's mallet head-on. Try not to be there when it swings.",
-    "Terror the Clown finished you off. Grimaldi's favorite is not for beginners.",
+  massiveClown: [
+    'The Massive Clown caved you in with an oversized mallet.',
+    "You took the Massive Clown's mallet head-on. Try not to be there when it swings.",
+    'The Massive Clown finished you off. It got faster once you had it hurt, and you did not.',
   ],
-  moldLion: [
-    'A Mold Lion mauled you. Its mane is fungus, and now so are you.',
-    'You were killed by a lion made mostly of toxic mold. Unlucky.',
-    'The Mold Lion got its claws in. Keep your distance from that mane.',
+  lion: [
+    'A lion ran you down in the long grass and bit.',
+    'You were killed by a lion. It covered the open ground faster than you did.',
+    'The lion got its teeth in. Out in the open there is nowhere to hide from one.',
   ],
   cityElfCultist: [
     'A soul bolt from a City Elf Cultist burned a hole through you.',
     'The cultist offered you to the angels above. They accepted.',
     'You were killed by harvested soul-stuff. Break line of sight on those casters.',
   ],
-  heatherTheBear: [
-    'Heather the Bear opened you up with one paw swipe.',
-    'The crowds adored her once. She just killed you.',
-    'You were mauled by Heather. Whatever is wearing her skin does not pull punches.',
+  direBear: [
+    'A Dire Bear opened you up with one paw swipe.',
+    'You were mauled by a Dire Bear. When it rears up, step back.',
+    'The Dire Bear brought its paw down on you. It gave you plenty of warning.',
   ],
   missQuill: [
     'Miss Quill put a soul bolt through you without losing her composure.',
-    'The sky fowl schoolteacher killed you. Every krasue in the city passed through her hands first.',
+    'The Hawkfolk schoolteacher killed you. Every krasue in the city passed through her hands first.',
     'Miss Quill finished the lesson. Interrupt her casting next time.',
   ],
   shieldFairy: [
@@ -534,7 +528,7 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
   doomsdayExplosion: [
     'You were standing next to a city-sized bomb.',
     'The soul crystal went off before you cleared the blast radius.',
-    'The Over City came down around you. You should have run faster.',
+    'Taloncrest came down around you. You should have run faster.',
   ],
   unknown: [
     'Something in the dungeon killed you. Better luck next time.',

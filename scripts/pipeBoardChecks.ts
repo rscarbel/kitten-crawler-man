@@ -13,7 +13,7 @@
 import { writeFileSync } from 'node:fs';
 import type { Difficulty } from '../src/core/difficulty/difficultyProfiles';
 import { withWorldSeed, worldRandom } from '../src/core/world/WorldRandom';
-import { seededStream } from '../src/map/bigTop/mirrorBoard';
+import { seededStream } from '../src/map/starlightTent/mirrorBoard';
 import {
   assessPipeBoard,
   cellIndex,

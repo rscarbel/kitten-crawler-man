@@ -14,11 +14,13 @@
  * two doorways need their landing tiles — over a carpet from the street door,
  * with a settee and table in each corner for the two people waiting.
  *
- * The anchors are load-bearing. The chair is the room's only `bench`, so Nim
- * works in the alcove; the pigment cabinet is its only `shelf`, where the
- * slate of rates is propped; and the two waiting-room tables are its only
- * `table`s, so both customers stand on the waiting-room side of the
- * partition, never behind it.
+ * Nim is placed on the south side of the alcove's side table and keeps to
+ * the alcove's bottom rows (see the parlour's roster in `BUILDING_OCCUPANTS`),
+ * so the floor south of that table must stay open. Placing him claims the
+ * table, which leaves the two waiting-room tables as the only `table`s an
+ * anchored customer can find: both customers stand on the waiting-room side
+ * of the partition, never behind it. The pigment cabinet is the room's only
+ * `shelf`, where the slate of rates is propped.
  *
  * The work rooms keep the ink-spattered floor; the waiting room is laid in
  * clean boards, since nobody is inked out there.
@@ -170,9 +172,8 @@ export function buildQuietNeedleLayout(w: number, h: number): TownInteriorLayout
     prop(lampCol, chairRow, 'arm_lamp', LAMP_REACHES_EAST),
     prop(trolleyCol, chairRow, 'needle_tray'),
     prop(nimStoolCol, nimStoolRow, 'stool', 0, { id: nimStoolId }),
-    // The stand the design book is left open on, beside the chair: the one
-    // alcove table sits furthest from the south wall, so both waiting
-    // customers (posted south) still take the waiting-room tables first.
+    // The stand the design book is left open on, beside the chair, where
+    // Nim works.
     prop(alcoveEastCol, chairRow, 'side_table'),
     prop(alcoveEastCol, workroomLastRow, 'drawer_unit'),
     prop(alcoveEastCol - 1, workroomLastRow, 'basket', 1),
