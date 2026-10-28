@@ -13,7 +13,7 @@ import type { PlayerDamageType } from '../Mob';
 /**
  * The weapons a guard can meet: a swung fist, claw or blade, and a stone from
  * the sling. Everything else is refused — a spell reads as going straight
- * through a raised guard, a blast or a shove from a shell has no single edge
+ * through a raised guard, a blast or a shove from an energy shield has no single edge
  * to catch, and a `null` type is a status tick nobody swung.
  */
 export const GUARDABLE_DAMAGE_TYPES: readonly PlayerDamageType[] = ['melee', 'slingshot'];

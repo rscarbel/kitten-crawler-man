@@ -52,7 +52,7 @@ const { Mantid } = await import('../src/creatures/Mantid.js');
 const { Mercenary } = await import('../src/creatures/Mercenary.js');
 const { MissQuill } = await import('../src/creatures/MissQuill.js');
 const { Lion } = await import('../src/creatures/Lion.js');
-const { Mongo } = await import('../src/creatures/Mongo.js');
+const { Deinonychus } = await import('../src/creatures/Deinonychus.js');
 const { Necromancer } = await import('../src/creatures/Necromancer.js');
 const { RaisedRatkin } = await import('../src/creatures/RaisedRatkin.js');
 const { Rat } = await import('../src/creatures/Rat.js');
@@ -144,7 +144,7 @@ function surfaced(tentacle: InstanceType<typeof KrakarenTentacle>): Mob {
   return tentacle;
 }
 
-const MONGO_STAGE_LEVELS = [1, 5, 10] as const;
+const DEINONYCHUS_STAGE_LEVELS = [1, 5, 10] as const;
 
 function subjects(): Subject[] {
   const at = [WORLD_TILE, WORLD_TILE, TILE_SIZE] as const;
@@ -155,9 +155,9 @@ function subjects(): Subject[] {
       `hireling ${getMercenaryTemplate(id).name}`,
     ),
   );
-  const mongos = MONGO_STAGE_LEVELS.map((level) => {
-    const probe = new Mongo(...at, owner, level, 1);
-    return unmarked(new Mongo(...at, owner, level, probe.maxHp), `Mongo L${level}`);
+  const deinonychusStages = DEINONYCHUS_STAGE_LEVELS.map((level) => {
+    const probe = new Deinonychus(...at, owner, level, 1);
+    return unmarked(new Deinonychus(...at, owner, level, probe.maxHp), `Deinonychus L${level}`);
   });
   return [
     provoke(new Rat(...at), 'rat'),
@@ -205,7 +205,7 @@ function subjects(): Subject[] {
     unmarked(new KrakarenClone(...at), 'Krakaren'),
     unmarked(surfaced(new KrakarenTentacle(...at)), 'Krakaren tentacle'),
     unmarked(new Cow(...at, 'holstein', 'adult', () => 0), 'cow'),
-    ...mongos,
+    ...deinonychusStages,
     ...mercenaries,
   ];
 }

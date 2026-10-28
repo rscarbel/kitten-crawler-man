@@ -12,9 +12,9 @@ const MISSILE_DAMAGE_TYPE = 'missile' satisfies PlayerDamageType;
 /**
  * Every tutorial goblin's kill XP, whatever the difficulty or level, because
  * the tutorial teaches spending a stat point on exactly one level-up: the human's
- * on the smush. At the dealer's 85% share goblin A pays him 4 of the 10 his
+ * on the seismic stomp. At the dealer's 85% share goblin A pays him 4 of the 10 his
  * first level costs and the first guard 4 more, so it is the second guard,
- * dying in the same smush, that carries him over. The cat's small shares and
+ * dying in the same seismic stomp, that carries him over. The cat's small shares and
  * goblin B leave her short of a level the tutorial never explains.
  */
 const TUTORIAL_GOBLIN_KILL_XP = 5;
@@ -27,7 +27,7 @@ export class TutorialGoblin extends Goblin {
   private readonly defenseOnly: boolean;
   /**
    * When true only a Magic Missile can hurt it. Goblin B exists to teach the
-   * cat's spell, and Smush hits everything in its blast with no regard for
+   * cat's spell, and Seismic Stomp hits everything in its blast with no regard for
    * walls, so without this the human could take the lesson from her.
    */
   private readonly missileOnly: boolean;

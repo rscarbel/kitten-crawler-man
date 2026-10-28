@@ -43,7 +43,7 @@ type Ctx = CanvasRenderingContext2D;
 
 // ── Shared hem geometry ──────────────────────────────────────────────────────
 
-/** Mordecai's tunic: ends above the knee so the legs stay legible. */
+/** The plain tunic: ends above the knee so the legs stay legible. */
 export const TUNIC_HEM: HemShape = { drop: 0.3, flare: 1.24, collarRise: 0.045, sway: 0.05 };
 const TUNIC_HEM_SAG = 0.03;
 /** A shadow down the far side, so the garment wraps a body instead of facing one. */
@@ -213,8 +213,6 @@ export interface BodyGarmentOptions {
 
 /**
  * A plain belted-length tunic or shirt, the base most outfits build on.
- *
- * Mordecai's much-mended tunic is this with its defaults and cap sleeves.
  */
 export function tunic({
   cloth,
@@ -660,7 +658,7 @@ const STRAP_DROP = 0.06;
  * strap jumping shoulders when he turns round. Edge-on it runs from his front
  * down to his back.
  */
-export function shoulderStrap({ leather }: { readonly leather: Ramp }): GarmentLayer {
+function shoulderStrap({ leather }: { readonly leather: Ramp }): GarmentLayer {
   return {
     name: 'shoulder strap',
     torso: (frame) => {
@@ -733,40 +731,8 @@ export function belt({ leather, buckle, over = TUNIC_HEM }: BeltOptions): Garmen
   };
 }
 
-const POUCH_WIDTH = 0.075;
-const POUCH_HEIGHT = 0.085;
-const POUCH_BACK = 0.1;
+/** Corner radius of a bag or pouch, as a share of its height. */
 const POUCH_ROUND = 0.3;
-
-/** A pouch hung off the back of a belt. */
-export function beltPouch({
-  leather,
-  over = TUNIC_HEM,
-}: {
-  readonly leather: Ramp;
-  readonly over?: HemShape;
-}): GarmentLayer {
-  return {
-    name: 'belt pouch',
-    torso: (frame) => {
-      const line = beltLine(frame, over);
-      fillOutlined(
-        frame.ctx,
-        () =>
-          traceRoundRect(
-            frame.ctx,
-            line.back + POUCH_BACK,
-            line.y,
-            POUCH_WIDTH,
-            POUCH_HEIGHT,
-            POUCH_HEIGHT * POUCH_ROUND,
-          ),
-        leather.dark,
-        DETAIL_OUTLINE_WIDTH,
-      );
-    },
-  };
-}
 
 /** Where on the belt line the wearer's right hip is, in this view. */
 function rightHipX(frame: GarmentFrame, line: BeltLine, inset: number): number {

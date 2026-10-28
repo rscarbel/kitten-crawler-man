@@ -1,7 +1,7 @@
 import type { CueSlot } from '../audio/cueSlot';
 import type { CreatureAudioTag } from '../audio/creatureAudioTags';
 import type { Mob } from '../creatures/Mob';
-import { Mongo } from '../creatures/Mongo';
+import { Deinonychus } from '../creatures/Deinonychus';
 import { RockGolemBoss } from '../creatures/RockGolemBoss';
 import { SkeletonLord } from '../creatures/SkeletonLord';
 import { TheLich } from '../creatures/TheLich';
@@ -128,10 +128,12 @@ const MOB_VOICES: Readonly<Record<CreatureAudioTag, MobVoice>> = {
   miss_quill: { ...SILENT_VOICE, projectile: SOUL_BOLT_LAUNCH },
   // The pounce lands on the claw cue: a dedicated pounce screech is unsourced,
   // and the pounce ends in a raking swipe anyway.
-  mongo: {
+  deinonychus: {
     ...SILENT_VOICE,
     attack: (mob) =>
-      mob instanceof Mongo && mob.lastAttack === 'bite' ? BITES : { takes: ['mongo_slash'] },
+      mob instanceof Deinonychus && mob.lastAttack === 'bite'
+        ? BITES
+        : { takes: ['deinonychus_slash'] },
   },
   necromancer: SILENT_VOICE,
   raised_ratkin: SILENT_VOICE,

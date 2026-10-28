@@ -15,7 +15,7 @@ function savedData(row: unknown): unknown {
 
 router.get('/', (req: Request, res: Response) => {
   const { id } = authedUser(req);
-  const row: unknown = db.prepare('SELECT data FROM progress WHERE user_id = ?').get(id);
+  const row: unknown = db.prepare('SELECT data FROM kcw_progress WHERE user_id = ?').get(id);
   res.json({ data: savedData(row) });
 });
 
@@ -31,7 +31,7 @@ router.post('/', (req: Request, res: Response) => {
 
   db.prepare(
     `
-    INSERT INTO progress (user_id, data, updated_at)
+    INSERT INTO kcw_progress (user_id, data, updated_at)
     VALUES (?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(user_id) DO UPDATE
       SET data = excluded.data,
@@ -44,7 +44,7 @@ router.post('/', (req: Request, res: Response) => {
 
 router.delete('/', (req: Request, res: Response) => {
   const { id } = authedUser(req);
-  db.prepare('DELETE FROM progress WHERE user_id = ?').run(id);
+  db.prepare('DELETE FROM kcw_progress WHERE user_id = ?').run(id);
   res.json({ ok: true });
 });
 

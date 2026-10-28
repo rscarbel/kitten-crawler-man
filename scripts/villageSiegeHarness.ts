@@ -22,6 +22,7 @@ import { createPartyCraftsState, type PartyCraftsState } from '../src/core/labou
 import { PartyTools } from '../src/core/items/gathering/PartyTools';
 import { PlayerManager } from '../src/core/party/PlayerManager';
 import { AbilityManager } from '../src/core/skills/AbilityManager';
+import { PetNameBook } from '../src/core/party/petNames';
 import { keybindings } from '../src/core/input/Keybindings';
 import type { GrantedReward } from '../src/core/items/loot/GrantedReward';
 import type { MusicClaims } from '../src/audio/AudioScope';
@@ -140,7 +141,11 @@ export function buildSiegeRig(options: SiegeRigOptions): SiegeRig {
   const pm = new PlayerManager(site.gate.inside.x, site.gate.inside.y, undefined);
   const roster = new MobRoster(map, new SpellSystem());
   const world: SceneWorld = { gameMap: map, bus, audio: null, audioScope: null, pm, roster };
-  const menus = new MenusKit({ world, abilityManager: new AbilityManager() });
+  const menus = new MenusKit({
+    world,
+    abilityManager: new AbilityManager(),
+    petNames: new PetNameBook(),
+  });
   const combat = new CombatKit({ world, abilityManager: new AbilityManager(), safeRoom: null });
   const rewardCards: string[] = [];
   const announced: string[] = [];

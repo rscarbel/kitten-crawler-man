@@ -1,5 +1,5 @@
 /**
- * The ways a hireling (and Mongo) could be lost to a scripted moment rather than
+ * The ways a hireling (and Deinonychus) could be lost to a scripted moment rather than
  * to a fight, each checked against the real systems on the real third floor.
  *
  * - A hire is signed inside whichever building keeps the mercenaries' desk,

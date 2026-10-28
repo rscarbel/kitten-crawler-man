@@ -21,7 +21,7 @@ import type { WipeStatus } from '../core/save/progressPersistence';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
 import type { CasinoSeat } from '../systems/ClubCasinoSystem';
-import { ClubWheelSystem } from '../systems/ClubWheelSystem';
+import { ClubWheelSystem, UNNAMED_WHEEL_PETS } from '../systems/ClubWheelSystem';
 import {
   BASE_WHEEL_BOARD,
   WHEEL_UPGRADES,
@@ -155,6 +155,7 @@ export class WheelPreviewScene extends PreviewScene {
       progressWipe: previewWipe(clock, () => this.slowWipe),
       afterPermanentDeath: () => this.reset(),
       grantAttackCow: () => undefined,
+      pets: UNNAMED_WHEEL_PETS,
       clock,
       forcedOutcome: (board) => this.forcedOutcome(board),
     });

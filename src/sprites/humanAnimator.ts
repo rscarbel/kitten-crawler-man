@@ -2,7 +2,7 @@
  * The human crawler's animator: which row he is drawn in, and how far through it he is.
  *
  * `HumanPlayer` tells it what is happening — how far he actually moved this
- * tick, which way he faces, that a strike or a Smush began, that he was hit,
+ * tick, which way he faces, that a strike or a Seismic Stomp began, that he was hit,
  * that he levelled up — and `drawHumanSelection` draws whatever it answers.
  * Everything here is tick-driven and seeded, so a replay of the same ticks
  * picks the same rows on the same frames; the art gates replay it exactly that
@@ -180,7 +180,7 @@ const TRAVELLING_STOMPS = STOMP_ROWS.filter((row) => row.locomotion === 'travell
 const STRIKE_ROWS = rowsWithRole('strike');
 const STANDING_STRIKES = STRIKE_ROWS.filter((row) => row.locomotion !== 'travelling');
 const TRAVELLING_STRIKES = STRIKE_ROWS.filter((row) => row.locomotion === 'travelling');
-/** Every blow painted on the move, strike or Smush. */
+/** Every blow painted on the move, strike or Seismic Stomp. */
 const TRAVELLING_BLOWS = [...TRAVELLING_STRIKES, ...TRAVELLING_STOMPS];
 /** The gestures a level-up plays, in the order the table gives them. */
 const CELEBRATION_ROWS = FIDGET_ROWS.filter((row) => row.levelUpOrder !== undefined).sort(
@@ -397,12 +397,12 @@ export interface StrikeTargetContext {
   readonly reachShare: number;
 }
 
-/** The player's strike and Smush timers, which set how far through a blow he is. */
+/** The player's strike and Seismic Stomp timers, which set how far through a blow he is. */
 export interface HumanStrikeClock {
   readonly attackTimer: number;
   readonly attackFrames: number;
-  readonly smushTimer: number;
-  readonly smushFrames: number;
+  readonly seismicStompTimer: number;
+  readonly seismicStompFrames: number;
 }
 
 interface HumanAnimatorTick {
@@ -574,7 +574,7 @@ export class HumanAnimator {
   private settleTo: RowSpec | null = null;
 
   private strike: Latch | null = null;
-  private smush: Latch | null = null;
+  private seismicStomp: Latch | null = null;
   private action: Scripted | null = null;
   private reaction: Scripted | null = null;
   private knockedOut = false;
@@ -619,7 +619,7 @@ export class HumanAnimator {
    * even if the stick is swung the other way mid-swing.
    */
   get latchedFacing(): { readonly x: number; readonly y: number } | null {
-    const latch = this.smush ?? this.strike;
+    const latch = this.seismicStomp ?? this.strike;
     return latch === null ? null : { x: latch.facingX, y: latch.facingY };
   }
 
@@ -635,7 +635,7 @@ export class HumanAnimator {
    * already playing, which ends as `interrupted`. By default moving cancels it.
    */
   playAction(row: HumanRowName, options: HumanActionOptions = {}): boolean {
-    const blowInFlight = this.strike !== null || this.smush !== null;
+    const blowInFlight = this.strike !== null || this.seismicStomp !== null;
     if (blowInFlight || this.reaction !== null || this.knockedOut) return false;
     this.endScripted('action', 'interrupted');
     this.action = this.scripted('action', row, options, false);
@@ -651,7 +651,7 @@ export class HumanAnimator {
    */
   playReaction(row: HumanRowName, options: HumanReactionOptions = {}): boolean {
     const overridesBlows = options.overridesBlows ?? false;
-    const blowInFlight = this.strike !== null || this.smush !== null;
+    const blowInFlight = this.strike !== null || this.seismicStomp !== null;
     if (blowInFlight && !overridesBlows) return false;
     this.endScripted('action', 'interrupted');
     this.endScripted('reaction', 'interrupted');
@@ -709,7 +709,7 @@ export class HumanAnimator {
     this.settleExits = [];
     this.settleTo = null;
     this.strike = null;
-    this.smush = null;
+    this.seismicStomp = null;
     this.lastStrike = null;
     this.lastStrikeView = null;
     this.lastStrikeEndTick = Number.NEGATIVE_INFINITY;
@@ -812,12 +812,12 @@ export class HumanAnimator {
   }
 
   /**
-   * Latches the facing a Smush is stamped along and picks its row. On the move
+   * Latches the facing a Seismic Stomp is stamped along and picks its row. On the move
    * he hops into the stamp, in the version of the hop whose legs begin nearest
    * the stride on screen; standing still he stamps standing. A view with no
-   * Smush of its own stamps in whichever view has one.
+   * Seismic Stomp of its own stamps in whichever view has one.
    */
-  beginSmush(facingX: number, facingY: number): HumanRowName | null {
+  beginSeismicStomp(facingX: number, facingY: number): HumanRowName | null {
     const facing = this.facing.peek(facingX, facingY);
     const view = humanRowView(facing.view);
     const fallback = STANDING_STOMPS.length > 0 ? STANDING_STOMPS[0] : undefined;
@@ -827,7 +827,7 @@ export class HumanAnimator {
     const row = hop ?? standing;
     if (row === undefined) return null;
     this.interruptScriptedForBlow();
-    this.smush = latchOf(row, facingX, facingY, facing.flipX);
+    this.seismicStomp = latchOf(row, facingX, facingY, facing.flipX);
     this.warmCombatRows(view);
     this.noteCombat(true);
     return row.name;
@@ -912,7 +912,7 @@ export class HumanAnimator {
     this.tickScripted('action', moving);
 
     this.finishBlows(input.clock, moving);
-    if (this.strike !== null || this.smush !== null) {
+    if (this.strike !== null || this.seismicStomp !== null) {
       // The legs of a travelling blow are keyed to the same distance as the
       // run, so the phase keeps turning under it; and what he is doing with
       // his feet is kept up to date, so the blow ends into it.
@@ -938,8 +938,8 @@ export class HumanAnimator {
   select(clock: HumanStrikeClock): HumanRowSelection {
     const overriding = this.reaction?.overridesBlows === true ? this.reaction : null;
     if (overriding !== null) return scriptedFrame(overriding);
-    if (this.smush !== null && clock.smushTimer > 0) {
-      return latchedFrame(this.smush, clock.smushTimer, clock.smushFrames);
+    if (this.seismicStomp !== null && clock.seismicStompTimer > 0) {
+      return latchedFrame(this.seismicStomp, clock.seismicStompTimer, clock.seismicStompFrames);
     }
     if (this.strike !== null && clock.attackTimer > 0) {
       return latchedFrame(this.strike, clock.attackTimer, clock.attackFrames);
@@ -1161,9 +1161,9 @@ export class HumanAnimator {
       this.lastStrikeEndTick = this.tickCount;
       this.guardTicks = GUARD_HOLD_TICKS;
     }
-    if (this.smush !== null && clock.smushTimer <= 0) {
-      this.handBackLegs(this.smush.row, moving);
-      this.smush = null;
+    if (this.seismicStomp !== null && clock.seismicStompTimer <= 0) {
+      this.handBackLegs(this.seismicStomp.row, moving);
+      this.seismicStomp = null;
       this.guardTicks = GUARD_HOLD_TICKS;
     }
   }

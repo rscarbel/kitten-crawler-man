@@ -98,7 +98,8 @@ names its keeper in `BUILDING_KEEPERS`, which the compiler holds to one entry pe
 building and to someone who lives there. Keeper Brenna
 Kestrel runs the General Store: she is the counter occupant `ShopSystem.setKeeper` points
 the shop at. The club's counter staff (the bartender, the vendor, Deuce and Donald) belong
-to `CloakAndDaggerSystem`, and Mordecai to `SafeRoomSystem`; both sit outside the ratio.
+to `CloakAndDaggerSystem`, and Dave to `DaveGuideSystem` (stood in the room by
+`SafeRoomSystem`); both sit outside the ratio.
 
 **The crowd.** `TownLifeSystem` rolls each street cohort's species at its own share:
 `PLAZA_HAWKFOLK_SHARE` and `ANCHOR_HAWKFOLK_SHARE` two thirds, `TRAVELER_HAWKFOLK_SHARE` one
@@ -490,12 +491,24 @@ Tent and all four tower storeys — and the only tiles it excuses are the Bopca'
 strip, which the counter's own side returns seal on purpose.
 
 **The safe room is the inn's taproom.** `hasSafeRoom` on the planned building is what
-puts Mordecai, the Bopca's counter and the lantern light in a room, and the bounds it
+puts Dave, the Bopca's counter and the lantern light in a room, and the bounds it
 uses are name-addressable, so the inn registers the taproom band rather than its whole
 floor. `planSafeRoomCounters` lays the counter run against the **north wall of those
 bounds** — which is why the taproom's archways to the landing are deliberately off-centre
 and why the middle of the taproom's top rows carry no authored furniture. A run laid
 across an archway would wall off the entire guest wing.
+
+**Dave teleports into the taproom.** He is not a resident and never stands in an empty
+inn: the building's `DaveGuideSystem` brings him in `DAVE_ARRIVAL_DELAY_FRAMES` after the
+party walks in, on the arrival tile `SafeRoomSystem.guidePlacement` gives him, unless the
+run left him there (`DaveWhereabouts`, threaded between the dungeon and the interior by
+`InteriorPartyRun`). On arrival the inn's `StoryDelivery` plays a floor-3 safe-room beat if
+one is due, as a walk-up cutscene, then Caroline's intel for the current objective. Her
+bearings, and Dave's tactics, are about the floor outside, measured from the building's
+door. Caroline speaks only while nothing hostile is fighting the party and no box is open
+(`carolineMaySpeak`). With nothing due he wanders the taproom and wears his `!` until he
+has given his tactics for the current objective. `docs/world-and-story.md` is the
+reference for the beats and both voices.
 
 **A building may run more than one counter.** A service is declared on the occupant who
 keeps it (`OccupantSpec.service` in `BUILDING_OCCUPANTS`, `src/systems/buildingOccupants.ts`),
@@ -765,7 +778,7 @@ tile. The margin is the hysteresis: shuffling while reading never closes it, and
 that really leaves does. Between the two ranges the box stays up to be read, but an
 interact press is handed to whoever the player has walked up to (`Conversation.handOff`),
 so turning from one speaker to the next never lets a stale box take the key. In the safe
-room the Bopca and Mordecai's ranges overlap. `safeRoomSpeakerFor`
+room the Bopca and Dave's ranges overlap. `safeRoomSpeakerFor`
 (`src/systems/safeRoomSpeaker.ts`) gives a press to the nearer of the two.
 `npm run verify:walk-away` holds the rule.
 
@@ -1521,7 +1534,7 @@ Rules for picking targets, to keep when tuning a pool:
   `sawmill_machine` and `rope_walk` (they have quest upgrade variants); Blackwood Lodge's
   `cellar_trapdoor` and `kessler_footlocker`; the Sunken Stump's `bolted_door`; Old
   Lori's raw `TABLE` / `CHAIR` / `BOOKSHELF` tiles (`LORI_REPAIRABLE_TYPES`, the
-  anchor-quest wreck); the Inn's safe-room counters and Mordecai.
+  anchor-quest wreck); the Inn's safe-room counters and Dave.
 - **Temple floor spots never touch `RUG` tiles**: `AnchorInteriorSystem.naveSpawnAnchors`
   scans for them to spread the vermin down the nave.
 - **Wall runs sit where the wall face shows**: the north wall's face in Taloncrest; in

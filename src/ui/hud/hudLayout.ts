@@ -18,7 +18,6 @@ import { resolveTheme, type Density, type Theme } from '../theme/tokens';
 import { hudButtonLayout, type HudButtonRects } from './hudButtonLayout';
 import type { CaptionAnchor } from './captions';
 import type { PackSize } from './hudPacking';
-import { FAVOR_PILL_MIN_W } from './viewerFavorPill';
 
 /** The minimap's side, by screen size and whether the player has expanded it. */
 const MINIMAP_SIDE: Readonly<
@@ -69,7 +68,7 @@ const COMPACT_FRAME_MIN_W = 160;
 const COMPANION_INSET_W = 28;
 /** The coin pill's footprint the dock keeps clear of; the drawn pill sizes to its number. */
 const COIN_PILL_RESERVED_W = 120;
-/** Mongo's Summon card is this many buttons wide. */
+/** Deinonychus's Summon card is this many buttons wide. */
 const SUMMON_WIDTH_IN_BUTTONS = 2.5;
 /** Room for his portrait and the longest of his labels, 'Resting', at a pointer's small buttons. */
 const SUMMON_MIN_W = 116;
@@ -141,13 +140,6 @@ export interface HudGeometry {
    * compact screen; null where the timer is a card in the top band.
    */
   readonly levelTimerChip: Rect | null;
-  /**
-   * The room left on the readout row, inside the frames' width, for the
-   * viewers' favour pill; null where the row has none, and the favour rides
-   * in the top band instead. Never widens the frames block, so the dock and
-   * the band are laid out the same with the pill or without it.
-   */
-  readonly favor: Rect | null;
   readonly miniMap: Rect;
   /** The minimap's square at its normal size: the part no button or bar ever covers. */
   readonly normalMiniMap: Rect;
@@ -345,10 +337,6 @@ export function hudLayout(opts: HudLayoutOptions): HudGeometry {
     w: Math.max(metrics.activeW, readoutRight - left),
     h: coins.y + coins.h - top,
   };
-  const favorLeft = readoutRight + space.xs;
-  const favorRoom = framesBlock.x + framesBlock.w - favorLeft;
-  const favor: Rect | null =
-    favorRoom >= FAVOR_PILL_MIN_W ? { x: favorLeft, y: coins.y, w: favorRoom, h: coins.h } : null;
 
   const hotbar = hotbarRects(theme, viewport, margin);
   const button = theme.size.control;
@@ -417,7 +405,6 @@ export function hudLayout(opts: HudLayoutOptions): HudGeometry {
     framesBlock,
     coins,
     levelTimerChip,
-    favor,
     miniMap,
     normalMiniMap,
     buttons,

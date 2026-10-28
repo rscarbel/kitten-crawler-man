@@ -1,13 +1,14 @@
 import type { SkillId } from '../../core/skills/SkillManager';
 import type { Rect } from '../core/geom';
 import { iconSquare } from './iconSquare';
+import { palette as themePalette } from '../theme/tokens';
 
 /**
  * One shared book silhouette for every skill book, tinted per skill.
  *
- * Five near-identical hand-drawn books would be five places to keep in sync for
- * no visual gain — the cover colour is what a player actually reads at inventory
- * slot size.
+ * A hand-drawn book per skill would be one more picture to keep in step for
+ * every skill added, for no visual gain: the cover colour is what a player
+ * actually reads at inventory slot size.
  */
 
 // Geometry as fractions of the icon square.
@@ -31,18 +32,11 @@ const PAGE_LINE_COLOR = '#a8927a';
 const CLASP_COLOR = '#c8a860';
 
 export interface CoverPalette {
-  cover: string;
-  spine: string;
+  readonly cover: string;
+  readonly spine: string;
 }
 
-const SKILL_COVERS: Record<SkillId, CoverPalette> = {
-  cockroach: { cover: '#5b3a1e', spine: '#2f1d0d' },
-  cat_reflexes: { cover: '#4c1d95', spine: '#2a0f57' },
-  pugilism: { cover: '#7f1d1d', spine: '#450a0a' },
-  iron_stomach: { cover: '#3f6212', spine: '#1f3006' },
-  iron_punch: { cover: '#3f4854', spine: '#1c2129' },
-  powerful_strike: { cover: '#92400e', spine: '#4a1f04' },
-};
+const SKILL_COVERS = themePalette.skillBook satisfies Record<SkillId, CoverPalette>;
 
 /** Draws a closed skill book, cover facing the viewer, centred in `rect`. */
 export function drawSkillBookIcon(

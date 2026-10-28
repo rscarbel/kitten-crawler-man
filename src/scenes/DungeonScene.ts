@@ -92,11 +92,7 @@ import {
   type PauseFrame,
   type PauseScreen,
 } from '../ui/screens/pause/PauseScreen';
-import {
-  CONSTITUTION_STAT_NAME,
-  isStatSpendButtonOf,
-  statSpendButtonId,
-} from '../ui/screens/pause/characterSection';
+import { isStatSpendButtonOf, statSpendButtonId } from '../ui/screens/pause/characterSection';
 import { SpellSystem } from '../systems/SpellSystem';
 import type { InventoryItem } from '../core/items/defs/ItemDefs';
 import {
@@ -109,7 +105,12 @@ import { presentationAwardId, type RewardPresentation } from '../loot/rewardChes
 import { partyOwnsGear, rollKillGear, withGearLoot, type GearId } from '../loot/gearPools';
 import { AchievementUISystem } from '../systems/AchievementUISystem';
 import { AchievementAwards } from '../systems/AchievementAwards';
-import { introduceMongo, joinMongoOnOpen, presentsMongo } from '../systems/mongoArrival';
+import {
+  deinonychusPortrait,
+  introduceDeinonychus,
+  joinDeinonychusOnOpen,
+  presentsDeinonychus,
+} from '../systems/deinonychusArrival';
 
 import { MiniMapSystem, type QuestMarkerType } from '../systems/MiniMapSystem';
 import {
@@ -157,6 +158,8 @@ import { WORK_ORDERS } from '../dialog/scripts/workOrders';
 import { isVillageUnderSiege } from '../core/quests/villageQuestPhase';
 import { playInteriorCue } from '../systems/interiorInteractionSoundCues';
 import { SafeRoomSystem, type SafeRoomInfo } from '../systems/SafeRoomSystem';
+import { DaveGuideSystem, DaveWhereabouts } from '../systems/DaveGuideSystem';
+import { sameSafeRoom, type SafeRoomId } from '../map/safeRoomId';
 import { SkillPointReminderSystem } from '../systems/SkillPointReminderSystem';
 import { BopcaSystem } from '../systems/BopcaSystem';
 import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
@@ -209,6 +212,9 @@ import { safeRoomPressLeavesSpeaker, safeRoomSpeakerFor } from '../systems/safeR
 import { ALL_BREAKABLE_PROPS, NO_BREAKABLE_PROPS } from '../systems/DestructiblePropSystem';
 import { MenusKit } from '../systems/kits/MenusKit';
 import { ChatKit, type ChatCommand } from '../systems/kits/ChatKit';
+import { CutsceneKit } from '../systems/kits/CutsceneKit';
+import { walkUpTo } from '../systems/cutscene/walkUp';
+import type { WalkToStep } from '../systems/cutscene/cutsceneSteps';
 import {
   activateHotbarSlot,
   drinkAnyHealthPotion,
@@ -369,16 +375,16 @@ import { BossIntroSystem } from '../systems/BossIntroSystem';
 import { DungeonIntroSystem } from '../systems/DungeonIntroSystem';
 import { TreeSystem } from '../systems/TreeSystem';
 import { WaterAnimationSystem } from '../systems/WaterAnimationSystem';
-import { AbilityManager, type AbilityId } from '../core/skills/AbilityManager';
+import { AbilityManager, perkText, type AbilityId } from '../core/skills/AbilityManager';
 import { FollowerScreen } from '../ui/screens/follower/FollowerScreen';
 import { MAGIC_MISSILE_SPARK_LEVEL } from '../abilities/magicMissile';
-import { getMongoStats } from '../abilities/mongo';
+import { getDeinonychusStats } from '../abilities/deinonychus';
 import {
-  captureMongoPetState,
-  createMongoPetState,
-  restoreMongoPetState,
-  type MongoPetState,
-} from '../core/state/MongoPetState';
+  captureDeinonychusPetState,
+  createDeinonychusPetState,
+  restoreDeinonychusPetState,
+  type DeinonychusPetState,
+} from '../core/state/DeinonychusPetState';
 
 import type { GrantedReward } from '../core/items/loot/GrantedReward';
 import { EventBus } from '../core/EventBus';
@@ -446,7 +452,7 @@ import {
 import { resolveDeathCause } from '../systems/DeathCauseSystem';
 import { pickDeathExplanation } from '../ui/DeathExplanations';
 import { BuildingInteriorScene } from './BuildingInteriorScene';
-import { MongoSystem, mongoXpFraction } from '../systems/MongoSystem';
+import { DeinonychusSystem, deinonychusXpFraction } from '../systems/DeinonychusSystem';
 import {
   NO_INTERIOR_COMPANIONS,
   type InteriorCompanionArrival,
@@ -594,16 +600,19 @@ import {
   SLAM_AUDIO_SEEK_SECONDS,
   SCREECH_AUDIO_SEEK_SECONDS,
 } from '../creatures/GrotesqueSpider';
-import { randomInt, randomIntFrom, pointInRect } from '../utils';
+import { randomInt, randomIntFrom, pointInRect, pixelToTile } from '../utils';
 import { aiAdapter } from '../ai/AIAdapter';
 import {
+  adviceIntel,
   adviceObjective,
+  adviceTactics,
   asOptional,
   gatewayAdviceId,
-  MordecaiAdvisor,
+  nextAdviceObjective,
   type AdviceObjective,
+  type AdviceObjectiveId,
   type AdviceSlot,
-} from '../systems/mordecaiAdvice';
+} from '../systems/daveAdvice';
 import {
   ALL_DEBRIEF_BOSS_TYPES,
   debriefBossType,
@@ -611,22 +620,23 @@ import {
   debriefPages,
   EMPTY_DEBRIEF_MEMORY,
   isSupersededDebrief,
-  rememberDebriefSpoken,
+  rememberDebriefHeard,
+  debriefTalk,
   sameDebriefMemory,
   unwornGear,
   type DebriefBossType,
   type DebriefMemory,
   type DebriefState,
-  type MordecaiDebriefCheckpoint,
-} from '../systems/mordecaiDebrief';
-import { mordecaiSpokenPages } from '../dialog/scripts/mordecai';
+  type DaveDebriefCheckpoint,
+} from '../systems/daveDebrief';
+import { displayPageCount } from '../dialog/Conversation';
+import type { CarolineMessage } from '../dialog/caroline';
 import type { DialogLine } from '../dialog/line';
 import type { ConversationHandle } from '../dialog/request';
 import type { QuestMarkerState } from '../sprites/questNPCSprite';
 import type { AISceneContext } from '../ai/aiActions';
-import { AIShowStage } from '../ai/show/AIShowStage';
+import { AIInteractionStage } from '../ai/interactions/AIInteractionStage';
 import { AIChallengeSystem } from '../systems/AIChallengeSystem';
-import { viewerFavor } from '../core/progression/viewerFavor';
 import { forwardSceneHooksToBus } from '../systems/sceneHookEvents';
 import { aiFloorKey, type AILevelTimer } from '../ai/actions/types';
 import { aiCameraSpotlight } from '../ai/actions/cameraSpotlight';
@@ -635,6 +645,19 @@ import { readCrawler, readNearbyMobs, tileOf } from '../ai/context/sceneReaders'
 import { mobLabel } from '../ai/context/eventMapping';
 import { GameStats, bindRunStats, type GameStatsSnapshot } from '../core/progression/GameStats';
 import { MusicLibrary, bindMusicLibrary } from '../core/music/MusicLibrary';
+import { StoryDirector } from '../story/StoryDirector';
+import { persistStoryBeatsSeen } from '../story/storySave';
+import type { StoryBeatId } from '../story/storyBeats';
+import { storyPreviewEvent } from '../story/storyPreview';
+import {
+  StoryDelivery,
+  partyIsEngaged,
+  storyFloorOf,
+  MAX_DAVE_TALK_PAGES,
+  type DaveTalkExtra,
+} from '../systems/StoryDelivery';
+import { PetNameBook, petWords } from '../core/party/petNames';
+import { MissingPetNames, attackCowPortrait, namePetThen } from '../systems/petNaming';
 import { musicUnlocksFromProgress } from '../core/music/musicBackfill';
 import { restoreMusicPlayback } from '../audio/music/playerPreference';
 import { difficultyStats } from '../core/difficulty/DifficultyStats';
@@ -727,6 +750,34 @@ export interface DungeonSceneOptions {
    */
   musicLibrary?: MusicLibrary;
   /**
+   * The run's story progress, threaded by reference like `musicLibrary` so a
+   * death never rewinds a beat already heard. Absent on a new game.
+   */
+  storyDirector?: StoryDirector;
+  /**
+   * The room Dave was last in, threaded by reference across a building visit
+   * so the floor finds him where it left him. Absent on arriving at a floor.
+   */
+  daveWhereabouts?: DaveWhereabouts;
+  /**
+   * A new run that skipped the tutorial: Dave is waiting in the start room
+   * and tells the party what the tutorial would have, then leaves.
+   */
+  skippedTutorial?: boolean;
+  /**
+   * The party has just come down to this floor, by the stairs or at the
+   * start of a run, so Caroline's message about the floor is due. A reload,
+   * a respawn or a walk out of a building is no arrival.
+   */
+  arrivedOnFloor?: boolean;
+  /** A dev preview: the beat is played as soon as the floor is up. */
+  storyPreview?: StoryBeatId;
+  /**
+   * The run's pet names, threaded by reference like `musicLibrary` so a death
+   * never takes back a name. Absent on a new game, which names them afresh.
+   */
+  petNames?: PetNameBook;
+  /**
    * Silently unlocks every song the floor's starting state proves the party
    * already passed through, before the floor's own music is claimed. For a
    * dev preset that drops the party onto a later floor without walking there,
@@ -743,20 +794,20 @@ export interface DungeonSceneOptions {
   floorEntryHumanSnap?: PlayerSnapshot;
   /** Snapshot of cat state at the very start of this floor — used to respawn after death. */
   floorEntryCatSnap?: PlayerSnapshot;
-  /** Whether Mongo the velociraptor has been unlocked (persists across floors). */
-  mongoUnlocked?: boolean;
+  /** Whether the Deinonychus has been unlocked (persists across floors). */
+  deinonychusUnlocked?: boolean;
   /**
    * The pet's HP and quest lock, threaded by reference like the quest progress
    * objects. His health persists across summons, floors and buildings, and the
-   * `Mongo` instance that carries it in play is destroyed on every despawn.
+   * `Deinonychus` instance that carries it in play is destroyed on every despawn.
    */
-  mongoPetState?: MongoPetState;
+  deinonychusPetState?: DeinonychusPetState;
   /**
-   * Whether Mongo was out beside the party at the building door they just came
+   * Whether Deinonychus was out beside the party at the building door they just came
    * out of. He is rebuilt beside the cat on the first frame, at the health the
    * pet state carries.
    */
-  mongoWasOut?: boolean;
+  deinonychusWasOut?: boolean;
   /** Carry ability leveling progress across floor transitions. */
   abilityManager?: AbilityManager;
   /** Ability state at floor entry — restored on death-restart so level-up progress rewinds to floor-start. */
@@ -808,7 +859,7 @@ export interface DungeonSceneOptions {
   casinoState?: CasinoState;
   /** The Wheel of Fortune's won prizes and pending spin, threaded by reference. */
   wheelLedger?: WheelLedger;
-  /** The human crawler's attack cow, threaded by reference like `mongoPetState`. */
+  /** The human crawler's attack cow, threaded by reference like `deinonychusPetState`. */
   attackCowState?: AttackCowState;
   /** Resident lore progress + the apothecary's batch, threaded by reference across building/scene transitions. */
   townMemory?: TownMemory;
@@ -926,7 +977,7 @@ export interface DungeonSceneOptions {
    */
   interiorReturn?: DungeonInteriorReturn;
   /**
-   * The party is walking out of the prison, which admits neither Mongo nor the
+   * The party is walking out of the prison, which admits neither Deinonychus nor the
    * hire: both are found standing on the gate room's waiting tiles.
    */
   companionsWaitAtPrisonDoor?: boolean;
@@ -1130,7 +1181,22 @@ const HOLD_WALK_TOLERANCE_PX = 4;
 const INTRO_BEGIN_HINT_Y_FRACTION = 0.78;
 const INTRO_BEGIN_HINT_SIZE = 18;
 
-/** Floors Mordecai has a list of objectives for; the rest fall through to the AI chat. */
+/** The nearest and furthest Dave waits from the party when he is met outside a safe room, in tiles. */
+const DAVE_WAITING_MIN_TILES = 2;
+const DAVE_WAITING_MAX_TILES = 4;
+/** The ways out from the party tried for his tile, best first: in front of them on screen, then beside. */
+const DAVE_WAITING_DIRECTIONS: ReadonlyArray<{ readonly x: number; readonly y: number }> = [
+  { x: 0, y: -1 },
+  { x: 1, y: 0 },
+  { x: -1, y: 0 },
+  { x: 0, y: 1 },
+  { x: 1, y: -1 },
+  { x: -1, y: -1 },
+  { x: 1, y: 1 },
+  { x: -1, y: 1 },
+];
+
+/** Floors Dave has a list of objectives for; the rest fall through to the AI chat. */
 const DUNGEON_FLOOR_ONE = 1;
 const DUNGEON_FLOOR_TWO = 2;
 /**
@@ -1153,18 +1219,18 @@ const MS_PER_SECOND = 1000;
 const TREE_FALL_SOUNDS = ['tree_fall_1', 'tree_fall_2', 'tree_fall_3', 'tree_fall_4'] as const;
 /** A nursery barrier giving way — the smash, not the per-blow crack the scene cycles separately. */
 const BARRIER_BREAK_SOUNDS = WOOD_SMASHING_SOUNDS;
-const MONGO_ADULT_SQUAWK_MIN_LEVEL = 5;
-const MONGO_ADULT_HAPPY_SQUAWKS = [
-  'happy_adult_mongo_squawk_1',
-  'happy_adult_mongo_squawk_2',
-  'happy_adult_mongo_squawk_3',
-  'happy_adult_mongo_squawk_4',
+const DEINONYCHUS_ADULT_SQUAWK_MIN_LEVEL = 5;
+const DEINONYCHUS_ADULT_HAPPY_SQUAWKS = [
+  'deinonychus_adult_happy_squawk_1',
+  'deinonychus_adult_happy_squawk_2',
+  'deinonychus_adult_happy_squawk_3',
+  'deinonychus_adult_happy_squawk_4',
 ] as const;
-const MONGO_BABY_HAPPY_SQUAWKS = [
-  'happy_baby_mongo_squawk_1',
-  'happy_baby_mongo_squawk_2',
-  'happy_baby_mongo_squawk_3',
-  'happy_baby_mongo_squawk_4',
+const DEINONYCHUS_JUVENILE_HAPPY_SQUAWKS = [
+  'deinonychus_juvenile_happy_squawk_1',
+  'deinonychus_juvenile_happy_squawk_2',
+  'deinonychus_juvenile_happy_squawk_3',
+  'deinonychus_juvenile_happy_squawk_4',
 ] as const;
 /** The five-minute alarm is the ten-minute one pitched up, so the escalation is audible. */
 const FIVE_MINUTE_WARNING_PLAYBACK_RATE = 1.3;
@@ -1295,6 +1361,8 @@ export class DungeonScene extends GameplayScene {
   // Systems
   private miniMap: MiniMapSystem;
   private safeRoom: SafeRoomSystem;
+  private dave: DaveGuideSystem;
+  private readonly daveWhereabouts: DaveWhereabouts;
   private bopca: BopcaSystem;
   // Only ever called from `update`, by which point the constructor has assigned
   // every boss system the check reads.
@@ -1312,12 +1380,11 @@ export class DungeonScene extends GameplayScene {
   /** The chat box and the cheat table behind it. */
   private readonly chat: ChatKit;
   private bossRoom: BossRoomSystem;
-  private readonly mordecaiAdvisor = new MordecaiAdvisor();
   /**
    * Saved, but not rewound on death, so heard speeches stay heard; see
    * `forgetDebriefsOfLivingBosses` for the one rewind that must reset it.
    */
-  private mordecaiDebrief: MordecaiDebriefCheckpoint = {};
+  private daveDebrief: DaveDebriefCheckpoint = {};
   /**
    * Saved, but not rewound on death, so a heard System notice stays heard.
    * Threaded by reference across building/scene transitions like
@@ -1488,14 +1555,14 @@ export class DungeonScene extends GameplayScene {
    * dies proving it.
    */
   private stairwellHintAnnounced = false;
-  private readonly mongoSystem: MongoSystem;
-  private readonly mongoPetState: MongoPetState;
+  private readonly deinonychusSystem: DeinonychusSystem;
+  private readonly deinonychusPetState: DeinonychusPetState;
   /**
-   * Mongo walked out of a building with the party and is waiting to be put down
+   * Deinonychus walked out of a building with the party and is waiting to be put down
    * beside the cat. Held for the first gameplay frame rather than done in the
    * constructor, which runs before the party is placed at the door.
    */
-  private mongoCarryPending = false;
+  private deinonychusCarryPending = false;
   /** Set for the first gameplay frame after the prison: see {@link DungeonSceneOptions.companionsWaitAtPrisonDoor}. */
   private companionsWaitingAtPrisonDoor = false;
   /** See {@link DungeonSceneOptions.devPrisonLayout}. */
@@ -1525,10 +1592,10 @@ export class DungeonScene extends GameplayScene {
   private achievementUI: AchievementUISystem;
   /** Pays every award this scene's crawlers earn; see {@link AchievementAwards}. */
   private awards: AchievementAwards;
-  /** The show AI's timed bounties on this floor. */
+  /** The AI's timed bounties on this floor. */
   private readonly aiChallenges: AIChallengeSystem;
-  /** Where the show AI's questions, adverts, challenge offers and the viewers' favour appear. */
-  private readonly aiShow: AIShowStage;
+  /** Where the AI's questions and challenge offers appear. */
+  private readonly aiInteractions: AIInteractionStage;
   private humanAchievements: AchievementManager;
   private catAchievements: AchievementManager;
 
@@ -1671,6 +1738,28 @@ export class DungeonScene extends GameplayScene {
   private playerIdleFrames = 0;
   private readonly gameStats: GameStats;
   private readonly musicLibrary: MusicLibrary;
+  private readonly storyDirector: StoryDirector;
+  /** Plays the story's beats, debriefs and intel through the cutscene director. */
+  private readonly story: StoryDelivery;
+  /**
+   * The newest save handed to storage, which a beat's seen-write builds on.
+   * Not `lastSave`: a save written from indoors is adopted there only once
+   * storage has taken it, and writing over an older one would undo it.
+   */
+  private lastDispatchedSave: SaveProgressInput | null = null;
+  private readonly skippedTutorialStart: boolean;
+  private readonly arrivedOnFloor: boolean;
+  private readonly storyPreview: StoryBeatId | null;
+  /** The floor's first frame has not opened its story yet: arrival messages, a waiting Dave. */
+  private storyOpeningPending = true;
+  /**
+   * The room Dave last teleported into, whose talk has not started yet: it
+   * starts once the active crawler is in there with him and nothing is
+   * fighting the party.
+   */
+  private daveArrivalOwed: SafeRoomInfo | null = null;
+  private readonly petNames: PetNameBook;
+  private readonly missingPetNames: MissingPetNames;
   private musicBackfillPending: boolean;
 
   /** The HUD, drawn from {@link hudModel} each frame. */
@@ -1705,6 +1794,8 @@ export class DungeonScene extends GameplayScene {
    * own surface on the scene's `UiRoot`. Systems only open requests on it.
    */
   private readonly conversation: Conversation;
+  /** Scripted moments that own the party: the tutorial's talks with Dave. */
+  private readonly cutscenes: CutsceneKit;
   private readonly tutorial: TutorialController | null = null;
   private readonly questSwitchConfirm: ConfirmDialog;
   /**
@@ -1747,6 +1838,14 @@ export class DungeonScene extends GameplayScene {
       handleWorldPointer: (gesture) => this.handleWorldPointer(gesture),
     });
     this.conversation = new Conversation(this.audio);
+    this.cutscenes = new CutsceneKit({
+      conversation: this.conversation,
+      teleportDaveOut: () => this.dave.teleportOut(),
+      pauseButton: () => {
+        const rect = this.hud.frame?.dock.get('pause');
+        return rect === undefined ? null : { rect, press: () => this.openPauseFromButton() };
+      },
+    });
     this.questSwitchConfirm = new ConfirmDialog(this.audio);
     this.companionStance = options?.companionStance ?? createCompanionStanceState();
     this.godModeState = options?.godModeState ?? createGodModeState();
@@ -1755,6 +1854,18 @@ export class DungeonScene extends GameplayScene {
     this.humanAchievements = options?.humanAchievements ?? new AchievementManager();
     this.catAchievements = options?.catAchievements ?? new AchievementManager();
     this.musicLibrary = options?.musicLibrary ?? new MusicLibrary();
+    this.storyDirector = options?.storyDirector ?? new StoryDirector();
+    this.story = new StoryDelivery({
+      director: this.storyDirector,
+      cutscenes: this.cutscenes.director,
+      persist: () => this.persistStory(),
+      calm: () => this.carolineMaySpeak(),
+    });
+    this.skippedTutorialStart = options?.skippedTutorial === true;
+    this.arrivedOnFloor = options?.arrivedOnFloor === true;
+    this.storyPreview = options?.storyPreview ?? null;
+    this.daveWhereabouts = options?.daveWhereabouts ?? new DaveWhereabouts();
+    this.petNames = options?.petNames ?? new PetNameBook();
     this.musicBackfillPending = options?.backfillMusicLibrary === true;
     // Ahead of the kits: `CombatKit` levels abilities off kills and `MenusKit`
     // draws the ability screen, so both want this before they exist.
@@ -2032,14 +2143,21 @@ export class DungeonScene extends GameplayScene {
     if (options?.hudView !== undefined) {
       this.miniMap.setExpanded(options.hudView.miniMapExpanded);
     }
-    this.safeRoom = new SafeRoomSystem(
-      this.gameMap,
-      spawnTileX,
-      spawnTileY,
-      this.conversation,
-      this.levelDef.id,
+    this.safeRoom = new SafeRoomSystem(this.gameMap, { kind: 'floor', level: this.levelDef.id });
+    this.dave = new DaveGuideSystem(
+      {
+        safeRooms: this.safeRoom,
+        conversation: this.conversation,
+        whereabouts: this.daveWhereabouts,
+        camera: () => this.camera(),
+        audio: this.audio,
+        onArrived: (room) => this.onDaveArrived(room),
+      },
+      // A reload resumes in the room it saved in, where he already stands.
+      this.partySafeRoom() ?? this.daveWhereabouts.room,
     );
-    this.safeRoom.setMarkerSource((room) => this.mordecaiMarkerFor(room));
+    this.dave.setMarkerSource((room) => this.daveMarkerFor(room));
+    this.dave.holdWhile(() => this.cutscenes.isActive);
     this.combat = new CombatKit({
       world: this.world,
       abilityManager: this.abilityManager,
@@ -2048,6 +2166,7 @@ export class DungeonScene extends GameplayScene {
     this.menus = new MenusKit({
       world: this.world,
       abilityManager: this.abilityManager,
+      petNames: this.petNames,
       heldItemId: () => this.readiedDynamiteId(),
       ...(tutorialController === null
         ? {}
@@ -2068,6 +2187,19 @@ export class DungeonScene extends GameplayScene {
     this.menus.questReward.setOpenConditions({
       conversationOpen: () => this.conversation.isOpen,
       worldHeld: () => this.gameplayHalted,
+    });
+    this.missingPetNames = new MissingPetNames({
+      prompt: this.menus.petNamePrompt,
+      petNames: this.petNames,
+      keyboardAnchor: this.sceneManager.canvas,
+      owned: {
+        deinonychus: () => this.deinonychusSystem.unlocked,
+        attackCow: () => this.attackCowState.owned,
+      },
+      portraits: {
+        deinonychus: deinonychusPortrait(() => this.abilityManager.getLevel('deinonychus')),
+        attackCow: attackCowPortrait,
+      },
     });
     this.menus.questReward.onClosed = (spec) => this.flyQuestRewards(spec);
     this.menus.useSceneItem = (item) => {
@@ -2261,10 +2393,15 @@ export class DungeonScene extends GameplayScene {
         sound: (id) => this.audio?.play(id),
       },
     );
-    this.attackCowSystem = new AttackCowSystem(this.attackCowState, levelDef.floorNumber, {
-      toast: (message) => this.menus.toasts.post(message),
-      sound: (id) => this.audio?.play(id),
-    });
+    this.attackCowSystem = new AttackCowSystem(
+      this.attackCowState,
+      levelDef.floorNumber,
+      this.petNames,
+      {
+        toast: (message) => this.menus.toasts.post(message),
+        sound: (id) => this.audio?.play(id),
+      },
+    );
     this.arena = new ArenaSystem(
       this.gameMap,
       this.bus,
@@ -2438,9 +2575,9 @@ export class DungeonScene extends GameplayScene {
       this.companion.setAggressive(this.human.isActive);
     };
     this.followerMenu.onSwitchCharacter = () => this.triggerSwitchCharacter();
-    this.followerMenu.onToggleMongoAutoSummon = () => {
+    this.followerMenu.onToggleDeinonychusAutoSummon = () => {
       this.audio?.play('menu_change_follower');
-      settings.setCatAutoSummonsMongo(!settings.catAutoSummonsMongo);
+      settings.setCatAutoSummonsDeinonychus(!settings.catAutoSummonsDeinonychus);
     };
     this.followerMenu.onSetPassive = () => {
       this.audio?.play('menu_change_follower');
@@ -2480,7 +2617,7 @@ export class DungeonScene extends GameplayScene {
           ...this.partyRunSaveFields({
             human: floorCompleteHumanSnap,
             cat: floorCompleteCatSnap,
-            ...this.mongoPetSaveState(),
+            ...this.deinonychusPetSaveState(),
           }),
           levelId: levelDef.nextLevelId,
           // No `world`: everything in it describes the floor being left, and a
@@ -2496,8 +2633,8 @@ export class DungeonScene extends GameplayScene {
         this.systemNotices.drainFor(this.human, this.cat);
 
         this.levelCompleteScreen.activate(levelDef.name, nextDef.name, () => {
-          // Dismiss Mongo and any hired merc before floor transition
-          this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+          // Dismiss Deinonychus and any hired merc before floor transition
+          this.deinonychusSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
           this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
           this.attackCowSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
           this.attackCowSystem.prepareForNewFloor();
@@ -2523,6 +2660,7 @@ export class DungeonScene extends GameplayScene {
           flushFigureFrameCache();
           this.sceneManager.replace(
             new DungeonScene(nextDef, this.input, this.sceneManager, {
+              arrivedOnFloor: true,
               // Taking the stairs regroups the party: a companion carried down
               // still knocked out would time out on arrival with no way to reach them.
               humanSnap: revivedSnapshot(snapPlayer(this.human)),
@@ -2530,8 +2668,10 @@ export class DungeonScene extends GameplayScene {
               humanAchievements: this.humanAchievements,
               catAchievements: this.catAchievements,
               musicLibrary: this.musicLibrary,
-              mongoUnlocked: this.mongoSystem.unlocked,
-              mongoPetState: this.mongoPetState,
+              storyDirector: this.storyDirector,
+              petNames: this.petNames,
+              deinonychusUnlocked: this.deinonychusSystem.unlocked,
+              deinonychusPetState: this.deinonychusPetState,
               wheelLedger: this.wheelLedger,
               attackCowState: this.attackCowState,
               abilityManager: this._cleanAbilityManager(),
@@ -2772,7 +2912,6 @@ export class DungeonScene extends GameplayScene {
       human: this.human,
       cat: this.cat,
       bus: this.bus,
-      coinMultiplier: () => this.aiShow.chestCoinMultiplier(),
       activeCrawler: () => (this.cat.isActive ? 'cat' : 'human'),
       inTutorial: () => this.tutorial !== null,
     });
@@ -2789,15 +2928,13 @@ export class DungeonScene extends GameplayScene {
         this.awards.grantChest(side === 'Human' ? 'human' : 'cat', { rarity, source: 'challenge' });
       },
     });
-    this.aiShow = new AIShowStage({
+    this.aiInteractions = new AIInteractionStage({
       bus: this.bus,
-      favor: viewerFavor,
       challenges: this.aiChallenges,
-      postToast: (text, opts) => this.menus.toasts.post(text, opts),
     });
     this.achievementUI.presentationGate = () => this.showsAchievementUi;
     this.achievementUI.onPresentationOpened = (presentation) =>
-      joinMongoOnOpen(presentation, this.mongoSystem);
+      joinDeinonychusOnOpen(presentation, this.deinonychusSystem);
     this.achievementUI.onPresentationClosed = (presentation) =>
       this.onRewardPresentationClosed(presentation);
 
@@ -2809,21 +2946,23 @@ export class DungeonScene extends GameplayScene {
     // Built here rather than as a field initialiser because it needs both the
     // shared pet state and a live read of the pet's ability level: a scene
     // handed no pet state still seeds him at the maximum his level carries.
-    const petMaxHp = getMongoStats(this.abilityManager.getLevel('mongo')).maxHp;
-    this.mongoPetState = options?.mongoPetState ?? createMongoPetState(petMaxHp, petMaxHp);
-    this.mongoSystem = new MongoSystem(
-      this.mongoPetState,
-      () => this.abilityManager.getLevel('mongo'),
+    const petMaxHp = getDeinonychusStats(this.abilityManager.getLevel('deinonychus')).maxHp;
+    this.deinonychusPetState =
+      options?.deinonychusPetState ?? createDeinonychusPetState(petMaxHp, petMaxHp);
+    this.deinonychusSystem = new DeinonychusSystem(
+      this.deinonychusPetState,
+      () => this.abilityManager.getLevel('deinonychus'),
       (amount) => {
-        this.abilityManager.addXp('mongo', amount);
+        this.abilityManager.addXp('deinonychus', amount);
       },
-      () => mongoXpFraction(this.abilityManager),
+      () => deinonychusXpFraction(this.abilityManager),
       this.menus.toasts,
+      this.petNames,
     );
-    if (options?.mongoUnlocked) {
-      this.mongoSystem.unlocked = true;
+    if (options?.deinonychusUnlocked) {
+      this.deinonychusSystem.unlocked = true;
     }
-    this.mongoCarryPending = options?.mongoWasOut === true;
+    this.deinonychusCarryPending = options?.deinonychusWasOut === true;
     this.companionsWaitingAtPrisonDoor = options?.companionsWaitAtPrisonDoor === true;
     this.devPrisonLayout = options?.devPrisonLayout ?? null;
     this.devPrisonEntryPending = options?.devEnterPrisonAtStart === true;
@@ -2833,7 +2972,8 @@ export class DungeonScene extends GameplayScene {
       abilityManager: this.abilityManager,
       menus: this.menus,
       audio: this.audio,
-      onPetLevelUp: () => this.mongoSystem.onPetLevelUp(),
+      petNames: this.petNames,
+      onPetLevelUp: () => this.deinonychusSystem.onPetLevelUp(),
       onSparkLevel: () => this.unlockSparkToFlame(),
     });
     bindCraftLevelUps({ bus: this.bus, menus: this.menus, audio: this.audio });
@@ -2881,7 +3021,7 @@ export class DungeonScene extends GameplayScene {
       for (const roomIndex of interiorReturn.stairwellRoomsSaved) {
         this.stairwellRoomsSaved.add(roomIndex);
       }
-      this.mordecaiDebrief = { ...interiorReturn.mordecaiDebrief };
+      this.daveDebrief = { ...interiorReturn.daveDebrief };
     }
     this.wasInTown = options?.suppressArrivalSave === true;
     this.wasInBriarHollowSaveZone = options?.suppressArrivalSave === true;
@@ -2975,7 +3115,7 @@ export class DungeonScene extends GameplayScene {
       this.townPropRenderables = [...this.townPropRenderables, this.doomsdayEscape.stairwellProp];
     }
     if (this.tutorial !== null) {
-      this.tutorial.setConversation(this.conversation);
+      this.tutorial.setCutscenes(this.cutscenes.director);
     }
     this.menus.pauseScreen.onResetGame =
       this.onResetGameCallback === null ? null : () => this.resetGame();
@@ -3090,7 +3230,7 @@ export class DungeonScene extends GameplayScene {
 
   /**
    * What closing a reward presentation sets going: the tutorial's next step
-   * after its first-kill chest, and Mongo's arrival after the chest that
+   * after its first-kill chest, and Deinonychus's arrival after the chest that
    * brought him, each held until the chest is put away so neither stacks
    * over it.
    */
@@ -3103,11 +3243,18 @@ export class DungeonScene extends GameplayScene {
     ) {
       tutorial.onHumanRewardDialogDismissed();
       this.bus.emit('rewardGranted', {
-        rewards: [this._makeAbilityReward('smush'), this._makeAbilityReward('protective_shell')],
+        rewards: [
+          this._makeAbilityReward('seismic_stomp'),
+          this._makeAbilityReward('energy_shield'),
+        ],
       });
     }
-    if (presentsMongo(presentation)) {
-      introduceMongo(this.bus, this.menus, () => this.abilityManager.getLevel('mongo'));
+    if (presentsDeinonychus(presentation)) {
+      introduceDeinonychus(this.bus, this.menus, {
+        deinonychusLevel: () => this.abilityManager.getLevel('deinonychus'),
+        petNames: this.petNames,
+        keyboardAnchor: this.sceneManager.canvas,
+      });
     }
   }
 
@@ -3143,7 +3290,7 @@ export class DungeonScene extends GameplayScene {
     this.awards.unlock(kind, 'first_kill');
     if (this.tutorial !== null) return;
     if (this.levelDef.isOverworld !== true) this.awards.recordDungeonKill();
-    if (kind === 'human' && (mob.killType === 'melee' || mob.killType === 'smush')) {
+    if (kind === 'human' && (mob.killType === 'melee' || mob.killType === 'seismic_stomp')) {
       this.awards.unlock('human', 'up_close');
     }
     if (kind === 'cat' && mob.killType === 'missile') this.awards.unlock('cat', 'magic_touch');
@@ -3151,7 +3298,7 @@ export class DungeonScene extends GameplayScene {
     // The archer is a goblin to the player even though it descends from `Mob`
     // rather than from `Goblin`, so it is named alongside it.
     const isGoblin = mob instanceof Goblin || mob instanceof GoblinArcher;
-    if (kind === 'human' && mob.killType === 'smush' && isGoblin) {
+    if (kind === 'human' && mob.killType === 'seismic_stomp' && isGoblin) {
       this.awards.unlock('human', 'flat_out');
     }
   }
@@ -3236,6 +3383,18 @@ export class DungeonScene extends GameplayScene {
     bus.on('playerDodged', () => difficultyStats.recordDodge());
     bus.on('bossDefeated', (e) => difficultyStats.noteBossDefeated(e.bossType));
 
+    bus.on('bossDefeated', (e) => {
+      const boss = debriefBossType(e.bossType);
+      if (boss !== null) this.story.noteCarolineMoment({ kind: 'bossDefeated', boss });
+    });
+    // Her first message is the tutorial's: past it, the intro a skipped
+    // tutorial plays tells it in her place.
+    if (this.tutorial !== null) {
+      bus.on('achievementUnlocked', () =>
+        this.story.noteCarolineMoment({ kind: 'firstAchievement' }),
+      );
+    }
+
     // The stairwell hunt is measured from the *last* gauntlet boss, not any
     // named one, so floor 2's single-boss gauntlet and floor 1's two-boss one
     // both fall out of the same lookup.
@@ -3266,7 +3425,7 @@ export class DungeonScene extends GameplayScene {
     });
 
     bus.on('crawlerKnockedOut', (e) => {
-      e.player.applyCockroachKnockoutRelief();
+      e.player.applyNineLivesKnockoutRelief();
       if (e.player === this.cat && this.human.isAlive && !this.human.isKnockedOut) {
         this.crawlerBarks.say(this.human, [CRAWLER_BARKS.catKnockedOut.paragraphs[0]]);
       }
@@ -3285,7 +3444,7 @@ export class DungeonScene extends GameplayScene {
       // kill at all (a cow caught in a blast): it earns nothing below but its
       // gore and its corpse marker.
       const creditedKiller = mob.countsAsKill ? killer : null;
-      if (creditedKiller !== null) this.mongoSystem.onKill(this.cat.isActive);
+      if (creditedKiller !== null) this.deinonychusSystem.onKill(this.cat.isActive);
 
       this.combat.spawnKillGore(mob, killer);
       this.miniMap.addCorpseMarker(cx, cy);
@@ -3325,7 +3484,7 @@ export class DungeonScene extends GameplayScene {
           // Tested rather than assumed: calling `receiveBossLoot` is no proof a
           // chest took the drop, and a drop nothing took must still land
           // somewhere. Still partitioned by owner even down this path — The
-          // Trash Gremlin's guaranteed Cockroach book is the cat's only reliable
+          // Trash Gremlin's guaranteed 9 Lives book is the cat's only reliable
           // source and must never land on the human.
           // `hasLockedBossChest` is asked first because `receiveBossLoot` warns
           // on a miss, and a boss room whose chest has already been opened is a
@@ -3451,15 +3610,17 @@ export class DungeonScene extends GameplayScene {
 
     bus.on('multiKill', (e) => {
       if (this.tutorial !== null) return;
-      if (e.count >= MULTIKILL_ACHIEVEMENT_THRESHOLD) this.awards.unlock('human', 'wrecking_ball');
+      if (e.count >= MULTIKILL_ACHIEVEMENT_THRESHOLD) {
+        this.awards.unlock(e.killer.crawlerKind, 'wrecking_ball');
+      }
     });
 
-    // Human-only by construction: only the human can light a stick.
     bus.on('dynamiteKills', (e) => {
       if (this.tutorial !== null) return;
+      const thrower = e.killer.crawlerKind;
       if (e.kills >= DYNAMITE_MULTIKILL_THRESHOLD)
-        this.awards.unlock('human', 'two_birds_one_stick');
-      if (e.bossKilled) this.awards.unlock('human', 'finish_with_a_blow');
+        this.awards.unlock(thrower, 'two_birds_one_stick');
+      if (e.bossKilled) this.awards.unlock(thrower, 'finish_with_a_blow');
     });
 
     bus.on('rewardGranted', (e) => {
@@ -3473,7 +3634,7 @@ export class DungeonScene extends GameplayScene {
       mgr.logRecentEvent(`${who} reached level ${e.newLevel}`);
     });
 
-    bus.on('safeRoomEntered', () => {
+    bus.on('safeRoomEntered', ({ room }) => {
       if (this.tutorial === null) this.awards.unlockParty('safe_haven');
       // Reachable mid-fight: the event fires for either crawler, and one left
       // outside a locked boss room can still walk into a safe room. Both the
@@ -3482,12 +3643,9 @@ export class DungeonScene extends GameplayScene {
       if (this.isBossFightInProgress) return;
       // Nor while anyone is down: a reload would stand them up for free.
       if (this.isRevivePending) return;
-      // The event fires from `pm.isAnySafe()`, which is true when either crawler
-      // is protected, so the active one may still be outside the room; the save
-      // point is then the room the companion reached.
-      const enteredRoom =
-        this.safeRoom.safeRoomInfoAt(this.active()) ??
-        this.safeRoom.safeRoomInfoAt(this.inactive());
+      // The room either crawler reached: the active one may still be outside
+      // it, and the save point is then the room the companion reached.
+      const enteredRoom = this.safeRoom.safeRoomInfo(room);
       if (enteredRoom === null) {
         // With no room to name, the resume tile stays as it was and the save
         // carries no checkpoint, so a death rebuilds from this save.
@@ -3663,7 +3821,7 @@ export class DungeonScene extends GameplayScene {
         if (this.openQuestJournal()) this.audio?.play('menu_open');
       },
       openChat: () => this.triggerOpenChat(),
-      mongoSummon: () => this.toggleMongoSummon(),
+      deinonychusSummon: () => this.toggleDeinonychusSummon(),
       buildAction: () => this.triggerBuildAction(),
       hotbarActivation: (idx) => activateHotbarSlot(this.hotbarHost(), idx),
       dynamiteRelease: (idx) => releaseChargedDynamite(this.hotbarHost(), idx),
@@ -3770,6 +3928,7 @@ export class DungeonScene extends GameplayScene {
     this.stealthKeySnatch.dispose();
     returnUnreadMusicNotices(this.menus, this.musicLibrary);
     this.menus.dispose();
+    this.cutscenes.dispose();
     this.inputHandler.unbind();
     this.removeHarvestKeyHook?.();
     this.removeHarvestKeyHook = null;
@@ -3929,7 +4088,7 @@ export class DungeonScene extends GameplayScene {
       return;
     }
     this.audio?.play('menu_change_follower');
-    this.safeRoom.closeMordecaiDialog();
+    this.dave.closeDialog();
     // Capture who is currently active before the switch
     const wasHumanActive = this.human.isActive;
     this.pm.switchActive();
@@ -4038,7 +4197,7 @@ export class DungeonScene extends GameplayScene {
    * Ends whatever floating conversation is on screen before a full menu opens
    * over it.
    *
-   * A street or shop-floor conversation (Mordecai, a citizen, a sign) never
+   * A street or shop-floor conversation (Dave, a citizen, a sign) never
    * halts the world or locks the keyboard, so the player can keep walking
    * while it's up — but that also means nothing already stopped `i`/`g`/Esc,
    * the HUD buttons or a mobile tap from opening a menu on top of it. Every
@@ -4485,7 +4644,11 @@ export class DungeonScene extends GameplayScene {
       },
       {
         name: '!cow',
-        run: () => (this.grantAttackCow() ? '🐄 ATTACK COW' : null),
+        run: () => {
+          if (!this.grantAttackCow()) return null;
+          this.nameAttackCow();
+          return '🐄 ATTACK COW';
+        },
       },
       {
         name: '!reveal',
@@ -4535,10 +4698,25 @@ export class DungeonScene extends GameplayScene {
 
   /**
    * Gives the party the human crawler's attack cow and stands her beside him now — the
-   * wheel's prize, and the `!cow` cheat. Returns false if she is already owned.
+   * `!cow` cheat. Returns false if she is already owned. A cow the wheel
+   * paid on a load is granted by `settleWheelLedger` instead, and named by
+   * `missingPetNames` once the floor is up.
    */
   grantAttackCow(): boolean {
     return this.attackCowSystem.grant(this.human, this.gameMap, this.world.roster);
+  }
+
+  /** Asks for the attack cow's name unless the run has one. */
+  private nameAttackCow(): void {
+    namePetThen(
+      {
+        prompt: this.menus.petNamePrompt,
+        petNames: this.petNames,
+        keyboardAnchor: this.sceneManager.canvas,
+      },
+      'attackCow',
+      attackCowPortrait,
+    );
   }
 
   /**
@@ -4725,12 +4903,12 @@ export class DungeonScene extends GameplayScene {
     );
     if (landing === null) return false;
 
-    // Mongo cannot follow a warp — he goes home and waits to be resummoned.
+    // Deinonychus cannot follow a warp — he goes home and waits to be resummoned.
     // The hire's contract still stands in this same scene, so it respawns
     // beside the party on the next update; dismissing it first is what keeps
     // `mobs` and `mobGrid` in step through the jump rather than leaving it
     // standing where the party no longer is.
-    this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+    this.deinonychusSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
     this.attackCowSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     this.placePartyAtTile(landing);
@@ -4767,13 +4945,13 @@ export class DungeonScene extends GameplayScene {
    * in play he is called back — and he runs home rather than vanishing, so
    * recalling him mid-fight is a real decision rather than a free undo.
    */
-  private toggleMongoSummon(): void {
+  private toggleDeinonychusSummon(): void {
     if (!this.cat.isActive || !this.active().canAct) return;
-    if (this.mongoSystem.mongo) {
-      this.mongoSystem.toggleRecall();
+    if (this.deinonychusSystem.deinonychus) {
+      this.deinonychusSystem.toggleRecall();
       return;
     }
-    this.summonMongo();
+    this.summonDeinonychus();
   }
 
   /**
@@ -4844,7 +5022,7 @@ export class DungeonScene extends GameplayScene {
     };
   }
 
-  /** Once, on the first frame after the prison, after Mongo and the hire have been stood up. */
+  /** Once, on the first frame after the prison, after Deinonychus and the hire have been stood up. */
   private seatCompanionsAtPrisonDoor(): void {
     if (!this.companionsWaitingAtPrisonDoor) return;
     this.companionsWaitingAtPrisonDoor = false;
@@ -4852,17 +5030,17 @@ export class DungeonScene extends GameplayScene {
     if (room === null) return;
     seatCompanionsWaitingOutsidePrison(
       room,
-      this.mongoSystem.mongo,
+      this.deinonychusSystem.deinonychus,
       this.mercenarySystem.activeMerc,
       this.world.roster.grid,
     );
   }
 
-  private carryMongoIn(): void {
-    if (!this.mongoCarryPending) return;
-    this.mongoCarryPending = false;
-    const mongo = this.mongoSystem.carryIn(this.cat, this.gameMap);
-    if (mongo !== null) this.world.roster.add(mongo);
+  private carryDeinonychusIn(): void {
+    if (!this.deinonychusCarryPending) return;
+    this.deinonychusCarryPending = false;
+    const deinonychus = this.deinonychusSystem.carryIn(this.cat, this.gameMap);
+    if (deinonychus !== null) this.world.roster.add(deinonychus);
   }
 
   /**
@@ -4886,32 +5064,32 @@ export class DungeonScene extends GameplayScene {
   }
 
   /** Returns whether he came out; a refusal has already been spoken by the cat. */
-  private summonMongo(): boolean {
-    const mongo = this.mongoSystem.summon(this.cat, this.gameMap);
-    if (mongo === null) return false;
-    this.world.roster.add(mongo);
-    this.abilityManager.addUsageXp('mongo');
-    this.audio?.play('mongo_released');
+  private summonDeinonychus(): boolean {
+    const deinonychus = this.deinonychusSystem.summon(this.cat, this.gameMap);
+    if (deinonychus === null) return false;
+    this.world.roster.add(deinonychus);
+    this.abilityManager.addUsageXp('deinonychus');
+    this.audio?.play('deinonychus_released');
     return true;
   }
 
   /**
-   * The companion cat sends Mongo in on her own when a fight reaches her.
+   * The companion cat sends Deinonychus in on her own when a fight reaches her.
    *
    * Only while the human is being driven: with the cat in hand the player has
    * the Summon button, and a pet that deployed himself would take the decision
    * away from them. A passive stance is an order to stay out of fights, and
    * sending the pet in would break it by proxy.
    */
-  private autoSummonMongo(ctx: SystemContext): void {
-    if (!settings.catAutoSummonsMongo) return;
-    if (!this.human.isActive || this.mongoSystem.mongo !== null) return;
+  private autoSummonDeinonychus(ctx: SystemContext): void {
+    if (!settings.catAutoSummonsDeinonychus) return;
+    if (!this.human.isActive || this.deinonychusSystem.deinonychus !== null) return;
     if (this.companion.getCombatStance(true) === 'passive') return;
     // A rest stop is not a staging ground: a hostile in sight through the door
     // would otherwise have him deployed from inside the sanctuary.
     if (this.pm.isAnySafe(this.safeRoom)) return;
-    if (!this.mongoSystem.catWantsToSummon(ctx)) return;
-    if (!this.summonMongo()) this.mongoSystem.onAutoSummonRefused();
+    if (!this.deinonychusSystem.catWantsToSummon(ctx)) return;
+    if (!this.summonDeinonychus()) this.deinonychusSystem.onAutoSummonRefused();
   }
 
   /**
@@ -4919,6 +5097,11 @@ export class DungeonScene extends GameplayScene {
    * scene took it, rebuilt from it when the scene was built after it, and the
    * floor restart only when the run has never saved.
    */
+  /** The safe room either crawler stands in, or null. */
+  private partySafeRoom(): SafeRoomId | null {
+    return this.safeRoom.safeRoomAt(this.human) ?? this.safeRoom.safeRoomAt(this.cat);
+  }
+
   private respawnAfterDeath(): void {
     // Before the branch, so it runs on every route: a checkpoint restore keeps
     // the world (and so would keep the mark standing where the party fell) while
@@ -4977,10 +5160,10 @@ export class DungeonScene extends GameplayScene {
     // is what writes his remaining health into the pet state the interior
     // rebuilds him from.
     const companionArrival: InteriorCompanionArrival = {
-      mongoUnlocked: this.mongoSystem.unlocked,
-      mongoWasOut: this.mongoSystem.followsThroughDoor,
+      deinonychusUnlocked: this.deinonychusSystem.unlocked,
+      deinonychusWasOut: this.deinonychusSystem.followsThroughDoor,
     };
-    this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+    this.deinonychusSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     // A standing hire's health goes into the roster the interior stands it
     // up from; a hire lying downed at the door is lost with this scene.
     this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
@@ -4988,10 +5171,12 @@ export class DungeonScene extends GameplayScene {
     // down at the door, she goes to rest instead.
     this.attackCowSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     // The prison admits neither companion: they wait in the gate room, and
-    // Mongo walks back out with the party exactly as he stood at the door.
+    // Deinonychus walks back out with the party exactly as he stood at the door.
     const companionsWaitOutside = entry.type === 'prison';
     const departureFor = (indoors: InteriorCompanionDeparture): InteriorCompanionDeparture =>
-      companionsWaitOutside ? { ...indoors, mongoWasOut: companionArrival.mongoWasOut } : indoors;
+      companionsWaitOutside
+        ? { ...indoors, deinonychusWasOut: companionArrival.deinonychusWasOut }
+        : indoors;
     const heldFloor = this.floorRegeneratesAroundBuildings
       ? null
       : this.holdFloorForInterior(returnTile);
@@ -5077,8 +5262,8 @@ export class DungeonScene extends GameplayScene {
         this.mercenaryRoster,
         this.godModeState,
         this.companionStance,
-        this.mongoPetState,
-        () => this.abilityManager.getLevel('mongo'),
+        this.deinonychusPetState,
+        () => this.abilityManager.getLevel('deinonychus'),
         this.gameStats,
         this.anchorQuestProgress,
         this.gameMap.artSeed,
@@ -5142,7 +5327,7 @@ export class DungeonScene extends GameplayScene {
       staleCarriedSave: this.staleCarriedSave,
       roomsClearAtFloorStart: this.roomsClearAtFloorStart,
       stairwellRoomsSaved: new Set(this.stairwellRoomsSaved),
-      mordecaiDebrief: { ...this.mordecaiDebrief },
+      daveDebrief: { ...this.daveDebrief },
     };
   }
 
@@ -5215,11 +5400,15 @@ export class DungeonScene extends GameplayScene {
       humanAchievements: this.humanAchievements,
       catAchievements: this.catAchievements,
       musicLibrary: this.musicLibrary,
-      mongoUnlocked: this.mongoSystem.unlocked || companionDeparture.mongoUnlocked,
-      mongoPetState: this.mongoPetState,
+      storyDirector: this.storyDirector,
+      petNames: this.petNames,
+      daveWhereabouts: this.daveWhereabouts,
+      deinonychusUnlocked:
+        this.deinonychusSystem.unlocked || companionDeparture.deinonychusUnlocked,
+      deinonychusPetState: this.deinonychusPetState,
       wheelLedger: this.wheelLedger,
       attackCowState: this.attackCowState,
-      mongoWasOut: companionDeparture.mongoWasOut,
+      deinonychusWasOut: companionDeparture.deinonychusWasOut,
       abilityManager: this._cleanAbilityManager(),
       partyCrafts: this.partyCrafts,
       saveProgress: this.onSaveProgress,
@@ -5289,7 +5478,7 @@ export class DungeonScene extends GameplayScene {
   private respawnFromSave(progress: GameProgressInput): void {
     // His HP only reaches the shared state through a despawn, and the instance
     // holding it is about to be discarded.
-    this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+    this.deinonychusSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     this.audio?.stopSound('death_sequence');
     this.stopHazardSoundsForRespawn();
     const sameFloor = progress.levelId === this.levelDef.id;
@@ -5300,6 +5489,8 @@ export class DungeonScene extends GameplayScene {
         onResetGame: this.onResetGameCallback ?? undefined,
         progressWipe: this.progressWipe ?? undefined,
         musicLibrary: this.musicLibrary,
+        storyDirector: this.storyDirector,
+        petNames: this.petNames,
         // A respawn is not a new floor, so a later floor restart still rewinds
         // to where this one began.
         floorEntryHumanSnap: sameFloor ? this.floorEntryHumanSnap : undefined,
@@ -5392,7 +5583,7 @@ export class DungeonScene extends GameplayScene {
     // whole cost of using him, and a free full heal on every safe-room restore
     // would hand it back. Dismissing also writes his real remaining HP into the
     // shared state, which nothing else on this path does.
-    this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+    this.deinonychusSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     // The same problem one companion over: the roster rewind below can un-hire a
     // mercenary taken on after the safe room, and nothing reachable from a
     // snapshot can splice the body out of the scene once that reference is gone.
@@ -5447,6 +5638,7 @@ export class DungeonScene extends GameplayScene {
     // agree, or the respawn frame would read as a fresh entry and save the
     // rewound world over itself.
     this.wasInSafeRoom = true;
+    this.dave.resumeIn(this.partySafeRoom());
     this.wasInTown = this.isInsideTownWall(this.active());
     this.wasInBriarHollowSaveZone = this.isInBriarHollowSaveZone(this.active());
     for (const { source, latch } of this.roomSaves) {
@@ -5503,7 +5695,7 @@ export class DungeonScene extends GameplayScene {
       bopca: this.bopca.captureCheckpoint(),
       difficultyTelemetry: this.difficultyTelemetry.captureCheckpoint(),
       mercenary: this.mercenarySystem.captureCheckpoint(),
-      mongo: this.mongoSystem.captureCheckpoint(),
+      deinonychus: this.deinonychusSystem.captureCheckpoint(),
 
       defendQuest: this.defendQuest.captureCheckpoint(),
       cloggedBathroom: this.cloggedBathroom.captureCheckpoint(),
@@ -5524,7 +5716,7 @@ export class DungeonScene extends GameplayScene {
       townMemory: captureTownMemory(this.townMemory),
       shopStock: captureShopStock(this.shopStock),
       mercenaryRoster: captureMercenaryRoster(this.mercenaryRoster),
-      mongoPetState: captureMongoPetState(this.mongoPetState),
+      deinonychusPetState: captureDeinonychusPetState(this.deinonychusPetState),
       attackCowState: captureAttackCowState(this.attackCowState),
       briarHollow: captureBriarHollowState(this.briarHollowState),
 
@@ -5604,7 +5796,7 @@ export class DungeonScene extends GameplayScene {
   private restoreRunProgress(world: WorldCheckpoint): void {
     this.gameStats.restore(world.gameStats);
     this.mercenarySystem.restoreCheckpoint(world.mercenary);
-    this.mongoSystem.restoreCheckpoint(world.mongo);
+    this.deinonychusSystem.restoreCheckpoint(world.deinonychus);
 
     restoreStarlightTentProgress(this.starlightTentProgress, world.starlightTentProgress);
     restoreMurderQuestProgress(this.murderQuestProgress, world.murderQuestProgress);
@@ -5618,10 +5810,10 @@ export class DungeonScene extends GameplayScene {
     restoreTownMemory(this.townMemory, world.townMemory);
     restoreShopStock(this.shopStock, world.shopStock);
     restoreMercenaryRoster(this.mercenaryRoster, world.mercenaryRoster);
-    // After `mongoSystem.dismiss()`, which writes the live pet's remaining HP
+    // After `deinonychusSystem.dismiss()`, which writes the live pet's remaining HP
     // and rest latch into this very object on its way out — restoring first
     // would hand the despawn a snapshot to overwrite.
-    restoreMongoPetState(this.mongoPetState, world.mongoPetState);
+    restoreDeinonychusPetState(this.deinonychusPetState, world.deinonychusPetState);
     // After `attackCowSystem.dismiss()` for the same reason as the pet's.
     restoreAttackCowState(this.attackCowState, world.attackCowState);
     restoreBriarHollowState(this.briarHollowState, world.briarHollow);
@@ -5653,8 +5845,11 @@ export class DungeonScene extends GameplayScene {
       shopStock: captureShopStock(this.shopStock),
       townMemory: captureTownMemory(this.townMemory),
       mercenaryRoster: captureMercenaryRoster(this.mercenaryRoster),
-      mongoPetState: captureMongoPetState({ ...this.mongoPetState, hp: this.mongoSystem.hp }),
-      mordecaiDebrief: { ...this.mordecaiDebrief },
+      deinonychusPetState: captureDeinonychusPetState({
+        ...this.deinonychusPetState,
+        hp: this.deinonychusSystem.hp,
+      }),
+      daveDebrief: { ...this.daveDebrief },
       tacticsNoticesSeen: [...this.tacticsNoticesSeen],
       doomsday: capturePersistedDoomsday(this.doomsdayQuestProgress, Date.now()),
       bossRoomDressing: this.bossRoomDressings.captureCheckpoint(),
@@ -5704,8 +5899,8 @@ export class DungeonScene extends GameplayScene {
       shopStock,
       townMemory,
       mercenaryRoster,
-      mongoPetState,
-      mordecaiDebrief,
+      deinonychusPetState,
+      daveDebrief,
       tacticsNoticesSeen,
       doomsday,
       bossRoomDressing,
@@ -5762,10 +5957,10 @@ export class DungeonScene extends GameplayScene {
     restoreTownMemory(this.townMemory, townMemory);
     restoreShopStock(this.shopStock, shopStock);
     restoreMercenaryRoster(this.mercenaryRoster, mercenaryRoster);
-    restoreMongoPetState(this.mongoPetState, mongoPetState);
+    restoreDeinonychusPetState(this.deinonychusPetState, deinonychusPetState);
     restoreBriarHollowState(this.briarHollowState, briarHollow);
 
-    this.mordecaiDebrief = { ...mordecaiDebrief };
+    this.daveDebrief = { ...daveDebrief };
     // `TacticsNoticeSystem` holds this exact Set by reference, so it's refilled
     // in place rather than replaced — a reassignment here would leave the
     // system watching the stale, pre-load one.
@@ -5788,7 +5983,7 @@ export class DungeonScene extends GameplayScene {
     const progress = this.buildSaveProgress({
       human: snapPlayer(this.human),
       cat: snapPlayer(this.cat),
-      ...this.mongoPetSaveState(),
+      ...this.deinonychusPetSaveState(),
     });
     this.lastSave = savePointAfterWrite(progress, checkpoint, this.tutorial !== null);
     void this.dispatchSaveProgress(progress);
@@ -5832,6 +6027,15 @@ export class DungeonScene extends GameplayScene {
     return {
       wheelLedger: this.wheelLedger,
       attackCowState: this.attackCowState,
+      petNames: this.petNames,
+      daveWhereabouts: this.daveWhereabouts,
+      story: {
+        director: this.storyDirector,
+        persist: () => this.persistStory(),
+        floor: storyFloorOf(this.levelDef.id),
+        currentObjective: () => nextAdviceObjective(this.floorObjectives()),
+        bearingOrigin: doorstep,
+      },
       commitSave: (party) => this.commitSaveFromInterior(party, doorstep),
       maySave: () => this.canSaveInTown,
       progressWipe: this.progressWipe,
@@ -5839,14 +6043,14 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
-   * Mongo's pet state as the system holds it right now. The accessor, not the
-   * stored value: a save can fire with Mongo still out, and the stored value is
-   * only written back when he despawns, so it would record a hurt raptor as full.
+   * Deinonychus's pet state as the system holds it right now. The accessor, not the
+   * stored value: a save can fire with Deinonychus still out, and the stored value is
+   * only written back when he despawns, so it would record a hurt dinosaur as full.
    */
-  private mongoPetSaveState(): Pick<SaveParty, 'mongoPetHp' | 'mongoPetResting'> {
+  private deinonychusPetSaveState(): Pick<SaveParty, 'deinonychusPetHp' | 'deinonychusPetResting'> {
     return {
-      mongoPetHp: this.mongoSystem.hp,
-      mongoPetResting: this.mongoSystem.restingUntilFull,
+      deinonychusPetHp: this.deinonychusSystem.hp,
+      deinonychusPetResting: this.deinonychusSystem.restingUntilFull,
     };
   }
 
@@ -5861,9 +6065,9 @@ export class DungeonScene extends GameplayScene {
       gameStats: this.gameStats.snapshot(),
       humanAchievements: this.humanAchievements.serialize(),
       catAchievements: this.catAchievements.serialize(),
-      mongoUnlocked: this.mongoSystem.unlocked,
-      mongoPetHp: party.mongoPetHp,
-      mongoPetResting: party.mongoPetResting,
+      deinonychusUnlocked: this.deinonychusSystem.unlocked,
+      deinonychusPetHp: party.deinonychusPetHp,
+      deinonychusPetResting: party.deinonychusPetResting,
       wheelPrizesWon: [...this.wheelLedger.prizesWon],
       pendingWheelOutcome:
         this.wheelLedger.pendingOutcome === null ? null : { ...this.wheelLedger.pendingOutcome },
@@ -5875,7 +6079,9 @@ export class DungeonScene extends GameplayScene {
       attackCowHp: this.attackCowState.hp ?? undefined,
       attackCowResting: this.attackCowState.restingUntilFull,
       musicLibrary: this.musicLibrary.serialize(),
-      viewerFavor: viewerFavor.serialize(),
+      storyBeatsSeen: this.storyDirector.seenInPlayOrder(),
+      objectivesBriefed: this.storyDirector.briefedInOrder(),
+      petNames: this.petNames.saved(),
     };
   }
 
@@ -5883,7 +6089,7 @@ export class DungeonScene extends GameplayScene {
     const progress = this.buildSaveProgress({
       human: snapPlayer(this.human),
       cat: snapPlayer(this.cat),
-      ...this.mongoPetSaveState(),
+      ...this.deinonychusPetSaveState(),
     });
     this.musicLibrary.absorbBackfill(musicUnlocksFromProgress(progress, progress.world?.persisted));
   }
@@ -5916,7 +6122,7 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
-   * The floor's persisted state with Mongo as the saving party has him. A save
+   * The floor's persisted state with Deinonychus as the saving party has him. A save
    * written indoors carries the pet the interior's own system holds, and the
    * pet state in the persisted world is what a resume applies last.
    */
@@ -5924,10 +6130,10 @@ export class DungeonScene extends GameplayScene {
     const persisted = this.capturePersistedWorldState();
     return {
       ...persisted,
-      mongoPetState: {
-        ...persisted.mongoPetState,
-        hp: party.mongoPetHp,
-        restingUntilFull: party.mongoPetResting,
+      deinonychusPetState: {
+        ...persisted.deinonychusPetState,
+        hp: party.deinonychusPetHp,
+        restingUntilFull: party.deinonychusPetResting,
       },
     };
   }
@@ -5943,13 +6149,16 @@ export class DungeonScene extends GameplayScene {
     // No banner either: a wiped run is on its way to a reload, and announcing
     // a save that was thrown away would be a lie.
     if (PAGE_SAVE_LATCH.engaged) return Promise.resolve('latched');
-    if (this.onSaveProgress === undefined) {
-      this.bus.emit('gameSaved', {});
-      return Promise.resolve('disabled');
-    }
-    const outcome = this.onSaveProgress(progress);
+    const outcome = this.writeSaveProgress(progress);
     this.bus.emit('gameSaved', {});
     return outcome;
+  }
+
+  /** Hands `progress` to storage without announcing it, as the newest save a beat's seen-write builds on. */
+  private writeSaveProgress(progress: SaveProgressInput): Promise<SaveWriteOutcome> {
+    if (PAGE_SAVE_LATCH.engaged) return Promise.resolve('latched');
+    this.lastDispatchedSave = progress;
+    return this.onSaveProgress?.(progress) ?? Promise.resolve('disabled');
   }
 
   /** The party is down the escape stairwell: the game is won. */
@@ -5968,7 +6177,10 @@ export class DungeonScene extends GameplayScene {
           stats: this.gameStats,
           humanLevel: this.human.level,
           catLevel: this.cat.level,
-          mongoLevel: this.mongoSystem.unlocked ? this.abilityManager.getRealLevel('mongo') : null,
+          deinonychusLevel: this.deinonychusSystem.unlocked
+            ? this.abilityManager.getRealLevel('deinonychus')
+            : null,
+          petNames: this.petNames,
           achievements: countPartyAchievements(this.humanAchievements, this.catAchievements),
         }),
       handlers: {
@@ -5992,7 +6204,7 @@ export class DungeonScene extends GameplayScene {
     // this floor holds has no claim on the memory once the player is back at
     // the menu, continuing or not.
     this.residency.releaseAll();
-    this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+    this.deinonychusSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     const baseOptions: DungeonSceneOptions = {
       audio: this.audio ?? undefined,
       saveProgress: this.onSaveProgress,
@@ -6402,7 +6614,7 @@ export class DungeonScene extends GameplayScene {
   private restartAtFloorEntry(): void {
     // Before the scene is replaced: his HP only reaches the shared state through
     // a despawn, and the instance holding it is about to be discarded.
-    this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+    this.deinonychusSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     this.audio?.stopSound('death_sequence');
     this.stopHazardSoundsForRespawn();
     // The restart generates the floor from a fresh seed and rewinds the party
@@ -6428,6 +6640,8 @@ export class DungeonScene extends GameplayScene {
         humanAchievements: this.floorEntryHumanAchievements.clone(),
         catAchievements: this.floorEntryCatAchievements.clone(),
         musicLibrary: this.musicLibrary,
+        storyDirector: this.storyDirector,
+        petNames: this.petNames,
         floorEntryHumanAchievements: this.floorEntryHumanAchievements,
         floorEntryAbilityManager: this.floorEntryAbilityManager,
         floorEntryGameStats: this.floorEntryGameStats,
@@ -6435,8 +6649,8 @@ export class DungeonScene extends GameplayScene {
         floorEntryCatAchievements: this.floorEntryCatAchievements,
         devPrisonLayout: this.devPrisonLayout ?? undefined,
         abilityManager: this.floorEntryAbilityManager.clone(),
-        mongoUnlocked: this.mongoSystem.unlocked,
-        mongoPetState: this.mongoPetState,
+        deinonychusUnlocked: this.deinonychusSystem.unlocked,
+        deinonychusPetState: this.deinonychusPetState,
         wheelLedger: this.wheelLedger,
         attackCowState: this.attackCowState,
         audio: this.audio ?? undefined,
@@ -6711,20 +6925,24 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
-   * Floats a "Pet" prompt over Mongo when a press would reach him.
+   * Floats a "Pet" prompt over Deinonychus when a press would reach him.
    *
    * Sits just ahead of the hireling in the Space chain, so it draws just ahead
    * of it too: it yields to a chest, a quest giver, a citizen or a harvest
    * already claiming the press, the same way `renderMercenaryPrompt` yields to
    * this one.
    */
-  private renderMongoPetPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private renderDeinonychusPetPrompt(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+  ): void {
     const active = this.active();
     if (this.safeRoom.isEntityInSafeRoom(active)) return;
     if (interactionPromptsDrawnThisFrame() > 0) return;
     if (this.gathering?.wouldStartHarvest(active) === true) return;
     if (this.briarHollowKit?.wouldInteract(active) === true) return;
-    this.mongoSystem.renderPetPrompt(
+    this.deinonychusSystem.renderPetPrompt(
       ctx,
       camX,
       camY,
@@ -6852,7 +7070,7 @@ export class DungeonScene extends GameplayScene {
       this.hud,
       this.hud.overlay(),
       ...aiAdapter.surfaces(() => this.hud.isOpen()),
-      ...this.aiShow.surfaces(),
+      ...this.aiInteractions.surfaces(),
       ...this.menus.surfaces({
         pauseFrame: () => this.pauseFrame(),
         togglePause: () => this.togglePause(),
@@ -6873,25 +7091,7 @@ export class DungeonScene extends GameplayScene {
         },
         dismissNearGoblinDialog: () => tutorial?.dismissNearGoblinDialog(),
       }),
-      {
-        id: 'tutorial-mordecai',
-        band: 'system',
-        isOpen: () => this.tutorialForcesMordecaiRead,
-        haltsWorld: false,
-        // His box is the shared conversation's; this only makes any press, on
-        // the box or off it, turn his page, since the tutorial forces a full read.
-        render: (ui) =>
-          void ui.hit('advance', ui.screen, {
-            onTap: () => this.conversation.advance(),
-            focusable: false,
-            sound: null,
-          }),
-        onKey: (key, mods) => {
-          if (keybindings.actionFor(key) !== 'attack') return this.conversation.handleKeyDown(key);
-          if (mods.repeat !== true && mods.predatesSurface !== true) this.conversation.advance();
-          return true;
-        },
-      },
+      this.cutscenes.surface(),
       this.achievementUI.surface(),
       deathScreenSurface(this.combat.deathScreen, {
         isOpen: () => this.gameOver,
@@ -6943,7 +7143,12 @@ export class DungeonScene extends GameplayScene {
           movementMode: this.companion.getMovementMode(this.human.isActive),
           combatStance: this.companion.getCombatStance(this.human.isActive),
           companionIsCat: this.human.isActive,
-          mongoAutoSummon: this.mongoSystem.unlocked ? settings.catAutoSummonsMongo : null,
+          deinonychus: this.deinonychusSystem.unlocked
+            ? {
+                autoSummon: settings.catAutoSummonsDeinonychus,
+                pet: petWords(this.petNames, 'deinonychus'),
+              }
+            : null,
         }),
         restriction: () => this.tutorial?.followerMenuRestriction ?? null,
       }),
@@ -6955,19 +7160,12 @@ export class DungeonScene extends GameplayScene {
     return !this.gameOver && !this.menus.pauseScreen.isOpen && !this.arrivalLoading.isOpen;
   }
 
-  private get tutorialForcesMordecaiRead(): boolean {
-    return (
-      this.tutorial?.showTutorialMordecaiDialog === true ||
-      this.tutorial?.showMordecaiReminderDialog === true
-    );
-  }
-
   /**
    * Who answers Escape on the conversation now up, or null when Escape is the
    * pause key's instead (the pause key then closes the conversation for the
    * menu). Only the speakers listed here take it, in this order: the defend
    * offer, the lab's scientist, the bounty man, the murder and the
-   * Anchor questlines, Mordecai, the Bopca, and, while nothing else has halted
+   * Anchor questlines, Dave, the Bopca, and, while nothing else has halted
    * the floor, a citizen, a villager or the recruiter, and a sign. A request
    * that must be read to its end still spends the press on its speaker.
    */
@@ -6985,7 +7183,7 @@ export class DungeonScene extends GameplayScene {
       this.anchorQuest.isDialogOpen ||
       this.cloggedBathroom.isDialogOpen ||
       this.stealthKeySnatch.isDialogOpen ||
-      this.safeRoom.mordecaiDialogOpen
+      this.dave.dialogOpen
     ) {
       return dismiss;
     }
@@ -7012,6 +7210,8 @@ export class DungeonScene extends GameplayScene {
   private pressPastHaltingConversation(x: number, y: number): void {
     const control = this.hud.controlUnderHalt(x, y);
     if (control === 'pause') this.openPauseFromButton();
+    // A cutscene's talk must be read through, so any other press turns its page.
+    else if (this.cutscenes.isActive) this.conversation.advance();
     else if (control === 'skill-points') this.menus.openSpendScreen();
   }
 
@@ -7194,57 +7394,73 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
-   * Mordecai's answer, from the highest-ranked of three sources that has one:
+   * Dave's answer when tapped, from the highest-ranked source that has one:
    *
-   *     tutorial (if it handles it) → post-boss debrief → floor advice → AI chat
+   *     tutorial reminder → post-boss debrief → tactics for the current objective → AI chat
    *
-   * The tutorial keeps first claim, as it always had. Floor advice sits above the
-   * AI chat because it is the deterministic answer to "what is left to do here",
-   * and it needs no server; the chat becomes the flavour path for a cleared floor.
+   * His tactics sit above the AI chat because they are the deterministic
+   * answer to "how do I get through what is next", and need no server; the
+   * chat is the flavour path for a cleared floor.
    */
-  private talkToMordecai(active: { x: number; y: number }): void {
-    if (this.tutorial?.onMordecaiInteracted() === true) return;
-
-    if (this.speakPostBossDebrief(active)) return;
-
-    const line = this.floorAdvice(active);
-    if (line !== null) {
-      this.safeRoom.openMordecaiLine(active, line);
+  private talkToDave(active: { x: number; y: number }): void {
+    const reminder = this.tutorial?.daveReminder() ?? null;
+    if (reminder !== null) {
+      this.cutscenes.director.play([
+        { kind: 'conversation', request: { lines: [reminder], reward: null, questRelated: false } },
+      ]);
       return;
     }
 
-    this.safeRoom.openMordecaiDialog(active, aiAdapter.chatWithMordecai());
+    if (this.speakPostBossDebrief(active)) return;
+
+    const tactics = this.floorTactics(active);
+    if (tactics !== null) {
+      this.dave.openLine(active, tactics);
+      return;
+    }
+
+    this.dave.openChat(active, aiAdapter.chatWithDave());
+  }
+
+  private speakPostBossDebrief(active: { x: number; y: number }): boolean {
+    const room = this.safeRoom.safeRoomInfoAt(active);
+    const debrief = room === null ? null : this.pendingDebrief(room, MAX_DAVE_TALK_PAGES);
+    if (debrief === null) return false;
+    this.dave.openLine(active, debrief.line);
+    debrief.onHeard();
+    return true;
   }
 
   /**
-   * Saves after the talk: the entry save predates it, so a reload in this room
-   * would otherwise congratulate them again.
+   * What Dave owes the party about the boss behind `room`, or null when he
+   * has nothing new to say. Hearing it saves: the entry save predates the
+   * talk, so a reload in this room would otherwise congratulate them again.
    */
-  private speakPostBossDebrief(active: { x: number; y: number }): boolean {
-    const room = this.safeRoom.safeRoomInfoAt(active);
+  private pendingDebrief(room: SafeRoomInfo, pageBudget: number): DaveTalkExtra | null {
     const bossType = this.exitRoomBoss(room);
-    if (room === null || bossType === null) return false;
-    const state = this.debriefState();
+    if (bossType === null) return null;
     const memory = this.debriefMemoryFor(bossType);
-    const line = mordecaiSpokenPages(debriefPages(bossType, memory, state) ?? []);
-    if (line === null) return false;
-
-    const remembered = rememberDebriefSpoken(memory, state);
-    this.mordecaiDebrief[bossType] = remembered;
-    this.safeRoom.openMordecaiLine(active, line);
-    // Boxes repeat every talk; don't pay a server round trip for a repeat.
-    const worthSaving = !sameDebriefMemory(memory, remembered);
-    if (
-      worthSaving &&
-      this.tutorial === null &&
-      !this.isBossFightInProgress &&
-      !this.isRevivePending
-    ) {
-      // `safeRoomEntered` fires once, for whichever crawler got in first. A
-      // checkpoint comes with it, so a death here rewinds to after the talk.
-      this.captureSavePoint(room.centre);
-    }
-    return true;
+    const pages = debriefPages(bossType, memory, this.debriefState()) ?? [];
+    const talk = debriefTalk(pages, pageBudget, displayPageCount);
+    if (talk === null) return null;
+    return {
+      line: talk.line,
+      onHeard: () => {
+        const remembered = rememberDebriefHeard(memory, talk.heard);
+        this.daveDebrief[bossType] = remembered;
+        // Boxes repeat every talk; don't pay a server round trip for a repeat.
+        const worthSaving = !sameDebriefMemory(memory, remembered);
+        if (
+          worthSaving &&
+          this.tutorial === null &&
+          !this.isBossFightInProgress &&
+          !this.isRevivePending
+        ) {
+          // A checkpoint comes with it, so a death here rewinds to after the talk.
+          this.captureSavePoint(room.centre);
+        }
+      },
+    };
   }
 
   private exitRoomBoss(room: SafeRoomInfo | null): DebriefBossType | null {
@@ -7262,16 +7478,16 @@ export class DungeonScene extends GameplayScene {
    */
   private forgetDebriefsOfLivingBosses(): void {
     const defeated = this.bossRoom.defeatedBossTypes;
-    const kept: MordecaiDebriefCheckpoint = {};
+    const kept: DaveDebriefCheckpoint = {};
     for (const bossType of ALL_DEBRIEF_BOSS_TYPES) {
-      const memory = this.mordecaiDebrief[bossType];
+      const memory = this.daveDebrief[bossType];
       if (memory !== undefined && defeated.has(bossType)) kept[bossType] = memory;
     }
-    this.mordecaiDebrief = kept;
+    this.daveDebrief = kept;
   }
 
   private debriefMemoryFor(bossType: DebriefBossType): DebriefMemory {
-    return this.mordecaiDebrief[bossType] ?? EMPTY_DEBRIEF_MEMORY;
+    return this.daveDebrief[bossType] ?? EMPTY_DEBRIEF_MEMORY;
   }
 
   private debriefState(): DebriefState {
@@ -7283,42 +7499,242 @@ export class DungeonScene extends GameplayScene {
     };
   }
 
-  private mordecaiMarkerFor(room: SafeRoomInfo): QuestMarkerState {
-    if (this.tutorial !== null) return this.tutorial.mordecaiMarker();
+  /** His `!`: news about gear behind a boss, or tactics for what is next that he has not yet given. */
+  private daveMarkerFor(room: SafeRoomInfo): QuestMarkerState {
     const bossType = this.exitRoomBoss(room);
-    if (bossType === null) return 'none';
-    const state = this.debriefState();
-    const hasNews = debriefHasNews(this.debriefMemoryFor(bossType), state);
-    return hasNews ? 'exclamation' : 'none';
+    if (bossType !== null && debriefHasNews(this.debriefMemoryFor(bossType), this.debriefState())) {
+      return 'exclamation';
+    }
+    const objective = this.currentObjective(room);
+    const tacticsOwed = objective !== null && !this.daveWhereabouts.tacticsGiven.has(objective.id);
+    return tacticsOwed ? 'exclamation' : 'none';
   }
 
   /**
-   * The advice pages for this floor, or null when there is nothing left to say.
-   *
-   * Bearings are measured from the safe room the player is standing in rather
-   * than from the first one on the map: a floor carries two, and pointing at the
-   * same boss from both has to give two different answers.
+   * The objective a safe room is concerned with: the boss a gateway room
+   * guards or the room a field station serves while either is unfinished,
+   * and otherwise the one the floor wants raised next. Null when nothing is
+   * left.
    */
-  private floorAdvice(active: { x: number; y: number }): DialogLine | null {
-    const safeRoom = this.safeRoom.safeRoomInfoAt(active);
-    if (safeRoom === null) return null;
-    const bearingOrigin = safeRoom.centre;
+  private currentObjective(room: SafeRoomInfo): AdviceObjective | null {
+    return (
+      this.pinnedGatewayAdvice(room.guardsBossType) ??
+      this.pinnedStationAdvice(room.servesSpecialRoom) ??
+      nextAdviceObjective(this.floorObjectives())
+    );
+  }
 
-    const pinned =
-      this.pinnedGatewayAdvice(safeRoom.guardsBossType) ??
-      this.pinnedStationAdvice(safeRoom.servesSpecialRoom);
-    if (pinned !== null) {
-      this.bus.emit('mordecaiAdviceGiven', { objectiveId: pinned.id });
-      return this.mordecaiAdvisor.renderObjective(pinned, bearingOrigin);
+  /** Dave's tactics for the objective of the safe room the player is standing in, or null when there is none. */
+  private floorTactics(active: { x: number; y: number }): DialogLine | null {
+    const room = this.safeRoom.safeRoomInfoAt(active);
+    const objective = room === null ? null : this.currentObjective(room);
+    if (objective === null) return null;
+    this.bus.emit('daveAdviceGiven', { objectiveId: objective.id });
+    this.daveWhereabouts.tacticsGiven.add(objective.id);
+    return adviceTactics(objective);
+  }
+
+  // ── The story ──────────────────────────────────────────────────────────────
+
+  /** Once a frame, after Dave has moved: opens the floor's story, starts a tutorial talk that is due, and lets Caroline speak. */
+  private tellStory(): void {
+    if (this.storyOpeningPending) {
+      this.storyOpeningPending = false;
+      this.openStory();
     }
+    const daveFree =
+      this.dave.isPresent &&
+      !this.story.isTellingDaveMoment &&
+      !this.cutscenes.isActive &&
+      !partyIsEngaged(this.world.roster.mobs, [this.human, this.cat]);
+    const owedRoom = this.daveArrivalOwed;
+    if (owedRoom !== null && daveFree && this.activeCrawlerIsWithDaveIn(owedRoom)) {
+      this.daveArrivalOwed = null;
+      this.playArrivalMoment(owedRoom);
+    }
+    const tutorialMoment = this.tutorial?.daveMomentDue ?? null;
+    if (tutorialMoment !== null && daveFree) {
+      this.story.playDaveMoment({
+        event: { kind: tutorialMoment },
+        walkUp: () => this.walkUpToDave(),
+        extra: () => null,
+        leavesAfter: false,
+        onDone: () => this.tutorial?.onDaveMomentHeard(),
+      });
+    }
+    this.story.update();
+  }
 
-    const objectives = this.floorObjectives();
-    if (objectives.length === 0) return null;
+  /** The floor's first frame: Caroline's arrival message, and Dave waiting for a party that skipped the tutorial. */
+  private openStory(): void {
+    if (this.storyPreview !== null) {
+      this.previewStoryBeat(this.storyPreview);
+      return;
+    }
+    const floor = storyFloorOf(this.levelDef.id);
+    if (floor !== null && this.arrivedOnFloor) {
+      this.story.noteCarolineMoment({ kind: 'floorArrival', floor });
+    }
+    if (this.skippedTutorialStart) this.meetPartyAtStart();
+  }
 
-    const snapshot = { floorNumber: this.levelDef.floorNumber, bearingOrigin, objectives };
-    const advised = this.mordecaiAdvisor.nextObjective(snapshot);
-    if (advised !== null) this.bus.emit('mordecaiAdviceGiven', { objectiveId: advised.id });
-    return this.mordecaiAdvisor.nextAdvice(snapshot);
+  /** Dave stands beside the party in the start room, gives his short version of the tutorial, and leaves. */
+  private meetPartyAtStart(): void {
+    const tile = this.daveWaitingTile();
+    if (tile === null) return;
+    this.dave.waitAt(tile);
+    this.story.playDaveMoment({
+      event: { kind: 'skippedTutorialStart' },
+      walkUp: () => this.walkUpToDave(),
+      extra: () => null,
+      leavesAfter: true,
+      onDone: () => undefined,
+    });
+  }
+
+  /** The dev preview: the beat's own moment, played at once with Dave beside the party when it is his. */
+  private previewStoryBeat(id: StoryBeatId): void {
+    const preview = storyPreviewEvent(id);
+    if (preview.kind === 'caroline') {
+      this.story.noteCarolineMoment(preview.event);
+      return;
+    }
+    const tile = this.daveWaitingTile();
+    if (tile === null) return;
+    this.dave.waitAt(tile);
+    this.story.playDaveMoment({
+      event: preview.event,
+      walkUp: () => this.walkUpToDave(),
+      extra: () => null,
+      leavesAfter: true,
+      onDone: () => undefined,
+    });
+  }
+
+  /** A tile beside the active crawler for Dave to wait on: open floor a short walk away, or null when none is. */
+  private daveWaitingTile(): { x: number; y: number } | null {
+    const active = this.active();
+    const origin = { x: pixelToTile(active.x), y: pixelToTile(active.y) };
+    for (let distance = DAVE_WAITING_MIN_TILES; distance <= DAVE_WAITING_MAX_TILES; distance++) {
+      for (const direction of DAVE_WAITING_DIRECTIONS) {
+        const tile = { x: origin.x + direction.x * distance, y: origin.y + direction.y * distance };
+        if (this.gameMap.isWalkable(tile.x, tile.y)) return tile;
+      }
+    }
+    return null;
+  }
+
+  /** The walk up to Dave from where the active crawler stands, or null while he cannot be spoken to. */
+  private walkUpToDave(): WalkToStep | null {
+    const tile = this.dave.standingTile;
+    if (tile === null) return null;
+    const active = this.active();
+    return walkUpTo(this.gameMap, tile, { x: pixelToTile(active.x), y: pixelToTile(active.y) });
+  }
+
+  /**
+   * Dave has finished teleporting into the room the party walked into: the
+   * story's beat and the debrief behind a boss, if either is due, and then
+   * Caroline's intel about what the room is concerned with. The tutorial's
+   * talks are its own, started by {@link tellStory}.
+   */
+  private onDaveArrived(room: SafeRoomInfo): void {
+    if (this.tutorial !== null || storyFloorOf(this.levelDef.id) === null) return;
+    this.daveArrivalOwed = room;
+  }
+
+  /**
+   * Whether the active crawler stands in `room` with Dave: an arrival's talk
+   * waits for that, so a party that walked out, or is fighting, is never
+   * pulled back in mid-fight. Dave stays put meanwhile.
+   */
+  private activeCrawlerIsWithDaveIn(room: SafeRoomInfo): boolean {
+    const daveState = this.dave.state;
+    const crawlerRoom = this.safeRoom.safeRoomAt(this.active());
+    return (
+      daveState.kind === 'inRoom' &&
+      sameSafeRoom(daveState.room, room.id) &&
+      crawlerRoom !== null &&
+      sameSafeRoom(crawlerRoom, room.id)
+    );
+  }
+
+  private playArrivalMoment(room: SafeRoomInfo): void {
+    const floor = storyFloorOf(this.levelDef.id);
+    if (floor === null) return;
+    this.story.playDaveMoment({
+      event: { kind: 'safeRoomArrival', floor, defeatedBosses: this.defeatedStoryBosses() },
+      walkUp: () => this.walkUpToDave(),
+      extra: (pageBudget) => this.pendingDebrief(room, pageBudget),
+      leavesAfter: false,
+      onDone: () => this.afterDaveArrival(room),
+    });
+  }
+
+  private afterDaveArrival(room: SafeRoomInfo): void {
+    // A boss message missed when it was due, lost to a fight that ran on or a
+    // floor left too soon, is caught up in the first calm room after.
+    for (const boss of this.defeatedStoryBosses()) {
+      this.story.noteCarolineMoment({ kind: 'bossDefeated', boss });
+    }
+    const objective = this.currentObjective(room);
+    if (objective !== null) {
+      this.story.briefObjective(objective.id, () => this.intelStillDue(objective.id));
+    }
+  }
+
+  /**
+   * Caroline's intel about `objective` as it stands when her turn comes,
+   * with its bearing from the safe room the party is then in; null once it
+   * is no longer that room's objective or the party is in no safe room, so
+   * it is offered again at the next arrival.
+   */
+  private intelStillDue(objective: AdviceObjectiveId): CarolineMessage | null {
+    const room = this.safeRoom.safeRoomInfoAt(this.active());
+    const current = room === null ? null : this.currentObjective(room);
+    if (room === null || current?.id !== objective) return null;
+    return adviceIntel(current, room.centre);
+  }
+
+  private defeatedStoryBosses(): ReadonlySet<DebriefBossType> {
+    const defeated = this.bossRoom.defeatedBossTypes;
+    return new Set(ALL_DEBRIEF_BOSS_TYPES.filter((boss) => defeated.has(boss)));
+  }
+
+  /**
+   * Caroline speaks only into a calm moment: nothing hostile is fighting
+   * either crawler, nothing halts the world and no other box is open. In the
+   * tutorial she also waits until Dave has met the human and for any lesson
+   * taught inside a menu to finish, unless a preview asked for her straight
+   * away.
+   */
+  private carolineMaySpeak(): boolean {
+    if (this.gameOver || this.gameplayHalted || this.conversation.isOpen) return false;
+    const tutorial = this.storyPreview === null ? this.tutorial : null;
+    const lessonHoldsHer =
+      tutorial !== null && (!tutorial.showAchievementUI || tutorial.pauseRestriction() !== null);
+    if (lessonHoldsHer) return false;
+    return !partyIsEngaged(this.world.roster.mobs, [this.human, this.cat]);
+  }
+
+  /**
+   * Writes the seen beats and briefings into the newest save handed to
+   * storage, at once and outside the checkpoint. The tutorial writes none
+   * here: none of its saves is a point a death returns to
+   * (`savePointAfterWrite`), so no beat could replay from one, and its beats
+   * reach storage with its next save, which carries the seen set like every
+   * save.
+   */
+  private persistStory(): void {
+    if (this.tutorial !== null) return;
+    const newest = this.lastDispatchedSave;
+    const written = persistStoryBeatsSeen(this.storyDirector, newest, (progress) =>
+      this.writeSaveProgress(progress),
+    );
+    if (written === null) return;
+    const last = this.lastSave;
+    if (last?.progress !== newest) return;
+    this.lastSave = { progress: written.progress, checkpoint: last.checkpoint };
   }
 
   /**
@@ -7358,7 +7774,7 @@ export class DungeonScene extends GameplayScene {
     return this.spiderQuest.hasStarted ? 'started' : 'unstarted';
   }
 
-  /** What this floor still asks of the player, in the order Mordecai raises it. */
+  /** What this floor still asks of the player, in the order Dave raises it. */
   private floorObjectives(): ReadonlyArray<AdviceSlot> {
     // The tutorial shares floor 1's number but not its map: its hand-crafted
     // grid has no boss rooms, no goblin mother and no stairs down, so the floor-1
@@ -7381,7 +7797,7 @@ export class DungeonScene extends GameplayScene {
       // `asOptional` is for work a party who is not interested never finishes,
       // and which would therefore stand in front of everything listed behind it
       // for the rest of the floor: the spider lab is a dead end, and the Ball of
-      // Swine only *guarantees* a way down, which is why Mordecai's own speech
+      // Swine only *guarantees* a way down, which is why Dave's own speech
       // about it says to find another if you would rather keep your bones.
       case DUNGEON_FLOOR_ONE:
         return [
@@ -7426,7 +7842,7 @@ export class DungeonScene extends GameplayScene {
    * of the three that is optional on the map.
    *
    * Never "complete": there is always another mark, which is the whole shape of
-   * the loop. Mordecai therefore keeps offering it, which is correct — it is the
+   * the loop. Dave therefore keeps offering it, which is correct — it is the
    * floor's repeatable work.
    */
   private bountyObjective(): AdviceObjective | null {
@@ -7604,14 +8020,14 @@ export class DungeonScene extends GameplayScene {
     const active = this.active();
     const inSafeRoom = this.safeRoom.isEntityInSafeRoom(active);
     const pressIsForSomeoneElse =
-      inSafeRoom && safeRoomPressLeavesSpeaker(this.bopca, this.safeRoom, active);
+      inSafeRoom && safeRoomPressLeavesSpeaker(this.bopca, this.dave, active);
     return this.conversation.handOff(active, pressIsForSomeoneElse, () =>
       inSafeRoom ? this.trySafeRoomPress(active) : this.tryHandOffToWorld(active),
     );
   }
 
   /**
-   * The world's half of a hand-off: only what the player walks up to. Mongo
+   * The world's half of a hand-off: only what the player walks up to. Deinonychus
    * and the hireling follow at the party's shoulder, and a tree is beside
    * half the street, so any of them would take a press made while reading a
    * street box from wherever the player happened to drift — dismissing the
@@ -7622,12 +8038,12 @@ export class DungeonScene extends GameplayScene {
     return this.tryWalkedUpToInteraction(active, false);
   }
 
-  /** The safe room's half of the interact chain: whichever of the Bopca and Mordecai is nearer. Returns whether either took the press. */
+  /** The safe room's half of the interact chain: whichever of the Bopca and Dave is nearer. Returns whether either took the press. */
   private trySafeRoomPress(active: HumanPlayer | CatPlayer): boolean {
-    const speaker = safeRoomSpeakerFor(this.bopca, this.safeRoom, active);
+    const speaker = safeRoomSpeakerFor(this.bopca, this.dave, active);
     if (speaker === 'bopca') return this.bopca.tryInteract(active);
-    if (speaker === 'mordecai') {
-      this.talkToMordecai(active);
+    if (speaker === 'dave') {
+      this.talkToDave(active);
       return true;
     }
     return false;
@@ -7710,7 +8126,7 @@ export class DungeonScene extends GameplayScene {
 
   /**
    * The tail of the interact chain: what is within reach almost everywhere —
-   * the trees, Mongo, the hireling — and so only answers a press nothing the
+   * the trees, Deinonychus, the hireling — and so only answers a press nothing the
    * player walked up to wanted. Returns whether anything took it.
    */
   private tryInteractWithSurroundings(active: HumanPlayer | CatPlayer): boolean {
@@ -7720,7 +8136,7 @@ export class DungeonScene extends GameplayScene {
       return true;
     }
     if (
-      this.mongoSystem.tryPet(
+      this.deinonychusSystem.tryPet(
         active,
         this.gameMap,
         this.world.roster.mobs,
@@ -7729,8 +8145,12 @@ export class DungeonScene extends GameplayScene {
       )
     ) {
       this.audio?.play('happy_hearts');
-      const isGrownUp = (this.mongoSystem.mongo?.growthLevel ?? 0) >= MONGO_ADULT_SQUAWK_MIN_LEVEL;
-      this.audio?.playRandom(isGrownUp ? MONGO_ADULT_HAPPY_SQUAWKS : MONGO_BABY_HAPPY_SQUAWKS);
+      const isGrownUp =
+        (this.deinonychusSystem.deinonychus?.growthLevel ?? 0) >=
+        DEINONYCHUS_ADULT_SQUAWK_MIN_LEVEL;
+      this.audio?.playRandom(
+        isGrownUp ? DEINONYCHUS_ADULT_HAPPY_SQUAWKS : DEINONYCHUS_JUVENILE_HAPPY_SQUAWKS,
+      );
       return true;
     }
     // Last in the chain: the hireling stands at the party's shoulder all
@@ -7823,7 +8243,6 @@ export class DungeonScene extends GameplayScene {
         this.levelDef.hasCollapseTimer === true && this.tutorial === null
           ? { frames: this.levelTimerFrames, paused: this.isLevelTimerPaused() }
           : null,
-      favor: this.aiShow.favorModel(),
     };
   }
 
@@ -7855,9 +8274,9 @@ export class DungeonScene extends GameplayScene {
           this.active(),
           this.inactive(),
           this.world.roster.grid,
-          this.safeRoom.mordecaiPositions,
+          this.dave.minimapTile,
           this.collectQuestMarkers(),
-          this.mongoSystem.mongo,
+          this.deinonychusSystem.deinonychus,
           this.briarHollowKit?.minimapProcessingStations ?? [],
           this.collectVendorMinimapPositions(),
         ),
@@ -7955,8 +8374,8 @@ export class DungeonScene extends GameplayScene {
   }
 
   private hudSummon(): HudModel['summon'] {
-    const card = this.mongoSystem.summonCard(this.cat.isActive);
-    return card === null ? null : { ...card, onTap: () => this.toggleMongoSummon() };
+    const card = this.deinonychusSystem.summonCard(this.cat.isActive);
+    return card === null ? null : { ...card, onTap: () => this.toggleDeinonychusSummon() };
   }
 
   /** Every bar the top band stacks this frame. */
@@ -7971,7 +8390,7 @@ export class DungeonScene extends GameplayScene {
       this.spiderQuest.topBandEntry(),
       ...(this.briarHollowKit?.topBandEntries() ?? []),
       ...(this.gathering?.topBandEntries(this.active()) ?? []),
-      ...this.aiShow.topBandEntries(),
+      ...this.aiInteractions.topBandEntries(),
       knockedOutBandEntry(this.inactive()),
     ];
     return entries.filter((entry): entry is TopBandEntry => entry !== null);
@@ -8180,6 +8599,7 @@ export class DungeonScene extends GameplayScene {
     // boss room locks would otherwise sit frozen at its first frame for the
     // length of the intro, and a potion's effect cue would be held with it.
     this.menus.update();
+    this.missingPetNames.update(this.ui.worldHalted());
     if (this.tutorial !== null) {
       this.tutorial.updateUnderMenus(this.human, this.cat);
       this.closeMenusForTutorial(this.tutorial);
@@ -8300,10 +8720,6 @@ export class DungeonScene extends GameplayScene {
       this.silenceFrozenWorldLoops();
       return;
     }
-    if (this.tutorial?.showTutorialMordecaiDialog === true) {
-      this.silenceFrozenWorldLoops();
-      return;
-    }
 
     this.updateGameplay();
   }
@@ -8409,8 +8825,8 @@ export class DungeonScene extends GameplayScene {
     const party = this._lifeParty;
     party.length = 0;
     party.push(this.human, this.cat);
-    const mongo = this.mongoSystem.mongo;
-    if (mongo?.isAlive === true) party.push(mongo);
+    const deinonychus = this.deinonychusSystem.deinonychus;
+    if (deinonychus?.isAlive === true) party.push(deinonychus);
     const hireling = this.mercenarySystem.activeMerc;
     if (hireling !== null) party.push(hireling);
     const cow = this.attackCowSystem.standingCow;
@@ -8449,12 +8865,13 @@ export class DungeonScene extends GameplayScene {
     bossFight: false,
   };
 
-  /** Mongo and the hireling, standing or down, for the party's lights. */
+  /** Deinonychus and the hireling, standing or down, for the party's lights. */
   private lightedCompanions(): ReadonlyArray<PartyCompanion> {
     const companions = this._lightedCompanions;
     companions.length = 0;
-    const mongo = this.mongoSystem.mongo;
-    if (mongo?.isAlive === true) companions.push({ x: mongo.x, y: mongo.y, downed: false });
+    const deinonychus = this.deinonychusSystem.deinonychus;
+    if (deinonychus?.isAlive === true)
+      companions.push({ x: deinonychus.x, y: deinonychus.y, downed: false });
     const standing = this.mercenarySystem.activeMerc;
     if (standing !== null) companions.push({ x: standing.x, y: standing.y, downed: false });
     const downed = this.mercenarySystem.downedMerc;
@@ -8578,6 +8995,7 @@ export class DungeonScene extends GameplayScene {
       gore: this.combat.gore,
       bodyPartGore: this.combat.bodyPartGore,
       safeRoom: this.safeRoom,
+      dave: this.dave,
       bossRoom: this.bossRoom,
       bossRoomDressings: this.bossRoomDressings,
       arenaRoom: this.arenaRoom,
@@ -8586,7 +9004,7 @@ export class DungeonScene extends GameplayScene {
       barriers: this.barriers,
       spells: this.combat.spells,
       dynamite: this.destruction.dynamite,
-      smushFx: this.combat.smushFx,
+      seismicStompFx: this.combat.seismicStompFx,
       meleeFx: this.combat.meleeFx,
       stormcallerFx: this.combat.stormcaller,
       gearFx: this.combat.gear,
@@ -8611,7 +9029,7 @@ export class DungeonScene extends GameplayScene {
       gymPromptTargets: this.gymPromptTargets(),
       treasureChests: this.treasureChests,
       miniMap: this.miniMap,
-      mongoSystem: this.mongoSystem,
+      deinonychusSystem: this.deinonychusSystem,
       mercenarySystem: this.mercenarySystem,
       attackCowSystem: this.attackCowSystem,
       crawlerBarks: this.crawlerBarks,
@@ -8709,7 +9127,13 @@ export class DungeonScene extends GameplayScene {
     // exists to answer. The HUD and every menu draw after it and cover it where
     // they meet.
     if (!this.gameOver && !this.menus.pauseScreen.isOpen) {
-      this.mongoSystem.renderOffscreenMarker(ctx, camX, camY, this.active(), VISIBILITY_RADIUS_PX);
+      this.deinonychusSystem.renderOffscreenMarker(
+        ctx,
+        camX,
+        camY,
+        this.active(),
+        VISIBILITY_RADIUS_PX,
+      );
     }
 
     // Rebuilt once here, above every consumer: the pinned world arrow, the
@@ -8771,17 +9195,17 @@ export class DungeonScene extends GameplayScene {
     if (!this.gameOver && !this.menus.pauseScreen.isOpen) {
       const invPlayer = this.menus.inventoryPlayer();
       const cooldowns = this.menus.itemCooldowns;
-      cooldowns.set('protective_shell', {
-        current: this.combat.spells.shellCooldown,
-        max: this.combat.spells.shellCooldownMax,
+      cooldowns.set('energy_shield', {
+        current: this.combat.spells.energyShieldCooldown,
+        max: this.combat.spells.energyShieldCooldownMax,
       });
       cooldowns.set('magic_missile', {
         current: this.cat.missileCooldownCurrent,
         max: Math.max(1, this.cat.missileCooldownMax),
       });
-      cooldowns.set('smush', {
-        current: this.human.smushCooldown,
-        max: Math.max(1, this.human.getSmushCooldownMax()),
+      cooldowns.set('seismic_stomp', {
+        current: this.human.seismicStompCooldown,
+        max: Math.max(1, this.human.getSeismicStompCooldownMax()),
       });
       this.menus.syncPotionCooldownOverlay(invPlayer);
       // Keyed by item id rather than ability id — the stone is a plain item that
@@ -8798,9 +9222,10 @@ export class DungeonScene extends GameplayScene {
       this.menus.inventoryScreen.isOpen ||
       this.followerMenu.isOpen;
     if (!this.gameOver && !anyMenuOpen) {
-      const safeRoomSpeaker = safeRoomSpeakerFor(this.bopca, this.safeRoom, this.active());
-      this.safeRoom.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'bopca');
-      this.bopca.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'mordecai');
+      const safeRoomSpeaker = safeRoomSpeakerFor(this.bopca, this.dave, this.active());
+      this.safeRoom.renderUI(ctx, this.active());
+      this.dave.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'bopca');
+      this.bopca.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'dave');
       // Once no overlay owns the press, `claimPress` takes it at the striker
       // ahead of everything else, so its lock-in prompt is drawn ahead of
       // every check that could hide or replace it, and no other prompt offers
@@ -8818,7 +9243,7 @@ export class DungeonScene extends GameplayScene {
         if (!this.earlierSpaceLinkClaims(this.active())) {
           this.briarHollowKit?.renderPrompt(ctx, camX, camY, this.active());
         }
-        this.renderMongoPetPrompt(ctx, camX, camY);
+        this.renderDeinonychusPetPrompt(ctx, camX, camY);
         this.renderMercenaryPrompt(ctx, camX, camY);
       }
     }
@@ -8916,8 +9341,8 @@ export class DungeonScene extends GameplayScene {
           ? closeButtonOf(screen.surface.id)
           : null;
       const pausePrefix = `${PAUSE_SURFACE_ID}/`;
-      const suggestedSpendId = `${pausePrefix}${statSpendButtonId('human', CONSTITUTION_STAT_NAME)}`;
-      // Constitution first; any other of the human crawler's "+" when it has scrolled out of view.
+      const suggestedSpendId = `${pausePrefix}${statSpendButtonId('human', 'health')}`;
+      // Health first; any other of the human crawler's "+" when it has scrolled out of view.
       const statSpendButtonRect =
         regionCssRect((region) => region.id === suggestedSpendId) ??
         regionCssRect(
@@ -8934,7 +9359,7 @@ export class DungeonScene extends GameplayScene {
           pauseInventoryEntry === null ? null : toCssRect(pauseInventoryEntry, uiScale),
         pauseButtonRect: pauseButton,
         bagItemRects: {
-          smush_tome: bagItemRect('smush_tome'),
+          seismic_stomp_tome: bagItemRect('seismic_stomp_tome'),
           health_potion: bagItemRect('health_potion'),
           lucky_hoodie: bagItemRect('lucky_hoodie'),
           magic_missile_tome: bagItemRect('magic_missile_tome'),
@@ -8959,7 +9384,7 @@ export class DungeonScene extends GameplayScene {
         followerMenuFollowMeRect: this.followerMenu.isOpen
           ? this.followerMenu.followMeButtonRect
           : null,
-        mordecaiPosition: this.safeRoom.mordecaiStandingPositions[0] ?? null,
+        davePosition: this.dave.standingPosition,
         isRewardScreenOpen: this.achievementUI.isBlocking,
         rewardsChipRect: this.hud.cssDockRect('chip'),
         isChestRewardOpen: this.chestKit.isOpen,
@@ -9031,7 +9456,8 @@ export class DungeonScene extends GameplayScene {
     markers.push(...this.anchorQuest.questMarkers);
     if (this.bounty !== null) markers.push(...this.bounty.questMarkers);
     if (this.briarHollowKit !== null) markers.push(...this.briarHollowKit.questMarkers);
-    markers.push(...this.safeRoom.mordecaiMarkers);
+    const daveMarker = this.dave.minimapMarker;
+    if (daveMarker !== null) markers.push(daveMarker);
     const pinned = resolvePinnedEntry(
       this.journalProgress.pinnedTrackerId,
       this._trackerEntries,
@@ -9081,8 +9507,8 @@ export class DungeonScene extends GameplayScene {
     // Not while he is retreating: on one hit point with the interception holding
     // him there, further hits are damage nobody can act on and a fight he cannot
     // leave.
-    const mongo = this.mongoSystem.mongo;
-    if (mongo && !mongo.recalling && !mongo.collapsing) targets.push(mongo);
+    const deinonychus = this.deinonychusSystem.deinonychus;
+    if (deinonychus && !deinonychus.recalling && !deinonychus.collapsing) targets.push(deinonychus);
     if (this.mercenarySystem.activeMerc) targets.push(this.mercenarySystem.activeMerc);
     const attackCow = this.attackCowSystem.standingCow;
     if (attackCow !== null) targets.push(attackCow);
@@ -9107,6 +9533,14 @@ export class DungeonScene extends GameplayScene {
   private updateGameplay(): void {
     const player = this.active();
 
+    // A dungeon wall is a wall seen from in front, the same as an interior's,
+    // so a crawler walking south into one has to stop with their feet on the
+    // last floor tile rather than planting their whole lower half on the
+    // masonry — see `SOLE_COLLISION_OFFSET`. Only the outdoor town keeps the
+    // waist anchor: out there the "walls" are building facades and town
+    // walls whose art and clearances are a separate question from this one.
+    const southAnchor: SouthCollisionAnchor = this.levelDef.isOverworld === true ? 'waist' : 'sole';
+    const scriptMovedParty = this.cutscenes.tickWorld(player, this.gameMap, southAnchor);
     const move = readMovement(
       this.input,
       this.holdRestsOnStructure() ? null : this.touch.moveTarget,
@@ -9127,20 +9561,12 @@ export class DungeonScene extends GameplayScene {
       catMoveBlocked ||
       humanMoveBlocked ||
       swingingAtStriker;
-    // Only `applyMovement` writes `isMoving`, so a crawler held here keeps
-    // the last frame's: a direction key held as the hold began would leave
-    // them striding in place, footsteps and all.
-    if (movementHeld) player.isMoving = false;
-    if (!movementHeld) {
-      // A dungeon wall is a wall seen from in front, the same as an interior's,
-      // so a crawler walking south into one has to stop with their feet on the
-      // last floor tile rather than planting their whole lower half on the
-      // masonry — see `SOLE_COLLISION_OFFSET`. Only the outdoor town keeps the
-      // old waist anchor: out there the "walls" are building facades and town
-      // walls whose art and clearances are a separate question from this one.
-      const southAnchor: SouthCollisionAnchor =
-        this.levelDef.isOverworld === true ? 'waist' : 'sole';
-      applyMovement(player, move, this.gameMap, southAnchor);
+    if (!scriptMovedParty) {
+      // Only `applyMovement` writes `isMoving`, so a crawler held here keeps
+      // the last frame's: a direction key held as the hold began would leave
+      // them striding in place, footsteps and all.
+      if (movementHeld) player.isMoving = false;
+      else applyMovement(player, move, this.gameMap, southAnchor);
     }
     // Both crawlers, not just the active one — a thrown dumbbell can knock back
     // whichever player it hits, including the companion the input above never moved.
@@ -9171,8 +9597,13 @@ export class DungeonScene extends GameplayScene {
     this.pm.updateProtection(this.safeRoom);
 
     const nowInSafeRoom = this.pm.isAnySafe(this.safeRoom);
-    if (!this.wasInSafeRoom && nowInSafeRoom) {
-      this.bus.emit('safeRoomEntered', {});
+    const enteredRoom =
+      this.wasInSafeRoom || !nowInSafeRoom
+        ? null
+        : (this.safeRoom.safeRoomAt(this.active()) ?? this.safeRoom.safeRoomAt(this.inactive()));
+    if (enteredRoom !== null) {
+      this.bus.emit('safeRoomEntered', { room: enteredRoom });
+      this.dave.onSafeRoomEntered(enteredRoom);
       this.tutorial?.onSafeRoomEntered();
     }
     this.wasInSafeRoom = nowInSafeRoom;
@@ -9209,6 +9640,8 @@ export class DungeonScene extends GameplayScene {
     const ctx = this.buildSystemContext();
 
     this.safeRoom.update(ctx);
+    this.dave.update(this.active());
+    this.tellStory();
     this.tickSkillPointReminder(ctx);
     // Straight after the context is built, so the move-cancel it watches for is
     // this frame's movement rather than the previous frame's.
@@ -9449,16 +9882,16 @@ export class DungeonScene extends GameplayScene {
       }
     }
 
-    this.mongoSystem.checkHealth();
+    this.deinonychusSystem.checkHealth();
     this.mercenarySystem.checkHealth((merc) => this.combat.spawnKillGore(merc, null));
     this.attackCowSystem.checkHealth();
     this.combat.resolveKills();
 
     this.combat.resolveSpellAftermath();
 
-    this.carryMongoIn();
-    this.mongoSystem.update(ctx);
-    this.autoSummonMongo(ctx);
+    this.carryDeinonychusIn();
+    this.deinonychusSystem.update(ctx);
+    this.autoSummonDeinonychus(ctx);
     this.mercenarySystem.update(ctx);
     this.attackCowSystem.update(ctx);
     this.seatCompanionsAtPrisonDoor();
@@ -9733,11 +10166,6 @@ export class DungeonScene extends GameplayScene {
         volume: SCIENTIST_SPEECH_VOLUME,
       });
     }
-    if (this.spiderQuest.mordecaiMessageChimePending) {
-      this.spiderQuest.mordecaiMessageChimePending = false;
-      const chime = spiderQuestCueSound('mordecaiMessage', Math.random());
-      if (chime !== null) this.audio?.play(chime, { bus: 'ui' });
-    }
     this.updateScientistFootsteps();
     if (this.spiderQuest.machineryStartPending) {
       this.spiderQuest.machineryStartPending = false;
@@ -9939,7 +10367,7 @@ export class DungeonScene extends GameplayScene {
       getLevelTimer: () => this.aiLevelTimer(),
       getFloorKey: () => this.aiFloorKey(),
       spotlight: (point, frames) => aiCameraSpotlight.start(point, frames),
-      getShow: () => this.aiShow,
+      getInteractions: () => this.aiInteractions,
     };
   }
 
@@ -9966,6 +10394,7 @@ export class DungeonScene extends GameplayScene {
       this.citizenDialogTarget !== null ||
       this.signDialogTarget !== null ||
       this.chat.isOpen ||
+      this.cutscenes.isActive ||
       // The pause screen halts the world too, but it is `isPaused`, not a menu.
       (this.ui.worldHalted() && !this.menus.pauseScreen.isOpen)
     );
@@ -9984,6 +10413,7 @@ export class DungeonScene extends GameplayScene {
     const activeCrawler = (): HumanPlayer | CatPlayer =>
       this.human.isActive ? this.human : this.cat;
     return {
+      petNames: this.petNames,
       crawlerNameOf: (player) =>
         player === this.human
           ? crawlerName('human')
@@ -10026,7 +10456,7 @@ export class DungeonScene extends GameplayScene {
             cat: readCrawler(this.cat, crawlerName('cat')),
           },
           location: this.aiLocation(active),
-          nearbyMobs: readNearbyMobs(this.world.roster.mobs, active),
+          nearbyMobs: readNearbyMobs(this.world.roster.mobs, active, this.petNames),
           combatInProgress: this.combatCooldownFrames > 0,
           bossFightActive: this.bossRoom.anyLocked,
           isPaused: this.gameOver || this.menus.pauseScreen.isOpen || menuOpen,
@@ -10038,10 +10468,14 @@ export class DungeonScene extends GameplayScene {
 
   private aiCompanionNames(): string[] {
     const names: string[] = [];
-    if (this.mongoSystem.mongo !== null) names.push('Mongo');
+    if (this.deinonychusSystem.deinonychus !== null) {
+      names.push(petWords(this.petNames, 'deinonychus').described);
+    }
     const hireling = this.mercenarySystem.activeMerc;
-    if (hireling !== null) names.push(mobLabel(hireling));
-    if (this.attackCowSystem.standingCow !== null) names.push('the attack cow');
+    if (hireling !== null) names.push(mobLabel(hireling, this.petNames));
+    if (this.attackCowSystem.standingCow !== null) {
+      names.push(petWords(this.petNames, 'attackCow').described);
+    }
     return names;
   }
 
@@ -10123,7 +10557,7 @@ export class DungeonScene extends GameplayScene {
     const camY = targetY + TILE_SIZE / 2 - viewportHeight() / 2;
 
     const shakeOffset = this.spiderQuest.cameraOffset;
-    const smushShake = this.combat.smushFx.cameraOffset;
+    const seismicStompShake = this.combat.seismicStompFx.cameraOffset;
     const gymShake = this.gymRoom.cameraOffset;
     const villageShake = this.briarHollowKit?.cameraOffset ?? { x: 0, y: 0 };
     const blastShake = this.explosionShake.cameraOffset;
@@ -10135,7 +10569,7 @@ export class DungeonScene extends GameplayScene {
         clamp(camX, 0, mapPxW - viewportWidth()) +
         shakeOffset.x +
         sway.x +
-        smushShake.x +
+        seismicStompShake.x +
         gymShake.x +
         villageShake.x +
         blastShake.x,
@@ -10143,7 +10577,7 @@ export class DungeonScene extends GameplayScene {
         clamp(camY, 0, mapPxH - viewportHeight()) +
         shakeOffset.y +
         sway.y +
-        smushShake.y +
+        seismicStompShake.y +
         gymShake.y +
         villageShake.y +
         blastShake.y,
@@ -10153,8 +10587,11 @@ export class DungeonScene extends GameplayScene {
   private _makeAbilityReward(abilityId: AbilityId): GrantedReward {
     const def = this.abilityManager.getDef(abilityId);
     const name = def?.name ?? abilityId;
+    const firstPerk = def?.perks.find((p) => p.level === 1);
     const description =
-      def?.perks.find((p) => p.level === 1)?.description ?? 'A new ability has been granted!';
+      firstPerk === undefined
+        ? 'A new ability has been granted!'
+        : perkText(firstPerk.description, this.petNames);
     const renderIcon: GrantedReward['renderIcon'] =
       def !== null ? (ctx, rect) => def.renderIcon(ctx, rect, 1) : drawUnknownAbilityIcon;
     return { kind: 'ability', name, description, renderIcon };
@@ -10163,14 +10600,14 @@ export class DungeonScene extends GameplayScene {
   /**
    * Where the one the human crawler is in conversation with stands, while a conversation
    * with somebody is open; null otherwise. Only the conversations whose
-   * speaker this scene can place — a townsperson, Mordecai, the defend-quest
+   * speaker this scene can place — a townsperson, Dave, the defend-quest
    * giver.
    */
   private humanTalkSpeaker(): Pt | null {
     const citizen = this.citizenDialogTarget;
     if (citizen !== null) return citizen;
-    const mordecai = this.safeRoom.speakingMordecaiPosition;
-    if (mordecai !== null) return mordecai;
+    const dave = this.dave.speakingPosition;
+    if (dave !== null) return dave;
     if (this.defendQuest.isDialogOpen) return this.defendQuest.questNPC;
     const villager = this.briarHollowKit?.humanTalkSpeaker() ?? null;
     if (villager !== null) return villager;

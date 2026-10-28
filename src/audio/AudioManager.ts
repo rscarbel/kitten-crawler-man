@@ -2241,7 +2241,7 @@ export class AudioManager {
 
     // No bespoke assets exist for the skill system yet, so each of these borrows
     // the closest existing cue: a whiffed punch for a dodge, the unlock/level-up
-    // stings for skill progress, and the revival tone for Cockroach's save.
+    // stings for skill progress, and the revival tone for 9 Lives' save.
     bus.on('playerDodged', () => {
       this.play('human_punch_weak', {
         volume: DODGE_WHIFF_VOLUME,
@@ -2258,7 +2258,7 @@ export class AudioManager {
     });
 
     bus.on('skillTriggered', (e) => {
-      if (e.skillId === 'cockroach') this.play('reviving_tone');
+      if (e.skillId === 'nine_lives') this.play('reviving_tone');
     });
 
     bus.on('humanMeleeSwing', (e) => {

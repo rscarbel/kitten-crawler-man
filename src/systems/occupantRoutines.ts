@@ -49,7 +49,7 @@ interface Positioned {
  */
 export interface RoutineParty {
   readonly crawlers: ReadonlyArray<Positioned>;
-  readonly pet: { readonly mongo: Positioned | null };
+  readonly pet: { readonly deinonychus: Positioned | null };
   readonly hire: {
     readonly activeMerc: Positioned | null;
     readonly downedMerc: Positioned | null;
@@ -61,7 +61,7 @@ export interface RoutineParty {
 export function partyRoutineBodies(party: RoutineParty): RoutineBody[] {
   const present: Array<Positioned | null> = [
     ...party.crawlers,
-    party.pet.mongo,
+    party.pet.deinonychus,
     party.hire.activeMerc ?? party.hire.downedMerc,
     party.cow.cow,
   ];

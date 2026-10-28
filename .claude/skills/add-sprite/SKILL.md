@@ -1,6 +1,6 @@
 ---
 name: add-sprite
-description: Add or modify a sprite in Kitten Crawler Man — sprite sheets (PNG or runtime-painted), JSON manifests, SpriteLoader/SpriteRenderer, offline generator scripts. Use when a creature, item, prop or effect needs new art or animation states. For a weapon, tool or garment the human or the cat holds or wears, use add-gear.
+description: Add or modify a sprite in Kitten Crawler World — sprite sheets (PNG or runtime-painted), JSON manifests, SpriteLoader/SpriteRenderer, offline generator scripts. Use when a creature, item, prop or effect needs new art or animation states. For a weapon, tool or garment the human or the cat holds or wears, use add-gear.
 ---
 
 # Add a Sprite
@@ -118,7 +118,8 @@ Creatures are not sheets at all: each is a `FigureDef` (`src/sprites/figure/figu
 - **`skipSupersample`.** Cells are normally painted at twice the density and downsampled. A figure that composes itself on a scratch surface at whatever density it is painted at, with whole-pixel effects (a one-pixel outline, a two-pixel cast shadow), sets this: its edges are already antialiased, and supersampling would compose four times the pixels only to smear those effects into half-pixel blurs.
 - **Two-layer cells (`FigureDef.heldLayers`).** A frame that holds a runtime-chosen item is painted in one pass into the whole cell and a front layer (what lies in front of the item), and the cache stores the front cropped to its ink beside the cell; `drawFigureCached(..., between)` draws cell, the item, then the front. The crop is charged to the row's bytes. Measured cost: a front crop is usually a fist's worth of pixels (the human's largest is 58×104 px); over the human's whole working set the crops add 1.7–2.1 MB (about 3–4%), over the cat's tool rows about 0.1 MB. A scripted prop (hammer, dynamite, crate…) is baked between the two layers at bake time through the same `compositeHeldItem` (`src/sprites/held/heldComposite.ts`) the runtime uses, so a cell with a prop painted into it needs no front layer at draw time. The human's front crops and his carrying working set are measured by G9b (see `bipedal-figure/references/gates.md`).
 - **Outfit variants and `releaseFigure`.** A cell is keyed on `(figure, state, frame)` and shared by every draw, so a closed set of looks is a set of figures, each with its own id and the same rows. Only the variant on screen should be resident: `releaseFigure(def)` drops every cell and queued prewarm of a replaced figure at once, instead of waiting out `IDLE_FRAMES_BEFORE_RELEASE` with two working sets side by side. `setOutfit` (`src/sprites/outfits.ts`) releases a crawler's old outfit and prewarms the new one; anything that queued rows for the old outfit must ask again.
-- **Attachments on the human rig.** A humanoid built on the human rig grows extra anatomy or clothing (wings, a tail, horns, trousers) through `BipedAttachments` (`biped/figure.ts`, passed as `BipedComposeOptions.attachments`), so the parts share his silhouette outline and cast shadows instead of reading as stickers. The Incubus (`incubusArt.ts`, `incubusFigure.ts`) is the worked example; see the `bipedal-figure` skill.
+- **Attachments on the human rig.** A humanoid built on the human rig grows extra anatomy or clothing (wings, a tail, horns, trousers) through `BipedAttachments` (`biped/figure.ts`, passed as `BipedComposeOptions.attachments`), so the parts share his silhouette outline and cast shadows instead of reading as stickers. The Demon Liaison (`demonLiaisonArt.ts`, `demonLiaisonFigure.ts`) is the worked example; see the `bipedal-figure` skill.
+- **An effect laid out of figure cells.** Dave's teleport (`drawDaveSprite` in `src/sprites/daveSprite.ts`) builds every frame of the column of light, the band-by-band resolve and the edge flash from three cells of the shared cache (his standing cell, that cell in the light's colour, and its ring), indexed by frame alone, so it stores no frames of its own. Colours come from `worldInk.daveTeleport` (`src/ui/theme/worldInk.ts`). Reach for this before painting a one-off effect sheet for a figure; `npm run render:dave-teleport` reviews every frame at the 32 px tile.
 - **`prewarmFigureState(def, state, frameLimit?)`.** `frameLimit` warms only a row's first frames — a blow's wind-up up to its impact frame — so the rest can bake while those play. Repeated requests for the same row merge to the larger limit.
 - **The cache caps are tunable numbers, not platform limits.** `CACHE_BUDGET_MEGABYTES` (80), the 24 MB per-figure default, the human's 28, the cat's 28 and the held-art cache's `HELD_ART_BUDGET_MEGABYTES` (4) were chosen to catch leaks and to stay far below the old sprite-sheet era (about 800 MB decoded). None is a device ceiling. When a figure genuinely needs more room, measure the need (G9b for the human, cat G9 and `bench:turn-residency` for the cat), raise its number to that measurement with a little slack, and say why in the constant's JSDoc — never raise one to make a red gate pass without the measurement.
 - **Held item art has its own cache.** A held visual (`src/sprites/held/`) is not part of any figure: `drawHeldVisual` in `heldVisualCache.ts` draws it at a socket transform from pictures keyed by look id × on-screen angle step (`AXIS_ANGLE_STEPS`, 32) × foreshortening step (`FORESHORTENING_STEPS`, 4) × flat/edge-on × mirrored × reversed × lit/shaded × phase. Each picture is painted already turned to its step (so the key light falls correctly for that angle) and cropped to its ink; the blit turns and stretches only the residue, so a swing never visibly snaps. Least-recently-drawn pictures go first past `HELD_ART_BUDGET_MEGABYTES`; it survives a canvas recovery. Measured: the Stormcaller in every look it has (3072 pictures, three crackle phases) is 6.7 MB at cell density, about 2 s to paint in node; only the looks actually drawn are ever baked. Painting at twice the cell density measured 20.9 MB with no visible difference at the tile, so `HELD_ART_SUPERSAMPLE` is 1. `measureHeldVisualSet(def)` reports one look's whole set; `heldVisualCacheBytes()` / `heldVisualCacheCount()` what is resident. `paintHeldVisual` (`heldPaint.ts`) is the uncached path, used at bake time and for icons.
@@ -146,13 +147,13 @@ a freeze. Nothing in typecheck, lint, the sheet, or a contact sheet shows it; it
 is only visible in motion, at the real speed. This has bitten three separate
 creatures here, in three disguises:
 
-- A small fast creature on a distance-driven walk phase. A juvenile raptor's
+- A small fast creature on a distance-driven walk phase. A juvenile Deinonychus's
   stride is 0.31 tiles, so covering the speed its AI asks for needs twelve
   strides a second — ninety-odd frames a second out of an eight-frame row.
   Neither the art nor the constant can fix it: a stride long enough to sync
   would step further than the leg extends and the reach gate rejects it. Cap
   the cadence with a ceiling derived from the fastest real locomotion
-  (`MONGO_UNDERSAMPLING_FRAME_LIMIT` in `mongoSprite.ts` is the pattern), so raising the
+  (`DEINONYCHUS_UNDERSAMPLING_FRAME_LIMIT` in `deinonychusSprite.ts` is the pattern), so raising the
   sprint speeds the legs up with it instead of clamping to a stale number.
 - A creature that changes speed for one state. A charging Tuskling sampled at
   the walk cadence skipped frames and read as vibrating rather than sprinting;
@@ -174,7 +175,7 @@ regex silently passes the moment those literals become named constants.
 ## Views for a horizontal-bodied animal
 
 Head-on and away views of a long, low animal are not a geometric projection of
-the profile. A depth-ordered true projection of a raptor was measured to be
+the profile. A depth-ordered true projection of the Deinonychus was measured to be
 correct and was unreadable: the head could not be found at 32 px, the axial
 views came out a third shorter than the profile, and the bite punched through
 the floor. This game's convention — set by the rat's walk row — is head at the
@@ -218,7 +219,7 @@ sampled between footfalls so no two frames mirror) lives in that module,
 not in the look. Her tooth (`drawFang`) is drawn slim in a warm off-white
 and grows only to one surface pixel, which the 2× supersample softens to a
 faint light pixel at the 32 px tile; `render:cat --mode=strip32` paints at
-the in-game size the way the cache does, so it shows what the game shows.
+the in-game size the way the cache does, so it shows what the game draws.
 G1's cell-fill floor is per look (`MIN_CELL_FILL_BY_LOOK` in
 `scripts/gates-cat.ts`): a new look measures its widest pose's fill and
 takes a floor a margin under it.

@@ -1,6 +1,8 @@
 import type { SkillId } from '../../core/skills/SkillManager';
 import type { Rect } from '../core/geom';
 import { iconSquare } from './iconSquare';
+import { PROFICIENCY_EMBLEMS, PROFICIENCY_PALETTES } from './proficiencyEmblems';
+import { MIRROR_SIDES, TWO_PI, type EmblemPalette, type EmblemRenderer } from './skillEmblemTypes';
 
 /**
  * One emblem per trainable skill, drawn into a square region.
@@ -15,35 +17,19 @@ import { iconSquare } from './iconSquare';
  */
 
 const CENTER = 0.5;
-const TWO_PI = Math.PI * 2;
-/** Left and right, for the parts of an emblem that come in mirrored pairs. */
-const MIRROR_SIDES = [-1, 1] as const;
 
 /** Disc the emblem sits on, so a light silhouette still reads on a light panel. */
 const BACKDROP_RADIUS = 0.46;
 const BACKDROP_INNER_STOP = 0.55;
 const BACKDROP_RIM_WIDTH_FRACTION = 0.035;
 
-interface EmblemPalette {
-  /** Centre of the backdrop disc. */
-  glow: string;
-  /** Outer edge of the backdrop disc. */
-  field: string;
-  /** Ring drawn around the disc. */
-  rim: string;
-  /** The silhouette itself. */
-  mark: string;
-  /** Highlights picked out on the silhouette. */
-  accent: string;
-}
-
-const SKILL_PALETTES: Record<SkillId, EmblemPalette> = {
-  cockroach: {
-    glow: '#6b4620',
-    field: '#2a1a0c',
-    rim: '#a9713a',
-    mark: '#e0a35c',
-    accent: '#fde8c6',
+const SKILL_PALETTES = {
+  nine_lives: {
+    glow: '#155e75',
+    field: '#06222b',
+    rim: '#22d3ee',
+    mark: '#cffafe',
+    accent: '#ffffff',
   },
   cat_reflexes: {
     glow: '#4c1d95',
@@ -66,7 +52,7 @@ const SKILL_PALETTES: Record<SkillId, EmblemPalette> = {
     mark: '#d9f99d',
     accent: '#ffffff',
   },
-  iron_punch: {
+  mechanical_fist: {
     glow: '#334155',
     field: '#0b1119',
     rim: '#94a3b8',
@@ -80,7 +66,8 @@ const SKILL_PALETTES: Record<SkillId, EmblemPalette> = {
     mark: '#fde68a',
     accent: '#ffffff',
   },
-};
+  ...PROFICIENCY_PALETTES,
+} as const satisfies Record<SkillId, EmblemPalette>;
 
 function drawBackdrop(
   ctx: CanvasRenderingContext2D,
@@ -106,86 +93,82 @@ function drawBackdrop(
   ctx.stroke();
 }
 
-// ── Cockroach: a roach seen from above, still going ──────────────────────────
+// ── 9 Lives: a cat's head ringed by its nine lives ─────────────────────────
 
-const ROACH_BODY_RX = 0.15;
-const ROACH_BODY_RY = 0.24;
-const ROACH_HEAD_RX = 0.09;
-const ROACH_HEAD_RY = 0.07;
-const ROACH_HEAD_Y = -0.22;
-/** Where each leg pair leaves the body, in multiples of the body's half-height. */
-const ROACH_FRONT_LEG_ANCHOR = -0.75;
-const ROACH_MIDDLE_LEG_ANCHOR = -0.1;
-const ROACH_REAR_LEG_ANCHOR = 0.55;
-const ROACH_LEG_ANCHORS = [
-  ROACH_FRONT_LEG_ANCHOR,
-  ROACH_MIDDLE_LEG_ANCHOR,
-  ROACH_REAR_LEG_ANCHOR,
-] as const;
-/** How far down the body a leg's outer end lands from where it leaves it. */
-const ROACH_LEG_RAKE = 0.4;
-const ROACH_LEG_INNER = 0.13;
-const ROACH_LEG_OUTER = 0.36;
-const ROACH_ANTENNA_ROOT_X = 0.04;
-const ROACH_ANTENNA_SPREAD = 0.16;
-const ROACH_ANTENNA_TIP_Y = -0.42;
-const ROACH_WING_SEAM_TOP = -0.12;
-const ROACH_WING_SEAM_BOTTOM = 0.2;
-const ROACH_LINE_WIDTH_FRACTION = 0.045;
+const NINE_LIVES_COUNT = 9;
+const LIFE_PIP_RING_RADIUS = 0.36;
+const LIFE_PIP_RADIUS = 0.038;
+/** The first pip sits at twelve o'clock so the ring reads as a count, not a decoration. */
+const LIFE_PIP_START_ANGLE = -Math.PI / 2;
+const CAT_HEAD_CENTER_Y = 0.04;
+const CAT_HEAD_RX = 0.19;
+const CAT_HEAD_RY = 0.16;
+const CAT_EAR_BASE_INNER_X = 0.03;
+const CAT_EAR_BASE_OUTER_X = 0.19;
+const CAT_EAR_BASE_Y = -0.04;
+const CAT_EAR_TIP_X = 0.16;
+const CAT_EAR_TIP_Y = -0.25;
+const CAT_EYE_OFFSET_X = 0.075;
+const CAT_EYE_Y = 0.02;
+const CAT_EYE_RX = 0.026;
+const CAT_EYE_RY = 0.05;
 
-function drawCockroachEmblem(
+function drawNineLivesEmblem(
   ctx: CanvasRenderingContext2D,
   cx: number,
   cy: number,
   size: number,
   palette: EmblemPalette,
 ): void {
-  const stroke = Math.max(1, size * ROACH_LINE_WIDTH_FRACTION);
-  ctx.strokeStyle = palette.mark;
-  ctx.lineWidth = stroke;
-  ctx.lineCap = 'round';
-
-  for (const anchor of ROACH_LEG_ANCHORS) {
-    for (const side of MIRROR_SIDES) {
-      ctx.beginPath();
-      ctx.moveTo(cx + side * size * ROACH_LEG_INNER, cy + size * anchor * ROACH_BODY_RY);
-      ctx.lineTo(
-        cx + side * size * ROACH_LEG_OUTER,
-        cy + size * (anchor + ROACH_LEG_RAKE) * ROACH_BODY_RY,
-      );
-      ctx.stroke();
-    }
+  ctx.fillStyle = palette.accent;
+  for (let life = 0; life < NINE_LIVES_COUNT; life++) {
+    const angle = LIFE_PIP_START_ANGLE + (life / NINE_LIVES_COUNT) * TWO_PI;
+    ctx.beginPath();
+    ctx.arc(
+      cx + Math.cos(angle) * size * LIFE_PIP_RING_RADIUS,
+      cy + Math.sin(angle) * size * LIFE_PIP_RING_RADIUS,
+      size * LIFE_PIP_RADIUS,
+      0,
+      TWO_PI,
+    );
+    ctx.fill();
   }
-
-  ctx.beginPath();
-  for (const side of MIRROR_SIDES) {
-    ctx.moveTo(cx + side * size * ROACH_ANTENNA_ROOT_X, cy + size * ROACH_HEAD_Y);
-    ctx.lineTo(cx + side * size * ROACH_ANTENNA_SPREAD, cy + size * ROACH_ANTENNA_TIP_Y);
-  }
-  ctx.stroke();
 
   ctx.fillStyle = palette.mark;
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, size * ROACH_BODY_RX, size * ROACH_BODY_RY, 0, 0, TWO_PI);
-  ctx.fill();
+  for (const side of MIRROR_SIDES) {
+    ctx.beginPath();
+    ctx.moveTo(cx + side * size * CAT_EAR_BASE_INNER_X, cy + size * CAT_EAR_BASE_Y);
+    ctx.lineTo(cx + side * size * CAT_EAR_TIP_X, cy + size * CAT_EAR_TIP_Y);
+    ctx.lineTo(cx + side * size * CAT_EAR_BASE_OUTER_X, cy + size * CAT_EAR_BASE_Y);
+    ctx.closePath();
+    ctx.fill();
+  }
   ctx.beginPath();
   ctx.ellipse(
     cx,
-    cy + size * ROACH_HEAD_Y,
-    size * ROACH_HEAD_RX,
-    size * ROACH_HEAD_RY,
+    cy + size * CAT_HEAD_CENTER_Y,
+    size * CAT_HEAD_RX,
+    size * CAT_HEAD_RY,
     0,
     0,
     TWO_PI,
   );
   ctx.fill();
 
-  ctx.strokeStyle = palette.field;
-  ctx.lineWidth = stroke;
-  ctx.beginPath();
-  ctx.moveTo(cx, cy + size * ROACH_WING_SEAM_TOP);
-  ctx.lineTo(cx, cy + size * ROACH_WING_SEAM_BOTTOM);
-  ctx.stroke();
+  ctx.fillStyle = palette.field;
+  for (const side of MIRROR_SIDES) {
+    ctx.beginPath();
+    ctx.ellipse(
+      cx + side * size * CAT_EYE_OFFSET_X,
+      cy + size * CAT_EYE_Y,
+      size * CAT_EYE_RX,
+      size * CAT_EYE_RY,
+      0,
+      0,
+      TWO_PI,
+    );
+    ctx.fill();
+  }
 }
 
 // ── Cat-like Reflexes: a paw already gone, trailing its own afterimages ──────
@@ -371,7 +354,7 @@ function drawIronStomachEmblem(
   }
 }
 
-// ── Iron Punch: the pugilist's fist, plated and spiked ─────────────────────
+// ── Mechanical Fist: the pugilist's fist, plated and spiked ────────────────
 
 /** How far the gauntlet plate overhangs the bare fist on each side. */
 const PLATE_OVERHANG = 0.03;
@@ -380,7 +363,7 @@ const GAUNTLET_SPIKE_HALF_W = 0.03;
 const GAUNTLET_BAND_TOP = 0.02;
 const GAUNTLET_BAND_HEIGHT = 0.05;
 
-function drawIronPunchEmblem(
+function drawMechanicalFistEmblem(
   ctx: CanvasRenderingContext2D,
   cx: number,
   cy: number,
@@ -495,22 +478,15 @@ function drawPowerfulStrikeEmblem(
   }
 }
 
-type EmblemRenderer = (
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  size: number,
-  palette: EmblemPalette,
-) => void;
-
-const SKILL_EMBLEMS: Record<SkillId, EmblemRenderer> = {
-  cockroach: drawCockroachEmblem,
+const SKILL_EMBLEMS = {
+  nine_lives: drawNineLivesEmblem,
   cat_reflexes: drawCatReflexesEmblem,
   pugilism: drawPugilismEmblem,
   iron_stomach: drawIronStomachEmblem,
-  iron_punch: drawIronPunchEmblem,
+  mechanical_fist: drawMechanicalFistEmblem,
   powerful_strike: drawPowerfulStrikeEmblem,
-};
+  ...PROFICIENCY_EMBLEMS,
+} as const satisfies Record<SkillId, EmblemRenderer>;
 
 /** Draws a skill's emblem into a square icon region. */
 export function drawSkillIcon(ctx: CanvasRenderingContext2D, rect: Rect, skillId: SkillId): void {

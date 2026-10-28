@@ -170,7 +170,7 @@ export function mantidReachableStates(sheet: MantidSheet): readonly string[] {
  * body part rather than a silent no-op.
  */
 export const MANTID_GORE_PARTS: ReadonlyArray<string> = [
-  'gore_raptorial_arm',
+  'gore_grasping_arm',
   'gore_head',
   'gore_pronotum',
   'gore_abdomen',

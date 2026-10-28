@@ -49,8 +49,8 @@ import { palette } from '../ui/theme/tokens';
 
 const CAMERA_CENTER_OFFSET_MULTIPLIER = 0.5;
 const NO_CAMERA_SHAKE = { x: 0, y: 0 } as const;
-/** The Cockroach pill's label: a standing capability rather than a timed effect. */
-const COCKROACH_PILL_LABEL = 'ROACH';
+/** The 9 Lives pill's label: a standing capability rather than a timed effect. */
+const NINE_LIVES_PILL_LABEL = 'LIVES';
 
 const NEVER_HIDDEN = (): boolean => false;
 
@@ -282,13 +282,13 @@ export abstract class GameplayScene extends Scene {
         harmful: badge.harmful,
       };
     });
-    if (player.skills.isUnlocked('cockroach')) {
-      const ready = player.isCockroachReady;
+    if (player.skills.isUnlocked('nine_lives')) {
+      const ready = player.isNineLivesReady;
       status.push({
-        id: 'cockroach',
-        label: COCKROACH_PILL_LABEL,
+        id: 'nine_lives',
+        label: NINE_LIVES_PILL_LABEL,
         color: ready ? palette.state.warning : palette.text.muted,
-        remaining: player.cockroachRechargeFraction(),
+        remaining: player.nineLivesRechargeFraction(),
         harmful: false,
         spent: !ready,
       });

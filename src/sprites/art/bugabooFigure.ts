@@ -2,10 +2,10 @@
  * The Bugaboo, as a painted figure: the choreography, the cell geometry, and
  * the `FigureDef` the runtime cache and the review harness both draw through.
  *
- * The seven-foot, obsidian-haired thing that comes up through the floor grates,
- * and the shape Mordecai wears on level 2. Anatomy and every stroke of paint
- * live in `bugabooArt.ts`; this module is one pose function per animation row,
- * sampled per frame, plus where that pose sits inside its cell.
+ * The seven-foot, obsidian-haired thing that comes up through the floor
+ * grates. Anatomy and every stroke of paint live in `bugabooArt.ts`; this
+ * module is one pose function per animation row, sampled per frame, plus where
+ * that pose sits inside its cell.
  *
  * Rows:
  *    idle          — toward the camera, breathing, coat shifting

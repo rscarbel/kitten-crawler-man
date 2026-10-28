@@ -1,6 +1,7 @@
 /**
- * The Rat Kin — Mordecai's rodent form, the safe-room changeling who paces his
- * room and gives the player advice.
+ * The Rat Kin painter: one pose of one ratkin, in the outfit it is handed. Every
+ * ratkin in the game — the people of Briar Hollow, their militia and the dead the
+ * necromancer raises — is painted here.
  *
  * A Rat Kin is *not* a rat. He stands and walks on two legs, wears clothes and
  * gestures with his hands, so he is built on the same rig every other bipedal
@@ -2318,19 +2319,4 @@ export function drawRatkin(
   outfit: RatkinOutfit,
 ): void {
   drawFigure(ctx, VIEWS[view], pose, outfit);
-}
-
-/** A ratkin walking toward the camera. */
-export function drawRatKinFront(ctx: Ctx, pose: RatKinPose, outfit: RatkinOutfit): void {
-  drawFigure(ctx, VIEWS.front, pose, outfit);
-}
-
-/** A ratkin walking away from the camera. */
-export function drawRatKinAway(ctx: Ctx, pose: RatKinPose, outfit: RatkinOutfit): void {
-  drawFigure(ctx, VIEWS.away, pose, outfit);
-}
-
-/** A ratkin edge-on, always drawn facing +X; the runtime mirrors for the left. */
-export function drawRatKinSide(ctx: Ctx, pose: RatKinPose, outfit: RatkinOutfit): void {
-  drawFigure(ctx, VIEWS.side, pose, outfit);
 }

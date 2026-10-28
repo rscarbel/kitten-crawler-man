@@ -39,6 +39,7 @@ import {
 } from '../src/core/quests/villageUnlocks';
 import { PlayerManager } from '../src/core/party/PlayerManager';
 import { AbilityManager } from '../src/core/skills/AbilityManager';
+import { PetNameBook } from '../src/core/party/petNames';
 import { MenusKit } from '../src/systems/kits/MenusKit';
 import { ConstructionKit } from '../src/systems/briarHollow/ConstructionKit';
 import { StructureHold } from '../src/systems/briarHollow/structureHold';
@@ -52,7 +53,7 @@ import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { Rat } from '../src/creatures/Rat';
 import { Cow } from '../src/creatures/Cow';
-import { Mongo } from '../src/creatures/Mongo';
+import { Deinonychus } from '../src/creatures/Deinonychus';
 import { GameMap } from '../src/map/GameMap';
 import {
   FloorTypeValue,
@@ -781,7 +782,7 @@ section('The gate');
     `a hostile chasing a crawler across the gate never crosses it in ${SIMULATED_GATE_SECONDS} s (closest row ${closest}, gate row ${gateRow})`,
   );
 
-  const pushedNorth = (mob: Rat | Cow | Mongo): boolean => {
+  const pushedNorth = (mob: Rat | Cow | Deinonychus): boolean => {
     mob.x = outside.x * TILE_SIZE;
     mob.y = outside.y * TILE_SIZE;
     mob.applyKnockback(0, -1, TILE_SIZE * 6, UPDATES_PER_SECOND);
@@ -794,9 +795,9 @@ section('The gate');
   const cow = new Cow(outside.x, outside.y, TILE_SIZE, 'holstein', 'adult');
   cow.setMap(gameMap);
   check(pushedNorth(cow), 'a cow crosses the gate');
-  const mongo = new Mongo(outside.x, outside.y, TILE_SIZE, rig.cat, 1, 100);
-  mongo.setMap(gameMap);
-  check(pushedNorth(mongo), 'Mongo crosses the gate');
+  const deinonychus = new Deinonychus(outside.x, outside.y, TILE_SIZE, rig.cat, 1, 100);
+  deinonychus.setMap(gameMap);
+  check(pushedNorth(deinonychus), 'Deinonychus crosses the gate');
 
   const walker = new HumanPlayer(outside.x, outside.y, TILE_SIZE);
   for (let frame = 0; frame < UPDATES_PER_SECOND * 3; frame++) {
@@ -843,14 +844,14 @@ function openPatch(): { x: number; y: number } {
   const footprint = planned.footprint;
   const rat = new Rat(footprint.x, footprint.y, TILE_SIZE);
   const cow = new Cow(footprint.x + 1, footprint.y + 1, TILE_SIZE, 'holstein', 'adult');
-  const mongo = new Mongo(footprint.x, footprint.y + 2, TILE_SIZE, rig.cat, 1, 100);
+  const deinonychus = new Deinonychus(footprint.x, footprint.y + 2, TILE_SIZE, rig.cat, 1, 100);
   rig.roster.add(rat);
   rig.roster.add(cow);
-  rig.roster.add(mongo);
+  rig.roster.add(deinonychus);
   const started = rig.construction.startOption('trebuchet');
   for (let frame = 0; frame < SETTLE_FRAMES; frame++) {
     rig.construction.update();
-    for (const mob of [rat, cow, mongo]) mob.advanceKnockback();
+    for (const mob of [rat, cow, deinonychus]) mob.advanceKnockback();
   }
   const inside = (body: { x: number; y: number }) => {
     const tx = Math.floor((body.x + TILE_SIZE / 2) / TILE_SIZE);
@@ -870,7 +871,10 @@ function openPatch(): { x: number; y: number } {
   check(started, 'a trebuchet starts over a hostile, a cow and the companion');
   check(!inside(rat) && onGround(rat), 'the hostile is pushed clear onto open ground');
   check(!inside(cow) && onGround(cow), 'the cow is pushed clear onto open ground');
-  check(!inside(mongo) && onGround(mongo), 'the companion is pushed clear onto open ground');
+  check(
+    !inside(deinonychus) && onGround(deinonychus),
+    'the companion is pushed clear onto open ground',
+  );
   check(
     !gameMap.isWalkable(footprint.x, footprint.y),
     'the footprint is reserved while it goes up',
@@ -880,7 +884,7 @@ function openPatch(): { x: number; y: number } {
     gameMap.isWalkable(footprint.x, footprint.y),
     'a cancelled trebuchet releases its footprint',
   );
-  for (const mob of [rat, cow, mongo]) {
+  for (const mob of [rat, cow, deinonychus]) {
     mob.hp = 0;
   }
 }
@@ -1459,7 +1463,11 @@ section('Long-press');
     pm,
     roster: new MobRoster(gameMap, new SpellSystem()),
   };
-  const menus = new MenusKit({ world, abilityManager: new AbilityManager() });
+  const menus = new MenusKit({
+    world,
+    abilityManager: new AbilityManager(),
+    petNames: new PetNameBook(),
+  });
   const state = createBriarHollowState();
   grantConstructionUnlocks(state.unlocks, CONSTRUCTION_UNLOCK_IDS);
   teach(pm.human, RIG_BUILDER_LEVEL);
@@ -1594,7 +1602,11 @@ section('The build key over a faced wall');
     pm,
     roster: new MobRoster(gameMap, new SpellSystem()),
   };
-  const menus = new MenusKit({ world, abilityManager: new AbilityManager() });
+  const menus = new MenusKit({
+    world,
+    abilityManager: new AbilityManager(),
+    petNames: new PetNameBook(),
+  });
   const state = createBriarHollowState();
   grantConstructionUnlocks(state.unlocks, CONSTRUCTION_UNLOCK_IDS);
   teach(pm.human, RIG_BUILDER_LEVEL);

@@ -42,7 +42,7 @@ import { Goblin } from '../src/creatures/Goblin';
 import { Troglodyte } from '../src/creatures/Troglodyte';
 import { CONVERTIBLE_MOB_TYPES } from '../src/creatures/convertibleMobs';
 import { Cow } from '../src/creatures/Cow';
-import { Mongo } from '../src/creatures/Mongo';
+import { Deinonychus } from '../src/creatures/Deinonychus';
 import { RatkinSoldier } from '../src/creatures/RatkinSoldier';
 import { RATKIN_SOLDIER_IDS } from '../src/sprites/art/ratkin/cast';
 import { collectFairyAllies } from '../src/creatures/fairies/fairyAllies';
@@ -637,8 +637,8 @@ section('Trebuchet damage');
 
 section('Friendly fire');
 {
-  const dexterity = 30;
-  const expectedDodge = computeDodgeChance(dexterity);
+  const evasiveness = 30;
+  const expectedDodge = computeDodgeChance('human', evasiveness);
   let hits = 0;
   let dodges = 0;
   let wrongAmount = 0;
@@ -649,7 +649,7 @@ section('Friendly fire');
     const { footprint } = placeTrebuchet(rig, FIELD.x, FIELD.y, 'human', 25);
     const mid = footprintCentre(footprint);
     const target = spawn(rig, dummy(), mid.x + 6 * TILE_SIZE, mid.y);
-    rig.human.setBaseStat('dexterity', dexterity);
+    rig.human.setBaseStat('evasiveness', evasiveness);
     let landed = 0;
     while (landed < shotsPerStream) {
       const record = rig.defense.trebuchets[0];
@@ -821,14 +821,14 @@ section('Snares: triggers and holds');
   const record = rig.defense.snares[0];
   const at = tileCentre(tile.x, tile.y);
   const cow = spawn(rig, new Cow(0, 0, TILE_SIZE, 'jersey', 'adult'), at.x, at.y);
-  const mongo = spawn(rig, new Mongo(0, 0, TILE_SIZE, rig.cat, 1, 100), at.x + 4, at.y);
+  const deinonychus = spawn(rig, new Deinonychus(0, 0, TILE_SIZE, rig.cat, 1, 100), at.x + 4, at.y);
   for (let f = 0; f < 30; f++) rig.snares.update();
   check(
     rig.snares.springLog.length === 0 && rig.snares.isSet(record),
     'friends walk over a snare freely',
   );
   despawnMob(cow, rig.roster.mobs, rig.roster.grid);
-  despawnMob(mongo, rig.roster.mobs, rig.roster.grid);
+  despawnMob(deinonychus, rig.roster.mobs, rig.roster.grid);
 
   const first = spawn(rig, ghoul(), at.x, at.y);
   const second = spawn(rig, ghoul(), at.x + 6, at.y - 4);
@@ -881,7 +881,7 @@ section('Snares: triggers and holds');
   const human = attackRig.human;
   human.x = biter.x + TILE_SIZE * 0.9;
   human.y = biter.y;
-  human.setBaseStat('dexterity', 1);
+  human.setBaseStat('evasiveness', 1);
   const startX = biter.x;
   const startY = biter.y;
   const humanHp = human.hp;
@@ -1089,7 +1089,7 @@ section('Converted allies');
 
   // The consumers that decide who is an enemy.
   check(!ally.takesPlayerDamage('melee'), 'takesPlayerDamage: the party cannot hurt it');
-  check(!ally.isPetAttackable, 'isPetAttackable: Mongo leaves it alone');
+  check(!ally.isPetAttackable, 'isPetAttackable: Deinonychus leaves it alone');
   check(ally.resetsFullyOnCheckpoint, 'resetsFullyOnCheckpoint: a rewind turns it back');
   check(dynamiteDamageToMob(ally, 100, 7) === 7, "dynamiteDamageToMob: it takes a crawler's share");
   check(ally.xpCreditTarget === rig.human, 'its kills are credited to its converter');
@@ -1110,7 +1110,7 @@ section('Converted allies');
   const friends: ReadonlyArray<{ name: string; mob: Mob }> = [
     { name: 'a cow', mob: new Cow(0, 0, TILE_SIZE, 'holstein', 'adult') },
     { name: 'a soldier', mob: new RatkinSoldier(0, 0, TILE_SIZE, RATKIN_SOLDIER_IDS[2]) },
-    { name: 'Mongo', mob: new Mongo(0, 0, TILE_SIZE, rig.cat, 1, 100) },
+    { name: 'Deinonychus', mob: new Deinonychus(0, 0, TILE_SIZE, rig.cat, 1, 100) },
     {
       name: 'a hireling',
       mob: new Mercenary(0, 0, TILE_SIZE, rig.human, 'crush', getMercenaryTemplate('crush').name),

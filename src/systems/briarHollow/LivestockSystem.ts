@@ -125,7 +125,7 @@ export interface LivestockDeps {
   readonly random?: () => number;
   /**
    * Everywhere a bang may soon land — a burning stick, a stick in hand, a
-   * Smush winding up — read every update, so the herd can warm what a blast
+   * Seismic Stomp winding up — read every update, so the herd can warm what a blast
    * would draw before it goes off.
    */
   readonly blastThreats?: () => readonly BlastThreat[];

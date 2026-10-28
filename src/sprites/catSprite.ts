@@ -11,7 +11,7 @@ import {
   releaseFigure,
   withFigureCellPlacement,
 } from './figure/figureFrameCache';
-import { catHeldPxPerUnit, catHeldSocketOf, catSocketsAt } from './art/catSockets';
+import { catHeldOutlined, catHeldPxPerUnit, catHeldSocketOf, catSocketsAt } from './art/catSockets';
 import { compositeHeldItem, heldTransformAt } from './held/heldComposite';
 import type { HeldVisualDef } from './held/heldVisualDef';
 import { ResidentRows, type ResidentSpan } from './figure/residentRows';
@@ -22,6 +22,9 @@ import type { WorkingToolKind } from '../core/items/gathering/toolTiers';
 import {
   ACTION_FRAMES,
   BREAK_FRAMES,
+  CAT_THROW_COCKED_FRAME,
+  CAT_THROW_RELEASE_FRAME,
+  CAT_THROW_TICKS_PER_FRAME,
   catFigureFor,
   catRowFacesWest,
   catRowView,
@@ -30,9 +33,13 @@ import {
   IDLE_FRAMES,
   KO_FRAMES,
   PLAYER_CAT_LOOK,
+  TILE_SCALE,
+  TILE_X,
+  TILE_Y,
   WALK_FRAMES,
   WORK_IMPACT_FRAME,
 } from './art/catFigure';
+import type { Pt } from './art/catArt';
 import {
   MAGIC_MISSILE_EXPLOSION_FIGURE,
   MAGIC_MISSILE_PROJECTILE_FIGURE,
@@ -43,7 +50,7 @@ import { DEFAULT_FACING_SELECTION, type FacingSelection } from './facingView';
 import { catRowViewOf, type CatRowView } from './catViews';
 import { BARE_CAT_OUTFIT } from './garments/cat/catDressing';
 import { outfitOf, sameOutfit, type Outfit } from './garments/outfit';
-import type { CatLook } from './looks/catLook';
+import type { CatLook, CatOutline } from './looks/catLook';
 
 export interface Missile {
   x: number;
@@ -108,11 +115,23 @@ export type CatState =
   | 'carry_idle'
   | 'carry_idle_side'
   | 'carry_idle_side_west'
-  | 'carry_idle_away';
+  | 'carry_idle_away'
+  | 'throw'
+  | 'throw_side'
+  | 'throw_side_west'
+  | 'throw_away';
 
 /** Animations that play once and then hand control back to walk/idle. */
 export type CatOneShot =
-  'swipe' | 'cast' | 'dance' | 'look_around' | 'groom_paw' | 'groom_flank' | 'chop' | 'mine';
+  | 'swipe'
+  | 'cast'
+  | 'dance'
+  | 'look_around'
+  | 'groom_paw'
+  | 'groom_flank'
+  | 'chop'
+  | 'mine'
+  | 'throw';
 
 /** Her work swings: a two-paw chop at wood and a two-paw pick at stone. */
 export type CatWorkSwing = Extract<CatOneShot, 'chop' | 'mine'>;
@@ -132,6 +151,9 @@ const CAT_CAST_FRAMES = 24;
 const CAT_DANCE_FRAMES = 96;
 const CAT_LOOK_AROUND_FRAMES = 90;
 const CAT_GROOM_FRAMES = 110;
+const CAT_THROW_TICKS = ACTION_FRAMES * CAT_THROW_TICKS_PER_FRAME;
+/** Ticks from the start of her throw to the tick the thing leaves her jaws. */
+export const CAT_THROW_RELEASE_TICKS = CAT_THROW_RELEASE_FRAME * CAT_THROW_TICKS_PER_FRAME;
 
 /**
  * Her work swings last as long as her swipe, `CAT_SWIPE_FRAMES`: harvests,
@@ -147,6 +169,7 @@ const ONE_SHOT_DURATION: Record<CatOneShot, number> = {
   look_around: CAT_LOOK_AROUND_FRAMES,
   groom_paw: CAT_GROOM_FRAMES,
   groom_flank: CAT_GROOM_FRAMES,
+  throw: CAT_THROW_TICKS,
 };
 
 /** Ticks her work swing plays for, start to finish. */
@@ -162,9 +185,10 @@ const IDLE_BREAKS: readonly CatOneShot[] = ['look_around', 'groom_paw', 'groom_f
 /**
  * Animations she abandons as soon as she moves. The level-up dance is in here
  * because a level-up lands mid-fight as often as not, and a cat sliding across
- * the floor in a dance pose looks broken.
+ * the floor in a dance pose looks broken. A throw is flung with her front paws
+ * planted, so a step ends it as a step ends the human's.
  */
-const INTERRUPTED_BY_MOVEMENT: readonly CatOneShot[] = [...IDLE_BREAKS, 'dance'];
+const INTERRUPTED_BY_MOVEMENT: readonly CatOneShot[] = [...IDLE_BREAKS, 'dance', 'throw'];
 
 /**
  * Frames an animation is guaranteed before movement can cut it short. Without
@@ -230,6 +254,10 @@ const FRAME_COUNT: Record<CatState, number> = {
   carry_idle_side: IDLE_FRAMES,
   carry_idle_side_west: IDLE_FRAMES,
   carry_idle_away: IDLE_FRAMES,
+  throw: ACTION_FRAMES,
+  throw_side: ACTION_FRAMES,
+  throw_side_west: ACTION_FRAMES,
+  throw_away: ACTION_FRAMES,
 };
 
 /**
@@ -282,6 +310,20 @@ const HELD_ROWS: Readonly<Record<CatHold, readonly CatState[]>> = {
   chop: ['chop', 'chop_side', 'chop_side_west', 'chop_away'],
   mine: ['mine', 'mine_side', 'mine_side_west', 'mine_away'],
   carry: [
+    'carry_walk',
+    'carry_walk_side',
+    'carry_walk_side_west',
+    'carry_walk_away',
+    'carry_idle',
+    'carry_idle_side',
+    'carry_idle_side_west',
+    'carry_idle_away',
+  ],
+  throw: [
+    'throw',
+    'throw_side',
+    'throw_side_west',
+    'throw_away',
     'carry_walk',
     'carry_walk_side',
     'carry_walk_side_west',
@@ -355,8 +397,8 @@ export function prewarmCatHold(hold: CatHold, facing: FacingSelection, moving: b
   const view = catRowViewOf(facing.view);
   const faced = (state: CatState): boolean =>
     catRowView(state) === view && catRowFacesWest(state) === (view === 'side' && facing.flipX);
-  const drawnNext =
-    hold === 'carry' ? directionalState(moving ? 'carry_walk' : 'carry_idle', facing) : null;
+  const inJaws = hold === 'carry' || hold === 'throw';
+  const drawnNext = inJaws ? directionalState(moving ? 'carry_walk' : 'carry_idle', facing) : null;
   const rows = HELD_ROWS[hold];
   const facedFirst = [...rows.filter(faced), ...rows.filter((row) => !faced(row))];
   const ordered =
@@ -477,6 +519,8 @@ export interface CatSpriteState {
   readonly carrying?: boolean;
   /** The swing of the tool she has out: standing, she holds it ready in that swing's opening pose. */
   readonly working?: CatWorkSwing | null;
+  /** An explosive in her jaws, drawn back to fling: standing, she holds her throw's cocked pose. */
+  readonly cockedToThrow?: boolean;
   /** Catnip has her pupils blown wide: painted over her eyes, so no second set of cells is baked. */
   readonly pupilsDilated?: boolean;
 }
@@ -492,7 +536,7 @@ function bothWays(state: CatState): ViewRows {
 }
 
 type DirectionalBase =
-  'walk' | 'idle' | 'swipe' | 'cast' | 'chop' | 'mine' | 'carry_walk' | 'carry_idle';
+  'walk' | 'idle' | 'swipe' | 'cast' | 'chop' | 'mine' | 'carry_walk' | 'carry_idle' | 'throw';
 
 /**
  * Her rows that have a version per view, by view. No row is ever mirrored at
@@ -540,6 +584,11 @@ const OWN_ROWS: Readonly<Record<DirectionalBase, Readonly<Record<CatRowView, Vie
     side: { east: 'carry_idle_side', west: 'carry_idle_side_west' },
     back: bothWays('carry_idle_away'),
   },
+  throw: {
+    front: bothWays('throw'),
+    side: { east: 'throw_side', west: 'throw_side_west' },
+    back: bothWays('throw_away'),
+  },
 };
 
 /** The rows she turns in empty-handed. */
@@ -579,6 +628,7 @@ const RESIDENT_VIEW_ROWS_HOLDING: Readonly<Record<CatHold, readonly CatState[]>>
   chop: viewRowsOf([...TURNING_BASES, 'chop']),
   mine: viewRowsOf([...TURNING_BASES, 'mine']),
   carry: viewRowsOf([...TURNING_BASES, 'carry_walk', 'carry_idle']),
+  throw: viewRowsOf([...TURNING_BASES, 'carry_walk', 'carry_idle', 'throw']),
 };
 
 /** The swing frame she holds her tool ready in between swings. */
@@ -628,6 +678,7 @@ const RESIDENT_VIEWS_HOLDING: Readonly<Record<CatHold, ResidentRows>> = {
   chop: new ResidentRows(spansOf(RESIDENT_VIEW_ROWS_HOLDING.chop)),
   mine: new ResidentRows(spansOf(RESIDENT_VIEW_ROWS_HOLDING.mine)),
   carry: new ResidentRows(spansOf(RESIDENT_VIEW_ROWS_HOLDING.carry)),
+  throw: new ResidentRows(spansOf(RESIDENT_VIEW_ROWS_HOLDING.throw)),
 };
 
 /** One cell of the cat crawler's figure: which row, which frame, and whether it is mirrored. */
@@ -683,6 +734,14 @@ export function catCellFor(state: CatSpriteState = {}): CatCell {
     return { state: directionalState(working, facing), frame: READY_FRAME, flipX: false };
   }
 
+  if (state.cockedToThrow === true) {
+    return {
+      state: directionalState('throw', facing),
+      frame: CAT_THROW_COCKED_FRAME,
+      flipX: false,
+    };
+  }
+
   const key = directionalState(state.carrying === true ? 'carry_idle' : 'idle', facing);
   return {
     state: key,
@@ -691,9 +750,13 @@ export function catCellFor(state: CatSpriteState = {}): CatCell {
   };
 }
 
-const DIRECTIONAL_ONE_SHOTS = ['swipe', 'cast', 'chop', 'mine'] as const satisfies readonly (
-  CatOneShot | DirectionalBase
-)[];
+const DIRECTIONAL_ONE_SHOTS = [
+  'swipe',
+  'cast',
+  'chop',
+  'mine',
+  'throw',
+] as const satisfies readonly (CatOneShot | DirectionalBase)[];
 
 function isDirectional(action: CatOneShot): action is (typeof DIRECTIONAL_ONE_SHOTS)[number] {
   return DIRECTIONAL_ONE_SHOTS.some((directional) => directional === action);
@@ -816,6 +879,17 @@ function catStowedAt(
   };
 }
 
+/**
+ * Where her mouth socket is on `cell`, in tile fractions from her sprite's tile
+ * origin: what she carries in her jaws leaves from there when she flings it.
+ */
+export function catMouthSocketInTile(cell: CatCell): Pt | null {
+  const frames = catSocketsAt(activeLook, cell.state, cell.frame);
+  if (frames === null) return null;
+  const { centre } = frames.sockets.mouth;
+  return { x: (centre.x - TILE_X) / TILE_SCALE, y: (centre.y - TILE_Y) / TILE_SCALE };
+}
+
 /** Composites `held` at its socket on the cell being drawn, or nothing where the cell does not hold it. */
 function catHeldBetween(held: CatHeldDraw, cell: CatCell): FigureBetween | undefined {
   const frames = catSocketsAt(activeLook, cell.state, cell.frame);
@@ -832,8 +906,49 @@ function catHeldBetween(held: CatHeldDraw, cell: CatCell): FigureBetween | undef
       place.scale * catHeldPxPerUnit(held.look),
       held.phase,
     );
+    const outline = activeLook.outline;
+    if (outline !== null && catHeldOutlined(held.look)) {
+      drawHeldOutline(ctx, outline, outline.widthPx * place.scale, () =>
+        compositeHeldItem(ctx, held.look, transform, 'cached'),
+      );
+    }
     compositeHeldItem(ctx, held.look, transform, 'cached');
   };
+}
+
+/** The four directions a held thing's outline is stamped out in, around the thing itself. */
+const OUTLINE_STAMPS: readonly Pt[] = [
+  { x: 1, y: 0 },
+  { x: -1, y: 0 },
+  { x: 0, y: 1 },
+  { x: 0, y: -1 },
+];
+
+/**
+ * Stamps `draw`'s silhouette `width` pixels out each way in her own outline's
+ * ink, so a dark thing in her jaws keeps its edge against her dark coat the
+ * way she keeps hers against a dark floor. Drawn before the thing itself,
+ * which then covers all but the rim.
+ */
+function drawHeldOutline(
+  ctx: CanvasRenderingContext2D,
+  outline: CatOutline,
+  width: number,
+  draw: () => void,
+): void {
+  ctx.save();
+  try {
+    ctx.globalAlpha *= outline.alpha;
+    ctx.shadowColor = outline.colour;
+    ctx.shadowBlur = 0;
+    for (const stamp of OUTLINE_STAMPS) {
+      ctx.shadowOffsetX = stamp.x * width;
+      ctx.shadowOffsetY = stamp.y * width;
+      draw();
+    }
+  } finally {
+    ctx.restore();
+  }
 }
 
 /** Both missile figures share one set of row names. */

@@ -23,14 +23,14 @@ import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { Mob } from '../src/creatures/Mob';
-import { Mongo } from '../src/creatures/Mongo';
+import { Deinonychus } from '../src/creatures/Deinonychus';
 import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
 import type { StandaloneMobKind } from '../src/levels/mobKinds';
 import { BallOfSwine } from '../src/creatures/BallOfSwine';
 import { makeBurn, makePoison } from '../src/core/combat/StatusEffect';
 import { CompanionSystem } from '../src/systems/CompanionSystem';
 import { MELEE_POINT_BLANK_RANGE } from '../src/systems/CombatSystem';
-import { MIN_STAT_VALUE } from '../src/Player';
+import { MIN_STAT_VALUE } from '../src/core/party/crawlerFormulas';
 import {
   BossRoomSystem,
   LOOT_SEAL_NOTICE,
@@ -98,8 +98,8 @@ const BOSS_ROOM_UNDER_TEST = 0;
 const CHEST_TILE = 10;
 /** How far outside the boss room's wall the party waits in the corridor. */
 const PARTY_STANDOFF_TILES = 2;
-/** Comfortably above any level-1 Mongo's max HP, so the constructor clamp never bites. */
-const MONGO_TEST_STARTING_HP = 999;
+/** Comfortably above any level-1 Deinonychus's max HP, so the constructor clamp never bites. */
+const DEINONYCHUS_TEST_STARTING_HP = 999;
 /** One frame past the un-entered regen delay, mirrored from `BossRoomSystem`. */
 const EXPECTED_UNENTERED_REGEN_FRAMES = 302;
 /** Enough to be unambiguously a wound, and nowhere near a kill. */
@@ -108,8 +108,8 @@ const DOORWAY_SNIPE_DAMAGE = 5;
 const THRESHOLD_ENTRY_FRAMES = 120;
 /** A swipe is committed half an animation before it lands, so a pursuer is allowed to back out of some. */
 const MIN_SWIPE_CONNECT_RATE = 0.6;
-/** Enough strength that the claw out-damages the missile she would otherwise be firing. */
-const BRAWLER_STRENGTH = 12;
+/** Enough melee that the claw out-damages the missile she would otherwise be firing. */
+const BRAWLER_MELEE = 12;
 /** The cat's own claw reach, restated so the two fights are compared against one number. */
 const CAT_MELEE_REACH_PX = TILE_SIZE * 1.6;
 /** Roughly a companion cat's cadence at a levelled missile. */
@@ -1040,7 +1040,7 @@ console.log('\nThe companion cat casts first and claws in the gaps');
   }
 }
 
-console.log('\nStanding her ground is a strength build, not the default');
+console.log('\nStanding her ground is a melee build, not the default');
 {
   /**
    * One rat chasing the companion cat for twenty seconds, driven the way the
@@ -1050,7 +1050,7 @@ console.log('\nStanding her ground is a strength build, not the default');
    * her ground puts at risk, and a harness that heals her every frame cannot
    * tell an opportunistic swipe from a suicidal one.
    */
-  function runChaseFight(strength: number): {
+  function runChaseFight(melee: number): {
     swipes: number;
     peaks: number;
     peaksOnTarget: number;
@@ -1065,7 +1065,7 @@ console.log('\nStanding her ground is a strength build, not the default');
     const { map, ground } = staged;
     const party = makeParty(map);
     const companion = new CompanionSystem(map, ground.x, ground.y);
-    party.cat.setBaseStat('strength', strength);
+    party.cat.setBaseStat('melee', melee);
     party.human.x = ground.x * TILE_SIZE;
     party.human.y = ground.y * TILE_SIZE;
     // The cat stands apart from the human and the rat is after *her*: the kite
@@ -1131,7 +1131,7 @@ console.log('\nStanding her ground is a strength build, not the default');
     };
   }
 
-  const brawler = runChaseFight(BRAWLER_STRENGTH);
+  const brawler = runChaseFight(BRAWLER_MELEE);
   if (brawler === null) {
     check(false, 'a generated dungeon offered open floor to stage a fight on');
   } else {
@@ -1164,7 +1164,7 @@ console.log('\nStanding her ground is a strength build, not the default');
     // measuring it as health rather than as intent is the only way to be sure.
     check(
       caster.closest > CAT_MELEE_REACH_PX,
-      `a cat with no strength keeps the rat out instead (${caster.closest.toFixed(0)}px)`,
+      `a cat with no melee keeps the rat out instead (${caster.closest.toFixed(0)}px)`,
     );
     check(caster.hpSpent === 0, `and pays nothing for it (${caster.hpSpent} HP spent)`);
     check(caster.casts > MIN_CASTS_PER_FIGHT, `still casting throughout (${caster.casts} casts)`);
@@ -1994,7 +1994,7 @@ console.log('\nA wooden chest still makes the party wait for its lock to fall');
 }
 
 console.log(
-  "\nA wooden chest's room-clear check answers to hostiles alone, not to Mongo or a grub",
+  "\nA wooden chest's room-clear check answers to hostiles alone, not to Deinonychus or a grub",
 );
 {
   const map = new GameMap(MAP_OPTIONS);
@@ -2010,15 +2010,15 @@ console.log(
   );
   const [chest] = chests.allChests;
 
-  const mongo = new Mongo(
+  const deinonychus = new Deinonychus(
     bounds.x + 1,
     bounds.y + 1,
     TILE_SIZE,
     party.cat,
     1,
-    MONGO_TEST_STARTING_HP,
+    DEINONYCHUS_TEST_STARTING_HP,
   );
-  party.roster.add(mongo);
+  party.roster.add(deinonychus);
   addMob(party, 'brindle_grub', bounds.x + 2, bounds.y + 1);
   const guard = addMob(party, 'goblin', bounds.x + 2, bounds.y + 2);
 
@@ -2029,7 +2029,7 @@ console.log(
   chests.update(party.roster.mobs);
   check(
     chest.state !== 'locked',
-    'unlocks once the guard is dead, even with Mongo and a grub still standing in the room',
+    'unlocks once the guard is dead, even with Deinonychus and a grub still standing in the room',
   );
 }
 

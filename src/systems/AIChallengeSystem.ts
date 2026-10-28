@@ -1,9 +1,9 @@
 /**
- * The show's timed bounties: the AI offers one (`offer_challenge`), the
+ * The AI's timed bounties: it offers one (`offer_challenge`), the
  * player takes it or turns it down on a card, and an accepted one is tracked
  * from the floor's events until it is won, failed or the party leaves.
  *
- * A challenge is a template plus bounded parameters (`src/ai/show/challenges.ts`);
+ * A challenge is a template plus bounded parameters (`src/ai/interactions/challenges.ts`);
  * this system interprets the template's rules and never runs logic the model
  * wrote. One challenge at a time: an offer on the card or a challenge under
  * way refuses the next. Its clock counts gameplay frames, so it stands still
@@ -15,6 +15,7 @@
  * high-importance game event.
  */
 
+import { speaksInCarolineFrame } from '../ai/AIChatFeed';
 import { crawlerName } from '../characters/characters';
 import type { Rarity } from '../core/items/defs/rarity';
 import type { EventBus } from '../core/EventBus';
@@ -30,7 +31,7 @@ import {
   mobMatches,
   type ChallengeSpec,
   type ChallengeSummary,
-} from '../ai/show/challenges';
+} from '../ai/interactions/challenges';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { secondsLabel, type TrackerEntry } from './questTracker';
 
@@ -294,6 +295,7 @@ export class AIChallengeSystem implements GameSystem {
       icon: 'skull',
       urgent: true,
       durationTicks: TAUNT_TOAST_TICKS,
+      voice: speaksInCarolineFrame(active.spec.offeredBy) ? 'caroline' : 'hud',
     });
   }
 

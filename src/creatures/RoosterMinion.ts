@@ -26,7 +26,7 @@ const AGGRO_RANGE_TILES = 8;
 /** He walks in to this share of his longest reach, so either blow lands from where he stops. */
 const FOLLOW_STOP_FRACTION = 0.85;
 const TILE_CENTER = 0.5;
-/** Shell XP per blocked peck or punch. */
+/** Energy Shield XP per blocked peck or punch. */
 const STRIKE_BLOCK_XP = 3;
 
 /** The painted builds the flock is drawn from: every rooster but Big Rooster himself. */
@@ -196,14 +196,14 @@ export abstract class RoosterMinion extends Mob {
       y: this.y,
       tileSize: this.tileSize,
       land: (target, spec) => {
-        // The party's shell turns aside an enemy's blow, never a turned ally's.
-        const shelled =
+        // The party's energy shield turns aside an enemy's blow, never a turned ally's.
+        const shielded =
           !this.isConverted &&
-          this.spells?.isPointInsideShell(
+          this.spells?.isPointInsideEnergyShield(
             target.x + this.tileSize * TILE_CENTER,
             target.y + this.tileSize * TILE_CENTER,
           ) === true;
-        if (shelled && this.spells !== null) {
+        if (shielded && this.spells !== null) {
           this.spells.addBlockXp(STRIKE_BLOCK_XP);
           return;
         }

@@ -45,7 +45,7 @@ import type { TrebuchetStructureRecord } from '../../core/quests/briarHollowStat
 import type { VillageQuestPhase } from '../../core/quests/villageQuestPhase';
 import type { BriarHollowSite } from '../../map/overworld/briarHollowSite';
 import { infernalTrebuchets, unlimitedAmmo } from '../../core/labour/craftPerks';
-import { makeBurn } from '../../core/combat/StatusEffect';
+import { makeCreditedBurn } from '../../core/combat/StatusEffect';
 import {
   TREBUCHET_COCKED_ANGLE,
   TREBUCHET_LOOSED_ANGLE,
@@ -816,7 +816,7 @@ export class TrebuchetSystem {
       // weapon skill — and, unlike `explosion`, no type still passes the
       // friendly-fire gate, so a boulder can never reach an ally that way.
       mob.takeCreditedDamage(damage, builder, null, null);
-      if (boulder.infernal && mob.isAlive) mob.applyStatus(makeBurn(builder));
+      if (boulder.infernal && mob.isAlive) mob.applyStatus(makeCreditedBurn(builder));
       if (mob.isAlive) this.shove(mob, toX, toY, TREBUCHET_KNOCKBACK_TILES);
     }
     for (const crawler of [this.deps.human, this.deps.cat]) {

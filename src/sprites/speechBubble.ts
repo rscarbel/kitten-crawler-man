@@ -276,7 +276,7 @@ export interface TimedBubbleStyle {
   readonly text: string;
 }
 
-/** The cat's calls to Mongo: a cool blue, the colour of her own UI. */
+/** The cat's calls to Deinonychus: a cool blue, the colour of her own UI. */
 export const CAT_SPEECH_STYLE: TimedBubbleStyle = { border: '#60a5fa', text: '#e0f2fe' };
 
 /** The human crawler's own barks: a warm amber, distinct from the cat's cool blue. */

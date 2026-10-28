@@ -6,9 +6,11 @@
 
 import {
   isAbilityId,
+  perkText,
   type AbilityDef,
   type AbilityId,
   type AbilityManager,
+  type AbilityPerkDef,
   type AbilityState,
 } from '../../../core/skills/AbilityManager';
 import type { Inventory } from '../../../core/items/inventory/Inventory';
@@ -28,13 +30,15 @@ import { lineHeightOf, measureTextHeight, text } from '../../widgets/text';
 import { keycap } from '../../widgets/keycap';
 import { choiceRow, wideButton, type Choice } from './parts';
 import type { PauseContext, PauseSection, SectionLayout } from './section';
+import { petWords, type PetNames } from '../../../core/party/petNames';
+import { deinonychusGuideLabel } from '../dialogs/deinonychusExplainer';
 
 type AbilitiesView =
   | { readonly kind: 'list' }
   | { readonly kind: 'hotbar' }
   | { readonly kind: 'detail'; readonly id: AbilityId };
 
-const MONGO_ABILITY_ID: AbilityId = 'mongo';
+const DEINONYCHUS_ABILITY_ID: AbilityId = 'deinonychus';
 
 /** The last hotbar slot holds quest items, never an ability. */
 const ABILITY_HOTBAR_SLOTS = HOTBAR_COUNT - 1;
@@ -154,12 +158,13 @@ function renderList(
 function perkRow(
   layout: SectionLayout,
   ui: Ui,
-  perk: { level: number; description: string },
+  perk: AbilityPerkDef,
   currentLevel: number,
+  petNames: PetNames,
 ): void {
   const { space, palette, radius, size } = ui.theme;
   const unlocked = currentLevel >= perk.level;
-  const description = unlocked ? perk.description : '???';
+  const description = unlocked ? perkText(perk.description, petNames) : '???';
   const badgeSide = size.icon + space.sm;
   const textW = layout.width - badgeSide - space.md * 2;
   const h = Math.max(
@@ -216,13 +221,18 @@ function renderDetail(layout: SectionLayout, ctx: PauseContext, def: AbilityDef)
     valueText: atMax ? 'MAX LEVEL' : `${state.xp} / ${state.xpToNextLevel} XP`,
     ghost: false,
   });
-  const guide = def.id === MONGO_ABILITY_ID ? ctx.guides.mongo : undefined;
+  const guide = def.id === DEINONYCHUS_ABILITY_ID ? ctx.guides.deinonychus : undefined;
   if (guide !== undefined) {
-    wideButton(layout, { id: 'mongo-guide', label: 'How Mongo works', icon: 'info', onTap: guide });
+    wideButton(layout, {
+      id: 'deinonychus-guide',
+      label: deinonychusGuideLabel(petWords(ctx.petNames, 'deinonychus')),
+      icon: 'info',
+      onTap: guide,
+    });
     layout.space(space.sm);
   }
   layout.heading('Level perks');
-  for (const perk of def.perks) perkRow(layout, ui, perk, state.level);
+  for (const perk of def.perks) perkRow(layout, ui, perk, state.level, ctx.petNames);
 }
 
 // ── Hotbar ──────────────────────────────────────────────────────────────────

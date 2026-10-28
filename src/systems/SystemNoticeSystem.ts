@@ -8,19 +8,14 @@ import type { CrawlerKind } from '../core/skills/SkillManager';
 import type { HudToasts, ToastOptions } from '../ui/hud/toasts';
 
 /**
- * First-unlock copy. One line per skill, trimmed to the name and the fact that
- * it is new: these ride the hotbar toast, which is read at a glance mid-fight.
+ * First-unlock copy, trimmed to the name and the fact that it is new: it rides
+ * the hotbar toast, which is read at a glance mid-fight.
  */
-const UNLOCK_LINES: Record<SkillId, string> = {
-  cockroach: 'Skill unlocked: Cockroach',
-  cat_reflexes: 'Skill unlocked: Cat-like Reflexes',
-  pugilism: 'Skill unlocked: Pugilism',
-  iron_stomach: 'Skill unlocked: Iron Stomach',
-  iron_punch: 'Skill unlocked: Iron Punch',
-  powerful_strike: 'Skill unlocked: Powerful Strike',
-};
+function unlockLine(id: SkillId): string {
+  return `Skill unlocked: ${getSkillDef(id).name}`;
+}
 
-const COCKROACH_RECHARGED_LINE = 'Cockroach ready';
+const NINE_LIVES_RECHARGED_LINE = '9 Lives ready';
 
 const SYSTEM_NOTICE_TOAST: ToastOptions = { tone: 'info' };
 const SKILL_UNLOCK_TOAST: ToastOptions = { tone: 'accent', icon: 'star' };
@@ -36,7 +31,7 @@ const TRAILING_PERIOD = /\.$/;
 
 /**
  * Drains everything a `Player` queues for the scene to announce or broadcast:
- * skill events, migration notices, and dodges.
+ * skill events, queued system notices, and dodges.
  *
  * Players have no event bus in scope — a dodge is decided inside
  * `Player.takeDamage` — so they queue and this converts. It is built
@@ -45,7 +40,7 @@ const TRAILING_PERIOD = /\.$/;
  */
 export class SystemNoticeSystem implements GameSystem {
   /** Tracks the recharge edge so the ready-toast fires once, not every frame. */
-  private cockroachWasRecharging = false;
+  private nineLivesWasRecharging = false;
 
   constructor(
     private readonly bus: EventBus,
@@ -63,22 +58,22 @@ export class SystemNoticeSystem implements GameSystem {
   drainFor(human: Player, cat: Player): void {
     this.drain(human, 'Human');
     this.drain(cat, 'Cat');
-    this.announceCockroachRecharge(cat);
+    this.announceNineLivesRecharge(cat);
   }
 
   /**
-   * A one-shot toast the moment Cockroach comes back online.
+   * A one-shot toast the moment 9 Lives comes back online.
    *
    * Polled rather than queued: the recharge is a wall-clock deadline that ripens
    * on its own, with no gameplay event to hang an announcement off.
    */
-  private announceCockroachRecharge(cat: Player): void {
-    if (!cat.skills.isUnlocked('cockroach')) return;
-    const ready = cat.isCockroachReady;
-    if (ready && this.cockroachWasRecharging) {
-      this.toasts.post(COCKROACH_RECHARGED_LINE, SKILL_READY_TOAST);
+  private announceNineLivesRecharge(cat: Player): void {
+    if (!cat.skills.isUnlocked('nine_lives')) return;
+    const ready = cat.isNineLivesReady;
+    if (ready && this.nineLivesWasRecharging) {
+      this.toasts.post(NINE_LIVES_RECHARGED_LINE, SKILL_READY_TOAST);
     }
-    this.cockroachWasRecharging = !ready;
+    this.nineLivesWasRecharging = !ready;
   }
 
   private drain(player: Player, who: 'Human' | 'Cat'): void {
@@ -125,7 +120,7 @@ export class SystemNoticeSystem implements GameSystem {
     switch (event.kind) {
       case 'unlocked':
         this.bus.emit('skillUnlocked', { player: who, skillId: event.id });
-        this.toasts.post(UNLOCK_LINES[event.id], SKILL_UNLOCK_TOAST);
+        this.toasts.post(unlockLine(event.id), SKILL_UNLOCK_TOAST);
         return;
       case 'leveled':
         this.bus.emit('skillLevelUp', { player: who, skillId: event.id, newLevel: event.level });
@@ -139,7 +134,7 @@ export class SystemNoticeSystem implements GameSystem {
         return;
       case 'triggered':
         this.bus.emit('skillTriggered', { player: who, skillId: event.id });
-        this.toasts.post(TRIGGER_LINES[event.id], SKILL_TRIGGER_TOAST);
+        this.toasts.post(triggerLine(event.id), SKILL_TRIGGER_TOAST);
         return;
       default: {
         const unhandled: never = event.kind;
@@ -150,15 +145,15 @@ export class SystemNoticeSystem implements GameSystem {
 }
 
 /**
- * Copy for a skill firing in the moment. Only skills with a dramatic proc need
- * one. Kept to a single short line: these ride the hotbar toast, which fires
- * mid-fight and does not wrap.
+ * Copy for a skill firing in the moment, for the skills whose proc is dramatic
+ * enough to say more than that it fired. Kept to a single short line: these
+ * ride the hotbar toast, which fires mid-fight and does not wrap.
  */
-const TRIGGER_LINES: Record<SkillId, string> = {
-  cockroach: 'Cockroach — fatal damage survived',
-  cat_reflexes: 'Cat-like Reflexes engaged.',
-  pugilism: 'Pugilism engaged.',
-  iron_stomach: 'Iron Stomach engaged.',
-  iron_punch: 'Iron Punch engaged.',
+const TRIGGER_LINES: Partial<Record<SkillId, string>> = {
+  nine_lives: '9 Lives — fatal damage survived',
   powerful_strike: 'Powerful Strike — double damage',
 };
+
+function triggerLine(id: SkillId): string {
+  return TRIGGER_LINES[id] ?? `${getSkillDef(id).name} engaged.`;
+}

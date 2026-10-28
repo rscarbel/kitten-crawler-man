@@ -57,7 +57,7 @@ export const CHARACTERS = {
     species: 'human',
     displayName: 'Dave',
     formalName: 'Dave',
-    speakerId: 'ryan',
+    speakerId: 'dave',
     plays: false,
     look: DAVE_LOOK,
   },

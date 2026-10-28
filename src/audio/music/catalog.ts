@@ -41,7 +41,7 @@ export type MusicAttribution = MusicAuthor & {
 };
 
 export interface MusicTrackDef {
-  /** The name the game shows, which may differ from the recording's own title. */
+  /** The name the game displays, which may differ from the recording's own title. */
   readonly title: string;
   readonly area: MusicAreaId;
   readonly attribution: MusicAttribution;
@@ -342,7 +342,7 @@ export const MUSIC_CATALOG = {
     },
   },
   boss_music_3: {
-    title: 'Dance for the Viewers',
+    title: 'Dance on the Fault Line',
     area: 'battles',
     attribution: {
       authorName: 'Douglas Gustafson',

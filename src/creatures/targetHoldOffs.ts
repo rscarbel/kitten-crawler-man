@@ -54,7 +54,7 @@ export interface HoldOffQuery {
 
 /**
  * The mobs a companion may not pick right now, and the chase-stall count that
- * decides when a chase is hopeless — the shared part of how Mongo and a
+ * decides when a chase is hopeless — the shared part of how Deinonychus and a
  * hireling give up on a target they cannot get to.
  *
  * A failed A* search makes `followTargetAStar` fall back to a straight-line

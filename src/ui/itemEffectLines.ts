@@ -1,14 +1,23 @@
-import { ALL_STATS, POTION_HEAL_FRACTION, type StatName } from '../Player';
+import { POTION_HEAL_FRACTION } from '../Player';
+import { ALL_STATS, DELIVERY_STAT, STAT_DEFS, type StatId } from '../core/party/stats';
 import {
   ITEM_DEF,
   wearerOf,
   type FairyElement,
   type InventoryItem,
+  type ItemDef,
   type ItemId,
   type ResistanceType,
 } from '../core/items/defs/ItemDefs';
-import { getSkillDef, SKILL_IDS, type SkillId } from '../core/skills/SkillManager';
-import type { ClawTrail, WeaponProcId, WeaponStats } from '../core/items/equipment/weapons';
+import { getSkillDef, SKILL_IDS, type SkillId, type SkillOwner } from '../core/skills/SkillManager';
+import {
+  WEAPON_FAMILY_LABELS,
+  type ClawTrail,
+  type WeaponDelivery,
+  type WeaponProcId,
+  type WeaponStats,
+} from '../core/items/equipment/weapons';
+import { isAbilityId } from '../core/skills/AbilityManager';
 import { describeTrait } from '../gear/traits';
 import { activeSetBonuses, setProgress, wornSets } from '../gear/setProgress';
 import { grantedAbility } from '../gear/gearHooks';
@@ -17,29 +26,23 @@ import { GEAR_SETS, type GearSetBonus } from '../gear/sets';
 import {
   HAMBURGER_FED_DURATION_SECONDS,
   HAMBURGER_HEAL_FRACTION,
-  HAMBURGER_STR_BONUS,
+  HAMBURGER_MELEE_BONUS,
 } from '../core/items/consumables/foodEffects';
 import { MAX_TOOL_TIER, toolTierDef, type ToolKind } from '../core/items/gathering/toolTiers';
 
 /** Multiplier→percentage conversion for the lines that read as percentages. */
 const PERCENT = 100;
 
-const STAT_LABELS: Record<StatName, string> = {
-  strength: 'Strength',
-  intelligence: 'Intelligence',
-  constitution: 'Constitution',
-  dexterity: 'Dexterity',
-};
-
 const TOOL_PLURAL: Record<ToolKind, string> = {
   axe: 'axes',
   pickaxe: 'picks',
 };
 
-const RESISTANCE_LABELS: Record<ResistanceType, string> = {
+export const RESISTANCE_LABELS: Readonly<Record<ResistanceType, string>> = {
   poison: 'Poison',
   ice: 'Ice',
   piercing: 'Piercing',
+  magic: 'Magic',
 };
 
 const FAIRY_ELEMENT_LABELS: Record<FairyElement, string> = {
@@ -55,6 +58,19 @@ export function fairyImmunityLine(elements: readonly FairyElement[]): string | n
 }
 
 const WEARER_LABELS = { cat: 'Cat only', human: 'Human only', both: null } as const;
+
+/** Who can learn from a skill book, by who its skill is for. */
+const LEARNER_LINES = {
+  cat: 'Only the Cat can learn it',
+  human: 'Only the Human can learn it',
+  both: 'Either crawler can learn it',
+} as const satisfies Record<SkillOwner, string>;
+
+/** What reading a skill book does, and who can read it. */
+function skillBookLines(id: SkillId): string[] {
+  const def = getSkillDef(id);
+  return [`Teaches ${def.name}`, LEARNER_LINES[def.eligibleFor]];
+}
 
 /** Rounded to whole percent because a tooltip is read, not calculated against. */
 export function asPercent(fraction: number): number {
@@ -72,8 +88,8 @@ export function skillBonusLine(id: SkillId, levels: number): string {
   return `+${levels} ${getSkillDef(id).name}`;
 }
 
-export function meleeOnlyStatLine(stat: StatName, amount: number): string {
-  return `+${amount} ${STAT_LABELS[stat]} (melee only)`;
+export function meleeOnlyStatLine(stat: StatId, amount: number): string {
+  return `+${amount} ${STAT_DEFS[stat].label} (melee only)`;
 }
 
 export const CANCELS_MOMENTUM_LINE = 'Momentum attacks cannot touch you';
@@ -99,11 +115,26 @@ function weaponLines(weapon: WeaponStats): string[] {
     if (weapon.trail !== null) lines.push(CLAW_TRAIL_LINES[weapon.trail]);
     return lines;
   }
-  const lines = [
-    `${weapon.strike === 'blade' ? 'Blade' : 'Blunt'} ×${weapon.damageMultiplier} damage`,
-  ];
+  const lines = [`${WEAPON_FAMILY_LABELS[weapon.family]} ×${weapon.damageMultiplier} damage`];
   if (weapon.onStrike !== undefined) lines.push(WEAPON_PROC_LINES[weapon.onStrike]);
   return lines;
+}
+
+/** How `def`'s damage leaves the crawler, when it deals any: its weapon, its own, or its ability's. */
+function deliveryOf(def: ItemDef): WeaponDelivery | null {
+  if (def.weapon !== undefined) return def.weapon.delivery;
+  if (def.delivery !== undefined) return def.delivery;
+  if (def.abilityId !== undefined && isAbilityId(def.abilityId)) {
+    return ABILITY_DEFS[def.abilityId].delivery;
+  }
+  return null;
+}
+
+/** "Scales with Melee" and the like, for an item whose damage grows with a stat. */
+function scalingLine(def: ItemDef): string | null {
+  const delivery = deliveryOf(def);
+  if (delivery === null) return null;
+  return `Scales with ${STAT_DEFS[DELIVERY_STAT[delivery]].label}`;
 }
 
 /** One line per set with any piece among `equipped`: its name and how many of its pieces are on. */
@@ -118,7 +149,7 @@ export function setProgressLines(equipped: ReadonlyArray<ItemId>): string[] {
 function setBonusLine(bonus: GearSetBonus): string {
   const stats = ALL_STATS.flatMap((stat) => {
     const amount = bonus.statBonus?.[stat];
-    return amount === undefined || amount === 0 ? [] : [`+${amount} ${STAT_LABELS[stat]}`];
+    return amount === undefined || amount === 0 ? [] : [`+${amount} ${STAT_DEFS[stat].label}`];
   });
   const traits = (bonus.traits ?? []).map(describeTrait);
   return [...stats, ...traits].join(', ');
@@ -161,7 +192,7 @@ export function describeItemEffects(item: InventoryItem): string[] {
   if (statBonus) {
     for (const stat of ALL_STATS) {
       const amount = statBonus[stat];
-      if (amount) lines.push(`+${amount} ${STAT_LABELS[stat]}`);
+      if (amount) lines.push(`+${amount} ${STAT_DEFS[stat].label}`);
     }
   }
 
@@ -176,6 +207,8 @@ export function describeItemEffects(item: InventoryItem): string[] {
   const def = ITEM_DEF[item.id];
   const weapon = def.weapon;
   if (weapon !== undefined) lines.push(...weaponLines(weapon));
+  const scaling = scalingLine(def);
+  if (scaling !== null) lines.push(scaling);
 
   const resistances = item.resistances;
   if (resistances && resistances.length > 0) {
@@ -195,6 +228,8 @@ export function describeItemEffects(item: InventoryItem): string[] {
       if (amount) lines.push(skillBonusLine(id, amount));
     }
   }
+
+  if (item.skillId !== undefined) lines.push(...skillBookLines(item.skillId));
 
   const regen = item.regenMultiplier === undefined ? null : regenLine(item.regenMultiplier);
   if (regen !== null) lines.push(regen);
@@ -219,7 +254,7 @@ export function describeItemEffects(item: InventoryItem): string[] {
   // Kept to short lines: effect lines are not wrapped the way the prose is.
   if (item.id === 'hamburger') {
     lines.push(`Heals ${asPercent(HAMBURGER_HEAL_FRACTION)}% max HP`);
-    lines.push(`+${HAMBURGER_STR_BONUS} Strength for ${HAMBURGER_FED_DURATION_SECONDS} seconds`);
+    lines.push(`+${HAMBURGER_MELEE_BONUS} Melee for ${HAMBURGER_FED_DURATION_SECONDS} seconds`);
     lines.push("Another refreshes it; doesn't stack");
   }
 

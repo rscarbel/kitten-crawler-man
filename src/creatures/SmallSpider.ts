@@ -46,8 +46,8 @@ const RECOVER_RETREAT_SPEED_FRACTION = 0.6;
 const RETREAT_RANGE_TILES = 4;
 const RETREAT_RANGE_PX = TILE_SIZE * RETREAT_RANGE_TILES;
 
-/** Shell block XP for spider attack */
-const SHELL_BLOCK_XP = 2;
+/** Energy Shield block XP for spider attack */
+const SHIELD_BLOCK_XP = 2;
 
 /** Approach fraction of attack range */
 const APPROACH_STOP_FRACTION = 0.9;
@@ -96,7 +96,10 @@ type SpiderState = 'idle' | 'pursuing' | 'crouching' | 'pouncing' | 'recovering'
 type DamageType = Parameters<Mob['takeDamageFrom']>[2];
 
 /** Blows that throw the body clear rather than dropping it where it stood. */
-const KNOCKBACK_DAMAGE_TYPES: ReadonlySet<DamageType> = new Set<DamageType>(['missile', 'smush']);
+const KNOCKBACK_DAMAGE_TYPES: ReadonlySet<DamageType> = new Set<DamageType>([
+  'missile',
+  'seismic_stomp',
+]);
 
 function pickDeathStyle(damageType: DamageType): SpiderDeathStyle {
   if (KNOCKBACK_DAMAGE_TYPES.has(damageType)) return 'death_flip';
@@ -206,7 +209,7 @@ export class SmallSpider extends Mob {
   /** Skittering is a discipline. Someone wrote it down. */
   protected override rollLootItems(_killer: Player | null): LootDrop['items'] {
     const items: LootDrop['items'] = [];
-    maybeDropSkillBook(items, 'skill_book_cat_reflexes');
+    maybeDropSkillBook(items, 'skitterer');
     return items;
   }
 
@@ -390,12 +393,12 @@ export class SmallSpider extends Mob {
       if (!target.isAlive) continue;
       if (Math.hypot(target.x - this.x, target.y - this.y) > HIT_RANGE_PX) continue;
       if (
-        this.spells?.isPointInsideShell(
+        this.spells?.isPointInsideEnergyShield(
           target.x + TILE_SIZE * TILE_CENTER_FRACTION,
           target.y + TILE_SIZE * TILE_CENTER_FRACTION,
         )
       ) {
-        this.spells.addBlockXp(SHELL_BLOCK_XP);
+        this.spells.addBlockXp(SHIELD_BLOCK_XP);
         continue;
       }
       this.dealDamage(target, this.pounceDamage);

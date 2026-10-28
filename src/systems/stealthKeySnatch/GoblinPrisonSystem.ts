@@ -40,12 +40,12 @@
  * raises the alarm, one that only hears it walks over to look and sweeps.
  * Abilities and items were audited against the guards:
  *
- * - **Magic Missile, Smush, melee, slingshot, dynamite**: `PrisonGoblin` is
+ * - **Magic Missile, Seismic Stomp, melee, slingshot, dynamite**: `PrisonGoblin` is
  *   damage immune and immovable; every blow only makes noise (and is a catch
  *   if the guard can see the crawler who threw it).
- * - **Protective Shell**: guards refuse every shove (`acceptsShove`), so the
- *   shell cannot push one out of a doorway; it breaks a cell door like any blow.
- * - **Mongo and the hireling**: never inside — the prison admits no
+ * - **Energy Shield**: guards refuse every shove (`acceptsShove`), so the
+ *   shield cannot push one out of a doorway; it breaks a cell door like any blow.
+ * - **Deinonychus and the hireling**: never inside — the prison admits no
  *   companions — so nothing can fight or block a guard.
  * - **Knockback, fear, stun, slow, root, confusion**: `PrisonGoblin` refuses
  *   every status and displacement, so none of them moves or holds a guard.

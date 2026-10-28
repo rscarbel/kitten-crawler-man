@@ -809,7 +809,7 @@ export const BARE_EARTH = 178;
 export const LAB_STATION_FLOOR = 179;
 /** The painted decontamination stripe inside each of the station's doorways, walkable. */
 export const LAB_STATION_THRESHOLD = 180;
-/** A folding camp cot with a rolled blanket, where Mordecai rests — not walkable, seen over. */
+/** A folding camp cot with a rolled blanket, where Dave rests — not walkable, seen over. */
 export const LAB_STATION_COT = 181;
 /** Lab benches tipped on their sides and a few sandbags, pushed to the wall — not walkable, seen over. */
 export const LAB_STATION_BARRICADE = 182;

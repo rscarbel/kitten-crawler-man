@@ -1,5 +1,5 @@
 /**
- * A sponsor's loot box left on the floor in the shadows beside the heroes:
+ * A loot box left on the floor in the shadows beside the heroes:
  * a gilded, domed chest, easy to miss until a glint runs across its lid and
  * gives it away.
  */

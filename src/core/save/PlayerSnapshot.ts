@@ -1,5 +1,5 @@
-import type { StatName, Player } from '../../Player';
-import { ALL_STATS } from '../../Player';
+import type { Player } from '../../Player';
+import { ALL_STATS, zeroStats, type StatId } from '../party/stats';
 import {
   INCURABLE_STATUSES,
   STATUS_DEFS,
@@ -49,15 +49,13 @@ export interface PlayerSnapshot {
   xp: number;
   unspentPoints: number;
   /** Stored stat values, excluding equipment and temporary modifiers. */
-  baseStats: Record<StatName, number>;
+  baseStats: Record<StatId, number>;
   coins: number;
   facingX: number;
   facingY: number;
   inventorySlots: (SavedStack | null)[];
   inventoryHotbar: (SavedStack | null)[];
   equippedEntries: [string, ItemId][];
-  /** The human's alone; the cat's snapshot never carries it. */
-  explosivesHandling?: number;
   /** The Quiet Needle's stat mark. */
   tattoo: StatTattooId | null;
   /** Skill taught by the Quiet Needle's brass mark. */
@@ -96,23 +94,19 @@ export interface PlayerSnapshot {
    */
   craftSkillStates: CraftSkillsSnapshot;
   /**
-   * Wall-clock deadline for Cockroach's recharge. Absolute epoch-ms is the point:
+   * Wall-clock deadline for 9 Lives' recharge. Absolute epoch-ms is the point:
    * a save opened tomorrow should find the skill ready, not still counting down.
    */
-  cockroachReadyAt: number | null;
-  /** Wall-clock deadline for the Third Eye's foresight, kept for the same reason as Cockroach's. */
+  nineLivesReadyAt: number | null;
+  /** Wall-clock deadline for the Third Eye's foresight, kept for the same reason as 9 Lives'. */
   thirdEyeReadyAt: number | null;
   /** Unseen "new upgrade" item ids, so the bag badge survives a scene round-trip. */
   unseenUpgrades: ItemId[];
 }
 
 export function snapPlayer(p: Player): PlayerSnapshot {
-  const baseStats: Record<StatName, number> = {
-    strength: p.getBaseStat('strength'),
-    intelligence: p.getBaseStat('intelligence'),
-    constitution: p.getBaseStat('constitution'),
-    dexterity: p.getBaseStat('dexterity'),
-  };
+  const baseStats = zeroStats();
+  for (const stat of ALL_STATS) baseStats[stat] = p.getBaseStat(stat);
   const snap: PlayerSnapshot = {
     hp: p.hp,
     maxHp: p.maxHp,
@@ -144,13 +138,12 @@ export function snapPlayer(p: Player): PlayerSnapshot {
     reviveProgress: p.reviveProgress,
     skillStates: p.skills.snapshotStates(),
     craftSkillStates: p.craftSkills.snapshot(),
-    cockroachReadyAt: p.cockroachReadyAt,
+    nineLivesReadyAt: p.nineLivesReadyAt,
     thirdEyeReadyAt: p.thirdEyeReadyAt,
     unseenUpgrades: [...p.inventory.unseenUpgrades],
     gearState: p.gear.snapshot(),
   };
   if (p instanceof HumanPlayer) {
-    snap.explosivesHandling = p.explosivesHandling;
     snap.slingshotCooldown = p.slingshotCooldown;
   }
   return snap;
@@ -229,10 +222,9 @@ export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
   p.reviveProgress = snap.reviveProgress;
   p.skills.restoreStates(snap.skillStates);
   p.craftSkills.restore(snap.craftSkillStates);
-  p.cockroachReadyAt = snap.cockroachReadyAt;
+  p.nineLivesReadyAt = snap.nineLivesReadyAt;
   p.thirdEyeReadyAt = snap.thirdEyeReadyAt;
   if (p instanceof HumanPlayer) {
-    if (snap.explosivesHandling !== undefined) p.explosivesHandling = snap.explosivesHandling;
     p.slingshotCooldown = snap.slingshotCooldown ?? 0;
   }
 
@@ -288,18 +280,15 @@ function parseEquippedEntries(kind: CrawlerKind, value: unknown): [string, ItemI
   return distinctIds.size === entries.length ? entries : undefined;
 }
 
-function parseBaseStats(value: unknown): Record<StatName, number> | undefined {
+function parseBaseStats(value: unknown): Record<StatId, number> | undefined {
   if (!isRecord(value)) return undefined;
-  const { strength, intelligence, constitution, dexterity } = value;
-  if (
-    !isNonNegativeFinite(strength) ||
-    !isNonNegativeFinite(intelligence) ||
-    !isNonNegativeFinite(constitution) ||
-    !isNonNegativeFinite(dexterity)
-  ) {
-    return undefined;
+  const stats = zeroStats();
+  for (const stat of ALL_STATS) {
+    const stored = value[stat];
+    if (!isNonNegativeFinite(stored)) return undefined;
+    stats[stat] = stored;
   }
-  return { strength, intelligence, constitution, dexterity };
+  return stats;
 }
 
 /**
@@ -364,7 +353,6 @@ export function parsePlayerSnapshot(value: unknown, kind: CrawlerKind): PlayerSn
     coins,
     facingX,
     facingY,
-    explosivesHandling,
     slingshotCooldown,
     drillTraining,
     juggJuiceHpBoost,
@@ -383,15 +371,15 @@ export function parsePlayerSnapshot(value: unknown, kind: CrawlerKind): PlayerSn
   const statusEffects = parseEvery(value.statusEffects, parseStatusEffect);
   const skillStates = parseEvery(value.skillStates, parseSkillState);
   const craftSkillStates = parseCraftSkillsSnapshot(value.craftSkillStates);
-  const cockroachReadyAt = parseNullableDeadline(value.cockroachReadyAt);
+  const nineLivesReadyAt = parseNullableDeadline(value.nineLivesReadyAt);
   const thirdEyeReadyAt = parseNullableDeadline(value.thirdEyeReadyAt);
   const unseenUpgrades = parseEvery(value.unseenUpgrades, (id) =>
     typeof id === 'string' && isItemId(id) ? id : undefined,
   );
   const isHuman = kind === 'human';
   const humanOnlyFieldsValid = isHuman
-    ? isNonNegativeFinite(explosivesHandling) && isNonNegativeFinite(slingshotCooldown)
-    : explosivesHandling === undefined && slingshotCooldown === undefined;
+    ? isNonNegativeFinite(slingshotCooldown)
+    : slingshotCooldown === undefined;
   if (
     !isNonNegativeFinite(hp) ||
     !isNonNegativeFinite(maxHp) ||
@@ -420,7 +408,7 @@ export function parsePlayerSnapshot(value: unknown, kind: CrawlerKind): PlayerSn
     statusEffects === undefined ||
     skillStates === undefined ||
     craftSkillStates === undefined ||
-    cockroachReadyAt === undefined ||
+    nineLivesReadyAt === undefined ||
     thirdEyeReadyAt === undefined ||
     unseenUpgrades === undefined
   ) {
@@ -451,11 +439,10 @@ export function parsePlayerSnapshot(value: unknown, kind: CrawlerKind): PlayerSn
     reviveProgress,
     skillStates,
     craftSkillStates,
-    cockroachReadyAt,
+    nineLivesReadyAt,
     thirdEyeReadyAt,
     unseenUpgrades,
   };
-  if (isNonNegativeFinite(explosivesHandling)) snap.explosivesHandling = explosivesHandling;
   if (isNonNegativeFinite(slingshotCooldown)) snap.slingshotCooldown = slingshotCooldown;
   return snap;
 }

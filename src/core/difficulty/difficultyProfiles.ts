@@ -16,7 +16,7 @@
 import { settings } from '../input/Settings';
 import { worldRandom } from '../world/WorldRandom';
 import type { Mob } from '../../creatures/Mob';
-import { COCKROACH_RECHARGE_MS } from '../skills/SkillManager';
+import { NINE_LIVES_RECHARGE_MS } from '../skills/SkillManager';
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
 
@@ -41,7 +41,7 @@ export interface DifficultyProfile {
    */
   tacticsChanceScale: number;
   /**
-   * Milliseconds cut from Cockroach's remaining recharge when its owner is
+   * Milliseconds cut from 9 Lives' remaining recharge when its owner is
    * knocked out — a consolation for the fatal blow it was too cold to catch.
    * Clamped so the recharge never goes negative, so Kitten's relief is simply
    * set larger than any recharge could be, which completes it outright
@@ -49,7 +49,7 @@ export interface DifficultyProfile {
    * a token amount rather than a real relief, kept strictly positive because
    * `verify:difficulty` requires every profile axis to be.
    */
-  cockroachKnockoutReliefMs: number;
+  nineLivesKnockoutReliefMs: number;
   /**
    * Share of a blow taken off a mob a shield fairy's ward is holding
    * invulnerable — 1 keeps the ward absolute, as it always was; under 1 lets
@@ -64,20 +64,20 @@ export interface DifficultyProfile {
 export const NORMAL_AMBIENT_LEVEL_RATIO = 0.7;
 export const NORMAL_BOSS_LEVEL_RATIO = 0.8;
 
-/** Milliseconds cut from a knocked-out crawler's own Cockroach recharge, on Crawler difficulty. */
-const COCKROACH_KNOCKOUT_RELIEF_MS_NORMAL = 15_000;
+/** Milliseconds cut from a knocked-out crawler's own 9 Lives recharge, on Crawler difficulty. */
+const NINE_LIVES_KNOCKOUT_RELIEF_MS_NORMAL = 15_000;
 /**
  * Kitten's relief completes the recharge outright: set past the longest
  * recharge the skill can ever hold, so clamping the result at "now" is always
  * what fires, with no separate "completed" case to keep in sync.
  */
-const COCKROACH_KNOCKOUT_RELIEF_MS_EASY = COCKROACH_RECHARGE_MS + 1;
+const NINE_LIVES_KNOCKOUT_RELIEF_MS_EASY = NINE_LIVES_RECHARGE_MS + 1;
 /**
- * Nightmare's Cockroach relief is unchanged in every way that matters — the
+ * Nightmare's 9 Lives relief is unchanged in every way that matters — the
  * recharge itself runs minutes long — but the field can't be zero because
  * `verify:difficulty` requires every profile axis to be strictly positive.
  */
-const COCKROACH_KNOCKOUT_RELIEF_MS_HARD_TOKEN = 1;
+const NINE_LIVES_KNOCKOUT_RELIEF_MS_HARD_TOKEN = 1;
 
 /**
  * UI labels for each tier. The single
@@ -103,7 +103,7 @@ export const DIFFICULTY_PROFILES: Record<Difficulty, DifficultyProfile> = {
     rewardCoinScale: 1.0,
     bountyPayoutScale: 0.85,
     tacticsChanceScale: 0.6,
-    cockroachKnockoutReliefMs: COCKROACH_KNOCKOUT_RELIEF_MS_EASY,
+    nineLivesKnockoutReliefMs: NINE_LIVES_KNOCKOUT_RELIEF_MS_EASY,
     wardDamageReduction: 0.75,
   },
   normal: {
@@ -115,7 +115,7 @@ export const DIFFICULTY_PROFILES: Record<Difficulty, DifficultyProfile> = {
     rewardCoinScale: 1.0,
     bountyPayoutScale: 1.0,
     tacticsChanceScale: 1.0,
-    cockroachKnockoutReliefMs: COCKROACH_KNOCKOUT_RELIEF_MS_NORMAL,
+    nineLivesKnockoutReliefMs: NINE_LIVES_KNOCKOUT_RELIEF_MS_NORMAL,
     wardDamageReduction: 1,
   },
   hard: {
@@ -127,7 +127,7 @@ export const DIFFICULTY_PROFILES: Record<Difficulty, DifficultyProfile> = {
     rewardCoinScale: 1.25,
     bountyPayoutScale: 1.5,
     tacticsChanceScale: 1.3,
-    cockroachKnockoutReliefMs: COCKROACH_KNOCKOUT_RELIEF_MS_HARD_TOKEN,
+    nineLivesKnockoutReliefMs: NINE_LIVES_KNOCKOUT_RELIEF_MS_HARD_TOKEN,
     wardDamageReduction: 1,
   },
 };

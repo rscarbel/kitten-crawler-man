@@ -115,10 +115,10 @@ const RENDER_EVENT_SEED = 1;
 const EVENT_PLAN_HORIZON_MS = 600000;
 /** How far into each beat its render is caught, as a share of its length: its most telling instant. */
 const EVENT_CATCH_SHARE: Readonly<Partial<Record<TitleEventId, number>>> = {
-  systemQuip: 0.6,
+  carolineQuip: 0.6,
   goblinPeek: 0.5,
   lootGlint: 0.5,
-  mongoDash: 0.42,
+  deinonychusDash: 0.42,
 };
 
 const plannedEvents = planTitleEvents(RENDER_EVENT_SEED, EVENT_PLAN_HORIZON_MS);

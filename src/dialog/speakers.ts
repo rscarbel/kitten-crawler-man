@@ -5,7 +5,7 @@
  * A `DialogLine` never carries a speaker's name as a string — it carries a
  * `SpeakerRef`, which is either a fixed entry in {@link SPEAKERS} (a named
  * cast member) or a `transient` speaker built at runtime from a
- * {@link TransientStyleId} preset (a townsperson, a sign, a system message —
+ * {@link TransientStyleId} preset (a townsperson, a sign, a narrated caption —
  * anyone whose name can't be a compile-time union member).
  */
 
@@ -14,6 +14,8 @@ import type { PortraitSource, ResolvedSpeaker, RevealMode } from '../ui/DialogBo
 import { ratkinPortrait } from '../sprites/ratkinPortrait';
 import type { RatkinCastId } from '../sprites/art/ratkin/cast';
 import { crawlerFormalName } from '../characters/characters';
+import { motion } from '../ui/theme/tokens';
+import type { CarolineSpeakerRef } from './caroline';
 
 /** How a speaker's text is cased when it's drawn — a written-in rule instead of an author convention to remember. */
 export type TextCase = 'as-written' | 'upper';
@@ -23,6 +25,13 @@ export type TextCase = 'as-written' | 'upper';
  * voice that is meant to read as a machine. Omitted means `'ui'`.
  */
 export type SpeakerTypeface = 'ui' | 'terminal';
+
+/**
+ * The box a speaker's words are drawn in: the ordinary dialog box, or
+ * Caroline's terminal frame. Decided by the kind of `SpeakerRef`, so only a
+ * line made by `carolineLines` can wear `caroline`.
+ */
+export type SpeakerSkin = 'standard' | 'caroline';
 
 /**
  * How a speaker sounds while their text reveals.
@@ -183,26 +192,8 @@ export const SPEAKERS = {
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
 
-  mordecai: {
-    name: 'Mordecai',
-    portrait: null,
-    voice: { kind: 'typing' },
-    reveal: 'sentence',
-    textCase: 'as-written',
-    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
-  },
-  /** Mordecai's voice coming through in the crawlers' ears rather than spoken face to face — every quest scene's warning, never a safe room or the tutorial. */
-  mordecaiInEar: {
-    name: 'Mordecai (in your ear)',
-    portrait: null,
-    voice: { kind: 'typing' },
-    reveal: 'sentence',
-    textCase: 'as-written',
-    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
-  },
-
-  mordecaiMessage: {
-    name: 'Message from Mordecai',
+  dave: {
+    name: 'Dave',
     portrait: null,
     voice: { kind: 'typing' },
     reveal: 'sentence',
@@ -459,6 +450,22 @@ export const SPEAKERS = {
 
 export type SpeakerId = keyof typeof SPEAKERS;
 
+/**
+ * Caroline, the System AI. Not in {@link SPEAKERS}: she is reached only
+ * through a `CarolineSpeakerRef`, which only `carolineLines`
+ * (`src/dialog/caroline.ts`) can make. Her frame draws "System AI message:"
+ * and "Caroline - " itself, so her name is never set as a plate.
+ */
+const CAROLINE_SPEAKER = {
+  name: 'Caroline',
+  portrait: null,
+  voice: { kind: 'typing' },
+  reveal: 'letter',
+  textCase: 'as-written',
+  revealIntervalMs: motion.carolineCharacter,
+  typeface: 'terminal',
+} as const satisfies SpeakerDef;
+
 export interface TransientStyleDef {
   readonly voice: SpeakerVoice;
   readonly reveal: RevealMode;
@@ -523,14 +530,6 @@ export const TRANSIENT_STYLES = {
     textCase: 'as-written',
     revealIntervalMs: SIGN_REVEAL_INTERVAL_MS,
   },
-  /** An auto-hiding system message, credited to whatever the message names itself. */
-  system: {
-    voice: { kind: 'typing' },
-    reveal: 'sentence',
-    textCase: 'as-written',
-    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
-    typeface: 'terminal',
-  },
   /** A room's cook — the name changes with the room, the voice does not. */
   bopca: {
     voice: { kind: 'typing' },
@@ -582,12 +581,14 @@ export function citizenVoiceSounds(style: CitizenSpeechStyle): ReadonlyArray<Sou
 
 /**
  * Who a `DialogLine` is attributed to: a fixed cast member, resolved by id
- * from {@link SPEAKERS}, or a transient speaker named at runtime and styled
- * by one of {@link TRANSIENT_STYLES}.
+ * from {@link SPEAKERS}, a transient speaker named at runtime and styled by
+ * one of {@link TRANSIENT_STYLES}, or Caroline, whose ref only
+ * `carolineLines` can make.
  */
 export type SpeakerRef =
   | { readonly kind: 'cast'; readonly id: SpeakerId }
-  | { readonly kind: 'transient'; readonly name: string; readonly style: TransientStyleId };
+  | { readonly kind: 'transient'; readonly name: string; readonly style: TransientStyleId }
+  | CarolineSpeakerRef;
 
 /**
  * Resolves a `SpeakerRef` into what `DialogBox` needs to draw it: a cast
@@ -596,24 +597,52 @@ export type SpeakerRef =
  * name wearing one of {@link TRANSIENT_STYLES}.
  */
 export function resolveSpeaker(ref: SpeakerRef): ResolvedSpeaker {
-  if (ref.kind === 'transient') {
-    return { name: ref.name, portrait: null, ...TRANSIENT_STYLES[ref.style] };
+  switch (ref.kind) {
+    case 'transient':
+      return { name: ref.name, portrait: null, ...TRANSIENT_STYLES[ref.style], skin: 'standard' };
+    case 'caroline':
+      return { ...CAROLINE_SPEAKER, skin: 'caroline' };
+    case 'cast': {
+      const def: SpeakerDef = SPEAKERS[ref.id];
+      return {
+        name: def.name,
+        portrait: def.portrait === null ? null : resolvePortrait(def.portrait),
+        voice: def.voice,
+        reveal: def.reveal,
+        textCase: def.textCase,
+        revealIntervalMs: def.revealIntervalMs,
+        typeface: def.typeface,
+        skin: 'standard',
+      };
+    }
+    default: {
+      const unhandled: never = ref;
+      return unhandled;
+    }
   }
-  const def: SpeakerDef = SPEAKERS[ref.id];
-  return {
-    name: def.name,
-    portrait: def.portrait === null ? null : resolvePortrait(def.portrait),
-    voice: def.voice,
-    reveal: def.reveal,
-    textCase: def.textCase,
-    revealIntervalMs: def.revealIntervalMs,
-    typeface: def.typeface,
-  };
+}
+
+function speakerDef(ref: SpeakerRef): SpeakerDef | TransientStyleDef {
+  switch (ref.kind) {
+    case 'transient':
+      return TRANSIENT_STYLES[ref.style];
+    case 'caroline':
+      return CAROLINE_SPEAKER;
+    case 'cast':
+      return SPEAKERS[ref.id];
+    default: {
+      const unhandled: never = ref;
+      return unhandled;
+    }
+  }
 }
 
 /** The face a `SpeakerRef`'s words are set in, without painting its portrait. */
 export function speakerTypeface(ref: SpeakerRef): SpeakerTypeface {
-  const def: SpeakerDef | TransientStyleDef =
-    ref.kind === 'transient' ? TRANSIENT_STYLES[ref.style] : SPEAKERS[ref.id];
-  return def.typeface ?? 'ui';
+  return speakerDef(ref).typeface ?? 'ui';
+}
+
+/** The box a `SpeakerRef`'s words are drawn in, without painting its portrait. */
+export function speakerSkin(ref: SpeakerRef): SpeakerSkin {
+  return ref.kind === 'caroline' ? 'caroline' : 'standard';
 }

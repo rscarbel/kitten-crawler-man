@@ -75,7 +75,7 @@ import type { TopBandEntry } from '../ui/hud/topBand';
 import { stackedBandEntry, TOP_BAND_WIDTH } from '../ui/hud/topBandStack';
 import type { Conversation } from '../dialog/Conversation';
 import type { ConversationHandle } from '../dialog/request';
-import { MORDECAI_MESSAGE, SCIENTIST } from '../dialog/scripts/scenes/spider';
+import { CAROLINE_SPIDER_WARNING, SCIENTIST } from '../dialog/scripts/scenes/spider';
 import { drawQuestMarker, QUEST_MARKER_GOLD, questMarkerTopY } from '../sprites/questNPCSprite';
 import { ActivityDifficultyGate } from '../ui/screens/dialogs/activityDifficultyPicker';
 import {
@@ -184,8 +184,8 @@ const SCIENTIST_SHOULDER_SIDE_TILES = 0.85;
 const SCIENTIST_SHOULDER_BACK_TILES = 0.3;
 /** Frames he holds the flinch's last pose after a failed hack before settling. */
 const FLINCH_HOLD_FRAMES = 30;
-/** The beat between Dr. Moult bolting and Mordecai's message, so the bolt is seen. */
-const MORDECAI_MESSAGE_DELAY_FRAMES = 30;
+/** The beat between Dr. Moult bolting and Caroline's warning, so the bolt is seen. */
+const CAROLINE_WARNING_DELAY_FRAMES = 30;
 /**
  * Tiles past the approach's own length the route search may reach: the lab's
  * doorway to his post inside it, with room for the path to bend.
@@ -426,8 +426,6 @@ export class SpiderQuestSystem implements GameSystem {
     readonly x: number;
     readonly y: number;
   } | null = null;
-  /** "Message from Mordecai" just opened: its chime. */
-  mordecaiMessageChimePending = false;
   /** A note was struck cleanly — the board's per-press tick. */
   keyboardHeroHitTickPending = false;
   /** A firewall pip just shattered on a mistake. */
@@ -526,11 +524,11 @@ export class SpiderQuestSystem implements GameSystem {
   /** How far each outer-hallway tile is walked from the mouth, for the stop trigger. */
   private readonly outerHallwayDepth = new Map<number, number>();
   /**
-   * From the moment he stops or talks to the party until Mordecai's message is
-   * read: the run back plays out with the party standing still, watching it.
+   * From the moment he stops or talks to the party until Caroline's warning
+   * is read: the run back plays out with the party standing still, watching it.
    */
   private holdingPartyForScientist = false;
-  private mordecaiMessageTimer = 0;
+  private carolineWarningTimer = 0;
   /** The tier picked at the terminal, kept so Try Again replays the same one. */
   private hackTier: Difficulty | null = null;
   private tutorialPagesShowing: readonly SpiderTutorialPageId[] = [];
@@ -614,20 +612,20 @@ export class SpiderQuestSystem implements GameSystem {
 
   /** The handle Dr. Moult's explanation opened with. */
   private conversationHandle: ConversationHandle | null = null;
-  /** The handle Mordecai's message opened with. */
-  private mordecaiHandle: ConversationHandle | null = null;
+  /** The handle Caroline's warning opened with. */
+  private carolineHandle: ConversationHandle | null = null;
 
   private get explanationOwned(): boolean {
     return this.conversationHandle !== null && this.conversation.isActive(this.conversationHandle);
   }
 
-  private get mordecaiMessageOwned(): boolean {
-    return this.mordecaiHandle !== null && this.conversation.isActive(this.mordecaiHandle);
+  private get carolineWarningOwned(): boolean {
+    return this.carolineHandle !== null && this.conversation.isActive(this.carolineHandle);
   }
 
   /** Whether the shared conversation is currently showing one of this quest's beats. */
   private get conversationOwned(): boolean {
-    return this.explanationOwned || this.mordecaiMessageOwned;
+    return this.explanationOwned || this.carolineWarningOwned;
   }
 
   constructor(
@@ -705,7 +703,7 @@ export class SpiderQuestSystem implements GameSystem {
 
   /**
    * Whether the party must stand still: through the cutscene, and from the
-   * moment Dr. Moult stops or talks to them until Mordecai's message is read.
+   * moment Dr. Moult stops or talks to them until Caroline's warning is read.
    */
   get holdsPartyMovement(): boolean {
     return this._playerLocked || this.holdingPartyForScientist;
@@ -754,7 +752,7 @@ export class SpiderQuestSystem implements GameSystem {
   get isDialogOpen(): boolean {
     return (
       this.phase === 'scientist_dialog' ||
-      this.mordecaiMessageOwned ||
+      this.carolineWarningOwned ||
       this.phase === 'hacking_failed' ||
       this.phase === 'keyboard_hero_tutorial'
     );
@@ -1028,7 +1026,7 @@ export class SpiderQuestSystem implements GameSystem {
       this._updateBrood(this._grotesqueSpider);
     }
 
-    this._tickMordecaiMessage();
+    this._tickCarolineWarning();
 
     if (this.phase === 'cutscene') {
       this._updateCutscene(ctx);
@@ -1306,23 +1304,22 @@ export class SpiderQuestSystem implements GameSystem {
     this.phase = 'scientist_returning';
     this.bus.emit('questStarted', { questId: SPIDER_QUEST_ID });
     this.beginRunToLabPost();
-    this.mordecaiMessageTimer = MORDECAI_MESSAGE_DELAY_FRAMES;
+    this.carolineWarningTimer = CAROLINE_WARNING_DELAY_FRAMES;
   }
 
-  /** Counts down to Mordecai's message, then opens it; reading it frees the party. */
-  private _tickMordecaiMessage(): void {
-    if (this.mordecaiMessageTimer <= 0) return;
-    this.mordecaiMessageTimer--;
-    if (this.mordecaiMessageTimer > 0) return;
-    this.mordecaiMessageChimePending = true;
-    this.mordecaiHandle = this.conversation.open({
-      lines: [MORDECAI_MESSAGE.warning],
+  /** Counts down to Caroline's warning, then opens it; reading it frees the party. */
+  private _tickCarolineWarning(): void {
+    if (this.carolineWarningTimer <= 0) return;
+    this.carolineWarningTimer--;
+    if (this.carolineWarningTimer > 0) return;
+    this.carolineHandle = this.conversation.open({
+      lines: [CAROLINE_SPIDER_WARNING.line],
       reward: null,
       questRelated: true,
       ending: {
         kind: 'close',
         onClosed: () => {
-          this.mordecaiHandle = null;
+          this.carolineHandle = null;
           this.holdingPartyForScientist = false;
         },
       },
@@ -1489,10 +1486,10 @@ export class SpiderQuestSystem implements GameSystem {
       this.conversation.close();
     }
     this.conversationHandle = null;
-    this.mordecaiHandle = null;
+    this.carolineHandle = null;
     this.terminalDifficulty.close();
     this.holdingPartyForScientist = false;
-    this.mordecaiMessageTimer = 0;
+    this.carolineWarningTimer = 0;
     this.runRoute = [];
     this.runRouteIndex = 0;
     this.shoulderSpot = null;

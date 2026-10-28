@@ -99,7 +99,7 @@ const TONGUE_HIT_RANGE_FRACTION = TROGLODYTE_TONGUE_OVERREACH;
 const TONGUE_CONE_MIN_DOT = 0.5;
 /** Tile center offset fraction. */
 const TILE_CENTER = 0.5;
-/** Shell XP per blocked tongue strike. */
+/** Energy Shield XP per blocked tongue strike. */
 const TONGUE_BLOCK_XP = 3;
 
 type TrogState = 'idle' | 'stalking' | 'winding_up' | 'striking' | 'cooldown';
@@ -332,12 +332,14 @@ export class Troglodyte extends Mob {
             const dot = (dx / dist) * this.facingX + (dy / dist) * this.facingY;
             if (dot < TONGUE_CONE_MIN_DOT) continue;
 
-            // The party's shell turns aside an enemy's tongue, never a turned ally's.
-            const shelled =
+            // The party's energy shield turns aside an enemy's tongue, never a turned ally's.
+            const shielded =
               !this.isConverted &&
-              this.spells?.isPointInsideShell(t.x + ts * TILE_CENTER, t.y + ts * TILE_CENTER) ===
-                true;
-            if (shelled && this.spells !== null) {
+              this.spells?.isPointInsideEnergyShield(
+                t.x + ts * TILE_CENTER,
+                t.y + ts * TILE_CENTER,
+              ) === true;
+            if (shielded && this.spells !== null) {
               this.spells.addBlockXp(TONGUE_BLOCK_XP);
               continue;
             }

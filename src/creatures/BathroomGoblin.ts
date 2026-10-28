@@ -166,7 +166,7 @@ export class BathroomGoblin extends Mob {
     return this.holdsPlace || this.hidden;
   }
 
-  /** A shell or a blast pushes him no more than a shoulder does while he holds his place in line. */
+  /** An energy shield or a blast pushes him no more than a shoulder does while he holds his place in line. */
   protected override acceptsShove(_x: number, _y: number): boolean {
     return !this.separationAnchored;
   }
@@ -193,7 +193,7 @@ export class BathroomGoblin extends Mob {
   }
 
   /**
-   * Every weapon may reach him, so the melee, missile, smush, sling and shell
+   * Every weapon may reach him, so the melee, missile, seismic stomp, sling and energy shield
    * sites all get as far as the blow (and the "ow") rather than passing him by.
    */
   protected override admitsPlayerDamage(_damageType: PlayerDamageType | null): boolean {

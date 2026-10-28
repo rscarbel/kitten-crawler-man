@@ -26,9 +26,10 @@ import type { StandaloneMobKind } from '../../levels/mobKinds';
 import { liveSpawnContext, spawnMob as spawnHostileMob } from '../../levels/spawnFunnel';
 import type { MobLevelRange } from '../../levels/types';
 import type { GameMap } from '../../map/GameMap';
-import { ALL_STATS, STAT_CODE, pendingStatusDamage } from '../../Player';
+import { pendingStatusDamage } from '../../Player';
+import { ALL_STATS, STAT_DEFS } from '../../core/party/stats';
 import {
-  AI_CHARACTER_SYSTEM,
+  AI_CHARACTER_CAROLINE,
   TARGET_PARAM,
   crawlerName,
   formatSeconds,
@@ -274,7 +275,7 @@ const spawnMob: AIActionDef = {
     severity: 'disruptive',
     forbidsContext: ['isPaused', 'inSafeRoom', 'inBossFight', 'indoors'],
   },
-  characters: [AI_CHARACTER_SYSTEM],
+  characters: [AI_CHARACTER_CAROLINE],
   maxPerFloor: SPAWN_CASTS_PER_FLOOR,
   spawnsMobs: true,
   budget: ({ params }) => ({ pool: 'mobsSpawned', amount: params.get(SPAWN_COUNT) }),
@@ -316,7 +317,7 @@ const spawnElite: AIActionDef = {
     severity: 'disruptive',
     forbidsContext: ['isPaused', 'inSafeRoom', 'inBossFight', 'indoors'],
   },
-  characters: [AI_CHARACTER_SYSTEM],
+  characters: [AI_CHARACTER_CAROLINE],
   maxPerFloor: ELITES_PER_FLOOR,
   spawnsMobs: true,
   budget: () => ({ pool: 'mobsSpawned', amount: 1 }),
@@ -426,7 +427,7 @@ const applyStatus: AIActionDef = {
     severity: 'harmful',
     forbidsContext: ['isPaused'],
   },
-  characters: [AI_CHARACTER_SYSTEM],
+  characters: [AI_CHARACTER_CAROLINE],
   maxPerFloor: STATUSES_PER_FLOOR,
   isHarmful: ({ params }) => AI_STATUS_EFFECTS[params.get(APPLY_STATUS)].harmful,
   refusal: ({ params, scene }) => {
@@ -449,18 +450,14 @@ const applyStatus: AIActionDef = {
   },
 };
 
-const REMOVE_STATUS = enumParam(
-  'status',
-  AILMENT_STATUSES,
-  'Which ailment to lift. Some afflictions are beyond even the System.',
-);
+const REMOVE_STATUS = enumParam('status', AILMENT_STATUSES, 'Which ailment to lift.');
 
 const removeStatus: AIActionDef = {
   name: 'remove_status',
   description: 'Cure a crawler of one ailment they currently have.',
   params: [TARGET_PARAM, REMOVE_STATUS],
   policy: { cost: 1, cooldownMs: CURE_COOLDOWN_MS, severity: 'benign' },
-  characters: [AI_CHARACTER_SYSTEM],
+  characters: [AI_CHARACTER_CAROLINE],
   refusal: ({ params, scene }) => {
     const crawler = resolveTarget(scene, params.get(TARGET_PARAM));
     const status = params.get(REMOVE_STATUS);
@@ -504,7 +501,7 @@ const modifyStat: AIActionDef = {
     severity: 'harmful',
     forbidsContext: ['isPaused'],
   },
-  characters: [AI_CHARACTER_SYSTEM],
+  characters: [AI_CHARACTER_CAROLINE],
   maxPerFloor: STAT_CHANGES_PER_FLOOR,
   isHarmful: ({ params }) => params.get(STAT_DELTA) < 0,
   refusal: ({ params, scene }) => {
@@ -525,7 +522,7 @@ const modifyStat: AIActionDef = {
     const maxHpBefore = crawler.maxHp;
     const mod = { ticksRemaining: secondsToFrames(seconds), stat, delta };
     crawler.tempStatMods.push(mod);
-    // A constitution cut lowers max HP and HP with it, one for one. Projected
+    // A health cut lowers max HP and HP with it, one for one. Projected
     // rather than applied and undone: every write to HP is watched for the
     // crawler entering a low-HP band, and a trial dip would set one off.
     const projectedHp = Math.max(1, hpBefore + crawler.maxHp - maxHpBefore);
@@ -538,7 +535,7 @@ const modifyStat: AIActionDef = {
     }
     crawler.syncHpToMaxHp();
     const signed = delta > 0 ? `+${delta}` : `${delta}`;
-    const summary = `${signed} ${STAT_CODE[stat]} for ${crawlerName(scene, crawler)} (${formatSeconds(seconds)})`;
+    const summary = `${signed} ${STAT_DEFS[stat].code} for ${crawlerName(scene, crawler)} (${formatSeconds(seconds)})`;
     notifyPlayer(scene, `${summary}: ${params.get(STAT_REASON)}`, {
       tone: delta > 0 ? 'success' : 'warning',
     });
@@ -557,7 +554,7 @@ const heal: AIActionDef = {
   description: 'Restore part of a crawler’s HP. Cannot revive a downed crawler.',
   params: [TARGET_PARAM, HEAL_PERCENT],
   policy: { cost: 2, cooldownMs: HEAL_COOLDOWN_MS, severity: 'benign' },
-  characters: [AI_CHARACTER_SYSTEM],
+  characters: [AI_CHARACTER_CAROLINE],
   maxPerFloor: HEALS_PER_FLOOR,
   refusal: ({ params, scene }) => {
     const crawler = resolveTarget(scene, params.get(TARGET_PARAM));
@@ -589,7 +586,7 @@ const setHp: AIActionDef = {
     severity: 'harmful',
     forbidsContext: ['isPaused', 'inBossFight'],
   },
-  characters: [AI_CHARACTER_SYSTEM],
+  characters: [AI_CHARACTER_CAROLINE],
   maxPerFloor: SET_HP_PER_FLOOR,
   isHarmful: ({ params, scene }) => {
     const crawler = resolveTarget(scene, params.get(TARGET_PARAM));
@@ -630,7 +627,7 @@ const adjustLevelTimer: AIActionDef = {
     severity: 'harmful',
     forbidsContext: ['isPaused'],
   },
-  characters: [AI_CHARACTER_SYSTEM],
+  characters: [AI_CHARACTER_CAROLINE],
   isHarmful: ({ params }) => params.get(TIMER_DELTA) < 0,
   budget: ({ params }) => ({ pool: 'timerSeconds', amount: Math.abs(params.get(TIMER_DELTA)) }),
   refusal: ({ params, scene }) => {

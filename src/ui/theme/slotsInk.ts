@@ -196,13 +196,14 @@ const symbols = {
   barRim: '#d4dbe5',
   barText: '#ffffff',
   barStripe: '#e01e2e',
-  /** The disc Mongo is framed on. */
-  mongoDisc: '#f2a541',
-  mongoDiscLight: '#ffe1a0',
-  mongoDiscDark: '#9a5a12',
-  mongoCrest: '#ff5fae',
-  mongoEye: '#fff8e8',
-  mongoTooth: '#ffffff',
+  /** The disc Deinonychus is framed on. */
+  deinonychusDisc: '#f0d28a',
+  deinonychusDiscLight: '#fff4d8',
+  deinonychusDiscDark: '#a47a2c',
+  /** His orange neck hackle, the same feathers as on his forearms and tail. */
+  deinonychusHackle: '#ee7a22',
+  deinonychusEye: '#fff8e8',
+  deinonychusTooth: '#ffffff',
   tiaraMetal: '#eef2f8',
   tiaraMetalDark: '#8592a8',
   tiaraGem: '#ff4fa3',

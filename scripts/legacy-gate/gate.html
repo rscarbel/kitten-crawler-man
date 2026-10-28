@@ -1,0 +1,152 @@
+<!--
+  The password gate in front of the frozen Kitten Crawler Man site at
+  ryanscarbel.com/kitten-crawler-man/ (and its GitHub Pages copy). That site is
+  an old build kept exactly as it was deployed, so the old name and URL stay
+  here and in .github/workflows/deploy-legacy.yml, and nowhere else.
+
+  inject.ts places this fragment at the end of the old page's <body>, so the
+  whole page is parsed before the bundle can run, and drops the page's own
+  bundle tag; the bundle loads only once the passphrase is given. It may use nothing but plain HTML, CSS and script: the old page has no
+  theme tokens and nothing from src/ reaches it.
+
+  This is a soft gate. The page source holds only a SHA-256 of the normalised
+  passphrase, but anyone reading the source can load dist/bundle.js directly.
+
+  It reads and writes no save, settings or progress key: its only key is
+  kcm.legacyGateUnlocked, so a returning player's saves are left untouched.
+-->
+<style>
+  #legacy-gate {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: #0a0d14;
+    color: #e8e2d4;
+    font:
+      16px/1.4 system-ui,
+      sans-serif;
+  }
+  #legacy-gate[hidden] {
+    display: none;
+  }
+  #legacy-gate form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    max-width: 360px;
+  }
+  #legacy-gate h1 {
+    margin: 0;
+    color: #f5b83d;
+    font-size: 22px;
+    letter-spacing: 0.08em;
+    text-align: center;
+  }
+  #legacy-gate input,
+  #legacy-gate button {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font: inherit;
+  }
+  #legacy-gate input {
+    border: 1px solid #3a4152;
+    background: #141925;
+    color: inherit;
+  }
+  #legacy-gate button {
+    border: 0;
+    background: #f5b83d;
+    color: #0a0d14;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  #legacy-gate-error {
+    min-height: 1.4em;
+    margin: 0;
+    color: #ff8a7a;
+    text-align: center;
+  }
+</style>
+<div id="legacy-gate" hidden>
+  <form id="legacy-gate-form" autocomplete="off">
+    <h1>KITTEN CRAWLER MAN</h1>
+    <label for="legacy-gate-passphrase">Passphrase</label>
+    <input id="legacy-gate-passphrase" type="password" autocapitalize="off" spellcheck="false" />
+    <button type="submit">Enter</button>
+    <p id="legacy-gate-error" role="alert"></p>
+  </form>
+</div>
+<script>
+  (() => {
+    const PASSPHRASE_SHA256 = '9b73d04c2130f1f646da8c9108d3730034f268516b469b7b26d5308fb89f7e90';
+    const UNLOCK_KEY = 'kcm.legacyGateUnlocked';
+    const UNLOCKED = '1';
+    const BUNDLE_PATH = 'dist/bundle.js';
+
+    const gate = document.getElementById('legacy-gate');
+    const form = document.getElementById('legacy-gate-form');
+    const field = document.getElementById('legacy-gate-passphrase');
+    const error = document.getElementById('legacy-gate-error');
+
+    function normalise(text) {
+      return text.trim().toLowerCase().replace(/\s+/g, ' ');
+    }
+
+    async function sha256Hex(text) {
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+      return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join(
+        '',
+      );
+    }
+
+    function readUnlocked() {
+      try {
+        return localStorage.getItem(UNLOCK_KEY) === UNLOCKED;
+      } catch {
+        return false;
+      }
+    }
+
+    function rememberUnlocked() {
+      try {
+        localStorage.setItem(UNLOCK_KEY, UNLOCKED);
+      } catch {
+        // Storage unavailable: the gate simply asks again next visit.
+      }
+    }
+
+    function loadGame() {
+      gate.remove();
+      const bundle = document.createElement('script');
+      bundle.src = BUNDLE_PATH;
+      document.body.appendChild(bundle);
+    }
+
+    if (readUnlocked()) {
+      loadGame();
+      return;
+    }
+
+    gate.hidden = false;
+    field.focus();
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      error.textContent = '';
+      const accepted = (await sha256Hex(normalise(field.value))) === PASSPHRASE_SHA256;
+      if (!accepted) {
+        error.textContent = 'That is not the passphrase.';
+        field.select();
+        return;
+      }
+      rememberUnlocked();
+      loadGame();
+    });
+  })();
+</script>

@@ -137,14 +137,14 @@ const PERCEPTIBLE_CHANNEL_STEP = 12;
  * How much of the cell two frames of one row have to differ over.
  *
  * A hash says two frames are not the same bytes. It does not say they are two
- * pictures: `mongo_adult.idle_side` frames 0 and 4 differed in eighteen pixels,
+ * pictures: `deinonychus_adult.idle_side` frames 0 and 4 differed in eighteen pixels,
  * a tenth of a percent of the cell, because the term meant to separate them was
  * a head yaw the profile view foreshortens away — byte-distinct, and on screen
  * the same frame twice. Both figures whose rows were "fixed" by hashing alone
  * measured that way.
  *
  * Derived by measuring every pair of frames of every row of every gated figure.
- * Below the floor, before their idles were rebuilt: the mongo profile idle at
+ * Below the floor, before their idles were rebuilt: the deinonychus profile idle at
  * 0.096% (adult) and 0.180% (adolescent), which is the case this exists to
  * catch. Above it, across the shipped art, the tightest pairs are the Ball of
  * Swine's wallow at 0.300% and the Dark Knight's edge-on idle at 0.374%, so

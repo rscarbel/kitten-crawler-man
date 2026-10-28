@@ -39,6 +39,28 @@ Entry shape:
 - **Size:** M
 - **Found:** 2026-10-21, spawn funnel work.
 
+### A status effect does not remember whether a spell laid it
+
+- **Where:** `Player.chillGrip` and `Player.magicResistedFrames` (`src/Player.ts`), `applyIceHit`'s `magic` option (`src/core/combat/frostStatus.ts`), `magicResistedBurn` (`src/systems/FairyFireballSystem.ts`), the grasping hands' `makeStuck` in `SkeletonLord` and `TheLich`.
+- **Problem:** magic resistance shortens a magic status where it is applied, but the slow a chill exerts is read live off the status type, so `chillGrip` weakens every chill on a crawler on the grounds that only ice fairies chill one today. A `StatusEffect` carries no record of having come from a spell.
+- **Cost:** a non-magic chill added later (a frost trap, an ice-mob bite) would be wrongly weakened by magic resistance, and each new magic status site must remember to shorten its own duration.
+- **Better shape:** stamp the share that survived resistance on the `StatusEffect` when it is applied (saved with it), and have every status reader scale its grip by that share.
+- **Until then:** a new chill source on a crawler that is not a spell must not ship without that stamp; a new magic status applier goes through `magicResistedFrames`.
+- **Size:** M
+- **Found:** 2026-10-27, stat sheet and magic resistance work.
+
+## Creature art
+
+### The Deinonychus is drawn as separately outlined pieces, so every join shows a dividing line
+
+- **Where:** `src/sprites/art/deinonychusArt.ts`: `drawDeinonychusSide` paints the tail (`drawTailSide`), body (`drawBodySide`), thigh (`drawThighSide`), neck (`drawNeckSide`), head (`drawHeadSide`) and limbs (`drawLimb`) one after another, each closing with its own `fillAndOutline` stroke. The head-on and away views (`drawDeinonychusAxial`) use `paintUnion` for some shapes but not every join.
+- **Problem:** each segment is filled and outlined on its own, so where one overlaps the next its outline is painted across the animal's body. In game the Deinonychus reads as plates laid on top of each other, with a clearly visible line at the neck, hips, thigh and tail base, rather than as one continuous animal.
+- **Cost:** the pet looks assembled rather than alive, and each art pass that tunes a segment's shape moves the seams instead of removing them.
+- **Better shape:** draw the body masses that should read as one surface (tail, torso, thigh, neck, head) as one silhouette with one outside outline, as `paintUnion` does: stroke every shape first and fill them all over the strokes, then paint shading and feathers inside the union with `insideUnion`. Keep separate outlines only where one part truly passes in front of another, such as the near wing or near leg over the flank.
+- **Until then:** don't add another body segment with its own `fillAndOutline`; join new masses into a union.
+- **Size:** M
+- **Found:** 2026-10-28, owner review of the Deinonychus sprite.
+
 ## Townsfolk
 
 ### Two Hawkfolk civilian looks are painted and gated but never worn
@@ -52,7 +74,7 @@ Entry shape:
 
 ### Townsfolk legwear colours are module state swapped round each bake
 
-- **Where:** `setTownsfolkLegwear` / `resetTownsfolkLegwear` and the `worn` binding in `src/sprites/garments/human/townsfolkLegwear.ts`, read only by the two cast garments `TOWNSFOLK_TROUSERS` and `TOWNSFOLK_SHOES`; callers `buildBipedFigure` (`src/sprites/art/townCastFigure.ts`) and `paintIncubusFrame` (`src/sprites/art/incubusFigure.ts`).
+- **Where:** `setTownsfolkLegwear` / `resetTownsfolkLegwear` and the `worn` binding in `src/sprites/garments/human/townsfolkLegwear.ts`, read only by the two cast garments `TOWNSFOLK_TROUSERS` and `TOWNSFOLK_SHOES`; callers `buildBipedFigure` (`src/sprites/art/townCastFigure.ts`) and `paintDemonLiaisonFrame` (`src/sprites/art/demonLiaisonFigure.ts`).
 - **Problem:** the leg painters (`paintLegCloth`, the shoe painter) take their colours as arguments, but the two cast garments are shared by every cast look, so they pass the colours a module-level binding holds, which each bake sets in a `try` and resets in `finally`, while every other part of a figure on the biped rig reads its look from the compose options.
 - **Cost:** two figures cannot be baked interleaved, a throwing painter between set and reset would leak colours into the next figure, and the two garments' paint depends on hidden call order rather than their inputs.
 - **Better shape:** carry the legwear on the look (or build the two garments per look, as `DAVE_TROUSERS` is built on a fixed denim) so the painters read it from their frame, as the torso garment reads `frame.look`.
@@ -78,9 +100,9 @@ Entry shape:
 - **Problem:** `InteriorEncounter` covers update, drawing and teardown, but whether an encounter locks the party, owns a conversation, takes a press, moves the camera or adds figures is asked of each concrete system by name, so the scene grows a branch per encounter.
 - **Cost:** a new scripted room means editing every one of those sites in the scene; missing one (a tap chain that does not know the new encounter locks the party) compiles.
 - **Better shape:** optional members on `InteriorEncounter` for each of those questions (`playerLocked`, `isDialogOpen`, `tryInteract`, `sortedFigures`, `cameraTarget`, `surfaces`), asked through `activeEncounter`, so the typed handles go away.
-- **Until then:** give a new encounter what it needs through `InteriorEncounter` and the fixtures `startEncounter` hands it (the storey's chest placer and exit fixtures) rather than another typed field on the scene.
+- **Until then:** give a new encounter what it needs through `InteriorEncounter` and the fixtures `startEncounter` hands it (the storey's chest placer and exit fixtures) rather than another typed field on the scene. A new scripted walk or talk is a `CutsceneStep` list played on the scene's `CutsceneKit`, never another `playerLocked` flag beside the tower's and the prison's.
 - **Size:** M
-- **Found:** 2026-10-26, interior chests and exit fixtures.
+- **Found:** 2026-10-26, interior chests and exit fixtures; extended 2026-10-27, cutscene director.
 
 ### Readables keep their own copy of the occupant furniture scan
 
@@ -175,7 +197,7 @@ Entry shape:
 
 ### Figures freeze ink measurements the runtime already measures
 
-- **Where:** the `GORE_RECENTRE` tables and their lookups in `src/sprites/art/darkKnightFigure.ts`, `mantidFigure.ts`, `rockGolemFigure.ts`, `lichFigure.ts`, `llamaFigure.ts`, `krakarenFigure.ts`, `tusklingFigure.ts`, `goblinFigure.ts`, `goblinBomberFigure.ts`, `skeletonFigure.ts`, `brindledVespaFigure.ts`, `ratFigure.ts`, `cockroachFigure.ts`, `troglodyteFigure.ts`, and on the shelf `src/shelf/auntieGorge/auntieGorgeFigure.ts` and `src/shelf/ironIggy/ironIggyFigure.ts`; `GORE_CENTRE_CORRECTION` in `src/sprites/art/cowGore.ts` (gated by `scripts/gates-cow.ts`); frozen head clearances `MONGO_HEAD_CLEARANCE_TILES` (`mongoSprite.ts`), `IRON_IGGY_HEAD_CLEARANCE_TILES` (`src/shelf/ironIggy/ironIggySprite.ts`), `MAGNUM_STAGE_TOP_ABOVE_TILE_TILES` (`src/sprites/magnumSprite.ts`) and `HUMAN_SPRITE_TOP_ABOVE_TILE` (`src/creatures/HumanPlayer.ts`, gate G21 in `scripts/gates-human.ts`); and the gates that re-measure them (`scripts/gates-*.ts`, `scripts/goblinSubjects.ts`).
+- **Where:** the `GORE_RECENTRE` tables and their lookups in `src/sprites/art/darkKnightFigure.ts`, `mantidFigure.ts`, `rockGolemFigure.ts`, `lichFigure.ts`, `llamaFigure.ts`, `krakarenFigure.ts`, `tusklingFigure.ts`, `goblinFigure.ts`, `goblinBomberFigure.ts`, `skeletonFigure.ts`, `brindledVespaFigure.ts`, `ratFigure.ts`, `cockroachFigure.ts`, `troglodyteFigure.ts`, and on the shelf `src/shelf/auntieGorge/auntieGorgeFigure.ts` and `src/shelf/ironIggy/ironIggyFigure.ts`; `GORE_CENTRE_CORRECTION` in `src/sprites/art/cowGore.ts` (gated by `scripts/gates-cow.ts`); frozen head clearances `DEINONYCHUS_HEAD_CLEARANCE_TILES` (`deinonychusSprite.ts`), `IRON_IGGY_HEAD_CLEARANCE_TILES` (`src/shelf/ironIggy/ironIggySprite.ts`), `MAGNUM_STAGE_TOP_ABOVE_TILE_TILES` (`src/sprites/magnumSprite.ts`) and `HUMAN_SPRITE_TOP_ABOVE_TILE` (`src/creatures/HumanPlayer.ts`, gate G21 in `scripts/gates-human.ts`); and the gates that re-measure them (`scripts/gates-*.ts`, `scripts/goblinSubjects.ts`).
 - **Problem:** each figure nudges every gore piece by an offset measured offline so its ink sits on the cell's centre, or freezes how far its art stands above its tile, and a gate re-measures the number on every render. But `figureFrameCache.ts` measures both at runtime: `drawFigureCachedRotatedCenter` spins a piece about `figureInkBounds(...)`, so where the ink sits in its cell does not change how it tumbles, and `figureRowInkTop` gives a drawn row's top.
 - **Cost:** every redraw means re-pasting measured numbers to keep gates green, for values the runtime could read itself. Their doc comments say only an offline pass can measure ink, which the runtime contradicts.
 - **Better shape:** paint each gore piece about the cell's centre with clearance from the edges and hang overhead chrome off `figureRowInkTop`; then delete the tables, the constants, their lookups and the gates that re-measure them. The structural gate's edge check is what still matters.
@@ -207,13 +229,13 @@ Entry shape:
 
 ### A gap that closes by a hairline flickers between outlined and cleared
 
-- **Where:** `clearOutlineInHoles` in `src/sprites/art/figureCompose.ts`, called from `src/sprites/art/biped/figure.ts`; `WING_HEAD_ON`'s `claw` in `src/sprites/art/incubusArt.ts`.
-- **Problem:** the outline is cleared inside a gap only when the gap is fully enclosed by the silhouette. When a gap's mouth is about one pixel wide, rounding opens it on some frames and shuts it on others, so a block of outline ink comes and goes from frame to frame. The incubus's wing claw is held a few pixels clear of his horns for this reason. Closing the silhouette by the outline's width before the reachability test fixes that case, but it flips Ryan's `build_side` hand pocket between frames and fails G3.
+- **Where:** `clearOutlineInHoles` in `src/sprites/art/figureCompose.ts`, called from `src/sprites/art/biped/figure.ts`; `WING_HEAD_ON`'s `claw` in `src/sprites/art/demonLiaisonArt.ts`.
+- **Problem:** the outline is cleared inside a gap only when the gap is fully enclosed by the silhouette. When a gap's mouth is about one pixel wide, rounding opens it on some frames and shuts it on others, so a block of outline ink comes and goes from frame to frame. The Demon Liaison's wing claw is held a few pixels clear of his horns for this reason. Closing the silhouette by the outline's width before the reachability test fixes that case, but it flips Ryan's `build_side` hand pocket between frames and fails G3.
 - **Cost:** any figure whose limbs or props nearly touch can gain an idle or loop flicker that only shows up as a stillness or seam failure, and the fix has to be made in that figure's art.
 - **Better shape:** decide whether a gap is enclosed once per row (for example from the rest frame or a majority of frames) rather than per frame, so every frame of a loop treats the same pocket the same way.
 - **Until then:** keep painted parts either clearly touching or a few pixels apart in every frame of a row; don't tune a gate threshold to absorb the flicker.
 - **Size:** M
-- **Found:** 2026-10-24, incubus idle stillness on the shared biped painter.
+- **Found:** 2026-10-24, Demon Liaison idle stillness on the shared biped painter.
 
 ### A base belt stacks over every worn shirt-slot garment
 
@@ -245,6 +267,40 @@ Entry shape:
 - **Size:** M.
 - **Found:** 2026-10-27, painting Brother Anselm on the human rig.
 
+## UI
+
+### The dialog box lays itself out outside the UI layout
+
+- **Where:** `DialogBox` (`src/ui/DialogBox.ts`): `layoutBudget`, `dialogWidth`, `_computeRect` and the `HOTBAR_SLOT_SIZE` / `HOTBAR_BOTTOM_MARGIN` copies; `Conversation.renderSurface`, which draws it under `ctx.scale(1 / scale)`.
+- **Problem:** the box sizes and places itself in canvas CSS pixels from `viewportWidth()` / `viewportHeight()` and its own copy of the hotbar's size, not from `ui.viewport`, `ui.size` or `hudLayout`. It is not a `panel`, so it never becomes a bottom sheet on a phone, and it vanishes the frame its surface closes, so Caroline's frame unfolds as her conversation opens but cannot fold shut as it closes.
+- **Cost:** a phone layout or a close animation for speech has to be special-cased inside the box, and a change to the hotbar's size silently drifts the box's gap above it.
+- **Better shape:** lay the box out in UI units from `ui.viewport` and the HUD geometry inside `Conversation`'s surface, branching on `ui.size` like a panel; give `Conversation` a closing state the surface stays open through.
+- **Until then:** don't add more hard-coded HUD measurements to `DialogBox`; read them from `hudLayout` when one is needed.
+- **Size:** M
+- **Found:** 2026-10-27, Caroline's message frame.
+
+### A cutscene's surface can stack over the talk it opened
+
+- **Where:** `CutsceneKit.surface()` (`src/systems/kits/CutsceneKit.ts`), `Conversation.surface()` (`src/dialog/Conversation.ts`) and `UiRoot.refreshStack` (`src/ui/core/UiRoot.ts`).
+- **Problem:** both surfaces sit in the `panel` band for a talk that does not halt the world (every Caroline message), so which one takes a key is decided by open order. Open order is only noticed when the stack is refreshed, which a drawn frame does; when both open between two refreshes, mount order decides, the cutscene surface lands on top, and it swallows the advance key meant for the message under it.
+- **Cost:** correct in the running game only because every frame is drawn; a headless harness that updates without drawing must refresh the stack by hand (`verify:dave-guide` does, through `ui.focusSurfaceId()`), and any future path that opens both inside one frame would leave the player unable to page a message with the keyboard.
+- **Better shape:** make the order explicit: let a surface name the surface it must sit beneath, or have the cutscene surface hand the advance key to the conversation it owns.
+- **Until then:** don't open a cutscene and its talk inside the same update without a draw between them.
+- **Size:** S
+- **Found:** 2026-10-28, Dave's safe-room talks and Caroline's queued messages.
+
+## Combat
+
+### A crawler's hit is scaled in two places, and each hit site wires the second by hand
+
+- **Where:** the per-delivery blow formulas (`bareFistDamage`, `bareClawDamage`, `slingDamage` in `src/core/party/crawlerFormulas.ts`, the missile and dynamite damage functions), and every call of `outgoingHitDamageOn` (`src/core/combat/outgoingHit.ts`) in `CombatSystem`, `StormcallerStrikeSystem`, `CombatKit`, `SpellSystem` and `DynamiteSystem`. Gear-thrown strikes (`gearStrike` in `src/gear/traits.ts`, `GearSystem`'s relic bolts and slash waves) and Seismic Stomp do not pass through it.
+- **Problem:** the stat a delivery grows with is folded into the blow by its own formula, then the hit site separately hands the result and its `DamageTags` to the outgoing-hit door for the proficiency skills. Nothing makes a new hit site do the second step.
+- **Cost:** a crawler hit added without the door silently ignores every proficiency skill and trains none; the stat scaling and the skill scaling can drift apart because no one value describes a hit.
+- **Better shape:** a hit record (dealer, delivery, base blow, tags) built once per hit and resolved by the door, which applies `DELIVERY_STAT` and the skills together, so a hit site cannot reach `takeDamageFrom` without it.
+- **Until then:** route every new crawler hit through `outgoingHitDamageOn` with its tags; don't add a skill bonus anywhere else.
+- **Size:** M
+- **Found:** 2026-10-27, proficiency skills.
+
 ## Shared types
 
 ### Tile geometry types are declared five times, and the shared one lives in the town plan
@@ -256,3 +312,13 @@ Entry shape:
 - **Until then:** import `TileRect`/`TilePoint` from `townPlan.ts` rather than declaring another copy.
 - **Size:** S
 - **Found:** 2026-10-22, floor-wide residency system.
+
+### The event bus's 'Human' / 'Cat' label is mapped from a crawler by hand in many places
+
+- **Where:** `crawlerLabel` in `src/systems/AchievementAwards.ts` (exported, also used by `src/systems/kits/hotbarActions.ts`), and inline `? 'Human' : 'Cat'` mappings in `src/ai/actions/interactions.ts`, `src/scenes/DungeonScene.ts`, `src/systems/AIChallengeSystem.ts`, `src/systems/LootSystem.ts` and `src/systems/kits/MenusKit.ts`; the `'Human' | 'Cat'` union is redeclared as `CrawlerSide` in `src/core/combat/hpThresholds.ts` and `src/systems/AIChallengeSystem.ts`.
+- **Problem:** events name a crawler with a capitalised label while everything else uses `CrawlerKind`, and each emitter converts on its own, some from `crawlerKind`, some by comparing against `pm.human` or `instanceof HumanPlayer`.
+- **Cost:** a new emitter copies whichever form it finds; the identity checks silently mislabel a crawler that is neither instance the scene holds.
+- **Better shape:** events carry `CrawlerKind`; the few places that print a label derive it once from a single shared function.
+- **Until then:** use `crawlerLabel` rather than adding another inline mapping.
+- **Size:** S
+- **Found:** 2026-10-27, the cat throwing explosives.

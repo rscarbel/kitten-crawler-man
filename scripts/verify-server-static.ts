@@ -51,7 +51,7 @@ const REFUSED = [
   '/server/index.ts',
   '/server/middleware/auth.ts',
   '/_site/dist/bundle.js',
-  '/dist/kitten-crawler-man.zip',
+  '/dist/kitten-crawler-world.zip',
   '/package.json',
   '/src/game.ts',
   '/src/audio/AudioManager.ts',

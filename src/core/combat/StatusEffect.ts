@@ -1,5 +1,8 @@
-import type { Player, StatName } from '../../Player';
+import type { Player } from '../../Player';
+import type { StatId } from '../party/stats';
 import type { ResistanceType } from '../items/defs/ItemDefs';
+import { MAGIC_HIT, UNTAGGED_HIT, type DamageTags } from './damageTags';
+import { BURN_WARD_SKILL, type ProficiencySkillId } from '../skills/proficiency';
 import {
   AEGIS_DAMAGE_SCALE,
   BLOOD_VOMIT_RETCH_FRAMES,
@@ -10,7 +13,7 @@ import {
 } from './statusTuning';
 import {
   HAMBURGER_FED_DURATION_SECONDS,
-  HAMBURGER_STR_BONUS,
+  HAMBURGER_MELEE_BONUS,
 } from '../items/consumables/foodEffects';
 
 /**
@@ -74,10 +77,12 @@ export interface StatusDamageOverTime {
   readonly intervalTicks: number;
   /** The resistance that blunts each bite, or null when none does. */
   readonly resistedBy: ResistanceType | null;
+  /** What kind of hit each bite is, when a crawler laid the status on. */
+  readonly tags: DamageTags;
 }
 
 /** Stat deltas a boon status grants while it is live. */
-type StatBoon = Readonly<Partial<Record<StatName, number>>>;
+type StatBoon = Readonly<Partial<Record<StatId, number>>>;
 
 /** Everything the rules need to know about one status. */
 export interface StatusDef {
@@ -103,6 +108,8 @@ export interface StatusDef {
    */
   readonly incomingDamageScale: number;
   readonly damageOverTime: StatusDamageOverTime | null;
+  /** The proficiency skill that shortens the status on whoever carries it, or null when none does. */
+  readonly durationWardedBy: ProficiencySkillId | null;
   /**
    * Whether the status survives a snapshot: `transient` for one that only lasts
    * as long as an on-screen moment, which a restore would otherwise replay for
@@ -121,10 +128,15 @@ const MAGIC_BURN_BITE_INTERVAL_TICKS = 60;
 const ELECTRIFIED_BITE_INTERVAL_TICKS = 60;
 const SPIT_VENOM_BITE_INTERVAL_TICKS = 40;
 
+/** Every bite of a burn is fire. */
+const FIRE_BITE: DamageTags = ['fire'];
+
 const DRAINED_FIRST = 0;
 const DRAINED_SECOND = 1;
 
 const ROOM_BOON_STAT_BONUS = 2;
+/** Health is counted one point per HP, so a room's health boon is twice its other stat boons. */
+const ROOM_BOON_HEALTH_BONUS = 4;
 
 /** A status that changes nothing the rules read; each entry overrides what it does. */
 const PLAIN_STATUS: StatusDef = {
@@ -134,6 +146,7 @@ const PLAIN_STATUS: StatusDef = {
   statBoon: null,
   incomingDamageScale: DAMAGE_UNCHANGED,
   damageOverTime: null,
+  durationWardedBy: null,
   persistence: 'saved',
 };
 
@@ -147,23 +160,40 @@ const PLAIN_AILMENT: StatusDef = { ...PLAIN_STATUS, cure: 'ailment' };
 export const STATUS_DEFS: Readonly<Record<StatusId, StatusDef>> = {
   burn: {
     ...PLAIN_AILMENT,
-    damageOverTime: { intervalTicks: BURN_BITE_INTERVAL_TICKS, resistedBy: null },
+    damageOverTime: { intervalTicks: BURN_BITE_INTERVAL_TICKS, resistedBy: null, tags: FIRE_BITE },
+    durationWardedBy: BURN_WARD_SKILL,
   },
   magic_burn: {
     ...PLAIN_AILMENT,
-    damageOverTime: { intervalTicks: MAGIC_BURN_BITE_INTERVAL_TICKS, resistedBy: null },
+    damageOverTime: {
+      intervalTicks: MAGIC_BURN_BITE_INTERVAL_TICKS,
+      resistedBy: null,
+      tags: MAGIC_HIT,
+    },
   },
   poison: {
     ...PLAIN_AILMENT,
-    damageOverTime: { intervalTicks: POISON_BITE_INTERVAL_TICKS, resistedBy: 'poison' },
+    damageOverTime: {
+      intervalTicks: POISON_BITE_INTERVAL_TICKS,
+      resistedBy: 'poison',
+      tags: UNTAGGED_HIT,
+    },
   },
   spit_venom: {
     ...PLAIN_AILMENT,
-    damageOverTime: { intervalTicks: SPIT_VENOM_BITE_INTERVAL_TICKS, resistedBy: 'poison' },
+    damageOverTime: {
+      intervalTicks: SPIT_VENOM_BITE_INTERVAL_TICKS,
+      resistedBy: 'poison',
+      tags: UNTAGGED_HIT,
+    },
   },
   electrified: {
     ...PLAIN_AILMENT,
-    damageOverTime: { intervalTicks: ELECTRIFIED_BITE_INTERVAL_TICKS, resistedBy: null },
+    damageOverTime: {
+      intervalTicks: ELECTRIFIED_BITE_INTERVAL_TICKS,
+      resistedBy: null,
+      tags: MAGIC_HIT,
+    },
   },
   stuck: PLAIN_AILMENT,
   stun: PLAIN_AILMENT,
@@ -189,13 +219,13 @@ export const STATUS_DEFS: Readonly<Record<StatusId, StatusDef>> = {
   jugg_juice: PLAIN_STATUS,
   cooldown_crisp: PLAIN_STATUS,
   whetstone: PLAIN_STATUS,
-  well_rested: { ...PLAIN_STATUS, statBoon: { constitution: ROOM_BOON_STAT_BONUS } },
-  hearth_warmed: { ...PLAIN_STATUS, statBoon: { strength: ROOM_BOON_STAT_BONUS } },
+  well_rested: { ...PLAIN_STATUS, statBoon: { health: ROOM_BOON_HEALTH_BONUS } },
+  hearth_warmed: { ...PLAIN_STATUS, statBoon: { melee: ROOM_BOON_STAT_BONUS } },
   deep_slumber: {
     ...PLAIN_STATUS,
-    statBoon: { dexterity: ROOM_BOON_STAT_BONUS, intelligence: ROOM_BOON_STAT_BONUS },
+    statBoon: { evasiveness: ROOM_BOON_STAT_BONUS, magic: ROOM_BOON_STAT_BONUS },
   },
-  hamburger_fed: { ...PLAIN_STATUS, statBoon: { strength: HAMBURGER_STR_BONUS } },
+  hamburger_fed: { ...PLAIN_STATUS, statBoon: { melee: HAMBURGER_MELEE_BONUS } },
   refreshed: PLAIN_STATUS,
 };
 
@@ -226,6 +256,13 @@ export interface StatusEffect {
    * kill credit already treats null as "not killed by anyone".
    */
   applier: Player | null;
+  /**
+   * Set when the applier is only credited with the effect and did not lay it
+   * on with a blow of their own: a burning boulder from the trebuchet they
+   * built. The kill is still theirs, but its bites are not their hits, so they
+   * neither boost nor train the applier's skills.
+   */
+  readonly creditOnly?: true;
   /**
    * Damage this effect will still soak up before any reaches HP. Only an
    * absorbing effect (see {@link makeShield}) carries it; `Player.takeDamage`
@@ -275,7 +312,7 @@ export const DOUBLE_DAMAGE_STATUS = 'double_damage' as const satisfies StatusId;
 
 /**
  * Statuses nothing clears but a death: not a cure, not a knockout and revive,
- * not the level-15 shell's cleanse — `Player.clearStatusEffects` keeps them.
+ * not the level-15 energy shield's cleanse — `Player.clearStatusEffects` keeps them.
  * A party death that respawns does clear them (`checkpointSnapshot` for the
  * in-place rewind, `progressForRespawn` for the rebuild from the save), or a
  * crawler with no way to heal would die to them again on every respawn.
@@ -474,6 +511,11 @@ export function makeBurn(applier: Player | null = null): StatusEffect {
   return { type: 'burn', ticksRemaining: BURN_TICKS, totalTicks: BURN_TICKS, applier };
 }
 
+/** A burn credited to `creditedTo` that something they built, not their own hand, set. */
+export function makeCreditedBurn(creditedTo: Player): StatusEffect {
+  return { ...makeBurn(creditedTo), creditOnly: true };
+}
+
 /** Thirty seconds at 60 fps. */
 const POISON_TICKS = 1800;
 
@@ -501,7 +543,7 @@ export function makeMagicBurn(applier: Player | null = null): StatusEffect {
 /** Ten seconds at 60 fps. */
 const ELECTRIFIED_TICKS = 600;
 
-/** Electrified: 10-second DoT + movement slow from level-15 shell shock wave. */
+/** Electrified: 10-second DoT + movement slow from level-15 energy shield shock wave. */
 export function makeElectrified(applier: Player | null = null): StatusEffect {
   return {
     type: 'electrified',
@@ -623,7 +665,7 @@ export function makeIntoxication(intoxication: Intoxication, durationScale = 1):
 /** Whetstone: three minutes at 60 fps — long enough to be worth carrying out the door. */
 const WHETSTONE_TICKS = 10800;
 
-/** Melee damage a freshly-stoned edge adds, on top of strength. */
+/** Melee damage a freshly-stoned edge adds, on top of the Melee stat. */
 export const WHETSTONE_MELEE_DAMAGE_BONUS = 3;
 
 /**
@@ -659,7 +701,7 @@ export function makeCooldownCrisp(): StatusEffect {
  * which is the whole of the mechanism: nothing is applied on grant and nothing
  * is unwound on expiry, so a boon cannot leave a stale bonus behind.
  *
- * A constitution entry moves max HP, so every path that starts or ends one of
+ * A health entry moves max HP, so every path that starts or ends one of
  * these has to call `syncHpToMaxHp` — otherwise the HP bar and the max disagree
  * until some unrelated event happens to reconcile them.
  */
@@ -718,13 +760,13 @@ export function makeDeepSlumber(): StatusEffect {
 
 // -- Food boons -----------------------------------------------------------------
 
-/** The strength a Hamburger lends; see {@link makeHamburgerFed}. */
+/** The Melee bonus a Hamburger lends; see {@link makeHamburgerFed}. */
 export const HAMBURGER_FED_STATUS = 'hamburger_fed' as const satisfies StatusId;
 
 export const HAMBURGER_FED_TICKS = HAMBURGER_FED_DURATION_SECONDS * TICKS_PER_SECOND;
 
 /**
- * Hamburger Fed: a short strength boon. Eating another while fed refreshes the
+ * Hamburger Fed: a short melee boon. Eating another while fed refreshes the
  * timer rather than adding a second bonus, because `applyStatus` replaces an
  * effect of the same type and {@link STAT_BOON_BONUSES} reads each type once.
  */

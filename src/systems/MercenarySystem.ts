@@ -84,7 +84,7 @@ function leavingDownedToast(name: string): string {
 
 /**
  * Manager for a hired mercenary (The Barracks Mercenaries' desk),
- * modelled on `MongoSystem`. Each scene — a floor or a building's interior —
+ * modelled on `DeinonychusSystem`. Each scene — a floor or a building's interior —
  * constructs a fresh instance from the persisted `MercenaryRoster`; if the
  * roster holds a contract for this floor, the merc is spawned near the active
  * player on the first frame and then follows and fights each frame like any
@@ -194,7 +194,7 @@ export class MercenarySystem implements GameSystem {
   }
 
   /**
-   * The hire's health for the frame, called (like `MongoSystem.checkHealth`)
+   * The hire's health for the frame, called (like `DeinonychusSystem.checkHealth`)
    * after mob damage resolution but *before* `resolveKills`.
    *
    * A standing hire at zero HP goes down here instead of dying: the killing
@@ -223,7 +223,7 @@ export class MercenarySystem implements GameSystem {
 
   /**
    * The killing blow put the hire on the floor instead. Everything the blow
-   * latched for a kill is undone here, the way `MongoSystem.checkHealth` does
+   * latched for a kill is undone here, the way `DeinonychusSystem.checkHealth` does
    * it, so `resolveKills` never sees one: no `mobKilled`, no XP, no gore.
    */
   private knockDown(merc: Mercenary): void {
@@ -305,7 +305,7 @@ export class MercenarySystem implements GameSystem {
 
   /**
    * Puts a hire that has fallen out of reach back behind its owner — too far
-   * off to be seen, or stuck on its way home — the way `MongoSystem` rescues a
+   * off to be seen, or stuck on its way home — the way `DeinonychusSystem` rescues a
    * stranded pet: onto a tile the owner can see and it can move in, re-indexed
    * in the grid so blows aimed at it land. Never mid-fight — its own or a
    * hostile's with it — which would be pulling it out of a fight it is in.
@@ -464,7 +464,7 @@ export class MercenarySystem implements GameSystem {
   renderSpeech(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     const merc = this.merc;
     if (merc !== null) {
-      renderHirelingDownedMarker(ctx, merc, camX, camY);
+      renderHirelingDownedMarker(ctx, merc, merc.displayName, camX, camY);
       merc.renderSpeech(ctx, camX, camY);
     }
     this.corpse?.renderSpeech(ctx, camX, camY);

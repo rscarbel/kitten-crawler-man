@@ -4,7 +4,7 @@ import { worldText } from './world/worldText';
 
 /**
  * The "you cannot use this yet" wipe: a dark panel that drains off the bottom of
- * a button as the wait runs out, with the remaining seconds over it. The Mongo
+ * a button as the wait runs out, with the remaining seconds over it. The Deinonychus
  * explainer draws it over its Summon button so the picture counts down the way
  * the HUD does.
  */

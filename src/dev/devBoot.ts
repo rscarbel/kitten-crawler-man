@@ -13,11 +13,12 @@ import { LlamaPreviewScene } from '../scenes/LlamaPreviewScene';
 import { CowPreviewScene } from '../scenes/CowPreviewScene';
 import { RockGolemPreviewScene } from '../scenes/RockGolemPreviewScene';
 import { SkeletonPreviewScene } from '../scenes/SkeletonPreviewScene';
-import { MongoPreviewScene } from '../scenes/MongoPreviewScene';
+import { DeinonychusPreviewScene } from '../scenes/DeinonychusPreviewScene';
 import { EvilClownPreviewScene } from '../scenes/EvilClownPreviewScene';
 import { MantidPreviewScene } from '../scenes/MantidPreviewScene';
 import { DarkKnightPreviewScene } from '../scenes/DarkKnightPreviewScene';
 import { RatKinPreviewScene } from '../scenes/RatKinPreviewScene';
+import { DemonLiaisonPreviewScene } from '../scenes/DemonLiaisonPreviewScene';
 import { ShadyPreviewScene } from '../scenes/ShadyPreviewScene';
 import { ScientistPreviewScene } from '../scenes/ScientistPreviewScene';
 import { NecromancerPreviewScene } from '../scenes/NecromancerPreviewScene';
@@ -68,6 +69,7 @@ import {
 import { DOOMSDAY_COUNTDOWN_MS, createDoomsdayProgress } from '../core/quests/DoomsdayProgress';
 import { settings } from '../core/input/Settings';
 import { getMercenaryTemplate } from '../core/party/mercenaryTemplates';
+import { PET_NAME_SUGGESTIONS, PetNameBook, parsePetName } from '../core/party/petNames';
 import {
   buildPlaytestBoot,
   playtestStartsPastBathroom,
@@ -84,7 +86,11 @@ import { startBrowserReplayRecording } from './aiReplayRecorder';
 import { startPerfWalkFromParams } from './perfScenes';
 import { DEFAULT_FLOOR_ART_SEED } from '../map/ground/floorArtSeed';
 import { createGodModeState } from '../core/state/GodMode';
-import { isLevelId } from '../levels/levelIds';
+import { isLevelId, type LevelId } from '../levels/levelIds';
+import { TUTORIAL_LEVEL_ID } from '../levels/tutorial';
+import { TutorialController } from '../systems/TutorialController';
+import { isStoryBeatId } from '../story/StoryDirector';
+import { storyDirectorBefore, storyPreviewLevel } from '../story/storyPreview';
 
 /**
  * Dev-only entry points, reachable by query parameter.
@@ -214,6 +220,22 @@ function devFloorOptions(
 }
 
 /**
+ * The run's pet names with the deinonychus a preset hands the party already
+ * named: a pet is named the moment it joins, so a drop-in past that moment
+ * would otherwise open on the name prompt. A fresh book, so the name never
+ * reaches the start menu's own run.
+ */
+function playtestPetNames(options: DungeonSceneOptions): PetNameBook {
+  const book = new PetNameBook(options.petNames?.saved());
+  if (book.nameOf('deinonychus') !== null) return book;
+  const name = parsePetName(PET_NAME_SUGGESTIONS.deinonychus[0]);
+  if (name === null)
+    throw new Error('the first suggested deinonychus name is not a legal pet name');
+  book.give('deinonychus', name);
+  return book;
+}
+
+/**
  * A copy of `options` with what every preset boot shares: the party, its spawn
  * and the puzzle chokes behind it. Never written into `options` itself, which
  * the caller goes on handing to the start menu: a preset's kit left there
@@ -227,7 +249,8 @@ function withPlaytestBoot(options: DungeonSceneOptions, boot: PlaytestBoot): Dun
     abilityManager: boot.abilityManager,
     // The pet is unlocked from a treasure chest most presets start well past,
     // and a playtest drop-in that cannot summon him cannot test him.
-    mongoUnlocked: true,
+    deinonychusUnlocked: true,
+    petNames: playtestPetNames(options),
     resolveSpawnTile: (gameMap) => resolvePlaytestSpawn(boot.spawn, gameMap),
     bathroomSolvedAtStart: (gameMap) => playtestStartsPastBathroom(boot.spawn, gameMap),
     stealthGateOpenAtStart: (gameMap) => playtestStartsPastStealthGate(boot.spawn, gameMap),
@@ -297,7 +320,9 @@ function prisonLayoutNamed(value: string): PrisonLayout | null {
  * seeds the Krasue Murders questline. `?prison=1&difficulty=hard`
  * walks the `prison` preset's party straight into the Goblin High Security
  * Prison, built from that layout on that difficulty; leaving it comes out in
- * floor 2's gate room. The rest are art preview harnesses.
+ * floor 2's gate room. `?story=floor2_dave_chosen` boots the floor a story beat
+ * is heard on, with every beat before it already heard, and plays the beat at
+ * once. The rest are art preview harnesses.
  *
  * A booted floor never writes the real saved game unless `&save` is added (e.g.
  * `?playtest=spider&save`): a kitted preset or a seeded quest stage written over
@@ -417,8 +442,8 @@ export function devBootScene(
     return true;
   }
 
-  if (params.get('mongo') !== null) {
-    sceneManager.replace(new MongoPreviewScene());
+  if (params.get('deinonychus') !== null) {
+    sceneManager.replace(new DeinonychusPreviewScene());
     return true;
   }
 
@@ -484,6 +509,11 @@ export function devBootScene(
 
   if (params.get('ratkin') !== null) {
     sceneManager.replace(new RatKinPreviewScene());
+    return true;
+  }
+
+  if (params.get('demonliaison') !== null) {
+    sceneManager.replace(new DemonLiaisonPreviewScene());
     return true;
   }
 
@@ -588,7 +618,7 @@ export function devBootScene(
           floorLevelId: null,
         };
       }
-      if (preset.mongoOut === true) floorOptions.mongoWasOut = true;
+      if (preset.deinonychusOut === true) floorOptions.deinonychusWasOut = true;
       const defences = preset.briarHollowDefences;
       if (defences !== undefined) {
         const wallsFlag = params.get('walls');
@@ -633,12 +663,41 @@ export function devBootScene(
     console.error(`Unknown playtest preset: "${playtestId}"`);
   }
 
+  const storyParam = params.get('story');
+  if (storyParam !== null) {
+    if (isStoryBeatId(storyParam)) {
+      const levelId = storyPreviewLevel(storyParam);
+      bootDevFloor(sceneManager, input, params, levelId, {
+        ...options,
+        storyDirector: storyDirectorBefore(storyParam),
+        storyPreview: storyParam,
+        tutorialController:
+          levelId === TUTORIAL_LEVEL_ID ? TutorialController.createForTutorial() : undefined,
+      });
+      return true;
+    }
+    console.error(`Unknown story beat: "${storyParam}"`);
+  }
+
   const levelId = params.get('level');
   if (levelId === null || !isLevelId(levelId)) return false;
+  bootDevFloor(sceneManager, input, params, levelId, options);
+  return true;
+}
 
+/**
+ * Opens a bare floor: the `?level=` route, and the floor a `?story=` preview
+ * plays its beat on. `&spawn=circus` puts the party on the circus grounds.
+ */
+function bootDevFloor(
+  sceneManager: SceneManager,
+  input: InputManager,
+  params: URLSearchParams,
+  levelId: LevelId,
+  options: DungeonSceneOptions,
+): void {
   const floorOptions: DungeonSceneOptions = { ...options };
   if (params.get('spawn') === 'circus') floorOptions.spawnAtCircus = true;
-
   sceneManager.replace(
     new DungeonScene(
       getLevelDef(levelId),
@@ -647,5 +706,4 @@ export function devBootScene(
       devFloorOptions(floorOptions, params),
     ),
   );
-  return true;
 }

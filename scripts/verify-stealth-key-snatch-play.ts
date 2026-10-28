@@ -108,7 +108,7 @@ const { PRISON_DOOR_UNBRIEFED_REFUSAL } =
   await import('../src/systems/stealthKeySnatch/prisonDoorGate.js');
 const { GATE_LOCKED_BARK } = await import('../src/dialog/scripts/scenes/stealthKeySnatch.js');
 const { PrisonGoblin } = await import('../src/creatures/PrisonGoblin.js');
-const { Mongo } = await import('../src/creatures/Mongo.js');
+const { Deinonychus } = await import('../src/creatures/Deinonychus.js');
 const { Mercenary } = await import('../src/creatures/Mercenary.js');
 const { MercenarySystem } = await import('../src/systems/MercenarySystem.js');
 const { createMercenaryRoster } = await import('../src/core/party/MercenaryRoster.js');
@@ -116,6 +116,7 @@ const { getMercenaryTemplate } = await import('../src/core/party/mercenaryTempla
 const { PrisonKeySystem } = await import('../src/systems/stealthKeySnatch/PrisonKeySystem.js');
 const { settings } = await import('../src/core/input/Settings.js');
 const { DIFFICULTY_ORDER } = await import('../src/core/difficulty/difficultyProfiles.js');
+const { PetNameBook, parsePetName } = await import('../src/core/party/petNames.js');
 
 type Scene = InstanceType<typeof DungeonScene>;
 type LiveMap = InstanceType<typeof GameMap>;
@@ -211,7 +212,7 @@ function injectFault(active: Fault | null): void {
       DungeonScene.prototype['seatCompanionsAtPrisonDoor'] = () => undefined;
       return;
     case 'companions-stay-put':
-      Mongo.prototype.updateAI = () => undefined;
+      Deinonychus.prototype.updateAI = () => undefined;
       Mercenary.prototype.updateAI = () => undefined;
       return;
     case 'restore-skips-gate': {
@@ -346,6 +347,18 @@ function sameTile(a: Tile, b: Tile): boolean {
   return a.x === b.x && a.y === b.y;
 }
 
+/**
+ * The names of a run whose Deinonychus has joined: he is named as he joins,
+ * and an unnamed one would hold the floor behind the naming prompt.
+ */
+function namedPets(): InstanceType<typeof PetNameBook> {
+  const book = new PetNameBook();
+  const name = parsePetName('Talon');
+  if (name === null) throw new Error('the test pet name is not a legal name');
+  book.give('deinonychus', name);
+  return book;
+}
+
 /** A Barracks hire already under contract for floor 2. */
 function hireRoster(): ReturnType<typeof createMercenaryRoster> {
   const roster = createMercenaryRoster();
@@ -360,10 +373,13 @@ function hireRoster(): ReturnType<typeof createMercenaryRoster> {
 }
 
 function companionsOf(scene: Scene): {
-  mongo: Scene['world']['roster']['mobs'][number] | null;
+  deinonychus: Scene['world']['roster']['mobs'][number] | null;
   hire: Scene['world']['roster']['mobs'][number] | null;
 } {
-  return { mongo: scene['mongoSystem'].mongo, hire: scene['mercenarySystem'].activeMerc };
+  return {
+    deinonychus: scene['deinonychusSystem'].deinonychus,
+    hire: scene['mercenarySystem'].activeMerc,
+  };
 }
 
 /** With the party walked off, both companions come back to it. */
@@ -377,9 +393,9 @@ function verifyCompanionsRejoin(scene: Scene, partyTile: Tile, label: string): v
     }
     scene.update();
   }
-  const { mongo, hire } = companionsOf(scene);
+  const { deinonychus, hire } = companionsOf(scene);
   for (const [name, companion] of [
-    ['Mongo', mongo],
+    ['Deinonychus', deinonychus],
     ['the hire', hire],
   ] as const) {
     const reach =
@@ -518,8 +534,9 @@ async function verifySeed(worldSeed: number): Promise<void> {
       saves.push(progress);
       return Promise.resolve('saved');
     },
-    mongoUnlocked: true,
-    mongoWasOut: true,
+    deinonychusUnlocked: true,
+    deinonychusWasOut: true,
+    petNames: namedPets(),
     mercenaryRoster: hireRoster(),
   });
   sceneManager.replace(outside);
@@ -621,8 +638,8 @@ async function verifySeed(worldSeed: number): Promise<void> {
   // ── Into the prison and out with the key ──
   const companionsOut = companionsOf(outside);
   check(
-    companionsOut.mongo !== null && companionsOut.hire !== null,
-    `${label}: Mongo and the hire are out before the prison`,
+    companionsOut.deinonychus !== null && companionsOut.hire !== null,
+    `${label}: Deinonychus and the hire are out before the prison`,
   );
   const doorStep = room.prisonDoor.approachTiles[0] ?? talkTile;
   placeParty(outside, doorStep);
@@ -644,9 +661,9 @@ async function verifySeed(worldSeed: number): Promise<void> {
   check(doorSave !== undefined, `${label}: walking into the prison writes a save at the door`);
   const outsideMobs = outside['world'].roster.mobs;
   check(
-    (companionsOut.mongo === null || !outsideMobs.includes(companionsOut.mongo)) &&
+    (companionsOut.deinonychus === null || !outsideMobs.includes(companionsOut.deinonychus)) &&
       (companionsOut.hire === null || !outsideMobs.includes(companionsOut.hire)),
-    `${label}: Mongo and the hire are dismissed at the prison door`,
+    `${label}: Deinonychus and the hire are dismissed at the prison door`,
   );
   const inside = currentScene(sceneManager);
   check(inside instanceof BuildingInteriorScene, `${label}: the prison door leads inside`);
@@ -664,7 +681,8 @@ async function verifySeed(worldSeed: number): Promise<void> {
   );
   check(await settleArrival(inside, ctx), `${label}: the prison's arrival screen finishes`);
   check(
-    inside['mongoSystem'].mongo === null && inside['mercenarySystem'].activeMerc === null,
+    inside['deinonychusSystem'].deinonychus === null &&
+      inside['mercenarySystem'].activeMerc === null,
     `${label}: no companion comes into the prison`,
   );
   const visit = inside['floor'].stealthKeySnatch;
@@ -715,13 +733,13 @@ async function verifySeed(worldSeed: number): Promise<void> {
   back.update();
   const companionsBack = companionsOf(back);
   check(
-    companionsBack.mongo !== null && companionsBack.hire !== null,
-    `${label}: Mongo and the hire are back on the floor after the prison`,
+    companionsBack.deinonychus !== null && companionsBack.hire !== null,
+    `${label}: Deinonychus and the hire are back on the floor after the prison`,
   );
   check(
-    companionsBack.mongo !== null &&
-      sameTile(tileOf(companionsBack.mongo), room.waitingTiles.mongo),
-    `${label}: Mongo waits on his gate-room tile (${JSON.stringify(companionsBack.mongo === null ? null : tileOf(companionsBack.mongo))} vs ${JSON.stringify(room.waitingTiles.mongo)})`,
+    companionsBack.deinonychus !== null &&
+      sameTile(tileOf(companionsBack.deinonychus), room.waitingTiles.deinonychus),
+    `${label}: Deinonychus waits on his gate-room tile (${JSON.stringify(companionsBack.deinonychus === null ? null : tileOf(companionsBack.deinonychus))} vs ${JSON.stringify(room.waitingTiles.deinonychus)})`,
   );
   check(
     companionsBack.hire !== null &&

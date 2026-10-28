@@ -175,7 +175,7 @@ const SLAM_BLOCK_XP = 8;
 export const SLAM_HP_FRACTION = 0.6;
 const SLAM_BONUS_DAMAGE = 6;
 
-const SHELL_BLOCK_XP = 8;
+const SHIELD_BLOCK_XP = 8;
 const SPIT_DAMAGE_MIN = 8;
 const SPIT_DAMAGE_MAX = 12;
 export const SPIT_HIT_RADIUS_FRACTION = 0.75;
@@ -1777,7 +1777,7 @@ export class GrotesqueSpider extends Mob {
       const targetCentreX = t.x + ts * TILE_CENTER;
       const targetCentreY = t.y + ts * TILE_CENTER;
       if (!isInsideScreech(this.centreX, this.centreY, targetCentreX, targetCentreY)) continue;
-      if (this.spells?.isPointInsideShell(targetCentreX, targetCentreY)) {
+      if (this.spells?.isPointInsideEnergyShield(targetCentreX, targetCentreY)) {
         this.spells.addBlockXp(SCREECH_BLOCK_XP);
         continue;
       }
@@ -1808,7 +1808,7 @@ export class GrotesqueSpider extends Mob {
       const targetCentreX = t.x + ts * TILE_CENTER;
       const targetCentreY = t.y + ts * TILE_CENTER;
       if (!isInsideSlamCone(impact, targetCentreX, targetCentreY)) continue;
-      if (this.spells?.isPointInsideShell(targetCentreX, targetCentreY)) {
+      if (this.spells?.isPointInsideEnergyShield(targetCentreX, targetCentreY)) {
         this.spells.addBlockXp(SLAM_BLOCK_XP);
         continue;
       }
@@ -2018,8 +2018,8 @@ export class GrotesqueSpider extends Mob {
       if (Math.hypot(proj.x - tcx, proj.y - tcy) < hitRadius) {
         this.spawnGroundTrap(proj.x, proj.y);
         this.activeProjectile = null;
-        if (this.spells?.isPointInsideShell(tcx, tcy)) {
-          this.spells.addBlockXp(SHELL_BLOCK_XP);
+        if (this.spells?.isPointInsideEnergyShield(tcx, tcy)) {
+          this.spells.addBlockXp(SHIELD_BLOCK_XP);
           return;
         }
         this.landSpitOn(t);

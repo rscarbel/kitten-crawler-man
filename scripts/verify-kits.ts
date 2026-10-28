@@ -5,7 +5,7 @@
  * and floor loot it gets by constructing `DestructionKit`.
  *
  * Every check here guards a failure that is *invisible in the game*. A mob added
- * without the roster's `SpellSystem` walks through a protective shell and
+ * without the roster's `SpellSystem` walks through an energy shield and
  * nothing anywhere says so. A `replaceAll` that swapped the array instead of its
  * contents would strand the per-frame `SystemContext` and every quest spawn
  * closure on a list that stops being updated — the scene keeps running, it just
@@ -42,6 +42,7 @@
 
 import { TILE_SIZE } from '../src/core/constants';
 import { AbilityManager } from '../src/core/skills/AbilityManager';
+import { PetNameBook } from '../src/core/party/petNames';
 import { EventBus } from '../src/core/EventBus';
 import { PlayerManager } from '../src/core/party/PlayerManager';
 import { GameMap, type PlacedTownInteriorProp } from '../src/map/GameMap';
@@ -51,7 +52,7 @@ import {
 } from '../src/sprites/art/townInterior/townInteriorProps';
 import { TownInteriorPropDestructionSystem } from '../src/systems/TownInteriorPropDestructionSystem';
 import { InMemoryInteriorPayoutRecord } from '../src/systems/InteriorPropInteractionSystem';
-import { Mob, type ShellContext } from '../src/creatures/Mob';
+import { Mob, type EnergyShieldContext } from '../src/creatures/Mob';
 import { alertPackAround } from '../src/creatures/packAlert';
 import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
 import { hasRoomToMove } from '../src/map/findWalkableTile';
@@ -182,7 +183,7 @@ function check(ok: boolean, label: string): void {
  * A mob that does nothing, so a check about the roster measures the roster.
  *
  * It exists for one reason a real mob cannot serve: `Mob.spells` is `protected`
- * and has no tell until a shell is up and something is in flight at it, and a
+ * and has no tell until a shield is up and something is in flight at it, and a
  * subclass can read it without a cast.
  */
 class ProbeMob extends Mob {
@@ -195,8 +196,8 @@ class ProbeMob extends Mob {
     super(tileX, tileY, TILE_SIZE, PROBE_MOB_HP, PROBE_MOB_SPEED);
   }
 
-  /** The shell context the roster injected, or null if it never did. */
-  get injectedShellContext(): ShellContext | null {
+  /** The shield context the roster injected, or null if it never did. */
+  get injectedEnergyShieldContext(): EnergyShieldContext | null {
     return this.spells;
   }
 
@@ -327,7 +328,7 @@ console.log('MobRoster.add is the single spawn path');
     const probe = new ProbeMob(floor.x + 1, floor.y);
 
     check(!probe.hasMap, 'a mob built outside the roster starts with no map');
-    check(probe.injectedShellContext === null, 'and with no shell context');
+    check(probe.injectedEnergyShieldContext === null, 'and with no shield context');
 
     stage.roster.add(probe);
 
@@ -336,7 +337,7 @@ console.log('MobRoster.add is the single spawn path');
     check(nearby.has(probe), 'add() indexes it where it stands, so a swing can find it');
     check(probe.hasMap, 'add() hands it the map, without which it cannot path or collide');
     check(
-      probe.injectedShellContext === stage.roster.spells,
+      probe.injectedEnergyShieldContext === stage.roster.spells,
       "add() hands it the roster's own SpellSystem, not a second instance",
     );
 
@@ -630,13 +631,13 @@ console.log('\nCombatKit re-reads the world it was handed');
   const combat = makeCombatKit(stage);
 
   // `updateMobs` documents spells-then-mob-AI; the spell half is observable
-  // through the shell's own cooldown, which only ticks when it is updated.
-  const shellLevel = stage.pm.human.getProtectiveShellLevel();
-  combat.spells.triggerProtectiveShell(stage.pm.human, stage.pm.cat, stage.roster.grid, shellLevel);
-  const cooldownBefore = combat.spells.shellCooldown;
+  // through the shield's own cooldown, which only ticks when it is updated.
+  const shieldLevel = stage.pm.human.getEnergyShieldLevel();
+  combat.spells.triggerEnergyShield(stage.pm.human, stage.pm.cat, stage.roster.grid, shieldLevel);
+  const cooldownBefore = combat.spells.energyShieldCooldown;
   combat.updateMobs(makeContext(stage));
   check(
-    cooldownBefore > 0 && combat.spells.shellCooldown < cooldownBefore,
+    cooldownBefore > 0 && combat.spells.energyShieldCooldown < cooldownBefore,
     'updateMobs ticks the spell system as well as the mob AI',
   );
 
@@ -907,7 +908,11 @@ console.log('\nBriarHollowKit is inert until gameMap.briarHollow exists');
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
   map.generateInterior(INTERIOR_KIND, GROUND_FLOOR, null);
   const stage = makeStage(map, PARKED_TILE, PARKED_TILE);
-  const menus = new MenusKit({ world: stage.world, abilityManager: new AbilityManager() });
+  const menus = new MenusKit({
+    world: stage.world,
+    abilityManager: new AbilityManager(),
+    petNames: new PetNameBook(),
+  });
   const partyCrafts = createPartyCraftsState();
   const kit = new BriarHollowKit(stage.world, {
     travelUnlocks: { anchor: createAnchorQuestProgress() },
@@ -980,8 +985,8 @@ function wear(crawler: Player, id: ItemId): boolean {
   return crawler.inventory.equipment.isEquipped(id);
 }
 
-/** Strength that makes every bare blow large, so a share of it never rounds to nothing. */
-const GEAR_PROBE_STRENGTH = 200;
+/** Melee that makes every bare blow large, so a share of it never rounds to nothing. */
+const GEAR_PROBE_MELEE = 200;
 /** HP the probe crawler is left on before a blow that heals her. */
 const GEAR_PROBE_LOW_HP = 1;
 /** Far past any crawler's bar: a blow that downs her outright. */
@@ -1003,7 +1008,7 @@ console.log('\nWorn gear traits fire through the kit, one per hook family');
         lifesteal !== null && wear(human, lifesteal),
         'fixture: the human wears a lifesteal piece',
       );
-      human.setBaseStat('strength', GEAR_PROBE_STRENGTH);
+      human.setBaseStat('melee', GEAR_PROBE_MELEE);
       const victim = spawnMob(
         'rat',
         { x: floor.x + 1, y: floor.y },
@@ -1038,7 +1043,7 @@ console.log('\nWorn gear traits fire through the kit, one per hook family');
         awakening !== null && wear(human, awakening),
         'fixture: the human wears an awakening piece',
       );
-      human.setBaseStat('strength', GEAR_PROBE_STRENGTH);
+      human.setBaseStat('melee', GEAR_PROBE_MELEE);
       const victim = spawnMob(
         'rat',
         { x: floor.x + 1, y: floor.y },

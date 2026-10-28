@@ -3,7 +3,7 @@
  *
  * The menu and its pricing live on `SHOPS.cookhouse`. Hollow Stew heals
  * exactly like a health potion and shares its cooldown, so its base price is a
- * potion's; a burger heals about half as much but feeds a strength bonus and
+ * potion's; a burger heals about half as much but feeds a melee bonus and
  * has no cooldown at all, so it is worth a little over half a potion.
  */
 

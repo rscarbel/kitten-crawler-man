@@ -13,8 +13,15 @@
  *     same tap reopening it.
  *   - With the Bopca's box open, a finger on the floor becomes a move touch —
  *     tap-to-move is the only way a phone player can walk away — and a tap on
- *     Mordecai, from beside him and still inside the Bopca's walk-away range,
+ *     Dave, from beside him and still inside the Bopca's walk-away range,
  *     hands the press on and opens him.
+ *   - While a cutscene owns the party, a held direction key and the interact
+ *     press do nothing: the walk-up ends on its own tile, facing its way, and
+ *     no one nearby answers. The pause key opens and closes the pause menu
+ *     mid-walk and mid-talk, the walk holding still under it and the talk
+ *     surviving it. The world halts for the talk; the cutscene runs to its end
+ *     (Caroline's message, the guide teleporting out, a wait) and then hands
+ *     the keys back.
  *
  * Run: npm run verify:walk-away (after `verify-walk-away.ts`)
  */
@@ -45,10 +52,18 @@ const { MercenarySystem } = await import('../src/systems/MercenarySystem.js');
 const { TownLifeSystem } = await import('../src/systems/TownLifeSystem.js');
 const { BopcaSystem, BOPCA_TALK_DISTANCE_TILES } = await import('../src/systems/BopcaSystem.js');
 const { SafeRoomSystem } = await import('../src/systems/SafeRoomSystem.js');
+const { DaveGuideSystem, DaveWhereabouts } = await import('../src/systems/DaveGuideSystem.js');
+const { safeRoomIdIn } = await import('../src/map/safeRoomId.js');
 const { TouchMoveState } = await import('../src/core/input/TouchMoveState.js');
 const { safeRoomSpeakerFor } = await import('../src/systems/safeRoomSpeaker.js');
 const { stampSafeRoomCounters } = await import('../src/map/safeRoomCounterLayout.js');
 const { CITIZEN_TALK_RADIUS_TILES } = await import('../src/creatures/townInteraction.js');
+const { CutsceneKit } = await import('../src/systems/kits/CutsceneKit.js');
+const { MenusKit } = await import('../src/systems/kits/MenusKit.js');
+const { walkUpTo } = await import('../src/systems/cutscene/walkUp.js');
+const { WALK_UP_MAX_PATH_TILES } = await import('../src/systems/cutscene/CutsceneDirector.js');
+const { carolineLines } = await import('../src/dialog/caroline.js');
+const { pixelToTile } = await import('../src/utils.js');
 
 type Scene = InstanceType<typeof DungeonScene>;
 type Point = { readonly x: number; readonly y: number };
@@ -78,15 +93,36 @@ function check(ok: boolean, message: string): void {
 
 await loadSprites('src/images/');
 
+/**
+ * One manager for every section, as the page has one: each section's scene
+ * replaces the last, so a scene left behind never sees the next section's
+ * keys. A manager per section would keep its window listeners and its exited
+ * scene, whose open boxes would go on swallowing presses.
+ */
+const sceneManager = new SceneManager();
+
 // ── Driving the scene the way a browser does ─────────────────────────────
 
 let clockMs = 0;
 let nextTouchId = 1;
 
 function pressSpace(): void {
+  pressKey(' ');
+}
+
+function pressKey(key: string): void {
+  holdKey(key);
+  releaseKey(key);
+}
+
+function holdKey(key: string): void {
   clockMs += 1;
-  shim.window.dispatch(new ShimEvent('keydown', ' ', clockMs));
-  shim.window.dispatch(new ShimEvent('keyup', ' ', clockMs));
+  shim.window.dispatch(new ShimEvent('keydown', key, clockMs));
+}
+
+function releaseKey(key: string): void {
+  clockMs += 1;
+  shim.window.dispatch(new ShimEvent('keyup', key, clockMs));
 }
 
 function canvasEvents(sceneManager: InstanceType<typeof SceneManager>): RecordingEventTarget {
@@ -226,7 +262,6 @@ async function verifyCitizenWithHireling(): Promise<void> {
     contractLevelId: level3.id,
     introduced: true,
   };
-  const sceneManager = new SceneManager();
   const scene = new DungeonScene(level3, new InputManager(), sceneManager, {
     existingMap: map,
     worldSeed: WORLD_SEED,
@@ -322,8 +357,6 @@ async function verifyCitizenWithHireling(): Promise<void> {
   active.y = drift.y;
   pressSpace();
   check(hirelingTalks > talksBefore, 'with no box up, the same press talks to the hireling');
-
-  scene.onExit();
 }
 
 // ── The Bopca's box on a phone ───────────────────────────────────────────
@@ -331,11 +364,14 @@ async function verifyCitizenWithHireling(): Promise<void> {
 interface SafeRoomSetup {
   readonly seed: number;
   readonly map: InstanceType<typeof GameMap>;
-  /** Where the player orders from: in reach of the Bopca. */
+  /**
+   * Where the player orders from: in reach of the Bopca, on the customer's
+   * side of her counter, so a walk-up to Dave can start from there.
+   */
   readonly orderFrom: Point;
-  /** Beside Mordecai, where a press is his, still inside the Bopca's walk-away range. */
-  readonly besideMordecai: Point;
-  readonly mordecaiHome: Point;
+  /** Beside Dave, where a press is his, still inside the Bopca's walk-away range. */
+  readonly besideDave: Point;
+  readonly daveHome: Point;
 }
 
 function pixels(tile: Point): Point {
@@ -353,7 +389,7 @@ function floorOneMap(seed: number): InstanceType<typeof GameMap> {
 }
 
 /**
- * A safe room where the tile beside Mordecai is still inside the Bopca's
+ * A safe room where the tile beside Dave is still inside the Bopca's
  * walk-away range, so her box is legitimately up when the player gets there
  * and the tap has to hand the press on to reach him.
  */
@@ -369,16 +405,23 @@ function findSafeRoomSetup(): SafeRoomSetup | null {
       null,
       false,
     );
-    const safeRoom = new SafeRoomSystem(probe, 0, 0, new Conversation(null));
+    const scope = { kind: 'floor', level: level1.id } as const;
+    const safeRooms = new SafeRoomSystem(probe, scope);
     for (const layout of layouts) {
       const bounds = layout.roomBounds;
-      const inRoom = (tile: Point): boolean =>
-        tile.x >= bounds.x &&
-        tile.x < bounds.x + bounds.w &&
-        tile.y >= bounds.y &&
-        tile.y < bounds.y + bounds.h;
-      const mordecaiHome = safeRoom.mordecaiPositions.find(inRoom);
-      if (mordecaiHome === undefined) continue;
+      const roomId = safeRoomIdIn(scope, layout.safeRoomIndex);
+      const daveHome = safeRooms.guidePlacement(roomId)?.home;
+      if (daveHome === undefined) continue;
+      const dave = new DaveGuideSystem(
+        {
+          safeRooms,
+          conversation: new Conversation(null),
+          whereabouts: new DaveWhereabouts(),
+          camera: () => ({ x: 0, y: 0 }),
+          audio: null,
+        },
+        roomId,
+      );
       const tiles: Point[] = [];
       for (let y = bounds.y; y < bounds.y + bounds.h; y++) {
         for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
@@ -386,17 +429,22 @@ function findSafeRoomSetup(): SafeRoomSetup | null {
         }
       }
       const bopcaHome = pixels(layout.bopcaHomeTile);
+      const daveTalkSpot = walkUpTo(probe, daveHome, daveHome).tile;
+      const reachesDave = (tile: Point): boolean =>
+        probe.findPath(tile.x, tile.y, daveTalkSpot.x, daveTalkSpot.y, WALK_UP_MAX_PATH_TILES)
+          .length > 0;
       const orderFrom = tiles
+        .filter(reachesDave)
         .map(pixels)
         .filter((at) => safeRoomSpeakerFor(bopca, null, at) === 'bopca')
         .sort((a, b) => tilesApart(a, bopcaHome) - tilesApart(b, bopcaHome))[0];
-      const besideMordecai = tiles
-        .filter((tile) => Math.hypot(tile.x - mordecaiHome.x, tile.y - mordecaiHome.y) === 1)
+      const besideDave = tiles
+        .filter((tile) => Math.hypot(tile.x - daveHome.x, tile.y - daveHome.y) === 1)
         .map(pixels)
-        .filter((at) => safeRoomSpeakerFor(bopca, safeRoom, at) === 'mordecai')
+        .filter((at) => safeRoomSpeakerFor(bopca, dave, at) === 'dave')
         .find((at) => tilesApart(at, bopcaHome) < walkAwayRangeTiles(BOPCA_TALK_DISTANCE_TILES));
-      if (orderFrom !== undefined && besideMordecai !== undefined) {
-        return { seed, map: floorOneMap(seed), orderFrom, besideMordecai, mordecaiHome };
+      if (orderFrom !== undefined && besideDave !== undefined) {
+        return { seed, map: floorOneMap(seed), orderFrom, besideDave, daveHome };
       }
     }
   }
@@ -406,13 +454,15 @@ function findSafeRoomSetup(): SafeRoomSetup | null {
 async function verifyBopcaOnAPhone(): Promise<void> {
   console.log("\nthe Bopca's box on a phone");
   const setup = findSafeRoomSetup();
-  check(setup !== null, 'a safe room puts Mordecai inside the Bopca walk-away range');
+  check(setup !== null, 'a safe room puts Dave inside the Bopca walk-away range');
   if (setup === null) return;
 
-  const sceneManager = new SceneManager();
   const scene = new DungeonScene(level1, new InputManager(), sceneManager, {
     existingMap: setup.map,
     worldSeed: setup.seed,
+    // Inside the room, so Dave is standing in it from the first frame as on a
+    // reload there, rather than teleporting in partway through the checks.
+    spawnAt: { x: pixelToTile(setup.orderFrom.x), y: pixelToTile(setup.orderFrom.y) },
     skipIntro: true,
   });
   sceneManager.replace(scene);
@@ -420,7 +470,7 @@ async function verifyBopcaOnAPhone(): Promise<void> {
   scene.update();
 
   const bopca = sceneField(scene, 'bopca', BopcaSystem);
-  const safeRoom = sceneField(scene, 'safeRoom', SafeRoomSystem);
+  const dave = sceneField(scene, 'dave', DaveGuideSystem);
   const touch = sceneField(scene, 'touch', TouchMoveState);
   const events = canvasEvents(sceneManager);
   const active = scene.pm.active();
@@ -443,31 +493,177 @@ async function verifyBopcaOnAPhone(): Promise<void> {
   touchUp(events, floorFinger, FLOOR_TAP);
   check(bopca.isDialogOpen, 'a tap on the floor at the counter leaves her box up');
 
-  standAt(setup.besideMordecai);
+  standAt(setup.besideDave);
   scene.update();
-  check(bopca.isDialogOpen, 'her box is still up beside Mordecai, inside her walk-away range');
+  check(bopca.isDialogOpen, 'her box is still up beside Dave, inside her walk-away range');
   const camera = sceneCamera(scene);
-  const onMordecai = {
-    x: setup.mordecaiHome.x * TILE_SIZE + TILE_SIZE / 2 - camera.x,
-    y: setup.mordecaiHome.y * TILE_SIZE + TILE_SIZE / 2 - camera.y,
+  const onDave = {
+    x: setup.daveHome.x * TILE_SIZE + TILE_SIZE / 2 - camera.x,
+    y: setup.daveHome.y * TILE_SIZE + TILE_SIZE / 2 - camera.y,
   };
   const conversation = sceneField(scene, 'conversation', Conversation);
   drawFrame(sceneManager, scene);
-  check(
-    !conversation.hitsSurface(onMordecai.x, onMordecai.y),
-    'Mordecai is not drawn under the box',
+  check(!conversation.hitsSurface(onDave.x, onDave.y), 'Dave is not drawn under the box');
+  tap(events, onDave);
+  check(dave.dialogOpen && !bopca.isDialogOpen, 'a tap on Dave hands the press on and opens him');
+}
+
+// ── A cutscene owns the party ────────────────────────────────────────────
+
+/** More world ticks than the walk across a safe room takes, short of its own timeout. */
+const MAX_WALK_TICKS = 600;
+/** Ticks run under the pause menu or a talk, to see that nothing moves. */
+const HELD_TICKS = 20;
+/** More presses than the talk has pages, reveals included. */
+const MAX_READ_PRESSES = 20;
+/** The ticks the closing wait holds the cutscene for. */
+const CLOSING_WAIT_FRAMES = 3;
+/** How near its tile, as a share of a tile, the walk-up has to end: the steering lets go within a quarter. */
+const STAND_TOLERANCE_TILE_FRACTION = 0.25;
+const STAND_TOLERANCE_PX = TILE_SIZE * STAND_TOLERANCE_TILE_FRACTION;
+/** The key held throughout the walk, whatever way the walk goes. */
+const HELD_DIRECTION_KEY = 'ArrowLeft';
+const FACING_VECTORS = {
+  up: { x: 0, y: -1 },
+  down: { x: 0, y: 1 },
+  left: { x: -1, y: 0 },
+  right: { x: 1, y: 0 },
+} as const;
+
+async function verifyCutsceneOwnsTheParty(): Promise<void> {
+  console.log('\na cutscene owns the party');
+  const setup = findSafeRoomSetup();
+  check(setup !== null, 'a floor-one safe room to play the cutscene in');
+  if (setup === null) return;
+
+  const scene = new DungeonScene(level1, new InputManager(), sceneManager, {
+    existingMap: setup.map,
+    worldSeed: setup.seed,
+    // Inside the room, so Dave is standing in it from the first frame as on a
+    // reload there, rather than teleporting in partway through the checks.
+    spawnAt: { x: pixelToTile(setup.orderFrom.x), y: pixelToTile(setup.orderFrom.y) },
+    skipIntro: true,
+  });
+  sceneManager.replace(scene);
+  check(await settleArrival(sceneManager, scene), "floor 1's arrival screen finishes");
+  scene.update();
+
+  const cutscenes = sceneField(scene, 'cutscenes', CutsceneKit);
+  const conversation = sceneField(scene, 'conversation', Conversation);
+  const dave = sceneField(scene, 'dave', DaveGuideSystem);
+  const bopca = sceneField(scene, 'bopca', BopcaSystem);
+  const pause = sceneField(scene, 'menus', MenusKit).pauseScreen;
+  const active = scene.pm.active();
+  active.x = setup.orderFrom.x;
+  active.y = setup.orderFrom.y;
+  scene.pm.inactive().x = setup.orderFrom.x;
+  scene.pm.inactive().y = setup.orderFrom.y;
+
+  const walk = walkUpTo(setup.map, setup.daveHome, {
+    x: pixelToTile(active.x),
+    y: pixelToTile(active.y),
+  });
+  const standAt = pixels(walk.tile);
+  const distanceToStand = (): number => Math.hypot(active.x - standAt.x, active.y - standAt.y);
+  const outcome = { completed: false };
+  cutscenes.director.play(
+    [
+      walk,
+      {
+        kind: 'conversation',
+        request: {
+          lines: [carolineLines.message('Hold still while I talk at you.').line],
+          reward: null,
+          questRelated: false,
+        },
+      },
+      { kind: 'carolineMessage', message: carolineLines.message('That is all.') },
+      { kind: 'daveTeleportOut' },
+      { kind: 'wait', frames: CLOSING_WAIT_FRAMES },
+    ],
+    () => {
+      outcome.completed = true;
+    },
   );
-  tap(events, onMordecai);
+  check(cutscenes.isActive && scene.ui.keyboardLocked(), 'the cutscene takes the keyboard');
+
+  holdKey(HELD_DIRECTION_KEY);
+  scene.update();
+  pressSpace();
+  scene.update();
   check(
-    safeRoom.mordecaiDialogOpen && !bopca.isDialogOpen,
-    'a tap on Mordecai hands the press on and opens him',
+    !conversation.isOpen && !bopca.isDialogOpen && !dave.dialogOpen,
+    'mid-walk, the interact press reaches no one',
   );
+
+  pressKey('Escape');
+  check(pause.isOpen, 'the pause key opens the pause menu mid-walk');
+  const pausedAt = { x: active.x, y: active.y };
+  for (let tick = 0; tick < HELD_TICKS; tick++) scene.update();
+  check(
+    active.x === pausedAt.x && active.y === pausedAt.y,
+    'the walk holds still under the pause menu',
+  );
+  pressKey('Escape');
+  check(!pause.isOpen && cutscenes.isActive, 'and closes it again, the cutscene still running');
+
+  let walkTicks = 0;
+  while (!conversation.isOpen && walkTicks < MAX_WALK_TICKS) {
+    scene.update();
+    walkTicks++;
+  }
+  check(conversation.isOpen, `the talk opens once the walk-up ends (${walkTicks} ticks)`);
+  check(
+    distanceToStand() <= STAND_TOLERANCE_PX,
+    `the walk-up ends on its own tile, the held key ignored (${distanceToStand().toFixed(1)} px off)`,
+  );
+  const facing = FACING_VECTORS[walk.face];
+  check(
+    active.facingX === facing.x && active.facingY === facing.y,
+    `the crawler turns ${walk.face}, to face the way the walk-up says`,
+  );
+  check(dave.isNear(active), 'Dave stands within talk range of the talk');
+
+  const talkingAt = { x: active.x, y: active.y };
+  for (let tick = 0; tick < HELD_TICKS; tick++) scene.update();
+  check(
+    scene.ui.worldHalted() && active.x === talkingAt.x && active.y === talkingAt.y,
+    'the world halts for the talk',
+  );
+  pressKey('Escape');
+  check(pause.isOpen, 'the pause key opens the pause menu mid-talk');
+  pressKey('Escape');
+  check(!pause.isOpen && conversation.isOpen, 'and closing it hands the talk back where it was');
+  releaseKey(HELD_DIRECTION_KEY);
+
+  let presses = 0;
+  while (cutscenes.isActive && presses < MAX_READ_PRESSES) {
+    pressSpace();
+    for (let tick = 0; tick <= CLOSING_WAIT_FRAMES; tick++) scene.update();
+    presses++;
+  }
+  check(
+    outcome.completed && !cutscenes.isActive && !conversation.isOpen,
+    `reading on runs the cutscene to its end (${presses} presses)`,
+  );
+  check(
+    !dave.isNear(standAt) && !dave.isPresent,
+    'Dave has teleported out: nobody is left to talk to',
+  );
+  check(!scene.ui.keyboardLocked(), "and the keyboard is the player's again");
+
+  holdKey(HELD_DIRECTION_KEY);
+  scene.update();
+  const walksAgain = active.isMoving;
+  releaseKey(HELD_DIRECTION_KEY);
+  check(walksAgain, 'a direction key walks the crawler once the cutscene is over');
 
   scene.onExit();
 }
 
 await verifyCitizenWithHireling();
 await verifyBopcaOnAPhone();
+await verifyCutsceneOwnsTheParty();
 
 console.log(
   failures === 0 ? '\nall scene walk-away checks passed' : `\n${failures} check(s) failed`,

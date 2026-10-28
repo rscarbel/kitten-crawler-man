@@ -3,7 +3,7 @@ import type { SpatialGrid } from '../core/world/SpatialGrid';
 import { AttackCow } from '../creatures/AttackCow';
 import { Mercenary } from '../creatures/Mercenary';
 import type { Mob } from '../creatures/Mob';
-import { Mongo } from '../creatures/Mongo';
+import { Deinonychus } from '../creatures/Deinonychus';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import type { GameMap } from '../map/GameMap';
 import type { Player } from '../Player';
@@ -13,8 +13,8 @@ const COMPANION_LANDING_SEARCH_TILES = 4;
 /** Offset from a body's origin to the centre of the tile it stands on, as a fraction of a tile. */
 const TILE_CENTRE_FRACTION = 0.5;
 
-/** A companion the party brings with it: Mongo, a Barracks hire, or the human crawler's attack cow. */
-export type PartyCompanion = Mongo | Mercenary | AttackCow;
+/** A companion the party brings with it: Deinonychus, a Barracks hire, or the human crawler's attack cow. */
+export type PartyCompanion = Deinonychus | Mercenary | AttackCow;
 
 /**
  * The companions standing with the party this frame, picked out of the scene's
@@ -28,7 +28,7 @@ export function standingCompanions(extraTargets: readonly Player[] | undefined):
   const companions: PartyCompanion[] = [];
   for (const target of extraTargets ?? []) {
     if (!target.isAlive) continue;
-    if (target instanceof Mongo) companions.push(target);
+    if (target instanceof Deinonychus) companions.push(target);
     else if (target instanceof Mercenary && !target.isDowned) companions.push(target);
     else if (target instanceof AttackCow && target.isStanding) companions.push(target);
   }
@@ -80,7 +80,7 @@ export function placeCompanionBeside(
   mobGrid.move(companion, preMoveX, preMoveY);
   // Each holds a route, a walk-home latch and stall counters toward where it
   // was; left alone it walks straight back to the spot it was lifted out of.
-  if (companion instanceof Mongo) companion.onRescued();
+  if (companion instanceof Deinonychus) companion.onRescued();
   else companion.onTeleported();
   return true;
 }

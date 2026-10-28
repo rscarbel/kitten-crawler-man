@@ -38,7 +38,7 @@ import type { StrikeTiming } from './mercenaryStrike';
  * - Crush guards the smaller crawler, the cat. Whoever hurts her becomes his
  *   target, and his Shield goes to her first.
  * - Hammer Hands is the party's shield. His Shield comes round sooner and goes to
- *   whoever on the party's side is worst hurt, Mongo included, and when his
+ *   whoever on the party's side is worst hurt, Deinonychus included, and when his
  *   owner is hurt and something is closing on them he steps into its path.
  */
 
@@ -83,7 +83,7 @@ export const SHIELD_CAST_RELEASE_TICK =
 type ShieldPriority =
   /** The crawlers only, and the cat before the other whenever she qualifies. */
   | 'cat_first'
-  /** Anyone on the party's side, Mongo included, lowest share of health first. */
+  /** Anyone on the party's side, Deinonychus included, lowest share of health first. */
   | 'worst_hurt';
 
 interface EarthElementalShieldConfig {

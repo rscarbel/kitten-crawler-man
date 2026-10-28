@@ -317,25 +317,36 @@ function hangDrop(context: GarmentFrameContext<'cat'>): number {
   return Math.max(LYING_HANG_SHARE, Math.cos(context.pose.roll));
 }
 
-function swingOf(context: GarmentFrameContext<'cat'>): number {
-  return Math.max(-MAX_SWING, Math.min(MAX_SWING, -context.pose.sway * SWING_PER_SWAY));
+function swingOf(context: GarmentFrameContext<'cat'>, hang: Hang): number {
+  const footShift = hang.swingWithSway * context.pose.sway;
+  const swing = -footShift * SWING_PER_SWAY;
+  return Math.max(-MAX_SWING, Math.min(MAX_SWING, swing));
 }
 
-/** Where on the band a pendant hangs, and how far below it the cord's V drops it. */
+/**
+ * Where on the band a pendant hangs, how far below it the cord's V drops it,
+ * and which way her sway swings it: +1 carries the pendant's foot along with
+ * the sway, -1 leaves it trailing behind.
+ */
 interface Hang {
   readonly angle: number;
   readonly drop: number;
+  readonly swingWithSway: 1 | -1;
 }
 
 /** Head-on the pendant hangs at her throat, the cord falling to it in a V. */
-const FRONT_HANG: Hang = { angle: QUARTER_TURN, drop: V_DROP };
+const FRONT_HANG: Hang = { angle: QUARTER_TURN, drop: V_DROP, swingWithSway: 1 };
 /**
  * In profile the band runs down the front of her neck to her chest, so a
  * pendant hung from its lower end, let alone dropped below it, dangles
  * between her forelegs: it hangs from partway up the band instead, at her
  * throat, with no V.
+ *
+ * In profile her sway drives her barrel forward and back along her length,
+ * so the pendant trails it, swinging back against her chest as she lunges.
+ * Carried forward instead, it would swing out past her throat and off her.
  */
-const PROFILE_HANG: Hang = { angle: QUARTER_TURN * 0.35, drop: 0 };
+const PROFILE_HANG: Hang = { angle: QUARTER_TURN * 0.35, drop: 0, swingWithSway: -1 };
 
 /**
  * The cord round the visible arc of her neck and, for a hang with a drop,
@@ -367,7 +378,7 @@ function hangPendant(
   }
   ctx.save();
   ctx.translate(point.x, point.y);
-  ctx.rotate(swingOf(context));
+  ctx.rotate(swingOf(context, hang));
   ctx.scale(squash, 1);
   look.paint(ctx);
   ctx.restore();

@@ -1,6 +1,6 @@
 /**
- * The gestures systems ask the human crawler for outside a fight — casting Protective
- * Shell, drinking, stooping for loot, heaving a chest open, talking — each
+ * The gestures systems ask the human crawler for outside a fight — casting Energy
+ * Shield, drinking, stooping for loot, heaving a chest open, talking — each
  * picked for the view he faces and played through `HumanPlayer.playAction`.
  *
  * Systems tell him what is happening; nothing here draws him. Where gameplay
@@ -24,10 +24,10 @@ import { type Pt } from '../sprites/art/bipedArt';
 import { eventFrame, type HumanRowName, type ViewRows } from '../sprites/art/humanFigure';
 import { HumanPlayer } from './HumanPlayer';
 
-type GestureFamily = 'shell_cast' | 'drink' | 'grab' | 'chest_open' | 'talk';
+type GestureFamily = 'shield_cast' | 'drink' | 'grab' | 'chest_open' | 'talk';
 
 const GESTURE_ROWS: Readonly<Record<GestureFamily, ViewRows>> = {
-  shell_cast: { front: 'shell_cast', side: 'shell_cast_side', back: 'shell_cast_away' },
+  shield_cast: { front: 'shield_cast', side: 'shield_cast_side', back: 'shield_cast_away' },
   drink: { front: 'drink', side: 'drink_side', back: 'drink_away' },
   grab: { front: 'grab', side: 'grab_side', back: 'grab_away' },
   chest_open: { front: 'chest_open', side: 'chest_open_side', back: 'chest_open_away' },
@@ -81,10 +81,10 @@ function once(run: () => void): () => void {
   };
 }
 
-/** Whether he is mid-way through a Protective Shell cast, so a second press waits for it. */
-export function isCastingShell(human: HumanPlayer): boolean {
+/** Whether he is mid-way through an Energy Shield cast, so a second press waits for it. */
+export function isCastingShield(human: HumanPlayer): boolean {
   const drawn = human.spriteSelection().row;
-  return human.isActing && Object.values(GESTURE_ROWS.shell_cast).includes(drawn);
+  return human.isActing && Object.values(GESTURE_ROWS.shield_cast).includes(drawn);
 }
 
 /**
@@ -97,20 +97,20 @@ function isOnHisFeet(human: HumanPlayer): boolean {
 }
 
 /**
- * Protective Shell: the right palm driven down and out, and `cast` run on the
+ * Energy Shield: the right palm driven down and out, and `cast` run on the
  * frame it lands — or straight away if he cannot play it, and at once if it is
  * cut short before the palm lands. A switch to the cat before the palm lands
  * still casts: the press was made while he was driven. A cast cut short by his
  * going down, or by the world stopping under the death screen, is lost
  * outright, never run: nothing was spent on it, so the cooldown is untouched.
  */
-export function castShellWithGesture(human: HumanPlayer, cast: () => void): void {
+export function castShieldWithGesture(human: HumanPlayer, cast: () => void): void {
   // Only while he is up: at full power the cast heals him to full, which on a
   // dead man is a resurrection under the death screen.
   const fire = once(() => {
     if (isOnHisFeet(human)) cast();
   });
-  const { row, faceX, faceY } = gestureRow(human, 'shell_cast', null);
+  const { row, faceX, faceY } = gestureRow(human, 'shield_cast', null);
   const accepted = human.playAction(row, {
     faceX,
     faceY,
@@ -123,21 +123,21 @@ export function castShellWithGesture(human: HumanPlayer, cast: () => void): void
 }
 
 /**
- * Holds the Protective Shell cast of the way he faces warm up to the frame the
+ * Holds the Energy Shield cast of the way he faces warm up to the frame the
  * dome goes up, while the spell sits on his hotbar ready to cast: the press
  * can come on any tick, and the dome waits on that frame being drawn. Called
  * once a tick by whatever keeps the spell's cooldown.
  */
-export function standByForShellCast(human: HumanPlayer, offCooldown: boolean): void {
+export function standByForShieldCast(human: HumanPlayer, offCooldown: boolean): void {
   const slotted = human.inventory.actionBar.slots.some(
-    (slot) => slot !== null && hotbarAbilityOf(human.inventory, slot) === 'protective_shell',
+    (slot) => slot !== null && hotbarAbilityOf(human.inventory, slot) === 'energy_shield',
   );
   if (!slotted || !offCooldown || !human.isActive) {
-    human.standBy('shell_cast', []);
+    human.standBy('shield_cast', []);
     return;
   }
-  const { row } = gestureRow(human, 'shell_cast', null);
-  human.standBy('shell_cast', [{ row, frames: (eventFrame(row, 'cast') ?? FIRST_FRAME) + 1 }]);
+  const { row } = gestureRow(human, 'shield_cast', null);
+  human.standBy('shield_cast', [{ row, frames: (eventFrame(row, 'cast') ?? FIRST_FRAME) + 1 }]);
 }
 
 /**

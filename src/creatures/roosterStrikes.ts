@@ -88,7 +88,7 @@ export interface RoosterStrikeBody {
   readonly x: number;
   readonly y: number;
   readonly tileSize: number;
-  /** Deals one landed blow: the rooster's own level scaling, shell and attribution rules. */
+  /** Deals one landed blow: the rooster's own level scaling, energy shield and attribution rules. */
   readonly land: (target: Player, spec: RoosterStrikeSpec) => void;
   /** The rooster's level-scaled cooldown for a base length. */
   readonly scaledCooldown: (baseFrames: number) => number;

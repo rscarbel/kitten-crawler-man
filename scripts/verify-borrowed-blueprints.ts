@@ -459,7 +459,7 @@ function verifyDialog(): void {
 
 const SECTIONS: ReadonlyArray<{ readonly name: string; readonly run: () => void }> = [
   { name: 'Phase order', run: verifyPhaseOrder },
-  { name: 'Persistence, old saves included', run: verifyPersistence },
+  { name: 'Persistence', run: verifyPersistence },
   { name: 'Quest-line providers in priority order', run: verifyProviderOrder },
   { name: 'Quest-slot eviction', run: verifyEviction },
   { name: 'Phase events', run: verifyPhaseEvents },

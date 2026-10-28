@@ -3,7 +3,7 @@
  *
  * Deliberately not a `Mob` and not a `Player`, like `Townsperson`: never in
  * the combat roster, so no attack, blast, boulder or area effect can reach
- * one, and no hostile, Mongo or hireling can see one. That is the whole of
+ * one, and no hostile, Deinonychus or hireling can see one. That is the whole of
  * how "nobody fights the villagers" is guaranteed — not a rule anyone has to
  * remember to check.
  *
@@ -50,8 +50,7 @@ const FULL_TURN = Math.PI * 2;
 const TILE_CENTRE = 0.5;
 /**
  * How far above the tile top a ratkin's head reaches, in tiles. The cast
- * stands about a tile tall, as Mordecai does, and half a tile clears every
- * hat and ear.
+ * stands about a tile tall, and half a tile clears every hat and ear.
  */
 export const VILLAGER_HEAD_CLEARANCE_TILES = 0.5;
 /** Gap between the head and a marker or bubble above it. */

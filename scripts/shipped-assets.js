@@ -6,7 +6,7 @@
  * time, TypeScript modules, editor cruft, and source art that generator scripts
  * sampled from but the game never loads. Shipping the whole tree wastes
  * megabytes of download and pre-cache, so every consumer of the build output
- * (service worker, offline ZIP, GitHub Pages site) asks this module which files
+ * (service worker, offline ZIP, deployed site) asks this module which files
  * the game actually references.
  *
  * A file ships only if something reachable at runtime names it: a sprite

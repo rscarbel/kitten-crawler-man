@@ -1,21 +1,20 @@
 /**
- * Smush: "taking your bare foot, placing it on top of a living, conscious life,
- * and then pressing lovingly down." A stomp with a press — the knee chambers
+ * Seismic Stomp: a stomp with a press — the knee chambers
  * high, hangs, the heel is driven down with the whole body dropping in behind
  * it, and the weight stays on it, grinding, before he steps back into guard.
  *
  * Two versions, each in all three views:
  *
- * - standing ({@link smushStanding}): the stamp and the press, planted.
- * - hopping ({@link smushHop}), for a Smush thrown on the run: he pushes off
+ * - standing ({@link seismicStompStanding}): the stamp and the press, planted.
+ * - hopping ({@link seismicStompHop}), for a Seismic Stomp thrown on the run: he pushes off
  *   the rear foot, hops in along the way he is running with the knee
  *   chambered, lands the stamp, and runs out of it. The sprite is carried over
  *   the floor the whole time, so the legs are the run's own, sampled at the
- *   Smush's slower frame rate, everywhere but the hop.
+ *   Seismic Stomp's slower frame rate, everywhere but the hop.
  *
- * The blast Smush throws off is NOT painted here. It scales with the ability's
- * level-dependent radius, so it is drawn at runtime by `SmushEffectSystem`,
- * centred on the stamp point each row declares ({@link smushStampPoint}).
+ * The blast Seismic Stomp throws off is NOT painted here. It scales with the ability's
+ * level-dependent radius, so it is drawn at runtime by `SeismicStompEffectSystem`,
+ * centred on the stamp point each row declares ({@link seismicStompStampPoint}).
  */
 
 import { PLAYER_SPEED } from '../../../core/constants';
@@ -53,18 +52,22 @@ import {
   runFoot,
   runSide,
 } from './locomotion';
-import { SMUSH_DURATION_TICKS, SMUSH_FRAMES, SMUSH_IMPACT_FRAME } from './timing';
+import {
+  SEISMIC_STOMP_DURATION_TICKS,
+  SEISMIC_STOMP_FRAMES,
+  SEISMIC_STOMP_IMPACT_FRAME,
+} from './timing';
 import { type BlowLeg, blowLeg, legPhase } from './travelling';
 
-/** The last frame of a Smush row, which hands back to the guard (standing) or the run (hopping). */
-const LAST_FRAME = SMUSH_FRAMES - 1;
+/** The last frame of a Seismic Stomp row, which hands back to the guard (standing) or the run (hopping). */
+const LAST_FRAME = SEISMIC_STOMP_FRAMES - 1;
 /**
  * Frames the stamping foot is held on the floor from the stamp: the stamp, the
  * press and the grind standing; the stamp and one frame of press on the hop,
  * after which the foot is a stride behind him and has to come up.
  */
-export const SMUSH_PRESS_FRAMES = 3;
-export const SMUSH_HOP_PRESS_FRAMES = 2;
+export const SEISMIC_STOMP_PRESS_FRAMES = 3;
+export const SEISMIC_STOMP_HOP_PRESS_FRAMES = 2;
 
 // ── Where the heel lands ─────────────────────────────────────────────────────
 
@@ -95,7 +98,7 @@ const HOP_STAMP_ANKLE_AHEAD = 0;
  * Built from the choreography's constants rather than from the painted pose,
  * so `scripts/gates-human.ts` re-measuring the pose against it is a real check.
  */
-export function smushStampPoint(
+export function seismicStompStampPoint(
   view: CardinalView,
   hop: boolean,
   stampSide: BodySide = 'right',
@@ -138,7 +141,7 @@ function soleMidAhead(pitch: number): number {
 // ── Standing ─────────────────────────────────────────────────────────────────
 
 /**
- * One frame of the standing Smush, in the terms every view shares. The row is
+ * One frame of the standing Seismic Stomp, in the terms every view shares. The row is
  * short enough — nine frames — that the beats are keyed one per frame rather
  * than sampled off a curve: each frame is a pose worth drawing on its own.
  */
@@ -395,7 +398,7 @@ function standingFootX(beat: StompBeat, view: CardinalView, frame: number): numb
   const stamp = view === 'side' ? SIDE_STAMP_ANKLE_X : FACING_STAMP_ANKLE_X;
   // Before the stamp a beat's footX is measured from the stamp point; after it,
   // footX is the share of the way back to guard the foot has stepped.
-  if (frame > SMUSH_IMPACT_FRAME) return lerp(stamp, guard, beat.footX);
+  if (frame > SEISMIC_STOMP_IMPACT_FRAME) return lerp(stamp, guard, beat.footX);
   // Head-on the chamber is placed by `facingChamberFootX`, under the hip.
   if (view !== 'side') return stamp;
   return stamp + beat.footX * SIDE_CHAMBER_BACK;
@@ -453,7 +456,7 @@ const FACING_CHAMBER_CROUCH_SHARE = 0.6;
 
 /** The share of a beat's crouch the hips sink on `step` in `view`. */
 function crouchShare(step: number, view: CardinalView): number {
-  if (step >= SMUSH_IMPACT_FRAME) {
+  if (step >= SEISMIC_STOMP_IMPACT_FRAME) {
     return view === 'side' ? PROFILE_PRESS_CROUCH_SHARE : PRESS_CROUCH_SHARE;
   }
   return view === 'side' ? 1 : FACING_CHAMBER_CROUCH_SHARE;
@@ -477,7 +480,7 @@ const PROFILE_PRESS_HEEL_LIFT = deg(35);
 const FACING_PRESS_LEAN = 0.25;
 /**
  * How far the support foot is drawn out to the side on each frame of the
- * standing Smush, in tile units: out on the press and the grind, halfway back
+ * standing Seismic Stomp, in tile units: out on the press and the grind, halfway back
  * as he rises, home by the guard.
  */
 const FACING_SUPPORT_SLIDE: readonly number[] = [0, 0, 0, 0.08, 0.18, 0.16, 0.05, 0, 0];
@@ -748,7 +751,8 @@ function profileSupportFoot(
   guard: GuardStance,
 ): { foot: Pt; pitch: number } {
   const inGuard = frame >= LAST_FRAME - 1;
-  const pressed = frame > SMUSH_IMPACT_FRAME ? Math.max(0, weight) * PROFILE_PRESS_HEEL_LIFT : 0;
+  const pressed =
+    frame > SEISMIC_STOMP_IMPACT_FRAME ? Math.max(0, weight) * PROFILE_PRESS_HEEL_LIFT : 0;
   const pitch = inGuard ? guard.supportPitch : Math.max(pitchForRise(rise), pressed);
   return { foot: rolledAboutToe(guard.supportFoot, guard.supportPitch, pitch), pitch };
 }
@@ -768,11 +772,11 @@ function setFoot(pose: BipedPose, side: BodySide, foot: Pt, pitch: number): void
 }
 
 /**
- * The standing Smush at `frame` (0 to {@link LAST_FRAME}) in `view`. The last
+ * The standing Seismic Stomp at `frame` (0 to {@link LAST_FRAME}) in `view`. The last
  * frame is the view's guard, which the animator hands over to when the row
  * ends.
  */
-export function smushStanding(frame: number, view: CardinalView): BipedPose {
+export function seismicStompStanding(frame: number, view: CardinalView): BipedPose {
   const step = Math.min(Math.max(Math.round(frame), 0), LAST_FRAME);
   const guard = GUARDS[view];
   if (step === LAST_FRAME) {
@@ -911,15 +915,16 @@ export function smushStanding(frame: number, view: CardinalView): BipedPose {
 // ── Hopping ──────────────────────────────────────────────────────────────────
 
 /**
- * Ground the sprite covers while one Smush frame plays, at his base speed, in
- * world pixels. Movement stays his own through a Smush, so a hop is carried
+ * Ground the sprite covers while one Seismic Stomp frame plays, at his base speed, in
+ * world pixels. Movement stays his own through a Seismic Stomp, so a hop is carried
  * over the floor as fast as he runs — about two and a half run frames' worth
- * of ground for every Smush frame.
+ * of ground for every Seismic Stomp frame.
  */
-export const SMUSH_GROUND_PX_PER_FRAME = (PLAYER_SPEED * SMUSH_DURATION_TICKS) / SMUSH_FRAMES;
+export const SEISMIC_STOMP_GROUND_PX_PER_FRAME =
+  (PLAYER_SPEED * SEISMIC_STOMP_DURATION_TICKS) / SEISMIC_STOMP_FRAMES;
 
-/** The run phase one Smush frame spans: a planted foot sweeps exactly this ground. */
-const HOP_PHASE_PER_FRAME = SMUSH_GROUND_PX_PER_FRAME / RUN_GROUND_PER_CYCLE_PX;
+/** The run phase one Seismic Stomp frame spans: a planted foot sweeps exactly this ground. */
+const HOP_PHASE_PER_FRAME = SEISMIC_STOMP_GROUND_PX_PER_FRAME / RUN_GROUND_PER_CYCLE_PX;
 
 /** The run's right-foot stance falls inside this share of its cycle. */
 const RIGHT_STANCE_SEARCH_END = 0.3;
@@ -948,7 +953,7 @@ function hopRunPhase(entry: number, frame: number): number {
 }
 
 /** The run phase the last frame of a hop begun at `entry` hands back to. */
-export function smushHopExitPhase(entry: number): number {
+export function seismicStompHopExitPhase(entry: number): number {
   return wrapPhase(hopRunPhase(entry, LAST_FRAME));
 }
 
@@ -958,11 +963,11 @@ export function smushHopExitPhase(entry: number): number {
  * from there.
  */
 function hopStampLeg(entry: number): BlowLeg {
-  return blowLeg(hopRunPhase(entry, SMUSH_IMPACT_FRAME), hopStampPhase());
+  return blowLeg(hopRunPhase(entry, SEISMIC_STOMP_IMPACT_FRAME), hopStampPhase());
 }
 
 /** Which foot a hop begun at `entry` stamps with. */
-export function smushHopStampSide(entry: number): BodySide {
+export function seismicStompHopStampSide(entry: number): BodySide {
   return sideOfSign(hopStampLeg(entry).side);
 }
 
@@ -972,7 +977,7 @@ export function smushHopStampSide(entry: number): BodySide {
  */
 function hopLastHeldFrame(): number {
   const heldPhase = RUN_TOE_OFF_PHASE - hopStampPhase();
-  return SMUSH_IMPACT_FRAME + Math.floor(heldPhase / HOP_PHASE_PER_FRAME);
+  return SEISMIC_STOMP_IMPACT_FRAME + Math.floor(heldPhase / HOP_PHASE_PER_FRAME);
 }
 
 /**
@@ -1087,13 +1092,13 @@ const HOP_CHIN: readonly number[] = [0, 0.1, 0, -0.8, -0.6, -0.2, 0, 0, 0];
 
 /** The stamping foot on a hop frame, side-on. */
 function hopStampFoot(entry: number, leg: BlowLeg, frame: number, view: CardinalView): GaitFoot {
-  if (frame > 0 && frame < SMUSH_IMPACT_FRAME) {
+  if (frame > 0 && frame < SEISMIC_STOMP_IMPACT_FRAME) {
     const chamber = HOP_CHAMBER[Math.min(frame - 1, HOP_CHAMBER.length - 1)];
     const ankle = pt(chamber.ankle.x, chamber.ankle.y - hopRise(view, frame));
     return { ankle, pitch: chamber.pitch, planted: false };
   }
   const run = runFoot(stampLegPhase(entry, leg, frame));
-  if (frame === SMUSH_IMPACT_FRAME + 1 && run.pitch > HOP_PRESS_MAX_PITCH) {
+  if (frame === SEISMIC_STOMP_IMPACT_FRAME + 1 && run.pitch > HOP_PRESS_MAX_PITCH) {
     // Rolled back onto the same toe point the run has, with the heel lower.
     const toe = run.ankle.x + soleOffsets(run.pitch).toe.x;
     return {
@@ -1142,19 +1147,19 @@ function hopArms(pose: BipedPose, view: CardinalView, arms: number, stampSide: B
 }
 
 /**
- * The hopping Smush at `frame` in `view`, begun at run phase `entry`. The
+ * The hopping Seismic Stomp at `frame` in `view`, begun at run phase `entry`. The
  * first and last frames are the run's own poses at `entry` and at
- * {@link smushHopExitPhase}; everything between is the run with the hop laid
- * over it, stamped with whichever foot {@link smushHopStampSide} names.
+ * {@link seismicStompHopExitPhase}; everything between is the run with the hop laid
+ * over it, stamped with whichever foot {@link seismicStompHopStampSide} names.
  */
-export function smushHop(frame: number, view: CardinalView, entry: number): BipedPose {
+export function seismicStompHop(frame: number, view: CardinalView, entry: number): BipedPose {
   const step = Math.min(Math.max(Math.round(frame), 0), LAST_FRAME);
   const phase = wrapPhase(hopRunPhase(entry, step));
   const onHop = step > 0 && step < LAST_FRAME;
   if (!onHop) return view === 'side' ? runSide(phase) : runFacingCycle(phase, view === 'back');
   const pose = view === 'side' ? runSide(phase) : runFacing(phase, view === 'back');
 
-  const chambered = step < SMUSH_IMPACT_FRAME;
+  const chambered = step < SEISMIC_STOMP_IMPACT_FRAME;
   const leg = hopStampLeg(entry);
   const trailingSide = -leg.side;
   placeFoot(
@@ -1184,7 +1189,7 @@ export function smushHop(frame: number, view: CardinalView, entry: number): Bipe
     // Landing, the weight goes onto the stamp as it does on the standing
     // press: the stamping knee driven at the camera, the trailing leg left
     // straight and light, the torso tipped over the foot.
-    const pressed = HOP_DROP[step] / HOP_DROP[SMUSH_IMPACT_FRAME];
+    const pressed = HOP_DROP[step] / HOP_DROP[SEISMIC_STOMP_IMPACT_FRAME];
     pose.leftForeshorten = 1;
     pose.rightForeshorten = 1;
     if (sideOfSign(leg.side) === 'right') pose.rightLegNearness = pressed * FACING_PRESS_NEARNESS;

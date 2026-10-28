@@ -16,7 +16,7 @@
  * picture. Each is memoised per figure, row and frame: a cell's pose is
  * fixed, and the key space is bounded.
  *
- * The anchors that are not sockets live here too: where the Smush heel lands
+ * The anchors that are not sockets live here too: where the Seismic Stomp heel lands
  * on a stamp row.
  */
 
@@ -49,7 +49,7 @@ import {
   TILE_CENTRE_FRACTION,
   TILE_SCALE,
 } from './figureScale';
-import { smushHopStampSide, smushStampPoint } from './stomps';
+import { seismicStompHopStampSide, seismicStompStampPoint } from './stomps';
 import { type HumanLook, type LookAxes, playerLookAxes } from '../../looks/humanLook';
 
 /** The index of the body slab a held thing sits directly in front of, 0 the rearmost. */
@@ -335,8 +335,10 @@ export function stampAnchorOf(row: HumanRowMeta, look: HumanLook): Pt | null {
   if (row.role !== 'stomp') return null;
   const hop = row.locomotion === 'travelling';
   const side: BodySide =
-    hop && row.entryFootPhase !== undefined ? smushHopStampSide(row.entryFootPhase) : 'right';
-  const point = smushStampPoint(row.view, hop, side);
+    hop && row.entryFootPhase !== undefined
+      ? seismicStompHopStampSide(row.entryFootPhase)
+      : 'right';
+  const point = seismicStompStampPoint(row.view, hop, side);
   const axes = playerLookAxes(look, VIEWS[row.view].profile);
   return {
     x: TILE_CENTRE_FRACTION + point.x * HUMAN_SCALE * axes.x,

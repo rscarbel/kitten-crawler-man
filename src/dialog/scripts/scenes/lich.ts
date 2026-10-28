@@ -8,6 +8,7 @@
  * `lich`.
  */
 
+import { carolineLines } from '../../caroline';
 import { speakerLines, transientSpeaker } from '../../line';
 import type { BarkLine, DialogLine, NonEmpty } from '../../line';
 import { crawlerName } from '../../../characters/characters';
@@ -18,7 +19,6 @@ const HUMAN_NAME = crawlerName('human');
 const narrator = transientSpeaker('The Krasue Murders', 'narration');
 const ryan = speakerLines('ryan');
 const belle = speakerLines('belle');
-const mordecai = speakerLines('mordecaiInEar');
 const voice = speakerLines('mysteriousVoice');
 const lich = speakerLines('lich');
 
@@ -35,10 +35,12 @@ export const LICH_REVEAL: NonEmpty<DialogLine> = [
   voice.line(
     'The teacher believed the souls were for her husband. That enough of them would buy him back whole. Grief will sign anything you put in front of it. It does not read the terms.',
   ),
-  belle.line(`${HUMAN_NAME}, the room got cold. I don’t like this voice. It’s not a cuddly voice.`),
-  mordecai.button(
+  carolineLines.message(
+    'Classification: lich. It wrote the letter, the writs and the harvest orders. Miss Quill was its instrument. It is not dead until the fire in its hood is out.',
+  ).line,
+  belle.button(
     'Ready weapons',
-    '*That’s a lich. The letter, the writs, the harvest. You were never chasing the schoolteacher. You were chasing the thing that holds her leash. Kill it, and don’t count it dead until the fire in that hood goes out.*',
+    `${HUMAN_NAME}, the room got cold. I don’t like this voice. It’s not a cuddly voice.`,
   ),
 ];
 

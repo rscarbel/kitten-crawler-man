@@ -1,8 +1,8 @@
-# Kitten Crawler Man
+# Kitten Crawler World
 
 A browser-based dungeon crawler built with TypeScript and HTML5 Canvas. Control a human and cat companion as they explore procedurally generated dungeons, fight bosses, collect loot, complete quests, and venture into an overworld town — all rendered with hand-drawn canvas sprites.
 
-**[Play it here](https://rscarbel.github.io/kitten-crawler-man/)**
+**[Play it here](https://ryanscarbel.com/kitten-crawler-world/)**
 
 ---
 
@@ -33,9 +33,8 @@ npm run server   # Express + SQLite on localhost
 
 ### Playtesting
 
-**Just playing:** use the [live build](https://rscarbel.github.io/kitten-crawler-man/)
-(also at ryanscarbel.com/kitten-crawler-man). Nothing to install. The AI is
-off there; the System and Mordecai use their scripted lines.
+**Just playing:** use the [live build](https://ryanscarbel.com/kitten-crawler-world/).
+Nothing to install. The AI is off there; Caroline and Dave use their scripted lines.
 
 **From source, or with the AI.** The owner grants, once per playtester:
 
@@ -71,7 +70,7 @@ The playtester, once:
    (for example `gh auth login`, or an SSH key added to their account); the
    `read:packages` token can't clone. Then clones `game-server-llm` next to
    this repository (both folders in the same parent directory) and follows the
-   one-time steps in [The System AI](#the-system-ai-optional) below. That
+   one-time steps in [Caroline, the System AI](#caroline-the-system-ai-optional) below. That
    needs Docker, Ollama 0.40.6 or newer, and a Mac with Apple Silicon and
    32 GB of memory or more; the default models are about a 10 GB download.
 
@@ -79,9 +78,9 @@ To revoke access later, remove the playtester from the repository's
 collaborators and, if they were invited there, from the package's **Manage
 access** list. Access inherited from the repository ends with the first.
 
-### The System AI (optional)
+### Caroline, the System AI (optional)
 
-With `AI_ENABLED=true`, the System and Mordecai are played by an LLM on the
+With `AI_ENABLED=true`, Caroline and Dave are played by an LLM on the
 [game-server-llm](../game-server-llm) server. The game talks to it through
 that repo's SDK (`@rscarbel/game-server-llm-sdk`), installed from GitHub Packages.
 `dev:ai` runs the server from a checkout beside this one (or `AI_SERVER_DIR`).
@@ -191,13 +190,13 @@ is a JSON file holding every message the game sent the server, in order:
     { "atMs": 0, "type": "state_snapshot", "payload": { "full": {…} } },        // later ones carry "patch" (RFC 7386)
     { "atMs": 9000, "type": "event_log", "payload": { "events": [ { "ts": …, "type": "dynamiteUsed", … } ] } },
     { "atMs": 18000, "type": "action_result", "payload": { "actionId": "…", "ok": true, "detail": "…" },
-      "answers": { "characterName": "System", "type": "announce", "params": {…} } }, // the ai_action it answered (not sent on the wire)
-    { "atMs": 82000, "type": "player_message", "payload": { "characterName": "System", "text": "Hey System. Remember the dynamite?" } }
+      "answers": { "characterName": "Caroline", "type": "announce", "params": {…} } }, // the ai_action it answered (not sent on the wire)
+    { "atMs": 82000, "type": "player_message", "payload": { "characterName": "Caroline", "text": "Caroline. Remember the dynamite?" } }
   ],
   "expectations": [
     // the reply to messages[messageIndex] should contain one of these as a whole word or phrase,
     // case-insensitively; none of them is in the question, so an echo never passes
-    { "kind": "recall", "messageIndex": 33, "characterName": "System", "mentionsAny": ["Belle", "knocked", "friendly fire"], "description": "…" }
+    { "kind": "recall", "messageIndex": 33, "characterName": "Caroline", "mentionsAny": ["Belle", "knocked", "friendly fire"], "description": "…" }
   ]
 }
 ```
@@ -226,14 +225,14 @@ install the SDK from GitHub Packages with the workflow's own `GITHUB_TOKEN`
 changes locally, see "Developing against a local checkout" in the SDK's
 README.
 
-**In game.** The System's messages type out in a panel under the unit frames
-as they stream in, with "The System is typing…" while it thinks, reply
-buttons when it asks something (a button sends its label as the player's
-message, with the choice id as `replyTo`), and a flash when its opinion of you
+**In game.** Caroline's messages type out in her frame under the unit frames
+as they stream in, with "Caroline is typing…" while she thinks, reply
+buttons when she asks something (a button sends its label as the player's
+message, with the choice id as `replyTo`), and a flash when her opinion of you
 changes. A dot there shows the AI online, degraded (throttled, resting or on a
-fallback model) or offline; offline, the System answers from its scripted
-lines. Settings → System AI sets the intensity (Off, Commentary, Classic,
-Chaotic) and whether the "intervened" line is shown. Every action the AI asks
+fallback model) or offline; offline, Caroline answers from her scripted
+lines. Settings → Caroline (System AI) sets the intensity (Off, Remarks only,
+Standard, Intense) and whether the "intervened" line is shown. Every action the AI asks
 for is answered to the server with whether it ran, so it learns what the game
 refused.
 
@@ -262,8 +261,8 @@ Mobile: touch controls with on-screen buttons for all actions.
 
 ### Two Playable Characters
 
-- **Human** — melee fighter, strength-based damage, can throw dynamite, has Protective Shell ability
-- **Cat** — ranged magic missiles, intelligence-based damage, auto-kites enemies
+- **Human** — melee fighter, damage scales with Melee, can throw dynamite, has Energy Shield ability
+- **Cat** — ranged magic missiles, damage scales with Magic, auto-kites enemies
 
 Switch between them with Tab. The inactive character auto-follows and auto-fights.
 
@@ -273,7 +272,7 @@ Switch between them with Tab. The inactive character auto-follows and auto-fight
 
 **Level 2: Safe Haven** — A larger dungeon with tougher enemies (troglodytes, llamas, goblins, brindle grubs). Features the Krakaren Clone boss, an arena with the Ball of Swine and Grotesque Spider, and Bugaboos that spawn from floor grates.
 
-**Level 3: The Overworld** — An outdoor town with grass, roads, forests, a town square, and enterable buildings (houses, a tower, and Mordecai's Kitchen restaurant). Hawkfolk roam the outskirts.
+**Level 3: The Overworld** — An outdoor town with grass, roads, forests, a town square, and enterable buildings (houses, a tower, and a restaurant whose kitchen is a safe room). Hawkfolk roam the outskirts.
 
 ### Bosses
 
@@ -283,13 +282,13 @@ Switch between them with Tab. The inactive character auto-follows and auto-fight
 - **Ball of Swine** — Orbiting arena boss (280 HP), contact-kills while moving, only vulnerable when stopped by barriers. Spawns 8 dazed Tusklings on death
 - **Grotesque Spider** — Spits venom that applies Stuck and Spit Venom status, immobilizing targets for 4 seconds
 
-### Companion: Mongo
+### Companion: Deinonychus
 
-Kill 200 monsters in the dungeon to earn Mongo — a blue velociraptor with pink feathers who joins the party. Mongo targets hostile mobs within a 12-tile radius, scales in size with your floor, and stays leashed near the party.
+Kill 200 monsters in the dungeon to earn a pet Deinonychus, a green-feathered dinosaur with orange wing and tail feathers who joins the party. Your Deinonychus targets hostile mobs within a 12-tile radius, scales in size with your floor, and stays leashed near the party.
 
 ### Combat & Stats
 
-Three stats — STR (melee damage), INT (missile damage), CON (+2 max HP per point). Kill enemies for XP (85% to top damage dealer, 15% to the other). Level up to earn skill points, allocated in the pause menu.
+Four stats — Health (+2 max HP per point), Melee (melee damage), Magic (missile damage), Evasiveness (dodge chance). Kill enemies for XP (85% to top damage dealer, 15% to the other). Level up to earn skill points, allocated in the pause menu.
 
 **Status effects:** Burn, Poison (troglodyte tongue lash — 30s, 1 dmg/2 sec), Spit Venom (Grotesque Spider — 4s immobilization + acid), Electrified (slow + damage), Stuck (immobilized).
 
@@ -299,9 +298,9 @@ Three stats — STR (melee damage), INT (missile damage), CON (+2 max HP per poi
 
 Both abilities level independently through gameplay, unlocking new perks at each tier (15 levels each):
 
-**Magic Missile** (Cat) — Starts as a basic INT-scaling projectile. Higher levels add AoE splash on impact, sub-missiles spawned from the explosion, homing in a forward cone, and at max level: infinite range, no cooldown, an orange beam, boss slow, and a death shockwave.
+**Magic Missile** (Cat) — Starts as a basic MAG-scaling projectile. Higher levels add AoE splash on impact, sub-missiles spawned from the explosion, homing in a forward cone, and at max level: infinite range, no cooldown, an orange beam, boss slow, and a death shockwave.
 
-**Protective Shell** (Human) — Creates an expanding shield (3–5 tile radius, 20s duration). Higher levels add damage to enemies caught in the expansion, faster ally healing inside the shell, continuous boundary damage, and at max level: instant ally heal, magic immunity, chain lightning on kills, and an electric shockwave on expiry.
+**Energy Shield** (Human) — Projects an expanding field of energy (3–5 tile radius, 20s duration) that pushes enemies back from its edge. Higher levels add damage to enemies caught in the expansion, faster ally healing inside the field, continuous boundary damage, and at max level: instant ally heal, magic immunity, chain lightning on kills, and an electric shockwave on expiry.
 
 ### Equipment & Items
 
@@ -315,12 +314,12 @@ Every piece of gear has a **rarity** on one ladder: Common → Uncommon → Rare
 - **Sets** — Hearthguard, Bareknuckle, Demolition Crew, Prowler and Gilded Showman pieces grant extra bonuses when worn together.
 - **Goblin Dynamite** — Throwable AoE (3-tile radius, 8 dmg, friendly fire). Hold to charge throw distance, tap to drop at feet, hold too long and it explodes in hand
 - **Gym Equipment** — Dumbbells, bench presses, treadmills. Place them to create barrier zones that slow enemies to 35% speed
-- **Scroll of Confusing Fog** — Blinds nearby enemies for INT × 5 seconds
+- **Scroll of Confusing Fog** — Blinds nearby enemies for MAG × 5 seconds
 - **Health Potions** — Restore HP
 
 ### Buildings & Interiors
 
-Walk up to a building door in the overworld to enter. Interiors include houses, a tower, and a restaurant that doubles as a safe room with Mordecai the NPC and a shop (potions, dynamite, fog scrolls).
+Walk up to a building door in the overworld to enter. Interiors include houses, a tower, and a restaurant that doubles as a safe room with Dave, the guide, and a shop (potions, dynamite, fog scrolls).
 
 ### Quests
 
@@ -328,9 +327,9 @@ Quest system with NPC interactions. Includes the Defend Quest — protect a gobl
 
 ### Achievements & Reward Chests
 
-Each crawler earns their own achievements, from a first kill (Off the Mark) and a first trip downstairs (Down the Hatch) to the dungeon kill milestones (Warming Up, Something Hatched, Body Count, A Thousand Cuts) and a boss killed without a scratch (Not a Scratch). Every achievement pays a **reward chest** of its rarity, and so do audience gifts, challenge wins, repeat boss kills and some wheel prizes.
+Each crawler earns their own achievements, from a first kill (Off the Mark) and a first trip downstairs (Down the Hatch) to the dungeon kill milestones (Warming Up, Something Hatched, Body Count, A Thousand Cuts) and a boss killed without a scratch (Not a Scratch). Every achievement pays a **reward chest** of its rarity, and so do Caroline's gifts, challenge wins, repeat boss kills and some wheel prizes.
 
-A chest's contents are rolled and paid the moment it is earned: coins, potions and, often, a piece of gear the crawler can wear, plus any fixed reward the achievement names (Down the Hatch hands out each crawler's starter piece, Something Hatched brings Mongo). Earned chests wait behind a "Rewards waiting" chip on the HUD and can be opened anywhere, whenever you like. The pause menu's Achievements page shows progress toward the counted ones.
+A chest's contents are rolled and paid the moment it is earned: coins, potions and, often, a piece of gear the crawler can wear, plus any fixed reward the achievement names (Down the Hatch hands out each crawler's starter piece, Something Hatched brings your Deinonychus). Earned chests wait behind a "Rewards waiting" chip on the HUD and can be opened anywhere, whenever you like. The pause menu's Achievements page shows progress toward the counted ones.
 
 ### Minimap
 
@@ -358,7 +357,7 @@ src/
 │   ├── quests/                ← QuestManager + each questline's progress and phase state
 │   ├── state/                 ← cross-scene state: TownMemory, GodMode, pets
 │   ├── party/                 ← PlayerManager, crawler formulas, revive, coins, mercenaries
-│   ├── progression/           ← achievements, XP curve and awards, game stats, viewer favour
+│   ├── progression/           ← achievements, XP curve and awards, game stats
 │   ├── skills/                ← SkillManager, AbilityManager, tattoos
 │   ├── labour/                ← craft skills and perks, harvest yield, thralls
 │   ├── combat/                ← StatusEffect, dodge, frost, knockback, floating text
@@ -383,11 +382,11 @@ src/
 │   ├── PlayerTickSystem.ts    ← status effect ticks, HP regen
 │   ├── MobUpdateLoop.ts       ← mob AI update and pathfinding
 │   ├── MiniMapSystem.ts       ← fog of war, corpse markers
-│   ├── SafeRoomSystem.ts      ← save point, Mordecai NPC
+│   ├── SafeRoomSystem.ts      ← save point, Dave NPC
 │   ├── BossRoomSystem.ts      ← boss room state, cockroach spawning
 │   ├── ArenaSystem.ts         ← Ball of Swine arena encounters
 │   ├── DynamiteSystem.ts      ← charge, throw, bounce, explode
-│   ├── SpellSystem.ts         ← protective shell, confusing fog
+│   ├── SpellSystem.ts         ← energy shield, confusing fog
 │   ├── DestructiblePropSystem.ts ← smashable barrels/crates, splinters, coin drops
 │   ├── BarrierSystem.ts       ← gym item placement, mob slow zones
 │   ├── GymRoomSystem.ts       ← gym equipment spawns + Big Rooster coordination
@@ -396,7 +395,7 @@ src/
 │   ├── BuildingSystem.ts      ← door detection, entry prompts
 │   ├── ShopSystem.ts          ← buying/selling items
 │   ├── DefendQuestSystem.ts   ← defense quest with NPC protection
-│   ├── MongoSystem.ts         ← Mongo companion spawning & management
+│   ├── DeinonychusSystem.ts         ← Deinonychus companion spawning & management
 │   ├── GoreSystem.ts          ← blood/death effects
 │   ├── BodyPartGoreSystem.ts  ← detailed body part damage visuals
 │   ├── BossIntroSystem.ts     ← boss encounter intro screen
@@ -422,12 +421,12 @@ src/
 │   ├── RoosterMinion.ts, LittleRooster.ts, SlightlyBentRooster.ts
 │   ├── KrakarenClone.ts, BallOfSwine.ts, GrotesqueSpider.ts
 │   ├── Hawkfolk.ts
-│   ├── Mongo.ts               ← raptor companion
+│   ├── Deinonychus.ts               ← dinosaur companion
 │   ├── QuestNPC.ts, NonCombatantNPC.ts
 │   └── ...
 ├── abilities/
 │   ├── magicMissile.ts        ← 15-level ability tree with perk unlocks
-│   └── protectiveShell.ts     ← 15-level ability tree with perk unlocks
+│   └── energyShield.ts     ← 15-level ability tree with perk unlocks
 ├── sprites/                   ← sprite renderers: PNG-sheet wrappers + procedural Canvas 2D drawing
 ├── images/                    ← PNG sheets, one manifest.json per leaf folder
 │   ├── bosses/, characters/, effects/, enemies/, npcs/
@@ -539,7 +538,7 @@ Player (base: position, HP, stats, walk animation)
 - **Express + SQLite** — optional backend for auth and progress saving
 - **@rscarbel/game-server-llm-sdk** — optional AI connection (from GitHub Packages)
 - **Prettier / ESLint** — formatting and linting
-- **GitHub Pages** — auto-deploy on push to main
+- **S3 + CloudFront** — auto-deploy to ryanscarbel.com on push to main
 
 ### Audio
 
@@ -550,7 +549,7 @@ Songs live in `src/audio/music/` (file named by its id, with a title and credit 
 `npm run build` produces a minified `dist/bundle.js` and regenerates `sw.js`.
 
 `npm run build:site` assembles the deployable `_site/` directory (what the
-Pages workflow uploads); `npm run build:zip` packages the offline edition.
+deploy workflow uploads); `npm run build:zip` packages the offline edition.
 Both take their asset list from `scripts/shipped-assets.js`, which ships only
 files the game actually references — sprite manifests are inlined into the
 bundle, and generator scripts, source art, and `.ts` modules living under

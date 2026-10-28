@@ -21,6 +21,7 @@ import type { SpatialGrid } from '../core/world/SpatialGrid';
 import type { GoreSystem } from './GoreSystem';
 import type { BodyPartGoreSystem } from './BodyPartGoreSystem';
 import type { SafeRoomSystem } from './SafeRoomSystem';
+import type { DaveGuideSystem } from './DaveGuideSystem';
 import type { BossRoomSystem } from './BossRoomSystem';
 import type { BossRoomDressings } from './bossRooms/BossRoomDressings';
 import type { ArenaRoomSystem } from './ArenaRoomSystem';
@@ -32,7 +33,7 @@ import type { DynamiteSystem } from './DynamiteSystem';
 import type { MagicMissileImpactEffectSystem } from './MagicMissileImpactEffectSystem';
 import type { MeleeImpactEffectSystem } from './MeleeImpactEffectSystem';
 import type { StormcallerStrikeSystem } from './StormcallerStrikeSystem';
-import type { SmushEffectSystem } from './SmushEffectSystem';
+import type { SeismicStompEffectSystem } from './SeismicStompEffectSystem';
 import type { LavaBallSystem } from './LavaBallSystem';
 import type { RockThrowSystem } from './RockThrowSystem';
 import type { HirelingShotSystem } from './HirelingShotSystem';
@@ -50,7 +51,7 @@ import type { WaterAnimationSystem } from './WaterAnimationSystem';
 import type { LootSystem } from './LootSystem';
 import type { GroundPickupSystem } from './GroundPickupSystem';
 import type { MiniMapSystem } from './MiniMapSystem';
-import type { MongoSystem } from './MongoSystem';
+import type { DeinonychusSystem } from './DeinonychusSystem';
 import type { AttackCowSystem } from './AttackCowSystem';
 import type { MercenarySystem } from './MercenarySystem';
 import type { CrawlerBarkSystem } from './CrawlerBarkSystem';
@@ -91,8 +92,8 @@ const DRAW_KIND_TOWNSPERSON = 4;
 /** Draw kind for interactive town props (notice board, etc.), rendered via their own render(). */
 const DRAW_KIND_TOWN_PROP = 5;
 
-/** Draw kind for a safe room's Mordecai, rendered via his own render(). */
-const DRAW_KIND_SAFE_ROOM_NPC = 6;
+/** Draw kind for Dave, rendered via his own render(). */
+const DRAW_KIND_DAVE = 6;
 
 /** Draw kind for a fixture hung on a wall face; its entry's `tx` holds the fixture's id. */
 const DRAW_KIND_WALL_FIXTURE = 7;
@@ -211,6 +212,7 @@ export interface RenderContext {
   gore: GoreSystem;
   bodyPartGore: BodyPartGoreSystem;
   safeRoom: SafeRoomSystem;
+  dave: DaveGuideSystem;
   bossRoom: BossRoomSystem;
   /** Every boss room's props, slow ground and room hazards on the floor. */
   bossRoomDressings: BossRoomDressings;
@@ -220,7 +222,7 @@ export interface RenderContext {
   barriers: BarrierSystem;
   spells: SpellSystem;
   dynamite: DynamiteSystem;
-  smushFx: SmushEffectSystem;
+  seismicStompFx: SeismicStompEffectSystem;
   meleeFx: MeleeImpactEffectSystem;
   /** The Stormcaller's waves; drawn beside the chain lightning they throw. */
   stormcallerFx: Pick<StormcallerStrikeSystem, 'render'>;
@@ -268,7 +270,7 @@ export interface RenderContext {
   };
   treasureChests: TreasureChestSystem;
   miniMap: MiniMapSystem;
-  mongoSystem: MongoSystem;
+  deinonychusSystem: DeinonychusSystem;
   mercenarySystem: MercenarySystem;
   attackCowSystem: AttackCowSystem;
   crawlerBarks: CrawlerBarkSystem;
@@ -419,9 +421,9 @@ export class RenderPipeline {
     rc.fairyFireballs?.renderGround(ctx, camX, camY);
     // Scorches, the shadows under bombs in the air, and the burning sticks' circles.
     rc.goblinBombs?.renderGround(ctx, camX, camY);
-    // The Smush's floor half: its rings and cracks are the ground the human crawler stamps,
+    // The Seismic Stomp's floor half: its rings and cracks are the ground the human crawler stamps,
     // and drawn over him they wash out the feet the stamp is read from.
-    rc.smushFx.renderGround(ctx, camX, camY);
+    rc.seismicStompFx.renderGround(ctx, camX, camY);
     // A blast's scorch is floor too: drawn over the crawlers it would sit on
     // their feet rather than under them.
     rc.dynamite.renderGround(ctx, camX, camY);
@@ -495,7 +497,7 @@ export class RenderPipeline {
       treasureChests,
       townsfolk,
       townProps,
-      safeRoom,
+      dave,
       speechBubblePulse,
     } = rc;
 
@@ -607,13 +609,13 @@ export class RenderPipeline {
       e.waterlineScreenX = player.x + TILE_SIZE * TILE_CENTRE_FRACTION - camX;
     }
 
-    // Mordecai sorts with the crawlers rather than with the room he stands in:
+    // Dave sorts with the crawlers rather than with the room he stands in:
     // the Bopca's counter is repainted after the world pass, so anything drawn
     // there ends up behind it.
-    for (const figure of safeRoom.sortedRenderables(active, speechBubblePulse)) {
+    for (const figure of dave.sortedRenderables(active, speechBubblePulse)) {
       const e = this._getEntry();
       e.sortY = figure.y + ENTITY_SORT_Y_OFFSET;
-      e.kind = DRAW_KIND_SAFE_ROOM_NPC;
+      e.kind = DRAW_KIND_DAVE;
       e.entity = figure;
       e.chestRef = null;
     }
@@ -710,7 +712,7 @@ export class RenderPipeline {
       barriers,
       spells,
       dynamite,
-      mongoSystem,
+      deinonychusSystem,
       crawlerBarks,
       pm,
     } = rc;
@@ -726,8 +728,8 @@ export class RenderPipeline {
     rc.destructibles.renderEffects(ctx, camX, camY, rc.goreUnderDarkness === true);
     rc.trees?.render(ctx, camX, camY);
     barriers.render(ctx, camX, camY, rc.gymPromptTargets.barrier);
-    spells.renderShell(ctx, camX, camY);
-    spells.renderCatMiniShell(ctx, camX, camY, pm.cat);
+    spells.renderEnergyShield(ctx, camX, camY);
+    spells.renderCatMiniShield(ctx, camX, camY, pm.cat);
     spells.renderChainLightning(ctx, camX, camY);
     rc.stormcallerFx.render(ctx, camX, camY);
     rc.gearFx.render(ctx, camX, camY);
@@ -735,7 +737,7 @@ export class RenderPipeline {
     spells.renderFogs(ctx, camX, camY);
     renderLevelUpFlash(ctx, camX, camY);
     dynamite.render(ctx, camX, camY);
-    dynamite.renderThrowPath(ctx, camX, camY, pm.human);
+    dynamite.renderThrowPath(ctx, camX, camY);
     // Over the entities: a ball crossing the room must never disappear behind
     // the mob it is about to fly past, or the shot reads as having fizzled.
     rc.lavaBalls.render(ctx, camX, camY);
@@ -757,13 +759,13 @@ export class RenderPipeline {
     rc.bossRoomDressings.renderAbove(ctx, camX, camY);
     // Last of the world effects: the stamp's air and thrown chips read as being
     // in front of everything it just hit.
-    rc.smushFx.render(ctx, camX, camY);
+    rc.seismicStompFx.render(ctx, camX, camY);
     rc.meleeFx.render(ctx, camX, camY);
     rc.missileFx.render(ctx, camX, camY);
 
-    // Cat speech bubble for Mongo summon/recall
-    mongoSystem.renderSpeechBubble(ctx, pm.cat.x - camX, pm.cat.y - camY);
-    mongoSystem.renderPetEmotes(ctx, camX, camY);
+    // Cat speech bubble for Deinonychus summon/recall
+    deinonychusSystem.renderSpeechBubble(ctx, pm.cat.x - camX, pm.cat.y - camY);
+    deinonychusSystem.renderPetEmotes(ctx, camX, camY);
     rc.mercenarySystem.renderSpeech(ctx, camX, camY);
     rc.attackCowSystem.renderOverlay(ctx, camX, camY);
     crawlerBarks.render(ctx, camX, camY, pm.human, pm.cat);

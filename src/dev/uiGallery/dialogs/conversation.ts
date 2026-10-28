@@ -1,12 +1,8 @@
 import { setViewportSize } from '../../../core/rendering/Viewport';
 import { crawlerName } from '../../../characters/characters';
 import { Conversation } from '../../../dialog/Conversation';
-import {
-  speakerLines,
-  transientSpeaker,
-  type DialogLine,
-  type NonEmpty,
-} from '../../../dialog/line';
+import { carolineLines } from '../../../dialog/caroline';
+import { speakerLines, type DialogLine, type NonEmpty } from '../../../dialog/line';
 import type { Choice, ConversationRequest, DialogReward, Ending } from '../../../dialog/request';
 import type { Surface, Ui } from '../../../ui/core/UiRoot';
 import type { DialogFixture } from './fixture';
@@ -85,12 +81,15 @@ const MAX_FIXTURE_PRESSES = 20;
 /**
  * A conversation opened on `req`. With `readToEnd`, every page is revealed
  * and turned until its choice row is up; otherwise it shows as it opens,
- * which for a one-sentence line is the whole line.
+ * which for a one-sentence line is the whole line, or with its first page
+ * revealed when `revealFirstPage`.
  */
 function conversationFixture(
   name: string,
   req: ConversationRequest,
   readToEnd: boolean,
+  /** Reveal the first page in full, as one press would, so a line that types out is reviewed whole. */
+  revealFirstPage = false,
 ): DialogFixture {
   return {
     name,
@@ -103,6 +102,7 @@ function conversationFixture(
         opened = true;
         conversation.open(req);
         conversation.update(null);
+        if (revealFirstPage) conversation.advance();
         if (!readToEnd) return;
         for (let press = 0; press < MAX_FIXTURE_PRESSES; press++) {
           if (conversation.isShowingChoices) break;
@@ -116,9 +116,8 @@ function conversationFixture(
   };
 }
 
-const mordecai = speakerLines('mordecai');
+const dave = speakerLines('dave');
 const belle = speakerLines('belle');
-const systemAi = transientSpeaker('System AI', 'system');
 
 const LONG_TEXT =
   'Listen carefully, because I am only going to say this once. The stairwell down is sealed until the floor boss falls, and the boss is not going to fall on its own. You will want potions, you will want armor, and you will want to stop poking every goblin you meet with a stick. The safe rooms are marked on your map. Use them. Sleep. Eat something that is not a mushroom you found on the floor.';
@@ -127,7 +126,7 @@ export const FIXTURES: readonly DialogFixture[] = [
   conversationFixture(
     'conversation-line',
     request([
-      mordecai.line(
+      dave.line(
         'Welcome to the dungeon, crawlers. Try not to die before lunch — the paperwork is murder.',
       ),
     ]),
@@ -135,12 +134,12 @@ export const FIXTURES: readonly DialogFixture[] = [
   ),
   conversationFixture(
     'conversation-multipage',
-    request([mordecai.line(LONG_TEXT), belle.line('Okay, Mordecai! Naps and no floor mushrooms.')]),
+    request([dave.line(LONG_TEXT), belle.line('Okay, Dave! Naps and no floor mushrooms.')]),
     false,
   ),
   conversationFixture(
     'conversation-choices',
-    request([mordecai.line('So. Are you going to help the ratkin or not?')], {
+    request([dave.line('So. Are you going to help the ratkin or not?')], {
       ending: {
         kind: 'choices',
         choices: [
@@ -172,11 +171,11 @@ export const FIXTURES: readonly DialogFixture[] = [
   ),
   conversationFixture(
     'conversation-reward',
-    request([mordecai.line('You actually did it, so take this before I change my mind.')], {
+    request([dave.line('You actually did it, so take this before I change my mind.')], {
       reward: {
         itemId: 'health_potion',
         displayName: 'Health Potion ×3',
-        lines: ['Restores health when drunk.', 'Mordecai insists you keep the bottles.'],
+        lines: ['Restores health when drunk.', 'Dave insists you keep the bottles.'],
         xp: 150,
       },
     }),
@@ -184,7 +183,7 @@ export const FIXTURES: readonly DialogFixture[] = [
   ),
   conversationFixture(
     'conversation-reward-button',
-    request([mordecai.button('Take it', 'Here is your cut, and do not spend it all on hats.')], {
+    request([dave.button('Take it', 'Here is your cut, and do not spend it all on hats.')], {
       reward: {
         itemId: 'goblin_dynamite',
         displayName: 'Goblin Dynamite ×2',
@@ -196,16 +195,17 @@ export const FIXTURES: readonly DialogFixture[] = [
   ),
   conversationFixture(
     'conversation-custom-advance',
-    request([mordecai.button('Show me the map', 'Before you go, let me show you where it is.')]),
+    request([dave.button('Show me the map', 'Before you go, let me show you where it is.')]),
     false,
   ),
   conversationFixture(
-    'conversation-system-ai',
+    'conversation-caroline',
     request([
-      systemAi.line(
-        'A special award! You have been handed a Common chest. Try not to cry about it.',
-      ),
+      carolineLines.message(
+        `Floor 2 is active. ${crawlerName('human')}, the stairwell is 140 tiles north-east. The boss in the east wing is optional.`,
+      ).line,
     ]),
     false,
+    true,
   ),
 ];

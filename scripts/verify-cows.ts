@@ -15,9 +15,9 @@
  *    - no animal is trying to walk and covering no ground for more than 5 s;
  *    - every panic ends, inside the pen, within its run plus a margin;
  *    - once the siege starts, every living animal is in the barn within 30 s.
- * 2. Damage: `takesPlayerDamage` is true for exactly explosion, smush and
+ * 2. Damage: `takesPlayerDamage` is true for exactly explosion, seismic stomp and
  *    missile; a melee blow, a sling stone and a hireling's credited blow
- *    change nothing; neither Mongo nor a hireling picks a cow as a target;
+ *    change nothing; neither Deinonychus nor a hireling picks a cow as a target;
  *    and a levelled cow dies to one untrained stick.
  * 3. Dynamite at the herd, through the real `DynamiteSystem` and
  *    `resolveKills`: every cow in the blast dies, each leaves 2–3 burgers
@@ -48,7 +48,7 @@ import { MAGIC_MISSILE_DEF } from '../src/abilities/magicMissile';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { Cow, type CowRowWarmer } from '../src/creatures/Cow';
-import { Mongo } from '../src/creatures/Mongo';
+import { Deinonychus } from '../src/creatures/Deinonychus';
 import { Mercenary } from '../src/creatures/Mercenary';
 import type { PlayerDamageType } from '../src/creatures/Mob';
 import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
@@ -78,6 +78,13 @@ import {
   PANIC_RADIUS_TILES,
 } from '../src/systems/briarHollow/LivestockSystem';
 import { Conversation } from '../src/dialog/Conversation';
+import {
+  PET_NAME_MAX_LENGTH,
+  PET_NAME_SUGGESTIONS,
+  PetNameBook,
+  parsePetName,
+  parseSavedPetNames,
+} from '../src/core/party/petNames';
 import { cowFigure } from '../src/sprites/art/cowFigure';
 import type { CowAge, CowCoatId } from '../src/sprites/cowSprite';
 import {
@@ -130,12 +137,12 @@ const STUCK_WINDOW_SECONDS = 5;
 const STUCK_WINDOW_FRAMES = STUCK_WINDOW_SECONDS * FRAMES_PER_SECOND;
 const STUCK_TRYING_FRAMES = 2 * FRAMES_PER_SECOND;
 const STUCK_MIN_PROGRESS_PX = TILE_SIZE;
-/** The protective shell is cast among the herd this far in, at its widest level. */
-const SHELL_SECOND = 100;
-const SHELL_FRAME = SHELL_SECOND * FRAMES_PER_SECOND;
-const SHELL_LEVEL = 15;
-/** Animals gathered round the human for the shell. */
-const SHELL_VICTIMS = 3;
+/** The energy shield is cast among the herd this far in, at its widest level. */
+const SHIELD_SECOND = 100;
+const SHIELD_FRAME = SHIELD_SECOND * FRAMES_PER_SECOND;
+const SHIELD_LEVEL = 15;
+/** Animals gathered round the human for the shield. */
+const SHIELD_VICTIMS = 3;
 /** How far a stick's blast reaches, stated here. */
 const STICK_KILL_REACH_TILES = 3;
 /** A stick is lit this long before each blast, which is the herd's warning to warm its rows. */
@@ -200,8 +207,8 @@ const HOSTILE_BEHIND_TILES = 4;
 const HOSTILE_AHEAD_TILES = 1;
 /** A tap on a cow from this far away is out of petting reach. */
 const TAP_OUT_OF_REACH_TILES = 3;
-const PET_TEST_MONGO_LEVEL = 1;
-const PET_TEST_MONGO_HP = 200;
+const PET_TEST_DEINONYCHUS_LEVEL = 1;
+const PET_TEST_DEINONYCHUS_HP = 200;
 const HALF = 0.5;
 
 let failures = 0;
@@ -505,7 +512,7 @@ interface HerdTally {
   walkedPx: number;
   peakWarmBytes: number;
   peakHeldBytes: number;
-  shellShoved: number;
+  shieldShoved: number;
   returnsMissed: number;
   fenceStuck: number;
 }
@@ -540,7 +547,7 @@ function simulate(seed: number, tally: HerdTally): void {
   const panicStart = new Map<Cow, number>();
   let shelterChecked = false;
 
-  let shellVictims: Cow[] = [];
+  let shieldVictims: Cow[] = [];
   for (let frame = 0; frame < TOTAL_FRAMES; frame++) {
     world.threats.length = 0;
     for (const blastFrame of BLAST_FRAMES) {
@@ -555,7 +562,7 @@ function simulate(seed: number, tally: HerdTally): void {
         });
       }
     }
-    if (frame === SHELL_FRAME) shellVictims = castShellAmongHerd(world);
+    if (frame === SHIELD_FRAME) shieldVictims = castShieldAmongHerd(world);
     if (frame === SIEGE_START_FRAME) world.quest.phase = 'assault';
     if (frame === SIEGE_END_FRAME) world.quest.phase = 'fortifying';
     if (BLAST_FRAMES.includes(frame)) {
@@ -583,8 +590,8 @@ function simulate(seed: number, tally: HerdTally): void {
       const exit = exits[Math.floor(random() * exits.length)];
       if (livingByDistanceToGate.length > 0) human.driveAt(livingByDistanceToGate[0], exit);
     }
-    if (frame >= SHELL_FRAME && world.spells.isInsideShell(world.human.x, world.human.y)) {
-      // The human holds still inside his shell while it lasts, so it keeps pushing where it was cast.
+    if (frame >= SHIELD_FRAME && world.spells.isInsideEnergyShield(world.human.x, world.human.y)) {
+      // The human holds still inside his shield while it lasts, so it keeps pushing where it was cast.
     } else {
       human.step();
     }
@@ -607,12 +614,12 @@ function simulate(seed: number, tally: HerdTally): void {
       const moved = Math.hypot(cow.x - previous.x, cow.y - previous.y);
       last.set(cow, { x: cow.x, y: cow.y });
       tally.walkedPx += moved;
-      if (shellVictims.includes(cow) && !allowed(centreTile(cow))) tally.shellShoved++;
+      if (shieldVictims.includes(cow) && !allowed(centreTile(cow))) tally.shieldShoved++;
       const window = windows.get(cow) ?? [];
       windows.set(cow, window);
-      // A shell holds every animal it touches against its edge for as long as
-      // it stands; being held there is the shell working, not the animal stuck.
-      if (world.spells.activeShellLevel > 0) window.length = 0;
+      // A shield holds every animal it touches against its edge for as long as
+      // it stands; being held there is the shield working, not the animal stuck.
+      if (world.spells.activeEnergyShieldLevel > 0) window.length = 0;
       window.push({ trying: cow.mode === 'walk' || cow.mode === 'trot', moved });
       if (window.length > STUCK_WINDOW_FRAMES) window.shift();
       const tryingFrames = window.filter((sample) => sample.trying).length;
@@ -650,28 +657,28 @@ function simulate(seed: number, tally: HerdTally): void {
 }
 
 /**
- * Casts the widest protective shell from inside the paddock, hard against its
- * fence by the gate, with animals gathered round the human — a shell ignores walls,
+ * Casts the widest energy shield from inside the paddock, hard against its
+ * fence by the gate, with animals gathered round the human — a shield ignores walls,
  * so it is the one push that could throw a cow over the rail. Returns the
  * animals it was cast among.
  */
-function castShellAmongHerd(world: World): Cow[] {
+function castShieldAmongHerd(world: World): Cow[] {
   const { rect, fenceGates } = world.site.pasture;
   const gate = fenceGates[0];
   world.human.x = (rect.x + 1) * TILE_SIZE;
   world.human.y = gate.y * TILE_SIZE;
-  // Adults with no calf, so the shell does not also split a calf from its mother.
+  // Adults with no calf, so the shield does not also split a calf from its mother.
   const herd = world.livestock.herd;
   const mothers = new Set(herd.map((animal) => animal.mother));
   const victims = herd
     .filter((cow) => cow.isAlive && !cow.isCalf && !mothers.has(cow))
-    .slice(0, SHELL_VICTIMS);
+    .slice(0, SHIELD_VICTIMS);
   victims.forEach((cow, index) => {
     cow.x = world.human.x + TILE_SIZE * HALF * (index - 1);
     cow.y = world.human.y + TILE_SIZE * HALF;
   });
   world.roster.rebuildGrid();
-  world.spells.triggerProtectiveShell(world.human, world.cat, world.roster.grid, SHELL_LEVEL);
+  world.spells.triggerEnergyShield(world.human, world.cat, world.roster.grid, SHIELD_LEVEL);
   return victims;
 }
 
@@ -739,7 +746,7 @@ function herdSection(seeds: number): void {
     walkedPx: 0,
     peakWarmBytes: 0,
     peakHeldBytes: 0,
-    shellShoved: 0,
+    shieldShoved: 0,
     returnsMissed: 0,
     fenceStuck: 0,
   };
@@ -765,8 +772,8 @@ function herdSection(seeds: number): void {
     `no animal spends 2 s of any 5 s trying to walk and covers under a tile (${tally.stuck} times)`,
   );
   check(
-    tally.shellShoved === 0,
-    `a protective shell never pushes an animal off its pen (${tally.shellShoved} frames outside)`,
+    tally.shieldShoved === 0,
+    `an energy shield never pushes an animal off its pen (${tally.shieldShoved} frames outside)`,
   );
   check(
     tally.returnsMissed === 0,
@@ -804,8 +811,8 @@ function herdSection(seeds: number): void {
 const ALL_DAMAGE_TYPES: readonly (PlayerDamageType | null)[] = [
   'melee',
   'missile',
-  'shell',
-  'smush',
+  'energy_shield',
+  'seismic_stomp',
   'explosion',
   'slingshot',
   null,
@@ -813,7 +820,7 @@ const ALL_DAMAGE_TYPES: readonly (PlayerDamageType | null)[] = [
 /** What may kill a cow, stated independently of `Cow`. */
 const COLLATERAL_TYPES: ReadonlySet<PlayerDamageType | null> = new Set([
   'explosion',
-  'smush',
+  'seismic_stomp',
   'missile',
 ]);
 
@@ -888,17 +895,17 @@ function damageSection(): void {
     `and, levelled by a spawn site to ${SPAWN_SITE_LEVEL}, dies to one stick like the herd (${stray.maxHp} hp)`,
   );
 
-  const mongo = new Mongo(
+  const deinonychus = new Deinonychus(
     Math.floor(cow.x / TILE_SIZE),
     Math.floor(cow.y / TILE_SIZE) + 1,
     TILE_SIZE,
     world.cat,
-    PET_TEST_MONGO_LEVEL,
-    PET_TEST_MONGO_HP,
+    PET_TEST_DEINONYCHUS_LEVEL,
+    PET_TEST_DEINONYCHUS_HP,
   );
-  world.roster.add(mongo);
-  mongo.updateAI([world.human, world.cat]);
-  check(mongo.currentTarget !== cow, 'Mongo does not go for a cow beside him');
+  world.roster.add(deinonychus);
+  deinonychus.updateAI([world.human, world.cat]);
+  check(deinonychus.currentTarget !== cow, 'Deinonychus does not go for a cow beside him');
   const merc = new Mercenary(
     Math.floor(cow.x / TILE_SIZE) + 1,
     Math.floor(cow.y / TILE_SIZE),
@@ -942,7 +949,7 @@ function blastSection(seeds: number): void {
     };
     const dynamite = new DynamiteSystem(world.map, null, () => null, bus);
     dynamite.beginCharge(DYNAMITE_HOTBAR_SLOT, human, 'goblin_dynamite');
-    dynamite.release(human);
+    dynamite.release();
     const abilities = new AbilityManager();
     for (let frame = 0; frame < DYNAMITE_WAIT_FRAMES; frame++) {
       dynamite.update(world.ctx);
@@ -1005,15 +1012,15 @@ function respawnSection(): void {
     human.y = homeY;
     cat.x = homeX;
     cat.y = homeY;
-    const mongo = new Mongo(
+    const deinonychus = new Deinonychus(
       Math.floor(homeX / TILE_SIZE),
       Math.floor(homeY / TILE_SIZE),
       TILE_SIZE,
       cat,
-      PET_TEST_MONGO_LEVEL,
-      PET_TEST_MONGO_HP,
+      PET_TEST_DEINONYCHUS_LEVEL,
+      PET_TEST_DEINONYCHUS_HP,
     );
-    roster.add(mongo);
+    roster.add(deinonychus);
     tick(RESPAWN_SLACK_FRAMES + 1);
 
     check(cow.isAlive && cow.hp === maxHp, `seed ${seed}: the cow is back at full health`);
@@ -1022,7 +1029,7 @@ function respawnSection(): void {
     for (const [name, body] of [
       ['The human', human],
       ['The cat', cat],
-      ['Mongo', mongo],
+      ['Deinonychus', deinonychus],
     ] as const) {
       const overlaps = Math.abs(body.x - cow.x) < TILE_SIZE && Math.abs(body.y - cow.y) < TILE_SIZE;
       const moved = body.x !== homeX || body.y !== homeY;
@@ -1071,7 +1078,11 @@ function routingSection(): void {
     partyTools: new PartyTools(partyCrafts.tools),
     partyCrafts,
     state: createBriarHollowState(),
-    menus: new MenusKit({ world: sceneWorld, abilityManager: new AbilityManager() }),
+    menus: new MenusKit({
+      world: sceneWorld,
+      abilityManager: new AbilityManager(),
+      petNames: new PetNameBook(),
+    }),
     audio: null,
     conversation: new Conversation(null),
     keybindings,
@@ -1211,12 +1222,54 @@ function routingSection(): void {
   kit.dispose();
 }
 
+/**
+ * The attack cow's name: what the player types is tidied into a name or
+ * refused, every suggestion is a name, and only a legal name is read back
+ * from a save.
+ */
+function petNameSection(): void {
+  console.log("\nthe attack cow's name");
+  const longest = 'M'.repeat(PET_NAME_MAX_LENGTH);
+  check(parsePetName(longest) === longest, `a name of ${PET_NAME_MAX_LENGTH} letters is kept`);
+  check(
+    parsePetName(`${longest}o`) === null,
+    `a name over ${PET_NAME_MAX_LENGTH} letters is refused`,
+  );
+  check(parsePetName('') === null && parsePetName(' \t ') === null, 'an empty name is refused');
+  for (const punctuationOnly of ['-', "'", "- ' -"]) {
+    check(
+      parsePetName(punctuationOnly) === null,
+      `"${punctuationOnly}" is refused: a name needs a letter or a digit`,
+    );
+  }
+  for (const illegal of ['Moo!', 'Bessie_2', 'Daisy\u{1F404}', 'Cl@ver']) {
+    check(parsePetName(illegal) === null, `"${illegal}" is refused for its characters`);
+  }
+  check(
+    parsePetName('  Sir   Moo-a-lot  ') === 'Sir Moo-a-lot',
+    'spaces are trimmed and their runs collapsed',
+  );
+  check(
+    parsePetName('Bess\u2019s Calf 2') === "Bess's Calf 2",
+    "a phone keyboard's curly apostrophe reads as the plain one",
+  );
+  const refused = PET_NAME_SUGGESTIONS.attackCow.filter((name) => parsePetName(name) !== name);
+  check(refused.length === 0, `every suggestion is a legal name (refused: ${refused.join(', ')})`);
+  const stored = parseSavedPetNames({ attackCow: 'Bessie' });
+  check(stored?.attackCow === 'Bessie', 'a stored legal name is read back');
+  check(
+    parseSavedPetNames({ attackCow: 'Bessie  ' }) === undefined,
+    'a stored name that is not already tidy fails validation',
+  );
+}
+
 const seeds = seedCount();
 herdSection(seeds);
 damageSection();
 blastSection(seeds);
 respawnSection();
 routingSection();
+petNameSection();
 
 if (failures > 0) {
   console.log(`\n${failures} check(s) failed`);

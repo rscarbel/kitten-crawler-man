@@ -95,7 +95,8 @@ import {
   PERMANENT_DEATH_FIRST_LINE,
   PERMANENT_DEATH_SECOND_LINE,
 } from '../src/ui/casino/wheel/permanentDeathView';
-import { DONALD_LINES } from '../src/dialog/scripts/donald';
+import { DONALD_LINES, donaldLinesFor } from '../src/dialog/scripts/donald';
+import { PetNameBook, petWords } from '../src/core/party/petNames';
 import {
   CRAWLER_HP_THRESHOLDS,
   HP_THRESHOLD_IDS,
@@ -495,9 +496,9 @@ function latchFixture(): GameProgressInput {
     humanSnap: snapPlayer(new HumanPlayer(0, 0, TILE_SIZE)),
     catSnap: snapPlayer(new CatPlayer(0, 0, TILE_SIZE)),
     abilityStates: new AbilityManager().serializeStates(),
-    mongoUnlocked: false,
-    mongoPetHp: 0,
-    mongoPetResting: false,
+    deinonychusUnlocked: false,
+    deinonychusPetHp: 0,
+    deinonychusPetResting: false,
     crafts: createPartyCraftsState(),
     humanAchievements: new AchievementManager().serialize(),
     catAchievements: new AchievementManager().serialize(),
@@ -511,6 +512,9 @@ function latchFixture(): GameProgressInput {
     attackCowOwned: false,
     attackCowResting: false,
     musicLibrary: new MusicLibrary().serialize(),
+    storyBeatsSeen: [],
+    objectivesBriefed: [],
+    petNames: {},
   };
 }
 
@@ -745,7 +749,8 @@ async function checkWipeRefusesOtherAccount(): Promise<void> {
  * the wheel; and a pending outcome found on load is paid once.
  */
 async function checkHostCommitsBeforeTurning(): Promise<void> {
-  const { ClubWheelSystem, WHEEL_SPIN_HOLD_MS } = await import('../src/systems/ClubWheelSystem');
+  const { ClubWheelSystem, UNNAMED_WHEEL_PETS, WHEEL_SPIN_HOLD_MS } =
+    await import('../src/systems/ClubWheelSystem');
   const { createWheelLedger } = await import('../src/core/save/WheelLedger');
   const { settleWheelLedger } = await import('../src/systems/casino/wheel/wheelPrizes');
   const { adoptWhenCommitted } = await import('../src/core/save/adoptWhenCommitted');
@@ -778,6 +783,7 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
       progressWipe: null,
       afterPermanentDeath: () => undefined,
       grantAttackCow: () => undefined,
+      pets: UNNAMED_WHEEL_PETS,
       clock: () => now,
       random: mulberry32(1),
       forcedOutcome: (board) => {
@@ -876,6 +882,7 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
         progressWipe: null,
         afterPermanentDeath: () => undefined,
         grantAttackCow: () => undefined,
+        pets: UNNAMED_WHEEL_PETS,
         clock: () => now,
         random: mulberry32(1),
       });
@@ -909,6 +916,7 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
       progressWipe: null,
       afterPermanentDeath: () => undefined,
       grantAttackCow: () => undefined,
+      pets: UNNAMED_WHEEL_PETS,
       random: mulberry32(1),
     });
     const board = boardForBet(WHEEL_MIN_BET);
@@ -969,6 +977,7 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
     progressWipe: null,
     afterPermanentDeath: () => undefined,
     grantAttackCow: () => undefined,
+    pets: UNNAMED_WHEEL_PETS,
     random: mulberry32(1),
   });
   packedWheel.landForReview(
@@ -1133,7 +1142,8 @@ async function checkOwedWipeIdentifiesSessionFirst(): Promise<void> {
  * the party still has.
  */
 async function checkLegendaryWeaponPaysBoth(): Promise<void> {
-  const { ClubWheelSystem, WHEEL_SPIN_HOLD_MS } = await import('../src/systems/ClubWheelSystem');
+  const { ClubWheelSystem, UNNAMED_WHEEL_PETS, WHEEL_SPIN_HOLD_MS } =
+    await import('../src/systems/ClubWheelSystem');
   const { createWheelLedger } = await import('../src/core/save/WheelLedger');
   const { settleWheelLedger } = await import('../src/systems/casino/wheel/wheelPrizes');
   const { LEGENDARY_WEAPON_CLAIM_IDS, STORMCALLER_ITEM_ID, KALEIDOSCOPE_SPECS_ITEM_ID } =
@@ -1158,6 +1168,7 @@ async function checkLegendaryWeaponPaysBoth(): Promise<void> {
       progressWipe: null,
       afterPermanentDeath: () => undefined,
       grantAttackCow: () => undefined,
+      pets: UNNAMED_WHEEL_PETS,
       clock: () => now,
       random: mulberry32(1),
       forcedOutcome: (board) => {
@@ -1239,7 +1250,8 @@ async function checkLegendaryWeaponPaysBoth(): Promise<void> {
  * record fails validation, and a reload mid-chain still owes a taped spin.
  */
 async function checkQuestFreeSpin(): Promise<void> {
-  const { ClubWheelSystem, WHEEL_SPIN_HOLD_MS } = await import('../src/systems/ClubWheelSystem');
+  const { ClubWheelSystem, UNNAMED_WHEEL_PETS, WHEEL_SPIN_HOLD_MS } =
+    await import('../src/systems/ClubWheelSystem');
   const {
     createWheelLedger,
     grantQuestFreeSpin,
@@ -1301,6 +1313,7 @@ async function checkQuestFreeSpin(): Promise<void> {
     progressWipe: null,
     afterPermanentDeath: () => undefined,
     grantAttackCow: () => undefined,
+    pets: UNNAMED_WHEEL_PETS,
     clock: () => now,
     random: mulberry32(1),
     forcedOutcome: (board) => {
@@ -1395,6 +1408,7 @@ async function checkQuestFreeSpin(): Promise<void> {
     progressWipe: null,
     afterPermanentDeath: () => undefined,
     grantAttackCow: () => undefined,
+    pets: UNNAMED_WHEEL_PETS,
     clock: () => now,
     random: mulberry32(1),
     forcedOutcome: (board) => {
@@ -1651,6 +1665,9 @@ function checkPenaltyWedges(): void {
     PERMANENT_DEATH_FIRST_LINE,
     PERMANENT_DEATH_SECOND_LINE,
     ...Object.values(DONALD_LINES).flatMap((lines) => lines.map((line) => line.paragraphs[0])),
+    ...donaldLinesFor('pet', petWords(new PetNameBook(), 'attackCow')).map(
+      (line) => line.paragraphs[0],
+    ),
   ];
   const retired = playerText.filter((line) =>
     RETIRED_WHEEL_WORDS.some((word) => line.toLowerCase().includes(word.toLowerCase())),

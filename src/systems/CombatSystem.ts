@@ -1,8 +1,8 @@
 import { TILE_SIZE } from '../core/constants';
 import { awardXp } from '../core/progression/awardXp';
 import { HumanPlayer } from '../creatures/HumanPlayer';
-import { Mongo } from '../creatures/Mongo';
-import { MONGO_ASSIST_XP } from '../abilities/mongo';
+import { Deinonychus } from '../creatures/Deinonychus';
+import { DEINONYCHUS_ASSIST_XP } from '../abilities/deinonychus';
 import { CatPlayer } from '../creatures/CatPlayer';
 import type { Mob } from '../creatures/Mob';
 import { Fairy } from '../creatures/fairies/Fairy';
@@ -22,6 +22,8 @@ import {
   runSwingHooks,
 } from '../gear/gearHooks';
 import type { GearWorld } from '../gear/traits';
+import { outgoingHitDamageOn } from '../core/combat/outgoingHit';
+import { MAGIC_HIT } from '../core/combat/damageTags';
 import {
   COILED_FIST_UNCOIL_DAMAGE_SHARE,
   QUICK_SERPENT_BITE_DAMAGE_SHARE,
@@ -29,7 +31,7 @@ import {
   UNCOIL_TEXT,
   VENOM_TEXT,
 } from '../core/skills/tattoos';
-import { getSmushStats } from '../abilities/smush';
+import { getSeismicStompStats } from '../abilities/seismicStomp';
 import { getMagicMissileVisualTier } from '../abilities/magicMissile';
 import {
   missileCanStrike,
@@ -39,7 +41,7 @@ import {
 import type { ExplosionVariant } from '../sprites/art/magicMissileArt';
 import type { MagicMissileImpactEffectSystem } from './MagicMissileImpactEffectSystem';
 import type { MeleeImpactEffectSystem } from './MeleeImpactEffectSystem';
-import type { SmushEffectSystem } from './SmushEffectSystem';
+import type { SeismicStompEffectSystem } from './SeismicStompEffectSystem';
 import type { Missile } from '../sprites/catSprite';
 import type { DestructiblePropSystem } from './DestructiblePropSystem';
 import type { TownInteriorPropDestructionSystem } from './TownInteriorPropDestructionSystem';
@@ -48,7 +50,8 @@ import {
   POWERFUL_STRIKE_CHANCE_PER_LEVEL,
   POWERFUL_STRIKE_DAMAGE_MULTIPLIER,
 } from '../core/skills/SkillManager';
-import { SLINGSHOT_HIT_RADIUS_FRACTION, type SlingshotRock } from '../sprites/slingshotSprite';
+import type { SlingshotRock } from '../sprites/slingshotSprite';
+import { SLING_HIT_RADIUS_FRACTION } from '../core/items/equipment/weapons';
 import { CLAWS_KEY, type ItemId } from '../core/items/defs/ItemDefs';
 import type { MeleeWeaponStats, WeaponProcId } from '../core/items/equipment/weapons';
 
@@ -152,26 +155,26 @@ const MISSILE_SUB_MISSILE_LEVEL = 10;
 const MISSILE_SLOW_BOSS_LEVEL = 15;
 /** Shockwave radius in tiles for level-15 missile kill. */
 const MISSILE_SHOCKWAVE_RADIUS_TILES = 5;
-/** Minimum shell level for chain lightning to trigger on kill. */
-const SHELL_CHAIN_LIGHTNING_LEVEL = 15;
+/** Minimum shield level for chain lightning to trigger on kill. */
+const ENERGY_SHIELD_CHAIN_LIGHTNING_LEVEL = 15;
 /** Missile collision hit radius as a fraction of TILE_SIZE. */
 const MISSILE_HIT_RADIUS_FRACTION = 0.7;
-/** Boss stun duration in frames when smush lands in the inner blast zone. */
-const SMUSH_BOSS_STUN_FRAMES = 150;
-/** Smush heal-on-hit chance (10th-level+). */
-const SMUSH_HEAL_CHANCE = 0.2;
-/** Smush heal fraction of total damage dealt. */
-const SMUSH_HEAL_FRACTION = 0.5;
-/** Stun duration in frames for smush non-boss stun. */
-const SMUSH_STUN_FRAMES = 150;
+/** Boss stun duration in frames when seismic stomp lands in the inner blast zone. */
+const SEISMIC_STOMP_BOSS_STUN_FRAMES = 150;
+/** Seismic Stomp heal-on-hit chance (10th-level+). */
+const SEISMIC_STOMP_HEAL_CHANCE = 0.2;
+/** Seismic Stomp heal fraction of total damage dealt. */
+const SEISMIC_STOMP_HEAL_FRACTION = 0.5;
+/** Stun duration in frames for seismic stomp non-boss stun. */
+const SEISMIC_STOMP_STUN_FRAMES = 150;
 /** Shown over a fairy the stomp passes under. */
-export const SMUSH_IMMUNE_LABEL = 'Immune';
+export const SEISMIC_STOMP_IMMUNE_LABEL = 'Immune';
 
 /**
  * A stomp is a shock through the ground, and a fairy hovers clear of it: the
  * blast deals it nothing and lands nothing on it, and says so over its head.
  */
-function dodgesSmush(mob: Mob): boolean {
+function dodgesSeismicStomp(mob: Mob): boolean {
   return mob instanceof Fairy;
 }
 
@@ -202,7 +205,7 @@ export interface CombatContext {
   /** Built structures a crawler's swing can reach — in practice, a village fence it flattens. */
   structures?: MeleeStructureTarget;
   /** Absent in scenes that draw no world effects (e.g. building interiors). */
-  smushFx?: Pick<SmushEffectSystem, 'spawn'>;
+  seismicStompFx?: Pick<SeismicStompEffectSystem, 'spawn'>;
   /** Absent in scenes that draw no world effects (e.g. building interiors). */
   meleeFx?: Pick<MeleeImpactEffectSystem, 'spawn'>;
   /** Absent in scenes that draw no world effects (e.g. building interiors). */
@@ -289,7 +292,8 @@ export function gearScaledDamage(
  * runs no procs of its own: a bonus hit that could trigger another would chain.
  */
 function tattooBonusStrike(crawler: HumanPlayer | CatPlayer, mob: Mob, damageShare: number): void {
-  const damage = Math.round(damageShare * crawlerMeleeStrikeDamage(crawler));
+  const blow = Math.round(damageShare * crawlerMeleeStrikeDamage(crawler));
+  const damage = outgoingHitDamageOn(crawler, mob, blow, crawler.meleeHitTags());
   mob.takeDamageFrom(damage, crawler, 'melee');
 }
 
@@ -349,8 +353,9 @@ export type WeaponProcs = Readonly<Record<WeaponProcId, WeaponProc>>;
  */
 export function cutWithWeapon(ctx: CombatContext, mob: Mob, damageMultiplier: number): boolean {
   const { human } = ctx;
-  const blow = damageMultiplier * crawlerMeleeStrikeDamage(human);
-  const damage = mob.blowsEarnNothing ? blow : gearScaledDamage(human, mob, 'melee', blow);
+  const edge = damageMultiplier * crawlerMeleeStrikeDamage(human);
+  const blow = mob.blowsEarnNothing ? edge : gearScaledDamage(human, mob, 'melee', edge);
+  const damage = outgoingHitDamageOn(human, mob, blow, human.meleeHitTags());
   mob.takeDamageFrom(damage, human, 'melee');
   if (mob.blowsEarnNothing) return false;
   ctx.hitLanded = true;
@@ -434,6 +439,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     const hc = centerOf(human);
     const range = human.getMeleeRange();
     const damage = human.getMeleeDamage();
+    const punchTags = human.meleeHitTags();
     // Widened by a tile because the grid measures a mob's origin while the test
     // below measures its centre: without the slack, reach is a third shorter
     // swinging up or left than it is swinging down or right, and the narrow
@@ -455,12 +461,14 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       }
       if (!gameMap.hasLineOfSight(hc.x, hc.y, mc.x, mc.y)) continue;
       if (!human.zeroDamage && mob.blowsEarnNothing) {
-        mob.takeDamageFrom(crawlerMeleeStrikeDamage(human), human, 'melee');
+        const punch = crawlerMeleeStrikeDamage(human);
+        mob.takeDamageFrom(outgoingHitDamageOn(human, mob, punch, punchTags), human, 'melee');
         humanHit = true;
         continue;
       }
       if (!human.zeroDamage) {
-        const blow = gearScaledDamage(human, mob, 'melee', crawlerMeleeStrikeDamage(human));
+        const punch = gearScaledDamage(human, mob, 'melee', crawlerMeleeStrikeDamage(human));
+        const blow = outgoingHitDamageOn(human, mob, punch, punchTags);
         mob.takeDamageFrom(blow, human, 'melee');
         ctx.hitLanded = true;
         humanHit = true;
@@ -494,6 +502,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     const cc = centerOf(cat);
     const range = cat.getMeleeRange();
     const damage = cat.getMeleeDamage();
+    const swipeTags = cat.meleeHitTags();
     runSwingHooks(cat, {
       originX: cc.x,
       originY: cc.y,
@@ -517,12 +526,14 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       }
       if (!gameMap.hasLineOfSight(cc.x, cc.y, mc.x, mc.y)) continue;
       if (!cat.zeroDamage && mob.blowsEarnNothing) {
-        mob.takeDamageFrom(crawlerMeleeStrikeDamage(cat), cat, 'melee');
+        const swipe = crawlerMeleeStrikeDamage(cat);
+        mob.takeDamageFrom(outgoingHitDamageOn(cat, mob, swipe, swipeTags), cat, 'melee');
         catHit = true;
         continue;
       }
       if (!cat.zeroDamage) {
-        const blow = gearScaledDamage(cat, mob, 'melee', crawlerMeleeStrikeDamage(cat));
+        const swipe = gearScaledDamage(cat, mob, 'melee', crawlerMeleeStrikeDamage(cat));
+        const blow = outgoingHitDamageOn(cat, mob, swipe, swipeTags);
         mob.takeDamageFrom(blow, cat, 'melee');
         ctx.hitLanded = true;
         catHit = true;
@@ -540,10 +551,10 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     ctx.bus.emit('catMeleeSwing', { hit: catHit, clawsId });
   }
 
-  // ── Smush AoE stomp ──
-  if (human.isSmushPeak() && !inSafeRoom(human)) {
-    const smushLevel = ctx.abilityManager.getLevel('smush');
-    const stats = getSmushStats(smushLevel);
+  // ── Seismic Stomp AoE stomp ──
+  if (human.isSeismicStompPeak() && !inSafeRoom(human)) {
+    const seismicStompLevel = ctx.abilityManager.getLevel('seismic_stomp');
+    const stats = getSeismicStompStats(seismicStompLevel);
     const hc = centerOf(human);
     const baseDamage = human.getMeleeDamage();
     const innerRadius = stats.innerBlastRadius * TILE_SIZE;
@@ -552,40 +563,40 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     // Spawned before the damage pass so the shockwave and the hits it explains
     // start on the same frame. Centred on the heel that made it, read off the
     // row being drawn: the damage query still runs off his centre, and every
-    // Smush row lands its heel within a few pixels of that centre across the
+    // Seismic Stomp row lands its heel within a few pixels of that centre across the
     // tile, but a wave that starts at his waist reads as coming out of his body.
-    const stamp = human.smushStampTile();
-    ctx.smushFx?.spawn(
+    const stamp = human.seismicStompStampTile();
+    ctx.seismicStompFx?.spawn(
       human.x + stamp.x * TILE_SIZE,
       human.y + stamp.y * TILE_SIZE,
       outerRadius,
       stats.isFullPower,
-      () => human.smushGrindBeat(),
+      () => human.seismicStompGrindBeat(),
     );
 
-    let totalSmushDamage = 0;
+    let totalSeismicStompDamage = 0;
     /**
      * Whether the stomp reached anything at all, props included — which is what
      * earns its usage XP. Separate from `ctx.hitLanded`, which means "an attack
      * connected with a *mob*": that flag drives the combat-started telemetry,
      * and a stomp that only splintered a crate is not a fight starting.
      */
-    let smushConnected = false;
-    let smushKills = 0;
+    let seismicStompConnected = false;
+    let seismicStompKills = 0;
 
     // Query both rings in one pass using the outer radius
-    const nearSmush = mobGrid.queryCircle(hc.x, hc.y, outerRadius + TILE_SIZE);
-    for (const mob of nearSmush) {
-      if (!mob.isAlive || !mob.takesPlayerDamage('smush')) continue;
+    const nearSeismicStomp = mobGrid.queryCircle(hc.x, hc.y, outerRadius + TILE_SIZE);
+    for (const mob of nearSeismicStomp) {
+      if (!mob.isAlive || !mob.takesPlayerDamage('seismic_stomp')) continue;
       const mc = centerOf(mob);
       const dist = Math.hypot(mc.x - hc.x, mc.y - hc.y);
       if (dist > outerRadius) continue;
-      if (dodgesSmush(mob)) {
-        mob.queueFloatingText(SMUSH_IMMUNE_LABEL, 'immune');
+      if (dodgesSeismicStomp(mob)) {
+        mob.queueFloatingText(SEISMIC_STOMP_IMMUNE_LABEL, 'immune');
         continue;
       }
       if (!human.zeroDamage && mob.blowsEarnNothing) {
-        mob.takeDamageFrom(baseDamage, human, 'smush');
+        mob.takeDamageFrom(baseDamage, human, 'seismic_stomp');
         continue;
       }
       if (!human.zeroDamage) {
@@ -597,15 +608,15 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         // either side of the call is what says whether this stomp did it. The
         // `justDied` flag cannot answer: it stays latched for a whole frame.
         const wasAlive = mob.hp > 0;
-        mob.takeDamageFrom(damage, human, 'smush');
-        if (wasAlive && mob.hp <= 0 && mob.isHostile) smushKills++;
+        mob.takeDamageFrom(damage, human, 'seismic_stomp');
+        if (wasAlive && mob.hp <= 0 && mob.isHostile) seismicStompKills++;
         ctx.hitLanded = true;
-        smushConnected = true;
-        totalSmushDamage += damage;
+        seismicStompConnected = true;
+        totalSeismicStompDamage += damage;
 
         // Level 5+: stun non-boss enemies
         if (isInner && stats.stunSmallEnemies && !mob.isBoss) {
-          mob.applyStatus(makeStun(SMUSH_STUN_FRAMES));
+          mob.applyStatus(makeStun(SEISMIC_STOMP_STUN_FRAMES));
         }
         // Level 14+: stun bosses at 25% chance
         if (
@@ -614,7 +625,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
           mob.isBoss &&
           Math.random() < stats.stunBossChance
         ) {
-          mob.applyStatus(makeStun(SMUSH_BOSS_STUN_FRAMES));
+          mob.applyStatus(makeStun(SEISMIC_STOMP_BOSS_STUN_FRAMES));
         }
       }
     }
@@ -627,28 +638,32 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       // Assigned rather than OR-ed on each line so neither call is skipped by
       // short-circuiting: a stomp splinters the crate *and* the sapling.
       if (ctx.destructibles?.smashAllInRadius(human, outerRadius) ?? false) {
-        smushConnected = true;
+        seismicStompConnected = true;
       }
       if (ctx.interiorProps?.smashAllInRadius(human, outerRadius) ?? false) {
-        smushConnected = true;
+        seismicStompConnected = true;
       }
       if (ctx.trees?.smashAllInRadius(human, outerRadius) ?? false) {
-        smushConnected = true;
+        seismicStompConnected = true;
       }
     }
 
     // Level 10+: 20% chance to heal human for 50% of total damage dealt
-    if (stats.healOnHit && totalSmushDamage > 0 && Math.random() < SMUSH_HEAL_CHANCE) {
-      const healAmt = Math.round(totalSmushDamage * SMUSH_HEAL_FRACTION);
+    if (
+      stats.healOnHit &&
+      totalSeismicStompDamage > 0 &&
+      Math.random() < SEISMIC_STOMP_HEAL_CHANCE
+    ) {
+      const healAmt = Math.round(totalSeismicStompDamage * SEISMIC_STOMP_HEAL_FRACTION);
       human.hp = Math.min(human.hp + healAmt, human.maxHp);
     }
 
-    if (smushKills > 0) {
-      ctx.bus.emit('multiKill', { killer: human, count: smushKills });
+    if (seismicStompKills > 0) {
+      ctx.bus.emit('multiKill', { killer: human, count: seismicStompKills });
     }
 
-    if (smushConnected) {
-      ctx.abilityManager.addUsageXp('smush');
+    if (seismicStompConnected) {
+      ctx.abilityManager.addUsageXp('seismic_stomp');
     }
   }
 
@@ -733,10 +748,11 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         const dist = Math.hypot(missile.x - mc.x, missile.y - mc.y);
         if (dist < hitRadius) {
           if (!cat.zeroDamage && mob.blowsEarnNothing) {
-            mob.takeDamageFrom(damage, cat, 'missile');
+            mob.takeDamageFrom(outgoingHitDamageOn(cat, mob, damage, MAGIC_HIT), cat, 'missile');
             ctx.bus.emit('missileImpact', { x: missile.x, y: missile.y });
           } else if (!cat.zeroDamage) {
-            const blow = gearScaledDamage(cat, mob, 'spell', damage);
+            const spell = gearScaledDamage(cat, mob, 'spell', damage);
+            const blow = outgoingHitDamageOn(cat, mob, spell, MAGIC_HIT);
             mob.takeDamageFrom(blow, cat, 'missile');
             ctx.hitLanded = true;
             ctx.bus.emit('missileImpact', { x: missile.x, y: missile.y });
@@ -757,7 +773,8 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
                 const splashDx = splashMob.x + HALF_TILE - missile.x;
                 const splashDy = splashMob.y + HALF_TILE - missile.y;
                 if (Math.hypot(splashDx, splashDy) < splashRadius) {
-                  splashMob.takeDamageFrom(splashDamage, cat, 'missile');
+                  const splash = outgoingHitDamageOn(cat, splashMob, splashDamage, MAGIC_HIT);
+                  splashMob.takeDamageFrom(splash, cat, 'missile');
                 }
               }
             }
@@ -791,7 +808,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
 
   // ── Slingshot stones ──
   if (!inSafeRoom(human)) {
-    const rockHitRadius = TILE_SIZE * SLINGSHOT_HIT_RADIUS_FRACTION;
+    const rockHitRadius = TILE_SIZE * SLING_HIT_RADIUS_FRACTION;
 
     const ricochetBounces = gearModifiers(human).ricochetBounces;
     for (const rock of human.getRocks()) {
@@ -846,7 +863,11 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         const mc = centerOf(mob);
         if (Math.hypot(rock.x - mc.x, rock.y - mc.y) >= rockHitRadius) continue;
         if (!human.zeroDamage) {
-          mob.takeDamageFrom(damage, human, 'slingshot');
+          mob.takeDamageFrom(
+            outgoingHitDamageOn(human, mob, damage, rock.tags),
+            human,
+            'slingshot',
+          );
           if (!mob.blowsEarnNothing) ctx.hitLanded = true;
           ctx.bus.emit('slingshotImpact', { x: rock.x, y: rock.y });
         }
@@ -919,7 +940,7 @@ export function resolveKills(ctx: CombatContext): void {
     if (!mob.belongsInMobGrid) mobGrid.remove(mob);
 
     // Damage is attributed through `xpCreditTarget`, which is the dealer itself
-    // for a crawler and the owner for a summon. Mongo hits in his own name so
+    // for a crawler and the owner for a summon. Deinonychus hits in his own name so
     // that mobs retaliate against *him*; without this mapping his damage would
     // simply drop out of the split and the cat would lose XP for sending him in.
     const creditedDamage = new Map<Player, number>();
@@ -974,14 +995,14 @@ export function resolveKills(ctx: CombatContext): void {
 
     // A kill the pet finished feeds the pet's own ability, and the cat keeps the
     // crawler XP through the credit mapping above. A kill he only contributed to
-    // pays the smaller assist — see MONGO_ASSIST_XP for why contribution has to
+    // pays the smaller assist — see DEINONYCHUS_ASSIST_XP for why contribution has to
     // pay at all.
-    if (paysRewards && mob.killedByDealer instanceof Mongo) {
-      abilityManager.addKillXp('mongo');
+    if (paysRewards && mob.killedByDealer instanceof Deinonychus) {
+      abilityManager.addKillXp('deinonychus');
     } else if (paysRewards) {
       for (const dealer of mob.damageTakenBy.keys()) {
-        if (!(dealer instanceof Mongo)) continue;
-        abilityManager.addXp('mongo', MONGO_ASSIST_XP);
+        if (!(dealer instanceof Deinonychus)) continue;
+        abilityManager.addXp('deinonychus', DEINONYCHUS_ASSIST_XP);
         break;
       }
     }
@@ -1015,12 +1036,12 @@ export function resolveKills(ctx: CombatContext): void {
       }
     }
 
-    // Smush kill XP + level 14 double gold
-    if (mob.killType === 'smush' && killer === human) {
-      if (paysRewards) abilityManager.addKillXp('smush');
-      const smushLevel = abilityManager.getLevel('smush');
+    // Seismic Stomp kill XP + level 14 double gold
+    if (mob.killType === 'seismic_stomp' && killer === human) {
+      if (paysRewards) abilityManager.addKillXp('seismic_stomp');
+      const seismicStompLevel = abilityManager.getLevel('seismic_stomp');
       if (
-        getSmushStats(smushLevel).doubleGoldOnKill &&
+        getSeismicStompStats(seismicStompLevel).doubleGoldOnKill &&
         mob.droppedLoot !== null &&
         !mob.droppedLoot.goldDoubled
       ) {
@@ -1029,14 +1050,13 @@ export function resolveKills(ctx: CombatContext): void {
       }
     }
 
-    // Protective shell kill XP + level-15 chain lightning
-    if (mob.killType === 'shell' && killer === human) {
-      if (paysRewards) abilityManager.addKillXp('protective_shell');
+    if (mob.killType === 'energy_shield' && killer === human) {
+      if (paysRewards) abilityManager.addKillXp('energy_shield');
 
-      // Level-15 chain lightning: if mob died inside the active shell, queue origin
+      // Level-15 chain lightning: if mob died inside the active shield, queue origin
       if (
-        spells.activeShellLevel >= SHELL_CHAIN_LIGHTNING_LEVEL &&
-        spells.isInsideShell(mob.x, mob.y)
+        spells.activeEnergyShieldLevel >= ENERGY_SHIELD_CHAIN_LIGHTNING_LEVEL &&
+        spells.isInsideEnergyShield(mob.x, mob.y)
       ) {
         spells.addChainLightningOrigin(mob.x + HALF_TILE, mob.y + HALF_TILE);
       }

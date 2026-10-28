@@ -73,7 +73,7 @@ const LIVE_FAULTS = [
   'door-off-wall',
   /** The sign is set down on the door's approach. */
   'sign-on-approach',
-  /** Mongo's waiting spot is inside a wall. */
+  /** Deinonychus's waiting spot is inside a wall. */
   'waiting-in-wall',
   /** The prison door's building entry is never placed. */
   'entry-missing',
@@ -285,7 +285,9 @@ function verifyRoomShape(gameMap: GameMap, room: StealthGateRoomData, label: str
 
   for (const [name, spot] of Object.entries(room.waitingTiles)) {
     const tile =
-      fault === 'waiting-in-wall' && name === 'mongo' ? { x: bounds.x - 1, y: bounds.y } : spot;
+      fault === 'waiting-in-wall' && name === 'deinonychus'
+        ? { x: bounds.x - 1, y: bounds.y }
+        : spot;
     check(
       rectContains(bounds, tile) && gameMap.isWalkable(tile.x, tile.y),
       `${label}: ${name}'s waiting spot (${tile.x},${tile.y}) is not open floor in the room`,
@@ -542,7 +544,7 @@ function verifyFloor(run: number): void {
     `${label}: the prison door cannot be reached`,
   );
   check(
-    reaches(room.waitingTiles.mongo) && reaches(room.waitingTiles.hireling),
+    reaches(room.waitingTiles.deinonychus) && reaches(room.waitingTiles.hireling),
     `${label}: a waiting spot cannot be reached while locked`,
   );
   const lockedSnapshot = gameMap.captureCheckpoint();

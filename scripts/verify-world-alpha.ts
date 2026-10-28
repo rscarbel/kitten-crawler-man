@@ -5,7 +5,7 @@
  *
  *  - an item icon drawn at a quarter alpha draws its stack-count badge at a
  *    quarter alpha too, not at full strength over a ghosted icon;
- *  - Mongo's health bar on the explainer's health page fades with him as he
+ *  - Deinonychus's health bar on the explainer's health page fades with him as he
  *    is recalled.
  *
  *   npm run verify:world-alpha
@@ -18,7 +18,7 @@ installCanvasGlobals();
 
 const { drawItemIcon } = await import('../src/ui/icons/drawItemIcon.js');
 const { ITEM_DEF } = await import('../src/core/items/defs/ItemDefs.js');
-const { drawHealthPage } = await import('../src/ui/icons/explainerArt/mongoArt.js');
+const { drawHealthPage } = await import('../src/ui/icons/explainerArt/deinonychusArt.js');
 const { WORLD_BAR } = await import('../src/ui/theme/worldInk.js');
 
 const CANVAS_SIZE = 400;
@@ -84,7 +84,7 @@ console.log('\n── an item icon’s stack badge keeps the icon’s alpha');
   );
 }
 
-console.log('\n── Mongo’s health bar fades with him');
+console.log('\n── Deinonychus’s health bar fades with him');
 {
   const { ctx, calls } = recordingContext();
   // The bar's fill is empty while he is down, so its track is what shows the fade.
@@ -92,7 +92,7 @@ console.log('\n── Mongo’s health bar fades with him');
   const trackFill = ctx.fillStyle;
   const trackColour = typeof trackFill === 'string' ? trackFill.toLowerCase() : '';
   for (let frame = 0; frame < HEALTH_PAGE_FRAMES; frame++) {
-    drawHealthPage(ctx, 'juvenile', frame, CANVAS_SIZE);
+    drawHealthPage(ctx, 'juvenile', 'Deinonychus', frame, CANVAS_SIZE);
   }
   const translucentBar = calls.some(
     (c) => c.call !== 'fillText' && c.fill === trackColour && c.alpha > 0 && c.alpha < 1,

@@ -5,16 +5,18 @@
  * than a game rule.
  */
 
-import type { StatName } from '../Player';
+import type { StatId } from '../core/party/stats';
 import type { Rgb } from './status/statusPaint';
 
 /** The additive spark inside every rising mote, whatever stat it belongs to. */
 export const STAT_BOOST_MOTE_HEAT: Rgb = [255, 255, 246];
 
 /** Burst/glow/text colour per stat, so the fanfare reads as that stat's own colour. */
-export const STAT_BOOST_COLOR: Record<StatName, Rgb> = {
-  strength: [239, 68, 68],
-  intelligence: [56, 189, 248],
-  constitution: [74, 222, 128],
-  dexterity: [250, 204, 21],
+export const STAT_BOOST_COLOR: Record<StatId, Rgb> = {
+  melee: [239, 68, 68],
+  magic: [56, 189, 248],
+  health: [74, 222, 128],
+  evasiveness: [250, 204, 21],
+  ranged: [167, 139, 250],
+  explosivesHandling: [251, 146, 60],
 };

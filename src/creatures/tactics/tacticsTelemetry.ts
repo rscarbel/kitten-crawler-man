@@ -2,7 +2,7 @@
  * `?difficulty` tactics counters — guard blocks and kites — recorded the
  * instant one happens rather than kept on the mob that earned it.
  *
- * A mob taken off the roster by a direct splice (a Mongo phase change, a
+ * A mob taken off the roster by a direct splice (a Deinonychus phase change, a
  * mercenary dismissal, a bounty escort's own despawn) is never asked
  * anything again, so a per-mob pending counter would lose whatever it was
  * holding the same frame the mob left. A module-level sink has nothing to

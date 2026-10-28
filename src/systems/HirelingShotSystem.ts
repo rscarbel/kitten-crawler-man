@@ -8,7 +8,7 @@
  * arrow already loosed does not care what happened to the archer.
  *
  * Every shot is an ally's, so none can hurt the party. Its only victims are
- * living hostile mobs — never a crawler, Mongo, a quest ally or another
+ * living hostile mobs — never a crawler, Deinonychus, a quest ally or another
  * hireling — and every blow is credited to the crawler who paid through
  * `takeCreditedDamage`, with the hireling named as the body that struck.
  *
@@ -226,7 +226,7 @@ export class HirelingShotSystem implements GameSystem {
 
   /**
    * Only a living hostile mob outside a safe room. Crawlers are not mobs, and
-   * Mongo, quest allies and hirelings are never hostile, so the party cannot be
+   * Deinonychus, quest allies and hirelings are never hostile, so the party cannot be
    * struck whichever way a shot happens to be crossing.
    */
   private canBeHit(mob: Mob, shooter: Mob): boolean {

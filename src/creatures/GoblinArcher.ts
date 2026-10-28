@@ -216,7 +216,7 @@ export class GoblinArcher extends Mob {
   /** Arrows, and the odd stolen book on staying out of reach. */
   protected override rollLootItems(killer: Player | null): LootDrop['items'] {
     const items = super.rollLootItems(killer);
-    maybeDropSkillBook(items, 'skill_book_cat_reflexes');
+    maybeDropSkillBook(items, 'archer');
     return items;
   }
 

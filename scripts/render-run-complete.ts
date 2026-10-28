@@ -4,7 +4,7 @@
  * mid count-up and settled, into `preview/run-complete/` (or
  * `--out-dir=<dir>`). The screen draws itself from a `RunSummary`, so a sample
  * one stands in for a finished run; a second, leaner summary checks the
- * no-Mongo, no-kills layout.
+ * no-Deinonychus, no-kills layout.
  *
  *   npx tsx scripts/render-run-complete.ts
  */
@@ -18,6 +18,12 @@ import { RunCompleteScreen, type RunSummary } from '../src/ui/screens/dialogs/Ru
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { asGameContext } from './nodeGameContext.js';
+import {
+  PET_NAME_SUGGESTIONS,
+  PetNameBook,
+  parsePetName,
+  petWords,
+} from '../src/core/party/petNames.js';
 
 /** Render frames into the count-up at which the "mid" shot is taken. */
 const MID_COUNT_UP_FRAME = 95;
@@ -34,6 +40,14 @@ const viewports: ReadonlyArray<{ name: string; w: number; h: number; density: De
   { name: 'phone-landscape', w: 667, h: 375, density: 'touch' },
 ];
 
+/** A run whose Deinonychus was given a name. */
+function namedRun(): PetNameBook {
+  const book = new PetNameBook();
+  const name = parsePetName(PET_NAME_SUGGESTIONS.deinonychus[0]);
+  if (name !== null) book.give('deinonychus', name);
+  return book;
+}
+
 const FULL_RUN: RunSummary = {
   framesPlayed: FULL_RUN_MINUTES * FRAMES_PER_MINUTE,
   deaths: 7,
@@ -45,12 +59,13 @@ const FULL_RUN: RunSummary = {
   achievementsTotal: 52,
   humanLevel: 24,
   catLevel: 23,
-  mongoLevel: 12,
+  deinonychusLevel: 12,
+  deinonychusWords: petWords(namedRun(), 'deinonychus'),
   totalKills: 1_412,
   bossesDefeated: 11,
   hirelingsHired: 3,
   hirelingsLost: 1,
-  mongoPets: 48,
+  deinonychusPets: 48,
   cowPets: 37,
   midgePets: 12,
   topKills: [
@@ -64,12 +79,13 @@ const FULL_RUN: RunSummary = {
 
 const LEAN_RUN: RunSummary = {
   ...FULL_RUN,
-  mongoLevel: null,
+  deinonychusWords: petWords(new PetNameBook(), 'deinonychus'),
+  deinonychusLevel: null,
   totalKills: 0,
   topKills: [],
   hirelingsHired: 0,
   hirelingsLost: 0,
-  mongoPets: 0,
+  deinonychusPets: 0,
   cowPets: 0,
   midgePets: 0,
 };

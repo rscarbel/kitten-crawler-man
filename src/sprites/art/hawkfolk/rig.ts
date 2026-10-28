@@ -1059,7 +1059,7 @@ function drawHeadSide(
     Math.PI * 2,
   );
   ctx.fill();
-  // Brow ridge: a heavy dark arc over the eye, the raptor's characteristic glare.
+  // Brow ridge: a heavy dark arc over the eye, a hawk's characteristic glare.
   ctx.save();
   ctx.strokeStyle = ramp.body.dark;
   ctx.lineWidth = DETAIL_OUTLINE_WIDTH * 1.6;
@@ -1085,7 +1085,7 @@ function drawHeadSide(
   ctx.fillStyle = EYE_PUPIL;
   ctx.fill();
   // Malar stripe: a dark mark dropping from under the eye toward the beak, and
-  // a pale throat bib below it — the two plumage cues that make a raptor's
+  // a pale throat bib below it — the two plumage cues that make a hawk's
   // face read as a face rather than a flat mask.
   ctx.save();
   ctx.globalAlpha = 0.85;

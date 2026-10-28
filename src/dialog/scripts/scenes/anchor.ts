@@ -3,7 +3,7 @@
  * neighbours who each hold a piece of the stone she wants whole again.
  *
  * Voss is a fraud about the mystical and completely straight about the
- * practical, and she knows exactly which half the audience is watching for.
+ * practical, and she knows exactly which half her customers are paying for.
  * Old Lori is a hedge-witch with thirty years of practice not noticing her
  * own furniture. Deacon Aviel is unsentimental about the temple's problems
  * and slightly embarrassed that this is one of them.

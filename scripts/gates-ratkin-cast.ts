@@ -12,7 +12,9 @@
  *   C3  anchor: every character's soles stand on the tile the figure claims
  *   C4  stride sync against `RAT_KIN_TILES_PER_WALK_CYCLE`, per build
  *   C5  event frames land inside their rows
- *   C6  Mordecai's cells byte-identical to the stored baseline
+ *   C6  the gait itself, over every walk and idle pose: each leg keeps reach
+ *       headroom, a planted foot holds its contact plane, one foot is always
+ *       down, and knees hinge the right way
  *   C7  silhouette distinctness of every pair of named characters at 32px
  *   C8  memory: the whole village on screen, and each figure fully warm
  *   C9  prewarm keeps re-asking while the party lingers near the palisade
@@ -30,14 +32,22 @@ import {
   missingStateFailures,
   nothingMeasuredFailures,
 } from './figureGates.js';
-import { mordecaiIdentityFailures } from './verify-mordecai-identity.js';
 import { thrallGateFailures } from './gates-thrall.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import {
   RAT_KIN_SCALE,
+  RAT_KIN_TILES_PER_WALK_CYCLE,
   STANCE_FRACTION,
   CONTRALATERAL_PHASE,
 } from '../src/sprites/art/ratKinFigure.js';
+import {
+  FLAT_TOE_CONTACT_HEIGHT,
+  LEG_REACH_LIMIT,
+  measureLegs,
+  toeContactHeight,
+  type RatKinPose,
+  type RatKinView,
+} from '../src/sprites/art/ratKinArt.js';
 import { RATKIN_BUILDS } from '../src/sprites/art/ratkin/outfit.js';
 import {
   RATKIN_CAST_IDS,
@@ -55,7 +65,6 @@ import {
   ratkinCastDrawnStates,
   ratkinCastTilesPerWalkCycle,
 } from '../src/sprites/ratkinCastSprite.js';
-import { RAT_KIN_TILES_PER_WALK_CYCLE } from '../src/sprites/ratKinSprite.js';
 import {
   FIGURE_BYTE_BUDGET,
   IDLE_FRAMES_BEFORE_RELEASE,
@@ -89,7 +98,7 @@ function failUnlessMeasured(gateId: string, measured: number, what: string): voi
 
 /**
  * The cast cell is sized for a spear held at full height and levelled on the
- * thrust; a child standing idle in it fills far less than a Mordecai-sized
+ * thrust; a child standing idle in it fills far less than a tightly cropped
  * cell would. The fill floor is the widest pose's box, so this is about the
  * figure's own largest pose, which for every cast member carries a prop or a
  * gesture out past the body.
@@ -133,7 +142,7 @@ function gateStateNames(): void {
 
 // ── C3 anchor ────────────────────────────────────────────────────────────────
 
-/** Measured on the shipped art: soles sit 3–4 cell pixels above the tile floor, as Mordecai's do. */
+/** Measured on the shipped art: soles sit 3–4 cell pixels above the tile floor. */
 const SOLES_ABOVE_TILE_FLOOR_MIN_PX = -2;
 const SOLES_ABOVE_TILE_FLOOR_MAX_PX = 5;
 const SOLID_ALPHA_THRESHOLD = 200;
@@ -192,12 +201,14 @@ function gateAnchor(): void {
 // ── C4 stride sync ───────────────────────────────────────────────────────────
 
 const PLANTED_EPSILON = 1e-9;
+/** How far the toe pads may wander off their contact plane while planted. */
+const CONTACT_HEIGHT_TOLERANCE = 0.002;
 const STRIDE_TOLERANCE = 0.00005;
 
 /**
  * Re-measures each character's planted-foot travel off the walk_side poses
- * and holds it against what the sprite wrapper paces the cycle by. The base
- * gait is Mordecai's, so the unscaled measure must also agree with his
+ * and holds it against what the sprite wrapper paces the cycle by. Every build
+ * walks the shared gait, so the unscaled measure must also agree with
  * `RAT_KIN_TILES_PER_WALK_CYCLE`.
  */
 function gateStrideSync(): void {
@@ -221,6 +232,14 @@ function gateStrideSync(): void {
           previousX = null;
           continue;
         }
+        const contact = toeContactHeight(foot);
+        if (Math.abs(contact - FLAT_TOE_CONTACT_HEIGHT) > CONTACT_HEIGHT_TOLERANCE) {
+          fail(
+            'C4',
+            `${id}'s ${side} toe pads sit ${contact.toFixed(TILES_DECIMALS)} while planted on ` +
+              `walk_side frame ${frame}, off the contact plane ${FLAT_TOE_CONTACT_HEIGHT}`,
+          );
+        }
         if (previousX !== null) {
           const slide = previousX - foot.ball.x;
           if (slide <= PLANTED_EPSILON)
@@ -240,7 +259,7 @@ function gateStrideSync(): void {
     if (Math.abs(baseTiles - RAT_KIN_TILES_PER_WALK_CYCLE) > STRIDE_TOLERANCE) {
       fail(
         'C4',
-        `${id}'s gait covers ${baseTiles.toFixed(TILES_DECIMALS)} tiles per cycle at Mordecai's size, ` +
+        `${id}'s gait covers ${baseTiles.toFixed(TILES_DECIMALS)} tiles per cycle at the base build's size, ` +
           `against RAT_KIN_TILES_PER_WALK_CYCLE ${RAT_KIN_TILES_PER_WALK_CYCLE}`,
       );
     }
@@ -279,10 +298,108 @@ function gateEventFrames(): void {
   failUnlessMeasured('C5', events, 'event frames');
 }
 
-// ── C6 Mordecai ──────────────────────────────────────────────────────────────
+// ── C6 the gait ──────────────────────────────────────────────────────────────
 
-function gateMordecaiIdentity(): void {
-  for (const failure of mordecaiIdentityFailures()) fail('C6', failure);
+/**
+ * How far inside the thigh and shank's combined span hip→hock must stay. One
+ * clamped frame locks the leg straight, the next tuck snaps it back, and the
+ * result reads as a hop rather than as a walk.
+ */
+const REACH_HEADROOM = 0.004;
+/** A head-on leg is a straight column, which the art declares as this exactly. */
+const STRAIGHT_COLUMN_FORESHORTEN = 1;
+const REACH_DECIMALS = 4;
+const CROSS_DECIMALS = 5;
+
+/**
+ * Every walk and idle pose of every cast member: the rows built on the shared
+ * gait. The fighting, cowering and working rows bend the rules on purpose.
+ */
+function gaitPoses(): { label: string; view: RatKinView; pose: RatKinPose }[] {
+  return RATKIN_CAST_IDS.flatMap((id) =>
+    castRowsFor(id)
+      .filter((row) => row.role === 'walk' || row.role === 'idle')
+      .flatMap((row) =>
+        Array.from({ length: row.frameCount }, (_unused, frame) => ({
+          label: `${id}.${row.name}[${frame}]`,
+          view: row.view,
+          pose: row.pose(frame),
+        })),
+      ),
+  );
+}
+
+/**
+ * Reach headroom, ground contact and knee direction over every gait pose.
+ *
+ * Contact is measured at the toe pads, not the ball: late in stance the ball
+ * rocks up off the floor and the push-off rolls forward onto the toes. Every
+ * frame needs at least one foot down — a frame with neither is a flight phase,
+ * which at this gait reads as a stumble.
+ *
+ * Edge-on every knee bends forward; a knee that solves behind the hip→hock line
+ * has hinged backward, which a sign flip produces silently. Head-on a real knee
+ * hinges away from the camera, so every leg must declare itself a straight
+ * column there.
+ */
+function gateGait(): void {
+  let worstReach = 0;
+  let worstReachAt = '';
+  let posesMeasured = 0;
+  let profileKneesMeasured = 0;
+  let facingFeetMeasured = 0;
+  for (const { label, view, pose } of gaitPoses()) {
+    posesMeasured++;
+    const lowest = Math.max(toeContactHeight(pose.nearFoot), toeContactHeight(pose.farFoot));
+    if (lowest < FLAT_TOE_CONTACT_HEIGHT - CONTACT_HEIGHT_TOLERANCE) {
+      fail(
+        'C6',
+        `${label} has both feet off the floor (lowest toe contact at ` +
+          `${lowest.toFixed(REACH_DECIMALS)}, floor at ${FLAT_TOE_CONTACT_HEIGHT})`,
+      );
+    }
+    for (const [side, leg] of Object.entries(measureLegs(pose, view))) {
+      if (leg.hipToHock > worstReach) {
+        worstReach = leg.hipToHock;
+        worstReachAt = `${label} ${side}`;
+      }
+      if (view !== 'side') continue;
+      profileKneesMeasured++;
+      // Signed area of hip→hock against hip→knee. Facing +X with +Y down, a
+      // knee forward of that line gives a negative cross product.
+      const hock = { x: leg.hock.x - leg.hip.x, y: leg.hock.y - leg.hip.y };
+      const knee = { x: leg.knee.x - leg.hip.x, y: leg.knee.y - leg.hip.y };
+      const cross = hock.x * knee.y - hock.y * knee.x;
+      if (cross >= 0) {
+        fail(
+          'C6',
+          `${label}'s ${side} knee sits behind the hip→hock line ` +
+            `(cross ${cross.toFixed(CROSS_DECIMALS)}) — the leg has hinged backward`,
+        );
+      }
+    }
+    if (view === 'side') continue;
+    for (const [side, foot] of Object.entries({ near: pose.nearFoot, far: pose.farFoot })) {
+      facingFeetMeasured++;
+      if (foot.foreshorten === STRAIGHT_COLUMN_FORESHORTEN) continue;
+      fail(
+        'C6',
+        `${label}'s ${side} foot declares foreshorten ${foot.foreshorten} head-on, where ` +
+          `every leg must be a straight column (${STRAIGHT_COLUMN_FORESHORTEN})`,
+      );
+    }
+  }
+  failUnlessMeasured('C6', posesMeasured, 'gait poses');
+  failUnlessMeasured('C6', profileKneesMeasured, 'profile knees');
+  failUnlessMeasured('C6', facingFeetMeasured, 'head-on feet');
+  if (worstReach > LEG_REACH_LIMIT - REACH_HEADROOM) {
+    fail(
+      'C6',
+      `${worstReachAt} asks the leg to span ${worstReach.toFixed(REACH_DECIMALS)} against a ` +
+        `reach of ${LEG_REACH_LIMIT.toFixed(REACH_DECIMALS)} — shorten the stride or drop the ` +
+        'pelvis further at contact',
+    );
+  }
 }
 
 // ── C7 silhouette distinctness ───────────────────────────────────────────────
@@ -464,7 +581,16 @@ const FAR_AWAY_TILES = 200;
  * cache's idle clock ticks per rendered frame, so a refresh paced in updates
  * falls behind it on every fast display.
  */
-const CACHE_FRAMES_PER_UPDATE: readonly number[] = [1, 2, 2.4, 8];
+const FRAMES_PER_UPDATE_AT_60_HZ = 1;
+const FRAMES_PER_UPDATE_AT_120_HZ = 2;
+const FRAMES_PER_UPDATE_AT_144_HZ = 2.4;
+const FRAMES_PER_UPDATE_WHILE_PAUSED = 8;
+const CACHE_FRAMES_PER_UPDATE: readonly number[] = [
+  FRAMES_PER_UPDATE_AT_60_HZ,
+  FRAMES_PER_UPDATE_AT_120_HZ,
+  FRAMES_PER_UPDATE_AT_144_HZ,
+  FRAMES_PER_UPDATE_WHILE_PAUSED,
+];
 
 /**
  * Drives `RatkinCastPrewarm` headlessly against a simulated cache clock: a
@@ -527,7 +653,7 @@ export function ratkinCastGateFailures(): string[] {
   gateAnchor();
   gateStrideSync();
   gateEventFrames();
-  gateMordecaiIdentity();
+  gateGait();
   gateSilhouettes();
   gateMemory();
   gatePrewarmRefresh();

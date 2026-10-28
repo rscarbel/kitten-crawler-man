@@ -2,7 +2,7 @@
  * A Briar Hollow cow or calf: livestock, not a combatant.
  *
  * A `Mob` rather than a village entity, because the things that can kill a cow
- * — a stick of dynamite, a Smush, a stray magic missile — find their victims
+ * — a stick of dynamite, a Seismic Stomp, a stray magic missile — find their victims
  * through the mob grid, and the gore and death pipeline that turns one into
  * pieces and burgers runs off `resolveKills`. It is never hostile, so every
  * companion, auto-aim and homing scan (all of which filter on `isHostile` or
@@ -501,15 +501,15 @@ export class Cow extends Mob {
   }
 
   /**
-   * Only area damage reaches a cow: a blast, a Smush, a magic missile. A cow is
+   * Only area damage reaches a cow: a blast, a Seismic Stomp, a magic missile. A cow is
    * only ever killed as collateral, never by an aimed blow — the attack key
    * near one pets it instead of swinging, and neither a claw, a fist, a sling
-   * stone nor the shell's edge is something a crawler could land on it by
+   * stone nor the energy shield's edge is something a crawler could land on it by
    * accident. Aimed missiles never pick it either, because the aim snap skips
    * anything not hostile; one that flies into it anyway still lands.
    */
   protected override admitsPlayerDamage(damageType: PlayerDamageType | null): boolean {
-    return damageType === 'explosion' || damageType === 'smush' || damageType === 'missile';
+    return damageType === 'explosion' || damageType === 'seismic_stomp' || damageType === 'missile';
   }
 
   /** A cow's spawn tile is its place in the pen, so a death rewind puts it back there. */
@@ -574,7 +574,7 @@ export class Cow extends Mob {
   }
 
   /**
-   * A push that ignores walls — a protective shell's edge — may not carry the
+   * A push that ignores walls — an energy shield's edge — may not carry the
    * animal off its pen either. Refused like its own step would be: anywhere
    * but passable pen ground, unless it is already off the pen and being
    * pushed about out there.
@@ -838,7 +838,7 @@ export class Cow extends Mob {
    * stands, the moment the bang lands, and — if it stands where the bang could
    * kill it (`inKillReach`) — the pieces it comes apart into, all eight at
    * once. The trot waits for the flinch it follows. Asked for while a stick
-   * burns or a Smush winds up nearby.
+   * burns or a Seismic Stomp winds up nearby.
    */
   warmForThreat(inKillReach: boolean): void {
     // One view per warning: an animal milling about under a burning stick

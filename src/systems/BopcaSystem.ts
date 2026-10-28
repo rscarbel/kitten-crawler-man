@@ -599,7 +599,7 @@ export class BopcaSystem implements GameSystem {
    * How far `active` stands from what a press at a counter would reach — a
    * waiting dish, or else the Bopca — in tiles, or null when neither is in
    * reach, mirroring `tryInteract`'s own order. For choosing between the Bopca
-   * and Mordecai when both could hear a press.
+   * and Dave when both could hear a press.
    */
   interactionDistanceTiles(active: { x: number; y: number }): number | null {
     const withDish = this.entryWithTakeableDish(active);
@@ -926,7 +926,7 @@ export class BopcaSystem implements GameSystem {
   /**
    * Prompts and heal popups, drawn in screen space over the world.
    *
-   * @param otherSpeakerTakesPress Mordecai is nearer and a press would reach
+   * @param otherSpeakerTakesPress Dave is nearer and a press would reach
    *   him instead, so neither the `Take` nor the `Talk` prompt may promise it.
    */
   renderUI(

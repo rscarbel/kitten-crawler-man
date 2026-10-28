@@ -161,7 +161,7 @@ export class MissQuill extends Mob {
     this.isMoving = false;
 
     this.bolts = advanceSoulBolts(this.bolts, this.map, this.tileSize, targets, (t) =>
-      this.dealRangedDamage(t, BOLT_DAMAGE),
+      this.dealSpellDamage(t, BOLT_DAMAGE),
     );
 
     const castRangePx = this.tileSize * MISS_QUILL_CAST_RANGE_TILES;

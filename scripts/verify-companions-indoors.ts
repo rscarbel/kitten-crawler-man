@@ -1,16 +1,16 @@
 /**
- * The party's companions — Mongo and a Barracks hire — go wherever the
+ * The party's companions — Deinonychus and a Barracks hire — go wherever the
  * crawlers go: through a building's door, up and down a tower's storeys, and
  * back out again, at the health they went in with.
  *
- * Driven through the real systems the scenes call (`MongoSystem`,
+ * Driven through the real systems the scenes call (`DeinonychusSystem`,
  * `MercenarySystem`, `carryCompanions`) on real generated interiors. The
  * scenes themselves need a DOM, so the order they call those systems in is
  * checked against their source, each fragment found before its order is
  * trusted — a fragment that is not there fails the check rather than passing
  * it by comparing two misses.
  *
- * Mongo:
+ * Deinonychus:
  * - Out at the door, he is rebuilt beside the cat indoors at the health he left
  *   with; a pet running home and the knockout latch both keep him out.
  * - A tower storey change moves him out of the storey being left, roster and
@@ -34,7 +34,7 @@
  *
  * Every room:
  * - Through every town building's door, and onto every tower storey from each
- *   of its stairs, both crawlers, Mongo and the hire are set down on open floor
+ *   of its stairs, both crawlers, Deinonychus and the hire are set down on open floor
  *   clear of every prop, with room to move, reachable from the landing; each
  *   crawler can walk off its tile, and the follower sets off after a leader who
  *   walks away.
@@ -51,13 +51,16 @@ import { fileURLToPath } from 'node:url';
 import { TILE_SIZE } from '../src/core/constants';
 import { level3 } from '../src/levels/level3';
 import { setViewportSize } from '../src/core/rendering/Viewport';
-import { createMongoPetState, type MongoPetState } from '../src/core/state/MongoPetState';
+import {
+  createDeinonychusPetState,
+  type DeinonychusPetState,
+} from '../src/core/state/DeinonychusPetState';
 import { createMercenaryRoster, type MercenaryRoster } from '../src/core/party/MercenaryRoster';
 import {
   getMercenaryTemplate,
   type MercenaryTemplateId,
 } from '../src/core/party/mercenaryTemplates';
-import { getMongoStats } from '../src/abilities/mongo';
+import { getDeinonychusStats } from '../src/abilities/deinonychus';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import type { Mob } from '../src/creatures/Mob';
@@ -88,7 +91,8 @@ import { BOSS_HEALER_DIFFICULTY } from '../src/levels/fairySpawner';
 import { HealingFairy } from '../src/creatures/fairies/HealingFairy';
 import { RockThrowSystem } from '../src/systems/RockThrowSystem';
 import { HirelingShotSystem } from '../src/systems/HirelingShotSystem';
-import { MongoSystem } from '../src/systems/MongoSystem';
+import { DeinonychusSystem } from '../src/systems/DeinonychusSystem';
+import { PetNameBook } from '../src/core/party/petNames';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
 import { SpellSystem } from '../src/systems/SpellSystem';
 import { Conversation } from '../src/dialog/Conversation';
@@ -259,11 +263,11 @@ function inRoster(roster: MobRoster, mob: Mob): boolean {
  */
 const LANDING_REACH_TILES = 5;
 
-// ── Mongo ────────────────────────────────────────────────────────────────────
+// ── Deinonychus ────────────────────────────────────────────────────────────────────
 
-const MONGO_LEVEL = 5;
+const DEINONYCHUS_LEVEL = 5;
 /** Hit points he is short when the party reaches the door. */
-const MONGO_WOUND_HP = 7;
+const DEINONYCHUS_WOUND_HP = 7;
 /** Frames watched for off-duty recovery: several of its ticks. */
 const REGEN_WATCH_FRAMES = 300;
 /** Hit points he is short for the recovery check: deep enough to take several ticks. */
@@ -273,21 +277,25 @@ function ignore(): void {
   // Nothing in these checks reads XP or announcements.
 }
 
-function makeMongoSystem(petState: MongoPetState, unlocked: boolean): MongoSystem {
-  const system = new MongoSystem(
+function makeDeinonychusSystem(
+  petState: DeinonychusPetState,
+  unlocked: boolean,
+): DeinonychusSystem {
+  const system = new DeinonychusSystem(
     petState,
-    () => MONGO_LEVEL,
+    () => DEINONYCHUS_LEVEL,
     ignore,
     () => 0,
     { post: ignore, isShowing: () => false },
+    new PetNameBook(),
   );
   system.unlocked = unlocked;
   return system;
 }
 
-function freshPetState(): MongoPetState {
-  const maxHp = getMongoStats(MONGO_LEVEL).maxHp;
-  return createMongoPetState(maxHp, maxHp);
+function freshPetState(): DeinonychusPetState {
+  const maxHp = getDeinonychusStats(DEINONYCHUS_LEVEL).maxHp;
+  return createDeinonychusPetState(maxHp, maxHp);
 }
 
 interface Outdoors {
@@ -302,94 +310,97 @@ function outdoors(): Outdoors {
 }
 
 /** What `DungeonScene`'s door callback hands the interior, and the dismiss it runs. */
-function walkInThroughDoor(system: MongoSystem, from: MobRoster): InteriorCompanionArrival {
-  const arrival = { mongoUnlocked: system.unlocked, mongoWasOut: system.followsThroughDoor };
+function walkInThroughDoor(system: DeinonychusSystem, from: MobRoster): InteriorCompanionArrival {
+  const arrival = {
+    deinonychusUnlocked: system.unlocked,
+    deinonychusWasOut: system.followsThroughDoor,
+  };
   system.dismiss(from.mobs, from.grid);
   return arrival;
 }
 
 /** What the interior's constructor does with the arrival. */
 function arriveInside(
-  petState: MongoPetState,
+  petState: DeinonychusPetState,
   arrival: InteriorCompanionArrival,
   party: Party,
   map: GameMap,
   roster: MobRoster,
-): MongoSystem {
-  const system = makeMongoSystem(petState, arrival.mongoUnlocked);
-  if (!arrival.mongoWasOut) return system;
-  const mongo = system.carryIn(party.cat, map);
-  if (mongo !== null) roster.add(mongo);
+): DeinonychusSystem {
+  const system = makeDeinonychusSystem(petState, arrival.deinonychusUnlocked);
+  if (!arrival.deinonychusWasOut) return system;
+  const deinonychus = system.carryIn(party.cat, map);
+  if (deinonychus !== null) roster.add(deinonychus);
   return system;
 }
 
-function checkMongoThroughTheDoor(): void {
-  section('Mongo, out at the door, walks in beside the cat at the health he left with');
+function checkDeinonychusThroughTheDoor(): void {
+  section('Deinonychus, out at the door, walks in beside the cat at the health he left with');
   const petState = freshPetState();
   const out = outdoors();
-  const system = makeMongoSystem(petState, true);
-  const mongo = system.summon(out.party.cat, out.map);
-  check(mongo !== null, 'he is summoned outdoors');
-  if (mongo === null) return;
-  out.roster.add(mongo);
-  const woundedHp = mongo.maxHp - MONGO_WOUND_HP;
-  mongo.hp = woundedHp;
+  const system = makeDeinonychusSystem(petState, true);
+  const deinonychus = system.summon(out.party.cat, out.map);
+  check(deinonychus !== null, 'he is summoned outdoors');
+  if (deinonychus === null) return;
+  out.roster.add(deinonychus);
+  const woundedHp = deinonychus.maxHp - DEINONYCHUS_WOUND_HP;
+  deinonychus.hp = woundedHp;
 
   const arrival = walkInThroughDoor(system, out.roster);
-  check(arrival.mongoWasOut, 'he counts as out at the door');
-  check(!inRoster(out.roster, mongo), 'the outdoor roster lets him go at the door');
+  check(arrival.deinonychusWasOut, 'he counts as out at the door');
+  check(!inRoster(out.roster, deinonychus), 'the outdoor roster lets him go at the door');
   check(petState.hp === woundedHp, `his health is written into the pet state (${petState.hp})`);
 
   const store = makeStore();
   const storeRoster = makeRoster(store);
   const party = makeParty(store, store.startTile);
   const inside = arriveInside(petState, arrival, party, store, storeRoster);
-  const indoorMongo = inside.mongo;
-  check(indoorMongo !== null, 'he is standing inside');
-  if (indoorMongo === null) return;
-  check(indoorMongo.hp === woundedHp, `inside at ${indoorMongo.hp} of ${woundedHp}`);
-  check(inRoster(storeRoster, indoorMongo), 'inside in the room’s roster and grid');
-  const reach = tilesBetween(indoorMongo, party.cat);
+  const indoorDeinonychus = inside.deinonychus;
+  check(indoorDeinonychus !== null, 'he is standing inside');
+  if (indoorDeinonychus === null) return;
+  check(indoorDeinonychus.hp === woundedHp, `inside at ${indoorDeinonychus.hp} of ${woundedHp}`);
+  check(inRoster(storeRoster, indoorDeinonychus), 'inside in the room’s roster and grid');
+  const reach = tilesBetween(indoorDeinonychus, party.cat);
   check(reach <= LANDING_REACH_TILES, `beside the cat (${reach.toFixed(1)} tiles)`);
-  const tile = tileUnder(indoorMongo);
+  const tile = tileUnder(indoorDeinonychus);
   check(hasRoomToMove(store, tile.x, tile.y), 'on a tile he can move in');
 
-  section('A Mongo who was not coming stays out');
-  const recalled = makeMongoSystem(freshPetState(), true);
+  section('A Deinonychus who was not coming stays out');
+  const recalled = makeDeinonychusSystem(freshPetState(), true);
   const running = recalled.summon(out.party.cat, out.map);
   if (running !== null) {
     out.roster.add(running);
     running.beginRecall();
   }
   check(running !== null && !recalled.followsThroughDoor, 'a pet running home is put away');
-  const unsummoned = makeMongoSystem(freshPetState(), true);
+  const unsummoned = makeDeinonychusSystem(freshPetState(), true);
   check(!unsummoned.followsThroughDoor, 'a pet never summoned is not carried');
 }
 
-function checkMongoLocks(): void {
+function checkDeinonychusLocks(): void {
   section('The knockout latch still keeps him out indoors');
   const store = makeStore();
   const party = makeParty(store, store.startTile);
-  const arrival: InteriorCompanionArrival = { mongoUnlocked: true, mongoWasOut: true };
+  const arrival: InteriorCompanionArrival = { deinonychusUnlocked: true, deinonychusWasOut: true };
 
   const resting = freshPetState();
   resting.restingUntilFull = true;
   const restingInside = arriveInside(resting, arrival, party, store, makeRoster(store));
-  check(restingInside.mongo === null, 'resting after a knockout, he does not walk in');
+  check(restingInside.deinonychus === null, 'resting after a knockout, he does not walk in');
 
   const restingAgain = freshPetState();
   restingAgain.restingUntilFull = true;
-  const locker = makeMongoSystem(restingAgain, true);
+  const locker = makeDeinonychusSystem(restingAgain, true);
   check(locker.summon(party.cat, store) === null, 'and the Summon key refuses him indoors too');
 
   const unknown = arriveInside(
     freshPetState(),
-    { mongoUnlocked: false, mongoWasOut: true },
+    { deinonychusUnlocked: false, deinonychusWasOut: true },
     party,
     store,
     makeRoster(store),
   );
-  check(unknown.mongo === null, 'a pet the run has not unlocked never appears');
+  check(unknown.deinonychus === null, 'a pet the run has not unlocked never appears');
 }
 
 /** A hostile standing on `map`, holding `body` as its target. */
@@ -402,20 +413,20 @@ function hostileChasing(map: GameMap, roster: MobRoster, body: Mob, at: { x: num
 }
 
 function checkStoreyCarry(): void {
-  section('A storey change carries Mongo and the hire to the new storey, roster and grid');
+  section('A storey change carries Deinonychus and the hire to the new storey, roster and grid');
   const ground = makeTowerStorey(GROUND_STOREY);
   const upper = makeTowerStorey(UPPER_STOREY);
   const groundRoster = makeRoster(ground);
   const upperRoster = makeRoster(upper);
   const party = makeParty(ground, ground.startTile);
 
-  const mongoSystem = makeMongoSystem(freshPetState(), true);
-  const mongo = mongoSystem.carryIn(party.cat, ground);
-  check(mongo !== null, 'Mongo is out on the ground storey');
-  if (mongo === null) return;
-  groundRoster.add(mongo);
-  mongo.hp = mongo.maxHp - MONGO_WOUND_HP;
-  const mongoHp = mongo.hp;
+  const deinonychusSystem = makeDeinonychusSystem(freshPetState(), true);
+  const deinonychus = deinonychusSystem.carryIn(party.cat, ground);
+  check(deinonychus !== null, 'Deinonychus is out on the ground storey');
+  if (deinonychus === null) return;
+  groundRoster.add(deinonychus);
+  deinonychus.hp = deinonychus.maxHp - DEINONYCHUS_WOUND_HP;
+  const deinonychusHp = deinonychus.hp;
 
   const roster = hireRoster('crush');
   const mercSystem = new MercenarySystem(roster, null);
@@ -425,25 +436,25 @@ function checkStoreyCarry(): void {
   if (merc === null) return;
   const mercHp = merc.hp;
 
-  const chaser = hostileChasing(ground, groundRoster, mongo, ground.startTile);
+  const chaser = hostileChasing(ground, groundRoster, deinonychus, ground.startTile);
 
   placeParty(party, upper, arrivalAbove(upper));
   const companions: CarriedCompanion[] = [
-    mongoSystem.asCarriedCompanion(party.cat),
+    deinonychusSystem.asCarriedCompanion(party.cat),
     mercSystem.asCarriedCompanion(),
   ];
   mercSystem.leaveStorey(groundRoster.mobs, groundRoster.grid);
   carryCompanions(companions, groundRoster, upperRoster, upper);
 
   for (const [name, body, hp] of [
-    ['Mongo', mongo, mongoHp],
+    ['Deinonychus', deinonychus, deinonychusHp],
     ['the hire', merc, mercHp],
   ] as const) {
     check(!groundRoster.mobs.includes(body), `${name} has left the ground storey’s roster`);
     check(!groundRoster.grid.has(body), `${name} has left the ground storey’s grid`);
     check(inRoster(upperRoster, body), `${name} is in the upper storey’s roster and grid`);
     check(filedWhereItStands(upperRoster, body), `${name} is filed where it stands`);
-    const follows = body === mongo ? party.cat : party.human;
+    const follows = body === deinonychus ? party.cat : party.human;
     const reach = tilesBetween(body, follows);
     check(reach <= LANDING_REACH_TILES, `${name} lands beside the party (${reach.toFixed(1)})`);
     check(body.hp === hp, `${name} keeps its health (${body.hp} of ${hp})`);
@@ -452,21 +463,30 @@ function checkStoreyCarry(): void {
     chaser.currentTarget === null && chaser.retaliateMob === null,
     'the storey left behind lets go of him',
   );
-  check(mongo.allMobs === upperRoster.mobs, 'Mongo reads the new storey’s mobs at once');
+  check(
+    deinonychus.allMobs === upperRoster.mobs,
+    'Deinonychus reads the new storey’s mobs at once',
+  );
   check(merc.allMobs === upperRoster.mobs, 'the hire reads the new storey’s mobs at once');
 
   section('A script resetting the party on one storey takes the companions along');
-  const faraway = { x: mongo.x, y: mongo.y };
+  const faraway = { x: deinonychus.x, y: deinonychus.y };
   const partyBack = arrivalAbove(upper);
   const openTile = findOpenTileAway(upper, partyBack);
   if (openTile !== null) {
     placeParty(party, upper, openTile);
   }
   carryCompanions(companions, upperRoster, upperRoster, upper);
-  const moved = Math.hypot(mongo.x - faraway.x, mongo.y - faraway.y) > 0;
-  check(openTile !== null && moved, 'Mongo is moved to the party’s new mark');
-  check(filedWhereItStands(upperRoster, mongo), 'and re-filed in the grid where he now stands');
-  check(upperRoster.mobs.filter((mob) => mob === mongo).length === 1, 'and listed once, not twice');
+  const moved = Math.hypot(deinonychus.x - faraway.x, deinonychus.y - faraway.y) > 0;
+  check(openTile !== null && moved, 'Deinonychus is moved to the party’s new mark');
+  check(
+    filedWhereItStands(upperRoster, deinonychus),
+    'and re-filed in the grid where he now stands',
+  );
+  check(
+    upperRoster.mobs.filter((mob) => mob === deinonychus).length === 1,
+    'and listed once, not twice',
+  );
 }
 
 /** The walkable tile furthest from `from` that has room to move, for a reset mark. */
@@ -489,31 +509,31 @@ function findOpenTileAway(map: GameMap, from: { x: number; y: number }) {
   return best;
 }
 
-function checkMongoWalksOut(): void {
-  section('Out at the exit, Mongo walks out with the party, health intact');
+function checkDeinonychusWalksOut(): void {
+  section('Out at the exit, Deinonychus walks out with the party, health intact');
   const petState = freshPetState();
   const store = makeStore();
   const storeRoster = makeRoster(store);
   const party = makeParty(store, store.startTile);
-  const inside = makeMongoSystem(petState, true);
-  const mongo = inside.carryIn(party.cat, store);
-  check(mongo !== null, 'he is out indoors');
-  if (mongo === null) return;
-  storeRoster.add(mongo);
-  mongo.hp = mongo.maxHp - MONGO_WOUND_HP;
-  const woundedHp = mongo.hp;
+  const inside = makeDeinonychusSystem(petState, true);
+  const deinonychus = inside.carryIn(party.cat, store);
+  check(deinonychus !== null, 'he is out indoors');
+  if (deinonychus === null) return;
+  storeRoster.add(deinonychus);
+  deinonychus.hp = deinonychus.maxHp - DEINONYCHUS_WOUND_HP;
+  const woundedHp = deinonychus.hp;
 
   // What the interior's `doExit` hands back, and the dismiss it runs.
   const departure: InteriorCompanionDeparture = {
-    mongoWasOut: inside.followsThroughDoor,
-    mongoUnlocked: inside.unlocked,
+    deinonychusWasOut: inside.followsThroughDoor,
+    deinonychusUnlocked: inside.unlocked,
   };
   inside.dismiss(storeRoster.mobs, storeRoster.grid);
 
   const out = outdoors();
-  const outside = makeMongoSystem(petState, true);
-  const back = departure.mongoWasOut ? outside.carryIn(out.party.cat, out.map) : null;
-  check(departure.mongoWasOut, 'he counts as out at the exit');
+  const outside = makeDeinonychusSystem(petState, true);
+  const back = departure.deinonychusWasOut ? outside.carryIn(out.party.cat, out.map) : null;
+  check(departure.deinonychusWasOut, 'he counts as out at the exit');
   check(back !== null && back.hp === woundedHp, `outside at ${back?.hp ?? 0} of ${woundedHp}`);
 }
 
@@ -525,17 +545,17 @@ function checkRegenOnlyOffDuty(): void {
   const store = makeStore();
   const roster = makeRoster(store);
   const party = makeParty(store, store.startTile);
-  const system = makeMongoSystem(petState, true);
-  const mongo = system.carryIn(party.cat, store);
-  check(mongo !== null, 'he is out indoors');
-  if (mongo === null) return;
-  roster.add(mongo);
-  const liveHp = mongo.hp;
+  const system = makeDeinonychusSystem(petState, true);
+  const deinonychus = system.carryIn(party.cat, store);
+  check(deinonychus !== null, 'he is out indoors');
+  if (deinonychus === null) return;
+  roster.add(deinonychus);
+  const liveHp = deinonychus.hp;
   const storedHp = petState.hp;
   const ctx = contextFor(party, store, roster);
   for (let f = 0; f < REGEN_WATCH_FRAMES; f++) system.update(ctx);
   check(petState.hp === storedHp, `out: the stored health does not move (${petState.hp})`);
-  check(mongo.hp === liveHp, `out: nor does his own (${mongo.hp})`);
+  check(deinonychus.hp === liveHp, `out: nor does his own (${deinonychus.hp})`);
 
   system.dismiss(roster.mobs, roster.grid);
   const putAwayHp = petState.hp;
@@ -881,22 +901,25 @@ function checkHeldMobsAreOffLimits(): void {
   party.human.isActive = false;
   party.cat.isActive = true;
   const ctx = contextFor(party, map, roster);
-  const mongoSystem = makeMongoSystem(freshPetState(), true);
-  const mongo = mongoSystem.summon(party.cat, map);
-  if (mongo === null) {
-    check(false, 'Mongo is out');
+  const deinonychusSystem = makeDeinonychusSystem(freshPetState(), true);
+  const deinonychus = deinonychusSystem.summon(party.cat, map);
+  if (deinonychus === null) {
+    check(false, 'Deinonychus is out');
   } else {
-    roster.add(mongo);
-    const foe = heldFoeBeside(map, roster, mongo);
+    roster.add(deinonychus);
+    const foe = heldFoeBeside(map, roster, deinonychus);
     const outcome = watchHeldFoe(foe, () => {
-      mongoSystem.update(ctx);
-      mongo.updateAI([]);
+      deinonychusSystem.update(ctx);
+      deinonychus.updateAI([]);
     });
-    check(outcome.lostWhileHeld === 0, `Mongo leaves it be (${outcome.lostWhileHeld} HP taken)`);
+    check(
+      outcome.lostWhileHeld === 0,
+      `Deinonychus leaves it be (${outcome.lostWhileHeld} HP taken)`,
+    );
     check(outcome.lostOnceReleased > 0, 'and goes for it once the script lets it go');
     roster.grid.remove(foe);
     roster.mobs.splice(roster.mobs.indexOf(foe), 1);
-    mongoSystem.dismiss(roster.mobs, roster.grid);
+    deinonychusSystem.dismiss(roster.mobs, roster.grid);
   }
 
   party.human.isActive = true;
@@ -1387,9 +1410,10 @@ function checkPartyInEveryRoom(arrival: RoomArrival): void {
   arriveAsTheSceneDoes(arrival, party);
 
   const roster = makeRoster(map);
-  const mongo = makeMongoSystem(freshPetState(), true).carryIn(party.cat, map);
-  check(mongo !== null, `${arrival.label}: Mongo walks in`);
-  if (mongo !== null) checkStandsFree(map, catFacts, mongo, `${arrival.label}: Mongo`);
+  const deinonychus = makeDeinonychusSystem(freshPetState(), true).carryIn(party.cat, map);
+  check(deinonychus !== null, `${arrival.label}: Deinonychus walks in`);
+  if (deinonychus !== null)
+    checkStandsFree(map, catFacts, deinonychus, `${arrival.label}: Deinonychus`);
 
   const hires = new MercenarySystem(hireRoster('crush'), null);
   hires.update(contextFor(party, map, roster));
@@ -1688,25 +1712,25 @@ function checkSceneWiring(): void {
   const combat = methodBody(interior, 'private updateCombat(): void {');
   check(combat !== null, 'the interior’s combat frame is found');
   check(
-    inOrder(combat, 'this.mongoSystem.checkHealth()', 'combat.resolveKills()'),
-    'Mongo’s lethal hit is intercepted before kills resolve',
+    inOrder(combat, 'this.deinonychusSystem.checkHealth()', 'combat.resolveKills()'),
+    'Deinonychus’s lethal hit is intercepted before kills resolve',
   );
   check(
     inOrder(combat, 'this.mercenarySystem.checkHealth(', 'combat.resolveKills()'),
     'the hire’s lethal hit is intercepted before kills resolve',
   );
   check(
-    inOrder(combat, 'combat.resolveKills()', 'this.mongoSystem.update(ctx)'),
-    'Mongo’s system runs after kills resolve',
+    inOrder(combat, 'combat.resolveKills()', 'this.deinonychusSystem.update(ctx)'),
+    'Deinonychus’s system runs after kills resolve',
   );
   const context = methodBody(interior, 'private buildSystemContext(): SystemContext {');
   check(
     context?.includes('extraTargets: this.companionTargets()') === true,
     'hostiles are handed the companions as targets',
   );
-  check(!interior.includes('tickMongoRegen('), 'no second regen tick runs beside his system');
+  check(!interior.includes('tickDeinonychusRegen('), 'no second regen tick runs beside his system');
   check(
-    interior.includes('mongoSummon: () => this.toggleMongoSummon()'),
+    interior.includes('deinonychusSummon: () => this.toggleDeinonychusSummon()'),
     'the Summon key is bound',
   );
   const constructorBody = methodBody(interior, '  constructor(');
@@ -1719,8 +1743,12 @@ function checkSceneWiring(): void {
     'the party is set down after the safe room’s fittings are stamped',
   );
   check(
-    inOrder(constructorBody, 'this.setPartyDown(this.map.startTile);', 'this.carryMongoIn();'),
-    'and before Mongo lands beside the cat',
+    inOrder(
+      constructorBody,
+      'this.setPartyDown(this.map.startTile);',
+      'this.carryDeinonychusIn();',
+    ),
+    'and before Deinonychus lands beside the cat',
   );
   const setDown = methodBody(interior, 'private setPartyDown(');
   check(
@@ -1747,39 +1775,43 @@ function checkSceneWiring(): void {
   );
   const doExit = methodBody(interior, 'private doExit(defeated = false): void {');
   check(
-    inOrder(doExit, 'this.companionDeparture()', 'this.mongoSystem.dismiss('),
-    'the exit reads who walks out before putting Mongo away',
+    inOrder(doExit, 'this.companionDeparture()', 'this.deinonychusSystem.dismiss('),
+    'the exit reads who walks out before putting Deinonychus away',
   );
   check(
     inOrder(doExit, 'this.mercenarySystem.dismissForTransition(', 'this.onExitCallback('),
     'the exit writes the hire’s health before the next scene is built',
   );
 
-  section('The overworld door hands Mongo across');
+  section('The overworld door hands Deinonychus across');
   const dungeon = readFileSync(DUNGEON_SCENE_PATH, 'utf8');
   const door = methodBody(dungeon, 'private enterBuilding(');
   check(door !== null, 'the building door’s callback is found');
   const exitOptions = methodBody(dungeon, 'private buildingExitOptions(');
   check(
-    inOrder(door, 'mongoWasOut: this.mongoSystem.followsThroughDoor', 'this.mongoSystem.dismiss('),
+    inOrder(
+      door,
+      'deinonychusWasOut: this.deinonychusSystem.followsThroughDoor',
+      'this.deinonychusSystem.dismiss(',
+    ),
     'the door reads whether he was out before putting him away',
   );
   check(
-    inOrder(door, 'this.mongoSystem.dismiss(', 'new BuildingInteriorScene('),
+    inOrder(door, 'this.deinonychusSystem.dismiss(', 'new BuildingInteriorScene('),
     'and puts him away before the interior is built',
   );
   check(
-    exitOptions?.includes('mongoWasOut: companionDeparture.mongoWasOut') === true,
+    exitOptions?.includes('deinonychusWasOut: companionDeparture.deinonychusWasOut') === true,
     'the rebuilt overworld is told he walked out',
   );
   const gameplay = methodBody(dungeon, 'private updateGameplay(): void {');
   check(
-    inOrder(gameplay, 'this.carryMongoIn();', 'this.mongoSystem.update(ctx);'),
+    inOrder(gameplay, 'this.carryDeinonychusIn();', 'this.deinonychusSystem.update(ctx);'),
     'the rebuilt overworld puts him down on its first frame, ahead of his system',
   );
-  const carryIn = methodBody(dungeon, 'private carryMongoIn(): void {');
+  const carryIn = methodBody(dungeon, 'private carryDeinonychusIn(): void {');
   check(
-    inOrder(carryIn, 'this.mongoSystem.carryIn(', 'this.world.roster.add('),
+    inOrder(carryIn, 'this.deinonychusSystem.carryIn(', 'this.world.roster.add('),
     'beside the cat, and into the roster',
   );
 
@@ -1789,6 +1821,7 @@ function checkSceneWiring(): void {
     'this.shop.renderObjects(',
     'this.club.renderObjects(',
     'this.safeRoom.renderUI(',
+    'this.dave?.renderUI(',
     'this.bopca.renderUI(',
   ]) {
     check(
@@ -1803,8 +1836,8 @@ function checkSceneWiring(): void {
   );
   const hudSummonBody = methodBody(interior, "private hudSummon(): HudModel['summon'] {");
   check(
-    inOrder(hudSummonBody, 'this.mongoSystem.summonCard(', 'this.toggleMongoSummon()'),
-    'built from Mongo’s own card, and a tap toggles him',
+    inOrder(hudSummonBody, 'this.deinonychusSystem.summonCard(', 'this.toggleDeinonychusSummon()'),
+    'built from Deinonychus’s own card, and a tap toggles him',
   );
   const hudSurface = readFileSync(HUD_SURFACE_PATH, 'utf8');
   check(
@@ -1839,9 +1872,9 @@ function checkSceneWiring(): void {
     inOrder(
       buildSummon,
       'if (actions.buildAction?.() === true) return;',
-      'actions.mongoSummon?.()',
+      'actions.deinonychusSummon?.()',
     ),
-    'a press of the build key that built something does not also toggle Mongo',
+    'a press of the build key that built something does not also toggle Deinonychus',
   );
   const repair = methodBody(interior, 'private triggerAnchorRepair(): boolean {');
   check(
@@ -1859,7 +1892,7 @@ function checkSceneWiring(): void {
     );
     check(binding !== null, `${sceneName} binds the ability level-ups to itself as it is built`);
     check(
-      binding?.includes('onPetLevelUp: () => this.mongoSystem.onPetLevelUp()') === true &&
+      binding?.includes('onPetLevelUp: () => this.deinonychusSystem.onPetLevelUp()') === true &&
         binding.includes('menus: this.menus'),
       `${sceneName}: a pet level rescales his health and its award lands on its own dialog`,
     );
@@ -1993,10 +2026,10 @@ function checkDownedPartnerKeepsEveryDoorShut(): void {
 
 // ── Run ──────────────────────────────────────────────────────────────────────
 
-checkMongoThroughTheDoor();
-checkMongoLocks();
+checkDeinonychusThroughTheDoor();
+checkDeinonychusLocks();
 checkStoreyCarry();
-checkMongoWalksOut();
+checkDeinonychusWalksOut();
 checkRegenOnlyOffDuty();
 checkHireThroughTheDoor();
 checkDownedHireIsLost();

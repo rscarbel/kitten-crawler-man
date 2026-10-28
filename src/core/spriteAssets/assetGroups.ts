@@ -47,7 +47,7 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'blood_particle',
     'blood_puddle',
     'magic_missile_icon',
-    'smush_icon',
+    'seismic_stomp_icon',
     'treasure_chests',
     'stairwell',
     'torch',
@@ -411,7 +411,7 @@ export const MOB_SPRITE_KEYS: Readonly<Record<MobKind, readonly SpriteKey[]>> = 
  * table, so `SYSTEM_ASSET_REQUIREMENTS` is the only place that names them.
  */
 export type FriendlyCreatureKind =
-  'cow' | 'calf' | 'ratkin_soldier' | 'baggi' | 'mongo' | 'mercenary';
+  'cow' | 'calf' | 'ratkin_soldier' | 'baggi' | 'deinonychus' | 'mercenary';
 
 /** Any creature whose sprite needs `verify:assets` checks. */
 export type CreatureKind = MobKind | FriendlyCreatureKind;
@@ -427,8 +427,8 @@ export const FRIENDLY_CREATURE_SPRITE_KEYS: Readonly<
   ratkin_soldier: [],
   /** `Baggi` — procedural. */
   baggi: [],
-  /** `MongoSystem` — a persistent companion, not a spawn-table mob; painted. */
-  mongo: [],
+  /** `DeinonychusSystem` — a persistent companion, not a spawn-table mob; painted. */
+  deinonychus: [],
   /** `MercenarySystem`'s hirelings, drawn through `MERCENARY_ART` (`src/sprites/mercenaryArt.ts`); painted. */
   mercenary: [],
 };

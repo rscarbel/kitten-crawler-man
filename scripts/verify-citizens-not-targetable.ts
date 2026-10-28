@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * Citizens (`Townsperson`) are never `Mob`s, so nothing that sweeps a mob
- * roster to pick a target — Mongo, hirelings and mercenaries (including bolt
+ * roster to pick a target — Deinonychus, hirelings and mercenaries (including bolt
  * fire), `SpellSystem`'s homing missiles, the fairy systems — may ever select
  * one. This is a two-part gate:
  *
@@ -150,11 +150,11 @@ const targetingSystems = findTargetingSystems();
  */
 const EXPECTED_TARGETING_SYSTEMS: readonly string[] = [
   'src/creatures/Mob.ts',
-  'src/creatures/Mongo.ts',
+  'src/creatures/Deinonychus.ts',
   'src/creatures/Mercenary.ts',
   'src/systems/HirelingShotSystem.ts',
   'src/systems/MercenarySystem.ts',
-  'src/systems/MongoSystem.ts',
+  'src/systems/DeinonychusSystem.ts',
   'src/systems/SpellSystem.ts',
   'src/systems/FairySystem.ts',
 ];

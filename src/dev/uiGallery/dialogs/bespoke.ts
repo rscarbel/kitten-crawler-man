@@ -1,3 +1,4 @@
+import { CAROLINE_CHARACTER_NAME } from '../../../ai/characters';
 import { ACHIEVEMENT_DEFS, type AwardDef } from '../../../core/progression/AchievementManager';
 import { ITEM_DEF, isItemId, type ItemId } from '../../../core/items/defs/ItemDefs';
 import { RARITIES, type Rarity } from '../../../core/items/defs/rarity';
@@ -110,7 +111,7 @@ function awardPresentation(
   award: AwardDef = GALLERY_AWARD[rarity],
 ): RewardPresentation {
   const rewards = galleryLines(rarity);
-  if (award.id === 'dungeon_kills_200') rewards.push({ kind: 'companion', id: 'mongo' });
+  if (award.id === 'dungeon_kills_200') rewards.push({ kind: 'companion', id: 'deinonychus' });
   return {
     origin: { kind: 'award', award },
     title: award.name,
@@ -139,11 +140,11 @@ function crowdedPresentation(): RewardPresentation {
 }
 
 const AI_AWARD: AwardDef = {
-  id: 'ai:fled-from-a-rat',
-  name: 'Fled From A Rat',
-  description: 'You ran from the single weakest creature in the dungeon. The viewers clipped it.',
+  id: 'ai:retreated-from-a-rat',
+  name: 'Retreated From A Rat',
+  description: 'You retreated from the weakest creature on this floor. Distance covered: 41 tiles.',
   rarity: 'Rare',
-  awardedBy: 'System',
+  awardedBy: CAROLINE_CHARACTER_NAME,
   awardedAt: 0,
 };
 

@@ -1,3 +1,4 @@
+import type { DamageTags } from '../core/combat/damageTags';
 /**
  * A stone in the air from the human's slingshot.
  *
@@ -33,32 +34,9 @@ export interface SlingshotRock {
   bounces: number;
   /** The enemy the stone last bounced off, which it passes through on the way to the next. */
   bouncedOff: object | null;
+  /** What kind of hit the stone lands, fixed by the weapon that loosed it. */
+  readonly tags: DamageTags;
 }
-
-/** Frames between shots — roughly one stone every three quarters of a second. */
-export const SLINGSHOT_COOLDOWN_FRAMES = 45;
-
-/** How far a stone carries before it drops out of the air. */
-export const SLINGSHOT_RANGE_TILES = 6;
-
-/**
- * Pixels a stone covers per tick. Sits between the magic missile's base and
- * full-power speeds: a flung pebble should read as faster than a lobbed bottle
- * and slower than a bolt of magic.
- */
-export const SLINGSHOT_SPEED = 6;
-
-/** Damage a stone does before the thrower's strength is counted. */
-export const SLINGSHOT_BASE_DAMAGE = 2;
-
-/**
- * Share of strength a stone carries. A quarter rather than melee's full point
- * per rank: the slingshot buys reach, and it pays for it in damage.
- */
-export const SLINGSHOT_STRENGTH_FRACTION = 0.25;
-
-/** Radius a stone is tested against props, trees and mobs with. */
-export const SLINGSHOT_HIT_RADIUS_FRACTION = 0.4;
 
 /** Radius of the drawn pebble, as a fraction of a tile. */
 const ROCK_RADIUS_FRACTION = 0.1;

@@ -164,7 +164,7 @@ function drawCover(
 const CARD_WIDTH = 1200;
 const CARD_HEIGHT = 630;
 
-const TITLE = 'KITTEN CRAWLER MAN';
+const TITLE = 'KITTEN CRAWLER WORLD';
 const TAGLINE = 'A man and his cat versus a very hostile dungeon';
 const CALL_TO_ACTION = 'Free  ·  Plays in your browser';
 

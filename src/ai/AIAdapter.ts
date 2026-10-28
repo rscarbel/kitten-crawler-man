@@ -3,7 +3,7 @@
  * `GameAiClient`. It streams what the context builder produces, answers every
  * `ai_action` with an `action_result`, carries player chat over the socket
  * and feeds the AI panel. With the server unreachable, or no one signed in,
- * the game plays on and the System falls back to scripted lines.
+ * the game plays on and Caroline falls back to scripted lines.
  */
 import {
   GameAiClient,
@@ -28,11 +28,11 @@ import {
 import type { AISceneContext } from './actions/types';
 import {
   enabledCharacters,
-  MORDECAI_CHARACTER_NAME,
+  DAVE_CHARACTER_NAME,
   renderCharacterPrompt,
-  SYSTEM_CHARACTER_NAME,
+  CAROLINE_CHARACTER_NAME,
 } from './characters';
-import { LineRotation, SYSTEM_FALLBACK_LINES } from './characters/fallbackLines';
+import { LineRotation, CAROLINE_FALLBACK_LINES } from './characters/fallbackLines';
 import { AIContextBuilder } from './context/AIContextBuilder';
 import { rememberForgottenPlayer, takeForgottenPlayerNotice } from './context/forgottenNotice';
 import { SdkContextTransport } from './context/transport';
@@ -59,17 +59,17 @@ export const AI_SDK_NAME = 'kitten-crawler';
  * this only bounds how stale a flag change (a menu opening) can get.
  */
 const DEFAULT_CONTEXT_TICK_MS = 250;
-/** Said once after a wipe, on the next page load, in the System's voice. */
-const FORGOTTEN_PLAYER_LINE = 'The System pretends not to remember you. It does.';
+/** Said once after a wipe, on the next page load, in Caroline's voice. */
+const FORGOTTEN_PLAYER_LINE = 'Your record is cleared. Observation resumes from zero.';
 /** A degraded notice with no `retryAfterMs` keeps the status amber this long. */
 const DEFAULT_DEGRADED_MS = 60_000;
-/** What the player says on walking up to Mordecai; the server briefs him from what he witnessed. */
-const MORDECAI_GREETING = 'Hey.';
-/** Mordecai's dialog box waits this long for his reply before he falls back on his usual advice. */
-const MORDECAI_REPLY_TIMEOUT_MS = 30_000;
-const MORDECAI_FALLBACK_LINE =
-  "Kill things, level up, find the stairwell. That's how you survive. Every floor, " +
-  "every time. You'd be surprised how many crawlers can't manage even that.";
+/** What the player says on walking up to Dave; the server briefs him from what he witnessed. */
+const DAVE_GREETING = 'Hey.';
+/** Dave's dialog box waits this long for his reply before he falls back on his usual advice. */
+const DAVE_REPLY_TIMEOUT_MS = 30_000;
+const DAVE_FALLBACK_LINE =
+  'Drink the potion before you need it, not after. Red ground means move. ' +
+  "And find the stairs. That's most of it, really.";
 const NO_SCENE_DETAIL = 'no gameplay scene is running';
 
 /** The part of the SDK client the adapter uses, so the gates can hand it a fake. */
@@ -151,7 +151,7 @@ export class AIAdapter {
   private connectGeneration = 0;
   /** A conversation box waiting on a character's next reply, by character name. */
   private readonly replyWaiters = new Map<string, (text: string) => void>();
-  private readonly fallbackLines = new LineRotation(SYSTEM_FALLBACK_LINES);
+  private readonly fallbackLines = new LineRotation(CAROLINE_FALLBACK_LINES);
   private readonly actionDispatcher: AIActionDispatcher;
 
   private sceneCtx: AISceneContext | null = null;
@@ -289,35 +289,35 @@ export class AIAdapter {
   }
 
   /**
-   * What the player typed to the System. Online it goes over the socket and
-   * the reply streams into the panel; offline the System answers with a
+   * What the player typed to Caroline. Online it goes over the socket and
+   * the reply streams into the panel; offline she answers with a
    * scripted line.
    */
-  chatWithSystem(message: string): void {
-    this.context.recordPlayerMessage(SYSTEM_CHARACTER_NAME);
-    if (!this.sendPlayerText(SYSTEM_CHARACTER_NAME, message)) this.sayScripted();
+  chatWithCaroline(message: string): void {
+    this.context.recordPlayerMessage(CAROLINE_CHARACTER_NAME);
+    if (!this.sendPlayerText(CAROLINE_CHARACTER_NAME, message)) this.sayScripted();
   }
 
   /**
-   * Opens a conversation with Mordecai and resolves with his reply. He is
+   * Opens a conversation with Dave and resolves with his reply. He is
    * briefed by the server only on what he witnessed. Falls back to his usual
    * advice when the server is unreachable or slow.
    */
-  chatWithMordecai(): Promise<string> {
-    this.context.recordPlayerMessage(MORDECAI_CHARACTER_NAME);
+  chatWithDave(): Promise<string> {
+    this.context.recordPlayerMessage(DAVE_CHARACTER_NAME);
     return new Promise((resolve) => {
-      this.replyWaiters.get(MORDECAI_CHARACTER_NAME)?.(MORDECAI_FALLBACK_LINE);
-      const timer = setTimeout(() => finish(MORDECAI_FALLBACK_LINE), MORDECAI_REPLY_TIMEOUT_MS);
+      this.replyWaiters.get(DAVE_CHARACTER_NAME)?.(DAVE_FALLBACK_LINE);
+      const timer = setTimeout(() => finish(DAVE_FALLBACK_LINE), DAVE_REPLY_TIMEOUT_MS);
       const finish = (text: string): void => {
         clearTimeout(timer);
-        if (this.replyWaiters.get(MORDECAI_CHARACTER_NAME) === finish) {
-          this.replyWaiters.delete(MORDECAI_CHARACTER_NAME);
+        if (this.replyWaiters.get(DAVE_CHARACTER_NAME) === finish) {
+          this.replyWaiters.delete(DAVE_CHARACTER_NAME);
         }
         resolve(text);
       };
-      this.replyWaiters.set(MORDECAI_CHARACTER_NAME, finish);
-      if (!this.sendPlayerText(MORDECAI_CHARACTER_NAME, MORDECAI_GREETING)) {
-        finish(MORDECAI_FALLBACK_LINE);
+      this.replyWaiters.set(DAVE_CHARACTER_NAME, finish);
+      if (!this.sendPlayerText(DAVE_CHARACTER_NAME, DAVE_GREETING)) {
+        finish(DAVE_FALLBACK_LINE);
       }
     });
   }
@@ -444,14 +444,14 @@ export class AIAdapter {
     this.flushContext();
     if (this.sceneBus !== null) this.startContextTimer();
     const forgotten = takeForgottenPlayerNotice();
-    if (forgotten !== null) this.feed.addScripted(SYSTEM_CHARACTER_NAME, forgotten);
+    if (forgotten !== null) this.feed.addScripted(CAROLINE_CHARACTER_NAME, forgotten);
   }
 
   private onDisconnected(): void {
     this.connected = false;
     this.stopContextTimer();
     this.feed.clearStreaming();
-    for (const waiter of [...this.replyWaiters.values()]) waiter(MORDECAI_FALLBACK_LINE);
+    for (const waiter of [...this.replyWaiters.values()]) waiter(DAVE_FALLBACK_LINE);
     this.refreshStatus();
   }
 
@@ -486,7 +486,7 @@ export class AIAdapter {
   }
 
   private sayScripted(): void {
-    this.feed.addScripted(SYSTEM_CHARACTER_NAME, this.fallbackLines.next());
+    this.feed.addScripted(CAROLINE_CHARACTER_NAME, this.fallbackLines.next());
   }
 
   private onChat(update: ChatStreamUpdate): void {
@@ -588,7 +588,7 @@ export class AIAdapter {
   }
 
   /**
-   * Big moments get a scripted line from the System while it is offline.
+   * Big moments get a scripted line from Caroline while she is offline.
    * Online, the server hears about them through the event stream and decides
    * for itself whether to react.
    */

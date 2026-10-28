@@ -20,7 +20,7 @@ import { IGNITION_DURATION_MS, LOGO_SLAM_AT_MS, type TitleCue } from './titleTim
 const TITLE_ONE_LINE = ['Kitten Crawler'] as const;
 /** The title broken in two, for a narrow stage where one run would be small. */
 const TITLE_TWO_LINES = ['Kitten', 'Crawler'] as const;
-const SUBTITLE = 'Man';
+const SUBTITLE = 'World';
 
 /**
  * Inter's capitals are this tall, as a share of the font size. With a middle
@@ -28,11 +28,11 @@ const SUBTITLE = 'Man';
  */
 const CAP_HEIGHT_EM = 0.73;
 const HALF = 0.5;
-/** "MAN" is set at this share of the title's size. */
+/** The subtitle is set at this share of the title's size. */
 const SUBTITLE_SCALE = 0.46;
 /** The gap between one title line's capitals and the next, as a share of the title size. */
 const TITLE_LINE_GAP_EM = 0.12;
-/** The gap between the title's capitals and "MAN"'s, as a share of the title size. */
+/** The gap between the title's capitals and the subtitle's, as a share of the title size. */
 const SUBTITLE_GAP_EM = 0.2;
 /** How deep the extrusion runs below the face, as a share of the title size. */
 const EXTRUSION_DEPTH_EM = 0.13;
@@ -40,11 +40,11 @@ const EXTRUSION_DEPTH_EM = 0.13;
 const GLOW_ROOM_EM = 0.55;
 /** The share of the logo rect's width the widest line may fill, leaving the rest as margin. */
 const WIDTH_FILL = 0.94;
-/** A rule's thickness, as a share of "MAN"'s size. */
+/** A rule's thickness, as a share of the subtitle's size. */
 const RULE_THICKNESS_EM = 0.12;
-/** The gap between "MAN" and each rule, as a share of "MAN"'s size. */
+/** The gap between the subtitle and each rule, as a share of the subtitle's size. */
 const RULE_GAP_EM = 0.45;
-/** How much of the title's width the rules and "MAN" span together. */
+/** How much of the title's width the rules and the subtitle span together. */
 const RULE_SPAN_SHARE = 0.86;
 
 /** The scale every measurement is first taken at, then scaled linearly to fit. */
@@ -81,13 +81,13 @@ export interface TitleLogoGeometry {
   readonly theme: Theme;
   readonly titleLines: readonly TitleLogoLine[];
   readonly subtitle: TitleLogoLine;
-  /** The two rules either side of "MAN", left then right; each tapers to a point at its outer end. */
+  /** The two rules either side of the subtitle, left then right; each tapers to a point at its outer end. */
   readonly rules: readonly [Rect, Rect];
   /** The title's size in CSS pixels. */
   readonly size: number;
   /** How far the extrusion runs below the face, in CSS pixels. */
   readonly depth: number;
-  /** The bottom of the whole lettering, extrusion included: below "MAN" and its rules. */
+  /** The bottom of the whole lettering, extrusion included: below the subtitle and its rules. */
   readonly footY: number;
   /** The left and right ends of the rules, the width of the lettering's foot. */
   readonly footLeft: number;

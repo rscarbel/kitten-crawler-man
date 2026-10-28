@@ -293,7 +293,7 @@ export class RockThrowSystem implements GameSystem {
 
   /**
    * Everything this rock can hit: the two players, the scene's extra
-   * player-like targets (Mongo, hired mercenaries) and whatever the golem was
+   * player-like targets (Deinonychus, hired mercenaries) and whatever the golem was
    * actually aiming at. Restricted to the players alone, a golem fighting a
    * mercenary throws straight through them into the far wall forever.
    */

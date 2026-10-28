@@ -24,6 +24,8 @@ export interface IceHitOptions {
   readonly chillFrames?: number;
   /** Overrides {@link FROZEN_FRAMES}, before any resistance halves it. */
   readonly frozenFrames?: number;
+  /** Whether the ice is a spell, so magic-resistant gear shortens what it leaves. */
+  readonly magic?: boolean;
 }
 
 /** How long `target` stays encased by a freeze of `frames`, after its gear. */
@@ -61,11 +63,14 @@ export function wouldIceHitFreeze(target: Player): boolean {
 export function applyIceHit(target: Player, options: IceHitOptions = {}): IceHitOutcome {
   if (!target.isAlive) return 'refused';
   const freezeAllowed = options.freezeAllowed ?? true;
-  const chillFrames = options.chillFrames ?? CHILLED_FRAMES;
+  const resistedByMagic = (frames: number): number =>
+    options.magic === true ? target.magicResistedFrames(frames) : frames;
+  const chillFrames = resistedByMagic(options.chillFrames ?? CHILLED_FRAMES);
   const hardensToFreeze = freezeAllowed && wouldIceHitFreeze(target);
 
   if (hardensToFreeze) {
-    target.applyStatus(makeFrozen(frozenFramesFor(target, options.frozenFrames)));
+    const frozenFrames = resistedByMagic(frozenFramesFor(target, options.frozenFrames));
+    target.applyStatus(makeFrozen(frozenFrames));
     if (!target.hasStatus(FROZEN_STATUS)) return 'refused';
     target.cureStatuses([CHILLED_STATUS]);
     return 'frozen';

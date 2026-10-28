@@ -40,7 +40,7 @@ import { PLAYER_SPEED, TILE_SIZE } from '../../../core/constants';
 import { HUMAN_SWING_FRAMES } from '../../../core/party/crawlerFormulas';
 import { HUMAN_CELL_PX_PER_UNIT, TILE_SCALE } from './figureScale';
 import { RUN_GROUND_PER_CYCLE_PX, WALK_GROUND_PER_CYCLE_PX } from './locomotion';
-import { SMUSH_GROUND_PX_PER_FRAME } from './stomps';
+import { SEISMIC_STOMP_GROUND_PX_PER_FRAME } from './stomps';
 import { RUN_FRAMES, WALK_FRAMES } from './timing';
 import { cellPointInTile } from './sockets';
 import { weaponTip } from './weaponReach';
@@ -322,7 +322,7 @@ const WALK_GROUND_PX_PER_FRAME = WALK_GROUND_PER_CYCLE_PX / WALK_FRAMES;
  *   frames is its gait's cycle of ground over its frame count.
  * - A strike thrown on the move is played off the swing's timer, so each of
  *   its frames lasts its share of the swing's ticks at base speed.
- * - A Smush hop is played off the Smush's own timer, the same way.
+ * - A Seismic Stomp hop is played off the Seismic Stomp's own timer, the same way.
  * - A start is paced by ground, one frame of its gait's cycle per frame: its
  *   planted foot is the gait's own, carried back a cycle frame at a time.
  *
@@ -331,7 +331,7 @@ const WALK_GROUND_PX_PER_FRAME = WALK_GROUND_PER_CYCLE_PX / WALK_FRAMES;
 export function groundPxPerFrame(row: HumanRowName): number {
   const spec: HumanRowMeta = HUMAN_ROW_TABLE[row];
   if (spec.locomotion !== 'travelling') return 0;
-  if (spec.role === 'stomp') return SMUSH_GROUND_PX_PER_FRAME;
+  if (spec.role === 'stomp') return SEISMIC_STOMP_GROUND_PX_PER_FRAME;
   if (spec.role === 'strike') return (HUMAN_SWING_FRAMES / spec.frameCount) * PLAYER_SPEED;
   if (spec.gait !== undefined) return groundPxPerGaitFrame(spec.gait, spec.frameCount);
   if (spec.bridges === 'walk') return WALK_GROUND_PX_PER_FRAME;

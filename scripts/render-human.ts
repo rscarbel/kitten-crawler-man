@@ -12,7 +12,7 @@
  *
  *   npm run render:human
  *   npm run render:human -- --look=dave
- *   npx tsx scripts/render-human.ts --row=smush --scale=4
+ *   npx tsx scripts/render-human.ts --row=seismic_stomp --scale=4
  *   npx tsx scripts/render-human.ts --part=head --scale=6
  *   npx tsx scripts/render-human.ts --row=walk_side --mode=onion --scale=3
  *   npx tsx scripts/render-human.ts --frame=4 --row=jab_side --scale=8

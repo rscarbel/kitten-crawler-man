@@ -157,6 +157,9 @@ export interface DragHandlers {
   onEnd?(point: DragPoint, cancelled: boolean): void;
 }
 
+/** A key the scene reserves for one control's action, answered wherever focus is. */
+export type KeyboardShortcut = 'Escape';
+
 /** What a region does when it receives input. Every handler is optional. */
 export interface HitHandlers {
   /** Fires on release, only for the gesture's owner, only if nothing has covered it since. */
@@ -189,8 +192,18 @@ export interface HitHandlers {
    * fields that let go of the keyboard when the player presses elsewhere.
    */
   readonly onOutsideDown?: () => void;
-  /** Joins the keyboard focus ring. Defaults to true when `onTap` is given and the region is enabled. */
+  /**
+   * Joins the keyboard focus ring. Defaults to true when `onTap` is given, the
+   * region is enabled and it has no `keyboardShortcut`.
+   */
   readonly focusable?: boolean;
+  /**
+   * The reserved key that already does what this control does, from anywhere:
+   * the HUD's pause button and Escape. A keyboard player never needs to focus
+   * it, so it stays out of the ring by default, and the keyboard audit counts
+   * it as reached while no open surface takes that key first.
+   */
+  readonly keyboardShortcut?: KeyboardShortcut;
   /** Enter/Space activates this region when nothing else is focused. */
   readonly primary?: boolean;
   /** Swallows input like a block, plays the error cue on tap, never fires a handler. Still reports hover. */
@@ -234,6 +247,7 @@ export interface HitRegion {
   readonly onWheel?: (dy: number) => void;
   readonly onOutsideDown?: () => void;
   readonly focusable: boolean;
+  readonly keyboardShortcut: KeyboardShortcut | null;
   readonly primary: boolean;
   readonly disabled: boolean;
   readonly sound: SoundId | null;
@@ -1493,6 +1507,9 @@ class SurfaceContext implements Ui {
     if (visible === null) return null;
     if (handlers.hoverOnly === true) return this.registerHoverOnly(id, visible);
     const disabled = handlers.disabled === true;
+    const keyboardShortcut = handlers.keyboardShortcut ?? null;
+    const joinsRingByDefault =
+      !disabled && handlers.onTap !== undefined && keyboardShortcut === null;
     this.shared.building.push({
       surfaceId: this.surfaceId,
       id,
@@ -1507,7 +1524,8 @@ class SurfaceContext implements Ui {
       dragSlop: handlers.dragSlop ?? TAP_SLOP,
       onWheel: handlers.onWheel,
       onOutsideDown: handlers.onOutsideDown,
-      focusable: handlers.focusable ?? (!disabled && handlers.onTap !== undefined),
+      focusable: handlers.focusable ?? joinsRingByDefault,
+      keyboardShortcut,
       primary: handlers.primary === true,
       disabled,
       sound: handlers.sound === undefined ? UI_TAP_SOUND : handlers.sound,
@@ -1525,6 +1543,7 @@ class SurfaceContext implements Ui {
       band: this.band,
       dragSlop: TAP_SLOP,
       focusable: false,
+      keyboardShortcut: null,
       primary: false,
       disabled: false,
       sound: null,

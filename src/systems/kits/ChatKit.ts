@@ -134,7 +134,7 @@ export class ChatKit {
         return;
       }
       this.chat.showBubble(typed);
-      aiAdapter.chatWithSystem(typed);
+      aiAdapter.chatWithCaroline(typed);
     });
   }
 

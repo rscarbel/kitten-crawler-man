@@ -62,7 +62,7 @@ export class Rat extends Mob {
   /** Vermin survive everything; the rarest of them leave the manual behind. */
   protected override rollLootItems(killer: Player | null): LootDrop['items'] {
     const items = super.rollLootItems(killer);
-    maybeDropSkillBook(items, 'skill_book_cockroach');
+    maybeDropSkillBook(items, 'vermin');
     return items;
   }
   readonly xpValue = 2;

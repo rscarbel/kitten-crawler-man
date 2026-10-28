@@ -11,6 +11,7 @@
  *   bus.emit('mobKilled', { mob, killer, killType });
  */
 
+import type { SafeRoomId } from '../map/safeRoomId';
 import type { Mob, PlayerDamageType } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
@@ -32,7 +33,7 @@ import type { EquipmentChange } from './items/equipment/EquipmentManager';
 import type { ToolKind, ToolTier } from './items/gathering/toolTiers';
 import type { ProcessingStationKind } from '../systems/briarHollow/processingStations';
 import type { Rarity } from './items/defs/rarity';
-import type { ChallengeSummary } from '../ai/show/challenges';
+import type { ChallengeSummary } from '../ai/interactions/challenges';
 import type { ExplosionVariant } from '../sprites/dynamiteExplosion';
 
 export interface GameEvents {
@@ -49,17 +50,17 @@ export interface GameEvents {
    * have already been split into one event each. Allies and livestock caught in
    * it are not counted.
    */
-  multiKill: { killer: HumanPlayer; count: number };
+  multiKill: { killer: HumanPlayer | CatPlayer; count: number };
 
   /**
    * One dynamite blast (a single stick or a whole chain) killed enemies.
    * `bossKilled` is set when one of them was a boss and this blast landed the
    * killing blow. Allies caught in the blast are not counted.
    */
-  dynamiteKills: { killer: HumanPlayer; kills: number; bossKilled: boolean };
+  dynamiteKills: { killer: HumanPlayer | CatPlayer; kills: number; bossKilled: boolean };
 
   /** A player entered a safe room (fires on each entry). */
-  safeRoomEntered: Record<string, never>;
+  safeRoomEntered: { room: SafeRoomId };
 
   /** Every hostile that counts toward the room-clear rule is gone from this room. */
   roomCleared: { roomIndex: number };
@@ -230,7 +231,7 @@ export interface GameEvents {
   /** A crawler took a dish off a Bopca's counter and ate it. */
   bopcaFoodEaten: { dishId: DishId; healed: number };
 
-  /** A crawler's dexterity turned a mob attack into a clean miss. */
+  /** A crawler's evasiveness turned a mob attack into a clean miss. */
   playerDodged: { player: 'Human' | 'Cat' };
 
   /** A crawler discovered a skill for the first time. */
@@ -239,7 +240,7 @@ export interface GameEvents {
   /** A known skill advanced a level, through use or a duplicate skill book. */
   skillLevelUp: { player: 'Human' | 'Cat'; skillId: SkillId; newLevel: number };
 
-  /** A skill fired in the moment (e.g. Cockroach catching a fatal blow). */
+  /** A skill fired in the moment (e.g. 9 Lives catching a fatal blow). */
   skillTriggered: { player: 'Human' | 'Cat'; skillId: SkillId };
 
   /** A crawler was taught a craft skill for the first time, at level 1. */
@@ -354,13 +355,13 @@ export interface GameEvents {
   /** A conversation opened on an empty dialog box (`started`) or the box emptied (`ended`). */
   conversation: { speaker: string; phase: 'started' | 'ended' };
 
-  /** Mordecai pointed the party at one of the floor's objectives. */
-  mordecaiAdviceGiven: { objectiveId: string };
+  /** Dave pointed the party at one of the floor's objectives. */
+  daveAdviceGiven: { objectiveId: string };
 
-  /** The player took a challenge the show's AI offered; its clock starts now. */
+  /** The player took a challenge the AI offered; its clock starts now. */
   challengeAccepted: ChallengeSummary;
 
-  /** The player turned down a challenge the show's AI offered. */
+  /** The player turned down a challenge the AI offered. */
   challengeDeclined: ChallengeSummary;
 
   /** An accepted challenge was won; its reward chest went to `rewardedTo`. */
@@ -373,7 +374,7 @@ export interface GameEvents {
   challengeFailed: ChallengeSummary & { reason: string; taunt: string };
 
   /**
-   * The player answered a question the show's AI put to them. `answer` is the
+   * The player answered a question the AI put to them. `answer` is the
    * label they picked, or null when they waved the question away.
    */
   playerAnswered: {
@@ -384,16 +385,7 @@ export interface GameEvents {
     askedBy: string;
   };
 
-  /** The viewers' favour meter moved: `delta` is how far it really moved, after clamping. */
-  viewerFavorChanged: {
-    favor: number;
-    delta: number;
-    reaction: string;
-    comment: string;
-    tier: string;
-  };
-
-  /** The show's AI wrote and awarded an achievement. */
+  /** The AI wrote and awarded an achievement. */
   aiAchievementAwarded: {
     title: string;
     description: string;
@@ -401,9 +393,6 @@ export interface GameEvents {
     player: 'Human' | 'Cat';
     awardedBy: string;
   };
-
-  /** A sponsor break the AI ran came off the screen, watched through or skipped. */
-  sponsorBreakEnded: { sponsor: string; skipped: boolean };
 }
 
 type EventCallback<T> = (data: T) => void;

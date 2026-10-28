@@ -55,6 +55,8 @@ export interface BootLook {
   readonly studs?: string;
   /** A toe cap of hoof, in this colour, split down its middle into two trotters. */
   readonly trotter?: string;
+  /** Laces in this colour up the instep, from the shaft's front to the toe cap. */
+  readonly laces?: string;
 }
 
 export interface SoleBuild {
@@ -163,6 +165,60 @@ function paintStud(ctx: Ctx, x: number, y: number, colour: string): void {
   ctx.beginPath();
   ctx.arc(x, y, STUD_RADIUS, 0, Math.PI * 2);
   ctx.fill();
+}
+
+/**
+ * The laces: a line up the instep with a few crossings over it. At the tile
+ * the line is all that shows, so it is drawn a little bolder than a seam.
+ */
+const LACE_WIDTH = 0.03;
+const LACE_CROSSING_HALF = 0.07;
+const LACE_CROSSINGS = [0.2, 0.5, 0.8] as const;
+/** Edge-on the laces run along the instep's curve, set a little in from its edge. */
+const PROFILE_LACE_FROM = 0.1;
+const PROFILE_LACE_TO = 0.7;
+const PROFILE_LACE_INSET = 0.08;
+const PROFILE_LACE_STEPS = 6;
+/** Head-on they run down the middle of the vamp to just above the toe cap. */
+const FRONT_LACE_TOP = 0.15;
+const FRONT_LACE_TOE_SHARE = 0.6;
+const FRONT_LACE_BOTTOM_RISE = 1.35;
+
+function strokeLace(ctx: Ctx, points: readonly Pt[], colour: string): void {
+  if (points.length === 0) return;
+  const first = points[0];
+  ctx.strokeStyle = colour;
+  ctx.lineWidth = LACE_WIDTH;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(first.x, first.y);
+  for (const at of points.slice(1)) ctx.lineTo(at.x, at.y);
+  ctx.stroke();
+}
+
+/** Laces from `from` to `to`, crossed by short strokes along `across`. */
+function paintLaceRun(ctx: Ctx, from: Pt, to: Pt, across: Pt, colour: string): void {
+  strokeLace(ctx, [from, to], colour);
+  for (const share of LACE_CROSSINGS) {
+    const at = pt(lerp(from.x, to.x, share), lerp(from.y, to.y, share));
+    strokeLace(
+      ctx,
+      [
+        offset(at, -across.x * LACE_CROSSING_HALF, -across.y * LACE_CROSSING_HALF),
+        offset(at, across.x * LACE_CROSSING_HALF, across.y * LACE_CROSSING_HALF),
+      ],
+      colour,
+    );
+  }
+}
+
+/** A point on the quadratic from `a` through control `c` to `b`. */
+function onQuadratic(a: Pt, c: Pt, b: Pt, t: number): Pt {
+  const u = 1 - t;
+  return pt(
+    u * u * a.x + 2 * u * t * c.x + t * t * b.x,
+    u * u * a.y + 2 * u * t * c.y + t * t * b.y,
+  );
 }
 
 /** Fills everything below `top` inside the current clip with the sole's dark leather. */
@@ -312,6 +368,18 @@ function paintProfileFoot(ctx: Ctx, pitch: number, look: BootLook): void {
         look.leather.light,
         INSTEP_LIGHT_ALPHA,
       );
+      if (look.laces !== undefined) {
+        const ankleFront = pt(ANKLE_WIDTH * PROFILE_ANKLE_FRONT, upperTop);
+        const instepControl = pt(toeX * PROFILE_INSTEP_AT, -FOOT_DEPTH * PROFILE_INSTEP_RISE);
+        const capTop = pt(capBack, toeTop);
+        const run: Pt[] = [];
+        for (let step = 0; step <= PROFILE_LACE_STEPS; step++) {
+          const t = lerp(PROFILE_LACE_FROM, PROFILE_LACE_TO, step / PROFILE_LACE_STEPS);
+          const on = onQuadratic(capTop, instepControl, ankleFront, t);
+          run.push(offset(on, 0, FOOT_DEPTH * PROFILE_LACE_INSET));
+        }
+        strokeLace(ctx, run, look.laces);
+      }
       crease(
         ctx,
         () => {
@@ -405,6 +473,14 @@ function paintHeadOnFoot(ctx: Ctx, outward: number, shaftHalf: number, look: Boo
         look.leather.light,
         FRONT_TOE_LIGHT_ALPHA,
       );
+      if (look.laces !== undefined) {
+        const laceTop = pt(0, lerp(top, sole, FRONT_LACE_TOP));
+        const laceBottom = pt(
+          toes * FRONT_LACE_TOE_SHARE,
+          sole - toeRow * FRONT_LACE_BOTTOM_RISE * FRONT_TOE_CAP_ARCH,
+        );
+        paintLaceRun(ctx, laceTop, laceBottom, pt(1, 0), look.laces);
+      }
       crease(
         ctx,
         () => {

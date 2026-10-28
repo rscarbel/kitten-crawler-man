@@ -1,7 +1,7 @@
 /**
  * Assembles the figure from its parts in draw order, one entry point per view.
  *
- * The rig paints bare skin: bare legs, and the bare feet the Smush stomp lands
+ * The rig paints bare skin: bare legs, and the bare feet the Seismic Stomp lands
  * with. Whatever covers them, down to a look's own jacket and trousers, is a
  * garment: a look's base garments dress the figure through the dressing, the
  * same way the gear it picks up does.
@@ -1151,8 +1151,8 @@ function clearSoleRims(
 }
 
 /**
- * The Protective Shell's violet, so the glow in his palm is the dome's own
- * light before the dome appears: a pale core fading to the shell's deep rim.
+ * The Energy Shield's violet, so the glow in his palm is the dome's own
+ * light before the dome appears: a pale core fading to the shield's deep rim.
  */
 const PALM_GLOW_CORE = '#e4dcff';
 const PALM_GLOW_RIM = '#7c3aed';

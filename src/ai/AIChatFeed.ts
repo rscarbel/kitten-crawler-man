@@ -6,7 +6,7 @@
  * headless gates can drive it frame by frame.
  */
 import type { ChatChoice, ChatStreamUpdate, ServerPayloads } from '@rscarbel/game-server-llm-sdk';
-import { SYSTEM_CHARACTER_NAME, VIEWERS_CHARACTER_NAME } from './characters';
+import { CAROLINE_CHARACTER_NAME } from './characters';
 
 /**
  * - `disabled`: no AI this session (turned off in the build, or no one signed in).
@@ -71,14 +71,9 @@ export interface ChoiceReply {
 
 export type OpinionDirection = 'up' | 'down' | 'same';
 
-const DISPLAY_NAMES: Readonly<Record<string, string>> = {
-  [SYSTEM_CHARACTER_NAME]: 'The System',
-  [VIEWERS_CHARACTER_NAME]: 'The Viewers',
-};
-
-/** How a character is named on screen: "The System", "Mordecai". */
-export function displayNameOf(characterName: string): string {
-  return DISPLAY_NAMES[characterName] ?? characterName;
+/** Whether `characterName` is Caroline, the System AI, whose words are drawn only in her own frame. */
+export function speaksInCarolineFrame(characterName: string): boolean {
+  return characterName === CAROLINE_CHARACTER_NAME;
 }
 
 function holdTicksFor(text: string): number {
@@ -120,7 +115,7 @@ const OPINION_ARROWS: Readonly<Record<OpinionDirection, string>> = {
   same: '',
 };
 
-/** "The System's opinion of you: ▲ Amused". */
+/** "Caroline's opinion of you: ▲ Amused". */
 export function opinionLine(name: string, direction: OpinionDirection, mood: string): string {
   return `${name}'s opinion of you: ${OPINION_ARROWS[direction]}${mood}`;
 }
@@ -203,7 +198,7 @@ export class AIChatFeed {
 
   /** Mood and opinion changes, flashed as one line. */
   onState(payload: ServerPayloads['ai_state']): void {
-    const name = displayNameOf(payload.characterName);
+    const name = payload.characterName;
     let direction: OpinionDirection = 'same';
     if (payload.relationship !== undefined) {
       const total = relationshipTotal(payload.relationship);
@@ -220,7 +215,7 @@ export class AIChatFeed {
   }
 
   addIntervention(actor: string, text: string): void {
-    this.interventionList.push({ actor: displayNameOf(actor), text, ticks: INTERVENTION_TICKS });
+    this.interventionList.push({ actor, text, ticks: INTERVENTION_TICKS });
     while (this.interventionList.length > MAX_INTERVENTIONS) this.interventionList.shift();
   }
 

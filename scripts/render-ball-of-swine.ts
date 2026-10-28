@@ -14,7 +14,7 @@
  *   npx tsx scripts/render-ball-of-swine.ts --mode=composite --scale=3
  *
  * `composite` is the mode that matters most, and the only one that shows what
- * the game shows: the ground shadow, then a rolling frame rotated to a heading,
+ * the game draws: the ground shadow, then a rolling frame rotated to a heading,
  * then the fixed key light on top. Reviewing the `roll` row on its own means
  * reviewing an unlit ball, which is not a thing the player ever sees.
  */

@@ -47,7 +47,7 @@ const LENS_LIGHT_ALPHA = 0.5;
 const LENS_DARK_TRAIL = 0.05;
 /** The bands thin as the wave spends itself. */
 const LENS_THIN_TO = 0.4;
-/** Warmer than the Smush's cold dungeon air — a gym is lit yellow. */
+/** Warmer than the Seismic Stomp's cold dungeon air — a gym is lit yellow. */
 const LENS_DARK_TINT = '104, 92, 78';
 const LENS_LIGHT_TINT = '246, 240, 224';
 

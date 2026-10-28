@@ -34,8 +34,6 @@ export const palette = {
     muted: '#6C7589',
     inverse: '#0B0E14',
     disabled: '#4A5163',
-    /** A machine voice: the System AI's terminal lines. */
-    terminal: '#5ED3F0',
   },
   accent: {
     base: '#F5B83D',
@@ -64,8 +62,6 @@ export const palette = {
     xp: '#9B87FF',
     stamina: '#3DD68C',
     boss: '#B36BFF',
-    /** The viewers' favour, on its meter and its pill. */
-    favor: '#5ED3F0',
     track: 'rgba(255, 255, 255, 0.08)',
     ghost: 'rgba(255, 255, 255, 0.35)',
   },
@@ -81,6 +77,25 @@ export const palette = {
     kit: '#5ED3D1',
   },
   /**
+   * Each skill book's cover and spine, keyed by the skill it teaches: the one
+   * thing a player reads to tell one book from another at slot size.
+   */
+  skillBook: {
+    nine_lives: { cover: '#155e75', spine: '#083344' },
+    cat_reflexes: { cover: '#4c1d95', spine: '#2a0f57' },
+    pugilism: { cover: '#7f1d1d', spine: '#450a0a' },
+    iron_stomach: { cover: '#3f6212', spine: '#1f3006' },
+    mechanical_fist: { cover: '#3f4854', spine: '#1c2129' },
+    powerful_strike: { cover: '#92400e', spine: '#4a1f04' },
+    swordsmanship: { cover: '#1e3a8a', spine: '#0f1d47' },
+    archery: { cover: '#166534', spine: '#08321a' },
+    clawmanship: { cover: '#9d174d', spine: '#4a0a24' },
+    magic_eye: { cover: '#86198f', spine: '#40083f' },
+    blunt_proficiency: { cover: '#57534e', spine: '#292524' },
+    pyros_touch: { cover: '#c2410c', spine: '#5c1f06' },
+    demolitionist: { cover: '#a16207', spine: '#4a2c03' },
+  },
+  /**
    * The rarity ladder, lowest to highest: reward frames, rays and accents.
    * `base` is the rarity's own colour, `light` its highlight and sheen, `deep`
    * its shadow and rim, `glow` the halo and burst it throws.
@@ -94,7 +109,7 @@ export const palette = {
     /** Pearl white whose halo leans prismatic, so it never reads as a pale Common. */
     divine: { base: '#F4F1FF', light: '#FFFFFF', deep: '#B4ACD9', glow: '#B6F0FF' },
   },
-  /** Metal and felt for the game-show set pieces: reward plaques, the merc desk, the casino. */
+  /** Metal and felt for the gilded set pieces: reward plaques, the merc desk, the casino. */
   material: {
     brassLight: '#F4D58A',
     brass: '#C99A3E',
@@ -112,6 +127,26 @@ export const palette = {
     chipSilver: '#BCC4D0',
     /** The poker table's padded rail: dark leather round the felt. */
     rail: '#3A2416',
+  },
+  /**
+   * Caroline, the System AI: a terminal readout rather than a panel, cold
+   * cyan on blue-black with no brass and no glass, so nothing else on screen
+   * can be mistaken for her speaking.
+   */
+  caroline: {
+    ground: 'rgba(4, 9, 17, 0.95)',
+    /** The title screen's frame lets the scene behind it show through. */
+    groundSheer: 'rgba(4, 9, 17, 0.74)',
+    hairline: '#5ED3F0',
+    bracket: '#8FE6FA',
+    grid: 'rgba(94, 211, 240, 0.07)',
+    scanline: 'rgba(94, 211, 240, 0.05)',
+    rule: 'rgba(94, 211, 240, 0.38)',
+    label: '#5ED3F0',
+    dot: '#7CF0C8',
+    prefix: '#8FE6FA',
+    body: '#E8F6FA',
+    cursor: '#8FE6FA',
   },
 } as const;
 
@@ -144,11 +179,8 @@ export const type = {
    * spacing together from these proportions.
    */
   logo: { size: 96, weight: 900, lineHeight: 96, letterSpacing: -2.4, upper: true },
-  /**
-   * A machine voice typed out a character at a time, set in the terminal face
-   * (`TERMINAL_FONT_STACK`) by whoever draws it: the System AI's lines.
-   */
-  terminal: { size: 14, weight: 600, lineHeight: 19, letterSpacing: 0.6, upper: true },
+  /** The strip over every Caroline message, in the terminal face: small, wide-tracked capitals. */
+  carolineLabel: { size: 10, weight: 700, lineHeight: 14, letterSpacing: 2.2, upper: true },
   /** A quiet line that still has to read across a big screen: the title's sound hint. */
   hint: { size: 15, weight: 500, lineHeight: 20, letterSpacing: 0.4 },
   /** An alarm that must be read mid-fight from across the screen: the siege's clocktower alert. */
@@ -175,7 +207,7 @@ export const condensedType: Readonly<Record<TypeRole, TypeRole>> = {
   caption: 'caption',
   overline: 'overline',
   logo: 'display',
-  terminal: 'caption',
+  carolineLabel: 'carolineLabel',
   hint: 'body',
   alarm: 'display',
   fanfare: 'display',
@@ -206,6 +238,32 @@ export const motion = {
   nowPlayingDisplay: 5000,
   /** How long a sound caption stays up after the sound it reports, fade included. */
   captionDisplay: 2500,
+  /** A Caroline frame opening: the line drawn across, then the box unfolding from it. Closing runs both backwards. */
+  carolineLineDraw: 120,
+  carolineUnfold: 160,
+  /** One character of Caroline's text appearing: a machine pace, quicker than speech. */
+  carolineCharacter: 22,
+  /** How long a decoding character shows one random glyph before the next. */
+  carolineScrambleStep: 34,
+  carolineCursorBlink: 530,
+  /** One breath of the status dot in her header strip. */
+  carolineDotPulse: 1600,
+  /** Her scanlines drift down by one step over this long: slow enough to sense rather than watch. */
+  carolineScanlineDrift: 2400,
+} as const;
+
+/** The shape of a Caroline frame, in UI units. */
+export const carolineFrame = {
+  chamfer: 7,
+  hairlineWidth: 1,
+  bracketWidth: 2,
+  bracketLength: 11,
+  gridStep: 8,
+  scanlineStep: 3,
+  dotSize: 5,
+  ruleWidth: 1,
+  /** Characters still scrambling behind the newest locked one: each cycles about this many glyph steps before it locks. */
+  decodeTail: 3,
 } as const;
 
 /** A surface opening scales up from this fraction of its size. */

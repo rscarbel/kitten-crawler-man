@@ -67,6 +67,7 @@ import {
 } from '../src/core/party/MercenaryRoster';
 import { getMercenaryTemplate } from '../src/core/party/mercenaryTemplates';
 import { loadGameSpritesInNode } from './nodeCanvasGlobals';
+import { PetNameBook } from '../src/core/party/petNames';
 
 const WORLD_SEED = 424242;
 /** Far enough from the stairs that standing there is plainly not on them. */
@@ -350,7 +351,8 @@ section('Reaching the stairs after containment ends the run, saved first');
         stats,
         humanLevel: HUMAN_LEVEL,
         catLevel: CAT_LEVEL,
-        mongoLevel: null,
+        deinonychusLevel: null,
+        petNames: new PetNameBook(),
         achievements: { unlocked: 1, total: 1 },
       });
     },

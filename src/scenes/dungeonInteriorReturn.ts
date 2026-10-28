@@ -6,7 +6,7 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { Mob } from '../creatures/Mob';
 import type { FairyRoomLedger } from '../levels/fairySpawner';
 import type { TilePoint } from '../map/town/townPlan';
-import type { MordecaiDebriefCheckpoint } from '../systems/mordecaiDebrief';
+import type { DaveDebriefCheckpoint } from '../systems/daveDebrief';
 
 /**
  * A dungeon floor held aside while the party is inside one of its buildings,
@@ -55,6 +55,6 @@ export interface DungeonInteriorReturn {
   readonly roomsClearAtFloorStart: ReadonlySet<number>;
   /** Stairwell rooms that already took their one save. */
   readonly stairwellRoomsSaved: ReadonlySet<number>;
-  /** What Mordecai has already said after each boss. */
-  readonly mordecaiDebrief: MordecaiDebriefCheckpoint;
+  /** What Dave has already said after each boss. */
+  readonly daveDebrief: DaveDebriefCheckpoint;
 }

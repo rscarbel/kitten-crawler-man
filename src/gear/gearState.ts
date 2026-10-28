@@ -1,7 +1,7 @@
 import { isItemId, type ItemId } from '../core/items/defs/ItemDefs';
 import { isNonNegativeFinite, isRecord, parseEvery } from '../core/util/guards';
 import type { ClawWeaponStats } from '../core/items/equipment/weapons';
-import type { StatName } from '../Player';
+import type { StatId } from '../core/party/stats';
 import { GearLiveState } from './gearLive';
 import type { GearModifiers, GearTrait } from './traits';
 
@@ -50,7 +50,7 @@ export interface WornGearCache {
   readonly traits: readonly ActiveTrait[];
   readonly modifiers: GearModifiers;
   /** What switched-on set bonuses add to each stat. */
-  readonly setStatBonus: Readonly<Record<StatName, number>>;
+  readonly setStatBonus: Readonly<Record<StatId, number>>;
   readonly claws: ClawWeaponStats | null;
 }
 

@@ -1,5 +1,5 @@
 /**
- * The two crawlers standing on the floor line at hero scale, and Mongo tearing
+ * The two crawlers standing on the floor line at hero scale, and Deinonychus tearing
  * across the back of the hall now and then. The heroes stand in the dark until
  * the spotlight (`stage.lights.spotlight`) finds them.
  *
@@ -24,14 +24,14 @@ import {
 } from '../../../sprites/art/humanFigure';
 import { PLAYER_HUMAN_SIZE_OVER_RIG } from '../../../sprites/art/human/figureScale';
 import { GROUND_Y as CAT_GROUND_BELOW_CENTRE } from '../../../sprites/art/catArt';
-import { GROUND_Y as MONGO_GROUND_BELOW_CENTRE } from '../../../sprites/art/mongoArt';
+import { GROUND_Y as DEINONYCHUS_GROUND_BELOW_CENTRE } from '../../../sprites/art/deinonychusArt';
 import { activeCatFigure, type CatState } from '../../../sprites/catSprite';
 import { figureFrameCount } from '../../../sprites/figure/figureDef';
 import {
-  drawMongoSprite,
-  MONGO_MAX_WALK_RADIANS_PER_TICK,
-  mongoWalkRadiansPerPixel,
-} from '../../../sprites/mongoSprite';
+  drawDeinonychusSprite,
+  DEINONYCHUS_MAX_WALK_RADIANS_PER_TICK,
+  deinonychusWalkRadiansPerPixel,
+} from '../../../sprites/deinonychusSprite';
 import { TITLE_INK } from '../../../ui/theme/titleInk';
 import type { Rect } from '../../../ui/core/geom';
 import { TITLE_STEP_MS, type TitleClock } from '../titleClock';
@@ -50,13 +50,13 @@ import {
   CAT_BREAK_ROWS,
   CAT_IDLE_ROW,
   prewarmTitleCast,
-  TITLE_MONGO_STAGE,
+  TITLE_DEINONYCHUS_STAGE,
 } from '../titleCast';
 
 /** The heroes' plane: near, but behind the logo and the spotlight. */
 const HEROES_DEPTH = 0.8;
-/** Mongo runs across the hall's own floor, so he rides the hall's plane. */
-const MONGO_DEPTH = HALL_DEPTH;
+/** Deinonychus runs across the hall's own floor, so he rides the hall's plane. */
+const DEINONYCHUS_DEPTH = HALL_DEPTH;
 
 /**
  * How much larger than the stage's own scale the heroes stand, and the tile
@@ -80,7 +80,7 @@ const CAT_FOOT_OFFSET_TILES = { x: -0.5, y: 0.1 } as const;
 /** Figures are centred across their tile; their feet sit at a depth into it each figure declares. */
 const HALF = 0.5;
 const CAT_GROUND_IN_TILE = HALF + CAT_GROUND_BELOW_CENTRE;
-const MONGO_GROUND_IN_TILE = HALF + MONGO_GROUND_BELOW_CENTRE;
+const DEINONYCHUS_GROUND_IN_TILE = HALF + DEINONYCHUS_GROUND_BELOW_CENTRE;
 
 /** The box a hero's shading is painted in, in hero tiles around the feet. */
 const HERO_SHADE_BOX_TILES = { left: -1.6, top: -2.3, width: 3.2, height: 2.7 } as const;
@@ -131,14 +131,14 @@ const CAT_BREAK_TICKS: Readonly<Record<CatBreakRow, number>> = {
 };
 
 /** How far down the hall behind the heroes he crosses it, wall to wall. */
-const MONGO_BEHIND_HEROES_TILES = 6;
+const DEINONYCHUS_BEHIND_HEROES_TILES = 6;
 /** How far behind each side wall he starts and ends, in his own tiles: he bolts out of one side passage and into the other. */
-const MONGO_OFFSTAGE_TILES = 2.5;
+const DEINONYCHUS_OFFSTAGE_TILES = 2.5;
 /** He runs in the dark behind the light, so he stays mostly shadow. */
-const MONGO_SHADE = 0.42;
-const MONGO_SHADE_BOX_TILES = { left: -1.6, top: -2, width: 3.2, height: 2.6 } as const;
+const DEINONYCHUS_SHADE = 0.42;
+const DEINONYCHUS_SHADE_BOX_TILES = { left: -1.6, top: -2, width: 3.2, height: 2.6 } as const;
 /** A variant below this sends him right to left. */
-const MONGO_LEFTWARD_BELOW = 0.5;
+const DEINONYCHUS_LEFTWARD_BELOW = 0.5;
 
 interface Gesture<Row extends string> {
   readonly row: Row;
@@ -351,8 +351,8 @@ export function heroesLayer(): TitleLayer {
     const figure = activeCatFigure();
     return heroCells.isReady(figure, row, densityOf(figure));
   });
-  const mongoShade = new TitleShadeBuffer();
-  let mongoDash: TitleEventFire | null = null;
+  const deinonychusShade = new TitleShadeBuffer();
+  let deinonychusDash: TitleEventFire | null = null;
   let lastWarmedHumanStart = -1;
   let lastWarmedCatStart = -1;
 
@@ -383,24 +383,24 @@ export function heroesLayer(): TitleLayer {
     }
   };
 
-  const renderMongo = (
+  const renderDeinonychus = (
     ctx: CanvasRenderingContext2D,
     clock: TitleClock,
     stage: TitleStage,
     camera: TitleCamera,
   ): void => {
-    const dash = mongoDash;
+    const dash = deinonychusDash;
     if (dash === null) return;
     const sinceMs = clock.elapsedMs - dash.startedAtMs;
     if (sinceMs < 0 || sinceMs >= dash.durationMs) return;
     const hall = titleHall(stage);
-    const scale = scaleAtDistance(hall, hall.heroDistanceTiles + MONGO_BEHIND_HEROES_TILES);
+    const scale = scaleAtDistance(hall, hall.heroDistanceTiles + DEINONYCHUS_BEHIND_HEROES_TILES);
     const tile = hall.farPxPerTile * scale;
     const leftWall = sideWallColumn(hall, scale, -1);
     const rightWall = sideWallColumn(hall, scale, 1);
-    const leftward = dash.variant < MONGO_LEFTWARD_BELOW;
-    const startX = leftWall - MONGO_OFFSTAGE_TILES * tile;
-    const endX = rightWall + MONGO_OFFSTAGE_TILES * tile;
+    const leftward = dash.variant < DEINONYCHUS_LEFTWARD_BELOW;
+    const startX = leftWall - DEINONYCHUS_OFFSTAGE_TILES * tile;
+    const endX = rightWall + DEINONYCHUS_OFFSTAGE_TILES * tile;
     const travelled = (endX - startX) * (sinceMs / dash.durationMs);
     const footX = leftward ? endX - travelled : startX + travelled;
     const footY = rowAtHeight(hall, scale, 0);
@@ -408,26 +408,33 @@ export function heroesLayer(): TitleLayer {
     // the stride; past it they hold the fastest stride the art can show.
     const naturalPerTick =
       (travelled / Math.max(1, ticksOf(sinceMs))) *
-      mongoWalkRadiansPerPixel(TITLE_MONGO_STAGE, tile);
-    const walkFrame = ticksOf(sinceMs) * Math.min(naturalPerTick, MONGO_MAX_WALK_RADIANS_PER_TICK);
+      deinonychusWalkRadiansPerPixel(TITLE_DEINONYCHUS_STAGE, tile);
+    const walkFrame =
+      ticksOf(sinceMs) * Math.min(naturalPerTick, DEINONYCHUS_MAX_WALK_RADIANS_PER_TICK);
     ctx.save();
-    applyTitleCamera(ctx, camera, MONGO_DEPTH);
+    applyTitleCamera(ctx, camera, DEINONYCHUS_DEPTH);
     ctx.beginPath();
     ctx.rect(leftWall, 0, rightWall - leftWall, stage.height);
     ctx.clip();
-    mongoShade.draw(
+    deinonychusShade.draw(
       ctx,
-      boxAround(footX, footY, tile, MONGO_SHADE_BOX_TILES),
-      MONGO_SHADE,
+      boxAround(footX, footY, tile, DEINONYCHUS_SHADE_BOX_TILES),
+      DEINONYCHUS_SHADE,
       TITLE_INK.cast.shadow,
       (target) =>
-        drawMongoSprite(target, footX - tile * HALF, footY - tile * MONGO_GROUND_IN_TILE, tile, {
-          stage: TITLE_MONGO_STAGE,
-          isMoving: true,
-          walkFrame,
-          facingX: leftward ? -1 : 1,
-          facingY: 0,
-        }),
+        drawDeinonychusSprite(
+          target,
+          footX - tile * HALF,
+          footY - tile * DEINONYCHUS_GROUND_IN_TILE,
+          tile,
+          {
+            stage: TITLE_DEINONYCHUS_STAGE,
+            isMoving: true,
+            walkFrame,
+            facingX: leftward ? -1 : 1,
+            facingY: 0,
+          },
+        ),
     );
     ctx.restore();
   };
@@ -441,10 +448,10 @@ export function heroesLayer(): TitleLayer {
     },
     update: (clock) => warmUpcomingGestures(clock.elapsedMs),
     onEvent: (fire) => {
-      if (fire.id === 'mongoDash') mongoDash = fire;
+      if (fire.id === 'deinonychusDash') deinonychusDash = fire;
     },
     render: (ctx, clock, stage, camera) => {
-      renderMongo(ctx, clock, stage, camera);
+      renderDeinonychus(ctx, clock, stage, camera);
 
       const tile = heroTile(stage);
       const humanTile = humanHeroTile(stage);
@@ -507,7 +514,7 @@ export function heroesLayer(): TitleLayer {
     dispose: () => {
       heroCells.dispose();
       heroShade.dispose();
-      mongoShade.dispose();
+      deinonychusShade.dispose();
     },
   };
 }

@@ -1,6 +1,6 @@
 {
-  "smush_icon": {
-    "path": "effects/smush_icon.png",
+  "seismic_stomp_icon": {
+    "path": "effects/seismic_stomp_icon.png",
     "frameWidth": 64,
     "frameHeight": 64,
     "tileX": 0,

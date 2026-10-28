@@ -51,6 +51,7 @@ import {
 } from '../sprites/cowTiming';
 import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
+import type { PetKind } from '../core/party/petNames';
 
 const UPDATES_PER_SECOND = 60;
 const TWO_PI = Math.PI * 2;
@@ -172,6 +173,7 @@ export type AttackCowPhase =
   'follow' | 'fight' | 'downed' | 'reviving' | 'limping' | 'lying_down' | 'resting';
 
 export class AttackCow extends Cow {
+  override readonly petKind = 'attackCow' as const satisfies PetKind;
   /** Who she follows and guards: the human crawler. */
   owner: Player;
   /** The scene's mob list, set by the system each frame, which she picks fights from. */
@@ -281,7 +283,7 @@ export class AttackCow extends Cow {
     return false;
   }
 
-  /** The party's own blast can catch her, as it can Mongo; nothing aimed ever does. */
+  /** The party's own blast can catch her, as it can Deinonychus; nothing aimed ever does. */
   protected override admitsPlayerDamage(damageType: PlayerDamageType | null): boolean {
     return damageType === 'explosion';
   }

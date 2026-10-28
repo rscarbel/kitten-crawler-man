@@ -185,7 +185,7 @@ export interface PlannedBuilding {
   readonly id: PlannedBuildingId;
   readonly kind: BuildingKind;
   /**
-   * Whether this building's interior hosts the town's safe room — Mordecai, the
+   * Whether this building's interior hosts the town's safe room — Dave, the
    * Bopca's counter and the lantern light. Stated here rather than derived from
    * `kind`, because a safe room is a property of one specific building and not
    * of a category: a building's kind says nothing about whether it hosts one.

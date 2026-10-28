@@ -262,8 +262,8 @@ const PAGES: readonly PagedOverlayPage[] = [
   },
   {
     overline: 'Basics · 3 of 3',
-    title: 'The show is watching',
-    body: 'Viewers love a close call. Survive with less than a fifth of your health and the sponsors start sending boxes.',
+    title: 'Caroline is watching',
+    body: 'Survive a close call with less than a fifth of your health and a reward chest may follow.',
   },
 ];
 

@@ -3,7 +3,8 @@ import { TILE_SIZE } from '../core/constants';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
 import { ITEM_DEF, QUEST_SLOT_IDX } from '../core/items/defs/ItemDefs';
-import { ALL_STATS, type Player } from '../Player';
+import { type Player } from '../Player';
+import { ALL_STATS } from '../core/party/stats';
 import { AbilityManager, isAbilityId, type AbilityId } from '../core/skills/AbilityManager';
 import { isSkillId, type SkillId, type SkillState } from '../core/skills/SkillManager';
 import { snapPlayer, type PlayerSnapshot } from '../core/save/PlayerSnapshot';
@@ -19,7 +20,7 @@ import type { PlaytestLoadout, PlaytestPreset, PlaytestSpawn } from './playtestP
  *
  * Loadouts are built by mutating throwaway crawlers rather than by hand-writing
  * snapshot JSON, so a preset inherits every derivation the real game does —
- * equipment stat bonuses, max HP from constitution, species stat floors.
+ * equipment stat bonuses, max HP from health, species stat floors.
  */
 export interface PlaytestBoot {
   levelDef: LevelDef;
@@ -36,11 +37,11 @@ export interface PlaytestBoot {
 const SCRATCH_TILE = 0;
 
 /**
- * Mongo's pet-ability level a level-3 preset starts at when it doesn't name
+ * Deinonychus's pet-ability level a level-3 preset starts at when it doesn't name
  * one of its own: high enough that a floor-3 playtest sees his grown stats
  * and sheet rather than the early-game pet, without hand-editing every preset.
  */
-const LEVEL3_DEFAULT_MONGO_LEVEL = 10;
+const LEVEL3_DEFAULT_DEINONYCHUS_LEVEL = 10;
 
 function skillStatesFor(levels: Partial<Record<SkillId, number>>): SkillState[] {
   const states: SkillState[] = [];
@@ -101,8 +102,6 @@ function applyLoadout(player: Player, loadout: PlaytestLoadout): void {
 function humanSnapshotFor(preset: PlaytestPreset): PlayerSnapshot {
   const human = new HumanPlayer(SCRATCH_TILE, SCRATCH_TILE, TILE_SIZE);
   applyLoadout(human, preset.human);
-  const { explosivesHandling } = preset.human;
-  if (explosivesHandling !== undefined) human.explosivesHandling = explosivesHandling;
   // Both crawlers snapshot their own `isActive`, so leaving these at the
   // constructor's default would restore a party with nobody driving.
   human.isActive = true;
@@ -128,8 +127,8 @@ function abilityManagerFor(levels: Partial<Record<AbilityId, number>>): AbilityM
 
 export function buildPlaytestBoot(preset: PlaytestPreset): PlaytestBoot {
   const abilityManager = abilityManagerFor(preset.abilityLevels);
-  if (preset.levelId === 'level3' && preset.abilityLevels.mongo === undefined) {
-    abilityManager.setLevel('mongo', LEVEL3_DEFAULT_MONGO_LEVEL);
+  if (preset.levelId === 'level3' && preset.abilityLevels.deinonychus === undefined) {
+    abilityManager.setLevel('deinonychus', LEVEL3_DEFAULT_DEINONYCHUS_LEVEL);
   }
   return {
     levelDef: getLevelDef(preset.levelId),

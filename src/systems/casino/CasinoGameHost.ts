@@ -12,7 +12,7 @@ export interface CasinoGameHost {
   readonly anySurfaceOpen: boolean;
   /** Runs once per club tick, open or not, for anything with its own clock. */
   update(): void;
-  /** Every surface the game shows, in stacking order; mounted once with the club's. */
+  /** Every surface the game displays, in stacking order; mounted once with the club's. */
   surfaces(seat: CasinoSeat): Surface[];
   /** The scene is being torn down under the game: settle anything owed and shut at once. */
   forceClose?(): void;

@@ -1,7 +1,7 @@
 /**
  * Headless gate for the two foods and the ground pickups they lie about as.
  *
- * - Hamburger: heals exactly its fraction; +STR while fed and back to base on
+ * - Hamburger: heals exactly its fraction; +MEL while fed and back to base on
  *   expiry; a second burger refreshes the timer without stacking; refused only
  *   at full HP while already fed.
  * - Hollow Stew: heals exactly what a potion heals; shares the potion's
@@ -26,12 +26,13 @@
 
 import { TILE_SIZE } from '../src/core/constants';
 import { AbilityManager } from '../src/core/skills/AbilityManager';
+import { PetNameBook } from '../src/core/party/petNames';
 import { EventBus } from '../src/core/EventBus';
 import { BAG_PAGE_SLOTS, ITEM_DEF, type ItemId } from '../src/core/items/defs/ItemDefs';
 import { PlayerManager } from '../src/core/party/PlayerManager';
 import {
   HAMBURGER_HEAL_FRACTION,
-  HAMBURGER_STR_BONUS,
+  HAMBURGER_MELEE_BONUS,
 } from '../src/core/items/consumables/foodEffects';
 import { HAMBURGER_FED_STATUS, HAMBURGER_FED_TICKS } from '../src/core/combat/StatusEffect';
 import { Mob } from '../src/creatures/Mob';
@@ -130,7 +131,11 @@ function makeStage(): Stage {
   const pm = new PlayerManager(ROOM_CENTRE_TILE, ROOM_CENTRE_TILE, undefined);
   const roster = new MobRoster(map, new SpellSystem());
   const world: SceneWorld = { gameMap: map, bus, audio: null, audioScope: null, pm, roster };
-  const menus = new MenusKit({ world, abilityManager: new AbilityManager() });
+  const menus = new MenusKit({
+    world,
+    abilityManager: new AbilityManager(),
+    petNames: new PetNameBook(),
+  });
   return { map, bus, pm, world, menus };
 }
 
@@ -176,7 +181,7 @@ console.log('Hamburger');
   const { pm, menus } = makeStage();
   const human = pm.human;
   human.inventory.addItem('hamburger', STARTING_BURGERS);
-  const baseStrength = human.strength;
+  const baseMelee = human.melee;
 
   hurt(human);
   const hpBefore = human.hp;
@@ -188,8 +193,8 @@ console.log('Hamburger');
   );
   check(human.inventory.countOf('hamburger') === STARTING_BURGERS - 1, 'and one burger is spent');
   check(
-    human.strength === baseStrength + HAMBURGER_STR_BONUS,
-    `STR is +${HAMBURGER_STR_BONUS} while fed (${human.strength} vs base ${baseStrength})`,
+    human.melee === baseMelee + HAMBURGER_MELEE_BONUS,
+    `MEL is +${HAMBURGER_MELEE_BONUS} while fed (${human.melee} vs base ${baseMelee})`,
   );
 
   tick(human, REFRESH_AFTER_TICKS);
@@ -200,15 +205,15 @@ console.log('Hamburger');
     `and refreshes the timer to the full ${HAMBURGER_FED_TICKS} ticks (${fedTicksLeft(human)})`,
   );
   check(
-    human.strength === baseStrength + HAMBURGER_STR_BONUS,
-    `and STR stays at +${HAMBURGER_STR_BONUS}, never stacking (${human.strength - baseStrength})`,
+    human.melee === baseMelee + HAMBURGER_MELEE_BONUS,
+    `and MEL stays at +${HAMBURGER_MELEE_BONUS}, never stacking (${human.melee - baseMelee})`,
   );
 
   tick(human, HAMBURGER_FED_TICKS - 1);
   check(fedTicksLeft(human) !== null, 'still fed one tick before the boon ends');
   tick(human, 2);
   check(fedTicksLeft(human) === null, 'the boon expires');
-  check(human.strength === baseStrength, `and STR is back to base (${human.strength})`);
+  check(human.melee === baseMelee, `and MEL is back to base (${human.melee})`);
 
   human.hp = human.maxHp;
   check(menus.eatFood(human, 'hamburger', null), 'at full HP but not fed, a burger is still eaten');

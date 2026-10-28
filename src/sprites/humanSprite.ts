@@ -67,7 +67,7 @@ type HumanAttackPhase = HumanRowName | null;
 /**
  * Where the stamping heel of the cell being drawn lands, in tile fractions
  * from the sprite's own tile origin, mirrored with the cell — or null when the
- * cell is not a stamp. Each Smush row declares its own: the heel lands in a
+ * cell is not a stamp. Each Seismic Stomp row declares its own: the heel lands in a
  * different place standing and on the hop, and in each view.
  */
 export function stampPointOf(selection: HumanRowSelection): Pt | null {
@@ -476,7 +476,7 @@ function selectHumanRow(state: HumanSpriteState, idleSeconds: number): HumanRowS
  * Draws one chosen cell of the human crawler. Only the profile rows are ever mirrored, so
  * his jacket never swaps sides.
  *
- * The blast Smush throws off is not part of this figure — `SmushEffectSystem`
+ * The blast Seismic Stomp throws off is not part of this figure — `SeismicStompEffectSystem`
  * draws it, because its size follows the ability's level.
  */
 export function drawHumanSelection(

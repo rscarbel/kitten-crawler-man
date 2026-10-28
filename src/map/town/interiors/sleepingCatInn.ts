@@ -7,7 +7,7 @@
  * painted sign beside it; Ossie's bar in the north-east corner, back bar and
  * counter with the barkeep's lane between; and the supper tables laid down
  * the south half. The Bopca's counter run lands between the hearth and the
- * bar on its own, and Mordecai and the sleeping bed stand where the safe room
+ * bar on its own, and Dave and the sleeping bed stand where the safe room
  * puts them — the layout leaves those tiles, and a way round each, open.
  *
  * The three guest rooms differ at a glance, because that difference is what a
@@ -110,7 +110,7 @@ export function buildSleepingCatInnContractAreas(_w: number, _h: number): Contra
   const { logBasketCol, catStoolRow } = innHearthSide();
   return {
     // The hearth's west flank, under the log basket: the rag rug owns the
-    // floor straight in front of the fire, and Mordecai's rug the floor
+    // floor straight in front of the fire, and Dave's rug the floor
     // south of that.
     hearth_apron: {
       kind: 'floor',
@@ -190,11 +190,11 @@ export function buildSleepingCatInnLayout(
    */
   const firesideChairRow = hearthRugRow + 1;
   /**
-   * Mordecai's corner of the hearth side: the safe room seats him a quarter
+   * Dave's corner of the hearth side: the safe room seats him a quarter
    * of the room west of its centre, which lands on this rug's east end.
    */
-  const mordecaiRugCol = catSignCol;
-  const mordecaiRugRow = firesideChairRow + 1;
+  const daveRugCol = catSignCol;
+  const daveRugRow = firesideChairRow + 1;
   /*
    * Ossie's bar. The counter faces south, so the row behind it is the
    * barkeep's lane and the row behind that the back bar against the
@@ -326,7 +326,7 @@ export function buildSleepingCatInnLayout(
     ),
     prop(hearthCol, hearthRugRow, 'rag_rug_small'),
     statefulProp(logBasketCol, firesideChairRow, 'fireside_chair', 'fireside_chair_2'),
-    prop(mordecaiRugCol, mordecaiRugRow, 'rag_rug_small', 1),
+    prop(daveRugCol, daveRugRow, 'rag_rug_small', 1),
   );
 
   // Ossie's bar.

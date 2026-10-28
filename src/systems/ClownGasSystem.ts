@@ -127,7 +127,7 @@ export class ClownGasSystem implements GameSystem, GroundHazardSource {
    * that could stand in a cloud forever is the kind of asymmetry a player
    * notices immediately.
    *
-   * Weak because the key set is not stable. `MongoSystem` and
+   * Weak because the key set is not stable. `DeinonychusSystem` and
    * `MercenarySystem` splice their charges out of `extraTargets` on recall or
    * death, and a pet recalled while standing in gas is never visited again — a
    * strong map would pin that whole `Player` for the life of the scene, once per
@@ -240,7 +240,7 @@ export class ClownGasSystem implements GameSystem, GroundHazardSource {
 
   /**
    * Everything a bottle can hit: the two players plus the scene's extra
-   * player-like targets (Mongo, hired mercenaries).
+   * player-like targets (Deinonychus, hired mercenaries).
    */
   private targetsFor(ctx: SystemContext): readonly Player[] {
     const targets: Player[] = [ctx.human, ctx.cat];

@@ -6,7 +6,7 @@
 import { rarityTooltipLines } from '../dialogs/canvasChrome';
 import { subSlotLabel, type InventoryItem } from '../../../core/items/defs/ItemDefs';
 import type { CrawlerKind } from '../../../core/skills/SkillManager';
-import { ALL_STATS } from '../../../Player';
+import { ALL_STATS, STAT_DEFS } from '../../../core/party/stats';
 import { intersect, splitH, type Rect } from '../../core/geom';
 import type { DragHandlers, HitHandlers, HitState, Ui } from '../../core/UiRoot';
 import { badge, badgeSize } from '../../widgets/badge';
@@ -18,7 +18,6 @@ import {
   DOLL_MAX_SECTION_CELLS,
   DOLL_SECTION_LABELS,
   dollSectionsFor,
-  STAT_LABELS,
   wornGearSummary,
   type DollSlot,
 } from './gearRules';
@@ -73,8 +72,8 @@ export function dollColumnWidth(ui: Ui, cellSide: number): number {
 function statLines(owner: InventoryOwner): { label: string; value: string; bonus: number }[] {
   const bonuses = owner.inventory.getEquippedStatBonus();
   return ALL_STATS.map((stat) => ({
-    label: STAT_LABELS[stat],
-    value: String(owner[stat]),
+    label: STAT_DEFS[stat].label,
+    value: String(owner.statValue(stat)),
     bonus: bonuses[stat],
   }));
 }

@@ -1,6 +1,6 @@
 import type { LevelId } from '../levels/levelIds';
 import type { ItemId } from '../core/items/defs/ItemDefs';
-import type { StatName } from '../Player';
+import type { StatId } from '../core/party/stats';
 import type { SkillId } from '../core/skills/SkillManager';
 import type { AbilityId } from '../core/skills/AbilityManager';
 import type { MobKind } from '../levels/mobKinds';
@@ -70,9 +70,7 @@ export interface PlaytestLoadout {
   readonly xpProgress: number;
   readonly coins: number;
   /** Stat values before equipment. Omitted stats keep the species default. */
-  readonly baseStats: Partial<Record<StatName, number>>;
-  /** Human only; the cat has no explosives training. */
-  readonly explosivesHandling?: number;
+  readonly baseStats: Partial<Record<StatId, number>>;
   readonly skillLevels: Partial<Record<SkillId, number>>;
   /** This crawler's own Resourcing level, taught and set. Omitted leaves it unlearned. */
   readonly resourcingLevel?: number;
@@ -137,8 +135,8 @@ export interface PlaytestPreset {
   readonly spiderQuestAwaitingHacking?: boolean;
   /** A Barracks hire already under contract for this floor, standing beside the party. */
   readonly hire?: MercenaryTemplateId;
-  /** Mongo already out beside the cat on the first frame, rather than waiting on a summon. */
-  readonly mongoOut?: boolean;
+  /** Deinonychus already out beside the cat on the first frame, rather than waiting on a summon. */
+  readonly deinonychusOut?: boolean;
   /** The party put down on the circus grounds instead of at `spawn`. */
   readonly spawnAtCircus?: boolean;
   /**
@@ -175,16 +173,15 @@ const TRASH_GREMLIN: PlaytestPreset = {
   description: 'Safe room just before the Trash Gremlin',
   levelId: 'level1',
   spawn: { kind: 'safeRoomBefore', bossType: 'trash_gremlin' },
-  abilityLevels: { smush: 3, magic_missile: 3, protective_shell: 3 },
+  abilityLevels: { seismic_stomp: 3, magic_missile: 3, energy_shield: 3 },
   human: {
     level: 4,
     xpProgress: 0.5,
     coins: 270,
-    baseStats: { strength: 4, constitution: 3, dexterity: 2 },
-    explosivesHandling: 1,
+    baseStats: { melee: 4, health: 6, evasiveness: 8, explosivesHandling: 1 },
     skillLevels: {},
     hotbar: [
-      { id: 'smush_tome', quantity: 1 },
+      { id: 'seismic_stomp_tome', quantity: 1 },
       { id: 'health_potion', quantity: 13 },
       { id: 'goblin_dynamite', quantity: 2 },
       { id: 'lucky_hoodie', quantity: 1, equipped: true },
@@ -195,7 +192,7 @@ const TRASH_GREMLIN: PlaytestPreset = {
     level: 4,
     xpProgress: 0.5,
     coins: 270,
-    baseStats: { strength: 1, intelligence: 4, constitution: 2, dexterity: 11 },
+    baseStats: { melee: 1, magic: 4, health: 2, evasiveness: 26 },
     skillLevels: {},
     hotbar: [
       { id: 'magic_missile_tome', quantity: 1 },
@@ -211,16 +208,15 @@ const BIG_ROOSTER: PlaytestPreset = {
   description: 'Safe room just before Big Rooster',
   levelId: 'level1',
   spawn: { kind: 'safeRoomBefore', bossType: 'big_rooster' },
-  abilityLevels: { smush: 4, magic_missile: 4, protective_shell: 3 },
+  abilityLevels: { seismic_stomp: 4, magic_missile: 4, energy_shield: 3 },
   human: {
     level: 11,
     xpProgress: 0.5,
     coins: 630,
-    baseStats: { strength: 7, constitution: 10, dexterity: 2 },
-    explosivesHandling: 1,
+    baseStats: { melee: 7, health: 20, evasiveness: 8, explosivesHandling: 1 },
     skillLevels: {},
     hotbar: [
-      { id: 'smush_tome', quantity: 1 },
+      { id: 'seismic_stomp_tome', quantity: 1 },
       { id: 'health_potion', quantity: 17 },
       { id: 'goblin_dynamite', quantity: 6 },
       { id: 'lucky_hoodie', quantity: 1, equipped: true },
@@ -234,8 +230,8 @@ const BIG_ROOSTER: PlaytestPreset = {
     level: 7,
     xpProgress: 0.5,
     coins: 630,
-    baseStats: { strength: 2, intelligence: 6, constitution: 2, dexterity: 14 },
-    skillLevels: { cockroach: 1 },
+    baseStats: { melee: 2, magic: 6, health: 2, evasiveness: 34 },
+    skillLevels: { nine_lives: 1 },
     hotbar: [
       { id: 'magic_missile_tome', quantity: 1 },
       { id: 'health_potion', quantity: 16 },
@@ -250,16 +246,15 @@ const LEVEL2: PlaytestPreset = {
   description: 'Start of the second floor',
   levelId: 'level2',
   spawn: { kind: 'mapStart' },
-  abilityLevels: { smush: 5, magic_missile: 6, protective_shell: 3 },
+  abilityLevels: { seismic_stomp: 5, magic_missile: 6, energy_shield: 3 },
   human: {
     level: 12,
     xpProgress: 0.5,
     coins: 1173,
-    baseStats: { strength: 8, constitution: 10, dexterity: 2 },
-    explosivesHandling: 1,
+    baseStats: { melee: 8, health: 20, evasiveness: 8, explosivesHandling: 1 },
     skillLevels: { pugilism: 2 },
     hotbar: [
-      { id: 'smush_tome', quantity: 1 },
+      { id: 'seismic_stomp_tome', quantity: 1 },
       { id: 'health_potion', quantity: 22 },
       { id: 'goblin_dynamite', quantity: 10 },
       { id: 'lucky_hoodie', quantity: 1, equipped: true },
@@ -281,8 +276,8 @@ const LEVEL2: PlaytestPreset = {
     level: 13,
     xpProgress: 0.5,
     coins: 1173,
-    baseStats: { strength: 2, intelligence: 17, constitution: 2, dexterity: 20 },
-    skillLevels: { cockroach: 1 },
+    baseStats: { melee: 2, magic: 17, health: 2, evasiveness: 49 },
+    skillLevels: { nine_lives: 1 },
     hotbar: [
       { id: 'magic_missile_tome', quantity: 1 },
       { id: 'health_potion', quantity: 28 },
@@ -304,16 +299,15 @@ const KRAKAREN: PlaytestPreset = {
   description: 'Safe room just before the Krakaren Clone',
   levelId: 'level2',
   spawn: { kind: 'safeRoomBefore', bossType: 'krakaren_clone' },
-  abilityLevels: { smush: 6, magic_missile: 6, protective_shell: 3 },
+  abilityLevels: { seismic_stomp: 6, magic_missile: 6, energy_shield: 3 },
   human: {
     level: 17,
     xpProgress: 0.5,
     coins: 1488,
-    baseStats: { strength: 12, constitution: 11, dexterity: 2 },
-    explosivesHandling: 1,
+    baseStats: { melee: 12, health: 22, evasiveness: 8, explosivesHandling: 1 },
     skillLevels: { pugilism: 2 },
     hotbar: [
-      { id: 'smush_tome', quantity: 1 },
+      { id: 'seismic_stomp_tome', quantity: 1 },
       { id: 'health_potion', quantity: 31 },
       { id: 'goblin_dynamite', quantity: 24 },
       { id: 'lucky_hoodie', quantity: 1, equipped: true },
@@ -335,8 +329,8 @@ const KRAKAREN: PlaytestPreset = {
     level: 15,
     xpProgress: 0.5,
     coins: 1488,
-    baseStats: { strength: 2, intelligence: 19, constitution: 2, dexterity: 22 },
-    skillLevels: { cockroach: 1 },
+    baseStats: { melee: 2, magic: 19, health: 2, evasiveness: 55 },
+    skillLevels: { nine_lives: 1 },
     hotbar: [
       { id: 'magic_missile_tome', quantity: 1 },
       { id: 'health_potion', quantity: 28 },
@@ -359,16 +353,15 @@ const SPIDER: PlaytestPreset = {
   levelId: 'level2',
   spawn: { kind: 'spiderLabStation' },
   spiderQuestAwaitingHacking: true,
-  abilityLevels: { smush: 6, magic_missile: 6, protective_shell: 3 },
+  abilityLevels: { seismic_stomp: 6, magic_missile: 6, energy_shield: 3 },
   human: {
     level: 20,
     xpProgress: 0.5,
     coins: 1903,
-    baseStats: { strength: 12, constitution: 14, dexterity: 2 },
-    explosivesHandling: 1,
+    baseStats: { melee: 12, health: 28, evasiveness: 8, explosivesHandling: 1 },
     skillLevels: { pugilism: 4 },
     hotbar: [
-      { id: 'smush_tome', quantity: 1 },
+      { id: 'seismic_stomp_tome', quantity: 1 },
       { id: 'goblin_dynamite', quantity: 14 },
       { id: 'health_potion', quantity: 34 },
       { id: 'lucky_hoodie', quantity: 1, equipped: true },
@@ -390,8 +383,8 @@ const SPIDER: PlaytestPreset = {
     level: 20,
     xpProgress: 0.5,
     coins: 1903,
-    baseStats: { strength: 5, intelligence: 21, constitution: 2, dexterity: 22 },
-    skillLevels: { cockroach: 1, iron_stomach: 1 },
+    baseStats: { melee: 5, magic: 21, health: 2, evasiveness: 55 },
+    skillLevels: { nine_lives: 1, iron_stomach: 1 },
     hotbar: [
       { id: 'magic_missile_tome', quantity: 1 },
       { id: 'health_potion', quantity: 28 },
@@ -413,16 +406,15 @@ const LEVEL3: PlaytestPreset = {
   description: 'Third floor town',
   levelId: 'level3',
   spawn: { kind: 'mapStart' },
-  abilityLevels: { smush: 7, magic_missile: 6, protective_shell: 3 },
+  abilityLevels: { seismic_stomp: 7, magic_missile: 6, energy_shield: 3 },
   human: {
     level: 28,
     xpProgress: 0.5,
     coins: 2327,
-    baseStats: { strength: 12, constitution: 16, dexterity: 6 },
-    explosivesHandling: 3,
+    baseStats: { melee: 12, health: 32, evasiveness: 24, explosivesHandling: 3 },
     skillLevels: { pugilism: 5 },
     hotbar: [
-      { id: 'smush_tome', quantity: 1 },
+      { id: 'seismic_stomp_tome', quantity: 1 },
       { id: 'goblin_dynamite', quantity: 18 },
       { id: 'health_potion', quantity: 38 },
       { id: 'lucky_hoodie', quantity: 1, equipped: true },
@@ -444,8 +436,8 @@ const LEVEL3: PlaytestPreset = {
     level: 28,
     xpProgress: 0.5,
     coins: 2327,
-    baseStats: { strength: 5, intelligence: 28, constitution: 2, dexterity: 34 },
-    skillLevels: { cockroach: 1, iron_stomach: 1 },
+    baseStats: { melee: 5, magic: 28, health: 2, evasiveness: 86 },
+    skillLevels: { nine_lives: 1, iron_stomach: 1 },
     hotbar: [
       { id: 'magic_missile_tome', quantity: 1 },
       { id: 'health_potion', quantity: 34 },
@@ -476,16 +468,15 @@ const SWINE: PlaytestPreset = {
   description: 'Antechamber outside the Ball of Swine arena',
   levelId: 'level2',
   spawn: { kind: 'safeRoomBefore', bossType: 'ball_of_swine' },
-  abilityLevels: { smush: 7, magic_missile: 7, protective_shell: 4 },
+  abilityLevels: { seismic_stomp: 7, magic_missile: 7, energy_shield: 4 },
   human: {
     level: 18,
     xpProgress: 0.5,
     coins: 1620,
-    baseStats: { strength: 13, constitution: 12, dexterity: 3 },
-    explosivesHandling: 1,
+    baseStats: { melee: 13, health: 24, evasiveness: 11, explosivesHandling: 1 },
     skillLevels: { pugilism: 3 },
     hotbar: [
-      { id: 'smush_tome', quantity: 1 },
+      { id: 'seismic_stomp_tome', quantity: 1 },
       { id: 'rattlestick_sling', quantity: 1 },
       { id: 'health_potion', quantity: 30 },
       { id: 'lucky_hoodie', quantity: 1, equipped: true },
@@ -507,8 +498,8 @@ const SWINE: PlaytestPreset = {
     level: 19,
     xpProgress: 0.5,
     coins: 1620,
-    baseStats: { strength: 3, intelligence: 20, constitution: 2, dexterity: 24 },
-    skillLevels: { cockroach: 1 },
+    baseStats: { melee: 3, magic: 20, health: 2, evasiveness: 61 },
+    skillLevels: { nine_lives: 1 },
     hotbar: [
       { id: 'magic_missile_tome', quantity: 1 },
       { id: 'health_potion', quantity: 30 },
@@ -535,16 +526,15 @@ const GEAR: PlaytestPreset = {
   description: 'Third floor town, both crawlers kitted in the enchanted gear',
   levelId: 'level3',
   spawn: { kind: 'mapStart' },
-  abilityLevels: { smush: 7, magic_missile: 6, protective_shell: 3 },
+  abilityLevels: { seismic_stomp: 7, magic_missile: 6, energy_shield: 3 },
   human: {
     level: 28,
     xpProgress: 0.5,
     coins: 2327,
-    baseStats: { strength: 12, constitution: 16, dexterity: 6 },
-    explosivesHandling: 3,
+    baseStats: { melee: 12, health: 32, evasiveness: 24, explosivesHandling: 3 },
     skillLevels: { pugilism: 5 },
     hotbar: [
-      { id: 'smush_tome', quantity: 1 },
+      { id: 'seismic_stomp_tome', quantity: 1 },
       { id: 'health_potion', quantity: 38 },
       { id: 'goblin_dynamite', quantity: 18 },
       { id: 'lucky_hoodie', quantity: 1, equipped: true },
@@ -562,8 +552,8 @@ const GEAR: PlaytestPreset = {
     level: 28,
     xpProgress: 0.5,
     coins: 2327,
-    baseStats: { strength: 5, intelligence: 28, constitution: 2, dexterity: 34 },
-    skillLevels: { cockroach: 1, iron_stomach: 1 },
+    baseStats: { melee: 5, magic: 28, health: 2, evasiveness: 86 },
+    skillLevels: { nine_lives: 1, iron_stomach: 1 },
     hotbar: [
       { id: 'magic_missile_tome', quantity: 1 },
       { id: 'health_potion', quantity: 34 },
@@ -620,7 +610,7 @@ const ANCHOR_STONE: PlaytestPreset = {
   human: {
     ...LEVEL3.human,
     hotbar: [
-      { id: 'smush_tome', quantity: 1 },
+      { id: 'seismic_stomp_tome', quantity: 1 },
       { id: 'health_potion', quantity: 38 },
       { id: 'goblin_dynamite', quantity: 18 },
       { id: 'lucky_hoodie', quantity: 1, equipped: true },
@@ -738,17 +728,18 @@ const DOOMSDAY_CONTAINMENT: PlaytestPreset = {
 };
 
 /**
- * The town with both companions already out — Crush under contract and Mongo
+ * The town with both companions already out — Crush under contract and Deinonychus
  * at the cat's side — for walking them through shop doors, up the tower's
  * storeys and back out again.
  */
 const COMPANIONS_INDOORS: PlaytestPreset = {
   ...LEVEL3,
   id: 'companions-indoors',
-  description: 'Third floor town, a hire under contract and Mongo out, for taking both indoors',
-  abilityLevels: { ...LEVEL3.abilityLevels, mongo: 5 },
+  description:
+    'Third floor town, a hire under contract and Deinonychus out, for taking both indoors',
+  abilityLevels: { ...LEVEL3.abilityLevels, deinonychus: 5 },
   hire: 'crush',
-  mongoOut: true,
+  deinonychusOut: true,
 };
 
 /** How many of each raw/refined resource the Briar Hollow preset starts with. */

@@ -173,7 +173,7 @@ export class Tuskling extends Mob {
   /** It eats anything. The book explains how. */
   protected override rollLootItems(_killer: Player | null): LootDrop['items'] {
     const items: LootDrop['items'] = [];
-    maybeDropSkillBook(items, 'skill_book_iron_stomach');
+    maybeDropSkillBook(items, 'glutton');
     return items;
   }
 

@@ -1,14 +1,17 @@
 name: Deploy
 
-# Publishes the game two places on every push to main: GitHub Pages, and the
-# kitten-crawler-man/ folder of the ryanscarbel.com S3 bucket (fronted by
-# CloudFront).
+# Publishes the game on every push to main to the kitten-crawler-world/ folder
+# of the ryanscarbel.com S3 bucket (fronted by CloudFront), served at
+# https://ryanscarbel.com/kitten-crawler-world/. GitHub Pages is not a target:
+# its URL is the repository name, which belongs to the frozen site that
+# deploy-legacy.yml publishes.
 #
-# Auth for the S3 half is GitHub OIDC — the runner assumes a role in the website
-# account for the life of the job. This repo is public, so it holds no AWS key
-# and no .env; the role's trust policy is what grants access, and it is scoped
-# to this repo's main branch. The role lives in the personal-website repo as
-# KittenCrawlerManDeployStack, deployed by hand:
+# Auth is GitHub OIDC — the runner assumes a role in the website account for
+# the life of the job. This repo is public, so it holds no AWS key and no .env;
+# the role's trust policy pins this repo's main branch, and its permission
+# policy must grant writes under both the kitten-crawler-world/ prefix and the
+# frozen kitten-crawler-man/ prefix (deploy-legacy.yml uses the same role). The role lives
+# in the personal-website repo as KittenCrawlerManDeployStack, deployed by hand:
 #   AWS_PROFILE=personal-website npx cdk deploy KittenCrawlerManDeployStack
 #
 # Building here rather than from a laptop also keeps a laptop's .env out of the
@@ -29,13 +32,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # One build feeds both targets, so the site and the offline ZIP can never
-  # disagree about which bundle they contain.
+  # One build feeds the site and the offline ZIP, so they can never disagree
+  # about which bundle they contain.
   build:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pages: write # actions/configure-pages
       packages: read # the AI SDK comes from GitHub Packages
     steps:
       - uses: actions/checkout@v4
@@ -56,41 +58,20 @@ jobs:
       - name: Build site and offline ZIP
         run: npm run build:release
 
-      - uses: actions/configure-pages@v5
-
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: _site
-
-      # The same output again as an ordinary artifact, because the Pages
-      # artifact can only be consumed by actions/deploy-pages.
       - uses: actions/upload-artifact@v4
         with:
           name: release
           path: |
             _site
-            dist/kitten-crawler-man.zip
+            dist/kitten-crawler-world.zip
           retention-days: 1
 
-  pages:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    permissions:
-      pages: write
-      id-token: write
-    steps:
-      - uses: actions/deploy-pages@v4
-        id: deployment
-
-  # Deliberately a separate job from `pages`, and deliberately without an
-  # `environment:`. A job that targets an environment gets an OIDC token whose
-  # subject is `repo:OWNER/REPO:environment:NAME` — the branch vanishes from it.
-  # Keeping this job environment-free is what makes the subject
-  # `repo:OWNER/REPO:ref:refs/heads/main`, which is what the role's trust policy
-  # pins, so a run from any other branch cannot reach the bucket.
+  # Deliberately without an `environment:`. A job that targets an environment
+  # gets an OIDC token whose subject is `repo:OWNER/REPO:environment:NAME` —
+  # the branch vanishes from it. Keeping this job environment-free is what
+  # makes the subject `repo:OWNER/REPO:ref:refs/heads/main`, which is what the
+  # role's trust policy pins, so a run from any other branch cannot reach the
+  # bucket.
   publish:
     needs: build
     if: github.ref == 'refs/heads/main'
@@ -118,15 +99,15 @@ jobs:
       # cache policy would then hold each file for its one-second minimum TTL.
       - name: Publish to S3
         env:
-          TARGET: s3://${{ secrets.AWS_SITE_BUCKET }}/kitten-crawler-man
+          TARGET: s3://${{ secrets.AWS_SITE_BUCKET }}/kitten-crawler-world
           CACHE_CONTROL: public, max-age=0, must-revalidate, s-maxage=31536000
         run: |
           aws s3 sync _site/ "$TARGET/" \
             --delete \
-            --exclude "kitten-crawler-man.zip" \
+            --exclude "kitten-crawler-world.zip" \
             --cache-control "$CACHE_CONTROL" \
             --only-show-errors
-          aws s3 cp dist/kitten-crawler-man.zip "$TARGET/kitten-crawler-man.zip" \
+          aws s3 cp dist/kitten-crawler-world.zip "$TARGET/kitten-crawler-world.zip" \
             --content-type application/zip \
             --cache-control "$CACHE_CONTROL" \
             --only-show-errors
@@ -135,6 +116,6 @@ jobs:
         run: |
           aws cloudfront create-invalidation \
             --distribution-id "${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID }}" \
-            --paths "/kitten-crawler-man/*" \
+            --paths "/kitten-crawler-world/*" \
             --query 'Invalidation.Id' \
             --output text

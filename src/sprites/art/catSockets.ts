@@ -23,6 +23,7 @@
 import type { Vec3 } from '../held/heldPaint';
 import { GRIP_ARCHETYPES, type CatGripArchetype, type CatSocket } from '../held/gripArchetypes';
 import type { HeldVisualDef } from '../held/heldVisualDef';
+import type { HeldVisualId } from '../held/heldVisualIds';
 import { HUMAN_CELL_PX_PER_UNIT } from './human/figureScale';
 import {
   BUTT_FOREPAW,
@@ -45,7 +46,13 @@ import {
   catSideTurn,
   deg,
 } from './catArt';
-import { CAT_CELL_PX_PER_POSE_UNIT, catPoseToCell, catRowOf, type RowSpec } from './catFigure';
+import {
+  CAT_CELL_PX_PER_POSE_UNIT,
+  catPoseToCell,
+  catRowHoldsAt,
+  catRowOf,
+  type RowSpec,
+} from './catFigure';
 import type { CatLook } from '../looks/catLook';
 import type { CardinalView } from '../facingView';
 
@@ -102,11 +109,21 @@ const CAT_TOOL_SHARE = 0.7;
  * strap rather than a thing she carries.
  */
 const CAT_MOUTH_SHARE = 1.3;
+/**
+ * An explosive she throws is drawn smaller than a carried thing: a stick as
+ * long as her head is wide hides her face head-on, and the throw's swing has
+ * to read round it.
+ */
+const CAT_THROWN_SHARE = 0.85;
 
 /** Cell pixels of hers per rig unit of `look`'s own dimensions, by how she holds it. */
 export function catHeldPxPerUnit(look: HeldVisualDef): number {
-  const share = catGripOf(look) === 'mouthCarry' ? CAT_MOUTH_SHARE : CAT_TOOL_SHARE;
-  return HUMAN_CELL_PX_PER_UNIT * share;
+  return HUMAN_CELL_PX_PER_UNIT * catHeldShare(look);
+}
+
+function catHeldShare(look: HeldVisualDef): number {
+  if (look.archetype === 'thrown') return CAT_THROWN_SHARE;
+  return catGripOf(look) === 'mouthCarry' ? CAT_MOUTH_SHARE : CAT_TOOL_SHARE;
 }
 
 /** Pads turned to the camera: what a socket nothing is held in reports. */
@@ -248,7 +265,7 @@ function solve(row: RowSpec, frame: number, look: CatLook): CatSocketFrames {
   const behindHer = grip?.under === 'body';
   const paws = forepaws(row, pose, look);
   const holdsHaft = grip?.pawsClosed === true;
-  const carries = row.hold === 'carry';
+  const inJaws = (row.hold === 'carry' || row.hold === 'throw') && catRowHoldsAt(row, frame);
   const socket = (centre: Pt, occupied: boolean): CatSocketFrame => ({
     centre: placed(row, centre),
     axis,
@@ -261,7 +278,7 @@ function solve(row: RowSpec, frame: number, look: CatLook): CatSocketFrames {
   const face = faceOf(row, pose, look);
   return {
     sockets: {
-      mouth: socket(mouthOf(row, pose, look), carries),
+      mouth: socket(mouthOf(row, pose, look), inJaws),
       forePaw: socket(paws.butt, holdsHaft),
       back: backSocket(row, pose, look),
     },
@@ -290,13 +307,35 @@ export function catSocketsAt(look: CatLook, state: string, frame: number): CatSo
 
 /**
  * How she holds `look`, or null for a thing she cannot hold: a thing made to
- * be carried in the jaws she carries there, and the tools the human swings in both
- * hands she swings with both forepaws on the haft.
+ * be carried in the jaws she carries there, as she does an explosive the human
+ * throws from his fist, and the tools the human swings in both hands she
+ * swings with both forepaws on the haft.
  */
 export function catGripOf(look: HeldVisualDef): CatGripArchetype | null {
-  if (look.archetype === 'mouthCarry') return 'mouthCarry';
+  if (look.archetype === 'mouthCarry' || look.archetype === 'thrown') return 'mouthCarry';
   if (look.archetype === 'pawTool' || look.archetype === 'twoHandHaft') return 'pawTool';
   return null;
+}
+
+/**
+ * Looks she carries end for end from the way the human holds them: the
+ * bomb's iron ball sits behind the neck a hand closes on, so held as he holds
+ * it the ball rides above her nose; turned, it hangs below her jaws.
+ */
+const TURNED_IN_JAWS: ReadonlySet<HeldVisualId> = new Set<HeldVisualId>(['prop_black_powder_bomb']);
+
+/**
+ * Looks drawn in her jaws with her own light outline round them: the bomb's
+ * black iron is lost against her dark coat without one, and its lit fuse is
+ * all that shows, where it reads as a glowing eye.
+ */
+const OUTLINED_IN_JAWS: ReadonlySet<HeldVisualId> = new Set<HeldVisualId>([
+  'prop_black_powder_bomb',
+]);
+
+/** Whether `look` is drawn in her jaws with her outline round it. */
+export function catHeldOutlined(look: HeldVisualDef): boolean {
+  return OUTLINED_IN_JAWS.has(look.id);
 }
 
 /** The socket `look` is held at on a frame, or null where it is not held there. */
@@ -307,5 +346,8 @@ export function catHeldSocketOf(
   const grip = catGripOf(look);
   if (grip === null) return null;
   const socket = frames.sockets[GRIP_ARCHETYPES[grip].heldIn[0]];
-  return socket.occupied ? socket : null;
+  if (!socket.occupied) return null;
+  if (!TURNED_IN_JAWS.has(look.id)) return socket;
+  const { axis } = socket;
+  return { ...socket, axis: { x: -axis.x, y: -axis.y, z: -axis.z } };
 }

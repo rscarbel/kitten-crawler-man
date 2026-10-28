@@ -19,7 +19,7 @@ export class AchievementUISystem {
   /**
    * Whether the chip may offer the waiting rewards now. While it is false the
    * chip stays hidden and the rewards wait in their crawlers' queues: the
-   * tutorial holds them until the player has spoken to Mordecai.
+   * tutorial holds them until the player has spoken to Dave.
    */
   presentationGate: () => boolean = () => true;
 

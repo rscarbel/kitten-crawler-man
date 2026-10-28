@@ -2,7 +2,7 @@
  * The Raised Ratkin as painted figures: the rows, the cell, and one
  * `FigureDef` per look (`raised_ratkin_smock`, `_jack`, `_shroud`).
  *
- * The rig and the gait are Mordecai's, edited: a dead ratkin walks on the same
+ * The rig and the gait are the shared ratkin ones (`ratKinFigure.ts`), edited: a dead ratkin walks on the same
  * legs, badly. What makes it read as dead rather than as a villager having a
  * bad day is structural, and every row carries it:
  *
@@ -39,6 +39,7 @@ import {
 import {
   GROUND_OFFSET_IN_TILE,
   RAT_KIN_SCALE,
+  RAT_KIN_TILES_PER_WALK_CYCLE,
   cyclePhase,
   idleFacing,
   idleSide,
@@ -56,7 +57,6 @@ import {
   type RaisedRatkinLook,
 } from './raisedRatkinArt';
 import { type FigureDef, figureStates } from '../figure/figureDef';
-import { RAT_KIN_TILES_PER_WALK_CYCLE } from '../ratKinSprite';
 import { SKELETON_RISE_FRAMES } from '../skeletonTiming';
 
 type Ctx = CanvasRenderingContext2D;
@@ -484,9 +484,9 @@ export const RAISED_ACTION_VIEWS: Readonly<Record<RaisedRatkinAction, readonly R
 };
 
 /**
- * Ground one shamble cycle covers, in tiles. The good foot is Mordecai's, planted
- * and stepping the same stride, so the distance is his walk's at this build's
- * scale; the dragged foot slides that same distance along the ground.
+ * Ground one shamble cycle covers, in tiles. The good foot is the shared gait's,
+ * planted and stepping the same stride, so the distance is that walk's at this
+ * build's scale; the dragged foot slides that same distance along the ground.
  */
 export const RAISED_RATKIN_TILES_PER_SHAMBLE_CYCLE =
   RAT_KIN_TILES_PER_WALK_CYCLE * RATKIN_BUILDS[RAISED_OUTFITS.smock.build].scale;

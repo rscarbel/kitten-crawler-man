@@ -9,7 +9,7 @@
  * (`ratkin_<id>`), exactly as the Hawkfolk's palettes do.
  *
  * Rows every character paints:
- *    walk / walk_side / walk_away     16 frames, Mordecai's gait
+ *    walk / walk_side / walk_away     16 frames, the shared ratkin gait
  *    idle / idle_side / idle_away      8 frames
  *    talk / talk_side                  8 frames, looping
  * Civilians add:
@@ -65,16 +65,14 @@ import { type FigureDef, figureStates } from '../figure/figureDef';
 export const RATKIN_CAST_TILE_SCALE = 64;
 
 /**
- * The cast's cell: wider and taller than Mordecai's, because the cast carries
- * things. A spear stands a full figure-height above the paw and levels out
- * past the muzzle on the thrust, and a hoe swings overhead. His tile sits
- * centred along the bottom, with the same ground margin his cell has, so a
- * villager and Mordecai standing on one tile put their feet on one line.
+ * The cast's cell: sized for carrying things. A spear stands a full
+ * figure-height above the paw and levels out past the muzzle on the thrust,
+ * and a hoe swings overhead. The tile sits centred along the bottom.
  */
 const FRAME_WIDTH = 128;
 const FRAME_HEIGHT = 128;
 const TILE_X = (FRAME_WIDTH - RATKIN_CAST_TILE_SCALE) / 2;
-/** Ground margin below the soles, matched to Mordecai's cell. */
+/** Ground margin below the soles, in cell pixels. */
 const GROUND_MARGIN = 13.4;
 const ORIGIN_X = FRAME_WIDTH / 2;
 const ORIGIN_Y = FRAME_HEIGHT - GROUND_MARGIN;

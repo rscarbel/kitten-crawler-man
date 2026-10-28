@@ -181,7 +181,7 @@ export function bopcaScript(name: string): BopcaScript {
           'What I am is a Bopca, and what a Bopca does is keep a safe room. That is the whole of the job.',
         ),
         say.line(
-          'We Bopcas signed with the Syndicate. Our worlds are still standing. Yours is not. Work it out.',
+          'We Bopcas keep these rooms at Caroline’s pleasure. Nothing she has not invited comes through that door. Work it out.',
         ),
         say.line(
           'Yes, I cook without washing my hands. Twenty-one years, and nobody has died of it yet.',

@@ -15,8 +15,25 @@ import { drawGlyph, type GlyphId } from '../theme/glyphs';
 import { skinsFor, type ButtonVariant } from '../theme/skins';
 import type { PanelWidth, Theme } from '../theme/tokens';
 import { button, measureButton } from './button';
-import { fillRounded, roundRectPath } from './paint';
-import { panel, panelBodyMaxHeight, panelBodyWidth, type FooterButton } from './panel';
+import { prefersReducedMotion } from '../core/reducedMotion';
+import { terminalTheme } from '../theme/terminalTheme';
+import {
+  CAROLINE_PREFIX,
+  carolineLineHeight,
+  carolineOpenDurationMs,
+  carolineRevealAt,
+  carolineRevealLength,
+  layoutCarolineText,
+  paintCarolineLines,
+} from './carolineFrame';
+import { fillRounded, roundRectPath, type PaintTarget } from './paint';
+import {
+  panel,
+  panelBodyMaxHeight,
+  panelBodyWidth,
+  type FooterButton,
+  type PanelChrome,
+} from './panel';
 import { scrollGutterWidth } from './scrollView';
 import { lineHeightOf, measureTextHeight, text } from './text';
 
@@ -81,6 +98,12 @@ export interface ChoiceModalConfig {
   readonly onClose?: () => void;
   /** Tapping outside the card calls this. Without it the scrim only swallows the tap. */
   readonly onScrimTap?: () => void;
+  /**
+   * `caroline` puts the modal in her frame: `title` is her message, decoding
+   * in after her prefix, the body is set in the terminal face, and no icon,
+   * hero or overline is drawn. Defaults to `glass`.
+   */
+  readonly chrome?: PanelChrome;
 }
 
 /** The icon disc's diameter. */
@@ -145,12 +168,21 @@ function layout(
 ): Layout {
   const { space } = ui.theme;
   const tracks: number[] = [];
-  if (config.hero !== undefined) tracks.push(config.hero.height);
-  else if (config.icon !== undefined) tracks.push(ICON_DISC);
-  if (config.overline !== undefined) tracks.push(lineHeightOf(ui, 'overline'));
-  tracks.push(measureTextHeight(ui, width, { text: config.title, role: 'heading' }));
-  for (const paragraph of paragraphs(config.body)) {
-    tracks.push(measureTextHeight(ui, width, { text: paragraph, role: 'secondary' }));
+  if (config.chrome === 'caroline') {
+    const lines = layoutCarolineText(ui, width, config.title).length;
+    tracks.push(lines * carolineLineHeight(ui.theme));
+    const face = terminalTarget(ui);
+    for (const paragraph of paragraphs(config.body)) {
+      tracks.push(measureTextHeight(face, width, { text: paragraph, role: 'secondary' }));
+    }
+  } else {
+    if (config.hero !== undefined) tracks.push(config.hero.height);
+    else if (config.icon !== undefined) tracks.push(ICON_DISC);
+    if (config.overline !== undefined) tracks.push(lineHeightOf(ui, 'overline'));
+    tracks.push(measureTextHeight(ui, width, { text: config.title, role: 'heading' }));
+    for (const paragraph of paragraphs(config.body)) {
+      tracks.push(measureTextHeight(ui, width, { text: paragraph, role: 'secondary' }));
+    }
   }
   if (config.extra !== undefined) tracks.push(config.extra.height);
   const stacked = stackedOverride ?? stacksButtons(ui, config, width);
@@ -171,6 +203,29 @@ function choiceButton(config: ChoiceModalConfig, b: ChoiceButton, index: number)
     variant: b.variant ?? (isDefault ? 'primary' : 'secondary'),
     primary: isDefault,
   };
+}
+
+function terminalTarget(ui: Ui): PaintTarget {
+  return { ctx: ui.ctx, theme: terminalTheme(ui.theme) };
+}
+
+/** Her message decoding in once the frame has opened, then the body in the terminal face. */
+function drawCarolineContent(ui: Ui, config: ChoiceModalConfig, next: () => Rect): void {
+  const reducedMotion = prefersReducedMotion();
+  const sinceOpenMs = ui.now - ui.openedAt;
+  const decodingFromMs = sinceOpenMs - carolineOpenDurationMs(ui.theme);
+  const messageRect = next();
+  const lines = layoutCarolineText(ui, messageRect.w, config.title);
+  paintCarolineLines(ui, messageRect.x, messageRect.y, lines, {
+    reveal: carolineRevealAt(ui.theme, config.title, Math.max(0, decodingFromMs), reducedMotion),
+    nowMs: ui.now,
+    prefixEnd: CAROLINE_PREFIX.length,
+    total: carolineRevealLength(config.title),
+  });
+  const face = terminalTarget(ui);
+  for (const paragraph of paragraphs(config.body)) {
+    text(face, next(), { text: paragraph, role: 'secondary', wrap: true });
+  }
 }
 
 /** Draws the modal. Call from a modal-band surface's `render`. */
@@ -201,6 +256,7 @@ export function choiceModal(ui: Ui, config: ChoiceModalConfig): void {
     footer,
     footerSize: 'lg',
     footerColumns,
+    chrome: config.chrome,
   });
   const scrollBody = natural.contentHeight > maxBody;
   const contentHeight = scrollBody
@@ -218,13 +274,16 @@ export function choiceModal(ui: Ui, config: ChoiceModalConfig): void {
     footerSize: 'lg',
     footerColumns,
     scrollBody,
+    chrome: config.chrome,
     content: (body) => {
       const { tracks, stacked } = layout(ui, config, body.w, natural.stacked);
       const rows = splitV(body, tracks, gap);
       let index = 0;
       const next = (): Rect => rows[index++] ?? { ...body, h: 0 };
       const tone = toneColor(theme, config.tone ?? 'accent');
-      if (config.hero !== undefined) {
+      if (config.chrome === 'caroline') {
+        drawCarolineContent(ui, config, next);
+      } else if (config.hero !== undefined) {
         const heroRect = next();
         ctx.save();
         roundRectPath(ctx, heroRect, theme.radius.md);
@@ -237,12 +296,19 @@ export function choiceModal(ui: Ui, config: ChoiceModalConfig): void {
         fillRounded(ctx, disc, theme.radius.pill, withAlpha(tone, ICON_DISC_ALPHA));
         drawGlyph(ctx, config.icon, centerIn(disc, ICON_GLYPH, ICON_GLYPH), { color: tone });
       }
-      if (config.overline !== undefined) {
-        text(ui, next(), { text: config.overline, role: 'overline', color: tone, align: 'center' });
-      }
-      text(ui, next(), { text: config.title, role: 'heading', align: 'center', wrap: true });
-      for (const paragraph of paragraphs(config.body)) {
-        text(ui, next(), { text: paragraph, role: 'secondary', align: 'center', wrap: true });
+      if (config.chrome !== 'caroline') {
+        if (config.overline !== undefined) {
+          text(ui, next(), {
+            text: config.overline,
+            role: 'overline',
+            color: tone,
+            align: 'center',
+          });
+        }
+        text(ui, next(), { text: config.title, role: 'heading', align: 'center', wrap: true });
+        for (const paragraph of paragraphs(config.body)) {
+          text(ui, next(), { text: paragraph, role: 'secondary', align: 'center', wrap: true });
+        }
       }
       if (config.extra !== undefined) config.extra.draw(next());
       if (!stacked) return;

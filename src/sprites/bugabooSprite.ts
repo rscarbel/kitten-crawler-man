@@ -35,25 +35,6 @@ export const BUGABOO_SWIPE_IMPACT_FRAME = SWIPE_IMPACT_FRAME;
 /** How many frames every swipe row holds, which the impact frame counts into. */
 export const BUGABOO_SWIPE_FRAMES = SWIPE_FRAMES;
 
-/**
- * The topmost inked row of the standing frames, in the figure's own `tileScale`
- * units — every idle and walk frame starts with this much transparent padding.
- * Measured off the painted cells rather than derived, because the anchor only
- * says where the feet are; nothing in the figure's geometry records how far the
- * horns reach. `scripts/gates-bugaboo.ts` re-measures it, since a redraw would
- * move it silently.
- */
-export const BUGABOO_STANDING_INK_TOP = 39;
-
-/**
- * How far above his tile origin the standing art actually reaches, in tiles.
- * Anything drawn over a Bugaboo's head — a speech bubble, an interaction prompt —
- * has to start above this or it lands on his chest.
- */
-export function bugabooHeadClearanceTiles(): number {
-  return (BUGABOO_FIGURE.tileY - BUGABOO_STANDING_INK_TOP) / BUGABOO_FIGURE.tileScale;
-}
-
 /** Loop speed for the idle, which is driven by the clock rather than a timer. */
 export const BUGABOO_IDLE_FPS = 6;
 /** How fast the arm sweeps its circle while the creature is stuck in a breach. */
@@ -255,17 +236,4 @@ export const BUGABOO_STATES: ReadonlyArray<BugabooState> = [
  */
 export function prewarmBugaboo(): void {
   for (const state of BUGABOO_STATES) prewarmFigureState(BUGABOO_FIGURE, state);
-}
-
-/** The rows a Bugaboo that never fights can play: a shopkeeper wearing the shape stands and walks. */
-const BUGABOO_PEACEFUL_BASES: ReadonlyArray<BugabooBase> = ['idle', 'walk'];
-
-/**
- * Warms the stance and walk rows in every view, for a Bugaboo that only ever
- * stands and wanders — floor 2's Mordecai. Called when his room is built.
- */
-export function prewarmPeacefulBugaboo(): void {
-  for (const base of BUGABOO_PEACEFUL_BASES) {
-    for (const view of BUGABOO_VIEWS) prewarmFigureState(BUGABOO_FIGURE, stateFor(base, view));
-  }
 }

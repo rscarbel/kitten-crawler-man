@@ -1,5 +1,5 @@
 /**
- * The human crawler doing things between fights: casting Protective Shell, drinking a
+ * The human crawler doing things between fights: casting Energy Shield, drinking a
  * potion, picking something up, heaving open a chest, and talking.
  *
  * Every one-shot here starts and ends on the idle's first frame in its view,
@@ -49,10 +49,10 @@ import type { Vec3 } from '../../held/heldPaint';
  * of a fight — the hand reaches the floor two frames (eight ticks) after the
  * key.
  */
-export const SHELL_CAST_FRAMES = 8;
-export const SHELL_CAST_TICKS_PER_FRAME = 4;
+export const SHIELD_CAST_FRAMES = 8;
+export const SHIELD_CAST_TICKS_PER_FRAME = 4;
 /** The frame his palm meets the dome's centre: the dome is raised here. */
-export const SHELL_CAST_FRAME = 2;
+export const SHIELD_CAST_FRAME = 2;
 
 /**
  * Bottle up, three swallows with the head back, bottle down, a wipe of the
@@ -281,9 +281,9 @@ interface MouthShape {
 
 const MOUTH_SHUT: MouthShape = { open: 0, width: 1 };
 
-// ── Protective Shell ─────────────────────────────────────────────────────────
+// ── Energy Shield ─────────────────────────────────────────────────────────
 
-const SHELL_LAST = SHELL_CAST_FRAMES - 1;
+const SHIELD_LAST = SHIELD_CAST_FRAMES - 1;
 
 /**
  * The dome is centred on the middle of his tile, which stands this far above
@@ -294,48 +294,48 @@ const TILE_CENTRE_ABOVE_GROUND_TILES = 0.4;
 const DOME_CENTRE_Y = -TILE_CENTRE_ABOVE_GROUND_TILES / PLAYER_HUMAN_SCALE;
 
 /** He sinks as he gathers it, so the drive's drop is split over two frames. */
-const SHELL_CROUCH: Track = offsetTrack(SHELL_LAST, [
+const SHIELD_CROUCH: Track = offsetTrack(SHIELD_LAST, [
   [1, 0.3],
-  [SHELL_CAST_FRAME, 0.55],
+  [SHIELD_CAST_FRAME, 0.55],
   [3, 0.62],
   [4, 0.58],
   [5, 0.3],
   [6, 0.08],
 ]);
 /** His weight drops into the drive and settles a frame after the palm lands. */
-const SHELL_BOB: Track = offsetTrack(SHELL_LAST, [
+const SHIELD_BOB: Track = offsetTrack(SHIELD_LAST, [
   [1, 0.004],
-  [SHELL_CAST_FRAME, 0.01],
+  [SHIELD_CAST_FRAME, 0.01],
   [3, 0.018],
   [4, 0.012],
   [5, 0.004],
 ]);
-const SHELL_CHIN: Track = offsetTrack(SHELL_LAST, [
+const SHIELD_CHIN: Track = offsetTrack(SHIELD_LAST, [
   [1, -0.3],
-  [SHELL_CAST_FRAME, -0.75],
+  [SHIELD_CAST_FRAME, -0.75],
   [3, -0.8],
   [4, -0.7],
   [5, -0.35],
 ]);
-const SHELL_MOUTH: Track = offsetTrack(SHELL_LAST, [
+const SHIELD_MOUTH: Track = offsetTrack(SHIELD_LAST, [
   [1, 0.05],
-  [SHELL_CAST_FRAME, 0.55],
+  [SHIELD_CAST_FRAME, 0.55],
   [3, 0.35],
   [4, 0.15],
 ]);
-const SHELL_JACKET: Track = offsetTrack(SHELL_LAST, [
-  [SHELL_CAST_FRAME, 0.45],
+const SHIELD_JACKET: Track = offsetTrack(SHIELD_LAST, [
+  [SHIELD_CAST_FRAME, 0.45],
   [3, 0.3],
   [4, 0.15],
 ]);
-const SHELL_HAIR: Track = offsetTrack(SHELL_LAST, [
+const SHIELD_HAIR: Track = offsetTrack(SHIELD_LAST, [
   [1, -0.2],
-  [SHELL_CAST_FRAME, 0.45],
+  [SHIELD_CAST_FRAME, 0.45],
   [3, 0.2],
 ]);
-const SHELL_BROW = 1;
+const SHIELD_BROW = 1;
 /** The right hand gathers into a fist at the chest, then opens flat as it strikes the floor. */
-const SHELL_GATHER_FIST = 0.95;
+const SHIELD_GATHER_FIST = 0.95;
 
 /**
  * Head-on the right arm drives down and a little out from his side, locked
@@ -349,9 +349,9 @@ const SHELL_GATHER_FIST = 0.95;
  * Joint angles, not a hand target: a target that close to the shoulder folds
  * the elbow up.
  */
-const SHELL_FRONT_RIGHT: RaisedPath = raisedPath(RIGHT_ARM, SHELL_LAST, [
+const SHIELD_FRONT_RIGHT: RaisedPath = raisedPath(RIGHT_ARM, SHIELD_LAST, [
   [1, { out: deg(-2), up: deg(118), scale: 0.62 }],
-  [SHELL_CAST_FRAME, { out: deg(16), up: deg(-14), scale: 1 }],
+  [SHIELD_CAST_FRAME, { out: deg(16), up: deg(-14), scale: 1 }],
   [3, { out: deg(17), up: deg(-15), scale: 1 }],
   [4, { out: deg(16), up: deg(-14), scale: 1 }],
   [5, { out: deg(10), up: deg(-8), scale: 1 }],
@@ -361,17 +361,17 @@ const SHELL_FRONT_RIGHT: RaisedPath = raisedPath(RIGHT_ARM, SHELL_LAST, [
  * Head-on the chest pitches forward over the driving hand, which is the only
  * way the camera sees him bend down to the floor rather than squat upright.
  */
-const SHELL_PITCH: Track = offsetTrack(SHELL_LAST, [
+const SHIELD_PITCH: Track = offsetTrack(SHIELD_LAST, [
   [1, 0.12],
-  [SHELL_CAST_FRAME, 0.62],
+  [SHIELD_CAST_FRAME, 0.62],
   [3, 0.66],
   [4, 0.58],
   [5, 0.26],
   [6, 0.05],
 ]);
-const SHELL_FRONT_LEFT: RaisedPath = raisedPath(LEFT_ARM, SHELL_LAST, [
+const SHIELD_FRONT_LEFT: RaisedPath = raisedPath(LEFT_ARM, SHIELD_LAST, [
   [1, { out: deg(2), up: deg(-4), scale: 1 }],
-  [SHELL_CAST_FRAME, { out: deg(14), up: deg(-12), scale: 1 }],
+  [SHIELD_CAST_FRAME, { out: deg(14), up: deg(-12), scale: 1 }],
   [3, { out: deg(15), up: deg(-13), scale: 1 }],
   [4, { out: deg(13), up: deg(-11), scale: 1 }],
   [5, { out: deg(6), up: deg(-5), scale: 1 }],
@@ -382,17 +382,17 @@ const SHELL_FRONT_LEFT: RaisedPath = raisedPath(LEFT_ARM, SHELL_LAST, [
  * out in front at elbow height instead, the forearm lies level across his
  * chest and the glow sits under it, nowhere near where the palm lands.
  */
-const SHELL_SIDE_RIGHT: HandPath = handPath(SEAM_WRISTS.side.right, SHELL_LAST, [
+const SHIELD_SIDE_RIGHT: HandPath = handPath(SEAM_WRISTS.side.right, SHIELD_LAST, [
   [1, pt(0.1, -1.42)],
-  [SHELL_CAST_FRAME, pt(0.48, DOME_CENTRE_Y - 0.33)],
+  [SHIELD_CAST_FRAME, pt(0.48, DOME_CENTRE_Y - 0.33)],
   [3, pt(0.48, DOME_CENTRE_Y - 0.3)],
   [4, pt(0.46, DOME_CENTRE_Y - 0.32)],
   [5, pt(0.3, -0.88)],
   [6, pt(0.06, -0.9)],
 ]);
-const SHELL_SIDE_LEFT: HandPath = handPath(SEAM_WRISTS.side.left, SHELL_LAST, [
+const SHIELD_SIDE_LEFT: HandPath = handPath(SEAM_WRISTS.side.left, SHIELD_LAST, [
   [1, pt(-0.06, -0.95)],
-  [SHELL_CAST_FRAME, pt(-0.26, -1.0)],
+  [SHIELD_CAST_FRAME, pt(-0.26, -1.0)],
   [3, pt(-0.27, -0.99)],
   [4, pt(-0.25, -0.97)],
   [5, pt(-0.14, -0.93)],
@@ -402,91 +402,91 @@ const SHELL_SIDE_LEFT: HandPath = handPath(SEAM_WRISTS.side.left, SHELL_LAST, [
  * reaches out in front of him rather than him folding down after it, which
  * with bent knees reads as squatting to sit.
  */
-const SHELL_SIDE_LEAN: Track = offsetTrack(SHELL_LAST, [
+const SHIELD_SIDE_LEAN: Track = offsetTrack(SHIELD_LAST, [
   [1, deg(-3)],
-  [SHELL_CAST_FRAME, deg(12)],
+  [SHIELD_CAST_FRAME, deg(12)],
   [3, deg(13)],
   [4, deg(11)],
   [5, deg(5)],
   [6, deg(1)],
 ]);
 /** In profile the crouch is kept shallow for the same reason. */
-const SHELL_SIDE_CROUCH_SHARE = 0.45;
+const SHIELD_SIDE_CROUCH_SHARE = 0.45;
 /** The elbow locks straight on the drive; a bent one reads as a pat, not a strike. */
-const SHELL_ELBOW_FLARE = 0.05;
+const SHIELD_ELBOW_FLARE = 0.05;
 
 /**
- * The shell's light gathers in the right palm as it is driven down and flares
+ * The shield's light gathers in the right palm as it is driven down and flares
  * on the cast frame, where the dome is centred, and stays lit while the palm
  * is pressed down: one bright frame is gone before the eye finds it.
  */
-const SHELL_PALM_GLOW: Track = offsetTrack(SHELL_LAST, [
-  [SHELL_CAST_FRAME - 1, 0.5],
-  [SHELL_CAST_FRAME, 1],
-  [SHELL_CAST_FRAME + 1, 0.9],
-  [SHELL_CAST_FRAME + 2, 0.45],
-  [SHELL_CAST_FRAME + 3, 0],
+const SHIELD_PALM_GLOW: Track = offsetTrack(SHIELD_LAST, [
+  [SHIELD_CAST_FRAME - 1, 0.5],
+  [SHIELD_CAST_FRAME, 1],
+  [SHIELD_CAST_FRAME + 1, 0.9],
+  [SHIELD_CAST_FRAME + 2, 0.45],
+  [SHIELD_CAST_FRAME + 3, 0],
 ]);
 
-function shellShapes(pose: BipedPose, frame: number): void {
+function shieldShapes(pose: BipedPose, frame: number): void {
   const gathering = frame === 1;
-  const striking = frame >= SHELL_CAST_FRAME && frame <= SHELL_LAST - 2;
-  if (gathering) pose.rightFist = SHELL_GATHER_FIST;
+  const striking = frame >= SHIELD_CAST_FRAME && frame <= SHIELD_LAST - 2;
+  if (gathering) pose.rightFist = SHIELD_GATHER_FIST;
   if (striking) {
     const open: HandShape = 'open';
     pose.rightHandShape = open;
     pose.leftHandShape = open;
   }
-  const glow = trackAt(frame, SHELL_PALM_GLOW);
+  const glow = trackAt(frame, SHIELD_PALM_GLOW);
   if (glow > 0) pose.palmGlow = { hand: 'right', strength: glow };
 }
 
-function shellBody(pose: BipedPose, frame: number): void {
-  pose.crouch += trackAt(frame, SHELL_CROUCH);
-  pose.bob += trackAt(frame, SHELL_BOB);
-  pose.chinLift = trackAt(frame, SHELL_CHIN);
-  pose.mouth = trackAt(frame, SHELL_MOUTH);
-  pose.jacketFlare += trackAt(frame, SHELL_JACKET);
-  pose.hairFlow += trackAt(frame, SHELL_HAIR);
-  pose.brow = SHELL_BROW;
+function shieldBody(pose: BipedPose, frame: number): void {
+  pose.crouch += trackAt(frame, SHIELD_CROUCH);
+  pose.bob += trackAt(frame, SHIELD_BOB);
+  pose.chinLift = trackAt(frame, SHIELD_CHIN);
+  pose.mouth = trackAt(frame, SHIELD_MOUTH);
+  pose.jacketFlare += trackAt(frame, SHIELD_JACKET);
+  pose.hairFlow += trackAt(frame, SHIELD_HAIR);
+  pose.brow = SHIELD_BROW;
   plantFeet(pose);
 }
 
-/** Protective Shell, toward the camera: the right palm driven down onto the dome's centre. */
-export function shellCastFront(frame: number): BipedPose {
+/** Energy Shield, toward the camera: the right palm driven down onto the dome's centre. */
+export function shieldCastFront(frame: number): BipedPose {
   const pose = seamPose('front');
-  if (isSeam(frame, SHELL_LAST)) return pose;
-  shellBody(pose, frame);
+  if (isSeam(frame, SHIELD_LAST)) return pose;
+  shieldBody(pose, frame);
   squatLegs(pose, pose.crouch);
-  pose.torsoPitch = trackAt(frame, SHELL_PITCH);
-  raiseArm(pose, RIGHT_ARM, frame, SHELL_FRONT_RIGHT);
-  raiseArm(pose, LEFT_ARM, frame, SHELL_FRONT_LEFT);
-  shellShapes(pose, frame);
+  pose.torsoPitch = trackAt(frame, SHIELD_PITCH);
+  raiseArm(pose, RIGHT_ARM, frame, SHIELD_FRONT_RIGHT);
+  raiseArm(pose, LEFT_ARM, frame, SHIELD_FRONT_LEFT);
+  shieldShapes(pose, frame);
   return pose;
 }
 
 /** From behind the arms are the same; out past his sides, they show. */
-export function shellCastBack(frame: number): BipedPose {
-  const pose = shellCastFront(frame);
-  if (isSeam(frame, SHELL_LAST)) return seamPose('back');
+export function shieldCastBack(frame: number): BipedPose {
+  const pose = shieldCastFront(frame);
+  if (isSeam(frame, SHIELD_LAST)) return seamPose('back');
   pose.headTurn = -pose.headTurn;
   pose.leftArmBehind = true;
   pose.rightArmBehind = true;
   return pose;
 }
 
-export function shellCastSide(frame: number): BipedPose {
+export function shieldCastSide(frame: number): BipedPose {
   const pose = seamPose('side');
-  if (isSeam(frame, SHELL_LAST)) return pose;
-  shellBody(pose, frame);
+  if (isSeam(frame, SHIELD_LAST)) return pose;
+  shieldBody(pose, frame);
   // Edge-on the chin is a true rotation of the head, and bending at the hips
   // already tips the face down at the floor.
   pose.chinLift = 0;
-  pose.crouch = seamPose('side').crouch + trackAt(frame, SHELL_CROUCH) * SHELL_SIDE_CROUCH_SHARE;
-  pose.lean += trackAt(frame, SHELL_SIDE_LEAN);
-  pose.elbowFlare = SHELL_ELBOW_FLARE;
-  placeHands(pose, frame, SHELL_SIDE_RIGHT, SHELL_SIDE_LEFT);
-  shellShapes(pose, frame);
+  pose.crouch = seamPose('side').crouch + trackAt(frame, SHIELD_CROUCH) * SHIELD_SIDE_CROUCH_SHARE;
+  pose.lean += trackAt(frame, SHIELD_SIDE_LEAN);
+  pose.elbowFlare = SHIELD_ELBOW_FLARE;
+  placeHands(pose, frame, SHIELD_SIDE_RIGHT, SHIELD_SIDE_LEFT);
+  shieldShapes(pose, frame);
   return pose;
 }
 

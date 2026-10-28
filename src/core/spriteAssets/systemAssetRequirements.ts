@@ -6,7 +6,7 @@ import type { SpriteKey } from './SpriteLoader';
  * A `LevelDef` does not list everything that can appear on its floor.
  * `BountySystem`, `StarlightTentMazeSystem`,
  * `QuillConfrontationSystem`, `MurderMysteryQuestSystem`, `SpiderQuestSystem`,
- * `SkeletonSummonSystem`, `MongoSystem` and `MercenarySystem` all construct
+ * `SkeletonSummonSystem`, `DeinonychusSystem` and `MercenarySystem` all construct
  * creatures no `LevelDef.roomMobs` / `hallwayMobs` / `extraSpawns` /
  * `campSpawns` entry ever names, because each is gated on a map feature
  * (`gameMap.circusCentre`, `gameMap.spiderLabRoom`, a live bounty site, a
@@ -154,13 +154,13 @@ export const SYSTEM_ASSET_REQUIREMENTS: readonly SystemAssetRequirement[] = [
     requiredGroups: ['boss_grotesque_spider'],
   },
 
-  // MongoSystem (src/systems/MongoSystem.ts) — Mongo is a persistent pet
+  // DeinonychusSystem (src/systems/DeinonychusSystem.ts) — Deinonychus is a persistent pet
   // companion unlockable from level 1 onward, not a spawn-table mob, so he can
   // walk onto any floor once unlocked.
   {
-    id: 'companion:mongo',
+    id: 'companion:deinonychus',
     levelIds: ALL_LEVELS,
-    mobTypes: ['mongo'],
+    mobTypes: ['deinonychus'],
     requiredGroups: ['core'],
   },
 

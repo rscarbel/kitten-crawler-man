@@ -1,5 +1,6 @@
 import { TILE_SIZE } from '../core/constants';
 import type { AttackCowState } from '../core/state/AttackCowState';
+import { petWords, type PetNames, type PetWords } from '../core/party/petNames';
 import { REVIVE_RANGE_PX } from '../core/party/reviveRules';
 import type { SpatialGrid } from '../core/world/SpatialGrid';
 import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
@@ -27,8 +28,13 @@ const TILE_CENTRE = 0.5;
 
 const ARRIVAL_SOUND = 'attack_cow_arrival' as const satisfies SoundId;
 const REVIVE_STARTED_SOUND = 'reviving_tone' as const satisfies SoundId;
-const DOWNED_TOAST = 'The attack cow is down! Stand beside her to revive.';
-const RESTING_TOAST = 'The attack cow limps off to rest. She will be back on the next floor.';
+function downedToast(cow: PetWords): string {
+  return `${cow.opening} is down! Stand beside her to revive.`;
+}
+
+function restingToast(cow: PetWords): string {
+  return `${cow.opening} limps off to rest. She will be back on the next floor.`;
+}
 
 /**
  * How the system reaches the player: it holds no audio and no HUD of its own,
@@ -49,7 +55,7 @@ const SILENT_FEEDBACK: AttackCowFeedback = {
 };
 
 /**
- * The human crawler's attack cow, modelled on `MongoSystem` and `MercenarySystem`.
+ * The human crawler's attack cow, modelled on `DeinonychusSystem` and `MercenarySystem`.
  *
  * Each scene — a floor or a building's interior — builds one from the shared
  * {@link AttackCowState}. If the party owns her and she is not resting, she is
@@ -74,12 +80,14 @@ export class AttackCowSystem implements GameSystem {
 
   /**
    * @param floorNumber the floor she fights on, which levels her.
+   * @param petNames the run's pet names, for what her toasts call her.
    * @param admitted false where she waits outside (the goblin prison), so
    *   this scene never stands her up.
    */
   constructor(
     private readonly state: AttackCowState,
     private readonly floorNumber: number,
+    private readonly petNames: PetNames,
     private readonly feedback: AttackCowFeedback = SILENT_FEEDBACK,
     private readonly admitted = true,
   ) {}
@@ -169,7 +177,7 @@ export class AttackCowSystem implements GameSystem {
     if (!cow.isStanding || cow.hp > 0) return;
     cow.goDown();
     this.releaseTargeting(cow);
-    this.feedback.toast(DOWNED_TOAST);
+    this.feedback.toast(downedToast(petWords(this.petNames, 'attackCow')));
   }
 
   private tickDowned(cow: AttackCow): void {
@@ -189,7 +197,7 @@ export class AttackCowSystem implements GameSystem {
     cow.limpOffToRest();
     this.state.restingUntilFull = true;
     this.state.hp = 0;
-    this.feedback.toast(RESTING_TOAST);
+    this.feedback.toast(restingToast(petWords(this.petNames, 'attackCow')));
   }
 
   /**
@@ -368,7 +376,9 @@ export class AttackCowSystem implements GameSystem {
   /** The countdown over her while she is down, and the revive bar once someone is reviving. */
   renderOverlay(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     const cow = this.downedCow;
-    if (cow !== null) renderHirelingDownedMarker(ctx, cow, camX, camY);
+    if (cow === null) return;
+    const label = petWords(this.petNames, 'attackCow').called;
+    renderHirelingDownedMarker(ctx, cow, label, camX, camY);
   }
 
   /** A candidate for the shared arrow arbiter, pointing at her while she is down out of sight. */

@@ -8,7 +8,7 @@
  * readout a tap passes through.
  */
 import {
-  displayNameOf,
+  speaksInCarolineFrame,
   type AIChatFeed,
   type AIConnectionStatus,
   type FeedMessage,
@@ -20,6 +20,16 @@ import { panelWidths } from '../theme/tokens';
 import { badge, badgeSize, type BadgeTone } from '../widgets/badge';
 import { button, buttonHeight } from '../widgets/button';
 import { card } from '../widgets/card';
+import {
+  CAROLINE_FULLY_OPEN,
+  CAROLINE_PREFIX,
+  carolineBox,
+  carolineBoxBody,
+  carolineBoxChromeHeight,
+  carolineLineHeight,
+  layoutCarolineText,
+  type CarolineReveal,
+} from '../widgets/carolineFrame';
 import { lineHeightOf, measureTextHeight, text } from '../widgets/text';
 import { hudLayout, type HudGeometry } from './hudLayout';
 
@@ -62,6 +72,45 @@ function visibleText(message: FeedMessage): string {
 
 function choiceRows(count: number): number {
   return Math.ceil(count / MAX_CHOICE_COLUMNS);
+}
+
+/** The reply buttons' height under a message, the gap above them included; 0 for none. */
+function choicesHeight(ui: Ui, rows: number): number {
+  const { space } = ui.theme;
+  return rows === 0 ? 0 : space.sm + rows * buttonHeight(ui, 'sm') + (rows - 1) * space.xs;
+}
+
+/** The reply buttons from the top of `area`, up to {@link MAX_CHOICE_COLUMNS} a row. */
+function drawChoiceRows(
+  ui: Ui,
+  area: Rect,
+  choices: FeedMessage['choices'],
+  rows: number,
+  onChoice: (choiceId: string) => void,
+): void {
+  const { space } = ui.theme;
+  const choiceRowH = buttonHeight(ui, 'sm');
+  const rowRects = splitV(
+    { ...area, h: choicesHeight(ui, rows) - space.sm },
+    Array.from({ length: rows }, () => choiceRowH),
+    space.xs,
+  );
+  rowRects.forEach((rowRect, row) => {
+    const rowChoices = choices.slice(row * MAX_CHOICE_COLUMNS, (row + 1) * MAX_CHOICE_COLUMNS);
+    const cells = splitH(
+      rowRect,
+      rowChoices.map((): 'fill' => 'fill'),
+      space.xs,
+    );
+    rowChoices.forEach((choice, column) => {
+      button(ui, cells[column], {
+        id: `choice-${choice.id}`,
+        label: choice.label,
+        size: 'sm',
+        onTap: () => onChoice(choice.id),
+      });
+    });
+  });
 }
 
 /** The card's height for a body of `bodyH`, given the overline it carries. */
@@ -120,8 +169,54 @@ function flashBlock(ui: Ui, flash: string, width: number): Block {
   };
 }
 
+/**
+ * How far Caroline's message has typed, as her frame reveals it: the prefix
+ * is up at once, and the newest characters still decode while more arrive.
+ */
+function carolineRevealOf(ui: Ui, message: FeedMessage): CarolineReveal {
+  const typed = Math.min(message.text.length, Math.floor(message.revealed));
+  const shown = CAROLINE_PREFIX.length + typed;
+  const typing = !message.done || typed < message.text.length;
+  const decodeTail = skinsFor(ui.theme).caroline.decodeTail;
+  return { shown, decoding: typing ? Math.min(decodeTail, typed) : 0 };
+}
+
+/** Caroline's message in her own frame, her reply buttons inside it under her text. */
+function carolineMessageBlock(
+  ui: Ui,
+  message: FeedMessage,
+  width: number,
+  maxLines: number,
+  onChoice: (choiceId: string) => void,
+): Block {
+  const { space } = ui.theme;
+  const padding = skinsFor(ui.theme).caroline.padding;
+  const lines = layoutCarolineText(ui, width - padding * 2, message.text, maxLines);
+  const textH = lines.length * carolineLineHeight(ui.theme);
+  const choices = message.done ? message.choices : [];
+  const rows = choiceRows(choices.length);
+  const choicesH = choicesHeight(ui, rows);
+  const height = carolineBoxChromeHeight(ui.theme) + textH + choicesH;
+  return {
+    height,
+    draw: (at) => {
+      const frame = { ...at, h: height };
+      carolineBox(ui, frame, {
+        message: message.text,
+        reveal: carolineRevealOf(ui, message),
+        nowMs: ui.now,
+        open: CAROLINE_FULLY_OPEN,
+        maxLines,
+      });
+      if (rows === 0) return;
+      const body = carolineBoxBody(ui.theme, frame);
+      drawChoiceRows(ui, inset(body, { t: textH + space.sm }), choices, rows, onChoice);
+    },
+  };
+}
+
 function typingBlock(ui: Ui, characterName: string): Block {
-  const line = `${displayNameOf(characterName)} is typing…`;
+  const line = `${characterName} is typing…`;
   const height = cardHeight(ui, lineHeightOf(ui, 'muted'));
   return {
     height,
@@ -132,7 +227,7 @@ function typingBlock(ui: Ui, characterName: string): Block {
         {
           id: 'ai-typing',
           kind: 'hud',
-          overline: displayNameOf(characterName),
+          overline: characterName,
           content: (body) => void text(ui, body, { text: line, role: 'muted' }),
         },
       ),
@@ -152,32 +247,10 @@ function messageBlock(
   const textH = measureTextHeight(ui, innerW, { text: message.text, role: 'body', maxLines });
   const choices = message.done ? message.choices : [];
   const rows = choiceRows(choices.length);
-  const choiceRowH = buttonHeight(ui, 'sm');
-  const choicesH = rows === 0 ? 0 : space.sm + rows * choiceRowH + (rows - 1) * space.xs;
+  const choicesH = choicesHeight(ui, rows);
   const height = cardHeight(ui, textH + choicesH);
   const drawChoices = (body: Rect): void => {
-    const area = inset(body, { t: textH + space.sm });
-    const rowRects = splitV(
-      { ...area, h: choicesH - space.sm },
-      Array.from({ length: rows }, () => choiceRowH),
-      space.xs,
-    );
-    rowRects.forEach((rowRect, row) => {
-      const rowChoices = choices.slice(row * MAX_CHOICE_COLUMNS, (row + 1) * MAX_CHOICE_COLUMNS);
-      const cells = splitH(
-        rowRect,
-        rowChoices.map((): 'fill' => 'fill'),
-        space.xs,
-      );
-      rowChoices.forEach((choice, column) => {
-        button(ui, cells[column], {
-          id: `choice-${choice.id}`,
-          label: choice.label,
-          size: 'sm',
-          onTap: () => onChoice(choice.id),
-        });
-      });
-    });
+    drawChoiceRows(ui, inset(body, { t: textH + space.sm }), choices, rows, onChoice);
   };
   return {
     height,
@@ -188,7 +261,7 @@ function messageBlock(
         {
           id: 'ai-message',
           kind: 'hud',
-          overline: displayNameOf(message.characterName),
+          overline: message.characterName,
           accent: ui.theme.palette.accent.base,
           content: (body) => {
             text(ui, { ...body, h: textH }, { text: shown, role: 'body', wrap: true, maxLines });
@@ -236,8 +309,11 @@ function fittedMessage(
     const block = typingBlock(ui, typing);
     return block.height <= room ? block : null;
   }
+  const blockFor = speaksInCarolineFrame(message.characterName)
+    ? carolineMessageBlock
+    : messageBlock;
   for (let lines = messageMaxLines(ui); lines >= 1; lines--) {
-    const block = messageBlock(ui, message, width, lines, onChoice);
+    const block = blockFor(ui, message, width, lines, onChoice);
     if (block.height <= room) return block;
   }
   return null;

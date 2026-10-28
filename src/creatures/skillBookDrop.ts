@@ -1,16 +1,19 @@
 /**
- * Skill-book drops. A book nobody in the party can still learn from (every
- * crawler is maxed in its skill or cannot read it) is swapped for a random
- * book someone can, and nothing drops once no book could help anyone.
+ * Skill-book drops. A creature drops from its pool in `SKILL_BOOK_POOLS`,
+ * skipping any book nobody in the party can still learn from (every crawler is
+ * maxed in its skill or cannot read it); a pool with nothing useful left is
+ * swapped for a random book someone can, and nothing drops once no book could
+ * help anyone.
  */
 import { ITEM_DEF } from '../core/items/defs/ItemDefs';
 import type { ItemDef, ItemId } from '../core/items/defs/ItemDefs';
 import type { SkillId } from '../core/skills/SkillManager';
 import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
+import { drawWeightedBook, SKILL_BOOK_POOLS, type SkillBookPoolId } from '../loot/skillBookPools';
 
 /**
- * Per-kill chance a qualifying regular enemy drops its themed skill book.
+ * Per-kill chance a qualifying regular enemy drops a book from its pool.
  *
  * Same order as the rarest consumables (jugg juice 0.005, stat boost 0.001):
  * a skill book should be an event, not a farm. Deliberately *not* wired into
@@ -64,9 +67,20 @@ export function usefulSkillBook(bookId: ItemId): ItemId | null {
   return alternatives[Math.floor(Math.random() * alternatives.length)] ?? null;
 }
 
-/** Appends `bookId`, or a still-useful substitute, to `items` on a rare roll. */
-export function maybeDropSkillBook(items: LootDrop['items'], bookId: ItemId): void {
+/**
+ * A book from `pool` someone can still learn from, drawn by weight, or null
+ * when every book in it is spent.
+ */
+function usefulPoolBook(pool: SkillBookPoolId, roll: number): ItemId | null {
+  const useful = SKILL_BOOK_POOLS[pool].filter((entry) => !isSkillBookSpent(entry.book));
+  return drawWeightedBook(useful, roll);
+}
+
+/** Appends a book from `pool`, or a still-useful substitute, to `items` on a rare roll. */
+export function maybeDropSkillBook(items: LootDrop['items'], pool: SkillBookPoolId): void {
   if (Math.random() >= SKILL_BOOK_DROP_CHANCE) return;
-  const book = usefulSkillBook(bookId);
+  const fromPool = usefulPoolBook(pool, Math.random());
+  const fallback = SKILL_BOOK_POOLS[pool][0].book;
+  const book = fromPool ?? usefulSkillBook(fallback);
   if (book !== null) items.push({ id: book, quantity: 1 });
 }

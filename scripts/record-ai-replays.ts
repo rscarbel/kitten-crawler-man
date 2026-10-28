@@ -30,7 +30,7 @@ import { AIAdapter, type AIClient } from '../src/ai/AIAdapter';
 import { ActionGovernor } from '../src/ai/actions/governor';
 import { FRAMES_PER_SECOND } from '../src/ai/actions/helpers';
 import type { AISceneContext } from '../src/ai/actions/types';
-import { SYSTEM_CHARACTER_NAME } from '../src/ai/characters';
+import { CAROLINE_CHARACTER_NAME } from '../src/ai/characters';
 import { describeDamageSource } from '../src/ai/context/eventMapping';
 import type {
   AIContextSource,
@@ -42,12 +42,11 @@ import type {
   SessionInput,
 } from '../src/ai/context/types';
 import type { AIReplayExpectation, AIReplayFixture } from '../src/ai/replay/aiReplayFormat';
-import { AIShowStage } from '../src/ai/show/AIShowStage';
+import { AIInteractionStage } from '../src/ai/interactions/AIInteractionStage';
 import { AchievementManager } from '../src/core/progression/AchievementManager';
 import { AchievementAwards } from '../src/systems/AchievementAwards';
 import { TILE_SIZE } from '../src/core/constants';
 import { EventBus } from '../src/core/EventBus';
-import { ViewerFavor } from '../src/core/progression/viewerFavor';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { Mob } from '../src/creatures/Mob';
@@ -61,6 +60,7 @@ import type { SystemContext } from '../src/systems/GameSystem';
 import { SpellSystem } from '../src/systems/SpellSystem';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
 import { aiReplayFixtureSchema, aiReplayJsonSchema, asSchemaInput } from './aiReplaySchema';
+import { PetNameBook } from '../src/core/party/petNames';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_AI_SERVER_DIR = '../game-server-llm';
@@ -226,7 +226,7 @@ interface World {
   readonly human: HumanPlayer;
   readonly cat: CatPlayer;
   readonly mobs: Mob[];
-  readonly show: AIShowStage;
+  readonly stage: AIInteractionStage;
   readonly session: SessionInput;
   readonly live: LiveInput;
   readonly recorder: AIReplayRecorder;
@@ -235,7 +235,7 @@ interface World {
   step(ms: number, change?: () => void): Promise<void>;
   /** Plays the server sending one tool call. */
   serverAction(actionId: string, type: string, params: Record<string, unknown>): Promise<void>;
-  /** The player types to the System; `recall` makes the reply an eval check. */
+  /** The player types to Caroline; `recall` makes the reply an eval check. */
   say(text: string, recall?: Omit<AIReplayExpectation, 'messageIndex' | 'characterName'>): void;
   finish(): AIReplayFixture;
 }
@@ -278,7 +278,7 @@ async function buildWorld(id: string, title: string, description: string): Promi
     grantReward: (side, rarity) =>
       void awards.grantChest(side === 'Human' ? 'human' : 'cat', { rarity, source: 'challenge' }),
   });
-  const show = new AIShowStage({ bus, favor: new ViewerFavor(), challenges, postToast });
+  const stage = new AIInteractionStage({ bus, challenges });
   const session: SessionInput = {
     floorNumber: 1,
     levelId: level1.id,
@@ -334,9 +334,10 @@ async function buildWorld(id: string, title: string, description: string): Promi
     isInCombat: () => live.combatInProgress,
     postToast,
     getAwards: () => awards,
-    getShow: () => show,
+    getInteractions: () => stage,
   };
   const source: AIContextSource = {
+    petNames: new PetNameBook(),
     readSession: () => structuredClone(session),
     readLive: () => structuredClone(live),
     isPartyInSafeRoom: () => live.location.inSafeRoom,
@@ -368,7 +369,7 @@ async function buildWorld(id: string, title: string, description: string): Promi
     human,
     cat,
     mobs,
-    show,
+    stage,
     session,
     live,
     recorder,
@@ -387,15 +388,15 @@ async function buildWorld(id: string, title: string, description: string): Promi
       await settle();
     },
     async serverAction(actionId, type, params) {
-      client.fire('ai_action', { actionId, characterName: SYSTEM_CHARACTER_NAME, type, params });
+      client.fire('ai_action', { actionId, characterName: CAROLINE_CHARACTER_NAME, type, params });
       adapter.update();
       await settle();
     },
     say(text, recall) {
       const messageIndex = recorder.nextIndex;
-      adapter.chatWithSystem(text);
+      adapter.chatWithCaroline(text);
       if (recall !== undefined) {
-        expectations.push({ ...recall, messageIndex, characterName: SYSTEM_CHARACTER_NAME });
+        expectations.push({ ...recall, messageIndex, characterName: CAROLINE_CHARACTER_NAME });
       }
     },
     finish() {
@@ -448,7 +449,7 @@ async function dynamiteIncident(): Promise<AIReplayFixture> {
     'dynamite-incident',
     'The dynamite incident',
     `Floor 1: a goblin fight ${HUMAN} ends with goblin dynamite that also knocks ${CAT} out, a revive, ` +
-      'the Trash Gremlin boss kill, then in a safe room the player asks the System whether it remembers the dynamite.',
+      'the Trash Gremlin boss kill, then in a safe room the player asks Caroline whether she remembers the dynamite.',
   );
   const { bus, human, cat, live } = world;
   const goblins = Array.from({ length: GOBLINS_IN_CAMP }, () => new Dummy('Goblin', 'goblin'));
@@ -504,7 +505,7 @@ async function dynamiteIncident(): Promise<AIReplayFixture> {
     bus.emit('roomCleared', { roomIndex: GOBLIN_CAMP_ROOM_INDEX });
   });
   await world.serverAction('replay-announce-1', 'announce', {
-    text: `Friendly fire is still fire, ${HUMAN}. The viewers would like to see that again.`,
+    text: `Friendly fire is still fire, ${HUMAN}. Recorded.`,
   });
   await world.step(LONG_BEAT_MS, () => {
     live.location = CORRIDOR;
@@ -536,11 +537,11 @@ async function dynamiteIncident(): Promise<AIReplayFixture> {
   });
   await world.step(WALK_MS, () => {
     live.location = SAFE_ROOM;
-    bus.emit('safeRoomEntered', {});
+    bus.emit('safeRoomEntered', { room: { kind: 'floor', level: 'level1', index: 0 } });
     bus.emit('gameSaved', {});
   });
   await world.step(BEAT_MS, () => {
-    world.say('Hey System. Remember the dynamite?', {
+    world.say('Caroline. Remember the dynamite?', {
       kind: 'recall',
       mentionsAny: [
         crawlerName('cat'),
@@ -550,7 +551,7 @@ async function dynamiteIncident(): Promise<AIReplayFixture> {
         'blast',
         'blew up',
       ],
-      description: `The System should bring up ${HUMAN} lighting goblin dynamite that killed three goblins and knocked ${CAT} out.`,
+      description: `Caroline should bring up ${HUMAN} lighting goblin dynamite that killed three goblins and knocked ${CAT} out.`,
     });
   });
   await world.step(LONG_BEAT_MS);
@@ -570,7 +571,7 @@ async function challengeAndDeath(): Promise<AIReplayFixture> {
   const world = await buildWorld(
     'challenge-and-death',
     'A challenge, then a death',
-    `Floor 1, mid-run: the System offers a three-kill challenge the party accepts and wins, then ${HUMAN} ` +
+    `Floor 1, mid-run: Caroline offers a three-kill challenge the party accepts and wins, then ${HUMAN} ` +
       'wanders into a goblin war band and dies, respawns at the save, and asks what that challenge was.',
   );
   const { bus, human, live, session } = world;
@@ -586,14 +587,14 @@ async function challengeAndDeath(): Promise<AIReplayFixture> {
     template: 'slay',
     title: 'Rat Race',
     reward_rarity: 'Common',
-    taunt: 'Three rats. THREE. And you still choked.',
+    taunt: 'Three rats. Sixty seconds. Not completed.',
     seconds: CHALLENGE_SECONDS,
     count: RATS_FOR_CHALLENGE,
     mob_type: 'any',
-    pitch: `Kill three things in a minute. Even ${CAT} could manage that.`,
+    pitch: 'Three kills in sixty seconds. Projected success: 70 percent.',
   });
   await world.step(BEAT_MS, () => {
-    world.show.acceptChallenge();
+    world.stage.acceptChallenge();
   });
   await world.step(QUICK_BEAT_MS, () => {
     live.combatInProgress = true;
@@ -641,7 +642,7 @@ async function challengeAndDeath(): Promise<AIReplayFixture> {
       kind: 'recall',
       mentionsAny: ['Rat Race'],
       description:
-        'The System should recall the "Rat Race" challenge the party won before the death.',
+        'Caroline should recall the "Rat Race" challenge the party won before the death.',
     });
   });
   await world.step(LONG_BEAT_MS);

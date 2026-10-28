@@ -3,13 +3,13 @@
  * `verify-mercenaries.ts`.
  *
  * - The ward: a Shield soaks up exactly its pool from a blow before any
- *   reaches HP, from a crawler and from Mongo alike; a spent ward lingers only
+ *   reaches HP, from a crawler and from Deinonychus alike; a spent ward lingers only
  *   long enough to be seen breaking; a scene-crossing snapshot carries the pool
  *   without sharing it, and a checkpoint strips it.
  * - Crush's Shield goes up on the cast frame, on the cat first, and takes a
  *   blow for her — measured on her HP; it waits for a fight, and for a wound.
- * - Hammer Hands' Shield goes to whoever is worst hurt, Mongo included, where
- *   Crush's would pass Mongo over.
+ * - Hammer Hands' Shield goes to whoever is worst hurt, Deinonychus included, where
+ *   Crush's would pass Deinonychus over.
  * - Guarding the cat: whoever hurts the cat loses HP to Crush, while the
  *   hostile nearest him is left alone; Hammer Hands in the same spot hits the nearest.
  * - The punch lands on the tick its extended frame is drawn.
@@ -26,7 +26,7 @@ import { GameMap } from '../../src/map/GameMap';
 import { FloorTypeValue, type TileContent } from '../../src/map/tileTypes';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
-import { Mongo } from '../../src/creatures/Mongo';
+import { Deinonychus } from '../../src/creatures/Deinonychus';
 import type { Mob } from '../../src/creatures/Mob';
 import type { Mercenary } from '../../src/creatures/Mercenary';
 import type { DamageSource, Player } from '../../src/Player';
@@ -93,9 +93,9 @@ const BADLY_HURT_FRACTION = 0.4;
 const BETWEEN_TRIGGERS_FRACTION = 0.65;
 /** Over both triggers. */
 const HEALTHY_FRACTION = 0.9;
-const MONGO_LEVEL = 1;
-/** Mongo worse off than anyone, so worst-hurt picks him if he counts at all. */
-const MONGO_HURT_FRACTION = 0.3;
+const DEINONYCHUS_LEVEL = 1;
+/** Deinonychus worse off than anyone, so worst-hurt picks him if he counts at all. */
+const DEINONYCHUS_HURT_FRACTION = 0.3;
 
 /** Inside the engage radius of the owner, well outside a punch. */
 const DISTANT_HOSTILE_TILES = 8;
@@ -104,8 +104,8 @@ const CAST_WATCH_FRAMES = SHIELD_CAST_TOTAL_TICKS * 2;
 const HELD_BLOW = SHIELD_ABSORB - 1;
 /** How far past what is left of the pool the breaking blow goes: a wound, not a kill. */
 const BREAKING_OVERFLOW = 3;
-/** Small enough for Mongo's softening to charge something, and for a ward to hold. */
-const MONGO_BLOW = 6;
+/** Small enough for Deinonychus's softening to charge something, and for a ward to hold. */
+const DEINONYCHUS_BLOW = 6;
 
 const CAT_GUARD_WATCH_FRAMES = 240;
 /** The foe near the cat stands this far from her, inside the attacker search. */
@@ -221,10 +221,10 @@ function distance(a: { x: number; y: number }, b: { x: number; y: number }): num
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-/** Runs the Mongo constructor the way `MongoSystem` does: at full health for his level. */
-function makeMongo(owner: Player, tileX: number, tileY: number): Mongo {
-  const probe = new Mongo(tileX, tileY, TILE_SIZE, owner, MONGO_LEVEL, 1);
-  return new Mongo(tileX, tileY, TILE_SIZE, owner, MONGO_LEVEL, probe.maxHp);
+/** Runs the Deinonychus constructor the way `DeinonychusSystem` does: at full health for his level. */
+function makeDeinonychus(owner: Player, tileX: number, tileY: number): Deinonychus {
+  const probe = new Deinonychus(tileX, tileY, TILE_SIZE, owner, DEINONYCHUS_LEVEL, 1);
+  return new Deinonychus(tileX, tileY, TILE_SIZE, owner, DEINONYCHUS_LEVEL, probe.maxHp);
 }
 
 // ── The ward itself ──────────────────────────────────────────────────────────
@@ -284,17 +284,20 @@ function checkWard(report: EarthElementalGuardGateReporter): void {
   );
 
   const cat = new CatPlayer(HUMAN_TILE_X, HUMAN_TILE_Y, TILE_SIZE);
-  const shieldedMongo = makeMongo(cat, HUMAN_TILE_X, HUMAN_TILE_Y);
-  shieldedMongo.applyStatus(makeShield(SHIELD_ABSORB, SHIELD_DURATION_TICKS));
-  const mongoBefore = shieldedMongo.hp;
-  shieldedMongo.takeDamage(MONGO_BLOW, source);
-  report.check(shieldedMongo.hp === mongoBefore, 'the ward holds a blow for Mongo too');
-  const bareMongo = makeMongo(cat, HUMAN_TILE_X, HUMAN_TILE_Y);
-  const bareMongoBefore = bareMongo.hp;
-  bareMongo.takeDamage(MONGO_BLOW, source);
+  const shieldedDeinonychus = makeDeinonychus(cat, HUMAN_TILE_X, HUMAN_TILE_Y);
+  shieldedDeinonychus.applyStatus(makeShield(SHIELD_ABSORB, SHIELD_DURATION_TICKS));
+  const deinonychusBefore = shieldedDeinonychus.hp;
+  shieldedDeinonychus.takeDamage(DEINONYCHUS_BLOW, source);
+  report.check(
+    shieldedDeinonychus.hp === deinonychusBefore,
+    'the ward holds a blow for Deinonychus too',
+  );
+  const bareDeinonychus = makeDeinonychus(cat, HUMAN_TILE_X, HUMAN_TILE_Y);
+  const bareDeinonychusBefore = bareDeinonychus.hp;
+  bareDeinonychus.takeDamage(DEINONYCHUS_BLOW, source);
   report.checkCatches(
-    bareMongo.hp === bareMongoBefore,
-    'the same blow on an unwarded Mongo is caught costing HP',
+    bareDeinonychus.hp === bareDeinonychusBefore,
+    'the same blow on an unwarded Deinonychus is caught costing HP',
   );
 
   const goblin = spawnMob(
@@ -303,20 +306,20 @@ function checkWard(report: EarthElementalGuardGateReporter): void {
     makeRoom(),
     liveSpawnContext('dev:spawn'),
   );
-  const struckMongo = makeMongo(cat, HUMAN_TILE_X, HUMAN_TILE_Y);
-  struckMongo.applyStatus(makeShield(SHIELD_ABSORB, SHIELD_DURATION_TICKS));
-  const struckBefore = struckMongo.hp;
-  struckMongo.takeDamageFrom(MONGO_BLOW, goblin, 'melee');
+  const struckDeinonychus = makeDeinonychus(cat, HUMAN_TILE_X, HUMAN_TILE_Y);
+  struckDeinonychus.applyStatus(makeShield(SHIELD_ABSORB, SHIELD_DURATION_TICKS));
+  const struckBefore = struckDeinonychus.hp;
+  struckDeinonychus.takeDamageFrom(DEINONYCHUS_BLOW, goblin, 'melee');
   report.check(
-    struckMongo.hp === struckBefore,
-    `the ward holds a mob-on-mob blow for Mongo — a boulder, a trample (${struckBefore} -> ${struckMongo.hp})`,
+    struckDeinonychus.hp === struckBefore,
+    `the ward holds a mob-on-mob blow for Deinonychus — a boulder, a trample (${struckBefore} -> ${struckDeinonychus.hp})`,
   );
-  const openMongo = makeMongo(cat, HUMAN_TILE_X, HUMAN_TILE_Y);
-  const openBefore = openMongo.hp;
-  openMongo.takeDamageFrom(MONGO_BLOW, goblin, 'melee');
+  const openDeinonychus = makeDeinonychus(cat, HUMAN_TILE_X, HUMAN_TILE_Y);
+  const openBefore = openDeinonychus.hp;
+  openDeinonychus.takeDamageFrom(DEINONYCHUS_BLOW, goblin, 'melee');
   report.checkCatches(
-    openMongo.hp === openBefore,
-    'the same mob-on-mob blow on an unwarded Mongo is caught costing HP',
+    openDeinonychus.hp === openBefore,
+    'the same mob-on-mob blow on an unwarded Deinonychus is caught costing HP',
   );
 
   const traveller = new HumanPlayer(HUMAN_TILE_X, HUMAN_TILE_Y, TILE_SIZE);
@@ -484,36 +487,36 @@ function castsOver(kit: EarthElementalGuardKit, frames: number): number {
 // ── Hammer Hands' Shield ─────────────────────────────────────────────────────
 
 function checkHammerHandsShield(report: EarthElementalGuardGateReporter): void {
-  report.section("Hammer Hands' Shield: whoever is worst hurt, Mongo included");
+  report.section("Hammer Hands' Shield: whoever is worst hurt, Deinonychus included");
   const probeCat = new CatPlayer(HUMAN_TILE_X + 1, HUMAN_TILE_Y, TILE_SIZE);
-  const mongo = makeMongo(probeCat, HUMAN_TILE_X, HUMAN_TILE_Y + 1);
-  const h = build('hammer_hands', [mongo]);
+  const deinonychus = makeDeinonychus(probeCat, HUMAN_TILE_X, HUMAN_TILE_Y + 1);
+  const h = build('hammer_hands', [deinonychus]);
   report.check(h !== null, 'Hammer Hands spawns with the earth elemental guard kit');
   if (h === null) return;
   woundTo(h.human, BETWEEN_TRIGGERS_FRACTION);
   woundTo(h.cat, HEALTHY_FRACTION);
-  woundTo(mongo, MONGO_HURT_FRACTION);
+  woundTo(deinonychus, DEINONYCHUS_HURT_FRACTION);
   addHostile(h, HUMAN_TILE_X + DISTANT_HOSTILE_TILES, HUMAN_TILE_Y);
-  const outcome = watchCast(h, [h.human, h.cat, mongo], CAST_WATCH_FRAMES);
+  const outcome = watchCast(h, [h.human, h.cat, deinonychus], CAST_WATCH_FRAMES);
   report.check(
-    outcome.shielded === mongo,
-    `Mongo, worst hurt, gets it (${outcome.shielded === null ? 'nobody' : outcome.shielded === mongo ? 'Mongo' : 'a crawler'})`,
+    outcome.shielded === deinonychus,
+    `Deinonychus, worst hurt, gets it (${outcome.shielded === null ? 'nobody' : outcome.shielded === deinonychus ? 'Deinonychus' : 'a crawler'})`,
   );
-  const mongoBefore = mongo.hp;
-  mongo.takeDamage(MONGO_BLOW, blowFrom(HUMAN_TILE_X, HUMAN_TILE_Y + 2));
-  report.check(mongo.hp === mongoBefore, 'and it takes a blow for him');
+  const deinonychusBefore = deinonychus.hp;
+  deinonychus.takeDamage(DEINONYCHUS_BLOW, blowFrom(HUMAN_TILE_X, HUMAN_TILE_Y + 2));
+  report.check(deinonychus.hp === deinonychusBefore, 'and it takes a blow for him');
 
-  const crushMongo = makeMongo(probeCat, HUMAN_TILE_X, HUMAN_TILE_Y + 1);
-  const crush = build('crush', [crushMongo]);
+  const crushDeinonychus = makeDeinonychus(probeCat, HUMAN_TILE_X, HUMAN_TILE_Y + 1);
+  const crush = build('crush', [crushDeinonychus]);
   if (crush !== null) {
     woundTo(crush.human, BETWEEN_TRIGGERS_FRACTION);
     woundTo(crush.cat, HEALTHY_FRACTION);
-    woundTo(crushMongo, MONGO_HURT_FRACTION);
+    woundTo(crushDeinonychus, DEINONYCHUS_HURT_FRACTION);
     addHostile(crush, HUMAN_TILE_X + DISTANT_HOSTILE_TILES, HUMAN_TILE_Y);
-    const passed = watchCast(crush, [crush.human, crush.cat, crushMongo], CAST_WATCH_FRAMES);
+    const passed = watchCast(crush, [crush.human, crush.cat, crushDeinonychus], CAST_WATCH_FRAMES);
     report.checkCatches(
       passed.shielded !== null,
-      "Crush in Hammer Hands' place is caught shielding nobody (Mongo is not his, the human is over his trigger)",
+      "Crush in Hammer Hands' place is caught shielding nobody (Deinonychus is not his, the human is over his trigger)",
     );
   }
 }

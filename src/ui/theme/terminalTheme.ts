@@ -1,7 +1,7 @@
 /**
  * The System AI's machine voice: the theme with the terminal face in place of
- * the UI face, for text the System types out (its title-screen lines, its
- * sponsor breaks). Built once per theme.
+ * the UI face, for text the System types out (its title-screen lines).
+ * Built once per theme.
  */
 
 import { TERMINAL_FONT_STACK } from './fonts';

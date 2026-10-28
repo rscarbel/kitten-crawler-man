@@ -29,7 +29,7 @@ import {
 } from '../biped/rig';
 import { type CardinalView } from '../../facingView';
 import { deg, type Pt } from '../bipedArt';
-import { SLINGSHOT_COOLDOWN_FRAMES } from '../../slingshotSprite';
+import { SLING_COOLDOWN_FRAMES } from '../../../core/items/equipment/weapons';
 import { anglesThrough, frameValue, upperArmShareThrough } from './gaitShared';
 import { PALM_TO_CAMERA, towards, turnHand } from './handTurn';
 import type { Vec3 } from '../../held/heldPaint';
@@ -44,7 +44,7 @@ export const SLING_FRAMES = 9;
  * Ticks each frame holds, derived from the cooldown so the draw can never be
  * slower than the gun: the row ends on the tick the sling may fire again.
  */
-export const SLING_TICKS_PER_FRAME = Math.round(SLINGSHOT_COOLDOWN_FRAMES / SLING_FRAMES);
+export const SLING_TICKS_PER_FRAME = Math.round(SLING_COOLDOWN_FRAMES / SLING_FRAMES);
 /** The last frame the pouch hangs free, before the drawing hand reaches it. */
 const REACH_FRAME = 2;
 /** From this frame on the drawing hand holds the pouch; before it the hand is open. */

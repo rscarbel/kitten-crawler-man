@@ -14,7 +14,7 @@ const MAX_SOFTENING_CREDIT = 1;
  * blow, one-point ticks included.
  *
  * Used by every creature on the party's side whose resistance is a multiplier
- * on incoming damage (Mongo, the Barracks hirelings). Such a creature
+ * on incoming damage (Deinonychus, the Barracks hirelings). Such a creature
  * charges its incoming damage here in *both* of `Mob`'s damage entry points,
  * because they are genuinely two doors rather than one wrapping the other:
  * `takeDamage` is what a mob swinging at a player-like target calls,
@@ -39,7 +39,7 @@ const MAX_SOFTENING_CREDIT = 1;
  * one-point hits pushes the balance further negative every time, so the
  * resistance stops applying to them *and* the accumulated credit is later spent
  * as flat immunity — measured at seventy-six free hit points after two hundred
- * ticks of a shell edge at a 0.6 multiplier, which is a damage shield rather
+ * ticks of an energy shield edge at a 0.6 multiplier, which is a damage shield rather
  * than a resistance. Clamped, the most the ledger can ever owe or be owed is one
  * hit point in either direction.
  */

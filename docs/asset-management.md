@@ -245,6 +245,12 @@ Scenes preload through their `AudioScope` (`scope.preload(ids)`), which declares
 when a scope is disposed, decoded buffers that no live scope declared are released, except
 the `universal` group.
 
+Recordings live under `src/audio/`, one folder per family and then per owner:
+`characters/deinonychus/` holds the pet Deinonychus's calls, `effects/caroline/` holds
+`caroline_message_chime`, which plays with each of Caroline's message boxes. A recording
+belongs to the folder of whoever or whatever makes the sound, never to the floor or the
+scene that first played it, so an owner's sounds move together when the owner does.
+
 ## Creatures are painted, not loaded
 
 There is no creature sheet on disk. Each figure's art lives in `src/sprites/art/` as a
@@ -436,6 +442,24 @@ Nothing outside `src/shelf/` and `scripts/` may import from it, so a shelved fig
 never in the bundle and never in the cache. Each keeps its art gates and render harness,
 so it still compiles and renders, and each has an entry in `src/shelf/README.md`.
 
+**A finished figure with a dev route is an unplaced asset, not a shelved one.** The Demon
+Liaison (`DEMON_LIAISON_FIGURE` in `src/sprites/art/demonLiaisonFigure.ts`, his parts in
+`demonLiaisonArt.ts`, drawn through `drawDemonLiaisonSprite` in
+`src/sprites/demonLiaisonSprite.ts`) is a complete horned, winged figure on the human rig
+that nothing in play spawns. His readers are the `?demonliaison` preview
+(`DemonLiaisonPreviewScene`) and `npm run render:demon-liaison`, which runs his gates
+and renders him beside the human and the residents; `npm run gates:idle-stillness` holds
+his idle. A dev route is bundled code, which the shelf forbids, so he sits beside the live
+figures. He costs bundle bytes but no cache memory, since nothing bakes him outside the
+preview.
+
+**Each character's harness is named for it.** `npm run render:deinonychus` (gates in
+`scripts/gates-deinonychus.ts`) and `render:deinonychus-explainer` draw the pet at each
+growth stage and its explainer; `render:energy-shield` (gates in
+`scripts/gates-energy-shield.ts`) and `render:seismic-stomp-blast` draw the two
+abilities' runtime effects; `render:dave-teleport` draws every frame of Dave's teleport in
+and out and every row he walks, stands and talks in, through `drawDaveSprite`.
+
 ## The ground is painted too
 
 The generated ground tilesets — `ground_overworld`, `ground_dungeon`,
@@ -595,7 +619,7 @@ building's entries and the tile chunks are left alone.
 The paced queues above are right for a floor already being played, and wrong
 for its first seconds: on the town they mean buildings arriving one at a time,
 a crowd drawn as stand-in poses while its rows bake, and a screenful of ground
-chunks baked on the first frame; in a dungeon, Mordecai's wander and the boss
+chunks baked on the first frame; in a dungeon, Dave's wander and the boss
 rooms' sheets painting in. Every environment covers that instead — the
 tutorial, every floor and every building interior. `LevelDef.arrivalLoadingScreen`
 is required, and `GameplayScene` holds an abstract `ArrivalLoader`
@@ -610,7 +634,9 @@ a few milliseconds a frame.
 
 The screen only drains what was queued, so what makes an arrival hitch-free is
 that everything drawn from the first frame queued its rows when it was placed:
-Mordecai in every view he wanders in, the goblin mother, the tutorial's
+Dave in every view he wanders in, whenever the run left him standing in the room
+the party arrives in (`DaveGuideSystem` warms him again on each safe-room entry, since his
+teleport may come long after the scene was built), the goblin mother, the tutorial's
 goblins, the spider lab's self-cycling life machines, the town's recruiter
 (urgently, since the crowd has filled the cache by then).
 `npm run verify:arrival-load` runs the real scene for each environment and

@@ -36,15 +36,19 @@ export type LuckCheck = () => boolean;
 
 export const NEVER_LUCKY: LuckCheck = () => false;
 
-/** Dexterity `!lucky` adds to each crawler's dodge roll; the dodge cap still applies. */
-export const LUCKY_DODGE_DEXTERITY_BONUS = 500;
+/**
+ * Flat dodge chance `!lucky` adds after the evasiveness curve: a whole extra
+ * chance, so the dodge cap is the only thing left between a crawler and every
+ * blow missing.
+ */
+export const LUCKY_DODGE_CHANCE_BONUS = 1;
 
 /**
- * Like the god-mode stat bonus, this rides on top of the stored stats and only
- * feeds the dodge roll, so it never shows on the stat sheet or reaches a snapshot.
+ * Rides on top of the stored stats and only feeds the dodge roll, so it never
+ * shows on the stat sheet or reaches a snapshot.
  */
 export function applyLuckToPlayer(p: Player): void {
-  p.setLuckyDodgeBonus(LUCKY_DODGE_DEXTERITY_BONUS);
+  p.setLuckyDodgeBonus(LUCKY_DODGE_CHANCE_BONUS);
 }
 
 export function removeLuckFromPlayer(p: Player): void {

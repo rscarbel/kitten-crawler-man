@@ -10,7 +10,7 @@
  *   - she never moves: not for a crawler, a companion, a hostile mob, or a
  *     knockback;
  *   - a crawler pinned between her and a wall can still walk away along it;
- *   - a crawler pressed against her can still hit her, and Mongo still closes
+ *   - a crawler pressed against her can still hit her, and Deinonychus still closes
  *     to his ordinary contact distance;
  *   - she is ticked from every tile of her room, so she collides wherever the
  *     party can stand in it.
@@ -22,14 +22,14 @@
  * Each fault overrides a getter on one instance, without touching a source
  * file. `unanchored` makes her separable again: the crawler is then handed
  * only its mass share of each push and the first check has to go red.
- * `wide-companion` makes Mongo stop closing to the ordinary contact: he is then
- * held out at her body radius, beyond his own bite, and the Mongo contact check
+ * `wide-companion` makes Deinonychus stop closing to the ordinary contact: he is then
+ * held out at her body radius, beyond his own bite, and the Deinonychus contact check
  * has to go red.
  */
 
 import { TILE_SIZE } from '../src/core/constants.js';
 import { KRAKAREN_BODY_RADIUS_PX, KrakarenClone } from '../src/creatures/KrakarenClone.js';
-import { Mongo } from '../src/creatures/Mongo.js';
+import { Deinonychus } from '../src/creatures/Deinonychus.js';
 import type { Mob } from '../src/creatures/Mob.js';
 import { Rat } from '../src/creatures/Rat.js';
 import type { Player } from '../src/Player.js';
@@ -112,8 +112,8 @@ const ESCAPE_MIN_TILES = 2;
 /** Walkable tiles needed along the wall on the escape side. */
 const ESCAPE_CLEAR_TILES = 4;
 
-const MONGO_LEVEL = 1;
-const MONGO_STARTING_HP = 999;
+const DEINONYCHUS_LEVEL = 1;
+const DEINONYCHUS_STARTING_HP = 999;
 
 let failures = 0;
 
@@ -273,24 +273,27 @@ function checkMobsAndShoves(side: DoorSide): void {
     const arena = buildArena(side);
     const origin = { x: arena.boss.x, y: arena.boss.y };
     const spawn = arena.env.room.spawn;
-    const mongo = new Mongo(
+    const deinonychus = new Deinonychus(
       spawn.x,
       spawn.y,
       TILE_SIZE,
       arena.ctx.cat,
-      MONGO_LEVEL,
-      MONGO_STARTING_HP,
+      DEINONYCHUS_LEVEL,
+      DEINONYCHUS_STARTING_HP,
     );
     if (FAULT === 'wide-companion') {
-      Object.defineProperty(mongo, 'closesToOrdinaryContact', { get: () => false });
+      Object.defineProperty(deinonychus, 'closesToOrdinaryContact', { get: () => false });
     }
-    settleOverlap(arena, mongo);
-    check(bossHasNotMoved(arena.boss, origin), `${side} lab: Mongo bumping her does not move her`);
-    const mongoGap = distanceBetween(mongo, arena.boss);
+    settleOverlap(arena, deinonychus);
     check(
-      Math.abs(mongoGap - SEPARATION_RADIUS) <= ORDINARY_CONTACT_SLACK_PX,
-      `${side} lab: Mongo is pushed out to his ordinary contact, not held out of reach ` +
-        `(${mongoGap.toFixed(1)} px)`,
+      bossHasNotMoved(arena.boss, origin),
+      `${side} lab: Deinonychus bumping her does not move her`,
+    );
+    const deinonychusGap = distanceBetween(deinonychus, arena.boss);
+    check(
+      Math.abs(deinonychusGap - SEPARATION_RADIUS) <= ORDINARY_CONTACT_SLACK_PX,
+      `${side} lab: Deinonychus is pushed out to his ordinary contact, not held out of reach ` +
+        `(${deinonychusGap.toFixed(1)} px)`,
     );
   }
   {

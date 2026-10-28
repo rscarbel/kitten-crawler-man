@@ -501,7 +501,7 @@ export class RockGolemBoss extends RockGolem {
       items.push({ id: 'cooldown_crisp', quantity: 1 });
       items.push({ id: 'stat_boost_potion', quantity: 1 });
     }
-    maybeDropSkillBook(items, 'skill_book_pugilism');
+    maybeDropSkillBook(items, 'stoneFist');
     return items;
   }
 }

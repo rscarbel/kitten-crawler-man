@@ -51,6 +51,7 @@ const RIOT_KNEEGUARDS_THORNS_SHARE = 0.1;
 const RIOT_KNEEGUARDS_RIPOSTE_WINDOW_FRAMES = 90;
 const RIOT_KNEEGUARDS_RIPOSTE_MULTIPLIER = 1.5;
 const IRON_KNUCKLE_STUN_CHANCE = 0.03;
+const IRON_KNUCKLE_MECHANICAL_FIST_LEVELS = 2;
 const HAZARD_GOGGLES_BLAST_TILES = 1;
 const DEMOLITION_APRON_REFUND_CHANCE = 0.2;
 const FOREMANS_HARDHAT_HARVEST_BONUS = 1;
@@ -134,8 +135,8 @@ export const GEAR_CATALOGUE = defineItemDefs({
     look: { kind: 'garment', garment: 'human_lucky_hoodie' },
     equipSlot: 'Torso',
     equipSubSlot: 'Jacket',
-    statBonus: { constitution: 1 },
-    traits: [{ kind: 'grantsAbility', ability: 'protective_shell' }],
+    statBonus: { health: 2 },
+    traits: [{ kind: 'grantsAbility', ability: 'energy_shield' }],
     description:
       'A faded red pullover with one drawstring chewed flat. He has never once washed it ' +
       'before a big day, and he is not about to start now.',
@@ -152,7 +153,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     look: { kind: 'garment', garment: 'human_scrappers_wraps' },
     equipSlot: 'Hands',
     equipSubSlot: 'Gloves',
-    statBonus: { strength: 1 },
+    statBonus: { melee: 1 },
     skillLevelBonus: { pugilism: 1 },
     description:
       'Cloth hand-wraps taped at the wrist, grey where the last owner bled into them and ' +
@@ -171,7 +172,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     look: { kind: 'garment', garment: 'human_hobnail_boots' },
     equipSlot: 'Feet',
     equipSubSlot: 'Shoes',
-    statBonus: { dexterity: 1 },
+    statBonus: { evasiveness: 1 },
     cancelsMomentum: true,
     description:
       'Heavy brown boots with iron studs hammered through the soles. They announce you on ' +
@@ -215,10 +216,10 @@ export const GEAR_CATALOGUE = defineItemDefs({
     look: { kind: 'garment', garment: 'human_iron_knuckle_gauntlet' },
     equipSlot: 'Hands',
     equipSubSlot: 'Gloves',
-    meleeOnlyStatBonus: { strength: 3 },
-    skillLevelBonus: { iron_punch: 2 },
+    meleeOnlyStatBonus: { melee: 3 },
+    skillLevelBonus: { mechanical_fist: IRON_KNUCKLE_MECHANICAL_FIST_LEVELS },
     traits: [
-      { kind: 'ironPunch' },
+      { kind: 'fistFamily', family: 'gauntlet' },
       { kind: 'onHitStatus', status: 'stun', chance: IRON_KNUCKLE_STUN_CHANCE, on: 'melee' },
     ],
     description:
@@ -237,7 +238,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     look: { kind: 'garment', garment: 'human_patched_duster' },
     equipSlot: 'Torso',
     equipSubSlot: 'Back',
-    statBonus: { constitution: 2 },
+    statBonus: { health: 4 },
     resistances: ['poison', 'piercing'],
     description:
       'A long leather coat flared at the hem, more patch than coat by now. Every patch is a ' +
@@ -274,7 +275,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     look: { kind: 'garment', garment: 'human_demolition_apron' },
     equipSlot: 'Torso',
     equipSubSlot: 'Shirt',
-    statBonus: { strength: 2 },
+    statBonus: { melee: 2 },
     traits: [
       { kind: 'explosiveCraft', radiusTiles: 0, refundChance: DEMOLITION_APRON_REFUND_CHANCE },
     ],
@@ -329,7 +330,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     look: { kind: 'garment', garment: 'human_hamhock_boots' },
     equipSlot: 'Feet',
     equipSubSlot: 'Shoes',
-    statBonus: { constitution: 1 },
+    statBonus: { health: 2 },
     cancelsMomentum: true,
     description:
       'Pig-leather boots with trotter toe caps. They squeak when wet, which they always are.',
@@ -349,7 +350,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     wearer: 'human',
     weapon: {
       delivery: 'melee',
-      strike: 'blade',
+      family: 'smallBlade',
       damageMultiplier: REBAR_SHIV_DAMAGE_MULTIPLIER,
       reachTiles: HUMAN_ARM_REACH_TILES,
       heldVisual: 'rebar_shiv',
@@ -372,7 +373,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     wearer: 'human',
     weapon: {
       delivery: 'melee',
-      strike: 'blunt',
+      family: 'blunt',
       damageMultiplier: PIPE_WRENCH_DAMAGE_MULTIPLIER,
       reachTiles: HUMAN_ARM_REACH_TILES,
       heldVisual: 'pipe_wrench',
@@ -394,7 +395,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     equipSlot: 'Weapon',
     equipSubSlot: 'Main',
     wearer: 'human',
-    weapon: { delivery: 'sling', heldVisual: 'rattlestick_sling', sound: 'sling' },
+    weapon: { delivery: 'sling', family: 'sling', heldVisual: 'rattlestick_sling', sound: 'sling' },
     traits: [{ kind: 'ricochet', bounces: RATTLESTICK_RICOCHET_BOUNCES }],
     description:
       'A forked stick with a band cut from an inner tube and a pocket of stones that rattle ' +
@@ -413,7 +414,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     wearer: 'human',
     weapon: {
       delivery: 'melee',
-      strike: 'blade',
+      family: 'axe',
       damageMultiplier: FIRE_AXE_DAMAGE_MULTIPLIER,
       reachTiles: HUMAN_ARM_REACH_TILES,
       heldVisual: 'fire_axe',
@@ -437,7 +438,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     wearer: 'human',
     weapon: {
       delivery: 'melee',
-      strike: 'blunt',
+      family: 'blunt',
       damageMultiplier: GRAVEDIGGERS_SPADE_DAMAGE_MULTIPLIER,
       reachTiles: HUMAN_ARM_REACH_TILES,
       heldVisual: 'gravediggers_spade',
@@ -463,7 +464,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     wearer: 'human',
     weapon: {
       delivery: 'melee',
-      strike: 'blade',
+      family: 'sword',
       damageMultiplier: STORMCALLER_DAMAGE_MULTIPLIER,
       reachTiles: HUMAN_ARM_REACH_TILES,
       onStrike: 'stormcallerStorm',
@@ -489,7 +490,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     wearer: 'human',
     weapon: {
       delivery: 'melee',
-      strike: 'blade',
+      family: 'sword',
       damageMultiplier: LAST_WORD_DAMAGE_MULTIPLIER,
       reachTiles: HUMAN_ARM_REACH_TILES,
       heldVisual: 'the_last_word',
@@ -551,7 +552,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     look: { kind: 'garment', garment: 'cat_velvet_harness' },
     equipSlot: 'Torso',
     equipSubSlot: 'Shirt',
-    statBonus: { constitution: 1, dexterity: 1 },
+    statBonus: { health: 2, evasiveness: 1 },
     description:
       'A plum velvet harness with little brass rings. It is the least practical thing she ' +
       'owns and she would fight anyone who said so.',
@@ -568,7 +569,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     look: { kind: 'garment', garment: 'cat_mousehide_booties' },
     equipSlot: 'Feet',
     equipSubSlot: 'Shoes',
-    statBonus: { dexterity: 2 },
+    statBonus: { evasiveness: 2 },
     description:
       'Four soft grey booties that make no sound at all. She considers the irony of the ' +
       'material a perk.',
@@ -585,7 +586,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     look: { kind: 'garment', garment: 'cat_plumed_coat' },
     equipSlot: 'Torso',
     equipSubSlot: 'Jacket',
-    statBonus: { dexterity: 2 },
+    statBonus: { evasiveness: 2 },
     traits: [{ kind: 'dodgeChance', chance: PLUMED_COAT_DODGE_CHANCE }],
     description:
       'A light leather coat trimmed down the spine with copper rooster feathers. Its ' +
@@ -603,7 +604,8 @@ export const GEAR_CATALOGUE = defineItemDefs({
     look: { kind: 'garment', garment: 'cat_stargazers_cap' },
     equipSlot: 'Head',
     equipSubSlot: 'Hat',
-    statBonus: { intelligence: 3 },
+    statBonus: { magic: 3 },
+    resistances: ['magic'],
     traits: [{ kind: 'missileSpeed', multiplier: STARGAZERS_CAP_MISSILE_SPEED }],
     description:
       'A little indigo pointed cap stitched with silver stars, cut with holes for the ears. ' +
@@ -621,7 +623,8 @@ export const GEAR_CATALOGUE = defineItemDefs({
     look: { kind: 'garment', garment: 'cat_moonmoth_pendant' },
     equipSlot: 'Head',
     equipSubSlot: 'Neck',
-    statBonus: { dexterity: 3, intelligence: 1 },
+    statBonus: { evasiveness: 3, magic: 1 },
+    resistances: ['magic'],
     traits: [{ kind: 'fairyTruce' }],
     description:
       'A pair of pale moth wings set in silver on a fine chain. Fairies tilt their heads at ' +
@@ -678,7 +681,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     look: { kind: 'garment', garment: 'cat_prowler_hood' },
     equipSlot: 'Head',
     equipSubSlot: 'Hat',
-    statBonus: { dexterity: 1 },
+    statBonus: { evasiveness: 1 },
     description:
       'A charcoal felt hood with silver stitching round the ear holes. It makes her face ' +
       'very hard to read, which was already true.',
@@ -696,7 +699,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     look: { kind: 'garment', garment: 'cat_prowler_mantle' },
     equipSlot: 'Torso',
     equipSubSlot: 'Back',
-    statBonus: { dexterity: 2 },
+    statBonus: { evasiveness: 2 },
     description:
       'A short charcoal mantle with silver stitching at the hem, cut to lie flat when she ' +
       'crouches and to swirl when she wants it to.',
@@ -714,7 +717,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     look: { kind: 'garment', garment: 'cat_prowler_booties' },
     equipSlot: 'Feet',
     equipSubSlot: 'Shoes',
-    statBonus: { dexterity: 1 },
+    statBonus: { evasiveness: 1 },
     description: 'Charcoal felt booties stitched in silver, with soles thinner than a whisper.',
   },
   tin_claw_caps: {
@@ -730,6 +733,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     wearer: 'cat',
     weapon: {
       delivery: 'claw',
+      family: 'claw',
       damageMultiplier: CLAW_CAP_DAMAGE_MULTIPLIER,
       reachBonusTiles: CLAW_REACH_BONUS_TILES,
       trail: null,
@@ -751,6 +755,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     wearer: 'cat',
     weapon: {
       delivery: 'claw',
+      family: 'claw',
       damageMultiplier: CLAW_CAP_DAMAGE_MULTIPLIER,
       reachBonusTiles: CLAW_REACH_BONUS_TILES,
       trail: 'venom',
@@ -775,6 +780,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     wearer: 'cat',
     weapon: {
       delivery: 'claw',
+      family: 'claw',
       damageMultiplier: CLAW_CAP_DAMAGE_MULTIPLIER,
       reachBonusTiles: CLAW_REACH_BONUS_TILES,
       trail: 'frost',
@@ -802,6 +808,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     set: 'prowler',
     weapon: {
       delivery: 'claw',
+      family: 'claw',
       damageMultiplier: PROWLER_CLAWS_DAMAGE_MULTIPLIER,
       reachBonusTiles: CLAW_REACH_BONUS_TILES,
       trail: null,
@@ -823,6 +830,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     wearer: 'cat',
     weapon: {
       delivery: 'claw',
+      family: 'claw',
       damageMultiplier: CLAW_CAP_DAMAGE_MULTIPLIER,
       reachBonusTiles: CLAW_REACH_BONUS_TILES,
       trail: 'ink',
@@ -851,6 +859,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     wearer: 'cat',
     weapon: {
       delivery: 'claw',
+      family: 'claw',
       damageMultiplier: SUNSTEEL_TALONS_DAMAGE_MULTIPLIER,
       reachBonusTiles: CLAW_REACH_BONUS_TILES,
       trail: 'sunsteel',
@@ -886,7 +895,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     },
     equipSlot: 'Head',
     equipSubSlot: 'Hat',
-    statBonus: { constitution: 1 },
+    statBonus: { health: 2 },
     description:
       'A padded wool cap in garrison brown. It keeps the ears warm and the skull mostly ' +
       'where it belongs.',
@@ -907,7 +916,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     },
     equipSlot: 'Torso',
     equipSubSlot: 'Shirt',
-    statBonus: { constitution: 2 },
+    statBonus: { health: 4 },
     description:
       'Layers of linen quilted flat and stitched through. Stops a tooth, spreads a club, and ' +
       'is cut in every size the garrison has ever needed, including small and furry.',
@@ -925,7 +934,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     look: { kind: 'garment', garment: 'human_hearthguard_bracers' },
     equipSlot: 'Hands',
     equipSubSlot: 'Gloves',
-    statBonus: { strength: 1 },
+    statBonus: { melee: 1 },
     description:
       'Boiled leather over the forearm, riveted at four points, stamped with the garrison ' +
       'hearth on the inside of each cuff.',
@@ -946,7 +955,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     },
     equipSlot: 'Feet',
     equipSubSlot: 'Shoes',
-    statBonus: { dexterity: 1 },
+    statBonus: { evasiveness: 1 },
     description:
       'Hard-soled garrison boots, broken in by somebody who walked a long way in them and ' +
       'handed them in clean.',
@@ -967,7 +976,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     },
     equipSlot: 'Torso',
     equipSubSlot: 'Shirt',
-    statBonus: { constitution: 3 },
+    statBonus: { health: 6 },
     regenMultiplier: SCRAPMAIL_REGEN_MULTIPLIER,
     traits: [
       {
@@ -995,7 +1004,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     },
     equipSlot: 'Head',
     equipSubSlot: 'Hat',
-    statBonus: { strength: 3 },
+    statBonus: { melee: 3 },
     traits: [
       {
         kind: 'flinchNova',
@@ -1023,7 +1032,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     },
     equipSlot: 'Head',
     equipSubSlot: 'Neck',
-    statBonus: { constitution: 3 },
+    statBonus: { health: 6 },
     cancelsMomentum: true,
     description:
       'A fist-sized lump of grey stone on a leather thong, warm and faintly beating. It is ' +
@@ -1103,7 +1112,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     },
     equipSlot: 'Head',
     equipSubSlot: 'Hat',
-    statBonus: { intelligence: 2 },
+    statBonus: { magic: 2 },
     description:
       'A tall red top hat with a gold band and a dent where a lion once sat on it. The ' +
       'lining still smells of greasepaint.',
@@ -1124,7 +1133,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     },
     equipSlot: 'Torso',
     equipSubSlot: 'Jacket',
-    statBonus: { constitution: 2 },
+    statBonus: { health: 4 },
     description:
       'A ringmaster’s tailcoat sewn so thick with sequins that it rattles. Under a spotlight ' +
       'it is impossible to look at anything else.',
@@ -1145,7 +1154,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     },
     equipSlot: 'Head',
     equipSubSlot: 'Face',
-    statBonus: { dexterity: 2 },
+    statBonus: { evasiveness: 2 },
     description:
       'A gold-rimmed monocle on a fine chain, handed over by a dealer who did not enjoy ' +
       'doing it. It makes everyone you look at feel slightly poorer.',
@@ -1165,7 +1174,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     },
     equipSlot: 'Head',
     equipSubSlot: 'Face',
-    statBonus: { strength: 4, intelligence: 4 },
+    statBonus: { melee: 4, magic: 4 },
     traits: [{ kind: 'cursed', maxHpPenaltyShare: GRINNING_MASK_MAX_HP_PENALTY }],
     description:
       'A white porcelain mask with a smile that is a little too wide. It fits perfectly the ' +
@@ -1183,7 +1192,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
     look: { human: onHisHand('human_nimble_bangle'), cat: onHerCollar('cat_nimble_bangle_charm') },
     equipSlot: 'Trinkets',
     equipSubSlot: 'Trinket',
-    statBonus: { dexterity: 1 },
+    statBonus: { evasiveness: 1 },
     description: 'A thin copper band that never quite stops sliding round.',
   },
   lucky_penny: {
@@ -1310,6 +1319,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
       {
         kind: 'relic',
         behaviour: 'bolt',
+        rechargeScalesWithMagic: false,
         status: 'burn',
         cooldownFrames: EMBER_WISP_COOLDOWN_FRAMES,
         rangeTiles: EMBER_WISP_RANGE_TILES,
@@ -1331,10 +1341,12 @@ export const GEAR_CATALOGUE = defineItemDefs({
     look: { human: RELIC_LOOK, cat: RELIC_LOOK },
     equipSlot: 'Weapon',
     equipSubSlot: 'Relic',
+    resistances: ['magic'],
     traits: [
       {
         kind: 'relic',
         behaviour: 'ward',
+        rechargeScalesWithMagic: true,
         cooldownFrames: WARD_STONE_COOLDOWN_FRAMES,
         rangeTiles: WARD_STONE_RANGE_TILES,
       },
@@ -1359,6 +1371,7 @@ export const GEAR_CATALOGUE = defineItemDefs({
       {
         kind: 'relic',
         behaviour: 'bramble',
+        rechargeScalesWithMagic: false,
         cooldownFrames: SPROUTLING_COOLDOWN_FRAMES,
         rangeTiles: SPROUTLING_RANGE_TILES,
       },

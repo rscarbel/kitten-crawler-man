@@ -63,7 +63,7 @@ const GRUMBLER: BanterPool = {
   got_bluffed: [
     '"With THAT? The cards here have no shame."',
     '"Robbed. In daylight. By rubbish."',
-    '"I\'m filing a complaint with the System."',
+    '"I\'m filing a complaint with Caroline."',
   ],
   fold_to_raise: [
     '"Take it. Choke on it."',
@@ -199,10 +199,10 @@ const BRAGGART: BanterPool = {
   all_in: [
     '"All in. Watch and learn."',
     '"Every chip. Make it a good story."',
-    '"Get the sponsors on the line."',
+    '"No more thinking. Let\'s see it."',
   ],
   needle_player: [
-    '"They\'ll put that one on the highlight reel."',
+    '"I\'ll be telling that one for years."',
     '"Stick to the dungeon, Crawler."',
     '"Don\'t feel bad. Everybody loses to me."',
   ],

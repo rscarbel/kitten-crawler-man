@@ -51,7 +51,7 @@ type SpiderEggEnd = 'hatched' | 'destroyed';
  *
  * A mob rather than a system-owned prop because that is what puts it in front
  * of every weapon the party has: the melee sweep, the stone, the missile, the
- * Smush and the companions all walk the mob grid, and the friendly-fire door
+ * Seismic Stomp and the companions all walk the mob grid, and the friendly-fire door
  * (`takesPlayerDamage`) is where it says it answers them all.
  *
  * It never acts. Its only clock is the hatch countdown; whoever owns it reads

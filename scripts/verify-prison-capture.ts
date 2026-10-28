@@ -8,8 +8,8 @@
  *    its door boarded, and resets every guard, spotlight and suspicion to the
  *    start of its loop;
  *  - the cell door breaks to each kind of blow the party has, one run each:
- *    either crawler's melee, Smush, Magic Missile direct and by splash, a
- *    slingshot rock, the Protective Shell and dynamite — and a broken door
+ *    either crawler's melee, Seismic Stomp, Magic Missile direct and by splash, a
+ *    slingshot rock, the Energy Shield and dynamite — and a broken door
  *    opens its tile;
  *  - one press of Space from any tile of the cell breaks its door;
  *  - guards take no damage, no knockback and no displacement from any of it;
@@ -41,8 +41,8 @@ installBrowserShim(VIEWPORT);
 const FAULTS = [
   /** The capture leaves the guards where they were caught. */
   'no-loop-reset',
-  /** The door refuses Smush. */
-  'door-refuses-smush',
+  /** The door refuses Seismic Stomp. */
+  'door-refuses-seismic-stomp',
   /** The door's tile stays blocked once it breaks. */
   'door-stays-blocked',
   /** The prompt shows from the hall outside the cell too. */
@@ -132,9 +132,9 @@ const GRID_PROBE_RADIUS_PX = 4;
 const NOISE_OFFSET_TILES = 2;
 /** Frames let run before a capture so the loops are well away from their start. */
 const PATROL_RUN_FRAMES = 400;
-/** The ability level from which Magic Missile splashes and the shell wounds as it opens. */
+/** The ability level from which Magic Missile splashes and the shield wounds as it opens. */
 const MISSILE_SPLASH_TEST_LEVEL = 5;
-const SHELL_TEST_LEVEL = 5;
+const SHIELD_TEST_LEVEL = 5;
 /** Frames a broken door is given to open its tile: the prison reads the break on its next frame. */
 const DOOR_OPEN_FRAMES = 2;
 /** Tiles back along the hall the cat fires the splash test from. */
@@ -305,7 +305,7 @@ function checkDoorBreaks(
     const takeDamageFrom = door.takeDamageFrom.bind(door);
     const record: { brokenBy: PlayerDamageType | null } = { brokenBy: null };
     door.takeDamageFrom = (amount, attacker, damageType) => {
-      if (fault === 'door-refuses-smush' && damageType === 'smush') return;
+      if (fault === 'door-refuses-seismic-stomp' && damageType === 'seismic_stomp') return;
       const wasBroken = door.broken;
       takeDamageFrom(amount, attacker, damageType);
       if (!wasBroken && door.broken) record.brokenBy = damageType ?? null;
@@ -336,9 +336,9 @@ const catMelee = (harness: PrisonHarness): void => {
   standAtCellDoor(harness, false);
   harness.cat.triggerAttack();
 };
-const smush = (harness: PrisonHarness): void => {
+const seismicStomp = (harness: PrisonHarness): void => {
   standAtCellDoor(harness, true);
-  harness.human.triggerSmush();
+  harness.human.triggerSeismicStomp();
 };
 const missileDirect = (harness: PrisonHarness): void => {
   standAtCellDoor(harness, false);
@@ -373,14 +373,14 @@ const slingshot = (harness: PrisonHarness): void => {
   standAtCellDoor(harness, true);
   human.triggerAttack(null);
 };
-const shell = (harness: PrisonHarness): void => {
+const shield = (harness: PrisonHarness): void => {
   standAtCellDoor(harness, true);
   const { scene, human, cat } = harness;
-  scene['combat'].spells.triggerProtectiveShell(
+  scene['combat'].spells.triggerEnergyShield(
     human,
     cat,
     scene['world'].roster.grid,
-    SHELL_TEST_LEVEL,
+    SHIELD_TEST_LEVEL,
   );
 };
 const dynamite = (harness: PrisonHarness, inCell = true): void => {
@@ -389,7 +389,7 @@ const dynamite = (harness: PrisonHarness, inCell = true): void => {
   human.inventory.addItem('goblin_dynamite', 1);
   const sticks = scene['destruction'].dynamite;
   sticks.beginCharge(0, human, 'goblin_dynamite');
-  sticks.release(human);
+  sticks.release();
 };
 
 function checkSpaceFromEveryCellTile(harness: PrisonHarness): void {
@@ -418,7 +418,14 @@ function checkSpaceFromEveryCellTile(harness: PrisonHarness): void {
 
 function checkGuardsUnmoved(harness: PrisonHarness): void {
   const { prison, human } = harness;
-  const types = ['melee', 'missile', 'shell', 'smush', 'explosion', 'slingshot'] as const;
+  const types = [
+    'melee',
+    'missile',
+    'energy_shield',
+    'seismic_stomp',
+    'explosion',
+    'slingshot',
+  ] as const;
   for (const guard of prison.guardMobs) {
     const before = { x: guard.x, y: guard.y, hp: guard.hp };
     for (const type of types) guard.takeDamageFrom(GUARD_PROBE_DAMAGE, human, type);
@@ -944,14 +951,17 @@ export const PRISON_CAPTURE_CHECKS: ReadonlyArray<PrisonCaptureCheck> = [
   { name: 'capture by spotlight', run: checkCaptureResets('spotlight') },
   { name: 'door: human melee', run: checkDoorBreaks('human melee', humanMelee, 'melee') },
   { name: 'door: cat melee', run: checkDoorBreaks('cat melee', catMelee, 'melee') },
-  { name: 'door: Smush', run: checkDoorBreaks('Smush', smush, 'smush') },
+  {
+    name: 'door: Seismic Stomp',
+    run: checkDoorBreaks('Seismic Stomp', seismicStomp, 'seismic_stomp'),
+  },
   { name: 'door: Magic Missile', run: checkDoorBreaks('Magic Missile', missileDirect, 'missile') },
   {
     name: 'door: missile splash',
     run: checkDoorBreaks('missile splash', missileSplash, 'missile'),
   },
   { name: 'door: slingshot', run: checkDoorBreaks('slingshot rock', slingshot, 'slingshot') },
-  { name: 'door: shell', run: checkDoorBreaks('Protective Shell', shell, 'shell') },
+  { name: 'door: shield', run: checkDoorBreaks('Energy Shield', shield, 'energy_shield') },
   { name: 'door: dynamite', run: checkDoorBreaks('dynamite', dynamite, 'explosion') },
   { name: 'Space from every cell tile', run: checkSpaceFromEveryCellTile },
   { name: 'guards unmoved', run: checkGuardsUnmoved },

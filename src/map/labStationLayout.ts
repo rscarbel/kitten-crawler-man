@@ -4,7 +4,7 @@
  * Pure geometry, like `safeRoomDecorLayout`: the generator stamps the result
  * into the grid, and nothing here touches a tile. The station is small, so the
  * one rule that matters is the one the safe room's decor learned the hard way —
- * no prop may cut any doorway, Mordecai or any floor tile off from the rest of
+ * no prop may cut any doorway, Dave or any floor tile off from the rest of
  * the room. Every placement is tested by flood fill and refused if it strands
  * a tile that was reachable before it.
  *
@@ -21,7 +21,7 @@ import {
   LAB_STATION_LANTERN,
   LAB_STATION_WHITEBOARD,
 } from './tileTypes';
-import { mordecaiAndBedTiles, SAFE_ROOM_THRESHOLD_DEPTH_TILES } from './safeRoomFixtures';
+import { guideAndBedTiles, SAFE_ROOM_THRESHOLD_DEPTH_TILES } from './safeRoomFixtures';
 
 type Point = { x: number; y: number };
 type Rect = { x: number; y: number; w: number; h: number };
@@ -208,7 +208,7 @@ function columnTiles(bounds: Rect, x: number, fromY: number): Point[] {
 
 /**
  * Lays out the station's kit. The cot takes the tile a Bopca station gives its
- * bed, beside Mordecai's; the two hangings take the north row; the locker,
+ * bed, beside Dave's; the two hangings take the north row; the locker,
  * the barricade, the jerry can and the lantern go against whichever walls the
  * corridors left free.
  */
@@ -216,14 +216,10 @@ export function planLabStation(input: LabStationLayoutInput): LabStationProp[] {
   const { bounds, centre } = input;
   const lastX = bounds.x + bounds.w - 1;
   const lastY = bounds.y + bounds.h - 1;
-  const [mordecai, bedTile] = mordecaiAndBedTiles({ bounds, centre });
+  const [dave, bedTile] = guideAndBedTiles({ bounds, centre });
   const doorways = labStationDoorwayTiles(input);
   const thresholds = labStationThresholdTiles(input);
-  const placer = new StationPlacer(
-    bounds,
-    [...doorways, mordecai],
-    [mordecai, ...doorways, ...thresholds],
-  );
+  const placer = new StationPlacer(bounds, [...doorways, dave], [dave, ...doorways, ...thresholds]);
 
   placer.placeFirst(
     [bedTile, { x: bedTile.x, y: bedTile.y - 1 }, { x: bedTile.x, y: bedTile.y + 1 }],
@@ -274,7 +270,7 @@ export function planLabStation(input: LabStationLayoutInput): LabStationProp[] {
     LAB_STATION_JERRY_CAN,
   );
 
-  // The lantern beside the cot, so its pool falls where Mordecai rests.
+  // The lantern beside the cot, so its pool falls where Dave rests.
   placer.placeFirst(
     [
       { x: bedTile.x + 1, y: bedTile.y },

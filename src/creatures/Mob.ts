@@ -40,6 +40,7 @@ import type { SilhouetteLayer } from '../core/spriteAssets/silhouetteComposite';
 import type { SiegeCapable, SiegeDirective, SiegeLobber } from './siege/siegeTypes';
 import { deflectAroundAirspaceBodies, isInsideAirspaceBody } from './airspace';
 import { deferChrome, type ChromePart } from '../systems/lighting/aboveDarkness';
+import type { PetKind } from '../core/party/petNames';
 import {
   GUARD_KNOCKBACK_FRAMES,
   GUARD_KNOCKBACK_TILES,
@@ -52,7 +53,8 @@ import {
  * immunity — can key off what actually landed. `null` is harm an attacker owns
  * but swung nothing for: a damage-over-time tick they applied.
  */
-export type PlayerDamageType = 'melee' | 'missile' | 'shell' | 'smush' | 'explosion' | 'slingshot';
+export type PlayerDamageType =
+  'melee' | 'missile' | 'energy_shield' | 'seismic_stomp' | 'explosion' | 'slingshot';
 
 /**
  * The one damage type that ignores friendly-fire immunity, so the rule lives in
@@ -77,9 +79,10 @@ export const BOSS_BLAST_DAMAGE_SCALE = 0.25;
  * Only `'contact'` — the mob's own body, teeth or weapon touching the target —
  * can be sent back by reflect gear. A bolt, a thrown weight, a spit, a reaching
  * tongue or a shockwave that resolves over an area has nothing for the victim's
- * armour to bite into, so it does not reflect.
+ * armour to bite into, so it does not reflect. A `spell` is a ranged blow that
+ * is also magic, which magic-resistant gear turns aside.
  */
-type MobBlowDelivery = 'contact' | 'ranged';
+type MobBlowDelivery = 'contact' | 'ranged' | 'spell';
 
 /** The damage source every blow a mob lands is described by. */
 export type MobDamageSource = Extract<DamageSource, { kind: 'mob' }>;
@@ -342,9 +345,9 @@ function tacticsRankMarkTop(barSy: number): number {
   return barCenterY - WORLD_TEXT.tacticsMark.size / 2;
 }
 
-/** Minimal shell API exposed to mobs — avoids a circular import with SpellSystem. */
-export interface ShellContext {
-  isPointInsideShell(cx: number, cy: number): boolean;
+/** Minimal energy shield API exposed to mobs — avoids a circular import with SpellSystem. */
+export interface EnergyShieldContext {
+  isPointInsideEnergyShield(cx: number, cy: number): boolean;
   addBlockXp(amount: number): void;
 }
 
@@ -533,17 +536,6 @@ export abstract class Mob extends Player {
   paysNoRewards = false;
 
   /**
-   * Whether a crawler's blow on this body may only make it react: no ability
-   * XP, no on-hit proc, no splash or sub-missile, no stomp heal, and no
-   * "combat started". For a body that can be struck forever and never dies
-   * (the bathroom queue), where any of those would be a farm. Every attack
-   * site that pays for a landed blow asks this before paying.
-   */
-  get blowsEarnNothing(): boolean {
-    return false;
-  }
-
-  /**
    * Set on a body a necromancer called up mid-fight, of any kind — a raised
    * ratkin, a skeleton, or a Grave Bull. Counted against his own escort
    * cohort rather than a wave's scripted spawns, and against nobody's cap
@@ -705,8 +697,8 @@ export abstract class Mob extends Player {
     return this.map !== null;
   }
 
-  /** Shell context injected by DungeonScene — used by subclasses to check shell state. */
-  protected spells: ShellContext | null = null;
+  /** Energy shield context injected by DungeonScene — used by subclasses to check whether the shield is up. */
+  protected spells: EnergyShieldContext | null = null;
 
   /** True for boss-tier mobs — used by DungeonScene to identify which mob belongs to which boss room. */
   isBoss = false;
@@ -1199,7 +1191,7 @@ export abstract class Mob extends Player {
    * "the dead are never spliced out" note in `DungeonScene`), so freeing on
    * death rather than on removal from the array is what actually bounds this.
    *
-   * Not called for every kind of removal: `MongoSystem` and `MercenarySystem`
+   * Not called for every kind of removal: `DeinonychusSystem` and `MercenarySystem`
    * both intercept their companion's lethal damage and clear `justDied` before
    * `resolveKills` runs, so kill resolution never processes them as a slain
    * enemy. A dead hireling's body then plays out through the corpse sweep and
@@ -1363,7 +1355,7 @@ export abstract class Mob extends Player {
   /**
    * Whether a companion walking back to `owner` has come up against another of
    * the party standing with her — touching a crawler, or another companion
-   * that travels with the party (Mongo), who is nearer the owner than it is and
+   * that travels with the party (Deinonychus), who is nearer the owner than it is and
    * within {@link PARTY_HUDDLE_TILES} of her. Whatever body holds the spot its
    * follow band wants, it can get no closer than touching it. That is as close as
    * it can get: walking on only presses it into her, where separation pushes it
@@ -1441,7 +1433,7 @@ export abstract class Mob extends Player {
 
   /**
    * True while a scripted encounter has this mob in the room but has not begun
-   * its fight, and nothing on the party's side — a companion crawler, Mongo, a
+   * its fight, and nothing on the party's side — a companion crawler, Deinonychus, a
    * hire — may pick it out to fight.
    *
    * Separate from {@link aiHeld}, which only stops the mob's own AI: a staggered
@@ -1479,6 +1471,9 @@ export abstract class Mob extends Player {
 
   /** Display name shown in hover tooltip. Subclasses should override. */
   displayName = 'Unknown';
+
+  /** The party pet this is, which the player names; null for every other mob. */
+  readonly petKind: PetKind | null = null;
 
   /** Key into BodyPartGoreSystem's registry; null means no body-part gore for this mob. */
   get bodyPartKey(): string | null {
@@ -1654,7 +1649,7 @@ export abstract class Mob extends Player {
 
   /**
    * Whether this mob's presence should be treated as an unfinished fight by
-   * room membership checks (the safe-descent gate, a chest's lock, Mongo's pet
+   * room membership checks (the safe-descent gate, a chest's lock, Deinonychus's pet
    * button). Defaults to alive-and-hostile; a subclass overrides it when a
    * mob shouldn't hold a room "in combat" on its own. See `countsTowardRoomClear`
    * in `creatures/roomClear.ts`, the shared entry point every such check uses.
@@ -1750,7 +1745,7 @@ export abstract class Mob extends Player {
   /**
    * Whether a player-sourced blow of this kind is allowed to land on this mob.
    *
-   * A non-hostile mob — Mongo, a hired mercenary, a quest ally — is immune to
+   * A non-hostile mob — Deinonychus, a hired mercenary, a quest ally — is immune to
    * every aimed player weapon, so the cat firing a missile through her own pet
    * can never cost the player their friend. Explosives are the deliberate
    * exception: a blast already hurts whoever lit it, and being indiscriminate
@@ -1796,11 +1791,11 @@ export abstract class Mob extends Player {
   }
 
   /**
-   * Whether the cat's pet raptor will pick a fight with this mob.
+   * Whether the cat's pet dinosaur will pick a fight with this mob.
    *
    * Defaults to {@link isHostile}, which already excludes every quest ally and
    * summon in the game. Overridden to `true` by mobs that are calm toward
-   * players but that Mongo hunts anyway — he is an animal, not a diplomat.
+   * players but that Deinonychus hunts anyway — he is an animal, not a diplomat.
    */
   get isPetAttackable(): boolean {
     return this.isHostile;
@@ -1816,7 +1811,7 @@ export abstract class Mob extends Player {
    * began, so a death should rewind it there. Override to `true` for a
    * non-hostile mob that is still spawn-anchored rather than a temporary
    * summon — e.g. a Briar Hollow cow, whose spawn tile is its place in the
-   * pen, unlike Mongo or a hired mercenary, whose "spawn tile" is wherever
+   * pen, unlike Deinonychus or a hired mercenary, whose "spawn tile" is wherever
    * they happened to be summoned or hired.
    */
   get resetsFullyOnCheckpoint(): boolean {
@@ -2114,6 +2109,14 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * Level-scaled damage from a spell: a ranged blow that magic-resistant gear
+   * turns aside a share of.
+   */
+  protected dealSpellDamage(target: Player, baseDamage: number, attackType?: string): boolean {
+    return this.deliverBlow(target, this.scaledDamage(baseDamage), attackType, 'spell');
+  }
+
+  /**
    * The single route every `deal*Damage` helper resolves through, so the sound,
    * the engagement flag and the reflect rule cannot drift apart between them.
    */
@@ -2136,12 +2139,13 @@ export abstract class Mob extends Player {
         x: this.x + this.tileSize * MOB_TILE_CENTER,
         y: this.y + this.tileSize * MOB_TILE_CENTER,
       },
+      magic: delivery === 'spell',
     });
     // A plain `mob` source names no attacker, so an ally's swing at a warded
     // charge is stopped here, where the attacker is still known.
     if (target instanceof Mob && target.wardRefuses(this)) return false;
     const turned =
-      delivery === 'ranged' ? crawlerTurnsRangedBlow(target, this) : inkSpoilsBlow(this, target);
+      delivery === 'contact' ? inkSpoilsBlow(this, target) : crawlerTurnsRangedBlow(target, this);
     if (turned) {
       this.attackSoundPending = true;
       return false;
@@ -2233,6 +2237,11 @@ export abstract class Mob extends Player {
     return this.deliverBlow(target, damage, attackType, 'ranged');
   }
 
+  /** Already-sized damage from a spell: {@link dealPreScaledRangedDamage}, but magic. */
+  protected dealPreScaledSpellDamage(target: Player, damage: number, attackType?: string): boolean {
+    return this.deliverBlow(target, damage, attackType, 'spell');
+  }
+
   /**
    * This mob's damage number on the curve it was levelled on, and zero if it
    * is harmless.
@@ -2251,7 +2260,7 @@ export abstract class Mob extends Player {
     this.map = map;
   }
 
-  setSpells(s: ShellContext): void {
+  setSpells(s: EnergyShieldContext): void {
     this.spells = s;
   }
 
@@ -2710,7 +2719,7 @@ export abstract class Mob extends Player {
 
   /**
    * Puts the mob at (`x`, `y`) for an outside push that ignores walls — the
-   * edge of a protective shell — unless the mob refuses that ground
+   * edge of an energy shield — unless the mob refuses that ground
    * ({@link acceptsShove}), in which case each axis is tried on its own so it
    * still slides as far as it may.
    */
@@ -3055,7 +3064,7 @@ export abstract class Mob extends Player {
    * the blow door and the applied-tick door — and every party weapon reaches
    * one of them exactly once, so this is the one count. A hireling's blow and a
    * summon's arrive credited to the crawler they fight for. Harm to an ally
-   * (a crawler's own dynamite catching Mongo) is not damage dealt.
+   * (a crawler's own dynamite catching Deinonychus) is not damage dealt.
    */
   private notePartyDamage(dealer: Player, amount: number): void {
     if (!this.isHostile || !dealer.xpCreditTarget.isCrawler) return;
@@ -3094,7 +3103,7 @@ export abstract class Mob extends Player {
     }
     const scaled = this.scaleIncomingDamage(amount);
     const wasHeldInvulnerable = this.isHeldInvulnerable;
-    // Wards on either side soak a struck blow: a hireling's Shield on Mongo, or
+    // Wards on either side soak a struck blow: a hireling's Shield on Deinonychus, or
     // overheal on a hostile — and a shield fairy's ward stops it outright.
     const unabsorbed = this.soakWithWards(scaled);
     // Counted the moment the ward is reached at all, blocked outright or only
@@ -3439,7 +3448,7 @@ export abstract class Mob extends Player {
    * achievement and the boss chest exactly as the hit that applied it would have.
    *
    * `killType` stays null even then. The union names weapons — melee, missile,
-   * shell, smush, explosion — and a status is none of them; a DoT finish trains
+   * energy shield, seismic stomp, explosion — and a status is none of them; a DoT finish trains
    * no ability, which is the deliberate price of not having to teach every
    * `killType` consumer a case for a kill nobody aimed.
    */

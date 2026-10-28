@@ -225,7 +225,8 @@ function checkPaylines(): void {
     middleLine([WILD, WILD, SCATTER, 'seven', 'seven']) === null,
     'two wilds before a scatter pay nothing',
   );
-  const cells = middleLine(['mongo', 'mongo', WILD, 'mongo', 'lemon'])?.cells ?? [];
+  const cells =
+    middleLine(['deinonychus', 'deinonychus', WILD, 'deinonychus', 'lemon'])?.cells ?? [];
   check(
     cells.length === 4 &&
       cells.every((cell, reel) => cell.reel === reel && cell.row === MIDDLE_ROW),
@@ -255,10 +256,10 @@ function checkScatters(): void {
   const twoScatters = glassOutcome(
     [
       [SCATTER, 'bell', 'bar'],
-      ['bar', 'lemon', 'mongo'],
-      ['mongo', SCATTER, 'bell'],
-      ['lemon', 'bar', 'mongo'],
-      ['bar', 'mongo', 'lemon'],
+      ['bar', 'lemon', 'deinonychus'],
+      ['deinonychus', SCATTER, 'bell'],
+      ['lemon', 'bar', 'deinonychus'],
+      ['bar', 'deinonychus', 'lemon'],
     ],
     MIN_BET_PER_LINE,
     JACKPOT_FLOOR,
@@ -277,10 +278,10 @@ function checkScatters(): void {
   const sameReel = glassOutcome(
     [
       [SCATTER, SCATTER, 'bar'],
-      ['bar', 'lemon', 'mongo'],
-      ['mongo', 'bell', 'bell'],
+      ['bar', 'lemon', 'deinonychus'],
+      ['deinonychus', 'bell', 'bell'],
       ['lemon', 'bar', SCATTER],
-      ['bar', 'mongo', 'lemon'],
+      ['bar', 'deinonychus', 'lemon'],
     ],
     MAX_BET_PER_LINE,
     JACKPOT_FLOOR,
@@ -298,10 +299,10 @@ function checkScatters(): void {
   const nearMiss = glassOutcome(
     [
       [SCATTER, 'bell', 'bar'],
-      ['bar', SCATTER, 'mongo'],
-      ['mongo', 'lemon', 'bell'],
-      ['lemon', 'bar', 'mongo'],
-      ['bar', 'mongo', 'lemon'],
+      ['bar', SCATTER, 'deinonychus'],
+      ['deinonychus', 'lemon', 'bell'],
+      ['lemon', 'bar', 'deinonychus'],
+      ['bar', 'deinonychus', 'lemon'],
     ],
     MIN_BET_PER_LINE,
     JACKPOT_FLOOR,
@@ -489,10 +490,10 @@ function checkPhases(): void {
 
   const nearMissGlass: SlotGrid = [
     [SCATTER, 'bell', 'bar'],
-    ['bar', SCATTER, 'mongo'],
-    ['mongo', 'lemon', 'bell'],
-    ['lemon', 'bar', 'mongo'],
-    ['bar', 'mongo', 'lemon'],
+    ['bar', SCATTER, 'deinonychus'],
+    ['deinonychus', 'lemon', 'bell'],
+    ['lemon', 'bar', 'deinonychus'],
+    ['bar', 'deinonychus', 'lemon'],
   ];
   const glassMachine = new SlotMachine({
     seed: subSeed(BASE_SEED, 8),

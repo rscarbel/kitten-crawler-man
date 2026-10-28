@@ -16,7 +16,6 @@ import { renderCaptions, type SoundCaptions } from './captions';
 import { coinPill } from './coinPill';
 import { dock, summonCard } from './dock';
 import { levelTimerChip, levelTimerEntry } from './levelTimer';
-import { viewerFavorBandEntry, viewerFavorPill } from './viewerFavorPill';
 import { hotbar } from './hotbar';
 import {
   captionAnchor,
@@ -188,14 +187,6 @@ export class HudSurface implements Surface {
         model.levelTimer,
       );
     }
-    const favor = model.favor ?? null;
-    const favorSlot = geometry.favor;
-    if (favor !== null && favorSlot !== null) {
-      // Beside the coin pill as drawn, the way the timer's chip follows it, not the room reserved for it.
-      const left = Math.min(favorSlot.x, coins.x + coins.w + ui.theme.space.xs);
-      const right = favorSlot.x + favorSlot.w;
-      viewerFavorPill(ui, { ...favorSlot, x: left, w: right - left }, favor);
-    }
     if (model.minimap !== null) {
       minimapFrame(ui, geometry.miniMap, model.minimap, { touch: ui.density === 'touch' });
     }
@@ -203,11 +194,7 @@ export class HudSurface implements Surface {
       keyHints: ui.density === 'pointer',
     });
     if (model.summon !== null) summonCard(ui, geometry.buttons.summon, model.summon);
-    const bandEntries = topBandEntries(
-      model,
-      geometry.levelTimerChip === null,
-      geometry.favor === null,
-    );
+    const bandEntries = topBandEntries(model, geometry.levelTimerChip === null);
     if (this.host.liftTopBand?.() !== true) {
       this.lastBandSlots = renderTopBand(
         ui,
@@ -275,15 +262,9 @@ export class HudSurface implements Surface {
  * The scene's bars, the level timer's card where it is not a chip, then the
  * safe room's call to collect, the band's lowest.
  */
-function topBandEntries(
-  model: HudModel,
-  timerInBand: boolean,
-  favorInBand: boolean,
-): TopBandEntry[] {
+function topBandEntries(model: HudModel, timerInBand: boolean): TopBandEntry[] {
   const timer = model.levelTimer;
   const timerCard =
     timer !== null && timerInBand ? [levelTimerEntry(timer.frames, timer.paused)] : [];
-  const favor = model.favor ?? null;
-  const favorCard = favor !== null && favorInBand ? [viewerFavorBandEntry(favor)] : [];
-  return [...model.topBand, ...timerCard, ...favorCard];
+  return [...model.topBand, ...timerCard];
 }

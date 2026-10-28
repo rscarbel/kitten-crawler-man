@@ -6,11 +6,12 @@
  * admits it. The harder the wheel bites, the louder he swears the game is one
  * hundred percent on the up-and-up — that denial is the joke, so every red
  * landing and the robbery lean on it hardest. He is smarm, not
- * menace: he enjoys the player's bad luck the way a host enjoys a ratings spike.
+ * menace: he enjoys the player's bad luck the way a croupier enjoys a long losing streak.
  */
 
 import { pickLine, speakerLines } from '../line';
 import type { BarkLine, NonEmpty } from '../line';
+import type { PetWords } from '../../core/party/petNames';
 
 const say = speakerLines('donald');
 
@@ -47,7 +48,7 @@ export const DONALD_LINES = {
   bet_up: [
     say.bark('"Bigger bet, friendlier wheel. That is just mathematics, my friend."'),
     say.bark('"Look at that! The wheel likes you more already."'),
-    say.bark('"A high roller! The viewers adore a high roller."'),
+    say.bark('"A high roller! The house adores a high roller."'),
     say.bark('"More coins, less red. Donald is very fair. Very, very fair."'),
   ],
   bet_down: [
@@ -69,7 +70,7 @@ export const DONALD_LINES = {
     say.bark('"Unlucky! Totally above board. The board is right there. Look at it."'),
   ],
   land_good: [
-    say.bark('"A winner! You see? Honest wheel. Tell your friends. Tell the viewers."'),
+    say.bark('"A winner! You see? Honest wheel. Tell your friends. Tell everyone."'),
     say.bark('"Congratulations! Donald is so happy for you. Look at his face. Happy."'),
     say.bark('"Ha! The wheel giveth. Remember that when it taketh."'),
     say.bark('"A prize! Proof, my friend. Proof it is not rigged."'),
@@ -84,11 +85,6 @@ export const DONALD_LINES = {
     say.bark('"Half your coins! It is in the rules. I wrote the rules. Fairly."'),
     say.bark('"Thank you for your contribution to the Donald retirement fund."'),
     say.bark('"Not robbery, my friend. Redistribution. Up-and-up, all of it."'),
-  ],
-  pet: [
-    say.bark('"A new pet! She bites, she kicks, she moos. Congratulations."'),
-    say.bark('"A cow! An attack cow! Do not ask where Donald keeps it."'),
-    say.bark('"Your new best friend! No refunds. She does not do refunds either."'),
   ],
   big_gold: [
     say.bark('"Gold! So much gold! Donald is weeping. These are happy tears. Mostly."'),
@@ -109,9 +105,23 @@ export const DONALD_LINES = {
   leave: [
     say.bark('"Leaving already? The wheel will remember your face."'),
     say.bark('"Come back soon! Donald saves your spot. And your coins, if you leave any."'),
-    say.bark('"Goodbye, my friend! Up-and-up, always. Tell the viewers."'),
+    say.bark('"Goodbye, my friend! Up-and-up, always. Tell your friends."'),
   ],
-} as const satisfies Record<DonaldTrigger, NonEmpty<BarkLine>>;
+} as const satisfies Record<Exclude<DonaldTrigger, 'pet'>, NonEmpty<BarkLine>>;
+
+/** His patter as the wheel hands over the attack cow, who may already have a name. */
+function donaldPetLines(cow: PetWords): NonEmpty<BarkLine> {
+  return [
+    say.bark('"A new pet! She bites, she kicks, she moos. Congratulations."'),
+    say.bark(`"A cow! ${cow.opening}! Do not ask where Donald keeps it."`),
+    say.bark('"Your new best friend! No refunds. She does not do refunds either."'),
+  ];
+}
+
+/** Every line Donald may say for `trigger`. */
+export function donaldLinesFor(trigger: DonaldTrigger, cow: PetWords): NonEmpty<BarkLine> {
+  return trigger === 'pet' ? donaldPetLines(cow) : DONALD_LINES[trigger];
+}
 
 /** `fresh`, as a `NonEmpty` pool, or `fallback` when filtering left nothing. */
 function freshOrFallback(
@@ -131,9 +141,10 @@ function freshOrFallback(
 export function pickDonaldLine(
   trigger: DonaldTrigger,
   lastLine: string | null,
+  cow: PetWords,
   random: () => number = Math.random,
 ): string {
-  const pool = DONALD_LINES[trigger];
+  const pool = donaldLinesFor(trigger, cow);
   const fresh = pool.filter((line) => line.paragraphs[0] !== lastLine);
   const candidates = freshOrFallback(fresh, pool);
   return pickLine(candidates, random() * candidates.length).paragraphs[0];

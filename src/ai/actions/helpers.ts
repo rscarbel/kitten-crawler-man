@@ -5,15 +5,15 @@ import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import { getLevelDef, type LevelDef } from '../../levels';
 import type { ToastOptions } from '../../ui/hud/toasts';
+import { CAROLINE_CHARACTER_NAME, DAVE_CHARACTER_NAME } from '../characters';
 import { optionalEnumParam } from './schema';
 import type { AISceneContext, AITargetCrawler } from './types';
 
 export type Crawler = HumanPlayer | CatPlayer;
 
 /** The character names the governor knows specific rules for. */
-export const AI_CHARACTER_SYSTEM = 'System';
-export const AI_CHARACTER_MORDECAI = 'Mordecai';
-export const AI_CHARACTER_VIEWERS = 'Viewers';
+export const AI_CHARACTER_CAROLINE = CAROLINE_CHARACTER_NAME;
+export const AI_CHARACTER_DAVE = DAVE_CHARACTER_NAME;
 
 /** The reward chest rarities the AI may hand out; the rarer ones are not its to give. */
 export const AI_CHEST_RARITIES = [
@@ -77,7 +77,7 @@ export function floorNumberOf(scene: AISceneContext): number {
 
 /**
  * Shows a line to the player: a toast when the scene offers one, otherwise
- * the active crawler's System notice queue, which every scene drains.
+ * the active crawler's notice queue, which every scene drains.
  */
 export function notifyPlayer(scene: AISceneContext, text: string, opts?: ToastOptions): void {
   if (scene.postToast !== undefined) {

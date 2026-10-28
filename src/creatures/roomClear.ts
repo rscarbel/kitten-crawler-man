@@ -2,7 +2,7 @@ import type { Mob } from './Mob';
 
 /**
  * Whether a mob's presence should be treated as an unfinished fight by room
- * membership checks — the safe-descent gate, a chest's lock, and Mongo's pet
+ * membership checks — the safe-descent gate, a chest's lock, and Deinonychus's pet
  * button all need to agree on this, rather than each rolling its own filter.
  *
  * Reads {@link Mob.countsTowardRoomClear}, which `BrindleGrub` overrides so

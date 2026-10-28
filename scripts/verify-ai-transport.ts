@@ -11,9 +11,9 @@
  *    indicator follows its setting.
  *  - Intensity: each setting reaches `context_set` as the agreed multiplier
  *    and severities.
- *  - Chat: player chat goes over the socket while connected; offline the
- *    System answers with a scripted line, a big moment gets one too, and
- *    Mordecai falls back on his usual advice. Streamed replies type out,
+ *  - Chat: player chat goes over the socket while connected; offline
+ *    Caroline answers with a scripted line, a big moment gets one too, and
+ *    Dave falls back on his usual advice. Streamed replies type out,
  *    reply buttons send the choice id as `replyTo`, and opinion changes flash.
  *  - Status: online, degraded for the notice's retry window, offline after a
  *    disconnect.
@@ -41,8 +41,8 @@ import {
 import { AI_INTENSITIES, intensityPolicy, type AIIntensity } from '../src/ai/aiIntensity';
 import { ActionGovernor } from '../src/ai/actions/governor';
 import type { AISceneContext } from '../src/ai/actions/types';
-import { MORDECAI_CHARACTER_NAME, SYSTEM_CHARACTER_NAME } from '../src/ai/characters';
-import { SYSTEM_FALLBACK_LINES } from '../src/ai/characters/fallbackLines';
+import { DAVE_CHARACTER_NAME, CAROLINE_CHARACTER_NAME } from '../src/ai/characters';
+import { CAROLINE_FALLBACK_LINES } from '../src/ai/characters/fallbackLines';
 import type {
   AIContextSource,
   CrawlerName,
@@ -50,7 +50,7 @@ import type {
   LiveInput,
   SessionInput,
 } from '../src/ai/context/types';
-import { CHALLENGE_TEMPLATE_IDS, type ChallengeSummary } from '../src/ai/show/challenges';
+import { CHALLENGE_TEMPLATE_IDS, type ChallengeSummary } from '../src/ai/interactions/challenges';
 import { AchievementManager } from '../src/core/progression/AchievementManager';
 import { AchievementAwards } from '../src/systems/AchievementAwards';
 import { TILE_SIZE } from '../src/core/constants';
@@ -61,6 +61,7 @@ import type { Mob } from '../src/creatures/Mob';
 import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions';
 import { level1 } from '../src/levels/level1';
 import { GameMap } from '../src/map/GameMap';
+import { PetNameBook } from '../src/core/party/petNames';
 
 let checks = 0;
 let failures = 0;
@@ -290,6 +291,7 @@ function buildRig(): Rig {
     menuOpen: false,
   });
   const source: AIContextSource = {
+    petNames: new PetNameBook(),
     readSession: () => ({ ...session }),
     readLive: live,
     isPartyInSafeRoom: () => false,
@@ -318,7 +320,7 @@ function action(
   type: string,
   params: Record<string, unknown>,
 ): GameAiClientEvents['ai_action'] {
-  return { actionId: id, characterName: SYSTEM_CHARACTER_NAME, type, params };
+  return { actionId: id, characterName: CAROLINE_CHARACTER_NAME, type, params };
 }
 
 /** Lets the context builder's rate limit pass and its timer fire, then returns the newest context sent. */
@@ -517,36 +519,36 @@ async function verifyChat(): Promise<void> {
   const client = rig.client();
   const feed = rig.adapter.feed;
 
-  rig.adapter.chatWithSystem('Hello?');
+  rig.adapter.chatWithCaroline('Hello?');
   check(client.messages.length === 0, 'before the handshake, nothing is sent');
   check(
-    feed.message !== null && SYSTEM_FALLBACK_LINES.includes(feed.message.text),
-    'the System answers with a scripted line',
+    feed.message !== null && CAROLINE_FALLBACK_LINES.includes(feed.message.text),
+    'Caroline answers with a scripted line',
   );
   check(
-    (await rig.adapter.chatWithMordecai()).length > 0,
-    'Mordecai answers offline with his usual advice',
+    (await rig.adapter.chatWithDave()).length > 0,
+    'Dave answers offline with his usual advice',
   );
 
   client.fire('connected', { sessionId: 's1', limits: LIMITS, resumed: false });
-  rig.adapter.chatWithSystem('Hello, System.');
+  rig.adapter.chatWithCaroline('Hello, Caroline.');
   const sent = lastOf(client.messages);
   check(
-    sent?.characterName === SYSTEM_CHARACTER_NAME && sent.text === 'Hello, System.',
+    sent?.characterName === CAROLINE_CHARACTER_NAME && sent.text === 'Hello, Caroline.',
     'connected, chat goes over the socket as player_message',
   );
 
-  client.fire('ai_typing', { characterName: SYSTEM_CHARACTER_NAME, typing: true });
-  check(feed.typingCharacter === SYSTEM_CHARACTER_NAME, 'ai_typing shows the System typing');
+  client.fire('ai_typing', { characterName: CAROLINE_CHARACTER_NAME, typing: true });
+  check(feed.typingCharacter === CAROLINE_CHARACTER_NAME, 'ai_typing shows Caroline typing');
   client.fire('chat', {
     messageId: 'm1',
-    characterName: SYSTEM_CHARACTER_NAME,
+    characterName: CAROLINE_CHARACTER_NAME,
     text: 'Well, ',
     done: false,
   });
   client.fire('chat', {
     messageId: 'm1',
-    characterName: SYSTEM_CHARACTER_NAME,
+    characterName: CAROLINE_CHARACTER_NAME,
     text: 'Well, crawler.',
     done: false,
   });
@@ -560,7 +562,7 @@ async function verifyChat(): Promise<void> {
   );
   client.fire('chat', {
     messageId: 'm1',
-    characterName: SYSTEM_CHARACTER_NAME,
+    characterName: CAROLINE_CHARACTER_NAME,
     text: 'Well, crawler. Pick one.',
     done: true,
     choices: [
@@ -579,59 +581,59 @@ async function verifyChat(): Promise<void> {
   check(feed.message?.choices.length === 0, 'an answered question drops its buttons');
 
   client.fire('ai_state', {
-    characterName: SYSTEM_CHARACTER_NAME,
+    characterName: CAROLINE_CHARACTER_NAME,
     mood: { label: 'bored', intensity: 1 },
     relationship: { respect: LOW_OPINION },
   });
   client.fire('ai_state', {
-    characterName: SYSTEM_CHARACTER_NAME,
+    characterName: CAROLINE_CHARACTER_NAME,
     mood: { label: 'amused', intensity: 1 },
     relationship: { respect: HIGH_OPINION },
   });
   check(
-    feed.flash?.text === "The System's opinion of you: ▲ Amused",
+    feed.flash?.text === "Caroline's opinion of you: ▲ Amused",
     `a rising opinion flashes with an up arrow (${feed.flash?.text ?? 'none'})`,
   );
   client.fire('ai_state', {
-    characterName: SYSTEM_CHARACTER_NAME,
+    characterName: CAROLINE_CHARACTER_NAME,
     mood: { label: 'irritated', intensity: 1 },
     relationship: { respect: HIGH_OPINION, irritation: HIGH_OPINION },
   });
   check(
-    feed.flash?.text === "The System's opinion of you: ▼ Irritated",
+    feed.flash?.text === "Caroline's opinion of you: ▼ Irritated",
     `growing irritation flashes with a down arrow (${feed.flash?.text ?? 'none'})`,
   );
 
-  const mordecaiReply = rig.adapter.chatWithMordecai();
+  const daveReply = rig.adapter.chatWithDave();
   const greeting = lastOf(client.messages);
   check(
-    greeting?.characterName === MORDECAI_CHARACTER_NAME,
-    'talking to Mordecai sends him a player_message',
+    greeting?.characterName === DAVE_CHARACTER_NAME,
+    'talking to Dave sends him a player_message',
   );
   client.fire('chat', {
     messageId: 'm2',
-    characterName: MORDECAI_CHARACTER_NAME,
+    characterName: DAVE_CHARACTER_NAME,
     text: 'Drink a potion, kid.',
     done: true,
   });
-  check((await mordecaiReply) === 'Drink a potion, kid.', 'his reply goes to his dialog box');
-  check(feed.message?.characterName !== MORDECAI_CHARACTER_NAME, 'and not to the panel');
+  check((await daveReply) === 'Drink a potion, kid.', 'his reply goes to his dialog box');
+  check(feed.message?.characterName !== DAVE_CHARACTER_NAME, 'and not to the panel');
 
   client.fire('disconnected', { code: 1006, reason: '', reconnectInMs: 500 });
   check(feed.status === 'offline', 'a dropped connection shows offline');
   const sentBefore = client.messages.length;
-  rig.adapter.chatWithSystem('Are you there?');
+  rig.adapter.chatWithCaroline('Are you there?');
   check(client.messages.length === sentBefore, 'offline, chat is not queued for later');
   check(
-    feed.message !== null && SYSTEM_FALLBACK_LINES.includes(feed.message.text),
-    'offline, the System answers from its script',
+    feed.message !== null && CAROLINE_FALLBACK_LINES.includes(feed.message.text),
+    'offline, Caroline answers from her script',
   );
   const beforeMoment = feed.message?.key;
   rig.bus.emit('stairwellFound', {});
   check(
     feed.message !== null &&
       feed.message.key !== beforeMoment &&
-      SYSTEM_FALLBACK_LINES.includes(feed.message.text),
+      CAROLINE_FALLBACK_LINES.includes(feed.message.text),
     'offline, a big moment gets a scripted line',
   );
   rig.adapter.unbindScene();
@@ -643,7 +645,7 @@ function verifyFeedLimits(): void {
   const longReply = 'blah '.repeat(MAX_DISPLAY_CHARS);
   feed.onChat({
     messageId: 'long',
-    characterName: SYSTEM_CHARACTER_NAME,
+    characterName: CAROLINE_CHARACTER_NAME,
     text: longReply,
     done: true,
   });
@@ -720,7 +722,7 @@ async function verifySceneHandover(): Promise<void> {
     template: CHALLENGE_TEMPLATE_IDS[0],
     objective: 'Kill rats',
     rewardRarity: 'Common',
-    offeredBy: SYSTEM_CHARACTER_NAME,
+    offeredBy: CAROLINE_CHARACTER_NAME,
   };
   rig.rebind(rig.bus, () => {
     rig.bus.emit('challengeFailed', { ...leftWith, reason: 'left the floor', taunt: '' });

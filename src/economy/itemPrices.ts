@@ -189,12 +189,20 @@ export const ITEM_PRICES = {
   rope:                         { base:     6, category: 'resource' },
   // tome
   magic_missile_tome:           { base:  1000, category: 'tome' },
-  smush_tome:                   { base:  1000, category: 'tome' },
+  seismic_stomp_tome:                   { base:  1000, category: 'tome' },
   explosives_handling_tome:     { base:   400, category: 'tome' },
-  skill_book_cockroach:         { base:   400, category: 'tome' },
+  skill_book_nine_lives:         { base:   400, category: 'tome' },
   skill_book_cat_reflexes:      { base:   400, category: 'tome' },
   skill_book_pugilism:          { base:  1400, category: 'tome' },
   skill_book_iron_stomach:      { base:   400, category: 'tome' },
+  skill_book_swordsmanship:     { base:   900, category: 'tome' },
+  skill_book_archery:           { base:   900, category: 'tome' },
+  skill_book_clawmanship:       { base:   900, category: 'tome' },
+  skill_book_magic_eye:         { base:   900, category: 'tome' },
+  skill_book_mechanical_fist:   { base:   900, category: 'tome' },
+  skill_book_blunt_proficiency: { base:   900, category: 'tome' },
+  skill_book_pyros_touch:       { base:   900, category: 'tome' },
+  skill_book_demolitionist:     { base:   900, category: 'tome' },
   // magic scroll
   scroll_of_confusing_fog:      { base:   150, category: 'magic_scroll' },
   // explosive

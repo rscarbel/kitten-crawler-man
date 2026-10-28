@@ -6,7 +6,7 @@
  *
  * A row decides for all its frames: an action or a fidget, or one that wants
  * his left hand on any frame — a prop in it, both fists on one haft, an open
- * hand at work, the Protective Shell gathered in it — leaves the shield
+ * hand at work, the Energy Shield gathered in it — leaves the shield
  * stowed for the whole row, so it
  * never jumps between his hand and his back mid-gesture. A two-handed weapon
  * out in his hand is not his to decide here: the runtime gives such a figure

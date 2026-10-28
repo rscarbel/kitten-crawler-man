@@ -64,8 +64,8 @@ export interface StealthGateRoomData {
   signTile: Point;
   /** Which way the sign's arrow points, toward the door. */
   signArrow: 'west' | 'east';
-  /** Where Mongo and the hireling wait while the crawlers are inside the prison. */
-  waitingTiles: { mongo: Point; hireling: Point };
+  /** Where Deinonychus and the hireling wait while the crawlers are inside the prison. */
+  waitingTiles: { deinonychus: Point; hireling: Point };
   /**
    * Tiles nothing generated may stand on: the gate and the floor inside it, the
    * guard and his talk tiles, the door approach, the waiting spots and a ring
@@ -278,7 +278,7 @@ function waitingSpots(
   input: StealthGateLayoutInput,
   doorwayTiles: ReadonlyArray<Point>,
   forbidden: ReadonlySet<string>,
-): { mongo: Point; hireling: Point } | null {
+): { deinonychus: Point; hireling: Point } | null {
   const { bounds, entrance, isOpen } = input;
   const scored: Array<{ tile: Point; score: number }> = [];
   for (let y = bounds.y; y < bounds.y + bounds.h; y++) {
@@ -299,7 +299,7 @@ function waitingSpots(
     const partner = scored.find(
       (other) => other !== first && chebyshev(other.tile, first.tile) === 1,
     );
-    if (partner !== undefined) return { mongo: first.tile, hireling: partner.tile };
+    if (partner !== undefined) return { deinonychus: first.tile, hireling: partner.tile };
   }
   return null;
 }
@@ -316,7 +316,7 @@ function ringAround(tiles: ReadonlyArray<Point>): Point[] {
 /**
  * Lays out the stealth gate room: the gate across the onward doorway, the guard
  * beside it, the prison door and its sign on the north wall, and the spots
- * Mongo and the hireling wait on. Null when the room's walls leave no place for
+ * Deinonychus and the hireling wait on. Null when the room's walls leave no place for
  * the door or the guard would close something off; the generator then rejects
  * the map.
  *
@@ -364,7 +364,9 @@ export function layOutStealthGateRoom(input: StealthGateLayoutInput): StealthGat
       const waitingTiles = waitingSpots(input, doorwayTiles, waitingForbidden);
       if (waitingTiles === null) continue;
 
-      const solid = new Set([guardTile, waitingTiles.mongo, waitingTiles.hireling].map(keyOf));
+      const solid = new Set(
+        [guardTile, waitingTiles.deinonychus, waitingTiles.hireling].map(keyOf),
+      );
       const reached = reachableInRoom(bounds, entrance.tiles, solid, isOpen);
       const reaches = (tile: Point): boolean => reached.has(keyOf(tile));
       const reachesEverything =
@@ -381,7 +383,7 @@ export function layOutStealthGateRoom(input: StealthGateLayoutInput): StealthGat
         ...guardTalkTiles,
         ...ringAround(prisonDoor.approachTiles),
         ...approachArea,
-        waitingTiles.mongo,
+        waitingTiles.deinonychus,
         waitingTiles.hireling,
         ...ringAround(entrance.tiles),
         ...ringAround(onward.tiles),

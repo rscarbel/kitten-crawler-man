@@ -1,7 +1,7 @@
 /**
  * CombatKit — everything a place needs in order to be somewhere a fight can
  * happen: spell effects, mob AI, attack and death resolution, gore, floating
- * damage numbers, the smush blast, regeneration, and the death screen.
+ * damage numbers, the seismic stomp blast, regeneration, and the death screen.
  *
  * A scene constructs one of these and gets combat. Before it existed, the
  * dungeon owned all of it as loose fields while `BuildingInteriorScene` owned a
@@ -9,11 +9,13 @@
  * why swinging at anything in an ordinary shop did nothing at all.
  *
  * The members stay concrete types rather than a `GameSystem[]`: their `update`
- * signatures are not uniform (`SmushEffectSystem.update()` takes nothing,
+ * signatures are not uniform (`SeismicStompEffectSystem.update()` takes nothing,
  * `MobUpdateLoop.update(ctx)` takes the frame), so a homogeneous loop could only
  * be reached through casts.
  */
 
+import { outgoingHitDamageOn } from '../../core/combat/outgoingHit';
+import { MAGIC_HIT } from '../../core/combat/damageTags';
 import { GearSystem } from '../GearSystem';
 import { RELIC_HUM_HEARING_TILES, RELIC_HUM_LOOP, RELIC_HUM_VOLUME } from '../gearTraitSoundCues';
 import { TILE_SIZE } from '../../core/constants';
@@ -41,7 +43,7 @@ import { MeleeImpactEffectSystem } from '../MeleeImpactEffectSystem';
 import { MobUpdateLoop } from '../MobUpdateLoop';
 import { PlayerTickSystem } from '../PlayerTickSystem';
 import type { SafeRoomSystem } from '../SafeRoomSystem';
-import { SmushEffectSystem } from '../SmushEffectSystem';
+import { SeismicStompEffectSystem } from '../SeismicStompEffectSystem';
 import { StatusChangeWatcher } from '../statusChangeEvents';
 import { StormcallerStrikeSystem } from '../StormcallerStrikeSystem';
 import type { SpellSystem } from '../SpellSystem';
@@ -53,7 +55,7 @@ import type { SceneWorld } from './SceneWorld';
 const TILE_CENTRE_FRACTION = 0.5;
 const HALF_TILE = TILE_SIZE * TILE_CENTRE_FRACTION;
 
-/** Damage the level-15 shell's parting shockwave deals to everything it catches. */
+/** Damage the level-15 shield's parting shockwave deals to everything it catches. */
 const SHOCKWAVE_DAMAGE = 4;
 /**
  * How far past its drawn radius the shockwave still catches people. The ring
@@ -61,7 +63,7 @@ const SHOCKWAVE_DAMAGE = 4;
  * rather than the single number the ripple is centred on.
  */
 const SHOCKWAVE_RADIUS_TILE_MARGIN = 2;
-/** Reach, target cap and damage of the level-15 shell's chain lightning. */
+/** Reach, target cap and damage of the level-15 shield's chain lightning. */
 const CHAIN_LIGHTNING_RANGE_TILES = 3;
 const CHAIN_LIGHTNING_MAX_TARGETS = 3;
 const CHAIN_LIGHTNING_DAMAGE = 2;
@@ -113,7 +115,7 @@ interface ImpactDirection {
 
 export class CombatKit {
   /**
-   * The same instance the roster hands to every mob it accepts, so a shell cast
+   * The same instance the roster hands to every mob it accepts, so a shield cast
    * by the party and a mob's read of it can never be two different systems.
    */
   readonly spells: SpellSystem;
@@ -122,7 +124,7 @@ export class CombatKit {
   readonly bodyPartGore: BodyPartGoreSystem;
   readonly floatingText = new FloatingCombatTextSystem();
   readonly playerTick = new PlayerTickSystem();
-  readonly smushFx = new SmushEffectSystem();
+  readonly seismicStompFx = new SeismicStompEffectSystem();
   readonly meleeFx = new MeleeImpactEffectSystem();
   readonly missileFx = new MagicMissileImpactEffectSystem();
   /** The Stormcaller's waves in flight, with what each swing has struck. */
@@ -146,7 +148,7 @@ export class CombatKit {
   /**
    * Rebuilt in place each frame rather than reallocated: `resolvePlayerAttacks`
    * and `resolveKills` read the same context, but a scene has to be able to run
-   * its own death interceptions (Mongo, a hired mercenary) between them.
+   * its own death interceptions (Deinonychus, a hired mercenary) between them.
    */
   private readonly combatCtx: CombatContext;
 
@@ -168,7 +170,7 @@ export class CombatKit {
       bus: deps.world.bus,
       abilityManager: deps.abilityManager,
       spells: this.spells,
-      smushFx: this.smushFx,
+      seismicStompFx: this.seismicStompFx,
       meleeFx: this.meleeFx,
       missileFx: this.missileFx,
       weaponProcs: { stormcallerStorm: this.stormcaller },
@@ -217,7 +219,7 @@ export class CombatKit {
   }
 
   /**
-   * Spells, then mob AI — in that order, because a shell raised this frame has
+   * Spells, then mob AI — in that order, because a shield raised this frame has
    * to exist before the mobs that would walk into it choose a step. The
    * active crawler is placed as the listener first, so every sound the frame
    * places in the world is heard from where the player now stands.
@@ -263,12 +265,12 @@ export class CombatKit {
   }
 
   /**
-   * Pays the protective shell its earned XP and lands the two effects the
+   * Pays the energy shield its earned XP and lands the two effects the
    * fifteenth level adds: the parting shockwave and the chain lightning a kill
-   * through the shell throws.
+   * through the shield throws.
    *
-   * Drained here rather than left to the scene because a shell cast in a
-   * building is the same shell cast in a corridor, and a copy of this in one
+   * Drained here rather than left to the scene because a shield cast in a
+   * building is the same shield cast in a corridor, and a copy of this in one
    * scene only is how the ability came to half-work indoors.
    */
   resolveSpellAftermath(): void {
@@ -276,9 +278,9 @@ export class CombatKit {
     const grid = this.world.roster.grid;
 
     const touchXp = this.spells.drainTouchXp();
-    if (touchXp > 0) this.abilityManager.addXp('protective_shell', touchXp);
+    if (touchXp > 0) this.abilityManager.addXp('energy_shield', touchXp);
     const blockXp = this.spells.drainBlockXp();
-    if (blockXp > 0) this.abilityManager.addXp('protective_shell', blockXp);
+    if (blockXp > 0) this.abilityManager.addXp('energy_shield', blockXp);
 
     const shockwave = this.spells.drainPendingShockwave();
     if (shockwave !== null) {
@@ -288,11 +290,14 @@ export class CombatKit {
       // while the test below measures centres, so without the slack the wave
       // comes up short on one side of itself.
       for (const mob of grid.queryCircle(shockwave.x, shockwave.y, reach + TILE_SIZE)) {
-        if (!mob.isAlive || !mob.takesPlayerDamage('shell')) continue;
+        if (!mob.isAlive || !mob.takesPlayerDamage('energy_shield')) continue;
         const dx = mob.x + HALF_TILE - shockwave.x;
         const dy = mob.y + HALF_TILE - shockwave.y;
         if (Math.hypot(dx, dy) >= reach) continue;
-        if (!human.zeroDamage) mob.takeDamageFrom(SHOCKWAVE_DAMAGE, human, 'shell');
+        if (!human.zeroDamage) {
+          const wave = outgoingHitDamageOn(human, mob, SHOCKWAVE_DAMAGE, MAGIC_HIT);
+          mob.takeDamageFrom(wave, human, 'energy_shield');
+        }
         mob.applyStatus(makeElectrified(human));
       }
     }
@@ -302,8 +307,11 @@ export class CombatKit {
       let hits = 0;
       for (const mob of nearby) {
         if (!mob.isAlive || hits >= CHAIN_LIGHTNING_MAX_TARGETS) continue;
-        if (!mob.takesPlayerDamage('shell')) continue;
-        if (!human.zeroDamage) mob.takeDamageFrom(CHAIN_LIGHTNING_DAMAGE, human, 'shell');
+        if (!mob.takesPlayerDamage('energy_shield')) continue;
+        if (!human.zeroDamage) {
+          const bolt = outgoingHitDamageOn(human, mob, CHAIN_LIGHTNING_DAMAGE, MAGIC_HIT);
+          mob.takeDamageFrom(bolt, human, 'energy_shield');
+        }
         this.spells.addChainLightningBolt(target.x, target.y, mob.x + HALF_TILE, mob.y + HALF_TILE);
         hits++;
       }
@@ -311,7 +319,7 @@ export class CombatKit {
   }
 
   /**
-   * Ages the viscera and the smush blast the frame's fighting left behind,
+   * Ages the viscera and the seismic stomp blast the frame's fighting left behind,
    * ticks the crawlers' worn gear, and sounds the blast. The boom belongs here
    * rather than with the mob cues because the stomp this frame just resolved
    * raised it.
@@ -319,13 +327,13 @@ export class CombatKit {
   updatePostCombat(audio: AudioManager | null): void {
     this.gore.update();
     this.bodyPartGore.update();
-    this.smushFx.update();
+    this.seismicStompFx.update();
     this.meleeFx.update();
     this.missileFx.update();
     this.gear.update();
-    if (this.smushFx.blastSoundPending) {
-      this.smushFx.blastSoundPending = false;
-      // `human_smush` plays when the ability fires, a third of a second before
+    if (this.seismicStompFx.blastSoundPending) {
+      this.seismicStompFx.blastSoundPending = false;
+      // `human_seismic_stomp` plays when the ability fires, a third of a second before
       // the foot lands; this is the boom the landing itself makes.
       audio?.play('dynamite_explosion');
     }
@@ -395,32 +403,32 @@ export class CombatKit {
     playMobAudioCues(this.world.roster.mobs, audio);
   }
 
-  /** The layer under the entities: settled blood, parts that came to rest, the Smush's floor. */
+  /** The layer under the entities: settled blood, parts that came to rest, the Seismic Stomp's floor. */
   renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     this.gore.renderPuddles(ctx, camX, camY);
     this.bodyPartGore.renderSettled(ctx, camX, camY);
-    this.smushFx.renderGround(ctx, camX, camY);
+    this.seismicStompFx.renderGround(ctx, camX, camY);
   }
 
-  /** The layer over the entities: airborne gore, shells, lightning, ripples, fog. */
+  /** The layer over the entities: airborne gore, shields, lightning, ripples, fog. */
   renderEffects(ctx: CanvasRenderingContext2D, camX: number, camY: number, cat: CatPlayer): void {
     this.gore.renderParticles(ctx, camX, camY);
     this.bodyPartGore.renderFlying(ctx, camX, camY);
-    this.spells.renderShell(ctx, camX, camY);
-    this.spells.renderCatMiniShell(ctx, camX, camY, cat);
+    this.spells.renderEnergyShield(ctx, camX, camY);
+    this.spells.renderCatMiniShield(ctx, camX, camY, cat);
     this.spells.renderChainLightning(ctx, camX, camY);
     this.stormcaller.render(ctx, camX, camY);
     this.spells.renderShockwaveRipples(ctx, camX, camY);
     this.spells.renderFogs(ctx, camX, camY);
     this.gear.render(ctx, camX, camY);
-    this.smushFx.render(ctx, camX, camY);
+    this.seismicStompFx.render(ctx, camX, camY);
     this.meleeFx.render(ctx, camX, camY);
     this.missileFx.render(ctx, camX, camY);
   }
 
   /**
    * Drops what this floor has standing in the world, for a scene that is walking
-   * away from the map rather than rewinding it: the shell and the fogs cast on a
+   * away from the map rather than rewinding it: the shield and the fogs cast on a
    * storey stop existing when it stops being drawn, but nothing the party spent
    * is refunded.
    */
@@ -428,7 +436,7 @@ export class CombatKit {
     this.spells.dropWorldEffects();
     this.stormcaller.reset();
     this.gear.reset();
-    this.smushFx.resetForCheckpoint();
+    this.seismicStompFx.resetForCheckpoint();
     this.meleeFx.resetForCheckpoint();
     this.missileFx.resetForCheckpoint();
     // A damage number frozen mid-fade is a number the player reads on the way
@@ -450,7 +458,7 @@ export class CombatKit {
     this.spells.resetForCheckpoint();
     this.stormcaller.reset();
     this.gear.reset();
-    this.smushFx.resetForCheckpoint();
+    this.seismicStompFx.resetForCheckpoint();
     this.meleeFx.resetForCheckpoint();
     this.missileFx.resetForCheckpoint();
     this.gore.resetForCheckpoint();

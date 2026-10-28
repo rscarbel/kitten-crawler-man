@@ -27,8 +27,8 @@ import {
   BIG_ROOSTER_FIGURE,
   LITTLE_ROOSTER_FIGURE,
 } from '../src/sprites/art/roosterFigure.js';
-import { drawRatKinFront, restingPose as ratKinRestingPose } from '../src/sprites/art/ratKinArt.js';
-import { MORDECAI_OUTFIT } from '../src/sprites/art/ratkin/cast.js';
+import { drawRatkin, restingPose as ratKinRestingPose } from '../src/sprites/art/ratKinArt.js';
+import { RATKIN_CAST_OUTFITS } from '../src/sprites/art/ratkin/cast.js';
 import { drawShady, restingPose as shadyRestingPose } from '../src/sprites/art/shadyArt.js';
 import {
   KRAKAREN_FIGURE,
@@ -39,10 +39,10 @@ import { COCKROACH_FIGURE } from '../src/sprites/art/cockroachFigure.js';
 import { RAT_FIGURE } from '../src/sprites/art/ratFigure.js';
 import { TUSKLING_FIGURE } from '../src/sprites/art/tusklingFigure.js';
 import {
-  PROTECTIVE_SHELL_FIGURE,
-  PROTECTIVE_SHELL_MINI_FIGURE,
-  PROTECTIVE_SHELL_SHOCKWAVE_FIGURE,
-} from '../src/sprites/art/protectiveShellFigure.js';
+  ENERGY_SHIELD_FIGURE,
+  ENERGY_SHIELD_MINI_FIGURE,
+  ENERGY_SHIELD_SHOCKWAVE_FIGURE,
+} from '../src/sprites/art/energyShieldFigure.js';
 import { SPIDER_FIGURE } from '../src/sprites/art/spiderFigure.js';
 import { BUGABOO_FIGURE } from '../src/sprites/art/bugabooFigure.js';
 import { LLAMA_FIGURE } from '../src/sprites/art/llamaFigure.js';
@@ -54,10 +54,10 @@ import {
   TROGLODYTE_TONGUE_FIGURE,
 } from '../src/sprites/art/troglodyteFigure.js';
 import {
-  MONGO_STAGES,
-  drawMongoSide,
-  restPose as mongoRestPose,
-} from '../src/sprites/art/mongoArt.js';
+  DEINONYCHUS_STAGES,
+  drawDeinonychusSide,
+  restPose as deinonychusRestPose,
+} from '../src/sprites/art/deinonychusArt.js';
 import { drawBallRoll } from '../src/sprites/art/ballOfSwineArt.js';
 import { drawBipedFront } from '../src/sprites/art/biped/figure.js';
 import { playerCharacter } from '../src/characters/characters.js';
@@ -194,8 +194,10 @@ const humanPose = humanRestingPose();
 const catPose = catRestPose();
 const catIdleRow = CAT_ROWS.find((row) => row.name === 'idle') ?? CAT_ROWS[0];
 const ratKinPose = ratKinRestingPose();
+/** A plainly dressed villager: the bench times the shared painter, not a heavy outfit. */
+const RAT_KIN_BENCH_CAST_MEMBER = 'pipkin';
 const shadyPose = shadyRestingPose();
-const mongoPose = mongoRestPose();
+const deinonychusPose = deinonychusRestPose();
 const mantidPose = mantidRestPose();
 const golemPose = golemRestPose();
 /** One arbitrary but fixed instant; every frame of these loops costs the same. */
@@ -207,7 +209,13 @@ const SUBJECTS: readonly Subject[] = [
   {
     name: 'rat_kin',
     frameSize: 96,
-    paint: (ctx) => drawRatKinFront(asGameContext(ctx), ratKinPose, MORDECAI_OUTFIT),
+    paint: (ctx) =>
+      drawRatkin(
+        asGameContext(ctx),
+        'front',
+        ratKinPose,
+        RATKIN_CAST_OUTFITS[RAT_KIN_BENCH_CAST_MEMBER],
+      ),
   },
   {
     name: 'shady',
@@ -245,9 +253,10 @@ const SUBJECTS: readonly Subject[] = [
     paint: (ctx) => drawKnightFront(asGameContext(ctx), knightPose),
   },
   {
-    name: 'mongo_adult',
+    name: 'deinonychus_adult',
     frameSize: 160,
-    paint: (ctx) => drawMongoSide(asGameContext(ctx), mongoPose, MONGO_STAGES.adult),
+    paint: (ctx) =>
+      drawDeinonychusSide(asGameContext(ctx), deinonychusPose, DEINONYCHUS_STAGES.adult),
   },
   {
     name: 'human',
@@ -309,9 +318,9 @@ const SUBJECTS: readonly Subject[] = [
   figureSubject(BIG_ROOSTER_FIGURE, 'idle'),
   figureSubject(LITTLE_ROOSTER_FIGURE, 'idle'),
   figureSubject(BENT_ROOSTER_FIGURE, 'idle'),
-  figureSubject(PROTECTIVE_SHELL_FIGURE, 'active'),
-  figureSubject(PROTECTIVE_SHELL_MINI_FIGURE, 'active'),
-  figureSubject(PROTECTIVE_SHELL_SHOCKWAVE_FIGURE, 'expand'),
+  figureSubject(ENERGY_SHIELD_FIGURE, 'active'),
+  figureSubject(ENERGY_SHIELD_MINI_FIGURE, 'active'),
+  figureSubject(ENERGY_SHIELD_SHOCKWAVE_FIGURE, 'expand'),
   figureSubject(COCKROACH_FIGURE, 'skitter_side'),
   figureSubject(RAT_FIGURE, 'walk_side'),
   figureSubject(LLAMA_FIGURE, 'idle'),

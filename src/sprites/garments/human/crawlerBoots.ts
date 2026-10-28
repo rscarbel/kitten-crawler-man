@@ -36,6 +36,7 @@ function farBoot(look: BootLook): BootLook {
     sole: receded(look.sole, FAR_LIMB_SHADE),
     studs: sunk(look.studs),
     trotter: sunk(look.trotter),
+    laces: sunk(look.laces),
   };
 }
 

@@ -15,6 +15,16 @@ import { withAlpha } from '../theme/color';
 import { drawGlyph, type GlyphId } from '../theme/glyphs';
 import { skinsFor, type TextRole } from '../theme/skins';
 import { motion, type Theme } from '../theme/tokens';
+import { prefersReducedMotion } from '../core/reducedMotion';
+import {
+  carolineCloseAt,
+  carolineOpenAt,
+  carolineOpenDurationMs,
+  carolineRevealAt,
+  carolineToast,
+  layoutCarolineToast,
+  type CarolineToastLayout,
+} from '../widgets/carolineFrame';
 import { drawGlass, fillRounded } from '../widgets/paint';
 import { lineHeightOf, measureText, measureTextHeight, text } from '../widgets/text';
 
@@ -29,6 +39,7 @@ export const TOAST_FADE_TICKS = 30;
 
 const TICKS_PER_SECOND = 60;
 const MS_PER_SECOND = 1000;
+const MS_PER_TICK = MS_PER_SECOND / TICKS_PER_SECOND;
 const TOAST_ENTER_TICKS = Math.max(1, Math.round((motion.base * TICKS_PER_SECOND) / MS_PER_SECOND));
 const EASE_OUT_POWER = 3;
 
@@ -45,6 +56,12 @@ const URGENT_GLOW_ALPHA = 0.45;
 const URGENT_ICON_SCALE = 1.4;
 
 export type ToastTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 'accent';
+
+/**
+ * Who a toast speaks for: an ordinary HUD notice, or Caroline, the System AI,
+ * whose notices are drawn in the compact variant of her own frame.
+ */
+export type ToastVoice = 'hud' | 'caroline';
 
 export interface ToastOptions {
   /** Drawn on the left, tinted with the tone. Tones other than `neutral` show a default glyph. */
@@ -76,6 +93,8 @@ export interface ToastOptions {
    * its clock only once it is on screen.
    */
   readonly overflow?: ToastOverflow;
+  /** Defaults to `hud`. Icon, tone and urgency are the HUD notice's look and do not apply to `caroline`. */
+  readonly voice?: ToastVoice;
 }
 
 export type ToastOverflow = 'evict' | 'queue';
@@ -87,6 +106,7 @@ export interface ShownToast {
   readonly icon: GlyphId | null;
   readonly tone: ToastTone;
   readonly urgent: boolean;
+  readonly voice: ToastVoice;
   /** Ticks since the toast first appeared. */
   readonly age: number;
   readonly ticksLeft: number;
@@ -98,6 +118,7 @@ interface Toast {
   icon: GlyphId | null;
   tone: ToastTone;
   urgent: boolean;
+  voice: ToastVoice;
   key: string | null;
   age: number;
   ticksLeft: number;
@@ -137,6 +158,7 @@ export class HudToasts {
       icon: opts.icon ?? DEFAULT_TONE_ICONS[tone],
       tone,
       urgent: opts.urgent === true,
+      voice: opts.voice ?? 'hud',
       ticksLeft: opts.durationTicks ?? TOAST_DISPLAY_TICKS,
     };
     const key = opts.key ?? null;
@@ -259,15 +281,31 @@ function easeOut(linear: number): number {
   return 1 - Math.pow(1 - linear, EASE_OUT_POWER);
 }
 
-interface ToastBox {
+/** A toast laid out for drawing: the HUD pill, or Caroline's frame with its own layout. */
+type ToastBox = HudToastBox | CarolineToastBox;
+
+interface CarolineToastBox {
+  readonly kind: 'caroline';
+  readonly layout: CarolineToastLayout;
+  readonly height: number;
+}
+
+interface HudToastBox {
+  readonly kind: 'hud';
   readonly metrics: ToastMetrics;
   readonly iconSpan: number;
   readonly textWidth: number;
   readonly textHeight: number;
+  readonly width: number;
   readonly height: number;
 }
 
 function layoutToast(ui: Ui, toast: ShownToast, anchor: ToastAnchor): ToastBox {
+  if (toast.voice === 'caroline') {
+    const maxWidth = Math.min(MAX_TOAST_WIDTH, anchor.maxWidth);
+    const layout = layoutCarolineToast(ui, maxWidth, toast.text);
+    return { kind: 'caroline', layout, height: layout.h };
+  }
   const metrics = metricsFor(ui, toast.urgent);
   const iconSpan = toast.icon === null ? 0 : metrics.iconSize + metrics.gap;
   const available = Math.min(MAX_TOAST_WIDTH, anchor.maxWidth);
@@ -282,7 +320,39 @@ function layoutToast(ui: Ui, toast: ShownToast, anchor: ToastAnchor): ToastBox {
     maxLines: MAX_TOAST_LINES,
   });
   const height = Math.max(metrics.iconSize, textHeight) + metrics.padY * 2;
-  return { metrics, iconSpan, textWidth, textHeight, height };
+  const width = metrics.padX * 2 + iconSpan + textWidth;
+  return { kind: 'hud', metrics, iconSpan, textWidth, textHeight, width, height };
+}
+
+/**
+ * Caroline's notice: her frame unfolds as it arrives, her text decodes in,
+ * and it folds shut over the ticks it would otherwise fade through.
+ */
+function drawCarolineToast(
+  ui: Ui,
+  toast: ShownToast,
+  anchor: ToastAnchor,
+  bottom: number,
+  box: CarolineToastBox,
+): void {
+  const { theme } = ui;
+  const reducedMotion = prefersReducedMotion();
+  const sinceArrivalMs = toast.age * MS_PER_TICK;
+  const closeMs = carolineOpenDurationMs(theme);
+  const closingMs = closeMs - toast.ticksLeft * MS_PER_TICK;
+  const open =
+    closingMs > 0
+      ? carolineCloseAt(theme, closingMs, reducedMotion)
+      : carolineOpenAt(theme, sinceArrivalMs, reducedMotion);
+  const reveal = carolineRevealAt(
+    theme,
+    toast.text,
+    Math.max(0, sinceArrivalMs - closeMs),
+    reducedMotion,
+  );
+  const { layout } = box;
+  const at = { x: anchor.x - layout.w / 2, y: bottom - layout.h };
+  carolineToast(ui, at, layout, { reveal, nowMs: ui.now, open });
 }
 
 function drawToast(
@@ -292,15 +362,18 @@ function drawToast(
   bottom: number,
   box: ToastBox,
 ): void {
+  if (box.kind === 'caroline') {
+    drawCarolineToast(ui, toast, anchor, bottom, box);
+    return;
+  }
   const { theme, ctx } = ui;
-  const { metrics, iconSpan, textWidth, textHeight, height } = box;
+  const { metrics, iconSpan, textWidth, textHeight, width, height } = box;
   const color = toneColor(theme, toast.tone);
   const enter = easeOut(Math.min(1, toast.age / TOAST_ENTER_TICKS));
   const fade = toast.ticksLeft < TOAST_FADE_TICKS ? toast.ticksLeft / TOAST_FADE_TICKS : 1;
   const alpha = Math.max(0, enter * fade);
   const isSingleLine = textHeight <= lineHeightOf(ui, metrics.role);
   const cornerRadius = isSingleLine ? theme.radius.pill : theme.radius.lg;
-  const width = metrics.padX * 2 + iconSpan + textWidth;
   const slide = (1 - enter) * theme.space.sm;
   const pill: Rect = {
     x: anchor.x - width / 2,

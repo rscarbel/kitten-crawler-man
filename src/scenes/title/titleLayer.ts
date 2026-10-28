@@ -59,7 +59,7 @@ export interface TitleLightRig {
   readonly torches: readonly TitleTorchLight[];
   /** 0 (the darkest the hall gets) to 1 (fully lit); how far the darkness has lifted. */
   ambient: number;
-  /** 0 off, 1 full: the game-show spotlight on the heroes. */
+  /** 0 off, 1 full: the spotlight on the heroes. */
   spotlight: number;
 }
 

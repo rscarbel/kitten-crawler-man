@@ -9,9 +9,10 @@
 
 import { hotbarAbilityOf } from '../../gear/gearHooks';
 import type { AbilityManager } from '../../core/skills/AbilityManager';
-import { castShellWithGesture, isCastingShell } from '../../creatures/humanGestures';
+import { castShieldWithGesture, isCastingShield } from '../../creatures/humanGestures';
 import { weaponStatsOf, type InventoryItem } from '../../core/items/defs/ItemDefs';
 import { isThrownExplosive, type DynamiteSystem, type ThrownExplosiveId } from '../DynamiteSystem';
+import { crawlerLabel } from '../AchievementAwards';
 import type { SkillBookReadRequest } from '../../ui/screens/inventory/InventoryActions';
 import type { SpellSystem } from '../SpellSystem';
 import type { MenusKit, PotionSlot } from './MenusKit';
@@ -64,11 +65,11 @@ export function activateHotbarSlot(
   const { pm, audio } = host.world;
   const active = pm.active();
   const slot = active.inventory.actionBar.slots[hotbarIdx];
-  // Any other slot, even an empty one, takes his hand back, and the
-  // readied item's own slot pressed again is the way to put it away.
+  // Any other slot, even an empty one, takes the readied item back, and its
+  // own slot pressed again is the way to put it away.
   const readiedItem = host.dynamite?.readiedItem ?? null;
   if (readiedItem !== null) {
-    host.dynamite?.putAway(pm.human);
+    host.dynamite?.putAway();
     if (slot === null || slot.id === readiedItem) return;
   }
   if (slot === null) return;
@@ -98,29 +99,29 @@ export function activateHotbarSlot(
     return;
   }
 
-  if (ability === 'protective_shell' && pm.human.isActive) {
+  if (ability === 'energy_shield' && pm.human.isActive) {
     // A press while the cooldown runs, or while his palm is still on its way
     // down, changes nothing: the dome goes up where the palm lands.
-    if (host.spells.shellCooldown > 0 || isCastingShell(pm.human)) return;
-    castShellWithGesture(pm.human, () => {
-      const cast = host.spells.triggerProtectiveShell(
+    if (host.spells.energyShieldCooldown > 0 || isCastingShield(pm.human)) return;
+    castShieldWithGesture(pm.human, () => {
+      const cast = host.spells.triggerEnergyShield(
         pm.human,
         pm.cat,
         host.world.roster.grid,
-        pm.human.getProtectiveShellLevel(),
+        pm.human.getEnergyShieldLevel(),
       );
       if (cast) {
-        host.abilityManager.addUsageXp('protective_shell');
-        audio?.play('human_protective_shell');
+        host.abilityManager.addUsageXp('energy_shield');
+        audio?.play('human_energy_shield_discharge');
       }
     });
     return;
   }
 
-  if (ability === 'smush' && pm.human.isActive) {
-    if (pm.human.triggerSmush()) {
-      audio?.play('human_smush');
-    } else if (pm.human.smushRefusedByCooldown) {
+  if (ability === 'seismic_stomp' && pm.human.isActive) {
+    if (pm.human.triggerSeismicStomp()) {
+      audio?.play('human_seismic_stomp');
+    } else if (pm.human.seismicStompRefusedByCooldown) {
       audio?.play('error_taking_action');
     }
     return;
@@ -132,12 +133,12 @@ export function activateHotbarSlot(
     return;
   }
 
-  if (isThrownExplosive(slot.id) && pm.human.isActive && host.dynamite !== null) {
+  if (isThrownExplosive(slot.id) && host.dynamite !== null) {
     if (host.dynamite.isCharging) {
       releaseDynamite(host);
     } else if (dynamiteGrip === 'ready') {
       readyDynamite(host, host.dynamite, slot.id);
-    } else if (!host.dynamite.beginCharge(hotbarIdx, pm.human, slot.id)) {
+    } else if (!host.dynamite.beginCharge(hotbarIdx, active, slot.id)) {
       refuseDynamiteInSafeRoom(host);
     }
     return;
@@ -170,7 +171,7 @@ export function refuseDynamiteInSafeRoom(host: Pick<HotbarHost, 'world' | 'menus
 }
 
 function readyDynamite(host: HotbarHost, dynamite: DynamiteSystem, item: ThrownExplosiveId): void {
-  if (!dynamite.ready(host.world.pm.human, item)) {
+  if (!dynamite.ready(host.world.pm.active(), item)) {
     refuseDynamiteInSafeRoom(host);
     return;
   }
@@ -189,12 +190,13 @@ export function throwReadiedDynamiteAt(
   worldX: number,
   worldY: number,
 ): boolean {
-  const { pm, bus } = host.world;
+  const { bus } = host.world;
   const dynamite = host.dynamite;
   const item = dynamite?.readiedItem ?? null;
-  if (dynamite === null || item === null || !pm.human.isActive) return false;
-  if (!dynamite.throwReadiedAt(pm.human, worldX, worldY)) return true;
-  bus.emit('dynamiteUsed', { player: 'Human', item });
+  const thrower = dynamite?.readiedThrower ?? null;
+  if (dynamite === null || item === null || thrower === null) return false;
+  if (!dynamite.throwReadiedAt(worldX, worldY)) return true;
+  bus.emit('dynamiteUsed', { player: crawlerLabel(thrower.crawlerKind), item });
   return true;
 }
 
@@ -217,13 +219,14 @@ export function releaseChargedDynamite(host: HotbarHost, hotbarIdx: number): boo
   return true;
 }
 
-/** Lets go of whatever he is charging and reports the throw. */
+/** Lets go of whatever is being charged and reports the throw. */
 function releaseDynamite(host: HotbarHost): void {
-  const { pm, bus } = host.world;
+  const { bus } = host.world;
   const item = host.dynamite?.chargingItem ?? null;
-  if (item === null) return;
-  host.dynamite?.release(pm.human);
-  bus.emit('dynamiteUsed', { player: 'Human', item });
+  const thrower = host.dynamite?.chargingThrower ?? null;
+  if (item === null || thrower === null) return;
+  host.dynamite?.release();
+  bus.emit('dynamiteUsed', { player: crawlerLabel(thrower.crawlerKind), item });
 }
 
 /** The potion key means "any bottle you have", unlike a slot, which names one. */

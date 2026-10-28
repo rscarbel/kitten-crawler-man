@@ -209,28 +209,30 @@ function isGameAction(value: string): value is GameAction {
 }
 
 /**
- * Turns the loosely-typed stored payload into a binding table. Anything the
- * current build does not recognise is dropped rather than rejected wholesale,
- * so a save written by a future (or hand-edited) build still boots.
+ * The binding table the stored payload describes, or null when it names an
+ * action or key this build does not have, repeats a key, or gives an action
+ * more keys than it may carry.
  */
-function sanitizeOverrides(
+function parseOverrides(
   stored: Readonly<Record<string, readonly string[]>>,
-): Map<GameAction, readonly string[]> {
+): Map<GameAction, readonly string[]> | null {
   const overrides = new Map<GameAction, readonly string[]>();
   for (const [action, keys] of Object.entries(stored)) {
-    if (!isGameAction(action)) continue;
-    const cleaned: string[] = [];
-    for (const key of keys) {
-      if (typeof key !== 'string') continue;
-      const normalized = normalizeKey(key);
-      if (!isBindableKey(normalized)) continue;
-      if (cleaned.includes(normalized)) continue;
-      cleaned.push(normalized);
-      if (cleaned.length === MAX_KEYS_PER_ACTION) break;
-    }
-    overrides.set(action, cleaned);
+    if (!isGameAction(action) || keys.length > MAX_KEYS_PER_ACTION) return null;
+    const normalizedKeys = keys.map(normalizeKey);
+    const allBindable = normalizedKeys.every(isBindableKey);
+    const allDistinct = new Set(normalizedKeys).size === normalizedKeys.length;
+    if (!allBindable || !allDistinct) return null;
+    overrides.set(action, normalizedKeys);
   }
   return overrides;
+}
+
+function storedOverrides(): Map<GameAction, readonly string[]> {
+  const overrides = parseOverrides(settings.bindings);
+  if (overrides !== null) return overrides;
+  console.warn('The stored key bindings failed validation; using the default keys.');
+  return new Map();
 }
 
 /** What a rebind attempt did, so the Controls screen can explain itself. */
@@ -243,7 +245,7 @@ export interface RebindOutcome {
 
 class Keybindings {
   /** Only actions the player has actually changed, so future default changes still reach them. */
-  private overrides = sanitizeOverrides(settings.bindings);
+  private overrides = storedOverrides();
   private reverse = new Map<string, GameAction>();
 
   constructor() {

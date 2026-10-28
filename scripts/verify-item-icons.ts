@@ -200,10 +200,7 @@ function screenRig(width: number, height: number, density: Density): ScreenRig {
   const owner: InventoryOwner = {
     inventory: new Inventory(),
     gear: new GearState(),
-    strength: OWNER_STAT,
-    intelligence: OWNER_STAT,
-    constitution: OWNER_STAT,
-    dexterity: OWNER_STAT,
+    statValue: () => OWNER_STAT,
   };
   const screen = new InventoryScreen({
     actions: new InventoryActions(),

@@ -32,7 +32,7 @@ const MANTIS_SPEED = 1.35;
 const MANTIS_WALK_ADVANTAGE = 1.04;
 export const MANTIS_MAX_SPEED = PLAYER_SPEED * MANTIS_WALK_ADVANTAGE;
 const AGGRO_RANGE_TILES = 7;
-/** Reach of the raptorial strike, in tiles from the mantis's own tile origin. */
+/** Reach of the grasping strike, in tiles from the mantis's own tile origin. */
 const SLASH_RANGE_TILES = 1.15;
 const SLASH_DAMAGE = 4;
 /**
@@ -222,7 +222,7 @@ export class MantisCrony extends Mob {
     if (!this.slashLanded && this.slashTimer <= SLASH_RECOVER_FRAMES) {
       this.slashLanded = true;
       if (target !== null && this.distanceTo(target) <= this.slashRangePx) {
-        this.dealDamage(target, SLASH_DAMAGE, 'raptorial_slash');
+        this.dealDamage(target, SLASH_DAMAGE, 'grasping_slash');
       }
     }
     if (this.slashTimer <= 0) this.slashCooldown = SLASH_COOLDOWN_FRAMES;

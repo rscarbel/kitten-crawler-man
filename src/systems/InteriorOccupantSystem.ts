@@ -578,7 +578,7 @@ export class InteriorOccupantSystem implements GameSystem {
     const arrival = findPartyArrivalTiles(this.map, this.map.startTile);
     reserved.add(tileKey(arrival.leader.x, arrival.leader.y));
     reserved.add(tileKey(arrival.follower.x, arrival.follower.y));
-    // Mordecai and the sleeping bed own their tiles in a safe-room interior.
+    // Dave and the sleeping bed own their tiles in a safe-room interior.
     for (const anchor of safeRoomAnchorTiles(this.map)) reserved.add(tileKey(anchor.x, anchor.y));
     return reserved;
   }

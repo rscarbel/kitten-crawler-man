@@ -1,0 +1,148 @@
+name: Deploy frozen site
+
+# Publishes the frozen Kitten Crawler Man site: one old build, kept exactly as it
+# was last deployed, at ryanscarbel.com/kitten-crawler-man/ and at this repo's
+# GitHub Pages URL. The game itself moved to ryanscarbel.com/kitten-crawler-world/
+# (deploy.yml); this workflow and scripts/legacy-gate/ are the only places that
+# still name the old site, because they are the only things that publish it.
+#
+# Run by hand only. It builds the chosen commit with that commit's own scripts,
+# then runs scripts/legacy-gate/inject.ts from the checkout this workflow runs
+# from, which puts a password gate in front of the game and narrows the old
+# service worker's cache cleanup so it never deletes the new game's caches
+# (both sites share the ryanscarbel.com origin). Nothing else in the old build
+# changes.
+#
+# Auth for S3 is the same GitHub OIDC role as deploy.yml, so its permission
+# policy must still allow the kitten-crawler-man/ prefix. Dispatch this from main: the
+# role pins `repo:OWNER/REPO:ref:refs/heads/main`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: The frozen commit to build (a full SHA)
+        required: true
+        default: 0ad267655569a4b26e8bf241a858454175c87bdf
+
+concurrency:
+  group: deploy-legacy
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write # actions/configure-pages
+      packages: read # the AI SDK comes from GitHub Packages
+    steps:
+      - name: Check out the gate
+        uses: actions/checkout@v4
+        with:
+          path: current
+
+      - name: Check out the frozen commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+          path: legacy
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: legacy/package-lock.json
+          registry-url: https://npm.pkg.github.com
+          scope: '@rscarbel'
+
+      # GitHub Packages wants a token even for public packages.
+      - name: Install the frozen commit's dependencies
+        working-directory: legacy
+        run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build site and offline ZIP
+        working-directory: legacy
+        run: npm run build:release
+
+      # inject.ts imports only Node built-ins, so the frozen commit's own tsx
+      # runs it without installing the current checkout.
+      - name: Add the password gate
+        working-directory: legacy
+        run: npx tsx ../current/scripts/legacy-gate/inject.ts _site
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: legacy/_site
+
+      # The same output again as an ordinary artifact, because the Pages
+      # artifact can only be consumed by actions/deploy-pages.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: legacy-release
+          path: |
+            legacy/_site
+            legacy/dist/kitten-crawler-man.zip
+          retention-days: 1
+
+  pages:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
+
+  # Deliberately a separate job from `pages`, and deliberately without an
+  # `environment:`, for the reason deploy.yml gives: an environment replaces
+  # the branch in the OIDC subject, and the role's trust policy pins the branch.
+  publish:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required to request the OIDC token
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: legacy-release
+
+      - name: Assume the publish role (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      # The same cache lifetimes as deploy.yml, which explains them.
+      - name: Publish to S3
+        env:
+          TARGET: s3://${{ secrets.AWS_SITE_BUCKET }}/kitten-crawler-man
+          CACHE_CONTROL: public, max-age=0, must-revalidate, s-maxage=31536000
+        run: |
+          aws s3 sync _site/ "$TARGET/" \
+            --delete \
+            --exclude "kitten-crawler-man.zip" \
+            --cache-control "$CACHE_CONTROL" \
+            --only-show-errors
+          aws s3 cp dist/kitten-crawler-man.zip "$TARGET/kitten-crawler-man.zip" \
+            --content-type application/zip \
+            --cache-control "$CACHE_CONTROL" \
+            --only-show-errors
+
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID }}" \
+            --paths "/kitten-crawler-man/*" \
+            --query 'Invalidation.Id' \
+            --output text

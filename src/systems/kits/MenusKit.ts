@@ -50,10 +50,12 @@ import { CraftExplainers } from '../../ui/screens/dialogs/CraftExplainers';
 import { RESOURCING_EXPLAINER } from '../../ui/screens/dialogs/resourcingExplainer';
 import { CONSTRUCTION_EXPLAINER } from '../../ui/screens/dialogs/constructionExplainer';
 import { PROCESSING_EXPLAINER } from '../../ui/screens/dialogs/processingExplainer';
-import { mongoExplainerEntry } from '../../ui/screens/dialogs/mongoExplainer';
+import { deinonychusExplainerEntry } from '../../ui/screens/dialogs/deinonychusExplainer';
 import { DUAL_HARVEST_EXPLAINER } from '../../ui/screens/dialogs/dualHarvestExplainer';
 import { levelUpSurface } from '../../ui/screens/dialogs/levelUpDialog';
 import { rewardGrantedSurface } from '../../ui/screens/dialogs/rewardGrantedDialog';
+import { PetNamePrompt } from '../../ui/screens/dialogs/petNamePrompt';
+import type { PetNames } from '../../core/party/petNames';
 import { skillBookDialogSurface } from '../../ui/screens/dialogs/skillBookDialog';
 import { questRewardSurface } from '../../ui/screens/dialogs/questRewardScreen';
 import { ConstructionScreen } from '../../ui/screens/construction/ConstructionScreen';
@@ -113,6 +115,8 @@ interface DelayedSound {
 export interface MenusKitDeps {
   readonly world: SceneWorld;
   readonly abilityManager: AbilityManager;
+  /** The run's pet names, for the menus that speak of the pets. */
+  readonly petNames: PetNames;
   /**
    * The tutorial's narrowing of the bag while a step steers a drag. Absent
    * everywhere else, which is what leaves the bag fully usable.
@@ -165,6 +169,8 @@ export class MenusKit {
   readonly pauseScreen: PauseScreen;
   readonly levelUpDialog = new LevelUpDialog();
   readonly rewardGrantedDialog = new RewardGrantedDialog();
+  /** Asks the player to name a pet as it joins the party. */
+  readonly petNamePrompt = new PetNamePrompt();
   /**
    * The quest-complete screen every quest asks for through `questRewardShown`.
    * It waits for every other halt before going up, so anything raised after
@@ -183,7 +189,7 @@ export class MenusKit {
   private readonly stopCaptions: (() => void) | null;
   /**
    * The "how it works" explainers: the craft skills' and processing's, opened
-   * from the Crafts tab and by the teachers, and Mongo's, opened when he joins
+   * from the Crafts tab and by the teachers, and Deinonychus's, opened when he joins
    * and from the pause menu.
    */
   readonly craftExplainers = new CraftExplainers();
@@ -241,8 +247,8 @@ export class MenusKit {
     this.craftExplainers.register('processing', PROCESSING_EXPLAINER);
     this.craftExplainers.register('dual_harvest', DUAL_HARVEST_EXPLAINER);
     this.craftExplainers.register(
-      'mongo',
-      mongoExplainerEntry(() => this.abilityManager.getLevel('mongo')),
+      'deinonychus',
+      deinonychusExplainerEntry(() => this.abilityManager.getLevel('deinonychus'), deps.petNames),
     );
     this.constructionMenu = new ConstructionScreen(audio, {
       notify: (message) => this.announce(message),
@@ -251,8 +257,9 @@ export class MenusKit {
       party: () => this.world.pm,
       abilities: this.abilityManager,
       audio,
+      petNames: deps.petNames,
       guides: {
-        mongo: () => void this.craftExplainers.open('mongo'),
+        deinonychus: () => void this.craftExplainers.open('deinonychus'),
         craft: (id) => void this.craftExplainers.open(id),
         processing: () => void this.craftExplainers.open('processing'),
         dualHarvest: () => void this.craftExplainers.open('dual_harvest'),
@@ -361,6 +368,7 @@ export class MenusKit {
   }
 
   dispose(): void {
+    this.petNamePrompt.dispose();
     this.toasts.clear();
     this.nowPlaying.clear();
     this.captions.clear();
@@ -634,18 +642,17 @@ export class MenusKit {
 
   /**
    * Studies one tome from `reader`'s pack, spending it for the Explosives
-   * Handling it teaches. Only the human can study one; the cat is refused and
-   * keeps nothing, since the tome can never reach her pack in the first place.
+   * Handling it teaches.
    */
   private studyTome(reader: HumanPlayer | CatPlayer, tome: PotionSlot & { id: ItemId }): void {
     const audio = this.world.audio;
     const levels = ITEM_DEF[tome.id].explosivesHandlingLevels;
-    if (levels === undefined || !(reader instanceof HumanPlayer)) {
+    if (levels === undefined) {
       audio?.play('error_taking_action');
       return;
     }
     if (!reader.inventory.removeOneFromSlot(tome.source, tome.slotIdx, tome.id)) return;
-    reader.explosivesHandling += levels;
+    reader.setBaseStat('explosivesHandling', reader.getBaseStat('explosivesHandling') + levels);
     audio?.play('menu_skillpoint_spent');
     this.announce(`Explosives Handling is now level ${reader.explosivesHandling}.`, TOME_TOAST);
   }
@@ -862,7 +869,7 @@ export class MenusKit {
 
   /**
    * The kit's overlays as surfaces: the inventory screen, the award stack,
-   * the explainers, the skill-book prompt, the item picker and the pause
+   * the pet-naming prompt, the explainers, the skill-book prompt, the item picker and the pause
    * menu. The hotbar is drawn with the scene's HUD, and the construction menu
    * with whoever lists its options, so the scene mounts those itself.
    *
@@ -884,6 +891,7 @@ export class MenusKit {
       rewardGrantedSurface('reward-granted', this.rewardGrantedDialog, {
         shownWhen: () => !this.levelUpDialog.isShowing && !this.questReward.isOpen,
       }),
+      this.petNamePrompt.surface('pet-name-prompt'),
       skillBookDialogSurface('skill-book-prompt', this.skillBookPrompt, {
         resolve: (choice) => {
           const reader = this.pendingSkillBookReader(this.inventoryPlayer());

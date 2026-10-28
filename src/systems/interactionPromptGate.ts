@@ -19,7 +19,7 @@ const TILE_CENTRE_FRACTION = 0.5;
 
 /**
  * Whether a living hostile stands within `radiusPx` of the centre of
- * `player`'s tile. Allies (a hireling, Mongo) never count:
+ * `player`'s tile. Allies (a hireling, Deinonychus) never count:
  * one standing close must not turn a press to talk into a swing.
  */
 export function hostileWithinRadius(

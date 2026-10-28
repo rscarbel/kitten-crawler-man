@@ -1141,7 +1141,7 @@ export class LichBattleSystem implements GroundHazardSource {
   }
 
   /**
-   * Only the crawlers slide. A companion — Mongo, a hire — is left wherever it
+   * Only the crawlers slide. A companion — Deinonychus, a hire — is left wherever it
    * is standing: the firewall and the orbs damage `Player` bodies only, so a
    * companion's position during the set piece has no effect on it.
    */

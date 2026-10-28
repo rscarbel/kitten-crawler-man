@@ -30,7 +30,7 @@ function overlapsTile(body: { x: number; y: number }, tile: TilePoint): boolean 
 }
 
 /**
- * Sets every crawler and every non-hostile living mob (Mongo, hired
+ * Sets every crawler and every non-hostile living mob (Deinonychus, hired
  * mercenaries, other allies) that overlaps `tile` down on the nearest walkable
  * tile with room to move. A body that finds no such tile within
  * {@link CLEARANCE_SEARCH_TILES} is left where it is.

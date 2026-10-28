@@ -16,6 +16,7 @@
  *   nothing.
  */
 
+import { petWords, type PetNames, type PetWords } from '../../../core/party/petNames';
 import type { AchievementManager } from '../../../core/progression/AchievementManager';
 import { formatPlayTime, type GameStats } from '../../../core/progression/GameStats';
 import { centerIn, splitH, splitV, type Rect } from '../../core/geom';
@@ -59,13 +60,15 @@ export interface RunSummary {
   readonly achievementsTotal: number;
   readonly humanLevel: number;
   readonly catLevel: number;
-  /** Null when Mongo was never unlocked, which drops his row. */
-  readonly mongoLevel: number | null;
+  /** Null when Deinonychus was never unlocked, which drops his row. */
+  readonly deinonychusLevel: number | null;
+  /** How his rows name him: by the name he was given, or as the party's Deinonychus. */
+  readonly deinonychusWords: PetWords;
   readonly totalKills: number;
   readonly bossesDefeated: number;
   readonly hirelingsHired: number;
   readonly hirelingsLost: number;
-  readonly mongoPets: number;
+  readonly deinonychusPets: number;
   readonly cowPets: number;
   readonly midgePets: number;
   readonly topKills: ReadonlyArray<readonly [string, number]>;
@@ -92,7 +95,8 @@ export function buildRunSummary(input: {
   stats: GameStats;
   humanLevel: number;
   catLevel: number;
-  mongoLevel: number | null;
+  deinonychusLevel: number | null;
+  petNames: PetNames;
   achievements: { unlocked: number; total: number };
 }): RunSummary {
   const { stats, achievements } = input;
@@ -107,12 +111,13 @@ export function buildRunSummary(input: {
     achievementsTotal: achievements.total,
     humanLevel: input.humanLevel,
     catLevel: input.catLevel,
-    mongoLevel: input.mongoLevel,
+    deinonychusLevel: input.deinonychusLevel,
+    deinonychusWords: petWords(input.petNames, 'deinonychus'),
     totalKills: stats.totalKills,
     bossesDefeated: stats.bossesDefeated,
     hirelingsHired: stats.hirelingsHired,
     hirelingsLost: stats.hirelingsLost,
-    mongoPets: stats.mongoPets,
+    deinonychusPets: stats.deinonychusPets,
     cowPets: stats.cowPets,
     midgePets: stats.midgePets,
     topKills: stats.topKills(RUN_SUMMARY_TOP_KILLS),
@@ -276,10 +281,10 @@ function partyRows(summary: RunSummary): StatRow[] {
     { label: 'Human level', value: summary.humanLevel, format: 'count', tone: 'human' },
     { label: 'Cat level', value: summary.catLevel, format: 'count', tone: 'cat' },
   ];
-  if (summary.mongoLevel !== null) {
+  if (summary.deinonychusLevel !== null) {
     rows.push({
-      label: 'Mongo level',
-      value: summary.mongoLevel,
+      label: `${summary.deinonychusWords.opening}'s level`,
+      value: summary.deinonychusLevel,
       format: 'count',
       tone: 'success',
     });
@@ -291,7 +296,12 @@ function partyRows(summary: RunSummary): StatRow[] {
     { label: 'Hirelings lost', value: summary.hirelingsLost, format: 'count', tone: 'muted' },
   );
   const petRows: StatRow[] = [
-    { label: 'Mongo petted', value: summary.mongoPets, format: 'count', tone: 'success' },
+    {
+      label: `${summary.deinonychusWords.opening} petted`,
+      value: summary.deinonychusPets,
+      format: 'count',
+      tone: 'success',
+    },
     { label: 'Cows petted', value: summary.cowPets, format: 'count', tone: 'success' },
     { label: 'Midge petted', value: summary.midgePets, format: 'count', tone: 'success' },
   ];

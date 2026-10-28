@@ -317,7 +317,7 @@ for (const look of CAT_LOOKS) {
       holdRowsSeen.add(row.state);
       scene.step(1);
       const held = scene.rowHeld;
-      const wanted = row.hold === 'carry' ? 'mouthCarry' : 'pawTool';
+      const wanted = row.hold === 'carry' || row.hold === 'throw' ? 'mouthCarry' : 'pawTool';
       if (held === null || catGripOf(held.look) !== wanted) holdRowsWrong.push(row.state);
     }
     scene.tap('row');

@@ -6,7 +6,7 @@
  * touch hold here is really waited out.
  *
  *  - The tutorial's bag step, opened from the pause menu's Inventory entry:
- *    the Smush tome and the potions dragged to the slots it asks for, the
+ *    the Seismic Stomp tome and the potions dragged to the slots it asks for, the
  *    hoodie refusing the hotbar with the tutorial's hint, then put on from
  *    their context menu until the tutorial moves on.
  *  - A plain dungeon floor: I and G, the HUD's Bag button, a potion drunk from
@@ -80,7 +80,7 @@ const DRAG_STEPS = 4;
 const HOLD_SLACK_MS = 80;
 /** Scene ticks after an action, so whatever reads it on its next update has. */
 const SETTLE_TICKS = 3;
-const SMUSH_HOTBAR_SLOT = 0;
+const SEISMIC_STOMP_HOTBAR_SLOT = 0;
 const POTION_HOTBAR_SLOT = 1;
 const HOODIE_TRY_HOTBAR_SLOT = 2;
 const DRINK_POTIONS = 3;
@@ -317,11 +317,15 @@ section('the tutorial’s bag step, from the pause menu');
   );
   check(!menus.pauseScreen.isOpen, 'in place of the pause menu');
 
-  await drag(scene, bagCell(scene, 'smush_tome'), hotbarCell(scene, SMUSH_HOTBAR_SLOT));
+  await drag(
+    scene,
+    bagCell(scene, 'seismic_stomp_tome'),
+    hotbarCell(scene, SEISMIC_STOMP_HOTBAR_SLOT),
+  );
   tick(scene);
   check(
-    human.inventory.actionBar.slots[SMUSH_HOTBAR_SLOT]?.id === 'smush_tome',
-    'the Smush tome is dragged to hotbar slot 1',
+    human.inventory.actionBar.slots[SEISMIC_STOMP_HOTBAR_SLOT]?.id === 'seismic_stomp_tome',
+    'the Seismic Stomp tome is dragged to hotbar slot 1',
   );
   check(tutorial.tutorialDragItemId === 'health_potion', 'and the tutorial asks for the potions');
 
@@ -362,7 +366,7 @@ section('the tutorial’s bag step, from the pause menu');
     'Equip puts the hoodie on through the scene',
   );
   tick(scene);
-  check(tutorial.state === 'HUMAN_EQUIPPED_SMUSH', 'and the tutorial moves on');
+  check(tutorial.state === 'HUMAN_EQUIPPED_SEISMIC_STOMP', 'and the tutorial moves on');
   check(!screen.isOpen && !menus.pauseScreen.isOpen, 'closing the bag behind it');
 }
 

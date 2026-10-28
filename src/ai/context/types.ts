@@ -1,6 +1,7 @@
 import type { LevelId } from '../../levels/levelIds';
 import type { Player } from '../../Player';
 import type { JsonObject } from './json';
+import type { PetNames } from '../../core/party/petNames';
 import type { PlayerCharacterName } from '../../characters/characters';
 import type { CrawlerKind } from '../../core/skills/SkillManager';
 
@@ -84,7 +85,7 @@ export interface SessionInput {
   secondsPlayed: number;
   deaths: number;
   activeQuests: QuestSummary[];
-  /** Companions out with the party (Mongo, hirelings, the attack cow). */
+  /** Companions out with the party (Deinonychus, hirelings, the attack cow). */
   companions: string[];
   /** Rooms on this floor's map, for the exploration share. Absent where the map has none. */
   roomCount?: number;
@@ -113,9 +114,11 @@ export interface LiveInput {
 export interface AIContextSource {
   readSession(): SessionInput;
   readLive(): LiveInput;
-  /** Cheap check used per event to decide whether Mordecai saw it: is the active crawler in a safe room? */
+  /** Cheap check used per event to decide whether Dave saw it: is the active crawler in a safe room? */
   isPartyInSafeRoom(): boolean;
   /** The same check for one crawler, for events that happened to that crawler. */
   isCrawlerInSafeRoom(crawler: CrawlerName): boolean;
   crawlerNameOf(player: Player): CrawlerName | null;
+  /** The run's pet names, so a pet is told about by the name the player gave it. */
+  readonly petNames: PetNames;
 }

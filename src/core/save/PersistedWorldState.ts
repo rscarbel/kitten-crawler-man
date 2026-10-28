@@ -28,7 +28,7 @@ import type { PlayerRead } from '../../systems/casino/poker/npc/playerRead';
 import { isRegularId } from '../../systems/casino/poker/npc/regulars';
 import { normalizeJackpotPool } from '../../systems/casino/slots/slotBets';
 import type { HiredMercenary, MercenaryRosterCheckpoint } from '../party/MercenaryRoster';
-import type { MongoPetStateCheckpoint } from '../state/MongoPetState';
+import type { DeinonychusPetStateCheckpoint } from '../state/DeinonychusPetState';
 import {
   VISITED_PLACE_IDS,
   isInteriorPropPayoutKey,
@@ -59,8 +59,8 @@ import { parsePersistedDoomsday, type PersistedDoomsdayProgress } from '../quest
 import {
   debriefBossType,
   type DebriefMemory,
-  type MordecaiDebriefCheckpoint,
-} from '../../systems/mordecaiDebrief';
+  type DaveDebriefCheckpoint,
+} from '../../systems/daveDebrief';
 import {
   parseBriarHollowStateSnapshot,
   type BriarHollowStateSnapshot,
@@ -94,8 +94,8 @@ export interface PersistedWorldState {
   shopStock: ShopStockSnapshot;
   townMemory: TownMemoryCheckpoint;
   mercenaryRoster: MercenaryRosterCheckpoint;
-  mongoPetState: MongoPetStateCheckpoint;
-  mordecaiDebrief: MordecaiDebriefCheckpoint;
+  deinonychusPetState: DeinonychusPetStateCheckpoint;
+  daveDebrief: DaveDebriefCheckpoint;
   /** Tactics traits the party has already been told enemies have learned, for the whole run. */
   tacticsNoticesSeen: readonly TacticsTrait[];
   /** The doomsday finale's stage and the time left on its countdown. */
@@ -422,9 +422,9 @@ function parseDebriefMemory(value: unknown): DebriefMemory | undefined {
   return { congratulated, namedItemIds: parsedItemIds };
 }
 
-function parseMordecaiDebriefCheckpoint(value: unknown): MordecaiDebriefCheckpoint | undefined {
+function parseDaveDebriefCheckpoint(value: unknown): DaveDebriefCheckpoint | undefined {
   if (!isRecord(value)) return undefined;
-  const parsed: MordecaiDebriefCheckpoint = {};
+  const parsed: DaveDebriefCheckpoint = {};
   for (const [key, entry] of Object.entries(value)) {
     const bossType = debriefBossType(key);
     const memory = parseDebriefMemory(entry);
@@ -1115,7 +1115,9 @@ export function parseMercenaryRosterCheckpoint(
   return { active: parsedActive, lastDeceased };
 }
 
-function parseMongoPetStateCheckpoint(value: unknown): MongoPetStateCheckpoint | undefined {
+function parseDeinonychusPetStateCheckpoint(
+  value: unknown,
+): DeinonychusPetStateCheckpoint | undefined {
   if (!isRecord(value)) return undefined;
   const { hp, regenFrames, scaledAgainstMaxHp, restingUntilFull } = value;
   if (
@@ -1311,8 +1313,8 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
   const shopStock = parseShopStockSnapshot(value.shopStock);
   const townMemory = parseTownMemoryCheckpoint(value.townMemory);
   const mercenaryRoster = parseMercenaryRosterCheckpoint(value.mercenaryRoster);
-  const mongoPetState = parseMongoPetStateCheckpoint(value.mongoPetState);
-  const mordecaiDebrief = parseMordecaiDebriefCheckpoint(value.mordecaiDebrief);
+  const deinonychusPetState = parseDeinonychusPetStateCheckpoint(value.deinonychusPetState);
+  const daveDebrief = parseDaveDebriefCheckpoint(value.daveDebrief);
   const tacticsNoticesSeen = parseTacticsNoticesSeen(value.tacticsNoticesSeen);
   const doomsday = parsePersistedDoomsday(value.doomsday);
   const bossRoomDressing = parseBossRoomDressingCheckpoint(value.bossRoomDressing);
@@ -1338,8 +1340,8 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
     shopStock === undefined ||
     townMemory === undefined ||
     mercenaryRoster === undefined ||
-    mongoPetState === undefined ||
-    mordecaiDebrief === undefined ||
+    deinonychusPetState === undefined ||
+    daveDebrief === undefined ||
     tacticsNoticesSeen === undefined ||
     doomsday === undefined ||
     bossRoomDressing === undefined ||
@@ -1370,8 +1372,8 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
     shopStock,
     townMemory,
     mercenaryRoster,
-    mongoPetState,
-    mordecaiDebrief,
+    deinonychusPetState,
+    daveDebrief,
     tacticsNoticesSeen,
     doomsday,
     bossRoomDressing,

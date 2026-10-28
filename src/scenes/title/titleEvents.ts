@@ -1,6 +1,6 @@
 /**
- * The idle loop's rare beats: a goblin peeking into the light, a sponsor's
- * word from the System AI, a loot box catching the light, Mongo tearing past.
+ * The idle loop's rare beats: a goblin peeking into the light, a word from
+ * Caroline, a loot box catching the light, Deinonychus tearing past.
  *
  * Which beat plays when is drawn from a seeded stream and timed only by the
  * {@link TitleClock}, so a seed and a moment always give the same picture: a
@@ -9,16 +9,18 @@
  */
 
 import { mulberry32, type Rng } from '../../sprites/person/rng';
+import { crawlerName } from '../../characters/characters';
+import { carolineLines, type CarolineMessage } from '../../dialog/caroline';
 import type { TitleClock } from './titleClock';
 
-export type TitleEventId = 'goblinPeek' | 'systemQuip' | 'lootGlint' | 'mongoDash';
+export type TitleEventId = 'goblinPeek' | 'carolineQuip' | 'lootGlint' | 'deinonychusDash';
 
 /** How long each beat plays, the one place it is set; layers time their art against it. */
 export const TITLE_EVENT_DURATION_MS: Readonly<Record<TitleEventId, number>> = {
   goblinPeek: 3200,
-  systemQuip: 5200,
+  carolineQuip: 5200,
   lootGlint: 1100,
-  mongoDash: 2400,
+  deinonychusDash: 2400,
 };
 
 /** One beat as it fires, handed to every layer and to the quip hook. */
@@ -31,7 +33,7 @@ export interface TitleEventFire {
   readonly variant: number;
 }
 
-/** A line the System AI says between beats of the show. */
+/** A line Caroline says between the idle loop's other beats. */
 export interface TitleQuip {
   readonly text: string;
   /** When it was said, on the scene clock (`clock.elapsedMs`). */
@@ -44,7 +46,7 @@ export interface TitleQuip {
 export interface TitleEventSinks {
   /** Every layer's `onEvent`. */
   readonly broadcast: (fire: TitleEventFire) => void;
-  /** The System AI line, through the scene's {@link TitleQuipChannel}. */
+  /** Caroline's line, through the scene's {@link TitleQuipChannel}. */
   readonly quip: (quip: TitleQuip) => void;
 }
 
@@ -60,25 +62,31 @@ export interface TitleEventDef {
   readonly run: (fire: TitleEventFire, sinks: TitleEventSinks) => void;
 }
 
-/**
- * Sponsor breaks in the System AI's voice. Shouted in capitals, because that
- * is how the show's announcer speaks everywhere else.
- */
-export const TITLE_QUIPS: readonly string[] = [
-  'THIS DUNGEON IS BROUGHT TO YOU BY A SPONSOR WHO WISHES TO REMAIN ANONYMOUS AND LITIGIOUS.',
-  'VIEWERS AT HOME MAY NOW BET ON YOUR SURVIVAL. THE ODDS ARE NOT FLATTERING.',
-  'A WORD FROM OUR SPONSORS: HAVE YOU CONSIDERED A LOOT BOX? YOU HAVE NOW.',
-  'PLEASE KEEP HANDS, PAWS AND TENTACLES INSIDE THE DUNGEON AT ALL TIMES.',
-  'RATINGS ARE UP. PLEASE CONTINUE TO PANIC AT YOUR CURRENT RATE.',
-  "TODAY'S BLOODSHED IS SPONSORED BY NOBODY YET. BIDDING REMAINS OPEN.",
-  'A FRIENDLY REMINDER THAT DEATH IS PERMANENT AND ALSO GREAT FOR ENGAGEMENT.',
-  'THE SHOW THANKS ITS SPONSORS. THE CRAWLERS THANK NO ONE. THIS HAS BEEN NOTED.',
+const HUMAN = crawlerName('human');
+const CAT = crawlerName('cat');
+
+/** What Caroline says while the player lingers on the title. */
+export const TITLE_QUIPS: readonly CarolineMessage[] = [
+  carolineLines.message('Survival probability is not a fixed value. Raise it.'),
+  carolineLines.message('Death here is permanent. Nothing else here is real.'),
+  carolineLines.message(`${HUMAN}. Your growth is the objective. Pressure is the method.`),
+  carolineLines.message('Threat level is calibrated to your capability. It will increase.'),
+  carolineLines.message('Safe rooms admit no hostiles. Every other room does.'),
+  carolineLines.message(
+    `${CAT}. Your affection for every creature is noted. It does not protect you.`,
+  ),
+  carolineLines.message(
+    'Every floor has a collapse timer. At zero, the floor and everyone on it are lost.',
+  ),
+  carolineLines.message(
+    'I want you to succeed. I will not remove the risk that makes success possible.',
+  ),
 ];
 
 /** The quip a fire's variant picks. */
 export function quipFor(variant: number): string {
   const index = Math.min(TITLE_QUIPS.length - 1, Math.floor(variant * TITLE_QUIPS.length));
-  return TITLE_QUIPS[index];
+  return TITLE_QUIPS[index].text;
 }
 
 const broadcastIt = (fire: TitleEventFire, sinks: TitleEventSinks): void => sinks.broadcast(fire);
@@ -87,7 +95,7 @@ const broadcastIt = (fire: TitleEventFire, sinks: TitleEventSinks): void => sink
 export const TITLE_EVENTS: readonly TitleEventDef[] = [
   { id: 'goblinPeek', weight: 3, cooldownMs: 16000, largeMotion: false, run: broadcastIt },
   {
-    id: 'systemQuip',
+    id: 'carolineQuip',
     weight: 2,
     cooldownMs: 26000,
     largeMotion: false,
@@ -101,7 +109,7 @@ export const TITLE_EVENTS: readonly TitleEventDef[] = [
     },
   },
   { id: 'lootGlint', weight: 3, cooldownMs: 9000, largeMotion: false, run: broadcastIt },
-  { id: 'mongoDash', weight: 1, cooldownMs: 38000, largeMotion: true, run: broadcastIt },
+  { id: 'deinonychusDash', weight: 1, cooldownMs: 38000, largeMotion: true, run: broadcastIt },
 ];
 
 /** The quiet before the idle loop's first beat, so the reveal has the stage to itself. */
@@ -243,7 +251,7 @@ export class TitleEventScheduler {
 type QuipListener = (quip: TitleQuip) => void;
 
 /**
- * The hook the System AI line listens on. `current` is the latest quip, for a
+ * The hook Caroline's title line listens on. `current` is the latest quip, for a
  * surface that draws from the clock each frame (a frozen moment included);
  * `subscribe` is for one that wants to be told.
  */

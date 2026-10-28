@@ -3,7 +3,7 @@ import type { SystemContext } from './GameSystem';
 
 /**
  * Everyone a fairy's area effect lands on: both crawlers, plus the scene's
- * extra player-side bodies (Mongo, hired mercenaries). Filled into `out`, which
+ * extra player-side bodies (Deinonychus, hired mercenaries). Filled into `out`, which
  * is emptied first.
  *
  * Defend-quest NPCs are left out. They are escorted rather than hunted —

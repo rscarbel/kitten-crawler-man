@@ -1,6 +1,6 @@
 ---
 name: add-gear
-description: Add or change how a weapon, tool, prop, hat or garment looks on the human or the cat in Kitten Crawler Man — grip archetypes and motion sets, defineHeldVisual / defineGarment, weapon stat blocks and onStrike procs, envelopes, layers and covered skin, the required item `look`, gates:equipment and the per-item render and review loop. Use whenever an item is held, carried, swung or worn by a crawler. For the item's non-visual data (loot, shop, hotbar) also read add-item; for new rows, a new archetype or a new motion set go to bipedal-figure.
+description: Add or change how a weapon, tool, prop, hat or garment looks on the human or the cat in Kitten Crawler World — grip archetypes and motion sets, defineHeldVisual / defineGarment, weapon stat blocks and onStrike procs, envelopes, layers and covered skin, the required item `look`, gates:equipment and the per-item render and review loop. Use whenever an item is held, carried, swung or worn by a crawler. For the item's non-visual data (loot, shop, hotbar) also read add-item; for new rows, a new archetype or a new motion set go to bipedal-figure.
 ---
 
 # Add Gear
@@ -38,7 +38,8 @@ Gear lives in `GEAR_CATALOGUE` (`src/gear/catalogue.ts`). `EQUIP_SUBSLOTS`
 - **Main hand** weapons are held visuals (below). **Claws** are a
   `ClawWeaponStats` block whose `garment` paints over her paws. A **relic** is
   armour with a `relic` trait and `RELIC_LOOK`: `GearSystem` floats it at the
-  shoulder. The **off hand** carries a shield in the `offHandHeld`
+  shoulder; its `rechargeScalesWithMagic` says whether the wearer's Magic
+  shortens its recharge. The **off hand** carries a shield in the `offHandHeld`
   archetype: the Pot-Lid Buckler's `look` is an `OffHandLook`
   (`{ kind: 'offHand', heldVisual, heardAs }`, `BUCKLER_LOOK`), and its
   mechanic is the `frontalBlock` trait.
@@ -65,7 +66,7 @@ All lengths are rig units, the units the human is drawn in (2.03 sole to crown).
 | ------------- | --------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `oneHandHaft` | the human | main hand              | light → `oneHandLight` set (slash, backhand, chop, thrust; drawn from the hip); heavy → `oneHandHeavy` set (shouldered, smash, swing; drawn from the back)     |
 | `twoHandHaft` | the human | off hand (butt) + main | `twoHand` set (sweep, across the body, from the back); the tools' chop and mine rows                                                                           |
-| `thrown`      | the human | main hand              | the dynamite light / hold / throw rows                                                                                                                         |
+| `thrown`      | both      | main hand / `mouth`    | his dynamite light / hold / throw rows; her `throw` rows in every view, the explosive in her jaws                                                              |
 | `slingshot`   | the human | main hand              | its own shot rows; otherwise carried in a bare-handed figure's fist, rests at the hip                                                                          |
 | `carriedFlat` | the human | both hands, level      | the place / build / repair rows (board, crate)                                                                                                                 |
 | `smallHeld`   | the human | main hand              | the drink and zippo rows                                                                                                                                       |
@@ -79,7 +80,7 @@ main hand plays. `src/sprites/art/human/offHand.ts` is its dresser
 closes his left fist on the shield on every row that leaves that hand free,
 turned per view (`CARRIED`, and `BLOCKING` on the `block` rows in
 `offHandBlock.ts`). A row decides for all its frames: an action, a fidget,
-or a row with a prop, an open hand, both fists on one haft or the Shell's glow
+or a row with a prop, an open hand, both fists on one haft or the Energy Shield's glow
 in his left hand stows it for the whole row. With a `twoHand` weapon in hand
 the runtime gives the figure no off-hand grip (`HumanPlayer.shieldInHand`), so
 it rides stowed. The figure id gains `:offhand-<radius>`; the runtime is
@@ -107,6 +108,16 @@ belong to build, place and repair rows the cat has no version of. A party
 axe or pick she has worked with rides on her `back` socket between uses
 (`CatPlayer.stowedDraw`); a borrowed tool (the scythe, the striker's mallet)
 is never stowed.
+
+**The cat throws explosives from her jaws.** `catGripOf` maps a `thrown` look
+(dynamite, the black powder bomb) to `mouthCarry`, drawn at `CAT_THROWN_SHARE`
+of his size so it does not hide her face head-on. Her `throw` rows
+(`hold: 'throw'` in `catFigure.ts`) cock her head back and flick it through; the
+explosive leaves her jaws at `CAT_THROW_RELEASE_FRAME`. What the throw does is
+`DynamiteSystem`'s, the same for either crawler: each crawler is an
+`ExplosiveThrower` (`src/systems/explosiveThrower.ts`; `HumanExplosiveHands` for him,
+`CatPlayer.explosives` for her) and the hotbar throws with the active one. A new
+throwable is a `thrown` held visual and plays for both with no per-crawler code.
 
 ## A held thing: `defineHeldVisual`
 
@@ -194,7 +205,7 @@ dev_plain_sword: {
   wearer: 'human',
   weapon: {
     delivery: 'melee',
-    strike: 'blade',
+    family: 'sword',
     damageMultiplier: PROVING_WEAPON_DAMAGE_MULTIPLIER,
     reachTiles: HUMAN_ARM_REACH_TILES,
     heldVisual: 'plain_arming_sword',
@@ -203,11 +214,18 @@ dev_plain_sword: {
 },
 ```
 
-- **Stat block** (`src/core/items/equipment/weapons.ts`): `MeleeWeaponStats` (`strike:
-'blade' | 'blunt'` picks the hit sound; `damageMultiplier` times the blow
+- **Stat block** (`src/core/items/equipment/weapons.ts`): every block names
+  its required `family: WeaponFamily` (`sword`, `smallBlade`, `axe`, `blunt`,
+  `staff`, `gauntlet` for the hand; `sling`, `bow`, `crossbow` at range; `claw`
+  for the cat), which every hit it lands carries as a damage tag
+  (`src/core/combat/damageTags.ts`) so the proficiency skill for that family
+  boosts it. `MeleeWeaponStats` (`damageMultiplier` times the blow
   his bare arm would land; `reachTiles`, read by `HumanPlayer.getMeleeRange`)
   or `SlingWeaponStats` (the attack key looses a stone). Every melee weapon
   swings through one function, `strikeWithWeapon` in `CombatSystem.ts`.
+  The block's `delivery` names the stat it grows with through `DELIVERY_STAT`
+  (`src/core/party/stats.ts`): melee and claws with Melee, the sling with
+  Ranged (`slingDamage` / `slingRangeTiles` in `crawlerFormulas.ts`).
   Never tune existing numbers; the user balances by playtest.
 - **Awakened looks.** A weapon with an `awakening` trait may name
   `awakenedHeldVisual` beside `heldVisual` (The Last Word): the same
@@ -336,7 +354,7 @@ item's `look`, which can only name a worn garment.
   the look, not the item list: each `HumanLook` / `CatLook` is an
   `OutfitBase` (`garments/outfit.ts`) naming its `baseGarments`, and
   `outfitOf(base, worn)` puts them under whatever is worn. `DAVE_LOOK` starts
-  from his jacket and jeans, `RYAN_LOOK` from his shirt, belt, chinos,
+  from his jacket, jeans and boots, `RYAN_LOOK` from his shirt, belt, chinos,
   sneakers and watch, `PUMPKIN_LOOK` and `BELLE_LOOK` from the cat's coat; a
   cast look on the human rig keeps only the jacket.
 - **Limbs still read as form.** G17 judges every thigh, calf and forearm

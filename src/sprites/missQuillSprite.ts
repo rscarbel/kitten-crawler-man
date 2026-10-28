@@ -9,7 +9,7 @@ const QUILL_TOPKNOT_LENGTH = 0.07;
 const QUILL_TOPKNOT_CURL = 0.055;
 
 /**
- * Her beak, in the species' hooked-raptor shape.
+ * Her beak, in the species' hooked hawk shape.
  *
  * Drawn to +x only: the whole figure is mirrored for a left-facing draw, so a
  * beak authored both ways would cancel itself out and leave her face-on.

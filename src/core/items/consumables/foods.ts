@@ -30,7 +30,7 @@ export type EatOutcome = 'eaten' | 'full' | 'cooldown' | 'cannotAct' | 'noneLeft
 export type ConsumeOne = () => boolean;
 
 /**
- * Hamburger: heals a quarter of max HP and lends strength for a while.
+ * Hamburger: heals a quarter of max HP and lends melee for a while.
  *
  * Refused only when it would do nothing at all — full HP *and* already fed. A
  * full-HP eater who isn't fed still gets the boon, and a fed one who is hurt

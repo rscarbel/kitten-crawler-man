@@ -3,8 +3,8 @@ import { TILE_SIZE } from '../../core/constants';
 import { findPartyArrivalTiles } from '../../map/findWalkableTile';
 import type { GameMap } from '../../map/GameMap';
 import {
-  AI_CHARACTER_MORDECAI,
-  AI_CHARACTER_SYSTEM,
+  AI_CHARACTER_DAVE,
+  AI_CHARACTER_CAROLINE,
   activeCrawler,
   compassDirection,
   notifyPlayer,
@@ -120,7 +120,7 @@ const teleportPlayer: AIActionDef = {
     severity: 'disruptive',
     forbidsContext: ['isPaused', 'inBossFight'],
   },
-  characters: [AI_CHARACTER_SYSTEM],
+  characters: [AI_CHARACTER_CAROLINE],
   maxPerFloor: TELEPORTS_PER_FLOOR,
   // Moving a downed or nearly dead crawler away from help is the harm the low-HP shield is for.
   isHarmful: ({ scene }) => anyVulnerable(scene),
@@ -178,7 +178,7 @@ const revealHint: AIActionDef = {
     'Tell the crawler which way (and roughly how far) the nearest stairwell or treasure room is.',
   params: [HINT_KIND],
   policy: { cost: 1, cooldownMs: HINT_COOLDOWN_MS, severity: 'benign' },
-  characters: [AI_CHARACTER_SYSTEM, AI_CHARACTER_MORDECAI],
+  characters: [AI_CHARACTER_CAROLINE, AI_CHARACTER_DAVE],
   maxPerFloor: HINTS_PER_FLOOR,
   refusal: ({ params, scene }) =>
     nearestLandmark(scene, params.get(HINT_KIND)) === null
@@ -237,7 +237,7 @@ function spotlightPoint(scene: AISceneContext, subject: Landmark | 'nearest_enem
 const spotlight: AIActionDef = {
   name: 'spotlight',
   description:
-    'Pan the camera to something for a few seconds so the crawler sees it. Never during a fight.',
+    'Frame the camera on something for a few seconds so the crawler sees it, then return to them. Never during a fight.',
   params: [SPOTLIGHT_SUBJECT, SPOTLIGHT_SECONDS, SPOTLIGHT_CAPTION],
   policy: {
     cost: 1,
@@ -245,7 +245,7 @@ const spotlight: AIActionDef = {
     severity: 'benign',
     forbidsContext: ['isPaused', 'inCombat', 'inBossFight'],
   },
-  characters: [AI_CHARACTER_SYSTEM],
+  characters: [AI_CHARACTER_CAROLINE],
   refusal: ({ params, scene }) => {
     if (scene.spotlight === undefined) return 'the camera cannot be moved here';
     return spotlightPoint(scene, params.get(SPOTLIGHT_SUBJECT)) === null

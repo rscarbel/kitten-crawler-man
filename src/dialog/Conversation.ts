@@ -53,7 +53,13 @@ import {
   type RewardStripSize,
 } from '../ui/screens/dialogs/conversationChrome';
 import type { PaintTarget } from '../ui/widgets/paint';
-import { resolveSpeaker, SPEAKERS, speakerTypeface, type SpeakerRef } from './speakers';
+import {
+  resolveSpeaker,
+  SPEAKERS,
+  speakerSkin,
+  speakerTypeface,
+  type SpeakerRef,
+} from './speakers';
 import type {
   Choice,
   ConfirmKeyboardDefault,
@@ -725,9 +731,7 @@ export class Conversation {
     let total = 0;
     let current = 0;
     request.lines.forEach((line, index) => {
-      const pages = isPendingLine(line)
-        ? 1
-        : countDisplayPages(line.paragraphs, false, speakerTypeface(line.speaker));
+      const pages = isPendingLine(line) ? 1 : displayPageCount(line);
       if (index < this.lineIndex) current += pages;
       else if (index === this.lineIndex) current += this.box.currentPageNumber();
       total += pages;
@@ -1026,6 +1030,16 @@ const NAMELESS_SPEAKER = 'narrator';
 
 /** A speaker's name without painting a portrait, which `resolveSpeaker` would. */
 function speakerName(ref: SpeakerRef): string {
-  if (ref.kind === 'transient') return ref.name;
+  if (ref.kind !== 'cast') return ref.name;
   return SPEAKERS[ref.id].name ?? NAMELESS_SPEAKER;
+}
+
+/** How many pages `line` fills in the dialog box at the current screen size, as the box paginates it. */
+export function displayPageCount(line: DialogLine): number {
+  return countDisplayPages(
+    line.paragraphs,
+    false,
+    speakerTypeface(line.speaker),
+    speakerSkin(line.speaker),
+  );
 }

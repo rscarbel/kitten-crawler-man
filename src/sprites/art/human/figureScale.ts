@@ -20,7 +20,7 @@ export const HUMAN_SCALE = 0.72;
  * is drawn, every look and every view alike: he is the one figure the player
  * watches all game, and at the town's scale he read as too small beside the
  * goblins and doorways he plays against. Everyone else built on the rig —
- * townsfolk, residents, the Incubus — stays at the rig's size.
+ * townsfolk, residents, the Demon Liaison — stays at the rig's size.
  */
 export const PLAYER_HUMAN_SIZE_OVER_RIG = 1.2;
 
@@ -40,7 +40,7 @@ export const HUMAN_CELL_PX_PER_UNIT = TILE_SCALE * HUMAN_SCALE;
 /** Cell pixels per figure unit of the player's human, before his look's own build. */
 export const PLAYER_HUMAN_CELL_PX_PER_UNIT = TILE_SCALE * PLAYER_HUMAN_SCALE;
 
-/** The centre of his tile across, as a fraction of it: where the Smush damage is measured from. */
+/** The centre of his tile across, as a fraction of it: where the Seismic Stomp damage is measured from. */
 export const TILE_CENTRE_FRACTION = 0.5;
 
 /** A tile-fraction `x` as a cell mirrored for a −X facing draws it: flipped about the tile's centre. */

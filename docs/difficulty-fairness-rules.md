@@ -265,6 +265,76 @@ in `src/creatures/tactics/`; every one of these rules is asserted by `verify:tac
   a "Blocked" label, and `TacticsNoticeSystem` announces each trait the first time the
   party fights one. Smarter AI the player cannot see reads as randomness.
 
+## The crawlers' stats
+
+Both crawlers carry the same six stats (`ALL_STATS` in `src/core/party/stats.ts`, in the
+order every stat list shows them) and may put level-up points into any of them:
+
+| Stat                | Code  | Ryan per point | Belle per point | What it grows                                                                                     |
+| ------------------- | ----- | -------------- | --------------- | ------------------------------------------------------------------------------------------------- |
+| Health              | `HLT` | 2              | 1               | max HP (`HEALTH_HP_PER_POINT`, one HP a point) and HP regen                                       |
+| Melee               | `MEL` | 1              | 1               | melee and claw weapons, bare fists and claws, Seismic Stomp                                       |
+| Magic               | `MAG` | 1              | 1               | spells and magic weapons, Energy Shield, magic resistance, magic-attuned recharges               |
+| Evasiveness         | `EVA` | 1              | 2               | dodge chance                                                                                      |
+| Ranged              | `RNG` | 1              | 1               | non-magical ranged weapons (the sling's damage and range)                                         |
+| Explosives Handling | `EXP` | 1              | 1               | thrown explosives' damage to enemies and throw length                                            |
+
+The gains are `STAT_GAIN_PER_POINT`, a `Record` over stats and crawlers, and every
+source of stat points (level-ups, the Drill Yard, stat-boost potions, gear) pays each
+crawler that gain. `STARTING_STATS` sets where each crawler starts: Ryan with 10 HP and about a 10% dodge,
+Belle with 6 HP and about a 28% dodge. Which stat a weapon grows with is its delivery's entry in
+`DELIVERY_STAT`, never per-item code, and its tooltip says "Scales with" that stat. HP
+regen is one formula for both (`crawlerRegenHpPerSecond`), saturating in health.
+
+**Dodge approaches a soft limit** (`src/core/combat/dodge.ts`):
+
+- `computeDodgeChance` takes evasiveness through
+  `DODGE_SOFT_LIMIT[crawler] * (1 - exp(-evasiveness / EVASIVENESS_DODGE_SCALE))`, with
+  soft limits of 0.45 for Ryan and 0.65 for Belle. The scale puts 100 evasiveness (100
+  points for Ryan, 50 for Belle) at 95% of the limit; points past that return very
+  little. Gear evasiveness feeds the curve.
+- Flat bonuses add after the curve: gear dodge chance, Cat-like Reflexes and `!lucky`'s
+  `LUCKY_DODGE_CHANCE_BONUS`. They can carry a crawler past her soft limit.
+- `DODGE_CHANCE_CAP` (0.75) is the hard ceiling over everything, so some blows always
+  land. It sits above Belle's soft limit so her gear still counts.
+
+**Magic resistance is scaled by Magic.** `'magic'` is a `ResistanceType`. A mob's spell
+(`Mob.dealSpellDamage`, which marks its `DamageSource` as `magic`) and a spell hazard
+(`HAZARD_IS_MAGIC`: the Lich's firewalls and orbs) are turned aside by magic-resistant
+gear in `Player.incomingDamage`, for every caller. The share it turns aside is `magicResistedShare(magic)`: `MAGIC_RESIST_BASE_SHARE` at starting Magic, plus
+`MAGIC_RESIST_SHARE_PER_MAGIC` a point, capped at `MAGIC_RESIST_MAX_SHARE`
+(`src/core/party/crawlerFormulas.ts`). A magic status loses the same share of its length
+(`Player.magicResistedFrames`), and a chill the same share of its slow: the ice fairy's chill and freeze, the fire fairy's
+burn, the Skeleton Lord's and the Lich's stuck hands. A magic-attuned relic's recharge
+shortens with its wearer's Magic down to `MAGIC_RECHARGE_MIN_SCALE` of its own. Every
+one of these is capped.
+
+**Proficiency skills follow one curve.** The eight proficiency skills
+(`PROFICIENCY_SKILL_IDS` in `src/core/skills/proficiency.ts`) top out at
+`PROFICIENCY_MAX_LEVEL` (50). `proficiencyEffect(level)` is 0 untrained, about 1% at level
+1 and `PROFICIENCY_EFFECT_CAP` (30%) at the ceiling, each level worth a little less
+than the last. The bonuses (Swordsmanship, Archery, Clawmanship, Magic Eye, Mechanical
+Fist, Blunt Proficiency, and the damage halves of Pyro's Touch and Demolitionist) apply to
+any hit carrying one of the skill's tags (`PROFICIENCY_SKILL_TAGS`), and bonuses from
+different skills on one hit add. The reductions use the same curve: Pyro's Touch
+shortens burns on its owner, and Demolitionist softens the owner's own blasts on the
+party. Uses level a proficiency on a slow curve of their own (`PROFICIENCY_BASE_USES`,
+`PROFICIENCY_USES_EXPONENT`), meant to take a whole run to reach the ceiling.
+
+**Reward chests pay by rarity.** A chest's coins are rolled from its rarity's range and
+multiplied only by the recipient's worn coin bonus. Nothing about how a run is going
+raises or lowers a payout.
+
+## Story talks halt the world
+
+While a cutscene's conversation is open (Dave's story talk, his debrief, a tutorial
+talk), the world halts: the floor's collapse timer and every mob stop. A talk opened by
+a cutscene can neither be dismissed nor walked away from, so the halt never strands the
+party mid-fight. The walk-up before it runs with the world ticking, which is safe
+because a safe room already keeps hostiles out. Caroline's messages do not halt the
+world; they wait until no hostile is fighting a crawler outside a safe room
+(`CutsceneDirector`, `StoryDelivery`).
+
 ## Fairies
 
 A fairy rides along with a room's own population rather than replacing it, so every
@@ -342,7 +412,7 @@ FIREBALL_FLIGHT_FRAMES`, so a crawler standing dead on the landing who starts
     sight, outside the town's safe zone), each on that crawler's own feet, on one
     cooldown. From the throw on, every landing is marked ground
     (`GroundHazardSource`, widened by `FIREBALL_HAZARD_MARGIN_TILES`): the AI
-    companion, Mongo and every hireling leave it before the ball comes down —
+    companion, the Deinonychus and every hireling leave it before the ball comes down —
     following, fighting, recalling or mid-swing alike — are steered out of every
     overlapping circle at once rather than out of one into another, and take no
     step back onto it until the charge has gone off.
@@ -415,7 +485,7 @@ FIREBALL_FLIGHT_FRAMES`, so a crawler standing dead on the landing who starts
   the arena. Every earlier room keeps its base rate for good. The Swine is optional:
   the pocket is reachable round the arena, and its rooms keep their base rates until
   the Swine dies.
-- **The Smush never hurts a fairy.** A fairy inside the blast takes no damage, stun,
+- **The Seismic Stomp never hurts a fairy.** A fairy inside the blast takes no damage, stun,
   knockback or status, and shows "Dodge" instead.
 - **Freeze never guarantees a fireball.** `FROZEN_FRAMES + ceil(blast radius px /
 (PLAYER_SPEED × CHILLED_MOVE_SPEED_FACTOR)) < FIREBALL_FUSE_FRAMES` (blast radius
@@ -544,7 +614,7 @@ blackPowderFlightFrames` (`blackPowderDodgeMarginFrames`): under a third of a
   of the blast an on-curve crawler would take at the floor's reference party level
   (`floorReferencePartyLevel`).
 - **Who the blast hurts.** Both crawlers take the full blast, as do party-side
-  mobs (Mongo, hirelings, soldiers, thralls, converted mobs, attack cows), each the
+  mobs (the Deinonychus, hirelings, soldiers, thralls, converted mobs, attack cows), each the
   same share of its own max HP. A hostile that attacks other mobs on its own
   (`Mob.huntsOtherMobs`, today the Brindled Vespa) is the goblins' enemy too and
   takes the full blast. Every other
@@ -561,16 +631,16 @@ blackPowderFlightFrames` (`blackPowderDodgeMarginFrames`): under a third of a
   landing (widened by the settle roll) and, from the first frame of the lock, a
   black powder landing are marked ground (`GroundHazardSource`, widened by
   `GOBLIN_BOMB_HAZARD_MARGIN_TILES`), whether or not a circle is drawn there. The AI
-  companion, Mongo, hirelings, soldiers and thralls leave every overlapping circle at
+  companion, the Deinonychus, hirelings, soldiers and thralls leave every overlapping circle at
   once, never stepping from one into another, and take no step back until the blast
   has gone off, as with the fairy fireball. Hostiles, the bombers included, refuse
   marked steps the same way.
 
 ---
 
-## The show AI's interventions
+## The AI's interventions
 
-Every action the show's AI takes (`src/ai/actions/`) passes the `ActionGovernor`
+Every action the AI takes (`src/ai/actions/`) passes the `ActionGovernor`
 (`governor.ts`) before it runs, whatever the server already allowed. The AI may
 pressure a crawler; it never ambushes a beaten one:
 
@@ -581,7 +651,7 @@ pressure a crawler; it never ambushes a beaten one:
   fight is not piled on. Help (heals, cures, buffs) is never held back. Both lines
   are written into the tool descriptions the model reads.
 - **Nothing the AI does finishes a crawler.** HP actions stop at the low-HP line,
-  a constitution cut that would cross it is undone, and a damage-over-time status
+  a health cut that would cross it is undone, and a damage-over-time status
   is refused when everything already eating the crawler's HP, scaled by any
   status that multiplies incoming damage (the wheel's double damage doubles every
   tick), would carry them under it.
@@ -592,10 +662,9 @@ pressure a crawler; it never ambushes a beaten one:
   per-floor budgets for spawns, gifts, fines, reward chests and clock changes, kept
   across reloads and shared with every building on the floor.
 
-## The show AI's challenges and favour
+## The AI's challenges
 
-The show's AI may set a challenge (`offer_challenge`) and move the viewers'
-favour (`viewer_reaction`). Both are held to the rules above:
+The AI may set a challenge (`offer_challenge`), held to the rules above:
 
 - **A challenge only puts its own reward chest at stake.** It never stops the crawlers
   doing anything: drinking a potion during a no-potion challenge simply fails
@@ -606,12 +675,8 @@ favour (`viewer_reaction`). Both are held to the rules above:
   stands (enough of the named creature alive, at least
   `CHALLENGE_MIN_SECONDS_PER_KILL` per kill, time for the walk to the stairs,
   no status already eating HP under a no-damage rule, a living boss for the
-  potion fast). Templates and their bounds live in `src/ai/show/challenges.ts`;
+  potion fast). Templates and their bounds live in `src/ai/interactions/challenges.ts`;
   the clock counts gameplay frames, so it stops whenever the world does.
-- **Favour only ever helps.** From `FAVOR_PERKS`' thresholds up
-  (`src/core/progression/viewerFavor.ts`) reward chests pay a little more coin; at the bottom
-  of the meter nothing is taken away. One reaction moves it at most
-  `FAVOR_SWING_MAX`.
 
 Gate: `npm run verify:ai-actions`.
 

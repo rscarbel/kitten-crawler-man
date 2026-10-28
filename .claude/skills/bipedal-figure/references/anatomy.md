@@ -328,7 +328,7 @@ against, or cited as "how it's done here".
 - **The rebound is the follow keyframes, not a fifth beat.** `follow` is eased
   out, so it moves fastest in the frames right after impact.
 - **An effect whose size is a gameplay value does not belong in a cached cell.**
-  The human's Smush blast is drawn live because the wave has to stop exactly on the
+  The human's Seismic Stomp blast is drawn live because the wave has to stop exactly on the
   damage radius, which grows with ability level; a cell keyed on
   `(state, frame)` cannot vary with it.
 

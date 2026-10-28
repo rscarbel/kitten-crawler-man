@@ -1,6 +1,6 @@
 ---
 name: add-sound
-description: Add a sound effect, jingle or song to Kitten Crawler Man (a song is one `npm run add:music` command), or change how audio plays — the music/ and jingles/ folders, SoundId tuples and SOUND_MANIFEST, MUSIC_CATALOG, music claims through the MusicDirector, sound traits, positional playAt, AudioScope loops, buses, loudness measurement and the check:audio / verify:audio gates. Use when adding, playing or routing any audio.
+description: Add a sound effect, jingle or song to Kitten Crawler World (a song is one `npm run add:music` command), or change how audio plays — the music/ and jingles/ folders, SoundId tuples and SOUND_MANIFEST, MUSIC_CATALOG, music claims through the MusicDirector, sound traits, positional playAt, AudioScope loops, buses, loudness measurement and the check:audio / verify:audio gates. Use when adding, playing or routing any audio.
 ---
 
 # Add a Sound

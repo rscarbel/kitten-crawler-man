@@ -1,7 +1,6 @@
-import { MORDECAI_CHARACTER } from './mordecai';
-import { SYSTEM_CHARACTER } from './system';
+import { DAVE_CHARACTER } from './dave';
+import { CAROLINE_CHARACTER } from './caroline';
 import type { AICharacterDefinition } from './types';
-import { VIEWERS_CHARACTER } from './viewers';
 
 export type {
   AICharacterDefinition,
@@ -10,16 +9,11 @@ export type {
   CharacterVoice,
   KnowledgeScope,
 } from './types';
-export { SYSTEM_CHARACTER, SYSTEM_CHARACTER_NAME } from './system';
-export { MORDECAI_CHARACTER, MORDECAI_CHARACTER_NAME } from './mordecai';
-export { VIEWERS_CHARACTER, VIEWERS_CHARACTER_NAME } from './viewers';
+export { CAROLINE_CHARACTER, CAROLINE_CHARACTER_NAME } from './caroline';
+export { DAVE_CHARACTER, DAVE_CHARACTER_NAME } from './dave';
 
 /** Every authored character, enabled or not, in the order they are synced to the server. */
-export const AI_CHARACTERS: readonly AICharacterDefinition[] = [
-  SYSTEM_CHARACTER,
-  MORDECAI_CHARACTER,
-  VIEWERS_CHARACTER,
-];
+export const AI_CHARACTERS: readonly AICharacterDefinition[] = [CAROLINE_CHARACTER, DAVE_CHARACTER];
 
 /** The characters the game talks to this session. */
 export function enabledCharacters(): AICharacterDefinition[] {

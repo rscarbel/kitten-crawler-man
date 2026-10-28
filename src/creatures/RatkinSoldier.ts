@@ -27,7 +27,7 @@ import { GHOUL_ATTACK_COOLDOWN_FRAMES, GHOUL_ATTACK_DAMAGE, GHOUL_HP } from './R
  * A `Mob` because it has to fight and be fought: hostiles pick it out of the
  * scene's allied defenders, it strikes them with a spear thrust, and it takes
  * knockback and damage like anything else. It is not hostile and not prey, so
- * Mongo, the hirelings, auto-aim and every aimed crawler weapon pass it by.
+ * Deinonychus, the hirelings, auto-aim and every aimed crawler weapon pass it by.
  *
  * It never dies. At no health it is knocked down where it stood — out of every
  * fight, drawn on the ground, owed no XP and counted as no kill — and it gets

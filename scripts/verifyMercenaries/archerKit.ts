@@ -3,7 +3,7 @@
  *
  * - An arrow leaves on the tick the string is loosed, and a hostile it is
  *   aimed at loses health.
- * - Arrows never touch the party: crawlers, Mongo and another hireling
+ * - Arrows never touch the party: crawlers, Deinonychus and another hireling
  *   standing in her line of fire keep their health and their footing, while a
  *   hostile on the same spot does not.
  * - An arrow stops at a safe room's threshold, and nothing inside one is hurt.
@@ -21,7 +21,7 @@ import { FloorTypeValue, type TileContent } from '../../src/map/tileTypes';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
 import { Mercenary } from '../../src/creatures/Mercenary';
-import { Mongo } from '../../src/creatures/Mongo';
+import { Deinonychus } from '../../src/creatures/Deinonychus';
 import { Mob } from '../../src/creatures/Mob';
 import type { Player } from '../../src/Player';
 import {
@@ -108,7 +108,7 @@ const ONE_TILE = 1;
 const FIRST_TILE_INSIDE_WEST_WALL = 1;
 /**
  * The party standing in the line of fire, as tile offsets from her: the
- * crawlers either side of her line of fire, Mongo and another hireling on it,
+ * crawlers either side of her line of fire, Deinonychus and another hireling on it,
  * between her and the crowd.
  */
 const HUMAN_IN_FIRE: readonly [number, number] = [NEAR_TILES, -1];
@@ -292,7 +292,7 @@ interface FriendlyOutcome {
 
 /**
  * Stands the party in the arrows' path — the human and the cat themselves,
- * Mongo, and a second hireling — between her and the hostile she is shooting,
+ * Deinonychus, and a second hireling — between her and the hostile she is shooting,
  * and runs the fight. With `asHostile`, a hostile goblin takes the other
  * hireling's spot
  * instead, and must be hit: that is what shows the spot is in the line of fire.
@@ -313,7 +313,7 @@ function friendlyFight(asHostile: boolean): FriendlyOutcome {
   if (asHostile) {
     decoy = addGoblin(h, otherDx, otherDy);
   } else {
-    const mongo = new Mongo(
+    const deinonychus = new Deinonychus(
       MERC_TILE_X + petDx,
       MERC_TILE_Y + petDy,
       TILE_SIZE,
@@ -321,7 +321,7 @@ function friendlyFight(asHostile: boolean): FriendlyOutcome {
       PET_LEVEL,
       PET_STARTING_HP,
     );
-    h.roster.add(mongo);
+    h.roster.add(deinonychus);
     const other = new Mercenary(
       MERC_TILE_X + otherDx,
       MERC_TILE_Y + otherDy,
@@ -331,8 +331,8 @@ function friendlyFight(asHostile: boolean): FriendlyOutcome {
       'Hammer Hands',
     );
     h.roster.add(other);
-    friends.push(mongo, other);
-    h.allies.push(mongo);
+    friends.push(deinonychus, other);
+    h.allies.push(deinonychus);
   }
   const before = friends.map(read);
   const targetHp = target.hp;
@@ -352,7 +352,7 @@ function checkFriendlyFire(): void {
   const party = friendlyFight(false);
   check(
     party.shotsLoosed && party.friendsUntouched && party.hostilesHurt,
-    'crawlers, Mongo and another hireling in the arrows’ path keep their health and footing while the hostiles are hit',
+    'crawlers, Deinonychus and another hireling in the arrows’ path keep their health and footing while the hostiles are hit',
   );
   const decoy = friendlyFight(true);
   check(decoy.hostilesHurt, 'a hostile standing on the ally spot is hit');

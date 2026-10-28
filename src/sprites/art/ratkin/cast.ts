@@ -1,6 +1,5 @@
 /**
- * Every ratkin look in the game, as data: Mordecai and the people of Briar
- * Hollow.
+ * Every ratkin look in the game, as data: the people of Briar Hollow.
  *
  * Each look is one {@link RatkinOutfit}. The painter is shared, so a character
  * is nothing but a fur, a build, a garment stack and a prop — and at a 32px
@@ -15,7 +14,6 @@ import {
   SHIRT_HEM,
   apron,
   belt,
-  beltPouch,
   browGoggles,
   bucketYoke,
   cap,
@@ -41,7 +39,6 @@ import {
   satchel,
   shawl,
   shirt,
-  shoulderStrap,
   skirt,
   smock,
   speckle,
@@ -55,36 +52,6 @@ import {
   wrap,
 } from './garments';
 import type { Ramp } from './paint';
-
-// ── Mordecai ─────────────────────────────────────────────────────────────────
-
-/** Dusty brown-grey back and limbs, the colour a sewer rat actually is. */
-const MORDECAI_FUR: Ramp = { dark: '#3b3128', mid: '#6c5b49', light: '#93806a' };
-/** The paler underside: throat, chest, belly, cheek, underjaw. */
-const MORDECAI_BELLY: Ramp = { dark: '#6a5b4c', mid: '#9d8c77', light: '#c0af98' };
-/** A mossy, much-mended tunic. Light enough to hold its own on a dark floor. */
-const MORDECAI_TUNIC: Ramp = { dark: '#26382e', mid: '#405f4b', light: '#5a8064' };
-/** Belt, satchel strap and pouch. */
-const MORDECAI_LEATHER: Ramp = { dark: '#3a2a1c', mid: '#6c4a2e', light: '#916a41' };
-const MORDECAI_BUCKLE = '#c2a24e';
-
-/**
- * Mordecai's rodent form: a mossy tunic with cap sleeves, a satchel strap, a
- * buckled belt and a pouch. His cells are held byte for byte against a stored
- * baseline (`npm run verify:mordecai-identity`), so a change to the shared
- * painter that moves a single pixel of him fails loudly.
- */
-export const MORDECAI_OUTFIT: RatkinOutfit = {
-  fur: MORDECAI_FUR,
-  belly: MORDECAI_BELLY,
-  build: 'standard',
-  garments: [
-    tunic({ cloth: MORDECAI_TUNIC, sleeve: 'cap' }),
-    shoulderStrap({ leather: MORDECAI_LEATHER }),
-    belt({ leather: MORDECAI_LEATHER, buckle: MORDECAI_BUCKLE }),
-    beltPouch({ leather: MORDECAI_LEATHER }),
-  ],
-};
 
 // ── Briar Hollow ─────────────────────────────────────────────────────────────
 

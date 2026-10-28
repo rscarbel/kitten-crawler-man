@@ -285,7 +285,7 @@ const SYNC_STEPS: readonly SyncStep[] = [
 async function writeSnapshot(file: string): Promise<void> {
   const snapshot = {
     source:
-      'kitten-crawler-man `npm run ai:sync -- --snapshot` (tools, characters, lore, event importance hints)',
+      'kitten-crawler-world `npm run ai:sync -- --snapshot` (tools, characters, lore, event importance hints)',
     tools: generateAIToolDefinitions(),
     characters: Object.fromEntries(
       AI_CHARACTERS.map((character) => [character.name, characterBody(character)]),

@@ -1,6 +1,6 @@
 /**
  * Trousers (or stockings) and shoes for the people built on the biped rig —
- * the town's citizens and residents, the club dancer, the Incubus — and the
+ * the town's citizens and residents, the club dancer, the Demon Liaison — and the
  * leg painter a look's own trousers are cut with. Nothing a crawler can loot
  * paints these.
  *

@@ -1,5 +1,5 @@
 /**
- * Requests for world-anchored feedback labels ("MISS!", "+1 DEX", "COCKROACH!",
+ * Requests for world-anchored feedback labels ("MISS!", "+1 EVA", "9 LIVES!",
  * "Blocked").
  *
  * Gameplay code that has no scene reference — `Player.takeDamage`, level-up

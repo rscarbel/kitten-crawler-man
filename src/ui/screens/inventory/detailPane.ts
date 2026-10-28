@@ -31,7 +31,8 @@ import {
   text,
 } from '../../widgets/text';
 import { FILTER_LABELS } from './bagView';
-import { STAT_ABBREVIATIONS, type StatDelta } from './gearRules';
+import type { StatDelta } from './gearRules';
+import { STAT_DEFS } from '../../../core/party/stats';
 
 export interface DetailAction {
   readonly id: string;
@@ -111,7 +112,7 @@ function rowsHeight(rows: number, rowH: number, gap: number): number {
 function deltaText(delta: StatDelta): string {
   const arrow = delta.delta > 0 ? UP_ARROW : DOWN_ARROW;
   const sign = delta.delta > 0 ? '+' : MINUS_SIGN;
-  return `${arrow} ${sign}${Math.abs(delta.delta)} ${STAT_ABBREVIATIONS[delta.stat]}`;
+  return `${arrow} ${sign}${Math.abs(delta.delta)} ${STAT_DEFS[delta.stat].code}`;
 }
 
 /** Which of the pane's parts a draw covers: everything, the scrolling text, or the pinned buttons. */

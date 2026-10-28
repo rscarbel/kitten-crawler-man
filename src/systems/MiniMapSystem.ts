@@ -45,8 +45,8 @@ const PLAYER_DOT_RADIUS = 2.5;
 const COMPANION_DOT_RADIUS = 2;
 /** Mob dot radius on minimap. */
 const MOB_DOT_RADIUS = 1.5;
-/** Mordecai dot radius on minimap. */
-const MORDECAI_DOT_RADIUS = 1.5;
+/** Dave dot radius on minimap. */
+const DAVE_DOT_RADIUS = 1.5;
 /** Pet dot radius on minimap. Under the companion's — he is party, but not a crawler. */
 const PET_DOT_RADIUS = 1.75;
 /** Quest marker pulse speed (radians per frame-time unit). */
@@ -363,7 +363,7 @@ export class MiniMapSystem implements GameSystem {
     active: { x: number; y: number },
     companion: { x: number; y: number },
     mobGrid: SpatialGrid<Mob>,
-    mordecaiPositions: Array<{ x: number; y: number }>,
+    daveTile: { x: number; y: number } | null,
     questMarkers: Array<{ x: number; y: number; type: QuestMarkerType }> = [],
     pet: { x: number; y: number } | null = null,
     resourceStations: Array<{ x: number; y: number; kind: ProcessingStationKind }> = [],
@@ -491,7 +491,7 @@ export class MiniMapSystem implements GameSystem {
     ctx.arc(compSX, compSY, COMPANION_DOT_RADIUS, 0, Math.PI * 2);
     ctx.fill();
 
-    // Mongo — his own colour, and no fog test, exactly like the companion above:
+    // Deinonychus — his own colour, and no fog test, exactly like the companion above:
     // he is party, and a party member you cannot find is the bug this answers.
     if (pet !== null) {
       const petTX = Math.floor((pet.x + HALF_TILE) / TILE_SIZE);
@@ -501,21 +501,21 @@ export class MiniMapSystem implements GameSystem {
       const petSY =
         mmY + (petTY - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       // Pink for his feathers, apart from every other dot: red is a hostile,
-      // blue the companion, white a friendly creature, Mordecai and the stairs.
+      // blue the companion, white a friendly creature, Dave and the stairs.
       ctx.fillStyle = MINIMAP_MARKER_COLORS.pet;
       ctx.beginPath();
       ctx.arc(petSX, petSY, PET_DOT_RADIUS, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // Mordecai — white dot per safe room if revealed
-    ctx.fillStyle = worldPalette.minimap.mordecai;
-    for (const pos of mordecaiPositions) {
-      if (!this.fogOfWar[pos.y * mapSize + pos.x]) continue;
-      const msx = mmX + (pos.x - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
-      const msy = mmY + (pos.y - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+    if (daveTile !== null && this.fogOfWar[daveTile.y * mapSize + daveTile.x]) {
+      ctx.fillStyle = worldPalette.minimap.dave;
+      const msx =
+        mmX + (daveTile.x - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+      const msy =
+        mmY + (daveTile.y - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       ctx.beginPath();
-      ctx.arc(msx, msy, MORDECAI_DOT_RADIUS, 0, Math.PI * 2);
+      ctx.arc(msx, msy, DAVE_DOT_RADIUS, 0, Math.PI * 2);
       ctx.fill();
     }
 

@@ -32,7 +32,7 @@ import {
   chestSpan,
   paintRewardChest,
 } from '../../../sprites/art/rewardChestArt';
-import { drawMongoIcon } from '../../../sprites/mongoSprite';
+import { drawDeinonychusIcon } from '../../../sprites/deinonychusSprite';
 import { centerIn, inset, type Rect } from '../../core/geom';
 import { keyLabel, tapVerb } from '../../core/inputMode';
 import { ACTIVATE_KEYS, type Surface, type Ui } from '../../core/UiRoot';
@@ -161,7 +161,7 @@ const RUMBLE_FROM: Rarity = 'Legendary';
 /** The chest whose best reward rises to a choir. */
 const CHOIR_FROM: Rarity = 'Divine';
 const RUMBLE_VOLUME = 0.4;
-const MONGO_REWARD_STAGE = 'juvenile';
+const DEINONYCHUS_REWARD_STAGE = 'juvenile';
 const HALF = 0.5;
 
 export class RewardChestScreen {
@@ -803,9 +803,15 @@ function coinTotal(rewards: readonly GrantedLine[]): number {
   return rewards.reduce((sum, line) => sum + (line.kind === 'coins' ? line.amount : 0), 0);
 }
 
-function paintMongo(ctx: CanvasRenderingContext2D, rect: Rect): void {
+function paintDeinonychus(ctx: CanvasRenderingContext2D, rect: Rect): void {
   const size = Math.min(rect.w, rect.h);
-  drawMongoIcon(ctx, MONGO_REWARD_STAGE, rect.x + rect.w * HALF, rect.y + rect.h * HALF, size);
+  drawDeinonychusIcon(
+    ctx,
+    DEINONYCHUS_REWARD_STAGE,
+    rect.x + rect.w * HALF,
+    rect.y + rect.h * HALF,
+    size,
+  );
 }
 
 function paintLinePicture(ctx: CanvasRenderingContext2D, line: GrantedLine, rect: Rect): void {
@@ -818,7 +824,7 @@ function paintLinePicture(ctx: CanvasRenderingContext2D, line: GrantedLine, rect
       drawCoinRewardIcon(ctx, rect);
       return;
     case 'companion':
-      paintMongo(ctx, rect);
+      paintDeinonychus(ctx, rect);
       return;
   }
 }
@@ -848,7 +854,7 @@ function paintLineSlot(
       itemSlot(ui, rect, { id, item: null, picture: drawCoinRewardIcon });
       return;
     case 'companion':
-      itemSlot(ui, rect, { id, item: null, picture: paintMongo, rarity: chestRarity });
+      itemSlot(ui, rect, { id, item: null, picture: paintDeinonychus, rarity: chestRarity });
       return;
   }
 }
@@ -879,7 +885,7 @@ function slotLabels(
       return { name: `${Math.round(coins * coinsLanded).toLocaleString()} coins`, detail: null };
     case 'companion':
       return {
-        name: ABILITY_DEFS.mongo.name,
+        name: ABILITY_DEFS.deinonychus.name,
         detail: { text: 'Companion', color: theme.palette.accent.base },
       };
   }

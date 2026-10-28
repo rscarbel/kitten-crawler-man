@@ -30,7 +30,7 @@ export class Inventory {
     this.equipment = new EquipmentManager((id) => this.findItemById(id), ownerKind);
   }
 
-  /** Replace `unseenUpgrades` from a snapshot, dropping any id retired since it was written. */
+  /** Replace `unseenUpgrades` from a snapshot. */
   restoreUnseenUpgrades(ids: ReadonlyArray<ItemId>): void {
     this.unseenUpgrades.clear();
     for (const id of ids) this.unseenUpgrades.add(id);

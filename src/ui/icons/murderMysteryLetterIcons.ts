@@ -3,7 +3,7 @@ import { iconSquare } from './iconSquare';
 
 /**
  * The two papers the Krasue murder mystery hands the party at the alley: the
- * magistrate's writ and the letter Mordecai calls necro-script. Drawn as a
+ * magistrate's writ and the letter Dave calls necro-script. Drawn as a
  * matched pair that reads as opposites at a glance — one crisp and official,
  * one warm and wrong — since both sit in the bag at once and a player has to
  * tell them apart without reading a tooltip.

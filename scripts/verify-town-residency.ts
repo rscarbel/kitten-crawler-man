@@ -40,7 +40,7 @@
 import type { Scene } from '../src/core/Scene.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 import { installBrowserShim, ShimEvent } from './browserShim.js';
-import { asGameContext } from './nodeGameContext.js';
+import { asGameContext, gameContext } from './nodeGameContext.js';
 
 const RETINA_DEVICE_PIXEL_RATIO = 2;
 const VIEWPORT = { width: 1280, height: 720, devicePixelRatio: RETINA_DEVICE_PIXEL_RATIO } as const;
@@ -223,7 +223,9 @@ const market: unknown = Reflect.get(scene(), 'market');
 if (!(market instanceof MarketSystem)) throw new Error('the overworld has no market');
 const crowdFigures = new Map<string, FigureDef>();
 for (const person of [...townLife.people, ...market.vendors]) {
-  for (const row of citizenFigureRows(person.figure)) crowdFigures.set(row.def.id, row.def);
+  const figure = person.citizenFigure;
+  if (figure === null) continue;
+  for (const row of citizenFigureRows(figure)) crowdFigures.set(row.def.id, row.def);
 }
 function crowdBytes(): number {
   let bytes = 0;
@@ -279,7 +281,7 @@ const waveFigures = Array.from({ length: WAVE_FIGURE_COUNT }, (_, index) => wave
 const heavyWaveFigures = Array.from({ length: HEAVY_WAVE_FIGURE_COUNT }, (_, index) =>
   waveFigure(index),
 );
-const waveContext = createCanvas(WAVE_CELL_PX, WAVE_CELL_PX).getContext('2d');
+const waveContext = gameContext(WAVE_CELL_PX, WAVE_CELL_PX);
 const waveIds = new Set(waveFigures.map((figure) => figure.id));
 let waveUnbakedDraws = 0;
 onFigureUnbakedDraw((def) => {
@@ -413,8 +415,12 @@ check(respawnUnbaked === 0, `${respawnUnbaked} citizen cells were drawn unbaked 
 
 // ── Recall home: a channel that covers the rewarm, and one that cannot ───────
 
-const recall: unknown = Reflect.get(scene(), 'recall');
-if (!(recall instanceof RecallSystem)) throw new Error('the overworld has no recall');
+function sceneRecall() {
+  const found: unknown = Reflect.get(scene(), 'recall');
+  if (!(found instanceof RecallSystem)) throw new Error('the overworld has no recall');
+  return found;
+}
+const recall = sceneRecall();
 
 /** What is drawn while a recall channels: nothing, the wave, or a heavy wave pinned in place. */
 type ChannelPressure = 'none' | 'wave' | 'pinnedWave';
@@ -517,7 +523,9 @@ flushFigureFrameCache();
 const city = buildScaledCity({ blocksPerSide: SCALED_CITY_BLOCKS_PER_SIDE });
 const cityFigures = new Set<string>();
 for (const citizen of city.citizens) {
-  for (const row of citizenFigureRows(citizen.figure)) cityFigures.add(row.def.id);
+  const figure = citizen.person.citizenFigure;
+  if (figure === null) continue;
+  for (const row of citizenFigureRows(figure)) cityFigures.add(row.def.id);
 }
 let cityUnbakedDraws = 0;
 onFigureUnbakedDraw((def) => {

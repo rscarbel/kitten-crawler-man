@@ -12,7 +12,11 @@ import { CatPlayer } from '../../../creatures/CatPlayer';
 import { TILE_SIZE } from '../../../core/constants';
 import { createWheelLedger, grantQuestFreeSpin } from '../../../core/save/WheelLedger';
 import { mulberry32 } from '../../../sprites/person/rng';
-import { ClubWheelSystem, WHEEL_ARMING_MS } from '../../../systems/ClubWheelSystem';
+import {
+  ClubWheelSystem,
+  UNNAMED_WHEEL_PETS,
+  WHEEL_ARMING_MS,
+} from '../../../systems/ClubWheelSystem';
 import {
   WHEEL_BET_STEP,
   WHEEL_MAX_BET,
@@ -101,6 +105,7 @@ function wheelFixture(name: string, state: WheelState): DialogFixture {
         progressWipe: null,
         afterPermanentDeath: () => undefined,
         grantAttackCow: () => undefined,
+        pets: UNNAMED_WHEEL_PETS,
         clock: () => now,
         random: mulberry32(FIXTURE_SEED),
         donaldRandom: mulberry32(DONALD_SEED),

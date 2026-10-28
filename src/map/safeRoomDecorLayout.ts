@@ -7,7 +7,7 @@
  * so `src/map` never has to depend on `src/systems`.
  *
  * Placement runs **after** the counter is planned, and treats as occupied every
- * tile the counter run owns, Mordecai's tile and the bed's, the tile inside each
+ * tile the counter run owns, Dave's tile and the bed's, the tile inside each
  * doorway, and the `SAFE_ROOM_THRESHOLD` traffic band. On top of that, every
  * placement is checked for reachability: a prop that would strand any floor the
  * player could previously walk to is refused outright.
@@ -26,7 +26,7 @@
 
 import type { GameMap } from './GameMap';
 import type { TileContent } from './tileTypes';
-import { isFieldStation, mordecaiAndBedTiles } from './safeRoomFixtures';
+import { isFieldStation, guideAndBedTiles } from './safeRoomFixtures';
 import { planSafeRoomCounters, type SafeRoomCounterLayout } from './safeRoomCounterLayout';
 import {
   placeProp,
@@ -161,7 +161,7 @@ function occupiedTiles(
   const occupied = new Set<string>();
   const doorwayTiles: Array<{ x: number; y: number }> = [];
 
-  for (const tile of mordecaiAndBedTiles(safeRoom)) occupied.add(tileKey(tile.x, tile.y));
+  for (const tile of guideAndBedTiles(safeRoom)) occupied.add(tileKey(tile.x, tile.y));
   // From the counter's *plan*, not from the tile types it will eventually write.
   // `SafeRoomSystem` builds itself — and so calls this — before the scene stamps
   // the counter, so on an unstamped map the whole run still reads as plain floor:
@@ -226,7 +226,7 @@ const CARDINAL_STEPS: ReadonlyArray<readonly [number, number]> = [
  * doorway is not enough on its own: over 240 generated safe rooms, a corner
  * lantern one row south of a doorway, or two wall hangings closing the ends of a
  * row the counter's back bench already fills, left 71 rooms with an unreachable
- * pocket and sealed 2 rooms outright — Mordecai, the bed and the Bopca all cut
+ * pocket and sealed 2 rooms outright — Dave, the bed and the Bopca all cut
  * off from the only entrance.
  */
 class DecorPlacer {
@@ -476,7 +476,7 @@ export function planSafeRoomDecor(map: GameMap): ReadonlyArray<SafeRoomDecorPlan
 /**
  * A refectory table with its stools, in the room's open middle-south.
  *
- * Started one row south of centre so the table never sits on Mordecai's or the
+ * Started one row south of centre so the table never sits on Dave's or the
  * bed's row, and never reaches the doorway band the occupancy set already bars.
  */
 function placeTableAndStools(

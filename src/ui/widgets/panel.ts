@@ -16,10 +16,22 @@
 import type { SoundId } from '../../audio/sounds';
 import { inset, splitH, splitV, type Rect, type Track } from '../core/geom';
 import type { Ui } from '../core/UiRoot';
+import { UiStateSlot } from '../core/uiState';
 import type { GlyphId } from '../theme/glyphs';
 import { skinsFor, type ButtonVariant, type ControlSize } from '../theme/skins';
 import { OPEN_SCALE_FROM, SHEET_MAX_HEIGHT_FRACTION, type PanelWidth } from '../theme/tokens';
+import { prefersReducedMotion } from '../core/reducedMotion';
 import { button, measureButton } from './button';
+import {
+  CAROLINE_CHIME,
+  carolineHeader,
+  carolineHeaderHeight,
+  carolineOpenAt,
+  carolineOpened,
+  carolineOpenRect,
+  paintCarolineFrame,
+  paintCarolineOpeningLine,
+} from './carolineFrame';
 import { iconButton } from './iconButton';
 import { drawGlass, openProgress } from './paint';
 import { scrollView } from './scrollView';
@@ -38,6 +50,15 @@ export interface FooterButton {
   readonly sound?: SoundId | null;
   readonly onTap: () => void;
 }
+
+/**
+ * What the panel is drawn as: the ordinary glass card, or Caroline's terminal
+ * frame, which carries her "System AI message:" strip as its header and
+ * unfolds from a line as it opens. Only her messages use `caroline`, and
+ * it draws no ✕ or back chevron: her prompts close through their own buttons
+ * and Escape.
+ */
+export type PanelChrome = 'glass' | 'caroline';
 
 export interface PanelOptions {
   /** Unique within the surface; prefixes the ids of the header and footer controls. */
@@ -86,6 +107,8 @@ export interface PanelOptions {
   readonly onScrimTap?: () => void;
   /** Tapping the card anywhere no control of its own sits calls this. Without it the card only swallows the tap. */
   readonly onCardTap?: () => void;
+  /** Defaults to `glass`. */
+  readonly chrome?: PanelChrome;
 }
 
 export interface PanelResult {
@@ -105,6 +128,9 @@ const SHEET_SLIDE = 24;
 /** Narrowest a footer button is drawn on a card, so a lone "OK" is still a comfortable target. */
 const FOOTER_MIN_BUTTON_WIDTH = 96;
 
+/** Whether a Caroline panel has chimed since its surface opened; cleared with the surface. */
+const CAROLINE_CHIMED = new UiStateSlot<boolean>('carolineChimed', () => false);
+
 /** Surfaces already given their open transform this frame, so a second panel doesn't compound it. */
 const animated = new WeakSet<Ui>();
 
@@ -121,6 +147,7 @@ export function panelChromeHeight(
     | 'footerColumns'
     | 'onClose'
     | 'onBack'
+    | 'chrome'
   >,
 ): number {
   const skin = skinsFor(ui.theme).panel.card;
@@ -151,8 +178,9 @@ function footerHeight(
 
 function headerHeight(
   ui: Ui,
-  opts: Pick<PanelOptions, 'title' | 'subtitle' | 'header' | 'onClose' | 'onBack'>,
+  opts: Pick<PanelOptions, 'title' | 'subtitle' | 'header' | 'onClose' | 'onBack' | 'chrome'>,
 ): number {
+  if (opts.chrome === 'caroline') return carolineHeaderHeight(ui.theme);
   const hasHeader =
     opts.title !== undefined ||
     opts.header !== undefined ||
@@ -202,6 +230,7 @@ export function panelBodyMaxHeight(
     | 'footerColumns'
     | 'onClose'
     | 'onBack'
+    | 'chrome'
   >,
 ): number {
   return Math.max(0, frameMaxHeight(ui, opts.width) - panelChromeHeight(ui, opts));
@@ -252,7 +281,18 @@ export function panel(ui: Ui, opts: PanelOptions): PanelResult {
     }
   }
 
-  if (!animated.has(ui) && progress < 1) {
+  const caroline = opts.chrome === 'caroline';
+  if (caroline && !ui.state(CAROLINE_CHIMED, opts.id)) {
+    ui.setState(CAROLINE_CHIMED, opts.id, true);
+    ui.playSound(CAROLINE_CHIME);
+  }
+  let unfolding: Rect | null = null;
+  if (caroline && !animated.has(ui)) {
+    animated.add(ui);
+    const open = carolineOpenAt(theme, ui.now - ui.openedAt, prefersReducedMotion());
+    paintCarolineOpeningLine(ui, frame, open);
+    if (!carolineOpened(open)) unfolding = carolineOpenRect(frame, open);
+  } else if (!animated.has(ui) && progress < 1) {
     animated.add(ui);
     ctx.globalAlpha *= progress;
     if (sheet) {
@@ -273,42 +313,45 @@ export function panel(ui: Ui, opts: PanelOptions): PanelResult {
   } else {
     ui.hit(`${opts.id}/card`, frame, { onTap: () => onCardTap(), focusable: false, sound: null });
   }
-  const radius = sheet ? { tl: skin.radius, tr: skin.radius, br: 0, bl: 0 } : skin.radius;
-  drawGlass(ui, frame, skin, radius);
-
-  let cursorY = content.y;
   const headerH = headerHeight(ui, opts);
-  if (headerH > 0) {
-    drawHeader(ui, { x: content.x, y: cursorY, w: content.w, h: headerH }, opts);
-    cursorY += headerH + theme.space.md;
-  }
-
+  const bodyTop = headerH > 0 ? content.y + headerH + theme.space.md : content.y;
   const footer = opts.footer ?? [];
   const footerH = footerHeight(ui, opts);
   const bodyBottom = content.y + content.h - (footerH > 0 ? footerH + theme.space.lg : 0);
   const body: Rect = {
     x: content.x,
-    y: cursorY,
+    y: bodyTop,
     w: content.w,
-    h: Math.max(0, bodyBottom - cursorY),
+    h: Math.max(0, bodyBottom - bodyTop),
   };
 
-  if (footerH > 0) {
-    drawFooter(
-      ui,
-      { x: content.x, y: content.y + content.h - footerH, w: content.w, h: footerH },
-      opts.id,
-      footer,
-      {
-        fill: compact || opts.footerLayout === 'fill',
-        size: opts.footerSize ?? 'md',
-        columns: opts.footerColumns,
-      },
-    );
-  }
+  const fill = (): void => {
+    const radius = sheet ? { tl: skin.radius, tr: skin.radius, br: 0, bl: 0 } : skin.radius;
+    if (caroline) paintCarolineFrame(ui, frame, { nowMs: ui.now });
+    else drawGlass(ui, frame, skin, radius);
 
-  const draw = opts.content;
-  if (draw !== undefined) {
+    if (headerH > 0) {
+      const headerRect = { x: content.x, y: content.y, w: content.w, h: headerH };
+      if (caroline) carolineHeader(ui, headerRect, ui.now);
+      else drawHeader(ui, headerRect, opts);
+    }
+
+    if (footerH > 0) {
+      drawFooter(
+        ui,
+        { x: content.x, y: content.y + content.h - footerH, w: content.w, h: footerH },
+        opts.id,
+        footer,
+        {
+          fill: compact || opts.footerLayout === 'fill',
+          size: opts.footerSize ?? 'md',
+          columns: opts.footerColumns,
+        },
+      );
+    }
+
+    const draw = opts.content;
+    if (draw === undefined) return;
     if (opts.scrollBody === true) {
       scrollView(ui, body, {
         id: `${opts.id}/body`,
@@ -318,7 +361,10 @@ export function panel(ui: Ui, opts: PanelOptions): PanelResult {
     } else {
       draw(body);
     }
-  }
+  };
+  // While her frame unfolds nothing inside it may take a tap or a key: a default button pressed unseen is a choice the player never made.
+  if (unfolding === null) fill();
+  else ui.clip(unfolding, fill);
 
   return { frame, body, sheet };
 }

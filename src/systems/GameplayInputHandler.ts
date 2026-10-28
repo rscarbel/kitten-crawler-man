@@ -40,10 +40,10 @@ export interface GameplayInputActions {
   switchCharacter?(): void;
   spaceAction?(): void;
   toggleQuestTracker?(): void;
-  mongoSummon?(): void;
+  deinonychusSummon?(): void;
   /**
    * Spends boards on whatever the active crawler stands at. Returns whether it
-   * did, because it shares its key with Mongo's summon: a press that built
+   * did, because it shares its key with Deinonychus's summon: a press that built
    * something must not also send the pet in or call him back.
    */
   buildAction?(): boolean;
@@ -109,7 +109,7 @@ const SIMPLE_ACTION_HANDLERS: Partial<Record<GameAction, (actions: GameplayInput
     toggleQuestTracker: (actions) => actions.toggleQuestTracker?.(),
     buildSummon: (actions) => {
       if (actions.buildAction?.() === true) return;
-      actions.mongoSummon?.();
+      actions.deinonychusSummon?.();
     },
     construction: (actions) => actions.onConstruction?.(),
     structureMenu: (actions) => actions.onStructureMenu?.(),

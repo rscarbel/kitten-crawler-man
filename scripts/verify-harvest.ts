@@ -696,7 +696,7 @@ section('Grove trees: immune to combat damage, fire and blasts; the axe still fe
     rig.trees.smashAllInRadius(rig.human, BLAST_TEST_RADIUS);
     check(
       gameMap.structure[standingGrove.y][standingGrove.x].type === TREE,
-      'a smush stomp never flattens the grove tree',
+      'a seismic stomp never flattens the grove tree',
     );
 
     const meleeHit = rig.trees.tryMeleeHit(rig.human, BLAST_TEST_RADIUS, OVERWHELMING_DAMAGE);

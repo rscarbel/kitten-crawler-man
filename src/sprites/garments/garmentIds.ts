@@ -62,6 +62,7 @@ export type CatWornGarmentId =
 export type HumanBaseGarmentId =
   | 'dave_jacket'
   | 'dave_trousers'
+  | 'dave_boots'
   | 'ryan_shirt'
   | 'ryan_belt'
   | 'ryan_chinos'

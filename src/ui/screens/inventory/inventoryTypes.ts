@@ -12,10 +12,7 @@ import type { InventoryActions } from './InventoryActions';
 export type InventoryTab = 'bag' | 'character';
 
 /** A crawler whose pack the screen shows. `HumanPlayer` and `CatPlayer` both satisfy it. */
-export type InventoryOwner = Pick<
-  Player,
-  'inventory' | 'gear' | 'strength' | 'intelligence' | 'constitution' | 'dexterity'
->;
+export type InventoryOwner = Pick<Player, 'inventory' | 'gear' | 'statValue'>;
 
 export interface InventoryMember {
   readonly id: CrawlerKind;

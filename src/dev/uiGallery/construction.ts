@@ -34,6 +34,7 @@ import {
 import { FollowerScreen, type FollowerMenuState } from '../../ui/screens/follower/FollowerScreen';
 import { text } from '../../ui/widgets/text';
 import type { DialogFixture } from './dialogs/fixture';
+import { PetNameBook, petWords } from '../../core/party/petNames';
 
 const STOCK: Readonly<Record<ResourceId, number>> = {
   wood: 46,
@@ -336,7 +337,7 @@ export const CONSTRUCTION_FIXTURES: readonly DialogFixture[] = [
       movementMode: 'follow',
       combatStance: 'aggressive',
       companionIsCat: true,
-      mongoAutoSummon: true,
+      deinonychus: { autoSummon: true, pet: petWords(new PetNameBook(), 'deinonychus') },
     },
     null,
   ),
@@ -346,7 +347,7 @@ export const CONSTRUCTION_FIXTURES: readonly DialogFixture[] = [
       movementMode: 'anchored',
       combatStance: 'passive',
       companionIsCat: false,
-      mongoAutoSummon: null,
+      deinonychus: null,
     },
     TUTORIAL_ALLOWED_ROW,
   ),

@@ -168,7 +168,7 @@ export const level3: LevelDef = {
       'Townsfolk have lives of their own. Walk up to one and strike up a conversation.',
       'Some shopkeepers buy as well as sell. Look for the Sell tab at the counter.',
       'The Barracks Mercenaries sign contracts at their desk in the Barracks muster hall.',
-      'The Sleeping Cat Inn keeps a safe room. Mordecai is waiting inside.',
+      'The Sleeping Cat Inn keeps a safe room. Dave is waiting inside.',
       'Crates and barrels are worth smashing. There are often coins inside.',
       'Check the notice board in the town square for what the town needs doing.',
     ],

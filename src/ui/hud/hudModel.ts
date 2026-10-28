@@ -11,7 +11,6 @@ import type { HitState } from '../core/UiRoot';
 import type { ItemSlotOptions } from '../widgets/itemSlot';
 import type { GlyphId } from '../theme/glyphs';
 import type { TopBandEntry } from './topBand';
-import type { ViewerFavorModel } from './viewerFavorPill';
 
 export type CrawlerId = 'human' | 'cat';
 
@@ -24,7 +23,7 @@ export interface StatusPillModel {
   /** Fraction of the effect still to run, for the radial timer; null for a standing effect. */
   readonly remaining: number | null;
   readonly harmful: boolean;
-  /** A standing capability that is currently spent (Cockroach recharging): drawn muted. */
+  /** A standing capability that is currently spent (9 Lives recharging): drawn muted. */
   readonly spent?: boolean;
 }
 
@@ -91,8 +90,10 @@ export interface DockButtonModel {
   onTap(): void;
 }
 
-/** Mongo's Summon card. */
+/** Deinonychus's Summon card. */
 export interface SummonModel {
+  /** What the player called him, for the card's tooltip. */
+  readonly petName: string;
   readonly label: string;
   readonly active: boolean;
   /** A press would do something right now. */
@@ -186,12 +187,6 @@ export interface HudModel {
    * compact one.
    */
   readonly levelTimer: LevelTimerModel | null;
-  /**
-   * The viewers' favour, once the show's AI has moved it this run; null or
-   * absent hides it. A pill on the readout row where there is room, a card
-   * in the top band where there is not.
-   */
-  readonly favor?: ViewerFavorModel | null;
 }
 
 /**

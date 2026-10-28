@@ -43,14 +43,17 @@ const CENTER_OFFSET = 0.5;
 export interface DownedBody {
   readonly x: number;
   readonly y: number;
-  readonly displayName: string;
   readonly survival: HirelingSurvival;
 }
 
-/** Countdown over the body, and the revive bar under it once someone is reviving. */
+/**
+ * Countdown over the body, headed by `label` (a hireling's name, or what the
+ * player named a pet), and the revive bar under it once someone is reviving.
+ */
 export function renderHirelingDownedMarker(
   ctx: CanvasRenderingContext2D,
   body: DownedBody,
+  label: string,
   camX: number,
   camY: number,
 ): void {
@@ -69,7 +72,7 @@ export function renderHirelingDownedMarker(
     ctx,
     centerX,
     tileTop - TILE_SIZE * COUNTDOWN_LIFT_TILES,
-    `${body.displayName}  ${secondsLeft}s`,
+    `${label}  ${secondsLeft}s`,
     color,
     reviving ? 1 : knockoutPulse(),
   );

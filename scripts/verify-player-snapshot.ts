@@ -16,6 +16,10 @@
  * The Third Eye's wall-clock recharge must round-trip, since a crawler is
  * rebuilt from its snapshot at every door.
  *
+ * Both crawlers spend into every stat at their own gain per point, and what
+ * they spent round-trips. Evasiveness alone keeps dodge under each crawler's
+ * soft limit; a flat gear bonus carries her past it.
+ *
  *   npx tsx scripts/verify-player-snapshot.ts
  */
 
@@ -38,6 +42,8 @@ import {
   type PlayerSnapshot,
 } from '../src/core/save/PlayerSnapshot.js';
 import { THIRD_EYE_FORESIGHT_COOLDOWN_MS } from '../src/core/skills/tattoos.js';
+import { DODGE_SOFT_LIMIT } from '../src/core/combat/dodge.js';
+import { ALL_STATS, STAT_GAIN_PER_POINT, type StatId } from '../src/core/party/stats.js';
 import { CatPlayer } from '../src/creatures/CatPlayer.js';
 import { HumanPlayer } from '../src/creatures/HumanPlayer.js';
 
@@ -69,6 +75,10 @@ const CAT_ONLY_KEY = 'Weapon:Claws';
 const WRONG_SUB_SLOT_KEY = 'Head:Hat';
 const SAVED_AWAKENING_KILLS = 42;
 const SAVED_RELIC_COOLDOWN_FRAMES = 90;
+/** Far past where the dodge curve has flattened against its soft limit. */
+const EVASIVENESS_FAR_PAST_THE_CURVE = 300;
+/** Cat armour whose flat dodge bonus lands after the curve. */
+const FLAT_DODGE_COAT: ItemId = 'plumed_coat';
 /** Express's default JSON body limit: a save that fits under it fits under any limit the server sets. */
 const EXPRESS_DEFAULT_BODY_LIMIT_BYTES = 100 * 1024;
 /** Stacks in the deep bag whose save size is measured. */
@@ -94,6 +104,12 @@ function wearingSnapshot(drawn: ItemId | null): PlayerSnapshot {
 /** `snap` as storage hands it back: plain JSON, unvalidated. */
 function stored(snap: Partial<PlayerSnapshot>): unknown {
   return JSON.parse(JSON.stringify(snap));
+}
+
+function restoredCat(snap: PlayerSnapshot): CatPlayer {
+  const cat = new CatPlayer(0, 0, TILE_SIZE);
+  restorePlayer(cat, snap);
+  return cat;
 }
 
 function restored(snap: PlayerSnapshot): HumanPlayer {
@@ -338,6 +354,71 @@ function restored(snap: PlayerSnapshot): HumanPlayer {
   check(
     back.tattoo === 'third_eye' && back.thirdEyeReadyAt === readyAt,
     "the Third Eye's recharge deadline round-trips, so a door cannot reset it",
+  );
+}
+
+// ── Every stat takes a point at each crawler's own gain, and keeps it ───────
+{
+  /** Spends one point into `stat` and reports what it added, and what a rebuild reads back. */
+  const spendOne = (
+    crawler: HumanPlayer | CatPlayer,
+    stat: StatId,
+  ): { gained: number; afterRebuild: number } => {
+    crawler.unspentPoints = 1;
+    const before = crawler.getBaseStat(stat);
+    crawler.spendPoint(stat);
+    const gained = crawler.getBaseStat(stat) - before;
+    const parsed = parsePlayerSnapshot(stored(snapPlayer(crawler)), crawler.crawlerKind);
+    if (parsed === undefined) return { gained, afterRebuild: Number.NaN };
+    const rebuilt = crawler instanceof HumanPlayer ? restored(parsed) : restoredCat(parsed);
+    return { gained, afterRebuild: rebuilt.getBaseStat(stat) };
+  };
+  for (const stat of ALL_STATS) {
+    const human = new HumanPlayer(0, 0, TILE_SIZE);
+    const ryan = spendOne(human, stat);
+    check(
+      ryan.gained === STAT_GAIN_PER_POINT[stat].human &&
+        ryan.afterRebuild === human.getBaseStat(stat),
+      `the human spends a point into ${stat} (+${ryan.gained}) and keeps it through a save`,
+    );
+    const cat = new CatPlayer(0, 0, TILE_SIZE);
+    const belle = spendOne(cat, stat);
+    check(
+      belle.gained === STAT_GAIN_PER_POINT[stat].cat &&
+        belle.afterRebuild === cat.getBaseStat(stat),
+      `the cat spends a point into ${stat} (+${belle.gained}) and keeps it through a save`,
+    );
+  }
+  check(
+    STAT_GAIN_PER_POINT.health.human === 2 &&
+      STAT_GAIN_PER_POINT.evasiveness.human === 1 &&
+      STAT_GAIN_PER_POINT.health.cat === 1 &&
+      STAT_GAIN_PER_POINT.evasiveness.cat === 2,
+    'a point gives the human +2 health / +1 evasiveness and the cat +1 health / +2 evasiveness',
+  );
+}
+
+// ── Dodge approaches each crawler's soft limit; flat gear goes past it ─────
+{
+  const human = new HumanPlayer(0, 0, TILE_SIZE);
+  human.setBaseStat('evasiveness', EVASIVENESS_FAR_PAST_THE_CURVE);
+  check(
+    human.dodgeChance < DODGE_SOFT_LIMIT.human,
+    `the human's dodge from evasiveness alone stays under ${DODGE_SOFT_LIMIT.human}`,
+  );
+  const cat = new CatPlayer(0, 0, TILE_SIZE);
+  cat.setBaseStat('evasiveness', EVASIVENESS_FAR_PAST_THE_CURVE);
+  const fromStats = cat.dodgeChance;
+  check(
+    fromStats < DODGE_SOFT_LIMIT.cat,
+    `the cat's dodge from evasiveness alone stays under ${DODGE_SOFT_LIMIT.cat}`,
+  );
+  cat.inventory.addItem(FLAT_DODGE_COAT, 1);
+  cat.inventory.equipByItemId(FLAT_DODGE_COAT);
+  const withCoat = restoredCat(snapPlayer(cat)).dodgeChance;
+  check(
+    withCoat > DODGE_SOFT_LIMIT.cat,
+    `a flat gear dodge bonus carries the cat past her soft limit (${withCoat.toFixed(3)})`,
   );
 }
 

@@ -21,8 +21,8 @@ const DOOR_HIT_FLASH_FRAMES = 8;
  * A `Mob` rather than a system-owned prop because that is what puts it in
  * front of every weapon the party has. Each weapon site already filters the
  * mob grid with `takesPlayerDamage`, and this door admits every
- * `PlayerDamageType`, so melee from either crawler, Smush, Magic Missile and
- * its splash, a slingshot rock, the Protective Shell and dynamite all land
+ * `PlayerDamageType`, so melee from either crawler, Seismic Stomp, Magic Missile and
+ * its splash, a slingshot rock, the Energy Shield and dynamite all land
  * here through the one door the game already has. It is nobody's enemy, so no
  * companion, hireling or homing shot ever picks it.
  *

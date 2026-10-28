@@ -8,7 +8,7 @@ import { isRecord } from '../util/guards';
  * safe-room tile inside a wall, and nothing in the seed itself can reveal
  * that, so a save stamped with any other generator fails validation.
  */
-export const WORLD_GENERATOR_VERSION = 8;
+export const WORLD_GENERATOR_VERSION = 1;
 
 interface TilePoint {
   x: number;

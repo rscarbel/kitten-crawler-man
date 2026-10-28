@@ -20,7 +20,6 @@ import { skinsFor, type ButtonVariant, type ControlSize } from '../../ui/theme/s
 import type { TitleClock } from './titleClock';
 import { stageRectInUi, type TitleStage } from './titleStage';
 import { LOGO_IMPACT_AT_MS } from './titleTimeline';
-import { viewerFavor } from '../../core/progression/viewerFavor';
 
 export const TITLE_MENU_SURFACE_ID = 'title-menu';
 const MENU_STRIP_ID = 'menu-strip';
@@ -272,7 +271,6 @@ export class TitleMenu {
     difficultyStats.beginRun();
     bindRunStats(null);
     bindMusicLibrary(null);
-    viewerFavor.beginRun();
   }
 
   private launchTutorial(): void {
@@ -296,6 +294,8 @@ export class TitleMenu {
       new DungeonScene(level1Def, input, sceneManager, {
         ...baseOptions,
         musicLibrary: musicLibrarySkippingTutorial(),
+        skippedTutorial: true,
+        arrivedOnFloor: true,
       }),
     );
   }

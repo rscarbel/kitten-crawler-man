@@ -1,16 +1,18 @@
 /**
  * "The Krasue Murders" — Taloncrest's town murder mystery. Baggi is a
- * kindly orc who saw a taking; Mordecai's warning arrives as a voice in the
- * crawlers' ears; the clue text carries the deduction chain that points first
+ * kindly orc who saw a taking; Caroline states what the crawlers cannot read
+ * for themselves; the clue text carries the deduction chain that points first
  * at the magistrate, then at his secretary, and finally at the thing that has
  * been signing his letters.
  */
 
+import { carolineLines } from '../../caroline';
 import { speakerLines, transientSpeaker } from '../../line';
 import type { DialogLine, NonEmpty } from '../../line';
 import { crawlerName } from '../../../characters/characters';
 
 const HUMAN_NAME = crawlerName('human');
+const CAT_NAME = crawlerName('cat');
 
 /** The murder mystery's own header, for a narration page with no more specific location to name. */
 const THE_KRASUE_MURDERS = 'The Krasue Murders';
@@ -24,7 +26,6 @@ const theTowerPlaza = transientSpeaker('The Tower Plaza', 'narration');
 const theUnreadableLetter = transientSpeaker('The Unreadable Letter', 'narration');
 const ryan = speakerLines('ryan');
 const belle = speakerLines('belle');
-const mordecai = speakerLines('mordecaiInEar');
 
 export const MURDER_HOOK: NonEmpty<DialogLine> = [
   baggi.line(
@@ -36,12 +37,9 @@ export const MURDER_HOOK: NonEmpty<DialogLine> = [
   belle.line(
     `${HUMAN_NAME}, she’s so sad. We have to help her. Can I give her a cuddle first? Then we can be detectives. I’ve never been a detective. Is it warm?`,
   ),
-  baggi.line(
-    'Meet me in the alley beside the Cloak & Dagger after dark and I’ll show you where they take them. Please. You’re the first ones who looked at me instead of through me.',
-  ),
-  mordecai.button(
+  baggi.button(
     'After dark, then',
-    '*Walk away from this one. A stranger with a sad story on this floor is bait, and you two bite on everything. ...You’re going to do it anyway, aren’t you. Fine. Then do me one favor. If you find anything on a dead body down here, leave it on the dead body. I mean it.*',
+    'Meet me in the alley beside the Cloak & Dagger after dark and I’ll show you where they take them. Please. You’re the first ones who looked at me instead of through me.',
   ),
 ];
 
@@ -61,12 +59,12 @@ export const MURDER_BODY_FOUND: NonEmpty<DialogLine> = [
   theAlley.line(
     'The second is a letter in no alphabet you know. Squiggles and triangles, written in a brown ink you are choosing not to think about.',
   ),
-  mordecai.line(
-    '*Hold it up so I can see it. ...Yeah. That’s necro-script. Living people don’t write it. Their hands can’t make the shapes. Whatever is running this thing, it’s already dead. So here’s my advice. Burn that letter and walk away from all of it.*',
-  ),
+  carolineLines.message(
+    'Classification: necro-script. Living hands cannot form its shapes. Its author is dead.',
+  ).line,
   ryan.button(
     'Investigate',
-    'Sorry, Mordecai. She died trying to get this to somebody, so it’s not getting burned. The witness is gone, the magistrate’s paperwork was on her, and whoever wrote this doesn’t breathe. Let’s go ask around town. Folks always know something.',
+    'A dead guy’s pen pal. Great. She died trying to get this to somebody, so we’re seeing it through. The witness is gone, the magistrate’s paperwork was on her, and whoever wrote this doesn’t breathe. Let’s go ask around town. Folks always know something.',
   ),
 ];
 
@@ -116,9 +114,9 @@ export const MURDER_TAUNT_AND_NIGHTFALL: NonEmpty<DialogLine> = [
   ryan.line(
     'Whoa. We didn’t ask anything out loud, and it answered anyway. This isn’t a letter. It’s a window, and somebody’s been watching through it since the alley. Hi there, whoever you are.',
   ),
-  mordecai.line(
-    '*I told you to burn it. It has your faces now. Listen to me. Whatever has been taking people one at a time is about to try for two at once, and the sun is almost down. Get somewhere with walls.*',
-  ),
+  carolineLines.message(
+    `${HUMAN_NAME}. ${CAT_NAME}. The letter is a sensor, and its author has your faces. It has taken people one at a time. Tonight it comes for two at once. Nightfall is close. A position with walls raises your survival.`,
+  ).line,
   belle.line(
     `Walls are good. Walls keep the warm in. ${HUMAN_NAME}, stay close to me. I will protect you.`,
   ),
@@ -148,11 +146,11 @@ export const MURDER_HIDEOUT_CLEARED: NonEmpty<DialogLine> = [
   ryan.line(
     'The schoolteacher! The chalk at the well, the note about evening lessons, handwriting way too neat for a butcher. She does the collecting, and the magistrate’s office keeps the Watch off her back. That writ on Baggi was a leash.',
   ),
-  belle.line(
-    `A teacher and a magistrate. And they’re both at the top of the tower? ${HUMAN_NAME}, it might be warm up there. Let’s go.`,
-  ),
-  mordecai.button(
+  carolineLines.message(
+    'Magistrate Featherfall attended the temple every seventh day for thirty years. He has not attended in weeks. Every letter he has sent since is in another hand. The deacon has the record.',
+  ).line,
+  belle.button(
     'To the tower',
-    '*Quill I believe. This town is full of quiet little monsters. It’s Featherfall that bothers me. Thirty years of temple every seventh day, and then nothing but polite notes in handwriting that isn’t his? Talk to the deacon before you climb that tower. Then climb it angry.*',
+    `A teacher and a magistrate. And they’re both at the top of the tower? ${HUMAN_NAME}, it might be warm up there. Let’s go.`,
   ),
 ];

@@ -13,7 +13,7 @@ import type { DamageSource, Player } from '../Player';
 import type { GameMap } from '../map/GameMap';
 import { Mob } from '../creatures/Mob';
 import { TILE_SIZE } from '../core/constants';
-import { applyChillOnly, applyIceHit } from '../core/combat/frostStatus';
+import { applyIceHit } from '../core/combat/frostStatus';
 import { ICE_BOLT_ATTACK_TYPE, IceFairy } from '../creatures/fairies/IceFairy';
 import {
   CHILL_BLAST_RADIUS_TILES,
@@ -151,7 +151,7 @@ export class FairyIceBolts {
    * then the frost. A blow that never connects — dodged, or held off by a ward
    * — carries no frost in behind it.
    *
-   * Mongo and the mercenaries are only ever chilled, never frozen: their AI
+   * Deinonychus and the mercenaries are only ever chilled, never frozen: their AI
    * does not read the frozen state, and an encased pet still biting would be a
    * picture the fight contradicts.
    */
@@ -162,16 +162,17 @@ export class FairyIceBolts {
       mobType: bolt.owner.mobType,
       attackType: ICE_BOLT_ATTACK_TYPE,
       from: { x, y },
+      magic: true,
     });
     if (crawlerTurnsShot(target, bolt.owner, bolt.dirX, bolt.dirY)) return;
     const connected = target.takeDamage(damage, source);
     if (!connected || !target.isAlive) return;
     if (bolt.owner.isAlive) bolt.owner.noteStruckPlayer(target);
     if (target instanceof Mob) {
-      applyChillOnly(target);
+      applyIceHit(target, { freezeAllowed: false, magic: true });
       return;
     }
-    applyIceHit(target);
+    applyIceHit(target, { magic: true });
   }
 
   private shatter(x: number, y: number): void {

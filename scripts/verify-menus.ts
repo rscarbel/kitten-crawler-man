@@ -43,6 +43,10 @@
  *    Cloak & Dagger, e.g. `Cloak & Dagger poker-table`;
  *  - `title with a save` and `title without a save` in `the title screen`.
  *
+ * Beside the audits, `the Skills tab: proficiency skills` checks the rules the
+ * proficiency cards show (`skillsTabChecks.ts`): who can learn each skill, what
+ * a duplicate book does, the level ceiling and which hits each skill boosts.
+ *
  * So `--only=shop` takes every shop fixture and every scene's shop surfaces,
  * `--only=gallery` the whole gallery, `--only=Cloak` the club. A selected
  * scene case is replayed on the phones too (`close buttons on phones, in the
@@ -62,13 +66,16 @@ import type { UiSize } from '../src/core/input/Settings.js';
 import type { SafeAreaInsets, ViewportInput } from '../src/ui/core/viewport.js';
 import type { MenusKit } from '../src/systems/kits/MenusKit.js';
 import type { ChestKit } from '../src/systems/kits/ChestKit.js';
-import type { AIShowStage } from '../src/ai/show/AIShowStage.js';
+import type { CutsceneKit } from '../src/systems/kits/CutsceneKit.js';
+import { CAROLINE_CHARACTER_NAME } from '../src/ai/characters';
+import type { AIInteractionStage } from '../src/ai/interactions/AIInteractionStage.js';
 import type { AIChallengeSystem } from '../src/systems/AIChallengeSystem.js';
 import type { AchievementUISystem } from '../src/systems/AchievementUISystem.js';
 import type { AchievementManager } from '../src/core/progression/AchievementManager.js';
 import { SPIDER_QUEST_NAME } from '../src/systems/SpiderQuestSystem';
 import type { ResidentId } from '../src/systems/townResidents.js';
 import { buildingDisplayName } from '../src/map/buildingIds.js';
+import { PetNameBook, petWords } from '../src/core/party/petNames.js';
 
 export {};
 
@@ -603,6 +610,45 @@ if (scenePass === null) {
       stolen.some((failure) => failure.includes('focus belongs to "floating-fake"')),
       'self test: a non-halting surface that steals focus from a halting one is not flagged',
     );
+    rig.root.unmount(floating);
+    rig.root.unmount(ringless);
+
+    // A pause button that Escape stands in for passes only while Escape gets through.
+    const shortcutOnly: Surface = {
+      id: 'shortcut-fake',
+      band: 'panel',
+      haltsWorld: false,
+      locksKeyboard: true,
+      isOpen: () => true,
+      render: (ui) =>
+        void ui.hit('pause', buttonRect, { onTap: () => undefined, keyboardShortcut: 'Escape' }),
+    };
+    const escapeTaker: Surface = {
+      id: 'escape-taker-fake',
+      band: 'hud',
+      haltsWorld: false,
+      blocksEscape: true,
+      isOpen: () => true,
+      render: () => undefined,
+    };
+    const shortcutRig = bareRoot();
+    shortcutRig.root.mount(shortcutOnly);
+    shortcutRig.frame();
+    const reached = auditFocus(shortcutRig.root, 'self test').failures;
+    countCase();
+    check(
+      reached.length === 0,
+      `self test: a pause button Escape stands in for is flagged: ${reached.join('; ')}`,
+    );
+    shortcutRig.root.mount(escapeTaker);
+    shortcutRig.frame();
+    const shadowed = auditFocus(shortcutRig.root, 'self test').failures;
+    for (const failure of shadowed) detail(`caught: ${failure}`);
+    countCase();
+    check(
+      shadowed.some((failure) => failure.includes('"shortcut-fake"')),
+      'self test: a shortcut button whose Escape another surface takes is not flagged',
+    );
   }
 
   // ── UI gallery ─────────────────────────────────────────────────────────────
@@ -667,6 +713,18 @@ if (scenePass === null) {
       settle: () => bare.settle(),
     };
     return { root, rig, model };
+  }
+
+  const SKILLS_TAB_SECTION = 'the Skills tab: proficiency skills';
+  if (isParent && selects(SKILLS_TAB_SECTION)) {
+    anySelected = true;
+    section(SKILLS_TAB_SECTION);
+    const { runSkillsTabChecks } = await import('./skillsTabChecks.js');
+    for (const outcome of runSkillsTabChecks()) {
+      countCase();
+      detail(`${outcome.ok ? 'ok' : 'FAIL'} ${outcome.message}`);
+      check(outcome.ok, `skills tab: ${outcome.message}`);
+    }
   }
 
   const GALLERY_SECTION = 'UI gallery';
@@ -1105,7 +1163,7 @@ const STRUCTURE_POPOVER_IN_GALLERY =
 /** A one-line conversation that holds the world, as a quest beat does. */
 function haltingRequest(): ConversationRequest {
   return {
-    lines: [speakerLines('mordecai').line('The audit wants a word, crawler.')],
+    lines: [speakerLines('dave').line('The audit wants a word, crawler.')],
     reward: null,
     questRelated: false,
     ending: { kind: 'close', onClosed: noop },
@@ -1202,7 +1260,7 @@ function menusKitOpeners<S>(menusOf: (scene: S) => MenusKit): Opener<S>[] {
       'skill-book-prompt',
       (scene) =>
         menusOf(scene).skillBookPrompt.open(
-          { bookId: 'skill_book_cockroach', skillId: 'cockroach' },
+          { bookId: 'skill_book_nine_lives', skillId: 'nine_lives' },
           SAMPLE_SKILL_LEVEL,
         ),
       (scene) => menusOf(scene).skillBookPrompt.close(),
@@ -1217,11 +1275,39 @@ function menusKitOpeners<S>(menusOf: (scene: S) => MenusKit): Opener<S>[] {
       (scene) => menusOf(scene).itemQuantityDialog.open(SAMPLE_QUANTITY),
       (scene) => menusOf(scene).itemQuantityDialog.close(),
     ),
+    opener<S>(
+      'pet-name-prompt',
+      (scene) =>
+        menusOf(scene).petNamePrompt.open({
+          kind: 'deinonychus',
+          portrait: noop,
+          keyboardAnchor: null,
+          onNamed: noop,
+        }),
+      // A name is required, so the prompt has no close of its own; the scene's teardown is the one way out.
+      (scene) => menusOf(scene).petNamePrompt.dispose(),
+    ),
     opener<S>('pause', (scene) => menusOf(scene).pauseScreen.open(), closePause),
     pauseConfirm('pause-reset-confirm', 'reset'),
     pauseConfirm('pause-difficulty-confirm', 'difficulty'),
     pauseConfirm('pause-bindings-confirm', 'bindings'),
   ];
+}
+
+/** Longer than the audit settles and plays an entrance for, so the cutscene is still running when audited. */
+const CUTSCENE_AUDIT_WAIT_FRAMES = MAX_SETTLE_FRAMES * 2;
+
+/**
+ * A cutscene holding the party still with nothing to read, the state its own
+ * surface is the topmost claimant in: a talk inside one is the conversation,
+ * audited on its own.
+ */
+function cutsceneOpener<S>(kitOf: (scene: S) => CutsceneKit): Opener<S> {
+  return opener<S>(
+    'cutscene',
+    (scene) => kitOf(scene).director.play([{ kind: 'wait', frames: CUTSCENE_AUDIT_WAIT_FRAMES }]),
+    (scene) => kitOf(scene).dispose(),
+  );
 }
 
 /** The Reward Chest, opened by a paid award waiting in the human's queue. */
@@ -1233,7 +1319,7 @@ function rewardChestOpener<S>(
     'reward-chest',
     (scene) => {
       achievementsOf(scene).queuePresentation({
-        origin: { kind: 'chest', source: 'audience' },
+        origin: { kind: 'chest', source: 'caroline' },
         title: 'Audit',
         subtitle: '',
         crawler: 'human',
@@ -1246,9 +1332,9 @@ function rewardChestOpener<S>(
   );
 }
 
-/** The show AI's question and sponsor break, and, where the scene runs challenges, its offer card. */
-function aiShowOpeners<S>(
-  stageOf: (scene: S) => AIShowStage,
+/** The AI's question and, where the scene runs challenges, its offer card. */
+function aiInteractionOpeners<S>(
+  stageOf: (scene: S) => AIInteractionStage,
   challengesOf: ((scene: S) => AIChallengeSystem) | null,
 ): Opener<S>[] {
   const openers = [
@@ -1258,15 +1344,9 @@ function aiShowOpeners<S>(
         void stageOf(scene).ask({
           question: 'Audit: save the cat or the loot?',
           choices: ['The cat', 'The loot'],
-          askedBy: 'System',
+          askedBy: CAROLINE_CHARACTER_NAME,
         }),
       (scene) => stageOf(scene).dismissQuestion(),
-    ),
-    opener<S>(
-      'ai-sponsor',
-      (scene) =>
-        stageOf(scene).runSponsorBreak({ sponsor: 'Audit Pellets', message: 'NOW AUDITED.' }),
-      (scene) => stageOf(scene).endSponsorBreak(true),
     ),
   ];
   if (challengesOf === null) return openers;
@@ -1284,7 +1364,7 @@ function aiShowOpeners<S>(
           rewardRarity: 'Common',
           pitch: '',
           taunt: 'Audited.',
-          offeredBy: 'System',
+          offeredBy: CAROLINE_CHARACTER_NAME,
         }),
       (scene) => stageOf(scene).declineChallenge(),
     ),
@@ -1316,10 +1396,11 @@ function townOpeners(): Opener<Town>[] {
       (scene) => scene['achievementUI'],
       (scene) => scene['humanAchievements'],
     ),
-    ...aiShowOpeners<Town>(
-      (scene) => scene['aiShow'],
+    ...aiInteractionOpeners<Town>(
+      (scene) => scene['aiInteractions'],
       (scene) => scene['aiChallenges'],
     ),
+    cutsceneOpener<Town>((scene) => scene['cutscenes']),
     menu(
       'wipe-hold',
       (scene) =>
@@ -1381,12 +1462,13 @@ function townOpeners(): Opener<Town>[] {
             achievementsTotal: 0,
             humanLevel: 1,
             catLevel: 1,
-            mongoLevel: null,
+            deinonychusLevel: null,
+            deinonychusWords: petWords(new PetNameBook(), 'deinonychus'),
             totalKills: 0,
             bossesDefeated: 0,
             hirelingsHired: 0,
             hirelingsLost: 0,
-            mongoPets: 0,
+            deinonychusPets: 0,
             cowPets: 0,
             midgePets: 0,
             topKills: [],
@@ -1767,7 +1849,8 @@ function roomOpeners(): Opener<Interior>[] {
       (scene) => scene['achievementUI'],
       (scene) => scene['humanAchievements'],
     ),
-    ...aiShowOpeners<Interior>((scene) => scene['aiShow'], null),
+    ...aiInteractionOpeners<Interior>((scene) => scene['aiInteractions'], null),
+    cutsceneOpener<Interior>((scene) => scene['cutscenes']),
     menu(
       'conversation',
       (scene) => void scene['conversation'].open(haltingRequest()),

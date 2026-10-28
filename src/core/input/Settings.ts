@@ -12,7 +12,7 @@ import { DEFAULT_AI_INTENSITY, isAIIntensity, type AIIntensity } from '../../ai/
 import { MUSIC_TRACK_IDS, type MusicTrackId } from '../../audio/sounds';
 import type { Difficulty } from '../difficulty/difficultyProfiles';
 
-const STORAGE_KEY = 'kittenCrawler.settings.v1';
+const STORAGE_KEY = 'kcw.settings';
 
 const MIN_VOLUME = 0;
 const MAX_VOLUME = 1;
@@ -91,12 +91,12 @@ interface SettingsData {
   ambienceVolume: number;
   bindings: StoredBindings;
   /**
-   * Whether the companion cat sends Mongo in on her own when a fight is on her.
+   * Whether the companion cat sends Deinonychus in on her own when a fight is on her.
    *
    * On by default: with the human in control the cat has no Summon button, so
    * without it the pet sits out every fight the player does not switch over for.
    */
-  catAutoSummonsMongo: boolean;
+  catAutoSummonsDeinonychus: boolean;
   uiSize: UiSize;
   /** Absent while area music plays: no preference is the default. */
   musicPlayback?: MusicPlaybackPreference;
@@ -127,7 +127,7 @@ const DEFAULTS: SettingsData = {
   musicVolume: DEFAULT_MUSIC_VOLUME,
   ambienceVolume: DEFAULT_AMBIENCE_VOLUME,
   bindings: {},
-  catAutoSummonsMongo: true,
+  catAutoSummonsDeinonychus: true,
   uiSize: 'medium',
   muted: false,
   monoAudio: false,
@@ -196,7 +196,7 @@ function parseSettings(stored: Record<string, unknown>): SettingsData | undefine
     sfxVolume,
     musicVolume,
     ambienceVolume,
-    catAutoSummonsMongo,
+    catAutoSummonsDeinonychus,
     uiSize,
     muted,
     monoAudio,
@@ -217,7 +217,7 @@ function parseSettings(stored: Record<string, unknown>): SettingsData | undefine
     !isVolume(musicVolume) ||
     !isVolume(ambienceVolume) ||
     bindings === undefined ||
-    typeof catAutoSummonsMongo !== 'boolean' ||
+    typeof catAutoSummonsDeinonychus !== 'boolean' ||
     !isUiSize(uiSize) ||
     (stored.musicPlayback !== undefined && musicPlayback === undefined) ||
     typeof muted !== 'boolean' ||
@@ -238,7 +238,7 @@ function parseSettings(stored: Record<string, unknown>): SettingsData | undefine
     musicVolume,
     ambienceVolume,
     bindings,
-    catAutoSummonsMongo,
+    catAutoSummonsDeinonychus,
     uiSize,
     muted,
     monoAudio,
@@ -360,12 +360,12 @@ class Settings {
     this.persist();
   }
 
-  get catAutoSummonsMongo(): boolean {
-    return this.data.catAutoSummonsMongo;
+  get catAutoSummonsDeinonychus(): boolean {
+    return this.data.catAutoSummonsDeinonychus;
   }
 
-  setCatAutoSummonsMongo(enabled: boolean): void {
-    this.data.catAutoSummonsMongo = enabled;
+  setCatAutoSummonsDeinonychus(enabled: boolean): void {
+    this.data.catAutoSummonsDeinonychus = enabled;
     this.persist();
   }
 

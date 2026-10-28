@@ -1,13 +1,14 @@
 /**
  * Pest Control's dialog: Dr. Moult's explanation, which `SpiderQuestSystem`
  * opens when a crawler talks to him at the hallway mouth or walks past him into
- * the hallway, and Mordecai's message that follows it.
+ * the hallway, and Caroline's warning that follows it.
  */
 
+import { crawlerName } from '../../../characters/characters';
+import { carolineLines } from '../../caroline';
 import { speakerLines } from '../../line';
 
 const say = speakerLines('scientist');
-const mordecaiMessage = speakerLines('mordecaiMessage');
 
 export const SCIENTIST = {
   /** Shouted after a crawler who walked into the hallway before hearing him out. */
@@ -20,8 +21,6 @@ export const SCIENTIST = {
   ]),
 };
 
-export const MORDECAI_MESSAGE = {
-  warning: mordecaiMessage.line(
-    "Hey kid. Listen, I wouldn't recommend following. You don't need to help him to get to the stairwell, and if you do get involved, I guarantee you this will be very dangerous and probably result in you being splattered along the dungeon floor. Your call though, there's always a reward for completing dungeon quests.",
-  ),
-};
+export const CAROLINE_SPIDER_WARNING = carolineLines.message(
+  `${crawlerName('human')}. This quest is optional: the stairwell does not require it. The lab ahead is classified high risk. Completion is rewarded.`,
+);

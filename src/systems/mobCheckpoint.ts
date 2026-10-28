@@ -59,7 +59,7 @@ export function rewindMobsToCheckpoint(roster: MobRoster): void {
       if (mob.resetsFullyOnCheckpoint) {
         mob.resetToSpawn();
       } else {
-        // Allies (Mongo, hired mercenaries) aren't spawn-anchored encounters
+        // Allies (Deinonychus, hired mercenaries) aren't spawn-anchored encounters
         // to reposition — their "spawn tile" is wherever they were summoned
         // or hired, not this safe room — but they can take real damage
         // fighting alongside the party and must not stay critically wounded

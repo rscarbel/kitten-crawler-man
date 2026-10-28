@@ -33,15 +33,15 @@
  *    hammer_down — a hammer-fist dropped onto something low
  *    knee_drop_down — a finisher: his weight dropped onto one knee
  *    stomp_run_down_1…4 — the stomp on the move: a hop-in stamp mid-stride
- *    smush, smush_side, smush_away
+ *    seismic_stomp, seismic_stomp_side, seismic_stomp_away
  *                — the ability: knee chambered high, heel stamped down, then pressed
- *    smush_hop_1…4, smush_hop_side_1…5, smush_hop_away_1…4
- *                — Smush thrown on the run: a hop off the rear foot onto the stamp
+ *    seismic_stomp_hop_1…4, seismic_stomp_hop_side_1…5, seismic_stomp_hop_away_1…4
+ *                — Seismic Stomp thrown on the run: a hop off the rear foot onto the stamp
  *    guard       — combat-ready stance for a few seconds after a blow, per view
  *    fidget_*    — one-shot gestures that break a long idle, each starting and
  *                  ending on the idle's first frame
- *    shell_cast, drink, grab, chest_open, talk (each ×3 views)
- *                — actions a system plays: the Protective Shell cast, a swig
+ *    shield_cast, drink, grab, chest_open, talk (each ×3 views)
+ *                — actions a system plays: the Energy Shield cast, a swig
  *                  from a bottle, a stoop for loot, heaving a chest open, and
  *                  a talking loop
  *    chop, mine (each ×3 views)
@@ -140,12 +140,12 @@ import {
   grabBack,
   grabFront,
   grabSide,
-  SHELL_CAST_FRAME,
-  SHELL_CAST_FRAMES,
-  SHELL_CAST_TICKS_PER_FRAME,
-  shellCastBack,
-  shellCastFront,
-  shellCastSide,
+  SHIELD_CAST_FRAME,
+  SHIELD_CAST_FRAMES,
+  SHIELD_CAST_TICKS_PER_FRAME,
+  shieldCastBack,
+  shieldCastFront,
+  shieldCastSide,
   TALK_FRAMES,
   TALK_TICKS_PER_FRAME,
   talkBack,
@@ -202,11 +202,11 @@ import {
   slingSide,
 } from './human/actionsSling';
 import {
-  SMUSH_HOP_PRESS_FRAMES,
-  SMUSH_PRESS_FRAMES,
-  smushHop,
-  smushHopExitPhase,
-  smushStanding,
+  SEISMIC_STOMP_HOP_PRESS_FRAMES,
+  SEISMIC_STOMP_PRESS_FRAMES,
+  seismicStompHop,
+  seismicStompHopExitPhase,
+  seismicStompStanding,
 } from './human/stomps';
 import {
   HAMMER_DOWN_FRAMES,
@@ -272,8 +272,8 @@ import {
   IDLE_FRAME_TICKS,
   idleBlinkLid,
   idleBreathPhase,
-  SMUSH_FRAMES,
-  SMUSH_IMPACT_FRAME,
+  SEISMIC_STOMP_FRAMES,
+  SEISMIC_STOMP_IMPACT_FRAME,
   RUN_FRAMES,
   RUN_START_FRAMES,
   RUN_STOP_FRAMES,
@@ -395,22 +395,22 @@ export const HUMAN_ROW_NAMES = [
   'stomp_run_down_2',
   'stomp_run_down_3',
   'stomp_run_down_4',
-  'smush',
-  'smush_side',
-  'smush_away',
-  'smush_hop_1',
-  'smush_hop_2',
-  'smush_hop_3',
-  'smush_hop_4',
-  'smush_hop_side_1',
-  'smush_hop_side_2',
-  'smush_hop_side_3',
-  'smush_hop_side_4',
-  'smush_hop_side_5',
-  'smush_hop_away_1',
-  'smush_hop_away_2',
-  'smush_hop_away_3',
-  'smush_hop_away_4',
+  'seismic_stomp',
+  'seismic_stomp_side',
+  'seismic_stomp_away',
+  'seismic_stomp_hop_1',
+  'seismic_stomp_hop_2',
+  'seismic_stomp_hop_3',
+  'seismic_stomp_hop_4',
+  'seismic_stomp_hop_side_1',
+  'seismic_stomp_hop_side_2',
+  'seismic_stomp_hop_side_3',
+  'seismic_stomp_hop_side_4',
+  'seismic_stomp_hop_side_5',
+  'seismic_stomp_hop_away_1',
+  'seismic_stomp_hop_away_2',
+  'seismic_stomp_hop_away_3',
+  'seismic_stomp_hop_away_4',
   'guard',
   'guard_side',
   'guard_away',
@@ -442,9 +442,9 @@ export const HUMAN_ROW_NAMES = [
   'dynamite_throw',
   'dynamite_throw_side',
   'dynamite_throw_away',
-  'shell_cast',
-  'shell_cast_side',
-  'shell_cast_away',
+  'shield_cast',
+  'shield_cast_side',
+  'shield_cast_away',
   'drink',
   'drink_side',
   'drink_away',
@@ -513,10 +513,10 @@ export type HumanGait = 'walk' | 'run';
  * The moments a system synchronises to while a row plays:
  * - `fuseLit`: the dynamite's fuse catches.
  * - `release`: the dynamite leaves his hand.
- * - `cast`: the Protective Shell's palm lands, and the dome goes up.
+ * - `cast`: the Energy Shield's palm lands, and the dome goes up.
  * - `lidUp`: a chest's lid is up past his chest.
  * - `strike`: the hammer lands on the board.
- * - `grind`: a Smush's heel, already down, is ground into the floor.
+ * - `grind`: a Seismic Stomp's heel, already down, is ground into the floor.
  * - `impact`: an axe bites a trunk or a pick strikes rock.
  */
 export type HumanRowEvent =
@@ -605,7 +605,7 @@ export function firstImpactFrame(row: HumanRowMeta): number | undefined {
  *   when the guard runs out.
  * - `start` / `stop`: a one-shot bridging standing and a locomotion cycle.
  * - `strike`: a melee blow; the family a facing throws is the strikes in its view.
- * - `stomp`: Smush.
+ * - `stomp`: Seismic Stomp.
  * - `action`: something a system has him do — build, carry, mend — played
  *   only when that system asks for it by name.
  * - `reaction`: something done to him — a flinch, a stumble, a fall — played
@@ -707,15 +707,17 @@ function shotProgress(frame: number, frameCount: number): number {
 
 const NO_IMPACT: readonly number[] = [];
 const STRIKE_IMPACT: readonly number[] = [ATTACK_IMPACT_FRAME];
-const SMUSH_IMPACT: readonly number[] = [SMUSH_IMPACT_FRAME];
+const SEISMIC_STOMP_IMPACT: readonly number[] = [SEISMIC_STOMP_IMPACT_FRAME];
 
 /** The frames after the stamp that the heel stays down and grinds, `pressFrames` counting the stamp. */
 function grindFrames(pressFrames: number): readonly number[] {
-  const grinds = pressFrames - SMUSH_IMPACT.length;
-  return Array.from({ length: grinds }, (_unused, beat) => SMUSH_IMPACT_FRAME + 1 + beat);
+  const grinds = pressFrames - SEISMIC_STOMP_IMPACT.length;
+  return Array.from({ length: grinds }, (_unused, beat) => SEISMIC_STOMP_IMPACT_FRAME + 1 + beat);
 }
-const SMUSH_GRIND_EVENTS = { grind: grindFrames(SMUSH_PRESS_FRAMES) } as const;
-const SMUSH_HOP_GRIND_EVENTS = { grind: grindFrames(SMUSH_HOP_PRESS_FRAMES) } as const;
+const SEISMIC_STOMP_GRIND_EVENTS = { grind: grindFrames(SEISMIC_STOMP_PRESS_FRAMES) } as const;
+const SEISMIC_STOMP_HOP_GRIND_EVENTS = {
+  grind: grindFrames(SEISMIC_STOMP_HOP_PRESS_FRAMES),
+} as const;
 const RUNNING_STRIKE_IMPACT: readonly number[] = [RUNNING_STRIKE_IMPACT_FRAME];
 
 /** Places in a combo chain, counted from the opening blow. */
@@ -812,20 +814,20 @@ function stompRunRow(version: number): HumanRowDef {
   };
 }
 
-function smushHopRow(view: CardinalView, version: number): HumanRowDef {
+function seismicStompHopRow(view: CardinalView, version: number): HumanRowDef {
   const entry = travellingEntryPhase(view, version);
   return {
-    frameCount: SMUSH_FRAMES,
+    frameCount: SEISMIC_STOMP_FRAMES,
     kind: 'oneShot',
     view,
-    impactFrames: SMUSH_IMPACT,
+    impactFrames: SEISMIC_STOMP_IMPACT,
     mirrorable: view === 'side',
     locomotion: 'travelling',
     entryFootPhase: entry,
-    exitFootPhase: smushHopExitPhase(entry),
+    exitFootPhase: seismicStompHopExitPhase(entry),
     role: 'stomp',
-    eventFrames: SMUSH_HOP_GRIND_EVENTS,
-    pose: (f) => smushHop(f, view, entry),
+    eventFrames: SEISMIC_STOMP_HOP_GRIND_EVENTS,
+    pose: (f) => seismicStompHop(f, view, entry),
   };
 }
 
@@ -869,8 +871,8 @@ export function explosiveRowNames(): HumanRowName[] {
   return HUMAN_ROWS.filter((row) => EXPLOSIVE_ROWS[row.name] !== undefined).map((row) => row.name);
 }
 
-/** The frame the Protective Shell's palm meets the dome's centre, where the dome is raised. */
-const SHELL_CAST_EVENTS = { cast: [SHELL_CAST_FRAME] } as const;
+/** The frame the Energy Shield's palm meets the dome's centre, where the dome is raised. */
+const SHIELD_CAST_EVENTS = { cast: [SHIELD_CAST_FRAME] } as const;
 /** The frame a chest's lid is up past his chest and what is inside can be shown. */
 const CHEST_OPEN_EVENTS = { lidUp: [CHEST_LID_UP_FRAME] } as const;
 
@@ -1407,52 +1409,52 @@ export const HUMAN_ROW_TABLE = {
   stomp_run_down_2: stompRunRow(1),
   stomp_run_down_3: stompRunRow(2),
   stomp_run_down_4: stompRunRow(3),
-  smush: {
-    frameCount: SMUSH_FRAMES,
+  seismic_stomp: {
+    frameCount: SEISMIC_STOMP_FRAMES,
     kind: 'oneShot',
     view: 'front',
-    impactFrames: SMUSH_IMPACT,
+    impactFrames: SEISMIC_STOMP_IMPACT,
     mirrorable: false,
     locomotion: 'planted',
     role: 'stomp',
-    eventFrames: SMUSH_GRIND_EVENTS,
-    pose: (f) => smushStanding(f, 'front'),
+    eventFrames: SEISMIC_STOMP_GRIND_EVENTS,
+    pose: (f) => seismicStompStanding(f, 'front'),
   },
-  smush_side: {
-    frameCount: SMUSH_FRAMES,
+  seismic_stomp_side: {
+    frameCount: SEISMIC_STOMP_FRAMES,
     kind: 'oneShot',
     view: 'side',
-    impactFrames: SMUSH_IMPACT,
+    impactFrames: SEISMIC_STOMP_IMPACT,
     mirrorable: true,
     locomotion: 'planted',
     role: 'stomp',
-    eventFrames: SMUSH_GRIND_EVENTS,
-    pose: (f) => smushStanding(f, 'side'),
+    eventFrames: SEISMIC_STOMP_GRIND_EVENTS,
+    pose: (f) => seismicStompStanding(f, 'side'),
   },
-  smush_away: {
-    frameCount: SMUSH_FRAMES,
+  seismic_stomp_away: {
+    frameCount: SEISMIC_STOMP_FRAMES,
     kind: 'oneShot',
     view: 'back',
-    impactFrames: SMUSH_IMPACT,
+    impactFrames: SEISMIC_STOMP_IMPACT,
     mirrorable: false,
     locomotion: 'planted',
     role: 'stomp',
-    eventFrames: SMUSH_GRIND_EVENTS,
-    pose: (f) => smushStanding(f, 'back'),
+    eventFrames: SEISMIC_STOMP_GRIND_EVENTS,
+    pose: (f) => seismicStompStanding(f, 'back'),
   },
-  smush_hop_1: smushHopRow('front', 0),
-  smush_hop_2: smushHopRow('front', 1),
-  smush_hop_3: smushHopRow('front', 2),
-  smush_hop_4: smushHopRow('front', 3),
-  smush_hop_side_1: smushHopRow('side', 0),
-  smush_hop_side_2: smushHopRow('side', 1),
-  smush_hop_side_3: smushHopRow('side', 2),
-  smush_hop_side_4: smushHopRow('side', 3),
-  smush_hop_side_5: smushHopRow('side', 4),
-  smush_hop_away_1: smushHopRow('back', 0),
-  smush_hop_away_2: smushHopRow('back', 1),
-  smush_hop_away_3: smushHopRow('back', 2),
-  smush_hop_away_4: smushHopRow('back', 3),
+  seismic_stomp_hop_1: seismicStompHopRow('front', 0),
+  seismic_stomp_hop_2: seismicStompHopRow('front', 1),
+  seismic_stomp_hop_3: seismicStompHopRow('front', 2),
+  seismic_stomp_hop_4: seismicStompHopRow('front', 3),
+  seismic_stomp_hop_side_1: seismicStompHopRow('side', 0),
+  seismic_stomp_hop_side_2: seismicStompHopRow('side', 1),
+  seismic_stomp_hop_side_3: seismicStompHopRow('side', 2),
+  seismic_stomp_hop_side_4: seismicStompHopRow('side', 3),
+  seismic_stomp_hop_side_5: seismicStompHopRow('side', 4),
+  seismic_stomp_hop_away_1: seismicStompHopRow('back', 0),
+  seismic_stomp_hop_away_2: seismicStompHopRow('back', 1),
+  seismic_stomp_hop_away_3: seismicStompHopRow('back', 2),
+  seismic_stomp_hop_away_4: seismicStompHopRow('back', 3),
   guard: {
     frameCount: GUARD_FRAMES,
     kind: 'loop',
@@ -1708,41 +1710,41 @@ export const HUMAN_ROW_TABLE = {
     eventFrames: DYNAMITE_THROW_EVENTS,
     pose: (f) => dynamiteThrow('back', f),
   },
-  shell_cast: {
-    frameCount: SHELL_CAST_FRAMES,
+  shield_cast: {
+    frameCount: SHIELD_CAST_FRAMES,
     kind: 'oneShot',
     view: 'front',
     impactFrames: NO_IMPACT,
     mirrorable: false,
     locomotion: 'planted',
     role: 'action',
-    ticksPerFrame: SHELL_CAST_TICKS_PER_FRAME,
-    eventFrames: SHELL_CAST_EVENTS,
-    pose: shellCastFront,
+    ticksPerFrame: SHIELD_CAST_TICKS_PER_FRAME,
+    eventFrames: SHIELD_CAST_EVENTS,
+    pose: shieldCastFront,
   },
-  shell_cast_side: {
-    frameCount: SHELL_CAST_FRAMES,
+  shield_cast_side: {
+    frameCount: SHIELD_CAST_FRAMES,
     kind: 'oneShot',
     view: 'side',
     impactFrames: NO_IMPACT,
     mirrorable: true,
     locomotion: 'planted',
     role: 'action',
-    ticksPerFrame: SHELL_CAST_TICKS_PER_FRAME,
-    eventFrames: SHELL_CAST_EVENTS,
-    pose: shellCastSide,
+    ticksPerFrame: SHIELD_CAST_TICKS_PER_FRAME,
+    eventFrames: SHIELD_CAST_EVENTS,
+    pose: shieldCastSide,
   },
-  shell_cast_away: {
-    frameCount: SHELL_CAST_FRAMES,
+  shield_cast_away: {
+    frameCount: SHIELD_CAST_FRAMES,
     kind: 'oneShot',
     view: 'back',
     impactFrames: NO_IMPACT,
     mirrorable: false,
     locomotion: 'planted',
     role: 'action',
-    ticksPerFrame: SHELL_CAST_TICKS_PER_FRAME,
-    eventFrames: SHELL_CAST_EVENTS,
-    pose: shellCastBack,
+    ticksPerFrame: SHIELD_CAST_TICKS_PER_FRAME,
+    eventFrames: SHIELD_CAST_EVENTS,
+    pose: shieldCastBack,
   },
   drink: {
     frameCount: DRINK_FRAMES,
@@ -2305,10 +2307,10 @@ function humanStateFrames(): Record<string, number> {
  * stay warm together are his baseline footprint rather than a peak: the run,
  * its start and stop, the idle and the guard in all three views; every strike
  * one facing can throw, standing and in each version painted on the move; the
- * Smush, standing and hopping, of the views a fight can stamp in within one
+ * Seismic Stomp, standing and hopping, of the views a fight can stamp in within one
  * release window; the wind-up of every blow a fight can open with from
  * standing; and the opening frames of the rows held on stand-by for a moment
- * that can come on any tick — the flinch, the stumble, the Protective Shell
+ * that can come on any tick — the flinch, the stumble, the Energy Shield
  * cast and, once he is low, the falls. The blows thrown on the move are
  * painted once per phase of the stride they can begin at, five versions a row
  * in profile, which is what makes his the largest working set in the fleet.

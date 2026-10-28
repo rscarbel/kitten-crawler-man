@@ -17,18 +17,18 @@ function standAt(
 }
 
 /**
- * Stands Mongo and the hire on the gate room's waiting tiles, where they
+ * Stands Deinonychus and the hire on the gate room's waiting tiles, where they
  * stayed while the crawlers were in the prison: the prison admits neither, so
  * on the way out they are found waiting by the door rather than at the
  * crawlers' heels. Either may be absent.
  */
 export function seatCompanionsWaitingOutsidePrison(
   room: Pick<StealthGateRoomData, 'waitingTiles'>,
-  mongo: Mob | null,
+  deinonychus: Mob | null,
   hire: Mercenary | null,
   grid: SpatialGrid<Mob>,
 ): void {
-  if (mongo !== null) standAt(mongo, room.waitingTiles.mongo, grid);
+  if (deinonychus !== null) standAt(deinonychus, room.waitingTiles.deinonychus, grid);
   if (hire !== null) {
     standAt(hire, room.waitingTiles.hireling, grid);
     hire.onTeleported();

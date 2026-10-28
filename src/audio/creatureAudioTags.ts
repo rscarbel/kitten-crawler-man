@@ -32,7 +32,7 @@ export type CreatureAudioTag =
   | 'merc_earth_elemental'
   | 'merc_medic'
   | 'miss_quill'
-  | 'mongo'
+  | 'deinonychus'
   | 'necromancer'
   | 'raised_ratkin'
   | 'rat'

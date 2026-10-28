@@ -9,8 +9,8 @@ import {
 import { ITEM_PRICES } from '../../economy/itemPrices';
 import { activePriceAdjustment, setPriceAdjustment } from '../../economy/pricing';
 import {
-  AI_CHARACTER_MORDECAI,
-  AI_CHARACTER_SYSTEM,
+  AI_CHARACTER_DAVE,
+  AI_CHARACTER_CAROLINE,
   MS_PER_SECOND,
   TARGET_PARAM,
   crawlerName,
@@ -29,8 +29,8 @@ const PRICE_COOLDOWN_MS = 180_000;
 
 /** No single item the AI hands out or names is worth more than this, at any depth. */
 const AI_ITEM_VALUE_MAX = 600;
-/** Mordecai's gifts are a potion or a snack, not loot. */
-const MORDECAI_GIFT_VALUE_MAX = 40;
+/** Dave's gifts are a potion or a snack, not loot. */
+const DAVE_GIFT_VALUE_MAX = 40;
 const GIFT_QUANTITY_MAX = 5;
 const TAKE_QUANTITY_MAX = 3;
 const TAKES_PER_FLOOR = 3;
@@ -93,16 +93,16 @@ function addToBag(crawler: Crawler, item: ItemId, quantity: number): void {
 const giveItem: AIActionDef = {
   name: 'give_item',
   description:
-    'Put an item into a crawler’s bag. Each floor has a value allowance; Mordecai may only give small things.',
+    'Put an item into a crawler’s bag. Each floor has a value allowance; Dave may only give small things.',
   params: [TARGET_PARAM, ITEM, GIFT_QUANTITY],
   policy: { cost: 2, cooldownMs: GIFT_COOLDOWN_MS, severity: 'benign' },
-  characters: [AI_CHARACTER_SYSTEM, AI_CHARACTER_MORDECAI],
+  characters: [AI_CHARACTER_CAROLINE, AI_CHARACTER_DAVE],
   budget: (call) => ({ pool: 'itemValue', amount: giftValue(call) }),
   refusal: (call) => {
     const item = call.params.get(ITEM);
-    const isMordecai = call.characterName === AI_CHARACTER_MORDECAI;
-    if (isMordecai && giftValue(call) > MORDECAI_GIFT_VALUE_MAX) {
-      return 'Mordecai can only spare small things';
+    const isDave = call.characterName === AI_CHARACTER_DAVE;
+    if (isDave && giftValue(call) > DAVE_GIFT_VALUE_MAX) {
+      return 'Dave can only spare small things';
     }
     const crawler = resolveTarget(call.scene, call.params.get(TARGET_PARAM));
     const wearer = wearerOf(item);
@@ -138,7 +138,7 @@ const removeItem: AIActionDef = {
     severity: 'harmful',
     forbidsContext: ['isPaused'],
   },
-  characters: [AI_CHARACTER_SYSTEM],
+  characters: [AI_CHARACTER_CAROLINE],
   maxPerFloor: TAKES_PER_FLOOR,
   refusal: ({ params, scene }) => {
     const item = params.get(ITEM);
@@ -184,7 +184,7 @@ const giveCoins: AIActionDef = {
   description: 'Pay a crawler coins, with a reason they see.',
   params: [TARGET_PARAM, COIN_GIFT, COIN_REASON],
   policy: { cost: 2, cooldownMs: COIN_COOLDOWN_MS, severity: 'benign' },
-  characters: [AI_CHARACTER_SYSTEM],
+  characters: [AI_CHARACTER_CAROLINE],
   budget: ({ params }) => ({ pool: 'coinsGiven', amount: params.get(COIN_GIFT) }),
   execute({ params, scene }) {
     const crawler = resolveTarget(scene, params.get(TARGET_PARAM));
@@ -214,7 +214,7 @@ const fineCoins: AIActionDef = {
     severity: 'disruptive',
     forbidsContext: ['isPaused'],
   },
-  characters: [AI_CHARACTER_SYSTEM],
+  characters: [AI_CHARACTER_CAROLINE],
   budget: (call) => ({ pool: 'coinsFined', amount: fineAmount(call) }),
   refusal: (call) => (fineAmount(call) <= 0 ? 'their purse is too light to fine' : null),
   execute(call) {
@@ -262,13 +262,15 @@ function priceAction(
       cooldownMs: PRICE_COOLDOWN_MS,
       severity: isSale ? 'benign' : 'disruptive',
     },
-    characters: [AI_CHARACTER_SYSTEM],
+    characters: [AI_CHARACTER_CAROLINE],
     maxPerFloor: PRICE_CHANGES_PER_FLOOR,
     refusal: priceRefusal,
     execute({ params, scene }) {
       const percent = params.get(PRICE_PERCENT);
       const seconds = params.get(PRICE_SECONDS);
-      const label = isSale ? `System sale (${percent}% off)` : `System surge (+${percent}%)`;
+      const label = isSale
+        ? `Caroline's sale (${percent}% off)`
+        : `Caroline's surge (+${percent}%)`;
       setPriceAdjustment(
         { label, multiplier: 1 + (direction * percent) / PERCENT },
         seconds * MS_PER_SECOND,

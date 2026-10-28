@@ -13,7 +13,7 @@
  * Rows:
  *    walk / walk_side / walk_away        — the rocking mantis gait
  *    idle / idle_side / idle_away        — swaying, head pivoting, antennae sweeping
- *    slash / slash_side / slash_away     — one raptorial strike: cock, snap, refold
+ *    slash / slash_side / slash_away     — one grasping strike: cock, snap, refold
  *    flurry / flurry_side / flurry_away  (boss only) — both arms, fast wide arcs
  *    rage_pause                          (boss only) — reared, cocked, trembling
  *
@@ -33,7 +33,7 @@ import {
   type MantidBuild,
   type MantidPose,
   type Pt,
-  type RaptorialPose,
+  type GraspingArmPose,
   clamp01,
   deg,
   drawMantidBack,
@@ -69,7 +69,7 @@ function leg(dx: number, dy: number, lift: number, splay = 1): LegPose {
   return { dx, dy, lift, splay };
 }
 
-function arm(swing: number, unfold: number, spread = 0, reach = 0): RaptorialPose {
+function arm(swing: number, unfold: number, spread = 0, reach = 0): GraspingArmPose {
   return { swing, unfold, spread, reach };
 }
 
@@ -231,7 +231,7 @@ function idleBack(phase: number): MantidPose {
 // ── Slash ────────────────────────────────────────────────────────────────────
 
 /**
- * One raptorial strike. The three windows are deliberately uneven: a mantis
+ * One grasping strike. The three windows are deliberately uneven: a mantis
  * cocks slowly and visibly — that is the player's cue to move — and then the
  * strike itself is over in two frames. Evening them out removes both the tell
  * and the shock.
@@ -256,7 +256,7 @@ function slashPhases(progress: number): SlashPhases {
 }
 
 /** The striking arm, in whichever view. `mirror` matches the view's arm sign. */
-function strikingArm(s: SlashPhases): RaptorialPose {
+function strikingArm(s: SlashPhases): GraspingArmPose {
   const cocked = s.cock * (1 - s.snap);
   const driven = s.snap * (1 - s.recover);
   return arm(
@@ -343,7 +343,7 @@ function slashBack(progress: number): MantidPose {
 const FLURRY_ARC = deg(58);
 const FLURRY_LEAN = deg(7);
 
-function flurryArm(phase: number): RaptorialPose {
+function flurryArm(phase: number): GraspingArmPose {
   const cycle = ((phase % 1) + 1) % 1;
   // Each arm spends the first half of its own cycle throwing and the second half
   // recovering, so at any instant one arm is out and the other is coming back.
@@ -621,7 +621,7 @@ interface CellGeometry {
  * `scripts/gates-mantid.ts` re-measures them on every render.
  */
 const BOSS_GORE_RECENTRE: ReadonlyMap<string, Pt> = new Map([
-  ['gore_raptorial_arm', pt(0.07142857142857142, 0.03125)],
+  ['gore_grasping_arm', pt(0.07142857142857142, 0.03125)],
   ['gore_head', pt(0.015625, 0.022321428571428572)],
   ['gore_pronotum', pt(0.008928571428571428, -0.06473214285714286)],
   ['gore_abdomen', pt(0.07366071428571429, -0.017857142857142856)],
@@ -632,7 +632,7 @@ const BOSS_GORE_RECENTRE: ReadonlyMap<string, Pt> = new Map([
 ]);
 
 const CRONY_GORE_RECENTRE: ReadonlyMap<string, Pt> = new Map([
-  ['gore_raptorial_arm', pt(0.06868131868131869, 0.034340659340659344)],
+  ['gore_grasping_arm', pt(0.06868131868131869, 0.034340659340659344)],
   ['gore_head', pt(0.017170329670329672, 0.02146291208791209)],
   ['gore_pronotum', pt(0.008585164835164836, -0.06438873626373627)],
   ['gore_abdomen', pt(0.0729739010989011, -0.017170329670329672)],

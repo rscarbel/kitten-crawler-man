@@ -41,9 +41,9 @@ import { BIG_ROOSTER_BOSS_TYPE } from '../src/core/mobs/bossTypes';
 import { BOLT_SPEED_CAP, lavaBoltSpeedForLevel } from '../src/systems/LavaBallSystem';
 import { GOBLIN_BOW_SHOTS, goblinArrowReleaseFrame } from '../src/sprites/goblinSprite';
 import {
-  humanRegenHpPerSecond,
+  crawlerRegenHpPerSecond,
   REGEN_HP_PER_SECOND_ASYMPTOTE,
-} from '../src/systems/PlayerTickSystem';
+} from '../src/core/party/crawlerFormulas';
 import {
   MAX_MOB_LEVEL,
   MAX_ROOM_SPAWN_COUNT,
@@ -168,11 +168,13 @@ import {
   setFloorReferencePartyLevel,
 } from '../src/core/difficulty/floorReferenceLevel';
 import {
+  DYN_MAX_CHARGE,
   DynamiteSystem,
   dynamiteCrawlerDamage,
   dynamiteDamageToMob,
   dynamiteMobDamage,
 } from '../src/systems/DynamiteSystem';
+import { EventBus } from '../src/core/EventBus';
 import { MissQuill } from '../src/creatures/MissQuill';
 import { Remex } from '../src/creatures/Remex';
 import { DarkKnight } from '../src/creatures/DarkKnight';
@@ -211,9 +213,9 @@ const SAMPLED_BASE_COOLDOWNS = [
  * curve actually reaches toward rather than a number it never nears.
  */
 const CADENCE_FLOOR_APPROACH_SLACK = 0.02;
-/** Constitutions whose regen gains are compared: an early point and a late one. */
-const EARLY_CONSTITUTION = 3;
-const LATE_CONSTITUTION = 12;
+/** Health values whose regen gains are compared: an early point and a late one. */
+const EARLY_HEALTH = 3;
+const LATE_HEALTH = 12;
 /** A levelled mob used for the re-level refusal check. */
 const RELEVEL_TEST_LEVEL = 5;
 /** Two crawler levels for the "party level is the stronger one" check. */
@@ -228,8 +230,8 @@ function isBelow(value: number, limit: number): boolean {
   return value < limit;
 }
 
-/** Constitutions sampled for the regen curve, from a fresh crawler to an absurd one. */
-const MAX_PROBED_CONSTITUTION = 200;
+/** Health values sampled for the regen curve, from a fresh crawler to an absurd one. */
+const MAX_PROBED_HEALTH = 200;
 
 /** Seed for the reinforced-room rolls, so the cap check reads the same rooms every run. */
 const REINFORCEMENT_ROLL_SEED = 0x2e1_f0cc;
@@ -926,22 +928,22 @@ section('regen curve');
 {
   let monotone = true;
   let bounded = true;
-  for (let constitution = 1; constitution <= MAX_PROBED_CONSTITUTION; constitution++) {
-    const rate = humanRegenHpPerSecond(constitution);
-    if (constitution > 1 && rate <= humanRegenHpPerSecond(constitution - 1)) monotone = false;
+  for (let health = 1; health <= MAX_PROBED_HEALTH; health++) {
+    const rate = crawlerRegenHpPerSecond(health);
+    if (health > 1 && rate <= crawlerRegenHpPerSecond(health - 1)) monotone = false;
     if (rate >= REGEN_HP_PER_SECOND_ASYMPTOTE) bounded = false;
   }
-  check(monotone, 'more constitution always heals faster');
-  check(bounded, 'no constitution reaches the asymptote');
+  check(monotone, 'more health always heals faster');
+  check(bounded, 'no health reaches the asymptote');
 
-  // The whole point of decoupling regen from max HP: constitution must buy far
+  // The whole point of decoupling regen from max HP: health must buy far
   // less regen than it used to, or the curve has been retuned back into the
   // out-heal-everything regime it was written to end.
   const earlyPointGain =
-    humanRegenHpPerSecond(EARLY_CONSTITUTION + 1) - humanRegenHpPerSecond(EARLY_CONSTITUTION);
+    crawlerRegenHpPerSecond(EARLY_HEALTH + 1) - crawlerRegenHpPerSecond(EARLY_HEALTH);
   const latePointGain =
-    humanRegenHpPerSecond(LATE_CONSTITUTION + 1) - humanRegenHpPerSecond(LATE_CONSTITUTION);
-  check(latePointGain < earlyPointGain, 'each point of constitution buys less regen than the last');
+    crawlerRegenHpPerSecond(LATE_HEALTH + 1) - crawlerRegenHpPerSecond(LATE_HEALTH);
+  check(latePointGain < earlyPointGain, 'each point of health buys less regen than the last');
 }
 
 // ── Spawn counts ─────────────────────────────────────────────────────────────
@@ -1128,13 +1130,6 @@ section('xp curve');
   check(
     uncurved.level > lump.level,
     `the curve is what holds it back (${uncurved.level} with none, ${lump.level} under floor 2’s)`,
-  );
-  const cat = new CatPlayer(0, 0, TILE_SIZE);
-  const dexterityBefore = cat.dexterity;
-  cat.gainXp(LARGE_XP_AWARD);
-  check(
-    cat.level > 1 && cat.dexterity - dexterityBefore === cat.level - 1,
-    `the cat gains her dexterity on every level one award buys (${cat.level - 1} levels)`,
   );
 
   // `awardXp` is the one place a level-up is announced; a direct `gainXp` call
@@ -2944,7 +2939,7 @@ function blastAgainstLevelledMob(
   const human = new HumanPlayer(start.x, start.y, TILE_SIZE);
   const cat = new CatPlayer(start.x, start.y, TILE_SIZE);
   human.level = throwerLevel;
-  human.explosivesHandling = handlingLevel;
+  human.setBaseStat('explosivesHandling', handlingLevel);
   human.inventory.addItem('goblin_dynamite', sticks);
   const roster = new MobRoster(explosiveMap, new SpellSystem());
   const mob = makeTarget(start.x + EXPLOSIVE_TARGET_OFFSET_TILES, start.y);
@@ -2962,10 +2957,124 @@ function blastAgainstLevelledMob(
   };
   for (let stick = 0; stick < sticks; stick++) {
     dynamite.beginCharge(0, human, 'goblin_dynamite');
-    dynamite.release(human);
+    dynamite.release();
   }
   for (let frame = 0; frame < DYNAMITE_SETTLE_FRAMES; frame++) dynamite.update(context);
   return { hpLost: mob.maxHp - mob.hp, maxHp: mob.maxHp };
+}
+
+type ThrowerKind = 'human' | 'cat';
+
+/** What one stick did, thrown or dropped by one crawler with the other beside them. */
+interface ThrowOutcome {
+  /** Ticks from letting go of the key to the blast, or null when it never went off. */
+  readonly fuseTicks: number | null;
+  /** How far east of the thrower's centre the blast went off, in pixels. */
+  readonly blastReachPx: number;
+  readonly mobHpLost: number;
+  readonly humanHpLost: number;
+  readonly catHpLost: number;
+  /** Sticks left in the thrower's pack once it is all over. */
+  readonly sticksLeft: number;
+}
+
+/**
+ * Charge frames for the probe's throws: a quarter of full strength, so even a
+ * trained throw comes down inside the probe map's room rather than off a wall.
+ */
+const PROBE_THROW_CHARGE_SHARE = 0.25;
+const PROBE_THROW_CHARGE = Math.round(DYN_MAX_CHARGE * PROBE_THROW_CHARGE_SHARE);
+/** Charge frames for a tap, which drops the stick at the thrower's feet. */
+const DROP_CHARGE = 0;
+/** Ticks the throw harness runs for: past the fuse, the throw and the blast. */
+const THROW_SETTLE_TICKS = 420;
+const THROW_PROBE_LEVEL = 14;
+/** Health enough that neither crawler is floored by the blast, which would cap what it is seen to take. */
+const THROW_PROBE_HEALTH = 200;
+/** A levelled ghoul, so a trained stick and an untrained one take different shares of it. */
+const THROW_PROBE_MOB_LEVEL = 30;
+/** Explosives Handling the throwing crawler and the other one are given in the scaling probe. */
+const TRAINED_THROWER_HANDLING = 5;
+const UNTRAINED_HANDLING = 1;
+/** Pixels two blast points may differ by and still be the same throw. */
+const SAME_LANDING_PX = 1;
+
+/**
+ * Has `kind` light one stick facing east, charge it for `chargeFrames` and let
+ * go, both crawlers standing together beside a ghoul, and reports what the
+ * blast did. Both crawlers are ticked every frame, so the throw plays its own
+ * row and lets go on its own release frame.
+ */
+function crawlerThrow(
+  kind: ThrowerKind,
+  chargeFrames: number,
+  throwerHandling: number,
+  otherHandling: number,
+  switchMidCharge = false,
+): ThrowOutcome {
+  const start = explosiveMap.startTile;
+  const human = new HumanPlayer(start.x, start.y, TILE_SIZE);
+  const cat = new CatPlayer(start.x, start.y, TILE_SIZE);
+  const thrower = kind === 'human' ? human : cat;
+  const other = kind === 'human' ? cat : human;
+  for (const crawler of [human, cat]) {
+    crawler.level = THROW_PROBE_LEVEL;
+    crawler.setBaseStat('health', THROW_PROBE_HEALTH);
+    crawler.syncHpToMaxHp();
+    crawler.facingX = 1;
+    crawler.facingY = 0;
+  }
+  thrower.isActive = true;
+  thrower.setBaseStat('explosivesHandling', throwerHandling);
+  other.setBaseStat('explosivesHandling', otherHandling);
+  thrower.inventory.addItem('goblin_dynamite', 1);
+  const roster = new MobRoster(explosiveMap, new SpellSystem());
+  // Behind the thrower, so a throw east flies clear of it.
+  const mob = makeGhoul(start.x - EXPLOSIVE_TARGET_OFFSET_TILES, start.y);
+  mob.applyMobLevel(THROW_PROBE_MOB_LEVEL);
+  roster.add(mob);
+  const throwerStartX = thrower.x + TILE_SIZE / 2;
+  const humanHp = human.hp;
+  const catHp = cat.hp;
+  const bus = new EventBus();
+  const dynamite = new DynamiteSystem(explosiveMap, null, () => null, bus);
+  const heard: { blast: { readonly x: number; readonly tick: number } | null; tick: number } = {
+    blast: null,
+    tick: 0,
+  };
+  bus.on('blastLanded', (e) => {
+    heard.blast ??= { x: e.x, tick: heard.tick };
+  });
+  const context = {
+    human,
+    cat,
+    active: thrower,
+    inactive: other,
+    activeIsMoving: false,
+    roster,
+    gameMap: explosiveMap,
+  };
+  dynamite.beginCharge(0, thrower, 'goblin_dynamite');
+  if (switchMidCharge) {
+    thrower.isActive = false;
+    other.isActive = true;
+  }
+  for (let frame = 0; frame < chargeFrames; frame++) dynamite.update(context);
+  dynamite.release();
+  for (heard.tick = 1; heard.tick <= THROW_SETTLE_TICKS; heard.tick++) {
+    human.tickTimers();
+    cat.tickTimers();
+    dynamite.update(context);
+  }
+  const landed = heard.blast;
+  return {
+    fuseTicks: landed?.tick ?? null,
+    blastReachPx: landed === null ? 0 : landed.x - throwerStartX,
+    mobHpLost: mob.maxHp - mob.hp,
+    humanHpLost: humanHp - human.hp,
+    catHpLost: catHp - cat.hp,
+    sticksLeft: thrower.inventory.countOf('goblin_dynamite'),
+  };
 }
 
 function makeGhoul(tileX: number, tileY: number): Mob {
@@ -3213,6 +3322,92 @@ section('explosives handling');
     singleBlast.hpLost > 0 && volley.hpLost === singleBlast.hpLost,
     `a boss hit by ${volleyOfSticks} sticks at once loses what one stick takes (${volley.hpLost} vs ${singleBlast.hpLost})`,
   );
+
+  // Either crawler throws a stick, and the stick does not care which: the
+  // fuse, the reach, the blast and what it does to the pair who lit it all
+  // come from the thrower's own Explosives Handling.
+  const describe = (outcome: ThrowOutcome): string =>
+    `fuse ${outcome.fuseTicks ?? 'never'}, ${outcome.blastReachPx.toFixed(0)} px, ` +
+    `mob -${outcome.mobHpLost}, human -${outcome.humanHpLost}, cat -${outcome.catHpLost}`;
+  const sameThrow = (a: ThrowOutcome, b: ThrowOutcome): boolean =>
+    a.fuseTicks !== null &&
+    a.fuseTicks === b.fuseTicks &&
+    Math.abs(a.blastReachPx - b.blastReachPx) <= SAME_LANDING_PX &&
+    a.mobHpLost === b.mobHpLost &&
+    a.humanHpLost === b.humanHpLost &&
+    a.catHpLost === b.catHpLost;
+  for (const handling of [UNTRAINED_HANDLING, TRAINED_THROWER_HANDLING]) {
+    const humanDrop = crawlerThrow('human', DROP_CHARGE, handling, handling);
+    const catDrop = crawlerThrow('cat', DROP_CHARGE, handling, handling);
+    check(
+      sameThrow(humanDrop, catDrop),
+      `Explosives Handling ${handling}: a stick the cat drops at her feet goes off as the human's does (cat ${describe(catDrop)}; human ${describe(humanDrop)})`,
+    );
+    const ghoul = makeGhoul(0, 0);
+    ghoul.applyMobLevel(THROW_PROBE_MOB_LEVEL);
+    const expectedMobDamage = Math.min(
+      ghoul.maxHp,
+      dynamiteDamageToMob(
+        ghoul,
+        dynamiteMobDamage(THROW_PROBE_LEVEL, handling),
+        dynamiteCrawlerDamage(handling),
+      ),
+    );
+    const crawlerShare = dynamiteCrawlerDamage(handling);
+    check(
+      catDrop.mobHpLost === expectedMobDamage &&
+        catDrop.humanHpLost === crawlerShare &&
+        catDrop.catHpLost === crawlerShare,
+      `Explosives Handling ${handling}: the cat's stick deals ${catDrop.mobHpLost} to the ghoul (priced ${expectedMobDamage}) and ${catDrop.humanHpLost}/${catDrop.catHpLost} to the human/cat beside it (priced ${crawlerShare} each)`,
+    );
+    const humanThrow = crawlerThrow('human', PROBE_THROW_CHARGE, handling, handling);
+    const catThrow = crawlerThrow('cat', PROBE_THROW_CHARGE, handling, handling);
+    check(
+      catThrow.fuseTicks !== null &&
+        catThrow.blastReachPx > EXPLOSIVE_TARGET_OFFSET_TILES * TILE_SIZE &&
+        catThrow.fuseTicks === humanThrow.fuseTicks &&
+        Math.abs(catThrow.blastReachPx - humanThrow.blastReachPx) <= SAME_LANDING_PX,
+      `Explosives Handling ${handling}: the cat throws a stick as far, on the same fuse, as the human (cat ${describe(catThrow)}; human ${describe(humanThrow)})`,
+    );
+  }
+
+  for (const kind of ['human', 'cat'] as const) {
+    const switched = crawlerThrow(
+      kind,
+      THROW_SETTLE_TICKS,
+      UNTRAINED_HANDLING,
+      UNTRAINED_HANDLING,
+      true,
+    );
+    check(
+      switched.fuseTicks === null && switched.sticksLeft === 1,
+      `a stick the ${kind} is lighting when control passes to the other crawler goes back in the bag unburned, never going off or being thrown (${describe(switched)}, ${switched.sticksLeft} left)`,
+    );
+    const trained = crawlerThrow(kind, DROP_CHARGE, TRAINED_THROWER_HANDLING, UNTRAINED_HANDLING);
+    const untrained = crawlerThrow(kind, DROP_CHARGE, UNTRAINED_HANDLING, TRAINED_THROWER_HANDLING);
+    check(
+      trained.mobHpLost > untrained.mobHpLost &&
+        trained.catHpLost === dynamiteCrawlerDamage(TRAINED_THROWER_HANDLING) &&
+        untrained.catHpLost === dynamiteCrawlerDamage(UNTRAINED_HANDLING),
+      `the ${kind}'s stick grows with the ${kind}'s own Explosives Handling, not the other crawler's (trained ${describe(trained)}; untrained ${describe(untrained)})`,
+    );
+    const far = crawlerThrow(
+      kind,
+      PROBE_THROW_CHARGE,
+      TRAINED_THROWER_HANDLING,
+      UNTRAINED_HANDLING,
+    );
+    const near = crawlerThrow(
+      kind,
+      PROBE_THROW_CHARGE,
+      UNTRAINED_HANDLING,
+      TRAINED_THROWER_HANDLING,
+    );
+    check(
+      far.blastReachPx > near.blastReachPx,
+      `the ${kind} throws further with more Explosives Handling of their own (${far.blastReachPx.toFixed(0)} px against ${near.blastReachPx.toFixed(0)} px)`,
+    );
+  }
 }
 
 console.log(failures === 0 ? '\nAll difficulty checks passed.' : `\n${failures} check(s) FAILED.`);

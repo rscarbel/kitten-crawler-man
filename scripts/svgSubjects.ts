@@ -511,18 +511,22 @@ export const SUBJECTS: readonly SvgSubject[] = [
   },
   {
     // Painted on the biped rig, so the same raster exception as the human applies.
-    name: 'incubus',
+    name: 'demon_liaison',
     views: async (frame) => {
-      const { INCUBUS_FIGURE, INCUBUS_ROLES, INCUBUS_VIEWS, incubusStateName } =
-        await import('../src/sprites/art/incubusFigure.js');
-      return INCUBUS_ROLES.flatMap((role) =>
-        INCUBUS_VIEWS.map((view): SvgView => {
-          const state = incubusStateName(role, view);
+      const {
+        DEMON_LIAISON_FIGURE,
+        DEMON_LIAISON_ROLES,
+        DEMON_LIAISON_VIEWS,
+        demonLiaisonStateName,
+      } = await import('../src/sprites/art/demonLiaisonFigure.js');
+      return DEMON_LIAISON_ROLES.flatMap((role) =>
+        DEMON_LIAISON_VIEWS.map((view): SvgView => {
+          const state = demonLiaisonStateName(role, view);
           return {
             name: state,
             paint: ({ dom, unit }) =>
-              inUnitSpace(dom, unit / INCUBUS_FIGURE.tileScale, (ctx) =>
-                INCUBUS_FIGURE.paintFrame(ctx, state, frame),
+              inUnitSpace(dom, unit / DEMON_LIAISON_FIGURE.tileScale, (ctx) =>
+                DEMON_LIAISON_FIGURE.paintFrame(ctx, state, frame),
               ),
           };
         }),

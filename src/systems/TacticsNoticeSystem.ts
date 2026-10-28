@@ -4,9 +4,8 @@ import type { Player } from '../Player';
 import { TACTICS_TRAITS, type TacticsTrait } from '../creatures/tactics/tacticsTraits';
 
 /**
- * One line per trait, fired the first time the party meets it. Written in the
- * System's own voice — dry, bureaucratic, unbothered by what it's describing.
- * Kept short: these ride the non-wrapping hotbar toast, which clips rather
+ * One line per trait, fired the first time the party meets it: dry and
+ * factual, a readout rather than a warning shouted by anyone. Kept short: these ride the non-wrapping hotbar toast, which clips rather
  * than wraps a line that runs past a phone-width canvas.
  */
 const TACTICS_NOTICE_LINES: Record<TacticsTrait, string> = {

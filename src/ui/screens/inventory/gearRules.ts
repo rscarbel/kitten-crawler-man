@@ -16,17 +16,17 @@ import {
   wearerOf,
   type EquipSlot,
   type InventoryItem,
-  type ResistanceType,
   type SubSlotId,
 } from '../../../core/items/defs/ItemDefs';
 import { SKILL_IDS, type CrawlerKind } from '../../../core/skills/SkillManager';
 import { gearModifiers, itemTraits, type GearWearer } from '../../../gear/gearHooks';
 import { describeTrait } from '../../../gear/traits';
-import { ALL_STATS, type StatName } from '../../../Player';
+import { ALL_STATS, type StatId } from '../../../core/party/stats';
 import {
   CANCELS_MOMENTUM_LINE,
   fairyImmunityLine,
   meleeOnlyStatLine,
+  RESISTANCE_LABELS,
   regenLine,
   setProgressLines,
   skillBonusLine,
@@ -124,25 +124,11 @@ export function equipRefusal(
 }
 
 export interface StatDelta {
-  readonly stat: StatName;
+  readonly stat: StatId;
   readonly delta: number;
 }
 
-export const STAT_LABELS: Readonly<Record<StatName, string>> = {
-  strength: 'Strength',
-  intelligence: 'Intelligence',
-  constitution: 'Constitution',
-  dexterity: 'Dexterity',
-};
-
-export const STAT_ABBREVIATIONS: Readonly<Record<StatName, string>> = {
-  strength: 'STR',
-  intelligence: 'INT',
-  constitution: 'CON',
-  dexterity: 'DEX',
-};
-
-function statOf(item: InventoryItem | null, stat: StatName): number {
+function statOf(item: InventoryItem | null, stat: StatId): number {
   return item?.statBonus?.[stat] ?? 0;
 }
 
@@ -165,12 +151,6 @@ export function armorDeltas(
   });
 }
 
-const RESISTANCE_NAMES: Readonly<Record<ResistanceType, string>> = {
-  poison: 'Poison',
-  ice: 'Ice',
-  piercing: 'Piercing',
-};
-
 /**
  * The worn-gear summary: real totals from the equipment aggregators rather
  * than a merge of per-item lines, because two items that each reflect 10%
@@ -180,7 +160,7 @@ export function wornGearSummary(wearer: GearWearer): string[] {
   const lines: string[] = [];
   const equipment = wearer.inventory.equipment;
   const resisted = ALL_RESISTANCE_TYPES.filter((type) => equipment.hasResistance(type)).map(
-    (type) => RESISTANCE_NAMES[type],
+    (type) => RESISTANCE_LABELS[type],
   );
   if (resisted.length > 0) lines.push(`Resists ${resisted.join(', ')}`);
   const fairyImmunity = fairyImmunityLine(

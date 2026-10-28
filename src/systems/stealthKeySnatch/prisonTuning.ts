@@ -115,9 +115,9 @@ export type PrisonNoiseKind = PlayerDamageType;
 export const PRISON_NOISE_RADIUS_TILES: Readonly<Record<PrisonNoiseKind, number>> = {
   melee: 4,
   slingshot: 4,
-  shell: 3,
+  energy_shield: 3,
   missile: 5,
-  smush: 6,
+  seismic_stomp: 6,
   explosion: 10,
 };
 

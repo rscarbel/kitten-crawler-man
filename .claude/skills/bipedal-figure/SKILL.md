@@ -1,6 +1,6 @@
 ---
 name: bipedal-figure
-description: Draw or redraw a believable two-legged character (human, goblin, clown, humanoid boss/NPC) as procedurally painted sprite art in Kitten Crawler Man — the rig/pose/view contract, the painter/figure/gate/harness pipeline, the image-review loop, and the anatomy traps that only show up in a picture. Use whenever a bipedal character needs new art, a new animation row, or a believability fix. The four-file painter pipeline it describes is the same for any creature; only the anatomy half is biped-specific. NOT for choosing or wiring the town's citizen looks (use add-person), for ground and floor materials (use add-ground-tile), for props and environment art, which are painted from sheet plans in src/sprites/sheets/ (use add-sprite), or for a weapon, tool, prop or garment the human or the cat holds or wears within the existing archetypes and body parts (use add-gear).
+description: Draw or redraw a believable two-legged character (human, goblin, clown, humanoid boss/NPC) as procedurally painted sprite art in Kitten Crawler World — the rig/pose/view contract, the painter/figure/gate/harness pipeline, the image-review loop, and the anatomy traps that only show up in a picture. Use whenever a bipedal character needs new art, a new animation row, or a believability fix. The four-file painter pipeline it describes is the same for any creature; only the anatomy half is biped-specific. NOT for choosing or wiring the town's citizen looks (use add-person), for ground and floor materials (use add-ground-tile), for props and environment art, which are painted from sheet plans in src/sprites/sheets/ (use add-sprite), or for a weapon, tool, prop or garment the human or the cat holds or wears within the existing archetypes and body parts (use add-gear).
 ---
 
 # Bipedal Figure Art
@@ -100,8 +100,8 @@ Because the human rig's movement is the only convincing movement in the game, ot
 built **on his rig** rather than on a rig of their own. They pose with his choreography
 (`human/idles.ts`, `human/locomotion.ts`, `human/actionsMisc.ts`) and paint with
 `drawBipedFront` / `drawBipedSide` / `drawBipedBack`. The town's adult citizens
-(`townCastFigure.ts`), the human named residents and Mordecai's Incubus
-(`incubusFigure.ts`) are built this way.
+(`townCastFigure.ts`), the human named residents and the Demon Liaison
+(`demonLiaisonFigure.ts`) are built this way.
 
 - **Dressing him differently is a `HumanLook`.** Skin, hair, iris, garment ramp, torso
   and sleeve cut, hairstyle, facial hair, expression, build and base garments live on a
@@ -109,7 +109,7 @@ built **on his rig** rather than on a rig of their own. They pose with his chore
   `RYAN_LOOK` in `looks/humans/`). Spread `RIG_LOOK` (`looks/humans/rig.ts`: every build
   field at the rig's own value, so no player's height, shoulders or head leaks in; its
   garment cut is `RIG_GARMENT_CUT`) and override what differs (`castHumanLook`
-  in `townCastFigure.ts`, `INCUBUS_LOOK` in `incubusFigure.ts`), and pass it as
+  in `townCastFigure.ts`, `DEMON_LIAISON_LOOK` in `demonLiaisonFigure.ts`), and pass it as
   `BipedComposeOptions.look`. Every rig painter and attachment is handed that look, so a
   painter reads colours and cuts from its `look` argument, never from an import of a player look's
   palette. The rig holds no look of its own, so looks bake side by side. Give each look
@@ -129,10 +129,10 @@ built **on his rig** rather than on a rig of their own. They pose with his chore
   and slab shadows; painted over the finished figure they read as stickers. With none, a
   pose is the human rig unchanged.
 
-- **The worked example** is the Incubus: `incubusArt.ts` holds the horns, folded wings,
+- **The worked example** is the Demon Liaison: `demonLiaisonArt.ts` holds the horns, folded wings,
   forked tail, shirt, sash, trousers and boots as attachments in figure units, shaded
-  with the human's `shadeForm`. `incubusFigure.ts` holds the rows. `npm run
-render:mordecai-incubus` runs its gates and renders him beside the human crawler and the residents.
+  with the human's `shadeForm`. `demonLiaisonFigure.ts` holds the rows. `npm run
+render:demon-liaison` runs its gates and renders him beside the human crawler and the residents.
   Silhouette carries the read at 32 px: horns as two points over the head, wings as two
   peaks over the shoulders, the tail as the curl beside the legs.
 

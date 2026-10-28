@@ -1,21 +1,21 @@
 /**
  * The slot machine's reel symbols as vector art: cherries, a lemon, a bell, a
- * BAR plate, Mongo on his disc, a jewelled tiara, a crawler's boots, a golden
+ * BAR plate, Deinonychus on his disc, a jewelled tiara, a crawler's boots, a golden
  * 7, the gold dagger-seal wild and the glowing loot-box scatter. Painted into
  * a square cell; `ui/casino/slots/slotSymbols` bakes them per size so the
  * reels only ever blit.
  */
 
 import { listAt } from '../../systems/casino/poker/npc/listAt';
-import { HIDE, pt, type Pt } from './mongoArt';
+import { HIDE, pt, type Pt } from './deinonychusArt';
 import type { SlotSymbol } from '../../systems/casino/slots/slotSymbols';
 import { UI_FONT_STACK } from '../../ui/theme/fonts';
 import { slotsInk } from '../../ui/theme/slotsInk';
 import { worldText } from '../../ui/world/worldText';
 
 const ink = slotsInk.symbols;
-/** Mongo's display feathers. */
-const MONGO_CREST = ink.mongoCrest;
+/** Deinonychus's orange neck hackle. */
+const DEINONYCHUS_HACKLE = ink.deinonychusHackle;
 
 const HALF = 0.5;
 const TWO_PI = Math.PI * 2;
@@ -180,24 +180,26 @@ const BAR = {
   textSize: 0.24,
 } as const;
 
-/** Mongo's disc; the ring and clip are shares of the disc's radius. */
-const MONGO_DISC = {
+/** Deinonychus's disc; the ring and clip are shares of the disc's radius. */
+const DEINONYCHUS_DISC = {
   radius: 0.42,
   ringRadius: 0.88,
   ringWidth: 0.03,
   clipRadius: 0.86,
 } as const;
 
-const MONGO_CREST_OUTLINE: UnitPath = {
-  from: pt(-0.06, -0.26),
+/** The hackle lies back down the nape from behind the skull; the head itself has no crest. */
+const DEINONYCHUS_HACKLE_OUTLINE: UnitPath = {
+  from: pt(-0.16, -0.2),
   segments: [
-    { quad: [pt(-0.18, -0.38), pt(-0.24, -0.22)] },
-    { quad: [pt(-0.32, -0.36), pt(-0.34, -0.12)] },
+    { quad: [pt(-0.3, -0.2), pt(-0.36, -0.06)] },
+    { quad: [pt(-0.46, 0.02), pt(-0.4, 0.14)] },
+    { quad: [pt(-0.48, 0.24), pt(-0.38, 0.34)] },
   ],
 };
 
 /** Neck, crown, snout and jaw, back to the neck. */
-const MONGO_HEAD_OUTLINE: UnitPath = {
+const DEINONYCHUS_HEAD_OUTLINE: UnitPath = {
   from: pt(-0.3, 0.34),
   segments: [
     { quad: [pt(-0.36, -0.06), pt(-0.18, -0.24)] },
@@ -209,7 +211,7 @@ const MONGO_HEAD_OUTLINE: UnitPath = {
   ],
 };
 
-const MONGO_HEAD = {
+const DEINONYCHUS_HEAD = {
   hideTop: -0.3,
   hideBottom: 0.3,
   mouth: { from: pt(-0.02, 0.03), bow: pt(0.16, 0.1), to: pt(0.33, 0.02), width: 0.025 },
@@ -555,55 +557,55 @@ const paintBar: Painter = (ctx, s) => {
   });
 };
 
-const paintMongo: Painter = (ctx, s) => {
+const paintDeinonychus: Painter = (ctx, s) => {
   dropShadow(ctx, s);
-  const r = s * MONGO_DISC.radius;
+  const r = s * DEINONYCHUS_DISC.radius;
   ctx.beginPath();
   ctx.arc(0, 0, r, 0, TWO_PI);
   outlined(
     ctx,
     s,
     radial(ctx, 0, 0, r, [
-      [0, ink.mongoDiscLight],
-      [0.65, ink.mongoDisc],
-      [1, ink.mongoDiscDark],
+      [0, ink.deinonychusDiscLight],
+      [0.65, ink.deinonychusDisc],
+      [1, ink.deinonychusDiscDark],
     ]),
   );
   ctx.beginPath();
-  ctx.arc(0, 0, r * MONGO_DISC.ringRadius, 0, TWO_PI);
-  ctx.lineWidth = s * MONGO_DISC.ringWidth;
+  ctx.arc(0, 0, r * DEINONYCHUS_DISC.ringRadius, 0, TWO_PI);
+  ctx.lineWidth = s * DEINONYCHUS_DISC.ringWidth;
   ctx.strokeStyle = ink.sevenRim;
   ctx.stroke();
   ctx.save();
   ctx.beginPath();
-  ctx.arc(0, 0, r * MONGO_DISC.clipRadius, 0, TWO_PI);
+  ctx.arc(0, 0, r * DEINONYCHUS_DISC.clipRadius, 0, TWO_PI);
   ctx.clip();
-  paintMongoHead(ctx, s);
+  paintDeinonychusHead(ctx, s);
   ctx.restore();
 };
 
-/** Mongo's head in profile, grinning: his own hide colours, his pink crest and a big bright eye. */
-function paintMongoHead(ctx: CanvasRenderingContext2D, s: number): void {
-  traceUnitPath(ctx, s, MONGO_CREST_OUTLINE);
-  outlined(ctx, s, MONGO_CREST);
-  traceUnitPath(ctx, s, MONGO_HEAD_OUTLINE);
+/** Deinonychus's head in profile, grinning: his own coat colours, his orange hackle and a big bright eye. */
+function paintDeinonychusHead(ctx: CanvasRenderingContext2D, s: number): void {
+  traceUnitPath(ctx, s, DEINONYCHUS_HACKLE_OUTLINE);
+  outlined(ctx, s, DEINONYCHUS_HACKLE);
+  traceUnitPath(ctx, s, DEINONYCHUS_HEAD_OUTLINE);
   outlined(
     ctx,
     s,
-    linear(ctx, 0, s * MONGO_HEAD.hideTop, 0, s * MONGO_HEAD.hideBottom, [
+    linear(ctx, 0, s * DEINONYCHUS_HEAD.hideTop, 0, s * DEINONYCHUS_HEAD.hideBottom, [
       [0, HIDE.light],
       [0.5, HIDE.base],
       [1, HIDE.back],
     ]),
   );
-  const { mouth, teeth, belly, eye, pupil, eyeShine, nostril } = MONGO_HEAD;
+  const { mouth, teeth, belly, eye, pupil, eyeShine, nostril } = DEINONYCHUS_HEAD;
   ctx.beginPath();
   ctx.moveTo(s * mouth.from.x, s * mouth.from.y);
   ctx.quadraticCurveTo(s * mouth.bow.x, s * mouth.bow.y, s * mouth.to.x, s * mouth.to.y);
   ctx.lineWidth = s * mouth.width;
   ctx.strokeStyle = ink.outline;
   ctx.stroke();
-  ctx.fillStyle = ink.mongoTooth;
+  ctx.fillStyle = ink.deinonychusTooth;
   for (let i = 0; i < teeth.count; i++) {
     const x = s * teeth.firstX + i * s * teeth.spacing;
     const gumY = s * teeth.gumY + i * s * teeth.stepDown;
@@ -620,7 +622,7 @@ function paintMongoHead(ctx: CanvasRenderingContext2D, s: number): void {
   ctx.fill();
   ctx.beginPath();
   ctx.arc(s * eye.x, s * eye.y, s * eye.radius, 0, TWO_PI);
-  outlined(ctx, s, ink.mongoEye);
+  outlined(ctx, s, ink.deinonychusEye);
   ctx.beginPath();
   ctx.arc(s * pupil.x, s * pupil.y, s * pupil.radius, 0, TWO_PI);
   ctx.fillStyle = ink.outline;
@@ -980,7 +982,7 @@ const PAINTERS: Readonly<Record<SlotSymbol, Painter>> = {
   lemon: paintLemon,
   bell: paintBell,
   bar: paintBar,
-  mongo: paintMongo,
+  deinonychus: paintDeinonychus,
   tiara: paintTiara,
   boots: paintBoots,
   seven: paintSeven,

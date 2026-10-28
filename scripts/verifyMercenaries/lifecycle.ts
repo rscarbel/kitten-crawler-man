@@ -13,7 +13,7 @@
  *   band; an owner who leaves mid-fight is followed home, and the leash alone
  *   holds a hireling near her when a fight is still in sight.
  * - Credit: a kill landed by the hireling pays its owner the top XP share.
- * - Friendly fire: through a fight with crawlers and Mongo pressed against it,
+ * - Friendly fire: through a fight with crawlers and Deinonychus pressed against it,
  *   no ally loses HP to the hireling, while the hostiles do.
  * - Tumbledown's boulder lands on a hostile out of fist reach.
  * - The contract: a checkpoint taken on a floor that has since ended never
@@ -32,7 +32,7 @@ import { GameMap } from '../../src/map/GameMap';
 import { FloorTypeValue, type TileContent } from '../../src/map/tileTypes';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
-import { Mongo } from '../../src/creatures/Mongo';
+import { Deinonychus } from '../../src/creatures/Deinonychus';
 import { Mercenary } from '../../src/creatures/Mercenary';
 import { PARTY_CONTACT_SLACK_RATIO, PARTY_HUDDLE_TILES, type Mob } from '../../src/creatures/Mob';
 import type { Player } from '../../src/Player';
@@ -65,7 +65,7 @@ import {
   DIFFICULTY_PROFILES,
 } from '../../src/core/difficulty/difficultyProfiles';
 import { referenceStats } from '../../src/core/party/referenceCrawler';
-import { ALL_STATS } from '../../src/Player';
+import { ALL_STATS } from '../../src/core/party/stats';
 import { mulberry32 } from '../../src/sprites/person/rng';
 import { findNearbyWalkableTile } from '../../src/map/findWalkableTile';
 import { setViewportSize } from '../../src/core/rendering/Viewport';
@@ -261,13 +261,13 @@ function addDummy(scene: Scene, tileX: number, tileY: number): Mob {
   return mob;
 }
 
-/** Runs the Mongo constructor the way `MongoSystem` does: at full health for his level. */
-function makeMongo(owner: Player, tileX: number, tileY: number): Mongo {
-  const probe = new Mongo(tileX, tileY, TILE_SIZE, owner, MONGO_LEVEL, 1);
-  return new Mongo(tileX, tileY, TILE_SIZE, owner, MONGO_LEVEL, probe.maxHp);
+/** Runs the Deinonychus constructor the way `DeinonychusSystem` does: at full health for his level. */
+function makeDeinonychus(owner: Player, tileX: number, tileY: number): Deinonychus {
+  const probe = new Deinonychus(tileX, tileY, TILE_SIZE, owner, DEINONYCHUS_LEVEL, 1);
+  return new Deinonychus(tileX, tileY, TILE_SIZE, owner, DEINONYCHUS_LEVEL, probe.maxHp);
 }
 
-const MONGO_LEVEL = 1;
+const DEINONYCHUS_LEVEL = 1;
 
 // ── Spawning ─────────────────────────────────────────────────────────────────
 
@@ -983,16 +983,16 @@ function checkHomecoming(report: LifecycleGateReporter): void {
   );
 }
 
-// ── Coming home with Mongo in the way ────────────────────────────────────────
+// ── Coming home with Deinonychus in the way ────────────────────────────────────────
 
-/** The human waits this far off, out of the huddle, so only Mongo is in the way. */
-const MONGO_HOMECOMING_HUMAN_OFFSET_TILES = 8;
-/** Mongo is summoned a tile toward the hire from the cat, before he is moved to its spot. */
-const MONGO_HOMECOMING_OFFSET_TILES = 1;
+/** The human waits this far off, out of the huddle, so only Deinonychus is in the way. */
+const DEINONYCHUS_HOMECOMING_HUMAN_OFFSET_TILES = 8;
+/** Deinonychus is summoned a tile toward the hire from the cat, before he is moved to its spot. */
+const DEINONYCHUS_HOMECOMING_OFFSET_TILES = 1;
 
 /**
  * A broken rest rule that counts only a crawler as a body in the way, so
- * Mongo parked on the hire's line home gets walked into.
+ * Deinonychus parked on the hire's line home gets walked into.
  */
 const restsAgainstCrawlersOnly: RestRule = (merc) => {
   const toOwner = tilesBetween(merc, merc.owner);
@@ -1009,7 +1009,7 @@ const restsAgainstCrawlersOnly: RestRule = (merc) => {
 };
 
 /**
- * The cat is the active crawler and the hire's owner; Mongo stands between her
+ * The cat is the active crawler and the hire's owner; Deinonychus stands between her
  * and the hire, which comes home from further out on that side.
  *
  * He is held on the spot the hire's own walk home would end on — its follow
@@ -1021,7 +1021,7 @@ const restsAgainstCrawlersOnly: RestRule = (merc) => {
  * body further than {@link PARTY_HUDDLE_TILES} from the owner is not one the
  * hire rests against at all.
  */
-function homecomingPastMongo(
+function homecomingPastDeinonychus(
   id: MercenaryTemplateId,
   map: GameMap,
   ownerTile: { readonly x: number; readonly y: number },
@@ -1035,61 +1035,62 @@ function homecomingPastMongo(
     ...built,
     ctx: { ...built.ctx, active: built.cat, inactive: built.human },
   };
-  scene.human.x = scene.cat.x - TILE_SIZE * from.x * MONGO_HOMECOMING_HUMAN_OFFSET_TILES;
-  scene.human.y = scene.cat.y - TILE_SIZE * from.y * MONGO_HOMECOMING_HUMAN_OFFSET_TILES;
-  const mongo = makeMongo(
+  scene.human.x = scene.cat.x - TILE_SIZE * from.x * DEINONYCHUS_HOMECOMING_HUMAN_OFFSET_TILES;
+  scene.human.y = scene.cat.y - TILE_SIZE * from.y * DEINONYCHUS_HOMECOMING_HUMAN_OFFSET_TILES;
+  const deinonychus = makeDeinonychus(
     scene.cat,
-    ownerTile.x + from.x * MONGO_HOMECOMING_OFFSET_TILES,
-    ownerTile.y + from.y * MONGO_HOMECOMING_OFFSET_TILES,
+    ownerTile.x + from.x * DEINONYCHUS_HOMECOMING_OFFSET_TILES,
+    ownerTile.y + from.y * DEINONYCHUS_HOMECOMING_OFFSET_TILES,
   );
-  scene.mobs.add(mongo);
-  scene.extras.push(mongo);
+  scene.mobs.add(deinonychus);
+  scene.extras.push(deinonychus);
   scene.system.update(scene.ctx);
   const merc = scene.system.activeMerc;
   if (merc === null) return null;
   withoutStuckRescue(merc);
   if (rule !== undefined)
     Object.defineProperty(merc, 'restsAgainstParty', { value: () => rule(merc) });
-  const mongoTiles = merc.kit.followBand.stopTiles;
-  const mongoX = scene.cat.x + TILE_SIZE * from.x * mongoTiles;
-  const mongoY = scene.cat.y + TILE_SIZE * from.y * mongoTiles;
-  const holdMongo = (): void => {
-    const oldX = mongo.x;
-    const oldY = mongo.y;
-    mongo.x = mongoX;
-    mongo.y = mongoY;
-    scene.mobs.grid.move(mongo, oldX, oldY);
+  const deinonychusTiles = merc.kit.followBand.stopTiles;
+  const deinonychusX = scene.cat.x + TILE_SIZE * from.x * deinonychusTiles;
+  const deinonychusY = scene.cat.y + TILE_SIZE * from.y * deinonychusTiles;
+  const holdDeinonychus = (): void => {
+    const oldX = deinonychus.x;
+    const oldY = deinonychus.y;
+    deinonychus.x = deinonychusX;
+    deinonychus.y = deinonychusY;
+    scene.mobs.grid.move(deinonychus, oldX, oldY);
   };
-  mongo.aiHeld = true;
-  holdMongo();
-  const startTiles = mongoTiles + HOMECOMING_RUN_UP_TILES;
+  deinonychus.aiHeld = true;
+  holdDeinonychus();
+  const startTiles = deinonychusTiles + HOMECOMING_RUN_UP_TILES;
   merc.x = scene.cat.x + TILE_SIZE * from.x * startTiles;
   merc.y = scene.cat.y + TILE_SIZE * from.y * startTiles;
   let nearest = Number.POSITIVE_INFINITY;
   let toggles = 0;
   let wasMoving: boolean | null = null;
   for (let f = 0; f < HOMECOMING_FRAMES; f++) {
-    // What `MongoSystem.update` hands him every frame.
-    mongo.allMobs = scene.mobs.mobs;
+    // What `DeinonychusSystem.update` hands him every frame.
+    deinonychus.allMobs = scene.mobs.mobs;
     step(scene);
-    holdMongo();
+    holdDeinonychus();
     if (f < HOMECOMING_SETTLED_FRAME) continue;
-    for (const body of [scene.cat, mongo]) nearest = Math.min(nearest, tilesBetween(merc, body));
+    for (const body of [scene.cat, deinonychus])
+      nearest = Math.min(nearest, tilesBetween(merc, body));
     if (wasMoving !== null && merc.isMoving !== wasMoving) toggles++;
     wasMoving = merc.isMoving;
   }
-  const againstMongo =
-    tilesBetween(mongo, scene.cat) + SEPARATION_RADIUS_TILES * PARTY_CONTACT_SLACK_RATIO;
+  const againstDeinonychus =
+    tilesBetween(deinonychus, scene.cat) + SEPARATION_RADIUS_TILES * PARTY_CONTACT_SLACK_RATIO;
   return {
     nearestCrawlerTiles: nearest,
     gaitToggles: toggles,
     restTiles: tilesBetween(merc, scene.cat),
-    reachableTiles: Math.max(merc.kit.followBand.startTiles, againstMongo),
+    reachableTiles: Math.max(merc.kit.followBand.startTiles, againstDeinonychus),
   };
 }
 
-function checkHomecomingPastMongo(report: LifecycleGateReporter): void {
-  report.section('A hire coming home stops at Mongo in its way, and stays stopped');
+function checkHomecomingPastDeinonychus(report: LifecycleGateReporter): void {
+  report.section('A hire coming home stops at Deinonychus in its way, and stays stopped');
   const roomOwner = { x: HOMECOMING_OWNER_TILE_X, y: HOMECOMING_OWNER_TILE_Y };
   const laneOwner = { x: HOMECOMING_OWNER_TILE_X, y: LANE_ROW };
   for (const id of MERCENARY_TEMPLATE_IDS) {
@@ -1105,7 +1106,7 @@ function checkHomecomingPastMongo(report: LifecycleGateReporter): void {
           : [{ map: makeRoom, owner: roomOwner }];
       for (const { map, owner } of arrangements) {
         runs++;
-        const outcome = homecomingPastMongo(id, map(), owner, from);
+        const outcome = homecomingPastDeinonychus(id, map(), owner, from);
         if (!settledClear(outcome)) {
           const where = map === makeLane ? 'corridor' : 'open';
           failed.push(`${where}, from the ${from.label}: ${describeHomecoming(outcome)}`);
@@ -1114,10 +1115,10 @@ function checkHomecomingPastMongo(report: LifecycleGateReporter): void {
     }
     report.check(
       failed.length === 0,
-      `${id}: clear of the cat and Mongo, settled and as near as it can get in all ${runs} arrangements${failed.length > 0 ? `; not in: ${failed.join('; ')}` : ''}`,
+      `${id}: clear of the cat and Deinonychus, settled and as near as it can get in all ${runs} arrangements${failed.length > 0 ? `; not in: ${failed.join('; ')}` : ''}`,
     );
   }
-  const crawlersOnly = homecomingPastMongo(
+  const crawlersOnly = homecomingPastDeinonychus(
     'brother_anselm',
     makeRoom(),
     { x: HOMECOMING_OWNER_TILE_X, y: HOMECOMING_OWNER_TILE_Y },
@@ -1126,7 +1127,7 @@ function checkHomecomingPastMongo(report: LifecycleGateReporter): void {
   );
   report.checkCatches(
     settledClear(crawlersOnly),
-    `a rest that counts only crawlers is caught walking into Mongo (${describeHomecoming(crawlersOnly)})`,
+    `a rest that counts only crawlers is caught walking into Deinonychus (${describeHomecoming(crawlersOnly)})`,
   );
 }
 
@@ -1610,9 +1611,9 @@ const PACK_TILES: readonly (readonly [number, number])[] = [
   [PACK_NEAR_TILE_X, CORNER_TILE + 2],
   [PACK_FAR_TILE_X, CORNER_TILE + 1],
 ];
-/** Mongo stands in the pack, where an arrow or boulder aimed at it would find him. */
-const MONGO_TILE_X = PACK_FAR_TILE_X;
-const MONGO_TILE_Y = CORNER_TILE;
+/** Deinonychus stands in the pack, where an arrow or boulder aimed at it would find him. */
+const DEINONYCHUS_TILE_X = PACK_FAR_TILE_X;
+const DEINONYCHUS_TILE_Y = CORNER_TILE;
 const STRAY_BLOW_FRAME = 300;
 const STRAY_BLOW = 3;
 
@@ -1623,30 +1624,30 @@ interface BrawlOutcome {
 
 /**
  * A fight in a corner with both crawlers pressed against the hireling and
- * Mongo standing in the pack: every swing, stomp, arrow and boulder the
+ * Deinonychus standing in the pack: every swing, stomp, arrow and boulder the
  * kit has goes off with an ally in reach of it.
  */
 function brawl(id: MercenaryTemplateId, strayBlow = false): BrawlOutcome | null {
   const setup = cornerScene(id);
   if (setup === null) return null;
   const { scene, merc } = setup;
-  const mongo = makeMongo(scene.human, MONGO_TILE_X, MONGO_TILE_Y);
-  mongo.aiHeld = true;
-  scene.mobs.add(mongo);
-  scene.extras.push(mongo);
+  const deinonychus = makeDeinonychus(scene.human, DEINONYCHUS_TILE_X, DEINONYCHUS_TILE_Y);
+  deinonychus.aiHeld = true;
+  scene.mobs.add(deinonychus);
+  scene.extras.push(deinonychus);
   const offset = pinOffsetPx(id);
   const pinned = addDummy(scene, CORNER_TILE, CORNER_TILE);
   const pack = PACK_TILES.map(([x, y]) => addDummy(scene, x, y));
   const hostiles = [pinned, ...pack];
   const hostileStart = hostiles.map((mob) => mob.hp);
-  const allies: Player[] = [scene.human, scene.cat, mongo];
+  const allies: Player[] = [scene.human, scene.cat, deinonychus];
   const allyStart = allies.map((ally) => ally.hp);
 
   for (let f = 0; f < BRAWL_FRAMES; f++) {
     if (pinned.isAlive) pin(pinned, merc, offset);
     pin(scene.human, merc, { x: 0, y: PIN_OFFSET_PX });
     pin(scene.cat, merc, { x: PIN_OFFSET_PX, y: 0 });
-    placeAtTile(mongo, MONGO_TILE_X, MONGO_TILE_Y);
+    placeAtTile(deinonychus, DEINONYCHUS_TILE_X, DEINONYCHUS_TILE_Y);
     if (strayBlow && f === STRAY_BLOW_FRAME) {
       scene.cat.takeDamage(STRAY_BLOW, { kind: 'mob', mobType: 'goblin', undodgeable: true });
     }
@@ -1672,7 +1673,7 @@ function checkFriendlyFire(report: LifecycleGateReporter): void {
     const outcome = brawl(id);
     report.check(
       spareAllies(outcome),
-      `${id} fights a pack with the crawlers and Mongo in reach, and hurts only the pack (${describeBrawl(outcome)})`,
+      `${id} fights a pack with the crawlers and Deinonychus in reach, and hurts only the pack (${describeBrawl(outcome)})`,
     );
   }
   const stray = brawl('tumbledown', true);
@@ -2078,7 +2079,7 @@ function runLifecycleChecks(report: LifecycleGateReporter): void {
   checkWarp(report);
   checkPartyNotShoved(report);
   checkHomecoming(report);
-  checkHomecomingPastMongo(report);
+  checkHomecomingPastDeinonychus(report);
   checkLeavingACrawlerBehind(report);
   checkSlowDrift(report);
   checkFollowing(report);

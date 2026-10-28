@@ -1,11 +1,11 @@
 /**
  * The part of the human crawler's attack cow that outlives the creature.
  *
- * Like `MongoPetState`: the cow instance is thrown away at every door, stair
+ * Like `DeinonychusPetState`: the cow instance is thrown away at every door, stair
  * and despawn, so whether the party owns her, her health and her rest latch are
  * party state, threaded by reference through `DungeonSceneOptions` and the
  * interior scene so they survive floor changes and building entries. Owned
- * lives here too, unlike Mongo's unlock flag, because the cow is won inside a
+ * lives here too, unlike Deinonychus's unlock flag, because the cow is won inside a
  * building and the scene outside has to see the win when the party walks out.
  */
 export interface AttackCowState {

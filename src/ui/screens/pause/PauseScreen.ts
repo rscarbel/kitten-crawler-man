@@ -51,6 +51,7 @@ import {
   type TrackedControl,
 } from './section';
 import { settingsSection } from './settingsSection';
+import type { PetNames } from '../../../core/party/petNames';
 
 /** What the scene hands the screen each frame it draws. */
 export interface PauseFrame {
@@ -81,6 +82,7 @@ export interface PauseScreenDeps {
   readonly abilities: AbilityManager;
   readonly audio: PauseAudio | null;
   readonly guides: PauseGuides;
+  readonly petNames: PetNames;
   /** The library the music page lists. Defaults to the run's bound library. */
   readonly musicLibrary?: () => MusicLibrary | null;
 }
@@ -360,6 +362,7 @@ export class PauseScreen {
       audio: this.deps.audio,
       musicLibrary: (this.deps.musicLibrary ?? activeMusicLibrary)(),
       guides: this.deps.guides,
+      petNames: this.deps.petNames,
       openChat: this.onOpenChat,
       actions: this.actions,
     };

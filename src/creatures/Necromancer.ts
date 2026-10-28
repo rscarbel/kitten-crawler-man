@@ -1623,6 +1623,7 @@ export class Necromancer extends Mob {
       mobType: this.mobType,
       attackType: NECRO_PULSE_ATTACK_TYPE,
       undodgeable: true,
+      magic: true,
     });
     for (const target of this.latestTargets) {
       if (!target.isAlive || target.isDefendTarget === true) continue;

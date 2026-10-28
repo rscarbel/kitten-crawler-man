@@ -129,9 +129,9 @@ export interface TownCastLookBiped extends TownCastLookCommon {
   readonly accessory: AccessorySpec;
   /** Trousers under a short cut; slim stockings under a hem that already covers the thigh. */
   readonly legwear: LegwearCut;
-  /** Covers Dave's bare legs — his look, not the rig's — in the trousers' or stockings' colour. */
+  /** Covers the rig's bare legs, which a cast look's base garments leave bare, in the trousers' or stockings' colour. */
   readonly pantsColor: string;
-  /** Covers Dave's bare feet, the other half of his look. */
+  /** Covers the rig's bare feet, which a cast look's base garments leave bare. */
   readonly shoeColor: string;
   readonly expression: BipedExpression;
   readonly details?: TownCastLookDetails;

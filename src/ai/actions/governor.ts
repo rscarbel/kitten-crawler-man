@@ -9,7 +9,7 @@
 import { TILE_SIZE } from '../../core/constants';
 import { CRAWLER_HP_THRESHOLDS, isAtOrUnderLowHealth } from '../../core/combat/hpThresholds';
 import {
-  AI_CHARACTER_MORDECAI,
+  AI_CHARACTER_DAVE,
   activeCrawler,
   bothCrawlers,
   floorNumberOf,
@@ -68,8 +68,8 @@ interface CharacterConditions {
 
 /** Extra conditions a character's calls must meet, whatever the action. */
 const CHARACTER_CONDITIONS: ReadonlyMap<string, CharacterConditions> = new Map([
-  // Mordecai only ever deals with the party in his safe room, and never mid-fight.
-  [AI_CHARACTER_MORDECAI, { requires: ['inSafeRoom'], forbids: ['isPaused', 'inCombat'] }],
+  // Dave only ever deals with the party in his safe room, and never mid-fight.
+  [AI_CHARACTER_DAVE, { requires: ['inSafeRoom'], forbids: ['isPaused', 'inCombat'] }],
 ]);
 
 export type GovernorVerdict =

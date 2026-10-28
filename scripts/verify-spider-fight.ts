@@ -3687,7 +3687,7 @@ const ATTACK_KEY_DAMAGE_TYPES: readonly PlayerDamageType[] = [
   'melee',
   'slingshot',
   'missile',
-  'smush',
+  'seismic_stomp',
 ];
 /** A deliberately tiny blow: an egg must break to any hit, not to a big one. */
 const TOKEN_HIT_DAMAGE = 1;

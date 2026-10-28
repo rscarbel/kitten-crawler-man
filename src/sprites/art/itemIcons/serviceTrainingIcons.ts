@@ -1,5 +1,5 @@
 /**
- * Service icons for the smithy's edge work and the training yard's four
+ * Service icons for the smithy's edge work and the training yard's six
  * drills.
  */
 
@@ -25,10 +25,12 @@ import {
   DARK_WOOD,
   DEEP_SHADE,
   FLAME_YELLOW,
+  GOLD,
   HALF_LIGHT,
   HALF_SHADE,
   IRON,
   LIGHT,
+  LINEN,
   OAK,
   paintFlame,
   paintGlow,
@@ -40,6 +42,7 @@ import {
   paintSword,
   SHADE,
   STRAW,
+  strokeOutlined,
   toIcon,
   withPlacement,
   type Vec,
@@ -199,7 +202,7 @@ const PATCH: readonly IconPoint[] = [
   [0.53, 0.54],
 ];
 
-const paintDrillStrength: IconArtPainter = (ctx, px) => {
+const paintDrillMelee: IconArtPainter = (ctx, px) => {
   const { postCx } = DUMMY;
   paintLitRect(
     ctx,
@@ -323,7 +326,7 @@ const SHIELD_RIVET_R = 0.025;
 const SHIELD_PAINT = '#8a3a2a';
 const BOSS_GLINT_FRACTION = 1 / 3;
 
-const paintDrillConstitution: IconArtPainter = (ctx, px) => {
+const paintDrillHealth: IconArtPainter = (ctx, px) => {
   const { cx, cy, r } = SHIELD;
   ctx.save();
   ctx.beginPath();
@@ -462,7 +465,7 @@ const SAND_PUFFS: readonly (readonly [number, number, number])[] = [
   [0.4, 0.92, 0.04],
 ];
 
-const paintDrillDexterity: IconArtPainter = (ctx, px) => {
+const paintDrillEvasiveness: IconArtPainter = (ctx, px) => {
   for (const line of MOTION_LINES) {
     strokeDetail(ctx, px, line, ICON_OUTLINE, MOTION_EDGE);
     strokeDetail(ctx, px, line, MOTION_COLOR, MOTION_WIDTH);
@@ -609,7 +612,7 @@ function paintLantern(ctx: CanvasRenderingContext2D, px: number): void {
   );
 }
 
-const paintDrillIntelligence: IconArtPainter = (ctx, px) => {
+const paintDrillMagic: IconArtPainter = (ctx, px) => {
   const outer = (): void => traceArch(ctx, ARCH.left, ARCH.right, ARCH.top, ARCH.bottom);
   paintForm(ctx, px, outer, litFill(ctx, STONE, [ARCH.left, ARCH.top], [ARCH.right, ARCH.bottom]));
   withShapeClip(ctx, outer, () => {
@@ -626,11 +629,259 @@ const paintDrillIntelligence: IconArtPainter = (ctx, px) => {
   paintLantern(ctx, px);
 };
 
+const TARGET_RED = '#b8352a';
+const SLING_STONE = '#8c8a84';
+const SLING_LEATHER = '#7a4a28';
+/** A straw archery butt on an easel, a sling stone lodged just off the gold and the sling slung over its shoulder. */
+const BUTT = { cx: 0.48, cy: 0.42, r: 0.36 } as const;
+/** The painted face's rings from the outside in; the straw rim shows beyond the first. */
+const TARGET_RINGS: readonly (readonly [radius: number, color: string])[] = [
+  [0.28, LINEN],
+  [0.21, TARGET_RED],
+  [0.14, LINEN],
+  [0.07, GOLD],
+];
+const RING_SEAM_WIDTH = 1.1;
+const EASEL_FRONT_LEGS: readonly (readonly IconPoint[])[] = [
+  [
+    [0.32, 0.62],
+    [0.18, 0.95],
+  ],
+  [
+    [0.64, 0.62],
+    [0.78, 0.95],
+  ],
+];
+const EASEL_BACK_LEG: readonly IconPoint[] = [
+  [0.48, 0.7],
+  [0.5, 0.94],
+];
+const EASEL_LEG_WIDTH = 2.6;
+/** Straw ends bristling out of the butt's rim, every one pointing away from the centre. */
+const BUTT_BRISTLE_COUNT = 14;
+const BUTT_BRISTLE_INNER = 0.31;
+const BUTT_BRISTLE_OUTER = 0.36;
+const BRISTLE_WIDTH = 1.4;
+const SLING_STONE_SPOT = { x: 0.55, y: 0.36, r: 0.055 } as const;
+const STONE_GLINT_FRACTION = 0.4;
+const STONE_CRACKS: readonly (readonly IconPoint[])[] = [
+  [
+    [0.6, 0.3],
+    [0.64, 0.25],
+  ],
+  [
+    [0.62, 0.38],
+    [0.67, 0.4],
+  ],
+  [
+    [0.53, 0.43],
+    [0.52, 0.47],
+  ],
+];
+const CRACK_WIDTH = 1.6;
+const SLING_CORDS: readonly (readonly IconPoint[])[] = [
+  [
+    [0.66, 0.1],
+    [0.8, 0.16],
+    [0.85, 0.36],
+    [0.85, 0.58],
+  ],
+  [
+    [0.7, 0.09],
+    [0.86, 0.12],
+    [0.94, 0.34],
+    [0.95, 0.58],
+  ],
+];
+const SLING_CORD_WIDTH = 1.4;
+const SLING_POUCH: readonly IconPoint[] = [
+  [0.82, 0.56, 0.02],
+  [0.98, 0.56, 0.02],
+  [0.95, 0.74, 0.04],
+  [0.85, 0.74, 0.04],
+];
+
+function paintTargetFace(ctx: CanvasRenderingContext2D, px: number): void {
+  const { cx, cy, r } = BUTT;
+  const lightFrom: Vec = [cx - r, cy - r];
+  const lightTo: Vec = [cx + r, cy + r];
+  for (const [ringR, color] of TARGET_RINGS) {
+    traceEllipse(ctx, cx, cy, ringR, ringR);
+    ctx.fillStyle = litFill(ctx, color, lightFrom, lightTo);
+    ctx.fill();
+    ctx.strokeStyle = ICON_OUTLINE;
+    ctx.lineWidth = px * RING_SEAM_WIDTH;
+    ctx.stroke();
+  }
+}
+
+function paintButtBristles(ctx: CanvasRenderingContext2D, px: number): void {
+  const { cx, cy } = BUTT;
+  for (let i = 0; i < BUTT_BRISTLE_COUNT; i++) {
+    const angle = (i / BUTT_BRISTLE_COUNT) * FULL_TURN;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    strokeDetail(
+      ctx,
+      px,
+      [
+        [cx + cos * BUTT_BRISTLE_INNER, cy + sin * BUTT_BRISTLE_INNER],
+        [cx + cos * BUTT_BRISTLE_OUTER, cy + sin * BUTT_BRISTLE_OUTER],
+      ],
+      tone(STRAW, SHADE),
+      BRISTLE_WIDTH,
+    );
+  }
+}
+
+function paintSling(ctx: CanvasRenderingContext2D, px: number): void {
+  for (const cord of SLING_CORDS) strokeOutlined(ctx, px, cord, SLING_LEATHER, SLING_CORD_WIDTH);
+  paintLitPoints(ctx, px, SLING_POUCH, SLING_LEATHER);
+}
+
+const paintDrillRanged: IconArtPainter = (ctx, px) => {
+  strokeOutlined(ctx, px, EASEL_BACK_LEG, DARK_WOOD, EASEL_LEG_WIDTH);
+  for (const leg of EASEL_FRONT_LEGS) strokeOutlined(ctx, px, leg, OAK, EASEL_LEG_WIDTH);
+  const { cx, cy, r } = BUTT;
+  paintLitEllipse(ctx, px, cx, cy, r, r, STRAW);
+  withShapeClip(
+    ctx,
+    () => traceEllipse(ctx, cx, cy, r, r),
+    () => paintButtBristles(ctx, px),
+  );
+  paintTargetFace(ctx, px);
+  for (const crack of STONE_CRACKS) strokeDetail(ctx, px, crack, ICON_OUTLINE, CRACK_WIDTH);
+  const stone = SLING_STONE_SPOT;
+  paintLitEllipse(ctx, px, stone.x, stone.y, stone.r, stone.r, SLING_STONE);
+  const stoneGlintShift = stone.r * STONE_GLINT_FRACTION;
+  glint(ctx, stone.x - stoneGlintShift, stone.y - stoneGlintShift, stone.r * STONE_GLINT_FRACTION);
+  paintSling(ctx, px);
+};
+
+const POWDER_BLACK = '#2a2622';
+const FUSE_CORD = '#c8b080';
+/** A squat powder keg, its fuse snaking up from the bung to a fizzing, spitting tip. */
+const KEG = {
+  left: 0.12,
+  right: 0.74,
+  top: 0.4,
+  bottom: 0.94,
+  bulge: 0.06,
+  lidRy: 0.08,
+} as const;
+const KEG_HOOP_YS = [0.52, 0.84] as const;
+const KEG_HOOP_HALF = 0.03;
+const KEG_STAVE_XS = [0.27, 0.43, 0.59] as const;
+const KEG_STAVE_WIDTH = 1.3;
+const KEG_BUNG = { x: 0.52, y: 0.41, rx: 0.05, ry: 0.025 } as const;
+/** The painted warning on the keg's belly: a black cross for "keep fire off". */
+const KEG_MARK: readonly (readonly IconPoint[])[] = [
+  [
+    [0.36, 0.6],
+    [0.5, 0.76],
+  ],
+  [
+    [0.5, 0.6],
+    [0.36, 0.76],
+  ],
+];
+const KEG_MARK_WIDTH = 2.6;
+const FUSE: readonly IconPoint[] = [
+  [0.52, 0.4],
+  [0.54, 0.3],
+  [0.64, 0.26],
+  [0.72, 0.28],
+  [0.76, 0.2],
+];
+const FUSE_WIDTH = 2.8;
+const FUSE_CHAR: readonly IconPoint[] = [
+  [0.746, 0.245],
+  [0.76, 0.2],
+];
+const FUSE_TIP = { x: 0.76, y: 0.19 } as const;
+const FUSE_GLOW_R = 0.2;
+const FUSE_FLAME = { halfWidth: 0.06, height: 0.14 } as const;
+const FUSE_SPARKS: readonly (readonly [number, number, number])[] = [
+  [0.88, 0.1, 0.06],
+  [0.64, 0.08, 0.045],
+  [0.9, 0.26, 0.04],
+];
+
+function traceKegBody(ctx: CanvasRenderingContext2D): void {
+  const { left, right, top, bottom, bulge } = KEG;
+  const midY = (top + bottom) / 2;
+  ctx.beginPath();
+  ctx.moveTo(left, top);
+  ctx.quadraticCurveTo(left - bulge, midY, left, bottom);
+  ctx.lineTo(right, bottom);
+  ctx.quadraticCurveTo(right + bulge, midY, right, top);
+  ctx.closePath();
+}
+
+function paintKeg(ctx: CanvasRenderingContext2D, px: number): void {
+  const { left, right, top, bottom, lidRy } = KEG;
+  const lightFrom: Vec = [left, top];
+  const lightTo: Vec = [right, bottom];
+  paintForm(ctx, px, () => traceKegBody(ctx), litFill(ctx, OAK, lightFrom, lightTo));
+  withShapeClip(
+    ctx,
+    () => traceKegBody(ctx),
+    () => {
+      for (const staveX of KEG_STAVE_XS) {
+        strokeDetail(
+          ctx,
+          px,
+          [
+            [staveX, top],
+            [staveX, bottom],
+          ],
+          tone(OAK, DEEP_SHADE),
+          KEG_STAVE_WIDTH,
+        );
+      }
+      for (const mark of KEG_MARK) strokeDetail(ctx, px, mark, POWDER_BLACK, KEG_MARK_WIDTH);
+      for (const hoopY of KEG_HOOP_YS) {
+        ctx.fillStyle = litFill(ctx, IRON, lightFrom, lightTo);
+        ctx.fillRect(
+          left - KEG.bulge,
+          hoopY - KEG_HOOP_HALF,
+          right - left + KEG.bulge * 2,
+          KEG_HOOP_HALF * 2,
+        );
+        strokeDetail(
+          ctx,
+          px,
+          [
+            [left - KEG.bulge, hoopY + KEG_HOOP_HALF],
+            [right + KEG.bulge, hoopY + KEG_HOOP_HALF],
+          ],
+          ICON_OUTLINE,
+        );
+      }
+    },
+  );
+  const lidCx = (left + right) / 2;
+  const lidRx = (right - left) / 2;
+  paintLitEllipse(ctx, px, lidCx, top, lidRx, lidRy, DARK_WOOD);
+  paintLitEllipse(ctx, px, KEG_BUNG.x, KEG_BUNG.y, KEG_BUNG.rx, KEG_BUNG.ry, BRASS);
+}
+
+const paintDrillExplosives: IconArtPainter = (ctx, px) => {
+  paintKeg(ctx, px);
+  paintGlow(ctx, FUSE_TIP.x, FUSE_TIP.y, FUSE_GLOW_R, FLAME_YELLOW);
+  strokeOutlined(ctx, px, FUSE, FUSE_CORD, FUSE_WIDTH);
+  strokeDetail(ctx, px, FUSE_CHAR, POWDER_BLACK, FUSE_WIDTH);
+  paintFlame(ctx, px, FUSE_TIP.x, FUSE_TIP.y, FUSE_FLAME.halfWidth, FUSE_FLAME.height);
+  for (const [sx, sy, r] of FUSE_SPARKS) paintSpark(ctx, sx, sy, r);
+};
+
 export const TRAINING_SERVICE_ICONS = {
   edge: toIcon(paintEdge),
   edge_pair: toIcon(paintEdgePair),
-  drill_strength: toIcon(paintDrillStrength),
-  drill_constitution: toIcon(paintDrillConstitution),
-  drill_dexterity: toIcon(paintDrillDexterity),
-  drill_intelligence: toIcon(paintDrillIntelligence),
+  drill_melee: toIcon(paintDrillMelee),
+  drill_health: toIcon(paintDrillHealth),
+  drill_evasiveness: toIcon(paintDrillEvasiveness),
+  drill_magic: toIcon(paintDrillMagic),
+  drill_ranged: toIcon(paintDrillRanged),
+  drill_explosives: toIcon(paintDrillExplosives),
 } as const;

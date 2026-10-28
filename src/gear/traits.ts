@@ -15,6 +15,7 @@
 import { ABILITY_DEFS } from '../abilities/abilityDefs';
 import type { AbilityId } from '../core/skills/AbilityManager';
 import { TILE_SIZE } from '../core/constants';
+import { WEAPON_FAMILY_LABELS, type MeleeWeaponFamily } from '../core/items/equipment/weapons';
 import { applyChillOnly } from '../core/combat/frostStatus';
 import { QUEST_SLOT_IDX, type ItemId } from '../core/items/defs/ItemDefs';
 import {
@@ -26,7 +27,8 @@ import {
   makeStun,
 } from '../core/combat/StatusEffect';
 import type { Mob } from '../creatures/Mob';
-import type { DamageSource, Player } from '../Player';
+import type { DamageSource, Player, RegenModifierKey } from '../Player';
+import { magicRechargeScale } from '../core/party/crawlerFormulas';
 import type { GearItemState } from './gearState';
 
 /** Multiplier→percentage conversion for generated lines. */
@@ -96,6 +98,7 @@ export type BaseGearTrait =
       readonly partner: ItemId;
       readonly rangeTiles: number;
       readonly regenMultiplier: number;
+      /** Added to every stat while the link holds; health takes `PARTNER_LINK_HEALTH_PER_POINT` times it. */
       readonly statBonus: number;
       readonly shieldFrames: number;
     }
@@ -114,12 +117,14 @@ export type BaseGearTrait =
       readonly kind: 'relic';
       readonly behaviour: RelicBehaviour;
       readonly cooldownFrames: number;
+      /** Whether the wearer's magic shortens the recharge (`magicRechargeScale`). */
+      readonly rechargeScalesWithMagic: boolean;
       readonly rangeTiles: number;
       /** What a bolt lands on what it hits; a bolt without one only wounds. */
       readonly status?: OnHitStatusKind;
     }
-  /** Unlocks the Iron Punch skill's banked levels on the wearer's fists. */
-  | { readonly kind: 'ironPunch' }
+  /** The wearer's punches land as blows from this kind of weapon, and train its skill. */
+  | { readonly kind: 'fistFamily'; readonly family: MeleeWeaponFamily }
   /** Fairies never start a fight with the wearer; one she has struck answers in kind. */
   | { readonly kind: 'fairyTruce' }
   /** Each missile that hits an enemy splits into this many copies that hunt nearby foes. */
@@ -151,8 +156,8 @@ export type GearTraitOf<K extends GearTraitKind> = Extract<GearTrait, { kind: K 
 export interface GearModifiers {
   /** Share of a landed mob melee blow sent back at the attacker. */
   readonly thornsShare: number;
-  /** Whether the wearer's fists strike with Iron Punch. */
-  readonly ironPunch: boolean;
+  /** The kind of weapon the wearer's punches land as, or null for a bare fist. */
+  readonly fistFamily: MeleeWeaponFamily | null;
   /** Copies each landed missile splits into; 0 when nothing worn splits them. */
   readonly missileSplitCopies: number;
   /** Added to the dodge chance before its cap (`computeDodgeChance`). */
@@ -177,7 +182,7 @@ export interface GearModifiers {
 
 export const NO_GEAR_MODIFIERS: GearModifiers = {
   thornsShare: 0,
-  ironPunch: false,
+  fistFamily: null,
   missileSplitCopies: 0,
   dodgeChance: 0,
   coinBonusShare: 0,
@@ -200,7 +205,7 @@ const MODIFIER_COMBINERS: {
   ) => GearModifiers[K];
 } = {
   thornsShare: sum,
-  ironPunch: (a, b) => a || b,
+  fistFamily: (a, b) => a ?? b,
   missileSplitCopies: (a, b) => Math.max(a, b),
   dodgeChance: sum,
   coinBonusShare: sum,
@@ -226,7 +231,7 @@ function combineModifier<K extends keyof GearModifiers>(
 export function addModifiers(total: GearModifiers, part: Partial<GearModifiers>): GearModifiers {
   return {
     thornsShare: combineModifier('thornsShare', total, part),
-    ironPunch: combineModifier('ironPunch', total, part),
+    fistFamily: combineModifier('fistFamily', total, part),
     missileSplitCopies: combineModifier('missileSplitCopies', total, part),
     dodgeChance: combineModifier('dodgeChance', total, part),
     coinBonusShare: combineModifier('coinBonusShare', total, part),
@@ -529,10 +534,16 @@ function withinFacingArc(
 }
 
 /** The regen modifier keys gear sets on a wearer, cleared and re-set by `GearSystem` each tick. */
-export const STILLNESS_REGEN_KEY = 'gear_stillness';
-export const PARTNER_LINK_REGEN_KEY = 'gear_partner_link';
+export const STILLNESS_REGEN_KEY = 'gear_stillness' as const satisfies RegenModifierKey;
+export const PARTNER_LINK_REGEN_KEY = 'gear_partner_link' as const satisfies RegenModifierKey;
 /** Every regen modifier key gear owns. */
 export const GEAR_REGEN_KEYS = [STILLNESS_REGEN_KEY, PARTNER_LINK_REGEN_KEY] as const;
+
+/**
+ * Health a partner link adds per point of its bonus. One health is one max HP,
+ * so like every gear health bonus it counts twice what it adds to other stats.
+ */
+export const PARTNER_LINK_HEALTH_PER_POINT = 2;
 
 /** A partner's shield when the other crawler goes down, as a share of the wearer's own max HP. */
 const PARTNER_SHIELD_MAX_HP_SHARE = 0.25;
@@ -544,6 +555,12 @@ function isDown(crawler: Player): boolean {
 
 function abilityName(ability: AbilityId): string {
   return ABILITY_DEFS[ability].name;
+}
+
+/** How long `relic` takes to recharge on `wearer`, after any magic that shortens it. */
+function relicRechargeFrames(wearer: Player, relic: Extract<GearTrait, { kind: 'relic' }>): number {
+  if (!relic.rechargeScalesWithMagic) return relic.cooldownFrames;
+  return Math.round(relic.cooldownFrames * magicRechargeScale(wearer.magic));
 }
 
 /** The relic's own recharge, read without the persisted record ever holding `undefined` as a value. */
@@ -724,7 +741,7 @@ const GEAR_TRAIT_HANDLERS: { readonly [K in GearTraitKind]: TraitHandler<GearTra
   },
   partnerLink: {
     describe: (t) =>
-      `Within ${t.rangeTiles} tiles of the partner piece: regen ×${t.regenMultiplier} and +${t.statBonus} to all stats`,
+      `Within ${t.rangeTiles} tiles of the partner piece: regen ×${t.regenMultiplier} and +${t.statBonus} to all stats (+${t.statBonus * PARTNER_LINK_HEALTH_PER_POINT} Health)`,
     score: (t) => t.statBonus * SCORE_PER_MULTIPLIER_STEP,
     onTick: (ctx, t, tick) => {
       const { wearer } = ctx;
@@ -815,7 +832,8 @@ const GEAR_TRAIT_HANDLERS: { readonly [K in GearTraitKind]: TraitHandler<GearTra
   },
   relic: {
     describe: (t) =>
-      `${RELIC_LABELS[t.behaviour]} every ${seconds(t.cooldownFrames)}s (${t.rangeTiles} tiles)`,
+      `${RELIC_LABELS[t.behaviour]} every ${seconds(t.cooldownFrames)}s (${t.rangeTiles} tiles)` +
+      (t.rechargeScalesWithMagic ? '; recharges faster with Magic' : ''),
     score: () => SCORE_SIGNATURE_MECHANIC,
     onTick: (ctx, t, tick) => {
       const { wearer, state } = ctx;
@@ -838,11 +856,11 @@ const GEAR_TRAIT_HANDLERS: { readonly [K in GearTraitKind]: TraitHandler<GearTra
         const spot = centreOf(target);
         tick.world.plantBramble(wearer, spot.x, spot.y);
       }
-      state.cooldownFrames.relic = t.cooldownFrames;
+      state.cooldownFrames.relic = relicRechargeFrames(wearer, t);
     },
     onRangedIncoming: (ctx, t) => {
       if (t.behaviour !== 'ward' || relicCooldown(ctx.state) > 0) return false;
-      ctx.state.cooldownFrames.relic = t.cooldownFrames;
+      ctx.state.cooldownFrames.relic = relicRechargeFrames(ctx.wearer, t);
       ctx.wearer.gear.live.queueFx({ kind: 'wardShatter' });
       return true;
     },
@@ -865,10 +883,10 @@ const GEAR_TRAIT_HANDLERS: { readonly [K in GearTraitKind]: TraitHandler<GearTra
     score: () => SCORE_SIGNATURE_MECHANIC,
     modifiers: () => ({ fairyTruce: true }),
   },
-  ironPunch: {
-    describe: () => 'Fists strike with Iron Punch',
+  fistFamily: {
+    describe: (t) => `Punches land as ${WEAPON_FAMILY_LABELS[t.family].toLowerCase()} blows`,
     score: () => SCORE_FLAT_MECHANIC,
-    modifiers: () => ({ ironPunch: true }),
+    modifiers: (t) => ({ fistFamily: t.family }),
   },
   missileSplit: {
     describe: (t) => `Missile hits split into ${t.copies} hunting copies`,

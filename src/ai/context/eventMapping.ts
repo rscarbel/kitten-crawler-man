@@ -1,10 +1,11 @@
 import { crawlerName } from '../../characters/characters';
 import type { EventBus } from '../../core/EventBus';
-import type { ChallengeSummary } from '../show/challenges';
+import type { ChallengeSummary } from '../interactions/challenges';
 import { ITEM_DEF, type ItemId } from '../../core/items/defs/ItemDefs';
 import type { Mob } from '../../creatures/Mob';
+import { petWords, type PetNames } from '../../core/party/petNames';
 import type { DamageSource } from '../../Player';
-import { MORDECAI_CHARACTER_NAME } from '../characters';
+import { DAVE_CHARACTER_NAME } from '../characters';
 import { EVENT_IMPORTANCE, IMPORTANCE } from './eventImportance';
 import type { EventDraft, GameEventStream } from './gameEventStream';
 import type { JsonObject } from './json';
@@ -58,7 +59,8 @@ function challengeData(e: ChallengeSummary): JsonObject {
 
 const UNNAMED_MOB = 'Unknown';
 
-export function mobLabel(mob: Mob): string {
+export function mobLabel(mob: Mob, petNames: PetNames): string {
+  if (mob.petKind !== null) return petWords(petNames, mob.petKind).described;
   if (mob.displayName !== UNNAMED_MOB) return mob.displayName;
   if (mob.spawnTypeKey !== null) return humanize(mob.spawnTypeKey);
   return mob.constructor.name;
@@ -94,7 +96,7 @@ function itemName(id: ItemId | null): string | null {
 /**
  * Subscribes the AI event mapping to a scene's bus. Each handler turns a game
  * event into an `EventDraft` (a summary written for the AI, a 0..1 importance
- * and who besides the omniscient System perceived it) or into a rollup or
+ * and who besides the omniscient Caroline perceived it) or into a rollup or
  * profile update. Returns the unsubscribe functions.
  */
 export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Array<() => void> {
@@ -125,16 +127,21 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
       if (e.mob.isBoss) return;
       const killer = e.killer === null ? null : nameOf(e.killer);
       if (killer !== null) profile.recordKills(1);
-      stream.recordKill(mobLabel(e.mob), killer, host.now(), source.isPartyInSafeRoom());
+      stream.recordKill(
+        mobLabel(e.mob, source.petNames),
+        killer,
+        host.now(),
+        source.isPartyInSafeRoom(),
+      );
     }),
     bus.on('multiKill', (e) => {
       emit({
         type: 'multiKill',
         data: { count: e.count },
-        summary: `${crawlerName('human')} killed ${e.count} enemies with a single blow.`,
+        summary: `${crawlerName(e.killer.crawlerKind)} killed ${e.count} enemies with a single blow.`,
         importance: EVENT_IMPORTANCE.multiKill,
         witness: 'inSafeRoom',
-        subject: crawlerName('human'),
+        subject: crawlerName(e.killer.crawlerKind),
       });
     }),
     bus.on('dynamiteUsed', (e) => {
@@ -155,11 +162,11 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         type: 'dynamiteKills',
         data: { kills: e.kills, bossKilled: e.bossKilled },
         summary: e.bossKilled
-          ? `${crawlerName('human')} blew up a boss with an explosive (${e.kills} dead in the blast).`
-          : `${crawlerName('human')}'s explosive killed ${e.kills} enemies at once.`,
+          ? `${crawlerName(e.killer.crawlerKind)} blew up a boss with an explosive (${e.kills} dead in the blast).`
+          : `${crawlerName(e.killer.crawlerKind)}'s explosive killed ${e.kills} enemies at once.`,
         importance: e.bossKilled ? IMPORTANCE.LANDMARK : EVENT_IMPORTANCE.dynamiteKills,
         witness: 'inSafeRoom',
-        subject: crawlerName('human'),
+        subject: crawlerName(e.killer.crawlerKind),
       });
     }),
     bus.on('bossFightInitiated', (e) => {
@@ -557,7 +564,7 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
 
     // ── Social and economy ──────────────────────────────────────────────────
     bus.on('conversation', (e) => {
-      const withMordecai = e.speaker === MORDECAI_CHARACTER_NAME;
+      const withDave = e.speaker === DAVE_CHARACTER_NAME;
       emit({
         type: e.phase === 'started' ? 'conversationStarted' : 'conversationEnded',
         data: { speaker: e.speaker },
@@ -565,17 +572,17 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
           e.phase === 'started'
             ? `The crawlers started talking to ${e.speaker}.`
             : `The crawlers finished talking to ${e.speaker}.`,
-        importance: withMordecai ? IMPORTANCE.NOTABLE : EVENT_IMPORTANCE.conversationStarted,
-        witness: withMordecai ? 'always' : 'inSafeRoom',
+        importance: withDave ? IMPORTANCE.NOTABLE : EVENT_IMPORTANCE.conversationStarted,
+        witness: withDave ? 'always' : 'inSafeRoom',
       });
     }),
-    bus.on('mordecaiAdviceGiven', (e) => {
+    bus.on('daveAdviceGiven', (e) => {
       profile.recordAdvice(host.now());
       emit({
-        type: 'mordecaiAdviceGiven',
+        type: 'daveAdviceGiven',
         data: { objective: humanize(e.objectiveId) },
-        summary: `Mordecai pointed the crawlers toward ${humanize(e.objectiveId)}.`,
-        importance: EVENT_IMPORTANCE.mordecaiAdviceGiven,
+        summary: `Dave pointed the crawlers toward ${humanize(e.objectiveId)}.`,
+        importance: EVENT_IMPORTANCE.daveAdviceGiven,
         witness: 'always',
       });
     }),
@@ -639,7 +646,7 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         witness: 'never',
       });
     }),
-    // ── The show: challenges, questions, the crowd ──────────────────────────
+    // ── Interactions: challenges and questions ──────────────────────────────
     bus.on('challengeAccepted', (e) => {
       emit({
         type: 'challengeAccepted',
@@ -695,15 +702,6 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         witness: 'always',
       });
     }),
-    bus.on('viewerFavorChanged', (e) => {
-      emit({
-        type: 'viewerFavorChanged',
-        data: { favor: e.favor, delta: e.delta, reaction: e.reaction, tier: e.tier },
-        summary: `The viewers' favour moved ${e.delta >= 0 ? '+' : ''}${e.delta} to ${e.favor}/100 (${e.tier}).`,
-        importance: EVENT_IMPORTANCE.viewerFavorChanged,
-        witness: 'never',
-      });
-    }),
     bus.on('aiAchievementAwarded', (e) => {
       const crawler = sideName(e.player);
       emit({
@@ -712,17 +710,6 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         summary: `${crawler} was awarded the achievement "${e.title}" by the ${e.awardedBy}.`,
         importance: EVENT_IMPORTANCE.aiAchievementAwarded,
         witness: 'always',
-      });
-    }),
-    bus.on('sponsorBreakEnded', (e) => {
-      emit({
-        type: 'sponsorBreakEnded',
-        data: { sponsor: e.sponsor, skipped: e.skipped },
-        summary: e.skipped
-          ? `The player skipped the sponsor break for ${e.sponsor}.`
-          : `The player sat through the sponsor break for ${e.sponsor}.`,
-        importance: EVENT_IMPORTANCE.sponsorBreakEnded,
-        witness: 'never',
       });
     }),
     bus.on('playerIdle', (e) => {

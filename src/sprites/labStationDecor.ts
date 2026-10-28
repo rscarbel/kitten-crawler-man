@@ -117,7 +117,7 @@ const COT = {
   shadowWidth: 0.9,
 } as const;
 
-/** A folding camp cot in olive canvas, a grey blanket rolled at its foot: where Mordecai rests. */
+/** A folding camp cot in olive canvas, a grey blanket rolled at its foot: where Dave rests. */
 export function drawStationCotTile(
   ctx: CanvasRenderingContext2D,
   sx: number,

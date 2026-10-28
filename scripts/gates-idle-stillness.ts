@@ -2,7 +2,7 @@
 /**
  * Idle stillness gates for every figure that stands on the human's breathing idle —
  * The human, the human townsfolk cast and named residents, Baggi, the city elf
- * cultists, Mordecai's Incubus — and for the Hawkfolk cast and the Earth Elemental hirelings that
+ * cultists, the Demon Liaison — and for the Hawkfolk cast and the Earth Elemental hirelings that
  * stand beside them, and the goblins (all five archetypes and the plumber), whose
  * camps and bathroom queue stand about in groups.
  *
@@ -44,10 +44,10 @@ import {
   cultistStateName,
 } from '../src/sprites/art/cityElfCultistFigure.js';
 import {
-  INCUBUS_FIGURE,
-  INCUBUS_VIEWS,
-  incubusStateName,
-} from '../src/sprites/art/incubusFigure.js';
+  DEMON_LIAISON_FIGURE,
+  DEMON_LIAISON_VIEWS,
+  demonLiaisonStateName,
+} from '../src/sprites/art/demonLiaisonFigure.js';
 import {
   castStateName,
   IDLE_FRAMES as HAWKFOLK_IDLE_FRAMES,
@@ -145,9 +145,9 @@ function idleSubjects(): IdleSubject[] {
     const state = cultistStateName('idle', view);
     subjects.push({ label: `cultist.${state}`, def: CITY_ELF_CULTIST_FIGURE, state });
   }
-  for (const view of INCUBUS_VIEWS) {
-    const state = incubusStateName('idle', view);
-    subjects.push({ label: `incubus.${state}`, def: INCUBUS_FIGURE, state });
+  for (const view of DEMON_LIAISON_VIEWS) {
+    const state = demonLiaisonStateName('idle', view);
+    subjects.push({ label: `demon_liaison.${state}`, def: DEMON_LIAISON_FIGURE, state });
   }
   for (const view of BAGGI_VIEWS) {
     const state = baggiStateName('idle', view);
@@ -405,7 +405,7 @@ function breathSeconds(frameAt: (seconds: number) => number): number | null {
 function gateBreathLength(): void {
   const goblinAnimator = bathroomGoblinAnimator('sword');
   const clocks: ReadonlyArray<readonly [string, (seconds: number) => number]> = [
-    ['the shared idle clock (Baggi, cultists, Incubus)', idleFrameAtSeconds],
+    ['the shared idle clock (Baggi, cultists, Demon Liaison)', idleFrameAtSeconds],
     ['the town cast idle', (t) => townCastLoopFrame('idle', TOWN_CAST_IDLE_FRAMES, t)],
     ['the Hawkfolk cast idle', (t) => hawkfolkCastLoopFrame('idle', HAWKFOLK_IDLE_FRAMES, t)],
     ['the goblin idle', (t) => goblinIdleFrameAt(goblinAnimator, t)],
@@ -446,7 +446,7 @@ function writePreview(): void {
     'baggi.idle_side',
     'cultist.idle',
     'cultist.idle_side',
-    'incubus.idle',
+    'demon_liaison.idle',
     'earth_elemental_crush.idle',
     'goblin_sword.idle',
     'goblin_bow.idle',

@@ -11,7 +11,7 @@
  * ordinary fight takes over. Abandoning always spends the tactic's cooldown,
  * so a retreat and the hazard can never take turns on alternate frames.
  *
- * The party's allies among the mobs — Mongo and the hirelings — do flee it,
+ * The party's allies among the mobs — Deinonychus and the hirelings — do flee it,
  * through {@link markedGroundEscape}; see `Mob.avoidsMarkedGround`.
  */
 

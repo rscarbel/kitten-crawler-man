@@ -44,7 +44,11 @@ import { drawSoulCrystalIcon } from './soulCrystalIcon';
 import { drawToolIcon, type ToolIconId } from '../../sprites/art/itemIcons/toolIcons';
 import { drawHeldVisualIcon } from '../../sprites/art/itemIcons/heldVisualIcon';
 import type { HeldVisualId } from '../../sprites/held/heldVisualIds';
-import { drawExplosivesTomeIcon, drawMagicMissileTomeIcon, drawSmushTomeIcon } from './tomeIcons';
+import {
+  drawExplosivesTomeIcon,
+  drawMagicMissileTomeIcon,
+  drawSeismicStompTomeIcon,
+} from './tomeIcons';
 
 /** Paints one item's picture into `rect`. Square art is centred in a non-square rect. */
 export type ItemIconPainter = (ctx: CanvasRenderingContext2D, rect: Rect) => void;
@@ -180,12 +184,20 @@ export const ITEM_ICONS: Record<ItemId, ItemIconPainter> = {
   dev_felling_axe: heldVisual('felling_axe'),
 
   magic_missile_tome: drawMagicMissileTomeIcon,
-  smush_tome: drawSmushTomeIcon,
+  seismic_stomp_tome: drawSeismicStompTomeIcon,
   explosives_handling_tome: drawExplosivesTomeIcon,
-  skill_book_cockroach: skillBook('cockroach'),
+  skill_book_nine_lives: skillBook('nine_lives'),
   skill_book_cat_reflexes: skillBook('cat_reflexes'),
   skill_book_pugilism: skillBook('pugilism'),
   skill_book_iron_stomach: skillBook('iron_stomach'),
+  skill_book_swordsmanship: skillBook('swordsmanship'),
+  skill_book_archery: skillBook('archery'),
+  skill_book_clawmanship: skillBook('clawmanship'),
+  skill_book_magic_eye: skillBook('magic_eye'),
+  skill_book_mechanical_fist: skillBook('mechanical_fist'),
+  skill_book_blunt_proficiency: skillBook('blunt_proficiency'),
+  skill_book_pyros_touch: skillBook('pyros_touch'),
+  skill_book_demolitionist: skillBook('demolitionist'),
 
   wayfinders_anchor: (ctx, rect) => drawAnchorStoneIcon(ctx, rect),
   anchor_shard_tinker: anchorShard,

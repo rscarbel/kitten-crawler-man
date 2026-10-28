@@ -31,7 +31,7 @@ export interface SystemContext {
   gameMap: GameMap;
   /** Boss room system reference — used by MobUpdateLoop for clamping. Absent in scenes without boss rooms (e.g. building interiors). */
   bossRoom?: BossRoomSystem;
-  /** Additional player-like targets (e.g. Mongo). Used by MobUpdateLoop. */
+  /** Additional player-like targets (e.g. Deinonychus). Used by MobUpdateLoop. */
   extraTargets?: Player[];
   /** The scene's crawler bark system, for any system that wants a crawler to say something. */
   crawlerBarks?: CrawlerBarkSystem;

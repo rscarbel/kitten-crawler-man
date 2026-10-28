@@ -1,0 +1,330 @@
+import type { AbilityDef, PerkText } from '../core/skills/AbilityManager';
+import { petWords } from '../core/party/petNames';
+import { drawDeinonychusIcon, type DeinonychusStage } from '../sprites/deinonychusSprite';
+import type { Rect } from '../ui/core/geom';
+import { iconSquare } from '../ui/icons/iconSquare';
+
+/**
+ * The Deinonychus is the cat's pet dinosaur, modelled as an ability so he
+ * levels, gains stats and shows up in the Abilities tab like everything else
+ * the party gets better at.
+ *
+ * He is unusual in two ways, and both are deliberate: he has no tome and no
+ * hotbar slot (he is summoned from the Summon button or the R key), and his
+ * "stats" are a whole creature's rather than a spell's. Everything that scales
+ * with his level lives in one table below so tuning him is one edit.
+ */
+
+export type DeinonychusAttack = 'bite' | 'slash' | 'pounce';
+
+export interface DeinonychusStats {
+  readonly stage: DeinonychusStage;
+  readonly maxHp: number;
+  readonly biteDamage: number;
+  readonly slashDamage: number;
+  readonly pounceDamage: number;
+  /** Movement speed in pixels per frame, the same units `Mob.speed` uses. */
+  readonly speed: number;
+  readonly slashUnlocked: boolean;
+  readonly pounceUnlocked: boolean;
+}
+
+interface DeinonychusLevelRow extends DeinonychusStats {
+  readonly level: number;
+  readonly perk: PerkText;
+}
+
+/**
+ * Every stat he has, per level.
+ *
+ * The `maxHp` column carries two invariants the perk text depends on, neither
+ * of which the numbers state on their own, so a partial re-scale can break
+ * them quietly.
+ *
+ * Levels 5 and 10 are *growth spurts*: their step must be visibly larger than
+ * the ordinary steps either side of it, or a level-4 dinosaur can end up with
+ * more health than a level-5 one under a perk line reading GROWTH SPURT.
+ *
+ * The ordinary steps must never go backwards either: a level-6 dinosaur must
+ * not gain less health per level than a level-2 one — the adolescent band
+ * can't be the slowest-growing stretch in the table, since that's right
+ * where the player has just been taught that levelling matters. Both
+ * invariants are gated in `verify-deinonychus.ts`; re-scale a band and run it.
+ */
+const DEINONYCHUS_LEVELS: readonly DeinonychusLevelRow[] = [
+  {
+    level: 1,
+    stage: 'juvenile',
+    maxHp: 35,
+    biteDamage: 2,
+    slashDamage: 0,
+    pounceDamage: 0,
+    speed: 2.0,
+    slashUnlocked: false,
+    pounceUnlocked: false,
+    perk: (petNames) =>
+      `A tiny terror hatches. ${petWords(petNames, 'deinonychus').opening} fights at your side with a snapping bite.`,
+  },
+  {
+    level: 2,
+    stage: 'juvenile',
+    maxHp: 42,
+    biteDamage: 3,
+    slashDamage: 0,
+    pounceDamage: 0,
+    speed: 2.0,
+    slashUnlocked: false,
+    pounceUnlocked: false,
+    perk: (petNames) =>
+      `Thicker down — ${petWords(petNames, 'deinonychus').referred} takes more punishment before you have to call him back.`,
+  },
+  {
+    level: 3,
+    stage: 'juvenile',
+    maxHp: 50,
+    biteDamage: 3,
+    slashDamage: 4,
+    pounceDamage: 0,
+    speed: 2.0,
+    slashUnlocked: true,
+    pounceUnlocked: false,
+    perk: 'Learns the fore-claw slash — a raking two-handed swipe at longer reach.',
+  },
+  {
+    level: 4,
+    stage: 'juvenile',
+    maxHp: 60,
+    biteDamage: 4,
+    slashDamage: 5,
+    pounceDamage: 0,
+    speed: 2.1,
+    slashUnlocked: true,
+    pounceUnlocked: false,
+    perk: 'Sharper claws, and the first hint of a hunting stride.',
+  },
+  {
+    level: 5,
+    stage: 'adolescent',
+    maxHp: 80,
+    biteDamage: 6,
+    slashDamage: 8,
+    pounceDamage: 0,
+    speed: 2.4,
+    slashUnlocked: true,
+    pounceUnlocked: false,
+    perk: (petNames) =>
+      `GROWTH SPURT — ${petWords(petNames, 'deinonychus').referred} is an adolescent. A major surge in health, damage and speed.`,
+  },
+  {
+    level: 6,
+    stage: 'adolescent',
+    maxHp: 90,
+    biteDamage: 7,
+    slashDamage: 9,
+    pounceDamage: 0,
+    speed: 2.4,
+    slashUnlocked: true,
+    pounceUnlocked: false,
+    perk: 'Denser muscle across the shoulders and haunches.',
+  },
+  {
+    level: 7,
+    stage: 'adolescent',
+    maxHp: 100,
+    biteDamage: 8,
+    slashDamage: 10,
+    pounceDamage: 14,
+    speed: 2.4,
+    slashUnlocked: true,
+    pounceUnlocked: true,
+    perk: 'Learns the leaping sickle-claw pounce — a gap-closer that lands with both feet.',
+  },
+  {
+    level: 8,
+    stage: 'adolescent',
+    maxHp: 110,
+    biteDamage: 9,
+    slashDamage: 11,
+    pounceDamage: 16,
+    speed: 2.5,
+    slashUnlocked: true,
+    pounceUnlocked: true,
+    perk: 'Longer stride — he reaches the fight before it reaches you.',
+  },
+  {
+    level: 9,
+    stage: 'adolescent',
+    maxHp: 120,
+    biteDamage: 10,
+    slashDamage: 12,
+    pounceDamage: 18,
+    speed: 2.5,
+    slashUnlocked: true,
+    pounceUnlocked: true,
+    perk: 'Hunting instincts sharpen. Every attack hits harder.',
+  },
+  {
+    level: 10,
+    stage: 'adult',
+    maxHp: 155,
+    biteDamage: 14,
+    slashDamage: 17,
+    pounceDamage: 26,
+    speed: 2.8,
+    slashUnlocked: true,
+    pounceUnlocked: true,
+    perk: 'FULLY GROWN — a true Deinonychus. Everything about him gets worse for everyone else.',
+  },
+  {
+    level: 11,
+    stage: 'adult',
+    maxHp: 168,
+    biteDamage: 15,
+    slashDamage: 19,
+    pounceDamage: 29,
+    speed: 2.8,
+    slashUnlocked: true,
+    pounceUnlocked: true,
+    perk: 'Hardened scales under the feathers.',
+  },
+  {
+    level: 12,
+    stage: 'adult',
+    maxHp: 181,
+    biteDamage: 17,
+    slashDamage: 21,
+    pounceDamage: 32,
+    speed: 2.8,
+    slashUnlocked: true,
+    pounceUnlocked: true,
+    perk: 'Pack-hunter cunning — he picks his target and finishes it.',
+  },
+  {
+    level: 13,
+    stage: 'adult',
+    maxHp: 194,
+    biteDamage: 19,
+    slashDamage: 23,
+    pounceDamage: 35,
+    speed: 2.9,
+    slashUnlocked: true,
+    pounceUnlocked: true,
+    perk: 'Terrifying speed across open ground.',
+  },
+  {
+    level: 14,
+    stage: 'adult',
+    maxHp: 207,
+    biteDamage: 21,
+    slashDamage: 25,
+    pounceDamage: 39,
+    speed: 2.9,
+    slashUnlocked: true,
+    pounceUnlocked: true,
+    perk: 'Almost apex. Very little on this floor wants his attention.',
+  },
+  {
+    level: 15,
+    stage: 'adult',
+    maxHp: 220,
+    biteDamage: 24,
+    slashDamage: 29,
+    pounceDamage: 45,
+    speed: 3.0,
+    slashUnlocked: true,
+    pounceUnlocked: true,
+    perk: (petNames) =>
+      `APEX PREDATOR. ${petWords(petNames, 'deinonychus').opening} is the most dangerous thing in the room, and he is yours.`,
+  },
+];
+
+export const DEINONYCHUS_MAX_LEVEL = DEINONYCHUS_LEVELS.length;
+
+/**
+ * Damage he has to land for one point of ability XP.
+ *
+ * `killXp` alone makes the first levels a wall, because the pet is the one
+ * creature in the party that mostly does not get the killing blow: a juvenile
+ * bites for two against mobs the cat is already hitting for ten, so a dinosaur who
+ * spent a whole floor in the fight can come off it having earned nothing. Paying
+ * for the contribution as well as the finish is what makes chip damage count.
+ *
+ * Deliberately coarse. A rate fine enough to pay per blow at level 1 pays an
+ * adult twelve times as much for the same swing, and his XP thresholds are the
+ * ones that grow — see {@link DEINONYCHUS_DEF.xpGrowthRate}.
+ *
+ * Set to two rather than five: a level-1 dinosaur bites for two every 46 frames,
+ * and at five damage per point that's only about a third of a point per second
+ * of *uninterrupted* combat — several minutes of continuous biting, from an
+ * animal that dies in a few hits and then owes minutes of recovery, just to
+ * reach the first level. At two, the first level-up lands within a session.
+ */
+export const DEINONYCHUS_DAMAGE_PER_XP = 2;
+
+/**
+ * XP for a kill he helped with but did not finish.
+ *
+ * The pet is the one party member who mostly does not land the killing blow —
+ * he chips at what the cat is already hitting for many times his bite — so a
+ * finish-only reward pays him for the fights he happened to be lucky in rather
+ * than the ones he did work in. Well under {@link DEINONYCHUS_DEF.killXp}: helping is
+ * worth real progress, finishing is worth more.
+ */
+export const DEINONYCHUS_ASSIST_XP = 5;
+
+/** The stats Deinonychus fights with at a given pet level. */
+export function getDeinonychusStats(level: number): DeinonychusStats {
+  const index = Math.max(0, Math.min(DEINONYCHUS_LEVELS.length - 1, Math.round(level) - 1));
+  return DEINONYCHUS_LEVELS[index];
+}
+
+/**
+ * His movement speed on the first level of a growth stage, in pixels per frame.
+ *
+ * For the harnesses that play his gait without a live Deinonychus behind them: they
+ * pace the walk from the speed that ships, so a cadence bug shows there too.
+ */
+export function deinonychusStageSpeed(stage: DeinonychusStage): number {
+  return (DEINONYCHUS_LEVELS.find((row) => row.stage === stage) ?? DEINONYCHUS_LEVELS[0]).speed;
+}
+
+/**
+ * Icon for the Abilities tab, the summon button and the reward dialog.
+ *
+ * Drawn from the sheet his *current* level uses, so the button shows the animal
+ * that will actually turn up rather than a stock portrait of the adult.
+ */
+function renderDeinonychusIcon(ctx: CanvasRenderingContext2D, rect: Rect, level: number): void {
+  const { x, y, size } = iconSquare(rect);
+  drawDeinonychusIcon(ctx, getDeinonychusStats(level).stage, x + size / 2, y + size / 2, size);
+}
+
+export const DEINONYCHUS_DEF: AbilityDef = {
+  id: 'deinonychus',
+  delivery: null,
+  name: 'Deinonychus',
+  owner: 'cat',
+  tag: 'PET',
+  equipInstructions:
+    'Switch to Cat (Tab), then press R or the Summon button. Press again to recall. ' +
+    'While you play the human, the cat sends him in herself when enemies are near ' +
+    '(Settings or the follower menu turn this off). ' +
+    'His health is his own and it carries between summons — he does not come back topped up. ' +
+    'He heals once you call him back, counting his run home — never more than 30 seconds ' +
+    'from empty to full — and a ' +
+    'knockout means he rests all the way to full ' +
+    'before he can be sent in again. Below roughly two fifths of his health he will not go in ' +
+    'at all — a dinosaur that hurt stays at your side instead of fighting, so the button holds ' +
+    'him back until he is fit.',
+  // Sixty rather than a hundred: the first level-up needs to land inside the
+  // first session that uses him, since that's the proof to the player that he
+  // levels at all.
+  baseXpToLevel2: 60,
+  xpGrowthRate: 1.45,
+  finalLevelMultiplier: 2.0,
+  usageXp: 2,
+  killXp: 15,
+  maxLevel: DEINONYCHUS_MAX_LEVEL,
+  perks: DEINONYCHUS_LEVELS.map((row) => ({ level: row.level, description: row.perk })),
+  renderIcon: renderDeinonychusIcon,
+};

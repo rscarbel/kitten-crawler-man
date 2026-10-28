@@ -28,6 +28,7 @@ import { TitleMenu, type TitleMenuChoice } from './titleMenu';
 import { freshTitleEventSeed, TitleEventScheduler, TitleQuipChannel } from './titleEvents';
 import { titlePromptSurface } from './titlePrompt';
 import { TitleMusicPulse } from './titlePulse';
+import { prefersReducedMotion } from '../../ui/core/reducedMotion';
 import { TITLE_WELCOME_HOLD_MS, TITLE_WELCOME_LINE, titleSystemAiSurface } from './titleSystemAi';
 import { TitleLightRigState, stageLayout, type TitleStage } from './titleStage';
 import {
@@ -40,12 +41,6 @@ import {
 } from './titleTimeline';
 
 const TITLE_TRACK = 'welcome_to_the_dungeon';
-const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
-
-function prefersReducedMotion(): boolean {
-  if (typeof globalThis.matchMedia !== 'function') return false;
-  return globalThis.matchMedia(REDUCED_MOTION_QUERY).matches;
-}
 
 /**
  * Where a title scene starts. Left unset, it follows the audio context:
@@ -80,7 +75,7 @@ export class TitleScene extends Scene {
   private readonly layers: readonly TitleLayer[];
   private readonly menu: TitleMenu;
   private readonly events: TitleEventScheduler;
-  /** The System AI's lines (its welcome, then sponsor quips), for the line that shows them to listen on. */
+  /** Caroline's lines (her welcome, then her quips), for the line that shows them to listen on. */
   readonly quips = new TitleQuipChannel();
   private readonly pulse: TitleMusicPulse;
   private stage: TitleStage;
@@ -311,7 +306,7 @@ export class TitleScene extends Scene {
   }
 
   /**
-   * Hands `keyframes` to the camera, the layers and the System AI line, each
+   * Hands `keyframes` to the camera, the layers and Caroline's line, each
    * timed on the scene clock from `sequenceStartedAtMs`, so a sequence
    * entered part-way shows a cue already as far along as it would be.
    */
@@ -323,7 +318,7 @@ export class TitleScene extends Scene {
       for (const layer of this.layers) layer.onCue?.(keyframe.cue);
       if (keyframe.cue === 'typewriterStart') {
         this.quips.publish({
-          text: TITLE_WELCOME_LINE,
+          text: TITLE_WELCOME_LINE.text,
           startedAtMs: firedAtElapsedMs,
           durationMs: TITLE_WELCOME_HOLD_MS,
         });

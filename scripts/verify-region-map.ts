@@ -4,7 +4,7 @@
  *
  * Room characters, lighting, hallway dressing and the wear field all ask "which
  * room or hallway is this tile", so the map has to answer for every tile a
- * crawler can stand on, and `roomIndexAt` — which the room-clear and Mongo
+ * crawler can stand on, and `roomIndexAt` — which the room-clear and Deinonychus
  * logic read — has to give exactly the answer the first-match search over
  * `roomBounds` gives. That search is restated here rather than imported so the
  * gate compares the grid against an independent definition.

@@ -180,7 +180,7 @@ const IMPACT_IDS = [
   'bite_1',
   'bite_2',
   'bite_3',
-  'mongo_slash',
+  'deinonychus_slash',
   'slash_strike_1',
   'slash_strike_2',
   'slash_strike_3',

@@ -1,6 +1,7 @@
 import type { AudioManager } from '../audio/AudioManager';
 import { MAGIC_MISSILE_SPARK_LEVEL } from '../abilities/magicMissile';
-import type { AbilityManager } from '../core/skills/AbilityManager';
+import { perkText, type AbilityManager } from '../core/skills/AbilityManager';
+import type { PetNames } from '../core/party/petNames';
 import type { MenusKit } from './kits/MenusKit';
 
 /** What a scene hands over for its ability level-ups to land on it. */
@@ -8,7 +9,9 @@ export interface AbilityLevelUpTarget {
   readonly abilityManager: AbilityManager;
   readonly menus: MenusKit;
   readonly audio: AudioManager | null;
-  /** Mongo grew: his stored health has to be rescaled onto the bigger animal. */
+  /** The run's pet names, for a perk that speaks of a named pet. */
+  readonly petNames: PetNames;
+  /** Deinonychus grew: his stored health has to be rescaled onto the bigger animal. */
   onPetLevelUp(): void;
   /** Magic Missile reached the level its achievement asks for. */
   onSparkLevel(): void;
@@ -27,16 +30,17 @@ export interface AbilityLevelUpTarget {
 export function bindAbilityLevelUps(target: AbilityLevelUpTarget): void {
   const { abilityManager, menus, audio } = target;
   abilityManager.onLevelUp = (id, newLevel) => {
-    if (id === 'mongo') target.onPetLevelUp();
+    if (id === 'deinonychus') target.onPetLevelUp();
     if (id === 'magic_missile' && newLevel >= MAGIC_MISSILE_SPARK_LEVEL) {
       target.onSparkLevel();
     }
     const def = abilityManager.getDef(id);
     if (def === null) return;
+    const perk = def.perks.find((candidate) => candidate.level === newLevel);
     menus.levelUpDialog.enqueue({
       name: def.name,
       newLevel,
-      perkDescription: def.perks.find((perk) => perk.level === newLevel)?.description ?? null,
+      perkDescription: perk === undefined ? null : perkText(perk.description, target.petNames),
       renderIcon: def.renderIcon,
     });
     audio?.play('ability_level_up');

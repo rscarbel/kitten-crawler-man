@@ -6,7 +6,7 @@
  * Usage: npm run build:zip
  *        (runs `npm run build` first to ensure sw.js and dist/bundle.js are fresh)
  *
- * Output: dist/kitten-crawler-man.zip
+ * Output: dist/kitten-crawler-world.zip
  *         Upload this file to S3 alongside the rest of the site so the
  *         download page can link to it.
  */
@@ -20,7 +20,7 @@ import { ROOT, CORE_FILES, collectShippedAssets, reportAssetSelection } from './
 
 const MAC_SCRIPT = `#!/bin/bash
 cd "$(dirname "$0")"
-echo "Starting Kitten Crawler Man..."
+echo "Starting Kitten Crawler World..."
 python3 -m http.server 8080 &
 SERVER_PID=$!
 sleep 1
@@ -32,7 +32,7 @@ wait $SERVER_PID
 
 const WIN_SCRIPT = `@echo off
 cd /d "%~dp0"
-echo Starting Kitten Crawler Man...
+echo Starting Kitten Crawler World...
 start /B python -m http.server 8080
 timeout /t 2 /nobreak >nul
 start http://localhost:8080
@@ -40,7 +40,7 @@ echo Game is running at http://localhost:8080
 pause
 `;
 
-const README = `KITTEN CRAWLER MAN — Offline Edition
+const README = `KITTEN CRAWLER WORLD — Offline Edition
 ======================================
 
 HOW TO PLAY
@@ -94,7 +94,7 @@ fs.writeFileSync(readmePath, README);
 
 // ── Create ZIP ───────────────────────────────────────────────────────────────
 
-const outZip = 'dist/kitten-crawler-man.zip';
+const outZip = 'dist/kitten-crawler-world.zip';
 
 // Remove any stale ZIP so we get a clean archive.
 if (fs.existsSync(path.join(ROOT, outZip))) {
@@ -133,4 +133,6 @@ try {
 const zipSizeBytes = fs.statSync(path.join(ROOT, outZip)).size;
 const zipSizeMb = (zipSizeBytes / 1024 / 1024).toFixed(1);
 console.log(`\nCreated ${outZip} (${zipSizeMb} MB)`);
-console.log('Upload dist/kitten-crawler-man.zip to your S3 bucket alongside the rest of the site.');
+console.log(
+  'Upload dist/kitten-crawler-world.zip to your S3 bucket alongside the rest of the site.',
+);

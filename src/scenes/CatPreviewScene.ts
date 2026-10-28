@@ -47,7 +47,6 @@ import type { WorkingTool } from '../core/items/gathering/toolTiers';
 import { WALK_FRAME_SPEED } from '../Player';
 import { CatPlayer } from '../creatures/CatPlayer';
 import { CAT_ROWS, type CatHold } from '../sprites/art/catFigure';
-import { catGripOf } from '../sprites/art/catSockets';
 import { HELD_VISUALS, workingToolHeldVisual } from '../sprites/held/heldVisuals';
 import type { HeldVisualDef } from '../sprites/held/heldVisualDef';
 import {
@@ -143,6 +142,7 @@ const CHOP: RowDrive = { kind: 'oneShot', action: 'chop' };
 const MINE: RowDrive = { kind: 'oneShot', action: 'mine' };
 const CARRY_WALK: RowDrive = { kind: 'walk', carrying: true };
 const CARRY_IDLE: RowDrive = { kind: 'idle', carrying: true };
+const THROW: RowDrive = { kind: 'oneShot', action: 'throw' };
 
 /** Exhaustive over her rows, so a row added to the figure cannot go unreachable here. */
 const ROW_DRIVES: Readonly<Record<CatState, RowDrive>> = {
@@ -184,6 +184,10 @@ const ROW_DRIVES: Readonly<Record<CatState, RowDrive>> = {
   carry_idle_side: CARRY_IDLE,
   carry_idle_side_west: CARRY_IDLE,
   carry_idle_away: CARRY_IDLE,
+  throw: THROW,
+  throw_side: THROW,
+  throw_side_west: THROW,
+  throw_away: THROW,
 };
 
 function isCatState(name: string): name is CatState {
@@ -367,12 +371,15 @@ interface CarryOption {
 const CARRY_OPTIONS: readonly CarryOption[] = [
   { label: 'none', look: null },
   ...Object.values(HELD_VISUALS)
-    .filter((look) => catGripOf(look) === 'mouthCarry')
+    .filter((look) => look.archetype === 'mouthCarry')
     .map((look) => ({ label: look.name, look })),
 ];
 
 const FIRST_CARRIED: HeldVisualDef | null =
   CARRY_OPTIONS.find((option) => option.look !== null)?.look ?? null;
+
+/** What the row pane holds in her jaws on her throw. */
+const ROW_PANE_THROWN: HeldVisualDef = HELD_VISUALS.prop_dynamite;
 
 /** What the row pane holds on a row she plays only while holding something, when nothing chosen fits it. */
 const ROW_PANE_TOOL: Readonly<Record<'chop' | 'mine', WorkingTool>> = {
@@ -509,6 +516,7 @@ export class CatPreviewScene extends PreviewScene {
       const look = this.carryOption.look ?? FIRST_CARRIED;
       return look === null ? null : { look, phase: 0, hold };
     }
+    if (hold === 'throw') return { look: ROW_PANE_THROWN, phase: 0, hold };
     const chosen = this.toolOption.tool;
     const chosenSwing = chosen === null ? null : CAT_WORK_SWING_OF_TOOL[chosen.kind];
     const tool = chosen !== null && chosenSwing === hold ? chosen : ROW_PANE_TOOL[hold];

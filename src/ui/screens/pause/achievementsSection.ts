@@ -68,7 +68,7 @@ function fixedRewardNames(def: AchievementDef, crawler: CrawlerKind): string[] {
     .filter((reward) => reward.to === undefined || reward.to === 'active' || reward.to === crawler)
     .map((reward) =>
       reward.kind === 'companion'
-        ? ABILITY_DEFS.mongo.name
+        ? ABILITY_DEFS.deinonychus.name
         : reward.quantity > 1
           ? `${reward.quantity} × ${ITEM_DEF[reward.id].name}`
           : ITEM_DEF[reward.id].name,

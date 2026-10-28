@@ -85,7 +85,7 @@ const CYCLES =
 const MS_PER_SECOND = 1000;
 const FRAMES_PER_SECOND = 60;
 const FRAME_MS = MS_PER_SECOND / FRAMES_PER_SECOND;
-/** Frames the arrival's loading screen may take before the soak calls it hung. */
+/** Frames a loading screen may stay up before the soak calls it hung. */
 const MAX_ARRIVAL_FRAMES = 3000;
 /** Frames of play after the arrival settles, before the first trip. */
 const SETTLE_FRAMES = 60;
@@ -251,6 +251,22 @@ async function dismissConversations(): Promise<void> {
   }
 }
 
+/** Runs frames while a loading screen covers the scene, up to {@link MAX_ARRIVAL_FRAMES}; returns how many. */
+async function framesUnderLoadingScreen(): Promise<number> {
+  let frames = 0;
+  while (renderQuality.isLoadingCovered && frames < MAX_ARRIVAL_FRAMES) {
+    await runFrame();
+    frames++;
+  }
+  return frames;
+}
+
+/** Whether the loading screen covering the scene lifted within {@link MAX_ARRIVAL_FRAMES}. */
+async function waitOutLoadingScreen(): Promise<boolean> {
+  await framesUnderLoadingScreen();
+  return !renderQuality.isLoadingCovered;
+}
+
 function currentScene(): Scene {
   if (current === null) throw new Error('no scene is running');
   return current;
@@ -367,6 +383,12 @@ for (let cycle = 0; cycle < CYCLES; cycle++) {
     failures.push(`trip ${cycle}: Space on the door of ${door.id} did not go inside`);
     break;
   }
+  // The building's own loading screen halts the world: a wander under it
+  // measures nothing, and the walk out would race it to the mat.
+  if (!(await waitOutLoadingScreen())) {
+    failures.push(`trip ${cycle}: the loading screen inside ${door.id} never lifted`);
+    break;
+  }
   await runFrames(ARRIVAL_PAUSE_FRAMES);
   await dismissConversations();
   const interior = currentScene();
@@ -392,11 +414,7 @@ for (let cycle = 0; cycle < CYCLES; cycle++) {
     break;
   }
   check(currentScene() !== outdoors, `trip ${cycle}: the exit did not rebuild the town scene`);
-  let exitLoadFrames = 0;
-  while (renderQuality.isLoadingCovered && exitLoadFrames < MAX_ARRIVAL_FRAMES) {
-    await runFrame();
-    exitLoadFrames++;
-  }
+  const exitLoadFrames = await framesUnderLoadingScreen();
   await runFrames(ARRIVAL_PAUSE_FRAMES);
 
   resetCacheWork();

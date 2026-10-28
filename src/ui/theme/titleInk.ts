@@ -133,7 +133,7 @@ const logoInk = {
 } as const;
 
 /**
- * The game-show rig: a warm-white key light on the heroes, and the cooler
+ * The lighting rig: a warm-white key light on the heroes, and the cooler
  * searchlights that sweep the hall between beats. Added over the dark, so each
  * is a colour whose strength is chosen at draw time.
  */
@@ -170,7 +170,7 @@ const castInk = {
   eyeGlowFade: 'rgba(214, 222, 92, 0)',
 } as const;
 
-/** The sponsor's loot box waiting in the shadows, and the glint that gives it away. */
+/** The loot box waiting in the shadows, and the glint that gives it away. */
 const lootInk = {
   /** Oiled planks, their shaded flank and the seams between them. */
   body: '#5a3416',

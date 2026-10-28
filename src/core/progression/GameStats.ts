@@ -21,7 +21,7 @@ const CLOCK_FIELD_WIDTH = 2;
  * a death that undid its own tally would make every death free. Whether the
  * party has heard the shield-fairy ward explainer is run history too: a
  * one-time hint that a death replayed would no longer be one-time. So is every
- * pet given to Mongo or a cow: the player did it, and no rewind takes it back.
+ * pet given to Deinonychus or a cow: the player did it, and no rewind takes it back.
  */
 export class GameStats {
   private _killsByType = new Map<string, number>();
@@ -35,7 +35,7 @@ export class GameStats {
   private _deaths = 0;
   private _framesPlayed = 0;
   private _wardExplainerHeard = false;
-  private _mongoPets = 0;
+  private _deinonychusPets = 0;
   private _cowPets = 0;
   private _midgePets = 0;
 
@@ -96,8 +96,8 @@ export class GameStats {
     this._deaths++;
   }
 
-  recordMongoPetted(): void {
-    this._mongoPets++;
+  recordDeinonychusPetted(): void {
+    this._deinonychusPets++;
   }
 
   /** Midge is a cow too, so a pet for her counts toward both tallies. */
@@ -170,8 +170,8 @@ export class GameStats {
     return this._wardExplainerHeard;
   }
 
-  get mongoPets(): number {
-    return this._mongoPets;
+  get deinonychusPets(): number {
+    return this._deinonychusPets;
   }
 
   get cowPets(): number {
@@ -196,7 +196,7 @@ export class GameStats {
       deaths: this._deaths,
       framesPlayed: this._framesPlayed,
       wardExplainerHeard: this._wardExplainerHeard,
-      mongoPets: this._mongoPets,
+      deinonychusPets: this._deinonychusPets,
       cowPets: this._cowPets,
       midgePets: this._midgePets,
     };
@@ -225,7 +225,7 @@ export class GameStats {
     stats._deaths = snapshot.deaths;
     stats._framesPlayed = snapshot.framesPlayed;
     stats._wardExplainerHeard = snapshot.wardExplainerHeard;
-    stats._mongoPets = snapshot.mongoPets;
+    stats._deinonychusPets = snapshot.deinonychusPets;
     stats._cowPets = snapshot.cowPets;
     stats._midgePets = snapshot.midgePets;
     return stats;
@@ -240,7 +240,7 @@ export class GameStats {
     this._deaths = Math.max(this._deaths, live._deaths);
     this._framesPlayed = Math.max(this._framesPlayed, live._framesPlayed);
     this._wardExplainerHeard ||= live._wardExplainerHeard;
-    this._mongoPets = Math.max(this._mongoPets, live._mongoPets);
+    this._deinonychusPets = Math.max(this._deinonychusPets, live._deinonychusPets);
     this._cowPets = Math.max(this._cowPets, live._cowPets);
     this._midgePets = Math.max(this._midgePets, live._midgePets);
   }
@@ -259,7 +259,7 @@ export interface GameStatsSnapshot {
   deaths: number;
   framesPlayed: number;
   wardExplainerHeard: boolean;
-  mongoPets: number;
+  deinonychusPets: number;
   cowPets: number;
   midgePets: number;
 }
@@ -287,7 +287,7 @@ export function parseGameStatsSnapshot(value: unknown): GameStatsSnapshot | unde
     deaths,
     framesPlayed,
     wardExplainerHeard,
-    mongoPets,
+    deinonychusPets,
     cowPets,
     midgePets,
   } = value;
@@ -303,7 +303,7 @@ export function parseGameStatsSnapshot(value: unknown): GameStatsSnapshot | unde
     !isNonNegativeFinite(deaths) ||
     !isNonNegativeFinite(framesPlayed) ||
     typeof wardExplainerHeard !== 'boolean' ||
-    !isNonNegativeFinite(mongoPets) ||
+    !isNonNegativeFinite(deinonychusPets) ||
     !isNonNegativeFinite(cowPets) ||
     !isNonNegativeFinite(midgePets)
   ) {
@@ -321,7 +321,7 @@ export function parseGameStatsSnapshot(value: unknown): GameStatsSnapshot | unde
     deaths,
     framesPlayed,
     wardExplainerHeard,
-    mongoPets,
+    deinonychusPets,
     cowPets,
     midgePets,
   };

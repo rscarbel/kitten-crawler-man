@@ -12,7 +12,7 @@ import {
 } from './art/attackCowFigure';
 import type { CowView } from './art/cowArt';
 import { type DrawnFigureRow, drawnFigureRow, figureFrameCount } from './figure/figureDef';
-import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
+import { drawFigureCached, drawFigureFitted, prewarmFigureState } from './figure/figureFrameCache';
 import { COW_IDLE_FPS } from './cowTiming';
 
 export type { AttackCowAction };
@@ -92,6 +92,17 @@ export function drawAttackCowSprite(
     alpha: state.alpha,
   });
   return drawnFigureRow(ATTACK_COW_FIGURE, key);
+}
+
+/** Her portrait: standing in profile, fitted to the square centred on (cx, cy). */
+export function drawAttackCowIcon(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+): void {
+  const box = { x: cx - size / 2, y: cy - size / 2, w: size, h: size };
+  drawFigureFitted(ctx, ATTACK_COW_FIGURE, attackCowStateName('idle', 'side'), 0, box);
 }
 
 /** Warms every view of one action's row, off whatever is about to play it. */

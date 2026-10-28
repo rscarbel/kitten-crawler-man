@@ -86,8 +86,6 @@ const NO_EFFECT: WheelPrizeEffect = {
 };
 
 const ONE = 1;
-/** A wheel prize's coins are the wheel's own, never scaled by the viewers' favour. */
-const WHEEL_COIN_MULTIPLIER = 1;
 
 /** Items straight into the crawler's bag, the moment the wheel lands. */
 function grantItems(
@@ -106,7 +104,7 @@ function grantRarityContents(target: WheelPrizeTarget, rarity: Rarity): WheelPri
   const lines = rollRewardChest(rarity, target.kind, worldRandom, {
     owns: (id) => partyOwnsGear(target.party, id),
     // A chest is a chest wherever it opens: the winner's worn coin bonus pays on it.
-    coinMultiplier: WHEEL_COIN_MULTIPLIER * coinBonusFor(target.crawler),
+    coinMultiplier: coinBonusFor(target.crawler),
   });
   const items: PrizeItem[] = [];
   let coins = 0;

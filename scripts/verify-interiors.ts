@@ -97,7 +97,7 @@ import { MobRoster } from '../src/systems/kits/SceneWorld';
 import { SpellSystem } from '../src/systems/SpellSystem';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
-import { MIN_STAT_VALUE } from '../src/Player';
+import { MIN_STAT_VALUE } from '../src/core/party/crawlerFormulas';
 import { partyLevelOf, spawnForLevel } from '../src/levels/spawner';
 import { level3 } from '../src/levels/level3';
 import { campSiteKey } from '../src/map/overworld/camps';
@@ -214,7 +214,7 @@ const TOWER_CONFRONTATION_FLOOR = TOWER_FLOOR_COUNT - 1;
  *
  * Nothing in the room has a windup — every caster in it can loose its first bolt
  * on the frame it acquires a target — and a companion locked to the game's
- * minimum constitution dies to any one of those bolts, which turns the whole
+ * minimum health dies to any one of those bolts, which turns the whole
  * party out of the tower before the fight is visible. So the arrival tile is not
  * allowed to be merely outside the ranges: it has to be outside them by more
  * than the encounter's own guards can drift while they idle.
@@ -733,7 +733,7 @@ console.log('\nSteve Cartwright shoots at his target, and holds fire for anyone 
       };
       const noParty = {
         crawlers: [],
-        pet: { mongo: null },
+        pet: { deinonychus: null },
         hire: { activeMerc: null, downedMerc: null },
         cow: { cow: null },
       };
@@ -747,8 +747,8 @@ console.log('\nSteve Cartwright shoots at his target, and holds fire for anyone 
         partyRoutineBodies({ ...noParty, cow: { cow: midLanePx } }),
       );
       holdsFireFor(
-        'a recalling Mongo',
-        partyRoutineBodies({ ...noParty, pet: { mongo: midLanePx } }),
+        'a recalling Deinonychus',
+        partyRoutineBodies({ ...noParty, pet: { deinonychus: midLanePx } }),
       );
 
       const shooter = placed.person;
@@ -850,7 +850,7 @@ console.log('\nNo interior tile renders as a hole');
 // A prop paints the floor it was stamped over before it paints itself, and the
 // palette it paints that floor through is chosen per tile type. A palette with
 // no material for the floor type underneath draws *nothing at all* and leaves a
-// transparent tile, which the game shows as a solid black square behind the
+// transparent tile, which the game draws as a solid black square behind the
 // prop. Nothing throws and nothing logs, so the only way to catch it is to
 // render the room and look at the pixels.
 //
@@ -1524,9 +1524,9 @@ console.log('\nThe tower confrontation opens on safe ground');
   human.isActive = true;
   cat.isActive = false;
   // The build this fight is hardest on, and the one it was reported broken from:
-  // a crawler holding the game's minimum constitution has a health pool smaller
+  // a crawler holding the game's minimum health has a health pool smaller
   // than a single soul bolt.
-  cat.setBaseStat('constitution', MIN_STAT_VALUE);
+  cat.setBaseStat('health', MIN_STAT_VALUE);
 
   const roster = new MobRoster(map, new SpellSystem());
   const spawned: Mob[] = [];

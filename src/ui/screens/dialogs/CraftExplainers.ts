@@ -1,6 +1,6 @@
 /**
  * The "how it works" explainers (the craft skills, village processing and
- * Mongo) behind one handle and one surface.
+ * Deinonychus) behind one handle and one surface.
  *
  * Only one is ever up at a time, and every scene treats whichever it is the
  * same way, so a scene mounts the one surface and anything that gains an
@@ -19,7 +19,7 @@ import {
 import type { ExplainerEntry } from './explainerPages';
 
 /** A craft skill's own id, or another process explained the same way. */
-export type ExplainerId = CraftSkillId | 'processing' | 'mongo' | 'dual_harvest';
+export type ExplainerId = CraftSkillId | 'processing' | 'deinonychus' | 'dual_harvest';
 
 export interface CraftExplainersSurfaceOptions {
   /** Defaults to `craft-explainers`. */

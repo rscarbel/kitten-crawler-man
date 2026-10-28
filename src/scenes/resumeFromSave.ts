@@ -5,15 +5,16 @@ import type { LevelDef } from '../levels/types';
 import { getLevelDef } from '../levels/index';
 import { revivedSnapshot, withoutIncurableStatuses } from '../core/save/PlayerSnapshot';
 import { AbilityManager } from '../core/skills/AbilityManager';
-import { getMongoStats } from '../abilities/mongo';
-import { createMongoPetState } from '../core/state/MongoPetState';
+import { getDeinonychusStats } from '../abilities/deinonychus';
+import { createDeinonychusPetState } from '../core/state/DeinonychusPetState';
 import { AchievementManager } from '../core/progression/AchievementManager';
 import { GameStats } from '../core/progression/GameStats';
 import { createWheelLedger } from '../core/save/WheelLedger';
 import { createAttackCowState } from '../core/state/AttackCowState';
 import { withDoubleDamageFrames } from '../core/save/doubleDamageSave';
 import { MusicLibrary } from '../core/music/MusicLibrary';
-import { viewerFavor } from '../core/progression/viewerFavor';
+import { storyDirectorFromSave } from '../story/storySave';
+import { PetNameBook } from '../core/party/petNames';
 
 /**
  * An ability manager carrying a save's progress.
@@ -96,7 +97,7 @@ export function sceneSetupFromSave(
     false,
   );
   options.abilityManager = resumedAbilityManager(progress.abilityStates);
-  options.mongoUnlocked = progress.mongoUnlocked;
+  options.deinonychusUnlocked = progress.deinonychusUnlocked;
   options.partyCrafts = progress.crafts;
   options.humanAchievements = AchievementManager.fromSerialized(progress.humanAchievements);
   options.catAchievements = AchievementManager.fromSerialized(progress.catAchievements);
@@ -104,14 +105,17 @@ export function sceneSetupFromSave(
   // no less heard for the death, and rewinding it would announce its unlock
   // and its credit a second time.
   options.musicLibrary ??= MusicLibrary.fromSerialized(progress.musicLibrary);
-  viewerFavor.restore(progress.viewerFavor);
+  // The same for the story: a beat heard after the save is still heard.
+  options.storyDirector ??= storyDirectorFromSave(progress);
+  // And for the pets: a name given after the save is still the pet's name.
+  options.petNames ??= new PetNameBook(progress.petNames);
   // Clamped against the maximum the restored ability level implies, which the
   // save does not store.
-  const petMaxHp = getMongoStats(options.abilityManager.getLevel('mongo')).maxHp;
-  options.mongoPetState = createMongoPetState(
-    Math.min(petMaxHp, progress.mongoPetHp),
+  const petMaxHp = getDeinonychusStats(options.abilityManager.getLevel('deinonychus')).maxHp;
+  options.deinonychusPetState = createDeinonychusPetState(
+    Math.min(petMaxHp, progress.deinonychusPetHp),
     petMaxHp,
-    progress.mongoPetResting,
+    progress.deinonychusPetResting,
   );
   const levelDef = getLevelDef(progress.levelId);
   const savedWorld = progress.world;

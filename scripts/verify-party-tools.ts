@@ -129,7 +129,7 @@ function newCrawlers(): { human: HumanPlayer; cat: CatPlayer } {
   const { human, cat } = newCrawlers();
   tools.grantStarterTools(human, cat);
 
-  // Simulate an old save or a bug that lost the item entirely.
+  // Simulate a bug that lost the item entirely.
   human.inventory.removeItems('basic_axe', 1);
   check(
     human.inventory.countOf('basic_axe') === 0,

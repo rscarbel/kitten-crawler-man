@@ -32,7 +32,7 @@ import {
   ratkinCastFigure,
   ratkinCastRow,
 } from './art/ratkinCastFigure';
-import { RAT_KIN_TILES_PER_WALK_CYCLE } from './ratKinSprite';
+import { RAT_KIN_TILES_PER_WALK_CYCLE } from './art/ratKinFigure';
 
 /** What a cast member can be doing, as far as the sprite is concerned. */
 export type RatkinCastAction =
@@ -129,8 +129,8 @@ export function ratkinCastDrawnStates(id: RatkinCastId): string[] {
 }
 
 /**
- * Ground one walk cycle covers for this cast member, in tiles. Mordecai's gait
- * at his size, scaled by the build: a child's legs are three quarters as long,
+ * Ground one walk cycle covers for this cast member, in tiles. The shared gait
+ * at the base build's size, scaled by this build: a child's legs are three quarters as long,
  * so three quarters of the ground per cycle, and pacing the cycle by distance
  * with anything else makes the feet skate.
  */

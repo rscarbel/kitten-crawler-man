@@ -48,11 +48,6 @@ export const SPIDER_QUEST_CUES = {
    */
   panickedFootstepsLoop: [],
   /**
-   * The ping as the "Message from Mordecai" box opens. Final:
-   * `mordecai_message_chime`. Interface, so play it with `{ bus: 'ui' }`.
-   */
-  mordecaiMessage: ['mordecai_message_chime'],
-  /**
    * The bed under both lab hallways, not the station. Final:
    * `spider_hallway_ambience_loop` (streamed). Start it through
    * `spiderQuestLoop('hallwayBed')`.

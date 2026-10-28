@@ -54,7 +54,7 @@ import { TargetHoldOffs, type HoldOffQuery } from './targetHoldOffs';
  * (`src/creatures/mercenaries/`), and how it looks in its entry in
  * `MERCENARY_ART`.
  *
- * It does **not** recall at low HP the way Mongo does: a hireling fights on,
+ * It does **not** recall at low HP the way Deinonychus does: a hireling fights on,
  * takes half of every blow, drinks its own draughts and heals up between
  * fights (`HirelingSurvival`). At zero HP it goes down rather than dying, and a
  * crawler standing over it can bring it back; left too long, it dies, and its
@@ -318,7 +318,7 @@ export class Mercenary extends Mob {
   }
 
   /**
-   * Ticked wherever the party is, like Mongo. Left to the activation radius,
+   * Ticked wherever the party is, like Deinonychus. Left to the activation radius,
    * a hire that fell a screen behind stopped thinking at exactly the moment it
    * needed to walk home, and stood frozen out of sight for the rest of the floor.
    */

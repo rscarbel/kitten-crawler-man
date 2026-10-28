@@ -2,7 +2,7 @@ import { TILE_SIZE } from '../../core/constants';
 import type { Player } from '../../Player';
 import type { Mob } from '../Mob';
 import type { Mercenary } from '../Mercenary';
-import { Mongo } from '../Mongo';
+import { Deinonychus } from '../Deinonychus';
 import { normalize } from '../../utils';
 import {
   ANSELM_HURT_DURATION_MS,
@@ -388,7 +388,7 @@ export class MedicKit implements MercenaryKit {
   /**
    * The ally worst off by share of health, below the trigger, in range and in
    * sight — himself included. A pet already on its way home, or a crawler
-   * knocked out and waiting to be revived, is not his to treat: Mongo's HP is
+   * knocked out and waiting to be revived, is not his to treat: Deinonychus's HP is
    * written off when he leaves, and revival is its own rule.
    */
   private findPatient(ctx: MercenaryKitContext): Player | null {
@@ -416,7 +416,7 @@ export class MedicKit implements MercenaryKit {
   private isTreatable(ctx: MercenaryKitContext, friend: Player, rangePx: number): boolean {
     const merc = ctx.merc;
     if (!friend.isAlive || friend.isKnockedOut || friend.maxHp <= 0) return false;
-    if (friend instanceof Mongo && friend.exhausted) return false;
+    if (friend instanceof Deinonychus && friend.exhausted) return false;
     if (friend === merc) return true;
     if (!ctx.allies.includes(friend)) return false;
     if (Math.hypot(friend.x - merc.x, friend.y - merc.y) > rangePx) return false;

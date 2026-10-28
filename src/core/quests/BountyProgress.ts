@@ -2,7 +2,7 @@ import { BOUNTY_DEFS } from '../../systems/bountyDefs';
 
 /**
  * Cross-scene state for Shady's bounty loop. One mutable object is created by
- * the overworld DungeonScene and threaded by reference through every scene
+ * the overworld's DungeonScene and threaded by reference through every scene
  * reconstruction (building entry/exit), so an issued bounty — and, critically,
  * the shuffled orders that make repeats feel fresh — survive door round-trips.
  *

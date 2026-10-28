@@ -12,22 +12,17 @@
  * feel ahead of it.
  */
 
-import { ALL_STATS, MIN_STAT_VALUE, type StatName } from '../../Player';
+import { STARTING_STATS, STAT_GAIN_PER_POINT, zeroStats, type StatId } from './stats';
 import type { PlayerDamageType } from '../../creatures/Mob';
 import { computeDodgeChance } from '../combat/dodge';
 import { getMagicMissileStats } from '../../abilities/magicMissile';
 import {
   bareClawDamage,
   bareFistDamage,
-  CAT_BASE_CONSTITUTION,
   CAT_BASE_HP_OFFSET,
-  CAT_DEXTERITY_PER_LEVEL,
-  CAT_LOCKED_STATS,
-  CAT_STARTING_DEXTERITY,
   CAT_SWIPE_FRAMES,
   crawlerMaxHp,
   HUMAN_BASE_HP_OFFSET,
-  HUMAN_STARTING_DEXTERITY,
   HUMAN_SWING_FRAMES,
   missileDamage,
   STAT_POINTS_PER_LEVEL,
@@ -48,7 +43,7 @@ export interface ReferenceAttack {
 }
 
 interface ReferenceStats {
-  readonly stats: Readonly<Record<StatName, number>>;
+  readonly stats: Readonly<Record<StatId, number>>;
   readonly maxHp: number;
   readonly dodgeChance: number;
   /**
@@ -60,61 +55,51 @@ interface ReferenceStats {
   readonly attackCycle: readonly ReferenceAttack[];
 }
 
-function startingStats(crawler: ReferenceCrawler): Record<StatName, number> {
-  const stats: Record<StatName, number> = {
-    strength: MIN_STAT_VALUE,
-    intelligence: MIN_STAT_VALUE,
-    constitution: MIN_STAT_VALUE,
-    dexterity: MIN_STAT_VALUE,
-  };
-  if (crawler === 'human') {
-    stats.dexterity = HUMAN_STARTING_DEXTERITY;
-  } else {
-    stats.constitution = CAT_BASE_CONSTITUTION;
-    stats.dexterity = CAT_STARTING_DEXTERITY;
-  }
-  return stats;
-}
-
-function canSpendInto(crawler: ReferenceCrawler, stat: StatName): boolean {
-  return crawler === 'human' || !CAT_LOCKED_STATS.includes(stat);
-}
+/**
+ * The stats an on-curve player spreads her points over, in the order she
+ * spends them. The curve every levelled enemy is priced against was fitted to
+ * these allocations, so they stay fixed whatever order the stat sheet lists
+ * stats in: the human splits his between his blow, his magic, his health and
+ * his footwork; the cat puts hers into her claws and her missile.
+ */
+const ON_CURVE_SPEND_ORDER = {
+  human: ['melee', 'magic', 'health', 'evasiveness'],
+  cat: ['melee', 'magic'],
+} as const satisfies Record<ReferenceCrawler, readonly StatId[]>;
 
 /**
- * Every level-up point spread evenly, in turn, over the stats the crawler can
- * spend into, so the result at every party level is the allocation a player
+ * Every level-up point spread evenly, in turn, over the crawler's on-curve
+ * spend order, so the result at every party level is the allocation a player
  * spending evenly would actually have — never a fractional point.
  */
-function spentPoints(crawler: ReferenceCrawler, points: number): Record<StatName, number> {
-  const spendable = ALL_STATS.filter((stat) => canSpendInto(crawler, stat));
-  const spent: Record<StatName, number> = {
-    strength: 0,
-    intelligence: 0,
-    constitution: 0,
-    dexterity: 0,
-  };
-  for (let point = 0; point < points; point++) spent[spendable[point % spendable.length]]++;
+function spentStats(crawler: ReferenceCrawler, points: number): Record<StatId, number> {
+  const order: readonly StatId[] = ON_CURVE_SPEND_ORDER[crawler];
+  const spent = zeroStats();
+  for (let point = 0; point < points; point++) {
+    const stat = order[point % order.length];
+    spent[stat] += STAT_GAIN_PER_POINT[stat][crawler];
+  }
   return spent;
 }
 
 function attackCycleFor(
   crawler: ReferenceCrawler,
-  stats: Readonly<Record<StatName, number>>,
+  stats: Readonly<Record<StatId, number>>,
 ): ReferenceAttack[] {
   if (crawler === 'human') {
     return [
-      { damage: bareFistDamage(stats.strength), damageType: 'melee', frames: HUMAN_SWING_FRAMES },
+      { damage: bareFistDamage(stats.melee), damageType: 'melee', frames: HUMAN_SWING_FRAMES },
     ];
   }
   const spell = getMagicMissileStats(UNTRAINED_SPELL_LEVEL);
   const pressesPerMissile = Math.max(1, Math.ceil(spell.cooldownFrames / CAT_SWIPE_FRAMES));
   const missile: ReferenceAttack = {
-    damage: missileDamage(stats.intelligence, spell.damageMultiplier),
+    damage: missileDamage(stats.magic, spell.damageMultiplier),
     damageType: 'missile',
     frames: CAT_SWIPE_FRAMES,
   };
   const claw: ReferenceAttack = {
-    damage: bareClawDamage(stats.strength),
+    damage: bareClawDamage(stats.melee),
     damageType: 'melee',
     frames: CAT_SWIPE_FRAMES,
   };
@@ -129,20 +114,21 @@ function attackCycleFor(
 export function referenceStats(crawler: ReferenceCrawler, partyLevel: number): ReferenceStats {
   const levelsGained = Math.max(0, partyLevel - 1);
   const points = levelsGained * STAT_POINTS_PER_LEVEL;
-  const spent = spentPoints(crawler, points);
-  const base = startingStats(crawler);
-  const stats: Record<StatName, number> = {
-    strength: base.strength + spent.strength,
-    intelligence: base.intelligence + spent.intelligence,
-    constitution: base.constitution + spent.constitution,
-    dexterity: base.dexterity + spent.dexterity,
+  const spent = spentStats(crawler, points);
+  const base = STARTING_STATS[crawler];
+  const stats: Record<StatId, number> = {
+    health: base.health + spent.health,
+    melee: base.melee + spent.melee,
+    magic: base.magic + spent.magic,
+    evasiveness: base.evasiveness + spent.evasiveness,
+    ranged: base.ranged + spent.ranged,
+    explosivesHandling: base.explosivesHandling + spent.explosivesHandling,
   };
-  if (crawler === 'cat') stats.dexterity += levelsGained * CAT_DEXTERITY_PER_LEVEL;
   const baseHpOffset = crawler === 'human' ? HUMAN_BASE_HP_OFFSET : CAT_BASE_HP_OFFSET;
   return {
     stats,
-    maxHp: crawlerMaxHp(baseHpOffset, stats.constitution),
-    dodgeChance: computeDodgeChance(stats.dexterity),
+    maxHp: crawlerMaxHp(baseHpOffset, stats.health),
+    dodgeChance: computeDodgeChance(crawler, stats.evasiveness),
     attackCycle: attackCycleFor(crawler, stats),
   };
 }
@@ -150,8 +136,9 @@ export function referenceStats(crawler: ReferenceCrawler, partyLevel: number): R
 /**
  * The max HP of an on-schedule human crawler at `partyLevel`: the
  * yardstick a blow sized as a share of a crawler's health is measured against.
- * The human rather than the cat because her constitution never grows, so her max HP
- * says nothing about how far into the run the party is.
+ * The human rather than the cat because her on-curve allocation leaves her
+ * health where it started, so her max HP says nothing about how far into the
+ * run the party is.
  */
 export function onCurveCrawlerMaxHp(partyLevel: number): number {
   return referenceStats('human', partyLevel).maxHp;

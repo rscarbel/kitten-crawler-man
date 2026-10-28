@@ -19,11 +19,9 @@ import { CONTAINMENT_LABEL, doomsdayCountdownEntry } from '../../systems/Doomsda
 import type { Rect } from '../../ui/core/geom';
 import type { Surface } from '../../ui/core/UiRoot';
 import { AIChatFeed } from '../../ai/AIChatFeed';
-import { SYSTEM_CHARACTER_NAME } from '../../ai/characters';
+import { CAROLINE_CHARACTER_NAME } from '../../ai/characters';
 import { aiPanelSurface } from '../../ui/hud/aiPanel';
 import { aiChallengeBandEntry } from '../../ui/hud/aiChallengeBand';
-import type { ViewerFavorModel } from '../../ui/hud/viewerFavorPill';
-import { FAVOR_MAX, favorPerk, favorTier } from '../../core/progression/viewerFavor';
 import { HudSurface } from '../../ui/hud/HudSurface';
 import type {
   DockButtonModel,
@@ -46,7 +44,7 @@ import type { TopBandEntry } from '../../ui/hud/topBand';
 import { stackedBandEntry } from '../../ui/hud/topBandStack';
 import { QUEST_BANNER_FRAMES, questBannerEntry } from '../../ui/QuestBanners';
 import { palette } from '../../ui/theme/tokens';
-import { drawMongoIcon, type MongoStage } from '../../sprites/mongoSprite';
+import { drawDeinonychusIcon, type DeinonychusStage } from '../../sprites/deinonychusSprite';
 import type { DialogFixture } from './dialogs/fixture';
 import { siegeHudEntry, type SiegeHudBar } from '../../systems/briarHollow/siegeHudEntry';
 import { UPDATES_PER_SECOND } from '../../systems/briarHollow/structureRules';
@@ -69,8 +67,11 @@ import {
 } from '../../ui/hud/siegeBellAlert';
 import { siegeVictorySurface } from '../../ui/hud/siegeVictoryCelebration';
 import { buildFixture as inventoryFixture } from './inventory';
+import { PET_NAME_SUGGESTIONS } from '../../core/party/petNames';
 
 const FIXTURE_TOAST_TICKS = 20;
+/** Long enough for Caroline's notice to unfold and decode in full, short of its fold. */
+const CAROLINE_TOAST_READ_TICKS = 90;
 /** A cry heard three times while its caption was up. */
 const MERGED_CAPTION_REPEATS = 3;
 /** Up and to the left of the screen's middle, in radians. */
@@ -94,7 +95,8 @@ const DYNAMITE_STACK = 3;
 const MINIMAP_ROW_STEP = 3;
 const PARTY_DOT = 4;
 /** The largest growth stage, whose art reaches furthest past its tile. */
-const SUMMON_PORTRAIT_STAGE = 'adult' as const satisfies MongoStage;
+const SUMMON_PORTRAIT_STAGE = 'adult' as const satisfies DeinonychusStage;
+const FIXTURE_DEINONYCHUS_NAME = PET_NAME_SUGGESTIONS.deinonychus[0];
 const ENCOUNTER_WAVE_FRACTION = 0.6;
 const STATUS_HALF = 0.5;
 const STATUS_MOST = 0.85;
@@ -129,7 +131,7 @@ function item(id: ItemId, quantity: number): InventoryItem {
 }
 
 const HOTBAR_ITEMS: readonly (InventoryItem | null)[] = [
-  item('smush_tome', 1),
+  item('seismic_stomp_tome', 1),
   item('health_potion', POTION_STACK),
   item('goblin_dynamite', DYNAMITE_STACK),
   null,
@@ -192,10 +194,10 @@ const FIGHT_STATUS: readonly StatusPillModel[] = [
   { id: 'haste', label: 'FAST', color: palette.state.info, remaining: STATUS_MOST, harmful: false },
 ];
 
-const COMPANION_ROACH_STATUS: readonly StatusPillModel[] = [
+const COMPANION_NINE_LIVES_STATUS: readonly StatusPillModel[] = [
   {
-    id: 'cockroach',
-    label: 'ROACH',
+    id: 'nine_lives',
+    label: 'LIVES',
     color: palette.state.success,
     remaining: null,
     harmful: false,
@@ -316,7 +318,9 @@ function encounterEntry(): TopBandEntry {
  * which has to read in full on a phone rather than be ellipsized. The music
  * notices: one unlock; the club's arrival, four unlocks and the first song's
  * credit; the longest credit in the catalogue, which must wrap on a phone;
- * and an old save's one backfill summary.
+ * and the one backfill summary a run started part-way through the game displays.
+ * `caroline` is two of her compact notices, a long and a very short one,
+ * decoded in full beside an ordinary one.
  */
 type FixtureToasts =
   | 'none'
@@ -327,7 +331,8 @@ type FixtureToasts =
   | 'clubArrival'
   | 'longCredit'
   | 'musicBackfill'
-  | 'captions';
+  | 'captions'
+  | 'caroline';
 
 const CLUB_SONGS = [
   'cloak_and_dagger_1',
@@ -335,7 +340,7 @@ const CLUB_SONGS = [
   'cloak_and_dagger_3',
   'cloak_and_dagger_4',
 ] as const satisfies readonly MusicTrackId[];
-/** A plausible count for an old save part-way through Taloncrest. */
+/** A plausible count for a run started part-way through Taloncrest. */
 const BACKFILLED_SONG_COUNT = 21;
 
 interface HudFixtureSpec {
@@ -351,8 +356,6 @@ interface HudFixtureSpec {
   readonly expanded: boolean;
   /** Fills the AI panel; absent leaves it unmounted. */
   readonly ai?: (feed: AIChatFeed) => void;
-  /** The viewers' favour meter; absent hides it, as before the AI first moves it. */
-  readonly favor?: ViewerFavorModel;
 }
 
 function hudFixture(spec: HudFixtureSpec): DialogFixture {
@@ -388,10 +391,19 @@ function hudFixture(spec: HudFixtureSpec): DialogFixture {
         toasts.post('Health restored', { tone: 'success', icon: 'flask' });
         toasts.post('Not enough coins', { tone: 'warning', icon: 'coin' });
         toasts.post('Game Saved', { tone: 'success', icon: 'save' });
-        toasts.post('Mongo recovering −3.6s', { tone: 'info', icon: 'hourglass' });
+        toasts.post(`${FIXTURE_DEINONYCHUS_NAME} is recovering −3.6s`, {
+          tone: 'info',
+          icon: 'hourglass',
+        });
         toasts.post(`Wear the ${ITEM_DEF.lucky_hoodie.name} — it does nothing in the bag!`, {
           tone: 'warning',
         });
+      }
+      if (spec.toasts === 'caroline') {
+        toasts.post('Game Saved', { tone: 'success', icon: 'save' });
+        toasts.post('Boss eliminated. Time: 4 minutes 12 seconds.', { voice: 'caroline' });
+        toasts.post('Saved.', { voice: 'caroline' });
+        for (let tick = 0; tick < CAROLINE_TOAST_READ_TICKS; tick++) toasts.update();
       }
       for (let tick = 0; tick < FIXTURE_TOAST_TICKS; tick++) {
         toasts.update();
@@ -415,6 +427,7 @@ function hudFixture(spec: HudFixtureSpec): DialogFixture {
         },
         dock: dock(spec.dockExtras),
         summon: {
+          petName: FIXTURE_DEINONYCHUS_NAME,
           label: 'Summon',
           active: false,
           usable: true,
@@ -425,7 +438,7 @@ function hudFixture(spec: HudFixtureSpec): DialogFixture {
           cooldown: 0,
           cooldownSeconds: 0,
           paintIcon: (ctx, rect) =>
-            drawMongoIcon(
+            drawDeinonychusIcon(
               ctx,
               SUMMON_PORTRAIT_STAGE,
               rect.x + rect.w / 2,
@@ -443,7 +456,6 @@ function hudFixture(spec: HudFixtureSpec): DialogFixture {
           spec.levelTimerFrames === undefined
             ? null
             : { frames: spec.levelTimerFrames, paused: false },
-        favor: spec.favor ?? null,
       });
       const hud = new HudSurface({
         id: `hud-${spec.name}`,
@@ -695,8 +707,8 @@ function aiOnline(feed: AIChatFeed): void {
   feed.status = 'online';
   feed.onChat({
     messageId: 'fixture-question',
-    characterName: SYSTEM_CHARACTER_NAME,
-    text: 'Crawler! The viewers demand a choice. Fight the goblin champion for a Rare chest, or flee and keep your dignity. Such as it is.',
+    characterName: CAROLINE_CHARACTER_NAME,
+    text: `${crawlerName('human')}. A goblin champion holds the corridor ahead. Defeat it for a Rare chest, or withdraw.`,
     done: true,
     choices: [
       { id: 'fight', label: 'Fight' },
@@ -706,68 +718,59 @@ function aiOnline(feed: AIChatFeed): void {
   });
   for (let frame = 0; frame < AI_TYPE_OUT_FRAMES; frame++) feed.update();
   feed.onState({
-    characterName: SYSTEM_CHARACTER_NAME,
-    mood: { label: 'amused', intensity: 1 },
+    characterName: CAROLINE_CHARACTER_NAME,
+    mood: { label: 'attentive', intensity: 1 },
     relationship: { respect: 0 },
   });
   feed.onState({
-    characterName: SYSTEM_CHARACTER_NAME,
-    mood: { label: 'amused', intensity: 1 },
+    characterName: CAROLINE_CHARACTER_NAME,
+    mood: { label: 'attentive', intensity: 1 },
     relationship: { respect: 1 },
   });
-  feed.addIntervention(SYSTEM_CHARACTER_NAME, `granted ${crawlerName('human')} a Common chest`);
+  feed.addIntervention(CAROLINE_CHARACTER_NAME, `granted ${crawlerName('human')} a Common chest`);
 }
 
 function aiOffline(feed: AIChatFeed): void {
   feed.status = 'offline';
-  feed.addScripted(SYSTEM_CHARACTER_NAME, 'Please hold while I pretend to care.');
+  feed.addScripted(CAROLINE_CHARACTER_NAME, 'Outcome logged. Continue.');
   for (let frame = 0; frame < AI_TYPE_OUT_FRAMES; frame++) feed.update();
 }
 
-/** A run the viewers are warming to, just after a cheer. */
-const SHOW_FAVOR_VALUE = 68;
-const SHOW_FAVOR_SWING = 6;
-const SHOW_FAVOR: ViewerFavorModel = {
-  value: SHOW_FAVOR_VALUE,
-  max: FAVOR_MAX,
-  tier: favorTier(SHOW_FAVOR_VALUE),
-  perk: favorPerk(SHOW_FAVOR_VALUE).label,
-  swing: { delta: SHOW_FAVOR_SWING, seq: 1 },
-};
-const SHOW_CHALLENGE_FRAMES_LEFT = 2_580;
-const SHOW_CHALLENGE_FRAMES_LIMIT = 5_400;
+const RUNNING_CHALLENGE_FRAMES_LEFT = 2_580;
+const RUNNING_CHALLENGE_FRAMES_LIMIT = 5_400;
 
-function showChallengeEntry(): TopBandEntry {
+function runningChallengeEntry(): TopBandEntry {
   return aiChallengeBandEntry({
     title: 'Rat Race',
     objective: 'Kill 5 rats within 90s without taking damage',
     progress: '2/5',
-    clock: { framesLeft: SHOW_CHALLENGE_FRAMES_LEFT, framesLimit: SHOW_CHALLENGE_FRAMES_LIMIT },
+    clock: {
+      framesLeft: RUNNING_CHALLENGE_FRAMES_LEFT,
+      framesLimit: RUNNING_CHALLENGE_FRAMES_LIMIT,
+    },
     urgent: false,
   });
 }
 
 export const HUD_FIXTURES: readonly DialogFixture[] = [
   hudFixture({
-    name: 'ai-show',
+    name: 'ai-challenge',
     status: [],
     skillPoints: 0,
     dockExtras: [],
-    topBand: () => [showChallengeEntry()],
+    topBand: () => [runningChallengeEntry()],
     toasts: 'none',
     expanded: false,
-    favor: SHOW_FAVOR,
   }),
   hudFixture({
-    name: 'ai-show-timed-floor',
+    name: 'ai-challenge-timed-floor',
     status: [],
     skillPoints: 0,
     dockExtras: [],
-    topBand: () => [showChallengeEntry()],
+    topBand: () => [runningChallengeEntry()],
     levelTimerFrames: LATE_TIMER_FRAMES,
     toasts: 'none',
     expanded: false,
-    favor: SHOW_FAVOR,
   }),
   hudFixture({
     name: 'ai-online',
@@ -788,6 +791,15 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
     toasts: 'none',
     expanded: false,
     ai: aiOffline,
+  }),
+  hudFixture({
+    name: 'caroline-toast',
+    status: [],
+    skillPoints: 0,
+    dockExtras: [],
+    topBand: () => [],
+    toasts: 'caroline',
+    expanded: false,
   }),
   hudFixture({
     name: 'quiet',
@@ -829,7 +841,7 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
   hudFixture({
     name: 'grate-defence',
     status: [],
-    companionStatus: COMPANION_ROACH_STATUS,
+    companionStatus: COMPANION_NINE_LIVES_STATUS,
     skillPoints: 0,
     dockExtras: ['build'],
     topBand: () => [bugabooEntry(), reviveEntry()],

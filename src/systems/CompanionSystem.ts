@@ -141,7 +141,7 @@ const COMPANION_MAX_PATH_DISTANCE_TILES = 96;
 
 /**
  * How long a companion refuses to re-acquire the mob it just broke its leash
- * on. Mirrors `Mongo`'s own forget window, for the same reason: the drop is
+ * on. Mirrors `Deinonychus`'s own forget window, for the same reason: the drop is
  * only half a disengage, and without the ban the companion turns around the
  * moment it is back within range of what it just walked away from.
  */
@@ -202,6 +202,16 @@ const AVOID_FLEE_CLEARANCE_TILES = 1.5;
 const ANCHOR_FOLLOW_DISTANCE = 0.9;
 const ANCHOR_CLOSE_DISTANCE = 0.5;
 const NEARBY_TARGET_FOLLOW_DISTANCE = 0.9;
+
+/**
+ * Whether a companion's held target has stopped being a fight to pursue. A
+ * target that changed sides (a snare turned it) is dropped like a dead one,
+ * and so is one taken off the floor without dying: a despawned mob still
+ * reads as alive, and a companion holding it fires at an empty spot forever.
+ */
+function isNoLongerAFight(target: Mob, mobGrid: SpatialGrid<Mob>): boolean {
+  return !target.isAlive || target.avoidInstead || !target.isHostile || !mobGrid.has(target);
+}
 
 export class CompanionSystem implements GameSystem {
   private catWanderTargetX = 0;
@@ -741,12 +751,7 @@ export class CompanionSystem implements GameSystem {
     );
 
     if (human.isActive) {
-      // A target that changed sides (a snare turned it) is dropped like a dead one.
-      if (
-        cat.autoTarget &&
-        (!cat.autoTarget.isAlive || cat.autoTarget.avoidInstead || !cat.autoTarget.isHostile)
-      )
-        cat.autoTarget = null;
+      if (cat.autoTarget && isNoLongerAFight(cat.autoTarget, mobGrid)) cat.autoTarget = null;
 
       if (cat.autoTarget && isUntriggeredBossRoomMob(cat.autoTarget, human)) cat.autoTarget = null;
 
@@ -821,11 +826,7 @@ export class CompanionSystem implements GameSystem {
         }
       }
     } else {
-      if (
-        human.autoTarget &&
-        (!human.autoTarget.isAlive || human.autoTarget.avoidInstead || !human.autoTarget.isHostile)
-      )
-        human.autoTarget = null;
+      if (human.autoTarget && isNoLongerAFight(human.autoTarget, mobGrid)) human.autoTarget = null;
 
       if (human.autoTarget && isUntriggeredBossRoomMob(human.autoTarget, cat))
         human.autoTarget = null;
@@ -908,7 +909,7 @@ export class CompanionSystem implements GameSystem {
    * Both halves are required. A drop on its own re-acquires the same mob the
    * frame the companion gets home — it is still the nearest thing in range —
    * and the companion spends the rest of the fight running laps. That is the
-   * lesson `Mongo`'s own leash had to learn, and the ban is what ends it.
+   * lesson `Deinonychus`'s own leash had to learn, and the ban is what ends it.
    *
    * A mob that has drawn blood recently *and is still beside the party* is
    * exempt from the ban, though never from the drop — so a chaser that follows
@@ -1564,10 +1565,10 @@ export class CompanionSystem implements GameSystem {
    *
    * And the trade has to be worth taking at all. Giving up the retreat costs
    * her roughly the same health whatever she is fighting, while what it buys
-   * scales entirely with strength — so a cat who has put nothing into strength
+   * scales entirely with melee — so a cat who has put nothing into melee
    * spends half a six-point health pool to add two damage a swing to a missile
    * that was already killing the thing. Pricing one against the other is what
-   * makes strength the stat that decides it, which is the whole reason the claw
+   * makes melee the stat that decides it, which is the whole reason the claw
    * exists on a companion at all. She still swipes whatever wanders into reach;
    * she simply will not stop running to arrange it.
    */

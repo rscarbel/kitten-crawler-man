@@ -33,7 +33,7 @@ export const DODGE_IMPORTANCE = IMPORTANCE.MINOR;
 
 /**
  * Each event type's importance. Where an event's importance varies (a
- * dynamite blast that kills a boss, a conversation with Mordecai, a large kill
+ * dynamite blast that kills a boss, a conversation with Dave, a large kill
  * rollup), this is its usual value and the event raises it.
  */
 export const EVENT_IMPORTANCE = {
@@ -82,7 +82,7 @@ export const EVENT_IMPORTANCE = {
   structureDestroyed: IMPORTANCE.MODERATE,
   conversationStarted: IMPORTANCE.MINOR,
   conversationEnded: IMPORTANCE.MINOR,
-  mordecaiAdviceGiven: IMPORTANCE.MODERATE,
+  daveAdviceGiven: IMPORTANCE.MODERATE,
   bopcaGreeted: IMPORTANCE.TRIVIA,
   bopcaFoodEaten: IMPORTANCE.MINOR,
   shopPurchase: IMPORTANCE.NOTABLE,
@@ -96,9 +96,7 @@ export const EVENT_IMPORTANCE = {
   challengeCompleted: IMPORTANCE.MAJOR,
   challengeFailed: IMPORTANCE.MAJOR,
   playerAnswered: IMPORTANCE.CRITICAL,
-  viewerFavorChanged: IMPORTANCE.LOW,
   aiAchievementAwarded: IMPORTANCE.SIGNIFICANT,
-  sponsorBreakEnded: IMPORTANCE.MODERATE,
 } as const satisfies Readonly<Record<string, number>>;
 
 export type GameEventType = keyof typeof EVENT_IMPORTANCE;

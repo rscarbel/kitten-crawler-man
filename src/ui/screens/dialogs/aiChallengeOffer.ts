@@ -1,5 +1,5 @@
 /**
- * The card a challenge from the show's AI arrives on: what it asks, the box
+ * The card a challenge from the AI arrives on: what it asks, the box
  * it pays and Accept / Decline. It halts the world, so the clock cannot start
  * before the player has read it.
  *
@@ -8,8 +8,8 @@
  * Escape and Decline turn it down.
  */
 
-import { displayNameOf } from '../../../ai/AIChatFeed';
-import { SYSTEM_CHARACTER_NAME } from '../../../ai/characters';
+import { speaksInCarolineFrame } from '../../../ai/AIChatFeed';
+import { CAROLINE_CHARACTER_NAME } from '../../../ai/characters';
 import type { Rarity } from '../../../core/items/defs/rarity';
 import type { Surface, Ui } from '../../core/UiRoot';
 import type { PanelWidth } from '../../theme/tokens';
@@ -34,7 +34,7 @@ export interface AIChallengeOfferView {
   readonly offeredBy: string;
 }
 
-/** What the card reads and drives; `AIChallengeSystem` provides it through the show stage. */
+/** What the card reads and drives; `AIChallengeSystem` provides it through `AIInteractionStage`. */
 export interface AIChallengeOfferSource {
   readonly challengeOffer: AIChallengeOfferView | null;
   acceptChallenge(): void;
@@ -66,9 +66,11 @@ export function aiChallengeOfferSurface(id: string, source: AIChallengeOfferSour
       const offer = source.challengeOffer;
       const body =
         offer === null ? [] : [offer.objective, ...(offer.pitch === '' ? [] : [offer.pitch])];
+      const offeredBy = offer?.offeredBy ?? CAROLINE_CHARACTER_NAME;
       return {
         id: 'ai-challenge',
-        overline: `A challenge from ${displayNameOf(offer?.offeredBy ?? SYSTEM_CHARACTER_NAME)}`,
+        chrome: speaksInCarolineFrame(offeredBy) ? 'caroline' : 'glass',
+        overline: `A challenge from ${offeredBy}`,
         icon: iconUnlessCompact(ui, 'trophy'),
         tone: 'accent',
         title: offer?.title ?? '',

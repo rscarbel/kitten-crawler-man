@@ -1,19 +1,19 @@
-# Kitten Crawler Man
+# Kitten Crawler World
 
-> Kitten Crawler Man is a free, single-player dungeon crawler and action RPG that runs in a web browser on desktop and mobile. The player controls Ryan, a human melee fighter, and Belle, his spell-casting tortoiseshell cat, through procedurally generated dungeon floors and then an overworld city.
+> Kitten Crawler World is a free, single-player dungeon crawler and action RPG that runs in a web browser on desktop and mobile. The player controls Ryan, a human melee fighter, and Belle, his spell-casting tortoiseshell cat, through procedurally generated dungeon floors and then an overworld city.
 
-- Play: https://rscarbel.github.io/kitten-crawler-man/
-- Offline download page: https://rscarbel.github.io/kitten-crawler-man/download/
+- Play: https://ryanscarbel.com/kitten-crawler-world/
+- Offline download page: https://ryanscarbel.com/kitten-crawler-world/download/
 - Source code: https://github.com/rscarbel/kitten-crawler-man
 - Price: free. No account is needed; progress is saved in the browser.
 - Built with: TypeScript and the HTML5 Canvas 2D API, bundled with esbuild, no game framework. Most character and environment art is painted procedurally in code.
 
 ## Characters
 
-- Ryan: a human melee fighter. Warm, sociable and clever, he gets along with anyone, but he is confident to a fault and chases adventure even when it probably isn't wise. Abilities: Smush and Protective Shell.
-- Belle: a slim, short-haired tortoiseshell cat who casts spells. She loves heat and loves everyone, wants to cuddle with everyone, and is not very smart. Abilities: Magic Missile, and summoning her pet raptor Mongo once the party has earned him with 200 dungeon kills.
+- Ryan: a human melee fighter. Warm, sociable and clever, he gets along with anyone, but he is confident to a fault and chases adventure even when it probably isn't wise. Abilities: Seismic Stomp and Energy Shield.
+- Belle: a slim, short-haired tortoiseshell cat who casts spells. She loves heat and loves everyone, wants to cuddle with everyone, and is not very smart. Abilities: Magic Missile, and summoning her pet Deinonychus once the party has earned him with 200 dungeon kills.
 - The player switches between them at any time (Tab). The crawler not being controlled follows and fights on its own, and can be given follower orders.
-- Mordecai: the guide who waits in safe rooms.
+- Dave: the guide who teleports into each safe room the party enters.
 
 ## Floors
 
@@ -27,7 +27,7 @@
 - Three difficulty levels: Kitten (easy), Crawler (normal), Nightmare (hard).
 - Gear on one rarity ladder (Common, Uncommon, Rare, Epic, Legendary, Divine) that visibly changes how Ryan and Belle look: worn pieces, two trinkets each, Ryan's weapons, Belle's claws, and relics that float at the shoulder and act on their own. Pieces carry traits (poison or chill on hit, lifesteal, thorns, a once-a-floor second wind, a blade that awakens after enough kills), and five gear sets grant bonuses when worn together.
 - Achievements that each pay a reward chest of their rarity: coins, potions and often a piece of gear, paid at once and shown whenever the player opens the "Rewards waiting" chip.
-- Companions: Mongo, earned at 200 dungeon kills, plus hireable mercenaries from The Barracks Mercenaries.
+- Companions: a pet Deinonychus, earned at 200 dungeon kills, plus hireable mercenaries from The Barracks Mercenaries.
 - Crafting skills (Resourcing and Construction) for harvesting, processing and building structures such as walls and trebuchets.
 - A casino in the Cloak & Dagger: blackjack, Texas hold'em poker, slots and a prize wheel.
 - Minigames including a pipe-board puzzle and "Keyboard Hero".
@@ -47,4 +47,4 @@ Keyboard defaults (all rebindable from the pause menu):
 - Build / summon pet: R; Construction: U; Structure menu: E
 - Pause / close menus: Escape
 
-On phones and tablets the game shows on-screen touch controls. There is no gamepad support.
+On phones and tablets the game displays on-screen touch controls. There is no gamepad support.

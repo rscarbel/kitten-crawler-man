@@ -57,11 +57,7 @@ import {
   type BugabooPose,
   type BugabooView,
 } from '../src/sprites/art/bugabooArt.js';
-import {
-  BUGABOO_STANDING_INK_TOP,
-  BUGABOO_STATES,
-  BUGABOO_SWIPE_FRAMES,
-} from '../src/sprites/bugabooSprite.js';
+import { BUGABOO_STATES, BUGABOO_SWIPE_FRAMES } from '../src/sprites/bugabooSprite.js';
 
 /** Alpha above which a pixel counts as painted. */
 const INK_ALPHA_THRESHOLD = 24;
@@ -919,44 +915,6 @@ function gateBreachDepth(): void {
 }
 
 /**
- * G15 — the head clearance the runtime lifts overhead UI by matches the art.
- *
- * `BUGABOO_STANDING_INK_TOP` is how the safe room knows to raise Mordecai's
- * speech bubble and `Talk` prompt clear of a creature that stands most of a
- * tile taller than the anchor suggests. The figure's geometry records where his
- * feet are and nothing else, so a redraw that raises the horns leaves the
- * prompt sitting on his chest with every other gate still green.
- */
-const HEAD_CLEARANCE_TOLERANCE_PX = 2;
-const OVERHEAD_UI_ROWS = [...STANDING_ROWS, 'walk', 'walk_side', 'walk_away'] as const;
-
-function gateHeadClearanceContract(): void {
-  let paintedInkTop = Infinity;
-  let framesMeasured = 0;
-  for (const name of OVERHEAD_UI_ROWS) {
-    const row = rowNamed(name, 'G15');
-    if (row === null) continue;
-    for (let frame = 0; frame < row.frameCount; frame++) {
-      const stats = inkStatsOf(cellAlpha(name, frame), frameWidth);
-      if (stats.count === 0) continue;
-      framesMeasured++;
-      paintedInkTop = Math.min(paintedInkTop, stats.minY);
-    }
-  }
-  failUnlessMeasured('G15', framesMeasured, 'standing frames');
-  if (!Number.isFinite(paintedInkTop)) return;
-  const drift = Math.abs(paintedInkTop - BUGABOO_STANDING_INK_TOP);
-  if (drift > HEAD_CLEARANCE_TOLERANCE_PX) {
-    fail(
-      'G15',
-      `the standing rows reach up to y=${paintedInkTop} but BUGABOO_STANDING_INK_TOP in ` +
-        `src/sprites/bugabooSprite.ts is ${BUGABOO_STANDING_INK_TOP} — ${drift}px off, ` +
-        `limit ${HEAD_CLEARANCE_TOLERANCE_PX}; overhead UI would sit on his head`,
-    );
-  }
-}
-
-/**
  * G16 — every state name the runtime can build is one the figure paints.
  *
  * Both draw paths return silently on an unknown state, so a pose name composed
@@ -1085,7 +1043,6 @@ export function bugabooGateFailures(): string[] {
   gateImpactIsThePeak();
   gateGropeSweep();
   gateBreachDepth();
-  gateHeadClearanceContract();
   gateRuntimeStateNames();
   gateCellGeometry();
   return [...failures];

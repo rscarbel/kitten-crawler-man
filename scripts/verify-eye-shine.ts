@@ -94,7 +94,7 @@ const { MazeMirrorTarget } = await import('../src/creatures/MazeMirrorTarget.js'
 const { Mercenary } = await import('../src/creatures/Mercenary.js');
 const { MissQuill } = await import('../src/creatures/MissQuill.js');
 const { Lion } = await import('../src/creatures/Lion.js');
-const { Mongo } = await import('../src/creatures/Mongo.js');
+const { Deinonychus } = await import('../src/creatures/Deinonychus.js');
 const { Necromancer } = await import('../src/creatures/Necromancer.js');
 const { RaisedRatkin } = await import('../src/creatures/RaisedRatkin.js');
 const { Rat } = await import('../src/creatures/Rat.js');
@@ -161,14 +161,14 @@ function eyeless(label: string, mob: MobInstance): Subject {
 const GOBLIN_WEAPONS = ['sword', 'axe', 'mace', 'warhammer'] as const;
 const RAISED_RATKIN_LOOKS = ['smock', 'jack', 'shroud'] as const;
 const COW_AGES = ['adult', 'calf'] as const;
-/** The Mongo levels at which his figure changes stage. */
-const MONGO_FIRST_STAGE_LEVEL = 1;
-const MONGO_SECOND_STAGE_LEVEL = 5;
-const MONGO_THIRD_STAGE_LEVEL = 10;
-const MONGO_STAGE_LEVELS = [
-  MONGO_FIRST_STAGE_LEVEL,
-  MONGO_SECOND_STAGE_LEVEL,
-  MONGO_THIRD_STAGE_LEVEL,
+/** The Deinonychus levels at which his figure changes stage. */
+const DEINONYCHUS_FIRST_STAGE_LEVEL = 1;
+const DEINONYCHUS_SECOND_STAGE_LEVEL = 5;
+const DEINONYCHUS_THIRD_STAGE_LEVEL = 10;
+const DEINONYCHUS_STAGE_LEVELS = [
+  DEINONYCHUS_FIRST_STAGE_LEVEL,
+  DEINONYCHUS_SECOND_STAGE_LEVEL,
+  DEINONYCHUS_THIRD_STAGE_LEVEL,
 ] as const;
 const MERCENARY_IDS = MERCENARY_TEMPLATE_IDS;
 const MAZE_BLOCK_KINDS = ['sandbag', 'brace', 'release_ring', 'capstan'] as const;
@@ -294,11 +294,11 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
   },
   MissQuill: () => [eyed('Miss Quill', new MissQuill(...at, () => undefined))],
   Lion: () => [eyed('lion', new Lion(...at))],
-  Mongo: () => {
+  Deinonychus: () => {
     const owner = new CatPlayer(...at);
-    return MONGO_STAGE_LEVELS.map((level) => {
-      const probe = new Mongo(...at, owner, level, 1);
-      return eyed(`Mongo L${level}`, new Mongo(...at, owner, level, probe.maxHp));
+    return DEINONYCHUS_STAGE_LEVELS.map((level) => {
+      const probe = new Deinonychus(...at, owner, level, 1);
+      return eyed(`Deinonychus L${level}`, new Deinonychus(...at, owner, level, probe.maxHp));
     });
   },
   Necromancer: () => [eyed('necromancer', new Necromancer(...at, Math.random))],

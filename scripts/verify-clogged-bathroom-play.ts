@@ -5,8 +5,8 @@
  *
  *  - The pipe board and its explainer hold the collapse timer for as long as
  *    they are up, and closing the board starts it again.
- *  - Every weapon the party has (melee, smush, missile, slingshot, dynamite,
- *    the shell), fired through its own system, reaches a queue goblin and the
+ *  - Every weapon the party has (melee, seismic stomp, missile, slingshot, dynamite,
+ *    the shield), fired through its own system, reaches a queue goblin and the
  *    plumber, hurts neither, moves neither, pays nothing and gets an "ow".
  *  - Neither companion ever picks a bathroom goblin to fight.
  *  - Playing the board to its answer through the turn API opens every copy
@@ -121,9 +121,9 @@ const { dungeonOptionsForLevel } = await import('../src/levels/dungeonOptions.js
 const { level2 } = await import('../src/levels/level2.js');
 const { AbilityManager } = await import('../src/core/skills/AbilityManager.js');
 const { MAGIC_MISSILE_DEF } = await import('../src/abilities/magicMissile.js');
-const { PROTECTIVE_SHELL_DEF } = await import('../src/abilities/protectiveShell.js');
-const { SMUSH_DEF } = await import('../src/abilities/smush.js');
-const { MONGO_DEF } = await import('../src/abilities/mongo.js');
+const { ENERGY_SHIELD_DEF } = await import('../src/abilities/energyShield.js');
+const { SEISMIC_STOMP_DEF } = await import('../src/abilities/seismicStomp.js');
+const { DEINONYCHUS_DEF } = await import('../src/abilities/deinonychus.js');
 const { GameStats } = await import('../src/core/progression/GameStats.js');
 const { BathroomGoblin, OW_THROTTLE_FRAMES } = await import('../src/creatures/BathroomGoblin.js');
 const { despawnMob } = await import('../src/creatures/Mob.js');
@@ -149,7 +149,8 @@ type SaveOptions = NonNullable<ConstructorParameters<typeof DungeonScene>[3]>;
 type SavedProgress = Parameters<NonNullable<SaveOptions['saveProgress']>>[0];
 type Tile = { readonly x: number; readonly y: number };
 type Rect = { readonly x: number; readonly y: number; readonly w: number; readonly h: number };
-type DamageKind = 'melee' | 'catMelee' | 'smush' | 'missile' | 'slingshot' | 'explosion' | 'shell';
+type DamageKind =
+  'melee' | 'catMelee' | 'seismic_stomp' | 'missile' | 'slingshot' | 'explosion' | 'energy_shield';
 
 /** Frames the board and the explainer are each held open: ten seconds of a running clock. */
 const HELD_OPEN_FRAMES = 600;
@@ -183,11 +184,11 @@ const FULL_TURN_QUARTERS = 4;
 const DAMAGE_KINDS: readonly DamageKind[] = [
   'melee',
   'catMelee',
-  'smush',
+  'seismic_stomp',
   'missile',
   'slingshot',
   'explosion',
-  'shell',
+  'energy_shield',
 ];
 const NEIGHBOUR_STEPS: readonly Tile[] = [
   { x: -1, y: 0 },
@@ -442,12 +443,12 @@ function blockedTilesOf(copy: BathroomCopy): Tile[] {
 
 function abilityManagerAtTestLevel(): InstanceType<typeof AbilityManager> {
   const manager = new AbilityManager();
-  for (const def of [MAGIC_MISSILE_DEF, PROTECTIVE_SHELL_DEF, SMUSH_DEF, MONGO_DEF]) {
+  for (const def of [MAGIC_MISSILE_DEF, ENERGY_SHIELD_DEF, SEISMIC_STOMP_DEF, DEINONYCHUS_DEF]) {
     manager.register(def);
   }
   manager.setLevel('magic_missile', ABILITY_TEST_LEVEL);
-  manager.setLevel('protective_shell', ABILITY_TEST_LEVEL);
-  manager.setLevel('smush', ABILITY_TEST_LEVEL);
+  manager.setLevel('energy_shield', ABILITY_TEST_LEVEL);
+  manager.setLevel('seismic_stomp', ABILITY_TEST_LEVEL);
   return manager;
 }
 
@@ -644,8 +645,8 @@ function throwBlow(rig: Rig, kind: DamageKind, goblin: Goblin, stand: Tile): voi
       cat.triggerAttack();
       tickPinned(scene, BLOW_FRAMES);
       return;
-    case 'smush':
-      human.triggerSmush();
+    case 'seismic_stomp':
+      human.triggerSeismicStomp();
       tickPinned(scene, BLOW_FRAMES);
       return;
     case 'missile':
@@ -663,33 +664,33 @@ function throwBlow(rig: Rig, kind: DamageKind, goblin: Goblin, stand: Tile): voi
       human.godMode = true;
       cat.godMode = true;
       dynamite.beginCharge(0, human, 'goblin_dynamite');
-      dynamite.release(human);
+      dynamite.release();
       tickPinned(scene, DYNAMITE_FRAMES);
       human.godMode = false;
       cat.godMode = false;
       return;
     }
-    case 'shell': {
+    case 'energy_shield': {
       const spells = scene['combat'].spells;
-      // The shell's cooldown outlasts a case, and the second subject needs a fresh cast.
-      spells['_shellCooldown'] = 0;
-      const cast = spells.triggerProtectiveShell(
+      // The shield's cooldown outlasts a case, and the second subject needs a fresh cast.
+      spells['_energyShieldCooldown'] = 0;
+      const cast = spells.triggerEnergyShield(
         human,
         cat,
         scene['world'].roster.grid,
         ABILITY_TEST_LEVEL,
       );
-      check(cast, 'the protective shell went up');
-      tickPinned(scene, shellFramesLeft(rig) + BLOW_FRAMES);
+      check(cast, 'the energy shield went up');
+      tickPinned(scene, shieldFramesLeft(rig) + BLOW_FRAMES);
       return;
     }
   }
 }
 
-/** Frames the shell has left to run, so its parting shockwave lands inside the case. */
-function shellFramesLeft(rig: Rig): number {
-  const shell = rig.scene['combat'].spells['activeShell'];
-  return shell?.framesRemaining ?? 0;
+/** Frames the shield has left to run, so its parting shockwave lands inside the case. */
+function shieldFramesLeft(rig: Rig): number {
+  const shield = rig.scene['combat'].spells['activeEnergyShield'];
+  return shield?.framesRemaining ?? 0;
 }
 
 /**

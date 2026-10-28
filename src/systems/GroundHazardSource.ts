@@ -1,7 +1,7 @@
 /**
  * Anything that puts damaging ground under the party's feet — the Trash Gremlin's acid
  * puddles, the Evil Clown's gas clouds — and can therefore tell whatever steers
- * a body on the party's side (the AI companion, Mongo, the hirelings) which way
+ * a body on the party's side (the AI companion, Deinonychus, the hirelings) which way
  * to run.
  *
  * A one-method interface rather than a base class because the implementers are

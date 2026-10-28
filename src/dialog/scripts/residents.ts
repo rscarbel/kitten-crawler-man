@@ -5,7 +5,7 @@
  * story told one entry per talk, and `reactive` is a quest-gated pool shown as the
  * lead page when their corner of town has something timelier to say. The lore
  * covers Scolopendra's curse, the Hawkfolk and their watchers, Featherfall's
- * magistracy, the old circus, and the Syndicate's cameras, and the `reactive`
+ * magistracy, the old circus, and Caroline's floating eyes, and the `reactive`
  * hooks read the game's own questlines through the same `TownDialogContext` the
  * street uses.
  */
@@ -99,10 +99,10 @@ export const RESIDENT_LINES = {
         'So when I tell you the ruins are not a place to prove anything — I am not being careful. I am being specific.',
       ],
       [
-        'You have noticed them, surely. The little floating eyes, out over the plaza.',
-        'They follow the interesting people. That is you, crawler, before you ask.',
-        'Whole world watching us die and calling it a season. Somebody somewhere is placing a wager on which of us goes first.',
-        'I keep the shutters closed and I make wheels. Let them film a man making wheels. Serves them right.',
+        'You have noticed them, surely. The floating eyes, out over the plaza.',
+        'Caroline’s. They follow the interesting people. That is you, crawler, before you ask.',
+        'Whatever she wants with what they see, she has never once told the rest of us.',
+        'I keep the shutters closed and I make wheels. Let her watch a man make wheels. Serves her right.',
       ],
     ],
     reactive: (ctx) => {
@@ -179,7 +179,7 @@ export const RESIDENT_LINES = {
       ],
       [
         'My boy Corvin. Fifteen, and about as sensible as a barn cat.',
-        'He watches the crawlers come up out of the stairwell and he thinks that is a life. Levels. Loot. A crowd somewhere cheering.',
+        'He watches the crawlers come up out of the stairwell and he thinks that is a life. Levels. Loot. A story people tell about him.',
         'I have told him what you all look like on the way back down. He hears it as a challenge, of course.',
         'So do me a kindness. If he asks you what it is like — do not make it sound good.',
       ],
@@ -382,7 +382,7 @@ export const RESIDENT_LINES = {
         'Nothing unfriendly has come through that door since you sat down, and it is not because I am handy with a ladle.',
         'The floor put its mark on this taproom the same as it marks anything it decides matters. I was not asked and nobody explained it — one evening this was a public house, the next it was the safe room.',
         'I still check the latch every night regardless. A habit can outlast the reason for it and I keep this one anyway.',
-        'Ask the other guest if you want proof. Mordecai took a room and never once checked out, and he will vouch for how quiet it stays.',
+        'Ask the other guest if you want proof. Dave took a room and never once checked out, and he will vouch for how quiet it stays.',
       ],
     ],
     reactive: (ctx) => {
@@ -426,7 +426,7 @@ export const RESIDENT_LINES = {
       [
         'There is a crawler guild recruiting through here. Brynhild’s Daughters — Hekla’s lot.',
         'They are not subtle. Hekla came in, looked at the room, and named a figure at a stranger inside a minute.',
-        'She has her eye on the ones with a following. Anybody a crowd gathers to watch.',
+        'She has her eye on the ones with a reputation. Anybody the town already talks about.',
         'Which is to say: if a very tall woman buys you a mead, she is not buying you a mead.',
       ],
       [
@@ -597,7 +597,7 @@ export const RESIDENT_LINES = {
       [
         'Watch the timer, crawler. Everyone forgets the timer because the town has a market and a pub and it feels like a place.',
         'Twenty days, they say. It was twenty days on the last floor too, and then it was eight.',
-        'They cut it when the audience gets bored, and somebody up there keeps a schedule for exactly that.',
+        'Caroline cuts it when she sees fit, and nobody down here has ever worked out her schedule.',
         'Do the thing you are putting off. Whatever it is. Do it this week.',
       ],
     ],
@@ -657,7 +657,7 @@ export const RESIDENT_LINES = {
         'There is no week three purchase. I want to be very clear that I am not being grim. I am reading the ledger.',
       ],
       [
-        'The floating eyes come in here too. Three of them, usually over the potion shelf.',
+        'Caroline’s floating eyes come in here too. Three of them, usually over the potion shelf.',
         'They are not interested in the shop. They are interested in who is buying in a hurry.',
         'I worked out early that if the eyes crowd somebody at my counter, that person is having a day.',
         'So I give those ones an extra potion and put it down as breakage. Do not tell the shopkeep.',
@@ -758,10 +758,10 @@ export const RESIDENT_LINES = {
         'Choose the one you want to be nagged by for the rest of your run.',
       ],
       [
-        'The Syndicate loves this shop. Loves it. There are three of those little eyes in here right now.',
-        'A crawler getting inked is good television — pain, a decision, and a shape the audience can recognise later.',
-        'They put my chair on a highlight reel. My chair. I have never been paid and I have never been asked.',
-        'So I have started doing very slow, very boring linework whenever the eyes get close. Bore an audience enough and they wander off to film someone else.',
+        'Caroline watches this shop. Closely. There are three of her floating eyes in here right now.',
+        'A crawler getting inked is worth recording, I suppose — pain, a decision, and a shape she can recognise later.',
+        'They hovered over my chair for a whole season. My chair. I have never been told why and I have never been asked.',
+        'So I have started doing very slow, very boring linework whenever the eyes get close. Bore them enough and they drift off to watch someone else.',
       ],
     ],
     reactive: (ctx) => {

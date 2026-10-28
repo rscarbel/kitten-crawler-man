@@ -105,14 +105,13 @@ export function postChestBand(chest: GuardedChest, band: ReadonlyArray<Mob>): vo
  *
  * An item naming a `lootRecipient` goes to that crawler, and gear to the one
  * its `wearer` names. Beyond gear, a book only one of them can study is routed
- * to that one — the alternative is handing the cat's only guaranteed Cockroach
+ * to that one — the alternative is handing the cat's only guaranteed 9 Lives
  * book to the human, who cannot read it.
  */
 export function forcedRecipientFor(id: ItemId): CrawlerKind | null {
   const def = ITEM_DEF[id];
   if (def.lootRecipient !== undefined) return def.lootRecipient;
   if (def.wearer !== undefined && def.wearer !== 'both') return def.wearer;
-  if (def.explosivesHandlingLevels !== undefined) return 'human';
   const skillId = def.skillId;
   if (skillId === undefined) return null;
   const eligibleFor = getSkillDef(skillId).eligibleFor;

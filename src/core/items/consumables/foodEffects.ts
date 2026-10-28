@@ -6,7 +6,7 @@
 
 /** Fraction of max HP a Hamburger restores on eating. */
 export const HAMBURGER_HEAL_FRACTION = 0.25;
-/** Strength granted by `hamburger_fed` while it is active. */
-export const HAMBURGER_STR_BONUS = 1;
+/** Melee granted by `hamburger_fed` while it is active. */
+export const HAMBURGER_MELEE_BONUS = 1;
 /** How long `hamburger_fed` lasts; eating again while fed refreshes to this. */
 export const HAMBURGER_FED_DURATION_SECONDS = 30;

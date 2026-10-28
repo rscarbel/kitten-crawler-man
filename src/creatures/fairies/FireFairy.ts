@@ -164,7 +164,7 @@ export class FireFairy extends Fairy {
   }
 
   /**
-   * Living crawlers in the party other than `acquired`. Mongo and the
+   * Living crawlers in the party other than `acquired`. Deinonychus and the
    * mercenaries are never what a lob is aimed at, a defend-quest ward is never
    * aimed at by anything, and a crawler in the town's safe zone is out of bounds.
    */

@@ -378,7 +378,7 @@ for (const { w: width, h: height } of EXTREME_VIEWPORTS) {
           drawLoadingScreen(
             extremeCtx,
             {
-              title: 'Kitten Crawler Man',
+              title: 'Kitten Crawler World',
               kicker: withText ? 'Floor 3' : undefined,
               tip: withText
                 ? 'A tip long enough to wrap onto a second line on a phone.'

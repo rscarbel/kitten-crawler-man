@@ -55,7 +55,7 @@ export interface HudButtonLayoutInput {
   readonly keepouts: readonly Rect[];
   /** The hotbar's glass strip. */
   readonly hotbar: Rect;
-  /** Mongo's Summon card, held whether or not it shows so nothing moves when he is unlocked. */
+  /** Deinonychus's Summon card, held whether or not it shows so nothing moves when he is unlocked. */
   readonly summon: PackSize;
   /** Whether the Build button's slot is held. */
   readonly build: boolean;
@@ -198,7 +198,7 @@ function switchButtonRect(input: HudButtonLayoutInput): Rect {
 }
 
 /**
- * Mongo's card: beside the switch on a touch screen, so the two take one row
+ * Deinonychus's card: beside the switch on a touch screen, so the two take one row
  * above the hotbar and leave the unit frames above them room on a short
  * screen; bottom left above the hotbar on a pointer screen.
  */

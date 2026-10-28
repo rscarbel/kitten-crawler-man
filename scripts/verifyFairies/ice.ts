@@ -11,13 +11,13 @@
  *   lands after the fairy that loosed it has died.
  * - Hit 1 chills; hit 2 inside the chill freezes, and a lone fairy's second
  *   bolt comes back inside its own chill at level 1 and the maximum; a hit in
- *   the freeze grace only chills. Mongo and the hirelings are only chilled.
+ *   the freeze grace only chills. Deinonychus and the hirelings are only chilled.
  * - Ice-resistant gear halves the bolt's damage and the freeze.
  * - The fairy never stands still to fire.
  * - Its death blast refreshes a chill and never freezes or damages.
  * - A frozen AI companion does not move, a frozen crawler lands no swing, and
  *   a chilled crawler's attack cadence slows to the chilled action speed.
- * - A swing or smush already under way when the freeze lands never lands,
+ * - A swing or seismic stomp already under way when the freeze lands never lands,
  *   and the attack key neither swings nor turns a frozen crawler.
  *
  * Where a rule needs a bolt that breaks it, a probe flies the fairy's own
@@ -42,7 +42,7 @@ import type { ResistanceType } from '../../src/core/items/defs/ItemDefs';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
 import { Mob } from '../../src/creatures/Mob';
-import { Mongo } from '../../src/creatures/Mongo';
+import { Deinonychus } from '../../src/creatures/Deinonychus';
 import { triggerPlayerAttack } from '../../src/systems/GameLoopPhases';
 import {
   IceFairy,
@@ -103,10 +103,10 @@ const BEHIND_WALL_X = 18;
 const OFF_THE_LINE_ROWS = 2;
 /** Where a body stands on the fairy's row between it and the crawler it fires at. */
 const IN_THE_LINE_X = 12;
-const MONGO_LEVEL = 1;
-const MONGO_STARTING_HP = 200;
-/** Bolts at Mongo that prove a second one never freezes him. */
-const MONGO_HITS_WANTED = 2;
+const DEINONYCHUS_LEVEL = 1;
+const DEINONYCHUS_STARTING_HP = 200;
+/** Bolts at Deinonychus that prove a second one never freezes him. */
+const DEINONYCHUS_HITS_WANTED = 2;
 /** Hits in the chill, freeze, grace sequence: chill, freeze, then one inside the grace. */
 const SEQUENCE_HITS = 3;
 /** The hit in that sequence that freezes. */
@@ -227,7 +227,7 @@ interface ProbeRules {
   readonly ignoresWalls: boolean;
   readonly diesWithOwner: boolean;
   readonly strikesHostiles: boolean;
-  /** Lands a freezing hit on Mongo and the hirelings too. */
+  /** Lands a freezing hit on Deinonychus and the hirelings too. */
   readonly freezesEveryBody: boolean;
 }
 
@@ -757,50 +757,50 @@ function checkHostilesUntouched(report: FairyGateReport): void {
   );
 }
 
-/** Bolts from a pinned fairy at the crawler, with Mongo standing on the line between them. */
-function boltsAtMongo(probe?: RigOptions['probe']): {
+/** Bolts from a pinned fairy at the crawler, with Deinonychus standing on the line between them. */
+function boltsAtDeinonychus(probe?: RigOptions['probe']): {
   hits: number;
   chilled: boolean;
   everFrozen: boolean;
 } {
   return withDodgesOff(() => {
     const rig = iceRig({ pinned: true, probe });
-    const mongo = new Mongo(
+    const deinonychus = new Deinonychus(
       IN_THE_LINE_X,
       FAIRY_TILE,
       TILE_SIZE,
       rig.pm.cat,
-      MONGO_LEVEL,
-      MONGO_STARTING_HP,
+      DEINONYCHUS_LEVEL,
+      DEINONYCHUS_STARTING_HP,
     );
-    mongo.setMap(rig.map);
-    rig.extras.push(mongo);
-    rig.watch(mongo);
+    deinonychus.setMap(rig.map);
+    rig.extras.push(deinonychus);
+    rig.watch(deinonychus);
     while (
-      rig.hitsOn(mongo).length < MONGO_HITS_WANTED &&
+      rig.hitsOn(deinonychus).length < DEINONYCHUS_HITS_WANTED &&
       rig.fairyPath.length <= RUN_LIMIT_FRAMES
     ) {
       rig.step();
     }
     return {
-      hits: rig.hitsOn(mongo).length,
-      chilled: mongo.hasStatus(CHILLED_STATUS),
-      everFrozen: rig.everFrozen.has(mongo),
+      hits: rig.hitsOn(deinonychus).length,
+      chilled: deinonychus.hasStatus(CHILLED_STATUS),
+      everFrozen: rig.everFrozen.has(deinonychus),
     };
   });
 }
 
 function checkPartyMobsOnlyChilled(report: FairyGateReport): void {
-  const real = boltsAtMongo();
+  const real = boltsAtDeinonychus();
   report.check(
-    real.hits >= MONGO_HITS_WANTED && real.chilled && !real.everFrozen,
-    `Mongo struck by ${MONGO_HITS_WANTED} bolts in a row is chilled and never frozen`,
+    real.hits >= DEINONYCHUS_HITS_WANTED && real.chilled && !real.everFrozen,
+    `Deinonychus struck by ${DEINONYCHUS_HITS_WANTED} bolts in a row is chilled and never frozen`,
     `${real.hits} hits`,
   );
-  const freezing = boltsAtMongo(() => ({ ...FAITHFUL_PROBE, freezesEveryBody: true }));
+  const freezing = boltsAtDeinonychus(() => ({ ...FAITHFUL_PROBE, freezesEveryBody: true }));
   report.checkCatches(
-    freezing.hits >= MONGO_HITS_WANTED && !freezing.everFrozen,
-    'a bolt that lands the crawler’s freezing hit on Mongo is caught freezing him',
+    freezing.hits >= DEINONYCHUS_HITS_WANTED && !freezing.everFrozen,
+    'a bolt that lands the crawler’s freezing hit on Deinonychus is caught freezing him',
     `${freezing.hits} hits`,
   );
 }
@@ -1146,7 +1146,7 @@ class SwingKeepingCat extends CatPlayer {
 
 /** A freeze short enough that the swing it caught would still have time to land after it. */
 const SWING_FREEZE_FRAMES = 30;
-/** Frames watched after the freeze lands: the freeze, then more than any whole swing or smush. */
+/** Frames watched after the freeze lands: the freeze, then more than any whole swing or seismic stomp. */
 const SWING_WATCH_FRAMES = 240;
 
 /** Anything that swings the way both crawlers do: started, ticked, landing on one peak frame. */
@@ -1167,8 +1167,12 @@ function humanSwing(human: HumanPlayer): SwingSubject {
   };
 }
 
-function humanSmush(human: HumanPlayer): SwingSubject {
-  return { body: human, start: () => human.triggerSmush(), peak: () => human.isSmushPeak() };
+function humanSeismicStomp(human: HumanPlayer): SwingSubject {
+  return {
+    body: human,
+    start: () => human.triggerSeismicStomp(),
+    peak: () => human.isSeismicStompPeak(),
+  };
 }
 
 function catSwing(cat: CatPlayer): SwingSubject {
@@ -1212,9 +1216,9 @@ function checkFreezeClearsSwing(report: FairyGateReport): void {
       humanSwing(new SwingKeepingHuman(...at())),
     ],
     [
-      'human smush',
-      humanSmush(new HumanPlayer(...at())),
-      humanSmush(new SwingKeepingHuman(...at())),
+      'human Seismic Stomp',
+      humanSeismicStomp(new HumanPlayer(...at())),
+      humanSeismicStomp(new SwingKeepingHuman(...at())),
     ],
     ['cat swipe', catSwing(new CatPlayer(...at())), catSwing(new SwingKeepingCat(...at()))],
   ];

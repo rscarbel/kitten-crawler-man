@@ -38,6 +38,7 @@ import type {
 } from './garmentIds';
 import { DAVE_JACKET } from './human/daveJacket';
 import { DAVE_TROUSERS } from './human/daveTrousers';
+import { DAVE_BOOTS } from './human/daveBoots';
 import { RYAN_BELT, RYAN_CHINOS } from './human/ryanChinos';
 import { RYAN_SHIRT } from './human/ryanShirt';
 import { RYAN_SNEAKERS } from './human/ryanSneakers';
@@ -89,6 +90,7 @@ const CAT_BASE_GARMENTS: Readonly<Record<CatBaseGarmentId, BaseGarmentDef<'cat'>
 const HUMAN_BASE_GARMENTS: Readonly<Record<HumanBaseGarmentId, BaseGarmentDef<'human'>>> = {
   dave_jacket: DAVE_JACKET,
   dave_trousers: DAVE_TROUSERS,
+  dave_boots: DAVE_BOOTS,
   ryan_shirt: RYAN_SHIRT,
   ryan_belt: RYAN_BELT,
   ryan_chinos: RYAN_CHINOS,

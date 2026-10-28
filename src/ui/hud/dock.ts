@@ -1,7 +1,7 @@
 /**
  * The HUD's buttons: the dock column under the minimap (Pause, Bag, Build,
  * the achievement chip, the Journal), the Follower and switch buttons and
- * Mongo's Summon card. Every rect comes from
+ * Deinonychus's Summon card. Every rect comes from
  * `hudLayout`; this module only draws them and wires their taps.
  */
 
@@ -116,7 +116,7 @@ function dockButton(ui: Ui, rect: Rect, model: DockButtonModel, opts: DockOption
 }
 
 /**
- * Mongo's card: his portrait, what a press does, his health (green once he
+ * Deinonychus's card: his portrait, what a press does, his health (green once he
  * is fit to send in) and level progress, and the recovery still to run as a
  * sweep with its seconds.
  */
@@ -194,7 +194,7 @@ export function summonCard(ui: Ui, rect: Rect, model: SummonModel): void {
   }
   tooltip(ui, rect, {
     id: 'summon/tip',
-    title: 'Mongo',
+    title: model.petName,
     text: `${model.label} · ${model.hp} / ${model.maxHp}`,
     show: state.hovered,
   });

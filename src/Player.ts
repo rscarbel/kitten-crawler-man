@@ -1,4 +1,5 @@
 import type { StatusDamageOverTime, StatusEffect, StatusId } from './core/combat/StatusEffect';
+import { outgoingHitDamageOn, proficiencyWardedAmount } from './core/combat/outgoingHit';
 import {
   CRAWLER_HP_THRESHOLDS,
   HP_THRESHOLD_IDS,
@@ -68,13 +69,25 @@ import { intoxicationMeleeBonus, intoxicationOf } from './core/combat/Intoxicati
 import type { IntoxicatingDrink } from './core/items/consumables/intoxicatingDrinks';
 import { computeDodgeChance } from './core/combat/dodge';
 import { xpMultiplierForPlayerLevel, type XpDiminishingTier } from './levels/xpDiminishing';
-import { crawlerMaxHp, STAT_POINTS_PER_LEVEL } from './core/party/crawlerFormulas';
+import {
+  crawlerMaxHp,
+  magicResistedShare,
+  MIN_STAT_VALUE,
+  STAT_POINTS_PER_LEVEL,
+} from './core/party/crawlerFormulas';
+import {
+  ALL_STATS,
+  STARTING_STATS,
+  STAT_DEFS,
+  STAT_GAIN_PER_POINT,
+  type StatId,
+} from './core/party/stats';
 import { activeDifficultyProfile } from './core/difficulty/difficultyProfiles';
 import { activeRunStats } from './core/progression/GameStats';
 import {
   SkillManager,
-  cockroachRechargeMs,
-  COCKROACH_IFRAME_FRAMES,
+  nineLivesRechargeMs,
+  NINE_LIVES_IFRAME_FRAMES,
   IRON_STOMACH_COOLDOWN_REDUCTION_PER_LEVEL,
   getSkillDef,
   type CrawlerKind,
@@ -118,26 +131,13 @@ import type { PromptFigure } from './ui/InteractionPrompt';
 
 const NO_SILHOUETTE_LAYERS: readonly SilhouetteLayer[] = [];
 
-/**
- * Every stat a crawler carries — the single vocabulary the whole stat system
- * speaks, and the iteration order for anything that walks all stats. A permanent
- * boost (potion or tattoo) can raise any of them.
- */
-export const ALL_STATS = ['strength', 'intelligence', 'constitution', 'dexterity'] as const;
-export type StatName = (typeof ALL_STATS)[number];
-
-/** Short labels shown by the level-up flash and the HUD. */
-export const STAT_CODE: Record<StatName, string> = {
-  strength: 'STR',
-  intelligence: 'INT',
-  constitution: 'CON',
-  dexterity: 'DEX',
-};
+/** Every source that scales a crawler's HP regen while it lasts; set and cleared by the same key. */
+export type RegenModifierKey = 'energy_shield' | 'gear_stillness' | 'gear_partner_link';
 
 /** A stat change that reverts itself after a fixed number of ticks. */
 export interface TempStatMod {
   ticksRemaining: number;
-  stat: StatName;
+  stat: StatId;
   delta: number;
 }
 
@@ -145,15 +145,51 @@ export interface TempStatMod {
 export interface PlayerConfig {
   /**
    * Fixed max HP. Mobs pass this; crawlers omit it so max HP stays derived from
-   * constitution and never has to be kept in sync by hand.
+   * health and never has to be kept in sync by hand.
    */
   maxHp?: number;
-  /** Starting base values. Any stat left out starts at {@link MIN_STAT_VALUE}. */
-  baseStats?: Partial<Record<StatName, number>>;
-  /** Species HP floor added on top of the constitution-derived HP. */
+  /** Species HP floor added on top of the health-derived HP. */
   baseHpOffset?: number;
-  /** Which crawler this is, for skill eligibility. Omitted by mobs and NPCs. */
+  /**
+   * Which crawler this is: her starting stats, what a point buys her, her
+   * dodge curve and her skill eligibility. Omitted by mobs and NPCs, whose
+   * stats all sit at {@link MIN_STAT_VALUE}.
+   */
   crawlerKind?: CrawlerKind;
+}
+
+/** Every standing hazard an environmental blow can name. */
+type EnvironmentalHazard =
+  | 'burningTree'
+  | 'lavaFlames'
+  | 'burningOil'
+  | 'clownGas'
+  | 'lichFirewall'
+  | 'lichOrb'
+  | 'trashAvalanche'
+  | 'krakarenLiveWire'
+  | 'krakarenTankBurst';
+
+/** Which standing hazards are spells, and so turned aside by magic resistance. */
+const HAZARD_IS_MAGIC = {
+  burningTree: false,
+  lavaFlames: false,
+  burningOil: false,
+  clownGas: false,
+  lichFirewall: true,
+  lichOrb: true,
+  trashAvalanche: false,
+  krakarenLiveWire: false,
+  krakarenTankBurst: false,
+} as const satisfies Record<EnvironmentalHazard, boolean>;
+
+/** Whether a blow from `source` is magic, which magic resistance turns aside. */
+function isMagicSource(source: DamageSource | undefined): boolean {
+  if (source?.kind === 'mob') return source.magic === true;
+  if (source?.kind === 'environmental' && source.hazard !== undefined) {
+    return HAZARD_IS_MAGIC[source.hazard];
+  }
+  return false;
 }
 
 /**
@@ -192,6 +228,11 @@ export type DamageSource =
        * away from the right side, measured from its own tile's centre.
        */
       readonly from?: { readonly x: number; readonly y: number };
+      /**
+       * Set on a spell: magic-resistant gear turns aside a share of it as it
+       * lands, and of any status it carries.
+       */
+      readonly magic?: boolean;
     }
   | {
       readonly kind: 'status';
@@ -213,16 +254,7 @@ export type DamageSource =
        * an untagged source means; a second hazard reporting "a burning tree"
        * on the death screen is the failure this discriminates away.
        */
-      readonly hazard?:
-        | 'burningTree'
-        | 'lavaFlames'
-        | 'burningOil'
-        | 'clownGas'
-        | 'lichFirewall'
-        | 'lichOrb'
-        | 'trashAvalanche'
-        | 'krakarenLiveWire'
-        | 'krakarenTankBurst';
+      readonly hazard?: EnvironmentalHazard;
     }
   | { readonly kind: 'doomsday' }
   /**
@@ -234,7 +266,7 @@ export type DamageSource =
       /**
        * Shrapnel from the party's own siege engine landing close by. Light and
        * flat — a single point — and, when `dodgeable`, rolled against the
-       * crawler's dexterity like any thrown blow.
+       * crawler's evasiveness like any thrown blow.
        */
       readonly kind: 'siege';
       readonly dodgeable: boolean;
@@ -258,13 +290,15 @@ export interface DamageOptions {
   /**
    * The lowest HP this blow may leave: a penalty that must hurt but never
    * kill passes `1`. Never raises HP that is already below it, and a blow
-   * stopped at the floor is not a killing blow, so Cockroach is not spent.
+   * stopped at the floor is not a killing blow, so 9 Lives is not spent.
    */
   readonly floorHp?: number;
 }
 
 const DEFAULT_POTION_COOLDOWN_SECONDS = 5.75;
-const DENOMINATOR_OFFSET = 30;
+/** Health at which the potion cooldown has lost half of {@link NUMERATOR_ASYMPTOTE_SLOPE} seconds. */
+const DENOMINATOR_OFFSET = 60;
+/** The most seconds health can ever take off the potion cooldown, approached but never reached. */
 const NUMERATOR_ASYMPTOTE_SLOPE = 3;
 
 const INITIAL_HEALTH_POTIONS = 10;
@@ -274,8 +308,6 @@ const VANISHED_FIGURE_ALPHA = 0.45;
 const MAX_PENDING_FLOATING_TEXT = 16;
 /** Same, for queued System lines. */
 const MAX_PENDING_SYSTEM_NOTICES = 4;
-/** No stat can be driven below this by debuffs or refunds. */
-export const MIN_STAT_VALUE = 1;
 /** Species HP floor used when a subclass doesn't declare one (mobs, which pass a fixed maxHp). */
 const DEFAULT_BASE_HP_OFFSET = 0;
 const DAMAGE_FLASH_FRAMES = 8;
@@ -403,6 +435,12 @@ const JUGG_JUICE_HP_MULTIPLIER_BONUS = 0.5;
 const JUGG_JUICE_FLAT_BONUS = 5;
 const STAT_BOOST_MIN = 2;
 const STAT_BOOST_RANGE = 3;
+/**
+ * Health a bought point (a stat potion or a drill) adds, the same for both
+ * crawlers: coins buy the same HP whoever spends them, unlike a level-up
+ * point, which follows each crawler's own health gain.
+ */
+const BOUGHT_HEALTH_PER_POINT = 2;
 
 /** Health bar display thresholds */
 const HP_BAR_GREEN_THRESHOLD = 0.5;
@@ -528,16 +566,18 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
    * *not* folded in here — the effective getters add those on every read, so a
    * paired equip/unequip can never drift.
    */
-  private readonly baseStats: Record<StatName, number>;
+  private readonly baseStats: Record<StatId, number>;
+  /** The crawler whose stat rules this body follows, or null for a mob or NPC. */
+  private readonly statOwner: CrawlerKind | null;
   /** Species HP floor. See {@link maxHp}. */
   private readonly baseHpOffset: number;
-  /** Fixed max HP for entities that don't derive it from constitution (mobs). */
+  /** Fixed max HP for entities that don't derive it from health (mobs). */
   private _maxHpOverride: number | null;
   /** Max HP as of the last {@link syncHpToMaxHp}, so growth can be credited once. */
   private _maxHpAtLastSync: number;
   /** Flat bonus applied to every stat while god mode is on. */
   private _godModeStatBonus = 0;
-  /** Extra dexterity that only the dodge roll sees, while `!lucky` is on. */
+  /** Flat dodge chance that only the dodge roll sees, while `!lucky` is on. */
   private _luckyDodgeBonus = 0;
   levelUpStat: string | null = null;
   levelUpFlash = 0;
@@ -545,7 +585,7 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
    * A stat-boost potion's own fanfare, kept separate from {@link levelUpFlash}
    * so the potion never gets rendered as a level-up.
    */
-  statBoostFlashStat: StatName | null = null;
+  statBoostFlashStat: StatId | null = null;
   statBoostFlashAmount = 0;
   statBoostFlashFrame = 0;
   /**
@@ -618,7 +658,7 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
   /** Feedback labels awaiting pickup by `FloatingCombatTextSystem`. */
   readonly pendingFloatingText: FloatingTextRequest[] = [];
   /**
-   * System-AI lines queued by code with no scene in scope (save migration),
+   * System-AI lines queued by code with no scene in scope,
    * drained by `SystemNoticeSystem`.
    */
   readonly pendingSystemNotices: string[] = [];
@@ -659,10 +699,10 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
    */
   readonly craftSkills: CraftSkills;
   /**
-   * Wall-clock time (ms since epoch) when Cockroach can next save this crawler,
+   * Wall-clock time (ms since epoch) when 9 Lives can next save this crawler,
    * or null when it has never fired.
    */
-  cockroachReadyAt: number | null = null;
+  nineLivesReadyAt: number | null = null;
   /**
    * Frames of blanket damage immunity.
    *
@@ -693,7 +733,7 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
   /**
    * Wall-clock time (ms since epoch) when the Third Eye can next foresee a
    * blow, or null when it has never fired. Wall-clock and carried by
-   * PlayerSnapshot for the same reason as {@link cockroachReadyAt}: this object
+   * PlayerSnapshot for the same reason as {@link nineLivesReadyAt}: this object
    * is rebuilt on every floor and door, so a frame counter would reset each time.
    */
   thirdEyeReadyAt: number | null = null;
@@ -757,7 +797,16 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
    * follow speed of its own and has to be slowed by this and nothing else.
    */
   get statusMoveFactor(): number {
-    return this.hasStatus(CHILLED_STATUS) ? CHILLED_MOVE_SPEED_FACTOR : 1;
+    return this.hasStatus(CHILLED_STATUS) ? this.chillGrip(CHILLED_MOVE_SPEED_FACTOR) : 1;
+  }
+
+  /**
+   * A chill's slowing `factor` after magic resistance takes its share of the
+   * slow off. Every chill that reaches a crawler is an ice fairy's spell, so
+   * magic-resistant gear weakens all of them.
+   */
+  private chillGrip(factor: number): number {
+    return 1 - (1 - factor) * this.survivingShare('magic');
   }
 
   /**
@@ -774,7 +823,7 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
    * directly, because the timers are whole frames and this is a fraction.
    */
   get actionSpeedMultiplier(): number {
-    return this.hasStatus(CHILLED_STATUS) ? CHILLED_ACTION_SPEED_FACTOR : 1;
+    return this.hasStatus(CHILLED_STATUS) ? this.chillGrip(CHILLED_ACTION_SPEED_FACTOR) : 1;
   }
 
   /**
@@ -845,7 +894,7 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
   /** Frames of uninterrupted revival progress (0–300 = 5 seconds). Resets if the reviver moves away. */
   reviveProgress = 0;
   /** Named multipliers applied to HP regen rate. Each entry stacks multiplicatively. */
-  private readonly _regenModifiers = new Map<string, number>();
+  private readonly _regenModifiers = new Map<RegenModifierKey, number>();
   /** Pending AI stat adjustments that will be reverted after their duration expires. */
   tempStatMods: TempStatMod[] = [];
   protected tileSize: number;
@@ -865,13 +914,18 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
     this.y = tileY * tileSize;
     this.tileSize = tileSize;
     this.baseHpOffset = config.baseHpOffset ?? DEFAULT_BASE_HP_OFFSET;
-    this.baseStats = {
-      strength: MIN_STAT_VALUE,
-      intelligence: MIN_STAT_VALUE,
-      constitution: MIN_STAT_VALUE,
-      dexterity: MIN_STAT_VALUE,
-      ...config.baseStats,
-    };
+    this.statOwner = config.crawlerKind ?? null;
+    this.baseStats =
+      config.crawlerKind === undefined
+        ? {
+            health: MIN_STAT_VALUE,
+            melee: MIN_STAT_VALUE,
+            magic: MIN_STAT_VALUE,
+            evasiveness: MIN_STAT_VALUE,
+            ranged: MIN_STAT_VALUE,
+            explosivesHandling: MIN_STAT_VALUE,
+          }
+        : { ...STARTING_STATS[config.crawlerKind] };
     this.skills = new SkillManager(config.crawlerKind ?? null);
     this.craftSkills = new CraftSkills(config.crawlerKind ?? null);
     this.inventory = new Inventory(config.crawlerKind ?? null);
@@ -968,7 +1022,7 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
    * currently equipped, plus any live temporary modifiers, plus whatever a
    * timed boon is lending right now.
    */
-  private effectiveStat(stat: StatName): number {
+  private effectiveStat(stat: StatId): number {
     let total = this.baseStats[stat] + this.inventory.getEquippedStatBonus()[stat];
     if (this.isCrawler) total += gearStatBonus(this, stat);
     for (const mod of this.tempStatMods) {
@@ -982,34 +1036,62 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
     return Math.max(MIN_STAT_VALUE, total + this._godModeStatBonus);
   }
 
-  get strength(): number {
-    return this.effectiveStat('strength');
+  get melee(): number {
+    return this.effectiveStat('melee');
   }
 
-  get intelligence(): number {
-    return this.effectiveStat('intelligence');
+  get magic(): number {
+    return this.effectiveStat('magic');
   }
 
-  /** HP growth stat — displayed as "HP" in the UI, same as health. */
-  get constitution(): number {
-    return this.effectiveStat('constitution');
+  get health(): number {
+    return this.effectiveStat('health');
   }
 
-  /** Agility stat — drives the chance to dodge an incoming mob attack. */
-  get dexterity(): number {
-    return this.effectiveStat('dexterity');
+  /** Drives the chance to dodge an incoming mob attack. */
+  get evasiveness(): number {
+    return this.effectiveStat('evasiveness');
+  }
+
+  get ranged(): number {
+    return this.effectiveStat('ranged');
+  }
+
+  get explosivesHandling(): number {
+    return this.effectiveStat('explosivesHandling');
+  }
+
+  /** Effective value of any stat, for code that holds the stat as data. */
+  statValue(stat: StatId): number {
+    return this.effectiveStat(stat);
+  }
+
+  /**
+   * What one level-up point adds to `stat` for this body: its crawler's gain,
+   * or one for a mob or NPC, which has no crawler's table to follow.
+   */
+  statGainPerPoint(stat: StatId): number {
+    return this.statOwner === null ? 1 : STAT_GAIN_PER_POINT[stat][this.statOwner];
+  }
+
+  /**
+   * What one bought point (a stat potion or a drill) adds to `stat`: Health at
+   * one rate for both crawlers, every other stat at this body's level-up gain.
+   */
+  boughtStatGainPerPoint(stat: StatId): number {
+    return stat === 'health' ? BOUGHT_HEALTH_PER_POINT : this.statGainPerPoint(stat);
   }
 
   /** Stored value of a stat, before equipment and temporary modifiers. */
-  getBaseStat(stat: StatName): number {
+  getBaseStat(stat: StatId): number {
     return this.baseStats[stat];
   }
 
   /**
-   * Overwrite a stored stat value. Save restore and migration use this; ordinary
+   * Overwrite a stored stat value. Save restore uses this; ordinary
    * gameplay should go through {@link spendPoint} or {@link applyPermanentStat}.
    */
-  setBaseStat(stat: StatName, value: number): void {
+  setBaseStat(stat: StatId, value: number): void {
     this.baseStats[stat] = Math.max(MIN_STAT_VALUE, Math.round(value));
     this.syncHpToMaxHp();
   }
@@ -1029,19 +1111,19 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
 
   /**
    * Max HP. Derived for crawlers so equipping, unequipping, refunding or
-   * debuffing constitution can never leave a stale total behind; mobs pass a
+   * debuffing health can never leave a stale total behind; mobs pass a
    * fixed value to the constructor and keep it.
    */
   get maxHp(): number {
     const base =
       this._maxHpOverride ??
-      Math.round(crawlerMaxHp(this.baseHpOffset, this.constitution) * gearMaxHpScale(this));
+      Math.round(crawlerMaxHp(this.baseHpOffset, this.health) * gearMaxHpScale(this));
     return Math.max(1, base + this._juggJuiceHpBoost);
   }
 
   /**
    * Pins max HP to a fixed value, permanently opting this entity out of the
-   * constitution-derived formula.
+   * health-derived formula.
    *
    * Protected, and deliberately not a `maxHp` setter: one stray assignment on a
    * crawler would silently freeze her max HP forever, which is precisely the
@@ -1059,7 +1141,7 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
    *
    * Both halves are load-bearing, and they have to mirror. Crediting growth
    * alone would make an equip/unequip round trip a free full heal — put the
-   * a Constitution piece on at 2 HP, take it off, walk away at full — while clamping
+   * a health piece on at 2 HP, take it off, walk away at full — while clamping
    * alone would bleed HP away on every gear swap. Mirroring is also what makes
    * Jugg Juice's expiry actually repay the max-HP loan rather than gifting it.
    */
@@ -1103,7 +1185,7 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
     this.syncHpToMaxHp();
   }
 
-  /** Raise or clear the `!lucky` dexterity bonus applied to dodge rolls only. Pass 0 to clear. */
+  /** Raise or clear the `!lucky` flat dodge chance, added after the evasiveness curve. Pass 0 to clear. */
   setLuckyDodgeBonus(bonus: number): void {
     this._luckyDodgeBonus = bonus;
   }
@@ -1133,7 +1215,8 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
    * bounty blow into one and a half bars. Public so a headless harness prices
    * a blow exactly as it lands.
    */
-  incomingDamage(amount: number, source?: DamageSource): number {
+  incomingDamage(rawAmount: number, source?: DamageSource): number {
+    const amount = isMagicSource(source) ? rawAmount * this.survivingShare('magic') : rawAmount;
     if (source?.kind !== 'mob') return this.statusScaledDamage(amount);
     // Read live rather than stamped at spawn: flipping to Kitten mid-bounty must
     // help immediately, or the toggle fails the player who needed it most.
@@ -1189,7 +1272,7 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
     // Deliberately *before* hp is written: every death check in the game reads hp
     // after takeDamage returns, so absorbing the blow here means neither the
     // game-over check nor the companion knockout path ever sees a dead crawler.
-    if (remainingHp === 0 && this.tryCockroach()) {
+    if (remainingHp === 0 && this.tryNineLives()) {
       this.pendingDamageTaken += hpBeforeBlow - this.hp;
       if (this.isCrawler) activeRunStats()?.recordDamageTaken(hpBeforeBlow - this.hp);
       return true;
@@ -1338,7 +1421,7 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
   }
 
   /**
-   * Cockroach: the crawler walks away from a fatal blow at 1 HP, then the skill
+   * 9 Lives: the crawler walks away from a fatal blow at 1 HP, then the skill
    * goes cold for a few minutes.
    *
    * The recharge is a wall-clock deadline, not a frame counter, because scenes
@@ -1347,69 +1430,70 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
    *
    * @returns whether the skill absorbed the blow.
    */
-  private tryCockroach(): boolean {
-    if (!this.skills.isUnlocked('cockroach')) return false;
-    if (this.cockroachReadyAt !== null && Date.now() < this.cockroachReadyAt) return false;
+  private tryNineLives(): boolean {
+    if (!this.skills.isUnlocked('nine_lives')) return false;
+    if (this.nineLivesReadyAt !== null && Date.now() < this.nineLivesReadyAt) return false;
 
     this.hp = 1;
-    this.invulnerableFrames = COCKROACH_IFRAME_FRAMES;
-    this.skills.recordTrigger('cockroach');
+    this.invulnerableFrames = NINE_LIVES_IFRAME_FRAMES;
+    this.skills.recordTrigger('nine_lives');
     // Credit the use before reading the level back: surviving is how the skill
     // trains, and a level gained on this very blow should shorten this recharge.
-    this.skills.recordUse('cockroach');
-    this.cockroachReadyAt = Date.now() + cockroachRechargeMs(this.skills.getLevel('cockroach'));
-    this.queueFloatingText('COCKROACH!', 'trigger');
+    this.skills.recordUse('nine_lives');
+    this.nineLivesReadyAt = Date.now() + nineLivesRechargeMs(this.skills.getLevel('nine_lives'));
+    this.queueFloatingText('9 LIVES!', 'trigger');
     return true;
   }
 
   /**
-   * A knockout consolation: Cockroach was too cold to catch the blow that put
+   * A knockout consolation: 9 Lives was too cold to catch the blow that put
    * this crawler down, so its own recharge gets a break — the difficulty
    * profile's relief comes off whatever is left, never past `Date.now()`.
    * Kitten's relief outsizes any recharge the skill can hold, so it always
    * completes it outright.
    */
-  applyCockroachKnockoutRelief(): void {
-    if (!this.skills.isUnlocked('cockroach')) return;
-    if (this.cockroachReadyAt === null) return;
-    const reliefMs = activeDifficultyProfile().cockroachKnockoutReliefMs;
-    this.cockroachReadyAt = Math.max(Date.now(), this.cockroachReadyAt - reliefMs);
+  applyNineLivesKnockoutRelief(): void {
+    if (!this.skills.isUnlocked('nine_lives')) return;
+    if (this.nineLivesReadyAt === null) return;
+    const reliefMs = activeDifficultyProfile().nineLivesKnockoutReliefMs;
+    this.nineLivesReadyAt = Math.max(Date.now(), this.nineLivesReadyAt - reliefMs);
   }
 
-  /** True once Cockroach has finished recharging (or was never spent). */
-  get isCockroachReady(): boolean {
-    return this.cockroachReadyAt === null || Date.now() >= this.cockroachReadyAt;
+  /** True once 9 Lives has finished recharging (or was never spent). */
+  get isNineLivesReady(): boolean {
+    return this.nineLivesReadyAt === null || Date.now() >= this.nineLivesReadyAt;
   }
 
-  /** How far through the recharge Cockroach is, 0–1. Returns 1 when ready. */
-  cockroachRechargeFraction(): number {
-    if (this.cockroachReadyAt === null) return 1;
-    const total = cockroachRechargeMs(this.skills.getLevel('cockroach'));
-    const remaining = this.cockroachReadyAt - Date.now();
+  /** How far through the recharge 9 Lives is, 0–1. Returns 1 when ready. */
+  nineLivesRechargeFraction(): number {
+    if (this.nineLivesReadyAt === null) return 1;
+    const total = nineLivesRechargeMs(this.skills.getLevel('nine_lives'));
+    const remaining = this.nineLivesReadyAt - Date.now();
     if (remaining <= 0) return 1;
     return Math.max(0, Math.min(1, 1 - remaining / total));
   }
 
   /**
-   * Whether this entity's dexterity translates into dodging. Off by default so
+   * Whether this entity's evasiveness translates into dodging. Off by default so
    * mobs and NPCs never dodge the player's attacks; the two crawlers opt in.
    */
   protected get canDodge(): boolean {
     return false;
   }
 
-  /** Flat dodge chance from skills, added on top of the dexterity curve. */
+  /** Flat dodge chance from skills, added on top of the evasiveness curve. */
   protected get dodgeFlatBonus(): number {
     return 0;
   }
 
   /** The chance this player has of dodging the next mob attack, 0–1. */
   get dodgeChance(): number {
-    if (!this.canDodge) return 0;
+    if (!this.canDodge || this.statOwner === null) return 0;
     const gearDodge = gearModifiers(this).dodgeChance;
     return computeDodgeChance(
-      this.dexterity + this._luckyDodgeBonus,
-      this.dodgeFlatBonus + gearDodge,
+      this.statOwner,
+      this.evasiveness,
+      this.dodgeFlatBonus + gearDodge + this._luckyDodgeBonus,
     );
   }
 
@@ -1502,10 +1586,10 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
     this.pendingFloatingText.push({ text, style, throttleFrames });
   }
 
-  /** Returns the potion cooldown in frames for the current constitution level. */
+  /** Returns the potion cooldown in frames for the current health level. */
   computePotionCooldown(): number {
-    const rechargeNumerator = NUMERATOR_ASYMPTOTE_SLOPE * this.constitution;
-    const rechargeDenominator = this.constitution + DENOMINATOR_OFFSET;
+    const rechargeNumerator = NUMERATOR_ASYMPTOTE_SLOPE * this.health;
+    const rechargeDenominator = this.health + DENOMINATOR_OFFSET;
     const cooldownReduction = rechargeNumerator / rechargeDenominator;
     const cooldownSeconds = DEFAULT_POTION_COOLDOWN_SECONDS - cooldownReduction;
     return Math.max(1, Math.round(cooldownSeconds * FRAMES_PER_SECOND * this.ironStomachTimeScale));
@@ -1601,6 +1685,18 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
   }
 
   /**
+   * Whether a crawler's blow on this body may only make it react: no ability
+   * XP, no on-hit proc, no splash or sub-missile, no stomp heal, and no
+   * "combat started". For a body that can be struck forever and never dies
+   * (the bathroom queue), where any of those would be a farm. Every attack
+   * site that pays for a landed blow, and every bite of a status a crawler
+   * laid on, asks this before paying.
+   */
+  get blowsEarnNothing(): boolean {
+    return false;
+  }
+
+  /**
    * Whether this is one of the two playable crawlers.
    *
    * Mobs, summons and quest NPCs all share this base class, so "did that blow
@@ -1691,23 +1787,10 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
     return true;
   }
 
-  /**
-   * Whether a banked level-up point may be invested in `stat`.
-   *
-   * Only *spending* is gated. Equipment `statBonus`, stat-boost potions and
-   * The Quiet Needle's tattoos all still raise a locked stat through
-   * {@link applyPermanentStat} — the lock models the System refusing an
-   * allocation, not the attribute being frozen in place.
-   */
-  canSpendPointInto(_stat: StatName): boolean {
-    return true;
-  }
-
-  spendPoint(stat: StatName): void {
-    if (!this.canSpendPointInto(stat)) return;
-    if (!this.consumePointFor(STAT_CODE[stat])) return;
-    this.baseStats[stat]++;
-    this.syncHpToMaxHp();
+  /** Invests one banked level-up point in `stat`, at this crawler's gain for it. */
+  spendPoint(stat: StatId): void {
+    if (!this.consumePointFor(STAT_DEFS[stat].code)) return;
+    this.raiseBaseStat(stat, this.statGainPerPoint(stat));
   }
 
   /** A drink's courage: an intoxicated crawler swings harder even as the room tilts. */
@@ -1777,7 +1860,7 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
    * Routed through the same expiry cleanup as `clearStatusEffects`, so a status
    * that loans the player something (Jugg Juice's max HP, Speed Fizz's
    * multiplier) still pays it back if a caller ever names one. The unconditional
-   * sync at the end covers a cured constitution boon for the same reason, and it
+   * sync at the end covers a cured health boon for the same reason, and it
    * runs after the list is replaced because the boon's bonus is read off it.
    *
    * The {@link INCURABLE_STATUSES} are never removed, whoever names them: the
@@ -1821,17 +1904,27 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
    * Apply a status effect. If the same type is already active it is refreshed
    * (replaced) rather than stacked.
    */
-  applyStatus(effect: StatusEffect) {
+  applyStatus(applied: StatusEffect) {
+    const effect = this.durationWarded(applied);
     const idx = this.statusEffects.findIndex((e) => e.type === effect.type);
     if (idx >= 0) {
       this.statusEffects[idx] = effect;
     } else {
       this.statusEffects.push(effect);
     }
-    // A constitution boon just moved max HP; without this the bar reads against
+    // A health boon just moved max HP; without this the bar reads against
     // the old maximum until something unrelated happens to reconcile them.
     if (STAT_BOON_BONUSES.has(effect.type)) this.syncHpToMaxHp();
     if (effect.type === FROZEN_STATUS) this.abandonSwing();
+  }
+
+  /** `effect` as this body's proficiency skills shorten it: Pyro's Touch on a burn. */
+  private durationWarded(effect: StatusEffect): StatusEffect {
+    const ward = STATUS_DEFS[effect.type].durationWardedBy;
+    if (ward === null) return effect;
+    const ticks = Math.ceil(proficiencyWardedAmount(this, ward, effect.ticksRemaining));
+    if (ticks === effect.ticksRemaining) return effect;
+    return { ...effect, ticksRemaining: ticks, totalTicks: ticks };
   }
 
   /**
@@ -1939,7 +2032,7 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
       if (STAT_BOON_BONUSES.has(effect.type)) hpMovingEffectCleared = true;
     }
     this.statusEffects = kept;
-    // After the list is replaced, never inside the loop: a constitution boon's
+    // After the list is replaced, never inside the loop: a health boon's
     // bonus is read off `statusEffects`, so an earlier sync would still be
     // measuring the maximum the boon was paying for and the bar would keep the
     // HP the boon lent.
@@ -1969,12 +2062,12 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
   }
 
   /** Register (or overwrite) a named regen bonus. Value is a multiplier where 1 = no effect; bonuses above 1 stack additively. */
-  setRegenModifier(key: string, multiplier: number): void {
+  setRegenModifier(key: RegenModifierKey, multiplier: number): void {
     this._regenModifiers.set(key, multiplier);
   }
 
   /** Remove a named regen bonus. No-op if the key was never set. */
-  clearRegenModifier(key: string): void {
+  clearRegenModifier(key: RegenModifierKey): void {
     this._regenModifiers.delete(key);
   }
 
@@ -2026,6 +2119,17 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
   }
 
   /**
+   * Share of a blow of the given channel that survives this body's resistances:
+   * one when nothing resists it. A magic resistance turns aside more the more
+   * magic its wearer has; every other channel loses a fixed share.
+   */
+  survivingShare(type: ResistanceType): number {
+    if (!this.resists(type)) return 1;
+    if (type === 'magic') return 1 - magicResistedShare(this.magic);
+    return RESISTED_DAMAGE_FRACTION;
+  }
+
+  /**
    * The damage a blow of the given channel still does after resistances.
    *
    * Rounded down rather than up so a resistance is worth something against the
@@ -2033,7 +2137,16 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
    */
   resistedDamage(amount: number, type: ResistanceType): number {
     if (!this.resists(type)) return amount;
-    return Math.max(0, Math.floor(amount * RESISTED_DAMAGE_FRACTION));
+    return Math.max(0, Math.floor(amount * this.survivingShare(type)));
+  }
+
+  /**
+   * How long a magic status of `frames` holds this body after its magic
+   * resistance: shortened by the same share a magic blow loses. Rounded up, so
+   * a resisted status still lands.
+   */
+  magicResistedFrames(frames: number): number {
+    return Math.ceil(frames * this.survivingShare('magic'));
   }
 
   /**
@@ -2047,10 +2160,18 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
 
   private applyStatusTickDamage(effect: StatusEffect, damageOverTime: StatusDamageOverTime): void {
     const resistance = damageOverTime.resistedBy;
-    const resisted = resistance !== null && this.resists(resistance);
-    const damage = resisted
-      ? Math.max(0, Math.floor(STATUS_TICK_DAMAGE * RESISTED_DAMAGE_FRACTION))
-      : STATUS_TICK_DAMAGE;
+    const bite =
+      resistance === null
+        ? STATUS_TICK_DAMAGE
+        : this.resistedDamage(STATUS_TICK_DAMAGE, resistance);
+    const applier = effect.applier;
+    // A bite the crawler laid on is her hit, so her proficiencies weigh in on
+    // it; one laid on by a foe, by nobody, or by something she only built is not.
+    const crawlersOwnBite =
+      applier !== null && applier !== this && applier.isCrawler && effect.creditOnly !== true;
+    const damage = crawlersOwnBite
+      ? outgoingHitDamageOn(applier, this, bite, damageOverTime.tags)
+      : bite;
     // A fully resisted tick must not reach `takeDamage`: a zero-damage hit still
     // flashes the crawler and suppresses regen, which reads as taking harm.
     if (damage <= 0) return;
@@ -2123,32 +2244,39 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
   }
 
   /** Raises one stat's base value. The one place a permanent stat change lands. */
-  private raiseBaseStat(stat: StatName, amount: number): void {
+  private raiseBaseStat(stat: StatId, amount: number): void {
     this.baseStats[stat] += amount;
     this.syncHpToMaxHp();
   }
 
   /**
-   * Permanently raise one stat, flashing the same feedback a spent level-up point
-   * does. Used by the Drill Yard and the Quiet Needle's tattoos — the stat-boost
-   * potion has its own fanfare via {@link applyStatBoost} instead, so a potion is
-   * never announced as a level-up.
+   * Permanently raise one stat by `points` bought points' worth (see
+   * {@link boughtStatGainPerPoint}), flashing the same feedback a spent level-up point
+   * does. Used by the Drill Yard — the stat-boost potion has its own fanfare
+   * via {@link applyStatBoost} instead, so a potion is never announced as a
+   * level-up.
+   *
+   * @returns how much the stat rose.
    */
-  applyPermanentStat(stat: StatName, amount: number): void {
+  applyPermanentStat(stat: StatId, points: number): number {
+    const amount = points * this.boughtStatGainPerPoint(stat);
     this.raiseBaseStat(stat, amount);
-    this.levelUpStat = STAT_CODE[stat];
+    this.levelUpStat = STAT_DEFS[stat].code;
     this.levelUpFlash = SPEND_POINT_FLASH_FRAMES;
+    return amount;
   }
 
   /**
-   * Permanently boost a randomly chosen stat by 2–4 points.
+   * Permanently boost a randomly chosen stat by 2–4 bought points' worth (see
+   * {@link boughtStatGainPerPoint}).
    *
    * @returns which stat won and by how much, so the caller can tell the player —
    *   the roll happens in here and is not recoverable from the result.
    */
-  applyStatBoost(): { stat: StatName; amount: number } {
+  applyStatBoost(): { stat: StatId; amount: number } {
     const stat = ALL_STATS[Math.floor(Math.random() * ALL_STATS.length)];
-    const amount = STAT_BOOST_MIN + Math.floor(Math.random() * STAT_BOOST_RANGE);
+    const points = STAT_BOOST_MIN + Math.floor(Math.random() * STAT_BOOST_RANGE);
+    const amount = points * this.boughtStatGainPerPoint(stat);
     this.raiseBaseStat(stat, amount);
     this.statBoostFlashStat = stat;
     this.statBoostFlashAmount = amount;

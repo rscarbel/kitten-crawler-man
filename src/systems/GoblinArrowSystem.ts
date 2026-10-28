@@ -218,7 +218,7 @@ export class GoblinArrowSystem implements GameSystem {
 
   /**
    * Everything this arrow can hit: the two players, the scene's extra
-   * player-like targets (Mongo, hired mercenaries), and whatever the archer was
+   * player-like targets (Deinonychus, hired mercenaries), and whatever the archer was
    * actually aiming at.
    */
   private targetsFor(ctx: SystemContext, arrow: Arrow): readonly Player[] {

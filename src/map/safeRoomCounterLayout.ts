@@ -33,7 +33,7 @@
  */
 
 import type { GameMap } from './GameMap';
-import { isFieldStation, mordecaiAndBedTiles } from './safeRoomFixtures';
+import { isFieldStation, guideAndBedTiles } from './safeRoomFixtures';
 import {
   SAFE_ROOM_COUNTER,
   SAFE_ROOM_COUNTER_BACK,
@@ -219,7 +219,7 @@ export function planSafeRoomCounters(map: GameMap): ReadonlyArray<SafeRoomCounte
     if (bounds.h < MIN_ROOM_HEIGHT_FOR_COUNTER || bounds.w < MIN_ROOM_WIDTH_FOR_COUNTER) continue;
 
     const doorColumns = doorColumnsOnNorthWall(map, bounds);
-    const fixtureTiles = mordecaiAndBedTiles(safeRoom);
+    const fixtureTiles = guideAndBedTiles(safeRoom);
 
     for (const rowOffset of RUN_ROW_OFFSETS) {
       const backRow = bounds.y + rowOffset;
@@ -228,7 +228,7 @@ export function planSafeRoomCounters(map: GameMap): ReadonlyArray<SafeRoomCounte
       if (lastRunRow >= bounds.y + bounds.h - 1) continue;
 
       const blockedColumns = new Set<number>(rowOffset === 0 ? doorColumns : []);
-      // Mordecai and the bed own their own tiles. Only their *columns* are out of
+      // Dave and the bed own their own tiles. Only their *columns* are out of
       // bounds, and only when the run's rows would actually reach their row —
       // blocking the whole row instead cost narrow rooms their counter entirely.
       for (const tile of fixtureTiles) {

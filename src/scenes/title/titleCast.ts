@@ -7,7 +7,7 @@
 
 import type { CatState } from '../../sprites/catSprite';
 import { prewarmGoblinBystander, type GoblinArchetype } from '../../sprites/goblinSprite';
-import { prewarmMongoWalk, type MongoStage } from '../../sprites/mongoSprite';
+import { prewarmDeinonychusWalk, type DeinonychusStage } from '../../sprites/deinonychusSprite';
 import type { HumanRowName } from '../../sprites/art/humanFigure';
 
 /** The human crawler stands facing the camera, breathing. */
@@ -36,8 +36,8 @@ export const CAT_BREAK_ROWS = [
 /** The goblin that peeks into the light: the plain cleaver goblin every crawler meets first. */
 export const PEEKING_GOBLIN: GoblinArchetype = 'sword';
 
-/** Mongo as the show knows him: fully grown. */
-export const TITLE_MONGO_STAGE: MongoStage = 'adult';
+/** The Deinonychus fully grown, the stage the title cast shows. */
+export const TITLE_DEINONYCHUS_STAGE: DeinonychusStage = 'adult';
 
 /**
  * Queues every row the title draws from the shared figure cache for baking.
@@ -48,7 +48,7 @@ export const TITLE_MONGO_STAGE: MongoStage = 'adult';
  */
 export function prewarmTitleCast(): void {
   prewarmGoblinBystander(PEEKING_GOBLIN);
-  prewarmMongoWalk(TITLE_MONGO_STAGE);
+  prewarmDeinonychusWalk(TITLE_DEINONYCHUS_STAGE);
 }
 
 /**

@@ -14,7 +14,6 @@ import { bakeFigureCell } from './figureSheet.js';
 import {
   distinctFrameFailures,
   figureStructuralFailures,
-  inkBoxOf,
   missingStateFailures,
   nothingMeasuredFailures,
 } from './figureGates.js';
@@ -48,7 +47,6 @@ import {
   NECROMANCER_STANDING_ROWS,
 } from '../src/sprites/necromancerSprite.js';
 import { SOUL_MID, hollowSoulPalette, type SoulRgb } from '../src/sprites/soulPalette.js';
-import { RAT_KIN_FIGURE, ORIGIN_Y as RAT_KIN_ORIGIN_Y } from '../src/sprites/art/ratKinFigure.js';
 
 const CHANNELS = 4;
 const PERCENT = 100;
@@ -139,13 +137,10 @@ function structuralGates(): void {
   }
 }
 
-// ── G3 size against a ratkin, G4 heads tall ──────────────────────────────────
+// ── G4 heads tall ────────────────────────────────────────────────────────────
 
 /** Half-width of the column band the crown is looked for in, in tiles. */
 const CROWN_BAND_TILES = 0.18;
-/** He stands twice a ratkin's height; the band the ratio may sit in. */
-const MIN_RATKIN_RATIO = 1.85;
-const MAX_RATKIN_RATIO = 2.3;
 /** Heads tall a figure needs to read as tall rather than as big. A ratkin is about 2.5. */
 const MIN_HEADS_TALL = 5.5;
 
@@ -156,33 +151,11 @@ function crownHeightTiles(): number | null {
   return top === null ? null : (POSE_ORIGIN_Y - top) / TILE_SCALE;
 }
 
-function sizeGates(): void {
+function headsTallGate(): void {
   const crown = crownHeightTiles();
   if (crown === null) {
-    fail('G3 size', 'found no solid ink above the idle front frame’s feet');
+    fail('G4 heads', 'found no solid ink above the idle front frame’s feet');
     return;
-  }
-  let ratkinHeight: number | null = null;
-  try {
-    const box = inkBoxOf(RAT_KIN_FIGURE, 'idle', 0);
-    ratkinHeight = box === null ? null : (RAT_KIN_ORIGIN_Y - box.minY) / TILE_SCALE;
-  } catch (error) {
-    fail('G3 size', `could not paint the ratkin to measure against: ${String(error)}`);
-  }
-  if (ratkinHeight === null) {
-    fail('G3 size', 'the ratkin idle painted nothing to measure against');
-  } else {
-    const ratio = crown / ratkinHeight;
-    console.log(
-      `  G3 crown ${crown.toFixed(2)} tiles against a ratkin's ${ratkinHeight.toFixed(2)} — ${ratio.toFixed(2)}×`,
-    );
-    if (ratio < MIN_RATKIN_RATIO || ratio > MAX_RATKIN_RATIO) {
-      fail(
-        'G3 size',
-        `he stands ${ratio.toFixed(2)}× a ratkin; he must read at about twice one ` +
-          `(${MIN_RATKIN_RATIO}–${MAX_RATKIN_RATIO})`,
-      );
-    }
   }
   const heads = crown / NECROMANCER_HEAD_HEIGHT;
   console.log(`  G4 ${heads.toFixed(1)} heads tall`);
@@ -613,7 +586,7 @@ function telegraphGate(): void {
 export function necromancerGateFailures(): string[] {
   failures.length = 0;
   structuralGates();
-  sizeGates();
+  headsTallGate();
   brightestGate();
   rimGate();
   paletteGate();

@@ -3,7 +3,6 @@ import {
   type DamageOptions,
   type DamageSource,
   type FigureMouth,
-  type StatName,
   type StatusFigureBox,
 } from '../Player';
 import { TILE_SIZE } from '../core/constants';
@@ -47,7 +46,10 @@ import {
   type HumanStrikeClock,
   type StrikeTargetContext,
 } from '../sprites/humanAnimator';
-import { SMUSH_DURATION_TICKS, SMUSH_RECOVERY_TICKS } from '../sprites/art/human/timing';
+import {
+  SEISMIC_STOMP_DURATION_TICKS,
+  SEISMIC_STOMP_RECOVERY_TICKS,
+} from '../sprites/art/human/timing';
 import { type Pt } from '../sprites/art/bipedArt';
 import {
   GROUND_OFFSET_IN_TILE,
@@ -59,7 +61,7 @@ import {
 } from '../sprites/art/humanFigure';
 import { drawActivePlayerMarker } from '../sprites/activePlayerMarker';
 import type { AbilityManager } from '../core/skills/AbilityManager';
-import { getSmushStats } from '../abilities/smush';
+import { getSeismicStompStats } from '../abilities/seismicStomp';
 import {
   humanLookOf,
   ITEM_DEF,
@@ -76,16 +78,13 @@ import {
   HUMAN_ARM_REACH_TILES,
   type HandWeaponStats,
   type MeleeWeaponStats,
+  SLING_COOLDOWN_FRAMES,
+  SLING_STONE_SPEED,
 } from '../core/items/equipment/weapons';
 import type { GameMap } from '../map/GameMap';
 import {
   drawSlingshotRocks,
   ROCK_LAUNCH_CONVERGE_TILES,
-  SLINGSHOT_BASE_DAMAGE,
-  SLINGSHOT_COOLDOWN_FRAMES,
-  SLINGSHOT_RANGE_TILES,
-  SLINGSHOT_SPEED,
-  SLINGSHOT_STRENGTH_FRACTION,
   type SlingshotRock,
 } from '../sprites/slingshotSprite';
 import {
@@ -103,6 +102,7 @@ import type {
 import { offHandGripOf } from '../sprites/art/human/offHand';
 import type { ShownPlacement } from '../sprites/art/human/stowedGeometry';
 import type { ThrownPropVisualId } from '../sprites/held/heldVisualIds';
+import { HumanExplosiveHands } from './humanExplosiveHands';
 import { motionSetOf } from '../sprites/art/human/motionSets';
 import { humanSocketsAt } from '../sprites/art/human/sockets';
 import type { WorkingTool } from '../core/items/gathering/toolTiers';
@@ -116,13 +116,12 @@ import {
 import {
   bareFistDamage,
   HUMAN_BASE_HP_OFFSET,
-  HUMAN_STARTING_DEXTERITY,
   HUMAN_SWING_FRAMES,
+  slingDamage,
+  slingRangeTiles,
 } from '../core/party/crawlerFormulas';
-import {
-  IRON_PUNCH_DAMAGE_FRACTION_PER_LEVEL,
-  PUGILISM_DAMAGE_PER_LEVEL,
-} from '../core/skills/SkillManager';
+import { PUGILISM_DAMAGE_PER_LEVEL } from '../core/skills/SkillManager';
+import { UNTAGGED_HIT, weaponHitTags, type DamageTags } from '../core/combat/damageTags';
 
 /**
  * How far his ground line sits above the bottom edge of his tile. The rig is
@@ -172,7 +171,7 @@ export function humanStatusFigureBoxOf(look: HumanLook): StatusFigureBox {
 }
 
 /** The point under the middle of his tile he stands on, in tile fractions. */
-const SMUSH_FALLBACK_STAMP_TILE: Pt = { x: 0.5, y: GROUND_OFFSET_IN_TILE };
+const SEISMIC_STOMP_FALLBACK_STAMP_TILE: Pt = { x: 0.5, y: GROUND_OFFSET_IN_TILE };
 
 /** The slingshot shot he draws for each view he can face. */
 const SLING_SHOT_ROWS: ViewRows = {
@@ -206,7 +205,7 @@ const STANDBY_REWARM_TICKS = Math.floor(
 const FALL_STANDBY_HEALTH_SHARE = 0.33;
 
 /** What a set of stand-by rows is held warm for. */
-type HumanStandbyReason = 'shell_cast' | 'fall';
+type HumanStandbyReason = 'shield_cast' | 'fall';
 
 interface HumanStandby {
   readonly spans: readonly HumanWarmSpan[];
@@ -220,17 +219,9 @@ function sameSpans(a: readonly HumanWarmSpan[], b: readonly HumanWarmSpan[]): bo
   );
 }
 
-/** Short label the level-up flash shows for Explosives Handling. */
-const EXPLOSIVES_HANDLING_CODE = 'EXP';
-
-/** The human alone can invest points in Explosives Handling. */
-type HumanSpendableStat = StatName | 'explosivesHandling';
-
 /**
- * This is a playable character.
- * The human has the power "brawl"
- * which is a powerful short range attack
- * it can be a punch of a stomp called "smush"
+ * The human crawler: a short-range brawler whose blows are a punch or the
+ * Seismic Stomp.
  */
 export class HumanPlayer extends Player {
   /** Which half of the skill roster this crawler is eligible for. */
@@ -243,9 +234,6 @@ export class HumanPlayer extends Player {
   override get isSwinging(): boolean {
     return this.attackTimer > 0;
   }
-  /** Increases dynamite damage and throw distance. */
-  explosivesHandling = 1;
-
   private abilityManager: AbilityManager | null = null;
 
   attackTimer = 0;
@@ -253,17 +241,17 @@ export class HumanPlayer extends Player {
   private autoAttackCooldown = 0;
   private readonly AUTO_ATTACK_COOLDOWN = 90;
 
-  smushTimer = 0;
-  smushCooldown = 0;
-  /** Ticks a Smush holds him, from the key press to back in guard. */
-  readonly SMUSH_FRAMES = SMUSH_DURATION_TICKS;
+  seismicStompTimer = 0;
+  seismicStompCooldown = 0;
+  /** Ticks a Seismic Stomp holds him, from the key press to back in guard. */
+  readonly SEISMIC_STOMP_FRAMES = SEISMIC_STOMP_DURATION_TICKS;
   /**
    * The timer value the stamp lands on: the windup has run and the press and
-   * recovery are still to come. Every Smush row is fitted around this tick —
+   * recovery are still to come. Every Seismic Stomp row is fitted around this tick —
    * its stamp frame is the one the animator shows here — never the other way
    * round; `scripts/gates-human.ts` replays the player to hold them to it.
    */
-  private readonly SMUSH_HIT_TIMER = SMUSH_RECOVERY_TICKS;
+  private readonly SEISMIC_STOMP_HIT_TIMER = SEISMIC_STOMP_RECOVERY_TICKS;
 
   /** The mob the human will automatically fight when not player-controlled. */
   autoTarget: Mob | null = null;
@@ -328,6 +316,8 @@ export class HumanPlayer extends Player {
   readonly animator = new HumanAnimator({ warmRow: prewarmHumanRow, facing: this.facing });
   /** Chooses his reaction rows — flinch, stumble, struggle, falls — from what is done to him. */
   private readonly reactions = new HumanReactionDirector(this);
+  /** How he lights, holds and throws an explosive. */
+  readonly explosives = new HumanExplosiveHands(this);
   /** Rows held warm ahead of a moment that can come on any tick, by what they wait for. */
   private readonly standbys = new Map<HumanStandbyReason, HumanStandby>();
   /** Fixed updates counted for the stand-by refresh. */
@@ -363,7 +353,6 @@ export class HumanPlayer extends Player {
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, {
       baseHpOffset: HUMAN_BASE_HP_OFFSET,
-      baseStats: { dexterity: HUMAN_STARTING_DEXTERITY },
       crawlerKind: HUMAN_CRAWLER_KIND,
     });
     this.lastTickX = this.x;
@@ -375,8 +364,8 @@ export class HumanPlayer extends Player {
     // scene change builds him bare and restores his gear a moment later, and
     // dressing him bare in between would release the outfit he is wearing.
     prewarmHumanSprite();
-    this.inventory.addItem('smush_tome', 1);
-    this.inventory.placeOnHotbar('smush_tome', HumanPlayer.TOME_HOTBAR_SLOT);
+    this.inventory.addItem('seismic_stomp_tome', 1);
+    this.inventory.placeOnHotbar('seismic_stomp_tome', HumanPlayer.TOME_HOTBAR_SLOT);
     // The base player already granted the starting potions; moving that one
     // stack keeps it a single stack, where re-granting it here would not.
     this.inventory.placeOnHotbar('health_potion', HumanPlayer.POTION_HOTBAR_SLOT);
@@ -554,25 +543,16 @@ export class HumanPlayer extends Player {
     this.abilityManager = manager;
   }
 
-  getProtectiveShellLevel(): number {
-    return this.abilityManager?.getLevel('protective_shell') ?? 1;
+  getEnergyShieldLevel(): number {
+    return this.abilityManager?.getLevel('energy_shield') ?? 1;
   }
 
-  getSmushLevel(): number {
-    return this.abilityManager?.getLevel('smush') ?? 1;
+  getSeismicStompLevel(): number {
+    return this.abilityManager?.getLevel('seismic_stomp') ?? 1;
   }
 
-  getSmushCooldownMax(): number {
-    return getSmushStats(this.getSmushLevel()).cooldownFrames;
-  }
-
-  spendPoint(stat: HumanSpendableStat): void {
-    if (stat === 'explosivesHandling') {
-      if (!this.consumePointFor(EXPLOSIVES_HANDLING_CODE)) return;
-      this.explosivesHandling++;
-      return;
-    }
-    super.spendPoint(stat);
+  getSeismicStompCooldownMax(): number {
+    return getSeismicStompStats(this.getSeismicStompLevel()).cooldownFrames;
   }
 
   /** Crawlers dodge; the mobs they fight do not. */
@@ -582,27 +562,30 @@ export class HumanPlayer extends Player {
 
   getMeleeDamage(): number {
     const pugilismBonus = PUGILISM_DAMAGE_PER_LEVEL * this.effectiveSkillLevel('pugilism');
-    const meleeOnlyStrength = this.inventory.equipment.getMeleeOnlyStatBonus('strength');
-    const flatDamage =
-      bareFistDamage(this.strength + meleeOnlyStrength) +
-      this.statusMeleeDamageBonus +
-      pugilismBonus;
-    // Iron Punch is a technique of the gear that carries it, not of the hand:
-    // without such a piece worn the banked levels are inert, however they were granted.
-    const ironPunchMultiplier = gearModifiers(this).ironPunch
-      ? 1 + IRON_PUNCH_DAMAGE_FRACTION_PER_LEVEL * this.effectiveSkillLevel('iron_punch')
-      : 1;
-    return flatDamage * ironPunchMultiplier;
+    const meleeOnlyBonus = this.inventory.equipment.getMeleeOnlyStatBonus('melee');
+    return (
+      bareFistDamage(this.melee + meleeOnlyBonus) + this.statusMeleeDamageBonus + pugilismBonus
+    );
   }
 
   /**
    * What a blow from a weapon in his hand is worth before the weapon's own
-   * multiplier: the unarmed formula without what only a fist earns — Pugilism,
-   * Iron Punch and the gauntlet's fist-mode strength — since none of them is in
-   * a weapon.
+   * multiplier: the unarmed formula without what only a fist earns — Pugilism
+   * and the gauntlet's fist-mode melee — since neither is in a weapon.
    */
   getBladeDamage(): number {
-    return bareFistDamage(this.strength) + this.statusMeleeDamageBonus;
+    return bareFistDamage(this.melee) + this.statusMeleeDamageBonus;
+  }
+
+  /**
+   * What kind of blow his melee strike is: the drawn weapon's family, or for a
+   * punch, whatever kind of weapon his worn gear makes his fists.
+   */
+  meleeHitTags(): DamageTags {
+    const weapon = this.drawnMeleeWeapon;
+    if (weapon !== null) return weaponHitTags(weapon);
+    const fistFamily = gearModifiers(this).fistFamily;
+    return fistFamily === null ? UNTAGGED_HIT : [fistFamily];
   }
 
   /** What the blow in his hand is worth: the weapon's while one is drawn to swing, his fists' otherwise. */
@@ -756,9 +739,9 @@ export class HumanPlayer extends Player {
     }
   }
 
-  /** What a single stone does on impact — deliberately below a bare fist's reach-for-reach worth. */
+  /** What a single stone does on impact. */
   getSlingshotDamage(): number {
-    return SLINGSHOT_BASE_DAMAGE + Math.floor(this.strength * SLINGSHOT_STRENGTH_FRACTION);
+    return slingDamage(this.ranged);
   }
 
   /** Stones still in the air, for the combat resolver to land. */
@@ -790,16 +773,17 @@ export class HumanPlayer extends Player {
       launchOffsetX: fork.x - x,
       launchOffsetY: fork.y - y,
       convergeDistance: this.tileSize * ROCK_LAUNCH_CONVERGE_TILES,
-      vx: Math.cos(angle) * SLINGSHOT_SPEED,
-      vy: Math.sin(angle) * SLINGSHOT_SPEED,
+      vx: Math.cos(angle) * SLING_STONE_SPEED,
+      vy: Math.sin(angle) * SLING_STONE_SPEED,
       distTraveled: 0,
-      maxDist: this.tileSize * SLINGSHOT_RANGE_TILES,
+      maxDist: this.tileSize * slingRangeTiles(this.ranged),
       state: 'flying',
       hit: false,
       bounces: 0,
       bouncedOff: null,
+      tags: weaponHitTags(this.drawnWeapon),
     });
-    this.slingshotCooldown = SLINGSHOT_COOLDOWN_FRAMES;
+    this.slingshotCooldown = SLING_COOLDOWN_FRAMES;
     this.pendingSlingshotFireSound = true;
     return true;
   }
@@ -946,11 +930,11 @@ export class HumanPlayer extends Player {
    * swinging at decides which blow it is.
    */
   triggerAttack(target: Mob | null = null) {
-    if (this.attackTimer > 0 || this.smushTimer > 0 || !this.canAct) return;
+    if (this.attackTimer > 0 || this.seismicStompTimer > 0 || !this.canAct) return;
     // A weapon in hand takes the attack key: bare fists are what the punch and
     // the kick animate, and he cannot swing what he is holding a sling with.
     // Checked after the windup guard above so a sling shot respects the same
-    // lock a mid-smush melee swing would.
+    // lock a mid-stomp melee swing would.
     if (this.hasSlingDrawn) {
       this.triggerSlingshot();
       return;
@@ -975,22 +959,28 @@ export class HumanPlayer extends Player {
     };
   }
 
-  triggerSmush(): boolean {
-    if (this.smushCooldown > 0 || this.smushTimer > 0 || this.attackTimer > 0) return false;
+  triggerSeismicStomp(): boolean {
+    if (this.seismicStompCooldown > 0 || this.seismicStompTimer > 0 || this.attackTimer > 0)
+      return false;
     if (!this.canAct) return false;
-    this.smushTimer = this.SMUSH_FRAMES;
-    this.animator.beginSmush(this.facingX, this.facingY);
+    this.seismicStompTimer = this.SEISMIC_STOMP_FRAMES;
+    this.animator.beginSeismicStomp(this.facingX, this.facingY);
     return true;
   }
 
   /**
-   * Whether a `triggerSmush` refusal right now is *because of* the cooldown,
+   * Whether a `triggerSeismicStomp` refusal right now is *because of* the cooldown,
    * as opposed to being mid-swing or unable to act — the two refusals a
    * refusal cue should stay silent for, since they are not the player
    * mistiming a press against a timer they can watch.
    */
-  get smushRefusedByCooldown(): boolean {
-    return this.smushCooldown > 0 && this.smushTimer <= 0 && this.attackTimer <= 0 && this.canAct;
+  get seismicStompRefusedByCooldown(): boolean {
+    return (
+      this.seismicStompCooldown > 0 &&
+      this.seismicStompTimer <= 0 &&
+      this.attackTimer <= 0 &&
+      this.canAct
+    );
   }
 
   /**
@@ -1010,8 +1000,8 @@ export class HumanPlayer extends Player {
     return {
       attackTimer: this.attackTimer,
       attackFrames: this.ATTACK_FRAMES,
-      smushTimer: this.smushTimer,
-      smushFrames: this.SMUSH_FRAMES,
+      seismicStompTimer: this.seismicStompTimer,
+      seismicStompFrames: this.SEISMIC_STOMP_FRAMES,
     };
   }
 
@@ -1023,7 +1013,7 @@ export class HumanPlayer extends Player {
   /**
    * Plays one of his rows as an action — something a system has him do:
    * hammer a board, pull a lever, drink. Priority, highest first: a blow or a
-   * Smush, then a reaction, then an action, then standing and moving; a knockout
+   * Seismic Stomp, then a reaction, then an action, then standing and moving; a knockout
    * outranks them all but a reaction that overrides blows. So this is refused
    * (false) mid-blow, mid-reaction or out cold, and replaces an action already
    * playing. By default it ends the first tick he moves, and the stride takes
@@ -1126,22 +1116,22 @@ export class HumanPlayer extends Player {
   }
 
   /**
-   * Where the heel of the Smush being drawn meets the floor, in tile
+   * Where the heel of the Seismic Stomp being drawn meets the floor, in tile
    * fractions from his tile origin — read off the row actually playing, so
    * the blast lands under the foot in every view, standing or on the hop.
    * His tile's own ground point when no stamp is being drawn.
    */
-  smushStampTile(): Pt {
-    return stampPointOf(this.spriteSelection()) ?? SMUSH_FALLBACK_STAMP_TILE;
+  seismicStompStampTile(): Pt {
+    return stampPointOf(this.spriteSelection()) ?? SEISMIC_STOMP_FALLBACK_STAMP_TILE;
   }
 
   /**
-   * Which grind of the Smush being drawn is on screen this tick, counted from
+   * Which grind of the Seismic Stomp being drawn is on screen this tick, counted from
    * 1 on the first frame after the stamp that the heel is ground into the
-   * floor; null on every other frame, and when no Smush is drawn. Read off the
+   * floor; null on every other frame, and when no Seismic Stomp is drawn. Read off the
    * row actually playing, so the blast's grind lands on the picture's.
    */
-  smushGrindBeat(): number | null {
+  seismicStompGrindBeat(): number | null {
     const drawn = this.spriteSelection();
     const row: HumanRowMeta = HUMAN_ROW_TABLE[drawn.row];
     const grinds = row.eventFrames?.grind ?? [];
@@ -1204,7 +1194,7 @@ export class HumanPlayer extends Player {
    *
    * Any action still playing is abandoned first, before the fall can
    * interrupt it: an interrupted gesture carries out what it was holding back
-   * (a Protective Shell heals him to full, a chest shows its loot), and under
+   * (an Energy Shield heals him to full, a chest shows its loot), and under
    * the death screen none of that may happen.
    */
   tickReactionWhileDefeated(): void {
@@ -1261,11 +1251,13 @@ export class HumanPlayer extends Player {
     // blow twice. The peaks also ask whether the timer moved this frame.
     this.swingTimersStepped = this.actionTicksThisFrame > 0;
     this.attackTimer = this.tickActionTimer(this.attackTimer);
-    this.smushCooldown = this.tickCooldown(this.smushCooldown);
-    if (this.smushTimer > 0) {
-      this.smushTimer = this.tickActionTimer(this.smushTimer);
-      if (this.smushTimer === 0) {
-        this.smushCooldown = getSmushStats(this.getSmushLevel()).cooldownFrames;
+    this.seismicStompCooldown = this.tickCooldown(this.seismicStompCooldown);
+    if (this.seismicStompTimer > 0) {
+      this.seismicStompTimer = this.tickActionTimer(this.seismicStompTimer);
+      if (this.seismicStompTimer === 0) {
+        this.seismicStompCooldown = getSeismicStompStats(
+          this.getSeismicStompLevel(),
+        ).cooldownFrames;
       }
     }
   }
@@ -1275,7 +1267,7 @@ export class HumanPlayer extends Player {
 
   protected override abandonSwing(): void {
     this.attackTimer = 0;
-    this.smushTimer = 0;
+    this.seismicStompTimer = 0;
   }
 
   /** Returns true on the single frame when the melee hit connects (peak of the swing). */
@@ -1284,8 +1276,8 @@ export class HumanPlayer extends Player {
   }
 
   /** Returns true on the single frame when the stamp lands and the blast goes off. */
-  isSmushPeak(): boolean {
-    return this.swingTimersStepped && this.smushTimer === this.SMUSH_HIT_TIMER;
+  isSeismicStompPeak(): boolean {
+    return this.swingTimersStepped && this.seismicStompTimer === this.SEISMIC_STOMP_HIT_TIMER;
   }
 
   getMeleeRange(): number {
@@ -1298,7 +1290,7 @@ export class HumanPlayer extends Player {
    * press can swap to it as easily as it can swing.
    */
   attackReachPx(): number {
-    return Math.max(this.getMeleeRange(), this.tileSize * SLINGSHOT_RANGE_TILES);
+    return Math.max(this.getMeleeRange(), this.tileSize * slingRangeTiles(this.ranged));
   }
 
   /**
@@ -1309,8 +1301,8 @@ export class HumanPlayer extends Player {
    */
   resetCombatState(): void {
     this.attackTimer = 0;
-    this.smushTimer = 0;
-    this.smushCooldown = 0;
+    this.seismicStompTimer = 0;
+    this.seismicStompCooldown = 0;
     this.autoAttackCooldown = 0;
     this.autoTarget = null;
     this.reactions.reset();

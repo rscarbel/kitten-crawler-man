@@ -121,7 +121,7 @@ function rowFrameCount(rows: ReadonlyArray<{ name: string; frameCount: number }>
  * - nobody's enemy (`isHostile` false), so no companion, pet, hireling or
  *   homing shot picks him, and he never counts toward a room clear;
  * - pays for nothing: no XP, coin, loot, ability XP or proc;
- * - immovable: no Protective Shell shove, blast push, knockback, separation
+ * - immovable: no Energy Shield shove, blast push, knockback, separation
  *   push, status (slow, stun, freeze, burn), root or confusion moves or holds
  *   him, so no ability can carry a guard out of a doorway.
  *

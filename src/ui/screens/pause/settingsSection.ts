@@ -1,4 +1,4 @@
-/** Settings: volumes, mute, mono, background audio, captions and the way to the music player, UI size, render quality, difficulty, the System AI's intensity and indicators, the companion toggle and the way to the controls. */
+/** Settings: volumes, mute, mono, background audio, captions and the way to the music player, UI size, render quality, difficulty, Caroline's intensity and indicators, the companion toggle and the way to the controls. */
 
 import { AI_INTENSITIES, AI_INTENSITY_LABELS, type AIIntensity } from '../../../ai/aiIntensity';
 import {
@@ -12,6 +12,7 @@ import { choiceRow, wideButton, type Choice } from './parts';
 import { keybindings } from '../../../core/input/Keybindings';
 import type { PauseAudio, PauseContext, PauseSection, SectionLayout } from './section';
 import { slider, sliderHeight, stepSlider } from './slider';
+import { petWords, type PetWords } from '../../../core/party/petNames';
 
 /**
  * Presets rather than a scale slider: fractional render scales leave hairline
@@ -57,20 +58,21 @@ const AI_INTENSITY_CHOICES: readonly Choice<AIIntensity>[] = AI_INTENSITIES.map(
 }));
 
 const AI_INTENSITY_HINTS: Readonly<Record<AIIntensity, string>> = {
-  off: 'The System only answers when you talk to it. It never acts on its own.',
-  commentary: 'The System narrates and reacts, but never touches your run.',
-  classic: 'The System meddles the way the show intends: rewards, punishments and surprises.',
-  chaotic: 'The System meddles about twice as often. The viewers approve.',
+  off: 'Caroline only answers when you talk to her. She never acts on her own.',
+  commentary: 'Caroline observes and remarks, but never touches your run.',
+  classic: 'Caroline intervenes as she sees fit: rewards, punishments and surprises.',
+  chaotic: 'Caroline intervenes about twice as often.',
 };
 
 const AI_INTERVENTIONS_HINT =
-  'A short line names what the System just did to your run, so you can tell its meddling from bad luck.';
+  'A short line names what Caroline just did to your run, so you can tell her interventions from bad luck.';
 
 const SOUND_CAPTIONS_HINT =
   'Captions name alarms, warnings and cries from off screen, even with the sound muted.';
 
-const MONGO_AUTO_SUMMON_HINT =
-  'While you play the human, the cat sends Mongo in when enemies are near. Also in the follower menu.';
+function deinonychusAutoSummonHint(pet: PetWords): string {
+  return `While you play the human, the cat sends ${pet.referred} in when enemies are near. Also in the follower menu.`;
+}
 const QUEST_ROUTE_TRAIL_HINT =
   'Dots on the ground lead the way to the quest pinned in your Journal. The arrow points the way either way.';
 
@@ -183,7 +185,7 @@ function renderSettings(layout: SectionLayout, ctx: PauseContext): void {
   });
   layout.paragraph(DIFFICULTY_HINTS[settings.difficulty], 'muted', ui.theme.space.md);
 
-  layout.heading('System AI');
+  layout.heading('Caroline (System AI)');
   choiceRow(layout, {
     id: 'ai-intensity',
     choices: AI_INTENSITY_CHOICES,
@@ -201,14 +203,15 @@ function renderSettings(layout: SectionLayout, ctx: PauseContext): void {
   layout.paragraph(AI_INTERVENTIONS_HINT, 'muted', ui.theme.space.md);
 
   layout.heading('Companion');
-  const autoSummon = settings.catAutoSummonsMongo;
+  const autoSummon = settings.catAutoSummonsDeinonychus;
+  const deinonychus = petWords(ctx.petNames, 'deinonychus');
   wideButton(layout, {
-    id: 'mongo-auto-summon',
-    label: `Cat summons Mongo: ${autoSummon ? 'On' : 'Off'}`,
+    id: 'deinonychus-auto-summon',
+    label: `Cat summons ${deinonychus.referred}: ${autoSummon ? 'On' : 'Off'}`,
     selected: autoSummon,
-    onTap: () => settings.setCatAutoSummonsMongo(!autoSummon),
+    onTap: () => settings.setCatAutoSummonsDeinonychus(!autoSummon),
   });
-  layout.paragraph(MONGO_AUTO_SUMMON_HINT, 'muted', ui.theme.space.md);
+  layout.paragraph(deinonychusAutoSummonHint(deinonychus), 'muted', ui.theme.space.md);
 
   layout.heading('Quests');
   const routeTrail = settings.questRouteTrail;

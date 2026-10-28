@@ -352,7 +352,7 @@ export interface BipedPose {
    */
   spineBend?: number;
   /**
-   * A glow gathered in one open palm, 0 to 1 strong: the Protective Shell
+   * A glow gathered in one open palm, 0 to 1 strong: the Energy Shield
    * cast, which is centred on that hand. Painted over the finished figure,
    * outline and all, because light spills past the silhouette. A hand posed
    * `'grip'` is holding something and shows none. Absent is no glow.

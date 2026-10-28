@@ -1,5 +1,6 @@
 import { crawlerName, PLAYER_CHARACTERS } from '../../characters/characters';
 import type { CrawlerKind } from '../../core/skills/SkillManager';
+import { DAVE_CHARACTER_NAME } from '../characters';
 import type { JsonObject } from './json';
 import { crawlerKindNamed } from './liveState';
 import type { CrawlerName, LiveInput } from './types';
@@ -11,7 +12,7 @@ const CAUTIOUS_POTION_HP_FRACTION = 0.5;
 /** Beyond this many tiles apart, the human has left the cat behind (or she him). */
 const PARTY_SPLIT_TILES = 12;
 /**
- * How long after a piece of Mordecai's advice progress still counts as having
+ * How long after a piece of Dave's advice progress still counts as having
  * acted on it. Advice points the party at the floor's next objective, so real
  * progress (a quest taken, an objective met, a boss down) inside this window is
  * the best signal the game has that the advice was taken.
@@ -42,8 +43,8 @@ export class PlayerProfileTracker {
   private coinsGained = 0;
   private purchases = 0;
   private chestsOpened = 0;
-  private systemChats = 0;
-  private mordecaiChats = 0;
+  private carolineChats = 0;
+  private daveChats = 0;
   private adviceGiven = 0;
   private adviceFollowed = 0;
   private pendingAdviceAt: number | null = null;
@@ -81,8 +82,8 @@ export class PlayerProfileTracker {
   }
 
   recordChat(characterName: string): void {
-    if (characterName === 'Mordecai') this.mordecaiChats++;
-    else this.systemChats++;
+    if (characterName === DAVE_CHARACTER_NAME) this.daveChats++;
+    else this.carolineChats++;
   }
 
   recordKnockout(crawler: CrawlerName): void {
@@ -144,8 +145,8 @@ export class PlayerProfileTracker {
         shareOfFloorExplored: ratio(this.roomsSeen.size, this.roomCount),
       },
       chat: {
-        withSystemPerHour: round2(this.systemChats / hours),
-        withMordecai: this.mordecaiChats,
+        withCarolinePerHour: round2(this.carolineChats / hours),
+        withDave: this.daveChats,
       },
       advice: {
         given: this.adviceGiven,

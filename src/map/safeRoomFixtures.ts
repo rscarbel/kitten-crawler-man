@@ -1,11 +1,12 @@
 /**
  * Where a safe room's fixed furniture stands, as pure geometry.
  *
- * Lives in the map layer rather than in `SafeRoomSystem` because two things now
- * need it and the dependency has to run one way: `SafeRoomSystem` places
- * Mordecai and the bed here, and `safeRoomCounterLayout` has to keep the Bopca's
- * counter off the same tiles. The map layer has no other dependency on
- * `src/systems`, and pulling one in would drag both player classes along with it.
+ * Lives in the map layer rather than in `SafeRoomSystem` because two things
+ * need it and the dependency has to run one way: `SafeRoomSystem` places the
+ * bed and the tile Dave arrives on here, and `safeRoomCounterLayout` has to
+ * keep the Bopca's counter off the same tiles. The map layer has no other
+ * dependency on `src/systems`, and pulling one in would drag both player
+ * classes along with it.
  */
 
 import type { SafeRoomService } from './DungeonGenerator';
@@ -13,7 +14,7 @@ import type { SafeRoomService } from './DungeonGenerator';
 /** How far into a safe room a doorway's threshold band reaches: the doorway tile, plus one. */
 export const SAFE_ROOM_THRESHOLD_DEPTH_TILES = 2;
 
-/** How far off-centre Mordecai and the bed sit: a quarter of the room's width. */
+/** How far off-centre Dave and the bed sit: a quarter of the room's width. */
 const SAFE_ROOM_ANCHOR_HALFWIDTH_DIVISOR = 4;
 
 /** A safe room, reduced to the two fields the fixture geometry depends on. */
@@ -22,8 +23,8 @@ export interface SafeRoomGeometry {
   centre: { x: number; y: number };
 }
 
-/** The tiles Mordecai and the sleeping bed occupy, west first. */
-export function mordecaiAndBedTiles(
+/** The tile Dave arrives on and the tile the sleeping bed occupies, west first. */
+export function guideAndBedTiles(
   safeRoom: SafeRoomGeometry,
 ): [{ x: number; y: number }, { x: number; y: number }] {
   const halfWidth = Math.floor(safeRoom.bounds.w / SAFE_ROOM_ANCHOR_HALFWIDTH_DIVISOR);

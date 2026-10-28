@@ -579,24 +579,25 @@ export class BriarHollowKit {
 
   /**
    * Every bang that may be coming: each burning stick, which can only go off
-   * where it lies; a stick in the human crawler's hand, which could land anywhere he can
-   * throw it; and a Smush winding up, which lands round his feet.
+   * where it lies; a stick in a crawler's hand or jaws, which could land
+   * anywhere it can be thrown; and a Seismic Stomp winding up, which lands
+   * round the human's feet.
    */
   private blastThreats(): BlastThreat[] {
     const { human, dynamite } = this.deps;
-    const threats: BlastThreat[] = dynamite.pendingBlastPoints(human).map((point) => ({
+    const threats: BlastThreat[] = dynamite.pendingBlastPoints().map((point) => ({
       x: point.x,
       y: point.y,
       reachTiles: point.inHand ? STICK_IN_HAND_REACH_TILES : PANIC_RADIUS_TILES,
       // Where a stick still in hand will kill is not known until it lands.
       killReachTiles: point.inHand ? 0 : point.radiusPx / TILE_SIZE,
     }));
-    if (human.smushTimer > 0) {
+    if (human.seismicStompTimer > 0) {
       threats.push({
         x: human.x + TILE_SIZE * TILE_CENTRE_FRACTION,
         y: human.y + TILE_SIZE * TILE_CENTRE_FRACTION,
-        reachTiles: SMUSH_REACH_TILES,
-        killReachTiles: SMUSH_REACH_TILES,
+        reachTiles: SEISMIC_STOMP_REACH_TILES,
+        killReachTiles: SEISMIC_STOMP_REACH_TILES,
       });
     }
     return threats;
@@ -1555,8 +1556,8 @@ const VICTORY_REWARD_NOTICE = 'Speak with Mayor Bramblewick to claim your reward
 
 /** How far a stick still in the human crawler's hand could end up blasting: a full throw plus the blast. */
 const STICK_IN_HAND_REACH_TILES = 12;
-/** How far round his feet the widest Smush reaches: a full-power outer ring. */
-const SMUSH_REACH_TILES = 9;
+/** How far round his feet the widest Seismic Stomp reaches: a full-power outer ring. */
+const SEISMIC_STOMP_REACH_TILES = 9;
 const TILE_CENTRE_FRACTION = 0.5;
 
 /** The kit is ticked by the fixed-step loop, this many times a second. */

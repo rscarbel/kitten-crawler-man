@@ -50,7 +50,7 @@ export type SfxGroup =
   | 'bounty'
   | 'starlightTent'
   | 'murderMysteryQuest'
-  | 'mongoMercenary'
+  | 'deinonychusMercenary'
   | 'interiorBopca'
   | 'interiorCasino'
   | 'interiorCommerce'
@@ -256,13 +256,13 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
   universal: [
     'ability_level_up',
     'achievement_awarded',
-    // Mongo's own three cues. `DungeonScene` constructs `MongoSystem` for every
+    // Deinonychus's own three cues. `DungeonScene` constructs `DeinonychusSystem` for every
     // floor, so the pet can be out anywhere the ability is unlocked.
     'bite_1',
     'bite_2',
     'bite_3',
-    'mongo_released',
-    'mongo_slash',
+    'deinonychus_released',
+    'deinonychus_slash',
     'achievement_unlocked',
     // Chewing solid food. The Bopca's diners use it indoors, but a hamburger
     // is eaten from the bag wherever the party happens to be.
@@ -277,6 +277,8 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'cat_revived',
     'cat_scratch',
     'cat_splash',
+    // Caroline's frame chimes as it opens, and she can speak in any scene.
+    'caroline_message_chime',
     // The Wayfinder's Anchor's channel start / completion — usable from any
     // scene the item can be carried into, same reasoning as `confusing_fog`
     // and `speed_fizz` just below.
@@ -314,13 +316,13 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'human_effect_damage_1',
     'human_effect_damage_2',
     'human_knocked_out',
-    'human_protective_shell',
+    'human_energy_shield_discharge',
     'human_punch_1',
     'human_punch_2',
     'human_punch_3',
     'human_punch_weak',
     'human_revived',
-    'human_smush',
+    'human_seismic_stomp',
     'human_splash',
     'jugg_juice',
     'level_begins',
@@ -384,14 +386,14 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'coin_land_tick',
     'garbage_bag_burst_1',
     'garbage_bag_burst_2',
-    'happy_adult_mongo_squawk_1',
-    'happy_adult_mongo_squawk_2',
-    'happy_adult_mongo_squawk_3',
-    'happy_adult_mongo_squawk_4',
-    'happy_baby_mongo_squawk_1',
-    'happy_baby_mongo_squawk_2',
-    'happy_baby_mongo_squawk_3',
-    'happy_baby_mongo_squawk_4',
+    'deinonychus_adult_happy_squawk_1',
+    'deinonychus_adult_happy_squawk_2',
+    'deinonychus_adult_happy_squawk_3',
+    'deinonychus_adult_happy_squawk_4',
+    'deinonychus_juvenile_happy_squawk_1',
+    'deinonychus_juvenile_happy_squawk_2',
+    'deinonychus_juvenile_happy_squawk_3',
+    'deinonychus_juvenile_happy_squawk_4',
     'item_bag_pop',
     'level_timer_final_minute_heartbeat',
     'level_timer_warning',
@@ -515,7 +517,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'equip_metal_armor_2',
     'reward_rarity_stinger',
     'stairwell_save_chime',
-    'velociraptor_chitter',
+    'deinonychus_chitter',
   ],
 
   /** The Trash Gremlin + Big Rooster boss rooms, level1's llama/rat, and its dungeon-generated arena. */
@@ -639,7 +641,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
 
   /**
    * The floor-3 overworld/town itself: Hawkfolk and Krasue in the wilderness,
-   * Mongo/mercenary escorts, the Dark Knight's rumble (shared with
+   * Deinonychus/mercenary escorts, the Dark Knight's rumble (shared with
    * `murderMysteryQuest`'s tower confrontation), and the paper of the notice
    * boards in the square and in Briar Hollow.
    */
@@ -871,7 +873,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
 
   /**
    * Every sound behind Pest Control (`SPIDER_QUEST_CUES`): Dr. Moult's calls,
-   * Mordecai's message and the lab hallway's small sounds, all on floor 2.
+   * Dave's message and the lab hallway's small sounds, all on floor 2.
    */
   spiderQuest: decodedCueIds(SPIDER_QUEST_CUES),
 
@@ -995,11 +997,11 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
 
   /**
    * `MercenarySystem`/`MercenaryGuildSystem` escorts, who are hired in town and
-   * so exist only on floor 3. Mongo is NOT here despite the pairing the name
-   * suggests: `DungeonScene` builds `MongoSystem` unconditionally, so the pet's
+   * so exist only on floor 3. Deinonychus is NOT here despite the pairing the name
+   * suggests: `DungeonScene` builds `DeinonychusSystem` unconditionally, so the pet's
    * own cues are universal.
    */
-  mongoMercenary: [
+  deinonychusMercenary: [
     // Tumbledown, the golem for hire, fights with the rock golem's voice.
     'massive_strike_with_dirt_impact',
     'rock_golem_grunt',
@@ -1125,7 +1127,7 @@ const LEVEL3_SFX_GROUPS: readonly SfxGroup[] = [
   'briarHollow',
   'constructionContracts',
   'murderMysteryQuest',
-  'mongoMercenary',
+  'deinonychusMercenary',
 ];
 
 /** Floor 3's groups decoded only while something can play them (`FloorSfxGates`). */

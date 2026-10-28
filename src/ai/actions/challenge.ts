@@ -1,7 +1,7 @@
 /**
  * `offer_challenge`: a timed bounty from a fixed set of templates, offered on
  * a card the player accepts or declines. The model fills a template's
- * bounded parameters; it never writes the rules (`src/ai/show/challenges.ts`).
+ * bounded parameters; it never writes the rules (`src/ai/interactions/challenges.ts`).
  *
  * The fairness rules hold at the offer: none while either crawler is under a
  * quarter of their health or a fight is on, one at a time, a few per floor,
@@ -26,12 +26,12 @@ import {
   minStairwellDashSeconds,
   mobMatches,
   type ChallengeSpec,
-} from '../show/challenges';
+} from '../interactions/challenges';
 import { aiSpawnableMobTypes } from './combat';
 import { LOW_HP_PERCENT, anyVulnerable } from './governor';
 import {
   AI_CHEST_RARITIES,
-  AI_CHARACTER_SYSTEM,
+  AI_CHARACTER_CAROLINE,
   CHEST_RARITY_POINTS,
   activeCrawler,
   bothCrawlers,
@@ -72,7 +72,7 @@ const REWARD_RARITY = enumParam(
 const TAUNT = textParam('taunt', {
   minLength: TAUNT_MIN_CHARS,
   maxLength: TAUNT_MAX_CHARS,
-  description: 'Your public jeer if they fail, shown loudly on screen.',
+  description: 'Your line if they fail, shown loudly on screen: the outcome, stated plainly.',
 });
 const SECONDS = optionalIntParam('seconds', {
   min: CHALLENGE_MIN_SECONDS,
@@ -96,7 +96,7 @@ const MOB_TYPE = optionalEnumParam(
 const PITCH = optionalTextParam('pitch', {
   minLength: 1,
   maxLength: PITCH_MAX_CHARS,
-  description: 'Your sell on the offer card, in character.',
+  description: 'Why you set it, on the offer card, in character.',
 });
 
 function specOf({ params, characterName }: AIActionCall): ChallengeSpec {
@@ -155,8 +155,8 @@ function winnableRefusal(call: AIActionCall, spec: ChallengeSpec): string | null
 }
 
 function challengeRefusal(call: AIActionCall): string | null {
-  const show = call.scene.getShow?.() ?? null;
-  const challenges = show?.challenges ?? null;
+  const interactions = call.scene.getInteractions?.() ?? null;
+  const challenges = interactions?.challenges ?? null;
   if (challenges === null) return 'challenges cannot run here';
   if (challenges.busy) return 'a challenge is already offered or under way';
   if (anyVulnerable(call.scene)) {
@@ -168,7 +168,7 @@ function challengeRefusal(call: AIActionCall): string | null {
 const offerChallenge: AIActionDef = {
   name: 'offer_challenge',
   description:
-    'Offer the crawlers a timed bounty from a fixed set of templates, with a reward chest for winning and a public taunt for failing. They accept or decline on a card; acceptance, the win or the failure arrive later as challengeAccepted / challengeDeclined / challengeCompleted / challengeFailed events. One at a time, never mid-fight or at low HP.',
+    'Offer the crawlers a timed bounty from a fixed set of templates, with a reward chest for winning and a line of yours for failing. They accept or decline on a card; acceptance, the win or the failure arrive later as challengeAccepted / challengeDeclined / challengeCompleted / challengeFailed events. One at a time, never mid-fight or at low HP.',
   params: [TEMPLATE, TITLE, REWARD_RARITY, TAUNT, SECONDS, COUNT, MOB_TYPE, PITCH],
   policy: {
     cost: 3,
@@ -177,7 +177,7 @@ const offerChallenge: AIActionDef = {
     forbidsContext: ['isPaused', 'inCombat', 'inBossFight'],
   },
   maxPerFloor: CHALLENGES_PER_FLOOR,
-  characters: [AI_CHARACTER_SYSTEM],
+  characters: [AI_CHARACTER_CAROLINE],
   isHarmful: () => false,
   budget: ({ params }) => ({
     pool: 'rewardChestPoints',
@@ -187,7 +187,7 @@ const offerChallenge: AIActionDef = {
   showsIndicator: false,
   execute(call) {
     const refusal = challengeRefusal(call);
-    const challenges = call.scene.getShow?.()?.challenges ?? null;
+    const challenges = call.scene.getInteractions?.()?.challenges ?? null;
     if (refusal !== null || challenges === null) {
       return refused(refusal ?? 'challenges cannot run here');
     }

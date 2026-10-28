@@ -68,6 +68,7 @@ import { createAnchorQuestProgress } from '../src/core/quests/AnchorQuestProgres
 import { BRIAR_HOLLOW_QUEST_NAME } from '../src/core/quests/villageQuestPhase';
 import type { LevelDef } from '../src/levels/types';
 import { AbilityManager } from '../src/core/skills/AbilityManager';
+import { PetNameBook } from '../src/core/party/petNames';
 import { ITEM_DEF, type InventoryItem, type ItemId } from '../src/core/items/defs/ItemDefs';
 import { PlayerManager } from '../src/core/party/PlayerManager';
 import { setViewportSize } from '../src/core/rendering/Viewport';
@@ -146,7 +147,11 @@ function buildRig(map: GameMap, levelDef: LevelDef = level3): Rig {
   const bus = new EventBus();
   const roster = new MobRoster(map, new SpellSystem());
   const sceneWorld: SceneWorld = { gameMap: map, bus, audio: null, audioScope: null, pm, roster };
-  const menus = new MenusKit({ world: sceneWorld, abilityManager: new AbilityManager() });
+  const menus = new MenusKit({
+    world: sceneWorld,
+    abilityManager: new AbilityManager(),
+    petNames: new PetNameBook(),
+  });
   const toasts: string[] = [];
   // Every toast the stone raises goes through the toast stack, as in the scene.
   menus.toasts.post = (message) => toasts.push(message);

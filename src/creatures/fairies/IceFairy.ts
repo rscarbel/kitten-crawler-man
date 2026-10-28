@@ -135,7 +135,7 @@ export class IceFairy extends Fairy {
   /**
    * The crawler to fire at: in range, in clear sight, and — given the choice —
    * one a hit would freeze, because finishing a chill into a freeze is the
-   * fairy's whole play. Mongo and the mercenaries can be struck by a bolt that
+   * fairy's whole play. Deinonychus and the mercenaries can be struck by a bolt that
    * meets them, but are never what it is aimed at.
    */
   private chooseTarget(): Player | null {

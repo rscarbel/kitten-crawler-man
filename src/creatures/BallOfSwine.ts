@@ -658,7 +658,7 @@ export class BallOfSwine extends Mob {
    *
    * Taking the lethal blow off `super` skips its guards, and each one is checked
    * rather than assumed: `isProtected` is written only by `PlayerManager`, for the two
-   * crawlers; `invulnerableFrames` only by Cockroach, a player skill; `godMode` and
+   * crawlers; `invulnerableFrames` only by 9 Lives, a player skill; `godMode` and
    * `isKnockedOut` are player-only; and its dodge roll needs a `'mob'` source, which a
    * status tick is not and a mob attacker never uses against another mob. None of them
    * can be true here. A non-lethal tick goes through `super` untouched regardless.
@@ -1032,7 +1032,7 @@ export class BallOfSwine extends Mob {
     // grinding itself down on the ironwork since the floor loaded — or on a route
     // walker it can see but never touch — would greet the party already collapsed,
     // with an empty momentum bar and VULNERABLE over its head, the opening beat and
-    // Mordecai's hint about baiting the wall both spent before anyone arrived or
+    // Dave's hint about baiting the wall both spent before anyone arrived or
     // without anyone ever risking anything.
     if (incidence >= HEAD_ON_COSINE && this.targetInsideDrum(this.currentTarget)) {
       this.slamHeading = this.heading;

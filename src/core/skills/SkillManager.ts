@@ -11,15 +11,26 @@
  * its level instead of wasting the drop.
  */
 
+import {
+  PROFICIENCY_BASE_USES,
+  PROFICIENCY_MAX_LEVEL,
+  PROFICIENCY_USES_EXPONENT,
+  proficiencyEffect,
+  type ProficiencySkillId,
+} from './proficiency';
+
 /** Uses needed to reach level 2. */
 export const SKILL_BASE_USES_TO_LEVEL = 10;
 /** Geometric growth applied to the use threshold at each level. */
 export const SKILL_USES_GROWTH_RATE = 1.6;
-/** Ceiling shared by the whole initial roster. */
+/** Ceiling shared by every skill that is not a proficiency. */
 export const SKILL_MAX_LEVEL = 5;
 
-export type SkillId =
-  'cockroach' | 'cat_reflexes' | 'pugilism' | 'iron_stomach' | 'iron_punch' | 'powerful_strike';
+/** The skills that train on a short geometric curve to {@link SKILL_MAX_LEVEL}. */
+export type StandardSkillId =
+  'nine_lives' | 'cat_reflexes' | 'pugilism' | 'iron_stomach' | 'powerful_strike';
+
+export type SkillId = StandardSkillId | ProficiencySkillId;
 
 /** The two playable crawlers, for skill eligibility. */
 export type CrawlerKind = 'cat' | 'human';
@@ -30,16 +41,34 @@ export const CRAWLER_KINDS = ['human', 'cat'] as const satisfies readonly Crawle
 /** Which crawler a skill can be used by. */
 export type SkillOwner = CrawlerKind | 'both';
 
-export interface SkillDef {
-  id: SkillId;
-  name: string;
+interface SkillDefBase<Id extends SkillId> {
+  readonly id: Id;
+  readonly name: string;
   /** In-fiction blurb, shown on the Skills tab card. */
-  flavor: string;
+  readonly flavor: string;
   /** What the skill does right now, given its current level. */
-  describeEffect: (level: number) => string;
-  maxLevel: number;
-  eligibleFor: SkillOwner;
+  readonly describeEffect: (level: number) => string;
+  readonly eligibleFor: SkillOwner;
 }
+
+interface StandardSkillDef<Id extends SkillId = StandardSkillId> extends SkillDefBase<Id> {
+  readonly progression: 'standard';
+  readonly maxLevel: typeof SKILL_MAX_LEVEL;
+}
+
+interface ProficiencySkillDef<Id extends SkillId = ProficiencySkillId> extends SkillDefBase<Id> {
+  readonly progression: 'proficiency';
+  readonly maxLevel: typeof PROFICIENCY_MAX_LEVEL;
+}
+
+export type SkillDef = StandardSkillDef<SkillId> | ProficiencySkillDef<SkillId>;
+
+/** Each skill's definition, its progression fixed by which kind of skill it is. */
+type SkillDefTable = {
+  readonly [Id in SkillId]: Id extends ProficiencySkillId
+    ? ProficiencySkillDef<Id>
+    : StandardSkillDef<Id>;
+};
 
 export interface SkillState {
   id: SkillId;
@@ -66,16 +95,16 @@ const MS_PER_SECOND = 1000;
 /** Turns a 0–1 fraction into a percentage for display. */
 const PERCENT = 100;
 
-/** Wall-clock recharge between Cockroach saves at level 1. */
-export const COCKROACH_RECHARGE_MS = 240_000;
+/** Wall-clock recharge between 9 Lives saves at level 1. */
+export const NINE_LIVES_RECHARGE_MS = 240_000;
 /** Each level shaves this much off the recharge. */
-export const COCKROACH_RECHARGE_REDUCTION_PER_LEVEL_MS = 30_000;
+export const NINE_LIVES_RECHARGE_REDUCTION_PER_LEVEL_MS = 30_000;
 /** Recharge never drops below this, however many levels are banked. */
-export const COCKROACH_MIN_RECHARGE_MS = 120_000;
-/** Invulnerability after a Cockroach save, so the next frame's hit can't finish the job. */
-export const COCKROACH_IFRAME_FRAMES = 90;
+export const NINE_LIVES_MIN_RECHARGE_MS = 120_000;
+/** Invulnerability after a 9 Lives save, so the next frame's hit can't finish the job. */
+export const NINE_LIVES_IFRAME_FRAMES = 90;
 
-/** Flat dodge chance Cat-like Reflexes adds per level, on top of the dexterity curve. */
+/** Flat dodge chance Cat-like Reflexes adds per level, on top of the evasiveness curve. */
 export const CAT_REFLEXES_DODGE_BONUS_PER_LEVEL = 0.02;
 
 /** Melee damage Pugilism adds per level. */
@@ -84,37 +113,42 @@ export const PUGILISM_DAMAGE_PER_LEVEL = 1;
 /** Fraction shaved off the potion cooldown per Iron Stomach level. */
 export const IRON_STOMACH_COOLDOWN_REDUCTION_PER_LEVEL = 0.1;
 
-/** Fraction added to human melee damage per Iron Punch level, while gear that unlocks it is worn. */
-export const IRON_PUNCH_DAMAGE_FRACTION_PER_LEVEL = 0.1;
-
 /** Chance per Powerful Strike level that a melee hit lands for double. */
 export const POWERFUL_STRIKE_CHANCE_PER_LEVEL = 0.04;
 /** What a Powerful Strike multiplies the blow by when it fires. */
 export const POWERFUL_STRIKE_DAMAGE_MULTIPLIER = 2;
 
-/** Recharge in milliseconds between Cockroach saves at the given skill level. */
-export function cockroachRechargeMs(level: number): number {
-  const reduced = COCKROACH_RECHARGE_MS - (level - 1) * COCKROACH_RECHARGE_REDUCTION_PER_LEVEL_MS;
-  return Math.max(COCKROACH_MIN_RECHARGE_MS, reduced);
+/** Recharge in milliseconds between 9 Lives saves at the given skill level. */
+export function nineLivesRechargeMs(level: number): number {
+  const reduced = NINE_LIVES_RECHARGE_MS - (level - 1) * NINE_LIVES_RECHARGE_REDUCTION_PER_LEVEL_MS;
+  return Math.max(NINE_LIVES_MIN_RECHARGE_MS, reduced);
 }
 
-const SKILL_DEFS: Record<SkillId, SkillDef> = {
-  cockroach: {
-    id: 'cockroach',
-    name: 'Cockroach',
-    flavor: 'Hard to kill. Harder to be rid of. The dungeon has tried both.',
+/** A proficiency's effect at `level`, as a whole percentage for a card or a toast. */
+function proficiencyPercent(level: number): number {
+  return Math.round(proficiencyEffect(level) * PERCENT);
+}
+
+const STANDARD = { progression: 'standard', maxLevel: SKILL_MAX_LEVEL } as const;
+const PROFICIENCY = { progression: 'proficiency', maxLevel: PROFICIENCY_MAX_LEVEL } as const;
+
+const SKILL_DEFS: SkillDefTable = {
+  nine_lives: {
+    id: 'nine_lives',
+    name: '9 Lives',
+    flavor: 'A cat is owed nine. Nobody said they come back quickly.',
     describeEffect: (level) =>
-      `Survive one fatal blow at 1 HP, then recharge for ${Math.round(cockroachRechargeMs(level) / MS_PER_SECOND)}s.`,
-    maxLevel: SKILL_MAX_LEVEL,
+      `Survive one fatal blow at 1 HP, then recharge for ${Math.round(nineLivesRechargeMs(level) / MS_PER_SECOND)}s.`,
+    ...STANDARD,
     eligibleFor: 'cat',
   },
   cat_reflexes: {
     id: 'cat_reflexes',
     name: 'Cat-like Reflexes',
-    flavor: 'The System filed this under "redundant" and approved it anyway.',
+    flavor: 'Caroline filed this under "redundant" and approved it anyway.',
     describeEffect: (level) =>
       `+${Math.round(CAT_REFLEXES_DODGE_BONUS_PER_LEVEL * level * PERCENT)}% dodge chance.`,
-    maxLevel: SKILL_MAX_LEVEL,
+    ...STANDARD,
     eligibleFor: 'cat',
   },
   pugilism: {
@@ -122,16 +156,7 @@ const SKILL_DEFS: Record<SkillId, SkillDef> = {
     name: 'Pugilism',
     flavor: 'Formalised hitting. The paperwork is the fist.',
     describeEffect: (level) => `+${PUGILISM_DAMAGE_PER_LEVEL * level} melee damage.`,
-    maxLevel: SKILL_MAX_LEVEL,
-    eligibleFor: 'human',
-  },
-  iron_punch: {
-    id: 'iron_punch',
-    name: 'Iron Punch',
-    flavor: 'The gauntlet knows the technique. You are the delivery mechanism.',
-    describeEffect: (level) =>
-      `+${Math.round(IRON_PUNCH_DAMAGE_FRACTION_PER_LEVEL * level * PERCENT)}% melee damage while a gauntlet that unlocks it is worn.`,
-    maxLevel: SKILL_MAX_LEVEL,
+    ...STANDARD,
     eligibleFor: 'human',
   },
   powerful_strike: {
@@ -140,16 +165,84 @@ const SKILL_DEFS: Record<SkillId, SkillDef> = {
     flavor: 'Every so often the whole arm agrees with itself.',
     describeEffect: (level) =>
       `${Math.round(POWERFUL_STRIKE_CHANCE_PER_LEVEL * level * PERCENT)}% chance for a melee hit to land double damage.`,
-    maxLevel: SKILL_MAX_LEVEL,
+    ...STANDARD,
     eligibleFor: 'human',
   },
   iron_stomach: {
     id: 'iron_stomach',
     name: 'Iron Stomach',
-    flavor: 'You have eaten worse. The System has the footage.',
+    flavor: 'You have eaten worse. Caroline keeps a record.',
     describeEffect: (level) =>
       `Potions recharge ${Math.round(IRON_STOMACH_COOLDOWN_REDUCTION_PER_LEVEL * level * PERCENT)}% faster, and drink sooner wears off.`,
-    maxLevel: SKILL_MAX_LEVEL,
+    ...STANDARD,
+    eligibleFor: 'both',
+  },
+  swordsmanship: {
+    id: 'swordsmanship',
+    name: 'Swordsmanship',
+    flavor: 'The pointy end goes in the other one. Everything after that is refinement.',
+    describeEffect: (level) => `+${proficiencyPercent(level)}% damage with swords.`,
+    ...PROFICIENCY,
+    eligibleFor: 'human',
+  },
+  archery: {
+    id: 'archery',
+    name: 'Archery',
+    flavor: 'Pull, breathe, let go. The breathing is optional. The letting go is not.',
+    describeEffect: (level) =>
+      `+${proficiencyPercent(level)}% damage with slings, bows and crossbows.`,
+    ...PROFICIENCY,
+    eligibleFor: 'both',
+  },
+  clawmanship: {
+    id: 'clawmanship',
+    name: 'Clawmanship',
+    flavor: 'Eighteen claws, and a growing sense of what each one is for.',
+    describeEffect: (level) => `+${proficiencyPercent(level)}% damage with worn claws.`,
+    ...PROFICIENCY,
+    eligibleFor: 'cat',
+  },
+  magic_eye: {
+    id: 'magic_eye',
+    name: 'Magic Eye',
+    flavor: 'You start to see where a spell wants to go, and you let it.',
+    describeEffect: (level) => `+${proficiencyPercent(level)}% magic damage.`,
+    ...PROFICIENCY,
+    eligibleFor: 'both',
+  },
+  mechanical_fist: {
+    id: 'mechanical_fist',
+    name: 'Mechanical Fist',
+    flavor: 'The gauntlet knows the technique. You are the delivery mechanism.',
+    describeEffect: (level) => `+${proficiencyPercent(level)}% damage with gauntlets.`,
+    ...PROFICIENCY,
+    eligibleFor: 'human',
+  },
+  blunt_proficiency: {
+    id: 'blunt_proficiency',
+    name: 'Blunt Proficiency',
+    flavor: 'No edge to keep and no point to lose. Just the heavy end, and where it lands.',
+    describeEffect: (level) =>
+      `+${proficiencyPercent(level)}% physical damage with staves and blunt weapons.`,
+    ...PROFICIENCY,
+    eligibleFor: 'both',
+  },
+  pyros_touch: {
+    id: 'pyros_touch',
+    name: "Pyro's Touch",
+    flavor: 'Fire stops being something that happens to you and starts being something you do.',
+    describeEffect: (level) =>
+      `+${proficiencyPercent(level)}% fire damage, and burns on you end ${proficiencyPercent(level)}% sooner.`,
+    ...PROFICIENCY,
+    eligibleFor: 'both',
+  },
+  demolitionist: {
+    id: 'demolitionist',
+    name: 'Demolitionist',
+    flavor: 'Stand where the blast is not. Then make the blast bigger.',
+    describeEffect: (level) =>
+      `+${proficiencyPercent(level)}% explosion damage, and your own blasts hurt your party ${proficiencyPercent(level)}% less.`,
+    ...PROFICIENCY,
     eligibleFor: 'both',
   },
 };
@@ -169,7 +262,16 @@ export function getSkillDef(id: SkillId): SkillDef {
 /** Uses needed to advance from `level` to the next, or Infinity at the ceiling. */
 export function usesToNextLevel(def: SkillDef, level: number): number {
   if (level >= def.maxLevel) return Infinity;
-  return Math.round(SKILL_BASE_USES_TO_LEVEL * Math.pow(SKILL_USES_GROWTH_RATE, level - 1));
+  switch (def.progression) {
+    case 'standard':
+      return Math.round(SKILL_BASE_USES_TO_LEVEL * SKILL_USES_GROWTH_RATE ** (level - 1));
+    case 'proficiency':
+      return Math.round(PROFICIENCY_BASE_USES * level ** PROFICIENCY_USES_EXPONENT);
+    default: {
+      const unhandled: never = def;
+      return unhandled;
+    }
+  }
 }
 
 /** True if `owner` is allowed to carry the skill at all. */
@@ -308,7 +410,7 @@ export class SkillManager {
     return leveled;
   }
 
-  /** Announce a skill firing (e.g. Cockroach catching a fatal blow). */
+  /** Announce a skill firing (e.g. 9 Lives catching a fatal blow). */
   recordTrigger(id: SkillId): void {
     const state = this.states.get(id);
     if (!state) return;

@@ -972,6 +972,257 @@ function carrying(base: CatPose, view: CardinalView): CatPose {
   };
 }
 
+// ── Throwing from her jaws ───────────────────────────────────────────────────
+
+/**
+ * The throw-row frame the thing in her jaws leaves her mouth on. Played over
+ * {@link CAT_THROW_TICKS_PER_FRAME}, it goes nine ticks after the release
+ * key, as the human's stick leaves his hand: the fuse a player timed burns
+ * the same whichever crawler threw it.
+ */
+export const CAT_THROW_RELEASE_FRAME = 3;
+export const CAT_THROW_TICKS_PER_FRAME = 3;
+/** The throw-row frame she is drawn back furthest on: she stands in it while she winds up. */
+export const CAT_THROW_COCKED_FRAME = 1;
+
+/** Head drawn back and to one side, shoulders dropped behind it. */
+const THROW_COCK_END = 0.16;
+/** The flick through: head and shoulders snap forward and the jaws open on the release. */
+const THROW_FLICK_END = 0.44;
+const THROW_RECOVER_START = 0.6;
+
+interface ThrowPhases {
+  /** 0→1 drawing back, let go of as the flick goes through. */
+  readonly cock: number;
+  /** 0→1 through the flick, held into the follow-through. */
+  readonly flick: number;
+  /** 0→1 settling back into her carrying stance's rest. */
+  readonly recover: number;
+}
+
+/** The thing in her jaws finishes its swing this far through the throw, ahead of her head. */
+const THROW_STICK_FLICK_END = 0.33;
+
+function throwPhases(progress: number, flickEnd = THROW_FLICK_END): ThrowPhases {
+  const flick = easeInOut(ramp(progress, THROW_COCK_END, flickEnd));
+  return {
+    cock: easeInOut(ramp(progress, 0, THROW_COCK_END)) * (1 - flick),
+    flick,
+    recover: easeInOut(ramp(progress, THROW_RECOVER_START, 1)),
+  };
+}
+
+/** How wide her jaws open as the thing leaves them, and how far they close after. */
+const THROW_JAW_OPEN = 0.4;
+const THROW_JAW_AFTER = 0.12;
+/** Her front paws stay planted: her chest dips into the cock and lifts a little on the flick. */
+const THROW_COCK_CROUCH = 0.022;
+const THROW_FLICK_RISE = -0.024;
+/**
+ * After it goes she follows it with her eyes: a nod after the thing as it
+ * flies, then a settle, so the recovery is not a held pose.
+ */
+const THROW_FOLLOW_DIP = 0.035;
+const THROW_FOLLOW_LEAN = deg(5);
+const THROW_FOLLOW_BOB = 0.01;
+/** Ears laid back as she draws back, pricked after the thing as it flies. */
+const THROW_COCK_EARS = -0.4;
+const THROW_FLICK_EARS = 0.9;
+/** Eyes narrowed through the effort, pupils wide as she watches it go. */
+const THROW_SQUINT = 0.65;
+const THROW_WATCH_PUPIL = 0.9;
+/** The tail lashes with the flick. */
+const THROW_TAIL_CURL = 1.4;
+const THROW_TAIL_WAVE = 0.6;
+const THROW_TAIL_WAVES_PER_THROW = 6;
+const THROW_TAIL_LASH = -0.9;
+/** Her hind legs brace a touch behind her as she draws back. */
+const THROW_HIND_BRACE = -0.03;
+
+/** One view's throw: where the head and the thing in her jaws go at the cock and at the flick. */
+interface ThrowKeys {
+  readonly tailBase: number;
+  readonly cock: ThrowKey;
+  readonly flick: ThrowKey;
+  /**
+   * The thing's lie in her jaws as she sets herself to throw: gripped by one
+   * end and angled back along her jaw in profile, its far end out toward the
+   * camera head-on, past her cheek from behind. Not her carrying lie, which
+   * holds a thing crosswise and reads as a strap on something this long.
+   */
+  readonly rest: CatGrip;
+}
+
+interface ThrowKey {
+  readonly headX: number;
+  readonly headY: number;
+  readonly headTilt: number;
+  readonly headTurn: number;
+  readonly lean: number;
+  readonly sway: number;
+  readonly haftAngle: number;
+}
+
+/**
+ * In profile she pulls her head back and down over her planted paws, the
+ * thing in her jaws tipped back toward her chest, then snaps it forward and
+ * up, the thing swinging out ahead of her muzzle as it goes.
+ */
+const THROW_SIDE: ThrowKeys = {
+  tailBase: SIDE_TAIL_BASE,
+  cock: {
+    headX: -0.09,
+    headY: 0.07,
+    headTilt: deg(24),
+    headTurn: 0,
+    lean: deg(-11),
+    sway: -0.05,
+    haftAngle: deg(150),
+  },
+  flick: {
+    headX: 0.1,
+    headY: -0.07,
+    headTilt: deg(-26),
+    headTurn: 0,
+    lean: deg(15),
+    sway: 0.1,
+    haftAngle: deg(-35),
+  },
+  rest: { pawsClosed: false, haftAngle: deg(160), haftDepth: 0.2, padNormal: PADS_TO_CAMERA },
+};
+
+/**
+ * Head-on she tosses it the way a cat flings a toy: the head swung round to
+ * her right and dipped, shoulders rolled after it, then whipped across to
+ * her left, the thing in her jaws swinging through with it.
+ */
+const THROW_FRONT: ThrowKeys = {
+  tailBase: FRONT_TAIL_BASE,
+  cock: {
+    headX: -0.05,
+    headY: 0.035,
+    headTilt: deg(-24),
+    headTurn: -1,
+    lean: deg(-9),
+    sway: 0,
+    haftAngle: deg(-50),
+  },
+  flick: {
+    headX: 0.05,
+    headY: -0.03,
+    headTilt: deg(22),
+    headTurn: 0.9,
+    lean: deg(13),
+    sway: 0,
+    haftAngle: deg(60),
+  },
+  rest: { pawsClosed: false, haftAngle: deg(-35), haftDepth: 0.6, padNormal: PADS_TO_CAMERA },
+};
+
+/** From behind the same toss: her head swings out past one shoulder, then across past the other. */
+const THROW_BACK: ThrowKeys = {
+  tailBase: BACK_TAIL_BASE,
+  cock: {
+    headX: 0.05,
+    headY: 0.035,
+    headTilt: deg(24),
+    headTurn: 1,
+    lean: deg(9),
+    sway: 0,
+    haftAngle: deg(80),
+  },
+  flick: {
+    headX: -0.05,
+    headY: -0.03,
+    headTilt: deg(-22),
+    headTurn: -0.9,
+    lean: deg(-9),
+    sway: 0,
+    haftAngle: deg(-70),
+  },
+  rest: {
+    under: 'head',
+    pawsClosed: false,
+    haftAngle: deg(20),
+    haftDepth: -0.3,
+    padNormal: PADS_TO_CAMERA,
+  },
+};
+
+const THROW_KEYS: Readonly<Record<CardinalView, ThrowKeys>> = {
+  front: THROW_FRONT,
+  side: THROW_SIDE,
+  back: THROW_BACK,
+};
+
+/** Where `key`'s value stands at this point of the throw: rest, drawn back, flicked through, settled. */
+function throwValue(phases: ThrowPhases, rest: number, cock: number, flick: number): number {
+  const swung = rest + (cock - rest) * phases.cock + (flick - rest) * phases.flick;
+  return lerp(swung, rest, phases.recover);
+}
+
+/** One frame of her throw in `view`, with the thing in her jaws until it goes. */
+function throwPose(view: CardinalView, frame: number): CatPose {
+  const progress = shotProgress(frame, ACTION_FRAMES);
+  const phases = throwPhases(progress);
+  const keys = THROW_KEYS[view];
+  const base = carrying(idleFront(0), view);
+  const released = frame >= CAT_THROW_RELEASE_FRAME;
+  const value = (pick: (key: ThrowKey) => number, rest: number): number =>
+    throwValue(phases, rest, pick(keys.cock), pick(keys.flick));
+  const jaw = released ? lerp(THROW_JAW_OPEN, THROW_JAW_AFTER, phases.recover) : CARRY_JAW;
+  const drive = phases.flick * (1 - phases.recover);
+  const ears = lerp(lerp(CARRY_EARS, THROW_COCK_EARS, phases.cock), THROW_FLICK_EARS, drive);
+  const follow = hump(phases.recover);
+  // The thing in her jaws whips through ahead of her head, so it is past
+  // hanging straight down by the frame before it goes rather than caught there.
+  const stickPhases = throwPhases(progress, THROW_STICK_FLICK_END);
+  const leanSign = view === 'back' ? -1 : 1;
+  return {
+    ...base,
+    bob: THROW_COCK_CROUCH * phases.cock + THROW_FLICK_RISE * drive + THROW_FOLLOW_BOB * follow,
+    lean: value((key) => key.lean, 0) + leanSign * THROW_FOLLOW_LEAN * follow,
+    sway: value((key) => key.sway, 0),
+    headX: value((key) => key.headX, 0),
+    headY: value((key) => key.headY, base.headY) + THROW_FOLLOW_DIP * follow,
+    headTilt: value((key) => key.headTilt, 0),
+    headTurn: value((key) => key.headTurn, 0),
+    earL: ears,
+    earR: ears,
+    eyeOpen: lerp(1, THROW_SQUINT, clamp01(phases.cock + drive)),
+    pupil: lerp(base.pupil, THROW_WATCH_PUPIL, drive),
+    mouth: jaw,
+    tail: tail(
+      keys.tailBase,
+      THROW_TAIL_CURL,
+      THROW_TAIL_WAVE,
+      progress * THROW_TAIL_WAVES_PER_THROW,
+      0,
+      THROW_TAIL_LASH * drive,
+    ),
+    frontL: NO_PAW,
+    frontR: NO_PAW,
+    hindL: paw(THROW_HIND_BRACE * phases.cock, 0, 0),
+    hindR: paw(THROW_HIND_BRACE * phases.cock, 0, 0),
+    time: progress,
+    grip: {
+      ...keys.rest,
+      haftAngle: throwValue(
+        stickPhases,
+        keys.rest.haftAngle,
+        keys.cock.haftAngle,
+        keys.flick.haftAngle,
+      ),
+    },
+  };
+}
+
+/** Whether `row` draws what she holds on `frame`: a throw lets go of it on its release frame. */
+export function catRowHoldsAt(row: RowSpec, frame: number): boolean {
+  if (row.hold === undefined) return false;
+  return row.hold !== 'throw' || frame < CAT_THROW_RELEASE_FRAME;
+}
+
 // ── Sheet assembly ───────────────────────────────────────────────────────────
 
 /**
@@ -1000,10 +1251,10 @@ export interface RowSpec {
 
 /**
  * The things she holds that have rows of their own: a tool she chops wood or
- * mines stone with, both forepaws on its haft, and a small thing carried in
- * her jaws.
+ * mines stone with, both forepaws on its haft, a small thing carried in her
+ * jaws, and an explosive carried there to be flung.
  */
-export type CatHold = 'chop' | 'mine' | 'carry';
+export type CatHold = 'chop' | 'mine' | 'carry' | 'throw';
 
 /** Loops sample the cycle evenly; one-shots sample the middle of each frame. */
 function cyclePhase(frame: number, frameCount: number): number {
@@ -1161,6 +1412,7 @@ const EAST_ROWS: readonly RowSpec[] = [
   ...swingRows('chop', { front: CHOP_FRONT, side: CHOP_SIDE, back: CHOP_BACK }),
   ...swingRows('mine', { front: MINE_FRONT, side: MINE_SIDE, back: MINE_BACK }),
   ...carryRows(),
+  ...throwRows(),
 ];
 
 function swingRows(
@@ -1205,6 +1457,19 @@ function carryRows(): RowSpec[] {
       pose: (f) => carrying(idles[view](cyclePhase(f, IDLE_FRAMES)), view),
     },
   ]);
+}
+
+/** Her throw of a thing from her jaws, front paws planted. */
+function throwRows(): RowSpec[] {
+  return CARDINAL_VIEWS.map((view) => ({
+    name: `throw${VIEW_SUFFIX[view]}`,
+    facesWest: false,
+    frameCount: ACTION_FRAMES,
+    kind: 'oneShot',
+    view,
+    hold: 'throw',
+    pose: (f) => throwPose(view, f),
+  }));
 }
 
 /** The suffix a west-facing profile row carries after its east-facing row's name. */

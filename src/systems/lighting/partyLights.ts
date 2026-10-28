@@ -18,7 +18,7 @@ interface Positioned {
   readonly y: number;
 }
 
-/** A companion of the party: Mongo or a hireling, standing or down. */
+/** A companion of the party: Deinonychus or a hireling, standing or down. */
 export interface PartyCompanion extends Positioned {
   readonly downed: boolean;
 }

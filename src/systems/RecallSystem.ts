@@ -7,7 +7,7 @@
  * restock, touch the checkpoint, turn in — from long walks into none.
  *
  * The system owns the channel and the cooldown, and nothing else. The position
- * writes and the Mongo/mercenary dismissal stay with the scene, which owns
+ * writes and the Deinonychus/mercenary dismissal stay with the scene, which owns
  * those objects; this asks for a destination tile and is told whether the
  * party got there. The destinations themselves are data in
  * `travel/travelDestinations.ts`.
@@ -107,7 +107,7 @@ export class RecallSystem implements GameSystem {
   /**
    * @param teleportParty Moves both crawlers to (or as near as it can get to)
    *   the given tile, reporting whether it found somewhere to put them. The
-   *   scene owns this because it owns the crawlers, Mongo and the mercenaries.
+   *   scene owns this because it owns the crawlers, Deinonychus and the mercenaries.
    * @param travelState The questlines' live progress, read for every unlock.
    * @param openTravelMenu Shows the destination list for `caster`; a row
    *   chosen there comes back through `beginChannelTo`.

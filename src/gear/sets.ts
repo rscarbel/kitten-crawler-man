@@ -6,7 +6,7 @@
  */
 
 import type { Wearer } from '../core/items/defs/ItemDefs';
-import type { StatName } from '../Player';
+import type { StatId } from '../core/party/stats';
 import type { GearTrait } from './traits';
 
 /** Every trait a set bonus may carry: none that acts only when a piece is put on or taken off. */
@@ -18,7 +18,7 @@ export type GearSetId =
 /** What a set adds once `pieces` of it are worn on one crawler. */
 export interface GearSetBonus {
   readonly pieces: number;
-  readonly statBonus?: Partial<Record<StatName, number>>;
+  readonly statBonus?: Partial<Record<StatId, number>>;
   /**
    * A set bonus switches on and off with a piece count rather than being put
    * on, so it runs no equip or unequip hook; the traits that need one — a
@@ -39,11 +39,11 @@ const TWO_PIECES = 2;
 const THREE_PIECES = 3;
 const FOUR_PIECES = 4;
 
-const HEARTHGUARD_CONSTITUTION = 1;
+const HEARTHGUARD_HEALTH = 2;
 const HEARTHGUARD_STILLNESS_FRAMES = 120;
 const HEARTHGUARD_STILLNESS_REGEN = 2;
 
-const BAREKNUCKLE_STRENGTH = 2;
+const BAREKNUCKLE_MELEE = 2;
 const BAREKNUCKLE_COMBO_HITS = 4;
 const BAREKNUCKLE_COMBO_WINDOW_FRAMES = 150;
 const BAREKNUCKLE_COMBO_STUN_FRAMES = 45;
@@ -66,7 +66,7 @@ export const GEAR_SETS: Readonly<Record<GearSetId, GearSetDef>> = {
     name: 'Hearthguard',
     wearer: 'both',
     bonuses: [
-      { pieces: TWO_PIECES, statBonus: { constitution: HEARTHGUARD_CONSTITUTION } },
+      { pieces: TWO_PIECES, statBonus: { health: HEARTHGUARD_HEALTH } },
       {
         pieces: THREE_PIECES,
         traits: [
@@ -83,7 +83,7 @@ export const GEAR_SETS: Readonly<Record<GearSetId, GearSetDef>> = {
     name: 'Bareknuckle',
     wearer: 'human',
     bonuses: [
-      { pieces: TWO_PIECES, statBonus: { strength: BAREKNUCKLE_STRENGTH } },
+      { pieces: TWO_PIECES, statBonus: { melee: BAREKNUCKLE_MELEE } },
       {
         pieces: THREE_PIECES,
         traits: [

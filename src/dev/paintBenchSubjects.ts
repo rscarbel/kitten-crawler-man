@@ -24,9 +24,8 @@ import {
   BIG_ROOSTER_FIGURE,
   LITTLE_ROOSTER_FIGURE,
 } from '../sprites/art/roosterFigure';
-import { MONGO_FIGURES } from '../sprites/art/mongoFigure';
+import { DEINONYCHUS_FIGURES } from '../sprites/art/deinonychusFigure';
 import { BALL_OF_SWINE_FIGURE } from '../sprites/art/ballOfSwineFigure';
-import { RAT_KIN_FIGURE } from '../sprites/art/ratKinFigure';
 import { ratkinCastFigure } from '../sprites/art/ratkinCastFigure';
 import { SHADY_FIGURE } from '../sprites/art/shadyFigure';
 import { MAGNUM_STAGE_FIGURE } from '../sprites/art/magnumFigure';
@@ -85,10 +84,10 @@ import {
   KRAKAREN_TENTACLE_FIGURE,
 } from '../sprites/art/krakarenFigure';
 import {
-  PROTECTIVE_SHELL_FIGURE,
-  PROTECTIVE_SHELL_MINI_FIGURE,
-  PROTECTIVE_SHELL_SHOCKWAVE_FIGURE,
-} from '../sprites/art/protectiveShellFigure';
+  ENERGY_SHIELD_FIGURE,
+  ENERGY_SHIELD_MINI_FIGURE,
+  ENERGY_SHIELD_SHOCKWAVE_FIGURE,
+} from '../sprites/art/energyShieldFigure';
 import {
   MAGIC_MISSILE_EXPLOSION_FIGURE,
   MAGIC_MISSILE_PROJECTILE_FIGURE,
@@ -123,7 +122,6 @@ export const PAINT_BENCH_SUBJECTS: readonly PaintBenchSubject[] = [
   { def: LITTLE_ROOSTER_FIGURE, state: 'idle' },
   { def: BENT_ROOSTER_FIGURE, state: 'idle' },
   { def: DARK_KNIGHT_FIGURE, state: 'idle' },
-  { def: RAT_KIN_FIGURE, state: 'idle' },
   // The heaviest-dressed villager (coat, chain, spectacles, ledger) and the
   // militia's thrust, which paints the cast's widest cell.
   { def: ratkinCastFigure('bramblewick'), state: 'idle' },
@@ -133,7 +131,7 @@ export const PAINT_BENCH_SUBJECTS: readonly PaintBenchSubject[] = [
   { def: ANGEL_FIGURE, state: 'swing_squat' },
   { def: ANGEL_FIGURE, state: 'arch_flip_look' },
   { def: hawkfolkCastFigure('tough_hawkbrown_standard'), state: 'walk' },
-  { def: MONGO_FIGURES.adult, state: 'walk_side' },
+  { def: DEINONYCHUS_FIGURES.adult, state: 'walk_side' },
   { def: TRASH_GREMLIN_FIGURE, state: 'idle' },
   { def: GREMLIN_BILE_ARC_FIGURE, state: 'arc' },
   { def: GREMLIN_ACID_FIGURE, state: 'pool' },
@@ -182,9 +180,9 @@ export const PAINT_BENCH_SUBJECTS: readonly PaintBenchSubject[] = [
   { def: LIFE_MACHINE_FIGURE, state: lifeMachineStateName('printing') },
   { def: SPIDER_FIGURE, state: 'walk' },
   { def: BUGABOO_FIGURE, state: 'walk_side' },
-  { def: PROTECTIVE_SHELL_FIGURE, state: 'active' },
-  { def: PROTECTIVE_SHELL_MINI_FIGURE, state: 'active' },
-  { def: PROTECTIVE_SHELL_SHOCKWAVE_FIGURE, state: 'expand' },
+  { def: ENERGY_SHIELD_FIGURE, state: 'active' },
+  { def: ENERGY_SHIELD_MINI_FIGURE, state: 'active' },
+  { def: ENERGY_SHIELD_SHOCKWAVE_FIGURE, state: 'expand' },
   { def: KRAKAREN_FIGURE, state: 'idle' },
   { def: KRAKAREN_TENTACLE_FIGURE, state: 'idle' },
   { def: KRAKAREN_SLAM_FIGURE, state: 'loom' },

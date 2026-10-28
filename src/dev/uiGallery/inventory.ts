@@ -3,6 +3,7 @@
  * packs, one named fixture at a time.
  */
 
+import type { StatId } from '../../core/party/stats';
 import { GearState } from '../../gear/gearState';
 import { crawlerName } from '../../characters/characters';
 import { Inventory } from '../../core/items/inventory/Inventory';
@@ -25,8 +26,22 @@ const FIXTURE_COIN_SPLIT = `${crawlerName('human')} 900 · ${crawlerName('cat')}
 /** Potions share a cooldown; the fixture shows it part-way through. */
 const POTION_COOLDOWN = { current: 180, max: 480 } as const;
 
-const BASE_STATS = { strength: 12, intelligence: 9, constitution: 11, dexterity: 10 } as const;
-const CAT_STATS = { strength: 6, intelligence: 14, constitution: 8, dexterity: 13 } as const;
+const BASE_STATS = {
+  health: 22,
+  melee: 12,
+  magic: 9,
+  evasiveness: 10,
+  ranged: 4,
+  explosivesHandling: 3,
+} as const satisfies Record<StatId, number>;
+const CAT_STATS = {
+  health: 8,
+  melee: 6,
+  magic: 14,
+  evasiveness: 26,
+  ranged: 1,
+  explosivesHandling: 1,
+} as const satisfies Record<StatId, number>;
 /** A packed fixture bag runs this many pages deep, the last one part-filled. */
 const PACKED_BAG_PAGES = 2.5;
 
@@ -57,14 +72,11 @@ const CAT_BAG: readonly { readonly id: ItemId; readonly quantity: number }[] = [
   { id: 'cooldown_crisp', quantity: 2 },
 ];
 
-function fixtureOwner(
-  kind: CrawlerKind,
-  stats: typeof BASE_STATS | typeof CAT_STATS,
-): InventoryOwner {
+function fixtureOwner(kind: CrawlerKind, stats: Readonly<Record<StatId, number>>): InventoryOwner {
   return {
     inventory: new Inventory(kind),
     gear: new GearState(),
-    ...stats,
+    statValue: (stat) => stats[stat],
   };
 }
 

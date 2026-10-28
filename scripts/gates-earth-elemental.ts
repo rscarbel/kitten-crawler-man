@@ -48,7 +48,7 @@ import {
   walkFoot,
   walkPose,
 } from '../src/sprites/art/earthElementalFigure.js';
-import { PROTECTIVE_SHELL_FIGURES } from '../src/sprites/art/protectiveShellFigure.js';
+import { ENERGY_SHIELD_FIGURES } from '../src/sprites/art/energyShieldFigure.js';
 import {
   EARTH_ELEMENTAL_CAST_SHIELD_CAST_FRAME,
   EARTH_ELEMENTAL_DEATH_CORPSE_FRAME,
@@ -713,24 +713,24 @@ function gateDeathEndsOnCorpse(): void {
   failUnlessMeasured('G15', measured, 'death rows');
 }
 
-// ── G16 the Shield is not the Protective Shell ───────────────────────────────
+// ── G16 the Shield is not the Energy Shield ───────────────────────────────
 
 /**
  * How far apart in CIE76 ΔE the Shield's colour must sit from every colour
- * the human's Protective Shell renders in. Around 2 is the smallest difference an
+ * the human's Energy Shield renders in. Around 2 is the smallest difference an
  * eye can see side by side and 10 reads as a slightly different shade of the
- * same paint; 20 is a different colour. Hue alone cannot do this: the Shell's
+ * same paint; 20 is a different colour. Hue alone cannot do this: the Energy Shield's
  * full power sits across orange to gold, the same hues as any amber, so the
  * Shield has to separate by saturation and value.
  */
-const MIN_SHELL_DELTA_E = 20;
+const MIN_ENERGY_SHIELD_DELTA_E = 20;
 /**
- * The dome is taller than it is wide, and taller than the Shell's ring by a
+ * The dome is taller than it is wide, and taller than the Energy Shield's ring by a
  * margin. Measured on the shipped art: the dome's hold stands 1.20–1.23 as tall
- * as wide, every Shell frame 1.00.
+ * as wide, every Energy Shield frame 1.00.
  */
 const MIN_DOME_ASPECT = 1.15;
-const MIN_ASPECT_OVER_SHELL = 0.15;
+const MIN_ASPECT_OVER_ENERGY_SHIELD = 0.15;
 
 /** sRGB to CIE L*a*b* (D65), for a ΔE a person would agree with. */
 const SRGB_MAX = 255;
@@ -831,25 +831,25 @@ function inkSummary(def: FigureDef, state: string, frame: number): InkSummary | 
 }
 
 /**
- * The Shield against the human's Protective Shell as the Shell actually renders:
- * every row of the shell and the cat's mini-shield, both variants, measured
- * off their own baked cells, so a Shell recolour is seen here without anyone
+ * The Shield against the human's Energy Shield as it actually renders:
+ * every row of the energy shield and the cat's mini-shield, both variants, measured
+ * off their own baked cells, so an Energy Shield recolour is seen here without anyone
  * updating a list. Two independent reads, either of which alone tells them
- * apart at a glance: colour (ΔE against every Shell row) and shape (an upright
+ * apart at a glance: colour (ΔE against every Energy Shield row) and shape (an upright
  * dome against a flat ring).
  */
 function gateShieldLooksItsOwn(): void {
-  const shellRows: InkSummary[] = [];
-  for (const shell of PROTECTIVE_SHELL_FIGURES) {
-    for (const [state, declared] of shell.states) {
+  const energyShieldRows: InkSummary[] = [];
+  for (const energyShield of ENERGY_SHIELD_FIGURES) {
+    for (const [state, declared] of energyShield.states) {
       for (let frame = 0; frame < declared.frames; frame++) {
-        const summary = inkSummary(shell, state, frame);
-        if (summary !== null) shellRows.push(summary);
+        const summary = inkSummary(energyShield, state, frame);
+        if (summary !== null) energyShieldRows.push(summary);
       }
     }
   }
-  failUnlessMeasured('G16', shellRows.length, 'Protective Shell frames to compare against');
-  const widestShell = Math.max(...shellRows.map((row) => row.aspect));
+  failUnlessMeasured('G16', energyShieldRows.length, 'Energy Shield frames to compare against');
+  const widestEnergyShield = Math.max(...energyShieldRows.map((row) => row.aspect));
 
   const def = EARTH_ELEMENTAL_SHIELD_FIGURE;
   let measured = 0;
@@ -863,21 +863,24 @@ function gateShieldLooksItsOwn(): void {
         continue;
       }
       measured++;
-      const nearest = Math.min(...shellRows.map((row) => deltaE(dome.colour, row.colour)));
-      if (nearest < MIN_SHELL_DELTA_E) {
+      const nearest = Math.min(...energyShieldRows.map((row) => deltaE(dome.colour, row.colour)));
+      if (nearest < MIN_ENERGY_SHIELD_DELTA_E) {
         fail(
           'G16',
-          `the Shield's ${state}[${frame}] is ${nearest.toFixed(1)} ΔE from a Protective Shell ` +
-            `frame (floor ${MIN_SHELL_DELTA_E}) — the two spells read as one colour`,
+          `the Shield's ${state}[${frame}] is ${nearest.toFixed(1)} ΔE from an Energy Shield ` +
+            `frame (floor ${MIN_ENERGY_SHIELD_DELTA_E}) — the two spells read as one colour`,
         );
       }
       if (state !== 'hold') continue;
-      if (dome.aspect < MIN_DOME_ASPECT || dome.aspect < widestShell + MIN_ASPECT_OVER_SHELL) {
+      if (
+        dome.aspect < MIN_DOME_ASPECT ||
+        dome.aspect < widestEnergyShield + MIN_ASPECT_OVER_ENERGY_SHIELD
+      ) {
         fail(
           'G16',
           `the Shield's hold[${frame}] is ${dome.aspect.toFixed(2)} as tall as wide against the ` +
-            `Shell's ${widestShell.toFixed(2)} (floor ${MIN_DOME_ASPECT}, and ` +
-            `${MIN_ASPECT_OVER_SHELL} over the Shell) — a ring, not a dome`,
+            `Energy Shield's ${widestEnergyShield.toFixed(2)} (floor ${MIN_DOME_ASPECT}, and ` +
+            `${MIN_ASPECT_OVER_ENERGY_SHIELD} over the Energy Shield) — a ring, not a dome`,
         );
       }
     }

@@ -1,7 +1,7 @@
 import { isRecord } from '../util/guards';
 import type { OwedWipe, WipeAccount, WipeMarkerStore } from './progressPersistence';
 
-const WIPE_MARKER_KEY = 'kcm.wipeOwed';
+const WIPE_MARKER_KEY = 'kcw.wipeOwed';
 
 function parseWipeAccount(raw: unknown): WipeAccount | null {
   if (!isRecord(raw)) return null;

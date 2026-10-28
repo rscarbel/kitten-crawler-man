@@ -3,7 +3,7 @@ import { parseGameProgress, stampGameProgress } from './saveFormat';
 import { PAGE_SAVE_LATCH, type ProgressStorage } from './progressPersistence';
 import { wipeOwed } from './wipeMarker';
 
-const STORAGE_KEY = 'kcm.progress';
+const STORAGE_KEY = 'kcw.progress';
 
 /**
  * The last checkpoint written on this device, or `null` when there is none.

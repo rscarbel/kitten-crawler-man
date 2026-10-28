@@ -8,15 +8,17 @@
  * Both fields have per-ability overrides; defaults are 1.3 and 1.8 respectively.
  */
 
+import type { WeaponDelivery } from '../items/equipment/weapons';
 import {
   computeXpToNextLevel,
   DEFAULT_XP_GROWTH_RATE,
   DEFAULT_FINAL_LEVEL_MULTIPLIER,
 } from '../progression/xpCurve';
 import type { Rect } from '../../ui/core/geom';
+import type { PetNames } from '../party/petNames';
 import { isFiniteNumber, isRecord, ownEntry, parseEvery } from '../util/guards';
 
-export type AbilityId = 'magic_missile' | 'protective_shell' | 'smush' | 'mongo';
+export type AbilityId = 'magic_missile' | 'energy_shield' | 'seismic_stomp' | 'deinonychus';
 
 /**
  * Every `AbilityId`, as a value. Typed as a total `Record` so adding an id to
@@ -25,9 +27,9 @@ export type AbilityId = 'magic_missile' | 'protective_shell' | 'smush' | 'mongo'
  */
 const ABILITY_IDS: Record<AbilityId, true> = {
   magic_missile: true,
-  protective_shell: true,
-  smush: true,
-  mongo: true,
+  energy_shield: true,
+  seismic_stomp: true,
+  deinonychus: true,
 };
 
 /** Narrows an item's free-form `abilityId` to one the manager knows about. */
@@ -35,9 +37,20 @@ export function isAbilityId(id: string): id is AbilityId {
   return ownEntry(ABILITY_IDS, id) !== undefined;
 }
 
+/**
+ * A perk's text: fixed, or read at display time from the run's pet names for
+ * an ability that speaks of a pet the player has named.
+ */
+export type PerkText = string | ((petNames: PetNames) => string);
+
 export interface AbilityPerkDef {
   level: number;
-  description: string;
+  description: PerkText;
+}
+
+/** `text` as the player reads it now. */
+export function perkText(text: PerkText, petNames: PetNames): string {
+  return typeof text === 'string' ? text : text(petNames);
 }
 
 export type AbilityOwner = 'cat' | 'human';
@@ -52,6 +65,8 @@ export interface AbilityDef {
   name: string;
   /** Which player this ability belongs to by default. */
   owner: AbilityOwner;
+  /** How its damage leaves the caster, which names the stat it grows with; null for none. */
+  delivery: WeaponDelivery | null;
   /**
    * Short badge shown beside the owner in the Abilities list, e.g. `PET`.
    *

@@ -3,35 +3,9 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { firstHealingConsumable } from '../core/items/consumables/foods';
+import { crawlerRegenHpPerSecond } from '../core/party/crawlerFormulas';
 
 const FRAMES_PER_SECOND = 60;
-
-/**
- * Passive regeneration for the human, in HP per second, as a flat base plus an
- * asymptotic constitution term.
- *
- * The old rule was `maxHp / 3600` — a flat *fraction* of max HP, which made
- * absolute regen scale linearly with constitution and let a mid-game crawler
- * out-heal an enemy that never missed. Constitution had no regen term of its
- * own; it only ever had one by accident, through max HP. These decouple the two:
- * a high-CON build still heals fastest, but the gap between CON 6 and CON 12
- * shrinks from 0.20 HP/s to 0.06, leaving max HP and the potion-cooldown
- * reduction as what constitution is actually bought for.
- */
-const REGEN_BASE_HP_PER_SECOND = 0.08;
-/** The most constitution can add, approached but never reached. */
-const REGEN_CON_GAIN_HP_PER_SECOND = 0.35;
-/** Constitution at which half of {@link REGEN_CON_GAIN_HP_PER_SECOND} is earned. */
-const REGEN_CON_HALF = 10;
-
-/**
- * The cat's flat rate.
- *
- * Flat rather than curved because her constitution is locked: a CON term would
- * be a constant dressed up as a formula. Her survivability is dodge and
- * Cockroach, and it should stay that way.
- */
-const CAT_REGEN_HP_PER_SECOND = 0.075;
 
 /**
  * A companion's unprompted heal: the first potion or stew it carries, through
@@ -48,23 +22,6 @@ const AUTO_POTION_COOLDOWN_FRAMES = 180;
 
 /** Health threshold for triggering auto-potion (50% HP). */
 const AUTO_POTION_HEALTH_THRESHOLD = 0.5;
-
-/**
- * Passive HP per second for a crawler with this constitution.
- *
- * Exported so `scripts/verify-difficulty.ts` asserts the curve's invariants
- * against the real function rather than against a copy of it.
- */
-export function humanRegenHpPerSecond(constitution: number): number {
-  return (
-    REGEN_BASE_HP_PER_SECOND +
-    (REGEN_CON_GAIN_HP_PER_SECOND * constitution) / (constitution + REGEN_CON_HALF)
-  );
-}
-
-/** The ceiling {@link humanRegenHpPerSecond} approaches but never reaches. */
-export const REGEN_HP_PER_SECOND_ASYMPTOTE =
-  REGEN_BASE_HP_PER_SECOND + REGEN_CON_GAIN_HP_PER_SECOND;
 
 /**
  * Handles per-frame health regeneration and companion auto-potion logic.
@@ -103,7 +60,11 @@ export class PlayerTickSystem implements GameSystem {
    */
   tickRegen(human: HumanPlayer, cat: CatPlayer): void {
     this.tickRegenHumanOnly(human);
-    this.catRegenAccum = this.accumulateRegen(cat, CAT_REGEN_HP_PER_SECOND, this.catRegenAccum);
+    this.catRegenAccum = this.accumulateRegen(
+      cat,
+      crawlerRegenHpPerSecond(cat.health),
+      this.catRegenAccum,
+    );
   }
 
   /**
@@ -137,7 +98,7 @@ export class PlayerTickSystem implements GameSystem {
   tickRegenHumanOnly(human: HumanPlayer): void {
     this.humanRegenAccum = this.accumulateRegen(
       human,
-      humanRegenHpPerSecond(human.constitution),
+      crawlerRegenHpPerSecond(human.health),
       this.humanRegenAccum,
     );
   }

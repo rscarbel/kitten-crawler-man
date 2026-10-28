@@ -24,6 +24,7 @@ import { text } from '../../widgets/text';
 import { choiceRow, wideButton, type Choice } from './parts';
 import type { RebindCapture } from './rebindCapture';
 import type { PauseSection, SectionLayout } from './section';
+import { petWords, type PetWords } from '../../../core/party/petNames';
 
 type ControlsView = 'keyboard' | 'touch';
 
@@ -32,22 +33,27 @@ type ControlsView = 'keyboard' | 'touch';
  * key, so there is nothing to rebind; the list exists so a phone player can
  * discover the gestures.
  */
-const TOUCH_CONTROL_ROWS: ReadonlyArray<{ readonly gesture: string; readonly effect: string }> = [
-  { gesture: 'Hold anywhere', effect: 'Walk toward your finger.' },
-  { gesture: 'Tap', effect: 'Attack, or use whatever you are standing beside.' },
-  { gesture: 'Tap Switch', effect: 'Swap which crawler you are driving.' },
-  { gesture: 'Tap Follower', effect: 'Give your companion movement and stance orders.' },
-  { gesture: 'Tap Bag', effect: 'Open the pack.' },
-  { gesture: 'Tap Summon', effect: 'Call Mongo to your side — the cat only.' },
-  { gesture: 'Tap a hotbar slot', effect: 'Use that item.' },
-  {
-    gesture: 'Tap a dynamite slot',
-    effect: 'Take a stick in hand, then tap where to throw it. Tap the slot again to put it away.',
-  },
-  { gesture: 'Long-press an item', effect: 'Open its menu — use, equip, drop.' },
-  { gesture: 'Tap the mini-map', effect: 'Expand it. Drag to scroll, tap again to shrink.' },
-  { gesture: 'Tap Pause', effect: 'Open this menu.' },
-];
+function touchControlRows(
+  pet: PetWords,
+): ReadonlyArray<{ readonly gesture: string; readonly effect: string }> {
+  return [
+    { gesture: 'Hold anywhere', effect: 'Walk toward your finger.' },
+    { gesture: 'Tap', effect: 'Attack, or use whatever you are standing beside.' },
+    { gesture: 'Tap Switch', effect: 'Swap which crawler you are driving.' },
+    { gesture: 'Tap Follower', effect: 'Give your companion movement and stance orders.' },
+    { gesture: 'Tap Bag', effect: 'Open the pack.' },
+    { gesture: 'Tap Summon', effect: `Call ${pet.referred} to your side — the cat only.` },
+    { gesture: 'Tap a hotbar slot', effect: 'Use that item.' },
+    {
+      gesture: 'Tap a dynamite slot',
+      effect:
+        'Take a stick in hand, then tap where to throw it. Tap the slot again to put it away.',
+    },
+    { gesture: 'Long-press an item', effect: 'Open its menu — use, equip, drop.' },
+    { gesture: 'Tap the mini-map', effect: 'Expand it. Drag to scroll, tap again to shrink.' },
+    { gesture: 'Tap Pause', effect: 'Open this menu.' },
+  ];
+}
 
 /** Where each keyboard group starts, so movement reads apart from the hotbar. */
 const KEYBOARD_GROUPS: ReadonlyArray<{ readonly header: string; readonly startsAt: GameAction }> = [
@@ -149,9 +155,9 @@ function keyboardRow(
   );
 }
 
-function touchRows(layout: SectionLayout, ui: Ui): void {
+function touchRows(layout: SectionLayout, ui: Ui, pet: PetWords): void {
   const rowH = listRowHeight(ui, true);
-  for (const row of TOUCH_CONTROL_ROWS) {
+  for (const row of touchControlRows(pet)) {
     const rect: Rect = layout.row(rowH, ui.theme.space.xxs);
     listRow(ui, rect, { id: `touch/${row.gesture}`, title: row.gesture, subtitle: row.effect });
   }
@@ -184,7 +190,7 @@ export function controlsSection(rebind: RebindCapture): PauseSection {
       layout.space(space.xs);
 
       if (shown === 'touch') {
-        touchRows(layout, ui);
+        touchRows(layout, ui, petWords(ctx.petNames, 'deinonychus'));
         return;
       }
 

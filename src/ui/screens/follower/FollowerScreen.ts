@@ -1,6 +1,6 @@
 /**
  * The companion's orders: how it moves, how it fights, whether the cat sends
- * Mongo in, and the switch to playing it. Each order is a radio-style row;
+ * Deinonychus in, and the switch to playing it. Each order is a radio-style row;
  * choosing one keeps the panel open so the player can set both at once. Only
  * ✕, Close, a tap outside, Escape, the Follow key and switching character
  * dismiss it.
@@ -15,6 +15,7 @@ import { listRow, listRowHeight } from '../../widgets/listRow';
 import { panel, type FooterButton } from '../../widgets/panel';
 import { scrollIntoView } from '../../widgets/scrollView';
 import { lineHeightOf, measureText, text } from '../../widgets/text';
+import type { PetWords } from '../../../core/party/petNames';
 
 /** What the panel shows, read from the scene's companion state every frame. */
 export interface FollowerMenuState {
@@ -23,10 +24,14 @@ export interface FollowerMenuState {
   /** True when the human is the active player, so the cat is the companion. */
   readonly companionIsCat: boolean;
   /**
-   * Whether the cat sends Mongo in on her own, or null to leave the row out:
-   * no pet yet, or a scene he cannot be summoned in.
+   * Deinonychus's row, or null to leave it out: no pet yet, or a scene he
+   * cannot be summoned in.
    */
-  readonly mongoAutoSummon: boolean | null;
+  readonly deinonychus: {
+    /** Whether the cat sends him in on her own. */
+    readonly autoSummon: boolean;
+    readonly pet: PetWords;
+  } | null;
 }
 
 export interface FollowerScreenSurfaceOptions {
@@ -93,7 +98,7 @@ export class FollowerScreen {
   onSetAggressive: (() => void) | null = null;
   onSetPassive: (() => void) | null = null;
   onSwitchCharacter: (() => void) | null = null;
-  onToggleMongoAutoSummon: (() => void) | null = null;
+  onToggleDeinonychusAutoSummon: (() => void) | null = null;
 
   get isOpen(): boolean {
     return this._isOpen;
@@ -180,17 +185,18 @@ export class FollowerScreen {
         ],
       },
     ];
-    if (state.companionIsCat && state.mongoAutoSummon !== null) {
+    const { deinonychus } = state;
+    if (state.companionIsCat && deinonychus !== null) {
       sections.push({
         header: 'Pet',
         rows: [
           {
             glyph: 'heart',
-            label: 'Summon Mongo in fights',
+            label: `Summon ${deinonychus.pet.referred} in fights`,
             control: 'toggle',
-            checked: state.mongoAutoSummon,
+            checked: deinonychus.autoSummon,
             idx: PET_TOGGLE_ROW_INDEX,
-            callback: this.onToggleMongoAutoSummon,
+            callback: this.onToggleDeinonychusAutoSummon,
           },
         ],
       });

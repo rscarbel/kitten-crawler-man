@@ -3,7 +3,7 @@
  * page, so the line is kept in storage and said on the next connection.
  */
 
-const FORGOTTEN_NOTICE_KEY = 'kcm-ai-forgotten-notice';
+const FORGOTTEN_NOTICE_KEY = 'kcw.aiForgottenNotice';
 
 /** Marks that the characters were told to forget this player. */
 export function rememberForgottenPlayer(line: string): void {

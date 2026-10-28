@@ -27,7 +27,7 @@ import type { SpellSystem } from '../SpellSystem';
  * Every mob that enters a scene goes through {@link add}. Before this existed
  * the same four-line closure was hand-written at nine call sites, and each one
  * that forgot a line produced its own bug — a mob that never receives a
- * `SpellSystem` walks through a protective shell, and one that never receives
+ * `SpellSystem` walks through an energy shield, and one that never receives
  * the map cannot path at all.
  */
 export class MobRoster {

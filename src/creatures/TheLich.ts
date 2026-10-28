@@ -746,21 +746,22 @@ export class TheLich extends Mob {
       const cx = target.x + this.tileSize * CENTER_OFFSET;
       const cy = target.y + this.tileSize * CENTER_OFFSET;
       if (!handsConeCovers(cone, cx, cy)) continue;
-      if (this.spells?.isPointInsideShell(cx, cy)) {
+      if (this.spells?.isPointInsideEnergyShield(cx, cy)) {
         this.spells.addBlockXp(HANDS_BLOCK_XP);
         continue;
       }
-      // `dealPreScaledRangedDamage` rather than `dealDamage`: this argument is
+      // `dealPreScaledSpellDamage` rather than `dealDamage`: this argument is
       // already a fraction of the victim's own health, so it is level-independent
       // by construction and scaling it again would make one cone an
-      // unconditional kill. It is also an area shockwave with no single point of
-      // contact for armour to bite into, so it does not reflect.
+      // unconditional kill. It is also a spell with no single point of contact
+      // for armour to bite into, so it does not reflect, and magic-resistant
+      // gear turns aside a share of it.
       const handsDamage = Math.ceil(target.maxHp * HANDS_HP_FRACTION) + HANDS_BONUS_DAMAGE;
-      const connected = this.dealPreScaledRangedDamage(target, handsDamage, 'grasping_hands');
+      const connected = this.dealPreScaledSpellDamage(target, handsDamage, 'grasping_hands');
       // Gated on the hit landing: a dodge that avoids the damage but still roots
       // the player in the middle of the cone is worse than no dodge at all.
       if (connected) {
-        target.applyStatus(makeStuck(HANDS_STUCK_FRAMES));
+        target.applyStatus(makeStuck(target.magicResistedFrames(HANDS_STUCK_FRAMES)));
       }
     }
   }

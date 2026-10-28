@@ -3,7 +3,7 @@
  * Headless checks on the one rule the party's own weapons obey: the crawlers
  * cannot wound a friend, and explosives are the single exception.
  *
- * The reported bug was the cat killing her own pet raptor with a magic missile
+ * The reported bug was the cat killing her own pet dinosaur with a magic missile
  * she never aimed at him. That produces no error, only a corpse the player
  * did not ask for. So every check below is written
  * as a pair: the ally is refused, and a hostile in the same position is *not*,
@@ -21,7 +21,7 @@ import { GameMap } from '../src/map/GameMap';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import type { Mob, PlayerDamageType } from '../src/creatures/Mob';
-import { Mongo } from '../src/creatures/Mongo';
+import { Deinonychus } from '../src/creatures/Deinonychus';
 import { HAWKFOLK_TOUGH_FAMILY, Hawkfolk } from '../src/creatures/Hawkfolk';
 import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
 import type { StandaloneMobKind } from '../src/levels/mobKinds';
@@ -68,8 +68,8 @@ const HOMING_LEVEL = 15;
 const AIMED_DAMAGE_TYPES: readonly (PlayerDamageType | null)[] = [
   'melee',
   'missile',
-  'shell',
-  'smush',
+  'energy_shield',
+  'seismic_stomp',
   null,
 ];
 
@@ -117,10 +117,17 @@ function makeGoblin(tileX = start.x + 2, tileY = start.y): Mob {
   return spawnMob('goblin', { x: tileX, y: tileY }, map, liveSpawnContext('dev:spawn'));
 }
 
-function makePet(owner: CatPlayer): Mongo {
-  const mongo = new Mongo(start.x, start.y, TILE_SIZE, owner, PET_LEVEL, PET_STARTING_HP);
-  mongo.setMap(map);
-  return mongo;
+function makePet(owner: CatPlayer): Deinonychus {
+  const deinonychus = new Deinonychus(
+    start.x,
+    start.y,
+    TILE_SIZE,
+    owner,
+    PET_LEVEL,
+    PET_STARTING_HP,
+  );
+  deinonychus.setMap(map);
+  return deinonychus;
 }
 
 function makeHawkfolk(): Hawkfolk {
@@ -155,7 +162,7 @@ console.log('The rule, stated on the mob itself');
   check(pet.takesPlayerDamage('explosion'), 'and so does the pet — a blast plays no favourites');
 }
 
-console.log('\nThe cat cannot wound her own raptor, whatever she swings');
+console.log('\nThe cat cannot wound her own dinosaur, whatever she swings');
 {
   const { human, cat } = makeCrawlers();
 

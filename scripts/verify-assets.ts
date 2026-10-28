@@ -12,7 +12,7 @@
  * 2. `SYSTEM_ASSET_REQUIREMENTS` (`src/core/spriteAssets/systemAssetRequirements.ts`) —
  *    creatures introduced by a bounty/quest/companion system that never
  *    touches the level def at all (`BountySystem`, `StarlightTentMazeSystem`,
- *    `SpiderQuestSystem`, `MongoSystem`, ...).
+ *    `SpiderQuestSystem`, `DeinonychusSystem`, ...).
  *
  * Every creature's sprite needs come from `MOB_SPRITE_KEYS` and
  * `FRIENDLY_CREATURE_SPRITE_KEYS`, which are total over their kinds, so `tsc`

@@ -14,7 +14,7 @@
  *   - a **long pronotum** — the "neck" — carried at an angle, which is what
  *     gives a mantis its upright, watchful posture. Shorten it and the animal
  *     collapses into a grasshopper;
- *   - **raptorial forelimbs socketed at the front of that pronotum, right
+ *   - **grasping forelimbs socketed at the front of that pronotum, right
  *     behind the head** — never on the abdomen and never level with the walking
  *     legs. The small spider taught us that socket placement is the single cue
  *     that sells an arthropod, and this is the mantis's;
@@ -159,9 +159,9 @@ export interface MantidBuild {
   readonly palette: ChitinPalette;
   /** 0 pristine wing cases, 1 shredded into notches and splits. */
   readonly wingWear: number;
-  /** 0 unmarked, 1 the boss's battle-scored raptorial femurs. */
+  /** 0 unmarked, 1 the boss's battle-scored grasping femurs. */
   readonly scarring: number;
-  /** Extra thickness on the raptorial arms and pronotum. The boss is not just bigger. */
+  /** Extra thickness on the grasping arms and pronotum. The boss is not just bigger. */
   readonly heft: number;
   /** Strength of the iridescent second gradient. */
   readonly iridescence: number;
@@ -519,7 +519,7 @@ const SPINE_ALPHA = 0.95;
 const SPINE_INK_ALPHA = 0.5;
 
 /**
- * The row of grasping spines down one edge of a raptorial segment.
+ * The row of grasping spines down one edge of a foreleg segment.
  *
  * These are not decoration. The spines are the difference between "the bug has
  * long front arms" and "the bug has *traps* on the front" — at 32 px they are
@@ -548,7 +548,7 @@ export function drawSpineRow(
   const END_INSET = 0.94;
   for (let i = 0; i < count; i++) {
     const t = lerp(START_INSET, END_INSET, count === 1 ? 0.5 : i / (count - 1));
-    // Alternating long and short spines: a real raptorial femur carries two
+    // Alternating long and short spines: a real grasping femur carries two
     // interleaved ranks, and an even comb reads as a saw blade instead.
     const rank = i % 2 === 0 ? 1 : 0.6;
     const jitter = 0.85 + hash2(seed, i) * 0.3;
@@ -611,8 +611,8 @@ function drawScars(
 
 // ── Pose ─────────────────────────────────────────────────────────────────────
 
-/** One raptorial forelimb. Angles are radians; lengths are tile units. */
-export interface RaptorialPose {
+/** One grasping forelimb. Angles are radians; lengths are tile units. */
+export interface GraspingArmPose {
   /** Rotation of the whole arm about its socket. 0 is the rest prayer. */
   readonly swing: number;
   /** 0 folded into the prayer, 1 snapped out nearly straight. */
@@ -665,8 +665,8 @@ export interface MantidPose {
   /** 0 wing cases flat on the abdomen, 1 raised in a deimatic display. */
   readonly wingFlare: number;
 
-  readonly foreL: RaptorialPose;
-  readonly foreR: RaptorialPose;
+  readonly foreL: GraspingArmPose;
+  readonly foreR: GraspingArmPose;
   readonly midL: LegPose;
   readonly midR: LegPose;
   readonly hindL: LegPose;
@@ -680,7 +680,7 @@ export interface MantidPose {
 }
 
 const REST_LEG: LegPose = { dx: 0, dy: 0, lift: 0, splay: 1 };
-const REST_ARM: RaptorialPose = { swing: 0, unfold: 0, spread: 0, reach: 0 };
+const REST_ARM: GraspingArmPose = { swing: 0, unfold: 0, spread: 0, reach: 0 };
 
 export function restPose(): MantidPose {
   return {
@@ -744,7 +744,7 @@ const ABDOMEN_REST_ANGLE = deg(-22);
 /**
  * The pronotum — the elongated prothorax a mantis carries its head on. This is
  * the animal's whole posture: it roots inside the thorax and rises forward at a
- * steep angle, and the raptorial arms socket at its *far* end.
+ * steep angle, and the grasping arms socket at its *far* end.
  */
 const PRONOTUM_ROOT_X = 0.05;
 const PRONOTUM_ROOT_Y = -0.01;
@@ -756,7 +756,7 @@ const PRONOTUM_TIP_HALF = 0.03;
 const PRONOTUM_HEFT_GAIN = 0.22;
 /** Battle gouges scored across a boss's pronotum. */
 const PRONOTUM_SCARS = 5;
-/** Where along the pronotum the raptorial sockets sit; 1 is the head end. */
+/** Where along the pronotum the grasping sockets sit; 1 is the head end. */
 export const FORELIMB_SOCKET_ALONG = 0.82;
 
 export const HEAD_WIDTH = 0.19;
@@ -767,21 +767,21 @@ const EYE_RX = 0.055;
 const EYE_RY = 0.064;
 const ANTENNA_LENGTH = 0.3;
 
-/** Raptorial arm segment lengths. The femur is the long, heavy, spined one. */
+/** Dinosaurial arm segment lengths. The femur is the long, heavy, spined one. */
 const COXA_LENGTH = 0.11;
 export const FEMUR_LENGTH = 0.21;
 export const TIBIA_LENGTH = 0.18;
 const COXA_HALF = 0.024;
 const FEMUR_HALF = 0.046;
 const TIBIA_HALF = 0.024;
-/** Battle gouges scored across a boss's raptorial femur. */
-const RAPTORIAL_FEMUR_SCARS = 6;
+/** Battle gouges scored across a boss's grasping femur. */
+const GRASPING_FEMUR_SCARS = 6;
 export const FEMUR_SPINES = 7;
 export const TIBIA_SPINES = 9;
 const SPINE_LENGTH = 0.026;
 
 /**
- * Where a raptorial arm sits at rest and where it ends up on a strike.
+ * Where a grasping arm sits at rest and where it ends up on a strike.
  *
  * The profile and the head-on views need genuinely different numbers, not one
  * set mirrored: seen from the side the prayer is a narrow V held out in *front*
@@ -1378,16 +1378,16 @@ function drawAntenna(
 }
 
 /**
- * One raptorial forelimb, socketed on the pronotum.
+ * One grasping forelimb, socketed on the pronotum.
  *
  * At `unfold = 0` the tibia lies folded back along the femur — the prayer. At
  * `unfold = 1` the whole arm is nearly straight, which is the only frame of a
  * strike anyone actually sees.
  */
-function drawRaptorial(
+function drawGraspingArm(
   ctx: Ctx,
   build: MantidBuild,
-  arm: RaptorialPose,
+  arm: GraspingArmPose,
   rig: ArmRig,
   socket: Pt,
   baseAngle: number,
@@ -1422,7 +1422,7 @@ function drawRaptorial(
     0.022 * mirror,
   );
   paintChitin(ctx, { outline: femur, build, shade });
-  drawScars(ctx, build, femur, RAPTORIAL_FEMUR_SCARS, seed);
+  drawScars(ctx, build, femur, GRASPING_FEMUR_SCARS, seed);
   drawSpineRow(ctx, build, coxaEnd, femurEnd, FEMUR_SPINES, SPINE_LENGTH * heft, mirror, seed);
 
   const tibia = segmentOutline(
@@ -1585,7 +1585,7 @@ export function drawMantidSide(ctx: Ctx, p: MantidPose, build: MantidBuild): voi
 
   // The far arm goes behind the head, the near arm in front of it, so the prayer
   // reads as two arms rather than as one thick one.
-  drawRaptorial(
+  drawGraspingArm(
     ctx,
     build,
     { ...p.foreR, swing: p.foreR.swing + SIDE_FAR_ARM_SWING },
@@ -1597,7 +1597,7 @@ export function drawMantidSide(ctx: Ctx, p: MantidPose, build: MantidBuild): voi
     build.seed + 2.2,
   );
   drawHeadSide(ctx, build, p, neck);
-  drawRaptorial(ctx, build, p.foreL, SIDE_ARM_RIG, socket, neck.angle, 1, 0, build.seed + 5.5);
+  drawGraspingArm(ctx, build, p.foreL, SIDE_ARM_RIG, socket, neck.angle, 1, 0, build.seed + 5.5);
 
   // Near-side walking legs last: they cross in front of the body.
   drawWalkingLeg(ctx, build, MID_LEG_ROOT, footFor(MID_FOOT_REST_X, p.midL), p.midL.splay, 0, 1);
@@ -1614,7 +1614,7 @@ export function drawMantidSide(ctx: Ctx, p: MantidPose, build: MantidBuild): voi
 }
 
 /**
- * Parallax on the far raptorial in profile.
+ * Parallax on the far grasping arm in profile.
  *
  * Both arms move together in the prayer, so drawn on the same socket at the same
  * angle the far one hides exactly behind the near one and the animal appears to
@@ -1679,7 +1679,7 @@ function axialLegPair(
   ];
 }
 
-/** Draws the pronotum column and both raptorials for a head-on or away view. */
+/** Draws the pronotum column and both grasping arms for a head-on or away view. */
 function drawAxialNeckAndArms(
   ctx: Ctx,
   build: MantidBuild,
@@ -1697,7 +1697,7 @@ function drawAxialNeckAndArms(
   const socket = along(root, neckAngle, length * FORELIMB_SOCKET_ALONG);
   for (const side of [-1, 1]) {
     const arm = side < 0 ? p.foreL : p.foreR;
-    drawRaptorial(
+    drawGraspingArm(
       ctx,
       build,
       { ...arm, spread: arm.spread + extraSpread },

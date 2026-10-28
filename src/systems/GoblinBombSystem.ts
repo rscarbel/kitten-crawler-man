@@ -770,7 +770,7 @@ export class GoblinBombSystem implements GameSystem, GroundHazardSource {
  *
  * - Both crawlers take the full blast, as the thrower's blow: the blast's
  *   share of each one's own max HP, which no dodge roll turns aside.
- * - A party-side mob (Mongo, a hireling, a soldier, a thrall, a converted mob,
+ * - A party-side mob (Deinonychus, a hireling, a soldier, a thrall, a converted mob,
  *   an attack cow) takes the full blast too, the same share of its own max HP.
  * - A hostile that hunts other mobs (`Mob.huntsOtherMobs`) takes the full
  *   damage: it is the goblins' enemy as much as the party's.

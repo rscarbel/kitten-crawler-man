@@ -42,6 +42,11 @@ const { walkAwayRangeTiles } = await import('../src/dialog/walkAway.js');
 const { BriarHollowKit } = await import('../src/systems/briarHollow/BriarHollowKit.js');
 const { MobRoster } = await import('../src/systems/kits/SceneWorld.js');
 const { liveSpawnContext, spawnMob } = await import('../src/levels/spawnFunnel.js');
+const { PetNameBook, parsePetName } = await import('../src/core/party/petNames.js');
+const { snapPlayer } = await import('../src/core/save/PlayerSnapshot.js');
+const { parseGameProgress } = await import('../src/core/save/saveFormat.js');
+const { isRecord } = await import('../src/core/util/guards.js');
+const { sceneSetupFromSave } = await import('../src/scenes/resumeFromSave.js');
 
 type Scene = InstanceType<typeof DungeonScene>;
 type Point = { readonly x: number; readonly y: number };
@@ -363,7 +368,55 @@ async function verifyPaddockPresses(): Promise<void> {
     `a tap on a cow in reach pets it and swings at nothing (${counts()})`,
   );
 
+  verifyPetNameSurvivesSave(scene);
   scene.onExit();
+}
+
+/**
+ * The cow's name rides the run's save: the scene writes it, a reload reads it
+ * back, a death's respawn keeps the live name over an older save's, and a
+ * save holding a name the prompt could never have given fails validation.
+ */
+function verifyPetNameSurvivesSave(scene: Scene): void {
+  console.log("\nthe attack cow's name through a save");
+  const book = sceneField(scene, 'petNames', PetNameBook);
+  const name = parsePetName('Sir Moo-a-lot');
+  if (name === null) {
+    check(false, 'the test name is a legal name');
+    return;
+  }
+  book.give('attackCow', name);
+  const buildSave: unknown = Reflect.get(scene, 'buildSaveProgress');
+  if (typeof buildSave !== 'function') throw new Error('the scene has no save builder');
+  const party = {
+    human: snapPlayer(scene.pm.human),
+    cat: snapPlayer(scene.pm.cat),
+    deinonychusPetHp: 0,
+    deinonychusPetResting: false,
+  };
+  const built: unknown = Reflect.apply(buildSave, scene, [party]);
+  if (!isRecord(built)) throw new Error('the save builder returned no record');
+  // The writer stamps the time on every save; the builder leaves that to it.
+  const written = { ...built, savedAt: new Date().toISOString() };
+  const stored: unknown = JSON.parse(JSON.stringify(written));
+  const reloaded = parseGameProgress(stored);
+  check(reloaded !== null, 'the save the scene writes passes validation');
+  if (reloaded === null) return;
+  const resumed = sceneSetupFromSave({}, reloaded).options.petNames;
+  check(
+    resumed?.nameOf('attackCow') === name,
+    `a reload names the cow as she was named (${resumed?.nameOf('attackCow') ?? 'none'})`,
+  );
+  const unnamedSave = { ...reloaded, petNames: {} };
+  const respawned = sceneSetupFromSave({ petNames: book }, unnamedSave).options.petNames;
+  check(
+    respawned?.nameOf('attackCow') === name,
+    'a respawn from a save older than her name keeps the name',
+  );
+  check(
+    parseGameProgress({ ...reloaded, petNames: { attackCow: 'Moo!' } }) === null,
+    'a save holding an illegal name fails validation',
+  );
 }
 
 await verifyPaddockPresses();

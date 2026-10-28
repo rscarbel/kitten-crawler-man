@@ -18,7 +18,7 @@ import { PLAYER_SPEED } from '../core/constants';
 /**
  * The Mantid — a bounty target, and an enormous praying mantis.
  *
- * Baseline he is a slow, deliberate stalker who lands single raptorial strikes.
+ * Baseline he is a slow, deliberate stalker who lands single grasping strikes.
  * What makes the fight is the **rage cycle**, which he runs on a timer for as
  * long as he is engaged:
  *
@@ -54,7 +54,7 @@ const MANTID_WALK_ADVANTAGE = 1.08;
 export const MANTID_MAX_SPEED = PLAYER_SPEED * MANTID_WALK_ADVANTAGE;
 const AGGRO_RANGE_TILES = 11;
 
-/** Reach of a single raptorial strike, in tiles from his own tile origin. */
+/** Reach of a single grasping strike, in tiles from his own tile origin. */
 const SLASH_RANGE_TILES = 1.7;
 /**
  * The stalking strike. Deliberately modest: the flurry is his damage, and this
@@ -94,7 +94,7 @@ const FLURRY_RADIUS_TILES = 1.6;
  */
 export const MANTID_FLURRY_ATTACK_TYPE = 'flurry';
 
-/** Shell XP awarded for absorbing one flurry tick. Small: there are fifteen of them. */
+/** Energy Shield XP awarded for absorbing one flurry tick. Small: there are fifteen of them. */
 const FLURRY_BLOCK_XP = 2;
 /** He closes during the flurry rather than flailing at air. */
 const FLURRY_SPEED_MULTIPLIER = 1.25;
@@ -420,7 +420,7 @@ export class Mantid extends Mob {
     if (!this.slashLanded && this.stateTimer <= SLASH_RECOVER_FRAMES) {
       this.slashLanded = true;
       if (target !== null && this.distanceTo(target) <= this.slashRangePx) {
-        this.dealDamage(target, SLASH_DAMAGE, 'raptorial_slash');
+        this.dealDamage(target, SLASH_DAMAGE, 'grasping_slash');
       }
     }
     if (this.stateTimer <= 0) {
@@ -491,16 +491,16 @@ export class Mantid extends Mob {
       if (!this.isAlive) return;
       if (!target.isAlive) continue;
       if (this.distanceTo(target) > this.flurryRadiusPx) continue;
-      const shell = this.spells;
+      const shield = this.spells;
       if (
-        shell?.isPointInsideShell(
+        shield?.isPointInsideEnergyShield(
           target.x + this.tileSize * CENTER_OFFSET,
           target.y + this.tileSize * CENTER_OFFSET,
         ) === true
       ) {
-        // Blocking a tick has to pay, or holding the shell through a flurry is
+        // Blocking a tick has to pay, or holding the shield through a flurry is
         // strictly worse than holding it through any other boss's attack.
-        shell.addBlockXp(FLURRY_BLOCK_XP);
+        shield.addBlockXp(FLURRY_BLOCK_XP);
         continue;
       }
       this.dealDamage(target, FLURRY_TICK_DAMAGE, MANTID_FLURRY_ATTACK_TYPE);
@@ -566,7 +566,7 @@ export class Mantid extends Mob {
       items.push({ id: 'stat_boost_potion', quantity: 1 });
     }
     // The mantis lives by striking first and not being where the blow lands.
-    maybeDropSkillBook(items, 'skill_book_cat_reflexes');
+    maybeDropSkillBook(items, 'mantid');
     return items;
   }
 

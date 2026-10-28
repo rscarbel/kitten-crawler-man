@@ -2,7 +2,7 @@
  * MurderMysteryQuestSystem — the overworld half of "The Krasue Murders",
  * the town's dialog-driven murder mystery:
  *
- *   Baggi's plea (Mordecai warns you off) → her headless body turns up in
+ *   Baggi's plea (Dave warns you off) → her headless body turns up in
  *   the alley behind the Sunken Stump → three clue points around town (the
  *   well, Old Lori's cottage, the tower plaza shrine) → a krasue swarm hits
  *   the streets at nightfall → the trail leads to the cult nest in Blackwood

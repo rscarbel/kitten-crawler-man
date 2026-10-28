@@ -37,9 +37,9 @@ const SPEED_BASE = 4.5;
 interface MagicMissileStats {
   /** Frames between allowed player-triggered shots (0 = no cooldown). */
   cooldownFrames: number;
-  /** Multiplier applied to base missile damage (2 + intelligence). */
+  /** Multiplier applied to base missile damage (2 + magic). */
   damageMultiplier: number;
-  /** Multiplier applied to base range (3.5 + intelligence * 0.5 tiles). */
+  /** Multiplier applied to base range (3.5 + magic * 0.5 tiles). */
   rangeMultiplier: number;
   /** Speed in px/frame. Increases to 9 at level 15. */
   speed: number;
@@ -122,6 +122,7 @@ export const MAGIC_MISSILE_SPARK_LEVEL = 3;
 
 export const MAGIC_MISSILE_DEF: AbilityDef = {
   id: 'magic_missile',
+  delivery: 'spell',
   name: 'Magic Missile',
   owner: 'cat',
   equipInstructions: 'Switch to Cat (Tab), place tome on hotbar, press key 1–7 to fire',

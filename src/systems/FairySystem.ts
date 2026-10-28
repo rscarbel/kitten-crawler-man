@@ -21,7 +21,7 @@ import type { Player } from '../Player';
 import type { SpatialGrid } from '../core/world/SpatialGrid';
 import { TILE_SIZE } from '../core/constants';
 import { makeFairyAegis } from '../core/combat/StatusEffect';
-import { applyChillOnly } from '../core/combat/frostStatus';
+import { applyIceHit } from '../core/combat/frostStatus';
 import { applyFairyRateUpgrade, type FairyRoomLedger } from '../levels/fairySpawner';
 import { Fairy } from '../creatures/fairies/Fairy';
 import { NecroFairy } from '../creatures/fairies/NecroFairy';
@@ -366,7 +366,7 @@ export class FairySystem implements GameSystem {
       const centre = playerCentre(target);
       if (Math.hypot(centre.x - x, centre.y - y) > radiusPx) continue;
       if (this.iceBolts.immunity.blocks(target, 'ice')) continue;
-      applyChillOnly(target);
+      applyIceHit(target, { freezeAllowed: false, magic: true });
     }
     this.partyScratch.length = 0;
     this.chillBlasts.push({ x, y, seed: this.seed(), age: 0 });

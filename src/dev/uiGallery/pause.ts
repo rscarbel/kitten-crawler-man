@@ -4,9 +4,9 @@
  */
 
 import { MAGIC_MISSILE_DEF } from '../../abilities/magicMissile';
-import { MONGO_DEF } from '../../abilities/mongo';
-import { PROTECTIVE_SHELL_DEF } from '../../abilities/protectiveShell';
-import { SMUSH_DEF } from '../../abilities/smush';
+import { DEINONYCHUS_DEF } from '../../abilities/deinonychus';
+import { ENERGY_SHIELD_DEF } from '../../abilities/energyShield';
+import { SEISMIC_STOMP_DEF } from '../../abilities/seismicStomp';
 import { AbilityManager } from '../../core/skills/AbilityManager';
 import {
   ACHIEVEMENT_DEFS,
@@ -31,6 +31,7 @@ import {
   type CrawlerKind,
 } from '../../core/skills/SkillManager';
 import { BRASS_GULLET_SKILL } from '../../core/skills/tattoos';
+import { PROFICIENCY_MAX_LEVEL, type ProficiencySkillId } from '../../core/skills/proficiency';
 import { CatPlayer } from '../../creatures/CatPlayer';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { Surface } from '../../ui/core/UiRoot';
@@ -43,19 +44,23 @@ import type { PauseAudio, PauseSectionId } from '../../ui/screens/pause/section'
 import type { MusicPlayerControls, MusicPlayerMode } from '../../audio/music/MusicDirector';
 import type { MusicBusId, MusicTrackId } from '../../audio/sounds';
 import type { DialogFixture, FixtureRig } from './dialogs/fixture';
+import { PetNameBook } from '../../core/party/petNames';
 
 const PLAYER_TILE = 10;
 const FIXTURE_XP = 140;
 const HUMAN_UNSPENT = 2;
 const CAT_UNSPENT = 1;
 const SKILLS_PER_CRAWLER = 2;
+/** Partway up a proficiency's climb, so its card shows a mid level and a part-full meter. */
+const FIXTURE_PROFICIENCY_LEVEL = 12;
+const FIXTURE_PROFICIENCY_USES = 37;
 const ACHIEVEMENTS_PER_CRAWLER = 4;
 const ABILITY_XP = 60;
 const CRAFT_XP = 700;
 const FRAMES_PER_SECOND = 60;
 const PLAYED_SECONDS = 1380;
 const PLAYED_FRAMES = FRAMES_PER_SECOND * PLAYED_SECONDS;
-const MONGO_PETS = 48;
+const DEINONYCHUS_PETS = 48;
 const OTHER_COW_PETS = 25;
 const MIDGE_PETS = 12;
 /** The key chip the keyboard-focus fixture walks to: well below the first screenful of rows. */
@@ -92,6 +97,27 @@ function grantSkills(player: HumanPlayer | CatPlayer, crawler: CrawlerKind): voi
     .forEach((id) => player.skills.unlockSkill(id));
 }
 
+/** Reads `skill`'s book until it reaches `level`, then trains it `uses` times. */
+function grantProficiency(
+  player: HumanPlayer | CatPlayer,
+  skill: ProficiencySkillId,
+  level: number,
+  uses: number,
+): void {
+  while (player.skills.getLevel(skill) < level) player.skills.unlockSkill(skill);
+  for (let use = 0; use < uses; use++) player.skills.recordUse(skill);
+}
+
+/**
+ * A proficiency partway up for each crawler, and one of the human's at its
+ * ceiling, so the Skills tab shows both a level climbing and a mastered one.
+ */
+function grantProficiencies(human: HumanPlayer, cat: CatPlayer): void {
+  grantProficiency(human, 'swordsmanship', FIXTURE_PROFICIENCY_LEVEL, FIXTURE_PROFICIENCY_USES);
+  grantProficiency(human, 'mechanical_fist', PROFICIENCY_MAX_LEVEL, 0);
+  grantProficiency(cat, 'clawmanship', FIXTURE_PROFICIENCY_LEVEL, FIXTURE_PROFICIENCY_USES);
+}
+
 /** Partway up the kill ladder, so its meters read part full. */
 const FIXTURE_DUNGEON_KILLS = 143;
 
@@ -116,6 +142,7 @@ export function pauseFixtureData(): PauseFixtureData {
   cat.unspentPoints = CAT_UNSPENT;
   grantSkills(human, 'human');
   grantSkills(cat, 'cat');
+  grantProficiencies(human, cat);
   human.craftSkills.learn('resourcing');
   human.craftSkills.learn('construction');
   human.craftSkills.addXp('construction', CRAFT_XP);
@@ -126,7 +153,7 @@ export function pauseFixtureData(): PauseFixtureData {
   cat.skillTattoo = BRASS_GULLET_SKILL;
 
   const abilities = new AbilityManager();
-  for (const def of [MAGIC_MISSILE_DEF, PROTECTIVE_SHELL_DEF, SMUSH_DEF, MONGO_DEF]) {
+  for (const def of [MAGIC_MISSILE_DEF, ENERGY_SHIELD_DEF, SEISMIC_STOMP_DEF, DEINONYCHUS_DEF]) {
     abilities.register(def);
   }
   abilities.addXp('magic_missile', ABILITY_XP);
@@ -144,7 +171,7 @@ export function pauseFixtureData(): PauseFixtureData {
     for (let kill = 0; kill < count; kill++) gameStats.recordKill(name);
   }
   for (let frame = 0; frame < PLAYED_FRAMES; frame++) gameStats.recordPlayedFrame();
-  for (let pet = 0; pet < MONGO_PETS; pet++) gameStats.recordMongoPetted();
+  for (let pet = 0; pet < DEINONYCHUS_PETS; pet++) gameStats.recordDeinonychusPetted();
   for (let pet = 0; pet < OTHER_COW_PETS; pet++) gameStats.recordCowPetted(false);
   for (let pet = 0; pet < MIDGE_PETS; pet++) gameStats.recordCowPetted(true);
 
@@ -282,12 +309,13 @@ export function pauseFixtureScreen(data: PauseFixtureData): PauseScreen {
     abilities: data.abilities,
     audio: fixtureAudio(),
     guides: {
-      mongo: () => undefined,
+      deinonychus: () => undefined,
       craft: () => undefined,
       processing: () => undefined,
       dualHarvest: () => undefined,
     },
     musicLibrary: () => library,
+    petNames: new PetNameBook(),
   });
   screen.onResetGame = () => undefined;
   screen.journalContext = {

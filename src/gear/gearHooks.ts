@@ -16,7 +16,8 @@ import {
 } from '../core/items/defs/ItemDefs';
 import type { ClawWeaponStats } from '../core/items/equipment/weapons';
 import type { Mob } from '../creatures/Mob';
-import { ALL_STATS, type Player, type StatName } from '../Player';
+import { type Player } from '../Player';
+import { ALL_STATS, zeroStats, type StatId } from '../core/party/stats';
 import type { ActiveTrait, WornGearCache } from './gearState';
 import { activeSetBonuses, wornSets } from './setProgress';
 import {
@@ -35,6 +36,7 @@ import {
   type GearTraitKind,
   type GearTraitOf,
   type IncomingShot,
+  PARTNER_LINK_HEALTH_PER_POINT,
 } from './traits';
 
 /** One trait a crawler is wearing, with the piece that carries it. */
@@ -66,12 +68,7 @@ function buildWornCache(wearer: GearWearer): WornGearCache {
       traits.push({ itemId, trait });
     }
   }
-  const setStatBonus: Record<StatName, number> = {
-    strength: 0,
-    intelligence: 0,
-    constitution: 0,
-    dexterity: 0,
-  };
+  const setStatBonus = zeroStats();
   for (const [set, worn] of wornSets(equipped)) {
     const holder = equipped.find((id) => ITEM_DEF[id].set === set);
     if (holder === undefined) continue;
@@ -129,8 +126,10 @@ export function gearModifiers(wearer: GearWearer): GearModifiers {
  * What worn gear adds to `stat` beyond each piece's own bonus: the stat
  * bonuses of every set bonus switched on, and a partner link while it holds.
  */
-export function gearStatBonus(wearer: GearWearer, stat: StatName): number {
-  return wornCache(wearer).setStatBonus[stat] + wearer.gear.live.partnerLinkStatBonus;
+export function gearStatBonus(wearer: GearWearer, stat: StatId): number {
+  const perPoint = stat === 'health' ? PARTNER_LINK_HEALTH_PER_POINT : 1;
+  const partnerLink = wearer.gear.live.partnerLinkStatBonus * perPoint;
+  return wornCache(wearer).setStatBonus[stat] + partnerLink;
 }
 
 /** The share of her max HP worn curses leave a crawler, 1 when nothing worn is cursed. */

@@ -1,6 +1,6 @@
 import { crawlerName } from '../../../characters/characters';
 import { ownEntry } from '../../util/guards';
-import type { StatName } from '../../../Player';
+import type { StatId } from '../../party/stats';
 import type { CrawlerKind, SkillId } from '../../skills/SkillManager';
 import type {
   MouthCarryVisualId,
@@ -28,6 +28,7 @@ import {
   PROVING_WEAPON_DAMAGE_MULTIPLIER,
   type ClawWeaponStats,
   type HandWeaponStats,
+  type WeaponDelivery,
   type WeaponStats,
 } from '../equipment/weapons';
 
@@ -46,16 +47,24 @@ export type ItemId =
   | 'gym_treadmill'
   | 'quest_wood_board'
   | 'magic_missile_tome'
-  | 'smush_tome'
+  | 'seismic_stomp_tome'
   | 'explosives_handling_tome'
   | 'doomsday_scenario'
   | 'quest_scythe'
   | 'quest_blueprints'
   | 'quest_prison_key'
-  | 'skill_book_cockroach'
+  | 'skill_book_nine_lives'
   | 'skill_book_cat_reflexes'
   | 'skill_book_pugilism'
   | 'skill_book_iron_stomach'
+  | 'skill_book_swordsmanship'
+  | 'skill_book_archery'
+  | 'skill_book_clawmanship'
+  | 'skill_book_magic_eye'
+  | 'skill_book_mechanical_fist'
+  | 'skill_book_blunt_proficiency'
+  | 'skill_book_pyros_touch'
+  | 'skill_book_demolitionist'
   | 'lucky_hoodie'
   | 'scrappers_wraps'
   | 'hobnail_boots'
@@ -198,19 +207,22 @@ export function wearerAllows(wearer: Wearer, kind: CrawlerKind): boolean {
 /**
  * Damage channels an item can protect against.
  *
- * A resistance only works where the damage is dealt asks for it: hits go
+ * Most resistances only work where the damage is dealt asks for it: hits go
  * through `Player.resistedDamage` (ice fairy bolts as `'ice'`, goblin arrows
- * and skeleton projectiles as `'piercing'`), and poison status ticks check
+ * and skeleton archers' bones as `'piercing'`), and poison status ticks check
  * `'poison'` themselves. A new attack of one of these kinds must ask too, or
- * the resistance silently does nothing against it.
+ * the resistance silently does nothing against it. `'magic'` is the exception:
+ * a spell says so on its `DamageSource` and `Player.incomingDamage` turns it
+ * aside for every caller.
  */
-export type ResistanceType = 'poison' | 'ice' | 'piercing';
+export type ResistanceType = 'poison' | 'ice' | 'piercing' | 'magic';
 
 /** Every damage channel gear can resist, for surfaces that summarise all of them. */
 export const ALL_RESISTANCE_TYPES = [
   'poison',
   'ice',
   'piercing',
+  'magic',
 ] as const satisfies readonly ResistanceType[];
 
 /**
@@ -235,14 +247,20 @@ export interface InventoryItem {
   equipSubSlot?: ItemSubSlot;
   /** Flavour only: what the item does is generated from its data. */
   description?: string;
-  statBonus?: Partial<Record<StatName, number>>;
+  statBonus?: Partial<Record<StatId, number>>;
+  /**
+   * How a non-weapon item's damage leaves the crawler — a spell scroll, a
+   * thrown explosive — which names the stat it grows with. Weapons say so on
+   * their stat block and tomes on their ability instead.
+   */
+  delivery?: Exclude<WeaponDelivery, WeaponStats['delivery']>;
   /** The ability a tome teaches, which its hotbar slot casts. */
   abilityId?: string;
   /** Skill this item teaches when used. Set on skill books. */
   skillId?: SkillId;
   /**
-   * Levels of the human's Explosives Handling this item adds when studied, and
-   * is used up doing it. Only the human can study one.
+   * Levels of Explosives Handling this item adds to whoever studies it, and
+   * is used up doing it.
    */
   explosivesHandlingLevels?: number;
   /**
@@ -281,7 +299,7 @@ export interface InventoryItem {
   /** Effective skill-level bonus granted while equipped; stacks with the trained level, capped at the skill's max. */
   skillLevelBonus?: Partial<Record<SkillId, number>>;
   /** Stat bonus that applies only to melee damage computation, not to the general stat. */
-  meleeOnlyStatBonus?: Partial<Record<StatName, number>>;
+  meleeOnlyStatBonus?: Partial<Record<StatId, number>>;
   /** Set on an axe/pickaxe item, naming which tier ladder it belongs to and where on it. */
   tool?: { kind: ToolKind; tier: ToolTier };
   /** Whether this item is eaten (as opposed to drunk) to trigger its effect. */
@@ -326,8 +344,7 @@ export type ItemCategory = (typeof ITEM_CATEGORIES)[number];
 
 /**
  * An item's static definition. `category` is read from here, never from a
- * slot: slots hold spread copies of a def, including ones restored from saves
- * written before a field existed.
+ * slot: slots hold spread copies of a def taken when the item arrived.
  */
 export type ItemDef = Omit<InventoryItem, 'quantity' | 'type'> & {
   readonly category: ItemCategory;
@@ -410,13 +427,14 @@ interface UnwornItemFields {
 const ITEM_DEFS = defineItemDefs({
   scroll_of_confusing_fog: {
     id: 'scroll_of_confusing_fog',
+    delivery: 'spell',
     category: 'consumable',
     name: 'Scroll of Confusing Fog',
     stackable: true,
     canHotlist: true,
     type: 'consumable',
     description:
-      'Summons a thick fog cloud around the caster. Any enemy caught inside the fog loses all sense of sight and cannot target any entity. Size and duration grow with INT, tapering off at higher values.',
+      'Summons a thick fog cloud around the caster. Any enemy caught inside the fog loses all sense of sight and cannot target any entity. Size and duration grow with Magic, tapering off at higher values.',
   },
   catnip_tuna_water: {
     id: 'catnip_tuna_water',
@@ -482,30 +500,31 @@ const ITEM_DEFS = defineItemDefs({
     canHotlist: true,
     type: 'consumable',
     drinkable: true,
-    description:
-      'Permanently increases one randomly chosen stat (STR, INT, CON, or DEX) by 2 to 4 points.',
+    description: "Permanently raises one randomly chosen stat by 2 to 4 level-up points' worth.",
   },
   goblin_dynamite: {
     id: 'goblin_dynamite',
+    delivery: 'thrownExplosive',
     category: 'consumable',
     name: 'Goblin Dynamite',
     stackable: true,
     canHotlist: true,
     type: 'consumable',
     description:
-      'A hissing stick of goblin-made dynamite. Only the Human can throw it. ' +
+      'A hissing stick of goblin-made dynamite. ' +
       'Hold the hotbar key to charge your throw — release to hurl it. ' +
       'Tap it to drop it at your feet. Warning: holding too long has consequences.',
   },
   black_powder_bomb: {
     id: 'black_powder_bomb',
+    delivery: 'thrownExplosive',
     category: 'consumable',
     name: 'Black Powder Bomb',
     stackable: true,
     canHotlist: true,
     type: 'consumable',
     description:
-      'A round cast-iron bomb packed with goblin black powder. Only the Human can throw it. ' +
+      'A round cast-iron bomb packed with goblin black powder. ' +
       'Thrown like dynamite — hold the hotbar key to charge, release to hurl — ' +
       'but it explodes the moment it lands. A tap lobs it a short way clear of you.',
   },
@@ -641,21 +660,21 @@ const ITEM_DEFS = defineItemDefs({
     canHotlist: false,
     canDrop: false,
     description:
-      'Squiggles and triangles in a brown ink you are choosing not to think about. Mordecai ' +
+      'Squiggles and triangles in a brown ink you are choosing not to think about. Dave ' +
       'called it necro-script and told you to burn it. It is warm.',
   },
-  smush_tome: {
-    id: 'smush_tome',
+  seismic_stomp_tome: {
+    id: 'seismic_stomp_tome',
     category: 'book',
     unsellable: true,
-    name: 'Smush',
+    name: 'Seismic Stomp',
     stackable: false,
     canHotlist: true,
     canDrop: false,
     type: 'consumable',
-    abilityId: 'smush',
+    abilityId: 'seismic_stomp',
     description:
-      'Use the crushing power of your bare feet to pound enemies into the ground with explosive force. ' +
+      'Drive your heel into the floor and send a shockwave through it. Everything close by takes the hit and staggers. ' +
       'Only the Human can use it. Place on the hotbar and press the assigned key to activate.',
   },
   explosives_handling_tome: {
@@ -669,21 +688,20 @@ const ITEM_DEFS = defineItemDefs({
     explosivesHandlingLevels: 1,
     description:
       'A blast-singed manual with most of its fingers — sorry, pages — still attached. ' +
-      'Only the Human can study it. Adds one level to Explosives Handling.',
+      'Adds one level to Explosives Handling.',
   },
-  skill_book_cockroach: {
-    id: 'skill_book_cockroach',
+  skill_book_nine_lives: {
+    id: 'skill_book_nine_lives',
     category: 'book',
     unsellable: true,
-    name: 'Skill Book: Cockroach',
+    name: 'Skill Book: 9 Lives',
     stackable: true,
     canHotlist: true,
     type: 'consumable',
-    skillId: 'cockroach',
+    skillId: 'nine_lives',
     description:
-      'Smells faintly of insecticide and spite. Only the Cat can learn from it. ' +
-      'Teaches you to survive the blow that was supposed to end the episode. ' +
-      'A second copy makes you better at it, which says something unkind about your prospects.',
+      "Once in a while, a blow that should have killed you doesn't. You're left standing on 1 HP, " +
+      "and you can't be hurt for a moment. Takes a while to come back. Faster with practice.",
   },
   skill_book_cat_reflexes: {
     id: 'skill_book_cat_reflexes',
@@ -695,7 +713,7 @@ const ITEM_DEFS = defineItemDefs({
     skillId: 'cat_reflexes',
     description:
       'Written by something that was very fast right up until it was not. ' +
-      'Only the Cat can learn from it. Improves your chance to be somewhere else when the hit lands.',
+      'Improves your chance to be somewhere else when the hit lands.',
   },
   skill_book_pugilism: {
     id: 'skill_book_pugilism',
@@ -706,8 +724,8 @@ const ITEM_DEFS = defineItemDefs({
     type: 'consumable',
     skillId: 'pugilism',
     description:
-      'Twelve pages of diagrams, all of them a fist. Only the Human can learn from it. ' +
-      'Every level makes your melee hurt more, which the sponsors describe as "content".',
+      'Twelve pages of diagrams, all of them a fist. ' +
+      'Every level makes your melee hurt more, which is the whole point of the diagrams.',
   },
   skill_book_iron_stomach: {
     id: 'skill_book_iron_stomach',
@@ -718,8 +736,92 @@ const ITEM_DEFS = defineItemDefs({
     type: 'consumable',
     skillId: 'iron_stomach',
     description:
-      'Sticky. Do not ask with what. Either crawler can learn from it. ' +
+      'Sticky. Do not ask with what. ' +
       'Potions come back round faster, and the room stops spinning sooner.',
+  },
+  skill_book_swordsmanship: {
+    id: 'skill_book_swordsmanship',
+    category: 'book',
+    name: 'Skill Book: Swordsmanship',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    skillId: 'swordsmanship',
+    description:
+      'A fencing manual from a school that, judging by the margins, did not take beginners twice.',
+  },
+  skill_book_archery: {
+    id: 'skill_book_archery',
+    category: 'book',
+    name: 'Skill Book: Archery',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    skillId: 'archery',
+    description: 'Diagrams of arms, strings and the distance between them. Every arrow in it hits.',
+  },
+  skill_book_clawmanship: {
+    id: 'skill_book_clawmanship',
+    category: 'book',
+    name: 'Skill Book: Clawmanship',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    skillId: 'clawmanship',
+    description: 'Shredded at the edges, which was probably the first lesson.',
+  },
+  skill_book_magic_eye: {
+    id: 'skill_book_magic_eye',
+    category: 'book',
+    name: 'Skill Book: Magic Eye',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    skillId: 'magic_eye',
+    description:
+      'The pages shimmer if you stare long enough. Somebody did, and wrote down what they saw.',
+  },
+  skill_book_mechanical_fist: {
+    id: 'skill_book_mechanical_fist',
+    category: 'book',
+    name: 'Skill Book: Mechanical Fist',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    skillId: 'mechanical_fist',
+    description:
+      'Riveted at the spine. The diagrams are of gauntlets, and of what gauntlets are for.',
+  },
+  skill_book_blunt_proficiency: {
+    id: 'skill_book_blunt_proficiency',
+    category: 'book',
+    name: 'Skill Book: Blunt Proficiency',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    skillId: 'blunt_proficiency',
+    description: 'Short, heavy and to the point, though it has no point. That is rather the idea.',
+  },
+  skill_book_pyros_touch: {
+    id: 'skill_book_pyros_touch',
+    category: 'book',
+    name: "Skill Book: Pyro's Touch",
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    skillId: 'pyros_touch',
+    description: 'Warm to hold, and getting warmer. The last chapter is mostly scorch.',
+  },
+  skill_book_demolitionist: {
+    id: 'skill_book_demolitionist',
+    category: 'book',
+    name: 'Skill Book: Demolitionist',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    skillId: 'demolitionist',
+    description:
+      'Half the pages are missing, and the half that remain are very sure of themselves.',
   },
   doomsday_scenario: {
     id: 'doomsday_scenario',
@@ -1005,7 +1107,7 @@ const ITEM_DEFS = defineItemDefs({
     wearer: 'human',
     weapon: {
       delivery: 'melee',
-      strike: 'blade',
+      family: 'sword',
       damageMultiplier: PROVING_WEAPON_DAMAGE_MULTIPLIER,
       reachTiles: HUMAN_ARM_REACH_TILES,
       heldVisual: 'plain_arming_sword',
@@ -1027,7 +1129,7 @@ const ITEM_DEFS = defineItemDefs({
     wearer: 'human',
     weapon: {
       delivery: 'melee',
-      strike: 'blunt',
+      family: 'blunt',
       damageMultiplier: PROVING_WEAPON_DAMAGE_MULTIPLIER,
       reachTiles: HUMAN_ARM_REACH_TILES,
       heldVisual: 'spiked_club',
@@ -1049,7 +1151,7 @@ const ITEM_DEFS = defineItemDefs({
     wearer: 'human',
     weapon: {
       delivery: 'melee',
-      strike: 'blade',
+      family: 'axe',
       damageMultiplier: PROVING_WEAPON_DAMAGE_MULTIPLIER,
       reachTiles: HUMAN_ARM_REACH_TILES,
       heldVisual: 'felling_axe',
@@ -1166,8 +1268,7 @@ export interface EquipAddress {
 
 /**
  * The section and sub-slot a `"Slot:SubSlot"` key names, or null when the key
- * names no sub-slot `kind` has — a key written under a since-renamed slot, or
- * one only the other crawler has.
+ * names no sub-slot `kind` has, such as one only the other crawler has.
  */
 export function equipAddressOfKey(kind: CrawlerKind | null, key: string): EquipAddress | null {
   const separator = key.indexOf(':');
@@ -1181,11 +1282,10 @@ export function equipAddressOfKey(kind: CrawlerKind | null, key: string): EquipA
 /**
  * Who may equip `id`, read off its definition: bag and hotbar slots hold
  * copies of a def taken when the item was picked up, so only the def is
- * current. Undefined for an item no slot takes, and for an id retired since a
- * save was written.
+ * current. Undefined for an item no slot takes.
  */
 export function wearerOf(id: ItemId): Wearer | undefined {
-  return isItemId(id) ? ITEM_DEF[id].wearer : undefined;
+  return ITEM_DEF[id].wearer;
 }
 
 /**
@@ -1265,8 +1365,7 @@ export const ANCHOR_SHARD_IDS = [
  *
  * Always ask this rather than reading `canHotlist` off an inventory instance:
  * bag and hotbar entries are spread copies of the def taken when the item was
- * picked up, so an item sitting in an old save still carries whatever the flag
- * was that day. The def is the only current answer.
+ * picked up, so the def is the only current answer.
  */
 export function itemCanHotlist(id: ItemId): boolean {
   return ITEM_DEF[id].canHotlist;

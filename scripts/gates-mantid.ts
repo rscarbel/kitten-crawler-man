@@ -188,7 +188,7 @@ const MIN_PRONOTUM_TO_THORAX_RATIO = 1.5;
 const MIN_HEAD_WIDTH_TO_DEPTH = 1.2;
 const MIN_SPINES_PER_SEGMENT = 5;
 
-/** Whether a pose field is a walking leg rather than a scalar or a raptorial. */
+/** Whether a pose field is a walking leg rather than a scalar or a grasping arm. */
 function isWalkingLeg(value: unknown): value is LegPose {
   if (typeof value !== 'object' || value === null) return false;
   const candidate: Record<string, unknown> = { ...value };
@@ -211,13 +211,13 @@ function countWalkingLegs(): number {
  * whose arms have quietly migrated onto its abdomen.
  */
 function gateAnatomy(): void {
-  // The single cue that sells the animal: the raptorial sockets sit on the far
+  // The single cue that sells the animal: the grasping sockets sit on the far
   // end of the pronotum, right behind the head — not on the thorax with the
   // walking legs, and never on the abdomen.
   if (FORELIMB_SOCKET_ALONG < MIN_FORELIMB_SOCKET_ALONG) {
     fail(
       'G2',
-      `the raptorial forelimbs socket ${FORELIMB_SOCKET_ALONG.toFixed(2)} along the pronotum; ` +
+      `the grasping forelimbs socket ${FORELIMB_SOCKET_ALONG.toFixed(2)} along the pronotum; ` +
         `they belong past ${MIN_FORELIMB_SOCKET_ALONG}, just behind the head`,
     );
   }
@@ -247,13 +247,13 @@ function gateAnatomy(): void {
   }
   // The femur is the heavy segment and must out-mass the tibia that folds on it.
   if (FEMUR_LENGTH <= TIBIA_LENGTH) {
-    fail('G2', 'the raptorial femur must be longer than the tibia that folds back along it');
+    fail('G2', 'the grasping femur must be longer than the tibia that folds back along it');
   }
   // Spines on both closing edges, or the arms are just sticks.
   if (FEMUR_SPINES < MIN_SPINES_PER_SEGMENT || TIBIA_SPINES < MIN_SPINES_PER_SEGMENT) {
     fail(
       'G2',
-      `both raptorial segments need at least ${MIN_SPINES_PER_SEGMENT} grasping spines ` +
+      `both foreleg segments need at least ${MIN_SPINES_PER_SEGMENT} grasping spines ` +
         `(femur ${FEMUR_SPINES}, tibia ${TIBIA_SPINES})`,
     );
   }
@@ -559,7 +559,7 @@ function gateMotion(): void {
         fail(
           'G5',
           `${def.id}.${row.name} never moves more than ${(share * 100).toFixed(1)}% of its ink ` +
-            `between frames, under the ${MIN_SHOT_PEAK_SHARE * 100}% a raptorial snap shows — ` +
+            `between frames, under the ${MIN_SHOT_PEAK_SHARE * 100}% a grasping snap shows — ` +
             'there is no strike in the strike',
         );
         continue;

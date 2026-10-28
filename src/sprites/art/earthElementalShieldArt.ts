@@ -2,11 +2,11 @@
  * The Earth Elementals' Shield: a translucent amber dome over whichever ally it
  * protects.
  *
- * It must never be mistaken for the human crawler's Protective Shell, a flat ring on the
+ * It must never be mistaken for the human crawler's Energy Shield, a flat ring on the
  * floor five tiles across, blue or at full power a saturated orange-to-gold.
  * The two differ in shape — an upright dome hugging one body against a disc
  * round a crowd, a honeycomb lattice against a plain ring — and in colour: the
- * full-power Shell covers the same hues as amber, so the dome is a muted honey
+ * full-power Energy Shield covers the same hues as amber, so the dome is a muted honey
  * separated from it by saturation and value (`SHIELD_AMBER` in
  * `earthElementalArt.ts`). A player told "the big rock guy shielded you" should look
  * at themselves and see a bell jar of honey.

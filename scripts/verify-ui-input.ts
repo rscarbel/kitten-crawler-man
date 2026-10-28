@@ -2678,8 +2678,13 @@ section('the Wheel of Fortune warnings and SPIN, on a desktop and on phones');
   const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
   const { TILE_SIZE } = await import('../src/core/constants.js');
   const { createWheelLedger } = await import('../src/core/save/WheelLedger.js');
-  const { ClubWheelSystem, WHEEL_ARMING_MS, WHEEL_SPIN_HOLD_MS, WHEEL_SPIN_KEY } =
-    await import('../src/systems/ClubWheelSystem.js');
+  const {
+    ClubWheelSystem,
+    UNNAMED_WHEEL_PETS,
+    WHEEL_ARMING_MS,
+    WHEEL_SPIN_HOLD_MS,
+    WHEEL_SPIN_KEY,
+  } = await import('../src/systems/ClubWheelSystem.js');
   const WHEEL_FRAME_MS = 16;
   const WHEEL_PURSE = 50_000;
   /** Well inside the hold, so letting go here must cancel. */
@@ -2710,6 +2715,7 @@ section('the Wheel of Fortune warnings and SPIN, on a desktop and on phones');
       progressWipe: null,
       afterPermanentDeath: () => undefined,
       grantAttackCow: () => undefined,
+      pets: UNNAMED_WHEEL_PETS,
       clock: () => now,
       // A drawn Nothing would make its round-trip the wipe, not a save; this checks the save.
       forcedOutcome: (board) => {

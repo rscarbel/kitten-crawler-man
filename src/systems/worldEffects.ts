@@ -5,7 +5,8 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
-import { STAT_BOOST_FLASH_FRAMES, type Player, type StatName } from '../Player';
+import { STAT_BOOST_FLASH_FRAMES, type Player } from '../Player';
+import { STAT_DEFS } from '../core/party/stats';
 import { drawEmbermote, drawGlow, rgba } from '../sprites/status/statusPaint';
 import { STAT_BOOST_COLOR, STAT_BOOST_MOTE_HEAT } from '../sprites/statBoostColors';
 import {
@@ -67,14 +68,6 @@ const STAT_BOOST_MOTE_SPREAD_PX = 24;
 /** Spaces each mote's lateral lane apart around the circle of `sin`, so the motes don't line up in a single column. */
 const STAT_BOOST_MOTE_LANE_SPACING = 2.4;
 const STAT_BOOST_MOTE_ALPHA = 0.85;
-
-/** Full stat names, for the potion fanfare's "+1 STRENGTH" wording. */
-const STAT_FULL_NAME: Record<StatName, string> = {
-  strength: 'STRENGTH',
-  intelligence: 'INTELLIGENCE',
-  constitution: 'CONSTITUTION',
-  dexterity: 'DEXTERITY',
-};
 
 /**
  * Scale of the reward text through its entrance: grows past full size, then
@@ -247,7 +240,7 @@ export function renderStatBoostFlash(
     ctx.restore();
 
     const scale = statBoostPunchScale(elapsed);
-    worldText(ctx, `+${p.statBoostFlashAmount} ${STAT_FULL_NAME[stat]}`, {
+    worldText(ctx, `+${p.statBoostFlashAmount} ${STAT_DEFS[stat].label.toUpperCase()}`, {
       x: cx,
       y: cy,
       size: STAT_BOOST_TEXT_SIZE * scale,

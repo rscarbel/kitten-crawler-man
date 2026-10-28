@@ -33,11 +33,11 @@ export interface TitleStage {
   /**
    * Whether the menu sits at the foot of its room rather than in its middle:
    * docked under the heroes held upright, and low in its column on a phone on
-   * its side, which leaves the System AI room between it and the logo.
+   * its side, which leaves Caroline's line room between it and the logo.
    */
   readonly menuAtFoot: boolean;
   /**
-   * Where the sound hint and the System AI's line sit beside the menu. In
+   * Where the sound hint and Caroline's line sit beside the menu. In
    * portrait they sit just above the docked menu instead, whose height only
    * the UI knows.
    */

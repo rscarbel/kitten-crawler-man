@@ -1,14 +1,14 @@
 import { TITLE_QUIPS } from '../../scenes/title/titleEvents';
-import { SYSTEM_CHARACTER } from './system';
+import { CAROLINE_CHARACTER } from './caroline';
 
 /**
- * What the System says when its server cannot be reached: its own authored
- * catchphrases and the sponsor breaks it reads on the title screen. The game
- * keeps its voice offline instead of going silent.
+ * What Caroline says when her server cannot be reached: her own authored
+ * catchphrases and the lines she shows on the title screen. The game keeps
+ * her voice offline instead of going silent.
  */
-export const SYSTEM_FALLBACK_LINES: readonly string[] = [
-  ...SYSTEM_CHARACTER.personality.voice.catchphrases,
-  ...TITLE_QUIPS,
+export const CAROLINE_FALLBACK_LINES: readonly string[] = [
+  ...CAROLINE_CHARACTER.personality.voice.catchphrases,
+  ...TITLE_QUIPS.map(({ text }) => text),
 ];
 
 /**

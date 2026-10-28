@@ -568,10 +568,7 @@ if (!onPhone) {
     dynamite.isReadied && !dynamite.isCharging,
     'the tap puts the stick in his hand without lighting it',
   );
-  check(
-    dynamite.pendingBlastPoints(human).length === 0,
-    'nothing is burning while he only holds it',
-  );
+  check(dynamite.pendingBlastPoints().length === 0, 'nothing is burning while he only holds it');
   check(thrown === 0, `the slot's release throws nothing (throws: ${thrown})`);
 
   tap(street, slot);
@@ -588,11 +585,11 @@ if (!onPhone) {
     thrown === 1 && !dynamite.isReadied && sticksLeft() === DYNAMITE_STICKS - 1,
     `a tap on the floor throws the stick (throws: ${thrown}, sticks: ${sticksLeft()})`,
   );
-  check(dynamite.pendingBlastPoints(human).length > 0, 'and its fuse is lit by the throw');
+  check(dynamite.pendingBlastPoints().length > 0, 'and its fuse is lit by the throw');
 
   tap(street, slot);
   const farAbove = { x: human.x, y: human.y - FAR_BEYOND_REACH_PX };
-  dynamite.throwReadiedAt(human, farAbove.x, farAbove.y);
+  dynamite.throwReadiedAt(farAbove.x, farAbove.y);
   dynamite['pendingThrow']?.launch(false);
   const liveSticks = dynamite['liveDynamites'];
   const launched = liveSticks.length === 0 ? undefined : liveSticks[liveSticks.length - 1];
@@ -611,7 +608,7 @@ if (!onPhone) {
   check(!dynamite.isReadied, 'a tap on an empty slot puts a readied stick away');
   human.inventory.actionBar.slots[emptyIndex] = besideDynamite;
 
-  if (dynamite.isReadied) dynamite.putAway(human);
+  if (dynamite.isReadied) dynamite.putAway();
   tap(street, slot);
   check(dynamite.isReadied, 'the stick is in his hand again');
   const stack = human.inventory.actionBar.slots[index];
@@ -689,7 +686,7 @@ section('a tap on the black powder bomb slot lobs it clear, and it bursts where 
     'one bomb is spent on the throw',
   );
   check(
-    dynamite.pendingBlastPoints(human).every((point) => !point.inHand),
+    dynamite.pendingBlastPoints().every((point) => !point.inHand),
     'nothing warns of a blast in his hand: a bomb never goes off there',
   );
   let burst = false;

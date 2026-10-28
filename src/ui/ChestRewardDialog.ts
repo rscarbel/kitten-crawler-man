@@ -86,7 +86,7 @@ export class ChestRewardDialog {
   /**
    * Drops the dialog without running its `onClose`.
    *
-   * That callback grants the chest's reward — the Mongo unlock among them — and
+   * That callback grants the chest's reward — the Deinonychus unlock among them — and
    * a checkpoint restore has just rewound the world the chest was opened in, so
    * firing it would hand out a prize for a chest that is locked again.
    */

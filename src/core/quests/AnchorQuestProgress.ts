@@ -95,7 +95,7 @@ export interface AnchorQuestProgress {
    */
   templeVerminRemaining: number;
   /**
-   * Whether the stone has ever completed a teleport, for Mordecai's advice.
+   * Whether the stone has ever completed a teleport, for Dave's advice.
    * Lives here rather than on `DungeonScene` because a building visit tears
    * that scene down and rebuilds it twice (in and back out) and a discovery
    * flag that resets every doorway would send the player back to advice about
@@ -103,7 +103,7 @@ export interface AnchorQuestProgress {
    */
   recallEverUsed: boolean;
   /**
-   * Whether a Speed Fizz has ever been bought or drunk, for Mordecai's advice.
+   * Whether a Speed Fizz has ever been bought or drunk, for Dave's advice.
    *
    * Not really anchor-questline state, but it needs the exact same durability
    * `recallEverUsed` does, and this record is already threaded everywhere a

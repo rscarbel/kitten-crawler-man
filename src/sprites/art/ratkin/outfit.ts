@@ -2,8 +2,8 @@
  * What a ratkin wears, how he is built, and what he carries — the outfit the
  * shared ratkin painter (`ratKinArt.ts`) is handed for every frame.
  *
- * One rig paints every ratkin in the game. Mordecai, each Briar Hollow
- * villager and anything built on them later differ only in the
+ * One rig paints every ratkin in the game. Each Briar Hollow villager, the
+ * raised dead and anything built on them later differ only in the
  * {@link RatkinOutfit} passed in: fur ramps, a proportion preset, an ordered
  * stack of garment layers and an optional held prop.
  *
@@ -251,7 +251,7 @@ export interface GarmentLayer {
  *
  * `fur` covers the back, limbs, head and ears; `belly` is the countershaded
  * front: throat, chest, cheeks and underjaw. `skin` and `tailSkin` default to
- * the rodent pinks Mordecai is painted in.
+ * the shared rodent pinks.
  */
 export interface RatkinOutfit {
   readonly fur: FurRamp;

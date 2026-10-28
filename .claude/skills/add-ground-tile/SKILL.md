@@ -1,6 +1,6 @@
 ---
 name: add-ground-tile
-description: Add or tune a procedurally generated ground/floor material for any floor of Kitten Crawler Man — seamless tiles, multi-tile patches, corner transition masks, the ?tiles review route. Use for terrain, floors, paving, walls-as-texture, or any new tileset. NOT for creature/item/prop art (use add-sprite).
+description: Add or tune a procedurally generated ground/floor material for any floor of Kitten Crawler World — seamless tiles, multi-tile patches, corner transition masks, the ?tiles review route. Use for terrain, floors, paving, walls-as-texture, or any new tileset. NOT for creature/item/prop art (use add-sprite).
 ---
 
 # Add a Ground Material

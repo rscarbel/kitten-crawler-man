@@ -33,8 +33,16 @@ import type { DialogLine, NonEmpty, Paragraphs } from '../src/dialog/line';
 import { installCanvasGlobals } from './nodeCanvasGlobals';
 import { gameContext } from './nodeGameContext';
 import { setViewportSize } from '../src/core/rendering/Viewport';
-import { DialogBox, type DialogLayout, type ResolvedSpeaker } from '../src/ui/DialogBox';
-import { SPEECH_REVEAL_INTERVAL_MS } from '../src/dialog/speakers';
+import {
+  countDisplayPages,
+  DialogBox,
+  type DialogLayout,
+  type ResolvedSpeaker,
+} from '../src/ui/DialogBox';
+import { carolineLines } from '../src/dialog/caroline';
+import { CAROLINE_PREFIX } from '../src/ui/widgets/carolineFrame';
+import { SPEECH_REVEAL_INTERVAL_MS, speakerSkin, speakerTypeface } from '../src/dialog/speakers';
+import { STORY_BEATS } from '../src/story/storyBeats';
 
 let failures = 0;
 function check(ok: boolean, label: string): void {
@@ -382,7 +390,11 @@ const SYNTHETIC_TRAILING_WORD_COUNT = 30;
 
 /** Long enough, in every shape paginate.ts breaks on, to actually exercise the harness while no real script exists to discover. */
 function builtInSyntheticLines(): DialogLine[] {
-  const speaker = { kind: 'transient' as const, name: 'Harness Speaker', style: 'system' as const };
+  const speaker = {
+    kind: 'transient' as const,
+    name: 'Harness Speaker',
+    style: 'townsfolk' as const,
+  };
   const manyWords = (count: number): string =>
     Array.from({ length: count }, (_, i) => `synthetic-word-${i}`).join(' ');
   return [
@@ -410,7 +422,50 @@ function builtInSyntheticLines(): DialogLine[] {
   ];
 }
 
-/** A `DialogLine` never carries a resolved speaker itself; the harness only cares about the text geometry, so any fixed voice/reveal/case works. */
+/**
+ * Caroline's lines: every story message of hers, and one long enough to page.
+ * They live outside `src/dialog/scripts/`, and her frame sets them in another
+ * face after a prefix, so they are paged here in her own skin.
+ */
+function carolineHarnessLines(): DialogLine[] {
+  const story = Object.values(STORY_BEATS).flatMap((beat) =>
+    beat.speaker === 'caroline' ? [beat.message.line] : [],
+  );
+  const longMessage = Array.from(
+    { length: SYNTHETIC_LONG_LINE_WORD_COUNT },
+    (_, i) => `synthetic-word-${i}`,
+  ).join(' ');
+  return [...story, carolineLines.message(longMessage).line];
+}
+
+/** A cap on the edge search below, far past any page. */
+const EDGE_SEARCH_MAX_WORDS = 400;
+/** Words cycle through this many spellings, so the edge line reads as words, not one long run. */
+const EDGE_WORD_VARIANTS = 10;
+
+/**
+ * A Caroline message that fits one page on its own but needs a second once
+ * her frame's prefix is in front of it, at the live viewport: the case where
+ * a count that forgot the prefix would disagree with the box. Null if no
+ * word count lands on that edge.
+ */
+function carolinePageEdgeLine(): DialogLine | null {
+  const typeface = 'terminal';
+  for (let words = 1; words <= EDGE_SEARCH_MAX_WORDS; words++) {
+    const text = Array.from({ length: words }, (_, i) => `edge${i % EDGE_WORD_VARIANTS}`).join(' ');
+    const bare = countDisplayPages([text], true, typeface, 'standard');
+    const framed = countDisplayPages([`${CAROLINE_PREFIX}${text}`], true, typeface, 'standard');
+    if (bare === 1 && framed === 2) return carolineLines.message(text).line;
+    if (bare > 1) return null;
+  }
+  return null;
+}
+
+/**
+ * A `DialogLine` never carries a resolved speaker itself. Voice, reveal and
+ * case don't change the geometry, so they are fixed; the skin and typeface
+ * do, so they are the line's own.
+ */
 function harnessResolvedSpeaker(line: DialogLine): ResolvedSpeaker {
   const name = line.speaker.kind === 'cast' ? line.speaker.id : line.speaker.name;
   return {
@@ -420,6 +475,8 @@ function harnessResolvedSpeaker(line: DialogLine): ResolvedSpeaker {
     reveal: 'all',
     textCase: 'as-written',
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
+    typeface: speakerTypeface(line.speaker),
+    skin: speakerSkin(line.speaker),
   };
 }
 
@@ -494,6 +551,17 @@ function renderLineThroughDialogBox(
       box.pageCount() > 1 ? `${box.currentPageNumber()} / ${box.pageCount()}` : null,
   });
 
+  const counted = countDisplayPages(
+    line.paragraphs,
+    true,
+    speakerTypeface(line.speaker),
+    speakerSkin(line.speaker),
+  );
+  check(
+    counted === box.pageCount(),
+    `${lineLabel}: page count ${counted} agrees with the box's ${box.pageCount()}`,
+  );
+
   let pagesChecked = 0;
   for (;;) {
     box.render(ctx);
@@ -516,7 +584,10 @@ async function runRenderHarness(): Promise<void> {
 
   const { lines: discoveredLines, stats } = await discoverScriptLines();
   const usingBuiltIns = discoveredLines.length === 0;
-  const lines = usingBuiltIns ? builtInSyntheticLines() : discoveredLines;
+  const lines = [
+    ...(usingBuiltIns ? builtInSyntheticLines() : discoveredLines),
+    ...carolineHarnessLines(),
+  ];
 
   if (usingBuiltIns) {
     console.log(
@@ -537,6 +608,12 @@ async function runRenderHarness(): Promise<void> {
       const lineLabel = `line ${index + 1}/${lines.length} @ ${viewport.label}`;
       totalPagesChecked += renderLineThroughDialogBox(line, ctx, lineLabel);
     });
+    const edge = carolinePageEdgeLine();
+    check(edge !== null, `a Caroline message on her prefix's page edge exists @ ${viewport.label}`);
+    if (edge !== null) {
+      const edgeLabel = `Caroline page edge @ ${viewport.label}`;
+      totalPagesChecked += renderLineThroughDialogBox(edge, ctx, edgeLabel);
+    }
   }
 
   console.log(

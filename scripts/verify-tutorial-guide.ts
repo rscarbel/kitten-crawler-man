@@ -14,19 +14,22 @@
  *    itself, so its step points at nothing): the hotbar slot to press with a
  *    keyboard as on touch, the Switch button, the level badge and then a
  *    stat's "+"; a card with a lone OK, or its own "tap to continue", is left
- *    to speak for itself, with no arrow and no hint over it; the arrow to Mordecai
+ *    to speak for itself, with no arrow and no hint over it; the arrow to Dave
  *    holds until his "Talk" prompt takes over; a menu open at a step with
  *    nothing to do in it says how to leave and points at its close button;
  *
  * And the step-driven state the scene reads from it:
  *
- *  - Mordecai wears "!" while he must be met, "?" while he must be reported
- *    back to, and nothing at any other step;
+ *  - Dave's talks are due when the human reaches his safe room and when the
+ *    cat joins, and at no other step; each plays as a story cutscene and the
+ *    step moves on only once his last page is read, his farewell catching up
+ *    Caroline's first message when no achievement has brought it yet; a
+ *    reminder tapped from him is a cutscene that moves no step on;
  *  - each tutorial goblin is flagged as the objective only during its own step;
  *  - the safe-room doorway, the chest and the stairwell are lit only during
  *    their steps, and the chest stands down the moment it is opened;
  *  - a cat already at full health (god mode's heal) skips the potion step;
- *  - the human levels up exactly on the smush, never before, and the cat not at
+ *  - the human levels up exactly on the seismic stomp, never before, and the cat not at
  *    all; the stat step waits for his point to be spent (god mode or not),
  *    pins the pause menu to the Character page, then pans to the cat, and is
  *    skipped with no point to spend;
@@ -171,7 +174,7 @@ function baseRenderContext(overrides: Partial<RenderContext>): RenderContext {
     followerButtonRect: null,
     followerMenuOpen: false,
     bagItemRects: {
-      smush_tome: null,
+      seismic_stomp_tome: null,
       health_potion: null,
       lucky_hoodie: null,
       magic_missile_tome: null,
@@ -184,7 +187,7 @@ function baseRenderContext(overrides: Partial<RenderContext>): RenderContext {
     isAbilityDialogShowing: false,
     isRewardGrantedDialogShowing: false,
     followerMenuFollowMeRect: null,
-    mordecaiPosition: null,
+    davePosition: null,
     isRewardScreenOpen: false,
     rewardsChipRect: null,
     isChestRewardOpen: false,
@@ -314,7 +317,7 @@ section('a phone the inventory fills, on its Bag tab: the hint takes the top, cl
 {
   const header: Rect = { x: 70, y: 44, w: 200, h: 44 };
   const filterRow: Rect = { x: 16, y: 100, w: 536, h: 40 };
-  const smushTome: Rect = { x: 64, y: 156, w: 44, h: 44 };
+  const seismicStompTome: Rect = { x: 64, y: 156, w: 44, h: 44 };
   const drawing = draw(
     PHONE_LANDSCAPE,
     'HUMAN_OPENED_ACHIEVEMENT',
@@ -323,20 +326,20 @@ section('a phone the inventory fills, on its Bag tab: the hint takes the top, cl
       inventoryFrame: { x: 0, y: 32, w: 568, h: 288 },
       inventoryBagTabRect: header,
       bagItemRects: {
-        smush_tome: smushTome,
+        seismic_stomp_tome: seismicStompTome,
         health_potion: null,
         lucky_hoodie: null,
         magic_missile_tome: null,
       },
     }),
   );
-  const hintLines = drawing.texts.filter((t) => t.text.includes('Smush'));
+  const hintLines = drawing.texts.filter((t) => t.text.includes('Seismic Stomp'));
   const lastLine = lastOf(hintLines);
   check(lastLine !== null, 'the drag hint is drawn');
-  check(hasArrowAt(drawing, smushTome), 'an arrow rests on the Smush tome');
+  check(hasArrowAt(drawing, seismicStompTome), 'an arrow rests on the Seismic Stomp tome');
   if (lastLine !== null) {
     const boxBottom = lastLine.y + HINT_TEXT_SIZE_LINE_PX + HINT_BOX_PADDING_PX;
-    const arrowTop = smushTome.y - GUIDE_ARROW_REACH_PX;
+    const arrowTop = seismicStompTome.y - GUIDE_ARROW_REACH_PX;
     check(
       boxBottom <= filterRow.y,
       `its box (bottom ${boxBottom}) ends above the filter row (y ${filterRow.y})`,
@@ -417,12 +420,12 @@ section('on touch, the call-the-cat hint clears the Follower button and its arro
   }
 }
 
-section('the step after Mordecai names the reward chest and points at the rewards chip');
+section('the step after Dave names the reward chest and points at the rewards chip');
 {
   const chip = { x: 900, y: 120, w: 44, h: 44 };
   const drawing = draw(
     DESKTOP,
-    'HUMAN_TALKED_TO_MORDECAI',
+    'HUMAN_TALKED_TO_DAVE',
     baseRenderContext({ rewardsChipRect: chip }),
   );
   check(hasArrowAt(drawing, chip), 'an arrow rests on the "Rewards waiting" chip');
@@ -430,7 +433,7 @@ section('the step after Mordecai names the reward chest and points at the reward
     hintMentions(drawing, 'reward chest'),
     `the hint names the reward chest (${hintText(drawing)})`,
   );
-  const hidden = draw(DESKTOP, 'HUMAN_TALKED_TO_MORDECAI', baseRenderContext({}));
+  const hidden = draw(DESKTOP, 'HUMAN_TALKED_TO_DAVE', baseRenderContext({}));
   check(hidden.arrowTips.length === 0, 'no arrow while the chip is not shown');
 }
 
@@ -438,7 +441,7 @@ section('a card with a single OK, or its own “continue”, is left to speak fo
 {
   const reveal = draw(
     DESKTOP,
-    'HUMAN_TALKED_TO_MORDECAI',
+    'HUMAN_TALKED_TO_DAVE',
     baseRenderContext({ isRewardScreenOpen: true }),
   );
   check(
@@ -486,20 +489,23 @@ section('with a keyboard, the hotbar slot to press is pointed at, as on touch');
   const tutorial = TutorialController.createForTutorial();
   const [, , guard1, guard2] = tutorial.allMobs;
   const between: Point = { x: (guard1.x + guard2.x) / 2, y: (guard1.y + guard2.y) / 2 };
-  const smushView: Viewpoint = {
+  const seismicStompView: Viewpoint = {
     player: between,
     camera: { x: between.x - DESKTOP.width / 2, y: between.y - DESKTOP.height / 2 },
   };
   const inRange = draw(
     DESKTOP,
-    'HUMAN_EQUIPPED_SMUSH',
+    'HUMAN_EQUIPPED_SEISMIC_STOMP',
     baseRenderContext({ hotbarSlotRects: [slot] }),
-    smushView,
+    seismicStompView,
   );
-  check(hasArrowAt(inRange, slot), 'the Smush step, within reach of both guards: on slot 1');
+  check(
+    hasArrowAt(inRange, slot),
+    'the Seismic Stomp step, within reach of both guards: on slot 1',
+  );
   const farAway = draw(
     DESKTOP,
-    'HUMAN_EQUIPPED_SMUSH',
+    'HUMAN_EQUIPPED_SEISMIC_STOMP',
     baseRenderContext({ hotbarSlotRects: [slot] }),
   );
   check(!hasArrowAt(farAway, slot), 'but not while a cast from there would miss them');
@@ -561,7 +567,7 @@ section('the level-up step points at the level badge, then at a stat’s +');
   );
   check(hasArrowAt(page, plus), 'on the Character page an arrow rests on the suggested +');
   check(
-    hintMentions(page, 'Constitution') && !hintMentions(page, 'badge'),
+    hintMentions(page, 'Health') && !hintMentions(page, 'badge'),
     `and the hint says what a point does and suggests a stat (${hintText(page)})`,
   );
 }
@@ -574,11 +580,11 @@ section('a menu open with nothing left to do in it says how to leave, and points
     pauseFrame: { x: 240, y: 110, w: 960, h: 680 },
     menuCloseRect: close,
   };
-  const keyboard = draw(DESKTOP, 'HUMAN_EQUIPPED_SMUSH', baseRenderContext(pauseMenu));
+  const keyboard = draw(DESKTOP, 'HUMAN_EQUIPPED_SEISMIC_STOMP', baseRenderContext(pauseMenu));
   check(hasArrowAt(keyboard, close), 'the pause menu mid-step: an arrow rests on its ✕');
   check(hintMentions(keyboard, 'Esc'), `and the hint says how to leave (${hintText(keyboard)})`);
   const touch = inTouchMode(() =>
-    draw(DESKTOP, 'HUMAN_EQUIPPED_SMUSH', baseRenderContext(pauseMenu)),
+    draw(DESKTOP, 'HUMAN_EQUIPPED_SEISMIC_STOMP', baseRenderContext(pauseMenu)),
   );
   check(hasArrowAt(touch, close), 'on touch too');
   check(hintMentions(touch, 'X button'), `naming the button (${hintText(touch)})`);
@@ -599,13 +605,13 @@ section('a menu open with nothing left to do in it says how to leave, and points
 
 const { TILE_SIZE } = await import('../src/core/constants.js');
 const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
+const { STAT_GAIN_PER_POINT } = await import('../src/core/party/stats.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
 const { applyGodModeToPlayer } = await import('../src/core/state/GodMode.js');
 const { TUTORIAL_CHEST_POS, TUTORIAL_STAIR_FOOTPRINT, TUTORIAL_SAFE_ENTRANCE_TILE } =
   await import('../src/map/TutorialMap.js');
 
 type Controller = InstanceType<typeof TutorialController>;
-type MarkerState = ReturnType<Controller['mordecaiMarker']>;
 
 /** Moves the controller through its own transition, so everything a step change sets is set. */
 function advanceTo(tutorial: Controller, state: TutorialState): void {
@@ -622,10 +628,10 @@ const STEPPED_STATES = [
   'HUMAN_NEAR_GOBLIN',
   'HUMAN_KILLED_GOBLIN',
   'HUMAN_GETS_TO_SAFE_ROOM',
-  'HUMAN_TALKED_TO_MORDECAI',
+  'HUMAN_TALKED_TO_DAVE',
   'HUMAN_OPENED_ACHIEVEMENT',
-  'HUMAN_EQUIPPED_SMUSH',
-  'HUMAN_SMUSHED_GUARDS',
+  'HUMAN_EQUIPPED_SEISMIC_STOMP',
+  'HUMAN_STOMPED_GUARDS',
   'HUMAN_LEVELED_UP',
   'CAMERA_PAN_TO_CAT',
   'SWITCHED_TO_CAT',
@@ -637,29 +643,8 @@ const STEPPED_STATES = [
   'AWAITING_SWITCH_TO_HUMAN',
   'SWITCHED_TO_HUMAN',
   'CAT_ARRIVED',
-  'TALKED_TO_MORDECAI_AGAIN',
+  'TALKED_TO_DAVE_AGAIN',
 ] as const satisfies readonly TutorialState[];
-
-section('Mordecai wears "!" to be met, "?" to be reported back to, nothing otherwise');
-{
-  const tutorial = TutorialController.createForTutorial();
-  let mismatches = 0;
-  for (const state of STEPPED_STATES) {
-    advanceTo(tutorial, state);
-    const expected: MarkerState =
-      state === 'HUMAN_GETS_TO_SAFE_ROOM'
-        ? 'exclamation'
-        : state === 'CAT_ARRIVED'
-          ? 'question'
-          : 'none';
-    const actual = tutorial.mordecaiMarker();
-    if (actual !== expected) {
-      mismatches++;
-      check(false, `${state}: marker ${actual}, expected ${expected}`);
-    }
-  }
-  check(mismatches === 0, 'the marker matches the step at every step');
-}
 
 section('each goblin is the objective only during its own step');
 {
@@ -674,7 +659,7 @@ section('each goblin is the objective only during its own step');
   for (const state of STEPPED_STATES) {
     advanceTo(tutorial, state);
     const expectedA = goblinASteps.includes(state);
-    const expectedGuards = state === 'HUMAN_EQUIPPED_SMUSH';
+    const expectedGuards = state === 'HUMAN_EQUIPPED_SEISMIC_STOMP';
     const expectedB = state === 'CAT_EQUIPPED_MAGIC_MISSILE';
     const flags = [goblinA, guard1, guard2, goblinB].map((mob) => mob.isCurrentObjective);
     const expected = [expectedA, expectedGuards, expectedGuards, expectedB];
@@ -693,7 +678,7 @@ section('the doorway, the chest and the stairwell are lit only during their step
   const expectedPlaces: Partial<Record<TutorialState, { x: number; y: number }>> = {
     USED_HEALTH_POTION: TUTORIAL_CHEST_POS,
     CAT_INSIDE_TREASURE_ROOM: TUTORIAL_CHEST_POS,
-    TALKED_TO_MORDECAI_AGAIN: {
+    TALKED_TO_DAVE_AGAIN: {
       x: TUTORIAL_STAIR_FOOTPRINT.x,
       y: TUTORIAL_STAIR_FOOTPRINT.y + TUTORIAL_STAIR_FOOTPRINT.h - 1,
     },
@@ -731,7 +716,7 @@ section('the doorway, the chest and the stairwell are lit only during their step
   check(chestStep.objectiveBeacons().length === 0, 'and stands its beam down at once');
 
   const stairStep = TutorialController.createForTutorial();
-  advanceTo(stairStep, 'TALKED_TO_MORDECAI_AGAIN');
+  advanceTo(stairStep, 'TALKED_TO_DAVE_AGAIN');
   const stairBeam = firstOf(stairStep.objectiveBeacons());
   if (stairBeam === null) {
     check(false, 'the stairwell is lit on the last step');
@@ -767,22 +752,22 @@ section('a cat already at full health skips the potion step');
   );
 }
 
-section('the arrow to Mordecai holds until his "Talk" prompt takes over');
+section('the arrow to Dave holds until his "Talk" prompt takes over');
 {
-  const { SafeRoomSystem } = await import('../src/systems/SafeRoomSystem.js');
-  const mordecai: Point = { x: 40 * TILE_SIZE, y: 40 * TILE_SIZE };
+  const { DAVE_NEAR_DISTANCE_TILES } = await import('../src/systems/DaveGuideSystem.js');
+  const dave: Point = { x: 40 * TILE_SIZE, y: 40 * TILE_SIZE };
   const viewFrom = (tilesAway: number): Viewpoint => {
-    const player = { x: mordecai.x + tilesAway * TILE_SIZE, y: mordecai.y };
+    const player = { x: dave.x + tilesAway * TILE_SIZE, y: dave.y };
     return {
       player,
       camera: { x: player.x - DESKTOP.width / 2, y: player.y - DESKTOP.height / 2 },
     };
   };
-  const promptTiles = SafeRoomSystem.MORDECAI_NEAR_DISTANCE;
+  const promptTiles = DAVE_NEAR_DISTANCE_TILES;
   const justOutside = draw(
     DESKTOP,
     'HUMAN_GETS_TO_SAFE_ROOM',
-    baseRenderContext({ mordecaiPosition: mordecai }),
+    baseRenderContext({ davePosition: dave }),
     viewFrom(promptTiles + PROMPT_EDGE_MARGIN_TILES),
   );
   check(
@@ -792,7 +777,7 @@ section('the arrow to Mordecai holds until his "Talk" prompt takes over');
   const justInside = draw(
     DESKTOP,
     'HUMAN_GETS_TO_SAFE_ROOM',
-    baseRenderContext({ mordecaiPosition: mordecai }),
+    baseRenderContext({ davePosition: dave }),
     viewFrom(promptTiles - PROMPT_EDGE_MARGIN_TILES),
   );
   check(justInside.arrowTips.length === 0, 'inside it the arrow stands down for the prompt');
@@ -833,7 +818,7 @@ function levelsThroughTutorial(xpScale: number): { human: number; cat: number }[
   });
 }
 
-section('The human levels up exactly on the smush, and the cat not at all');
+section('The human levels up exactly on the seismic stomp, and the cat not at all');
 for (const xpScale of [1, HARD_DIFFICULTY_XP_SCALE]) {
   const levels = levelsThroughTutorial(xpScale);
   const at = (kill: number): { human: number; cat: number } => levels[kill];
@@ -876,10 +861,13 @@ function runFrames(
 
 section('the stat step waits for the human’s point, on the Character page, then pans to the cat');
 {
-  const { tutorial, human, cat } = tutorialAt('HUMAN_SMUSHED_GUARDS');
+  const { tutorial, human, cat } = tutorialAt('HUMAN_STOMPED_GUARDS');
   human.gainXp(human.xpNeededForNextLevel);
   runFrames(tutorial, human, cat);
-  check(tutorial.state === 'HUMAN_LEVELED_UP', `after the smush beat it waits (${tutorial.state})`);
+  check(
+    tutorial.state === 'HUMAN_LEVELED_UP',
+    `after the seismic stomp beat it waits (${tutorial.state})`,
+  );
   const restriction = tutorial.pauseRestriction();
   check(
     restriction?.kind === 'section' && restriction.section === 'character',
@@ -889,7 +877,12 @@ section('the stat step waits for the human’s point, on the Character page, the
   applyGodModeToPlayer(human);
   runFrames(tutorial, human, cat);
   check(tutorial.state === 'HUMAN_LEVELED_UP', 'god mode spends nothing for the player');
-  human.spendPoint('constitution');
+  const healthBefore = human.getBaseStat('health');
+  human.spendPoint('health');
+  check(
+    human.getBaseStat('health') - healthBefore === STAT_GAIN_PER_POINT.health.human,
+    `the suggested Health point buys the human +${STAT_GAIN_PER_POINT.health.human} health`,
+  );
   tutorial.update(human, cat);
   check(
     tutorial.state === 'CAMERA_PAN_TO_CAT' &&
@@ -898,7 +891,7 @@ section('the stat step waits for the human’s point, on the Character page, the
     `a point spent under god mode closes the menu and starts the pan (${tutorial.state})`,
   );
 
-  const skipped = tutorialAt('HUMAN_SMUSHED_GUARDS');
+  const skipped = tutorialAt('HUMAN_STOMPED_GUARDS');
   runFrames(skipped.tutorial, skipped.human, skipped.cat);
   check(
     skipped.tutorial.state === 'CAMERA_PAN_TO_CAT' || skipped.tutorial.state === 'SWITCHED_TO_CAT',
@@ -912,7 +905,7 @@ section('a step finished inside a menu completes while the menu halts the world'
   human.gainXp(human.xpNeededForNextLevel);
   tutorial.updateUnderMenus(human, cat);
   check(tutorial.state === 'HUMAN_LEVELED_UP', 'with the point unspent the Character page stays');
-  human.spendPoint('strength');
+  human.spendPoint('melee');
   tutorial.updateUnderMenus(human, cat);
   check(
     tutorial.state === 'CAMERA_PAN_TO_CAT' && tutorial.needsAutoCloseMenus,
@@ -920,15 +913,15 @@ section('a step finished inside a menu completes while the menu halts the world'
   );
 
   const bag = tutorialAt('HUMAN_OPENED_ACHIEVEMENT');
-  bag.human.inventory.addItem('smush_tome', 1);
+  bag.human.inventory.addItem('seismic_stomp_tome', 1);
   bag.human.inventory.addItem('health_potion', 1);
   bag.human.inventory.addItem('lucky_hoodie', 1);
-  bag.human.inventory.placeOnHotbar('smush_tome', 0);
+  bag.human.inventory.placeOnHotbar('seismic_stomp_tome', 0);
   bag.human.inventory.placeOnHotbar('health_potion', 1);
   bag.human.inventory.equipment.equipById('lucky_hoodie');
   bag.tutorial.updateUnderMenus(bag.human, bag.cat);
   check(
-    bag.tutorial.state === 'HUMAN_EQUIPPED_SMUSH' && bag.tutorial.needsAutoCloseMenus,
+    bag.tutorial.state === 'HUMAN_EQUIPPED_SEISMIC_STOMP' && bag.tutorial.needsAutoCloseMenus,
     `The human's bag step, finished, closes the menus (${bag.tutorial.state})`,
   );
 }
@@ -948,7 +941,7 @@ section('after goblin B the game waits for the player to switch back to the huma
   cat.isActive = false;
   tutorial.update(human, cat);
   check(tutorial.state === 'SWITCHED_TO_HUMAN', 'the player’s own switch completes it');
-  advanceTo(tutorial, 'TALKED_TO_MORDECAI_AGAIN');
+  advanceTo(tutorial, 'TALKED_TO_DAVE_AGAIN');
   check(tutorial.canSwitchCharacter, 'and switching keeps working to the end of the tutorial');
 }
 
@@ -959,7 +952,7 @@ const {
   TUTORIAL_GATE_G2,
   TUTORIAL_GATE_G3,
   TUTORIAL_GOBLIN_B_DOOR,
-  TUTORIAL_GATE_SMUSH,
+  TUTORIAL_GATE_SEISMIC_STOMP,
   TUTORIAL_CAT_SPAWN_TILE,
   GOBLIN_B_POS,
 } = await import('../src/map/TutorialMap.js');
@@ -985,12 +978,12 @@ function gateView(camera: { x: number; y: number }, dialogOpen = false): GateVie
 }
 
 const TILE_FRACTION_HALF = 0.5;
-/** Smush's level in the tutorial, the one taught at the smush gate. */
-const TUTORIAL_SMUSH_LEVEL = 1;
-/** Tiles of slack goblin B must stand beyond Smush's blast, so a step closer never reaches him. */
-const SMUSH_REACH_MARGIN_TILES = 1;
+/** Seismic Stomp's level in the tutorial, the one taught at the seismic stomp gate. */
+const TUTORIAL_SEISMIC_STOMP_LEVEL = 1;
+/** Tiles of slack goblin B must stand beyond Seismic Stomp's blast, so a step closer never reaches him. */
+const SEISMIC_STOMP_REACH_MARGIN_TILES = 1;
 /** More than any tutorial goblin's health. */
-const SMUSH_TEST_DAMAGE = 100;
+const SEISMIC_STOMP_TEST_DAMAGE = 100;
 /** Where the door's leaves meet the floor, down its row. */
 const DOOR_GROUND_LINE_TILES = 0.55;
 const FAR_VIEW = gateView({ x: FAR_AWAY_PX, y: FAR_AWAY_PX });
@@ -1024,19 +1017,21 @@ function raisedCue(tutorial: Controller, cue: string): boolean {
   return tutorial.drainGateCues().some((raised) => raised.cue === cue);
 }
 
-/** The smush gate's middle, where its cues sound from. */
-const SMUSH_GATE_CENTRE = {
-  x: (TUTORIAL_GATE_SMUSH.x + TILE_FRACTION_HALF) * TILE_SIZE,
-  y: ((TUTORIAL_GATE_SMUSH.y1 + TUTORIAL_GATE_SMUSH.y2 + 1) / 2) * TILE_SIZE,
+/** The seismic stomp gate's middle, where its cues sound from. */
+const SEISMIC_STOMP_GATE_CENTRE = {
+  x: (TUTORIAL_GATE_SEISMIC_STOMP.x + TILE_FRACTION_HALF) * TILE_SIZE,
+  y: ((TUTORIAL_GATE_SEISMIC_STOMP.y1 + TUTORIAL_GATE_SEISMIC_STOMP.y2 + 1) / 2) * TILE_SIZE,
 };
 
-/** Whether `cue` was raised by the smush gate rather than any other gate the step unlocked. */
-function smushGateRaised(tutorial: Controller, cue: string): boolean {
+/** Whether `cue` was raised by the seismic stomp gate rather than any other gate the step unlocked. */
+function seismicStompGateRaised(tutorial: Controller, cue: string): boolean {
   return tutorial
     .drainGateCues()
     .some(
       (raised) =>
-        raised.cue === cue && raised.x === SMUSH_GATE_CENTRE.x && raised.y === SMUSH_GATE_CENTRE.y,
+        raised.cue === cue &&
+        raised.x === SEISMIC_STOMP_GATE_CENTRE.x &&
+        raised.y === SEISMIC_STOMP_GATE_CENTRE.y,
     );
 }
 
@@ -1067,17 +1062,17 @@ function humanInSafeEntranceHall(tilesNorth: number): {
 }
 
 /**
- * The human walks straight west along the connector at the smush gate from the
+ * The human walks straight west along the connector at the seismic stomp gate from the
  * safe room; counts the frames a gate stopped him.
  */
-function walkThroughSmushGate(godMode: boolean): { stops: number; through: boolean } {
+function walkThroughSeismicStompGate(godMode: boolean): { stops: number; through: boolean } {
   const { tutorial, human, cat } = freshTutorial();
   if (godMode) applyGodModeToPlayer(human);
-  human.x = TUTORIAL_GATE_SMUSH.clampPxX + GATE_WALK_START_TILES * TILE_SIZE;
-  human.y = ((TUTORIAL_GATE_SMUSH.y1 + TUTORIAL_GATE_SMUSH.y2) / 2) * TILE_SIZE;
-  advanceTo(tutorial, 'HUMAN_SMUSHED_GUARDS');
+  human.x = TUTORIAL_GATE_SEISMIC_STOMP.clampPxX + GATE_WALK_START_TILES * TILE_SIZE;
+  human.y = ((TUTORIAL_GATE_SEISMIC_STOMP.y1 + TUTORIAL_GATE_SEISMIC_STOMP.y2) / 2) * TILE_SIZE;
+  advanceTo(tutorial, 'HUMAN_STOMPED_GUARDS');
   const step = PLAYER_SPEED * human.speedMultiplier;
-  const goalX = (TUTORIAL_GATE_SMUSH.x - GATE_WALK_PAST_TILES) * TILE_SIZE;
+  const goalX = (TUTORIAL_GATE_SEISMIC_STOMP.x - GATE_WALK_PAST_TILES) * TILE_SIZE;
   let stops = 0;
   for (let frame = 0; frame < GATE_SETTLE_FRAMES * 2 && human.x > goalX; frame++) {
     const wanted = human.x - step;
@@ -1157,7 +1152,7 @@ section("The cat's gate opens once every dialog box is shut, wherever she is");
   check(cat.y > TUTORIAL_GATE_G1.clampPxY, 'after which it no longer holds her');
 }
 
-section("the final gate opens the moment Mordecai's farewell ends");
+section("the final gate opens the moment Dave's farewell ends");
 {
   const { tutorial, human, cat } = freshTutorial();
   human.x = ((TUTORIAL_GATE_G3.x1 + TUTORIAL_GATE_G3.x2) / 2) * TILE_SIZE;
@@ -1166,7 +1161,7 @@ section("the final gate opens the moment Mordecai's farewell ends");
   human.y = TUTORIAL_GATE_G3.clampPxY + PLAYER_SPEED;
   tutorial.applyGateConstraints(human, cat);
   check(human.y === TUTORIAL_GATE_G3.clampPxY, 'it holds the human until the farewell is heard');
-  advanceTo(tutorial, 'TALKED_TO_MORDECAI_AGAIN');
+  advanceTo(tutorial, 'TALKED_TO_DAVE_AGAIN');
   tutorial.drainGateCues();
   tutorial.updateGates(human, cat, FAR_VIEW);
   check(raisedCue(tutorial, 'gateRaise'), 'then rises at once, in view or not');
@@ -1176,32 +1171,34 @@ section("the final gate opens the moment Mordecai's farewell ends");
   check(human.y > TUTORIAL_GATE_G3.clampPxY, 'and lets him through');
 }
 
-section('the smush gate waits for the human to walk up to it, on screen, and never stops him');
+section(
+  'the seismic stomp gate waits for the human to walk up to it, on screen, and never stops him',
+);
 {
   const { tutorial, human, cat } = freshTutorial();
-  human.x = TUTORIAL_GATE_SMUSH.clampPxX + GATE_WALK_START_TILES * TILE_SIZE;
-  human.y = ((TUTORIAL_GATE_SMUSH.y1 + TUTORIAL_GATE_SMUSH.y2) / 2) * TILE_SIZE;
-  advanceTo(tutorial, 'HUMAN_SMUSHED_GUARDS');
+  human.x = TUTORIAL_GATE_SEISMIC_STOMP.clampPxX + GATE_WALK_START_TILES * TILE_SIZE;
+  human.y = ((TUTORIAL_GATE_SEISMIC_STOMP.y1 + TUTORIAL_GATE_SEISMIC_STOMP.y2) / 2) * TILE_SIZE;
+  advanceTo(tutorial, 'HUMAN_STOMPED_GUARDS');
   tutorial.updateGates(human, cat, gateView(cameraOn(human)));
-  check(!smushGateRaised(tutorial, 'gateRaise'), 'it stays down while the human is far off');
-  human.x = TUTORIAL_GATE_SMUSH.clampPxX;
+  check(!seismicStompGateRaised(tutorial, 'gateRaise'), 'it stays down while the human is far off');
+  human.x = TUTORIAL_GATE_SEISMIC_STOMP.clampPxX;
   tutorial.updateGates(human, cat, FAR_VIEW);
   check(
-    !smushGateRaised(tutorial, 'gateRaise'),
+    !seismicStompGateRaised(tutorial, 'gateRaise'),
     'and while it is off screen, even with the human at it',
   );
   tutorial.updateGates(human, cat, gateView(cameraOn(human)));
   check(
-    smushGateRaised(tutorial, 'gateRaise'),
+    seismicStompGateRaised(tutorial, 'gateRaise'),
     'and rises when it comes on screen with the human beside it',
   );
 
-  const normal = walkThroughSmushGate(false);
+  const normal = walkThroughSeismicStompGate(false);
   check(
     normal.through && normal.stops === 0,
     `walking at it, the human passes without a stop (${normal.stops} frames held)`,
   );
-  const god = walkThroughSmushGate(true);
+  const god = walkThroughSeismicStompGate(true);
   check(god.through && god.stops === 0, `at god-mode pace too (${god.stops} frames held)`);
 }
 
@@ -1248,29 +1245,31 @@ section("goblin B's door keeps the human off him until the cat's missile kills h
     human.y === TUTORIAL_GOBLIN_B_DOOR.southClampPxY && human.y > goblinBottomPx,
     `walking north at goblin B, the human is held south of his door (y ${human.y}, goblin ends at ${goblinBottomPx})`,
   );
-  const { getSmushStats } = await import('../src/abilities/smush.js');
+  const { getSeismicStompStats } = await import('../src/abilities/seismicStomp.js');
   const humanCentreY = TUTORIAL_GOBLIN_B_DOOR.southClampPxY + TILE_SIZE / 2;
   const goblinCentreY = (GOBLIN_B_POS.y + 1 / 2) * TILE_SIZE;
-  const smushReachPx =
-    (getSmushStats(TUTORIAL_SMUSH_LEVEL).outerBlastRadius + SMUSH_REACH_MARGIN_TILES) * TILE_SIZE;
+  const seismicStompReachPx =
+    (getSeismicStompStats(TUTORIAL_SEISMIC_STOMP_LEVEL).outerBlastRadius +
+      SEISMIC_STOMP_REACH_MARGIN_TILES) *
+    TILE_SIZE;
   check(
-    humanCentreY - goblinCentreY > smushReachPx,
-    `from there goblin B is ${((humanCentreY - goblinCentreY) / TILE_SIZE).toFixed(1)} tiles off, past a level-1 Smush's blast plus ${SMUSH_REACH_MARGIN_TILES} (${(smushReachPx / TILE_SIZE).toFixed(1)})`,
+    humanCentreY - goblinCentreY > seismicStompReachPx,
+    `from there goblin B is ${((humanCentreY - goblinCentreY) / TILE_SIZE).toFixed(1)} tiles off, past a level-1 Seismic Stomp's blast plus ${SEISMIC_STOMP_REACH_MARGIN_TILES} (${(seismicStompReachPx / TILE_SIZE).toFixed(1)})`,
   );
   const goblinB = tutorial.allMobs.find(
     (mob) => mob.x === GOBLIN_B_POS.x * TILE_SIZE && mob.y === GOBLIN_B_POS.y * TILE_SIZE,
   );
   check(
     goblinB !== undefined &&
-      !goblinB.takesPlayerDamage('smush') &&
+      !goblinB.takesPlayerDamage('seismic_stomp') &&
       !goblinB.takesPlayerDamage('melee') &&
       !goblinB.takesPlayerDamage('slingshot') &&
       goblinB.takesPlayerDamage('missile'),
-    "and nothing of the human's can hurt goblin B at any range, god-mode Smush included: only the cat's missile",
+    "and nothing of the human's can hurt goblin B at any range, god-mode Seismic Stomp included: only the cat's missile",
   );
   if (goblinB !== undefined) {
-    goblinB.takeDamageFrom(SMUSH_TEST_DAMAGE, human, 'smush');
-    check(goblinB.isAlive, 'a Smush landing on him anyway leaves him standing');
+    goblinB.takeDamageFrom(SEISMIC_STOMP_TEST_DAMAGE, human, 'seismic_stomp');
+    check(goblinB.isAlive, 'a Seismic Stomp landing on him anyway leaves him standing');
   }
   const missileReachPx = cat.attackReachPx();
   const catFootY = TUTORIAL_GATE_G2.clampPxY + TILE_SIZE / 2;
@@ -1322,6 +1321,125 @@ section('a gate unlocked far from the player is still heard, from its direction'
       `the gate is ${tilesFrom(unlock).toFixed(0)} tiles off, past hearing (${hearing}), and its latch plays ${tilesFrom(source).toFixed(0)} tiles off on the same side`,
     );
   }
+}
+
+section('meeting Dave and his farewell are story cutscenes the step waits on');
+{
+  const { CutsceneDirector } = await import('../src/systems/cutscene/CutsceneDirector.js');
+  const { Conversation } = await import('../src/dialog/Conversation.js');
+  const { StoryDirector } = await import('../src/story/StoryDirector.js');
+  const { StoryDelivery } = await import('../src/systems/StoryDelivery.js');
+  const { pixelToTile } = await import('../src/utils.js');
+  /** More presses than any of his tutorial talks has pages, reveals included. */
+  const MAX_READ_PRESSES = 40;
+  /** More world ticks than a walk that is already standing at its end needs. */
+  const MAX_START_TICKS = 5;
+
+  const { tutorial, human } = freshTutorial();
+  const conversation = new Conversation(null);
+  let daveTeleports = 0;
+  const director = new CutsceneDirector({
+    conversation,
+    teleportDaveOut: () => {
+      daveTeleports++;
+    },
+  });
+  tutorial.setCutscenes(director);
+  const story = new StoryDirector();
+  let persisted = 0;
+  const delivery = new StoryDelivery({
+    director: story,
+    cutscenes: director,
+    persist: () => {
+      persisted++;
+    },
+    calm: () => true,
+  });
+  const standingStill = {
+    kind: 'walkTo',
+    who: 'activeCrawler',
+    tile: { x: pixelToTile(human.x), y: pixelToTile(human.y) },
+    face: 'up',
+  } as const;
+  const startTalk = (): boolean => {
+    for (let tick = 0; tick < MAX_START_TICKS && !conversation.isOpen; tick++) {
+      director.tickWorld(human, tutorial.map);
+    }
+    return conversation.isOpen;
+  };
+  const readThrough = (): void => {
+    for (let press = 0; press < MAX_READ_PRESSES && conversation.isOpen; press++) {
+      conversation.advance();
+      conversation.update(null);
+    }
+  };
+  const playMoment = (): void => {
+    const moment = tutorial.daveMomentDue;
+    if (moment === null) return;
+    delivery.playDaveMoment({
+      event: { kind: moment },
+      walkUp: () => standingStill,
+      extra: () => null,
+      leavesAfter: false,
+      onDone: () => tutorial.onDaveMomentHeard(),
+    });
+  };
+  const momentPlays = (from: TutorialState, to: TutorialState, what: string): void => {
+    advanceTo(tutorial, from);
+    playMoment();
+    check(director.isActive && tutorial.state === from, `${what}: a cutscene the step waits on`);
+    for (let talk = 0; talk < MAX_READ_PRESSES && director.isActive; talk++) {
+      if (!startTalk()) break;
+      readThrough();
+    }
+    check(
+      !conversation.isOpen && !director.isActive && tutorial.state === to,
+      `${what}: reading his last page ends the cutscene and moves the step on to ${to}`,
+    );
+  };
+
+  for (const state of STEPPED_STATES) {
+    advanceTo(tutorial, state);
+    const expected =
+      state === 'HUMAN_GETS_TO_SAFE_ROOM'
+        ? 'tutorialSafeRoomArrival'
+        : state === 'CAT_ARRIVED'
+          ? 'tutorialCatArrived'
+          : null;
+    check(
+      tutorial.daveMomentDue === expected,
+      `${state}: his talk due is ${String(tutorial.daveMomentDue)}, expected ${String(expected)}`,
+    );
+  }
+
+  momentPlays('HUMAN_GETS_TO_SAFE_ROOM', 'HUMAN_TALKED_TO_DAVE', 'meeting him');
+  check(story.hasSeen('tutorial_meets_dave'), 'meeting him marks his meeting beat heard');
+  check(
+    !story.hasSeen('tutorial_caroline_first_contact'),
+    'control: Caroline has not spoken before any achievement',
+  );
+  momentPlays('CAT_ARRIVED', 'TALKED_TO_DAVE_AGAIN', 'his farewell');
+  check(
+    story.hasSeen('tutorial_caroline_first_contact') && story.hasSeen('tutorial_dave_farewell'),
+    'a farewell reached before her first message catches her message up first, then plays',
+  );
+  check(persisted >= 2, 'every beat heard is written down at once');
+
+  advanceTo(tutorial, 'HUMAN_OPENED_ACHIEVEMENT');
+  const reminder = tutorial.daveReminder();
+  check(reminder !== null, 'tapped at a lesson step, he has its reminder');
+  if (reminder !== null) {
+    director.play([
+      { kind: 'conversation', request: { lines: [reminder], reward: null, questRelated: false } },
+    ]);
+  }
+  check(startTalk(), 'the reminder opens at once');
+  readThrough();
+  check(
+    !director.isActive && tutorial.state === 'HUMAN_OPENED_ACHIEVEMENT',
+    'a reminder ends without moving the step on',
+  );
+  check(daveTeleports === 0, 'no tutorial talk sends him away');
 }
 
 if (failures > 0) {

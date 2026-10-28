@@ -1,10 +1,10 @@
-/** Cheap show actions: words on screen, a reward chest, a sound, a sting, a note to self. */
+/** Cheap narration actions: words on screen, a reward chest, a sound, a sting, a note to self. */
 import type { MusicBusId, SoundId } from '../../audio/sounds';
 import {
   AI_CHEST_RARITIES,
-  AI_CHARACTER_MORDECAI,
+  AI_CHARACTER_DAVE,
   CHEST_RARITY_POINTS,
-  AI_CHARACTER_SYSTEM,
+  AI_CHARACTER_CAROLINE,
   TARGET_PARAM,
   crawlerKind,
   crawlerName,
@@ -21,6 +21,7 @@ import {
   optionalTextParam,
   textParam,
 } from './schema';
+import { speaksInCarolineFrame } from '../AIChatFeed';
 import { aiActionTimers } from './timers';
 import { ok, refused, type AIActionDef } from './types';
 
@@ -44,7 +45,7 @@ const STING_FADE_IN_MS = 400;
 const ANNOUNCE_TEXT = textParam('text', {
   minLength: 1,
   maxLength: ANNOUNCE_MAX_CHARS,
-  description: 'What the System says, shown on screen. Short and in character.',
+  description: 'What you say, shown on screen in your frame. Short, precise and in character.',
 });
 const ANNOUNCE_STYLE = optionalEnumParam(
   'style',
@@ -62,16 +63,17 @@ const ANNOUNCE_TONE = optionalEnumParam(
 const announce: AIActionDef = {
   name: 'announce',
   description:
-    'Put a short line on the crawler’s screen as a System notice. Use for commentary, taunts and rulings.',
+    'Put a short line on the crawler’s screen as a notice. Use for observations, rulings and warnings.',
   params: [ANNOUNCE_TEXT, ANNOUNCE_STYLE, ANNOUNCE_TONE],
   policy: { cost: 1, cooldownMs: SHORT_COOLDOWN_MS, severity: 'benign' },
   showsIndicator: false,
-  execute({ params, scene }) {
+  execute({ params, scene, characterName }) {
     const text = params.get(ANNOUNCE_TEXT);
     const banner = params.get(ANNOUNCE_STYLE) === 'banner';
     notifyPlayer(scene, text, {
       tone: params.get(ANNOUNCE_TONE),
       urgent: banner,
+      voice: speaksInCarolineFrame(characterName) ? 'caroline' : 'hud',
       ...(banner ? { durationTicks: BANNER_DURATION_TICKS } : {}),
     });
     return ok(`announced: ${text}`);
@@ -96,7 +98,7 @@ const grantRewardChest: AIActionDef = {
   params: [TARGET_PARAM, CHEST_RARITY_PARAM, CHEST_REASON_PARAM],
   policy: { cost: 2, cooldownMs: REWARD_CHEST_COOLDOWN_MS, severity: 'benign' },
   maxPerFloor: REWARD_CHESTS_PER_FLOOR,
-  characters: [AI_CHARACTER_SYSTEM],
+  characters: [AI_CHARACTER_CAROLINE],
   budget: ({ params }) => ({
     pool: 'rewardChestPoints',
     amount: CHEST_RARITY_POINTS[params.get(CHEST_RARITY_PARAM)],
@@ -110,7 +112,7 @@ const grantRewardChest: AIActionDef = {
     const reason = params.get(CHEST_REASON_PARAM);
     scene
       .getAwards()
-      .grantChest(crawlerKind(scene, crawler), { rarity, source: 'audience', subtitle: reason });
+      .grantChest(crawlerKind(scene, crawler), { rarity, source: 'caroline', subtitle: reason });
     notifyPlayer(scene, `${rarity} chest for ${crawlerName(scene, crawler)}: ${reason}`, {
       tone: 'success',
       icon: 'sparkle',
@@ -134,7 +136,7 @@ const SOUND_CUE = enumParam('cue', AI_SOUND_CUES, 'Which sound to play.');
 
 const playSound: AIActionDef = {
   name: 'play_sound',
-  description: 'Play a short sound effect for comic or dramatic timing.',
+  description: 'Play a short sound effect to mark a moment.',
   params: [SOUND_CUE],
   policy: {
     cost: 1,
@@ -181,7 +183,7 @@ const musicSting: AIActionDef = {
     severity: 'benign',
     forbidsContext: ['isPaused', 'inBossFight'],
   },
-  characters: [AI_CHARACTER_SYSTEM],
+  characters: [AI_CHARACTER_CAROLINE],
   refusal: ({ scene }) =>
     (scene.getAudioScope?.() ?? null) === null ? 'no music in this scene' : null,
   execute({ params, scene }) {
@@ -225,11 +227,16 @@ const remember: AIActionDef = {
     'Pin a fact, grudge or promise about this crawler to your long-term memory. Changes nothing in the game.',
   params: [REMEMBER_FACT, REMEMBER_KIND, REMEMBER_NOTE],
   policy: { cost: 1, cooldownMs: REMEMBER_COOLDOWN_MS, severity: 'benign' },
-  characters: [AI_CHARACTER_SYSTEM, AI_CHARACTER_MORDECAI],
+  characters: [AI_CHARACTER_CAROLINE, AI_CHARACTER_DAVE],
   showsIndicator: false,
-  execute({ params, scene }) {
+  execute({ params, scene, characterName }) {
     const note = params.get(REMEMBER_NOTE);
-    if (note !== '') notifyPlayer(scene, note, { tone: 'info' });
+    if (note !== '') {
+      notifyPlayer(scene, note, {
+        tone: 'info',
+        voice: speaksInCarolineFrame(characterName) ? 'caroline' : 'hud',
+      });
+    }
     return ok(`remembered (${params.get(REMEMBER_KIND)}): ${params.get(REMEMBER_FACT)}`);
   },
 };

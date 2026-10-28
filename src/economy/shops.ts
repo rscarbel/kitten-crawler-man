@@ -300,7 +300,7 @@ export const SHOPS = {
       {
         item: 'stat_boost_potion',
         normalStock: 1,
-        desc: '+2-4 to a random stat, permanent',
+        desc: '+2-4 points to a random stat, permanent',
         label: 'Stat Boost',
         bundle: null,
         gate: null,
@@ -366,7 +366,7 @@ export const SHOPS = {
       {
         item: 'hearthguard_cap',
         normalStock: 'unlimited',
-        desc: 'Padded wool, garrison brown. +1 Constitution',
+        desc: 'Padded wool, garrison brown. +2 Health',
         label: ITEM_DEF.hearthguard_cap.name,
         bundle: null,
         gate: null,
@@ -374,7 +374,7 @@ export const SHOPS = {
       {
         item: 'hearthguard_bracers',
         normalStock: 'unlimited',
-        desc: 'Boiled leather on the blocking arm. +1 Strength',
+        desc: 'Boiled leather on the blocking arm. +1 Melee',
         label: ITEM_DEF.hearthguard_bracers.name,
         bundle: null,
         gate: null,
@@ -382,7 +382,7 @@ export const SHOPS = {
       {
         item: 'hearthguard_boots',
         normalStock: 'unlimited',
-        desc: 'Hard-soled and broken in. +1 Dexterity',
+        desc: 'Hard-soled and broken in. +1 Evasiveness',
         label: ITEM_DEF.hearthguard_boots.name,
         bundle: null,
         gate: null,
@@ -390,7 +390,7 @@ export const SHOPS = {
       {
         item: 'nimble_bangle',
         normalStock: 'unlimited',
-        desc: 'A thin copper band. +1 Dexterity',
+        desc: 'A thin copper band. +1 Evasiveness',
         label: ITEM_DEF.nimble_bangle.name,
         bundle: null,
         gate: null,
@@ -398,7 +398,7 @@ export const SHOPS = {
       {
         item: 'hearthguard_quilted_vest',
         normalStock: 'unlimited',
-        desc: 'Quilted through, in every size. +2 Constitution',
+        desc: 'Quilted through, in every size. +4 Health',
         label: ITEM_DEF.hearthguard_quilted_vest.name,
         bundle: null,
         gate: null,

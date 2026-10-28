@@ -27,8 +27,8 @@ export function drawMagicMissileTomeIcon(ctx: CanvasRenderingContext2D, rect: Re
   drawSpriteKey(ctx, 'magic_missile_icon', 'standard', 0, x, y, size);
 }
 
-/** Smush tome: the spell's own ability icon. */
-export function drawSmushTomeIcon(ctx: CanvasRenderingContext2D, rect: Rect): void {
+/** Seismic Stomp tome: the spell's own ability icon. */
+export function drawSeismicStompTomeIcon(ctx: CanvasRenderingContext2D, rect: Rect): void {
   const { x, y, size } = iconSquare(rect);
-  drawSpriteKey(ctx, 'smush_icon', 'standard', 0, x, y, size);
+  drawSpriteKey(ctx, 'seismic_stomp_icon', 'standard', 0, x, y, size);
 }

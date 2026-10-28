@@ -12,12 +12,12 @@ import { rollGearFromPool, type GearId } from './gearPools';
 export type GrantedLine =
   | { readonly kind: 'item'; readonly id: ItemId; readonly quantity: number }
   | { readonly kind: 'coins'; readonly amount: number }
-  | { readonly kind: 'companion'; readonly id: 'mongo' }
+  | { readonly kind: 'companion'; readonly id: 'deinonychus' }
   /** A rolled piece of gear the party already owned, paid out at its sell price. */
   | { readonly kind: 'duplicate'; readonly id: ItemId; readonly coins: number };
 
 /** Where a chest that is not an achievement came from, named on its header. */
-export type ChestSource = 'audience' | 'challenge' | 'wheel' | 'bossRepeat' | 'quest';
+export type ChestSource = 'caroline' | 'challenge' | 'wheel' | 'bossRepeat' | 'quest';
 
 /**
  * What a presentation pays for: an achievement (built-in or the AI's), or a
@@ -47,7 +47,7 @@ export function presentationAwardId(presentation: RewardPresentation | null): st
 
 /** The header a chest that is not an achievement carries, by where it came from. */
 export const CHEST_SOURCE_TITLES: Readonly<Record<ChestSource, string>> = {
-  audience: 'A gift from the audience',
+  caroline: 'A gift from Caroline',
   challenge: 'Challenge won',
   wheel: 'Prize wheel',
   bossRepeat: 'Boss defeated again',
@@ -155,7 +155,7 @@ const CHEST_CONTENTS: Readonly<Record<Rarity, ChestContentsRow>> = {
 export interface RewardChestContext {
   /** Whether either crawler already holds this piece, in a bag, on the hotbar or worn. */
   readonly owns: (id: GearId) => boolean;
-  /** What the chest's coins are multiplied by: the viewers' favour bonus where the scene has one. */
+  /** What the chest's coins are multiplied by: the recipient's worn coin bonus. */
   readonly coinMultiplier: number;
   /** Pieces this same chest already hands over as fixed rewards, which the roll must not repeat. */
   readonly reserved?: readonly ItemId[];

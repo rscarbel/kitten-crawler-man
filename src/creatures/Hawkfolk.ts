@@ -29,7 +29,7 @@ export const HAWKFOLK_TOUGH_FAMILY = uniformVariantFamily<HawkfolkLookId>(
 
 /** The blows the player lands by hand, as opposed to anything fired or thrown. */
 const HAND_SWUNG_DAMAGE_TYPES: ReadonlySet<PlayerDamageType | null> =
-  new Set<PlayerDamageType | null>(['melee', 'smush']);
+  new Set<PlayerDamageType | null>(['melee', 'seismic_stomp']);
 
 const HAWKFOLK_HP = 14;
 const HAWKFOLK_SPEED_NEUTRAL = 0.55;
@@ -134,8 +134,8 @@ export class Hawkfolk extends Mob {
   }
 
   /**
-   * Mongo hunts the town Hawkfolk whether or not they have been provoked. Players
-   * cannot melee a calm one; the pet raptor has no such manners.
+   * Deinonychus hunts the town Hawkfolk whether or not they have been provoked. Players
+   * cannot melee a calm one; the pet dinosaur has no such manners.
    */
   override get isPetAttackable(): boolean {
     return true;
@@ -232,7 +232,7 @@ export class Hawkfolk extends Mob {
   /** No dungeon loot — only, very rarely, the book on being this quick. */
   protected override rollLootItems(_killer: Player | null): LootDrop['items'] {
     const items: LootDrop['items'] = [];
-    maybeDropSkillBook(items, 'skill_book_cat_reflexes');
+    maybeDropSkillBook(items, 'hawkfolk');
     return items;
   }
 

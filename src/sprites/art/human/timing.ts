@@ -168,26 +168,27 @@ export const ATTACK_FRAMES = 8;
  * long enough for the knee to be seen chambering, short enough that the stamp
  * lands where the player aimed it rather than where he has since run to.
  */
-const SMUSH_WINDUP_TICKS = 15;
+const SEISMIC_STOMP_WINDUP_TICKS = 15;
 /**
  * The press and the step back into guard after the stamp, just under half a
  * second, through which he can neither strike nor stamp again.
  */
-export const SMUSH_RECOVERY_TICKS = 29;
-/** How long Smush holds him, from the key press to back in guard. */
-export const SMUSH_DURATION_TICKS = SMUSH_WINDUP_TICKS + SMUSH_RECOVERY_TICKS;
+export const SEISMIC_STOMP_RECOVERY_TICKS = 29;
+/** How long Seismic Stomp holds him, from the key press to back in guard. */
+export const SEISMIC_STOMP_DURATION_TICKS =
+  SEISMIC_STOMP_WINDUP_TICKS + SEISMIC_STOMP_RECOVERY_TICKS;
 /**
- * Frames in every Smush row, standing or hopping, in every view.
+ * Frames in every Seismic Stomp row, standing or hopping, in every view.
  *
  * The count is not free. The runtime shows frame `floor(progress × frames)`,
  * and the stamp must first appear on the tick the blast fires, which is
- * {@link SMUSH_WINDUP_TICKS} into {@link SMUSH_DURATION_TICKS}. A quarter-second
+ * {@link SEISMIC_STOMP_WINDUP_TICKS} into {@link SEISMIC_STOMP_DURATION_TICKS}. A quarter-second
  * windup is a hair over one frame in three, so only a multiple of three puts a
  * frame boundary on that tick; nine is the one that keeps the row inside the
  * figure's working-set budget while still giving the chamber, the hang, the
  * stamp, a two-frame press and a three-frame recovery a frame each.
  */
-export const SMUSH_FRAMES = 9;
+export const SEISMIC_STOMP_FRAMES = 9;
 
 /**
  * `HumanPlayer` fires the melee hit on the middle frame of its swing, so every
@@ -195,11 +196,11 @@ export const SMUSH_FRAMES = 9;
  */
 export const ATTACK_IMPACT_FRAME = 4;
 /**
- * The frame every Smush row's heel meets the floor on: the first frame shown
- * at or after {@link SMUSH_WINDUP_TICKS}. `scripts/gates-human.ts` replays the
- * player and fails any Smush row not on this frame on the tick its blast fires.
+ * The frame every Seismic Stomp row's heel meets the floor on: the first frame shown
+ * at or after {@link SEISMIC_STOMP_WINDUP_TICKS}. `scripts/gates-human.ts` replays the
+ * player and fails any Seismic Stomp row not on this frame on the tick its blast fires.
  */
-export const SMUSH_IMPACT_FRAME = 3;
+export const SEISMIC_STOMP_IMPACT_FRAME = 3;
 
 /**
  * Frames in the bow shot: the arrow put to the string, a four-frame draw to

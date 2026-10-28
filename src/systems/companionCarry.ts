@@ -37,24 +37,24 @@ export interface CarriedCompanion {
 
 /** What a building is told, at the door, about the companions coming in. */
 export interface InteriorCompanionArrival {
-  /** Whether Mongo exists in this run at all; an interior has no other way to know. */
-  readonly mongoUnlocked: boolean;
+  /** Whether Deinonychus exists in this run at all; an interior has no other way to know. */
+  readonly deinonychusUnlocked: boolean;
   /** Whether he was out beside the party at the door, and so walks in with them. */
-  readonly mongoWasOut: boolean;
+  readonly deinonychusWasOut: boolean;
 }
 
 /** What the overworld is told on the way back out. */
 export interface InteriorCompanionDeparture {
   /** Whether he was out beside the party at the door, and so walks out with them. */
-  readonly mongoWasOut: boolean;
+  readonly deinonychusWasOut: boolean;
   /** Whether he has joined the party, which opening his reward chest indoors can do. */
-  readonly mongoUnlocked: boolean;
+  readonly deinonychusUnlocked: boolean;
 }
 
-/** Nobody came in with the party, and nothing about Mongo is known. */
+/** Nobody came in with the party, and nothing about Deinonychus is known. */
 export const NO_INTERIOR_COMPANIONS: InteriorCompanionArrival = {
-  mongoUnlocked: false,
-  mongoWasOut: false,
+  deinonychusUnlocked: false,
+  deinonychusWasOut: false,
 };
 
 /**

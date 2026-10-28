@@ -3,6 +3,7 @@ import { displayHp } from '../../core/party/crawlerFormulas';
 import { ITEM_DEF } from '../../core/items/defs/ItemDefs';
 import type { Mob } from '../../creatures/Mob';
 import type { Player } from '../../Player';
+import type { PetNames } from '../../core/party/petNames';
 import { mobLabel } from './eventMapping';
 import type { CrawlerName, CrawlerState, NearbyMobState, ThreatLevel } from './types';
 
@@ -78,7 +79,11 @@ export function readCrawler(player: Player, name: CrawlerName): CrawlerState {
 }
 
 /** Living hostiles near `from`, nearest first. */
-export function readNearbyMobs(mobs: readonly Mob[], from: Player): NearbyMobState[] {
+export function readNearbyMobs(
+  mobs: readonly Mob[],
+  from: Player,
+  petNames: PetNames,
+): NearbyMobState[] {
   const origin = tileOf(from);
   return mobs
     .filter((mob) => mob.isAlive && mob.isHostile)
@@ -90,7 +95,7 @@ export function readNearbyMobs(mobs: readonly Mob[], from: Player): NearbyMobSta
     .sort((a, b) => a.distance - b.distance)
     .slice(0, NEARBY_MOB_MAX)
     .map(({ mob, distance }) => ({
-      name: mobLabel(mob),
+      name: mobLabel(mob, petNames),
       level: mob.level,
       isBoss: mob.isBoss,
       threat: threatOf(mob, from.level),

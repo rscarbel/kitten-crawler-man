@@ -1,6 +1,7 @@
 /**
  * Dave's look: light skin, a short brown crop, blue eyes, the worn brown
- * moto jacket over plain blue jeans, and bare feet.
+ * moto jacket over plain blue jeans, and dark-brown leather work boots under
+ * the jeans' hem.
  */
 
 import {
@@ -14,6 +15,7 @@ import {
 import type { GlossRamp, Ramp } from '../../art/biped/palette';
 import { DAVE_SHOVED_UP_SLEEVE } from '../../art/biped/sleeve';
 import { RIG_GARMENT_CUT, type GarmentCut } from '../../art/biped/torso';
+import { DAVE_BOOTS } from '../../garments/human/daveBoots';
 import { DAVE_JACKET } from '../../garments/human/daveJacket';
 import { DAVE_TROUSERS } from '../../garments/human/daveTrousers';
 import {
@@ -171,5 +173,5 @@ export const DAVE_LOOK: HumanLook = {
   shoulderSpread: DAVE_SHOULDER_SPREAD,
   hipSpread: RIG_HIP_SPREAD,
   figureExtent: DAVE_FIGURE_EXTENT,
-  baseGarments: [DAVE_JACKET, DAVE_TROUSERS],
+  baseGarments: [DAVE_JACKET, DAVE_TROUSERS, DAVE_BOOTS],
 };

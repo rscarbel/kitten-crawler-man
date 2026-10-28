@@ -1,15 +1,15 @@
 /**
- * A question the show's AI puts to the player ("Viewers want to know: save
- * the cat or the loot?"), with one button per answer. It halts the world
- * while it is up, so nothing hits the party mid-thought.
+ * A question the AI puts to the player ("Save the cat or the loot?"), with
+ * one button per answer. It halts the world while it is up, so nothing hits
+ * the party mid-thought.
  *
  * No answer is the default: Space and Enter press nothing until a button is
  * focused, so a key held from the fight cannot answer for the player. Escape
  * waves the question away, which the AI hears as no answer.
  */
 
-import { displayNameOf } from '../../../ai/AIChatFeed';
-import { SYSTEM_CHARACTER_NAME } from '../../../ai/characters';
+import { speaksInCarolineFrame } from '../../../ai/AIChatFeed';
+import { CAROLINE_CHARACTER_NAME } from '../../../ai/characters';
 import type { Surface } from '../../core/UiRoot';
 import type { PanelWidth } from '../../theme/tokens';
 import { choiceModalSurface } from '../../widgets/choiceModal';
@@ -50,9 +50,11 @@ export function aiQuestionSurface(id: string, source: AIQuestionSource): Surface
     content: (ui) => {
       const pending = source.pendingQuestion;
       const choices = pending?.choices ?? [];
+      const askedBy = pending?.askedBy ?? CAROLINE_CHARACTER_NAME;
       return {
         id: `question-${pending?.id ?? 'none'}`,
-        overline: `${displayNameOf(pending?.askedBy ?? SYSTEM_CHARACTER_NAME)} asks`,
+        chrome: speaksInCarolineFrame(askedBy) ? 'caroline' : 'glass',
+        overline: `${askedBy} asks`,
         icon: iconUnlessCompact(ui, 'eye'),
         tone: 'info',
         title: pending?.question ?? '',

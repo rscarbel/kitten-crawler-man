@@ -14,7 +14,9 @@
  *        reveal still playing) — a mouse player is waiting too. A region that
  *        covers the whole screen is not a control: it is "tap anywhere" to
  *        hurry a screen that finishes on its own, and the keyboard reaches
- *        the same place by waiting;
+ *        the same place by waiting. Nor is one that names a reserved key as
+ *        its `keyboardShortcut` (the HUD's pause button and Escape) while no
+ *        open surface takes that key first: the keyboard does what it does;
  *      * its key handler takes Enter or Space (a page-through dialog, the
  *        Keyboard Hero board), so the keyboard answers it without a ring.
  *        The probe cannot tell a handler that acts on the surface from one
@@ -82,10 +84,28 @@ function coversScreen(region: HitRegion, screen: Rect): boolean {
   );
 }
 
-function isControl(region: HitRegion, screen: Rect): boolean {
+/**
+ * Whether Escape, pressed now, would pass every open surface and reach the
+ * scene's own pause key. Mirrors the order `UiRoot.escape` walks the stack in.
+ */
+function escapeReachesScene(root: UiRoot): boolean {
+  const surfaces = mountedSurfaces(root);
+  const layers = root['frozenLayers'];
+  return root.openSurfaceIds().every((id) => {
+    if ((layers.get(id)?.onEscape ?? null) !== null) return false;
+    const surface = surfaces.get(id);
+    if (surface === undefined) return true;
+    if (surface.blocksEscape === true) return false;
+    return surface.close === undefined || surface.wantsEscape?.() === false;
+  });
+}
+
+function isControl(region: HitRegion, screen: Rect, root: UiRoot): boolean {
+  const shortcutReaches = region.keyboardShortcut === 'Escape' && escapeReachesScene(root);
   return (
     !region.disabled &&
     !coversScreen(region, screen) &&
+    !shortcutReaches &&
     (region.onTap !== undefined ||
       region.onPress !== undefined ||
       region.onRelease !== undefined ||
@@ -130,10 +150,10 @@ export function auditFocus(root: UiRoot, label: string): FocusAuditOutcome {
       claimants.push({ id: surface.id, ringSize, ringlessReason: null });
       continue;
     }
-    const reason = ringlessReason(surface, own, isScope, root.viewport.screen);
+    const reason = ringlessReason(surface, own, isScope, root);
     claimants.push({ id: surface.id, ringSize, ringlessReason: reason });
     if (reason !== null) continue;
-    const controls = own.filter((region) => isControl(region, root.viewport.screen)).length;
+    const controls = own.filter((region) => isControl(region, root.viewport.screen, root)).length;
     const detail =
       focusable > 0
         ? `its ${focusable} focusable region(s) sit below its top layer`
@@ -149,9 +169,10 @@ function ringlessReason(
   surface: Surface,
   own: readonly HitRegion[],
   isScope: boolean,
-  screen: Rect,
+  root: UiRoot,
 ): RinglessReason | null {
-  if (!own.some((region) => isControl(region, screen))) return 'nothing-to-press';
+  const screen = root.viewport.screen;
+  if (!own.some((region) => isControl(region, screen, root))) return 'nothing-to-press';
   if (surface.onKey === undefined) return null;
   if (!isScope) return 'waits-its-turn';
   const answers = ACTIVATION_PROBE_KEYS.some((key) => surface.onKey?.(key, {}) === true);

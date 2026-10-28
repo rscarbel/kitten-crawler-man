@@ -1,7 +1,7 @@
 /**
  * Cross-scene state for "The Krasue Murders" (the town murder-mystery
  * questline). Like DoomsdayProgress, one mutable object is created by the
- * overworld DungeonScene and threaded by reference through
+ * overworld's DungeonScene and threaded by reference through
  * BuildingInteriorScene and every scene reconstruction — the cult-hideout and
  * tower-confrontation beats advance the stage from inside interiors.
  *

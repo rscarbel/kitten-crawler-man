@@ -20,7 +20,7 @@
  *   the ball comes down and stays out until the charges have gone off; so does
  *   she standing exactly on the line between two landings, in the open or in a
  *   one-tile corridor, where the circles' summed push leads nowhere.
- * - So do Mongo and every hireling, standing where the twin lob's two landings
+ * - So do Deinonychus and every hireling, standing where the twin lob's two landings
  *   overlap, beside the line between them or exactly on it, whether following
  *   their crawler or fighting a mob inside the circle, and none of them takes
  *   a hit; on the line in a one-tile corridor they leave along it.
@@ -65,7 +65,7 @@ import { LOCKED_TELEGRAPH_MIN_FRAMES } from '../../src/creatures/mobLevelScaling
 import { MAX_MOB_LEVEL } from '../../src/levels/spawner';
 import type { Player } from '../../src/Player';
 import { applyMovement } from '../../src/systems/GameLoopPhases';
-import { Mongo } from '../../src/creatures/Mongo';
+import { Deinonychus } from '../../src/creatures/Deinonychus';
 import { Mercenary } from '../../src/creatures/Mercenary';
 import {
   MERCENARY_TEMPLATE_IDS,
@@ -106,10 +106,10 @@ const FAIRY_TILE_Y = 10;
 /** Where the crawler stands for a throw: six tiles east, in range and in sight. */
 const TARGET_TILE_X = 11;
 /**
- * Constitution that gives the crawler HP to spare, so no run ends in a death
+ * Health that gives the crawler HP to spare, so no run ends in a death
  * that stops the blows being measured.
  */
-const DURABLE_CONSTITUTION = 100;
+const DURABLE_HEALTH = 100;
 /** Frames granted for one throw to leave, fly and land. */
 const THROW_LIMIT_FRAMES = 400;
 /** Frames granted for a landed charge to go off. */
@@ -403,7 +403,7 @@ function fireStage(
   stage.roster.add(fairy);
   const level = opts.level ?? 1;
   if (level > 1) fairy.applyMobLevel(level);
-  stage.pm.human.setBaseStat('constitution', DURABLE_CONSTITUTION);
+  stage.pm.human.setBaseStat('health', DURABLE_HEALTH);
   stage.pm.human.hp = stage.pm.human.maxHp;
   placeOnTile(stage.pm.human, opts.targetTileX ?? TARGET_TILE_X, FAIRY_TILE_Y);
   placeOnTile(stage.pm.cat, PARK_TILE, PARK_TILE);
@@ -787,7 +787,7 @@ function companionDodgeRun(
     const s = fireStage({ fireballs, make, walls });
     const cat = s.pm.cat;
     placeOnTile(cat, COMPANION_CAT_TILE_X, FAIRY_TILE_Y);
-    cat.setBaseStat('constitution', DURABLE_CONSTITUTION);
+    cat.setBaseStat('health', DURABLE_HEALTH);
     cat.hp = cat.maxHp;
     const companion = new CompanionSystem(s.map, COMPANION_CAT_TILE_X, FAIRY_TILE_Y);
     companion.registerHazardSource(s.fireballs);
@@ -1249,8 +1249,8 @@ function checkFreezeNeverGuaranteesBlast(report: FairyGateReport): void {
   );
 }
 
-/** Mongo's pet level for the ally runs: the youngest, slowest raptor. */
-const ALLY_MONGO_LEVEL = 1;
+/** Deinonychus's pet level for the ally runs: the youngest, slowest dinosaur. */
+const ALLY_DEINONYCHUS_LEVEL = 1;
 /**
  * Where an ally stands for the twin lob: its centre a quarter-tile along the
  * line from the cat's landing towards the human's, deep inside both circles
@@ -1339,16 +1339,16 @@ const ALLY_FOE_TILE_Y = FAIRY_TILE_Y;
 const ALLY_FOE_HP = 100_000;
 
 /** One of each kind of ally ranged over for the corridor and the broken-escape runs. */
-const CORRIDOR_ALLY_KINDS = ['Mongo', 'crush'] as const;
+const CORRIDOR_ALLY_KINDS = ['Deinonychus', 'crush'] as const;
 
 /** What an ally is doing when the balls are thrown. */
 type AllyStance = 'following' | 'fighting';
 
 /** Which ally stands on the landings. */
-type AllyKind = 'Mongo' | MercenaryTemplateId;
+type AllyKind = 'Deinonychus' | MercenaryTemplateId;
 
-/** Mongo who walks wherever his follow and his fight take him, marked ground or not. */
-class HazardBlindMongo extends Mongo {
+/** Deinonychus who walks wherever his follow and his fight take him, marked ground or not. */
+class HazardBlindDeinonychus extends Deinonychus {
   protected override get avoidsMarkedGround(): boolean {
     return false;
   }
@@ -1361,8 +1361,8 @@ class HazardBlindMercenary extends Mercenary {
   }
 }
 
-/** Mongo who flees marked ground he stands on but will step back onto it. */
-class FleeOnlyMongo extends Mongo {
+/** Deinonychus who flees marked ground he stands on but will step back onto it. */
+class FleeOnlyDeinonychus extends Deinonychus {
   protected override get avoidsMarkedGround(): boolean {
     return isMarkedGround(this.x, this.y);
   }
@@ -1382,7 +1382,7 @@ class FleeOnlyMercenary extends Mercenary {
 type AllyAvoidance = 'real' | 'blind' | 'flee only';
 
 /**
- * Builds an ally the way its system does — Mongo at full health for his
+ * Builds an ally the way its system does — Deinonychus at full health for his
  * level, owned by the cat; a hireling owned by the human — and places it.
  */
 function makeAlly(
@@ -1390,11 +1390,15 @@ function makeAlly(
   avoidance: AllyAvoidance,
   human: Player,
   cat: Player,
-): Mongo | Mercenary {
-  if (kind === 'Mongo') {
-    const probe = new Mongo(0, 0, TILE_SIZE, cat, ALLY_MONGO_LEVEL, 1);
-    const makers = { real: Mongo, blind: HazardBlindMongo, 'flee only': FleeOnlyMongo } as const;
-    return new makers[avoidance](0, 0, TILE_SIZE, cat, ALLY_MONGO_LEVEL, probe.maxHp);
+): Deinonychus | Mercenary {
+  if (kind === 'Deinonychus') {
+    const probe = new Deinonychus(0, 0, TILE_SIZE, cat, ALLY_DEINONYCHUS_LEVEL, 1);
+    const makers = {
+      real: Deinonychus,
+      blind: HazardBlindDeinonychus,
+      'flee only': FleeOnlyDeinonychus,
+    } as const;
+    return new makers[avoidance](0, 0, TILE_SIZE, cat, ALLY_DEINONYCHUS_LEVEL, probe.maxHp);
   }
   const name = getMercenaryTemplate(kind).name;
   const makers = {
@@ -1446,7 +1450,7 @@ function allyDodgeRun(
     const s = fireStage({ fireballs: setup.fireballs, walls });
     const { human, cat } = s.pm;
     placeOnTile(cat, COMPANION_CAT_TILE_X, FAIRY_TILE_Y);
-    cat.setBaseStat('constitution', DURABLE_CONSTITUTION);
+    cat.setBaseStat('health', DURABLE_HEALTH);
     cat.hp = cat.maxHp;
     const ally = makeAlly(kind, avoidance, human, cat);
     ally.setMap(s.map);
@@ -1492,7 +1496,8 @@ function allyDodgeRun(
         const flyingBefore = s.fireballs.liveFireballs.length;
         setMarkedGroundSources([s.fireballs]);
         ally.updateAI(party);
-        const fightingFoe = ally instanceof Mongo ? ally.engagedTarget === foe : ally.isFighting;
+        const fightingFoe =
+          ally instanceof Deinonychus ? ally.engagedTarget === foe : ally.isFighting;
         if (foe !== null && fightingFoe) engagedFoe = true;
         s.fairy.updateAI(party);
         s.fireballs.update({ ...s.ctx(), extraTargets: [ally] });
@@ -1543,7 +1548,7 @@ function checkAlliesDodge(report: FairyGateReport): void {
     !run.hurt;
   const describe = (run: AllyDodgeRun): string =>
     `clear ${run.clearedAfter} frames after the throw, landing at ${run.flightFrames}, re-entered ${run.reentered}, back on marked ground ${run.reenteredMarked}, hurt ${run.hurt}`;
-  const kinds: readonly AllyKind[] = ['Mongo', ...MERCENARY_TEMPLATE_IDS];
+  const kinds: readonly AllyKind[] = ['Deinonychus', ...MERCENARY_TEMPLATE_IDS];
   const placements: readonly AllyPlacement[] = ['beside the line', 'on the line'];
   for (const placement of placements) {
     for (const kind of kinds) {
@@ -1554,7 +1559,8 @@ function checkAlliesDodge(report: FairyGateReport): void {
           real.twoBalls,
           `the fairy lobs at both crawlers with ${staged} between them`,
         );
-        const picksNoFights = kind !== 'Mongo' && getMercenaryTemplate(kind).kit.id === 'medic';
+        const picksNoFights =
+          kind !== 'Deinonychus' && getMercenaryTemplate(kind).kit.id === 'medic';
         if (stance === 'fighting' && picksNoFights) {
           report.notApplicable(
             `${staged} takes on the mob planted in the circle`,
@@ -1609,7 +1615,7 @@ function checkAlliesDodge(report: FairyGateReport): void {
       );
     }
   }
-  for (const kind of ['Mongo', 'crush'] as const) {
+  for (const kind of ['Deinonychus', 'crush'] as const) {
     for (const stance of ['following', 'fighting'] as const) {
       const blind = allyDodgeRun(kind, stance, 'blind');
       report.checkCatches(

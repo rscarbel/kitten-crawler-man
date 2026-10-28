@@ -26,7 +26,7 @@ export interface RewardGrantedView {
 
 /**
  * Pausing overlay shown when the player is granted an ability, a skill, or a
- * special unlock (e.g. Mongo the velociraptor companion) after dismissing an
+ * special unlock (e.g. the Deinonychus companion) after dismissing an
  * award screen.
  *
  * Multiple rewards are queued and shown one after the other.

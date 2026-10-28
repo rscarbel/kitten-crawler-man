@@ -15,7 +15,7 @@ import type { DifficultyTelemetryCheckpoint } from '../../systems/DifficultyTele
 import type { DoomsdayEscapeCheckpoint } from '../../systems/DoomsdayEscapeSystem';
 import type { MercenaryCheckpoint } from '../../systems/MercenarySystem';
 import type { MiniMapCheckpoint } from '../../systems/MiniMapSystem';
-import type { MongoCheckpoint } from '../../systems/MongoSystem';
+import type { DeinonychusCheckpoint } from '../../systems/DeinonychusSystem';
 import type { MurderMysteryQuestCheckpoint } from '../../systems/MurderMysteryQuestSystem';
 import type { RecallCheckpoint } from '../../systems/RecallSystem';
 import type { SpiderQuestCheckpoint } from '../../systems/SpiderQuestSystem';
@@ -30,7 +30,7 @@ import type { CasinoStateCheckpoint } from '../club/CasinoState';
 import type { TownMemoryCheckpoint } from '../state/TownMemory';
 import type { GameStatsSnapshot } from '../progression/GameStats';
 import type { MercenaryRosterCheckpoint } from '../party/MercenaryRoster';
-import type { MongoPetStateCheckpoint } from '../state/MongoPetState';
+import type { DeinonychusPetStateCheckpoint } from '../state/DeinonychusPetState';
 import type { MurderQuestProgressCheckpoint } from '../quests/MurderQuestProgress';
 import type { JournalProgressCheckpoint } from '../quests/JournalProgress';
 import type { BriarHollowStateSnapshot } from '../quests/briarHollowState';
@@ -69,7 +69,7 @@ export interface WorldCheckpoint {
   bopca: BopcaCheckpoint;
   difficultyTelemetry: DifficultyTelemetryCheckpoint;
   mercenary: MercenaryCheckpoint;
-  mongo: MongoCheckpoint;
+  deinonychus: DeinonychusCheckpoint;
 
   defendQuest: DefendQuestCheckpoint;
   /** Where the bathroom quest stands and whether its explainer was seen; the board's turns are not kept. */
@@ -99,8 +99,8 @@ export interface WorldCheckpoint {
   shopStock: ShopStockSnapshot;
   townMemory: TownMemoryCheckpoint;
   mercenaryRoster: MercenaryRosterCheckpoint;
-  mongoPetState: MongoPetStateCheckpoint;
-  /** The human crawler's attack cow: owned, her health and her rest, rewound like Mongo's. */
+  deinonychusPetState: DeinonychusPetStateCheckpoint;
+  /** The human crawler's attack cow: owned, her health and her rest, rewound like Deinonychus's. */
   attackCowState: AttackCowStateCheckpoint;
   /** Briar Hollow's quest, structures and soldier orders. Empty on every floor but 3. */
   briarHollow: BriarHollowStateSnapshot;

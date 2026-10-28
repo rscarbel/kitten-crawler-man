@@ -1,5 +1,6 @@
 import { gearModifiers, wornClaws } from '../gear/gearHooks';
-import { Player, type FigureMouth, type StatName, type StatusFigureBox } from '../Player';
+import { weaponHitTags, type DamageTags } from '../core/combat/damageTags';
+import { Player, type FigureMouth, type StatusFigureBox } from '../Player';
 import { intoxicationDilatesPupils, intoxicationOf } from '../core/combat/Intoxication';
 
 import type { Mob } from './Mob';
@@ -14,6 +15,8 @@ import {
   prewarmMagicMissileCast,
   prewarmCatHold,
   catCellFor,
+  catMouthSocketInTile,
+  CAT_THROW_RELEASE_TICKS,
   type CatHeldDraw,
   type CatSpriteState,
   type CatWorkSwing,
@@ -46,17 +49,14 @@ import { HELD_VISUALS, workingToolHeldVisual } from '../sprites/held/heldVisuals
 import type { HeldVisualDef } from '../sprites/held/heldVisualDef';
 import { heldPhaseAt } from '../sprites/held/heldComposite';
 import { ITEM_DEF } from '../core/items/defs/ItemDefs';
+import type { ExplosiveThrower, ThrowCallbacks } from '../systems/explosiveThrower';
 
 /** Single source for this class's crawler identity — used by the UI and by skill eligibility. */
 const CAT_CRAWLER_KIND: CrawlerKind = 'cat';
 
 import {
   bareClawDamage,
-  CAT_BASE_CONSTITUTION,
   CAT_BASE_HP_OFFSET,
-  CAT_DEXTERITY_PER_LEVEL,
-  CAT_LOCKED_STATS,
-  CAT_STARTING_DEXTERITY,
   CAT_SWIPE_FRAMES,
   missileDamage,
 } from '../core/party/crawlerFormulas';
@@ -128,7 +128,7 @@ export class CatPlayer extends Player {
    */
   private static readonly AUTO_SWIPE_COOLDOWN_FRAMES = 90;
   private static readonly MISSILE_BASE_RANGE = 3.5;
-  private static readonly MISSILE_RANGE_INTELLIGENCE_MULTIPLIER = 0.5;
+  private static readonly MISSILE_RANGE_MAGIC_MULTIPLIER = 0.5;
   private static readonly SUBMISSILE_MAX_DIST_TILES = 1.8;
   /** Half a tile: what you add to a tile origin to get its centre. */
   private static readonly TILE_CENTER_OFFSET = 0.5;
@@ -142,14 +142,16 @@ export class CatPlayer extends Player {
   }
 
   private spriteState(held: CatHeldDraw | null = this.heldDraw()): CatSpriteState {
+    const hold = held?.hold ?? null;
     return {
       walkFrame: this.walkFrame,
       isMoving: this.isMoving,
       facing: this.facing.peek(this.facingX, this.facingY),
       isKnockedOut: this.isKnockedOut,
       oneShot: this.animator.current,
-      carrying: held?.hold === 'carry',
-      working: held !== null && held.hold !== 'carry' ? held.hold : null,
+      carrying: hold === 'carry' || hold === 'throw',
+      working: hold === 'chop' || hold === 'mine' ? hold : null,
+      cockedToThrow: hold === 'throw' && this.explosive?.cocked === true,
       pupilsDilated: intoxicationDilatesPupils(intoxicationOf(this)),
     };
   }
@@ -216,10 +218,6 @@ export class CatPlayer extends Player {
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, {
       baseHpOffset: CAT_BASE_HP_OFFSET,
-      baseStats: {
-        constitution: CAT_BASE_CONSTITUTION,
-        dexterity: CAT_STARTING_DEXTERITY,
-      },
       crawlerKind: CAT_CRAWLER_KIND,
     });
     // She is drawn on essentially every frame of the scene she is built for, so
@@ -235,7 +233,7 @@ export class CatPlayer extends Player {
 
   getMissileDamage(): number {
     const stats = getMagicMissileStats(this.getMagicMissileLevel());
-    return missileDamage(this.intelligence, stats.damageMultiplier);
+    return missileDamage(this.magic, stats.damageMultiplier);
   }
 
   /** Crawlers dodge; the mobs they fight do not. */
@@ -243,7 +241,7 @@ export class CatPlayer extends Player {
     return true;
   }
 
-  /** Cat-like Reflexes rides on top of the dexterity curve, under the same cap. */
+  /** Cat-like Reflexes rides on top of the evasiveness curve, under the same cap. */
   protected override get dodgeFlatBonus(): number {
     return CAT_REFLEXES_DODGE_BONUS_PER_LEVEL * this.skills.getLevel('cat_reflexes');
   }
@@ -254,23 +252,8 @@ export class CatPlayer extends Player {
     this.skills.recordUse('cat_reflexes');
   }
 
-  /**
-   * The cat's constitution is fixed by the enhanced pet biscuit, and her dexterity
-   * is auto-allocated by Enhanced Growth — neither accepts a spent point. Her
-   * banked points go to strength and intelligence.
-   */
-  override canSpendPointInto(stat: StatName): boolean {
-    return !CAT_LOCKED_STATS.includes(stat);
-  }
-
-  /**
-   * Enhanced Growth: the System auto-allocates the cat's dexterity on every
-   * level-up, which is the counterweight to her locked constitution.
-   */
   protected override onLevelGained(): void {
     super.onLevelGained();
-    this.setBaseStat('dexterity', this.getBaseStat('dexterity') + CAT_DEXTERITY_PER_LEVEL);
-    this.queueFloatingText(`+${CAT_DEXTERITY_PER_LEVEL} DEX`, 'buff');
     this.animator.play('dance');
   }
 
@@ -293,9 +276,14 @@ export class CatPlayer extends Player {
     this.animator.play('groom_paw');
   }
 
+  /** What kind of blow her swipe is: her worn claws' family, or none for a bare paw. */
+  meleeHitTags(): DamageTags {
+    return weaponHitTags(wornClaws(this));
+  }
+
   getMeleeDamage(): number {
     const clawMultiplier = wornClaws(this)?.damageMultiplier ?? 1;
-    return bareClawDamage(this.strength) * clawMultiplier + this.statusMeleeDamageBonus;
+    return bareClawDamage(this.melee) * clawMultiplier + this.statusMeleeDamageBonus;
   }
 
   getMeleeRange(): number {
@@ -312,8 +300,7 @@ export class CatPlayer extends Player {
   /** A missile's flight before its level's range multiplier. */
   private missileBaseRangePx(): number {
     return (
-      (CatPlayer.MISSILE_BASE_RANGE +
-        this.intelligence * CatPlayer.MISSILE_RANGE_INTELLIGENCE_MULTIPLIER) *
+      (CatPlayer.MISSILE_BASE_RANGE + this.magic * CatPlayer.MISSILE_RANGE_MAGIC_MULTIPLIER) *
       this.tileSize
     );
   }
@@ -516,9 +503,20 @@ export class CatPlayer extends Player {
     this.prewarmMouthCarry();
   }
 
-  /** What she is drawn holding: her working tool while she works, else what is in her jaws. */
+  /**
+   * What she is drawn holding: an explosive in her jaws to be flung, else her
+   * working tool while she works, else what she carries in her jaws.
+   */
   private heldDraw(): CatHeldDraw | null {
     if (!this.isAlive) return null;
+    const explosive = this.explosive;
+    if (explosive !== null) {
+      return {
+        look: explosive.look,
+        phase: heldPhaseAt(explosive.look, this.heldTicks),
+        hold: 'throw',
+      };
+    }
     const tool = this.workingTool;
     const swing = this.workSwing;
     const toolLook = tool === null ? null : workingToolHeldVisual(tool);
@@ -581,6 +579,79 @@ export class CatPlayer extends Player {
     this.heldTicks++;
     this.facing.update(this.facingX, this.facingY);
     this.animator.tick(this.isMoving, this.isKnockedOut);
+    this.tickThrow();
+  }
+
+  /**
+   * An explosive in her jaws: carried while it waits, cocked while she draws
+   * back to fling it. Null with her jaws free of one.
+   */
+  private explosive: { readonly look: HeldVisualDef; cocked: boolean } | null = null;
+  /** The throw playing, with how many ticks it has run and whether it has let go yet. */
+  private throwing: {
+    ticks: number;
+    released: boolean;
+    readonly callbacks: ThrowCallbacks;
+  } | null = null;
+
+  /** How she carries, draws back and flings an explosive: from her jaws, front paws planted. */
+  readonly explosives: ExplosiveThrower = {
+    takeExplosive: (look) => {
+      // A throw still playing is over the moment she takes up the next one.
+      this.animator.stop('throw');
+      this.finishThrow();
+      this.explosive = { look: HELD_VISUALS[look], cocked: false };
+      prewarmCatHold('throw', this.facing.peek(this.facingX, this.facingY), this.isMoving);
+    },
+    holdExplosive: (stance) => {
+      if (this.explosive !== null) this.explosive.cocked = stance !== 'readied';
+    },
+    throwExplosive: (callbacks) => {
+      if (!this.canAct || this.isKnockedOut || this.isSwinging) {
+        // A refused throw still puts the thing in the world, from her centre,
+        // so nothing is left in her jaws.
+        this.explosive = null;
+        return false;
+      }
+      this.finishThrow();
+      if (this.explosive !== null) this.explosive.cocked = false;
+      this.animator.play('throw');
+      this.throwing = { ticks: 0, released: false, callbacks };
+      return true;
+    },
+    dropExplosivePose: () => {
+      this.explosive = null;
+      this.animator.stop('throw');
+      this.finishThrow();
+    },
+    explosiveReleasePoint: () => {
+      const inTile = catMouthSocketInTile(catCellFor(this.spriteState()));
+      const tile = inTile ?? { x: CatPlayer.TILE_CENTER_OFFSET, y: CatPlayer.TILE_CENTER_OFFSET };
+      return { x: this.x + tile.x * this.tileSize, y: this.y + tile.y * this.tileSize };
+    },
+  };
+
+  /** Lets the thing go on her throw's release tick, and ends the throw once its row has stopped. */
+  private tickThrow(): void {
+    const throwing = this.throwing;
+    if (throwing === null) return;
+    throwing.ticks++;
+    if (!throwing.released && throwing.ticks >= CAT_THROW_RELEASE_TICKS) {
+      throwing.released = true;
+      throwing.callbacks.onRelease();
+    }
+    if (this.animator.current?.action !== 'throw') {
+      this.explosive = null;
+      this.finishThrow();
+    }
+  }
+
+  /** Ends the throw in flight, if any, telling it whether she went down under it. */
+  private finishThrow(): void {
+    const throwing = this.throwing;
+    if (throwing === null) return;
+    this.throwing = null;
+    throwing.callbacks.onEnd(!this.isAlive);
   }
 
   override get isSwinging(): boolean {
@@ -711,7 +782,7 @@ export class CatPlayer extends Player {
    * something already inside her reach.
    *
    * Until this existed the companion cat had exactly one attack — the missile —
-   * so every point a player put into her strength was dead weight for as long as
+   * so every point a player put into her melee was dead weight for as long as
    * they were playing the human. Nothing downstream needed teaching: the melee
    * resolver never asked which crawler was active, and the swipe animation and
    * its sound were already wired.

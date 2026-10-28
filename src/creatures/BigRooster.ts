@@ -776,7 +776,7 @@ export class BigRooster extends Mob {
       land: (target, spec) => {
         const tcx = target.x + this.tileSize * CENTER_OFFSET;
         const tcy = target.y + this.tileSize * CENTER_OFFSET;
-        if (this.spells?.isPointInsideShell(tcx, tcy) === true) {
+        if (this.spells?.isPointInsideEnergyShield(tcx, tcy) === true) {
           this.spells.addBlockXp(BLOCK_XP);
           return;
         }
@@ -1024,7 +1024,7 @@ export class BigRooster extends Mob {
       const tcx = target.x + this.tileSize * CENTER_OFFSET;
       const tcy = target.y + this.tileSize * CENTER_OFFSET;
       if (Math.hypot(plate.x - tcx, plate.y - tcy) >= hitRadius) continue;
-      if (this.spells?.isPointInsideShell(tcx, tcy) === true) {
+      if (this.spells?.isPointInsideEnergyShield(tcx, tcy) === true) {
         this.spells.addBlockXp(BLOCK_XP);
       } else if (this.dealRangedDamage(target, PLATE_ROLL_DAMAGE, PLATE_ROLL_ATTACK_TYPE)) {
         target.damageFlash = DAMAGE_FLASH_DUMBBELL;
@@ -1104,7 +1104,7 @@ export class BigRooster extends Mob {
       const dx = cx - point.x;
       const dy = cy - point.y;
       if (Math.hypot(dx, dy) > radius) continue;
-      if (this.spells?.isPointInsideShell(cx, cy) === true) {
+      if (this.spells?.isPointInsideEnergyShield(cx, cy) === true) {
         this.spells.addBlockXp(BLOCK_XP);
         continue;
       }
@@ -1176,7 +1176,7 @@ export class BigRooster extends Mob {
       if (distance > reach) continue;
       const inArc = distance === 0 || (dx * aim.x + dy * aim.y) / distance >= CLUB_ARC_MIN_DOT;
       if (!inArc) continue;
-      if (this.spells?.isPointInsideShell(cx, cy) === true) {
+      if (this.spells?.isPointInsideEnergyShield(cx, cy) === true) {
         this.spells.addBlockXp(BLOCK_XP);
         continue;
       }
@@ -1621,7 +1621,7 @@ export class BigRooster extends Mob {
       const dx = proj.x - tcx;
       const dy = proj.y - tcy;
       if (Math.hypot(dx, dy) < hitRadius) {
-        if (this.spells?.isPointInsideShell(tcx, tcy)) {
+        if (this.spells?.isPointInsideEnergyShield(tcx, tcy)) {
           this.spells.addBlockXp(BLOCK_XP);
           this.activeThrow = null;
           return;

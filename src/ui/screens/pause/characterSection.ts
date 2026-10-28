@@ -3,7 +3,8 @@
  * them, the skills they have found, and the run's statistics.
  */
 
-import { CON_HP_BONUS_PER_POINT, displayHp } from '../../../core/party/crawlerFormulas';
+import { displayHp } from '../../../core/party/crawlerFormulas';
+import { ALL_STATS, STAT_DEFS, type StatId } from '../../../core/party/stats';
 import { formatPlayTime, type GameStats } from '../../../core/progression/GameStats';
 import { crawlerName } from '../../../characters/characters';
 import {
@@ -12,20 +13,19 @@ import {
   SKILL_IDS,
   usesToNextLevel,
   type CrawlerKind,
+  type SkillDef,
   type SkillState,
 } from '../../../core/skills/SkillManager';
+import { proficiencyLevelLabel } from '../../../core/skills/proficiency';
 import {
   BRASS_GULLET_LABEL,
   BRASS_GULLET_SKILL,
   STAT_TATTOO_DESIGNS,
   brassGulletDesc,
 } from '../../../core/skills/tattoos';
-import { HumanPlayer } from '../../../creatures/HumanPlayer';
-import type { Player, StatName } from '../../../Player';
-import { DYN_MOB_DAMAGE_FRACTION_PER_HANDLING_LEVEL } from '../../../systems/DynamiteSystem';
-import { centerIn, inset, splitH, type Rect } from '../../core/geom';
+import type { Player } from '../../../Player';
+import { centerIn, splitH, type Rect } from '../../core/geom';
 import type { Ui } from '../../core/UiRoot';
-import { drawGlyph } from '../../theme/glyphs';
 import { skinsFor, type TextRole } from '../../theme/skins';
 import type { Theme } from '../../theme/tokens';
 import { badge, badgeSize } from '../../widgets/badge';
@@ -38,121 +38,27 @@ import { lineHeightOf, measureTextHeight, text } from '../../widgets/text';
 import { choiceRow, perCrawler, type Choice } from './parts';
 import { activeGearLines } from '../../itemEffectLines';
 import type { PauseContext, PauseSection, SectionLayout } from './section';
+import { petWords, type PetNames } from '../../../core/party/petNames';
 
 type CharacterTab = 'attributes' | 'skills' | 'run';
 
-const PERCENT = 100;
-const EXPLOSIVE_DAMAGE_PERCENT_PER_POINT = Math.round(
-  DYN_MOB_DAMAGE_FRACTION_PER_HANDLING_LEVEL * PERCENT,
-);
-
 const SPEND_SOUND = 'menu_skillpoint_spent';
 
-interface StatDef {
-  /** The stat this card invests in; null for the human-only Explosives Handling track. */
-  readonly statName: StatName | null;
-  readonly name: string;
-  readonly description: string;
-  /** Shown instead of the description when the System refuses points into this stat. */
-  readonly lockedNote?: string;
-  readonly accent: (theme: Theme) => string;
-  readonly value: (p: Player) => number;
-  /** Invests one banked level-up point into this card's stat. */
-  readonly spend: (p: Player) => void;
-}
-
-/** The health stat's card name, on both crawlers' pages. */
-export const CONSTITUTION_STAT_NAME = 'Constitution';
-
-const strengthAccent = (theme: Theme): string => theme.palette.category.weapon;
-const constitutionAccent = (theme: Theme): string => theme.palette.state.success;
-const dexterityAccent = (theme: Theme): string => theme.palette.state.info;
-
-const HUMAN_STATS: readonly StatDef[] = [
-  {
-    statName: 'strength',
-    name: 'Strength',
-    description: 'Hit harder. Each point raises melee damage by 1.',
-    accent: strengthAccent,
-    value: (p) => p.strength,
-    spend: (p) => p.spendPoint('strength'),
-  },
-  {
-    statName: null,
-    name: 'Explosives Handling',
-    description: `Bigger booms. Each point adds +${EXPLOSIVE_DAMAGE_PERCENT_PER_POINT}% dynamite damage to enemies and a longer throw.`,
-    accent: (theme) => theme.palette.state.warning,
-    value: (p) => (p instanceof HumanPlayer ? p.explosivesHandling : 0),
-    spend: (p) => {
-      if (p instanceof HumanPlayer) p.spendPoint('explosivesHandling');
-    },
-  },
-  {
-    statName: 'constitution',
-    name: CONSTITUTION_STAT_NAME,
-    description: `Toughen up. Each point grants +${CON_HP_BONUS_PER_POINT} maximum HP.`,
-    accent: constitutionAccent,
-    value: (p) => p.constitution,
-    spend: (p) => p.spendPoint('constitution'),
-  },
-  {
-    statName: 'dexterity',
-    name: 'Dexterity',
-    description: 'Stay untouched. Each point improves your chance to dodge an attack.',
-    accent: dexterityAccent,
-    value: (p) => p.dexterity,
-    spend: (p) => p.spendPoint('dexterity'),
-  },
-];
-
-const CAT_STATS: readonly StatDef[] = [
-  {
-    statName: 'strength',
-    name: 'Strength',
-    description: 'Sharper claws. Each point raises claw attack damage.',
-    accent: strengthAccent,
-    value: (p) => p.strength,
-    spend: (p) => p.spendPoint('strength'),
-  },
-  {
-    statName: 'intelligence',
-    name: 'Intelligence',
-    description: 'Think bigger. Amplifies magic missile power & range.',
-    accent: (theme) => theme.palette.category.book,
-    value: (p) => p.intelligence,
-    spend: (p) => p.spendPoint('intelligence'),
-  },
-  {
-    statName: 'constitution',
-    name: CONSTITUTION_STAT_NAME,
-    description: `Nine lives. Each point grants +${CON_HP_BONUS_PER_POINT} maximum HP.`,
-    lockedNote:
-      'Attribute locked by the System. Pet biscuit enhancement is permanent and non-negotiable.',
-    accent: constitutionAccent,
-    value: (p) => p.constitution,
-    spend: (p) => p.spendPoint('constitution'),
-  },
-  {
-    statName: 'dexterity',
-    name: 'Dexterity',
-    description: 'Feline grace. Each point improves your chance to dodge an attack.',
-    lockedNote: 'Auto-allocated by Enhanced Growth on level-up. No input required.',
-    accent: dexterityAccent,
-    value: (p) => p.dexterity,
-    spend: (p) => p.spendPoint('dexterity'),
-  },
-];
-
-const STATS_BY_CRAWLER: Readonly<Record<CrawlerKind, readonly StatDef[]>> = {
-  human: HUMAN_STATS,
-  cat: CAT_STATS,
-};
+/** The colour each stat's card is drawn in while a point can go into it. */
+const STAT_ACCENTS = {
+  health: (theme) => theme.palette.state.success,
+  melee: (theme) => theme.palette.category.weapon,
+  magic: (theme) => theme.palette.category.book,
+  evasiveness: (theme) => theme.palette.state.info,
+  ranged: (theme) => theme.palette.category.tool,
+  explosivesHandling: (theme) => theme.palette.state.warning,
+} as const satisfies Record<StatId, (theme: Theme) => string>;
 
 const SPEND_BUTTON_ID_SUFFIX = '/spend';
 
 /** The widget id of a stat card's "+" spend button, for code that points at it. */
-export function statSpendButtonId(crawler: CrawlerKind, statName: string): string {
-  return `${crawler}/${statName}${SPEND_BUTTON_ID_SUFFIX}`;
+export function statSpendButtonId(crawler: CrawlerKind, stat: StatId): string {
+  return `${crawler}/${stat}${SPEND_BUTTON_ID_SUFFIX}`;
 }
 
 /** Whether a widget id is one of `crawler`'s stat "+" spend buttons. */
@@ -224,39 +130,29 @@ function statCard(
   column: SectionLayout,
   ctx: PauseContext,
   crawler: CrawlerKind,
-  stat: StatDef,
+  stat: StatId,
 ): void {
   const { ui } = column;
   const { space, palette, size } = ui.theme;
   const player = crawlerOf(ctx, crawler);
-  // A locked card reads like the no-points state; the difference is that no
-  // amount of banked points will ever open it.
-  const locked = stat.statName !== null && !player.canSpendPointInto(stat.statName);
-  const canInvest = player.unspentPoints > 0 && !locked;
+  const def = STAT_DEFS[stat];
+  const canInvest = player.unspentPoints > 0;
   const padding = skinsFor(ui.theme).panel.raised.padding;
   const plusW = canInvest ? size.control : 0;
-  const description = locked ? (stat.lockedNote ?? stat.description) : stat.description;
+  const description = `${def.description} ${def.effectLine(crawler)}`;
   const descW = column.width - padding * 2 - plusW - (canInvest ? space.sm : 0);
   const descH = measureTextHeight(ui, descW, { text: description, role: 'caption' });
   const h = padding * 2 + lineHeightOf(ui, 'label') + space.xxs + descH;
   const rect = column.row(h, space.sm);
-  const accent = canInvest ? stat.accent(ui.theme) : palette.text.muted;
+  const accent = canInvest ? STAT_ACCENTS[stat](ui.theme) : palette.text.muted;
   card(ui, rect, {
-    id: `${crawler}/${stat.name}`,
+    id: `${crawler}/${stat}`,
     content: (body) => {
       const [textCol, plusCol] = splitH(body, ['fill', plusW], canInvest ? space.sm : 0);
       const nameRow: Rect = { ...textCol, h: lineHeightOf(ui, 'label') };
-      let nameRect = nameRow;
-      if (locked) {
-        const side = size.icon;
-        drawGlyph(ui.ctx, 'lock', centerIn({ ...nameRow, w: side }, side, side), {
-          color: palette.text.muted,
-        });
-        nameRect = inset(nameRow, { l: side + space.xs });
-      }
-      text(ui, nameRect, { text: stat.name, role: 'label', color: accent });
+      text(ui, nameRow, { text: def.label, role: 'label', color: accent });
       text(ui, nameRow, {
-        text: String(stat.value(player)),
+        text: String(player.statValue(stat)),
         role: 'value',
         color: accent,
         align: 'right',
@@ -265,24 +161,19 @@ function statCard(
       text(
         ui,
         { x: textCol.x, y: nameRow.y + nameRow.h + space.xxs, w: textCol.w, h: descH },
-        {
-          text: description,
-          role: 'caption',
-          color: locked ? palette.state.warning : undefined,
-          wrap: true,
-        },
+        { text: description, role: 'caption', wrap: true },
       );
       if (!canInvest) return;
       const plus = centerIn(plusCol, size.control, size.control);
       column.track(
         plus,
         iconButton(ui, plus, {
-          id: statSpendButtonId(crawler, stat.name),
+          id: statSpendButtonId(crawler, stat),
           icon: 'plus',
-          label: `Spend a point on ${stat.name}`,
+          label: `Spend a point on ${def.label}`,
           variant: 'primary',
           sound: SPEND_SOUND,
-          onTap: () => stat.spend(player),
+          onTap: () => player.spendPoint(stat),
         }),
       );
     },
@@ -306,7 +197,7 @@ function tattooLines(player: Player): string[] {
 function renderAttributes(layout: SectionLayout, ctx: PauseContext): void {
   perCrawler(layout, (column, crawler) => {
     crawlerHeader(column, ctx, crawler);
-    for (const stat of STATS_BY_CRAWLER[crawler]) statCard(column, ctx, crawler, stat);
+    for (const stat of ALL_STATS) statCard(column, ctx, crawler, stat);
     for (const line of tattooLines(crawlerOf(ctx, crawler))) column.paragraph(line, 'muted');
     const gear = activeGearLines([...crawlerOf(ctx, crawler).inventory.equipment.equippedIds()]);
     for (const line of gear) column.paragraph(line, 'success');
@@ -336,6 +227,29 @@ function levelPips(ui: Ui, row: Rect, level: number, maxLevel: number): void {
       index < level ? palette.category.book : palette.meter.track,
     );
     x += PIP_SIZE + space.xxs;
+  }
+}
+
+/**
+ * A skill's level beside its name: a pip per level for the short climbs, and
+ * the number for a proficiency, whose ceiling is too far off for pips.
+ */
+function skillLevel(ui: Ui, row: Rect, def: SkillDef, level: number): void {
+  switch (def.progression) {
+    case 'standard':
+      levelPips(ui, row, level, def.maxLevel);
+      return;
+    case 'proficiency':
+      text(ui, row, {
+        text: proficiencyLevelLabel(level),
+        role: 'secondary',
+        align: 'right',
+      });
+      return;
+    default: {
+      const unhandled: never = def;
+      return unhandled;
+    }
   }
 }
 
@@ -371,7 +285,7 @@ function skillCard(column: SectionLayout, crawler: CrawlerKind, state: SkillStat
       };
       const nameRow = take(lineHeightOf(ui, 'label'), space.xs);
       text(ui, nameRow, { text: def.name, role: 'label', color: ui.theme.palette.category.book });
-      levelPips(ui, nameRow, state.level, def.maxLevel);
+      skillLevel(ui, nameRow, def, state.level);
       text(ui, take(effectH, space.xxs), { text: effect, role: 'secondary', wrap: true });
       text(ui, take(flavorH, space.sm), { text: def.flavor, role: 'muted', wrap: true });
       meter(ui, take(meterHeight(ui), 0), {
@@ -421,6 +335,7 @@ function renderSkills(layout: SectionLayout, ctx: PauseContext): void {
 
 function statRows(
   stats: GameStats,
+  petNames: PetNames,
 ): ReadonlyArray<{ label: string; value: string; role: TextRole }> {
   return [
     { label: 'Time Played', value: formatPlayTime(stats.framesPlayed), role: 'value' },
@@ -433,7 +348,11 @@ function statRows(
     { label: 'Gold Earned', value: `${stats.goldEarned}`, role: 'accent' },
     { label: 'Hirelings Hired', value: `${stats.hirelingsHired}`, role: 'value' },
     { label: 'Hirelings Lost', value: `${stats.hirelingsLost}`, role: 'muted' },
-    { label: 'Mongo Petted', value: `${stats.mongoPets}`, role: 'success' },
+    {
+      label: `${petWords(petNames, 'deinonychus').opening} Petted`,
+      value: `${stats.deinonychusPets}`,
+      role: 'success',
+    },
     { label: 'Cows Petted', value: `${stats.cowPets}`, role: 'success' },
     { label: 'Midge Petted', value: `${stats.midgePets}`, role: 'success' },
   ];
@@ -452,7 +371,7 @@ function valueRow(layout: SectionLayout, label: string, value: string, role: Tex
 
 function renderRun(layout: SectionLayout, ctx: PauseContext): void {
   const stats = ctx.gameStats;
-  for (const row of statRows(stats)) valueRow(layout, row.label, row.value, row.role);
+  for (const row of statRows(stats, ctx.petNames)) valueRow(layout, row.label, row.value, row.role);
   layout.heading('Enemies killed');
   const kills = [...stats.killsByType.entries()].sort((a, b) => b[1] - a[1]);
   if (kills.length === 0) layout.paragraph('No kills yet', 'muted');

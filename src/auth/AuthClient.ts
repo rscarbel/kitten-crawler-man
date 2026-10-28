@@ -12,6 +12,9 @@ import type {
 } from '../core/save/WheelLedger';
 import type { DoubleDamageRemaining } from '../core/save/doubleDamageSave';
 import type { SerializedMusicLibrary } from '../core/music/MusicLibrary';
+import type { StoryBeatId } from '../story/storyBeats';
+import type { AdviceObjectiveId } from '../systems/daveAdvice';
+import type { SavedPetNames } from '../core/party/petNames';
 import { parseGameProgress } from '../core/save/saveFormat';
 import { PAGE_SAVE_LATCH, type ProgressStorage } from '../core/save/progressPersistence';
 import { wipeOwed } from '../core/save/wipeMarker';
@@ -33,17 +36,17 @@ export interface GameProgress {
    * crawler and so have no home in a `PlayerSnapshot`.
    */
   abilityStates: SerializedAbilityState[];
-  /** Whether the Krakaren chest has been opened and Mongo is available at all. */
-  mongoUnlocked: boolean;
+  /** Whether the Krakaren chest has been opened and Deinonychus is available at all. */
+  deinonychusUnlocked: boolean;
   /** The pet's HP, which persists across summons and sessions. */
-  mongoPetHp: number;
+  deinonychusPetHp: number;
   /**
    * Whether he is resting off a knockout, which blocks summoning until he is
    * back to full. Stored separately from the HP because it is a latch: the HP
-   * alone cannot say whether a half-healed raptor is on his way back up from
+   * alone cannot say whether a half-healed dinosaur is on his way back up from
    * zero or was simply recalled hurt.
    */
-  mongoPetResting: boolean;
+  deinonychusPetResting: boolean;
   /**
    * Shared axe/pickaxe tiers and which craft-skill explainers have already
    * played. Party progress rather than either crawler's own — a tool upgrade
@@ -96,10 +99,14 @@ export interface GameProgress {
   /** The songs the run has unlocked and heard. Top level because a floor change carries no `world`. */
   musicLibrary: SerializedMusicLibrary;
   /**
-   * The viewers' favour meter, 0–100. Absent until the show's AI first moved
-   * it, and the run carries on at the starting favour with the meter hidden.
+   * The story beats the run has heard, in play order. Written the moment a
+   * beat finishes as well as on every save, so a beat never plays twice.
    */
-  viewerFavor?: number;
+  storyBeatsSeen: readonly StoryBeatId[];
+  /** The objectives Caroline has briefed the party on, written alongside the seen beats. */
+  objectivesBriefed: readonly AdviceObjectiveId[];
+  /** The names the player has given the party's pets this run. */
+  petNames: SavedPetNames;
   savedAt: string;
 }
 

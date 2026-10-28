@@ -21,6 +21,7 @@ import type { HitState, KeyModifiers, Ui } from '../../core/UiRoot';
 import type { GlyphId } from '../../theme/glyphs';
 import type { TextRole } from '../../theme/skins';
 import { measureTextHeight, text } from '../../widgets/text';
+import type { PetNames } from '../../../core/party/petNames';
 
 export const PAUSE_SECTION_IDS = [
   'journal',
@@ -69,7 +70,7 @@ export type PauseAudio = { readonly music: MusicPlayerControls } & Pick<
 
 /** The explainers a section can open. Absent ones are offered disabled or not at all. */
 export interface PauseGuides {
-  readonly mongo?: () => void;
+  readonly deinonychus?: () => void;
   readonly craft?: (id: CraftSkillId) => void;
   readonly processing?: () => void;
   readonly dualHarvest?: () => void;
@@ -96,6 +97,8 @@ export interface PauseContext {
   /** The run's music library, or null where no run is bound (which hides the music page). */
   readonly musicLibrary: MusicLibrary | null;
   readonly guides: PauseGuides;
+  /** The run's pet names, for the pages that speak of the pets. */
+  readonly petNames: PetNames;
   /** Opens the chat window; null where chat isn't offered. */
   readonly openChat: (() => void) | null;
   readonly actions: PauseActions;

@@ -27,6 +27,12 @@ import { questRewardSurface } from '../../../ui/screens/dialogs/questRewardScree
 import { RunCompleteScreen, type RunSummary } from '../../../ui/screens/dialogs/RunCompleteScreen';
 import { screenFadeSurface } from '../../../ui/ScreenFade';
 import type { DialogFixture, FixtureRig } from './fixture';
+import {
+  PET_NAME_SUGGESTIONS,
+  PetNameBook,
+  parsePetName,
+  petWords,
+} from '../../../core/party/petNames';
 
 /** Render frames that carry the death fade to full and the button live. */
 const DEATH_SETTLED_FRAMES = 60;
@@ -84,6 +90,14 @@ const SAMPLE_KILLS: Readonly<Record<string, number>> = {
 const POTIONS_GIVEN = 3;
 const BURGERS_GIVEN = 5;
 
+/** A run whose Deinonychus was given a name. */
+function namedRun(): PetNameBook {
+  const book = new PetNameBook();
+  const name = parsePetName(PET_NAME_SUGGESTIONS.deinonychus[0]);
+  if (name !== null) book.give('deinonychus', name);
+  return book;
+}
+
 const SAMPLE_SUMMARY: RunSummary = {
   framesPlayed: PLAYED_MINUTES * SECONDS_PER_MINUTE * FRAMES_PER_SECOND,
   deaths: 7,
@@ -95,12 +109,13 @@ const SAMPLE_SUMMARY: RunSummary = {
   achievementsTotal: 58,
   humanLevel: 24,
   catLevel: 26,
-  mongoLevel: 19,
+  deinonychusLevel: 19,
+  deinonychusWords: petWords(namedRun(), 'deinonychus'),
   totalKills: 1_342,
   bossesDefeated: 9,
   hirelingsHired: 5,
   hirelingsLost: 2,
-  mongoPets: 48,
+  deinonychusPets: 48,
   cowPets: 37,
   midgePets: 12,
   topKills: Object.entries(SAMPLE_KILLS),
@@ -235,7 +250,7 @@ export const FIXTURES: readonly DialogFixture[] = [
   deathFixture('death', 'A goblin got you. Repeatedly. With enthusiasm.', 'checkpoint'),
   deathFixture(
     'death-long-explanation',
-    'The Grotesque Spider slammed down on you from the ceiling, which is a sentence nobody should ever have to read about themselves. Your body has been filed under "abstract art". The viewers at home are already making it into a looping clip with a sad trombone.',
+    'The Grotesque Spider slammed down on you from the ceiling, which is a sentence nobody should ever have to read about themselves. Your body has been filed under "abstract art". Somewhere a sad trombone is playing, and it is playing for you.',
     'floorRestart',
   ),
   {

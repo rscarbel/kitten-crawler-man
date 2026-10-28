@@ -492,7 +492,7 @@ lori.frame();
 check(!cottage['conversation'].isOpen, 'and closes it');
 check(!cottage['pauseScreen'].isOpen, 'without pausing');
 
-const blockedLine = speakerLines('mordecai').line('A beat that must be read to the end.');
+const blockedLine = speakerLines('dave').line('A beat that must be read to the end.');
 cottage['conversation'].open({
   lines: [blockedLine],
   reward: null,

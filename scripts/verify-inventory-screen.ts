@@ -20,6 +20,7 @@ import { createCanvas } from 'canvas';
 
 import type { Inventory as InventoryT } from '../src/core/items/inventory/Inventory.js';
 import type { ItemId } from '../src/core/items/defs/ItemDefs.js';
+import type { StatId } from '../src/core/party/stats.js';
 import type { KeyModifiers, UiRoot as UiRootT } from '../src/ui/core/UiRoot.js';
 import type {
   InventoryMember as Member,
@@ -33,6 +34,9 @@ installCanvasGlobals();
 
 const { Inventory } = await import('../src/core/items/inventory/Inventory.js');
 const { GearState } = await import('../src/gear/gearState.js');
+const { MIN_STAT_VALUE } = await import('../src/core/party/crawlerFormulas.js');
+const { STAT_DEFS } = await import('../src/core/party/stats.js');
+const { describeItemEffects } = await import('../src/ui/itemEffectLines.js');
 const { BAG_PAGE_SLOTS, ITEM_DEF, isItemId } = await import('../src/core/items/defs/ItemDefs.js');
 const { UiRoot } = await import('../src/ui/core/UiRoot.js');
 const { MOUSE_POINTER_ID, PRIMARY_BUTTON } = await import('../src/ui/core/pointer.js');
@@ -120,6 +124,25 @@ function check(condition: boolean, label: string): void {
 }
 
 // ── Model ───────────────────────────────────────────────────────────────────
+
+console.log('Item effect lines name the stat a weapon grows with');
+{
+  const lines = (id: ItemId): readonly string[] =>
+    describeItemEffects({ ...ITEM_DEF[id], quantity: 1 });
+  for (const [id, stat] of [
+    ['rattlestick_sling', 'ranged'],
+    ['stormcaller', 'melee'],
+    ['magic_missile_tome', 'magic'],
+    ['goblin_dynamite', 'explosivesHandling'],
+  ] as const satisfies readonly (readonly [ItemId, StatId])[]) {
+    const expected = `Scales with ${STAT_DEFS[stat].label}`;
+    check(lines(id).includes(expected), `${id} says "${expected}"`);
+  }
+  check(
+    lines('ward_stone').some((line) => line.includes('Magic')),
+    'the ward stone lists its magic resistance',
+  );
+}
 
 console.log('Inventory.sortBag');
 {
@@ -289,10 +312,7 @@ function makeRig(platform: PlatformSpec, opts: RigOptions = {}): Rig {
     return {
       inventory,
       gear: new GearState(),
-      strength: 1,
-      intelligence: 1,
-      constitution: 1,
-      dexterity: 1,
+      statValue: () => MIN_STAT_VALUE,
     };
   };
   const party: readonly Member[] = opts.companion

@@ -52,6 +52,16 @@ import type { BuildingEntry } from '../map/buildingEntry';
 import { type BuildingId, buildingDisplayName } from '../map/buildingIds';
 import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/save/PlayerSnapshot';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
+import { DaveGuideSystem } from '../systems/DaveGuideSystem';
+import { prewarmDaveSprite } from '../sprites/daveSprite';
+import { adviceIntel, adviceTactics, type AdviceObjectiveId } from '../systems/daveAdvice';
+import type { CarolineMessage } from '../dialog/caroline';
+import { StoryDelivery, partyIsEngaged } from '../systems/StoryDelivery';
+import { walkUpTo } from '../systems/cutscene/walkUp';
+import type { WalkToStep } from '../systems/cutscene/cutsceneSteps';
+import type { QuestMarkerState } from '../sprites/questNPCSprite';
+import { pixelToTile } from '../utils';
+import { sameSafeRoom, type SafeRoomId } from '../map/safeRoomId';
 import { BopcaSystem } from '../systems/BopcaSystem';
 import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
@@ -106,7 +116,14 @@ import { GameplayScene } from './GameplayScene';
 import { AchievementManager } from '../core/progression/AchievementManager';
 import { AchievementUISystem } from '../systems/AchievementUISystem';
 import { AchievementAwards } from '../systems/AchievementAwards';
-import { introduceMongo, joinMongoOnOpen, presentsMongo } from '../systems/mongoArrival';
+import {
+  deinonychusPortrait,
+  introduceDeinonychus,
+  joinDeinonychusOnOpen,
+  presentsDeinonychus,
+} from '../systems/deinonychusArrival';
+import { MissingPetNames, attackCowPortrait, namePetThen } from '../systems/petNaming';
+import { petWords } from '../core/party/petNames';
 import type { JournalProgress } from '../core/quests/JournalProgress';
 import { isOutstanding, resolvePinnedEntry, type TrackerEntry } from '../systems/questTracker';
 import { GameStats, bindRunStats } from '../core/progression/GameStats';
@@ -143,8 +160,7 @@ import { floorArrivalLoadTasks } from './floorArrivalLoad';
 import type { ArrivalLoadingScreen } from '../levels/types';
 import { aiAdapter } from '../ai/AIAdapter';
 import type { AISceneContext } from '../ai/aiActions';
-import { AIShowStage } from '../ai/show/AIShowStage';
-import { viewerFavor } from '../core/progression/viewerFavor';
+import { AIInteractionStage } from '../ai/interactions/AIInteractionStage';
 import type { AIContextSource, SessionInput } from '../ai/context/types';
 import { readCrawler, readNearbyMobs } from '../ai/context/sceneReaders';
 import { mobLabel } from '../ai/context/eventMapping';
@@ -328,6 +344,7 @@ import {
 } from '../core/quests/AnchorQuestProgress';
 import { MenusKit } from '../systems/kits/MenusKit';
 import { ChatKit } from '../systems/kits/ChatKit';
+import { CutsceneKit } from '../systems/kits/CutsceneKit';
 import {
   activateHotbarSlot,
   drinkAnyHealthPotion,
@@ -390,13 +407,16 @@ import {
   visibleWorldView,
 } from '../core/rendering/visibleWorldView';
 import { captionToward } from '../ui/hud/captions';
-import { createMongoPetState, type MongoPetState } from '../core/state/MongoPetState';
+import {
+  createDeinonychusPetState,
+  type DeinonychusPetState,
+} from '../core/state/DeinonychusPetState';
 import { detachedPartyRun, type InteriorPartyRun } from './interiorPartyRun';
 import { reloadPage, type SaveWriteOutcome } from '../core/save/progressPersistence';
 import { settings } from '../core/input/Settings';
 import { bindAbilityLevelUps } from '../systems/abilityLevelUps';
 import { bindCraftLevelUps } from '../systems/craftLevelUps';
-import { MongoSystem, mongoXpFraction } from '../systems/MongoSystem';
+import { DeinonychusSystem, deinonychusXpFraction } from '../systems/DeinonychusSystem';
 import {
   carryCompanions,
   NO_INTERIOR_COMPANIONS,
@@ -404,7 +424,7 @@ import {
   type InteriorCompanionArrival,
   type InteriorCompanionDeparture,
 } from '../systems/companionCarry';
-import { getMongoStats } from '../abilities/mongo';
+import { getDeinonychusStats } from '../abilities/deinonychus';
 import {
   isGearBoss,
   partyOwnsGear,
@@ -731,6 +751,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
   /** Null in every interior but the one the town plan flags with `hasSafeRoom`. */
   private readonly safeRoom: SafeRoomSystem | null;
+  private readonly dave: DaveGuideSystem | null;
   private wasInSafeRoom = false;
   /** Null in every interior but the one the town plan flags as the safe room. */
   private readonly bopca: BopcaSystem | null;
@@ -758,10 +779,10 @@ export class BuildingInteriorScene extends GameplayScene {
   /** Pays every award this scene's crawlers earn; see {@link AchievementAwards}. */
   private readonly awards: AchievementAwards;
   /**
-   * The show AI's questions, adverts and the viewers' favour. Challenges stay
+   * The AI's questions. Challenges stay
    * outside: a door is where a challenge ends, so none starts indoors.
    */
-  private readonly aiShow: AIShowStage;
+  private readonly aiInteractions: AIInteractionStage;
   /** The overworld's Quest Journal, read through the door; null on a floor with none. */
   private readonly overworldJournal: InteriorJournalSource | null;
   /** The way out toward a pinned objective outside this building. */
@@ -822,13 +843,14 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly companion: CompanionSystem;
   private readonly followerMenu = new FollowerScreen();
   /**
-   * Mongo. Owned by the scene rather than by a storey: he climbs a tower's
+   * Deinonychus. Owned by the scene rather than by a storey: he climbs a tower's
    * stairs with the party, and `changeFloor` moves him between storey rosters.
    */
-  private readonly mongoSystem: MongoSystem;
+  private readonly deinonychusSystem: DeinonychusSystem;
+  private readonly missingPetNames: MissingPetNames;
   /**
    * The mercenary under contract, stood up from the roster on the first frame
-   * like outdoors. Scene-owned for the same reason Mongo is.
+   * like outdoors. Scene-owned for the same reason Deinonychus is.
    */
   private readonly mercenarySystem: MercenarySystem;
   private readonly attackCowSystem: AttackCowSystem;
@@ -898,7 +920,7 @@ export class BuildingInteriorScene extends GameplayScene {
   private prison: GoblinPrisonSystem | null = null;
   /**
    * The hireling waits outside this building (the prison's rules), so the
-   * hire on the roster is never stood up indoors. Mongo is kept out by the
+   * hire on the roster is never stood up indoors. Deinonychus is kept out by the
    * floor, which hands the prison an arrival with no companions.
    */
   private readonly companionsWaitOutside: boolean;
@@ -974,6 +996,16 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly plumblineFarmRoom: PlumblineFarmRoomSync | null;
   /** The one conversation panel every speaking system in this room shares. */
   private readonly conversation: Conversation;
+  /** Scripted moments that own the party, run the same way as in the dungeon. */
+  private readonly cutscenes: CutsceneKit;
+  /** The run's story, told in this building's safe room as on the floor outside. */
+  private readonly story: StoryDelivery;
+  /**
+   * The safe room Dave last teleported into here, whose talk has not started
+   * yet: it starts once the active crawler is in there with him and nothing
+   * is fighting the party.
+   */
+  private daveArrivalOwed: SafeRoomId | null = null;
   /** Occupant the open conversation belongs to; used to notice the player walking off. */
   private citizenDialogTarget: Townsperson | null = null;
   /** The talk row pinned for {@link citizenDialogTarget}, unpinned with it. */
@@ -1059,8 +1091,8 @@ export class BuildingInteriorScene extends GameplayScene {
      * he walks in with the party, written back into it when he walks out, and
      * his off-duty recovery keeps ticking on it while he is recalled indoors.
      */
-    mongoPetState?: MongoPetState,
-    mongoPetLevel?: () => number,
+    deinonychusPetState?: DeinonychusPetState,
+    deinonychusPetLevel?: () => number,
     /** The run's tallies, so the Stats tab reads the same numbers indoors. */
     gameStats?: GameStats,
     /**
@@ -1107,6 +1139,14 @@ export class BuildingInteriorScene extends GameplayScene {
       handleWorldPointer: (gesture) => this.handleWorldPointer(gesture),
     });
     this.conversation = new Conversation(this.audio);
+    this.cutscenes = new CutsceneKit({
+      conversation: this.conversation,
+      teleportDaveOut: () => this.dave?.teleportOut(),
+      pauseButton: () => {
+        const rect = this.hud.frame?.dock.get('pause');
+        return rect === undefined ? null : { rect, press: () => this.pauseScreen.toggle() };
+      },
+    });
     // Additive and cheap on repeat entry: preloading the same interior's SFX
     // group twice is a no-op, so re-entering a shop never re-pays the decode
     // cost (see the DungeonScene equivalent for the matching per-floor case).
@@ -1132,22 +1172,24 @@ export class BuildingInteriorScene extends GameplayScene {
     this.mercenaryRoster = mercenaryRoster ?? createMercenaryRoster();
     this.godModeState = godModeState ?? createGodModeState();
     this.companionStance = companionStance ?? createCompanionStanceState();
-    const petLevel = mongoPetLevel ?? ((): number => this.abilityManager.getLevel('mongo'));
-    const petMaxHp = getMongoStats(petLevel()).maxHp;
-    this.mongoSystem = new MongoSystem(
-      mongoPetState ?? createMongoPetState(petMaxHp, petMaxHp),
+    const petLevel =
+      deinonychusPetLevel ?? ((): number => this.abilityManager.getLevel('deinonychus'));
+    const petMaxHp = getDeinonychusStats(petLevel()).maxHp;
+    this.deinonychusSystem = new DeinonychusSystem(
+      deinonychusPetState ?? createDeinonychusPetState(petMaxHp, petMaxHp),
       petLevel,
       (amount) => {
-        this.abilityManager.addXp('mongo', amount);
+        this.abilityManager.addXp('deinonychus', amount);
       },
-      () => mongoXpFraction(this.abilityManager),
+      () => deinonychusXpFraction(this.abilityManager),
       // Built ahead of the menus, so the stack is reached once he has something to say.
       {
         post: (text, opts) => this.menus.toasts.post(text, opts),
         isShowing: (key) => this.menus.toasts.isShowing(key),
       },
+      partyRun.petNames,
     );
-    this.mongoSystem.unlocked = companionArrival.mongoUnlocked;
+    this.deinonychusSystem.unlocked = companionArrival.deinonychusUnlocked;
     this.hireContract = this.mercenaryRoster.active;
     this.mercenarySystem = new MercenarySystem(
       this.mercenaryRoster,
@@ -1175,6 +1217,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.attackCowSystem = new AttackCowSystem(
       partyRun.attackCowState,
       getLevelDef(floor.levelId).floorNumber,
+      partyRun.petNames,
       {
         toast: (message) => this.menus.toasts.post(message),
         sound: (id) => this.audio?.play(id),
@@ -1280,8 +1323,34 @@ export class BuildingInteriorScene extends GameplayScene {
 
     this.safeRoom =
       entry.hasSafeRoom === true
-        ? new SafeRoomSystem(this.map, sx, sy, this.conversation, 'level3')
+        ? new SafeRoomSystem(this.map, { kind: 'interior', building: entry.id })
         : null;
+    this.dave =
+      this.safeRoom === null
+        ? null
+        : new DaveGuideSystem(
+            {
+              safeRooms: this.safeRoom,
+              conversation: this.conversation,
+              whereabouts: partyRun.daveWhereabouts,
+              camera: () => this.computeCamera(this.map),
+              audio: this.audio,
+              onArrived: (room) => {
+                this.daveArrivalOwed = room.id;
+              },
+            },
+            // Walking in at the door is an arrival, not a reload: he is only
+            // already here if the run left him here.
+            partyRun.daveWhereabouts.room,
+          );
+    this.dave?.holdWhile(() => this.cutscenes.isActive);
+    this.dave?.setMarkerSource(() => this.daveMarker());
+    this.story = new StoryDelivery({
+      director: partyRun.story.director,
+      cutscenes: this.cutscenes.director,
+      persist: partyRun.story.persist,
+      calm: () => this.carolineMaySpeak(),
+    });
 
     if (entry.hasSafeRoom === true) {
       this.bopca = new BopcaSystem(
@@ -1334,7 +1403,6 @@ export class BuildingInteriorScene extends GameplayScene {
       human: this.human,
       cat: this.cat,
       bus: this.bus,
-      coinMultiplier: () => this.aiShow.chestCoinMultiplier(),
       activeCrawler: () => (this.cat.isActive ? 'cat' : 'human'),
     });
     this.club =
@@ -1368,6 +1436,10 @@ export class BuildingInteriorScene extends GameplayScene {
           grantAttackCow: () => {
             this.grantAttackCow();
           },
+          pets: {
+            petNames: this.partyRun.petNames,
+            nameAttackCow: (next) => this.nameAttackCow(next),
+          },
           onNotice: (message, tone) => this.menus.toasts.post(message, { tone }),
           isLucky: () => this.godModeState.luckyActive,
         }),
@@ -1390,7 +1462,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // does what a swing in the dungeon does. An empty roster costs nothing —
     // every member of the kit is a no-op over empty arrays.
     // One spell system for the whole building rather than one per storey: the
-    // shell's cooldown is something the party spent, and a per-storey copy would
+    // energy shield's cooldown is something the party spent, and a per-storey copy would
     // hand it back to anyone who took the stairs and came straight back.
     const spells = new SpellSystem();
     for (const floorMap of interiorMaps) {
@@ -1469,12 +1541,26 @@ export class BuildingInteriorScene extends GameplayScene {
     this.menus = new MenusKit({
       world: this.floors[GROUND_FLOOR_INDEX].world,
       abilityManager: this.abilityManager,
+      petNames: this.partyRun.petNames,
       onPotionDrunk: (id) => this.noteDrinkAchievement(id),
       heldItemId: () => this.readiedDynamiteId(),
     });
     this.menus.questReward.setOpenConditions({
       conversationOpen: () => this.conversation.isOpen,
       worldHeld: () => this.ui.worldHalted(),
+    });
+    this.missingPetNames = new MissingPetNames({
+      prompt: this.menus.petNamePrompt,
+      petNames: this.partyRun.petNames,
+      keyboardAnchor: this.sceneManager.canvas,
+      owned: {
+        deinonychus: () => this.deinonychusSystem.unlocked,
+        attackCow: () => this.partyRun.attackCowState.owned,
+      },
+      portraits: {
+        deinonychus: deinonychusPortrait(() => this.abilityManager.getLevel('deinonychus')),
+        attackCow: attackCowPortrait,
+      },
     });
     this.menus.questReward.onClosed = (spec) => this.flyQuestRewards(spec);
     this.menus.useSceneItem = (item) => {
@@ -1489,19 +1575,21 @@ export class BuildingInteriorScene extends GameplayScene {
       this.audio,
     );
     this.achievementUI.onPresentationOpened = (presentation) =>
-      joinMongoOnOpen(presentation, this.mongoSystem);
+      joinDeinonychusOnOpen(presentation, this.deinonychusSystem);
     this.achievementUI.onPresentationClosed = (presentation) => {
-      if (!presentsMongo(presentation)) return;
-      introduceMongo(this.bus, this.menus, () => this.abilityManager.getLevel('mongo'));
+      if (!presentsDeinonychus(presentation)) return;
+      introduceDeinonychus(this.bus, this.menus, {
+        deinonychusLevel: () => this.abilityManager.getLevel('deinonychus'),
+        petNames: this.partyRun.petNames,
+        keyboardAnchor: this.sceneManager.canvas,
+      });
     };
     this.bus.on('rewardGranted', (e) => {
       for (const reward of e.rewards) this.menus.rewardGrantedDialog.enqueue(reward);
     });
-    this.aiShow = new AIShowStage({
+    this.aiInteractions = new AIInteractionStage({
       bus: this.bus,
-      favor: viewerFavor,
       challenges: null,
-      postToast: (text, opts) => this.menus.toasts.post(text, opts),
     });
     this.systemNotices = new SystemNoticeSystem(this.bus, this.menus.toasts);
     this.tacticsNotices = new TacticsNoticeSystem(tacticsNoticesSeen ?? new Set<TacticsTrait>());
@@ -1512,7 +1600,11 @@ export class BuildingInteriorScene extends GameplayScene {
       sceneCommands: [
         {
           name: '!cow',
-          run: () => (this.grantAttackCow() ? '🐄 ATTACK COW' : null),
+          run: () => {
+            if (!this.grantAttackCow()) return null;
+            this.nameAttackCow();
+            return '🐄 ATTACK COW';
+          },
         },
       ],
     });
@@ -1523,7 +1615,8 @@ export class BuildingInteriorScene extends GameplayScene {
       abilityManager: this.abilityManager,
       menus: this.menus,
       audio: this.audio,
-      onPetLevelUp: () => this.mongoSystem.onPetLevelUp(),
+      petNames: this.partyRun.petNames,
+      onPetLevelUp: () => this.deinonychusSystem.onPetLevelUp(),
       onSparkLevel: () => this.awards.unlock('cat', 'spark_to_flame'),
     });
     bindCraftLevelUps({ bus: this.bus, menus: this.menus, audio: this.audio });
@@ -1622,7 +1715,7 @@ export class BuildingInteriorScene extends GameplayScene {
             () =>
               partyRoutineBodies({
                 crawlers: [this.human, this.cat],
-                pet: this.mongoSystem,
+                pet: this.deinonychusSystem,
                 hire: this.mercenarySystem,
                 cow: this.attackCowSystem,
               }),
@@ -1729,7 +1822,15 @@ export class BuildingInteriorScene extends GameplayScene {
 
     // Last, once the party stands where it came in and the entry storey's roster
     // exists to receive him.
-    if (companionArrival.mongoWasOut) this.carryMongoIn();
+    if (companionArrival.deinonychusWasOut) this.carryDeinonychusIn();
+    // A party set down inside the safe room has Dave on his way within the
+    // first seconds of play, so his figure is warmed under the loading screen
+    // rather than on his arrival.
+    const safeRoom = this.safeRoom;
+    const arrivesInSafeRoom =
+      safeRoom !== null &&
+      (safeRoom.safeRoomAt(this.active()) ?? safeRoom.safeRoomAt(this.inactive())) !== null;
+    if (this.dave !== null && arrivesInSafeRoom) prewarmDaveSprite();
     // After everything that warms figures or queues art — the occupants, the
     // party, the companions — so the loader measures what this room really owes.
     this.arrivalLoading.begin({
@@ -1941,7 +2042,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.combat.spawnGore(e.x, e.y, e.dirX, e.dirY);
     });
     this.bus.on('crawlerKnockedOut', (e) => {
-      e.player.applyCockroachKnockoutRelief();
+      e.player.applyNineLivesKnockoutRelief();
       if (e.player === this.cat && this.human.isAlive && !this.human.isKnockedOut) {
         this.crawlerBarks.say(this.human, [CRAWLER_BARKS.catKnockedOut.paragraphs[0]]);
       }
@@ -1954,7 +2055,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.bus.on('mobKilled', (e) => {
       this.gameStats.recordMobKilled(e);
       // A kill the party earned speeds his recovery, indoors as outdoors.
-      if (e.killer !== null) this.mongoSystem.onKill(this.cat.isActive);
+      if (e.killer !== null) this.deinonychusSystem.onKill(this.cat.isActive);
       this.combat.spawnKillGore(e.mob, e.killer);
       // Onto the floor, the same as the dungeon, rather than straight into the
       // purse: seeing the loot fall and land is how a kill reads as having paid.
@@ -2311,8 +2412,8 @@ export class BuildingInteriorScene extends GameplayScene {
     const goingUp = newFloor > this.currentFloor;
     // Anything the storey has in the air has to be dropped on the way out. A
     // stick thrown as the player left would otherwise hang there unticked and go
-    // off when they came back down; a shell is the opposite problem — the spell
-    // system is one instance for the whole building, so a shell left standing
+    // off when they came back down; an energy shield is the opposite problem — the spell
+    // system is one instance for the whole building, so a shield left standing
     // would keep protecting on the *new* storey from the old one's coordinates.
     const departing = this.floors[this.currentFloor];
     departing.combat.leaveFloor();
@@ -2468,7 +2569,7 @@ export class BuildingInteriorScene extends GameplayScene {
       toggleQuestTracker: () => {
         if (this.openQuestJournal()) this.audio?.play('menu_open');
       },
-      mongoSummon: () => this.toggleMongoSummon(),
+      deinonychusSummon: () => this.toggleDeinonychusSummon(),
       openChat: () => this.openChat(),
       hotbarActivation: (idx) => activateHotbarSlot(this.hotbarHost(), idx),
       dynamiteRelease: (idx) => releaseChargedDynamite(this.hotbarHost(), idx),
@@ -2632,6 +2733,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // again; its pixels go back now rather than at a collection the browser
     // may put off for a long time.
     for (const floor of this.floors) floor.world.gameMap.releaseTileArt();
+    this.cutscenes.dispose();
     this.inputHandler.unbind();
     // A real <input> on document.body, which swallows every key it is focused
     // for. Left behind, it makes the scene that replaces this one unplayable.
@@ -2666,7 +2768,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.hud,
       this.hud.overlay(),
       ...aiAdapter.surfaces(() => this.hud.isOpen()),
-      ...this.aiShow.surfaces(),
+      ...this.aiInteractions.surfaces(),
       ...this.menus.surfaces({
         pauseFrame: () => ({
           humanAchievements: this.humanAchievements,
@@ -2700,9 +2802,10 @@ export class BuildingInteriorScene extends GameplayScene {
           movementMode: this.companion.getMovementMode(this.human.isActive),
           combatStance: this.companion.getCombatStance(this.human.isActive),
           companionIsCat: this.human.isActive,
-          mongoAutoSummon: null,
+          deinonychus: null,
         }),
       }),
+      this.cutscenes.surface(),
       this.conversation.surface({
         id: CONVERSATION_SURFACE_ID,
         handOffPress: () => this.handOffConversationPress(),
@@ -2791,7 +2894,7 @@ export class BuildingInteriorScene extends GameplayScene {
     if (contractContact?.isFollowUpOpen === true) {
       return () => void contractContact.dismissFollowUp();
     }
-    if (this.safeRoom?.mordecaiDialogOpen === true) return () => void this.conversation.dismiss();
+    if (this.dave?.dialogOpen === true) return () => void this.conversation.dismiss();
     // `dismiss` rather than `close`: a service queued behind the story must not
     // open on the way out of it. Declined while anything halts the room, as
     // the box underneath a halting menu is not what the player is looking at.
@@ -2809,6 +2912,8 @@ export class BuildingInteriorScene extends GameplayScene {
   private pressPastHaltingConversation(x: number, y: number): void {
     const control = this.hud.controlUnderHalt(x, y);
     if (control === 'pause') this.pauseScreen.toggle();
+    // A cutscene's talk must be read through, so any other press turns its page.
+    else if (this.cutscenes.isActive) this.conversation.advance();
     else if (control === 'skill-points') this.menus.openSpendScreen();
   }
 
@@ -2873,7 +2978,7 @@ export class BuildingInteriorScene extends GameplayScene {
    */
   private carriedCompanions(): CarriedCompanion[] {
     return [
-      this.mongoSystem.asCarriedCompanion(this.cat),
+      this.deinonychusSystem.asCarriedCompanion(this.cat),
       this.mercenarySystem.asCarriedCompanion(),
       this.attackCowSystem.asCarriedCompanion(),
     ];
@@ -2881,13 +2986,14 @@ export class BuildingInteriorScene extends GameplayScene {
 
   /**
    * The party-side creatures hostiles may go for this frame, beside the
-   * crawlers. Not Mongo while he is retreating: on one hit point, with the
+   * crawlers. Not Deinonychus while he is retreating: on one hit point, with the
    * interception holding him there, further hits are a fight he cannot leave.
    */
   private companionTargets(): Player[] {
     const targets: Player[] = [];
-    const mongo = this.mongoSystem.mongo;
-    if (mongo !== null && !mongo.recalling && !mongo.collapsing) targets.push(mongo);
+    const deinonychus = this.deinonychusSystem.deinonychus;
+    if (deinonychus !== null && !deinonychus.recalling && !deinonychus.collapsing)
+      targets.push(deinonychus);
     const merc = this.mercenarySystem.activeMerc;
     if (merc !== null) targets.push(merc);
     const cow = this.attackCowSystem.standingCow;
@@ -2898,61 +3004,61 @@ export class BuildingInteriorScene extends GameplayScene {
   /** Who walks out of the door with the party. Read before anything is put away. */
   private companionDeparture(): InteriorCompanionDeparture {
     return {
-      mongoWasOut: this.mongoSystem.followsThroughDoor,
-      mongoUnlocked: this.mongoSystem.unlocked,
+      deinonychusWasOut: this.deinonychusSystem.followsThroughDoor,
+      deinonychusUnlocked: this.deinonychusSystem.unlocked,
     };
   }
 
   /**
    * Stands the driven crawler on `landing` and the other beside them, each on
-   * a tile they can walk off. Everything that lands beside a crawler — Mongo,
+   * a tile they can walk off. Everything that lands beside a crawler — Deinonychus,
    * the hire — reads these positions, so this comes before any of them.
    */
   private setPartyDown(landing: { readonly x: number; readonly y: number }): void {
     this.pm.setPartyDown(findPartyArrivalTiles(this.map, landing));
   }
 
-  private carryMongoIn(): void {
-    const mongo = this.mongoSystem.carryIn(this.cat, this.map);
-    if (mongo !== null) this.world.roster.add(mongo);
+  private carryDeinonychusIn(): void {
+    const deinonychus = this.deinonychusSystem.carryIn(this.cat, this.map);
+    if (deinonychus !== null) this.world.roster.add(deinonychus);
   }
 
   /**
    * The Summon button and the R key are one toggle, exactly as outdoors: out of
    * play he is summoned, in play he is called back and runs home.
    */
-  private toggleMongoSummon(): void {
+  private toggleDeinonychusSummon(): void {
     if (this.gameOver) return;
     if (!this.cat.isActive || !this.active().canAct) return;
-    if (this.mongoSystem.mongo !== null) {
-      this.mongoSystem.toggleRecall();
+    if (this.deinonychusSystem.deinonychus !== null) {
+      this.deinonychusSystem.toggleRecall();
       return;
     }
-    this.summonMongo();
+    this.summonDeinonychus();
   }
 
   /** Returns whether he came out; a refusal has already been spoken by the cat. */
-  private summonMongo(): boolean {
-    const mongo = this.mongoSystem.summon(this.cat, this.map);
-    if (mongo === null) return false;
-    this.world.roster.add(mongo);
-    this.abilityManager.addUsageXp('mongo');
-    this.audio?.play('mongo_released');
+  private summonDeinonychus(): boolean {
+    const deinonychus = this.deinonychusSystem.summon(this.cat, this.map);
+    if (deinonychus === null) return false;
+    this.world.roster.add(deinonychus);
+    this.abilityManager.addUsageXp('deinonychus');
+    this.audio?.play('deinonychus_released');
     return true;
   }
 
   /**
-   * The companion cat sends Mongo in on her own when a fight reaches her — only
+   * The companion cat sends Deinonychus in on her own when a fight reaches her — only
    * while the human is being driven, never against a passive stance, and never
    * from inside a safe room, which is a rest stop rather than a staging ground.
    */
-  private autoSummonMongo(ctx: SystemContext): void {
-    if (!settings.catAutoSummonsMongo) return;
-    if (!this.human.isActive || this.mongoSystem.mongo !== null) return;
+  private autoSummonDeinonychus(ctx: SystemContext): void {
+    if (!settings.catAutoSummonsDeinonychus) return;
+    if (!this.human.isActive || this.deinonychusSystem.deinonychus !== null) return;
     if (this.companion.getCombatStance(true) === 'passive') return;
     if (this.safeRoom !== null && this.pm.isAnySafe(this.safeRoom)) return;
-    if (!this.mongoSystem.catWantsToSummon(ctx)) return;
-    if (!this.summonMongo()) this.mongoSystem.onAutoSummonRefused();
+    if (!this.deinonychusSystem.catWantsToSummon(ctx)) return;
+    if (!this.summonDeinonychus()) this.deinonychusSystem.onAutoSummonRefused();
   }
 
   /**
@@ -2964,7 +3070,11 @@ export class BuildingInteriorScene extends GameplayScene {
    * swap bodies mid-slide, out from under the code writing their positions.
    */
   private get scriptOwnsParty(): boolean {
-    return this.towerConfrontation?.playerLocked === true || this.prison?.playerLocked === true;
+    return (
+      this.cutscenes.isActive ||
+      this.towerConfrontation?.playerLocked === true ||
+      this.prison?.playerLocked === true
+    );
   }
 
   /** Hands control to the companion, unless they're lying knocked out. */
@@ -2982,7 +3092,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // a distance the player never walked. Ending the conversation outright is
     // what the dungeon does, and the mobile Switch button reaches this same
     // method, so both roads agree.
-    this.safeRoom?.closeMordecaiDialog();
+    this.dave?.closeDialog();
     const wasHumanActive = this.human.isActive;
     this.pm.switchActive();
     // The crawler who just stopped being driven is now standing somewhere new,
@@ -3013,11 +3123,14 @@ export class BuildingInteriorScene extends GameplayScene {
     const nowInSafeRoom = this.pm.isAnySafe(safeRoom);
     const justEntered = nowInSafeRoom && !this.wasInSafeRoom;
     this.wasInSafeRoom = nowInSafeRoom;
-    if (justEntered) this.onSafeRoomEntered();
+    if (!justEntered) return;
+    const room = safeRoom.safeRoomAt(this.active()) ?? safeRoom.safeRoomAt(this.inactive());
+    if (room !== null) this.onSafeRoomEntered(room);
   }
 
-  private onSafeRoomEntered(): void {
-    this.bus.emit('safeRoomEntered', {});
+  private onSafeRoomEntered(room: SafeRoomId): void {
+    this.bus.emit('safeRoomEntered', { room });
+    this.dave?.onSafeRoomEntered(room);
     this.awards.unlockParty('safe_haven');
     // A reload would stand a downed crawler, hire or cow up for free.
     if (this.isRevivePending || !this.partyRun.maySave()) return;
@@ -3060,12 +3173,12 @@ export class BuildingInteriorScene extends GameplayScene {
 
   /**
    * Where the one the human crawler is in conversation with stands, while a street-style
-   * conversation is open — a resident, or Mordecai; null otherwise.
+   * conversation is open — a resident, or Dave; null otherwise.
    */
   private humanTalkSpeaker(): { x: number; y: number } | null {
     const citizen = this.citizenDialogTarget;
     if (citizen !== null) return citizen;
-    return this.safeRoom?.speakingMordecaiPosition ?? null;
+    return this.dave?.speakingPosition ?? null;
   }
 
   update(): void {
@@ -3076,6 +3189,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // party is still drawn on top of the screen announcing it, and a dialog that
     // is not ticked sits frozen at its first frame with its accept button inert.
     this.menus.update();
+    this.missingPetNames.update(this.ui.worldHalted());
     postMusicLibraryNotices(activeMusicLibrary()?.drainNotices() ?? [], this.menus);
     this.tickSaveIndicator();
     this.achievementUI.tick();
@@ -3223,19 +3337,21 @@ export class BuildingInteriorScene extends GameplayScene {
     tickShopStock(this.shopStock);
     tickShopStock(this.briarHollowState.shopStock);
     // Deliberately does not return: the player has to be able to walk while the
-    // box is up, because walking off is what dismisses it. Mordecai's own
+    // box is up, because walking off is what dismisses it. Dave's own
     // conversation is the shared one, already ticked above; this only measures
     // whether the player has walked out of his room.
-    this.safeRoom?.tickMordecaiWalkAway(this.active());
+    this.dave?.tickWalkAway(this.active());
     this.humanTalk.update(this.human, this.humanTalkSpeaker(), false);
 
     const player = this.active();
+    // Interiors are small enough that the south wall is always on screen, so a
+    // crawler with their feet planted on it is the first thing you notice.
+    this.cutscenes.tickWorld(player, this.map, 'sole');
     // A cutscene drives both bodies itself. Every input below is withheld for
     // its whole run, movement included, or the player walks the human out of the
     // scripted walk-up he is halfway through.
     const scriptOwnsParty = this.scriptOwnsParty;
 
-    // Movement via shared GameLoopPhases
     if (!scriptOwnsParty) {
       const move = readMovement(
         this.input,
@@ -3244,14 +3360,12 @@ export class BuildingInteriorScene extends GameplayScene {
         player,
         this.computeCamera(this.map),
       );
-      // Interiors are small enough that the south wall is always on screen, so a
-      // crawler with their feet planted on it is the first thing you notice.
       applyMovement(player, move, this.map, 'sole');
     }
 
     // A citizen conversation blocks the swap outright rather than surviving it:
     // its walk-away check has no way to be told the body changed, unlike
-    // Mordecai's, which trySwitchActive closes on the way through.
+    // Dave's, which trySwitchActive closes on the way through.
     if (
       this.citizenDialogTarget === null &&
       !scriptOwnsParty &&
@@ -3276,14 +3390,14 @@ export class BuildingInteriorScene extends GameplayScene {
     const interactPressed = (): boolean =>
       this.interactArmed && !overlayOwnsInteract && keybindings.isHeld(this.input, 'attack');
 
-    // Safe room: whichever of the Bopca and Mordecai is nearer. Only consume
+    // Safe room: whichever of the Bopca and Dave is nearer. Only consume
     // Space when actually acting, so an unrelated press can still fall through
     // to talking to an ambient occupant sharing the room.
     if (interactPressed() && this.questResidentInReach(player) && this.tryTalkToOccupant(player)) {
       keybindings.release(this.input, 'attack');
     }
 
-    const safeRoomSpeaker = safeRoomSpeakerFor(this.bopca, this.safeRoom, player);
+    const safeRoomSpeaker = safeRoomSpeakerFor(this.bopca, this.dave, player);
     if (
       this.bopca !== null &&
       safeRoomSpeaker === 'bopca' &&
@@ -3301,9 +3415,9 @@ export class BuildingInteriorScene extends GameplayScene {
       keybindings.release(this.input, 'attack');
     }
 
-    if (safeRoomSpeaker === 'mordecai' && interactPressed()) {
+    if (safeRoomSpeaker === 'dave' && interactPressed()) {
       keybindings.release(this.input, 'attack');
-      this.talkToMordecai(player);
+      this.talkToDave(player);
     }
 
     if (this.shop !== null && interactPressed() && this.shop.isNearShopkeeper(player)) {
@@ -3379,7 +3493,10 @@ export class BuildingInteriorScene extends GameplayScene {
     drainBloodVomitRetches([this.human, this.cat], this.bus);
     drainHpThresholdCrossings({ human: this.human, cat: this.cat }, this.bus);
     this.updateSafeRoomProtection();
-    this.safeRoom?.updateWander();
+    this.safeRoom?.tickBeds();
+    this.dave?.update(player);
+    this.startOwedDaveTalk();
+    this.story.update();
     this.bopca?.tick(this.human, this.cat, player, this.inactive());
     this.shop?.update();
     this.club?.update(this.active(), this.inactive(), this.occupants?.people ?? []);
@@ -3543,7 +3660,7 @@ export class BuildingInteriorScene extends GameplayScene {
     });
     // Before kills are resolved: a companion's lethal hit is intercepted here,
     // or it runs the whole kill path and pays the party for its own pet.
-    this.mongoSystem.checkHealth();
+    this.deinonychusSystem.checkHealth();
     this.mercenarySystem.checkHealth((merc) => combat.spawnKillGore(merc, null));
     this.attackCowSystem.checkHealth();
     combat.resolveKills();
@@ -3552,8 +3669,8 @@ export class BuildingInteriorScene extends GameplayScene {
     combat.resolveSpellAftermath();
     // Also where his off-duty recovery ticks, and so only while he is not out,
     // and never behind any of the world-halting returns in `update`.
-    this.mongoSystem.update(ctx);
-    this.autoSummonMongo(ctx);
+    this.deinonychusSystem.update(ctx);
+    this.autoSummonDeinonychus(ctx);
     if (this.mercenaryRoster.active !== this.hireContract) {
       this.hireContract = this.mercenaryRoster.active;
       this.mercenarySystem.onContractChanged(ctx.roster.mobs, ctx.roster.grid);
@@ -3817,7 +3934,12 @@ export class BuildingInteriorScene extends GameplayScene {
   private aiMenuOpen(): boolean {
     // The pause screen halts the world too, but it is `isPaused`, not a menu.
     const haltedByMenu = this.ui.worldHalted() && !this.pauseScreen.isOpen;
-    return haltedByMenu || this.citizenDialogTarget !== null || this.chat.isOpen;
+    return (
+      haltedByMenu ||
+      this.citizenDialogTarget !== null ||
+      this.chat.isOpen ||
+      this.cutscenes.isActive
+    );
   }
 
   private aiPaused(): boolean {
@@ -3846,13 +3968,14 @@ export class BuildingInteriorScene extends GameplayScene {
       getAudio: () => this.audio,
       getAudioScope: () => this.audioScope,
       getAwards: () => this.awards,
-      getShow: () => this.aiShow,
+      getInteractions: () => this.aiInteractions,
     };
   }
 
   private createAIContextSource(): AIContextSource {
     const inSafeRoom = (): boolean => this.safeRoom?.isEntityInSafeRoom(this.active()) ?? false;
     return {
+      petNames: this.partyRun.petNames,
       crawlerNameOf: (player) =>
         player === this.human
           ? crawlerName('human')
@@ -3867,10 +3990,15 @@ export class BuildingInteriorScene extends GameplayScene {
       readSession: () => {
         const level = getLevelDef(this.floor.levelId);
         const companions: string[] = [];
-        if (this.mongoSystem.mongo !== null) companions.push('Mongo');
+        const { petNames } = this.partyRun;
+        if (this.deinonychusSystem.deinonychus !== null) {
+          companions.push(petWords(petNames, 'deinonychus').described);
+        }
         const hireling = this.mercenarySystem.activeMerc;
-        if (hireling !== null) companions.push(mobLabel(hireling));
-        if (this.attackCowSystem.standingCow !== null) companions.push('the attack cow');
+        if (hireling !== null) companions.push(mobLabel(hireling, petNames));
+        if (this.attackCowSystem.standingCow !== null) {
+          companions.push(petWords(petNames, 'attackCow').described);
+        }
         const session: SessionInput = {
           floorNumber: level.floorNumber,
           levelId: this.floor.levelId,
@@ -3892,7 +4020,7 @@ export class BuildingInteriorScene extends GameplayScene {
       readLive: () => {
         const active = this.active();
         const safe = inSafeRoom();
-        const nearbyMobs = readNearbyMobs(this.world.roster.mobs, active);
+        const nearbyMobs = readNearbyMobs(this.world.roster.mobs, active, this.partyRun.petNames);
         const menuOpen = this.aiMenuOpen();
         return {
           activeCrawler: crawlerName(this.human.isActive ? 'human' : 'cat'),
@@ -3998,7 +4126,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // Read before the dismiss that clears it; the dismiss writes his remaining
     // health into the pet state the next scene rebuilds him from.
     const companions = this.companionDeparture();
-    this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+    this.deinonychusSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     // Writes the hire's health into the roster the next scene stands it up
     // from; a hire lying downed at the door is lost with the room.
     this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
@@ -4013,10 +4141,25 @@ export class BuildingInteriorScene extends GameplayScene {
   /**
    * Gives the party the human crawler's attack cow and stands her beside him in this room
    * now, with her arrival moo — the wheel's "A new pet" prize, and the `!cow`
-   * cheat. Returns false when she was already owned.
+   * cheat. Returns false when she was already owned. Naming her is the
+   * caller's, so the wheel can ask once its landing banner is down.
    */
   grantAttackCow(): boolean {
     return this.attackCowSystem.grant(this.human, this.map, this.world.roster);
+  }
+
+  /** Asks for the attack cow's name unless the run has one, then runs `next`. */
+  private nameAttackCow(next?: () => void): void {
+    namePetThen(
+      {
+        prompt: this.menus.petNamePrompt,
+        petNames: this.partyRun.petNames,
+        keyboardAnchor: this.sceneManager.canvas,
+      },
+      'attackCow',
+      attackCowPortrait,
+      next,
+    );
   }
 
   /**
@@ -4028,8 +4171,8 @@ export class BuildingInteriorScene extends GameplayScene {
     return this.partyRun.commitSave({
       human: snapPlayer(this.human),
       cat: snapPlayer(this.cat),
-      mongoPetHp: this.mongoSystem.hp,
-      mongoPetResting: this.mongoSystem.restingUntilFull,
+      deinonychusPetHp: this.deinonychusSystem.hp,
+      deinonychusPetResting: this.deinonychusSystem.restingUntilFull,
     });
   }
 
@@ -4172,7 +4315,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const openOverlays = surfacesOverHud(this.ui, ROOM_STATUS_ONLY);
     if (openOverlays.length !== 1 || openOverlays[0] !== CONVERSATION_SURFACE_ID) return false;
     const player = this.active();
-    const pressIsForSomeoneElse = safeRoomPressLeavesSpeaker(this.bopca, this.safeRoom, player);
+    const pressIsForSomeoneElse = safeRoomPressLeavesSpeaker(this.bopca, this.dave, player);
     return this.conversation.handOff(
       player,
       pressIsForSomeoneElse,
@@ -4183,12 +4326,12 @@ export class BuildingInteriorScene extends GameplayScene {
     );
   }
 
-  /** Whichever of the Bopca and Mordecai is nearer. Returns whether either took the press. */
+  /** Whichever of the Bopca and Dave is nearer. Returns whether either took the press. */
   private trySafeRoomPress(player: ReturnType<BuildingInteriorScene['active']>): boolean {
-    const speaker = safeRoomSpeakerFor(this.bopca, this.safeRoom, player);
+    const speaker = safeRoomSpeakerFor(this.bopca, this.dave, player);
     if (speaker === 'bopca') return this.bopca?.tryInteract(player) === true;
-    if (speaker === 'mordecai') {
-      this.talkToMordecai(player);
+    if (speaker === 'dave') {
+      this.talkToDave(player);
       return true;
     }
     return false;
@@ -4600,12 +4743,93 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
-   * Mordecai's AI chat. His floor advice is the overworld's: every objective it
-   * ranks is out there, and the bearing to it is taken from overworld tiles.
+   * Dave's tactics for what the floor outside wants raised next, and once
+   * nothing is left, his AI chat. Every objective is out there, so the floor
+   * outside ranks them.
    */
-  private talkToMordecai(active: { x: number; y: number }): void {
-    if (this.safeRoom === null) return;
-    this.safeRoom.openMordecaiDialog(active, aiAdapter.chatWithMordecai());
+  private talkToDave(active: { x: number; y: number }): void {
+    const objective = this.partyRun.story.currentObjective();
+    if (objective !== null) {
+      this.bus.emit('daveAdviceGiven', { objectiveId: objective.id });
+      this.partyRun.daveWhereabouts.tacticsGiven.add(objective.id);
+      this.dave?.openLine(active, adviceTactics(objective));
+      return;
+    }
+    this.dave?.openChat(active, aiAdapter.chatWithDave());
+  }
+
+  /** His `!`: tactics for what is next that he has not yet given. */
+  private daveMarker(): QuestMarkerState {
+    const objective = this.partyRun.story.currentObjective();
+    const owed =
+      objective !== null && !this.partyRun.daveWhereabouts.tacticsGiven.has(objective.id);
+    return owed ? 'exclamation' : 'none';
+  }
+
+  /**
+   * Dave's talk on arriving in this building's safe room, once the active
+   * crawler is in there with him and nothing is fighting the party: the
+   * floor's story beat if one is due, then Caroline's intel about what is
+   * next out there.
+   */
+  private startOwedDaveTalk(): void {
+    const owed = this.daveArrivalOwed;
+    const daveState = this.dave?.state ?? null;
+    const crawlerRoom = this.safeRoom?.safeRoomAt(this.active()) ?? null;
+    const together =
+      owed !== null &&
+      daveState?.kind === 'inRoom' &&
+      daveState.phase.kind === 'present' &&
+      sameSafeRoom(daveState.room, owed) &&
+      crawlerRoom !== null &&
+      sameSafeRoom(crawlerRoom, owed);
+    const free =
+      !this.cutscenes.isActive &&
+      !this.story.isTellingDaveMoment &&
+      !partyIsEngaged(this.world.roster.mobs, [this.human, this.cat]);
+    if (!together || !free) return;
+    this.daveArrivalOwed = null;
+    const story = this.partyRun.story;
+    const floor = story.floor;
+    if (floor === null) return;
+    this.story.playDaveMoment({
+      // No boss with a story beat of its own is fought from a building.
+      event: { kind: 'safeRoomArrival', floor, defeatedBosses: new Set() },
+      walkUp: () => this.walkUpToDave(),
+      extra: () => null,
+      leavesAfter: false,
+      onDone: () => {
+        const objective = story.currentObjective();
+        if (objective === null) return;
+        this.story.briefObjective(objective.id, () => this.intelStillDue(objective.id));
+      },
+    });
+  }
+
+  /**
+   * Caroline's intel about `objective` as it stands when her turn comes: null
+   * once it is no longer what the floor wants raised next, or the party has
+   * left the safe room, so it is offered again at the next arrival.
+   */
+  private intelStillDue(objective: AdviceObjectiveId): CarolineMessage | null {
+    const story = this.partyRun.story;
+    const current = story.currentObjective();
+    const inSafeRoom = (this.safeRoom?.safeRoomAt(this.active()) ?? null) !== null;
+    if (current?.id !== objective || !inSafeRoom) return null;
+    return adviceIntel(current, story.bearingOrigin);
+  }
+
+  private walkUpToDave(): WalkToStep | null {
+    const tile = this.dave?.standingTile ?? null;
+    if (tile === null) return null;
+    const active = this.active();
+    return walkUpTo(this.map, tile, { x: pixelToTile(active.x), y: pixelToTile(active.y) });
+  }
+
+  /** Caroline speaks only while nothing hostile is fighting the party, nothing halts the world and no box is open. */
+  private carolineMaySpeak(): boolean {
+    if (this.gameOver || this.ui.worldHalted() || this.conversation.isOpen) return false;
+    return !partyIsEngaged(this.world.roster.mobs, [this.human, this.cat]);
   }
 
   private townDialogContext(): TownDialogContext {
@@ -4631,7 +4855,7 @@ export class BuildingInteriorScene extends GameplayScene {
    *
    * Talking is the last link of the Space chain, so this is drawn after every
    * surface that raises a prompt of its own — the counters, the desk, the bed,
-   * Mordecai, the Bopca, the readables, the quest fights — and yields to any
+   * Dave, the Bopca, the readables, the quest fights — and yields to any
    * of them already on screen: that one takes the press first.
    */
   private renderMercenaryPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
@@ -4848,7 +5072,7 @@ export class BuildingInteriorScene extends GameplayScene {
   private interiorChrome(): InteriorChrome {
     return {
       follow: !this.followDisabled,
-      summon: this.mongoSystem.canShow && this.cat.isActive,
+      summon: this.deinonychusSystem.canShow && this.cat.isActive,
       build: this.buildButtonOffered,
       journal: this.overworldJournal !== null,
     };
@@ -4914,9 +5138,9 @@ export class BuildingInteriorScene extends GameplayScene {
     this.bopca?.renderObjects(ctx, camX, camY, this.active(), this.inactive());
 
     // With the room's fixtures — the bed, the lantern pools, the stove steam.
-    // Ahead of the sorted pass, not after it, because Mordecai now sorts *in*
-    // that pass: left here he would be drawn before his own bed and stand
-    // behind it. The dungeon scene has always ordered these two this way.
+    // Ahead of the sorted pass, not after it, because Dave sorts *in* that
+    // pass: drawn after it, the bed would cover him. The dungeon scene orders
+    // these two the same way.
     if (this.safeRoom) {
       this.safeRoom.renderObjects(ctx, camX, camY, this.active());
     }
@@ -4927,7 +5151,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.club?.renderFloor(ctx, camX, camY);
 
     const safeRoomFigures =
-      this.safeRoom?.sortedRenderables(
+      this.dave?.sortedRenderables(
         this.active(),
         SAFE_ROOM_PULSE_BASE + Math.sin(Date.now() / SAFE_ROOM_PULSE_PERIOD_MS) * PULSE_SWING,
       ) ?? [];
@@ -4975,7 +5199,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.rockThrows.render(ctx, camX, camY);
     this.hirelingShots.render(ctx, camX, camY);
     this.fairies.render(ctx, camX, camY);
-    destruction.renderEffects(ctx, camX, camY, this.human);
+    destruction.renderEffects(ctx, camX, camY);
     this.interiorPropDestruction?.renderEffects(ctx, camX, camY);
     this.contractSite?.renderAbove(ctx, camX, camY);
     // Over the crawlers, so a column standing between the camera and one of them
@@ -5001,7 +5225,7 @@ export class BuildingInteriorScene extends GameplayScene {
     renderLevelUpFlash(ctx, camX, camY, this.pm);
     renderStatBoostFlash(ctx, camX, camY, this.pm);
     this.chat.renderBubble(ctx, camX, camY);
-    this.mongoSystem.renderSpeechBubble(ctx, this.cat.x - camX, this.cat.y - camY);
+    this.deinonychusSystem.renderSpeechBubble(ctx, this.cat.x - camX, this.cat.y - camY);
     this.mercenarySystem.renderSpeech(ctx, camX, camY);
     this.attackCowSystem.renderOverlay(ctx, camX, camY);
     this.crawlerBarks.render(ctx, camX, camY, this.human, this.cat);
@@ -5025,7 +5249,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // Before the HUD: the marker is clamped to the screen edge, and a pet off
     // the top of the room would otherwise sit on top of the health bars.
     if (!this.gameOver && !this.pauseScreen.isOpen) {
-      this.mongoSystem.renderOffscreenMarker(
+      this.deinonychusSystem.renderOffscreenMarker(
         ctx,
         camX,
         camY,
@@ -5068,28 +5292,29 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.hudShows) {
       const invPlayer = this.inventoryPlayer();
       const cooldowns = this.menus.itemCooldowns;
-      cooldowns.set('protective_shell', {
-        current: this.combat.spells.shellCooldown,
-        max: this.combat.spells.shellCooldownMax,
+      cooldowns.set('energy_shield', {
+        current: this.combat.spells.energyShieldCooldown,
+        max: this.combat.spells.energyShieldCooldownMax,
       });
       cooldowns.set('magic_missile', {
         current: this.cat.missileCooldownCurrent,
         max: Math.max(1, this.cat.missileCooldownMax),
       });
-      cooldowns.set('smush', {
-        current: this.human.smushCooldown,
-        max: Math.max(1, this.human.getSmushCooldownMax()),
+      cooldowns.set('seismic_stomp', {
+        current: this.human.seismicStompCooldown,
+        max: Math.max(1, this.human.getSeismicStompCooldownMax()),
       });
       this.menus.syncPotionCooldownOverlay(invPlayer);
     }
 
-    const safeRoomSpeaker = safeRoomSpeakerFor(this.bopca, this.safeRoom, this.active());
+    const safeRoomSpeaker = safeRoomSpeakerFor(this.bopca, this.dave, this.active());
     if (this.safeRoom) {
-      this.safeRoom.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'bopca');
+      this.safeRoom.renderUI(ctx, this.active());
     }
+    this.dave?.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'bopca');
 
     if (this.bopca !== null) {
-      this.bopca.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'mordecai');
+      this.bopca.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'dave');
     }
     // Last of the world prompts; see the method for why.
     this.renderMercenaryPrompt(ctx, camX, camY);
@@ -5203,7 +5428,6 @@ export class BuildingInteriorScene extends GameplayScene {
         : null,
       topBand: this.topBandEntries(),
       levelTimer: this.heldLevelTimer(),
-      favor: controls ? this.aiShow.favorModel() : null,
     };
   }
 
@@ -5322,8 +5546,8 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   private hudSummon(): HudModel['summon'] {
-    const card = this.mongoSystem.summonCard(this.cat.isActive);
-    return card === null ? null : { ...card, onTap: () => this.toggleMongoSummon() };
+    const card = this.deinonychusSystem.summonCard(this.cat.isActive);
+    return card === null ? null : { ...card, onTap: () => this.toggleDeinonychusSummon() };
   }
 
   /** Every bar the top band stacks this frame, the room's name last. */
@@ -5466,7 +5690,7 @@ export class BuildingInteriorScene extends GameplayScene {
   /**
    * The space-equivalent actions a world tap performs.
    *
-   * A conversation, panel or Mordecai's own box already up when the tap landed
+   * A conversation, panel or Dave's own box already up when the tap landed
    * keeps the tap from opening a fresh one in the same press: the
    * close-then-reopen trap.
    *
@@ -5488,12 +5712,12 @@ export class BuildingInteriorScene extends GameplayScene {
     ) {
       return;
     }
-    const safeRoomSpeaker = safeRoomSpeakerFor(this.bopca, this.safeRoom, this.active());
+    const safeRoomSpeaker = safeRoomSpeakerFor(this.bopca, this.dave, this.active());
     if (this.bopca !== null && !this.bopca.isDialogOpen && safeRoomSpeaker === 'bopca') {
       this.bopca.tryInteract(this.active());
     }
-    if (this.safeRoom?.mordecaiDialogOpen !== true && safeRoomSpeaker === 'mordecai') {
-      this.talkToMordecai(this.active());
+    if (this.dave?.dialogOpen !== true && safeRoomSpeaker === 'dave') {
+      this.talkToDave(this.active());
     }
     if (this.shop?.isNearShopkeeper(this.active()) === true) {
       this.shop.open();
@@ -5504,7 +5728,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.club?.handleInteract(this.active());
     // Talk to a nearby occupant only when nothing else claimed the tap: no
     // shop/club panel is up (the store has both a shop and shelf-browsers), and
-    // the safe room didn't just open Mordecai (that building has both Mordecai
+    // the safe room didn't just open Dave (that building has both Dave
     // and ambient occupants within one tap's reach).
     if (!dialogUpBeforeTap && !this.tapTargetOpen()) {
       const active = this.active();
@@ -5554,7 +5778,7 @@ export class BuildingInteriorScene extends GameplayScene {
     return (
       this.shop?.isOpen === true ||
       this.club?.modalOpen === true ||
-      this.safeRoom?.mordecaiDialogOpen === true ||
+      this.dave?.dialogOpen === true ||
       this.bopca?.isDialogOpen === true ||
       this.servicePanel?.isOpen === true ||
       this.readingPanel?.isOpen === true ||

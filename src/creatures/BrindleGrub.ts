@@ -266,7 +266,7 @@ export class BrindleGrub extends Mob {
   /** Grubs drop nothing but, very rarely, the book on eating anything. */
   protected override rollLootItems(_killer: Player | null): LootDrop['items'] {
     const items: LootDrop['items'] = [];
-    maybeDropSkillBook(items, 'skill_book_iron_stomach');
+    maybeDropSkillBook(items, 'glutton');
     return items;
   }
 

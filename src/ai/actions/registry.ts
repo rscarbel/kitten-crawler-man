@@ -20,7 +20,7 @@ import { ActionGovernor, hpShieldNote } from './governor';
 import { defaultLedgerStore } from './ledgerStore';
 import { NARRATION_ACTIONS } from './narration';
 import { objectSchema, validateParams } from './schema';
-import { SHOW_ACTIONS } from './show';
+import { INTERACTION_ACTIONS } from './interactions';
 import { aiActionTimers } from './timers';
 import type { AIActionDef, AIActionResult, AISceneContext, AIToolDefinition } from './types';
 import { WORLD_ACTIONS } from './world';
@@ -30,7 +30,7 @@ const COMMENTARY_ONLY_FLAG: SessionFlagName = 'commentaryOnly';
 
 export const AI_ACTIONS: readonly AIActionDef[] = [
   ...NARRATION_ACTIONS,
-  ...SHOW_ACTIONS,
+  ...INTERACTION_ACTIONS,
   ...CHALLENGE_ACTIONS,
   ...COMBAT_ACTIONS,
   ...ECONOMY_ACTIONS,
@@ -76,7 +76,7 @@ export interface AIActionRequest {
 }
 
 export interface AIActionOutcome extends AIActionResult {
-  /** The line for the "System intervened" indicator, or null when none should show. */
+  /** The line for the "Caroline intervened" indicator, or null when none should show. */
   readonly indicator: string | null;
 }
 

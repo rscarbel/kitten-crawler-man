@@ -582,8 +582,8 @@ type RefusedChannel = {
 
 const SPELL_AND_AREA_TYPES: readonly PlayerDamageType[] = [
   'missile',
-  'shell',
-  'smush',
+  'energy_shield',
+  'seismic_stomp',
   'explosion',
 ];
 

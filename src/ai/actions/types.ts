@@ -7,7 +7,7 @@ import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { Mob } from '../../creatures/Mob';
 import type { GameMap } from '../../map/GameMap';
 import type { ToastOptions } from '../../ui/hud/toasts';
-import type { AIShowHost } from '../show/types';
+import type { AIInteractionHost } from '../interactions/types';
 import type { ActionParams, JsonObjectSchema, ParamField } from './schema';
 import type { SessionFlagName } from '../context/sessionContext';
 
@@ -52,8 +52,8 @@ export interface AISceneContext {
   getFloorKey?(): string;
   /** Pans the camera to a world point (pixels) for `frames` frames. */
   spotlight?(point: { readonly x: number; readonly y: number }, frames: number): void;
-  /** The show's stage: questions, sponsor breaks, challenges and the viewers' favour. */
-  getShow?(): AIShowHost | null;
+  /** The stage the AI puts questions and challenge offers on. */
+  getInteractions?(): AIInteractionHost | null;
 }
 
 export type AITargetCrawler = 'human' | 'cat';
@@ -159,7 +159,7 @@ export interface AIActionDef {
   budget?(call: AIActionCall): AIBudgetDraw | null;
   /** Action-specific refusal (no stacking, nothing to remove…); null to allow. */
   refusal?(call: AIActionCall): string | null;
-  /** Whether a successful call shows the "System intervened" indicator. Defaults to true. */
+  /** Whether a successful call shows the "Caroline intervened" indicator. Defaults to true. */
   readonly showsIndicator?: boolean;
   execute(call: AIActionCall): AIActionResult;
 }

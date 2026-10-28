@@ -15,9 +15,10 @@ import {
 import { parseDoubleDamageRemaining } from './doubleDamageSave';
 import { parseAttackCowHp } from '../state/AttackCowState';
 import { MusicLibrary } from '../music/MusicLibrary';
-import { parseViewerFavor } from '../progression/viewerFavor';
 import { parseSerializedAbilityStates } from '../skills/AbilityManager';
 import { isLevelId } from '../../levels/levelIds';
+import { parseObjectivesBriefed, parseStoryBeatsSeen } from '../../story/storySave';
+import { parseSavedPetNames } from '../party/petNames';
 
 /**
  * The fields of a save that belong to the whole run rather than to the floor it
@@ -30,9 +31,9 @@ type RunSaveFieldKey =
   | 'gameStats'
   | 'humanAchievements'
   | 'catAchievements'
-  | 'mongoUnlocked'
-  | 'mongoPetHp'
-  | 'mongoPetResting'
+  | 'deinonychusUnlocked'
+  | 'deinonychusPetHp'
+  | 'deinonychusPetResting'
   | 'wheelPrizesWon'
   | 'pendingWheelOutcome'
   | 'wheelFreeSpinBet'
@@ -43,14 +44,15 @@ type RunSaveFieldKey =
   | 'attackCowHp'
   | 'attackCowResting'
   | 'musicLibrary'
-  | 'viewerFavor';
+  | 'storyBeatsSeen'
+  | 'objectivesBriefed'
+  | 'petNames';
 
 /**
  * Run fields whose absence means something, so their keys must be written but
- * their values may be `undefined`: the cow's HP (full, not yet measured) and
- * the viewers' favour (the AI has not moved it yet).
+ * their values may be `undefined`: the cow's HP (full, not yet measured).
  */
-type RunSaveFieldAbsentWhenUnmeasured = 'attackCowHp' | 'viewerFavor';
+type RunSaveFieldAbsentWhenUnmeasured = 'attackCowHp';
 
 /**
  * The run-level fields every save path must write, built in one place so that a
@@ -90,9 +92,17 @@ export function parseGameProgress(raw: unknown): GameProgress | null {
   const wheelQuestFreeSpins = parseWheelQuestFreeSpins(raw.wheelQuestFreeSpins);
   const doubleDamageRemaining = parseDoubleDamageRemaining(raw.doubleDamageRemaining);
   const musicLibrary = MusicLibrary.parse(raw.musicLibrary);
-  const { mongoUnlocked, mongoPetHp, mongoPetResting, attackCowOwned, attackCowResting } = raw;
+  const storyBeatsSeen = parseStoryBeatsSeen(raw.storyBeatsSeen);
+  const objectivesBriefed = parseObjectivesBriefed(raw.objectivesBriefed);
+  const petNames = parseSavedPetNames(raw.petNames);
+  const {
+    deinonychusUnlocked,
+    deinonychusPetHp,
+    deinonychusPetResting,
+    attackCowOwned,
+    attackCowResting,
+  } = raw;
   const attackCowHp = raw.attackCowHp === undefined ? undefined : parseAttackCowHp(raw.attackCowHp);
-  const viewerFavor = raw.viewerFavor === undefined ? undefined : parseViewerFavor(raw.viewerFavor);
   if (
     humanSnap === undefined ||
     catSnap === undefined ||
@@ -108,13 +118,15 @@ export function parseGameProgress(raw: unknown): GameProgress | null {
     wheelQuestFreeSpins === undefined ||
     doubleDamageRemaining === undefined ||
     musicLibrary === undefined ||
-    typeof mongoUnlocked !== 'boolean' ||
-    !isNonNegativeFinite(mongoPetHp) ||
-    typeof mongoPetResting !== 'boolean' ||
+    storyBeatsSeen === undefined ||
+    objectivesBriefed === undefined ||
+    petNames === undefined ||
+    typeof deinonychusUnlocked !== 'boolean' ||
+    !isNonNegativeFinite(deinonychusPetHp) ||
+    typeof deinonychusPetResting !== 'boolean' ||
     typeof attackCowOwned !== 'boolean' ||
     typeof attackCowResting !== 'boolean' ||
-    (raw.attackCowHp !== undefined && attackCowHp === undefined) ||
-    (raw.viewerFavor !== undefined && viewerFavor === undefined)
+    (raw.attackCowHp !== undefined && attackCowHp === undefined)
   ) {
     return null;
   }
@@ -123,9 +135,9 @@ export function parseGameProgress(raw: unknown): GameProgress | null {
     humanSnap,
     catSnap,
     abilityStates,
-    mongoUnlocked,
-    mongoPetHp,
-    mongoPetResting,
+    deinonychusUnlocked,
+    deinonychusPetHp,
+    deinonychusPetResting,
     humanAchievements,
     catAchievements,
     world,
@@ -141,7 +153,9 @@ export function parseGameProgress(raw: unknown): GameProgress | null {
     attackCowHp,
     attackCowResting,
     musicLibrary,
-    viewerFavor,
+    storyBeatsSeen,
+    objectivesBriefed,
+    petNames,
     savedAt,
   };
 }

@@ -1,8 +1,9 @@
 /**
  * Choreography for the Briar Hollow cast: every row a villager or a militia
- * soldier plays beyond Mordecai's walk and idle.
+ * soldier plays beyond the shared walk and idle.
  *
- * The walk and idle themselves are Mordecai's, imported rather than copied —
+ * The walk and idle themselves are the ratkin gait's (`ratKinFigure.ts`),
+ * imported rather than copied —
  * the gait is the one thing every ratkin shares, and the stride-sync gate is
  * written against it. What this module adds is:
  *
@@ -14,7 +15,7 @@
  * - **Soldier rows** (all three views): a spear thrust, a flinch, a collapse,
  *   and getting back up.
  *
- * Arms are driven by joint angles throughout, as Mordecai's are: a hand placed
+ * Arms are driven by joint angles throughout, as the gait's are: a hand placed
  * by IK sweeps both segments together and the forearm flails.
  */
 

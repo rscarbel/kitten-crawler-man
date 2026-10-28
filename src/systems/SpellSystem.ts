@@ -1,4 +1,6 @@
 import { TILE_SIZE } from '../core/constants';
+import { outgoingHitDamageOn } from '../core/combat/outgoingHit';
+import { MAGIC_HIT } from '../core/combat/damageTags';
 import {
   allocCanvas,
   freshSurfaceContext,
@@ -11,7 +13,7 @@ import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameSystem, SystemContext } from './GameSystem';
-import { getProtectiveShellStats, type ProtectiveShellStats } from '../abilities/protectiveShell';
+import { getEnergyShieldStats, type EnergyShieldStats } from '../abilities/energyShield';
 import { normalize } from '../utils';
 import { worldPalette } from '../ui/theme/worldInk';
 import { worldText } from '../ui/world/worldText';
@@ -23,23 +25,24 @@ import {
 } from '../sprites/figure/figureFrameCache';
 import { figureFrameCount } from '../sprites/figure/figureDef';
 import {
-  MINI_SHELL_STATE,
-  PROTECTIVE_SHELL_FIGURE,
-  PROTECTIVE_SHELL_MINI_FIGURE,
-  PROTECTIVE_SHELL_SHOCKWAVE_FIGURE,
-  SHELL_ACTIVE_STATE,
-  SHELL_APPEAR_FULL_POWER_STATE,
-  SHELL_APPEAR_STATE,
-  SHELL_EXPIRE_STATE,
-  SHELL_FULL_POWER_STATE,
+  MINI_SHIELD_STATE,
+  ENERGY_SHIELD_FIGURE,
+  ENERGY_SHIELD_MINI_FIGURE,
+  ENERGY_SHIELD_SHOCKWAVE_FIGURE,
+  SHIELD_ACTIVE_STATE,
+  SHIELD_APPEAR_FULL_POWER_STATE,
+  SHIELD_APPEAR_STATE,
+  SHIELD_EXPIRE_STATE,
+  SHIELD_FULL_POWER_STATE,
   SHOCKWAVE_STATE,
-  shellTileSizeFor,
-} from '../sprites/art/protectiveShellFigure';
+  shieldTileSizeFor,
+} from '../sprites/art/energyShieldFigure';
 import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
-import { standByForShellCast } from '../creatures/humanGestures';
+import { standByForShieldCast } from '../creatures/humanGestures';
+import { energyShieldMagicScale } from '../core/party/crawlerFormulas';
 import type { DynamicLightSink } from './lighting/dynamicLights';
 
-interface ActiveShell {
+interface ActiveEnergyShield {
   x: number;
   y: number;
   radiusPx: number;
@@ -47,13 +50,15 @@ interface ActiveShell {
   totalFrames: number;
   didInitialDamage: boolean;
   abilityLevel: number;
+  /** What the caster's magic multiplied this cast's duration and expanding blast by. */
+  magicScale: number;
   catWasInside: boolean;
   continuousDamageThrottle: number;
   /** Mobs pushed at least once this cast (for touch-XP tracking). */
   touchedMobIds: Set<Mob>;
 }
 
-interface MiniShell {
+interface MiniShield {
   /** Center x in world pixels (follows cat). */
   framesRemaining: number; // 180 frames = 3 seconds
   radiusPx: number;
@@ -108,15 +113,15 @@ const FOG_BLOBS = platform.isMobile ? CLOUD_BLOBS.slice(0, MOBILE_FOG_BLOB_COUNT
 const TILE_CENTER_OFFSET = 0.5;
 const FOG_MARGIN = 4;
 const FOG_COLOR_STOP_1 = 0.55;
-const SHELL_COOLDOWN_FRAMES = 7200;
+const SHIELD_COOLDOWN_FRAMES = 7200;
 const CHAIN_LIGHTNING_FRAMES = 20;
 const INITIAL_SHOCKWAVE_FRAMES = 40;
 /**
  * Fog radius and duration both approach a hard cap asymptotically rather than
- * scaling linearly with intelligence, so a heavily-invested late-game caster
+ * scaling linearly with magic, so a heavily-invested late-game caster
  * (easily reached by floor 3) gets a noticeably bigger cloud than a fresh one
  * without ever reaching a cloud big enough, or long enough, to blanket a whole
- * fight indefinitely: `base + (cap - base) * (1 - exp(-k * intelligence))`.
+ * fight indefinitely: `base + (cap - base) * (1 - exp(-k * magic))`.
  */
 const FOG_RADIUS_BASE_TILES = 3;
 const FOG_RADIUS_CAP_TILES = 9;
@@ -125,34 +130,36 @@ const FOG_DURATION_BASE_SECONDS = 4;
 const FOG_DURATION_CAP_SECONDS = 12;
 const FOG_DURATION_GROWTH_RATE = 0.12;
 const FOG_DURATION_FRAME_MULTIPLIER = 60;
-const MINI_SHELL_FRAMES = 180;
-const MINI_SHELL_TILES = 1.5;
+const MINI_SHIELD_FRAMES = 180;
+const MINI_SHIELD_TILES = 1.5;
 const CONTINUOUS_DAMAGE_THROTTLE_FRAMES = 60;
-const SHELL_BUFFER_TILES = 1;
-const SHELL_OUTER_BUFFER_BASE = 4;
-const SHELL_EXPAND_BUFFER = 2;
+/** What each throttled pulse of the shield's edge does to an enemy pressed against it. */
+const SHIELD_EDGE_DAMAGE = 1;
+const SHIELD_BUFFER_TILES = 1;
+const SHIELD_OUTER_BUFFER_BASE = 4;
+const SHIELD_EXPAND_BUFFER = 2;
 const SHOCKWAVE_FADE_IN_FRAMES = 30;
-const SHELL_FADE_OUT_FRAMES = 60;
-const SHELL_APPEAR_FRAMES = 30;
-const MINI_SHELL_FADE_OUT_FRAMES = 30;
+const SHIELD_FADE_OUT_FRAMES = 60;
+const SHIELD_APPEAR_FRAMES = 30;
+const MINI_SHIELD_FADE_OUT_FRAMES = 30;
 /**
  * How far ahead of the fade the expiry rows are warmed.
  *
  * The cast itself warms them too, but the figure cache releases a row that has
  * gone `IDLE_FRAMES_BEFORE_RELEASE` rendered frames without being drawn, and a
- * high-level shell outlasts that — so a shell that has run its whole duration
+ * high-level shield outlasts that — so a shield that has run its whole duration
  * would meet the fade cold.
  *
  * Clamped to that window rather than merely written to sit under it: a lead
  * longer than the window is warming the cache sweeps away again before the fade
  * ever plays it, so the two numbers cannot be allowed to drift apart silently.
  */
-const SHELL_EXPIRY_PREWARM_LEAD_TARGET_FRAMES = 120;
-const SHELL_EXPIRY_PREWARM_LEAD_FRAMES = Math.min(
-  SHELL_EXPIRY_PREWARM_LEAD_TARGET_FRAMES,
+const SHIELD_EXPIRY_PREWARM_LEAD_TARGET_FRAMES = 120;
+const SHIELD_EXPIRY_PREWARM_LEAD_FRAMES = Math.min(
+  SHIELD_EXPIRY_PREWARM_LEAD_TARGET_FRAMES,
   IDLE_FRAMES_BEFORE_RELEASE,
 );
-const MINI_SHELL_ALPHA_MULT = 0.7;
+const MINI_SHIELD_ALPHA_MULT = 0.7;
 const CHAIN_LIGHTNING_STEPS = 5;
 const CHAIN_LIGHTNING_JITTER_RANGE = 8;
 const CHAIN_LIGHTNING_ALPHA_FULL = 0.9;
@@ -169,7 +176,7 @@ const FOG_PULSE_FREQ = 0.04;
 const FOG_TIMER_ALPHA_MULT = 0.8;
 const TIMER_TEXT_SIZE = 10;
 const TIMER_Y_OFFSET = 14;
-const SHELL_RENDER_EXTENT = 25;
+const SHIELD_RENDER_EXTENT = 25;
 const FULL_POWER_LEVEL = 15;
 
 /** Pre-render the fog cloud texture to an offscreen canvas (called once per fog). */
@@ -202,12 +209,12 @@ function asymptoticApproach(n: number, base: number, cap: number, growthRate: nu
 }
 
 export class SpellSystem implements GameSystem {
-  private activeShell: ActiveShell | null = null;
-  private _shellCooldown = 0;
-  private _shellCooldownMax = SHELL_COOLDOWN_FRAMES;
+  private activeEnergyShield: ActiveEnergyShield | null = null;
+  private _energyShieldCooldown = 0;
+  private _energyShieldCooldownMax = SHIELD_COOLDOWN_FRAMES;
   private activeFogs: ActiveFog[] = [];
-  private shellOwner: HumanPlayer | null = null;
-  private catMiniShell: MiniShell | null = null;
+  private shieldOwner: HumanPlayer | null = null;
+  private catMiniShield: MiniShield | null = null;
   private chainLightningBolts: ChainLightningBolt[] = [];
 
   /** A chain-lightning arc lights the room at its middle as it crackles and fades. */
@@ -226,13 +233,13 @@ export class SpellSystem implements GameSystem {
   /** Touch XP pending drain by DungeonScene (1 per unique mob pushed). */
   private _pendingTouchXp = 0;
 
-  /** Block XP pending drain — incremented each time the shell deflects a projectile or tongue. */
+  /** Block XP pending drain — incremented each time the shield deflects a projectile or tongue. */
   private _pendingBlockXp = 0;
 
-  /** Pending shockwave event for level-15 shell expiry. */
+  /** Pending shockwave event for level-15 shield expiry. */
   private _pendingShockwave: { x: number; y: number; radiusPx: number } | null = null;
 
-  /** Pending chain lightning origin points (mob died inside shell). */
+  /** Pending chain lightning origin points (mob died inside shield). */
   private _pendingChainLightningOrigins: Array<{ x: number; y: number }> = [];
 
   /** Reusable Set to avoid allocating per queryCircle call each frame. */
@@ -244,12 +251,12 @@ export class SpellSystem implements GameSystem {
 
   /**
    * Drops every active spell effect and pending cross-frame event. Used on a
-   * checkpoint respawn so a shell, fog, or in-flight bolt from the encounter
+   * checkpoint respawn so a shield, fog, or in-flight bolt from the encounter
    * that killed the player doesn't carry into the new frame.
    */
   resetForCheckpoint(): void {
     this.dropWorldEffects();
-    this._shellCooldown = 0;
+    this._energyShieldCooldown = 0;
   }
 
   /**
@@ -257,16 +264,16 @@ export class SpellSystem implements GameSystem {
    * party has *spent*.
    *
    * Separate from {@link resetForCheckpoint} because leaving a room is not the
-   * same as rewinding time: a shell has to stop existing when the map it was
+   * same as rewinding time: a shield has to stop existing when the map it was
    * cast on stops being drawn, but refunding its cooldown would let a player
    * re-cast it by stepping through a door and back.
    */
   dropWorldEffects(): void {
-    this.activeShell = null;
+    this.activeEnergyShield = null;
     for (const fog of this.activeFogs) releaseSurface(fog.cachedCanvas);
     this.activeFogs = [];
-    this.shellOwner = null;
-    this.catMiniShell = null;
+    this.shieldOwner = null;
+    this.catMiniShield = null;
     this.chainLightningBolts = [];
     this.shockwaveRipples = [];
     this._pendingTouchXp = 0;
@@ -294,22 +301,22 @@ export class SpellSystem implements GameSystem {
     return drained;
   }
 
-  get shellCooldown(): number {
-    return this._shellCooldown;
+  get energyShieldCooldown(): number {
+    return this._energyShieldCooldown;
   }
 
-  get shellCooldownMax(): number {
-    return this._shellCooldownMax;
+  get energyShieldCooldownMax(): number {
+    return this._energyShieldCooldownMax;
   }
 
-  get activeShellLevel(): number {
-    return this.activeShell?.abilityLevel ?? 0;
+  get activeEnergyShieldLevel(): number {
+    return this.activeEnergyShield?.abilityLevel ?? 0;
   }
 
-  /** Returns true if the tile-top-left point (px, py) is inside the active shell. */
-  isInsideShell(px: number, py: number): boolean {
-    if (!this.activeShell) return false;
-    const { x, y, radiusPx } = this.activeShell;
+  /** Returns true if the tile-top-left point (px, py) is inside the active shield. */
+  isInsideEnergyShield(px: number, py: number): boolean {
+    if (!this.activeEnergyShield) return false;
+    const { x, y, radiusPx } = this.activeEnergyShield;
     const cx = px + TILE_SIZE * TILE_CENTER_OFFSET;
     const cy = py + TILE_SIZE * TILE_CENTER_OFFSET;
     return Math.hypot(cx - x, cy - y) < radiusPx;
@@ -321,13 +328,16 @@ export class SpellSystem implements GameSystem {
     return v;
   }
 
-  /** True if the given center point (world pixels) is inside the active shell. */
-  isPointInsideShell(cx: number, cy: number): boolean {
-    if (!this.activeShell) return false;
-    return Math.hypot(cx - this.activeShell.x, cy - this.activeShell.y) < this.activeShell.radiusPx;
+  /** True if the given center point (world pixels) is inside the active shield. */
+  isPointInsideEnergyShield(cx: number, cy: number): boolean {
+    if (!this.activeEnergyShield) return false;
+    return (
+      Math.hypot(cx - this.activeEnergyShield.x, cy - this.activeEnergyShield.y) <
+      this.activeEnergyShield.radiusPx
+    );
   }
 
-  /** Called by mobs when the shell deflects one of their attacks. */
+  /** Called by mobs when the shield deflects one of their attacks. */
   addBlockXp(amount: number): void {
     this._pendingBlockXp += amount;
   }
@@ -350,7 +360,7 @@ export class SpellSystem implements GameSystem {
     return v;
   }
 
-  /** Queue a chain lightning origin (called from DungeonScene when a mob dies inside the shell). */
+  /** Queue a chain lightning origin (called from DungeonScene when a mob dies inside the shield). */
   addChainLightningOrigin(x: number, y: number): void {
     this._pendingChainLightningOrigins.push({ x, y });
   }
@@ -363,28 +373,28 @@ export class SpellSystem implements GameSystem {
   /**
    * Warms every row the cast about to happen will draw.
    *
-   * The shell is the one figure here that paints past the fallback threshold —
+   * The shield is the one figure here that paints past the fallback threshold —
    * a 400×400 cell of stacked haloes — and a cast is a keypress with no
    * telegraph of its own, so the cast is the earliest moment that knows.
    */
-  private prewarmShellCast(stats: ProtectiveShellStats): void {
+  private prewarmShieldCast(stats: EnergyShieldStats): void {
     prewarmFigureState(
-      PROTECTIVE_SHELL_FIGURE,
-      stats.isFullPower ? SHELL_APPEAR_FULL_POWER_STATE : SHELL_APPEAR_STATE,
+      ENERGY_SHIELD_FIGURE,
+      stats.isFullPower ? SHIELD_APPEAR_FULL_POWER_STATE : SHIELD_APPEAR_STATE,
     );
     prewarmFigureState(
-      PROTECTIVE_SHELL_FIGURE,
-      stats.isFullPower ? SHELL_FULL_POWER_STATE : SHELL_ACTIVE_STATE,
+      ENERGY_SHIELD_FIGURE,
+      stats.isFullPower ? SHIELD_FULL_POWER_STATE : SHIELD_ACTIVE_STATE,
     );
     if (stats.miniShieldEnabled) {
-      prewarmFigureState(PROTECTIVE_SHELL_MINI_FIGURE, MINI_SHELL_STATE);
+      prewarmFigureState(ENERGY_SHIELD_MINI_FIGURE, MINI_SHIELD_STATE);
     }
-    this.prewarmShellExpiry(stats.isFullPower);
+    this.prewarmShieldExpiry(stats.isFullPower);
   }
 
-  private prewarmShellExpiry(isFullPower: boolean): void {
-    prewarmFigureState(PROTECTIVE_SHELL_FIGURE, SHELL_EXPIRE_STATE);
-    if (isFullPower) prewarmFigureState(PROTECTIVE_SHELL_SHOCKWAVE_FIGURE, SHOCKWAVE_STATE);
+  private prewarmShieldExpiry(isFullPower: boolean): void {
+    prewarmFigureState(ENERGY_SHIELD_FIGURE, SHIELD_EXPIRE_STATE);
+    if (isFullPower) prewarmFigureState(ENERGY_SHIELD_SHOCKWAVE_FIGURE, SHOCKWAVE_STATE);
   }
 
   /** Add an expanding shockwave ring for visual effect. */
@@ -392,7 +402,7 @@ export class SpellSystem implements GameSystem {
     this.shockwaveRipples.push({
       x,
       y,
-      maxRadius: radiusPx + TILE_SIZE * SHELL_BUFFER_TILES,
+      maxRadius: radiusPx + TILE_SIZE * SHIELD_BUFFER_TILES,
       currentRadius: radiusPx * TILE_CENTER_OFFSET,
       framesLeft: INITIAL_SHOCKWAVE_FRAMES,
       totalFrames: INITIAL_SHOCKWAVE_FRAMES,
@@ -400,39 +410,42 @@ export class SpellSystem implements GameSystem {
   }
 
   /**
-   * Attempt to activate the protective shell.
-   * @returns true if the shell was successfully triggered (i.e. not on cooldown).
+   * Attempt to activate the energy shield.
+   * @returns true if the shield was successfully triggered (i.e. not on cooldown).
    */
-  triggerProtectiveShell(
+  triggerEnergyShield(
     human: HumanPlayer,
     cat: CatPlayer,
     mobGrid: SpatialGrid<Mob>,
     abilityLevel: number,
   ): boolean {
-    if (this._shellCooldown > 0 || !human.canAct) return false;
+    if (this._energyShieldCooldown > 0 || !human.canAct) return false;
 
-    const stats = getProtectiveShellStats(abilityLevel);
+    const stats = getEnergyShieldStats(abilityLevel);
+    const magicScale = energyShieldMagicScale(human.magic);
+    const durationFrames = Math.round(stats.durationFrames * magicScale);
     const radiusPx = stats.radiusTiles * TILE_SIZE;
-    const shellX = human.x + TILE_SIZE * TILE_CENTER_OFFSET;
-    const shellY = human.y + TILE_SIZE * TILE_CENTER_OFFSET;
+    const shieldX = human.x + TILE_SIZE * TILE_CENTER_OFFSET;
+    const shieldY = human.y + TILE_SIZE * TILE_CENTER_OFFSET;
 
-    this.activeShell = {
-      x: shellX,
-      y: shellY,
+    this.activeEnergyShield = {
+      x: shieldX,
+      y: shieldY,
       radiusPx,
-      framesRemaining: stats.durationFrames,
-      totalFrames: stats.durationFrames,
+      framesRemaining: durationFrames,
+      totalFrames: durationFrames,
       didInitialDamage: false,
       abilityLevel,
+      magicScale,
       catWasInside: false,
       continuousDamageThrottle: 0,
       touchedMobIds: new Set<Mob>(),
     };
 
-    this.prewarmShellCast(stats);
-    this._shellCooldown = stats.cooldownFrames;
-    this._shellCooldownMax = stats.cooldownFrames;
-    this.shellOwner = human;
+    this.prewarmShieldCast(stats);
+    this._energyShieldCooldown = stats.cooldownFrames;
+    this._energyShieldCooldownMax = stats.cooldownFrames;
+    this.shieldOwner = human;
 
     // Level 15: instant ally heal + clear status effects
     if (stats.isFullPower) {
@@ -442,14 +455,14 @@ export class SpellSystem implements GameSystem {
       cat.clearStatusEffects();
     }
 
-    const shell = this.activeShell;
+    const shield = this.activeEnergyShield;
     const catDist = Math.hypot(
-      cat.x + TILE_SIZE * TILE_CENTER_OFFSET - shellX,
-      cat.y + TILE_SIZE * TILE_CENTER_OFFSET - shellY,
+      cat.x + TILE_SIZE * TILE_CENTER_OFFSET - shieldX,
+      cat.y + TILE_SIZE * TILE_CENTER_OFFSET - shieldY,
     );
-    shell.catWasInside = catDist < radiusPx;
+    shield.catWasInside = catDist < radiusPx;
 
-    this.pushMobsFromShell(mobGrid, stats);
+    this.pushMobsFromEnergyShield(mobGrid, stats);
 
     return true;
   }
@@ -458,14 +471,14 @@ export class SpellSystem implements GameSystem {
     if (!caster.canAct) return;
     if (!caster.inventory.removeOne('scroll_of_confusing_fog')) return;
     const radiusTiles = asymptoticApproach(
-      caster.intelligence,
+      caster.magic,
       FOG_RADIUS_BASE_TILES,
       FOG_RADIUS_CAP_TILES,
       FOG_RADIUS_GROWTH_RATE,
     );
     const radiusPx = radiusTiles * TILE_SIZE;
     const durationSeconds = asymptoticApproach(
-      caster.intelligence,
+      caster.magic,
       FOG_DURATION_BASE_SECONDS,
       FOG_DURATION_CAP_SECONDS,
       FOG_DURATION_GROWTH_RATE,
@@ -484,75 +497,77 @@ export class SpellSystem implements GameSystem {
     });
   }
 
-  /** Called every gameplay frame. Ticks cooldowns, pushes shell mobs, marks confused mobs. */
+  /** Called every gameplay frame. Ticks cooldowns, pushes shield mobs, marks confused mobs. */
   update(ctx: SystemContext): void {
     const { cat, human } = ctx;
     const mobGrid = ctx.roster.grid;
 
-    this._shellCooldown = human.tickCooldown(this._shellCooldown);
-    standByForShellCast(human, this._shellCooldown === 0);
+    this._energyShieldCooldown = human.tickCooldown(this._energyShieldCooldown);
+    standByForShieldCast(human, this._energyShieldCooldown === 0);
 
-    if (this.activeShell) {
+    if (this.activeEnergyShield) {
       // Clear heal boost from previous frame; re-applied below if ally is still inside
-      cat.clearRegenModifier('shell');
-      human.clearRegenModifier('shell');
+      cat.clearRegenModifier('energy_shield');
+      human.clearRegenModifier('energy_shield');
 
-      const shell = this.activeShell;
-      const stats = getProtectiveShellStats(shell.abilityLevel);
+      const shield = this.activeEnergyShield;
+      const stats = getEnergyShieldStats(shield.abilityLevel);
 
-      shell.framesRemaining--;
+      shield.framesRemaining--;
 
       // Push mobs outward every frame
-      this.pushMobsFromShell(mobGrid, stats);
+      this.pushMobsFromEnergyShield(mobGrid, stats);
 
-      // Level 10+: boost healing for allies inside the shell
       const catCx = cat.x + TILE_SIZE * TILE_CENTER_OFFSET;
       const catCy = cat.y + TILE_SIZE * TILE_CENTER_OFFSET;
-      const catDist = Math.hypot(catCx - shell.x, catCy - shell.y);
-      const catIsInside = catDist < shell.radiusPx;
+      const catDist = Math.hypot(catCx - shield.x, catCy - shield.y);
+      const catIsInside = catDist < shield.radiusPx;
       const humanDist = Math.hypot(
-        human.x + TILE_SIZE * TILE_CENTER_OFFSET - shell.x,
-        human.y + TILE_SIZE * TILE_CENTER_OFFSET - shell.y,
+        human.x + TILE_SIZE * TILE_CENTER_OFFSET - shield.x,
+        human.y + TILE_SIZE * TILE_CENTER_OFFSET - shield.y,
       );
-      const humanIsInside = humanDist < shell.radiusPx;
+      const humanIsInside = humanDist < shield.radiusPx;
 
       if (stats.allyHealingMultiplier > 1) {
-        if (catIsInside) cat.setRegenModifier('shell', stats.allyHealingMultiplier);
-        if (humanIsInside) human.setRegenModifier('shell', stats.allyHealingMultiplier);
+        if (catIsInside) cat.setRegenModifier('energy_shield', stats.allyHealingMultiplier);
+        if (humanIsInside) human.setRegenModifier('energy_shield', stats.allyHealingMultiplier);
       }
 
-      // Level 14+: mini-shield for cat when it exits the shell
       if (stats.miniShieldEnabled) {
-        if (shell.catWasInside && !catIsInside) {
-          // Cat just left — give it a mini-shell
-          this.catMiniShell = {
-            framesRemaining: MINI_SHELL_FRAMES,
-            radiusPx: TILE_SIZE * MINI_SHELL_TILES,
+        if (shield.catWasInside && !catIsInside) {
+          this.catMiniShield = {
+            framesRemaining: MINI_SHIELD_FRAMES,
+            radiusPx: TILE_SIZE * MINI_SHIELD_TILES,
           };
         }
-        shell.catWasInside = catIsInside;
+        shield.catWasInside = catIsInside;
       }
 
       // Level 14+: continuous boundary damage (every 60 frames)
       if (stats.continuousDamageEnabled) {
-        shell.continuousDamageThrottle++;
-        if (shell.continuousDamageThrottle >= CONTINUOUS_DAMAGE_THROTTLE_FRAMES) {
-          shell.continuousDamageThrottle = 0;
+        shield.continuousDamageThrottle++;
+        if (shield.continuousDamageThrottle >= CONTINUOUS_DAMAGE_THROTTLE_FRAMES) {
+          shield.continuousDamageThrottle = 0;
           this._querySet.clear();
           const boundaryMobs = mobGrid.queryCircle(
-            shell.x,
-            shell.y,
-            shell.radiusPx + TILE_SIZE,
+            shield.x,
+            shield.y,
+            shield.radiusPx + TILE_SIZE,
             this._querySet,
           );
           for (const mob of boundaryMobs) {
-            if (!mob.isAlive || !mob.takesPlayerDamage('shell')) continue;
-            const dx = mob.x + TILE_SIZE * TILE_CENTER_OFFSET - shell.x;
-            const dy = mob.y + TILE_SIZE * TILE_CENTER_OFFSET - shell.y;
+            if (!mob.isAlive || !mob.takesPlayerDamage('energy_shield')) continue;
+            const dx = mob.x + TILE_SIZE * TILE_CENTER_OFFSET - shield.x;
+            const dy = mob.y + TILE_SIZE * TILE_CENTER_OFFSET - shield.y;
             const dist = Math.hypot(dx, dy);
-            // "On the boundary" = within 1 tile outside the shell edge
-            if (dist >= shell.radiusPx && dist < shell.radiusPx + TILE_SIZE) {
-              mob.takeDamageFrom(1, this.shellOwner, 'shell');
+            // "On the boundary" = within 1 tile outside the shield edge
+            if (dist >= shield.radiusPx && dist < shield.radiusPx + TILE_SIZE) {
+              const owner = this.shieldOwner;
+              const edge =
+                owner === null
+                  ? SHIELD_EDGE_DAMAGE
+                  : outgoingHitDamageOn(owner, mob, SHIELD_EDGE_DAMAGE, MAGIC_HIT);
+              mob.takeDamageFrom(edge, owner, 'energy_shield');
             }
           }
         }
@@ -566,27 +581,25 @@ export class SpellSystem implements GameSystem {
       }
 
       const enteringExpiry =
-        shell.framesRemaining <= SHELL_EXPIRY_PREWARM_LEAD_FRAMES &&
-        shell.framesRemaining + 1 > SHELL_EXPIRY_PREWARM_LEAD_FRAMES;
-      if (enteringExpiry) this.prewarmShellExpiry(stats.isFullPower);
+        shield.framesRemaining <= SHIELD_EXPIRY_PREWARM_LEAD_FRAMES &&
+        shield.framesRemaining + 1 > SHIELD_EXPIRY_PREWARM_LEAD_FRAMES;
+      if (enteringExpiry) this.prewarmShieldExpiry(stats.isFullPower);
 
-      if (shell.framesRemaining <= 0) {
-        cat.clearRegenModifier('shell');
-        human.clearRegenModifier('shell');
+      if (shield.framesRemaining <= 0) {
+        cat.clearRegenModifier('energy_shield');
+        human.clearRegenModifier('energy_shield');
         if (stats.isFullPower) {
-          this._pendingShockwave = { x: shell.x, y: shell.y, radiusPx: shell.radiusPx };
+          this._pendingShockwave = { x: shield.x, y: shield.y, radiusPx: shield.radiusPx };
         }
-        this.activeShell = null;
-        this.shellOwner = null;
+        this.activeEnergyShield = null;
+        this.shieldOwner = null;
       }
     }
 
-    // Tick cat mini-shell
-    if (this.catMiniShell) {
-      this.catMiniShell.framesRemaining--;
+    if (this.catMiniShield) {
+      this.catMiniShield.framesRemaining--;
 
-      // Push mobs away from cat center using the mini-shell
-      const miniRadius = this.catMiniShell.radiusPx;
+      const miniRadius = this.catMiniShield.radiusPx;
       this._querySet.clear();
       const catCx = cat.x + TILE_SIZE * TILE_CENTER_OFFSET;
       const catCy = cat.y + TILE_SIZE * TILE_CENTER_OFFSET;
@@ -603,14 +616,14 @@ export class SpellSystem implements GameSystem {
           const oy = mob.y;
           const nx = dist > 0 ? dx / dist : 1;
           const ny = dist > 0 ? dy / dist : 0;
-          const push = miniRadius - dist + SHELL_EXPAND_BUFFER;
+          const push = miniRadius - dist + SHIELD_EXPAND_BUFFER;
           mob.shoveTo(mob.x + nx * push, mob.y + ny * push);
           mobGrid.move(mob, ox, oy);
         }
       }
 
-      if (this.catMiniShell.framesRemaining <= 0) {
-        this.catMiniShell = null;
+      if (this.catMiniShield.framesRemaining <= 0) {
+        this.catMiniShield = null;
       }
     }
 
@@ -666,14 +679,14 @@ export class SpellSystem implements GameSystem {
     });
   }
 
-  private pushMobsFromShell(mobGrid: SpatialGrid<Mob>, stats: ProtectiveShellStats): void {
-    if (!this.activeShell) return;
-    const shell = this.activeShell;
-    const { x, y, radiusPx } = shell;
+  private pushMobsFromEnergyShield(mobGrid: SpatialGrid<Mob>, stats: EnergyShieldStats): void {
+    if (!this.activeEnergyShield) return;
+    const shield = this.activeEnergyShield;
+    const { x, y, radiusPx } = shield;
 
     this._querySet.clear();
-    const nearShell = mobGrid.queryCircle(x, y, radiusPx + TILE_SIZE, this._querySet);
-    for (const mob of nearShell) {
+    const nearShield = mobGrid.queryCircle(x, y, radiusPx + TILE_SIZE, this._querySet);
+    for (const mob of nearShield) {
       if (!mob.isAlive) continue;
       const mcx = mob.x + TILE_SIZE * TILE_CENTER_OFFSET;
       const mcy = mob.y + TILE_SIZE * TILE_CENTER_OFFSET;
@@ -685,49 +698,55 @@ export class SpellSystem implements GameSystem {
         const oy = mob.y;
         const nx = dist > 0 ? dx / dist : 1;
         const ny = dist > 0 ? dy / dist : 0;
-        const push = radiusPx - dist + SHELL_EXPAND_BUFFER;
+        const push = radiusPx - dist + SHIELD_EXPAND_BUFFER;
         mob.shoveTo(mob.x + nx * push, mob.y + ny * push);
 
         // Expansion damage: only on the very first push frame (initial cast).
-        // Allies are still shoved clear — the shell is a wall to everyone — but
+        // Allies are still shoved clear — the shield is a wall to everyone — but
         // it only wounds what it is allowed to wound.
         if (
-          !shell.didInitialDamage &&
+          !shield.didInitialDamage &&
           stats.expandDamageEnabled &&
-          mob.takesPlayerDamage('shell')
+          mob.takesPlayerDamage('energy_shield')
         ) {
-          mob.takeDamageFrom(stats.expandDamage, this.shellOwner, 'shell');
+          const expandDamage = Math.round(stats.expandDamage * shield.magicScale);
+          const owner = this.shieldOwner;
+          const blast =
+            owner === null
+              ? expandDamage
+              : outgoingHitDamageOn(owner, mob, expandDamage, MAGIC_HIT);
+          mob.takeDamageFrom(blast, owner, 'energy_shield');
         }
 
-        if (!shell.touchedMobIds.has(mob) && !mob.blowsEarnNothing) {
-          shell.touchedMobIds.add(mob);
+        if (!shield.touchedMobIds.has(mob) && !mob.blowsEarnNothing) {
+          shield.touchedMobIds.add(mob);
           this._pendingTouchXp++;
         }
 
         mobGrid.move(mob, ox, oy);
-      } else if (dist < radiusPx + SHELL_OUTER_BUFFER_BASE) {
+      } else if (dist < radiusPx + SHIELD_OUTER_BUFFER_BASE) {
         // Thin outer buffer: push mobs back so they can't re-enter from outside
         const ox = mob.x;
         const oy = mob.y;
         const nx = dist > 0 ? dx / dist : 1;
         const ny = dist > 0 ? dy / dist : 0;
-        const outerPush = radiusPx + SHELL_OUTER_BUFFER_BASE - dist;
+        const outerPush = radiusPx + SHIELD_OUTER_BUFFER_BASE - dist;
         mob.shoveTo(mob.x + nx * outerPush, mob.y + ny * outerPush);
         mobGrid.move(mob, ox, oy);
       }
     }
-    shell.didInitialDamage = true;
+    shield.didInitialDamage = true;
   }
 
-  renderShell(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    if (!this.activeShell) return;
-    const { x, y, radiusPx, framesRemaining, totalFrames, abilityLevel } = this.activeShell;
+  renderEnergyShield(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    if (!this.activeEnergyShield) return;
+    const { x, y, radiusPx, framesRemaining, totalFrames, abilityLevel } = this.activeEnergyShield;
     const sx = x - camX;
     const sy = y - camY;
     const isFullPower = abilityLevel >= FULL_POWER_LEVEL;
 
     // Offscreen culling
-    const extent = radiusPx + SHELL_RENDER_EXTENT;
+    const extent = radiusPx + SHIELD_RENDER_EXTENT;
     if (
       sx + extent < 0 ||
       sy + extent < 0 ||
@@ -738,39 +757,39 @@ export class SpellSystem implements GameSystem {
 
     const elapsed = (totalFrames - framesRemaining) / FOG_DURATION_FRAME_MULTIPLIER;
     const fadeIn = Math.min(1, (totalFrames - framesRemaining) / SHOCKWAVE_FADE_IN_FRAMES);
-    const fadeOut = Math.min(1, framesRemaining / SHELL_FADE_OUT_FRAMES);
+    const fadeOut = Math.min(1, framesRemaining / SHIELD_FADE_OUT_FRAMES);
     const alpha = Math.min(fadeIn, fadeOut);
 
-    const appearing = totalFrames - framesRemaining < SHELL_APPEAR_FRAMES;
-    const expiring = framesRemaining < SHELL_FADE_OUT_FRAMES;
+    const appearing = totalFrames - framesRemaining < SHIELD_APPEAR_FRAMES;
+    const expiring = framesRemaining < SHIELD_FADE_OUT_FRAMES;
 
     let state: string;
     let frame: number;
     if (appearing) {
-      state = isFullPower ? SHELL_APPEAR_FULL_POWER_STATE : SHELL_APPEAR_STATE;
+      state = isFullPower ? SHIELD_APPEAR_FULL_POWER_STATE : SHIELD_APPEAR_STATE;
       frame = progressFrameIndex(
-        (totalFrames - framesRemaining) / SHELL_APPEAR_FRAMES,
-        figureFrameCount(PROTECTIVE_SHELL_FIGURE, state),
+        (totalFrames - framesRemaining) / SHIELD_APPEAR_FRAMES,
+        figureFrameCount(ENERGY_SHIELD_FIGURE, state),
       );
     } else if (expiring) {
-      state = SHELL_EXPIRE_STATE;
+      state = SHIELD_EXPIRE_STATE;
       frame = progressFrameIndex(
-        1 - framesRemaining / SHELL_FADE_OUT_FRAMES,
-        figureFrameCount(PROTECTIVE_SHELL_FIGURE, state),
+        1 - framesRemaining / SHIELD_FADE_OUT_FRAMES,
+        figureFrameCount(ENERGY_SHIELD_FIGURE, state),
       );
     } else {
-      state = isFullPower ? SHELL_FULL_POWER_STATE : SHELL_ACTIVE_STATE;
-      const cycleFrames = figureFrameCount(PROTECTIVE_SHELL_FIGURE, state);
+      state = isFullPower ? SHIELD_FULL_POWER_STATE : SHIELD_ACTIVE_STATE;
+      const cycleFrames = figureFrameCount(ENERGY_SHIELD_FIGURE, state);
       frame = timeFrameIndex(elapsed, cycleFrames, cycleFrames);
     }
 
-    const tileSize = shellTileSizeFor(PROTECTIVE_SHELL_FIGURE, radiusPx);
-    drawFigureCached(ctx, PROTECTIVE_SHELL_FIGURE, state, frame, sx, sy, tileSize, { alpha });
+    const tileSize = shieldTileSizeFor(ENERGY_SHIELD_FIGURE, radiusPx);
+    drawFigureCached(ctx, ENERGY_SHIELD_FIGURE, state, frame, sx, sy, tileSize, { alpha });
 
     const secs = Math.ceil(framesRemaining / FOG_DURATION_FRAME_MULTIPLIER);
     const timerColor = isFullPower
-      ? worldPalette.spell.shellTimerFull
-      : worldPalette.spell.shellTimer;
+      ? worldPalette.spell.energyShieldTimerFull
+      : worldPalette.spell.energyShieldTimer;
     worldText(ctx, `${secs}s`, {
       x: sx,
       y: sy - radiusPx - TIMER_Y_OFFSET,
@@ -782,25 +801,25 @@ export class SpellSystem implements GameSystem {
     });
   }
 
-  renderCatMiniShell(
+  renderCatMiniShield(
     ctx: CanvasRenderingContext2D,
     camX: number,
     camY: number,
     cat: CatPlayer,
   ): void {
-    if (!this.catMiniShell) return;
-    const { framesRemaining, radiusPx } = this.catMiniShell;
+    if (!this.catMiniShield) return;
+    const { framesRemaining, radiusPx } = this.catMiniShield;
     const sx = cat.x + TILE_SIZE * TILE_CENTER_OFFSET - camX;
     const sy = cat.y + TILE_SIZE * TILE_CENTER_OFFSET - camY;
 
-    const elapsed = (MINI_SHELL_FRAMES - framesRemaining) / FOG_DURATION_FRAME_MULTIPLIER;
-    const fadeOut = Math.min(1, framesRemaining / MINI_SHELL_FADE_OUT_FRAMES);
-    const alpha = fadeOut * MINI_SHELL_ALPHA_MULT;
-    const cycleFrames = figureFrameCount(PROTECTIVE_SHELL_MINI_FIGURE, MINI_SHELL_STATE);
+    const elapsed = (MINI_SHIELD_FRAMES - framesRemaining) / FOG_DURATION_FRAME_MULTIPLIER;
+    const fadeOut = Math.min(1, framesRemaining / MINI_SHIELD_FADE_OUT_FRAMES);
+    const alpha = fadeOut * MINI_SHIELD_ALPHA_MULT;
+    const cycleFrames = figureFrameCount(ENERGY_SHIELD_MINI_FIGURE, MINI_SHIELD_STATE);
     const frame = timeFrameIndex(elapsed, cycleFrames, cycleFrames);
 
-    const tileSize = shellTileSizeFor(PROTECTIVE_SHELL_MINI_FIGURE, radiusPx);
-    drawFigureCached(ctx, PROTECTIVE_SHELL_MINI_FIGURE, MINI_SHELL_STATE, frame, sx, sy, tileSize, {
+    const tileSize = shieldTileSizeFor(ENERGY_SHIELD_MINI_FIGURE, radiusPx);
+    drawFigureCached(ctx, ENERGY_SHIELD_MINI_FIGURE, MINI_SHIELD_STATE, frame, sx, sy, tileSize, {
       alpha,
     });
   }
@@ -852,13 +871,13 @@ export class SpellSystem implements GameSystem {
       const progress = 1 - ripple.framesLeft / ripple.totalFrames;
       const frame = progressFrameIndex(
         progress,
-        figureFrameCount(PROTECTIVE_SHELL_SHOCKWAVE_FIGURE, SHOCKWAVE_STATE),
+        figureFrameCount(ENERGY_SHIELD_SHOCKWAVE_FIGURE, SHOCKWAVE_STATE),
       );
 
-      const tileSize = shellTileSizeFor(PROTECTIVE_SHELL_SHOCKWAVE_FIGURE, ripple.currentRadius);
+      const tileSize = shieldTileSizeFor(ENERGY_SHIELD_SHOCKWAVE_FIGURE, ripple.currentRadius);
       drawFigureCached(
         ctx,
-        PROTECTIVE_SHELL_SHOCKWAVE_FIGURE,
+        ENERGY_SHIELD_SHOCKWAVE_FIGURE,
         SHOCKWAVE_STATE,
         frame,
         sx,

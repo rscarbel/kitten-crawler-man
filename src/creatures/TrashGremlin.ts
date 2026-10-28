@@ -848,9 +848,9 @@ export class TrashGremlin extends Mob {
 
   protected rollLootItems(killer: Player | null): LootDrop['items'] {
     const items = super.rollLootItems(killer);
-    // Guaranteed, not rolled: Cockroach is the safety net for the cat's locked
-    // constitution, and a 0.5% vermin drop is no way to hand out a safety net.
-    const book = usefulSkillBook('skill_book_cockroach');
+    // Guaranteed, not rolled: 9 Lives is the cat's only way to walk away from a
+    // killing blow, and a 0.5% vermin drop is no way to hand out a safety net.
+    const book = usefulSkillBook('skill_book_nine_lives');
     if (book !== null) items.push({ id: book, quantity: 1 });
     return items;
   }

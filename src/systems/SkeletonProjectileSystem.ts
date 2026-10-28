@@ -204,11 +204,16 @@ export class SkeletonProjectileSystem implements GameSystem {
       // A shot crossing open ground is exactly what dodge is for, so it stays
       // dodgeable. The burst it makes on landing is not — there is no
       // sidestepping a blast you are already standing in.
-      source: caster.stampHarmLimits({ kind: 'mob', mobType: shot.mobType }),
+      source: caster.stampHarmLimits({
+        kind: 'mob',
+        mobType: shot.mobType,
+        magic: isSoulBolt(shot.kind),
+      }),
       burstSource: caster.stampHarmLimits({
         kind: 'mob',
         mobType: shot.mobType,
         undodgeable: true,
+        magic: isSoulBolt(shot.kind),
       }),
       aimedAt: shot.aimedAt,
       owner: caster,
@@ -243,11 +248,13 @@ export class SkeletonProjectileSystem implements GameSystem {
         const cx = target.x + TILE_SIZE * CENTER_OFFSET;
         const cy = target.y + TILE_SIZE * CENTER_OFFSET;
         if (Math.hypot(projectile.x - cx, projectile.y - cy) >= hitRadius) continue;
-        // Only the bolt itself pierces; the burst below is a splash, which a
-        // piercing resistance has no purchase on.
+        // Only a bone arrow pierces; a soul bolt is a spell, which its magic
+        // source answers for, and the burst below is a splash.
         // A fully resisted hit must not reach `takeDamage`: a zero-damage bolt
         // still flashes the crawler's hit-react and suppresses regen.
-        const resistedDamage = target.resistedDamage(projectile.damage, 'piercing');
+        const resistedDamage = isSoulBolt(projectile.kind)
+          ? projectile.damage
+          : target.resistedDamage(projectile.damage, 'piercing');
         const connected =
           resistedDamage > 0 &&
           !crawlerTurnsShot(target, projectile.owner, projectile.vx, projectile.vy) &&
@@ -298,7 +305,7 @@ export class SkeletonProjectileSystem implements GameSystem {
 
   /**
    * Everything this projectile can hit: the two players, the scene's extra
-   * player-like targets (Mongo, hired mercenaries), and whatever the caster was
+   * player-like targets (Deinonychus, hired mercenaries), and whatever the caster was
    * actually aiming at.
    */
   private targetsFor(ctx: SystemContext, projectile: Projectile): readonly Player[] {

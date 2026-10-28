@@ -157,15 +157,10 @@ export class DestructionKit {
   }
 
   /** Splinters, live sticks and their arc — all of it over the entities. */
-  renderEffects(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    thrower: HumanPlayer,
-  ): void {
+  renderEffects(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     this.destructibles.renderEffects(ctx, camX, camY);
     this.dynamite.render(ctx, camX, camY);
-    this.dynamite.renderThrowPath(ctx, camX, camY, thrower);
+    this.dynamite.renderThrowPath(ctx, camX, camY);
   }
 
   /** Floor piles and their labels, drawn with the rest of the world-space chrome. */

@@ -13,7 +13,7 @@
  *   npm run verify:soldiers [-- --streams=N]
  *
  * Negative tests, each shown to turn its section red: a soldier made
- * `isPetAttackable` fails the Mongo check; the village leash taken out fails
+ * `isPetAttackable` fails the Deinonychus check; the village leash taken out fails
  * the 30-tile check; a path budget of 48 fails the walk home from the east
  * and north; a fighting soldier left talkable fails the talk-yield check; the
  * soldier's health multiple at 0.35 fails the holds-one health check, and at
@@ -37,7 +37,7 @@ import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { Mercenary } from '../src/creatures/Mercenary';
 import type { Mob } from '../src/creatures/Mob';
-import { Mongo } from '../src/creatures/Mongo';
+import { Deinonychus } from '../src/creatures/Deinonychus';
 import { RatkinSoldier } from '../src/creatures/RatkinSoldier';
 import { RAISED_RATKIN_FAMILY, RaisedRatkin } from '../src/creatures/RaisedRatkin';
 import { RuinsGhoul } from '../src/creatures/RuinsGhoul';
@@ -178,14 +178,14 @@ const FIGHT_TIMEOUT_SECONDS = 120;
 const FIGHT_START_TILES = 3;
 /** Crawlers stand well clear of the fight: out of a ghoul's notice, inside the activation radius. */
 const CRAWLER_CLEARANCE_TILES = 14;
-const MONGO_WATCH_FRAMES = 300;
+const DEINONYCHUS_WATCH_FRAMES = 300;
 const MERC_WATCH_FRAMES = 300;
 const HOMING_WATCH_FRAMES = 20;
 const MAX_MISSILE_LEVEL = 15;
 const HOSTILE_WATCH_SECONDS = 20;
-/** A level Mongo is fielded at for the targeting check. */
-const MONGO_TEST_LEVEL = 5;
-const MONGO_TEST_HP = 100;
+/** A level Deinonychus is fielded at for the targeting check. */
+const DEINONYCHUS_TEST_LEVEL = 5;
+const DEINONYCHUS_TEST_HP = 100;
 /** Distance a stage keeps from the palisade, so the open patch is not inside the village. */
 const PATCH_MIN_TILES_OUTSIDE = 8;
 const PATCH_RADIUS_TILES = 4;
@@ -458,7 +458,7 @@ section('A soldier is on the party side');
     !soldier.takesPlayerDamage('melee') &&
       !soldier.takesPlayerDamage('missile') &&
       !soldier.takesPlayerDamage('slingshot') &&
-      !soldier.takesPlayerDamage('smush'),
+      !soldier.takesPlayerDamage('seismic_stomp'),
     'no aimed crawler weapon can wound a soldier',
   );
   check(
@@ -490,34 +490,34 @@ section('The party side never picks a soldier');
     return ghoul;
   };
 
-  // Mongo, beside the soldier with nothing else about.
-  const mongo = new Mongo(
+  // Deinonychus, beside the soldier with nothing else about.
+  const deinonychus = new Deinonychus(
     patch.x + 1,
     patch.y,
     TILE_SIZE,
     rig.cat,
-    MONGO_TEST_LEVEL,
-    MONGO_TEST_HP,
+    DEINONYCHUS_TEST_LEVEL,
+    DEINONYCHUS_TEST_HP,
   );
-  mongo.setMap(gameMap);
+  deinonychus.setMap(gameMap);
   standAt(rig.cat, { x: patch.x + 1, y: patch.y + 1 });
-  mongo.allMobs = [soldier];
+  deinonychus.allMobs = [soldier];
   const soldierHp = soldier.hp;
-  for (let frame = 0; frame < MONGO_WATCH_FRAMES; frame++) {
-    mongo.updateAI([rig.human, rig.cat]);
-    mongo.tickTimers();
+  for (let frame = 0; frame < DEINONYCHUS_WATCH_FRAMES; frame++) {
+    deinonychus.updateAI([rig.human, rig.cat]);
+    deinonychus.tickTimers();
   }
-  check(soldier.hp === soldierHp, 'Mongo never goes for a soldier');
-  // The same stage with a hostile in it, so a Mongo who attacks nothing cannot pass the check.
-  const mongoPrey = freshHostile();
-  mongo.allMobs = [soldier, mongoPrey];
-  for (let frame = 0; frame < MONGO_WATCH_FRAMES; frame++) {
-    mongo.updateAI([rig.human, rig.cat]);
-    mongo.tickTimers();
+  check(soldier.hp === soldierHp, 'Deinonychus never goes for a soldier');
+  // The same stage with a hostile in it, so a Deinonychus who attacks nothing cannot pass the check.
+  const deinonychusPrey = freshHostile();
+  deinonychus.allMobs = [soldier, deinonychusPrey];
+  for (let frame = 0; frame < DEINONYCHUS_WATCH_FRAMES; frame++) {
+    deinonychus.updateAI([rig.human, rig.cat]);
+    deinonychus.tickTimers();
   }
   check(
-    mongoPrey.hp < mongoPrey.maxHp && soldier.hp === soldierHp,
-    'the same Mongo does go for a hostile beside it, and still not the soldier',
+    deinonychusPrey.hp < deinonychusPrey.maxHp && soldier.hp === soldierHp,
+    'the same Deinonychus does go for a hostile beside it, and still not the soldier',
   );
 
   // Every hireling kit.

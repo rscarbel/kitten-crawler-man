@@ -43,13 +43,13 @@ value quoted beside them.
 | `locomotion.ts`                                                                                                               | Walk and run cycles, their starts and stops, in all three views; `RUN_RADIANS_PER_PX` / `WALK_RADIANS_PER_PX`.                                                                                                                                                                                                            |
 | `idles.ts`                                                                                                                    | The breathing idle, the guard, the guard drop, the fidgets.                                                                                                                                                                                                                                                               |
 | `strikesSide.ts` / `strikesUp.ts` / `strikesDown.ts`                                                                          | The strike family of each view (profile, from behind, head-on).                                                                                                                                                                                                                                                           |
-| `stomps.ts`                                                                                                                   | Smush, standing and hopping.                                                                                                                                                                                                                                                                                              |
+| `stomps.ts`                                                                                                                   | Seismic Stomp, standing and hopping.                                                                                                                                                                                                                                                                                      |
 | `travelling.ts`                                                                                                               | What every blow thrown on the move shares: entry phases, the kicking leg per entry, swing feet drawn back into reach.                                                                                                                                                                                                     |
 | `actionsBuild.ts` / `actionsThrow.ts` / `actionsSling.ts` / `actionsMisc.ts`                                                  | Rows systems ask for: build/place/repair; dynamite light/hold/throw; the sling shot; shell cast, drink, grab, chest open, talk.                                                                                                                                                                                           |
 | `reactions.ts`                                                                                                                | Rows done to him: hurt (front and behind), stagger, struggle, knockdown, knocked out, revive, death.                                                                                                                                                                                                                      |
 | `appearance.ts`                                                                                                               | Outfits: `humanFigureFor` / `humanFigureWearing` keyed by an `Outfit<'human'>`, `dressedPose`, `garmentRowOf` (what a row tells garments that move with it).                                                                                                                                                              |
 | `probe.ts`                                                                                                                    | `probeHumanJoints(row, frame)`: joints in cell pixels, read off the skeleton the painter solves, for gates and runtime anchors.                                                                                                                                                                                           |
-| `sockets.ts`                                                                                                                  | `humanSocketsAt(figure, row, frame)`: `mainHand` (his right), `offHand`, `back`, `hip` in cell pixels, memoised per figure, row and frame; `mirroredSocket`; `stampAnchorOf` (where a Smush heel lands).                                                                                                                  |
+| `sockets.ts`                                                                                                                  | `humanSocketsAt(figure, row, frame)`: `mainHand` (his right), `offHand`, `back`, `hip` in cell pixels, memoised per figure, row and frame; `mirroredSocket`; `stampAnchorOf` (where a Seismic Stomp heel lands).                                                                                                          |
 | `handTurn.ts` / `carry.ts`                                                                                                    | Authoring a gripping hand's turn in depth (`turnHand`, palm normals); how a carried item is held on rows not authored for it (`carryInMainHand`, `CarriedGrip`).                                                                                                                                                          |
 | `motionSets.ts` / `armedRows.ts` / `armedHold.ts` / `armedStrikes.ts` / `holster.ts` / `stowedGeometry.ts` / `weaponReach.ts` | The rows a weapon out in his hand plays, by grip and weight: the set an item picks, the armed row table, stance and stride holds, keyed blows and their travelling versions, draw and stow, where a stowed weapon rests, where a weapon blow lands. See "Motion sets" below.                                              |
 
@@ -205,7 +205,7 @@ travelling blow is painted once per entry phase in `TRAVELLING_ENTRY_PHASES`
 (five versions per row in profile, four head-on and from behind), the legs
 carried on from that phase by the run's own feet; the upper body's beats are the
 same in every version. The animator throws the version whose legs begin
-nearest the stride on screen. A Smush on the move is a hop in along the run,
+nearest the stride on screen. A Seismic Stomp on the move is a hop in along the run,
 chosen the same way.
 
 ## Views and facing: five views, three painted
@@ -222,7 +222,7 @@ chosen the same way.
   answer it returns the same thing. A zero facing keeps `previous`.
 - **`FacingState`** remembers one figure's selection between ticks:
   `update` moves it on (the animator calls it once a tick), `peek` asks what a
-  facing would draw without moving it (a strike, a Smush or a draw latches its
+  facing would draw without moving it (a strike, a Seismic Stomp or a draw latches its
   view this way). `HumanPlayer.facing` is shared with his animator;
   `isTurnedView` is true for the profile and both diagonals. It is the
   five-view `HeldFacing`; a figure painted only head-on, away and in profile
@@ -364,7 +364,7 @@ What he holds is never a sticker over the finished figure.
   on a bare-handed row its set has none of its own for, it closes his right
   fist on it wherever the row leaves that hand free (`carryInMainHand`), one figure per carried grip
   (handle thickness × low or shouldered), so the cells are two-layered. A
-  row with a prop in either hand, a tool in both or the shell's glow in that
+  row with a prop in either hand, a tool in both or the Energy Shield's glow in that
   palm keeps its hands and the item is not drawn. The carry angle is turned
   off his face and out of the floor by a small search, the item's reach
   assumed per style.
@@ -443,7 +443,7 @@ held visual and an item, nothing else.
 - **The animator** plays the set's own idle, guard, drop, cycles, starts and
   stops and strikes; a set with none of a kind falls back as `restRowFor`,
   `cycleRow` and `strikingSet` say. With a weapon out he never fidgets and a
-  level-up plays no gesture. Smush, reactions and actions stay bare-handed
+  level-up plays no gesture. Seismic Stomp, reactions and actions stay bare-handed
   rows, the weapon on the stand-in carry.
 - **Wiring**: `HumanPlayer` reads the set off the drawn weapon's held visual
   and hands it to `HumanAnimator.setMotionSet`; a draw or stow calls
@@ -482,7 +482,7 @@ pose keeps the shoulders square to the camera.
 
 A cell is keyed on `(figure, state, frame)` and shared by every draw, so gear
 cannot be a draw parameter. Everything he wears is a garment
-(`src/sprites/garments/human/`): each look's own clothes are its base garments (Dave's jacket and jeans, Ryan's shirt, belt, chinos, sneakers and watch),
+(`src/sprites/garments/human/`): each look's own clothes are its base garments (Dave's jacket, jeans and boots, Ryan's shirt, belt, chinos, sneakers and watch),
 then whatever is put on over them (the townsfolk's trousers and shoes on the
 figures built on his rig).
 The compositor (`biped/figure.ts`) paints no clothing itself: at each piece —
@@ -502,7 +502,7 @@ wears is resident: `setOutfit('human', …)` (`src/sprites/outfits.ts`, through
 `dressInGear` applies it — at once, or on his next draw for a change made while
 he is being built — and re-asks the animator's and the stand-by warm requests,
 which went to the figure he took off. Figures built on his rig (townsfolk, the
-club cast, Baggi, the Incubus, the city elf) carry a fixed outfit on their
+club cast, Baggi, the Demon Liaison, the city elf) carry a fixed outfit on their
 poses. `npm run gates:equipment` (E5) holds every garment inside its part's
 envelope; `scripts/render-garments.ts --wear=<ids>` renders one for review.
 
@@ -693,7 +693,8 @@ wrist (`ryanWatch.ts`; E7 checks the side). His face is relaxed (`mouthSmile`, a
 
 **Dave**: 6'3", heavily muscled — narrower than the rig (`widthScale` 0.94,
 leaner limbs, a chest about a seventh of his height deep, a head a little
-larger than life), brown crop, moto jacket and jeans, bare feet.
+larger than life), brown crop, moto jacket and jeans, dark-brown leather lace-up
+ankle boots under the jeans' hem (`daveBoots.ts`).
 
 The ceilings above (no three-quarter views, the head-on run's planted leg, the
 armed rows head-on and from behind, the grip at close range) hold for both

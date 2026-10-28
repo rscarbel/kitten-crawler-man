@@ -21,7 +21,7 @@
  *   capped speed, the lob's reticle — and the freeze that must never guarantee
  *   a fireball blast.
  * - Every fairy and raised-skeleton sound preloaded wherever one can be heard.
- * - The Smush sparing fairies.
+ * - The Seismic Stomp sparing fairies.
  * - Positioning: HP share, backing off, cover, running for the next room, and
  *   the speed cap a determined chase always beats.
  *
@@ -50,7 +50,7 @@ import { verifyIceFairy } from './verifyFairies/ice';
 import { verifyFireFairy } from './verifyFairies/fire';
 import { verifyNecroFairy } from './verifyFairies/necro';
 import { verifyFairySounds } from './verifyFairies/sounds';
-import { verifySmushSparesFairies } from './verifyFairies/smush';
+import { verifySeismicStompSparesFairies } from './verifyFairies/seismicStomp';
 import { verifyFairyPositioning } from './verifyFairies/positioning';
 
 /**
@@ -75,7 +75,7 @@ verifyIceFairy(report);
 verifyFireFairy(report);
 verifyNecroFairy(report);
 verifyFairySounds(report);
-verifySmushSparesFairies(report);
+verifySeismicStompSparesFairies(report);
 verifyFairyPositioning(report);
 
 const passedPositives = report.positiveCount - report.positiveFailures;

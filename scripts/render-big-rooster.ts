@@ -150,7 +150,7 @@ const REVIEWED_EMPTY_HANDED: readonly string[] = process.argv.includes('--held')
   : ['idle', 'peck', 'crow', 'sprint'];
 
 /**
- * One cell as the game shows it: the baked body, with the dumbbell drawn at the
+ * One cell as the game draws it: the baked body, with the dumbbell drawn at the
  * hand anchor on held frames (the rows he plays either way are reviewed
  * empty-handed, and the pickup shows the dumbbell waiting where his fist will
  * close on it) — behind him from the back, where his own back

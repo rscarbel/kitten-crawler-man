@@ -1,5 +1,4 @@
-import type { StatName } from '../../../Player';
-import { ALL_STATS } from '../../../Player';
+import { ALL_STATS, zeroStats, type StatId } from '../../party/stats';
 import {
   ITEM_DEF,
   crawlerHasSection,
@@ -49,10 +48,10 @@ export interface EquipmentChange {
 export type EquipmentListener = (change: EquipmentChange) => void;
 
 /** Summed stat bonuses contributed by everything currently worn. */
-export type StatBonuses = Record<StatName, number>;
+export type StatBonuses = Record<StatId, number>;
 
 function emptyStatBonuses(): StatBonuses {
-  return { strength: 0, intelligence: 0, constitution: 0, dexterity: 0 };
+  return zeroStats();
 }
 
 // Weights for `gearScore`, below — chosen so a single resistance or a
@@ -478,7 +477,7 @@ export class EquipmentManager {
   }
 
   /** Summed stat bonus that counts only toward melee damage, not the stat itself. */
-  getMeleeOnlyStatBonus(stat: StatName): number {
+  getMeleeOnlyStatBonus(stat: StatId): number {
     let total = 0;
     for (const id of this.equipped.values()) {
       total += ITEM_DEF[id].meleeOnlyStatBonus?.[stat] ?? 0;

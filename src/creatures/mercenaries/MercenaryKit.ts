@@ -85,7 +85,7 @@ export interface MercenaryKit {
   onOwnerHurt?(ctx: MercenaryKitContext, attacker: Mob | null): void;
 
   /**
-   * Any ally took a wound — the other crawler, Mongo, the owner too. This is the
+   * Any ally took a wound — the other crawler, Deinonychus, the owner too. This is the
    * hook for a kit that protects someone in particular, or heals the worst hurt.
    */
   onFriendHurt?(ctx: MercenaryKitContext, friend: Player, attacker: Mob | null): void;
@@ -184,7 +184,7 @@ export interface MercenaryKitContext {
   readonly allMobs: readonly Mob[];
   /**
    * Everyone on the party's side the kit may protect or heal: both crawlers,
-   * Mongo, a quest ally. Never the hireling itself.
+   * Deinonychus, a quest ally. Never the hireling itself.
    *
    * Shields, heals and any other help for them go through their own
    * `Player` API (`applyStatus` with a `StatusEffect`, restoring `hp` within

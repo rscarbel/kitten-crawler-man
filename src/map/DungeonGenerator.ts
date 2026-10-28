@@ -25,7 +25,7 @@ import { randomFromArray, randomInt, clamp } from '../utils';
 import { tileCoordKey } from './tileIndex';
 import { planCrawlerSigns, crawlerSignFootprint, type PlannedCrawlerSign } from './crawlerSigns';
 import { isWalkableTileType } from './walkability';
-import { mordecaiAndBedTiles, SAFE_ROOM_THRESHOLD_DEPTH_TILES } from './safeRoomFixtures';
+import { guideAndBedTiles, SAFE_ROOM_THRESHOLD_DEPTH_TILES } from './safeRoomFixtures';
 import { planLabStation } from './labStationLayout';
 import { labHallwayDecayAt, layOutLabApproach, type LabHallwayTile } from './labApproach';
 import type { ProgressionDef } from '../levels/types';
@@ -273,7 +273,7 @@ export interface SafeRoomData {
   centre: Point;
   /**
    * Set when this safe room is the last stop before a specific boss, naming that
-   * boss's snake_case mob type. Drives the boss-specific advice Mordecai gives
+   * boss's snake_case mob type. Drives the boss-specific advice Dave gives
    * in that room while the boss is still alive.
    */
   guardsBossType?: string;
@@ -587,7 +587,7 @@ const QUEST_ROOM_H = 12;
 const SPIDER_LAB_W = 40;
 const SPIDER_LAB_H = 32;
 /**
- * The lab's field station: room for Mordecai to wander a little (his walk needs
+ * The lab's field station: room for Dave to wander a little (his walk needs
  * a 3×3 interior) beside the team's kit, with the walk between its two
  * doorways left open.
  */
@@ -894,7 +894,7 @@ function isCarvedFloor(grid: TileContent[][], x: number, y: number): boolean {
  * has cut through the room's wall — before that every perimeter tile looks
  * identical.
  *
- * Mordecai's tile and the bed's are skipped: they are the room's fixed furniture
+ * Dave's tile and the bed's are skipped: they are the room's fixed furniture
  * and the band would otherwise be drawn under them in a narrow room. The Bopca's
  * counter run is *not* skipped, and does not need to be — it is stamped later
  * with `placeProp`, which overwrites the type, and `DUNGEON_GROUND` maps all
@@ -906,7 +906,7 @@ function stampSafeRoomThresholds(
   safeRoom: { bounds: Rect; centre: Point },
 ): void {
   const { bounds } = safeRoom;
-  const fixtures = mordecaiAndBedTiles(safeRoom);
+  const fixtures = guideAndBedTiles(safeRoom);
   const isFixture = (x: number, y: number): boolean =>
     fixtures.some((tile) => tile.x === x && tile.y === y);
 

@@ -1,13 +1,13 @@
 import type { AbilityDef, AbilityId } from '../core/skills/AbilityManager';
 import { MAGIC_MISSILE_DEF } from './magicMissile';
-import { MONGO_DEF } from './mongo';
-import { PROTECTIVE_SHELL_DEF } from './protectiveShell';
-import { SMUSH_DEF } from './smush';
+import { DEINONYCHUS_DEF } from './deinonychus';
+import { ENERGY_SHIELD_DEF } from './energyShield';
+import { SEISMIC_STOMP_DEF } from './seismicStomp';
 
 /** Every ability's definition, by id: what a scene registers, and where its name is read. */
 export const ABILITY_DEFS: Readonly<Record<AbilityId, AbilityDef>> = {
   magic_missile: MAGIC_MISSILE_DEF,
-  protective_shell: PROTECTIVE_SHELL_DEF,
-  smush: SMUSH_DEF,
-  mongo: MONGO_DEF,
+  energy_shield: ENERGY_SHIELD_DEF,
+  seismic_stomp: SEISMIC_STOMP_DEF,
+  deinonychus: DEINONYCHUS_DEF,
 };

@@ -1,6 +1,6 @@
 ---
 name: add-person
-description: Townsfolk and citizens in Kitten Crawler Man — Taloncrest's closed cast of human and Hawkfolk looks, the species axis, citizen figures and their cadence and cache rules, interior occupants as data (placement, territory, bespoke-figure residents, routines such as mopping and target practice, services), plus the seeded person genome and skeleton painter (children, the ?people gallery). Use for any townsperson, crowd, resident or citizen work. NOT for creatures or bosses (use add-creature/add-sprite), and see bipedal-figure for painting on the human rig.
+description: Townsfolk and citizens in Kitten Crawler World — Taloncrest's closed cast of human and Hawkfolk looks, the species axis, citizen figures and their cadence and cache rules, interior occupants as data (placement, territory, bespoke-figure residents, routines such as mopping and target practice, services), plus the seeded person genome and skeleton painter (children, the ?people gallery). Use for any townsperson, crowd, resident or citizen work. NOT for creatures or bosses (use add-creature/add-sprite), and see bipedal-figure for painting on the human rig.
 ---
 
 # Townsfolk and Procedural People

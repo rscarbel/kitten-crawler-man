@@ -15,11 +15,11 @@
  * Run: npm run verify:level-timer-safe-room
  */
 
-import { installBrowserShim } from './browserShim.js';
+import { installBrowserShim, ShimEvent } from './browserShim.js';
 import { settleArrival } from './settleArrival.js';
 
 const VIEWPORT = { width: 1280, height: 720, devicePixelRatio: 1 } as const;
-installBrowserShim(VIEWPORT);
+const shim = installBrowserShim(VIEWPORT);
 
 const WORLD_SEED = 7;
 const { mulberry32 } = await import('../src/sprites/person/rng.js');
@@ -34,6 +34,7 @@ const { GameMap } = await import('../src/map/GameMap.js');
 const { dungeonOptionsForLevel } = await import('../src/levels/dungeonOptions.js');
 const { level1 } = await import('../src/levels/level1.js');
 const { level2 } = await import('../src/levels/level2.js');
+const { CutsceneKit } = await import('../src/systems/kits/CutsceneKit.js');
 
 type LevelDef = typeof level1;
 type Scene = InstanceType<typeof DungeonScene>;
@@ -47,6 +48,10 @@ const FRAMES_PER_CASE = 120;
  * not read as a paused clock.
  */
 const MIN_RUNNING_LOSS = FRAMES_PER_CASE / 2;
+/** More presses than any story talk has pages, reveals included. */
+const MAX_READ_PRESSES = 40;
+/** World ticks run after each press, enough for a walk-up to reach its speaker. */
+const TICKS_PER_PRESS = 30;
 /** How far from every safe room the "outside" tile must be, in tiles. */
 const OUTSIDE_MARGIN_TILES = 6;
 
@@ -57,6 +62,38 @@ function check(ok: boolean, message: string): void {
 }
 
 await loadSprites('src/images/');
+
+/**
+ * One manager for both floors, as the page has one: a manager per floor would
+ * keep its window listeners and its exited scene, whose open box would go on
+ * swallowing the next floor's presses.
+ */
+const sceneManager = new SceneManager();
+
+let clockMs = 0;
+function pressSpace(): void {
+  clockMs += 1;
+  shim.window.dispatch(new ShimEvent('keydown', ' ', clockMs));
+  clockMs += 1;
+  shim.window.dispatch(new ShimEvent('keyup', ' ', clockMs));
+}
+
+/**
+ * Reads whatever story cutscene the last case set off to its end: walking
+ * into the safe room is Dave's arrival, and his talk halts the world until it
+ * is read, as it does for a player. A case measured under it would read the
+ * talk's halt as the timer's own.
+ */
+function readOutCutscenes(scene: Scene): boolean {
+  const cutscenes: unknown = Reflect.get(scene, 'cutscenes');
+  if (!(cutscenes instanceof CutsceneKit))
+    throw new Error("the scene's cutscenes is not a CutsceneKit");
+  for (let press = 0; press < MAX_READ_PRESSES && cutscenes.isActive; press++) {
+    for (let tick = 0; tick < TICKS_PER_PRESS; tick++) scene.update();
+    pressSpace();
+  }
+  return !cutscenes.isActive;
+}
 
 function placeAt(entity: { x: number; y: number }, tile: Tile): void {
   entity.x = tile.x * TILE_SIZE;
@@ -90,6 +127,7 @@ function findOutsideTile(map: InstanceType<typeof GameMap>): Tile | null {
  * dead party stops the clock too, which would pass a "holds" case vacuously.
  */
 function framesLost(scene: Scene, activeTile: Tile, inactiveTile: Tile): number {
+  if (!readOutCutscenes(scene)) throw new Error('a story cutscene never finished');
   const before = scene.levelTimerRemainingFrames;
   const startingHp = scene.pm.players().map((player) => player.hp);
   for (let frame = 0; frame < FRAMES_PER_CASE; frame++) {
@@ -118,7 +156,6 @@ async function checkFloor(name: string, levelDef: LevelDef): Promise<void> {
   if (safeRoom === undefined || outside === null) return;
   const inside = safeRoom.centre;
 
-  const sceneManager = new SceneManager();
   const scene = new DungeonScene(levelDef, new InputManager(), sceneManager, {
     existingMap: map,
     worldSeed: WORLD_SEED,

@@ -409,7 +409,7 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
   }
 
   /**
-   * Flatten every tree in radius from a crawler's own centre, the way a smush
+   * Flatten every tree in radius from a crawler's own centre, the way a seismic stomp
    * flattens every breakable prop: unlike {@link destroyInRadius}, a real wall
    * still shadows the blast — only trees and breakable props
    * ({@link SMASH_SIGHT_TRANSPARENT_TYPES}) are transparent to it, so a sapling

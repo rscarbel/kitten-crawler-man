@@ -14,24 +14,23 @@ export const DEFAULT_AI_INTENSITY: AIIntensity = 'classic';
 
 export const AI_INTENSITY_LABELS: Readonly<Record<AIIntensity, string>> = {
   off: 'Off',
-  commentary: 'Commentary',
-  classic: 'Classic',
-  chaotic: 'Chaotic',
+  commentary: 'Remarks only',
+  classic: 'Standard',
+  chaotic: 'Intense',
 };
 
 /**
- * What Commentary lets the AI do: talk about the run and nothing else. Every
- * entry is pure presentation or the character's own memory; anything that
- * pays out, cures, moves, asks, discounts or interrupts is left off, however
- * benign its severity, because Commentary promises the System never touches
- * the run.
+ * What the commentary intensity lets the AI do: talk about the run and
+ * nothing else. Every entry is pure presentation or the character's own
+ * memory; anything that pays out, cures, moves, asks, discounts or interrupts
+ * is left off, however benign its severity, because that intensity promises
+ * Caroline never touches the run.
  */
 export const COMMENTARY_ACTIONS: readonly string[] = [
   'announce',
   'play_sound',
   'music_sting',
   'remember',
-  'viewer_reaction',
 ];
 
 export function isCommentaryAction(actionName: string): boolean {

@@ -1,13 +1,13 @@
 ---
 name: add-system
-description: Add a new gameplay mechanic to Kitten Crawler Man as a GameSystem class — constructor deps, update ordering, rendering, input routing, disposal. Also the recipe for standing up a whole new scene from the kits in src/systems/kits/. Use when a feature doesn't fit an existing system in src/systems/.
+description: Add a new gameplay mechanic to Kitten Crawler World as a GameSystem class — constructor deps, update ordering, rendering, input routing, disposal. Also the recipe for standing up a whole new scene from the kits in src/systems/kits/. Use when a feature doesn't fit an existing system in src/systems/.
 ---
 
 # Add a Game System
 
 Mechanics live as plain classes in `src/systems/` implementing `GameSystem` (`src/systems/GameSystem.ts`): optional `update(ctx: SystemContext)` and `dispose()`. `SystemContext` carries per-frame shared state: `human, cat, active, inactive, activeIsMoving, roster, gameMap, bossRoom?, extraTargets?`.
 
-`ctx.roster` is a `MobRoster` (`src/systems/kits/SceneWorld.ts`): `roster.mobs` is the list, `roster.grid` the spatial index, and `roster.add(mob)` is the **only** way a mob joins a scene — it inserts into both and hands the mob the scene's map and spell context. Never push into one without the other; a mob that misses `setSpells` walks straight through a protective shell.
+`ctx.roster` is a `MobRoster` (`src/systems/kits/SceneWorld.ts`): `roster.mobs` is the list, `roster.grid` the spatial index, and `roster.add(mob)` is the **only** way a mob joins a scene — it inserts into both and hands the mob the scene's map and spell context. Never push into one without the other; a mob that misses `setSpells` walks straight through an energy shield.
 
 First check whether an existing system already owns the domain (~30 in `src/systems/` — combat, loot, barriers, dynamite, shops, gore, minimap, ...). Extend it if so.
 
@@ -41,7 +41,7 @@ Finish with the `dev-workflow` gates (typecheck, lint, format).
 construction rather than by transplanting the dungeon's wiring a third time. A
 **kit** is a plain class whose fields are concrete system types. There is
 deliberately no string-keyed registry and no `GameSystem[]` loop: `update`
-signatures are not uniform (`SmushEffectSystem.update()` takes nothing,
+signatures are not uniform (`SeismicStompEffectSystem.update()` takes nothing,
 `MobUpdateLoop.update(ctx)` takes the frame), so a homogeneous loop could only
 be reached through casts.
 
@@ -73,7 +73,7 @@ exactly once with `audio.wireEvents(bus)` — after that, a cue is chosen in
 ## 2. Construct the kits
 
 - **`CombatKit`** — spells, mob AI, attack/death resolution, gore, floating
-  numbers, the smush blast, regeneration, the death screen. Construct it
+  numbers, the seismic stomp blast, regeneration, the death screen. Construct it
   **unconditionally**: an empty roster costs nothing per frame, and it is what
   makes Space-to-attack and the ability hotbar work at all.
 - **`DestructionKit`** — smashable props, floor loot, dynamite. Loot and dynamite
@@ -85,6 +85,29 @@ exactly once with `audio.wireEvents(bus)` — after that, a cue is chosen in
   potion drinking, skill-book flow. One per scene.
 - **`ChatKit`** — the chat box and the universal cheat table. One per scene.
   Pass `sceneCommands` for anything only this scene can answer.
+- **`CutsceneKit`** — the cutscene director (`src/systems/cutscene/`) and the
+  surface that hands it the party. Mount `surface()`, call
+  `tickWorld(active, map, southAnchor)` in the movement phase and skip the
+  player's own movement while it returns true, and fold `isActive` into
+  anything that asks "does a script own the party". A script is a list of
+  `CutsceneStep`s (walk-up, talk, Caroline's message, the guide teleporting
+  out, a wait) given to `director.play(script, onComplete?)`; never hand-roll
+  another party lock. Its deps are the scene's one `Conversation`,
+  `teleportDaveOut` and the HUD's `pauseButton`.
+  - A walk-up is `walkUpTo(map, speakerTile, crawlerTile)`
+    (`src/systems/cutscene/walkUp.ts`); the companion follows by its own drive.
+    A walk that cannot finish gives up after `WALK_UP_TIMEOUT_FRAMES` and the
+    talk plays from where the crawler stands.
+  - Steps start only on a world tick, so a script never opens over the pause
+    menu, and a walk or a wait stops while the world is halted. A talk halts the
+    world itself, cannot be dismissed or walked away from, and ends its step on
+    its last page. A Caroline message does not halt the world.
+  - A cutscene asked for while one plays is queued, and `isActive` stays true
+    until the queue is empty.
+  - Story moments are not scripted by hand: `StoryDelivery`
+    (`src/systems/StoryDelivery.ts`) builds Dave's walk-up talks and queues
+    Caroline's messages on the director from what `StoryDirector` says is due
+    (`add-quest`, `docs/world-and-story.md`).
 
 Kit construction order matters where a kit's constructor has side effects: a
 quest encounter spawns mobs and starts music the moment it is built, so build it

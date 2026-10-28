@@ -3,7 +3,7 @@ import { dressTutorial, type TutorialDressingLayout } from './tutorialDressing';
 import { STAIRWELL_FOOTPRINT_SPAN } from './DungeonGenerator';
 import { DEFAULT_FLOOR_ART_SEED } from './ground/floorArtSeed';
 import { TILE_SIZE } from '../core/constants';
-import { mordecaiAndBedTiles } from './safeRoomFixtures';
+import { guideAndBedTiles } from './safeRoomFixtures';
 import { FloorTypeValue, SAFE_ROOM_FLOOR, STAIRS_DOWN, type TileContent } from './tileTypes';
 
 /** A tile rectangle: `x`/`y` is the top-left tile, `w`/`h` count tiles. */
@@ -52,20 +52,20 @@ const GATE_G1_ROWS_INTO_HALL = 1;
  * Rows below the treasure room gate G2 sits: none, so it stands in the
  * room's doorway and goblin B, just past it, is as far north as he can be.
  * He has to be: the human, held south of goblin B's door, must stand beyond a
- * level-1 Smush's outer blast from him, with room to spare.
+ * level-1 Seismic Stomp's outer blast from him, with room to spare.
  */
 const GATE_G2_ROWS_INTO_HALL = 0;
 /** Rows past G2 goblin B stands: close enough that the cat, stopped at G2, has him on screen. */
 const GOBLIN_B_ROWS_PAST_G2 = 1;
 const GATE_G3_ROWS_INTO_HALL = 1;
-/** Columns east of the west hallway the smush guards stand. */
-const SMUSH_GUARD_COLUMNS_PAST_WEST_HALL = 3;
+/** Columns east of the west hallway the seismic stomp guards stand. */
+const STOMP_GUARD_COLUMNS_PAST_WEST_HALL = 3;
 /**
- * Columns between the smush gate and the safe room's west wall. The human is
+ * Columns between the seismic stomp gate and the safe room's west wall. The human is
  * held one column east of the gate, two from the guards, which keeps both
- * guards inside a level-1 Smush's outer blast.
+ * guards inside a level-1 Seismic Stomp's outer blast.
  */
-const SMUSH_GATE_COLUMNS_FROM_SAFE_ROOM = 4;
+const SEISMIC_STOMP_GATE_COLUMNS_FROM_SAFE_ROOM = 4;
 /**
  * Columns from the safe room's west wall to the centre of the human's doorway. Far
  * enough east that the Bopca counter, which avoids north-wall doorway columns,
@@ -131,9 +131,9 @@ const GOBLIN_B_Y = GATE_G2_ROW + GOBLIN_B_ROWS_PAST_G2;
 
 const WEST_HALL_X1 = centredStart(CAT_COLUMN_X, HALL_WIDTH_TILES);
 const WEST_HALL_X2 = WEST_HALL_X1 + HALL_WIDTH_TILES - 1;
-const SMUSH_GUARD_X = WEST_HALL_X2 + SMUSH_GUARD_COLUMNS_PAST_WEST_HALL;
-const SMUSH_GATE_COL = SMUSH_GUARD_X + 1;
-const SAFE_ROOM_X1 = SMUSH_GATE_COL + SMUSH_GATE_COLUMNS_FROM_SAFE_ROOM;
+const STOMP_GUARD_X = WEST_HALL_X2 + STOMP_GUARD_COLUMNS_PAST_WEST_HALL;
+const SEISMIC_STOMP_GATE_COL = STOMP_GUARD_X + 1;
+const SAFE_ROOM_X1 = SEISMIC_STOMP_GATE_COL + SEISMIC_STOMP_GATE_COLUMNS_FROM_SAFE_ROOM;
 const HUMAN_COLUMN_X = SAFE_ROOM_X1 + HUMAN_DOOR_COLUMNS_INTO_SAFE_ROOM;
 
 export const TUTORIAL_HUMAN_ROOM_BOUNDS: TutorialRect = {
@@ -159,7 +159,7 @@ export const TUTORIAL_SAFE_ROOM_BOUNDS: TutorialRect = {
 
 /**
  * The connector into the safe room's west wall. It hugs the room's bottom
- * interior row, leaving the rows above it to Mordecai's patch and the counter.
+ * interior row, leaving the rows above it to Dave's patch and the counter.
  */
 export const TUTORIAL_L_HORIZONTAL_HALL_BOUNDS: TutorialRect = rectFromInclusive(
   WEST_HALL_X2 + 1,
@@ -223,10 +223,10 @@ export const TUTORIAL_SAFE_ROOM = {
 } as const;
 
 /**
- * Mordecai's home tile, from the same fixture geometry `SafeRoomSystem` places
+ * Dave's home tile, from the same fixture geometry `SafeRoomSystem` places
  * him with. He wanders around it, so prefer his live position where one is to hand.
  */
-export const TUTORIAL_MORDECAI_HOME_TILE: TutorialTile = mordecaiAndBedTiles(TUTORIAL_SAFE_ROOM)[0];
+export const TUTORIAL_DAVE_HOME_TILE: TutorialTile = guideAndBedTiles(TUTORIAL_SAFE_ROOM)[0];
 
 export const TUTORIAL_CAT_SPAWN_TILE: TutorialTile = centreTile(TUTORIAL_CAT_ROOM_BOUNDS);
 export const TUTORIAL_HUMAN_SPAWN_TILE: TutorialTile = centreTile(TUTORIAL_HUMAN_ROOM_BOUNDS);
@@ -266,7 +266,7 @@ export const TUTORIAL_GATE_G2 = {
   southClampPxY: (GATE_G2_ROW + 1) * TILE_SIZE,
 } as const;
 
-/** Gate G3: holds both crawlers in the safe room until Mordecai's farewell has been heard. */
+/** Gate G3: holds both crawlers in the safe room until Dave's farewell has been heard. */
 export const TUTORIAL_GATE_G3 = {
   x1: TUTORIAL_STAIR_HALL_BOUNDS.x,
   x2: lastX(TUTORIAL_STAIR_HALL_BOUNDS),
@@ -285,14 +285,14 @@ export const TUTORIAL_GATE_SAFE_ENTRANCE = {
 /**
  * The row of goblin B's door: the last row of the west hallway before the
  * connector joins it, as far south of him as the hall allows, so the human,
- * coming round from the smush guards, can never reach goblin B and take the
+ * coming round from the seismic stomp guards, can never reach goblin B and take the
  * cat's Magic Missile lesson from her.
  */
 const GOBLIN_B_DOOR_ROW = TUTORIAL_L_HORIZONTAL_HALL_BOUNDS.y - 1;
 
 /**
  * Goblin B's door: a solid cellar door, not a portcullis, so it never looks
- * like the gate the human was taught to Smush through. It shuts goblin B in
+ * like the gate the human was taught to Seismic Stomp through. It shuts goblin B in
  * between the fence and the connector until the cat's missile kills him.
  */
 export const TUTORIAL_GOBLIN_B_DOOR = {
@@ -305,13 +305,13 @@ export const TUTORIAL_GOBLIN_B_DOOR = {
   southClampPxY: (GOBLIN_B_DOOR_ROW + 1) * TILE_SIZE,
 } as const;
 
-/** The portcullis across the connector, running north–south, that keeps the human east of the smush guards. */
-export const TUTORIAL_GATE_SMUSH = {
-  x: SMUSH_GATE_COL,
+/** The portcullis across the connector, running north–south, that keeps the human east of the seismic stomp guards. */
+export const TUTORIAL_GATE_SEISMIC_STOMP = {
+  x: SEISMIC_STOMP_GATE_COL,
   y1: TUTORIAL_L_HORIZONTAL_HALL_BOUNDS.y,
   y2: lastY(TUTORIAL_L_HORIZONTAL_HALL_BOUNDS),
   /** Min pixel-X the human may reach while the gate is shut. */
-  clampPxX: (SMUSH_GATE_COL + 1) * TILE_SIZE,
+  clampPxX: (SEISMIC_STOMP_GATE_COL + 1) * TILE_SIZE,
 } as const;
 
 /** First combat goblin — in the human's hallway, aggros normally but deals 0 damage. */
@@ -321,13 +321,13 @@ export const GOBLIN_A_POS: TutorialTile = {
 };
 /** Magic-missile demo target behind G2. */
 export const GOBLIN_B_POS: TutorialTile = { x: CAT_COLUMN_X, y: GOBLIN_B_Y };
-/** Two stationary smush-demo guards just west of the smush gate, on the connector's outer rows. */
-export const SMUSH_GUARD_1_POS: TutorialTile = {
-  x: SMUSH_GUARD_X,
+/** Two stationary stomp-demo guards just west of the seismic stomp gate, on the connector's outer rows. */
+export const STOMP_GUARD_1_POS: TutorialTile = {
+  x: STOMP_GUARD_X,
   y: TUTORIAL_L_HORIZONTAL_HALL_BOUNDS.y,
 };
-export const SMUSH_GUARD_2_POS: TutorialTile = {
-  x: SMUSH_GUARD_X,
+export const STOMP_GUARD_2_POS: TutorialTile = {
+  x: STOMP_GUARD_X,
   y: lastY(TUTORIAL_L_HORIZONTAL_HALL_BOUNDS),
 };
 /** Treasure chest, in the middle of the treasure room and in line with the cat's hallway. */
@@ -395,8 +395,8 @@ function singleTile(tile: TutorialTile): TutorialRect {
 }
 
 function tutorialDressingLayout(grid: TileContent[][]): TutorialDressingLayout {
-  const smushGateKeepClear: TutorialRect = {
-    x: SMUSH_GATE_COL - GATE_KEEP_CLEAR_MARGIN_TILES,
+  const seismicStompGateKeepClear: TutorialRect = {
+    x: SEISMIC_STOMP_GATE_COL - GATE_KEEP_CLEAR_MARGIN_TILES,
     y: TUTORIAL_L_HORIZONTAL_HALL_BOUNDS.y,
     w: GATE_KEEP_CLEAR_SPAN_TILES,
     h: TUTORIAL_L_HORIZONTAL_HALL_BOUNDS.h,
@@ -423,22 +423,22 @@ function tutorialDressingLayout(grid: TileContent[][]): TutorialDressingLayout {
       gateRowKeepClear(TUTORIAL_L_VERTICAL_HALL_BOUNDS, GOBLIN_B_DOOR_ROW),
       gateRowKeepClear(TUTORIAL_STAIR_HALL_BOUNDS, GATE_G3_ROW),
       gateRowKeepClear(TUTORIAL_HUMAN_HALL_BOUNDS, SAFE_ENTRANCE_GATE_ROW),
-      smushGateKeepClear,
+      seismicStompGateKeepClear,
       columnToRoomBottom(TUTORIAL_CAT_ROOM_BOUNDS, TUTORIAL_CAT_SPAWN_TILE),
       columnToRoomBottom(TUTORIAL_HUMAN_ROOM_BOUNDS, TUTORIAL_HUMAN_SPAWN_TILE),
       columnToRoomBottom(TUTORIAL_TREASURE_ROOM_BOUNDS, {
         x: TUTORIAL_CHEST_POS.x,
         y: TUTORIAL_TREASURE_ROOM_BOUNDS.y,
       }),
-      // Mordecai wanders the safe room and its counter and decor are stamped
+      // Dave wanders the safe room and its counter and decor are stamped
       // in at runtime, so nothing else is set down in it.
       TUTORIAL_SAFE_ROOM_BOUNDS,
       stairApproach,
       TUTORIAL_STAIR_FOOTPRINT,
       singleTile(GOBLIN_A_POS),
       singleTile(GOBLIN_B_POS),
-      singleTile(SMUSH_GUARD_1_POS),
-      singleTile(SMUSH_GUARD_2_POS),
+      singleTile(STOMP_GUARD_1_POS),
+      singleTile(STOMP_GUARD_2_POS),
     ],
     chestTile: TUTORIAL_CHEST_POS,
     stairTile: TUTORIAL_STAIR_POS,

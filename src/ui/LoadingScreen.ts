@@ -417,7 +417,7 @@ export interface LoadingScreenHandle {
   stop(): void;
 }
 
-const BOOT_TITLE = 'Kitten Crawler Man';
+const BOOT_TITLE = 'Kitten Crawler World';
 const BOOT_STATUS = 'Unpacking the dungeon';
 
 /**

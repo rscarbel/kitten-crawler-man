@@ -1,6 +1,6 @@
 ---
 name: dev-workflow
-description: Build, run, and verify Kitten Crawler Man — npm scripts, dev server ports, validation gates (typecheck/lint/format), backend and .env notes. Use when running the game, verifying a change, or setting up the environment.
+description: Build, run, and verify Kitten Crawler World — npm scripts, dev server ports, validation gates (typecheck/lint/format), backend and .env notes. Use when running the game, verifying a change, or setting up the environment.
 ---
 
 # Dev Workflow
@@ -151,6 +151,20 @@ the station with Dr. Moult already at his terminal; `spider-hallway` starts in t
 host room short of the lab hallway's mouth with him still waiting there. Presets are data in
 `src/dev/playtestPresets.ts`; add one there.
 
+**Story and characters.** `?story=<beatId>` (any key of `STORY_BEATS`, e.g. `?story=floor2_dave_chosen`) boots the floor a story beat belongs to with every earlier beat already heard and plays that beat at once, so any of Dave's talks or Caroline's messages can be read without playing to it; the tutorial's beats open in the tutorial. `?deinonychus` is the pet's preview (every growth stage and row), `?demonliaison` the unplaced Demon Liaison figure, `?ratkin` the ratkin cast. The headless gates beside them:
+
+```bash
+npm run verify:dave-guide              # Dave's arrivals, the story cutscenes, seen beats in the save, Caroline's intel once per objective, the skipped tutorial
+npm run verify:deinonychus             # a summoned Deinonychus is never far from the cat for long, and never unrecoverable
+npm run verify:deinonychus-explainer   # its explainer: when it opens, how it pages and closes, that its text is still true
+npm run verify:seismic-stomp-props     # a stomp flattens every breakable prop in its radius; a wall still shadows
+npm run render:dave-teleport           # every frame of Dave's teleport and his rows, at the 32 px tile
+npm run render:deinonychus             # the pet's sheets and gates (-- --stage=juvenile|adolescent|adult, --mode=stages|onion)
+npm run render:energy-shield           # the Energy Shield effect and its gates
+npm run render:seismic-stomp-blast     # the Seismic Stomp blast at a spread of ages and radii
+npm run render:demon-liaison           # the Demon Liaison's sheet and gates
+```
+
 A `?playtest=` or `?level=` boot never writes the real saved game, so it can't
 clobber your own run. Add `&save` (e.g. `?playtest=spider&save`) to persist its
 saves. Without it, saves still happen in memory, so a death still respawns at the
@@ -171,7 +185,7 @@ The SDK is installed from GitHub Packages (`.npmrc` maps the `@rscarbel` scope t
 
 ## `.env`
 
-From `.env.example`: `AI_ENABLED` (default `false` — with it off, `game.ts` skips auth/AI and boots straight into the game, which is how the static site ships), `AI_SERVER_URL` (default `http://localhost:3001`), `AI_APP_ID`, `PUBLIC_URL`, `AI_SIGNING_KEY_DIR` / `AI_SIGNING_KEY_PEM`, `JWT_SECRET`, and `AI_SYNC_CLIENT_ID` / `AI_SYNC_CLIENT_SECRET` for `npm run ai:sync`. With the AI server absent the game plays on, the panel's dot shows offline and the System answers from scripted lines.
+From `.env.example`: `AI_ENABLED` (default `false` — with it off, `game.ts` skips auth/AI and boots straight into the game, which is how the static site ships), `AI_SERVER_URL` (default `http://localhost:3001`), `AI_APP_ID`, `PUBLIC_URL`, `AI_SIGNING_KEY_DIR` / `AI_SIGNING_KEY_PEM`, `JWT_SECRET`, and `AI_SYNC_CLIENT_ID` / `AI_SYNC_CLIENT_SECRET` for `npm run ai:sync`. With the AI server absent the game plays on, the panel's dot shows offline and Caroline answers from scripted lines.
 
 **`npm run ai:sync`** (`scripts/ai-sync.ts`) pushes the characters, the generated tools, the world bible and the event importance hints to the AI server once per deploy, as a service account (client credentials). Each upload is one entry in its `SYNC_STEPS`; an optional one (the lore and the importance hints) is skipped with a note when the service account lacks its scope (`lore:write`) or the server answers its endpoint with a 404. A character goes up exactly as `PUT /api/characters/:name` keeps it: the server takes identity only from `personality.core` and strips unknown keys, so the role and the acting-rule notes are folded into that core (`renderCharacterCore`). `-- --dry-run` prints the payloads; `-- --snapshot=<file>` writes them all to one JSON file, formatted with the target repo's prettier config (the AI server's `bench/game/kitten-crawler-sync.json` is made this way), and sends nothing. The README says how to create the service account.
 
@@ -179,7 +193,7 @@ From `.env.example`: `AI_ENABLED` (default `false` — with it off, `game.ts` sk
 
 ## Backend
 
-`server/index.ts` — Express on :3000, serves the static root, mounts `/api/auth`, `/api/progress`, `/api/ai-token` and `/.well-known/jwks.json` (`server/routes/aiToken.ts`, key in `server/aiSigningKey.ts`). `server/db.ts` — better-sqlite3 (`data/game.db`, or `$GAME_DATA_DIR/game.db`; a `game.db` left at the repo root is moved there on first start; `users` + `progress` tables). Only allowlisted game files are served from the repo root (`server/publicFiles.ts`). JWT cookies + bcrypt in `server/routes/` and `server/middleware/`.
+`server/index.ts` — Express on :3000, serves the static root, mounts `/api/auth`, `/api/progress`, `/api/ai-token` and `/.well-known/jwks.json` (`server/routes/aiToken.ts`, key in `server/aiSigningKey.ts`). `server/db.ts` — better-sqlite3 (`data/game.db`, or `$GAME_DATA_DIR/game.db`; `users` + `kcw_progress` tables). The static deploys build with `AI_ENABLED` off, so no production client ever reaches `/api/progress`; server saves exist only in local dev. Only allowlisted game files are served from the repo root (`server/publicFiles.ts`). JWT cookies + bcrypt in `server/routes/` and `server/middleware/`.
 
 ## Sprite generation
 
@@ -187,7 +201,7 @@ Most sheets are painted by the game itself and have no file at all — the groun
 
 ## Verifying a gameplay change
 
-Typecheck + lint alone don't prove behavior. Run `npm run serve`, open `http://localhost:8080`, and exercise the affected flow (spawn the creature's level, use the item, trigger the ability). Deploys go to GitHub Pages automatically on push to main (`.github/workflows/deploy.yml`).
+Typecheck + lint alone don't prove behavior. Run `npm run serve`, open `http://localhost:8080`, and exercise the affected flow (spawn the creature's level, use the item, trigger the ability). Every push to main deploys to `https://ryanscarbel.com/kitten-crawler-world/` (`.github/workflows/deploy.yml`: the S3 prefix `kitten-crawler-world`, the CloudFront invalidation `/kitten-crawler-world/*` and `dist/kitten-crawler-world.zip`; GitHub Pages is not a target). Agents never push; the owner pushes when ready, and the push deploys. The frozen old site at `/kitten-crawler-man/` is published only by hand (`workflow_dispatch` on `.github/workflows/deploy-legacy.yml`, run from main), which builds the frozen commit and adds the password gate in `scripts/legacy-gate/`. That workflow and `scripts/legacy-gate/` are the only places that name the old site.
 
 ## Design debt
 

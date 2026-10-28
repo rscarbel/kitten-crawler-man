@@ -28,7 +28,7 @@
  *
  * And the party's dungeon kill tally, which is saved with the human's
  * achievements: the kill that crosses Something Hatched queues the chest that
- * brings Mongo, but he joins only when that chest is opened, once, even after
+ * brings Deinonychus, but he joins only when that chest is opened, once, even after
  * a save and reload; the tally survives a save, and a kill on the overworld
  * never counts.
  *
@@ -485,9 +485,9 @@ const DESCENT_VIEWPORT = { width: 1280, height: 720, devicePixelRatio: 1 } as co
 const DESCENT_HUMAN_ACHIEVEMENT = 'boss_slayer' as const satisfies AchievementId;
 const DESCENT_CAT_ACHIEVEMENT = 'magic_touch' as const satisfies AchievementId;
 /** Kills short of Something Hatched, so the next dungeon kill crosses it. */
-const KILLS_BEFORE_MONGO = DUNGEON_KILLS_SOMETHING_HATCHED - 1;
-/** Dungeon kills landed past the threshold, which must not pay Mongo again. */
-const KILLS_PAST_MONGO = 3;
+const KILLS_BEFORE_DEINONYCHUS = DUNGEON_KILLS_SOMETHING_HATCHED - 1;
+/** Dungeon kills landed past the threshold, which must not pay Deinonychus again. */
+const KILLS_PAST_DEINONYCHUS = 3;
 
 /**
  * Takes the stairs on a real floor and reloads the save that wrote from the
@@ -545,8 +545,8 @@ async function checkDescentSaveKeepsAchievements(): Promise<void> {
   );
 }
 
-/** How many of a crawler's queued, unopened reward chests bring Mongo, read without taking any. */
-function mongoChestsQueued(manager: AchievementManager): number {
+/** How many of a crawler's queued, unopened reward chests bring Deinonychus, read without taking any. */
+function deinonychusChestsQueued(manager: AchievementManager): number {
   return manager
     .serialize()
     .presentations.filter((presentation) =>
@@ -595,12 +595,12 @@ async function checkDungeonKillLadder(): Promise<void> {
   const { DungeonScene } = await import('../src/scenes/DungeonScene.js');
   const { level2 } = await import('../src/levels/level2.js');
   const { Rat } = await import('../src/creatures/Rat.js');
-  const { MONGO_DEF } = await import('../src/abilities/mongo.js');
-  const { presentsMongo } = await import('../src/systems/mongoArrival.js');
+  const { DEINONYCHUS_DEF } = await import('../src/abilities/deinonychus.js');
+  const { presentsDeinonychus } = await import('../src/systems/deinonychusArrival.js');
 
   const humanAchievements = new AchievementManager();
   const catAchievements = new AchievementManager();
-  for (let kill = 0; kill < KILLS_BEFORE_MONGO; kill++) {
+  for (let kill = 0; kill < KILLS_BEFORE_DEINONYCHUS; kill++) {
     humanAchievements.advanceCounter('dungeonKills');
   }
   const dungeon = new DungeonScene(level2, new InputManager(), new SceneManager(), {
@@ -620,8 +620,8 @@ async function checkDungeonKillLadder(): Promise<void> {
     });
   };
   check(
-    !dungeon['mongoSystem'].unlocked,
-    'fixture: Mongo is unlocked before the ladder is crossed',
+    !dungeon['deinonychusSystem'].unlocked,
+    'fixture: Deinonychus is unlocked before the ladder is crossed',
   );
   killRat(dungeon);
   check(
@@ -633,15 +633,18 @@ async function checkDungeonKillLadder(): Promise<void> {
     'crossing the threshold does not unlock it for the cat',
   );
   check(
-    !dungeon['mongoSystem'].unlocked,
-    'crossing Something Hatched brings Mongo before his chest is opened',
+    !dungeon['deinonychusSystem'].unlocked,
+    'crossing Something Hatched brings Deinonychus before his chest is opened',
   );
-  for (let kill = 0; kill < KILLS_PAST_MONGO; kill++) killRat(dungeon);
+  for (let kill = 0; kill < KILLS_PAST_DEINONYCHUS; kill++) killRat(dungeon);
   check(
-    mongoChestsQueued(catAchievements) === 1,
-    `the cat does not hold exactly one unopened chest bringing Mongo (${mongoChestsQueued(catAchievements)})`,
+    deinonychusChestsQueued(catAchievements) === 1,
+    `the cat does not hold exactly one unopened chest bringing Deinonychus (${deinonychusChestsQueued(catAchievements)})`,
   );
-  check(!dungeon['mongoSystem'].unlocked, 'more dungeon kills bring Mongo with his chest unopened');
+  check(
+    !dungeon['deinonychusSystem'].unlocked,
+    'more dungeon kills bring Deinonychus with his chest unopened',
+  );
 
   const reloadedHuman = reloadAchievements(humanAchievements);
   const reloadedCat = reloadAchievements(catAchievements);
@@ -649,35 +652,49 @@ async function checkDungeonKillLadder(): Promise<void> {
     reloadedHuman.counter('dungeonKills') === humanAchievements.counter('dungeonKills'),
     'the dungeon kill tally does not survive a save',
   );
-  check(mongoChestsQueued(reloadedCat) === 1, "Mongo's unopened chest does not survive a save");
+  check(
+    deinonychusChestsQueued(reloadedCat) === 1,
+    "Deinonychus's unopened chest does not survive a save",
+  );
   const resumed = new DungeonScene(level2, new InputManager(), new SceneManager(), {
     worldSeed: HARNESS_WORLD_SEED,
     skipIntro: true,
     humanAchievements: reloadedHuman,
     catAchievements: reloadedCat,
   });
-  check(!resumed['mongoSystem'].unlocked, 'a reload with his chest unopened brings Mongo');
-  let mongoIntroductions = 0;
+  check(
+    !resumed['deinonychusSystem'].unlocked,
+    'a reload with his chest unopened brings Deinonychus',
+  );
+  let deinonychusIntroductions = 0;
   resumed['bus'].on('rewardGranted', (e) => {
-    mongoIntroductions += e.rewards.filter((reward) => reward.name === MONGO_DEF.name).length;
+    deinonychusIntroductions += e.rewards.filter(
+      (reward) => reward.name === DEINONYCHUS_DEF.name,
+    ).length;
   });
   const rewardScreen = resumed['achievementUI'];
   const sceneOpened = rewardScreen.onPresentationOpened;
   let broughtByAnotherChest = false;
   rewardScreen.onPresentationOpened = (presentation) => {
     sceneOpened?.(presentation);
-    if (!presentsMongo(presentation) && resumed['mongoSystem'].unlocked) {
+    if (!presentsDeinonychus(presentation) && resumed['deinonychusSystem'].unlocked) {
       broughtByAnotherChest = true;
     }
   };
   while (rewardScreen.openRewards()) rewardScreen.dismiss();
-  check(!broughtByAnotherChest, 'opening a chest that does not bring Mongo brings him');
-  check(resumed['mongoSystem'].unlocked, 'opening his chest after a reload does not bring Mongo');
+  check(!broughtByAnotherChest, 'opening a chest that does not bring Deinonychus brings him');
   check(
-    mongoIntroductions === 1,
-    `opening his chest does not introduce Mongo exactly once (${mongoIntroductions})`,
+    resumed['deinonychusSystem'].unlocked,
+    'opening his chest after a reload does not bring Deinonychus',
   );
-  check(mongoChestsQueued(reloadedCat) === 0, "Mongo's chest is still waiting after it was opened");
+  check(
+    deinonychusIntroductions === 1,
+    `opening his chest does not introduce Deinonychus exactly once (${deinonychusIntroductions})`,
+  );
+  check(
+    deinonychusChestsQueued(reloadedCat) === 0,
+    "Deinonychus's chest is still waiting after it was opened",
+  );
 
   const overworldTally = humanAchievements.counter('dungeonKills');
   const overworld = new DungeonScene(level3, new InputManager(), new SceneManager(), {

@@ -386,8 +386,8 @@ const SAFE_ROOM_BOUNDS_BY_BUILDING: ReadonlyMap<
 > = new Map([
   /*
    * The inn's taproom, and none of its guest wing. A rented room is somewhere a
-   * crawler pays to be alone; the System's protection belongs to the public room
-   * downstairs, where the Bopca cooks and Mordecai sits.
+   * crawler pays to be alone; a safe room's protection belongs to the public room
+   * downstairs, where the Bopca cooks and Dave sits.
    */
   [
     'taloncrest_inn',
@@ -2321,7 +2321,7 @@ export class GameMap {
     for (const key of [...this.structureBlockedSet]) {
       this.unblockStructureTile(tileKeyX(key), tileKeyY(key));
     }
-    for (const key of snapshot.structureBlockedTiles ?? []) {
+    for (const key of snapshot.structureBlockedTiles) {
       this.blockStructureTile(tileKeyX(key), tileKeyY(key));
     }
   }
@@ -3140,6 +3140,6 @@ export interface GameMapCheckpoint {
   /** `tileCoordKey` values, so the entries survive a structure replacement. */
   permanentBlockedTiles: number[];
   stairwellTiles: ReadonlyArray<{ x: number; y: number }>;
-  /** `tileCoordKey` values of structure footprints; absent in checkpoints taken before structures existed. */
-  structureBlockedTiles?: number[];
+  /** `tileCoordKey` values of structure footprints. */
+  structureBlockedTiles: number[];
 }

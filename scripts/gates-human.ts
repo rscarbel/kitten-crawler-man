@@ -28,7 +28,7 @@ import {
   figureByteBudgetFor,
   IDLE_FRAMES_BEFORE_RELEASE,
 } from '../src/sprites/figure/figureFrameCache.js';
-import { getSmushStats, SMUSH_DEF } from '../src/abilities/smush.js';
+import { getSeismicStompStats, SEISMIC_STOMP_DEF } from '../src/abilities/seismicStomp.js';
 import { bakeFigureCell, paintFigureCell } from './figureSheet.js';
 import { asGameContext } from './nodeGameContext.js';
 import {
@@ -64,10 +64,13 @@ import {
   TILE_SCALE,
 } from '../src/sprites/art/human/figureScale.js';
 import { STOMP_DOWN_IMPACT } from '../src/sprites/art/human/strikesDown.js';
-import { SMUSH_HOP_PRESS_FRAMES, SMUSH_PRESS_FRAMES } from '../src/sprites/art/human/stomps.js';
+import {
+  SEISMIC_STOMP_HOP_PRESS_FRAMES,
+  SEISMIC_STOMP_PRESS_FRAMES,
+} from '../src/sprites/art/human/stomps.js';
 import {
   RUN_FRAMES,
-  SMUSH_IMPACT_FRAME,
+  SEISMIC_STOMP_IMPACT_FRAME,
   TICKS_PER_SECOND,
   WALK_FRAMES,
 } from '../src/sprites/art/human/timing.js';
@@ -732,7 +735,7 @@ function isDeclaredSpike(row: string, step: number): boolean {
  * one-shot strike generally cannot be failed at all: its handful of large steps makes an allowance wider than the
  * furthest apart any two of its own frames are. On a one-shot this clause
  * therefore only catches a limb thrown somewhere no frame of the row goes, which
- * is what the Smush stamp moving 0.1 tiles off its stance does. The dead-frame
+ * is what the Seismic Stomp stamp moving 0.1 tiles off its stance does. The dead-frame
  * clause below has no such blind spot, and on loops the joint-spike clause
  * after it sees the snaps this silhouette step cannot.
  *
@@ -1082,14 +1085,14 @@ function gateStrikePeaksOnImpact(): void {
 
 /**
  * The rows that land by driving a raised foot down onto the floor: the down
- * family's stamp, and every Smush row — any row that declares where its heel
+ * family's stamp, and every Seismic Stomp row — any row that declares where its heel
  * lands.
  */
 const STOMP_ROWS: ReadonlyArray<{ readonly row: string; readonly impact: number }> = [
   { row: 'stomp_down', impact: STOMP_DOWN_IMPACT },
   ...HUMAN_ROWS.filter((row) => stampAnchorOf(row, gateLook) !== null).map((row) => ({
     row: row.name,
-    impact: row.impactFrames[0] ?? SMUSH_IMPACT_FRAME,
+    impact: row.impactFrames[0] ?? SEISMIC_STOMP_IMPACT_FRAME,
   })),
 ];
 
@@ -1110,7 +1113,7 @@ function stampingSide(row: RowSpec, impact: number): LegSide {
 
 /**
  * G6 — a stomp is at its apex the frame before impact and on the floor from
- * impact on: through the rest of the row, or through the press on a Smush row,
+ * impact on: through the rest of the row, or through the press on a Seismic Stomp row,
  * which then steps back to guard (standing) or runs on (the hop).
  *
  * The apex is the pose's own lift of the stamping foot, looked for over the
@@ -1146,8 +1149,8 @@ function gateStompLandsOnImpact(): void {
       stampAnchorOf(row, gateLook) === null
         ? row.frameCount - impact
         : hops
-          ? SMUSH_HOP_PRESS_FRAMES
-          : SMUSH_PRESS_FRAMES;
+          ? SEISMIC_STOMP_HOP_PRESS_FRAMES
+          : SEISMIC_STOMP_PRESS_FRAMES;
     let plantedFrames = 0;
     for (let frame = impact; frame < Math.min(impact + pressFrames, row.frameCount); frame++) {
       plantedFrames++;
@@ -1354,19 +1357,19 @@ function strikeFamilies(set: MotionSet): Map<CardinalView, HumanRowName[]> {
 }
 
 /**
- * How many views' Smush rows can be warm at once. A Smush row is admitted when
+ * How many views' Seismic Stomp rows can be warm at once. A Seismic Stomp row is admitted when
  * it is stamped and released once it has gone unplayed for the cache's release
  * window; at the shortest cooldown the ability reaches, this many stamps can
  * fall inside one window, and each can be in a different view.
  */
-function smushViewsWarmAtOnce(): number {
-  const shortestCooldown = getSmushStats(SMUSH_DEF.maxLevel).cooldownFrames;
+function seismicStompViewsWarmAtOnce(): number {
+  const shortestCooldown = getSeismicStompStats(SEISMIC_STOMP_DEF.maxLevel).cooldownFrames;
   return Math.floor(IDLE_FRAMES_BEFORE_RELEASE / shortestCooldown) + 1;
 }
 
 /**
- * The Smush rows a fight can hold warm together: the standing stamp and the
- * hop of as many views as {@link smushViewsWarmAtOnce}, taking the heaviest.
+ * The Seismic Stomp rows a fight can hold warm together: the standing stamp and the
+ * hop of as many views as {@link seismicStompViewsWarmAtOnce}, taking the heaviest.
  */
 function warmStompRows(): HumanRowName[] {
   const byView = new Map<CardinalView, HumanRowName[]>();
@@ -1377,14 +1380,14 @@ function warmStompRows(): HumanRowName[] {
   const framesOf = (names: readonly HumanRowName[]): number =>
     names.reduce((sum, name) => sum + HUMAN_ROW_TABLE[name].frameCount, 0);
   const heaviestFirst = [...byView.values()].sort((a, b) => framesOf(b) - framesOf(a));
-  return heaviestFirst.slice(0, smushViewsWarmAtOnce()).flat();
+  return heaviestFirst.slice(0, seismicStompViewsWarmAtOnce()).flat();
 }
 
 /**
- * The Protective Shell cast of a view, up to the frame the dome goes up — the
- * span `standByForShellCast` holds warm while the spell is ready.
+ * The Energy Shield cast of a view, up to the frame the dome goes up — the
+ * span `standByForShieldCast` holds warm while the spell is ready.
  */
-function shellCastSpans(view: CardinalView): HumanWarmSpan[] {
+function shieldCastSpans(view: CardinalView): HumanWarmSpan[] {
   return HUMAN_ROWS.flatMap((row) => {
     const cast = row.eventFrames?.cast?.[0];
     return row.view === view && cast !== undefined ? [{ row: row.name, frames: cast + 1 }] : [];
@@ -1401,11 +1404,11 @@ function shellCastSpans(view: CardinalView): HumanWarmSpan[] {
  * fight can open with from standing, up to each one's impact frame), the whole of
  * the largest family of strikes one facing can throw — standing, and every
  * version painted on the move, whose wind-ups are warmed as he sets off in
- * that view — and the Smush rows, standing and every hop version, of as many
+ * that view — and the Seismic Stomp rows, standing and every hop version, of as many
  * views as can be stamped inside one release window. On top of those, the
  * rows held on stand-by for a moment that can come on any tick, in the view
  * the fight is fought in, each only up to the frame it is held to: the flinch
- * and the stumble to the end of their recoil, the Protective Shell cast to the
+ * and the stumble to the end of their recoil, the Energy Shield cast to the
  * frame the dome goes up, and the falls to him reaching the floor. Measured
  * against `HUMAN_FIGURE`'s own `budgetMegabytes` rather than the cache's fleet
  * default, since he declares an override.
@@ -1461,8 +1464,8 @@ function gateWorkingSetOf(set: MotionSet): number {
   const fightView: CardinalView | undefined =
     busiestFamily.length > 0 ? HUMAN_ROW_TABLE[busiestFamily[0]].view : undefined;
   const fightReactions = fightView === undefined ? [] : fightReactionSpans(fightView);
-  const shellCast = fightView === undefined ? [] : shellCastSpans(fightView);
-  const standby = [...fightReactions, ...shellCast, ...FALL_SPANS].filter(
+  const shieldCast = fightView === undefined ? [] : shieldCastSpans(fightView);
+  const standby = [...fightReactions, ...shieldCast, ...FALL_SPANS].filter(
     (span) => !rows.includes(span.row),
   );
   const standbyFrames = standby.reduce((sum, span) => sum + span.frames, 0);
@@ -1470,7 +1473,7 @@ function gateWorkingSetOf(set: MotionSet): number {
   failUnlessMeasured('G9b', stomps.length, 'stomp rows');
   failUnlessMeasured('G9b', residentWhole.length, `rows held warm in every view (${set})`);
   failUnlessMeasured('G9b', fightReactions.length, 'fight reaction rows');
-  failUnlessMeasured('G9b', shellCast.length, 'Protective Shell cast rows');
+  failUnlessMeasured('G9b', shieldCast.length, 'Energy Shield cast rows');
   failUnlessMeasured('G9b', standbyFrames, 'stand-by frames');
   const cells = framesOf(rows) + windUpFrames + standbyFrames;
   const workingSpans = [
@@ -2332,7 +2335,7 @@ function throwSwing(
 }
 
 /**
- * Stamps one Smush through to its end, running on along the facing throughout
+ * Stamps one Seismic Stomp through to its end, running on along the facing throughout
  * when `moving`, and records the cell drawn on the tick the blast fires.
  * Returns the number of ticks it fired on, or null if it would not trigger.
  *
@@ -2341,15 +2344,15 @@ function throwSwing(
  * and it has to be *new* on that tick, or the heel sits on the floor with
  * nothing happening until the blast catches up.
  */
-function stampSmush(
+function stampSeismicStomp(
   player: HumanPlayer,
   moving: boolean,
   seen: Map<HumanRowName, Set<number>>,
 ): number | null {
-  if (!player.triggerSmush()) return null;
+  if (!player.triggerSeismicStomp()) return null;
   let stamps = 0;
   let previous = player.spriteSelection();
-  while (player.smushTimer > 0) {
+  while (player.seismicStompTimer > 0) {
     if (moving) {
       player.isMoving = true;
       player.x += player.facingX * PLAYER_SPEED;
@@ -2357,7 +2360,7 @@ function stampSmush(
     }
     player.updateAttack();
     const chosen = player.spriteSelection();
-    if (player.isSmushPeak()) {
+    if (player.isSeismicStompPeak()) {
       stamps++;
       recordFrame(seen, chosen.row, chosen.frame);
       const stampedEarly =
@@ -2367,7 +2370,7 @@ function stampSmush(
         fail(
           'G15',
           `${chosen.row} already shows its stamp frame ${previous.frame} the tick before the ` +
-            'blast fires — the heel lands before the Smush does',
+            'blast fires — the heel lands before the Seismic Stomp does',
         );
       }
     }
@@ -2458,7 +2461,7 @@ function replaySwings(
  * at every kind of target the animator tells apart — none, low, tall, downed
  * and far — ticked through `updateAttack` and `tickTimers` exactly as the
  * combat kit ticks them, the runner triggering at every phase of his stride.
- * On the tick `isAttackPeak` / `isSmushPeak` fires the frame is read from
+ * On the tick `isAttackPeak` / `isSeismicStompPeak` fires the frame is read from
  * `HumanPlayer.spriteSelection`, the cell `drawSelf` paints. A row that never
  * turns up is a row the runtime can never pick, and fails by name.
  */
@@ -2507,15 +2510,15 @@ function gateImpactTiming(): void {
       [stander, false],
       [runner, true],
     ] as const) {
-      stamper.smushCooldown = 0;
+      stamper.seismicStompCooldown = 0;
       const how = moving ? 'on the run' : 'standing';
-      const stamps = stampSmush(stamper, moving, stampFrames);
+      const stamps = stampSeismicStomp(stamper, moving, stampFrames);
       if (stamps === null) {
-        fail('G15', `Smush would not trigger ${how} at facing ${index}/${FACING_SWEEP}`);
+        fail('G15', `Seismic Stomp would not trigger ${how} at facing ${index}/${FACING_SWEEP}`);
       } else if (stamps !== 1) {
         fail(
           'G15',
-          `a Smush ${how} at facing ${index}/${FACING_SWEEP} stamped on ${stamps} ticks, not 1`,
+          `a Seismic Stomp ${how} at facing ${index}/${FACING_SWEEP} stamped on ${stamps} ticks, not 1`,
         );
       }
     }
@@ -2525,7 +2528,7 @@ function gateImpactTiming(): void {
   // A hop is only drawn from the run frame its legs begin at, and the runner
   // above reaches each view's facings at whatever phase his running total of
   // ticks happens to leave him in — a handful of phases, not the stride. So
-  // the Smush on the run is also stamped from a fresh stride at every tick of
+  // the Seismic Stomp on the run is also stamped from a fresh stride at every tick of
   // one full cycle, in every view.
   const runCycleTicks = Math.ceil(RUN_GROUND_PER_CYCLE_PX / PLAYER_SPEED);
   let hopsStamped = 0;
@@ -2533,10 +2536,10 @@ function gateImpactTiming(): void {
     for (let offset = 0; offset < runCycleTicks; offset++) {
       const hopper = playerFacing(facing);
       walkFor(hopper, WALK_IN_TICKS + offset);
-      if (stampSmush(hopper, true, stampFrames) !== null) hopsStamped++;
+      if (stampSeismicStomp(hopper, true, stampFrames) !== null) hopsStamped++;
     }
   }
-  failUnlessMeasured('G15', hopsStamped, 'Smushes stamped at every phase of a stride');
+  failUnlessMeasured('G15', hopsStamped, 'Seismic Stomps stamped at every phase of a stride');
 
   const checks: ReadonlyArray<
     readonly [string, readonly HumanRowName[], Map<HumanRowName, Set<number>>]
@@ -2588,7 +2591,7 @@ function gateImpactTiming(): void {
  * past the sector's edge, so a stick wobbling across an edge never flickers
  * him between two views. The strike the runtime draws for a facing, standing
  * or on the run, is in the view his facing selection draws through the
- * fallback table, and so are the stride, the idle and the Smush, each
+ * fallback table, and so are the stride, the idle and the Seismic Stomp, each
  * mirrored exactly when the selection is and the row is mirrorable. And once
  * a blow is thrown its row and its mirroring hold for the whole swing,
  * however the facing is steered after it.
@@ -2632,12 +2635,12 @@ function gateViewConsistency(): void {
       const runningLatch = swingLatchBreaks(runningStriker, runningStrike);
       latchBreaks += runningLatch.breaks;
       latchTicks += runningLatch.ticks;
-      const smusher = playerFacing(facing, set);
-      smusher.triggerSmush();
-      const stamping = smusher.spriteSelection();
+      const stomper = playerFacing(facing, set);
+      stomper.triggerSeismicStomp();
+      const stamping = stomper.spriteSelection();
       const hopper = playerFacing(facing, set);
       walkFor(hopper, WALK_IN_TICKS);
-      hopper.triggerSmush();
+      hopper.triggerSeismicStomp();
       const hopping = hopper.spriteSelection();
       facingsMeasured++;
       for (const chosen of [striking, runningStrike, walking, standing, stamping, hopping]) {
@@ -3496,7 +3499,7 @@ function replaySetOffAndStop(
 }
 
 /**
- * Runs `ticks` into a stride, throws a blow (or stamps a Smush), runs on
+ * Runs `ticks` into a stride, throws a blow (or stamps a Seismic Stomp), runs on
  * through it, and checks the cut into the blow and back out of it. On the run
  * every blow drawn must be one painted on the move: a standing blow there is
  * the frozen slide this gate exists to catch, whatever its cuts measure.
@@ -3504,16 +3507,16 @@ function replaySetOffAndStop(
 function replayBlowOnTheRun(
   facing: Pt,
   ticks: number,
-  smush: boolean,
+  seismicStomp: boolean,
   limit: number,
   report: CutReport,
 ): void {
   const player = playerFacing(facing);
   walkFor(player, ticks);
   let previous = player.spriteSelection();
-  if (smush) player.triggerSmush();
+  if (seismicStomp) player.triggerSeismicStomp();
   else player.triggerAttack();
-  const what = `${smush ? 'a Smush' : 'a blow'} thrown ${ticks} ticks into a run`;
+  const what = `${seismicStomp ? 'a Seismic Stomp' : 'a blow'} thrown ${ticks} ticks into a run`;
   let slid = false;
   const check = (now: HumanRowSelection): void => {
     if (!slid && isStandingBlow(now.row)) {
@@ -3528,7 +3531,7 @@ function replayBlowOnTheRun(
     previous = now;
   };
   check(player.spriteSelection());
-  const blowTicks = smush ? player.SMUSH_FRAMES : player.ATTACK_FRAMES;
+  const blowTicks = seismicStomp ? player.SEISMIC_STOMP_FRAMES : player.ATTACK_FRAMES;
   for (let tick = 0; tick <= blowTicks; tick++) {
     player.isMoving = true;
     player.x += facing.x * PLAYER_SPEED;
@@ -3670,7 +3673,7 @@ function replayGuardDrop(view: CardinalView, facing: Pt): void {
  *
  * Then the animator's own cuts are replayed with a real `HumanPlayer`, in
  * every view: setting off from standing and stopping again after every number
- * of ticks across two strides, running and wading; and a blow and a Smush
+ * of ticks across two strides, running and wading; and a blow and a Seismic Stomp
  * thrown at every phase of a run. Every change of row is measured as the jump
  * of the ankles between the cell drawn before it and the cell drawn after, at
  * the 32-px tile, and held to the largest step the stride itself makes from
@@ -3773,12 +3776,12 @@ function gateHandOff(): void {
     }
     const runLimit = cycleStepPx(run);
     const runTicksPerCycle = Math.ceil(RUN_GROUND_PER_CYCLE_PX / PLAYER_SPEED);
-    for (const smush of [false, true]) {
+    for (const seismicStomp of [false, true]) {
       const report = newReport();
       for (let offset = 0; offset < runTicksPerCycle; offset++) {
-        replayBlowOnTheRun(facing, WALK_IN_TICKS + offset, smush, runLimit, report);
+        replayBlowOnTheRun(facing, WALK_IN_TICKS + offset, seismicStomp, runLimit, report);
       }
-      const kind = smush ? 'Smush' : 'strike';
+      const kind = seismicStomp ? 'Seismic Stomp' : 'strike';
       failUnlessMeasured(
         'G20',
         report.measured,
@@ -3893,7 +3896,7 @@ const RIGHT_SHOULDER_SCREEN_SIDE: Readonly<Partial<Record<CardinalView, number>>
  * puts it.
  *
  * A figure drawn with his right on the viewer's right from both front and
- * back is one of them in a mirror: the right-handed throw, the shell centred
+ * back is one of them in a mirror: the right-handed throw, the shield centred
  * on his right hand and the sling's fork in his left all swap hands as he
  * turns round, and no other gate sees it, because every one of them is
  * symmetric under a reflection. Measured on the probe, which names each limb

@@ -10,8 +10,8 @@
  *   - Once out of the talk range, an interact press goes to the world first
  *     (`Conversation.handOff`); only a press nothing else takes turns a page.
  *   - In real generated safe rooms, a Bopca conversation closes on walking
- *     off inside the room, and so does Mordecai's; and walking from the
- *     counter to Mordecai and pressing talk opens Mordecai, including in rooms
+ *     off inside the room, and so does Dave's; and walking from the
+ *     counter to Dave and pressing talk opens Dave, including in rooms
  *     where he stands close enough to the counter that the Bopca's box would
  *     still be up when the player gets to him.
  *
@@ -32,6 +32,12 @@ import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { BOPCA_TALK_DISTANCE_TILES, BopcaSystem } from '../src/systems/BopcaSystem';
 import { SafeRoomSystem } from '../src/systems/SafeRoomSystem';
+import {
+  DAVE_NEAR_DISTANCE_TILES,
+  DaveGuideSystem,
+  DaveWhereabouts,
+} from '../src/systems/DaveGuideSystem';
+import { safeRoomIdIn, type SafeRoomScope } from '../src/map/safeRoomId';
 import { safeRoomPressLeavesSpeaker, safeRoomSpeakerFor } from '../src/systems/safeRoomSpeaker';
 
 installCanvasGlobals();
@@ -70,8 +76,8 @@ const ONE_STEP_TILES = PLAYER_SPEED / TILE_SIZE;
 const MAX_WALK_FRAMES = 4000;
 /** Seeds whose floors are searched for safe rooms; each floor holds about two. */
 const SEEDS = [7919, 15838, 23757, 31676, 39595, 47514, 55433, 63352, 71271, 79190, 87109, 95028];
-/** How close the walk-away test stands to Mordecai to start talking: well inside his range, as a player would. */
-const MORDECAI_PRESS_TILES = 1.5;
+/** How close the walk-away test stands to Dave to start talking: well inside his range, as a player would. */
+const DAVE_PRESS_TILES = 1.5;
 
 interface Point {
   x: number;
@@ -218,7 +224,7 @@ interface Room {
   readonly map: GameMap;
   readonly bounds: { x: number; y: number; w: number; h: number };
   readonly bopcaHome: Point;
-  readonly mordecaiHome: Point;
+  readonly daveHome: Point;
 }
 
 function tileKey(tile: Point): string {
@@ -318,16 +324,18 @@ function tilesFromPlayer(human: HumanPlayer, tile: Point): number {
 interface SafeRoomTally {
   rooms: number;
   bopcaWalkAways: number;
-  mordecaiWalkAways: number;
+  daveWalkAways: number;
   handOffs: number;
   closeTogetherHandOffs: number;
-  /** Walks that ended beside Mordecai but still inside the Bopca's own talk range. */
+  /** Walks that ended beside Dave but still inside the Bopca's own talk range. */
   overlappingHandOffs: number;
 }
 
+/** The scope every walk-away room is built in; any floor would do. */
+const SAFE_ROOM_SCOPE: SafeRoomScope = { kind: 'floor', level: 'level1' };
 function roomsOf(
   seed: number,
-): Array<{ room: Room; bopca: BopcaSystem; safeRoom: SafeRoomSystem; conversation: Conversation }> {
+): Array<{ room: Room; bopca: BopcaSystem; dave: DaveGuideSystem; conversation: Conversation }> {
   const map = new GameMap({ tileHeight: TILE_SIZE, worldSeed: seed });
   const layouts = stampSafeRoomCounters(map);
   // After the counter, as the dungeon stamps them: the furnishings are solid,
@@ -340,20 +348,25 @@ function roomsOf(
     // One system per room, with only that room's counter, so each room is a
     // fresh visit and nothing one room's walk did carries into the next.
     const bopca = new BopcaSystem(map, [layout], new EventBus(), conversation, null, false);
-    const safeRoom = new SafeRoomSystem(map, 0, 0, conversation);
-    const mordecaiHome = safeRoom.mordecaiPositions.find(
-      (home) =>
-        home.x >= layout.roomBounds.x &&
-        home.x < layout.roomBounds.x + layout.roomBounds.w &&
-        home.y >= layout.roomBounds.y &&
-        home.y < layout.roomBounds.y + layout.roomBounds.h,
+    const safeRooms = new SafeRoomSystem(map, SAFE_ROOM_SCOPE);
+    const roomId = safeRoomIdIn(SAFE_ROOM_SCOPE, layout.safeRoomIndex);
+    const daveHome = safeRooms.guidePlacement(roomId)?.home;
+    if (daveHome === undefined) return [];
+    const dave = new DaveGuideSystem(
+      {
+        safeRooms,
+        conversation,
+        whereabouts: new DaveWhereabouts(),
+        camera: () => ({ x: 0, y: 0 }),
+        audio: null,
+      },
+      roomId,
     );
-    if (mordecaiHome === undefined) return [];
     return [
       {
-        room: { map, bounds: layout.roomBounds, bopcaHome: layout.bopcaHomeTile, mordecaiHome },
+        room: { map, bounds: layout.roomBounds, bopcaHome: layout.bopcaHomeTile, daveHome },
         bopca,
-        safeRoom,
+        dave,
         conversation,
       },
     ];
@@ -362,22 +375,22 @@ function roomsOf(
 
 function verifySafeRooms(): void {
   console.log(
-    '\nreal safe rooms: walking off the Bopca and Mordecai, and turning from one to the other',
+    '\nreal safe rooms: walking off the Bopca and Dave, and turning from one to the other',
   );
   const tally: SafeRoomTally = {
     rooms: 0,
     bopcaWalkAways: 0,
-    mordecaiWalkAways: 0,
+    daveWalkAways: 0,
     handOffs: 0,
     closeTogetherHandOffs: 0,
     overlappingHandOffs: 0,
   };
   const bopcaCloseAt = promisedCloseTiles(BOPCA_TALK_DISTANCE_TILES);
-  const mordecaiCloseAt = promisedCloseTiles(SafeRoomSystem.MORDECAI_NEAR_DISTANCE);
-  const line = say.line('Mordecai has a word for you.');
+  const daveCloseAt = promisedCloseTiles(DAVE_NEAR_DISTANCE_TILES);
+  const line = say.line('Dave has a word for you.');
 
   for (const seed of SEEDS) {
-    for (const { room, bopca, safeRoom, conversation } of roomsOf(seed)) {
+    for (const { room, bopca, dave, conversation } of roomsOf(seed)) {
       tally.rooms++;
       const label = `seed ${seed}, room at ${room.bounds.x},${room.bounds.y}`;
       const allTiles: Point[] = [];
@@ -387,9 +400,9 @@ function verifySafeRooms(): void {
         }
       }
       // The floor the party can actually stand on: everything reachable from
-      // Mordecai's home. The galley behind the counter is walkable but sealed
+      // Dave's home. The galley behind the counter is walkable but sealed
       // off by the counter itself, and a walk that starts in it goes nowhere.
-      const partyFloor = pathsFrom(room, room.mordecaiHome);
+      const partyFloor = pathsFrom(room, room.daveHome);
       // Where a player orders from: the tile on that floor nearest the Bopca
       // that a press reaches her from.
       const orderingTiles = allTiles
@@ -430,46 +443,44 @@ function verifySafeRooms(): void {
         conversation.close();
       }
 
-      // ── Walk away from Mordecai ──
+      // ── Walk away from Dave ──
       {
-        const mordecaiTiles = allTiles
-          .filter((tile) => tilesBetween(tile, room.mordecaiHome) <= MORDECAI_PRESS_TILES)
-          .sort((a, b) => tilesBetween(a, room.mordecaiHome) - tilesBetween(b, room.mordecaiHome));
-        const talkFrom = mordecaiTiles.find(
-          (tile) => !(tile.x === room.mordecaiHome.x && tile.y === room.mordecaiHome.y),
+        const daveTiles = allTiles
+          .filter((tile) => tilesBetween(tile, room.daveHome) <= DAVE_PRESS_TILES)
+          .sort((a, b) => tilesBetween(a, room.daveHome) - tilesBetween(b, room.daveHome));
+        const talkFrom = daveTiles.find(
+          (tile) => !(tile.x === room.daveHome.x && tile.y === room.daveHome.y),
         );
         if (talkFrom !== undefined) {
           const { human, cat } = playerAt(talkFrom);
-          safeRoom.openMordecaiLine(human, line);
-          check(safeRoom.mordecaiDialogOpen, `${label}: Mordecai's box opens`);
+          dave.openLine(human, line);
+          check(dave.dialogOpen, `${label}: Dave's box opens`);
           standStill(human, cat, conversation, bopca);
-          check(safeRoom.mordecaiDialogOpen, `${label}: standing by Mordecai keeps his box open`);
+          check(dave.dialogOpen, `${label}: standing by Dave keeps his box open`);
           const fromHere = pathsFrom(room, talkFrom);
           const farthest = [...fromHere.values()]
             .map((path) => path[path.length - 1])
-            .filter((tile) => tilesBetween(tile, room.mordecaiHome) > mordecaiCloseAt + 1)
-            .sort(
-              (a, b) => tilesBetween(b, room.mordecaiHome) - tilesBetween(a, room.mordecaiHome),
-            )[0];
+            .filter((tile) => tilesBetween(tile, room.daveHome) > daveCloseAt + 1)
+            .sort((a, b) => tilesBetween(b, room.daveHome) - tilesBetween(a, room.daveHome))[0];
           if (farthest !== undefined) {
-            tally.mordecaiWalkAways++;
+            tally.daveWalkAways++;
             const closed: { atTiles: number | null } = { atTiles: null };
             walk(fromHere.get(tileKey(farthest)) ?? [], human, cat, conversation, bopca, () => {
-              if (safeRoom.mordecaiDialogOpen) return false;
-              closed.atTiles = tilesFromPlayer(human, room.mordecaiHome);
+              if (dave.dialogOpen) return false;
+              closed.atTiles = tilesFromPlayer(human, room.daveHome);
               return true;
             });
             const closedAtTiles = closed.atTiles;
             check(
-              closedAtTiles !== null && closedAtTiles <= mordecaiCloseAt + ONE_STEP_TILES,
-              `${label}: walking off closes Mordecai's box by ${mordecaiCloseAt.toFixed(1)} tiles (closed at ${closedAtTiles === null ? 'never' : closedAtTiles.toFixed(2)})`,
+              closedAtTiles !== null && closedAtTiles <= daveCloseAt + ONE_STEP_TILES,
+              `${label}: walking off closes Dave's box by ${daveCloseAt.toFixed(1)} tiles (closed at ${closedAtTiles === null ? 'never' : closedAtTiles.toFixed(2)})`,
             );
           }
           conversation.close();
         }
       }
 
-      // ── From the counter to Mordecai ──
+      // ── From the counter to Dave ──
       {
         // The tile a player walks up to him on: the one beside him nearest the
         // counter. Chosen by the room's shape alone, not by who the game thinks
@@ -477,10 +488,10 @@ function verifySafeRooms(): void {
         // is tested as the player meets it.
         const pressTile = allTiles
           .filter((tile) => paths.has(tileKey(tile)))
-          .filter((tile) => tilesBetween(tile, room.mordecaiHome) === 1)
+          .filter((tile) => tilesBetween(tile, room.daveHome) === 1)
           .sort((a, b) => tilesBetween(a, orderFrom) - tilesBetween(b, orderFrom))[0];
         if (pressTile === undefined) {
-          check(false, `${label}: Mordecai can be walked up to from the counter`);
+          check(false, `${label}: Dave can be walked up to from the counter`);
           continue;
         }
         const { human, cat } = playerAt(orderFrom);
@@ -490,10 +501,10 @@ function verifySafeRooms(): void {
         const bopcaBoxStillUp = bopca.isDialogOpen;
         const stillInBopcaRange = bopca.interactionDistanceTiles(human) !== null;
         const trySafeRoomPress = (): boolean => {
-          const speaker = safeRoomSpeakerFor(bopca, safeRoom, human);
+          const speaker = safeRoomSpeakerFor(bopca, dave, human);
           if (speaker === 'bopca') return bopca.tryInteract(human);
-          if (speaker === 'mordecai') {
-            safeRoom.openMordecaiLine(human, line);
+          if (speaker === 'dave') {
+            dave.openLine(human, line);
             return true;
           }
           return false;
@@ -502,16 +513,16 @@ function verifySafeRooms(): void {
         // box up, offered to the room first and then to the box; with none,
         // straight to the room.
         if (conversation.isOpen) {
-          const pressIsForSomeoneElse = safeRoomPressLeavesSpeaker(bopca, safeRoom, human);
+          const pressIsForSomeoneElse = safeRoomPressLeavesSpeaker(bopca, dave, human);
           const handedOff = conversation.handOff(human, pressIsForSomeoneElse, trySafeRoomPress);
           if (!handedOff) conversation.advance();
         } else {
           trySafeRoomPress();
         }
-        const reached = safeRoom.mordecaiDialogOpen && !bopca.isDialogOpen;
+        const reached = dave.dialogOpen && !bopca.isDialogOpen;
         check(
           reached,
-          `${label}: walking from the counter to Mordecai (${tilesBetween(room.bopcaHome, room.mordecaiHome).toFixed(1)} tiles apart) and pressing talk opens him`,
+          `${label}: walking from the counter to Dave (${tilesBetween(room.bopcaHome, room.daveHome).toFixed(1)} tiles apart) and pressing talk opens him`,
         );
         tally.handOffs++;
         if (bopcaBoxStillUp) tally.closeTogetherHandOffs++;
@@ -522,7 +533,7 @@ function verifySafeRooms(): void {
   }
 
   console.log(
-    `\n  ${tally.rooms} rooms; ${tally.bopcaWalkAways} Bopca walk-aways, ${tally.mordecaiWalkAways} Mordecai walk-aways, ${tally.handOffs} counter-to-Mordecai walks (${tally.closeTogetherHandOffs} with the Bopca's box still up on arrival, ${tally.overlappingHandOffs} still inside her talk range)`,
+    `\n  ${tally.rooms} rooms; ${tally.bopcaWalkAways} Bopca walk-aways, ${tally.daveWalkAways} Dave walk-aways, ${tally.handOffs} counter-to-Dave walks (${tally.closeTogetherHandOffs} with the Bopca's box still up on arrival, ${tally.overlappingHandOffs} still inside her talk range)`,
   );
   // A gate that found no room to walk in passes vacuously; insist it found each case.
   check(tally.rooms > 0, 'the seeds generated safe rooms to test in');
@@ -530,17 +541,14 @@ function verifySafeRooms(): void {
     tally.bopcaWalkAways > 0,
     'at least one room was big enough to walk off the Bopca inside it',
   );
-  check(
-    tally.mordecaiWalkAways > 0,
-    'at least one room was big enough to walk off Mordecai inside it',
-  );
+  check(tally.daveWalkAways > 0, 'at least one room was big enough to walk off Dave inside it');
   check(
     tally.closeTogetherHandOffs > 0,
-    'at least one room put Mordecai close enough to the counter that the Bopca box was still up on reaching him',
+    'at least one room put Dave close enough to the counter that the Bopca box was still up on reaching him',
   );
   check(
     tally.overlappingHandOffs > 0,
-    "at least one room put the tile beside Mordecai inside the Bopca's own talk range",
+    "at least one room put the tile beside Dave inside the Bopca's own talk range",
   );
 }
 

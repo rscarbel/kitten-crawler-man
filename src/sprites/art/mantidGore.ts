@@ -16,7 +16,7 @@
  *
  * The pieces are chosen for **silhouette**, not for anatomy. Eight cells
  * tumbling past at 16 px must not read as eight identical chips, so the set is
- * spread across a hooked and spined raptorial arm (nothing else in the bestiary
+ * spread across a hooked and spined grasping arm (nothing else in the bestiary
  * drops anything remotely that shape), a triangular head trailing one antenna,
  * a long straight column (the pronotum), a fat segmented cone (the abdomen), a
  * ragged flat sheet (a wing case), a thin zigzag stick (a walking leg), a coiled
@@ -285,11 +285,11 @@ export function mantidGorePieces(): readonly MantidGorePiece[] {
   const armSeed = nextSeed();
   const armWoundSeed = nextSeed();
   /**
-   * The severed raptorial arm, still folded shut. It is the most identifiable
+   * The severed grasping arm, still folded shut. It is the most identifiable
    * thing this creature owns, so it is the first piece and it keeps its spines.
    */
-  const raptorialArm: MantidGorePiece = {
-    state: 'gore_raptorial_arm',
+  const graspingArm: MantidGorePiece = {
+    state: 'gore_grasping_arm',
     paint: (ctx, build) => {
       const FEMUR_A: Pt = { x: -0.13, y: 0.06 };
       const FEMUR_B: Pt = { x: 0.12, y: -0.04 };
@@ -782,5 +782,5 @@ export function mantidGorePieces(): readonly MantidGorePiece[] {
     },
   };
 
-  return [raptorialArm, head, pronotum, abdomen, wingCase, walkingLeg, gut, plate];
+  return [graspingArm, head, pronotum, abdomen, wingCase, walkingLeg, gut, plate];
 }

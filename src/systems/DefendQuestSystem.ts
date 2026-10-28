@@ -770,7 +770,7 @@ export class DefendQuestSystem implements GameSystem {
    *
    * Claims the press whenever a grate in reach needs work, even without the
    * boards for it — the refusal is itself the answer to the press, and the
-   * same key would otherwise summon Mongo out of the player's hands.
+   * same key would otherwise summon Deinonychus out of the player's hands.
    */
   tryBuildBarrier(builder: HumanPlayer | CatPlayer): boolean {
     if (this.phase !== 'defending' && this.phase !== 'countdown') return false;

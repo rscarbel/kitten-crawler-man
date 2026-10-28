@@ -556,8 +556,8 @@ export abstract class GoblinBomber extends Mob implements BombThrower, SiegeLobb
    */
   protected override rollLootItems(killer: Player | null): LootDrop['items'] {
     const items = super.rollLootItems(killer);
-    // A thrower's book on staying out of a blast's way.
-    maybeDropSkillBook(items, 'skill_book_cat_reflexes');
+    // A thrower's books: on the blast itself, and on staying out of its way.
+    maybeDropSkillBook(items, 'bomber');
     items.push({
       id: this.carriedExplosive,
       quantity: randomInt(BOMBER_LOOT_MIN_QUANTITY, BOMBER_LOOT_MAX_QUANTITY),

@@ -16,19 +16,31 @@
  */
 
 import type { Rect } from './core/geom';
+import { prefersReducedMotion } from './core/reducedMotion';
 import { drawQuestIcon } from './QuestIcon';
 import { chromeTarget } from './screens/dialogs/canvasChrome';
 import { TERMINAL_FONT_STACK, UI_FONT_STACK } from './theme/fonts';
 import { skinsFor } from './theme/skins';
 import { fontFor, type, type Theme } from './theme/tokens';
 import { drawGlass, fillRounded, strokeRounded, type PaintTarget } from './widgets/paint';
+import {
+  CAROLINE_CHIME,
+  CAROLINE_PREFIX,
+  carolineHeader,
+  carolineHeaderHeight,
+  carolineOpenAt,
+  paintCarolineFrame,
+  paintCarolineLines,
+  withCarolineOpen,
+  type CarolineLine,
+} from './widgets/carolineFrame';
 import { measureText, text as drawLabel } from './widgets/text';
 import type { AudioManager } from '../audio/AudioManager';
 import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { allocCanvas, surfaceContext } from '../core/rendering/canvasSurface';
 import type { Paragraphs } from '../dialog/line';
 import { computeLineSpans, paginate, splitSentences, type Page } from '../dialog/paginate';
-import type { SpeakerTypeface, SpeakerVoice, TextCase } from '../dialog/speakers';
+import type { SpeakerSkin, SpeakerTypeface, SpeakerVoice, TextCase } from '../dialog/speakers';
 
 let measuringCtx: CanvasRenderingContext2D | null = null;
 
@@ -140,6 +152,7 @@ export interface ResolvedSpeaker {
   readonly revealIntervalMs: number;
   /** Omitted means the UI face. */
   readonly typeface?: SpeakerTypeface;
+  readonly skin: SpeakerSkin;
 }
 
 export interface DialogBoxConfig {
@@ -180,12 +193,32 @@ export function countDisplayPages(
   paragraphs: Paragraphs,
   showFooterHint: boolean,
   typeface: SpeakerTypeface = 'ui',
+  skin: SpeakerSkin = 'standard',
 ): number {
   const { maxWidth, maxLines } = layoutBudget(showFooterHint);
   const ctx = measuringContext();
   ctx.font = bodyFont(typeface);
   const measure = (line: string): number => ctx.measureText(line).width;
-  return paginate(paragraphs, measure, maxWidth, maxLines).length;
+  return paginate(framedParagraphs(paragraphs, skin), measure, maxWidth, maxLines).length;
+}
+
+/**
+ * The paragraphs as the box sets them in `skin`: Caroline's frame opens her
+ * text with her prefix, laid out with it so a page never overflows.
+ */
+function framedParagraphs(paragraphs: Paragraphs, skin: SpeakerSkin): Paragraphs {
+  switch (skin) {
+    case 'standard':
+      return paragraphs;
+    case 'caroline': {
+      const [first, ...rest] = paragraphs;
+      return [`${CAROLINE_PREFIX}${first}`, ...rest];
+    }
+    default: {
+      const unhandled: never = skin;
+      return unhandled;
+    }
+  }
 }
 
 /**
@@ -278,6 +311,13 @@ export class DialogBox {
   private _lastRevealTime = 0;
   /** Whether this line's voice clip has already played — reset only by `show()`, so a line split across several display pages speaks once. */
   private _voiceSpoken = false;
+  /**
+   * When the box last appeared from hidden or changed skin; a frame that
+   * unfolds as it opens runs from here, not from each line. A skip finishes
+   * the unfold with the text.
+   */
+  private _openedAtMs = 0;
+  private _reducedMotion = false;
   private _pageIndicator: (() => string | null) | null = null;
 
   constructor(audio: AudioManager | null, config: DialogBoxConfig) {
@@ -299,7 +339,13 @@ export class DialogBox {
 
   /** Begin showing a line. Resets any in-progress animation and starts from its first display page. */
   show(paragraphs: Paragraphs, speaker: ResolvedSpeaker, options: ShowOptions): void {
-    this._paragraphs = applyTextCase(paragraphs, speaker.textCase);
+    const skinChanged = this._speaker?.skin !== speaker.skin;
+    if (!this._visible || skinChanged) {
+      this._openedAtMs = performance.now();
+      this._reducedMotion = prefersReducedMotion();
+      if (speaker.skin === 'caroline') this._audio?.play(CAROLINE_CHIME, { bus: 'ui' });
+    }
+    this._paragraphs = framedParagraphs(applyTextCase(paragraphs, speaker.textCase), speaker.skin);
     this._speaker = speaker;
     this._visible = true;
     this._questRelated = options.questRelated;
@@ -390,6 +436,7 @@ export class DialogBox {
   skipToEnd(): void {
     this._sync();
     this._revealedCount = this._tokens.length;
+    this._openedAtMs = Number.NEGATIVE_INFINITY;
   }
 
   /**
@@ -431,16 +478,92 @@ export class DialogBox {
     ctx.save();
     if (alpha < 1) ctx.globalAlpha = alpha;
 
-    drawGlass(target, { x: dx, y: dy, w: dw, h: this._height }, skinsFor(target.theme).panel.card);
-
-    this._renderSpeakerRow(target, dx, dy);
-    this._renderBodyText(target, dx, dy, dw);
-    this._renderFooterHint(target, dx, dy, dw);
-    if (this._questRelated) {
-      drawQuestIcon(ctx, dx + dw - QUEST_ICON_MARGIN, dy + QUEST_ICON_MARGIN, QUEST_ICON_SIZE);
+    const skin = this._speaker.skin;
+    switch (skin) {
+      case 'standard':
+        this._renderStandard(target, dx, dy, dw);
+        break;
+      case 'caroline':
+        this._renderCaroline(target, dx, dy, dw);
+        break;
+      default: {
+        const unhandled: never = skin;
+        throw new Error(`DialogBox: no renderer for skin ${String(unhandled)}`);
+      }
     }
 
     ctx.restore();
+  }
+
+  private _renderStandard(target: PaintTarget, dx: number, dy: number, dw: number): void {
+    const rect = { x: dx, y: dy, w: dw, h: this._height };
+    drawGlass(target, rect, skinsFor(target.theme).panel.card);
+    this._renderSpeakerRow(target, dx, dy);
+    this._renderBodyText(target, dx, dy, dw);
+    this._renderFooterHint(target, dx, dy, dw);
+    this._renderQuestIcon(target, dx, dy, dw);
+  }
+
+  /** Caroline's terminal frame: it unfolds as the box first opens and her text decodes in. */
+  private _renderCaroline(target: PaintTarget, dx: number, dy: number, dw: number): void {
+    const rect = { x: dx, y: dy, w: dw, h: this._height };
+    const nowMs = performance.now();
+    const open = carolineOpenAt(target.theme, nowMs - this._openedAtMs, this._reducedMotion);
+    withCarolineOpen(target, rect, open, () => {
+      paintCarolineFrame(target, rect, { nowMs });
+      carolineHeader(
+        target,
+        {
+          x: dx + DIALOG_PADDING,
+          y: dy + SPEAKER_ROW_Y,
+          w: dw - DIALOG_PADDING * 2,
+          h: carolineHeaderHeight(target.theme),
+        },
+        nowMs,
+      );
+      this._renderCarolineBody(target, dx, dy, dw, nowMs);
+      this._renderFooterHint(target, dx, dy, dw);
+      this._renderQuestIcon(target, dx, dy, dw);
+    });
+  }
+
+  private _renderCarolineBody(
+    target: PaintTarget,
+    dx: number,
+    dy: number,
+    dw: number,
+    nowMs: number,
+  ): void {
+    const page = this._currentPage();
+    if (page === null) return;
+    const textAreaWidth = dw - DIALOG_PADDING * 2;
+    let searchFrom = 0;
+    const lines: CarolineLine[] = wrapBodyLines(page.text, textAreaWidth, this._typeface).map(
+      (line) => {
+        const found = page.text.indexOf(line, searchFrom);
+        const start = found === -1 ? searchFrom : found;
+        searchFrom = start + line.length;
+        return { text: line, start };
+      },
+    );
+    // Tokens are code points but her painter counts UTF-16 units, as `page.text` does.
+    const total = page.text.length;
+    const shown = this._tokens.slice(0, this._revealedCount).join('').length;
+    const decodeTail = skinsFor(target.theme).caroline.decodeTail;
+    const decoding = this._reducedMotion || shown >= total ? 0 : Math.min(decodeTail, shown);
+    const opensWithPrefix = page.startOffset === 0;
+    paintCarolineLines(target, dx + DIALOG_PADDING, dy + TEXT_AREA_Y, lines, {
+      reveal: { shown, decoding },
+      nowMs,
+      prefixEnd: opensWithPrefix ? CAROLINE_PREFIX.length : 0,
+      total,
+      style: BODY_STYLE,
+    });
+  }
+
+  private _renderQuestIcon(target: PaintTarget, dx: number, dy: number, dw: number): void {
+    if (!this._questRelated) return;
+    drawQuestIcon(target.ctx, dx + dw - QUEST_ICON_MARGIN, dy + QUEST_ICON_MARGIN, QUEST_ICON_SIZE);
   }
 
   /**

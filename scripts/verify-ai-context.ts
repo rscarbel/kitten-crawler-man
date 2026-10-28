@@ -6,8 +6,8 @@
  * snapshot differ must send a full state first, then patches, never faster
  * than its interval and never when nothing changed. `context_set` must go out
  * only when the session or its flags change. Kills must arrive rolled up per
- * fight and dodges sampled, Mordecai must perceive only what happens in front
- * of him while the System perceives everything, a party sitting on potions at
+ * fight and dodges sampled, Dave must perceive only what happens in front
+ * of him while Caroline perceives everything, a party sitting on potions at
  * low HP must be reported, a new floor must raise a reflection-worthy event,
  * and the SDK transport must hand the client the whole state the patches
  * describe.
@@ -22,7 +22,7 @@ import { makePoison } from '../src/core/combat/StatusEffect';
 import { PlayerManager } from '../src/core/party/PlayerManager';
 import { Mob } from '../src/creatures/Mob';
 import type { Player } from '../src/Player';
-import { MORDECAI_CHARACTER_NAME, SYSTEM_CHARACTER_NAME } from '../src/ai/characters';
+import { DAVE_CHARACTER_NAME, CAROLINE_CHARACTER_NAME } from '../src/ai/characters';
 import { AIContextBuilder, type ContextMessage } from '../src/ai/context/AIContextBuilder';
 import {
   DODGE_SAMPLE_WINDOW_MS,
@@ -49,6 +49,7 @@ import type {
   SessionInput,
 } from '../src/ai/context/types';
 import { StatusChangeWatcher } from '../src/systems/statusChangeEvents';
+import { PetNameBook } from '../src/core/party/petNames';
 
 const SNAPSHOT_INTERVAL_MS = 1_000;
 const HALF_INTERVAL_MS = 500;
@@ -69,7 +70,7 @@ const POTIONS_HELD = 3;
 const STOCKPILING_WAIT_MS = 9_000;
 const BATCH_LIMIT = 3;
 const MANY_EVENTS = 7;
-/** The safe-room fight, the death and the cat's potion: all Mordecai saw in the witness-scoping run. */
+/** The safe-room fight, the death and the cat's potion: all Dave saw in the witness-scoping run. */
 /** The events the witness-scoping test emits: a corridor fight, a safe-room fight, a boss fight, a death. */
 const SCOPING_EVENTS = 4;
 const WITNESSED_IN_SCOPING_TEST = 3;
@@ -241,6 +242,7 @@ function crawler(name: CrawlerName, active: boolean): CrawlerState {
 }
 
 class FakeScene implements AIContextSource {
+  readonly petNames = new PetNameBook();
   session: SessionInput = {
     floorNumber: 1,
     levelId: 'level1',
@@ -453,7 +455,7 @@ function verifyContextChangeDetection(): void {
     'state patches are held to the snapshot interval',
   );
 
-  builder.recordPlayerMessage(SYSTEM_CHARACTER_NAME);
+  builder.recordPlayerMessage(CAROLINE_CHARACTER_NAME);
   advance(PROFILE_INTERVAL_MS);
   const profiled = itemAt(ofType(builder.tick(), 'context_set'), 0);
   check(
@@ -468,16 +470,13 @@ function verifyWitnessScoping(): void {
   section('witness scoping');
   check(
     perceiversOf('never', true) === undefined,
-    'a never-witnessed event is the omniscient System’s alone',
+    'a never-witnessed event is the omniscient Caroline’s alone',
   );
-  check(
-    perceiversOf('inSafeRoom', false) === undefined,
-    'outside a safe room Mordecai sees nothing',
-  );
+  check(perceiversOf('inSafeRoom', false) === undefined, 'outside a safe room Dave sees nothing');
   const inside = perceiversOf('inSafeRoom', true) ?? [];
   check(
-    inside.includes(MORDECAI_CHARACTER_NAME) && inside.includes(SYSTEM_CHARACTER_NAME),
-    'inside one he and the System both do',
+    inside.includes(DAVE_CHARACTER_NAME) && inside.includes(CAROLINE_CHARACTER_NAME),
+    'inside one he and Caroline both do',
   );
 
   const { bus, scene, builder, pm } = makeRig();
@@ -492,16 +491,13 @@ function verifyWitnessScoping(): void {
   const [outside, inSafe, boss, died] = Array.from({ length: SCOPING_EVENTS }, (_, index) =>
     itemAt(events, index),
   );
-  check(outside?.witnessedBy === undefined, 'a fight in a corridor is not witnessed by Mordecai');
+  check(outside?.witnessedBy === undefined, 'a fight in a corridor is not witnessed by Dave');
   check(
-    inSafe?.witnessedBy?.includes(MORDECAI_CHARACTER_NAME) === true,
+    inSafe?.witnessedBy?.includes(DAVE_CHARACTER_NAME) === true,
     'the same event in a safe room is',
   );
   check(boss?.witnessedBy === undefined, 'a boss fight is never his to see');
-  check(
-    died?.witnessedBy?.includes(MORDECAI_CHARACTER_NAME) === true,
-    'a death always reaches him',
-  );
+  check(died?.witnessedBy?.includes(DAVE_CHARACTER_NAME) === true, 'a death always reaches him');
   check(
     events.every(
       (event) =>
@@ -519,16 +515,16 @@ function verifyWitnessScoping(): void {
   const catDrank = itemAt(drinks, 0);
   const humanDrank = itemAt(drinks, 1);
   check(
-    catDrank?.witnessedBy?.includes(MORDECAI_CHARACTER_NAME) === true &&
+    catDrank?.witnessedBy?.includes(DAVE_CHARACTER_NAME) === true &&
       humanDrank?.witnessedBy === undefined,
     'witnessing follows the crawler it happened to, not the one being driven',
   );
-  const briefing = builder.witnessedHighlights(MORDECAI_CHARACTER_NAME, MANY_EVENTS);
+  const briefing = builder.witnessedHighlights(DAVE_CHARACTER_NAME, MANY_EVENTS);
   check(
     itemAt(briefing, 0)?.summary === catDrank?.summary &&
       briefing.length === WITNESSED_IN_SCOPING_TEST &&
       briefing.every((line) => line.summary !== humanDrank?.summary),
-    'Mordecai is briefed only on what he witnessed, newest first',
+    'Dave is briefed only on what he witnessed, newest first',
   );
 }
 
@@ -618,7 +614,7 @@ function verifyDerivedEvents(): void {
     'a new floor raises a landmark floorEntered event',
   );
   check(
-    floorEntered?.witnessedBy?.includes(MORDECAI_CHARACTER_NAME) === true,
+    floorEntered?.witnessedBy?.includes(DAVE_CHARACTER_NAME) === true,
     'which every character hears',
   );
   const arrivalContext = itemAt(ofType(arrival, 'context_set'), 0);
@@ -722,7 +718,7 @@ function verifySdkTransport(): void {
       sentContext.allowedSeverities?.join() === 'benign',
     'context, flags and intensity ride along unchanged',
   );
-  const event: GameEvent = { ts: 1, type: 't', data: {}, witnessedBy: ['Mordecai'] };
+  const event: GameEvent = { ts: 1, type: 't', data: {}, witnessedBy: ['Dave'] };
   transport.send([{ type: 'event_log', payload: { events: [event] } }]);
   check(eventBatches[0]?.[0] === event, 'events pass through unchanged');
   transport.reset();

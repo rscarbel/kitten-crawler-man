@@ -22,7 +22,7 @@ import {
   TUTORIAL_GATE_G3,
   TUTORIAL_GOBLIN_B_DOOR,
   TUTORIAL_GATE_SAFE_ENTRANCE,
-  TUTORIAL_GATE_SMUSH,
+  TUTORIAL_GATE_SEISMIC_STOMP,
 } from '../map/TutorialMap';
 import {
   GATE_DUST_FRAMES,
@@ -45,7 +45,7 @@ import {
 import type { TownPropRenderable } from './townPropRenderable';
 import type { TutorialCue, TutorialCueAt } from './tutorialSoundCues';
 
-export type TutorialGateId = 'safeEntrance' | 'g1' | 'smush' | 'fence' | 'goblinB' | 'g3';
+export type TutorialGateId = 'safeEntrance' | 'g1' | 'seismic_stomp' | 'fence' | 'goblinB' | 'g3';
 
 /** Which crawler walking up to a gate makes it open. */
 type GateCrawler = 'human' | 'cat' | 'either';
@@ -206,21 +206,21 @@ const GATE_DEFS: readonly GateDef[] = [
     northClamp('cat', TUTORIAL_GATE_G1),
   ]),
   {
-    id: 'smush',
+    id: 'seismic_stomp',
     kind: 'side',
     crawler: 'human',
     opens: 'approach',
-    x1: TUTORIAL_GATE_SMUSH.x,
-    y1: TUTORIAL_GATE_SMUSH.y1,
-    x2: TUTORIAL_GATE_SMUSH.x,
-    y2: TUTORIAL_GATE_SMUSH.y2,
+    x1: TUTORIAL_GATE_SEISMIC_STOMP.x,
+    y1: TUTORIAL_GATE_SEISMIC_STOMP.y1,
+    x2: TUTORIAL_GATE_SEISMIC_STOMP.x,
+    y2: TUTORIAL_GATE_SEISMIC_STOMP.y2,
     clamps: [
       {
         who: 'human',
         axis: 'x',
         bound: 'min',
-        limitPx: TUTORIAL_GATE_SMUSH.clampPxX,
-        ...bandY(TUTORIAL_GATE_SMUSH.y1, TUTORIAL_GATE_SMUSH.y2),
+        limitPx: TUTORIAL_GATE_SEISMIC_STOMP.clampPxX,
+        ...bandY(TUTORIAL_GATE_SEISMIC_STOMP.y1, TUTORIAL_GATE_SEISMIC_STOMP.y2),
       },
     ],
   },

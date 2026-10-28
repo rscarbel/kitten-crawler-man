@@ -330,7 +330,7 @@ export class LavaBallSystem implements GameSystem, GroundHazardSource {
   /**
    * Everything this bolt can hit.
    *
-   * The two players plus the scene's extra player-like targets (Mongo, hired
+   * The two players plus the scene's extra player-like targets (Deinonychus, hired
    * mercenaries) plus whatever the llama was actually aiming at. Restricted to
    * the players alone, a llama fighting a mercenary winds up, fires, and puts
    * the ball straight through them into the far wall — forever, because it

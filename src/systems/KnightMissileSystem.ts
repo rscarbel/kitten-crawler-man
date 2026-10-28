@@ -127,6 +127,7 @@ export class KnightMissileSystem implements GameSystem {
             kind: 'mob',
             mobType: released.mobType,
             attackType: KNIGHT_MISSILE_ATTACK_TYPE,
+            magic: true,
           }),
           owner: mob,
           age: 0,
@@ -192,7 +193,7 @@ export class KnightMissileSystem implements GameSystem {
 
   /**
    * Everything a bolt can hit: the two players plus the scene's extra
-   * player-like targets (Mongo, hired mercenaries).
+   * player-like targets (Deinonychus, hired mercenaries).
    */
   private targetsFor(ctx: SystemContext): readonly Player[] {
     const targets: Player[] = [ctx.human, ctx.cat];

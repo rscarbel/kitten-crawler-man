@@ -40,6 +40,7 @@ import {
 } from '../core/save/WheelLedger';
 import { CatPlayer } from '../creatures/CatPlayer';
 import { pickDonaldLine, type DonaldTrigger } from '../dialog/scripts/donald';
+import { petWords, type PetName, type PetNames, type PetWords } from '../core/party/petNames';
 import type { DonaldBustPose } from '../sprites/donaldSprite';
 import type { Surface, Ui } from '../ui/core/UiRoot';
 import type { ToastTone } from '../ui/hud/toasts';
@@ -115,6 +116,19 @@ export const WHEEL_SPIN_HOLD_MS = 1000;
 /** The key that holds SPIN from the keyboard. */
 export const WHEEL_SPIN_KEY = ' ';
 
+/** The run's pets as the wheel speaks of them and names the cow it gives. */
+export interface WheelPets {
+  readonly petNames: PetNames;
+  /** Asks for the attack cow's name unless she has one, then runs `next`. */
+  nameAttackCow(next: () => void): void;
+}
+
+/** For a review wheel, where no pet is ever named and nothing is asked. */
+export const UNNAMED_WHEEL_PETS: WheelPets = {
+  petNames: { nameOf: () => null },
+  nameAttackCow: (next) => next(),
+};
+
 export interface ClubWheelDeps {
   readonly audio: AudioManager | null;
   /** Where the klaxon and heartbeat loops run, faded out with the scene. */
@@ -128,6 +142,7 @@ export interface ClubWheelDeps {
   readonly afterPermanentDeath: () => void;
   /** Gives the human crawler the attack cow and stands her beside him; her arrival moo is the grant's own. */
   readonly grantAttackCow: () => void;
+  readonly pets: WheelPets;
   /** A notice for the scene's toasts. */
   readonly onNotice?: (message: string, tone: ToastTone) => void;
   readonly clock?: () => number;
@@ -347,11 +362,15 @@ function plural(name: string): string {
  * The line under the landing banner: what the prize paid and to whom, never
  * the banner's own title over again.
  */
-function prizeLine(wedge: WheelWedge, effect: WheelPrizeEffect, recipient: WheelCrawler): string {
+function prizeLine(
+  wedge: WheelWedge,
+  effect: WheelPrizeEffect,
+  recipient: WheelCrawler,
+  cowName: PetName | null,
+): string {
   const name = crawlerFormalName(recipient);
   const { prize } = wedge;
-  if (prize.kind === 'pet')
-    return `An attack cow of his very own for ${crawlerFormalName('human')}`;
+  if (prize.kind === 'pet') return attackCowPrizeLine(cowName);
   if (prize.kind === 'gold') return `Paid straight into ${name}'s purse`;
   if (prize.kind === 'take_damage') return `${name} loses ${effect.hpLost} HP`;
   if (prize.kind === 'heal_and_gold') {
@@ -363,6 +382,17 @@ function prizeLine(wedge: WheelWedge, effect: WheelPrizeEffect, recipient: Wheel
   );
   const coins = effect.coinsWon > 0 ? [`${effect.coinsWon.toLocaleString()} coins`] : [];
   return `For ${name}: ${[...names, ...coins].join(' and ')}`;
+}
+
+/**
+ * The cow is named once her banner is down, so her own name reaches this
+ * line only when the run named her before she was won.
+ */
+function attackCowPrizeLine(cowName: PetName | null): string {
+  const owner = crawlerFormalName('human');
+  return cowName === null
+    ? `An attack cow of his very own for ${owner}`
+    : `${cowName}, an attack cow of his very own for ${owner}`;
 }
 
 /** What a single named item does, for under the prize screen's title. */
@@ -1177,7 +1207,12 @@ export class ClubWheelSystem implements WheelGameHost {
         durationMs: REVEAL_MS[effectKind],
         itemRarity: effect.rarity,
         items: effect.items,
-        prizeLine: prizeLine(wedge, effect, spin.recipientKind),
+        prizeLine: prizeLine(
+          wedge,
+          effect,
+          spin.recipientKind,
+          this.deps.pets.petNames.nameOf('attackCow'),
+        ),
         coinsTaken: effect.coinsTaken,
         coinsWon: effect.coinsWon,
         purseBefore: purseAfter + effect.coinsTaken - effect.coinsWon,
@@ -1202,9 +1237,17 @@ export class ClubWheelSystem implements WheelGameHost {
     this.finishReveal();
   }
 
-  /** Raises the item prize screen over the wheel; false for a prize with no items to show. */
+  /**
+   * Raises what follows the landing banner: the name prompt for a cow just
+   * won, or the item prize screen. False when nothing follows.
+   */
   private presentPrize(phase: Extract<WheelPhase, { kind: 'revealing' }>): boolean {
     const { reveal } = phase;
+    if (reveal.effect === 'pet') {
+      phase.prizeShown = true;
+      this.deps.pets.nameAttackCow(() => this.finishReveal());
+      return true;
+    }
     if (reveal.itemRarity !== null && reveal.items.length > 0) {
       phase.prizeShown = true;
       const items = reveal.items.map(({ id, quantity }): GrantedLine => ({
@@ -1361,8 +1404,12 @@ export class ClubWheelSystem implements WheelGameHost {
 
   // ── Donald ───────────────────────────────────────────────────────────────
 
+  private get cowWords(): PetWords {
+    return petWords(this.deps.pets.petNames, 'attackCow');
+  }
+
   private say(trigger: DonaldTrigger): void {
-    this.donaldLine = pickDonaldLine(trigger, this.donaldLine, this.donaldRandom);
+    this.donaldLine = pickDonaldLine(trigger, this.donaldLine, this.cowWords, this.donaldRandom);
     this.donaldLineAt = this.clock();
     this.lastActivityAt = this.donaldLineAt;
   }

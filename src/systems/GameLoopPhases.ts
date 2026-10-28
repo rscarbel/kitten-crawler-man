@@ -32,7 +32,7 @@ import { Mantid } from '../creatures/Mantid';
 import { BallOfSwine } from '../creatures/BallOfSwine';
 import { AttackCow } from '../creatures/AttackCow';
 import { Cow, type CowVoice } from '../creatures/Cow';
-import { Mongo } from '../creatures/Mongo';
+import { Deinonychus } from '../creatures/Deinonychus';
 import { mobVoiceTakes } from './mobVoices';
 import { KrakarenClone } from '../creatures/KrakarenClone';
 import { KrakarenTentacle } from '../creatures/KrakarenTentacle';
@@ -61,8 +61,8 @@ import {
  *   5. updateSystems         — barriers, gym room, companion, spells, etc.
  *   6. updateMobAI           — activate nearby mobs, run AI, clamp bosses
  *   7. resolveCombat         — attack hits, kills, XP split, loot drops
- *   8. postCombat            — gore, grub spawns, arena phases, Mongo
- *   9. tickTimers            — player timers, loot TTL, dynamite, smush blasts, level timer
+ *   8. postCombat            — gore, grub spawns, arena phases, Deinonychus
+ *   9. tickTimers            — player timers, loot TTL, dynamite, seismic stomp blasts, level timer
  *   10. checkDeath           — game over conditions
  */
 
@@ -527,9 +527,9 @@ function playCuesOf(mob: Mob, audio: PlacedCuePlayer | null): void {
     mob.guardSoundPending = false;
     audio?.play(GUARD_SOUND);
   }
-  if (mob instanceof Mongo && mob.targetChitterPending) {
+  if (mob instanceof Deinonychus && mob.targetChitterPending) {
     mob.targetChitterPending = false;
-    audio?.play('velociraptor_chitter');
+    audio?.play('deinonychus_chitter');
   }
   if (mob.attackSoundPending) {
     mob.attackSoundPending = false;

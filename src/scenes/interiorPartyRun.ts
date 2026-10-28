@@ -2,14 +2,36 @@ import type { PlayerSnapshot } from '../core/save/PlayerSnapshot';
 import type { SaveWriteOutcome } from '../core/save/progressPersistence';
 import { createWheelLedger, type WheelLedger } from '../core/save/WheelLedger';
 import { createAttackCowState, type AttackCowState } from '../core/state/AttackCowState';
+import { PetNameBook } from '../core/party/petNames';
+import { DaveWhereabouts } from '../systems/DaveGuideSystem';
+import type { AdviceObjective } from '../systems/daveAdvice';
+import { StoryDirector } from '../story/StoryDirector';
+import type { StoryFloor } from '../story/storyTypes';
+import type { TilePoint } from '../map/town/townPlan';
 import type { ProgressWipe } from '../ui/screens/dialogs/wipeHold';
 
 /** The party as a save records it, wherever it is standing. */
 export interface SaveParty {
   human: PlayerSnapshot;
   cat: PlayerSnapshot;
-  mongoPetHp: number;
-  mongoPetResting: boolean;
+  deinonychusPetHp: number;
+  deinonychusPetResting: boolean;
+}
+
+/** The run's story as a building's safe room tells it: the floor outside's beats, objectives and save. */
+export interface InteriorStory {
+  readonly director: StoryDirector;
+  /** Writes the seen beats and briefings into the newest save at once, outside the checkpoint. */
+  readonly persist: () => void;
+  /** The floor outside, whose beats a safe room in here plays; null on a floor with none. */
+  readonly floor: StoryFloor | null;
+  /** The objective the floor outside wants raised next, or null when nothing is left. */
+  readonly currentObjective: () => AdviceObjective | null;
+  /**
+   * Where bearings from inside are taken from: the building's door, in the
+   * floor's tiles, since every objective is out there.
+   */
+  readonly bearingOrigin: TilePoint;
 }
 
 /**
@@ -21,6 +43,11 @@ export interface SaveParty {
 export interface InteriorPartyRun {
   readonly wheelLedger: WheelLedger;
   readonly attackCowState: AttackCowState;
+  /** The run's pet names; a pet named indoors is saved by the floor outside. */
+  readonly petNames: PetNameBook;
+  /** Where Dave was last, so a building's safe room keeps him between visits. */
+  readonly daveWhereabouts: DaveWhereabouts;
+  readonly story: InteriorStory;
   /**
    * Writes a save now and makes it the one a death or a reload returns to.
    * A reload resumes on the building's doorstep. Resolves once storage has
@@ -42,6 +69,15 @@ export function detachedPartyRun(): InteriorPartyRun {
   return {
     wheelLedger: createWheelLedger(),
     attackCowState: createAttackCowState(),
+    petNames: new PetNameBook(),
+    daveWhereabouts: new DaveWhereabouts(),
+    story: {
+      director: new StoryDirector(),
+      persist: () => undefined,
+      floor: null,
+      currentObjective: () => null,
+      bearingOrigin: { x: 0, y: 0 },
+    },
     commitSave: () => Promise.resolve('disabled'),
     maySave: () => true,
     progressWipe: null,

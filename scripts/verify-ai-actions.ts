@@ -20,40 +20,30 @@
  *    action kills, cooldowns and per-floor limits and budgets are never
  *    exceeded.
  *  - A sale never lets a unit be bought and sold back for a profit.
- *  - The show: AI achievements are filed once per title and survive a save,
- *    questions report their answers, the favour meter stays in range and
- *    never punishes, and every challenge template runs its offer, accept,
- *    win and fail paths, refusing offers that could not be won fairly.
+ *  - Interactions: AI achievements are filed once per title and survive a
+ *    save, questions report their answers, and every challenge template runs
+ *    its offer, accept, win and fail paths, refusing offers that could not be
+ *    won fairly.
  *  - The dispatcher holds calls through a pause and expires stale ones, and
  *    both wire shapes of `ai_action` parse.
  *
  * Run: npm run verify:ai-actions
  */
 import { partyOwnsGear } from '../src/loot/gearPools';
-import { crawlerName } from '../src/characters/characters';
 import { AchievementManager, aiAchievementKey } from '../src/core/progression/AchievementManager';
 import { AchievementAwards } from '../src/systems/AchievementAwards';
 import { presentationAwardId } from '../src/loot/rewardChest';
 import { EventBus, type GameEvents } from '../src/core/EventBus';
-import {
-  FAVOR_MAX,
-  FAVOR_MIN,
-  FAVOR_START,
-  ViewerFavor,
-  favorPerk,
-  parseViewerFavor,
-} from '../src/core/progression/viewerFavor';
-import { AIShowStage } from '../src/ai/show/AIShowStage';
+import { AIInteractionStage } from '../src/ai/interactions/AIInteractionStage';
 import {
   CHALLENGE_MAX_SECONDS,
   CHALLENGE_TEMPLATE_IDS,
   minStairwellDashSeconds,
-} from '../src/ai/show/challenges';
+} from '../src/ai/interactions/challenges';
 import { AIChallengeSystem } from '../src/systems/AIChallengeSystem';
 import type { SystemContext } from '../src/systems/GameSystem';
 import { SpellSystem } from '../src/systems/SpellSystem';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
-import { FAVOR_SWING_MAX } from '../src/ai/actions/show';
 import { TILE_SIZE } from '../src/core/constants';
 import {
   makeBurn,
@@ -97,9 +87,8 @@ import {
 } from '../src/ai/actions/governor';
 import { CRAWLER_HP_THRESHOLDS, hpThresholdTop } from '../src/core/combat/hpThresholds';
 import {
-  AI_CHARACTER_MORDECAI,
-  AI_CHARACTER_SYSTEM,
-  AI_CHARACTER_VIEWERS,
+  AI_CHARACTER_DAVE,
+  AI_CHARACTER_CAROLINE,
   secondsToFrames,
 } from '../src/ai/actions/helpers';
 import {
@@ -154,11 +143,7 @@ function endSection(): void {
 }
 
 const SNAKE_CASE = /^[a-z][a-z0-9_]*$/;
-const KNOWN_CHARACTERS = new Set([
-  AI_CHARACTER_SYSTEM,
-  AI_CHARACTER_MORDECAI,
-  AI_CHARACTER_VIEWERS,
-]);
+const KNOWN_CHARACTERS = new Set([AI_CHARACTER_CAROLINE, AI_CHARACTER_DAVE]);
 const KNOWN_FLAGS = new Set<string>(AI_CONTEXT_FLAGS);
 /** The most attention budget any single action may cost. */
 const MAX_ACTION_COST = 10;
@@ -174,7 +159,7 @@ const PAUSED_SCENE_CHANCE = 0.2;
 const BOSS_SCENE_CHANCE = 0.1;
 const SAFE_ROOM_SCENE_CHANCE = 0.15;
 const COMBAT_SCENE_CHANCE = 0.3;
-const MORDECAI_CALL_CHANCE = 0.2;
+const DAVE_CALL_CHANCE = 0.2;
 const RANDOM_TEXT_MAX_EXTRA = 3;
 /** Frames ticked after each call, so timed effects get to expire mid-run. */
 const FRAMES_PER_STEP = 120;
@@ -196,11 +181,11 @@ const BURN_FORECAST_INTERVAL = 60;
 const POISON_FORECAST_INTERVAL = 120;
 const HURT_TEST_FRACTION = 0.3;
 /**
- * Constitution the test human carries past a fresh crawler's, as a crawler a
+ * Health the test human carries past a fresh crawler's, as a crawler a
  * floor into a run does: at a fresh crawler's 10 HP the HP shields' fractions
  * round onto the same whole hit point and every check between them is moot.
  */
-const TEST_CRAWLER_EXTRA_CONSTITUTION = 2;
+const TEST_CRAWLER_EXTRA_HEALTH = 2;
 const PERCENT_SCALE = 100;
 /** Frames a status is ticked for: past the longest one the AI applies. */
 const STATUS_RUN_FRAMES = 2400;
@@ -436,9 +421,8 @@ interface FakeWorld {
   readonly toasts: string[];
   readonly musicClaims: Set<string>;
   readonly bus: EventBus;
-  readonly favor: ViewerFavor;
   readonly challenges: AIChallengeSystem;
-  readonly show: AIShowStage;
+  readonly stage: AIInteractionStage;
   readonly achievements: { readonly human: AchievementManager; readonly cat: AchievementManager };
   flags: { paused: boolean; boss: boolean; safeRoom: boolean; combat: boolean };
   timerFrames: number;
@@ -457,7 +441,7 @@ function buildWorld(): FakeWorld {
   const human = new HumanPlayer(start.x, start.y, TILE_SIZE);
   const cat = new CatPlayer(start.x + 1, start.y, TILE_SIZE);
   human.isActive = true;
-  human.applyPermanentStat('constitution', TEST_CRAWLER_EXTRA_CONSTITUTION);
+  human.applyPermanentStat('health', TEST_CRAWLER_EXTRA_HEALTH);
   human.hp = human.maxHp;
   const mobs: Mob[] = [];
   const toasts: string[] = [];
@@ -465,7 +449,6 @@ function buildWorld(): FakeWorld {
   const humanAchievements = new AchievementManager();
   const catAchievements = new AchievementManager();
   const bus = new EventBus();
-  const favor = new ViewerFavor();
   const awards = new AchievementAwards({
     humanAchievements,
     catAchievements,
@@ -485,7 +468,7 @@ function buildWorld(): FakeWorld {
     grantReward: (side, rarity) =>
       void awards.grantChest(side === 'Human' ? 'human' : 'cat', { rarity, source: 'challenge' }),
   });
-  const show = new AIShowStage({ bus, favor, challenges, postToast });
+  const stage = new AIInteractionStage({ bus, challenges });
   const world: FakeWorld = {
     human,
     cat,
@@ -494,9 +477,8 @@ function buildWorld(): FakeWorld {
     toasts,
     musicClaims,
     bus,
-    favor,
     challenges,
-    show,
+    stage,
     achievements: { human: humanAchievements, cat: catAchievements },
     flags: { paused: false, boss: false, safeRoom: false, combat: false },
     timerFrames: COLLAPSE_LIMIT_FRAMES,
@@ -527,7 +509,7 @@ function buildWorld(): FakeWorld {
         },
       }),
       spotlight: (point, frames) => aiCameraSpotlight.start(point, frames),
-      getShow: () => show,
+      getInteractions: () => stage,
     },
   };
   return world;
@@ -549,20 +531,18 @@ function systemContextOf(world: FakeWorld): SystemContext {
 
 /**
  * Plays the player's part between fuzzed calls: answers or waves away a
- * question, sits through or skips an advert, takes or turns down an offer,
- * and lets a running challenge's clock run, so each show action keeps
- * getting a free stage to run on.
+ * question, takes or turns down an offer, and lets a running challenge's
+ * clock run, so each interaction action keeps getting a free stage to run on.
  */
-function pumpShow(world: FakeWorld): void {
-  const { show } = world;
-  if (show.pendingQuestion !== null) {
-    if (Math.random() < 1 / 2) show.answer(0);
-    else show.dismissQuestion();
+function pumpStage(world: FakeWorld): void {
+  const { stage } = world;
+  if (stage.pendingQuestion !== null) {
+    if (Math.random() < 1 / 2) stage.answer(0);
+    else stage.dismissQuestion();
   }
-  if (show.sponsorBreak !== null) show.endSponsorBreak(Math.random() < 1 / 2);
-  if (show.challengeOffer !== null) {
-    if (Math.random() < 1 / 2) show.acceptChallenge();
-    else show.declineChallenge();
+  if (stage.challengeOffer !== null) {
+    if (Math.random() < 1 / 2) stage.acceptChallenge();
+    else stage.declineChallenge();
   }
   const running = (): boolean => world.challenges.current !== null;
   const ctx = systemContextOf(world);
@@ -682,8 +662,8 @@ section('fuzzed calls through the governor keep the fairness rules');
       // A price change runs on the wall clock, which this loop's fake clock does not move.
       if (Math.random() < 1 / 2) clearPriceAdjustment();
       const characterName =
-        Math.random() < MORDECAI_CALL_CHANCE ? AI_CHARACTER_MORDECAI : AI_CHARACTER_SYSTEM;
-      pumpShow(world);
+        Math.random() < DAVE_CALL_CHANCE ? AI_CHARACTER_DAVE : AI_CHARACTER_CAROLINE;
+      pumpStage(world);
       const vulnerableBefore = anyVulnerable(world);
       const hurtInFightBefore = world.flags.combat && anyHurt(world);
       const pausedBefore = world.flags.paused;
@@ -731,12 +711,9 @@ section('fuzzed calls through the governor keep the fairness rules');
       if (def.characters !== undefined) {
         check(def.characters.includes(characterName), `${def.name} ran for ${characterName}`);
       }
-      if (characterName === AI_CHARACTER_MORDECAI) {
-        check(world.flags.safeRoom, `${def.name} ran for Mordecai outside a safe room`);
-        check(
-          !world.flags.combat && !pausedBefore,
-          `${def.name} ran for Mordecai mid-fight or paused`,
-        );
+      if (characterName === AI_CHARACTER_DAVE) {
+        check(world.flags.safeRoom, `${def.name} ran for Dave outside a safe room`);
+        check(!world.flags.combat && !pausedBefore, `${def.name} ran for Dave mid-fight or paused`);
       }
       check(
         !pausedBefore || def.policy.severity === 'benign',
@@ -779,14 +756,8 @@ section('fuzzed calls through the governor keep the fairness rules');
       }
       if (def.name === 'ask_player') {
         check(
-          world.show.pendingQuestion !== null,
+          world.stage.pendingQuestion !== null,
           'ask_player reported success with no question up',
-        );
-      }
-      if (def.name === 'viewer_reaction') {
-        check(
-          world.favor.value >= FAVOR_MIN && world.favor.value <= FAVOR_MAX,
-          `viewer_reaction left favour at ${world.favor.value}`,
         );
       }
 
@@ -873,7 +844,7 @@ section('the governor refuses what the fairness rules forbid');
   const spawn = {
     name: 'spawn_mob',
     params: { mob_type: 'rat' },
-    characterName: AI_CHARACTER_SYSTEM,
+    characterName: AI_CHARACTER_CAROLINE,
   };
   const ratIsNative =
     level1.roomMobs.some((rule) => rule.type === 'rat') ||
@@ -906,41 +877,41 @@ section('the governor refuses what the fairness rules forbid');
 
   const stat = {
     name: 'modify_stat',
-    params: { stat: 'strength', delta: 2, reason: 'testing' },
-    characterName: AI_CHARACTER_SYSTEM,
+    params: { stat: 'explosivesHandling', delta: 2, reason: 'testing' },
+    characterName: AI_CHARACTER_CAROLINE,
   };
-  check(executeAIAction(stat, world.scene, governor).ok, 'a first stat change runs');
+  check(
+    executeAIAction(stat, world.scene, governor).ok,
+    'a first stat change runs, on any stat on the sheet',
+  );
   clockMs += MAX_CLOCK_STEP_MS;
   check(!executeAIAction(stat, world.scene, governor).ok, 'a second stat change never stacks');
 
-  const mordecaiGift = {
+  const daveGift = {
     name: 'give_item',
     params: { item_id: 'health_potion' },
-    characterName: AI_CHARACTER_MORDECAI,
+    characterName: AI_CHARACTER_DAVE,
   };
   check(
-    !executeAIAction(mordecaiGift, world.scene, governor).ok,
-    'Mordecai does not act outside a safe room',
+    !executeAIAction(daveGift, world.scene, governor).ok,
+    'Dave does not act outside a safe room',
   );
   world.flags.safeRoom = true;
-  check(
-    executeAIAction(mordecaiGift, world.scene, governor).ok,
-    'Mordecai gives a potion in a safe room',
-  );
+  check(executeAIAction(daveGift, world.scene, governor).ok, 'Dave gives a potion in a safe room');
   check(
     !executeAIAction(
-      { ...mordecaiGift, name: 'spawn_mob', params: { mob_type: 'rat' } },
+      { ...daveGift, name: 'spawn_mob', params: { mob_type: 'rat' } },
       world.scene,
       governor,
     ).ok,
-    'Mordecai may not spawn',
+    'Dave may not spawn',
   );
 
-  const setHp = { name: 'set_hp', params: { hp_percent: 1 }, characterName: AI_CHARACTER_SYSTEM };
+  const setHp = { name: 'set_hp', params: { hp_percent: 1 }, characterName: AI_CHARACTER_CAROLINE };
   check(!executeAIAction(setHp, world.scene, governor).ok, 'set_hp refuses a lethal share');
   check(
     !executeAIAction(
-      { name: 'no_such_action', params: {}, characterName: AI_CHARACTER_SYSTEM },
+      { name: 'no_such_action', params: {}, characterName: AI_CHARACTER_CAROLINE },
       world.scene,
       governor,
     ).ok,
@@ -959,35 +930,38 @@ section(
   };
   const world = buildWorld();
   const governor = new ActionGovernor(() => clockMs);
-  const system = (name: string, params: Record<string, unknown>) =>
-    executeAIAction({ name, params, characterName: AI_CHARACTER_SYSTEM }, world.scene, governor);
+  const asCaroline = (name: string, params: Record<string, unknown>) =>
+    executeAIAction({ name, params, characterName: AI_CHARACTER_CAROLINE }, world.scene, governor);
   const shield = lowestUnshieldedHp;
 
   world.cat.isKnockedOut = true;
-  check(!system('spawn_mob', { mob_type: 'rat' }).ok, 'no spawn while a crawler is knocked out');
   check(
-    !system('apply_status', { status: 'burn', target_player: 'Human' }).ok,
+    !asCaroline('spawn_mob', { mob_type: 'rat' }).ok,
+    'no spawn while a crawler is knocked out',
+  );
+  check(
+    !asCaroline('apply_status', { status: 'burn', target_player: 'Human' }).ok,
     'nothing harmful while a crawler is knocked out',
   );
   check(
-    !system('teleport_player', { tile_x: 1, tile_y: 1 }).ok,
+    !asCaroline('teleport_player', { tile_x: 1, tile_y: 1 }).ok,
     'no teleport while a crawler is knocked out',
   );
   world.cat.isKnockedOut = false;
   world.cat.hp = 0;
-  check(!system('spawn_mob', { mob_type: 'rat' }).ok, 'no spawn while a crawler is dead');
+  check(!asCaroline('spawn_mob', { mob_type: 'rat' }).ok, 'no spawn while a crawler is dead');
   world.cat.hp = world.cat.maxHp;
 
   // Poison's whole run against a crawler barely over the line: refused, since it would carry them under.
   world.human.statusEffects = [];
   world.human.hp = shield(world.human) + 1;
   check(
-    !system('apply_status', { status: 'poison', target_player: 'Human' }).ok,
+    !asCaroline('apply_status', { status: 'poison', target_player: 'Human' }).ok,
     'a damage-over-time status that would end under 25% HP is refused',
   );
   step();
   world.human.hp = world.human.maxHp;
-  const burned = system('apply_status', { status: 'burn', target_player: 'Human' });
+  const burned = asCaroline('apply_status', { status: 'burn', target_player: 'Human' });
   check(burned.ok, `burn on a healthy crawler runs (${burned.detail})`);
   for (let frame = 0; frame < STATUS_RUN_FRAMES; frame++) world.human.tickTimers();
   check(
@@ -1000,15 +974,15 @@ section(
   world.human.syncHpToMaxHp();
   world.human.hp = shield(world.human) + 1;
   const hpBeforeCut = world.human.hp;
-  system('modify_stat', {
-    stat: 'constitution',
+  asCaroline('modify_stat', {
+    stat: 'health',
     delta: -STAT_CUT_POINTS,
     reason: 'testing',
     target_player: 'Human',
   });
   check(
     world.human.hp >= Math.min(hpBeforeCut, shield(world.human)),
-    'a constitution cut never drops HP under the 25% line',
+    'a health cut never drops HP under the 25% line',
   );
   world.human.tempStatMods.length = 0;
   world.human.syncHpToMaxHp();
@@ -1018,7 +992,7 @@ section(
   for (const percent of [SET_HP_LOWEST_PERCENT, SET_HP_LOWEST_PERCENT + 1]) {
     world.human.statusEffects = [];
     world.human.hp = world.human.maxHp;
-    const set = system('set_hp', { hp_percent: percent, target_player: 'Human' });
+    const set = asCaroline('set_hp', { hp_percent: percent, target_player: 'Human' });
     if (percent === SET_HP_LOWEST_PERCENT) {
       check(set.ok, `set_hp at its lowest ${percent}% runs on a healthy crawler (${set.detail})`);
     }
@@ -1031,7 +1005,7 @@ section(
   world.human.inventory.equipByItemId('scrapmail_vest');
   check(world.human.inventory.equipment.isEquipped('scrapmail_vest'), 'the test shirt is worn');
   check(
-    !system('remove_item', { item_id: 'scrapmail_vest', target_player: 'Human' }).ok,
+    !asCaroline('remove_item', { item_id: 'scrapmail_vest', target_player: 'Human' }).ok,
     'worn gear is never confiscated',
   );
   check(world.human.inventory.equipment.isEquipped('scrapmail_vest'), 'the shirt is still worn');
@@ -1046,7 +1020,7 @@ section(
   );
   world.mobs.push(guard);
   check(
-    !system('teleport_player', { tile_x: landing.x, tile_y: landing.y }).ok,
+    !asCaroline('teleport_player', { tile_x: landing.x, tile_y: landing.y }).ok,
     'no teleport onto ground a hostile stands near',
   );
   world.mobs.length = 0;
@@ -1054,7 +1028,7 @@ section(
 
   world.human.coins = FINE_TEST_PURSE;
   const fineBudgetBefore = governor.remainingBudget(world.scene, 'coinsFined');
-  const fined = system('fine_coins', {
+  const fined = asCaroline('fine_coins', {
     amount: FINE_TEST_AMOUNT,
     reason: 'testing',
     target_player: 'Human',
@@ -1071,7 +1045,11 @@ section(
   };
   const before = new ActionGovernor(() => clockMs, store);
   const spawned = executeAIAction(
-    { name: 'give_coins', params: { amount: 50, reason: 'testing' }, characterName: 'System' },
+    {
+      name: 'give_coins',
+      params: { amount: 50, reason: 'testing' },
+      characterName: AI_CHARACTER_CAROLINE,
+    },
     world.scene,
     before,
   );
@@ -1085,7 +1063,7 @@ section(
 }
 endSection();
 
-section('the show: achievements, questions, favour and every challenge template');
+section('interactions: achievements, questions and every challenge template');
 {
   let clockMs = 0;
   const step = (): void => {
@@ -1104,9 +1082,7 @@ section('the show: achievements, questions, favour and every challenge template'
   world.bus.on('challengeCompleted', record('challengeCompleted'));
   world.bus.on('challengeFailed', record('challengeFailed'));
   world.bus.on('playerAnswered', record('playerAnswered'));
-  world.bus.on('viewerFavorChanged', record('viewerFavorChanged'));
   world.bus.on('aiAchievementAwarded', record('aiAchievementAwarded'));
-  world.bus.on('sponsorBreakEnded', record('sponsorBreakEnded'));
   const lastOf = <T>(items: readonly T[]): T | undefined =>
     items.length === 0 ? undefined : items[items.length - 1];
   let wins = 0;
@@ -1116,10 +1092,10 @@ section('the show: achievements, questions, favour and every challenge template'
   const lostAnother = (): boolean => heardOf('challengeFailed').length === ++losses;
   const heardOf = (type: keyof GameEvents): unknown[] =>
     heard.filter((event) => event.type === type).map((event) => event.data);
-  const system = (name: string, params: Record<string, unknown>): AIActionOutcome => {
+  const asCaroline = (name: string, params: Record<string, unknown>): AIActionOutcome => {
     step();
     return executeAIAction(
-      { name, params, characterName: AI_CHARACTER_SYSTEM },
+      { name, params, characterName: AI_CHARACTER_CAROLINE },
       world.scene,
       governor,
     );
@@ -1141,7 +1117,7 @@ section('the show: achievements, questions, favour and every challenge template'
   };
   const paidBefore = paidState(world.achievements.human, world.human);
   check(
-    system('grant_achievement', { ...award, target_player: 'Human' }).ok,
+    asCaroline('grant_achievement', { ...award, target_player: 'Human' }).ok,
     'an AI achievement is awarded',
   );
   check(
@@ -1159,7 +1135,7 @@ section('the show: achievements, questions, favour and every challenge template'
   );
   check(heardOf('aiAchievementAwarded').length === 1, 'the award is told to the bus');
   check(
-    !system('grant_achievement', {
+    !asCaroline('grant_achievement', {
       ...award,
       title: '  fled from a   RAT ',
       target_player: 'Human',
@@ -1176,9 +1152,12 @@ section('the show: achievements, questions, favour and every challenge template'
 
   const giftBefore = paidState(world.achievements.cat, world.cat);
   check(
-    system('grant_reward_chest', { rarity: 'Common', reason: 'For style.', target_player: 'Cat' })
-      .ok,
-    'the audience can gift a reward chest',
+    asCaroline('grant_reward_chest', {
+      rarity: 'Common',
+      reason: 'For style.',
+      target_player: 'Cat',
+    }).ok,
+    'Caroline can gift a reward chest',
   );
   check(
     paidAtOnce(giftBefore, paidState(world.achievements.cat, world.cat)),
@@ -1193,7 +1172,7 @@ section('the show: achievements, questions, favour and every challenge template'
     'a tampered AI achievement fails the whole record on load',
   );
 
-  const messy = system('grant_achievement', {
+  const messy = asCaroline('grant_achievement', {
     title: 'Stair\n\n\u200BMaster\u202E',
     description: 'Line one.\nLine two.\r\n\tLine three.',
     rarity: 'Common',
@@ -1210,8 +1189,11 @@ section('the show: achievements, questions, favour and every challenge template'
     `AI text is flattened to one plain line (${JSON.stringify(filedNames)})`,
   );
   check(
-    !system('grant_achievement', { ...award, title: 'Stair\u200B Master', target_player: 'Cat' })
-      .ok,
+    !asCaroline('grant_achievement', {
+      ...award,
+      title: 'Stair\u200B Master',
+      target_player: 'Cat',
+    }).ok,
     'invisible characters do not get round the one-per-title rule',
   );
   const smuggled = AchievementManager.parse({
@@ -1221,7 +1203,7 @@ section('the show: achievements, questions, favour and every challenge template'
         name: 'Saved\n\nTitle\u2066',
         description: 'From\u0000 a save',
         rarity: 'Common',
-        awardedBy: 'System',
+        awardedBy: AI_CHARACTER_CAROLINE,
         awardedAt: 0,
       },
     ],
@@ -1230,8 +1212,8 @@ section('the show: achievements, questions, favour and every challenge template'
   check(smuggled === undefined, 'a saved AI achievement that is not one plain line is rejected');
 
   // Questions: the id comes back at once, the answer later as an event.
-  const asked = system('ask_player', {
-    question: 'Viewers want to know: save the cat or the loot?',
+  const asked = asCaroline('ask_player', {
+    question: 'Save the cat or the loot?',
     choice_1: 'The cat',
     choice_2: 'The loot',
   });
@@ -1240,28 +1222,32 @@ section('the show: achievements, questions, favour and every challenge template'
     `ask_player reports its question id (${asked.detail})`,
   );
   check(
-    !system('ask_player', {
+    !asCaroline('ask_player', {
       question: 'A second question, so soon?',
       choice_1: 'Yes',
       choice_2: 'No',
     }).ok,
     'a second question waits for the first',
   );
-  world.show.answer(1);
+  world.stage.answer(1);
   const answered = heardOf('playerAnswered')[0];
   check(
     isRecord(answered) &&
       answered.answer === 'The loot' &&
-      answered.askedBy === AI_CHARACTER_SYSTEM,
+      answered.askedBy === AI_CHARACTER_CAROLINE,
     'the answer is told to the bus with who asked',
   );
   governor = freshGovernor();
-  system('ask_player', { question: 'Will you ever answer me?', choice_1: 'Yes', choice_2: 'No' });
-  world.show.dismissQuestion();
+  asCaroline('ask_player', {
+    question: 'Will you ever answer me?',
+    choice_1: 'Yes',
+    choice_2: 'No',
+  });
+  world.stage.dismissQuestion();
   const ignored = heardOf('playerAnswered')[1];
   check(isRecord(ignored) && ignored.answer === null, 'waving a question away answers null');
   check(
-    !system('ask_player', {
+    !asCaroline('ask_player', {
       question: 'Pick one of these two?',
       choice_1: 'Same',
       choice_2: 'same',
@@ -1269,79 +1255,14 @@ section('the show: achievements, questions, favour and every challenge template'
     'two answers that say the same thing are refused',
   );
 
-  // Favour: bounded, saved, and never a penalty.
-  for (let swing = 0; swing < FAVOR_MAX; swing++) world.favor.adjust(FAVOR_SWING_MAX, 'cheer');
-  check(world.favor.value === FAVOR_MAX, 'favour stops at its top');
-  for (let swing = 0; swing < FAVOR_MAX; swing++) world.favor.adjust(-FAVOR_SWING_MAX, 'boo');
-  check(world.favor.value === FAVOR_MIN, 'favour stops at its bottom');
-  for (let value = FAVOR_MIN; value <= FAVOR_MAX; value++) {
-    check(favorPerk(value).chestCoinMultiplier >= 1, `favour ${value} never cuts a chest's coins`);
-  }
-  check(favorPerk(FAVOR_MIN).chestCoinMultiplier === 1, 'the lowest favour costs nothing');
-  check(parseViewerFavor('lots') === undefined, 'a junk saved favour is rejected');
-  check(parseViewerFavor(FAVOR_MAX * 2) === undefined, 'an out-of-range saved favour is rejected');
-  const fresh = new ViewerFavor();
-  check(fresh.serialize() === undefined && !fresh.engaged, 'an untouched run saves no favour');
-  fresh.restore(undefined);
-  check(fresh.value === FAVOR_START, 'a save without favour starts at the middle');
-  world.favor.adjust(1, 'cheer');
-  new AIShowStage({
-    bus: world.bus,
-    favor: world.favor,
-    challenges: null,
-    postToast: () => undefined,
-  });
-  check(world.favor.lastSwing === null, 'a new scene does not replay the last swing');
-  governor = freshGovernor();
-  const reacted = system('viewer_reaction', {
-    reaction: 'cheer',
-    delta: FAVOR_SWING_MAX,
-    comment: `${crawlerName('cat').toUpperCase()}!`,
-  });
-  check(reacted.ok, `viewer_reaction runs (${reacted.detail})`);
-  check(heardOf('viewerFavorChanged').length === 1, 'a reaction is told to the bus');
-  check(
-    executeAIAction(
-      {
-        name: 'viewer_reaction',
-        params: { reaction: 'boo', delta: -1 },
-        characterName: AI_CHARACTER_VIEWERS,
-      },
-      world.scene,
-      freshGovernor(),
-    ).ok,
-    'the Viewers may react',
-  );
-
-  // Sponsor breaks: never mid-fight, one at a time, skippable.
-  world.flags.combat = true;
-  check(
-    !system('sponsor_message', {
-      sponsor: 'Borant Snacks',
-      message: 'Pellets: now with fewer screams.',
-    }).ok,
-    'no sponsor break mid-fight',
-  );
-  world.flags.combat = false;
-  check(
-    system('sponsor_message', {
-      sponsor: 'Borant Snacks',
-      message: 'Pellets: now with fewer screams.',
-    }).ok,
-    'a sponsor break runs away from a fight',
-  );
-  world.show.endSponsorBreak(true);
-  const skipped = heardOf('sponsorBreakEnded')[0];
-  check(isRecord(skipped) && skipped.skipped === true, 'a skipped break is told to the bus');
-
   // Challenges: refusals first.
   const offer = (template: string, extra: Record<string, unknown> = {}): AIActionOutcome => {
     governor = freshGovernor();
-    return system('offer_challenge', {
+    return asCaroline('offer_challenge', {
       template,
       title: `Test ${template}`,
       reward_rarity: 'Common',
-      taunt: 'The viewers saw that.',
+      taunt: 'That was recorded.',
       ...extra,
     });
   };
@@ -1405,7 +1326,7 @@ section('the show: achievements, questions, favour and every challenge template'
   });
   check(slay.ok, `a winnable slay challenge is offered (${slay.detail})`);
   check(!offer('untouched').ok, 'one challenge at a time');
-  world.show.acceptChallenge();
+  world.stage.acceptChallenge();
   check(heardOf('challengeAccepted').length === 1, 'accepting is told to the bus');
   const paidBeforeWin = paidState(world.achievements.human, world.human);
   for (let kill = 0; kill < CHALLENGE_KILLS; kill++) killRat(world.human);
@@ -1424,51 +1345,51 @@ section('the show: achievements, questions, favour and every challenge template'
     offer('untouched', { seconds: CHALLENGE_SHORT_SECONDS }).ok,
     'an untouched challenge is offered',
   );
-  world.show.declineChallenge();
+  world.stage.declineChallenge();
   check(heardOf('challengeDeclined').length === 1, 'declining is told to the bus');
 
   // untouched: won by lasting the clock, lost to a scratch.
   offer('untouched', { seconds: CHALLENGE_SHORT_SECONDS });
-  world.show.acceptChallenge();
+  world.stage.acceptChallenge();
   runFrames(CHALLENGE_SHORT_SECONDS * UPDATE_FRAMES_PER_SECOND);
   check(wonAnother(), 'lasting the clock wins an untouched challenge');
   offer('untouched', { seconds: CHALLENGE_SHORT_SECONDS });
-  world.show.acceptChallenge();
+  world.stage.acceptChallenge();
   runFrames(1);
   world.human.hp -= 1;
   runFrames(1);
   check(lostAnother(), 'a scratch fails an untouched challenge');
   const scratched = lastOf(heardOf('challengeFailed'));
   check(
-    isRecord(scratched) && scratched.taunt === 'The viewers saw that.',
+    isRecord(scratched) && scratched.taunt === 'That was recorded.',
     'a scratch fails it, with the taunt told to the bus',
   );
   check(
-    world.toasts.some((toast) => toast.includes('The viewers saw that.')),
+    world.toasts.some((toast) => toast.includes('That was recorded.')),
     'the taunt is shown',
   );
   healthy();
 
   // slay: lost to the clock.
   offer('slay', { count: CHALLENGE_KILLS, mob_type: 'rat', seconds: CHALLENGE_SECONDS });
-  world.show.acceptChallenge();
+  world.stage.acceptChallenge();
   runFrames(CHALLENGE_SECONDS * UPDATE_FRAMES_PER_SECOND);
   check(lostAnother(), 'running out of time fails a kill challenge');
 
   // belle_finishes: the human stealing the kill fails it.
   spawnRats(CHALLENGE_RATS);
   offer('belle_finishes', { count: 1, mob_type: 'rat', seconds: CHALLENGE_SECONDS });
-  world.show.acceptChallenge();
+  world.stage.acceptChallenge();
   killRat(world.human);
   check(lostAnother(), 'a kill by the human fails a cat-finishes challenge');
   offer('belle_finishes', { count: 1, mob_type: 'rat', seconds: CHALLENGE_SECONDS });
-  world.show.acceptChallenge();
+  world.stage.acceptChallenge();
   killRat(world.cat);
   check(wonAnother(), 'the cat’s kill wins it');
 
   // slay_untouched: won clean.
   offer('slay_untouched', { count: 1, mob_type: 'rat', seconds: CHALLENGE_SECONDS });
-  world.show.acceptChallenge();
+  world.stage.acceptChallenge();
   runFrames(1);
   killRat(world.human);
   check(wonAnother(), 'a clean kill wins an untouched slay');
@@ -1483,11 +1404,11 @@ section('the show: achievements, questions, favour and every challenge template'
   boss.isBoss = true;
   world.mobs.push(boss);
   check(offer('no_potion_until_boss').ok, 'a potion fast is offered with a living boss');
-  world.show.acceptChallenge();
+  world.stage.acceptChallenge();
   world.bus.emit('healingPotionUsed', { player: 'Human', hpRestored: 1 });
   check(lostAnother(), 'a potion fails the fast');
   offer('no_potion_until_boss');
-  world.show.acceptChallenge();
+  world.stage.acceptChallenge();
   world.bus.emit('bossDefeated', { bossType: 'rat', mob: boss });
   check(wonAnother(), 'the boss falling wins the fast');
 
@@ -1501,7 +1422,7 @@ section('the show: achievements, questions, favour and every challenge template'
       'a stairwell dash with time for the walk is offered',
     );
     if (world.challenges.offer !== null) {
-      world.show.acceptChallenge();
+      world.stage.acceptChallenge();
       world.human.x = firstStair.x * TILE_SIZE;
       world.human.y = firstStair.y * TILE_SIZE;
       runFrames(1);
@@ -1512,7 +1433,7 @@ section('the show: achievements, questions, favour and every challenge template'
   // belle_finishes: a kill no crawler made neither counts nor fails it.
   spawnRats(CHALLENGE_RATS);
   offer('belle_finishes', { count: 1, mob_type: 'rat', seconds: CHALLENGE_SECONDS });
-  world.show.acceptChallenge();
+  world.stage.acceptChallenge();
   const strayRat = world.mobs.find((mob) => mob.isAlive && mob.spawnTypeKey === 'rat');
   if (strayRat !== undefined) {
     strayRat.hp = 0;
@@ -1534,7 +1455,7 @@ section('the show: achievements, questions, favour and every challenge template'
   const died = lastOf(heardOf('challengeFailed'));
   check(isRecord(died) && died.reason === 'died', 'the failure says the party died');
   offer('untouched', { seconds: CHALLENGE_SHORT_SECONDS });
-  world.show.acceptChallenge();
+  world.stage.acceptChallenge();
   world.challenges.endQuietly('the run rewound to a checkpoint');
   check(lostAnother(), 'a checkpoint rewind ends a running challenge');
   const rewound = lastOf(heardOf('challengeFailed'));
@@ -1543,7 +1464,7 @@ section('the show: achievements, questions, favour and every challenge template'
 
   // A challenge left open when the floor goes is failed quietly.
   offer('untouched', { seconds: CHALLENGE_SHORT_SECONDS });
-  world.show.acceptChallenge();
+  world.stage.acceptChallenge();
   world.challenges.dispose();
   check(lostAnother(), 'leaving the floor ends a running challenge');
   const leftBehind = lastOf(heardOf('challengeFailed'));
@@ -1569,7 +1490,7 @@ section('a hurt party is not piled on mid-fight');
   const call = (name: string, params: Record<string, unknown>) => {
     clockMs += TIMER_CALL_SPACING_MS;
     return executeAIAction(
-      { name, params, characterName: AI_CHARACTER_SYSTEM },
+      { name, params, characterName: AI_CHARACTER_CAROLINE },
       world.scene,
       governor,
     );
@@ -1630,7 +1551,11 @@ section('floor keys, status damage forecasts and indoor spawns');
   };
   const governor = new ActionGovernor(() => 0);
   const gift = executeAIAction(
-    { name: 'give_coins', params: { amount: 40, reason: 'testing' }, characterName: 'System' },
+    {
+      name: 'give_coins',
+      params: { amount: 40, reason: 'testing' },
+      characterName: AI_CHARACTER_CAROLINE,
+    },
     outdoors.scene,
     governor,
   );
@@ -1646,7 +1571,7 @@ section('floor keys, status damage forecasts and indoor spawns');
   );
   check(
     !executeAIAction(
-      { name: 'spawn_mob', params: { mob_type: 'rat' }, characterName: 'System' },
+      { name: 'spawn_mob', params: { mob_type: 'rat' }, characterName: AI_CHARACTER_CAROLINE },
       interiorScene,
       governor,
     ).ok,
@@ -1693,7 +1618,7 @@ section('floor keys, status damage forecasts and indoor spawns');
       {
         name: 'apply_status',
         params: { status: 'burn', target_player: 'Human' },
-        characterName: 'System',
+        characterName: AI_CHARACTER_CAROLINE,
       },
       outdoors.scene,
       new ActionGovernor(() => 0),
@@ -1782,7 +1707,7 @@ section('the collapse timer: cuts stop at the floor, top-ups move by their delta
       {
         name: 'adjust_level_timer',
         params: { delta_seconds: deltaSeconds },
-        characterName: AI_CHARACTER_SYSTEM,
+        characterName: AI_CHARACTER_CAROLINE,
       },
       world.scene,
       governor,
@@ -1821,21 +1746,22 @@ endSection();
 section('dispatcher and wire shapes');
 {
   const v2 = parseServerAction(
-    { actionId: 'a1', characterName: 'Mordecai', type: 'announce', params: { text: 'hi' } },
-    AI_CHARACTER_SYSTEM,
+    { actionId: 'a1', characterName: 'Dave', type: 'announce', params: { text: 'hi' } },
+    AI_CHARACTER_CAROLINE,
   );
   check(
-    v2?.actionId === 'a1' &&
-      v2.request.characterName === 'Mordecai' &&
-      v2.request.name === 'announce',
+    v2?.actionId === 'a1' && v2.request.characterName === 'Dave' && v2.request.name === 'announce',
     'a protocol 2 action parses with its id and character',
   );
-  const v1 = parseServerAction({ type: 'announce', text: 'hi' }, AI_CHARACTER_SYSTEM);
+  const v1 = parseServerAction({ type: 'announce', text: 'hi' }, AI_CHARACTER_CAROLINE);
   check(
     v1?.actionId === null && validateParams(AI_ACTIONS[0]?.params ?? [], v1.request.params).ok,
     'a protocol 1 action parses its flat arguments',
   );
-  check(parseServerAction('nope', AI_CHARACTER_SYSTEM) === null, 'a non-object action is ignored');
+  check(
+    parseServerAction('nope', AI_CHARACTER_CAROLINE) === null,
+    'a non-object action is ignored',
+  );
 
   let clockMs = 0;
   const world = buildWorld();
@@ -1846,7 +1772,7 @@ section('dispatcher and wire shapes');
   );
   const announce = parseServerAction(
     { type: 'announce', params: { text: 'held' } },
-    AI_CHARACTER_SYSTEM,
+    AI_CHARACTER_CAROLINE,
   );
   if (announce !== null) {
     world.flags.paused = true;

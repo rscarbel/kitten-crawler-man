@@ -1,23 +1,12 @@
 /**
- * Mordecai in his rodent form, as a painted figure: the choreography, the cell
- * geometry, and the `FigureDef` the runtime cache and the review harness both
- * draw through.
+ * The ratkin gait: the walk, the idle, the arm swing and the tail lag every
+ * ratkin figure is choreographed from. The Briar Hollow cast
+ * (`ratkinCastFigure.ts`), the raised dead (`raisedRatkinFigure.ts`) and the
+ * thrall build their rows on these poses rather than copying them, so the
+ * stride below holds for all of them.
  *
- * This module is choreography and nothing else — the gait, the arm swing, the
- * tail lag, the row table, and the placement of a pose inside its cell. Anatomy,
- * palette and every stroke of paint live in `ratKinArt.ts`.
- *
- * Rows:
- *    walk       — toward the camera
- *    walk_side  — profile, painted facing +X and mirrored at runtime
- *    walk_away  — away from the camera, tail toward the viewer
- *    idle / idle_side / idle_away
- *
- * There is no attack row: Mordecai wanders his safe room and talks, and never
- * fights.
- *
- * The art invariants live in `scripts/gates-rat-kin.ts`, which the review
- * harness runs: `npm run render:rat-kin`.
+ * Anatomy, palette and every stroke of paint live in `ratKinArt.ts`. The art
+ * invariants live in `scripts/gates-ratkin-cast.ts`: `npm run render:ratkin-cast`.
  */
 
 import { clamp01, deg, easeInOut, hump, lerp, type Pt } from './bipedArt';
@@ -27,60 +16,50 @@ import {
   type ArmAngles,
   type FootPose,
   type RatKinPose,
-  type RatKinView,
-  drawRatKinAway,
-  drawRatKinFront,
-  drawRatKinSide,
   REST_FOOT_PITCH,
   REST_TAIL_BASE,
   REST_TAIL_CURL,
   restingPose,
 } from './ratKinArt';
-import { type FigureDef, figureStates } from '../figure/figureDef';
-import { MORDECAI_OUTFIT } from './ratkin/cast';
 
-// ── Cell geometry ───────────────────────────────────────────────
+// ── Placement ────────────────────────────────────────────────────────────────
 
-/** Tile size the art is drawn at; the runtime scales by tileSize / TILE_SCALE. */
-export const TILE_SCALE = 64;
 /**
  * How far down its own tile a figure's feet sit. Matched to the human and the cat: a
  * floor-standing creature belongs near the *bottom* of the tile it occupies, and
- * anchoring the soles on the tile's centre instead floats him half a tile above
+ * anchoring the soles on the tile's centre instead floats it half a tile above
  * the floor everything else stands on.
  */
 export const GROUND_OFFSET_IN_TILE = 0.9;
 
 /**
- * The cell the poses are painted into, and where his own tile sits inside it.
+ * How much of a tile a ratkin of the base build fills, scaled about its own
+ * ground line so its feet stay on the tile they belong to. Each build scales
+ * from here (`RATKIN_BUILDS`).
  *
- * These four numbers were measured by the bake this figure replaces — the widest
- * pose plus padding, quantised — and `scripts/parity-figure-sheet.ts` is what
- * proved the painter still fills exactly that cell. The gates re-check that
- * nothing paints against the edge, which is what would say a pose has outgrown
- * them.
- */
-const FRAME_WIDTH = 96;
-const FRAME_HEIGHT = 104;
-const TILE_X = 16;
-const TILE_Y = 33;
-
-/** Poses are painted with the ground line under the cell's centre. */
-export const ORIGIN_X = FRAME_WIDTH / 2;
-export const ORIGIN_Y = TILE_Y + TILE_SCALE * GROUND_OFFSET_IN_TILE;
-
-/**
- * How much of a tile he fills, scaled about his own ground line so his feet stay
- * on the tile they belong to.
- *
- * Set just under the player's own height: Mordecai is a hunched advisor the
- * player walks up to and talks down to slightly, and a safe-room NPC that towers
- * over the crawler reads as a boss.
+ * Set just under the player's own height: a ratkin is a hunched little person
+ * the player talks down to slightly, and one that towers over the crawler
+ * reads as a boss.
  */
 export const RAT_KIN_SCALE = 0.66;
 
 export const WALK_FRAMES = 16;
 export const IDLE_FRAMES = 8;
+
+/**
+ * Ground one walk cycle covers at `RAT_KIN_SCALE`, in tiles.
+ *
+ * The stance foot is planted: it holds still on the floor while the body
+ * travels over it. That only reads as walking if the caller advances the cycle
+ * at the rate the ratkin is actually moving — pace a walk with a phase speed
+ * derived from distance, never by scaling the frame index against a frame
+ * counter, or the feet skate. Each build scales it by its own size.
+ *
+ * The stride-sync gate in `scripts/gates-ratkin-cast.ts` re-measures the
+ * planted frames of every cast member's walk and fails if this drifts from
+ * what they actually cover.
+ */
+export const RAT_KIN_TILES_PER_WALK_CYCLE = 0.4303;
 
 // ── Pose helpers ─────────────────────────────────────────────────────────────
 
@@ -135,7 +114,7 @@ export function wave(phase: number): number {
  * swing 90° out of step with the legs, which reads as a shuffle even though
  * every individual limb is moving correctly.
  */
-export function armSwingDrive(phase: number): number {
+function armSwingDrive(phase: number): number {
   return -Math.cos(phase * Math.PI * 2);
 }
 
@@ -415,7 +394,7 @@ const ARM_BACKSWING_SHARE = 0.55;
 /** How much of the shoulder's swing the forearm inherits. */
 const FOREARM_FOLLOW = 0.22;
 /** Standing, the arms drift by a fraction of the walk's swing. */
-export const IDLE_ARM_DRIFT = 0.12;
+const IDLE_ARM_DRIFT = 0.12;
 
 /**
  * One profile arm, driven from its joints. `forward` is −1 at the back of the
@@ -507,7 +486,7 @@ function facingArmSwing(phase: number, side: number): ArmAngles {
 export const FACING_SWING_MIDPOINT = 0.5;
 
 /** How tightly the paws are held; a scurrying rodent's are half-curled. */
-export const WALK_PAW_CURL = 0.55;
+const WALK_PAW_CURL = 0.55;
 const IDLE_PAW_CURL = 0.35;
 
 // ── The tail ─────────────────────────────────────────────────────────────────
@@ -719,109 +698,3 @@ export function idleFacing(phase: number, away: boolean): RatKinPose {
 }
 
 const IDLE_TAIL_CURL_DRIFT = deg(11);
-
-// ── Rows ─────────────────────────────────────────────────────────────────────
-
-export interface RowSpec {
-  readonly name: string;
-  readonly frameCount: number;
-  readonly view: RatKinView;
-  readonly pose: (frame: number) => RatKinPose;
-}
-
-export const RAT_KIN_ROWS: readonly RowSpec[] = [
-  {
-    name: 'walk',
-    frameCount: WALK_FRAMES,
-    view: 'front',
-    pose: (f) => walkFacing(cyclePhase(f, WALK_FRAMES), false),
-  },
-  {
-    name: 'walk_side',
-    frameCount: WALK_FRAMES,
-    view: 'side',
-    pose: (f) => walkSide(cyclePhase(f, WALK_FRAMES)),
-  },
-  {
-    name: 'walk_away',
-    frameCount: WALK_FRAMES,
-    view: 'away',
-    pose: (f) => walkFacing(cyclePhase(f, WALK_FRAMES), true),
-  },
-  {
-    name: 'idle',
-    frameCount: IDLE_FRAMES,
-    view: 'front',
-    pose: (f) => idleFacing(cyclePhase(f, IDLE_FRAMES), false),
-  },
-  {
-    name: 'idle_side',
-    frameCount: IDLE_FRAMES,
-    view: 'side',
-    pose: (f) => idleSide(cyclePhase(f, IDLE_FRAMES)),
-  },
-  {
-    name: 'idle_away',
-    frameCount: IDLE_FRAMES,
-    view: 'away',
-    pose: (f) => idleFacing(cyclePhase(f, IDLE_FRAMES), true),
-  },
-];
-
-/** Every pose the sheet is built from, in row-then-frame order. */
-export function poseStream(): { row: RowSpec; frame: number; pose: RatKinPose }[] {
-  return RAT_KIN_ROWS.flatMap((row) =>
-    Array.from({ length: row.frameCount }, (_unused, frame) => ({
-      row,
-      frame,
-      pose: row.pose(frame),
-    })),
-  );
-}
-
-// ── Painting ────────────────────────────────────────────────────
-
-function rowNamed(state: string): RowSpec | undefined {
-  return RAT_KIN_ROWS.find((row) => row.name === state);
-}
-
-/**
- * Paints one cell of the Rat Kin, in the cell's own pixels, with his ground line
- * on the cell's declared anchor.
- *
- * The figure scale is applied about that ground line rather than about the
- * origin, so shrinking him keeps his feet on the tile they belong to instead of
- * floating him above it.
- */
-function paintRatKinFrame(ctx: CanvasRenderingContext2D, state: string, frame: number): void {
-  const row = rowNamed(state);
-  if (row === undefined) return;
-  const pose = row.pose(frame);
-  ctx.save();
-  ctx.translate(ORIGIN_X, ORIGIN_Y);
-  ctx.scale(TILE_SCALE, TILE_SCALE);
-  ctx.translate(0, GROUND_Y);
-  ctx.scale(RAT_KIN_SCALE, RAT_KIN_SCALE);
-  ctx.translate(0, -GROUND_Y);
-  if (row.view === 'front') drawRatKinFront(ctx, pose, MORDECAI_OUTFIT);
-  else if (row.view === 'away') drawRatKinAway(ctx, pose, MORDECAI_OUTFIT);
-  else drawRatKinSide(ctx, pose, MORDECAI_OUTFIT);
-  ctx.restore();
-}
-
-function ratKinStateFrames(): Record<string, number> {
-  const frames: Record<string, number> = {};
-  for (const row of RAT_KIN_ROWS) frames[row.name] = row.frameCount;
-  return frames;
-}
-
-export const RAT_KIN_FIGURE: FigureDef = {
-  id: 'rat_kin',
-  frameWidth: FRAME_WIDTH,
-  frameHeight: FRAME_HEIGHT,
-  tileX: TILE_X,
-  tileY: TILE_Y,
-  tileScale: TILE_SCALE,
-  states: figureStates(ratKinStateFrames()),
-  paintFrame: paintRatKinFrame,
-};

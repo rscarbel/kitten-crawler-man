@@ -97,8 +97,8 @@ export const worldPalette = {
   },
   /** Countdowns hanging over a cast spell, and the barrier taking shape. */
   spell: {
-    shellTimerFull: '#fbbf24',
-    shellTimer: '#93c5fd',
+    energyShieldTimerFull: '#fbbf24',
+    energyShieldTimer: '#93c5fd',
     fogTimer: '#d0d0e0',
     barrierPlacing: '#60a5fa',
     barrierTrack: '#4b5563',
@@ -252,7 +252,7 @@ export const worldPalette = {
     hostile: '#ef4444',
     /** A creature on the map that is not hostile right now: a hireling, a cow, a calm Hawkfolk. */
     friendly: '#ffffff',
-    mordecai: '#ffffff',
+    dave: '#ffffff',
     questOffer: '#fbbf24',
     questTurnIn: '#4ade80',
     questTarget: '#ef4444',
@@ -291,6 +291,19 @@ export const worldPalette = {
     buildEdge: '#78350f',
     structureHp: '#65a30d',
     structureTrack: 'rgba(0,0,0,0.55)',
+  },
+  /**
+   * The world re-rendering Dave as he teleports in or out: Caroline's own cyan
+   * (`palette.caroline` in `tokens.ts`), so the player reads the light that
+   * builds him as the same machine that speaks in her frame.
+   */
+  daveTeleport: {
+    /** The white-hot heart of the scan column and the last flash round his edge. */
+    core: '#e8f6fa',
+    /** The column's body and the brighter data motes. */
+    beam: '#8fe6fa',
+    /** The glow round the column, the glitching slices' tint and the dimmer motes. */
+    glow: '#5ed3f0',
   },
   /** The tutorial's pointing arrows and hint box. */
   guide: {

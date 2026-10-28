@@ -214,11 +214,11 @@ const CONTACT_SHADOW_ALPHA = 0.32;
 
 /**
  * The Shield's honey: a muted, darker amber with a pale cream highlight and a
- * brown depth. The human crawler's Protective Shell is blue, or at full power a saturated
+ * brown depth. The human crawler's Energy Shield is blue, or at full power a saturated
  * orange-to-gold (#fd7c0a, #ff8c00, #fbbf24) that sits across the same hues
  * any amber does, so hue alone cannot tell the two apart. The honey keeps its
- * distance in saturation and value instead — at least 25 ΔE from every Shell
- * colour, where a bright amber sits under 10 from the Shell's gold — and the
+ * distance in saturation and value instead — at least 25 ΔE from every Energy Shield
+ * colour, where a bright amber sits under 10 from the Energy Shield's gold — and the
  * gates hold it there.
  */
 export const SHIELD_AMBER = '#d4a04a';

@@ -6,7 +6,7 @@
 
 import { CraftExplainers, type ExplainerId } from '../../../ui/screens/dialogs/CraftExplainers';
 import { CONSTRUCTION_EXPLAINER } from '../../../ui/screens/dialogs/constructionExplainer';
-import { mongoExplainerEntry } from '../../../ui/screens/dialogs/mongoExplainer';
+import { deinonychusExplainerEntry } from '../../../ui/screens/dialogs/deinonychusExplainer';
 import { DUAL_HARVEST_EXPLAINER } from '../../../ui/screens/dialogs/dualHarvestExplainer';
 import { PROCESSING_EXPLAINER } from '../../../ui/screens/dialogs/processingExplainer';
 import { RESOURCING_EXPLAINER } from '../../../ui/screens/dialogs/resourcingExplainer';
@@ -23,10 +23,11 @@ import { ReadableOverlay } from '../../../ui/screens/dialogs/ReadableOverlay';
 import { spiderTutorialSurface } from '../../../ui/screens/dialogs/spiderTutorial';
 import type { Surface } from '../../../ui/core/UiRoot';
 import type { DialogFixture, FixtureRig } from './fixture';
+import { PET_NAME_SUGGESTIONS, PetNameBook, parsePetName } from '../../../core/party/petNames';
 import { buildingDisplayName } from '../../../map/buildingIds';
 
-/** A pet level that draws Mongo as an adolescent, the middle of his three growth stages. */
-const MONGO_FIXTURE_LEVEL = 5;
+/** A pet level that draws Deinonychus as an adolescent, the middle of his three growth stages. */
+const DEINONYCHUS_FIXTURE_LEVEL = 5;
 
 /** Opens the fixture's model the first time it is shown, and keeps the surface shut otherwise. */
 function gated(surface: Surface, shown: () => boolean, open: () => void): Surface {
@@ -49,6 +50,14 @@ function pressTimes(key: string, times: number): (rig: FixtureRig) => void {
   };
 }
 
+/** A run whose Deinonychus has a name, as every run has by the time his explainer opens. */
+function namedDeinonychus(): PetNameBook {
+  const book = new PetNameBook();
+  const name = parsePetName(PET_NAME_SUGGESTIONS.deinonychus[0]);
+  if (name !== null) book.give('deinonychus', name);
+  return book;
+}
+
 function explainerFixtures(id: ExplainerId, pageCount: number): readonly DialogFixture[] {
   const name = `explainer-${id}`;
   const build = (fixtureName: string, shown: () => boolean): readonly Surface[] => {
@@ -58,8 +67,8 @@ function explainerFixtures(id: ExplainerId, pageCount: number): readonly DialogF
     host.register('processing', PROCESSING_EXPLAINER);
     host.register('dual_harvest', DUAL_HARVEST_EXPLAINER);
     host.register(
-      'mongo',
-      mongoExplainerEntry(() => MONGO_FIXTURE_LEVEL),
+      'deinonychus',
+      deinonychusExplainerEntry(() => DEINONYCHUS_FIXTURE_LEVEL, namedDeinonychus()),
     );
     return [gated(host.surface({ id: fixtureName }), shown, () => void host.open(id))];
   };
@@ -310,7 +319,7 @@ export const FIXTURES: readonly DialogFixture[] = [
   ...explainerFixtures('construction', CONSTRUCTION_PAGES),
   ...explainerFixtures('resourcing', THREE_PAGES),
   ...explainerFixtures('processing', THREE_PAGES),
-  ...explainerFixtures('mongo', THREE_PAGES),
+  ...explainerFixtures('deinonychus', THREE_PAGES),
   ...explainerFixtures('dual_harvest', 1),
   blackjackFixture('blackjack-rules', true, 0),
   blackjackFixture('blackjack-rules-page5', false, BLACKJACK_LATER_PAGE),

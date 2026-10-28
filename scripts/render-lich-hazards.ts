@@ -12,7 +12,7 @@
  *   npx tsx scripts/render-lich-hazards.ts --out=hazards.png
  *   npx tsx scripts/render-lich-hazards.ts --zoom=8 --only=orb
  *
- * Like `render-smush-blast.ts`, this imports game modules written against
+ * Like `render-seismic-stomp-blast.ts`, this imports game modules written against
  * browser types and hands them a node-canvas context, so it sits outside
  * `tsconfig.scripts.json` with the other harnesses that need that bridge.
  */

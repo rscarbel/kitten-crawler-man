@@ -54,7 +54,7 @@ const CAT_STRIP = parseSamples(
 const CAT_ZOOM = parseSamples('idle:0,idle_side:0,idle_side_west:0,idle_away:0');
 
 const HUMAN_STRIP = parseSamples(
-  'walk:0,walk:8,walk_side:0,walk_side:8,walk_away:0,walk_away:8,run_side:4,run:4,idle:0,idle_side:0,idle_away:0,guard_side:0,cross_side:4,roundhouse_side:4,stomp_down:3,uppercut_up:4,shell_cast:4,build_side:6,knocked_out_side:0,smush_side:4',
+  'walk:0,walk:8,walk_side:0,walk_side:8,walk_away:0,walk_away:8,run_side:4,run:4,idle:0,idle_side:0,idle_away:0,guard_side:0,cross_side:4,roundhouse_side:4,stomp_down:3,uppercut_up:4,shield_cast:4,build_side:6,knocked_out_side:0,seismic_stomp_side:4',
 );
 const HUMAN_ZOOM = parseSamples('idle:0,idle_side:0,idle_away:0');
 

@@ -1,7 +1,6 @@
 import { buildingDisplayName } from '../../map/buildingIds';
 import { ABILITY_DEFS } from '../../abilities/abilityDefs';
 import { MAGIC_MISSILE_SPARK_LEVEL } from '../../abilities/magicMissile';
-import { displayNameOf } from '../../ai/AIChatFeed';
 import {
   CHEST_SOURCE_TITLES,
   type ChestSource,
@@ -96,7 +95,7 @@ export type FixedReward =
       readonly quantity: number;
       readonly to?: RewardRecipient;
     }
-  | { readonly kind: 'companion'; readonly id: 'mongo'; readonly to: 'cat' };
+  | { readonly kind: 'companion'; readonly id: 'deinonychus'; readonly to: 'cat' };
 
 /** What an achievement pays: a chest of `rarity`, with any `fixed` rewards added on top. */
 export interface AchievementReward {
@@ -148,7 +147,7 @@ export interface AchievementDef {
 export type AIAchievementKey = `ai:${string}`;
 
 /**
- * An achievement the show's AI wrote on the spot: its own title, description
+ * An achievement the AI wrote on the spot: its own title, description
  * and chest rarity. Kept beside the built-in ones and shown through the same
  * reward screen and Achievements page.
  */
@@ -188,7 +187,7 @@ export interface AIAchievementGrant {
 }
 
 const MAGIC_MISSILE_NAME = ABILITY_DEFS.magic_missile.name;
-const STOMP_NAME = ABILITY_DEFS.smush.name;
+const STOMP_NAME = ABILITY_DEFS.seismic_stomp.name;
 
 function dungeonKillsDescription(kills: number): string {
   return `The party has killed ${kills} monsters in the dungeon.`;
@@ -202,7 +201,7 @@ export const ACHIEVEMENT_DEFS: Readonly<Record<AchievementId, AchievementDef>> =
     playerType: 'both',
     reward: { rarity: 'Common' },
     tutorialReward: [
-      { kind: 'item', id: 'smush_tome', quantity: 1, to: 'human' },
+      { kind: 'item', id: 'seismic_stomp_tome', quantity: 1, to: 'human' },
       { kind: 'item', id: 'health_potion', quantity: TUTORIAL_REWARD_POTIONS, to: 'human' },
       { kind: 'item', id: 'lucky_hoodie', quantity: 1, to: 'human' },
       { kind: 'item', id: 'health_potion', quantity: TUTORIAL_REWARD_POTIONS, to: 'cat' },
@@ -341,12 +340,12 @@ export const ACHIEVEMENT_DEFS: Readonly<Record<AchievementId, AchievementDef>> =
     id: 'two_birds_one_stick',
     name: 'Two Birds, One Stick',
     description: `Kill ${DYNAMITE_MULTIKILL_THRESHOLD} or more enemies with one stick of dynamite.`,
-    playerType: 'human',
+    playerType: 'both',
     reward: {
       rarity: 'Common',
       fixed: [
         { kind: 'item', id: 'goblin_dynamite', quantity: ACHIEVEMENT_DYNAMITE_STICKS },
-        { kind: 'item', id: 'hazard_goggles', quantity: 1 },
+        { kind: 'item', id: 'hazard_goggles', quantity: 1, to: 'human' },
       ],
     },
   },
@@ -354,7 +353,7 @@ export const ACHIEVEMENT_DEFS: Readonly<Record<AchievementId, AchievementDef>> =
     id: 'finish_with_a_blow',
     name: 'Finish with a blow',
     description: 'Landed the killing blow on a boss with dynamite.',
-    playerType: 'human',
+    playerType: 'both',
     reward: {
       rarity: 'Uncommon',
       fixed: [
@@ -376,7 +375,7 @@ export const ACHIEVEMENT_DEFS: Readonly<Record<AchievementId, AchievementDef>> =
     name: 'Something Hatched',
     description: dungeonKillsDescription(DUNGEON_KILLS_SOMETHING_HATCHED),
     playerType: 'both',
-    reward: { rarity: 'Epic', fixed: [{ kind: 'companion', id: 'mongo', to: 'cat' }] },
+    reward: { rarity: 'Epic', fixed: [{ kind: 'companion', id: 'deinonychus', to: 'cat' }] },
     progress: { counter: 'dungeonKills', target: DUNGEON_KILLS_SOMETHING_HATCHED },
   },
   dungeon_kills_500: {
@@ -511,7 +510,7 @@ function parseGrantedLine(value: unknown): GrantedLine | undefined {
     const amount = wholeCount(value.amount);
     return amount === undefined ? undefined : { kind, amount };
   }
-  if (kind === 'companion') return id === 'mongo' ? { kind, id } : undefined;
+  if (kind === 'companion') return id === 'deinonychus' ? { kind, id } : undefined;
   if (typeof id !== 'string' || !isItemId(id)) return undefined;
   if (kind === 'item') {
     const quantity = wholeCount(value.quantity);
@@ -702,7 +701,7 @@ export class AchievementManager {
     return this.counters[id];
   }
 
-  /** Record a significant event (level-up, boss kill, etc.) for Mordecai's context. */
+  /** Record a significant event (level-up, boss kill, etc.) for Dave's context. */
   logRecentEvent(label: string): void {
     this.recentEvents.unshift({ label, timestamp: Date.now() });
     if (this.recentEvents.length > RECENT_EVENTS_MAX_CAP) this.recentEvents.pop();
@@ -749,7 +748,7 @@ export class AchievementManager {
     };
     this.aiAwards.set(id, def);
     this.menuUnseen++;
-    this.logRecentEvent(`Awarded "${def.name}" by ${displayNameOf(grant.awardedBy)}`);
+    this.logRecentEvent(`Awarded "${def.name}" by ${grant.awardedBy}`);
     return def;
   }
 

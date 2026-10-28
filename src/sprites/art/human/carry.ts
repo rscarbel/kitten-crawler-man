@@ -5,7 +5,7 @@
  * run on down the line of the fist, so a punch reads as a thrust or a cut.
  *
  * A row whose own business occupies him — a prop in either hand, a tool in
- * both, a sling's pouch pinched, the Protective Shell's glow gathered in that
+ * both, a sling's pouch pinched, the Energy Shield's glow gathered in that
  * palm — keeps its hands, and the item is not drawn on it.
  */
 

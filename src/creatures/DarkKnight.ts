@@ -111,7 +111,7 @@ const SWEEP_SHARE_INSIDE_RING = 0.6;
  * The two ground attacks are priced as punishment for ignoring a warning that
  * sat on the floor for most of a second: a share of the victim's own max HP,
  * which keeps them lethal against the cat's fixed HP and against a human crawler who has
- * poured everything into constitution.
+ * poured everything into health.
  *
  * **These go through `dealPreScaledDamage`, not `dealDamage`.** A share of the
  * target's max HP already scales with the party; running it through the mob
@@ -705,7 +705,7 @@ export class DarkKnight extends Mob {
       const cx = target.x + this.tileSize * TILE_CENTER;
       const cy = target.y + this.tileSize * TILE_CENTER;
       if (Math.hypot(cx - point.x, cy - point.y) > radius) continue;
-      if (this.spells?.isPointInsideShell(cx, cy) === true) {
+      if (this.spells?.isPointInsideEnergyShield(cx, cy) === true) {
         this.spells.addBlockXp(SLAM_BLOCK_XP);
         continue;
       }
@@ -724,7 +724,7 @@ export class DarkKnight extends Mob {
       if (Math.hypot(target.x - this.x, target.y - this.y) > radius) continue;
       const cx = target.x + this.tileSize * TILE_CENTER;
       const cy = target.y + this.tileSize * TILE_CENTER;
-      if (this.spells?.isPointInsideShell(cx, cy) === true) {
+      if (this.spells?.isPointInsideEnergyShield(cx, cy) === true) {
         this.spells.addBlockXp(SWEEP_BLOCK_XP);
         continue;
       }
@@ -844,8 +844,8 @@ export class DarkKnight extends Mob {
       items.push({ id: 'cooldown_crisp', quantity: 1 });
       items.push({ id: 'stat_boost_potion', quantity: 1 });
     }
-    // He fights with his fists as readily as his mace; the book is his to lose.
-    maybeDropSkillBook(items, 'skill_book_pugilism');
+    // He fights with fists, mace and blade alike; the books are his to lose.
+    maybeDropSkillBook(items, 'armouredFighter');
     return items;
   }
 

@@ -34,6 +34,7 @@ import { UiRoot, type HitRegion } from '../src/ui/core/UiRoot.js';
 import { NO_INSETS, type ViewportInput } from '../src/ui/core/viewport.js';
 import { PAUSE_CONFIRM_SURFACE_IDS, PauseScreen } from '../src/ui/screens/pause/PauseScreen.js';
 import { gameContext } from './nodeGameContext.js';
+import { PetNameBook } from '../src/core/party/petNames.js';
 
 /** Faults a run can inject to prove the checks can fail. */
 export type DifficultyGuardFault = 'unguarded-difficulty';
@@ -78,6 +79,7 @@ const menu = new PauseScreen({
   abilities: new AbilityManager(),
   audio: new AudioManager(),
   guides: {},
+  petNames: new PetNameBook(),
 });
 // Music pausing is not under test, and the silent audio shim has no voices to pause.
 menu.skipAudioPause = () => true;

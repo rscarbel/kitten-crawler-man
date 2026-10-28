@@ -4,7 +4,7 @@
  *
  * - every weapon kind a crawler swings, throws or casts is refused at the
  *   attack sites' friendly-fire gate (`takesPlayerDamage`) and at the door;
- * - both crawlers, Mongo, a hireling's credited blow, a turned thrall, an
+ * - both crawlers, Deinonychus, a hireling's credited blow, a turned thrall, an
  *   allied mob's own swing, dynamite, trebuchet shrapnel and every status the
  *   party lays leave her bar where it was;
  * - no party targeting may pick her: she is not hostile, not the pet's prey,
@@ -17,7 +17,7 @@ import { TILE_SIZE } from '../../src/core/constants';
 import { makeBurn, makePoison } from '../../src/core/combat/StatusEffect';
 import { Cow } from '../../src/creatures/Cow';
 import { Goblin } from '../../src/creatures/Goblin';
-import { Mongo } from '../../src/creatures/Mongo';
+import { Deinonychus } from '../../src/creatures/Deinonychus';
 import type { Mob, PlayerDamageType } from '../../src/creatures/Mob';
 import type { DamageSource, Player } from '../../src/Player';
 import { merritGateTile } from '../../src/systems/briarHollow/blueprints/escortRoute';
@@ -32,16 +32,16 @@ const PICKUP_UPDATES = 30;
 const PROBE_DAMAGE = 10;
 /** Long enough for every damage-over-time status to tick several times. */
 const STATUS_TICK_UPDATES = 600;
-const MONGO_LEVEL = 5;
-const MONGO_HP = 100;
+const DEINONYCHUS_LEVEL = 5;
+const DEINONYCHUS_HP = 100;
 /** Enough swings that a dodge roll cannot stop every one. */
 const SWINGS_TO_LAND_ONE = 20;
 
 const EVERY_PARTY_WEAPON: readonly PlayerDamageType[] = [
   'melee',
   'missile',
-  'shell',
-  'smush',
+  'energy_shield',
+  'seismic_stomp',
   'explosion',
   'slingshot',
 ];
@@ -117,7 +117,14 @@ export function verifyMidgeFriendlyFire(check: Check): void {
   }
 
   const { human, cat } = rig;
-  const mongo = new Mongo(gate.x, gate.y, TILE_SIZE, cat, MONGO_LEVEL, MONGO_HP);
+  const deinonychus = new Deinonychus(
+    gate.x,
+    gate.y,
+    TILE_SIZE,
+    cat,
+    DEINONYCHUS_LEVEL,
+    DEINONYCHUS_HP,
+  );
   const thrall = new Goblin(gate.x, gate.y, TILE_SIZE, 'sword');
   thrall.convertToAlly(human);
   const ally = new AlliedSwinger(gate.x, gate.y, TILE_SIZE, MIDGE_COAT, 'adult');
@@ -146,7 +153,7 @@ export function verifyMidgeFriendlyFire(check: Check): void {
     });
   }
   const mobDealers: ReadonlyArray<{ readonly name: string; readonly body: Mob }> = [
-    { name: 'Mongo', body: mongo },
+    { name: 'Deinonychus', body: deinonychus },
     { name: 'a turned thrall', body: thrall },
     { name: 'an allied mob', body: ally },
   ];
@@ -241,7 +248,7 @@ export function verifyMidgeFriendlyFire(check: Check): void {
     blueprints.escort.isEscorting,
     'after every probe she is still on the lead, not scared home',
   );
-  mongo.dispose();
+  deinonychus.dispose();
   thrall.dispose();
   ally.dispose();
   hostile.dispose();

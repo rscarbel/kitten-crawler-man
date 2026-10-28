@@ -6,7 +6,14 @@
  */
 
 import { darken, lighten, mix, withAlpha } from './color';
-import { FOCUS_RING, PRESS_DROP, type Elevation, type Theme, type TypeStyle } from './tokens';
+import {
+  carolineFrame,
+  FOCUS_RING,
+  PRESS_DROP,
+  type Elevation,
+  type Theme,
+  type TypeStyle,
+} from './tokens';
 
 export const BUTTON_VARIANTS = [
   'primary',
@@ -116,7 +123,6 @@ export const METER_KINDS = [
   'progress',
   'warning',
   'danger',
-  'favor',
 ] as const;
 
 export type MeterKind = (typeof METER_KINDS)[number];
@@ -285,10 +291,42 @@ export interface ControlFlashSkin {
   readonly glowBlur: number;
 }
 
-/** The System AI's line on the title screen: terminal type with a dark halo over the art. */
-export interface SystemAiSkin {
-  readonly text: TextSkin;
-  readonly halo: string;
+/**
+ * Caroline's frame: a chamfered terminal readout with a cyan hairline,
+ * heavier corner brackets, a faint grid and drifting scanlines, a header
+ * strip and decoding text. Worn by her alone.
+ */
+export interface CarolineSkin {
+  readonly ground: string;
+  readonly groundSheer: string;
+  readonly hairline: string;
+  readonly hairlineWidth: number;
+  readonly bracket: string;
+  readonly bracketWidth: number;
+  readonly bracketLength: number;
+  readonly chamfer: number;
+  readonly grid: string;
+  readonly gridStep: number;
+  readonly scanline: string;
+  readonly scanlineStep: number;
+  readonly scanlineDriftMs: number;
+  readonly padding: number;
+  readonly paddingCompact: number;
+  readonly label: TextSkin;
+  readonly dot: string;
+  readonly dotSize: number;
+  readonly dotPulseMs: number;
+  readonly rule: string;
+  readonly ruleWidth: number;
+  readonly prefix: TextSkin;
+  readonly body: TextSkin;
+  readonly cursor: string;
+  readonly cursorBlinkMs: number;
+  readonly characterMs: number;
+  readonly scrambleStepMs: number;
+  readonly decodeTail: number;
+  readonly lineDrawMs: number;
+  readonly unfoldMs: number;
 }
 
 /** The title's sound hint: quiet, but readable over the dark hall. */
@@ -334,7 +372,7 @@ export interface Skins {
   readonly keycap: KeycapSkin;
   readonly titleLogo: TitleLogoSkin;
   readonly controlFlash: ControlFlashSkin;
-  readonly systemAi: SystemAiSkin;
+  readonly caroline: CarolineSkin;
   readonly soundHint: SoundHintSkin;
 }
 
@@ -716,8 +754,6 @@ function buildMeters(theme: Theme): Record<MeterKind, MeterSkin> {
     progress: meter(palette.accent.base),
     warning: meter(palette.state.warning),
     danger: meter(palette.state.danger),
-    // The audience's meter wears the System's own terminal colour: the show's voice, not the party's.
-    favor: meter(palette.meter.favor, palette.text.muted),
   };
 }
 
@@ -800,6 +836,43 @@ function buildTitleLogo(theme: Theme): TitleLogoSkin {
   };
 }
 
+function buildCaroline(theme: Theme): CarolineSkin {
+  const { palette, type, space, motion } = theme;
+  const ink = palette.caroline;
+  return {
+    ground: ink.ground,
+    groundSheer: ink.groundSheer,
+    hairline: ink.hairline,
+    hairlineWidth: carolineFrame.hairlineWidth,
+    bracket: ink.bracket,
+    bracketWidth: carolineFrame.bracketWidth,
+    bracketLength: carolineFrame.bracketLength,
+    chamfer: carolineFrame.chamfer,
+    grid: ink.grid,
+    gridStep: carolineFrame.gridStep,
+    scanline: ink.scanline,
+    scanlineStep: carolineFrame.scanlineStep,
+    scanlineDriftMs: motion.carolineScanlineDrift,
+    padding: space.md,
+    paddingCompact: space.sm,
+    label: { style: type.carolineLabel, color: ink.label },
+    dot: ink.dot,
+    dotSize: carolineFrame.dotSize,
+    dotPulseMs: motion.carolineDotPulse,
+    rule: ink.rule,
+    ruleWidth: carolineFrame.ruleWidth,
+    prefix: { style: type.body, color: ink.prefix },
+    body: { style: type.body, color: ink.body },
+    cursor: ink.cursor,
+    cursorBlinkMs: motion.carolineCursorBlink,
+    characterMs: motion.carolineCharacter,
+    scrambleStepMs: motion.carolineScrambleStep,
+    decodeTail: carolineFrame.decodeTail,
+    lineDrawMs: motion.carolineLineDraw,
+    unfoldMs: motion.carolineUnfold,
+  };
+}
+
 function buildSkins(theme: Theme): Skins {
   const { palette, space, radius, type, elevation } = theme;
   const brass = buildBrass(theme);
@@ -839,10 +912,7 @@ function buildSkins(theme: Theme): Skins {
       glow: withAlpha(palette.accent.hover, FLASH_GLOW_ALPHA),
       glowBlur: space.xl,
     },
-    systemAi: {
-      text: { style: type.terminal, color: palette.text.terminal },
-      halo: palette.surface.sunken,
-    },
+    caroline: buildCaroline(theme),
     soundHint: {
       text: { style: type.hint, color: palette.text.secondary },
       halo: palette.surface.sunken,

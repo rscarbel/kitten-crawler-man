@@ -1,9 +1,9 @@
 import type { ItemId } from '../core/items/defs/ItemDefs';
-import type { StatName } from '../Player';
+import { STAT_DEFS, type StatId } from '../core/party/stats';
 import type { CrawlerKind } from '../core/skills/SkillManager';
 import {
   HAMBURGER_FED_DURATION_SECONDS,
-  HAMBURGER_STR_BONUS,
+  HAMBURGER_MELEE_BONUS,
 } from '../core/items/consumables/foodEffects';
 import { REFRESHED_DURATION_SECONDS, REFRESHED_SPEED_FACTOR } from '../core/combat/StatusEffect';
 import type { ToastOptions } from './hud/toasts';
@@ -20,7 +20,7 @@ const FIXED_EFFECT_NOTICES: Partial<Record<ItemId, string>> = {
   cooldown_crisp: 'Cooldowns temporarily halved',
   catnip_tuna_water: 'Health restored — and she is buzzed',
   hollow_stew: 'Health restored',
-  hamburger: `Health restored — Strength +${HAMBURGER_STR_BONUS} for ${HAMBURGER_FED_DURATION_SECONDS}s`,
+  hamburger: `Health restored — Melee +${HAMBURGER_MELEE_BONUS} for ${HAMBURGER_FED_DURATION_SECONDS}s`,
 };
 
 /**
@@ -39,15 +39,8 @@ export function drinkRefusal(owner: CrawlerKind): string {
   return `That's the ${CRAWLER_NOUN[owner]}'s.`;
 }
 
-const STAT_LABELS: Record<StatName, string> = {
-  strength: 'Strength',
-  intelligence: 'Intelligence',
-  constitution: 'Constitution',
-  dexterity: 'Dexterity',
-};
-
-export function statBoostNotice(stat: StatName, amount: number): string {
-  return `${STAT_LABELS[stat]} increased by ${amount}`;
+export function statBoostNotice(stat: StatId, amount: number): string {
+  return `${STAT_DEFS[stat].label} increased by ${amount}`;
 }
 
 const SECONDS_PER_MINUTE = 60;

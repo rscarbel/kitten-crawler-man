@@ -36,7 +36,9 @@ import {
   TILE_X,
   WORK_IMPACT_FRAME,
   catPoseToCell,
+  catRowHoldsAt,
   paintCatCell,
+  type CatHold,
   type RowSpec,
 } from '../src/sprites/art/catFigure.js';
 import { GROUND_Y, type Pt } from '../src/sprites/art/catArt.js';
@@ -55,6 +57,7 @@ import {
   type HeldVisualId,
   MOUTH_CARRY_VISUAL_IDS,
   FIXTURE_TOOL_VISUAL_IDS,
+  THROWN_PROP_VISUAL_IDS,
   TOOL_HELD_VISUAL_IDS,
 } from '../src/sprites/held/heldVisualIds.js';
 import type { HeldVisualDef } from '../src/sprites/held/heldVisualDef.js';
@@ -121,8 +124,8 @@ interface Subject {
   readonly bitesGround: boolean;
 }
 
-function rowsHolding(hold: 'chop' | 'mine' | 'carry'): RowSpec[] {
-  return CAT_ROWS.filter((row) => row.hold === hold);
+function rowsHolding(...holds: readonly CatHold[]): RowSpec[] {
+  return CAT_ROWS.filter((row) => row.hold !== undefined && holds.includes(row.hold));
 }
 
 function subjects(only: string | null): Subject[] {
@@ -143,6 +146,10 @@ function subjects(only: string | null): Subject[] {
   }
   for (const id of MOUTH_CARRY_VISUAL_IDS) {
     list.push({ id, look: HELD_VISUALS[id], rows: rowsHolding('carry'), bitesGround: false });
+  }
+  for (const id of THROWN_PROP_VISUAL_IDS) {
+    const rows = rowsHolding('carry', 'throw');
+    list.push({ id, look: HELD_VISUALS[id], rows, bitesGround: false });
   }
   return only === null ? list : list.filter((subject) => subject.id === only);
 }
@@ -490,6 +497,7 @@ export function catHeldFailures(only: string | null = null): string[] {
     for (const subject of chosen) {
       for (const row of subject.rows) {
         for (let frame = 0; frame < row.frameCount; frame++) {
+          if (!catRowHoldsAt(row, frame)) continue;
           checkFrame(look, subject, row, frame, failures, counts);
           checkPads(look, subject, row, frame, failures, counts);
         }

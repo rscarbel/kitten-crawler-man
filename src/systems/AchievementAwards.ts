@@ -4,7 +4,7 @@
  * puts them straight into the owning crawler's bag and purse, queues the
  * presentation the reward screen shows, and tells the bus, so the audio and
  * the AI hear every award the same way. A companion is the one reward not
- * paid here: it joins when its chest is opened (see `mongoArrival.ts`).
+ * paid here: it joins when its chest is opened (see `deinonychusArrival.ts`).
  */
 
 import {
@@ -50,8 +50,6 @@ export interface AchievementAwardsDeps {
    * only the scene knows every place a piece can be waiting.
    */
   readonly owns: (id: GearId) => boolean;
-  /** What every chest's coins are multiplied by: the viewers' favour bonus where the scene has one. */
-  readonly coinMultiplier?: () => number;
   /** Which crawler the player is steering: the one an "active" fixed reward goes to. */
   readonly activeCrawler: () => CrawlerKind;
   /** Whether the scene is the tutorial, whose achievements pay their tutorial kit instead of a roll. */
@@ -70,7 +68,8 @@ export interface ChestGrant {
 
 const POTION_ID = 'health_potion' satisfies ItemId;
 
-function crawlerLabel(kind: CrawlerKind): 'Human' | 'Cat' {
+/** How the event bus names a crawler. */
+export function crawlerLabel(kind: CrawlerKind): 'Human' | 'Cat' {
   return kind === 'human' ? 'Human' : 'Cat';
 }
 
@@ -216,7 +215,7 @@ export class AchievementAwards {
       ? rollRewardChest(rarity, kind, this.deps.random ?? worldRandom, {
           owns: this.deps.owns,
           // The recipient's worn coin bonus pays on chests as it does on kills.
-          coinMultiplier: (this.deps.coinMultiplier?.() ?? 1) * coinBonusFor(this.crawler(kind)),
+          coinMultiplier: coinBonusFor(this.crawler(kind)),
           // Every fixed piece, whichever crawler it is routed to: the award pays it
           // to one of them, so a roll on either must not hand over a second copy.
           reserved: fixed.flatMap((reward) => (reward.kind === 'item' ? [reward.id] : [])),

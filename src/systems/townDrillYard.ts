@@ -12,7 +12,8 @@
  * `BuildingInteriorScene` owns the sounds and the interaction gating.
  */
 
-import type { Player, StatName } from '../Player';
+import type { Player } from '../Player';
+import { ALL_STATS, STAT_DEFS, type StatId } from '../core/party/stats';
 import type {
   ShopMenu,
   ShopOffer,
@@ -46,48 +47,66 @@ const DRILL_PRICES: ReadonlyArray<number> = [
  */
 export const DRILL_TRAINING_CAP = DRILL_PRICES.length;
 
-const DRILL_ROWS: ReadonlyArray<{
+interface DrillRow {
   readonly key: string;
-  readonly stat: StatName;
   readonly art: ServiceIconId;
   readonly label: string;
-  readonly desc: string;
+  /** What the drill is, before the stat it raises is named. */
+  readonly pitch: string;
   readonly taught: string;
-}> = [
-  {
-    key: 'pell_work',
-    stat: 'strength',
-    art: 'drill_strength',
-    label: 'Pell Work',
-    desc: `Hours on the straw man until the swing comes off the hip. +${DRILL_STAT_POINTS} Strength`,
-    taught: 'Again. Again. There — that one came off the hip. Keep it.',
-  },
-  {
+}
+
+/** One drill per stat, listed in the stat sheet's order. */
+const DRILLS = {
+  health: {
     key: 'shield_hours',
-    stat: 'constitution',
-    art: 'drill_constitution',
+    art: 'drill_health',
     label: 'Shield Hours',
-    desc: `Stand in the ring and be hit until standing stops being a decision. +${DRILL_STAT_POINTS} Constitution`,
+    pitch: 'Stand in the ring and be hit until standing stops being a decision.',
     taught:
       'You stopped flinching about an hour ago and did not notice. That is what you paid for.',
   },
-  {
-    key: 'footwork',
-    stat: 'dexterity',
-    art: 'drill_dexterity',
-    label: 'Footwork',
-    desc: `Sand, rope and a stick across the ankles. +${DRILL_STAT_POINTS} Dexterity`,
-    taught: 'You are off the line now instead of backing down it. Do not go proud about it.',
+  melee: {
+    key: 'pell_work',
+    art: 'drill_melee',
+    label: 'Pell Work',
+    pitch: 'Hours on the straw man until the swing comes off the hip.',
+    taught: 'Again. Again. There — that one came off the hip. Keep it.',
   },
-  {
+  magic: {
     key: 'stairwells',
-    stat: 'intelligence',
-    art: 'drill_intelligence',
+    art: 'drill_magic',
     label: 'Reading a Stairwell',
-    desc: `Where they wait, which way they come, what a floor's shape is telling you. +${DRILL_STAT_POINTS} Intelligence`,
+    pitch: "Where they wait, which way they come, what a floor's shape is telling you.",
     taught: 'You will see the room before you are in it now. That is worth more than the swing.',
   },
-];
+  evasiveness: {
+    key: 'footwork',
+    art: 'drill_evasiveness',
+    label: 'Footwork',
+    pitch: 'Sand, rope and a stick across the ankles.',
+    taught: 'You are off the line now instead of backing down it. Do not go proud about it.',
+  },
+  ranged: {
+    key: 'butts',
+    art: 'drill_ranged',
+    label: 'The Butts',
+    pitch: 'Stones at a straw target until you stop watching your own hand.',
+    taught: 'You looked at the mark and not the sling. That is the whole of it.',
+  },
+  explosivesHandling: {
+    key: 'powder_shed',
+    art: 'drill_explosives',
+    label: 'The Powder Shed',
+    pitch: 'Short fuses, long throws, and a sandbag wall you will learn to love.',
+    taught: 'All ten fingers. You would be amazed how few leave this shed with all ten.',
+  },
+} as const satisfies Record<StatId, DrillRow>;
+
+/** What a drill of `stat` raises `player`'s stat by. */
+function drillGain(player: Player, stat: StatId): number {
+  return DRILL_STAT_POINTS * player.boughtStatGainPerPoint(stat);
+}
 
 const SERGEANT_BARKS: ReadonlyArray<string> = [
   'The sand is free. What I know is not, and I have not got much of it left to sell.',
@@ -124,11 +143,11 @@ export function buildDrillYardMenu(
     bark: host?.line ?? rotateLine(SERGEANT_BARKS, turn),
     byline: hostByline(host),
     emblem: null,
-    options: DRILL_ROWS.map((row): ShopRow => ({
-      key: row.key,
-      label: row.label,
-      desc: row.desc,
-      art: { kind: 'service', service: row.art },
+    options: ALL_STATS.map((stat): ShopRow => ({
+      key: DRILLS[stat].key,
+      label: DRILLS[stat].label,
+      desc: `${DRILLS[stat].pitch} +${drillGain(player, stat)} ${STAT_DEFS[stat].label}`,
+      art: { kind: 'service', service: DRILLS[stat].art },
       offer,
       questErrand: false,
     })),
@@ -140,9 +159,9 @@ export const runDrill: ShopPurchaseHandler = (option, buyer) => {
   if (nextPrice(buyer) === null) {
     return { ok: false, line: `${DRILL_EXHAUSTED}. Go and use it.` };
   }
-  const row = DRILL_ROWS.find((candidate) => candidate.key === option.key);
-  if (row === undefined) return { ok: false, line: 'Pell looks at the sand and says nothing.' };
-  buyer.applyPermanentStat(row.stat, DRILL_STAT_POINTS);
+  const stat = ALL_STATS.find((candidate) => DRILLS[candidate].key === option.key);
+  if (stat === undefined) return { ok: false, line: 'Pell looks at the sand and says nothing.' };
+  buyer.applyPermanentStat(stat, DRILL_STAT_POINTS);
   buyer.drillTraining++;
-  return { ok: true, line: row.taught };
+  return { ok: true, line: DRILLS[stat].taught };
 };

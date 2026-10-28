@@ -1,6 +1,6 @@
 ---
 name: add-level
-description: Add or modify a level, map feature, or tile type in Kitten Crawler Man — LevelDef, level registry/chaining, spawn rules, tile renderers, walkability. Use for work in src/levels/ or src/map/.
+description: Add or modify a level, map feature, or tile type in Kitten Crawler World — LevelDef, level registry/chaining, spawn rules, tile renderers, walkability. Use for work in src/levels/ or src/map/.
 ---
 
 # Add a Level or Tile

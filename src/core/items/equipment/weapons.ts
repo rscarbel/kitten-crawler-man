@@ -22,8 +22,32 @@ export const STORMCALLER_DAMAGE_MULTIPLIER = 2;
  */
 export const PROVING_WEAPON_DAMAGE_MULTIPLIER = 1;
 
-/** What a melee weapon's edge does to what it meets: a blade cuts, a blunt head bludgeons. */
-export type StrikeKind = 'blade' | 'blunt';
+/** The kinds of weapon swung in hand, which the proficiency skills train with. */
+export type MeleeWeaponFamily = 'sword' | 'smallBlade' | 'axe' | 'blunt' | 'staff' | 'gauntlet';
+
+/** The kinds of weapon that loose something at range. */
+export type RangedWeaponFamily = 'sling' | 'bow' | 'crossbow';
+
+/**
+ * What kind of weapon a weapon is. Every weapon stat block names one, so a hit
+ * it lands carries it as a damage tag and the skill that trains with that kind
+ * of weapon boosts it.
+ */
+export type WeaponFamily = MeleeWeaponFamily | RangedWeaponFamily | 'claw';
+
+/** How each weapon family is named on a tooltip. */
+export const WEAPON_FAMILY_LABELS = {
+  sword: 'Sword',
+  smallBlade: 'Small blade',
+  axe: 'Axe',
+  blunt: 'Blunt',
+  staff: 'Staff',
+  gauntlet: 'Gauntlet',
+  claw: 'Claws',
+  sling: 'Sling',
+  bow: 'Bow',
+  crossbow: 'Crossbow',
+} as const satisfies Record<WeaponFamily, string>;
 
 /**
  * What a weapon held in hand is heard as, by what it is made of, its size and
@@ -48,7 +72,7 @@ export interface MeleeWeaponStats {
   readonly delivery: 'melee';
   /** How the weapon looks in hand, which also names its grip archetype and weight. */
   readonly heldVisual: WeaponHeldVisualId;
-  readonly strike: StrikeKind;
+  readonly family: MeleeWeaponFamily;
   readonly sound: HandWeaponSoundFamily;
   /** Applied to the blow his bare arm would land, minus what only a fist earns. */
   readonly damageMultiplier: number;
@@ -66,9 +90,23 @@ export interface MeleeWeaponStats {
   readonly awakenedHeldVisual?: WeaponHeldVisualId;
 }
 
+/** Frames between sling shots — roughly one stone every three quarters of a second. */
+export const SLING_COOLDOWN_FRAMES = 45;
+
+/**
+ * Pixels a sling stone covers per tick. Sits between the magic missile's base
+ * and full-power speeds: a flung pebble should read as faster than a lobbed
+ * bottle and slower than a bolt of magic.
+ */
+export const SLING_STONE_SPEED = 6;
+
+/** Radius a sling stone is tested against props, trees and mobs with, as a fraction of a tile. */
+export const SLING_HIT_RADIUS_FRACTION = 0.4;
+
 /** A weapon that takes the attack key to loose a stone instead of swinging. */
 export interface SlingWeaponStats {
   readonly delivery: 'sling';
+  readonly family: 'sling';
   readonly heldVisual: WeaponHeldVisualId;
   readonly sound: HandWeaponSoundFamily;
 }
@@ -91,6 +129,7 @@ export type ClawTrail = 'frost' | 'venom' | 'ink' | 'sunsteel';
  */
 export interface ClawWeaponStats {
   readonly delivery: 'claw';
+  readonly family: 'claw';
   readonly sound: ClawSoundFamily;
   /** Applied to the swipe her bare paw would land. */
   readonly damageMultiplier: number;
@@ -103,3 +142,9 @@ export interface ClawWeaponStats {
 }
 
 export type WeaponStats = HandWeaponStats | ClawWeaponStats;
+
+/**
+ * Every way a crawler's damage leaves her: the weapon blocks above, plus spells
+ * and thrown explosives, which are items without a weapon block.
+ */
+export type WeaponDelivery = WeaponStats['delivery'] | 'spell' | 'thrownExplosive';

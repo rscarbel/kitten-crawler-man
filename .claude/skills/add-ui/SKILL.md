@@ -1,6 +1,6 @@
 ---
 name: add-ui
-description: Build canvas UI in Kitten Crawler Man — surfaces on a scene's UiRoot (bands, Escape, focus, pointer capture), the Ui context, the widget set, theme tokens/skins/glyphs/fonts, panels and phone layout, the HUD model, world painters, Conversation/DialogBox, and the UI guard rails (check:ui-style, verify:ui-input, render:ui-gallery). Use when adding or changing any menu, dialog, HUD element, prompt or on-screen text.
+description: Build canvas UI in Kitten Crawler World — surfaces on a scene's UiRoot (bands, Escape, focus, pointer capture), the Ui context, the widget set, theme tokens/skins/glyphs/fonts, panels and phone layout, the HUD model, world painters, Conversation/DialogBox, and the UI guard rails (check:ui-style, verify:ui-input, render:ui-gallery). Use when adding or changing any menu, dialog, HUD element, prompt or on-screen text.
 ---
 
 # Canvas UI
@@ -12,7 +12,7 @@ the world is a **surface** mounted once on the scene's `UiRoot`. A surface's
 looks come from **theme tokens and skins**. Nothing in feature code calls `ctx`
 for chrome.
 
-The look is **dark glass, game-show gold**: deep blue-black semi-opaque panels
+The look is **dark glass, warm gold**: deep blue-black semi-opaque panels
 with a soft 1px light edge, generous radius and a soft drop shadow. Warm gold is
 the one accent, used for the primary action, focus and selection. Category
 colours appear only as small accents (icon tints, pills), never as panel fills.
@@ -62,8 +62,8 @@ Settled design decisions, not open questions:
   `canvasChrome.ts`; category colour is still the accent every other item wears.
 - **The phone HUD has no collapse toggle**; the compact unit frames are already
   small.
-- **Achievement and System AI announcements stay big modal moments**, part of
-  the show's flavour: every award plays on the Reward Chest screen.
+- **Achievement and Caroline announcements stay big modal moments**: every
+  award plays on the Reward Chest screen.
 
 ## Surfaces (`src/ui/core/UiRoot.ts`)
 
@@ -255,14 +255,21 @@ surface.
 - `tooltip(ui, anchor, { id, show, text, title?, lines?, placement?, immediate? })` — after `TOOLTIP_DELAY_MS`, kept on screen.
 - `contextMenu(ui, { id, at, title?, items, onDismiss })` and `popover(ui, { id, anchor, w, h, placement?, onDismiss?, draw })` — layered, deferred, flip and clamp to the viewport.
 - `searchField(ui, rect, { id, input, placeholder? })` — the surface's `onKey` delegates to `input.handleKey` (`SearchInput`).
+- `textField(ui, rect, { id, sink, placeholder, active? })` — a one-line free-text field over a `TextEntrySink` (`src/ui/input/textEntrySink.ts`). The sink is a hidden, focused DOM input, so the browser does the editing (IME composition, AltGr, paste, caret moves) and a phone raises its keyboard; a tap on the field focuses the sink inside that tap, which is the only way a phone will. Build one sink per entry with its `maxLength`, `onEnter` and optional `onEscape`, `attach` it to the canvas, and `dispose` it when the entry ends and when the scene tears down, or the field left on the page swallows the next scene's keys. Its surface sets `takesText: true`. The chat box (`PlayerChatSystem`) and `PetNamePrompt` are the two users.
 - `stepper(ui, rect, { id, state, large?, max? })` over a `QuantityPickerState`; digits via `stepperKey` from `onKey`.
 - `itemSlot(ui, rect, { id, item, quantity?, keycap?, cooldown?, selected?, dragging?, dropTarget?, equipped?, disabled?, tooltip?, onTap?, onPress?, onDrag?, … })` — icon from `ITEM_ICONS`, category accent, quantity, cooldown sweep.
 - `costChips(ui, rect, { costs, align? })` — have/need chips; `costsMet`, `measureCostChips`.
 - `choiceModal(ui, config)` / `choiceModalSurface({ id, band?, isOpen, haltsWorld?, locksKeyboard?, escape, onKey?, content })` — title, optional icon or hero art, body, extra content, 1–N buttons; `escape` is `close`, `block` or `pass`. Every confirm, stair/door prompt, level-up and reward announcement. `buttonColumns` lays the buttons out as a pinned footer grid (the panel's `footerColumns`), falling back to stacked full-width buttons wherever the widest label would not fit a column.
 - `pagedOverlay` / `pagedOverlaySurface({ id, pages, onDone, … isOpen })` — multi-page explainers, rules sheets, tutorials, readable notes; arrows turn pages.
+- `carolineFrame` — the one painter for Caroline and worn by nothing else: a chamfered terminal readout with a "System AI message:" strip, her "Caroline - " prefix and decoding text. Variants: `carolineBox` (full box; `sheer` for the title screen), `carolineToast` (compact, label inline), and the pieces `DialogBox`, `panel({ chrome: 'caroline' })` and `choiceModal({ chrome: 'caroline' })` build from. Open, reveal and close are pure functions of a clock (`carolineOpenAt`, `carolineRevealAt`, `carolineCloseAt`) and honour `prefersReducedMotion()` (`src/ui/core/reducedMotion.ts`). A toast posted with `voice: 'caroline'` draws in it.
 
 `paint.ts` holds the shared primitives (rounded paths, glass, focus ring,
 hover/press treatment). Feature code never calls it; it calls widgets.
+
+**Two surfaces with fixed jobs:**
+
+- **`PetNamePrompt`** (`src/ui/screens/dialogs/petNamePrompt.ts`, one per scene on `MenusKit.petNamePrompt`) — a `modal`, `takesText` surface that halts the world and cannot be dismissed: the pet's portrait, a `textField`, the suggestion chips from `PET_NAME_SUGGESTIONS`, "Surprise me" and Confirm, which stays disabled until `parsePetName` (`src/core/party/petNames.ts`) accepts the text. It is an `md` `choiceModal`, so a phone gets a bottom sheet. Ask for a name through `namePetThen` (`src/systems/petNaming.ts`), never by opening the prompt directly; `MissingPetNames` asks once per scene for any pet the party owns unnamed. Text that names a pet reads `petWords(petNames, kind)`, never the species.
+- **The cutscene surface** (`CutsceneKit.surface()`, id `CUTSCENE_SURFACE_ID`, band `panel`) — open while a `CutsceneDirector` owns the party. It draws nothing, blocks every press and gameplay key, and leaves only pause live: Escape passes beneath it and the HUD's pause button stays tappable. It does not halt the world itself; a talk the cutscene opens does. Never add a `playerLocked` flag or a click chain for a scripted moment: write it as a cutscene (`add-system`).
 
 ## Panels, sizes and phones
 
@@ -422,10 +429,8 @@ host lifts it over its own panels. Mount both.
   that aims at the HUD.
 - **`HudModel`**: `crawlers` (active first), `activeCrawler`, `coins`,
   `skillPoints`, `minimap` (`MinimapModel` with its own `paint`, `toggle`,
-  `pan?`), `dock`, `summon`, `hotbar`, `topBand`, `levelTimer`
-  (`{ frames, paused } | null`; the HUD decides chip or band card) and
-  `favor` (the viewers' favour: a pill on the readout row in the room
-  `HudGeometry.favor` leaves inside the frames' width, else a band card).
+  `pan?`), `dock`, `summon`, `hotbar`, `topBand` and `levelTimer`
+  (`{ frames, paused } | null`; the HUD decides chip or band card).
 - **Dock:** `DockButtonModel { id, icon, label, key?, badge?, selected?, pulse?, bounce?, onTap }`.
   Buttons fire on release. `hudButtonLayout` fixes the column order (Pause, Bag,
   Build, rewards chip, Journal, then a scene's `extras`, which never shift
@@ -516,6 +521,13 @@ verify:dialog-accept` walks this with Space alone.
 - **Speakers** — `SPEAKERS` (`src/dialog/speakers.ts`) keyed by `SpeakerId`; a
   name picked at runtime uses `transientSpeaker(name, style)` with a
   `TRANSIENT_STYLES` preset.
+- **Caroline** — her lines are authored only as `carolineLines.message(text)`
+  (`src/dialog/caroline.ts`), which alone can make her `SpeakerRef`
+  (`kind: 'caroline'`); she is not in `SPEAKERS`. That ref resolves to the
+  `caroline` skin, which `DialogBox` draws through `carolineFrame`. Her frame
+  adds the label and the prefix: a literal carrying either is a compile
+  error, and a run-time string has them stripped. Her story beats hold a
+  `CarolineMessage`, not lines.
 - **`DialogBox`** (`src/ui/DialogBox.ts`) is the box `Conversation` wraps
   (typing reveal, voice, pagination); its chrome is in
   `src/ui/screens/dialogs/conversationChrome.ts`. Never construct one for

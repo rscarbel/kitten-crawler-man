@@ -24,10 +24,12 @@ import {
   makeWellRested,
   ROOM_BOON_DURATION_MINUTES,
   ROOM_BOON_STATUSES,
+  STATUS_DEFS,
   type StatusEffect,
   type StatusId,
 } from '../core/combat/StatusEffect';
 import type { Player } from '../Player';
+import { ALL_STATS, STAT_DEFS } from '../core/party/stats';
 import {
   offerUnless,
   type ShopRow,
@@ -44,8 +46,6 @@ interface InnRoom {
   readonly art: ServiceIconId;
   /** The boon's own status type, so a re-rent can be recognised as a refresh. */
   readonly status: StatusId;
-  /** What the boon is worth, stated on the row — the player is paying for this, not for the bed. */
-  readonly boonSummary: string;
   readonly makeBoon: () => StatusEffect;
   /** Ossie's line on the way up the stairs. */
   readonly lines: ReadonlyArray<string>;
@@ -58,7 +58,6 @@ const ROOMS: ReadonlyArray<InnRoom> = [
     price: SERVICE_PRICES.inn.attic_room,
     art: 'room_attic',
     status: 'well_rested',
-    boonSummary: '+2 CON',
     makeBoon: makeWellRested,
     lines: [
       'Mind the beam. Everyone forgets the beam, and everyone only forgets it once.',
@@ -72,7 +71,6 @@ const ROOMS: ReadonlyArray<InnRoom> = [
     price: SERVICE_PRICES.inn.hearth_room,
     art: 'room_hearth',
     status: 'hearth_warmed',
-    boonSummary: '+2 STR',
     makeBoon: makeHearthWarmed,
     lines: [
       'Fire stays banked till dawn. You will wake up warm right through, which is not a thing that happens on a dungeon floor.',
@@ -86,17 +84,25 @@ const ROOMS: ReadonlyArray<InnRoom> = [
     price: SERVICE_PRICES.inn.cats_own_room,
     art: 'room_cats_own',
     status: 'deep_slumber',
-    boonSummary: '+2 DEX and +2 INT',
     makeBoon: makeDeepSlumber,
     lines: [
       'Best room in the house. Feather bed, bolt on the door, and the cat gets the pillow — house rule, not negotiable.',
-      'Nobody knocks on that door. Not the guard, not the System, not me.',
+      'Nobody knocks on that door. Not the guard, not Caroline, not me.',
       'You will not dream in there. You will just stop, and then it will be morning, and you will be quick again.',
     ],
   },
 ];
 
 const ROOM_KEYS: ReadonlySet<string> = new Set(ROOMS.map((room) => room.key));
+
+/** What a room's boon is worth, stated on the row — the player is paying for this, not for the bed. */
+function boonSummary(status: StatusId): string {
+  const boon = STATUS_DEFS[status].statBoon;
+  return ALL_STATS.flatMap((stat) => {
+    const amount = boon?.[stat] ?? 0;
+    return amount === 0 ? [] : [`+${amount} ${STAT_DEFS[stat].code}`];
+  }).join(' and ');
+}
 
 /** Whether a menu row bought at the inn is a room rather than something off the kitchen board. */
 export function isInnRoomKey(key: string): boolean {
@@ -114,7 +120,7 @@ export function buildInnRoomOptions(townInDanger: boolean): ReadonlyArray<ShopRo
   return ROOMS.map((room): ShopRow => ({
     key: room.key,
     label: room.label,
-    desc: `Mends you both, sleeps off what ails you, ${room.boonSummary} for ${ROOM_BOON_DURATION_MINUTES} minutes`,
+    desc: `Mends you both, sleeps off what ails you, ${boonSummary(room.status)} for ${ROOM_BOON_DURATION_MINUTES} minutes`,
     art: { kind: 'service', service: room.art },
     offer: offerUnless(townInDanger ? 'Not tonight' : null, { kind: 'coins', coins: room.price }),
     questErrand: false,
@@ -143,7 +149,7 @@ export function rentInnRoom(party: ReadonlyArray<Player>, turn: number): ShopPur
       // cheapest bed in town a way to lose money.
       member.cureStatuses(ROOM_BOON_STATUSES);
       member.applyStatus(room.makeBoon());
-      // Last, so a constitution boon's freshly-raised maximum is the one the
+      // Last, so a health boon's freshly-raised maximum is the one the
       // mend fills to.
       member.reviveToFull();
     }

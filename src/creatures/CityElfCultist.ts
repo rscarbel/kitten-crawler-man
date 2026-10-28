@@ -167,7 +167,7 @@ export class CityElfCultist extends Mob {
     if (this.retreatCooldown > 0) this.retreatCooldown--;
 
     this.bolts = advanceSoulBolts(this.bolts, this.map, this.tileSize, targets, (t) =>
-      this.dealRangedDamage(t, BOLT_DAMAGE),
+      this.dealSpellDamage(t, BOLT_DAMAGE),
     );
 
     const aggroRangePx = this.tileSize * CITY_ELF_CULTIST_AGGRO_RANGE_TILES;
