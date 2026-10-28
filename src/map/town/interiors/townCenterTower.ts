@@ -34,7 +34,7 @@ import {
   INTERIOR_STONE_FLOOR,
   RUG,
 } from '../../tileTypes';
-import { prop, tileRect, type TownInteriorLayoutEntry } from './types';
+import { prop, tileRect, type TownInteriorLayoutEntry, statefulProp } from './types';
 
 /** Where a storey's two staircases start (their north-west tiles), or null where there is none. */
 export interface TowerStairOrigins {
@@ -152,14 +152,20 @@ function hallOfPetitions(shell: Shell, stairs: TowerStairOrigins): TownInteriorL
   const writBoardCol = pigeonholeCol + PIGEONHOLE_WIDTH;
   const eastOfHearthCol = hearthCol + TOWER_HEARTH_WIDTH;
   entries.push(
-    prop(westCol, northRow, 'records_cabinet', CABINET_SHUT),
-    prop(westCol + 1, northRow, 'records_cabinet', CABINET_DRAWER_OPEN),
+    statefulProp(westCol, northRow, 'records_cabinet', 'records_cabinet_1', CABINET_SHUT),
+    statefulProp(
+      westCol + 1,
+      northRow,
+      'records_cabinet',
+      'records_cabinet_2',
+      CABINET_DRAWER_OPEN,
+    ),
     prop(pigeonholeCol, northRow, 'pigeonhole_wall'),
     prop(writBoardCol, northRow, 'writ_board'),
     prop(hearthCol, northRow, 'tower_hearth'),
     prop(eastOfHearthCol, northRow, 'sky_banner'),
     prop(eastOfHearthCol + 1, northRow, 'window_dressing'),
-    prop(eastCol, northRow, 'records_cabinet', CABINET_SHUT),
+    statefulProp(eastCol, northRow, 'records_cabinet', 'records_cabinet_3', CABINET_SHUT),
   );
 
   // The aisle: the town's own red runner, from the hearth to the door.
@@ -174,8 +180,8 @@ function hallOfPetitions(shell: Shell, stairs: TowerStairOrigins): TownInteriorL
   const counterWestCol = westCol + 1;
   const counterEastCol = counterWestCol + PETITION_COUNTER_WIDTH - 1;
   entries.push(
-    prop(counterWestCol, deskRow, 'scrivener_desk', DESK_TIDY),
-    prop(counterEastCol - 1, deskRow, 'scrivener_desk', DESK_HEAPED),
+    statefulProp(counterWestCol, deskRow, 'scrivener_desk', 'scrivener_desk_1', DESK_TIDY),
+    statefulProp(counterEastCol - 1, deskRow, 'scrivener_desk', 'scrivener_desk_2', DESK_HEAPED),
     prop(counterWestCol, counterRow, 'petition_counter'),
   );
 
@@ -194,19 +200,21 @@ function hallOfPetitions(shell: Shell, stairs: TowerStairOrigins): TownInteriorL
     for (let i = 0; i < pewsPerRank; i++) {
       const westHasPapers = i === rank ? PEW_PAPERS_LEFT : PEW_CLEAR;
       const eastHasPapers = i === pewsPerRank - 1 - rank ? PEW_PAPERS_LEFT : PEW_CLEAR;
-      entries.push(prop(westPewCol + i, row, 'pew', westHasPapers));
-      entries.push(prop(eastPewCol + i, row, 'pew', eastHasPapers));
+      entries.push(
+        statefulProp(westPewCol + i, row, 'pew', `pew_${rank}_west_${i}`, westHasPapers),
+        statefulProp(eastPewCol + i, row, 'pew', `pew_${rank}_east_${i}`, eastHasPapers),
+      );
     }
   }
   const lastPewRow = firstPewRow + (pewRanks - 1) * pewPitch;
   entries.push(
-    prop(westCol, firstPewRow - 1, 'torchere'),
-    prop(eastCol, firstPewRow - 1, 'torchere'),
+    statefulProp(westCol, firstPewRow - 1, 'torchere', 'torchere_1'),
+    statefulProp(eastCol, firstPewRow - 1, 'torchere', 'torchere_2'),
     prop(westCol, firstPewRow + pewPitch, 'sky_banner'),
     prop(eastCol, firstPewRow + pewPitch, 'sky_banner'),
-    prop(westCol, lastPewRow, 'side_table'),
-    prop(doorCol - 1, lastPewRow + pewPitch, 'torchere'),
-    prop(runnerEastCol + 1, lastPewRow + pewPitch, 'torchere'),
+    statefulProp(westCol, lastPewRow, 'side_table', 'side_table_1'),
+    statefulProp(doorCol - 1, lastPewRow + pewPitch, 'torchere', 'torchere_3'),
+    statefulProp(runnerEastCol + 1, lastPewRow + pewPitch, 'torchere', 'torchere_4'),
   );
 
   // Beside the stair up, the visitors' register on its lectern, clear of the
@@ -218,14 +226,14 @@ function hallOfPetitions(shell: Shell, stairs: TowerStairOrigins): TownInteriorL
   // records office that has run out of room upstairs.
   const coatStandSetback = 2;
   entries.push(
-    prop(doorCol - 1 - coatStandSetback, southRow, 'coat_stand'),
-    prop(runnerEastCol + 1 + coatStandSetback, southRow, 'coat_stand'),
-    prop(westCol, southRow, 'archive_boxes', BOXES_TALL),
-    prop(westCol + 1, southRow, 'archive_boxes', BOXES_OPENED),
-    prop(westCol, southRow - 1, 'chest'),
-    prop(eastCol, southRow, 'archive_boxes', BOXES_TALL),
-    prop(eastCol - 1, southRow, 'barrel'),
-    prop(eastCol, southRow - 1, 'drawer_unit'),
+    statefulProp(doorCol - 1 - coatStandSetback, southRow, 'coat_stand', 'coat_stand_1'),
+    statefulProp(runnerEastCol + 1 + coatStandSetback, southRow, 'coat_stand', 'coat_stand_2'),
+    statefulProp(westCol, southRow, 'archive_boxes', 'archive_boxes_1', BOXES_TALL),
+    statefulProp(westCol + 1, southRow, 'archive_boxes', 'archive_boxes_2', BOXES_OPENED),
+    statefulProp(westCol, southRow - 1, 'chest', 'chest_1'),
+    statefulProp(eastCol, southRow, 'archive_boxes', 'archive_boxes_3', BOXES_TALL),
+    statefulProp(eastCol - 1, southRow, 'barrel', 'barrel'),
+    statefulProp(eastCol, southRow - 1, 'drawer_unit', 'drawer_unit'),
   );
   return entries;
 }
@@ -239,12 +247,24 @@ function recordsOffice(shell: Shell): TownInteriorLayoutEntry[] {
   const westPigeonholeCol = doorCol + RUNNER_WIDTH / 2 - PIGEONHOLE_WIDTH;
   const eastPigeonholeCol = westPigeonholeCol + PIGEONHOLE_WIDTH;
   entries.push(
-    prop(westCol, northRow, 'records_cabinet', CABINET_SHUT),
-    prop(westPigeonholeCol - 1, northRow, 'records_cabinet', CABINET_DRAWER_OPEN),
+    statefulProp(westCol, northRow, 'records_cabinet', 'records_cabinet_4', CABINET_SHUT),
+    statefulProp(
+      westPigeonholeCol - 1,
+      northRow,
+      'records_cabinet',
+      'records_cabinet_5',
+      CABINET_DRAWER_OPEN,
+    ),
     prop(westPigeonholeCol, northRow, 'pigeonhole_wall'),
     prop(eastPigeonholeCol, northRow, 'pigeonhole_wall'),
-    prop(eastPigeonholeCol + PIGEONHOLE_WIDTH, northRow, 'records_cabinet', CABINET_SHUT),
-    prop(eastCol, northRow, 'records_cabinet', CABINET_DRAWER_OPEN),
+    statefulProp(
+      eastPigeonholeCol + PIGEONHOLE_WIDTH,
+      northRow,
+      'records_cabinet',
+      'records_cabinet_6',
+      CABINET_SHUT,
+    ),
+    statefulProp(eastCol, northRow, 'records_cabinet', 'records_cabinet_7', CABINET_DRAWER_OPEN),
   );
 
   // Two ranks of stacks against each side wall, an open column between each
@@ -261,10 +281,22 @@ function recordsOffice(shell: Shell): TownInteriorLayoutEntry[] {
     const drawerShut = 1 - drawerOpen;
     entries.push(
       prop(westCol, row, 'pigeonhole_wall'),
-      prop(westCabinetCol, row, 'records_cabinet', drawerOpen),
-      prop(westCabinetCol + 1, row, 'records_cabinet', drawerShut),
-      prop(eastCabinetCol, row, 'records_cabinet', drawerShut),
-      prop(eastCabinetCol + 1, row, 'records_cabinet', drawerOpen),
+      statefulProp(westCabinetCol, row, 'records_cabinet', `stack_${rank}_cabinet_1`, drawerOpen),
+      statefulProp(
+        westCabinetCol + 1,
+        row,
+        'records_cabinet',
+        `stack_${rank}_cabinet_2`,
+        drawerShut,
+      ),
+      statefulProp(eastCabinetCol, row, 'records_cabinet', `stack_${rank}_cabinet_3`, drawerShut),
+      statefulProp(
+        eastCabinetCol + 1,
+        row,
+        'records_cabinet',
+        `stack_${rank}_cabinet_4`,
+        drawerOpen,
+      ),
       prop(eastCabinetCol + cabinetsPerStack, row, 'pigeonhole_wall'),
     );
   }
@@ -279,10 +311,34 @@ function recordsOffice(shell: Shell): TownInteriorLayoutEntry[] {
     const row = firstStackRow + rank * stackPitch;
     const isFirstRank = rank === 0;
     entries.push(
-      prop(westDeskCol, row, 'scrivener_desk', isFirstRank ? DESK_TIDY : DESK_HEAPED),
-      prop(eastDeskCol, row, 'scrivener_desk', isFirstRank ? DESK_HEAPED : DESK_TIDY),
-      prop(westDeskCol + rank, row + 1, 'stool', isFirstRank ? STOOL_PLAIN : STOOL_WORN),
-      prop(eastDeskCol + 1 - rank, row + 1, 'stool', isFirstRank ? STOOL_WORN : STOOL_PLAIN),
+      statefulProp(
+        westDeskCol,
+        row,
+        'scrivener_desk',
+        `rank_${rank}_west_desk`,
+        isFirstRank ? DESK_TIDY : DESK_HEAPED,
+      ),
+      statefulProp(
+        eastDeskCol,
+        row,
+        'scrivener_desk',
+        `rank_${rank}_east_desk`,
+        isFirstRank ? DESK_HEAPED : DESK_TIDY,
+      ),
+      statefulProp(
+        westDeskCol + rank,
+        row + 1,
+        'stool',
+        `rank_${rank}_west_stool`,
+        isFirstRank ? STOOL_PLAIN : STOOL_WORN,
+      ),
+      statefulProp(
+        eastDeskCol + 1 - rank,
+        row + 1,
+        'stool',
+        `rank_${rank}_east_stool`,
+        isFirstRank ? STOOL_WORN : STOOL_PLAIN,
+      ),
     );
   }
   entries.push(
@@ -294,18 +350,18 @@ function recordsOffice(shell: Shell): TownInteriorLayoutEntry[] {
   // left clear where the runner ends.
   const setteeCol = westCol + BOOK_HEAP_WIDTH + 1 + RUNNER_WIDTH;
   entries.push(
-    prop(westCol, southRow, 'archive_boxes', BOXES_TALL),
-    prop(westCol + 1, southRow, 'archive_boxes', BOXES_OPENED),
+    statefulProp(westCol, southRow, 'archive_boxes', 'archive_boxes_4', BOXES_TALL),
+    statefulProp(westCol + 1, southRow, 'archive_boxes', 'archive_boxes_5', BOXES_OPENED),
     prop(westCol + 2, southRow, 'book_heap'),
-    prop(westCol, southRow - 1, 'archive_boxes', BOXES_OPENED),
-    prop(setteeCol - 1, southRow, 'torchere'),
-    prop(setteeCol, southRow, 'settee'),
-    prop(runnerEastCol + 1, southRow, 'side_table'),
+    statefulProp(westCol, southRow - 1, 'archive_boxes', 'archive_boxes_6', BOXES_OPENED),
+    statefulProp(setteeCol - 1, southRow, 'torchere', 'torchere_5'),
+    statefulProp(setteeCol, southRow, 'settee', 'settee_1'),
+    statefulProp(runnerEastCol + 1, southRow, 'side_table', 'side_table_2'),
     prop(eastCabinetCol - 1, southRow, 'book_heap'),
-    prop(eastCol - 2, southRow, 'archive_boxes', BOXES_OPENED),
-    prop(eastCol - 1, southRow, 'chest'),
-    prop(eastCol, southRow, 'archive_boxes', BOXES_TALL),
-    prop(eastCol, southRow - 1, 'archive_boxes', BOXES_TALL),
+    statefulProp(eastCol - 2, southRow, 'archive_boxes', 'archive_boxes_7', BOXES_OPENED),
+    statefulProp(eastCol - 1, southRow, 'chest', 'chest_2'),
+    statefulProp(eastCol, southRow, 'archive_boxes', 'archive_boxes_8', BOXES_TALL),
+    statefulProp(eastCol, southRow - 1, 'archive_boxes', 'archive_boxes_9', BOXES_TALL),
   );
   return entries;
 }
@@ -323,7 +379,7 @@ function quillsRooms(shell: Shell): TownInteriorLayoutEntry[] {
   // North wall: her dresser and window on the quarters side, her locked
   // cabinet and her specimens on the workshop side.
   entries.push(
-    prop(workshopCol - 1 - DRESSER_WIDTH, northRow, 'inn_dresser'),
+    statefulProp(workshopCol - 1 - DRESSER_WIDTH, northRow, 'inn_dresser', 'inn_dresser'),
     prop(workshopCol - 1, northRow, 'window_dressing'),
     prop(workshopCol, northRow, 'potion_cabinet'),
     prop(workshopCol + POTION_CABINET_WIDTH, northRow, 'specimen_case'),
@@ -336,12 +392,12 @@ function quillsRooms(shell: Shell): TownInteriorLayoutEntry[] {
   entries.push(
     prop(westCol + 1, bedRow + 1, 'rag_rug', RAG_RUG_PLAIN),
     prop(westCol, bedRow, 'inn_guest_bed', GUEST_BED_MADE),
-    prop(westCol + GUEST_BED_WIDTH, bedRow, 'side_table'),
-    prop(westCol, bedRow + GUEST_BED_DEPTH + 1, 'washstand'),
-    prop(chairCol, bedRow + 2, 'good_chair'),
-    prop(chairCol, bedRow + 1, 'arm_lamp'),
-    prop(chairCol + 1, landingRow, 'coat_stand'),
-    prop(westCol, southRow, 'chest'),
+    statefulProp(westCol + GUEST_BED_WIDTH, bedRow, 'side_table', 'side_table_3'),
+    statefulProp(westCol, bedRow + GUEST_BED_DEPTH + 1, 'washstand', 'washstand'),
+    statefulProp(chairCol, bedRow + 2, 'good_chair', 'good_chair'),
+    statefulProp(chairCol, bedRow + 1, 'arm_lamp', 'arm_lamp'),
+    statefulProp(chairCol + 1, landingRow, 'coat_stand', 'coat_stand_3'),
+    statefulProp(westCol, southRow, 'chest', 'chest_3'),
     prop(westCol + 1, southRow, 'book_heap'),
   );
 
@@ -350,8 +406,8 @@ function quillsRooms(shell: Shell): TownInteriorLayoutEntry[] {
   const sittingRow = southRow - 1;
   entries.push(
     prop(chairCol, sittingRow, 'rug_medium', RUG_EMBER_ON_TEAL),
-    prop(chairCol, sittingRow, 'settee', SETTEE_DUSTY),
-    prop(chairCol + 1, sittingRow + 1, 'low_table'),
+    statefulProp(chairCol, sittingRow, 'settee', 'settee_2', SETTEE_DUSTY),
+    statefulProp(chairCol + 1, sittingRow + 1, 'low_table', 'low_table'),
   );
 
   // The workshop: plans at its head, then the coil benches, the charged
@@ -360,7 +416,7 @@ function quillsRooms(shell: Shell): TownInteriorLayoutEntry[] {
   entries.push(
     prop(workshopCol, plansRow, 'drafting_table'),
     prop(workshopCol + DRAFTING_TABLE_WIDTH, plansRow, 'roll_bin'),
-    prop(workshopCol + 1, plansRow + 1, 'stool'),
+    statefulProp(workshopCol + 1, plansRow + 1, 'stool', 'stool_3'),
   );
   const benchPitch = 3;
   const firstBenchRow = plansRow + benchPitch;
@@ -370,8 +426,8 @@ function quillsRooms(shell: Shell): TownInteriorLayoutEntry[] {
   entries.push(
     prop(westBenchCol, firstBenchRow, 'coil_bench'),
     prop(eastBenchCol, secondBenchRow, 'coil_bench'),
-    prop(westBenchCol - 1, firstBenchRow, 'stool', STOOL_WORN),
-    prop(eastBenchCol + COIL_BENCH_WIDTH, secondBenchRow, 'stool', STOOL_PLAIN),
+    statefulProp(westBenchCol - 1, firstBenchRow, 'stool', 'stool_4', STOOL_WORN),
+    statefulProp(eastBenchCol + COIL_BENCH_WIDTH, secondBenchRow, 'stool', 'stool_5', STOOL_PLAIN),
     prop(eastCol, firstBenchRow - 1, 'conduit_coil'),
     prop(eastBenchCol, firstBenchRow, 'conduit_coil'),
     prop(westBenchCol + 1, secondBenchRow, 'conduit_coil'),
@@ -388,12 +444,12 @@ function quillsRooms(shell: Shell): TownInteriorLayoutEntry[] {
   const eastStoreCount = 3;
   const eastStoresCol = eastCol - eastStoreCount;
   entries.push(
-    prop(storesCol, southRow, 'crate'),
-    prop(storesCol + 1, southRow, 'open_crate'),
-    prop(storesCol + 2, southRow, 'jars', JARS_OPEN),
-    prop(eastStoresCol, southRow, 'archive_boxes', BOXES_OPENED),
-    prop(eastStoresCol + 1, southRow, 'jars', JARS_STOPPERED),
-    prop(eastStoresCol + 2, southRow, 'crate'),
+    statefulProp(storesCol, southRow, 'crate', 'crate_1'),
+    statefulProp(storesCol + 1, southRow, 'open_crate', 'open_crate'),
+    statefulProp(storesCol + 2, southRow, 'jars', 'jars_1', JARS_OPEN),
+    statefulProp(eastStoresCol, southRow, 'archive_boxes', 'archive_boxes_10', BOXES_OPENED),
+    statefulProp(eastStoresCol + 1, southRow, 'jars', 'jars_2', JARS_STOPPERED),
+    statefulProp(eastStoresCol + 2, southRow, 'crate', 'crate_2'),
   );
   return entries;
 }
@@ -410,13 +466,25 @@ function magistratesOffice(shell: Shell): TownInteriorLayoutEntry[] {
   for (let row = sideFirstRow; row < sideLastRow; row++) {
     const drawerOpen = row % 2 === 0 ? CABINET_DRAWER_OPEN : CABINET_SHUT;
     entries.push(
-      prop(westCol, row, 'records_cabinet', drawerOpen),
-      prop(eastCol, row, 'records_cabinet', 1 - drawerOpen),
+      statefulProp(
+        westCol,
+        row,
+        'records_cabinet',
+        `west_wall_cabinet_${row - sideFirstRow}`,
+        drawerOpen,
+      ),
+      statefulProp(
+        eastCol,
+        row,
+        'records_cabinet',
+        `east_wall_cabinet_${row - sideFirstRow}`,
+        1 - drawerOpen,
+      ),
     );
   }
   entries.push(
-    prop(westCol, sideLastRow, 'archive_boxes', BOXES_TALL),
-    prop(eastCol, sideLastRow, 'archive_boxes', BOXES_OPENED),
+    statefulProp(westCol, sideLastRow, 'archive_boxes', 'archive_boxes_11', BOXES_TALL),
+    statefulProp(eastCol, sideLastRow, 'archive_boxes', 'archive_boxes_12', BOXES_OPENED),
   );
 
   // The hearth, and the floor east of it left open for the magistrate:
@@ -440,6 +508,9 @@ function magistratesOffice(shell: Shell): TownInteriorLayoutEntry[] {
   );
 
   // Standing lamps in the two south corners.
-  entries.push(prop(westCol, southRow - 1, 'torchere'), prop(eastCol, southRow - 1, 'torchere'));
+  entries.push(
+    statefulProp(westCol, southRow - 1, 'torchere', 'torchere_6'),
+    statefulProp(eastCol, southRow - 1, 'torchere', 'torchere_7'),
+  );
   return entries;
 }

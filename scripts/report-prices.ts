@@ -35,6 +35,7 @@ import {
   catalogLineUnits,
   isShopId,
   shopDef,
+  shopTitle,
   type CatalogLine,
   type ShopDef,
   type ShopId,
@@ -261,7 +262,7 @@ function catalogRow(shop: ShopId, line: CatalogLine): string[] {
 
 function shopSection(shop: ShopId): string[] {
   const def = shopDef(shop);
-  const lines = [`### ${def.name} (\`${shop}\`)`, '', describeShop(def), ''];
+  const lines = [`### ${shopTitle(def)} (\`${shop}\`)`, '', describeShop(def), ''];
   if (def.catalog.length === 0) return [...lines, '_No catalog lines._', ''];
   return [
     ...lines,
@@ -319,7 +320,7 @@ function itemBreakdownSection(item: ItemId, shops: readonly ShopId[]): string[] 
     lines.push('_Not stocked by any shop in this sheet; what each one would pay for it:_', '');
     for (const shop of shops) {
       if (!shopDef(shop).buysFromPlayer) continue;
-      lines.push(`### ${shopDef(shop).name}: sell`, '');
+      lines.push(`### ${shopTitle(shopDef(shop))}: sell`, '');
       lines.push(...workingLines(priceBreakdown(shop, item, normal, 'sell')), '');
     }
     return lines;
@@ -327,11 +328,11 @@ function itemBreakdownSection(item: ItemId, shops: readonly ShopId[]): string[] 
   for (const shop of stockists) {
     const def = shopDef(shop);
     for (const line of def.catalog.filter((candidate) => candidate.item === item)) {
-      lines.push(`### ${def.name}: buy ${lineName(line)}`, '');
+      lines.push(`### ${shopTitle(def)}: buy ${lineName(line)}`, '');
       lines.push(...workingLines(lineBreakdown(shop, line, normal, 'buy')), '');
     }
     if (def.buysFromPlayer && canSellItemId(item)) {
-      lines.push(`### ${def.name}: sell`, '');
+      lines.push(`### ${shopTitle(def)}: sell`, '');
       lines.push(...workingLines(priceBreakdown(shop, item, normal, 'sell')), '');
     }
   }

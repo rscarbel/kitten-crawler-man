@@ -1,3 +1,4 @@
+import type { LevelId } from '../levels/levelIds';
 import {
   drawRatKinSprite,
   prewarmRatKinSprite,
@@ -55,7 +56,7 @@ export interface MordecaiSpriteState {
  * assumes. Zero for the Rat Kin; the Bugaboo and the Incubus both stand taller
  * than a tile, so their heads overlap anything anchored on the tile.
  */
-export function mordecaiOverheadLift(levelId: string, tileSize: number): number {
+export function mordecaiOverheadLift(levelId: LevelId, tileSize: number): number {
   const headClearanceTiles =
     levelId === 'level2'
       ? bugabooHeadClearanceTiles()
@@ -67,7 +68,7 @@ export function mordecaiOverheadLift(levelId: string, tileSize: number): number 
 }
 
 /** The highest his art reaches for a figure whose tile top is at `sy`. */
-export function mordecaiHeadTop(levelId: string, sy: number, tileSize: number): number {
+export function mordecaiHeadTop(levelId: LevelId, sy: number, tileSize: number): number {
   return sy - mordecaiOverheadLift(levelId, tileSize) - TILE_ANCHORED_UI_CLEARANCE_TILES * tileSize;
 }
 
@@ -78,7 +79,7 @@ export function mordecaiHeadTop(levelId: string, sy: number, tileSize: number): 
  * Branches on the same level IDs {@link drawMordecaiForLevel} does, so a level
  * cannot be warmed for a shape it never draws.
  */
-export function prewarmMordecaiForLevel(levelId: string): void {
+export function prewarmMordecaiForLevel(levelId: LevelId): void {
   if (levelId === 'level2') {
     prewarmPeacefulBugaboo();
     return;
@@ -95,7 +96,7 @@ export function prewarmMordecaiForLevel(levelId: string): void {
  * wander can pace it by distance and the planted foot holds still. The
  * Bugaboo's walk was tuned against the Rat Kin's pacing and shares it.
  */
-export function mordecaiTilesPerWalkCycle(levelId: string): number {
+export function mordecaiTilesPerWalkCycle(levelId: LevelId): number {
   return levelId === 'level3' ? INCUBUS_TILES_PER_WALK_CYCLE : RAT_KIN_TILES_PER_WALK_CYCLE;
 }
 
@@ -110,7 +111,7 @@ export function drawMordecaiForLevel(
   sy: number,
   s: number,
   state: MordecaiSpriteState,
-  levelId: string,
+  levelId: LevelId,
 ): DrawnFigureRow | undefined {
   const { walkPhase, isWalking, facingY, lastHorizontalFacing, idleOffsetSeconds } = state;
   if (levelId === 'level3') {

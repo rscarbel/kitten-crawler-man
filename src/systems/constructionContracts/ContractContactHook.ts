@@ -27,7 +27,7 @@ import {
 } from './contractCatalog';
 import { contractPayout, isContractReady } from './contractGenerator';
 import { ContractSettlement, type ContractSettlementDeps } from './ContractSettlement';
-import type { BuildingName } from '../../map/buildingEntry';
+import type { BuildingId } from '../../map/buildingIds';
 
 /** Every Taloncrest contract building is paid out on its ground floor. */
 const CONTACT_FLOOR = 0;
@@ -67,12 +67,12 @@ export class ContractContactHook implements ResidentQuestHook {
 
   /** The hook for this room, or null anywhere but the ground floor of a building that can host a contract. */
   static forBuilding(
-    buildingName: BuildingName,
+    buildingId: BuildingId,
     floor: number,
     deps: ContractContactHookDeps,
   ): ContractContactHook | null {
     if (floor !== CONTACT_FLOOR) return null;
-    const site = taloncrestContractSite(buildingName);
+    const site = taloncrestContractSite(buildingId);
     return site === undefined ? null : new ContractContactHook(site, deps);
   }
 
@@ -88,7 +88,7 @@ export class ContractContactHook implements ResidentQuestHook {
     const active = this.deps.state.contracts.active;
     if (active === null || contractSiteFor(active.site) !== this.site) return false;
     if (!isContractReady(active)) return false;
-    return !interiorRoomOwnedByStory(this.site.buildingName, this.deps.story());
+    return !interiorRoomOwnedByStory(this.site.buildingId, this.deps.story());
   }
 
   tryOpenDialog(residentId: ResidentId, talker: Player): boolean {

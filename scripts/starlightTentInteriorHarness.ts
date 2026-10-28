@@ -11,7 +11,6 @@
  * to re-implement the scene's draw order.
  */
 
-import { STARLIGHT_TENT_NAME } from '../src/map/overworld/circusGroundsLayout.js';
 import type { StarlightTentFinale } from '../src/systems/starlightTent/StarlightTentFinale';
 import { standRing } from './starlightTentRingHarness';
 import type { Difficulty } from '../src/core/difficulty/difficultyProfiles.js';
@@ -97,7 +96,7 @@ export function buildTent(artSeed: number, options: TentOptions = {}): TentHarne
   const worldSeed = options.worldSeed ?? TEST_WORLD_SEED;
   const plan = planStarlightTentMaze(worldSeed, options.difficulty ?? TEST_DIFFICULTY);
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [], artSeed });
-  map.generateInterior('house', 0, STARLIGHT_TENT_NAME, false, {
+  map.generateInterior('house', 0, 'taloncrest_circus_tent', false, {
     kind: 'starlight_tent_maze',
     plan,
   });

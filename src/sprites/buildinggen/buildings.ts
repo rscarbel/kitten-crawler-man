@@ -26,7 +26,6 @@
  * nine frames drift against each other for a long time before they realign.
  */
 
-import { CLOAK_AND_DAGGER_NAME } from '../../map/town/townPlan';
 import type { BuildingSpec } from './spec';
 
 /**
@@ -2231,7 +2230,7 @@ const QUIET_NEEDLE: BuildingSpec = {
 const CLOAK_AND_DAGGER: BuildingSpec = {
   key: 'cloak_and_dagger',
   file: 'cloak_and_dagger.png',
-  title: CLOAK_AND_DAGGER_NAME,
+  title: 'The Cloak & Dagger',
   replaces: 'cloak_and_dagger',
   tilesWide: 12,
   tilesHigh: 10,

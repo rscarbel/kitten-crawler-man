@@ -38,7 +38,7 @@ import { getSpriteExtentsPxForTileType } from '../core/spriteAssets/SpriteLoader
 import { tileKey } from './tileKey';
 import { doorwayKeepClearTiles } from './doorwayKeepClear';
 import type { GameMap } from '../map/GameMap';
-import type { PlannedBuildingName } from '../map/town/townPlan';
+import type { PlannedBuildingId } from '../map/buildingIds';
 import type { Player } from '../Player';
 import type { AudioManager } from '../audio/AudioManager';
 import type { GameSystem } from './GameSystem';
@@ -77,7 +77,7 @@ const BENCH_COLUMN_GAP = 2;
 const FORTUNE_OFFSET: TileOffset = { dx: 4, dy: -4 };
 
 /** The building the bounty giver loiters outside. */
-const BOUNTY_GIVER_BUILDING = 'The Quiet Needle' as const satisfies PlannedBuildingName;
+const BOUNTY_GIVER_BUILDING = 'taloncrest_tattoo_parlor' as const satisfies PlannedBuildingId;
 /**
  * Where the bounty giver stands relative to the parlour's door, in order of
  * preference: on Low Street just past the facade's east corner, in front of
@@ -169,7 +169,7 @@ export class TownPropSystem implements GameSystem {
   }
 
   private bountyGiverDoor(): { readonly doorTile: TileXY } | undefined {
-    return this.gameMap.buildingEntries.find((entry) => entry.name === BOUNTY_GIVER_BUILDING);
+    return this.gameMap.buildingEntries.find((entry) => entry.id === BOUNTY_GIVER_BUILDING);
   }
 
   /**

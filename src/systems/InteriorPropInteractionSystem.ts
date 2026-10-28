@@ -17,7 +17,11 @@ import type { Conversation } from '../dialog/Conversation';
 import type { BarkLine } from '../dialog/line';
 import type { LootSystem } from './LootSystem';
 import type { GameMap, PlacedTownInteriorProp } from '../map/GameMap';
-import { interiorPropPayoutKey, type TownMemory } from '../core/state/TownMemory';
+import {
+  interiorPropPayoutKey,
+  type InteriorPropPayoutKey,
+  type TownMemory,
+} from '../core/state/TownMemory';
 import {
   TOWN_INTERIOR_PROPS,
   type TownInteriorExamineId,
@@ -33,6 +37,7 @@ import {
   SHOP_BELL_KEEPER_LINE,
   USE_LINES,
 } from '../dialog/scripts/interiorObjects';
+import type { BuildingId } from '../map/buildingIds';
 
 const INTERACT_RADIUS_TILES = 1.4;
 const INTERACT_RADIUS = TILE_SIZE * INTERACT_RADIUS_TILES;
@@ -79,19 +84,19 @@ export class InMemoryInteriorPayoutRecord implements InteriorPayoutRecord {
  * so a first-time drop survives leaving and re-entering the room, and rewinds
  * with the rest of the town's memory on a death.
  *
- * Scoped to one room at construction (`buildingName`/`floor`), matching the
+ * Scoped to one room at construction (`buildingId`/`floor`), matching the
  * scene that builds one fresh per entry — every `id` this record is asked
  * about is a placed prop's own stable id, never a full room key.
  */
 export class TownMemoryInteriorPayoutRecord implements InteriorPayoutRecord {
   constructor(
     private readonly memory: TownMemory,
-    private readonly buildingName: string,
+    private readonly buildingId: BuildingId,
     private readonly floor: number,
   ) {}
 
-  private key(id: string): string {
-    return interiorPropPayoutKey(this.buildingName, this.floor, id);
+  private key(id: string): InteriorPropPayoutKey {
+    return interiorPropPayoutKey(this.buildingId, this.floor, id);
   }
 
   hasPaidOut(id: string): boolean {

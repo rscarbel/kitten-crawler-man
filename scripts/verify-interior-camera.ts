@@ -45,7 +45,7 @@ import { TILE_SIZE } from '../src/core/constants';
 import { level3 } from '../src/levels/level3';
 import { GameMap, TOWER_FLOOR_COUNT } from '../src/map/GameMap';
 import { createTownPlan, type BuildingKind } from '../src/map/town/townPlan';
-import type { BuildingName } from '../src/map/buildingEntry';
+import type { BuildingId } from '../src/map/buildingIds';
 import { stampSafeRoomCounters } from '../src/map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../src/map/safeRoomDecorLayout';
 import {
@@ -77,7 +77,6 @@ import type { Rect } from '../src/ui/core/geom';
 import type { Density } from '../src/ui/theme/tokens';
 import { measureText } from '../src/ui/widgets/text';
 import { STARLIGHT_TENT_ENTRY_KIND } from '../src/map/OverworldGenerator';
-import { STARLIGHT_TENT_NAME } from '../src/map/overworld/circusGroundsLayout';
 import { isMazeBarrierTile, planStarlightTentMaze } from '../src/map/starlightTentMazeLayout';
 
 /** Any world deals the Starlight Tent a maze of the same shape; only the hall's board differs. */
@@ -179,7 +178,7 @@ const CENTRING_TOLERANCE_PX = TILE_SIZE * CENTRING_TOLERANCE_TILES;
 /** Where `GameplayScene.computeCamera` centres on within the focus's tile. */
 const FOCUS_TILE_CENTRE = 0.5;
 /** The room the failing cameras are expected to fail on. */
-const NEGATIVE_TEST_ROOM = 'Temple of the Sky';
+const NEGATIVE_TEST_ROOM = 'taloncrest_temple';
 /** Hidden-tile failures listed per room/layout/viewport before the rest are only counted. */
 const HIDDEN_TILES_LISTED = 3;
 /** A rejected label design: a full-width strip with the name centred at 13 px bold. */
@@ -230,7 +229,7 @@ function fail(label: string): void {
 }
 
 function buildInterior(
-  name: BuildingName,
+  name: BuildingId,
   kind: BuildingKind,
   floor: number,
   hasSafeRoom: boolean,
@@ -238,7 +237,7 @@ function buildInterior(
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
   // The Starlight Tent is always its maze, dealt from the world seed and difficulty.
   const variant =
-    name === STARLIGHT_TENT_NAME
+    name === 'taloncrest_circus_tent'
       ? {
           kind: 'starlight_tent_maze' as const,
           plan: planStarlightTentMaze(GATE_WORLD_SEED, GATE_DIFFICULTY),
@@ -598,15 +597,15 @@ function checkRoomNameSlot(
 await loadGameSpritesInNode();
 
 const plan = createTownPlan(level3.mapSize);
-const walkIns: Array<{ name: BuildingName; kind: BuildingKind; hasSafeRoom: boolean }> = [
+const walkIns: Array<{ name: BuildingId; kind: BuildingKind; hasSafeRoom: boolean }> = [
   ...plan.buildings.map((b) => ({
-    name: b.name,
+    name: b.id,
     kind: b.kind,
     hasSafeRoom: b.hasSafeRoom === true,
   })),
-  { name: plan.tower.name, kind: plan.tower.kind, hasSafeRoom: false },
+  { name: plan.tower.id, kind: plan.tower.kind, hasSafeRoom: false },
   // Out on the circus grounds rather than in the town plan.
-  { name: STARLIGHT_TENT_NAME, kind: STARLIGHT_TENT_ENTRY_KIND, hasSafeRoom: false },
+  { name: 'taloncrest_circus_tent', kind: STARLIGHT_TENT_ENTRY_KIND, hasSafeRoom: false },
 ];
 
 const noBarriers = (): boolean => false;
@@ -618,7 +617,8 @@ for (const walkIn of walkIns) {
     const label = floors > 1 ? `${walkIn.name} (floor ${floor})` : walkIn.name;
     const title = interiorRoomTitle(walkIn.name, floors > 1 ? floor : null);
     const drawn = measureDrawnBounds(map);
-    const opensDuringVisit = walkIn.name === STARLIGHT_TENT_NAME ? isMazeBarrierTile : noBarriers;
+    const opensDuringVisit =
+      walkIn.name === 'taloncrest_circus_tent' ? isMazeBarrierTile : noBarriers;
     const reachable = reachableTiles(map, opensDuringVisit);
     rooms.push({
       label,

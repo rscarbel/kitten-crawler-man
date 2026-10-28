@@ -9,6 +9,7 @@ import type { Surface } from '../../core/UiRoot';
 import type { PanelWidth } from '../../theme/tokens';
 import { choiceModalSurface } from '../../widgets/choiceModal';
 import { iconUnlessCompact, keyboardHint, stackParts, swallowAttackKey } from './choiceDialogParts';
+import { buildingDisplayName } from '../../../map/buildingIds';
 
 /** What the prompt reads and drives; `BuildingSystem` provides all of it. */
 export interface BuildingEntryPromptSource {
@@ -52,7 +53,7 @@ export function buildingEntryPromptSurface(
         id: 'building-entry',
         overline: entry === null ? undefined : KIND_LABELS[entry.type],
         icon: iconUnlessCompact(ui, 'chevronRight'),
-        title: entry?.name ?? '',
+        title: entry === null ? '' : buildingDisplayName(entry.id),
         body: 'Enter this building?',
         extra: stackParts(ui, [keyboardHint(ui, PROMPT_WIDTH, LEAVE_HINT)]),
         width: PROMPT_WIDTH,

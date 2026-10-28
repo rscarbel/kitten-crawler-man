@@ -10,9 +10,7 @@
  * site in between.
  */
 
-import { STARLIGHT_TENT_NAME } from '../overworld/circusGroundsLayout';
-import type { BuildingName } from '../buildingEntry';
-import { TOWN_TOWER_NAME } from './townPlan';
+import type { BuildingId } from '../buildingIds';
 import type { TownInteriorWallMaterialId } from '../../sprites/art/townInterior/interiorWallFace';
 
 /** What a building with no entry below is dressed in. */
@@ -21,58 +19,55 @@ export const DEFAULT_TOWN_INTERIOR_WALL_MATERIAL: TownInteriorWallMaterialId = '
 /**
  * Per-building material choice. Most rooms stay on the town's own plaster
  * (the default every gate and every existing render already assumes); a
- * room whose walls should read as a different finish gets an entry here, keyed
- * by building name exactly like `INTERIOR_BY_NAME`.
+ * room whose walls should read as a different finish gets an entry here.
  */
-const WALL_MATERIAL_BY_BUILDING_NAME: ReadonlyMap<BuildingName, TownInteriorWallMaterialId> =
-  new Map([
-    // Wood floor, wood counter, wood shelving throughout — timber panelling
-    // instead of plaster carries the same material the whole way to the wall.
-    ['General Store', 'timber'],
-    // A forge hall is built of stone around the fire it holds, not plaster.
-    ['The Rusty Anvil', 'stone'],
-    // A joiner's shop, timber floor to timber wall, the same reasoning as the
-    // General Store's own entry.
-    ["Cartwright's Workshop", 'timber'],
-    // The garrison's armoury and drill hall read as stone the way the smithy
-    // does — a working building, not a plastered house.
-    ['The Barracks', 'stone'],
-    // A cosy taproom, timber panelled the way the bar and the guest-wing beds
-    // already are — the one warm finish among the town's three taverns.
-    ['The Sleeping Cat Inn', 'timber'],
-    // The "respectable house": dressed stone rather than plaster, matching a
-    // mead hall built to look like it has stood for generations.
-    ['The Horned Flagon', 'stone'],
-    // A board floor, a plank counter and drying racks throughout — timber the
-    // whole way to the wall, the same reasoning as the General Store's entry.
-    ['Herb & Remedy', 'timber'],
-    // A one-room cabin built of logs, not plastered lath — a hedge-witch's
-    // cottage reads as a woodsman's build from the walls in.
-    ["Old Lori's Cottage", 'timber'],
-    // A dome carried on dressed stone, inside and out — the one finish that
-    // matches eighty years of standing.
-    ['Temple of the Sky', 'stone'],
-    // Wendell panelled his own walls, and fitted them better than the house
-    // deserves.
-    ['Plumbline Farm', 'timber'],
-    // A garrison post in a timber lodge: dark boarded walls to match the
-    // stained timber it is built of outside, not a townhouse's plaster.
-    ['Blackwood Lodge', 'timber'],
-    // A tent has no walls, only sidewall canvas hung in the dark: striped drapes
-    // on every face that looks onto the ring or a corridor, and the black back
-    // of the tent everywhere else.
-    [STARLIGHT_TENT_NAME, 'canvas'],
-    // The tower is dressed stone outside to the top of its spire, and the
-    // magistrate's seat is not a building anyone plastered over.
-    [TOWN_TOWER_NAME, 'stone'],
-  ]);
+const WALL_MATERIAL_BY_BUILDING: ReadonlyMap<BuildingId, TownInteriorWallMaterialId> = new Map([
+  // Wood floor, wood counter, wood shelving throughout — timber panelling
+  // instead of plaster carries the same material the whole way to the wall.
+  ['taloncrest_general_store', 'timber'],
+  // A forge hall is built of stone around the fire it holds, not plaster.
+  ['taloncrest_smithy', 'stone'],
+  // A joiner's shop, timber floor to timber wall, the same reasoning as the
+  // General Store's own entry.
+  ['taloncrest_crafting_house', 'timber'],
+  // The garrison's armoury and drill hall read as stone the way the smithy
+  // does — a working building, not a plastered house.
+  ['taloncrest_barracks', 'stone'],
+  // A cosy taproom, timber panelled the way the bar and the guest-wing beds
+  // already are — the one warm finish among the town's three taverns.
+  ['taloncrest_inn', 'timber'],
+  // The "respectable house": dressed stone rather than plaster, matching a
+  // mead hall built to look like it has stood for generations.
+  ['taloncrest_flagon_tavern', 'stone'],
+  // A board floor, a plank counter and drying racks throughout — timber the
+  // whole way to the wall, the same reasoning as the General Store's entry.
+  ['taloncrest_apothecary', 'timber'],
+  // A one-room cabin built of logs, not plastered lath — a hedge-witch's
+  // cottage reads as a woodsman's build from the walls in.
+  ['taloncrest_old_lady_cottage', 'timber'],
+  // A dome carried on dressed stone, inside and out — the one finish that
+  // matches eighty years of standing.
+  ['taloncrest_temple', 'stone'],
+  // Wendell panelled his own walls, and fitted them better than the house
+  // deserves.
+  ['taloncrest_builder_farm', 'timber'],
+  // A garrison post in a timber lodge: dark boarded walls to match the
+  // stained timber it is built of outside, not a townhouse's plaster.
+  ['taloncrest_garrison_lodge', 'timber'],
+  // A tent has no walls, only sidewall canvas hung in the dark: striped drapes
+  // on every face that looks onto the ring or a corridor, and the black back
+  // of the tent everywhere else.
+  ['taloncrest_circus_tent', 'canvas'],
+  // The tower is dressed stone outside to the top of its spire, and the
+  // magistrate's seat is not a building anyone plastered over.
+  ['taloncrest_tower', 'stone'],
+]);
 
 let activeMaterial: TownInteriorWallMaterialId = DEFAULT_TOWN_INTERIOR_WALL_MATERIAL;
 
 /** Sets the wall finish every `INTERIOR_WALL` tile is drawn in from now on. */
-export function setTownInteriorWallMaterial(buildingName: BuildingName | null): void {
-  const namedMaterial =
-    buildingName === null ? undefined : WALL_MATERIAL_BY_BUILDING_NAME.get(buildingName);
+export function setTownInteriorWallMaterial(buildingId: BuildingId | null): void {
+  const namedMaterial = buildingId === null ? undefined : WALL_MATERIAL_BY_BUILDING.get(buildingId);
   activeMaterial = namedMaterial ?? DEFAULT_TOWN_INTERIOR_WALL_MATERIAL;
 }
 

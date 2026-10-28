@@ -67,7 +67,7 @@ Pure modules they share with the solver: `detection.ts` (`castCone`, `castDisc`,
 The floor-3 town's systems, and where each rule lives. The durable description is `docs/town.md`.
 
 - **Street:** `TownLifeSystem` runs the crowd, rolled from the world seed; its looks are pinned in the figure cache by distance from the party through a `CrowdResidentSet` the scene registers with its `WorldResidency`. `TownPropSystem` places the plaza fixtures, `TownDecorSystem` the yard and doorstep dressing, and `MarketSystem` the stalls. All three refuse `doorwayKeepClearTiles` (`src/systems/doorwayKeepClear.ts`), because a connectivity check cannot see a door being sealed. Citizens dispatch by species through `src/creatures/citizenFigure.ts`.
-- **Interiors:** layouts are data in `src/map/town/interiors/`, with props from `TOWN_INTERIOR_PROPS`.
+- **Interiors:** layouts are data in `src/map/town/interiors/`, with props from `TOWN_INTERIOR_PROPS`. Buildings are keyed by `BuildingId` (`src/map/buildingIds.ts`); the sign's text is `buildingDisplayName(id)`, for display only.
   - `InteriorOccupantSystem` seats the room's people.
   - `InteriorPropInteractionSystem` runs examine, search and use; `InteriorReadableSystem` runs paged documents.
   - `TownInteriorPropDestructionSystem` breaks placed props, and `InteriorBreakReactions` captions the reactions.
@@ -129,7 +129,7 @@ nowhere, so neither can go stale. See `add-quest`.
 
 `Player` (`src/Player.ts`, abstract: position, HP, stats, status effects, walk animation) → `HumanPlayer`, `CatPlayer`, and `Mob` (`src/creatures/Mob.ts`, abstract: aggro, A* pathfinding, LOS, health bar, loot). All enemies extend `Mob`. See the `add-creature` skill.
 
-**Damage and HP bands.** A status id is a `StatusId` (`STATUS_IDS`, `src/core/combat/StatusEffect.ts`); each declares a multiplier on the damage its carrier takes in `STATUS_INCOMING_DAMAGE_SCALE` (`statusTuning.ts`), applied once per blow from any source (`Player.takeDamage` for crawlers, `Mob`'s own door for mobs). `takeDamage` takes `DamageOptions` (`floorHp` stops a blow at a minimum HP). `Player.hp` is an accessor: every write on a crawler checks the bands in `CRAWLER_HP_THRESHOLDS` (`src/core/combat/hpThresholds.ts`), each firing once on entry and re-arming above its line; both gameplay scenes drain the crossings with `drainHpThresholdCrossings`, which runs each band's `onEnter` (`low_health` emits `healthLow`). A save restore writes HP through `restoreHp`, which reacts to nothing.
+**Damage and HP bands.** A status id is a `StatusId` (`STATUS_IDS`, `src/core/combat/StatusEffect.ts`); each declares its rules in one `STATUS_DEFS` entry, including a multiplier on the damage its carrier takes (`incomingDamageScale`), applied once per blow from any source (`Player.takeDamage` for crawlers, `Mob`'s own door for mobs). `takeDamage` takes `DamageOptions` (`floorHp` stops a blow at a minimum HP). `Player.hp` is an accessor: every write on a crawler checks the bands in `CRAWLER_HP_THRESHOLDS` (`src/core/combat/hpThresholds.ts`), each firing once on entry and re-arming above its line; both gameplay scenes drain the crossings with `drainHpThresholdCrossings`, which runs each band's `onEnter` (`low_health` emits `healthLow`). A save restore writes HP through `restoreHp`, which reacts to nothing.
 
 `src/shelf/` holds finished painted characters with no role yet, one folder each, with their gates and render harnesses in `scripts/`. Nothing in the game imports it; its `README.md` lists the characters and the rules.
 

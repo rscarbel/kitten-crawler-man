@@ -10,7 +10,6 @@
  *
  * Run: npx tsx scripts/render-starlight-tent-maze.ts
  */
-import { STARLIGHT_TENT_NAME } from '../src/map/overworld/circusGroundsLayout.js';
 import { standRing } from './starlightTentRingHarness';
 import type { Difficulty } from '../src/core/difficulty/difficultyProfiles';
 import { createCanvas } from 'canvas';
@@ -1013,7 +1012,7 @@ const VIEW_TILES_HIGH = 16;
 function smokeTestTheTent(): string[] {
   const problems: string[] = [];
   const mazeMap = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  mazeMap.generateInterior('house', 0, STARLIGHT_TENT_NAME, false, {
+  mazeMap.generateInterior('house', 0, 'taloncrest_circus_tent', false, {
     kind: 'starlight_tent_maze',
     plan: TEST_PLAN,
   });
@@ -1128,7 +1127,7 @@ function sampleTile(ctx: CanvasRenderingContext2D): TileSample {
 function checkOpenedWaysLookOpen(): string[] {
   const problems: string[] = [];
   const mazeMap = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  mazeMap.generateInterior('house', 0, STARLIGHT_TENT_NAME, false, {
+  mazeMap.generateInterior('house', 0, 'taloncrest_circus_tent', false, {
     kind: 'starlight_tent_maze',
     plan: TEST_PLAN,
   });

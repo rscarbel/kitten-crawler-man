@@ -1,7 +1,7 @@
 import { Mob } from './Mob';
 import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Player } from '../Player';
-import type { LootDrop } from './Mob';
+import type { LootDrop, PlayerDamageType } from './Mob';
 import { drawLionSprite } from '../sprites/lionSprite';
 import { riposteCooldown } from './tactics/riposte';
 import type { TacticsTrait } from './tactics/tacticsTraits';
@@ -19,6 +19,8 @@ const COIN_DROP_MIN = 1;
 const COIN_DROP_MAX = 3;
 /** Fraction of attack range used as follow stop distance. */
 const FOLLOW_STOP_FRACTION = 0.8;
+/** Frames between pain snarls, so a flurry of blows doesn't stack cries. */
+const HURT_SNARL_COOLDOWN = 60;
 
 const LION_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'regroup', 'riposte'];
 
@@ -53,6 +55,7 @@ export class Lion extends Mob {
   private attackCooldown = 0;
   private attackAnimTimer = 0;
   private isAggro = false;
+  private hurtSnarlCooldown = 0;
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, LION_HP, LION_SPEED);
@@ -77,6 +80,21 @@ export class Lion extends Mob {
     this.attackCooldown = 0;
     this.attackAnimTimer = 0;
     this.isAggro = false;
+    this.hurtSnarlCooldown = 0;
+  }
+
+  override takeDamageFrom(
+    amount: number,
+    attacker: Player | null,
+    damageType: PlayerDamageType | null = 'melee',
+  ): void {
+    const previousHp = this.hp;
+    super.takeDamageFrom(amount, attacker, damageType);
+    const wasHurt = this.hp < previousHp;
+    if (wasHurt && this.hurtSnarlCooldown === 0) {
+      this.damageSoundPending = true;
+      this.hurtSnarlCooldown = HURT_SNARL_COOLDOWN;
+    }
   }
 
   protected rollLootItems(_killer: Player | null): LootDrop['items'] {
@@ -88,6 +106,7 @@ export class Lion extends Mob {
 
     if (this.attackCooldown > 0) this.attackCooldown--;
     if (this.attackAnimTimer > 0) this.attackAnimTimer--;
+    if (this.hurtSnarlCooldown > 0) this.hurtSnarlCooldown--;
 
     const aggroRangePx = this.tileSize * AGGRO_RANGE_TILES;
     const attackRangePx = this.tileSize * ATTACK_RANGE_TILES;
@@ -103,6 +122,9 @@ export class Lion extends Mob {
       return;
     }
 
+    // The hunting roar: once as it turns on the party, not again until it has
+    // lost them and found them anew.
+    if (!this.isAggro) this.specialSoundPending = true;
     this.isAggro = true;
     const nearestDist = this.distanceTo(nearest);
     this.updateLastKnown(nearest);

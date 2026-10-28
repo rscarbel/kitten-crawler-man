@@ -28,12 +28,12 @@ import { TrashGremlin } from '../creatures/TrashGremlin';
 import type { RoosterSoundCue } from '../creatures/creatureSoundCues';
 import type { RoosterBuild } from '../sprites/roosterSprite';
 import { ROOSTER_CUES, ROOSTER_STEP_VOLUME, TRASH_GREMLIN_CUES } from './bossSoundCues';
-import { RockGolemBoss } from '../creatures/RockGolemBoss';
 import { Mantid } from '../creatures/Mantid';
 import { BallOfSwine } from '../creatures/BallOfSwine';
 import { AttackCow } from '../creatures/AttackCow';
 import { Cow, type CowVoice } from '../creatures/Cow';
 import { Mongo } from '../creatures/Mongo';
+import { mobVoiceTakes } from './mobVoices';
 import { KrakarenClone } from '../creatures/KrakarenClone';
 import { KrakarenTentacle } from '../creatures/KrakarenTentacle';
 import { playFairyCastCues } from './fairyAudioCues';
@@ -504,16 +504,25 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
       : null;
     playCuesOf(mob, voice);
     playBomberGoblinCues(mob, voice, audio?.clockSeconds ?? 0);
-    // The damage switch only takes the flag for the tags it voices; a
+    // The damage cue only takes the flag down for voices that have one; a
     // creature silenced now must not bring an old cue with it once heard.
     if (!heard) mob.damageSoundPending = false;
   }
 }
 
+/**
+ * One take as a plain play, several as a random pick, so a single-take cue
+ * never enters the fresh-take bookkeeping of a set it happens to start.
+ */
+function playTakes(takes: readonly SoundId[], audio: PlacedCuePlayer | null): void {
+  if (takes.length === 0) return;
+  if (takes.length === 1) audio?.play(takes[0]);
+  else audio?.playRandom(takes);
+}
+
 function playCuesOf(mob: Mob, audio: PlacedCuePlayer | null): void {
-  // Outside the `audioTag` switch: a guard is the same metal-on-metal beat on
-  // every creature that can raise one, and a tag lookup would leave any
-  // creature without a tag silent.
+  // Outside the voice table: a guard is the same metal-on-metal beat on every
+  // creature that can raise one, whatever voice it has.
   if (mob.guardSoundPending) {
     mob.guardSoundPending = false;
     audio?.play(GUARD_SOUND);
@@ -524,196 +533,23 @@ function playCuesOf(mob: Mob, audio: PlacedCuePlayer | null): void {
   }
   if (mob.attackSoundPending) {
     mob.attackSoundPending = false;
-    switch (mob.audioTag) {
-      case 'goblin':
-        audio?.playRandom(['goblin_1', 'goblin_2']);
-        break;
-      case 'rat':
-        audio?.playRandom(['rat_squeak_1', 'rat_squeak_2', 'rat_squeak_3']);
-        break;
-      case 'troglodyte':
-        audio?.play('troglodyte_tongue');
-        break;
-      case 'tuskling':
-        audio?.playRandom([
-          'tuskling_grunt_1',
-          'tuskling_grunt_2',
-          'tuskling_grunt_3',
-          'tuskling_grunt_4',
-        ]);
-        break;
-      case 'hawkfolk':
-        audio?.playRandom(['hawkfolk_1', 'hawkfolk_2']);
-        break;
-      // The pounce still lands on the claw cue: a dedicated pounce screech is
-      // unsourced, and the pounce ends in a raking swipe anyway.
-      case 'mongo':
-        if (mob instanceof Mongo && mob.lastAttack === 'bite') {
-          audio?.playRandom(['bite_1', 'bite_2', 'bite_3']);
-        } else {
-          audio?.play('mongo_slash');
-        }
-        break;
-      // Hired mercenaries. Tumbledown is a rock golem and swings under the
-      // golem's own tag below.
-      case 'merc_earth_elemental':
-        audio?.playRandom(['rock_thud_1', 'rock_thud_2', 'rock_thud_3', 'rock_thud_4']);
-        break;
-      // The archer's cue is raised on the frame the string is loosed.
-      case 'merc_archer':
-        audio?.play('shooting_an_arrow');
-        break;
-      case 'merc_medic':
-        audio?.play('human_punch_weak');
-        break;
-      case 'ratkin_soldier':
-        audio?.playRandom([
-          'ratkin_soldier_strike_1',
-          'ratkin_soldier_strike_2',
-          'ratkin_soldier_strike_3',
-        ]);
-        break;
-      case 'mantis':
-      case 'mantid':
-        audio?.playRandom(['slash_strike_1', 'slash_strike_2', 'slash_strike_3']);
-        break;
-      case 'krakaren':
-        audio?.play('krakaren_ground_slam');
-        break;
-      // One cue for both the double-fist slam and the stomp.
-      case 'rock_golem':
-        audio?.play('massive_strike_with_dirt_impact');
-        break;
-      case 'lemur':
-        audio?.play('lemur_attack');
-        break;
-      case 'clown':
-        audio?.playRandom(['clown_laughing_1', 'clown_laughing_2', 'clown_horn', 'clown_burp']);
-        break;
-      // Stand-ins until the Evil Clown's own audio is sourced: the horn is the
-      // closest thing to the whoomph of a backhand this troupe already owns.
-      case 'evil_clown':
-        audio?.play('clown_horn');
-        break;
-      case 'krasue':
-        audio?.play('krasue_attack');
-        break;
-      // Stand-in: `hammer_strike` is the closest thing in the library to a
-      // gauntlet thud. Replace with `dark_knight_punch` if Ryan sources one.
-      case 'dark_knight':
-        audio?.play('hammer_strike');
-        break;
-      case 'skeleton':
-        audio?.playRandom(['slash_strike_1', 'slash_strike_2', 'slash_strike_3']);
-        break;
-      case 'bear':
-        audio?.play('bear_big_attack');
-        break;
-      // Its own roars are not recorded yet, and another creature's voice on a
-      // lion would be wrong, so its bite lands silent until they are.
-      case 'lion':
-        break;
-      // The lab's hatchlings and the small spiders share this pounce bite.
-      case 'small_spider':
-        audio?.playRandom(['bite_1', 'bite_2', 'bite_3']);
-        break;
-    }
+    playTakes(mobVoiceTakes(mob, 'attack'), audio);
   }
   if (mob.projectileSoundPending) {
     mob.projectileSoundPending = false;
-    if (mob.audioTag === 'llama') audio?.play('llama_fireball');
-    if (mob.audioTag === 'lemur') audio?.play('lemur_sound');
-    if (mob.audioTag === 'skeleton') audio?.play('shooting_an_arrow');
-    // Only the archer among the goblins ever queues one of these — the melee
-    // archetypes have nothing to throw.
-    if (mob.audioTag === 'goblin') audio?.play('shooting_an_arrow');
-    if (mob.audioTag === 'skeleton_lord') audio?.play('magic_ball_launch');
-    if (mob.audioTag === 'the_lich') audio?.play('magic_ball_launch');
-    // The same cue the Lich's own bolts use: hers are the same soul-fire, and
-    // the room's second half is meant to sound like a continuation of its
-    // first.
-    if (mob.audioTag === 'miss_quill') audio?.play('magic_ball_launch');
-    if (mob.audioTag === 'evil_clown') audio?.play('dumbbell_throw');
-    if (mob.audioTag === 'rock_golem') audio?.play('rock_golem_grunt');
+    playTakes(mobVoiceTakes(mob, 'projectile'), audio);
   }
   if (mob.damageSoundPending) {
-    // Only tags handled here consume the flag.
-    switch (mob.audioTag) {
-      case 'bear':
-        mob.damageSoundPending = false;
-        audio?.play('bear_growl_1');
-        break;
-      // [STAND-IN] Dry bone rattle, not yet sourced. Snapping wood is the
-      // nearest dry clatter the library has.
-      case 'skeleton':
-      case 'skeleton_lord':
-        mob.damageSoundPending = false;
-        audio?.playRandom(['wood_breaking_1', 'wood_breaking_2']);
-        break;
-      // Robes over a skeleton, so a hit on it is bones knocking together
-      // rather than the dry snap the two above stand in for.
-      case 'the_lich':
-        mob.damageSoundPending = false;
-        audio?.play('bones_rattling');
-        break;
-      // The golem uses this flag for the dazed groan after a barrier
-      // interrupts its roll, not for taking a hit.
-      case 'rock_golem':
-        mob.damageSoundPending = false;
-        audio?.play('rock_golem_frustrated');
-        break;
+    // Only a voice with a hurt cue takes the flag down.
+    const hurtTakes = mobVoiceTakes(mob, 'damage');
+    if (hurtTakes.length > 0) {
+      mob.damageSoundPending = false;
+      playTakes(hurtTakes, audio);
     }
   }
   if (mob.specialSoundPending) {
     mob.specialSoundPending = false;
-    switch (mob.audioTag) {
-      case 'trash_gremlin':
-        audio?.play('trash_gremlin_vomit');
-        break;
-      case 'big_rooster':
-        audio?.play('dumbbell_throw');
-        break;
-      case 'ball_of_swine':
-        audio?.play('ball_of_swine_rolling');
-        break;
-      // The boulder grinding across the arena, versus the golem hauling
-      // itself into and out of that shape.
-      case 'rock_golem':
-        audio?.play(
-          mob instanceof RockGolemBoss && mob.lastSpecial === 'roll'
-            ? 'rolling_earth_ball'
-            : 'rock_golem_grunt',
-        );
-        break;
-      case 'krakaren':
-        audio?.play('krakaren_yell');
-        break;
-      case 'mantid':
-        audio?.play('mantid_furious');
-        break;
-      // The laugh that tells the party the vials are coming. A stand-in until
-      // a slow distorted clown laugh is sourced.
-      case 'evil_clown':
-        audio?.playRandom(['clown_laughing_1', 'clown_laughing_2']);
-        break;
-      // The lord has two specials and `specialSoundPending` is one flag, so
-      // which cue to play comes off the boss itself.
-      case 'skeleton_lord':
-        audio?.play(
-          mob instanceof SkeletonLord && mob.lastSpecial === 'summon'
-            ? 'skeleton_lord_chant'
-            : 'dead_hand_wave',
-        );
-        break;
-      // The Lich carries the same two specials on the same single flag.
-      case 'the_lich':
-        audio?.play(
-          mob instanceof TheLich && mob.lastSpecial === 'summon'
-            ? 'skeleton_lord_chant'
-            : 'dead_hand_wave',
-        );
-        break;
-    }
+    playTakes(mobVoiceTakes(mob, 'special'), audio);
   }
   playMantidHiss(mob, audio);
   playSwineSpinup(mob, audio);

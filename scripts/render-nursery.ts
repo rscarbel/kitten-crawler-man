@@ -37,6 +37,7 @@ import { CatPlayer } from '../src/creatures/CatPlayer.js';
 import { MobRoster } from '../src/systems/kits/SceneWorld.js';
 import { SpellSystem } from '../src/systems/SpellSystem.js';
 import type { SystemContext } from '../src/systems/GameSystem.js';
+import { parseLevelId } from '../src/levels/levelIds.js';
 
 const DEFAULT_LEVEL = 1;
 const DEFAULT_SCALE = 2;
@@ -83,7 +84,7 @@ function stringArg(name: string, fallback: string): string {
 const floorNumber = intArg('level', DEFAULT_LEVEL);
 const scale = intArg('scale', DEFAULT_SCALE);
 const outBase = stringArg('out', `${PREVIEW_DIR}/nursery`).replace(/\.png$/, '');
-const levelDef = getLevelDef(`level${floorNumber}`);
+const levelDef = getLevelDef(parseLevelId(`level${floorNumber}`));
 
 await loadGameSpritesInNode();
 setDungeonFloorTheme(levelDef.groundTheme ?? DEFAULT_DUNGEON_FLOOR_THEME);

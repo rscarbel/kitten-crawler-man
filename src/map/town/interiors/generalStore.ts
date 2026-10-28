@@ -11,7 +11,7 @@
  *
  * Shared by every `store`-kind building (today, only the General Store),
  * which is why the shell dimensions and this layout key off `BuildingKind`
- * rather than a building name the way the thirteen named houses do.
+ * rather than a building id the way the thirteen other houses do.
  */
 
 import { INTERIOR_WALL } from '../../tileTypes';
@@ -22,8 +22,11 @@ import {
   tileColumn,
   tileRow,
   type TownInteriorLayoutEntry,
+  statefulProp,
+  contractTargetId,
 } from './types';
 import type { ContractAreaRecord } from '../../contractAreas';
+import type { PlannedBuildingId } from '../../buildingIds';
 
 const GOODS_WALL_WIDTH = 4;
 const POTION_CABINET_WIDTH = 2;
@@ -59,7 +62,7 @@ const GOODS_STOCKROOM = 3;
 const DISPLAY_HOUSEHOLD = 0;
 const DISPLAY_HARDWARE = 1;
 
-const CONTRACT_SITE = 'general_store';
+const CONTRACT_SITE = 'taloncrest_general_store' satisfies PlannedBuildingId;
 /** The worn boards span the door's own two columns and the row in front of them. */
 const DOOR_BOARDS_SPOT_SIZE = 2;
 
@@ -194,8 +197,8 @@ export function buildGeneralStoreLayout(
   // so one swing at a wall cluster never reaches these too.
   const entranceCrateCol = westCol + 2;
   entries.push(
-    prop(entranceCrateCol, southRow, 'crate'),
-    prop(entranceCrateCol + 1, southRow, 'crate'),
+    statefulProp(entranceCrateCol, southRow, 'crate', 'crate_1'),
+    statefulProp(entranceCrateCol + 1, southRow, 'crate', 'crate_2'),
   );
 
   // Storeroom partition, its doorway gap, and its contents: the stock wall
@@ -208,11 +211,15 @@ export function buildGeneralStoreLayout(
     prop(westCol, northRow, 'goods_wall', GOODS_STOCKROOM, merchandise),
     prop(westCol, stockStackRow, 'stock_stack', 0, merchandise),
     prop(clerkDeskCol, storeroomLastRow, 'clerk_desk'),
-    prop(clerkDeskCol + CLERK_DESK_WIDTH, storeroomLastRow, 'open_crate'),
-    prop(storeroomLastCol, northRow, 'shelving_unit', 2, {
-      ...merchandise,
-      ...contractTarget(CONTRACT_SITE, 'storeroom_shelf'),
-    }),
+    statefulProp(clerkDeskCol + CLERK_DESK_WIDTH, storeroomLastRow, 'open_crate', 'open_crate'),
+    statefulProp(
+      storeroomLastCol,
+      northRow,
+      'shelving_unit',
+      contractTargetId(CONTRACT_SITE, 'storeroom_shelf'),
+      2,
+      merchandise,
+    ),
   );
 
   entries.push(
@@ -236,8 +243,8 @@ export function buildGeneralStoreLayout(
   const deliveryStackCol = deliveryCol + HAND_CART_LOAD_WIDTH;
   entries.push(
     prop(deliveryCol, deliveryRow, 'hand_cart'),
-    prop(deliveryCol + 1, deliveryRow, 'barrel', 1, merchandise),
-    prop(deliveryCol + 2, deliveryRow, 'sack', 0, merchandise),
+    statefulProp(deliveryCol + 1, deliveryRow, 'barrel', 'delivery_barrel', 1, merchandise),
+    statefulProp(deliveryCol + 2, deliveryRow, 'sack', 'delivery_sack', 0, merchandise),
     prop(deliveryStackCol, deliveryRow - 1, 'stock_stack', 0, merchandise),
   );
 
@@ -249,7 +256,7 @@ export function buildGeneralStoreLayout(
       ...merchandise,
       ...contractTarget(CONTRACT_SITE, 'bulk_bins'),
     }),
-    prop(binsCol + BULK_BINS_WIDTH, binsRow, 'sack', 0, merchandise),
+    statefulProp(binsCol + BULK_BINS_WIDTH, binsRow, 'sack', 'bins_sack', 0, merchandise),
   );
 
   // The counter, its bell end, the dynamite behind it and a perch for the keeper.
@@ -289,12 +296,12 @@ export function buildGeneralStoreLayout(
   // with a gap a table and a sack pile would seal off.
   const westFirstRow = storeroomPartitionRow + 1;
   entries.push(
-    prop(westCol, westFirstRow, 'tool_barrel', 0, merchandise),
-    prop(westCol + 1, westFirstRow, 'barrel', 0, merchandise),
-    prop(westCol, westFirstRow + 1, 'basket', 1, merchandise),
-    prop(westCol, westFirstRow + 2, 'crock_stack', 0, merchandise),
+    statefulProp(westCol, westFirstRow, 'tool_barrel', 'west_tool_barrel', 0, merchandise),
+    statefulProp(westCol + 1, westFirstRow, 'barrel', 'west_barrel', 0, merchandise),
+    statefulProp(westCol, westFirstRow + 1, 'basket', 'west_basket', 1, merchandise),
+    statefulProp(westCol, westFirstRow + 2, 'crock_stack', 'west_crocks', 0, merchandise),
     prop(westCol, southRow - 2, 'sack_pile', 1, merchandise),
-    prop(westCol, southRow - 1, 'coat_hook', 1),
+    statefulProp(westCol, southRow - 1, 'coat_hook', 'coat_hook', 1),
   );
 
   // Stock stood out along the front wall either side of the door, where a
@@ -302,24 +309,24 @@ export function buildGeneralStoreLayout(
   const frontWestCol = doorWestCol - FRONT_STOCK_DOOR_GAP;
   const frontEastCol = doorWestCol + FRONT_STOCK_DOOR_GAP;
   entries.push(
-    prop(frontWestCol, southRow, 'barrel', 0, merchandise),
-    prop(frontWestCol + 1, southRow, 'basket', 0, merchandise),
-    prop(frontWestCol, southRow - 1, 'sack', 0, merchandise),
+    statefulProp(frontWestCol, southRow, 'barrel', 'front_barrel', 0, merchandise),
+    statefulProp(frontWestCol + 1, southRow, 'basket', 'front_west_basket', 0, merchandise),
+    statefulProp(frontWestCol, southRow - 1, 'sack', 'front_sack', 0, merchandise),
     prop(frontEastCol, southRow, 'sack_pile', 1, merchandise),
-    prop(frontEastCol + 2, southRow, 'basket', 1, merchandise),
+    statefulProp(frontEastCol + 2, southRow, 'basket', 'front_east_basket', 1, merchandise),
   );
 
   // East wall: a second tool barrel and crockery under the bins, oil and
   // sacks down to the door.
   const eastStockRow = binsRow + 1;
   entries.push(
-    prop(eastCol, eastStockRow, 'tool_barrel', 0, merchandise),
-    prop(eastCol, eastStockRow + 1, 'basket', 0, merchandise),
-    prop(eastCol, eastStockRow + 2, 'crock_stack', 0, merchandise),
+    statefulProp(eastCol, eastStockRow, 'tool_barrel', 'east_tool_barrel', 0, merchandise),
+    statefulProp(eastCol, eastStockRow + 1, 'basket', 'east_basket', 0, merchandise),
+    statefulProp(eastCol, eastStockRow + 2, 'crock_stack', 'east_crocks', 0, merchandise),
     prop(eastCol - 1, southRow - 2, 'sack_pile', 0, merchandise),
-    prop(eastCol, southRow - 1, 'barrel', 0, merchandise),
-    prop(eastCol - 1, southRow, 'barrel', 1, merchandise),
-    prop(eastCol, southRow, 'crate', 0, merchandise),
+    statefulProp(eastCol, southRow - 1, 'barrel', 'east_barrel_north', 0, merchandise),
+    statefulProp(eastCol - 1, southRow, 'barrel', 'east_barrel_south', 1, merchandise),
+    statefulProp(eastCol, southRow, 'crate', 'east_crate', 0, merchandise),
   );
 
   return entries;

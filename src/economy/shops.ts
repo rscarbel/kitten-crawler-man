@@ -30,6 +30,7 @@ import {
   STREET,
   type StockCurve,
 } from './stockCurves';
+import { buildingDisplayName, type BuildingId } from '../map/buildingIds';
 
 /**
  * A condition outside the shop that decides whether a line is on the counter
@@ -70,7 +71,11 @@ export interface CatalogLine {
 
 /** One counter's whole pricing personality and what it sells. */
 export interface ShopDef {
-  readonly name: string;
+  /**
+   * The counter's title. A shop that is its building's own counter is titled
+   * by the building's sign, so the two cannot drift apart.
+   */
+  readonly title: { readonly building: BuildingId } | { readonly name: string };
   /** Multiplies every price at this counter, buying and selling. 1 = sells at base. */
   readonly markup: number;
   /** Specialty taste: replaces `markup` for a whole category. Applies to both what it charges and what it pays. */
@@ -95,7 +100,7 @@ export const SHOPS = {
    * almost immediately. Armour and gear barely move.
    */
   general_store: {
-    name: 'General Store',
+    title: { building: 'taloncrest_general_store' },
     markup: 1,
     categoryMarkup: {},
     itemMarkup: {},
@@ -137,7 +142,7 @@ export const SHOPS = {
    * street vendor. She wants food back more than anything else.
    */
   greengrocer: {
-    name: "Greengrocer's Cart",
+    title: { name: "Greengrocer's Cart" },
     markup: 1,
     specialties: ['food'],
     categoryMarkup: {},
@@ -170,7 +175,7 @@ export const SHOPS = {
    * He priced the Anchor's first shard as scrap, and never revised it.
    */
   tinker: {
-    name: "Tinker's Stall",
+    title: { name: "Tinker's Stall" },
     markup: 1,
     categoryMarkup: {},
     itemMarkup: {},
@@ -219,7 +224,7 @@ export const SHOPS = {
    * on top would pay more for a potion than any other counter charges for it.
    */
   club_bar: {
-    name: 'The Bar',
+    title: { name: 'The Bar' },
     markup: 1.15,
     categoryMarkup: { potion: 1.67, food: 1.67 },
     itemMarkup: {
@@ -280,7 +285,7 @@ export const SHOPS = {
    * moves the price, and the last one on the shelf is dear.
    */
   club_market: {
-    name: 'The Market',
+    title: { name: 'The Market' },
     markup: 1,
     categoryMarkup: {},
     itemMarkup: {
@@ -317,7 +322,7 @@ export const SHOPS = {
    * buy nothing back; the rounds themselves are services.
    */
   pub: {
-    name: 'The Tavern',
+    title: { name: 'The Tavern' },
     markup: 1,
     itemMarkup: {
       /** Poured on the spot rather than sold sealed to carry off, so it goes for a little under the stalls' price. */
@@ -346,7 +351,7 @@ export const SHOPS = {
    * stack of them barely moves her price.
    */
   armoury: {
-    name: 'The Quartermaster',
+    title: { name: 'The Quartermaster' },
     markup: 1,
     specialties: ['armor', 'weapon'],
     categoryMarkup: {},
@@ -406,7 +411,7 @@ export const SHOPS = {
    * little faster than the General Store's, and she pays best for potions.
    */
   apothecary: {
-    name: 'Herb & Remedy',
+    title: { building: 'taloncrest_apothecary' },
     markup: 1,
     itemMarkup: {
       /**
@@ -450,8 +455,8 @@ export const SHOPS = {
    * three-stick bundle, not for a cheaper single stick, which would retire the
    * store's line.
    */
-  cartwright: {
-    name: "Cartwright's Workshop",
+  crafting_house: {
+    title: { building: 'taloncrest_crafting_house' },
     markup: 1,
     categoryMarkup: {},
     itemMarkup: {},
@@ -484,8 +489,8 @@ export const SHOPS = {
    * worth more per unit than at a street vendor's cart, and a big stack
    * barely moves the price before it is absorbed.
    */
-  millers_farm: {
-    name: "Miller's Farm",
+  mill_farm: {
+    title: { building: 'taloncrest_mill_farm' },
     markup: 1,
     categoryMarkup: { food: 1.25 },
     itemMarkup: {
@@ -513,7 +518,7 @@ export const SHOPS = {
    * because the next cart is a long way off.
    */
   trading_post: {
-    name: 'Nibnose Trading Post',
+    title: { building: 'briar_hollow_store' },
     /** A village carries its goods a long way, so everything the town also sells costs a tenth more here. */
     markup: 1.1,
     /**
@@ -588,7 +593,7 @@ export const SHOPS = {
    * and barely notices a stack of it.
    */
   cookhouse: {
-    name: "Pipkin's Cookhouse",
+    title: { building: 'briar_hollow_cookhouse' },
     markup: 1,
     specialties: ['food'],
     categoryMarkup: {},
@@ -642,4 +647,9 @@ export function primaryCatalogLine(shop: ShopId, item: ItemId): CatalogLine | un
 /** The units one row hands over: a bundle's quantity, or one for a single-unit line. */
 export function catalogLineUnits(line: CatalogLine): number {
   return line.bundle === null ? 1 : line.bundle.quantity;
+}
+
+/** The title over a shop's counter. */
+export function shopTitle(def: ShopDef): string {
+  return 'building' in def.title ? buildingDisplayName(def.title.building) : def.title.name;
 }

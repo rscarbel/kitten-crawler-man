@@ -22,8 +22,6 @@ import type { Inventory } from '../../../core/items/inventory/Inventory';
 export const BLUEPRINTS_QUEST_ID = 'borrowed_blueprints' as const satisfies QuestId;
 export const BLUEPRINTS_QUEST_NAME = 'The Borrowed Blueprints';
 
-/** Wendell's house in Taloncrest, where the blueprints are kept. */
-export const PLUMBLINE_FARM_NAME = 'Plumbline Farm';
 /** The yard behind Plumbline Farm that Wendell prepared as a pasture, where Midge ends up. */
 export const WENDELL_PASTURE_YARD_NAME = 'Garrison Green';
 

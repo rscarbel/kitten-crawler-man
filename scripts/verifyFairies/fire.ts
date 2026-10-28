@@ -1554,7 +1554,7 @@ function checkAlliesDodge(report: FairyGateReport): void {
           real.twoBalls,
           `the fairy lobs at both crawlers with ${staged} between them`,
         );
-        const picksNoFights = kind !== 'Mongo' && getMercenaryTemplate(kind).kit === 'medic';
+        const picksNoFights = kind !== 'Mongo' && getMercenaryTemplate(kind).kit.id === 'medic';
         if (stance === 'fighting' && picksNoFights) {
           report.notApplicable(
             `${staged} takes on the mob planted in the circle`,

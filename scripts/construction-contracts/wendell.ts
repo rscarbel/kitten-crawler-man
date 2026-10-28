@@ -21,7 +21,6 @@ import { Conversation, defaultChoiceIndex } from '../../src/dialog/Conversation'
 import { speakerLines } from '../../src/dialog/line';
 import type { Choice, ConversationHandle, ConversationRequest } from '../../src/dialog/request';
 import { WENDELL_CONTRACTS } from '../../src/dialog/scripts/wendellContracts';
-import { PLUMBLINE_FARM_NAME } from '../../src/systems/briarHollow/blueprints/blueprintsProgress';
 import { contractSiteFor } from '../../src/systems/constructionContracts/contractCatalog';
 import {
   buildContractWorld,
@@ -72,7 +71,7 @@ function wendellRig(): WendellRig | null {
     if (event.questId === CONSTRUCTION_CONTRACT_QUEST_ID) started++;
   });
   const anchor = createAnchorQuestProgress();
-  const hook = WendellContractsHook.forBuilding(PLUMBLINE_FARM_NAME, WENDELL_FLOOR, {
+  const hook = WendellContractsHook.forBuilding('taloncrest_builder_farm', WENDELL_FLOOR, {
     state,
     bus,
     audio: null,
@@ -117,7 +116,7 @@ function verifyWendell(check: Check): void {
   check(rig !== null, 'Plumbline Farm stands up the contracts hook');
   if (rig === null) return;
   check(
-    WendellContractsHook.forBuilding('The Rusty Anvil', WENDELL_FLOOR, {
+    WendellContractsHook.forBuilding('taloncrest_smithy', WENDELL_FLOOR, {
       state: rig.state,
       bus: new EventBus(),
       audio: null,
@@ -186,7 +185,8 @@ function verifyWendell(check: Check): void {
   }
   const firstSite = first === null ? undefined : contractSiteFor(first.site);
   check(
-    rig.state.contracts.active === null && rig.state.contracts.lastSiteKey === firstSite?.slug,
+    rig.state.contracts.active === null &&
+      rig.state.contracts.lastSiteKey === firstSite?.buildingId,
     'dropping clears the contract and remembers its site',
   );
   check(rig.hook.markerFor(WENDELL) === 'exclamation', 'after the drop: the ! is back');
@@ -226,7 +226,7 @@ function verifyWendell(check: Check): void {
   check(rig.questsStarted() === startedBefore + 1, 'and starts the quest once');
   const secondSite = second === null ? undefined : contractSiteFor(second.site);
   check(
-    secondSite !== undefined && secondSite.slug !== firstSite?.slug,
+    secondSite !== undefined && secondSite.buildingId !== firstSite?.buildingId,
     `the new contract is at another building (${secondSite?.name ?? 'none'})`,
   );
   const issuedLine = lastShown(rig);

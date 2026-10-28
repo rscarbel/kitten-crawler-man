@@ -31,8 +31,11 @@ import {
   tileRect,
   tileRow,
   type TownInteriorLayoutEntry,
+  statefulProp,
+  contractTargetId,
 } from './types';
 import type { ContractAreaRecord } from '../../contractAreas';
+import type { PlannedBuildingId } from '../../buildingIds';
 
 /** The flour sack stack's variant with one sack slit open and a scoop in it. */
 const OPENED_SACK_VARIANT = 1;
@@ -41,7 +44,7 @@ const HEARTH_RUG_COLOURWAY = 2;
 /** A basket with a cloth folded over its rim, so it never reads as a copy of its neighbour. */
 const CLOTH_COVERED_BASKET_VARIANT = 1;
 
-const CONTRACT_SITE = 'millers_farm';
+const CONTRACT_SITE = 'taloncrest_mill_farm' satisfies PlannedBuildingId;
 const KITCHEN_FLOOR_SPOT_SIZE = 2;
 const MILL_FLAGS_SPOT_W = 3;
 const MILL_FLAGS_SPOT_H = 2;
@@ -149,30 +152,42 @@ export function buildMillersFarmLayout(
   const eastCrateCol = eastCol - 1;
 
   const entries: TownInteriorLayoutEntry[] = [
-    prop(dresserCol, northRow, 'farm_dresser'),
-    prop(coatHookCol, northRow, 'coat_hook'),
-    prop(coatHookCol + 1, northRow, 'basket', CLOTH_COVERED_BASKET_VARIANT),
+    statefulProp(dresserCol, northRow, 'farm_dresser', 'farm_dresser'),
+    statefulProp(coatHookCol, northRow, 'coat_hook', 'coat_hook'),
+    statefulProp(coatHookCol + 1, northRow, 'basket', 'basket_1', CLOTH_COVERED_BASKET_VARIANT),
     prop(hearthCol, northRow, 'farm_hearth', 0, contractTarget(CONTRACT_SITE, 'hearth')),
     prop(potRackCol, northRow, 'pot_rack', 0, contractTarget(CONTRACT_SITE, 'pot_rack')),
-    prop(larderCol, northRow, 'larder_shelf', 0, contractTarget(CONTRACT_SITE, 'larder_shelf')),
+    statefulProp(
+      larderCol,
+      northRow,
+      'larder_shelf',
+      contractTargetId(CONTRACT_SITE, 'larder_shelf'),
+      0,
+    ),
     prop(palletCol, northRow, 'corvin_pallet'),
     // Corvin's corner: his scraps at the foot of the pallet.
     prop(eastCol, northRow + 1, 'crawler_scraps'),
 
     // A rag rug on the boards in front of the fire, with a chair drawn up to it.
     prop(hearthCol, hearthFrontRow, 'rug_medium', HEARTH_RUG_COLOURWAY),
-    prop(hearthRugEastCol, hearthFrontRow, 'chair'),
-    prop(tableCol, tableRow, 'farm_table', 0, contractTarget(CONTRACT_SITE, 'farm_table')),
-    prop(tableEndCol, tableRow + 1, 'stool'),
-    prop(troughCol, troughRow, 'bake_trough'),
+    statefulProp(hearthRugEastCol, hearthFrontRow, 'chair', 'chair'),
+    statefulProp(
+      tableCol,
+      tableRow,
+      'farm_table',
+      contractTargetId(CONTRACT_SITE, 'farm_table'),
+      0,
+    ),
+    statefulProp(tableEndCol, tableRow + 1, 'stool', 'stool'),
+    statefulProp(troughCol, troughRow, 'bake_trough', 'bake_trough'),
     prop(eastCol, troughRow + 1, 'flour_bin'),
 
-    prop(westCol, kitchenSouthRow, 'barrel'),
-    prop(westCol + 1, kitchenSouthRow, 'sack'),
-    prop(tableEndCol + 2, kitchenSouthRow, 'basket'),
+    statefulProp(westCol, kitchenSouthRow, 'barrel', 'barrel_1'),
+    statefulProp(westCol + 1, kitchenSouthRow, 'sack', 'sack_1'),
+    statefulProp(tableEndCol + 2, kitchenSouthRow, 'basket', 'basket_2'),
     prop(churnCol, kitchenSouthRow, 'dairy_churn'),
-    prop(churnCol + 1, kitchenSouthRow, 'crate'),
-    prop(eastCol, kitchenSouthRow, 'barrel', 1),
+    statefulProp(churnCol + 1, kitchenSouthRow, 'crate', 'crate_1'),
+    statefulProp(eastCol, kitchenSouthRow, 'barrel', 'barrel_2', 1),
   ];
 
   entries.push(...tileRow(partitionRow, westCol, eastCol, INTERIOR_WALL));
@@ -193,26 +208,44 @@ export function buildMillersFarmLayout(
     prop(scaleCol, millRoomFirstRow, 'grain_scale'),
     prop(sieveCol, millRoomFirstRow, 'sieve_rack', 0, contractTarget(CONTRACT_SITE, 'sieve_rack')),
 
-    prop(sackStackCol, millRoomFirstRow, 'flour_sack_stack'),
-    prop(sackStackCol, millRoomFirstRow + 1, 'flour_sack_stack', OPENED_SACK_VARIANT),
+    statefulProp(sackStackCol, millRoomFirstRow, 'flour_sack_stack', 'flour_sack_stack_1'),
+    statefulProp(
+      sackStackCol,
+      millRoomFirstRow + 1,
+      'flour_sack_stack',
+      'flour_sack_stack_2',
+      OPENED_SACK_VARIANT,
+    ),
     prop(westCol, millFrontRow, 'flour_bin'),
     prop(sieveCol, millFrontRow + 1, 'hand_cart'),
     prop(broomCol, southRow, 'broom'),
-    prop(westCol, southRow - 1, 'crate'),
-    prop(westCol, southRow, 'crate'),
-    prop(westCol + 1, southRow, 'crate'),
-    prop(westCol + 2, southRow, 'basket'),
+    statefulProp(westCol, southRow - 1, 'crate', 'crate_2'),
+    statefulProp(westCol, southRow, 'crate', 'crate_3'),
+    statefulProp(westCol + 1, southRow, 'crate', 'crate_4'),
+    statefulProp(westCol + 2, southRow, 'basket', 'basket_3'),
 
-    prop(eastCol, millRoomFirstRow, 'barrel'),
-    prop(eastCol, millRoomFirstRow + 1, 'barrel', 1),
-    prop(eastCol, millRoomFirstRow + 2, 'barrel'),
-    prop(scaleCol, millFrontRow - 1, 'grain_bin', 0, contractTarget(CONTRACT_SITE, 'grain_bin')),
-    prop(eastCrateCol, millFrontRow, 'crate'),
-    prop(eastCol, millFrontRow, 'barrel', 1),
-    prop(scaleCol, millFrontRow + 1, 'flour_sack_stack', OPENED_SACK_VARIANT),
-    prop(scaleCol, southRow, 'sack'),
-    prop(eastCol - 1, southRow, 'crate'),
-    prop(eastCol, southRow, 'crate'),
+    statefulProp(eastCol, millRoomFirstRow, 'barrel', 'barrel_3'),
+    statefulProp(eastCol, millRoomFirstRow + 1, 'barrel', 'barrel_4', 1),
+    statefulProp(eastCol, millRoomFirstRow + 2, 'barrel', 'barrel_5'),
+    statefulProp(
+      scaleCol,
+      millFrontRow - 1,
+      'grain_bin',
+      contractTargetId(CONTRACT_SITE, 'grain_bin'),
+      0,
+    ),
+    statefulProp(eastCrateCol, millFrontRow, 'crate', 'crate_5'),
+    statefulProp(eastCol, millFrontRow, 'barrel', 'barrel_6', 1),
+    statefulProp(
+      scaleCol,
+      millFrontRow + 1,
+      'flour_sack_stack',
+      'flour_sack_stack_3',
+      OPENED_SACK_VARIANT,
+    ),
+    statefulProp(scaleCol, southRow, 'sack', 'sack_2'),
+    statefulProp(eastCol - 1, southRow, 'crate', 'crate_6'),
+    statefulProp(eastCol, southRow, 'crate', 'crate_7'),
   );
   return entries;
 }

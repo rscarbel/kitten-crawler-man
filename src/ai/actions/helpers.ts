@@ -66,18 +66,13 @@ export function tileOf(point: { readonly x: number; readonly y: number }): {
   return { x: Math.floor(point.x / TILE_SIZE), y: Math.floor(point.y / TILE_SIZE) };
 }
 
-/** The current floor's definition, or null for a scene whose id names no floor. */
-export function levelDefOf(scene: AISceneContext): LevelDef | null {
-  try {
-    return getLevelDef(scene.getLevelId());
-  } catch {
-    return null;
-  }
+/** The current floor's definition. */
+export function levelDefOf(scene: AISceneContext): LevelDef {
+  return getLevelDef(scene.getLevelId());
 }
 
-/** Floor depth, 1-based; a scene with no floor counts as the first. */
 export function floorNumberOf(scene: AISceneContext): number {
-  return Math.max(1, levelDefOf(scene)?.floorNumber ?? 1);
+  return levelDefOf(scene).floorNumber;
 }
 
 /**

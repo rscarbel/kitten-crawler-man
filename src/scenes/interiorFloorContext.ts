@@ -2,6 +2,7 @@ import { ASSET_GROUPS, type AssetGroup } from '../core/spriteAssets/assetGroups'
 import type { SpriteKey } from '../core/spriteAssets/SpriteLoader';
 import { level3 } from '../levels/level3';
 import type { LevelDef } from '../levels/types';
+import type { LevelId } from '../levels/levelIds';
 import { groundSheetKeysAmong } from '../map/ground/runtimeGroundSheets';
 import type { InteriorVariant } from '../map/GameMap';
 import type { StealthKeySnatchVisit } from '../systems/stealthKeySnatch/stealthKeySnatchVisit';
@@ -15,8 +16,11 @@ import type { StealthKeySnatchVisit } from '../systems/stealthKeySnatch/stealthK
  * that floor's rules.
  */
 export interface InteriorFloorContext {
-  /** The floor the building stands on: which props break and what advice applies indoors. */
-  readonly floorNumber: number;
+  /**
+   * The level the building stands on: its sounds, which props break, what
+   * advice applies indoors, and the floor the AI is told about.
+   */
+  readonly levelId: LevelId;
   /** The ground sheets the room's floor and walls are painted from. */
   readonly groundSheets: readonly SpriteKey[];
   /**
@@ -76,7 +80,7 @@ export function interiorArt(
  * Their counters and notice boards are the street's own `town` sheets.
  */
 export const TOWN_INTERIOR_FLOOR: InteriorFloorContext = {
-  floorNumber: level3.floorNumber,
+  levelId: level3.id,
   ...interiorArt(['town'], level3),
   sightRadiusPx: Number.POSITIVE_INFINITY,
   ownsMusic: true,

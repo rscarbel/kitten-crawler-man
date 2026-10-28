@@ -4,6 +4,7 @@ import {
   timeFrameIndex,
 } from '../core/spriteAssets/SpriteRenderer';
 import type { EyePlacement } from './eyePlacement';
+import type { CardinalView, FacingSelection } from './facingView';
 import { figureFrameCount, type FigureDef } from './figure/figureDef';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import {
@@ -53,8 +54,16 @@ function figureFor(sheet: RockGolemSheet): FigureDef {
   return ROCK_GOLEM_FIGURE;
 }
 
-/** Which of the sheet's three viewpoints a facing vector selects. */
+/** Which of the sheet's three viewpoints a facing selects. */
 type GolemView = 'front' | 'side' | 'away';
+
+const GOLEM_VIEWS: Readonly<Record<CardinalView, GolemView>> = {
+  front: 'front',
+  side: 'side',
+  back: 'away',
+};
+
+const PROFILE_FACING: FacingSelection<CardinalView> = { view: 'side', flipX: false };
 
 /** The attacks every golem shares — the boss's roll is not one of them. */
 export type GolemAttack = 'slam' | 'stomp' | 'throw';
@@ -121,8 +130,8 @@ export interface RockGolemSpriteState {
   /** The walk cycle angle from `Player.walkFrame` (radians, 0–2π). */
   readonly walkFrame?: number;
   readonly isMoving?: boolean;
-  readonly facingX?: number;
-  readonly facingY?: number;
+  /** From `selectCardinalFacing`; the profile when omitted. */
+  readonly facing?: FacingSelection<CardinalView>;
   /** Which attack is playing, or null. */
   readonly attack?: GolemAttack | null;
   /** 0 at the first frame of the attack, 1 at the last. */
@@ -131,12 +140,6 @@ export interface RockGolemSpriteState {
   readonly ballState?: GolemBallState | null;
   /** 0 at the first frame of a curl/uncurl, 1 at the last. */
   readonly ballProgress?: number;
-}
-
-/** Views split on whichever axis the golem is facing hardest along. */
-function viewFor(facingX: number, facingY: number): GolemView {
-  if (Math.abs(facingY) <= Math.abs(facingX)) return 'side';
-  return facingY < 0 ? 'away' : 'front';
 }
 
 function stateFor(base: string, view: GolemView): string {
@@ -155,17 +158,16 @@ function resolveRow(sheet: RockGolemSheet, state: RockGolemSpriteState): Resolve
   const {
     walkFrame = 0,
     isMoving = false,
-    facingX = 1,
-    facingY = 0,
+    facing = PROFILE_FACING,
     attack = null,
     attackProgress = 0,
     ballState = null,
     ballProgress = 0,
   } = state;
-  const view = viewFor(facingX, facingY);
+  const view = GOLEM_VIEWS[facing.view];
   // Only the profile art is mirrored: flipping the head-on views would put the
   // golem's asymmetric shoulder on the wrong side every time it turned round.
-  const flipX = view === 'side' && facingX < 0;
+  const flipX = view === 'side' && facing.flipX;
 
   if (ballState !== null) {
     const count = frameCountOf(sheet, ballState);

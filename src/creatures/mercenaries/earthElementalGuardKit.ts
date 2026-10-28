@@ -1,5 +1,8 @@
 import { TILE_SIZE } from '../../core/constants';
-import type { MercenaryTemplate, MercenaryTemplateId } from '../../core/party/mercenaryTemplates';
+import type {
+  EarthElementalGuardStyle,
+  MercenaryTemplate,
+} from '../../core/party/mercenaryTemplates';
 import { makeShield, isAbsorbing, SHIELD_STATUS } from '../../core/combat/StatusEffect';
 import type { Player } from '../../Player';
 import { normalize } from '../../utils';
@@ -28,9 +31,9 @@ import type { StrikeTiming } from './mercenaryStrike';
 /**
  * The earth elemental bodyguards' kit, shared by Crush and Hammer Hands: seven
  * feet of rock throwing heavy punches, and a warding Shield spell. What sets
- * the two apart is carried in a per-hire {@link EarthElementalGuardConfig}
- * rather than in two kits, because they are the same kind of creature trained
- * the same way — they differ in whom they guard.
+ * the two apart is an {@link EarthElementalGuardConfig} chosen by the guard
+ * style each template's kit names, rather than two kits, because they are the
+ * same kind of creature trained the same way — they differ in whom they guard.
  *
  * - Crush guards the smaller crawler, the cat. Whoever hurts her becomes his
  *   target, and his Shield goes to her first.
@@ -174,17 +177,12 @@ const HAMMER_HANDS_CONFIG: EarthElementalGuardConfig = {
   bodyBlocks: true,
 };
 
-const EARTH_ELEMENTAL_GUARD_CONFIGS: Partial<
-  Record<MercenaryTemplateId, EarthElementalGuardConfig>
+export const EARTH_ELEMENTAL_GUARD_CONFIGS: Readonly<
+  Record<EarthElementalGuardStyle, EarthElementalGuardConfig>
 > = {
-  crush: CRUSH_CONFIG,
-  hammer_hands: HAMMER_HANDS_CONFIG,
+  cat_guard: CRUSH_CONFIG,
+  party_shield: HAMMER_HANDS_CONFIG,
 };
-
-/** An earth elemental with no config of its own fights like Hammer Hands, the plainer of the two. */
-function earthElementalGuardConfigFor(id: MercenaryTemplateId): EarthElementalGuardConfig {
-  return EARTH_ELEMENTAL_GUARD_CONFIGS[id] ?? HAMMER_HANDS_CONFIG;
-}
 
 const MIN_PUNCH_DAMAGE = 1;
 
@@ -236,7 +234,7 @@ export class EarthElementalGuardKit extends BasicMeleeKit<EarthElementalGuardRow
 
   constructor(
     template: MercenaryTemplate,
-    readonly guard: EarthElementalGuardConfig = earthElementalGuardConfigFor(template.id),
+    readonly guard: EarthElementalGuardConfig,
   ) {
     super({
       damage: Math.max(MIN_PUNCH_DAMAGE, Math.round(template.damage * guard.punchDamageRatio)),

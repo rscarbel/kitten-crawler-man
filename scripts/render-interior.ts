@@ -7,9 +7,9 @@
  * generic tile types without anyone noticing.
  *
  *   npx tsx scripts/render-interior.ts --kind=store --scale=3
- *   npx tsx scripts/render-interior.ts --kind=house --name="The Horned Flagon"
+ *   npx tsx scripts/render-interior.ts --kind=house --name='taloncrest_flagon_tavern'
  *   npx tsx scripts/render-interior.ts --kind=tower --floor=1
- *   npx tsx scripts/render-interior.ts --name="The Sleeping Cat Inn" --safe-room
+ *   npx tsx scripts/render-interior.ts --name='taloncrest_inn' --safe-room
  */
 
 import { createCanvas, type Canvas } from 'canvas';
@@ -23,7 +23,7 @@ import { renderCanvas, renderDecorationsOverlay } from '../src/map/TileRenderer.
 import { stampSafeRoomCounters } from '../src/map/safeRoomCounterLayout.js';
 import { stampSafeRoomDecor } from '../src/map/safeRoomDecorLayout.js';
 import type { BuildingKind } from '../src/map/town/townPlan.js';
-import { BUILDING_NAMES, isBuildingName, type BuildingName } from '../src/map/buildingEntry.js';
+import { BUILDING_IDS, isBuildingId, type BuildingId } from '../src/map/buildingIds.js';
 
 const DEFAULT_KIND = 'store';
 const DEFAULT_SCALE = 2;
@@ -59,14 +59,14 @@ function parseKind(raw: string): BuildingKind {
   return match;
 }
 
-function parseBuildingName(raw: string): BuildingName | null {
+function parseBuildingId(raw: string): BuildingId | null {
   if (raw === '') return null;
-  if (!isBuildingName(raw)) throw new Error(`--name must be one of ${BUILDING_NAMES.join(', ')}`);
+  if (!isBuildingId(raw)) throw new Error(`--name must be one of ${BUILDING_IDS.join(', ')}`);
   return raw;
 }
 
 const kind = parseKind(stringArg('kind', DEFAULT_KIND));
-const buildingName = parseBuildingName(stringArg('name', ''));
+const buildingId = parseBuildingId(stringArg('name', ''));
 const towerFloor = intArg('floor', DEFAULT_TOWER_FLOOR);
 const scale = intArg('scale', DEFAULT_SCALE);
 const outPath = stringArg('out', DEFAULT_OUT);
@@ -78,7 +78,7 @@ const hasSafeRoom = flagArg('safe-room');
 await loadGameSpritesInNode(artSeed);
 
 const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-map.generateInterior(kind, towerFloor, buildingName, hasSafeRoom);
+map.generateInterior(kind, towerFloor, buildingId, hasSafeRoom);
 // `generateInterior` lays the room; the counter run and the furnishings are
 // stamped by the scene afterwards, so a harness that skipped them was showing a
 // safe room nobody ever plays in.
@@ -104,4 +104,4 @@ renderCanvas(gameCtx, map.structure, TILE_SIZE, 0, 0, viewW, viewH);
 renderDecorationsOverlay(gameCtx, map.structure, TILE_SIZE, 0, 0, viewW, viewH);
 
 writePreviewPng(outPath, canvas.toBuffer('image/png'));
-console.log(`${outPath}: ${buildingName ?? kind} — ${tilesW}x${tilesH} tiles at ${scale}x`);
+console.log(`${outPath}: ${buildingId ?? kind} — ${tilesW}x${tilesH} tiles at ${scale}x`);

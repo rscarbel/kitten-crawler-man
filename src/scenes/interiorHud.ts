@@ -14,6 +14,7 @@ import { TOP_BAND_WIDTH } from '../ui/hud/topBandStack';
 import type { HudGeometry } from '../ui/hud/hudLayout';
 import type { Rect } from '../ui/core/geom';
 import type { SizeClass } from '../ui/core/viewport';
+import { buildingDisplayName, type BuildingId } from '../map/buildingIds';
 
 /** The tower's storeys, bottom up, as the room's banner names them. */
 const TOWER_FLOOR_LABELS: readonly string[] = [
@@ -26,10 +27,11 @@ const TOWER_FLOOR_LABELS: readonly string[] = [
 const ROOM_NAME_ENTRY_ID = 'room-name';
 
 /** The name a room's banner shows: the building's, plus the storey inside the tower. */
-export function interiorRoomTitle(buildingName: string, towerFloor: number | null): string {
-  if (towerFloor === null) return buildingName;
+export function interiorRoomTitle(buildingId: BuildingId, towerFloor: number | null): string {
+  const displayName = buildingDisplayName(buildingId);
+  if (towerFloor === null) return displayName;
   const floorLabel = TOWER_FLOOR_LABELS[towerFloor] ?? `Floor ${towerFloor + 1}`;
-  return `${buildingName} (${floorLabel})`;
+  return `${displayName} (${floorLabel})`;
 }
 
 /** The room-name banner's height: one line of label text on the band's card. */

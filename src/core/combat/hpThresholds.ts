@@ -66,6 +66,15 @@ export function hpThresholdTop(threshold: HpThreshold, maxHp: number): number {
   return Math.ceil(maxHp * threshold.share);
 }
 
+/**
+ * Whether `hp` puts a crawler in the low-health band or under it, a downed body
+ * included. The AI's fairness shield is this line, so the AI never treats as
+ * fair game a crawler the game already calls low, nor spares one it does not.
+ */
+export function isAtOrUnderLowHealth(hp: number, maxHp: number): boolean {
+  return hp <= hpThresholdTop(CRAWLER_HP_THRESHOLDS.low_health, maxHp);
+}
+
 /** Whether `hp` sits inside `threshold`'s band. A downed body (0 HP) is in no band. */
 export function isInsideHpThreshold(threshold: HpThreshold, hp: number, maxHp: number): boolean {
   return hp > 0 && hp <= hpThresholdTop(threshold, maxHp);

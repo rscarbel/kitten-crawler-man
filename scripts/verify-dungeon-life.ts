@@ -81,6 +81,7 @@ import {
   DungeonLifeSystem,
   type Walker,
 } from '../src/systems/dungeon/DungeonLifeSystem.js';
+import type { DungeonFloorNumber } from '../src/levels/levelIds.js';
 
 /** Generated floors checked per level, from fixed seeds so a failure replays. */
 const SEED_COUNT = 3;
@@ -140,7 +141,7 @@ function check(ok: boolean, message: string): void {
   if (!ok) failures.push(message);
 }
 
-function buildFloor(level: number, seed: number): GameMap {
+function buildFloor(level: DungeonFloorNumber, seed: number): GameMap {
   const levelDef = getLevelDef(`level${level}`);
   setDungeonFloorTheme(levelDef.groundTheme ?? 'cellars');
   return new GameMap({
@@ -152,7 +153,7 @@ function buildFloor(level: number, seed: number): GameMap {
   });
 }
 
-function floorTheme(level: number): DungeonFloorThemeId {
+function floorTheme(level: DungeonFloorNumber): DungeonFloorThemeId {
   return level === 1 ? 'cellars' : 'service_level';
 }
 
@@ -314,7 +315,11 @@ interface LightChecks {
  * emitter is gone from a plan made on the same frame, before the lighting
  * pass has updated. The map is put back as it was after each sub-check.
  */
-function brokenLightChecks(gameMap: GameMap, level: number, breakIt: boolean): LightChecks {
+function brokenLightChecks(
+  gameMap: GameMap,
+  level: DungeonFloorNumber,
+  breakIt: boolean,
+): LightChecks {
   const lighting = new DungeonLightingSystem({ gameMap, now: () => 0, additiveGlows: () => false });
   lighting.update();
   const lights = lighting.staticLightTiles();
@@ -375,7 +380,7 @@ function brokenLightChecks(gameMap: GameMap, level: number, breakIt: boolean): L
   return { prop, fixture, fuse };
 }
 
-function checkBrokenLights(gameMap: GameMap, level: number, label: string): void {
+function checkBrokenLights(gameMap: GameMap, level: DungeonFloorNumber, label: string): void {
   const broken = brokenLightChecks(gameMap, level, true);
   const standing = brokenLightChecks(gameMap, level, false);
   const subChecks = ['prop', 'fixture', 'fuse'] as const;
@@ -397,7 +402,7 @@ function checkBrokenLights(gameMap: GameMap, level: number, label: string): void
 
 function lifeFor(
   gameMap: GameMap,
-  level: number,
+  level: DungeonFloorNumber,
   fullDetail: boolean,
   raiseCue: (cue: DungeonCue) => void = () => undefined,
 ): DungeonLifeSystem {
@@ -458,7 +463,7 @@ function checkOffFloorCanFail(gameMap: GameMap, label: string): void {
  * check, on floor, within the room's cap, with no more rooms seated at once
  * than the cap allows.
  */
-function checkCritterCoverage(gameMap: GameMap, level: number, label: string): void {
+function checkCritterCoverage(gameMap: GameMap, level: DungeonFloorNumber, label: string): void {
   const life = lifeFor(gameMap, level, true);
   const rooms = [...life.critterRoomBounds()].sort(
     (a, b) => a.bounds.y - b.bounds.y || a.bounds.x - b.bounds.x,
@@ -515,7 +520,7 @@ function checkCritterCoverage(gameMap: GameMap, level: number, label: string): v
  * it must run and be gone, never leaving the floor on the way, and the room
  * must not fill again while the camera is on it.
  */
-function checkCrittersFlee(gameMap: GameMap, level: number, label: string): void {
+function checkCrittersFlee(gameMap: GameMap, level: DungeonFloorNumber, label: string): void {
   const life = lifeFor(gameMap, level, true);
   const room = firstOf(life.critterRoomBounds());
   if (room === undefined) return;
@@ -544,7 +549,7 @@ function checkCrittersFlee(gameMap: GameMap, level: number, label: string): void
 }
 
 /** Surprise bursts land on floor, stay on it as they run, keep to the budget and are gone in time. */
-function checkSurpriseBursts(gameMap: GameMap, level: number, label: string): void {
+function checkSurpriseBursts(gameMap: GameMap, level: DungeonFloorNumber, label: string): void {
   const life = lifeFor(gameMap, level, true);
   const room = firstOf(life.critterRoomBounds());
   if (room === undefined) return;
@@ -608,7 +613,7 @@ function placeFeet(walker: { x: number; y: number }, feetX: number, feetY: numbe
 }
 
 /** Walks a crowd back and forth over a puddle and a paper drift, far past every cap. */
-function checkEffectCaps(gameMap: GameMap, level: number, label: string): void {
+function checkEffectCaps(gameMap: GameMap, level: DungeonFloorNumber, label: string): void {
   const life = lifeFor(gameMap, level, true);
   const puddle = puddleWithEastNeighbour(gameMap, life);
   const paper = firstPaperTile(gameMap);
@@ -708,7 +713,7 @@ function puddleWithEastNeighbour(gameMap: GameMap, life: DungeonLifeSystem): Til
 }
 
 /** A flying walker never splashes; a walking one does. */
-function checkFlyersDoNotSplash(gameMap: GameMap, level: number, label: string): void {
+function checkFlyersDoNotSplash(gameMap: GameMap, level: DungeonFloorNumber, label: string): void {
   const puddle = puddleWithEastNeighbour(gameMap, lifeFor(gameMap, level, true));
   if (puddle === undefined) return;
   const flyer = { x: 0, y: 0, isFlying: true };
@@ -722,7 +727,7 @@ function checkFlyersDoNotSplash(gameMap: GameMap, level: number, label: string):
  * A walker whose body is over a puddle but whose feet are on the dry tile
  * below it leaves no ring: a ring is drawn at the feet, so the feet decide.
  */
-function checkRingsStayOnWater(gameMap: GameMap, level: number, label: string): void {
+function checkRingsStayOnWater(gameMap: GameMap, level: DungeonFloorNumber, label: string): void {
   const surface = floorSurfaceOf(gameMap.structure);
   if (surface === undefined) return;
   const life = lifeFor(gameMap, level, true);
@@ -759,7 +764,7 @@ function checkRingsStayOnWater(gameMap: GameMap, level: number, label: string): 
  * and checks flies still gather over what it left. The twin — the same life
  * told nothing about the wreckage — must lose them, so the check can fail.
  */
-function checkFliesOverRemains(gameMap: GameMap, level: number, label: string): void {
+function checkFliesOverRemains(gameMap: GameMap, level: DungeonFloorNumber, label: string): void {
   const bones: TilePoint[] = [];
   for (let y = 0; y < gameMap.structure.length; y++) {
     for (let x = 0; x < gameMap.structure[y].length; x++) {
@@ -817,7 +822,11 @@ function checkFliesOverRemains(gameMap: GameMap, level: number, label: string): 
 }
 
 /** The drip's one-shot is raised on the frame its drop lands, not when it starts to fall. */
-function checkDripSoundsOnLanding(gameMap: GameMap, level: number, label: string): void {
+function checkDripSoundsOnLanding(
+  gameMap: GameMap,
+  level: DungeonFloorNumber,
+  label: string,
+): void {
   const heardOnFrames: number[] = [];
   let frame = 0;
   const life = lifeFor(gameMap, level, true, (cue) => {
@@ -856,7 +865,7 @@ function drewAnything(paint: (ctx: CanvasRenderingContext2D) => void): boolean {
  * drip has fallen); at full detail something must, the twin that keeps the
  * check honest.
  */
-function presetDraws(gameMap: GameMap, level: number, fullDetail: boolean): boolean {
+function presetDraws(gameMap: GameMap, level: DungeonFloorNumber, fullDetail: boolean): boolean {
   const life = lifeFor(gameMap, level, fullDetail);
   const targets = [
     ...life.critterRoomBounds().map((room) => roomCentre(room.bounds)),
@@ -878,7 +887,11 @@ function presetDraws(gameMap: GameMap, level: number, fullDetail: boolean): bool
 }
 
 /** At the performance preset a drip still falls and a wader still splashes. */
-function checkPresetKeepsDripsAndSplashes(gameMap: GameMap, level: number, label: string): void {
+function checkPresetKeepsDripsAndSplashes(
+  gameMap: GameMap,
+  level: DungeonFloorNumber,
+  label: string,
+): void {
   const life = lifeFor(gameMap, level, false);
   const puddle = firstOf(life.puddles);
   if (puddle === undefined) {

@@ -3575,7 +3575,11 @@ type TownInteriorPropExtras = Pick<
   'destructible' | 'interaction' | 'flames' | 'ambientSound'
 >;
 
-function def(
+/**
+ * Keeps each prop's extras in its type, so `StatefulTownInteriorPropId` can
+ * tell from the table alone which props a room's save remembers.
+ */
+function def<const E extends TownInteriorPropExtras = TownInteriorPropExtras>(
   id: string,
   footprint: TownInteriorFootprint,
   walkable: boolean,
@@ -3583,9 +3587,9 @@ function def(
   mount: TownInteriorPropMount,
   variants: number,
   paint: (ctx: Ctx, frame: TownPropFrame, variant: number, rng: Rng) => void,
-  extras: TownInteriorPropExtras = {},
-): TownInteriorPropDef {
-  return {
+  extras?: E,
+): TownInteriorPropDef & E {
+  const base: TownInteriorPropDef = {
     id,
     footprint,
     artHeightTiles: frameHeightFor(id),
@@ -3594,11 +3598,8 @@ function def(
     mount,
     variants,
     paint,
-    destructible: extras.destructible,
-    interaction: extras.interaction,
-    flames: extras.flames,
-    ambientSound: extras.ambientSound,
   };
+  return Object.assign(base, extras);
 }
 
 export const TOWN_INTERIOR_PROPS = {
@@ -4754,6 +4755,23 @@ export const TOWN_INTERIOR_PROPS = {
 } as const satisfies Record<string, TownInteriorPropDef>;
 
 export type TownInteriorPropId = keyof typeof TOWN_INTERIOR_PROPS;
+
+type TownInteriorPropTable = typeof TOWN_INTERIOR_PROPS;
+
+/**
+ * Props a room's save remembers: a breakable pays out once, a searched
+ * container is searched once. A layout must give every one of these an
+ * explicit id (`statefulProp`), so moving it keeps what the save holds.
+ */
+export type StatefulTownInteriorPropId = {
+  [K in TownInteriorPropId]: TownInteriorPropTable[K] extends
+    | { readonly destructible: TownInteriorDestructibleSpec }
+    | { readonly interaction: { readonly kind: 'search' } }
+    ? K
+    : never;
+}[TownInteriorPropId];
+
+export type StatelessTownInteriorPropId = Exclude<TownInteriorPropId, StatefulTownInteriorPropId>;
 
 export function isTownInteriorPropId(value: string): value is TownInteriorPropId {
   return Object.prototype.hasOwnProperty.call(TOWN_INTERIOR_PROPS, value);

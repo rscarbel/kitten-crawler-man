@@ -29,13 +29,21 @@
 
 import { BOOKSHELF, CHAIR, TABLE } from '../../tileTypes';
 import { TOWN_INTERIOR_PROPS } from '../../../sprites/art/townInterior/townInteriorProps';
-import { contractTarget, prop, tile, type TownInteriorLayoutEntry } from './types';
+import {
+  contractTarget,
+  prop,
+  tile,
+  type TownInteriorLayoutEntry,
+  statefulProp,
+  contractTargetId,
+} from './types';
 import type { ContractAreaRecord } from '../../contractAreas';
+import type { PlannedBuildingId } from '../../buildingIds';
 
 /** Deep sky field, ember border — the reading-table rug, told apart from the hearth rug's ember field. */
 const READING_RUG_COLOURWAY = 3;
 
-const CONTRACT_SITE = 'old_loris_cottage';
+const CONTRACT_SITE = 'taloncrest_old_lady_cottage' satisfies PlannedBuildingId;
 const FLOORBOARDS_SPOT_SIZE = 2;
 const DOOR_STEP_SPOT_H = 1;
 
@@ -146,11 +154,17 @@ export function buildOldLorisCottageLayout(w: number, h: number): TownInteriorLa
   const broomCol = doorWestCol - 1;
 
   return [
-    prop(dresserCol, northRow, 'jar_dresser', 0, contractTarget(CONTRACT_SITE, 'jar_dresser')),
+    statefulProp(
+      dresserCol,
+      northRow,
+      'jar_dresser',
+      contractTargetId(CONTRACT_SITE, 'jar_dresser'),
+      0,
+    ),
     prop(hearthCol, northRow, 'witch_hearth', 0, contractTarget(CONTRACT_SITE, 'hearth')),
     prop(dryingBeamCol, northRow, 'drying_beam', 0, contractTarget(CONTRACT_SITE, 'drying_beam')),
-    prop(eastCol, northRow + 1, 'mushroom_basket'),
-    prop(eastCol - 1, northRow + 1, 'basket', 1),
+    statefulProp(eastCol, northRow + 1, 'mushroom_basket', 'mushroom_basket_1'),
+    statefulProp(eastCol - 1, northRow + 1, 'basket', 'basket_1', 1),
 
     // Colourway 2 (ember field, deep sky border) reads as worn wool rather
     // than the sky-blue/ember default's shop-carpet brightness.
@@ -159,52 +173,58 @@ export function buildOldLorisCottageLayout(w: number, h: number): TownInteriorLa
     prop(armchairCol, footstoolRow, 'hedge_stool'),
     prop(bookHeapCol, bookHeapRow, 'book_heap'),
 
-    prop(westCol, hearthRugRow, 'crock_cluster'),
-    prop(westCol + 1, hearthRugRow, 'sack'),
+    statefulProp(westCol, hearthRugRow, 'crock_cluster', 'crock_cluster_1'),
+    statefulProp(westCol + 1, hearthRugRow, 'sack', 'sack_1'),
     prop(westCol, hearthRugRow + 1, 'birdcage_stand'),
-    prop(westCol, worktableRow, 'crock_cluster', 1),
-    prop(worktableCol - 1, worktableRow, 'mushroom_basket'),
-    prop(
+    statefulProp(westCol, worktableRow, 'crock_cluster', 'crock_cluster_2', 1),
+    statefulProp(worktableCol - 1, worktableRow, 'mushroom_basket', 'mushroom_basket_2'),
+    statefulProp(
       worktableCol,
       worktableRow,
       'witch_worktable',
+      contractTargetId(CONTRACT_SITE, 'worktable'),
       0,
-      contractTarget(CONTRACT_SITE, 'worktable'),
     ),
-    prop(workStoolCol, workStoolRow, 'stool'),
-    prop(worktableCol + TOWN_INTERIOR_PROPS.witch_worktable.footprint.w, worktableRow, 'basket', 1),
+    statefulProp(workStoolCol, workStoolRow, 'stool', 'stool_1'),
+    statefulProp(
+      worktableCol + TOWN_INTERIOR_PROPS.witch_worktable.footprint.w,
+      worktableRow,
+      'basket',
+      'basket_2',
+      1,
+    ),
 
     tile(westCol, wreckShelfRow, BOOKSHELF),
     tile(wreckTableCol1, wreckTableRow, TABLE),
     tile(wreckTableCol2, wreckTableRow, TABLE),
     tile(wreckChairCol, wreckTableRow, CHAIR),
 
-    prop(
+    statefulProp(
       eastCol,
       eastShelfRow,
       'crockery_shelf',
+      contractTargetId(CONTRACT_SITE, 'crockery_shelf'),
       0,
-      contractTarget(CONTRACT_SITE, 'crockery_shelf'),
     ),
-    prop(eastCol, eastShelfRow + 1, 'crock_cluster', 1),
-    prop(eastCol - 1, eastShelfRow, 'oil_lamp'),
+    statefulProp(eastCol, eastShelfRow + 1, 'crock_cluster', 'crock_cluster_3', 1),
+    statefulProp(eastCol - 1, eastShelfRow, 'oil_lamp', 'oil_lamp'),
 
     prop(readingRugCol, readingRugRow, 'rug_medium', READING_RUG_COLOURWAY),
-    prop(readingTableCol - 1, readingRugRow, 'stool', 1),
-    prop(readingTableCol, readingRugRow, 'table_small', 1),
-    prop(readingTableCol + 1, readingRugRow, 'stool'),
+    statefulProp(readingTableCol - 1, readingRugRow, 'stool', 'stool_2', 1),
+    statefulProp(readingTableCol, readingRugRow, 'table_small', 'table_small', 1),
+    statefulProp(readingTableCol + 1, readingRugRow, 'stool', 'stool_3'),
 
     // Her bed along the south wall's west end, a chest at its foot.
     prop(westCol, southRow, 'cottage_bed', 0, contractTarget(CONTRACT_SITE, 'bed')),
-    prop(westCol + 2, southRow, 'chest'),
-    prop(westCol, storeRow, 'basket'),
+    statefulProp(westCol + 2, southRow, 'chest', 'chest'),
+    statefulProp(westCol, storeRow, 'basket', 'basket_3'),
 
     // Stores stacked into the corner by the door.
-    prop(eastCol, storeRow - 2, 'barrel'),
-    prop(eastCol, storeRow - 1, 'sack'),
-    prop(eastCol, storeRow, 'barrel', 1),
-    prop(eastCol, southRow, 'crate'),
-    prop(eastCol - 1, southRow, 'crate'),
+    statefulProp(eastCol, storeRow - 2, 'barrel', 'barrel_1'),
+    statefulProp(eastCol, storeRow - 1, 'sack', 'sack_2'),
+    statefulProp(eastCol, storeRow, 'barrel', 'barrel_2', 1),
+    statefulProp(eastCol, southRow, 'crate', 'crate_1'),
+    statefulProp(eastCol - 1, southRow, 'crate', 'crate_2'),
     prop(broomCol, southRow, 'broom'),
   ];
 }

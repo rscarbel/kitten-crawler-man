@@ -14,7 +14,7 @@
  */
 
 import { BUILDING_OCCUPANTS } from './buildingOccupants';
-import type { BuildingName } from '../map/buildingEntry';
+import type { BuildingId } from '../map/buildingIds';
 
 /**
  * Which priced menu a counter opens. Each one is its own menu builder and
@@ -30,9 +30,9 @@ export type ServiceCounter =
   | 'drill_yard'
   | 'apothecary'
   | 'smithy'
-  | 'cartwright'
-  | 'miller_kitchen'
-  | 'plumbline_hayloft';
+  | 'crafting_house'
+  | 'mill_kitchen'
+  | 'hayloft';
 
 /**
  * A desk with a screen of its own rather than a priced menu: the system behind
@@ -56,19 +56,19 @@ export type OccupantService =
   | { readonly surface: 'desk'; readonly desk: ServiceDesk; readonly verb: string };
 
 /** Every service this building's roster offers, in roster order. Empty when it offers none. */
-export function interiorServicesFor(building: BuildingName): ReadonlyArray<OccupantService> {
+export function interiorServicesFor(building: BuildingId): ReadonlyArray<OccupantService> {
   return (BUILDING_OCCUPANTS.get(building) ?? []).flatMap((spec) =>
     spec.service === undefined ? [] : [spec.service],
   );
 }
 
 /** Whether this building takes coin over any counter or desk, and so needs the purchase cue. */
-export function interiorSellsSomething(building: BuildingName): boolean {
+export function interiorSellsSomething(building: BuildingId): boolean {
   return interiorServicesFor(building).some((service) => service.surface !== 'reading');
 }
 
 /** Whether one of this building's occupants keeps `desk`. */
-export function interiorKeepsDesk(building: BuildingName, desk: ServiceDesk): boolean {
+export function interiorKeepsDesk(building: BuildingId, desk: ServiceDesk): boolean {
   const desks = interiorServicesFor(building).flatMap((service) =>
     service.surface === 'desk' ? [service.desk] : [],
   );

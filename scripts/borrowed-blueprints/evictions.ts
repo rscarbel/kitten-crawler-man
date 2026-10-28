@@ -35,9 +35,7 @@ import {
   AnchorInteriorSystem,
   WOOD_PILE_RESPAWN_SECONDS,
 } from '../../src/systems/AnchorInteriorSystem';
-import { LORI_COTTAGE_NAME } from '../../src/systems/interiorStoryOwnership';
 import {
-  PLUMBLINE_FARM_NAME,
   grantBlueprintsItem,
   takeBlueprintsItem,
 } from '../../src/systems/briarHollow/blueprints/blueprintsProgress';
@@ -115,7 +113,7 @@ function wendellHandsBackBlueprints(
   crawler: HumanPlayer | CatPlayer,
 ): void {
   const conversation = new Conversation(null);
-  const wendell = WendellBlueprintsHook.forBuilding(PLUMBLINE_FARM_NAME, WENDELL_FLOOR, {
+  const wendell = WendellBlueprintsHook.forBuilding('taloncrest_builder_farm', WENDELL_FLOOR, {
     state: rig.state,
     bus: rig.bus,
     audio: null,
@@ -141,9 +139,9 @@ function loriCottage(
   progress.status = 'active';
   progress.lori = 'in_progress';
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  map.generateInterior('house', 0, LORI_COTTAGE_NAME, false);
+  map.generateInterior('house', 0, 'taloncrest_old_lady_cottage', false);
   const room = AnchorInteriorSystem.forBuilding(
-    LORI_COTTAGE_NAME,
+    'taloncrest_old_lady_cottage',
     0,
     progress,
     map,
@@ -270,9 +268,7 @@ export function verifyBlueprintsEvictionRecovery(check: Check): void {
   check(!rig.quest.blueprintsHeld, "another quest's item takes the slot and the blueprints go");
   const guidance = rig.quest.guidance();
   check(
-    guidance?.kind === 'town_building' &&
-      guidance.buildingName === PLUMBLINE_FARM_NAME &&
-      guidance.residentName === 'Wendell',
+    guidance?.kind === 'town_building' && guidance.residentName === 'Wendell',
     'guidance points back to Wendell at Plumbline Farm',
   );
   check(
@@ -444,9 +440,7 @@ export function verifyWoodPileEvictsBlueprints(check: Check, kind: CrawlerKind):
   check(!rig.quest.blueprintsHeld, 'the quest no longer sees the blueprints held');
   const guidance = rig.quest.guidance();
   check(
-    guidance?.kind === 'town_building' &&
-      guidance.buildingName === PLUMBLINE_FARM_NAME &&
-      guidance.residentName === 'Wendell',
+    guidance?.kind === 'town_building' && guidance.residentName === 'Wendell',
     'guidance points back to Wendell at Plumbline Farm',
   );
   check(

@@ -490,7 +490,13 @@ console.log('\nA chest ahead of the pickups in the Space chain');
   const chests = new TreasureChestSystem();
   const chestTileX = Math.floor(human.x / TILE_SIZE) + CHEST_OFFSET_TILES;
   const chestTileY = Math.floor(human.y / TILE_SIZE);
-  chests.addWoodenChest(chestTileX, chestTileY, CHEST_GUARD_BOUNDS, { coins: 0, items: [] }, false);
+  chests.addWoodenChest(
+    chestTileX,
+    chestTileY,
+    CHEST_GUARD_BOUNDS,
+    { coins: 0, items: [] },
+    'when_room_clear',
+  );
   // `wouldInteract` is what the pickup prompt asks to stand aside for a chest;
   // it must agree with what the chain's `tryInteract` then does with the press.
   const predicted = chests.wouldInteract(human);

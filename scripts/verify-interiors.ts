@@ -11,9 +11,8 @@
  * does not exist simply never appears. None of that throws, none of it logs, and
  * none of it shows up in a screenshot.
  *
- * The rooms are laid out by `createTownPlan`, so the building names come from
- * the plan rather than being restated here: a rename that breaks a quest breaks
- * this too, which is the point (see docs/town.md, "Names are load-bearing").
+ * The rooms are laid out by `createTownPlan`, so the building ids come from
+ * the plan rather than being restated here.
  *
  * Run: npx tsx scripts/verify-interiors.ts
  */
@@ -22,9 +21,9 @@ import { createCanvas } from 'canvas';
 
 import { loadGameSpritesInNode } from './nodeCanvasGlobals';
 import { asGameContext } from './nodeGameContext';
-import { CLOAK_AND_DAGGER_NAME, createTownPlan } from '../src/map/town/townPlan';
+import { createTownPlan } from '../src/map/town/townPlan';
 import type { BuildingKind } from '../src/map/town/townPlan';
-import type { BuildingName } from '../src/map/buildingEntry';
+import type { BuildingId } from '../src/map/buildingIds';
 import { GameMap, TOWER_FLOOR_COUNT } from '../src/map/GameMap';
 import { findPartyArrivalTiles, hasRoomToMove } from '../src/map/findWalkableTile';
 import {
@@ -227,7 +226,7 @@ const ARRIVAL_VIGIL_SECONDS = 20;
 const ARRIVAL_VIGIL_FRAMES = ARRIVAL_VIGIL_SECONDS * FRAMES_PER_SECOND;
 
 /** Where Steve Cartwright keeps his range. */
-const CARTWRIGHT_HOME = "Cartwright's Workshop";
+const CARTWRIGHT_HOME = 'taloncrest_crafting_house';
 /** The shortest lane from his crossbow to the target that reads as a range, in tiles. */
 const MIN_SHOOTING_LANE_TILES = 4;
 /** Comfortably longer than one aim, shot and reload, so a cycle always completes inside it. */
@@ -237,16 +236,16 @@ const TARGET_PRACTICE_CYCLE_FRAMES = TARGET_PRACTICE_CYCLE_SECONDS * FRAMES_PER_
 const TARGET_PRACTICE_HELD_SECONDS = 15;
 const TARGET_PRACTICE_HELD_FRAMES = TARGET_PRACTICE_HELD_SECONDS * FRAMES_PER_SECOND;
 /** Each pub's janitor, by the building they mop. */
-const JANITOR_HOMES: ReadonlyArray<readonly [BuildingName, ResidentId]> = [
-  ['The Sunken Stump Pub', 'janitor_puddles'],
-  ['The Horned Flagon', 'janitor_grout'],
+const JANITOR_HOMES: ReadonlyArray<readonly [BuildingId, ResidentId]> = [
+  ['taloncrest_pub', 'janitor_puddles'],
+  ['taloncrest_flagon_tavern', 'janitor_grout'],
 ];
 /** Long enough for a stroll and several spots worked. */
 const JANITOR_WATCH_SECONDS = 90;
 const JANITOR_WATCH_FRAMES = JANITOR_WATCH_SECONDS * FRAMES_PER_SECOND;
 
 /** Where Old Lori lives — the town's roaming resident. */
-const LORI_HOME = "Old Lori's Cottage";
+const LORI_HOME = 'taloncrest_old_lady_cottage';
 /**
  * How far from the room's centre (Chebyshev tiles) she may be set down. Not
  * zero: the cottage's centre is furniture, and she starts in the widest open
@@ -294,12 +293,12 @@ function check(condition: boolean, label: string): void {
 }
 
 const plan = createTownPlan(PLAN_SIZE);
-const buildings = new Map<BuildingName, BuildingKind>(plan.buildings.map((b) => [b.name, b.kind]));
-const towerName = plan.tower.name;
+const buildings = new Map<BuildingId, BuildingKind>(plan.buildings.map((b) => [b.id, b.kind]));
+const towerName = plan.tower.id;
 buildings.set(towerName, plan.tower.kind);
 /** Named rather than derived from a kind, exactly as the town plan states it. */
-const safeRoomBuildings = new Set<BuildingName>(
-  plan.buildings.filter((b) => b.hasSafeRoom === true).map((b) => b.name),
+const safeRoomBuildings = new Set<BuildingId>(
+  plan.buildings.filter((b) => b.hasSafeRoom === true).map((b) => b.id),
 );
 
 /**
@@ -307,7 +306,7 @@ const safeRoomBuildings = new Set<BuildingName>(
  * builds, plus the safe-room fittings the scene stamps afterwards. A check that
  * skipped the stamping pass would be inspecting a room nobody ever sees.
  */
-function buildInterior(name: BuildingName | null, kind: BuildingKind, floor: number): GameMap {
+function buildInterior(name: BuildingId | null, kind: BuildingKind, floor: number): GameMap {
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
   const hasSafeRoom = name !== null && safeRoomBuildings.has(name);
   map.generateInterior(kind, floor, name, hasSafeRoom);
@@ -422,7 +421,7 @@ console.log('\nGeneral Store counter');
 // figures on the same furniture with no way to tell which one the "Shop"
 // prompt belongs to.
 {
-  const generalStoreRoster = BUILDING_OCCUPANTS.get('General Store') ?? [];
+  const generalStoreRoster = BUILDING_OCCUPANTS.get('taloncrest_general_store') ?? [];
   const counterSpecs = generalStoreRoster.filter(
     (occupant) => occupantAnchor(occupant) === 'counter',
   );
@@ -432,8 +431,8 @@ console.log('\nGeneral Store counter');
     'the counter occupant is Keeper Brenna Kestrel',
   );
 
-  const map = buildInterior('General Store', 'store', TOWER_GROUND_FLOOR);
-  const occupants = InteriorOccupantSystem.forBuilding(map, 'store', 'General Store');
+  const map = buildInterior('taloncrest_general_store', 'store', TOWER_GROUND_FLOOR);
+  const occupants = InteriorOccupantSystem.forBuilding(map, 'store', 'taloncrest_general_store');
   const kestrel = occupants?.people.find((person) => person.residentId === 'keeper_brenna_kestrel');
   check(kestrel !== undefined, 'the General Store roster actually places Kestrel in the room');
 
@@ -958,7 +957,7 @@ console.log("\nThe club's stages are solid, and the lanes past them open");
 // and the walk from the bar side to the tables passes above and below each
 // platform, so the rows either side of it must stay clear the whole way across.
 {
-  const map = buildInterior(CLOAK_AND_DAGGER_NAME, 'club', TOWER_GROUND_FLOOR);
+  const map = buildInterior('taloncrest_nightclub', 'club', TOWER_GROUND_FLOOR);
   for (const post of CLUB_PERFORMER_POSTS) {
     const open: string[] = [];
     const blockedLane: string[] = [];
@@ -982,7 +981,7 @@ console.log("\nThe club's stages are solid, and the lanes past them open");
       `the lanes past ${post.performer}'s stage stay open — ${blockedLane.join(' ')}`,
     );
   }
-  const host = InteriorOccupantSystem.forBuilding(map, 'club', CLOAK_AND_DAGGER_NAME);
+  const host = InteriorOccupantSystem.forBuilding(map, 'club', 'taloncrest_nightclub');
   const brandon = host?.placements.find((placement) => placement.spec.residentId === 'brandon');
   check(
     brandon?.stand.x === CLUB_HOST_MARK.x && brandon.stand.y === CLUB_HOST_MARK.y,
@@ -995,7 +994,7 @@ console.log("\nThe club's crowd stands in company, not wandering");
 // tables, or in front of a stage — and move between those, never stroll for
 // the sake of it. Measured over ten simulated minutes, sampled once a second.
 {
-  const map = buildInterior(CLOAK_AND_DAGGER_NAME, 'club', TOWER_GROUND_FLOOR);
+  const map = buildInterior('taloncrest_nightclub', 'club', TOWER_GROUND_FLOOR);
   const crowd = createClubCrowd(map, mulberry32(CROWD_SIM_SEED));
   // Two gatherings whose rings come within two bodies of each other leave
   // their members shoving each other off their places forever.
@@ -1092,7 +1091,7 @@ console.log("\nThe club's gatherings never take more people than they have room 
 // to a full group is already one too many, and the overfill only happens when
 // two patrons change plans on the same tick, so several seeds are run.
 {
-  const map = buildInterior(CLOAK_AND_DAGGER_NAME, 'club', TOWER_GROUND_FLOOR);
+  const map = buildInterior('taloncrest_nightclub', 'club', TOWER_GROUND_FLOOR);
   const totalTicks = CROWD_SIM_SECONDS * CLUB_ANIM_FRAMES_PER_SECOND;
   const overfullSeeds: string[] = [];
   for (let seed = 1; seed <= CAPACITY_SIM_SEEDS; seed++) {
@@ -1167,7 +1166,7 @@ console.log('\nEvery prop that makes a sound sounds once, from inside its room')
 // neither shows in a screenshot. Unnamed houses take the generic layout, so one
 // is built alongside the named rooms: its hearth is a prop like every other.
 const GENERIC_HOUSE_NAME = null;
-const soundingRooms: ReadonlyArray<readonly [BuildingName | null, BuildingKind]> = [
+const soundingRooms: ReadonlyArray<readonly [BuildingId | null, BuildingKind]> = [
   ...buildings,
   [GENERIC_HOUSE_NAME, 'house'],
 ];
@@ -1468,12 +1467,12 @@ for (const anchorKind of ANCHOR_KINDS) {
 }
 
 console.log('\nStat boons present themselves as boons');
-// An unregistered status falls back to a grey *harmful* pill, so a boon the
+// A status with no look falls back to a grey *harmful* pill, so a boon the
 // player paid coins for would show in the HUD as though it were a poison.
 check(STAT_BOON_BONUSES.size > 0, 'there is at least one stat boon to check');
 for (const [type, bonuses] of STAT_BOON_BONUSES) {
   const visual = statusVisual(type);
-  check(visual !== undefined, `the "${type}" boon has a registered status visual`);
+  check(visual !== null, `the "${type}" boon has a registered status visual`);
   check(visual?.harmful === false, `the "${type}" boon is not painted as something to fear`);
   check(
     Object.values(bonuses).some((amount) => amount !== 0),

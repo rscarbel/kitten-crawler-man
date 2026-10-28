@@ -1,3 +1,4 @@
+import { buildingDisplayName } from '../../map/buildingIds';
 import { ABILITY_DEFS } from '../../abilities/abilityDefs';
 import { MAGIC_MISSILE_SPARK_LEVEL } from '../../abilities/magicMissile';
 import { displayNameOf } from '../../ai/AIChatFeed';
@@ -10,7 +11,6 @@ import {
 } from '../../loot/rewardChest';
 import { ITEM_DEF, isItemId, type ItemId } from '../items/defs/ItemDefs';
 import { isFiniteNumber, isRecord, ownEntry, parseEvery } from '../util/guards';
-import { CLOAK_AND_DAGGER_NAME } from '../../map/town/townPlan';
 import { plainLine } from '../util/plainText';
 import { isRarity, type Rarity } from '../items/defs/rarity';
 import type { CrawlerKind } from '../skills/SkillManager';
@@ -286,7 +286,7 @@ export const ACHIEVEMENT_DEFS: Readonly<Record<AchievementId, AchievementDef>> =
   bartenders_choice: {
     id: 'bartenders_choice',
     name: "Bartender's Choice",
-    description: `Drink a ${ITEM_DEF.catnip_tuna_water.name} in ${CLOAK_AND_DAGGER_NAME}.`,
+    description: `Drink a ${ITEM_DEF.catnip_tuna_water.name} in ${buildingDisplayName('taloncrest_nightclub')}.`,
     playerType: 'cat',
     reward: {
       rarity: 'Common',

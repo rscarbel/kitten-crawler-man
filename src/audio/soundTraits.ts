@@ -214,6 +214,9 @@ const IMPACT_IDS = [
   'metal_dent_1',
   'metal_dent_2',
   'metal_dent_3',
+  'crossbow_bolt_thunk_wood_1',
+  'crossbow_bolt_thunk_wood_2',
+  'crossbow_bolt_thunk_wood_3',
 ] as const satisfies readonly SoundId[];
 
 const FOOTSTEP_IDS = [
@@ -506,6 +509,12 @@ const ROOSTER_CLUCK_IDS = [
   'bent_rooster_cluck_3',
 ] as const satisfies readonly SoundId[];
 
+/**
+ * Lions that notice the party together — a siege wave, two hunting one field —
+ * roar as one animal rather than stacking the same take.
+ */
+const LION_AGGRO_ROAR_MIN_INTERVAL_MS = 1500;
+
 const ID_TRAITS: Readonly<Partial<Record<SoundId, Partial<SoundTraits>>>> = {
   ...Object.fromEntries(IMPACT_IDS.map((id) => [id, VARIED])),
   ...Object.fromEntries(FOOTSTEP_IDS.map((id) => [id, FOOTSTEPS])),
@@ -525,6 +534,7 @@ const ID_TRAITS: Readonly<Partial<Record<SoundId, Partial<SoundTraits>>>> = {
   ...Object.fromEntries(RELIC_EFFECT_IDS.map((id) => [id, VARIED])),
   ...Object.fromEntries(GEAR_MOMENT_IDS.map((id) => [id, GEAR_MOMENT])),
   twin_locket_link: PARTNER_LINK,
+  lion_aggro_roar: { minIntervalMs: LION_AGGRO_ROAR_MIN_INTERVAL_MS },
   ...Object.fromEntries(BOMBER_GRUNT_IDS.map((id) => [id, BOMBER_VOICE])),
   ...Object.fromEntries(FIRE_IN_THE_HOLE_IDS.map((id) => [id, BOMBER_VOICE])),
   ...Object.fromEntries(BOMBS_AWAY_IDS.map((id) => [id, BOMBER_VOICE])),
@@ -600,6 +610,12 @@ const SOUND_CAPTIONS: Readonly<Partial<Record<SoundId, SoundCaption>>> = {
   troglodyte_tongue: offscreen('Tongue lashes'),
   bear_big_attack: offscreen('Bear roars'),
   bear_growl_1: offscreen('Bear growls'),
+  lion_aggro_roar: offscreen('Lion roars'),
+  ...takes(
+    ['lion_attack_roar_1', 'lion_attack_roar_2', 'lion_attack_roar_3'],
+    offscreen('Lion snarls'),
+  ),
+  ...takes(['lion_hurt_1', 'lion_hurt_2', 'lion_hurt_3', 'lion_hurt_4'], offscreen('Lion snarls')),
   ...takes(['clown_laughing_1', 'clown_laughing_2'], offscreen('Clown laughs')),
   clown_horn: offscreen('Clown horn honks'),
   clown_burp: offscreen('Clown burps'),

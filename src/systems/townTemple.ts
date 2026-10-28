@@ -16,6 +16,7 @@ import { offerUnless, type ShopMenu, type ShopRow } from '../ui/screens/shop/sho
 import { hostByline, type ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
 import { SERVICE_PRICES } from '../economy/servicePrices';
+import { buildingDisplayName } from '../map/buildingIds';
 
 const GRACE_LINES: ReadonlyArray<string> = [
   'The Hawkfolk sees you. Rise mended, and go carefully.',
@@ -57,7 +58,7 @@ export function buildBlessingMenu(
     questErrand: false,
   };
   return {
-    title: 'Temple of the Sky',
+    title: buildingDisplayName('taloncrest_temple'),
     bark: host?.line ?? priestBark(turn),
     byline: hostByline(host),
     emblem: null,

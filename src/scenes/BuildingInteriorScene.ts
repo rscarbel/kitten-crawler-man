@@ -48,7 +48,8 @@ import { requestEnvironmentSheetsForGroups } from '../sprites/sheets/environment
 import { holdIdleClock, releaseIdleClock } from '../core/rendering/renderFrameClock';
 import { PlayerManager } from '../core/party/PlayerManager';
 import { setSkillBookReaders } from '../creatures/skillBookDrop';
-import type { BuildingEntry, BuildingName } from '../map/buildingEntry';
+import type { BuildingEntry } from '../map/buildingEntry';
+import { type BuildingId, buildingDisplayName } from '../map/buildingIds';
 import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/save/PlayerSnapshot';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
 import { BopcaSystem } from '../systems/BopcaSystem';
@@ -132,7 +133,7 @@ import {
   compressedSfxForLevelId,
   SFX_GROUPS,
   sfxGroupsForBuildingEntry,
-  sfxGroupsForFloorNumber,
+  sfxGroupsForLevelId,
 } from '../audio/sfxGroups';
 import { prewarmGroups } from '../core/spriteAssets/SpriteLoader';
 import { ArrivalLoader } from './ArrivalLoader';
@@ -147,7 +148,7 @@ import { viewerFavor } from '../core/progression/viewerFavor';
 import type { AIContextSource, SessionInput } from '../ai/context/types';
 import { readCrawler, readNearbyMobs } from '../ai/context/sceneReaders';
 import { mobLabel } from '../ai/context/eventMapping';
-import { allLevelDefs } from '../levels';
+import { getLevelDef } from '../levels';
 import { forwardSceneHooksToBus } from '../systems/sceneHookEvents';
 import { StatusChangeWatcher } from '../systems/statusChangeEvents';
 import { EventBus } from '../core/EventBus';
@@ -172,7 +173,6 @@ import {
   createStarlightTentProgress,
   type StarlightTentProgress,
 } from '../core/state/StarlightTentProgress';
-import { STARLIGHT_TENT_NAME } from '../map/overworld/circusGroundsLayout';
 import type { MurderQuestProgress, MurderQuestStage } from '../core/quests/MurderQuestProgress';
 import { createDoomsdayProgress, type DoomsdayProgress } from '../core/quests/DoomsdayProgress';
 import { createCasinoState, type CasinoState } from '../core/club/CasinoState';
@@ -284,7 +284,6 @@ import {
   plumblineFarmExamineLine,
   PlumblineFarmRoomSync,
 } from '../systems/briarHollow/blueprints/plumblineFarmRoom';
-import { PLUMBLINE_FARM_NAME } from '../systems/briarHollow/blueprints/blueprintsProgress';
 import { partyCount } from '../core/items/gathering/partyResources';
 import { indoorsConstructionSource } from '../systems/briarHollow/ConstructionSystem';
 import { FortuneTable, HEDGE_WITCH, fortuneScreenSurface } from '../ui/screens/shop/FortuneScreen';
@@ -319,14 +318,10 @@ import { CombatKit } from '../systems/kits/CombatKit';
 import { SkillPointReminderSystem } from '../systems/SkillPointReminderSystem';
 import { interiorHostilesFor, noteRoomCleared } from '../systems/interiorHostiles';
 import { partyLevelOf } from '../levels/spawner';
-import { CLOAK_AND_DAGGER_NAME, TAVERN_BUILDING_NAMES } from '../map/town/townPlan';
+import { TAVERN_BUILDING_IDS } from '../map/town/townPlan';
 import { isSlotCabinet, type ClubProp } from '../core/club/clubProps';
 import { AnchorInteriorSystem } from '../systems/AnchorInteriorSystem';
-import {
-  SKY_TEMPLE_NAME,
-  cultHideoutHoldsRoom,
-  type InteriorStoryState,
-} from '../systems/interiorStoryOwnership';
+import { cultHideoutHoldsRoom, type InteriorStoryState } from '../systems/interiorStoryOwnership';
 import {
   createAnchorQuestProgress,
   type AnchorQuestProgress,
@@ -476,13 +471,16 @@ const TALK_PROMPT_LABEL = 'Talk';
 const READ_PROMPT_LABEL = 'Read';
 
 /** Rooms that hum with their own constant ambience regardless of where you stand. */
-const INTERIOR_AMBIENT_BEDS = new Map<BuildingName, { soundId: SoundId; volume: number }>([
-  ['The Sunken Stump Pub', { soundId: 'ambient_bar_crowd', volume: BAR_CROWD_AMBIENT_VOLUME }],
-  ['The Horned Flagon', { soundId: 'ambient_bar_crowd', volume: BAR_CROWD_AMBIENT_VOLUME }],
-  ['The Sleeping Cat Inn', { soundId: 'ambient_bar_crowd', volume: BAR_CROWD_AMBIENT_VOLUME }],
-  [CLOAK_AND_DAGGER_NAME, { soundId: 'ambient_bar_crowd', volume: BAR_CROWD_AMBIENT_VOLUME }],
-  ['Herb & Remedy', { soundId: 'ambient_magic_shop', volume: MAGIC_SHOP_AMBIENT_VOLUME }],
-  ['General Store', { soundId: 'ambient_general_store', volume: GENERAL_STORE_AMBIENT_VOLUME }],
+const INTERIOR_AMBIENT_BEDS = new Map<BuildingId, { soundId: SoundId; volume: number }>([
+  ['taloncrest_pub', { soundId: 'ambient_bar_crowd', volume: BAR_CROWD_AMBIENT_VOLUME }],
+  ['taloncrest_flagon_tavern', { soundId: 'ambient_bar_crowd', volume: BAR_CROWD_AMBIENT_VOLUME }],
+  ['taloncrest_inn', { soundId: 'ambient_bar_crowd', volume: BAR_CROWD_AMBIENT_VOLUME }],
+  ['taloncrest_nightclub', { soundId: 'ambient_bar_crowd', volume: BAR_CROWD_AMBIENT_VOLUME }],
+  ['taloncrest_apothecary', { soundId: 'ambient_magic_shop', volume: MAGIC_SHOP_AMBIENT_VOLUME }],
+  [
+    'taloncrest_general_store',
+    { soundId: 'ambient_general_store', volume: GENERAL_STORE_AMBIENT_VOLUME },
+  ],
 ]);
 
 const NO_HIDDEN_PROPS: ReadonlySet<string> = new Set();
@@ -520,7 +518,6 @@ const EXIT_ARROW_Y_OFFSET = 15;
 const INTERIOR_DEFEAT_MESSAGE = 'The building kept what was left of you.';
 /** The death cause reported to the AI for a defeat no named hazard explains. */
 const INTERIOR_DEFEAT_CAUSE = 'interiorDefeat';
-const TUTORIAL_LEVEL_ID = 'tutorial';
 const AI_FRAMES_PER_SECOND = 60;
 /** Fraction of max HP both players are revived to after falling in an interior fight. */
 const INTERIOR_REVIVE_HP_FRACTION = 0.5;
@@ -697,7 +694,7 @@ function interiorVariantFor(
   if (entry.type === 'prison') {
     return { kind: 'goblin_prison', plan: planGoblinPrison(worldSeed, settings.difficulty) };
   }
-  if (entry.name !== STARLIGHT_TENT_NAME) return 'default';
+  if (entry.id !== 'taloncrest_circus_tent') return 'default';
   // Dealt before the room exists: the hall's tiles, its floor marks and its
   // stage lights are all built from the board, once.
   return {
@@ -1116,10 +1113,10 @@ export class BuildingInteriorScene extends GameplayScene {
     // The floor outside's groups are declared too, though already decoded:
     // what no live scope declares is released as the floor's scene exits.
     void this.audioScope?.preload([
-      ...sfxGroupsForFloorNumber(floor.floorNumber),
+      ...sfxGroupsForLevelId(floor.levelId),
       ...sfxGroupsForBuildingEntry(entry),
     ]);
-    void this.audioScope?.keepCompressed(compressedSfxForLevelId(`level${floor.floorNumber}`));
+    void this.audioScope?.keepCompressed(compressedSfxForLevelId(floor.levelId));
     this.abilityManager = abilityManager ?? new AbilityManager();
     this.townMemory = townMemory ?? createTownMemory();
     this.starlightTentProgress = overworld?.starlightTent ?? createStarlightTentProgress();
@@ -1177,7 +1174,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.companionsWaitOutside = prisonPlan !== null;
     this.attackCowSystem = new AttackCowSystem(
       partyRun.attackCowState,
-      floor.floorNumber,
+      getLevelDef(floor.levelId).floorNumber,
       {
         toast: (message) => this.menus.toasts.post(message),
         sound: (id) => this.audio?.play(id),
@@ -1197,7 +1194,7 @@ export class BuildingInteriorScene extends GameplayScene {
         });
         // Every storey of a tower passes `false`: a tower is not a safe-room
         // building, and the flag belongs to the building rather than the floor.
-        floorMap.generateInterior('tower', f, entry.name, false);
+        floorMap.generateInterior('tower', f, entry.id, false);
         this.towerFloors.push(floorMap);
       }
       this.map = this.towerFloors[0];
@@ -1208,7 +1205,7 @@ export class BuildingInteriorScene extends GameplayScene {
         prebuiltStructure: [],
         artSeed: townArtSeed,
       });
-      this.map.generateInterior(entry.type, 0, entry.name, entry.hasSafeRoom === true, variant);
+      this.map.generateInterior(entry.type, 0, entry.id, entry.hasSafeRoom === true, variant);
     }
 
     // Every storey shares the one seed, so this covers the tower as well as a
@@ -1258,7 +1255,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.cat.setAbilityManager(this.abilityManager);
     this.human.setAbilityManager(this.abilityManager);
     this.plumblineFarmRoom =
-      entry.name === PLUMBLINE_FARM_NAME ? new PlumblineFarmRoomSync(this.map) : null;
+      entry.id === 'taloncrest_builder_farm' ? new PlumblineFarmRoomSync(this.map) : null;
     this.syncPlumblineFarmRoom();
     // Restoring a snapshot leaves positions alone, so the party is stood at
     // the door here; it is set down again once the room's fittings exist.
@@ -1408,7 +1405,7 @@ export class BuildingInteriorScene extends GameplayScene {
       const skeletonSummons = new SkeletonSummonSystem(floorMap, (mob) => world.roster.add(mob));
       this.floors.push({
         world,
-        destruction: new DestructionKit(world, floor.floorNumber),
+        destruction: new DestructionKit(world, getLevelDef(floor.levelId).floorNumber),
         skeletonShots: new SkeletonProjectileSystem(floorMap),
         rockThrows: new RockThrowSystem(floorMap),
         hirelingShots: new HirelingShotSystem(
@@ -1447,7 +1444,7 @@ export class BuildingInteriorScene extends GameplayScene {
       pm: this.pm,
       audio: this.audio,
       rewardFly: this.rewardFly,
-      floorNumber: floor.floorNumber,
+      floorNumber: getLevelDef(floor.levelId).floorNumber,
       partyOwnsGear: (id) => this.partyOwnsGear(id),
     });
     // Every storey has its own LootSystem/GroundPickupSystem (per-floor, like
@@ -1542,7 +1539,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // heap of boards is a citizen standing at nothing.
     const ground = this.floors[GROUND_FLOOR_INDEX].world;
     this.anchorInterior = AnchorInteriorSystem.forBuilding(
-      entry.name,
+      entry.id,
       GROUND_FLOOR_INDEX,
       this.anchorQuestProgress,
       ground.gameMap,
@@ -1559,7 +1556,7 @@ export class BuildingInteriorScene extends GameplayScene {
       }
     };
     if (this.anchorInterior !== null) this.anchorInterior.onItemGranted = flyGrantedItem;
-    const wendellHook = WendellBlueprintsHook.forBuilding(entry.name, GROUND_FLOOR_INDEX, {
+    const wendellHook = WendellBlueprintsHook.forBuilding(entry.id, GROUND_FLOOR_INDEX, {
       state: this.briarHollowState,
       bus: this.bus,
       audio: this.audio,
@@ -1569,7 +1566,7 @@ export class BuildingInteriorScene extends GameplayScene {
       toast: (message) => this.menus.toasts.post(message),
       onItemGranted: flyGrantedItem,
     });
-    const wendellContractsHook = WendellContractsHook.forBuilding(entry.name, GROUND_FLOOR_INDEX, {
+    const wendellContractsHook = WendellContractsHook.forBuilding(entry.id, GROUND_FLOOR_INDEX, {
       state: this.briarHollowState,
       bus: this.bus,
       audio: this.audio,
@@ -1584,7 +1581,7 @@ export class BuildingInteriorScene extends GameplayScene {
       openHayloft: () => this.openWendellHayloft(),
       chatLine: () => this.wendellChatLine(),
     });
-    this.contractContact = ContractContactHook.forBuilding(entry.name, GROUND_FLOOR_INDEX, {
+    this.contractContact = ContractContactHook.forBuilding(entry.id, GROUND_FLOOR_INDEX, {
       state: this.briarHollowState,
       party: { human: this.human, cat: this.cat },
       story: () => ({
@@ -1620,7 +1617,7 @@ export class BuildingInteriorScene extends GameplayScene {
         ? InteriorOccupantSystem.forBuilding(
             this.map,
             entry.type,
-            entry.name,
+            entry.id,
             () => this.active(),
             () =>
               partyRoutineBodies({
@@ -1647,7 +1644,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.encounter === null
         ? InteriorReadableSystem.forBuilding(
             this.map,
-            entry.name,
+            entry.id,
             this.occupants?.occupiedFurniture ?? new Set(),
           )
         : null;
@@ -1657,7 +1654,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // not get two separate first-timer's grace periods on one room.
     const interiorPayoutRecord = new TownMemoryInteriorPayoutRecord(
       this.townMemory,
-      entry.name,
+      entry.id,
       GROUND_FLOOR_INDEX,
     );
     // Same suppression as the two above: a live encounter room is a fight,
@@ -1666,7 +1663,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.encounter === null
         ? InteriorPropInteractionSystem.forBuilding(this.map, interiorPayoutRecord)
         : null;
-    if (this.propInteractions !== null && entry.name === PLUMBLINE_FARM_NAME) {
+    if (this.propInteractions !== null && entry.id === 'taloncrest_builder_farm') {
       this.propInteractions.examineOverride = (id) =>
         plumblineFarmExamineLine(id, this.briarHollowState.blueprints.phase);
     }
@@ -1694,7 +1691,7 @@ export class BuildingInteriorScene extends GameplayScene {
     };
     const contractSite =
       this.encounter === null
-        ? ContractInteriorSite.forBuilding(entry.name, GROUND_FLOOR_INDEX, {
+        ? ContractInteriorSite.forBuilding(entry.id, GROUND_FLOOR_INDEX, {
             state: this.briarHollowState,
             story: () => contractStory,
             gameMap: ground.gameMap,
@@ -1719,14 +1716,14 @@ export class BuildingInteriorScene extends GameplayScene {
     // One panel of each kind however many counters this building has: only one
     // surface is ever open at a time, because the player can only be standing at
     // one of them.
-    const services = interiorServicesFor(entry.name);
+    const services = interiorServicesFor(entry.id);
     this.servicePanel = services.some((service) => service.surface === 'menu')
       ? new ShopSession()
       : null;
     this.readingPanel = services.some((service) => service.surface === 'reading')
       ? new FortuneTable()
       : null;
-    this.mercenaryDesk = interiorKeepsDesk(entry.name, 'mercenary_guild')
+    this.mercenaryDesk = interiorKeepsDesk(entry.id, 'mercenary_guild')
       ? new MercenaryGuildSystem(this.mercenaryRoster, this.audio)
       : null;
 
@@ -1737,7 +1734,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // party, the companions — so the loader measures what this room really owes.
     this.arrivalLoading.begin({
       kicker: prisonPlan === null ? INTERIOR_LOADING_KICKER : PRISON_LOADING_KICKER,
-      title: entry.name,
+      title: buildingDisplayName(entry.id),
       screen: loadingScreen,
       returning: false,
       tasks: () =>
@@ -1766,8 +1763,8 @@ export class BuildingInteriorScene extends GameplayScene {
     );
     emitters.push(...slotBankEmitters(this.club?.props ?? []));
     const roomBed =
-      INTERIOR_AMBIENT_BEDS.get(this.entry.name) ??
-      (this.entry.name === STARLIGHT_TENT_NAME ? STARLIGHT_TENT_AMBIENT_BED : null) ??
+      INTERIOR_AMBIENT_BEDS.get(this.entry.id) ??
+      (this.entry.id === 'taloncrest_circus_tent' ? STARLIGHT_TENT_AMBIENT_BED : null) ??
       this.prisonAmbientBed();
     if (roomBed !== null) {
       emitters.push({
@@ -1970,8 +1967,11 @@ export class BuildingInteriorScene extends GameplayScene {
       }
       const boss = e.mob.spawnTypeKey;
       if (owner !== null && boss !== null && isGearBoss(boss) && e.mob.paysRewards) {
-        const gear = rollBossGear(boss, this.floor.floorNumber, Math.random, (id) =>
-          this.partyOwnsGear(id),
+        const gear = rollBossGear(
+          boss,
+          getLevelDef(this.floor.levelId).floorNumber,
+          Math.random,
+          (id) => this.partyOwnsGear(id),
         );
         this.dropBossGear(e.mob.x, e.mob.y, gear, owner);
       }
@@ -2034,7 +2034,7 @@ export class BuildingInteriorScene extends GameplayScene {
   private populateHostileRooms(): void {
     this.floors.forEach((floor, floorIndex) => {
       const hostiles = interiorHostilesFor({
-        buildingName: this.entry.name,
+        buildingId: this.entry.id,
         buildingType: this.entry.type,
         floor: floorIndex,
         map: floor.world.gameMap,
@@ -2076,7 +2076,7 @@ export class BuildingInteriorScene extends GameplayScene {
       const roster = this.floors[floorIndex].world.roster;
       if (roster.mobs.some((mob) => mob.isAlive && mob.isHostile)) continue;
       this.hostileRoomFloors.delete(floorIndex);
-      noteRoomCleared(this.townMemory, this.entry.name, floorIndex);
+      noteRoomCleared(this.townMemory, this.entry.id, floorIndex);
     }
   }
 
@@ -2106,10 +2106,7 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     const murderProgress = this.murderQuestProgress;
-    if (
-      murderProgress !== undefined &&
-      cultHideoutHoldsRoom(this.entry.name, murderProgress.stage)
-    ) {
+    if (murderProgress !== undefined && cultHideoutHoldsRoom(this.entry.id, murderProgress.stage)) {
       this.startEncounter(
         GROUND_FLOOR_INDEX,
         (bus, addMob) =>
@@ -2381,10 +2378,10 @@ export class BuildingInteriorScene extends GameplayScene {
   private interiorMusicTracks(): ReadonlyArray<MusicTrackId> | null {
     if (!this.floor.ownsMusic) return null;
     if (this.entry.type === 'club') return CLUB_MUSIC_TRACKS;
-    if (this.entry.name === STARLIGHT_TENT_NAME) return CIRCUS_MUSIC_TRACKS;
+    if (this.entry.id === 'taloncrest_circus_tent') return CIRCUS_MUSIC_TRACKS;
     if (this.entry.type === 'tower') return TOWER_MUSIC_TRACKS;
-    if (this.entry.name === SKY_TEMPLE_NAME) return TEMPLE_MUSIC_TRACKS;
-    if (TAVERN_BUILDING_NAMES.has(this.entry.name)) return TAVERN_MUSIC_TRACKS;
+    if (this.entry.id === 'taloncrest_temple') return TEMPLE_MUSIC_TRACKS;
+    if (TAVERN_BUILDING_IDS.has(this.entry.id)) return TAVERN_MUSIC_TRACKS;
     return DEFAULT_BUILDING_MUSIC_TRACKS;
   }
 
@@ -2429,7 +2426,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const musicTracks = this.interiorMusicTracks();
     // The tent shares the grounds' playlist, so carrying on the song the party
     // walked in with would make the flap pass unmarked: it skips to another.
-    const changesSongAtTheDoor = this.entry.name === STARLIGHT_TENT_NAME;
+    const changesSongAtTheDoor = this.entry.id === 'taloncrest_circus_tent';
     if (musicTracks !== null) {
       this.arrivalLoading.whenClosed(() => {
         this.audioScope?.claimMusic({
@@ -2716,7 +2713,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.readablePanel.surface(READABLE_SURFACE_ID),
       exitBuildingPromptSurface(EXIT_MENU_SURFACE_ID, {
         isOpen: () => this.exitMenuOpen,
-        buildingName: () => this.entry.name,
+        buildingId: () => this.entry.id,
         exit: () => this.leaveByExitMenu(),
         stay: () => this.closeExitMenu(),
       }),
@@ -3682,7 +3679,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.entry.doorTile,
     );
     const target = pinned?.target;
-    if (target === undefined || target.building === this.entry.name) return null;
+    if (target === undefined || target.building === this.entry.id) return null;
     const isTower = this.towerFloors.length > 0;
     if (isTower && this.soulCrystal.isGuidingToCrystal) return null;
     const goals =
@@ -3831,28 +3828,20 @@ export class BuildingInteriorScene extends GameplayScene {
     return this.world.roster.mobs.some((mob) => mob.isAlive && mob.isHostile);
   }
 
-  /** The level this building stands on, by floor number; the tutorial has no buildings. */
-  private aiLevelId(): string {
-    const level = allLevelDefs().find(
-      (def) => def.floorNumber === this.floor.floorNumber && def.id !== TUTORIAL_LEVEL_ID,
-    );
-    return level?.id ?? `floor${this.floor.floorNumber}`;
-  }
-
   private createAISceneContext(): AISceneContext {
     return {
       getHuman: () => this.human,
       getCat: () => this.cat,
       getMobs: () => this.world.roster.mobs,
       getGameMap: () => this.map,
-      getLevelId: () => this.aiLevelId(),
+      getLevelId: () => this.floor.levelId,
       spawnMob: (mob) => this.world.roster.add(mob),
       isBossFightActive: () => this.activeEncounter !== null && this.aiHostilesAlive(),
       isPaused: () => this.aiPaused(),
       isInSafeRoom: () => this.safeRoom?.isEntityInSafeRoom(this.active()) ?? false,
       isIndoors: () => true,
       // The room's own map is seeded apart from the floor; allowances belong to the floor.
-      getFloorKey: () => this.floor.aiFloorKey ?? `${this.aiLevelId()}#indoors`,
+      getFloorKey: () => this.floor.aiFloorKey ?? `${this.floor.levelId}#indoors`,
       postToast: (text, opts) => this.menus.toasts.post(text, opts),
       getAudio: () => this.audio,
       getAudioScope: () => this.audioScope,
@@ -3876,17 +3865,16 @@ export class BuildingInteriorScene extends GameplayScene {
           crawler === crawlerName('human') ? this.human : this.cat,
         ) ?? false,
       readSession: () => {
-        const levelId = this.aiLevelId();
-        const level = allLevelDefs().find((def) => def.id === levelId);
+        const level = getLevelDef(this.floor.levelId);
         const companions: string[] = [];
         if (this.mongoSystem.mongo !== null) companions.push('Mongo');
         const hireling = this.mercenarySystem.activeMerc;
         if (hireling !== null) companions.push(mobLabel(hireling));
         if (this.attackCowSystem.standingCow !== null) companions.push('the attack cow');
         const session: SessionInput = {
-          floorNumber: this.floor.floorNumber,
-          levelId,
-          floorName: level?.name ?? `Floor ${this.floor.floorNumber}`,
+          floorNumber: level.floorNumber,
+          levelId: this.floor.levelId,
+          floorName: level.name,
           levelTimerRunning: false,
           difficulty: DIFFICULTY_LABELS[settings.difficulty],
           secondsPlayed: Math.floor(this.gameStats.framesPlayed / AI_FRAMES_PER_SECOND),
@@ -3914,10 +3902,11 @@ export class BuildingInteriorScene extends GameplayScene {
           },
           location: {
             kind: safe ? 'safeRoom' : 'building',
-            label: safe ? `safe room in ${this.entry.name}` : this.entry.name,
+            label: safe
+              ? `safe room in ${buildingDisplayName(this.entry.id)}`
+              : buildingDisplayName(this.entry.id),
             inSafeRoom: safe,
             inBossArena: false,
-            buildingName: this.entry.name,
           },
           nearbyMobs,
           combatInProgress: nearbyMobs.length > 0,
@@ -4556,21 +4545,21 @@ export class BuildingInteriorScene extends GameplayScene {
           counterOptions(null),
         );
         return;
-      case 'cartwright':
+      case 'crafting_house':
         panel.open(
           () => buildCartwrightMenu(turn, host, this.shopStock),
           confirmed(overCounter(sellCartwrightGoods(turn, this.shopStock), 'tillDrawer'), never),
-          counterOptions(this.sellConfigFor('cartwright')),
+          counterOptions(this.sellConfigFor('crafting_house')),
         );
         return;
-      case 'miller_kitchen':
+      case 'mill_kitchen':
         panel.open(
           () => buildMillerMenu(this.active(), turn, host, this.shopStock),
           confirmed(overCounter(serveMillerGoods(turn, this.shopStock), 'scaleWeigh'), never),
-          counterOptions(this.sellConfigFor('millers_farm')),
+          counterOptions(this.sellConfigFor('mill_farm')),
         );
         return;
-      case 'plumbline_hayloft':
+      case 'hayloft':
         panel.open(
           () => buildPlumblineFarmMenu(party, turn, host),
           confirmed(servePlumblineFarmRest(party, turn), never),
@@ -4581,7 +4570,7 @@ export class BuildingInteriorScene extends GameplayScene {
         panel.open(
           () =>
             buildInnMenu(
-              this.entry.name,
+              this.entry.id,
               this.active(),
               turn,
               host,
@@ -4590,7 +4579,7 @@ export class BuildingInteriorScene extends GameplayScene {
             ),
           // A round off the kitchen board pours; a room gets the safe room's own
           // cue instead, because that is what the player just bought a night of.
-          confirmed(serveInn(this.entry.name, party, turn, this.shopStock), (option) =>
+          confirmed(serveInn(this.entry.id, party, turn, this.shopStock), (option) =>
             isInnRoomKey(option.key) ? 'entered_safe_room' : POUR_CUE,
           ),
           counterOptions(null),
@@ -4598,8 +4587,8 @@ export class BuildingInteriorScene extends GameplayScene {
         return;
       case 'tavern':
         panel.open(
-          () => buildTavernMenu(this.entry.name, this.active(), turn, host, this.shopStock),
-          confirmed(serveDrinkAt(this.entry.name, this.shopStock), always),
+          () => buildTavernMenu(this.entry.id, this.active(), turn, host, this.shopStock),
+          confirmed(serveDrinkAt(this.entry.id, this.shopStock), always),
           counterOptions(null),
         );
         return;
@@ -5354,7 +5343,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.prisonKey?.topBandEntry() ?? null,
       contractCounterEntry(this.briarHollowState.contracts.active),
       this.companionDownIndoors ? knockedOutBandEntry(this.inactive()) : null,
-      roomNameEntry(interiorRoomTitle(this.entry.name, towerFloor)),
+      roomNameEntry(interiorRoomTitle(this.entry.id, towerFloor)),
     ];
     return entries.filter((entry): entry is TopBandEntry => entry !== null);
   }

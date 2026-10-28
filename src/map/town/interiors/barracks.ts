@@ -22,8 +22,17 @@ import {
   TOWN_INTERIOR_PROPS,
   type TownInteriorPropId,
 } from '../../../sprites/art/townInterior/townInteriorProps';
-import { contractTarget, prop, tile, tileRect, type TownInteriorLayoutEntry } from './types';
+import {
+  contractTarget,
+  prop,
+  tile,
+  tileRect,
+  type TownInteriorLayoutEntry,
+  statefulProp,
+  contractTargetId,
+} from './types';
 import type { ContractAreaRecord } from '../../contractAreas';
+import type { PlannedBuildingId } from '../../buildingIds';
 
 export const BARRACKS_INTERIOR_W = 22;
 export const BARRACKS_INTERIOR_H = 18;
@@ -52,7 +61,7 @@ function widthOf(propId: TownInteriorPropId): number {
 /** A bunk nobody has claimed: upper mattress rolled, lower one bare. */
 const UNCLAIMED_BUNK_VARIANT = 1;
 
-const CONTRACT_SITE = 'barracks';
+const CONTRACT_SITE = 'taloncrest_barracks' satisfies PlannedBuildingId;
 const MUSTER_FLOOR_SPOT_W = 3;
 const MUSTER_FLOOR_SPOT_H = 2;
 /** Columns left between the cracked flags and the barrel and crate stacked against the east wall. */
@@ -192,7 +201,7 @@ export function buildBarracksLayout(
       contractTarget(CONTRACT_SITE, 'weapon_rack'),
     ),
     prop(armourRowCol, northRow, 'armour_stand_row'),
-    prop(armouryFirstCol, stockAlleyRow, 'barrel'),
+    statefulProp(armouryFirstCol, stockAlleyRow, 'barrel', 'barrel_1'),
     prop(
       armouryFirstCol,
       counterRow,
@@ -200,30 +209,31 @@ export function buildBarracksLayout(
       0,
       contractTarget(CONTRACT_SITE, 'issue_counter'),
     ),
-    prop(armouryFirstCol, footlockerRow, 'chest', 0, { id: 'barracks_footlocker' }),
-    prop(armouryFirstCol, issueCrateFirstRow, 'crate'),
-    prop(armouryFirstCol, issueCrateFirstRow + 1, 'open_crate'),
-    prop(armouryFirstCol, issueCrateFirstRow + 2, 'barrel', 1),
+    statefulProp(armouryFirstCol, footlockerRow, 'chest', 'barracks_footlocker', 0),
+    statefulProp(armouryFirstCol, issueCrateFirstRow, 'crate', 'crate_1'),
+    statefulProp(armouryFirstCol, issueCrateFirstRow + 1, 'open_crate', 'open_crate_1'),
+    statefulProp(armouryFirstCol, issueCrateFirstRow + 2, 'barrel', 'barrel_2', 1),
     // Not on the footlocker row: the tile south of the counter flap is the
     // flap's only way out, so the stock alley and Dann with it hang on it.
     prop(armouryLastCol, issueCrateFirstRow, 'armour_stand'),
-    prop(armouryLastCol, issueCrateFirstRow + 1, 'crate'),
-    prop(armouryLastCol, issueCrateFirstRow + 2, 'crate'),
+    statefulProp(armouryLastCol, issueCrateFirstRow + 1, 'crate', 'crate_2'),
+    statefulProp(armouryLastCol, issueCrateFirstRow + 2, 'crate', 'crate_3'),
     // Where a crawler tries a helm on before signing for it: a worn mat, a
     // bench, a stand to hang it on and the stone to take the burr off.
     prop(fittingBenchCol, fittingBenchRow, 'rug_medium', FITTING_MAT_COLOURWAY),
     prop(fittingBenchCol, fittingBenchRow, 'bench_seat'),
     prop(fittingBenchCol + 2, fittingBenchRow, 'armour_stand'),
     prop(fittingBenchCol + 2, fittingBenchRow + 2, 'grindstone'),
-    prop(armouryFirstCol, issueShelfRow, 'shelving_unit'),
-    prop(armouryFirstCol, issueShelfRow + 1, 'barrel'),
-    prop(armouryLastCol, issueShelfRow, 'shelving_unit', 1),
-    prop(armouryLastCol, issueShelfRow + 1, 'barrel', 1),
+    statefulProp(armouryFirstCol, issueShelfRow, 'shelving_unit', 'shelving_unit_1'),
+    statefulProp(armouryFirstCol, issueShelfRow + 1, 'barrel', 'barrel_3'),
+    statefulProp(armouryLastCol, issueShelfRow, 'shelving_unit', 'shelving_unit_2', 1),
+    statefulProp(armouryLastCol, issueShelfRow + 1, 'barrel', 'barrel_4', 1),
   );
   for (let rx = armouryFirstCol; rx <= armouryLastCol; rx++) {
     const besideTheArchway = rx === armouryArchwayCol || rx === armouryArchwayCol + 1;
     if (besideTheArchway) continue;
-    entries.push(prop(rx, issueStackRow, rx % 2 === 0 ? 'barrel' : 'crate'));
+    const stockKind = rx % 2 === 0 ? 'barrel' : 'crate';
+    entries.push(statefulProp(rx, issueStackRow, stockKind, `issue_stack_${rx - armouryFirstCol}`));
   }
 
   // Drill hall. The sand inside the walls stays open for drilling — the one
@@ -242,9 +252,15 @@ export function buildBarracksLayout(
   entries.push(
     prop(drillFirstCol, northRow, 'garrison_weapon_rack', PRACTICE_RACK_VARIANT),
     prop(drillSlateCol, northRow, 'drill_slate'),
-    prop(drillTroughCol, northRow, 'water_trough', 0, contractTarget(CONTRACT_SITE, 'trough')),
+    statefulProp(
+      drillTroughCol,
+      northRow,
+      'water_trough',
+      contractTargetId(CONTRACT_SITE, 'trough'),
+      0,
+    ),
     prop(drillButtCol, northRow, 'archery_butt', 0, contractTarget(CONTRACT_SITE, 'archery_butt')),
-    prop(eastWallCol - 1, northRow, 'sandbags'),
+    statefulProp(eastWallCol - 1, northRow, 'sandbags', 'sandbags_1'),
   );
   entries.push(
     prop(
@@ -262,27 +278,33 @@ export function buildBarracksLayout(
   );
   // West and east flanks of the sand: water barrels and spare kit.
   entries.push(
-    prop(drillFirstCol, ringFirstRow - 1, 'barrel'),
-    prop(drillFirstCol, ringFirstRow, 'crate'),
-    prop(drillFirstCol, ringFirstRow + 1, 'open_crate'),
+    statefulProp(drillFirstCol, ringFirstRow - 1, 'barrel', 'barrel_5'),
+    statefulProp(drillFirstCol, ringFirstRow, 'crate', 'crate_4'),
+    statefulProp(drillFirstCol, ringFirstRow + 1, 'open_crate', 'open_crate_2'),
     prop(drillFirstCol, ringLastRow, 'armour_stand'),
-    prop(drillFirstCol, drillSouthLineRow, 'barrel', 1),
-    prop(eastWallCol, ringFirstRow - 1, 'barrel'),
-    prop(eastWallCol, ringFirstRow, 'barrel', 1),
-    prop(eastWallCol, ringLastRow - 1, 'barrel', 1),
-    prop(eastWallCol, ringLastRow, 'crate'),
-    prop(eastWallCol - 1, drillSouthLineRow, 'sandbags', 1),
+    statefulProp(drillFirstCol, drillSouthLineRow, 'barrel', 'barrel_6', 1),
+    statefulProp(eastWallCol, ringFirstRow - 1, 'barrel', 'barrel_7'),
+    statefulProp(eastWallCol, ringFirstRow, 'barrel', 'barrel_8', 1),
+    statefulProp(eastWallCol, ringLastRow - 1, 'barrel', 'barrel_9', 1),
+    statefulProp(eastWallCol, ringLastRow, 'crate', 'crate_5'),
+    statefulProp(eastWallCol - 1, drillSouthLineRow, 'sandbags', 'sandbags_2', 1),
   );
   // South wall of the hall (the partition's north face): a trough, benches
   // for the recruits waiting their turn, sandbags — and the tile north of
   // the drill archway left clear.
   entries.push(
-    prop(drillFirstCol, drillSouthWallRow, 'water_trough'),
+    statefulProp(drillFirstCol, drillSouthWallRow, 'water_trough', 'water_trough_2'),
     prop(drillFirstCol + widthOf('water_trough'), drillSouthWallRow, 'bench_seat'),
     prop(drillBenchEastCol, drillSouthWallRow, 'bench_seat'),
-    prop(drillBenchEastCol + widthOf('bench_seat'), drillSouthWallRow, 'sandbags', 1),
-    prop(eastWallCol - 1, drillSouthWallRow, 'barrel'),
-    prop(eastWallCol, drillSouthWallRow, 'crate'),
+    statefulProp(
+      drillBenchEastCol + widthOf('bench_seat'),
+      drillSouthWallRow,
+      'sandbags',
+      'sandbags_3',
+      1,
+    ),
+    statefulProp(eastWallCol - 1, drillSouthWallRow, 'barrel', 'barrel_10'),
+    statefulProp(eastWallCol, drillSouthWallRow, 'crate', 'crate_6'),
   );
 
   // Muster hall. The board and the bunks along the partition, the briefing
@@ -291,7 +313,7 @@ export function buildBarracksLayout(
   // off the armoury archway's own landing tile.
   entries.push(
     prop(armouryFirstCol, musterNorthRow, 'bunk_bed'),
-    prop(boardCol - 1, musterNorthRow, 'barrel'),
+    statefulProp(boardCol - 1, musterNorthRow, 'barrel', 'barrel_11'),
     prop(boardCol, musterNorthRow, 'muster_board'),
     prop(boardEndCol, musterNorthRow, 'bunk_bed', UNCLAIMED_BUNK_VARIANT),
     prop(
@@ -306,26 +328,26 @@ export function buildBarracksLayout(
     prop(eastWallCol - 1, musterNorthRow, 'bunk_bed', UNCLAIMED_BUNK_VARIANT),
   );
   entries.push(
-    prop(armouryFirstCol, briefingRow - 1, 'barrel'),
-    prop(armouryFirstCol, briefingRow, 'crate'),
-    prop(briefingCol - 1, briefingRow, 'stool'),
-    prop(briefingCol, briefingRow, 'briefing_table'),
-    prop(briefingCol + briefingWidth, briefingRow, 'stool', 1),
-    prop(eastWallCol, briefingRow - 1, 'barrel'),
-    prop(eastWallCol, briefingRow, 'crate'),
-    prop(mercDeskCol, mercDeskRow, 'merc_desk'),
+    statefulProp(armouryFirstCol, briefingRow - 1, 'barrel', 'barrel_12'),
+    statefulProp(armouryFirstCol, briefingRow, 'crate', 'crate_7'),
+    statefulProp(briefingCol - 1, briefingRow, 'stool', 'stool_1'),
+    statefulProp(briefingCol, briefingRow, 'briefing_table', 'briefing_table'),
+    statefulProp(briefingCol + briefingWidth, briefingRow, 'stool', 'stool_2', 1),
+    statefulProp(eastWallCol, briefingRow - 1, 'barrel', 'barrel_13'),
+    statefulProp(eastWallCol, briefingRow, 'crate', 'crate_8'),
+    statefulProp(mercDeskCol, mercDeskRow, 'merc_desk', 'merc_desk'),
   );
   entries.push(
     prop(armouryFirstCol, southWallRow, 'bunk_bed'),
-    prop(
+    statefulProp(
       southBrazierWestCol,
       southWallRow,
       'forge_brazier',
+      contractTargetId(CONTRACT_SITE, 'brazier'),
       0,
-      contractTarget(CONTRACT_SITE, 'brazier'),
     ),
     prop(southBrazierWestCol + 1, southWallRow, 'bench_seat'),
-    prop(drillArchwayCol, southWallRow, 'forge_brazier'),
+    statefulProp(drillArchwayCol, southWallRow, 'forge_brazier', 'forge_brazier_2'),
     prop(drillArchwayCol + 1, southWallRow, 'bench_seat'),
     prop(
       drillArchwayCol + 1 + widthOf('bench_seat'),

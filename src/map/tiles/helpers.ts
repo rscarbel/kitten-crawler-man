@@ -53,7 +53,6 @@ import {
   MAP_TABLE,
   FLASH_WALL,
   PIGMENT_SHELF,
-  INK_BENCH,
   GRINDING_SLAB,
   BROKEN_TABLE,
   BROKEN_CHAIR,
@@ -206,7 +205,6 @@ const NON_FLOOR_TYPES = new Set<number>([
   MAP_TABLE,
   FLASH_WALL,
   PIGMENT_SHELF,
-  INK_BENCH,
   GRINDING_SLAB,
   // Boss-room props and decals. Each is stamped with `placeProp`, so a probe
   // reaching one gets its recorded floor before this set is consulted; this

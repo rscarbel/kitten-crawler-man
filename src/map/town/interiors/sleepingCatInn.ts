@@ -22,8 +22,16 @@
  */
 
 import { INTERIOR_WALL } from '../../tileTypes';
-import { contractTarget, prop, tile, type TownInteriorLayoutEntry } from './types';
+import {
+  contractTarget,
+  prop,
+  tile,
+  type TownInteriorLayoutEntry,
+  statefulProp,
+  contractTargetId,
+} from './types';
 import type { ContractAreaRecord } from '../../contractAreas';
+import type { PlannedBuildingId } from '../../buildingIds';
 
 export const INN_INTERIOR_W = 24;
 export const INN_INTERIOR_H = 19;
@@ -51,7 +59,7 @@ const LANDING_RUNNER_COLOURWAY = 1;
 /** Back bench, galley strip and front bar: the rows `planSafeRoomCounters` lays the Bopca's run across. */
 const SAFE_ROOM_COUNTER_DEPTH_ROWS = 3;
 
-const CONTRACT_SITE = 'sleeping_cat_inn';
+const CONTRACT_SITE = 'taloncrest_inn' satisfies PlannedBuildingId;
 const CONTRACT_COT_INDEX = 0;
 /** The east supper table's bench, in the open middle of the taproom. */
 const CONTRACT_BENCH_TABLE_INDEX = 3;
@@ -239,8 +247,8 @@ export function buildSleepingCatInnLayout(
   // Loot-bearing junk first: the payout gate expects the first breakable in
   // placement order to pay out.
   entries.push(
-    prop(cotRoomChestCol, INN_GUEST_WING_LAST_ROW, 'crate'),
-    prop(westCol, INN_GUEST_WING_LAST_ROW, 'barrel'),
+    statefulProp(cotRoomChestCol, INN_GUEST_WING_LAST_ROW, 'crate', 'crate'),
+    statefulProp(westCol, INN_GUEST_WING_LAST_ROW, 'barrel', 'barrel_1'),
   );
 
   // The cheap room: three cots shoulder to shoulder.
@@ -249,15 +257,15 @@ export function buildSleepingCatInnLayout(
     entries.push(prop(westCol + i, northRow, 'inn_cot', i, cotTarget));
   }
   entries.push(
-    prop(cotRoomWashstandCol, northRow, 'washstand'),
+    statefulProp(cotRoomWashstandCol, northRow, 'washstand', 'washstand_1'),
     prop(cotRoomWindowCol, northRow, 'window_dressing'),
-    prop(cotRoomChestCol, northRow, 'chest'),
+    statefulProp(cotRoomChestCol, northRow, 'chest', 'chest_1'),
     prop(cotRoomRugCol, guestRugRow, 'rag_runner'),
   );
 
   // The best room: a double bed by its own fire.
   entries.push(
-    prop(bestRoomWestCol, northRow, 'drawer_unit'),
+    statefulProp(bestRoomWestCol, northRow, 'drawer_unit', 'drawer_unit'),
     prop(bestRoomHearthCol, northRow, 'hearth_wide', 0, contractTarget(CONTRACT_SITE, 'best_fire')),
     prop(bestRoomWestCol + 1, northRow + 1, 'rag_rug_small'),
     prop(bestRoomWindowCol, northRow, 'window_dressing'),
@@ -268,20 +276,20 @@ export function buildSleepingCatInnLayout(
       BLUE_CHECK_QUILT,
       contractTarget(CONTRACT_SITE, 'guest_bed'),
     ),
-    prop(bestRoomWindowCol, bestRoomSeatRow, 'fireside_chair'),
-    prop(bestRoomWestCol, bestRoomSeatRow + 1, 'washstand'),
-    prop(bestRoomBedCol + 1, bestRoomSeatRow, 'chest'),
+    statefulProp(bestRoomWindowCol, bestRoomSeatRow, 'fireside_chair', 'fireside_chair_1'),
+    statefulProp(bestRoomWestCol, bestRoomSeatRow + 1, 'washstand', 'washstand_2'),
+    statefulProp(bestRoomBedCol + 1, bestRoomSeatRow, 'chest', 'chest_2'),
   );
 
   // The quiet room: patchwork bed, books, the brazier.
   entries.push(
     prop(quietRoomWestCol, northRow, 'inn_guest_bed', PATCHWORK_QUILT),
     prop(quietRoomWindowCol, northRow, 'window_dressing'),
-    prop(quietRoomShelfCol, northRow, 'shelving_unit', 1),
-    prop(quietRoomShelfCol + 1, northRow, 'shelving_unit', 2),
-    prop(eastCol, northRow, 'forge_brazier'),
-    prop(eastCol, northRow + 2, 'washstand'),
-    prop(quietRoomWestCol, northRow + 2, 'chest'),
+    statefulProp(quietRoomShelfCol, northRow, 'shelving_unit', 'shelving_unit_1', 1),
+    statefulProp(quietRoomShelfCol + 1, northRow, 'shelving_unit', 'shelving_unit_2', 2),
+    statefulProp(eastCol, northRow, 'forge_brazier', 'forge_brazier'),
+    statefulProp(eastCol, northRow + 2, 'washstand', 'washstand_3'),
+    statefulProp(quietRoomWestCol, northRow + 2, 'chest', 'chest_3'),
     prop(quietRoomRugCol, guestRugRow, 'rag_runner', 1),
   );
 
@@ -290,18 +298,24 @@ export function buildSleepingCatInnLayout(
     prop(landingRugSecondCol, INN_LANDING_RUG_ROW, 'rug_runner', LANDING_RUNNER_COLOURWAY),
     prop(landingRugThirdCol, INN_LANDING_RUG_ROW, 'rug_runner_4', LANDING_RUNNER_COLOURWAY),
     prop(landingRugFourthCol, INN_LANDING_RUG_ROW, 'rug_runner_4', LANDING_RUNNER_COLOURWAY),
-    prop(westCol, INN_LANDING_ROW, 'barrel'),
-    prop(landingBenchCol, INN_LANDING_ROW, 'inn_bench'),
-    prop(landingLinenChestCol, INN_LANDING_ROW, 'chest'),
-    prop(eastCol, INN_LANDING_ROW, 'barrel', 1),
+    statefulProp(westCol, INN_LANDING_ROW, 'barrel', 'barrel_2'),
+    statefulProp(landingBenchCol, INN_LANDING_ROW, 'inn_bench', 'inn_bench_1'),
+    statefulProp(landingLinenChestCol, INN_LANDING_ROW, 'chest', 'chest_4'),
+    statefulProp(eastCol, INN_LANDING_ROW, 'barrel', 'barrel_3', 1),
   );
 
   // The hearth side of the taproom.
   entries.push(
-    prop(westCol, taproomNorthRow, 'inn_dresser', 0, contractTarget(CONTRACT_SITE, 'dresser')),
-    prop(westCol, coatHookRow, 'coat_hook'),
+    statefulProp(
+      westCol,
+      taproomNorthRow,
+      'inn_dresser',
+      contractTargetId(CONTRACT_SITE, 'dresser'),
+      0,
+    ),
+    statefulProp(westCol, coatHookRow, 'coat_hook', 'coat_hook'),
     prop(catSignCol, taproomNorthRow, 'cat_portrait'),
-    prop(logBasketCol, taproomNorthRow, 'log_basket'),
+    statefulProp(logBasketCol, taproomNorthRow, 'log_basket', 'log_basket'),
     prop(catSignCol, catStoolRow, 'cat_stool'),
     prop(
       hearthCol,
@@ -311,7 +325,7 @@ export function buildSleepingCatInnLayout(
       contractTarget(CONTRACT_SITE, 'taproom_hearth'),
     ),
     prop(hearthCol, hearthRugRow, 'rag_rug_small'),
-    prop(logBasketCol, firesideChairRow, 'fireside_chair'),
+    statefulProp(logBasketCol, firesideChairRow, 'fireside_chair', 'fireside_chair_2'),
     prop(mordecaiRugCol, mordecaiRugRow, 'rag_rug_small', 1),
   );
 
@@ -323,7 +337,7 @@ export function buildSleepingCatInnLayout(
     prop(galleyRugCol, galleyRugRow, 'rag_rug', 1),
   );
   for (let rx = backBarCol; rx <= eastCol; rx += barStoolPitch)
-    entries.push(prop(rx, barStoolRow, 'stool'));
+    entries.push(statefulProp(rx, barStoolRow, 'stool', `bar_stool_${rx - backBarCol}`));
 
   // The supper tables, each with its bench on the room side.
   const tables = [
@@ -334,19 +348,22 @@ export function buildSleepingCatInnLayout(
     { col: cornerTableCol, row: middleTableRow, variant: ROAST_NIGHT },
   ];
   const contractBenchTable = tables[CONTRACT_BENCH_TABLE_INDEX];
-  for (const table of tables) {
-    const benchTarget = table === contractBenchTable ? contractTarget(CONTRACT_SITE, 'bench') : {};
+  for (const [index, table] of tables.entries()) {
+    const benchId =
+      table === contractBenchTable
+        ? contractTargetId(CONTRACT_SITE, 'bench')
+        : `table_bench_${index}`;
     entries.push(
-      prop(table.col, table.row, 'inn_table', table.variant),
-      prop(table.col, table.row + 1, 'inn_bench', 0, benchTarget),
+      statefulProp(table.col, table.row, 'inn_table', `table_${index}`, table.variant),
+      statefulProp(table.col, table.row + 1, 'inn_bench', benchId),
     );
   }
 
   entries.push(
     prop(southStoreCol, southRow, 'dairy_churn'),
     prop(southStoreCol + 1, southRow, 'cask_rack', 0, contractTarget(CONTRACT_SITE, 'cask_rack')),
-    prop(eastCol - 1, southRow, 'barrel'),
-    prop(eastCol, southRow, 'barrel', 1),
+    statefulProp(eastCol - 1, southRow, 'barrel', 'barrel_4'),
+    statefulProp(eastCol, southRow, 'barrel', 'barrel_5', 1),
   );
   return entries;
 }

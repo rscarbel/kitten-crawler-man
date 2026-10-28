@@ -93,9 +93,9 @@ import {
   ActionGovernor,
   FLOOR_BUDGETS,
   HURT_IN_COMBAT_FRACTION,
-  LOW_HP_FRACTION,
   LOW_HP_PERCENT,
 } from '../src/ai/actions/governor';
+import { CRAWLER_HP_THRESHOLDS, hpThresholdTop } from '../src/core/combat/hpThresholds';
 import {
   AI_CHARACTER_MORDECAI,
   AI_CHARACTER_SYSTEM,
@@ -601,11 +601,22 @@ function randomArgs(def: AIActionDef): unknown {
   return args;
 }
 
+const LOW_HEALTH_SHARE = CRAWLER_HP_THRESHOLDS.low_health.share;
+const ONE_HP = 1;
+
+/**
+ * The least HP the AI may leave a crawler on: one point over the low-health
+ * band, which the fairness shield shares with the game.
+ */
+function lowestUnshieldedHp(crawler: HumanPlayer | CatPlayer): number {
+  return hpThresholdTop(CRAWLER_HP_THRESHOLDS.low_health, crawler.maxHp) + ONE_HP;
+}
+
 function randomiseScene(world: FakeWorld): void {
   const lowHp = Math.random() < LOW_HP_SCENE_CHANCE;
   for (const crawler of [world.human, world.cat]) {
     crawler.isKnockedOut = Math.random() < KNOCKED_OUT_SCENE_CHANCE;
-    const share = lowHp ? Math.random() * LOW_HP_FRACTION : LOW_HP_FRACTION + Math.random();
+    const share = lowHp ? Math.random() * LOW_HEALTH_SHARE : LOW_HEALTH_SHARE + Math.random();
     crawler.hp = Math.max(1, Math.min(crawler.maxHp, Math.round(crawler.maxHp * share)));
   }
   world.flags = {
@@ -648,7 +659,7 @@ function anyHurt(world: FakeWorld): boolean {
 function anyVulnerable(world: FakeWorld): boolean {
   return [world.human, world.cat].some(
     (crawler) =>
-      crawler.isKnockedOut || !crawler.isAlive || crawler.hp / crawler.maxHp < LOW_HP_FRACTION,
+      crawler.isKnockedOut || !crawler.isAlive || crawler.hp < lowestUnshieldedHp(crawler),
   );
 }
 
@@ -712,7 +723,7 @@ section('fuzzed calls through the governor keep the fairness rules');
         const target = targetOf(world, args.target_player);
         const projected = target.hp - pendingStatusDamage(target.statusEffects);
         check(
-          projected >= Math.ceil(target.maxHp * LOW_HP_FRACTION),
+          projected >= lowestUnshieldedHp(target),
           `apply_status ${String(args.status)} will carry a crawler under 25% HP`,
         );
       }
@@ -868,7 +879,7 @@ section('the governor refuses what the fairness rules forbid');
     level1.roomMobs.some((rule) => rule.type === 'rat') ||
     level1.hallwayMobs.some((rule) => rule.type === 'rat');
 
-  world.human.hp = Math.max(1, Math.floor(world.human.maxHp * LOW_HP_FRACTION) - 1);
+  world.human.hp = Math.max(ONE_HP, lowestUnshieldedHp(world.human) - ONE_HP);
   check(
     !executeAIAction(spawn, world.scene, governor).ok,
     `no spawn while a crawler is under ${LOW_HP_PERCENT}% HP`,
@@ -950,8 +961,7 @@ section(
   const governor = new ActionGovernor(() => clockMs);
   const system = (name: string, params: Record<string, unknown>) =>
     executeAIAction({ name, params, characterName: AI_CHARACTER_SYSTEM }, world.scene, governor);
-  const shield = (crawler: HumanPlayer | CatPlayer): number =>
-    Math.ceil(crawler.maxHp * LOW_HP_FRACTION);
+  const shield = lowestUnshieldedHp;
 
   world.cat.isKnockedOut = true;
   check(!system('spawn_mob', { mob_type: 'rat' }).ok, 'no spawn while a crawler is knocked out');
@@ -1008,7 +1018,10 @@ section(
   for (const percent of [SET_HP_LOWEST_PERCENT, SET_HP_LOWEST_PERCENT + 1]) {
     world.human.statusEffects = [];
     world.human.hp = world.human.maxHp;
-    system('set_hp', { hp_percent: percent, target_player: 'Human' });
+    const set = system('set_hp', { hp_percent: percent, target_player: 'Human' });
+    if (percent === SET_HP_LOWEST_PERCENT) {
+      check(set.ok, `set_hp at its lowest ${percent}% runs on a healthy crawler (${set.detail})`);
+    }
     check(world.human.hp >= shield(world.human), `set_hp ${percent}% stays at or over the line`);
     step();
   }
@@ -1562,10 +1575,10 @@ section('a hurt party is not piled on mid-fight');
     );
   };
   const hurtHp = Math.floor(world.human.maxHp * HURT_TEST_FRACTION);
-  world.human.hp = Math.max(Math.ceil(world.human.maxHp * LOW_HP_FRACTION) + 1, hurtHp);
+  world.human.hp = Math.max(lowestUnshieldedHp(world.human), hurtHp);
   check(
     world.human.hp / world.human.maxHp < HURT_IN_COMBAT_FRACTION &&
-      world.human.hp / world.human.maxHp >= LOW_HP_FRACTION,
+      world.human.hp >= lowestUnshieldedHp(world.human),
     'the test crawler sits between the two shields',
   );
   world.flags.combat = true;
@@ -1675,7 +1688,7 @@ section('floor keys, status damage forecasts and indoor spawns');
   const human = outdoors.human;
   const burnWithHpToSpare = (statusEffects: StatusEffect[]): boolean => {
     human.statusEffects = statusEffects;
-    human.hp = Math.min(human.maxHp, Math.ceil(human.maxHp * LOW_HP_FRACTION) + burnAlone);
+    human.hp = Math.min(human.maxHp, lowestUnshieldedHp(human) + burnAlone);
     const ok = executeAIAction(
       {
         name: 'apply_status',

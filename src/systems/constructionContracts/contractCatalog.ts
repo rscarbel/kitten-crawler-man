@@ -11,13 +11,14 @@
 import type { ResourceCost } from '../../core/items/gathering/partyResources';
 import type { VillagerId } from '../../dialog/scripts/briarHollow';
 import { contractPropId } from '../../map/contractAreas';
-import { BUILDINGS, type VillageBuildingId } from '../../map/overworld/briarHollowLayout';
+import { BUILDINGS } from '../../map/overworld/briarHollowLayout';
 import {
-  CLOAK_AND_DAGGER_NAME,
-  PLANNED_BUILDING_NAMES,
-  TOWN_TOWER_NAME,
-  type TownBuildingName,
-} from '../../map/town/townPlan';
+  PLANNED_BUILDING_IDS,
+  type TownBuildingId,
+  buildingDisplayName,
+  type BuildingId,
+  type BriarHollowBuildingId,
+} from '../../map/buildingIds';
 import type { ResidentId } from '../townResidents';
 
 /** The three materials a contract is costed in. */
@@ -55,29 +56,31 @@ export interface ContractSpotDef {
  * Wendell's own farm, where the contracts are handed out.
  */
 export const CONTRACT_EXCLUDED_TOWN_BUILDINGS = [
-  TOWN_TOWER_NAME,
-  CLOAK_AND_DAGGER_NAME,
-  'Plumbline Farm',
-] as const satisfies readonly TownBuildingName[];
+  'taloncrest_tower',
+  'taloncrest_nightclub',
+  'taloncrest_builder_farm',
+] as const satisfies readonly TownBuildingId[];
 
-export type ContractTownBuildingName = Exclude<
-  TownBuildingName,
+export type ContractTownBuildingId = Exclude<
+  TownBuildingId,
   (typeof CONTRACT_EXCLUDED_TOWN_BUILDINGS)[number]
 >;
 
 /** Every Briar Hollow building hosts contracts; none is excluded. */
-export type ContractVillageBuildingId = VillageBuildingId;
+export type ContractVillageBuildingId = BriarHollowBuildingId;
 
 export type ContractSiteKey =
-  | { readonly town: 'taloncrest'; readonly buildingName: ContractTownBuildingName }
+  | { readonly town: 'taloncrest'; readonly buildingId: ContractTownBuildingId }
   | { readonly town: 'briar_hollow'; readonly buildingId: ContractVillageBuildingId };
 
+/**
+ * A contract site's building, unique across both towns: the prefix of every
+ * placed-prop id the site's spots target, and the key the contract state
+ * remembers a site by.
+ */
+export type ContractSiteBuildingId = ContractTownBuildingId | ContractVillageBuildingId;
+
 interface ContractSiteDefBase {
-  /**
-   * Unique across both towns: the prefix of every placed-prop id the site's
-   * spots target, and the key the contract state remembers a site by.
-   */
-  readonly slug: string;
   /** The building as Wendell and the Journal name it. */
   readonly name: string;
   readonly spots: readonly ContractSpotDef[];
@@ -85,7 +88,7 @@ interface ContractSiteDefBase {
 
 export interface TaloncrestContractSiteDef extends ContractSiteDefBase {
   readonly town: 'taloncrest';
-  readonly buildingName: ContractTownBuildingName;
+  readonly buildingId: ContractTownBuildingId;
   readonly contact: TaloncrestContractContactId;
 }
 
@@ -97,18 +100,21 @@ export interface BriarHollowContractSiteDef extends ContractSiteDefBase {
 
 export type ContractSiteDef = TaloncrestContractSiteDef | BriarHollowContractSiteDef;
 
-/** How a pool entry is written before its target is resolved against its site's slug. */
+/** How a pool entry is written before its target is resolved against its site's building. */
 interface SpotSpec {
   readonly id: ContractSpotId;
   readonly kind: ContractSpotDef['kind'];
   readonly label: string;
   readonly cost: ContractSpotCost;
   readonly material: ContractSpotDef['material'];
-  /** A placed prop with the explicit id `contract:<slug>:<id>`, or an exported area keyed by `id`. */
+  /** A placed prop with the explicit id `contract:<building>:<id>`, or an exported area keyed by `id`. */
   readonly on: 'prop' | 'area';
 }
 
-function poolFor(slug: string, specs: readonly SpotSpec[]): readonly ContractSpotDef[] {
+function poolFor(
+  buildingId: ContractSiteBuildingId,
+  specs: readonly SpotSpec[],
+): readonly ContractSpotDef[] {
   return specs.map((spec) => ({
     id: spec.id,
     kind: spec.kind,
@@ -117,26 +123,23 @@ function poolFor(slug: string, specs: readonly SpotSpec[]): readonly ContractSpo
     material: spec.material,
     target:
       spec.on === 'prop'
-        ? { kind: 'prop', placedId: contractPropId(slug, spec.id) }
+        ? { kind: 'prop', placedId: contractPropId(buildingId, spec.id) }
         : { kind: 'area', areaId: spec.id },
   }));
 }
 
 interface TaloncrestSiteData {
-  readonly slug: string;
   readonly contact: ResidentId;
   readonly spots: readonly SpotSpec[];
 }
 
 interface VillageSiteData {
-  readonly name: string;
   readonly contact: VillagerId;
   readonly spots: readonly SpotSpec[];
 }
 
 const TALONCREST_SITE_DATA = {
-  'The Barracks': {
-    slug: 'barracks',
+  taloncrest_barracks: {
     contact: 'quartermaster_dann',
     spots: [
       {
@@ -213,8 +216,7 @@ const TALONCREST_SITE_DATA = {
       },
     ],
   },
-  'Blackwood Lodge': {
-    slug: 'blackwood_lodge',
+  taloncrest_garrison_lodge: {
     contact: 'sgt_kessler',
     spots: [
       {
@@ -283,8 +285,7 @@ const TALONCREST_SITE_DATA = {
       },
     ],
   },
-  "Cartwright's Workshop": {
-    slug: 'cartwrights_workshop',
+  taloncrest_crafting_house: {
     contact: 'steve_cartwright',
     spots: [
       {
@@ -353,8 +354,7 @@ const TALONCREST_SITE_DATA = {
       },
     ],
   },
-  'General Store': {
-    slug: 'general_store',
+  taloncrest_general_store: {
     contact: 'keeper_brenna_kestrel',
     spots: [
       {
@@ -431,8 +431,7 @@ const TALONCREST_SITE_DATA = {
       },
     ],
   },
-  'Temple of the Sky': {
-    slug: 'temple_of_the_sky',
+  taloncrest_temple: {
     contact: 'deacon_aviel',
     spots: [
       {
@@ -517,8 +516,7 @@ const TALONCREST_SITE_DATA = {
       },
     ],
   },
-  'Herb & Remedy': {
-    slug: 'herb_and_remedy',
+  taloncrest_apothecary: {
     contact: 'apothecary_fen',
     spots: [
       {
@@ -595,8 +593,7 @@ const TALONCREST_SITE_DATA = {
       },
     ],
   },
-  'The Sleeping Cat Inn': {
-    slug: 'sleeping_cat_inn',
+  taloncrest_inn: {
     contact: 'innkeep_ossie',
     spots: [
       {
@@ -673,8 +670,7 @@ const TALONCREST_SITE_DATA = {
       },
     ],
   },
-  'The Horned Flagon': {
-    slug: 'horned_flagon',
+  taloncrest_flagon_tavern: {
     contact: 'innkeep_brend',
     spots: [
       {
@@ -751,8 +747,7 @@ const TALONCREST_SITE_DATA = {
       },
     ],
   },
-  "Old Lori's Cottage": {
-    slug: 'old_loris_cottage',
+  taloncrest_old_lady_cottage: {
     contact: 'old_lori',
     spots: [
       {
@@ -829,8 +824,7 @@ const TALONCREST_SITE_DATA = {
       },
     ],
   },
-  'The Rusty Anvil': {
-    slug: 'rusty_anvil',
+  taloncrest_smithy: {
     contact: 'smith_varga',
     spots: [
       {
@@ -907,8 +901,7 @@ const TALONCREST_SITE_DATA = {
       },
     ],
   },
-  'The Sunken Stump Pub': {
-    slug: 'sunken_stump_pub',
+  taloncrest_pub: {
     contact: 'innkeep_marlow',
     spots: [
       {
@@ -985,8 +978,7 @@ const TALONCREST_SITE_DATA = {
       },
     ],
   },
-  'The Quiet Needle': {
-    slug: 'quiet_needle',
+  taloncrest_tattoo_parlor: {
     contact: 'tattooist_nim',
     spots: [
       {
@@ -1063,8 +1055,7 @@ const TALONCREST_SITE_DATA = {
       },
     ],
   },
-  "Miller's Farm": {
-    slug: 'millers_farm',
+  taloncrest_mill_farm: {
     contact: 'marta_miller',
     spots: [
       {
@@ -1141,7 +1132,7 @@ const TALONCREST_SITE_DATA = {
       },
     ],
   },
-} as const satisfies Record<ContractTownBuildingName, TaloncrestSiteData>;
+} as const satisfies Record<ContractTownBuildingId, TaloncrestSiteData>;
 
 /** The north-wall run every roofless village room offers. */
 const REPOINT_NORTH_WALL: SpotSpec = {
@@ -1173,8 +1164,7 @@ const RESTRING_BED: SpotSpec = {
 };
 
 const VILLAGE_SITE_DATA = {
-  hall: {
-    name: "Mayor's Hall",
+  briar_hollow_hall: {
     contact: 'bramblewick',
     spots: [
       {
@@ -1237,8 +1227,7 @@ const VILLAGE_SITE_DATA = {
       },
     ],
   },
-  forge: {
-    name: 'Ironwhisker Forge',
+  briar_hollow_forge: {
     contact: 'oren',
     spots: [
       {
@@ -1307,8 +1296,7 @@ const VILLAGE_SITE_DATA = {
       },
     ],
   },
-  cookhouse: {
-    name: "Pipkin's Cookhouse",
+  briar_hollow_cookhouse: {
     contact: 'pipkin',
     spots: [
       {
@@ -1370,8 +1358,7 @@ const VILLAGE_SITE_DATA = {
       },
     ],
   },
-  infirmary: {
-    name: 'Infirmary',
+  briar_hollow_infirmary: {
     contact: 'sella',
     spots: [
       {
@@ -1426,8 +1413,7 @@ const VILLAGE_SITE_DATA = {
       },
     ],
   },
-  store: {
-    name: 'Nibnose Trading Post',
+  briar_hollow_store: {
     contact: 'vetch',
     spots: [
       {
@@ -1482,8 +1468,7 @@ const VILLAGE_SITE_DATA = {
       },
     ],
   },
-  workshop: {
-    name: "Engineer's Workshop",
+  briar_hollow_workshop: {
     contact: 'tikka',
     spots: [
       {
@@ -1546,8 +1531,7 @@ const VILLAGE_SITE_DATA = {
       },
     ],
   },
-  sawmill: {
-    name: 'Splintertail Sawmill',
+  briar_hollow_sawmill: {
     contact: 'fenna',
     spots: [
       {
@@ -1616,8 +1600,7 @@ const VILLAGE_SITE_DATA = {
       },
     ],
   },
-  guardhouse: {
-    name: 'Guardhouse',
+  briar_hollow_guardhouse: {
     contact: 'sedge',
     spots: [
       {
@@ -1672,8 +1655,7 @@ const VILLAGE_SITE_DATA = {
       },
     ],
   },
-  farmhouse: {
-    name: 'Roottail Farmhouse',
+  briar_hollow_farmhouse: {
     contact: 'merrit',
     spots: [
       RESTRING_BED,
@@ -1721,8 +1703,7 @@ const VILLAGE_SITE_DATA = {
       },
     ],
   },
-  barn: {
-    name: 'Barn',
+  briar_hollow_barn: {
     contact: 'merrit',
     spots: [
       {
@@ -1791,8 +1772,7 @@ const VILLAGE_SITE_DATA = {
       },
     ],
   },
-  home_nella: {
-    name: 'Softstep Cottage',
+  briar_hollow_seamstress_cottage: {
     contact: 'nella',
     spots: [
       RESTRING_BED,
@@ -1840,8 +1820,7 @@ const VILLAGE_SITE_DATA = {
       },
     ],
   },
-  home_cricket: {
-    name: 'Mudwhisk Cottage',
+  briar_hollow_well_keeper_cottage: {
     contact: 'cricket',
     spots: [
       RESTRING_BED,
@@ -1889,8 +1868,7 @@ const VILLAGE_SITE_DATA = {
       },
     ],
   },
-  home_wicker: {
-    name: 'Longtooth Workshop',
+  briar_hollow_carpenter_workshop: {
     contact: 'wicker',
     spots: [
       RESTRING_BED,
@@ -1938,8 +1916,7 @@ const VILLAGE_SITE_DATA = {
       },
     ],
   },
-  home_midge: {
-    name: 'Candleear Cottage',
+  briar_hollow_lamplighter_cottage: {
     contact: 'midge',
     spots: [
       RESTRING_BED,
@@ -1987,8 +1964,7 @@ const VILLAGE_SITE_DATA = {
       },
     ],
   },
-  garn_hut: {
-    name: 'Quarry Hut',
+  briar_hollow_quarry_hut: {
     contact: 'garn',
     spots: [
       {
@@ -2070,16 +2046,15 @@ export type VillageContractContactId =
 /** Everyone who pays out a contract, in either town. */
 export type ContractContactId = TaloncrestContractContactId | VillageContractContactId;
 
-function taloncrestSite(buildingName: ContractTownBuildingName): TaloncrestContractSiteDef {
-  const entry = TALONCREST_SITE_DATA[buildingName];
+function taloncrestSite(buildingId: ContractTownBuildingId): TaloncrestContractSiteDef {
+  const entry = TALONCREST_SITE_DATA[buildingId];
   const data: TaloncrestSiteData = entry;
   return {
     town: 'taloncrest',
-    buildingName,
-    slug: data.slug,
-    name: buildingName,
+    buildingId,
+    name: buildingDisplayName(buildingId),
     contact: entry.contact,
-    spots: poolFor(data.slug, data.spots),
+    spots: poolFor(buildingId, data.spots),
   };
 }
 
@@ -2089,37 +2064,38 @@ function villageSite(buildingId: ContractVillageBuildingId): BriarHollowContract
   return {
     town: 'briar_hollow',
     buildingId,
-    slug: buildingId,
-    name: data.name,
+    name: buildingDisplayName(buildingId),
     contact: entry.contact,
     spots: poolFor(buildingId, data.spots),
   };
 }
 
-function isContractTownBuildingName(name: TownBuildingName): name is ContractTownBuildingName {
-  return name in TALONCREST_SITE_DATA;
+function isContractTownBuildingId(
+  buildingId: TownBuildingId,
+): buildingId is ContractTownBuildingId {
+  return buildingId in TALONCREST_SITE_DATA;
 }
 
 /** Every contract site in both towns, Taloncrest first, in the fixed order the generator draws from. */
 export const CONTRACT_SITES: readonly ContractSiteDef[] = [
-  ...PLANNED_BUILDING_NAMES.filter(isContractTownBuildingName).map(taloncrestSite),
+  ...PLANNED_BUILDING_IDS.filter(isContractTownBuildingId).map(taloncrestSite),
   ...BUILDINGS.map((building) => villageSite(building.id)),
 ];
 
-const SITES_BY_SLUG = new Map<string, ContractSiteDef>(
-  CONTRACT_SITES.map((site) => [site.slug, site]),
+const SITES_BY_BUILDING = new Map<string, ContractSiteDef>(
+  CONTRACT_SITES.map((site) => [site.buildingId, site]),
 );
 
-/** The site a slug names, or undefined for a slug no site carries (a stale save). */
-export function contractSiteBySlug(slug: string): ContractSiteDef | undefined {
-  return SITES_BY_SLUG.get(slug);
+/** The site a saved building id names, or undefined for one no site carries. */
+export function contractSiteByBuildingId(buildingId: string): ContractSiteDef | undefined {
+  return SITES_BY_BUILDING.get(buildingId);
 }
 
 /** The catalogue entry a saved site key names, or undefined when it names none. */
 export function contractSiteFor(key: ContractSiteKey): ContractSiteDef | undefined {
   return CONTRACT_SITES.find((site) =>
     site.town === 'taloncrest'
-      ? key.town === 'taloncrest' && key.buildingName === site.buildingName
+      ? key.town === 'taloncrest' && key.buildingId === site.buildingId
       : key.town === 'briar_hollow' && key.buildingId === site.buildingId,
   );
 }
@@ -2127,16 +2103,16 @@ export function contractSiteFor(key: ContractSiteKey): ContractSiteDef | undefin
 /** The durable key for a site, as the contract state stores it. */
 export function contractSiteKey(site: ContractSiteDef): ContractSiteKey {
   return site.town === 'taloncrest'
-    ? { town: 'taloncrest', buildingName: site.buildingName }
+    ? { town: 'taloncrest', buildingId: site.buildingId }
     : { town: 'briar_hollow', buildingId: site.buildingId };
 }
 
 /** The Taloncrest site for a building, or undefined when that building hosts none. */
 export function taloncrestContractSite(
-  buildingName: string,
+  buildingId: BuildingId,
 ): TaloncrestContractSiteDef | undefined {
   for (const site of CONTRACT_SITES) {
-    if (site.town === 'taloncrest' && site.buildingName === buildingName) return site;
+    if (site.town === 'taloncrest' && site.buildingId === buildingId) return site;
   }
   return undefined;
 }

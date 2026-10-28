@@ -28,6 +28,7 @@ import {
   type GolemBallState,
   type RockGolemSheet,
 } from '../sprites/rockGolemSprite';
+import { selectCardinalFacing } from '../sprites/facingView';
 import { previewInk } from '../ui/theme/previewInk';
 
 /** A facing vector per column, chosen so the wrapper picks each viewpoint. */
@@ -197,8 +198,7 @@ export class RockGolemPreviewScene extends PreviewScene {
           {
             walkFrame: this.clock * WALK_FRAME_RATE,
             isMoving: row.moving,
-            facingX: view.facingX,
-            facingY: view.facingY,
+            facing: selectCardinalFacing(view.facingX, view.facingY),
             attack: row.attack,
             attackProgress: this.progressOf(row),
             ballState: row.ballState,

@@ -42,6 +42,7 @@ import {
   type ContractSpotFootprint,
 } from '../../src/systems/constructionContracts/contractTargets';
 import { CONTRACT_MATERIALS, type Check } from './shared';
+import type { BuildingId } from '../../src/map/buildingIds';
 
 /** World seeds whose town entries and village are each checked in full. */
 const LAYOUT_WORLD_COUNT = 4;
@@ -102,13 +103,13 @@ export function worldLayouts(seed: number): WorldLayouts {
 /** The ground floor of a Taloncrest building, generated the way its interior scene generates it. */
 export function generateGroundFloor(entry: BuildingEntry): GameMap {
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  map.generateInterior(entry.type, 0, entry.name, entry.hasSafeRoom === true);
+  map.generateInterior(entry.type, 0, entry.id, entry.hasSafeRoom === true);
   return map;
 }
 
 function siteLayout(site: ContractSiteDef, world: WorldLayouts): SiteLayout | string {
   if (site.town === 'briar_hollow') return { town: 'briar_hollow', site, village: world.village };
-  const entry = world.entries.find((candidate) => candidate.name === site.buildingName);
+  const entry = world.entries.find((candidate) => candidate.id === site.buildingId);
   if (entry === undefined) return `${site.name}: no building entry on world seed ${world.seed}`;
   return { town: 'taloncrest', site, map: generateGroundFloor(entry) };
 }
@@ -446,7 +447,7 @@ function verifySiteRoster(check: Check): void {
     village.length === EXPECTED_VILLAGE_SITES,
     `${EXPECTED_VILLAGE_SITES} Briar Hollow sites (${village.length})`,
   );
-  const slugs = new Set(CONTRACT_SITES.map((site) => site.slug));
+  const slugs = new Set(CONTRACT_SITES.map((site) => site.buildingId));
   check(slugs.size === CONTRACT_SITES.length, 'every site slug is unique across both towns');
   for (const site of CONTRACT_SITES) {
     const ids = new Set(site.spots.map((spot) => spot.id));
@@ -455,11 +456,9 @@ function verifySiteRoster(check: Check): void {
 }
 
 function verifyExclusions(check: Check): void {
-  const excluded: readonly string[] = CONTRACT_EXCLUDED_TOWN_BUILDINGS;
+  const excluded: readonly BuildingId[] = CONTRACT_EXCLUDED_TOWN_BUILDINGS;
   const named = CONTRACT_SITES.filter(
-    (site) =>
-      excluded.includes(site.name) ||
-      (site.town === 'taloncrest' && excluded.includes(site.buildingName)),
+    (site) => site.town === 'taloncrest' && excluded.includes(site.buildingId),
   );
   check(named.length === 0, `no excluded building is a contract site (${excluded.join(', ')})`);
   for (const name of excluded) {
@@ -468,7 +467,7 @@ function verifyExclusions(check: Check): void {
   for (const seed of LAYOUT_WORLD_SEEDS) {
     const world = worldLayouts(seed);
     for (const name of excluded) {
-      const entry = world.entries.find((candidate) => candidate.name === name);
+      const entry = world.entries.find((candidate) => candidate.id === name);
       if (entry === undefined) {
         check(false, `seed ${seed}: ${name} has a building entry`);
         continue;

@@ -22,8 +22,16 @@
  */
 
 import { INTERIOR_WALL } from '../../tileTypes';
-import { contractTarget, prop, tileColumn, type TownInteriorLayoutEntry } from './types';
+import {
+  contractTarget,
+  prop,
+  tileColumn,
+  type TownInteriorLayoutEntry,
+  statefulProp,
+  contractTargetId,
+} from './types';
 import type { ContractAreaRecord } from '../../contractAreas';
+import type { PlannedBuildingId } from '../../buildingIds';
 
 const BENCH_WIDTH = 5;
 const LATHE_WIDTH = 3;
@@ -38,7 +46,7 @@ const WORK_AISLE_ROWS = 2;
 /** Tiles east of the door the firewood starts, leaving a clear approach to the door. */
 const FIREWOOD_DOOR_CLEARANCE = 3;
 
-const CONTRACT_SITE = 'cartwrights_workshop';
+const CONTRACT_SITE = 'taloncrest_crafting_house' satisfies PlannedBuildingId;
 /** The bay's open floor under the rack and the step out of it, two tiles square. */
 const BAY_PAD_SPOT_SIZE = 2;
 
@@ -134,25 +142,34 @@ export function buildCartwrightsWorkshopLayout(w: number, h: number): TownInteri
 
   // Loot-bearing clutter first: the payout gate reads the first breakable
   // in placement order, and the shop's own stock (spokes, timber) never pays.
-  entries.push(prop(eastCol, southRow - 1, 'crate'), prop(eastCol, southRow, 'barrel', 1));
+  entries.push(
+    statefulProp(eastCol, southRow - 1, 'crate', 'crate_1'),
+    statefulProp(eastCol, southRow, 'barrel', 'barrel_1', 1),
+  );
 
   entries.push(
     prop(finishedWheelsCol, northRow, 'wheelwright_stand'),
     prop(benchCol, northRow, 'joiner_bench', 0, contractTarget(CONTRACT_SITE, 'joiner_bench')),
-    prop(spokeTubCol, aisleRow, 'spoke_tub', 0, { dropsLoot: false }),
+    statefulProp(spokeTubCol, aisleRow, 'spoke_tub', 'spoke_tub_1', 0, { dropsLoot: false }),
     prop(latheCol, northRow, 'lathe', 0, contractTarget(CONTRACT_SITE, 'lathe')),
-    prop(gluePotCol, gluePotRow, 'glue_pot', 0, contractTarget(CONTRACT_SITE, 'glue_hearth')),
+    statefulProp(
+      gluePotCol,
+      gluePotRow,
+      'glue_pot',
+      contractTargetId(CONTRACT_SITE, 'glue_hearth'),
+      0,
+    ),
   );
 
   entries.push(...tileColumn(bayWallCol, northRow, bayWallLastRow, INTERIOR_WALL));
   entries.push(
     prop(bayFirstCol, northRow, 'timber_rack', 0, contractTarget(CONTRACT_SITE, 'timber_rack')),
-    prop(eastCol, bayWallLastRow, 'crate'),
+    statefulProp(eastCol, bayWallLastRow, 'crate', 'crate_2'),
   );
 
   entries.push(
-    prop(westCol, wheelStandRow, 'barrel'),
-    prop(westCol, wheelStandRow + 1, 'crate'),
+    statefulProp(westCol, wheelStandRow, 'barrel', 'barrel_2'),
+    statefulProp(westCol, wheelStandRow + 1, 'crate', 'crate_3'),
     prop(
       wheelStandCol,
       wheelStandRow,
@@ -171,14 +188,14 @@ export function buildCartwrightsWorkshopLayout(w: number, h: number): TownInteri
   );
 
   entries.push(
-    prop(eastCol, eastStockRow, 'barrel'),
-    prop(eastCol, eastStockRow + 1, 'crate'),
-    prop(eastCol - 1, eastStockRow, 'spoke_tub', 0, { dropsLoot: false }),
+    statefulProp(eastCol, eastStockRow, 'barrel', 'barrel_3'),
+    statefulProp(eastCol, eastStockRow + 1, 'crate', 'crate_4'),
+    statefulProp(eastCol - 1, eastStockRow, 'spoke_tub', 'spoke_tub_2', 0, { dropsLoot: false }),
   );
 
   entries.push(
     prop(wagonCol, wagonRow, 'wagon_bed', 0, contractTarget(CONTRACT_SITE, 'wagon_bed')),
-    prop(toolboxCol, southRow, 'chest', 0, { id: 'cartwright_toolbox' }),
+    statefulProp(toolboxCol, southRow, 'chest', 'cartwright_toolbox', 0),
     prop(firewoodCol, southRow, 'firewood_stack'),
   );
 

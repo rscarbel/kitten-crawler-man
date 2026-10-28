@@ -551,7 +551,7 @@ section('The party side never picks a soldier');
       if (merc.isFighting || prey.hp < prey.maxHp) foughtHostile = true;
     }
     // The medic picks no fights at all, so there is nothing for its control to show.
-    const picksFights = getMercenaryTemplate(templateId).kit !== 'medic';
+    const picksFights = getMercenaryTemplate(templateId).kit.id !== 'medic';
     if (picksFights) check(foughtHostile, `${templateId} does fight a hostile beside it`);
   }
 

@@ -44,6 +44,7 @@ import {
   SHOPS,
   isShopId,
   shopDef,
+  shopTitle,
   type CatalogBundle,
   type CatalogLine,
   type ShopDef,
@@ -156,15 +157,16 @@ interface PriceFactor {
 
 /** Which of the shop's markups applies to this item, labelled with the one that won. */
 function markupFactor(def: ShopDef, item: ItemId, category: ItemCategory): PriceFactor {
+  const title = shopTitle(def);
   const itemMarkup = def.itemMarkup[item];
   if (itemMarkup !== undefined) {
-    return { label: `${def.name}: ${ITEM_DEF[item].name} markup`, multiplier: itemMarkup };
+    return { label: `${title}: ${ITEM_DEF[item].name} markup`, multiplier: itemMarkup };
   }
   const categoryMarkup = def.categoryMarkup[category];
   if (categoryMarkup !== undefined) {
-    return { label: `${def.name}: ${category} markup`, multiplier: categoryMarkup };
+    return { label: `${title}: ${category} markup`, multiplier: categoryMarkup };
   }
-  return { label: `${def.name} markup`, multiplier: def.markup };
+  return { label: `${title} markup`, multiplier: def.markup };
 }
 
 /** The stock curve a shop applies to this item: its category override, else its own. */

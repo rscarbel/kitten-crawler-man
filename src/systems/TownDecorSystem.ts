@@ -44,14 +44,13 @@ import { tileKey } from './tileKey';
 import { doorwayKeepClearTiles } from './doorwayKeepClear';
 import type { GameMap } from '../map/GameMap';
 import {
-  CLOAK_AND_DAGGER_NAME,
   SHOP_SIGN_EMBLEMS,
   type ShopSignEmblem,
   type TileRect,
-  type TownBuildingName,
   type TownOffset,
   type TownPlan,
 } from '../map/town/townPlan';
+import { type TownBuildingId } from '../map/buildingIds';
 import type { GameSystem } from './GameSystem';
 import type { TownPropRenderable } from './townPropRenderable';
 
@@ -105,7 +104,7 @@ const LAMP_FLICKER_PHASE_STRIDE_RAD = GOLDEN_ANGLE_RAD;
  */
 type ClutterAnchor =
   | { readonly at: 'yard'; readonly name: string; readonly offset: TownOffset }
-  | { readonly at: 'door'; readonly name: TownBuildingName; readonly offset: TownOffset }
+  | { readonly at: 'door'; readonly building: TownBuildingId; readonly offset: TownOffset }
   // `surface` reaches a `PlannedSurface` (the drill yards, the crop rows) rather
   // than a `PlannedYard` — the working ground a trade actually stands on, which
   // for the Barracks is gravel the generator plans as a surface, not a fenced
@@ -131,44 +130,68 @@ const CLUTTER_PLACEMENTS: ReadonlyArray<ClutterPlacement> = [
   // The smithy, spilling onto Market Street either side of its door.
   {
     kind: 'anvil_block',
-    anchor: { at: 'door', name: 'The Rusty Anvil', offset: { dx: -3, dy: 1 } },
+    anchor: { at: 'door', building: 'taloncrest_smithy', offset: { dx: -3, dy: 1 } },
   },
-  { kind: 'coal_pile', anchor: { at: 'door', name: 'The Rusty Anvil', offset: { dx: -4, dy: 1 } } },
+  {
+    kind: 'coal_pile',
+    anchor: { at: 'door', building: 'taloncrest_smithy', offset: { dx: -4, dy: 1 } },
+  },
   {
     kind: 'quench_barrel',
-    anchor: { at: 'door', name: 'The Rusty Anvil', offset: { dx: 3, dy: 1 } },
+    anchor: { at: 'door', building: 'taloncrest_smithy', offset: { dx: 3, dy: 1 } },
   },
-  { kind: 'tool_rack', anchor: { at: 'door', name: 'The Rusty Anvil', offset: { dx: 4, dy: 1 } } },
+  {
+    kind: 'tool_rack',
+    anchor: { at: 'door', building: 'taloncrest_smithy', offset: { dx: 4, dy: 1 } },
+  },
 
   // Frontages: what each trade leaves outside its own door.
   {
     kind: 'water_trough',
-    anchor: { at: 'door', name: 'The Sleeping Cat Inn', offset: { dx: -3, dy: 1 } },
+    anchor: { at: 'door', building: 'taloncrest_inn', offset: { dx: -3, dy: 1 } },
   },
   {
     kind: 'hitching_post',
-    anchor: { at: 'door', name: 'The Sleeping Cat Inn', offset: { dx: -4, dy: 1 } },
+    anchor: { at: 'door', building: 'taloncrest_inn', offset: { dx: -4, dy: 1 } },
   },
-  { kind: 'crate_stack', anchor: { at: 'door', name: 'General Store', offset: { dx: 3, dy: 1 } } },
-  { kind: 'sacks', anchor: { at: 'door', name: 'General Store', offset: { dx: 4, dy: 1 } } },
+  {
+    kind: 'crate_stack',
+    anchor: { at: 'door', building: 'taloncrest_general_store', offset: { dx: 3, dy: 1 } },
+  },
+  {
+    kind: 'sacks',
+    anchor: { at: 'door', building: 'taloncrest_general_store', offset: { dx: 4, dy: 1 } },
+  },
   // +4, not +3: The Horned Flagon's doorway is four tiles wide, so `paintDoorApron`
   // reaches three tiles east of the door *centre* and a barrel at +3 stood on the
   // last tile of its own doorstep.
   {
     kind: 'barrel_stack',
-    anchor: { at: 'door', name: 'The Horned Flagon', offset: { dx: 4, dy: 1 } },
+    anchor: { at: 'door', building: 'taloncrest_flagon_tavern', offset: { dx: 4, dy: 1 } },
   },
-  { kind: 'planter', anchor: { at: 'door', name: 'Temple of the Sky', offset: { dx: 3, dy: 1 } } },
-  { kind: 'birdbath', anchor: { at: 'door', name: 'Temple of the Sky', offset: { dx: 5, dy: 1 } } },
-  {
-    kind: 'barrel_stack',
-    anchor: { at: 'door', name: CLOAK_AND_DAGGER_NAME, offset: { dx: 4, dy: 1 } },
-  },
-  { kind: 'handcart', anchor: { at: 'door', name: "Miller's Farm", offset: { dx: -3, dy: 1 } } },
-  { kind: 'hay_bale', anchor: { at: 'door', name: "Miller's Farm", offset: { dx: -4, dy: 1 } } },
   {
     kind: 'planter',
-    anchor: { at: 'door', name: "Old Lori's Cottage", offset: { dx: 3, dy: 1 } },
+    anchor: { at: 'door', building: 'taloncrest_temple', offset: { dx: 3, dy: 1 } },
+  },
+  {
+    kind: 'birdbath',
+    anchor: { at: 'door', building: 'taloncrest_temple', offset: { dx: 5, dy: 1 } },
+  },
+  {
+    kind: 'barrel_stack',
+    anchor: { at: 'door', building: 'taloncrest_nightclub', offset: { dx: 4, dy: 1 } },
+  },
+  {
+    kind: 'handcart',
+    anchor: { at: 'door', building: 'taloncrest_mill_farm', offset: { dx: -3, dy: 1 } },
+  },
+  {
+    kind: 'hay_bale',
+    anchor: { at: 'door', building: 'taloncrest_mill_farm', offset: { dx: -4, dy: 1 } },
+  },
+  {
+    kind: 'planter',
+    anchor: { at: 'door', building: 'taloncrest_old_lady_cottage', offset: { dx: 3, dy: 1 } },
   },
 
   // The carting yard behind Market Row.
@@ -243,25 +266,34 @@ const CLUTTER_PLACEMENTS: ReadonlyArray<ClutterPlacement> = [
 
   // Building-line dressing: something at most every frontage, so facades sit
   // in a lived-in street rather than on bare ground.
-  { kind: 'tool_rack', anchor: { at: 'door', name: 'The Barracks', offset: { dx: -3, dy: 1 } } },
-  { kind: 'crate_stack', anchor: { at: 'door', name: 'The Barracks', offset: { dx: 4, dy: 1 } } },
   {
-    kind: 'wagon_wheel',
-    anchor: { at: 'door', name: "Cartwright's Workshop", offset: { dx: -3, dy: 1 } },
-  },
-  {
-    kind: 'sacks',
-    anchor: { at: 'door', name: "Cartwright's Workshop", offset: { dx: 4, dy: 1 } },
-  },
-  {
-    kind: 'planter',
-    anchor: { at: 'door', name: 'The Sunken Stump Pub', offset: { dx: -3, dy: 1 } },
+    kind: 'tool_rack',
+    anchor: { at: 'door', building: 'taloncrest_barracks', offset: { dx: -3, dy: 1 } },
   },
   {
     kind: 'crate_stack',
-    anchor: { at: 'door', name: 'The Sunken Stump Pub', offset: { dx: 4, dy: 1 } },
+    anchor: { at: 'door', building: 'taloncrest_barracks', offset: { dx: 4, dy: 1 } },
   },
-  { kind: 'planter', anchor: { at: 'door', name: 'The Quiet Needle', offset: { dx: -3, dy: 1 } } },
+  {
+    kind: 'wagon_wheel',
+    anchor: { at: 'door', building: 'taloncrest_crafting_house', offset: { dx: -3, dy: 1 } },
+  },
+  {
+    kind: 'sacks',
+    anchor: { at: 'door', building: 'taloncrest_crafting_house', offset: { dx: 4, dy: 1 } },
+  },
+  {
+    kind: 'planter',
+    anchor: { at: 'door', building: 'taloncrest_pub', offset: { dx: -3, dy: 1 } },
+  },
+  {
+    kind: 'crate_stack',
+    anchor: { at: 'door', building: 'taloncrest_pub', offset: { dx: 4, dy: 1 } },
+  },
+  {
+    kind: 'planter',
+    anchor: { at: 'door', building: 'taloncrest_tattoo_parlor', offset: { dx: -3, dy: 1 } },
+  },
 
   // Trade-themed yard dressing: the empty back strips and gardens each read as
   // the trade behind them rather than as bare kept grass.
@@ -480,18 +512,21 @@ interface FixturePlacement {
  * repaint.
  */
 const FIXTURE_PLACEMENTS: ReadonlyArray<FixturePlacement> = [
-  { kind: 'awning_post', anchor: { at: 'door', name: 'General Store', offset: { dx: -4, dy: 1 } } },
   {
     kind: 'awning_post',
-    anchor: { at: 'door', name: 'The Horned Flagon', offset: { dx: -4, dy: 1 } },
+    anchor: { at: 'door', building: 'taloncrest_general_store', offset: { dx: -4, dy: 1 } },
   },
   {
     kind: 'awning_post',
-    anchor: { at: 'door', name: CLOAK_AND_DAGGER_NAME, offset: { dx: -4, dy: 1 } },
+    anchor: { at: 'door', building: 'taloncrest_flagon_tavern', offset: { dx: -4, dy: 1 } },
+  },
+  {
+    kind: 'awning_post',
+    anchor: { at: 'door', building: 'taloncrest_nightclub', offset: { dx: -4, dy: 1 } },
   },
   {
     kind: 'hawkfolk_perch',
-    anchor: { at: 'door', name: 'Temple of the Sky', offset: { dx: -4, dy: 1 } },
+    anchor: { at: 'door', building: 'taloncrest_temple', offset: { dx: -4, dy: 1 } },
   },
 ];
 
@@ -741,7 +776,7 @@ export class TownDecorSystem implements GameSystem {
 
   private resolveClutterAnchor(plan: TownPlan, anchor: ClutterAnchor): TileXY | null {
     if (anchor.at === 'door') {
-      const entry = this.gameMap.buildingEntries.find((e) => e.name === anchor.name);
+      const entry = this.gameMap.buildingEntries.find((e) => e.id === anchor.building);
       if (entry === undefined) return null;
       return { x: entry.doorTile.x + anchor.offset.dx, y: entry.doorTile.y + anchor.offset.dy };
     }

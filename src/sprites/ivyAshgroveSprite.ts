@@ -9,6 +9,7 @@ import { progressFrameIndex, walkFrameIndex } from '../core/spriteAssets/SpriteR
 import { TILE_SIZE } from '../core/constants';
 import { isKitRow, type ArcherRow } from '../creatures/mercenaries/MercenaryKit';
 import type { EyePlacement } from './eyePlacement';
+import type { CardinalView, FacingSelection } from './facingView';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import { figureFrameCount } from './figure/figureDef';
 import { FIGURE_HEIGHT } from './art/biped/proportions';
@@ -59,12 +60,16 @@ function prewarmRoles(roles: readonly IvyRole[]): void {
   }
 }
 
-/** Views split on whichever axis she is facing hardest along; the fall is painted in profile only. */
-function viewFor(role: IvyRole, facingX: number, facingY: number): IvyView {
-  const views = IVY_ROLE_VIEWS[role];
-  const wanted: IvyView =
-    Math.abs(facingY) <= Math.abs(facingX) ? 'side' : facingY < 0 ? 'away' : 'front';
-  return views.includes(wanted) ? wanted : 'side';
+const IVY_VIEW_OF: Readonly<Record<CardinalView, IvyView>> = {
+  front: 'front',
+  side: 'side',
+  back: 'away',
+};
+
+/** The fall is painted in profile only, so a role without the facing's view turns to it. */
+function viewFor(role: IvyRole, facing: FacingSelection<CardinalView>): IvyView {
+  const wanted = IVY_VIEW_OF[facing.view];
+  return IVY_ROLE_VIEWS[role].includes(wanted) ? wanted : 'side';
 }
 
 const FULL_TURN = Math.PI * 2;
@@ -115,7 +120,7 @@ export const IVY_ASHGROVE_ART: MercenaryArt = {
     const { row, progress } = frame.state;
     const fallback: IvyRole = frame.isMoving ? 'walk' : 'idle';
     const role = isKitRow(IVY_ROWS, row) ? IVY_ROWS[row] : fallback;
-    const view = viewFor(role, frame.facingX, frame.facingY);
+    const view = viewFor(role, frame.cardinalFacing);
     const state = ivyStateName(role, view);
     const frames = figureFrameCount(IVY_ASHGROVE_FIGURE, state);
     if (frames === 0) return;
@@ -123,7 +128,8 @@ export const IVY_ASHGROVE_ART: MercenaryArt = {
     if (role === 'walk') index = walkFrameIndex(frame.walkFrame, frames);
     else if (role === 'idle') index = idleFrameAtSeconds(frame.clock / TICKS_PER_SECOND);
     else index = progressFrameIndex(progress, frames);
-    const flipX = view === 'side' && frame.facingX < 0;
+    const turnedToProfile = view === 'side' && frame.cardinalFacing.view !== 'side';
+    const flipX = turnedToProfile ? frame.facingX < 0 : frame.cardinalFacing.flipX;
     drawFigureCached(ctx, IVY_ASHGROVE_FIGURE, state, index, sx, sy, tileSize, { flipX });
   },
   cullMarginTiles: CULL_MARGIN_TILES,

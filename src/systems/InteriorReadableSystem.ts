@@ -13,7 +13,7 @@
 
 import { TILE_SIZE } from '../core/constants';
 import type { GameMap } from '../map/GameMap';
-import type { BuildingName } from '../map/buildingEntry';
+import type { BuildingId } from '../map/buildingIds';
 import {
   BOOKSHELF,
   TABLE,
@@ -78,18 +78,18 @@ export class InteriorReadableSystem {
    */
   static forBuilding(
     map: GameMap,
-    name: BuildingName,
+    buildingId: BuildingId,
     occupiedFurniture: ReadonlySet<string>,
   ): InteriorReadableSystem | null {
-    const readables = readablesFor(name);
+    const readables = readablesFor(buildingId);
     if (readables.length === 0) return null;
-    const system = new InteriorReadableSystem(map, name, readables, occupiedFurniture);
+    const system = new InteriorReadableSystem(map, buildingId, readables, occupiedFurniture);
     return system.placed.length > 0 ? system : null;
   }
 
   private constructor(
     map: GameMap,
-    buildingName: string,
+    buildingId: BuildingId,
     readables: ReadonlyArray<Readable>,
     occupiedFurniture: ReadonlySet<string>,
   ) {
@@ -105,7 +105,7 @@ export class InteriorReadableSystem {
     // so "hard to reach" is not the same as "never".
     const stillLooking: Readable[] = [];
     for (const readable of readables) {
-      if (!this.tryPlace(readable, buildingName, furniture, occupiedFurniture)) {
+      if (!this.tryPlace(readable, buildingId, furniture, occupiedFurniture)) {
         stillLooking.push(readable);
       }
     }
@@ -113,7 +113,7 @@ export class InteriorReadableSystem {
     // have already taken.
     const nothingBlocked: ReadonlySet<string> = new Set();
     for (const readable of stillLooking) {
-      this.tryPlace(readable, buildingName, furniture, nothingBlocked);
+      this.tryPlace(readable, buildingId, furniture, nothingBlocked);
     }
   }
 
@@ -123,11 +123,11 @@ export class InteriorReadableSystem {
    */
   private tryPlace(
     readable: Readable,
-    buildingName: string,
+    buildingId: BuildingId,
     furniture: ReadonlyMap<ReadableAnchor, TileXY[]>,
     blocked: ReadonlySet<string>,
   ): boolean {
-    const tile = pickTile(readable.anchor, buildingName, furniture, union(blocked, this.usedTiles));
+    const tile = pickTile(readable.anchor, buildingId, furniture, union(blocked, this.usedTiles));
     if (tile === null) return false;
     this.usedTiles.add(tileKey(tile.x, tile.y));
     this.placed.push({ readable, x: tile.x * TILE_SIZE, y: tile.y * TILE_SIZE });
@@ -202,7 +202,7 @@ function scanFurniture(map: GameMap): Map<ReadableAnchor, TileXY[]> {
  */
 function pickTile(
   preferred: ReadableAnchor,
-  buildingName: string,
+  buildingId: BuildingId,
   furniture: ReadonlyMap<ReadableAnchor, TileXY[]>,
   usedTiles: ReadonlySet<string>,
 ): TileXY | null {
@@ -213,7 +213,7 @@ function pickTile(
   for (const kind of order) {
     const tiles = furniture.get(kind);
     if (tiles === undefined) continue;
-    const start = anchorCursorForBuilding(buildingName, tiles.length);
+    const start = anchorCursorForBuilding(buildingId, tiles.length);
     for (let offset = 0; offset < tiles.length; offset++) {
       const tile = tiles[(start + offset) % tiles.length];
       if (!usedTiles.has(tileKey(tile.x, tile.y))) return tile;

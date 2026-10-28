@@ -1,10 +1,12 @@
 import type { Player, StatName } from '../../Player';
+import type { ResistanceType } from '../items/defs/ItemDefs';
 import {
+  AEGIS_DAMAGE_SCALE,
   BLOOD_VOMIT_RETCH_FRAMES,
   CHILLED_FRAMES,
   DOUBLE_DAMAGE_FRAMES,
+  DOUBLE_DAMAGE_SCALE,
   FROZEN_FRAMES,
-  STATUS_INCOMING_DAMAGE_SCALE,
 } from './statusTuning';
 import {
   HAMBURGER_FED_DURATION_SECONDS,
@@ -13,8 +15,9 @@ import {
 
 /**
  * Every status the game can put on a body. A new status is added here first;
- * the tables keyed by it (`STATUS_INCOMING_DAMAGE_SCALE` in `statusTuning.ts`)
- * then fail to compile until it declares its entry.
+ * the tables keyed by it ({@link STATUS_DEFS} for its rules, `STATUS_VISUALS`
+ * in `statusEffectVisuals.ts` for its look) then fail to compile until it
+ * declares its entry.
  */
 export const STATUS_IDS = [
   'burn',
@@ -51,6 +54,153 @@ export type StatusId = (typeof STATUS_IDS)[number];
 /** Whether `value` names a status this build defines, for ids read back from a save. */
 export function isStatusId(value: string): value is StatusId {
   return STATUS_IDS.some((id) => id === value);
+}
+
+/**
+ * Who may take a status off its carrier.
+ *
+ * - `ailment`: done *to* the carrier rather than bought by it. Every rest and
+ *   cure that clears ailments takes it.
+ * - `named`: a boon, a ward or a mark. Cleared by a full cleanse or by a caller
+ *   that names it, never by an ailment cure, so a service that takes coin cannot
+ *   delete the Speed Fizz the player just paid for.
+ * - `death_only`: nothing clears it but a death; see {@link INCURABLE_STATUSES}.
+ */
+export type StatusCure = 'ailment' | 'named' | 'death_only';
+
+/** A status that bites its carrier on a fixed clock for as long as it lasts. */
+export interface StatusDamageOverTime {
+  /** Frames between bites; a bite lands on every positive multiple of it. */
+  readonly intervalTicks: number;
+  /** The resistance that blunts each bite, or null when none does. */
+  readonly resistedBy: ResistanceType | null;
+}
+
+/** Stat deltas a boon status grants while it is live. */
+type StatBoon = Readonly<Partial<Record<StatName, number>>>;
+
+/** Everything the rules need to know about one status. */
+export interface StatusDef {
+  readonly cure: StatusCure;
+  /**
+   * Set on a status that carries an absorb pool. A blow drains every ward on
+   * the body in ascending `drainOrder`; see {@link WARD_STATUSES}.
+   */
+  readonly ward: { readonly drainOrder: number } | null;
+  /**
+   * Whether the status lasts only while whoever applied it lives: the caster's
+   * death strips it (`removeWardsAppliedBy`).
+   */
+  readonly heldByCaster: boolean;
+  /**
+   * Stat deltas the status grants while it is live, read by
+   * `Player.effectiveStat`; see {@link STAT_BOON_BONUSES}.
+   */
+  readonly statBoon: StatBoon | null;
+  /**
+   * What every blow on the carrier is multiplied by, from any source; see
+   * {@link statusIncomingDamageScale}.
+   */
+  readonly incomingDamageScale: number;
+  readonly damageOverTime: StatusDamageOverTime | null;
+  /**
+   * Whether the status survives a snapshot: `transient` for one that only lasts
+   * as long as an on-screen moment, which a restore would otherwise replay for
+   * as long as the saved record says. `snapPlayer` leaves every transient entry
+   * out, and a saved snapshot holding one fails validation.
+   */
+  readonly persistence: 'saved' | 'transient';
+}
+
+/** The scale of a status that leaves the damage its carrier takes alone. */
+const DAMAGE_UNCHANGED = 1;
+
+const BURN_BITE_INTERVAL_TICKS = 60;
+const POISON_BITE_INTERVAL_TICKS = 120;
+const MAGIC_BURN_BITE_INTERVAL_TICKS = 60;
+const ELECTRIFIED_BITE_INTERVAL_TICKS = 60;
+const SPIT_VENOM_BITE_INTERVAL_TICKS = 40;
+
+const DRAINED_FIRST = 0;
+const DRAINED_SECOND = 1;
+
+const ROOM_BOON_STAT_BONUS = 2;
+
+/** A status that changes nothing the rules read; each entry overrides what it does. */
+const PLAIN_STATUS: StatusDef = {
+  cure: 'named',
+  ward: null,
+  heldByCaster: false,
+  statBoon: null,
+  incomingDamageScale: DAMAGE_UNCHANGED,
+  damageOverTime: null,
+  persistence: 'saved',
+};
+
+const PLAIN_AILMENT: StatusDef = { ...PLAIN_STATUS, cure: 'ailment' };
+
+/**
+ * Every status's rules, one entry per {@link StatusId}. The lists below
+ * ({@link INCURABLE_STATUSES}, {@link WARD_STATUSES}, {@link AILMENT_STATUSES}
+ * and the rest) are derived from it, never kept by hand.
+ */
+export const STATUS_DEFS: Readonly<Record<StatusId, StatusDef>> = {
+  burn: {
+    ...PLAIN_AILMENT,
+    damageOverTime: { intervalTicks: BURN_BITE_INTERVAL_TICKS, resistedBy: null },
+  },
+  magic_burn: {
+    ...PLAIN_AILMENT,
+    damageOverTime: { intervalTicks: MAGIC_BURN_BITE_INTERVAL_TICKS, resistedBy: null },
+  },
+  poison: {
+    ...PLAIN_AILMENT,
+    damageOverTime: { intervalTicks: POISON_BITE_INTERVAL_TICKS, resistedBy: 'poison' },
+  },
+  spit_venom: {
+    ...PLAIN_AILMENT,
+    damageOverTime: { intervalTicks: SPIT_VENOM_BITE_INTERVAL_TICKS, resistedBy: 'poison' },
+  },
+  electrified: {
+    ...PLAIN_AILMENT,
+    damageOverTime: { intervalTicks: ELECTRIFIED_BITE_INTERVAL_TICKS, resistedBy: null },
+  },
+  stuck: PLAIN_AILMENT,
+  stun: PLAIN_AILMENT,
+  // A real handicap, even when self-inflicted.
+  drunk: PLAIN_AILMENT,
+  catnip_buzz: PLAIN_AILMENT,
+  ink: PLAIN_STATUS,
+  blood_vomit: { ...PLAIN_STATUS, persistence: 'transient' },
+  double_damage: {
+    ...PLAIN_STATUS,
+    cure: 'death_only',
+    incomingDamageScale: DOUBLE_DAMAGE_SCALE,
+  },
+  chilled: PLAIN_AILMENT,
+  frozen: PLAIN_AILMENT,
+  shield: { ...PLAIN_STATUS, ward: { drainOrder: DRAINED_SECOND }, heldByCaster: true },
+  // Drained before the shield because it decays on its own clock whatever
+  // happens, so spending it first wastes the least.
+  overheal: { ...PLAIN_STATUS, ward: { drainOrder: DRAINED_FIRST }, heldByCaster: true },
+  fairy_ward: { ...PLAIN_STATUS, heldByCaster: true },
+  fairy_aegis: { ...PLAIN_STATUS, incomingDamageScale: AEGIS_DAMAGE_SCALE },
+  speed_fizz: PLAIN_STATUS,
+  jugg_juice: PLAIN_STATUS,
+  cooldown_crisp: PLAIN_STATUS,
+  whetstone: PLAIN_STATUS,
+  well_rested: { ...PLAIN_STATUS, statBoon: { constitution: ROOM_BOON_STAT_BONUS } },
+  hearth_warmed: { ...PLAIN_STATUS, statBoon: { strength: ROOM_BOON_STAT_BONUS } },
+  deep_slumber: {
+    ...PLAIN_STATUS,
+    statBoon: { dexterity: ROOM_BOON_STAT_BONUS, intelligence: ROOM_BOON_STAT_BONUS },
+  },
+  hamburger_fed: { ...PLAIN_STATUS, statBoon: { strength: HAMBURGER_STR_BONUS } },
+  refreshed: PLAIN_STATUS,
+};
+
+function statusesWhere(rule: (def: StatusDef) => boolean): ReadonlyArray<StatusId> {
+  return STATUS_IDS.filter((id) => rule(STATUS_DEFS[id]));
 }
 
 /**
@@ -110,14 +260,15 @@ export const FROZEN_STATUS = 'frozen' as const satisfies StatusId;
  * One retch of blood, which a crawler brings up on entering the lowest HP
  * band (`CRAWLER_HP_THRESHOLDS.retch`). It costs nothing: it is the warning
  * that the next blow may be the last, and it lasts only as long as the retch
- * plays, so it is never restored from a snapshot (`STATUS_PERSISTENCE`).
+ * plays, so it is never restored from a snapshot (its `persistence` in
+ * {@link STATUS_DEFS}).
  */
 export const BLOOD_VOMIT_STATUS = 'blood_vomit' as const satisfies StatusId;
 
 /**
- * The Wheel of Fortune's curse: every blow taken counts double
- * (`STATUS_INCOMING_DAMAGE_SCALE`). Incurable, cleared only by a death. Its
- * remaining time is saved per crawler outside the snapshot too
+ * The Wheel of Fortune's curse: every blow taken counts double (its
+ * `incomingDamageScale` in {@link STATUS_DEFS}). Incurable, cleared only by a
+ * death. Its remaining time is saved per crawler outside the snapshot too
  * (`doubleDamageSave.ts`), so a reload restores it whatever the snapshot kept.
  */
 export const DOUBLE_DAMAGE_STATUS = 'double_damage' as const satisfies StatusId;
@@ -129,7 +280,7 @@ export const DOUBLE_DAMAGE_STATUS = 'double_damage' as const satisfies StatusId;
  * in-place rewind, `progressForRespawn` for the rebuild from the save), or a
  * crawler with no way to heal would die to them again on every respawn.
  */
-export const INCURABLE_STATUSES: ReadonlyArray<StatusId> = [DOUBLE_DAMAGE_STATUS];
+export const INCURABLE_STATUSES = statusesWhere((def) => def.cure === 'death_only');
 
 /** One retch of blood, from the frame it comes up. */
 export function makeBloodVomit(): StatusEffect {
@@ -157,19 +308,23 @@ export function makeDoubleDamage(ticks: number = DOUBLE_DAMAGE_FRAMES): StatusEf
   return { type: DOUBLE_DAMAGE_STATUS, ticksRemaining: ticks, totalTicks: ticks, applier: null };
 }
 
-/**
- * Every status that carries an absorb pool, in the order a blow drains them.
- *
- * Overheal goes first because it decays on its own clock whatever happens, so
- * spending it before anything else wastes the least.
- */
-export const WARD_STATUSES: ReadonlyArray<StatusId> = [OVERHEAL_STATUS, SHIELD_STATUS];
+function wardStatusesInDrainOrder(): ReadonlyArray<StatusId> {
+  const wards = STATUS_IDS.flatMap((id) => {
+    const ward = STATUS_DEFS[id].ward;
+    return ward === null ? [] : [{ id, drainOrder: ward.drainOrder }];
+  });
+  wards.sort((a, b) => a.drainOrder - b.drainOrder);
+  return wards.map((ward) => ward.id);
+}
+
+/** Every status that carries an absorb pool, in the order a blow drains them. */
+export const WARD_STATUSES = wardStatusesInDrainOrder();
 
 /**
  * Every status a caster keeps up only while it lives, stripped together by
  * `removeWardsAppliedBy` on its death.
  */
-export const CASTER_HELD_STATUSES: ReadonlyArray<StatusId> = [...WARD_STATUSES, FAIRY_WARD_STATUS];
+export const CASTER_HELD_STATUSES = statusesWhere((def) => def.heldByCaster);
 
 /**
  * Long enough to outlast any fight. A fairy's ward has no clock of its own: it
@@ -268,14 +423,14 @@ export function statusRemainingFraction(effect: StatusEffect): number {
 
 /**
  * What every blow on a body carrying `effects` is multiplied by: the product of
- * each status's {@link STATUS_INCOMING_DAMAGE_SCALE}. Applied once per blow by
- * `Player.takeDamage` (crawlers) and `Mob`'s own door (mobs), whatever the
+ * each status's `incomingDamageScale` in {@link STATUS_DEFS}. Applied once per
+ * blow by `Player.takeDamage` (crawlers) and `Mob`'s own door (mobs), whatever the
  * source, so a status that doubles or halves damage does it to a swing, a
  * status tick and a hazard alike.
  */
 export function statusIncomingDamageScale(effects: ReadonlyArray<StatusEffect>): number {
   let scale = 1;
-  for (const effect of effects) scale *= STATUS_INCOMING_DAMAGE_SCALE[effect.type];
+  for (const effect of effects) scale *= STATUS_DEFS[effect.type].incomingDamageScale;
   return scale;
 }
 
@@ -284,22 +439,9 @@ export function statusIncomingDamageScale(effects: ReadonlyArray<StatusEffect>):
  *
  * Anything that cures or clears status effects must work from this list rather
  * than wiping `statusEffects` wholesale: a service that takes coin and deletes
- * the Speed Fizz the player just paid for is a trap, not a service. `drunk` is
- * on it because it is a real handicap, even when it was self-inflicted.
+ * the Speed Fizz the player just paid for is a trap, not a service.
  */
-export const AILMENT_STATUSES: ReadonlyArray<StatusId> = [
-  'burn',
-  'magic_burn',
-  'poison',
-  'spit_venom',
-  'electrified',
-  'stuck',
-  'stun',
-  'drunk',
-  'catnip_buzz',
-  CHILLED_STATUS,
-  FROZEN_STATUS,
-];
+export const AILMENT_STATUSES = statusesWhere((def) => def.cure === 'ailment');
 
 /**
  * The statuses a drink lays on that blur the room: the camera sways, the walk
@@ -324,9 +466,12 @@ export const CURABLE_AILMENT_STATUSES: ReadonlyArray<StatusId> = AILMENT_STATUSE
 
 // Preset constructors
 
-/** 8-second burn: 1 damage / second for 8 seconds (480 ticks at 60 fps). */
+/** Eight seconds at 60 fps. */
+const BURN_TICKS = 480;
+
+/** 8-second burn: 1 damage / second for 8 seconds. */
 export function makeBurn(applier: Player | null = null): StatusEffect {
-  return { type: 'burn', ticksRemaining: 480, totalTicks: 480, applier };
+  return { type: 'burn', ticksRemaining: BURN_TICKS, totalTicks: BURN_TICKS, applier };
 }
 
 /** Thirty seconds at 60 fps. */
@@ -340,14 +485,30 @@ export function makePoison(
   return { type: 'poison', ticksRemaining: ticks, totalTicks: ticks, applier };
 }
 
+/** Ten seconds at 60 fps. */
+const MAGIC_BURN_TICKS = 600;
+
 /** Magic Burn: 10-second arcane DoT from a level-15 Magic Missile shockwave. 1 dmg/s. */
 export function makeMagicBurn(applier: Player | null = null): StatusEffect {
-  return { type: 'magic_burn', ticksRemaining: 600, totalTicks: 600, applier };
+  return {
+    type: 'magic_burn',
+    ticksRemaining: MAGIC_BURN_TICKS,
+    totalTicks: MAGIC_BURN_TICKS,
+    applier,
+  };
 }
+
+/** Ten seconds at 60 fps. */
+const ELECTRIFIED_TICKS = 600;
 
 /** Electrified: 10-second DoT + movement slow from level-15 shell shock wave. */
 export function makeElectrified(applier: Player | null = null): StatusEffect {
-  return { type: 'electrified', ticksRemaining: 600, totalTicks: 600, applier };
+  return {
+    type: 'electrified',
+    ticksRemaining: ELECTRIFIED_TICKS,
+    totalTicks: ELECTRIFIED_TICKS,
+    applier,
+  };
 }
 
 /** Four seconds at 60 fps. */
@@ -362,9 +523,17 @@ export function makeStuck(ticks: number = SPIDER_WEB_TICKS): StatusEffect {
   return { type: 'stuck', ticksRemaining: ticks, totalTicks: ticks, applier: null };
 }
 
+/** Four seconds at 60 fps. */
+const SPIT_VENOM_TICKS = 240;
+
 /** Spider spit venom: acid DoT applied alongside stuck — 1 damage every 40 ticks (~6 dmg over 4 s). */
 export function makeSpitVenom(applier: Player | null = null): StatusEffect {
-  return { type: 'spit_venom', ticksRemaining: 240, totalTicks: 240, applier };
+  return {
+    type: 'spit_venom',
+    ticksRemaining: SPIT_VENOM_TICKS,
+    totalTicks: SPIT_VENOM_TICKS,
+    applier,
+  };
 }
 
 /**
@@ -386,14 +555,30 @@ export function makeStun(ticks: number): StatusEffect {
 /** The status filed under a Speed Fizz potion — its own constant because {@link Player} checks for it by name to draw motion afterimages. */
 export const SPEED_FIZZ_STATUS = 'speed_fizz' as const satisfies StatusId;
 
-/** Speed Fizz: doubles movement speed for 25 seconds (1500 ticks at 60 fps). */
+/** Twenty-five seconds at 60 fps. */
+const SPEED_FIZZ_TICKS = 1500;
+
+/** Speed Fizz: doubles movement speed for 25 seconds. */
 export function makeSpeedFizz(): StatusEffect {
-  return { type: SPEED_FIZZ_STATUS, ticksRemaining: 1500, totalTicks: 1500, applier: null };
+  return {
+    type: SPEED_FIZZ_STATUS,
+    ticksRemaining: SPEED_FIZZ_TICKS,
+    totalTicks: SPEED_FIZZ_TICKS,
+    applier: null,
+  };
 }
 
-/** Jugg Juice: temporarily boosts max HP by 50% + 5 for 30 seconds (1800 ticks at 60 fps). */
+/** Thirty seconds at 60 fps. */
+const JUGG_JUICE_TICKS = 1800;
+
+/** Jugg Juice: temporarily boosts max HP by 50% + 5 for 30 seconds. */
 export function makeJuggJuice(): StatusEffect {
-  return { type: 'jugg_juice', ticksRemaining: 1800, totalTicks: 1800, applier: null };
+  return {
+    type: 'jugg_juice',
+    ticksRemaining: JUGG_JUICE_TICKS,
+    totalTicks: JUGG_JUICE_TICKS,
+    applier: null,
+  };
 }
 
 /** Base drunk duration: 30 seconds at 60 fps. */
@@ -454,15 +639,23 @@ export function makeWhetstone(): StatusEffect {
   };
 }
 
-/** Cooldown Crisp: halves all ability cooldowns for 25 seconds (1500 ticks at 60 fps). */
+/** Twenty-five seconds at 60 fps. */
+const COOLDOWN_CRISP_TICKS = 1500;
+
+/** Cooldown Crisp: halves all ability cooldowns for 25 seconds. */
 export function makeCooldownCrisp(): StatusEffect {
-  return { type: 'cooldown_crisp', ticksRemaining: 1500, totalTicks: 1500, applier: null };
+  return {
+    type: 'cooldown_crisp',
+    ticksRemaining: COOLDOWN_CRISP_TICKS,
+    totalTicks: COOLDOWN_CRISP_TICKS,
+    applier: null,
+  };
 }
 
 // -- Room boons: what a night in a rented bed is actually worth ---------------
 
 /**
- * Stat deltas a boon grants while it is live. Read by `Player.effectiveStat`,
+ * Stat deltas each boon grants while it is live. Read by `Player.effectiveStat`,
  * which is the whole of the mechanism: nothing is applied on grant and nothing
  * is unwound on expiry, so a boon cannot leave a stale bonus behind.
  *
@@ -470,15 +663,12 @@ export function makeCooldownCrisp(): StatusEffect {
  * these has to call `syncHpToMaxHp` — otherwise the HP bar and the max disagree
  * until some unrelated event happens to reconcile them.
  */
-export const STAT_BOON_BONUSES: ReadonlyMap<StatusId, Partial<Record<StatName, number>>> = new Map<
-  StatusId,
-  Partial<Record<StatName, number>>
->([
-  ['well_rested', { constitution: 2 }],
-  ['hearth_warmed', { strength: 2 }],
-  ['deep_slumber', { dexterity: 2, intelligence: 2 }],
-  ['hamburger_fed', { strength: HAMBURGER_STR_BONUS }],
-]);
+export const STAT_BOON_BONUSES: ReadonlyMap<StatusId, StatBoon> = new Map(
+  STATUS_IDS.flatMap((id) => {
+    const statBoon = STATUS_DEFS[id].statBoon;
+    return statBoon === null ? [] : [[id, statBoon] as const];
+  }),
+);
 
 const TICKS_PER_SECOND = 60;
 const SECONDS_PER_MINUTE = 60;

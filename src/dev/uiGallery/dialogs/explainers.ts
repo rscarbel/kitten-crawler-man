@@ -23,6 +23,7 @@ import { ReadableOverlay } from '../../../ui/screens/dialogs/ReadableOverlay';
 import { spiderTutorialSurface } from '../../../ui/screens/dialogs/spiderTutorial';
 import type { Surface } from '../../../ui/core/UiRoot';
 import type { DialogFixture, FixtureRig } from './fixture';
+import { buildingDisplayName } from '../../../map/buildingIds';
 
 /** A pet level that draws Mongo as an adolescent, the middle of his three growth stages. */
 const MONGO_FIXTURE_LEVEL = 5;
@@ -178,7 +179,7 @@ const NOTICES: readonly Notice[] = [
   },
   {
     tone: 'available',
-    title: 'Plumbline Farm',
+    title: buildingDisplayName('taloncrest_builder_farm'),
     body: 'Hands wanted for the harvest. Bring your own scythe; meals provided.',
   },
   {

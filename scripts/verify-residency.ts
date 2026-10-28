@@ -34,13 +34,14 @@ import {
   type RouteResult,
 } from './residencyRoutes.js';
 import type { SurfaceOwner } from '../src/core/rendering/canvasSurface.js';
+import type { BuildingId } from '../src/map/buildingIds.js';
 
 const SCRIPT = 'scripts/verify-residency.ts';
 /**
  * The inn, whose safe room paints the indoor and dungeon ground sheets, and
  * Miller's Farm, whose furniture is baked into the town-interior prop cache.
  */
-const TOUR_BUILDINGS: readonly string[] = ['The Sleeping Cat Inn', "Miller's Farm"];
+const TOUR_BUILDINGS: readonly BuildingId[] = ['taloncrest_inn', 'taloncrest_mill_farm'];
 const BYTES_PER_KILOBYTE = 1024;
 const BYTES_PER_MEGABYTE = BYTES_PER_KILOBYTE * BYTES_PER_KILOBYTE;
 const MEGABYTE_PLACES = 1;

@@ -42,7 +42,6 @@ import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions.js';
 import { level1 } from '../src/levels/level1.js';
 import { level3 } from '../src/levels/level3.js';
 import type { LevelDef } from '../src/levels/types.js';
-import { STARLIGHT_TENT_NAME } from '../src/map/overworld/circusGroundsLayout.js';
 import type { TileRect } from '../src/map/town/townPlan.js';
 import type { GameProgressInput } from '../src/auth/AuthClient.js';
 import { HumanPlayer } from '../src/creatures/HumanPlayer.js';
@@ -210,14 +209,14 @@ function checkOverworld(worldSeed: number): void {
       y: entry.doorTile.y + RETURN_TILE_ROWS_SOUTH_OF_DOOR,
     };
     const returnsInsideWall = isInsideAtTileCentre(map, returnTile.x, returnTile.y);
-    const expectInside = entry.name !== STARLIGHT_TENT_NAME;
+    const expectInside = entry.id !== 'taloncrest_circus_tent';
     check(
       returnsInsideWall === expectInside,
-      `${label}: ${entry.name} return tile inside the wall is ${returnsInsideWall}, expected ${expectInside}`,
+      `${label}: ${entry.id} return tile inside the wall is ${returnsInsideWall}, expected ${expectInside}`,
     );
   }
   check(
-    map.buildingEntries.some((entry) => entry.name === STARLIGHT_TENT_NAME),
+    map.buildingEntries.some((entry) => entry.id === 'taloncrest_circus_tent'),
     `${label}: no Starlight Tent entry to check`,
   );
 

@@ -23,6 +23,7 @@ import type { Mob } from '../creatures/Mob';
 import type { GameMap } from '../map/GameMap';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import { TOWN_INTERIOR_PROPS } from '../sprites/art/townInterior/townInteriorProps';
+import type { BuildingId } from '../map/buildingIds';
 
 /** How far from its intended tile a guard may be nudged to find open floor. */
 const SPAWN_SEARCH_RADIUS_TILES = 4;
@@ -67,7 +68,7 @@ export const STAIR_GUARD_OFFSETS: ReadonlyArray<{ dx: number; dy: number }> = [
 const GUARDED_TOWER_FLOORS: ReadonlySet<number> = new Set([1, 2]);
 
 export interface InteriorHostileContext {
-  readonly buildingName: string;
+  readonly buildingId: BuildingId;
   readonly buildingType: string;
   readonly floor: number;
   readonly map: GameMap;
@@ -84,7 +85,7 @@ export interface InteriorHostileContext {
  * The caller adds them through its roster; nothing here touches a scene.
  */
 export function interiorHostilesFor(ctx: InteriorHostileContext): Mob[] {
-  if (ctx.memory.clearedRooms.has(roomKey(ctx.buildingName, ctx.floor))) return [];
+  if (ctx.memory.clearedRooms.has(roomKey(ctx.buildingId, ctx.floor))) return [];
   if (!holdsStairGuards(ctx)) return [];
 
   const anchor = wayOnwardFrom(ctx.map);
@@ -168,8 +169,8 @@ function holdsStairGuards(ctx: InteriorHostileContext): boolean {
 }
 
 /** Marks this room quiet, so re-entering it does not restock the fight. */
-export function noteRoomCleared(memory: TownMemory, buildingName: string, floor: number): void {
-  memory.clearedRooms.add(roomKey(buildingName, floor));
+export function noteRoomCleared(memory: TownMemory, buildingId: BuildingId, floor: number): void {
+  memory.clearedRooms.add(roomKey(buildingId, floor));
 }
 
 /**

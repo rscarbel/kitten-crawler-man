@@ -37,7 +37,7 @@ const WOOD_HELD = 10;
 const SEARCH_RADIUS_TILES = 3;
 /** More presses than any thanks line has pages. */
 const MAX_PAGE_PRESSES = 2000;
-const SAWMILL_SITE_SLUG = 'sawmill';
+const SAWMILL_SITE_ID = 'briar_hollow_sawmill';
 /** Longer than any one cut takes. */
 const MAX_CUT_FRAMES = 3000;
 
@@ -134,7 +134,7 @@ function verifyOwedFennaIsPaid(check: Check): void {
   state.blueprints.phase = 'complete';
   const active = issueContract(
     state.contracts,
-    (site) => site.slug === SAWMILL_SITE_SLUG,
+    (site) => site.buildingId === SAWMILL_SITE_ID,
     RIG_SEED,
   );
   if (active === null) {

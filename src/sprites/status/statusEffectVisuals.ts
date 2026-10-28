@@ -2,10 +2,10 @@
  * One place that answers, for any status effect: what does it look like on the
  * character, what does it look like in the HUD, and what is it called.
  *
- * Keeping the three answers in one place is what stops them from disagreeing: a
- * status left out of this registry falls back to a generic grey HUD pill and
- * draws nothing on the character, so the gap is visible immediately rather than
- * buried across separate files.
+ * Keeping the three answers in one place is what stops them from disagreeing.
+ * The registry is keyed by every status, so a new one fails to compile until it
+ * declares a look; one declared with none falls back to a generic grey HUD pill
+ * and draws nothing on the character.
  *
  * Each entry can contribute two things:
  *
@@ -32,6 +32,7 @@ import {
   SHIELD_STATUS,
   SPEED_FIZZ_STATUS,
   type StatusEffect,
+  type StatusId,
 } from '../../core/combat/StatusEffect';
 import type { StatusVisualFrame } from './statusPaint';
 import { ARCANE_FLAME, NATURAL_FLAME, drawFlames, flameBodyLayers } from './statusFlames';
@@ -86,10 +87,11 @@ export interface StatusVisual {
   /** Whether this is something to fear. Drives the badge's urgency styling. */
   readonly harmful: boolean;
   /**
-   * Set on a status too brief to be worth a HUD pill: one that is over before
-   * the eye finds the badge row is noise there, and the body already shows it.
+   * False for a status too brief to be worth a HUD pill: one that is over
+   * before the eye finds the badge row is noise there, and the body already
+   * shows it.
    */
-  readonly noHudPill?: true;
+  readonly showsHudPill: boolean;
   /**
    * Coats of paint applied through the character's own shape, in order. A list
    * rather than one coat because a single blend mode cannot both carry a colour
@@ -119,284 +121,237 @@ export interface StatusVisual {
   ) => void;
 }
 
-const STATUS_VISUALS = new Map<string, StatusVisual>([
-  [
-    'burn',
-    {
-      label: 'BURN',
-      color: '#f97316',
-      harmful: true,
-      bodyLayers: (f) => flameBodyLayers(f, NATURAL_FLAME),
-      overlay: (ctx, f) => drawFlames(ctx, f, NATURAL_FLAME),
-    },
-  ],
-  [
-    'magic_burn',
-    {
-      label: 'HEX',
-      color: '#a855f7',
-      harmful: true,
-      bodyLayers: (f) => flameBodyLayers(f, ARCANE_FLAME),
-      overlay: (ctx, f) => drawFlames(ctx, f, ARCANE_FLAME),
-    },
-  ],
-  [
-    'poison',
-    {
-      label: 'PSN',
-      color: '#22c55e',
-      harmful: true,
-      bodyLayers: (f) => [poisonBodyLayer(f)],
-      overlay: drawPoison,
-    },
-  ],
-  [
-    'spit_venom',
-    {
-      label: 'ACID',
-      color: '#84cc16',
-      harmful: true,
-      bodyLayers: (f) => [venomBodyLayer(f)],
-      overlay: drawSpitVenom,
-    },
-  ],
-  [
-    BLOOD_VOMIT_STATUS,
-    {
-      label: 'VOMT',
-      color: '#dc2626',
-      harmful: true,
-      noHudPill: true,
-      bodyLayers: bloodVomitBodyLayers,
-      overlay: drawBloodVomit,
-    },
-  ],
-  [
-    DOUBLE_DAMAGE_STATUS,
-    {
-      label: 'DMx2',
-      // The wheel's own red wedge, darkened, so the pill reads as the wedge that laid it.
-      color: '#991b1b',
-      harmful: true,
-    },
-  ],
-  [
-    'stuck',
-    {
-      label: 'WEB',
-      color: '#d9f99d',
-      harmful: true,
-      bodyLayers: (f) => [stuckBodyLayer(f)],
-      overlay: drawStuck,
-    },
-  ],
-  [
-    'stun',
-    {
-      label: 'STUN',
-      color: '#fbbf24',
-      harmful: true,
-      overlay: drawStun,
-    },
-  ],
-  [
-    'electrified',
-    {
-      label: 'ZAP',
-      color: '#38bdf8',
-      harmful: true,
-      bodyLayers: (f) => [electrifiedBodyLayer(f)],
-      overlay: drawElectrified,
-    },
-  ],
-  [
-    SPEED_FIZZ_STATUS,
-    {
-      label: 'FIZZ',
-      color: '#0284c7',
-      harmful: false,
-      bodyLayers: (f) => [speedFizzBodyLayer(f)],
-      // The trail sits behind the body, opposite the direction of travel;
-      // the ambient motes stay in front like every other boon's.
-      preOverlay: drawSpeedFizzTrail,
-      overlay: drawSpeedFizzMotes,
-    },
-  ],
-  [
-    'jugg_juice',
-    {
-      label: 'JUGG',
-      color: '#ea580c',
-      harmful: false,
-      bodyLayers: (f) => [juggJuiceBodyLayer(f)],
-      overlay: drawJuggJuice,
-    },
-  ],
-  [
-    'cooldown_crisp',
-    {
-      label: 'CRSP',
-      color: '#059669',
-      harmful: false,
-      bodyLayers: (f) => [cooldownCrispBodyLayer(f)],
-      overlay: drawCooldownCrisp,
-    },
-  ],
-  [
-    'whetstone',
-    {
-      label: 'EDGE',
-      color: '#94a3b8',
-      harmful: false,
-      bodyLayers: (f) => [whetstoneBodyLayer(f)],
-      overlay: drawWhetstone,
-    },
-  ],
-  [
-    'well_rested',
-    {
-      label: 'RSTD',
-      color: '#f5d68a',
-      harmful: false,
-      bodyLayers: (f) => [wellRestedBodyLayer(f)],
-      overlay: drawWellRested,
-    },
-  ],
-  [
-    'hearth_warmed',
-    {
-      label: 'WARM',
-      color: '#f4725c',
-      harmful: false,
-      bodyLayers: (f) => [hearthWarmedBodyLayer(f)],
-      overlay: drawHearthWarmed,
-    },
-  ],
-  [
-    'deep_slumber',
-    {
-      label: 'DEEP',
-      color: '#8a94f4',
-      harmful: false,
-      bodyLayers: (f) => [deepSlumberBodyLayer(f)],
-      overlay: drawDeepSlumber,
-    },
-  ],
-  [
-    HAMBURGER_FED_STATUS,
-    {
-      label: 'FED',
-      // Mustard, the burger's own cheese, so the pill reads as the food that granted it.
-      color: '#e0a526',
-      harmful: false,
-    },
-  ],
-  [
-    REFRESHED_STATUS,
-    {
-      label: 'FRESH',
-      // Clean tap-water aqua, the plumbing that granted it.
-      color: '#5eead4',
-      harmful: false,
-    },
-  ],
-  [
-    SHIELD_STATUS,
-    {
-      label: 'SHLD',
-      // The amber of the dome itself, so the badge and the picture read as one thing.
-      color: SHIELD_AMBER_DEEP,
-      harmful: false,
-      overlay: drawShieldDome,
-    },
-  ],
-  [
-    CHILLED_STATUS,
-    {
-      label: 'CHIL',
-      color: '#7dd3fc',
-      harmful: true,
-      bodyLayers: (f) => [chilledBodyLayer(f)],
-      overlay: drawChilled,
-    },
-  ],
-  [
-    FROZEN_STATUS,
-    {
-      label: 'FRZN',
-      color: '#bae6fd',
-      harmful: true,
-      bodyLayers: (f) => [frozenBodyLayer(f)],
-      overlay: drawFrozen,
-    },
-  ],
-  [
-    FAIRY_WARD_STATUS,
-    {
-      label: 'WARD',
-      color: '#3b82f6',
-      harmful: false,
-      overlay: drawFairyWard,
-    },
-  ],
-  [
-    FAIRY_AEGIS_STATUS,
-    {
-      label: 'AEGS',
-      color: '#93c5fd',
-      harmful: false,
-      bodyLayers: (f) => [aegisBodyLayer(f)],
-      overlay: drawAegis,
-    },
-  ],
-  [
-    OVERHEAL_STATUS,
-    {
-      label: 'OVHL',
-      color: '#d9f99d',
-      harmful: false,
-      bodyLayers: (f) => [overhealBodyLayer(f)],
-      overlay: drawOverheal,
-    },
-  ],
-  [
-    'drunk',
-    {
-      label: 'DRNK',
-      color: '#b45309',
-      harmful: false,
-      bodyLayers: (f) => [drunkBodyLayer(f)],
-      overlay: drawDrunk,
-    },
-  ],
-  [
-    'catnip_buzz',
-    {
-      label: 'NIP!',
-      color: '#65a30d',
-      harmful: false,
-      overlay: drawCatnipBuzz,
-    },
-  ],
-]);
+/**
+ * Every status's look, one entry per {@link StatusId}. Null for a status with
+ * nothing to show: only mobs carry `ink`, and a mob has no HUD pill or body
+ * coat for it.
+ */
+const STATUS_VISUALS: Readonly<Record<StatusId, StatusVisual | null>> = {
+  burn: {
+    label: 'BURN',
+    color: '#f97316',
+    harmful: true,
+    showsHudPill: true,
+    bodyLayers: (f) => flameBodyLayers(f, NATURAL_FLAME),
+    overlay: (ctx, f) => drawFlames(ctx, f, NATURAL_FLAME),
+  },
+  magic_burn: {
+    label: 'HEX',
+    color: '#a855f7',
+    harmful: true,
+    showsHudPill: true,
+    bodyLayers: (f) => flameBodyLayers(f, ARCANE_FLAME),
+    overlay: (ctx, f) => drawFlames(ctx, f, ARCANE_FLAME),
+  },
+  poison: {
+    label: 'PSN',
+    color: '#22c55e',
+    harmful: true,
+    showsHudPill: true,
+    bodyLayers: (f) => [poisonBodyLayer(f)],
+    overlay: drawPoison,
+  },
+  spit_venom: {
+    label: 'ACID',
+    color: '#84cc16',
+    harmful: true,
+    showsHudPill: true,
+    bodyLayers: (f) => [venomBodyLayer(f)],
+    overlay: drawSpitVenom,
+  },
+  [BLOOD_VOMIT_STATUS]: {
+    label: 'VOMT',
+    color: '#dc2626',
+    harmful: true,
+    showsHudPill: false,
+    bodyLayers: bloodVomitBodyLayers,
+    overlay: drawBloodVomit,
+  },
+  [DOUBLE_DAMAGE_STATUS]: {
+    label: 'DMx2',
+    // The wheel's own red wedge, darkened, so the pill reads as the wedge that laid it.
+    color: '#991b1b',
+    harmful: true,
+    showsHudPill: true,
+  },
+  stuck: {
+    label: 'WEB',
+    color: '#d9f99d',
+    harmful: true,
+    showsHudPill: true,
+    bodyLayers: (f) => [stuckBodyLayer(f)],
+    overlay: drawStuck,
+  },
+  stun: {
+    label: 'STUN',
+    color: '#fbbf24',
+    harmful: true,
+    showsHudPill: true,
+    overlay: drawStun,
+  },
+  electrified: {
+    label: 'ZAP',
+    color: '#38bdf8',
+    harmful: true,
+    showsHudPill: true,
+    bodyLayers: (f) => [electrifiedBodyLayer(f)],
+    overlay: drawElectrified,
+  },
+  [SPEED_FIZZ_STATUS]: {
+    label: 'FIZZ',
+    color: '#0284c7',
+    harmful: false,
+    showsHudPill: true,
+    bodyLayers: (f) => [speedFizzBodyLayer(f)],
+    // The trail sits behind the body, opposite the direction of travel;
+    // the ambient motes stay in front like every other boon's.
+    preOverlay: drawSpeedFizzTrail,
+    overlay: drawSpeedFizzMotes,
+  },
+  jugg_juice: {
+    label: 'JUGG',
+    color: '#ea580c',
+    harmful: false,
+    showsHudPill: true,
+    bodyLayers: (f) => [juggJuiceBodyLayer(f)],
+    overlay: drawJuggJuice,
+  },
+  cooldown_crisp: {
+    label: 'CRSP',
+    color: '#059669',
+    harmful: false,
+    showsHudPill: true,
+    bodyLayers: (f) => [cooldownCrispBodyLayer(f)],
+    overlay: drawCooldownCrisp,
+  },
+  whetstone: {
+    label: 'EDGE',
+    color: '#94a3b8',
+    harmful: false,
+    showsHudPill: true,
+    bodyLayers: (f) => [whetstoneBodyLayer(f)],
+    overlay: drawWhetstone,
+  },
+  well_rested: {
+    label: 'RSTD',
+    color: '#f5d68a',
+    harmful: false,
+    showsHudPill: true,
+    bodyLayers: (f) => [wellRestedBodyLayer(f)],
+    overlay: drawWellRested,
+  },
+  hearth_warmed: {
+    label: 'WARM',
+    color: '#f4725c',
+    harmful: false,
+    showsHudPill: true,
+    bodyLayers: (f) => [hearthWarmedBodyLayer(f)],
+    overlay: drawHearthWarmed,
+  },
+  deep_slumber: {
+    label: 'DEEP',
+    color: '#8a94f4',
+    harmful: false,
+    showsHudPill: true,
+    bodyLayers: (f) => [deepSlumberBodyLayer(f)],
+    overlay: drawDeepSlumber,
+  },
+  [HAMBURGER_FED_STATUS]: {
+    label: 'FED',
+    // Mustard, the burger's own cheese, so the pill reads as the food that granted it.
+    color: '#e0a526',
+    harmful: false,
+    showsHudPill: true,
+  },
+  [REFRESHED_STATUS]: {
+    label: 'FRESH',
+    // Clean tap-water aqua, the plumbing that granted it.
+    color: '#5eead4',
+    harmful: false,
+    showsHudPill: true,
+  },
+  [SHIELD_STATUS]: {
+    label: 'SHLD',
+    // The amber of the dome itself, so the badge and the picture read as one thing.
+    color: SHIELD_AMBER_DEEP,
+    harmful: false,
+    showsHudPill: true,
+    overlay: drawShieldDome,
+  },
+  [CHILLED_STATUS]: {
+    label: 'CHIL',
+    color: '#7dd3fc',
+    harmful: true,
+    showsHudPill: true,
+    bodyLayers: (f) => [chilledBodyLayer(f)],
+    overlay: drawChilled,
+  },
+  [FROZEN_STATUS]: {
+    label: 'FRZN',
+    color: '#bae6fd',
+    harmful: true,
+    showsHudPill: true,
+    bodyLayers: (f) => [frozenBodyLayer(f)],
+    overlay: drawFrozen,
+  },
+  [FAIRY_WARD_STATUS]: {
+    label: 'WARD',
+    color: '#3b82f6',
+    harmful: false,
+    showsHudPill: true,
+    overlay: drawFairyWard,
+  },
+  [FAIRY_AEGIS_STATUS]: {
+    label: 'AEGS',
+    color: '#93c5fd',
+    harmful: false,
+    showsHudPill: true,
+    bodyLayers: (f) => [aegisBodyLayer(f)],
+    overlay: drawAegis,
+  },
+  [OVERHEAL_STATUS]: {
+    label: 'OVHL',
+    color: '#d9f99d',
+    harmful: false,
+    showsHudPill: true,
+    bodyLayers: (f) => [overhealBodyLayer(f)],
+    overlay: drawOverheal,
+  },
+  drunk: {
+    label: 'DRNK',
+    color: '#b45309',
+    harmful: false,
+    showsHudPill: true,
+    bodyLayers: (f) => [drunkBodyLayer(f)],
+    overlay: drawDrunk,
+  },
+  catnip_buzz: {
+    label: 'NIP!',
+    color: '#65a30d',
+    harmful: false,
+    showsHudPill: true,
+    overlay: drawCatnipBuzz,
+  },
+  ink: null,
+};
 
-/** Badge styling for a status with no registry entry, so one can never be invisible. */
+/** Badge styling for a status with no look of its own, so one can never be invisible. */
 const UNKNOWN_STATUS_COLOR = '#6b7280';
 const UNKNOWN_STATUS_LABEL_LENGTH = 4;
 
-export function statusVisual(type: string): StatusVisual | undefined {
-  return STATUS_VISUALS.get(type);
+export function statusVisual(type: StatusId): StatusVisual | null {
+  return STATUS_VISUALS[type];
 }
 
-/** Whether the HUD shows a pill for `type`; see {@link StatusVisual.noHudPill}. */
-export function statusShowsHudPill(type: string): boolean {
-  return STATUS_VISUALS.get(type)?.noHudPill !== true;
+/** Whether the HUD shows a pill for `type`; see {@link StatusVisual.showsHudPill}. */
+export function statusShowsHudPill(type: StatusId): boolean {
+  return STATUS_VISUALS[type]?.showsHudPill ?? true;
 }
 
-/** Label and colour for a HUD badge, falling back for an unregistered status. */
-export function statusBadge(type: string): { label: string; color: string; harmful: boolean } {
-  const visual = STATUS_VISUALS.get(type);
-  if (visual !== undefined) {
+/** Label and colour for a HUD badge, falling back for a status with no look. */
+export function statusBadge(type: StatusId): { label: string; color: string; harmful: boolean } {
+  const visual = STATUS_VISUALS[type];
+  if (visual !== null) {
     return { label: visual.label, color: visual.color, harmful: visual.harmful };
   }
   return {
@@ -430,7 +385,7 @@ export function statusBodyLayers(
   layers: SilhouetteLayer[] = [],
 ): SilhouetteLayer[] {
   for (const effect of effects) {
-    const bodyLayers = STATUS_VISUALS.get(effect.type)?.bodyLayers;
+    const bodyLayers = STATUS_VISUALS[effect.type]?.bodyLayers;
     if (bodyLayers === undefined) continue;
     layers.push(...bodyLayers(frameFor(effect)));
   }

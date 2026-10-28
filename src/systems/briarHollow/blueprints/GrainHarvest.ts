@@ -256,7 +256,7 @@ export class GrainHarvest {
 
   constructor(protected readonly ctx: GrainHarvestContext) {
     this.nowMs = ctx.nowMs ?? (() => performance.now());
-    const barn = ctx.site.buildings.find((building) => building.id === 'barn');
+    const barn = ctx.site.buildings.find((building) => building.id === 'briar_hollow_barn');
     const pegs = barn?.furniture.find((prop) => prop.prop === 'scythe_pegs');
     this.pegs = pegs === undefined ? null : { x: pegs.x, y: pegs.y };
   }

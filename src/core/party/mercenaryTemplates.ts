@@ -10,6 +10,7 @@
  * never on the template id, so two hires sharing a kit behave alike.
  */
 
+import type { CreatureAudioTag } from '../../audio/creatureAudioTags';
 import { SERVICE_PRICES } from '../../economy/servicePrices';
 
 /**
@@ -27,8 +28,21 @@ const DESK_ORDER = [
 
 export type MercenaryTemplateId = (typeof DESK_ORDER)[number];
 
-/** How a hireling fights. Crush and Hammer Hands share one kit with a per-hire config. */
-export type MercenaryKitId = 'earth_elemental_guard' | 'archer' | 'medic' | 'golem';
+/**
+ * Whom an earth elemental bodyguard looks after: the cat above all, or
+ * whoever on the party's side needs it most.
+ */
+export type EarthElementalGuardStyle = 'cat_guard' | 'party_shield';
+
+/**
+ * How a hireling fights, with whatever a kit shared by several hires needs to
+ * tell them apart, so a hire on that kit cannot be declared without it.
+ */
+export type MercenaryKitSpec =
+  | { readonly id: 'earth_elemental_guard'; readonly guard: EarthElementalGuardStyle }
+  | { readonly id: 'archer' }
+  | { readonly id: 'medic' }
+  | { readonly id: 'golem' };
 
 /** Which painted figure (and variant of it) draws the hireling. */
 export type MercenaryArtId =
@@ -39,12 +53,14 @@ export type MercenaryVoiceId =
   'crush' | 'hammer_hands' | 'ivy_ashgrove' | 'brother_anselm' | 'tumbledown';
 
 /**
- * The `Mob.audioTag` a hireling plays its attack cues under, switched on in
- * `playMobAudioCues`. Tumbledown is a rock golem and keeps the golem's tag, so
- * its slam sounds like every other golem's.
+ * The `Mob.audioTag` a hireling plays its attack cues under. Tumbledown is a
+ * rock golem and keeps the golem's tag, so its slam sounds like every other
+ * golem's.
  */
-export type MercenaryAudioTag =
-  'merc_earth_elemental' | 'merc_archer' | 'merc_medic' | 'rock_golem';
+export type MercenaryAudioTag = Extract<
+  CreatureAudioTag,
+  'merc_earth_elemental' | 'merc_archer' | 'merc_medic' | 'rock_golem'
+>;
 
 export interface MercenaryTemplate {
   readonly id: MercenaryTemplateId;
@@ -62,7 +78,7 @@ export interface MercenaryTemplate {
   readonly speed: number;
   /** Damage per basic strike, credited to the owning player on a kill. */
   readonly damage: number;
-  readonly kit: MercenaryKitId;
+  readonly kit: MercenaryKitSpec;
   readonly art: MercenaryArtId;
   readonly audioTag: MercenaryAudioTag;
   readonly voice: MercenaryVoiceId;
@@ -100,7 +116,7 @@ const TEMPLATES_BY_ID: Readonly<Record<MercenaryTemplateId, MercenaryTemplate>> 
     hp: CRUSH_HP,
     speed: EARTH_ELEMENTAL_SPEED,
     damage: EARTH_ELEMENTAL_DAMAGE,
-    kit: 'earth_elemental_guard',
+    kit: { id: 'earth_elemental_guard', guard: 'cat_guard' },
     art: 'crush',
     audioTag: 'merc_earth_elemental',
     voice: 'crush',
@@ -116,7 +132,7 @@ const TEMPLATES_BY_ID: Readonly<Record<MercenaryTemplateId, MercenaryTemplate>> 
     hp: HAMMER_HANDS_HP,
     speed: EARTH_ELEMENTAL_SPEED,
     damage: EARTH_ELEMENTAL_DAMAGE,
-    kit: 'earth_elemental_guard',
+    kit: { id: 'earth_elemental_guard', guard: 'party_shield' },
     art: 'hammer_hands',
     audioTag: 'merc_earth_elemental',
     voice: 'hammer_hands',
@@ -132,7 +148,7 @@ const TEMPLATES_BY_ID: Readonly<Record<MercenaryTemplateId, MercenaryTemplate>> 
     hp: IVY_ASHGROVE_HP,
     speed: IVY_ASHGROVE_SPEED,
     damage: IVY_ASHGROVE_DAMAGE,
-    kit: 'archer',
+    kit: { id: 'archer' },
     art: 'ivy_ashgrove',
     audioTag: 'merc_archer',
     voice: 'ivy_ashgrove',
@@ -148,7 +164,7 @@ const TEMPLATES_BY_ID: Readonly<Record<MercenaryTemplateId, MercenaryTemplate>> 
     hp: BROTHER_ANSELM_HP,
     speed: BROTHER_ANSELM_SPEED,
     damage: BROTHER_ANSELM_DAMAGE,
-    kit: 'medic',
+    kit: { id: 'medic' },
     art: 'brother_anselm',
     audioTag: 'merc_medic',
     voice: 'brother_anselm',
@@ -163,7 +179,7 @@ const TEMPLATES_BY_ID: Readonly<Record<MercenaryTemplateId, MercenaryTemplate>> 
     hp: TUMBLEDOWN_HP,
     speed: TUMBLEDOWN_SPEED,
     damage: TUMBLEDOWN_DAMAGE,
-    kit: 'golem',
+    kit: { id: 'golem' },
     art: 'tumbledown',
     audioTag: 'rock_golem',
     voice: 'tumbledown',

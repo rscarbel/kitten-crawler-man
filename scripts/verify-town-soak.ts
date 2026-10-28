@@ -77,7 +77,6 @@ const {
 } = await import('../src/sprites/figure/figureFrameCache.js');
 const { setFigureCacheStatsRecording, getFigureCacheStats } =
   await import('../src/sprites/figure/figureCacheStats.js');
-const { STARLIGHT_TENT_NAME } = await import('../src/map/overworld/circusGroundsLayout.js');
 
 const cyclesArg = process.argv.find((arg) => arg.startsWith('--cycles='));
 const DEFAULT_TRIPS = 20;
@@ -267,7 +266,7 @@ const twinMap = new GameMap({
 });
 // The Starlight Tent is the circus's maze, which parks both crawlers at its flaps;
 // the soak walks the town's own doors.
-const doors = twinMap.buildingEntries.filter((entry) => entry.name !== STARLIGHT_TENT_NAME);
+const doors = twinMap.buildingEntries.filter((entry) => entry.id !== 'taloncrest_circus_tent');
 check(doors.length > 0, 'the town has no doors to walk through');
 
 sceneManager.replace(
@@ -342,7 +341,7 @@ const unreachableDoors = new Set<string>();
 async function walkOntoSomeDoor(firstIndex: number): Promise<BuildingEntry | null> {
   for (let offset = 0; offset < doors.length; offset++) {
     const door = doors[(firstIndex + offset) % doors.length];
-    if (unreachableDoors.has(door.name)) continue;
+    if (unreachableDoors.has(door.id)) continue;
     placePartyBelow(door.doorTile);
     await runFrames(ARRIVAL_PAUSE_FRAMES);
     const opened = await holdUntil(
@@ -351,7 +350,7 @@ async function walkOntoSomeDoor(firstIndex: number): Promise<BuildingEntry | nul
       () => currentScene().ui?.focusSurfaceId() === DOOR_MENU_SURFACE,
     );
     if (opened) return door;
-    unreachableDoors.add(door.name);
+    unreachableDoors.add(door.id);
   }
   return null;
 }
@@ -365,7 +364,7 @@ for (let cycle = 0; cycle < CYCLES; cycle++) {
   }
   await press(' ');
   if (!(currentScene() instanceof BuildingInteriorScene)) {
-    failures.push(`trip ${cycle}: Space on the door of ${door.name} did not go inside`);
+    failures.push(`trip ${cycle}: Space on the door of ${door.id} did not go inside`);
     break;
   }
   await runFrames(ARRIVAL_PAUSE_FRAMES);
@@ -389,7 +388,7 @@ for (let cycle = 0; cycle < CYCLES; cycle++) {
   if (onMat) await press(' ');
   const leftBuilding = currentScene() !== interior;
   if (!leftBuilding || !(currentScene() instanceof DungeonScene)) {
-    failures.push(`trip ${cycle}: could not walk out of ${door.name}`);
+    failures.push(`trip ${cycle}: could not walk out of ${door.id}`);
     break;
   }
   check(currentScene() !== outdoors, `trip ${cycle}: the exit did not rebuild the town scene`);
@@ -404,7 +403,7 @@ for (let cycle = 0; cycle < CYCLES; cycle++) {
   await wander();
   const stats = getFigureCacheStats();
   samples.push({
-    door: door.name,
+    door: door.id,
     prewarmDepth: figurePrewarmDepth(),
     cacheBytes: stats.bytes,
     pinnedRows: pinnedFigureRowCount(),

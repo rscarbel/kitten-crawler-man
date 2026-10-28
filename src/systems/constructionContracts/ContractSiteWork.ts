@@ -31,7 +31,6 @@ import {
   getContractOverlay,
   type ContractArtImage,
   type ContractOverlaySpec,
-  type ContractSettlement,
 } from '../../sprites/art/constructionContracts/contractArtCache';
 import {
   CONTRACT_FINISH_PUFF_SECONDS,
@@ -176,7 +175,6 @@ export interface ContractSiteWorkDeps {
   ) => ContractSpotFootprint | null;
   /** See {@link ContractWorkSpot.sortLine}. */
   readonly sortLineFor: (footprint: ContractSpotFootprint) => number | null;
-  readonly settlement: ContractSettlement;
   /** A one-line toast over the HUD. */
   readonly announce: (message: string) => void;
   /** Whether the world is stopped under a menu; the channel waits while it is. */
@@ -483,7 +481,7 @@ export class ContractSiteWork {
       if (def === undefined) return;
       const footprint = this.deps.resolveFootprint(site, def);
       if (footprint === null) return;
-      const cacheKey = `${site.slug}:${def.id}`;
+      const cacheKey = `${site.buildingId}:${def.id}`;
       const tiles = footprintTiles(footprint.rect);
       const sortLine = this.deps.sortLineFor(footprint);
       const spot: ContractWorkSpot = {
@@ -498,7 +496,7 @@ export class ContractSiteWork {
           cacheKey,
           material: def.material,
           surface: footprint.surface,
-          settlement: this.deps.settlement,
+          town: site.town,
           widthTiles: footprint.rect.w,
           heightTiles: footprint.rect.h,
           tilePx: TILE_SIZE,

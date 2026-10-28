@@ -1,3 +1,5 @@
+import type { BuildingId } from './buildingIds';
+
 /**
  * A rectangle of a building that a construction contract can mark for
  * repair without naming a prop: a stretch of floor, a run of wall face, a
@@ -25,8 +27,8 @@ export const CONTRACT_PROP_ID_PREFIX = 'contract:';
 
 /**
  * The explicit placed-prop id a contract spot targets: unique across both
- * towns because it carries the site's slug.
+ * towns because it carries the site's building.
  */
-export function contractPropId(siteSlug: string, spotId: string): string {
-  return `${CONTRACT_PROP_ID_PREFIX}${siteSlug}:${spotId}`;
+export function contractPropId(buildingId: BuildingId, spotId: string): string {
+  return `${CONTRACT_PROP_ID_PREFIX}${buildingId}:${spotId}`;
 }

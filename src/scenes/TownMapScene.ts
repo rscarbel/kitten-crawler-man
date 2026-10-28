@@ -24,6 +24,7 @@
 
 import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
 import { worldText } from '../ui/world/worldText';
+import { buildingDisplayName } from '../map/buildingIds';
 import { inset, splitH, splitV, type Rect } from '../ui/core/geom';
 import type { Surface, Ui, WorldGesture } from '../ui/core/UiRoot';
 import { card } from '../ui/widgets/card';
@@ -494,7 +495,7 @@ export class TownMapScene extends PreviewScene {
 
     if (px < NAME_LABEL_MIN_PX_PER_TILE) return;
     for (const plot of this.plots) {
-      worldText(ctx, plot.name, {
+      worldText(ctx, buildingDisplayName(plot.id), {
         x: (plot.rect.x + plot.rect.w / 2) * px,
         y: (plot.rect.y + plot.rect.h / 2) * px,
         size: NAME_LABEL_SIZE,
@@ -540,7 +541,7 @@ export class TownMapScene extends PreviewScene {
       });
     }
     for (const building of village.buildings) {
-      worldText(ctx, building.name, {
+      worldText(ctx, buildingDisplayName(building.id), {
         x: (building.rect.x + building.rect.w / 2) * px,
         y: (building.rect.y + building.rect.h / 2) * px,
         size: NAME_LABEL_SIZE,

@@ -18,16 +18,13 @@
  */
 
 import type { TownRole } from '../sprites/person/PersonAppearance';
-import {
-  CLOAK_AND_DAGGER_NAME,
-  type PlannedBuildingName,
-  type TilePoint,
-} from '../map/town/townPlan';
+import { type TilePoint } from '../map/town/townPlan';
+import { type PlannedBuildingId, mapByBuildingId } from '../map/buildingIds';
 import { CLUB_HOST_MARK } from '../core/club/clubLayout';
 import type { TownInteriorPropId } from '../sprites/art/townInterior/townInteriorProps';
 import type { BespokeResidentFigureId } from '../creatures/bespokeResidentFigures';
 import type { AnchorKind } from './InteriorOccupantSystem';
-import { mapByBuildingName, type BuildingEntry } from '../map/buildingEntry';
+import { type BuildingEntry } from '../map/buildingEntry';
 import type { ResidentId } from './townResidents';
 import type { CrowdSpecies, TownSpecies } from './townSpecies';
 import type { OccupantService } from './townServices';
@@ -170,11 +167,10 @@ const JANITOR = {
 const CARTWRIGHT_SHOOTING_DISTANCE_TILES = 4;
 
 /**
- * Occupants for each marquee building, keyed by the name `GameMap.generateInterior`
- * lays out. `scripts/verify-interiors.ts` checks it headlessly against the
+ * Occupants for each marquee building. `scripts/verify-interiors.ts` checks it headlessly against the
  * resident registry and the generated rooms.
  */
-export const BUILDING_OCCUPANTS = mapByBuildingName<ReadonlyArray<OccupantSpec>>({
+export const BUILDING_OCCUPANTS = mapByBuildingId<ReadonlyArray<OccupantSpec>>({
   // A garrison man waiting on his steel, because the smith's whole story is
   // that she reads the garrison's damage before the garrison admits to it.
   //
@@ -184,7 +180,7 @@ export const BUILDING_OCCUPANTS = mapByBuildingName<ReadonlyArray<OccupantSpec>>
   // with nobody at all behind the counter they walk up to. The counter is the
   // point of the two-room layout: the customer never has to walk into the
   // quench to be served.
-  'The Rusty Anvil': [
+  taloncrest_smithy: [
     {
       role: 'smith',
       placement: {
@@ -215,7 +211,7 @@ export const BUILDING_OCCUPANTS = mapByBuildingName<ReadonlyArray<OccupantSpec>>
   // Every post here points south for one reason: the guest rooms upstairs are
   // rented, and a room a crawler has paid for should not have a stranger
   // standing in it when they open the door.
-  'The Sleeping Cat Inn': [
+  taloncrest_inn: [
     {
       role: 'innkeeper',
       placement: { kind: 'anchor', anchor: 'counter', post: 'back', activity: 'tend_counter' },
@@ -249,7 +245,7 @@ export const BUILDING_OCCUPANTS = mapByBuildingName<ReadonlyArray<OccupantSpec>>
     },
   ],
   // The mead hall: a full house down both sides of the feast table.
-  'The Horned Flagon': [
+  taloncrest_flagon_tavern: [
     {
       role: 'innkeeper',
       placement: { kind: 'anchor', anchor: 'counter', post: 'back', activity: 'tend_counter' },
@@ -267,7 +263,7 @@ export const BUILDING_OCCUPANTS = mapByBuildingName<ReadonlyArray<OccupantSpec>>
     { ...JANITOR, residentId: 'janitor_grout' },
   ],
   // The dive: rowdier and drunker than the mead hall, packed into a smaller room.
-  'The Sunken Stump Pub': [
+  taloncrest_pub: [
     {
       role: 'innkeeper',
       placement: { kind: 'anchor', anchor: 'counter', post: 'back', activity: 'tend_counter' },
@@ -284,18 +280,18 @@ export const BUILDING_OCCUPANTS = mapByBuildingName<ReadonlyArray<OccupantSpec>>
     { ...JANITOR, residentId: 'janitor_puddles' },
   ],
   // The child is Corvin, who wants to be a crawler and whose mother hates it.
-  "Miller's Farm": [
+  taloncrest_mill_farm: [
     {
       role: 'farmer',
       placement: { kind: 'anchor', anchor: 'hearth', post: 'centre', activity: 'idle' },
       residentId: 'marta_miller',
-      service: { surface: 'menu', counter: 'miller_kitchen', verb: 'Eat' },
+      service: { surface: 'menu', counter: 'mill_kitchen', verb: 'Eat' },
     },
     { role: 'commoner', placement: AT_TABLE, species: 'human' },
     { role: 'child', placement: WANDERING_THE_TABLES, species: 'human' },
   ],
   // A customer waiting at the counter, so the apothecary reads as a shop with trade.
-  'Herb & Remedy': [
+  taloncrest_apothecary: [
     {
       role: 'merchant',
       placement: { kind: 'anchor', anchor: 'counter', post: 'back', activity: 'tend_counter' },
@@ -313,12 +309,12 @@ export const BUILDING_OCCUPANTS = mapByBuildingName<ReadonlyArray<OccupantSpec>>
       species: 'hawkfolk',
     },
   ],
-  'Plumbline Farm': [
+  taloncrest_builder_farm: [
     {
       role: 'farmer',
       placement: { kind: 'anchor', anchor: 'hearth', post: 'centre', activity: 'idle' },
       residentId: 'wendell',
-      service: { surface: 'menu', counter: 'plumbline_hayloft', verb: 'Rest' },
+      service: { surface: 'menu', counter: 'hayloft', verb: 'Rest' },
     },
     {
       role: 'child',
@@ -326,7 +322,7 @@ export const BUILDING_OCCUPANTS = mapByBuildingName<ReadonlyArray<OccupantSpec>>
       species: 'human',
     },
   ],
-  "Cartwright's Workshop": [
+  taloncrest_crafting_house: [
     {
       role: 'laborer',
       placement: {
@@ -338,7 +334,7 @@ export const BUILDING_OCCUPANTS = mapByBuildingName<ReadonlyArray<OccupantSpec>>
       },
       residentId: 'steve_cartwright',
       routine: { kind: 'target_practice', targetProp: 'target_board' },
-      service: { surface: 'menu', counter: 'cartwright', verb: 'Buy' },
+      service: { surface: 'menu', counter: 'crafting_house', verb: 'Buy' },
     },
     {
       role: 'commoner',
@@ -356,7 +352,7 @@ export const BUILDING_OCCUPANTS = mapByBuildingName<ReadonlyArray<OccupantSpec>>
   // this spec places (`BuildingInteriorScene` wires it through with
   // `ShopSystem.setKeeper`) for its "Shop" prompt and interact range, so she
   // is rendered exactly once, by the occupant system's own Y-sorted pass.
-  'General Store': [
+  taloncrest_general_store: [
     {
       role: 'commoner',
       placement: { kind: 'anchor', anchor: 'shelf', post: 'back', activity: 'browse_shelf' },
@@ -387,7 +383,7 @@ export const BUILDING_OCCUPANTS = mapByBuildingName<ReadonlyArray<OccupantSpec>>
   // hunt for a way up to her. Her readings, her repair errand and her lore all
   // start by talking to her, so she has to be the easiest thing in the room to
   // reach.
-  "Old Lori's Cottage": [
+  taloncrest_old_lady_cottage: [
     {
       role: 'priest',
       placement: { kind: 'roam' },
@@ -403,7 +399,7 @@ export const BUILDING_OCCUPANTS = mapByBuildingName<ReadonlyArray<OccupantSpec>>
   // Aviel keeps the strip of dais in front of the altar, which stands
   // against the north wall under the sky window: the blessing is offered
   // where the aisle ends, and he never strays off the dais into the nave.
-  'Temple of the Sky': [
+  taloncrest_temple: [
     {
       role: 'priest',
       placement: { kind: 'prop', prop: 'altar', side: 'south', activity: 'tend_counter' },
@@ -430,7 +426,7 @@ export const BUILDING_OCCUPANTS = mapByBuildingName<ReadonlyArray<OccupantSpec>>
   // Both customers wait at the waiting room's tables. Placement by prop
   // runs before anchors and claims the alcove table for Nim, so a `table`
   // anchor can only ever find the waiting room's.
-  'The Quiet Needle': [
+  taloncrest_tattoo_parlor: [
     {
       role: 'merchant',
       placement: {
@@ -460,7 +456,7 @@ export const BUILDING_OCCUPANTS = mapByBuildingName<ReadonlyArray<OccupantSpec>>
   // on the sand are townsfolk who have not been given the title yet. The
   // mercenaries rent the east end of the muster hall, and Sydney keeps
   // their hire desk there, behind it and never out from it.
-  'The Barracks': [
+  taloncrest_barracks: [
     {
       role: 'merchant',
       placement: {
@@ -517,7 +513,7 @@ export const BUILDING_OCCUPANTS = mapByBuildingName<ReadonlyArray<OccupantSpec>>
       species: 'hawkfolk',
     },
   ],
-  'Blackwood Lodge': [
+  taloncrest_garrison_lodge: [
     {
       role: 'guard',
       placement: { kind: 'anchor', anchor: 'table', post: 'centre', activity: 'idle' },
@@ -532,7 +528,7 @@ export const BUILDING_OCCUPANTS = mapByBuildingName<ReadonlyArray<OccupantSpec>>
   // The club's host, greeting the door from behind his stand. His territory
   // is the row behind the stand and nothing else: a host who wanders off his
   // book leaves the door unanswered.
-  [CLOAK_AND_DAGGER_NAME]: [
+  taloncrest_nightclub: [
     {
       role: 'noble',
       placement: { kind: 'mark', tile: CLUB_HOST_MARK, faces: 'south', activity: 'tend_counter' },
@@ -540,7 +536,7 @@ export const BUILDING_OCCUPANTS = mapByBuildingName<ReadonlyArray<OccupantSpec>>
       residentId: 'brandon',
     },
   ],
-} satisfies Partial<Record<PlannedBuildingName, ReadonlyArray<OccupantSpec>>>);
+} satisfies Partial<Record<PlannedBuildingId, ReadonlyArray<OccupantSpec>>>);
 
 /** Light company for the town-service interiors, which already have their own scripted NPCs. */
 export const TYPE_OCCUPANTS: Partial<Record<BuildingEntry['type'], ReadonlyArray<OccupantSpec>>> = {

@@ -32,6 +32,7 @@ import { stairwellPromptSurface } from '../../../ui/screens/dialogs/stairwellPro
 import { towerStairsPromptSurface } from '../../../ui/screens/dialogs/towerStairsPrompt';
 import type { DialogFixture } from './fixture';
 import { SPIDER_QUEST_NAME } from '../../../systems/SpiderQuestSystem';
+import { buildingDisplayName } from '../../../map/buildingIds';
 
 /** Frames of `update()` that carry an award card through its whole reveal. */
 const FRAMES_TO_SETTLE = 120;
@@ -107,7 +108,7 @@ const COMFORTABLE_DESCENT: DescentPrompt = {
 
 const TAVERN: BuildingEntry = {
   doorTile: { x: 0, y: 0 },
-  name: 'The Sunken Stump Pub',
+  id: 'taloncrest_pub',
   type: 'store',
   doorway: { x0: 0, width: 1 },
   sign: 'tankard',
@@ -185,7 +186,9 @@ export const FIXTURES: readonly DialogFixture[] = [
     name: 'activity-difficulty',
     surfaces: (shown) => [
       activityDifficultyPickerSurface('activity-difficulty', () =>
-        shown() ? { activity: 'Goblin High Security Prison', pick: noop, cancel: noop } : null,
+        shown()
+          ? { activity: buildingDisplayName('level2_goblin_prison'), pick: noop, cancel: noop }
+          : null,
       ),
     ],
   },
@@ -233,7 +236,7 @@ export const FIXTURES: readonly DialogFixture[] = [
     surfaces: (shown) => [
       exitBuildingPromptSurface('exit-building', {
         isOpen: shown,
-        buildingName: () => TAVERN.name,
+        buildingId: () => TAVERN.id,
         exit: noop,
         stay: noop,
       }),

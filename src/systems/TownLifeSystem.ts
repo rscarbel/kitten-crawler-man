@@ -31,8 +31,7 @@ import {
   WELL,
 } from '../map/tileTypes';
 import { tileCoordKey } from '../map/tileIndex';
-import { CLOAK_AND_DAGGER_NAME, type TownBuildingName } from '../map/town/townPlan';
-import type { BuildingName } from '../map/buildingEntry';
+import type { TownBuildingId, BuildingId } from '../map/buildingIds';
 
 import { Townsperson } from '../creatures/Townsperson';
 import { CITIZEN_TALK_RADIUS_TILES, findNearestTownsperson } from '../creatures/townInteraction';
@@ -179,8 +178,7 @@ const DOORSTEP_ANCHORS_PER_BUILDING = 1;
 /**
  * The doorways worth posting someone permanently on, and who stands there.
  *
- * Keyed by building name, which is what `buildingEntries` carries — and matched
- * by lookup rather than by index, so a building the `TownPlan` drops simply
+ * Keyed by building id and matched by lookup rather than by index, so a building the `TownPlan` drops simply
  * loses its anchor instead of giving the next building in the list a bouncer.
  */
 /**
@@ -191,11 +189,11 @@ const DOORSTEP_ANCHORS_PER_BUILDING = 1;
  * human here as a plain, arbitrary tie-break rather than rolled, since the
  * club's door staff sit outside the town's species ratio.
  */
-const DOORSTEP_ANCHOR_ROLES: ReadonlyArray<readonly [TownBuildingName, TownRole, CrowdSpecies]> = [
-  ['The Rusty Anvil', 'smith', 'hawkfolk'],
-  [CLOAK_AND_DAGGER_NAME, 'guard', 'human'],
-  ['The Sleeping Cat Inn', 'innkeeper', 'hawkfolk'],
-  ['Temple of the Sky', 'priest', 'hawkfolk'],
+const DOORSTEP_ANCHOR_ROLES: ReadonlyArray<readonly [TownBuildingId, TownRole, CrowdSpecies]> = [
+  ['taloncrest_smithy', 'smith', 'hawkfolk'],
+  ['taloncrest_nightclub', 'guard', 'human'],
+  ['taloncrest_inn', 'innkeeper', 'hawkfolk'],
+  ['taloncrest_temple', 'priest', 'hawkfolk'],
 ];
 // Anchored citizens barely move and mostly stand: the slowest speeds and the
 // longest pauses of any cohort.
@@ -554,8 +552,8 @@ export class TownLifeSystem implements GameSystem {
   }
 
   /** The Hawkfolk share a building's own frontage should roll at, per its keeper's species. */
-  private frontageHawkfolkShare(buildingName: BuildingName): number {
-    const keeper = buildingKeeper(buildingName);
+  private frontageHawkfolkShare(buildingId: BuildingId): number {
+    const keeper = buildingKeeper(buildingId);
     if (keeper === null) return PLAZA_HAWKFOLK_SHARE;
     return FRONTAGE_HAWKFOLK_SHARE_BY_KEEPER[residentSpecies(keeper)];
   }
@@ -565,11 +563,9 @@ export class TownLifeSystem implements GameSystem {
     for (const door of this.districtDoors) {
       const frontage = this.gatherFrontageTiles(door);
       if (frontage.length === 0) continue;
-      const buildingName = this.buildingNameAtDoor(door);
+      const buildingId = this.buildingIdAtDoor(door);
       const hawkfolkShare =
-        buildingName !== undefined
-          ? this.frontageHawkfolkShare(buildingName)
-          : PLAZA_HAWKFOLK_SHARE;
+        buildingId !== undefined ? this.frontageHawkfolkShare(buildingId) : PLAZA_HAWKFOLK_SHARE;
       const wander: WanderParams = {
         pickTarget: () => randomTilePoint(frontage),
         arriveDist: ARRIVE_DIST,
@@ -592,11 +588,11 @@ export class TownLifeSystem implements GameSystem {
     }
   }
 
-  /** The `buildingEntries` name whose door tile is `door`, or `undefined` for a door not in the list. */
-  private buildingNameAtDoor(door: TileXY): BuildingName | undefined {
+  /** The building whose door tile is `door`, or `undefined` for a door not in `buildingEntries`. */
+  private buildingIdAtDoor(door: TileXY): BuildingId | undefined {
     return this.gameMap.buildingEntries.find(
       (entry) => entry.doorTile.x === door.x && entry.doorTile.y === door.y,
-    )?.name;
+    )?.id;
   }
 
   /**
@@ -662,8 +658,8 @@ export class TownLifeSystem implements GameSystem {
         () => rollSpecies(ANCHOR_HAWKFOLK_SHARE, this.castRng),
       );
     }
-    for (const [buildingName, role, species] of DOORSTEP_ANCHOR_ROLES) {
-      const entry = this.gameMap.buildingEntries.find((e) => e.name === buildingName);
+    for (const [buildingId, role, species] of DOORSTEP_ANCHOR_ROLES) {
+      const entry = this.gameMap.buildingEntries.find((e) => e.id === buildingId);
       if (entry === undefined) continue;
       this.addAnchoredCitizen(
         entry.doorTile,

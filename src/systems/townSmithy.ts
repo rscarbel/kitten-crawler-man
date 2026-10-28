@@ -24,6 +24,7 @@ import {
 import { hostByline, type ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
 import { SERVICE_PRICES } from '../economy/servicePrices';
+import { buildingDisplayName } from '../map/buildingIds';
 
 const SINGLE_EDGE_KEY = 'edge';
 const PAIR_EDGE_KEY = 'edge_pair';
@@ -79,7 +80,7 @@ export function buildSmithyMenu(
   };
 
   return {
-    title: 'The Rusty Anvil',
+    title: buildingDisplayName('taloncrest_smithy'),
     bark: host?.line ?? rotateLine(SMITH_BARKS, turn),
     byline: hostByline(host),
     emblem: null,

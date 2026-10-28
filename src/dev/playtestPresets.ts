@@ -1,3 +1,4 @@
+import type { LevelId } from '../levels/levelIds';
 import type { ItemId } from '../core/items/defs/ItemDefs';
 import type { StatName } from '../Player';
 import type { SkillId } from '../core/skills/SkillManager';
@@ -9,8 +10,7 @@ import type { MercenaryTemplateId } from '../core/party/mercenaryTemplates';
 import type { PartyToolsState } from '../core/items/gathering/PartyTools';
 import type { PalisadeTier } from '../map/tileTypes';
 import type { BlueprintsQuestPhase } from '../core/quests/blueprintsQuestPhase';
-import type { VillageBuildingId } from '../map/overworld/briarHollowLayout';
-import { CLOAK_AND_DAGGER_NAME, type TownBuildingName } from '../map/town/townPlan';
+import type { TownBuildingId, BriarHollowBuildingId } from '../map/buildingIds';
 import { TOOL_TIER_BASIC, TOOL_TIER_LONG_HAFT } from '../core/items/gathering/toolTiers';
 import { buyPrice } from '../economy/pricing';
 import { createShopStock } from '../economy/shopStock';
@@ -46,9 +46,9 @@ export type PlaytestSpawn =
   /** Just inside Briar Hollow's gate, on the main street. */
   | { readonly kind: 'briarHollowGate' }
   /** The street tile just south of a town building's door. */
-  | { readonly kind: 'townBuildingDoor'; readonly buildingName: TownBuildingName }
+  | { readonly kind: 'townBuildingDoor'; readonly buildingId: TownBuildingId }
   /** On the threshold of a Briar Hollow building. */
-  | { readonly kind: 'briarHollowBuilding'; readonly buildingId: VillageBuildingId };
+  | { readonly kind: 'briarHollowBuilding'; readonly buildingId: BriarHollowBuildingId };
 
 /** One stack of items placed in a fixed slot. */
 export interface PlaytestStack {
@@ -106,14 +106,14 @@ export interface PlaytestBlueprintsSetup {
  * every spot but its last one done and Wendell's introduction already given.
  */
 export interface PlaytestContractsSetup {
-  readonly lastSpotAt?: VillageBuildingId;
+  readonly lastSpotAt?: BriarHollowBuildingId;
 }
 
 export interface PlaytestPreset {
   readonly id: string;
   /** Printed by the npm script when it lists what can be played. */
   readonly description: string;
-  readonly levelId: string;
+  readonly levelId: LevelId;
   readonly spawn: PlaytestSpawn;
   /** Applied to `Settings` before the floor is built. Omitted presets keep the player's own choice. */
   readonly difficulty?: Difficulty;
@@ -1007,7 +1007,7 @@ const CONTRACTS: PlaytestPreset = {
   id: 'contracts',
   description:
     "Outside Plumbline Farm, Borrowed Blueprints done, Wendell's contracts open, Anchor in hand",
-  spawn: { kind: 'townBuildingDoor', buildingName: 'Plumbline Farm' },
+  spawn: { kind: 'townBuildingDoor', buildingId: 'taloncrest_builder_farm' },
   human: {
     ...BRIAR_HOLLOW_VILLAGE.human,
     constructionLevel: BLUEPRINTS_PRESET_CONSTRUCTION,
@@ -1035,8 +1035,8 @@ const CONTRACTS_LAST_SPOT: PlaytestPreset = {
   ...CONTRACTS,
   id: 'contracts-last-spot',
   description: "Construction contract at the Mayor's Hall, every spot done but one",
-  spawn: { kind: 'briarHollowBuilding', buildingId: 'hall' },
-  constructionContracts: { lastSpotAt: 'hall' },
+  spawn: { kind: 'briarHollowBuilding', buildingId: 'briar_hollow_hall' },
+  constructionContracts: { lastSpotAt: 'briar_hollow_hall' },
 };
 
 /** The human's Resourcing in the thralls preset: the level the summon unlocks at. */
@@ -1127,7 +1127,7 @@ const CASINO_FLOOR: PlaytestPreset = {
   ...LEVEL3,
   id: 'casino-floor',
   description: "Outside the Cloak & Dagger's door, the casino floor one step inside",
-  spawn: { kind: 'townBuildingDoor', buildingName: CLOAK_AND_DAGGER_NAME },
+  spawn: { kind: 'townBuildingDoor', buildingId: 'taloncrest_nightclub' },
 };
 
 export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [

@@ -21,7 +21,7 @@ The layout follows a few rules. They are worth keeping when adding to the town:
    dirt, yard gravel, verge. Bare grass exists only outside the walls.
 3. **Negative space is designed too.** Block interiors are gardens, workyards and
    drying greens, not leftover lawn.
-4. **Names are load-bearing.** See [Invariants](#invariants) — a rename breaks quests.
+4. **Ids are load-bearing, names are not.** See [Building ids](#building-ids) and [Invariants](#invariants).
 
 The wall itself is drawn procedurally by `drawTownWallTile` (`src/map/tiles/buildingTiles.ts`):
 coursed ashlar, with a crenellated parapet on any run's exposed north face, phased off the
@@ -42,6 +42,29 @@ it. Yard fences (`FENCE`) and the ruins' `RUINED_WALL` are split the same way.
 | **Low Quarter**   | south band     | The Cloak & Dagger, The Quiet Needle (Shady loiters on Low Street outside it), The Sunken Stump Pub — plus the service alley the murder mystery needs |
 | **South Green**   | inside SE wall | Miller's Farm                                                                                                                                         |
 | **The Ruins**     | outside walls  | ruin shells, rubble, ghouls; the circus 70–90 tiles out                                                                                               |
+
+### Building ids
+
+Every building is keyed by a `BuildingId` (`src/map/buildingIds.ts`), never by the name
+on its sign. An id is `<location>_<slug>`: the location is a `TownId` (`taloncrest`,
+`briar_hollow`) or the `LevelId` of the dungeon floor the door stands on (`level2`), and
+the slug says what the building is, never who runs it, so a repainted sign or a renamed
+character leaves it alone (`taloncrest_old_lady_cottage`, not Lori's;
+`taloncrest_crafting_house`, not Cartwright's; `briar_hollow_seamstress_cottage`, not
+Nella's). The Starlight Tent is `taloncrest_circus_tent`, the tower `taloncrest_tower`
+(`TOWN_TOWER_ID`), and floor 2's prison `level2_goblin_prison`. The id union is built from
+the per-location slug lists, so a new building is a new slug and a new town is a new key;
+one location's ids have their own union (`BriarHollowBuildingId`). Shop and service-counter ids follow the same rule
+(`crafting_house`, `mill_farm`, `mill_kitchen`, `hayloft`), and a shop that is its
+building's own counter is titled through its `building`, never a restated name.
+
+Every building-keyed table (layouts, shells, occupants, services, readables, music, decor
+anchors, contract sites), every saved key and every dev route uses the id. The sign's text
+is `buildingDisplayName(id)`, read only where the player sees it: the street label, the
+door prompt, the room banner, the loading screen, readable titles and contract text. A
+stored id is narrowed with `isBuildingId`; a save holding anything else fails validation
+and is discarded. Briar Hollow's buildings are drawn roofless in the village rather than
+entered through `buildingEntries`, but share the one id union and display-name table.
 
 ---
 
@@ -438,11 +461,11 @@ the route guide's first aim from the plaza and from outside Briar Hollow.
 ## Interiors
 
 A door on the street opens a `BuildingInteriorScene` over a room built by
-`GameMap.generateInterior(kind, floor, name, hasSafeRoom)`. The room is regenerated on
+`GameMap.generateInterior(kind, floor, buildingId, hasSafeRoom)`. The room is regenerated on
 every entry, so it keeps no state of its own; anything a room must remember lives in
 `TownMemory` (see [Remembered between visits](#remembered-between-visits)). A room's
 contents are data: one layout file per building in `src/map/town/interiors/`, listed in
-`NAMED_INTERIOR_LAYOUTS` (`index.ts`), each a pure function of the shell's size that
+`INTERIOR_LAYOUTS_BY_BUILDING` (`index.ts`), each a pure function of the shell's size that
 returns layout entries. `generateInterior` holds no per-building logic.
 
 Only the Cloak & Dagger's rooms and stations are fixed. Every other
@@ -451,7 +474,7 @@ services, the safe room, the murder mystery's alley and cellar, the cult hideout
 gates below. A room's layout follows from what the building is, and every room should
 look occupied. Four things about the shell are worth knowing before changing one.
 
-**The shell is per building, not per kind.** `INTERIOR_BY_NAME` in `GameMap.ts` states
+**The shell is per building, not per kind.** `INTERIOR_BY_BUILDING` in `GameMap.ts` states
 each building's width, height and floor material, and `INTERIOR_BY_KIND` is only the
 fallback for anything absent from it. A kind is a category, and a category cannot say how
 big a mead hall is or what a garrison's drill floor is made of. Four interior floor
@@ -544,7 +567,7 @@ painters live in `src/sprites/art/townInterior/rooms/`, one file per building pl
   standing instance at its footprint centre, and a smashed or contract-hidden instance
   falls silent. Keep every fire under the tavern crowd bed. Interiors have no dynamic
   light, so a fire's glow is part of its own art.
-- **Wall finish is per building.** `WALL_MATERIAL_BY_BUILDING_NAME`
+- **Wall finish is per building.** `WALL_MATERIAL_BY_BUILDING`
   (`src/map/town/interiorWallMaterial.ts`) picks plaster, stone or timber.
   `interiorWallFace.ts` paints the face.
 - **Some systems still scan raw tile types.** `ANCHOR_TILE_TYPES`, Old Lori's repairable
@@ -669,8 +692,13 @@ and `BuildingInteriorScene`. It holds resident talk counts, Fen's poultice batch
 `clearedRooms`, `clearedCamps` and `paidOutInteriorProps`.
 
 - **A prop pays out once, ever.** `paidOutInteriorProps` is keyed by
-  `interiorPropPayoutKey`: the room key plus the prop's stable id, which defaults to
-  `propId@x,y` and never comes from scan order.
+  `interiorPropPayoutKey`: the room key plus the id the layout gives the prop. Every prop
+  a save remembers (a breakable, a searched container: `StatefulTownInteriorPropId`,
+  derived from the prop table) must be placed with `statefulProp(x, y, propId, id)`, and
+  `prop()` refuses those ids at compile time, so moving a prop keeps its payout. An id is
+  unique within its room; one placed in a loop carries the loop's index
+  (`` `pew_${rank}_west_${i}` ``), and `applyTownInteriorLayout` throws on a repeat. A prop
+  with nothing saved needs no id and is named by its tile.
 - **The payout is marked before the roll.** An empty roll or a merchandise break still
   spends it, so re-entering and re-breaking pays nothing. Broken _state_ is not saved: the
   room stands again on the next visit.
@@ -763,22 +791,23 @@ Wendell's `RESIDENT_LINES` entries and all of `src/dialog/scripts/scenes/anchor.
 Load-bearing for quests, systems and save state. Anything that moves must be re-derived,
 not hard-coded twice.
 
-**Building names.** All 16 `buildingEntries` names and `type` values, verbatim. Quests,
-dialog, interiors, mercenaries, the club, the murder mystery and the cult hideout key
-off these strings across ~20 files. The tattoo parlour is **The Quiet Needle**
-(sprite key `quiet_needle`), and the
-facade's `replaces: 'tattoo_parlor'` stays as it is — the frozen footprint fixture the
-building gates measure against is keyed by `replaces`, not by the sprite key.
+**Building ids.** Every `buildingEntries` id and `type` value. Quests, dialog, interiors,
+mercenaries, the club, the murder mystery, the cult hideout and saves key off the ids
+(see [Building ids](#building-ids)); a misspelled one fails to compile, and a renamed one
+discards saves that hold it. The tattoo parlour is `taloncrest_tattoo_parlor` (sign
+**The Quiet Needle**, sprite key `quiet_needle`), and the facade's
+`replaces: 'tattoo_parlor'` stays as it is — the frozen footprint fixture the building
+gates measure against is keyed by `replaces`, not by the sprite key.
 
-A misspelled key is invisible from both directions: the building reports no service and
-the service names no building, so nothing throws and nothing logs. `verify:interiors`
-walks both sides for exactly that reason.
+A building with no entry in a partial table is invisible from both directions: the
+building reports no service and the service names no building, so nothing throws and
+nothing logs. `verify:interiors` walks both sides for exactly that reason.
 
-**A rename forgets what the town remembered there.** `clearedRooms` and
-`paidOutInteriorProps` are keyed by building name, so a save written before a rename
-forgets every room cleared or searched there. Saves carry no compatibility promise (see
-CLAUDE.md), so there is no alias map; the run simply re-stocks that building. Wendell's
-home is **Plumbline Farm** (facade `plumbline_farm`).
+**A sign can be renamed freely.** `clearedRooms` and `paidOutInteriorProps` are keyed by
+building id (`RoomKey`, `InteriorPropPayoutKey` in `TownMemory.ts`), so changing a
+building's display name keeps everything the town remembers there. Changing an id is a
+save break like any other: the save fails validation and is discarded. Wendell's home is
+**Plumbline Farm** (`taloncrest_builder_farm`, facade `plumbline_farm`).
 
 **Safe-room-ness is `hasSafeRoom` on the planned building**, not a `BuildingKind`.
 `BuildingKind` is `'house' | 'tower' | 'store' | 'club'` — there is no `restaurant`
@@ -806,13 +835,13 @@ carries the flag, and `verify:interiors` asserts that.
 **Centre-relative offsets.** These are tuned to the current town extents. Move the
 layout and they must be re-tuned, not left stale:
 
-| Consumer               | Constants                                                                                |
-| ---------------------- | ---------------------------------------------------------------------------------------- |
-| `market/vendorDefs.ts` | `WEST_STALL_DX`, `EAST_STALL_DX`, `STALL_ROW_DY`                                         |
-| `TownPropSystem`       | `BOARD_OFFSET`, `FORTUNE_OFFSET`                                                         |
-| `TownLifeSystem`       | `PLAZA_RADIUS_TILES`, `DISTRICT_RADIUS_TILES`, `FRONTAGE_RADIUS_TILES`                   |
-| `DungeonScene`         | `FOUNTAIN_AMBIENT_RADIUS_TILES`, `TOWN_SQUARE_AMBIENT_RADIUS_TILES`, `CITY_CROWD_*`      |
-| `OverworldGenerator`   | `TOWN_SAFE_RADIUS_TILES`, `RUINS_*`, `FOREST_MIN_DIST_TILES`                             |
+| Consumer               | Constants                                                                           |
+| ---------------------- | ----------------------------------------------------------------------------------- |
+| `market/vendorDefs.ts` | `WEST_STALL_DX`, `EAST_STALL_DX`, `STALL_ROW_DY`                                    |
+| `TownPropSystem`       | `BOARD_OFFSET`, `FORTUNE_OFFSET`                                                    |
+| `TownLifeSystem`       | `PLAZA_RADIUS_TILES`, `DISTRICT_RADIUS_TILES`, `FRONTAGE_RADIUS_TILES`              |
+| `DungeonScene`         | `FOUNTAIN_AMBIENT_RADIUS_TILES`, `TOWN_SQUARE_AMBIENT_RADIUS_TILES`, `CITY_CROWD_*` |
+| `OverworldGenerator`   | `TOWN_SAFE_RADIUS_TILES`, `RUINS_*`, `FOREST_MIN_DIST_TILES`                        |
 
 A stale offset drops a stall, bench or notice board into a wall. `?townmap` shows it
 instantly.
@@ -1460,8 +1489,8 @@ reads as none, and Wendell re-offers.
 **The catalogue** (`contractCatalog.ts`, pure data). `CONTRACT_SITES` holds every
 enterable building in both towns, 13 in Taloncrest and 15 in Briar Hollow, except
 `CONTRACT_EXCLUDED_TOWN_BUILDINGS` (Town Center Tower, The Cloak & Dagger, Plumbline Farm),
-which the `ContractTownBuildingName` type rules out at compile time. Each site has a
-`slug` unique across both towns, a contact (a `ResidentId` in Taloncrest, a `VillagerId`
+which the `ContractTownBuildingId` type rules out at compile time. Each site is keyed by
+its building id (`ContractSiteBuildingId`, unique across both towns), and has a contact (a `ResidentId` in Taloncrest, a `VillagerId`
 in Briar Hollow; the name is read from the contact's own record by `contractContactName`)
 and a pool of `ContractSpotDef`s: `kind`, `label`, `cost` in `wood_board` / `rope` /
 `stone`, `material` (`wood`, `stone`, `rope`, `plaster`; picks the art and the sounds) and
@@ -1473,12 +1502,13 @@ a `target`. Spot kinds:
   blocked; finishing the spot brings the prop back.
 
 The catalogue holds no coordinates. A prop spot names the placed prop whose explicit id is
-`contract:<slug>:<spot>` (`contractPropId`, `src/map/contractAreas.ts`): Taloncrest
-layouts give it through `contractTarget(slug, spot)` in `src/map/town/interiors/*`, Briar
+`contract:<building id>:<spot>` (`contractPropId`, `src/map/contractAreas.ts`): Taloncrest
+layouts give it through `contractTarget` / `contractTargetId(buildingId, spot)` in
+`src/map/town/interiors/*`, Briar
 Hollow's `PropTemplate`s through `contractSpotId` in `briarHollowLayout.ts`. An area spot
 names a `ContractArea` (`floor`, `wall`, `doorway`, `open_side`) exported beside the
 layout: each Taloncrest interior's `build<Building>ContractAreas(w, h)`, gathered in
-`NAMED_INTERIOR_CONTRACT_AREAS` (`src/map/town/interiors/index.ts`; the General Store's
+`INTERIOR_CONTRACT_AREAS_BY_BUILDING` (`src/map/town/interiors/index.ts`; the General Store's
 `buildGeneralStoreContractAreas` is looked up by kind), in the interior's own grid; and
 `BRIAR_HOLLOW_CONTRACT_AREAS`, relative to the building rect's north-west corner (an area
 may lie just outside it, as the quarry hut's step does). `contractTargets.ts`
@@ -1746,8 +1776,8 @@ anything built or damaged since the party last saved.
   seed the village state before the scene is built (`contractsPlaytestState`).
 - `npm run render:construction-contracts` renders every material's damage on every target
   kind, a rebuild site per material, the reach glow and the finish puff, then every spot
-  of one Taloncrest and one Briar Hollow pool, highlights included, on the real room (`--taloncrest=<slug>`,
-  `--hollow=<buildingId>`), each at 1x, 1x zoomed and 2x.
+  of one Taloncrest and one Briar Hollow pool, highlights included, on the real room (`--taloncrest=<buildingId>`,
+  `--briar_hollow=<buildingId>`), each at 1x, 1x zoomed and 2x.
 - `npm run verify:construction-contracts` is the contracts' headless gate: every catalogue
   target resolves in its built layout and no two spots share one, no excluded building
   appears, every pool offers `CONTRACT_MIN_DISTINCT_SETS`, the generator stays in the
@@ -1856,11 +1886,11 @@ Anything that blocks goes on the rim. The open field gets decals only.
 
 ### Tile types and registries
 
-| Type                    | Walkable | Sight     | Drawn by                                          |
-| ----------------------- | -------- | --------- | ------------------------------------------------- |
-| `CIRCUS_LOT`            | yes      | —         | chunk bake: `circus_lot` ground material + decals |
-| `CIRCUS_STRUCTURE_TALL` | no       | blocks    | Y-sorted pass: Starlight Tent, pavilions, crate stack    |
-| `CIRCUS_STRUCTURE_LOW`  | no       | seen past | Y-sorted pass: arch posts, lamps, wagons, booths  |
+| Type                    | Walkable | Sight     | Drawn by                                              |
+| ----------------------- | -------- | --------- | ----------------------------------------------------- |
+| `CIRCUS_LOT`            | yes      | —         | chunk bake: `circus_lot` ground material + decals     |
+| `CIRCUS_STRUCTURE_TALL` | no       | blocks    | Y-sorted pass: Starlight Tent, pavilions, crate stack |
+| `CIRCUS_STRUCTURE_LOW`  | no       | seen past | Y-sorted pass: arch posts, lamps, wagons, booths      |
 
 Structures use the Briar Hollow anchor pattern: the drawing tile, always in the
 footprint's bottom row, is keyed `circus:<structure>` and draws the whole structure;
@@ -1972,7 +2002,7 @@ knows which room is live.
 
 ### Shell and floor
 
-- **Walls** use the `'canvas'` finish (`WALL_MATERIAL_BY_BUILDING_NAME`). A wall tile
+- **Walls** use the `'canvas'` finish (`WALL_MATERIAL_BY_BUILDING`). A wall tile
   facing no floor is the dark backstage mass, the `starlight_tent_backstage` material of the
   interior ground sheet, with dim clutter at least `BACKSTAGE_CLUTTER_CLEARANCE_TILES`
   (2) from any floor. A wall facing floor hangs a striped drape (`starlightTentWallFace`).

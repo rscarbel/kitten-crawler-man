@@ -32,7 +32,6 @@ import { createMurderQuestProgress } from '../../src/core/quests/MurderQuestProg
 import { createDoomsdayProgress } from '../../src/core/quests/DoomsdayProgress';
 import { withWorldSeed } from '../../src/core/world/WorldRandom';
 import { GameMap, TOWER_FLOOR_COUNT } from '../../src/map/GameMap';
-import { TOWN_TOWER_NAME } from '../../src/map/town/townPlan';
 import { ARENA_INTERIOR_RADIUS_TILES } from '../../src/map/arenaGeometry';
 import { roomDoorways } from '../../src/map/roomDoorways';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
@@ -591,7 +590,7 @@ function towerSighting(
 ): BossSighting {
   return underDifficulty(difficulty, seed, () => {
     const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-    map.generateInterior('tower', TOWER_FLOOR_COUNT - 1, TOWN_TOWER_NAME, false);
+    map.generateInterior('tower', TOWER_FLOOR_COUNT - 1, 'taloncrest_tower', false);
     const roster = new MobRoster(map, new SpellSystem());
     const progress = createMurderQuestProgress();
     progress.stage = stage;

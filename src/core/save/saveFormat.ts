@@ -17,7 +17,7 @@ import { parseAttackCowHp } from '../state/AttackCowState';
 import { MusicLibrary } from '../music/MusicLibrary';
 import { parseViewerFavor } from '../progression/viewerFavor';
 import { parseSerializedAbilityStates } from '../skills/AbilityManager';
-import { isLevelId } from '../../levels/index';
+import { isLevelId } from '../../levels/levelIds';
 
 /**
  * The fields of a save that belong to the whole run rather than to the floor it

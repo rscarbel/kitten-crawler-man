@@ -14,7 +14,7 @@
 import { GameMap } from '../src/map/GameMap.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import { createTownPlan, type BuildingKind } from '../src/map/town/townPlan.js';
-import type { BuildingName } from '../src/map/buildingEntry.js';
+import type { BuildingId } from '../src/map/buildingIds.js';
 import { HumanPlayer } from '../src/creatures/HumanPlayer.js';
 import { LootSystem } from '../src/systems/LootSystem.js';
 import {
@@ -55,7 +55,7 @@ function check(condition: boolean, label: string): void {
 const PLAN_SIZE = 5;
 const plan = createTownPlan(PLAN_SIZE);
 
-function buildInterior(name: BuildingName, kind: BuildingKind, hasSafeRoom: boolean): GameMap {
+function buildInterior(name: BuildingId, kind: BuildingKind, hasSafeRoom: boolean): GameMap {
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
   map.generateInterior(kind, 0, name, hasSafeRoom);
   return map;
@@ -73,48 +73,48 @@ function buildInterior(name: BuildingName, kind: BuildingKind, hasSafeRoom: bool
 // Floors below are measured counts; watch this fail by commenting out `destructible: DESTRUCTIBLE_BARREL`
 // on `barrel`'s registry entry in `townInteriorProps.ts` and re-running.
 const BREAKABLE_FLOOR_BY_BUILDING: Readonly<Partial<Record<string, number>>> = {
-  'Blackwood Lodge': 4,
-  'Plumbline Farm': 6,
-  'The Barracks': 18,
+  taloncrest_garrison_lodge: 4,
+  taloncrest_builder_farm: 6,
+  taloncrest_barracks: 18,
   // A workshop of a few big built pieces, none of which break: its
   // breakables are the spoke tubs, the glue pot and the crates and barrels of
   // stores.
-  "Cartwright's Workshop": 10,
-  'Temple of the Sky': 8,
-  'Herb & Remedy': 15,
+  taloncrest_crafting_house: 10,
+  taloncrest_temple: 8,
+  taloncrest_apothecary: 15,
   // Shelving, counter, tables and bins are built-in fittings with no
   // breakable spec; the store's breakables are its single-tile barrels,
   // sacks, baskets, crocks, tool barrels, crates and one storeroom shelf.
-  'General Store': 20,
-  'The Sleeping Cat Inn': 12,
-  'The Horned Flagon': 3,
+  taloncrest_general_store: 20,
+  taloncrest_inn: 12,
+  taloncrest_flagon_tavern: 3,
   // A ten-by-ten room of a few big pieces: its breakables are the crocks,
   // baskets, stores, the jar dresser and the worktable. The bed and the
   // herb-drying beam are fixtures — a bed frame no more smashes to kindling
   // than a barracks bunk, and the beam is hung from the wall — so they do
   // not count, which leaves the room at 22.
-  "Old Lori's Cottage": 22,
+  taloncrest_old_lady_cottage: 22,
   // A smaller smithy built round a few big working pieces: its breakables
   // are the one-tile stock, stools, tubs and barrels around them.
-  'The Rusty Anvil': 17,
-  'The Sunken Stump Pub': 5,
-  'The Quiet Needle': 9,
-  "Miller's Farm": 12,
+  taloncrest_smithy: 17,
+  taloncrest_pub: 5,
+  taloncrest_tattoo_parlor: 9,
+  taloncrest_mill_farm: 12,
 };
 
 console.log('Breakables regression floor');
 let totalBreakable = 0;
 let generalStoreMap: GameMap | null = null;
 for (const building of plan.buildings) {
-  const map = buildInterior(building.name, building.kind, building.hasSafeRoom === true);
-  if (building.name === 'General Store') generalStoreMap = map;
+  const map = buildInterior(building.id, building.kind, building.hasSafeRoom === true);
+  if (building.id === 'taloncrest_general_store') generalStoreMap = map;
   const count = map.placedInteriorProps.filter(isBreakableInteriorProp).length;
   totalBreakable += count;
-  const floor = BREAKABLE_FLOOR_BY_BUILDING[building.name];
+  const floor = BREAKABLE_FLOOR_BY_BUILDING[building.id];
   if (floor === undefined) continue;
   check(
     count >= floor,
-    `"${building.name}" has at least ${floor} breakable prop(s) (found ${count})`,
+    `"${building.id}" has at least ${floor} breakable prop(s) (found ${count})`,
   );
 }
 check(totalBreakable > 0, 'at least one building has a breakable prop');
@@ -131,14 +131,14 @@ console.log('\nWalkable props stay out of the Y-sorted pass');
 {
   let walkablePlaced = 0;
   for (const building of plan.buildings) {
-    const map = buildInterior(building.name, building.kind, building.hasSafeRoom === true);
+    const map = buildInterior(building.id, building.kind, building.hasSafeRoom === true);
     const sortedWalkable = townInteriorPropFigures(map).filter(
       (figure) => TOWN_INTERIOR_PROPS[figure.placed.propId].walkable,
     );
     const sortedWalkableIds = sortedWalkable.map((figure) => figure.placed.id).join(', ');
     check(
       sortedWalkable.length === 0,
-      `"${building.name}" sorts no walkable prop with the figures` +
+      `"${building.id}" sorts no walkable prop with the figures` +
         (sortedWalkable.length === 0 ? '' : ` (found ${sortedWalkableIds})`),
     );
     const walkableHere = map.placedInteriorProps.filter(
@@ -148,7 +148,7 @@ console.log('\nWalkable props stay out of the Y-sorted pass');
     const groundIds = new Set(townInteriorGroundProps(map).map((placed) => placed.id));
     check(
       walkableHere.every((placed) => groundIds.has(placed.id)),
-      `"${building.name}" draws all ${walkableHere.length} walkable prop(s) in the ground layer`,
+      `"${building.id}" draws all ${walkableHere.length} walkable prop(s) in the ground layer`,
     );
   }
   // Without a single placed rug the two checks above pass vacuously.
@@ -237,7 +237,7 @@ console.log('\nMulti-tile props break whole (swing and blast)');
   const BLAST_RADIUS = TILE_SIZE * BLAST_RADIUS_TILES;
 
   interface MultiTileCase {
-    readonly buildingName: string;
+    readonly buildingId: BuildingId;
     readonly placedId: string;
     readonly stand: { readonly x: number; readonly y: number };
     readonly facingY: number;
@@ -247,7 +247,7 @@ console.log('\nMulti-tile props break whole (swing and blast)');
   // guaranteed coin, and has open floor beside its far column to stand on.
   function findMultiTileCase(): MultiTileCase | null {
     for (const building of plan.buildings) {
-      const map = buildInterior(building.name, building.kind, building.hasSafeRoom === true);
+      const map = buildInterior(building.id, building.kind, building.hasSafeRoom === true);
       for (const placed of map.placedInteriorProps) {
         const propDef = TOWN_INTERIOR_PROPS[placed.propId];
         const spec = propDef.destructible;
@@ -260,7 +260,7 @@ console.log('\nMulti-tile props break whole (swing and blast)');
         for (const side of [south, north]) {
           if (!map.isWalkable(side.x, side.y)) continue;
           return {
-            buildingName: building.name,
+            buildingId: building.id,
             placedId: placed.id,
             stand: { x: side.x, y: side.y },
             facingY: side.facingY,
@@ -282,8 +282,8 @@ console.log('\nMulti-tile props break whole (swing and blast)');
   const found = findMultiTileCase();
   check(found !== null, 'some room places a multi-tile breakable that pays out');
   if (found !== null) {
-    const building = plan.buildings.find((b) => b.name === found.buildingName);
-    if (building === undefined) throw new Error(`${found.buildingName} vanished from the plan`);
+    const building = plan.buildings.find((b) => b.id === found.buildingId);
+    if (building === undefined) throw new Error(`${found.buildingId} vanished from the plan`);
 
     const attacks: ReadonlyArray<{
       readonly label: string;
@@ -309,13 +309,13 @@ console.log('\nMulti-tile props break whole (swing and blast)');
     ];
 
     for (const attack of attacks) {
-      const map = buildInterior(building.name, building.kind, building.hasSafeRoom === true);
+      const map = buildInterior(building.id, building.kind, building.hasSafeRoom === true);
       const placed = map.placedInteriorProps.find((p) => p.id === found.placedId);
       if (placed === undefined) throw new Error(`${found.placedId} not placed on a rebuild`);
       const propDef = TOWN_INTERIOR_PROPS[placed.propId];
       const spec = propDef.destructible;
       if (spec === undefined) throw new Error('unreachable — chosen for its spec');
-      const name = `${placed.propId} ${propDef.footprint.w}x${propDef.footprint.h} in "${building.name}", ${attack.label}`;
+      const name = `${placed.propId} ${propDef.footprint.w}x${propDef.footprint.h} in "${building.id}", ${attack.label}`;
 
       const footprintTiles: Array<{ x: number; y: number }> = [];
       for (let dy = 0; dy < propDef.footprint.h; dy++)
@@ -382,24 +382,25 @@ console.log('\nBroken debris never blocks (real movement, not just isWalkable)')
   // The Temple of the Sky is where the reported bug actually happened (a
   // broken pew, which is the `chair` kind's only placement); the General
   // Store covers the junk/container kinds in the same pass.
-  const KINDS_TO_CHECK: ReadonlyArray<{ readonly kind: string; readonly buildingName: string }> = [
-    { kind: 'chair', buildingName: 'Temple of the Sky' },
-    { kind: 'barrel', buildingName: 'General Store' },
-    { kind: 'crate', buildingName: 'General Store' },
-    { kind: 'shelf', buildingName: 'General Store' },
-  ];
+  const KINDS_TO_CHECK: ReadonlyArray<{ readonly kind: string; readonly buildingId: BuildingId }> =
+    [
+      { kind: 'chair', buildingId: 'taloncrest_temple' },
+      { kind: 'barrel', buildingId: 'taloncrest_general_store' },
+      { kind: 'crate', buildingId: 'taloncrest_general_store' },
+      { kind: 'shelf', buildingId: 'taloncrest_general_store' },
+    ];
   const STEP_COUNT = 40;
   const move: MovementInput = { dx: 0, dy: 1, isMobile: false };
 
-  for (const { kind, buildingName } of KINDS_TO_CHECK) {
-    const entry = plan.buildings.find((b) => b.name === buildingName);
-    if (entry === undefined) throw new Error(`${buildingName} was not in this plan`);
-    const map = buildInterior(entry.name, entry.kind, false);
+  for (const { kind, buildingId } of KINDS_TO_CHECK) {
+    const entry = plan.buildings.find((b) => b.id === buildingId);
+    if (entry === undefined) throw new Error(`${buildingId} was not in this plan`);
+    const map = buildInterior(entry.id, entry.kind, false);
     const placed = map.placedInteriorProps.find(
       (candidate) => TOWN_INTERIOR_PROPS[candidate.propId].destructible?.kind === kind,
     );
     if (placed === undefined) {
-      check(false, `"${buildingName}" places at least one breakable "${kind}" to drive through`);
+      check(false, `"${buildingId}" places at least one breakable "${kind}" to drive through`);
       continue;
     }
     const spec = TOWN_INTERIOR_PROPS[placed.propId].destructible;
@@ -599,7 +600,7 @@ console.log('\nExamine/search/use dispatch');
 console.log('\nBreak reactions (General Store)');
 {
   const map = generalStoreMap;
-  const occupants = InteriorOccupantSystem.forBuilding(map, 'store', 'General Store');
+  const occupants = InteriorOccupantSystem.forBuilding(map, 'store', 'taloncrest_general_store');
   const people = occupants?.people ?? [];
   check(people.length > 0, `the General Store has occupants to react (found ${people.length})`);
   const breakable = map.placedInteriorProps.filter(isBreakableInteriorProp);

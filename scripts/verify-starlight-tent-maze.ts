@@ -14,7 +14,6 @@
  *
  * Run: npx tsx scripts/verify-starlight-tent-maze.ts
  */
-import { STARLIGHT_TENT_NAME } from '../src/map/overworld/circusGroundsLayout';
 import {
   RING_GUARD_POSTS,
   type StarlightTentFinale,
@@ -328,7 +327,7 @@ console.log('\nChecking the act bands…');
 }
 
 const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-map.generateInterior('house', 0, STARLIGHT_TENT_NAME, false, {
+map.generateInterior('house', 0, 'taloncrest_circus_tent', false, {
   kind: 'starlight_tent_maze',
   plan: TEST_PLAN,
 });
@@ -1724,7 +1723,7 @@ function buildMazeHarness(progress: StarlightTentProgress = createStarlightTentP
   ring: RingHarness;
 } {
   const mazeMap = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  mazeMap.generateInterior('house', 0, STARLIGHT_TENT_NAME, false, {
+  mazeMap.generateInterior('house', 0, 'taloncrest_circus_tent', false, {
     kind: 'starlight_tent_maze',
     plan: TEST_PLAN,
   });
@@ -2499,8 +2498,8 @@ const DOOR_REFUSAL_MESSAGE = 'Not yet.';
 console.log('\nDriving a refused door through the door gate…');
 {
   const town = new GameMap({ mapSize: TOWN_MAP_SIZE, mapType: 'overworld' });
-  const starlightTent = town.buildingEntries.find((entry) => entry.name === STARLIGHT_TENT_NAME);
-  const otherDoor = town.buildingEntries.find((entry) => entry.name !== STARLIGHT_TENT_NAME);
+  const starlightTent = town.buildingEntries.find((entry) => entry.id === 'taloncrest_circus_tent');
+  const otherDoor = town.buildingEntries.find((entry) => entry.id !== 'taloncrest_circus_tent');
   check(starlightTent !== undefined, 'the generated town has a Starlight Tent');
   check(otherDoor !== undefined, 'the generated town has some other building to compare against');
 
@@ -2515,7 +2514,7 @@ console.log('\nDriving a refused door through the door gate…');
       },
       {
         blockedMessage: (entry) =>
-          entry.name === STARLIGHT_TENT_NAME && sealed ? DOOR_REFUSAL_MESSAGE : null,
+          entry.id === 'taloncrest_circus_tent' && sealed ? DOOR_REFUSAL_MESSAGE : null,
         onRefused: (message) => refusals.push(message),
       },
     );
@@ -3245,7 +3244,7 @@ console.log('\nChanging the difficulty while the show is on…');
 
   const progress = createStarlightTentProgress();
   const mazeMap = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  mazeMap.generateInterior('house', 0, STARLIGHT_TENT_NAME, false, {
+  mazeMap.generateInterior('house', 0, 'taloncrest_circus_tent', false, {
     kind: 'starlight_tent_maze',
     plan: TEST_PLAN,
   });
@@ -3412,7 +3411,7 @@ console.log('\nChanging the difficulty while the show is on…');
 console.log('\nChecking a guarded chest and an exit fixture in the tent…');
 {
   const fixtureMap = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  fixtureMap.generateInterior('house', 0, STARLIGHT_TENT_NAME, false, {
+  fixtureMap.generateInterior('house', 0, 'taloncrest_circus_tent', false, {
     kind: 'starlight_tent_maze',
     plan: TEST_PLAN,
   });

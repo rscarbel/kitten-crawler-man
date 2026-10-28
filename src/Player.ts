@@ -1,4 +1,4 @@
-import type { StatusEffect, StatusId } from './core/combat/StatusEffect';
+import type { StatusDamageOverTime, StatusEffect, StatusId } from './core/combat/StatusEffect';
 import {
   CRAWLER_HP_THRESHOLDS,
   HP_THRESHOLD_IDS,
@@ -29,6 +29,7 @@ import {
   CURABLE_AILMENT_STATUSES,
   makeBloodVomit,
   statusIncomingDamageScale,
+  STATUS_DEFS,
 } from './core/combat/StatusEffect';
 import {
   BRASS_BELCH_TEXT,
@@ -351,24 +352,8 @@ const FRAMES_PER_SECOND = 60;
 /** Iron Stomach can shorten a swallow's timers by a lot, but never to nothing. */
 const MIN_IRON_STOMACH_TIME_SCALE = 0.4;
 
-/** Tick intervals (in ticks) for each status effect type */
-const BURN_TICK_INTERVAL = 60;
-const POISON_TICK_INTERVAL = 120;
-const MAGIC_BURN_TICK_INTERVAL = 60;
-const ELECTRIFIED_TICK_INTERVAL = 60;
-const SPIT_VENOM_TICK_INTERVAL = 40;
-
 /** Damage every status effect deals per tick of its own interval. */
 const STATUS_TICK_DAMAGE = 1;
-
-/** How often each damage-over-time status bites, by type. */
-const STATUS_DAMAGE_INTERVALS: ReadonlyMap<string, number> = new Map([
-  ['burn', BURN_TICK_INTERVAL],
-  ['poison', POISON_TICK_INTERVAL],
-  ['magic_burn', MAGIC_BURN_TICK_INTERVAL],
-  ['electrified', ELECTRIFIED_TICK_INTERVAL],
-  ['spit_venom', SPIT_VENOM_TICK_INTERVAL],
-]);
 
 /**
  * How many more times an effect that bites every `interval` frames will bite.
@@ -392,18 +377,15 @@ function remainingBites(effect: StatusEffect, interval: number): number {
 export function pendingStatusDamage(effects: readonly StatusEffect[]): number {
   let total = 0;
   for (const effect of effects) {
-    const interval = STATUS_DAMAGE_INTERVALS.get(effect.type);
-    if (interval === undefined) continue;
-    total += remainingBites(effect, interval) * STATUS_TICK_DAMAGE;
+    const damageOverTime = STATUS_DEFS[effect.type].damageOverTime;
+    if (damageOverTime === null) continue;
+    total += remainingBites(effect, damageOverTime.intervalTicks) * STATUS_TICK_DAMAGE;
   }
   return total * statusIncomingDamageScale(effects);
 }
 
 /** Share of a damage number that survives a matching resistance. */
 export const RESISTED_DAMAGE_FRACTION = 0.5;
-
-/** The status effects a poison resistance blunts. */
-const POISON_RESISTED_EFFECTS: ReadonlySet<string> = new Set(['poison', 'spit_venom']);
 
 /**
  * Default wading depth, used by every mob. Half a tile puts the surface at about
@@ -1220,7 +1202,7 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
 
   /**
    * What this body's statuses multiply every blow it takes by, from any
-   * source; see `STATUS_INCOMING_DAMAGE_SCALE`.
+   * source; see `incomingDamageScale` in `STATUS_DEFS`.
    */
   get statusDamageScale(): number {
     return statusIncomingDamageScale(this.statusEffects);
@@ -1863,11 +1845,8 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
 
   /**
    * Advance all active status effects by one tick and apply their per-tick
-   * behaviour. Called automatically from tickTimers().
-   *
-   * Per-type rules:
-   *   burn  — 1 damage every 60 ticks (1 /second); 8 hits over 480 ticks.
-   *   (future: frozen → block movement in scene; paralyzed → block all input)
+   * behaviour. Called automatically from tickTimers(). A damage-over-time
+   * status bites on its `damageOverTime` clock in `STATUS_DEFS`.
    */
   private tickStatusEffects() {
     if (this.statusEffects.length === 0) return;
@@ -1880,24 +1859,9 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
     let statBoonExpired = false;
     for (const effect of this.statusEffects) {
       const elapsed = effect.totalTicks - effect.ticksRemaining;
-      if (effect.type === 'burn' && elapsed > 0 && elapsed % BURN_TICK_INTERVAL === 0) {
-        this.applyStatusTickDamage(effect);
-      }
-      if (effect.type === 'poison' && elapsed > 0 && elapsed % POISON_TICK_INTERVAL === 0) {
-        this.applyStatusTickDamage(effect);
-      }
-      if (effect.type === 'magic_burn' && elapsed > 0 && elapsed % MAGIC_BURN_TICK_INTERVAL === 0) {
-        this.applyStatusTickDamage(effect);
-      }
-      if (
-        effect.type === 'electrified' &&
-        elapsed > 0 &&
-        elapsed % ELECTRIFIED_TICK_INTERVAL === 0
-      ) {
-        this.applyStatusTickDamage(effect);
-      }
-      if (effect.type === 'spit_venom' && elapsed > 0 && elapsed % SPIT_VENOM_TICK_INTERVAL === 0) {
-        this.applyStatusTickDamage(effect);
+      const damageOverTime = STATUS_DEFS[effect.type].damageOverTime;
+      if (damageOverTime !== null && elapsed > 0 && elapsed % damageOverTime.intervalTicks === 0) {
+        this.applyStatusTickDamage(effect, damageOverTime);
       }
       effect.ticksRemaining--;
       const justExpired = effect.ticksRemaining < 0;
@@ -2081,8 +2045,9 @@ export abstract class Player implements AboveDarknessDrawer, PromptFigure {
     return Math.min(getSkillDef(id).maxLevel, this.skills.getLevel(id) + granted);
   }
 
-  private applyStatusTickDamage(effect: StatusEffect): void {
-    const resisted = POISON_RESISTED_EFFECTS.has(effect.type) && this.resists('poison');
+  private applyStatusTickDamage(effect: StatusEffect, damageOverTime: StatusDamageOverTime): void {
+    const resistance = damageOverTime.resistedBy;
+    const resisted = resistance !== null && this.resists(resistance);
     const damage = resisted
       ? Math.max(0, Math.floor(STATUS_TICK_DAMAGE * RESISTED_DAMAGE_FRACTION))
       : STATUS_TICK_DAMAGE;

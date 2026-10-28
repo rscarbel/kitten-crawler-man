@@ -24,8 +24,8 @@ import { GameMap } from '../src/map/GameMap.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import { createTownPlan, type BuildingKind } from '../src/map/town/townPlan.js';
 import { TOWN_INTERIOR_PROPS } from '../src/sprites/art/townInterior/townInteriorProps.js';
-import { NAMED_INTERIOR_LAYOUTS } from '../src/map/town/interiors/index.js';
-import type { BuildingName } from '../src/map/buildingEntry.js';
+import { INTERIOR_LAYOUTS_BY_BUILDING } from '../src/map/town/interiors/index.js';
+import type { BuildingId } from '../src/map/buildingIds.js';
 
 let failures = 0;
 function check(condition: boolean, label: string): void {
@@ -44,11 +44,11 @@ const DOORWAY_EXEMPTION_RADIUS_TILES = 1;
 
 const PLAN_SIZE = 5;
 const plan = createTownPlan(PLAN_SIZE);
-const buildingKindByName = new Map<BuildingName, BuildingKind>(
-  plan.buildings.map((b) => [b.name, b.kind]),
+const buildingKindById = new Map<BuildingId, BuildingKind>(
+  plan.buildings.map((b) => [b.id, b.kind]),
 );
 
-function buildInterior(name: BuildingName, kind: BuildingKind): GameMap {
+function buildInterior(name: BuildingId, kind: BuildingKind): GameMap {
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
   map.generateInterior(kind, 0, name, false);
   return map;
@@ -88,7 +88,7 @@ function largestEmptySquare(
   return best;
 }
 
-function checkRoomDensity(name: BuildingName, kind: BuildingKind): void {
+function checkRoomDensity(name: BuildingId, kind: BuildingKind): void {
   const map = buildInterior(name, kind);
   const furnished = furnishedTiles(map);
   const start = map.startTile;
@@ -116,9 +116,12 @@ function checkRoomDensity(name: BuildingName, kind: BuildingKind): void {
 // about density this codebase actually chose, not about every auto-generated
 // house in a 200-house overworld.
 console.log('Largest empty floor square per named interior\n');
-const namedRoomNames = new Set<BuildingName>([...NAMED_INTERIOR_LAYOUTS.keys(), 'General Store']);
-for (const name of namedRoomNames) {
-  const kind = buildingKindByName.get(name);
+const roomsWithLayouts = new Set<BuildingId>([
+  ...INTERIOR_LAYOUTS_BY_BUILDING.keys(),
+  'taloncrest_general_store',
+]);
+for (const name of roomsWithLayouts) {
+  const kind = buildingKindById.get(name);
   check(kind !== undefined, `"${name}" is a building the town plan places`);
   if (kind !== undefined) checkRoomDensity(name, kind);
 }

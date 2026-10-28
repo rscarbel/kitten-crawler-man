@@ -120,6 +120,7 @@ import { buildColosseumDressing } from '../src/systems/bossRooms/BossRoomDressin
 import { UINT32_SPAN } from '../src/core/world/WorldRandom.js';
 import { StairwellSystem } from '../src/systems/StairwellSystem.js';
 import { LabHallwayAtmosphere } from '../src/systems/spiderQuest/LabHallwayAtmosphere.js';
+import { parseLevelId } from '../src/levels/levelIds.js';
 
 const DEFAULT_LEVEL = 1;
 const DEFAULT_VIEW_TILES_W = 56;
@@ -215,7 +216,9 @@ const artSeed = tutorialRequested
   : FLOOR_ART_SEEDS[Math.abs(artSeedIndex) % FLOOR_ART_SEEDS.length];
 
 const floorNumber = intArg('level', DEFAULT_LEVEL);
-const levelDef = tutorialRequested ? tutorialLevel : getLevelDef(`level${floorNumber}`);
+const levelDef = tutorialRequested
+  ? tutorialLevel
+  : getLevelDef(parseLevelId(`level${floorNumber}`));
 if (levelDef.isOverworld) throw new Error(`level${floorNumber} is an overworld — use render-town`);
 
 const worldSeed = optionalIntArg('seed');

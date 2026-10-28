@@ -42,7 +42,7 @@ import {
   type CanvasSurface,
 } from '../../core/rendering/canvasSurface';
 import type { MapSpriteExtentsPx } from '../../core/spriteAssets/SpriteLoader';
-import type { VillageBuildingDef, VillageBuildingId } from '../overworld/briarHollowSite';
+import type { VillageBuildingDef } from '../overworld/briarHollowSite';
 import { briarHollowSiteFor } from './hollowSiteRegistry';
 import type { GroundPalette } from '../ground/GroundPalette';
 import { OVERWORLD_GROUND, type GroundMaterial } from '../town/groundMaterials';
@@ -67,6 +67,7 @@ import {
   type ClothColour,
 } from '../../sprites/art/villageArt';
 import { onCanvasRecovery } from '../../core/rendering/canvasRecovery';
+import type { BriarHollowBuildingId } from '../buildingIds';
 
 // ── Geometry, in tiles ────────────────────────────────────────────────────────
 
@@ -130,15 +131,19 @@ type Direction = 'north' | 'south' | 'east' | 'west';
 export type SignPictogram = 'anvil' | 'bowl' | 'mortar' | 'coin' | 'gear' | 'saw';
 
 /** The outbuildings: working sheds whose walls are woven wattle between posts. */
-const WATTLED_BUILDINGS: ReadonlySet<VillageBuildingId> = new Set(['barn', 'sawmill', 'garn_hut']);
+const WATTLED_BUILDINGS: ReadonlySet<BriarHollowBuildingId> = new Set([
+  'briar_hollow_barn',
+  'briar_hollow_sawmill',
+  'briar_hollow_quarry_hut',
+]);
 
-const SHOP_SIGNS: Partial<Record<VillageBuildingId, SignPictogram>> = {
-  forge: 'anvil',
-  cookhouse: 'bowl',
-  infirmary: 'mortar',
-  store: 'coin',
-  workshop: 'gear',
-  sawmill: 'saw',
+const SHOP_SIGNS: Partial<Record<BriarHollowBuildingId, SignPictogram>> = {
+  briar_hollow_forge: 'anvil',
+  briar_hollow_cookhouse: 'bowl',
+  briar_hollow_infirmary: 'mortar',
+  briar_hollow_store: 'coin',
+  briar_hollow_workshop: 'gear',
+  briar_hollow_sawmill: 'saw',
 };
 
 /** What a porthole-less stretch of north face carries. */
@@ -203,8 +208,8 @@ function keyOf(tx: number, ty: number): number {
 const WALL_KEY_STRIDE = 65536;
 
 function householdColour(
-  colours: ReadonlyMap<VillageBuildingId, ClothColour>,
-  id: VillageBuildingId,
+  colours: ReadonlyMap<BriarHollowBuildingId, ClothColour>,
+  id: BriarHollowBuildingId,
 ): ClothColour {
   return colours.get(id) ?? 'madder';
 }
@@ -1531,7 +1536,7 @@ export function hollowThresholdPalette(
     candidate.doorways.some((door) => door.x === tx && door.y === ty),
   );
   if (building === undefined || building.floor === 'planks') return OVERWORLD_GROUND;
-  return building.id === 'forge' ? GRAVEL_DOORWAY_PALETTE : EARTH_DOORWAY_PALETTE;
+  return building.id === 'briar_hollow_forge' ? GRAVEL_DOORWAY_PALETTE : EARTH_DOORWAY_PALETTE;
 }
 
 function doorwayPalette(material: GroundMaterial): GroundPalette {

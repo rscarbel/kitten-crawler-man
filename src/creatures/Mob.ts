@@ -8,6 +8,7 @@ import type { StatusEffect } from '../core/combat/StatusEffect';
 import { MOB_MAX_PATH_DISTANCE_TILES, type GameMap } from '../map/GameMap';
 import { verticalCollisionOffset } from '../map/collisionAnchors';
 import type { ItemId } from '../core/items/defs/ItemDefs';
+import type { CreatureAudioTag } from '../audio/creatureAudioTags';
 import { randomInt } from '../utils';
 import { AGGRO_PERSIST_MULTIPLIER, PLAYER_SPEED, WADE_SPEED_FACTOR } from '../core/constants';
 import { tryConsumePathfind } from './pathfindBudget';
@@ -1487,8 +1488,8 @@ export abstract class Mob extends Player {
   /** Short description shown in hover tooltip. Subclasses should override. */
   description = '';
 
-  /** Sound category key for attack audio (e.g. 'goblin', 'rat', 'llama'). Empty string = no sound. */
-  readonly audioTag: string = '';
+  /** The voice this mob's generic sound flags play under. */
+  readonly audioTag: CreatureAudioTag = 'silent';
 
   /**
    * Identifies this mob's type for death-cause tracking. Returns the class name by default;

@@ -6,7 +6,7 @@
  * so the session never touches the restock.
  */
 
-import { shopDef, type ShopId } from '../../../economy/shops';
+import { shopDef, shopTitle, type ShopId } from '../../../economy/shops';
 import type { ShopStock } from '../../../economy/shopStock';
 import {
   SOLD_OUT_LABEL,
@@ -33,7 +33,7 @@ function storeMenu(counter: StoreCounter): ShopMenu {
   const { shop, stock } = counter;
   const def = shopDef(shop);
   return {
-    title: def.name,
+    title: shopTitle(def),
     bark: STORE_BARK,
     byline: null,
     emblem: null,

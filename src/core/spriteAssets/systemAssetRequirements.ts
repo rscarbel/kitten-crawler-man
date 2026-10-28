@@ -1,3 +1,4 @@
+import { LEVEL_IDS, type LevelId } from '../../levels/levelIds';
 import { ASSET_GROUPS, type AssetGroup, type CreatureKind } from './assetGroups';
 import type { SpriteKey } from './SpriteLoader';
 
@@ -26,17 +27,17 @@ export interface SystemAssetRequirement {
   /** Stable id: `<system>` or `<system>:<bounty-or-quest-id>`. */
   readonly id: string;
   /** Level ids (`LevelDef.id`) this system/encounter can introduce creatures on. */
-  readonly levelIds: readonly string[];
+  readonly levelIds: readonly LevelId[];
   /** The creature kinds this system/encounter can construct. */
   readonly mobTypes: readonly CreatureKind[];
   /** Asset groups declared as covering `mobTypes`' sprite needs. */
   readonly requiredGroups: readonly AssetGroup[];
 }
 
-const LEVEL3 = ['level3'];
-const ALL_LEVELS = ['tutorial', 'level1', 'level2', 'level3'];
+const LEVEL3: readonly LevelId[] = ['level3'];
+const ALL_LEVELS = LEVEL_IDS;
 /** Every floor whose `LevelDef.fairies` table or boss fights can produce a fairy. */
-const FAIRY_LEVELS = ['level1', 'level2', 'level3'];
+const FAIRY_LEVELS: readonly LevelId[] = ['level1', 'level2', 'level3'];
 
 export const SYSTEM_ASSET_REQUIREMENTS: readonly SystemAssetRequirement[] = [
   // The fairy passes in `src/levels/fairySpawner.ts` read `LevelDef.fairies`,
@@ -208,7 +209,7 @@ export const SYSTEM_ASSET_REQUIREMENTS: readonly SystemAssetRequirement[] = [
  * `./assetGroups`, and this file sits alongside it.
  */
 export function requiredSpriteKeysForLevel(
-  levelId: string,
+  levelId: LevelId,
   spriteGroups: readonly AssetGroup[],
 ): ReadonlySet<SpriteKey> {
   const groups = new Set<AssetGroup>(spriteGroups);

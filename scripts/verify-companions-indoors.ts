@@ -93,12 +93,11 @@ import { MobRoster } from '../src/systems/kits/SceneWorld';
 import { SpellSystem } from '../src/systems/SpellSystem';
 import { Conversation } from '../src/dialog/Conversation';
 import { createTownPlan, type BuildingKind } from '../src/map/town/townPlan';
-import type { BuildingName } from '../src/map/buildingEntry';
+import type { BuildingId } from '../src/map/buildingIds';
 import { TOWER_FLOOR_COUNT } from '../src/map/GameMap';
 import { stampSafeRoomCounters } from '../src/map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../src/map/safeRoomDecorLayout';
 import { STARLIGHT_TENT_ENTRY_KIND } from '../src/map/OverworldGenerator';
-import { STARLIGHT_TENT_NAME } from '../src/map/overworld/circusGroundsLayout';
 import {
   MAZE_CAT_SPAWN_TILE,
   MAZE_HUMAN_SPAWN_TILE,
@@ -111,7 +110,6 @@ const STARLIGHT_TENT_WORLD_SEED = 0x5eed_b16;
 const STARLIGHT_TENT_DIFFICULTY = 'normal';
 import { TOWN_INTERIOR_PROPS } from '../src/sprites/art/townInterior/townInteriorProps';
 import { AnchorInteriorSystem } from '../src/systems/AnchorInteriorSystem';
-import { SKY_TEMPLE_NAME } from '../src/systems/interiorStoryOwnership';
 import { createAnchorQuestProgress } from '../src/core/quests/AnchorQuestProgress';
 import { CultHideoutSystem } from '../src/systems/CultHideoutSystem';
 import { interiorHostilesFor } from '../src/systems/interiorHostiles';
@@ -1121,7 +1119,7 @@ const WALK_DIRECTIONS: ReadonlyArray<{ dx: number; dy: number; name: string }> =
 
 interface RoomArrival {
   readonly label: string;
-  readonly buildingName: string;
+  readonly buildingId: BuildingId;
   readonly kind: BuildingKind;
   readonly storey: number;
   readonly map: GameMap;
@@ -1131,7 +1129,7 @@ interface RoomArrival {
   readonly fixedMarks?: { readonly human: MazeTile; readonly cat: MazeTile };
 }
 
-function buildRoom(name: BuildingName, kind: BuildingKind, storey: number, hasSafeRoom: boolean) {
+function buildRoom(name: BuildingId, kind: BuildingKind, storey: number, hasSafeRoom: boolean) {
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
   map.generateInterior(kind, storey, name, hasSafeRoom);
   // The scene stamps these after the map is built; a room checked without
@@ -1155,20 +1153,20 @@ function footOfStair(stairs: ReadonlyArray<{ x: number; y: number }>, map: GameM
 function everyRoomArrival(): RoomArrival[] {
   const plan = createTownPlan(level3.mapSize);
   const arrivals: RoomArrival[] = [];
-  const buildings: Array<{ name: BuildingName; kind: BuildingKind; hasSafeRoom: boolean }> = [
+  const buildings: Array<{ name: BuildingId; kind: BuildingKind; hasSafeRoom: boolean }> = [
     ...plan.buildings.map((b) => ({
-      name: b.name,
+      name: b.id,
       kind: b.kind,
       hasSafeRoom: b.hasSafeRoom === true,
     })),
-    { name: plan.tower.name, kind: plan.tower.kind, hasSafeRoom: false },
-    { name: STARLIGHT_TENT_NAME, kind: STARLIGHT_TENT_ENTRY_KIND, hasSafeRoom: false },
+    { name: plan.tower.id, kind: plan.tower.kind, hasSafeRoom: false },
+    { name: 'taloncrest_circus_tent', kind: STARLIGHT_TENT_ENTRY_KIND, hasSafeRoom: false },
   ];
   for (const { name, kind, hasSafeRoom } of buildings) {
     const storeys = kind === 'tower' ? TOWER_FLOOR_COUNT : 1;
     for (let storey = 0; storey < storeys; storey++) {
       const map = buildRoom(name, kind, storey, hasSafeRoom);
-      const base = { buildingName: name, kind, storey, map };
+      const base = { buildingId: name, kind, storey, map };
       if (storey === 0) arrivals.push({ ...base, label: `${name}, door`, landing: map.startTile });
       if (map._interiorStairDownTiles.length > 0) {
         arrivals.push({
@@ -1187,13 +1185,13 @@ function everyRoomArrival(): RoomArrival[] {
     }
   }
   const maze = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  maze.generateInterior(STARLIGHT_TENT_ENTRY_KIND, 0, STARLIGHT_TENT_NAME, false, {
+  maze.generateInterior(STARLIGHT_TENT_ENTRY_KIND, 0, 'taloncrest_circus_tent', false, {
     kind: 'starlight_tent_maze',
     plan: planStarlightTentMaze(STARLIGHT_TENT_WORLD_SEED, STARLIGHT_TENT_DIFFICULTY),
   });
   arrivals.push({
-    label: `${STARLIGHT_TENT_NAME} maze, two flaps`,
-    buildingName: STARLIGHT_TENT_NAME,
+    label: `taloncrest_circus_tent maze, two flaps`,
+    buildingId: 'taloncrest_circus_tent',
     kind: STARLIGHT_TENT_ENTRY_KIND,
     storey: 0,
     map: maze,
@@ -1404,10 +1402,10 @@ function checkPartyInEveryRoom(arrival: RoomArrival): void {
 function checkTempleVermin(): void {
   section('The temple’s vermin are put where the party can find them');
   const plan = createTownPlan(level3.mapSize);
-  const temple = plan.buildings.find((building) => building.name === SKY_TEMPLE_NAME);
+  const temple = plan.buildings.find((building) => building.id === 'taloncrest_temple');
   check(temple !== undefined, 'the town has its temple');
   if (temple === undefined) return;
-  const map = buildRoom(temple.name, temple.kind, GROUND_STOREY, temple.hasSafeRoom === true);
+  const map = buildRoom(temple.id, temple.kind, GROUND_STOREY, temple.hasSafeRoom === true);
   const progress = createAnchorQuestProgress();
   progress.status = 'active';
   progress.temple = 'in_progress';
@@ -1415,7 +1413,7 @@ function checkTempleVermin(): void {
   const party = makeParty(map, map.startTile);
   const vermin: Mob[] = [];
   AnchorInteriorSystem.forBuilding(
-    temple.name,
+    temple.id,
     GROUND_STOREY,
     progress,
     map,
@@ -1466,7 +1464,7 @@ function checkQuestHostilesIndoors(): void {
       reachable: reachableFrom(map, arrival.landing),
     };
     const spawned: Mob[] = [];
-    if (arrival.buildingName === CULT_HIDEOUT_NAME && arrival.storey === GROUND_STOREY) {
+    if (arrival.buildingId === CULT_HIDEOUT_NAME && arrival.storey === GROUND_STOREY) {
       const progress = createMurderQuestProgress();
       progress.stage = 'cult_hideout';
       new CultHideoutSystem(
@@ -1482,7 +1480,7 @@ function checkQuestHostilesIndoors(): void {
       progress.stage = 'confrontation';
       spawned.push(
         ...interiorHostilesFor({
-          buildingName: arrival.buildingName,
+          buildingId: arrival.buildingId,
           buildingType: arrival.kind,
           floor: arrival.storey,
           map,
@@ -1499,7 +1497,7 @@ function checkQuestHostilesIndoors(): void {
 }
 
 /** The house the cult holds its meetings in. */
-const CULT_HIDEOUT_NAME = 'Blackwood Lodge';
+const CULT_HIDEOUT_NAME = 'taloncrest_garrison_lodge';
 
 function checkEveryRoom(): void {
   section('In every room, every body the party brings stands where it can move');
@@ -1509,7 +1507,7 @@ function checkEveryRoom(): void {
 
   // The temple's door is flanked by candle stands, one of them on the tile east
   // of the landing; a party set down blind puts its follower inside it.
-  const temple = arrivals.find((arrival) => arrival.buildingName === SKY_TEMPLE_NAME);
+  const temple = arrivals.find((arrival) => arrival.buildingId === 'taloncrest_temple');
   if (temple === undefined) {
     check(false, 'negative: the temple is among the rooms walked into');
     return;
@@ -1560,7 +1558,7 @@ function checkPartyOutdoors(): void {
     for (const entry of map.buildingEntries) {
       const landing = { x: entry.doorTile.x, y: entry.doorTile.y + DOORSTEP_OFFSET_Y };
       const { leader, follower } = findPartyArrivalTiles(map, landing);
-      const where = `seed ${worldSeed}, ${entry.name}`;
+      const where = `seed ${worldSeed}, ${entry.id}`;
       const followerKey = `${follower.x},${follower.y}`;
       const cat = new CatPlayer(follower.x, follower.y, TILE_SIZE);
       if (follower.x === leader.x && follower.y === leader.y) {

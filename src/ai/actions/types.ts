@@ -1,3 +1,4 @@
+import type { LevelId } from '../../levels/levelIds';
 import type { AchievementAwards } from '../../systems/AchievementAwards';
 import type { AudioManager } from '../../audio/AudioManager';
 import type { MusicClaims } from '../../audio/AudioScope';
@@ -28,7 +29,7 @@ export interface AISceneContext {
   getCat(): CatPlayer;
   getMobs(): Mob[];
   getGameMap(): GameMap;
-  getLevelId(): string;
+  getLevelId(): LevelId;
   spawnMob(mob: Mob): void;
   isBossFightActive(): boolean;
   isPaused(): boolean;
@@ -58,7 +59,7 @@ export interface AISceneContext {
 export type AITargetCrawler = 'human' | 'cat';
 
 /** One floor of one run: its level id and the world seed the run rolled. */
-export function aiFloorKey(levelId: string, worldSeed: number): string {
+export function aiFloorKey(levelId: LevelId, worldSeed: number): string {
   return `${levelId}#${worldSeed}`;
 }
 

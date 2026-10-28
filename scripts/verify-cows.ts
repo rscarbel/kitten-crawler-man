@@ -245,7 +245,7 @@ function tilesApart(a: { x: number; y: number }, b: { x: number; y: number }): n
 function allowedGround(site: BriarHollowSite): (tile: TilePoint) => boolean {
   const { rect, fenceGates } = site.pasture;
   const paddock: TileRect = { x: rect.x + 1, y: rect.y + 1, w: rect.w - 2, h: rect.h - 2 };
-  const barn = site.buildings.find((building) => building.id === 'barn');
+  const barn = site.buildings.find((building) => building.id === 'briar_hollow_barn');
   const lane: TilePoint[] = [];
   for (const gate of fenceGates) {
     lane.push(gate);

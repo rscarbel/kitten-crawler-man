@@ -103,7 +103,6 @@ import { grownRect, KeepOut } from './overworld/keepOut';
 import {
   CIRCUS_TERRAIN_CLEARANCE_TILES,
   CIRCUS_RADIUS_TILES,
-  STARLIGHT_TENT_NAME,
   type CircusGroundsSite,
 } from './overworld/circusGroundsLayout';
 import { circusApproachCentreLine, paintCircusGrounds } from './overworld/paintCircusGrounds';
@@ -378,7 +377,7 @@ export function generateOverworld(size: number): OverworldData {
   }
   buildingEntries.push({
     doorTile: towerDoor,
-    name: plan.tower.name,
+    id: plan.tower.id,
     type: plan.tower.kind,
     doorway: { x0: towerSpan.x0, width: towerSpan.width },
   });
@@ -397,7 +396,7 @@ export function generateOverworld(size: number): OverworldData {
   const buildingPlots: TileRect[] = [];
   const namedPlots: TownPlot[] = [
     // The only plot allowed to stand on the wall: the tower *is* part of it.
-    { name: plan.tower.name, rect: towerBasePlot(plan), container: 'north wall' },
+    { name: plan.tower.id, rect: towerBasePlot(plan), container: 'north wall' },
   ];
   for (const planned of plan.buildings) {
     const placement = placeSpriteBuilding(grid, plan, planned);
@@ -408,10 +407,10 @@ export function generateOverworld(size: number): OverworldData {
       w: placement.rect.w,
       h: planned.frontRow - planned.plotTop + 1,
     });
-    namedPlots.push({ name: planned.name, rect: placement.rect, container: 'interior' });
+    namedPlots.push({ name: planned.id, rect: placement.rect, container: 'interior' });
     buildingEntries.push({
       doorTile: placement.doorTile,
-      name: planned.name,
+      id: planned.id,
       type: planned.kind,
       hasSafeRoom: planned.hasSafeRoom,
       sign: planned.sign,
@@ -667,7 +666,7 @@ function assertWildernessIsReachable(
 
   for (const entry of entries) {
     if (reachability.reached(entry.doorTile.x, entry.doorTile.y)) continue;
-    throw new Error(`The door of '${entry.name}' is cut off from the town square`);
+    throw new Error(`The door of '${entry.id}' is cut off from the town square`);
   }
   if (!reachability.reached(circusCentre.x, circusCentre.y)) {
     throw new Error('The circus is cut off from the town square');
@@ -1057,7 +1056,7 @@ function assertTownPlotsDoNotOverlap(plan: TownPlan, plots: ReadonlyArray<TownPl
  * distinction. It stands outside the walls at a random distance, and below about
  * map size 200 the circus can be placed far enough out to be clipped by the void
  * border: measured over 100 generations, **about half** of them at size 120 and half
- * at size 150 would throw `The door of 'The Starlight Tent' cannot be reached from the plaza`.
+ * at size 150 would throw `The door of 'taloncrest_circus_tent' cannot be reached from the plaza`.
  * (Two separate 20-sample runs put 120 above and below 150 respectively, so no
  * ordering between the two sizes is claimed — only that it is a coin toss at both.)
  * The only
@@ -1082,7 +1081,7 @@ function assertTownPlotsDoNotOverlap(plan: TownPlan, plots: ReadonlyArray<TownPl
  * rather than from the art rects the generator already has. Those are two
  * different sets, and the difference is exactly the doorway: a doorway is inside
  * its building's art and is the one tile of it that is not blocked, so a check
- * built from the art rects fails every door (`The door of 'Blackwood Lodge'
+ * built from the art rects fails every door (`The door of 'taloncrest_garrison_lodge'
  * cannot be reached from the plaza`). A connectivity check that disagrees with
  * the collision model is worse than none — which is also why the type branch is
  * `getBlockedTileOffsets(tile.type)` and not a test for `MAIN_TOWER`: `WELL`
@@ -1156,10 +1155,10 @@ function assertTownIsFullyReachable(
     const { doorTile } = entry;
     if (!inTown(doorTile.x, doorTile.y)) continue;
     if (!reached(doorTile.x, doorTile.y)) {
-      throw new Error(`The door of '${entry.name}' cannot be reached from the plaza`);
+      throw new Error(`The door of '${entry.id}' cannot be reached from the plaza`);
     }
     if (!reached(doorTile.x, doorTile.y + 1)) {
-      throw new Error(`Leaving '${entry.name}' would put the player on an unreachable tile`);
+      throw new Error(`Leaving '${entry.id}' would put the player on an unreachable tile`);
     }
   }
 }
@@ -1288,7 +1287,7 @@ function paintCircus(
   );
   buildingEntries.push({
     doorTile: starlightTentDoor.doorTile,
-    name: STARLIGHT_TENT_NAME,
+    id: 'taloncrest_circus_tent',
     type: STARLIGHT_TENT_ENTRY_KIND,
     doorway: { x0: starlightTentDoor.doorTile.x, width: starlightTentDoor.doorwayWidth },
   });

@@ -43,7 +43,7 @@ export const INTERIOR_EXIT_FIXTURES = {
   rope_ladder: {
     prompt: 'Climb out',
     departure: { kind: 'fade', frames: LADDER_CLIMB_FADE_FRAMES },
-    sound: null,
+    sound: 'rope_ladder_climb',
   },
 } as const satisfies Record<InteriorExitFixtureId, InteriorExitFixtureSpec>;
 

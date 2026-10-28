@@ -36,7 +36,7 @@ import {
   DOOR_PEG_POST_VARIANT,
   PLAN_CHEST_VARIANT,
 } from '../../../sprites/art/townInterior/rooms/plumblineFarm';
-import { prop, type TownInteriorLayoutEntry } from './types';
+import { prop, type TownInteriorLayoutEntry, statefulProp } from './types';
 
 /** `rug_medium`'s warm colourway, the one that sits with timber walls. */
 const WARM_RUG_VARIANT = 1;
@@ -172,12 +172,12 @@ export function buildPlumblineFarmLayout(
 
   return [
     prop(draftingCol, northRow, 'drafting_table'),
-    prop(toolWallCol, northRow, 'tool_wall'),
+    statefulProp(toolWallCol, northRow, 'tool_wall', 'tool_wall'),
     prop(hearthCol, northRow, 'builders_hearth'),
     prop(dairyWallCol, northRow, 'dairy_wall'),
 
     prop(westCol, underWallRow, 'roll_bin'),
-    prop(draftingStoolCol, underWallRow, 'stool'),
+    statefulProp(draftingStoolCol, underWallRow, 'stool', 'stool_1'),
     prop(sawhorseCol, underWallRow, 'sawhorse'),
     prop(westCol, planChestRow, 'plan_chest', variantFor(state, swapped.planChest), {
       id: swapped.planChest,
@@ -185,23 +185,23 @@ export function buildPlumblineFarmLayout(
     prop(trestleCol, trestleRow, 'door_on_trestles'),
 
     prop(hearthCol, hearthRugRow, 'rug_medium', WARM_RUG_VARIANT),
-    prop(goodChairCol, hearthRugRow, 'good_chair'),
+    statefulProp(goodChairCol, hearthRugRow, 'good_chair', 'good_chair'),
 
     prop(churnCol, underWallRow, 'churn_stand', variantFor(state, swapped.churnStand), {
       id: swapped.churnStand,
     }),
     prop(eastCol, pailStackRow, 'pail_stack'),
-    prop(churnCol, feedRow, 'feed_stack'),
+    statefulProp(churnCol, feedRow, 'feed_stack', 'feed_stack'),
 
-    prop(toolChestCol, workRow, 'tool_chest'),
+    statefulProp(toolChestCol, workRow, 'tool_chest', 'tool_chest'),
     prop(stairShelfCol, workRow, 'stair_shelf'),
 
-    prop(westCol, washstandRow, 'washstand'),
+    statefulProp(westCol, washstandRow, 'washstand', 'washstand'),
     prop(supperCol, supperRow, 'rug_small', SUPPER_RUG_VARIANT),
-    prop(supperCol, supperRow, 'supper_table'),
-    prop(supperStoolCol, supperRow + 1, 'stool', 1),
+    statefulProp(supperCol, supperRow, 'supper_table', 'supper_table'),
+    statefulProp(supperStoolCol, supperRow + 1, 'stool', 'stool_2', 1),
     prop(westCol, southRow, 'made_cot'),
-    prop(westCol + TOWN_INTERIOR_PROPS.made_cot.footprint.w, southRow, 'chest'),
+    statefulProp(westCol + TOWN_INTERIOR_PROPS.made_cot.footprint.w, southRow, 'chest', 'chest'),
     prop(bootTrayCol, southRow, 'boot_tray', variantFor(state, swapped.bootTray), {
       id: swapped.bootTray,
     }),

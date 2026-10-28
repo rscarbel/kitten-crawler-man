@@ -3,7 +3,7 @@
  * act, and the cards that open each act after the first.
  */
 
-import { STARLIGHT_TENT_NAME } from '../../../map/overworld/circusGroundsLayout';
+import { buildingDisplayName } from '../../../map/buildingIds';
 import { speakerLines, transientSpeaker } from '../../line';
 import type { DialogLine, NonEmpty } from '../../line';
 import { crawlerName } from '../../../characters/characters';
@@ -12,7 +12,7 @@ const HUMAN_NAME = crawlerName('human');
 const CAT_NAME = crawlerName('cat');
 
 /** The tent's own header, for a narration page with no more specific title to give it. */
-const narrator = transientSpeaker(STARLIGHT_TENT_NAME, 'narration');
+const narrator = transientSpeaker(buildingDisplayName('taloncrest_circus_tent'), 'narration');
 const burned = transientSpeaker('Burned', 'narration');
 const caught = transientSpeaker('Caught', 'narration');
 const scorched = transientSpeaker('Scorched', 'narration');

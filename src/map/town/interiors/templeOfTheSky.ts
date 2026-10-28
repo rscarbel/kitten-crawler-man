@@ -25,8 +25,16 @@
 
 import { RUG } from '../../tileTypes';
 import { TOWN_INTERIOR_PROPS } from '../../../sprites/art/townInterior/townInteriorProps';
-import { contractTarget, prop, tile, type TownInteriorLayoutEntry } from './types';
+import {
+  contractTarget,
+  prop,
+  tile,
+  type TownInteriorLayoutEntry,
+  statefulProp,
+  contractTargetId,
+} from './types';
 import type { ContractAreaRecord } from '../../contractAreas';
+import type { PlannedBuildingId } from '../../buildingIds';
 
 /** One pew segment in this many carries a book left on its seat. */
 const PEW_BOOK_EVERY = 5;
@@ -38,7 +46,7 @@ function pewVariant(col: number, rank: number): number {
   return (col + rank * PEW_BOOK_RANK_STRIDE) % PEW_BOOK_EVERY === 0 ? PEW_BOOK_VARIANT : 0;
 }
 
-const CONTRACT_SITE = 'temple_of_the_sky';
+const CONTRACT_SITE = 'taloncrest_temple' satisfies PlannedBuildingId;
 /** The east end of the third rank: an ordinary pew, clear of the aisle's candle stands. */
 const CONTRACT_PEW_RANK = 2;
 const NAVE_FLAGS_SPOT_W = 3;
@@ -175,14 +183,14 @@ export function buildTempleOfTheSkyLayout(w: number, h: number): TownInteriorLay
     prop(altarCol, daisRow, 'sky_window'),
     prop(altarCol, daisRow, 'altar', 0, contractTarget(CONTRACT_SITE, 'altar')),
     prop(lecternCol, daisRow, 'lectern', 0, contractTarget(CONTRACT_SITE, 'lectern')),
-    prop(westCandelabrumCol, daisRow, 'temple_candelabrum'),
-    prop(eastCandelabrumCol, daisRow, 'temple_candelabrum'),
+    statefulProp(westCandelabrumCol, daisRow, 'temple_candelabrum', 'temple_candelabrum_1'),
+    statefulProp(eastCandelabrumCol, daisRow, 'temple_candelabrum', 'temple_candelabrum_2'),
     prop(westPerchCol, daisRow, 'perch_stand'),
     prop(eastPerchCol, daisRow, 'perch_stand', 1),
     prop(westBannerCol, daisRow, 'sky_banner'),
     prop(eastBannerCol, daisRow, 'sky_banner'),
-    prop(westBrazierCol, daisRow, 'forge_brazier'),
-    prop(eastBrazierCol, daisRow, 'forge_brazier'),
+    statefulProp(westBrazierCol, daisRow, 'forge_brazier', 'forge_brazier_1'),
+    statefulProp(eastBrazierCol, daisRow, 'forge_brazier', 'forge_brazier_2'),
     prop(westVotiveCol, daisFrontRow, 'votive_rack'),
     prop(eastVotiveCol, daisFrontRow, 'votive_rack'),
   ];
@@ -196,22 +204,33 @@ export function buildTempleOfTheSkyLayout(w: number, h: number): TownInteriorLay
     const westEnd = isEndRank ? westPewEndCol - 1 : westPewEndCol;
     const eastStart = isEndRank ? eastPewStartCol + 1 : eastPewStartCol;
     for (let rx = westPewStartCol; rx <= westEnd; rx++)
-      entries.push(prop(rx, pewRow, 'pew', pewVariant(rx, rank)));
-    for (let rx = eastStart; rx <= eastPewEndCol; rx++) {
-      const isContractPew = rank === CONTRACT_PEW_RANK && rx === eastPewEndCol;
       entries.push(
-        prop(
+        statefulProp(
           rx,
           pewRow,
           'pew',
+          `pew_${rank}_west_${rx - westPewStartCol}`,
           pewVariant(rx, rank),
-          isContractPew ? contractTarget(CONTRACT_SITE, 'pew') : {},
         ),
       );
+    for (let rx = eastStart; rx <= eastPewEndCol; rx++) {
+      const isContractPew = rank === CONTRACT_PEW_RANK && rx === eastPewEndCol;
+      const pewId = isContractPew
+        ? contractTargetId(CONTRACT_SITE, 'pew')
+        : `pew_${rank}_east_${rx - eastStart}`;
+      entries.push(statefulProp(rx, pewRow, 'pew', pewId, pewVariant(rx, rank)));
     }
     if (isEndRank) {
-      entries.push(prop(westPewEndCol, pewRow, 'temple_candelabrum', 1));
-      entries.push(prop(eastPewStartCol, pewRow, 'temple_candelabrum', 1));
+      entries.push(
+        statefulProp(westPewEndCol, pewRow, 'temple_candelabrum', `pew_end_light_${rank}_west`, 1),
+        statefulProp(
+          eastPewStartCol,
+          pewRow,
+          'temple_candelabrum',
+          `pew_end_light_${rank}_east`,
+          1,
+        ),
+      );
     }
   }
 
@@ -235,10 +254,10 @@ export function buildTempleOfTheSkyLayout(w: number, h: number): TownInteriorLay
     prop(westWallCol, lowerScriptureRow, 'scripture_shelf', 1),
     prop(eastWallCol, lowerScriptureRow, 'scripture_shelf'),
     prop(eastWallCol, sidePerchRow, 'perch_stand'),
-    prop(westBenchCol, benchRow, 'pew'),
-    prop(westBenchCol + 1, benchRow, 'pew'),
-    prop(eastBenchCol, benchRow, 'pew'),
-    prop(eastBenchCol + 1, benchRow, 'pew'),
+    statefulProp(westBenchCol, benchRow, 'pew', 'pew_3'),
+    statefulProp(westBenchCol + 1, benchRow, 'pew', 'pew_4'),
+    statefulProp(eastBenchCol, benchRow, 'pew', 'pew_5'),
+    statefulProp(eastBenchCol + 1, benchRow, 'pew', 'pew_6'),
     prop(
       westBenchCol,
       narthexVotiveRow,
@@ -247,8 +266,8 @@ export function buildTempleOfTheSkyLayout(w: number, h: number): TownInteriorLay
       contractTarget(CONTRACT_SITE, 'votive_rack'),
     ),
     prop(eastBenchCol, narthexVotiveRow, 'votive_rack'),
-    prop(westDoorLightCol, doorRow, 'temple_candelabrum', 1),
-    prop(eastDoorLightCol, doorRow, 'temple_candelabrum', 1),
+    statefulProp(westDoorLightCol, doorRow, 'temple_candelabrum', 'temple_candelabrum_5', 1),
+    statefulProp(eastDoorLightCol, doorRow, 'temple_candelabrum', 'temple_candelabrum_6', 1),
     prop(fontCol, fontRow, 'sky_font', 0, contractTarget(CONTRACT_SITE, 'font')),
     prop(offeringTableCol, fontRow, 'offering_table'),
     prop(westWallCol, narthexPerchRow + 1, 'perch_stand'),

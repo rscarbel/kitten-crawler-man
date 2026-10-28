@@ -83,6 +83,9 @@ and why the crowd is rolled from the world seed.
   `AMBIENT_VOICE_OF`
   (`src/dialog/scripts/townsfolk.ts`, which may share an existing ambient pool or name a
   new one) and `FRONTAGE_HAWKFOLK_SHARE_BY_KEEPER` (`TownLifeSystem`).
+- **Homes are building ids.** A resident's `home`, and every building-keyed table here,
+  takes a `BuildingId` (`src/map/buildingIds.ts`), never the name on the sign. An id says
+  what the building is, never who runs it, so renaming a resident leaves it alone.
 - **A building's keeper is named.** `BUILDING_KEEPERS` (`src/systems/townResidents.ts`)
   names who keeps each building a resident lives in; its type requires an entry for every
   such building and only accepts someone who lives there. The keeper's species leans the

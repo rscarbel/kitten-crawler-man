@@ -42,7 +42,8 @@ import { drawBaggiCorpse } from '../sprites/baggiSprite';
 import { drawWellClueProp, drawHomeClueProp, drawRoostClueProp } from '../sprites/kraseuClueProps';
 import { drawRadialGlow } from '../sprites/radialGlow';
 import { bouncingArrowAboveEntityTop, drawBouncingArrowAboveEntity } from '../ui/WorldArrow';
-import type { BuildingEntry, BuildingName } from '../map/buildingEntry';
+import type { BuildingEntry } from '../map/buildingEntry';
+import type { BuildingId } from '../map/buildingIds';
 import { doorwayBeaconTarget, towerApproachBeaconTarget } from './objectiveBeaconTargets';
 import { drawInteractionPrompt, drawInteractionPromptOver } from '../ui/InteractionPrompt';
 import type { Conversation } from '../dialog/Conversation';
@@ -54,7 +55,6 @@ import { partyXpSections } from '../ui/questReward/rewardLines';
 import type { QuestRewardSpec, RewardItemLine } from '../ui/questReward/types';
 import { grantQuestGear } from '../loot/questGear';
 import type { GearId } from '../loot/gearPools';
-import { CLOAK_AND_DAGGER_NAME, TOWN_TOWER_NAME } from '../map/town/townPlan';
 import {
   MURDER_HOOK,
   MURDER_BODY_FOUND,
@@ -300,13 +300,13 @@ export class MurderMysteryQuestSystem implements GameSystem {
         coins: 150,
       },
     });
-    const pubDoor = this.doorTileOf('The Sunken Stump Pub');
+    const pubDoor = this.doorTileOf('taloncrest_pub');
     // Baggi's opening approach happens at the Cloak & Dagger when it exists
     // on this floor, else at the pub. Gated on the pub
     // too, so on a pub-less map the alley/body anchor and the "is this quest
     // viable?" check below resolve without a club. Dropping this club lookup
     // forces the pub hook; nothing else in the quest depends on it.
-    const clubDoor = pubDoor ? this.doorTileOf(CLOAK_AND_DAGGER_NAME) : null;
+    const clubDoor = pubDoor ? this.doorTileOf('taloncrest_nightclub') : null;
     // The hook and the corpse anchor separately: she is last seen at the club's
     // door and found in the alley beside it.
     const hookDoor = clubDoor ?? pubDoor;
@@ -319,8 +319,8 @@ export class MurderMysteryQuestSystem implements GameSystem {
     this.alleyTile = alleyDoor
       ? this.findSpawnTile(alleyDoor.x + alleyOffset.dx, alleyDoor.y + alleyOffset.dy)
       : null;
-    this.hideoutEntry = this.buildingEntryOf('Blackwood Lodge');
-    this.towerEntry = this.buildingEntryOf(TOWN_TOWER_NAME);
+    this.hideoutEntry = this.buildingEntryOf('taloncrest_garrison_lodge');
+    this.towerEntry = this.buildingEntryOf('taloncrest_tower');
 
     const wellTile = this.findWellTile();
     if (wellTile) {
@@ -331,7 +331,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
         drawProp: drawWellClueProp,
       });
     }
-    const homeEntry = this.buildingEntryOf("Old Lori's Cottage");
+    const homeEntry = this.buildingEntryOf('taloncrest_old_lady_cottage');
     const homeTile = homeEntry
       ? this.findTileClearOfAllDoorways(
           homeEntry.doorTile.x + HOME_DOOR_OFFSET.dx,
@@ -414,12 +414,12 @@ export class MurderMysteryQuestSystem implements GameSystem {
     }
   }
 
-  private buildingEntryOf(buildingName: BuildingName): BuildingEntry | null {
-    return this.gameMap.buildingEntries.find((b) => b.name === buildingName) ?? null;
+  private buildingEntryOf(buildingId: BuildingId): BuildingEntry | null {
+    return this.gameMap.buildingEntries.find((b) => b.id === buildingId) ?? null;
   }
 
-  private doorTileOf(buildingName: BuildingName): { x: number; y: number } | null {
-    return this.buildingEntryOf(buildingName)?.doorTile ?? null;
+  private doorTileOf(buildingId: BuildingId): { x: number; y: number } | null {
+    return this.buildingEntryOf(buildingId)?.doorTile ?? null;
   }
 
   private get hideoutDoorTile(): { x: number; y: number } | null {

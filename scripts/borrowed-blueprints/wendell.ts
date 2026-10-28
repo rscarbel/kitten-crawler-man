@@ -26,10 +26,8 @@ import type { DialogLine } from '../../src/dialog/line';
 import type { ConversationRequest } from '../../src/dialog/request';
 import { DAIRY_LIVE_EXAMINE_LINES, EXAMINE_LINES } from '../../src/dialog/scripts/interiorObjects';
 import { WENDELL } from '../../src/dialog/scripts/wendellBlueprints';
-import { PLUMBLINE_FARM_NAME } from '../../src/systems/briarHollow/blueprints/blueprintsProgress';
 import { plumblineFarmExamineLine } from '../../src/systems/briarHollow/blueprints/plumblineFarmRoom';
 import { WendellBlueprintsHook } from '../../src/systems/briarHollow/blueprints/WendellBlueprintsHook';
-import { LORI_COTTAGE_NAME } from '../../src/systems/interiorStoryOwnership';
 
 /** The runner's pass/fail recorder, handed in so every section counts toward one verdict. */
 export type Check = (ok: boolean, label: string) => void;
@@ -72,7 +70,7 @@ function wendellRig(phase: BlueprintsQuestPhase): WendellRig {
   bus.on('blueprintsQuestPhaseChanged', (event) => phasesMoved.push(event.phase));
   const granted: ItemId[] = [];
   const visit = (): WendellBlueprintsHook => {
-    const hook = WendellBlueprintsHook.forBuilding(PLUMBLINE_FARM_NAME, WENDELL_FLOOR, {
+    const hook = WendellBlueprintsHook.forBuilding('taloncrest_builder_farm', WENDELL_FLOOR, {
       state,
       bus,
       audio: null,
@@ -113,7 +111,11 @@ function questSlotItem(crawler: HumanPlayer | CatPlayer): ItemId | null {
 /** The first visit: his price, in the active crawler's voice, and on to Merrit only once it is read. */
 export function verifyWendellFirstVisit(check: Check): void {
   check(
-    WendellBlueprintsHook.forBuilding(LORI_COTTAGE_NAME, WENDELL_FLOOR, wendellRigDeps()) === null,
+    WendellBlueprintsHook.forBuilding(
+      'taloncrest_old_lady_cottage',
+      WENDELL_FLOOR,
+      wendellRigDeps(),
+    ) === null,
     'no Wendell hook in any other building',
   );
 

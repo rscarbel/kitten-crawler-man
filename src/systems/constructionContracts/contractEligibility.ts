@@ -13,11 +13,7 @@
 import type { AnchorQuestProgress } from '../../core/quests/AnchorQuestProgress';
 import type { MurderQuestStage } from '../../core/quests/MurderQuestProgress';
 import { isVillageUnderSiege, type VillageQuestPhase } from '../../core/quests/villageQuestPhase';
-import {
-  LORI_COTTAGE_NAME,
-  lorisWreckMended,
-  interiorRoomOwnedByStory,
-} from '../interiorStoryOwnership';
+import { lorisWreckMended, interiorRoomOwnedByStory } from '../interiorStoryOwnership';
 import type { ContractSiteDef } from './contractCatalog';
 
 /** The world facts eligibility reads; both floor-3 scenes can build one from their threaded state. */
@@ -34,7 +30,7 @@ export interface ContractWorld {
  */
 export function contractSiteOwnedByStory(site: ContractSiteDef, world: ContractWorld): boolean {
   if (site.town === 'briar_hollow') return isVillageUnderSiege(world.villagePhase);
-  return interiorRoomOwnedByStory(site.buildingName, world);
+  return interiorRoomOwnedByStory(site.buildingId, world);
 }
 
 /** Checked only when a contract is issued; one already issued waits out whatever blocks it. */
@@ -42,7 +38,7 @@ export function contractSiteEligible(site: ContractSiteDef, world: ContractWorld
   if (contractSiteOwnedByStory(site, world)) return false;
   // Her cottage is the anchor quest's wreck until it is mended, and a contract
   // spot laid over smashed furniture would read as part of that job.
-  if (site.town === 'taloncrest' && site.buildingName === LORI_COTTAGE_NAME) {
+  if (site.town === 'taloncrest' && site.buildingId === 'taloncrest_old_lady_cottage') {
     return lorisWreckMended(world.anchor);
   }
   return true;

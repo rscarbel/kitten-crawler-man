@@ -55,11 +55,11 @@ const TILE_CENTRE = 0.5;
 
 /** Contacts walked through the live case: a farmer held in each of her two buildings, a shopkeeper, the quarryman and the militia's sergeant. */
 const LIVE_SITE_IDS: readonly BriarHollowContractSiteDef['buildingId'][] = [
-  'farmhouse',
-  'barn',
-  'cookhouse',
-  'garn_hut',
-  'guardhouse',
+  'briar_hollow_farmhouse',
+  'briar_hollow_barn',
+  'briar_hollow_cookhouse',
+  'briar_hollow_quarry_hut',
+  'briar_hollow_guardhouse',
 ];
 
 function isSoldierId(id: string): id is RatkinSoldierId {
@@ -314,7 +314,9 @@ function verifyRebuiltSites(check: Check): void {
 
 /** A dropped contract lets its contact go, and a scene rebuilt with no contract holds no one. */
 function verifyDropAndRestore(check: Check): void {
-  const site = villageSites().find((candidate) => candidate.buildingId === 'farmhouse');
+  const site = villageSites().find(
+    (candidate) => candidate.buildingId === 'briar_hollow_farmhouse',
+  );
   if (site === undefined) {
     check(false, 'the farmhouse hosts contracts');
     return;

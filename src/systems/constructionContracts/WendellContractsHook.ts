@@ -18,7 +18,6 @@ import type { DialogLine, NonEmpty } from '../../dialog/line';
 import type { Choice, ConversationHandle, ConversationRequest, Ending } from '../../dialog/request';
 import { WENDELL_CONTRACTS } from '../../dialog/scripts/wendellContracts';
 import type { Player } from '../../Player';
-import { PLUMBLINE_FARM_NAME } from '../briarHollow/blueprints/blueprintsProgress';
 import type { ResidentQuestHook } from '../residentQuestHooks';
 import type { ResidentId } from '../townResidents';
 import { contractSiteFor, type ContractSiteDef } from './contractCatalog';
@@ -28,7 +27,7 @@ import { dropContract, isContractReady } from './contractGenerator';
 import { issueNextContract, remainingSpotLabels } from './contractIssue';
 import { CONSTRUCTION_CONTRACT_QUEST_ID, contractsUnlocked } from './contractQuest';
 import { playContractCue } from './contractSoundCues';
-import type { BuildingName } from '../../map/buildingEntry';
+import type { BuildingId } from '../../map/buildingIds';
 
 export interface WendellContractsHookDeps {
   readonly state: BriarHollowState;
@@ -64,11 +63,11 @@ export class WendellContractsHook implements ResidentQuestHook {
 
   /** The hook for this room, or null anywhere but Plumbline Farm's ground floor. */
   static forBuilding(
-    buildingName: BuildingName,
+    buildingId: BuildingId,
     floor: number,
     deps: WendellContractsHookDeps,
   ): WendellContractsHook | null {
-    if (buildingName !== PLUMBLINE_FARM_NAME || floor !== WENDELL_FLOOR) return null;
+    if (buildingId !== 'taloncrest_builder_farm' || floor !== WENDELL_FLOOR) return null;
     return new WendellContractsHook(deps);
   }
 

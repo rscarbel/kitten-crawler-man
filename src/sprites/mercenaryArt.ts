@@ -1,5 +1,6 @@
 import type { MercenaryArtId } from '../core/party/mercenaryTemplates';
 import type { EyePlacement } from './eyePlacement';
+import type { CardinalView, FacingSelection } from './facingView';
 import {
   isKitRow,
   type EarthElementalGuardRow,
@@ -61,7 +62,7 @@ const EARTH_ELEMENTAL_HIRE_EYES: EyePlacement = {
  * {@link MERCENARY_ART} with an object that draws the requested
  * {@link MercenaryDrawState} row from its own figure — typically through
  * `drawFigureCached`, picking the front, `_side` or `_away` view from the
- * facing it is handed — and warms its approach rows in `prewarm`. Nothing
+ * facing selection it is handed — and warms its approach rows in `prewarm`. Nothing
  * else in the game needs to change when a figure lands.
  */
 
@@ -71,8 +72,15 @@ export interface MercenaryArtFrame {
   /** The walk cycle angle from `Player.walkFrame` (radians, 0–2π). */
   readonly walkFrame: number;
   readonly isMoving: boolean;
+  /** The view in all five, for a figure painted with diagonals or falling back from them. */
+  readonly facing: FacingSelection;
+  /** The view for a figure painted only head-on, away and in profile. */
+  readonly cardinalFacing: FacingSelection<CardinalView>;
+  /**
+   * The horizontal facing, for a row painted only in profile drawn while the
+   * figure faces head-on or away: which way that profile turns.
+   */
   readonly facingX: number;
-  readonly facingY: number;
   /** Frames the hireling has been alive, for loops driven by its own clock. */
   readonly clock: number;
 }
@@ -161,8 +169,7 @@ const TUMBLEDOWN_ART: MercenaryArt = {
     drawRockGolemSprite(ctx, 'rock_golem_ally', sx, sy, tileSize, {
       walkFrame: frame.walkFrame,
       isMoving: frame.isMoving,
-      facingX: frame.facingX,
-      facingY: frame.facingY,
+      facing: frame.cardinalFacing,
       attack,
       attackProgress: attack === null ? 0 : frame.state.progress,
     });
@@ -237,8 +244,7 @@ function earthElementalHireArt(
       drawEarthElementalSprite(ctx, sx, sy, tileSize, {
         variant,
         row: action,
-        facingX: frame.facingX,
-        facingY: frame.facingY,
+        facing: frame.cardinalFacing,
         walkPhase: frame.walkFrame,
         ticks,
       });

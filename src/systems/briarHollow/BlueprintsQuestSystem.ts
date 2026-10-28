@@ -66,7 +66,6 @@ import { FENNA_COMPLETION_BARK } from './blueprints/blueprintsDialog';
 import {
   BLUEPRINTS_QUEST_ID,
   BLUEPRINTS_QUEST_NAME,
-  PLUMBLINE_FARM_NAME,
   WENDELL_PASTURE_YARD_NAME,
   isHeld,
   moveBlueprintsPhase,
@@ -354,13 +353,12 @@ export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, 
 
   private wendellGuidance(): QuestGuidance | null {
     const entry = this.ctx.gameMap.buildingEntries.find(
-      (candidate) => candidate.name === PLUMBLINE_FARM_NAME,
+      (candidate) => candidate.id === 'taloncrest_builder_farm',
     );
     const door = doorwayBeaconTarget(entry ?? null);
     if (door === null) return null;
     return {
       kind: 'town_building',
-      buildingName: PLUMBLINE_FARM_NAME,
       residentName: 'Wendell',
       door,
     };

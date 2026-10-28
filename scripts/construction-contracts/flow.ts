@@ -184,7 +184,7 @@ function checkPaidOut(
   }
   check(state.contracts.active === null, `${site.name}: no contract held after the payout`);
   check(
-    state.contracts.contractsCompleted === 1 && state.contracts.lastSiteKey === site.slug,
+    state.contracts.contractsCompleted === 1 && state.contracts.lastSiteKey === site.buildingId,
     `${site.name}: counted as completed and remembered as the last site`,
   );
   check(
@@ -211,7 +211,7 @@ function checkPaidOut(
 // ── Taloncrest ─────────────────────────────────────────────────────────
 
 function verifyTaloncrestSite(check: Check, site: TaloncrestContractSiteDef): void {
-  const entry = worldLayouts(VILLAGE_SEED).entries.find((e) => e.name === site.buildingName);
+  const entry = worldLayouts(VILLAGE_SEED).entries.find((e) => e.id === site.buildingId);
   if (entry === undefined) {
     check(false, `${site.name}: has a building entry`);
     return;
@@ -230,7 +230,7 @@ function verifyTaloncrestSite(check: Check, site: TaloncrestContractSiteDef): vo
   const anchor = createAnchorQuestProgress();
   const story = (): InteriorStoryState => ({ murderStage: undefined, anchor });
   const toasts: string[] = [];
-  const interior = ContractInteriorSite.forBuilding(site.buildingName, 0, {
+  const interior = ContractInteriorSite.forBuilding(site.buildingId, 0, {
     state,
     story,
     gameMap: map,
@@ -264,7 +264,7 @@ function verifyTaloncrestSite(check: Check, site: TaloncrestContractSiteDef): vo
   check(active.spotsDone.every(Boolean), `${site.name}: every spot marked done`);
   interior.dispose();
 
-  const occupants = InteriorOccupantSystem.forBuilding(map, entry.type, entry.name, () => human);
+  const occupants = InteriorOccupantSystem.forBuilding(map, entry.type, entry.id, () => human);
   const contact = occupants?.people.find((person) => person.residentId === site.contact);
   check(contact !== undefined, `${site.name}: ${site.contact} stands in the room to pay`);
   const conversation = new Conversation(null);
@@ -272,7 +272,7 @@ function verifyTaloncrestSite(check: Check, site: TaloncrestContractSiteDef): vo
   const bus = new EventBus();
   const questCompleted = countQuestCompleted(bus);
   const coinsFlown: number[] = [];
-  const hook = ContractContactHook.forBuilding(site.buildingName, 0, {
+  const hook = ContractContactHook.forBuilding(site.buildingId, 0, {
     state,
     story,
     bus,

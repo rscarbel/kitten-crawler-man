@@ -1784,7 +1784,7 @@ function broodAudio(): void {
   const loaded = new Set<SoundId>([...SFX_GROUPS.universal, ...sfxGroupsForLevelId('level2')]);
   const cues: readonly SoundId[] = ['splat_1', 'splat_2', 'splat_3', 'bite_1', 'bite_2', 'bite_3'];
   const unloaded = cues.filter((id) => !loaded.has(id));
-  const hatchlingHasVoice = new SpiderHatchling(0, 0, TILE_SIZE, LAB_BOUNDS).audioTag !== '';
+  const hatchlingHasVoice = new SpiderHatchling(0, 0, TILE_SIZE, LAB_BOUNDS).audioTag !== 'silent';
   record(
     '3',
     'brood and hatchling sounds are loaded on the lab floor, and hatchlings have a voice',

@@ -11,7 +11,7 @@
 
 import { isKitRow, type MedicRow } from '../creatures/mercenaries/MercenaryKit';
 import { walkFrameIndex } from '../core/spriteAssets/SpriteRenderer';
-import { type CardinalView, selectFacing } from './facingView';
+import type { CardinalView } from './facingView';
 import { prewarmFigureState } from './figure/figureFrameCache';
 import { carriedGripOf } from './art/human/carry';
 import { TILE_SCALE } from './art/human/figureScale';
@@ -189,8 +189,7 @@ export const BROTHER_ANSELM_ART: MercenaryArt = {
     const { row, progress } = frame.state;
     const fallback: AnselmRow = frame.isMoving ? 'walk' : 'idle';
     const painted = isKitRow(KIT_ROWS, row) ? KIT_ROWS[row] : fallback;
-    const facing = selectFacing(frame.facingX, frame.facingY);
-    const name = viewRow(ANSELM_ROWS[painted], facing.view);
+    const name = viewRow(ANSELM_ROWS[painted], frame.facing.view);
     drawHumanFigureSelection(
       ctx,
       BROTHER_ANSELM_FIGURE,
@@ -200,7 +199,7 @@ export const BROTHER_ANSELM_ART: MercenaryArt = {
       {
         row: name,
         frame: frameOf(painted, name, progress, frame.walkFrame, frame.clock),
-        flipX: HUMAN_ROW_TABLE[name].mirrorable && facing.flipX,
+        flipX: HUMAN_ROW_TABLE[name].mirrorable && frame.facing.flipX,
       },
       STAFF_DRAW,
     );

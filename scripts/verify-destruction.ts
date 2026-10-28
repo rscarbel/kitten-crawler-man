@@ -90,6 +90,7 @@ import {
 import type { SpillKind } from '../src/systems/destruction/spillDecals.js';
 import { LOCKED_TELEGRAPH_MIN_FRAMES } from '../src/creatures/mobLevelScaling.js';
 import type { DynamicLightSource } from '../src/systems/lighting/dynamicLights.js';
+import type { DungeonFloorNumber } from '../src/levels/levelIds.js';
 
 installCanvasGlobals();
 
@@ -587,7 +588,7 @@ function checkWreckagePersistsAndEvicts(): void {
 
 // ── Real floors: lights, fuse boxes, checkpoints ──
 
-function buildFloor(level: number, seed: number): GameMap {
+function buildFloor(level: DungeonFloorNumber, seed: number): GameMap {
   const levelDef = getLevelDef(`level${level}`);
   setDungeonFloorTheme(levelDef.groundTheme ?? 'cellars');
   return new GameMap({
@@ -599,7 +600,7 @@ function buildFloor(level: number, seed: number): GameMap {
   });
 }
 
-function floorBench(level: number, seed: number) {
+function floorBench(level: DungeonFloorNumber, seed: number) {
   const gameMap = buildFloor(level, seed);
   const props = new DestructiblePropSystem(gameMap, new LootSystem(gameMap), level);
   const clock = { ms: 0 };
@@ -633,7 +634,7 @@ function breakFixture(b: Bench, fixture: WallFixture): void {
   }
 }
 
-function checkLightsAndFuses(level: number, seed: number): void {
+function checkLightsAndFuses(level: DungeonFloorNumber, seed: number): void {
   const label = `floor ${level} seed ${seed}`;
   const { b, lighting } = floorBench(level, seed);
   const structure = b.gameMap.structure;
@@ -771,7 +772,7 @@ function standGasCylinder(gameMap: GameMap): { x: number; y: number } {
   throw new Error('no open room tile for a gas cylinder');
 }
 
-function checkCheckpoint(level: number, seed: number): void {
+function checkCheckpoint(level: DungeonFloorNumber, seed: number): void {
   const label = `floor ${level} seed ${seed}`;
   const { b, lighting } = floorBench(level, seed);
   const structure = b.gameMap.structure;

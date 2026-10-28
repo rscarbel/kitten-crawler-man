@@ -8,8 +8,7 @@
  *
  * The town's three drinking houses each keep their own board, so the Low Quarter
  * dive, the mead hall and the traveller's inn are told apart by what they serve
- * as well as by who serves it. A house is looked up by its building name — the
- * same `entry.name` key `townServices.ts` and `BUILDING_OCCUPANTS` use — and an
+ * as well as by who serves it. A house is looked up by its building id, and an
  * unlisted house falls back to the common round.
  */
 
@@ -24,7 +23,7 @@ import {
 } from '../ui/screens/shop/shopSession';
 import { hostByline, type ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
-import type { BuildingName } from '../map/buildingEntry';
+import type { BuildingId } from '../map/buildingIds';
 import { SERVICE_PRICES } from '../economy/servicePrices';
 import type { ServiceIconId } from '../sprites/art/itemIcons/serviceIcons';
 import type { SHOPS, ShopId } from '../economy/shops';
@@ -149,15 +148,15 @@ const DEFAULT_DRINKS: ReadonlyArray<Drink> = [ALE, BOOZY_MILK, SPEED_FIZZ];
  * Sleeping Cat is a kitchen first, and the only board in town where the mends
  * come as food.
  */
-const HOUSE_DRINKS: ReadonlyMap<BuildingName, ReadonlyArray<Drink>> = new Map([
-  ['The Sunken Stump Pub', [ALE, BOOZY_MILK, SPEED_FIZZ]],
-  ['The Horned Flagon', [MEAD, GUILD_RESERVE, SPEED_FIZZ]],
-  ['The Sleeping Cat Inn', [HONEY_BREAD, STEW, NIGHTCAP]],
+const HOUSE_DRINKS: ReadonlyMap<BuildingId, ReadonlyArray<Drink>> = new Map([
+  ['taloncrest_pub', [ALE, BOOZY_MILK, SPEED_FIZZ]],
+  ['taloncrest_flagon_tavern', [MEAD, GUILD_RESERVE, SPEED_FIZZ]],
+  ['taloncrest_inn', [HONEY_BREAD, STEW, NIGHTCAP]],
 ]);
 
-const HOUSE_BARKS: ReadonlyMap<BuildingName, ReadonlyArray<string>> = new Map([
+const HOUSE_BARKS: ReadonlyMap<BuildingId, ReadonlyArray<string>> = new Map([
   [
-    'The Sunken Stump Pub',
+    'taloncrest_pub',
     [
       'Coin on the wood. I do not keep a slate and you would not like the terms.',
       'Ale, milk, or the fizzy one that makes you run into walls. Pick.',
@@ -165,7 +164,7 @@ const HOUSE_BARKS: ReadonlyMap<BuildingName, ReadonlyArray<string>> = new Map([
     ],
   ],
   [
-    'The Horned Flagon',
+    'taloncrest_flagon_tavern',
     [
       'The horn is a deposit, not a gift. Now — what will you have?',
       'We keep a reserve for people who sit down properly. Interested?',
@@ -173,7 +172,7 @@ const HOUSE_BARKS: ReadonlyMap<BuildingName, ReadonlyArray<string>> = new Map([
     ],
   ],
   [
-    'The Sleeping Cat Inn',
+    'taloncrest_inn',
     [
       'Kitchen is open. You look like you have been living off ration bricks.',
       'Eat first, drink after. House order, and I do enforce it.',
@@ -189,11 +188,11 @@ const BARKEEP_BARKS: ReadonlyArray<string> = [
 ];
 
 /** A barkeep's greeting, rotated by how many times the player has talked to them. */
-function pubServeLine(house: BuildingName, turn: number): string {
+function pubServeLine(house: BuildingId, turn: number): string {
   return rotateLine(HOUSE_BARKS.get(house) ?? BARKEEP_BARKS, turn);
 }
 
-function drinksFor(house: BuildingName): ReadonlyArray<Drink> {
+function drinksFor(house: BuildingId): ReadonlyArray<Drink> {
   return HOUSE_DRINKS.get(house) ?? DEFAULT_DRINKS;
 }
 
@@ -239,7 +238,7 @@ function pourDrink(drink: Drink, player: Player): void {
  * has a named one, so the greeting is theirs rather than the generic barkeep's.
  */
 export function buildTavernMenu(
-  house: BuildingName,
+  house: BuildingId,
   buyer: Player,
   turn: number,
   host: ResidentHost | null,
@@ -268,7 +267,7 @@ export function buildTavernMenu(
  * The purchase handler for one house — bound to the same board `buildTavernMenu`
  * showed, so a key can never be served from a different tavern's list.
  */
-export function serveDrinkAt(house: BuildingName, stock: ShopStock): ShopPurchaseHandler {
+export function serveDrinkAt(house: BuildingId, stock: ShopStock): ShopPurchaseHandler {
   return (option, player) => {
     const drink = drinksFor(house).find((candidate) => drinkKey(candidate) === option.key);
     if (drink === undefined) return { ok: false, line: 'The barkeep shrugs.' };

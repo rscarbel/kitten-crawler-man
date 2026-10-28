@@ -28,7 +28,7 @@ import {
   type ChallengeSpec,
 } from '../show/challenges';
 import { aiSpawnableMobTypes } from './combat';
-import { LOW_HP_FRACTION, anyVulnerable } from './governor';
+import { LOW_HP_PERCENT, anyVulnerable } from './governor';
 import {
   AI_CHEST_RARITIES,
   AI_CHARACTER_SYSTEM,
@@ -53,7 +53,6 @@ const TITLE_MAX_CHARS = 40;
 const TAUNT_MIN_CHARS = 4;
 const TAUNT_MAX_CHARS = 140;
 const PITCH_MAX_CHARS = 140;
-const PERCENT = 100;
 
 const TEMPLATE = enumParam(
   'template',
@@ -161,7 +160,7 @@ function challengeRefusal(call: AIActionCall): string | null {
   if (challenges === null) return 'challenges cannot run here';
   if (challenges.busy) return 'a challenge is already offered or under way';
   if (anyVulnerable(call.scene)) {
-    return `no challenges while a crawler is below ${Math.round(LOW_HP_FRACTION * PERCENT)}% HP`;
+    return `no challenges while a crawler is at or under ${LOW_HP_PERCENT}% HP`;
   }
   return winnableRefusal(call, specOf(call));
 }

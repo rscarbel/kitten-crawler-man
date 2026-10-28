@@ -68,6 +68,7 @@ import type { AchievementUISystem } from '../src/systems/AchievementUISystem.js'
 import type { AchievementManager } from '../src/core/progression/AchievementManager.js';
 import { SPIDER_QUEST_NAME } from '../src/systems/SpiderQuestSystem';
 import type { ResidentId } from '../src/systems/townResidents.js';
+import { buildingDisplayName } from '../src/map/buildingIds.js';
 
 export {};
 
@@ -1531,7 +1532,7 @@ function townOpeners(): Opener<Town>[] {
         const doors = scene['gameMap'].buildingEntries;
         if (doors.length === 0) throw new Error('the town has no door to stand the picker on');
         const door = doors[0];
-        scene['prisonDifficulty'].open({ activity: door.name, onPick: noop });
+        scene['prisonDifficulty'].open({ activity: buildingDisplayName(door.id), onPick: noop });
       },
       (scene) => scene['prisonDifficulty'].cancel(),
     ),
@@ -1706,12 +1707,12 @@ async function enter(entry: Entry): Promise<Interior> {
   // is: it is the one surface a player meets before any other in the room.
   room.render(ctx);
   if (room.ui.isOpen(ARRIVAL_SURFACE)) {
-    const arrivalOutcome = auditFocus(room.ui, `${entry.name} ${ARRIVAL_SURFACE}`);
+    const arrivalOutcome = auditFocus(room.ui, `${entry.id} ${ARRIVAL_SURFACE}`);
     failures.push(...arrivalOutcome.failures);
-    detail(`${entry.name} ${ARRIVAL_SURFACE}: ${describeClaimants(arrivalOutcome.claimants)}`);
+    detail(`${entry.id} ${ARRIVAL_SURFACE}: ${describeClaimants(arrivalOutcome.claimants)}`);
   }
   if (!(await settleArrival(room, ctx))) {
-    throw new Error(`${entry.name}'s arrival screen never finished`);
+    throw new Error(`${entry.id}'s arrival screen never finished`);
   }
   return room;
 }
@@ -1737,9 +1738,7 @@ function chestRewardOpener<S>(kitOf: (scene: S) => ChestKit): Opener<S> {
           unlockFrame: 0,
           sparkleFrame: 0,
           tryLockedTimer: 0,
-          guard: null,
-          bossRoomIndex: null,
-          hadMobs: false,
+          lock: { kind: 'none' },
         },
         null,
       ),
@@ -1868,7 +1867,7 @@ function interiorCases(): InteriorCase[] {
   return [
     {
       label: 'General Store',
-      entry: building('General Store', (entry) => entry.type === 'store'),
+      entry: building('taloncrest_general_store', (entry) => entry.type === 'store'),
       openers: [
         ...roomOpeners(),
         menu(
@@ -1880,7 +1879,7 @@ function interiorCases(): InteriorCase[] {
     },
     {
       label: 'Herb & Remedy',
-      entry: building('Herb & Remedy', (entry) => entry.name === 'Herb & Remedy'),
+      entry: building('taloncrest_apothecary', (entry) => entry.id === 'taloncrest_apothecary'),
       openers: [
         menu(
           'priced-menu',
@@ -1911,7 +1910,10 @@ function interiorCases(): InteriorCase[] {
     },
     {
       label: "Old Lori's Cottage",
-      entry: building("Old Lori's Cottage", (entry) => entry.name === "Old Lori's Cottage"),
+      entry: building(
+        'taloncrest_old_lady_cottage',
+        (entry) => entry.id === 'taloncrest_old_lady_cottage',
+      ),
       openers: [
         menu(
           'fortune-teller',
@@ -1922,7 +1924,7 @@ function interiorCases(): InteriorCase[] {
     },
     {
       label: 'The Barracks',
-      entry: building('The Barracks', (entry) => entry.name === 'The Barracks'),
+      entry: building('taloncrest_barracks', (entry) => entry.id === 'taloncrest_barracks'),
       openers: [
         menu(
           'mercenary-desk',

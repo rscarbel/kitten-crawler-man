@@ -13,6 +13,9 @@
  *
  * A figure that has no rows of its own for a view yet draws a neighbouring
  * view's rows instead, through the one fallback table its animator keeps.
+ *
+ * A figure painted only head-on, away and in profile is drawn through
+ * {@link selectCardinalFacing} instead, which splits on the dominant axis.
  */
 
 import { TWO_PI } from './art/biped/geometry';
@@ -25,10 +28,17 @@ export const CARDINAL_VIEWS = ['front', 'side', 'back'] as const;
 export type CardinalView = Extract<FacingView, (typeof CARDINAL_VIEWS)[number]>;
 
 /** The view a facing is drawn in, and whether the cell is mirrored left for right. */
-export interface FacingSelection {
-  readonly view: FacingView;
+export interface FacingSelection<View extends FacingView = FacingView> {
+  readonly view: View;
   readonly flipX: boolean;
 }
+
+/** Picks the selection for a facing, holding `previous` through hysteresis when given one. */
+export type FacingSelector<View extends FacingView> = (
+  facingX: number,
+  facingY: number,
+  previous: FacingSelection<View> | null,
+) => FacingSelection<View>;
 
 /** Clockwise from east, in screen space (y down): the selection each 45° sector shows. */
 const SECTORS: readonly FacingSelection[] = [
@@ -99,6 +109,59 @@ export function selectFacing(
   return SECTORS[index];
 }
 
+const PROFILE: FacingSelection<CardinalView> = { view: 'side', flipX: false };
+const PROFILE_MIRRORED: FacingSelection<CardinalView> = { view: 'side', flipX: true };
+const HEAD_ON: FacingSelection<CardinalView> = { view: 'front', flipX: false };
+const AWAY: FacingSelection<CardinalView> = { view: 'back', flipX: false };
+
+const QUARTER_TURN = TWO_PI / 4;
+const HALF_TURN = TWO_PI / 2;
+const HALF_QUARTER_TURN = QUARTER_TURN / 2;
+
+/** The facing angle, in screen space (y down), at the middle of a cardinal selection's quarter. */
+function cardinalCentre(selection: FacingSelection<CardinalView>): number {
+  switch (selection.view) {
+    case 'side':
+      return selection.flipX ? HALF_TURN : 0;
+    case 'front':
+      return QUARTER_TURN;
+    case 'back':
+      return -QUARTER_TURN;
+    default: {
+      const unhandled: never = selection.view;
+      return unhandled;
+    }
+  }
+}
+
+/** Whichever axis the facing points along hardest, a tie going to the profile. */
+function dominantAxisFacing(facingX: number, facingY: number): FacingSelection<CardinalView> {
+  if (Math.abs(facingY) <= Math.abs(facingX)) return facingX < 0 ? PROFILE_MIRRORED : PROFILE;
+  return facingY < 0 ? AWAY : HEAD_ON;
+}
+
+/**
+ * The view and mirroring for a figure painted only head-on, away and in
+ * profile: whichever axis the facing points along hardest, with only the
+ * profile mirrored. Given the selection it was drawn in last, that selection
+ * is kept until the facing is {@link FACING_HYSTERESIS_DEGREES} past the edge
+ * of its quarter. A zero facing keeps the previous selection, or is drawn in
+ * profile with none.
+ */
+export function selectCardinalFacing(
+  facingX: number,
+  facingY: number,
+  previous: FacingSelection<CardinalView> | null = null,
+): FacingSelection<CardinalView> {
+  if (previous === null) return dominantAxisFacing(facingX, facingY);
+  if (facingX === 0 && facingY === 0) return previous;
+  const angle = Math.atan2(facingY, facingX);
+  const holdsPrevious =
+    angularDistance(angle, cardinalCentre(previous)) <=
+    HALF_QUARTER_TURN + FACING_HYSTERESIS_RADIANS;
+  return holdsPrevious ? previous : dominantAxisFacing(facingX, facingY);
+}
+
 /**
  * Views authored facing +X and mirrored for −X — the profile and both
  * diagonals — as opposed to the head-on and away views, which show the
@@ -109,28 +172,37 @@ export function isTurnedView(view: FacingView): boolean {
 }
 
 /**
- * One figure's facing, remembered between ticks so its view holds through the
- * selector's hysteresis. Each crawler owns one.
+ * One figure's facing under a selector, remembered between ticks so its view
+ * holds through the selector's hysteresis.
  */
-export class FacingState {
-  private selection: FacingSelection;
+export class HeldFacing<View extends FacingView> {
+  private readonly select: FacingSelector<View>;
+  private selection: FacingSelection<View>;
 
-  constructor(facingX = 0, facingY = 1) {
-    this.selection = selectFacing(facingX, facingY);
+  constructor(select: FacingSelector<View>, facingX: number, facingY: number) {
+    this.select = select;
+    this.selection = select(facingX, facingY, null);
   }
 
-  get current(): FacingSelection {
+  get current(): FacingSelection<View> {
     return this.selection;
   }
 
   /** Moves the selection on to a new facing and returns it. */
-  update(facingX: number, facingY: number): FacingSelection {
-    this.selection = selectFacing(facingX, facingY, this.selection);
+  update(facingX: number, facingY: number): FacingSelection<View> {
+    this.selection = this.select(facingX, facingY, this.selection);
     return this.selection;
   }
 
   /** What a facing would be drawn in, judged from the selection held now, without moving it on. */
-  peek(facingX: number, facingY: number): FacingSelection {
-    return selectFacing(facingX, facingY, this.selection);
+  peek(facingX: number, facingY: number): FacingSelection<View> {
+    return this.select(facingX, facingY, this.selection);
+  }
+}
+
+/** A figure's facing in all five views. Each crawler owns one. */
+export class FacingState extends HeldFacing<FacingView> {
+  constructor(facingX = 0, facingY = 1) {
+    super(selectFacing, facingX, facingY);
   }
 }

@@ -48,8 +48,8 @@ const MID_STREAM_INDEX = 37;
 /** Every this-many issues on a stream, the contract is dropped instead of finished. */
 const DROP_EVERY = 7;
 
-function siteSlug(active: ActiveContract): string {
-  return contractSiteFor(active.site)?.slug ?? '<unknown site>';
+function siteBuildingId(active: ActiveContract): string {
+  return contractSiteFor(active.site)?.buildingId ?? '<unknown site>';
 }
 
 function sameSet(a: readonly string[], b: readonly string[]): boolean {
@@ -65,8 +65,8 @@ function runStream(seed: number): { contracts: ActiveContract[]; faults: string[
   const state: ConstructionContractsState = createConstructionContractsState();
   const contracts: ActiveContract[] = [];
   const faults: string[] = [];
-  let previousSlug: string | null = null;
-  const lastSetBySlug = new Map<string, readonly string[]>();
+  let previousBuildingId: string | null = null;
+  const lastSetByBuilding = new Map<string, readonly string[]>();
   for (let issue = 0; issue < ISSUES_PER_STREAM; issue++) {
     const active = issueContract(state, everySite, seed);
     const at = `seed ${seed} issue ${issue}`;
@@ -75,30 +75,31 @@ function runStream(seed: number): { contracts: ActiveContract[]; faults: string[
       break;
     }
     contracts.push({ ...active, spotIds: [...active.spotIds], spotsDone: [...active.spotsDone] });
-    const slug = siteSlug(active);
+    const buildingId = siteBuildingId(active);
     const cost = contractCost(active);
     for (const material of CONTRACT_MATERIALS) {
       const band = CONTRACT_MATERIAL_BANDS[material];
       if (cost[material] < band.min || cost[material] > band.max) {
-        faults.push(`${at}: ${slug} needs ${cost[material]} ${material}`);
+        faults.push(`${at}: ${buildingId} needs ${cost[material]} ${material}`);
       }
     }
     const spotCount = active.spotIds.length;
     if (spotCount < CONTRACT_MIN_SPOTS || spotCount > CONTRACT_MAX_SPOTS) {
-      faults.push(`${at}: ${slug} has ${spotCount} spots`);
+      faults.push(`${at}: ${buildingId} has ${spotCount} spots`);
     }
-    if (new Set(active.spotIds).size !== spotCount) faults.push(`${at}: ${slug} repeats a spot`);
+    if (new Set(active.spotIds).size !== spotCount)
+      faults.push(`${at}: ${buildingId} repeats a spot`);
     const materials = CONTRACT_MATERIALS.reduce((sum, material) => sum + cost[material], 0);
     if (contractPayout(active) !== materials * CONTRACT_COINS_PER_MATERIAL) {
       faults.push(`${at}: payout ${contractPayout(active)} for ${materials} materials`);
     }
-    if (slug === previousSlug) faults.push(`${at}: ${slug} twice in a row`);
-    const lastSet = lastSetBySlug.get(slug);
+    if (buildingId === previousBuildingId) faults.push(`${at}: ${buildingId} twice in a row`);
+    const lastSet = lastSetByBuilding.get(buildingId);
     if (lastSet !== undefined && sameSet(lastSet, active.spotIds)) {
-      faults.push(`${at}: ${slug} repeats its last spot set`);
+      faults.push(`${at}: ${buildingId} repeats its last spot set`);
     }
-    previousSlug = slug;
-    lastSetBySlug.set(slug, [...active.spotIds]);
+    previousBuildingId = buildingId;
+    lastSetByBuilding.set(buildingId, [...active.spotIds]);
     if (issue % DROP_EVERY === DROP_EVERY - 1) {
       dropContract(state);
     } else {
@@ -122,7 +123,7 @@ function sameContract(a: ActiveContract, b: ActiveContract): boolean {
 }
 
 function verifyStreams(check: Check): void {
-  const slugsSeen = new Set<string>();
+  const buildingsSeen = new Set<string>();
   for (const seed of SEED_STREAMS) {
     const first = runStream(seed);
     const again = runStream(seed);
@@ -136,7 +137,7 @@ function verifyStreams(check: Check): void {
       first.contracts.length === again.contracts.length &&
       first.contracts.every((contract, index) => sameContract(contract, again.contracts[index]));
     check(replayed, `seed ${seed}: the same seed draws the same ${ISSUES_PER_STREAM} contracts`);
-    for (const contract of first.contracts) slugsSeen.add(siteSlug(contract));
+    for (const contract of first.contracts) buildingsSeen.add(siteBuildingId(contract));
   }
   const firstStream = runStream(SEED_STREAMS[0]).contracts;
   const secondStream = runStream(SEED_STREAMS[1]).contracts;
@@ -144,7 +145,7 @@ function verifyStreams(check: Check): void {
     firstStream.length !== secondStream.length ||
     firstStream.some((contract, index) => !sameContract(contract, secondStream[index]));
   check(streamsDiffer, 'two seeds draw different sequences');
-  check(slugsSeen.size > 1, `the streams visit many buildings (${slugsSeen.size})`);
+  check(buildingsSeen.size > 1, `the streams visit many buildings (${buildingsSeen.size})`);
 }
 
 /**
@@ -163,10 +164,10 @@ function verifyDeterminism(check: Check): void {
   Math.random();
   const b = draw();
   check(a !== null && b !== null && sameContract(a, b), 'same seed + index → the same contract');
-  const onlyOne = (site: ContractSiteDef): boolean => site.slug === 'forge';
+  const onlyOne = (site: ContractSiteDef): boolean => site.buildingId === 'briar_hollow_forge';
   const filtered = issueContract(createConstructionContractsState(), onlyOne, seed);
   check(
-    filtered !== null && siteSlug(filtered) === 'forge',
+    filtered !== null && siteBuildingId(filtered) === 'briar_hollow_forge',
     'eligibility narrows the draw to the sites it allows',
   );
   const held = createConstructionContractsState();

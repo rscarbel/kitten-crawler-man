@@ -1,3 +1,5 @@
+import type { LevelId } from '../../levels/levelIds';
+import { TUTORIAL_LEVEL_ID } from '../../levels/tutorial';
 import type { QuestId } from '../quests/QuestManager';
 import type { GameProgressInput } from '../../auth/AuthClient';
 import {
@@ -24,24 +26,17 @@ import { blueprintsPhaseAtLeast } from '../quests/blueprintsQuestPhase';
 import { JACKPOT_FLOOR } from '../../systems/casino/slots/slotBets';
 import type { PlayerSnapshot } from '../save/PlayerSnapshot';
 import { allResidents, type ResidentId } from '../../systems/townResidents';
-import {
-  CLOAK_AND_DAGGER_NAME,
-  PLANNED_BUILDING_NAMES,
-  TAVERN_BUILDING_NAMES,
-  TOWN_TOWER_NAME,
-} from '../../map/town/townPlan';
-import { SKY_TEMPLE_NAME } from '../../systems/interiorStoryOwnership';
-import { isBuildingName } from '../../map/buildingEntry';
-import { buildingNameOfRoomKey } from '../state/TownMemory';
+import { TAVERN_BUILDING_IDS } from '../../map/town/townPlan';
+import { PLANNED_BUILDING_IDS, type BuildingId } from '../../map/buildingIds';
+import { buildingOfRoomKey } from '../state/TownMemory';
 import type { CloggedBathroomPhase } from '../../systems/cloggedBathroom/cloggedBathroomCheckpoint';
 import type { StealthKeySnatchPhase } from '../../systems/stealthKeySnatch/stealthKeySnatchCheckpoint';
 
-const TUTORIAL_LEVEL_ID = 'tutorial';
-const LEVEL_1_ID = 'level1';
-const LEVEL_2_ID = 'level2';
-const LEVEL_3_ID = 'level3';
-const DUNGEON_FLOOR_IDS: ReadonlySet<string> = new Set([LEVEL_1_ID, LEVEL_2_ID, LEVEL_3_ID]);
-const FLOORS_PAST_LEVEL_1: ReadonlySet<string> = new Set([LEVEL_2_ID, LEVEL_3_ID]);
+const LEVEL_1_ID = 'level1' satisfies LevelId;
+const LEVEL_2_ID = 'level2' satisfies LevelId;
+const LEVEL_3_ID = 'level3' satisfies LevelId;
+const DUNGEON_FLOOR_IDS: ReadonlySet<LevelId> = new Set([LEVEL_1_ID, LEVEL_2_ID, LEVEL_3_ID]);
+const FLOORS_PAST_LEVEL_1: ReadonlySet<LevelId> = new Set([LEVEL_2_ID, LEVEL_3_ID]);
 
 /** Floor 1's two boss rooms, by their index in the boss-room checkpoint. */
 const FLOOR_1_FIRST_BOSS_ROOM_INDEX = 0;
@@ -91,16 +86,15 @@ function murderStageAtLeast(stage: MurderQuestStage, threshold: MurderQuestStage
 }
 
 /**
- * The songs a building plays as its party walks in, or nothing for a name that
- * is not a town building (a dungeon floor's rooms play the floor's own music).
+ * The songs a building plays as its party walks in, or nothing for a building
+ * outside the town (the Starlight Tent and the prison have their own music).
  */
-function buildingMusic(name: string): ReadonlyArray<MusicTrackId> {
-  if (!isBuildingName(name)) return [];
-  if (TAVERN_BUILDING_NAMES.has(name)) return TAVERN_MUSIC_TRACKS;
-  if (name === SKY_TEMPLE_NAME) return TEMPLE_MUSIC_TRACKS;
-  if (name === TOWN_TOWER_NAME) return TOWER_MUSIC_TRACKS;
-  if (name === CLOAK_AND_DAGGER_NAME) return CLUB_MUSIC_TRACKS;
-  const isTownBuilding = PLANNED_BUILDING_NAMES.some((planned) => planned === name);
+function buildingMusic(buildingId: BuildingId): ReadonlyArray<MusicTrackId> {
+  if (TAVERN_BUILDING_IDS.has(buildingId)) return TAVERN_MUSIC_TRACKS;
+  if (buildingId === 'taloncrest_temple') return TEMPLE_MUSIC_TRACKS;
+  if (buildingId === 'taloncrest_tower') return TOWER_MUSIC_TRACKS;
+  if (buildingId === 'taloncrest_nightclub') return CLUB_MUSIC_TRACKS;
+  const isTownBuilding = PLANNED_BUILDING_IDS.some((planned) => planned === buildingId);
   return isTownBuilding ? DEFAULT_BUILDING_MUSIC_TRACKS : [];
 }
 
@@ -134,7 +128,7 @@ export function musicUnlocksFromProgress(
 
   const { levelId } = progress;
   const onLevel3 = levelId === LEVEL_3_ID;
-  const floorState = (floorId: string): PersistedWorldState | undefined =>
+  const floorState = (floorId: LevelId): PersistedWorldState | undefined =>
     levelId === floorId ? persisted : undefined;
   const level1State = floorState(LEVEL_1_ID);
   const level2State = floorState(LEVEL_2_ID);
@@ -173,8 +167,10 @@ export function musicUnlocksFromProgress(
   const rememberedBuildings = [
     ...(townMemory?.clearedRooms ?? []),
     ...(townMemory?.paidOutInteriorProps ?? []),
-  ].map(buildingNameOfRoomKey);
-  const rememberedBuilding = (name: string): boolean => rememberedBuildings.includes(name);
+  ]
+    .map(buildingOfRoomKey)
+    .filter((id) => id !== undefined);
+  const rememberedBuilding = (id: BuildingId): boolean => rememberedBuildings.includes(id);
   const visitedPlaces = new Set(townMemory?.visitedPlaces ?? []);
 
   // A run past the tutorial can never return to it, whether it played it or skipped it.
@@ -288,13 +284,13 @@ export function musicUnlocksFromProgress(
   const templeVisited =
     (anchorQuest?.temple ?? 'offered') !== 'offered' ||
     talkedTo.has(TEMPLE_DEACON_ID) ||
-    rememberedBuilding(SKY_TEMPLE_NAME) ||
+    rememberedBuilding('taloncrest_temple') ||
     killed(SHRINE_VERMIN_NAME);
   if (templeVisited) unlock(TEMPLE_MUSIC_TRACKS);
 
   const towerClimbed =
     murderStageAtLeast(murderStage, 'quill_slain') ||
-    rememberedBuilding(TOWN_TOWER_NAME) ||
+    rememberedBuilding('taloncrest_tower') ||
     doomsdayStarted;
   if (towerClimbed) unlock(TOWER_MUSIC_TRACKS);
 

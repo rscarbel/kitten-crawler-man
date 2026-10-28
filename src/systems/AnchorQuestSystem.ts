@@ -26,7 +26,11 @@ import type { EventBus } from '../core/EventBus';
 import type { AudioManager } from '../audio/AudioManager';
 import type { Player } from '../Player';
 import { canAffordCoins, spendPartyCoins } from '../core/party/partyCoins';
-import { ANCHOR_QUEST_NAME, type AnchorQuestProgress } from '../core/quests/AnchorQuestProgress';
+import {
+  ANCHOR_ERRAND_GIVERS,
+  ANCHOR_QUEST_NAME,
+  type AnchorQuestProgress,
+} from '../core/quests/AnchorQuestProgress';
 import {
   ANCHOR_SHARD_IDS,
   ITEM_DEF,
@@ -43,8 +47,7 @@ import {
 } from '../ui/questReward/rewardLines';
 import type { QuestRewardSpec, RewardItemLine } from '../ui/questReward/types';
 import type { VendorLineGate } from '../economy/shops';
-import { LORI_COTTAGE_NAME, SKY_TEMPLE_NAME } from './interiorStoryOwnership';
-import type { BuildingName } from '../map/buildingEntry';
+import type { BuildingId } from '../map/buildingIds';
 import {
   travelUnlocksSection,
   unlockedDestinationIds,
@@ -119,7 +122,7 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
      * The caller states the doorway's own span, because only the map knows it:
      * an opening can be wider than the single walkable tile recorded as the door.
      */
-    private readonly doorTileOf: (buildingName: BuildingName) => TrackerTarget | null,
+    private readonly doorTileOf: (buildingId: BuildingId) => TrackerTarget | null,
     private readonly toast: (message: string) => void,
     private readonly conversation: Conversation,
     /** Every questline that binds a destination, read when the reward screen is built. */
@@ -551,7 +554,7 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
   /** Where a given shard's step sends the player. */
   private stepTarget(shardId: (typeof ANCHOR_SHARD_IDS)[number]): TrackerTarget | undefined {
     if (shardId === 'anchor_shard_tinker') return this.tinkerStallTile() ?? undefined;
-    if (shardId === 'anchor_shard_lori') return this.doorTileOf(LORI_COTTAGE_NAME) ?? undefined;
-    return this.doorTileOf(SKY_TEMPLE_NAME) ?? undefined;
+    const errand = shardId === 'anchor_shard_lori' ? 'lori' : 'temple';
+    return this.doorTileOf(ANCHOR_ERRAND_GIVERS[errand].buildingId) ?? undefined;
   }
 }

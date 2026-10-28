@@ -31,18 +31,82 @@ export type ChestGuard =
    */
   | { readonly kind: 'band'; readonly mobs: ReadonlyArray<Mob> };
 
-export interface TreasureChest {
-  tileX: number;
-  tileY: number;
-  type: ChestType;
+/** A wooden chest's lock: it comes off once `guard` has held a live mob and holds none. */
+interface GuardLock {
+  readonly kind: 'guards';
+  guard: ChestGuard;
+  /**
+   * Whether the guard has held a live mob yet. Until it has, an empty room is
+   * guards not yet arrived rather than guards beaten.
+   */
+  hadMobs: boolean;
+}
+
+/** A boss room's silver chest: it unlocks when that room's boss loot lands in it. */
+interface BossLock {
+  readonly kind: 'boss';
+  readonly bossRoomIndex: number;
+}
+
+/** A chest nothing locks: one a previous visit already emptied. */
+interface NoLock {
+  readonly kind: 'none';
+}
+
+/** How a chest comes unlocked. */
+type ChestLock = GuardLock | BossLock | NoLock;
+
+interface ChestBase {
+  readonly tileX: number;
+  readonly tileY: number;
   state: 'locked' | 'unlocking' | 'unlocked' | 'opened';
   loot: LootDrop | null;
   unlockFrame: number;
   sparkleFrame: number;
   tryLockedTimer: number;
-  guard: ChestGuard | null;
-  bossRoomIndex: number | null;
-  hadMobs: boolean;
+}
+
+/**
+ * A chest on the map. Its art and its lock go together: a guard lock only on a
+ * wooden chest, a boss lock only on a silver one, and either kind standing open
+ * with no lock at all.
+ */
+export type TreasureChest = ChestBase &
+  (
+    | { readonly type: 'wooden'; readonly lock: GuardLock }
+    | { readonly type: 'silver'; readonly lock: BossLock }
+    | { readonly type: ChestType; readonly lock: NoLock }
+  );
+
+/** A wooden chest held by guards, the only kind a band can be posted to. */
+export type GuardedChest = Extract<TreasureChest, { readonly lock: GuardLock }>;
+
+/**
+ * When a room-guarded chest may unlock: `after_guards_seen` waits for mobs to
+ * stand in the room and then all die, so a room whose guards have not come
+ * out yet is not taken for a cleared one; `when_room_clear` unlocks it the
+ * first frame the room holds none.
+ */
+export type RoomChestRelease = 'after_guards_seen' | 'when_room_clear';
+
+/** The part of a chest's lock that changes in play; only a guard lock has any. */
+export type ChestLockProgress =
+  Readonly<Pick<GuardLock, 'kind' | 'hadMobs'>> | Pick<BossLock, 'kind'> | NoLock;
+
+/** What of `lock` a checkpoint keeps. */
+export function lockProgressOf(lock: ChestLock): ChestLockProgress {
+  switch (lock.kind) {
+    case 'guards':
+      return { kind: 'guards', hadMobs: lock.hadMobs };
+    case 'boss':
+      return { kind: 'boss' };
+    case 'none':
+      return { kind: 'none' };
+    default: {
+      const unhandled: never = lock;
+      return unhandled;
+    }
+  }
 }
 
 /**
@@ -56,7 +120,7 @@ export interface TreasureChestProgressSnapshot {
   loot: LootDrop | null;
   unlockFrame: number;
   tryLockedTimer: number;
-  hadMobs: boolean;
+  lock: ChestLockProgress;
 }
 
 export interface TreasureChestCheckpoint {
@@ -76,7 +140,12 @@ const LOOT_ARROW_COLOR = '#facc15';
  */
 export function isChestOpenable(chest: TreasureChest): boolean {
   if (chest.state === 'unlocked') return true;
-  return chest.state === 'unlocking' && chest.bossRoomIndex !== null;
+  return chest.state === 'unlocking' && chest.lock.kind === 'boss';
+}
+
+/** Whether `chest` is the silver chest of boss room `bossRoomIndex`. */
+function isBossChestOf(chest: TreasureChest, bossRoomIndex: number): boolean {
+  return chest.lock.kind === 'boss' && chest.lock.bossRoomIndex === bossRoomIndex;
 }
 
 /** How far `player` stands from `chest`, the measure every reach check uses. */
@@ -115,7 +184,7 @@ function guardsHolding(guard: ChestGuard, mobs: readonly Mob[]): Mob[] {
 
 /** A boss chest holding the loot of a defeated boss that nobody has opened yet. */
 function isAwaitingBossLoot(chest: TreasureChest): boolean {
-  return chest.bossRoomIndex !== null && isChestOpenable(chest);
+  return chest.lock.kind === 'boss' && isChestOpenable(chest);
 }
 
 // Sparkle animation constants
@@ -232,20 +301,19 @@ export class TreasureChestSystem {
       unlockFrame: 0,
       sparkleFrame: 0,
       tryLockedTimer: 0,
-      guard: null,
-      bossRoomIndex,
-      hadMobs: false,
+      lock: { kind: 'boss', bossRoomIndex },
     });
   }
 
+  /** A wooden chest held by whatever counts toward a room clear inside `guardBounds`, in tiles. */
   addWoodenChest(
     tileX: number,
     tileY: number,
     guardBounds: { x: number; y: number; w: number; h: number },
     loot: LootDrop,
-    hasGuards = true,
-  ): TreasureChest {
-    const chest: TreasureChest = {
+    release: RoomChestRelease,
+  ): GuardedChest {
+    const chest: GuardedChest = {
       tileX,
       tileY,
       type: 'wooden',
@@ -254,9 +322,11 @@ export class TreasureChestSystem {
       unlockFrame: 0,
       sparkleFrame: 0,
       tryLockedTimer: 0,
-      guard: { kind: 'room', bounds: guardBounds },
-      bossRoomIndex: null,
-      hadMobs: !hasGuards,
+      lock: {
+        kind: 'guards',
+        guard: { kind: 'room', bounds: guardBounds },
+        hadMobs: release === 'when_room_clear',
+      },
     };
     this.chests.push(chest);
     return chest;
@@ -266,8 +336,8 @@ export class TreasureChestSystem {
    * A wooden chest held by a band of mobs that has not come out yet: locked,
    * and unlocked once every mob later posted to its `band` guard is dead.
    */
-  addBandChest(tileX: number, tileY: number, loot: LootDrop): TreasureChest {
-    const chest: TreasureChest = {
+  addBandChest(tileX: number, tileY: number, loot: LootDrop): GuardedChest {
+    const chest: GuardedChest = {
       tileX,
       tileY,
       type: 'wooden',
@@ -276,9 +346,7 @@ export class TreasureChestSystem {
       unlockFrame: 0,
       sparkleFrame: 0,
       tryLockedTimer: 0,
-      guard: { kind: 'band', mobs: [] },
-      bossRoomIndex: null,
-      hadMobs: false,
+      lock: { kind: 'guards', guard: { kind: 'band', mobs: [] }, hadMobs: false },
     };
     this.chests.push(chest);
     return chest;
@@ -295,9 +363,7 @@ export class TreasureChestSystem {
       unlockFrame: 0,
       sparkleFrame: 0,
       tryLockedTimer: 0,
-      guard: null,
-      bossRoomIndex: null,
-      hadMobs: false,
+      lock: { kind: 'none' },
     };
     this.chests.push(chest);
     return chest;
@@ -305,12 +371,12 @@ export class TreasureChestSystem {
 
   /** Whether this boss room still has a chest waiting to be handed its loot. */
   hasLockedBossChest(bossRoomIndex: number): boolean {
-    return this.chests.some((c) => c.bossRoomIndex === bossRoomIndex && c.state === 'locked');
+    return this.chests.some((c) => isBossChestOf(c, bossRoomIndex) && c.state === 'locked');
   }
 
   /** Whether this boss room still has a chest nobody has opened, whatever its lock state. */
   hasUnopenedBossChest(bossRoomIndex: number): boolean {
-    return this.chests.some((c) => c.bossRoomIndex === bossRoomIndex && c.state !== 'opened');
+    return this.chests.some((c) => isBossChestOf(c, bossRoomIndex) && c.state !== 'opened');
   }
 
   /**
@@ -335,9 +401,7 @@ export class TreasureChestSystem {
    *   must ask {@link hasLockedBossChest} first rather than provoke the warning.
    */
   receiveBossLoot(bossRoomIndex: number, loot: LootDrop): boolean {
-    const chest = this.chests.find(
-      (c) => c.bossRoomIndex === bossRoomIndex && c.state === 'locked',
-    );
+    const chest = this.chests.find((c) => isBossChestOf(c, bossRoomIndex) && c.state === 'locked');
     if (chest === undefined) {
       console.warn(
         `[TreasureChestSystem] Boss loot for room ${bossRoomIndex} had no locked chest to go into.`,
@@ -451,15 +515,15 @@ export class TreasureChestSystem {
         chest.sparkleFrame = (chest.sparkleFrame + 1) % SPARKLE_CYCLE;
       }
 
-      // Check wooden chest room clearing
-      if (chest.state === 'locked' && chest.type === 'wooden' && chest.guard !== null) {
-        const liveMobsInRoom = guardsHolding(chest.guard, mobs);
+      if (chest.state === 'locked' && chest.lock.kind === 'guards') {
+        const lock = chest.lock;
+        const liveMobsInRoom = guardsHolding(lock.guard, mobs);
 
         if (liveMobsInRoom.length > 0) {
-          chest.hadMobs = true;
+          lock.hadMobs = true;
         }
 
-        if (chest.hadMobs && liveMobsInRoom.length === 0) {
+        if (lock.hadMobs && liveMobsInRoom.length === 0) {
           const idx = this.chests.indexOf(chest);
           this.triggerUnlock(idx);
           this.onWoodenChestUnlocked?.();
@@ -624,7 +688,7 @@ export class TreasureChestSystem {
         loot: chest.loot === null ? null : cloneLootDrop(chest.loot),
         unlockFrame: chest.unlockFrame,
         tryLockedTimer: chest.tryLockedTimer,
-        hadMobs: chest.hadMobs,
+        lock: lockProgressOf(chest.lock),
       })),
     };
   }
@@ -640,7 +704,13 @@ export class TreasureChestSystem {
       chest.loot = entry.loot === null ? null : cloneLootDrop(entry.loot);
       chest.unlockFrame = entry.unlockFrame;
       chest.tryLockedTimer = entry.tryLockedTimer;
-      chest.hadMobs = entry.hadMobs;
+      if (chest.lock.kind === 'guards' && entry.lock.kind === 'guards') {
+        chest.lock.hadMobs = entry.lock.hadMobs;
+      } else if (chest.lock.kind !== entry.lock.kind) {
+        console.warn(
+          `[TreasureChestSystem] Checkpoint for the chest at ${chest.tileX},${chest.tileY} holds a ${entry.lock.kind} lock; the chest has a ${chest.lock.kind} lock.`,
+        );
+      }
       this.chests.push(chest);
     }
   }

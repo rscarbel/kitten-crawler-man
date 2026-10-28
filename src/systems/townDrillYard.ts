@@ -23,10 +23,10 @@ import type { ServiceIconId } from '../sprites/art/itemIcons/serviceIcons';
 import { hostByline, type ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
 import { SERVICE_PRICES } from '../economy/servicePrices';
-import type { PlannedBuildingName } from '../map/town/townPlan';
+import type { PlannedBuildingId } from '../map/buildingIds';
 
 /** The garrison whose guard runs the drill yard. */
-export const DRILL_YARD_BUILDING = 'The Barracks' as const satisfies PlannedBuildingName;
+export const DRILL_YARD_BUILDING = 'taloncrest_barracks' as const satisfies PlannedBuildingId;
 
 /** Stat points one bought session is worth. */
 const DRILL_STAT_POINTS = 1;

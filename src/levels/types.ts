@@ -1,3 +1,4 @@
+import type { LevelId } from './levelIds';
 import type { CampKind } from '../map/overworld/camps';
 import type { BathroomRequest } from '../map/gauntletLayout';
 import type { StealthGateRequest } from '../map/spineLayout';
@@ -336,7 +337,7 @@ export interface ArrivalLoadingScreen {
 
 /** Data-only description of a dungeon level. No game-logic dependencies. */
 export interface LevelDef {
-  id: string;
+  id: LevelId;
   name: string;
   /** Dungeon depth, 1-based. Drives depth-scaled rewards such as smashed-prop coins. */
   floorNumber: number;
@@ -375,7 +376,7 @@ export interface LevelDef {
    */
   bossRooms?: BossRoomRule[];
   /** ID of the next level in the registry, if any. */
-  nextLevelId?: string;
+  nextLevelId?: LevelId;
   /**
    * Diminishing returns on XP earned here — kills, bosses and quest rewards
    * alike — so an early floor can't be farmed into trivialising the ones below

@@ -65,7 +65,7 @@ const STALL_PRICES = {
 } as const;
 /** A wounded crawler keeps this share of their health, so heal offers are open. */
 const WOUNDED_HP_FRACTION = 0.4;
-const INN_HOUSE = 'The Sleeping Cat Inn';
+const INN_HOUSE = 'taloncrest_inn';
 const TRAVEL_ART = {
   town: 'travel_town',
   circus: 'travel_circus',

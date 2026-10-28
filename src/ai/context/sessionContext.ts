@@ -1,11 +1,10 @@
 import { crawlerName } from '../../characters/characters';
+import { isAtOrUnderLowHealth } from '../../core/combat/hpThresholds';
 import type { ActionSeverity } from '../actions/types';
 import type { JsonObject } from './json';
 import { liveCrawlerNamed } from './liveState';
 import type { LiveInput, SessionInput } from './types';
 
-/** A crawler below this share of max HP is "low" for the AI and for tool policies. */
-export const LOW_HP_FRACTION = 0.25;
 /** Under this many seconds on the collapse clock the AI should treat the floor as urgent. */
 export const LEVEL_TIMER_LOW_SECONDS = 120;
 const SECONDS_PER_MINUTE = 60;
@@ -15,7 +14,7 @@ const SECONDS_PER_MINUTE = 60;
  * `forbidsContext`, so each name is part of the server contract: rename one
  * and every policy naming it silently stops matching.
  *
- * - `lowHp`: the active crawler is below `LOW_HP_FRACTION` of max HP.
+ * - `lowHp`: the active crawler is in the low-health band (`isAtOrUnderLowHealth`).
  * - `crawlerDown`: either crawler is knocked out and waiting for a revive.
  * - `levelTimerLow`: the collapse clock is running and under `LEVEL_TIMER_LOW_SECONDS`.
  * - `inMenu`: a menu or dialog other than the pause screen is up; `isPaused` covers both.
@@ -64,7 +63,7 @@ export function buildSessionFlags(
     isPaused: live.isPaused,
     inMenu: live.menuOpen,
     inBossFight: live.bossFightActive,
-    lowHp: active.maxHp > 0 && active.hp / active.maxHp < LOW_HP_FRACTION,
+    lowHp: active.maxHp > 0 && isAtOrUnderLowHealth(active.hp, active.maxHp),
     crawlerDown: live.crawlers.human.knockedOut || live.crawlers.cat.knockedOut,
     indoors: session.indoors,
     levelTimerLow: timerLow,

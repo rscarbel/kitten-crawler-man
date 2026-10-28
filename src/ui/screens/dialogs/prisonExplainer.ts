@@ -15,6 +15,7 @@ import {
 } from '../../icons/explainerArt/prisonArt';
 import { pagedOverlaySurface, type PagedOverlayPage } from '../../widgets/pagedOverlay';
 import { explainerPage } from './explainerPages';
+import { buildingDisplayName } from '../../../map/buildingIds';
 
 /** What the explainer reads from, and drives on, the prison's key system. */
 export interface PrisonExplainerModel {
@@ -25,7 +26,7 @@ export interface PrisonExplainerModel {
   dismissPrisonExplainer(): void;
 }
 
-const TITLE = 'Goblin High Security Prison';
+const TITLE = buildingDisplayName('level2_goblin_prison');
 const DONE_LABEL = 'Start sneaking';
 
 function pages(touch: boolean): readonly PagedOverlayPage[] {

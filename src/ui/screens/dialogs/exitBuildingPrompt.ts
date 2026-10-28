@@ -8,11 +8,12 @@ import type { Surface } from '../../core/UiRoot';
 import type { PanelWidth } from '../../theme/tokens';
 import { choiceModalSurface } from '../../widgets/choiceModal';
 import { iconUnlessCompact, keyboardHint, stackParts, swallowAttackKey } from './choiceDialogParts';
+import { buildingDisplayName, type BuildingId } from '../../../map/buildingIds';
 
 /** What the interior scene supplies. */
 export interface ExitBuildingHooks {
   isOpen(): boolean;
-  buildingName(): string;
+  buildingId(): BuildingId;
   exit(): void;
   /** Stay: shut the prompt and remember the refusal until the player steps off the mat. */
   stay(): void;
@@ -36,7 +37,7 @@ export function exitBuildingPromptSurface(id: string, hooks: ExitBuildingHooks):
       id: 'exit-building',
       overline: 'Exit Building',
       icon: iconUnlessCompact(ui, 'logOut'),
-      title: `Leave ${hooks.buildingName()}?`,
+      title: `Leave ${buildingDisplayName(hooks.buildingId())}?`,
       extra: stackParts(ui, [keyboardHint(ui, PROMPT_WIDTH, STAY_HINT)]),
       width: PROMPT_WIDTH,
       buttons: [

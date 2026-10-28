@@ -24,11 +24,11 @@ import type { ShopMenu, ShopPurchaseHandler } from '../ui/screens/shop/shopSessi
 import { buildInnRoomOptions, isInnRoomKey, rentInnRoom } from './townInnRooms';
 import { buildTavernMenu, serveDrinkAt } from './townPub';
 import type { ResidentHost } from './townResidents';
-import type { BuildingName } from '../map/buildingEntry';
+import type { BuildingId } from '../map/buildingIds';
 
 /** The inn's board: the kitchen, and the guest wing at the end of it. */
 export function buildInnMenu(
-  house: BuildingName,
+  house: BuildingId,
   buyer: Player,
   turn: number,
   host: ResidentHost | null,
@@ -44,7 +44,7 @@ export function buildInnMenu(
  * kitchen put on the board.
  */
 export function serveInn(
-  house: BuildingName,
+  house: BuildingId,
   party: ReadonlyArray<Player>,
   turn: number,
   stock: ShopStock,

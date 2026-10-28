@@ -39,26 +39,6 @@ Entry shape:
 - **Size:** M
 - **Found:** 2026-10-21, spawn funnel work.
 
-### A creature's audio tag is a free string matched by unchecked switches
-
-- **Where:** `Mob.audioTag` (`readonly audioTag: string`, `src/creatures/Mob.ts`) and the `switch (mob.audioTag)` blocks and `mob.audioTag === '…'` chains in `playCuesOf` (`src/systems/GameLoopPhases.ts`).
-- **Problem:** the tag is typed `string`, so a misspelled tag or a creature whose tag has no `case` compiles and plays nothing; each switch handles a different subset of tags, and a tag that should be silent (the lion's, until its recordings land) can only say so with an empty `case`.
-- **Cost:** a new creature silently has no voice, and nothing fails when a tag is renamed on one side only.
-- **Better shape:** a literal union of tags with a `Record<AudioTag, { attack, projectile, damage, special }>` cue table (each slot a cue list or explicitly none), so a new tag cannot ship without saying what it plays.
-- **Until then:** when adding a tag, add its `case` in every switch that should voice it, and write an explicit empty `case` with a reason where it should stay silent.
-- **Size:** M
-- **Found:** 2026-10-26, the lion's audio tag.
-
-### An earth elemental hire's guard config falls back silently
-
-- **Where:** `EARTH_ELEMENTAL_GUARD_CONFIGS` and `earthElementalGuardConfigFor` (`src/creatures/mercenaries/earthElementalGuardKit.ts`).
-- **Problem:** the per-hire guard config is a `Partial<Record<MercenaryTemplateId, …>>` keyed by template id, and any template on the `earth_elemental_guard` kit without an entry is handed Hammer Hands' config without a word.
-- **Cost:** a new earth elemental hire compiles and plays as Hammer Hands by accident; the kit branches on template ids, which the template table's own header says code must not do.
-- **Better shape:** carry a kit's per-hire config on the template (a `kit` that is a discriminated union with its config), so a hire on that kit cannot be declared without one.
-- **Until then:** give every new hire on this kit its own config entry.
-- **Size:** S
-- **Found:** 2026-10-27, The Barracks Mercenaries' roster rework.
-
 ## Townsfolk
 
 ### Two Hawkfolk civilian looks are painted and gated but never worn
@@ -81,36 +61,6 @@ Entry shape:
 - **Found:** 2026-10-23, moving the biped rig's look into `HumanLook`.
 
 ## Town and interiors
-
-### Buildings are identified by their display name
-
-- **Where:** `BuildingName` and `BUILDING_NAMES` (`src/map/buildingEntry.ts`), built from `PlannedBuildingName` (`src/map/town/townPlan.ts`); every table keyed by it (`INTERIOR_BY_NAME` in `GameMap`, `BUILDING_OCCUPANTS`, `BUILDING_READABLES`, `KEEPER_BY_BUILDING`, `TAVERN_BUILDING_NAMES` in `src/map/town/townPlan.ts`, `HOUSE_DRINKS`/`HOUSE_BARKS` in `src/systems/townPub.ts`); `musicBackfill`'s remembered buildings. Still a plain `string` because the key also holds a parsed save's value or a test's made-up room: `TownMemory`'s `roomKey`/`interiorPropPayoutKey`, `InteriorPropInteractionSystem`'s `buildingName`, `interiorHostiles`' `InteriorHostileContext.buildingName`/`noteRoomCleared`, and `taloncrestContractSite` (read by `briarHollowState`'s save parser). Also the positional prop ids built by `stableInteriorPropId` (`` `${propId}@${x},${y}` ``).
-- **Problem:** a building's player-facing name ("The Barracks", "Old Lori's Cottage") is also its identity. The tables are typed by the name union, so a misspelled key fails to compile, but the name is still written out as a literal in a dozen or more files per building, and it is the key saved data is stored under. Renaming the text therefore changes the identity, and a save written before the rename forgets that building's rooms and payouts. Interior props without an explicit id are keyed by their tile, so moving one forgets its saved state.
-- **Cost:** every rename is a cross-cutting edit through every table and literal, and it forgets saved state for that building. Display text can't be changed freely or localised.
-- **Better shape:** a stable building id (a slug union) as the only key across layout, occupants, services, memory and saves, with the display name as data on the building's definition. Interior props keyed by stable ids instead of tile positions.
-- **Until then:** key any new building table by `BuildingName` or `TownBuildingName`, never `string`, and narrow a stored name with `isBuildingName` rather than casting it. Never add an alias map from old names to new ones; give a moved prop an explicit id instead.
-- **Size:** L
-- **Found:** 2026-10-26, renaming the club and Old Lori's Cottage.
-
-### The Anchor quest finds its giver by resident id and building name
-
-- **Where:** `AnchorInteriorSystem` (`src/systems/AnchorInteriorSystem.ts`): the dialog opener and the quest marker both test `residentId === 'old_lori' && this.buildingName === LORI_COTTAGE_NAME`.
-- **Problem:** which resident gives the Anchor quest, and where, is a pair of literals in the system rather than data on the quest or the resident.
-- **Cost:** moving the quest to another giver, or giving a second resident a quest, means another hand-written pair check in the same shape.
-- **Better shape:** quest-giver wiring declared as data (a quest giver field on the resident or on the quest definition) that the interior systems read.
-- **Until then:** don't add another `residentId === … && buildingName === …` check for a new quest; declare the giver in data.
-- **Size:** S
-- **Found:** 2026-10-26, renaming the cottage's resident.
-
-### Construction contracts name the two towns with two different unions
-
-- **Where:** `ContractSiteDef.town` (`'taloncrest' | 'briar_hollow'`, `src/systems/constructionContracts/contractCatalog.ts`); `ContractSettlement` (`'taloncrest' | 'hollow'`, `src/sprites/art/constructionContracts/contractPalette.ts`); the `Settlement` type and `--hollow=` flag in `scripts/render-construction-contracts.ts`; the `settlement:` literals in `ConstructionContractSystem` and `ContractInteriorSite`.
-- **Problem:** the same two towns have one id in the catalogue and saves and another in the palette and render harness, and neither union is derived from the other, so each site owner restates its town as a second literal (`settlement: 'hollow'`, `settlement: 'taloncrest'`) instead of reading it from the site.
-- **Cost:** a third contract town needs entries in both unions plus every restated literal, and nothing makes the two lists agree.
-- **Better shape:** one town-id union owned by the catalogue, with the palette keyed by it (`Record<ContractTown, ContractPalette>`).
-- **Until then:** don't add a third spelling; take new per-town data by `ContractSiteDef['town']`.
-- **Size:** S
-- **Found:** 2026-10-26, Hawkfolk / Taloncrest rename.
 
 ### Interior prop art heights are a string-keyed table read by fallback
 
@@ -151,15 +101,6 @@ Entry shape:
 - **Until then:** stand any person the club adds through the club's occupant roster in `BUILDING_OCCUPANTS`, not as a new direct painter call in `CloakAndDaggerSystem`.
 - **Size:** M
 - **Found:** 2026-10-26, interior cast placement and figures.
-
-### `INK_BENCH` is a tile type nothing places
-
-- **Where:** `INK_BENCH` in `src/map/tileTypes.ts`, its case in `src/map/tiles/interiorTiles.ts`, and its entries in `src/map/tiles/helpers.ts` and `src/map/walkability.ts`.
-- **Problem:** the Quiet Needle's chair is the `ink_chair` prop, and no layout writes the `INK_BENCH` tile type, so its painter and walkability entries have no reader in a generated room.
-- **Cost:** dead code that reads as live; a reader would assume a second ink bench exists somewhere.
-- **Better shape:** delete the tile type and everything that names it.
-- **Size:** S
-- **Found:** 2026-10-26, retiring the `bench` occupant anchor.
 
 ### An exit fixture's art is drawn by whatever stands behind it, not by the fixture
 
@@ -221,6 +162,16 @@ Entry shape:
 - **Better shape:** profile the slow gates. Most of their time is probably repeated scene setup or soak length that a smaller sample would cover just as well.
 - **Size:** M
 - **Found:** 2026-10-21, perf and memory batch.
+
+### Many scripts are never typechecked
+
+- **Where:** `tsconfig.scripts.json`, whose `include` lists harnesses one by one (its own comment says "The older scripts/ harnesses predate this and are not covered"); `typecheck:scripts` in `scripts/check.ts`. Typechecking all of `scripts/**/*.ts` against that config gives 18 errors, in `verify-town-residency.ts`, `verify-preview-scene.ts`, `render-equipment.ts`, `verify-held-visuals.ts`, `verify-arrival-load.ts`, `verify-residency.ts` and `verify-player-snapshot.ts`: an `unknown` read without narrowing, an implicit `any`, a `Canvas` passed where `CanvasImageSource` is expected, members that no longer exist (`arrivalLoading`, `LIVE_SCRIPT_LAP_TICKS`), and `Array.prototype.at` against the configured lib.
+- **Problem:** a script outside the list runs through `tsx`, which strips types without checking them, so neither `npm run check` nor `check:full` ever sees its type errors. Several of the failing files are live gates.
+- **Cost:** a rename or a type change in `src/` silently breaks an unlisted harness, and the breakage surfaces only as a confusing runtime failure, or not at all when the bad branch never runs. The game's strict type rules don't hold for a large part of the tooling.
+- **Better shape:** include `scripts/**/*.ts` in `tsconfig.scripts.json`, fix the existing errors, and delete the per-file list, so a new script is covered by default.
+- **Until then:** add every new script to the `include` list, and when changing a type that scripts use, typecheck all of `scripts/` once with a temporary config that includes `scripts/**/*.ts`.
+- **Size:** S
+- **Found:** 2026-10-27, building ids replacing display names.
 
 ### Figures freeze ink measurements the runtime already measures
 
@@ -293,47 +244,6 @@ Entry shape:
 - **Until then:** give such rows no `role`, keep them generic to their motion set rather than named after one character, and add them to the motion set they hold an item in so the equipment gates cover them. A stride row of this kind (`twohand_amble`, `twohand_hurry`) declares `gait: 'walk'` so G10 paces it, and is kept out of the crawler's stride only by being declared after his set's own walk, which `cycleRow` finds first; never declare one ahead of it.
 - **Size:** M.
 - **Found:** 2026-10-27, painting Brother Anselm on the human rig.
-
-### Hireling art picks its view with no hysteresis
-
-- **Where:** `MercenaryArtFrame` (`src/sprites/mercenaryArt.ts`) hands each art only `facingX` / `facingY`; `BROTHER_ANSELM_ART.draw` calls `selectFacing` with no previous selection, and the other hires split views by the dominant axis.
-- **Problem:** a hire walking along a sector edge can flip between profile and front or back from one tick to the next, because no `FacingState` is kept per hireling.
-- **Cost:** view flicker on hires that the player's own figure avoids through `FacingState`.
-- **Better shape:** keep a `FacingState` on `Mercenary`, update it once a tick, and hand the selection to the art in `MercenaryArtFrame`.
-- **Size:** S.
-- **Found:** 2026-10-27, painting Brother Anselm on the human rig.
-
-## Combat and statuses
-
-### A status's definition is spread over separately kept lists
-
-- **Where:** `src/core/combat/StatusEffect.ts` (`STATUS_IDS`, `INCURABLE_STATUSES`, `WARD_STATUSES`, `CASTER_HELD_STATUSES`, `AILMENT_STATUSES`, `STAT_BOON_BONUSES`), `STATUS_INCOMING_DAMAGE_SCALE` in `src/core/combat/statusTuning.ts`, and `STATUS_VISUALS` in `src/sprites/status/statusEffectVisuals.ts`.
-- **Problem:** what a status is (curable, incurable, a ward, a boon, how it scales damage, how it looks) is answered by membership in several lists and maps rather than one entry per `StatusId`. Only the damage scale is a `Record<StatusId, …>`; `STATUS_VISUALS` is a `Map<string, StatusVisual>`, so a status with no visual (`ink`) compiles and falls back to a grey pill, and whether it gets a HUD pill at all is an optional `noHudPill` flag on that map's entry. Damage-over-time is a third copy: `STATUS_DAMAGE_INTERVALS` (a `Map<string, number>` in `src/Player.ts`) feeds `pendingStatusDamage`, while `Player.tickStatusEffects` repeats each interval in its own `if (effect.type === …)` branch.
-- **Cost:** a new status must be remembered in each list by hand, and nothing fails when one is missed; a damage-over-time status added to the tick branches but not to the interval map is invisible to the AI's forecast.
-- **Better shape:** one `Record<StatusId, StatusDef>` holding each status's rules (curability, ward, boon stats, damage scale), with the visuals as a `Record<StatusId, StatusVisual | null>` beside it in the sprite layer, and the lists derived from them.
-- **Until then:** key any new per-status table by `StatusId` as a `Record`, never a `Map<string, …>` or a hand-kept array.
-- **Size:** M
-- **Found:** 2026-10-26, status damage scale and HP bands.
-
-### The AI governor keeps its own low-HP line
-
-- **Where:** `LOW_HP_FRACTION` in `src/ai/actions/governor.ts` and `shieldedHp` in `src/ai/actions/combat.ts`, beside `CRAWLER_HP_THRESHOLDS.low_health` in `src/core/combat/hpThresholds.ts`.
-- **Problem:** both are "a quarter of max HP, rounded up", declared twice; the AI's line is exclusive (`hp < shieldedHp`) and the band's inclusive (`hp <= hpThresholdTop`).
-- **Cost:** tuning one leaves the other behind, so the AI may refuse to hurt a crawler the game does not yet call low, or the reverse.
-- **Better shape:** the governor reads the band (`hpThresholdTop(CRAWLER_HP_THRESHOLDS.low_health, maxHp)`) and agrees on which side the line falls.
-- **Until then:** don't add a third copy of the share; read one of these two.
-- **Size:** S
-- **Found:** 2026-10-26, HP bands.
-
-### A treasure chest is one flat record for two kinds of chest
-
-- **Where:** `TreasureChest` and `TreasureChestSystem.addWoodenChest`'s positional `hasGuards = true` (`src/systems/TreasureChestSystem.ts`).
-- **Problem:** `guardBounds` and `hadMobs` only mean anything on a wooden chest and `bossRoomIndex` only on a silver one, but all three sit on every chest as nullable fields, and whether a wooden chest waits for guards is a bare boolean argument.
-- **Cost:** a chest with `type: 'silver'` and `guardBounds` set compiles, and every reader re-derives the kind from which field is null (`isChestOpenable`, `isAwaitingBossLoot`, `ChestKit.payStandard`).
-- **Better shape:** a discriminated union on how the chest unlocks (`{ lock: 'guards'; guardBounds; hadMobs }`, `{ lock: 'boss'; bossRoomIndex }`, `{ lock: 'none' }`), with the save codec in `PersistedWorldState` following it.
-- **Until then:** add chests through `ChestPlacer` (`src/systems/kits/ChestKit.ts`) or the existing `add*Chest` methods rather than building `TreasureChest` literals, and don't add another nullable field that only one kind uses.
-- **Size:** S
-- **Found:** 2026-10-26, interior chests and exit fixtures.
 
 ## Shared types
 

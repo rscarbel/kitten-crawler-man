@@ -16,7 +16,7 @@
  *   npx tsx scripts/render-town-interiors.ts --out-dir=preview/my-pass --scale=2
  *   npx tsx scripts/render-town-interiors.ts --probes
  *
- * `--only` matches a case-insensitive substring of the building name.
+ * `--only` matches a case-insensitive substring of the building id.
  * `--probes` stands the human at a counter, a table, the doorway and on the top
  * row of the room's first rug (one of each the room actually has) so a scale
  * mismatch between the new interior props and a real figure — or a rug drawn
@@ -29,12 +29,12 @@
  * variant is an empty ring.
  */
 
-import { STARLIGHT_TENT_NAME } from '../src/map/overworld/circusGroundsLayout.js';
 import { createCanvas, type Canvas } from 'canvas';
 
 import { installCanvasGlobals, paintEnvironmentArtInNode } from './nodeCanvasGlobals.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { asGameContext } from './nodeGameContext.js';
+import type { BuildingId } from '../src/map/buildingIds.js';
 
 interface CanvasGlobals {
   Image?: unknown;
@@ -76,7 +76,7 @@ const WARM_FRAMES = 60;
 const DEFAULT_SCALE = 2;
 const DEFAULT_OUT_DIR = `${PREVIEW_DIR}/town-interiors`;
 /** Buildings this harness does not cover; see the file doc for why. */
-const EXCLUDED_BUILDING_NAMES: ReadonlySet<string> = new Set([STARLIGHT_TENT_NAME]);
+const EXCLUDED_BUILDINGS: ReadonlySet<BuildingId> = new Set(['taloncrest_circus_tent']);
 
 /** Length of the `--` prefix and `=` separator around a flag's name. */
 const FLAG_PREFIX_LENGTH = 3;
@@ -106,8 +106,7 @@ installCanvasGlobals();
 
 const plan = createTownPlan(TOWN_PLAN_SIZE);
 const rooms = [...plan.buildings, plan.tower].filter(
-  (building) =>
-    !EXCLUDED_BUILDING_NAMES.has(building.name) && building.name.toLowerCase().includes(only),
+  (building) => !EXCLUDED_BUILDINGS.has(building.id) && building.id.toLowerCase().includes(only),
 );
 
 if (rooms.length === 0) {
@@ -134,14 +133,14 @@ const storeys = rooms.flatMap((building) => {
 for (const { building, floor, floorCount } of storeys) {
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [], artSeed });
   const hasSafeRoom = 'hasSafeRoom' in building && building.hasSafeRoom === true;
-  map.generateInterior(building.kind, floor, building.name, hasSafeRoom, 'default');
+  map.generateInterior(building.kind, floor, building.id, hasSafeRoom, 'default');
   if (hasSafeRoom) {
     stampSafeRoomCounters(map);
     stampSafeRoomDecor(map);
   }
   map.releaseTileArt();
 
-  const occupants = InteriorOccupantSystem.forBuilding(map, building.kind, building.name);
+  const occupants = InteriorOccupantSystem.forBuilding(map, building.kind, building.id);
   for (let frame = 0; frame < WARM_FRAMES; frame++) occupants?.update();
 
   const mapW = map.structure[0]?.length ?? 0;
@@ -207,8 +206,8 @@ for (const { building, floor, floorCount } of storeys) {
 
   const outPath = writePreviewPng(
     floorCount > 1
-      ? `${outDir}/${slug(building.name)}-floor-${floor}.png`
-      : `${outDir}/${slug(building.name)}.png`,
+      ? `${outDir}/${slug(building.id)}-floor-${floor}.png`
+      : `${outDir}/${slug(building.id)}.png`,
     canvas.toBuffer('image/png'),
   );
   console.log(`${outPath}: ${mapW}x${mapH} tiles, ${occupants?.people.length ?? 0} occupant(s)`);

@@ -345,7 +345,7 @@ export class VillagerSystem {
 
   /** Where the hammer needs to land: the forge's anvil, read off the site's own furniture placement. */
   private findAnvilPoint(): VillagerCrawler | null {
-    const forge = this.deps.site.buildings.find((building) => building.id === 'forge');
+    const forge = this.deps.site.buildings.find((building) => building.id === 'briar_hollow_forge');
     const anvil = forge?.furniture.find((prop) => prop.prop === 'anvil');
     if (anvil === undefined) return null;
     return {

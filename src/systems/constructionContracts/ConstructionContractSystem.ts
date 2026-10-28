@@ -41,7 +41,6 @@ import { BUILDINGS, doorwayTiles, outwardStep } from '../../map/overworld/briarH
 import { rectContains, type BriarHollowSite } from '../../map/overworld/briarHollowSite';
 import { releaseContractArt } from '../../sprites/art/constructionContracts/contractArtCache';
 import type { TopBandEntry } from '../../ui/hud/topBand';
-import { PLUMBLINE_FARM_NAME } from '../briarHollow/blueprints/blueprintsProgress';
 import {
   pointedGuidanceTarget,
   shortfallGuidance,
@@ -82,6 +81,7 @@ import {
   type ContractSiteWorkDeps,
 } from './ContractSiteWork';
 import { briarHollowSpotFootprint } from './contractTargets';
+import type { BuildingId } from '../../map/buildingIds';
 
 /** What a spot in reach says, and what a press on it is told, while the siege is on. */
 export const CONTRACT_SIEGE_LINE = 'Not while the village is under siege.';
@@ -127,7 +127,7 @@ export interface ConstructionContractSystemDeps {
    * Whether a story state owns a Taloncrest room right now, so its spots
    * are inert and its contact away. Absent means none ever does.
    */
-  readonly taloncrestRoomOwnedByStory?: (buildingName: string) => boolean;
+  readonly taloncrestRoomOwnedByStory?: (buildingId: BuildingId) => boolean;
   /** A one-line toast over the HUD. */
   readonly announce: (message: string) => void;
   /** Keeps the resource strip up while a spot is being worked. */
@@ -166,7 +166,6 @@ export class ConstructionContractSystem implements GameSystem, QuestLineProvider
       // north wall that covers a prop south of it covers that prop's damage too.
       sortLineFor: (footprint) =>
         footprint.surface === 'floor' ? null : decorationFigureLine(footprint.rect, gameMap),
-      settlement: 'hollow',
       announce: deps.announce,
       worldHalted: deps.worldHalted,
       standDownReason: () => (this.underSiege ? CONTRACT_SIEGE_LINE : null),
@@ -308,7 +307,7 @@ export class ConstructionContractSystem implements GameSystem, QuestLineProvider
   /** Whether the active site is held by a story state: the siege, or a Taloncrest room's fight. */
   private siteHeldByStory(site: ContractSiteDef): boolean {
     if (site.town === 'briar_hollow') return this.underSiege;
-    return this.deps.taloncrestRoomOwnedByStory?.(site.buildingName) === true;
+    return this.deps.taloncrestRoomOwnedByStory?.(site.buildingId) === true;
   }
 
   /**
@@ -331,21 +330,18 @@ export class ConstructionContractSystem implements GameSystem, QuestLineProvider
   /** The site's door, as the guide and the Journal point at it. */
   private siteGuidance(site: ContractSiteDef): TownBuildingGuidance | null {
     const door =
-      site.town === 'taloncrest'
-        ? this.townBuildingDoor(site.buildingName)
-        : this.villageDoor(site);
+      site.town === 'taloncrest' ? this.townBuildingDoor(site.buildingId) : this.villageDoor(site);
     if (door === null) return null;
     return {
       kind: 'town_building',
-      buildingName: site.name,
       residentName: contractContactName(site),
       door,
     };
   }
 
-  private townBuildingDoor(buildingName: string): TrackerTarget | null {
+  private townBuildingDoor(buildingId: BuildingId): TrackerTarget | null {
     const entry = this.deps.gameMap.buildingEntries.find(
-      (candidate) => candidate.name === buildingName,
+      (candidate) => candidate.id === buildingId,
     );
     return doorwayBeaconTarget(entry ?? null);
   }
@@ -443,7 +439,7 @@ export class ConstructionContractSystem implements GameSystem, QuestLineProvider
    * points at the farm.
    */
   private wendellsDoor(): TrackerTarget | undefined {
-    const door = this.townBuildingDoor(PLUMBLINE_FARM_NAME);
+    const door = this.townBuildingDoor('taloncrest_builder_farm');
     return door === null ? undefined : { ...door, litOnlyWhenPinned: true };
   }
 

@@ -390,9 +390,6 @@ export const FLASH_WALL = 103;
 /** Stoppered jars of ground pigment on a stained shelf. */
 export const PIGMENT_SHELF = 104;
 
-/** A padded reclining bench with a leather headrest: where the needle works. */
-export const INK_BENCH = 105;
-
 /** A stone slab with a muller, a soot pot and a pestle, for grinding pigment. */
 export const GRINDING_SLAB = 106;
 

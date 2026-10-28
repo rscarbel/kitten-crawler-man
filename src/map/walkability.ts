@@ -53,7 +53,6 @@ import {
   MAP_TABLE,
   FLASH_WALL,
   PIGMENT_SHELF,
-  INK_BENCH,
   GRINDING_SLAB,
   RIVER_ROCK,
   BOULDER_SMALL,
@@ -158,7 +157,6 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   MAP_TABLE,
   FLASH_WALL,
   PIGMENT_SHELF,
-  INK_BENCH,
   GRINDING_SLAB,
   // The floor-3 wilderness. `HIGHLAND_GRASS`, `SCREE`, `BARE_EARTH`, `BRIDGE`,
   // `WILDFLOWER_TUFT`, `PEBBLE_SCATTER` and `DEN_HOLLOW` are deliberately

@@ -1,5 +1,6 @@
 import { walkFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { type EarthElementalVariant, type EarthElementalView } from './art/earthElementalArt';
+import type { CardinalView, FacingSelection } from './facingView';
 import {
   EARTH_ELEMENTAL_ACTIONS,
   EARTH_ELEMENTAL_FIGURES,
@@ -46,9 +47,8 @@ const ROW_CLOCK: Readonly<
 export interface EarthElementalSpriteState {
   readonly variant: EarthElementalVariant;
   readonly row: EarthElementalAction;
-  /** Facing vector; the dominant axis picks the view, and a profile facing −X is mirrored. */
-  readonly facingX: number;
-  readonly facingY: number;
+  /** From `selectCardinalFacing`: the view, and whether the profile is mirrored. */
+  readonly facing: FacingSelection<CardinalView>;
   /**
    * Gait phase in radians for the walk, advanced by distance covered:
    * `2π / (EARTH_ELEMENTAL_WALK_TILES_PER_CYCLE * tileSize)` per pixel moved.
@@ -63,18 +63,15 @@ export interface EarthElementalSpriteState {
   readonly alpha?: number;
 }
 
-/** Which view a facing vector selects: whichever axis it points along hardest. */
-export function earthElementalViewFor(facingX: number, facingY: number): EarthElementalView {
-  if (Math.abs(facingY) <= Math.abs(facingX)) return 'side';
-  return facingY < 0 ? 'away' : 'front';
-}
+const EARTH_ELEMENTAL_VIEW_OF: Readonly<Record<CardinalView, EarthElementalView>> = {
+  front: 'front',
+  side: 'side',
+  back: 'away',
+};
 
 /** The sheet frame a state resolves to. */
 export function earthElementalFrameFor(state: EarthElementalSpriteState): number {
-  const stateName = earthElementalStateName(
-    state.row,
-    earthElementalViewFor(state.facingX, state.facingY),
-  );
+  const stateName = earthElementalStateName(state.row, EARTH_ELEMENTAL_VIEW_OF[state.facing.view]);
   const frames = Math.max(1, figureFrameCount(EARTH_ELEMENTAL_FIGURES[state.variant], stateName));
   if (state.row === 'walk') return walkFrameIndex(state.walkPhase ?? 0, frames);
   const clock = ROW_CLOCK[state.row];
@@ -97,8 +94,8 @@ export function drawEarthElementalSprite(
   tileSize: number,
   state: EarthElementalSpriteState,
 ): void {
-  const view = earthElementalViewFor(state.facingX, state.facingY);
-  const flipX = view === 'side' && state.facingX < 0;
+  const view = EARTH_ELEMENTAL_VIEW_OF[state.facing.view];
+  const flipX = view === 'side' && state.facing.flipX;
   drawFigureCached(
     ctx,
     EARTH_ELEMENTAL_FIGURES[state.variant],

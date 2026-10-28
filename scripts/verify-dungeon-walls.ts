@@ -63,11 +63,15 @@ import {
   VOID_TYPE,
   type TileContent,
 } from '../src/map/tileTypes.js';
+import type { DungeonFloorNumber } from '../src/levels/levelIds.js';
 
 /** Maps per floor. Wall shapes repeat heavily, so a handful covers every case the generator makes. */
 const SEEDS_PER_FLOOR = 4;
 const FIRST_SEED = 101;
-const FLOORS: ReadonlyArray<{ readonly level: number; readonly theme: DungeonFloorThemeId }> = [
+const FLOORS: ReadonlyArray<{
+  readonly level: DungeonFloorNumber;
+  readonly theme: DungeonFloorThemeId;
+}> = [
   { level: 1, theme: 'cellars' },
   { level: 2, theme: 'service_level' },
 ];
@@ -511,7 +515,7 @@ function report(label: string, result: SweepResult): void {
   if (result.failures.length > 0) failed = true;
 }
 
-function floorMap(level: number, worldSeed: number): GameMap {
+function floorMap(level: DungeonFloorNumber, worldSeed: number): GameMap {
   const levelDef = getLevelDef(`level${level}`);
   return new GameMap({
     mapSize: levelDef.mapSize,

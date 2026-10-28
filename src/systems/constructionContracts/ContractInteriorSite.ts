@@ -15,7 +15,7 @@ import type { BriarHollowState } from '../../core/quests/briarHollowState';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { GameMap } from '../../map/GameMap';
-import type { BuildingName } from '../../map/buildingEntry';
+import type { BuildingId } from '../../map/buildingIds';
 import { releaseContractArt } from '../../sprites/art/constructionContracts/contractArtCache';
 import { interiorRoomOwnedByStory, type InteriorStoryState } from '../interiorStoryOwnership';
 import type { WorkChannelBuilder } from '../WorkChannel';
@@ -62,7 +62,7 @@ export class ContractInteriorSite {
   } | null = null;
   private protectedFor: { revision: number; ids: ReadonlySet<string> } | null = null;
 
-  private constructor(buildingName: BuildingName, deps: ContractInteriorSiteDeps) {
+  private constructor(buildingId: BuildingId, deps: ContractInteriorSiteDeps) {
     const gameMap = deps.gameMap;
     this.work = new ContractSiteWork({
       state: deps.state,
@@ -70,14 +70,13 @@ export class ContractInteriorSite {
       cat: deps.cat,
       audio: deps.audio,
       audioScope: deps.audioScope,
-      siteHere: (site) => site.town === 'taloncrest' && site.buildingName === buildingName,
+      siteHere: (site) => site.town === 'taloncrest' && site.buildingId === buildingId,
       resolveFootprint: (site, spot) =>
         site.town === 'taloncrest' ? taloncrestSpotFootprint(site, spot, gameMap) : null,
       sortLineFor: (footprint) => interiorSortLine(footprint, gameMap),
-      settlement: 'taloncrest',
       announce: deps.toast,
       worldHalted: deps.worldHalted,
-      inert: () => interiorRoomOwnedByStory(buildingName, deps.story()),
+      inert: () => interiorRoomOwnedByStory(buildingId, deps.story()),
     });
   }
 
@@ -88,17 +87,17 @@ export class ContractInteriorSite {
    * the room is free again.
    */
   static forBuilding(
-    buildingName: BuildingName,
+    buildingId: BuildingId,
     floor: number,
     deps: ContractInteriorSiteDeps,
   ): ContractInteriorSite | null {
     if (floor !== CONTRACT_FLOOR) return null;
-    const site = taloncrestContractSite(buildingName);
+    const site = taloncrestContractSite(buildingId);
     const active = deps.state.contracts.active;
     if (site === undefined || active === null) return null;
     if (contractSiteFor(active.site) !== site) return null;
-    if (interiorRoomOwnedByStory(buildingName, deps.story())) return null;
-    return new ContractInteriorSite(buildingName, deps);
+    if (interiorRoomOwnedByStory(buildingId, deps.story())) return null;
+    return new ContractInteriorSite(buildingId, deps);
   }
 
   update(): void {

@@ -212,7 +212,7 @@ console.log('\nDoorway derivation (manifest, no map needed)');
   for (const building of plan.buildings) {
     const doorway = getSpriteDoorwayByKey(building.spriteKey);
     if (doorway === undefined) {
-      check(false, `${building.name}: '${building.spriteKey}' derives a doorway`);
+      check(false, `${building.id}: '${building.spriteKey}' derives a doorway`);
       continue;
     }
     // Measured here from the manifest independently of `SpriteLoader`, and
@@ -224,7 +224,7 @@ console.log('\nDoorway derivation (manifest, no map needed)');
     const painted = paintedDoorColumn(building.spriteKey);
     check(
       painted !== undefined && doorway.dx === painted,
-      `${building.name}: door tile dx=${doorway.dx} sits on the painted opening ` +
+      `${building.id}: door tile dx=${doorway.dx} sits on the painted opening ` +
         `(pixel gap centre column ${painted ?? 'not found'})`,
     );
   }
@@ -267,7 +267,7 @@ for (let mapIndex = 0; mapIndex < MAPS_TO_GENERATE; mapIndex++) {
     for (let x = x0; x < x0 + width; x++) {
       checkOnce(
         map.isWalkable(x, entry.doorTile.y),
-        `'${entry.name}': column ${x - x0} of its ${width}-tile doorway is not walkable`,
+        `'${entry.id}': column ${x - x0} of its ${width}-tile doorway is not walkable`,
       );
     }
     // Where `DungeonScene` puts the party when they walk back out of a
@@ -277,15 +277,15 @@ for (let mapIndex = 0; mapIndex < MAPS_TO_GENERATE; mapIndex++) {
     // solid one there is a player stuck inside a shop.
     checkOnce(
       walkable(entry.doorTile.x, entry.doorTile.y + 1),
-      `'${entry.name}': the tile the party is put back on when they leave is not walkable`,
+      `'${entry.id}': the tile the party is put back on when they leave is not walkable`,
     );
     checkOnce(
       entry.doorTile.x >= x0 && entry.doorTile.x < x0 + width,
-      `'${entry.name}': its door tile lies outside its own doorway`,
+      `'${entry.id}': its door tile lies outside its own doorway`,
     );
     checkOnce(
       reaches(MAP_SIZE, plaza, entry.doorTile, walkable),
-      `'${entry.name}': its door is walkable from the plaza`,
+      `'${entry.id}': its door is walkable from the plaza`,
     );
   }
 
@@ -422,7 +422,7 @@ for (let mapIndex = 0; mapIndex < QUEST_ROUTE_CHECK_MAPS; mapIndex++) {
     if (target === null) continue;
     const goals = goalTilesForTarget(map, target);
     if (goals.length === 0) {
-      checkOnce(false, `'${entry.name}': its door target has a tile a route can end on`);
+      checkOnce(false, `'${entry.id}': its door target has a tile a route can end on`);
       continue;
     }
     routeField = buildRouteField(map, goals, routeField);
@@ -430,7 +430,7 @@ for (let mapIndex = 0; mapIndex < QUEST_ROUTE_CHECK_MAPS; mapIndex++) {
     const last = chain[chain.length - 1];
     checkOnce(
       last !== undefined && isTileIn(goals, last),
-      `'${entry.name}': the route from the plaza reaches its door`,
+      `'${entry.id}': the route from the plaza reaches its door`,
     );
     const insideTown = map.isTileInsideTownWall(entry.doorTile.x, entry.doorTile.y);
     checkOnce(

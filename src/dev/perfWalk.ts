@@ -15,7 +15,7 @@ import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import { keybindings, type GameAction } from '../core/input/Keybindings';
 import type { AISceneContext } from '../ai/actions/types';
 import type { GameMap } from '../map/GameMap';
-import type { BuildingName } from '../map/buildingEntry';
+import type { BuildingId } from '../map/buildingIds';
 import type { MobKind } from '../levels/mobKinds';
 import type { Player } from '../Player';
 
@@ -36,8 +36,8 @@ export type PerfWalkAnchor =
   | { readonly kind: 'spiderLab' }
   /** The boss room nearest the safe room that waits before this boss. */
   | { readonly kind: 'bossRoomPast'; readonly bossType: MobKind }
-  /** A building's door, by its entry name. */
-  | { readonly kind: 'buildingDoor'; readonly name: BuildingName };
+  /** A building's door. */
+  | { readonly kind: 'buildingDoor'; readonly id: BuildingId };
 
 export type PerfWalkStep =
   /**
@@ -300,7 +300,7 @@ function anchorTile(
       );
     }
     case 'buildingDoor':
-      return gameMap.buildingEntries.find((entry) => entry.name === anchor.name)?.doorTile ?? null;
+      return gameMap.buildingEntries.find((entry) => entry.id === anchor.id)?.doorTile ?? null;
   }
 }
 

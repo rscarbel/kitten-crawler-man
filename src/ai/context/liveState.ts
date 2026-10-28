@@ -46,7 +46,6 @@ export function buildLiveState(live: LiveInput): JsonObject {
     inSafeRoom: live.location.inSafeRoom,
     inBossArena: live.location.inBossArena,
   };
-  if (live.location.buildingName !== undefined) location.building = live.location.buildingName;
   return {
     activePlayer: live.activeCrawler,
     [PLAYER_CHARACTERS.human]: crawlerJson(live.crawlers.human),

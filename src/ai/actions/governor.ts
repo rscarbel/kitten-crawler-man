@@ -7,6 +7,7 @@
  * gifts, fines and clock changes, scaled by depth where the stakes scale.
  */
 import { TILE_SIZE } from '../../core/constants';
+import { CRAWLER_HP_THRESHOLDS, isAtOrUnderLowHealth } from '../../core/combat/hpThresholds';
 import {
   AI_CHARACTER_MORDECAI,
   activeCrawler,
@@ -27,16 +28,18 @@ import {
   type AISceneContext,
 } from './types';
 
-/** Below this share of max HP a crawler is off-limits to anything that hurts or hunts them. */
-export const LOW_HP_FRACTION = 0.25;
 /**
  * During a fight the shield widens: below this share of max HP a crawler is
  * already losing, and the AI does not pile more on.
  */
 export const HURT_IN_COMBAT_FRACTION = 0.4;
 const PERCENT = 100;
-/** `LOW_HP_FRACTION` as a whole percentage, for text the model and the player read. */
-export const LOW_HP_PERCENT = Math.round(LOW_HP_FRACTION * PERCENT);
+/**
+ * The low-health band's share as a whole percentage, for text the model and the
+ * player read. A crawler in that band is off-limits to anything that hurts or
+ * hunts them.
+ */
+export const LOW_HP_PERCENT = Math.round(CRAWLER_HP_THRESHOLDS.low_health.share * PERCENT);
 const HURT_IN_COMBAT_PERCENT = Math.round(HURT_IN_COMBAT_FRACTION * PERCENT);
 
 /** How near a hostile with a target must be for the party to count as fighting. */
@@ -116,10 +119,10 @@ function hpFraction(crawler: Crawler): number {
   return crawler.maxHp > 0 ? crawler.hp / crawler.maxHp : 0;
 }
 
-/** A crawler the fairness rules shield: down (knocked out or dead), or under {@link LOW_HP_FRACTION} of max HP. */
+/** A crawler the fairness rules shield: down (knocked out or dead), or in the low-health band. */
 export function isVulnerable(crawler: Crawler): boolean {
   if (crawler.isKnockedOut || !crawler.isAlive) return true;
-  return hpFraction(crawler) < LOW_HP_FRACTION;
+  return isAtOrUnderLowHealth(crawler.hp, crawler.maxHp);
 }
 
 export function anyVulnerable(scene: AISceneContext): boolean {
@@ -147,7 +150,7 @@ function canHurtParty(def: AIActionDef): boolean {
 export function hpShieldNote(def: AIActionDef): string | null {
   if (!canHurtParty(def)) return null;
   const subject = def.spawnsMobs === true ? 'Never spawns' : 'Never harms';
-  return `${subject} while a crawler is below ${LOW_HP_PERCENT}% HP, or below ${HURT_IN_COMBAT_PERCENT}% during a fight.`;
+  return `${subject} while a crawler is at or under ${LOW_HP_PERCENT}% HP, or below ${HURT_IN_COMBAT_PERCENT}% during a fight.`;
 }
 
 export class ActionGovernor {
@@ -189,7 +192,7 @@ export class ActionGovernor {
       if (flags.isPaused) return deny('no spawns while a menu is open');
       if (flags.inBossFight) return deny('no spawns during a boss fight');
       if (anyVulnerable(scene))
-        return deny(`no spawns while a crawler is below ${LOW_HP_PERCENT}% HP`);
+        return deny(`no spawns while a crawler is at or under ${LOW_HP_PERCENT}% HP`);
       if (flags.inCombat && anyHurt(scene)) {
         return deny(`no spawns mid-fight while a crawler is below ${HURT_IN_COMBAT_PERCENT}% HP`);
       }
@@ -197,7 +200,7 @@ export class ActionGovernor {
 
     const harmful = def.isHarmful?.(call) ?? def.policy.severity === 'harmful';
     if (harmful && anyVulnerable(scene)) {
-      return deny(`nothing harmful while a crawler is below ${LOW_HP_PERCENT}% HP`);
+      return deny(`nothing harmful while a crawler is at or under ${LOW_HP_PERCENT}% HP`);
     }
     if (harmful && flags.inCombat && anyHurt(scene)) {
       return deny(

@@ -12,8 +12,6 @@
  * its warm-up has passed; `globalThis.__perfWalk` says how far it has got.
  */
 
-import { STARLIGHT_TENT_NAME } from '../map/overworld/circusGroundsLayout';
-import { CLOAK_AND_DAGGER_NAME } from '../map/town/townPlan';
 import { aiAdapter } from '../ai/AIAdapter';
 import type { SceneManager } from '../core/Scene';
 import {
@@ -168,7 +166,7 @@ const PERF_SCENES: readonly PerfScene[] = [
       [
         { kind: 'walk', anchor: CIRCUS_CENTRE, dx: CIRCUS_LAP_REACH_TILES },
         { kind: 'walk', anchor: CIRCUS_CENTRE, dx: -CIRCUS_LAP_REACH_TILES },
-        ...takePrompt({ kind: 'buildingDoor', name: STARLIGHT_TENT_NAME }),
+        ...takePrompt({ kind: 'buildingDoor', id: 'taloncrest_circus_tent' }),
       ],
       INTERIOR_LAP,
     ),
@@ -178,7 +176,7 @@ const PERF_SCENES: readonly PerfScene[] = [
     description: 'In through the Cloak & Dagger door, then laps of the casino floor',
     query: pinnedFloor('playtest=casino-floor'),
     route: leadInThenLap(
-      takePrompt({ kind: 'buildingDoor', name: CLOAK_AND_DAGGER_NAME }),
+      takePrompt({ kind: 'buildingDoor', id: 'taloncrest_nightclub' }),
       INTERIOR_LAP,
     ),
   },

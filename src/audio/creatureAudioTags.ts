@@ -1,0 +1,47 @@
+/**
+ * The voice a creature's combat cues play under, read off `Mob.audioTag`.
+ * `MOB_VOICES` in `src/systems/mobVoices.ts` holds a row for every tag, so a
+ * new tag does not compile until it says what it plays, even if that is
+ * nothing.
+ */
+export type CreatureAudioTag =
+  | 'silent'
+  | 'ball_of_swine'
+  | 'bear'
+  | 'big_rooster'
+  | 'clown'
+  | 'cow'
+  | 'dark_knight'
+  | 'evil_clown'
+  | 'fairy'
+  | 'goblin'
+  | 'goblin_bombardier'
+  | 'goblin_dynamiter'
+  | 'grave_bull'
+  | 'grotesque_spider'
+  | 'hawkfolk'
+  | 'krakaren'
+  | 'krakaren_tentacle'
+  | 'krasue'
+  | 'lemur'
+  | 'lion'
+  | 'llama'
+  | 'mantid'
+  | 'mantis'
+  | 'merc_archer'
+  | 'merc_earth_elemental'
+  | 'merc_medic'
+  | 'miss_quill'
+  | 'mongo'
+  | 'necromancer'
+  | 'raised_ratkin'
+  | 'rat'
+  | 'ratkin_soldier'
+  | 'rock_golem'
+  | 'skeleton'
+  | 'skeleton_lord'
+  | 'small_spider'
+  | 'the_lich'
+  | 'trash_gremlin'
+  | 'troglodyte'
+  | 'tuskling';

@@ -31,6 +31,7 @@ import { SERVICE_PRICES } from '../economy/servicePrices';
 import { SHOPS, type ShopId } from '../economy/shops';
 import type { ShopStock } from '../economy/shopStock';
 import { catalogLineRow, findCatalogLine, handOverCatalogLine } from './market/vendorMenu';
+import { buildingDisplayName } from '../map/buildingIds';
 
 const APOTHECARY_SHOP = 'apothecary' as const satisfies ShopId;
 const CURE_KEY = 'cure';
@@ -82,7 +83,7 @@ export function buildApothecaryMenu(
   };
 
   return {
-    title: 'Herb & Remedy',
+    title: buildingDisplayName('taloncrest_apothecary'),
     bark: host?.line ?? rotateLine(APOTHECARY_BARKS, turn),
     byline: hostByline(host),
     emblem: null,

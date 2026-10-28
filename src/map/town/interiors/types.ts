@@ -20,25 +20,18 @@
  * check holds them to.
  */
 
-import type { TownInteriorPropId } from '../../../sprites/art/townInterior/townInteriorProps';
+import type {
+  StatefulTownInteriorPropId,
+  StatelessTownInteriorPropId,
+} from '../../../sprites/art/townInterior/townInteriorProps';
 import { contractPropId } from '../../contractAreas';
+import type { PlannedBuildingId } from '../../buildingIds';
 
-export interface TownInteriorPropEntry {
+interface TownInteriorPropEntryBase {
   readonly kind: 'prop';
   readonly x: number;
   readonly y: number;
-  readonly propId: TownInteriorPropId;
   readonly variant?: number;
-  /**
-   * A cross-regeneration-stable id for this exact placed instance, used to
-   * key a payout record (a room's `GameMap` — and with it `placedInteriorProps`'
-   * array order — is rebuilt fresh every visit). Defaults to `propId@x,y`,
-   * which is already stable as long as a building's layout doesn't move the
-   * instance; set explicitly when a layout wants to keep an id fixed across a
-   * future position edit, or when something else names this instance (a
-   * construction contract spot, via {@link contractTarget}).
-   */
-  readonly id?: string;
   /**
    * Overrides the prop's own `destructible.dropsLootByDefault` for this one
    * placed instance — the same prop id is junk in a storeroom and shop
@@ -47,8 +40,33 @@ export interface TownInteriorPropEntry {
   readonly dropsLoot?: boolean;
 }
 
-/** The stable id a payout record keys on for one placed prop entry. */
-export function stableInteriorPropId(entry: TownInteriorPropEntry): string {
+/**
+ * A placed prop the room's save remembers (a breakable's payout, a searched
+ * container). Its id is written in the layout, unique within the room, and
+ * is what the save keys it by, so moving the prop keeps its state.
+ */
+interface StatefulTownInteriorPropEntry extends TownInteriorPropEntryBase {
+  readonly propId: StatefulTownInteriorPropId;
+  readonly id: string;
+}
+
+/**
+ * A placed prop with nothing saved. It needs an id only when something else
+ * names it (a construction contract spot, via {@link contractTarget}).
+ */
+interface StatelessTownInteriorPropEntry extends TownInteriorPropEntryBase {
+  readonly propId: StatelessTownInteriorPropId;
+  readonly id?: string;
+}
+
+export type TownInteriorPropEntry = StatefulTownInteriorPropEntry | StatelessTownInteriorPropEntry;
+
+/**
+ * The id a placed prop goes by within its room. A prop without one in its
+ * layout is named by its tile; nothing is saved against such an id, so a
+ * moved prop loses nothing.
+ */
+export function placedInteriorPropId(entry: TownInteriorPropEntry): string {
   return entry.id ?? `${entry.propId}@${entry.x},${entry.y}`;
 }
 
@@ -76,20 +94,40 @@ export function smashableTile(x: number, y: number, tileType: number): TownInter
 export function prop(
   x: number,
   y: number,
-  propId: TownInteriorPropId,
+  propId: StatelessTownInteriorPropId,
   variant = 0,
   options: { readonly id?: string; readonly dropsLoot?: boolean } = {},
 ): TownInteriorPropEntry {
   return { kind: 'prop', x, y, propId, variant, id: options.id, dropsLoot: options.dropsLoot };
 }
 
+/** A prop the room's save remembers, under `id`: see `StatefulTownInteriorPropId`. */
+export function statefulProp(
+  x: number,
+  y: number,
+  propId: StatefulTownInteriorPropId,
+  id: string,
+  variant = 0,
+  options: { readonly dropsLoot?: boolean } = {},
+): TownInteriorPropEntry {
+  return { kind: 'prop', x, y, propId, id, variant, dropsLoot: options.dropsLoot };
+}
+
 /**
- * The `prop` options that make an entry the target of a construction
- * contract spot. A contract finds its prop by this id alone, so an entry
- * carrying it can move freely within its layout.
+ * The id that makes an entry the target of a construction contract spot. A
+ * contract finds its prop by this id alone, so an entry carrying it can move
+ * freely within its layout.
  */
-export function contractTarget(siteSlug: string, spotId: string): { readonly id: string } {
-  return { id: contractPropId(siteSlug, spotId) };
+export function contractTargetId(buildingId: PlannedBuildingId, spotId: string): string {
+  return contractPropId(buildingId, spotId);
+}
+
+/** The `prop` options carrying {@link contractTargetId}. */
+export function contractTarget(
+  buildingId: PlannedBuildingId,
+  spotId: string,
+): { readonly id: string } {
+  return { id: contractTargetId(buildingId, spotId) };
 }
 
 /** A run of the same tile type along a row, inclusive of both ends. */

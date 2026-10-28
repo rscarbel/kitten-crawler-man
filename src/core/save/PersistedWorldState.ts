@@ -4,10 +4,12 @@ import {
   type BossRoomDressingCheckpoint,
 } from '../../systems/bossRooms/bossRoomDressingCheckpoint';
 import type { ArenaCheckpoint } from '../../systems/ArenaSystem';
-import type {
-  TreasureChest,
-  TreasureChestCheckpoint,
-  TreasureChestProgressSnapshot,
+import {
+  lockProgressOf,
+  type ChestLockProgress,
+  type TreasureChest,
+  type TreasureChestCheckpoint,
+  type TreasureChestProgressSnapshot,
 } from '../../systems/TreasureChestSystem';
 import type { DefendQuestCheckpoint } from '../../systems/DefendQuestSystem';
 import {
@@ -27,7 +29,12 @@ import { isRegularId } from '../../systems/casino/poker/npc/regulars';
 import { normalizeJackpotPool } from '../../systems/casino/slots/slotBets';
 import type { HiredMercenary, MercenaryRosterCheckpoint } from '../party/MercenaryRoster';
 import type { MongoPetStateCheckpoint } from '../state/MongoPetState';
-import { VISITED_PLACE_IDS, type TownMemoryCheckpoint } from '../state/TownMemory';
+import {
+  VISITED_PLACE_IDS,
+  isInteriorPropPayoutKey,
+  isRoomKey,
+  type TownMemoryCheckpoint,
+} from '../state/TownMemory';
 import type { JournalProgressCheckpoint } from '../quests/JournalProgress';
 import { TACTICS_TRAITS, type TacticsTrait } from '../../creatures/tactics/tacticsTraits';
 import { parseShopStockSnapshot, type ShopStockSnapshot } from '../../economy/shopStock';
@@ -148,14 +155,15 @@ export function toPersistedTreasureChestCheckpoint(
       loot: entry.loot,
       unlockFrame: entry.unlockFrame,
       tryLockedTimer: entry.tryLockedTimer,
-      hadMobs: entry.hadMobs,
+      lock: entry.lock,
     })),
   };
 }
 
 /**
  * Matches each saved entry to the chest the regenerated floor put on the same
- * tile. An entry with no chest there is dropped.
+ * tile. An entry with no chest there, or whose lock is of another kind than
+ * that chest's, is dropped.
  */
 export function fromPersistedTreasureChestCheckpoint(
   persisted: PersistedTreasureChestCheckpoint,
@@ -166,6 +174,12 @@ export function fromPersistedTreasureChestCheckpoint(
   for (const entry of persisted.chests) {
     const chest = liveChests.find((c) => c.tileX === entry.tileX && c.tileY === entry.tileY);
     if (chest === undefined) continue;
+    if (entry.lock.kind !== chest.lock.kind) {
+      console.warn(
+        `[PersistedWorldState] Saved chest at ${entry.tileX},${entry.tileY} has a ${entry.lock.kind} lock; the chest there has a ${chest.lock.kind} lock. Dropped.`,
+      );
+      continue;
+    }
     matched.add(chest);
     chests.push({
       chest,
@@ -173,7 +187,7 @@ export function fromPersistedTreasureChestCheckpoint(
       loot: entry.loot,
       unlockFrame: entry.unlockFrame,
       tryLockedTimer: entry.tryLockedTimer,
-      hadMobs: entry.hadMobs,
+      lock: entry.lock,
     });
   }
   // `restoreCheckpoint` replaces the whole chest list, so a chest the save
@@ -186,7 +200,7 @@ export function fromPersistedTreasureChestCheckpoint(
       loot: chest.loot,
       unlockFrame: chest.unlockFrame,
       tryLockedTimer: chest.tryLockedTimer,
-      hadMobs: chest.hadMobs,
+      lock: lockProgressOf(chest.lock),
     });
   }
   return { chests };
@@ -505,11 +519,27 @@ function parseTreasureChestState(value: unknown): PersistedTreasureChestEntry['s
   return stringUnion(value, ['locked', 'unlocking', 'unlocked', 'opened'] as const);
 }
 
+function parseChestLockProgress(value: unknown): ChestLockProgress | undefined {
+  if (!isRecord(value)) return undefined;
+  const { kind, hadMobs } = value;
+  switch (kind) {
+    case 'guards':
+      return isBoolean(hadMobs) ? { kind: 'guards', hadMobs } : undefined;
+    case 'boss':
+      return { kind: 'boss' };
+    case 'none':
+      return { kind: 'none' };
+    default:
+      return undefined;
+  }
+}
+
 function parsePersistedTreasureChestEntry(value: unknown): PersistedTreasureChestEntry | undefined {
   if (!isRecord(value)) return undefined;
-  const { tileX, tileY, state, loot, unlockFrame, tryLockedTimer, hadMobs } = value;
+  const { tileX, tileY, state, loot, unlockFrame, tryLockedTimer, lock } = value;
   const parsedState = parseTreasureChestState(state);
   const parsedLoot = parseNullableLootDrop(loot);
+  const parsedLock = parseChestLockProgress(lock);
   if (
     !isNumber(tileX) ||
     !isNumber(tileY) ||
@@ -517,7 +547,7 @@ function parsePersistedTreasureChestEntry(value: unknown): PersistedTreasureChes
     parsedLoot === undefined ||
     !isNumber(unlockFrame) ||
     !isNumber(tryLockedTimer) ||
-    !isBoolean(hadMobs)
+    parsedLock === undefined
   ) {
     return undefined;
   }
@@ -528,7 +558,7 @@ function parsePersistedTreasureChestEntry(value: unknown): PersistedTreasureChes
     loot: parsedLoot,
     unlockFrame,
     tryLockedTimer,
-    hadMobs,
+    lock: parsedLock,
   };
 }
 
@@ -917,20 +947,26 @@ export function parseTownMemoryCheckpoint(value: unknown): TownMemoryCheckpoint 
   const parsedVisitedPlaces = parseArray(visitedPlaces, (entry) =>
     stringUnion(entry, VISITED_PLACE_IDS),
   );
+  const parsedClearedRooms = parseArray(clearedRooms, (entry) =>
+    isRoomKey(entry) ? entry : undefined,
+  );
+  const parsedPaidOutProps = parseArray(paidOutInteriorProps, (entry) =>
+    isInteriorPropPayoutKey(entry) ? entry : undefined,
+  );
   if (
     parsedTalks === undefined ||
-    !isStringArray(clearedRooms) ||
+    parsedClearedRooms === undefined ||
     !isStringArray(clearedCamps) ||
-    !isStringArray(paidOutInteriorProps) ||
+    parsedPaidOutProps === undefined ||
     parsedVisitedPlaces === undefined
   ) {
     return undefined;
   }
   return {
     residentTalks: parsedTalks,
-    clearedRooms,
+    clearedRooms: parsedClearedRooms,
     clearedCamps,
-    paidOutInteriorProps,
+    paidOutInteriorProps: parsedPaidOutProps,
     visitedPlaces: parsedVisitedPlaces,
   };
 }

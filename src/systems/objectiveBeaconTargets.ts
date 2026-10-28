@@ -110,7 +110,7 @@ interface FacadeExtent {
  * rather than a sprite building.
  */
 function facadeExtent(entry: BuildingEntry): FacadeExtent | null {
-  const spriteKey = plannedBuildingSpriteKey(entry.name);
+  const spriteKey = plannedBuildingSpriteKey(entry.id);
   if (spriteKey === undefined) return null;
   const footprint = getSpriteFootprintByKey(spriteKey);
   const doorway = getSpriteDoorwayByKey(spriteKey);
@@ -163,7 +163,7 @@ export function doorwayBeaconTarget(entry: BuildingEntry | null): TrackerTarget 
       widthTiles: span.width,
       backsetTiles: DOORWAY_BACKSET_TILES,
       heightTiles: DOORWAY_BEAM_HEIGHT_TILES,
-      building: entry.name,
+      building: entry.id,
     };
   }
   const ridgeRise = facade.roofRise + FACADE_DOOR_ROW_TILES;
@@ -177,7 +177,7 @@ export function doorwayBeaconTarget(entry: BuildingEntry | null): TrackerTarget 
     widthTiles: facade.widthTiles,
     backsetTiles: DOORWAY_BACKSET_TILES,
     heightTiles: ridgeRise + roofClearance,
-    building: entry.name,
+    building: entry.id,
   };
 }
 
@@ -199,6 +199,6 @@ export function towerApproachBeaconTarget(entry: BuildingEntry | null): TrackerT
     widthTiles: span.width,
     backsetTiles: DOORWAY_BACKSET_TILES,
     standsInFront: true,
-    building: entry.name,
+    building: entry.id,
   };
 }

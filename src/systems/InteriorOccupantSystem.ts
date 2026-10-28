@@ -44,7 +44,8 @@ import {
   TRAINING_DUMMY,
   MUSTER_BOARD,
 } from '../map/tileTypes';
-import type { BuildingEntry, BuildingName } from '../map/buildingEntry';
+import type { BuildingEntry } from '../map/buildingEntry';
+import type { BuildingId } from '../map/buildingIds';
 import type { GameSystem } from './GameSystem';
 import { DEFAULT_TOWN_SPECIES } from './townSpecies';
 import {
@@ -352,22 +353,22 @@ export class InteriorOccupantSystem implements GameSystem {
   static forBuilding(
     map: GameMap,
     type: BuildingEntry['type'],
-    name: BuildingName,
+    buildingId: BuildingId,
     focus: RoamerFocus = () => null,
     bodies: OccupantBodies = () => [],
     playCue: OccupantCuePlayer = () => undefined,
   ): InteriorOccupantSystem | null {
-    if (!interiorHoldsOccupants(type, name)) return null;
-    const specs = BUILDING_OCCUPANTS.get(name) ?? TYPE_OCCUPANTS[type];
+    if (!interiorHoldsOccupants(type, buildingId)) return null;
+    const specs = BUILDING_OCCUPANTS.get(buildingId) ?? TYPE_OCCUPANTS[type];
     if (specs === undefined || specs.length === 0) return null;
-    const system = new InteriorOccupantSystem(map, specs, name, focus, bodies, playCue);
+    const system = new InteriorOccupantSystem(map, specs, buildingId, focus, bodies, playCue);
     return system.occupants.length > 0 ? system : null;
   }
 
   private constructor(
     private readonly map: GameMap,
     specs: ReadonlyArray<OccupantSpec>,
-    private readonly buildingName: string,
+    private readonly buildingId: BuildingId,
     private readonly focus: RoamerFocus,
     bodies: OccupantBodies,
     playCue: OccupantCuePlayer,
@@ -758,7 +759,7 @@ export class InteriorOccupantSystem implements GameSystem {
       }
       return null;
     }
-    const start = cursors.get(kind) ?? anchorCursorForBuilding(this.buildingName, pieces.length);
+    const start = cursors.get(kind) ?? anchorCursorForBuilding(this.buildingId, pieces.length);
     for (let offset = 0; offset < pieces.length; offset++) {
       const idx = (start + offset) % pieces.length;
       const furniture = pieces[idx];

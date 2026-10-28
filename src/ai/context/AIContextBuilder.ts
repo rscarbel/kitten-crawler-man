@@ -1,4 +1,5 @@
 import type { EventBus } from '../../core/EventBus';
+import { isAtOrUnderLowHealth } from '../../core/combat/hpThresholds';
 import type { ActionSeverity } from '../actions/types';
 import { EVENT_IMPORTANCE } from './eventImportance';
 import { subscribeGameEvents } from './eventMapping';
@@ -15,7 +16,6 @@ import { PlayerProfileTracker } from './playerProfile';
 import {
   buildSessionContext,
   buildSessionFlags,
-  LOW_HP_FRACTION,
   type ContextSetPayload,
   type SessionFlags,
 } from './sessionContext';
@@ -301,7 +301,7 @@ export class AIContextBuilder {
     const stillWatching: StockpilingWatch[] = [];
     for (const watch of this.stockpiling) {
       const state = liveCrawlerNamed(live, watch.crawler);
-      const stillLow = state.maxHp > 0 && state.hp / state.maxHp < LOW_HP_FRACTION;
+      const stillLow = state.maxHp > 0 && isAtOrUnderLowHealth(state.hp, state.maxHp);
       if (!stillLow || state.knockedOut) continue;
       if (now - watch.since < STOCKPILING_GRACE_MS) {
         stillWatching.push(watch);

@@ -21,8 +21,16 @@
  */
 
 import { INTERIOR_WALL } from '../../tileTypes';
-import { contractTarget, prop, tile, tileRow, type TownInteriorLayoutEntry } from './types';
+import {
+  contractTarget,
+  prop,
+  tile,
+  tileRow,
+  type TownInteriorLayoutEntry,
+  statefulProp,
+} from './types';
 import type { ContractAreaRecord } from '../../contractAreas';
+import type { PlannedBuildingId } from '../../buildingIds';
 
 const SHOP_DEPTH = 3;
 const BAR_STOCK_WIDTH = 2;
@@ -37,7 +45,7 @@ const DELIVERY_OFFSET_FROM_WALL = 2;
 const FORGE_FLOOR_WEST_MARGIN = 2;
 const BLADE_RACK_AXES_VARIANT = 1;
 
-const CONTRACT_SITE = 'rusty_anvil';
+const CONTRACT_SITE = 'taloncrest_smithy' satisfies PlannedBuildingId;
 const SHOP_FLAGS_SPOT_W = 3;
 const SHOP_FLAGS_SPOT_H = 2;
 
@@ -132,12 +140,14 @@ export function buildRustyAnvilLayout(
   // order is the one the payout gate expects to pay, and shop stock never
   // does.
   const westStockFirstRow = coalHeapRow + 1;
-  for (let row = westStockFirstRow; row <= lowerRow; row++)
-    entries.push(prop(westCol, row, row % 2 === 0 ? 'barrel' : 'crate'));
+  for (let row = westStockFirstRow; row <= lowerRow; row++) {
+    const stockKind = row % 2 === 0 ? 'barrel' : 'crate';
+    entries.push(statefulProp(westCol, row, stockKind, `west_stock_${row - westStockFirstRow}`));
+  }
   entries.push(
-    prop(westCol + 1, lowerRow, 'sack'),
-    prop(westCol + 1, lowerRow - 1, 'sack'),
-    prop(westCol, forgeLastRow, 'barrel'),
+    statefulProp(westCol + 1, lowerRow, 'sack', 'sack_1'),
+    statefulProp(westCol + 1, lowerRow - 1, 'sack', 'sack_2'),
+    statefulProp(westCol, forgeLastRow, 'barrel', 'barrel_1'),
   );
 
   entries.push(
@@ -145,7 +155,7 @@ export function buildRustyAnvilLayout(
     prop(barStockCol, northRow, 'bar_stock'),
     prop(bellowsCol, northRow, 'smith_bellows', 0, contractTarget(CONTRACT_SITE, 'bellows')),
     prop(forgeCol, northRow, 'forge', 0, contractTarget(CONTRACT_SITE, 'forge')),
-    prop(slackTubCol, northRow, 'slack_tub'),
+    statefulProp(slackTubCol, northRow, 'slack_tub', 'slack_tub'),
     prop(toolWallCol, northRow, 'smith_tool_wall', 0, contractTarget(CONTRACT_SITE, 'tool_wall')),
     prop(eastWindowCol, northRow, 'window_dressing'),
     prop(coalHeapCol, coalHeapRow, 'coal_heap'),
@@ -162,17 +172,17 @@ export function buildRustyAnvilLayout(
   const deliveryCol = westCol + DELIVERY_OFFSET_FROM_WALL;
   entries.push(
     prop(deliveryCol, lowerRow, 'hand_cart'),
-    prop(deliveryCol + 1, lowerRow, 'sack'),
+    statefulProp(deliveryCol + 1, lowerRow, 'sack', 'sack_3'),
     prop(deliveryCol + 2, lowerRow, 'mandrel_swage'),
   );
 
   entries.push(
     prop(benchCol, benchRow, 'vice_bench', 0, contractTarget(CONTRACT_SITE, 'vice_bench')),
-    prop(eastCol, benchRow, 'chest', 0, { id: 'rusty_anvil_footlocker' }),
-    prop(benchCol + 1, lowerRow, 'stool'),
-    prop(eastCol, footlockerBarrelRow, 'barrel'),
-    prop(eastCol, lowerRow, 'barrel', 1),
-    prop(eastCol - 1, lowerRow, 'crate'),
+    statefulProp(eastCol, benchRow, 'chest', 'rusty_anvil_footlocker', 0),
+    statefulProp(benchCol + 1, lowerRow, 'stool', 'stool'),
+    statefulProp(eastCol, footlockerBarrelRow, 'barrel', 'barrel_2'),
+    statefulProp(eastCol, lowerRow, 'barrel', 'barrel_3', 1),
+    statefulProp(eastCol - 1, lowerRow, 'crate', 'crate_1'),
     // Spare stock stood against the partition's forge-hall face.
     prop(grindstoneCol + 1, lowerRow, 'bar_stock'),
   );
@@ -196,12 +206,12 @@ export function buildRustyAnvilLayout(
     prop(westCol, shopBackRow, 'blade_rack', 0, contractTarget(CONTRACT_SITE, 'blade_rack')),
     prop(counterCol, counterRow, 'smith_counter', 0, contractTarget(CONTRACT_SITE, 'counter')),
     prop(westCol, counterRow, 'mail_stand', 0, contractTarget(CONTRACT_SITE, 'mail_stand')),
-    prop(westCol + 1, counterRow, 'barrel', 0, { dropsLoot: false }),
+    statefulProp(westCol + 1, counterRow, 'barrel', 'barrel_4', 0, { dropsLoot: false }),
     prop(eastRackCol, shopBackRow, 'blade_rack', BLADE_RACK_AXES_VARIANT),
     prop(eastRackCol, southRow, 'ironmongery_table', 0, { dropsLoot: false }),
-    prop(eastCol, shopBackRow, 'barrel', 1, { dropsLoot: false }),
-    prop(eastCol, counterRow, 'crate', 0, { dropsLoot: false }),
-    prop(eastCol, southRow, 'crate', 0, { dropsLoot: false }),
+    statefulProp(eastCol, shopBackRow, 'barrel', 'barrel_5', 1, { dropsLoot: false }),
+    statefulProp(eastCol, counterRow, 'crate', 'crate_2', 0, { dropsLoot: false }),
+    statefulProp(eastCol, southRow, 'crate', 'crate_3', 0, { dropsLoot: false }),
   );
 
   return entries;

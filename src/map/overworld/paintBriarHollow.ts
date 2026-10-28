@@ -196,7 +196,7 @@ function paintBuildings(grid: TileGrid, site: BriarHollowSite): void {
     const floor =
       building.floor === 'planks'
         ? HOLLOW_PLANK_FLOOR
-        : building.id === 'forge'
+        : building.id === 'briar_hollow_forge'
           ? YARD_GRAVEL
           : DIRT_PATCH;
     grid.fill(building.interior, floor);

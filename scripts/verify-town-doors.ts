@@ -131,7 +131,7 @@ for (const worldSeed of WORLD_SEEDS) {
       doorOpen ? null : `door (${door.x},${door.y}) blocked`,
       approachReached ? null : `approach (${approach.x},${approach.y}) unreachable`,
     ].filter((reason) => reason !== null);
-    sealed.push(`${entry.name}: ${why.join(', ')}`);
+    sealed.push(`${entry.id}: ${why.join(', ')}`);
   }
   check(
     sealed.length === 0,

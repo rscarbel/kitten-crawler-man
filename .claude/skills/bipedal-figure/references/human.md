@@ -224,7 +224,10 @@ chosen the same way.
   `update` moves it on (the animator calls it once a tick), `peek` asks what a
   facing would draw without moving it (a strike, a Smush or a draw latches its
   view this way). `HumanPlayer.facing` is shared with his animator;
-  `isTurnedView` is true for the profile and both diagonals.
+  `isTurnedView` is true for the profile and both diagonals. It is the
+  five-view `HeldFacing`; a figure painted only head-on, away and in profile
+  holds a `HeldFacing` of `selectCardinalFacing` (the dominant axis, a tie
+  going to the profile, with the same hysteresis margin) instead.
 - **The fallback.** The human has no diagonal rows. `HUMAN_VIEW_FALLBACK`
   (`src/sprites/humanViews.ts`) draws `frontDiagonal` in profile and
   `backDiagonal` from behind; it is the only place a missing view is filled

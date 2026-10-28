@@ -1985,6 +1985,7 @@ console.log('\nA wooden chest still makes the party wait for its lock to fall');
       h: 1,
     },
     { coins: 1, items: [] },
+    'after_guards_seen',
   );
   const [chest] = chests.allChests;
   chests.triggerUnlock(0);
@@ -2000,7 +2001,13 @@ console.log(
   const party = makeParty(map);
   const bounds = { x: CHEST_TILE, y: CHEST_TILE, w: 4, h: 4 };
   const chests = new TreasureChestSystem();
-  chests.addWoodenChest(CHEST_TILE, CHEST_TILE, bounds, { coins: 1, items: [] });
+  chests.addWoodenChest(
+    CHEST_TILE,
+    CHEST_TILE,
+    bounds,
+    { coins: 1, items: [] },
+    'after_guards_seen',
+  );
   const [chest] = chests.allChests;
 
   const mongo = new Mongo(

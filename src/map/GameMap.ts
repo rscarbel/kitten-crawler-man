@@ -141,7 +141,8 @@ import {
   type MobSpawnPoint,
 } from './DungeonGenerator';
 import { generateOverworld } from './OverworldGenerator';
-import type { BuildingEntry, BuildingName } from './buildingEntry';
+import type { BuildingEntry } from './buildingEntry';
+import type { BuildingId } from './buildingIds';
 import type { CampSite } from './overworld/camps';
 import type { BriarHollowSite, VillageDistrictId } from './overworld/briarHollowSite';
 import { rectContains } from './overworld/briarHollowSite';
@@ -153,9 +154,9 @@ import { registerOverworldTerrain } from './tiles/overworldTerrainRegistry';
 import { hollowPropDrawsAt } from './tiles/hollowVillageTiles';
 import { circusStructureDrawsAt } from './tiles/circusStructureTiles';
 import { tentPoleDrawsAt } from './tiles/tentPoleTiles';
-import { CLOAK_AND_DAGGER_NAME, type BuildingKind, type TownPlan } from './town/townPlan';
+import { type BuildingKind, type TownPlan } from './town/townPlan';
 import {
-  NAMED_INTERIOR_LAYOUTS,
+  INTERIOR_LAYOUTS_BY_BUILDING,
   buildGeneralStoreLayout,
   INN_INTERIOR_W,
   INN_INTERIOR_H,
@@ -166,7 +167,7 @@ import {
 } from './town/interiors/index';
 import {
   prop as townInteriorProp,
-  stableInteriorPropId,
+  placedInteriorPropId,
   type TownInteriorLayoutEntry,
 } from './town/interiors/types';
 import {
@@ -308,7 +309,7 @@ export interface PlacedTownInteriorProp {
   readonly propId: TownInteriorPropId;
   readonly variant: number;
   readonly tile: { readonly x: number; readonly y: number };
-  /** Cross-regeneration-stable id — see `stableInteriorPropId`. */
+  /** Unique within the room; see `placedInteriorPropId`. */
   readonly id: string;
   /** Resolved per-instance override of the prop def's own `destructible.dropsLootByDefault`. */
   readonly dropsLoot: boolean | undefined;
@@ -330,47 +331,47 @@ const INTERIOR_BY_KIND: Record<BuildingKind, InteriorShell> = {
  * box in the same boards is the single largest reason they all felt alike.
  * Anything absent here falls back to its kind's shell.
  */
-const INTERIOR_BY_NAME: ReadonlyMap<BuildingName, InteriorShell> = new Map([
+const INTERIOR_BY_BUILDING: ReadonlyMap<BuildingId, InteriorShell> = new Map([
+  ['taloncrest_inn', { w: INN_INTERIOR_W, h: INN_INTERIOR_H, floorType: INTERIOR_RUSH_FLOOR }],
   [
-    'The Sleeping Cat Inn',
-    { w: INN_INTERIOR_W, h: INN_INTERIOR_H, floorType: INTERIOR_RUSH_FLOOR },
-  ],
-  [
-    'The Barracks',
+    'taloncrest_barracks',
     { w: BARRACKS_INTERIOR_W, h: BARRACKS_INTERIOR_H, floorType: INTERIOR_STONE_FLOOR },
   ],
   // A small parlour: the alcove, back room and waiting room each hold a few
   // big pieces with nothing spread thin between them. Clean boards are the
   // base; the two work rooms lay their own ink-stained floor in
   // `buildQuietNeedleLayout`.
-  ['The Quiet Needle', { w: 14, h: 13, floorType: INTERIOR_BOARD_FLOOR }],
+  ['taloncrest_tattoo_parlor', { w: 14, h: 13, floorType: INTERIOR_BOARD_FLOOR }],
   // Flagstones under the respectable house: a mead hall built to look like it
   // has stood for generations, on a floor that shows no wear.
-  ['The Horned Flagon', { w: 22, h: 16, floorType: INTERIOR_FLAG_FLOOR }],
+  ['taloncrest_flagon_tavern', { w: 22, h: 16, floorType: INTERIOR_FLAG_FLOOR }],
   // Packed earth under the dive, and a room small enough that the drinkers
   // are always in each other's way: nobody has ever laid a floor here worth
   // keeping clean.
-  ['The Sunken Stump Pub', { w: 15, h: 12, floorType: INTERIOR_EARTH_FLOOR }],
-  ['Temple of the Sky', { w: 18, h: 18, floorType: INTERIOR_FLAG_FLOOR }],
-  ['The Rusty Anvil', { w: 16, h: 12, floorType: INTERIOR_FLAG_FLOOR }],
-  ['Herb & Remedy', { w: 16, h: 14, floorType: INTERIOR_BOARD_FLOOR }],
+  ['taloncrest_pub', { w: 15, h: 12, floorType: INTERIOR_EARTH_FLOOR }],
+  ['taloncrest_temple', { w: 18, h: 18, floorType: INTERIOR_FLAG_FLOOR }],
+  ['taloncrest_smithy', { w: 16, h: 12, floorType: INTERIOR_FLAG_FLOOR }],
+  ['taloncrest_apothecary', { w: 16, h: 14, floorType: INTERIOR_BOARD_FLOOR }],
   // One small room: a ten-tile floor keeps her furniture crowded in clusters
   // against the walls instead of spread thin across a hall.
-  ["Old Lori's Cottage", { w: 12, h: 12, floorType: INTERIOR_BOARD_FLOOR }],
+  ['taloncrest_old_lady_cottage', { w: 12, h: 12, floorType: INTERIOR_BOARD_FLOOR }],
   // Board, not earth: a wheelwright's own floor is swept clean of shavings
   // by daylight, not left as bare dirt. Sized to the pieces the trade needs —
   // any wider and the wagon, the stand and the bench float in open floor.
-  ["Cartwright's Workshop", { w: 16, h: 12, floorType: INTERIOR_BOARD_FLOOR }],
+  ['taloncrest_crafting_house', { w: 16, h: 12, floorType: INTERIOR_BOARD_FLOOR }],
   // Boards under the kitchen half; the mill room overrides its own tiles to
   // flagstone in `buildMillersFarmLayout`.
-  ["Miller's Farm", { w: 16, h: 14, floorType: INTERIOR_BOARD_FLOOR }],
-  ['Plumbline Farm', { w: 14, h: 10, floorType: INTERIOR_BOARD_FLOOR }],
+  ['taloncrest_mill_farm', { w: 16, h: 14, floorType: INTERIOR_BOARD_FLOOR }],
+  ['taloncrest_builder_farm', { w: 14, h: 10, floorType: INTERIOR_BOARD_FLOOR }],
   // Sixteen wide: a bunk rank down each side wall and the hall between them
   // still wide enough for the cult-hideout fight around the room's centre.
-  ['Blackwood Lodge', { w: 16, h: 14, floorType: INTERIOR_BOARD_FLOOR }],
-  ['General Store', { w: STORE_INTERIOR_W, h: STORE_INTERIOR_H, floorType: INTERIOR_BOARD_FLOOR }],
-  [CLOAK_AND_DAGGER_NAME, { w: CLUB_INTERIOR_W, h: CLUB_INTERIOR_H, floorType: CLUB_FLOOR }],
-] satisfies ReadonlyArray<[BuildingName, InteriorShell]>);
+  ['taloncrest_garrison_lodge', { w: 16, h: 14, floorType: INTERIOR_BOARD_FLOOR }],
+  [
+    'taloncrest_general_store',
+    { w: STORE_INTERIOR_W, h: STORE_INTERIOR_H, floorType: INTERIOR_BOARD_FLOOR },
+  ],
+  ['taloncrest_nightclub', { w: CLUB_INTERIOR_W, h: CLUB_INTERIOR_H, floorType: CLUB_FLOOR }],
+] satisfies ReadonlyArray<[BuildingId, InteriorShell]>);
 
 /**
  * The band of a safe-room building's interior the safe room actually covers.
@@ -379,8 +380,8 @@ const INTERIOR_BY_NAME: ReadonlyMap<BuildingName, InteriorShell> = new Map([
  * its taproom and not its guest wing. The whole interior is the fallback, so a
  * future safe-room building works without an entry here.
  */
-const SAFE_ROOM_BOUNDS_BY_NAME: ReadonlyMap<
-  BuildingName,
+const SAFE_ROOM_BOUNDS_BY_BUILDING: ReadonlyMap<
+  BuildingId,
   { readonly x: number; readonly y: number; readonly w: number; readonly h: number }
 > = new Map([
   /*
@@ -389,7 +390,7 @@ const SAFE_ROOM_BOUNDS_BY_NAME: ReadonlyMap<
    * downstairs, where the Bopca cooks and Mordecai sits.
    */
   [
-    'The Sleeping Cat Inn',
+    'taloncrest_inn',
     {
       x: 1,
       y: INN_TAPROOM_FIRST_ROW,
@@ -458,9 +459,9 @@ const DECORATION_OVERLAY_TYPES: ReadonlySet<number> = new Set([
   GOBLIN_TENT,
   CLIFF,
   // The garrison's and the inking shop's tall props. Y-sorted so a player
-  // standing north of a training dummy is drawn behind it. `MAP_TABLE` and
-  // `INK_BENCH` are absent for the same reason `TABLE` and `BED` are: both are
-  // waist height, drawn flat in the base pass, and nothing walks behind them.
+  // standing north of a training dummy is drawn behind it. `MAP_TABLE` is
+  // absent for the same reason `TABLE` and `BED` are: it is waist height, drawn
+  // flat in the base pass, and nothing walks behind it.
   TRAINING_DUMMY,
   WEAPON_RACK,
   MUSTER_BOARD,
@@ -1521,8 +1522,8 @@ export class GameMap {
   /**
    * Applies one town interior layout file's entries to a freshly carved
    * grid: a 'tile' entry writes a tile type directly (via `placeProp` when
-   * `smashable`, matching what the old switch case did for a breakable
-   * legacy fixture); a 'prop' entry registers a placed prop instance and
+   * `smashable`, which records the floor underneath so a break can restore
+   * it); a 'prop' entry registers a placed prop instance and
    * blocks its footprint, mirroring how the Cloak & Dagger's furniture
    * blocks the tiles `CLUB_FURNITURE_TILES` names.
    */
@@ -1537,11 +1538,19 @@ export class GameMap {
         continue;
       }
       const propDef = TOWN_INTERIOR_PROPS[entry.propId];
+      const id = placedInteriorPropId(entry);
+      // A save keys a prop's payout by this id, so two props sharing one
+      // would share a payout, and an empty one writes a key the save's parser
+      // rejects.
+      if (id.length === 0) throw new Error(`A '${entry.propId}' in a room has an empty id`);
+      if (this._placedInteriorProps.some((placed) => placed.id === id)) {
+        throw new Error(`Two props in one room share the id '${id}'`);
+      }
       this._placedInteriorProps.push({
         propId: entry.propId,
         variant: entry.variant ?? 0,
         tile: { x: entry.x, y: entry.y },
-        id: stableInteriorPropId(entry),
+        id,
         dropsLoot: entry.dropsLoot,
       });
       if (!propDef.walkable) {
@@ -1554,16 +1563,16 @@ export class GameMap {
 
   /** Generates a small interior room for a building (called externally after construction).
    *  For towers, pass towerFloor (0-3) to generate per-floor stair layout. A null
-   *  `buildingName` builds the plain room of its kind, with no building's own shell or layout. */
+   *  `buildingId` builds the plain room of its kind, with no building's own shell or layout. */
   generateInterior(
     buildingType: BuildingKind,
     towerFloor = 0,
-    buildingName: BuildingName | null = null,
+    buildingId: BuildingId | null = null,
     hasSafeRoom = false,
     variant: InteriorVariant = 'default',
   ): void {
     this._placedInteriorProps = [];
-    setTownInteriorWallMaterial(buildingName);
+    setTownInteriorWallMaterial(buildingId);
     setStarlightTentDecorPlan(null);
     if (variant !== 'default') {
       if (variant.kind === 'starlight_tent_maze') this.generateStarlightTentMaze(variant.plan);
@@ -1574,7 +1583,7 @@ export class GameMap {
     const isStore = buildingType === 'store';
     const isClub = buildingType === 'club';
     const isHouse = buildingType === 'house';
-    const namedShell = buildingName === null ? undefined : INTERIOR_BY_NAME.get(buildingName);
+    const namedShell = buildingId === null ? undefined : INTERIOR_BY_BUILDING.get(buildingId);
     const { w, h, floorType } = namedShell ?? INTERIOR_BY_KIND[buildingType];
 
     const grid: TileContent[][] = Array.from({ length: h }, (_, y) =>
@@ -1607,7 +1616,7 @@ export class GameMap {
 
     // ── Named building interiors — each reads its layout from a per-building file ──
     const namedLayout =
-      buildingName === null ? undefined : NAMED_INTERIOR_LAYOUTS.get(buildingName);
+      buildingId === null ? undefined : INTERIOR_LAYOUTS_BY_BUILDING.get(buildingId);
     const isNamedBuilding = namedLayout !== undefined;
 
     if (isHouse && namedLayout !== undefined) {
@@ -1749,7 +1758,7 @@ export class GameMap {
     if (hasSafeRoom) {
       const wholeInterior = { x: 1, y: 1, w: w - 2, h: h - 2 };
       const namedBounds =
-        buildingName === null ? undefined : SAFE_ROOM_BOUNDS_BY_NAME.get(buildingName);
+        buildingId === null ? undefined : SAFE_ROOM_BOUNDS_BY_BUILDING.get(buildingId);
       const bounds = namedBounds ?? wholeInterior;
       this.safeRooms = [
         {

@@ -16,8 +16,15 @@
  * door's own column is kept clear so the room is enterable.
  */
 
-import { contractTarget, prop, type TownInteriorLayoutEntry } from './types';
+import {
+  contractTarget,
+  prop,
+  type TownInteriorLayoutEntry,
+  statefulProp,
+  contractTargetId,
+} from './types';
 import type { ContractAreaRecord } from '../../contractAreas';
+import type { PlannedBuildingId } from '../../buildingIds';
 
 const KEG_END = 0;
 const TILL_END = 1;
@@ -27,7 +34,7 @@ const ALE_SLICK = 0;
 const SWEPT_GLASS = 1;
 const OLD_STAIN = 2;
 
-const CONTRACT_SITE = 'sunken_stump_pub';
+const CONTRACT_SITE = 'taloncrest_pub' satisfies PlannedBuildingId;
 /** The second table of the north rank, in from the west wall. */
 const CONTRACT_STUMP_TABLE_INDEX = 1;
 const MUD_FLAGS_SPOT_W = 3;
@@ -136,47 +143,66 @@ export function buildSunkenStumpPubLayout(w: number, h: number): TownInteriorLay
   // Loot-bearing junk first: the payout gate expects the first breakable in
   // placement order to pay out.
   entries.push(
-    prop(westCol, southRow, 'junk_heap'),
-    prop(eastCol, southRow, 'barrel'),
-    prop(eastCol, northRankRow, 'barrel', 1),
-    prop(eastCol, northRankRow + 1, 'crate'),
+    statefulProp(westCol, southRow, 'junk_heap', 'junk_heap'),
+    statefulProp(eastCol, southRow, 'barrel', 'barrel_1'),
+    statefulProp(eastCol, northRankRow, 'barrel', 'barrel_2', 1),
+    statefulProp(eastCol, northRankRow + 1, 'crate', 'crate'),
   );
 
   entries.push(
-    prop(westCol, northRow, 'stump_back_shelf', 0, contractTarget(CONTRACT_SITE, 'back_shelf')),
-    prop(barTillCol, northRow, 'stump_back_shelf', 1),
+    statefulProp(
+      westCol,
+      northRow,
+      'stump_back_shelf',
+      contractTargetId(CONTRACT_SITE, 'back_shelf'),
+      0,
+    ),
+    statefulProp(barTillCol, northRow, 'stump_back_shelf', 'stump_back_shelf_2', 1),
     prop(westCol, barRow, 'stump_bar', KEG_END, contractTarget(CONTRACT_SITE, 'bar')),
     prop(barTillCol, barRow, 'stump_bar', TILL_END),
     prop(backDoorCol, northRow, 'bolted_door'),
-    prop(emptiesCol, northRow, 'keg_stack', 0, contractTarget(CONTRACT_SITE, 'keg_cradle')),
+    statefulProp(
+      emptiesCol,
+      northRow,
+      'keg_stack',
+      contractTargetId(CONTRACT_SITE, 'keg_cradle'),
+      0,
+    ),
     prop(stoveCol, northRow, 'stump_stove', 0, contractTarget(CONTRACT_SITE, 'stove')),
-    prop(stoveCol - 1, barRow, 'barrel_table', 0),
+    statefulProp(stoveCol - 1, barRow, 'barrel_table', 'barrel_table_1', 0),
     prop(dartboardCol, northRow, 'dartboard'),
-    prop(eastCol, northRow, 'smoky_lamp', 0, contractTarget(CONTRACT_SITE, 'lamp')),
+    statefulProp(eastCol, northRow, 'smoky_lamp', contractTargetId(CONTRACT_SITE, 'lamp'), 0),
   );
   for (let rx = westCol; rx <= barEndCol; rx += barStoolPitch)
-    entries.push(prop(rx, barStoolRow, 'stool', rx % 2));
+    entries.push(statefulProp(rx, barStoolRow, 'stool', `bar_stool_${rx - westCol}`, rx % 2));
 
   const tables = [
     ...northTables.map((table) => ({ ...table, row: northRankRow })),
     ...southTables.map((table) => ({ ...table, row: southRankRow })),
   ];
   const contractTable = tables[CONTRACT_STUMP_TABLE_INDEX];
-  for (const table of tables) {
-    const tableTarget = table === contractTable ? contractTarget(CONTRACT_SITE, 'stump_table') : {};
+  for (const [index, table] of tables.entries()) {
+    const tableId =
+      table === contractTable
+        ? contractTargetId(CONTRACT_SITE, 'stump_table')
+        : `stump_table_${index}`;
     entries.push(
-      prop(table.col, table.row, 'stump_table', table.variant, tableTarget),
-      prop(table.col, table.row + 1, 'stool'),
-      prop(table.col + 1, table.row + 1, 'stool', 1),
+      statefulProp(table.col, table.row, 'stump_table', tableId, table.variant),
+      statefulProp(table.col, table.row + 1, 'stool', `table_stool_${index}_west`),
+      statefulProp(table.col + 1, table.row + 1, 'stool', `table_stool_${index}_east`, 1),
     );
   }
   entries.push(
     prop(diceTableCol, northRankRow, 'dice_table', 0, contractTarget(CONTRACT_SITE, 'dice_table')),
-    prop(diceTableCol, northRankRow + 1, 'stool', 1),
-    prop(diceTableCol + 1, northRankRow + 1, 'stool'),
+    statefulProp(diceTableCol, northRankRow + 1, 'stool', 'stool_4', 1),
+    statefulProp(diceTableCol + 1, northRankRow + 1, 'stool', 'stool_5'),
   );
-  northBarrelCols.forEach((col, i) => entries.push(prop(col, northRankRow, 'barrel_table', i)));
-  southBarrelCols.forEach((col, i) => entries.push(prop(col, southRankRow, 'barrel_table', i + 1)));
+  northBarrelCols.forEach((col, i) =>
+    entries.push(statefulProp(col, northRankRow, 'barrel_table', `north_barrel_table_${i}`, i)),
+  );
+  southBarrelCols.forEach((col, i) =>
+    entries.push(statefulProp(col, southRankRow, 'barrel_table', `south_barrel_table_${i}`, i + 1)),
+  );
 
   entries.push(
     prop(westCol + 2, northRankRow - 1, 'floor_stain', ALE_SLICK),

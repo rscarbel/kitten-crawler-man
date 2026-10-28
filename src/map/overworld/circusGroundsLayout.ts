@@ -37,12 +37,6 @@ export const CIRCUS_RADIUS_TILES = 14;
  */
 export const CIRCUS_TERRAIN_CLEARANCE_TILES = 3;
 
-/**
- * The tent's building name: the overworld registers its door under it, and the
- * interior scene recognises the maze by it.
- */
-export const STARLIGHT_TENT_NAME = 'The Starlight Tent';
-
 // ── Structures ───────────────────────────────────────────────────────────────
 
 /** Every structure the grounds stamp, as the prop id its sheet row is named by. */

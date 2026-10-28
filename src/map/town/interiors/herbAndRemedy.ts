@@ -16,10 +16,19 @@
  */
 
 import { INTERIOR_WALL } from '../../tileTypes';
-import { contractTarget, prop, tile, tileRow, type TownInteriorLayoutEntry } from './types';
+import {
+  contractTarget,
+  prop,
+  tile,
+  tileRow,
+  type TownInteriorLayoutEntry,
+  statefulProp,
+  contractTargetId,
+} from './types';
 import type { ContractAreaRecord } from '../../contractAreas';
+import type { PlannedBuildingId } from '../../buildingIds';
 
-const CONTRACT_SITE = 'herb_and_remedy';
+const CONTRACT_SITE = 'taloncrest_apothecary' satisfies PlannedBuildingId;
 const DRYING_FLOOR_SPOT_W = 3;
 const DRYING_FLOOR_SPOT_H = 2;
 
@@ -96,26 +105,24 @@ export function buildHerbAndRemedyLayout(
   const stillTenderStoolCol = stillCol + 1;
   // The still's fuel stands at its firebox, beside the tender's stool.
   const fuelBarrelCol = stillCol;
-  // The payout key it was first placed under, on the tile beside the still.
-  const fuelBarrelId = `barrel@${stillStepCol},${northRow}`;
 
   const entries: TownInteriorLayoutEntry[] = [];
   // Storeroom offcuts first: the first breakable in placement order is the
   // one the payout gate expects to pay, and shop stock never does.
   entries.push(
-    prop(westCol, harvestRow, 'crate'),
-    prop(westCol, dryingLastRow, 'sack'),
-    prop(fuelBarrelCol, harvestRow, 'barrel', 0, { id: fuelBarrelId }),
+    statefulProp(westCol, harvestRow, 'crate', 'crate_1'),
+    statefulProp(westCol, dryingLastRow, 'sack', 'sack_1'),
+    statefulProp(fuelBarrelCol, harvestRow, 'barrel', 'still_fuel_barrel'),
   );
   entries.push(
     prop(westCol, northRow, 'window_dressing'),
-    prop(westCol, northRow + 1, 'live_herb_pots'),
-    prop(
+    statefulProp(westCol, northRow + 1, 'live_herb_pots', 'live_herb_pots_1'),
+    statefulProp(
       pottingBenchCol,
       northRow,
       'potting_bench',
+      contractTargetId(CONTRACT_SITE, 'potting_bench'),
       0,
-      contractTarget(CONTRACT_SITE, 'potting_bench'),
     ),
     prop(
       dryingRackCol,
@@ -126,20 +133,20 @@ export function buildHerbAndRemedyLayout(
     ),
     prop(stillCol, northRow, 'still', 0, contractTarget(CONTRACT_SITE, 'still')),
     prop(eastWindowCol, northRow, 'window_dressing'),
-    prop(eastCol, northRow, 'live_herb_pots', 1),
+    statefulProp(eastCol, northRow, 'live_herb_pots', 'live_herb_pots_2', 1),
     // The day's cut, brought in and waiting to be bunched.
-    prop(harvestCol, harvestRow, 'basket'),
-    prop(
+    statefulProp(harvestCol, harvestRow, 'basket', 'basket_1'),
+    statefulProp(
       sortingTableCol,
       harvestRow,
       'sorting_table',
+      contractTargetId(CONTRACT_SITE, 'sorting_table'),
       0,
-      contractTarget(CONTRACT_SITE, 'sorting_table'),
     ),
-    prop(harvestSackCol, harvestRow, 'sack'),
-    prop(stillTenderStoolCol, harvestRow, 'stool'),
-    prop(seedDrawerCol, harvestRow, 'drawer_unit'),
-    prop(eastCol, harvestRow, 'basket', 1),
+    statefulProp(harvestSackCol, harvestRow, 'sack', 'sack_2'),
+    statefulProp(stillTenderStoolCol, harvestRow, 'stool', 'stool'),
+    statefulProp(seedDrawerCol, harvestRow, 'drawer_unit', 'drawer_unit_1'),
+    statefulProp(eastCol, harvestRow, 'basket', 'basket_2', 1),
   );
   entries.push(...tileRow(partitionRow, westCol, eastCol, INTERIOR_WALL));
   entries.push(
@@ -149,11 +156,11 @@ export function buildHerbAndRemedyLayout(
 
   entries.push(
     prop(cabinetCol, cabinetRow, 'apothecary_drawer_wall'),
-    prop(keeperNookCol, cabinetRow, 'drawer_unit'),
-    prop(keeperNookCol + 1, cabinetRow, 'crate'),
+    statefulProp(keeperNookCol, cabinetRow, 'drawer_unit', 'drawer_unit_2'),
+    statefulProp(keeperNookCol + 1, cabinetRow, 'crate', 'crate_2'),
     // Stock carried through from the drying room, waiting to be shelved.
-    prop(eastCol, cabinetRow, 'crate'),
-    prop(eastCol, cabinetRow + 1, 'sack'),
+    statefulProp(eastCol, cabinetRow, 'crate', 'crate_3'),
+    statefulProp(eastCol, cabinetRow + 1, 'sack', 'sack_3'),
     prop(counterWestCol, counterRow, 'apothecary_counter', 0),
     prop(
       counterEastSectionCol,
@@ -163,7 +170,7 @@ export function buildHerbAndRemedyLayout(
       contractTarget(CONTRACT_SITE, 'counter'),
     ),
     prop(rugCol, firstShopRow, 'rug_large', rugColourway),
-    prop(westCol, displayRow, 'remedy_display', 0, { dropsLoot: false }),
+    statefulProp(westCol, displayRow, 'remedy_display', 'remedy_display', 0, { dropsLoot: false }),
     prop(
       specimenCaseCol,
       specimenCaseRow,
@@ -171,11 +178,17 @@ export function buildHerbAndRemedyLayout(
       0,
       contractTarget(CONTRACT_SITE, 'specimen_case'),
     ),
-    prop(westCol, southRow, 'live_herb_pots', 0, contractTarget(CONTRACT_SITE, 'planters')),
-    prop(eastCol, firstShopRow, 'potted_bay'),
-    prop(binsCol, binsRow, 'herb_bins', 0, { dropsLoot: false }),
+    statefulProp(
+      westCol,
+      southRow,
+      'live_herb_pots',
+      contractTargetId(CONTRACT_SITE, 'planters'),
+      0,
+    ),
+    statefulProp(eastCol, firstShopRow, 'potted_bay', 'potted_bay'),
+    statefulProp(binsCol, binsRow, 'herb_bins', 'herb_bins', 0, { dropsLoot: false }),
     prop(waitingBenchCol, southRow, 'bench_seat'),
-    prop(eastCol, southRow, 'live_herb_pots', 1),
+    statefulProp(eastCol, southRow, 'live_herb_pots', 'live_herb_pots_4', 1),
   );
   return entries;
 }

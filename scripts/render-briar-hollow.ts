@@ -28,6 +28,7 @@ import { createCanvas, type Canvas } from 'canvas';
 
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { asGameContext } from './nodeGameContext.js';
+import { buildingDisplayName } from '../src/map/buildingIds.js';
 
 interface CanvasGlobals {
   Image?: unknown;
@@ -82,7 +83,7 @@ const WORLD_SCALE = 0.125;
 const LABEL_SIZE_PX = 28;
 const LABEL_COLOR = '#fde68a';
 /** The cottage the wall probes stand in: south door, walls on all four sides. */
-const PROBE_BUILDING = 'home_nella';
+const PROBE_BUILDING = 'briar_hollow_seamstress_cottage';
 /** Tiles of street shown round the probe cottage. */
 const PROBE_MARGIN_TILES = 3;
 /** Retina: the probe image is judged at the density the game is played at. */
@@ -255,7 +256,7 @@ for (const seed of seeds) {
     // The same context `renderView` drew through, still under its scale.
     const labelCtx = asGameContext(canvas.getContext('2d'));
     for (const building of worldFrame ? [] : site.buildings) {
-      worldText(labelCtx, building.name, {
+      worldText(labelCtx, buildingDisplayName(building.id), {
         x: (building.rect.x + building.rect.w / 2 - view.x) * TILE_SIZE,
         y: (building.rect.y + building.rect.h / 2 - view.y) * TILE_SIZE,
         size: LABEL_SIZE_PX,

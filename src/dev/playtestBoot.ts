@@ -10,8 +10,7 @@ import { snapPlayer, type PlayerSnapshot } from '../core/save/PlayerSnapshot';
 import { getLevelDef, type LevelDef } from '../levels/index';
 import type { GameMap } from '../map/GameMap';
 import type { MobKind } from '../levels/mobKinds';
-import type { VillageBuildingId } from '../map/overworld/briarHollowLayout';
-import type { TownBuildingName } from '../map/town/townPlan';
+import type { TownBuildingId, BriarHollowBuildingId } from '../map/buildingIds';
 import type { PlaytestLoadout, PlaytestPreset, PlaytestSpawn } from './playtestPresets';
 
 /**
@@ -270,9 +269,9 @@ const TOWN_DOORSTEP_ROWS_SOUTH = 1;
 
 function townBuildingDoorstep(
   gameMap: GameMap,
-  buildingName: TownBuildingName,
+  buildingId: TownBuildingId,
 ): { x: number; y: number } | null {
-  const entry = gameMap.buildingEntries.find((candidate) => candidate.name === buildingName);
+  const entry = gameMap.buildingEntries.find((candidate) => candidate.id === buildingId);
   if (entry === undefined) return null;
   const doorstep = { x: entry.doorTile.x, y: entry.doorTile.y + TOWN_DOORSTEP_ROWS_SOUTH };
   return gameMap.isWalkable(doorstep.x, doorstep.y) ? doorstep : null;
@@ -280,7 +279,7 @@ function townBuildingDoorstep(
 
 function briarHollowThreshold(
   gameMap: GameMap,
-  buildingId: VillageBuildingId,
+  buildingId: BriarHollowBuildingId,
 ): { x: number; y: number } | null {
   const building = gameMap.briarHollow?.buildings.find((candidate) => candidate.id === buildingId);
   const threshold = building?.doorways.find((tile) => gameMap.isWalkable(tile.x, tile.y));
@@ -427,7 +426,7 @@ function resolveSpawnLandmark(
     case 'briarHollowGate':
       return gameMap.briarHollow?.gate.inside ?? null;
     case 'townBuildingDoor':
-      return townBuildingDoorstep(gameMap, spawn.buildingName);
+      return townBuildingDoorstep(gameMap, spawn.buildingId);
     case 'briarHollowBuilding':
       return briarHollowThreshold(gameMap, spawn.buildingId);
   }

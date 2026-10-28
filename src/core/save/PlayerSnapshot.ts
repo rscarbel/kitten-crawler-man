@@ -1,7 +1,11 @@
 import type { StatName, Player } from '../../Player';
 import { ALL_STATS } from '../../Player';
-import { INCURABLE_STATUSES, isStatusId, type StatusEffect } from '../combat/StatusEffect';
-import { STATUS_PERSISTENCE } from '../combat/statusTuning';
+import {
+  INCURABLE_STATUSES,
+  STATUS_DEFS,
+  isStatusId,
+  type StatusEffect,
+} from '../combat/StatusEffect';
 import { isSkillId, type CrawlerKind, type SkillId, type SkillState } from '../skills/SkillManager';
 import { isStatTattooId, type StatTattooId } from '../skills/tattoos';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
@@ -70,7 +74,7 @@ export interface PlayerSnapshot {
   drillTraining: number;
   /**
    * Active buffs and DoTs, so a drink or a poison survives a building
-   * round-trip. Never holds a `transient` status (see `STATUS_PERSISTENCE`).
+   * round-trip. Never holds a `transient` status (see `StatusDef.persistence`).
    */
   statusEffects: StatusEffect[];
   /** Max-HP loaned by an active Jugg Juice, so it is still repaid on the far side. */
@@ -131,7 +135,7 @@ export function snapPlayer(p: Player): PlayerSnapshot {
     // has ever heard of. A transient status lasts only as long as its moment
     // on screen, so it is left behind rather than replayed on arrival.
     statusEffects: p.statusEffects
-      .filter((effect) => STATUS_PERSISTENCE[effect.type] !== 'transient')
+      .filter((effect) => STATUS_DEFS[effect.type].persistence !== 'transient')
       .map((effect) => ({ ...effect, applier: null })),
     juggJuiceHpBoost: p.juggJuiceHpBoost,
     isActive: p.isActive,
@@ -306,7 +310,7 @@ function parseStatusEffect(value: unknown): StatusEffect | undefined {
   if (!isRecord(value)) return undefined;
   const { type, ticksRemaining, totalTicks, absorbRemaining, absorbTotal } = value;
   if (typeof type !== 'string' || !isStatusId(type)) return undefined;
-  if (STATUS_PERSISTENCE[type] === 'transient') return undefined;
+  if (STATUS_DEFS[type].persistence === 'transient') return undefined;
   if (!isNonNegativeFinite(ticksRemaining) || !isNonNegativeFinite(totalTicks)) return undefined;
   const effect: StatusEffect = { type, ticksRemaining, totalTicks, applier: null };
   if (absorbRemaining !== undefined) {

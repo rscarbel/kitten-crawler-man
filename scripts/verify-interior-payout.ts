@@ -23,7 +23,7 @@
 import { GameMap } from '../src/map/GameMap.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import { createTownPlan, type BuildingKind } from '../src/map/town/townPlan.js';
-import type { BuildingName } from '../src/map/buildingEntry.js';
+import type { BuildingId } from '../src/map/buildingIds.js';
 import { HumanPlayer } from '../src/creatures/HumanPlayer.js';
 import { LootSystem } from '../src/systems/LootSystem.js';
 import { TownInteriorPropDestructionSystem } from '../src/systems/TownInteriorPropDestructionSystem.js';
@@ -53,13 +53,13 @@ const PLAN_SIZE = 5;
 const plan = createTownPlan(PLAN_SIZE);
 const GENERAL_STORE_FLOOR = 0;
 
-function buildInterior(name: BuildingName, kind: BuildingKind, hasSafeRoom: boolean): GameMap {
+function buildInterior(name: BuildingId, kind: BuildingKind, hasSafeRoom: boolean): GameMap {
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
   map.generateInterior(kind, 0, name, hasSafeRoom);
   return map;
 }
 
-const generalStoreEntry = plan.buildings.find((b) => b.name === 'General Store');
+const generalStoreEntry = plan.buildings.find((b) => b.id === 'taloncrest_general_store');
 if (generalStoreEntry === undefined) throw new Error('General Store was not in this plan');
 
 /** Breaks every prop's own HP worth of swings against `target`, once. */
@@ -97,12 +97,12 @@ console.log('Break once, restore on re-entry, silent on re-break');
   const memory = createTownMemory();
 
   // First visit.
-  const map1 = buildInterior(generalStoreEntry.name, generalStoreEntry.kind, false);
+  const map1 = buildInterior(generalStoreEntry.id, generalStoreEntry.kind, false);
   const { target: target1, spec } = findBreakable(map1);
   const loot1 = new LootSystem(map1);
   const record1 = new TownMemoryInteriorPayoutRecord(
     memory,
-    generalStoreEntry.name,
+    generalStoreEntry.id,
     GENERAL_STORE_FLOOR,
   );
   const destruction1 = new TownInteriorPropDestructionSystem(map1, loot1, record1);
@@ -113,7 +113,7 @@ console.log('Break once, restore on re-entry, silent on re-break');
 
   // Leave and come back: a brand-new map (a room regenerates every entry)
   // built from the same layout, same `TownMemory`.
-  const map2 = buildInterior(generalStoreEntry.name, generalStoreEntry.kind, false);
+  const map2 = buildInterior(generalStoreEntry.id, generalStoreEntry.kind, false);
   const { target: target2 } = findBreakable(map2);
   check(target2.id === target1.id, "the prop's id is stable across regeneration");
   check(!map2.isWalkable(target2.tile.x, target2.tile.y), 'the prop is standing again on re-entry');
@@ -121,7 +121,7 @@ console.log('Break once, restore on re-entry, silent on re-break');
   const loot2 = new LootSystem(map2);
   const record2 = new TownMemoryInteriorPayoutRecord(
     memory,
-    generalStoreEntry.name,
+    generalStoreEntry.id,
     GENERAL_STORE_FLOOR,
   );
   const destruction2 = new TownInteriorPropDestructionSystem(map2, loot2, record2);
@@ -149,11 +149,11 @@ console.log('\nAn empty first roll still marks the prop paid out');
   // at the roll, not on a nonzero outcome, without leaning on a single
   // coin flip.
   const memory = createTownMemory();
-  const map = buildInterior(generalStoreEntry.name, generalStoreEntry.kind, false);
+  const map = buildInterior(generalStoreEntry.id, generalStoreEntry.kind, false);
   const loot = new LootSystem(map);
   const record = new TownMemoryInteriorPayoutRecord(
     memory,
-    generalStoreEntry.name,
+    generalStoreEntry.id,
     GENERAL_STORE_FLOOR,
   );
   const destruction = new TownInteriorPropDestructionSystem(map, loot, record);
@@ -188,7 +188,7 @@ console.log('\nAn empty first roll still marks the prop paid out');
 console.log('\nA death rewind to a save before the break pays it out again');
 {
   const memory: TownMemory = createTownMemory();
-  const map = buildInterior(generalStoreEntry.name, generalStoreEntry.kind, false);
+  const map = buildInterior(generalStoreEntry.id, generalStoreEntry.kind, false);
   const { target, spec } = findBreakable(map);
 
   const checkpoint = captureTownMemory(memory);
@@ -196,7 +196,7 @@ console.log('\nA death rewind to a save before the break pays it out again');
   const loot1 = new LootSystem(map);
   const record: InteriorPayoutRecord = new TownMemoryInteriorPayoutRecord(
     memory,
-    generalStoreEntry.name,
+    generalStoreEntry.id,
     GENERAL_STORE_FLOOR,
   );
   const destruction1 = new TownInteriorPropDestructionSystem(map, loot1, record);
@@ -212,12 +212,12 @@ console.log('\nA death rewind to a save before the break pays it out again');
 
   // A fresh room (the death restart regenerates the floor) and a fresh
   // destruction system reading the now-rewound memory.
-  const map2 = buildInterior(generalStoreEntry.name, generalStoreEntry.kind, false);
+  const map2 = buildInterior(generalStoreEntry.id, generalStoreEntry.kind, false);
   const { target: target2 } = findBreakable(map2);
   const loot2 = new LootSystem(map2);
   const record2 = new TownMemoryInteriorPayoutRecord(
     memory,
-    generalStoreEntry.name,
+    generalStoreEntry.id,
     GENERAL_STORE_FLOOR,
   );
   const destruction2 = new TownInteriorPropDestructionSystem(map2, loot2, record2);

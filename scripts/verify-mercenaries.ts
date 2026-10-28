@@ -172,7 +172,7 @@ function checkTemplateTable(): void {
     const kit = createMercenaryKit(template);
     check(
       template.id === getMercenaryTemplate(template.id).id && hasSomething && art.deathFrames > 0,
-      `${template.id}: voice, figure (death ${art.deathFrames} frames) and ${template.kit} kit (reach ${kit.strikeRangeTiles} tiles)`,
+      `${template.id}: voice, figure (death ${art.deathFrames} frames) and ${template.kit.id} kit (reach ${kit.strikeRangeTiles} tiles)`,
     );
   }
 }

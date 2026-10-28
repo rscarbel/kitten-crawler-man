@@ -24,7 +24,6 @@ import { EventBus } from '../../src/core/EventBus';
 import { AbilityManager } from '../../src/core/skills/AbilityManager';
 import { setViewportSize } from '../../src/core/rendering/Viewport';
 import { withWorldSeed } from '../../src/core/world/WorldRandom';
-import { STARLIGHT_TENT_NAME } from '../../src/map/overworld/circusGroundsLayout';
 import {
   captureMercenaryRoster,
   createMercenaryRoster,
@@ -257,7 +256,7 @@ function makeDecoy(place: Place, tile: { x: number; y: number }): Decoy {
 
 function starlightTentMaze(): GameMap {
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  map.generateInterior('house', 0, STARLIGHT_TENT_NAME, false, {
+  map.generateInterior('house', 0, 'taloncrest_circus_tent', false, {
     kind: 'starlight_tent_maze',
     plan: planStarlightTentMaze(STARLIGHT_TENT_WORLD_SEED, STARLIGHT_TENT_DIFFICULTY),
   });
@@ -288,7 +287,7 @@ function journey(worldSeed: number, options: JourneyOptions): StepReading[] {
   );
   const centre = overworld.circusCentre;
   const starlightTent = overworld.buildingEntries.find(
-    (entry) => entry.name === STARLIGHT_TENT_NAME,
+    (entry) => entry.id === 'taloncrest_circus_tent',
   );
   const town = overworld.townSquareCentre ?? overworld.startTile;
   if (centre === undefined || starlightTent === undefined) {

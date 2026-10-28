@@ -1,3 +1,4 @@
+import type { LevelId } from '../levels/levelIds';
 import type { GameMap } from '../map/GameMap';
 import type { TilePoint } from '../map/town/townPlan';
 import type { SafeRoomService } from '../map/DungeonGenerator';
@@ -180,7 +181,7 @@ export class SafeRoomSystem implements GameSystem {
     _startTileX: number,
     _startTileY: number,
     private readonly conversation: Conversation,
-    private readonly levelId = 'level1',
+    private readonly levelId: LevelId = 'level1',
   ) {
     this.entries = [];
 

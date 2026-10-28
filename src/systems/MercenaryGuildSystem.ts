@@ -9,6 +9,7 @@ import {
   type MercenaryTemplateId,
 } from '../core/party/mercenaryTemplates';
 import { MERCENARY_ART } from '../sprites/mercenaryArt';
+import { selectCardinalFacing, selectFacing } from '../sprites/facingView';
 import {
   drawCrocodilianSprite,
   prewarmSydney,
@@ -33,6 +34,9 @@ const MS_PER_SECOND = 1000;
 /** She faces the customer across the desk. */
 const MANAGER_FACING_X = 0;
 const MANAGER_FACING_Y = 1;
+/** A hire on file faces out of its portrait, at whoever is reading it. */
+const PORTRAIT_FACING_X = 0;
+const PORTRAIT_FACING_Y = 1;
 
 // Sydney's voice. She ran a garrison's stores before she ran this desk, and
 // she runs it the same way: by the form, without raising her voice.
@@ -315,8 +319,9 @@ export class MercenaryGuildSystem {
       state: { row: 'idle', progress: 0 },
       walkFrame: 0,
       isMoving: false,
-      facingX: 0,
-      facingY: 1,
+      facing: selectFacing(PORTRAIT_FACING_X, PORTRAIT_FACING_Y),
+      cardinalFacing: selectCardinalFacing(PORTRAIT_FACING_X, PORTRAIT_FACING_Y),
+      facingX: PORTRAIT_FACING_X,
       clock: (performance.now() / MS_PER_SECOND) * TICKS_PER_SECOND,
     });
     ctx.restore();

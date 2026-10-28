@@ -13,6 +13,11 @@ import {
   makeWhetstone,
   type StatusEffect,
 } from '../../core/combat/StatusEffect';
+import {
+  CRAWLER_HP_THRESHOLDS,
+  hpThresholdTop,
+  isAtOrUnderLowHealth,
+} from '../../core/combat/hpThresholds';
 import { BOUNTY_MAX_BLOW_HP_SHARE } from '../../creatures/mobLevelScaling';
 import type { Mob } from '../../creatures/Mob';
 import { allLevelDefs, type LevelDef } from '../../levels';
@@ -35,7 +40,7 @@ import {
   tileOf,
   type Crawler,
 } from './helpers';
-import { LOW_HP_FRACTION, LOW_HP_PERCENT } from './governor';
+import { LOW_HP_PERCENT } from './governor';
 import { enumParam, intParam, optionalEnumParam, optionalIntParam, textParam } from './schema';
 import { ok, refused, type AIActionDef, type AISceneContext } from './types';
 
@@ -80,7 +85,7 @@ const HEAL_MIN_PERCENT = 5;
 const HEAL_MAX_PERCENT = 50;
 const SET_HP_PER_FLOOR = 2;
 const PERCENT = 100;
-/** set_hp never puts a crawler under the line the fairness rules shield. */
+/** set_hp's lowest share, which lands a crawler just over the line the fairness rules shield. */
 const SET_HP_MIN_PERCENT = LOW_HP_PERCENT;
 
 export const TIMER_DELTA_LIMIT_SECONDS = 60;
@@ -236,7 +241,6 @@ function ambientLevelFor(scene: AISceneContext, def: LevelDef, band: MobLevelRan
 
 function nativeTypeRefusal(scene: AISceneContext, type: StandaloneMobKind): string | null {
   const def = levelDefOf(scene);
-  if (def === null) return 'nothing can be spawned here';
   if (floorBandFor(def, type) === null) return `${snakeToWords(type)} is not native to this floor`;
   return null;
 }
@@ -278,8 +282,8 @@ const spawnMob: AIActionDef = {
   execute({ params, scene }) {
     const def = levelDefOf(scene);
     const type = params.get(MOB_TYPE);
-    const band = def === null ? null : floorBandFor(def, type);
-    if (def === null || band === null) return refused(`${snakeToWords(type)} cannot spawn here`);
+    const band = floorBandFor(def, type);
+    if (band === null) return refused(`${snakeToWords(type)} cannot spawn here`);
     const target = resolveTarget(scene, params.get(TARGET_PARAM));
     const placement = params.get(PLACEMENT);
     const count = params.get(SPAWN_COUNT);
@@ -320,8 +324,8 @@ const spawnElite: AIActionDef = {
   execute({ params, scene }) {
     const def = levelDefOf(scene);
     const type = params.get(MOB_TYPE);
-    const band = def === null ? null : floorBandFor(def, type);
-    if (def === null || band === null) return refused(`${snakeToWords(type)} cannot spawn here`);
+    const band = floorBandFor(def, type);
+    if (band === null) return refused(`${snakeToWords(type)} cannot spawn here`);
     const target = resolveTarget(scene, params.get(TARGET_PARAM));
     const tile = findSpawnTile(scene.getGameMap(), target, params.get(PLACEMENT), 0, 1);
     if (tile === null) return refused('no fair ground to spawn on near the crawler');
@@ -365,9 +369,25 @@ const AI_STATUS_EFFECTS = {
 } as const satisfies Record<string, AIStatusEffect>;
 type AIStatus = keyof typeof AI_STATUS_EFFECTS;
 
-/** The HP line nothing the AI does may push a crawler under: the fairness rules' low-HP shield. */
-function shieldedHp(crawler: Crawler): number {
-  return Math.ceil(crawler.maxHp * LOW_HP_FRACTION);
+/** set_hp writes whole points, so one point over a band's top is the least that clears it. */
+const ONE_HP = 1;
+
+/**
+ * The least HP the AI may leave a crawler on: just over the low-health band the
+ * fairness rules shield.
+ */
+function lowestUnshieldedHp(crawler: Crawler): number {
+  return hpThresholdTop(CRAWLER_HP_THRESHOLDS.low_health, crawler.maxHp) + ONE_HP;
+}
+
+/**
+ * The HP set_hp leaves a crawler on for `percent`: that share of max HP, but
+ * never in the low-health band, so its lowest share means "down to just over
+ * the line" rather than onto it.
+ */
+function setHpLanding(crawler: Crawler, percent: number): number {
+  const wanted = Math.ceil((crawler.maxHp * percent) / PERCENT);
+  return Math.min(crawler.maxHp, Math.max(1, lowestUnshieldedHp(crawler), wanted));
 }
 
 /**
@@ -416,8 +436,8 @@ const applyStatus: AIActionDef = {
     if (crawler.hasStatus(status)) return `${crawlerName(scene, crawler)} already has ${status}`;
     const effect: AIStatusEffect = AI_STATUS_EFFECTS[status];
     const added = effect.make?.() ?? null;
-    if (effect.harmful && hpAfterStatuses(crawler, added) < shieldedHp(crawler)) {
-      return `${status} could take ${crawlerName(scene, crawler)} under ${LOW_HP_PERCENT}% HP`;
+    if (effect.harmful && isAtOrUnderLowHealth(hpAfterStatuses(crawler, added), crawler.maxHp)) {
+      return `${status} could take ${crawlerName(scene, crawler)} to ${LOW_HP_PERCENT}% HP or less`;
     }
     return null;
   },
@@ -509,9 +529,12 @@ const modifyStat: AIActionDef = {
     // rather than applied and undone: every write to HP is watched for the
     // crawler entering a low-HP band, and a trial dip would set one off.
     const projectedHp = Math.max(1, hpBefore + crawler.maxHp - maxHpBefore);
-    if (delta < 0 && projectedHp < Math.min(hpBefore, shieldedHp(crawler))) {
+    const cutsDeeper = projectedHp < hpBefore;
+    if (delta < 0 && cutsDeeper && isAtOrUnderLowHealth(projectedHp, crawler.maxHp)) {
       crawler.tempStatMods.splice(crawler.tempStatMods.indexOf(mod), 1);
-      return refused(`that would take ${crawlerName(scene, crawler)} under ${LOW_HP_PERCENT}% HP`);
+      return refused(
+        `that would take ${crawlerName(scene, crawler)} to ${LOW_HP_PERCENT}% HP or less`,
+      );
     }
     crawler.syncHpToMaxHp();
     const signed = delta > 0 ? `+${delta}` : `${delta}`;
@@ -575,19 +598,18 @@ const setHp: AIActionDef = {
   refusal: ({ params, scene }) => {
     const crawler = resolveTarget(scene, params.get(TARGET_PARAM));
     if (!crawler.isAlive || crawler.isKnockedOut) return `${crawlerName(scene, crawler)} is down`;
-    const target = Math.ceil((crawler.maxHp * params.get(SET_HP_PERCENT)) / PERCENT);
+    const target = setHpLanding(crawler, params.get(SET_HP_PERCENT));
     const lowering = target < crawler.hp;
     const afterStatuses = target - pendingStatusDamage(crawler.statusEffects);
-    if (lowering && afterStatuses < shieldedHp(crawler)) {
-      return `${crawlerName(scene, crawler)}'s afflictions would carry them under ${LOW_HP_PERCENT}% HP`;
+    if (lowering && isAtOrUnderLowHealth(afterStatuses, crawler.maxHp)) {
+      return `${crawlerName(scene, crawler)}'s afflictions would carry them to ${LOW_HP_PERCENT}% HP or less`;
     }
     return null;
   },
   execute({ params, scene }) {
     const crawler = resolveTarget(scene, params.get(TARGET_PARAM));
     const percent = params.get(SET_HP_PERCENT);
-    const wanted = Math.ceil((crawler.maxHp * percent) / PERCENT);
-    crawler.hp = Math.min(crawler.maxHp, Math.max(1, shieldedHp(crawler), wanted));
+    crawler.hp = setHpLanding(crawler, percent);
     return ok(`set ${crawlerName(scene, crawler)} to ${percent}% HP`);
   },
 };

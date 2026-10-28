@@ -10,9 +10,7 @@
 
 import { getTownRamp, TOWN_INK, type Ramp, type RGB } from '../town/townPalette';
 import { CLOTH, INK, STONE, WOOD } from '../villageArt';
-
-/** Which town a spot stands in, which decides whose wood and stone the damage is cut from. */
-export type ContractSettlement = 'taloncrest' | 'hollow';
+import type { TownId } from '../../../map/buildingIds';
 
 export interface ContractPalette {
   /** Planks, posts, offcuts. */
@@ -109,6 +107,12 @@ const HOLLOW: ContractPalette = {
   wallMasonry: 'footing',
 };
 
-export function contractPalette(settlement: ContractSettlement): ContractPalette {
-  return settlement === 'taloncrest' ? TALONCREST : HOLLOW;
+/** Whose wood and stone the damage is cut from, by the town a spot stands in. */
+const PALETTE_BY_TOWN: Readonly<Record<TownId, ContractPalette>> = {
+  taloncrest: TALONCREST,
+  briar_hollow: HOLLOW,
+};
+
+export function contractPalette(town: TownId): ContractPalette {
+  return PALETTE_BY_TOWN[town];
 }

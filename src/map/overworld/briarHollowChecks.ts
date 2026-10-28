@@ -225,7 +225,7 @@ export function checkBriarHollowIsReachable(
       problems.push(`grove tree ${describe(tree)} has no reachable side`);
     }
   }
-  const sawmill = site.buildings.find((building) => building.id === 'sawmill');
+  const sawmill = site.buildings.find((building) => building.id === 'briar_hollow_sawmill');
   const machine = sawmill?.furniture.find((prop) => prop.prop === 'sawmill_machine');
   if (machine === undefined || !reachedBeside(fromTown, propFootprint(machine))) {
     problems.push('the sawmill machine cannot be reached');

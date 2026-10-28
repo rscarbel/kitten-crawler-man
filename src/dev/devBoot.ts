@@ -84,6 +84,7 @@ import { startBrowserReplayRecording } from './aiReplayRecorder';
 import { startPerfWalkFromParams } from './perfScenes';
 import { DEFAULT_FLOOR_ART_SEED } from '../map/ground/floorArtSeed';
 import { createGodModeState } from '../core/state/GodMode';
+import { isLevelId } from '../levels/levelIds';
 
 /**
  * Dev-only entry points, reachable by query parameter.
@@ -633,18 +634,18 @@ export function devBootScene(
   }
 
   const levelId = params.get('level');
-  if (levelId === null) return false;
+  if (levelId === null || !isLevelId(levelId)) return false;
 
   const floorOptions: DungeonSceneOptions = { ...options };
   if (params.get('spawn') === 'circus') floorOptions.spawnAtCircus = true;
 
-  try {
-    const levelDef = getLevelDef(levelId);
-    sceneManager.replace(
-      new DungeonScene(levelDef, input, sceneManager, devFloorOptions(floorOptions, params)),
-    );
-    return true;
-  } catch {
-    return false;
-  }
+  sceneManager.replace(
+    new DungeonScene(
+      getLevelDef(levelId),
+      input,
+      sceneManager,
+      devFloorOptions(floorOptions, params),
+    ),
+  );
+  return true;
 }

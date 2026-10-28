@@ -44,7 +44,7 @@ globals.document = {
 const { TILE_SIZE } = await import('../src/core/constants.js');
 const { loadSprites } = await import('../src/core/spriteAssets/SpriteLoader.js');
 const { GameMap } = await import('../src/map/GameMap.js');
-const { createTownPlan, CLOAK_AND_DAGGER_NAME } = await import('../src/map/town/townPlan.js');
+const { createTownPlan } = await import('../src/map/town/townPlan.js');
 const { FLOOR_ART_SEEDS } = await import('../src/map/ground/artSeedAlphabet.js');
 const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
@@ -111,10 +111,10 @@ paintEnvironmentArtInNode(artSeed);
 installCanvasGlobals();
 
 const plan = createTownPlan(TOWN_PLAN_SIZE);
-const building = plan.buildings.find((b) => b.name === CLOAK_AND_DAGGER_NAME);
-if (building === undefined) throw new Error(`town plan has no "${CLOAK_AND_DAGGER_NAME}"`);
+const building = plan.buildings.find((b) => b.id === 'taloncrest_nightclub');
+if (building === undefined) throw new Error(`town plan has no "taloncrest_nightclub"`);
 const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [], artSeed });
-map.generateInterior(building.kind, 0, building.name, false, 'default');
+map.generateInterior(building.kind, 0, building.id, false, 'default');
 map.releaseTileArt();
 
 const human = new HumanPlayer(map.startTile.x, map.startTile.y, TILE_SIZE);

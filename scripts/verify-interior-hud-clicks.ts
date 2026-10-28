@@ -55,7 +55,6 @@ const { createBriarHollowState } = await import('../src/core/quests/briarHollowS
 const { BuildingInteriorScene } = await import('../src/scenes/BuildingInteriorScene.js');
 const { PointerInput, PRIMARY_BUTTON } = await import('../src/ui/core/pointer.js');
 const { ITEM_DEF } = await import('../src/core/items/defs/ItemDefs.js');
-const { LORI_COTTAGE_NAME } = await import('../src/systems/interiorStoryOwnership.js');
 const { createAnchorQuestProgress } = await import('../src/core/quests/AnchorQuestProgress.js');
 const { speakerLines } = await import('../src/dialog/line.js');
 const { toCssRect } = await import('../src/ui/hud/HudSurface.js');
@@ -185,7 +184,7 @@ async function enter(
     journal,
   );
   if (!(await settleArrival(scene, ctx))) {
-    throw new Error(`${entry.name}'s arrival screen never finished`);
+    throw new Error(`${entry.id}'s arrival screen never finished`);
   }
   return scene;
 }
@@ -440,7 +439,7 @@ console.log("\nUnder one of Old Lori's beats, which halts the room");
 const anchorProgress = createAnchorQuestProgress();
 anchorProgress.status = 'active';
 const cottage = await enter(
-  building((entry) => entry.name === LORI_COTTAGE_NAME),
+  building((entry) => entry.id === 'taloncrest_old_lady_cottage'),
   anchorProgress,
 );
 const lori = rig(cottage);

@@ -11,7 +11,7 @@
  * with their own painters, which need a live `UiRoot` to draw at all.
  *
  *   npm run render:interior-hud
- *   npm run render:interior-hud -- --room="Temple of the Sky" --viewport=390x844 --density=pointer
+ *   npm run render:interior-hud -- --room='taloncrest_temple' --viewport=390x844 --density=pointer
  */
 
 import { createCanvas } from 'canvas';
@@ -51,7 +51,7 @@ import { text } from '../src/ui/widgets/text';
 import type { Density } from '../src/ui/theme/tokens';
 
 const OUT_DIR = `${PREVIEW_DIR}/playtest-r3`;
-const DEFAULT_ROOMS = ['Temple of the Sky', "Old Lori's Cottage"];
+const DEFAULT_ROOMS = ['taloncrest_temple', 'taloncrest_old_lady_cottage'];
 const DEFAULT_VIEWPORTS = ['390x844', '844x390'];
 const DEFAULT_DENSITY: Density = 'touch';
 const FULL_CHROME: InteriorChrome = { follow: true, summon: true, build: true, journal: true };
@@ -238,17 +238,17 @@ const roomNames = roomArg === null ? DEFAULT_ROOMS : [roomArg];
 const viewportSpecs = viewportArg === null ? DEFAULT_VIEWPORTS : [viewportArg];
 
 for (const roomName of roomNames) {
-  const building = plan.buildings.find((b) => b.name === roomName);
+  const building = plan.buildings.find((b) => b.id === roomName);
   if (building === undefined) {
     console.log(`no building named "${roomName}"`);
     process.exit(1);
   }
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  map.generateInterior(building.kind, 0, building.name, false);
+  map.generateInterior(building.kind, 0, building.id, false);
   map.releaseTileArt();
   const reachable = reachableTiles(map);
-  const title = interiorRoomTitle(building.name, null);
-  const slug = building.name
+  const title = interiorRoomTitle(building.id, null);
+  const slug = building.id
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
@@ -316,7 +316,7 @@ for (const roomName of roomNames) {
       reachable.find((tile) => Math.abs(tile.x - subject.x) + Math.abs(tile.y - subject.y) === 1) ??
       subject;
     console.log(
-      `  ${building.name} @ ${spec} (${density}): ${hiddenBefore.length} floor tile(s) hidden under the HUD before; rat at (${subject.x},${subject.y})`,
+      `  ${building.id} @ ${spec} (${density}): ${hiddenBefore.length} floor tile(s) hidden under the HUD before; rat at (${subject.x},${subject.y})`,
     );
 
     for (const phase of ['before', 'after'] as const) {

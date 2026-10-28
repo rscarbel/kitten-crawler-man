@@ -10,6 +10,7 @@ import {
   type RockGolemSheet,
   type RockGolemSpriteState,
 } from '../sprites/rockGolemSprite';
+import { selectCardinalFacing } from '../sprites/facingView';
 import {
   GOLEM_SLAM_FRAMES,
   GOLEM_STOMP_FRAMES,
@@ -401,8 +402,7 @@ export class RockGolem extends Mob {
     return {
       walkFrame: this.walkFrame,
       isMoving: this.isMoving,
-      facingX: this.facingX,
-      facingY: this.facingY,
+      facing: selectCardinalFacing(this.facingX, this.facingY),
       attack,
       attackProgress:
         timing === null ? 0 : this.attackFrame / (timing.frames * FRAMES_PER_SHEET_FRAME),

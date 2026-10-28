@@ -12,8 +12,7 @@
  * to sit each one on and `ReadableOverlay` draws it.
  */
 
-import type { BuildingName } from '../map/buildingEntry';
-import type { PlannedBuildingName } from '../map/town/townPlan';
+import type { BuildingId, PlannedBuildingId } from '../map/buildingIds';
 
 /** The furniture a readable sits on, resolved to real tiles by the owning system. */
 export type ReadableAnchor = 'shelf' | 'table' | 'crate' | 'board';
@@ -37,9 +36,9 @@ export interface Readable {
   readonly body: ReadonlyArray<string>;
 }
 
-const BUILDING_READABLES: ReadonlyMap<BuildingName, ReadonlyArray<Readable>> = new Map([
+const BUILDING_READABLES: ReadonlyMap<BuildingId, ReadonlyArray<Readable>> = new Map([
   [
-    "Old Lori's Cottage",
+    'taloncrest_old_lady_cottage',
     [
       {
         id: 'lori_herbal',
@@ -58,7 +57,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingName, ReadonlyArray<Readable>> = n
     ],
   ],
   [
-    'Blackwood Lodge',
+    'taloncrest_garrison_lodge',
     [
       {
         id: 'lodge_cellar_letter',
@@ -77,7 +76,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingName, ReadonlyArray<Readable>> = n
     ],
   ],
   [
-    'Temple of the Sky',
+    'taloncrest_temple',
     [
       {
         id: 'temple_watchers',
@@ -96,7 +95,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingName, ReadonlyArray<Readable>> = n
     ],
   ],
   [
-    "Cartwright's Workshop",
+    'taloncrest_crafting_house',
     [
       {
         id: 'cartwright_playbill',
@@ -114,7 +113,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingName, ReadonlyArray<Readable>> = n
     ],
   ],
   [
-    'Plumbline Farm',
+    'taloncrest_builder_farm',
     [
       {
         id: 'wendell_milk_rounds',
@@ -132,7 +131,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingName, ReadonlyArray<Readable>> = n
     ],
   ],
   [
-    'Herb & Remedy',
+    'taloncrest_apothecary',
     [
       {
         id: 'apothecary_ledger',
@@ -150,7 +149,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingName, ReadonlyArray<Readable>> = n
     ],
   ],
   [
-    'The Sunken Stump Pub',
+    'taloncrest_pub',
     [
       {
         id: 'stump_slate',
@@ -168,7 +167,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingName, ReadonlyArray<Readable>> = n
     ],
   ],
   [
-    'The Sleeping Cat Inn',
+    'taloncrest_inn',
     [
       {
         id: 'inn_ledger',
@@ -200,7 +199,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingName, ReadonlyArray<Readable>> = n
     ],
   ],
   [
-    'The Horned Flagon',
+    'taloncrest_flagon_tavern',
     [
       {
         id: 'flagon_seating',
@@ -218,7 +217,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingName, ReadonlyArray<Readable>> = n
     ],
   ],
   [
-    'The Rusty Anvil',
+    'taloncrest_smithy',
     [
       {
         id: 'anvil_repair_book',
@@ -236,7 +235,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingName, ReadonlyArray<Readable>> = n
     ],
   ],
   [
-    "Miller's Farm",
+    'taloncrest_mill_farm',
     [
       {
         id: 'miller_requisition',
@@ -254,7 +253,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingName, ReadonlyArray<Readable>> = n
     ],
   ],
   [
-    'General Store',
+    'taloncrest_general_store',
     [
       {
         id: 'store_order_book',
@@ -272,7 +271,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingName, ReadonlyArray<Readable>> = n
     ],
   ],
   [
-    'The Barracks',
+    'taloncrest_barracks',
     [
       {
         id: 'barracks_orders',
@@ -306,7 +305,7 @@ const BUILDING_READABLES: ReadonlyMap<BuildingName, ReadonlyArray<Readable>> = n
     ],
   ],
   [
-    'The Quiet Needle',
+    'taloncrest_tattoo_parlor',
     [
       {
         id: 'ink_design_book',
@@ -351,14 +350,14 @@ const BUILDING_READABLES: ReadonlyMap<BuildingName, ReadonlyArray<Readable>> = n
       },
     ],
   ],
-] satisfies ReadonlyArray<readonly [PlannedBuildingName, ReadonlyArray<Readable>]>);
+] satisfies ReadonlyArray<readonly [PlannedBuildingId, ReadonlyArray<Readable>]>);
 
 /** Every building with readables authored, for the gallery and the headless check. */
-export function readableBuildings(): ReadonlyArray<BuildingName> {
+export function readableBuildings(): ReadonlyArray<BuildingId> {
   return [...BUILDING_READABLES.keys()];
 }
 
 /** Every readable authored for `building`, in the order they should be placed. */
-export function readablesFor(building: BuildingName): ReadonlyArray<Readable> {
+export function readablesFor(building: BuildingId): ReadonlyArray<Readable> {
   return BUILDING_READABLES.get(building) ?? [];
 }

@@ -1,3 +1,4 @@
+import type { LevelId } from '../levels/levelIds';
 import type { SavedWorld } from '../core/save/SavedWorld';
 import type { PlayerSnapshot } from '../core/save/PlayerSnapshot';
 import type { SerializedAbilityState } from '../core/skills/AbilityManager';
@@ -24,7 +25,7 @@ export interface AuthUser {
 }
 
 export interface GameProgress {
-  levelId: string;
+  levelId: LevelId;
   humanSnap: PlayerSnapshot;
   catSnap: PlayerSnapshot;
   /**

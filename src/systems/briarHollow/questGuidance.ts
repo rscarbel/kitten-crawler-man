@@ -110,7 +110,6 @@ export type QuestGuidance =
    */
   | {
       readonly kind: 'town_building';
-      readonly buildingName: string;
       /** Who the party is going to see there, for a caption; null when it is the building itself. */
       readonly residentName: string | null;
       readonly door: TrackerTarget;

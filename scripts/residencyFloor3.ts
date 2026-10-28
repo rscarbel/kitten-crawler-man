@@ -51,13 +51,12 @@ import {
   figurePrewarmDepth,
   IDLE_FRAMES_BEFORE_RELEASE,
 } from '../src/sprites/figure/figureFrameCache.js';
-import { STARLIGHT_TENT_NAME } from '../src/map/overworld/circusGroundsLayout.js';
-import { CLOAK_AND_DAGGER_NAME, TOWN_TOWER_NAME } from '../src/map/town/townPlan.js';
 import { TownLifeSystem } from '../src/systems/TownLifeSystem.js';
 import { MarketSystem } from '../src/systems/market/MarketSystem.js';
 import { citizenFigureRows, type CitizenFigure } from '../src/creatures/citizenFigure.js';
 import { RATKIN_CAST_PREWARM_ORDER } from '../src/sprites/ratkinCastSprite.js';
 import { ratkinCastFigure } from '../src/sprites/art/ratkinCastFigure.js';
+import type { BuildingId } from '../src/map/buildingIds.js';
 
 export type Floor3Route = (typeof RESIDENCY_FLOORS)['3']['routes'][number];
 
@@ -77,13 +76,16 @@ const ARRIVAL_PAUSE_FRAMES = 5;
 /** Interiors the tour visits: the club and eleven more. */
 const TOUR_INTERIOR_COUNT = 12;
 /** Visited first, in this order: the casino, the inn with the safe room, and a shop. */
-const TOUR_FIRST_BUILDINGS: readonly string[] = [
-  CLOAK_AND_DAGGER_NAME,
-  'The Sleeping Cat Inn',
-  'General Store',
+const TOUR_FIRST_BUILDINGS: readonly BuildingId[] = [
+  'taloncrest_nightclub',
+  'taloncrest_inn',
+  'taloncrest_general_store',
 ];
 /** Never entered: the Starlight Tent is the circus's maze, which parks both crawlers, and the tower is a fight. */
-const TOUR_SKIPPED_BUILDINGS: ReadonlySet<string> = new Set([STARLIGHT_TENT_NAME, TOWN_TOWER_NAME]);
+const TOUR_SKIPPED_BUILDINGS: ReadonlySet<BuildingId> = new Set([
+  'taloncrest_circus_tent',
+  'taloncrest_tower',
+]);
 const DOOR_MENU_SURFACE = 'building-entry';
 const EXIT_MENU_SURFACE = 'exit-building';
 const CONVERSATION_SURFACE = 'conversation';
@@ -348,7 +350,7 @@ export async function runFloor3Route(
     const doorstep = { x: currentScene().pm.human.x, y: currentScene().pm.human.y };
     await holdUntil('a', WANDER_FRAMES_EACH_WAY, () => false);
     await holdUntil('d', WANDER_FRAMES_EACH_WAY, () => false);
-    await snapshot(`${INTERIOR_MILESTONE_PREFIX}${door.name}`);
+    await snapshot(`${INTERIOR_MILESTONE_PREFIX}${door.id}`);
     currentScene().pm.human.x = doorstep.x;
     currentScene().pm.human.y = doorstep.y;
     await dismissConversations();
@@ -359,7 +361,7 @@ export async function runFloor3Route(
     );
     if (onMat) await press(' ');
     // Every later milestone would be measured indoors under a street label.
-    if (!(current instanceof DungeonScene)) throw new Error(`could not walk out of ${door.name}`);
+    if (!(current instanceof DungeonScene)) throw new Error(`could not walk out of ${door.id}`);
     await settleLoader();
     await runFrames(ARRIVAL_PAUSE_FRAMES);
     return 'visited';
@@ -367,10 +369,10 @@ export async function runFloor3Route(
 
   /** The tour's doors: the three it must see first, then the nearest unvisited each time. */
   function tourDoors(entries: readonly BuildingEntry[]): BuildingEntry[] {
-    const candidates = entries.filter((entry) => !TOUR_SKIPPED_BUILDINGS.has(entry.name));
+    const candidates = entries.filter((entry) => !TOUR_SKIPPED_BUILDINGS.has(entry.id));
     const ordered: BuildingEntry[] = [];
     for (const name of options.firstBuildings ?? TOUR_FIRST_BUILDINGS) {
-      const entry = candidates.find((candidate) => candidate.name === name);
+      const entry = candidates.find((candidate) => candidate.id === name);
       if (entry === undefined) throw new Error(`the town has no ${name}`);
       ordered.push(entry);
     }
@@ -428,9 +430,9 @@ export async function runFloor3Route(
       if (visited >= interiorCount) break;
       if ((await visit(door)) === 'visited') {
         visited++;
-        await snapshot(`after ${door.name}`);
+        await snapshot(`after ${door.id}`);
       } else {
-        notes.push(`skipped ${door.name}: the door would not open`);
+        notes.push(`skipped ${door.id}: the door would not open`);
       }
     }
     if (visited < interiorCount) notes.push(`visited ${visited} of ${interiorCount} interiors`);

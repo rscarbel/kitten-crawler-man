@@ -22,8 +22,7 @@ import { transientSpeaker } from '../dialog/line';
 import type { CitizenSpeechStyle } from '../dialog/speakers';
 import type { DialogLine, Paragraphs } from '../dialog/line';
 import type { TownSpecies } from './townSpecies';
-import { CLOAK_AND_DAGGER_NAME, type PlannedBuildingName } from '../map/town/townPlan';
-import { mapByBuildingName, type BuildingName } from '../map/buildingEntry';
+import { type PlannedBuildingId, mapByBuildingId, type BuildingId } from '../map/buildingIds';
 
 export type ResidentId =
   | 'old_lori'
@@ -54,8 +53,8 @@ export interface ResidentDef {
   /** Appearance and voice base; also the fallback when the town is in danger. */
   readonly role: TownRole;
   readonly species: TownSpecies;
-  /** The building this resident anchors, keyed by `entry.name` exactly. */
-  readonly home: PlannedBuildingName;
+  /** The building this resident anchors. */
+  readonly home: PlannedBuildingId;
 }
 
 const RESIDENT_DEFS = [
@@ -64,120 +63,126 @@ const RESIDENT_DEFS = [
     name: 'Old Lori',
     role: 'priest',
     species: 'dwarf',
-    home: "Old Lori's Cottage",
+    home: 'taloncrest_old_lady_cottage',
   },
   {
     id: 'steve_cartwright',
     name: 'Steve Cartwright',
     role: 'laborer',
     species: 'otter',
-    home: "Cartwright's Workshop",
+    home: 'taloncrest_crafting_house',
   },
   {
     id: 'janitor_puddles',
     name: 'Puddles',
     role: 'laborer',
     species: 'crocodilian',
-    home: 'The Sunken Stump Pub',
+    home: 'taloncrest_pub',
   },
   {
     id: 'janitor_grout',
     name: 'Grout',
     role: 'laborer',
     species: 'crocodilian',
-    home: 'The Horned Flagon',
+    home: 'taloncrest_flagon_tavern',
   },
-  { id: 'wendell', name: 'Wendell', role: 'farmer', species: 'human', home: 'Plumbline Farm' },
+  {
+    id: 'wendell',
+    name: 'Wendell',
+    role: 'farmer',
+    species: 'human',
+    home: 'taloncrest_builder_farm',
+  },
   {
     id: 'marta_miller',
     name: 'Marta Miller',
     role: 'farmer',
     species: 'human',
-    home: "Miller's Farm",
+    home: 'taloncrest_mill_farm',
   },
   {
     id: 'apothecary_fen',
     name: 'Apothecary Fen',
     role: 'merchant',
     species: 'human',
-    home: 'Herb & Remedy',
+    home: 'taloncrest_apothecary',
   },
   {
     id: 'deacon_aviel',
     name: 'Deacon Aviel',
     role: 'priest',
     species: 'hawkfolk',
-    home: 'Temple of the Sky',
+    home: 'taloncrest_temple',
   },
   {
     id: 'smith_varga',
     name: 'Smith Varga',
     role: 'smith',
     species: 'hawkfolk',
-    home: 'The Rusty Anvil',
+    home: 'taloncrest_smithy',
   },
   {
     id: 'innkeep_ossie',
     name: 'Innkeep Ossie',
     role: 'innkeeper',
     species: 'hawkfolk',
-    home: 'The Sleeping Cat Inn',
+    home: 'taloncrest_inn',
   },
   {
     id: 'innkeep_brend',
     name: 'Innkeep Brend',
     role: 'innkeeper',
     species: 'hawkfolk',
-    home: 'The Horned Flagon',
+    home: 'taloncrest_flagon_tavern',
   },
   {
     id: 'innkeep_marlow',
     name: 'Innkeep Marlow',
     role: 'innkeeper',
     species: 'human',
-    home: 'The Sunken Stump Pub',
+    home: 'taloncrest_pub',
   },
   {
     id: 'sgt_kessler',
     name: 'Sgt. Kessler',
     role: 'guard',
     species: 'hawkfolk',
-    home: 'Blackwood Lodge',
+    home: 'taloncrest_garrison_lodge',
   },
   {
     id: 'sydney',
     name: 'Sydney',
     role: 'merchant',
     species: 'crocodilian',
-    home: 'The Barracks',
+    home: 'taloncrest_barracks',
   },
   {
     id: 'corporal_pell',
     name: 'Corporal Pell',
     role: 'guard',
     species: 'hawkfolk',
-    home: 'The Barracks',
+    home: 'taloncrest_barracks',
   },
   {
     id: 'quartermaster_dann',
     name: 'Quartermaster Dann',
     role: 'merchant',
     species: 'hawkfolk',
-    home: 'The Barracks',
+    home: 'taloncrest_barracks',
   },
   {
     id: 'stock_clerk_wick',
     name: 'Wick',
     role: 'commoner',
     species: 'human',
-    home: 'General Store',
+    home: 'taloncrest_general_store',
   },
   {
     id: 'tattooist_nim',
     name: 'Nim',
     role: 'merchant',
     species: 'hawkfolk',
-    home: 'The Quiet Needle',
+    home: 'taloncrest_tattoo_parlor',
   },
   // The club's host, drawn by his own painter, at the front desk by the door.
   {
@@ -185,14 +190,14 @@ const RESIDENT_DEFS = [
     name: 'Brandon',
     role: 'noble',
     species: 'human',
-    home: CLOAK_AND_DAGGER_NAME,
+    home: 'taloncrest_nightclub',
   },
   {
     id: 'keeper_brenna_kestrel',
     name: 'Keeper Brenna Kestrel',
     role: 'merchant',
     species: 'hawkfolk',
-    home: 'General Store',
+    home: 'taloncrest_general_store',
   },
 ] as const satisfies ReadonlyArray<ResidentDef>;
 
@@ -216,24 +221,24 @@ type ResidentOf<Home extends ResidentHome> = Extract<ResidentRecord, { readonly 
  * needs an entry, and a keeper can only be someone who lives there.
  */
 const BUILDING_KEEPERS = {
-  "Old Lori's Cottage": 'old_lori',
-  "Cartwright's Workshop": 'steve_cartwright',
-  'The Sunken Stump Pub': 'innkeep_marlow',
-  'The Horned Flagon': 'innkeep_brend',
-  'Plumbline Farm': 'wendell',
-  "Miller's Farm": 'marta_miller',
-  'Herb & Remedy': 'apothecary_fen',
-  'Temple of the Sky': 'deacon_aviel',
-  'The Rusty Anvil': 'smith_varga',
-  'The Sleeping Cat Inn': 'innkeep_ossie',
-  'Blackwood Lodge': 'sgt_kessler',
-  'The Barracks': 'corporal_pell',
-  'General Store': 'keeper_brenna_kestrel',
-  'The Quiet Needle': 'tattooist_nim',
-  [CLOAK_AND_DAGGER_NAME]: 'brandon',
+  taloncrest_old_lady_cottage: 'old_lori',
+  taloncrest_crafting_house: 'steve_cartwright',
+  taloncrest_pub: 'innkeep_marlow',
+  taloncrest_flagon_tavern: 'innkeep_brend',
+  taloncrest_builder_farm: 'wendell',
+  taloncrest_mill_farm: 'marta_miller',
+  taloncrest_apothecary: 'apothecary_fen',
+  taloncrest_temple: 'deacon_aviel',
+  taloncrest_smithy: 'smith_varga',
+  taloncrest_inn: 'innkeep_ossie',
+  taloncrest_garrison_lodge: 'sgt_kessler',
+  taloncrest_barracks: 'corporal_pell',
+  taloncrest_general_store: 'keeper_brenna_kestrel',
+  taloncrest_tattoo_parlor: 'tattooist_nim',
+  taloncrest_nightclub: 'brandon',
 } as const satisfies { readonly [Home in ResidentHome]: ResidentOf<Home> };
 
-const KEEPER_BY_BUILDING = mapByBuildingName<ResidentId>(BUILDING_KEEPERS);
+const KEEPER_BY_BUILDING = mapByBuildingId<ResidentId>(BUILDING_KEEPERS);
 
 const RESIDENTS_BY_ID = new Map<ResidentId, ResidentDef>(RESIDENT_DEFS.map((def) => [def.id, def]));
 
@@ -249,9 +254,9 @@ export function allResidents(): ReadonlyArray<ResidentDef> {
   return RESIDENT_DEFS;
 }
 
-/** The resident who keeps the building named `buildingName`, or null for a building no resident lives in. */
-export function buildingKeeper(buildingName: BuildingName): ResidentDef | null {
-  const keeperId = KEEPER_BY_BUILDING.get(buildingName);
+/** The resident who keeps the building named `buildingId`, or null for a building no resident lives in. */
+export function buildingKeeper(buildingId: BuildingId): ResidentDef | null {
+  const keeperId = KEEPER_BY_BUILDING.get(buildingId);
   return keeperId === undefined ? null : residentById(keeperId);
 }
 

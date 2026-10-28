@@ -7,6 +7,7 @@
  * `BuildingInteriorScene` owns the sounds and the interaction gating.
  */
 
+import { buildingDisplayName } from '../map/buildingIds';
 import type { Player } from '../Player';
 import { getSkillDef } from '../core/skills/SkillManager';
 import {
@@ -25,12 +26,9 @@ import {
   type ShopRow,
   type ShopPurchaseHandler,
 } from '../ui/screens/shop/shopSession';
-import type { PlannedBuildingName } from '../map/town/townPlan';
 import { hostByline, type ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
 import { SERVICE_PRICES } from '../economy/servicePrices';
-
-export const QUIET_NEEDLE_NAME = 'The Quiet Needle' as const satisfies PlannedBuildingName;
 
 /**
  * The parlour's one skill mark, gated on its own marker rather than `tattoo`:
@@ -104,7 +102,7 @@ function tattooistBark(turn: number): string {
 export function buildTattooMenu(player: Player, turn: number, host: ResidentHost | null): ShopMenu {
   const existing = player.tattoo;
   return {
-    title: QUIET_NEEDLE_NAME,
+    title: buildingDisplayName('taloncrest_tattoo_parlor'),
     bark: host?.line ?? tattooistBark(turn),
     byline: hostByline(host),
     emblem: null,

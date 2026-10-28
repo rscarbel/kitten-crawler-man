@@ -115,6 +115,7 @@ import { blueprintsPhaseAtLeast } from '../../core/quests/blueprintsQuestPhase';
 import { createMidgeEscortCarry, type MidgeEscortCarry } from '../../core/quests/midgeEscortCarry';
 import type { BlueprintsCue } from './blueprints/blueprintsSoundCues';
 import type { TravelUnlockState } from '../travel/travelDestinations';
+import type { BuildingId } from '../../map/buildingIds';
 
 /** The live `Keybindings` singleton's own type, which the class itself does not export. */
 type KeybindingsHost = typeof keybindings;
@@ -196,7 +197,7 @@ export interface BriarHollowKitDeps {
    * Whether a story state owns a Taloncrest room right now, for a
    * construction contract held there. Absent means none ever does.
    */
-  readonly taloncrestRoomOwnedByStory?: (buildingName: string) => boolean;
+  readonly taloncrestRoomOwnedByStory?: (buildingId: BuildingId) => boolean;
   /** Opens the village notice board's panel. Absent means the board cannot be read. */
   readonly openNoticeBoard?: () => void;
   /** Whether optional scenery (chimney smoke, lamp glows) is drawn this frame. Absent means always. */

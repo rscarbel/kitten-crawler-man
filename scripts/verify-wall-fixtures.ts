@@ -50,6 +50,7 @@ import { HumanPlayer } from '../src/creatures/HumanPlayer.js';
 import { LootSystem } from '../src/systems/LootSystem.js';
 import { DestructiblePropSystem } from '../src/systems/DestructiblePropSystem.js';
 import { DungeonLightingSystem, POWER_DOWN_MS } from '../src/systems/DungeonLightingSystem.js';
+import type { DungeonFloorNumber } from '../src/levels/levelIds.js';
 
 const FIRST_SEED = 3;
 const SEED_STRIDE = 4;
@@ -85,7 +86,7 @@ function fail(check: string, message: string): void {
   console.error(`FAIL [${check}] ${message}`);
 }
 
-function buildFloor(level: number, seed: number): GameMap {
+function buildFloor(level: DungeonFloorNumber, seed: number): GameMap {
   const levelDef = getLevelDef(`level${level}`);
   setDungeonFloorTheme(levelDef.groundTheme ?? 'cellars');
   return new GameMap({
@@ -109,7 +110,12 @@ function fixtureSignature(gameMap: GameMap): string {
     .join('|');
 }
 
-function checkPlacement(gameMap: GameMap, label: string, level: number, seed: number): void {
+function checkPlacement(
+  gameMap: GameMap,
+  label: string,
+  level: DungeonFloorNumber,
+  seed: number,
+): void {
   const fixtures = gameMap.wallFixtures;
   if (fixtures.length === 0) fail('placement', `${label}: no fixtures at all`);
   const taken = new Set<string>();

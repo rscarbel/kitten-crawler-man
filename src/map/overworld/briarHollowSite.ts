@@ -65,20 +65,15 @@ import {
   type ClutterPropId,
   type PropPlacement,
   type PropTemplate,
-  type VillageBuildingId,
   type VillageDistrictId,
   type VillageFloor,
   type VillagerAnchorKind,
   type WallSide,
 } from './briarHollowLayout';
 import { worldRandom } from '../../core/world/WorldRandom';
+import type { BriarHollowBuildingId } from '../buildingIds';
 
-export type {
-  PropPlacement,
-  VillageBuildingId,
-  VillageDistrictId,
-  VillagerAnchorKind,
-} from './briarHollowLayout';
+export type { PropPlacement, VillageDistrictId, VillagerAnchorKind } from './briarHollowLayout';
 
 // ── The record ────────────────────────────────────────────────────────────────
 
@@ -101,8 +96,7 @@ export interface VillageDistrict {
 }
 
 export interface VillageBuildingDef {
-  readonly id: VillageBuildingId;
-  readonly name: string;
+  readonly id: BriarHollowBuildingId;
   /** Outer footprint, walls included. */
   readonly rect: TileRect;
   /** Threshold tiles — gaps in the wall. Never `buildingEntries`: nothing here is a door to another scene. */
@@ -124,11 +118,11 @@ export type HouseholdColour = 'madder' | 'woad' | 'weld';
 const HOUSEHOLD_COLOURS: readonly HouseholdColour[] = ['madder', 'woad', 'weld'];
 
 /** The homes a laundry line can be strung beside. */
-const LAUNDRY_HOMES: readonly VillageBuildingId[] = [
-  'home_nella',
-  'home_cricket',
-  'home_midge',
-  'home_wicker',
+const LAUNDRY_HOMES: readonly BriarHollowBuildingId[] = [
+  'briar_hollow_seamstress_cottage',
+  'briar_hollow_well_keeper_cottage',
+  'briar_hollow_lamplighter_cottage',
+  'briar_hollow_carpenter_workshop',
 ];
 
 /**
@@ -139,11 +133,11 @@ export interface BriarHollowDressing {
   /** One per `cropFields` entry, in the same order. */
   readonly cropKinds: readonly CropKind[];
   /** Which home the laundry line hangs beside. */
-  readonly laundryHome: VillageBuildingId;
+  readonly laundryHome: BriarHollowBuildingId;
   /** One per clutter spot: which of crate, barrel or sack stands there. */
   readonly clutter: readonly ClutterPropId[];
   /** Accent colour per building, for flower boxes, quilts and signboards. */
-  readonly householdColours: ReadonlyMap<VillageBuildingId, HouseholdColour>;
+  readonly householdColours: ReadonlyMap<BriarHollowBuildingId, HouseholdColour>;
 }
 
 /**
@@ -818,7 +812,7 @@ function drawDressing(): BriarHollowDressing {
   });
   const laundryHome = pick(LAUNDRY_HOMES);
   const clutter = CLUTTER_SPOTS.map(() => pick(CLUTTER_PROPS));
-  const householdColours = new Map<VillageBuildingId, HouseholdColour>();
+  const householdColours = new Map<BriarHollowBuildingId, HouseholdColour>();
   for (const building of BUILDINGS) householdColours.set(building.id, pick(HOUSEHOLD_COLOURS));
   return { cropKinds, laundryHome, clutter, householdColours };
 }
@@ -854,7 +848,6 @@ function buildBuildings(origin: TilePoint): VillageBuildingDef[] {
     const buildingOrigin: TilePoint = { x: rect.x, y: rect.y };
     return {
       id: template.id,
-      name: template.name,
       rect,
       doorways: template.doorways.flatMap((spec) => doorwayTiles(rect, spec)),
       interior: insetRect(rect),
@@ -871,31 +864,31 @@ function buildAnchors(
   origin: TilePoint,
   buildings: readonly VillageBuildingDef[],
 ): Record<VillagerAnchorKind, readonly TilePoint[]> {
-  const byBuilding = (id: VillageBuildingId): readonly TilePoint[] =>
+  const byBuilding = (id: BriarHollowBuildingId): readonly TilePoint[] =>
     buildings.find((building) => building.id === id)?.occupantAnchors ?? [];
   const shift = (points: readonly TilePoint[]) => points.map((point) => shiftPoint(origin, point));
   const homes: TilePoint[] = [
-    ...byBuilding('home_nella'),
-    ...byBuilding('home_cricket'),
-    ...byBuilding('home_wicker'),
-    ...byBuilding('home_midge'),
+    ...byBuilding('briar_hollow_seamstress_cottage'),
+    ...byBuilding('briar_hollow_well_keeper_cottage'),
+    ...byBuilding('briar_hollow_carpenter_workshop'),
+    ...byBuilding('briar_hollow_lamplighter_cottage'),
   ];
   return {
-    hall: byBuilding('hall'),
-    forge: byBuilding('forge'),
-    cookhouse: byBuilding('cookhouse'),
-    infirmary: byBuilding('infirmary'),
-    store: byBuilding('store'),
-    workshop: byBuilding('workshop'),
-    sawmill: byBuilding('sawmill'),
-    guardhouse: byBuilding('guardhouse'),
-    farmhouse: byBuilding('farmhouse'),
-    barn: byBuilding('barn'),
-    home_nella: byBuilding('home_nella'),
-    home_cricket: byBuilding('home_cricket'),
-    home_wicker: byBuilding('home_wicker'),
-    home_midge: byBuilding('home_midge'),
-    garn_hut: byBuilding('garn_hut'),
+    briar_hollow_hall: byBuilding('briar_hollow_hall'),
+    briar_hollow_forge: byBuilding('briar_hollow_forge'),
+    briar_hollow_cookhouse: byBuilding('briar_hollow_cookhouse'),
+    briar_hollow_infirmary: byBuilding('briar_hollow_infirmary'),
+    briar_hollow_store: byBuilding('briar_hollow_store'),
+    briar_hollow_workshop: byBuilding('briar_hollow_workshop'),
+    briar_hollow_sawmill: byBuilding('briar_hollow_sawmill'),
+    briar_hollow_guardhouse: byBuilding('briar_hollow_guardhouse'),
+    briar_hollow_farmhouse: byBuilding('briar_hollow_farmhouse'),
+    briar_hollow_barn: byBuilding('briar_hollow_barn'),
+    briar_hollow_seamstress_cottage: byBuilding('briar_hollow_seamstress_cottage'),
+    briar_hollow_well_keeper_cottage: byBuilding('briar_hollow_well_keeper_cottage'),
+    briar_hollow_carpenter_workshop: byBuilding('briar_hollow_carpenter_workshop'),
+    briar_hollow_lamplighter_cottage: byBuilding('briar_hollow_lamplighter_cottage'),
+    briar_hollow_quarry_hut: byBuilding('briar_hollow_quarry_hut'),
     square: shift(OPEN_AIR_ANCHORS.square),
     well: shift(OPEN_AIR_ANCHORS.well),
     bench: shift(OPEN_AIR_ANCHORS.bench),
@@ -935,9 +928,9 @@ export function buildBriarHollowSite(centre: TilePoint): BriarHollowSite {
   const [southGate] = gates;
   const gateOutside = southGate.outside;
   const buildings = buildBuildings(origin);
-  const sawmill = buildings.find((building) => building.id === 'sawmill');
+  const sawmill = buildings.find((building) => building.id === 'briar_hollow_sawmill');
   const sawmillMachine = sawmill?.furniture.find((prop) => prop.prop === 'sawmill_machine');
-  const hut = buildings.find((building) => building.id === 'garn_hut');
+  const hut = buildings.find((building) => building.id === 'briar_hollow_quarry_hut');
   const ruinsCentre = shiftPoint(origin, RUINS_CENTRE);
 
   return {

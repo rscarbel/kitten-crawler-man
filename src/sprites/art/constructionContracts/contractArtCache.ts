@@ -19,11 +19,11 @@ import {
   type DamageBox,
 } from './contractDamageArt';
 import { paintContractBuildSite } from './contractBuildSiteArt';
-import { contractPalette, type ContractSettlement } from './contractPalette';
+import { contractPalette } from './contractPalette';
+import type { TownId } from '../../../map/buildingIds';
 import { onCanvasRecovery } from '../../../core/rendering/canvasRecovery';
 
 export type { ContractArtMaterial, ContractArtSurface } from './contractDamageArt';
-export type { ContractSettlement } from './contractPalette';
 
 /** Everything that decides what one spot's art looks like. */
 export interface ContractOverlaySpec {
@@ -31,7 +31,8 @@ export interface ContractOverlaySpec {
   readonly cacheKey: string;
   readonly material: ContractArtMaterial;
   readonly surface: ContractArtSurface;
-  readonly settlement: ContractSettlement;
+  /** Decides whose wood and stone the damage is cut from. */
+  readonly town: TownId;
   /** The target's footprint, or the wall face's run, in tiles. */
   readonly widthTiles: number;
   readonly heightTiles: number;
@@ -71,7 +72,7 @@ function specKey(spec: ContractBuildSiteSpec, surface: string): string {
     spec.cacheKey,
     spec.material,
     surface,
-    spec.settlement,
+    spec.town,
     spec.widthTiles,
     spec.heightTiles,
     spec.tilePx,
@@ -117,7 +118,7 @@ export function getContractOverlay(spec: ContractOverlaySpec): ContractArtImage 
   const cached = overlayCache.get(key);
   if (cached !== undefined) return cached;
   const headroom = spec.surface === 'prop' ? PROP_HEADROOM_TILES : 0;
-  const palette = contractPalette(spec.settlement);
+  const palette = contractPalette(spec.town);
   const image = paintImage(spec, headroom, (ctx, box) =>
     paintContractDamage(
       { ctx, box, surface: spec.surface, palette, seed: spec.seed },
@@ -133,7 +134,7 @@ export function getContractBuildSite(spec: ContractBuildSiteSpec): ContractArtIm
   const key = specKey(spec, 'build_site');
   const cached = buildSiteCache.get(key);
   if (cached !== undefined) return cached;
-  const palette = contractPalette(spec.settlement);
+  const palette = contractPalette(spec.town);
   const image = paintImage(spec, 0, (ctx, box) =>
     paintContractBuildSite(ctx, box, spec.material, palette, spec.seed),
   );

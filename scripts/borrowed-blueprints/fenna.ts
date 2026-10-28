@@ -42,7 +42,6 @@ import { Conversation } from '../../src/dialog/Conversation';
 import {
   BLUEPRINTS_QUEST_ID,
   moveBlueprintsPhase,
-  PLUMBLINE_FARM_NAME,
 } from '../../src/systems/briarHollow/blueprints/blueprintsProgress';
 import { WendellBlueprintsHook } from '../../src/systems/briarHollow/blueprints/WendellBlueprintsHook';
 import { stationUpgradeCost } from '../../src/systems/briarHollow/blueprints/StationUpgrades';
@@ -423,7 +422,7 @@ export function verifyWendellMarker(check: Check): void {
   const state = createBriarHollowState();
   const human = new HumanPlayer(0, 0, TILE_SIZE);
   const cat = new CatPlayer(0, 0, TILE_SIZE);
-  const hook = WendellBlueprintsHook.forBuilding(PLUMBLINE_FARM_NAME, WENDELL_FLOOR, {
+  const hook = WendellBlueprintsHook.forBuilding('taloncrest_builder_farm', WENDELL_FLOOR, {
     state,
     bus: new EventBus(),
     audio: null,

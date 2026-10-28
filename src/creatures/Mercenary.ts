@@ -10,8 +10,15 @@ import {
   getMercenaryTemplate,
   type MercenaryTemplateId,
   type MercenaryTemplate,
+  type MercenaryAudioTag,
 } from '../core/party/mercenaryTemplates';
 import { MERCENARY_ART, type MercenaryArt } from '../sprites/mercenaryArt';
+import {
+  type CardinalView,
+  FacingState,
+  HeldFacing,
+  selectCardinalFacing,
+} from '../sprites/facingView';
 import {
   SPEECH_DURATION_FRAMES,
   TimedSpeech,
@@ -145,7 +152,7 @@ export class Mercenary extends Mob {
   protected coinDropMax = 0;
   displayName: string;
   description: string;
-  override readonly audioTag: string;
+  override readonly audioTag: MercenaryAudioTag;
   /** A fallen hireling leaves a body that fades, so kill resolution keeps it drawn. */
   override readonly rendersWhenDead = true;
   /**
@@ -172,6 +179,13 @@ export class Mercenary extends Mob {
   readonly template: MercenaryTemplate;
   readonly kit: MercenaryKit;
   private readonly art: MercenaryArt;
+  /** Both models are held because each figure is painted for one of them. */
+  private readonly facing = new FacingState(this.facingX, this.facingY);
+  private readonly cardinalFacing = new HeldFacing<CardinalView>(
+    selectCardinalFacing,
+    this.facingX,
+    this.facingY,
+  );
   private readonly barker: MercenaryBarker;
   private readonly kitContext: ShellKitContext;
   /** What the hireling is saying; drawn by `renderSpeech`. */
@@ -534,6 +548,12 @@ export class Mercenary extends Mob {
 
   private get corpseTotalFrames(): number {
     return this.art.deathFrames + CORPSE_LINGER_FRAMES + CORPSE_FADE_FRAMES;
+  }
+
+  override tickTimers(): void {
+    super.tickTimers();
+    this.facing.update(this.facingX, this.facingY);
+    this.cardinalFacing.update(this.facingX, this.facingY);
   }
 
   override tickCorpse(): void {
@@ -994,8 +1014,9 @@ export class Mercenary extends Mob {
       state: this.drawState(),
       walkFrame: this.walkFrame,
       isMoving: this.isMoving,
+      facing: this.facing.peek(this.facingX, this.facingY),
+      cardinalFacing: this.cardinalFacing.peek(this.facingX, this.facingY),
       facingX: this.facingX,
-      facingY: this.facingY,
       clock: this.animPhase,
     };
 

@@ -16,6 +16,7 @@
 
 import type { SignpostArm } from '../sprites/townWayfinding';
 import type { TownOffset } from '../map/town/townPlan';
+import { buildingDisplayName } from '../map/buildingIds';
 
 /**
  * The signposts, by the `TownPlan`'s own names: one inside each gate, pointing
@@ -91,7 +92,7 @@ export const PLANNED_SIGNPOSTS: ReadonlyArray<PlannedSignpost> = [
     sidewaysTiles: SIGNPOST_SIDEWAYS_TILES,
     arms: [
       { label: 'Garrison Row', direction: -1 },
-      { label: 'The Barracks', direction: 1 },
+      { label: buildingDisplayName('taloncrest_barracks'), direction: 1 },
     ],
   },
 ];

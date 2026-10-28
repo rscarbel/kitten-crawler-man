@@ -75,12 +75,12 @@ import {
   BLOOD_VOMIT_RETCH_FRAMES,
   DOUBLE_DAMAGE_FRAMES,
   DOUBLE_DAMAGE_SCALE,
-  STATUS_INCOMING_DAMAGE_SCALE,
 } from '../src/core/combat/statusTuning';
 import {
   BLOOD_VOMIT_STATUS,
   DOUBLE_DAMAGE_STATUS,
   INCURABLE_STATUSES,
+  STATUS_DEFS,
   STATUS_IDS,
   makeBloodVomit,
   makeDoubleDamage,
@@ -1493,10 +1493,10 @@ function hpLostTo(source: DamageSource, effect: StatusEffect | null): number {
 }
 
 function checkStatusDamageScale(): void {
-  const scaled = STATUS_IDS.filter((id) => STATUS_INCOMING_DAMAGE_SCALE[id] !== 1);
+  const scaled = STATUS_IDS.filter((id) => STATUS_DEFS[id].incomingDamageScale !== 1);
   check(scaled.length > 0, 'at least one status scales incoming damage');
   for (const id of scaled) {
-    const scale = STATUS_INCOMING_DAMAGE_SCALE[id];
+    const scale = STATUS_DEFS[id].incomingDamageScale;
     const effect: StatusEffect = {
       type: id,
       ticksRemaining: STATUS_SCALE_TICKS,
@@ -1714,7 +1714,7 @@ function checkTakeDamage(): void {
 
 function checkDoubleDamage(): void {
   check(
-    STATUS_INCOMING_DAMAGE_SCALE[DOUBLE_DAMAGE_STATUS] === DOUBLE_DAMAGE_SCALE &&
+    STATUS_DEFS[DOUBLE_DAMAGE_STATUS].incomingDamageScale === DOUBLE_DAMAGE_SCALE &&
       DOUBLE_DAMAGE_SCALE === 2,
     'double damage doubles every incoming blow',
   );

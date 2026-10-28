@@ -139,7 +139,7 @@ function verifyInvalidSavesRejected(check: Check): void {
   const unknownBuilding = parseBriarHollowStateSnapshot(
     withContracts({
       ...savedContracts(),
-      active: { ...saved, site: { town: 'taloncrest', buildingName: 'Town Center Tower' } },
+      active: { ...saved, site: { town: 'taloncrest', buildingId: 'taloncrest_tower' } },
     }),
   );
   check(unknownBuilding === undefined, 'a contract at a building that hosts none is refused');

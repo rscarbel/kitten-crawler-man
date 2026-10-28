@@ -6,7 +6,7 @@ import { BATHROOM_CUES } from '../systems/cloggedBathroom/bathroomSoundCues';
 import { PRISON_CUES } from '../systems/stealthKeySnatch/prisonSoundCues';
 import { SPIDER_QUEST_CUES } from '../systems/spiderQuest/spiderQuestSoundCues';
 import { TUTORIAL_CUES } from '../systems/tutorialSoundCues';
-import { TUTORIAL_LEVEL_ID } from '../levels/tutorial';
+import type { LevelId } from '../levels/levelIds';
 import { INTERIOR_CUES } from '../systems/interiorInteractionSoundCues';
 import { INTERIOR_AMBIENCE_CUES } from '../systems/interiorAmbienceCues';
 import { occupantRoutineSoundIds } from '../systems/occupantRoutineCues';
@@ -671,6 +671,15 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     // The Dire Bear roams the forest edges of the whole floor.
     'bear_big_attack',
     'bear_growl_1',
+    // Lions hunt the open fields, and join the siege's assault waves.
+    'lion_aggro_roar',
+    'lion_attack_roar_1',
+    'lion_attack_roar_2',
+    'lion_attack_roar_3',
+    'lion_hurt_1',
+    'lion_hurt_2',
+    'lion_hurt_3',
+    'lion_hurt_4',
   ],
 
   /**
@@ -932,13 +941,15 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
   ],
 
   /**
-   * The Starlight Tent maze's cues (`STARLIGHT_TENT_CUES`), the grounds' high striker, and
-   * the voices of the clowns guarding the finale ring's chest. Floor 3 holds
-   * this group near the circus grounds; the Starlight Tent declares it itself.
+   * The Starlight Tent maze's cues (`STARLIGHT_TENT_CUES`), the grounds' high striker, the
+   * voices of the clowns guarding the finale ring's chest, and the rope ladder out of that
+   * ring (`INTERIOR_EXIT_FIXTURES`). Floor 3 holds this group near the circus grounds; the
+   * Starlight Tent declares it itself.
    */
   starlightTent: [
     ...starlightTentCueSoundIds(),
     'high_striker_bell',
+    'rope_ladder_climb',
     'clown_burp',
     'clown_horn',
     'clown_laughing_1',
@@ -1135,7 +1146,7 @@ export const GATED_SFX_IDS: ReadonlySet<SoundId> = new Set(
  * Ids a floor's scenes keep compressed: the gated groups on floor 3, so a cue
  * played while its group is let go decodes on demand rather than going unheard.
  */
-export function compressedSfxForLevelId(levelId: string): readonly SoundId[] {
+export function compressedSfxForLevelId(levelId: LevelId): readonly SoundId[] {
   return levelId === 'level3' ? [...GATED_SFX_IDS] : [];
 }
 
@@ -1148,26 +1159,25 @@ const LEVEL2_SFX_GROUPS: readonly SfxGroup[] = [
 ];
 
 /** Which `SfxGroup`s a `DungeonScene` should preload for the level it just entered. */
-export function sfxGroupsForLevelId(levelId: string): readonly SoundId[] {
-  const groups: readonly SfxGroup[] =
-    levelId === 'level1'
-      ? ['level1']
-      : levelId === 'level2'
-        ? LEVEL2_SFX_GROUPS
-        : levelId === 'level3'
-          ? LEVEL3_SFX_GROUPS
-          : levelId === TUTORIAL_LEVEL_ID
-            ? ['tutorial']
-            : // Any future level with no dedicated group: universal already
-              // covers menu/combat cues, so there is nothing floor-specific to
-              // add — falling through to `misc` is deliberate, not a gap.
-              ['misc'];
-  return groups.flatMap((group) => SFX_GROUPS[group]);
+export function sfxGroupsForLevelId(levelId: LevelId): readonly SoundId[] {
+  return sfxGroupsOf(levelId).flatMap((group) => SFX_GROUPS[group]);
 }
 
-/** {@link sfxGroupsForLevelId} for the floor a building stands on, by its number. */
-export function sfxGroupsForFloorNumber(floorNumber: number): readonly SoundId[] {
-  return sfxGroupsForLevelId(`level${floorNumber}`);
+function sfxGroupsOf(levelId: LevelId): readonly SfxGroup[] {
+  switch (levelId) {
+    case 'tutorial':
+      return ['tutorial'];
+    case 'level1':
+      return ['level1'];
+    case 'level2':
+      return LEVEL2_SFX_GROUPS;
+    case 'level3':
+      return LEVEL3_SFX_GROUPS;
+    default: {
+      const unhandled: never = levelId;
+      return unhandled;
+    }
+  }
 }
 
 /**
@@ -1181,7 +1191,7 @@ export function sfxGroupsForBuildingEntry(entry: BuildingEntry): readonly SoundI
   const sellsSomething =
     entry.type === 'club' ||
     entry.type === 'store' ||
-    (entry.type === 'house' && interiorSellsSomething(entry.name));
+    (entry.type === 'house' && interiorSellsSomething(entry.id));
   const groups: readonly SfxGroup[] = [
     'constructionContracts',
     'interiorInteractions',

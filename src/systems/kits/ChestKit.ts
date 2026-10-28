@@ -29,7 +29,12 @@ import { ChestRewardDialog, type ChestLootSplit } from '../../ui/ChestRewardDial
 import type { Surface } from '../../ui/core/UiRoot';
 import { chestRewardSurface } from '../../ui/screens/dialogs/chestRewardScreen';
 import type { RewardFlyHold, RewardFlySystem } from '../RewardFlySystem';
-import type { ChestType, TreasureChest, TreasureChestSystem } from '../TreasureChestSystem';
+import type {
+  ChestType,
+  GuardedChest,
+  TreasureChest,
+  TreasureChestSystem,
+} from '../TreasureChestSystem';
 
 /** Even odds for which crawler takes the odd coin or the odd unit of a split stack. */
 const LOOT_SPLIT_THRESHOLD = 0.5;
@@ -72,7 +77,7 @@ export interface ChestPlacer {
    * then stand: locked from the start, and unlocked once every mob posted to
    * it with {@link postChestBand} is dead.
    */
-  heldByBand(tile: TilePoint, loot: LootDrop): TreasureChest;
+  heldByBand(tile: TilePoint, loot: LootDrop): GuardedChest;
   /** A chest a previous visit already emptied: drawn with its lid up, offering nothing. */
   opened(tile: TilePoint, type: ChestType): TreasureChest;
 }
@@ -91,8 +96,8 @@ export function chestPlacer(chests: TreasureChestSystem, map: GameMap): ChestPla
 }
 
 /** Posts the band that holds a chest placed with {@link ChestPlacer.heldByBand}. */
-export function postChestBand(chest: TreasureChest, band: ReadonlyArray<Mob>): void {
-  chest.guard = { kind: 'band', mobs: band };
+export function postChestBand(chest: GuardedChest, band: ReadonlyArray<Mob>): void {
+  chest.lock.guard = { kind: 'band', mobs: band };
 }
 
 /**
@@ -234,7 +239,7 @@ export class ChestKit {
     // A boss chest holds the boss's own loot, gear roll included, and its
     // coins took the kill's coin bonus when the boss died; a world chest rolls
     // its gear and takes the bonus here.
-    const isBossChest = chest.bossRoomIndex !== null;
+    const isBossChest = chest.lock.kind === 'boss';
     const chestGear = isBossChest
       ? { items: [], coins: 0 }
       : rollChestGear(chest.type, this.deps.floorNumber, Math.random, this.deps.partyOwnsGear);

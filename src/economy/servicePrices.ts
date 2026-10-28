@@ -35,8 +35,8 @@ export const SERVICE_PRICES = {
     stew: 9,
     nightcap: 16,
   },
-  millers_farm: { hot_plate: 6 },
-  plumbline_farm: { hayloft: 10 },
+  mill_farm: { hot_plate: 6 },
+  builder_farm: { hayloft: 10 },
   /** The plaza seer charges for the theatre; Lori reads at her own table for less. */
   fortune: { plaza_seer: 3, hedge_witch: 2 },
   /**

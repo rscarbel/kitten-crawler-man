@@ -6,7 +6,7 @@
  * room's pool, area highlights included, composited onto the real room.
  *
  *   npm run render:construction-contracts
- *   npm run render:construction-contracts -- --taloncrest=sleeping_cat_inn --hollow=forge
+ *   npm run render:construction-contracts -- --taloncrest=taloncrest_inn --briar_hollow=briar_hollow_forge
  *   npm run render:construction-contracts -- --out-dir=preview/my-pass
  *
  * Every image is written three ways: `-1x` at the game's own 32 px tiles,
@@ -32,6 +32,7 @@ import { installCanvasGlobals, paintEnvironmentArtInNode } from './nodeCanvasGlo
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { asGameContext } from './nodeGameContext.js';
 import type { ContractSpotMaterial } from '../src/systems/constructionContracts/contractCatalog.js';
+import { TOWN_IDS, type TownId } from '../src/map/buildingIds.js';
 
 installCanvasGlobals();
 
@@ -76,15 +77,13 @@ const { worldText } = await import('../src/ui/world/worldText.js');
 type GameMapInstance = InstanceType<typeof GameMap>;
 type Material = ContractSpotMaterial;
 type Surface = 'prop' | 'floor' | 'wall' | 'doorway' | 'open_side';
-type Settlement = 'taloncrest' | 'hollow';
 
 const MATERIALS: readonly Material[] = ['wood', 'stone', 'rope', 'plaster'];
 const SURFACES: readonly Surface[] = ['prop', 'floor', 'wall', 'doorway', 'open_side'];
-const SETTLEMENTS: readonly Settlement[] = ['taloncrest', 'hollow'];
 
 const DEFAULT_OUT_DIR = `${PREVIEW_DIR}/construction-contracts`;
-const DEFAULT_TALONCREST_SITE = 'sleeping_cat_inn';
-const DEFAULT_HOLLOW_SITE = 'forge';
+const DEFAULT_TALONCREST_SITE = 'taloncrest_inn';
+const DEFAULT_HOLLOW_SITE = 'briar_hollow_forge';
 /** Hard-pixel blow-up of the 1x image, so a one-pixel mark is visible as a pixel. */
 const ZOOM = 3;
 const RETINA = 2;
@@ -111,8 +110,8 @@ function stringArg(name: string, fallback: string): string {
 }
 
 const outDir = stringArg('out-dir', DEFAULT_OUT_DIR);
-const taloncrestSlug = stringArg('taloncrest', DEFAULT_TALONCREST_SITE);
-const hollowSlug = stringArg('hollow', DEFAULT_HOLLOW_SITE);
+const taloncrestBuildingId = stringArg('taloncrest', DEFAULT_TALONCREST_SITE);
+const hollowBuildingId = stringArg('briar_hollow', DEFAULT_HOLLOW_SITE);
 
 await loadSprites('src/images/');
 paintEnvironmentArtInNode(FLOOR_ART_SEEDS[0]);
@@ -185,14 +184,14 @@ const PLASTER_STANDIN_BASE = 'rgb(167,154,128)';
 
 function paintFloor(
   ctx: CanvasRenderingContext2D,
-  settlement: Settlement,
+  town: TownId,
   x: number,
   y: number,
   w: number,
   h: number,
 ): void {
   const rng = mulberry32(SWATCH_SEED);
-  if (settlement === 'taloncrest') {
+  if (town === 'taloncrest') {
     paintPlankBoard(ctx, x, y, w, h, rng, {
       direction: 'horizontal',
       boardPx: TILE_SIZE * FLOOR_BOARD_TILES,
@@ -212,7 +211,7 @@ function paintFloor(
 /** A plain block of the material, standing on its footprint, for a prop's damage to sit on. */
 function paintPropStandIn(
   ctx: CanvasRenderingContext2D,
-  settlement: Settlement,
+  town: TownId,
   material: Material,
   x: number,
   y: number,
@@ -222,7 +221,7 @@ function paintPropStandIn(
   const rng = mulberry32(PROP_STANDIN_SEED);
   const top = y - TILE_SIZE * PROP_STANDIN_RISE_TILES;
   const height = h + TILE_SIZE * PROP_STANDIN_RISE_TILES;
-  if (settlement === 'taloncrest') {
+  if (town === 'taloncrest') {
     if (material === 'stone')
       paintStoneCourses(ctx, x, top, w, height, getTownRamp('oc_stone'), rng);
     else if (material === 'plaster') {
@@ -252,14 +251,14 @@ function paintPropStandIn(
 
 function paintWallStandIn(
   ctx: CanvasRenderingContext2D,
-  settlement: Settlement,
+  town: TownId,
   material: Material,
   x: number,
   y: number,
   w: number,
   h: number,
 ): void {
-  if (settlement === 'taloncrest') {
+  if (town === 'taloncrest') {
     const finish = material === 'stone' ? 'stone' : material === 'plaster' ? 'plaster' : 'timber';
     for (let tile = 0; tile * TILE_SIZE < w; tile++) {
       paintNorthInteriorWallFace(ctx, x + tile * TILE_SIZE, y, TILE_SIZE, h, finish, tile, 0);
@@ -282,11 +281,11 @@ function paintWallStandIn(
   drawFieldstones(ctx, x, y + h - footing, w, footing, rng, TILE_SIZE * FOOTING_STONE_TILES);
 }
 
-function swatchSheet(settlement: Settlement): void {
+function swatchSheet(town: TownId): void {
   const columns = SURFACES.length + 1;
   const widthPx = (LABEL_COLUMN_TILES + columns * CELL_W_TILES) * TILE_SIZE;
   const heightPx = (HEADER_ROW_TILES + MATERIALS.length * CELL_H_TILES) * TILE_SIZE;
-  writeAllScales(`swatches-${settlement}`, widthPx, heightPx, (ctx) => {
+  writeAllScales(`swatches-${town}`, widthPx, heightPx, (ctx) => {
     ctx.fillStyle = SHEET_BACKGROUND;
     ctx.fillRect(0, 0, widthPx, heightPx);
     const headers = [...SURFACES, 'rebuild'];
@@ -319,27 +318,27 @@ function swatchSheet(settlement: Settlement): void {
         const ty = cellTop + cellH - th - TILE_SIZE * CELL_FOOT_MARGIN_TILES;
         paintFloor(
           ctx,
-          settlement,
+          town,
           cellLeft + CELL_GUTTER_PX,
           cellTop + CELL_GUTTER_PX,
           cellW - CELL_GUTTER_PX * 2,
           cellH - CELL_GUTTER_PX * 2,
         );
         const spec = {
-          cacheKey: `swatch:${settlement}:${material}:${surface}`,
+          cacheKey: `swatch:${town}:${material}:${surface}`,
           material,
-          settlement,
+          town,
           widthTiles: target.w,
           heightTiles: target.h,
           tilePx: TILE_SIZE,
-          seed: contractSpotArtSeed(`${settlement}:${material}:${surface}`),
+          seed: contractSpotArtSeed(`${town}:${material}:${surface}`),
         };
         if (surface === 'rebuild') {
           drawContractBuildSite(ctx, spec, tx, ty);
           return;
         }
-        if (surface === 'prop') paintPropStandIn(ctx, settlement, material, tx, ty, tw, th);
-        if (surface === 'wall') paintWallStandIn(ctx, settlement, material, tx, ty, tw, th);
+        if (surface === 'prop') paintPropStandIn(ctx, town, material, tx, ty, tw, th);
+        if (surface === 'wall') paintWallStandIn(ctx, town, material, tx, ty, tw, th);
         drawContractOverlay(ctx, { ...spec, surface }, tx, ty);
       });
     });
@@ -385,9 +384,9 @@ function effectsSheet(): void {
     ];
     for (let column = 0; column < GLOW_COLUMNS; column++) {
       const rect = spotRect(column, 0);
-      paintFloor(ctx, 'hollow', ...floorInCell(column, 0));
+      paintFloor(ctx, 'briar_hollow', ...floorInCell(column, 0));
       drawContractSpotGlow(ctx, rect, GLOW_TIMES[column]);
-      paintPropStandIn(ctx, 'hollow', 'wood', rect.x, rect.y, rect.w, rect.h);
+      paintPropStandIn(ctx, 'briar_hollow', 'wood', rect.x, rect.y, rect.w, rect.h);
     }
     for (let frame = 0; frame < PUFF_FRAMES; frame++) {
       const rect = spotRect(frame, 1);
@@ -413,12 +412,12 @@ interface PlacedSpot {
   readonly rect: { readonly x: number; readonly y: number; readonly w: number; readonly h: number };
 }
 
-function overlaySpec(spot: PlacedSpot, settlement: Settlement) {
+function overlaySpec(spot: PlacedSpot, town: TownId) {
   return {
     cacheKey: spot.id,
     material: spot.material,
     surface: spot.surface,
-    settlement,
+    town,
     widthTiles: spot.rect.w,
     heightTiles: spot.rect.h,
     tilePx: TILE_SIZE,
@@ -429,11 +428,11 @@ function overlaySpec(spot: PlacedSpot, settlement: Settlement) {
 function drawSpot(
   ctx: CanvasRenderingContext2D,
   spot: PlacedSpot,
-  settlement: Settlement,
+  town: TownId,
   camX: number,
   camY: number,
 ): void {
-  const spec = overlaySpec(spot, settlement);
+  const spec = overlaySpec(spot, town);
   const x = spot.rect.x * TILE_SIZE - camX;
   const y = spot.rect.y * TILE_SIZE - camY;
   if (spot.kind === 'rebuild') drawContractBuildSite(ctx, spec, x, y);
@@ -476,18 +475,18 @@ function isGroundSpot(spot: PlacedSpot): boolean {
 }
 
 function taloncrestRoom(): void {
-  const site = CONTRACT_SITES.find((candidate) => candidate.slug === taloncrestSlug);
+  const site = CONTRACT_SITES.find((candidate) => candidate.buildingId === taloncrestBuildingId);
   if (site?.town !== 'taloncrest')
-    throw new Error(`--taloncrest=${taloncrestSlug} names no Taloncrest site`);
+    throw new Error(`--taloncrest=${taloncrestBuildingId} names no Taloncrest site`);
   const plan = createTownPlan(TOWN_PLAN_SIZE);
-  const building = plan.buildings.find((candidate) => candidate.name === site.buildingName);
-  if (building === undefined) throw new Error(`${site.buildingName} is not in the town plan`);
+  const building = plan.buildings.find((candidate) => candidate.id === site.buildingId);
+  if (building === undefined) throw new Error(`${site.buildingId} is not in the town plan`);
   const map = new GameMap({
     tileHeight: TILE_SIZE,
     prebuiltStructure: [],
     artSeed: FLOOR_ART_SEEDS[0],
   });
-  map.generateInterior(building.kind, 0, building.name, false, 'default');
+  map.generateInterior(building.kind, 0, building.id, false, 'default');
   map.releaseTileArt();
   const spots: PlacedSpot[] = [];
   const hiddenPropIds = new Set<string>();
@@ -538,8 +537,8 @@ function taloncrestRoom(): void {
       }
       if (withSpots) drawSpotFrames(ctx, spots);
     };
-  writeAllScales(`room-taloncrest-${site.slug}`, viewW, viewH, paintRoom(true));
-  writeAllScales(`room-taloncrest-${site.slug}-before`, viewW, viewH, paintRoom(false));
+  writeAllScales(`room-taloncrest-${site.buildingId}`, viewW, viewH, paintRoom(true));
+  writeAllScales(`room-taloncrest-${site.buildingId}-before`, viewW, viewH, paintRoom(false));
   for (const spot of spots)
     console.log(
       `  ${spot.id}: ${spot.kind} ${spot.material} ${spot.surface} ${JSON.stringify(spot.rect)}`,
@@ -547,9 +546,9 @@ function taloncrestRoom(): void {
 }
 
 function hollowRoom(): void {
-  const site = CONTRACT_SITES.find((candidate) => candidate.slug === hollowSlug);
+  const site = CONTRACT_SITES.find((candidate) => candidate.buildingId === hollowBuildingId);
   if (site?.town !== 'briar_hollow')
-    throw new Error(`--hollow=${hollowSlug} names no Briar Hollow site`);
+    throw new Error(`--briar_hollow=${hollowBuildingId} names no Briar Hollow site`);
   const gameMap: GameMapInstance = new GameMap({
     mapSize: OVERWORLD_SIZE,
     tileHeight: TILE_SIZE,
@@ -631,14 +630,14 @@ function hollowRoom(): void {
       if (withSpots) contracts.renderAbove(ctx, camX, camY);
     };
 
-  writeAllScales(`room-hollow-${site.slug}-before`, viewW, viewH, paintRoom(false));
+  writeAllScales(`room-hollow-${site.buildingId}-before`, viewW, viewH, paintRoom(false));
   state.contracts.active = {
     site: contractSiteKey(site),
     spotIds: site.spots.map((spot) => spot.id),
     spotsDone: site.spots.map(() => false),
   };
   contracts.update();
-  writeAllScales(`room-hollow-${site.slug}`, viewW, viewH, paintRoom(true));
+  writeAllScales(`room-hollow-${site.buildingId}`, viewW, viewH, paintRoom(true));
   contracts.dispose();
   for (const spot of site.spots) {
     const footprint = briarHollowSpotFootprint(site, spot, village);
@@ -648,7 +647,7 @@ function hollowRoom(): void {
   }
 }
 
-for (const settlement of SETTLEMENTS) swatchSheet(settlement);
+for (const town of TOWN_IDS) swatchSheet(town);
 effectsSheet();
 taloncrestRoom();
 hollowRoom();

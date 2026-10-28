@@ -5,8 +5,6 @@
  * get a number.
  */
 
-import type { StatusId } from './StatusEffect';
-
 const FRAMES_PER_SECOND = 60;
 const SECONDS_PER_MINUTE = 60;
 const DOUBLE_DAMAGE_MINUTES = 5;
@@ -53,79 +51,3 @@ export const CHILLED_ACTION_SPEED_FACTOR = 0.7;
 
 /** Share of each blow a mob under the aegis actually takes. */
 export const AEGIS_DAMAGE_SCALE = 0.5;
-
-/** The scale of a status that leaves the damage its carrier takes alone. */
-const DAMAGE_UNCHANGED = 1;
-
-/**
- * Every status's multiplier on the damage its carrier takes, from any source.
- * Keyed by every {@link StatusId} so a new status cannot ship without saying
- * whether it changes incoming damage. Read through
- * `statusIncomingDamageScale`, which multiplies the carrier's active entries.
- */
-export const STATUS_INCOMING_DAMAGE_SCALE = {
-  burn: DAMAGE_UNCHANGED,
-  magic_burn: DAMAGE_UNCHANGED,
-  poison: DAMAGE_UNCHANGED,
-  spit_venom: DAMAGE_UNCHANGED,
-  electrified: DAMAGE_UNCHANGED,
-  stuck: DAMAGE_UNCHANGED,
-  stun: DAMAGE_UNCHANGED,
-  drunk: DAMAGE_UNCHANGED,
-  catnip_buzz: DAMAGE_UNCHANGED,
-  ink: DAMAGE_UNCHANGED,
-  blood_vomit: DAMAGE_UNCHANGED,
-  double_damage: DOUBLE_DAMAGE_SCALE,
-  chilled: DAMAGE_UNCHANGED,
-  frozen: DAMAGE_UNCHANGED,
-  shield: DAMAGE_UNCHANGED,
-  overheal: DAMAGE_UNCHANGED,
-  fairy_ward: DAMAGE_UNCHANGED,
-  fairy_aegis: AEGIS_DAMAGE_SCALE,
-  speed_fizz: DAMAGE_UNCHANGED,
-  jugg_juice: DAMAGE_UNCHANGED,
-  cooldown_crisp: DAMAGE_UNCHANGED,
-  whetstone: DAMAGE_UNCHANGED,
-  well_rested: DAMAGE_UNCHANGED,
-  hearth_warmed: DAMAGE_UNCHANGED,
-  deep_slumber: DAMAGE_UNCHANGED,
-  hamburger_fed: DAMAGE_UNCHANGED,
-  refreshed: DAMAGE_UNCHANGED,
-} as const satisfies Record<StatusId, number>;
-
-/**
- * Whether a status survives a snapshot: `transient` for one that only lasts as
- * long as an on-screen moment, which a restore would otherwise replay for as
- * long as the saved record says. Keyed by every {@link StatusId} so a new
- * status cannot ship without deciding. `snapPlayer` leaves every transient
- * entry out, and a saved snapshot holding one fails validation.
- */
-export const STATUS_PERSISTENCE = {
-  burn: 'saved',
-  magic_burn: 'saved',
-  poison: 'saved',
-  spit_venom: 'saved',
-  electrified: 'saved',
-  stuck: 'saved',
-  stun: 'saved',
-  drunk: 'saved',
-  catnip_buzz: 'saved',
-  ink: 'saved',
-  blood_vomit: 'transient',
-  double_damage: 'saved',
-  chilled: 'saved',
-  frozen: 'saved',
-  shield: 'saved',
-  overheal: 'saved',
-  fairy_ward: 'saved',
-  fairy_aegis: 'saved',
-  speed_fizz: 'saved',
-  jugg_juice: 'saved',
-  cooldown_crisp: 'saved',
-  whetstone: 'saved',
-  well_rested: 'saved',
-  hearth_warmed: 'saved',
-  deep_slumber: 'saved',
-  hamburger_fed: 'saved',
-  refreshed: 'saved',
-} as const satisfies Record<StatusId, 'saved' | 'transient'>;

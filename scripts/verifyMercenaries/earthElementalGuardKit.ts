@@ -407,7 +407,7 @@ function checkCrushShield(report: EarthElementalGuardGateReporter): void {
   report.check(h.cat.hp === catBefore, `and it takes a blow for her (${catBefore} -> ${h.cat.hp})`);
 
   const cooldownWatch = CRUSH_SHIELD_COOLDOWN_FRAMES - SHIELD_CAST_TOTAL_TICKS * 2;
-  const casts = castsOver(new EarthElementalGuardKit(CRUSH_TEMPLATE), cooldownWatch);
+  const casts = castsOver(new EarthElementalGuardKit(CRUSH_TEMPLATE, CRUSH_CONFIG), cooldownWatch);
   report.check(
     casts === 1,
     `one Shield in the ${cooldownWatch} frames after the first, with the fight on throughout (${casts})`,

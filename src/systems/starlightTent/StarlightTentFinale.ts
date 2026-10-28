@@ -32,7 +32,7 @@ import { TILE_SIZE } from '../../core/constants';
 import { ropeLadderFoot } from '../../sprites/art/starlightTent/finaleProps';
 import { postChestBand, type ChestPlacer } from '../kits/ChestKit';
 import type { InteriorExitFixtureSystem } from '../interiorExitFixtures';
-import type { TreasureChest } from '../TreasureChestSystem';
+import type { GuardedChest, TreasureChest } from '../TreasureChestSystem';
 import { questMobLevel } from '../questMobLevel';
 
 /** The clowns the troupe sends out to hold the ring. */
@@ -106,7 +106,7 @@ export interface StarlightTentFinaleDeps {
 /** Where the ring's fight stands. */
 type RingStage =
   /** The chest is shut and nobody has come out for it yet. */
-  | { readonly kind: 'waiting' }
+  | { readonly kind: 'waiting'; readonly chest: GuardedChest }
   /** The guards are out; the chest unlocks once the last of them is dead. */
   | { readonly kind: 'guarded'; readonly guards: ReadonlyArray<Mob> }
   /** The chest has been opened, on this show or an earlier one. */
@@ -133,8 +133,9 @@ export class StarlightTentFinale {
       this.stage = { kind: 'claimed' };
       return;
     }
-    this.chest = deps.chests.heldByBand(MAZE_RING_CHEST_TILE, ringChestLoot());
-    this.stage = { kind: 'waiting' };
+    const chest = deps.chests.heldByBand(MAZE_RING_CHEST_TILE, ringChestLoot());
+    this.chest = chest;
+    this.stage = { kind: 'waiting', chest };
   }
 
   /** The guards the ring has called out, alive or dead; empty before they come out and after a claim. */
@@ -151,7 +152,7 @@ export class StarlightTentFinale {
       case 'waiting': {
         const partyInRing = standsInRing(human) || standsInRing(cat);
         if (actOnStage === 'finale' && partyInRing) {
-          this.stage = { kind: 'guarded', guards: this.callGuards() };
+          this.stage = { kind: 'guarded', guards: this.callGuards(this.stage.chest) };
         }
         return;
       }
@@ -169,7 +170,7 @@ export class StarlightTentFinale {
     }
   }
 
-  private callGuards(): Mob[] {
+  private callGuards(chest: GuardedChest): Mob[] {
     const { map, addMob, partyLevel } = this.deps;
     const guards = RING_GUARD_POSTS.map((post) => {
       const guard = spawnMob(
@@ -189,7 +190,7 @@ export class StarlightTentFinale {
     // Held by the guards themselves rather than by whoever stands in the
     // ring: the last clown chasing the party out through the curtains still
     // has the chest.
-    postChestBand(this.chest, guards);
+    postChestBand(chest, guards);
     return guards;
   }
 

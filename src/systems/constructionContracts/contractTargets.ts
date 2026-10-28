@@ -14,19 +14,16 @@ import type { GameMap } from '../../map/GameMap';
 import { BRIAR_HOLLOW_CONTRACT_AREAS } from '../../map/overworld/briarHollowLayout';
 import type { BriarHollowSite } from '../../map/overworld/briarHollowSite';
 import {
-  NAMED_INTERIOR_CONTRACT_AREAS,
+  INTERIOR_CONTRACT_AREAS_BY_BUILDING,
   buildGeneralStoreContractAreas,
 } from '../../map/town/interiors';
-import type { PlannedBuildingName, TileRect } from '../../map/town/townPlan';
+import type { TileRect } from '../../map/town/townPlan';
 import { TOWN_INTERIOR_PROPS } from '../../sprites/art/townInterior/townInteriorProps';
 import type {
   BriarHollowContractSiteDef,
   ContractSpotDef,
   TaloncrestContractSiteDef,
 } from './contractCatalog';
-
-/** The General Store's layout is applied by building kind, so its areas are looked up apart from the named rooms. */
-const GENERAL_STORE_NAME = 'General Store' satisfies PlannedBuildingName;
 
 /** Where a spot lies, and what kind of surface it marks: a prop, or one of the layout's area kinds. */
 export interface ContractSpotFootprint {
@@ -67,9 +64,9 @@ export function taloncrestSpotFootprint(
   const interiorH = map.structure.length;
   const interiorW = map.structure[0]?.length ?? 0;
   const areas =
-    site.buildingName === GENERAL_STORE_NAME
+    site.buildingId === 'taloncrest_general_store'
       ? buildGeneralStoreContractAreas(interiorW, interiorH)
-      : NAMED_INTERIOR_CONTRACT_AREAS.get(site.buildingName)?.(interiorW, interiorH);
+      : INTERIOR_CONTRACT_AREAS_BY_BUILDING.get(site.buildingId)?.(interiorW, interiorH);
   const area = areas === undefined ? undefined : ownEntry(areas, target.areaId);
   return area === undefined ? null : areaFootprint(area, 0, 0);
 }

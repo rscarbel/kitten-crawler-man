@@ -116,8 +116,8 @@ Hard rules. Every one of these is asserted by `verify:difficulty`.
   it — flame patches, radial bursts — stays flat and does not scale at all.
 
 **Statuses that scale incoming damage.** A status changes the damage its carrier
-takes only through its entry in `STATUS_INCOMING_DAMAGE_SCALE`
-(`src/core/combat/statusTuning.ts`), keyed by every status id, so a new status cannot
+takes only through the `incomingDamageScale` of its entry in `STATUS_DEFS`
+(`src/core/combat/StatusEffect.ts`), keyed by every status id, so a new status cannot
 ship without saying. Crawlers and mobs read the same table. The wheel's double-damage
 curse (`double_damage`, `DOUBLE_DAMAGE_SCALE` for `DOUBLE_DAMAGE_FRAMES`) is the one
 crawler-side entry above 1, and it multiplies every source: mob blows, status ticks,
@@ -575,7 +575,8 @@ Every action the show's AI takes (`src/ai/actions/`) passes the `ActionGovernor`
 pressure a crawler; it never ambushes a beaten one:
 
 - **Two HP shields.** Nothing that spawns hostiles or harms the party runs while
-  either crawler is down or under `LOW_HP_FRACTION` of their health. During a
+  either crawler is down or in the low-health band (`isAtOrUnderLowHealth`, the
+  same `CRAWLER_HP_THRESHOLDS.low_health` line that fires `healthLow`). During a
   fight the line rises to `HURT_IN_COMBAT_FRACTION`: a party already losing a
   fight is not piled on. Help (heals, cures, buffs) is never held back. Both lines
   are written into the tool descriptions the model reads.

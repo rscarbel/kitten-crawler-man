@@ -734,7 +734,7 @@ function checkPartyNotShoved(report: LifecycleGateReporter): void {
   report.section('A hire never moves the party, and gets past it to the fight');
   for (const id of MERCENARY_TEMPLATE_IDS) {
     // A medic never picks a fight, so for him only the standing still is asked.
-    const fights = getMercenaryTemplate(id).kit !== 'medic';
+    const fights = getMercenaryTemplate(id).kit.id !== 'medic';
     const open = shoveOutcome(id, makeRoom(), SHOVE_TILE_Y);
     report.check(
       partyStayedPut(open) && (!fights || open?.foeHit === true),

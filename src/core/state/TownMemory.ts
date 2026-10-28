@@ -18,6 +18,7 @@
  */
 
 import type { ResidentId } from '../../systems/townResidents';
+import { BUILDING_IDS, isBuildingId, type BuildingId } from '../../map/buildingIds';
 
 /** Places whose first visit opens something: a travel destination, a playlist. */
 export const VISITED_PLACE_IDS = ['circus_grounds', 'starlight_tent'] as const;
@@ -28,13 +29,13 @@ export interface TownMemory {
   residentTalks: Map<ResidentId, number>;
   /**
    * Rooms whose hostile occupants have already been dealt with, keyed by
-   * `<building name>#<floor>`.
+   * `roomKey`.
    *
    * An interior map is regenerated on every entry, so a room that spawns its hostiles from its own layout would
    * restock them the moment the player stepped back through the door — turning
    * a fight into a farm.
    */
-  clearedRooms: Set<string>;
+  clearedRooms: Set<RoomKey>;
   /**
    * Wilderness camps whose every resident has been killed, keyed by
    * `campSiteKey`.
@@ -63,7 +64,7 @@ export interface TownMemory {
    * exactly the way a cleared room would re-stock its hostiles without
    * `clearedRooms`.
    */
-  paidOutInteriorProps: Set<string>;
+  paidOutInteriorProps: Set<InteriorPropPayoutKey>;
   /** Places the party has set foot in at least once. */
   visitedPlaces: Set<VisitedPlaceId>;
 }
@@ -80,25 +81,58 @@ export function createTownMemory(): TownMemory {
 
 const ROOM_KEY_SEPARATOR = '#';
 
-/** The key a room is remembered under. A tower's storeys are separate rooms. */
-export function roomKey(buildingName: string, floor: number): string {
-  return `${buildingName}${ROOM_KEY_SEPARATOR}${floor}`;
+/** A room as the town remembers it: its building and storey. A tower's storeys are separate rooms. */
+export type RoomKey = `${BuildingId}${typeof ROOM_KEY_SEPARATOR}${number}`;
+
+/** A placed interior prop as the town remembers its payout: its room and the prop's layout id. */
+export type InteriorPropPayoutKey = `${RoomKey}${typeof ROOM_KEY_SEPARATOR}${string}`;
+
+export function roomKey(buildingId: BuildingId, floor: number): RoomKey {
+  return `${buildingId}${ROOM_KEY_SEPARATOR}${floor}`;
 }
 
 /** The building a room or prop-payout key was recorded in. */
-export function buildingNameOfRoomKey(key: string): string {
-  const separatorAt = key.indexOf(ROOM_KEY_SEPARATOR);
-  return separatorAt < 0 ? key : key.slice(0, separatorAt);
+export function buildingOfRoomKey(key: RoomKey | InteriorPropPayoutKey): BuildingId | undefined {
+  return BUILDING_IDS.find((id) => key.startsWith(`${id}${ROOM_KEY_SEPARATOR}`));
 }
 
 /**
- * The key a placed interior prop's first-time payout is remembered under —
- * a room key plus the prop's own id, which is stable across the room's
- * regeneration (derived from its layout entry, never from scan order or a
- * counter).
+ * The key a placed interior prop's first-time payout is remembered under:
+ * its room plus the id its layout gives it, so the record survives the room
+ * being rebuilt and the prop being moved.
  */
-export function interiorPropPayoutKey(buildingName: string, floor: number, propId: string): string {
-  return `${roomKey(buildingName, floor)}${ROOM_KEY_SEPARATOR}${propId}`;
+export function interiorPropPayoutKey(
+  buildingId: BuildingId,
+  floor: number,
+  propId: string,
+): InteriorPropPayoutKey {
+  return `${roomKey(buildingId, floor)}${ROOM_KEY_SEPARATOR}${propId}`;
+}
+
+const FLOOR_INDEX_PATTERN = /^\d+$/;
+
+/** Narrows a room key read from a save. */
+export function isRoomKey(value: unknown): value is RoomKey {
+  if (typeof value !== 'string') return false;
+  const separatorAt = value.indexOf(ROOM_KEY_SEPARATOR);
+  if (separatorAt < 0) return false;
+  const building = value.slice(0, separatorAt);
+  const floor = value.slice(separatorAt + ROOM_KEY_SEPARATOR.length);
+  return isBuildingId(building) && FLOOR_INDEX_PATTERN.test(floor);
+}
+
+/**
+ * Narrows a prop-payout key read from a save. Split at the room key's end
+ * only: everything after it is the prop's layout id, whatever it contains.
+ */
+export function isInteriorPropPayoutKey(value: unknown): value is InteriorPropPayoutKey {
+  if (typeof value !== 'string') return false;
+  const buildingEnd = value.indexOf(ROOM_KEY_SEPARATOR);
+  if (buildingEnd < 0) return false;
+  const floorEnd = value.indexOf(ROOM_KEY_SEPARATOR, buildingEnd + ROOM_KEY_SEPARATOR.length);
+  if (floorEnd < 0) return false;
+  const propId = value.slice(floorEnd + ROOM_KEY_SEPARATOR.length);
+  return isRoomKey(value.slice(0, floorEnd)) && propId.length > 0;
 }
 
 /** How many conversations this resident has already had with the player. */
@@ -152,9 +186,9 @@ export function forgetClearedCamps(memory: TownMemory): void {
 /** A point-in-time copy of the town's memory. */
 export interface TownMemoryCheckpoint {
   residentTalks: ReadonlyArray<readonly [ResidentId, number]>;
-  clearedRooms: ReadonlyArray<string>;
+  clearedRooms: ReadonlyArray<RoomKey>;
   clearedCamps: ReadonlyArray<string>;
-  paidOutInteriorProps: ReadonlyArray<string>;
+  paidOutInteriorProps: ReadonlyArray<InteriorPropPayoutKey>;
   visitedPlaces: ReadonlyArray<VisitedPlaceId>;
 }
 

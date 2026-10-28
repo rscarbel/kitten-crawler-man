@@ -16,6 +16,8 @@
  */
 
 import type { QuestStatus } from './QuestManager';
+import type { BuildingId } from '../../map/buildingIds';
+import type { ResidentId } from '../../systems/townResidents';
 
 /** The questline's display title, as the journal, overlay and reward screens name it. */
 export const ANCHOR_QUEST_NAME = 'The Anchor is Broken';
@@ -29,6 +31,45 @@ export const ANCHOR_QUEST_NAME = 'The Anchor is Broken';
  * `done` — the shard has been handed over (and is now an inventory question).
  */
 type AnchorStepState = 'offered' | 'in_progress' | 'shard_owed' | 'done';
+
+/** The shards a resident gives out indoors, named by the progress field that tracks each. */
+const ANCHOR_INDOOR_ERRANDS = ['lori', 'temple'] as const;
+type AnchorIndoorErrand = (typeof ANCHOR_INDOOR_ERRANDS)[number];
+
+interface AnchorErrandGiver {
+  readonly residentId: ResidentId;
+  /** The room the errand is worked in, and the only room its giver offers it from. */
+  readonly buildingId: BuildingId;
+}
+
+/** Who gives each indoor shard, and where. */
+export const ANCHOR_ERRAND_GIVERS = {
+  lori: { residentId: 'old_lori', buildingId: 'taloncrest_old_lady_cottage' },
+  temple: { residentId: 'deacon_aviel', buildingId: 'taloncrest_temple' },
+} as const satisfies Record<AnchorIndoorErrand, AnchorErrandGiver>;
+
+/** The indoor errand `residentId` gives in `buildingId`, or null when they give none there. */
+export function anchorErrandGivenBy(
+  residentId: ResidentId,
+  buildingId: BuildingId,
+): AnchorIndoorErrand | null {
+  return (
+    ANCHOR_INDOOR_ERRANDS.find((errand) => {
+      const giver: AnchorErrandGiver = ANCHOR_ERRAND_GIVERS[errand];
+      return giver.residentId === residentId && giver.buildingId === buildingId;
+    }) ?? null
+  );
+}
+
+/** The indoor errand worked in `buildingId`, or null when none is. */
+export function anchorErrandRoom(buildingId: BuildingId): AnchorIndoorErrand | null {
+  return (
+    ANCHOR_INDOOR_ERRANDS.find((errand) => {
+      const giver: AnchorErrandGiver = ANCHOR_ERRAND_GIVERS[errand];
+      return giver.buildingId === buildingId;
+    }) ?? null
+  );
+}
 
 export interface AnchorQuestProgress {
   /**

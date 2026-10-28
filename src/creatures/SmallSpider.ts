@@ -1,5 +1,6 @@
 import { Mob } from './Mob';
 import type { EyePlacement } from '../sprites/eyePlacement';
+import type { CreatureAudioTag } from '../audio/creatureAudioTags';
 import { maybeDropSkillBook } from './skillBookDrop';
 import {
   SPIDER_EYES_AHEAD_TILES,
@@ -133,7 +134,7 @@ export class SmallSpider extends Mob {
   protected override coinDropMin = 0;
   protected override coinDropMax = SPIDER_COIN_DROP_MAX;
   override displayName = 'Spider';
-  override readonly audioTag: string = 'small_spider';
+  override readonly audioTag: CreatureAudioTag = 'small_spider';
   override description = 'A quick, venomous spider that pounces on its prey.';
   override mass = 1;
 

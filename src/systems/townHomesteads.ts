@@ -7,7 +7,7 @@
  * he clears stumps, Marta has food because she is the reason the town eats, and
  * Wendell has a hayloft. They are priced against the plaza's versions so no
  * homestead becomes the strictly better place to buy anything; the goods live
- * on `SHOPS.cartwright` and `SHOPS.millers_farm` (each price is the item's base
+ * on `SHOPS.crafting_house` and `SHOPS.mill_farm` (each price is the item's base
  * in `ITEM_PRICES` times that shop's markup), the
  * hayloft and the hot plate in `SERVICE_PRICES`.
  *
@@ -28,10 +28,11 @@ import { SERVICE_PRICES } from '../economy/servicePrices';
 import { SHOPS, type ShopId } from '../economy/shops';
 import type { ShopStock } from '../economy/shopStock';
 import { catalogLineRow, findCatalogLine, handOverCatalogLine } from './market/vendorMenu';
+import { buildingDisplayName } from '../map/buildingIds';
 
 // -- Cartwright's Workshop --------------------------------------------------
 
-const CARTWRIGHT_SHOP = 'cartwright' as const satisfies ShopId;
+const CRAFTING_HOUSE_SHOP = 'crafting_house' as const satisfies ShopId;
 
 const CARTWRIGHT_BARKS: ReadonlyArray<string> = [
   'Stumps, mostly. I am not going to pretend that is all you want it for.',
@@ -51,18 +52,20 @@ export function buildCartwrightMenu(
   stock: ShopStock,
 ): ShopMenu {
   return {
-    title: "Cartwright's Workshop",
+    title: buildingDisplayName('taloncrest_crafting_house'),
     bark: host?.line ?? rotateLine(CARTWRIGHT_BARKS, turn),
     byline: hostByline(host),
     emblem: null,
-    options: SHOPS.cartwright.catalog.map((line) => catalogLineRow(CARTWRIGHT_SHOP, line, stock)),
+    options: SHOPS.crafting_house.catalog.map((line) =>
+      catalogLineRow(CRAFTING_HOUSE_SHOP, line, stock),
+    ),
   };
 }
 
 export function sellCartwrightGoods(turn: number, stock: ShopStock): ShopPurchaseHandler {
   return (option, buyer) => {
-    const line = findCatalogLine(CARTWRIGHT_SHOP, option.key);
-    if (line === undefined || !handOverCatalogLine(CARTWRIGHT_SHOP, line, stock, buyer)) {
+    const line = findCatalogLine(CRAFTING_HOUSE_SHOP, option.key);
+    if (line === undefined || !handOverCatalogLine(CRAFTING_HOUSE_SHOP, line, stock, buyer)) {
       return { ok: false, line: 'Steve shrugs at the bench.' };
     }
     return { ok: true, line: rotateLine(CARTWRIGHT_LINES, turn) };
@@ -71,7 +74,7 @@ export function sellCartwrightGoods(turn: number, stock: ShopStock): ShopPurchas
 
 // -- Miller's Farm ----------------------------------------------------------
 
-const MILLERS_FARM_SHOP = 'millers_farm' as const satisfies ShopId;
+const MILL_FARM_SHOP = 'mill_farm' as const satisfies ShopId;
 /** Fraction of max HP a plate off Marta's table puts back. */
 const HOT_PLATE_HEAL_FRACTION = 0.25;
 
@@ -102,19 +105,19 @@ export function buildMillerMenu(
     art: { kind: 'service', service: 'hot_plate' },
     offer: offerUnless(buyer.hp >= buyer.maxHp ? 'Unhurt' : null, {
       kind: 'coins',
-      coins: SERVICE_PRICES.millers_farm.hot_plate,
+      coins: SERVICE_PRICES.mill_farm.hot_plate,
     }),
     questErrand: false,
   };
 
   return {
-    title: "Miller's Farm",
+    title: buildingDisplayName('taloncrest_mill_farm'),
     bark: host?.line ?? rotateLine(MILLER_BARKS, turn),
     byline: hostByline(host),
     emblem: null,
     options: [
       plate,
-      ...SHOPS.millers_farm.catalog.map((line) => catalogLineRow(MILLERS_FARM_SHOP, line, stock)),
+      ...SHOPS.mill_farm.catalog.map((line) => catalogLineRow(MILL_FARM_SHOP, line, stock)),
     ],
   };
 }
@@ -131,8 +134,8 @@ export function serveMillerGoods(turn: number, stock: ShopStock): ShopPurchaseHa
       buyer.hp = Math.min(buyer.maxHp, healed);
       return { ok: true, line: rotateLine(MILLER_LINES, turn) };
     }
-    const line = findCatalogLine(MILLERS_FARM_SHOP, option.key);
-    if (line === undefined || !handOverCatalogLine(MILLERS_FARM_SHOP, line, stock, buyer)) {
+    const line = findCatalogLine(MILL_FARM_SHOP, option.key);
+    if (line === undefined || !handOverCatalogLine(MILL_FARM_SHOP, line, stock, buyer)) {
       return { ok: false, line: 'Marta wipes her hands and waits.' };
     }
     return { ok: true, line: 'Straight off the tray. Do not let them go soft.' };
@@ -171,13 +174,13 @@ export function buildPlumblineFarmMenu(
     art: { kind: 'service', service: 'hayloft' },
     offer: offerUnless(unhurt ? 'Unhurt' : null, {
       kind: 'coins',
-      coins: SERVICE_PRICES.plumbline_farm.hayloft,
+      coins: SERVICE_PRICES.builder_farm.hayloft,
     }),
     questErrand: false,
   };
 
   return {
-    title: 'Plumbline Farm',
+    title: buildingDisplayName('taloncrest_builder_farm'),
     bark: host?.line ?? rotateLine(HAYLOFT_BARKS, turn),
     byline: hostByline(host),
     emblem: null,

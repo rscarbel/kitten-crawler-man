@@ -60,6 +60,7 @@ import {
 } from '../src/systems/lighting/aboveDarkness.js';
 import { registerBossRoomMoodLights } from '../src/systems/bossRooms/BossRoomDressings.js';
 import { Rat } from '../src/creatures/Rat.js';
+import type { DungeonFloorNumber } from '../src/levels/levelIds.js';
 
 /** Generated floors checked per level, from fixed seeds so a failure replays. */
 const SEED_COUNT = 3;
@@ -306,7 +307,7 @@ function backfacesOf(
 
 // ── Floors ──────────────────────────────────────────────────────────────────
 
-function buildFloor(level: number, seed: number): GameMap {
+function buildFloor(level: DungeonFloorNumber, seed: number): GameMap {
   const levelDef = getLevelDef(`level${level}`);
   setDungeonFloorTheme(levelDef.groundTheme ?? 'cellars');
   return new GameMap({
@@ -564,7 +565,7 @@ function bossFightRegions(
  * fully lit: no ambient darkness and no darkened pixel on any tile, at least
  * one mood light each, and none of them in the spider lab.
  */
-function checkBossRooms(gameMap: GameMap, level: number, label: string): number {
+function checkBossRooms(gameMap: GameMap, level: DungeonFloorNumber, label: string): number {
   const lighting = lightingFor(gameMap, { ms: 0 });
   const bossTypes = getLevelDef(`level${level}`).bossRooms?.map((room) => room.type) ?? [];
   registerBossRoomMoodLights(lighting, gameMap, bossTypes);

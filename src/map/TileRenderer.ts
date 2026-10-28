@@ -436,9 +436,9 @@ const DECORATION_TYPES = new Set([
   GOBLIN_TENT,
   CLIFF,
   // The garrison's and the inking shop's tall props. Y-sorted so a player
-  // standing north of a training dummy is drawn behind it. `MAP_TABLE` and
-  // `INK_BENCH` are absent for the same reason `TABLE` and `BED` are: both are
-  // waist height, drawn flat in the base pass, and nothing walks behind them.
+  // standing north of a training dummy is drawn behind it. `MAP_TABLE` is
+  // absent for the same reason `TABLE` and `BED` are: it is waist height, drawn
+  // flat in the base pass, and nothing walks behind it.
   TRAINING_DUMMY,
   WEAPON_RACK,
   MUSTER_BOARD,

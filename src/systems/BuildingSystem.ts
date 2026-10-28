@@ -9,6 +9,7 @@ import type { GameSystem, SystemContext } from './GameSystem';
 import { worldText } from '../ui/world/worldText';
 import { worldPalette } from '../ui/theme/worldInk';
 import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import { buildingDisplayName } from '../map/buildingIds';
 
 /**
  * A door the scene is holding shut, and what to say when the player tries it.
@@ -214,7 +215,7 @@ export class BuildingSystem implements GameSystem {
 
       const BUILDING_NAME_TEXT_ADJUST = 9;
       const BUILDING_NAME_Y_EXTRA = 2;
-      worldText(ctx, entry.name, {
+      worldText(ctx, buildingDisplayName(entry.id), {
         x: sx,
         y: sy - ts * BUILDING_NAME_Y_FRACTION - BUILDING_NAME_Y_EXTRA - BUILDING_NAME_TEXT_ADJUST,
         size: BUILDING_NAME_SIZE,

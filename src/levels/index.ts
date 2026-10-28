@@ -1,31 +1,24 @@
 import type { LevelDef } from './types';
+import { LEVEL_IDS, type LevelId } from './levelIds';
 import { level1 } from './level1';
 import { level2 } from './level2';
 import { level3 } from './level3';
 import { tutorialLevel } from './tutorial';
 
-const registry = new Map<string, LevelDef>([
-  ['tutorial', tutorialLevel],
-  ['level1', level1],
-  ['level2', level2],
-  ['level3', level3],
-]);
+const LEVEL_DEFS: Readonly<Record<LevelId, LevelDef>> = {
+  tutorial: tutorialLevel,
+  level1,
+  level2,
+  level3,
+};
 
-/** Look up a level by ID. Throws if the ID is not registered. */
-export function getLevelDef(id: string): LevelDef {
-  const def = registry.get(id);
-  if (!def) throw new Error(`Unknown level id: "${id}"`);
-  return def;
+export function getLevelDef(id: LevelId): LevelDef {
+  return LEVEL_DEFS[id];
 }
 
-/** Whether `id` names a registered level. */
-export function isLevelId(id: string): boolean {
-  return registry.has(id);
-}
-
-/** Every registered level, in the order a run reaches them. */
+/** Every level, in the order a run reaches them. */
 export function allLevelDefs(): LevelDef[] {
-  return [...registry.values()];
+  return LEVEL_IDS.map((id) => LEVEL_DEFS[id]);
 }
 
 /** The small line over a level's name on its loading screen. */

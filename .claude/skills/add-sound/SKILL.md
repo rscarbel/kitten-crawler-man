@@ -105,7 +105,7 @@ One scope per scene (`audio.createScope()`, disposed in `onExit`; also on `Scene
 ## Where to trigger from
 
 - **Events first**: map EventBus events to sounds in `AudioManager.wireEvents(bus)`. The bus is cleared on scene teardown, so it re-wires per scene. Music is never wired there — claim it.
-- **Mobs**: set the creature's `audioTag` and add a `case` in `playMobAudioCues`. `dealDamage` sets `attackSoundPending`; set `projectileSoundPending` for ranged attacks. More voices than the boolean flags carry go in a typed field (`Cow.voicePending`, drained by `playCowVoice`) or a cue queue with its own player (`src/systems/undeadAudioCues.ts`).
+- **Mobs**: set the creature's `audioTag` (a `CreatureAudioTag`) and say what each generic flag plays in its `MOB_VOICES` row (`src/systems/mobVoices.ts`), which `playMobAudioCues` reads. `dealDamage` sets `attackSoundPending`; set `projectileSoundPending` for ranged attacks. More voices than the boolean flags carry go in a typed field (`Cow.voicePending`, drained by `playCowVoice`) or a cue queue with its own player (`src/systems/undeadAudioCues.ts`).
 - **Systems** hold no `AudioManager`; they set pending flags the scene drains, and take `MusicClaims` / `audioScope` for music and loops.
 - **UI buttons**: the scene's `UiRoot` plays the tap (a region's `sound` option picks another cue or `null`); never add per-button play calls — see `add-ui`.
 

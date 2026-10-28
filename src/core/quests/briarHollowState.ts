@@ -38,7 +38,9 @@ import {
   type BlueprintsStationId,
 } from './blueprintsQuestPhase';
 import {
-  contractSiteBySlug,
+  contractSiteByBuildingId,
+  CONTRACT_SITES,
+  type ContractSiteBuildingId,
   contractSiteKey,
   contractSpot,
   taloncrestContractSite,
@@ -46,6 +48,7 @@ import {
   type ContractSiteKey,
   type ContractSpotId,
 } from '../../systems/constructionContracts/contractCatalog';
+import { isBuildingId } from '../../map/buildingIds';
 
 // ── Quest state ──────────────────────────────────────────────────────────
 
@@ -192,10 +195,10 @@ export interface ConstructionContractsState {
   contractsIssued: number;
   contractsCompleted: number;
   active: ActiveContract | null;
-  /** Slug of the last site finished or dropped, so the same building never comes up twice running. */
-  lastSiteKey: string | null;
-  /** Each site's last spot set, by slug, so a building never repeats its exact set back to back. */
-  lastSpotSetBySite: Record<string, readonly ContractSpotId[]>;
+  /** The last site finished or dropped, so the same building never comes up twice running. */
+  lastSiteKey: ContractSiteBuildingId | null;
+  /** Each site's last spot set, so a building never repeats its exact set back to back. */
+  lastSpotSetBySite: Partial<Record<ContractSiteBuildingId, readonly ContractSpotId[]>>;
 }
 
 export function createConstructionContractsState(): ConstructionContractsState {
@@ -220,9 +223,10 @@ function copyActiveContract(active: ActiveContract): ActiveContract {
 function copyConstructionContractsState(
   contracts: ConstructionContractsState,
 ): ConstructionContractsState {
-  const lastSpotSetBySite: Record<string, readonly ContractSpotId[]> = {};
-  for (const [slug, spotIds] of Object.entries(contracts.lastSpotSetBySite)) {
-    lastSpotSetBySite[slug] = [...spotIds];
+  const lastSpotSetBySite: ConstructionContractsState['lastSpotSetBySite'] = {};
+  for (const { buildingId } of CONTRACT_SITES) {
+    const spotIds = contracts.lastSpotSetBySite[buildingId];
+    if (spotIds !== undefined) lastSpotSetBySite[buildingId] = [...spotIds];
   }
   return {
     introSeen: contracts.introSeen,
@@ -671,11 +675,11 @@ function parseBlueprintsQuestState(value: unknown): BlueprintsQuestState | undef
 /** The catalogue site a saved key names, or undefined when it names none. */
 function parseContractSiteKey(value: unknown): ContractSiteDef | undefined {
   if (!isRecord(value)) return undefined;
-  if (value.town === 'taloncrest' && isString(value.buildingName)) {
-    return taloncrestContractSite(value.buildingName);
+  if (value.town === 'taloncrest' && isBuildingId(value.buildingId)) {
+    return taloncrestContractSite(value.buildingId);
   }
   if (value.town === 'briar_hollow' && isString(value.buildingId)) {
-    const site = contractSiteBySlug(value.buildingId);
+    const site = contractSiteByBuildingId(value.buildingId);
     return site?.town === 'briar_hollow' ? site : undefined;
   }
   return undefined;
@@ -704,15 +708,15 @@ function parseActiveContract(value: unknown): ActiveContract | undefined {
 
 function parseSpotSetsBySite(
   value: unknown,
-): Record<string, readonly ContractSpotId[]> | undefined {
+): ConstructionContractsState['lastSpotSetBySite'] | undefined {
   if (!isRecord(value)) return undefined;
-  const sets: Record<string, readonly ContractSpotId[]> = {};
-  for (const [slug, saved] of Object.entries(value)) {
-    const site = contractSiteBySlug(slug);
+  const sets: ConstructionContractsState['lastSpotSetBySite'] = {};
+  for (const [buildingId, saved] of Object.entries(value)) {
+    const site = contractSiteByBuildingId(buildingId);
     if (site === undefined) return undefined;
     const spotIds = parseSiteSpotIds(saved, site);
     if (spotIds === undefined) return undefined;
-    sets[slug] = spotIds;
+    sets[site.buildingId] = spotIds;
   }
   return sets;
 }
@@ -722,15 +726,18 @@ function parseConstructionContractsState(value: unknown): ConstructionContractsS
   const { introSeen, contractsIssued, contractsCompleted, lastSiteKey } = value;
   const active = value.active === null ? null : parseActiveContract(value.active);
   const lastSpotSetBySite = parseSpotSetsBySite(value.lastSpotSetBySite);
-  const lastSiteKeyValid =
-    lastSiteKey === null ||
-    (isString(lastSiteKey) && contractSiteBySlug(lastSiteKey) !== undefined);
+  const lastSite =
+    lastSiteKey === null
+      ? null
+      : isString(lastSiteKey)
+        ? contractSiteByBuildingId(lastSiteKey)
+        : undefined;
   if (
     !isBoolean(introSeen) ||
     !isWholeCount(contractsIssued) ||
     !isWholeCount(contractsCompleted) ||
     active === undefined ||
-    !lastSiteKeyValid ||
+    lastSite === undefined ||
     lastSpotSetBySite === undefined
   ) {
     return undefined;
@@ -740,7 +747,7 @@ function parseConstructionContractsState(value: unknown): ConstructionContractsS
     contractsIssued,
     contractsCompleted,
     active,
-    lastSiteKey,
+    lastSiteKey: lastSite === null ? null : lastSite.buildingId,
     lastSpotSetBySite,
   };
 }

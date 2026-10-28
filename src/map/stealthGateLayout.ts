@@ -4,8 +4,6 @@ import { ROOM_WALL_OUTWARD, type Point, type Rect, type RoomDoorway } from './ro
 /** Whether the stealth gate still shuts the gate room's onward doorway. One value per floor. */
 export type StealthGateState = 'locked' | 'open';
 
-/** The building the prison door opens into, as `BuildingSystem` names it. */
-export const PRISON_BUILDING_NAME = 'Goblin High Security Prison';
 /** The prison door is a double door: two tiles of north wall face. */
 export const PRISON_DOOR_WIDTH_TILES = 2;
 /**
@@ -428,7 +426,7 @@ export function prisonBuildingEntry(room: Pick<StealthGateRoomData, 'prisonDoor'
   const { prisonDoor } = room;
   return {
     doorTile: { x: prisonDoor.x0, y: prisonDoor.approachRow },
-    name: PRISON_BUILDING_NAME,
+    id: 'level2_goblin_prison',
     type: 'prison',
     doorway: { x0: prisonDoor.x0, width: PRISON_DOOR_WIDTH_TILES },
   };

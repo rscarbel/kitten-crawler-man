@@ -308,7 +308,8 @@ function simulate(seed: number): void {
   const boundsOf = (villager: Villager): TileRect =>
     villager.routine.bounds === 'quarry' ? site.quarry.rect : site.interior;
 
-  const workshopRect = site.buildings.find((building) => building.id === 'workshop')?.rect ?? null;
+  const workshopRect =
+    site.buildings.find((building) => building.id === 'briar_hollow_workshop')?.rect ?? null;
 
   const problems = new Set<string>();
   let servicePostChecks = 0;

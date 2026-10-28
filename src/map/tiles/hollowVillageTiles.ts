@@ -157,7 +157,7 @@ function variantFor(
   if (prop === 'bed') return QUILT_VARIANT[householdColourAt(structure, anchorX, anchorY)];
   if (prop === 'table') {
     const building = buildingAt(structure, anchorX, anchorY);
-    const laid = building === undefined || building.id === 'cookhouse';
+    const laid = building === undefined || building.id === 'briar_hollow_cookhouse';
     return laid ? TABLE_LAID_VARIANT : TABLE_BARE_VARIANT;
   }
   return variantAt(anchorX, anchorY, variants);

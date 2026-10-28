@@ -347,7 +347,7 @@ import {
   type SavePoint,
 } from '../core/save/SavePoint';
 import { progressForRespawn, sceneSetupFromSave } from './resumeFromSave';
-import { CLOAK_AND_DAGGER_NAME, type TilePoint } from '../map/town/townPlan';
+import { type TilePoint } from '../map/town/townPlan';
 import type { WorldCheckpoint } from '../core/save/WorldCheckpoint';
 import {
   toPersistedArenaCheckpoint,
@@ -656,7 +656,6 @@ import {
 } from '../audio/loopLevels';
 import { Conversation } from '../dialog/Conversation';
 import { WOOD_SMASHING_SOUNDS, type MusicTrackId, type SoundId } from '../audio/sounds';
-import type { VillageBuildingId } from '../map/overworld/briarHollowLayout';
 import { rectCentre, rectContains } from '../map/overworld/briarHollowSite';
 import { sfxGroupsForLevelId, compressedSfxForLevelId } from '../audio/sfxGroups';
 import { DUNGEON_CUES, playDungeonCue, type DungeonCue } from '../systems/dungeon/dungeonSoundCues';
@@ -679,6 +678,7 @@ import { drawUnknownAbilityIcon } from '../ui/icons/rewardIcons';
 import { dynamiteChargeSurface } from '../systems/DynamiteSystem';
 import type { HitRegion, Surface, UiRoot, WorldGesture } from '../ui/core/UiRoot';
 import { PRIMARY_BUTTON } from '../ui/core/pointer';
+import { buildingDisplayName, type BriarHollowBuildingId } from '../map/buildingIds';
 
 /** A save as a scene writes it: every run-level field present, the floor's `world` optional. */
 export type SaveProgressInput = GameProgressInput & RunSaveFields;
@@ -933,8 +933,6 @@ export interface DungeonSceneOptions {
 }
 
 // Items with a designated owner — kept in sync with non-boss floor loot routing below
-/** Building whose forge fires supply the town's fire-crackle ambience. */
-const RUSTY_ANVIL_BUILDING_NAME = 'The Rusty Anvil';
 /** The key the necromancer's boss intro is played under: his spawn key. */
 const NECROMANCER_BOSS_TYPE = 'necromancer';
 /** How far outside the mark `!bounty go` lands the party — inside its aggro range. */
@@ -1794,13 +1792,13 @@ export class DungeonScene extends GameplayScene {
       this.floorEntryCatSnap = snapPlayer(this.cat);
 
       initialMobs.push(...tutorialController.allMobs);
-      // Tutorial chest — unlocked immediately since there are no mob guards
+      // The tutorial's treasure room has no guards, so its chest unlocks at once.
       this.treasureChests.addWoodenChest(
         TUTORIAL_CHEST_POS.x,
         TUTORIAL_CHEST_POS.y,
         TUTORIAL_TREASURE_ROOM_BOUNDS,
         { coins: 0, items: [] },
-        false,
+        'when_room_clear',
       );
       this.gameMap.blockTilePermanently(TUTORIAL_CHEST_POS.x, TUTORIAL_CHEST_POS.y);
     } else {
@@ -2743,8 +2741,8 @@ export class DungeonScene extends GameplayScene {
                 const cam = this.camera();
                 this.rewardFly.enqueueCoins(coins, worldX - cam.x, worldY - cam.y);
               },
-              taloncrestRoomOwnedByStory: (buildingName) =>
-                interiorRoomOwnedByStory(buildingName, {
+              taloncrestRoomOwnedByStory: (buildingId) =>
+                interiorRoomOwnedByStory(buildingId, {
                   murderStage: this.murderQuestProgress.stage,
                   anchor: this.anchorQuestProgress,
                 }),
@@ -2957,9 +2955,9 @@ export class DungeonScene extends GameplayScene {
         return tile === null ? null : characterTarget(tile);
       },
       () => stallBeaconTarget(this.market?.stallTileFor(TINKER_VENDOR_ID) ?? null),
-      (buildingName) =>
+      (buildingId) =>
         doorwayBeaconTarget(
-          this.gameMap.buildingEntries.find((entry) => entry.name === buildingName) ?? null,
+          this.gameMap.buildingEntries.find((entry) => entry.id === buildingId) ?? null,
         ),
       (message) => this.menus.announce(message),
       this.conversation,
@@ -3006,10 +3004,13 @@ export class DungeonScene extends GameplayScene {
         items.push({ id: 'scroll_of_confusing_fog', quantity: 1 });
       }
       items.push({ id: rollChestPotion(), quantity: 1 });
-      this.treasureChests.addWoodenChest(tr.centre.x, tr.centre.y, tr.bounds, {
-        coins,
-        items,
-      });
+      this.treasureChests.addWoodenChest(
+        tr.centre.x,
+        tr.centre.y,
+        tr.bounds,
+        { coins, items },
+        'after_guards_seen',
+      );
       this.gameMap.blockTilePermanently(tr.centre.x, tr.centre.y);
     }
 
@@ -3849,9 +3850,9 @@ export class DungeonScene extends GameplayScene {
     emitters.push(village);
     const villageSite = this.gameMap.briarHollow;
     if (villageSite !== null) {
-      const workshopBeds: ReadonlyArray<{ id: VillageBuildingId; soundId: SoundId }> = [
-        { id: 'forge', soundId: 'ambient_forge' },
-        { id: 'cookhouse', soundId: 'ambient_cookhouse' },
+      const workshopBeds: ReadonlyArray<{ id: BriarHollowBuildingId; soundId: SoundId }> = [
+        { id: 'briar_hollow_forge', soundId: 'ambient_forge' },
+        { id: 'briar_hollow_cookhouse', soundId: 'ambient_cookhouse' },
       ];
       for (const bed of workshopBeds) {
         const building = villageSite.buildings.find((candidate) => candidate.id === bed.id);
@@ -3895,7 +3896,7 @@ export class DungeonScene extends GameplayScene {
         maxVolume: CITY_CROWD_AMBIENT_VOLUME,
       });
     }
-    const smithy = this.gameMap.buildingEntries.find((e) => e.name === RUSTY_ANVIL_BUILDING_NAME);
+    const smithy = this.gameMap.buildingEntries.find((e) => e.id === 'taloncrest_smithy');
     if (smithy !== undefined) {
       emitters.push({
         soundId: 'ambient_fire_crackling',
@@ -3905,7 +3906,7 @@ export class DungeonScene extends GameplayScene {
         maxVolume: FORGE_AMBIENT_VOLUME,
       });
     }
-    const club = this.gameMap.buildingEntries.find((e) => e.name === CLOAK_AND_DAGGER_NAME);
+    const club = this.gameMap.buildingEntries.find((e) => e.id === 'taloncrest_nightclub');
     if (club !== undefined) {
       emitters.push({
         soundId: 'ambient_cloak_and_dagger_exterior',
@@ -4818,7 +4819,7 @@ export class DungeonScene extends GameplayScene {
     }
     this.building?.closeMenu();
     this.prisonDifficulty.open({
-      activity: entry.name,
+      activity: buildingDisplayName(entry.id),
       onPick: (difficulty) => this.enterBuilding(entry, difficulty),
     });
   }
@@ -5154,7 +5155,7 @@ export class DungeonScene extends GameplayScene {
     const levelDef = this.levelDef;
     return {
       ...(entry.type === 'prison' ? this.prisonVisitContext(prisonDifficulty) : {}),
-      floorNumber: levelDef.floorNumber,
+      levelId: levelDef.id,
       ...interiorArt(levelDef.spriteGroups, levelDef),
       sightRadiusPx: VISIBILITY_RADIUS_PX,
       ownsMusic: false,
@@ -9004,7 +9005,7 @@ export class DungeonScene extends GameplayScene {
    * Gathers every seller's minimap position into one reused array: Briar
    * Hollow's shop villagers plus every town building where an occupant keeps a
    * menu or a desk, read off `interiorSellsSomething` rather than a hand-kept
-   * list of building names — a service given to an occupant's spec in
+   * list of buildings — a service given to an occupant's spec in
    * `buildingOccupants.ts` shows up here without touching this.
    */
   private collectVendorMinimapPositions(): Array<{ x: number; y: number }> {
@@ -9012,7 +9013,7 @@ export class DungeonScene extends GameplayScene {
     positions.length = 0;
     if (this.briarHollowKit !== null) positions.push(...this.briarHollowKit.minimapVendorPositions);
     for (const entry of this.gameMap.buildingEntries) {
-      if (!interiorSellsSomething(entry.name)) continue;
+      if (!interiorSellsSomething(entry.id)) continue;
       positions.push({ x: entry.doorTile.x * TILE_SIZE, y: entry.doorTile.y * TILE_SIZE });
     }
     return positions;

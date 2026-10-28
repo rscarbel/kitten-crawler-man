@@ -12,8 +12,15 @@
  * south half, where the benches are deal and the mugs are clay.
  */
 
-import { contractTarget, prop, type TownInteriorLayoutEntry } from './types';
+import {
+  contractTarget,
+  prop,
+  type TownInteriorLayoutEntry,
+  statefulProp,
+  contractTargetId,
+} from './types';
 import type { ContractAreaRecord } from '../../contractAreas';
+import type { PlannedBuildingId } from '../../buildingIds';
 
 const ROAST = 0;
 const CANDELABRUM = 1;
@@ -22,7 +29,7 @@ const TARGE_AND_AXES = 0;
 const SUPPER_TRESTLE = 0;
 const PIPE_AND_HAT_TRESTLE = 1;
 
-const CONTRACT_SITE = 'horned_flagon';
+const CONTRACT_SITE = 'taloncrest_flagon_tavern' satisfies PlannedBuildingId;
 /** The roast in the middle of the feast table, and the westernmost section's bench. */
 const CONTRACT_FEAST_TABLE_SECTION = 2;
 const CONTRACT_FEAST_BENCH_SECTION = 0;
@@ -165,14 +172,14 @@ export function buildHornedFlagonLayout(w: number, h: number): TownInteriorLayou
   // Loot-bearing junk first: the payout gate expects the first breakable in
   // placement order to pay out.
   entries.push(
-    prop(westCol, southRow, 'barrel'),
-    prop(eastCol, southRow, 'barrel', 1),
-    prop(westCol, southRow - 1, 'crate'),
+    statefulProp(westCol, southRow, 'barrel', 'barrel_1'),
+    statefulProp(eastCol, southRow, 'barrel', 'barrel_2', 1),
+    statefulProp(westCol, southRow - 1, 'crate', 'crate'),
   );
 
   entries.push(
     prop(westCol, northRow, 'guild_booth'),
-    prop(boothTableCol, boothTableRow, 'booth_table'),
+    statefulProp(boothTableCol, boothTableRow, 'booth_table', 'booth_table'),
     prop(
       boothScreenCol,
       boothScreenRow,
@@ -180,7 +187,7 @@ export function buildHornedFlagonLayout(w: number, h: number): TownInteriorLayou
       0,
       contractTarget(CONTRACT_SITE, 'booth_screen'),
     ),
-    prop(boothTorchereCol, northRow, 'torchere'),
+    statefulProp(boothTorchereCol, northRow, 'torchere', 'torchere_1'),
     prop(westTrophyCol, northRow, 'flagon_trophy', TARGE_AND_AXES),
     prop(
       guildBannerCol,
@@ -189,12 +196,12 @@ export function buildHornedFlagonLayout(w: number, h: number): TownInteriorLayou
       0,
       contractTarget(CONTRACT_SITE, 'trophy_banner'),
     ),
-    prop(westTorchereCol, northRow, 'torchere'),
+    statefulProp(westTorchereCol, northRow, 'torchere', 'torchere_2'),
     prop(hearthCol, northRow, 'flagon_hearth', 0, contractTarget(CONTRACT_SITE, 'hearth')),
     prop(hearthCol, hearthRugRow, 'flagon_hearth_rug'),
-    prop(eastTorchereCol, northRow, 'torchere'),
-    prop(westTorchereCol, honouredChairRow, 'flagon_chair'),
-    prop(eastTorchereCol, honouredChairRow, 'flagon_chair'),
+    statefulProp(eastTorchereCol, northRow, 'torchere', 'torchere_3'),
+    statefulProp(westTorchereCol, honouredChairRow, 'flagon_chair', 'flagon_chair_1'),
+    statefulProp(eastTorchereCol, honouredChairRow, 'flagon_chair', 'flagon_chair_2'),
   );
 
   entries.push(
@@ -203,7 +210,7 @@ export function buildHornedFlagonLayout(w: number, h: number): TownInteriorLayou
     prop(barCol, barRow, 'flagon_bar', 0, contractTarget(CONTRACT_SITE, 'bar')),
   );
   for (let rx = barCol; rx <= eastCol; rx += barStoolPitch)
-    entries.push(prop(rx, barStoolRow, 'stool', 1));
+    entries.push(statefulProp(rx, barStoolRow, 'stool', `bar_stool_${rx - barCol}`, 1));
 
   entries.push(
     prop(carpetCol, carpetRow, 'flagon_carpet'),
@@ -211,34 +218,38 @@ export function buildHornedFlagonLayout(w: number, h: number): TownInteriorLayou
   );
   for (let section = 0; section < feastSections; section++) {
     const col = feastCol + section * feastSectionWidth;
-    const tableTarget =
-      section === CONTRACT_FEAST_TABLE_SECTION ? contractTarget(CONTRACT_SITE, 'feast_table') : {};
+    const tableId =
+      section === CONTRACT_FEAST_TABLE_SECTION
+        ? contractTargetId(CONTRACT_SITE, 'feast_table')
+        : `feast_table_${section}`;
     const benchTarget =
       section === CONTRACT_FEAST_BENCH_SECTION ? contractTarget(CONTRACT_SITE, 'feast_bench') : {};
     entries.push(
-      prop(col, feastRow, 'feast_table', feastCourses[section], tableTarget),
+      statefulProp(col, feastRow, 'feast_table', tableId, feastCourses[section]),
       prop(col, feastBenchRow, 'feast_bench', 0, benchTarget),
     );
   }
 
   const contractTrestle = trestles[CONTRACT_TRESTLE_INDEX];
-  for (const trestle of trestles) {
-    const trestleTarget =
-      trestle === contractTrestle ? contractTarget(CONTRACT_SITE, 'trestle') : {};
+  for (const [index, trestle] of trestles.entries()) {
+    const trestleId =
+      trestle === contractTrestle
+        ? contractTargetId(CONTRACT_SITE, 'trestle')
+        : `trestle_table_${index}`;
     entries.push(
-      prop(trestle.col, trestle.row, 'trestle_table', trestle.variant, trestleTarget),
-      prop(trestle.col, trestle.row + 1, 'deal_bench'),
+      statefulProp(trestle.col, trestle.row, 'trestle_table', trestleId, trestle.variant),
+      statefulProp(trestle.col, trestle.row + 1, 'deal_bench', `deal_bench_${index}`),
     );
   }
 
   entries.push(
-    prop(westCol, sideboardRow, 'flagon_sideboard'),
-    prop(eastCol - 1, sideboardRow, 'flagon_sideboard'),
+    statefulProp(westCol, sideboardRow, 'flagon_sideboard', 'flagon_sideboard_1'),
+    statefulProp(eastCol - 1, sideboardRow, 'flagon_sideboard', 'flagon_sideboard_2'),
   );
 
   entries.push(
-    prop(coatRackCol, southRow, 'coat_rack'),
-    prop(doorTorchereCol, southRow, 'torchere'),
+    statefulProp(coatRackCol, southRow, 'coat_rack', 'coat_rack'),
+    statefulProp(doorTorchereCol, southRow, 'torchere', 'torchere_4'),
   );
   return entries;
 }

@@ -21,8 +21,9 @@
  */
 
 import { TOWN_INTERIOR_PROPS } from '../../../sprites/art/townInterior/townInteriorProps';
-import { contractTarget, prop, type TownInteriorLayoutEntry } from './types';
+import { contractTarget, prop, type TownInteriorLayoutEntry, statefulProp } from './types';
 import type { ContractAreaRecord } from '../../contractAreas';
+import type { PlannedBuildingId } from '../../buildingIds';
 
 /** `lodge_bunk` dressings — see `paintLodgeBunk` for what each tier holds. */
 const BUNK_ROLLED = 0;
@@ -32,7 +33,7 @@ const BUNK_SLEPT = 3;
 /** The worn ember mat in front of the stove. */
 const STOVE_MAT_COLOURWAY = 2;
 
-const CONTRACT_SITE = 'blackwood_lodge';
+const CONTRACT_SITE = 'taloncrest_garrison_lodge' satisfies PlannedBuildingId;
 /** The east rank's first bunk, well away from Kessler's own and his footlocker. */
 const CONTRACT_BUNK_RANK = 0;
 const FLOORBOARDS_SPOT_W = 3;
@@ -190,8 +191,8 @@ export function buildBlackwoodLodgeLayout(w: number, h: number): TownInteriorLay
   }
   entries.push(
     prop(westAisleCol, bunkRow(kesslerBunkRank), 'kessler_footlocker'),
-    prop(eastAisleCol, bunkRow(slepBunkRank), 'chest', 0, { id: 'lodge_footlocker' }),
-    prop(westAisleCol, bunkRow(bunksPerWall - 1), 'drawer_unit'),
+    statefulProp(eastAisleCol, bunkRow(slepBunkRank), 'chest', 'lodge_footlocker', 0),
+    statefulProp(westAisleCol, bunkRow(bunksPerWall - 1), 'drawer_unit', 'drawer_unit'),
   );
 
   entries.push(
@@ -204,24 +205,24 @@ export function buildBlackwoodLodgeLayout(w: number, h: number): TownInteriorLay
     ),
     prop(trapdoorCol, trapdoorRow, 'cellar_trapdoor'),
     prop(benchCol, benchRow, 'bench_seat'),
-    prop(mapTableCol - 1, mapTableRow, 'stool'),
-    prop(mapTableCol + mapTableW, mapTableRow + 1, 'stool', 1),
+    statefulProp(mapTableCol - 1, mapTableRow, 'stool', 'stool_1'),
+    statefulProp(mapTableCol + mapTableW, mapTableRow + 1, 'stool', 'stool_2', 1),
   );
 
   entries.push(
-    prop(westCol, storeRow, 'crate'),
-    prop(westCol + 1, storeRow, 'barrel'),
-    prop(westCol, southRow, 'crate'),
-    prop(westCol + 1, southRow, 'sack'),
-    prop(westAisleCol, southRow, 'barrel', 1),
+    statefulProp(westCol, storeRow, 'crate', 'crate_1'),
+    statefulProp(westCol + 1, storeRow, 'barrel', 'barrel_1'),
+    statefulProp(westCol, southRow, 'crate', 'crate_2'),
+    statefulProp(westCol + 1, southRow, 'sack', 'sack_1'),
+    statefulProp(westAisleCol, southRow, 'barrel', 'barrel_2', 1),
     prop(southBenchCol, southRow, 'bench_seat'),
-    prop(southEastCratesCol, southRow, 'crate'),
-    prop(southEastCratesCol + 1, southRow, 'open_crate'),
-    prop(eastAisleCol, southRow, 'barrel'),
-    prop(eastCol - 1, storeRow, 'barrel', 1),
-    prop(eastCol, storeRow, 'crate'),
-    prop(eastCol - 1, southRow, 'sack'),
-    prop(eastCol, southRow, 'crate'),
+    statefulProp(southEastCratesCol, southRow, 'crate', 'crate_3'),
+    statefulProp(southEastCratesCol + 1, southRow, 'open_crate', 'open_crate'),
+    statefulProp(eastAisleCol, southRow, 'barrel', 'barrel_3'),
+    statefulProp(eastCol - 1, storeRow, 'barrel', 'barrel_4', 1),
+    statefulProp(eastCol, storeRow, 'crate', 'crate_4'),
+    statefulProp(eastCol - 1, southRow, 'sack', 'sack_2'),
+    statefulProp(eastCol, southRow, 'crate', 'crate_5'),
   );
   return entries;
 }

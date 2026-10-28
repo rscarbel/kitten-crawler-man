@@ -84,6 +84,7 @@ import { ITEM_DEF, isItemId, wearerAllows, type ItemId } from '../src/core/items
 import type { CrawlerKind } from '../src/core/skills/SkillManager';
 import type { GearTraitKind } from '../src/gear/traits';
 import type { Player } from '../src/Player';
+import type { BuildingId } from '../src/map/buildingIds';
 
 /** The level the kit's militia are raised at; nothing here fights them. */
 const MILITIA_LEVEL = 1;
@@ -133,7 +134,7 @@ const PACK_STANDOFF_TILES = 40;
 const PACK_ALERT_RADIUS_TILES = 3;
 const PACK_ALERT_RADIUS_PX = TILE_SIZE * PACK_ALERT_RADIUS_TILES;
 
-const TOWER_NAME = 'verify-kits tower';
+const TOWER_ID = 'taloncrest_tower' satisfies BuildingId;
 /**
  * Where the party is parked in a check that does not care where they stand —
  * the first interior tile inside the north-west corner.
@@ -746,7 +747,7 @@ console.log('\nA room with hostiles in it is content, not wiring');
     const towerFloor = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
     towerFloor.generateInterior('tower', floor, null);
     const base: InteriorHostileContext = {
-      buildingName: TOWER_NAME,
+      buildingId: TOWER_ID,
       buildingType: 'tower',
       floor,
       map: towerFloor,
@@ -847,7 +848,7 @@ console.log('\nA room with hostiles in it is content, not wiring');
   const cleared = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
   cleared.generateInterior('tower', FIRST_GUARDED_TOWER_FLOOR, null);
   const clearedContext: InteriorHostileContext = {
-    buildingName: TOWER_NAME,
+    buildingId: TOWER_ID,
     buildingType: 'tower',
     floor: FIRST_GUARDED_TOWER_FLOOR,
     map: cleared,
@@ -872,7 +873,7 @@ console.log('\nA room with hostiles in it is content, not wiring');
     'so they are in its spatial index and can be hit',
   );
 
-  noteRoomCleared(memory, TOWER_NAME, FIRST_GUARDED_TOWER_FLOOR);
+  noteRoomCleared(memory, TOWER_ID, FIRST_GUARDED_TOWER_FLOOR);
   check(
     interiorHostilesFor(clearedContext).length === 0,
     'a cleared room stays cleared, so walking back in is not a farm',
@@ -885,7 +886,7 @@ console.log('\nA room with hostiles in it is content, not wiring');
   // the branch under test is never reached.
   const uncleared: InteriorHostileContext = {
     ...clearedContext,
-    buildingName: `${TOWER_NAME} (untouched)`,
+    memory: createTownMemory(),
   };
   check(
     interiorHostilesFor({ ...uncleared, floor: GROUND_FLOOR }).length === 0,

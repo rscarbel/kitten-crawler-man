@@ -12,7 +12,6 @@ import { level3 } from '../../src/levels/level3';
 import { GameMap } from '../../src/map/GameMap';
 import { OVERWORLD_BORDER_TILES } from '../../src/map/OverworldGenerator';
 import type { BuildingEntry } from '../../src/map/buildingEntry';
-import { STARLIGHT_TENT_NAME } from '../../src/map/overworld/circusGroundsLayout';
 import { gateHighwayTiles, widenApproach } from '../../src/map/town/paintStreets';
 import { circusApproachCentreLine } from '../../src/map/overworld/paintCircusGrounds';
 
@@ -55,7 +54,7 @@ export function buildCircusSite(seed: number): CircusSite | string {
   const centre = map.circusCentre;
   const radiusTiles = map.circusRadiusTiles;
   if (centre === undefined || radiusTiles === undefined) return 'the map has no circus';
-  const starlightTent = map.buildingEntries.find((entry) => entry.name === STARLIGHT_TENT_NAME);
+  const starlightTent = map.buildingEntries.find((entry) => entry.id === 'taloncrest_circus_tent');
   if (starlightTent === undefined) return 'the circus has no Starlight Tent entry';
   const plan = map.townPlan;
   if (plan === undefined) return 'the map has no town plan to route the approach road from';

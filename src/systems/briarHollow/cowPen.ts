@@ -131,7 +131,7 @@ export class CowPen {
 
   /** The pen of a generated village: its paddock, the barn, and the lane between their openings. */
   static forSite(gameMap: GameMap, site: BriarHollowSite): CowPen {
-    const barn = site.buildings.find((building) => building.id === 'barn') ?? null;
+    const barn = site.buildings.find((building) => building.id === 'briar_hollow_barn') ?? null;
     return new CowPen(gameMap, site.pasture.rect, site.pasture.fenceGates, barn);
   }
 

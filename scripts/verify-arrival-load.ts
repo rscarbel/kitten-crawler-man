@@ -94,7 +94,7 @@ console.warn = (...args: unknown[]) => {
 
 const WORLD_SEED = 1;
 /** The town's one building with a safe room, whose counter is painted from dungeon ground. */
-const INN_NAME = 'The Sleeping Cat Inn';
+const INN_ID = 'taloncrest_inn';
 const { mulberry32 } = await import('../src/sprites/person/rng.js');
 Math.random = mulberry32(WORLD_SEED);
 
@@ -179,7 +179,7 @@ function buildScene(): Scene {
         worldSeed: WORLD_SEED,
       });
       const store = town.buildingEntries.find((entry) =>
-        environment === 'inn' ? entry.name === INN_NAME : entry.type === 'store',
+        environment === 'inn' ? entry.id === INN_ID : entry.type === 'store',
       );
       if (store === undefined) throw new Error(`the town has no building for ${environment}`);
       const human = new HumanPlayer(0, 0, TILE_SIZE);

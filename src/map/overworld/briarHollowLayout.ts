@@ -18,6 +18,7 @@
 
 import type { TilePoint, TileRect } from '../town/townPlan';
 import { contractPropId, type ContractAreaRecord } from '../contractAreas';
+import type { BriarHollowBuildingId } from '../buildingIds';
 
 // ── The palisade ──────────────────────────────────────────────────────────────
 
@@ -382,23 +383,6 @@ export function resolveProp(template: PropTemplate): PropPlacement {
 
 // ── Buildings ─────────────────────────────────────────────────────────────────
 
-export type VillageBuildingId =
-  | 'hall'
-  | 'forge'
-  | 'cookhouse'
-  | 'infirmary'
-  | 'store'
-  | 'workshop'
-  | 'sawmill'
-  | 'guardhouse'
-  | 'farmhouse'
-  | 'barn'
-  | 'home_nella'
-  | 'home_cricket'
-  | 'home_wicker'
-  | 'home_midge'
-  | 'garn_hut';
-
 export type WallSide = 'north' | 'south' | 'east' | 'west';
 
 /**
@@ -421,9 +405,7 @@ export interface DoorwaySpec {
 export type VillageFloor = 'planks' | 'working';
 
 export interface BuildingTemplate {
-  readonly id: VillageBuildingId;
-  /** Minimap and tooltip name. */
-  readonly name: string;
+  readonly id: BriarHollowBuildingId;
   /** Outer footprint, walls included, in site coordinates. */
   readonly rect: TileRect;
   readonly doorways: ReadonlyArray<DoorwaySpec>;
@@ -444,8 +426,7 @@ const BARN_RECT: TileRect = { x: 38, y: 9, w: 9, h: 7 };
 export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
   {
     // Bramblewick.
-    id: 'hall',
-    name: "Mayor's Hall",
+    id: 'briar_hollow_hall',
     rect: HALL_RECT,
     doorways: [{ side: 'south', offset: 5, width: 2 }],
     floor: 'planks',
@@ -455,14 +436,24 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
         prop: 'shelf_records',
         x: 1,
         y: 1,
-        contractSpotId: contractPropId('hall', 'records_shelf'),
+        contractSpotId: contractPropId('briar_hollow_hall', 'records_shelf'),
       },
       { prop: 'shelf_records', x: 2, y: 1 },
-      { prop: 'banner', x: 5, y: 1, contractSpotId: contractPropId('hall', 'banner') },
-      { prop: 'desk', x: 8, y: 1, contractSpotId: contractPropId('hall', 'desk') },
-      { prop: 'hearth', x: 10, y: 3, contractSpotId: contractPropId('hall', 'hearth') },
-      { prop: 'long_table', x: 3, y: 3, contractSpotId: contractPropId('hall', 'long_table') },
-      { prop: 'bench', x: 3, y: 4, contractSpotId: contractPropId('hall', 'bench') },
+      { prop: 'banner', x: 5, y: 1, contractSpotId: contractPropId('briar_hollow_hall', 'banner') },
+      { prop: 'desk', x: 8, y: 1, contractSpotId: contractPropId('briar_hollow_hall', 'desk') },
+      {
+        prop: 'hearth',
+        x: 10,
+        y: 3,
+        contractSpotId: contractPropId('briar_hollow_hall', 'hearth'),
+      },
+      {
+        prop: 'long_table',
+        x: 3,
+        y: 3,
+        contractSpotId: contractPropId('briar_hollow_hall', 'long_table'),
+      },
+      { prop: 'bench', x: 3, y: 4, contractSpotId: contractPropId('briar_hollow_hall', 'bench') },
       { prop: 'bench', x: 6, y: 4 },
       { prop: 'rug', x: 8, y: 3 },
     ],
@@ -470,8 +461,7 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
   {
     // Oren. Open on the south: the corner posts and a knee wall either side of
     // a three-tile opening.
-    id: 'forge',
-    name: 'Ironwhisker Forge',
+    id: 'briar_hollow_forge',
     rect: { x: 8, y: 21, w: 9, h: 7 },
     doorways: [{ side: 'south', offset: 3, width: 3 }],
     floor: 'working',
@@ -479,18 +469,42 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     // sits between Oren and the doorway, where the hammer swing lands.
     occupantAnchors: [{ x: 4, y: 1 }],
     furniture: [
-      { prop: 'forge_hearth', x: 1, y: 1, contractSpotId: contractPropId('forge', 'forge_hearth') },
-      { prop: 'anvil', x: 4, y: 2, contractSpotId: contractPropId('forge', 'anvil_block') },
-      { prop: 'quench_trough', x: 6, y: 1, contractSpotId: contractPropId('forge', 'quench') },
-      { prop: 'tool_rack', x: 7, y: 3, contractSpotId: contractPropId('forge', 'tool_rack') },
-      { prop: 'coal_bin', x: 1, y: 4, contractSpotId: contractPropId('forge', 'coal_bin') },
+      {
+        prop: 'forge_hearth',
+        x: 1,
+        y: 1,
+        contractSpotId: contractPropId('briar_hollow_forge', 'forge_hearth'),
+      },
+      {
+        prop: 'anvil',
+        x: 4,
+        y: 2,
+        contractSpotId: contractPropId('briar_hollow_forge', 'anvil_block'),
+      },
+      {
+        prop: 'quench_trough',
+        x: 6,
+        y: 1,
+        contractSpotId: contractPropId('briar_hollow_forge', 'quench'),
+      },
+      {
+        prop: 'tool_rack',
+        x: 7,
+        y: 3,
+        contractSpotId: contractPropId('briar_hollow_forge', 'tool_rack'),
+      },
+      {
+        prop: 'coal_bin',
+        x: 1,
+        y: 4,
+        contractSpotId: contractPropId('briar_hollow_forge', 'coal_bin'),
+      },
       { prop: 'soot', x: 3, y: 2 },
     ],
   },
   {
     // Pipkin.
-    id: 'cookhouse',
-    name: "Pipkin's Cookhouse",
+    id: 'briar_hollow_cookhouse',
     rect: { x: 18, y: 34, w: 10, h: 7 },
     doorways: [
       { side: 'south', offset: 3, width: 2 },
@@ -499,64 +513,121 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     floor: 'planks',
     occupantAnchors: [{ x: 5, y: 1 }],
     furniture: [
-      { prop: 'cooking_hearth', x: 1, y: 1, contractSpotId: contractPropId('cookhouse', 'hearth') },
+      {
+        prop: 'cooking_hearth',
+        x: 1,
+        y: 1,
+        contractSpotId: contractPropId('briar_hollow_cookhouse', 'hearth'),
+      },
       {
         prop: 'serving_counter',
         x: 4,
         y: 2,
-        contractSpotId: contractPropId('cookhouse', 'counter'),
+        contractSpotId: contractPropId('briar_hollow_cookhouse', 'counter'),
       },
       { prop: 'sack', x: 8, y: 1 },
-      { prop: 'table', x: 1, y: 4, contractSpotId: contractPropId('cookhouse', 'table') },
+      {
+        prop: 'table',
+        x: 1,
+        y: 4,
+        contractSpotId: contractPropId('briar_hollow_cookhouse', 'table'),
+      },
       { prop: 'table', x: 6, y: 4 },
-      { prop: 'bench', x: 2, y: 5, contractSpotId: contractPropId('cookhouse', 'bench') },
+      {
+        prop: 'bench',
+        x: 2,
+        y: 5,
+        contractSpotId: contractPropId('briar_hollow_cookhouse', 'bench'),
+      },
       { prop: 'bench', x: 7, y: 5 },
     ],
   },
   {
     // Sella.
-    id: 'infirmary',
-    name: 'Infirmary',
+    id: 'briar_hollow_infirmary',
     rect: { x: 39, y: 31, w: 8, h: 6 },
     doorways: [{ side: 'west', offset: 2, width: 1 }],
     floor: 'planks',
     occupantAnchors: [{ x: 4, y: 2 }],
     furniture: [
-      { prop: 'cot', x: 5, y: 1, contractSpotId: contractPropId('infirmary', 'cot_a') },
-      { prop: 'cot', x: 6, y: 1, contractSpotId: contractPropId('infirmary', 'cot_b') },
+      {
+        prop: 'cot',
+        x: 5,
+        y: 1,
+        contractSpotId: contractPropId('briar_hollow_infirmary', 'cot_a'),
+      },
+      {
+        prop: 'cot',
+        x: 6,
+        y: 1,
+        contractSpotId: contractPropId('briar_hollow_infirmary', 'cot_b'),
+      },
       {
         prop: 'shelf_herbs',
         x: 1,
         y: 1,
-        contractSpotId: contractPropId('infirmary', 'herb_shelf'),
+        contractSpotId: contractPropId('briar_hollow_infirmary', 'herb_shelf'),
       },
-      { prop: 'washbasin', x: 6, y: 4, contractSpotId: contractPropId('infirmary', 'basin') },
-      { prop: 'table', x: 2, y: 4, contractSpotId: contractPropId('infirmary', 'table') },
+      {
+        prop: 'washbasin',
+        x: 6,
+        y: 4,
+        contractSpotId: contractPropId('briar_hollow_infirmary', 'basin'),
+      },
+      {
+        prop: 'table',
+        x: 2,
+        y: 4,
+        contractSpotId: contractPropId('briar_hollow_infirmary', 'table'),
+      },
       { prop: 'stool', x: 4, y: 4 },
     ],
   },
   {
     // Vetch.
-    id: 'store',
-    name: 'Nibnose Trading Post',
+    id: 'briar_hollow_store',
     rect: { x: 8, y: 30, w: 8, h: 6 },
     doorways: [{ side: 'east', offset: 2, width: 1 }],
     floor: 'planks',
     occupantAnchors: [{ x: 3, y: 1 }],
     furniture: [
-      { prop: 'serving_counter', x: 2, y: 2, contractSpotId: contractPropId('store', 'counter') },
-      { prop: 'shelf_goods', x: 1, y: 1, contractSpotId: contractPropId('store', 'shelf_a') },
-      { prop: 'shelf_goods', x: 1, y: 3, contractSpotId: contractPropId('store', 'shelf_b') },
+      {
+        prop: 'serving_counter',
+        x: 2,
+        y: 2,
+        contractSpotId: contractPropId('briar_hollow_store', 'counter'),
+      },
+      {
+        prop: 'shelf_goods',
+        x: 1,
+        y: 1,
+        contractSpotId: contractPropId('briar_hollow_store', 'shelf_a'),
+      },
+      {
+        prop: 'shelf_goods',
+        x: 1,
+        y: 3,
+        contractSpotId: contractPropId('briar_hollow_store', 'shelf_b'),
+      },
       { prop: 'crate', x: 1, y: 4 },
-      { prop: 'barrel', x: 2, y: 4, contractSpotId: contractPropId('store', 'barrel') },
-      { prop: 'sack', x: 5, y: 4, contractSpotId: contractPropId('store', 'sack_plinth') },
+      {
+        prop: 'barrel',
+        x: 2,
+        y: 4,
+        contractSpotId: contractPropId('briar_hollow_store', 'barrel'),
+      },
+      {
+        prop: 'sack',
+        x: 5,
+        y: 4,
+        contractSpotId: contractPropId('briar_hollow_store', 'sack_plinth'),
+      },
       { prop: 'barrel', x: 6, y: 4 },
     ],
   },
   {
     // Tikka.
-    id: 'workshop',
-    name: "Engineer's Workshop",
+    id: 'briar_hollow_workshop',
     rect: { x: 49, y: 30, w: 8, h: 7 },
     doorways: [{ side: 'west', offset: 3, width: 1 }],
     floor: 'planks',
@@ -573,34 +644,38 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
         prop: 'drafting_table',
         x: 3,
         y: 1,
-        contractSpotId: contractPropId('workshop', 'drafting_table'),
+        contractSpotId: contractPropId('briar_hollow_workshop', 'drafting_table'),
       },
       {
         prop: 'gear_crate',
         x: 6,
         y: 1,
-        contractSpotId: contractPropId('workshop', 'gear_crate_a'),
+        contractSpotId: contractPropId('briar_hollow_workshop', 'gear_crate_a'),
       },
       {
         prop: 'gear_crate',
         x: 6,
         y: 2,
-        contractSpotId: contractPropId('workshop', 'gear_crate_b'),
+        contractSpotId: contractPropId('briar_hollow_workshop', 'gear_crate_b'),
       },
       {
         prop: 'trebuchet_model',
         x: 6,
         y: 5,
-        contractSpotId: contractPropId('workshop', 'trebuchet_model'),
+        contractSpotId: contractPropId('briar_hollow_workshop', 'trebuchet_model'),
       },
-      { prop: 'workbench', x: 3, y: 5, contractSpotId: contractPropId('workshop', 'workbench') },
+      {
+        prop: 'workbench',
+        x: 3,
+        y: 5,
+        contractSpotId: contractPropId('briar_hollow_workshop', 'workbench'),
+      },
     ],
   },
   {
     // Fenna. Open along the whole north side, facing the grove the logs come
     // from; the sawmill machine is the manual processing station.
-    id: 'sawmill',
-    name: 'Splintertail Sawmill',
+    id: 'briar_hollow_sawmill',
     rect: { x: 15, y: 13, w: 10, h: 6 },
     doorways: [{ side: 'north', offset: 1, width: 8 }],
     floor: 'working',
@@ -608,16 +683,25 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     furniture: [
       { prop: 'sawmill_machine', x: 1, y: 2 },
       { prop: 'rope_walk', x: 5, y: 4 },
-      { prop: 'log_pile', x: 7, y: 2, contractSpotId: contractPropId('sawmill', 'log_chocks') },
-      { prop: 'board_stack', x: 8, y: 4, contractSpotId: contractPropId('sawmill', 'board_rack') },
+      {
+        prop: 'log_pile',
+        x: 7,
+        y: 2,
+        contractSpotId: contractPropId('briar_hollow_sawmill', 'log_chocks'),
+      },
+      {
+        prop: 'board_stack',
+        x: 8,
+        y: 4,
+        contractSpotId: contractPropId('briar_hollow_sawmill', 'board_rack'),
+      },
       { prop: 'sawdust', x: 3, y: 2 },
       { prop: 'sawdust', x: 4, y: 4 },
     ],
   },
   {
     // The militia's post, beside the gate and facing the main street.
-    id: 'guardhouse',
-    name: 'Guardhouse',
+    id: 'briar_hollow_guardhouse',
     rect: { x: 31, y: 38, w: 7, h: 6 },
     doorways: [{ side: 'west', offset: 2, width: 1 }],
     floor: 'planks',
@@ -626,147 +710,230 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
       { x: 3, y: 2 },
     ],
     furniture: [
-      { prop: 'table', x: 3, y: 1, contractSpotId: contractPropId('guardhouse', 'table') },
+      {
+        prop: 'table',
+        x: 3,
+        y: 1,
+        contractSpotId: contractPropId('briar_hollow_guardhouse', 'table'),
+      },
       {
         prop: 'weapon_rack',
         x: 5,
         y: 1,
-        contractSpotId: contractPropId('guardhouse', 'weapon_rack'),
+        contractSpotId: contractPropId('briar_hollow_guardhouse', 'weapon_rack'),
       },
-      { prop: 'bunk', x: 4, y: 3, contractSpotId: contractPropId('guardhouse', 'bunk_a') },
-      { prop: 'bunk', x: 5, y: 3, contractSpotId: contractPropId('guardhouse', 'bunk_b') },
+      {
+        prop: 'bunk',
+        x: 4,
+        y: 3,
+        contractSpotId: contractPropId('briar_hollow_guardhouse', 'bunk_a'),
+      },
+      {
+        prop: 'bunk',
+        x: 5,
+        y: 3,
+        contractSpotId: contractPropId('briar_hollow_guardhouse', 'bunk_b'),
+      },
     ],
   },
   {
     // Merrit.
-    id: 'farmhouse',
-    name: 'Roottail Farmhouse',
+    id: 'briar_hollow_farmhouse',
     rect: { x: 29, y: 8, w: 7, h: 6 },
     doorways: [{ side: 'south', offset: 3, width: 1 }],
     floor: 'planks',
     occupantAnchors: [{ x: 3, y: 2 }],
     furniture: [
-      { prop: 'bed', x: 1, y: 1, contractSpotId: contractPropId('farmhouse', 'bed') },
-      { prop: 'table', x: 3, y: 1, contractSpotId: contractPropId('farmhouse', 'table') },
+      { prop: 'bed', x: 1, y: 1, contractSpotId: contractPropId('briar_hollow_farmhouse', 'bed') },
+      {
+        prop: 'table',
+        x: 3,
+        y: 1,
+        contractSpotId: contractPropId('briar_hollow_farmhouse', 'table'),
+      },
       {
         prop: 'seed_sacks',
         x: 5,
         y: 1,
-        contractSpotId: contractPropId('farmhouse', 'seed_platform'),
+        contractSpotId: contractPropId('briar_hollow_farmhouse', 'seed_platform'),
       },
       { prop: 'seed_sacks', x: 5, y: 2 },
-      { prop: 'hoe_rack', x: 5, y: 4, contractSpotId: contractPropId('farmhouse', 'hoe_rack') },
+      {
+        prop: 'hoe_rack',
+        x: 5,
+        y: 4,
+        contractSpotId: contractPropId('briar_hollow_farmhouse', 'hoe_rack'),
+      },
     ],
   },
   {
     // The cows' shelter. Open on the east, facing the pasture gate, so a cow can
     // walk from the paddock straight in under cover.
-    id: 'barn',
-    name: 'Barn',
+    id: 'briar_hollow_barn',
     rect: BARN_RECT,
     doorways: [{ side: 'east', offset: 2, width: 3 }],
     floor: 'working',
     occupantAnchors: [{ x: 4, y: 3 }],
     furniture: [
-      { prop: 'hay_bale', x: 1, y: 1, contractSpotId: contractPropId('barn', 'hay_rack') },
+      {
+        prop: 'hay_bale',
+        x: 1,
+        y: 1,
+        contractSpotId: contractPropId('briar_hollow_barn', 'hay_rack'),
+      },
       { prop: 'hay_bale', x: 2, y: 1 },
       { prop: 'hay_bale', x: 1, y: 2 },
       { prop: 'scythe_pegs', x: 5, y: 1 },
-      { prop: 'water_trough', x: 3, y: 5, contractSpotId: contractPropId('barn', 'trough') },
-      { prop: 'feed_bin', x: 1, y: 5, contractSpotId: contractPropId('barn', 'feed_bin') },
+      {
+        prop: 'water_trough',
+        x: 3,
+        y: 5,
+        contractSpotId: contractPropId('briar_hollow_barn', 'trough'),
+      },
+      {
+        prop: 'feed_bin',
+        x: 1,
+        y: 5,
+        contractSpotId: contractPropId('briar_hollow_barn', 'feed_bin'),
+      },
     ],
   },
   {
     // Nella.
-    id: 'home_nella',
-    name: 'Softstep Cottage',
+    id: 'briar_hollow_seamstress_cottage',
     rect: { x: 39, y: 38, w: 6, h: 5 },
     doorways: [{ side: 'south', offset: 2, width: 1 }],
     floor: 'planks',
     occupantAnchors: [{ x: 3, y: 2 }],
     furniture: [
-      { prop: 'bed', x: 1, y: 1, contractSpotId: contractPropId('home_nella', 'bed') },
-      { prop: 'loom', x: 3, y: 1, contractSpotId: contractPropId('home_nella', 'loom') },
+      {
+        prop: 'bed',
+        x: 1,
+        y: 1,
+        contractSpotId: contractPropId('briar_hollow_seamstress_cottage', 'bed'),
+      },
+      {
+        prop: 'loom',
+        x: 3,
+        y: 1,
+        contractSpotId: contractPropId('briar_hollow_seamstress_cottage', 'loom'),
+      },
       {
         prop: 'fabric_bolts',
         x: 4,
         y: 3,
-        contractSpotId: contractPropId('home_nella', 'bolt_shelf'),
+        contractSpotId: contractPropId('briar_hollow_seamstress_cottage', 'bolt_shelf'),
       },
       { prop: 'rug', x: 2, y: 2 },
     ],
   },
   {
     // Cricket.
-    id: 'home_cricket',
-    name: 'Mudwhisk Cottage',
+    id: 'briar_hollow_well_keeper_cottage',
     rect: { x: 47, y: 38, w: 6, h: 5 },
     doorways: [{ side: 'west', offset: 2, width: 1 }],
     floor: 'planks',
     occupantAnchors: [{ x: 3, y: 2 }],
     furniture: [
-      { prop: 'bed', x: 4, y: 1, contractSpotId: contractPropId('home_cricket', 'bed') },
+      {
+        prop: 'bed',
+        x: 4,
+        y: 1,
+        contractSpotId: contractPropId('briar_hollow_well_keeper_cottage', 'bed'),
+      },
       {
         prop: 'tool_pegs',
         x: 1,
         y: 1,
-        contractSpotId: contractPropId('home_cricket', 'tool_pegs'),
+        contractSpotId: contractPropId('briar_hollow_well_keeper_cottage', 'tool_pegs'),
       },
-      { prop: 'bucket', x: 2, y: 3, contractSpotId: contractPropId('home_cricket', 'bucket') },
+      {
+        prop: 'bucket',
+        x: 2,
+        y: 3,
+        contractSpotId: contractPropId('briar_hollow_well_keeper_cottage', 'bucket'),
+      },
       { prop: 'rug', x: 2, y: 2 },
     ],
   },
   {
     // Wicker: a workshop-home, with the half-built cart outside.
-    id: 'home_wicker',
-    name: 'Longtooth Workshop',
+    id: 'briar_hollow_carpenter_workshop',
     rect: { x: 9, y: 38, w: 7, h: 5 },
     doorways: [{ side: 'north', offset: 3, width: 1 }],
     floor: 'planks',
     occupantAnchors: [{ x: 4, y: 2 }],
     furniture: [
-      { prop: 'bed', x: 1, y: 1, contractSpotId: contractPropId('home_wicker', 'bed') },
-      { prop: 'workbench', x: 4, y: 3, contractSpotId: contractPropId('home_wicker', 'workbench') },
+      {
+        prop: 'bed',
+        x: 1,
+        y: 1,
+        contractSpotId: contractPropId('briar_hollow_carpenter_workshop', 'bed'),
+      },
+      {
+        prop: 'workbench',
+        x: 4,
+        y: 3,
+        contractSpotId: contractPropId('briar_hollow_carpenter_workshop', 'workbench'),
+      },
       {
         prop: 'board_stack',
         x: 5,
         y: 1,
-        contractSpotId: contractPropId('home_wicker', 'board_stack'),
+        contractSpotId: contractPropId('briar_hollow_carpenter_workshop', 'board_stack'),
       },
       { prop: 'rug', x: 2, y: 2 },
     ],
   },
   {
     // Midge, with the lamp shed.
-    id: 'home_midge',
-    name: 'Candleear Cottage',
+    id: 'briar_hollow_lamplighter_cottage',
     rect: { x: 55, y: 38, w: 6, h: 5 },
     doorways: [{ side: 'north', offset: 2, width: 1 }],
     floor: 'planks',
     occupantAnchors: [{ x: 3, y: 2 }],
     furniture: [
-      { prop: 'bed', x: 4, y: 2, contractSpotId: contractPropId('home_midge', 'bed') },
+      {
+        prop: 'bed',
+        x: 4,
+        y: 2,
+        contractSpotId: contractPropId('briar_hollow_lamplighter_cottage', 'bed'),
+      },
       {
         prop: 'lamp_shelf',
         x: 1,
         y: 2,
-        contractSpotId: contractPropId('home_midge', 'lamp_shelf'),
+        contractSpotId: contractPropId('briar_hollow_lamplighter_cottage', 'lamp_shelf'),
       },
-      { prop: 'oil_cans', x: 1, y: 3, contractSpotId: contractPropId('home_midge', 'oil_rack') },
+      {
+        prop: 'oil_cans',
+        x: 1,
+        y: 3,
+        contractSpotId: contractPropId('briar_hollow_lamplighter_cottage', 'oil_rack'),
+      },
       { prop: 'rug', x: 2, y: 3 },
     ],
   },
   {
     // Garn, out in the quarry.
-    id: 'garn_hut',
-    name: 'Quarry Hut',
+    id: 'briar_hollow_quarry_hut',
     rect: { x: 57, y: 55, w: 5, h: 4 },
     doorways: [{ side: 'west', offset: 1, width: 1 }],
     floor: 'planks',
     occupantAnchors: [{ x: 2, y: 2 }],
     furniture: [
-      { prop: 'stool', x: 3, y: 1, contractSpotId: contractPropId('garn_hut', 'stool') },
-      { prop: 'pick_rack', x: 3, y: 2, contractSpotId: contractPropId('garn_hut', 'pick_rack') },
+      {
+        prop: 'stool',
+        x: 3,
+        y: 1,
+        contractSpotId: contractPropId('briar_hollow_quarry_hut', 'stool'),
+      },
+      {
+        prop: 'pick_rack',
+        x: 3,
+        y: 2,
+        contractSpotId: contractPropId('briar_hollow_quarry_hut', 'pick_rack'),
+      },
     ],
   },
 ];
@@ -778,107 +945,110 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
  * doorways; floor rects stay off furniture, rugs and threshold tiles. The
  * quarry hut's `step` lies just outside its west door, on open ground.
  */
-export const BRIAR_HOLLOW_CONTRACT_AREAS: Readonly<Record<VillageBuildingId, ContractAreaRecord>> =
-  {
-    hall: {
-      north_wall: { kind: 'wall', x: 2, y: 0, w: 4, h: 1 },
-      floor: { kind: 'floor', x: 7, y: 4, w: 3, h: 2 },
-      threshold: { kind: 'doorway', x: 5, y: 7, w: 2, h: 1 },
-    },
-    forge: {
-      back_wall: { kind: 'wall', x: 2, y: 0, w: 4, h: 1 },
-      walkway: { kind: 'floor', x: 2, y: 3, w: 3, h: 2 },
-      awning: { kind: 'open_side', x: 3, y: 6, w: 3, h: 1 },
-    },
-    cookhouse: {
-      north_wall: { kind: 'wall', x: 3, y: 0, w: 4, h: 1 },
-      floor: { kind: 'floor', x: 3, y: 3, w: 3, h: 2 },
-      hearth_apron: { kind: 'floor', x: 1, y: 2, w: 2, h: 2 },
-      east_door: { kind: 'doorway', x: 9, y: 3, w: 1, h: 1 },
-    },
-    infirmary: {
-      north_wall: { kind: 'wall', x: 2, y: 0, w: 3, h: 1 },
-      floor: { kind: 'floor', x: 2, y: 2, w: 2, h: 2 },
-      wash_floor: { kind: 'floor', x: 5, y: 3, w: 2, h: 1 },
-    },
-    store: {
-      floor: { kind: 'floor', x: 3, y: 3, w: 2, h: 2 },
-      north_wall: { kind: 'wall', x: 2, y: 0, w: 4, h: 1 },
-      rat_floor: { kind: 'floor', x: 5, y: 1, w: 2, h: 2 },
-    },
-    workshop: {
-      north_wall: { kind: 'wall', x: 2, y: 0, w: 3, h: 1 },
-      floor: { kind: 'floor', x: 1, y: 4, w: 2, h: 2 },
-      test_pad: { kind: 'floor', x: 5, y: 3, w: 2, h: 2 },
-      threshold: { kind: 'doorway', x: 0, y: 3, w: 1, h: 1 },
-    },
-    sawmill: {
-      south_wall: { kind: 'wall', x: 3, y: 5, w: 4, h: 1 },
-      saw_flags: { kind: 'floor', x: 4, y: 2, w: 2, h: 2 },
-      loading_floor: { kind: 'floor', x: 6, y: 1, w: 3, h: 1 },
-      hoist: { kind: 'open_side', x: 1, y: 0, w: 8, h: 1 },
-      west_wall: { kind: 'wall', x: 0, y: 2, w: 1, h: 3 },
-      east_wall: { kind: 'wall', x: 9, y: 2, w: 1, h: 3 },
-    },
-    guardhouse: {
-      north_wall: { kind: 'wall', x: 2, y: 0, w: 3, h: 1 },
-      floor: { kind: 'floor', x: 1, y: 3, w: 3, h: 2 },
-      entry_flags: { kind: 'floor', x: 1, y: 1, w: 2, h: 2 },
-      west_door: { kind: 'doorway', x: 0, y: 2, w: 1, h: 1 },
-    },
-    farmhouse: {
-      north_wall: { kind: 'wall', x: 2, y: 0, w: 3, h: 1 },
-      floor: { kind: 'floor', x: 1, y: 3, w: 2, h: 2 },
-      door_flags: { kind: 'floor', x: 3, y: 3, w: 2, h: 2 },
-      west_wall: { kind: 'wall', x: 0, y: 2, w: 1, h: 3 },
-    },
-    barn: {
-      north_wall: { kind: 'wall', x: 2, y: 0, w: 3, h: 1 },
-      stall_floor: { kind: 'floor', x: 2, y: 2, w: 3, h: 2 },
-      barn_door: { kind: 'open_side', x: 8, y: 2, w: 1, h: 3 },
-      drain: { kind: 'floor', x: 5, y: 4, w: 2, h: 2 },
-      south_wall: { kind: 'wall', x: 3, y: 6, w: 3, h: 1 },
-    },
-    home_nella: {
-      north_wall: { kind: 'wall', x: 2, y: 0, w: 3, h: 1 },
-      floor: { kind: 'floor', x: 3, y: 2, w: 2, h: 1 },
-      threshold: { kind: 'doorway', x: 2, y: 4, w: 1, h: 1 },
-      west_wall: { kind: 'wall', x: 0, y: 1, w: 1, h: 3 },
-      east_wall: { kind: 'wall', x: 5, y: 1, w: 1, h: 3 },
-    },
-    home_cricket: {
-      north_wall: { kind: 'wall', x: 2, y: 0, w: 3, h: 1 },
-      floor: { kind: 'floor', x: 2, y: 1, w: 2, h: 1 },
-      west_door: { kind: 'doorway', x: 0, y: 2, w: 1, h: 1 },
-      east_wall: { kind: 'wall', x: 5, y: 1, w: 1, h: 3 },
-      south_wall: { kind: 'wall', x: 2, y: 4, w: 3, h: 1 },
-    },
-    home_wicker: {
-      north_wall: { kind: 'wall', x: 4, y: 0, w: 2, h: 1 },
-      floor: { kind: 'floor', x: 3, y: 1, w: 2, h: 2 },
-      threshold: { kind: 'doorway', x: 3, y: 0, w: 1, h: 1 },
-      west_wall: { kind: 'wall', x: 0, y: 1, w: 1, h: 3 },
-      east_wall: { kind: 'wall', x: 6, y: 1, w: 1, h: 3 },
-    },
-    home_midge: {
-      north_wall: { kind: 'wall', x: 3, y: 0, w: 2, h: 1 },
-      floor: { kind: 'floor', x: 2, y: 1, w: 2, h: 2 },
-      threshold: { kind: 'doorway', x: 2, y: 0, w: 1, h: 1 },
-      east_wall: { kind: 'wall', x: 5, y: 1, w: 1, h: 3 },
-      west_wall: { kind: 'wall', x: 0, y: 1, w: 1, h: 3 },
-    },
-    garn_hut: {
-      north_wall: { kind: 'wall', x: 1, y: 0, w: 3, h: 1 },
-      floor: { kind: 'floor', x: 1, y: 1, w: 2, h: 2 },
-      west_door: { kind: 'doorway', x: 0, y: 1, w: 1, h: 1 },
-      east_wall: { kind: 'wall', x: 4, y: 1, w: 1, h: 2 },
-      south_wall: { kind: 'wall', x: 1, y: 3, w: 3, h: 1 },
-      step: { kind: 'floor', x: -1, y: 1, w: 1, h: 1 },
-    },
-  };
+export const BRIAR_HOLLOW_CONTRACT_AREAS: Readonly<
+  Record<BriarHollowBuildingId, ContractAreaRecord>
+> = {
+  briar_hollow_hall: {
+    north_wall: { kind: 'wall', x: 2, y: 0, w: 4, h: 1 },
+    floor: { kind: 'floor', x: 7, y: 4, w: 3, h: 2 },
+    threshold: { kind: 'doorway', x: 5, y: 7, w: 2, h: 1 },
+  },
+  briar_hollow_forge: {
+    back_wall: { kind: 'wall', x: 2, y: 0, w: 4, h: 1 },
+    walkway: { kind: 'floor', x: 2, y: 3, w: 3, h: 2 },
+    awning: { kind: 'open_side', x: 3, y: 6, w: 3, h: 1 },
+  },
+  briar_hollow_cookhouse: {
+    north_wall: { kind: 'wall', x: 3, y: 0, w: 4, h: 1 },
+    floor: { kind: 'floor', x: 3, y: 3, w: 3, h: 2 },
+    hearth_apron: { kind: 'floor', x: 1, y: 2, w: 2, h: 2 },
+    east_door: { kind: 'doorway', x: 9, y: 3, w: 1, h: 1 },
+  },
+  briar_hollow_infirmary: {
+    north_wall: { kind: 'wall', x: 2, y: 0, w: 3, h: 1 },
+    floor: { kind: 'floor', x: 2, y: 2, w: 2, h: 2 },
+    wash_floor: { kind: 'floor', x: 5, y: 3, w: 2, h: 1 },
+  },
+  briar_hollow_store: {
+    floor: { kind: 'floor', x: 3, y: 3, w: 2, h: 2 },
+    north_wall: { kind: 'wall', x: 2, y: 0, w: 4, h: 1 },
+    rat_floor: { kind: 'floor', x: 5, y: 1, w: 2, h: 2 },
+  },
+  briar_hollow_workshop: {
+    north_wall: { kind: 'wall', x: 2, y: 0, w: 3, h: 1 },
+    floor: { kind: 'floor', x: 1, y: 4, w: 2, h: 2 },
+    test_pad: { kind: 'floor', x: 5, y: 3, w: 2, h: 2 },
+    threshold: { kind: 'doorway', x: 0, y: 3, w: 1, h: 1 },
+  },
+  briar_hollow_sawmill: {
+    south_wall: { kind: 'wall', x: 3, y: 5, w: 4, h: 1 },
+    saw_flags: { kind: 'floor', x: 4, y: 2, w: 2, h: 2 },
+    loading_floor: { kind: 'floor', x: 6, y: 1, w: 3, h: 1 },
+    hoist: { kind: 'open_side', x: 1, y: 0, w: 8, h: 1 },
+    west_wall: { kind: 'wall', x: 0, y: 2, w: 1, h: 3 },
+    east_wall: { kind: 'wall', x: 9, y: 2, w: 1, h: 3 },
+  },
+  briar_hollow_guardhouse: {
+    north_wall: { kind: 'wall', x: 2, y: 0, w: 3, h: 1 },
+    floor: { kind: 'floor', x: 1, y: 3, w: 3, h: 2 },
+    entry_flags: { kind: 'floor', x: 1, y: 1, w: 2, h: 2 },
+    west_door: { kind: 'doorway', x: 0, y: 2, w: 1, h: 1 },
+  },
+  briar_hollow_farmhouse: {
+    north_wall: { kind: 'wall', x: 2, y: 0, w: 3, h: 1 },
+    floor: { kind: 'floor', x: 1, y: 3, w: 2, h: 2 },
+    door_flags: { kind: 'floor', x: 3, y: 3, w: 2, h: 2 },
+    west_wall: { kind: 'wall', x: 0, y: 2, w: 1, h: 3 },
+  },
+  briar_hollow_barn: {
+    north_wall: { kind: 'wall', x: 2, y: 0, w: 3, h: 1 },
+    stall_floor: { kind: 'floor', x: 2, y: 2, w: 3, h: 2 },
+    barn_door: { kind: 'open_side', x: 8, y: 2, w: 1, h: 3 },
+    drain: { kind: 'floor', x: 5, y: 4, w: 2, h: 2 },
+    south_wall: { kind: 'wall', x: 3, y: 6, w: 3, h: 1 },
+  },
+  briar_hollow_seamstress_cottage: {
+    north_wall: { kind: 'wall', x: 2, y: 0, w: 3, h: 1 },
+    floor: { kind: 'floor', x: 3, y: 2, w: 2, h: 1 },
+    threshold: { kind: 'doorway', x: 2, y: 4, w: 1, h: 1 },
+    west_wall: { kind: 'wall', x: 0, y: 1, w: 1, h: 3 },
+    east_wall: { kind: 'wall', x: 5, y: 1, w: 1, h: 3 },
+  },
+  briar_hollow_well_keeper_cottage: {
+    north_wall: { kind: 'wall', x: 2, y: 0, w: 3, h: 1 },
+    floor: { kind: 'floor', x: 2, y: 1, w: 2, h: 1 },
+    west_door: { kind: 'doorway', x: 0, y: 2, w: 1, h: 1 },
+    east_wall: { kind: 'wall', x: 5, y: 1, w: 1, h: 3 },
+    south_wall: { kind: 'wall', x: 2, y: 4, w: 3, h: 1 },
+  },
+  briar_hollow_carpenter_workshop: {
+    north_wall: { kind: 'wall', x: 4, y: 0, w: 2, h: 1 },
+    floor: { kind: 'floor', x: 3, y: 1, w: 2, h: 2 },
+    threshold: { kind: 'doorway', x: 3, y: 0, w: 1, h: 1 },
+    west_wall: { kind: 'wall', x: 0, y: 1, w: 1, h: 3 },
+    east_wall: { kind: 'wall', x: 6, y: 1, w: 1, h: 3 },
+  },
+  briar_hollow_lamplighter_cottage: {
+    north_wall: { kind: 'wall', x: 3, y: 0, w: 2, h: 1 },
+    floor: { kind: 'floor', x: 2, y: 1, w: 2, h: 2 },
+    threshold: { kind: 'doorway', x: 2, y: 0, w: 1, h: 1 },
+    east_wall: { kind: 'wall', x: 5, y: 1, w: 1, h: 3 },
+    west_wall: { kind: 'wall', x: 0, y: 1, w: 1, h: 3 },
+  },
+  briar_hollow_quarry_hut: {
+    north_wall: { kind: 'wall', x: 1, y: 0, w: 3, h: 1 },
+    floor: { kind: 'floor', x: 1, y: 1, w: 2, h: 2 },
+    west_door: { kind: 'doorway', x: 0, y: 1, w: 1, h: 1 },
+    east_wall: { kind: 'wall', x: 4, y: 1, w: 1, h: 2 },
+    south_wall: { kind: 'wall', x: 1, y: 3, w: 3, h: 1 },
+    step: { kind: 'floor', x: -1, y: 1, w: 1, h: 1 },
+  },
+};
 
 /** The buildings that stand inside the palisade — every one but the quarry hut. */
-export const OUTSIDE_BUILDINGS: ReadonlySet<VillageBuildingId> = new Set(['garn_hut']);
+export const OUTSIDE_BUILDINGS: ReadonlySet<BriarHollowBuildingId> = new Set([
+  'briar_hollow_quarry_hut',
+]);
 
 /** The tiles of a doorway, in site coordinates. */
 export function doorwayTiles(rect: TileRect, spec: DoorwaySpec): TilePoint[] {
@@ -1259,7 +1429,7 @@ export const DISTRICTS: ReadonlyArray<DistrictTemplate> = [
  * are listed in `OPEN_AIR_ANCHORS`.
  */
 export type VillagerAnchorKind =
-  | VillageBuildingId
+  | BriarHollowBuildingId
   | 'square'
   | 'well'
   | 'bench'
@@ -1288,7 +1458,7 @@ export const HALL_SHELTER_SPOTS: ReadonlyArray<TilePoint> = [
 
 /** Open-air anchors, in site coordinates. Each is a walkable tile. */
 export const OPEN_AIR_ANCHORS: Readonly<
-  Record<Exclude<VillagerAnchorKind, VillageBuildingId | 'homes' | 'hall_shelter'>, TilePoint[]>
+  Record<Exclude<VillagerAnchorKind, BriarHollowBuildingId | 'homes' | 'hall_shelter'>, TilePoint[]>
 > = {
   square: [
     { x: 26, y: 25 },

@@ -18,10 +18,14 @@
  * `interiorHostiles.ts` states the arrangement.
  */
 
-import type { AnchorQuestProgress } from '../core/quests/AnchorQuestProgress';
+import {
+  anchorErrandGivenBy,
+  anchorErrandRoom,
+  type AnchorQuestProgress,
+} from '../core/quests/AnchorQuestProgress';
 import type { AudioManager } from '../audio/AudioManager';
 import type { GameMap } from '../map/GameMap';
-import type { BuildingName } from '../map/buildingEntry';
+import type { BuildingId } from '../map/buildingIds';
 import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
 import type { ResidentId } from './townResidents';
@@ -62,12 +66,7 @@ import {
   LORI_REQUEST_TERMS,
   LORI_REWARD,
 } from '../dialog/scripts/scenes/anchor';
-import {
-  LORI_COTTAGE_NAME,
-  SKY_TEMPLE_NAME,
-  lorisWreckMended,
-  templeVerminHoldRoom,
-} from './interiorStoryOwnership';
+import { lorisWreckMended, templeVerminHoldRoom } from './interiorStoryOwnership';
 
 /** Her worktable, its chair and one wall shelf. */
 const LORI_REPAIRS_REQUIRED = 3;
@@ -162,7 +161,7 @@ export class AnchorInteriorSystem {
     null;
 
   private constructor(
-    private readonly buildingName: BuildingName,
+    private readonly buildingId: BuildingId,
     private readonly progress: AnchorQuestProgress,
     private readonly map: GameMap,
     private readonly crawlers: () => ReadonlyArray<Player>,
@@ -171,14 +170,15 @@ export class AnchorInteriorSystem {
     private readonly conversation: Conversation,
     private readonly audio: AudioManager | null,
   ) {
-    if (this.buildingName === LORI_COTTAGE_NAME) {
+    const errand = anchorErrandRoom(this.buildingId);
+    if (errand === 'lori') {
       this.breakLorisFurniture();
       // The pile is placed on the step starting, but the room is torn down and
       // rebuilt on every door open — so a re-entry mid-step must put it back, or
       // a player who spent every board before leaving can never earn another.
       if (this.progress.lori === 'in_progress') this.placeWoodPile();
     }
-    if (this.buildingName === SKY_TEMPLE_NAME) this.restockNave();
+    if (errand === 'temple') this.restockNave();
   }
 
   /**
@@ -191,7 +191,7 @@ export class AnchorInteriorSystem {
    * building gains a storey.
    */
   static forBuilding(
-    buildingName: BuildingName,
+    buildingId: BuildingId,
     floor: number,
     progress: AnchorQuestProgress,
     map: GameMap,
@@ -202,9 +202,9 @@ export class AnchorInteriorSystem {
     audio: AudioManager | null,
   ): AnchorInteriorSystem | null {
     if (floor !== 0) return null;
-    if (buildingName !== LORI_COTTAGE_NAME && buildingName !== SKY_TEMPLE_NAME) return null;
+    if (anchorErrandRoom(buildingId) === null) return null;
     return new AnchorInteriorSystem(
-      buildingName,
+      buildingId,
       progress,
       map,
       crawlers,
@@ -331,7 +331,7 @@ export class AnchorInteriorSystem {
    * `TEMPLE_VERMIN_COUNT`, or walking out and back in would restock the nave.
    */
   private restockNave(): void {
-    if (!templeVerminHoldRoom(this.buildingName, this.progress)) return;
+    if (!templeVerminHoldRoom(this.buildingId, this.progress)) return;
     this.spawnVermin(this.progress.templeVerminRemaining);
     // Read back what actually found floor to stand on rather than trusting the
     // record: a nave with no room left for any of them must not leave the step
@@ -678,13 +678,14 @@ export class AnchorInteriorSystem {
   tryOpenDialog(residentId: ResidentId, talker: Player): boolean {
     if (this.conversationOwned) return false;
     if (this.progress.status !== 'active') return false;
-    if (residentId === 'old_lori' && this.buildingName === LORI_COTTAGE_NAME) {
-      return this.tryOpenLoriDialog(talker);
+    switch (anchorErrandGivenBy(residentId, this.buildingId)) {
+      case 'lori':
+        return this.tryOpenLoriDialog(talker);
+      case 'temple':
+        return this.tryOpenAvielDialog(talker);
+      case null:
+        return false;
     }
-    if (residentId === 'deacon_aviel' && this.buildingName === SKY_TEMPLE_NAME) {
-      return this.tryOpenAvielDialog(talker);
-    }
-    return false;
   }
 
   private tryOpenLoriDialog(talker: Player): boolean {
@@ -783,13 +784,8 @@ export class AnchorInteriorSystem {
    */
   markerFor(residentId: ResidentId): NPCMarkerType | null {
     if (this.progress.status !== 'active') return null;
-    if (residentId === 'old_lori' && this.buildingName === LORI_COTTAGE_NAME) {
-      return markerForStep(this.progress.lori);
-    }
-    if (residentId === 'deacon_aviel' && this.buildingName === SKY_TEMPLE_NAME) {
-      return markerForStep(this.progress.temple);
-    }
-    return null;
+    const errand = anchorErrandGivenBy(residentId, this.buildingId);
+    return errand === null ? null : markerForStep(this.progress[errand]);
   }
 
   // ── Rendering ─────────────────────────────────────────────────────────────

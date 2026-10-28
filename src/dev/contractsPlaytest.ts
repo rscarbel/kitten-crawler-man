@@ -7,10 +7,10 @@
 
 import { BLUEPRINTS_GRAIN_TARGET } from '../core/quests/blueprintsQuestPhase';
 import type { BriarHollowState } from '../core/quests/briarHollowState';
-import type { VillageBuildingId } from '../map/overworld/briarHollowLayout';
 import { issueContract } from '../systems/constructionContracts/contractGenerator';
 import { blueprintsPlaytestState } from './blueprintsPlaytest';
 import type { PlaytestContractsSetup } from './playtestPresets';
+import type { BriarHollowBuildingId } from '../map/buildingIds';
 
 /**
  * Any seed draws a valid contract; a fixed one keeps the preset's spot set the
@@ -31,7 +31,7 @@ export function contractsPlaytestState(setup: PlaytestContractsSetup): BriarHoll
   return state;
 }
 
-function issueAlmostFinished(state: BriarHollowState, buildingId: VillageBuildingId): void {
+function issueAlmostFinished(state: BriarHollowState, buildingId: BriarHollowBuildingId): void {
   const contracts = state.contracts;
   contracts.introSeen = true;
   const active = issueContract(

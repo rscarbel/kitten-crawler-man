@@ -36,8 +36,11 @@ import {
   tileRect,
   tileRow,
   type TownInteriorLayoutEntry,
+  statefulProp,
+  contractTargetId,
 } from './types';
 import type { ContractAreaRecord } from '../../contractAreas';
+import type { PlannedBuildingId } from '../../buildingIds';
 
 /** The flash wall's two design sets, so its two runs never repeat a sheet. */
 const FLASH_SET_WEST = 0;
@@ -50,7 +53,7 @@ const WAITING_CARPET_COLOURWAY = 3;
 /** The arm lamp's reach: variant 0 reaches east, over the chair it stands west of. */
 const LAMP_REACHES_EAST = 0;
 
-const CONTRACT_SITE = 'quiet_needle';
+const CONTRACT_SITE = 'taloncrest_tattoo_parlor' satisfies PlannedBuildingId;
 const WAITING_FLOOR_SPOT_W = 3;
 const PLASTER_SPOT_W = 3;
 
@@ -109,7 +112,6 @@ export function buildQuietNeedleLayout(w: number, h: number): TownInteriorLayout
     chairRow,
     chairCol,
     chairWidth,
-    plasterCol,
   } = needleAlcove(h);
   const eastWallCol = w - 2;
   const waitingFirstRow = partitionRow + 1;
@@ -126,8 +128,6 @@ export function buildQuietNeedleLayout(w: number, h: number): TownInteriorLayout
   // alcove's only way west, and a stool anywhere else on it would cut it.
   const nimStoolCol = westCol;
   const nimStoolRow = chairRow - 1;
-  // The payout key it was first placed under, against the wall at the plaster.
-  const nimStoolId = `stool@${plasterCol},${northRow}`;
   const alcoveEastCol = zoneDividerCol - 1;
 
   // ── The back room ──
@@ -166,37 +166,37 @@ export function buildQuietNeedleLayout(w: number, h: number): TownInteriorLayout
       contractTarget(CONTRACT_SITE, 'pigment_cabinet'),
     ),
     prop(chartCol, northRow, 'feather_chart'),
-    prop(alcoveEastCol, northRow, 'crock_cluster', 1),
+    statefulProp(alcoveEastCol, northRow, 'crock_cluster', 'crock_cluster', 1),
     prop(chairCol, chairRow, 'rug_medium', 2),
     prop(chairCol, chairRow, 'ink_chair', 0, contractTarget(CONTRACT_SITE, 'ink_chair')),
-    prop(lampCol, chairRow, 'arm_lamp', LAMP_REACHES_EAST),
+    statefulProp(lampCol, chairRow, 'arm_lamp', 'arm_lamp_1', LAMP_REACHES_EAST),
     prop(trolleyCol, chairRow, 'needle_tray'),
-    prop(nimStoolCol, nimStoolRow, 'stool', 0, { id: nimStoolId }),
+    statefulProp(nimStoolCol, nimStoolRow, 'stool', 'nim_stool'),
     // The stand the design book is left open on, beside the chair, where
     // Nim works.
-    prop(alcoveEastCol, chairRow, 'side_table'),
-    prop(alcoveEastCol, workroomLastRow, 'drawer_unit'),
-    prop(alcoveEastCol - 1, workroomLastRow, 'basket', 1),
-    prop(westCol, workroomLastRow, 'jars'),
+    statefulProp(alcoveEastCol, chairRow, 'side_table', 'side_table_1'),
+    statefulProp(alcoveEastCol, workroomLastRow, 'drawer_unit', 'drawer_unit'),
+    statefulProp(alcoveEastCol - 1, workroomLastRow, 'basket', 'basket', 1),
+    statefulProp(westCol, workroomLastRow, 'jars', 'jars_1'),
   );
 
   entries.push(
-    prop(
+    statefulProp(
       grindingBenchCol,
       northRow,
       'grinding_bench',
+      contractTargetId(CONTRACT_SITE, 'grinding_bench'),
       0,
-      contractTarget(CONTRACT_SITE, 'grinding_bench'),
     ),
-    prop(grinderStoolCol, grinderStoolRow, 'stool'),
-    prop(eastWallCol - 1, northRow, 'potion_shelf'),
-    prop(eastWallCol, northRow, 'barrel'),
-    prop(eastWallCol, workroomLastRow - 2, 'sack'),
-    prop(eastWallCol, workroomLastRow - 1, 'sack', 1),
-    prop(eastWallCol, workroomLastRow, 'barrel', 1),
-    prop(backRoomFirstCol, workroomLastRow, 'crate'),
-    prop(backRoomFirstCol, workroomLastRow - 1, 'jars', 1),
-    prop(eastWallCol - 1, workroomLastRow - 1, 'open_crate'),
+    statefulProp(grinderStoolCol, grinderStoolRow, 'stool', 'stool_2'),
+    statefulProp(eastWallCol - 1, northRow, 'potion_shelf', 'potion_shelf'),
+    statefulProp(eastWallCol, northRow, 'barrel', 'barrel_1'),
+    statefulProp(eastWallCol, workroomLastRow - 2, 'sack', 'sack_1'),
+    statefulProp(eastWallCol, workroomLastRow - 1, 'sack', 'sack_2', 1),
+    statefulProp(eastWallCol, workroomLastRow, 'barrel', 'barrel_2', 1),
+    statefulProp(backRoomFirstCol, workroomLastRow, 'crate', 'crate'),
+    statefulProp(backRoomFirstCol, workroomLastRow - 1, 'jars', 'jars_2', 1),
+    statefulProp(eastWallCol - 1, workroomLastRow - 1, 'open_crate', 'open_crate'),
   );
 
   entries.push(
@@ -208,22 +208,34 @@ export function buildQuietNeedleLayout(w: number, h: number): TownInteriorLayout
       contractTarget(CONTRACT_SITE, 'flash_wall'),
     ),
     prop(eastFlashCol, waitingFirstRow, 'flash_wall', FLASH_SET_EAST),
-    prop(eastFlashLastCol + 2, waitingFirstRow, 'potted_bay'),
-    prop(eastWallCol, waitingFirstRow, 'coat_stand'),
+    statefulProp(eastFlashLastCol + 2, waitingFirstRow, 'potted_bay', 'potted_bay_1'),
+    statefulProp(eastWallCol, waitingFirstRow, 'coat_stand', 'coat_stand'),
     prop(carpetCol, carpetRow, 'rug_large', WAITING_CARPET_COLOURWAY),
-    prop(
+    statefulProp(
       westSetteeCol,
       settingRow,
       'settee',
+      contractTargetId(CONTRACT_SITE, 'settee'),
       SETTEE_VIOLET,
-      contractTarget(CONTRACT_SITE, 'settee'),
     ),
-    prop(westTableCol, tableRow, 'low_table', 0, contractTarget(CONTRACT_SITE, 'low_table')),
-    prop(eastSetteeCol, settingRow, 'settee', SETTEE_TEAL),
-    prop(eastTableCol, tableRow, 'side_table'),
-    prop(eastWallCol, settingRow, 'potted_bay'),
-    prop(westSetteeCol + TOWN_INTERIOR_PROPS.settee.footprint.w, settingRow, 'arm_lamp', 1),
-    prop(eastWallCol, southRow, 'barrel'),
+    statefulProp(
+      westTableCol,
+      tableRow,
+      'low_table',
+      contractTargetId(CONTRACT_SITE, 'low_table'),
+      0,
+    ),
+    statefulProp(eastSetteeCol, settingRow, 'settee', 'settee_2', SETTEE_TEAL),
+    statefulProp(eastTableCol, tableRow, 'side_table', 'side_table_2'),
+    statefulProp(eastWallCol, settingRow, 'potted_bay', 'potted_bay_2'),
+    statefulProp(
+      westSetteeCol + TOWN_INTERIOR_PROPS.settee.footprint.w,
+      settingRow,
+      'arm_lamp',
+      'arm_lamp_2',
+      1,
+    ),
+    statefulProp(eastWallCol, southRow, 'barrel', 'barrel_3'),
   );
 
   return entries;

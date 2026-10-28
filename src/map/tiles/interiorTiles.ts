@@ -36,7 +36,6 @@ import {
   MAP_TABLE,
   FLASH_WALL,
   PIGMENT_SHELF,
-  INK_BENCH,
   GRINDING_SLAB,
   BROKEN_TABLE,
   BROKEN_CHAIR,
@@ -906,37 +905,6 @@ export function drawInteriorTile(
       return true;
     }
 
-    // The reclining bench the needle works over: padded, with a leather
-    // headrest at the end the tattooist stands behind.
-    case INK_BENCH: {
-      drawFloorBeneath(ctx, structure, sx, sy, ts, tx, ty);
-      const joinedLeft = structure[ty]?.[tx - 1]?.type === INK_BENCH;
-      const joinedRight = structure[ty]?.[tx + 1]?.type === INK_BENCH;
-      const padTop = sy + Math.floor(ts * BENCH_TOP_FRACTION);
-      const padHeight = Math.floor(ts * BENCH_HEIGHT_FRACTION);
-      const padLeft = joinedLeft ? sx : sx + 2;
-      const padRight = joinedRight ? sx + ts : sx + ts - 2;
-
-      ctx.fillStyle = TIMBER_DARK;
-      const apronHeight = Math.floor(ts * BENCH_APRON_HEIGHT_FRACTION);
-      ctx.fillRect(padLeft, padTop + padHeight - 1, padRight - padLeft, apronHeight);
-      ctx.fillStyle = BENCH_PADDING;
-      ctx.fillRect(padLeft, padTop, padRight - padLeft, padHeight);
-      ctx.fillStyle = BENCH_SEAM;
-      ctx.fillRect(padLeft, padTop + Math.floor(padHeight / 2), padRight - padLeft, 1);
-      if (!joinedLeft) {
-        const headrestWidth = Math.floor(ts * BENCH_HEADREST_FRACTION);
-        ctx.fillStyle = BENCH_HEADREST;
-        ctx.fillRect(padLeft, padTop - 3, headrestWidth, padHeight + 3);
-        ctx.fillStyle = BENCH_HEADREST_LIGHT;
-        ctx.fillRect(padLeft, padTop - 3, headrestWidth, 1);
-        ctx.fillRect(padLeft + headrestWidth - 1, padTop - 3, 1, padHeight + 3);
-      }
-      ctx.fillStyle = BENCH_PADDING_SHEEN;
-      ctx.fillRect(padLeft, padTop, padRight - padLeft, 1);
-      return true;
-    }
-
     // Where the pigment is actually made: a stone slab with a muller, a soot pot
     // and a pestle, and a smear of what was last ground on it.
     case GRINDING_SLAB: {
@@ -1177,17 +1145,6 @@ const JAR_CORK = '#c2a878';
 const GLAZE_GLINT = 'rgba(255,255,255,0.28)';
 /** Woad, gall black and madder — the same three the shop's floor is stained with. */
 const PIGMENT_JAR_COLORS: ReadonlyArray<string> = ['#3a5a90', '#241f21', '#8e3a2e'];
-
-const BENCH_TOP_FRACTION = 0.3;
-const BENCH_HEIGHT_FRACTION = 0.34;
-const BENCH_HEADREST_FRACTION = 0.28;
-const BENCH_APRON_HEIGHT_FRACTION = 0.16;
-const BENCH_PADDING = '#6a3436';
-const BENCH_SEAM = '#4c2426';
-const BENCH_HEADREST = '#33241d';
-const BENCH_HEADREST_LIGHT = '#7a5b46';
-/** Warm rather than white: the sheen on padding is the lamp, not daylight. */
-const BENCH_PADDING_SHEEN = 'rgba(255,220,200,0.2)';
 
 const SLAB_TOP_FRACTION = 0.3;
 const SLAB_HEIGHT_FRACTION = 0.46;

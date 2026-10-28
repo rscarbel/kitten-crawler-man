@@ -187,9 +187,7 @@ function sampleChest(type: TreasureChest['type']): TreasureChest {
     unlockFrame: 0,
     sparkleFrame: 0,
     tryLockedTimer: 0,
-    guard: null,
-    bossRoomIndex: null,
-    hadMobs: false,
+    lock: { kind: 'none' },
   };
 }
 

@@ -150,7 +150,7 @@ function siteReachProblem(site: ContractSiteDef, seed: number): ReachProblem | s
       })),
     };
   }
-  const entry = world.entries.find((candidate) => candidate.name === site.buildingName);
+  const entry = world.entries.find((candidate) => candidate.id === site.buildingId);
   if (entry === undefined) return `${site.name}: no building entry on world seed ${seed}`;
   const map = generateGroundFloor(entry);
   return {

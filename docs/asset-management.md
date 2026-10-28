@@ -763,7 +763,7 @@ fewer figures to paint and cache. Fights stay as hard as they were. The tier is 
 value, `varietyTier()` in `src/core/perf/varietyTier.ts`, read when something spawns or a
 citizen picks its look:
 
-| tier | name         | enemies                                      | street crowd (human / Hawkfolk)                |
+| tier | name         | enemies                                      | street crowd (human / Hawkfolk)               |
 | ---- | ------------ | -------------------------------------------- | --------------------------------------------- |
 | 0    | Full         | every look                                   | every look / all 16                           |
 | 1    | Shared looks | each variant family wears its canonical look | one commoner, one child, other roles all / 8  |

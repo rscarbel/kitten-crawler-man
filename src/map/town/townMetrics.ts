@@ -26,6 +26,7 @@ import {
   getSpriteFootprintByKey,
 } from '../../core/spriteAssets/SpriteLoader';
 import type { BuildingKind, TilePoint, TileRect } from './townPlan';
+import { buildingDisplayName, type BuildingId } from '../buildingIds';
 
 /** Manifest key of the town's main tower, whose anchor tile carries no sprite key. */
 const MAIN_TOWER_SPRITE_KEY = 'overworld_main_tower';
@@ -54,7 +55,7 @@ export interface MeasurableOverworld {
   readonly grid: ReadonlyArray<ReadonlyArray<TileContent>>;
   readonly buildingEntries: ReadonlyArray<{
     readonly doorTile: TilePoint;
-    readonly name: string;
+    readonly id: BuildingId;
     readonly type: BuildingKind;
   }>;
   readonly townSquareCentre: TilePoint;
@@ -76,7 +77,7 @@ export interface BuildingPlot {
   readonly rect: TileRect;
   /** The full sprite art rect, including any overhang, for the `?townmap` view. */
   readonly artRect: TileRect;
-  readonly name: string;
+  readonly id: BuildingId;
   readonly doorTile: TilePoint;
 }
 
@@ -185,7 +186,7 @@ export function collectBuildingPlots(data: MeasurableOverworld): BuildingPlot[] 
     claimedEntries.add(index);
     const entry = data.buildingEntries[index];
     plots.push({
-      name: entry.name,
+      id: entry.id,
       doorTile: entry.doorTile,
       rect: building.rect,
       artRect: building.artRect,
@@ -210,7 +211,7 @@ export function measureTown(
     );
     if (distance <= farthestDoorTiles) continue;
     farthestDoorTiles = distance;
-    farthestDoorName = plot.name;
+    farthestDoorName = buildingDisplayName(plot.id);
   }
 
   const groundTypes = new Set<number>();

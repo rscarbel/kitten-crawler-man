@@ -36,7 +36,6 @@ import { level2 } from '../src/levels/level2';
 import { level3 } from '../src/levels/level3';
 import type { LevelDef } from '../src/levels/types';
 import { GameMap } from '../src/map/GameMap';
-import { STARLIGHT_TENT_NAME } from '../src/map/overworld/circusGroundsLayout';
 import { mulberry32 } from '../src/sprites/person/rng';
 import { checkCircusJourney } from './verifyHirelingLoss/circusJourney';
 import { checkDeathNotice } from './verifyHirelingLoss/deathNotice';
@@ -108,7 +107,7 @@ function checkDeskExitSaves(worldSeed: number): void {
   const label = `seed ${worldSeed}`;
   const map = buildMap(level3, worldSeed);
   const desks = map.buildingEntries.filter((entry) =>
-    interiorKeepsDesk(entry.name, 'mercenary_guild'),
+    interiorKeepsDesk(entry.id, 'mercenary_guild'),
   );
   check(
     desks.length === 1,
@@ -117,10 +116,10 @@ function checkDeskExitSaves(worldSeed: number): void {
   for (const desk of desks) {
     check(
       isInsideWallAtTile(map, returnTileOf(desk)),
-      `${label}: leaving ${desk.name} lands outside the town wall, so no save carries a new hire`,
+      `${label}: leaving ${desk.id} lands outside the town wall, so no save carries a new hire`,
     );
   }
-  const starlightTent = map.buildingEntries.find((entry) => entry.name === STARLIGHT_TENT_NAME);
+  const starlightTent = map.buildingEntries.find((entry) => entry.id === 'taloncrest_circus_tent');
   check(
     starlightTent !== undefined,
     `${label}: no Starlight Tent to stand in for an exit that does not save`,

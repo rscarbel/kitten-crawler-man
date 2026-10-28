@@ -1,3 +1,4 @@
+import type { LevelId } from './levelIds';
 import { crawlerName } from '../characters/characters';
 import { keybindings } from '../core/input/Keybindings';
 import type { LevelDef } from './types';
@@ -8,7 +9,7 @@ import type { LevelDef } from './types';
  * — the two are the same rung of the progression — but its hand-crafted map has
  * none of that floor's bosses or quests on it.
  */
-export const TUTORIAL_LEVEL_ID = 'tutorial';
+export const TUTORIAL_LEVEL_ID = 'tutorial' satisfies LevelId;
 
 export const tutorialLevel: LevelDef = {
   id: TUTORIAL_LEVEL_ID,

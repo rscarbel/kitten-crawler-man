@@ -49,9 +49,8 @@ import { speakerLines, type NonEmpty } from '../src/dialog/line';
 import type { Choice, ConversationRequest, ConversationTopic } from '../src/dialog/request';
 import { topicMenu } from '../src/dialog/topics';
 import { GameMap } from '../src/map/GameMap';
-import type { BuildingName } from '../src/map/buildingEntry';
+import type { BuildingId } from '../src/map/buildingIds';
 import { AnchorInteriorSystem } from '../src/systems/AnchorInteriorSystem';
-import { LORI_COTTAGE_NAME, SKY_TEMPLE_NAME } from '../src/systems/interiorStoryOwnership';
 import { AnchorQuestSystem } from '../src/systems/AnchorQuestSystem';
 import { RewardGrantedDialog } from '../src/ui/RewardGrantedDialog';
 import { UiRoot } from '../src/ui/core/UiRoot';
@@ -176,15 +175,15 @@ function makeVoss(progress: AnchorQuestProgress, party: Party, conversation: Con
 }
 
 function makeRoom(
-  buildingName: BuildingName,
+  buildingId: BuildingId,
   progress: AnchorQuestProgress,
   party: Party,
   conversation: Conversation,
 ): AnchorInteriorSystem | null {
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-  map.generateInterior('house', 0, buildingName, false);
+  map.generateInterior('house', 0, buildingId, false);
   return AnchorInteriorSystem.forBuilding(
-    buildingName,
+    buildingId,
     0,
     progress,
     map,
@@ -326,7 +325,7 @@ function verifyLori(): void {
   const conversation = new Conversation(null);
   const progress = activeProgress();
   const party = makeParty();
-  const room = makeRoom(LORI_COTTAGE_NAME, progress, party, conversation);
+  const room = makeRoom('taloncrest_old_lady_cottage', progress, party, conversation);
   if (room === null) {
     check(false, "Old Lori's cottage has a questline system");
     return;
@@ -349,7 +348,7 @@ function verifyLori(): void {
 
   section('Old Lori: Escape is the way out, and it agrees to nothing');
   const fresh = activeProgress();
-  const escRoom = makeRoom(LORI_COTTAGE_NAME, fresh, party, conversation);
+  const escRoom = makeRoom('taloncrest_old_lady_cottage', fresh, party, conversation);
   if (escRoom === null) return;
   escRoom.tryOpenDialog('old_lori', party.human);
   frame(rig);
@@ -365,7 +364,7 @@ function verifyAviel(): void {
   const conversation = new Conversation(null);
   const progress = activeProgress();
   const party = makeParty();
-  const room = makeRoom(SKY_TEMPLE_NAME, progress, party, conversation);
+  const room = makeRoom('taloncrest_temple', progress, party, conversation);
   if (room === null) {
     check(false, 'the Temple of the Sky has a questline system');
     return;

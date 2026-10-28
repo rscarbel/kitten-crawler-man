@@ -1,3 +1,4 @@
+import type { LevelId } from '../../levels/levelIds';
 import type { Player } from '../../Player';
 import type { JsonObject } from './json';
 import type { PlayerCharacterName } from '../../characters/characters';
@@ -35,7 +36,6 @@ export interface SemanticLocation {
   inBossArena: boolean;
   /** Index of the dungeon room the crawler stands in, when the map has rooms. */
   roomIndex?: number;
-  buildingName?: string;
 }
 
 export interface CrawlerState {
@@ -75,7 +75,7 @@ export interface QuestSummary {
 /** Slow-changing facts about the run: what `context_set` is built from. */
 export interface SessionInput {
   floorNumber: number;
-  levelId: string;
+  levelId: LevelId;
   floorName: string;
   /** Seconds left on the floor's collapse clock; absent on a floor without one. */
   levelTimerSeconds?: number;

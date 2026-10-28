@@ -162,11 +162,11 @@ export function pickContract(
 ): ContractPick | null {
   const sites = CONTRACT_SITES.filter(
     (site) =>
-      site.slug !== state.lastSiteKey && eligibility(site) && validSpotSets(site).length > 0,
+      site.buildingId !== state.lastSiteKey && eligibility(site) && validSpotSets(site).length > 0,
   );
   const site = pickFrom(rng, sites);
   if (site === undefined) return null;
-  const lastSet = ownEntry(state.lastSpotSetBySite, site.slug);
+  const lastSet = ownEntry(state.lastSpotSetBySite, site.buildingId);
   const allSets = validSpotSets(site);
   const freshSets =
     lastSet === undefined ? allSets : allSets.filter((set) => !sameSpotSet(set, lastSet));
@@ -201,8 +201,8 @@ function retireActive(state: ConstructionContractsState, active: ActiveContract)
   state.active = null;
   const site = contractSiteFor(active.site);
   if (site === undefined) return;
-  state.lastSiteKey = site.slug;
-  state.lastSpotSetBySite[site.slug] = [...active.spotIds];
+  state.lastSiteKey = site.buildingId;
+  state.lastSpotSetBySite[site.buildingId] = [...active.spotIds];
 }
 
 /**

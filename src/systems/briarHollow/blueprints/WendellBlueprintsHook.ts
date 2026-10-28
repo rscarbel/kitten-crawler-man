@@ -26,12 +26,7 @@ import type { ConversationHandle } from '../../../dialog/request';
 import type { Player } from '../../../Player';
 import type { ResidentQuestHook } from '../../residentQuestHooks';
 import type { ResidentId } from '../../townResidents';
-import {
-  grantBlueprintsItem,
-  isHeld,
-  moveBlueprintsPhase,
-  PLUMBLINE_FARM_NAME,
-} from './blueprintsProgress';
+import { grantBlueprintsItem, isHeld, moveBlueprintsPhase } from './blueprintsProgress';
 import {
   speakingCrawler,
   wendellBlueprintsReturnedPages,
@@ -40,7 +35,7 @@ import {
   wendellWaitingPages,
 } from './blueprintsDialog';
 import { playBlueprintsCue, type BlueprintsCue } from './blueprintsSoundCues';
-import type { BuildingName } from '../../../map/buildingEntry';
+import type { BuildingId } from '../../../map/buildingIds';
 
 export interface WendellBlueprintsHookDeps {
   readonly state: BriarHollowState;
@@ -79,11 +74,11 @@ export class WendellBlueprintsHook implements ResidentQuestHook {
 
   /** The hook for this room, or null anywhere but Plumbline Farm's ground floor. */
   static forBuilding(
-    buildingName: BuildingName,
+    buildingId: BuildingId,
     floor: number,
     deps: WendellBlueprintsHookDeps,
   ): WendellBlueprintsHook | null {
-    if (buildingName !== PLUMBLINE_FARM_NAME || floor !== WENDELL_FLOOR) return null;
+    if (buildingId !== 'taloncrest_builder_farm' || floor !== WENDELL_FLOOR) return null;
     return new WendellBlueprintsHook(deps);
   }
 

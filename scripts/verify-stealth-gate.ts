@@ -35,7 +35,6 @@ import { roomDoorways } from '../src/map/roomDoorways.js';
 import { tileIndex } from '../src/map/tileIndex.js';
 import { STEALTH_GATE_CLOSED, STEALTH_GATE_OPEN } from '../src/map/tileTypes.js';
 import {
-  PRISON_BUILDING_NAME,
   PRISON_DOOR_DOORWAY_CLEARANCE_TILES,
   PRISON_DOOR_SIDE_FACE_TILES,
   PRISON_DOOR_WIDTH_TILES,
@@ -392,7 +391,7 @@ function verifyDoorAndSign(
   const entry = entries.find((candidate) => candidate.type === 'prison');
   check(
     entry !== undefined &&
-      entry.name === PRISON_BUILDING_NAME &&
+      entry.id === 'level2_goblin_prison' &&
       entry.doorway.width === PRISON_DOOR_WIDTH_TILES &&
       entry.doorway.x0 === room.prisonDoor.x0 &&
       entry.doorTile.y === room.prisonDoor.approachRow,
