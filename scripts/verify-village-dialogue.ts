@@ -21,10 +21,9 @@ import {
   MIDGE,
   PIPKIN,
   TIKKA,
-  VILLAGER_IDS,
   WICKER,
-  type VillagerId,
 } from '../src/dialog/scripts/briarHollow';
+import { VILLAGER_IDS, type VillagerId } from '../src/core/quests/villagerIds';
 import type { DialogLine } from '../src/dialog/line';
 import {
   KEEP_TALKING,
@@ -51,6 +50,9 @@ import {
 import type { VillageQuestPhase } from '../src/core/quests/villageQuestPhase';
 import { GameMap } from '../src/map/GameMap';
 import { TILE_SIZE } from '../src/core/constants';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+
+useDevPlayerIdentity();
 
 let failures = 0;
 

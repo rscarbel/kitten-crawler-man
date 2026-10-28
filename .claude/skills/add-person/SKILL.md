@@ -151,7 +151,7 @@ and why the crowd is rolled from the world seed.
 - **Humans:** the looks are `TOWN_CAST_LOOKS` in `src/sprites/person/townCastLooks.ts`,
   picked by `pickTownCastLook(seed, role, tier)`, and each is painted as one `FigureDef` by
   `src/sprites/art/townCastFigure.ts`.
-  - Adults paint on **the human rig** for his movement, never in his look.
+  - Adults paint on **the human rig** for the human crawler's movement, never in a player look.
     `castHumanLook` builds each one's `HumanLook` from `RIG_LOOK` (the rig's own build in
     Dave's colours, `looks/humans/rig.ts`), with the look's own skin, hair, garment ramp
     and cut (`RIG_GARMENT_CUT` spread and overridden), expression and build. Its

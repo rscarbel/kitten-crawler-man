@@ -1,6 +1,7 @@
 /**
  * The validation gates in one command: format, typecheck (game and scripts),
- * lint, `check:ui-style`, `check:audio` and `check:spawn-funnel`, run in parallel after formatting,
+ * lint, `check:ui-style`, `check:audio`, `check:spawn-funnel` and
+ * `check:server-imports`, run in parallel after formatting,
  * one line each when they pass.
  *
  *   npm run check        the inner loop: cached lint, cached format, and the
@@ -78,6 +79,7 @@ const parallel = await Promise.all([
   runTask('check:ui-style', [bin('tsx'), 'scripts/check-ui-style.ts', '--strict']),
   runTask('check:audio', [bin('tsx'), 'scripts/check-audio.ts']),
   runTask('check:spawn-funnel', [bin('tsx'), 'scripts/check-spawn-funnel.ts']),
+  runTask('check:server-imports', [bin('tsx'), 'scripts/check-server-imports.ts']),
 ]);
 for (const result of parallel) console.log(summarize(result));
 results.push(...parallel);

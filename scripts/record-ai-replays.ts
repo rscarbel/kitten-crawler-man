@@ -34,7 +34,6 @@ import { CAROLINE_CHARACTER_NAME } from '../src/ai/characters';
 import { describeDamageSource } from '../src/ai/context/eventMapping';
 import type {
   AIContextSource,
-  CrawlerName,
   CrawlerState,
   LiveInput,
   NearbyMobState,
@@ -61,6 +60,10 @@ import { SpellSystem } from '../src/systems/SpellSystem';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
 import { aiReplayFixtureSchema, aiReplayJsonSchema, asSchemaInput } from './aiReplaySchema';
 import { PetNameBook } from '../src/core/party/petNames';
+import type { CrawlerKind } from '../src/core/skills/SkillManager';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+
+useDevPlayerIdentity();
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_AI_SERVER_DIR = '../game-server-llm';
@@ -190,9 +193,9 @@ const BOSS_ARENA: SemanticLocation = {
   roomIndex: BOSS_ROOM_INDEX,
 };
 
-function crawlerState(name: CrawlerName, maxHp: number, active: boolean): CrawlerState {
+function crawlerState(kind: CrawlerKind, maxHp: number, active: boolean): CrawlerState {
   return {
-    name,
+    kind,
     hp: maxHp,
     maxHp,
     level: PARTY_LEVEL,
@@ -294,10 +297,10 @@ async function buildWorld(id: string, title: string, description: string): Promi
     indoors: false,
   };
   const live: LiveInput = {
-    activeCrawler: crawlerName('human'),
+    activeCrawler: 'human',
     crawlers: {
-      human: crawlerState(crawlerName('human'), FULL_HP, true),
-      cat: crawlerState(crawlerName('cat'), CAT_MAX_HP, false),
+      human: crawlerState('human', FULL_HP, true),
+      cat: crawlerState('cat', CAT_MAX_HP, false),
     },
     location: CORRIDOR,
     nearbyMobs: [],
@@ -342,7 +345,7 @@ async function buildWorld(id: string, title: string, description: string): Promi
     readLive: () => structuredClone(live),
     isPartyInSafeRoom: () => live.location.inSafeRoom,
     isCrawlerInSafeRoom: () => live.location.inSafeRoom,
-    crawlerNameOf: (player) => (player === human ? crawlerName('human') : crawlerName('cat')),
+    crawlerKindOf: (player) => (player === human ? 'human' : 'cat'),
   };
   const recorder = new AIReplayRecorder({ id, title, description, source: 'scripted', now });
   adapter.setOutboundListener(recorder.record);

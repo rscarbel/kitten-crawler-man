@@ -97,6 +97,8 @@ const {
   beginFigureFrame,
   pinnedFigureFootprint,
 } = await import('../src/sprites/figure/figureFrameCache.js');
+const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js');
+useDevPlayerIdentity();
 
 const MS_PER_SECOND = 1000;
 const FRAMES_PER_SECOND = 60;

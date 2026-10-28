@@ -16,10 +16,12 @@
  * `docs/world-and-story.md` holds the voice rules and the editing guide.
  */
 
+import { crawlerDisplayName } from '../characters/characters';
 import { carolineLines } from '../dialog/caroline';
-import { defineStoryBeats } from './storyTypes';
+import { type DaveLines, defineStoryBeats } from './storyTypes';
+import type { StoryBeatId } from './storyBeatIds';
 
-export const STORY_BEATS = defineStoryBeats({
+export const STORY_BEATS = defineStoryBeats<StoryBeatId>()({
   // Tutorial
 
   tutorial_meets_dave: {
@@ -118,8 +120,9 @@ export const STORY_BEATS = defineStoryBeats({
     speaker: 'caroline',
     trigger: { kind: 'floorArrival', floor: 2 },
     requires: [],
-    message: carolineLines.message(
-      'Floor 2. Threat density is higher. Ryan, Belle: your survival probability on this floor is below my target. Raise it.',
+    message: carolineLines.deferredMessage(
+      () =>
+        `Floor 2. Threat density is higher. ${crawlerDisplayName('human')}, ${crawlerDisplayName('cat')}: your survival probability on this floor is below my target. Raise it.`,
     ),
   },
 
@@ -149,11 +152,13 @@ export const STORY_BEATS = defineStoryBeats({
     speaker: 'dave',
     trigger: { kind: 'safeRoomArrival', floor: 2, afterBossDefeated: 'krakaren_clone' },
     requires: ['floor2_dave_how_he_knows'],
-    lines: [
-      "I've seen your face when her messages come in, Ryan. She talks to you more than she ever talked to me.",
-      "I think she picked you for something. I think you're the one who's meant to change how all this ends.",
-      "Not yet, though. She doesn't hand anyone that kind of weight on day one. She'll build you up to it, a floor at a time, whether you like her methods or not.",
-    ],
+    get lines(): DaveLines {
+      return [
+        `I've seen your face when her messages come in, ${crawlerDisplayName('human')}. She talks to you more than she ever talked to me.`,
+        "I think she picked you for something. I think you're the one who's meant to change how all this ends.",
+        "Not yet, though. She doesn't hand anyone that kind of weight on day one. She'll build you up to it, a floor at a time, whether you like her methods or not.",
+      ];
+    },
   },
 
   floor2_caroline_motive: {
@@ -185,6 +190,3 @@ export const STORY_BEATS = defineStoryBeats({
     ],
   },
 });
-
-/** One beat of the story, by its key in {@link STORY_BEATS}. */
-export type StoryBeatId = keyof typeof STORY_BEATS;

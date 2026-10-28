@@ -121,6 +121,8 @@ const { environmentPaintDepth, environmentPaintedStepCount } =
 const { tileChunkBakeCount } = await import('../src/map/TileRenderer.js');
 const { setFigureCacheStatsRecording, getFigureCacheStats } =
   await import('../src/sprites/figure/figureCacheStats.js');
+const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js');
+useDevPlayerIdentity();
 
 const MS_PER_SECOND = 1000;
 const FRAMES_PER_SECOND = 60;

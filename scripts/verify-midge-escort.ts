@@ -76,6 +76,9 @@ import {
 import { garrisonGreen } from '../src/systems/briarHollow/blueprints/garrisonGreen';
 import type { BlueprintsCue } from '../src/systems/briarHollow/blueprints/blueprintsSoundCues';
 import { BLUEPRINTS_MIDGE_WAITING_HINT } from '../src/systems/briarHollow/BlueprintsQuestSystem';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+
+useDevPlayerIdentity();
 
 installCanvasGlobals();
 

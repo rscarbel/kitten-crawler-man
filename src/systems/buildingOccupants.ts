@@ -25,7 +25,7 @@ import type { TownInteriorPropId } from '../sprites/art/townInterior/townInterio
 import type { BespokeResidentFigureId } from '../creatures/bespokeResidentFigures';
 import type { AnchorKind } from './InteriorOccupantSystem';
 import { type BuildingEntry } from '../map/buildingEntry';
-import type { ResidentId } from './townResidents';
+import type { ResidentId } from '../core/state/residentIds';
 import type { CrowdSpecies, TownSpecies } from './townSpecies';
 import type { OccupantService } from './townServices';
 import type { OccupantRoutine } from './occupantRoutines';

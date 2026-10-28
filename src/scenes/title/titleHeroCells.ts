@@ -79,8 +79,12 @@ interface HeroRow {
   lastUsed: number;
 }
 
+function figureKeyPrefix(def: FigureDef): string {
+  return `${def.id}|`;
+}
+
 function rowKey(def: FigureDef, state: string): string {
-  return `${def.id}|${state}`;
+  return `${figureKeyPrefix(def)}${state}`;
 }
 
 function cellBytes(surface: CanvasSurface): number {
@@ -149,6 +153,22 @@ export class TitleHeroCells {
     this.bytes = 0;
   }
 
+  /**
+   * Lets go of every row of `def`, resident or queued: a figure the title no
+   * longer shows, such as the look a player has just chosen away from.
+   */
+  releaseFigure(def: FigureDef): void {
+    for (const [key, row] of [...this.rows]) {
+      if (row.def === def) this.release(key, row);
+    }
+    for (const key of [...this.residentKeys]) {
+      if (key.startsWith(figureKeyPrefix(def))) this.residentKeys.delete(key);
+    }
+    const kept = this.queue.filter((queued) => queued.def !== def);
+    this.queue.length = 0;
+    this.queue.push(...kept);
+  }
+
   /** Asks for a whole row ahead of its showing, baked a cell at a time by {@link bakeQueued}. */
   request(def: FigureDef, state: string): void {
     if (this.queue.some((queued) => queued.def === def && queued.state === state)) return;
@@ -163,6 +183,21 @@ export class TitleHeroCells {
   holdResident(def: FigureDef, state: string): void {
     this.residentKeys.add(rowKey(def, state));
     this.request(def, state);
+  }
+
+  /**
+   * Bakes every frame of a row at `density` now, in this call. For a moment
+   * that can afford one stall but must not stall again while it plays out.
+   */
+  bakeRowNow(def: FigureDef, state: string, density: number): void {
+    const row = this.rowFor(def, state, density);
+    row.lastUsed = this.frame;
+    const frameCount = figureFrameCount(def, state);
+    for (let frame = 0; frame < frameCount; frame++) {
+      if (row.cells.has(frame)) continue;
+      this.makeRoom(this.bakedBytes(row), row);
+      this.bake(row, frame);
+    }
   }
 
   /** Whether every frame of a row is baked at `density`, so it can play from start to end sharp and without a stall. */

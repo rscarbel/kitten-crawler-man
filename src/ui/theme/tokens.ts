@@ -22,6 +22,8 @@ export const palette = {
      */
     sunken: '#0A0D14',
     scrim: 'rgba(4, 6, 10, 0.62)',
+    /** The black a full-screen card is laid over, faded by the card's own opacity. */
+    blackout: '#000000',
   },
   border: {
     subtle: 'rgba(255, 255, 255, 0.07)',
@@ -34,6 +36,8 @@ export const palette = {
     muted: '#6C7589',
     inverse: '#0B0E14',
     disabled: '#4A5163',
+    /** Pure white, for a call to act laid over full-screen art. */
+    bright: '#FFFFFF',
   },
   accent: {
     base: '#F5B83D',
@@ -135,8 +139,6 @@ export const palette = {
    */
   caroline: {
     ground: 'rgba(4, 9, 17, 0.95)',
-    /** The title screen's frame lets the scene behind it show through. */
-    groundSheer: 'rgba(4, 9, 17, 0.74)',
     hairline: '#5ED3F0',
     bracket: '#8FE6FA',
     grid: 'rgba(94, 211, 240, 0.07)',
@@ -183,6 +185,8 @@ export const type = {
   carolineLabel: { size: 10, weight: 700, lineHeight: 14, letterSpacing: 2.2, upper: true },
   /** A quiet line that still has to read across a big screen: the title's sound hint. */
   hint: { size: 15, weight: 500, lineHeight: 20, letterSpacing: 0.4 },
+  /** A call to act over a full-screen card: the floor banner's "begin" line. */
+  prompt: { size: 18, weight: 700, lineHeight: 24 },
   /** An alarm that must be read mid-fight from across the screen: the siege's clocktower alert. */
   alarm: { size: 40, weight: 900, lineHeight: 46, letterSpacing: 1.5, upper: true },
   /**
@@ -209,6 +213,7 @@ export const condensedType: Readonly<Record<TypeRole, TypeRole>> = {
   logo: 'display',
   carolineLabel: 'carolineLabel',
   hint: 'body',
+  prompt: 'title',
   alarm: 'display',
   fanfare: 'display',
 };
@@ -241,8 +246,17 @@ export const motion = {
   /** A Caroline frame opening: the line drawn across, then the box unfolding from it. Closing runs both backwards. */
   carolineLineDraw: 120,
   carolineUnfold: 160,
-  /** One character of Caroline's text appearing: a machine pace, quicker than speech. */
-  carolineCharacter: 22,
+  /**
+   * One character of Caroline's text appearing in her toasts and announcement
+   * modals: a machine pace, about 135 characters a second.
+   */
+  carolineCharacter: 7.4,
+  /**
+   * One character of Caroline's text appearing in the dialog box: a machine
+   * pace, about ninety characters a second. Slower than her notices, which
+   * are a line or two to glance at, where a message is read through.
+   */
+  carolineSpeechCharacter: 11,
   /** How long a decoding character shows one random glyph before the next. */
   carolineScrambleStep: 34,
   carolineCursorBlink: 530,

@@ -11,6 +11,7 @@ import {
   RIG_BROW_TONE,
   RIG_EYES,
   PROFILE_BROW_DEFAULT,
+  RIG_FACE,
 } from '../../art/biped/head';
 import type { GlossRamp, Ramp } from '../../art/biped/palette';
 import { DAVE_SHOVED_UP_SLEEVE } from '../../art/biped/sleeve';
@@ -24,6 +25,7 @@ import {
   RIG_HIP_SPREAD,
   RIG_NECK_GIRTH,
   RIG_NECK_SOFTNESS,
+  TROUSERS_OWN_SEAT,
 } from '../humanLook';
 import { type LimbBuild, RIG_LIMBS } from '../../art/biped/limbs';
 
@@ -172,6 +174,8 @@ export const DAVE_LOOK: HumanLook = {
   neckSoftness: RIG_NECK_SOFTNESS,
   shoulderSpread: DAVE_SHOULDER_SPREAD,
   hipSpread: RIG_HIP_SPREAD,
+  seatFullness: TROUSERS_OWN_SEAT,
+  face: RIG_FACE,
   figureExtent: DAVE_FIGURE_EXTENT,
   baseGarments: [DAVE_JACKET, DAVE_TROUSERS, DAVE_BOOTS],
 };

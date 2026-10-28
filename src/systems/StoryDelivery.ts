@@ -10,7 +10,7 @@ import type { CarolineMessage } from '../dialog/caroline';
 import type { DialogLine } from '../dialog/line';
 import { displayPageCount } from '../dialog/Conversation';
 import { daveStoryLine } from '../dialog/scripts/dave';
-import type { StoryBeatId } from '../story/storyBeats';
+import type { StoryBeatId } from '../story/storyBeatIds';
 import {
   MAX_BEATS_PER_ARRIVAL,
   storyBeat,
@@ -21,7 +21,7 @@ import type { StoryFloor } from '../story/storyTypes';
 import type { LevelId } from '../levels/levelIds';
 import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
-import type { AdviceObjectiveId } from './daveAdvice';
+import type { AdviceObjectiveId } from '../story/adviceObjectiveIds';
 import type { CutsceneDirector } from './cutscene/CutsceneDirector';
 import type { CutsceneScript, CutsceneStep, WalkToStep } from './cutscene/cutsceneSteps';
 

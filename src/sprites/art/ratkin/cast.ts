@@ -8,7 +8,12 @@
  * cloak, Marta's sash, Midge's lantern.
  */
 
-import { VILLAGER_IDS, type VillagerId } from '../../../dialog/scripts/briarHollow';
+import {
+  SOLDIER_IDS,
+  VILLAGER_IDS,
+  type SoldierId,
+  type VillagerId,
+} from '../../../core/quests/villagerIds';
 import type { RatkinOutfit } from './outfit';
 import {
   SHIRT_HEM,
@@ -62,12 +67,9 @@ import type { Ramp } from './paint';
 export type RatkinCastId =
   VillagerId | 'elder_bracken' | 'elder_thistle' | 'child_nib' | 'child_burr';
 
-/** The four militia, who get the fighting rows. */
-export const RATKIN_SOLDIER_IDS = ['sedge', 'hobb', 'marta', 'pru'] as const;
-export type RatkinSoldierId = (typeof RATKIN_SOLDIER_IDS)[number];
-
-export function isRatkinSoldier(id: RatkinCastId): id is RatkinSoldierId {
-  return RATKIN_SOLDIER_IDS.some((soldier) => soldier === id);
+/** Whether `id` is one of the militia, who get the fighting rows. */
+export function isRatkinSoldier(id: RatkinCastId): id is SoldierId {
+  return SOLDIER_IDS.some((soldier) => soldier === id);
 }
 
 /** Shades a single colour into a three-stop ramp, for the many one-off cloths below. */

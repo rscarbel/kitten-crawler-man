@@ -73,8 +73,52 @@ const CHIN_CORNER_X = 0.44;
 const CHIN_CORNER_Y = 1.14;
 const CHIN_CONTROL_X = 0.2;
 
+/**
+ * The shape of a face, as a look draws it against the rig's skull: the jaw
+ * and chin head-on and the profile line edge-on, the hollows under the
+ * cheekbones and brow ridge, and the size of the nose, the eyes and their
+ * lashes and the colour of the lips. Head-on points are fractions of
+ * `HEAD_RX` across and `HEAD_RY` down; edge-on of `HEAD_DEPTH` and `HEAD_RY`.
+ */
+export interface FaceShape {
+  /** Where the cheek's curve is pulled out to on its way down to the jaw corner. */
+  readonly cheekControl: Pt;
+  readonly jawCorner: Pt;
+  readonly jawCornerControl: Pt;
+  readonly jawCornerEnd: Pt;
+  readonly chinCorner: Pt;
+  /** How far out the chin's curve is pulled as it rounds under. */
+  readonly chinControlX: number;
+  /** The front plane's edge on each side, temple to chin corner. */
+  readonly sidePlaneEdge: readonly Pt[];
+  /** The profile line, forehead to under the chin. */
+  readonly profileLine: readonly Pt[];
+  /** The jaw's angle edge-on, below and in front of the ear. */
+  readonly profileJawAngle: Pt;
+  /** How deep the hollow under each cheekbone is shaded, against the rig's lean one. */
+  readonly cheekHollow: number;
+  /** How deep the brow ridge's shadow over the eyes lies, against the rig's heavy brow. */
+  readonly browRidge: number;
+  /** How large the nose's marks are drawn head-on, against the rig's. */
+  readonly noseSize: number;
+  /** How large the eyes are drawn, against the rig's; their spacing is the rig's. */
+  readonly eyeSize: number;
+  /** How far the upper lashes flick out past the eye's outer corner, in eye widths; 0 draws none. */
+  readonly lashes: number;
+  /** The colour the lips are tinted toward, or null for lips of the skin's own tones. */
+  readonly lipTint: string | null;
+}
+
+/** The rig's own cheek hollows, brow ridge, nose and eyes. */
+const RIG_CHEEK_HOLLOW = 1;
+const RIG_BROW_RIDGE = 1;
+const RIG_NOSE_SIZE = 1;
+const RIG_EYE_SIZE = 1;
+/** No lashes drawn past the lid. */
+const NO_LASHES = 0;
+
 /** Traces the skull-plus-jaw silhouette seen head-on (or from behind). */
-function traceSkullFacing(ctx: Ctx): void {
+function traceSkullFacing(ctx: Ctx, face: FaceShape): void {
   ctx.beginPath();
   ctx.moveTo(-HEAD_RX, HEAD_RY * CRANIUM_SIDE_Y);
   ctx.quadraticCurveTo(-HEAD_RX, HEAD_RY * CROWN_CONTROL_Y, 0, HEAD_RY * CROWN_Y);
@@ -85,41 +129,41 @@ function traceSkullFacing(ctx: Ctx): void {
     const x = (fraction: number): number => side * HEAD_RX * fraction;
     if (side > 0) {
       ctx.quadraticCurveTo(
-        x(CHEEK_CONTROL_X),
-        HEAD_RY * CHEEK_CONTROL_Y,
-        x(JAW_CORNER_X),
-        HEAD_RY * JAW_CORNER_Y,
+        x(face.cheekControl.x),
+        HEAD_RY * face.cheekControl.y,
+        x(face.jawCorner.x),
+        HEAD_RY * face.jawCorner.y,
       );
       ctx.quadraticCurveTo(
-        x(JAW_CORNER_CONTROL_X),
-        HEAD_RY * JAW_CORNER_CONTROL_Y,
-        x(JAW_CORNER_END_X),
-        HEAD_RY * JAW_CORNER_END_Y,
+        x(face.jawCornerControl.x),
+        HEAD_RY * face.jawCornerControl.y,
+        x(face.jawCornerEnd.x),
+        HEAD_RY * face.jawCornerEnd.y,
       );
-      ctx.lineTo(x(CHIN_CORNER_X), HEAD_RY * CHIN_CORNER_Y);
+      ctx.lineTo(x(face.chinCorner.x), HEAD_RY * face.chinCorner.y);
       ctx.quadraticCurveTo(
-        x(CHIN_CONTROL_X),
+        x(face.chinControlX),
         HEAD_RY * HEAD_CHIN_DROP,
         0,
         HEAD_RY * HEAD_CHIN_DROP,
       );
     } else {
       ctx.quadraticCurveTo(
-        x(CHIN_CONTROL_X),
+        x(face.chinControlX),
         HEAD_RY * HEAD_CHIN_DROP,
-        x(CHIN_CORNER_X),
-        HEAD_RY * CHIN_CORNER_Y,
+        x(face.chinCorner.x),
+        HEAD_RY * face.chinCorner.y,
       );
-      ctx.lineTo(x(JAW_CORNER_END_X), HEAD_RY * JAW_CORNER_END_Y);
+      ctx.lineTo(x(face.jawCornerEnd.x), HEAD_RY * face.jawCornerEnd.y);
       ctx.quadraticCurveTo(
-        x(JAW_CORNER_CONTROL_X),
-        HEAD_RY * JAW_CORNER_CONTROL_Y,
-        x(JAW_CORNER_X),
-        HEAD_RY * JAW_CORNER_Y,
+        x(face.jawCornerControl.x),
+        HEAD_RY * face.jawCornerControl.y,
+        x(face.jawCorner.x),
+        HEAD_RY * face.jawCorner.y,
       );
       ctx.quadraticCurveTo(
-        x(CHEEK_CONTROL_X),
-        HEAD_RY * CHEEK_CONTROL_Y,
+        x(face.cheekControl.x),
+        HEAD_RY * face.cheekControl.y,
         -HEAD_RX,
         HEAD_RY * CRANIUM_SIDE_Y,
       );
@@ -159,27 +203,27 @@ function traceSkullBack(ctx: Ctx): void {
 }
 
 /** The underside of the jaw seen head-on, corner to corner, as an open path. */
-function traceJawEdgeFacing(ctx: Ctx): void {
-  ctx.moveTo(-HEAD_RX * JAW_CORNER_X, HEAD_RY * JAW_CORNER_Y);
+function traceJawEdgeFacing(ctx: Ctx, face: FaceShape): void {
+  ctx.moveTo(-HEAD_RX * face.jawCorner.x, HEAD_RY * face.jawCorner.y);
   ctx.quadraticCurveTo(
-    -HEAD_RX * JAW_CORNER_CONTROL_X,
-    HEAD_RY * JAW_CORNER_CONTROL_Y,
-    -HEAD_RX * JAW_CORNER_END_X,
-    HEAD_RY * JAW_CORNER_END_Y,
+    -HEAD_RX * face.jawCornerControl.x,
+    HEAD_RY * face.jawCornerControl.y,
+    -HEAD_RX * face.jawCornerEnd.x,
+    HEAD_RY * face.jawCornerEnd.y,
   );
-  ctx.lineTo(-HEAD_RX * CHIN_CORNER_X, HEAD_RY * CHIN_CORNER_Y);
+  ctx.lineTo(-HEAD_RX * face.chinCorner.x, HEAD_RY * face.chinCorner.y);
   ctx.quadraticCurveTo(
     0,
     HEAD_RY * HEAD_CHIN_DROP,
-    HEAD_RX * CHIN_CORNER_X,
-    HEAD_RY * CHIN_CORNER_Y,
+    HEAD_RX * face.chinCorner.x,
+    HEAD_RY * face.chinCorner.y,
   );
-  ctx.lineTo(HEAD_RX * JAW_CORNER_END_X, HEAD_RY * JAW_CORNER_END_Y);
+  ctx.lineTo(HEAD_RX * face.jawCornerEnd.x, HEAD_RY * face.jawCornerEnd.y);
   ctx.quadraticCurveTo(
-    HEAD_RX * JAW_CORNER_CONTROL_X,
-    HEAD_RY * JAW_CORNER_CONTROL_Y,
-    HEAD_RX * JAW_CORNER_X,
-    HEAD_RY * JAW_CORNER_Y,
+    HEAD_RX * face.jawCornerControl.x,
+    HEAD_RY * face.jawCornerControl.y,
+    HEAD_RX * face.jawCorner.x,
+    HEAD_RY * face.jawCorner.y,
   );
 }
 
@@ -225,7 +269,7 @@ function profilePoint(p: Pt): Pt {
   return pt(p.x * HEAD_DEPTH, p.y * HEAD_RY);
 }
 
-function traceSkullProfile(ctx: Ctx): void {
+function traceSkullProfile(ctx: Ctx, face: FaceShape): void {
   ctx.beginPath();
   const back = profilePoint(PROFILE_SKULL_BASE);
   ctx.moveTo(back.x, back.y);
@@ -235,19 +279,20 @@ function traceSkullProfile(ctx: Ctx): void {
   const crown = profilePoint(PROFILE_CROWN);
   ctx.quadraticCurveTo(backControl.x, backControl.y, crown.x, crown.y);
   const frontControl = profilePoint(PROFILE_CROWN_FRONT_CONTROL);
-  const forehead = profilePoint(PROFILE_LINE[0]);
+  const line = face.profileLine;
+  const forehead = profilePoint(line[0]);
   ctx.quadraticCurveTo(frontControl.x, frontControl.y, forehead.x, forehead.y);
   // Through the midpoints, so the landmarks read as soft turns rather than
   // as the corners of a polygon.
-  for (let i = 1; i < PROFILE_LINE.length - 1; i++) {
-    const here = profilePoint(PROFILE_LINE[i]);
-    const next = profilePoint(PROFILE_LINE[i + 1]);
+  for (let i = 1; i < line.length - 1; i++) {
+    const here = profilePoint(line[i]);
+    const next = profilePoint(line[i + 1]);
     const mid = mixPt(here, next, 0.5);
     ctx.quadraticCurveTo(here.x, here.y, mid.x, mid.y);
   }
-  const underChin = profilePoint(PROFILE_LINE[PROFILE_LINE.length - 1]);
+  const underChin = profilePoint(line[line.length - 1]);
   ctx.lineTo(underChin.x, underChin.y);
-  const angle = profilePoint(PROFILE_JAW_ANGLE);
+  const angle = profilePoint(face.profileJawAngle);
   ctx.lineTo(angle.x, angle.y);
   const rear = profilePoint(PROFILE_JAW_REAR);
   ctx.lineTo(rear.x, rear.y);
@@ -260,9 +305,9 @@ function traceSkullProfile(ctx: Ctx): void {
  * it, so it casts nothing onto the neck, and its lit sliver would lay a pale
  * stripe down the back of the jaw.
  */
-function traceJawEdgeProfile(ctx: Ctx): void {
-  const chin = profilePoint(PROFILE_LINE[PROFILE_LINE.length - 1]);
-  const angle = profilePoint(PROFILE_JAW_ANGLE);
+function traceJawEdgeProfile(ctx: Ctx, face: FaceShape): void {
+  const chin = profilePoint(face.profileLine[face.profileLine.length - 1]);
+  const angle = profilePoint(face.profileJawAngle);
   ctx.moveTo(chin.x, chin.y);
   ctx.lineTo(angle.x, angle.y);
 }
@@ -434,6 +479,7 @@ export function drawNeck(
   skin: Ramp,
   girth: number,
   softness: number,
+  face: FaceShape,
 ): void {
   const angle = headAngle(pose);
   const frames = neckFramesOf(skeleton, angle, girth);
@@ -508,7 +554,7 @@ export function drawNeck(
     castShadow(
       ctx,
       trace,
-      () => (view.profile ? traceJawEdgeProfile(ctx) : traceJawEdgeFacing(ctx)),
+      () => (view.profile ? traceJawEdgeProfile(ctx, face) : traceJawEdgeFacing(ctx, face)),
       skin,
       JAW_SHADOW_WIDTH,
       angle,
@@ -537,13 +583,13 @@ const SIDE_PLANE_EDGE: readonly Pt[] = [
 /** How far past the silhouette the side-plane shapes reach; the skull clip ends them. */
 const PLANE_OVERREACH = 1.4;
 
-function traceSidePlane(ctx: Ctx, side: number): void {
+function traceSidePlane(ctx: Ctx, side: number, edge: readonly Pt[]): void {
   ctx.beginPath();
-  const first = SIDE_PLANE_EDGE[0];
+  const first = edge[0];
   ctx.moveTo(side * HEAD_RX * first.x, HEAD_RY * first.y);
-  for (let i = 1; i < SIDE_PLANE_EDGE.length - 1; i++) {
-    const here = SIDE_PLANE_EDGE[i];
-    const next = SIDE_PLANE_EDGE[i + 1];
+  for (let i = 1; i < edge.length - 1; i++) {
+    const here = edge[i];
+    const next = edge[i + 1];
     ctx.quadraticCurveTo(
       side * HEAD_RX * here.x,
       HEAD_RY * here.y,
@@ -551,7 +597,7 @@ function traceSidePlane(ctx: Ctx, side: number): void {
       HEAD_RY * lerp(here.y, next.y, 0.5),
     );
   }
-  const last = SIDE_PLANE_EDGE[SIDE_PLANE_EDGE.length - 1];
+  const last = edge[edge.length - 1];
   ctx.lineTo(side * HEAD_RX * last.x, HEAD_RY * last.y);
   ctx.lineTo(side * HEAD_RX * last.x, HEAD_RY * PLANE_OVERREACH);
   ctx.lineTo(side * HEAD_RX * PLANE_OVERREACH, HEAD_RY * PLANE_OVERREACH);
@@ -670,7 +716,7 @@ function fillPolygon(ctx: Ctx, points: readonly Pt[], sx: number, sy: number): v
 }
 
 /** The planes of the face seen head-on, painted inside the skull's clip. */
-function paintFacePlanesFacing(ctx: Ctx, lift: number, skin: Ramp): void {
+function paintFacePlanesFacing(ctx: Ctx, lift: number, skin: Ramp, face: FaceShape): void {
   // The front plane, lit from the upper left: a linear falloff, so its lower
   // right fades toward the base rather than ending on a ring.
   const front = ctx.createLinearGradient(
@@ -688,7 +734,7 @@ function paintFacePlanesFacing(ctx: Ctx, lift: number, skin: Ramp): void {
   ctx.fillRect(-HEAD_RX, -HEAD_RY * PLANE_OVERREACH, HEAD_RX * 2, HEAD_RY * PLANE_OVERREACH * 2);
 
   // The key-side plane turns from the camera but still faces the light.
-  traceSidePlane(ctx, -1);
+  traceSidePlane(ctx, -1, face.sidePlaneEdge);
   ctx.fillStyle = skin.base;
   ctx.fill();
   // The far side plane is the one in shadow: a hard step at the plane's edge,
@@ -697,12 +743,12 @@ function paintFacePlanesFacing(ctx: Ctx, lift: number, skin: Ramp): void {
   shade.addColorStop(0, skin.mid);
   shade.addColorStop(SIDE_SHADE_CORE, skin.shadow);
   shade.addColorStop(1, skin.dark);
-  traceSidePlane(ctx, 1);
+  traceSidePlane(ctx, 1, face.sidePlaneEdge);
   ctx.fillStyle = shade;
   ctx.fill();
 
   for (const side of [-1, 1]) {
-    ctx.fillStyle = rgba(side < 0 ? skin.mid : skin.shadow, CHEEK_UNDER_ALPHA);
+    ctx.fillStyle = rgba(side < 0 ? skin.mid : skin.shadow, CHEEK_UNDER_ALPHA * face.cheekHollow);
     fillPolygon(ctx, CHEEK_UNDER_PLANE, side * HEAD_RX, HEAD_RY);
   }
 
@@ -714,7 +760,7 @@ function paintFacePlanesFacing(ctx: Ctx, lift: number, skin: Ramp): void {
       EYE_RX * SOCKET_RX,
       EYE_RY * SOCKET_RY,
       side < 0 ? skin.mid : skin.shadow,
-      SOCKET_ALPHA,
+      SOCKET_ALPHA * face.browRidge,
       0,
       SOCKET_CORE,
     );
@@ -723,22 +769,22 @@ function paintFacePlanesFacing(ctx: Ctx, lift: number, skin: Ramp): void {
   // The nose, from light only. The bridge between the eyes faces the key and
   // is what keeps the two sockets from joining into one band across the face.
   ctx.strokeStyle = rgba(skin.light, NOSE_RIDGE_ALPHA);
-  ctx.lineWidth = HEAD_RX * NOSE_RIDGE_WIDTH;
+  ctx.lineWidth = HEAD_RX * NOSE_RIDGE_WIDTH * face.noseSize;
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(HEAD_RX * NOSE_RIDGE_X, HEAD_RY * NOSE_RIDGE_TOP_Y);
   ctx.lineTo(HEAD_RX * NOSE_RIDGE_X, HEAD_RY * NOSE_TIP.y);
   ctx.stroke();
   ctx.fillStyle = rgba(skin.mid, NOSE_BRIDGE_ALPHA);
-  fillPolygon(ctx, NOSE_BRIDGE_SHADE, HEAD_RX, HEAD_RY);
+  fillPolygon(ctx, NOSE_BRIDGE_SHADE, HEAD_RX * face.noseSize, HEAD_RY);
   // Tipped back, the nose stops casting down onto the lip and shows its
   // underside instead: the nostrils, the one dark mark that says "chin up".
   const nostrils = clamp01(lift / NOSTRIL_FULL_LIFT);
   fillFlatEllipse(
     ctx,
-    HEAD_RX * NOSE_SHADOW.x,
+    HEAD_RX * NOSE_SHADOW.x * face.noseSize,
     HEAD_RY * NOSE_SHADOW.y,
-    HEAD_RX * NOSE_SHADOW_RX,
+    HEAD_RX * NOSE_SHADOW_RX * face.noseSize,
     HEAD_RY * NOSE_SHADOW_RY,
     skin.shadow,
     NOSE_SHADOW_ALPHA * (1 - nostrils),
@@ -747,7 +793,7 @@ function paintFacePlanesFacing(ctx: Ctx, lift: number, skin: Ramp): void {
     for (const side of [-1, 1]) {
       fillFlatEllipse(
         ctx,
-        HEAD_RX * (NOSE_TIP.x + side * NOSTRIL_DX),
+        HEAD_RX * (NOSE_TIP.x + side * NOSTRIL_DX) * face.noseSize,
         HEAD_RY * (NOSE_TIP.y + NOSTRIL_DY),
         HEAD_RX * NOSTRIL_RX,
         HEAD_RY * NOSTRIL_RY,
@@ -758,10 +804,10 @@ function paintFacePlanesFacing(ctx: Ctx, lift: number, skin: Ramp): void {
   }
   fillFlatEllipse(
     ctx,
-    HEAD_RX * NOSE_TIP.x,
+    HEAD_RX * NOSE_TIP.x * face.noseSize,
     HEAD_RY * NOSE_TIP.y,
-    HEAD_RX * NOSE_TIP_RX,
-    HEAD_RY * NOSE_TIP_RY,
+    HEAD_RX * NOSE_TIP_RX * face.noseSize,
+    HEAD_RY * NOSE_TIP_RY * face.noseSize,
     skin.rim,
     NOSE_TIP_ALPHA,
   );
@@ -784,14 +830,14 @@ function paintFacePlanesFacing(ctx: Ctx, lift: number, skin: Ramp): void {
   ctx.lineWidth = JAW_LIGHT_WIDTH;
   ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(-HEAD_RX * CHEEK_CONTROL_X, HEAD_RY * JAW_CORNER_Y * JAW_LIGHT_START);
+  ctx.moveTo(-HEAD_RX * face.cheekControl.x, HEAD_RY * face.jawCorner.y * JAW_LIGHT_START);
   ctx.quadraticCurveTo(
-    -HEAD_RX * JAW_CORNER_X,
-    HEAD_RY * JAW_CORNER_Y,
-    -HEAD_RX * JAW_CORNER_END_X,
-    HEAD_RY * JAW_CORNER_END_Y,
+    -HEAD_RX * face.jawCorner.x,
+    HEAD_RY * face.jawCorner.y,
+    -HEAD_RX * face.jawCornerEnd.x,
+    HEAD_RY * face.jawCornerEnd.y,
   );
-  ctx.lineTo(-HEAD_RX * CHIN_CORNER_X, HEAD_RY * CHIN_CORNER_Y);
+  ctx.lineTo(-HEAD_RX * face.chinCorner.x, HEAD_RY * face.chinCorner.y);
   ctx.stroke();
   ctx.restore();
 }
@@ -834,7 +880,7 @@ const PROFILE_JAW_LIGHT_FROM = pt(-0.26, 0.94);
 const PROFILE_JAW_LIGHT_TO = pt(0.68, 1.1);
 
 /** The planes of the face edge-on, painted inside the skull's clip. */
-function paintFacePlanesProfile(ctx: Ctx, skin: Ramp): void {
+function paintFacePlanesProfile(ctx: Ctx, skin: Ramp, face: FaceShape): void {
   fillSoftEllipse(
     ctx,
     HEAD_DEPTH * PROFILE_CHEEK_LIGHT.x,
@@ -860,7 +906,7 @@ function paintFacePlanesProfile(ctx: Ctx, skin: Ramp): void {
     HEAD_RY * PLANE_OVERREACH * 2,
   );
 
-  ctx.fillStyle = rgba(skin.mid, CHEEK_UNDER_ALPHA);
+  ctx.fillStyle = rgba(skin.mid, CHEEK_UNDER_ALPHA * face.cheekHollow);
   fillPolygon(ctx, PROFILE_CHEEK_UNDER, HEAD_DEPTH, HEAD_RY);
   fillSoftEllipse(
     ctx,
@@ -869,7 +915,7 @@ function paintFacePlanesProfile(ctx: Ctx, skin: Ramp): void {
     HEAD_DEPTH * PROFILE_SOCKET_RX,
     HEAD_RY * PROFILE_SOCKET_RY,
     skin.dark,
-    PROFILE_SOCKET_ALPHA,
+    PROFILE_SOCKET_ALPHA * face.browRidge,
     0,
     SOCKET_CORE,
   );
@@ -915,6 +961,27 @@ function paintFacePlanesProfile(ctx: Ctx, skin: Ramp): void {
   ctx.lineTo(HEAD_DEPTH * PROFILE_JAW_LIGHT_TO.x, HEAD_RY * PROFILE_JAW_LIGHT_TO.y);
   ctx.stroke();
 }
+
+// ── The rig's own face ───────────────────────────────────────────────────────
+
+/** The rig's own face: a square jaw and broad chin, a heavy brow and a man's nose. */
+export const RIG_FACE: FaceShape = {
+  cheekControl: pt(CHEEK_CONTROL_X, CHEEK_CONTROL_Y),
+  jawCorner: pt(JAW_CORNER_X, JAW_CORNER_Y),
+  jawCornerControl: pt(JAW_CORNER_CONTROL_X, JAW_CORNER_CONTROL_Y),
+  jawCornerEnd: pt(JAW_CORNER_END_X, JAW_CORNER_END_Y),
+  chinCorner: pt(CHIN_CORNER_X, CHIN_CORNER_Y),
+  chinControlX: CHIN_CONTROL_X,
+  sidePlaneEdge: SIDE_PLANE_EDGE,
+  profileLine: PROFILE_LINE,
+  profileJawAngle: PROFILE_JAW_ANGLE,
+  cheekHollow: RIG_CHEEK_HOLLOW,
+  browRidge: RIG_BROW_RIDGE,
+  noseSize: RIG_NOSE_SIZE,
+  eyeSize: RIG_EYE_SIZE,
+  lashes: NO_LASHES,
+  lipTint: null,
+};
 
 // ── Features ─────────────────────────────────────────────────────────────────
 
@@ -1008,6 +1075,10 @@ interface EyeSpec {
   readonly skin: Ramp;
   readonly iris: string;
   readonly style: EyeStyle;
+  /** The eye's height and iris against the rig's; its width comes in `rx`. */
+  readonly size: number;
+  /** {@link FaceShape.lashes}. */
+  readonly lashes: number;
 }
 
 /**
@@ -1043,8 +1114,9 @@ export interface EyeStyle {
 }
 
 function traceEyeOpening(ctx: Ctx, eye: EyeSpec, top: number, bottom: number): void {
-  const inner = pt(eye.cx - eye.outward * eye.rx, eye.cy + EYE_RY * EYE_CANTHAL_TILT);
-  const outer = pt(eye.cx + eye.outward * eye.rx, eye.cy - EYE_RY * EYE_CANTHAL_TILT);
+  const tilt = EYE_RY * eye.size * EYE_CANTHAL_TILT;
+  const inner = pt(eye.cx - eye.outward * eye.rx, eye.cy + tilt);
+  const outer = pt(eye.cx + eye.outward * eye.rx, eye.cy - tilt);
   ctx.beginPath();
   ctx.moveTo(inner.x, inner.y);
   // A quadratic's apex sits halfway to its control point, hence the doubling.
@@ -1059,7 +1131,8 @@ function traceEyeOpening(ctx: Ctx, eye: EyeSpec, top: number, bottom: number): v
  */
 function drawEye(ctx: Ctx, eye: EyeSpec): void {
   const openness = 1 - eye.blink;
-  const height = EYE_RY * eye.style.openness;
+  const eyeRy = EYE_RY * eye.size;
+  const height = eyeRy * eye.style.openness;
   const top = height * openness * (1 - eye.scowl * SCOWL_UPPER_CLOSE);
   const bottom = height * openness * (1 - eye.scowl * SCOWL_LOWER_RAISE);
 
@@ -1074,16 +1147,17 @@ function drawEye(ctx: Ctx, eye: EyeSpec): void {
       () => traceEyeOpening(ctx, eye, top, bottom),
       () => {
         const irisX = eye.cx + eye.look * eye.rx * EYE_LOOK_TRAVEL;
-        const irisY = eye.cy - eye.lookUp * EYE_RY * EYE_LOOK_UP_TRAVEL;
+        const irisY = eye.cy - eye.lookUp * eyeRy * EYE_LOOK_UP_TRAVEL;
+        const irisR = IRIS_R * eye.size;
         ctx.beginPath();
-        ctx.arc(irisX, irisY, IRIS_R, 0, TWO_PI);
+        ctx.arc(irisX, irisY, irisR, 0, TWO_PI);
         // No pupil: at a pixel and a half across, a pupil covers the iris
         // and the eye reads grey rather than blue.
         ctx.fillStyle = eye.irisColoured ? irisInShade(eye.iris, eye.style) : OUTLINE;
         ctx.fill();
         if (eye.irisColoured && eye.style.colouredIris) {
           ctx.beginPath();
-          ctx.arc(irisX, irisY, IRIS_R * PUPIL_SHARE, 0, TWO_PI);
+          ctx.arc(irisX, irisY, irisR * PUPIL_SHARE, 0, TWO_PI);
           ctx.fillStyle = OUTLINE;
           ctx.fill();
         }
@@ -1095,15 +1169,35 @@ function drawEye(ctx: Ctx, eye: EyeSpec): void {
   ctx.lineWidth = UPPER_LID_WIDTH * eye.style.lidWeight;
   ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(eye.cx - eye.outward * eye.rx, eye.cy + EYE_RY * EYE_CANTHAL_TILT);
+  ctx.moveTo(eye.cx - eye.outward * eye.rx, eye.cy + eyeRy * EYE_CANTHAL_TILT);
   ctx.quadraticCurveTo(
     eye.cx,
     eye.cy - top * 2,
     eye.cx + eye.outward * eye.rx,
-    eye.cy - EYE_RY * EYE_CANTHAL_TILT,
+    eye.cy - eyeRy * EYE_CANTHAL_TILT,
   );
   ctx.stroke();
+  if (eye.lashes <= 0 || openness <= EYE_SHUT_THRESHOLD) return;
+  // The lashes thicken the lid toward the outer corner and flick out and up
+  // past it: the mark that reads as lashes at the tile is the lid line
+  // running on past the eye.
+  const outer = pt(eye.cx + eye.outward * eye.rx, eye.cy - eyeRy * EYE_CANTHAL_TILT);
+  const flick = eye.rx * 2 * eye.lashes;
+  ctx.lineWidth = UPPER_LID_WIDTH * eye.style.lidWeight * LASH_WEIGHT;
+  ctx.beginPath();
+  ctx.moveTo(eye.cx + eye.outward * eye.rx * LASH_FROM_SHARE, eye.cy - top * LASH_RISE_SHARE);
+  ctx.lineTo(outer.x, outer.y);
+  ctx.lineTo(outer.x + eye.outward * flick, outer.y - flick * LASH_LIFT);
+  ctx.stroke();
 }
+
+/** The lashes' line against the lid's, from this share of the way out to the outer corner. */
+const LASH_WEIGHT = 1.5;
+const LASH_FROM_SHARE = 0.2;
+/** Where the lash line meets the lid's arc above the eye, as a share of the opening's height. */
+const LASH_RISE_SHARE = 1.4;
+/** How steeply the flick past the corner rises, against its reach out. */
+const LASH_LIFT = 0.6;
 
 const BROW_Y = -HEAD_RY * 0.3;
 const BROW_THICK = HEAD_RY * 0.19;
@@ -1260,6 +1354,7 @@ function drawMouth(
   widthScale: number,
   smile: number,
   skin: Ramp,
+  lipTint: string | null,
 ): void {
   const centre = (left + right) / 2;
   const cornerDrop = MOUTH_CORNER_DROP - smile;
@@ -1285,7 +1380,9 @@ function drawMouth(
   ctx.save();
   const onRow = snapToPixelRow(ctx, centre, cy);
   ctx.translate(onRow.x - centre, onRow.y - cy);
-  ctx.strokeStyle = rgba(mouthLine(skin), MOUTH_LINE_ALPHA);
+  const line =
+    lipTint === null ? mouthLine(skin) : mix(mouthLine(skin), lipTint, LIP_TINT_LINE_SHARE);
+  ctx.strokeStyle = rgba(line, MOUTH_LINE_ALPHA);
   ctx.lineWidth = Math.max(MOUTH_LINE_WIDTH * (1 + open), onePixel(ctx));
   ctx.lineCap = 'round';
   ctx.beginPath();
@@ -1293,7 +1390,10 @@ function drawMouth(
   ctx.quadraticCurveTo(centre, cy - cornerDrop, centre + halfWidth, cy + cornerDrop);
   ctx.stroke();
   const lipHalf = halfWidth * LOWER_LIP_SHARE;
-  ctx.strokeStyle = rgba(skin.light, LOWER_LIP_ALPHA);
+  ctx.strokeStyle =
+    lipTint === null
+      ? rgba(skin.light, LOWER_LIP_ALPHA)
+      : rgba(mix(skin.light, lipTint, LIP_TINT_LOWER_SHARE), LOWER_LIP_ALPHA_TINTED);
   ctx.lineWidth = onePixel(ctx);
   ctx.beginPath();
   ctx.moveTo(centre - lipHalf, cy + onePixel(ctx) * LOWER_LIP_ROWS_DOWN);
@@ -1301,6 +1401,14 @@ function drawMouth(
   ctx.stroke();
   ctx.restore();
 }
+
+/**
+ * Tinted lips: the line between them takes some of the tint, and the lit
+ * lower lip more, drawn a little stronger so the colour reads at the tile.
+ */
+const LIP_TINT_LINE_SHARE = 0.35;
+const LIP_TINT_LOWER_SHARE = 0.55;
+const LOWER_LIP_ALPHA_TINTED = 0.8;
 
 /**
  * The size of one pixel of the surface being painted, in the current units.
@@ -1903,10 +2011,10 @@ export function pitchedHairY(y: number, lift: number): number {
 }
 
 /** Traces the skull's silhouette as the view paints it, in head-local units. */
-export function traceSkull(ctx: Ctx, view: ViewSpec): void {
+export function traceSkull(ctx: Ctx, view: ViewSpec, face: FaceShape): void {
   if (view.showsBack) traceSkullBack(ctx);
-  else if (view.profile) traceSkullProfile(ctx);
-  else traceSkullFacing(ctx);
+  else if (view.profile) traceSkullProfile(ctx, face);
+  else traceSkullFacing(ctx, face);
 }
 
 /**
@@ -1914,12 +2022,12 @@ export function traceSkull(ctx: Ctx, view: ViewSpec): void {
  * silhouette. Nothing is painted for a level or tucked head: tucked, the chin
  * sinks toward the neck and the jaw's underside turns away.
  */
-function paintJawUnderside(ctx: Ctx, lift: number, skin: Ramp): void {
+function paintJawUnderside(ctx: Ctx, lift: number, skin: Ramp, face: FaceShape): void {
   if (lift <= 0) return;
   ctx.save();
   applyFacePitch(ctx, lift);
   ctx.beginPath();
-  traceJawEdgeFacing(ctx);
+  traceJawEdgeFacing(ctx, face);
   ctx.lineTo(HEAD_RX * JAW_UNDERSIDE_REACH, HEAD_RY * JAW_UNDERSIDE_REACH);
   ctx.lineTo(-HEAD_RX * JAW_UNDERSIDE_REACH, HEAD_RY * JAW_UNDERSIDE_REACH);
   ctx.closePath();
@@ -1929,7 +2037,7 @@ function paintJawUnderside(ctx: Ctx, lift: number, skin: Ramp): void {
   // The chin's lower edge still faces the key as it turns under, and that lit
   // lip is what separates the chin from the plane behind it.
   ctx.beginPath();
-  traceJawEdgeFacing(ctx);
+  traceJawEdgeFacing(ctx, face);
   ctx.strokeStyle = rgba(skin.light, CHIN_EDGE_ALPHA * shown);
   ctx.lineWidth = CHIN_EDGE_WIDTH;
   ctx.lineCap = 'round';
@@ -2092,20 +2200,22 @@ function paintHead(ctx: Ctx, pose: BipedPose, view: ViewSpec, lift: number, look
     }
   }
 
-  const traceSkull = (): void => (profile ? traceSkullProfile(ctx) : traceSkullFacing(ctx));
+  const shape = look.face;
+  const traceSkull = (): void =>
+    profile ? traceSkullProfile(ctx, shape) : traceSkullFacing(ctx, shape);
   traceSkull();
   ctx.fillStyle = skin.base;
   ctx.fill();
   withClip(ctx, traceSkull, () => {
     if (profile) {
-      paintFacePlanesProfile(ctx, skin);
+      paintFacePlanesProfile(ctx, skin, shape);
       return;
     }
     ctx.save();
     applyFacePitch(ctx, lift);
-    paintFacePlanesFacing(ctx, lift, skin);
+    paintFacePlanesFacing(ctx, lift, skin, shape);
     ctx.restore();
-    paintJawUnderside(ctx, lift, skin);
+    paintJawUnderside(ctx, lift, skin, shape);
   });
 
   const anger = pose.brow * expression.angerScale;
@@ -2116,7 +2226,7 @@ function paintHead(ctx: Ctx, pose: BipedPose, view: ViewSpec, lift: number, look
     drawEye(ctx, {
       cx: eyeX,
       cy: EYE_Y,
-      rx: EYE_RX * PROFILE_EYE_WIDTH_SHARE,
+      rx: EYE_RX * PROFILE_EYE_WIDTH_SHARE * shape.eyeSize,
       outward: PROFILE_OUTWARD,
       look: PROFILE_EYE_LOOK,
       lookUp: pose.gazeUp ?? 0,
@@ -2127,6 +2237,8 @@ function paintHead(ctx: Ctx, pose: BipedPose, view: ViewSpec, lift: number, look
       skin,
       iris: look.iris,
       style: expression.eyes,
+      size: shape.eyeSize,
+      lashes: shape.lashes,
     });
     drawBrow(
       ctx,
@@ -2146,6 +2258,7 @@ function paintHead(ctx: Ctx, pose: BipedPose, view: ViewSpec, lift: number, look
       mouthWidth,
       expression.mouthSmile,
       skin,
+      shape.lipTint,
     );
     look.facialHair?.(ctx, face);
   } else {
@@ -2158,7 +2271,7 @@ function paintHead(ctx: Ctx, pose: BipedPose, view: ViewSpec, lift: number, look
       drawEye(ctx, {
         cx: side * EYE_DX,
         cy: EYE_Y,
-        rx: EYE_RX,
+        rx: EYE_RX * shape.eyeSize,
         outward: side,
         look: pose.headTurn,
         lookUp: pose.gazeUp ?? 0,
@@ -2169,6 +2282,8 @@ function paintHead(ctx: Ctx, pose: BipedPose, view: ViewSpec, lift: number, look
         skin,
         iris: look.iris,
         style: expression.eyes,
+        size: shape.eyeSize,
+        lashes: shape.lashes,
       });
       drawBrow(
         ctx,
@@ -2189,6 +2304,7 @@ function paintHead(ctx: Ctx, pose: BipedPose, view: ViewSpec, lift: number, look
       mouthWidth,
       expression.mouthSmile,
       skin,
+      shape.lipTint,
     );
     look.facialHair?.(ctx, face);
     ctx.restore();

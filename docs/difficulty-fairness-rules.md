@@ -270,18 +270,18 @@ in `src/creatures/tactics/`; every one of these rules is asserted by `verify:tac
 Both crawlers carry the same six stats (`ALL_STATS` in `src/core/party/stats.ts`, in the
 order every stat list shows them) and may put level-up points into any of them:
 
-| Stat                | Code  | Ryan per point | Belle per point | What it grows                                                                                     |
-| ------------------- | ----- | -------------- | --------------- | ------------------------------------------------------------------------------------------------- |
-| Health              | `HLT` | 2              | 1               | max HP (`HEALTH_HP_PER_POINT`, one HP a point) and HP regen                                       |
-| Melee               | `MEL` | 1              | 1               | melee and claw weapons, bare fists and claws, Seismic Stomp                                       |
-| Magic               | `MAG` | 1              | 1               | spells and magic weapons, Energy Shield, magic resistance, magic-attuned recharges               |
-| Evasiveness         | `EVA` | 1              | 2               | dodge chance                                                                                      |
-| Ranged              | `RNG` | 1              | 1               | non-magical ranged weapons (the sling's damage and range)                                         |
-| Explosives Handling | `EXP` | 1              | 1               | thrown explosives' damage to enemies and throw length                                            |
+| Stat                | Code  | Human per point | Belle per point | What it grows                                                                      |
+| ------------------- | ----- | --------------- | --------------- | ---------------------------------------------------------------------------------- |
+| Health              | `HLT` | 2               | 1               | max HP (`HEALTH_HP_PER_POINT`, one HP a point) and HP regen                        |
+| Melee               | `MEL` | 1               | 1               | melee and claw weapons, bare fists and claws, Seismic Stomp                        |
+| Magic               | `MAG` | 1               | 1               | spells and magic weapons, Energy Shield, magic resistance, magic-attuned recharges |
+| Evasiveness         | `EVA` | 1               | 2               | dodge chance                                                                       |
+| Ranged              | `RNG` | 1               | 1               | non-magical ranged weapons (the sling's damage and range)                          |
+| Explosives Handling | `EXP` | 1               | 1               | thrown explosives' damage to enemies and throw length                              |
 
 The gains are `STAT_GAIN_PER_POINT`, a `Record` over stats and crawlers, and every
 source of stat points (level-ups, the Drill Yard, stat-boost potions, gear) pays each
-crawler that gain. `STARTING_STATS` sets where each crawler starts: Ryan with 10 HP and about a 10% dodge,
+crawler that gain. `STARTING_STATS` sets where each crawler starts: the human with 10 HP and about a 10% dodge,
 Belle with 6 HP and about a 28% dodge. Which stat a weapon grows with is its delivery's entry in
 `DELIVERY_STAT`, never per-item code, and its tooltip says "Scales with" that stat. HP
 regen is one formula for both (`crawlerRegenHpPerSecond`), saturating in health.
@@ -290,8 +290,8 @@ regen is one formula for both (`crawlerRegenHpPerSecond`), saturating in health.
 
 - `computeDodgeChance` takes evasiveness through
   `DODGE_SOFT_LIMIT[crawler] * (1 - exp(-evasiveness / EVASIVENESS_DODGE_SCALE))`, with
-  soft limits of 0.45 for Ryan and 0.65 for Belle. The scale puts 100 evasiveness (100
-  points for Ryan, 50 for Belle) at 95% of the limit; points past that return very
+  soft limits of 0.45 for the human and 0.65 for Belle. The scale puts 100 evasiveness (100
+  points for the human, 50 for Belle) at 95% of the limit; points past that return very
   little. Gear evasiveness feeds the curve.
 - Flat bonuses add after the curve: gear dodge chance, Cat-like Reflexes and `!lucky`'s
   `LUCKY_DODGE_CHANCE_BONUS`. They can carry a crawler past her soft limit.

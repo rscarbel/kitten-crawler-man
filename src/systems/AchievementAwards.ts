@@ -12,27 +12,24 @@ import {
   ACHIEVEMENT_DEFS,
   crawlerCanEarn,
   counterKeeper,
-  isAchievementId,
-  type AchievementCounterId,
-  type AchievementId,
   type AchievementManager,
-  type AIAchievementDef,
   type AIAchievementGrant,
   type FixedReward,
   type PartyAchievements,
 } from '../core/progression/AchievementManager';
+import {
+  isAchievementId,
+  type AchievementCounterId,
+  type AchievementId,
+  type AIAchievementDef,
+} from '../core/progression/achievementSave';
 import type { EventBus } from '../core/EventBus';
-import { ITEM_DEF, type ItemId } from '../core/items/defs/ItemDefs';
+import type { ItemId } from '../core/items/defs/ItemDefs';
 import type { Rarity } from '../core/items/defs/rarity';
 import { CRAWLER_KINDS, type CrawlerKind } from '../core/skills/SkillManager';
 import { worldRandom } from '../core/world/WorldRandom';
-import {
-  CHEST_SOURCE_TITLES,
-  rollRewardChest,
-  type ChestSource,
-  type GrantedLine,
-  type RewardPresentation,
-} from '../loot/rewardChest';
+import { CHEST_SOURCE_TITLES, rollRewardChest, type RewardPresentation } from '../loot/rewardChest';
+import { type ChestSource, type GrantedLine } from '../core/progression/achievementSave';
 import { duplicateCoins, isGearId, type GearId } from '../loot/gearPools';
 import { coinBonusFor } from '../gear/gearHooks';
 import type { Player } from '../Player';
@@ -225,12 +222,12 @@ export class AchievementAwards {
     const owner = this.crawler(kind);
     let coins = 0;
     let potions = 0;
-    const items: string[] = [];
+    const items: ItemId[] = [];
     for (const line of lines) {
       if (line.kind === 'item') {
         owner.inventory.addItem(line.id, line.quantity);
         if (line.id === POTION_ID) potions += line.quantity;
-        else items.push(ITEM_DEF[line.id].name);
+        else items.push(line.id);
       } else if (line.kind === 'coins') {
         owner.earnCoins(line.amount);
         coins += line.amount;

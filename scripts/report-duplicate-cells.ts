@@ -14,7 +14,7 @@
  * A report, not a gate: it exits non-zero only when a figure cannot be baked.
  */
 
-import { PAINT_BENCH_SUBJECTS } from '../src/dev/paintBenchSubjects.js';
+import { paintBenchSubjects } from '../src/dev/paintBenchSubjects.js';
 import {
   findDuplicateCells,
   summariseDuplicateCells,
@@ -38,7 +38,7 @@ const SHARE_COLUMN = 8;
 
 function distinctFigures(): FigureDef[] {
   const byId = new Map<string, FigureDef>();
-  for (const { def } of PAINT_BENCH_SUBJECTS) byId.set(def.id, def);
+  for (const { def } of paintBenchSubjects()) byId.set(def.id, def);
   return [...byId.values()];
 }
 

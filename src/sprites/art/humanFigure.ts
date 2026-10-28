@@ -68,7 +68,7 @@ import { type BipedPose, VIEWS } from './biped/rig';
 import type { HandleRadius } from '../held/gripArchetypes';
 import { compositeHeldItem } from '../held/heldComposite';
 import { type CardinalView, type FacingView } from '../facingView';
-import { type HumanRowView } from '../humanSprite';
+import type { HumanRowView } from '../humanSprite';
 import {
   fidgetCeilingBack,
   fidgetCeilingFront,
@@ -187,7 +187,6 @@ import {
   TILE_SCALE,
 } from './human/figureScale';
 import { type HumanLook, playerLookAxes, withLookBuild } from '../looks/humanLook';
-import { playerCharacter } from '../../characters/characters';
 import { sideOfSign } from './human/gaitShared';
 import { travellingEntryPhase } from './human/travelling';
 import { REACTION_ROW_NAMES, REACTION_ROW_TABLE } from './human/reactions';
@@ -2148,18 +2147,24 @@ export interface HumanFigurePainting {
   readonly itemHandle: HandleRadius;
 }
 
-/**
- * The player's own figure holds nothing of its own choosing; an
- * equipment-chosen item reaches him only through the rows that grip a working
- * tool, whose hafts are all one thickness.
- */
-const PLAYER_HUMAN_LOOK = playerCharacter('human').look;
+const undressedPaintings = new WeakMap<HumanLook, HumanFigurePainting>();
 
-const UNDRESSED_PAINTING: HumanFigurePainting = {
-  look: PLAYER_HUMAN_LOOK,
-  dress: (pose) => withLookBuild(pose, PLAYER_HUMAN_LOOK),
-  itemHandle: 'standard',
-};
+/**
+ * How `look` is painted in no garments and holding nothing of its own
+ * choosing; an equipment-chosen item reaches the figure only through the rows
+ * that grip a working tool, whose hafts are all one thickness.
+ */
+export function undressedHumanPainting(look: HumanLook): HumanFigurePainting {
+  const known = undressedPaintings.get(look);
+  if (known !== undefined) return known;
+  const painting: HumanFigurePainting = {
+    look,
+    dress: (pose) => withLookBuild(pose, look),
+    itemHandle: 'standard',
+  };
+  undressedPaintings.set(look, painting);
+  return painting;
+}
 
 /** A row's pose as `painting` paints it on `frame`. */
 export function paintedPose(painting: HumanFigurePainting, row: RowSpec, frame: number): BipedPose {
@@ -2290,10 +2295,6 @@ export function humanHeldLayers(painting: HumanFigurePainting): FigureHeldLayers
   };
 }
 
-function paintHumanFrame(ctx: CanvasRenderingContext2D, state: string, frame: number): void {
-  paintDressedHumanFrame(ctx, state, frame, UNDRESSED_PAINTING);
-}
-
 function humanStateFrames(): Record<string, number> {
   const frames: Record<string, number> = {};
   for (const row of HUMAN_ROWS) frames[row.name] = row.frameCount;
@@ -2318,7 +2319,7 @@ function humanStateFrames(): Record<string, number> {
  * painted area rather than his cell: with a light one-hander out, the largest
  * family he has — four blows in each view, every one with its versions painted
  * on the move — measures 17.1 MB stored with its front layers round the
- * thickest handle in Ryan's clothes (93.6 MB were each held as a whole cell),
+ * thickest handle in the male light look's clothes (93.6 MB were each held as a whole cell),
  * and 22.0 MB on Dave in every garment the gates dress him in, the heaviest
  * any look or outfit measures. Twenty-eight megabytes covers that, the two
  * whole cells a bake in flight is admitted at, and a quarter as much again for
@@ -2333,19 +2334,29 @@ export function humanFigureId(look: HumanLook): string {
   return `human:${look.id}`;
 }
 
-export const HUMAN_FIGURE: FigureDef = {
-  id: humanFigureId(UNDRESSED_PAINTING.look),
-  frameWidth: FRAME_W,
-  frameHeight: FRAME_H,
-  tileX: TILE_X,
-  tileY: TILE_Y,
-  tileScale: TILE_SCALE,
-  states: figureStates(humanStateFrames()),
-  paintFrame: paintHumanFrame,
-  budgetMegabytes: HUMAN_FIGURE_BUDGET_MEGABYTES,
-  skipSupersample: true,
-  heldLayers: humanHeldLayers(UNDRESSED_PAINTING),
-};
+const undressedFigures = new WeakMap<HumanLook, FigureDef>();
 
-/** How {@link HUMAN_FIGURE} paints a frame. */
-export const HUMAN_FIGURE_PAINTING: HumanFigurePainting = UNDRESSED_PAINTING;
+/**
+ * The figure `look` is painted as in no garments, holding nothing: the cells,
+ * cell size and budget every dressed figure of a human look shares.
+ */
+export function undressedHumanFigure(look: HumanLook): FigureDef {
+  const known = undressedFigures.get(look);
+  if (known !== undefined) return known;
+  const painting = undressedHumanPainting(look);
+  const figure: FigureDef = {
+    id: humanFigureId(look),
+    frameWidth: FRAME_W,
+    frameHeight: FRAME_H,
+    tileX: TILE_X,
+    tileY: TILE_Y,
+    tileScale: TILE_SCALE,
+    states: figureStates(humanStateFrames()),
+    paintFrame: (ctx, state, frame) => paintDressedHumanFrame(ctx, state, frame, painting),
+    budgetMegabytes: HUMAN_FIGURE_BUDGET_MEGABYTES,
+    skipSupersample: true,
+    heldLayers: humanHeldLayers(painting),
+  };
+  undressedFigures.set(look, figure);
+  return figure;
+}

@@ -152,6 +152,9 @@ import { activeDifficultyChangeGuard } from '../src/core/difficulty/difficultyCh
 import { settings } from '../src/core/input/Settings';
 import { runMirrorBoardChecks, SWEEP_ATTEMPTS } from './starlightTentMirrorBoardChecks';
 import { runInteriorFixtureChecks } from './interiorFixtureChecks';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+
+useDevPlayerIdentity();
 
 /** A credited damage-over-time that outlasts every watch here: poison held on far past its usual run. */
 const LASTING_POISON_TICKS = 999999;

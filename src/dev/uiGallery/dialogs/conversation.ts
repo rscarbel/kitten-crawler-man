@@ -1,8 +1,15 @@
 import { setViewportSize } from '../../../core/rendering/Viewport';
-import { crawlerName } from '../../../characters/characters';
+import { PLAYER_NAME_MAX_GRAPHEMES } from '../../../core/naming/playerName';
+import { isolateForDisplay } from '../../../core/text/isolateName';
+import { crawlerDisplayName } from '../../../characters/characters';
 import { Conversation } from '../../../dialog/Conversation';
 import { carolineLines } from '../../../dialog/caroline';
-import { speakerLines, type DialogLine, type NonEmpty } from '../../../dialog/line';
+import {
+  speakerLines,
+  transientSpeaker,
+  type DialogLine,
+  type NonEmpty,
+} from '../../../dialog/line';
 import type { Choice, ConversationRequest, DialogReward, Ending } from '../../../dialog/request';
 import type { Surface, Ui } from '../../../ui/core/UiRoot';
 import type { DialogFixture } from './fixture';
@@ -119,6 +126,15 @@ function conversationFixture(
 const dave = speakerLines('dave');
 const belle = speakerLines('belle');
 
+/** The widest name a crawler can take: the longest legal length in wide Latin capitals. */
+const WIDEST_CRAWLER_NAME = 'W'.repeat(PLAYER_NAME_MAX_GRAPHEMES);
+const CJK_CRAWLER_NAME = '山田花子';
+const ARABIC_CRAWLER_NAME = 'ليلى';
+
+const widestNamed = transientSpeaker(WIDEST_CRAWLER_NAME, 'townsfolk');
+const cjkNamed = transientSpeaker(CJK_CRAWLER_NAME, 'townsfolk');
+const arabicNamed = transientSpeaker(ARABIC_CRAWLER_NAME, 'townsfolk');
+
 const LONG_TEXT =
   'Listen carefully, because I am only going to say this once. The stairwell down is sealed until the floor boss falls, and the boss is not going to fall on its own. You will want potions, you will want armor, and you will want to stop poking every goblin you meet with a stick. The safe rooms are marked on your map. Use them. Sleep. Eat something that is not a mushroom you found on the floor.';
 
@@ -154,7 +170,11 @@ export const FIXTURES: readonly DialogFixture[] = [
   conversationFixture(
     'conversation-choices-floating',
     request(
-      [belle.line(`${crawlerName('human')}, can we get the hat? It looks so warm. Please?`)],
+      [
+        belle.line(
+          () => `${crawlerDisplayName('human')}, can we get the hat? It looks so warm. Please?`,
+        ),
+      ],
       {
         haltsWorld: false,
         ending: {
@@ -199,10 +219,35 @@ export const FIXTURES: readonly DialogFixture[] = [
     false,
   ),
   conversationFixture(
+    'conversation-name-widest',
+    request([widestNamed.line('A name this wide has to stop at the edge of the box.')]),
+    false,
+    true,
+  ),
+  conversationFixture(
+    'conversation-name-cjk',
+    request([
+      cjkNamed.line(`Dave, it is ${isolateForDisplay(CJK_CRAWLER_NAME)}! Where is the stairwell?`),
+    ]),
+    false,
+    true,
+  ),
+  conversationFixture(
+    'conversation-name-arabic',
+    request([
+      arabicNamed.line(
+        `Dave, it is ${isolateForDisplay(ARABIC_CRAWLER_NAME)}! Where is the stairwell?`,
+      ),
+    ]),
+    false,
+    true,
+  ),
+  conversationFixture(
     'conversation-caroline',
     request([
-      carolineLines.message(
-        `Floor 2 is active. ${crawlerName('human')}, the stairwell is 140 tiles north-east. The boss in the east wing is optional.`,
+      carolineLines.deferredMessage(
+        () =>
+          `Floor 2 is active. ${crawlerDisplayName('human')}, the stairwell is 140 tiles north-east. The boss in the east wing is optional.`,
       ).line,
     ]),
     false,

@@ -60,6 +60,9 @@ import { createBriarHollowState } from '../src/core/quests/briarHollowState';
 import { createTownMemory } from '../src/core/state/TownMemory';
 import { mountConversation, type ConversationRig } from './conversationHarness';
 import { buildSiegeRig } from './villageSiegeHarness';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+
+useDevPlayerIdentity();
 
 // ── Reporting ────────────────────────────────────────────────────────────────
 

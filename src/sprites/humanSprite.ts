@@ -29,7 +29,9 @@ import { type Pt } from './art/bipedArt';
 import { heldFrameAt, heldLength, TICKS_PER_SECOND } from './art/human/timing';
 import { type HumanFigure, humanFigureFor } from './art/human/appearance';
 import { type Outfit, outfitOf, sameOutfit } from './garments/outfit';
-import { playerCharacter } from '../characters/characters';
+import { HUMAN_CRAWLER_LOOKS } from '../characters/humanCrawlerLooks';
+import { lookIdOf } from '../characters/crawlerChoices';
+import { followPlayerIdentity } from '../characters/playerIdentity';
 import { type HumanLook, playerStatureScale } from './looks/humanLook';
 import { HUMAN_CELL_PX_PER_UNIT, mirroredTileX } from './art/human/figureScale';
 import {
@@ -248,14 +250,16 @@ const RESIDENT_SPANS_BY_SET: Readonly<Record<MotionSet, readonly HumanWarmSpan[]
  * The outfit the human crawler is drawn in, the handle closed in his main hand, and the
  * figure that paints them. Module state rather than a player field because
  * every picture of him — the live player, a cutscene, a tutorial panel, a
- * status preview — must show the same man in the same gear, and there is
- * only ever one of him.
+ * status preview — must show the same crawler in the same gear, and there is
+ * only ever one of them.
  *
  * Bare and empty-handed to begin with, because that is how a new game's human crawler
- * is first drawn: nothing he starts with shows, so a first prewarm in any
- * other figure would be released on his first frame.
+ * is first drawn: nothing they start with shows, so a first prewarm in any
+ * other figure would be released on their first frame. The male light look
+ * until a player identity is set, because the title's cover art is composed
+ * around it.
  */
-let activeLook: HumanLook = playerCharacter('human').look;
+let activeLook: HumanLook = HUMAN_CRAWLER_LOOKS.male_light;
 let activeOutfit: Outfit<'human'> = outfitOf(activeLook, []);
 let activeHeld: CarriedGrip | null = null;
 let activeOffHand: OffHandGrip | null = null;
@@ -747,3 +751,9 @@ export function drawHumanSprite(
   const selection = selectHumanRow(state, performance.now() / MILLISECONDS_PER_SECOND);
   drawHumanSelection(ctx, sx, sy, s, selection);
 }
+
+/**
+ * Registered last so that a look applied at once, for an identity set before
+ * this module loaded, finds every module constant initialised.
+ */
+followPlayerIdentity((identity) => setHumanLook(HUMAN_CRAWLER_LOOKS[lookIdOf(identity)]));

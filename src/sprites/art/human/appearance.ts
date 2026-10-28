@@ -16,13 +16,13 @@ import { type FigureDef } from '../../figure/figureDef';
 import { defaultOutfitOf } from '../../garments/human/humanDressing';
 import type { Outfit } from '../../garments/outfit';
 import {
-  HUMAN_FIGURE,
-  HUMAN_FIGURE_PAINTING,
   humanFigureId,
   type HumanFigurePainting,
   humanHeldLayers,
   paintDressedHumanFrame,
   type RowSpec,
+  undressedHumanFigure,
+  undressedHumanPainting,
 } from '../humanFigure';
 import { type CarriedGrip, carriedGripKey, carryInMainHand } from './carry';
 import { carryInOffHand, type OffHandGrip, offHandGripKey } from './offHand';
@@ -65,8 +65,6 @@ export interface HumanFigure {
  */
 const figuresByKey = new Map<string, HumanFigure>();
 
-const BASE_FIGURE: HumanFigure = { def: HUMAN_FIGURE, painting: HUMAN_FIGURE_PAINTING };
-
 /**
  * The key a figure is cached under: the look, the outfit, the handle in his
  * main hand if any and the shield on his off hand if any.
@@ -82,18 +80,11 @@ function figureKey(
   return offHand === null ? holding : `${holding}:${offHandGripKey(offHand)}`;
 }
 
-const BASE_KEY = figureKey(
-  HUMAN_FIGURE_PAINTING.look,
-  defaultOutfitOf(HUMAN_FIGURE_PAINTING.look),
-  null,
-  null,
-);
-
 /**
  * The figure `look` is painted as in `outfit`, his main hand closed on an
  * equipment-chosen item the way `held` says, or holding nothing, and his off
- * hand on a shield the way `offHand` says, or free. The player's look in its
- * default outfit holding nothing is `HUMAN_FIGURE` itself; every other shares
+ * hand on a shield the way `offHand` says, or free. A look in its default
+ * outfit holding nothing is its `undressedHumanFigure` itself; every other shares
  * its rows, cell and budget and differs in its id, in the look it paints, in
  * the garments laid on each pose and in what closes his fists.
  *
@@ -108,9 +99,16 @@ export function humanFigureFor(
   offHand: OffHandGrip | null = null,
 ): HumanFigure {
   const key = figureKey(look, outfit, held, offHand);
-  if (key === BASE_KEY) return BASE_FIGURE;
   const known = figuresByKey.get(key);
   if (known !== undefined) return known;
+  if (key === figureKey(look, defaultOutfitOf(look), null, null)) {
+    const undressed: HumanFigure = {
+      def: undressedHumanFigure(look),
+      painting: undressedHumanPainting(look),
+    };
+    figuresByKey.set(key, undressed);
+    return undressed;
+  }
   const dress = (pose: BipedPose, row: RowSpec, frame: number): BipedPose => {
     const dressed = withLookBuild(dressedPose(outfit, pose, row, frame), look);
     // The main hand first: it reads a closed left fist as his hands being busy.
@@ -120,11 +118,11 @@ export function humanFigureFor(
   const painting: HumanFigurePainting = {
     look,
     dress,
-    itemHandle: HUMAN_FIGURE_PAINTING.itemHandle,
+    itemHandle: undressedHumanPainting(look).itemHandle,
   };
   const figure: HumanFigure = {
     def: {
-      ...HUMAN_FIGURE,
+      ...undressedHumanFigure(look),
       id: key,
       paintFrame: (ctx, state, frame) => paintDressedHumanFrame(ctx, state, frame, painting),
       heldLayers: humanHeldLayers(painting),

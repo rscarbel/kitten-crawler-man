@@ -9,7 +9,7 @@
  * Talks go through the kit's Space entry, as a player's would.
  */
 
-import { playerCharacter } from '../../src/characters/characters';
+import { CRAWLER_SPEAKERS } from '../../src/characters/characters';
 import { setViewportSize } from '../../src/core/rendering/Viewport';
 import type { BlueprintsQuestPhase } from '../../src/core/quests/blueprintsQuestPhase';
 import type { VillageQuestPhase } from '../../src/core/quests/villageQuestPhase';
@@ -146,7 +146,7 @@ export function verifyMerritAsk(check: Check): void {
     );
     const pages = talkToMerrit(talk);
     check(
-      same(pages, paragraphs(merritAskPages(playerCharacter('human').speakerId, pleaWon))),
+      same(pages, paragraphs(merritAskPages(CRAWLER_SPEAKERS.human, pleaWon))),
       `the human asks for a cow and Merrit's greeting follows the Plea (won: ${pleaWon})`,
     );
     talk.rig.step();
@@ -169,7 +169,7 @@ export function verifyMerritAsk(check: Check): void {
   belle.rig.cat.isActive = true;
   const bellePages = talkToMerrit(belle);
   check(
-    same(bellePages, paragraphs(merritAskPages(playerCharacter('cat').speakerId, false))),
+    same(bellePages, paragraphs(merritAskPages(CRAWLER_SPEAKERS.cat, false))),
     'with the cat active, the cat does the asking',
   );
   belle.rig.dispose();
@@ -181,7 +181,7 @@ export function verifyMerritFenceDone(check: Check): void {
   check(merritMarker(talk) === 'question', 'a "?" over Merrit at report_fence');
   const pages = talkToMerrit(talk);
   check(
-    same(pages, paragraphs(merritFenceDonePages(playerCharacter('human').speakerId))),
+    same(pages, paragraphs(merritFenceDonePages(CRAWLER_SPEAKERS.human))),
     'the finished fence, and her terms for Midge',
   );
   talk.rig.step();

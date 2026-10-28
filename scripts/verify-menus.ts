@@ -73,9 +73,10 @@ import type { AIChallengeSystem } from '../src/systems/AIChallengeSystem.js';
 import type { AchievementUISystem } from '../src/systems/AchievementUISystem.js';
 import type { AchievementManager } from '../src/core/progression/AchievementManager.js';
 import { SPIDER_QUEST_NAME } from '../src/systems/SpiderQuestSystem';
-import type { ResidentId } from '../src/systems/townResidents.js';
+import type { ResidentId } from '../src/core/state/residentIds.js';
 import { buildingDisplayName } from '../src/map/buildingIds.js';
 import { PetNameBook, petWords } from '../src/core/party/petNames.js';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
 
 export {};
 
@@ -568,6 +569,8 @@ function reportToParent(): never {
 }
 
 if (scenePass === null) {
+  useDevPlayerIdentity();
+
   // ── Self test ──────────────────────────────────────────────────────────────
 
   if (isParent) section('self test: the audit flags a menu a keyboard cannot reach');
@@ -1123,11 +1126,122 @@ function auditScene<S extends SceneUnderAudit>(
   }
 }
 
+// ── The title screen ───────────────────────────────────────────────────────
+
+const { SceneManager } = await import('../src/core/Scene.js');
+const { InputManager } = await import('../src/core/input/InputManager.js');
+const { TitleScene, CHARACTER_CREATION_SURFACE_ID } =
+  await import('../src/scenes/title/TitleScene.js');
+const { TITLE_MENU_SURFACE_ID } = await import('../src/scenes/title/titleMenu.js');
+const CREATED_CRAWLER_NAME = 'Morgan';
+
+const auditsRooms = scenePass.shard === 'rooms';
+const TITLE_SECTION = 'the title screen';
+// Without a save first, before any identity is set, so a stray `playerIdentity()`
+// read on the title or the creation screen throws here as it would for a new player.
+const titleCases = [false, true]
+  .map((withSave) => ({ withSave, label: `title ${withSave ? 'with a save' : 'without a save'}` }))
+  .filter(({ label }) => auditsRooms && selects(label, TITLE_SECTION, PHONE_SCENES_SECTION));
+if (titleCases.length > 0) {
+  anySelected = true;
+  section(TITLE_SECTION);
+}
+for (const { withSave, label } of titleCases) {
+  countCase();
+  // The boot sets a saved run's identity before the title paints its heroes.
+  if (withSave) useDevPlayerIdentity();
+  const resumed = { continued: false };
+  const onContinue = withSave
+    ? (): void => {
+        resumed.continued = true;
+      }
+    : undefined;
+  const sceneManager = new SceneManager();
+  // Held dormant: with no audio context there is no gesture to wait for, and the audit wants the menu as a first-time player meets it.
+  const title = new TitleScene(new InputManager(), sceneManager, {}, onContinue, {
+    startState: 'dormant',
+    keyboardAnchor: null,
+  });
+  sceneManager.replace(title);
+  step(title);
+  check(
+    title.ui.isOpen(TITLE_MENU_SURFACE_ID),
+    `${label}: the menu is not open on the first frame`,
+  );
+  if (phonePass === null) {
+    const outcome = auditFocus(title.ui, label);
+    failures.push(...outcome.failures);
+    detail(`${label}: ${describeClaimants(outcome.claimants)}`);
+  }
+  settleEntrance(title, TITLE_MENU_SURFACE_ID);
+  recordCloseButtons(title.ui, label);
+  check(title.ui.key('Enter') === 'consumed', `${label}: Enter does not reach the menu`);
+  if (withSave) {
+    check(title.state === 'dive', `${label}: Enter does not take the focused primary choice`);
+    for (let frame = 0; frame < MAX_SETTLE_FRAMES && !resumed.continued; frame++) step(title);
+    check(resumed.continued, `${label}: the primary choice never continued the save`);
+  } else {
+    createCrawlerByKeyboard(title, label);
+  }
+  title.onExit();
+}
+
+/**
+ * A new game opens the character creation screen before any dive; walks it
+ * with the keyboard alone, auditing each page's focus scope, through to the
+ * dive into the first floor.
+ */
+function createCrawlerByKeyboard(title: InstanceType<typeof TitleScene>, label: string): void {
+  const creation = title.characterCreation;
+  check(
+    title.ui.isOpen(CHARACTER_CREATION_SURFACE_ID) && title.state !== 'dive',
+    `${label}: a new game does not open the character creation screen before the dive`,
+  );
+  const auditPage = (): void => {
+    step(title);
+    if (phonePass !== null) return;
+    const outcome = auditFocus(title.ui, `${label} creation ${creation.page ?? 'closed'}`);
+    failures.push(...outcome.failures);
+  };
+  const press = (key: string, mods: { readonly shift?: boolean } = {}): void => {
+    title.ui.key(key, mods);
+    step(title);
+  };
+  auditPage();
+  for (const key of CREATED_CRAWLER_NAME) press(key);
+  press('Enter');
+  check(creation.page === 'body', `${label}: Enter on a typed name does not move on to the body`);
+  auditPage();
+  // The ring starts at Back, then the two bodies.
+  press('Tab');
+  press('Tab');
+  press('Enter');
+  check(creation.page === 'figure', `${label}: the keyboard cannot choose a body`);
+  auditPage();
+  // Back, then the two figures; Begin joins the ring once one is picked, ahead of them.
+  press('Tab');
+  press('Tab');
+  press('Enter');
+  press('Tab', { shift: true });
+  press('Enter');
+  check(
+    !creation.isOpen && title.state === 'dive',
+    `${label}: the keyboard cannot pick a figure and begin the run`,
+  );
+  // The menu fades through the dive but is still on screen: taking a new game again must not reopen creation.
+  press('Enter');
+  check(
+    !creation.isOpen && !title.ui.isOpen(CHARACTER_CREATION_SURFACE_ID),
+    `${label}: a menu press during the dive reopens the character creation screen`,
+  );
+}
+
+// Every scene below starts a run, so it has the dev crawler's identity.
+useDevPlayerIdentity();
+
 // ── The town ───────────────────────────────────────────────────────────────
 
 const { TILE_SIZE } = await import('../src/core/constants.js');
-const { SceneManager } = await import('../src/core/Scene.js');
-const { InputManager } = await import('../src/core/input/InputManager.js');
 const { GameMap } = await import('../src/map/GameMap.js');
 const { level3 } = await import('../src/levels/level3.js');
 const { DungeonScene } = await import('../src/scenes/DungeonScene.js');
@@ -1140,6 +1254,8 @@ type ConversationRequest = Parameters<Town['conversation']['open']>[0];
 const MAX_ARRIVAL_FRAMES = 3000;
 const { ARRIVAL_LOADING_SURFACE_ID: ARRIVAL_SURFACE } =
   await import('../src/scenes/ArrivalLoader.js');
+const { ARRIVAL_BANNER_SURFACE_ID: ARRIVAL_BANNER } =
+  await import('../src/systems/DungeonIntroSystem.js');
 const SAMPLE_LEVEL = 2;
 const SAMPLE_SKILL_LEVEL = 1;
 const SAMPLE_QUANTITY_MAX = 5;
@@ -1732,8 +1848,17 @@ if (townSelected.length > 0) {
   }
   check(!street.ui.isOpen(arrival), "the town's arrival screen never finished");
   step(street);
+  check(street.ui.isOpen(ARRIVAL_BANNER), 'the town raises no arrival banner to audit');
+  const bannerOutcome = auditFocus(street.ui, `town ${ARRIVAL_BANNER}`);
+  failures.push(...bannerOutcome.failures);
+  detail(`town ${ARRIVAL_BANNER}: ${describeClaimants(bannerOutcome.claimants)}`);
+  for (let frame = 0; frame < MAX_ARRIVAL_FRAMES && street.ui.isOpen(ARRIVAL_BANNER); frame++) {
+    step(street);
+  }
+  check(!street.ui.isOpen(ARRIVAL_BANNER), "the town's arrival banner never finished");
   auditScene('town', street, townSelected, {
     [arrival]: 'audited above, while the town loads',
+    [ARRIVAL_BANNER]: 'audited above, as the town is announced',
     'grate-spikes': STRUCTURE_POPOVER_IN_GALLERY,
     'structure-menu': STRUCTURE_POPOVER_IN_GALLERY,
   });
@@ -2141,7 +2266,6 @@ function interiorCases(): InteriorCase[] {
 }
 
 const CLUB_LABEL = 'Cloak & Dagger';
-const auditsRooms = scenePass.shard === 'rooms';
 const cases = interiorCases();
 for (const { label, entry, openers } of cases) {
   const roomShard: SceneShard = label === CLUB_LABEL ? 'club' : 'rooms';
@@ -2166,54 +2290,6 @@ for (const { label, entry, openers } of cases) {
     }
   }
   auditScene(label, room, roomSelected, elsewhere);
-}
-
-// ── The title screen ───────────────────────────────────────────────────────
-
-const { TitleScene } = await import('../src/scenes/title/TitleScene.js');
-const { TITLE_MENU_SURFACE_ID } = await import('../src/scenes/title/titleMenu.js');
-
-const TITLE_SECTION = 'the title screen';
-const titleCases = [true, false]
-  .map((withSave) => ({ withSave, label: `title ${withSave ? 'with a save' : 'without a save'}` }))
-  .filter(({ label }) => auditsRooms && selects(label, TITLE_SECTION, PHONE_SCENES_SECTION));
-if (titleCases.length > 0) {
-  anySelected = true;
-  section(TITLE_SECTION);
-}
-for (const { withSave, label } of titleCases) {
-  countCase();
-  const resumed = { continued: false };
-  const onContinue = withSave
-    ? (): void => {
-        resumed.continued = true;
-      }
-    : undefined;
-  const sceneManager = new SceneManager();
-  // Held dormant: with no audio context there is no gesture to wait for, and the audit wants the menu as a first-time player meets it.
-  const title = new TitleScene(new InputManager(), sceneManager, {}, onContinue, {
-    startState: 'dormant',
-  });
-  sceneManager.replace(title);
-  step(title);
-  check(
-    title.ui.isOpen(TITLE_MENU_SURFACE_ID),
-    `${label}: the menu is not open on the first frame`,
-  );
-  if (phonePass === null) {
-    const outcome = auditFocus(title.ui, label);
-    failures.push(...outcome.failures);
-    detail(`${label}: ${describeClaimants(outcome.claimants)}`);
-  }
-  settleEntrance(title, TITLE_MENU_SURFACE_ID);
-  recordCloseButtons(title.ui, label);
-  check(title.ui.key('Enter') === 'consumed', `${label}: Enter does not reach the menu`);
-  check(title.state === 'dive', `${label}: Enter does not take the focused primary choice`);
-  if (withSave) {
-    for (let frame = 0; frame < MAX_SETTLE_FRAMES && !resumed.continued; frame++) step(title);
-    check(resumed.continued, `${label}: the primary choice never continued the save`);
-  }
-  title.onExit();
 }
 
 // ── Report ─────────────────────────────────────────────────────────────────

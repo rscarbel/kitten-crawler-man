@@ -1,6 +1,6 @@
 /**
- * The idle loop's rare beats: a goblin peeking into the light, a word from
- * Caroline, a loot box catching the light, Deinonychus tearing past.
+ * The idle loop's rare beats: a goblin peeking into the light, a loot box
+ * catching the light, Deinonychus tearing past.
  *
  * Which beat plays when is drawn from a seeded stream and timed only by the
  * {@link TitleClock}, so a seed and a moment always give the same picture: a
@@ -9,21 +9,18 @@
  */
 
 import { mulberry32, type Rng } from '../../sprites/person/rng';
-import { crawlerName } from '../../characters/characters';
-import { carolineLines, type CarolineMessage } from '../../dialog/caroline';
 import type { TitleClock } from './titleClock';
 
-export type TitleEventId = 'goblinPeek' | 'carolineQuip' | 'lootGlint' | 'deinonychusDash';
+export type TitleEventId = 'goblinPeek' | 'lootGlint' | 'deinonychusDash';
 
 /** How long each beat plays, the one place it is set; layers time their art against it. */
 export const TITLE_EVENT_DURATION_MS: Readonly<Record<TitleEventId, number>> = {
   goblinPeek: 3200,
-  carolineQuip: 5200,
   lootGlint: 1100,
   deinonychusDash: 2400,
 };
 
-/** One beat as it fires, handed to every layer and to the quip hook. */
+/** One beat as it fires, handed to every layer. */
 export interface TitleEventFire {
   readonly id: TitleEventId;
   /** When it began, on the scene clock (`clock.elapsedMs`). */
@@ -33,21 +30,10 @@ export interface TitleEventFire {
   readonly variant: number;
 }
 
-/** A line Caroline says between the idle loop's other beats. */
-export interface TitleQuip {
-  readonly text: string;
-  /** When it was said, on the scene clock (`clock.elapsedMs`). */
-  readonly startedAtMs: number;
-  /** How long it stays up before the line may be cleared. */
-  readonly durationMs: number;
-}
-
 /** Where a fired beat goes. */
 export interface TitleEventSinks {
   /** Every layer's `onEvent`. */
   readonly broadcast: (fire: TitleEventFire) => void;
-  /** Caroline's line, through the scene's {@link TitleQuipChannel}. */
-  readonly quip: (quip: TitleQuip) => void;
 }
 
 /** One row of the event table. */
@@ -62,52 +48,11 @@ export interface TitleEventDef {
   readonly run: (fire: TitleEventFire, sinks: TitleEventSinks) => void;
 }
 
-const HUMAN = crawlerName('human');
-const CAT = crawlerName('cat');
-
-/** What Caroline says while the player lingers on the title. */
-export const TITLE_QUIPS: readonly CarolineMessage[] = [
-  carolineLines.message('Survival probability is not a fixed value. Raise it.'),
-  carolineLines.message('Death here is permanent. Nothing else here is real.'),
-  carolineLines.message(`${HUMAN}. Your growth is the objective. Pressure is the method.`),
-  carolineLines.message('Threat level is calibrated to your capability. It will increase.'),
-  carolineLines.message('Safe rooms admit no hostiles. Every other room does.'),
-  carolineLines.message(
-    `${CAT}. Your affection for every creature is noted. It does not protect you.`,
-  ),
-  carolineLines.message(
-    'Every floor has a collapse timer. At zero, the floor and everyone on it are lost.',
-  ),
-  carolineLines.message(
-    'I want you to succeed. I will not remove the risk that makes success possible.',
-  ),
-];
-
-/** The quip a fire's variant picks. */
-export function quipFor(variant: number): string {
-  const index = Math.min(TITLE_QUIPS.length - 1, Math.floor(variant * TITLE_QUIPS.length));
-  return TITLE_QUIPS[index].text;
-}
-
 const broadcastIt = (fire: TitleEventFire, sinks: TitleEventSinks): void => sinks.broadcast(fire);
 
 /** The beats the idle loop draws from. */
 export const TITLE_EVENTS: readonly TitleEventDef[] = [
   { id: 'goblinPeek', weight: 3, cooldownMs: 16000, largeMotion: false, run: broadcastIt },
-  {
-    id: 'carolineQuip',
-    weight: 2,
-    cooldownMs: 26000,
-    largeMotion: false,
-    run: (fire, sinks) => {
-      sinks.broadcast(fire);
-      sinks.quip({
-        text: quipFor(fire.variant),
-        startedAtMs: fire.startedAtMs,
-        durationMs: fire.durationMs,
-      });
-    },
-  },
   { id: 'lootGlint', weight: 3, cooldownMs: 9000, largeMotion: false, run: broadcastIt },
   { id: 'deinonychusDash', weight: 1, cooldownMs: 38000, largeMotion: true, run: broadcastIt },
 ];
@@ -245,40 +190,6 @@ export class TitleEventScheduler {
     this.planner = planner;
     this.upcoming = planner.next();
     return planner;
-  }
-}
-
-type QuipListener = (quip: TitleQuip) => void;
-
-/**
- * The hook Caroline's title line listens on. `current` is the latest quip, for a
- * surface that draws from the clock each frame (a frozen moment included);
- * `subscribe` is for one that wants to be told.
- */
-export class TitleQuipChannel {
-  private latest: TitleQuip | null = null;
-  private readonly listeners = new Set<QuipListener>();
-
-  publish(quip: TitleQuip): void {
-    this.latest = quip;
-    for (const listener of this.listeners) listener(quip);
-  }
-
-  /** The latest quip, or null before the first; a caller compares its start time to the clock. */
-  current(): TitleQuip | null {
-    return this.latest;
-  }
-
-  /** Calls `listener` on every quip from now on; the returned function unsubscribes. */
-  subscribe(listener: QuipListener): () => void {
-    this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
-  }
-
-  clear(): void {
-    this.latest = null;
   }
 }
 

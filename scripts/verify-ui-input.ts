@@ -3005,6 +3005,137 @@ section('the slot machine: a skip before the banner lands plays no slam, shake, 
   );
 }
 
+section('the character creation screen: every page seals the title, Back and Escape step back');
+{
+  const { CharacterCreation, CREATION_PAGES, bodyButtonId, figureCardId } =
+    await import('../src/ui/screens/creation/characterCreation.js');
+  type Creation = InstanceType<typeof CharacterCreation>;
+  type CreationPage = (typeof CREATION_PAGES)[number];
+  type ConfirmedIdentity = Parameters<Parameters<Creation['open']>[0]>[0];
+  const CREATION_ID = 'creation-probe';
+  const TYPED_NAME = 'Morgan';
+  const SAMPLES_PER_AXIS = 5;
+  const CELL_CENTRE = 0.5;
+  const painted = new Set<string>();
+  let releases = 0;
+  const confirmed: ConfirmedIdentity[] = [];
+  const figures = {
+    paint: (_ctx: CanvasRenderingContext2D, _rect: Rect, look: string): void => {
+      painted.add(look);
+    },
+    release: (): void => {
+      releases++;
+    },
+  };
+  const creationAt = (page: CreationPage): Creation => {
+    const creation = new CharacterCreation({ figures, keyboardAnchor: null });
+    creation.open((identity) => confirmed.push(identity));
+    if (page === 'name') return creation;
+    creation.fill(TYPED_NAME);
+    creation.next();
+    if (page === 'figure') creation.chooseBody('female');
+    return creation;
+  };
+  const staged = (creation: Creation): Harness => {
+    const h = harness([creation.surface(CREATION_ID)]);
+    h.frame();
+    return h;
+  };
+  const regionOf = (h: Harness, localId: string): HitRegion | null =>
+    h.root.regions().find((region) => region.id === `${CREATION_ID}/${localId}`) ?? null;
+  const tapRegion = (h: Harness, localId: string): void => {
+    const region = regionOf(h, localId);
+    check(region !== null, `the creation screen registers ${localId}`);
+    if (region === null) return;
+    h.tap(mid(region.rect));
+    h.frame();
+  };
+
+  for (const page of CREATION_PAGES) {
+    const regionIds = staged(creationAt(page))
+      .root.regions()
+      .filter((region) => region.surfaceId === CREATION_ID)
+      .map((region) => region.id);
+    check(regionIds.length > 0, `the ${page} page registers its controls`);
+    for (const regionId of regionIds) {
+      const h = staged(creationAt(page));
+      const region = h.root.regions().find((candidate) => candidate.id === regionId);
+      if (region === undefined) continue;
+      h.tap(mid(region.rect));
+      h.frame();
+      check(h.rec.world.length === 0, `${page} page: a tap on ${regionId} reached the title`);
+    }
+    for (let ix = 0; ix < SAMPLES_PER_AXIS; ix++) {
+      for (let iy = 0; iy < SAMPLES_PER_AXIS; iy++) {
+        const h = staged(creationAt(page));
+        const point = {
+          x: (SCREEN_W * (ix + CELL_CENTRE)) / SAMPLES_PER_AXIS,
+          y: (SCREEN_H * (iy + CELL_CENTRE)) / SAMPLES_PER_AXIS,
+        };
+        h.tap(point);
+        check(
+          h.rec.world.length === 0,
+          `${page} page: a tap at (${point.x}, ${point.y}) reached the title`,
+        );
+      }
+    }
+  }
+
+  const creation = creationAt('name');
+  const h = staged(creation);
+  tapRegion(h, 'creation/next');
+  check(
+    creation.page === 'name' && h.rec.sounds.includes(UI_ERROR_SOUND),
+    'Next refuses an empty name with the error cue',
+  );
+  for (const key of TYPED_NAME) h.root.key(key);
+  h.frame();
+  tapRegion(h, 'creation/next');
+  check(creation.page === 'body', 'a name typed through the keys takes Next to the body page');
+  check(h.root.key('Escape') === 'consumed', 'Escape on the body page is the screen’s');
+  h.frame();
+  check(creation.page === 'name', 'Escape on the body page steps back to the name');
+  tapRegion(h, 'creation/next');
+  check(creation.page === 'body', 'the name typed before is still in the field on the way back');
+  tapRegion(h, bodyButtonId('female'));
+  check(creation.page === 'figure', 'a body takes the screen to the figure page');
+  painted.clear();
+  h.frame();
+  check(
+    painted.size === 2 && painted.has('female_light') && painted.has('female_dark'),
+    `the figure page paints the chosen body’s two looks and no other (painted ${[...painted].join()})`,
+  );
+  tapRegion(h, 'creation/begin');
+  check(creation.page === 'figure', 'Begin waits for a figure to be picked');
+  const releasesBeforeBack = releases;
+  tapRegion(h, 'creation/back');
+  check(creation.page === 'body', 'Back on the figure page steps back to the body');
+  check(releases > releasesBeforeBack, 'Back to the body page lets the figures go');
+  tapRegion(h, bodyButtonId('female'));
+  tapRegion(h, figureCardId('dark'));
+  const releasesBeforeBegin = releases;
+  tapRegion(h, 'creation/begin');
+  const identity = confirmed[confirmed.length - 1];
+  check(
+    !creation.isOpen &&
+      identity?.name === TYPED_NAME &&
+      identity.body === 'female' &&
+      identity.complexion === 'dark',
+    'Begin closes the screen and confirms the name, body and figure chosen',
+  );
+  check(releases > releasesBeforeBegin, 'closing on Begin lets the figures go');
+  check(h.rec.world.length === 0, 'nothing in the walk-through reached the title');
+
+  const escaped = creationAt('name');
+  const escapeHarness = staged(escaped);
+  escapeHarness.root.key('Escape');
+  escapeHarness.frame();
+  check(!escaped.isOpen, 'Escape on the name page closes the screen');
+  const backed = creationAt('name');
+  tapRegion(staged(backed), 'creation/back');
+  check(!backed.isOpen, 'Back on the name page closes the screen');
+}
+
 section('the real dungeon scene, on a desktop and on a phone');
 {
   // Each in its own process: the platform is decided once, when the game's modules load.

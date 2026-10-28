@@ -17,7 +17,7 @@
  *    repeatedly — and every visit re-told page one before the shop would open.
  */
 
-import type { ResidentId } from '../../systems/townResidents';
+import type { ResidentId } from './residentIds';
 import { BUILDING_IDS, isBuildingId, type BuildingId } from '../../map/buildingIds';
 
 /** Places whose first visit opens something: a travel destination, a playlist. */

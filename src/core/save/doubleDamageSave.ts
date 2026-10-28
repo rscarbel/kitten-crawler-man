@@ -1,5 +1,5 @@
 import { isRecord } from '../util/guards';
-import type { PlayerSnapshot } from './PlayerSnapshot';
+import type { PlayerSnapshot } from './playerSnapshotFormat';
 import { DOUBLE_DAMAGE_STATUS } from '../combat/StatusEffect';
 import { DOUBLE_DAMAGE_FRAMES } from '../combat/statusTuning';
 

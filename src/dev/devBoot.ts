@@ -1,4 +1,5 @@
 import type { SceneManager } from '../core/Scene';
+import { useDevPlayerIdentity } from './devPlayerIdentity';
 import type { InputManager } from '../core/input/InputManager';
 import { DungeonScene, type DungeonSceneOptions } from '../scenes/DungeonScene';
 import { PaintBenchScene } from '../scenes/PaintBenchScene';
@@ -89,7 +90,7 @@ import { createGodModeState } from '../core/state/GodMode';
 import { isLevelId, type LevelId } from '../levels/levelIds';
 import { TUTORIAL_LEVEL_ID } from '../levels/tutorial';
 import { TutorialController } from '../systems/TutorialController';
-import { isStoryBeatId } from '../story/StoryDirector';
+import { isStoryBeatId } from '../story/storyBeatIds';
 import { storyDirectorBefore, storyPreviewLevel } from '../story/storyPreview';
 
 /**
@@ -383,282 +384,276 @@ export function devBootScene(
   }
 
   if (params.get('title') !== null) {
+    // A bare `?title` leaves the identity unset, so the title runs as it does for a fresh player.
+    if (params.get('save') !== null) useDevPlayerIdentity();
     openDevTitle(sceneManager, input, options, params);
     return true;
   }
 
+  const route = devRouteNamed(sceneManager, input, options, params);
+  if (route === null) return false;
+  useDevPlayerIdentity();
+  route();
+  return true;
+}
+
+/**
+ * The scene a dev-only parameter names, as the boot that builds it, or null
+ * when none does. Building is deferred so the dev identity is set only when a
+ * route takes over, and before anything that names or paints the human.
+ */
+function devRouteNamed(
+  sceneManager: SceneManager,
+  input: InputManager,
+  options: DungeonSceneOptions,
+  params: URLSearchParams,
+): (() => void) | null {
   if (params.get('paintbench') !== null) {
-    sceneManager.replace(new PaintBenchScene());
-    return true;
+    return () => sceneManager.replace(new PaintBenchScene());
   }
 
   if (params.get('people') !== null) {
-    sceneManager.replace(new PersonPreviewScene());
-    return true;
+    return () => sceneManager.replace(new PersonPreviewScene());
   }
 
   if (params.get('human') !== null) {
-    sceneManager.replace(new HumanPreviewScene());
-    return true;
+    return () => sceneManager.replace(new HumanPreviewScene());
   }
 
   if (params.get('cat') !== null) {
-    sceneManager.replace(new CatPreviewScene());
-    return true;
+    return () => sceneManager.replace(new CatPreviewScene());
   }
 
   if (params.get('bopca') !== null) {
-    sceneManager.replace(new BopcaPreviewScene());
-    return true;
+    return () => sceneManager.replace(new BopcaPreviewScene());
   }
 
   if (params.get('goblins') !== null) {
-    sceneManager.replace(new GoblinPreviewScene());
-    return true;
+    return () => sceneManager.replace(new GoblinPreviewScene());
   }
 
   if (params.get('rat') !== null) {
-    sceneManager.replace(new RatPreviewScene());
-    return true;
+    return () => sceneManager.replace(new RatPreviewScene());
   }
 
   if (params.get('llama') !== null) {
-    sceneManager.replace(new LlamaPreviewScene());
-    return true;
+    return () => sceneManager.replace(new LlamaPreviewScene());
   }
 
   if (params.get('cows') !== null) {
-    sceneManager.replace(new CowPreviewScene());
-    return true;
+    return () => sceneManager.replace(new CowPreviewScene());
   }
 
   if (params.get('golem') !== null) {
-    sceneManager.replace(new RockGolemPreviewScene());
-    return true;
+    return () => sceneManager.replace(new RockGolemPreviewScene());
   }
 
   if (params.get('darkknight') !== null) {
-    sceneManager.replace(new DarkKnightPreviewScene());
-    return true;
+    return () => sceneManager.replace(new DarkKnightPreviewScene());
   }
 
   if (params.get('deinonychus') !== null) {
-    sceneManager.replace(new DeinonychusPreviewScene());
-    return true;
+    return () => sceneManager.replace(new DeinonychusPreviewScene());
   }
 
   if (params.get('bugaboo') !== null) {
-    sceneManager.replace(new BugabooPreviewScene());
-    return true;
+    return () => sceneManager.replace(new BugabooPreviewScene());
   }
 
   if (params.get('tuskling') !== null) {
-    sceneManager.replace(new TusklingPreviewScene());
-    return true;
+    return () => sceneManager.replace(new TusklingPreviewScene());
   }
 
   if (params.get('krakaren') !== null) {
-    sceneManager.replace(new KrakarenPreviewScene());
-    return true;
+    return () => sceneManager.replace(new KrakarenPreviewScene());
   }
 
   if (params.get('gremlin') !== null) {
-    sceneManager.replace(new TrashGremlinPreviewScene());
-    return true;
+    return () => sceneManager.replace(new TrashGremlinPreviewScene());
   }
 
   if (params.get('rooster') !== null) {
-    sceneManager.replace(new BigRoosterPreviewScene());
-    return true;
+    return () => sceneManager.replace(new BigRoosterPreviewScene());
   }
 
   if (params.get('trog') !== null) {
-    sceneManager.replace(new TroglodytePreviewScene());
-    return true;
+    return () => sceneManager.replace(new TroglodytePreviewScene());
   }
 
   if (params.get('mantid') !== null) {
-    sceneManager.replace(new MantidPreviewScene());
-    return true;
+    return () => sceneManager.replace(new MantidPreviewScene());
   }
 
   if (params.get('evilclown') !== null) {
-    sceneManager.replace(new EvilClownPreviewScene());
-    return true;
+    return () => sceneManager.replace(new EvilClownPreviewScene());
   }
 
   if (params.get('skeletons') !== null) {
-    sceneManager.replace(new SkeletonPreviewScene());
-    return true;
+    return () => sceneManager.replace(new SkeletonPreviewScene());
   }
 
   if (params.get('lich') !== null) {
-    sceneManager.replace(new SkeletonPreviewScene('lich'));
-    return true;
+    return () => sceneManager.replace(new SkeletonPreviewScene('lich'));
   }
 
   if (params.get('status') !== null) {
-    sceneManager.replace(new StatusPreviewScene());
-    return true;
+    return () => sceneManager.replace(new StatusPreviewScene());
   }
 
   if (params.get('fairies') !== null) {
-    sceneManager.replace(new FairyPreviewScene());
-    return true;
+    return () => sceneManager.replace(new FairyPreviewScene());
   }
 
   if (params.get('ratkin') !== null) {
-    sceneManager.replace(new RatKinPreviewScene());
-    return true;
+    return () => sceneManager.replace(new RatKinPreviewScene());
   }
 
   if (params.get('demonliaison') !== null) {
-    sceneManager.replace(new DemonLiaisonPreviewScene());
-    return true;
+    return () => sceneManager.replace(new DemonLiaisonPreviewScene());
   }
 
   if (params.get('shady') !== null) {
-    sceneManager.replace(new ShadyPreviewScene());
-    return true;
+    return () => sceneManager.replace(new ShadyPreviewScene());
   }
 
   const scientist = params.get('scientist');
   if (scientist !== null) {
-    sceneManager.replace(new ScientistPreviewScene(scientist));
-    return true;
+    return () => sceneManager.replace(new ScientistPreviewScene(scientist));
   }
 
   if (params.get('necromancer') !== null) {
-    sceneManager.replace(new NecromancerPreviewScene());
-    return true;
+    return () => sceneManager.replace(new NecromancerPreviewScene());
   }
 
   if (params.get('casino') !== null) {
-    sceneManager.replace(new CasinoPreviewScene());
-    return true;
+    return () => sceneManager.replace(new CasinoPreviewScene());
   }
 
   if (params.get('poker') !== null) {
-    sceneManager.replace(new PokerPreviewScene());
-    return true;
+    return () => sceneManager.replace(new PokerPreviewScene());
   }
 
   if (params.get('slots') !== null) {
-    sceneManager.replace(new SlotsPreviewScene());
-    return true;
+    return () => sceneManager.replace(new SlotsPreviewScene());
   }
 
   if (params.get('wheel') !== null) {
-    sceneManager.replace(new WheelPreviewScene());
-    return true;
+    return () => sceneManager.replace(new WheelPreviewScene());
   }
 
   if (params.get('keyboardhero') !== null) {
-    sceneManager.replace(new KeyboardHeroPreviewScene());
-    return true;
+    return () => sceneManager.replace(new KeyboardHeroPreviewScene());
   }
 
   if (params.get('pipeboard') !== null) {
-    sceneManager.replace(new PipeBoardPreviewScene());
-    return true;
+    return () => sceneManager.replace(new PipeBoardPreviewScene());
   }
 
   if (params.get('ui') !== null) {
-    sceneManager.replace(new UiGalleryScene());
-    return true;
+    return () => sceneManager.replace(new UiGalleryScene());
   }
 
   if (params.get('tiles') !== null) {
-    sceneManager.replace(new TilePreviewScene());
-    return true;
+    return () => sceneManager.replace(new TilePreviewScene());
   }
 
   if (params.get('townmap') !== null) {
-    sceneManager.replace(new TownMapScene());
-    return true;
+    return () => sceneManager.replace(new TownMapScene());
   }
 
   const prisonParam = params.get('prison');
   const prisonPreset = getPlaytestPreset(PRISON_ROUTE_PRESET_ID);
   if (prisonParam !== null && prisonPreset !== null) {
-    const difficultyParam = params.get('difficulty');
-    const difficulty = DIFFICULTIES.find((candidate) => candidate === difficultyParam);
-    if (difficulty !== undefined) settings.setDifficultyForSession(difficulty);
-    const layout = prisonLayoutNamed(prisonParam);
-    if (layout === null && prisonParam !== '') {
-      console.error(`Unknown prison layout "${prisonParam}"; building the world's own`);
-    }
-    const boot = buildPlaytestBoot(prisonPreset);
-    sceneManager.replace(
-      new DungeonScene(boot.levelDef, input, sceneManager, {
-        ...devFloorOptions(withPlaytestBoot(options, boot), params),
-        devEnterPrisonAtStart: true,
-        devPrisonLayout: layout ?? undefined,
-      }),
-    );
-    return true;
+    return () => {
+      const difficultyParam = params.get('difficulty');
+      const difficulty = DIFFICULTIES.find((candidate) => candidate === difficultyParam);
+      if (difficulty !== undefined) settings.setDifficultyForSession(difficulty);
+      const layout = prisonLayoutNamed(prisonParam);
+      if (layout === null && prisonParam !== '') {
+        console.error(`Unknown prison layout "${prisonParam}"; building the world's own`);
+      }
+      const boot = buildPlaytestBoot(prisonPreset);
+      sceneManager.replace(
+        new DungeonScene(boot.levelDef, input, sceneManager, {
+          ...devFloorOptions(withPlaytestBoot(options, boot), params),
+          devEnterPrisonAtStart: true,
+          devPrisonLayout: layout ?? undefined,
+        }),
+      );
+    };
   }
 
   const playtestId = params.get('playtest');
   if (playtestId !== null) {
     const preset = getPlaytestPreset(playtestId);
     if (preset !== null) {
-      if (preset.difficulty !== undefined) settings.setDifficultyForSession(preset.difficulty);
-      const boot = buildPlaytestBoot(preset);
-      const floorOptions = withPlaytestBoot(options, boot);
-      if (preset.hire !== undefined) {
-        floorOptions.mercenaryRoster = {
-          active: {
-            id: preset.hire,
-            name: getMercenaryTemplate(preset.hire).name,
-            contractLevelId: preset.levelId,
-            introduced: false,
-          },
-          lastDeceased: null,
-          floorLevelId: null,
-        };
-      }
-      if (preset.deinonychusOut === true) floorOptions.deinonychusWasOut = true;
-      const defences = preset.briarHollowDefences;
-      if (defences !== undefined) {
-        const wallsFlag = params.get('walls');
-        const trebuchetsFlag = params.get('trebuchets');
-        const wallTier = parseWallTier(wallsFlag) ?? defences.wallTier;
-        const trebuchets = parseTrebuchetCount(trebuchetsFlag) ?? defences.trebuchets;
-        if (wallsFlag !== null && parseWallTier(wallsFlag) === null) {
-          console.error(`Unknown walls "${wallsFlag}"; standing the ring at ${defences.wallTier}`);
+      return () => {
+        if (preset.difficulty !== undefined) settings.setDifficultyForSession(preset.difficulty);
+        const boot = buildPlaytestBoot(preset);
+        const floorOptions = withPlaytestBoot(options, boot);
+        if (preset.hire !== undefined) {
+          floorOptions.mercenaryRoster = {
+            active: {
+              id: preset.hire,
+              name: getMercenaryTemplate(preset.hire).name,
+              contractLevelId: preset.levelId,
+              introduced: false,
+            },
+            lastDeceased: null,
+            floorLevelId: null,
+          };
         }
-        const assaultNow = params.get('assaultNow') !== null;
-        floorOptions.prepareBriarHollow = (kit, gameMap) => {
-          fortifyBriarHollow(kit, gameMap, { wallTier, trebuchets });
-          if (assaultNow) beginAssaultForPlaytest(kit);
-        };
-      } else if (preset.constructionContracts !== undefined) {
-        floorOptions.briarHollowState = contractsPlaytestState(preset.constructionContracts);
-      } else if (preset.briarHollowBlueprints !== undefined) {
-        floorOptions.briarHollowState = blueprintsPlaytestState(preset.briarHollowBlueprints);
-      } else if (preset.briarHollowUnlockAll === true) {
-        floorOptions.prepareBriarHollow = (kit) => unlockEverythingForPlaytest(kit.state.unlocks);
-      }
-      if (preset.toolTiers !== undefined) {
-        floorOptions.partyCrafts = { ...createPartyCraftsState(), tools: { ...preset.toolTiers } };
-      }
-      if (preset.spawnAtCircus === true) floorOptions.spawnAtCircus = true;
-      if (boot.doomsdayStage !== undefined) {
-        const doomsday = createDoomsdayProgress();
-        doomsday.stage = boot.doomsdayStage;
-        doomsday.deadlineAt = Date.now() + DOOMSDAY_COUNTDOWN_MS;
-        floorOptions.doomsdayQuestProgress = doomsday;
-        // The countdown starts at the Lich's death, so the questline it ends is
-        // already at that beat; the crystal's spot is filled in by the tower's
-        // top floor the first time the party climbs to it.
-        floorOptions.murderQuestProgress =
-          parseMurderQuestProgress('lich_slain') ?? floorOptions.murderQuestProgress;
-      }
-      sceneManager.replace(
-        new DungeonScene(boot.levelDef, input, sceneManager, devFloorOptions(floorOptions, params)),
-      );
-      return true;
+        if (preset.deinonychusOut === true) floorOptions.deinonychusWasOut = true;
+        const defences = preset.briarHollowDefences;
+        if (defences !== undefined) {
+          const wallsFlag = params.get('walls');
+          const trebuchetsFlag = params.get('trebuchets');
+          const wallTier = parseWallTier(wallsFlag) ?? defences.wallTier;
+          const trebuchets = parseTrebuchetCount(trebuchetsFlag) ?? defences.trebuchets;
+          if (wallsFlag !== null && parseWallTier(wallsFlag) === null) {
+            console.error(
+              `Unknown walls "${wallsFlag}"; standing the ring at ${defences.wallTier}`,
+            );
+          }
+          const assaultNow = params.get('assaultNow') !== null;
+          floorOptions.prepareBriarHollow = (kit, gameMap) => {
+            fortifyBriarHollow(kit, gameMap, { wallTier, trebuchets });
+            if (assaultNow) beginAssaultForPlaytest(kit);
+          };
+        } else if (preset.constructionContracts !== undefined) {
+          floorOptions.briarHollowState = contractsPlaytestState(preset.constructionContracts);
+        } else if (preset.briarHollowBlueprints !== undefined) {
+          floorOptions.briarHollowState = blueprintsPlaytestState(preset.briarHollowBlueprints);
+        } else if (preset.briarHollowUnlockAll === true) {
+          floorOptions.prepareBriarHollow = (kit) => unlockEverythingForPlaytest(kit.state.unlocks);
+        }
+        if (preset.toolTiers !== undefined) {
+          floorOptions.partyCrafts = {
+            ...createPartyCraftsState(),
+            tools: { ...preset.toolTiers },
+          };
+        }
+        if (preset.spawnAtCircus === true) floorOptions.spawnAtCircus = true;
+        if (boot.doomsdayStage !== undefined) {
+          const doomsday = createDoomsdayProgress();
+          doomsday.stage = boot.doomsdayStage;
+          doomsday.deadlineAt = Date.now() + DOOMSDAY_COUNTDOWN_MS;
+          floorOptions.doomsdayQuestProgress = doomsday;
+          // The countdown starts at the Lich's death, so the questline it ends is
+          // already at that beat; the crystal's spot is filled in by the tower's
+          // top floor the first time the party climbs to it.
+          floorOptions.murderQuestProgress =
+            parseMurderQuestProgress('lich_slain') ?? floorOptions.murderQuestProgress;
+        }
+        sceneManager.replace(
+          new DungeonScene(
+            boot.levelDef,
+            input,
+            sceneManager,
+            devFloorOptions(floorOptions, params),
+          ),
+        );
+      };
     }
     console.error(`Unknown playtest preset: "${playtestId}"`);
   }
@@ -666,23 +661,23 @@ export function devBootScene(
   const storyParam = params.get('story');
   if (storyParam !== null) {
     if (isStoryBeatId(storyParam)) {
-      const levelId = storyPreviewLevel(storyParam);
-      bootDevFloor(sceneManager, input, params, levelId, {
-        ...options,
-        storyDirector: storyDirectorBefore(storyParam),
-        storyPreview: storyParam,
-        tutorialController:
-          levelId === TUTORIAL_LEVEL_ID ? TutorialController.createForTutorial() : undefined,
-      });
-      return true;
+      return () => {
+        const levelId = storyPreviewLevel(storyParam);
+        bootDevFloor(sceneManager, input, params, levelId, {
+          ...options,
+          storyDirector: storyDirectorBefore(storyParam),
+          storyPreview: storyParam,
+          tutorialController:
+            levelId === TUTORIAL_LEVEL_ID ? TutorialController.createForTutorial() : undefined,
+        });
+      };
     }
     console.error(`Unknown story beat: "${storyParam}"`);
   }
 
   const levelId = params.get('level');
-  if (levelId === null || !isLevelId(levelId)) return false;
-  bootDevFloor(sceneManager, input, params, levelId, options);
-  return true;
+  if (levelId === null || !isLevelId(levelId)) return null;
+  return () => bootDevFloor(sceneManager, input, params, levelId, options);
 }
 
 /**

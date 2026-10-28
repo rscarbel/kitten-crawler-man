@@ -77,6 +77,8 @@ const {
 } = await import('../src/sprites/figure/figureFrameCache.js');
 const { setFigureCacheStatsRecording, getFigureCacheStats } =
   await import('../src/sprites/figure/figureCacheStats.js');
+const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js');
+useDevPlayerIdentity();
 
 const cyclesArg = process.argv.find((arg) => arg.startsWith('--cycles='));
 const DEFAULT_TRIPS = 20;

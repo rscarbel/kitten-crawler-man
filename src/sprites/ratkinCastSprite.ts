@@ -22,9 +22,9 @@ import {
   RATKIN_CAST_IDS,
   RATKIN_CAST_OUTFITS,
   type RatkinCastId,
-  type RatkinSoldierId,
   isRatkinSoldier,
 } from './art/ratkin/cast';
+import type { SoldierId } from '../core/quests/villagerIds';
 import {
   type CastRowRole,
   RATKIN_WORK_MOTIONS,
@@ -242,7 +242,7 @@ const SOLDIER_FIGHT_ACTIONS: readonly RatkinCastAction[] = ['strike', 'hurt', 'd
  * asked for when the soldier first engages, so the thrust that follows is
  * not a cold bake mid-swing. The side and away views bake on first use.
  */
-export function prewarmRatkinSoldierFight(id: RatkinSoldierId): void {
+export function prewarmRatkinSoldierFight(id: SoldierId): void {
   const figure = ratkinCastFigure(id);
   for (const action of SOLDIER_FIGHT_ACTIONS) {
     prewarmFigureState(figure, castStateName(action, 'front'));

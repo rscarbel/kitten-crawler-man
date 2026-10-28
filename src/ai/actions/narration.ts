@@ -1,4 +1,5 @@
 /** Cheap narration actions: words on screen, a reward chest, a sound, a sting, a note to self. */
+import { crawlerDisplayName } from '../../characters/characters';
 import type { MusicBusId, SoundId } from '../../audio/sounds';
 import {
   AI_CHEST_RARITIES,
@@ -7,7 +8,6 @@ import {
   AI_CHARACTER_CAROLINE,
   TARGET_PARAM,
   crawlerKind,
-  crawlerName,
   formatSeconds,
   notifyPlayer,
   resolveTarget,
@@ -76,7 +76,7 @@ const announce: AIActionDef = {
       voice: speaksInCarolineFrame(characterName) ? 'caroline' : 'hud',
       ...(banner ? { durationTicks: BANNER_DURATION_TICKS } : {}),
     });
-    return ok(`announced: ${text}`);
+    return ok(() => `announced: ${text}`);
   },
 };
 
@@ -110,14 +110,13 @@ const grantRewardChest: AIActionDef = {
     const crawler = resolveTarget(scene, params.get(TARGET_PARAM));
     const rarity = params.get(CHEST_RARITY_PARAM);
     const reason = params.get(CHEST_REASON_PARAM);
-    scene
-      .getAwards()
-      .grantChest(crawlerKind(scene, crawler), { rarity, source: 'caroline', subtitle: reason });
-    notifyPlayer(scene, `${rarity} chest for ${crawlerName(scene, crawler)}: ${reason}`, {
+    const kind = crawlerKind(scene, crawler);
+    scene.getAwards().grantChest(kind, { rarity, source: 'caroline', subtitle: reason });
+    notifyPlayer(scene, `${rarity} chest for ${crawlerDisplayName(kind)}: ${reason}`, {
       tone: 'success',
       icon: 'sparkle',
     });
-    return ok(`granted a ${rarity} chest to ${crawlerName(scene, crawler)}`);
+    return ok((names) => `granted a ${rarity} chest to ${names.crawler(crawler)}`);
   },
 };
 
@@ -151,7 +150,7 @@ const playSound: AIActionDef = {
     if (audio === null) return refused('no audio in this scene');
     const cue = params.get(SOUND_CUE);
     audio.play(cue);
-    return ok(`played ${snakeToWords(cue)}`);
+    return ok(() => `played ${snakeToWords(cue)}`);
   },
 };
 
@@ -200,7 +199,7 @@ const musicSting: AIActionDef = {
     aiActionTimers.after(secondsToFrames(seconds), () => {
       scope.releaseMusic('ai_director');
     });
-    return ok(`music: ${snakeToWords(track)} for ${formatSeconds(seconds)}`);
+    return ok(() => `music: ${snakeToWords(track)} for ${formatSeconds(seconds)}`);
   },
 };
 
@@ -237,7 +236,7 @@ const remember: AIActionDef = {
         voice: speaksInCarolineFrame(characterName) ? 'caroline' : 'hud',
       });
     }
-    return ok(`remembered (${params.get(REMEMBER_KIND)}): ${params.get(REMEMBER_FACT)}`);
+    return ok(() => `remembered (${params.get(REMEMBER_KIND)}): ${params.get(REMEMBER_FACT)}`);
   },
 };
 

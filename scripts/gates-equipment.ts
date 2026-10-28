@@ -106,6 +106,9 @@ import { motionSetOf } from '../src/sprites/art/human/motionSets.js';
 import { compositeHeldItem, heldTransformAt } from '../src/sprites/held/heldComposite.js';
 import { scriptedPropVisual } from '../src/sprites/held/art/scriptedPropHeld.js';
 import type { Pt } from '../src/sprites/art/bipedArt.js';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+
+useDevPlayerIdentity();
 
 installCanvasGlobals();
 

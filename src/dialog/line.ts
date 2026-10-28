@@ -19,6 +19,13 @@ export type Paragraphs = readonly [string, ...string[]];
 export type LineText = string | Paragraphs;
 
 /**
+ * Text for a line that is still a fixed property of a script, but names
+ * something only known once a run is under way, such as the player's own
+ * name: written as a function, it is read each time the line is shown.
+ */
+export type DeferredText<Text> = () => Text;
+
+/**
  * What the player presses to move past a line's last display page.
  * `'continue'` renders the standard footer hint; `'custom'` renders a
  * labelled button in its place — for a line whose advance is itself a
@@ -44,9 +51,9 @@ export type NonEmpty<T> = readonly [T, ...T[]];
 /** The line-building helpers `speakerLines` and `transientSpeaker` both return, closed over one speaker. */
 export interface LineBuilder {
   /** A line with the standard "Continue" advance. The common case. */
-  line(text: LineText): DialogLine;
+  line(text: LineText | DeferredText<LineText>): DialogLine;
   /** A line whose advance control wears `label` instead of "Continue". */
-  button(label: string, text: LineText): DialogLine;
+  button(label: string, text: LineText | DeferredText<LineText>): DialogLine;
   /**
    * A templated line: `build` takes the line's arguments and returns its
    * text, so a missing or misspelled argument is a compile error at every
@@ -60,7 +67,7 @@ export interface LineBuilder {
    */
   fnButton<A>(label: string, build: (args: A) => LineText): (args: A) => DialogLine;
   /** A single-paragraph line for a speech bubble or an ambient bark. */
-  bark(text: string): BarkLine;
+  bark(text: string | DeferredText<string>): BarkLine;
 }
 
 function toParagraphs(text: LineText): Paragraphs {
@@ -71,10 +78,37 @@ function buildLine(speaker: SpeakerRef, text: LineText, advance: AdvanceLabel): 
   return { speaker, paragraphs: toParagraphs(text), advance };
 }
 
+function buildDeferrableLine(
+  speaker: SpeakerRef,
+  text: LineText | DeferredText<LineText>,
+  advance: AdvanceLabel,
+): DialogLine {
+  if (typeof text !== 'function') return buildLine(speaker, text, advance);
+  return {
+    speaker,
+    get paragraphs(): Paragraphs {
+      return toParagraphs(text());
+    },
+    advance,
+  };
+}
+
+function buildBark(speaker: SpeakerRef, text: string | DeferredText<string>): BarkLine {
+  const advance: AdvanceLabel = { kind: 'continue' };
+  if (typeof text !== 'function') return { speaker, paragraphs: [text], advance };
+  return {
+    speaker,
+    get paragraphs(): readonly [string] {
+      return [text()];
+    },
+    advance,
+  };
+}
+
 function lineBuilderFor(speaker: SpeakerRef): LineBuilder {
   return {
-    line: (text) => buildLine(speaker, text, { kind: 'continue' }),
-    button: (label, text) => buildLine(speaker, text, { kind: 'custom', label }),
+    line: (text) => buildDeferrableLine(speaker, text, { kind: 'continue' }),
+    button: (label, text) => buildDeferrableLine(speaker, text, { kind: 'custom', label }),
     fn:
       <A>(build: (args: A) => LineText) =>
       (args: A): DialogLine =>
@@ -83,11 +117,7 @@ function lineBuilderFor(speaker: SpeakerRef): LineBuilder {
       <A>(label: string, build: (args: A) => LineText) =>
       (args: A): DialogLine =>
         buildLine(speaker, build(args), { kind: 'custom', label }),
-    bark: (text: string): BarkLine => ({
-      speaker,
-      paragraphs: [text],
-      advance: { kind: 'continue' },
-    }),
+    bark: (text) => buildBark(speaker, text),
   };
 }
 

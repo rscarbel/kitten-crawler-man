@@ -19,11 +19,9 @@ import { BigRooster } from '../../src/creatures/BigRooster.js';
 import { KrakarenClone } from '../../src/creatures/KrakarenClone.js';
 import { TrashGremlin } from '../../src/creatures/TrashGremlin.js';
 import {
-  ALL_DEBRIEF_BOSS_TYPES,
   BOSS_DISPLAY_NAMES,
   EMPTY_DEBRIEF_MEMORY,
   MAX_ITEMS_PER_DEBRIEF_PAGE,
-  debriefBossType,
   debriefHasNews,
   debriefPages,
   isStrictUpgrade,
@@ -31,10 +29,14 @@ import {
   rememberDebriefHeard,
   sameDebriefMemory,
   unwornGear,
-  type DebriefBossType,
   type DebriefMemory,
   type DebriefState,
 } from '../../src/systems/daveDebrief.js';
+import {
+  ALL_DEBRIEF_BOSS_TYPES,
+  debriefBossType,
+  type DebriefBossType,
+} from '../../src/core/mobs/debriefBossTypes.js';
 
 const failures: string[] = [];
 let checks = 0;

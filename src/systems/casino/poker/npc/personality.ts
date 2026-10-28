@@ -27,7 +27,8 @@ import {
   type SizingWeights,
   type UnitParameter,
 } from './profiles';
-import { REGULAR_IDS, type RegularId, mapRegulars } from './regulars';
+import { mapRegulars } from './regulars';
+import { REGULAR_IDS, type RegularId } from './regularIds';
 import { type PokerTell, rollTells } from './tells';
 
 export const POKER_PERSONALITY_SALT = 0x504f4b52;

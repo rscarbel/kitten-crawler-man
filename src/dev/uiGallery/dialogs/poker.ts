@@ -15,7 +15,7 @@ import { ClubPokerSystem, POKER_MIN_BUY_IN } from '../../../systems/ClubPokerSys
 import { TABLE_MAXIMUM, TABLE_MINIMUM } from '../../../systems/casino/BlackjackTable';
 import { POKER_DEV_SEED } from '../../../systems/casino/poker/npc/personality';
 import { EMPTY_PLAYER_READ } from '../../../systems/casino/poker/npc/playerRead';
-import { REGULAR_IDS } from '../../../systems/casino/poker/npc/regulars';
+import { REGULAR_IDS } from '../../../systems/casino/poker/npc/regularIds';
 import { PokerRules } from '../../../ui/screens/dialogs/PokerRules';
 import { SEAT_INFO_BIO_HANDS } from '../../../ui/casino/pokerSeatInfo';
 import type { PokerReads } from '../../../core/club/CasinoState';

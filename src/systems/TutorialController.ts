@@ -1,5 +1,5 @@
 import { TILE_SIZE } from '../core/constants';
-import { crawlerName } from '../characters/characters';
+import { crawlerDisplayName } from '../characters/characters';
 import { getSeismicStompStats } from '../abilities/seismicStomp';
 import type { TutorialGoblin } from '../creatures/TutorialGoblin';
 import type { GameMap } from '../map/GameMap';
@@ -198,7 +198,11 @@ let cachedHintTexts: {
 
 /** The copy for each step's hint box; an empty string shows no box. */
 function hintTexts(mode: InputMode): Record<TutorialState, string> {
-  const key = [mode, ...HINT_TEXT_ACTIONS.map((action) => keyLabel(action))].join('|');
+  const key = [
+    mode,
+    crawlerDisplayName('human'),
+    ...HINT_TEXT_ACTIONS.map((action) => keyLabel(action)),
+  ].join('|');
   if (cachedHintTexts?.key !== key) {
     const texts = byInputMode(mode, { touch: TOUCH_HINT_TEXTS, pointer: pointerHintTexts() });
     cachedHintTexts = { key, texts };
@@ -224,7 +228,9 @@ const TOUCH_HINT_TEXTS: Record<TutorialState, string> = {
   CAT_OPENED_TREASURE_BOX: '',
   CAT_EQUIPPED_MAGIC_MISSILE: 'Tap Magic Missile (slot 1). It flies over the fence at the goblin!',
   CAT_SHOT_GUARD: 'The missile flew right over the fence!',
-  AWAITING_SWITCH_TO_HUMAN: `Tap the Switch button to go back to ${crawlerName('human')}.`,
+  get AWAITING_SWITCH_TO_HUMAN(): string {
+    return `Tap the Switch button to go back to ${crawlerDisplayName('human')}.`;
+  },
   SWITCHED_TO_HUMAN: 'Tap the Follower button and call the cat to you.',
   CAT_ARRIVED: 'Your partner is with you. Dave wants a word.',
   TALKED_TO_DAVE_AGAIN: 'Tutorial complete! Find the stairs to continue.',
@@ -254,7 +260,7 @@ function pointerHintTexts(): Record<TutorialState, string> {
     CAT_OPENED_TREASURE_BOX: '',
     CAT_EQUIPPED_MAGIC_MISSILE: `A goblin guard lurks behind the fence. Press ${firstSlotKey}. Magic flies right over it!`,
     CAT_SHOT_GUARD: 'The missile flew right over the fence!',
-    AWAITING_SWITCH_TO_HUMAN: `Switch back to ${crawlerName('human')}. Press ${keyLabel('switchCharacter')}.`,
+    AWAITING_SWITCH_TO_HUMAN: `Switch back to ${crawlerDisplayName('human')}. Press ${keyLabel('switchCharacter')}.`,
     SWITCHED_TO_HUMAN: `Press "${keyLabel('companionFollow')}" to bring up the follower menu and call the cat to you.`,
     CAT_ARRIVED: 'Your partner is with you. Dave wants a word.',
     TALKED_TO_DAVE_AGAIN: 'Tutorial complete! Find the stairwell and descend to begin.',
@@ -283,7 +289,7 @@ function bagTabHint(mode: InputMode): string {
 
 /** The stat step's copy once the Character page is open: what a point does, then the one ask. */
 function statSpendHint(mode: InputMode): string {
-  return `A point makes ${crawlerName('human')} stronger in one stat for good. ${tapVerb(mode)} the + on any stat to spend it. Health (more HP) is a safe first pick.`;
+  return `A point makes ${crawlerDisplayName('human')} stronger in one stat for good. ${tapVerb(mode)} the + on any stat to spend it. Health (more HP) is a safe first pick.`;
 }
 
 function leaveMenuHint(mode: InputMode): string {

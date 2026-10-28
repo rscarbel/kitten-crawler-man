@@ -152,26 +152,26 @@ export const DAVE_SHOVED_UP_SLEEVE: SleeveCut = {
   shadeContrast: LEATHER_SLEEVE_CONTRAST,
 };
 /** A thin rolled band: a few turns of cotton add little to the arm. */
-const RYAN_CUFF_BULK = 1.2;
+const ROLLED_CUFF_BULK = 1.2;
 /** A lean man's deltoid, a little less than the rig's heavy cap. */
-const RYAN_CAP_SWELL = 0.2;
+const ROLLED_CAP_SWELL = 0.2;
 /** Cotton chambray: its shade lies light round the arm. */
 export const COTTON_SLEEVE_CONTRAST = 0.6;
 /** His shoulders slope: the cap carries the trapezius's fall on out over the arm. */
-const RYAN_CAP_SLOPE = 1;
+const ROLLED_CAP_SLOPE = 1;
 /** The roll lies just below the elbow, a twelfth of the way down the forearm. */
-const RYAN_ROLL_ALONG_FOREARM = 0.08;
+const ROLL_ALONG_FOREARM = 0.08;
 /**
- * Ryan's shirt sleeve, rolled in flat turns to just below the elbow: the roll
+ * A shirt sleeve, rolled in flat turns to just below the elbow: the roll
  * sits further down the forearm than a sleeve shoved up, and lies flatter
  * against it, because cotton folds into a band where leather bunches.
  */
-export const RYAN_ROLLED_SLEEVE: SleeveCut = {
-  cuffAlongForearm: RYAN_ROLL_ALONG_FOREARM,
-  cuffBulk: RYAN_CUFF_BULK,
+export const ROLLED_SLEEVE: SleeveCut = {
+  cuffAlongForearm: ROLL_ALONG_FOREARM,
+  cuffBulk: ROLLED_CUFF_BULK,
   padding: 0,
-  capSwell: RYAN_CAP_SWELL,
-  capSlope: RYAN_CAP_SLOPE,
+  capSwell: ROLLED_CAP_SWELL,
+  capSlope: ROLLED_CAP_SLOPE,
   shadeContrast: COTTON_SLEEVE_CONTRAST,
 };
 /**

@@ -353,6 +353,8 @@ const { activeHumanFigure, activeHumanLook, motionSetOfRow } =
   await import('../src/sprites/humanSprite.js');
 const { HUMAN_LOOKS } = await import('./humanLooks.js');
 const { humanRowOf } = await import('../src/sprites/art/humanFigure.js');
+const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js');
+useDevPlayerIdentity();
 
 /** Long enough for the live script to stow, draw and strike with the weapon picked. */
 const HUMAN_SCRIPT_WATCH_TICKS = 6 * 60;

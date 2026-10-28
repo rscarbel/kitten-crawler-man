@@ -3,7 +3,7 @@
  * only looks at the image — every defect that has ever mattered on a figure in
  * this project was invisible to `typecheck`, `lint` and a code read.
  *
- * The contact sheet is painted from `HUMAN_FIGURE` the way the runtime cache
+ * The contact sheet is painted from `undressedHumanFigure(activeHumanLook())` the way the runtime cache
  * bakes it, and the art gates run as part of the render — on every human look
  * unless `--look=` narrows them to one, each in the default outfit, bare and
  * in all his gear — so one command answers both "does it still hold
@@ -83,6 +83,9 @@ import { type Pt } from '../src/sprites/art/bipedArt.js';
 import { HEAD_RY } from '../src/sprites/art/biped/proportions.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import type { HumanLook } from '../src/sprites/looks/humanLook.js';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+
+useDevPlayerIdentity();
 
 const DEFAULT_SCALE = 1.5;
 const MIN_SCALE = 0.25;

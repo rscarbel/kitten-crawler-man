@@ -1,7 +1,5 @@
-import { crawlerName, PLAYER_CHARACTERS } from '../../characters/characters';
-import type { CrawlerKind } from '../../core/skills/SkillManager';
 import { createMergePatch, type JsonObject } from './json';
-import type { CrawlerName, CrawlerState, LiveInput } from './types';
+import type { CrawlerState, LiveInput } from './types';
 
 /** The server keeps up with one snapshot a second; anything faster is wasted bandwidth. */
 export const SNAPSHOT_MIN_INTERVAL_MS = 1_000;
@@ -9,16 +7,6 @@ export const SNAPSHOT_MIN_INTERVAL_MS = 1_000;
 export interface StateSnapshotPayload {
   full?: JsonObject;
   patch?: JsonObject;
-}
-
-/** Which crawler goes by `name`. */
-export function crawlerKindNamed(name: CrawlerName): CrawlerKind {
-  return name === crawlerName('human') ? 'human' : 'cat';
-}
-
-/** The live state of the crawler that goes by `name`. */
-export function liveCrawlerNamed(live: LiveInput, name: CrawlerName): CrawlerState {
-  return live.crawlers[crawlerKindNamed(name)];
 }
 
 function crawlerJson(crawler: CrawlerState): JsonObject {
@@ -48,8 +36,8 @@ export function buildLiveState(live: LiveInput): JsonObject {
   };
   return {
     activePlayer: live.activeCrawler,
-    [PLAYER_CHARACTERS.human]: crawlerJson(live.crawlers.human),
-    [PLAYER_CHARACTERS.cat]: crawlerJson(live.crawlers.cat),
+    human: crawlerJson(live.crawlers.human),
+    cat: crawlerJson(live.crawlers.cat),
     location,
     nearbyMobs: live.nearbyMobs.map((mob) => ({
       name: mob.name,

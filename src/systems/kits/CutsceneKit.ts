@@ -1,13 +1,14 @@
 /**
  * CutsceneKit — the cutscene director, the surface that hands the party to it,
  * and the movement phase's half of a scripted walk. The dungeon and a building
- * interior each build one, mount its surface, and call `tickWorld` in place of
+ * interior each build one, mount its surfaces, and call `tickWorld` in place of
  * the player's own movement, so a script owns the party the same way in both.
  */
 
 import type { SoundId } from '../../audio/sounds';
 import type { Rect } from '../../ui/core/geom';
 import type { Surface } from '../../ui/core/UiRoot';
+import type { ConversationSurfaceOptions } from '../../dialog/Conversation';
 import type { GameMap } from '../../map/GameMap';
 import type { Player } from '../../Player';
 import { applyMovement, type SouthCollisionAnchor } from '../GameLoopPhases';
@@ -57,12 +58,25 @@ export class CutsceneKit {
   }
 
   /**
+   * The cutscene's surface and the scene's conversation surface, to mount in
+   * this order and only through here. A talk the cutscene opens must stack
+   * above the surface that holds the party, or that surface takes every key
+   * and tap meant for the talk. Caroline's messages float in the same band as
+   * it, and when the scene runs two catch-up updates before a frame is drawn
+   * both open in the same stack refresh, where mount order decides which is on
+   * top.
+   */
+  surfaces(conversation: ConversationSurfaceOptions): readonly Surface[] {
+    return [this.cutsceneSurface(), this.deps.conversation.surface(conversation)];
+  }
+
+  /**
    * Takes every press, tap and gameplay key while a cutscene plays, short of
    * pause: Escape passes beneath it to the pause key, and the HUD's pause
    * button stays pressable through it. It draws nothing, so the HUD stays in
    * view, and the pause menu opens over it and hands the script back on close.
    */
-  surface(): Surface {
+  private cutsceneSurface(): Surface {
     return {
       id: CUTSCENE_SURFACE_ID,
       band: 'panel',

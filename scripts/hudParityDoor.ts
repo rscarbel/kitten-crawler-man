@@ -36,6 +36,8 @@ const { GameMap } = await import('../src/map/GameMap.js');
 const { level3 } = await import('../src/levels/level3.js');
 const { DungeonScene } = await import('../src/scenes/DungeonScene.js');
 const { BuildingInteriorScene } = await import('../src/scenes/BuildingInteriorScene.js');
+const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js');
+useDevPlayerIdentity();
 
 type Rect = { readonly x: number; readonly y: number; readonly w: number; readonly h: number };
 type Outside = InstanceType<typeof DungeonScene>;

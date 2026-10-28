@@ -69,7 +69,11 @@ export interface GarmentCut {
   readonly hemDrop: number;
   /** Whether it carries the jacket's own hardware: the zip and the sewn waistband. */
   readonly hasHardware: boolean;
-  /** How far the hem flares past the waist. */
+  /**
+   * How far the hem flares past the rig's waist. It is measured against the
+   * rig's waist, not the one {@link waistAcross} draws in, so a pinched waist
+   * flares back out to the hips below it.
+   */
   readonly hemFlare: number;
   /**
    * How deep the garment stands front to back edge-on, against the rig's own
@@ -109,6 +113,19 @@ export interface GarmentCut {
    * down each side, and a lit yoke reads as a hump over its shoulders.
    */
   readonly foldWeight: number;
+  /**
+   * How narrow the waist stands head-on against the rig's
+   * ({@link RIG_WAIST_ACROSS}): a woman's waist draws in well inside both her
+   * chest and her hips, and that pinch between them is what reads as a
+   * woman's figure at the tile.
+   */
+  readonly waistAcross: number;
+  /**
+   * How far the bust stands forward of the chest edge-on, in torso units, and
+   * how deep the shade under it lies head-on: {@link NO_BUST} is a flat
+   * chest. At the tile the profile is where a woman's figure reads first.
+   */
+  readonly bustDepth: number;
 }
 
 /** The jacket's own folds. */
@@ -143,6 +160,12 @@ const RIG_CHEST_ACROSS = 1;
 /** The rig's own chest-to-back depth, edge-on. */
 const RIG_TORSO_DEPTH = 1;
 
+/** The rig's own waist, head-on. */
+export const RIG_WAIST_ACROSS = 1;
+
+/** A flat chest, the rig's own. */
+export const NO_BUST = 0;
+
 /** What {@link torsoFrame} needs of a look: the garment's material and cut. */
 export interface TorsoLook {
   readonly garment: GlossRamp;
@@ -167,6 +190,8 @@ export const RIG_GARMENT_CUT: GarmentCut = {
   shoulderDrop: RIG_SHOULDER_DROP,
   neckline: 'closed',
   foldWeight: RIG_FOLD_WEIGHT,
+  waistAcross: RIG_WAIST_ACROSS,
+  bustDepth: NO_BUST,
 };
 
 const NO_LAG: Pt = { x: 0, y: 0 };
@@ -257,6 +282,11 @@ const HEM_SAG = 0.012;
 /** Head-on the neckline dips at the front, under the collar. */
 const NECKLINE_DIP = 0.04;
 
+/** The garment's half-width at the waist head-on, in the view's girth. */
+function facingWaistHalf(frame: TorsoFrame, view: ViewSpec): number {
+  return (WAIST_HALF + JACKET_OFFSET) * view.girth * frame.cut.waistAcross;
+}
+
 function traceFacing(
   ctx: Ctx,
   frame: TorsoFrame,
@@ -270,8 +300,12 @@ function traceFacing(
   const leftRoot = -frame.acrossOf(skeleton.leftShoulder);
   const rightRoot = frame.acrossOf(skeleton.rightShoulder);
   const chestHalf = (CHEST_HALF + JACKET_OFFSET) * view.girth * frame.cut.chestAcross;
-  const waistHalf = (WAIST_HALF + JACKET_OFFSET) * view.girth;
-  const hemHalf = waistHalf * frame.cut.hemFlare * (1 + pose.jacketFlare * HEM_KICK);
+  const waistHalf = facingWaistHalf(frame, view);
+  const hemHalf =
+    (WAIST_HALF + JACKET_OFFSET) *
+    view.girth *
+    frame.cut.hemFlare *
+    (1 + pose.jacketFlare * HEM_KICK);
   const drop = frame.cut.shoulderDrop;
 
   // From behind the arms hang on the far side of him and the back of the
@@ -347,6 +381,36 @@ const PROFILE = {
   clavicle: pt(0.2, 0.0),
 } as const;
 
+/**
+ * A bust edge-on: its fullest point sits a little below the pecs', and under
+ * it the cloth falls back in to the ribs rather than bridging straight down
+ * to the belly, so the forward line reads as a form and not as a barrel.
+ */
+const BUST_APEX_DROP = 0.05;
+const BUST_UNDER_DROP = 0.03;
+/** How far forward of the chest the bust's underside stands, as a share of its depth. */
+const BUST_UNDER_SHARE = 0.7;
+/** The bust depth at which the cloth under it tucks fully back to the ribs. */
+const BUST_FULL_TUCK = 0.04;
+
+/** Edge-on, the chest's forward line: the pec's (or the bust's) control point and the point under it. */
+function profileChest(frame: TorsoFrame): { pec: Pt; underPec: Pt } {
+  const depth = frame.cut.profileDepth;
+  const bust = frame.cut.bustDepth;
+  const pec = PROFILE.pecControl;
+  const under = PROFILE.underPec;
+  return {
+    pec: frame.at(
+      pec.x * depth + bust * QUAD_CONTROL_REACH,
+      pec.y + (bust > NO_BUST ? BUST_APEX_DROP : 0),
+    ),
+    underPec: frame.at(
+      under.x * depth + bust * BUST_UNDER_SHARE,
+      under.y + (bust > NO_BUST ? BUST_UNDER_DROP : 0),
+    ),
+  };
+}
+
 function traceProfile(ctx: Ctx, frame: TorsoFrame, pose: BipedPose): void {
   const { at } = frame;
   const kick = frame.cut.hemFlare * (1 + pose.jacketFlare * HEM_KICK);
@@ -362,9 +426,9 @@ function traceProfile(ctx: Ctx, frame: TorsoFrame, pose: BipedPose): void {
   const blade = p(PROFILE.bladeControl);
   const lumbar = p(PROFILE.lumbar);
   const belly = p(PROFILE.belly);
-  const underPec = p(PROFILE.underPec);
-  const pec = p(PROFILE.pecControl);
+  const { pec, underPec } = profileChest(frame);
   const clavicle = p(PROFILE.clavicle);
+  const tuck = clamp01(frame.cut.bustDepth / BUST_FULL_TUCK);
 
   ctx.beginPath();
   ctx.moveTo(neckFront.x, neckFront.y);
@@ -380,8 +444,8 @@ function traceProfile(ctx: Ctx, frame: TorsoFrame, pose: BipedPose): void {
   ctx.quadraticCurveTo(hemMid.x, hemMid.y, hemFront.x, hemFront.y);
   ctx.lineTo(belly.x, belly.y);
   ctx.quadraticCurveTo(
-    belly.x + (underPec.x - belly.x),
-    belly.y - (belly.y - underPec.y) / 2,
+    lerp(underPec.x, belly.x, tuck),
+    lerp(belly.y - (belly.y - underPec.y) / 2, underPec.y, tuck),
     underPec.x,
     underPec.y,
   );
@@ -711,6 +775,7 @@ function paintFront(
       paintWaistFolds(ctx, frame, waistHalf, s);
     });
   }
+  paintBustFacing(ctx, frame);
   if (!frame.cut.hasHardware) return;
   const zipTop = at(0, -NECK_BASE_RISE + NECKLINE_DIP);
   const zipBottom = frame.hem(0, HEM_SAG);
@@ -724,6 +789,54 @@ function paintFront(
     },
     zipGlintOffset(frame),
   );
+}
+
+/**
+ * Head-on a bust reads in value, not outline: each breast a lit round below
+ * where the pecs' light lies, with a soft shade under it where it turns from
+ * the key. A hard crease there reads as a pectoral muscle. Centres and radii
+ * are in torso units.
+ */
+const FACING_BUST_X = 0.1;
+const FACING_BUST_Y = 0.15;
+const FACING_BUST_RX = 0.08;
+const FACING_BUST_RY = 0.06;
+const FACING_BUST_LIT_ALPHA = 0.6;
+const FACING_BUST_SHADE_SIDE_ALPHA = 0.25;
+const UNDER_BUST_Y = 0.225;
+const UNDER_BUST_RX = 0.085;
+const UNDER_BUST_RY = 0.03;
+const UNDER_BUST_ALPHA = 0.55;
+
+function paintBustFacing(ctx: Ctx, frame: TorsoFrame): void {
+  const fullness = clamp01(frame.cut.bustDepth / BUST_FULL_TUCK);
+  if (fullness <= 0) return;
+  const { at } = frame;
+  for (const s of [-1, 1]) {
+    const lit = s < 0;
+    const under = at(s * FACING_BUST_X, UNDER_BUST_Y);
+    fillSoftEllipse(
+      ctx,
+      under.x,
+      under.y,
+      UNDER_BUST_RX,
+      UNDER_BUST_RY,
+      frame.material.shadow,
+      UNDER_BUST_ALPHA * fullness,
+      frame.angle - HALF_PI,
+    );
+    const centre = at(s * FACING_BUST_X, FACING_BUST_Y);
+    fillSoftEllipse(
+      ctx,
+      centre.x,
+      centre.y,
+      FACING_BUST_RX,
+      FACING_BUST_RY,
+      frame.material.light,
+      (lit ? FACING_BUST_LIT_ALPHA : FACING_BUST_SHADE_SIDE_ALPHA) * fullness,
+      frame.angle - HALF_PI,
+    );
+  }
 }
 
 function zipGlintOffset(frame: TorsoFrame): Pt {
@@ -826,6 +939,22 @@ function paintArmShadowOnFlank(ctx: Ctx, material: GlossRamp, arm: BoneChain): v
   );
 }
 
+function shifted(point: Pt, by: Pt): Pt {
+  return pt(point.x + by.x, point.y + by.y);
+}
+
+/**
+ * How far a bust carries the pec's light and the fold under it, in figure
+ * space: forward by its depth and down to where it is fullest.
+ */
+function bustOffset(frame: TorsoFrame): Pt {
+  const bust = frame.cut.bustDepth;
+  if (bust <= NO_BUST) return pt(0, 0);
+  const origin = frame.at(0, 0);
+  const moved = frame.at(bust, BUST_APEX_DROP);
+  return pt(moved.x - origin.x, moved.y - origin.y);
+}
+
 function paintProfile(ctx: Ctx, frame: TorsoFrame, nearArm: BoneChain): void {
   const { at } = frame;
   const depth = frame.cut.profileDepth;
@@ -853,11 +982,12 @@ function paintProfile(ctx: Ctx, frame: TorsoFrame, nearArm: BoneChain): void {
     frame.angle - HALF_PI + PROFILE_BACK_GLINT_TILT,
     GLINT_CORE,
   );
+  const bustLift = bustOffset(frame);
   const pecLight = p(PROFILE_PEC_LIGHT);
   fillSoftEllipse(
     ctx,
-    pecLight.x,
-    pecLight.y,
+    pecLight.x + bustLift.x,
+    pecLight.y + bustLift.y,
     PROFILE_PEC_RX,
     PROFILE_PEC_RY,
     frame.material.light,
@@ -865,7 +995,13 @@ function paintProfile(ctx: Ctx, frame: TorsoFrame, nearArm: BoneChain): void {
     frame.angle - HALF_PI,
   );
   weighted(ctx, frame, () => {
-    foldAlong(ctx, frame.material, p(PROFILE_UNDER_PEC_FROM), null, p(PROFILE_UNDER_PEC_TO));
+    foldAlong(
+      ctx,
+      frame.material,
+      shifted(p(PROFILE_UNDER_PEC_FROM), bustLift),
+      null,
+      shifted(p(PROFILE_UNDER_PEC_TO), bustLift),
+    );
     foldAlong(ctx, frame.material, p(PROFILE_LUMBAR_FOLD_FROM), null, p(PROFILE_LUMBAR_FOLD_TO));
     paintArmShadowOnFlank(ctx, frame.material, nearArm);
   });
@@ -1102,7 +1238,7 @@ export function paintJacket(
   look: TorsoLook,
 ): void {
   const frame = torsoFrame(skeleton, pose, look);
-  const waistHalf = (WAIST_HALF + JACKET_OFFSET) * view.girth;
+  const waistHalf = facingWaistHalf(frame, view);
   const chestHalf = (CHEST_HALF + JACKET_OFFSET) * view.girth * frame.cut.chestAcross;
   const shoulderHalf = Math.max(
     -frame.acrossOf(skeleton.leftShoulder),

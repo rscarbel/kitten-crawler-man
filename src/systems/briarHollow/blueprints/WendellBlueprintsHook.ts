@@ -25,7 +25,7 @@ import type { DialogLine, NonEmpty } from '../../../dialog/line';
 import type { ConversationHandle } from '../../../dialog/request';
 import type { Player } from '../../../Player';
 import type { ResidentQuestHook } from '../../residentQuestHooks';
-import type { ResidentId } from '../../townResidents';
+import type { ResidentId } from '../../../core/state/residentIds';
 import { grantBlueprintsItem, isHeld, moveBlueprintsPhase } from './blueprintsProgress';
 import {
   speakingCrawler,

@@ -1,6 +1,8 @@
-import { ADVICE_OBJECTIVE_ORDER, type AdviceObjectiveId } from '../systems/daveAdvice';
-import type { DebriefBossType } from '../systems/daveDebrief';
-import { STORY_BEATS, type StoryBeatId } from './storyBeats';
+import type { GameProgressInput } from '../auth/AuthClient';
+import { ADVICE_OBJECTIVE_ORDER, type AdviceObjectiveId } from './adviceObjectiveIds';
+import type { DebriefBossType } from '../core/mobs/debriefBossTypes';
+import { STORY_BEATS } from './storyBeats';
+import { STORY_BEAT_ORDER, type StoryBeatId } from './storyBeatIds';
 import type {
   CarolineTrigger,
   DaveTrigger,
@@ -27,15 +29,6 @@ export type StoryEvent =
   | { readonly kind: 'bossDefeated'; readonly boss: DebriefBossType }
   | { readonly kind: 'firstAchievement' }
   | { readonly kind: 'beatFinished'; readonly beat: StoryBeatId };
-
-/** Narrows an id read from outside the type system, such as a save or a URL. */
-export function isStoryBeatId(value: unknown): value is StoryBeatId {
-  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(STORY_BEATS, value);
-}
-
-/** Every beat, in the order `storyBeats.ts` lists them, which is the order they are played. */
-export const STORY_BEAT_ORDER: readonly StoryBeatId[] =
-  Object.keys(STORY_BEATS).filter(isStoryBeatId);
 
 /** A beat by id, widened from its literal entry so every optional field can be read. */
 export function storyBeat(id: StoryBeatId): StoryBeat<StoryBeatId> {
@@ -225,4 +218,11 @@ export class StoryDirector {
     }
     return waitingOn;
   }
+}
+
+/** The director a save resumes with. */
+export function storyDirectorFromSave(
+  progress: Pick<GameProgressInput, 'storyBeatsSeen' | 'objectivesBriefed'>,
+): StoryDirector {
+  return new StoryDirector(progress.storyBeatsSeen, progress.objectivesBriefed);
 }

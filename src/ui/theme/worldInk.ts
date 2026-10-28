@@ -195,8 +195,6 @@ export const worldPalette = {
   escortCaption: '#fde68a',
   /** The nursery's wood pile caption, in the amber of the boards it hands out. */
   woodPileLabel: '#fbbf24',
-  /** The "press any key to begin" line under a floor's intro card. */
-  introPrompt: '#ffffff',
   /** The soul crystal's lilac, for the line urging the party to contain it. */
   soulCrystalInk: '#e9d5ff',
   /** The dark wipe that drains off a control still waiting out its cooldown. */

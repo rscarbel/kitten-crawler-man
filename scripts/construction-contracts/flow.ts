@@ -57,7 +57,7 @@ import {
 import { rectCentre } from '../../src/map/overworld/briarHollowSite';
 import type { Check } from './shared';
 import { partyStock, PLENTY_OF_EACH_MATERIAL, sameCost, stockSpent, stockUp } from './shared';
-import { RATKIN_SOLDIER_IDS, type RatkinSoldierId } from '../../src/sprites/art/ratkin/cast';
+import { SOLDIER_IDS, type SoldierId } from '../../src/core/quests/villagerIds';
 import { buildSiegeRig, standAt, type SiegeRig } from '../villageSiegeHarness';
 import { generateGroundFloor, worldLayouts } from './targets';
 
@@ -117,8 +117,8 @@ function issueAt(state: BriarHollowState, site: ContractSiteDef): ReturnType<typ
   return issueContract(state.contracts, (candidate) => candidate === site, CONTRACT_SEED);
 }
 
-function isSoldierId(id: string): id is RatkinSoldierId {
-  return RATKIN_SOLDIER_IDS.some((soldierId) => soldierId === id);
+function isSoldierId(id: string): id is SoldierId {
+  return SOLDIER_IDS.some((soldierId) => soldierId === id);
 }
 
 /** The glyph drawn over a Briar Hollow contact this frame, or null when they are nowhere in the village. */

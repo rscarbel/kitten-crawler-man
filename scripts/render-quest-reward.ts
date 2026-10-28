@@ -19,6 +19,9 @@ import { asGameContext } from './nodeGameContext.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import type { QuestRewardSpec } from '../src/ui/questReward/types.js';
 import type { Density } from '../src/ui/theme/tokens.js';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+
+useDevPlayerIdentity();
 
 installCanvasGlobals();
 

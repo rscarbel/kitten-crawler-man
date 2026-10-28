@@ -166,7 +166,8 @@ import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
 import { TacticsNoticeSystem } from '../systems/TacticsNoticeSystem';
 import type { TacticsTrait } from '../creatures/tactics/tacticsTraits';
 import { isEngagedInFight } from '../creatures/tactics/tacticalFrame';
-import { crawlerName } from '../characters/characters';
+import { crawlerDisplayName } from '../characters/characters';
+import { humanVocalSounds } from '../characters/humanVocalSounds';
 import { CRAWLER_KINDS } from '../core/skills/SkillManager';
 import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
@@ -341,8 +342,8 @@ import {
   revivedSnapshot,
   checkpointSnapshot,
   withoutIncurableStatuses,
-  type PlayerSnapshot,
 } from '../core/save/PlayerSnapshot';
+import type { PlayerSnapshot } from '../core/save/playerSnapshotFormat';
 import type { LevelCheckpoint } from '../core/save/LevelCheckpoint';
 import {
   carriedSaveRegeneratesFloor,
@@ -355,6 +356,7 @@ import {
 import { progressForRespawn, sceneSetupFromSave } from './resumeFromSave';
 import { type TilePoint } from '../map/town/townPlan';
 import type { WorldCheckpoint } from '../core/save/WorldCheckpoint';
+import { type PersistedWorldState } from '../core/save/PersistedWorldState';
 import {
   toPersistedArenaCheckpoint,
   fromPersistedArenaCheckpoint,
@@ -368,8 +370,7 @@ import {
   fromPersistedMurderMysteryQuestCheckpoint,
   toPersistedBountyCheckpoint,
   fromPersistedBountyCheckpoint,
-  type PersistedWorldState,
-} from '../core/save/PersistedWorldState';
+} from '../core/save/persistedWorldCapture';
 import { assertNoFieldsLeft } from '../core/util/guards';
 import { BossIntroSystem } from '../systems/BossIntroSystem';
 import { DungeonIntroSystem } from '../systems/DungeonIntroSystem';
@@ -610,12 +611,10 @@ import {
   gatewayAdviceId,
   nextAdviceObjective,
   type AdviceObjective,
-  type AdviceObjectiveId,
   type AdviceSlot,
 } from '../systems/daveAdvice';
+import { type AdviceObjectiveId } from '../story/adviceObjectiveIds';
 import {
-  ALL_DEBRIEF_BOSS_TYPES,
-  debriefBossType,
   debriefHasNews,
   debriefPages,
   EMPTY_DEBRIEF_MEMORY,
@@ -624,11 +623,15 @@ import {
   debriefTalk,
   sameDebriefMemory,
   unwornGear,
-  type DebriefBossType,
   type DebriefMemory,
   type DebriefState,
   type DaveDebriefCheckpoint,
 } from '../systems/daveDebrief';
+import {
+  ALL_DEBRIEF_BOSS_TYPES,
+  debriefBossType,
+  type DebriefBossType,
+} from '../core/mobs/debriefBossTypes';
 import { displayPageCount } from '../dialog/Conversation';
 import type { CarolineMessage } from '../dialog/caroline';
 import type { DialogLine } from '../dialog/line';
@@ -641,13 +644,13 @@ import { forwardSceneHooksToBus } from '../systems/sceneHookEvents';
 import { aiFloorKey, type AILevelTimer } from '../ai/actions/types';
 import { aiCameraSpotlight } from '../ai/actions/cameraSpotlight';
 import type { AIContextSource, SemanticLocation, SessionInput } from '../ai/context/types';
-import { readCrawler, readNearbyMobs, tileOf } from '../ai/context/sceneReaders';
+import { readActiveQuests, readCrawler, readNearbyMobs, tileOf } from '../ai/context/sceneReaders';
 import { mobLabel } from '../ai/context/eventMapping';
 import { GameStats, bindRunStats, type GameStatsSnapshot } from '../core/progression/GameStats';
 import { MusicLibrary, bindMusicLibrary } from '../core/music/MusicLibrary';
 import { StoryDirector } from '../story/StoryDirector';
 import { persistStoryBeatsSeen } from '../story/storySave';
-import type { StoryBeatId } from '../story/storyBeats';
+import type { StoryBeatId } from '../story/storyBeatIds';
 import { storyPreviewEvent } from '../story/storyPreview';
 import {
   StoryDelivery,
@@ -656,7 +659,8 @@ import {
   MAX_DAVE_TALK_PAGES,
   type DaveTalkExtra,
 } from '../systems/StoryDelivery';
-import { PetNameBook, petWords } from '../core/party/petNames';
+import { PetNameBook, petWords, unnamedPetWords } from '../core/party/petNames';
+import { playerIdentity } from '../characters/playerIdentity';
 import { MissingPetNames, attackCowPortrait, namePetThen } from '../systems/petNaming';
 import { musicUnlocksFromProgress } from '../core/music/musicBackfill';
 import { restoreMusicPlayback } from '../audio/music/playerPreference';
@@ -694,8 +698,6 @@ import { ArrivalLoader, type WarpLoadRequest } from './ArrivalLoader';
 import { steppedWork, type LoadTask } from '../core/perf/LoadRunner';
 import { postMusicLibraryNotices, returnUnreadMusicNotices } from '../ui/hud/nowPlaying';
 import { createSceneUi, sceneMouse } from '../ui/core/sceneUi';
-import { byInputMode } from '../ui/core/inputMode';
-import { worldText } from '../ui/world/worldText';
 import { worldPalette } from '../ui/theme/worldInk';
 import { drawUnknownAbilityIcon } from '../ui/icons/rewardIcons';
 import { dynamiteChargeSurface } from '../systems/DynamiteSystem';
@@ -1177,10 +1179,6 @@ const BRIAR_HOLLOW_DOUBLE_TAP_WINDOW_MS = 300;
 /** A hold that moved the crawler further than this was a walk, not a long-press. */
 const HOLD_WALK_TOLERANCE_PX = 4;
 
-/** Where the intro's "begin" hint sits, as a fraction of the screen's height from the top. */
-const INTRO_BEGIN_HINT_Y_FRACTION = 0.78;
-const INTRO_BEGIN_HINT_SIZE = 18;
-
 /** The nearest and furthest Dave waits from the party when he is met outside a safe room, in tiles. */
 const DAVE_WAITING_MIN_TILES = 2;
 const DAVE_WAITING_MAX_TILES = 4;
@@ -1601,8 +1599,6 @@ export class DungeonScene extends GameplayScene {
 
   private bossIntro = new BossIntroSystem();
   private readonly dungeonIntro = new DungeonIntroSystem();
-  // Becomes true once the AudioContext is running so intro ticks in sync with sound.
-  private introStarted = false;
   private readonly skipIntro: boolean;
 
   private readonly abilityManager: AbilityManager;
@@ -3065,7 +3061,7 @@ export class DungeonScene extends GameplayScene {
       if (!signs.isEmpty) this.crawlerSigns = signs;
     }
     this.skipIntro = options?.skipIntro ?? false;
-    if (this.skipIntro) this.dungeonIntro.skip();
+    if (this.skipIntro || this.tutorial !== null) this.dungeonIntro.skip();
     this.overworldMusic =
       levelDef.isOverworld && this.audioScope !== null
         ? new OverworldMusicSystem(this.gameMap, this.audioScope)
@@ -3740,7 +3736,8 @@ export class DungeonScene extends GameplayScene {
     this.audio?.resume();
     // Delay intro ticking until the AudioContext is running so the intro sound
     // plays in sync with the visual. On desktop this is nearly instant; on mobile
-    // it waits for the first user gesture and shows a "Tap to begin" prompt.
+    // it waits for the first user gesture and shows a "Tap to begin" prompt,
+    // and the banner begins on its own gesture or fallback if the audio never runs.
     // A floor's own track already playing (back out of a building) is claimed
     // at once, so it carries on through the scene change; a new one starts
     // with the intro, not under the loading screen.
@@ -3754,14 +3751,20 @@ export class DungeonScene extends GameplayScene {
     if (music !== null && zoneMusic !== null && music.isPlaying(zoneMusic)) {
       this.overworldMusic?.claimZoneAt(arrival.x, arrival.y);
     }
-    const startIntro = (): void => {
-      this.introStarted = true;
+    let introBegun = false;
+    // A gesture also unlocks the audio, so its sting is heard with the banner;
+    // the silent fallback drops it, since an announcement long after the
+    // banner is worse than none.
+    const startIntro = (announce: boolean): void => {
+      if (introBegun) return;
+      introBegun = true;
+      this.dungeonIntro.start();
       if (this.tutorial !== null) {
         this.audio?.duckMusic('tutorial', TUTORIAL_MUSIC_DUCK_LEVEL);
       } else {
         // The duck outlives the tutorial's scene, so every later floor lets go of it.
         this.audio?.unduckMusic('tutorial');
-        if (!this.skipIntro) this.audio?.playWhenReady('level_begins');
+        if (announce && !this.skipIntro) this.audio?.playWhenReady('level_begins');
       }
       this.claimFloorMusic();
     };
@@ -3769,9 +3772,10 @@ export class DungeonScene extends GameplayScene {
     // heard with the banner it belongs to, not over the loading bar.
     this.arrivalLoading.whenClosed(() => {
       if (this.audio === null || this.audio.isRunning) {
-        startIntro();
+        startIntro(true);
       } else {
-        this.audio.onRunning(startIntro);
+        this.audio.onRunning(() => startIntro(true));
+        this.dungeonIntro.awaitBegin((cause) => startIntro(cause === 'gesture'));
       }
     });
 
@@ -6082,6 +6086,7 @@ export class DungeonScene extends GameplayScene {
       storyBeatsSeen: this.storyDirector.seenInPlayOrder(),
       objectivesBriefed: this.storyDirector.briefedInOrder(),
       petNames: this.petNames.saved(),
+      playerIdentity: playerIdentity(),
     };
   }
 
@@ -7065,6 +7070,7 @@ export class DungeonScene extends GameplayScene {
     const tutorial = this.tutorial;
     return [
       ...this.arrivalLoading.surfaces(),
+      this.dungeonIntro,
       this.wipeHold.surface('wipe-hold'),
       promptSurface(),
       this.hud,
@@ -7077,7 +7083,7 @@ export class DungeonScene extends GameplayScene {
         resolveInventoryActions: () => this.resolveInventoryActions(),
         pauseRestriction: () => this.tutorial?.pauseRestriction() ?? null,
       }),
-      this.conversation.surface({
+      ...this.cutscenes.surfaces({
         handOffPress: () => this.handOffConversationPress(),
         dismiss: () => this.conversationEscapeOwner()?.(),
         wantsEscape: () => this.conversationEscapeOwner() !== null,
@@ -7091,7 +7097,6 @@ export class DungeonScene extends GameplayScene {
         },
         dismissNearGoblinDialog: () => tutorial?.dismissNearGoblinDialog(),
       }),
-      this.cutscenes.surface(),
       this.achievementUI.surface(),
       deathScreenSurface(this.combat.deathScreen, {
         isOpen: () => this.gameOver,
@@ -8365,7 +8370,7 @@ export class DungeonScene extends GameplayScene {
       dock.push({
         id: 'switch',
         icon: other === 'cat' ? 'cat' : 'user',
-        label: `Switch to ${crawlerName(other)}`,
+        label: `Switch to ${crawlerDisplayName(other)}`,
         key: keybindings.labelFor('switchCharacter'),
         onTap: () => this.triggerSwitchCharacter(),
       });
@@ -8606,15 +8611,12 @@ export class DungeonScene extends GameplayScene {
     }
     // The floor's song starts with the intro banner, which is drawn over the
     // HUD for most of a credit's display time; its notices wait in the library.
-    const introBannerShowing = this.tutorial === null && this.dungeonIntro.isActive;
-    if (!introBannerShowing) postMusicLibraryNotices(this.musicLibrary.drainNotices(), this.menus);
+    if (!this.dungeonIntro.isActive)
+      postMusicLibraryNotices(this.musicLibrary.drainNotices(), this.menus);
     this.tickSaveIndicator();
     this.chestKit.tick();
 
-    // Only tick once audio is ready so the intro visual and sound start together.
-    if (this.introStarted && this.tutorial === null) {
-      this.dungeonIntro.tick();
-    }
+    this.dungeonIntro.tick();
 
     if (this.bossIntro.isActive) {
       this.silenceFrozenWorldLoops();
@@ -8646,18 +8648,20 @@ export class DungeonScene extends GameplayScene {
       this.labHallway?.silence();
     }
 
-    // Town keeps living through citizen chats and other overlay dialogs — only a
-    // hard stop (game over, the pause menu, or a level- or run-complete screen)
-    // should freeze the streets.
     // Ungated: a death screen or a pause is exactly when the next place the
     // party is drawn may be a warp away, and the caches can use the time.
     this.residency.update(() => this.residencyOutlook());
-    if (
-      !this.gameOver &&
-      !this.menus.pauseScreen.isOpen &&
-      !this.levelCompleteScreen.isActive &&
-      !this.runCompleteScreen.isActive
-    ) {
+    // Town keeps living through citizen chats and other overlay dialogs; only a
+    // hard stop freezes the streets. The arrival banner is one: the village's
+    // quests and the crowd would otherwise start the floor before the player
+    // has been handed it.
+    const townFrozen =
+      this.gameOver ||
+      this.menus.pauseScreen.isOpen ||
+      this.levelCompleteScreen.isActive ||
+      this.runCompleteScreen.isActive ||
+      !this.dungeonIntro.arrivalSettled;
+    if (!townFrozen) {
       this.townLife?.update(this.buildSystemContext());
       this.briarHollowKit?.update(this.buildSystemContext());
       this.gathering?.update(this.buildSystemContext(), this.overlayOpen);
@@ -9257,30 +9261,6 @@ export class DungeonScene extends GameplayScene {
     // hide it mid-flight.
     this.rewardFly.render(ctx, this.hudFlyTargets());
 
-    // Hidden behind the pause menu, like every other overlay above: the intro
-    // card is drawn last and would otherwise cover the menu it was opened over,
-    // leaving a screen of buttons nobody can see to aim at.
-    if (this.tutorial === null && !this.menus.pauseScreen.isOpen) {
-      this.dungeonIntro.render(ctx);
-
-      if (this.dungeonIntro.isActive && !this.introStarted) {
-        const hint = byInputMode(this.ui.viewport.density, {
-          touch: 'Tap to begin',
-          pointer: 'Press any key to begin',
-        });
-        worldText(ctx, hint, {
-          x: Math.round(viewportWidth() / 2),
-          y: Math.round(viewportHeight() * INTRO_BEGIN_HINT_Y_FRACTION),
-          align: 'center',
-          size: INTRO_BEGIN_HINT_SIZE,
-          bold: true,
-          color: worldPalette.introPrompt,
-          outline: true,
-          glow: true,
-        });
-      }
-    }
-
     // While its modals or the song are up, they draw with their own surface.
     this.spiderQuest.renderUI(ctx, camX, camY);
 
@@ -9419,7 +9399,8 @@ export class DungeonScene extends GameplayScene {
    */
   private sealedBuildingMessage(entry: BuildingEntry): string | null {
     const partner = this.inactive();
-    const partnerName = partner === this.human ? crawlerName('human') : crawlerName('cat');
+    const partnerName =
+      partner === this.human ? crawlerDisplayName('human') : crawlerDisplayName('cat');
     const partnerDown = downedPartnerEntryRefusal(partner, partnerName);
     if (partnerDown !== null) return partnerDown;
     const prisonRefusal = prisonDoorRefusal(entry, this.stealthKeySnatch.isGuardBriefed);
@@ -9907,7 +9888,7 @@ export class DungeonScene extends GameplayScene {
 
     if (this.human.effectDamageSoundPending) {
       this.human.effectDamageSoundPending = false;
-      this.audio?.playRandom(['human_effect_damage_1', 'human_effect_damage_2']);
+      this.audio?.playRandom(humanVocalSounds().hurt);
     }
     if (this.cat.effectDamageSoundPending) {
       this.cat.effectDamageSoundPending = false;
@@ -10414,15 +10395,11 @@ export class DungeonScene extends GameplayScene {
       this.human.isActive ? this.human : this.cat;
     return {
       petNames: this.petNames,
-      crawlerNameOf: (player) =>
-        player === this.human
-          ? crawlerName('human')
-          : player === this.cat
-            ? crawlerName('cat')
-            : null,
+      crawlerKindOf: (player) =>
+        player === this.human ? 'human' : player === this.cat ? 'cat' : null,
       isPartyInSafeRoom: () => this.safeRoom.isEntityInSafeRoom(activeCrawler()),
       isCrawlerInSafeRoom: (crawler) =>
-        this.safeRoom.isEntityInSafeRoom(crawler === crawlerName('human') ? this.human : this.cat),
+        this.safeRoom.isEntityInSafeRoom(crawler === 'human' ? this.human : this.cat),
       readSession: () => {
         const levelDef = this.levelDef;
         const session: SessionInput = {
@@ -10433,9 +10410,7 @@ export class DungeonScene extends GameplayScene {
           difficulty: DIFFICULTY_LABELS[settings.difficulty],
           secondsPlayed: Math.floor(this.gameStats.framesPlayed / FRAMES_PER_SECOND),
           deaths: this.gameStats.deaths,
-          activeQuests: this.collectTrackerEntries()
-            .filter((entry) => entry.status === 'active')
-            .map((entry) => ({ id: entry.id, name: entry.name, objective: entry.objective })),
+          activeQuests: readActiveQuests(this.collectTrackerEntries()),
           companions: this.aiCompanionNames(),
           indoors: false,
         };
@@ -10450,13 +10425,13 @@ export class DungeonScene extends GameplayScene {
         const active = activeCrawler();
         const menuOpen = this.aiMenuOpen();
         return {
-          activeCrawler: crawlerName(this.human.isActive ? 'human' : 'cat'),
+          activeCrawler: this.human.isActive ? 'human' : 'cat',
           crawlers: {
-            human: readCrawler(this.human, crawlerName('human')),
-            cat: readCrawler(this.cat, crawlerName('cat')),
+            human: readCrawler(this.human, 'human'),
+            cat: readCrawler(this.cat, 'cat'),
           },
           location: this.aiLocation(active),
-          nearbyMobs: readNearbyMobs(this.world.roster.mobs, active, this.petNames),
+          nearbyMobs: readNearbyMobs(this.world.roster.mobs, active),
           combatInProgress: this.combatCooldownFrames > 0,
           bossFightActive: this.bossRoom.anyLocked,
           isPaused: this.gameOver || this.menus.pauseScreen.isOpen || menuOpen,
@@ -10469,12 +10444,12 @@ export class DungeonScene extends GameplayScene {
   private aiCompanionNames(): string[] {
     const names: string[] = [];
     if (this.deinonychusSystem.deinonychus !== null) {
-      names.push(petWords(this.petNames, 'deinonychus').described);
+      names.push(unnamedPetWords('deinonychus').described);
     }
     const hireling = this.mercenarySystem.activeMerc;
-    if (hireling !== null) names.push(mobLabel(hireling, this.petNames));
+    if (hireling !== null) names.push(mobLabel(hireling));
     if (this.attackCowSystem.standingCow !== null) {
-      names.push(petWords(this.petNames, 'attackCow').described);
+      names.push(unnamedPetWords('attackCow').described);
     }
     return names;
   }

@@ -80,12 +80,8 @@ import {
 } from './casino/poker/npc/personality';
 import { createRegularsTable, type PokerRegulars } from './casino/poker/npc/PokerRegulars';
 import { fadeReadBetweenVisits } from './casino/poker/npc/playerRead';
-import {
-  POKER_REGULARS,
-  REGULAR_IDS,
-  isRegularId,
-  type RegularId,
-} from './casino/poker/npc/regulars';
+import { POKER_REGULARS } from './casino/poker/npc/regulars';
+import { REGULAR_IDS, isRegularId, type RegularId } from './casino/poker/npc/regularIds';
 import type { CasinoSeat } from './ClubCasinoSystem';
 
 /** Frames longer than this are a tab-away, not a slow frame; the clock refuses to jump. */

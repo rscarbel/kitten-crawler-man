@@ -57,4 +57,24 @@ export const carolineLines = {
       line: { speaker: SPEAKER, paragraphs: [words], advance: { kind: 'continue' } },
     };
   },
+  /**
+   * A message that names something only known once a run is under way, such
+   * as the player's own name: `build` is read each time the message is shown,
+   * and the frame text is stripped from what it returns.
+   */
+  deferredMessage(build: () => string): CarolineMessage {
+    return {
+      [AUTHORED]: true,
+      get text(): string {
+        return withoutFrameText(build());
+      },
+      line: {
+        speaker: SPEAKER,
+        get paragraphs(): readonly [string] {
+          return [withoutFrameText(build())];
+        },
+        advance: { kind: 'continue' },
+      },
+    };
+  },
 } as const;

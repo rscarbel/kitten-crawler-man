@@ -7,9 +7,8 @@
  *
  * Script text never carries the label or the prefix: this file adds both.
  *
- * Three variants share the frame: the full box (dialog, prompts, the AI
- * panel), a compact toast (one row, label inline) and a sheer title line
- * that lets the title scene show through. Every painter is a pure function of
+ * Two variants share the frame: the full box (dialog, prompts, the AI
+ * panel) and a compact toast (one row, label inline). Every painter is a pure function of
  * the clock it is handed, so a frozen review moment shows exactly what a
  * player would.
  */
@@ -203,8 +202,6 @@ function strokeBrackets(ctx: CanvasRenderingContext2D, r: Rect, skin: CarolineSk
 
 export interface CarolineFrameOptions {
   readonly nowMs: number;
-  /** The title's frame: a thinner ground the scene behind shows through. */
-  readonly sheer?: boolean;
 }
 
 /** The frame alone: ground, grid, scanlines, hairline and brackets. */
@@ -217,7 +214,7 @@ export function paintCarolineFrame(
   const skin = skinOf(target.theme);
   ctx.save();
   chamferPath(ctx, rect, skin.chamfer);
-  ctx.fillStyle = opts.sheer === true ? skin.groundSheer : skin.ground;
+  ctx.fillStyle = skin.ground;
   ctx.fill();
   ctx.clip();
 
@@ -494,8 +491,6 @@ export interface CarolineMessageView {
 }
 
 export interface CarolineBoxOptions extends CarolineMessageView {
-  /** The title's frame: a thinner ground the scene shows through. */
-  readonly sheer?: boolean;
   /** Longer text ends in an ellipsis past this many lines. */
   readonly maxLines?: number;
 }
@@ -538,7 +533,7 @@ export function carolineBox(target: PaintTarget, rect: Rect, opts: CarolineBoxOp
   const padding = boxPadding(theme);
   const inner = inset(rect, padding);
   withCarolineOpen(target, rect, opts.open, () => {
-    paintCarolineFrame(target, rect, { nowMs: opts.nowMs, sheer: opts.sheer });
+    paintCarolineFrame(target, rect, { nowMs: opts.nowMs });
     carolineHeader(target, { ...inner, h: carolineHeaderHeight(theme) }, opts.nowMs);
     const lines = layoutCarolineText(target, inner.w, opts.message, opts.maxLines);
     paintCarolineLines(target, inner.x, boxBodyTop(theme, rect), lines, {

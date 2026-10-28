@@ -21,7 +21,6 @@ export {
 export { SdkContextTransport, type ContextClient, type ContextTransport } from './transport';
 export type {
   AIContextSource,
-  CrawlerName,
   CrawlerState,
   GameEvent,
   LiveInput,

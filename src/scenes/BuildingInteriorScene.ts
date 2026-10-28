@@ -50,11 +50,13 @@ import { PlayerManager } from '../core/party/PlayerManager';
 import { setSkillBookReaders } from '../creatures/skillBookDrop';
 import type { BuildingEntry } from '../map/buildingEntry';
 import { type BuildingId, buildingDisplayName } from '../map/buildingIds';
-import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/save/PlayerSnapshot';
+import { snapPlayer, restorePlayer } from '../core/save/PlayerSnapshot';
+import type { PlayerSnapshot } from '../core/save/playerSnapshotFormat';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
 import { DaveGuideSystem } from '../systems/DaveGuideSystem';
 import { prewarmDaveSprite } from '../sprites/daveSprite';
-import { adviceIntel, adviceTactics, type AdviceObjectiveId } from '../systems/daveAdvice';
+import { adviceIntel, adviceTactics } from '../systems/daveAdvice';
+import { type AdviceObjectiveId } from '../story/adviceObjectiveIds';
 import type { CarolineMessage } from '../dialog/caroline';
 import { StoryDelivery, partyIsEngaged } from '../systems/StoryDelivery';
 import { walkUpTo } from '../systems/cutscene/walkUp';
@@ -67,7 +69,7 @@ import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
 import { ShopSystem } from '../systems/ShopSystem';
 import { TouchMoveState } from '../core/input/TouchMoveState';
-import { crawlerName } from '../characters/characters';
+import { crawlerDisplayName } from '../characters/characters';
 import { constructionUnlocked } from '../core/quests/villageUnlocks';
 import { platform } from '../core/input/Platform';
 import {
@@ -123,7 +125,7 @@ import {
   presentsDeinonychus,
 } from '../systems/deinonychusArrival';
 import { MissingPetNames, attackCowPortrait, namePetThen } from '../systems/petNaming';
-import { petWords } from '../core/party/petNames';
+import { unnamedPetWords } from '../core/party/petNames';
 import type { JournalProgress } from '../core/quests/JournalProgress';
 import { isOutstanding, resolvePinnedEntry, type TrackerEntry } from '../systems/questTracker';
 import { GameStats, bindRunStats } from '../core/progression/GameStats';
@@ -162,7 +164,7 @@ import { aiAdapter } from '../ai/AIAdapter';
 import type { AISceneContext } from '../ai/aiActions';
 import { AIInteractionStage } from '../ai/interactions/AIInteractionStage';
 import type { AIContextSource, SessionInput } from '../ai/context/types';
-import { readCrawler, readNearbyMobs } from '../ai/context/sceneReaders';
+import { readActiveQuests, readCrawler, readNearbyMobs } from '../ai/context/sceneReaders';
 import { mobLabel } from '../ai/context/eventMapping';
 import { getLevelDef } from '../levels';
 import { forwardSceneHooksToBus } from '../systems/sceneHookEvents';
@@ -243,8 +245,8 @@ import {
   residentHost,
   type ResidentDef,
   type ResidentHost,
-  type ResidentId,
 } from '../systems/townResidents';
+import { type ResidentId } from '../core/state/residentIds';
 import { residentLinesFor } from '../dialog/scripts/residents';
 import { buildApothecaryMenu, serveRemedy } from '../systems/townApothecary';
 import { buildSmithyMenu, sharpenEdges } from '../systems/townSmithy';
@@ -2780,7 +2782,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.menus.constructionMenu.surface('construction-menu', () => {
         const menuCrawler = this.active();
         return {
-          crawlerName: crawlerName(menuCrawler === this.human ? 'human' : 'cat'),
+          crawlerName: crawlerDisplayName(menuCrawler === this.human ? 'human' : 'cat'),
           skills: menuCrawler.craftSkills,
           partyCount: (id) => partyCount(this.human, this.cat, id),
         };
@@ -2805,8 +2807,7 @@ export class BuildingInteriorScene extends GameplayScene {
           deinonychus: null,
         }),
       }),
-      this.cutscenes.surface(),
-      this.conversation.surface({
+      ...this.cutscenes.surfaces({
         id: CONVERSATION_SURFACE_ID,
         handOffPress: () => this.handOffConversationPress(),
         dismiss: () => this.conversationEscape()?.(),
@@ -3976,28 +3977,21 @@ export class BuildingInteriorScene extends GameplayScene {
     const inSafeRoom = (): boolean => this.safeRoom?.isEntityInSafeRoom(this.active()) ?? false;
     return {
       petNames: this.partyRun.petNames,
-      crawlerNameOf: (player) =>
-        player === this.human
-          ? crawlerName('human')
-          : player === this.cat
-            ? crawlerName('cat')
-            : null,
+      crawlerKindOf: (player) =>
+        player === this.human ? 'human' : player === this.cat ? 'cat' : null,
       isPartyInSafeRoom: inSafeRoom,
       isCrawlerInSafeRoom: (crawler) =>
-        this.safeRoom?.isEntityInSafeRoom(
-          crawler === crawlerName('human') ? this.human : this.cat,
-        ) ?? false,
+        this.safeRoom?.isEntityInSafeRoom(crawler === 'human' ? this.human : this.cat) ?? false,
       readSession: () => {
         const level = getLevelDef(this.floor.levelId);
         const companions: string[] = [];
-        const { petNames } = this.partyRun;
         if (this.deinonychusSystem.deinonychus !== null) {
-          companions.push(petWords(petNames, 'deinonychus').described);
+          companions.push(unnamedPetWords('deinonychus').described);
         }
         const hireling = this.mercenarySystem.activeMerc;
-        if (hireling !== null) companions.push(mobLabel(hireling, petNames));
+        if (hireling !== null) companions.push(mobLabel(hireling));
         if (this.attackCowSystem.standingCow !== null) {
-          companions.push(petWords(petNames, 'attackCow').described);
+          companions.push(unnamedPetWords('attackCow').described);
         }
         const session: SessionInput = {
           floorNumber: level.floorNumber,
@@ -4007,9 +4001,7 @@ export class BuildingInteriorScene extends GameplayScene {
           difficulty: DIFFICULTY_LABELS[settings.difficulty],
           secondsPlayed: Math.floor(this.gameStats.framesPlayed / AI_FRAMES_PER_SECOND),
           deaths: this.gameStats.deaths,
-          activeQuests: (this.overworldJournal?.entries() ?? [])
-            .filter((entry) => entry.status === 'active')
-            .map((entry) => ({ id: entry.id, name: entry.name, objective: entry.objective })),
+          activeQuests: readActiveQuests(this.overworldJournal?.entries() ?? []),
           companions,
           indoors: true,
         };
@@ -4020,13 +4012,13 @@ export class BuildingInteriorScene extends GameplayScene {
       readLive: () => {
         const active = this.active();
         const safe = inSafeRoom();
-        const nearbyMobs = readNearbyMobs(this.world.roster.mobs, active, this.partyRun.petNames);
+        const nearbyMobs = readNearbyMobs(this.world.roster.mobs, active);
         const menuOpen = this.aiMenuOpen();
         return {
-          activeCrawler: crawlerName(this.human.isActive ? 'human' : 'cat'),
+          activeCrawler: this.human.isActive ? 'human' : 'cat',
           crawlers: {
-            human: readCrawler(this.human, crawlerName('human')),
-            cat: readCrawler(this.cat, crawlerName('cat')),
+            human: readCrawler(this.human, 'human'),
+            cat: readCrawler(this.cat, 'cat'),
           },
           location: {
             kind: safe ? 'safeRoom' : 'building',
@@ -5538,7 +5530,7 @@ export class BuildingInteriorScene extends GameplayScene {
     dock.push({
       id: 'switch',
       icon: other === 'cat' ? 'cat' : 'user',
-      label: `Switch to ${crawlerName(other)}`,
+      label: `Switch to ${crawlerDisplayName(other)}`,
       key: keybindings.labelFor('switchCharacter'),
       onTap: () => this.trySwitchActive(),
     });

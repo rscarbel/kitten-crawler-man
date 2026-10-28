@@ -43,6 +43,9 @@ import {
 import { createShopStock, shopStockKey, type ShopStock } from '../src/economy/shopStock';
 import * as stockCurves from '../src/economy/stockCurves';
 import type { StockCurve } from '../src/economy/stockCurves';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+
+useDevPlayerIdentity();
 
 const REPORT_DIR = '.price-report';
 const REPORT_FILE = 'prices.md';

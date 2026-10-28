@@ -104,9 +104,11 @@ built **on his rig** rather than on a rig of their own. They pose with his chore
 (`demonLiaisonFigure.ts`) are built this way.
 
 - **Dressing him differently is a `HumanLook`.** Skin, hair, iris, garment ramp, torso
-  and sleeve cut, hairstyle, facial hair, expression, build and base garments live on a
+  and sleeve cut, hairstyle, facial hair, expression, face shape (`FaceShape` in
+  `biped/head.ts`: jaw and chin, profile line, cheek and brow hollows, nose, eye and
+  lash size, lip tint; `RIG_FACE` is the rig's own), build and base garments live on a
   `HumanLook` (`src/sprites/looks/humanLook.ts`; the player looks are `DAVE_LOOK` and
-  `RYAN_LOOK` in `looks/humans/`). Spread `RIG_LOOK` (`looks/humans/rig.ts`: every build
+  the crawler's four in `HUMAN_CRAWLER_LOOKS`, `src/characters/humanCrawlerLooks.ts`). Spread `RIG_LOOK` (`looks/humans/rig.ts`: every build
   field at the rig's own value, so no player's height, shoulders or head leaks in; its
   garment cut is `RIG_GARMENT_CUT`) and override what differs (`castHumanLook`
   in `townCastFigure.ts`, `DEMON_LIAISON_LOOK` in `demonLiaisonFigure.ts`), and pass it as

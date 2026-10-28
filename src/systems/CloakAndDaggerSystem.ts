@@ -7,7 +7,7 @@ import type { AudioManager } from '../audio/AudioManager';
 import type { AudioScope, MusicClaims } from '../audio/AudioScope';
 import { CASINO_MUSIC_TRACKS } from '../audio/sounds';
 import type { CasinoState } from '../core/club/CasinoState';
-import type { AchievementId } from '../core/progression/AchievementManager';
+import type { AchievementId } from '../core/progression/achievementSave';
 import type { AchievementAwards } from './AchievementAwards';
 import type { GameMap } from '../map/GameMap';
 import type { InteriorFigure } from '../core/rendering/InteriorFigure';

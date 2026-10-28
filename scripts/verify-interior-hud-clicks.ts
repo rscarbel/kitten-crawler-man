@@ -60,6 +60,8 @@ const { speakerLines } = await import('../src/dialog/line.js');
 const { toCssRect } = await import('../src/ui/hud/HudSurface.js');
 const { liveHudLayout } = await import('../src/ui/hud/liveHudLayout.js');
 const { createJournalProgress } = await import('../src/core/quests/JournalProgress.js');
+const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js');
+useDevPlayerIdentity();
 
 const WORLD_SEED = 1;
 const TOUCH_ID = 1;

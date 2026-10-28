@@ -46,7 +46,7 @@ import type { BriarHollowSite } from '../src/map/overworld/briarHollowSite';
 import type { TilePoint } from '../src/map/town/townPlan';
 import { findNearbyWalkableTile } from '../src/map/findWalkableTile';
 import type { Player } from '../src/Player';
-import { RATKIN_SOLDIER_IDS, type RatkinSoldierId } from '../src/sprites/art/ratkin/cast';
+import { SOLDIER_IDS, type SoldierId } from '../src/core/quests/villagerIds';
 import { mulberry32 } from '../src/sprites/person/rng';
 import { snapTargetAlong } from '../src/systems/GameLoopPhases';
 import type { SystemContext } from '../src/systems/GameSystem';
@@ -326,7 +326,7 @@ function tick(rig: Rig, frames = 1): void {
   }
 }
 
-function soldierOf(rig: Rig, id: RatkinSoldierId): RatkinSoldier {
+function soldierOf(rig: Rig, id: SoldierId): RatkinSoldier {
   const soldier = rig.soldiers.soldierById(id);
   if (soldier === null) throw new Error(`no ${id} in the rig`);
   return soldier;
@@ -384,7 +384,7 @@ function recorder(said: DialogLine[]): ConversationHandle {
 /** Opens the conversation with `id` as `talker` and runs the topic keyed `key`. Returns what was said. */
 function giveOrder(
   rig: Rig,
-  id: RatkinSoldierId,
+  id: SoldierId,
   key: string,
   talker: HumanPlayer | CatPlayer = rig.human,
 ): DialogLine[] {
@@ -470,7 +470,7 @@ section('A soldier is on the party side');
     'a soldier pays no XP and counts as no kill',
   );
   check(
-    RATKIN_SOLDIER_IDS.every((id) => rig.roster.mobs.includes(soldierOf(rig, id))),
+    SOLDIER_IDS.every((id) => rig.roster.mobs.includes(soldierOf(rig, id))),
     'all four soldiers are in the roster on a fresh build',
   );
 }
@@ -637,7 +637,7 @@ section('Hostiles pick and wound soldiers');
 section('Follow: through the gate and out, within the band');
 {
   const rig = makeRig();
-  const id: RatkinSoldierId = 'hobb';
+  const id: SoldierId = 'hobb';
   const soldier = soldierOf(rig, id);
   standAt(rig.human, site.gate.inside);
   place(rig, soldier, { x: site.gate.inside.x, y: site.gate.inside.y - 1 });
@@ -693,7 +693,7 @@ section('Follow: through the gate and out, within the band');
 section('Follow: the village leash');
 {
   const rig = makeRig();
-  const id: RatkinSoldierId = 'marta';
+  const id: SoldierId = 'marta';
   const soldier = soldierOf(rig, id);
   standAt(rig.human, site.gate.inside);
   place(rig, soldier, { x: site.gate.inside.x + 1, y: site.gate.inside.y - 1 });
@@ -781,7 +781,7 @@ function tilePastLeash(dx: number, dy: number): TilePoint | null {
       continue;
     }
     const rig = makeRig();
-    const id: RatkinSoldierId = 'marta';
+    const id: SoldierId = 'marta';
     const soldier = soldierOf(rig, id);
     rig.soldiers.orderFollow(id, rig.human);
     standAt(rig.human, far);
@@ -831,7 +831,7 @@ section('Hold never drifts');
 {
   const patch = openPatch();
   const rig = makeRig();
-  const id: RatkinSoldierId = 'pru';
+  const id: SoldierId = 'pru';
   const soldier = soldierOf(rig, id);
   place(rig, soldier, patch);
   standAt(rig.human, { x: patch.x, y: patch.y - 1 });
@@ -871,7 +871,7 @@ section('Hold never drifts');
 section('Patrol routes are walks a soldier can take');
 {
   const rig = makeRig();
-  for (const id of RATKIN_SOLDIER_IDS) {
+  for (const id of SOLDIER_IDS) {
     const soldier = soldierOf(rig, id);
     const post = rig.soldiers.posts.post[id].tile;
     place(rig, soldier, post);
@@ -1055,7 +1055,7 @@ interface DuelResult {
 }
 
 /** Fights one soldier against `count` foes. */
-function duel(id: RatkinSoldierId, count: number, stream: number): DuelResult {
+function duel(id: SoldierId, count: number, stream: number): DuelResult {
   const seed = WORLD_SEED + stream * STREAM_SEED_STRIDE + count * FOE_COUNT_SEED_STRIDE;
   const random = mulberry32(seed);
   const originalRandom = Math.random;
@@ -1066,7 +1066,7 @@ function duel(id: RatkinSoldierId, count: number, stream: number): DuelResult {
     const startTiles = FIGHT_START_TILES + random() * (FIGHT_START_MAX_TILES - FIGHT_START_TILES);
     const startAngle = random() * Math.PI * 2;
     const rig = makeRig(createBriarHollowState(), random, level);
-    for (const other of RATKIN_SOLDIER_IDS) {
+    for (const other of SOLDIER_IDS) {
       if (other === id) continue;
       const bystander = soldierOf(rig, other);
       bystander.hp = 0;
@@ -1098,7 +1098,7 @@ function duel(id: RatkinSoldierId, count: number, stream: number): DuelResult {
   }
 }
 
-for (const id of RATKIN_SOLDIER_IDS) {
+for (const id of SOLDIER_IDS) {
   let oneWins = 0;
   let threeLosses = 0;
   let draws = 0;

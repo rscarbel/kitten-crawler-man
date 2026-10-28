@@ -338,7 +338,7 @@ item's `look`, which can only name a worn garment.
   garments in one sub-slot cannot be worn together (`EQUIP_SUBSLOTS`).
 - **Covering skin is declared.** Footwear states `covers: ['feet']`: in
   `outfitOf` it leaves off every garment covering that skin from a layer
-  further in (the townsfolk's shoes over Ryan's sneakers). Never hide another
+  further in (the townsfolk's shoes over the crawler's knit sneakers). Never hide another
   look's base garment by its id, and never paint a skin- or fur-coloured
   patch over something.
 - **A glove recolours the hand; it never paints over it.** A glove covers
@@ -354,8 +354,9 @@ item's `look`, which can only name a worn garment.
   the look, not the item list: each `HumanLook` / `CatLook` is an
   `OutfitBase` (`garments/outfit.ts`) naming its `baseGarments`, and
   `outfitOf(base, worn)` puts them under whatever is worn. `DAVE_LOOK` starts
-  from his jacket, jeans and boots, `RYAN_LOOK` from his shirt, belt, chinos,
-  sneakers and watch, `PUMPKIN_LOOK` and `BELLE_LOOK` from the cat's coat; a
+  from his jacket, jeans and boots, `MALE_CRAWLER_BUILD` (every male crawler look) from his shirt, belt, chinos,
+  sneakers and watch, `FEMALE_CRAWLER_BUILD` (every female crawler look) from her
+  belted jacket, neck scarf, tapered trousers, ankle boots and gold watch, `PUMPKIN_LOOK` and `BELLE_LOOK` from the cat's coat; a
   cast look on the human rig keeps only the jacket.
 - **Limbs still read as form.** G17 judges every thigh, calf and forearm
   crop with whatever is worn over it: a flat-painted sleeve, trouser leg or
@@ -379,6 +380,15 @@ item's `look`, which can only name a worn garment.
     `shadeContrast` (leather's whole ramp, `LEATHER_SLEEVE_CONTRAST`, or a
     softer cotton one, drawn in the ramp's colours rather than as a
     translucent overlay, so a cell bakes the same on every surface).
+  - `GarmentCut.waistAcross` and `GarmentCut.bustDepth` — how far the
+    waist draws in head-on and how far a bust stands forward edge-on (and
+    shades head-on); the hem's flare is measured from the rig's waist, so a
+    pinched waist flares back out to the hips. Neutral on every male look
+    (`RIG_WAIST_ACROSS`, `NO_BUST`); a torso piece cut from `traceGarmentTorso`
+    or `torsoCover` follows them for free.
+  - `HumanLook.seatFullness` — how much fuller across and behind the hips a
+    body's seat stands than a pair of trousers is cut for; the chinos scale
+    their `SeatFit` by it (`TROUSERS_OWN_SEAT` is neutral).
   - `SeatFit` — a trouser seat's width, depth, drop and `style`: `'panel'`
     (one form hemmed straight across) or `'legs'` (head-on the two trouser
     legs carried up to the waist, painted in the legs' slab so no slab

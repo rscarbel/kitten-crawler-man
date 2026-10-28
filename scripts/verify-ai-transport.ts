@@ -45,7 +45,6 @@ import { DAVE_CHARACTER_NAME, CAROLINE_CHARACTER_NAME } from '../src/ai/characte
 import { CAROLINE_FALLBACK_LINES } from '../src/ai/characters/fallbackLines';
 import type {
   AIContextSource,
-  CrawlerName,
   CrawlerState,
   LiveInput,
   SessionInput,
@@ -62,6 +61,10 @@ import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions';
 import { level1 } from '../src/levels/level1';
 import { GameMap } from '../src/map/GameMap';
 import { PetNameBook } from '../src/core/party/petNames';
+import type { CrawlerKind } from '../src/core/skills/SkillManager';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+
+useDevPlayerIdentity();
 
 let checks = 0;
 let failures = 0;
@@ -157,9 +160,9 @@ class FakeClient extends TypedEmitter<GameAiClientEvents> implements AIClient {
   }
 }
 
-function crawler(name: CrawlerName, active: boolean): CrawlerState {
+function crawler(kind: CrawlerKind, active: boolean): CrawlerState {
   return {
-    name,
+    kind,
     hp: FULL_HP,
     maxHp: FULL_HP,
     level: PARTY_LEVEL,
@@ -278,10 +281,10 @@ function buildRig(): Rig {
     indoors: false,
   };
   const live = (): LiveInput => ({
-    activeCrawler: crawlerName('human'),
+    activeCrawler: 'human',
     crawlers: {
-      human: crawler(crawlerName('human'), true),
-      cat: crawler(crawlerName('cat'), false),
+      human: crawler('human', true),
+      cat: crawler('cat', false),
     },
     location: { kind: 'corridor', label: 'dark corridor', inSafeRoom: false, inBossArena: false },
     nearbyMobs: [],
@@ -296,7 +299,7 @@ function buildRig(): Rig {
     readLive: live,
     isPartyInSafeRoom: () => false,
     isCrawlerInSafeRoom: () => false,
-    crawlerNameOf: (player) => (player === human ? crawlerName('human') : crawlerName('cat')),
+    crawlerKindOf: (player) => (player === human ? 'human' : 'cat'),
   };
   rig.adapter.bindScene(scene, rig.bus, source);
   return rig;
@@ -313,7 +316,7 @@ function sleep(ms: number): Promise<void> {
 /** A heal well inside the action's own range, so only the intensity can refuse it. */
 const HEAL_PERCENT = 20;
 const REWARD_CHEST = { rarity: 'Common', reason: 'Good show.' };
-const REMEMBER = { fact: `${crawlerName('human')} hums while he fights.`, kind: 'fact' };
+const REMEMBER = { fact: `${crawlerName('human')} hums while fighting.`, kind: 'fact' };
 
 function action(
   id: string,

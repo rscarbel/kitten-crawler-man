@@ -18,6 +18,9 @@ import { NO_INSETS, type ViewportInput } from '../src/ui/core/viewport.js';
 import type { Density } from '../src/ui/theme/tokens.js';
 import type { PauseSectionId } from '../src/ui/screens/pause/section.js';
 import { pauseFixtureData, pauseFixtureScreen } from '../src/dev/uiGallery/pause.js';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+
+useDevPlayerIdentity();
 
 interface Case {
   readonly name: string;

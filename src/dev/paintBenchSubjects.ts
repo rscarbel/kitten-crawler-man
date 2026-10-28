@@ -15,7 +15,8 @@
 
 import type { FigureDef } from '../sprites/figure/figureDef';
 import { CAT_FIGURE } from '../sprites/art/catFigure';
-import { HUMAN_FIGURE } from '../sprites/art/humanFigure';
+import { undressedHumanFigure } from '../sprites/art/humanFigure';
+import { activeHumanLook } from '../sprites/humanSprite';
 import { DARK_KNIGHT_FIGURE } from '../sprites/art/darkKnightFigure';
 import { GREMLIN_ACID_FIGURE, GREMLIN_BILE_ARC_FIGURE } from '../sprites/art/gremlinBileFigure';
 import { TRASH_GREMLIN_FIGURE } from '../sprites/art/trashGremlinFigure';
@@ -115,8 +116,7 @@ export interface PaintBenchSubject {
   readonly state: string;
 }
 
-export const PAINT_BENCH_SUBJECTS: readonly PaintBenchSubject[] = [
-  { def: HUMAN_FIGURE, state: 'idle' },
+const FIXED_SUBJECTS: readonly PaintBenchSubject[] = [
   { def: CAT_FIGURE, state: 'idle' },
   { def: BIG_ROOSTER_FIGURE, state: 'idle' },
   { def: LITTLE_ROOSTER_FIGURE, state: 'idle' },
@@ -202,3 +202,11 @@ export const PAINT_BENCH_SUBJECTS: readonly PaintBenchSubject[] = [
     state: fairyStateName('hover', 'side'),
   })),
 ];
+
+/**
+ * Every subject the bench times, the human first. Built on call so the human
+ * is painted as whoever the crawler is when the bench runs.
+ */
+export function paintBenchSubjects(): readonly PaintBenchSubject[] {
+  return [{ def: undressedHumanFigure(activeHumanLook()), state: 'idle' }, ...FIXED_SUBJECTS];
+}

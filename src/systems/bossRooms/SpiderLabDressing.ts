@@ -43,15 +43,13 @@ import type { CocoonState, SpiderLabDressingCheckpoint } from './spiderLabCheckp
 import {
   DARKNESS_MASK_PAD_PX,
   DARKNESS_MASK_SCALE,
-  FIRST_DARK_PHASE,
-  LAST_LIGHT_PHASE,
   bakeDarknessMask,
   bankLitIn,
   darknessBounds,
   labLightBanks,
-  type LabLightPhase,
   type LightBank,
 } from './spiderLabLighting';
+import { FIRST_DARK_PHASE, LAST_LIGHT_PHASE, type LabLightPhase } from './spiderLabLightPhase';
 
 // ── Tuning ───────────────────────────────────────────────────────────────────
 

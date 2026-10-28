@@ -33,7 +33,8 @@ import {
   EARTH_ELEMENTAL_VIEWS,
   earthElementalStateName,
 } from '../src/sprites/art/earthElementalFigure.js';
-import { HUMAN_FIGURE } from '../src/sprites/art/humanFigure.js';
+import { undressedHumanFigure } from '../src/sprites/art/humanFigure.js';
+import { activeHumanLook } from '../src/sprites/humanSprite.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 
 /** Matches TILE_SIZE in src/core/constants.ts. */
@@ -213,7 +214,7 @@ function blitCell(
 function renderLineup(outPath: string): void {
   const figures: { def: FigureDef; state: (view: string) => string; label: string }[] = [
     {
-      def: HUMAN_FIGURE,
+      def: undressedHumanFigure(activeHumanLook()),
       state: (view) => (view === 'front' ? 'idle' : `idle_${view}`),
       label: 'The human',
     },
@@ -342,7 +343,7 @@ function renderShield(outPath: string, scale: number): void {
       ctx.fillRect(x, y, cellW, cellH);
       blitCell(
         ctx,
-        HUMAN_FIGURE,
+        undressedHumanFigure(activeHumanLook()),
         'idle',
         0,
         x + def.tileX * scale,
@@ -357,7 +358,7 @@ function renderShield(outPath: string, scale: number): void {
     const x = PADDING + frame * IN_GAME_TILE * 2;
     blitCell(
       ctx,
-      HUMAN_FIGURE,
+      undressedHumanFigure(activeHumanLook()),
       'idle',
       0,
       x,

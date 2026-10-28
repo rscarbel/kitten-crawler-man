@@ -139,10 +139,12 @@ export const SUBJECTS: readonly SvgSubject[] = [
       const { drawBipedFront, drawBipedBack, drawBipedSide } =
         await import('../src/sprites/art/biped/figure.js');
       const { VIEWS } = await import('../src/sprites/art/biped/rig.js');
-      const { HUMAN_ROWS, HUMAN_FIGURE_PAINTING, paintedPose } =
+      const { HUMAN_ROWS, undressedHumanPainting, paintedPose } =
         await import('../src/sprites/art/humanFigure.js');
       const { playerLookAxes } = await import('../src/sprites/looks/humanLook.js');
-      const { look, itemHandle } = HUMAN_FIGURE_PAINTING;
+      const { activeHumanLook } = await import('../src/sprites/humanSprite.js');
+      const painting = undressedHumanPainting(activeHumanLook());
+      const { look, itemHandle } = painting;
       const painters = { front: drawBipedFront, back: drawBipedBack, side: drawBipedSide };
       return HUMAN_ROWS.map((row) => ({
         name: row.name,
@@ -150,7 +152,7 @@ export const SUBJECTS: readonly SvgSubject[] = [
           inUnitSpace(domContextOf(targets), targets.unit, (ctx) => {
             const axes = playerLookAxes(look, VIEWS[row.view].profile);
             ctx.scale(axes.x, axes.y);
-            painters[row.view](ctx, paintedPose(HUMAN_FIGURE_PAINTING, row, frame), {
+            painters[row.view](ctx, paintedPose(painting, row, frame), {
               look,
               itemHandle,
             });

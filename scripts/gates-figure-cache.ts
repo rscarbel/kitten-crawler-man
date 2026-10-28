@@ -47,10 +47,11 @@ import {
   setFigureWorldPixelRatio,
   figureFrameStoredBytes,
   recordFigureCellBlits,
+  residentFigureCells,
   takeRecordedFigureCell,
 } from '../src/sprites/figure/figureFrameCache.js';
 import { defaultOutfitOf } from '../src/sprites/garments/human/humanDressing.js';
-import { playerCharacter } from '../src/characters/characters.js';
+import { activeHumanLook } from '../src/sprites/humanSprite.js';
 import { wornGarmentOf } from '../src/sprites/garments/garments.js';
 import { bareCatOutfit } from '../src/sprites/garments/cat/catDressing.js';
 import { outfitOf } from '../src/sprites/garments/outfit.js';
@@ -68,11 +69,23 @@ import { createCanvas } from 'canvas';
 
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { gameContext } from './nodeGameContext.js';
+import { DEV_PLAYER_IDENTITY, useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+import { setPlayerIdentity } from '../src/characters/playerIdentity.js';
+import { HUMAN_CRAWLER_LOOKS } from '../src/characters/humanCrawlerLooks.js';
+import {
+  COMPLEXIONS,
+  CRAWLER_BODIES,
+  lookIdOf,
+  type HumanCrawlerLookId,
+} from '../src/characters/crawlerChoices.js';
+import { humanFigureId } from '../src/sprites/art/humanFigure.js';
+
+useDevPlayerIdentity();
 
 installCanvasGlobals();
 
-/** The look the player's human is painted in, whose outfits the residency checks dress him in. */
-const PLAYER_LOOK = playerCharacter('human').look;
+/** The look the human crawler is painted in, whose outfits the residency checks dress them in. */
+const PLAYER_LOOK = activeHumanLook();
 
 /**
  * The cache's clock for this gate, advanced only by the synthetic painters'
@@ -1701,6 +1714,56 @@ const BOOST_TEST_BUDGET_CELL_MULTIPLE = 3;
     `${after.directDraws - before.directDraws} live paint(s) and ` +
       `${after.approxDraws - before.approxDraws} stand-in(s) while the rebake ran`,
   );
+}
+
+// Only the player's chosen look is ever resident: each identity set in turn
+// leaves the human crawler's cells, outfit figures included, in its look alone.
+{
+  /** Frames drawn in each look, so its outfit and prewarmed rows are baked before the next switch. */
+  const IDENTITY_WARM_FRAMES = 30;
+  const crawlerLookIds = Object.values(HUMAN_CRAWLER_LOOKS).map((look) => look.id);
+  /** The crawler look a resident figure paints, or null for a figure that is no crawler look. */
+  const crawlerLookOfFigure = (figureId: string): HumanCrawlerLookId | null =>
+    crawlerLookIds.find((lookId) => {
+      const baseId = humanFigureId(HUMAN_CRAWLER_LOOKS[lookId]);
+      return figureId === baseId || figureId.startsWith(`${baseId}:`);
+    }) ?? null;
+
+  reset();
+  setHumanOutfit(
+    outfitOf(PLAYER_LOOK, [
+      wornGarmentOf('human', 'townsfolk_trousers'),
+      wornGarmentOf('human', 'townsfolk_shoes'),
+    ]),
+  );
+  for (const body of CRAWLER_BODIES) {
+    for (const complexion of COMPLEXIONS) {
+      const identity = { ...DEV_PLAYER_IDENTITY, body, complexion };
+      const lookId = lookIdOf(identity);
+      setPlayerIdentity(identity);
+      for (let i = 0; i < IDENTITY_WARM_FRAMES; i++) {
+        beginFigureFrame();
+        drawHumanSelection(ctx, 0, 0, TILE_SIZE, { row: 'idle', frame: 0, flipX: false });
+      }
+      const crawlerFigures = residentFigureCells()
+        .filter((resident) => resident.bytes > 0)
+        .map((resident) => ({
+          id: resident.figureId,
+          look: crawlerLookOfFigure(resident.figureId),
+        }))
+        .filter((resident) => resident.look !== null);
+      const strangers = crawlerFigures.filter((resident) => resident.look !== lookId);
+      check(
+        `with a ${lookId} identity only the ${lookId} look is resident`,
+        crawlerFigures.length > 0 && strangers.length === 0,
+        crawlerFigures.length === 0
+          ? `nothing of ${lookId} was resident after ${IDENTITY_WARM_FRAMES} drawn frames`
+          : `other looks still hold cells: ${strangers.map((resident) => resident.id).join(', ')}`,
+      );
+    }
+  }
+  setPlayerIdentity(DEV_PLAYER_IDENTITY);
+  setHumanOutfit(defaultOutfitOf(PLAYER_LOOK));
 }
 
 // Canvas memory spent: a bake the browser refuses a surface must not throw out

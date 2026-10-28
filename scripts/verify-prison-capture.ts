@@ -96,6 +96,8 @@ const {
   CAPTURE_HOLD_FRAMES,
   CAPTURE_WITH_KEY_TOAST,
 } = await import('../src/systems/stealthKeySnatch/GoblinPrisonSystem.js');
+const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js');
+useDevPlayerIdentity();
 const { enterPrison } = await import('./prisonInteriorHarness.js');
 type PrisonHarness = Awaited<ReturnType<typeof enterPrison>>;
 

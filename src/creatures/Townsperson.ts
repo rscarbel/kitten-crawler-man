@@ -14,7 +14,8 @@ import { scaleHumanoidBox } from '../sprites/humanoidScale';
 import { gaitCyclesForDistance } from '../sprites/gaitCadence';
 import type { Facing } from '../sprites/person/skeleton';
 import { stepWander, type WanderParams, type WanderState, type WanderStep } from './townWander';
-import { residentById, type ResidentId } from '../systems/townResidents';
+import { residentById } from '../systems/townResidents';
+import { type ResidentId } from '../core/state/residentIds';
 import type { CrowdSpecies, TownSpecies } from '../systems/townSpecies';
 import {
   citizenDialogSeed,

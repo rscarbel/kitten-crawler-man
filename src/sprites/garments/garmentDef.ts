@@ -70,11 +70,12 @@ interface HumanAnatomy {
 
 /**
  * Bare skin of a human a garment can cover: shoes cover the feet, a glove or
- * a ring covers the hand it is on (his own left or right), so a glove hides a
- * ring worn under it, and a garment closed over his chest covers it, so a
- * coat hides the shirt or jacket his look starts in.
+ * a ring covers the hand it is on (their own left or right), so a glove hides
+ * a ring worn under it; a garment closed over the chest covers it, so a coat
+ * hides the shirt or jacket the look starts in; and one whose hood or collar
+ * closes round the throat covers it, so a hoodie hides a scarf worn under it.
  */
-type HumanBareFeature = 'feet' | 'chest' | HumanHand;
+type HumanBareFeature = 'feet' | 'chest' | 'throat' | HumanHand;
 
 type HumanHand = `${BodySide}Hand`;
 

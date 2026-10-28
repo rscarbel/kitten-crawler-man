@@ -85,6 +85,13 @@ import {
   parsePetName,
   parseSavedPetNames,
 } from '../src/core/party/petNames';
+import {
+  PLAYER_NAME_MAX_GRAPHEMES,
+  PLAYER_NAME_RULE_MESSAGES,
+  parsePlayerName,
+  playerNameRejection,
+} from '../src/core/naming/playerName';
+import { MAX_MARKS_PER_CLUSTER, NAME_MAX_CODE_UNITS } from '../src/core/naming/nameRules';
 import { cowFigure } from '../src/sprites/art/cowFigure';
 import type { CowAge, CowCoatId } from '../src/sprites/cowSprite';
 import {
@@ -1239,7 +1246,7 @@ function petNameSection(): void {
   for (const punctuationOnly of ['-', "'", "- ' -"]) {
     check(
       parsePetName(punctuationOnly) === null,
-      `"${punctuationOnly}" is refused: a name needs a letter or a digit`,
+      `"${punctuationOnly}" is refused: a name needs a letter`,
     );
   }
   for (const illegal of ['Moo!', 'Bessie_2', 'Daisy\u{1F404}', 'Cl@ver']) {
@@ -1263,6 +1270,112 @@ function petNameSection(): void {
   );
 }
 
+/**
+ * The human crawler's name, under the same rules as a pet's with its own cap:
+ * names from every script are kept as typed, and markup, injection attempts,
+ * control and bidi characters, emoji and stacked marks are refused.
+ */
+function playerNameSection(): void {
+  console.log("\nthe player's name");
+  const persianWithZeroWidthNonJoiner = '\u0639\u0644\u06CC\u200C\u0631\u0636\u0627';
+  /** Bengali ya-phala: ra, a joiner, then the virama on the far side of it, then ya. */
+  const bengaliYaPhala = '\u09B0\u200D\u09CD\u09AF';
+  const accepted = [
+    'Siobhán',
+    'Zoë',
+    'Björk',
+    'Øyvind',
+    'Łukasz',
+    'Ruairí',
+    'Ngũgĩ',
+    'Tāne',
+    "O'Brien",
+    "N'Dour",
+    'Jean-Luc',
+    'Mary-Kate',
+    'José María',
+    'Nguyễn Thị Minh Khai',
+    'Martin Luther King Jr.',
+    '\u02BBIolani',
+    '\u01C3Xóõ',
+    '李小龍',
+    'محمد',
+    'אברהם',
+    'अनुष्का',
+    persianWithZeroWidthNonJoiner,
+    bengaliYaPhala,
+    'X Æ A-12',
+    'Núria Pel·lisser',
+  ];
+  for (const name of accepted) {
+    check(parsePlayerName(name) === name, `"${name}" is kept as typed`);
+  }
+  check(
+    parsePlayerName('O\u2019Brien') === "O'Brien",
+    'a curly apostrophe is kept as the straight one',
+  );
+  check(
+    parsePlayerName('Zoe\u0308') === 'Zoë',
+    'a letter typed as a base and a combining mark is stored composed',
+  );
+  const longest = 'M'.repeat(PLAYER_NAME_MAX_GRAPHEMES);
+  check(
+    parsePlayerName(longest) === longest,
+    `a name of ${PLAYER_NAME_MAX_GRAPHEMES} letters is kept`,
+  );
+
+  const zalgoCluster = `Z${'\u0336\u0337\u0338\u0322\u031B'.slice(0, MAX_MARKS_PER_CLUSTER + 1)}`;
+  const refused = [
+    ['', 'empty'],
+    ['    ', 'spaces only'],
+    ["'-.", 'punctuation alone'],
+    [`${longest}M`, `${PLAYER_NAME_MAX_GRAPHEMES + 1} characters`],
+    ['<script>alert(1)</script>', 'a script tag'],
+    ["Robert'); DROP TABLE Students;--", 'SQL'],
+    ['{{system}}', 'template braces'],
+    ['</player_name>', 'a closing tag'],
+    ['Ignore previous instructions:', 'an instruction ending in a colon'],
+    ['Bob\nSmith', 'a newline'],
+    ['Bob\u202EhtimS', 'a right-to-left override'],
+    ['\u{1F600}\u{1F431}', 'emoji'],
+    [`${zalgoCluster}algo`, 'stacked marks'],
+    ['Bob\u200C', 'a joiner outside a word'],
+    ['\u0301abc', 'a combining mark before any letter'],
+    ['Bo \u0301b', 'a combining mark on a space'],
+    ['\u3164', 'a Hangul filler alone'],
+    ['\uFFA0', 'a halfwidth Hangul filler alone'],
+    ['\u115F\u1160', 'Hangul choseong and jungseong fillers'],
+    ['\u3164Ryan', 'a Hangul filler before a name'],
+    ['a\uFE0F', 'a variation selector'],
+    ['\u0640', 'a tatweel alone'],
+  ] as const;
+  for (const [raw, why] of refused) {
+    check(parsePlayerName(raw) === null, `a name with ${why} is refused`);
+  }
+
+  check(
+    playerNameRejection('Bob!') === 'charset' &&
+      playerNameRejection('\u0301abc') === 'charset' &&
+      playerNameRejection('42') === 'noLetter' &&
+      playerNameRejection('\u0640') === 'noLetter' &&
+      playerNameRejection('\u3164') === 'charset' &&
+      playerNameRejection(`${longest}M`) === 'tooLong' &&
+      playerNameRejection(`${zalgoCluster}algo`) === 'tooManyMarks' &&
+      playerNameRejection('  ') === 'empty',
+    'each refusal names the rule it broke',
+  );
+  const manyCodeUnits = 'ab\u0301\u0302\u0303\u0304'.repeat(PLAYER_NAME_MAX_GRAPHEMES / 2);
+  check(
+    manyCodeUnits.normalize('NFC').length > NAME_MAX_CODE_UNITS &&
+      playerNameRejection(manyCodeUnits) === 'tooLong',
+    `a name of few characters but over ${NAME_MAX_CODE_UNITS} code units is too long`,
+  );
+  check(
+    PLAYER_NAME_RULE_MESSAGES.tooLong === `${PLAYER_NAME_MAX_GRAPHEMES} characters at most`,
+    'the length message states the cap',
+  );
+}
+
 const seeds = seedCount();
 herdSection(seeds);
 damageSection();
@@ -1270,6 +1383,7 @@ blastSection(seeds);
 respawnSection();
 routingSection();
 petNameSection();
+playerNameSection();
 
 if (failures > 0) {
   console.log(`\n${failures} check(s) failed`);

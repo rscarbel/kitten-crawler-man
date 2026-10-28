@@ -43,6 +43,9 @@ import { carolineLines } from '../src/dialog/caroline';
 import { CAROLINE_PREFIX } from '../src/ui/widgets/carolineFrame';
 import { SPEECH_REVEAL_INTERVAL_MS, speakerSkin, speakerTypeface } from '../src/dialog/speakers';
 import { STORY_BEATS } from '../src/story/storyBeats';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+
+useDevPlayerIdentity();
 
 let failures = 0;
 function check(ok: boolean, label: string): void {

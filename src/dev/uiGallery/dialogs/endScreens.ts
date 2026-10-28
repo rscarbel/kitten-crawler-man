@@ -4,7 +4,7 @@
  * like a real run, plus the mid-timeline states worth judging.
  */
 
-import { crawlerName } from '../../../characters/characters';
+import { crawlerDisplayName } from '../../../characters/characters';
 import { createAnchorQuestProgress } from '../../../core/quests/AnchorQuestProgress';
 import { blueprintsRewardSpec } from '../../../systems/briarHollow/blueprints/blueprintsRewardSpec';
 import type { TreasureChest } from '../../../systems/TreasureChestSystem';
@@ -136,56 +136,60 @@ function runCompleteFixture(name: string, frameCount: number): DialogFixture {
   };
 }
 
-const DEFEND_SPEC: QuestRewardSpec = {
-  questTitle: 'Defend the Goblin Mother',
-  renderQuestIcon: rewardIconPainter('goblin_dynamite'),
-  quote: {
-    text: 'You kept my babies breathing. That is worth more than coin. Take the coin anyway.',
-    speaker: 'The Goblin Mother',
-  },
-  sections: [
-    ...partyXpSections({ human: 500, cat: 450 }),
-    { kind: 'coins', amount: 50 },
-    {
-      kind: 'items',
-      items: [
-        {
-          name: 'Uncommon reward chest',
-          count: 1,
-          renderIcon: (ctx, rect) => drawRewardChestIcon(ctx, rect, 'Uncommon'),
-          note: 'One for each crawler.',
-        },
-        bagItemRewardLine('health_potion', POTIONS_GIVEN),
-        bagItemRewardLine('skill_book_cat_reflexes', 1, {
-          describe: true,
-          note: `In ${crawlerName('cat')}'s bag.`,
-        }),
-      ],
+function defendSpec(): QuestRewardSpec {
+  return {
+    questTitle: 'Defend the Goblin Mother',
+    renderQuestIcon: rewardIconPainter('goblin_dynamite'),
+    quote: {
+      text: 'You kept my babies breathing. That is worth more than coin. Take the coin anyway.',
+      speaker: 'The Goblin Mother',
     },
-  ],
-  footnote: 'The nursery stays open to you for the rest of the floor.',
-};
+    sections: [
+      ...partyXpSections({ human: 500, cat: 450 }),
+      { kind: 'coins', amount: 50 },
+      {
+        kind: 'items',
+        items: [
+          {
+            name: 'Uncommon reward chest',
+            count: 1,
+            renderIcon: (ctx, rect) => drawRewardChestIcon(ctx, rect, 'Uncommon'),
+            note: 'One for each crawler.',
+          },
+          bagItemRewardLine('health_potion', POTIONS_GIVEN),
+          bagItemRewardLine('skill_book_cat_reflexes', 1, {
+            describe: true,
+            note: `In ${crawlerDisplayName('cat')}'s bag.`,
+          }),
+        ],
+      },
+    ],
+    footnote: 'The nursery stays open to you for the rest of the floor.',
+  };
+}
 
-const PLEA_SPEC: QuestRewardSpec = {
-  questTitle: "Briar Hollow's Plea",
-  sections: [
-    ...partyXpSections({ human: 2000, cat: 1934 }),
-    { kind: 'coins', amount: 500 },
-    { kind: 'items', items: [bagItemRewardLine('hamburger', BURGERS_GIVEN)] },
-    travelUnlocksSection(['briar_hollow'], { anchor: createAnchorQuestProgress() }),
-  ],
-};
+function pleaSpec(): QuestRewardSpec {
+  return {
+    questTitle: "Briar Hollow's Plea",
+    sections: [
+      ...partyXpSections({ human: 2000, cat: 1934 }),
+      { kind: 'coins', amount: 500 },
+      { kind: 'items', items: [bagItemRewardLine('hamburger', BURGERS_GIVEN)] },
+      travelUnlocksSection(['briar_hollow'], { anchor: createAnchorQuestProgress() }),
+    ],
+  };
+}
 
 function questRewardFixture(
   name: string,
-  spec: QuestRewardSpec,
+  spec: () => QuestRewardSpec,
   frameCount: number,
 ): DialogFixture {
   return {
     name,
     surfaces: (shown) => {
       const model = new QuestRewardScreen(null);
-      model.open(spec);
+      model.open(spec());
       return [gated(shown, questRewardSurface(model, { id: name }))];
     },
     interact: frames(frameCount),
@@ -264,12 +268,12 @@ export const FIXTURES: readonly DialogFixture[] = [
   },
   runCompleteFixture('run-complete-counting', RUN_COMPLETE_COUNTING_FRAMES),
   runCompleteFixture('run-complete', RUN_COMPLETE_SETTLED_FRAMES),
-  questRewardFixture('quest-reward-revealing', DEFEND_SPEC, QUEST_REWARD_REVEALING_FRAMES),
-  questRewardFixture('quest-reward', DEFEND_SPEC, QUEST_REWARD_SETTLED_FRAMES),
-  questRewardFixture('quest-reward-unlocks', PLEA_SPEC, QUEST_REWARD_SETTLED_FRAMES),
+  questRewardFixture('quest-reward-revealing', defendSpec, QUEST_REWARD_REVEALING_FRAMES),
+  questRewardFixture('quest-reward', defendSpec, QUEST_REWARD_SETTLED_FRAMES),
+  questRewardFixture('quest-reward-unlocks', pleaSpec, QUEST_REWARD_SETTLED_FRAMES),
   questRewardFixture(
     'quest-reward-blueprints',
-    blueprintsRewardSpec(null, () => undefined),
+    () => blueprintsRewardSpec(null, () => undefined),
     QUEST_REWARD_SETTLED_FRAMES,
   ),
   chestFixture('chest-opening', 'wooden', SAMPLE_SPLIT, CHEST_OPENING_TICKS),

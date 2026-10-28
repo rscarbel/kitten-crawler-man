@@ -68,6 +68,9 @@ import {
 import { getMercenaryTemplate } from '../src/core/party/mercenaryTemplates';
 import { loadGameSpritesInNode } from './nodeCanvasGlobals';
 import { PetNameBook } from '../src/core/party/petNames';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+
+useDevPlayerIdentity();
 
 const WORLD_SEED = 424242;
 /** Far enough from the stairs that standing there is plainly not on them. */

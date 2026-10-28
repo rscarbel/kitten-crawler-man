@@ -40,8 +40,9 @@ import {
 } from '../src/sprites/art/magnumFigure.js';
 import {
   GROUND_OFFSET_IN_TILE as HUMAN_GROUND_OFFSET_IN_TILE,
-  HUMAN_FIGURE,
+  undressedHumanFigure,
 } from '../src/sprites/art/humanFigure.js';
+import { activeHumanLook } from '../src/sprites/humanSprite.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 
 /** Matches TILE_SIZE in src/core/constants.ts. */
@@ -331,10 +332,11 @@ function renderRows(states: readonly string[], outPath: string, scale: number, p
  */
 function renderInGame(states: readonly string[], outPath: string, zoom: number): void {
   const k = IN_GAME_SCALE;
-  const humanK = IN_GAME_TILE / HUMAN_FIGURE.tileScale;
-  const humanGround = HUMAN_FIGURE.tileY + HUMAN_FIGURE.tileScale * HUMAN_GROUND_OFFSET_IN_TILE;
-  const human = bakeFigureCell(HUMAN_FIGURE, HUMAN_STATE, 0);
-  const humanWindow = rowWindow(HUMAN_FIGURE, HUMAN_STATE, [0]);
+  const humanFigure = undressedHumanFigure(activeHumanLook());
+  const humanK = IN_GAME_TILE / humanFigure.tileScale;
+  const humanGround = humanFigure.tileY + humanFigure.tileScale * HUMAN_GROUND_OFFSET_IN_TILE;
+  const human = bakeFigureCell(humanFigure, HUMAN_STATE, 0);
+  const humanWindow = rowWindow(humanFigure, HUMAN_STATE, [0]);
   const rows = states.map((state) => {
     const def = figureFor(state);
     const frames = framesToShow(frameCountOf(def, state));

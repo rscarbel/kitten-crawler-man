@@ -1,6 +1,6 @@
 import type { CarolineMessage } from '../dialog/caroline';
 import type { DungeonFloorNumber } from '../levels/levelIds';
-import type { DebriefBossType } from '../systems/daveDebrief';
+import type { DebriefBossType } from '../core/mobs/debriefBossTypes';
 
 /** A floor the story has beats on. */
 export type StoryFloor = DungeonFloorNumber;
@@ -72,11 +72,12 @@ export type StoryBeat<Id extends string> =
 export type StorySpeaker = StoryBeat<string>['speaker'];
 
 /**
- * Checks a table of beats against itself: every id a beat names must be one of
- * the table's own keys. Returns the table unchanged, with its literal types.
+ * Checks a table of beats against the story's id list: the table has an entry
+ * for every id and no other, and every id a beat names is one of them.
+ * Returns the table unchanged, with its literal types.
  */
-export function defineStoryBeats<
-  const Beats extends { readonly [Id in keyof Beats]: StoryBeat<Extract<keyof Beats, string>> },
->(beats: Beats): Beats {
-  return beats;
+export function defineStoryBeats<Id extends string>() {
+  return <const Beats extends Readonly<Record<Id, StoryBeat<Id>>>>(
+    beats: Beats & Record<Exclude<keyof Beats, Id>, never>,
+  ): Beats => beats;
 }

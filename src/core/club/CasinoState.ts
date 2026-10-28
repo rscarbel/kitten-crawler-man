@@ -10,7 +10,7 @@
 
 import type { ShoeState } from '../../systems/casino/Deck';
 import type { PlayerRead } from '../../systems/casino/poker/npc/playerRead';
-import { REGULAR_IDS, type RegularId } from '../../systems/casino/poker/npc/regulars';
+import { REGULAR_IDS, type RegularId } from '../../systems/casino/poker/npc/regularIds';
 import { JACKPOT_FLOOR, normalizeJackpotPool } from '../../systems/casino/slots/slotBets';
 
 /** What each poker regular has learned about the player's play this run. */

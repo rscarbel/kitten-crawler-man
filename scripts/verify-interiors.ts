@@ -57,12 +57,8 @@ import {
 } from '../src/creatures/bespokeResidentFigures';
 import { DEFAULT_TOWN_SPECIES } from '../src/systems/townSpecies';
 import { InteriorReadableSystem } from '../src/systems/InteriorReadableSystem';
-import {
-  allResidents,
-  residentById,
-  residentSpecies,
-  type ResidentId,
-} from '../src/systems/townResidents';
+import { allResidents, residentById, residentSpecies } from '../src/systems/townResidents';
+import { type ResidentId } from '../src/core/state/residentIds';
 import { partyRoutineBodies, type RoutineBody } from '../src/systems/occupantRoutines';
 import type { OccupantRoutineCue } from '../src/systems/occupantRoutineCues';
 import { RESIDENT_LINES } from '../src/dialog/scripts/residents';
@@ -79,7 +75,7 @@ import {
   createClubCrowd,
 } from '../src/systems/ClubCrowdSystem';
 import { ClubGamblerSystem } from '../src/systems/ClubGamblerSystem';
-import { REGULAR_IDS } from '../src/systems/casino/poker/npc/regulars';
+import { REGULAR_IDS } from '../src/systems/casino/poker/npc/regularIds';
 import { NPC_SEAT_COUNT } from '../src/systems/casino/poker/PokerTable';
 import { interiorServicesFor } from '../src/systems/townServices';
 import { readableBuildings, readablesFor } from '../src/systems/townReadables';
@@ -117,6 +113,9 @@ import { setViewportSize } from '../src/core/rendering/Viewport';
 import { ShopSystem } from '../src/systems/ShopSystem';
 import { createShopStock } from '../src/economy/shopStock';
 import { mulberry32 } from '../src/sprites/person/rng';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+
+useDevPlayerIdentity();
 
 // The confrontation's office scene paginates its dialog against the live
 // viewport; without a size set, DialogBox measures against a zero-width box

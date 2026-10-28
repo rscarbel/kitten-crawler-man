@@ -8,6 +8,8 @@
  * asked for it, so a field focuses the sink from its own tap handler.
  */
 
+import { graphemes } from '../../core/text/graphemes';
+
 /** Sixteen pixels keeps iOS from zooming the page to the field. */
 const KEYBOARD_SINK_FONT_PX = 16;
 const KEYBOARD_SINK_Z_INDEX = 9999;
@@ -26,8 +28,30 @@ function imeTookKey(e: KeyboardEvent): boolean {
   return e.isComposing || Reflect.get(e, 'keyCode') === IME_PROCESS_KEY_CODE;
 }
 
+/** A `KeyboardEvent.key` that types text: one character, not a named key such as "Shift". */
+function isPrintableKey(key: string): boolean {
+  return graphemes(key).length === 1;
+}
+
+/** `text` cut to `maxCodeUnits` at a grapheme boundary, so a cut never leaves half a character. */
+function clampToHardStop(text: string, maxCodeUnits: number): string {
+  if (text.length <= maxCodeUnits) return text;
+  let kept = '';
+  for (const cluster of graphemes(text)) {
+    if (kept.length + cluster.length > maxCodeUnits) break;
+    kept += cluster;
+  }
+  return kept;
+}
+
 export interface TextEntrySinkOptions {
-  readonly maxLength: number;
+  /**
+   * The most UTF-16 code units the entry holds, the unit the DOM field's own
+   * `maxLength` counts in. A hard stop against runaway input such as a huge
+   * paste, never the rule for a legal entry: what the entry accepts, its length
+   * in characters included, is decided by the parser its text is handed to.
+   */
+  readonly maxCodeUnits: number;
   /** Enter, unless it commits an IME composition or is an auto-repeat. */
   readonly onEnter: () => void;
   /** Escape. Absent where Escape must not end the entry. */
@@ -70,7 +94,7 @@ export class TextEntrySink {
     if (this.field !== null) return;
     const field = document.createElement('input');
     field.type = 'text';
-    field.maxLength = this.options.maxLength;
+    field.maxLength = this.options.maxCodeUnits;
     field.value = this.text;
     const rect = anchor.getBoundingClientRect();
     Object.assign(field.style, {
@@ -84,7 +108,7 @@ export class TextEntrySink {
       zIndex: `${KEYBOARD_SINK_Z_INDEX}`,
     });
     const readField = () => {
-      this.text = field.value.slice(0, this.options.maxLength);
+      this.text = clampToHardStop(field.value, this.options.maxCodeUnits);
     };
     field.addEventListener('input', readField);
     field.addEventListener('compositionend', readField);
@@ -110,7 +134,7 @@ export class TextEntrySink {
 
   /** Replaces the text, with the caret after it. */
   setValue(value: string): void {
-    this.text = value.slice(0, this.options.maxLength);
+    this.text = clampToHardStop(value, this.options.maxCodeUnits);
     this.syncField();
   }
 
@@ -123,11 +147,12 @@ export class TextEntrySink {
   typeKey(key: string): boolean {
     let edited = false;
     if (key === 'Backspace') {
-      this.text = this.text.slice(0, -1);
+      this.text = graphemes(this.text).slice(0, -1).join('');
       edited = true;
-    } else if (Array.from(key).length === 1 && this.text.length < this.options.maxLength) {
-      this.text += key;
-      edited = true;
+    } else if (isPrintableKey(key)) {
+      const typed = clampToHardStop(this.text + key, this.options.maxCodeUnits);
+      edited = typed !== this.text;
+      this.text = typed;
     }
     this.syncField();
     this.focus();

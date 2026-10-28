@@ -1,9 +1,7 @@
-import { crawlerName, PLAYER_CHARACTERS } from '../../characters/characters';
 import type { CrawlerKind } from '../../core/skills/SkillManager';
 import { DAVE_CHARACTER_NAME } from '../characters';
 import type { JsonObject } from './json';
-import { crawlerKindNamed } from './liveState';
-import type { CrawlerName, LiveInput } from './types';
+import type { LiveInput } from './types';
 
 const MS_PER_MINUTE = 60_000;
 const MS_PER_HOUR = 3_600_000;
@@ -86,8 +84,8 @@ export class PlayerProfileTracker {
     else this.carolineChats++;
   }
 
-  recordKnockout(crawler: CrawlerName): void {
-    this.knockouts[crawlerKindNamed(crawler)]++;
+  recordKnockout(crawler: CrawlerKind): void {
+    this.knockouts[crawler]++;
   }
 
   recordAdvice(now: number): void {
@@ -152,10 +150,10 @@ export class PlayerProfileTracker {
         given: this.adviceGiven,
         followedShare: ratio(this.adviceFollowed, this.adviceGiven),
       },
-      [`treatmentOf${crawlerName('cat')}`]: {
+      treatmentOfCat: {
         shareOfTimeSplitUp: ratio(this.splitSamples, this.liveSamples),
-        [`${PLAYER_CHARACTERS.cat}Knockouts`]: this.knockouts.cat,
-        [`${PLAYER_CHARACTERS.human}Knockouts`]: this.knockouts.human,
+        catKnockouts: this.knockouts.cat,
+        humanKnockouts: this.knockouts.human,
       },
     };
   }

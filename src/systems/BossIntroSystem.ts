@@ -39,9 +39,15 @@ import { worldPlate, worldTint } from '../ui/world/worldShapes';
 import { worldPalette } from '../ui/theme/worldInk';
 import { withAlpha } from '../ui/theme/color';
 import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
-import { crawlerName } from '../characters/characters';
+import { crawlerDisplayName } from '../characters/characters';
 
-const CRAWLER_TEAM_LABEL = `TEAM ${crawlerName('human').toUpperCase()} & ${crawlerName('cat').toUpperCase()}`;
+/**
+ * Measured after uppercasing, because uppercasing can lengthen a name (ß
+ * becomes SS) and the player's name is any length the name rules allow.
+ */
+function crawlerTeamLabel(): string {
+  return `TEAM ${crawlerDisplayName('human').toUpperCase()} & ${crawlerDisplayName('cat').toUpperCase()}`;
+}
 
 type IntroState = {
   bossType: string;
@@ -256,6 +262,8 @@ const BOSS_PANEL_BACKGROUNDS: Partial<Record<string, string>> = {
 const BACKDROP_ALPHA = 0.88;
 const VERSUS_PANEL_BORDER_WIDTH = 2;
 const PANEL_LABEL_SIZE = 11;
+/** Clear space kept between the team label and either edge of its panel. */
+const TEAM_LABEL_SIDE_MARGIN = 8;
 const PANEL_CAPTION_SIZE = 9;
 const FIGHT_LABEL_SIZE = 10;
 
@@ -455,10 +463,20 @@ export class BossIntroSystem implements GameSystem {
       );
       ctx.restore();
 
-      worldText(ctx, CRAWLER_TEAM_LABEL, {
+      const teamLabel = crawlerTeamLabel();
+      const teamLabelRoom = panelW - TEAM_LABEL_SIDE_MARGIN * 2;
+      const teamLabelWidth = measureWorldText(ctx, teamLabel, {
+        size: PANEL_LABEL_SIZE,
+        bold: true,
+      }).width;
+      const teamLabelSize =
+        teamLabelWidth > teamLabelRoom
+          ? PANEL_LABEL_SIZE * (teamLabelRoom / teamLabelWidth)
+          : PANEL_LABEL_SIZE;
+      worldText(ctx, teamLabel, {
         x: leftX + panelW / 2,
         y: panelY + panelH - TEAM_LABEL_Y_OFFSET_FROM_BOTTOM - LABEL_TEXT_ADJUST,
-        size: PANEL_LABEL_SIZE,
+        size: teamLabelSize,
         bold: true,
         color: worldPalette.ink.human,
         align: 'center',

@@ -5,16 +5,14 @@
 
 import { speakerLines, transientSpeaker } from '../../line';
 import type { DialogLine, NonEmpty } from '../../line';
-import { crawlerName } from '../../../characters/characters';
-
-const HUMAN_NAME = crawlerName('human');
+import { crawlerDisplayName } from '../../../characters/characters';
 
 /** The murder mystery's own header, for a narration page with no more specific location to name. */
 const THE_KRASUE_MURDERS = 'The Krasue Murders';
 
 const narrator = transientSpeaker(THE_KRASUE_MURDERS, 'narration');
 const theTopFloor = transientSpeaker('The Top Floor', 'narration');
-const ryan = speakerLines('ryan');
+const humanCrawler = speakerLines('human_crawler');
 const belle = speakerLines('belle');
 const quill = speakerLines('quill');
 
@@ -28,7 +26,7 @@ export const QUILL_FEATHERFALL_EXAMINE: NonEmpty<DialogLine> = [
   narrator.line(
     'The magistrate hasn’t moved since you came up the stairs. He hasn’t moved in a long time — the ink in that well is a solid brick and his sash is grey with dust.',
   ),
-  ryan.button(
+  humanCrawler.button(
     'Back away',
     'Oh, buddy. You’ve been dead for weeks. So who has been signing the magistrate’s letters?',
   ),
@@ -45,14 +43,15 @@ export const QUILL_OFFICE: NonEmpty<DialogLine> = [
   quill.line(
     'You are not in the appointment ledger. The magistrate sees petitioners on the seventh day. You may leave your names with me. I keep excellent records.',
   ),
-  ryan.line(
+  humanCrawler.line(
     'Love the filing system, honestly. But people are dying in the low streets, your cult burned down last night, and your name is signed at the bottom of their duty ledger. Where’s Featherfall?',
   ),
   quill.line(
     'The magistrate is at his desk, where he has always been. He is simply particular about visitors. As am I.',
   ),
   belle.line(
-    `${HUMAN_NAME}? The bird at the big desk hasn’t moved. Or blinked. Or breathed. I think he’s really cold. Should I sit on his lap?`,
+    () =>
+      `${crawlerDisplayName('human')}? The bird at the big desk hasn’t moved. Or blinked. Or breathed. I think he’s really cold. Should I sit on his lap?`,
   ),
   quill.line(
     'Hm. It was the chalk, I suppose. Or the note. I did tell her to come alone. Witnesses make everything so untidy. Well. You have interrupted years of careful work, children, and I am afraid the syllabus does not allow for interruptions. Mr. Remex? Ring the bell.',
@@ -68,9 +67,10 @@ export const QUILL_VICTORY: NonEmpty<DialogLine> = [
   narrator.line(
     'The robe folds over nothing and settles on the boards. The seal at its belt, Featherfall’s seal, cracks down the middle. Somewhere beneath the floorboards, something enormous begins, very slowly, to wake.',
   ),
-  ryan.line('That one was for Baggi. Somebody looked.'),
+  humanCrawler.line('That one was for Baggi. Somebody looked.'),
   belle.button(
     'It’s not over',
-    `We did it, ${HUMAN_NAME}. Baggi would be happy. Can we have a nap now? The floor is rumbling...`,
+    () =>
+      `We did it, ${crawlerDisplayName('human')}. Baggi would be happy. Can we have a nap now? The floor is rumbling...`,
   ),
 ];

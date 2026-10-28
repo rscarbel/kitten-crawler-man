@@ -4,6 +4,7 @@ import type { AudioManager } from '../../audio/AudioManager';
 import type { MusicClaims } from '../../audio/AudioScope';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
+import type { ItemId } from '../../core/items/defs/ItemDefs';
 import type { Mob } from '../../creatures/Mob';
 import type { GameMap } from '../../map/GameMap';
 import type { ToastOptions } from '../../ui/hud/toasts';
@@ -125,11 +126,23 @@ export interface AIBudgetDraw {
   readonly amount: number;
 }
 
-/** What an executed (or refused) action reports back. */
-export interface AIActionResult {
-  readonly ok: boolean;
-  readonly detail: string;
+/**
+ * How one audience names the crawlers and items a result line mentions: the
+ * AI is told `crawlerAIName` names, the screen shows the typed,
+ * bidi-isolated ones. Neither audience may ever see the other's.
+ */
+export interface ResultNamer {
+  crawler(crawler: HumanPlayer | CatPlayer): string;
+  item(id: ItemId): string;
 }
+
+/** A success line, built once per audience so each names things its own way. */
+export type ResultLine = (names: ResultNamer) => string;
+
+/** What an executed (or refused) action reports back. A refusal goes only to the AI. */
+export type AIActionResult =
+  | { readonly ok: true; readonly line: ResultLine }
+  | { readonly ok: false; readonly detail: string };
 
 /** Everything an executor and an action's own fairness check can read. */
 export interface AIActionCall {
@@ -164,8 +177,8 @@ export interface AIActionDef {
   execute(call: AIActionCall): AIActionResult;
 }
 
-export function ok(detail: string): AIActionResult {
-  return { ok: true, detail };
+export function ok(line: ResultLine): AIActionResult {
+  return { ok: true, line };
 }
 
 export function refused(detail: string): AIActionResult {

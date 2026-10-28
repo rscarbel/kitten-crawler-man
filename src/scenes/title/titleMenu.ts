@@ -119,6 +119,13 @@ export interface TitleMenuDeps {
    * Ignored after the first, so a second press mid-dive cannot start two runs.
    */
   readonly choose: (launch: () => void) => void;
+  /** Whether a choice is already diving into its run, after which the menu takes nothing. */
+  readonly isDiving: () => boolean;
+  /**
+   * A new game was chosen: the scene has the player make their crawler and,
+   * once they confirm, calls `begin`. Backing out of it calls nothing.
+   */
+  readonly createCrawler: (begin: () => void) => void;
 }
 
 export class TitleMenu {
@@ -254,11 +261,35 @@ export class TitleMenu {
         size: buttonSize,
         primary: choice.primary,
         flash,
-        onTap: () => this.deps.choose(choice.launch),
+        onTap: () => this.take(choice),
       });
       ctx.restore();
     });
     ctx.restore();
+  }
+
+  /**
+   * A new game makes its crawler before the dive; Continue dives straight
+   * into the saved run. The menu stays on screen while it fades through the
+   * dive, so a press then must take nothing, or a new game would open the
+   * creation sheet over a run already starting.
+   */
+  private take(choice: TitleMenuChoice): void {
+    const { choose, createCrawler, isDiving } = this.deps;
+    if (isDiving()) return;
+    switch (choice.id) {
+      case 'continue':
+        choose(choice.launch);
+        return;
+      case 'tutorial':
+      case 'level1':
+        createCrawler(() => choose(choice.launch));
+        return;
+      default: {
+        const unhandled: never = choice.id;
+        throw new Error(`Unhandled title menu choice: ${String(unhandled)}`);
+      }
+    }
   }
 
   /**

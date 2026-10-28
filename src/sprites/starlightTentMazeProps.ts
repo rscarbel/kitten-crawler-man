@@ -14,8 +14,8 @@
  */
 
 import { worldPlate } from '../ui/world/worldShapes';
-import { worldText } from '../ui/world/worldText';
-import { crawlerName } from '../characters/characters';
+import { measureWorldText, worldText } from '../ui/world/worldText';
+import { crawlerDisplayName } from '../characters/characters';
 import {
   MIN_VISIBLE_ALPHA,
   flameStamps,
@@ -1050,6 +1050,8 @@ export function drawSpotlightDock(
 // ── Comprehension aids ────────────────────────────────────────────────────────
 
 const CHIP_WIDTH = 1.3;
+/** Room kept either side of a name too long for the chip's own width, in tiles. */
+const CHIP_TEXT_PADDING = 0.1;
 const CHIP_HEIGHT = 0.42;
 const CHIP_LIFT = 0.42;
 const CHIP_RADIUS = 3;
@@ -1075,7 +1077,14 @@ export function drawTargetNameChip(
 ): void {
   const catOwned = owner === 'cat';
   const textSize = Math.max(CHIP_TEXT_MIN_SIZE, size * CHIP_TEXT_FRACTION);
-  const width = size * CHIP_WIDTH;
+  // Measured after uppercasing: that can lengthen a name (ß becomes SS).
+  const label = crawlerDisplayName(owner).toUpperCase();
+  const labelWidth = measureWorldText(ctx, label, {
+    size: textSize,
+    bold: true,
+    outline: true,
+  }).width;
+  const width = Math.max(size * CHIP_WIDTH, labelWidth + size * CHIP_TEXT_PADDING * 2);
   const height = size * CHIP_HEIGHT;
   const box = {
     x: x + size / 2 - width / 2,
@@ -1092,7 +1101,7 @@ export function drawTargetNameChip(
     borderWidth: CHIP_BORDER_WIDTH,
     radius: CHIP_RADIUS,
   });
-  worldText(ctx, crawlerName(owner).toUpperCase(), {
+  worldText(ctx, label, {
     x: box.x + box.w / 2,
     y: box.y + (box.h - textSize) / 2 - CHIP_TEXT_NUDGE,
     size: textSize,

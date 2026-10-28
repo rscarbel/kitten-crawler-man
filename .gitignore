@@ -13,8 +13,9 @@ sw.js
 .price-report/
 .keys
 data/
+docs/*
 !docs/asset-management.md
 !docs/design-debt.md
 !docs/difficulty-fairness-rules.md
+!docs/world-and-story.md
 !docs/town.md
-docs/*

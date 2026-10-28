@@ -9,7 +9,7 @@
  * dialog gate can read the order without standing up a scene.
  */
 
-import { playerCharacter, type PlayerSpeakerId } from '../../../characters/characters';
+import { CRAWLER_SPEAKERS, type CrawlerSpeakerId } from '../../../characters/characters';
 import type { DialogLine, NonEmpty } from '../../../dialog/line';
 import { FENNA, MERRIT, MERRIT_BLUEPRINTS_REPLIES } from '../../../dialog/scripts/briarHollow';
 import {
@@ -20,7 +20,7 @@ import {
 import { cardinalDirection } from '../../../utils';
 
 /** Which crawler's voice a line takes: the one the player is controlling. */
-export type SpeakingCrawler = PlayerSpeakerId;
+export type SpeakingCrawler = CrawlerSpeakerId;
 
 /**
  * The line in `active`'s voice. Both crawlers' versions are named at every
@@ -31,12 +31,12 @@ function inVoiceOf(
   humanVersion: DialogLine,
   catVersion: DialogLine,
 ): DialogLine {
-  return active === playerCharacter('human').speakerId ? humanVersion : catVersion;
+  return active === CRAWLER_SPEAKERS.human ? humanVersion : catVersion;
 }
 
 /** The voice of whichever crawler the player controls: the human's when the human is active. */
 export function speakingCrawler(humanIsActive: boolean): SpeakingCrawler {
-  return playerCharacter(humanIsActive ? 'human' : 'cat').speakerId;
+  return CRAWLER_SPEAKERS[humanIsActive ? 'human' : 'cat'];
 }
 
 // ── Fenna ────────────────────────────────────────────────────────────────
@@ -102,18 +102,18 @@ export const FENNA_COMPLETION_BARK = FENNA.blueprintsComplete;
 /**
  * The whole first visit, in order: the active crawler asks, Wendell
  * remembers, the active crawler asks to borrow them, Wendell names his
- * price, Belle asks about the cows, Wendell answers, and Ryan turns to Belle.
+ * price, Belle asks about the cows, Wendell answers, and the human turns to Belle.
  */
 export function wendellFirstVisitPages(active: SpeakingCrawler): NonEmpty<DialogLine> {
-  const { ryan, belle } = WENDELL_BLUEPRINTS_REPLIES;
+  const { human, cat } = WENDELL_BLUEPRINTS_REPLIES;
   return [
-    inVoiceOf(active, ryan.askAboutBlueprints, belle.askAboutBlueprints),
+    inVoiceOf(active, human.askAboutBlueprints, cat.askAboutBlueprints),
     WENDELL.remembersTheBlueprints,
-    inVoiceOf(active, ryan.askToBorrow, belle.askToBorrow),
+    inVoiceOf(active, human.askToBorrow, cat.askToBorrow),
     WENDELL.namesHisPrice,
     WENDELL_BLUEPRINTS_ASIDES.belleAsksAboutCows,
     WENDELL.missesTheCows,
-    WENDELL_BLUEPRINTS_ASIDES.ryanPlansTheCow,
+    WENDELL_BLUEPRINTS_ASIDES.humanPlansTheCow,
   ];
 }
 
@@ -143,17 +143,17 @@ export function merritAskPages(
   active: SpeakingCrawler,
   pleaComplete: boolean,
 ): NonEmpty<DialogLine> {
-  const { ryan, belle } = MERRIT_BLUEPRINTS_REPLIES;
+  const { human, cat } = MERRIT_BLUEPRINTS_REPLIES;
   const greeting = pleaComplete
     ? MERRIT.blueprintsGreetingAfterPlea
     : MERRIT.blueprintsGreetingBeforePlea;
   return [
-    inVoiceOf(active, ryan.goodMorning, belle.goodMorning),
+    inVoiceOf(active, human.goodMorning, cat.goodMorning),
     greeting,
-    inVoiceOf(active, ryan.itsWhatWeDo, belle.itsWhatWeDo),
-    inVoiceOf(active, ryan.askForCow, belle.askForCow),
+    inVoiceOf(active, human.itsWhatWeDo, cat.itsWhatWeDo),
+    inVoiceOf(active, human.askForCow, cat.askForCow),
     MERRIT.blueprintsFenceTerms,
-    inVoiceOf(active, ryan.fenceAgreed, belle.fenceAgreed),
+    inVoiceOf(active, human.fenceAgreed, cat.fenceAgreed),
   ];
 }
 
@@ -164,12 +164,12 @@ export function merritFenceWaitingPages(): NonEmpty<DialogLine> {
 
 /** Merrit on the finished fence, the Bramblewick mix-up, and the grain she wants for Midge. */
 export function merritFenceDonePages(active: SpeakingCrawler): NonEmpty<DialogLine> {
-  const { ryan, belle } = MERRIT_BLUEPRINTS_REPLIES;
+  const { human, cat } = MERRIT_BLUEPRINTS_REPLIES;
   return [
     MERRIT.blueprintsFenceDone,
-    inVoiceOf(active, ryan.theMayor, belle.theMayor),
+    inVoiceOf(active, human.theMayor, cat.theMayor),
     MERRIT.blueprintsNotTheMayor,
-    inVoiceOf(active, ryan.needMilk, belle.needMilk),
+    inVoiceOf(active, human.needMilk, cat.needMilk),
     MERRIT.blueprintsDairyTerms,
     MERRIT.blueprintsScytheOffer,
   ];

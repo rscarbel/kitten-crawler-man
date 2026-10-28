@@ -12,12 +12,10 @@
  * unread here is a bark nobody will ever hear.
  */
 
-import { crawlerName } from '../../characters/characters';
+import { crawlerDisplayName } from '../../characters/characters';
 import { speakerLines } from '../line';
 import type { MercenaryLines } from '../roles';
 import type { MercenaryVoice } from '../../creatures/mercenaries/mercenaryVoices';
-
-const CAT_NAME = crawlerName('cat');
 
 /** A quarryman: few words, all of them load-bearing. */
 const crush = speakerLines('crush');
@@ -25,7 +23,9 @@ const crush = speakerLines('crush');
 export const CRUSH_LINES = {
   hired: [
     crush.bark('Signed and here. Point me at the heavy part.'),
-    crush.bark(`I'll walk with ${CAT_NAME}. The small ones get leaned on first.`),
+    crush.bark(
+      () => `I'll walk with ${crawlerDisplayName('cat')}. The small ones get leaned on first.`,
+    ),
     crush.bark('Crush. Eleven years in the quarry. Lead on.'),
     crush.bark('Contract says the floor. I read it twice.'),
   ],
@@ -33,7 +33,7 @@ export const CRUSH_LINES = {
     crush.bark('Good stone in these walls. Somebody cut it right.'),
     crush.bark('Quiet. I trust quiet about as far as I can throw it. Which is far.'),
     crush.bark('You learn to listen for the crack before the fall.'),
-    crush.bark(`${CAT_NAME}, stay where I can see you.`),
+    crush.bark(() => `${crawlerDisplayName('cat')}, stay where I can see you.`),
   ],
   engage: [
     crush.bark('Here it comes.'),
@@ -54,7 +54,7 @@ export const CRUSH_LINES = {
     crush.bark('I have been hit by worse. A mountain, once.'),
   ],
   special: [
-    crush.bark(`Ward's up, ${CAT_NAME}. Stay under it.`),
+    crush.bark(() => `Ward's up, ${crawlerDisplayName('cat')}. Stay under it.`),
     crush.bark('Shield. Inside the light.'),
     crush.bark('Stand in the glow.'),
     crush.bark('Warded. Go.'),
@@ -66,9 +66,9 @@ export const CRUSH_LINES = {
     crush.bark('Easy. I am coming.'),
   ],
   catHurt: [
-    crush.bark(`${CAT_NAME}. Behind me, now.`),
+    crush.bark(() => `${crawlerDisplayName('cat')}. Behind me, now.`),
     crush.bark('Wrong one to touch.'),
-    crush.bark(`Nobody lays a hand on ${CAT_NAME} twice.`),
+    crush.bark(() => `Nobody lays a hand on ${crawlerDisplayName('cat')} twice.`),
     crush.bark('You picked the small one. Pick again.'),
   ],
   downed: [
@@ -88,7 +88,7 @@ export const CRUSH_LINES = {
     crush.bark('One swallow. Fine now.'),
   ],
   death: [
-    crush.bark(`Get ${CAT_NAME} out.`),
+    crush.bark(() => `Get ${crawlerDisplayName('cat')} out.`),
     crush.bark('Good... stone.'),
     crush.bark('Held as long as I could.'),
     crush.bark('Tell the desk... I held.'),
@@ -97,12 +97,14 @@ export const CRUSH_LINES = {
     crush.bark('Quarry work is mostly waiting for a rock to tell you where it breaks.'),
     crush.bark('I do not talk much. This is most of it.'),
     crush.bark('You paid. I stay. That is the whole arrangement.'),
-    crush.bark(`I watch ${CAT_NAME} because nobody else watches the small ones.`),
+    crush.bark(
+      () => `I watch ${crawlerDisplayName('cat')} because nobody else watches the small ones.`,
+    ),
   ],
   floorEnd: [
     crush.bark('Floor done. Contract done. Good work.'),
     crush.bark('Stairs are yours. My paper ends here.'),
-    crush.bark(`Look after ${CAT_NAME}.`),
+    crush.bark(() => `Look after ${crawlerDisplayName('cat')}.`),
     crush.bark('You lived. That was the job.'),
   ],
 } satisfies MercenaryLines;
@@ -154,10 +156,10 @@ export const HAMMER_HANDS_LINES = {
     hammerHands.bark("That's enough of that."),
   ],
   catHurt: [
-    hammerHands.bark(`${CAT_NAME}, back to me!`),
-    hammerHands.bark(`Hold on, ${CAT_NAME}.`),
+    hammerHands.bark(() => `${crawlerDisplayName('cat')}, back to me!`),
+    hammerHands.bark(() => `Hold on, ${crawlerDisplayName('cat')}.`),
     hammerHands.bark('Leave the cat alone.'),
-    hammerHands.bark(`I see it, ${CAT_NAME}. Coming.`),
+    hammerHands.bark(() => `I see it, ${crawlerDisplayName('cat')}. Coming.`),
   ],
   downed: [
     hammerHands.bark("I'm down. Come and get me, would you?"),
@@ -243,10 +245,10 @@ export const IVY_ASHGROVE_LINES = {
     ivyAshgrove.bark("Hold on. Next one's for whoever did that."),
   ],
   catHurt: [
-    ivyAshgrove.bark(`${CAT_NAME}! Clear the line!`),
-    ivyAshgrove.bark(`I've got the one on ${CAT_NAME}.`),
+    ivyAshgrove.bark(() => `${crawlerDisplayName('cat')}! Clear the line!`),
+    ivyAshgrove.bark(() => `I've got the one on ${crawlerDisplayName('cat')}.`),
     ivyAshgrove.bark('Off the cat. Now.'),
-    ivyAshgrove.bark(`Move, ${CAT_NAME}, I can't shoot through you.`),
+    ivyAshgrove.bark(() => `Move, ${crawlerDisplayName('cat')}, I can't shoot through you.`),
   ],
   downed: [
     ivyAshgrove.bark("I'm down. Somebody, please."),
@@ -333,10 +335,10 @@ export const BROTHER_ANSELM_LINES = {
     brotherAnselm.bark('That needs tending. Soon.'),
   ],
   catHurt: [
-    brotherAnselm.bark(`${CAT_NAME}, come here, little one.`),
-    brotherAnselm.bark(`I see you, ${CAT_NAME}. Hold on.`),
+    brotherAnselm.bark(() => `${crawlerDisplayName('cat')}, come here, little one.`),
+    brotherAnselm.bark(() => `I see you, ${crawlerDisplayName('cat')}. Hold on.`),
     brotherAnselm.bark('The cat is bleeding. I am coming.'),
-    brotherAnselm.bark(`Easy, ${CAT_NAME}. Easy.`),
+    brotherAnselm.bark(() => `Easy, ${crawlerDisplayName('cat')}. Easy.`),
   ],
   downed: [
     brotherAnselm.bark('I have fallen. A hand, please.'),

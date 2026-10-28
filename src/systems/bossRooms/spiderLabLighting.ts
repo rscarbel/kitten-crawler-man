@@ -6,6 +6,7 @@ import {
 } from '../../core/rendering/canvasSurface';
 import type { SpiderLabRoomData } from '../../map/DungeonGenerator';
 import { doorFrame } from '../../map/spiderLabLayout';
+import type { BlowingPhase, LabLightPhase } from './spiderLabLightPhase';
 
 /**
  * The spider lab's ceiling light banks, and the darkness her roars leave when
@@ -43,15 +44,6 @@ const MACHINE_GLOW_TILES = 1.8;
 const MACHINE_GLOW_STRENGTH = 0.55;
 const TERMINAL_GLOW_TILES = 2.4;
 const TERMINAL_GLOW_STRENGTH = 0.7;
-
-/** The lighting phases: every bank lit, half blown by her first roar, one more by her second. */
-export type LabLightPhase = 1 | 2 | 3;
-/** The phases that begin with a roar, and so can blow a bank. */
-export type BlowingPhase = Exclude<LabLightPhase, 1>;
-/** Her last phase, whose roar leaves the room at its darkest. */
-export const LAST_LIGHT_PHASE = 3;
-/** The phase her first roar begins. */
-export const FIRST_DARK_PHASE = 2;
 
 export interface LightBank {
   /** The pool's centre on the floor, in world pixels. */

@@ -6,7 +6,7 @@
  * without every crawler, label and gain being decided for it.
  */
 
-import { crawlerName } from '../../characters/characters';
+import { crawlerDisplayName } from '../../characters/characters';
 import { ITEM_DEF, wearerAllows } from '../items/defs/ItemDefs';
 import type { WeaponDelivery } from '../items/equipment/weapons';
 import type { CrawlerKind } from '../skills/SkillManager';
@@ -30,7 +30,7 @@ export const ALL_STATS = [
 export type StatId = (typeof ALL_STATS)[number];
 
 /**
- * What one banked level-up point adds to a stat, per crawler. Ryan is the
+ * What one banked level-up point adds to a stat, per crawler. The human is the
  * sturdier of the two and Belle the harder to hit, so health and evasiveness
  * grow at different rates for each.
  */
@@ -45,7 +45,7 @@ export const STAT_GAIN_PER_POINT = {
 
 /**
  * Each crawler's stats on a fresh run. Chosen so starting max HP, damage and
- * dodge match what each crawler has always started with: Ryan 10 HP and about a
+ * dodge match what each crawler has always started with: the human 10 HP and about a
  * 10% dodge, Belle 6 HP and about a 28% dodge.
  */
 export const STARTING_STATS = {
@@ -139,7 +139,7 @@ export const STAT_DEFS = {
     effectLine: (crawler) =>
       wieldsWeaponScalingWith(crawler, 'ranged')
         ? `${perPoint(STAT_GAIN_PER_POINT.ranged[crawler], 'Ranged')} Sling stones hit harder and fly +${RANGED_RANGE_PER_POINT_TILES} tiles further.`
-        : `${crawlerName(crawler)} has no ranged weapon yet.`,
+        : `${crawlerDisplayName(crawler)} has no ranged weapon yet.`,
   },
   explosivesHandling: {
     label: 'Explosives Handling',

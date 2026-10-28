@@ -137,7 +137,7 @@ const teleportPlayer: AIActionDef = {
     leader.y = tiles.leader.y * TILE_SIZE;
     follower.x = tiles.follower.x * TILE_SIZE;
     follower.y = tiles.follower.y * TILE_SIZE;
-    return ok(`teleported the party to ${tiles.leader.x},${tiles.leader.y}`);
+    return ok(() => `teleported the party to ${tiles.leader.x},${tiles.leader.y}`);
   },
 };
 
@@ -194,7 +194,7 @@ const revealHint: AIActionDef = {
     const tiles = Math.round(Math.hypot(dx, dy));
     const hint = `The nearest ${snakeToWords(kind)} is ${tiles} tiles to the ${compassDirection(dx, dy)}.`;
     notifyPlayer(scene, hint, { tone: 'info', icon: 'info' });
-    return ok(hint);
+    return ok(() => hint);
   },
 };
 
@@ -261,7 +261,7 @@ const spotlight: AIActionDef = {
     scene.spotlight(point, secondsToFrames(params.get(SPOTLIGHT_SECONDS)));
     const caption = params.get(SPOTLIGHT_CAPTION);
     if (caption !== '') notifyPlayer(scene, caption, { tone: 'accent' });
-    return ok(`spotlight on ${snakeToWords(subject)}`);
+    return ok(() => `spotlight on ${snakeToWords(subject)}`);
   },
 };
 

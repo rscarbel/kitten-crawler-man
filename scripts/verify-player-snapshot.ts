@@ -35,12 +35,8 @@ import {
   HUMAN_ARM_REACH_TILES,
   STORMCALLER_DAMAGE_MULTIPLIER,
 } from '../src/core/items/equipment/weapons.js';
-import {
-  parsePlayerSnapshot,
-  restorePlayer,
-  snapPlayer,
-  type PlayerSnapshot,
-} from '../src/core/save/PlayerSnapshot.js';
+import { restorePlayer, snapPlayer } from '../src/core/save/PlayerSnapshot.js';
+import { parsePlayerSnapshot, type PlayerSnapshot } from '../src/core/save/playerSnapshotFormat.js';
 import { THIRD_EYE_FORESIGHT_COOLDOWN_MS } from '../src/core/skills/tattoos.js';
 import { DODGE_SOFT_LIMIT } from '../src/core/combat/dodge.js';
 import { ALL_STATS, STAT_GAIN_PER_POINT, type StatId } from '../src/core/party/stats.js';
@@ -375,11 +371,11 @@ function restored(snap: PlayerSnapshot): HumanPlayer {
   };
   for (const stat of ALL_STATS) {
     const human = new HumanPlayer(0, 0, TILE_SIZE);
-    const ryan = spendOne(human, stat);
+    const humanSpent = spendOne(human, stat);
     check(
-      ryan.gained === STAT_GAIN_PER_POINT[stat].human &&
-        ryan.afterRebuild === human.getBaseStat(stat),
-      `the human spends a point into ${stat} (+${ryan.gained}) and keeps it through a save`,
+      humanSpent.gained === STAT_GAIN_PER_POINT[stat].human &&
+        humanSpent.afterRebuild === human.getBaseStat(stat),
+      `the human spends a point into ${stat} (+${humanSpent.gained}) and keeps it through a save`,
     );
     const cat = new CatPlayer(0, 0, TILE_SIZE);
     const belle = spendOne(cat, stat);

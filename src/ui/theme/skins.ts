@@ -298,7 +298,6 @@ export interface ControlFlashSkin {
  */
 export interface CarolineSkin {
   readonly ground: string;
-  readonly groundSheer: string;
   readonly hairline: string;
   readonly hairlineWidth: number;
   readonly bracket: string;
@@ -327,6 +326,15 @@ export interface CarolineSkin {
   readonly decodeTail: number;
   readonly lineDrawMs: number;
   readonly unfoldMs: number;
+}
+
+/** The floor's arrival banner: the shade under its card and the line asking for a first gesture. */
+export interface ArrivalBannerSkin {
+  readonly shade: string;
+  /** The shade's opacity while the card is fully shown; it fades with the card. */
+  readonly shadeOpacity: number;
+  readonly prompt: TextSkin;
+  readonly promptHalo: string;
 }
 
 /** The title's sound hint: quiet, but readable over the dark hall. */
@@ -374,8 +382,11 @@ export interface Skins {
   readonly controlFlash: ControlFlashSkin;
   readonly caroline: CarolineSkin;
   readonly soundHint: SoundHintSkin;
+  readonly arrivalBanner: ArrivalBannerSkin;
 }
 
+/** Dark enough to set the card off the floor, light enough that the floor still reads behind it. */
+const ARRIVAL_BANNER_SHADE_OPACITY = 0.52;
 const HOVER_LIGHTEN = 0.08;
 /** The mercenary plate's darker face needs a stronger highlight than a hover to read as polished. */
 const MERCENARY_HIGHLIGHT_LIGHTEN = 0.16;
@@ -841,7 +852,6 @@ function buildCaroline(theme: Theme): CarolineSkin {
   const ink = palette.caroline;
   return {
     ground: ink.ground,
-    groundSheer: ink.groundSheer,
     hairline: ink.hairline,
     hairlineWidth: carolineFrame.hairlineWidth,
     bracket: ink.bracket,
@@ -916,6 +926,12 @@ function buildSkins(theme: Theme): Skins {
     soundHint: {
       text: { style: type.hint, color: palette.text.secondary },
       halo: palette.surface.sunken,
+    },
+    arrivalBanner: {
+      shade: palette.surface.blackout,
+      shadeOpacity: ARRIVAL_BANNER_SHADE_OPACITY,
+      prompt: { style: type.prompt, color: palette.text.bright },
+      promptHalo: palette.surface.blackout,
     },
     dialogChoice: buildDialogChoice(theme),
     questRewardBrass: brass.quest,

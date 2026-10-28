@@ -80,6 +80,9 @@ import {
 } from './bossRooms/harness.js';
 import { findGymFloor, runGymFightSuite } from './bossRooms/gymFightSim.js';
 import { stagePlateRoll } from './bossRooms/gymScenario.js';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+
+useDevPlayerIdentity();
 
 installCanvasGlobals();
 // Seeded, so a dodge roll cannot turn a gate green one run and red the next.

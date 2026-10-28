@@ -16,7 +16,7 @@
  * paid for by whoever is being steered, the way every shop charges.
  */
 
-import { crawlerName } from '../../../characters/characters';
+import { crawlerDisplayName } from '../../../characters/characters';
 import { ITEM_DEF } from '../../../core/items/defs/ItemDefs';
 import type { BriarHollowState } from '../../../core/quests/briarHollowState';
 import type { EventBus } from '../../../core/EventBus';
@@ -225,7 +225,7 @@ function upgradeOption(tools: PartyToolsState, kind: ToolKind): ShopRow {
     };
   }
   const next = toolTierDef(kind, nextTier);
-  const gain = `${describeToolTierGain(next)} (now ${describeToolTierGain(current)}). Applies to ${crawlerName('human')} and ${crawlerName('cat')}.`;
+  const gain = `${describeToolTierGain(next)} (now ${describeToolTierGain(current)}). Applies to ${crawlerDisplayName('human')} and ${crawlerDisplayName('cat')}.`;
   return {
     key: kind,
     label: next.name,

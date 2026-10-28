@@ -23,7 +23,7 @@ import {
   dropContract,
   issueContract,
 } from '../../src/systems/constructionContracts/contractGenerator';
-import { RATKIN_SOLDIER_IDS, type RatkinSoldierId } from '../../src/sprites/art/ratkin/cast';
+import { SOLDIER_IDS, type SoldierId } from '../../src/core/quests/villagerIds';
 import { buildSiegeRig, UPDATES_PER_SECOND, type SiegeRig } from '../villageSiegeHarness';
 import type { Check } from './shared';
 import { PLENTY_OF_EACH_MATERIAL, stockUp } from './shared';
@@ -62,8 +62,8 @@ const LIVE_SITE_IDS: readonly BriarHollowContractSiteDef['buildingId'][] = [
   'briar_hollow_guardhouse',
 ];
 
-function isSoldierId(id: string): id is RatkinSoldierId {
-  return RATKIN_SOLDIER_IDS.some((soldierId) => soldierId === id);
+function isSoldierId(id: string): id is SoldierId {
+  return SOLDIER_IDS.some((soldierId) => soldierId === id);
 }
 
 function villageSites(): BriarHollowContractSiteDef[] {

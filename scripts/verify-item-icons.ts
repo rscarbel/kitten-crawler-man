@@ -36,6 +36,9 @@ import type { Density } from '../src/ui/theme/tokens.js';
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { gameContext } from './nodeGameContext.js';
 import { watchCanvas } from './strictCanvas.js';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+
+useDevPlayerIdentity();
 
 installCanvasGlobals();
 

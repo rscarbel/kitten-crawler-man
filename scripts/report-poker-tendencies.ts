@@ -40,7 +40,7 @@ import {
   ARCHETYPE_PRESETS,
   type Archetype,
 } from '../src/systems/casino/poker/npc/profiles';
-import { REGULAR_IDS, type RegularId } from '../src/systems/casino/poker/npc/regulars';
+import { REGULAR_IDS, type RegularId } from '../src/systems/casino/poker/npc/regularIds';
 import {
   TELL_KINDS,
   type TellKind,

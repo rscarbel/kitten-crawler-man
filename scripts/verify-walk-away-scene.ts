@@ -64,6 +64,8 @@ const { walkUpTo } = await import('../src/systems/cutscene/walkUp.js');
 const { WALK_UP_MAX_PATH_TILES } = await import('../src/systems/cutscene/CutsceneDirector.js');
 const { carolineLines } = await import('../src/dialog/caroline.js');
 const { pixelToTile } = await import('../src/utils.js');
+const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js');
+useDevPlayerIdentity();
 
 type Scene = InstanceType<typeof DungeonScene>;
 type Point = { readonly x: number; readonly y: number };

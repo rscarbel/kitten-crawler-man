@@ -53,13 +53,7 @@ import {
   type RewardStripSize,
 } from '../ui/screens/dialogs/conversationChrome';
 import type { PaintTarget } from '../ui/widgets/paint';
-import {
-  resolveSpeaker,
-  SPEAKERS,
-  speakerSkin,
-  speakerTypeface,
-  type SpeakerRef,
-} from './speakers';
+import { resolveSpeaker, speakerSkin, speakerTypeface, type SpeakerRef } from './speakers';
 import type {
   Choice,
   ConfirmKeyboardDefault,
@@ -256,12 +250,13 @@ export class Conversation {
 
   /**
    * Told when a conversation opens on an empty box and when the box empties,
-   * with the name of whoever spoke first. Beats chained with `play` are the
+   * with whoever spoke first. It carries the speaker, never a name: a player
+   * may name the human after anyone in the cast. Beats chained with `play` are the
    * same conversation and report nothing; a request that supersedes another
    * reports the first ending and the second starting.
    */
-  onTalk: ((change: { speaker: string; phase: 'started' | 'ended' }) => void) | null = null;
-  private openedSpeaker: string | null = null;
+  onTalk: ((change: { speaker: SpeakerRef; phase: 'started' | 'ended' }) => void) | null = null;
+  private openedSpeaker: SpeakerRef | null = null;
 
   constructor(private readonly audio: AudioManager | null) {
     this.box = new DialogBox(audio, { showFooterHint: false });
@@ -334,7 +329,7 @@ export class Conversation {
     this.currentHandle = handle;
     this.begin(request, true);
     if (this.openedSpeaker === null) {
-      this.openedSpeaker = speakerName(request.lines[0].speaker);
+      this.openedSpeaker = request.lines[0].speaker;
       this.onTalk?.({ speaker: this.openedSpeaker, phase: 'started' });
     }
     return handle;
@@ -1024,14 +1019,6 @@ export class Conversation {
     const y = fitting?.y ?? Math.max(0, compact.aboveY);
     drawRewardStrip(target, reward, { x: boxRect.x, y, w: width, h: height }, size);
   }
-}
-
-const NAMELESS_SPEAKER = 'narrator';
-
-/** A speaker's name without painting a portrait, which `resolveSpeaker` would. */
-function speakerName(ref: SpeakerRef): string {
-  if (ref.kind !== 'cast') return ref.name;
-  return SPEAKERS[ref.id].name ?? NAMELESS_SPEAKER;
 }
 
 /** How many pages `line` fills in the dialog box at the current screen size, as the box paginates it. */

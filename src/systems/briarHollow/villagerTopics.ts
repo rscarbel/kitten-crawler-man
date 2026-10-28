@@ -37,7 +37,7 @@ import {
   TIKKA,
   VETCH,
 } from '../../dialog/scripts/briarHollow';
-import type { VillagerId } from '../../dialog/scripts/briarHollow';
+import type { VillagerId } from '../../core/quests/villagerIds';
 import type { VillagerContext } from './villagerCircumstances';
 import type { ShopSign } from '../../sprites/overheadIcon';
 

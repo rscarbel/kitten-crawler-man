@@ -165,6 +165,9 @@ function checkAlwaysUnlocked(check: Check): void {
   }
 }
 
+/** The name the harness's new game gives its crawler on the creation screen. */
+const HARNESS_CRAWLER_NAME = 'Morgan';
+
 /**
  * A new game that skips the tutorial can never go back to it, so its library
  * starts with Tutorial Island unlocked and announced like any other unlock.
@@ -179,10 +182,13 @@ async function checkSkipToLevel1(check: Check): Promise<void> {
   const { MOUSE_POINTER_ID, PRIMARY_BUTTON } = await import('../../src/ui/core/pointer.js');
 
   const sceneManager = new SceneManager();
-  const menu = new TitleScene(new InputManager(), sceneManager, {
-    worldSeed: HARNESS_WORLD_SEED,
-    skipIntro: true,
-  });
+  const menu = new TitleScene(
+    new InputManager(),
+    sceneManager,
+    { worldSeed: HARNESS_WORLD_SEED, skipIntro: true },
+    undefined,
+    { keyboardAnchor: null },
+  );
   sceneManager.replace(menu);
   menu.render(sceneManager.ctx);
   const skipRegionId = `${TITLE_MENU_SURFACE_ID}/level1`;
@@ -207,6 +213,12 @@ async function checkSkipToLevel1(check: Check): Promise<void> {
       deltaY: 0,
     });
   }
+  const creation = menu.characterCreation;
+  creation.fill(HARNESS_CRAWLER_NAME);
+  creation.next();
+  creation.chooseBody('male');
+  creation.chooseComplexion('light');
+  creation.begin();
   const stepsThroughTheDive = Math.ceil(DIVE_DURATION_MS / TITLE_STEP_MS) + 1;
   for (let step = 0; step < stepsThroughTheDive; step++) menu.update();
   const library = activeMusicLibrary();

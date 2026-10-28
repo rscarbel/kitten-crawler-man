@@ -3,7 +3,7 @@
  *
  * These gates enforce sheet-shape invariants — a pose that fits its cell, a
  * strike that lands on the frame the hit is scored on — directly against
- * cells painted from `HUMAN_FIGURE`, baked exactly the way the runtime cache
+ * cells painted from `undressedHumanFigure(look)`, baked exactly the way the runtime cache
  * bakes them, plus pose-stream checks that measure the rig itself and need no
  * pixels at all.
  *
@@ -39,7 +39,7 @@ import {
 } from './figureGates.js';
 import {
   GROUND_OFFSET_IN_TILE,
-  HUMAN_FIGURE,
+  undressedHumanFigure,
   HUMAN_ROW_NAMES,
   HUMAN_ROW_TABLE,
   HUMAN_ROWS,
@@ -98,9 +98,13 @@ import {
 } from '../src/sprites/art/biped/figure.js';
 import { DAVE_DENIM } from '../src/sprites/garments/human/daveTrousers.js';
 import { DAVE_LOOK } from '../src/sprites/looks/humans/dave.js';
-import { RYAN_LOOK } from '../src/sprites/looks/humans/ryan.js';
-import { RYAN_BELT_LEATHER, RYAN_SLATE } from '../src/sprites/garments/human/ryanChinos.js';
-import { RYAN_WATCH_FACE } from '../src/sprites/garments/human/ryanWatch.js';
+import { MALE_LIGHT_LOOK } from '../src/sprites/looks/humans/maleLight.js';
+import type { HumanCrawlerLookId } from '../src/characters/crawlerChoices.js';
+import { HUMAN_CRAWLER_LOOKS } from '../src/characters/humanCrawlerLooks.js';
+import { BELT_LEATHER, SLATE_CHINO_CLOTH } from '../src/sprites/garments/human/chinos.js';
+import { GOLD_WATCH_DEEP, SMARTWATCH_FACE } from '../src/sprites/garments/human/wristwatches.js';
+import { STONE_TROUSER_CLOTH } from '../src/sprites/garments/human/taperedTrousers.js';
+import { JACKET_BELT_LEATHER } from '../src/sprites/garments/human/beltedJacket.js';
 import {
   type HumanLook,
   playerLookAxes,
@@ -182,6 +186,9 @@ import {
   fightReactionSpans,
   type HumanWarmSpan,
 } from '../src/sprites/humanReactions.js';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+
+useDevPlayerIdentity();
 
 // The human painter composes each cell on scratch surfaces of its own, which
 // `allocCanvas` makes with `document.createElement('canvas')` outside a browser.
@@ -193,7 +200,7 @@ const CHANNELS = 4;
 const ALPHA_OFFSET = 3;
 const OPAQUE_ALPHA = 255;
 
-const { frameWidth, frameHeight } = HUMAN_FIGURE;
+const { frameWidth, frameHeight } = undressedHumanFigure(MALE_LIGHT_LOOK);
 
 interface GateFailure {
   readonly id: string;
@@ -271,9 +278,9 @@ function failUnlessMeasured(gateId: string, measured: number, what: string): voi
  * unless a run names another. Every outfit is a figure of its own, and each
  * one's cells must hold to the same gates.
  */
-let gateLook: HumanLook = RYAN_LOOK;
+let gateLook: HumanLook = MALE_LIGHT_LOOK;
 let gateOutfit: Outfit<'human'> = defaultOutfitOf(gateLook);
-let gateFigure: FigureDef = HUMAN_FIGURE;
+let gateFigure: FigureDef = undressedHumanFigure(gateLook);
 
 /** The look's figure in the outfit every row was authored in. */
 function authoredFigure(): HumanFigure {
@@ -511,9 +518,10 @@ const MIN_FRAMES_PER_CYCLE_TURN = 4;
  * frame held still, the seam goes to exactly zero, and every ceiling-only seam
  * gate stays green on it. The denominator is the median rather than the
  * narrowest step because two adjacent frames can legitimately be byte-identical,
- * which would collapse the floor into `seam >= 0`. His shipped loops wrap at
- * 0.914–2.379 of their median step, so 0.5 is far below any of them and still
- * fires the moment a seam collapses.
+ * which would collapse the floor into `seam >= 0`. Every look's shipped loops
+ * wrap well clear of 0.5 of their median step, bar a row a look's gate spec
+ * names with a floor of its own (`loopSeamFloors`), and a collapsed seam
+ * measures near zero, so 0.5 still fires the moment one collapses.
  */
 const LOOP_SEAM_FLOOR = 0.5;
 
@@ -579,7 +587,7 @@ function gateLoopClosure(): void {
       );
       failOnSeamPop(row.name, worn, gateOutfit.key);
     }
-    const floor = typical * LOOP_SEAM_FLOOR;
+    const floor = typical * (gateSpec().loopSeamFloors.get(row.name) ?? LOOP_SEAM_FLOOR);
     if (seam < floor) {
       fail(
         'G3',
@@ -714,9 +722,10 @@ function isPixelIdentical(a: Uint8ClampedArray, b: Uint8ClampedArray): boolean {
  * the only frames a player reads as an impact. G6 is what holds the spike to
  * exactly that step.
  */
-function isDeclaredSpike(row: string, step: number): boolean {
+function isDeclaredSpike(row: HumanRowName, step: number): boolean {
   const stomp = STOMP_ROWS.find((candidate) => candidate.row === row);
-  return stomp !== undefined && step === stomp.impact - 1;
+  if (stomp !== undefined && step === stomp.impact - 1) return true;
+  return gateSpec().declaredSpikes.some((spike) => spike.row === row && spike.step === step);
 }
 
 /**
@@ -1410,7 +1419,7 @@ function shieldCastSpans(view: CardinalView): HumanWarmSpan[] {
  * the fight is fought in, each only up to the frame it is held to: the flinch
  * and the stumble to the end of their recoil, the Energy Shield cast to the
  * frame the dome goes up, and the falls to him reaching the floor. Measured
- * against `HUMAN_FIGURE`'s own `budgetMegabytes` rather than the cache's fleet
+ * against `undressedHumanFigure(look)`'s own `budgetMegabytes` rather than the cache's fleet
  * default, since he declares an override.
  */
 function gateWorkingSet(): void {
@@ -4177,12 +4186,21 @@ const PROFILE_HEAD_DEPTH_SLACK = 0.01;
  */
 const DAVE_PROFILE_HEAD_TO_CHEST_LIMIT = 0.899 + PROFILE_HEAD_DEPTH_SLACK;
 /**
- * Ryan is drawn to a real lean man's proportions: his head, hair and beard
+ * The male crawler is drawn to a real lean man's proportions: his head, hair and beard
  * about an eighth of his height deep, his chest the same, so edge-on his head
  * is about as deep as his chest. His deepest upright profile frame measures
  * 0.911 of the chest (`idle_side`), and the limit is that and the slack.
  */
-const RYAN_PROFILE_HEAD_TO_CHEST_LIMIT = 0.911 + PROFILE_HEAD_DEPTH_SLACK;
+const MALE_CRAWLER_PROFILE_HEAD_TO_CHEST_LIMIT = 0.911 + PROFILE_HEAD_DEPTH_SLACK;
+/**
+ * The female crawler's chest stands deeper edge-on for her bust, and her head
+ * carries a ponytail or braid hanging behind it. Her deepest upright profile
+ * frame measures 0.873 of the chest (`barge_side`, with the braid swung out
+ * behind), and the limit is that and the slack.
+ */
+const FEMALE_DEEPEST_PROFILE_HEAD_SHARE = 0.873;
+const FEMALE_CRAWLER_PROFILE_HEAD_TO_CHEST_LIMIT =
+  FEMALE_DEEPEST_PROFILE_HEAD_SHARE + PROFILE_HEAD_DEPTH_SLACK;
 /** Pixels per rig unit the head and jacket are painted at to be measured. */
 const HEAD_DEPTH_GATE_PX_PER_UNIT = 200;
 /** Side of the square surface each part is painted on, in rig units. */
@@ -4447,7 +4465,67 @@ interface HumanLookGateSpec {
   readonly profileHeadToChestLimit: number;
   /** G19: the deepest tone of each material, past skin and garment, between the arms and the body. */
   readonly besideArmDeepTones: readonly string[];
+  /**
+   * G3: a loop whose seam on this look sits under {@link LOOP_SEAM_FLOOR} of
+   * its median step for a reason of the look's own, with the floor it is held
+   * to instead.
+   */
+  readonly loopSeamFloors: ReadonlyMap<HumanRowName, number>;
+  /**
+   * G4: single steps that on this look exceed their row's allowance for a
+   * reason of the look's own, each held exempt like the stomp's impact step:
+   * `step` is the index of the frame the step leaves.
+   */
+  readonly declaredSpikes: readonly DeclaredSpike[];
 }
+
+/** One frame-to-frame step of one row that G4 lets past its allowance. */
+interface DeclaredSpike {
+  readonly row: HumanRowName;
+  readonly step: number;
+}
+
+const NO_SEAM_FLOORS: ReadonlyMap<HumanRowName, number> = new Map();
+
+const MALE_CRAWLER_GATE_SPEC: HumanLookGateSpec = {
+  slimLimbsAtTile: true,
+  profileHeadToChestLimit: MALE_CRAWLER_PROFILE_HEAD_TO_CHEST_LIMIT,
+  besideArmDeepTones: [SLATE_CHINO_CLOTH.cloth.deep, BELT_LEATHER, SMARTWATCH_FACE],
+  loopSeamFloors: NO_SEAM_FLOORS,
+  declaredSpikes: [],
+};
+
+/**
+ * The female crawler's rows that measure differently from the male
+ * crawler's on the same motion. Props and the palm's glow are painted in the
+ * figure's own units and scale with her, so what differs is her build and
+ * clothes: her jacket's sleeves run to the wrist, so an arm sweeping out
+ * changes more of the silhouette than a rolled sleeve does.
+ *
+ * `build_side` wraps at 0.474 of its median step, so its floor is that with
+ * a little room; a seam collapsed to a held frame still measures near zero.
+ * On `twohand_channel_side` the palm opening, from frame
+ * `FEMALE_CHANNEL_PALM_OPENS_AFTER` to the next, measures 1.43–1.45 of its
+ * runner-up against the 1.35 every other step of every look is held to; a
+ * teleported limb on any other step of the row still fails.
+ */
+const FEMALE_BUILD_SIDE_SEAM_FLOOR = 0.42;
+const FEMALE_CHANNEL_PALM_OPENS_AFTER = 1;
+
+const FEMALE_CRAWLER_GATE_SPEC: HumanLookGateSpec = {
+  ...MALE_CRAWLER_GATE_SPEC,
+  besideArmDeepTones: [STONE_TROUSER_CLOTH.cloth.deep, JACKET_BELT_LEATHER, GOLD_WATCH_DEEP],
+  profileHeadToChestLimit: FEMALE_CRAWLER_PROFILE_HEAD_TO_CHEST_LIMIT,
+  loopSeamFloors: new Map([['build_side', FEMALE_BUILD_SIDE_SEAM_FLOOR]]),
+  declaredSpikes: [{ row: 'twohand_channel_side', step: FEMALE_CHANNEL_PALM_OPENS_AFTER }],
+};
+
+const CRAWLER_LOOK_GATE_SPECS: Readonly<Record<HumanCrawlerLookId, HumanLookGateSpec>> = {
+  male_light: MALE_CRAWLER_GATE_SPEC,
+  male_dark: MALE_CRAWLER_GATE_SPEC,
+  female_light: FEMALE_CRAWLER_GATE_SPEC,
+  female_dark: FEMALE_CRAWLER_GATE_SPEC,
+};
 
 const LOOK_GATE_SPECS: ReadonlyMap<string, HumanLookGateSpec> = new Map([
   [
@@ -4456,16 +4534,14 @@ const LOOK_GATE_SPECS: ReadonlyMap<string, HumanLookGateSpec> = new Map([
       slimLimbsAtTile: false,
       profileHeadToChestLimit: DAVE_PROFILE_HEAD_TO_CHEST_LIMIT,
       besideArmDeepTones: [DAVE_DENIM.cloth.deep],
+      loopSeamFloors: NO_SEAM_FLOORS,
+      declaredSpikes: [],
     },
   ],
-  [
-    RYAN_LOOK.id,
-    {
-      slimLimbsAtTile: true,
-      profileHeadToChestLimit: RYAN_PROFILE_HEAD_TO_CHEST_LIMIT,
-      besideArmDeepTones: [RYAN_SLATE.cloth.deep, RYAN_BELT_LEATHER, RYAN_WATCH_FACE],
-    },
-  ],
+  ...Object.values(HUMAN_CRAWLER_LOOKS).map((look): [string, HumanLookGateSpec] => [
+    look.id,
+    CRAWLER_LOOK_GATE_SPECS[look.id],
+  ]),
 ]);
 
 function gateSpec(): HumanLookGateSpec {

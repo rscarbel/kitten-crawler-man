@@ -11,7 +11,6 @@
  * - `spotlightOn`: the spotlight snaps onto the heroes.
  * - `logoSlam`: the logo begins its fall onto the screen.
  * - `shake`: the camera shake as the logo lands, with its dust burst.
- * - `typewriterStart`: Caroline's line begins typing.
  * - `menuFlash`: the menu buttons flash once, in time with the slam.
  * - `settle`: the reveal is over and the idle loop takes over.
  * - `diveStart`: a menu choice was taken; the camera starts its push.
@@ -23,7 +22,6 @@ export type TitleCue =
   | 'spotlightOn'
   | 'logoSlam'
   | 'shake'
-  | 'typewriterStart'
   | 'menuFlash'
   | 'settle'
   | 'diveStart'
@@ -49,9 +47,6 @@ export const LOGO_SLAM_AT_MS = 1700;
 export const LOGO_FALL_MS = 260;
 /** The instant the logo lands: the shake, the dust and the menu's flash all hit together. */
 export const LOGO_IMPACT_AT_MS = LOGO_SLAM_AT_MS + LOGO_FALL_MS;
-/** Caroline starts typing once the dust has begun to settle. */
-export const TYPEWRITER_START_AT_MS = 2350;
-
 /** The ignition, in firing order. */
 export const IGNITION_TIMELINE: readonly TitleKeyframe[] = [
   { atMs: IGNITE_AT_MS, cue: 'ignite' },
@@ -60,7 +55,6 @@ export const IGNITION_TIMELINE: readonly TitleKeyframe[] = [
   { atMs: LOGO_SLAM_AT_MS, cue: 'logoSlam' },
   { atMs: LOGO_IMPACT_AT_MS, cue: 'shake' },
   { atMs: LOGO_IMPACT_AT_MS, cue: 'menuFlash' },
-  { atMs: TYPEWRITER_START_AT_MS, cue: 'typewriterStart' },
   { atMs: IGNITION_DURATION_MS, cue: 'settle' },
 ];
 

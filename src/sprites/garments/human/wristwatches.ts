@@ -1,6 +1,7 @@
 /**
- * Ryan's smartwatch on his left wrist: silver, with a round dark face on the
- * back of the wrist and a link band round it. Like every one-sided thing on
+ * Watches on the left wrist, each a round face on the back of the wrist and
+ * a band round it: the male crawler's silver smartwatch with its dark glass,
+ * and the female crawler's slim gold watch with its champagne dial. Like every one-sided thing on
  * the rig, a profile row mirrored to face left shows it on the other wrist.
  */
 
@@ -14,10 +15,19 @@ import { humanEveryView } from './views';
 
 type Ctx = CanvasRenderingContext2D;
 
-const STEEL = '#c3c8d0';
-const STEEL_SHADE = '#7c828c';
-export const RYAN_WATCH_FACE = '#171a21';
-const FACE_GLINT = '#5f6b7e';
+/** What one watch is made of and how wide its band stands, against the smartwatch's. */
+interface WatchLook {
+  readonly metal: string;
+  readonly metalShade: string;
+  readonly face: string;
+  readonly faceGlint: string;
+  /** How far the band stands proud of the wrist either side, in figure units. */
+  readonly bandProud: number;
+  /** The face's radius as a share of the band's length. */
+  readonly faceRadiusShare: number;
+}
+
+export const SMARTWATCH_FACE = '#171a21';
 
 /** Where the band sits along the forearm, 0 at the elbow and 1 at the wrist. */
 const BAND_FROM = 0.86;
@@ -28,12 +38,8 @@ const BAND_TO = 0.97;
  * bright steel reads as the watch case seen from behind.
  */
 const STRAP_ONLY_SHARE = 0.5;
-/** The band stands this far proud of the wrist either side. */
-const BAND_PROUD = 0.008;
 /** The links' shaded edge, along the arm side away from the key. */
 const BAND_SHADE_SHARE = 0.4;
-/** The round face, centred on the band, a little wider than the band is long. */
-const FACE_RADIUS_SHARE = 0.75;
 /** The face's rim of steel round the dark glass. */
 const BEZEL = 0.006;
 /** The glass catches the key on its upper left. */
@@ -50,15 +56,15 @@ function faceTowardCamera(view: ViewSpec): boolean {
   return !view.profile && !view.showsBack;
 }
 
-function paintForearm(ctx: Ctx, frame: BipedForearmFrame): void {
+function paintWatch(ctx: Ctx, frame: BipedForearmFrame, watch: WatchLook): void {
   if (frame.piece !== 'arm') return;
   const { chain, view } = frame;
   if (frame.drawn !== drawnSide('left', view)) return;
   const angle = angleBetween(chain.joint, chain.end);
   const length = Math.hypot(chain.end.x - chain.joint.x, chain.end.y - chain.joint.y);
   const edges = bareSegmentEdges('forearm', BAND_TO, view.profile, frame.look.limbs);
-  const plus = edges.plus + BAND_PROUD;
-  const minus = edges.minus + BAND_PROUD;
+  const plus = edges.plus + watch.bandProud;
+  const minus = edges.minus + watch.bandProud;
   const faceShows = faceTowardCamera(view);
   const to = length * BAND_TO;
   const bandLength = length * (BAND_TO - BAND_FROM) * (faceShows ? 1 : STRAP_ONLY_SHARE);
@@ -67,9 +73,9 @@ function paintForearm(ctx: Ctx, frame: BipedForearmFrame): void {
   ctx.save();
   ctx.translate(chain.joint.x, chain.joint.y);
   ctx.rotate(angle);
-  ctx.fillStyle = STEEL;
+  ctx.fillStyle = watch.metal;
   ctx.fillRect(from, -minus, to - from, plus + minus);
-  ctx.fillStyle = STEEL_SHADE;
+  ctx.fillStyle = watch.metalShade;
   ctx.fillRect(
     from,
     plus - (plus + minus) * BAND_SHADE_SHARE,
@@ -80,17 +86,17 @@ function paintForearm(ctx: Ctx, frame: BipedForearmFrame): void {
     ctx.restore();
     return;
   }
-  const faceRadius = (to - from) * FACE_RADIUS_SHARE;
+  const faceRadius = (to - from) * watch.faceRadiusShare;
   const faceX = (from + to) / 2;
-  ctx.fillStyle = STEEL;
+  ctx.fillStyle = watch.metal;
   ctx.beginPath();
   ctx.arc(faceX, 0, faceRadius + BEZEL, 0, TWO_PI);
   ctx.fill();
-  ctx.fillStyle = RYAN_WATCH_FACE;
+  ctx.fillStyle = watch.face;
   ctx.beginPath();
   ctx.arc(faceX, 0, faceRadius, 0, TWO_PI);
   ctx.fill();
-  ctx.fillStyle = rgba(FACE_GLINT, GLINT_ALPHA);
+  ctx.fillStyle = rgba(watch.faceGlint, GLINT_ALPHA);
   ctx.beginPath();
   ctx.arc(
     faceX - faceRadius * GLINT_SHARE,
@@ -103,12 +109,50 @@ function paintForearm(ctx: Ctx, frame: BipedForearmFrame): void {
   ctx.restore();
 }
 
-export const RYAN_WATCH = defineGarment({
-  id: 'ryan_watch',
+function watchPainter(watch: WatchLook): (ctx: Ctx, frame: BipedForearmFrame) => void {
+  return (ctx, frame) => paintWatch(ctx, frame, watch);
+}
+
+const SMARTWATCH_LOOK: WatchLook = {
+  metal: '#c3c8d0',
+  metalShade: '#7c828c',
+  face: SMARTWATCH_FACE,
+  faceGlint: '#5f6b7e',
+  bandProud: 0.008,
+  faceRadiusShare: 0.75,
+};
+
+export const SMARTWATCH = defineGarment({
+  id: 'smartwatch',
   name: 'Smartwatch',
   wearer: 'human',
   base: true,
   layer: 'over',
   region: ['forearm'],
-  paint: { forearm: humanEveryView(paintForearm) },
+  paint: { forearm: humanEveryView(watchPainter(SMARTWATCH_LOOK)) },
+});
+
+/**
+ * A slim gold watch: a fine bracelet that sits close to the wrist and a small
+ * pale dial, so at the tile it is a glint of gold rather than the
+ * smartwatch's dark block.
+ */
+export const GOLD_WATCH_DEEP = '#7a5a22';
+const GOLD_WATCH_LOOK: WatchLook = {
+  metal: '#e2c072',
+  metalShade: GOLD_WATCH_DEEP,
+  face: '#f3e7cc',
+  faceGlint: '#ffffff',
+  bandProud: 0.004,
+  faceRadiusShare: 0.6,
+};
+
+export const GOLD_WATCH = defineGarment({
+  id: 'gold_watch',
+  name: 'Gold watch',
+  wearer: 'human',
+  base: true,
+  layer: 'over',
+  region: ['forearm'],
+  paint: { forearm: humanEveryView(watchPainter(GOLD_WATCH_LOOK)) },
 });

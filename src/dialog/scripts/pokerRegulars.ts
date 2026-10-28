@@ -17,7 +17,7 @@ import type { BarkLine, NonEmpty } from '../line';
 import type { SpeakerId } from '../speakers';
 import type { PokerBanterTrigger } from '../../systems/casino/poker/pokerEvents';
 import type { BanterSetId } from '../../systems/casino/poker/npc/profiles';
-import type { RegularId } from '../../systems/casino/poker/npc/regulars';
+import type { RegularId } from '../../systems/casino/poker/npc/regularIds';
 
 type BanterPool = Readonly<Record<PokerBanterTrigger, NonEmpty<string>>>;
 

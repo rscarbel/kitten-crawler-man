@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import db from '../db.js';
 import { HTTP_STATUS } from '../httpStatus.js';
 import { authedUser, isRecord, requireAuth } from '../middleware/auth.js';
+import { parseGameProgress } from '../../src/core/save/saveFormat.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -24,8 +25,8 @@ router.post('/', (req: Request, res: Response) => {
   const body: unknown = req.body;
   const data = isRecord(body) ? body.data : undefined;
 
-  if (!isRecord(data)) {
-    res.status(HTTP_STATUS.BAD_REQUEST).json({ error: 'data must be an object' });
+  if (parseGameProgress(data) === null) {
+    res.status(HTTP_STATUS.BAD_REQUEST).json({ error: 'data is not a save this build writes' });
     return;
   }
 

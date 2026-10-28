@@ -114,6 +114,9 @@ import { finalePropCatalogue } from '../src/sprites/art/starlightTent/finaleProp
 import { curtainPropCatalogue } from '../src/sprites/art/starlightTent/curtainProps.js';
 import { MAX_REFLECTING_PANES } from '../src/systems/StarlightTentMazeSystem.js';
 import { STARLIGHT_TENT_CUES } from '../src/systems/starlightTent/starlightTentSoundCues.js';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+
+useDevPlayerIdentity();
 
 const ARG_PREFIX_LENGTH = '--='.length;
 

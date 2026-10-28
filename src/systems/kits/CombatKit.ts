@@ -334,8 +334,9 @@ export class CombatKit {
     if (this.seismicStompFx.blastSoundPending) {
       this.seismicStompFx.blastSoundPending = false;
       // `human_seismic_stomp` plays when the ability fires, a third of a second before
-      // the foot lands; this is the boom the landing itself makes.
+      // the foot lands; this is the boom and the ground's shudder the landing itself makes.
       audio?.play('dynamite_explosion');
+      audio?.play('seismic_stomp_quake');
     }
     this.playKaleidoscopeCues(audio);
     this.playGearCues(audio);

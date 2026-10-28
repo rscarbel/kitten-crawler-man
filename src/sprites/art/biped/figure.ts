@@ -1011,12 +1011,12 @@ function torsoSlabs(
           view,
           look,
           pose,
-          envelope: (envelopeCtx) => traceSkull(envelopeCtx, view),
+          envelope: (envelopeCtx) => traceSkull(envelopeCtx, view, look.face),
         });
         ctx.restore();
       };
       const headBehindBack = torsoPitchedAway(pose, view);
-      drawNeck(ctx, skeleton, pose, view, look.skin, look.neckGirth, look.neckSoftness);
+      drawNeck(ctx, skeleton, pose, view, look.skin, look.neckGirth, look.neckSoftness, look.face);
       if (headBehindBack) head();
       dressTorso(ctx, skeleton, pose, view, dressing, look);
       if (!headBehindBack) head();

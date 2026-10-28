@@ -16,7 +16,7 @@
  *    the current seed, one line per check.
  */
 
-import { crawlerName } from '../characters/characters';
+import { crawlerDisplayName } from '../characters/characters';
 import { setViewportSize, viewportHeight, viewportWidth } from '../core/rendering/Viewport';
 import { settings } from '../core/input/Settings';
 import { TILE_SIZE } from '../core/constants';
@@ -51,7 +51,8 @@ import {
 } from '../systems/casino/poker/npc/personality';
 import { listAt } from '../systems/casino/poker/npc/listAt';
 import { UNIT_PARAMETERS } from '../systems/casino/poker/npc/profiles';
-import { POKER_REGULARS, REGULAR_IDS } from '../systems/casino/poker/npc/regulars';
+import { POKER_REGULARS } from '../systems/casino/poker/npc/regulars';
+import { REGULAR_IDS } from '../systems/casino/poker/npc/regularIds';
 import type { PokerTell, TellSignal } from '../systems/casino/poker/npc/tells';
 import { CARD_ASPECT, drawCardFace } from '../ui/casino/PlayingCard';
 import { pokerTableColors } from '../ui/casino/pokerColors';
@@ -298,15 +299,17 @@ interface PlateSubject {
   readonly avatar: SeatAvatar;
 }
 
-const PLATE_SUBJECTS: ReadonlyArray<PlateSubject> = [
-  ...REGULAR_IDS.map((id) => ({
-    name: POKER_REGULARS[id].name,
-    avatar: { kind: 'regular', key: id, look: POKER_REGULARS[id].look } as const,
-  })),
-  { name: `You (${crawlerName('human')})`, avatar: { kind: 'crawler', crawler: 'human' } },
-  { name: `You (${crawlerName('cat')})`, avatar: { kind: 'crawler', crawler: 'cat' } },
-  { name: 'Empty seat', avatar: { kind: 'empty' } },
-];
+function plateSubjects(): ReadonlyArray<PlateSubject> {
+  return [
+    ...REGULAR_IDS.map((id) => ({
+      name: POKER_REGULARS[id].name,
+      avatar: { kind: 'regular', key: id, look: POKER_REGULARS[id].look } as const,
+    })),
+    { name: `You (${crawlerDisplayName('human')})`, avatar: { kind: 'crawler', crawler: 'human' } },
+    { name: `You (${crawlerDisplayName('cat')})`, avatar: { kind: 'crawler', crawler: 'cat' } },
+    { name: 'Empty seat', avatar: { kind: 'empty' } },
+  ];
+}
 
 /** Everything a plate paints, including the avatar's overhang, the tag and the blind marker. */
 function plateFootprint(seat: PokerSeatLayout, markerRoom: number): Rect {
@@ -1053,7 +1056,8 @@ export class PokerPreviewScene extends PreviewScene {
     const cellWidth = footprint.w + space.lg;
     const cellHeight = footprint.h + space.md;
     const columns = Math.max(1, Math.floor(area.w / cellWidth));
-    const rowsPerState = Math.ceil(PLATE_SUBJECTS.length / columns);
+    const subjects = plateSubjects();
+    const rowsPerState = Math.ceil(subjects.length / columns);
     const heading = lineHeightOf(ui, 'label');
     const stateHeight = heading + space.sm + rowsPerState * cellHeight + space.md;
     const colors = pokerTableColors(ui.theme);
@@ -1074,7 +1078,7 @@ export class PokerPreviewScene extends PreviewScene {
             },
           );
           const flags = { ...RESTING_PLATE, ...state.flags(ui.now) };
-          PLATE_SUBJECTS.forEach((subject, index) => {
+          subjects.forEach((subject, index) => {
             const cellX = content.x + (index % columns) * cellWidth;
             const cellY = top + heading + space.sm + Math.floor(index / columns) * cellHeight;
             ui.ctx.save();

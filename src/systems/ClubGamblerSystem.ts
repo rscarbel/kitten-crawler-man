@@ -29,12 +29,8 @@ import {
   type SeatPose,
 } from '../sprites/clubCastFigure';
 import { CLUB_PATRON_REFS } from '../sprites/clubCastRoster';
-import {
-  POKER_REGULARS,
-  REGULAR_IDS,
-  isRegularId,
-  type RegularId,
-} from './casino/poker/npc/regulars';
+import { POKER_REGULARS } from './casino/poker/npc/regulars';
+import { REGULAR_IDS, isRegularId, type RegularId } from './casino/poker/npc/regularIds';
 import { CLUB_ANIM_FRAMES_PER_SECOND } from '../core/club/clubTiming';
 import { PLAYER_SEAT } from './casino/poker/PokerTable';
 

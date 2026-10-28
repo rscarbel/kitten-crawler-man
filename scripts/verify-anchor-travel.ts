@@ -75,6 +75,9 @@ import { setViewportSize } from '../src/core/rendering/Viewport';
 import { MenusKit } from '../src/systems/kits/MenusKit';
 import { ANCHOR_INDOORS_REFUSAL, refuseAnchorIndoors } from '../src/systems/kits/hotbarActions';
 import type { SceneWorld } from '../src/systems/kits/SceneWorld';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+
+useDevPlayerIdentity();
 
 /**
  * Seeds the gate runs on: each one a different town, circus and village

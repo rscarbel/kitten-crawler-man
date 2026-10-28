@@ -19,7 +19,7 @@ import type { Choice, ConversationHandle, ConversationRequest, Ending } from '..
 import { WENDELL_CONTRACTS } from '../../dialog/scripts/wendellContracts';
 import type { Player } from '../../Player';
 import type { ResidentQuestHook } from '../residentQuestHooks';
-import type { ResidentId } from '../townResidents';
+import type { ResidentId } from '../../core/state/residentIds';
 import { contractSiteFor, type ContractSiteDef } from './contractCatalog';
 import { contractContactName } from './contractContacts';
 import type { ContractWorld } from './contractEligibility';

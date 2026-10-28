@@ -26,7 +26,6 @@
 import { installCanvasGlobals } from './nodeCanvasGlobals';
 import { setViewportSize } from '../src/core/rendering/Viewport';
 import type { ConversationRequest } from '../src/dialog/request';
-import { crawlerName } from '../src/characters/characters';
 import { TILE_SIZE } from '../src/core/constants';
 import {
   captureBriarHollowState,
@@ -36,13 +35,8 @@ import {
 import type { VillageQuestPhase } from '../src/core/quests/villageQuestPhase';
 import type { Mob } from '../src/creatures/Mob';
 import { Necromancer } from '../src/creatures/Necromancer';
-import {
-  BRAMBLEWICK,
-  FENNA,
-  OREN,
-  TIKKA,
-  type VillagerId,
-} from '../src/dialog/scripts/briarHollow';
+import { BRAMBLEWICK, FENNA, OREN, TIKKA } from '../src/dialog/scripts/briarHollow';
+import { type VillagerId } from '../src/core/quests/villagerIds';
 import type { DialogLine } from '../src/dialog/line';
 import type { MusicClaims } from '../src/audio/AudioScope';
 import type { MusicClaimOwner } from '../src/audio/music/MusicDirector';
@@ -68,7 +62,8 @@ import {
   BRIAR_HOLLOW_REWARD_BURGERS,
   BRIAR_HOLLOW_REWARD_STEW,
   MAYOR_SHOUT_SUMMONS_SPEAKER,
-  MAYOR_SHOUT_SUMMONS_TEXT,
+  mayorShoutSummonsText,
+  type QuestLineSpeaker,
   PROCESSING_BOARDS_TARGET,
   PROCESSING_DONE_LINE,
   PROCESSING_ROPE_TARGET,
@@ -80,6 +75,9 @@ import { TREBUCHET_BUILD_COST } from '../src/systems/briarHollow/structureRules'
 import { buildSiegeRig, standAt } from './villageSiegeHarness';
 import { mulberry32 } from '../src/sprites/person/rng';
 import type { QuestRewardSpec } from '../src/ui/questReward/types';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+
+useDevPlayerIdentity();
 
 const VIEWPORT_WIDTH = 1280;
 const VIEWPORT_HEIGHT = 720;
@@ -181,9 +179,9 @@ conversation.open = (request) => {
 
 // Every narrated line the questline queues outside a conversation — the
 // crawlers' own beats, the Mayor's shout — in order.
-const questLines: Array<{ speaker: string; text: string }> = [];
+const questLines: Array<{ speaker: QuestLineSpeaker; text: string }> = [];
 const showQuestLine = kit.showQuestLine.bind(kit);
-kit.showQuestLine = (speaker: string, text: string, onClosed?: () => void) => {
+kit.showQuestLine = (speaker: QuestLineSpeaker, text: string, onClosed?: () => void) => {
   questLines.push({ speaker, text });
   showQuestLine(speaker, text, onClosed);
 };
@@ -429,7 +427,10 @@ section('3. Wood, then stone');
   rig.step();
   check(
     questLines.some(
-      (q) => q.text === QUARRY_SPOTTED_LINE.human && q.speaker === crawlerName('human'),
+      (q) =>
+        q.text === QUARRY_SPOTTED_LINE.human &&
+        q.speaker.kind === 'crawler' &&
+        q.speaker.crawler === 'human',
     ),
     'the active crawler mentions the quarry in their own voice once the wood target is held',
   );
@@ -503,7 +504,10 @@ section("5. Fenna, processing, and Tikka's plans");
   rig.step();
   check(
     questLines.some(
-      (q) => q.text === PROCESSING_DONE_LINE.human && q.speaker === crawlerName('human'),
+      (q) =>
+        q.text === PROCESSING_DONE_LINE.human &&
+        q.speaker.kind === 'crawler' &&
+        q.speaker.crawler === 'human',
     ),
     'the active crawler suggests heading back to Tikka once processing is done',
   );
@@ -574,7 +578,7 @@ section('6. A trebuchet, loading it, and a wooden wall');
   rig.step();
   check(
     questLines.some(
-      (q) => q.speaker === MAYOR_SHOUT_SUMMONS_SPEAKER && q.text === MAYOR_SHOUT_SUMMONS_TEXT,
+      (q) => q.speaker === MAYOR_SHOUT_SUMMONS_SPEAKER && q.text === mayorShoutSummonsText(),
     ),
     'the Mayor shouts his summons once a wooden wall stands',
   );

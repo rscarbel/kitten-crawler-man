@@ -2,7 +2,7 @@ import { isRecord } from '../../core/util/guards';
 import {
   parseColosseumDressingCheckpoint,
   type ColosseumDressingCheckpoint,
-} from './ColosseumDressingSystem';
+} from './colosseumDressingCheckpoint';
 import {
   parseTrashGremlinRoomCheckpoint,
   type TrashGremlinRoomCheckpoint,

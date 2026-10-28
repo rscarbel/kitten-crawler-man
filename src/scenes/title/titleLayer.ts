@@ -92,6 +92,12 @@ export interface TitleLayer {
   onCue?(cue: TitleCue): void;
   /** One of the idle loop's beats has begun. A layer ignores beats it does not stage. */
   onEvent?(fire: TitleEventFire): void;
+  /**
+   * The player has just confirmed who they are, before the dive begins. A
+   * layer that pictures them switches here, so the dive never shows the look
+   * they chose away from.
+   */
+  onIdentityChosen?(): void;
   /** Called when the scene exits: let go of baked canvases and anything held. */
   dispose?(): void;
 }

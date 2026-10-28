@@ -83,7 +83,7 @@ function renderBackdrop(name: string, window: TileWindow): string {
 
 // ── Figures ──────────────────────────────────────────────────────────────────
 
-/** The human crawler the images show: `--look=<id>`, Ryan's by default. */
+/** The human crawler the images show: `--look=<id>`, `male_light` by default. */
 const HUMAN_LOOK = humanLookFlag();
 const HUMAN = humanFigureWearing(HUMAN_LOOK, defaultOutfitOf(HUMAN_LOOK));
 const CAT = catFigureFor(PLAYER_CAT_LOOK, outfitOf(PLAYER_CAT_LOOK, []));

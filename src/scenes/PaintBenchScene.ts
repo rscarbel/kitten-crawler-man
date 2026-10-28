@@ -13,7 +13,7 @@
  */
 
 import { viewportHeight, viewportWidth } from '../core/rendering/Viewport';
-import { PAINT_BENCH_SUBJECTS, type PaintBenchSubject } from '../dev/paintBenchSubjects';
+import { paintBenchSubjects, type PaintBenchSubject } from '../dev/paintBenchSubjects';
 import { allocCanvas, releaseSurface, surfaceContext } from '../core/rendering/canvasSurface';
 import { worldText } from '../ui/world/worldText';
 import { PreviewScene, type PreviewControl } from './PreviewScene';
@@ -135,6 +135,7 @@ const SUBJECT_INTERVAL_MS = 0;
 
 export class PaintBenchScene extends PreviewScene {
   private measurements: Measurement[] = [];
+  private readonly subjects = paintBenchSubjects();
   private nextSubject = 0;
 
   /**
@@ -154,8 +155,8 @@ export class PaintBenchScene extends PreviewScene {
   }
 
   private measureNext(): void {
-    if (this.nextSubject >= PAINT_BENCH_SUBJECTS.length) return;
-    const subject = PAINT_BENCH_SUBJECTS[this.nextSubject];
+    if (this.nextSubject >= this.subjects.length) return;
+    const subject = this.subjects[this.nextSubject];
     this.nextSubject++;
     const directMs = timePaints(subject, 1);
     const bakeMs = timeBakePaints(subject);
@@ -172,7 +173,7 @@ export class PaintBenchScene extends PreviewScene {
         fallbackVerdict(directMs),
     );
     globalThis.__paintBenchResults = [...this.measurements];
-    if (this.nextSubject === PAINT_BENCH_SUBJECTS.length) {
+    if (this.nextSubject === this.subjects.length) {
       globalThis.__paintBenchDone = true;
       console.log(`[paintbench] done — ${this.measurements.length} figures measured`);
       return;
@@ -188,7 +189,7 @@ export class PaintBenchScene extends PreviewScene {
 
     const top = this.headerBottom + MARGIN;
 
-    if (PAINT_BENCH_SUBJECTS.length === 0) {
+    if (this.subjects.length === 0) {
       worldText(ctx, 'No painted figures are registered yet.', {
         style: 'hint',
         x: MARGIN,

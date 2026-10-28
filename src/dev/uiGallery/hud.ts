@@ -7,7 +7,7 @@
  */
 
 import { rewardsBannerEntry } from '../../ui/hud/rewardsBanner';
-import { crawlerName } from '../../characters/characters';
+import { crawlerDisplayName } from '../../characters/characters';
 import {
   HOTBAR_COUNT,
   ITEM_DEF,
@@ -164,7 +164,7 @@ function crawlers(
   return [
     {
       id: 'human',
-      name: crawlerName('human'),
+      name: crawlerDisplayName('human'),
       glyph: 'user',
       level: 7,
       hp: 84,
@@ -176,7 +176,7 @@ function crawlers(
     },
     {
       id: 'cat',
-      name: crawlerName('cat'),
+      name: crawlerDisplayName('cat'),
       glyph: 'cat',
       level: 8,
       hp: 22,
@@ -214,7 +214,7 @@ function dock(extra: readonly DockButtonModel['id'][]): DockButtonModel[] {
     { id: 'bag', icon: 'bag', label: 'Bag', key: 'I', badge: '2', onTap: record },
     { id: 'journal', icon: 'compass', label: 'Quest Journal', key: 'J', badge: '3', onTap: record },
     { id: 'follower', icon: 'users', label: 'Follower orders', key: 'F', onTap: record },
-    { id: 'switch', icon: 'cat', label: `Switch to ${crawlerName('cat')}`, onTap: record },
+    { id: 'switch', icon: 'cat', label: `Switch to ${crawlerDisplayName('cat')}`, onTap: record },
   ];
   if (extra.includes('build')) {
     buttons.push({
@@ -415,7 +415,7 @@ function hudFixture(spec: HudFixtureSpec): DialogFixture {
         activeCrawler: 'human',
         coins: {
           shown: 1240,
-          split: `${crawlerName('human')} 900 · ${crawlerName('cat')} 340`,
+          split: `${crawlerDisplayName('human')} 900 · ${crawlerDisplayName('cat')} 340`,
           pulse: 0,
         },
         skillPoints: { hidden: false, nag: spec.skillPoints > 0, open: record },
@@ -708,7 +708,7 @@ function aiOnline(feed: AIChatFeed): void {
   feed.onChat({
     messageId: 'fixture-question',
     characterName: CAROLINE_CHARACTER_NAME,
-    text: `${crawlerName('human')}. A goblin champion holds the corridor ahead. Defeat it for a Rare chest, or withdraw.`,
+    text: `${crawlerDisplayName('human')}. A goblin champion holds the corridor ahead. Defeat it for a Rare chest, or withdraw.`,
     done: true,
     choices: [
       { id: 'fight', label: 'Fight' },
@@ -727,7 +727,10 @@ function aiOnline(feed: AIChatFeed): void {
     mood: { label: 'attentive', intensity: 1 },
     relationship: { respect: 1 },
   });
-  feed.addIntervention(CAROLINE_CHARACTER_NAME, `granted ${crawlerName('human')} a Common chest`);
+  feed.addIntervention(
+    CAROLINE_CHARACTER_NAME,
+    `granted ${crawlerDisplayName('human')} a Common chest`,
+  );
 }
 
 function aiOffline(feed: AIChatFeed): void {

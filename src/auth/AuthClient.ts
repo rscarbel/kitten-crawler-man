@@ -1,8 +1,8 @@
 import type { LevelId } from '../levels/levelIds';
 import type { SavedWorld } from '../core/save/SavedWorld';
-import type { PlayerSnapshot } from '../core/save/PlayerSnapshot';
+import type { PlayerSnapshot } from '../core/save/playerSnapshotFormat';
 import type { SerializedAbilityState } from '../core/skills/AbilityManager';
-import type { SerializedAchievements } from '../core/progression/AchievementManager';
+import type { SerializedAchievements } from '../core/progression/achievementSave';
 import type { GameStatsSnapshot } from '../core/progression/GameStats';
 import type { PartyCraftsState } from '../core/labour/partyCrafts';
 import type {
@@ -12,9 +12,10 @@ import type {
 } from '../core/save/WheelLedger';
 import type { DoubleDamageRemaining } from '../core/save/doubleDamageSave';
 import type { SerializedMusicLibrary } from '../core/music/MusicLibrary';
-import type { StoryBeatId } from '../story/storyBeats';
-import type { AdviceObjectiveId } from '../systems/daveAdvice';
+import type { StoryBeatId } from '../story/storyBeatIds';
+import type { AdviceObjectiveId } from '../story/adviceObjectiveIds';
 import type { SavedPetNames } from '../core/party/petNames';
+import type { PlayerIdentity } from '../characters/playerIdentity';
 import { parseGameProgress } from '../core/save/saveFormat';
 import { PAGE_SAVE_LATCH, type ProgressStorage } from '../core/save/progressPersistence';
 import { wipeOwed } from '../core/save/wipeMarker';
@@ -107,6 +108,8 @@ export interface GameProgress {
   objectivesBriefed: readonly AdviceObjectiveId[];
   /** The names the player has given the party's pets this run. */
   petNames: SavedPetNames;
+  /** The name, body and complexion the player chose for their human crawler. */
+  playerIdentity: PlayerIdentity;
   savedAt: string;
 }
 

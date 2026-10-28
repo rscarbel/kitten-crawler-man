@@ -30,7 +30,8 @@
  * Run: npm run verify:ai-actions
  */
 import { partyOwnsGear } from '../src/loot/gearPools';
-import { AchievementManager, aiAchievementKey } from '../src/core/progression/AchievementManager';
+import { AchievementManager } from '../src/core/progression/AchievementManager';
+import { aiAchievementKey } from '../src/core/progression/achievementSave';
 import { AchievementAwards } from '../src/systems/AchievementAwards';
 import { presentationAwardId } from '../src/loot/rewardChest';
 import { EventBus, type GameEvents } from '../src/core/EventBus';
@@ -118,6 +119,10 @@ import {
 import { COMMENTARY_ACTIONS, intensityRefusal, isCommentaryAction } from '../src/ai/aiIntensity';
 import { AI_TOOLS } from '../src/ai/aiTools';
 import { SESSION_FLAG_NAMES } from '../src/ai/context/sessionContext';
+import { HUMAN_CRAWLER_AI_NAME, crawlerDisplayName } from '../src/characters/characters';
+import { DEV_PLAYER_IDENTITY, useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+
+useDevPlayerIdentity();
 
 let checksRun = 0;
 let checksFailed = 0;
@@ -624,8 +629,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function targetOf(world: FakeWorld, target: unknown): HumanPlayer | CatPlayer {
-  if (target === 'Human') return world.human;
-  if (target === 'Cat') return world.cat;
+  if (target === 'human') return world.human;
+  if (target === 'cat') return world.cat;
   return world.human.isActive ? world.human : world.cat;
 }
 
@@ -940,7 +945,7 @@ section(
     'no spawn while a crawler is knocked out',
   );
   check(
-    !asCaroline('apply_status', { status: 'burn', target_player: 'Human' }).ok,
+    !asCaroline('apply_status', { status: 'burn', target_player: 'human' }).ok,
     'nothing harmful while a crawler is knocked out',
   );
   check(
@@ -956,12 +961,12 @@ section(
   world.human.statusEffects = [];
   world.human.hp = shield(world.human) + 1;
   check(
-    !asCaroline('apply_status', { status: 'poison', target_player: 'Human' }).ok,
+    !asCaroline('apply_status', { status: 'poison', target_player: 'human' }).ok,
     'a damage-over-time status that would end under 25% HP is refused',
   );
   step();
   world.human.hp = world.human.maxHp;
-  const burned = asCaroline('apply_status', { status: 'burn', target_player: 'Human' });
+  const burned = asCaroline('apply_status', { status: 'burn', target_player: 'human' });
   check(burned.ok, `burn on a healthy crawler runs (${burned.detail})`);
   for (let frame = 0; frame < STATUS_RUN_FRAMES; frame++) world.human.tickTimers();
   check(
@@ -978,7 +983,7 @@ section(
     stat: 'health',
     delta: -STAT_CUT_POINTS,
     reason: 'testing',
-    target_player: 'Human',
+    target_player: 'human',
   });
   check(
     world.human.hp >= Math.min(hpBeforeCut, shield(world.human)),
@@ -992,7 +997,7 @@ section(
   for (const percent of [SET_HP_LOWEST_PERCENT, SET_HP_LOWEST_PERCENT + 1]) {
     world.human.statusEffects = [];
     world.human.hp = world.human.maxHp;
-    const set = asCaroline('set_hp', { hp_percent: percent, target_player: 'Human' });
+    const set = asCaroline('set_hp', { hp_percent: percent, target_player: 'human' });
     if (percent === SET_HP_LOWEST_PERCENT) {
       check(set.ok, `set_hp at its lowest ${percent}% runs on a healthy crawler (${set.detail})`);
     }
@@ -1005,7 +1010,7 @@ section(
   world.human.inventory.equipByItemId('scrapmail_vest');
   check(world.human.inventory.equipment.isEquipped('scrapmail_vest'), 'the test shirt is worn');
   check(
-    !asCaroline('remove_item', { item_id: 'scrapmail_vest', target_player: 'Human' }).ok,
+    !asCaroline('remove_item', { item_id: 'scrapmail_vest', target_player: 'human' }).ok,
     'worn gear is never confiscated',
   );
   check(world.human.inventory.equipment.isEquipped('scrapmail_vest'), 'the shirt is still worn');
@@ -1031,11 +1036,22 @@ section(
   const fined = asCaroline('fine_coins', {
     amount: FINE_TEST_AMOUNT,
     reason: 'testing',
-    target_player: 'Human',
+    target_player: 'human',
   });
   const taken = FINE_TEST_PURSE - world.human.coins;
   const charged = fineBudgetBefore - governor.remainingBudget(world.scene, 'coinsFined');
   check(fined.ok && taken > 0, `a fine runs (${fined.detail})`);
+  const typedName = DEV_PLAYER_IDENTITY.name;
+  check(
+    fined.detail.includes(HUMAN_CRAWLER_AI_NAME) && !fined.detail.includes(typedName),
+    `the AI detail names the human as "${HUMAN_CRAWLER_AI_NAME}", never the typed name (${fined.detail})`,
+  );
+  const fineIndicator = fined.indicator ?? '';
+  check(
+    fineIndicator.includes(crawlerDisplayName('human')) &&
+      !fineIndicator.includes(HUMAN_CRAWLER_AI_NAME),
+    `the on-screen indicator names the human as typed, never "${HUMAN_CRAWLER_AI_NAME}" (${fineIndicator})`,
+  );
   check(charged === taken, `a fine charges what it took (${charged} charged, ${taken} taken)`);
 
   const stored = new Map<string, FloorLedgerSnapshot>();
@@ -1117,7 +1133,7 @@ section('interactions: achievements, questions and every challenge template');
   };
   const paidBefore = paidState(world.achievements.human, world.human);
   check(
-    asCaroline('grant_achievement', { ...award, target_player: 'Human' }).ok,
+    asCaroline('grant_achievement', { ...award, target_player: 'human' }).ok,
     'an AI achievement is awarded',
   );
   check(
@@ -1138,7 +1154,7 @@ section('interactions: achievements, questions and every challenge template');
     !asCaroline('grant_achievement', {
       ...award,
       title: '  fled from a   RAT ',
-      target_player: 'Human',
+      target_player: 'human',
     }).ok,
     'the same title, however it is spaced or cased, is never awarded twice',
   );
@@ -1155,7 +1171,7 @@ section('interactions: achievements, questions and every challenge template');
     asCaroline('grant_reward_chest', {
       rarity: 'Common',
       reason: 'For style.',
-      target_player: 'Cat',
+      target_player: 'cat',
     }).ok,
     'Caroline can gift a reward chest',
   );
@@ -1176,7 +1192,7 @@ section('interactions: achievements, questions and every challenge template');
     title: 'Stair\n\n\u200BMaster\u202E',
     description: 'Line one.\nLine two.\r\n\tLine three.',
     rarity: 'Common',
-    target_player: 'Cat',
+    target_player: 'cat',
   });
   check(messy.ok, `a messy achievement is still awarded (${messy.detail})`);
   const filedNames = world.achievements.cat.aiAchievements().map((def) => def.name);
@@ -1192,7 +1208,7 @@ section('interactions: achievements, questions and every challenge template');
     !asCaroline('grant_achievement', {
       ...award,
       title: 'Stair\u200B Master',
-      target_player: 'Cat',
+      target_player: 'cat',
     }).ok,
     'invisible characters do not get round the one-per-title rule',
   );
@@ -1376,13 +1392,13 @@ section('interactions: achievements, questions and every challenge template');
   runFrames(CHALLENGE_SECONDS * UPDATE_FRAMES_PER_SECOND);
   check(lostAnother(), 'running out of time fails a kill challenge');
 
-  // belle_finishes: the human stealing the kill fails it.
+  // cat_finishes: the human stealing the kill fails it.
   spawnRats(CHALLENGE_RATS);
-  offer('belle_finishes', { count: 1, mob_type: 'rat', seconds: CHALLENGE_SECONDS });
+  offer('cat_finishes', { count: 1, mob_type: 'rat', seconds: CHALLENGE_SECONDS });
   world.stage.acceptChallenge();
   killRat(world.human);
   check(lostAnother(), 'a kill by the human fails a cat-finishes challenge');
-  offer('belle_finishes', { count: 1, mob_type: 'rat', seconds: CHALLENGE_SECONDS });
+  offer('cat_finishes', { count: 1, mob_type: 'rat', seconds: CHALLENGE_SECONDS });
   world.stage.acceptChallenge();
   killRat(world.cat);
   check(wonAnother(), 'the cat’s kill wins it');
@@ -1430,9 +1446,9 @@ section('interactions: achievements, questions and every challenge template');
     }
   }
 
-  // belle_finishes: a kill no crawler made neither counts nor fails it.
+  // cat_finishes: a kill no crawler made neither counts nor fails it.
   spawnRats(CHALLENGE_RATS);
-  offer('belle_finishes', { count: 1, mob_type: 'rat', seconds: CHALLENGE_SECONDS });
+  offer('cat_finishes', { count: 1, mob_type: 'rat', seconds: CHALLENGE_SECONDS });
   world.stage.acceptChallenge();
   const strayRat = world.mobs.find((mob) => mob.isAlive && mob.spawnTypeKey === 'rat');
   if (strayRat !== undefined) {
@@ -1509,11 +1525,11 @@ section('a hurt party is not piled on mid-fight');
     'no elite mid-fight on a hurt crawler',
   );
   check(
-    !call('apply_status', { status: 'drunk', target_player: 'Cat' }).ok,
+    !call('apply_status', { status: 'drunk', target_player: 'cat' }).ok,
     'nothing harmful mid-fight while a crawler is hurt',
   );
   check(
-    call('apply_status', { status: 'speed_fizz', target_player: 'Human' }).ok,
+    call('apply_status', { status: 'speed_fizz', target_player: 'human' }).ok,
     'help still lands mid-fight',
   );
   world.flags.combat = false;
@@ -1617,7 +1633,7 @@ section('floor keys, status damage forecasts and indoor spawns');
     const ok = executeAIAction(
       {
         name: 'apply_status',
-        params: { status: 'burn', target_player: 'Human' },
+        params: { status: 'burn', target_player: 'human' },
         characterName: AI_CHARACTER_CAROLINE,
       },
       outdoors.scene,

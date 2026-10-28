@@ -161,7 +161,7 @@ import { HUMAN_ROW_TABLE } from '../src/sprites/art/humanFigure.js';
 import { CAT_FIGURE } from '../src/sprites/art/catFigure.js';
 import { RESIDENT_VIEW_ROWS } from '../src/sprites/catSprite.js';
 import { castRowsFor, ratkinCastFigure } from '../src/sprites/art/ratkinCastFigure.js';
-import { RATKIN_SOLDIER_IDS } from '../src/sprites/art/ratkin/cast.js';
+import { SOLDIER_IDS } from '../src/core/quests/villagerIds.js';
 
 installCanvasGlobals();
 
@@ -556,7 +556,7 @@ function humanRows(): Row[] {
 
 function crawlerRows(): Row[] {
   const cat = RESIDENT_VIEW_ROWS.map((state) => row(CAT_FIGURE, state));
-  const soldiers = RATKIN_SOLDIER_IDS.flatMap((id) =>
+  const soldiers = SOLDIER_IDS.flatMap((id) =>
     castRowsFor(id)
       .filter((spec) => SOLDIER_FIGHT_ROLES.has(spec.role))
       .map((spec) => row(ratkinCastFigure(id), spec.name)),

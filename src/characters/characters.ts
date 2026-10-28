@@ -1,143 +1,116 @@
 /**
  * The game's named characters: who each one is, what species they are, and
- * whether the player controls them. This registry is the one source of every
- * crawler's display name; UI, dialog headers and the AI context read names
- * from here rather than spelling them out.
+ * whether the player controls them. With the player's own identity
+ * (`playerIdentity.ts`), this registry is the one source of every crawler's
+ * name; UI, dialog headers and the AI context read names through
+ * `crawlerName` rather than spelling them out.
  */
 
+import { isolateForDisplay } from '../core/text/isolateName';
 import type { CrawlerKind } from '../core/skills/SkillManager';
 import type { SpeakerId } from '../dialog/speakers';
-import type { CatLook } from '../sprites/looks/catLook';
-import { BELLE_LOOK } from '../sprites/looks/cats/belle';
-import { PUMPKIN_LOOK } from '../sprites/looks/cats/pumpkin';
-import type { HumanLook } from '../sprites/looks/humanLook';
-import { DAVE_LOOK } from '../sprites/looks/humans/dave';
-import { RYAN_LOOK } from '../sprites/looks/humans/ryan';
+import { playerIdentity } from './playerIdentity';
 
-export type CharacterId = 'dave' | 'ryan' | 'pumpkin' | 'belle';
+/** The registry's characters. The player's human is not one: their name and look are the player's own choice. */
+export const CHARACTER_IDS = ['dave', 'pumpkin', 'belle'] as const;
+export type CharacterId = (typeof CHARACTER_IDS)[number];
 
 interface CharacterDefBase<Species extends CrawlerKind> {
   readonly species: Species;
-  /** The short name every label, hint and AI payload uses. */
+  /** The name every label, hint, dialog header and AI payload uses. */
   readonly displayName: string;
-  /** The name in full, where the character is announced rather than referred to: dialog headers, prize cards. */
-  readonly formalName: string;
   /** The character's entry in `SPEAKERS`, for lines they speak. */
   readonly speakerId: SpeakerId;
   /** Whether the player controls this character as one of the two crawlers. */
   readonly plays: boolean;
 }
 
-export interface HumanCharacterDef extends CharacterDefBase<'human'> {
-  /** How he is painted. */
-  readonly look: HumanLook;
-}
-export interface CatCharacterDef extends CharacterDefBase<'cat'> {
-  /** How she is painted. */
-  readonly look: CatLook;
-}
-export type CharacterDef = HumanCharacterDef | CatCharacterDef;
+/** A registry character; how each is painted is `CHARACTER_LOOKS` (`characterLooks.ts`), kept apart so names load without art. */
+export type CharacterDef = CharacterDefBase<'human'> | CharacterDefBase<'cat'>;
 
-/** Whether a character is a cat: narrows any registry entry to its cat definition. */
-export function isCatCharacter<C extends CharacterDef>(
-  character: C,
-): character is Extract<C, CatCharacterDef> {
-  return character.species === 'cat';
-}
+/** The registry characters of `Species`. */
+export type CharacterIdOfSpecies<Species extends CrawlerKind> = {
+  [Id in CharacterId]: (typeof CHARACTERS)[Id]['species'] extends Species ? Id : never;
+}[CharacterId];
 
-/** Whether a character is a human: narrows any registry entry to its human definition. */
-export function isHumanCharacter<C extends CharacterDef>(
-  character: C,
-): character is Extract<C, HumanCharacterDef> {
-  return character.species === 'human';
+/** Whether registry character `id` is a cat. */
+export function isCatCharacterId(id: CharacterId): id is CharacterIdOfSpecies<'cat'> {
+  return CHARACTERS[id].species === 'cat';
 }
 
 export const CHARACTERS = {
   dave: {
     species: 'human',
     displayName: 'Dave',
-    formalName: 'Dave',
     speakerId: 'dave',
     plays: false,
-    look: DAVE_LOOK,
-  },
-  ryan: {
-    species: 'human',
-    displayName: 'Ryan',
-    formalName: 'Ryan',
-    speakerId: 'ryan',
-    plays: true,
-    look: RYAN_LOOK,
   },
   pumpkin: {
     species: 'cat',
     displayName: 'Pumpkin',
-    formalName: 'Pumpkin',
     speakerId: 'belle',
     plays: false,
-    look: PUMPKIN_LOOK,
   },
   belle: {
     species: 'cat',
     displayName: 'Belle',
-    formalName: 'Belle',
     speakerId: 'belle',
     plays: true,
-    look: BELLE_LOOK,
   },
 } as const satisfies Record<CharacterId, CharacterDef>;
 
-/** The characters of `Species` the player may control; a character with `plays: false` never fills a crawler slot. */
-type PlayableCharacterIdOfSpecies<Species extends CrawlerKind> = {
+/** The registry's characters the player may control as the cat; a character with `plays: false` never fills the slot. */
+type PlayableCatId = {
   [Id in CharacterId]: (typeof CHARACTERS)[Id] extends {
-    readonly species: Species;
+    readonly species: 'cat';
     readonly plays: true;
   }
     ? Id
     : never;
 }[CharacterId];
 
-/** Which character the player controls as each crawler; a crawler is always played by a playable character of its own species. */
+/** Which registry character the player controls as the cat. The human is the player's own, so has no entry. */
 export const PLAYER_CHARACTERS = {
-  human: 'ryan',
   cat: 'belle',
-} as const satisfies { [Kind in CrawlerKind]: PlayableCharacterIdOfSpecies<Kind> };
+} as const satisfies { readonly cat: PlayableCatId };
 
-type PlayerCharacters = typeof PLAYER_CHARACTERS;
-
-/** The display name of the character playing crawler `Kind`, as a literal type. */
-export type CrawlerNameOf<Kind extends CrawlerKind> =
-  (typeof CHARACTERS)[PlayerCharacters[Kind]]['displayName'];
-
-/** Either crawler's display name. */
-export type PlayerCharacterName = CrawlerNameOf<CrawlerKind>;
-
-/** The `SPEAKERS` entry of whichever character plays either crawler: the voices a crawler's lines can take. */
-export type PlayerSpeakerId = (typeof CHARACTERS)[PlayerCharacters[CrawlerKind]]['speakerId'];
-
-/** The character the player controls as crawler `kind`. */
-export function playerCharacter<Kind extends CrawlerKind>(
-  kind: Kind,
-): (typeof CHARACTERS)[PlayerCharacters[Kind]] {
+/** The registry character the player controls as the cat. */
+export function playerCharacter(kind: 'cat') {
   return CHARACTERS[PLAYER_CHARACTERS[kind]];
 }
 
-/** The display name of the character playing crawler `kind`, for any UI that must name one of them. */
-export function crawlerName<Kind extends CrawlerKind>(kind: Kind): CrawlerNameOf<Kind> {
-  return playerCharacter(kind).displayName;
-}
+/** The `SPEAKERS` entry each crawler's lines are spoken through. */
+export const CRAWLER_SPEAKERS = {
+  human: 'human_crawler',
+  cat: CHARACTERS[PLAYER_CHARACTERS.cat].speakerId,
+} as const satisfies Record<CrawlerKind, SpeakerId>;
 
-/** The full name of the character playing crawler `kind`, as their dialog header announces them. */
-export function crawlerFormalName(kind: CrawlerKind): string {
-  return characterFormalName(PLAYER_CHARACTERS[kind]);
-}
+/** The voices a crawler's lines can take. */
+export type CrawlerSpeakerId = (typeof CRAWLER_SPEAKERS)[CrawlerKind];
 
 /**
- * A character's full name. Its return type is spelled out rather than read off
- * `CHARACTERS` because `SPEAKERS` heads its lines with it, and `SPEAKERS` is
- * what `CharacterDef.speakerId` is typed against: an inferred type here would
- * make the two definitions depend on each other.
+ * Crawler `kind`'s name, bare. Text shown on screen takes
+ * {@link crawlerDisplayName} and text for the AI takes {@link crawlerAIName}
+ * instead. Read when the text is built, never captured at load: the human's
+ * name is the player's and is not known until a run has one.
  */
-function characterFormalName(id: CharacterId): string {
-  return CHARACTERS[id].formalName;
+export function crawlerName(kind: CrawlerKind): string {
+  return kind === 'human' ? playerIdentity().name : playerCharacter(kind).displayName;
+}
+
+/** Crawler `kind`'s name, ready to set into a line of on-screen text. Never stored and never sent to the AI. */
+export function crawlerDisplayName(kind: CrawlerKind): string {
+  return isolateForDisplay(crawlerName(kind));
+}
+
+/** How every summary, quest, item and action result sent to the AI names the human crawler. */
+export const HUMAN_CRAWLER_AI_NAME = 'the human crawler';
+
+/**
+ * Crawler `kind` as the AI is told of them. The human's typed name is player
+ * text the AI server fences as untrusted, so it travels only as
+ * `humanCrawler.name` in the session context and never inside other text.
+ */
+export function crawlerAIName(kind: CrawlerKind): string {
+  return kind === 'human' ? HUMAN_CRAWLER_AI_NAME : playerCharacter(kind).displayName;
 }

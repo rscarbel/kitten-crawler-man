@@ -86,18 +86,6 @@ export const DAVE_TILES_PER_WALK_CYCLE = WALK_GROUND_PER_CYCLE_PX / TILE_SIZE;
  */
 const DAVE_HEAD_LIFT_TILES = DAVE_LOOK.figureExtent.spriteTopAboveTilePx / TILE_SIZE;
 
-/**
- * How much room above the tile origin the tile-anchored overhead UI already
- * reserves for itself: the "…" bubble and the Space prompt hang off the
- * speaker's tile, and half a tile clears a figure about a tile tall.
- */
-const TILE_ANCHORED_UI_CLEARANCE_TILES = 0.5;
-
-/** Extra pixels overhead UI rises to clear him, beyond the half tile it already assumes. */
-export function daveOverheadLift(tileSize: number): number {
-  return Math.max(0, (DAVE_HEAD_LIFT_TILES - TILE_ANCHORED_UI_CLEARANCE_TILES) * tileSize);
-}
-
 /** The top of his art over the tile whose top edge is at `sy`, before a drawn row has been measured. */
 export function daveHeadTop(sy: number, tileSize: number): number {
   return sy - DAVE_HEAD_LIFT_TILES * tileSize;

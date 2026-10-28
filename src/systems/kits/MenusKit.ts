@@ -17,7 +17,7 @@ import { playDrinkGesture } from '../../creatures/humanGestures';
 import { displayHp } from '../../core/party/crawlerFormulas';
 import { ITEM_DEF, type InventoryItem, type ItemId } from '../../core/items/defs/ItemDefs';
 import { itemIsTradable } from '../../core/items/inventory/itemTrade';
-import { crawlerName } from '../../characters/characters';
+import { crawlerDisplayName } from '../../characters/characters';
 import { type CrawlerKind } from '../../core/skills/SkillManager';
 import {
   POTION_EFFECT_SOUND_DELAY,
@@ -285,11 +285,11 @@ export class MenusKit {
       kind === 'human'
         ? {
             id: 'human',
-            name: crawlerName('human'),
+            name: crawlerDisplayName('human'),
             owner: pm.human,
             heldItemId: deps.heldItemId?.() ?? null,
           }
-        : { id: 'cat', name: crawlerName('cat'), owner: pm.cat };
+        : { id: 'cat', name: crawlerDisplayName('cat'), owner: pm.cat };
     const restrictions = deps.inventoryRestrictions;
     return new InventoryScreen({
       actions: this.inventoryActions,
@@ -301,7 +301,7 @@ export class MenusKit {
       },
       coins: () => partyCoins(pm.human, pm.cat),
       coinSplit: () =>
-        `${crawlerName('human')} ${pm.human.coins} · ${crawlerName('cat')} ${pm.cat.coins}`,
+        `${crawlerDisplayName('human')} ${pm.human.coins} · ${crawlerDisplayName('cat')} ${pm.cat.coins}`,
       cooldownFor: (item) => this.itemCooldowns.get(cooldownKeyOf(item)) ?? null,
       restrictions: restrictions === undefined ? undefined : () => restrictions(),
       onBlockedDrag: () => deps.onBlockedInventoryDrag?.(),

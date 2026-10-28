@@ -31,7 +31,8 @@ import { ALL_STATS, STAT_DEFS } from '../../core/party/stats';
 import {
   AI_CHARACTER_CAROLINE,
   TARGET_PARAM,
-  crawlerName,
+  crawlerNameForAI,
+  displayNamer,
   formatSeconds,
   levelDefOf,
   notifyPlayer,
@@ -43,7 +44,7 @@ import {
 } from './helpers';
 import { LOW_HP_PERCENT } from './governor';
 import { enumParam, intParam, optionalEnumParam, optionalIntParam, textParam } from './schema';
-import { ok, refused, type AIActionDef, type AISceneContext } from './types';
+import { ok, refused, type AIActionDef, type AISceneContext, type ResultLine } from './types';
 
 const SPAWN_COOLDOWN_MS = 45_000;
 const ELITE_COOLDOWN_MS = 180_000;
@@ -296,7 +297,7 @@ const spawnMob: AIActionDef = {
       spawned++;
     }
     if (spawned === 0) return refused('no fair ground to spawn on near the crawler');
-    return ok(`spawned ${spawned}x ${snakeToWords(type)} (${placement})`);
+    return ok(() => `spawned ${spawned}x ${snakeToWords(type)} (${placement})`);
   },
 };
 
@@ -338,7 +339,7 @@ const spawnElite: AIActionDef = {
     // The cap every bounty mark carries: an elite may hit hard, never from full to nothing.
     mob.blowCapShareOfTargetHp = BOUNTY_MAX_BLOW_HP_SHARE;
     notifyPlayer(scene, `Elite incoming: ${name}`, { tone: 'danger', urgent: true });
-    return ok(`spawned elite ${snakeToWords(type)} "${name}" at level ${eliteLevel}`);
+    return ok(() => `spawned elite ${snakeToWords(type)} "${name}" at level ${eliteLevel}`);
   },
 };
 
@@ -433,12 +434,14 @@ const applyStatus: AIActionDef = {
   refusal: ({ params, scene }) => {
     const crawler = resolveTarget(scene, params.get(TARGET_PARAM));
     const status = params.get(APPLY_STATUS);
-    if (!crawler.isAlive || crawler.isKnockedOut) return `${crawlerName(scene, crawler)} is down`;
-    if (crawler.hasStatus(status)) return `${crawlerName(scene, crawler)} already has ${status}`;
+    if (!crawler.isAlive || crawler.isKnockedOut)
+      return `${crawlerNameForAI(scene, crawler)} is down`;
+    if (crawler.hasStatus(status))
+      return `${crawlerNameForAI(scene, crawler)} already has ${status}`;
     const effect: AIStatusEffect = AI_STATUS_EFFECTS[status];
     const added = effect.make?.() ?? null;
     if (effect.harmful && isAtOrUnderLowHealth(hpAfterStatuses(crawler, added), crawler.maxHp)) {
-      return `${status} could take ${crawlerName(scene, crawler)} to ${LOW_HP_PERCENT}% HP or less`;
+      return `${status} could take ${crawlerNameForAI(scene, crawler)} to ${LOW_HP_PERCENT}% HP or less`;
     }
     return null;
   },
@@ -446,7 +449,7 @@ const applyStatus: AIActionDef = {
     const crawler = resolveTarget(scene, params.get(TARGET_PARAM));
     const status = params.get(APPLY_STATUS);
     AI_STATUS_EFFECTS[status].apply(crawler);
-    return ok(`${snakeToWords(status)} on ${crawlerName(scene, crawler)}`);
+    return ok((names) => `${snakeToWords(status)} on ${names.crawler(crawler)}`);
   },
 };
 
@@ -461,14 +464,16 @@ const removeStatus: AIActionDef = {
   refusal: ({ params, scene }) => {
     const crawler = resolveTarget(scene, params.get(TARGET_PARAM));
     const status = params.get(REMOVE_STATUS);
-    return crawler.hasStatus(status) ? null : `${crawlerName(scene, crawler)} has no ${status}`;
+    return crawler.hasStatus(status)
+      ? null
+      : `${crawlerNameForAI(scene, crawler)} has no ${status}`;
   },
   execute({ params, scene }) {
     const crawler = resolveTarget(scene, params.get(TARGET_PARAM));
     const status = params.get(REMOVE_STATUS);
     const cleared = crawler.cureStatuses([status]);
     if (cleared === 0) return refused(`${status} could not be lifted`);
-    return ok(`cured ${snakeToWords(status)} on ${crawlerName(scene, crawler)}`);
+    return ok((names) => `cured ${snakeToWords(status)} on ${names.crawler(crawler)}`);
   },
 };
 
@@ -508,7 +513,7 @@ const modifyStat: AIActionDef = {
     if (params.get(STAT_DELTA) === 0) return 'a change of zero is no change';
     const crawler = resolveTarget(scene, params.get(TARGET_PARAM));
     if (crawler.tempStatMods.length > 0) {
-      return `${crawlerName(scene, crawler)} already has a temporary stat change`;
+      return `${crawlerNameForAI(scene, crawler)} already has a temporary stat change`;
     }
     return null;
   },
@@ -530,13 +535,14 @@ const modifyStat: AIActionDef = {
     if (delta < 0 && cutsDeeper && isAtOrUnderLowHealth(projectedHp, crawler.maxHp)) {
       crawler.tempStatMods.splice(crawler.tempStatMods.indexOf(mod), 1);
       return refused(
-        `that would take ${crawlerName(scene, crawler)} to ${LOW_HP_PERCENT}% HP or less`,
+        `that would take ${crawlerNameForAI(scene, crawler)} to ${LOW_HP_PERCENT}% HP or less`,
       );
     }
     crawler.syncHpToMaxHp();
     const signed = delta > 0 ? `+${delta}` : `${delta}`;
-    const summary = `${signed} ${STAT_DEFS[stat].code} for ${crawlerName(scene, crawler)} (${formatSeconds(seconds)})`;
-    notifyPlayer(scene, `${summary}: ${params.get(STAT_REASON)}`, {
+    const summary: ResultLine = (names) =>
+      `${signed} ${STAT_DEFS[stat].code} for ${names.crawler(crawler)} (${formatSeconds(seconds)})`;
+    notifyPlayer(scene, `${summary(displayNamer(scene))}: ${params.get(STAT_REASON)}`, {
       tone: delta > 0 ? 'success' : 'warning',
     });
     return ok(summary);
@@ -558,15 +564,18 @@ const heal: AIActionDef = {
   maxPerFloor: HEALS_PER_FLOOR,
   refusal: ({ params, scene }) => {
     const crawler = resolveTarget(scene, params.get(TARGET_PARAM));
-    if (!crawler.isAlive || crawler.isKnockedOut) return `${crawlerName(scene, crawler)} is down`;
-    return crawler.hp >= crawler.maxHp ? `${crawlerName(scene, crawler)} is at full HP` : null;
+    if (!crawler.isAlive || crawler.isKnockedOut)
+      return `${crawlerNameForAI(scene, crawler)} is down`;
+    return crawler.hp >= crawler.maxHp ? `${crawlerNameForAI(scene, crawler)} is at full HP` : null;
   },
   execute({ params, scene }) {
     const crawler = resolveTarget(scene, params.get(TARGET_PARAM));
     const amount = Math.max(1, Math.round((crawler.maxHp * params.get(HEAL_PERCENT)) / PERCENT));
     const before = crawler.hp;
     crawler.hp = Math.min(crawler.maxHp, crawler.hp + amount);
-    return ok(`healed ${crawlerName(scene, crawler)} for ${Math.round(crawler.hp - before)} HP`);
+    return ok(
+      (names) => `healed ${names.crawler(crawler)} for ${Math.round(crawler.hp - before)} HP`,
+    );
   },
 };
 
@@ -594,12 +603,13 @@ const setHp: AIActionDef = {
   },
   refusal: ({ params, scene }) => {
     const crawler = resolveTarget(scene, params.get(TARGET_PARAM));
-    if (!crawler.isAlive || crawler.isKnockedOut) return `${crawlerName(scene, crawler)} is down`;
+    if (!crawler.isAlive || crawler.isKnockedOut)
+      return `${crawlerNameForAI(scene, crawler)} is down`;
     const target = setHpLanding(crawler, params.get(SET_HP_PERCENT));
     const lowering = target < crawler.hp;
     const afterStatuses = target - pendingStatusDamage(crawler.statusEffects);
     if (lowering && isAtOrUnderLowHealth(afterStatuses, crawler.maxHp)) {
-      return `${crawlerName(scene, crawler)}'s afflictions would carry them to ${LOW_HP_PERCENT}% HP or less`;
+      return `${crawlerNameForAI(scene, crawler)}'s afflictions would carry them to ${LOW_HP_PERCENT}% HP or less`;
     }
     return null;
   },
@@ -607,7 +617,7 @@ const setHp: AIActionDef = {
     const crawler = resolveTarget(scene, params.get(TARGET_PARAM));
     const percent = params.get(SET_HP_PERCENT);
     crawler.hp = setHpLanding(crawler, percent);
-    return ok(`set ${crawlerName(scene, crawler)} to ${percent}% HP`);
+    return ok((names) => `set ${names.crawler(crawler)} to ${percent}% HP`);
   },
 };
 
@@ -661,7 +671,7 @@ const adjustLevelTimer: AIActionDef = {
     const sign = movedSeconds >= 0 ? '+' : '-';
     const shown = `Collapse timer ${sign}${formatSeconds(movedSeconds)}`;
     notifyPlayer(scene, shown, { tone: delta > 0 ? 'success' : 'danger', urgent: delta < 0 });
-    return ok(shown);
+    return ok(() => shown);
   },
 };
 

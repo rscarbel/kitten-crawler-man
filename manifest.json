@@ -2,7 +2,7 @@
   "id": "/kitten-crawler-world/",
   "name": "Kitten Crawler World",
   "short_name": "Kitten Crawler",
-  "description": "A free browser dungeon crawler: play as Ryan and Belle, his tortoiseshell cat, fight through procedurally generated floors, beat bosses, and collect loot.",
+  "description": "A free browser dungeon crawler: name your own human crawler and play them beside Belle, a tortoiseshell cat; fight through procedurally generated floors, beat bosses, and collect loot.",
   "lang": "en",
   "dir": "ltr",
   "start_url": "/kitten-crawler-world/",
@@ -45,14 +45,14 @@
       "sizes": "1280x720",
       "type": "image/jpeg",
       "form_factor": "wide",
-      "label": "Ryan, a man in a light-blue shirt, throws a punch at a sword-wielding goblin while Belle, a black tortoiseshell cat, watches his back in a torchlit dungeon cell block"
+      "label": "The human crawler, a man in a light-blue shirt, throws a punch at a sword-wielding goblin while Belle, a black tortoiseshell cat, watches his back in a torchlit dungeon cell block"
     },
     {
       "src": "src/images/website/screenshot-narrow.jpg",
       "sizes": "720x1280",
       "type": "image/jpeg",
       "form_factor": "narrow",
-      "label": "Ryan and Belle, a man in a light-blue shirt and a black tortoiseshell cat, stand in a torchlit dungeon cell block as a sword-wielding goblin closes in"
+      "label": "The human crawler and Belle, a man in a light-blue shirt and a black tortoiseshell cat, stand in a torchlit dungeon cell block as a sword-wielding goblin closes in"
     }
   ]
 }

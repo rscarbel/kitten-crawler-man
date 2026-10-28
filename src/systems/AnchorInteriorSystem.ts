@@ -28,7 +28,7 @@ import type { GameMap } from '../map/GameMap';
 import type { BuildingId } from '../map/buildingIds';
 import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
-import type { ResidentId } from './townResidents';
+import type { ResidentId } from '../core/state/residentIds';
 import type { NPCMarkerType } from '../creatures/QuestNPC';
 import { TILE_SIZE } from '../core/constants';
 import { QUEST_SLOT_IDX } from '../core/items/defs/ItemDefs';

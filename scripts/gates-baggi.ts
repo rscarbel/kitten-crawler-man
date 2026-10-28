@@ -29,7 +29,8 @@ import {
 import { BAGGI_FIGURE } from '../src/sprites/art/baggiFigure.js';
 import { BAGGI_STANDING_STATE, BAGGI_WALK_STATE } from '../src/sprites/baggiSprite.js';
 import { BAGGI_CORPSE_FIGURE, BAGGI_CORPSE_STATE } from '../src/sprites/art/baggiCorpseArt.js';
-import { HUMAN_FIGURE } from '../src/sprites/art/humanFigure.js';
+import { undressedHumanFigure } from '../src/sprites/art/humanFigure.js';
+import { activeHumanLook } from '../src/sprites/humanSprite.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 
 const RGBA_STRIDE = 4;
@@ -261,11 +262,11 @@ const HUMAN_REFERENCE_STATE = 'idle';
  * look reaches the rig only through the options her bake passes.
  */
 function lookIsolationFailures(): string[] {
-  const before = pixelsOf(HUMAN_FIGURE, HUMAN_REFERENCE_STATE, 0);
+  const before = pixelsOf(undressedHumanFigure(activeHumanLook()), HUMAN_REFERENCE_STATE, 0);
   for (const state of figureStateNames(BAGGI_FIGURE)) {
     bakeFigureCell(BAGGI_FIGURE, state, 0);
   }
-  const after = pixelsOf(HUMAN_FIGURE, HUMAN_REFERENCE_STATE, 0);
+  const after = pixelsOf(undressedHumanFigure(activeHumanLook()), HUMAN_REFERENCE_STATE, 0);
   if (before.data.length === 0) return ['G5 the human reference cell is empty'];
   for (let i = 0; i < before.data.length; i++) {
     if (before.data[i] !== after.data[i]) {

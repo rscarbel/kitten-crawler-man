@@ -65,6 +65,9 @@ import {
 } from './starlightTentLightingFairness.js';
 import { loadGameSpritesInNode } from './nodeCanvasGlobals.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+
+useDevPlayerIdentity();
 
 const ARG_PREFIX_LENGTH = '--='.length;
 

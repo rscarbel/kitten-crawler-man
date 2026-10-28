@@ -1,8 +1,8 @@
 import type { GameProgressInput } from '../auth/AuthClient';
 import type { SaveWriteOutcome } from '../core/save/progressPersistence';
-import { isStoryBeatId, StoryDirector } from './StoryDirector';
-import type { StoryBeatId } from './storyBeats';
-import { isAdviceObjectiveId, type AdviceObjectiveId } from '../systems/daveAdvice';
+import type { StoryDirector } from './StoryDirector';
+import { isStoryBeatId, type StoryBeatId } from './storyBeatIds';
+import { isAdviceObjectiveId, type AdviceObjectiveId } from './adviceObjectiveIds';
 
 /**
  * A save's seen beats, or undefined when the field is not a list. Ids this
@@ -29,11 +29,6 @@ export function parseObjectivesBriefed(raw: unknown): AdviceObjectiveId[] | unde
     if (isAdviceObjectiveId(entry) && !briefed.includes(entry)) briefed.push(entry);
   }
   return briefed;
-}
-
-/** The director a save resumes with. */
-export function storyDirectorFromSave(progress: GameProgressInput): StoryDirector {
-  return new StoryDirector(progress.storyBeatsSeen, progress.objectivesBriefed);
 }
 
 /** What {@link persistStoryBeatsSeen} wrote, for the caller to adopt as its newest save. */

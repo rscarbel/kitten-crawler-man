@@ -1,20 +1,19 @@
 /**
  * The human looks the human harnesses and gates paint, by the id `--look=`
  * names. Every human garment, held item and motion set is fitted on all of
- * them: two builds share one rig and one set of rows, so a fit checked on
- * one says nothing about the other.
+ * them: their builds share one rig and one set of rows, so a fit checked on
+ * one says nothing about another.
  */
 
-import { CHARACTERS, isHumanCharacter } from '../src/characters/characters.js';
+import { HUMAN_CRAWLER_LOOKS } from '../src/characters/humanCrawlerLooks.js';
 import type { HumanLook } from '../src/sprites/looks/humanLook.js';
+import { DAVE_LOOK } from '../src/sprites/looks/humans/dave.js';
 
-/** Every human in the character registry, so a new human is gated without being listed here. */
-export const HUMAN_LOOKS: readonly HumanLook[] = Object.values(CHARACTERS)
-  .filter(isHumanCharacter)
-  .map((human) => human.look);
+/** Every look the human crawler can wear, and Dave, so a new crawler look is gated without being listed here. */
+export const HUMAN_LOOKS: readonly HumanLook[] = [...Object.values(HUMAN_CRAWLER_LOOKS), DAVE_LOOK];
 
 /** The look a harness paints when `--look=` names none. */
-const DEFAULT_HUMAN_LOOK_ID = CHARACTERS.ryan.look.id;
+const DEFAULT_HUMAN_LOOK_ID = HUMAN_CRAWLER_LOOKS.male_light.id;
 
 const LOOK_FLAG_PREFIX = '--look=';
 

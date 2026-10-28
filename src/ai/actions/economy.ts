@@ -2,6 +2,7 @@
 import {
   ITEM_DEF,
   isItemId,
+  itemAIName,
   wearerAllows,
   wearerOf,
   type ItemId,
@@ -13,7 +14,7 @@ import {
   AI_CHARACTER_CAROLINE,
   MS_PER_SECOND,
   TARGET_PARAM,
-  crawlerName,
+  crawlerNameForAI,
   formatSeconds,
   notifyPlayer,
   resolveTarget,
@@ -108,7 +109,7 @@ const giveItem: AIActionDef = {
     const wearer = wearerOf(item);
     const kind = crawler === call.scene.getHuman() ? 'human' : 'cat';
     if (wearer !== undefined && !wearerAllows(wearer, kind)) {
-      return `${crawlerName(call.scene, crawler)} cannot use ${ITEM_DEF[item].name}`;
+      return `${crawlerNameForAI(call.scene, crawler)} cannot use ${itemAIName(item)}`;
     }
     return null;
   },
@@ -117,7 +118,7 @@ const giveItem: AIActionDef = {
     const crawler = resolveTarget(scene, params.get(TARGET_PARAM));
     const quantity = params.get(GIFT_QUANTITY);
     addToBag(crawler, item, quantity);
-    return ok(`gave ${ITEM_DEF[item].name} x${quantity} to ${crawlerName(scene, crawler)}`);
+    return ok((names) => `gave ${names.item(item)} x${quantity} to ${names.crawler(crawler)}`);
   },
 };
 
@@ -145,21 +146,21 @@ const removeItem: AIActionDef = {
     const crawler = resolveTarget(scene, params.get(TARGET_PARAM));
     // Equipped gear sits in the bag too; taking it would strip what they are wearing.
     if (crawler.inventory.equipment.isEquipped(item)) {
-      return `${crawlerName(scene, crawler)} is wearing their ${ITEM_DEF[item].name}`;
+      return `${crawlerNameForAI(scene, crawler)} is wearing their ${itemAIName(item)}`;
     }
     return crawler.inventory.countOf(item) > 0
       ? null
-      : `${crawlerName(scene, crawler)} has no ${ITEM_DEF[item].name}`;
+      : `${crawlerNameForAI(scene, crawler)} has no ${itemAIName(item)}`;
   },
   execute({ params, scene }) {
     const item = params.get(ITEM);
     const crawler = resolveTarget(scene, params.get(TARGET_PARAM));
     if (crawler.inventory.equipment.isEquipped(item)) return refused('that item is being worn');
     const taken = Math.min(params.get(TAKE_QUANTITY), crawler.inventory.countOf(item));
-    if (taken === 0) return refused(`${crawlerName(scene, crawler)} has none to take`);
+    if (taken === 0) return refused(`${crawlerNameForAI(scene, crawler)} has none to take`);
     crawler.inventory.removeItems(item, taken);
     crawler.onInventoryChanged();
-    return ok(`took ${ITEM_DEF[item].name} x${taken} from ${crawlerName(scene, crawler)}`);
+    return ok((names) => `took ${names.item(item)} x${taken} from ${names.crawler(crawler)}`);
   },
 };
 
@@ -194,7 +195,7 @@ const giveCoins: AIActionDef = {
       tone: 'success',
       icon: 'coin',
     });
-    return ok(`paid ${crawlerName(scene, crawler)} ${amount} coins`);
+    return ok((names) => `paid ${names.crawler(crawler)} ${amount} coins`);
   },
 };
 
@@ -227,7 +228,7 @@ const fineCoins: AIActionDef = {
       tone: 'warning',
       icon: 'coin',
     });
-    return ok(`fined ${crawlerName(scene, crawler)} ${amount} coins`);
+    return ok((names) => `fined ${names.crawler(crawler)} ${amount} coins`);
   },
 };
 
@@ -279,7 +280,7 @@ function priceAction(
         tone: isSale ? 'success' : 'warning',
         icon: 'coin',
       });
-      return ok(`${label} for ${formatSeconds(seconds)}`);
+      return ok(() => `${label} for ${formatSeconds(seconds)}`);
     },
   };
 }

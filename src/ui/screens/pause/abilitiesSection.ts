@@ -15,7 +15,7 @@ import {
 } from '../../../core/skills/AbilityManager';
 import type { Inventory } from '../../../core/items/inventory/Inventory';
 import { HOTBAR_COUNT } from '../../../core/items/defs/ItemDefs';
-import { crawlerName } from '../../../characters/characters';
+import { crawlerDisplayName } from '../../../characters/characters';
 import { type CrawlerKind } from '../../../core/skills/SkillManager';
 import { centerIn, grid, inset, splitV, type Rect } from '../../core/geom';
 import type { Ui } from '../../core/UiRoot';
@@ -51,17 +51,19 @@ const SLOT_KEY_CORNER = 0.5;
 /** The bag rows' Add button is this many control heights wide. */
 const ADD_BUTTON_WIDTH_CONTROLS = 3;
 
-const CRAWLER_CHOICES: readonly Choice<CrawlerKind>[] = [
-  { value: 'human', label: crawlerName('human') },
-  { value: 'cat', label: crawlerName('cat') },
-];
+function crawlerChoices(): readonly Choice<CrawlerKind>[] {
+  return [
+    { value: 'human', label: crawlerDisplayName('human') },
+    { value: 'cat', label: crawlerDisplayName('cat') },
+  ];
+}
 
 function xpFraction(state: AbilityState): number {
   return state.xpToNextLevel === Infinity ? 1 : Math.min(1, state.xp / state.xpToNextLevel);
 }
 
 function ownerLabel(state: AbilityState): string {
-  return crawlerName(state.owner);
+  return crawlerDisplayName(state.owner);
 }
 
 /** The largest square in `r` that shares its top-left corner. */
@@ -315,7 +317,7 @@ function renderHotbar(
   const { space, size } = ui.theme;
   choiceRow(layout, {
     id: 'hotbar-crawler',
-    choices: CRAWLER_CHOICES,
+    choices: crawlerChoices(),
     selected: crawler,
     onPick: pick,
   });

@@ -1,4 +1,4 @@
-import type { PlayerSnapshot } from '../core/save/PlayerSnapshot';
+import type { PlayerSnapshot } from '../core/save/playerSnapshotFormat';
 import type { SaveWriteOutcome } from '../core/save/progressPersistence';
 import { createWheelLedger, type WheelLedger } from '../core/save/WheelLedger';
 import { createAttackCowState, type AttackCowState } from '../core/state/AttackCowState';

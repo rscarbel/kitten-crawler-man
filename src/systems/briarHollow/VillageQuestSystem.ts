@@ -77,9 +77,10 @@ import {
   TREBUCHET_HEIGHT_TILES,
   WALL_TIERS,
 } from './structureRules';
-import { crawlerName } from '../../characters/characters';
+import { crawlerDisplayName } from '../../characters/characters';
 import type { CrawlerKind } from '../../core/skills/SkillManager';
-import { BRAMBLEWICK, FENNA, OREN, TIKKA, type VillagerId } from '../../dialog/scripts/briarHollow';
+import { BRAMBLEWICK, FENNA, OREN, TIKKA } from '../../dialog/scripts/briarHollow';
+import { type VillagerId } from '../../core/quests/villagerIds';
 import type { ConversationRequest, ConversationTopic } from '../../dialog/request';
 import {
   KEEP_TALKING,
@@ -171,9 +172,28 @@ export const STONE_GATHERED_LINE = {
   cat: "Oren said find Tikka when we have wood and stone. We have both! Let's go see Tikka.",
 } as const satisfies Record<CrawlerKind, string>;
 
+/**
+ * Who a narrated quest line is headed with: one of the crawlers, whose name
+ * is read when the line is shown, or a speaker named outright.
+ */
+export type QuestLineSpeaker =
+  | { readonly kind: 'crawler'; readonly crawler: CrawlerKind }
+  | { readonly kind: 'named'; readonly name: string };
+
+/** The name a quest line's box is headed with. */
+export function questLineSpeakerName(speaker: QuestLineSpeaker): string {
+  return speaker.kind === 'crawler' ? crawlerDisplayName(speaker.crawler) : speaker.name;
+}
+
 /** What the Mayor shouts once the wall is up, summoning both crawlers to hear his ask. */
-export const MAYOR_SHOUT_SUMMONS_SPEAKER = 'Mayor Bramblewick [shouting]';
-export const MAYOR_SHOUT_SUMMONS_TEXT = `${crawlerName('human')}, ${crawlerName('cat')}, come and speak with me. I have something for you.`;
+export const MAYOR_SHOUT_SUMMONS_SPEAKER = {
+  kind: 'named',
+  name: 'Mayor Bramblewick [shouting]',
+} as const satisfies QuestLineSpeaker;
+
+export function mayorShoutSummonsText(): string {
+  return `${crawlerDisplayName('human')}, ${crawlerDisplayName('cat')}, come and speak with me. I have something for you.`;
+}
 
 /** What the fortifications stand at, for the journal's fortifying-phase tally. */
 export interface FortificationTally {
@@ -235,7 +255,7 @@ export interface VillageQuestSystemDeps {
    * dismissed — the place to move a phase whose arrow must not jump while
    * the line is still on screen.
    */
-  readonly showQuestLine: (speaker: string, text: string, onClosed?: () => void) => void;
+  readonly showQuestLine: (speaker: QuestLineSpeaker, text: string, onClosed?: () => void) => void;
   /** Queues a "New Item!" card; cards halt the world, so they are only raised after a conversation. */
   readonly enqueueReward: (reward: GrantedReward) => void;
   /** Runs once every queued card has been read. */
@@ -376,7 +396,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
     onClosed: () => void,
   ): void {
     const kind = this.activeCrawlerKind();
-    this.deps.showQuestLine(crawlerName(kind), line[kind], onClosed);
+    this.deps.showQuestLine({ kind: 'crawler', crawler: kind }, line[kind], onClosed);
   }
 
   // ── Polling: steps the world itself finishes, not a conversation ─────────
@@ -440,7 +460,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
       case 'build_wall':
         if (!this.mayorSummonsRequested && hasWoodenWall(tallyFortifications(this.deps.state))) {
           this.mayorSummonsRequested = true;
-          this.deps.showQuestLine(MAYOR_SHOUT_SUMMONS_SPEAKER, MAYOR_SHOUT_SUMMONS_TEXT, () => {
+          this.deps.showQuestLine(MAYOR_SHOUT_SUMMONS_SPEAKER, mayorShoutSummonsText(), () => {
             this.mayorSummonsRequested = false;
             this.setPhase('summoned_by_mayor');
           });

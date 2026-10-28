@@ -37,7 +37,7 @@ import { constructionUnlocked } from '../../core/quests/villageUnlocks';
 import { isVillageUnderSiege } from '../../core/quests/villageQuestPhase';
 import { TILE_SIZE } from '../../core/constants';
 import type { NPCMarkerType } from '../../creatures/QuestNPC';
-import type { VillagerId } from '../../dialog/scripts/briarHollow';
+import type { VillagerId } from '../../core/quests/villagerIds';
 import type { ConversationTopic } from '../../dialog/request';
 import type { TilePoint } from '../../map/town/townPlan';
 import type { Player } from '../../Player';

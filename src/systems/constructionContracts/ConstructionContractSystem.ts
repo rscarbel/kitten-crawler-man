@@ -34,7 +34,7 @@ import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { NPCMarkerType } from '../../creatures/QuestNPC';
 import type { Conversation } from '../../dialog/Conversation';
 import { contractThanksLines } from '../../dialog/scripts/contractThanks';
-import type { VillagerId } from '../../dialog/scripts/briarHollow';
+import type { VillagerId } from '../../core/quests/villagerIds';
 import type { GameMap } from '../../map/GameMap';
 import type { TilePoint } from '../../map/town/townPlan';
 import { BUILDINGS, doorwayTiles, outwardStep } from '../../map/overworld/briarHollowLayout';

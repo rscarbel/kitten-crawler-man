@@ -24,7 +24,7 @@
  * only when a figure declares nothing to time.
  */
 
-import { PAINT_BENCH_SUBJECTS } from '../src/dev/paintBenchSubjects.js';
+import { paintBenchSubjects } from '../src/dev/paintBenchSubjects.js';
 import { humanFigureWearing } from '../src/sprites/art/human/appearance.js';
 import { humanItemGarments } from '../src/sprites/garments/itemLooks.js';
 import { outfitOf } from '../src/sprites/garments/outfit.js';
@@ -64,7 +64,9 @@ function timeAverageMs(run: () => void): number {
   return Number(end - start) / NANOSECONDS_PER_MILLISECOND / TIMED_ITERATIONS;
 }
 
-if (PAINT_BENCH_SUBJECTS.length === 0) {
+const subjects = paintBenchSubjects();
+
+if (subjects.length === 0) {
   console.error('No painted figures are registered in src/dev/paintBenchSubjects.ts.');
   process.exitCode = 1;
 }
@@ -74,7 +76,7 @@ console.log(
     `${'direct'.padStart(MS_COLUMN)}${'bake'.padStart(MS_COLUMN)}  verdict`,
 );
 
-for (const subject of PAINT_BENCH_SUBJECTS) {
+for (const subject of subjects) {
   const { def, state } = subject;
   const frames = def.states.get(state)?.frames;
   if (frames === undefined || frames < 1) {

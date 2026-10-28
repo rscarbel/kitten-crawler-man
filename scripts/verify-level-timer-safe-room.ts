@@ -35,6 +35,8 @@ const { dungeonOptionsForLevel } = await import('../src/levels/dungeonOptions.js
 const { level1 } = await import('../src/levels/level1.js');
 const { level2 } = await import('../src/levels/level2.js');
 const { CutsceneKit } = await import('../src/systems/kits/CutsceneKit.js');
+const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js');
+useDevPlayerIdentity();
 
 type LevelDef = typeof level1;
 type Scene = InstanceType<typeof DungeonScene>;

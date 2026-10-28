@@ -7,10 +7,10 @@ import { ABILITY_DEFS } from '../../../abilities/abilityDefs';
 import {
   ACHIEVEMENT_DEFS,
   achievementProgress,
-  isAchievementId,
   type AchievementDef,
 } from '../../../core/progression/AchievementManager';
-import { crawlerName } from '../../../characters/characters';
+import { isAchievementId } from '../../../core/progression/achievementSave';
+import { crawlerDisplayName } from '../../../characters/characters';
 import { ITEM_DEF } from '../../../core/items/defs/ItemDefs';
 import type { Rarity } from '../../../core/items/defs/rarity';
 import { type CrawlerKind } from '../../../core/skills/SkillManager';
@@ -176,7 +176,7 @@ function crawlerAchievements(layout: SectionLayout, ctx: PauseContext, crawler: 
   const { ui } = layout;
   const { space } = ui.theme;
   const manager = ctx.achievements[crawler];
-  layout.heading(crawlerName(crawler), ui.theme.palette.crawler[crawler]);
+  layout.heading(crawlerDisplayName(crawler), ui.theme.palette.crawler[crawler]);
   const listed = listedFor(ctx, crawler);
   const aiAwards = manager.aiAchievements();
   if (!listed.some((entry) => entry.unlocked) && aiAwards.length === 0) {

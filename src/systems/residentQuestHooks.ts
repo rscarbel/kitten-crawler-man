@@ -11,7 +11,7 @@
 
 import type { Player } from '../Player';
 import type { NPCMarkerType } from '../creatures/QuestNPC';
-import type { ResidentId } from './townResidents';
+import type { ResidentId } from '../core/state/residentIds';
 
 export interface ResidentQuestHook {
   /** Whether the shared conversation is showing one of this hook's beats right now. */

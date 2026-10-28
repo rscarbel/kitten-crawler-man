@@ -16,7 +16,7 @@
  */
 
 import { speaksInCarolineFrame } from '../ai/AIChatFeed';
-import { crawlerName } from '../characters/characters';
+import { crawlerAIName, crawlerDisplayName } from '../characters/characters';
 import type { Rarity } from '../core/items/defs/rarity';
 import type { EventBus } from '../core/EventBus';
 import { TILE_SIZE } from '../core/constants';
@@ -106,7 +106,7 @@ export class AIChallengeSystem implements GameSystem {
         if (this.active?.spec.template === 'no_potion_until_boss') this.complete();
       }),
       bus.on('crawlerKnockedOut', () => {
-        if (this.active !== null) this.fail('a crawler was knocked out');
+        if (this.active !== null) this.fail('had a crawler knocked out');
       }),
       bus.on('playerDied', () => {
         if (this.active !== null) this.fail('died');
@@ -246,7 +246,7 @@ export class AIChallengeSystem implements GameSystem {
     if (!rules.countsKills || isBoss || !mobMatches(active.spec.mobType, typeKey)) return;
     const counts = rules.killer === 'party' || killer === this.deps.cat;
     if (!counts) {
-      if (rules.failOnOtherKiller) this.fail(`${crawlerName('human')} landed the blow`);
+      if (rules.failOnOtherKiller) this.fail(`let ${crawlerAIName('human')} land the blow`);
       return;
     }
     active.kills++;
@@ -268,7 +268,7 @@ export class AIChallengeSystem implements GameSystem {
     if (active === null) return;
     this.active = null;
     const side: CrawlerSide = this.deps.human.isActive ? 'Human' : 'Cat';
-    const name = crawlerName(side === 'Human' ? 'human' : 'cat');
+    const name = crawlerDisplayName(side === 'Human' ? 'human' : 'cat');
     this.deps.grantReward(side, active.spec.rewardRarity);
     this.deps.bus.emit('challengeCompleted', {
       ...this.summaryOf(active),

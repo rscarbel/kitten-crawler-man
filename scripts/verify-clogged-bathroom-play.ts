@@ -138,6 +138,8 @@ const { parsePersistedWorldState } = await import('../src/core/save/PersistedWor
 const { tileIndex } = await import('../src/map/tileIndex.js');
 const { settings } = await import('../src/core/input/Settings.js');
 const { DIFFICULTY_ORDER } = await import('../src/core/difficulty/difficultyProfiles.js');
+const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js');
+useDevPlayerIdentity();
 
 type Scene = InstanceType<typeof DungeonScene>;
 type LiveMap = InstanceType<typeof GameMap>;

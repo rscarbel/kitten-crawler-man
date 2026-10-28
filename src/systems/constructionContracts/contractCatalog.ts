@@ -9,7 +9,7 @@
  */
 
 import type { ResourceCost } from '../../core/items/gathering/partyResources';
-import type { VillagerId } from '../../dialog/scripts/briarHollow';
+import type { VillagerId } from '../../core/quests/villagerIds';
 import { contractPropId } from '../../map/contractAreas';
 import { BUILDINGS } from '../../map/overworld/briarHollowLayout';
 import {
@@ -19,7 +19,7 @@ import {
   type BuildingId,
   type BriarHollowBuildingId,
 } from '../../map/buildingIds';
-import type { ResidentId } from '../townResidents';
+import type { ResidentId } from '../../core/state/residentIds';
 
 /** The three materials a contract is costed in. */
 export type ContractMaterialId = 'wood_board' | 'rope' | 'stone';

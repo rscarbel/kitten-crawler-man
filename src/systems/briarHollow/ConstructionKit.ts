@@ -12,7 +12,7 @@
  * starts it fresh.
  */
 
-import { crawlerName } from '../../characters/characters';
+import { crawlerDisplayName } from '../../characters/characters';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import {
   allocCanvas,
@@ -1345,7 +1345,7 @@ export class ConstructionKit {
       this.deps.menus.constructionMenu.surface('construction-menu', () => {
         const active = this.active();
         return {
-          crawlerName: crawlerName(active === this.deps.human ? 'human' : 'cat'),
+          crawlerName: crawlerDisplayName(active === this.deps.human ? 'human' : 'cat'),
           skills: active.craftSkills,
           partyCount: (id) => partyCount(this.deps.human, this.deps.cat, id),
         };

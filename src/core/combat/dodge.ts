@@ -22,7 +22,7 @@ const NEAR_LIMIT_SHARE = 0.95;
 const EVASIVENESS_FOR_NEAR_LIMIT = 100;
 /**
  * The curve's e-folding length: 100 points of evasiveness (100 spent points for
- * Ryan, 50 for Belle) reach 95% of the soft limit.
+ * the human, 50 for Belle) reach 95% of the soft limit.
  */
 const EVASIVENESS_DODGE_SCALE = EVASIVENESS_FOR_NEAR_LIMIT / -Math.log(1 - NEAR_LIMIT_SHARE);
 

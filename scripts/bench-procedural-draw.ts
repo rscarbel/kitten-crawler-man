@@ -60,7 +60,7 @@ import {
 } from '../src/sprites/art/deinonychusArt.js';
 import { drawBallRoll } from '../src/sprites/art/ballOfSwineArt.js';
 import { drawBipedFront } from '../src/sprites/art/biped/figure.js';
-import { playerCharacter } from '../src/characters/characters.js';
+import { activeHumanLook } from '../src/sprites/humanSprite.js';
 import { restingPose as humanRestingPose } from '../src/sprites/art/biped/rig.js';
 import { restPose as catRestPose } from '../src/sprites/art/catArt.js';
 import {
@@ -261,8 +261,7 @@ const SUBJECTS: readonly Subject[] = [
   {
     name: 'human',
     frameSize: 192,
-    paint: (ctx) =>
-      drawBipedFront(asGameContext(ctx), humanPose, { look: playerCharacter('human').look }),
+    paint: (ctx) => drawBipedFront(asGameContext(ctx), humanPose, { look: activeHumanLook() }),
   },
   {
     name: 'cat',

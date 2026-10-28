@@ -124,6 +124,9 @@ import { hudLayout } from '../src/ui/hud/hudLayout';
 import { NO_INSETS, resolveViewport } from '../src/ui/core/viewport';
 import { BuildingSystem, downedPartnerEntryRefusal } from '../src/systems/BuildingSystem';
 import { crawlerName } from '../src/characters/characters';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+
+useDevPlayerIdentity();
 
 // ── Reporting ────────────────────────────────────────────────────────────────
 

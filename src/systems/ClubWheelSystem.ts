@@ -18,14 +18,16 @@
  * it back, and the wheel closes back to the picker once the chain resolves.
  */
 
-import { crawlerFormalName } from '../characters/characters';
+import { crawlerDisplayName } from '../characters/characters';
+import { crawlerPronouns } from '../characters/crawlerPronouns';
 import type { AudioManager } from '../audio/AudioManager';
 import type { AudioScope } from '../audio/AudioScope';
 import type { SoundId } from '../audio/sounds';
 import type { Player } from '../Player';
 import { ITEM_DEF, type ItemId } from '../core/items/defs/ItemDefs';
 import { RewardChestScreen } from '../ui/screens/rewardChest/RewardChestScreen';
-import { CHEST_SOURCE_TITLES, type GrantedLine } from '../loot/rewardChest';
+import { CHEST_SOURCE_TITLES } from '../loot/rewardChest';
+import { type GrantedLine } from '../core/progression/achievementSave';
 import { partyCoins, spendPartyCoins, canAffordCoins } from '../core/party/partyCoins';
 import {
   saveOutcomeCommitted,
@@ -368,7 +370,7 @@ function prizeLine(
   recipient: WheelCrawler,
   cowName: PetName | null,
 ): string {
-  const name = crawlerFormalName(recipient);
+  const name = crawlerDisplayName(recipient);
   const { prize } = wedge;
   if (prize.kind === 'pet') return attackCowPrizeLine(cowName);
   if (prize.kind === 'gold') return `Paid straight into ${name}'s purse`;
@@ -389,10 +391,11 @@ function prizeLine(
  * line only when the run named her before she was won.
  */
 function attackCowPrizeLine(cowName: PetName | null): string {
-  const owner = crawlerFormalName('human');
+  const owner = crawlerDisplayName('human');
+  const theirs = crawlerPronouns('human').possessive;
   return cowName === null
-    ? `An attack cow of his very own for ${owner}`
-    : `${cowName}, an attack cow of his very own for ${owner}`;
+    ? `An attack cow of ${theirs} very own for ${owner}`
+    : `${cowName}, an attack cow of ${theirs} very own for ${owner}`;
 }
 
 /** What a single named item does, for under the prize screen's title. */

@@ -99,12 +99,16 @@ import { siegeVictorySurface } from '../../ui/hud/siegeVictoryCelebration';
 import { ARROW_PRIORITY, drawArrowAbovePlayer, type ArrowCandidate } from '../../ui/WorldArrow';
 import { palette } from '../../ui/theme/tokens';
 import type { MusicClaims } from '../../audio/AudioScope';
-import { VillageQuestSystem } from './VillageQuestSystem';
+import {
+  questLineSpeakerName,
+  type QuestLineSpeaker,
+  VillageQuestSystem,
+} from './VillageQuestSystem';
 import { VillageQuestGuide } from './VillageQuestGuide';
 import { BlueprintsQuestSystem } from './BlueprintsQuestSystem';
 import { ConstructionContractSystem } from '../constructionContracts/ConstructionContractSystem';
 import { pinningContractSite } from '../constructionContracts/contractContactPin';
-import type { VillagerId } from '../../dialog/scripts/briarHollow';
+import type { VillagerId } from '../../core/quests/villagerIds';
 import type { RatkinSoldier } from '../../creatures/RatkinSoldier';
 import { RecruiterSystem } from './RecruiterSystem';
 import type { Conversation } from '../../dialog/Conversation';
@@ -128,7 +132,7 @@ interface WorldPoint {
 
 /** A narrated line queued for the shared conversation, and what to run once it has been dismissed. */
 interface PendingQuestLine {
-  readonly speaker: string;
+  readonly speaker: QuestLineSpeaker;
   readonly text: string;
   readonly onClosed?: () => void;
 }
@@ -670,7 +674,7 @@ export class BriarHollowKit {
    * open village menu clears, never stacked on top of one. `onClosed`, when
    * given, runs once the box the line opened has been dismissed.
    */
-  showQuestLine(speaker: string, text: string, onClosed?: () => void): void {
+  showQuestLine(speaker: QuestLineSpeaker, text: string, onClosed?: () => void): void {
     // A scene with no audio manager is a headless harness with nothing to
     // show the line on and nobody to press through it; treat it as read at
     // once rather than stalling whatever waits on `onClosed`.
@@ -697,7 +701,7 @@ export class BriarHollowKit {
     if (next === undefined) return;
     this.activeQuestLine = next;
     this.activeQuestLineHandle = this.deps.conversation.open({
-      lines: [transientSpeaker(next.speaker, 'questLine').line(next.text)],
+      lines: [transientSpeaker(questLineSpeakerName(next.speaker), 'questLine').line(next.text)],
       reward: null,
       questRelated: true,
       ending: {

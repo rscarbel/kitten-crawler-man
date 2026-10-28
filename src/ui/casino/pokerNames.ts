@@ -3,7 +3,7 @@
  * table would call them by, never more than eight letters.
  */
 
-import type { RegularId } from '../../systems/casino/poker/npc/regulars';
+import type { RegularId } from '../../systems/casino/poker/npc/regularIds';
 
 export const REGULAR_SHORT_NAMES: Readonly<Record<RegularId, string>> = {
   wren: 'Wren',

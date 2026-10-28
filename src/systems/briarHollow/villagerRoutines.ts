@@ -7,10 +7,11 @@
  */
 
 import type { VillagerAnchorKind } from '../../map/overworld/briarHollowSite';
-import type { RatkinCastId, RatkinSoldierId } from '../../sprites/art/ratkin/cast';
+import type { RatkinCastId } from '../../sprites/art/ratkin/cast';
+import type { SoldierId } from '../../core/quests/villagerIds';
 
 /** Every cast member who lives a routine rather than taking orders. */
-export type CivilianCastId = Exclude<RatkinCastId, RatkinSoldierId>;
+export type CivilianCastId = Exclude<RatkinCastId, SoldierId>;
 
 /** The ground a villager's routine keeps them on. */
 export type VillagerBounds = 'village' | 'quarry';

@@ -20,7 +20,8 @@ import { bakeFigureCell } from './figureSheet.js';
 import { destructiblePropSheetPlans } from '../src/sprites/sheets/destructiblePropSheets.js';
 import { floorTwoPropVariantSheetPlans } from '../src/sprites/sheets/propVariantSheets.js';
 import { remainsSheetPlans } from '../src/sprites/sheets/remainsSheets.js';
-import { HUMAN_FIGURE } from '../src/sprites/art/humanFigure.js';
+import { undressedHumanFigure } from '../src/sprites/art/humanFigure.js';
+import { activeHumanLook } from '../src/sprites/humanSprite.js';
 import type { PropSheetPlan } from '../src/sprites/sheets/propSheetPlan.js';
 
 /** Matches TILE_SIZE in src/core/constants.ts. */
@@ -42,8 +43,9 @@ const outDir = resolve(flag('out', 'preview/props/breakable-gallery'));
 const zoom = Number.parseInt(flag('zoom', String(DEFAULT_ZOOM)), 10);
 mkdirSync(outDir, { recursive: true });
 
-const human = bakeFigureCell(HUMAN_FIGURE, 'idle', 0);
-const humanScale = IN_GAME_TILE / HUMAN_FIGURE.tileScale;
+const humanFigure = undressedHumanFigure(activeHumanLook());
+const human = bakeFigureCell(humanFigure, 'idle', 0);
+const humanScale = IN_GAME_TILE / humanFigure.tileScale;
 
 interface Row {
   readonly sheet: Canvas;
@@ -67,8 +69,8 @@ function rowsOf(plans: ReadonlyArray<PropSheetPlan>): Row[] {
 function render(name: string, plans: ReadonlyArray<PropSheetPlan>, scale: number): void {
   const rows = rowsOf(plans);
   const cellScale = (plan: PropSheetPlan) => (IN_GAME_TILE / plan.tileScale) * scale;
-  const humanW = HUMAN_FIGURE.frameWidth * humanScale * scale;
-  const humanH = HUMAN_FIGURE.frameHeight * humanScale * scale;
+  const humanW = humanFigure.frameWidth * humanScale * scale;
+  const humanH = humanFigure.frameHeight * humanScale * scale;
   const rowHeight = (row: Row) => Math.max(row.plan.frameHeight * cellScale(row.plan), humanH);
   const rowWidth = (row: Row) => humanW + row.frames * row.plan.frameWidth * cellScale(row.plan);
   const blockWidth = Math.max(...rows.map(rowWidth)) + PADDING * 2;
@@ -88,7 +90,7 @@ function render(name: string, plans: ReadonlyArray<PropSheetPlan>, scale: number
       const s = cellScale(row.plan);
       const h = rowHeight(row);
       const groundY = y + h - (row.plan.frameHeight - row.plan.tileY - row.plan.tileScale) * s;
-      const humanGround = (HUMAN_FIGURE.tileY + HUMAN_FIGURE.tileScale) * humanScale * scale;
+      const humanGround = (humanFigure.tileY + humanFigure.tileScale) * humanScale * scale;
       ctx.drawImage(human, left + PADDING, groundY - humanGround, humanW, humanH);
       for (let frame = 0; frame < row.frames; frame++) {
         ctx.drawImage(

@@ -7,9 +7,9 @@
  * and whether it is optional is Caroline's to say (`caroline.ts`).
  */
 
-import { crawlerName } from '../../characters/characters';
-import type { AdviceObjectiveId } from '../../systems/daveAdvice';
-import type { DebriefBossType } from '../../systems/daveDebrief';
+import { crawlerDisplayName } from '../../characters/characters';
+import type { AdviceObjectiveId } from '../../story/adviceObjectiveIds';
+import type { DebriefBossType } from '../../core/mobs/debriefBossTypes';
 import type { TutorialState } from '../../systems/TutorialController';
 import type { DaveLines } from '../../story/storyTypes';
 import { speakerLines } from '../line';
@@ -55,7 +55,8 @@ export const DAVE_TUTORIAL_REMINDERS = {
   CAT_EQUIPPED_MAGIC_MISSILE: say.line('Fire your magic missile over the fence at the goblin.'),
   CAT_SHOT_GUARD: null,
   AWAITING_SWITCH_TO_HUMAN: say.line(
-    `Switch back to ${crawlerName('human')}. The Switch button, or the switch key on a keyboard.`,
+    () =>
+      `Switch back to ${crawlerDisplayName('human')}. The Switch button, or the switch key on a keyboard.`,
   ),
   SWITCHED_TO_HUMAN: say.line('Use the Follower button. Call the cat over first.'),
   CAT_ARRIVED: null,

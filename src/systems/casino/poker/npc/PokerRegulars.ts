@@ -65,7 +65,7 @@ import {
 } from './personality';
 import { listAt } from './listAt';
 import { lineOf, type PerceivedTendencies } from './ranges';
-import { REGULAR_IDS, isRegularId, type RegularId } from './regulars';
+import { REGULAR_IDS, isRegularId, type RegularId } from './regularIds';
 import {
   conditionRate,
   tellConditionPrior,

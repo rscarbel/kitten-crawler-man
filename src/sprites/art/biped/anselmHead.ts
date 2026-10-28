@@ -2,7 +2,7 @@
  * Brother Anselm's tonsure: the crown shaved bare and a ring of greying hair
  * left round the head above the ears, cut short. Painted in the head's own
  * frame by the rig's head painter, in the head-local units the cast heads
- * and Ryan's hair use (`human/castHead.ts`, `ryanHead.ts`): x a fraction of
+ * and the crawler's hair use (`human/castHead.ts`, `crawlerHair.ts`): x a fraction of
  * `HEAD_RX` head-on and of `HEAD_DEPTH` edge-on, y of `HEAD_RY`, the crown
  * at −1.2 and the brow near −0.3.
  *

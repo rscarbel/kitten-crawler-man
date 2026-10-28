@@ -12,11 +12,7 @@
 import { TILE_SIZE } from '../../../core/constants';
 import { progressFrameIndex, timeFrameIndex } from '../../../core/spriteAssets/SpriteRenderer';
 import { mulberry32 } from '../../../sprites/person/rng';
-import {
-  emptyHandedHumanFigure,
-  rowFrameAtTicks,
-  rowLengthInTicks,
-} from '../../../sprites/humanSprite';
+import { rowFrameAtTicks, rowLengthInTicks } from '../../../sprites/humanSprite';
 import {
   GROUND_OFFSET_IN_TILE,
   HUMAN_ROW_TABLE,
@@ -51,6 +47,7 @@ import {
   CAT_IDLE_ROW,
   prewarmTitleCast,
   TITLE_DEINONYCHUS_STAGE,
+  titleHumanFigure,
 } from '../titleCast';
 
 /** The heroes' plane: near, but behind the logo and the spotlight. */
@@ -339,14 +336,31 @@ export function heroesLayer(): TitleLayer {
     const tile = def.id === activeCatFigure().id ? drawnAt.catTile : drawnAt.humanTile;
     return TitleHeroCells.densityFor(def, tile, drawnAt.pixelRatio);
   };
+  /** The human figure the hero is drawn as and whose rows the cells hold; another look chosen on the title lets them go. */
+  let heldHumanFigure = titleHumanFigure();
   const holdIdleRows = (): void => {
-    heroCells.holdResident(emptyHandedHumanFigure(), HUMAN_IDLE_ROW);
+    heroCells.holdResident(heldHumanFigure, HUMAN_IDLE_ROW);
     heroCells.holdResident(activeCatFigure(), CAT_IDLE_ROW);
   };
-  const humanGate = new GestureGate<HumanFidgetRow>((row) => {
-    const figure = emptyHandedHumanFigure();
-    return heroCells.isReady(figure, row, densityOf(figure));
-  });
+  const adoptHumanLook = (): void => {
+    const figure = titleHumanFigure();
+    if (figure === heldHumanFigure) return;
+    heroCells.releaseFigure(heldHumanFigure);
+    heldHumanFigure = figure;
+    holdIdleRows();
+  };
+  /**
+   * The dive keeps the look it started with: a new look's cells would be
+   * painted mid-dive, and the run brings its own. A look chosen on the
+   * creation screen is switched to before the dive, by `onIdentityChosen`.
+   */
+  const followHumanLook = (clock: TitleClock): void => {
+    if (clock.state === 'dive') return;
+    adoptHumanLook();
+  };
+  const humanGate = new GestureGate<HumanFidgetRow>((row) =>
+    heroCells.isReady(heldHumanFigure, row, densityOf(heldHumanFigure)),
+  );
   const catGate = new GestureGate<CatBreakRow>((row) => {
     const figure = activeCatFigure();
     return heroCells.isReady(figure, row, densityOf(figure));
@@ -367,7 +381,7 @@ export function heroesLayer(): TitleLayer {
     );
     if (human !== null && human.startMs !== lastWarmedHumanStart) {
       lastWarmedHumanStart = human.startMs;
-      heroCells.request(emptyHandedHumanFigure(), human.row);
+      heroCells.request(heldHumanFigure, human.row);
     }
     const cat = gestureStartingSoon(
       timeMs,
@@ -450,6 +464,12 @@ export function heroesLayer(): TitleLayer {
     onEvent: (fire) => {
       if (fire.id === 'deinonychusDash') deinonychusDash = fire;
     },
+    // The idle row is painted here, at confirm, so the dive that starts next
+    // never stalls to paint a cell of it.
+    onIdentityChosen: () => {
+      adoptHumanLook();
+      heroCells.bakeRowNow(heldHumanFigure, HUMAN_IDLE_ROW, densityOf(heldHumanFigure));
+    },
     render: (ctx, clock, stage, camera) => {
       renderDeinonychus(ctx, clock, stage, camera);
 
@@ -458,6 +478,7 @@ export function heroesLayer(): TitleLayer {
       const pixelRatio = pixelRatioOf(ctx);
       drawnAt = { catTile: tile, humanTile, pixelRatio };
       if (heroCells.beginFrame()) holdIdleRows();
+      followHumanLook(clock);
       applyTitleCamera(ctx, camera, HEROES_DEPTH);
       const humanX = stage.heroSpot.x + HUMAN_FOOT_OFFSET_TILES.x * tile;
       const humanY = stage.heroSpot.y + HUMAN_FOOT_OFFSET_TILES.y * tile;
@@ -483,7 +504,7 @@ export function heroesLayer(): TitleLayer {
         (target) => {
           const humanLeft = humanX - humanTile * HALF;
           const humanTop = humanY - humanTile * GROUND_OFFSET_IN_TILE;
-          const humanFigure = emptyHandedHumanFigure();
+          const humanFigure = heldHumanFigure;
           heroCells.draw(
             target,
             humanFigure,

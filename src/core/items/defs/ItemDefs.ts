@@ -1,4 +1,4 @@
-import { crawlerName } from '../../../characters/characters';
+import { crawlerDisplayName, HUMAN_CRAWLER_AI_NAME } from '../../../characters/characters';
 import { ownEntry } from '../../util/guards';
 import type { StatId } from '../../party/stats';
 import type { CrawlerKind, SkillId } from '../../skills/SkillManager';
@@ -353,6 +353,12 @@ export type ItemDef = Omit<InventoryItem, 'quantity' | 'type'> & {
    * could use it — a signature drop that belongs to one of them.
    */
   readonly lootRecipient?: CrawlerKind;
+  /**
+   * The name told to the AI, for an item whose `name` carries the player's
+   * typed name: that reaches the AI only where its server fences it as player
+   * text, so this one names them by `crawlerAIName` instead.
+   */
+  readonly aiName?: string;
 } & (WornItemFields | WeaponItemFields | UnwornItemFields);
 
 /**
@@ -826,7 +832,11 @@ const ITEM_DEFS = defineItemDefs({
   doomsday_scenario: {
     id: 'doomsday_scenario',
     category: 'quest',
-    name: `${crawlerName('human')}'s Doomsday Scenario`,
+    /** The player's name is theirs to choose, so it is read whenever the item is named. */
+    get name(): string {
+      return `${crawlerDisplayName('human')}'s Doomsday Scenario`;
+    },
+    aiName: `${HUMAN_CRAWLER_AI_NAME}'s Doomsday Scenario`,
     stackable: false,
     canHotlist: false,
     canDrop: false,
@@ -1342,6 +1352,27 @@ export function itemFitsSubSlot(
   return subSlotFamily(item.equipSubSlot) === subSlotFamily(subSlot);
 }
 
+/** Whether `kind` may wear `id` in section `slot`. A null kind is a wearer of any kind. */
+export function kindMayWear(kind: CrawlerKind | null, slot: EquipSlot, id: ItemId): boolean {
+  if (kind === null) return true;
+  const wearer = wearerOf(id);
+  if (wearer === undefined || !wearerAllows(wearer, kind)) return false;
+  return crawlerHasSection(kind, slot);
+}
+
+/**
+ * Whether `kind` can wear `id` under the sub-slot `key`: the key names a
+ * sub-slot this crawler has, the item fits it, and the crawler may wear the
+ * item. A null kind is a wearer of any kind.
+ */
+export function mayEquipUnder(kind: CrawlerKind | null, key: string, id: ItemId): boolean {
+  const address = equipAddressOfKey(kind, key);
+  if (address === null) return false;
+  const def = ITEM_DEF[id];
+  if (def.equipSlot !== address.slot || !itemFitsSubSlot(def, address.subSlot)) return false;
+  return kindMayWear(kind, address.slot, id);
+}
+
 export function isItemId(s: string): s is ItemId {
   return ownEntry(ITEM_DEF, s) !== undefined;
 }
@@ -1369,6 +1400,12 @@ export const ANCHOR_SHARD_IDS = [
  */
 export function itemCanHotlist(id: ItemId): boolean {
   return ITEM_DEF[id].canHotlist;
+}
+
+/** Item `id`'s name as told to the AI: never one carrying the player's typed name. */
+export function itemAIName(id: ItemId): string {
+  const def = ITEM_DEF[id];
+  return def.aiName ?? def.name;
 }
 
 /**

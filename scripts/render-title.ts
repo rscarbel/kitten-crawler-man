@@ -33,7 +33,6 @@ const {
   IGNITION_DURATION_MS,
   LOGO_IMPACT_AT_MS,
   SPOTLIGHT_ON_AT_MS,
-  TYPEWRITER_START_AT_MS,
 } = await import('../src/scenes/title/titleTimeline.js');
 const { requestEnvironmentSheetsForGroups } =
   await import('../src/sprites/sheets/environmentSheets.js');
@@ -102,8 +101,6 @@ const DIVE_CATCH_MS = DIVE_DURATION_MS * DIVE_CATCH_SHARE;
 const AFTER_BLACKOUT_MS = 120;
 /** Just after a beat lands, where its flash and its shake are strongest. */
 const JUST_AFTER_BEAT_MS = 60;
-/** Partway through the welcome line's typing. */
-const MID_TYPING_MS = 500;
 /** Partway through the menu's staggered entrance. */
 const MID_ENTRANCE_MS = 120;
 /** Early in the idle loop, as the fast path lands a returning player on it. */
@@ -114,8 +111,7 @@ const RENDER_EVENT_SEED = 1;
 /** How far ahead to look for each beat's first showing. */
 const EVENT_PLAN_HORIZON_MS = 600000;
 /** How far into each beat its render is caught, as a share of its length: its most telling instant. */
-const EVENT_CATCH_SHARE: Readonly<Partial<Record<TitleEventId, number>>> = {
-  carolineQuip: 0.6,
+const EVENT_CATCH_SHARE: Readonly<Record<TitleEventId, number>> = {
   goblinPeek: 0.5,
   lootGlint: 0.5,
   deinonychusDash: 0.42,
@@ -195,7 +191,6 @@ const MOMENTS: readonly NamedMoment[] = [
   })),
   ignitionAt('ignition-spotlight', SPOTLIGHT_ON_AT_MS + JUST_AFTER_BEAT_MS),
   ignitionAt('ignition-impact', LOGO_IMPACT_AT_MS + JUST_AFTER_BEAT_MS),
-  ignitionAt('ignition-typing', TYPEWRITER_START_AT_MS + MID_TYPING_MS),
   ignitionAt('ignition-impact-reduced', LOGO_IMPACT_AT_MS + JUST_AFTER_BEAT_MS, true),
   aliveAt('alive-9000ms-reduced', MID_ALIVE_MS, true),
   {

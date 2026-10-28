@@ -7,7 +7,8 @@
  * with no cast can only be given a bespoke painter.
  */
 
-import type { ResidentId, ResidentSpeciesOf } from '../systems/townResidents';
+import type { ResidentSpeciesOf } from '../systems/townResidents';
+import type { ResidentId } from '../core/state/residentIds';
 import type { CrowdSpecies, TownSpecies } from '../systems/townSpecies';
 import { townCastLook } from '../sprites/person/townCastLooks';
 import { hawkfolkLookById, type HawkfolkLookId } from '../sprites/art/hawkfolk/cast';

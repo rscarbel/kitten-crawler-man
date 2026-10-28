@@ -4,11 +4,11 @@
  * (`src/systems/CrawlerBarkSystem.ts`).
  */
 
-import { crawlerName } from '../../characters/characters';
+import { crawlerDisplayName } from '../../characters/characters';
 import { speakerLines } from '../line';
 import type { BarkLine, NonEmpty } from '../line';
 
-const ryan = speakerLines('ryan');
+const humanCrawler = speakerLines('human_crawler');
 const belle = speakerLines('belle');
 
 export const CRAWLER_BARKS: {
@@ -30,11 +30,11 @@ export const CRAWLER_BARKS: {
   readonly blueprintsLeftBehind: { readonly human: BarkLine; readonly cat: BarkLine };
 } = {
   /** The human's reaction to the cat going down, on the `crawlerKnockedOut` event. */
-  catKnockedOut: ryan.bark(`Hang in there, ${crawlerName('cat')}! I got you!`),
+  catKnockedOut: humanCrawler.bark(() => `Hang in there, ${crawlerDisplayName('cat')}! I got you!`),
   wardExplainer: {
     human: [
-      ryan.bark("Huh. The ones glowing blue aren't taking a scratch."),
-      ryan.bark('Shield fairy first, then. Easy.'),
+      humanCrawler.bark("Huh. The ones glowing blue aren't taking a scratch."),
+      humanCrawler.bark('Shield fairy first, then. Easy.'),
     ],
     cat: [
       belle.bark("The blue ones won't get hurt. They're all glowy."),
@@ -42,11 +42,11 @@ export const CRAWLER_BARKS: {
     ],
   },
   scytheLeftBehind: {
-    human: ryan.bark('Oops. We left the scythe behind.'),
+    human: humanCrawler.bark('Oops. We left the scythe behind.'),
     cat: belle.bark('We forgot the scythe! Poor scythe.'),
   },
   blueprintsLeftBehind: {
-    human: ryan.bark('Oops. We left the blueprints behind.'),
+    human: humanCrawler.bark('Oops. We left the blueprints behind.'),
     cat: belle.bark('We forgot the blueprints! The paper ones.'),
   },
 };

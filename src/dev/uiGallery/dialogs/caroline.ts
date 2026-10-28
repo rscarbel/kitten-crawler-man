@@ -1,14 +1,14 @@
 /**
  * Caroline's frame in every variant on one sheet, over a dark backdrop and a
- * light one: the full box settled, decoding and unfolding, the compact toast
- * and the sheer title line. Each moment is a fixed point on her clock, so the
+ * light one: the full box settled, decoding and unfolding, and the compact
+ * toast. Each moment is a fixed point on her clock, so the
  * capture never depends on how fast the render ran.
  */
 
-import { crawlerName } from '../../../characters/characters';
+import { crawlerDisplayName } from '../../../characters/characters';
 import { splitV, type Rect } from '../../../ui/core/geom';
 import type { Surface, Ui } from '../../../ui/core/UiRoot';
-import { panelWidths } from '../../../ui/theme/tokens';
+import { motion, panelWidths } from '../../../ui/theme/tokens';
 import {
   CAROLINE_FULLY_OPEN,
   carolineBox,
@@ -23,17 +23,19 @@ import type { DialogFixture } from './fixture';
 
 /** A fixed moment on her clock, so the scanlines, dot and scrambled glyphs hold still between captures. */
 const FIXTURE_NOW_MS = 1234;
-/** Part-way through a reveal: some characters locked, the newest still scrambling. */
-const DECODING_AT_MS = 900;
 /** Part-way through the open: the line drawn, the box half unfolded. */
 const UNFOLDING_AT_MS = 200;
 
-const SETTLED_MESSAGE = `${crawlerName('human')}. ${crawlerName('cat')}. Floor 2 is active. The stairwell is 140 tiles north-east.`;
+function settledMessage(): string {
+  return `${crawlerDisplayName('human')}. ${crawlerDisplayName('cat')}. Floor 2 is active. The stairwell is 140 tiles north-east.`;
+}
 const DECODING_MESSAGE =
   'Objective: the east wing holds a level 9 brute. Classification: optional. Reward: rare.';
+const DECODING_SHOWN_FRACTION = 0.5;
+/** Part-way through a reveal: some characters locked, the newest still scrambling. */
+const DECODING_AT_MS = DECODING_MESSAGE.length * DECODING_SHOWN_FRACTION * motion.carolineCharacter;
 const UNFOLDING_MESSAGE = 'Safe room confirmed. Hostiles evicted.';
 const TOAST_MESSAGE = 'Boss eliminated. Time: 4 minutes 12 seconds.';
-const TITLE_MESSAGE = 'Survival probability is not a fixed value. Raise it.';
 
 type Backdrop = 'dark' | 'light';
 
@@ -63,22 +65,22 @@ function framesSurface(id: string, backdrop: Backdrop, shown: () => boolean): Su
         w: width,
         h: viewport.h - space.lg * 2,
       };
+      const settledText = settledMessage();
       const toast = layoutCarolineToast(ui, width, TOAST_MESSAGE);
       const rows = splitV(
         column,
         [
-          measureCarolineBox(ui, width, SETTLED_MESSAGE),
+          measureCarolineBox(ui, width, settledText),
           measureCarolineBox(ui, width, DECODING_MESSAGE),
           measureCarolineBox(ui, width, UNFOLDING_MESSAGE),
           toast.h,
-          measureCarolineBox(ui, width, TITLE_MESSAGE),
         ],
         space.md,
       );
-      const [settled, decoding, unfolding, toastRow, title] = rows;
+      const [settled, decoding, unfolding, toastRow] = rows;
       carolineBox(ui, settled, {
-        message: SETTLED_MESSAGE,
-        reveal: carolineSettled(SETTLED_MESSAGE),
+        message: settledText,
+        reveal: carolineSettled(settledText),
         nowMs: FIXTURE_NOW_MS,
         open: CAROLINE_FULLY_OPEN,
       });
@@ -98,13 +100,6 @@ function framesSurface(id: string, backdrop: Backdrop, shown: () => boolean): Su
         reveal: carolineSettled(TOAST_MESSAGE),
         nowMs: FIXTURE_NOW_MS,
         open: CAROLINE_FULLY_OPEN,
-      });
-      carolineBox(ui, title, {
-        message: TITLE_MESSAGE,
-        reveal: carolineSettled(TITLE_MESSAGE),
-        nowMs: FIXTURE_NOW_MS,
-        open: CAROLINE_FULLY_OPEN,
-        sheer: true,
       });
     },
   };

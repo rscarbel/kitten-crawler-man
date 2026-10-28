@@ -9,6 +9,7 @@ import { FIXTURES as AI_INTERACTIONS } from './dialogs/aiInteractions';
 import { FIXTURES as BESPOKE } from './dialogs/bespoke';
 import { FIXTURES as CAROLINE } from './dialogs/caroline';
 import { FIXTURES as CASINO } from './dialogs/casino';
+import { FIXTURES as CHARACTER_CREATION } from './dialogs/characterCreation';
 import { FIXTURES as CHOICE } from './dialogs/choice';
 import { FIXTURES as CONVERSATION } from './dialogs/conversation';
 import { FIXTURES as END_SCREENS } from './dialogs/endScreens';
@@ -23,6 +24,7 @@ import { FIXTURES as WHEEL } from './dialogs/wheel';
 export const DIALOG_FIXTURES: readonly DialogFixture[] = [
   ...CHOICE,
   ...PET_NAME,
+  ...CHARACTER_CREATION,
   ...END_SCREENS,
   ...EXPLAINERS,
   ...CONVERSATION,

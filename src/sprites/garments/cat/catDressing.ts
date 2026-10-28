@@ -3,7 +3,7 @@
  * every piece, painting each garment of the outfit that covers that part.
  */
 
-import { playerCharacter } from '../../../characters/characters';
+import { PLAYER_CAT } from '../../../characters/characterLooks';
 import type { CatDressing } from '../../art/catParts';
 import type { CatLook } from '../../looks/catLook';
 import type { GarmentFrameContext } from '../garmentDef';
@@ -15,7 +15,7 @@ export function bareCatOutfit(look: CatLook): Outfit<'cat'> {
 }
 
 /** The player's cat with nothing on. */
-export const BARE_CAT_OUTFIT: Outfit<'cat'> = bareCatOutfit(playerCharacter('cat').look);
+export const BARE_CAT_OUTFIT: Outfit<'cat'> = bareCatOutfit(PLAYER_CAT.look);
 
 /** The dressing that paints `outfit` onto one cell, described by `context`. */
 export function dressCat(outfit: Outfit<'cat'>, context: GarmentFrameContext<'cat'>): CatDressing {

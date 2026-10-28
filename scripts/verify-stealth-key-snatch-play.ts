@@ -25,6 +25,9 @@
 
 import { installBrowserShim } from './browserShim.js';
 import { settleArrival } from './settleArrival.js';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+
+useDevPlayerIdentity();
 
 const VIEWPORT = { width: 1280, height: 720, devicePixelRatio: 1 } as const;
 installBrowserShim(VIEWPORT);

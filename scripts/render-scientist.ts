@@ -21,7 +21,8 @@ import { reportFigureGates } from './figureGates.js';
 import { scientistGateFailures } from './gates-scientist.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { TILE_SIZE } from '../src/core/constants.js';
-import { HUMAN_FIGURE } from '../src/sprites/art/humanFigure.js';
+import { undressedHumanFigure } from '../src/sprites/art/humanFigure.js';
+import { activeHumanLook } from '../src/sprites/humanSprite.js';
 import { buildSkeleton } from '../src/sprites/art/scientistArt.js';
 import {
   ORIGIN_X,
@@ -242,7 +243,7 @@ const SCIENTIST_LINEUP: readonly string[] = [
 /** Each figure stands on one ground line, its tile bottoms aligned, so the heights compare directly. */
 function renderLineup(): Canvas {
   const entries = [
-    ...HUMAN_STATES.map((state) => ({ def: HUMAN_FIGURE, state })),
+    ...HUMAN_STATES.map((state) => ({ def: undressedHumanFigure(activeHumanLook()), state })),
     ...SCIENTIST_LINEUP.map((state) => ({ def: SCIENTIST_FIGURE, state })),
   ];
   const tilePx = TILE_SIZE * LINEUP_SCALE;

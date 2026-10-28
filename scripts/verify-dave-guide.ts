@@ -12,6 +12,10 @@
  *     intro told in a safe room in its place keeps him there.
  *   - Each beat plays once, is in the save the moment it ends, and a director
  *     rebuilt from that save does not play it again.
+ *   - Caroline's floor arrival message, opened with two updates run before a
+ *     frame is drawn (the scene manager's catch-up), stacks above the
+ *     cutscene that opened it and is read to its end with Space alone, and
+ *     still is after a pause and resume.
  *   - Caroline's intel about an objective shows once, however many rooms are
  *     entered while it is current.
  *   - A death rewound to the last save stands Dave in that save's room.
@@ -31,6 +35,9 @@
  */
 
 import { installBrowserShim, ShimEvent } from './browserShim.js';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+
+useDevPlayerIdentity();
 
 const VIEWPORT = { width: 1280, height: 720, devicePixelRatio: 1 } as const;
 const shim = installBrowserShim(VIEWPORT);
@@ -49,12 +56,12 @@ const { level1 } = await import('../src/levels/level1.js');
 const { Conversation } = await import('../src/dialog/Conversation.js');
 const { DaveGuideSystem } = await import('../src/systems/DaveGuideSystem.js');
 const { SafeRoomSystem } = await import('../src/systems/SafeRoomSystem.js');
-const { CutsceneKit } = await import('../src/systems/kits/CutsceneKit.js');
+const { CutsceneKit, CUTSCENE_SURFACE_ID } = await import('../src/systems/kits/CutsceneKit.js');
 const { MenusKit } = await import('../src/systems/kits/MenusKit.js');
 const { safeRoomIdIn, sameSafeRoom } = await import('../src/map/safeRoomId.js');
-const { StoryDirector, STORY_BEAT_ORDER, storyBeat } =
+const { StoryDirector, storyBeat, storyDirectorFromSave } =
   await import('../src/story/StoryDirector.js');
-const { storyDirectorFromSave } = await import('../src/story/storySave.js');
+const { STORY_BEAT_ORDER } = await import('../src/story/storyBeatIds.js');
 const { debriefCheckResults } = await import('./daveGuide/debriefChecks.js');
 const { StoryDelivery, MAX_DAVE_TALK_PAGES } = await import('../src/systems/StoryDelivery.js');
 const { displayPageCount } = await import('../src/dialog/Conversation.js');
@@ -83,6 +90,10 @@ type BeatId = (typeof STORY_BEAT_ORDER)[number];
 const MAX_ARRIVAL_FRAMES = 300;
 /** More frames than his teleport-out takes. */
 const MAX_DEPARTURE_FRAMES = 120;
+/** More drawn frames than floor 1's arrival message takes to come up. */
+const MAX_CAROLINE_ARRIVAL_FRAMES = 600;
+/** Updates the scene manager runs before one drawn frame after a slow frame. */
+const CATCH_UP_UPDATES_PER_DRAW = 2;
 /** Frames a fight near the room is given to lose interest before Caroline must have spoken. */
 const MAX_CALM_FRAMES = 1200;
 /** More presses than any talk has pages, reveals included. */
@@ -488,6 +499,53 @@ async function verifySkippedTutorial(): Promise<void> {
   scene.onExit();
 }
 
+// ── Caroline's arrival message reads with Space after catch-up updates ───
+
+/**
+ * One drawn frame after a slow one: the scene manager's catch-up updates run
+ * back to back, and only then does the drawn frame settle the surface stack.
+ */
+function catchUpFrame(harness: Harness): void {
+  for (let update = 0; update < CATCH_UP_UPDATES_PER_DRAW; update++) harness.scene.update();
+  harness.scene.ui.focusSurfaceId();
+}
+
+async function verifyCarolineArrivalReads(pauseFirst: boolean): Promise<void> {
+  console.log(
+    pauseFirst
+      ? "\nCaroline's arrival message still reads with Space after a pause and resume"
+      : "\nCaroline's arrival message, opened between two drawn frames, reads with Space",
+  );
+  const harness = await openFloorOne({ arrivedOnFloor: true });
+  const { scene, conversation, cutscenes } = harness;
+  const pause = sceneField(scene, 'menus', MenusKit).pauseScreen;
+  for (let tick = 0; tick < MAX_CAROLINE_ARRIVAL_FRAMES && !conversation.isOpen; tick++) {
+    catchUpFrame(harness);
+  }
+  check(conversation.isOpen && cutscenes.isActive, 'her message is up, inside its cutscene');
+  const stack = scene.ui.openSurfaceIds();
+  check(
+    stack.indexOf(CUTSCENE_SURFACE_ID) !== -1 &&
+      stack.indexOf(CUTSCENE_SURFACE_ID) < stack.indexOf('conversation'),
+    `the message stacks above the cutscene holding the party (${stack.join(' < ')})`,
+  );
+  if (pauseFirst) {
+    pressKey('Escape');
+    catchUpFrame(harness);
+    check(pause.isOpen, 'Escape opens the pause menu over it');
+    pressKey('Escape');
+    catchUpFrame(harness);
+    check(!pause.isOpen, 'and Escape closes it again');
+  }
+  for (let press = 0; press < MAX_READ_PRESSES && conversation.isOpen; press++) {
+    pressKey(' ');
+    for (let tick = 0; tick < FRAMES_PER_PRESS; tick++) catchUpFrame(harness);
+  }
+  check(!conversation.isOpen, 'Space reads it to its end and closes it');
+  check(!cutscenes.isActive, 'and the cutscene hands the party back');
+  scene.onExit();
+}
+
 // ── The director, with rooms skipped ──────────────────────────────────────
 
 function verifySkippedRooms(): void {
@@ -697,6 +755,8 @@ function verifyTalkLength(): void {
 
 await verifyRoomsAndBeats();
 await verifyArrivalTiming();
+await verifyCarolineArrivalReads(false);
+await verifyCarolineArrivalReads(true);
 verifyTalkLength();
 await verifySkippedTutorial();
 verifySkippedRooms();

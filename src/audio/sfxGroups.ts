@@ -277,8 +277,19 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'cat_revived',
     'cat_scratch',
     'cat_splash',
-    // Caroline's frame chimes as it opens, and she can speak in any scene.
+    // Caroline's frame chimes as it opens and ticks as her words decode, and she
+    // can speak in any scene.
     'caroline_message_chime',
+    'caroline_text_tick_1',
+    'caroline_text_tick_2',
+    'caroline_text_tick_3',
+    'caroline_text_tick_4',
+    'caroline_text_tick_5',
+    'caroline_text_tick_6',
+    'caroline_text_tick_7',
+    // Dave teleports into the safe room the party walks into, on every floor.
+    'dave_teleport_in',
+    'dave_teleport_out',
     // The Wayfinder's Anchor's channel start / completion — usable from any
     // scene the item can be carried into, same reasoning as `confusing_fog`
     // and `speed_fizz` just below.
@@ -322,7 +333,14 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'human_punch_3',
     'human_punch_weak',
     'human_revived',
+    'human_female_effect_damage_1',
+    'human_female_effect_damage_2',
+    'human_female_effect_damage_3',
+    'human_female_effect_damage_4',
+    'human_female_knocked_out',
+    'human_female_revived',
     'human_seismic_stomp',
+    'seismic_stomp_quake',
     'human_splash',
     'jugg_juice',
     'level_begins',

@@ -58,6 +58,9 @@ import type { Villager } from '../src/systems/briarHollow/Villager';
 import type { VillagerPartyState } from '../src/systems/briarHollow/villagerCircumstances';
 import { GATE_SWING_SECONDS, VillageGate } from '../src/systems/briarHollow/VillageGate';
 import type { BriarHollowGate } from '../src/map/overworld/briarHollowSite';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+
+useDevPlayerIdentity();
 
 const MAP_SIZE = 280;
 const DEFAULT_SEEDS = 3;

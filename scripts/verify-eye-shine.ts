@@ -51,7 +51,7 @@ const { Mob } = await import('../src/creatures/Mob.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
 const { getMercenaryTemplate, MERCENARY_TEMPLATE_IDS } =
   await import('../src/core/party/mercenaryTemplates.js');
-const { RATKIN_SOLDIER_IDS } = await import('../src/sprites/art/ratkin/cast.js');
+const { SOLDIER_IDS } = await import('../src/core/quests/villagerIds.js');
 const { BallOfSwine } = await import('../src/creatures/BallOfSwine.js');
 const { BrindleGrub } = await import('../src/creatures/BrindleGrub.js');
 const { Bugaboo } = await import('../src/creatures/Bugaboo.js');
@@ -120,6 +120,8 @@ const { TheLich } = await import('../src/creatures/TheLich.js');
 const { Troglodyte } = await import('../src/creatures/Troglodyte.js');
 const { Tuskling } = await import('../src/creatures/Tuskling.js');
 const { TutorialGoblin } = await import('../src/creatures/TutorialGoblin.js');
+const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js');
+useDevPlayerIdentity();
 
 type MobInstance = InstanceType<typeof Mob>;
 
@@ -306,7 +308,7 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
     RAISED_RATKIN_LOOKS.map((look) => eyed(`raised ratkin ${look}`, new RaisedRatkin(...at, look))),
   Rat: () => [eyed('rat', new Rat(...at))],
   RatkinSoldier: () =>
-    RATKIN_SOLDIER_IDS.map((id) => eyed(`ratkin soldier ${id}`, new RatkinSoldier(...at, id))),
+    SOLDIER_IDS.map((id) => eyed(`ratkin soldier ${id}`, new RatkinSoldier(...at, id))),
   Remex: () => [eyed('remex', new Remex(...at), 'faceMidBody')],
   RockGolem: () => [eyed('rock golem', new RockGolem(...at))],
   RockGolemBoss: () => [eyed('rock golem boss', new RockGolemBoss(...at))],

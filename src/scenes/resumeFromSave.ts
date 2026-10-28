@@ -13,8 +13,9 @@ import { createWheelLedger } from '../core/save/WheelLedger';
 import { createAttackCowState } from '../core/state/AttackCowState';
 import { withDoubleDamageFrames } from '../core/save/doubleDamageSave';
 import { MusicLibrary } from '../core/music/MusicLibrary';
-import { storyDirectorFromSave } from '../story/storySave';
+import { storyDirectorFromSave } from '../story/StoryDirector';
 import { PetNameBook } from '../core/party/petNames';
+import { setPlayerIdentity } from '../characters/playerIdentity';
 
 /**
  * An ability manager carrying a save's progress.
@@ -69,6 +70,7 @@ export function sceneSetupFromSave(
   save: GameProgressInput,
 ): SceneSetupFromSave {
   const progress = structuredClone(save);
+  setPlayerIdentity(progress.playerIdentity);
   const options: DungeonSceneOptions = { ...baseOptions };
   // Loading straight into a wipe is never recoverable — the same save would
   // reload into the same wipe — so a resumed party always arrives on its feet.

@@ -209,7 +209,7 @@ beside the fixtures. Fixtures live in the server repo, under
 - `npm run ai:replays` writes the scripted ones there: short sessions acted
   out headlessly through the real AI adapter and context builder with a
   scripted clock, so they are the same on every run. `dynamite-incident` is a
-  goblin fight Ryan ends with dynamite that also knocks Belle out, the Trash Gremlin
+  goblin fight the human crawler ends with dynamite that also knocks Belle out, the Trash Gremlin
   boss kill, then "Remember the dynamite?"; `challenge-and-death` is an
   accepted and won challenge, a death, then a question about the challenge.
   `-- --out=<dir>` writes elsewhere.

@@ -1,3 +1,4 @@
+import { crawlerAIName } from '../../characters/characters';
 import { AI_CHARACTERS, type AICharacterDefinition } from '../characters';
 import {
   DODGE_IMPORTANCE,
@@ -5,8 +6,10 @@ import {
   KILL_IMPORTANCE_CAP,
   KILL_IMPORTANCE_PER_KILL,
 } from './eventImportance';
+import { forTheServer, textForTheServer } from './forTheServer';
 import type { JsonObject } from './json';
-import type { CrawlerName, GameEvent } from './types';
+import type { CrawlerKind } from '../../core/skills/SkillManager';
+import type { GameEvent } from './types';
 
 /**
  * Who besides the omniscient characters perceives an event.
@@ -27,7 +30,7 @@ export interface EventDraft {
    * where that crawler stands, not the controlled one: the cat drinking a
    * potion in the safe room is seen there even while the human explores outside.
    */
-  subject?: CrawlerName;
+  subject?: CrawlerKind;
 }
 
 /** Kills inside one fight are reported together once the fight goes quiet for this long. */
@@ -61,17 +64,25 @@ export function perceiversOf(
   return enabled.map((character) => character.name);
 }
 
+/** Who made a kill: a crawler, or `other` for companions, hazards and anything else. */
+type Killer = CrawlerKind | 'other';
+
 interface KillRollup {
   firstAt: number;
   lastAt: number;
   byType: Map<string, number>;
-  byKiller: Map<string, number>;
+  byKiller: Map<Killer, number>;
   witnessedInSafeRoom: boolean;
 }
 
 interface DodgeSample {
   windowStart: number;
-  byCrawler: Map<CrawlerName, number>;
+  byCrawler: Map<CrawlerKind, number>;
+}
+
+/** A summary may open on a name that starts in lower case ("the human crawler"). */
+function asSentence(summary: string): string {
+  return summary.charAt(0).toUpperCase() + summary.slice(1);
 }
 
 function mapToJson(map: ReadonlyMap<string, number>): JsonObject {
@@ -80,10 +91,21 @@ function mapToJson(map: ReadonlyMap<string, number>): JsonObject {
   return out;
 }
 
-function countPhrase(map: ReadonlyMap<string, number>): string {
+/**
+ * The words for a killer in a summary. Tallies are keyed by kind, never by
+ * name, because the player may give the human the cat's name.
+ */
+function killerWords(killer: Killer): string {
+  return killer === 'other' ? 'something else' : crawlerAIName(killer);
+}
+
+function countPhrase<Key extends string>(
+  map: ReadonlyMap<Key, number>,
+  words: (key: Key) => string = (key) => key,
+): string {
   return [...map.entries()]
     .sort((a, b) => b[1] - a[1])
-    .map(([name, count]) => `${count} ${name}`)
+    .map(([key, count]) => `${count} ${words(key)}`)
     .join(', ');
 }
 
@@ -113,7 +135,7 @@ export class GameEventStream {
   }
 
   /** One kill toward the current fight's rollup. `killer` is null for kills no crawler made. */
-  recordKill(mobName: string, killer: CrawlerName | null, now: number, inSafeRoom: boolean): void {
+  recordKill(mobName: string, killer: CrawlerKind | null, now: number, inSafeRoom: boolean): void {
     if (this.kills !== null && now - this.kills.lastAt > KILL_ROLLUP_QUIET_MS) {
       this.flushKills();
     }
@@ -121,18 +143,18 @@ export class GameEventStream {
       firstAt: now,
       lastAt: now,
       byType: new Map<string, number>(),
-      byKiller: new Map<string, number>(),
+      byKiller: new Map<Killer, number>(),
       witnessedInSafeRoom: inSafeRoom,
     };
     this.kills = rollup;
     rollup.lastAt = now;
     rollup.byType.set(mobName, (rollup.byType.get(mobName) ?? 0) + 1);
-    const killerName = killer ?? 'something else';
-    rollup.byKiller.set(killerName, (rollup.byKiller.get(killerName) ?? 0) + 1);
+    const tallied: Killer = killer ?? 'other';
+    rollup.byKiller.set(tallied, (rollup.byKiller.get(tallied) ?? 0) + 1);
   }
 
-  recordDodge(crawler: CrawlerName, now: number): void {
-    const sample = this.dodges ?? { windowStart: now, byCrawler: new Map<CrawlerName, number>() };
+  recordDodge(crawler: CrawlerKind, now: number): void {
+    const sample = this.dodges ?? { windowStart: now, byCrawler: new Map<CrawlerKind, number>() };
     this.dodges = sample;
     sample.byCrawler.set(crawler, (sample.byCrawler.get(crawler) ?? 0) + 1);
   }
@@ -165,7 +187,7 @@ export class GameEventStream {
     if (rollup === null) return;
     const count = [...rollup.byType.values()].reduce((sum, n) => sum + n, 0);
     const seconds = Math.max(1, Math.round((rollup.lastAt - rollup.firstAt) / MS_PER_SECOND));
-    const killers = countPhrase(rollup.byKiller);
+    const killers = countPhrase(rollup.byKiller, killerWords);
     const importance = Math.min(
       KILL_IMPORTANCE_CAP,
       KILL_IMPORTANCE_BASE + KILL_IMPORTANCE_PER_KILL * count,
@@ -181,7 +203,7 @@ export class GameEventStream {
       },
       summary:
         count === 1
-          ? `A ${[...rollup.byType.keys()].join('')} was killed (by ${[...rollup.byKiller.keys()].join('')}).`
+          ? `A ${[...rollup.byType.keys()].join('')} was killed (by ${[...rollup.byKiller.keys()].map(killerWords).join('')}).`
           : `${count} enemies killed in ${seconds}s: ${countPhrase(rollup.byType)} (kills: ${killers}).`,
       importance,
     };
@@ -200,7 +222,7 @@ export class GameEventStream {
       ts: now,
       type: 'playerDodged',
       data: { count: total, seconds, byCrawler: mapToJson(sample.byCrawler) },
-      summary: `Dodged ${total} attack${total === 1 ? '' : 's'} in the last ${seconds}s (${countPhrase(sample.byCrawler)}).`,
+      summary: `Dodged ${total} attack${total === 1 ? '' : 's'} in the last ${seconds}s (${countPhrase(sample.byCrawler, crawlerAIName)}).`,
       importance: DODGE_IMPORTANCE,
     });
   }
@@ -213,7 +235,9 @@ export class GameEventStream {
       .reverse();
   }
 
-  private enqueue(event: GameEvent): void {
+  private enqueue(built: GameEvent): void {
+    const event: GameEvent = { ...built, data: forTheServer(built.data) };
+    if (built.summary !== undefined) event.summary = asSentence(textForTheServer(built.summary));
     this.pending.push(event);
     if (event.witnessedBy !== undefined) {
       this.recentWitnessed.push(event);

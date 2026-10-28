@@ -72,7 +72,7 @@ import {
   scratchPx,
   withComposeLayers,
 } from './figureCompose';
-import { playerCharacter } from '../../characters/characters';
+import { PLAYER_CAT } from '../../characters/characterLooks';
 import type { CatGait, CatLook, CatOutline } from '../looks/catLook';
 import { lateralWalkBack, lateralWalkFront, lateralWalkSide } from './catLateralWalk';
 import { CARDINAL_VIEWS, type CardinalView } from '../facingView';
@@ -1741,7 +1741,7 @@ function catFigure(look: CatLook, outfit: Outfit<'cat'>): FigureDef {
 }
 
 /** How the cat the player controls looks. */
-export const PLAYER_CAT_LOOK: CatLook = playerCharacter('cat').look;
+export const PLAYER_CAT_LOOK: CatLook = PLAYER_CAT.look;
 
 /** The cat the player controls, with nothing on but her coat. */
 export const CAT_FIGURE: FigureDef = catFigure(PLAYER_CAT_LOOK, BARE_CAT_OUTFIT);

@@ -1,9 +1,10 @@
 /**
- * Ryan's trousers and belt: slim charcoal chinos below his shirt's tucked
- * tail, and a black leather belt with a silver buckle over the tuck.
+ * The male crawler's trousers and belt: slim charcoal chinos below the
+ * shirt's tucked tail, and a black leather belt with a silver buckle over the
+ * tuck.
  *
  * The legs are the townsfolk trousers' leg painter in a fixed slate cloth;
- * the seat over his hips is the trouser seat the cast's trousers are painted
+ * the seat over the hips is the trouser seat the cast's trousers are painted
  * with. The belt is painted at the bottom of the shirt's own torso trace, so
  * it sits exactly where the tail is tucked in, in every view.
  */
@@ -39,7 +40,7 @@ const SLATE: GlossRamp = {
   specular: '#7f8897',
 };
 
-export const RYAN_SLATE: LegCloth = { cloth: SLATE, cut: 'slimTrousers' };
+export const SLATE_CHINO_CLOTH: LegCloth = { cloth: SLATE, cut: 'slimTrousers' };
 
 /**
  * A slim cut sits close to his narrow hips: head-on his trousers stand well
@@ -51,32 +52,51 @@ const SLIM_SEAT: SeatFit = {
   across: 0.46,
   depth: 0.58,
   drop: 0.6,
-  style: { kind: 'legs', cut: RYAN_SLATE.cut },
+  style: { kind: 'legs', cut: SLATE_CHINO_CLOTH.cut },
 };
 
-function paintSeat(ctx: Ctx, frame: BipedHipsFrame): void {
-  paintTrouserSeat(ctx, frame.skeleton, frame.view, RYAN_SLATE.cloth, SLIM_SEAT, frame.look.limbs);
+/**
+ * The seat and leg painters of a pair of trousers in `cloth`, the seat cut to
+ * `seat` and let out by the wearer's own seat fullness.
+ */
+export function trouserPainters(
+  cloth: LegCloth,
+  seat: SeatFit,
+): {
+  readonly hips: (ctx: Ctx, frame: BipedHipsFrame) => void;
+  readonly leg: (ctx: Ctx, frame: BipedLegFrame) => void;
+} {
+  return {
+    hips: (ctx, frame) => {
+      const fullness = frame.look.seatFullness;
+      const fitted: SeatFit = {
+        ...seat,
+        across: seat.across * fullness.across,
+        depth: seat.depth * fullness.depth,
+      };
+      paintTrouserSeat(ctx, frame.skeleton, frame.view, cloth.cloth, fitted, frame.look.limbs);
+    },
+    leg: (ctx, frame) => paintLegCloth(ctx, frame, cloth),
+  };
 }
 
-function paintLegs(ctx: Ctx, frame: BipedLegFrame): void {
-  paintLegCloth(ctx, frame, RYAN_SLATE);
-}
+const CHINO_PAINTERS = trouserPainters(SLATE_CHINO_CLOTH, SLIM_SEAT);
 
-export const RYAN_CHINOS = defineGarment({
-  id: 'ryan_chinos',
+export const CHINOS = defineGarment({
+  id: 'chinos',
   name: 'Chinos',
   wearer: 'human',
   base: true,
   layer: 'over',
   region: ['hips', 'leg'],
   paint: {
-    hips: humanEveryView(paintSeat),
-    leg: humanEveryView(paintLegs),
+    hips: humanEveryView(CHINO_PAINTERS.hips),
+    leg: humanEveryView(CHINO_PAINTERS.leg),
   },
 });
 
 /** Black leather, its lit edge only just off black. */
-export const RYAN_BELT_LEATHER = '#141417';
+export const BELT_LEATHER = '#141417';
 const BELT_LIT = '#34343a';
 const BUCKLE = '#c6cbd3';
 const BUCKLE_SHADE = '#6f747d';
@@ -150,7 +170,7 @@ function paintBelt(ctx: Ctx, frame: BipedTorsoFrame, context: GarmentFrameContex
       ctx.moveTo(band[0].x, band[0].y);
       for (const p of band.slice(1)) ctx.lineTo(p.x, p.y);
       ctx.closePath();
-      ctx.fillStyle = RYAN_BELT_LEATHER;
+      ctx.fillStyle = BELT_LEATHER;
       ctx.fill();
       const lipFrom = torso.at(-BELT_OVERREACH, top);
       const lipTo = torso.at(BELT_OVERREACH, top);
@@ -169,8 +189,8 @@ function paintBelt(ctx: Ctx, frame: BipedTorsoFrame, context: GarmentFrameContex
   );
 }
 
-export const RYAN_BELT = defineGarment({
-  id: 'ryan_belt',
+export const LEATHER_BELT = defineGarment({
+  id: 'leather_belt',
   name: 'Belt',
   wearer: 'human',
   base: true,

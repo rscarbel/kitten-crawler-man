@@ -16,13 +16,14 @@ import { aiCameraSpotlight } from './cameraSpotlight';
 import { CHALLENGE_ACTIONS } from './challenge';
 import { COMBAT_ACTIONS } from './combat';
 import { ECONOMY_ACTIONS } from './economy';
+import { aiNamer, displayNamer } from './helpers';
 import { ActionGovernor, hpShieldNote } from './governor';
 import { defaultLedgerStore } from './ledgerStore';
 import { NARRATION_ACTIONS } from './narration';
 import { objectSchema, validateParams } from './schema';
 import { INTERACTION_ACTIONS } from './interactions';
 import { aiActionTimers } from './timers';
-import type { AIActionDef, AIActionResult, AISceneContext, AIToolDefinition } from './types';
+import type { AIActionDef, AISceneContext, AIToolDefinition } from './types';
 import { WORLD_ACTIONS } from './world';
 
 /** The session flag Commentary intensity raises; see `AIIntensityPolicy.commentaryOnly`. */
@@ -75,10 +76,19 @@ export interface AIActionRequest {
   readonly characterName: string;
 }
 
-export interface AIActionOutcome extends AIActionResult {
-  /** The line for the "Caroline intervened" indicator, or null when none should show. */
-  readonly indicator: string | null;
-}
+/**
+ * What a call came to. `detail` is for the AI and names the human crawler as
+ * `HUMAN_CRAWLER_AI_NAME`; `indicator` is for the screen and names them as
+ * the player typed it, so the two are never the same string.
+ */
+export type AIActionOutcome =
+  | {
+      readonly ok: true;
+      readonly detail: string;
+      /** The line for the "Caroline intervened" indicator, or null when none should show. */
+      readonly indicator: string | null;
+    }
+  | { readonly ok: false; readonly detail: string; readonly indicator: null };
 
 function failed(detail: string): AIActionOutcome {
   return { ok: false, detail, indicator: null };
@@ -107,8 +117,8 @@ export function executeAIAction(
     const result = def.execute(call);
     if (!result.ok) return failed(result.detail);
     governor.record(def, call, draw);
-    const indicator = def.showsIndicator === false ? null : result.detail;
-    return { ok: true, detail: result.detail, indicator };
+    const indicator = def.showsIndicator === false ? null : result.line(displayNamer(scene));
+    return { ok: true, detail: result.line(aiNamer(scene)), indicator };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'unexpected error';
     return failed(`${def.name} failed: ${message}`);

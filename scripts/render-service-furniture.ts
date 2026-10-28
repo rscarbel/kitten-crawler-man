@@ -21,7 +21,8 @@ import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 
 installCanvasGlobals();
 const { drawFigureCached } = await import('../src/sprites/figure/figureFrameCache.js');
-const { HUMAN_FIGURE } = await import('../src/sprites/art/humanFigure.js');
+const { undressedHumanFigure } = await import('../src/sprites/art/humanFigure.js');
+const { activeHumanLook } = await import('../src/sprites/humanSprite.js');
 
 function argValue(name: string): string | undefined {
   const prefix = `--${name}=`;
@@ -87,7 +88,15 @@ for (const floor of FLOOR_COLOURS) {
       x += plan.frameWidth * k + CELL_GAP_TILES * tile;
     }
     const footY = y + (plan.tileY + plan.tileScale) * k;
-    drawFigureCached(gameCtx, HUMAN_FIGURE, 'idle', 0, x, footY - tile, tile);
+    drawFigureCached(
+      gameCtx,
+      undressedHumanFigure(activeHumanLook()),
+      'idle',
+      0,
+      x,
+      footY - tile,
+      tile,
+    );
     y += height;
   }
 }

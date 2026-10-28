@@ -56,7 +56,8 @@ value quoted beside them.
 **Row table and figure** — `src/sprites/art/humanFigure.ts`: cell geometry
 (`FRAME_W`, `TILE_X`, `TILE_Y`, `GROUND_OFFSET_IN_TILE`, `ORIGIN_X/Y`),
 `HUMAN_ROW_NAMES`, `HUMAN_ROW_TABLE`, `HUMAN_ROWS`, `paintDressedHumanFrame`,
-and `HUMAN_FIGURE`.
+and `undressedHumanFigure(look)`: a look in no garments, whose cell size and
+budget every dressed figure of that look shares.
 
 **Shared by every painted figure** — `src/sprites/art/bipedArt.ts` holds only the
 small maths and colour helpers (`Pt`, `deg`, `lerp`, easing, `hump`, `mix`,
@@ -455,7 +456,7 @@ held visual and an item, nothing else.
   that set in his hand — the set's own rows replace the bare-handed ones, so
   arming swaps the working set rather than adding to it.
 - **Memory**: the light set's family is the largest he has — G9b measures it
-  as the cache stores it, ink crops and front layers, at 17.1 MB in Ryan's
+  as the cache stores it, ink crops and front layers, at 17.1 MB in `male_light`'s
   clothes and 22.0 MB on Dave in every garment (93.6 MB as whole cells) — so
   `HUMAN_FIGURE_BUDGET_MEGABYTES` is 28.
 
@@ -482,7 +483,7 @@ pose keeps the shoulders square to the camera.
 
 A cell is keyed on `(figure, state, frame)` and shared by every draw, so gear
 cannot be a draw parameter. Everything he wears is a garment
-(`src/sprites/garments/human/`): each look's own clothes are its base garments (Dave's jacket, jeans and boots, Ryan's shirt, belt, chinos, sneakers and watch),
+(`src/sprites/garments/human/`): each look's own clothes are its base garments (Dave's jacket, jeans and boots, the male crawler's shirt, belt, chinos, sneakers and watch),
 then whatever is put on over them (the townsfolk's trousers and shoes on the
 figures built on his rig).
 The compositor (`biped/figure.ts`) paints no clothing itself: at each piece —
@@ -494,7 +495,8 @@ paints there, inside the slab. The pose carries what he wears
 the row read); absent is his default outfit, his look's base garments with
 nothing over them. Each
 outfit is a figure of its own (`humanFigureWearing`), keyed by its sorted
-garment ids; the default outfit is `HUMAN_FIGURE` itself. Only the outfit he
+garment ids, each spread from `undressedHumanFigure(look)`
+(`src/sprites/art/humanFigure.ts`); the default outfit is one of them. Only the outfit he
 wears is resident: `setOutfit('human', …)` (`src/sprites/outfits.ts`, through
 `setHumanOutfit` in `humanSprite.ts`) releases the old figure outright
 (`releaseFigure`) and prewarms the new one's always-drawn rows.
@@ -620,15 +622,19 @@ drawn row's top at runtime and could replace it:
 - The waterline when he wades is read off the solved rig of his standing pose,
   not frozen.
 
-## Looks: Ryan and Dave
+## Looks: the human crawler's four and Dave
 
 The rig and its rows are shared; who is painted is a `HumanLook`
-(`src/sprites/looks/humanLook.ts`). Two player looks exist: Ryan
-(`looks/humans/ryan.ts`) and Dave (`looks/humans/dave.ts`), both registered in
-`src/characters/characters.ts`. Every human harness and gate takes
-`--look=ryan|dave` (`scripts/humanLooks.ts`, Ryan by default), `?human&look=`
-picks one in the preview, and `gates:equipment` checks every held item and
-garment on both.
+(`src/sprites/looks/humanLook.ts`). The human crawler wears one of four looks,
+`HUMAN_CRAWLER_LOOKS` in `src/characters/humanCrawlerLooks.ts`, keyed by
+`HumanCrawlerLookId` (`${CrawlerBody}_${Complexion}`): `male_light`
+(`looks/humans/maleLight.ts`), `male_dark`, `female_light` and `female_dark`
+beside it. The male looks share one build and set of clothes
+(`MALE_CRAWLER_BUILD`, a `HumanBuild`, in `looks/humans/maleBuild.ts`). Dave
+(`looks/humans/dave.ts`) is the other look the harnesses paint. Every human
+harness and gate takes `--look=<id>` (`scripts/humanLooks.ts`, `male_light` by
+default), `?human&look=` picks one in the preview, and `gates:equipment` checks
+every held item and garment on all of them.
 
 A look's build is data, never an edit to `proportions.ts`:
 
@@ -680,16 +686,28 @@ A look's build is data, never an edit to `proportions.ts`:
   reach (`clearOutlineInHoles`, `figureCompose.ts`): a gap shut between an arm
   and the hip it rests on would otherwise ring with outline ink.
 
-**Ryan**: 6'0", drawn to the reference photograph's measured proportions (head
+**The male crawler** (`male_light`, `male_dark`): 6'0", drawn to the reference photograph's measured proportions (head
 crown to chin 0.156 of his height, shoulders 0.25, hips about 0.2, slim limbs,
 a chest about an eighth of his height deep). Swept-top hair and a short beard
-(`biped/ryanHead.ts`, mass tables shared with `human/castHead.ts`), light-blue
-chambray shirt with an open pointed collar and a white V (`ryanShirt.ts`),
-sleeves rolled just below the elbow (`RYAN_ROLLED_SLEEVE`), black belt and
-slate slim chinos (`ryanChinos.ts`), black knit low-tops on a thin white sole line under
-the trouser cuff (`ryanSneakers.ts`, `BootLook.soleBuild`), a watch on his left
-wrist (`ryanWatch.ts`; E7 checks the side). His face is relaxed (`mouthSmile`, a low
+(`SWEPT_TOP` and `shortBeard` in `biped/crawlerHair.ts`, mass tables shared with `human/castHead.ts`), light-blue
+chambray shirt with an open pointed collar and a white V (`chambrayShirt.ts`),
+sleeves rolled just below the elbow (`ROLLED_SLEEVE`), black belt and
+slate slim chinos (`chinos.ts`), black knit low-tops on a thin white sole line under
+the trouser cuff (`knitSneakers.ts`, `BootLook.soleBuild`), a watch on his left
+wrist (`wristwatches.ts`; E7 checks the side). His face is relaxed (`mouthSmile`, a low
 `angerScale`).
+
+**The female crawler's clothes** (`female_light`, `female_dark`, on
+`FEMALE_CRAWLER_BUILD` in `looks/humans/femaleBuild.ts`): a fitted, cropped
+wine twill jacket (`beltedJacket.ts`: the look's `garment` ramp and cut, hem just
+below a slim cognac belt at the waist, lapels open over an ivory crew-neck top,
+`TAILORED_SLEEVE` to the wrist shaded with the whole ramp so the forearm keeps
+its form for G17), a teal silk scarf knotted at the throat (`neckScarf.ts`, on
+the torso's `collar` piece), high-waisted stone tapered trousers
+(`taperedTrousers.ts`, through `trouserPainters` in `chinos.ts`), chocolate ankle
+boots on a slim sole (`ankleBoots.ts`) and a slim gold watch (`wristwatches.ts`).
+The jacket stops just below the belt because the trouser seat is painted from
+the waist down: a longer hem lets the seat stand out behind it edge-on.
 
 **Dave**: 6'3", heavily muscled — narrower than the rig (`widthScale` 0.94,
 leaner limbs, a chest about a seventh of his height deep, a head a little
@@ -698,7 +716,7 @@ ankle boots under the jeans' hem (`daveBoots.ts`).
 
 The ceilings above (no three-quarter views, the head-on run's planted leg, the
 armed rows head-on and from behind, the grip at close range) hold for both
-looks unchanged; they are properties of the rig and its rows. Ryan's own: at
+looks unchanged; they are properties of the rig and its rows. The male crawler's own: at
 the 32 px tile his limbs are two to three pixels across, so their form is
 one lit pixel against one shaded one: his chinos' terminator sits on the
 middle of the leg (`SLIM_LEG_TERMINATOR` in `human/legwear.ts`) and their

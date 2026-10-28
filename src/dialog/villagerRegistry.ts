@@ -28,10 +28,8 @@ import {
   TIKKA,
   VETCH,
   WICKER,
-  type ShopkeeperId,
-  type SoldierId,
-  type VillagerId,
 } from './scripts/briarHollow';
+import { type ShopkeeperId, type SoldierId, type VillagerId } from '../core/quests/villagerIds';
 import {
   CHILD_BURR,
   CHILD_NIB,

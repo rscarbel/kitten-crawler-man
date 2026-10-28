@@ -28,7 +28,7 @@ import {
   type ConstructionUnlockId,
   type VillageUnlocks,
 } from './villageUnlocks';
-import { VILLAGER_IDS, type VillagerId } from '../../dialog/scripts/briarHollow';
+import { VILLAGER_IDS, type VillagerId } from './villagerIds';
 import type { RatkinCastId } from '../../sprites/art/ratkin/cast';
 import { HOLLOW_BELL_MAX_HP } from '../../systems/briarHollow/hollowBell';
 import { PASTURE_FENCE_SECTION_COUNT } from '../../map/overworld/briarHollowLayout';

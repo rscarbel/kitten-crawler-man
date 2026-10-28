@@ -23,12 +23,9 @@
  * strobing cycle shows up.
  */
 
-import {
-  CHARACTERS,
-  type HumanCharacterDef,
-  isHumanCharacter,
-  playerCharacter,
-} from '../characters/characters';
+import { HUMAN_CRAWLER_LOOKS } from '../characters/humanCrawlerLooks';
+import type { HumanLook } from '../sprites/looks/humanLook';
+import { DAVE_LOOK } from '../sprites/looks/humans/dave';
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import { progressFrameIndex, walkFrameIndex } from '../core/spriteAssets/SpriteRenderer';
 import { HUMAN_SWING_FRAMES } from '../core/party/crawlerFormulas';
@@ -52,6 +49,7 @@ import {
   setHumanLook,
   rowLengthInTicks,
   rowTicksPerFrame,
+  activeHumanLook,
 } from '../sprites/humanSprite';
 import {
   ITEM_DEF,
@@ -162,26 +160,24 @@ function initialRowIndex(): number {
   return Math.max(0, index);
 }
 
-/** The humans the preview can paint, by the look id `&look=` names: every human in the registry. */
-const PREVIEW_HUMANS: readonly HumanCharacterDef[] =
-  Object.values(CHARACTERS).filter(isHumanCharacter);
+/** The looks the preview can paint, by the id `&look=` names: every human crawler look, and Dave. */
+const PREVIEW_LOOKS: readonly HumanLook[] = [...Object.values(HUMAN_CRAWLER_LOOKS), DAVE_LOOK];
 
 /**
- * The human `&look=` names, the player's human by default, made the look the human crawler
+ * The human `&look=` names, the human crawler's current look by default, made the look the human crawler
  * is painted as. Called from the scene's first field initializer, so every
  * player and prewarm the scene builds after it is built on that look.
  */
-function selectPreviewHuman(): HumanCharacterDef {
+function selectPreviewLook(): HumanLook {
   const wanted = new URLSearchParams(window.location.search).get('look');
-  const human =
-    PREVIEW_HUMANS.find((candidate) => candidate.look.id === wanted) ?? playerCharacter('human');
-  setHumanLook(human.look);
-  return human;
+  const look = PREVIEW_LOOKS.find((candidate) => candidate.id === wanted) ?? activeHumanLook();
+  setHumanLook(look);
+  return look;
 }
 
 export class HumanPreviewScene extends PreviewScene {
-  /** Who the preview paints: `&look=` names one of the human characters. */
-  readonly character = selectPreviewHuman();
+  /** Who the preview paints: `&look=` names one of the human looks. */
+  readonly look = selectPreviewLook();
   private rowIndex = initialRowIndex();
   private rowTicks = 0;
   private readonly live = new HumanPlayer(0, 0, TILE_SIZE);
@@ -248,14 +244,14 @@ export class HumanPreviewScene extends PreviewScene {
   }
 
   protected previewTitle(): string {
-    return `human preview — ?human&look=${PREVIEW_HUMANS.map((human) => human.look.id).join('|')}`;
+    return `human preview — ?human&look=${PREVIEW_LOOKS.map((look) => look.id).join('|')}`;
   }
 
   protected previewCaptions(): readonly string[] {
     const row = HUMAN_ROWS[this.rowIndex];
     const frame = frameAt(row, this.rowTicks);
     return [
-      `${this.character.displayName} — ${row.name} (${row.view}, ${row.kind}) — click for the next row`,
+      `${this.look.id} — ${row.name} (${row.view}, ${row.kind}) — click for the next row`,
       `frame ${frame + 1} of ${row.frameCount}, at game timing`,
     ];
   }

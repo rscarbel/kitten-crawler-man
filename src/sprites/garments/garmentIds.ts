@@ -58,16 +58,24 @@ export type CatWornGarmentId =
   | CatCharmGarmentId
   | CatPendantGarmentId;
 
-/** Dave's jacket and jeans and Ryan's clothes, which every outfit of each is built on. */
+/**
+ * Dave's jacket and jeans, the male crawler's clothes and the female
+ * crawler's clothes, which every outfit of each is built on.
+ */
 export type HumanBaseGarmentId =
   | 'dave_jacket'
   | 'dave_trousers'
   | 'dave_boots'
-  | 'ryan_shirt'
-  | 'ryan_belt'
-  | 'ryan_chinos'
-  | 'ryan_sneakers'
-  | 'ryan_watch';
+  | 'chambray_shirt'
+  | 'leather_belt'
+  | 'chinos'
+  | 'knit_sneakers'
+  | 'smartwatch'
+  | 'belted_twill_jacket'
+  | 'silk_neck_scarf'
+  | 'tapered_trousers'
+  | 'ankle_boots'
+  | 'gold_watch';
 
 /** Garments put on over the biped rig's base: what the townsfolk built on the rig wear. */
 export type HumanWornGarmentId =
@@ -85,7 +93,7 @@ type IvyAshgroveGarmentId = 'ivy_trousers' | 'ivy_boots' | 'ivy_bracer';
 /** What the hirelings built on the biped rig wear: Brother Anselm's habit and sandals, and every hire's armband. */
 type HirelingGarmentId = 'monk_habit' | 'monk_sandals' | 'hireling_armband';
 
-/** What the human crawler wears on his hands, forearms, knees and feet. */
+/** What the human crawler wears on the hands, forearms, knees and feet. */
 type HumanLimbGarmentId =
   | 'human_scrappers_wraps'
   | 'human_silkspinner_gloves'
@@ -96,7 +104,7 @@ type HumanLimbGarmentId =
   | 'human_hamhock_boots'
   | 'human_hearthguard_boots';
 
-/** The trinkets on the human crawler: a ring on his hand for each charm, a bangle at his wrist. */
+/** The trinkets on the human crawler: a ring on a hand for each charm, a bangle at the wrist. */
 export type HumanTrinketGarmentId =
   | 'human_nimble_bangle'
   | 'human_lucky_penny_ring'
@@ -106,7 +114,7 @@ export type HumanTrinketGarmentId =
   | 'human_fae_iron_ring'
   | 'human_hourglass_ring';
 
-/** What the human crawler wears over his head and torso. */
+/** What the human crawler wears over the head and torso. */
 type HumanHeadTorsoGarmentId =
   | 'human_lucky_hoodie'
   | 'human_patched_duster'

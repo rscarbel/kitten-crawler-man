@@ -47,6 +47,8 @@ const { snapPlayer } = await import('../src/core/save/PlayerSnapshot.js');
 const { parseGameProgress } = await import('../src/core/save/saveFormat.js');
 const { isRecord } = await import('../src/core/util/guards.js');
 const { sceneSetupFromSave } = await import('../src/scenes/resumeFromSave.js');
+const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js');
+useDevPlayerIdentity();
 
 type Scene = InstanceType<typeof DungeonScene>;
 type Point = { readonly x: number; readonly y: number };

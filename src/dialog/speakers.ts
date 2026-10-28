@@ -13,7 +13,7 @@ import type { SoundId } from '../audio/sounds';
 import type { PortraitSource, ResolvedSpeaker, RevealMode } from '../ui/DialogBox';
 import { ratkinPortrait } from '../sprites/ratkinPortrait';
 import type { RatkinCastId } from '../sprites/art/ratkin/cast';
-import { crawlerFormalName } from '../characters/characters';
+import { crawlerDisplayName } from '../characters/characters';
 import { motion } from '../ui/theme/tokens';
 import type { CarolineSpeakerRef } from './caroline';
 
@@ -35,12 +35,15 @@ export type SpeakerSkin = 'standard' | 'caroline';
 
 /**
  * How a speaker sounds while their text reveals.
- *   'typing' → the shared typing-click sound, once per revealed token
- *   'clips'  → one of the speaker's own voice clips, once per DialogLine
- *   'silent' → no sound at all
+ *   'typing'    → the shared typing-click sound, once per revealed token
+ *   'wordTicks' → one of the speaker's own ticks as each word starts revealing,
+ *                 for a letter-by-letter reveal too fast to click per letter
+ *   'clips'     → one of the speaker's own voice clips, once per DialogLine
+ *   'silent'    → no sound at all
  */
 export type SpeakerVoice =
   | { readonly kind: 'typing' }
+  | { readonly kind: 'wordTicks'; readonly sounds: ReadonlyArray<SoundId> }
   | { readonly kind: 'clips'; readonly sounds: ReadonlyArray<SoundId> }
   | { readonly kind: 'silent' };
 
@@ -100,9 +103,15 @@ export function resolvePortrait(key: PortraitKey): PortraitSource {
   return ratkinPortrait(key.id);
 }
 
+/**
+ * Who a speaker is credited as. `null` renders a nameless box, for a narrator
+ * or a voice with no name to show; a function is a name not known until the
+ * line is shown, such as the player's own.
+ */
+export type SpeakerName = string | null | (() => string);
+
 export interface SpeakerDef {
-  /** `null` renders a nameless box — for a narrator, or a voice with no name to show. */
-  readonly name: string | null;
+  readonly name: SpeakerName;
   readonly portrait: PortraitKey | null;
   readonly voice: SpeakerVoice;
   readonly reveal: RevealMode;
@@ -171,8 +180,8 @@ export const SPEAKERS = {
   midge: ratkinVillagerSpeaker('Midge Candleear', 'midge'),
 
   // The two Crawlers.
-  ryan: {
-    name: crawlerFormalName('human'),
+  human_crawler: {
+    name: () => crawlerDisplayName('human'),
     portrait: null,
     voice: { kind: 'typing' },
     reveal: 'sentence',
@@ -184,7 +193,7 @@ export const SPEAKERS = {
    * written speech impediments read as typos.
    */
   belle: {
-    name: crawlerFormalName('cat'),
+    name: () => crawlerDisplayName('cat'),
     portrait: null,
     voice: { kind: 'typing' },
     reveal: 'sentence',
@@ -450,6 +459,25 @@ export const SPEAKERS = {
 
 export type SpeakerId = keyof typeof SPEAKERS;
 
+/** The name cast member `id` is credited as at the moment it is asked. */
+export function speakerName(id: SpeakerId): string | null {
+  return resolveSpeakerName(SPEAKERS[id].name);
+}
+
+function resolveSpeakerName(name: SpeakerName): string | null {
+  return typeof name === 'function' ? name() : name;
+}
+
+const CAROLINE_TEXT_TICKS: ReadonlyArray<SoundId> = [
+  'caroline_text_tick_1',
+  'caroline_text_tick_2',
+  'caroline_text_tick_3',
+  'caroline_text_tick_4',
+  'caroline_text_tick_5',
+  'caroline_text_tick_6',
+  'caroline_text_tick_7',
+];
+
 /**
  * Caroline, the System AI. Not in {@link SPEAKERS}: she is reached only
  * through a `CarolineSpeakerRef`, which only `carolineLines`
@@ -459,10 +487,10 @@ export type SpeakerId = keyof typeof SPEAKERS;
 const CAROLINE_SPEAKER = {
   name: 'Caroline',
   portrait: null,
-  voice: { kind: 'typing' },
+  voice: { kind: 'wordTicks', sounds: CAROLINE_TEXT_TICKS },
   reveal: 'letter',
   textCase: 'as-written',
-  revealIntervalMs: motion.carolineCharacter,
+  revealIntervalMs: motion.carolineSpeechCharacter,
   typeface: 'terminal',
 } as const satisfies SpeakerDef;
 
@@ -605,7 +633,7 @@ export function resolveSpeaker(ref: SpeakerRef): ResolvedSpeaker {
     case 'cast': {
       const def: SpeakerDef = SPEAKERS[ref.id];
       return {
-        name: def.name,
+        name: resolveSpeakerName(def.name),
         portrait: def.portrait === null ? null : resolvePortrait(def.portrait),
         voice: def.voice,
         reveal: def.reveal,

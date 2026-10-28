@@ -1,5 +1,5 @@
 /**
- * Ryan's shirt: a light-blue chambray button-up, the base garment over his
+ * A light-blue chambray button-up, the base garment over his
  * torso. Its body is the rig's torso in his look's cloth and cut; over it go
  * the open neck with a white V-neck undershirt showing in it, the placket and
  * its small white buttons, and the soft blousing where the tail is tucked in
@@ -316,8 +316,8 @@ function paintTorso(ctx: Ctx, frame: BipedTorsoFrame, context: GarmentFrameConte
   }
 }
 
-export const RYAN_SHIRT = defineGarment({
-  id: 'ryan_shirt',
+export const CHAMBRAY_SHIRT = defineGarment({
+  id: 'chambray_shirt',
   name: 'Chambray shirt',
   wearer: 'human',
   base: true,

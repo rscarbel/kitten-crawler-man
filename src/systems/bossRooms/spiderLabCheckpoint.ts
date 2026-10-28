@@ -1,5 +1,5 @@
 import { isRecord } from '../../core/util/guards';
-import { FIRST_DARK_PHASE, LAST_LIGHT_PHASE, type LabLightPhase } from './spiderLabLighting';
+import { FIRST_DARK_PHASE, LAST_LIGHT_PHASE, type LabLightPhase } from './spiderLabLightPhase';
 
 /** A cocoon's life: hanging whole, woken and splitting, or torn open. */
 export type CocoonState = 'intact' | 'hatching' | 'burst';

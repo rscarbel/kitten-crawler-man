@@ -1,17 +1,17 @@
-import { crawlerName } from '../../characters/characters';
+import { CRAWLER_SPEAKERS, crawlerAIName } from '../../characters/characters';
+import { speakerName, type SpeakerId, type SpeakerRef } from '../../dialog/speakers';
 import type { EventBus } from '../../core/EventBus';
 import type { ChallengeSummary } from '../interactions/challenges';
-import { ITEM_DEF, type ItemId } from '../../core/items/defs/ItemDefs';
+import { itemAIName, type ItemId } from '../../core/items/defs/ItemDefs';
 import type { Mob } from '../../creatures/Mob';
-import { petWords, type PetNames } from '../../core/party/petNames';
-import type { DamageSource } from '../../Player';
-import { DAVE_CHARACTER_NAME } from '../characters';
+import { unnamedPetWords } from '../../core/party/petNames';
+import type { DamageSource, Player } from '../../Player';
+import { CRAWLER_KINDS, type CrawlerKind } from '../../core/skills/SkillManager';
 import { EVENT_IMPORTANCE, IMPORTANCE } from './eventImportance';
 import type { EventDraft, GameEventStream } from './gameEventStream';
 import type { JsonObject } from './json';
-import { liveCrawlerNamed } from './liveState';
 import type { PlayerProfileTracker } from './playerProfile';
-import type { AIContextSource, CrawlerName } from './types';
+import type { AIContextSource } from './types';
 
 /** `playerIdle` fires every few seconds of idling; only these marks are worth telling the AI about. */
 const IDLE_FIRST_MARK_MS = 30_000;
@@ -29,16 +29,35 @@ export interface EventMappingHost {
   readonly profile: PlayerProfileTracker;
   now(): number;
   /** A crawler dropped to low HP; the host decides later whether they sat on their potions. */
-  watchForStockpiling(crawler: CrawlerName): void;
-  potionDrunk(crawler: CrawlerName): void;
+  watchForStockpiling(crawler: CrawlerKind): void;
+  potionDrunk(crawler: CrawlerKind): void;
 }
 
-function sideName(side: 'Human' | 'Cat'): CrawlerName {
-  return crawlerName(side === 'Human' ? 'human' : 'cat');
+const DAVE_SPEAKER = 'dave' satisfies SpeakerId;
+const NAMELESS_SPEAKER = 'a voice with no name';
+
+/**
+ * Who spoke, in words for a summary. A crawler is named as the AI knows them
+ * ({@link crawlerAIName}), never through its speaker plate, which is set for
+ * the screen.
+ */
+function speakerWords(ref: SpeakerRef): string {
+  if (ref.kind !== 'cast') return ref.name;
+  const crawler = CRAWLER_KINDS.find((kind) => CRAWLER_SPEAKERS[kind] === ref.id);
+  if (crawler !== undefined) return crawlerAIName(crawler);
+  return speakerName(ref.id) ?? NAMELESS_SPEAKER;
 }
 
-function kindName(kind: 'human' | 'cat'): CrawlerName {
-  return crawlerName(kind);
+function sideKind(side: 'Human' | 'Cat'): CrawlerKind {
+  return side === 'Human' ? 'human' : 'cat';
+}
+
+function sideName(side: 'Human' | 'Cat'): string {
+  return crawlerAIName(sideKind(side));
+}
+
+function kindName(kind: CrawlerKind): string {
+  return crawlerAIName(kind);
 }
 
 /** `trash_gremlin` → `the trashGremlin`. */
@@ -59,8 +78,12 @@ function challengeData(e: ChallengeSummary): JsonObject {
 
 const UNNAMED_MOB = 'Unknown';
 
-export function mobLabel(mob: Mob, petNames: PetNames): string {
-  if (mob.petKind !== null) return petWords(petNames, mob.petKind).described;
+/**
+ * A mob in words for the AI. A pet goes by its kind: the name the player gave
+ * it travels only in the context's fenced `petNames`.
+ */
+export function mobLabel(mob: Mob): string {
+  if (mob.petKind !== null) return unnamedPetWords(mob.petKind).described;
   if (mob.displayName !== UNNAMED_MOB) return mob.displayName;
   if (mob.spawnTypeKey !== null) return humanize(mob.spawnTypeKey);
   return mob.constructor.name;
@@ -90,7 +113,7 @@ export function describeDamageSource(source: DamageSource | null): string {
 }
 
 function itemName(id: ItemId | null): string | null {
-  return id === null ? null : ITEM_DEF[id].name;
+  return id === null ? null : itemAIName(id);
 }
 
 /**
@@ -108,7 +131,11 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         : source.isCrawlerInSafeRoom(draft.subject);
     stream.record(draft, host.now(), sawIt);
   };
-  const nameOf = source.crawlerNameOf.bind(source);
+  const kindOf = source.crawlerKindOf.bind(source);
+  const nameOf = (player: Player): string | null => {
+    const kind = kindOf(player);
+    return kind === null ? null : crawlerAIName(kind);
+  };
   const progress = (): void => profile.recordProgress(host.now());
 
   return [
@@ -120,28 +147,23 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         summary: `${sideName(e.attacker)} started a fight with a ${e.mobType}.`,
         importance: EVENT_IMPORTANCE.combatStarted,
         witness: 'inSafeRoom',
-        subject: sideName(e.attacker),
+        subject: sideKind(e.attacker),
       });
     }),
     bus.on('mobKilled', (e) => {
       if (e.mob.isBoss) return;
-      const killer = e.killer === null ? null : nameOf(e.killer);
+      const killer = e.killer === null ? null : kindOf(e.killer);
       if (killer !== null) profile.recordKills(1);
-      stream.recordKill(
-        mobLabel(e.mob, source.petNames),
-        killer,
-        host.now(),
-        source.isPartyInSafeRoom(),
-      );
+      stream.recordKill(mobLabel(e.mob), killer, host.now(), source.isPartyInSafeRoom());
     }),
     bus.on('multiKill', (e) => {
       emit({
         type: 'multiKill',
         data: { count: e.count },
-        summary: `${crawlerName(e.killer.crawlerKind)} killed ${e.count} enemies with a single blow.`,
+        summary: `${crawlerAIName(e.killer.crawlerKind)} killed ${e.count} enemies with a single blow.`,
         importance: EVENT_IMPORTANCE.multiKill,
         witness: 'inSafeRoom',
-        subject: crawlerName(e.killer.crawlerKind),
+        subject: e.killer.crawlerKind,
       });
     }),
     bus.on('dynamiteUsed', (e) => {
@@ -154,7 +176,7 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
             : `${sideName(e.player)} lit a stick of goblin dynamite.`,
         importance: EVENT_IMPORTANCE.dynamiteUsed,
         witness: 'inSafeRoom',
-        subject: sideName(e.player),
+        subject: sideKind(e.player),
       });
     }),
     bus.on('dynamiteKills', (e) => {
@@ -162,11 +184,11 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         type: 'dynamiteKills',
         data: { kills: e.kills, bossKilled: e.bossKilled },
         summary: e.bossKilled
-          ? `${crawlerName(e.killer.crawlerKind)} blew up a boss with an explosive (${e.kills} dead in the blast).`
-          : `${crawlerName(e.killer.crawlerKind)}'s explosive killed ${e.kills} enemies at once.`,
+          ? `${crawlerAIName(e.killer.crawlerKind)} blew up a boss with an explosive (${e.kills} dead in the blast).`
+          : `${crawlerAIName(e.killer.crawlerKind)}'s explosive killed ${e.kills} enemies at once.`,
         importance: e.bossKilled ? IMPORTANCE.LANDMARK : EVENT_IMPORTANCE.dynamiteKills,
         witness: 'inSafeRoom',
-        subject: crawlerName(e.killer.crawlerKind),
+        subject: e.killer.crawlerKind,
       });
     }),
     bus.on('bossFightInitiated', (e) => {
@@ -190,21 +212,20 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
     }),
     bus.on('healthLow', (e) => {
       const crawler = sideName(e.player);
-      host.watchForStockpiling(crawler);
+      host.watchForStockpiling(sideKind(e.player));
       emit({
         type: 'healthLow',
         data: { crawler, hp: Math.ceil(e.hp), maxHp: e.maxHp },
         summary: `${crawler} is badly hurt (${Math.ceil(e.hp)}/${e.maxHp} HP).`,
         importance: EVENT_IMPORTANCE.healthLow,
         witness: 'inSafeRoom',
-        subject: crawler,
+        subject: sideKind(e.player),
       });
     }),
     bus.on('healingPotionUsed', (e) => {
       const crawler = sideName(e.player);
-      host.potionDrunk(crawler);
-      const live = source.readLive();
-      const state = liveCrawlerNamed(live, crawler);
+      host.potionDrunk(sideKind(e.player));
+      const state = source.readLive().crawlers[sideKind(e.player)];
       const hpBefore = Math.max(0, state.hp - e.hpRestored);
       profile.recordPotion(state.maxHp > 0 ? hpBefore / state.maxHp : 0);
       emit({
@@ -213,13 +234,14 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         summary: `${crawler} drank a healing potion at ${Math.round(hpBefore)}/${state.maxHp} HP.`,
         importance: EVENT_IMPORTANCE.healingPotionUsed,
         witness: 'inSafeRoom',
-        subject: crawler,
+        subject: sideKind(e.player),
       });
     }),
     bus.on('crawlerKnockedOut', (e) => {
-      const crawler = nameOf(e.player);
-      if (crawler === null) return;
-      profile.recordKnockout(crawler);
+      const kind = kindOf(e.player);
+      if (kind === null) return;
+      const crawler = crawlerAIName(kind);
+      profile.recordKnockout(kind);
       const cause = describeDamageSource(e.player.lastDamageSource);
       emit({
         type: 'crawlerKnockedOut',
@@ -227,7 +249,7 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         summary: `${crawler} was knocked out by ${cause} and is bleeding out.`,
         importance: EVENT_IMPORTANCE.crawlerKnockedOut,
         witness: 'inSafeRoom',
-        subject: crawler,
+        subject: kind,
       });
     }),
     bus.on('crawlerRevived', (e) => {
@@ -239,11 +261,11 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         summary: `${crawler} was revived.`,
         importance: EVENT_IMPORTANCE.crawlerRevived,
         witness: 'inSafeRoom',
-        subject: crawler,
+        subject: kindOf(e.player) ?? undefined,
       });
     }),
     bus.on('playerDodged', (e) => {
-      stream.recordDodge(sideName(e.player), host.now());
+      stream.recordDodge(sideKind(e.player), host.now());
     }),
     bus.on('roomCleared', (e) => {
       emit({
@@ -261,7 +283,7 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         summary: `${sideName(e.player)}'s ${humanize(e.skillId)} skill kicked in.`,
         importance: EVENT_IMPORTANCE.skillTriggered,
         witness: 'inSafeRoom',
-        subject: sideName(e.player),
+        subject: sideKind(e.player),
       });
     }),
     bus.on('statusApplied', (e) => {
@@ -273,7 +295,7 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         summary: `${crawler} is now afflicted with ${humanize(e.status)}.`,
         importance: EVENT_IMPORTANCE.statusApplied,
         witness: 'inSafeRoom',
-        subject: crawler,
+        subject: kindOf(e.player) ?? undefined,
       });
     }),
     bus.on('statusCured', (e) => {
@@ -285,7 +307,7 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         summary: `${crawler} is no longer ${humanize(e.status)}.`,
         importance: EVENT_IMPORTANCE.statusCured,
         witness: 'inSafeRoom',
-        subject: crawler,
+        subject: kindOf(e.player) ?? undefined,
       });
     }),
     bus.on('playerDied', (e) => {
@@ -318,7 +340,7 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         summary: `${crawler} reached level ${e.newLevel}.`,
         importance: EVENT_IMPORTANCE.playerLevelUp,
         witness: 'inSafeRoom',
-        subject: crawler,
+        subject: kindOf(e.player) ?? undefined,
       });
     }),
     bus.on('skillUnlocked', (e) => {
@@ -328,7 +350,7 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         summary: `${sideName(e.player)} learned the ${humanize(e.skillId)} skill.`,
         importance: EVENT_IMPORTANCE.skillUnlocked,
         witness: 'inSafeRoom',
-        subject: sideName(e.player),
+        subject: sideKind(e.player),
       });
     }),
     bus.on('skillLevelUp', (e) => {
@@ -338,7 +360,7 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         summary: `${sideName(e.player)}'s ${humanize(e.skillId)} rose to level ${e.newLevel}.`,
         importance: EVENT_IMPORTANCE.skillLevelUp,
         witness: 'inSafeRoom',
-        subject: sideName(e.player),
+        subject: sideKind(e.player),
       });
     }),
     bus.on('craftSkillLearned', (e) => {
@@ -348,7 +370,7 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         summary: `${kindName(e.crawler)} learned the ${e.id} craft.`,
         importance: EVENT_IMPORTANCE.craftSkillLearned,
         witness: 'inSafeRoom',
-        subject: kindName(e.crawler),
+        subject: e.crawler,
       });
     }),
     bus.on('craftSkillLevelUp', (e) => {
@@ -358,7 +380,7 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         summary: `${kindName(e.crawler)}'s ${e.id} craft rose to level ${e.level}.`,
         importance: EVENT_IMPORTANCE.craftSkillLevelUp,
         witness: 'inSafeRoom',
-        subject: kindName(e.crawler),
+        subject: e.crawler,
       });
     }),
     bus.on('achievementUnlocked', (e) => {
@@ -386,7 +408,7 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
       const contents = [
         e.coins > 0 ? `${e.coins} coins` : null,
         e.potions > 0 ? `${e.potions} potions` : null,
-        ...e.items,
+        ...e.items.map(itemAIName),
       ].filter((part): part is string => part !== null);
       emit({
         type: 'rewardChestOpened',
@@ -394,7 +416,7 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         summary: `${crawler} earned a ${e.rarity} chest: ${contents.join(', ') || 'nothing'}.`,
         importance: EVENT_IMPORTANCE.rewardChestOpened,
         witness: 'always',
-        subject: nameOf(e.owner) ?? undefined,
+        subject: kindOf(e.owner) ?? undefined,
       });
     }),
     bus.on('equipmentChanged', (e) => {
@@ -414,7 +436,7 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
             : `${crawler} took off ${removed ?? 'something'}.`,
         importance: EVENT_IMPORTANCE.equipmentChanged,
         witness: 'inSafeRoom',
-        subject: crawler,
+        subject: e.crawler,
       });
     }),
     bus.on('stairwellFound', () => {
@@ -564,14 +586,15 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
 
     // ── Social and economy ──────────────────────────────────────────────────
     bus.on('conversation', (e) => {
-      const withDave = e.speaker === DAVE_CHARACTER_NAME;
+      const withDave = e.speaker.kind === 'cast' && e.speaker.id === DAVE_SPEAKER;
+      const speaker = speakerWords(e.speaker);
       emit({
         type: e.phase === 'started' ? 'conversationStarted' : 'conversationEnded',
-        data: { speaker: e.speaker },
+        data: { speaker },
         summary:
           e.phase === 'started'
-            ? `The crawlers started talking to ${e.speaker}.`
-            : `The crawlers finished talking to ${e.speaker}.`,
+            ? `The crawlers started talking to ${speaker}.`
+            : `The crawlers finished talking to ${speaker}.`,
         importance: withDave ? IMPORTANCE.NOTABLE : EVENT_IMPORTANCE.conversationStarted,
         witness: withDave ? 'always' : 'inSafeRoom',
       });
@@ -614,7 +637,7 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         summary: `${crawler} bought ${e.item} for ${e.coins} coins${e.shop ? ` at ${e.shop}` : ''}.`,
         importance: EVENT_IMPORTANCE.shopPurchase,
         witness: 'inSafeRoom',
-        subject: nameOf(e.buyer) ?? undefined,
+        subject: kindOf(e.buyer) ?? undefined,
       });
     }),
     bus.on('shopSold', (e) => {
@@ -625,7 +648,7 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         summary: `${crawler} sold ${e.quantity} × ${e.item} for ${e.coins} coins.`,
         importance: EVENT_IMPORTANCE.shopSold,
         witness: 'inSafeRoom',
-        subject: nameOf(e.seller) ?? undefined,
+        subject: kindOf(e.seller) ?? undefined,
       });
     }),
     bus.on('cowPetted', () => {

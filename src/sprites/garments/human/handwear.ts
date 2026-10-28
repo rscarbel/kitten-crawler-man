@@ -12,9 +12,9 @@
 
 import type { BipedForearmFrame } from '../../art/biped/bipedParts';
 import { crease } from '../../art/biped/paint';
-import { deriveRamp, type Ramp } from '../../art/biped/palette';
+import { deriveRamp, LIGHT, type Ramp } from '../../art/biped/palette';
 import { drawnSide, type BodySide } from '../../art/biped/rig';
-import { pt, TWO_PI } from '../../art/biped/geometry';
+import { pt, rotate, TWO_PI } from '../../art/biped/geometry';
 import { rgba } from '../../art/bipedArt';
 import { fillSoftEllipse } from '../../art/softShade';
 import { defineGarment } from '../garmentDef';
@@ -318,8 +318,8 @@ const BOILED_LEATHER: Ramp = {
 };
 /** Bright steel heads, cold against the warm leather so they never read as more of it. */
 const BRACER_RIVET = '#f4f1ea';
-/** A plate of leather from below the elbow to just short of the wrist. */
-const BRACER: CuffShape = { from: 0.34, to: 0.94, proudFrom: 0.012, proudTo: 0.012, endBow: 0.4 };
+/** A plate of leather from just below the elbow, up under any sleeve that ends there, to just short of the wrist. */
+const BRACER: CuffShape = { from: 0.26, to: 0.94, proudFrom: 0.012, proudTo: 0.012, endBow: 0.4 };
 /** Each end is a stiff rolled edge, a band a step darker than the plate. */
 const BRACER_EDGE_WIDTH = 0.03;
 /** A rivet sits just in from each of the plate's four corners. */
@@ -339,6 +339,32 @@ function paintBracerEdges(ctx: Ctx, cuff: CuffFrame): void {
   ctx.stroke();
 }
 
+/**
+ * Boiled leather holds a hard lip down each long edge: lit where it turns to
+ * the key, dark where it turns away. At the tile those two lines are what
+ * make the plate read as a tube against the arm, whatever the skin under it,
+ * because tan leather and deep brown skin share a value.
+ */
+function paintBracerLips(ctx: Ctx, cuff: CuffFrame): void {
+  const light = rotate(LIGHT, -cuff.angle);
+  const litSide = light.y <= 0 ? -1 : 1;
+  ctx.lineWidth = BRACER_LIP_WIDTH;
+  ctx.lineCap = 'round';
+  for (const [side, colour] of [
+    [litSide, inArmShade(cuff.ramp.rim, cuff)],
+    [-litSide, cuff.ramp.deep],
+  ] as const) {
+    ctx.strokeStyle = colour;
+    ctx.beginPath();
+    ctx.moveTo(cuff.fromX, side * cuff.fromHalf * BRACER_LIP_ACROSS);
+    ctx.lineTo(cuff.toX, side * cuff.toHalf * BRACER_LIP_ACROSS);
+    ctx.stroke();
+  }
+}
+/** Each lip runs just inside the plate's long edge, as wide as its rolled ends. */
+const BRACER_LIP_ACROSS = 0.72;
+const BRACER_LIP_WIDTH = 0.04;
+
 function paintBracerRivets(ctx: Ctx, cuff: CuffFrame): void {
   for (const x of [cuff.fromX + BRACER_RIVET_IN, cuff.toX - BRACER_RIVET_IN]) {
     const half = cuffHalfAt(cuff, x) * BRACER_RIVET_ACROSS;
@@ -357,6 +383,7 @@ function paintBracer(ctx: Ctx, frame: BipedForearmFrame): void {
     BOILED_LEATHER,
     (cuff) => {
       paintCuffForm(ctx, cuff);
+      paintBracerLips(ctx, cuff);
       paintBracerEdges(ctx, cuff);
     },
     (cuff) => paintBracerRivets(ctx, cuff),

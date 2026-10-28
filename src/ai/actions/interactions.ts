@@ -3,10 +3,11 @@
  * questions it puts to them. Each is cheap and benign; what they cost is
  * screen time, which the per-floor caps and cooldowns ration.
  */
+import { crawlerDisplayName } from '../../characters/characters';
 import {
   AI_ACHIEVEMENT_DESCRIPTION_MAX_CHARS,
   AI_ACHIEVEMENT_TITLE_MAX_CHARS,
-} from '../../core/progression/AchievementManager';
+} from '../../core/progression/achievementSave';
 import { AI_QUESTION_MAX_CHOICES } from '../interactions/types';
 import {
   AI_CHEST_RARITIES,
@@ -14,7 +15,7 @@ import {
   CHEST_RARITY_POINTS,
   TARGET_PARAM,
   crawlerKind,
-  crawlerName,
+  crawlerNameForAI,
   notifyPlayer,
   resolveTarget,
 } from './helpers';
@@ -57,7 +58,7 @@ function achievementRefusal({ params, scene }: AIActionCall): string | null {
   const crawler = resolveTarget(scene, params.get(TARGET_PARAM));
   const title = params.get(ACHIEVEMENT_TITLE);
   if (scene.getAwards().managerOf(crawlerKind(scene, crawler)).hasAIAchievement(title)) {
-    return `${crawlerName(scene, crawler)} already holds "${title}"`;
+    return `${crawlerNameForAI(scene, crawler)} already holds "${title}"`;
   }
   return null;
 }
@@ -97,8 +98,7 @@ const grantAchievement: AIActionDef = {
       awardedBy: characterName,
     });
     if (award === null) return refused('that achievement could not be filed');
-    const name = crawlerName(scene, crawler);
-    notifyPlayer(scene, `Special award for ${name}: ${award.name}`, {
+    notifyPlayer(scene, `Special award for ${crawlerDisplayName(kind)}: ${award.name}`, {
       tone: 'accent',
       icon: 'trophy',
       urgent: true,
@@ -111,7 +111,7 @@ const grantAchievement: AIActionDef = {
       player: kind === 'human' ? 'Human' : 'Cat',
       awardedBy: characterName,
     });
-    return ok(`awarded "${award.name}" (${rarity} chest) to ${name}`);
+    return ok((names) => `awarded "${award.name}" (${rarity} chest) to ${names.crawler(crawler)}`);
   },
 };
 
@@ -184,7 +184,9 @@ const askPlayer: AIActionDef = {
       choices: choicesOf(call),
       askedBy: call.characterName,
     });
-    return ok(`asked ${questionId}: ${question} (the answer arrives as a playerAnswered event)`);
+    return ok(
+      () => `asked ${questionId}: ${question} (the answer arrives as a playerAnswered event)`,
+    );
   },
 };
 

@@ -1,5 +1,6 @@
-import { playerCharacter } from '../../characters/characters';
+import { crawlerAIName, crawlerDisplayName } from '../../characters/characters';
 import { TILE_SIZE } from '../../core/constants';
+import { ITEM_DEF, itemAIName } from '../../core/items/defs/ItemDefs';
 import type { Rarity } from '../../core/items/defs/rarity';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
@@ -7,7 +8,7 @@ import { getLevelDef, type LevelDef } from '../../levels';
 import type { ToastOptions } from '../../ui/hud/toasts';
 import { CAROLINE_CHARACTER_NAME, DAVE_CHARACTER_NAME } from '../characters';
 import { optionalEnumParam } from './schema';
-import type { AISceneContext, AITargetCrawler } from './types';
+import type { AISceneContext, AITargetCrawler, ResultNamer } from './types';
 
 export type Crawler = HumanPlayer | CatPlayer;
 
@@ -29,10 +30,16 @@ export const CHEST_RARITY_POINTS: Readonly<Record<AIChestRarity, number>> = {
   Rare: 3,
 };
 
+/** A tool picks a crawler by kind, never by name: the player names the human, and may give it the cat's name. */
+const TARGET_CRAWLERS = ['active', 'human', 'cat'] as const satisfies readonly (
+  'active' | AITargetCrawler
+)[];
+type AITargetChoice = (typeof TARGET_CRAWLERS)[number];
+
 export const TARGET_PARAM = optionalEnumParam(
   'target_player',
-  ['active', 'Human', 'Cat'],
-  `Which crawler: the one the player is driving (active), ${playerCharacter('human').displayName} (Human) or ${playerCharacter('cat').displayName} (Cat).`,
+  TARGET_CRAWLERS,
+  'Which crawler: the one the player is driving (active), the human crawler (human) or the cat crawler (cat).',
   'active',
 );
 
@@ -41,18 +48,44 @@ export function activeCrawler(scene: AISceneContext): Crawler {
   return human.isActive ? human : scene.getCat();
 }
 
-export function resolveTarget(scene: AISceneContext, target: 'active' | 'Human' | 'Cat'): Crawler {
-  if (target === 'Human') return scene.getHuman();
-  if (target === 'Cat') return scene.getCat();
-  return activeCrawler(scene);
+export function resolveTarget(scene: AISceneContext, target: AITargetChoice): Crawler {
+  switch (target) {
+    case 'human':
+      return scene.getHuman();
+    case 'cat':
+      return scene.getCat();
+    case 'active':
+      return activeCrawler(scene);
+    default: {
+      const unhandled: never = target;
+      return unhandled;
+    }
+  }
 }
 
 export function crawlerKind(scene: AISceneContext, crawler: Crawler): AITargetCrawler {
   return crawler === scene.getHuman() ? 'human' : 'cat';
 }
 
-export function crawlerName(scene: AISceneContext, crawler: Crawler): string {
-  return playerCharacter(crawlerKind(scene, crawler)).displayName;
+/** A crawler as the AI is told of them; for refusals and anything else only the AI reads. */
+export function crawlerNameForAI(scene: AISceneContext, crawler: Crawler): string {
+  return crawlerAIName(crawlerKind(scene, crawler));
+}
+
+/** Names for text sent to the AI: never the player's typed name. */
+export function aiNamer(scene: AISceneContext): ResultNamer {
+  return {
+    crawler: (crawler) => crawlerNameForAI(scene, crawler),
+    item: itemAIName,
+  };
+}
+
+/** Names for text shown on screen: the typed name, isolated for display, and never sent to the AI. */
+export function displayNamer(scene: AISceneContext): ResultNamer {
+  return {
+    crawler: (crawler) => crawlerDisplayName(crawlerKind(scene, crawler)),
+    item: (id) => ITEM_DEF[id].name,
+  };
 }
 
 export function bothCrawlers(scene: AISceneContext): readonly Crawler[] {

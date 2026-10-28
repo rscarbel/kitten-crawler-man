@@ -17,7 +17,7 @@
  * across the door, so leaving mid-run and coming back starts it over.
  */
 
-import { crawlerName } from '../characters/characters';
+import { crawlerDisplayName } from '../characters/characters';
 import { TILE_SIZE } from '../core/constants';
 import type { GameMap } from '../map/GameMap';
 import type { MusicClaims } from '../audio/AudioScope';
@@ -1005,10 +1005,7 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
     // Said out loud as well as drawn. The crawler this door was opened for is
     // the one the player is *not* holding, so the news has to survive the walk
     // back across the tent and the switch.
-    this.showBanner(
-      WAY_OPENED_BANNER,
-      block.blocks === 'human' ? WAY_OPENED_FOR_HUMAN : WAY_OPENED_FOR_CAT,
-    );
+    this.showBanner(WAY_OPENED_BANNER, wayOpenedFor(block.blocks));
   }
 
   private updateBlocks(): void {
@@ -1134,10 +1131,7 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
 
     for (const half of changes.teachingOpened) {
       this.openTile(MAZE_TEACHING_DOORWAYS[half]);
-      this.showBanner(
-        WAY_OPENED_BANNER,
-        half === 'human' ? TEACHING_OPENED_FOR_HUMAN : TEACHING_OPENED_FOR_CAT,
-      );
+      this.showBanner(WAY_OPENED_BANNER, teachingOpenedFor(half));
     }
 
     if (changes.solved) {
@@ -2223,7 +2217,7 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
         camY,
         half === 'cat'
           ? 'Ring the show-bell to clear the boards, or wait in the alcoves.'
-          : `${crawlerName('cat')}'s bell clears the boards. Otherwise, wait in the alcoves.`,
+          : `${crawlerDisplayName('cat')}'s bell clears the boards. Otherwise, wait in the alcoves.`,
       );
       return true;
     }
@@ -2244,7 +2238,7 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
     const activeTile = tileOf(active);
     const room = half === 'human' ? curtain.humanRoom : curtain.catRoom;
     if (!rectContains(room, activeTile.x, activeTile.y)) return;
-    const waitingFor = crawlerName(half === 'human' ? 'cat' : 'human');
+    const waitingFor = crawlerDisplayName(half === 'human' ? 'cat' : 'human');
     this.drawWorldHint(
       ctx,
       active,
@@ -2287,8 +2281,8 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
       camX,
       camY,
       blocked.blocks === 'human'
-        ? `${crawlerName('cat')} can reach that ${thing}. Press ${control} to switch.`
-        : `${crawlerName('human')} can break that ${thing}. Press ${control} to switch.`,
+        ? `${crawlerDisplayName('cat')} can reach that ${thing}. Press ${control} to switch.`
+        : `${crawlerDisplayName('human')} can break that ${thing}. Press ${control} to switch.`,
     );
   }
 
@@ -2390,11 +2384,13 @@ export class StarlightTentMazeSystem implements GameSystem, GroundHazardSource {
  * *active* crawler and the crawler this concerns is the other one.
  */
 const WAY_OPENED_BANNER = 'The way is open';
-const WAY_OPENED_FOR_HUMAN = `Switch to ${crawlerName('human')} and walk through.`;
-const WAY_OPENED_FOR_CAT = `Switch to ${crawlerName('cat')} and walk through.`;
+function wayOpenedFor(kind: MazeHalf): string {
+  return `Switch to ${crawlerDisplayName(kind)} and walk through.`;
+}
 const WAY_OPENED_FOR_BOTH = 'Both lanes can go on.';
-const TEACHING_OPENED_FOR_HUMAN = `${crawlerName('human')}'s doorway into the hall is open.`;
-const TEACHING_OPENED_FOR_CAT = `${crawlerName('cat')}'s doorway into the hall is open.`;
+function teachingOpenedFor(kind: MazeHalf): string {
+  return `${crawlerDisplayName(kind)}'s doorway into the hall is open.`;
+}
 const ENCORE_BANNER = 'Bravo!';
 const ENCORE_PAID_SUBTITLE = 'An encore. The house throws coins.';
 const ENCORE_REPEAT_SUBTITLE = 'An encore. The house has nothing left to throw.';

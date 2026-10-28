@@ -8,7 +8,7 @@
  * never from module state, so any number of looks can be baked side by side.
  */
 
-import type { BipedExpression, HeadFeaturePainter } from '../art/biped/head';
+import type { BipedExpression, FaceShape, HeadFeaturePainter } from '../art/biped/head';
 import type { GlossRamp, Ramp } from '../art/biped/palette';
 import type { LimbBuild } from '../art/biped/limbs';
 import type { SleeveCut } from '../art/biped/sleeve';
@@ -23,15 +23,15 @@ import { PLAYER_HUMAN_SIZE_OVER_RIG } from '../art/human/figureScale';
  */
 export interface HumanFigureExtent {
   /**
-   * How far the top of his hair sits above the tile anchor, in pixels at the
+   * How far the top of the figure's hair sits above the tile anchor, in pixels at the
    * in-game tile, rounded up to a whole pixel so the health bar hung off it
    * clears the hair.
    */
   readonly spriteTopAboveTilePx: number;
   /**
-   * Half his width head-on, arms included, in tile fractions. He is narrower
-   * than the tile: flames or drips spread across the full tile would visibly
-   * miss him.
+   * Half the figure's width head-on, arms included, in tile fractions. Every
+   * look is narrower than the tile: flames or drips spread across the full
+   * tile would visibly miss the figure.
    */
   readonly halfWidthTiles: number;
 }
@@ -56,6 +56,8 @@ export interface HumanLook extends OutfitBase<'human'> {
   readonly facialHair: HeadFeaturePainter | null;
   /** The brows, anger and lips the face wears in every pose. */
   readonly expression: BipedExpression;
+  /** The shape of the face: its jaw, chin, profile, nose, eyes and lips. */
+  readonly face: FaceShape;
   /**
    * How much taller and wider than the rig the look stands, about its own
    * ground line. Applied where a cell maps figure units to pixels, so the
@@ -101,9 +103,34 @@ export interface HumanLook extends OutfitBase<'human'> {
   readonly shoulderSpread: number;
   /** How far apart the thighs root against the rig's heavy-hipped stance. */
   readonly hipSpread: number;
-  /** Where the status box, health bar and marker hang off his painted figure. */
+  /** How much fuller than a pair of trousers' own cut their seat stands on this body. */
+  readonly seatFullness: SeatFullness;
+  /** Where the status box, health bar and marker hang off the look's painted figure. */
   readonly figureExtent: HumanFigureExtent;
 }
+
+/**
+ * How much fuller a body's seat stands than the one trousers are cut for:
+ * head-on across the hips, and edge-on behind them. A woman's hips are wider
+ * and her seat rounder than the slim man's trousers are cut to.
+ */
+export interface SeatFullness {
+  readonly across: number;
+  readonly depth: number;
+}
+
+/** The seat a pair of trousers is cut for, unchanged. */
+export const TROUSERS_OWN_SEAT: SeatFullness = { across: 1, depth: 1 };
+
+/**
+ * Everything a look carries but who it is — its id, colouring, hair and
+ * expression: the build, the face's shape and the clothes. Looks that share a body share one of
+ * these and differ only in the rest.
+ */
+export type HumanBuild = Omit<
+  HumanLook,
+  'id' | 'skin' | 'handSkin' | 'hair' | 'iris' | 'hairstyle' | 'facialHair' | 'expression'
+>;
 
 /** A pose with `look`'s own build laid on: what the painter, the probe and the sockets all solve. */
 export function withLookBuild<P extends { shoulderSpread?: number; hipSpread?: number }>(
@@ -130,6 +157,9 @@ export const RIG_NECK_SOFTNESS = 1;
 
 /** The rig is drawn at 6'3", crown to sole. */
 export const RIG_STATURE_METRES = 1.905;
+
+/** A look's stature is written in inches and compared with the rig's in metres. */
+export const METRES_PER_INCH = 0.0254;
 
 /** The ramp a look's hands are painted in. */
 export function handSkinOf(look: Pick<HumanLook, 'skin' | 'handSkin'>): Ramp {

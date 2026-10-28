@@ -1,14 +1,31 @@
-import { TITLE_QUIPS } from '../../scenes/title/titleEvents';
+import { carolineLines } from '../../dialog/caroline';
 import { CAROLINE_CHARACTER } from './caroline';
 
 /**
+ * Lines that name no crawler: the player names the human, so a fixed list
+ * cannot carry either crawler's name.
+ */
+const CAROLINE_OFFLINE_REMARKS = [
+  carolineLines.message('Survival probability is not a fixed value. Raise it.'),
+  carolineLines.message('Death here is permanent. Nothing else here is real.'),
+  carolineLines.message('Threat level is calibrated to your capability. It will increase.'),
+  carolineLines.message('Safe rooms admit no hostiles. Every other room does.'),
+  carolineLines.message(
+    'Every floor has a collapse timer. At zero, the floor and everyone on it are lost.',
+  ),
+  carolineLines.message(
+    'I want you to succeed. I will not remove the risk that makes success possible.',
+  ),
+];
+
+/**
  * What Caroline says when her server cannot be reached: her own authored
- * catchphrases and the lines she shows on the title screen. The game keeps
- * her voice offline instead of going silent.
+ * catchphrases and a few remarks of her own. The game keeps her voice offline
+ * instead of going silent.
  */
 export const CAROLINE_FALLBACK_LINES: readonly string[] = [
   ...CAROLINE_CHARACTER.personality.voice.catchphrases,
-  ...TITLE_QUIPS.map(({ text }) => text),
+  ...CAROLINE_OFFLINE_REMARKS.map(({ text }) => text),
 ];
 
 /**

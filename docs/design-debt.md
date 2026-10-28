@@ -220,17 +220,17 @@ Entry shape:
 ### The rows roll every look's foot on the rig's sole
 
 - **Where:** `soleOffsets` in `src/sprites/art/human/gaitShared.ts`, `probeLeg` in `src/sprites/art/human/probe.ts`, `scaleFootByBuild` in `src/sprites/art/biped/limbs.ts`.
-- **Problem:** row poses are look-independent, so a rolling foot is planted by the rig's heel and toe. A look with a shorter foot (`LimbBuild.footLength`, Ryan's 0.82) is painted stretched across the picture after the pitch, which keeps the ends' heights but moves them along the floor; measured on his own sole, his foot slides about 1.2 in-game px through the stance of the run-strike rows (`jab_run_side_*`). G10 measures the rig's sole, so it does not see this. Stretching along the pitched foot instead lifts the planted end off the floor on every rolling contact.
+- **Problem:** row poses are look-independent, so a rolling foot is planted by the rig's heel and toe. A look with a shorter foot (`LimbBuild.footLength`, the male crawler build's 0.82) is painted stretched across the picture after the pitch, which keeps the ends' heights but moves them along the floor; measured on its own sole, that foot slides about 1.2 in-game px through the stance of the run-strike rows (`jab_run_side_*`). G10 measures the rig's sole, so it does not see this. Stretching along the pitched foot instead lifts the planted end off the floor on every rolling contact.
 - **Cost:** a planted foot on a look with its own foot size is held to a sole it does not have; the probe's sole landmarks are the rig's, not the painted foot's.
 - **Better shape:** let the row's pose solve the rolling contact against the look's own sole (`withLookBuild` carrying the foot size into the stance solve), then scale the foot along its pitched axis and measure the look's own sole in `probeLeg`.
-- **Until then:** don't give a look a foot size much further from the rig's than Ryan's without re-measuring the slide on its own sole.
+- **Until then:** don't give a look a foot size much further from the rig's than the male crawler build's without re-measuring the slide on its own sole.
 - **Size:** M
 - **Found:** 2026-10-24, threading look foot size through the human figure's contacts and probe.
 
 ### A gap that closes by a hairline flickers between outlined and cleared
 
 - **Where:** `clearOutlineInHoles` in `src/sprites/art/figureCompose.ts`, called from `src/sprites/art/biped/figure.ts`; `WING_HEAD_ON`'s `claw` in `src/sprites/art/demonLiaisonArt.ts`.
-- **Problem:** the outline is cleared inside a gap only when the gap is fully enclosed by the silhouette. When a gap's mouth is about one pixel wide, rounding opens it on some frames and shuts it on others, so a block of outline ink comes and goes from frame to frame. The Demon Liaison's wing claw is held a few pixels clear of his horns for this reason. Closing the silhouette by the outline's width before the reachability test fixes that case, but it flips Ryan's `build_side` hand pocket between frames and fails G3.
+- **Problem:** the outline is cleared inside a gap only when the gap is fully enclosed by the silhouette. When a gap's mouth is about one pixel wide, rounding opens it on some frames and shuts it on others, so a block of outline ink comes and goes from frame to frame. The Demon Liaison's wing claw is held a few pixels clear of his horns for this reason. Closing the silhouette by the outline's width before the reachability test fixes that case, but it flips the male crawler's `build_side` hand pocket between frames and fails G3.
 - **Cost:** any figure whose limbs or props nearly touch can gain an idle or loop flicker that only shows up as a stillness or seam failure, and the fix has to be made in that figure's art.
 - **Better shape:** decide whether a gap is enclosed once per row (for example from the rest frame or a majority of frames) rather than per frame, so every frame of a loop treats the same pocket the same way.
 - **Until then:** keep painted parts either clearly touching or a few pixels apart in every frame of a row; don't tune a gate threshold to absorb the flicker.
@@ -239,8 +239,8 @@ Entry shape:
 
 ### A base belt stacks over every worn shirt-slot garment
 
-- **Where:** `RYAN_BELT` in `src/sprites/garments/human/ryanChinos.ts` (layer `outer`), `GARMENT_LAYERS` in `src/sprites/garments/garmentDef.ts`, the id tie-break in `outfitOf` (`src/sprites/garments/outfit.ts`).
-- **Problem:** the belt has to paint over his chinos, which share its `over` layer and sort after it by id, so it sits on `outer`. Every shirt-slot garment (apron, vest, quilted vest) is also `outer`, and `human_*` sorts before `ryan_belt`, so his belt paints over their hips skirts.
+- **Where:** `LEATHER_BELT` in `src/sprites/garments/human/chinos.ts` (layer `outer`), `GARMENT_LAYERS` in `src/sprites/garments/garmentDef.ts`, the id tie-break in `outfitOf` (`src/sprites/garments/outfit.ts`).
+- **Problem:** the belt has to paint over the chinos on the `over` layer, and a same-layer tie is settled by id spelling, so it sits on `outer`. Every shirt-slot garment (apron, vest, quilted vest) is also `outer`, and `human_*` sorts before `leather_belt`, so the belt paints over their hips skirts.
 - **Cost:** stacking within a layer is decided by id spelling, so a garment's place in the outfit depends on its name; a belted coat today is an accident.
 - **Better shape:** let a base garment order its own pieces (or give fastenings their own layer between `over` and `outer`) so stacking never falls to the id tie-break between garments that overlap.
 - **Until then:** don't rename garment ids to win a tie-break.
@@ -256,6 +256,16 @@ Entry shape:
 - **Until then:** don't lower the G17 bar or exempt garments; if a sleeved garment fails on Dave's far forearm, check the roll's contribution before reshading the cloth.
 - **Size:** S.
 - **Found:** 2026-10-26, painting the human's sleeved coats.
+
+### A look's seat fullness reaches only the trousers built by `trouserPainters`
+
+- **Where:** `HumanLook.seatFullness` (`src/sprites/looks/humanLook.ts`), read only in `trouserPainters` (`src/sprites/garments/human/chinos.ts`), which the chinos and the tapered trousers are built from; `TOWNSFOLK_TROUSERS` (`src/sprites/garments/human/townsfolkLegwear.ts`) and every other garment painted over the hips call `paintTrouserSeat` or paint their own seat without it.
+- **Problem:** a body's seat is a fact about the look, but only one trouser painter scales its `SeatFit` by it. A female crawler put in the townsfolk trousers, or any hips garment not built by `trouserPainters`, gets the slim man's seat.
+- **Cost:** each new hips garment has to remember to read `seatFullness` itself, and one that forgets fits every look but the female ones wrongly with every gate green.
+- **Better shape:** apply the look's seat fullness where the seat is painted (`paintTrouserSeat`, or the hips frame handing garments a seat already fitted to the body), so no garment can leave it out.
+- **Until then:** a new trouser or skirt over the hips goes through `trouserPainters` or scales its seat by `frame.look.seatFullness` itself.
+- **Size:** S.
+- **Found:** 2026-10-28, reviewing the female crawler looks.
 
 ### Rows only a hireling plays live in the crawler's row table
 
@@ -278,16 +288,6 @@ Entry shape:
 - **Until then:** don't add more hard-coded HUD measurements to `DialogBox`; read them from `hudLayout` when one is needed.
 - **Size:** M
 - **Found:** 2026-10-27, Caroline's message frame.
-
-### A cutscene's surface can stack over the talk it opened
-
-- **Where:** `CutsceneKit.surface()` (`src/systems/kits/CutsceneKit.ts`), `Conversation.surface()` (`src/dialog/Conversation.ts`) and `UiRoot.refreshStack` (`src/ui/core/UiRoot.ts`).
-- **Problem:** both surfaces sit in the `panel` band for a talk that does not halt the world (every Caroline message), so which one takes a key is decided by open order. Open order is only noticed when the stack is refreshed, which a drawn frame does; when both open between two refreshes, mount order decides, the cutscene surface lands on top, and it swallows the advance key meant for the message under it.
-- **Cost:** correct in the running game only because every frame is drawn; a headless harness that updates without drawing must refresh the stack by hand (`verify:dave-guide` does, through `ui.focusSurfaceId()`), and any future path that opens both inside one frame would leave the player unable to page a message with the keyboard.
-- **Better shape:** make the order explicit: let a surface name the surface it must sit beneath, or have the cutscene surface hand the advance key to the conversation it owns.
-- **Until then:** don't open a cutscene and its talk inside the same update without a draw between them.
-- **Size:** S
-- **Found:** 2026-10-28, Dave's safe-room talks and Caroline's queued messages.
 
 ## Combat
 

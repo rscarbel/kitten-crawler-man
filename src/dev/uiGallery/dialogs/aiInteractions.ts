@@ -4,7 +4,7 @@
  */
 
 import { CAROLINE_CHARACTER_NAME } from '../../../ai/characters';
-import { crawlerName } from '../../../characters/characters';
+import { crawlerDisplayName } from '../../../characters/characters';
 import {
   aiChallengeOfferSurface,
   type AIChallengeOfferView,
@@ -23,7 +23,7 @@ function decodeInFull(rig: FixtureRig): void {
 function questionFixture(
   name: string,
   question: string,
-  choices: readonly string[],
+  choices: () => readonly string[],
 ): DialogFixture {
   return {
     name,
@@ -31,7 +31,7 @@ function questionFixture(
       aiQuestionSurface(name, {
         get pendingQuestion() {
           return shown()
-            ? { id: 'question-1', question, choices, askedBy: CAROLINE_CHARACTER_NAME }
+            ? { id: 'question-1', question, choices: choices(), askedBy: CAROLINE_CHARACTER_NAME }
             : null;
         },
         answer: noop,
@@ -67,10 +67,10 @@ function challengeFixture(name: string): DialogFixture {
 }
 
 export const FIXTURES: readonly DialogFixture[] = [
-  questionFixture('ai-question', 'Save the cat or the loot?', ['The cat', 'The loot']),
-  questionFixture('ai-question-four', 'Which of you is carrying this team?', [
-    crawlerName('human'),
-    crawlerName('cat'),
+  questionFixture('ai-question', 'Save the cat or the loot?', () => ['The cat', 'The loot']),
+  questionFixture('ai-question-four', 'Which of you is carrying this team?', () => [
+    crawlerDisplayName('human'),
+    crawlerDisplayName('cat'),
     'Deinonychus',
     'Nobody',
   ]),

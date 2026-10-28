@@ -59,6 +59,8 @@ const { drinkRefusal } = await import('../src/ui/potionNotices.js');
 const { intoxicationOf } = await import('../src/core/combat/Intoxication.js');
 const { LONG_PRESS_MS, TOUCH_PICKUP_HOLD_MS } =
   await import('../src/ui/screens/inventory/InventoryScreen.js');
+const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js');
+useDevPlayerIdentity();
 
 type Scene = InstanceType<typeof DungeonScene>;
 type GestureKind = 'down' | 'move' | 'up';

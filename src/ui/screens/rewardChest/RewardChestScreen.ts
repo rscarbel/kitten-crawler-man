@@ -19,12 +19,13 @@ import type { AudioManager } from '../../../audio/AudioManager';
 import type { CueSlot } from '../../../audio/cueSlot';
 import type { SoundId } from '../../../audio/sounds';
 import { ABILITY_DEFS } from '../../../abilities/abilityDefs';
-import { crawlerName } from '../../../characters/characters';
+import { crawlerDisplayName } from '../../../characters/characters';
 import { isAIAchievementDef } from '../../../core/progression/AchievementManager';
 import { ITEM_DEF } from '../../../core/items/defs/ItemDefs';
 import { keybindings } from '../../../core/input/Keybindings';
 import { rarityAtLeast, type Rarity } from '../../../core/items/defs/rarity';
-import { type GrantedLine, type RewardPresentation } from '../../../loot/rewardChest';
+import { type RewardPresentation } from '../../../loot/rewardChest';
+import { type GrantedLine } from '../../../core/progression/achievementSave';
 import {
   CHEST_REACH_BELOW,
   chestAnchors,
@@ -550,7 +551,7 @@ export class RewardChestScreen {
       ui,
       { x: inner.x, y, w: inner.w, h: lineHeightOf(ui, 'caption') },
       {
-        text: `Awarded to ${crawlerName(presentation.crawler)}`,
+        text: `Awarded to ${crawlerDisplayName(presentation.crawler)}`,
         role: 'caption',
         color: palette.crawler[presentation.crawler],
         align: 'center',

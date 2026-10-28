@@ -54,7 +54,7 @@ import {
   RATKIN_CAST_OUTFITS,
   type RatkinCastId,
 } from '../src/sprites/art/ratkin/cast.js';
-import { VILLAGER_IDS } from '../src/dialog/scripts/briarHollow/index.js';
+import { VILLAGER_IDS } from '../src/core/quests/villagerIds.js';
 import {
   RATKIN_CAST_TILE_SCALE,
   castRowsFor,
@@ -74,6 +74,9 @@ import {
   RATKIN_PREWARM_RADIUS_TILES,
   RatkinCastPrewarm,
 } from '../src/systems/briarHollow/ratkinCastPrewarm.js';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+
+useDevPlayerIdentity();
 
 const CHANNELS = 4;
 const ALPHA_OFFSET = 3;

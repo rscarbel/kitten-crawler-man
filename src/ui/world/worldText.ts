@@ -17,6 +17,7 @@
  * the alignment anchor, as with canvas `textAlign`.
  */
 
+import { graphemes } from '../../core/text/graphemes';
 import { computeLineSpans } from '../../dialog/paginate';
 import { digitCellWidth } from '../theme/fonts';
 import {
@@ -146,8 +147,8 @@ export function worldLineHeight(
 function lineWidth(ctx: CanvasRenderingContext2D, line: string, digitCell: number | null): number {
   if (digitCell === null) return ctx.measureText(line).width;
   let width = 0;
-  for (const char of line) {
-    width += DIGIT.test(char) ? digitCell : ctx.measureText(char).width;
+  for (const cluster of graphemes(line)) {
+    width += DIGIT.test(cluster) ? digitCell : ctx.measureText(cluster).width;
   }
   return width;
 }
@@ -174,12 +175,12 @@ function paintTabularLine(
   stroke: boolean,
 ): void {
   let x = left;
-  for (const char of line) {
-    const natural = ctx.measureText(char).width;
-    const cell = DIGIT.test(char) ? digitCell : natural;
-    const charX = x + (cell - natural) / 2;
-    if (stroke) ctx.strokeText(char, charX, y);
-    else ctx.fillText(char, charX, y);
+  for (const cluster of graphemes(line)) {
+    const natural = ctx.measureText(cluster).width;
+    const cell = DIGIT.test(cluster) ? digitCell : natural;
+    const clusterX = x + (cell - natural) / 2;
+    if (stroke) ctx.strokeText(cluster, clusterX, y);
+    else ctx.fillText(cluster, clusterX, y);
     x += cell;
   }
 }

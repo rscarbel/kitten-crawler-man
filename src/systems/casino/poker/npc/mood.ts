@@ -6,7 +6,7 @@
 
 import { POKER_TIER_IDS, type PokerTierId } from '../pokerStakes';
 import { type Archetype, type PokerProfile, clampUnit } from './profiles';
-import type { RegularId } from './regulars';
+import type { RegularId } from './regularIds';
 
 /** Who a tilted regular is gunning for: a seat, and who sat in it when they got stung. */
 export interface TiltTarget {

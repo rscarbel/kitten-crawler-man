@@ -5,16 +5,14 @@
  * the other.
  */
 
-import { CHARACTERS, isCatCharacter } from '../src/characters/characters.js';
+import { PAINTED_CATS, PLAYER_CAT } from '../src/characters/characterLooks.js';
 import type { CatLook } from '../src/sprites/looks/catLook.js';
 
 /** Every cat in the character registry, so a new cat is gated without being listed here. */
-export const CAT_LOOKS: readonly CatLook[] = Object.values(CHARACTERS)
-  .filter(isCatCharacter)
-  .map((cat) => cat.look);
+export const CAT_LOOKS: readonly CatLook[] = PAINTED_CATS.map((cat) => cat.look);
 
 /** The look a harness paints when `--look=` names none. */
-const DEFAULT_CAT_LOOK_ID = CHARACTERS.belle.look.id;
+const DEFAULT_CAT_LOOK_ID = PLAYER_CAT.look.id;
 
 /** The look `--look=<id>` names, or the default; throws on an id no look has. */
 export function catLookFlag(argv: readonly string[] = process.argv): CatLook {

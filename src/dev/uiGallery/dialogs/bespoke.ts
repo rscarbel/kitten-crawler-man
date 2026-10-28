@@ -2,11 +2,8 @@ import { CAROLINE_CHARACTER_NAME } from '../../../ai/characters';
 import { ACHIEVEMENT_DEFS, type AwardDef } from '../../../core/progression/AchievementManager';
 import { ITEM_DEF, isItemId, type ItemId } from '../../../core/items/defs/ItemDefs';
 import { RARITIES, type Rarity } from '../../../core/items/defs/rarity';
-import {
-  CHEST_SOURCE_TITLES,
-  type GrantedLine,
-  type RewardPresentation,
-} from '../../../loot/rewardChest';
+import { CHEST_SOURCE_TITLES, type RewardPresentation } from '../../../loot/rewardChest';
+import { type GrantedLine } from '../../../core/progression/achievementSave';
 import type { Surface, Ui } from '../../../ui/core/UiRoot';
 import { drawLoadingScreen } from '../../../ui/LoadingScreen';
 import { COLLECT_GUARD_FRAMES, chestTimeline } from '../../../ui/screens/rewardChest/chestTimeline';

@@ -391,7 +391,7 @@ console.log('\nChecking every def’s encounter under every difficulty profile�
 }
 
 // The crony mantises, both skeleton warriors and the regular rock golem are
-// meant to be first-class mobs Ryan can spawn ambiently later, not boss
+// meant to be first-class mobs that can spawn ambiently later, not boss
 // appendages. That is only true if the registry can actually build them.
 console.log('\nSpawning every reusable bounty minion through the registry…');
 {

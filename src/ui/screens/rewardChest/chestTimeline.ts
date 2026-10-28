@@ -11,7 +11,7 @@
 
 import { ITEM_DEF } from '../../../core/items/defs/ItemDefs';
 import { rarityAtLeast, rarityRank, type Rarity } from '../../../core/items/defs/rarity';
-import type { GrantedLine } from '../../../loot/rewardChest';
+import type { GrantedLine } from '../../../core/progression/achievementSave';
 
 /** The chest starts falling on the screen's first frame. */
 export const DROP_START_FRAME = 0;

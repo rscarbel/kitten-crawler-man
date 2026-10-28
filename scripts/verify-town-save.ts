@@ -63,11 +63,14 @@ import type { VisitedPlaceId } from '../src/core/state/TownMemory.js';
 import {
   AchievementManager,
   DUNGEON_KILLS_SOMETHING_HATCHED,
-  type AchievementId,
 } from '../src/core/progression/AchievementManager.js';
+import { type AchievementId } from '../src/core/progression/achievementSave.js';
 import { CHEST_SOURCE_TITLES } from '../src/loot/rewardChest.js';
 import { installBrowserShim } from './browserShim.js';
 import { settleArrival } from './settleArrival.js';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+
+useDevPlayerIdentity();
 
 const MINIMAL_SEED = 1;
 const ASCENDING_DIGITS_SEED = 123456789;

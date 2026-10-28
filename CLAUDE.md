@@ -57,7 +57,7 @@ Exactly four docs are durable references describing the shipped system, and thos
 
 ## Validation Gates
 
-One command runs format, typecheck (game and scripts), lint, `check:ui-style`, `check:audio` and `check:spawn-funnel` in parallel and prints one line per gate:
+One command runs format, typecheck (game and scripts), lint, `check:ui-style`, `check:audio`, `check:spawn-funnel` and `check:server-imports` in parallel and prints one line per gate:
 
 - **While iterating:** `npm run check`. Cached lint and format, plus the native TypeScript compiler when it is installed; seconds when little changed. Don't chain `typecheck`, `lint` and `format` yourself.
 - **Before calling work complete:** `npm run check:full` must exit 0. It runs stable `tsc` and an uncached lint, which catches what the cached lint can miss: a type change in one file breaking a type-aware rule in an untouched file.

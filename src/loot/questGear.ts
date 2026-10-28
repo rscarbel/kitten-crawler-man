@@ -4,7 +4,7 @@
  * its sell price instead, the same as any other duplicate.
  */
 
-import { crawlerName } from '../characters/characters';
+import { crawlerDisplayName } from '../characters/characters';
 import { ITEM_DEF } from '../core/items/defs/ItemDefs';
 import type { CrawlerKind } from '../core/skills/SkillManager';
 import type { Player } from '../Player';
@@ -42,5 +42,5 @@ export function grantQuestGear(party: GearParty, id: GearId, earner: CrawlerKind
     return bagItemRewardLine(id, 1, { flyToBag: false, note: `Duplicate: +${coins} coins` });
   }
   owner.inventory.addItem(id, 1);
-  return bagItemRewardLine(id, 1, { note: `For ${crawlerName(recipient)}` });
+  return bagItemRewardLine(id, 1, { note: `For ${crawlerDisplayName(recipient)}` });
 }

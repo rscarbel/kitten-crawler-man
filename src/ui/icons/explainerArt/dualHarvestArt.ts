@@ -5,7 +5,7 @@
  * keeps chopping, both hauls climbing.
  */
 
-import { crawlerName } from '../../../characters/characters';
+import { crawlerDisplayName } from '../../../characters/characters';
 import type { IllustrationRect } from './illustration';
 import {
   BOULDER_KEY,
@@ -81,7 +81,6 @@ const MARKER_HOP_PX = 16;
 /** Low between the two pairs, under the path the marker slides along overhead. */
 const CONTROL_ABOVE_GROUND = 76;
 const CONTROL_CAPTION_GAP = 6;
-const CONTROL_CAPTION = `Switch to ${crawlerName('cat')}`;
 const CONTROL_CAPTION_SIZE = 12;
 const CONTROL_CAPTION_COLOR = '#e2e8f0';
 
@@ -197,7 +196,7 @@ function drawSwitchControl(
 }
 
 function drawControlCaption(ctx: CanvasRenderingContext2D, centreX: number, above: number): void {
-  worldText(ctx, CONTROL_CAPTION, {
+  worldText(ctx, `Switch to ${crawlerDisplayName('cat')}`, {
     x: centreX,
     y: above + CONTROL_CAPTION_GAP,
     size: CONTROL_CAPTION_SIZE,

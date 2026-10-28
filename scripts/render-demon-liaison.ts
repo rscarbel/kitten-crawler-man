@@ -26,7 +26,8 @@ import {
 import { TILE_SIZE } from '../src/core/constants.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 import { figureByteBudgetFor } from '../src/sprites/figure/figureFrameCache.js';
-import { HUMAN_FIGURE } from '../src/sprites/art/humanFigure.js';
+import { undressedHumanFigure } from '../src/sprites/art/humanFigure.js';
+import { activeHumanLook } from '../src/sprites/humanSprite.js';
 import { townCastOutfitFigure, townCastStateName } from '../src/sprites/art/townCastFigure.js';
 import { TOWN_CAST_LOOKS } from '../src/sprites/person/townCastLooks.js';
 import {
@@ -186,7 +187,7 @@ function contextSubjects(): Subject[] {
     };
   });
   return [
-    { label: 'The human', def: HUMAN_FIGURE, state: 'idle', frame: 0 },
+    { label: 'The human', def: undressedHumanFigure(activeHumanLook()), state: 'idle', frame: 0 },
     { label: 'Demon Liaison', def: DEMON_LIAISON_FIGURE, state: 'idle', frame: 0 },
     { label: 'side', def: DEMON_LIAISON_FIGURE, state: 'idle_side', frame: 0 },
     { label: 'away', def: DEMON_LIAISON_FIGURE, state: 'idle_away', frame: 0 },

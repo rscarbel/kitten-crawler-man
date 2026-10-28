@@ -1,6 +1,6 @@
 import type { AbilityManager } from '../skills/AbilityManager';
 import type { AchievementManager } from '../progression/AchievementManager';
-import type { PlayerSnapshot } from './PlayerSnapshot';
+import type { PlayerSnapshot } from './playerSnapshotFormat';
 import type { WorldCheckpoint } from './WorldCheckpoint';
 import type { PartyCraftsState } from '../labour/partyCrafts';
 

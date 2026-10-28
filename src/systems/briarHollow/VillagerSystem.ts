@@ -43,15 +43,8 @@ import type {
 } from '../../dialog/request';
 import { topicMenu } from '../../dialog/topics';
 import { SPEAKERS } from '../../dialog/speakers';
-import {
-  GARN,
-  MERRIT,
-  MIDGE,
-  PIPKIN,
-  VILLAGER_IDS,
-  WICKER,
-  type VillagerId,
-} from '../../dialog/scripts/briarHollow';
+import { GARN, MERRIT, MIDGE, PIPKIN, WICKER } from '../../dialog/scripts/briarHollow';
+import { VILLAGER_IDS, type VillagerId } from '../../core/quests/villagerIds';
 import { VILLAGER_SCRIPTS } from '../../dialog/villagerRegistry';
 import { VillageNavigator } from './villageNavigator';
 import { tradingPostRunningLow } from './services/tradingPost';

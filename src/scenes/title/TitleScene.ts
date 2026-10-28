@@ -25,11 +25,13 @@ import { TitleCameraRig } from './titleCamera';
 import type { TitleLayer } from './titleLayer';
 import { TITLE_LAYERS } from './titleLayers';
 import { TitleMenu, type TitleMenuChoice } from './titleMenu';
-import { freshTitleEventSeed, TitleEventScheduler, TitleQuipChannel } from './titleEvents';
+import { freshTitleEventSeed, TitleEventScheduler } from './titleEvents';
 import { titlePromptSurface } from './titlePrompt';
 import { TitleMusicPulse } from './titlePulse';
+import { CharacterCreation } from '../../ui/screens/creation/characterCreation';
+import { CreationFigureCells } from './creationFigures';
+import { setPlayerIdentity } from '../../characters/playerIdentity';
 import { prefersReducedMotion } from '../../ui/core/reducedMotion';
-import { TITLE_WELCOME_HOLD_MS, TITLE_WELCOME_LINE, titleSystemAiSurface } from './titleSystemAi';
 import { TitleLightRigState, stageLayout, type TitleStage } from './titleStage';
 import {
   DIVE_DURATION_MS,
@@ -62,7 +64,15 @@ export interface TitleSceneHarness {
   readonly reducedMotion?: boolean;
   /** Fixes which idle beats play when; a live title draws a fresh one. */
   readonly eventSeed?: number;
+  /**
+   * Replaces the scene manager's canvas as the anchor of the name field's
+   * hidden text input. Null for a headless harness, which has no page to put
+   * one on and types only through the keys the screen is offered.
+   */
+  readonly keyboardAnchor?: HTMLCanvasElement | null;
 }
+
+export const CHARACTER_CREATION_SURFACE_ID = 'character-creation';
 
 export class TitleScene extends Scene {
   readonly ui: UiRoot;
@@ -74,9 +84,8 @@ export class TitleScene extends Scene {
   private readonly lights = new TitleLightRigState();
   private readonly layers: readonly TitleLayer[];
   private readonly menu: TitleMenu;
+  private readonly creation: CharacterCreation;
   private readonly events: TitleEventScheduler;
-  /** Caroline's lines (her welcome, then her quips), for the line that shows them to listen on. */
-  readonly quips = new TitleQuipChannel();
   private readonly pulse: TitleMusicPulse;
   private stage: TitleStage;
   /** The insets the stage was laid out inside; a change (a rotation) lays it out again. */
@@ -112,7 +121,6 @@ export class TitleScene extends Scene {
         broadcast: (fire) => {
           for (const layer of this.layers) layer.onEvent?.(fire);
         },
-        quip: (quip) => this.quips.publish(quip),
       },
       harness.eventSeed ?? freshTitleEventSeed(),
     );
@@ -125,6 +133,11 @@ export class TitleScene extends Scene {
         // The menu is a modal, so every gesture lands on it; nothing lies beneath.
       },
     });
+    this.creation = new CharacterCreation({
+      figures: new CreationFigureCells(),
+      keyboardAnchor:
+        harness.keyboardAnchor === undefined ? sceneManager.canvas : harness.keyboardAnchor,
+    });
     this.menu = new TitleMenu({
       input,
       sceneManager,
@@ -133,6 +146,14 @@ export class TitleScene extends Scene {
       stage: () => this.stage,
       clock: () => this.clock,
       choose: (launch) => this.dive(launch),
+      isDiving: () => this.pendingLaunch !== null,
+      createCrawler: (begin) => {
+        this.creation.open((identity) => {
+          setPlayerIdentity(identity);
+          for (const layer of this.layers) layer.onIdentityChosen?.();
+          begin();
+        });
+      },
     });
     this.ui.mount(
       titlePromptSurface({
@@ -141,15 +162,13 @@ export class TitleScene extends Scene {
         menuStrip: (ui) => this.menu.layout(ui).strip,
       }),
     );
-    this.ui.mount(
-      titleSystemAiSurface({
-        clock: () => this.clock,
-        quips: this.quips,
-        stage: () => this.stage,
-        menuStrip: (ui) => this.menu.layout(ui).strip,
-      }),
-    );
     this.ui.mount(this.menu.surface());
+    this.ui.mount(this.creation.surface(CHARACTER_CREATION_SURFACE_ID));
+  }
+
+  /** The character creation screen a new game opens, for harnesses that walk through it. */
+  get characterCreation(): CharacterCreation {
+    return this.creation;
   }
 
   /** The menu's choices in order, as the player sees them. */
@@ -169,6 +188,7 @@ export class TitleScene extends Scene {
 
   onExit(): void {
     this.exited = true;
+    this.creation.dispose();
     this.scope?.dispose();
     this.scope = null;
     this.pulse.dispose();
@@ -182,7 +202,6 @@ export class TitleScene extends Scene {
   showMoment(moment: TitleMoment): void {
     this.clock.freezeAt(moment);
     this.events.restart();
-    this.quips.clear();
     this.ignitionCursor = new TimelineCursor(IGNITION_TIMELINE);
     this.diveCursor = new TimelineCursor(DIVE_TIMELINE);
     const { elapsedMs, stateElapsedMs } = this.clock;
@@ -306,7 +325,7 @@ export class TitleScene extends Scene {
   }
 
   /**
-   * Hands `keyframes` to the camera, the layers and Caroline's line, each
+   * Hands `keyframes` to the camera and the layers, each
    * timed on the scene clock from `sequenceStartedAtMs`, so a sequence
    * entered part-way shows a cue already as far along as it would be.
    */
@@ -316,13 +335,6 @@ export class TitleScene extends Scene {
       const firedAtElapsedMs = sequenceStartedAtMs + keyframe.atMs;
       this.camera.onCue(keyframe.cue, firedAtElapsedMs, reducedMotion);
       for (const layer of this.layers) layer.onCue?.(keyframe.cue);
-      if (keyframe.cue === 'typewriterStart') {
-        this.quips.publish({
-          text: TITLE_WELCOME_LINE.text,
-          startedAtMs: firedAtElapsedMs,
-          durationMs: TITLE_WELCOME_HOLD_MS,
-        });
-      }
     }
   }
 

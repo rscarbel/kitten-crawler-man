@@ -4,20 +4,7 @@ import type { Rarity } from '../core/items/defs/rarity';
 import type { CrawlerKind } from '../core/skills/SkillManager';
 import { randomIntFrom } from '../utils';
 import { rollGearFromPool, type GearId } from './gearPools';
-
-/**
- * One thing an award has already put into a crawler's bag or purse. The
- * reward screen only pictures these; it never grants anything itself.
- */
-export type GrantedLine =
-  | { readonly kind: 'item'; readonly id: ItemId; readonly quantity: number }
-  | { readonly kind: 'coins'; readonly amount: number }
-  | { readonly kind: 'companion'; readonly id: 'deinonychus' }
-  /** A rolled piece of gear the party already owned, paid out at its sell price. */
-  | { readonly kind: 'duplicate'; readonly id: ItemId; readonly coins: number };
-
-/** Where a chest that is not an achievement came from, named on its header. */
-export type ChestSource = 'caroline' | 'challenge' | 'wheel' | 'bossRepeat' | 'quest';
+import type { ChestSource, GrantedLine } from '../core/progression/achievementSave';
 
 /**
  * What a presentation pays for: an achievement (built-in or the AI's), or a

@@ -1,5 +1,5 @@
 /**
- * Ryan's shoes: black knit low-top sneakers on a thin white sole that runs
+ * Black knit low-top sneakers on a thin white sole that runs
  * along the bottom edge only — the shoe reads as black, the sole as a fine
  * line under it. Worn under his trousers, so the cuff breaks over the top of
  * the shoe.
@@ -75,8 +75,8 @@ function paintLeg(ctx: CanvasRenderingContext2D, frame: BipedLegFrame): void {
   paintBootOnLeg(ctx, frame, far ? FAR_SNEAKER : SNEAKERS);
 }
 
-export const RYAN_SNEAKERS = defineGarment({
-  id: 'ryan_sneakers',
+export const KNIT_SNEAKERS = defineGarment({
+  id: 'knit_sneakers',
   name: 'Knit sneakers',
   wearer: 'human',
   base: true,

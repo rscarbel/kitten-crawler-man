@@ -98,6 +98,8 @@ const { AmbientSoundSystem } = await import('../src/systems/AmbientSoundSystem.j
 const { ON_DEMAND_SOUND_IDS, SOUND_MANIFEST } = await import('../src/audio/sounds.js');
 const { MACHINERY_LOOP, SPIDER_WALKING_LOOP, WADING_LOOP, WALKING_LOOP } =
   await import('../src/audio/loopLevels.js');
+const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js');
+useDevPlayerIdentity();
 const { checkBackfill, checkSaveRoundTrip } = await import('./verifyAudio/musicLibrary.js');
 const director = await import('./verifyAudio/director.js');
 const { checkNoticesSurviveSceneChange } = await import('./verifyAudio/musicNotices.js');

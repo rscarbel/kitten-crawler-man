@@ -19,7 +19,7 @@ import type {
 import { rectCentre, rectContains } from '../../map/overworld/briarHollowSite';
 import type { TilePoint, TileRect } from '../../map/town/townPlan';
 import { findNearbyWalkableTile } from '../../map/findWalkableTile';
-import { RATKIN_SOLDIER_IDS, type RatkinSoldierId } from '../../sprites/art/ratkin/cast';
+import { SOLDIER_IDS, type SoldierId } from '../../core/quests/villagerIds';
 import { normalize } from '../../utils';
 
 /** Within this many tiles of the palisade, a patrol runs along the inside of the wall. */
@@ -44,7 +44,7 @@ const MIN_ROUTE_WAYPOINTS = 2;
 const ROUTE_LEG_BUDGET_TILES = 60;
 
 /** Which side of the village each soldier defends when the siege comes. */
-const BATTLE_LANES: Readonly<Record<RatkinSoldierId, AssaultLane['id']>> = {
+const BATTLE_LANES: Readonly<Record<SoldierId, AssaultLane['id']>> = {
   hobb: 'south',
   marta: 'south',
   sedge: 'east',
@@ -59,14 +59,14 @@ export interface SoldierStation {
 }
 
 export interface SoldierPosts {
-  readonly post: Readonly<Record<RatkinSoldierId, SoldierStation>>;
-  readonly battlePost: Readonly<Record<RatkinSoldierId, SoldierStation>>;
+  readonly post: Readonly<Record<SoldierId, SoldierStation>>;
+  readonly battlePost: Readonly<Record<SoldierId, SoldierStation>>;
   /**
    * Every soldier's battle post when the whole assault comes from one side:
    * the four of them spread along the inside of that wall, facing the lane.
    */
   readonly battlePostByLane: Readonly<
-    Record<AssaultLaneId, Readonly<Record<RatkinSoldierId, SoldierStation>>>
+    Record<AssaultLaneId, Readonly<Record<SoldierId, SoldierStation>>>
   >;
   /** Sedge's walk along the east palisade while at his post. */
   readonly sedgeBeat: readonly TilePoint[];
@@ -294,7 +294,7 @@ export function computeSoldierPosts(gameMap: GameMap, site: BriarHollowSite): So
   const lumberYard = rectCentre(site.lumberYard.rect);
   const lumberWall = wallPost(gameMap, site, bounds.x, lumberYard.y);
   const squareAnchor = site.villagerAnchors.square[0] ?? rectCentre(site.square.rect);
-  const wanted: Readonly<Record<RatkinSoldierId, TilePoint>> = {
+  const wanted: Readonly<Record<SoldierId, TilePoint>> = {
     hobb: site.gate.inside,
     sedge: eastWall,
     marta: squareAnchor,
@@ -313,7 +313,7 @@ export function computeSoldierPosts(gameMap: GameMap, site: BriarHollowSite): So
 
   const battleTaken = new Set<string>();
   const perLaneCount = new Map<AssaultLane['id'], number>();
-  const battleStation = (id: RatkinSoldierId): SoldierStation => {
+  const battleStation = (id: SoldierId): SoldierStation => {
     const laneId = BATTLE_LANES[id];
     const lane = site.assaultLanes.find((candidate) => candidate.id === laneId);
     if (lane === undefined) return post[id];
@@ -324,20 +324,20 @@ export function computeSoldierPosts(gameMap: GameMap, site: BriarHollowSite): So
     const tile = wallPost(gameMap, site, lane.approach.x, lane.approach.y, offset);
     return station(claimSpot(gameMap, tile, battleTaken));
   };
-  const battlePost: Record<RatkinSoldierId, SoldierStation> = {
+  const battlePost: Record<SoldierId, SoldierStation> = {
     hobb: post.hobb,
     sedge: post.sedge,
     marta: post.marta,
     pru: post.pru,
   };
-  for (const id of RATKIN_SOLDIER_IDS) battlePost[id] = battleStation(id);
+  for (const id of SOLDIER_IDS) battlePost[id] = battleStation(id);
 
-  const laneStations = (laneId: AssaultLaneId): Record<RatkinSoldierId, SoldierStation> => {
+  const laneStations = (laneId: AssaultLaneId): Record<SoldierId, SoldierStation> => {
     const lane = site.assaultLanes.find((candidate) => candidate.id === laneId);
-    const stations: Record<RatkinSoldierId, SoldierStation> = { ...battlePost };
+    const stations: Record<SoldierId, SoldierStation> = { ...battlePost };
     if (lane === undefined) return stations;
     const laneTaken = new Set<string>();
-    RATKIN_SOLDIER_IDS.forEach((id, turn) => {
+    SOLDIER_IDS.forEach((id, turn) => {
       const side = turn % 2 === 0 ? 1 : -1;
       const offset = side * Math.ceil(turn / 2) * BATTLE_POST_SPREAD_TILES;
       const tile = wallPost(gameMap, site, lane.approach.x, lane.approach.y, offset);
@@ -345,7 +345,7 @@ export function computeSoldierPosts(gameMap: GameMap, site: BriarHollowSite): So
     });
     return stations;
   };
-  const battlePostByLane: Record<AssaultLaneId, Record<RatkinSoldierId, SoldierStation>> = {
+  const battlePostByLane: Record<AssaultLaneId, Record<SoldierId, SoldierStation>> = {
     north: laneStations('north'),
     south: laneStations('south'),
     east: laneStations('east'),

@@ -17,7 +17,7 @@
 
 import type { QuestStatus } from './QuestManager';
 import type { BuildingId } from '../../map/buildingIds';
-import type { ResidentId } from '../../systems/townResidents';
+import type { ResidentId } from '../state/residentIds';
 
 /** The questline's display title, as the journal, overlay and reward screens name it. */
 export const ANCHOR_QUEST_NAME = 'The Anchor is Broken';

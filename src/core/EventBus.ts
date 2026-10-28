@@ -21,6 +21,7 @@ import type { QuestRewardSpec } from '../ui/questReward/types';
 import type { DishId } from '../systems/bopcaDialog';
 import type { TravelDestinationId } from '../systems/travel/travelDestinations';
 import type { SkillId, CrawlerKind } from './skills/SkillManager';
+import type { SpeakerRef } from '../dialog/speakers';
 import type { CraftSkillId } from './labour/CraftSkills';
 import type { StructureKind } from './world/structureKinds';
 import type { PalisadeTier } from '../map/tileTypes';
@@ -342,7 +343,7 @@ export interface GameEvents {
     rarity: Rarity;
     coins: number;
     potions: number;
-    items: string[];
+    items: ItemId[];
   };
 
   /**
@@ -353,7 +354,7 @@ export interface GameEvents {
   playerDied: { fallen: Player | null; cause: string };
 
   /** A conversation opened on an empty dialog box (`started`) or the box emptied (`ended`). */
-  conversation: { speaker: string; phase: 'started' | 'ended' };
+  conversation: { speaker: SpeakerRef; phase: 'started' | 'ended' };
 
   /** Dave pointed the party at one of the floor's objectives. */
   daveAdviceGiven: { objectiveId: string };

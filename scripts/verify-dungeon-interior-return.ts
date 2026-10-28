@@ -83,6 +83,8 @@ const { GameMap } = await import('../src/map/GameMap.js');
 const { dungeonOptionsForLevel } = await import('../src/levels/dungeonOptions.js');
 const { level2 } = await import('../src/levels/level2.js');
 const { sceneSetupFromSave } = await import('../src/scenes/resumeFromSave.js');
+const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js');
+useDevPlayerIdentity();
 
 type Scene = InstanceType<typeof DungeonScene>;
 type Inside = InstanceType<typeof BuildingInteriorScene>;

@@ -12,6 +12,30 @@ export interface JsonObject {
   [key: string]: JsonValue;
 }
 
+/** `value` with `transform` applied to every string in it, object keys included. */
+function mapJsonStrings(value: JsonValue, transform: (text: string) => string): JsonValue {
+  if (typeof value === 'string') return transform(value);
+  if (Array.isArray(value)) return value.map((item) => mapJsonStrings(item, transform));
+  if (isJsonObject(value)) return mapJsonObjectStrings(value, transform);
+  return value;
+}
+
+/**
+ * `object` with `transform` applied to every string in it, keys as well as
+ * values, keeping its type. Keys count because some records are keyed by
+ * display text (a crawler's notable items, by item name).
+ */
+export function mapJsonObjectStrings(
+  object: JsonObject,
+  transform: (text: string) => string,
+): JsonObject {
+  const out: JsonObject = {};
+  for (const [key, item] of Object.entries(object)) {
+    out[transform(key)] = mapJsonStrings(item, transform);
+  }
+  return out;
+}
+
 export function isJsonObject(value: JsonValue | undefined): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

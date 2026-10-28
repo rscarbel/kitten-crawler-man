@@ -23,12 +23,7 @@
  * carriable thing where none is chosen.
  */
 
-import {
-  CHARACTERS,
-  type CatCharacterDef,
-  isCatCharacter,
-  playerCharacter,
-} from '../characters/characters';
+import { PAINTED_CATS, PLAYER_CAT, type PaintedCat } from '../characters/characterLooks';
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import {
   catLookOf,
@@ -268,17 +263,13 @@ class RowPlayback {
   }
 }
 
-/** The cats the preview can paint, by the look id `&look=` names: every cat in the registry. */
-const PREVIEW_CATS: readonly CatCharacterDef[] = Object.values(CHARACTERS).filter(isCatCharacter);
-
 /**
  * The cat `&look=` names, the player's cat by default, made the sprite's active look as
  * it is chosen: every cat the scene makes after this paints in it.
  */
-function selectPreviewCat(): CatCharacterDef {
+function selectPreviewCat(): PaintedCat {
   const wanted = new URLSearchParams(window.location.search).get('look');
-  const cat =
-    PREVIEW_CATS.find((candidate) => candidate.look.id === wanted) ?? playerCharacter('cat');
+  const cat = PAINTED_CATS.find((candidate) => candidate.look.id === wanted) ?? PLAYER_CAT;
   setCatLook(cat.look);
   return cat;
 }
@@ -589,7 +580,7 @@ export class CatPreviewScene extends PreviewScene {
   }
 
   protected previewTitle(): string {
-    return `cat preview — ?cat&look=${PREVIEW_CATS.map((cat) => cat.look.id).join('|')}`;
+    return `cat preview — ?cat&look=${PAINTED_CATS.map((cat) => cat.look.id).join('|')}`;
   }
 
   protected previewCaptions(): readonly string[] {

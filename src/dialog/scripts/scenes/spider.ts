@@ -4,7 +4,7 @@
  * the hallway, and Caroline's warning that follows it.
  */
 
-import { crawlerName } from '../../../characters/characters';
+import { crawlerDisplayName } from '../../../characters/characters';
 import { carolineLines } from '../../caroline';
 import { speakerLines } from '../../line';
 
@@ -21,6 +21,7 @@ export const SCIENTIST = {
   ]),
 };
 
-export const CAROLINE_SPIDER_WARNING = carolineLines.message(
-  `${crawlerName('human')}. This quest is optional: the stairwell does not require it. The lab ahead is classified high risk. Completion is rewarded.`,
+export const CAROLINE_SPIDER_WARNING = carolineLines.deferredMessage(
+  () =>
+    `${crawlerDisplayName('human')}. This quest is optional: the stairwell does not require it. The lab ahead is classified high risk. Completion is rewarded.`,
 );

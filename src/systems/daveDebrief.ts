@@ -14,7 +14,8 @@ import {
   type WearableItem,
 } from '../core/items/defs/ItemDefs';
 import { traitScore, type GearTraitKind } from '../gear/traits';
-import { crawlerName } from '../characters/characters';
+import { crawlerDisplayName } from '../characters/characters';
+import { crawlerPronouns } from '../characters/crawlerPronouns';
 import { type CrawlerKind } from '../core/skills/SkillManager';
 import {
   DAVE_DEBRIEF_CONGRATS,
@@ -24,21 +25,7 @@ import {
   daveSpokenPages,
 } from '../dialog/scripts/dave';
 import type { DialogLine } from '../dialog/line';
-
-/** In the order the spine meets them; {@link isSupersededDebrief} relies on it. */
-const DEBRIEF_BOSS_TYPES = ['trash_gremlin', 'big_rooster', 'krakaren_clone'] as const;
-
-export type DebriefBossType = (typeof DEBRIEF_BOSS_TYPES)[number];
-
-export const ALL_DEBRIEF_BOSS_TYPES: ReadonlyArray<DebriefBossType> = DEBRIEF_BOSS_TYPES;
-
-export function debriefBossType(bossType: string | undefined): DebriefBossType | null {
-  if (bossType === undefined) return null;
-  for (const id of DEBRIEF_BOSS_TYPES) {
-    if (id === bossType) return id;
-  }
-  return null;
-}
+import { ALL_DEBRIEF_BOSS_TYPES, type DebriefBossType } from '../core/mobs/debriefBossTypes';
 
 /**
  * A later gauntlet kill retires this boss's debrief, so only the newest exit room
@@ -48,7 +35,7 @@ export function isSupersededDebrief(
   bossType: DebriefBossType,
   defeatedBossTypes: ReadonlySet<string>,
 ): boolean {
-  const laterBosses = DEBRIEF_BOSS_TYPES.slice(DEBRIEF_BOSS_TYPES.indexOf(bossType) + 1);
+  const laterBosses = ALL_DEBRIEF_BOSS_TYPES.slice(ALL_DEBRIEF_BOSS_TYPES.indexOf(bossType) + 1);
   return laterBosses.some((later) => defeatedBossTypes.has(later));
 }
 
@@ -58,11 +45,6 @@ export const BOSS_DISPLAY_NAMES = {
   big_rooster: 'Big Rooster',
   krakaren_clone: 'Krakaren Clone',
 } as const satisfies Record<DebriefBossType, string>;
-
-const CRAWLER_POSSESSIVES = {
-  human: 'his',
-  cat: 'her',
-} as const satisfies Record<CrawlerKind, string>;
 
 const CRAWLER_ORDER: ReadonlyArray<CrawlerKind> = ['human', 'cat'];
 
@@ -258,10 +240,10 @@ function gearSentences(recommendable: ReadonlyArray<UnwornItem>): GearSentence[]
   for (const owner of CRAWLER_ORDER) {
     const own = recommendable.filter((item) => item.owner === owner);
     chunk(own, MAX_ITEMS_PER_DEBRIEF_PAGE).forEach((group, index) => {
-      const name = crawlerName(owner);
+      const name = crawlerDisplayName(owner);
       const text =
         index === 0
-          ? daveDebriefGearFirstSentence(name, CRAWLER_POSSESSIVES[owner], itemList(group))
+          ? daveDebriefGearFirstSentence(name, crawlerPronouns(owner).possessive, itemList(group))
           : daveDebriefGearMoreSentence(name, itemList(group));
       sentences.push({ text, itemIds: group.map((item) => item.id) });
     });

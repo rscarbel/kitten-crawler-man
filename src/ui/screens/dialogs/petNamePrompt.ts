@@ -7,12 +7,14 @@
  */
 
 import {
-  PET_NAME_MAX_LENGTH,
+  PET_NAME_RULE_MESSAGES,
   PET_NAME_SUGGESTIONS,
   parsePetName,
+  petNameRejection,
   type PetKind,
   type PetName,
 } from '../../../core/party/petNames';
+import { NAME_MAX_CODE_UNITS } from '../../../core/naming/nameRules';
 import { activeInputMode } from '../../core/inputMode';
 import type { Rect } from '../../core/geom';
 import type { KeyModifiers, Surface, Ui } from '../../core/UiRoot';
@@ -46,8 +48,6 @@ const PET_NAME_PROMPT_TITLES = {
 const PET_NAME_PLACEHOLDER = 'Type a name';
 const SURPRISE_LABEL = 'Surprise me';
 const CONFIRM_LABEL = 'Confirm';
-const EMPTY_NAME_REASON = 'Type a name or pick one';
-const ILLEGAL_NAME_REASON = "Letters, digits, spaces, ' and - only";
 const PANEL_WIDTH = 'md';
 const CHIP_SIZE = 'sm';
 const PORTRAIT_HEIGHT = 96;
@@ -118,7 +118,7 @@ export class PetNamePrompt {
       return;
     }
     const sink = new TextEntrySink({
-      maxLength: PET_NAME_MAX_LENGTH,
+      maxCodeUnits: NAME_MAX_CODE_UNITS,
       onEnter: () => this.confirm(),
     });
     this.current = { request, sink };
@@ -217,9 +217,8 @@ export class PetNamePrompt {
     const fieldHeight = ui.theme.size.control;
     const narrowestBody = panelBodyWidth(ui, PANEL_WIDTH) - scrollGutterWidth(ui);
     const rowCount = chipRows(ui, suggestions, narrowestBody).length;
-    const name = parsePetName(sink.value);
-    const confirmBlocked =
-      name !== null ? false : sink.value.trim() === '' ? EMPTY_NAME_REASON : ILLEGAL_NAME_REASON;
+    const rejection = petNameRejection(sink.value);
+    const confirmBlocked = rejection === null ? false : PET_NAME_RULE_MESSAGES[rejection];
     return {
       id: 'pet-name',
       title: PET_NAME_PROMPT_TITLES[request.kind],

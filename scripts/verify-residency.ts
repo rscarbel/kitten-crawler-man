@@ -35,6 +35,9 @@ import {
 } from './residencyRoutes.js';
 import type { SurfaceOwner } from '../src/core/rendering/canvasSurface.js';
 import type { BuildingId } from '../src/map/buildingIds.js';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+
+useDevPlayerIdentity();
 
 const SCRIPT = 'scripts/verify-residency.ts';
 /**

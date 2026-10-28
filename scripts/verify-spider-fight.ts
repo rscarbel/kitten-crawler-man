@@ -121,6 +121,9 @@ import { SFX_GROUPS, sfxGroupsForLevelId } from '../src/audio/sfxGroups';
 import type { SoundId } from '../src/audio/sounds';
 import { findBossRoomDoorways, type DoorSide } from '../src/systems/bossRooms/bossRoomLayout';
 import { generateFloor } from './bossRooms/harness';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+
+useDevPlayerIdentity();
 
 installCanvasGlobals();
 

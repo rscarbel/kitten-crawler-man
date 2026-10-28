@@ -20,6 +20,8 @@ installCanvasGlobals();
 
 const { drawLoadingScreen } = await import('../src/ui/LoadingScreen.js');
 const { allLevelDefs, levelLoadingKicker } = await import('../src/levels/index.js');
+const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js');
+useDevPlayerIdentity();
 
 const DEVICE_PIXEL_RATIO = 2;
 const OUT_DIR = `${PREVIEW_DIR}/loading-screen`;

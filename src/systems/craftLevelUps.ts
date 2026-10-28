@@ -1,6 +1,6 @@
 import type { AudioManager } from '../audio/AudioManager';
 import type { EventBus } from '../core/EventBus';
-import { crawlerName } from '../characters/characters';
+import { crawlerDisplayName } from '../characters/characters';
 import { describeConstructionPerk, describeResourcingPerk } from '../core/labour/craftPerks';
 import { drawCraftSkillIcon } from '../ui/icons/craftSkillIcons';
 import type { MenusKit } from './kits/MenusKit';
@@ -28,7 +28,7 @@ export function bindCraftLevelUps(target: CraftLevelUpTarget): void {
   const { bus, menus, audio } = target;
   bus.on('craftSkillLevelUp', ({ crawler, id, level }) => {
     menus.levelUpDialog.enqueue({
-      name: `${crawlerName(crawler)} — ${CRAFT_SKILL_LABELS[id]}`,
+      name: `${crawlerDisplayName(crawler)} — ${CRAFT_SKILL_LABELS[id]}`,
       newLevel: level,
       perkDescription:
         id === 'resourcing' ? describeResourcingPerk(level) : describeConstructionPerk(level),

@@ -11,7 +11,7 @@
  */
 
 import type { TownDialogContext } from '../../systems/townDialog';
-import type { ResidentId } from '../../systems/townResidents';
+import type { ResidentId } from '../../core/state/residentIds';
 import type { ResidentLines } from '../roles';
 
 function murderResolved(ctx: TownDialogContext): boolean {

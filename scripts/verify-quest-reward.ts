@@ -49,6 +49,9 @@ import {
   type QuestRewardUi,
   type SiegeRig,
 } from './villageSiegeHarness';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+
+useDevPlayerIdentity();
 
 installCanvasGlobals();
 

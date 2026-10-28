@@ -4,10 +4,10 @@ import type { ActionSeverity } from '../actions/types';
 import { EVENT_IMPORTANCE } from './eventImportance';
 import { subscribeGameEvents } from './eventMapping';
 import { GameEventStream } from './gameEventStream';
+import { forTheServer } from './forTheServer';
 import { jsonEqual, type JsonObject } from './json';
 import {
   buildLiveState,
-  liveCrawlerNamed,
   SnapshotDiffer,
   SNAPSHOT_MIN_INTERVAL_MS,
   type StateSnapshotPayload,
@@ -19,7 +19,10 @@ import {
   type ContextSetPayload,
   type SessionFlags,
 } from './sessionContext';
-import type { AIContextSource, CrawlerName, GameEvent, LiveInput, SessionInput } from './types';
+import type { AIContextSource, GameEvent, LiveInput, SessionInput } from './types';
+import type { CrawlerKind } from '../../core/skills/SkillManager';
+import { crawlerAIName } from '../../characters/characters';
+import type { PetNames } from '../../core/party/petNames';
 
 /** The player profile is recomputed this often and rides along on the next `context_set`. */
 export const PROFILE_INTERVAL_MS = 180_000;
@@ -52,7 +55,7 @@ export interface AIContextBuilderOptions {
 }
 
 interface StockpilingWatch {
-  crawler: CrawlerName;
+  crawler: CrawlerKind;
   since: number;
 }
 
@@ -208,7 +211,7 @@ export class AIContextBuilder {
       this.checkStockpiling(now, live);
 
       if (now - this.lastStateSentAt >= this.stateIntervalMs) {
-        const sent = this.collectState(session, live, now, out);
+        const sent = this.collectState(session, live, source.petNames, now, out);
         if (sent) this.lastStateSentAt = now;
       }
     }
@@ -246,11 +249,12 @@ export class AIContextBuilder {
   private collectState(
     session: SessionInput,
     live: LiveInput,
+    petNames: PetNames,
     now: number,
     out: ContextMessage[],
   ): boolean {
     let sent = false;
-    const context = buildSessionContext(session, this.profileJson);
+    const context = forTheServer(buildSessionContext(session, petNames, this.profileJson));
     const flags = buildSessionFlags(session, live, this.commentaryOnly);
     const contextChanged = this.lastContext === null || !jsonEqual(context, this.lastContext);
     const flagsChanged = this.lastFlags === null || !jsonEqual({ ...flags }, { ...this.lastFlags });
@@ -264,7 +268,7 @@ export class AIContextBuilder {
       out.push({ type: 'context_set', payload });
       sent = true;
     }
-    const snapshot = this.differ.next(buildLiveState(live), now);
+    const snapshot = this.differ.next(forTheServer(buildLiveState(live)), now);
     if (snapshot !== null) {
       out.push({ type: 'state_snapshot', payload: snapshot });
       sent = true;
@@ -291,7 +295,7 @@ export class AIContextBuilder {
     );
   }
 
-  private watchForStockpiling(crawler: CrawlerName): void {
+  private watchForStockpiling(crawler: CrawlerKind): void {
     if (this.stockpiling.some((watch) => watch.crawler === crawler)) return;
     this.stockpiling.push({ crawler, since: this.now() });
   }
@@ -300,7 +304,7 @@ export class AIContextBuilder {
     if (this.stockpiling.length === 0 || live.isPaused) return;
     const stillWatching: StockpilingWatch[] = [];
     for (const watch of this.stockpiling) {
-      const state = liveCrawlerNamed(live, watch.crawler);
+      const state = live.crawlers[watch.crawler];
       const stillLow = state.maxHp > 0 && isAtOrUnderLowHealth(state.hp, state.maxHp);
       if (!stillLow || state.knockedOut) continue;
       if (now - watch.since < STOCKPILING_GRACE_MS) {
@@ -312,8 +316,12 @@ export class AIContextBuilder {
       this.stream.record(
         {
           type: 'potionStockpiling',
-          data: { crawler: watch.crawler, healthPotions: state.healthPotions, hp: state.hp },
-          summary: `${watch.crawler} is nearly dead with ${state.healthPotions} healing potions in the bag and is not drinking any.`,
+          data: {
+            crawler: crawlerAIName(watch.crawler),
+            healthPotions: state.healthPotions,
+            hp: state.hp,
+          },
+          summary: `${crawlerAIName(watch.crawler)} is nearly dead with ${state.healthPotions} healing potions in the bag and is not drinking any.`,
           importance: EVENT_IMPORTANCE.potionStockpiling,
           witness: 'inSafeRoom',
         },

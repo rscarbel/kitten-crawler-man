@@ -14,7 +14,8 @@ import {
   WILDS_MUSIC_TRACKS,
   type MusicTrackId,
 } from '../../audio/sounds';
-import { AchievementManager, type AchievementId } from '../progression/AchievementManager';
+import { AchievementManager } from '../progression/AchievementManager';
+import { type AchievementId } from '../progression/achievementSave';
 import {
   DEFEND_QUEST_PHASE_ORDER,
   SPIDER_QUEST_PHASE_ORDER,
@@ -24,8 +25,9 @@ import { MURDER_QUEST_STAGE_ORDER, type MurderQuestStage } from '../quests/Murde
 import { phaseAtLeast, type VillageQuestPhase } from '../quests/villageQuestPhase';
 import { blueprintsPhaseAtLeast } from '../quests/blueprintsQuestPhase';
 import { JACKPOT_FLOOR } from '../../systems/casino/slots/slotBets';
-import type { PlayerSnapshot } from '../save/PlayerSnapshot';
-import { allResidents, type ResidentId } from '../../systems/townResidents';
+import type { PlayerSnapshot } from '../save/playerSnapshotFormat';
+import { allResidents } from '../../systems/townResidents';
+import { type ResidentId } from '../state/residentIds';
 import { TAVERN_BUILDING_IDS } from '../../map/town/townPlan';
 import { PLANNED_BUILDING_IDS, type BuildingId } from '../../map/buildingIds';
 import { buildingOfRoomKey } from '../state/TownMemory';

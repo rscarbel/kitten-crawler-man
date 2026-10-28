@@ -53,6 +53,9 @@ import {
 } from '../src/sprites/art/roosterArt.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import { drawRoosterDumbbell } from '../src/sprites/roosterDumbbell.js';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+
+useDevPlayerIdentity();
 
 const DEFAULT_SCALE = 1.5;
 const MIN_SCALE = 0.25;

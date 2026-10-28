@@ -16,6 +16,7 @@
  */
 
 import { cardinalDirection } from '../utils';
+import type { AdviceObjectiveId } from '../story/adviceObjectiveIds';
 import type { DialogLine } from '../dialog/line';
 import type { CarolineMessage } from '../dialog/caroline';
 import { DAVE_ADVICE } from '../dialog/scripts/dave';
@@ -93,35 +94,6 @@ const GATEWAY_ADVICE_IDS = [
 
 /** A boss whose speech belongs to the safe room guarding it. */
 export type GatewayAdviceId = (typeof GATEWAY_ADVICE_IDS)[number];
-
-const ADVICE_OBJECTIVE_IDS = [
-  'trash_gremlin',
-  'big_rooster',
-  'defend_goblin_mother',
-  'krakaren_clone',
-  'stealth_gate',
-  'spider_lab',
-  'spider_lab_started',
-  'spider_lab_station',
-  'ball_of_swine',
-  'ball_of_swine_distant',
-  'krasue_murders',
-  'shady_bounties',
-  'anchor_offer',
-  'anchor_stone',
-  'speed_fizz_tip',
-] as const;
-
-/** Every objective Dave has tactics for and Caroline has intel about. */
-export type AdviceObjectiveId = (typeof ADVICE_OBJECTIVE_IDS)[number];
-
-/** Narrows an id read from outside the type system, such as a save. */
-export function isAdviceObjectiveId(value: unknown): value is AdviceObjectiveId {
-  return ADVICE_OBJECTIVE_IDS.some((id) => id === value);
-}
-
-/** Every objective, in the order the floors meet them, which is the order a save lists them. */
-export const ADVICE_OBJECTIVE_ORDER: ReadonlyArray<AdviceObjectiveId> = ADVICE_OBJECTIVE_IDS;
 
 /**
  * Narrows a safe room's `guardsBossType` to the objective whose prose it pins.

@@ -33,13 +33,12 @@ export interface TitleStage {
   /**
    * Whether the menu sits at the foot of its room rather than in its middle:
    * docked under the heroes held upright, and low in its column on a phone on
-   * its side, which leaves Caroline's line room between it and the logo.
+   * its side.
    */
   readonly menuAtFoot: boolean;
   /**
-   * Where the sound hint and Caroline's line sit beside the menu. In
-   * portrait they sit just above the docked menu instead, whose height only
-   * the UI knows.
+   * Where the sound hint sits beside the menu. In portrait it sits just
+   * above the docked menu instead, whose height only the UI knows.
    */
   readonly promptRect: Rect;
   /** Wall torch mounts, far to near. `lights.torches` holds their live state by the same index. */

@@ -9,13 +9,46 @@ import type { CatState } from '../../sprites/catSprite';
 import { prewarmGoblinBystander, type GoblinArchetype } from '../../sprites/goblinSprite';
 import { prewarmDeinonychusWalk, type DeinonychusStage } from '../../sprites/deinonychusSprite';
 import type { HumanRowName } from '../../sprites/art/humanFigure';
+import { humanFigureFor } from '../../sprites/art/human/appearance';
+import { outfitOf } from '../../sprites/garments/outfit';
+import type { HumanLook } from '../../sprites/looks/humanLook';
+import type { FigureDef } from '../../sprites/figure/figureDef';
+import { HUMAN_CRAWLER_LOOKS } from '../../characters/humanCrawlerLooks';
+import { lookIdOf } from '../../characters/crawlerChoices';
+import { maybePlayerIdentity } from '../../characters/playerIdentity';
+
+/**
+ * The look the title paints before a player has made a crawler: the cover
+ * art is composed around it.
+ */
+const TITLE_DEFAULT_HUMAN_LOOK = HUMAN_CRAWLER_LOOKS.male_light;
+
+/** Asked for every frame a hero is drawn, so each look's figure is worked out once. */
+const bareFigures = new WeakMap<HumanLook, FigureDef>();
+
+/** `look` in nothing but its own clothes, holding nothing: how a crawler is shown before a run dresses them. */
+export function bareHumanFigure(look: HumanLook): FigureDef {
+  const known = bareFigures.get(look);
+  if (known !== undefined) return known;
+  const figure = humanFigureFor(look, outfitOf(look, []), null).def;
+  bareFigures.set(look, figure);
+  return figure;
+}
+
+/** The human hero the title shows: the run's look once there is one, the cover's look before. */
+export function titleHumanFigure(): FigureDef {
+  const identity = maybePlayerIdentity();
+  const look =
+    identity === null ? TITLE_DEFAULT_HUMAN_LOOK : HUMAN_CRAWLER_LOOKS[lookIdOf(identity)];
+  return bareHumanFigure(look);
+}
 
 /** The human crawler stands facing the camera, breathing. */
 export const HUMAN_IDLE_ROW = 'idle' satisfies HumanRowName;
 
 /**
- * His stance shifts: small, head-on gestures that read as a man waiting for a
- * show to start, never as a man about to throw a punch.
+ * The crawler's stance shifts: small, head-on gestures that read as someone
+ * waiting for a show to start, never as someone about to throw a punch.
  */
 export const HUMAN_FIDGET_ROWS = [
   'fidget_glance',

@@ -91,12 +91,12 @@ import {
 } from '../src/systems/casino/poker/npc/personality';
 import { ARCHETYPES, type Archetype } from '../src/systems/casino/poker/npc/profiles';
 import type { PokerTell } from '../src/systems/casino/poker/npc/tells';
+import { POKER_REGULARS } from '../src/systems/casino/poker/npc/regulars';
 import {
-  POKER_REGULARS,
   REGULAR_IDS,
   isRegularId,
   type RegularId,
-} from '../src/systems/casino/poker/npc/regulars';
+} from '../src/systems/casino/poker/npc/regularIds';
 import type { PokerDecisionContext } from '../src/systems/casino/poker/PokerTable';
 import {
   ERRORS_SHOWN,

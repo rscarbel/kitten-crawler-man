@@ -44,7 +44,7 @@ import { CONVERTIBLE_MOB_TYPES } from '../src/creatures/convertibleMobs';
 import { Cow } from '../src/creatures/Cow';
 import { Deinonychus } from '../src/creatures/Deinonychus';
 import { RatkinSoldier } from '../src/creatures/RatkinSoldier';
-import { RATKIN_SOLDIER_IDS } from '../src/sprites/art/ratkin/cast';
+import { SOLDIER_IDS } from '../src/core/quests/villagerIds';
 import { collectFairyAllies } from '../src/creatures/fairies/fairyAllies';
 import { alertPackAround, setPackAlertGrid } from '../src/creatures/packAlert';
 import { dynamiteDamageToMob } from '../src/systems/DynamiteSystem';
@@ -687,7 +687,7 @@ section('Friendly fire');
   const cow = spawn(rig, new Cow(0, 0, TILE_SIZE, 'holstein', 'adult'), at.x + 12, at.y);
   const soldier = spawn(
     rig,
-    new RatkinSoldier(0, 0, TILE_SIZE, RATKIN_SOLDIER_IDS[0]),
+    new RatkinSoldier(0, 0, TILE_SIZE, SOLDIER_IDS[0]),
     at.x - 12,
     at.y + 8,
   );
@@ -1109,7 +1109,7 @@ section('Converted allies');
   // The party's own can never be turned: they are not enemies to begin with.
   const friends: ReadonlyArray<{ name: string; mob: Mob }> = [
     { name: 'a cow', mob: new Cow(0, 0, TILE_SIZE, 'holstein', 'adult') },
-    { name: 'a soldier', mob: new RatkinSoldier(0, 0, TILE_SIZE, RATKIN_SOLDIER_IDS[2]) },
+    { name: 'a soldier', mob: new RatkinSoldier(0, 0, TILE_SIZE, SOLDIER_IDS[2]) },
     { name: 'Deinonychus', mob: new Deinonychus(0, 0, TILE_SIZE, rig.cat, 1, 100) },
     {
       name: 'a hireling',
@@ -1264,7 +1264,7 @@ section('Converted allies');
     const cow = spawn(arena, new Cow(0, 0, TILE_SIZE, 'dun', 'adult'), at.x, at.y + TILE_SIZE);
     const soldier = spawn(
       arena,
-      new RatkinSoldier(0, 0, TILE_SIZE, RATKIN_SOLDIER_IDS[1]),
+      new RatkinSoldier(0, 0, TILE_SIZE, SOLDIER_IDS[1]),
       at.x,
       at.y - TILE_SIZE,
     );

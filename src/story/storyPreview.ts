@@ -4,10 +4,11 @@
  */
 
 import type { LevelId } from '../levels/levelIds';
-import type { DebriefBossType } from '../systems/daveDebrief';
+import type { DebriefBossType } from '../core/mobs/debriefBossTypes';
 import type { CarolineStoryEvent, DaveStoryEvent } from '../systems/StoryDelivery';
-import type { StoryBeatId } from './storyBeats';
-import { STORY_BEAT_ORDER, StoryDirector, storyBeat } from './StoryDirector';
+import type { StoryBeatId } from './storyBeatIds';
+import { StoryDirector, storyBeat } from './StoryDirector';
+import { STORY_BEAT_ORDER } from './storyBeatIds';
 import type { StoryFloor } from './storyTypes';
 
 /** The floor each boss with a story beat is fought on. */

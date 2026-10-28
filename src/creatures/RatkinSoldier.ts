@@ -4,7 +4,7 @@ import type { DamageOptions, DamageSource, Player } from '../Player';
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import { normalize } from '../utils';
 import type { TilePoint, TileRect } from '../map/town/townPlan';
-import type { RatkinSoldierId } from '../sprites/art/ratkin/cast';
+import type { SoldierId } from '../core/quests/villagerIds';
 import {
   type RatkinCastAction,
   drawRatkinCastSprite,
@@ -82,7 +82,7 @@ export interface SoldierProfile {
   readonly guardsGate: boolean;
 }
 
-export const SOLDIER_PROFILES: Readonly<Record<RatkinSoldierId, SoldierProfile>> = {
+export const SOLDIER_PROFILES: Readonly<Record<SoldierId, SoldierProfile>> = {
   sedge: {
     name: 'Sedge Quickclaw',
     hpScale: 0.8,
@@ -271,7 +271,7 @@ export class RatkinSoldier extends Mob {
   readonly xpValue: number = 0;
   protected coinDropMin = 0;
   protected coinDropMax = 0;
-  readonly soldierId: RatkinSoldierId;
+  readonly soldierId: SoldierId;
   readonly profile: SoldierProfile;
   displayName: string;
   description = 'A Briar Hollow militia soldier. Fights for the village, and takes your orders.';
@@ -351,7 +351,7 @@ export class RatkinSoldier extends Mob {
   private gaitSampleY: number;
   private readonly tilesPerWalkCycle: number;
 
-  constructor(tileX: number, tileY: number, tileSize: number, soldierId: RatkinSoldierId) {
+  constructor(tileX: number, tileY: number, tileSize: number, soldierId: SoldierId) {
     const profile = SOLDIER_PROFILES[soldierId];
     super(
       tileX,
@@ -1062,7 +1062,7 @@ export class RatkinSoldier extends Mob {
   }
 }
 
-const SOLDIER_LOOP_OFFSETS_SECONDS: Readonly<Record<RatkinSoldierId, number>> = {
+const SOLDIER_LOOP_OFFSETS_SECONDS: Readonly<Record<SoldierId, number>> = {
   sedge: 0,
   hobb: 0.37,
   marta: 0.71,

@@ -27,6 +27,8 @@ const { setViewportSize } = await import('../src/core/rendering/Viewport.js');
 const { PRISON_LAYOUTS } = await import('../src/map/goblinPrisonLayouts.js');
 const { isPrisonCrawlerWalkable, rectContainsTile } =
   await import('../src/map/goblinPrisonPlan.js');
+const { useDevPlayerIdentity } = await import('../src/dev/devPlayerIdentity.js');
+useDevPlayerIdentity();
 const { enterPrison } = await import('./prisonInteriorHarness.js');
 type Difficulty = import('../src/core/difficulty/difficultyProfiles.js').Difficulty;
 

@@ -27,7 +27,8 @@ import {
 } from '../src/core/quests/briarHollowState';
 import { createPartyCraftsState, parsePartyCraftsState } from '../src/core/labour/partyCrafts';
 import { teachBoth } from '../src/core/labour/CraftSkills';
-import { parsePlayerSnapshot, snapPlayer, restorePlayer } from '../src/core/save/PlayerSnapshot';
+import { snapPlayer, restorePlayer } from '../src/core/save/PlayerSnapshot';
+import { parsePlayerSnapshot } from '../src/core/save/playerSnapshotFormat';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { TILE_SIZE } from '../src/core/constants';

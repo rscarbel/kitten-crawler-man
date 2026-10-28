@@ -264,11 +264,7 @@ export function panel(ui: Ui, opts: PanelOptions): PanelResult {
   }
 
   if (opts.scrim !== false) {
-    ctx.save();
-    ctx.globalAlpha *= progress;
-    ctx.fillStyle = skins.scrim;
-    ctx.fillRect(ui.screen.x, ui.screen.y, ui.screen.w, ui.screen.h);
-    ctx.restore();
+    screenShade(ui, { color: skins.scrim, opacity: progress });
     if (opts.onScrimTap !== undefined) {
       const onScrimTap = opts.onScrimTap;
       ui.hit(`${opts.id}/scrim`, ui.screen, {
@@ -474,4 +470,20 @@ function drawFooterGrid(
   buttons.forEach((b, index) => {
     button(ui, cells[index], { ...b, size: layout.size, id: `${panelId}/${b.id ?? b.label}` });
   });
+}
+
+/**
+ * Washes the whole screen in `color` at `opacity`, under whatever the surface
+ * draws next. It draws only: blocking the screen is the caller's choice.
+ */
+export function screenShade(
+  ui: Ui,
+  opts: { readonly color: string; readonly opacity: number },
+): void {
+  const { ctx, screen } = ui;
+  ctx.save();
+  ctx.globalAlpha *= opts.opacity;
+  ctx.fillStyle = opts.color;
+  ctx.fillRect(screen.x, screen.y, screen.w, screen.h);
+  ctx.restore();
 }

@@ -3,6 +3,14 @@
  * new game asks again, and a death never rewinds one.
  */
 
+import {
+  NAME_MAX_CODE_UNITS,
+  nameRejection,
+  nameRuleMessages,
+  normalizeName,
+  type NameCaps,
+  type NameRejection,
+} from '../naming/nameRules';
 import { isRecord } from '../util/guards';
 
 export const PET_KINDS = ['deinonychus', 'attackCow'] as const;
@@ -13,47 +21,36 @@ export function isPetKind(value: string): value is PetKind {
   return PET_KINDS.some((kind) => kind === value);
 }
 
-/** The longest name a pet takes, in characters. */
+/** The most characters a pet's name may show. */
 export const PET_NAME_MAX_LENGTH = 16;
+
+const PET_NAME_CAPS = {
+  maxGraphemes: PET_NAME_MAX_LENGTH,
+  maxCodeUnits: NAME_MAX_CODE_UNITS,
+} as const satisfies NameCaps;
 
 declare const petNameBrand: unique symbol;
 
 /** A name that passed {@link parsePetName}; nothing else can make one. */
 export type PetName = string & { readonly [petNameBrand]: true };
 
-/**
- * Letters (with the marks some scripts build them from), digits, spaces,
- * apostrophes and hyphens, in any script.
- */
-const LEGAL_PET_NAME = /^[\p{L}\p{M}\p{Nd} '-]+$/u;
-/** A name is more than punctuation: it holds at least one letter or digit. */
-const HAS_LETTER_OR_DIGIT = /[\p{L}\p{Nd}]/u;
-const SPACE_RUNS = /\s+/g;
-/**
- * Phone keyboards type a curly apostrophe by default, which reads as the
- * same mark to the player.
- */
-const TYPOGRAPHIC_APOSTROPHES = /[\u2018\u2019\u02BC]/g;
-
 function isPetName(normalized: string): normalized is PetName {
-  const length = Array.from(normalized).length;
-  return (
-    length > 0 &&
-    length <= PET_NAME_MAX_LENGTH &&
-    LEGAL_PET_NAME.test(normalized) &&
-    HAS_LETTER_OR_DIGIT.test(normalized)
-  );
+  return nameRejection(normalized, PET_NAME_CAPS) === null;
 }
 
-/**
- * `raw` as a pet's name: trimmed, with runs of spaces collapsed, or null when
- * what is left is empty, too long, holds a character a name may not, or has
- * no letter or digit at all.
- */
+/** `raw` as a pet's name, tidied, or null when it breaks a rule. */
 export function parsePetName(raw: string): PetName | null {
-  const normalized = raw.replace(TYPOGRAPHIC_APOSTROPHES, "'").replace(SPACE_RUNS, ' ').trim();
+  const normalized = normalizeName(raw);
   return isPetName(normalized) ? normalized : null;
 }
+
+/** The rule `raw` breaks as a pet's name, or null when it is one. */
+export function petNameRejection(raw: string): NameRejection | null {
+  return nameRejection(normalizeName(raw), PET_NAME_CAPS);
+}
+
+/** The line a naming screen shows for each rule a pet's name can break. */
+export const PET_NAME_RULE_MESSAGES = nameRuleMessages(PET_NAME_CAPS);
 
 /** Names offered to a player who would rather pick than type. */
 export const PET_NAME_SUGGESTIONS = {
@@ -168,6 +165,11 @@ const UNNAMED_PET_WORDS = {
     described: 'the attack cow',
   },
 } as const satisfies Record<PetKind, PetWords>;
+
+/** The words for `kind` before the player names it, or wherever a pet's name must not appear. */
+export function unnamedPetWords(kind: PetKind): PetWords {
+  return UNNAMED_PET_WORDS[kind];
+}
 
 /** The words for `kind`, read from the run's names now. */
 export function petWords(names: PetNames, kind: PetKind): PetWords {

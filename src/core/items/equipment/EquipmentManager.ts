@@ -1,14 +1,12 @@
 import { ALL_STATS, zeroStats, type StatId } from '../../party/stats';
 import {
   ITEM_DEF,
-  crawlerHasSection,
-  equipAddressOfKey,
   isItemId,
   isWearable,
   itemFitsSubSlot,
+  kindMayWear,
+  mayEquipUnder,
   subSlotsOf,
-  wearerAllows,
-  wearerOf,
 } from '../defs/ItemDefs';
 import { traitScore } from '../../../gear/traits';
 import type {
@@ -484,24 +482,4 @@ export class EquipmentManager {
     }
     return total;
   }
-}
-
-function kindMayWear(kind: CrawlerKind | null, slot: EquipSlot, id: ItemId): boolean {
-  if (kind === null) return true;
-  const wearer = wearerOf(id);
-  if (wearer === undefined || !wearerAllows(wearer, kind)) return false;
-  return crawlerHasSection(kind, slot);
-}
-
-/**
- * Whether `kind` can wear `id` under the sub-slot `key`: the key names a
- * sub-slot this crawler has, the item fits it, and the crawler may wear the
- * item. A null kind is a wearer of any kind.
- */
-export function mayEquipUnder(kind: CrawlerKind | null, key: string, id: ItemId): boolean {
-  const address = equipAddressOfKey(kind, key);
-  if (address === null) return false;
-  const def = ITEM_DEF[id];
-  if (def.equipSlot !== address.slot || !itemFitsSubSlot(def, address.subSlot)) return false;
-  return kindMayWear(kind, address.slot, id);
 }

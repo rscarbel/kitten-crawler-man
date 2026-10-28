@@ -107,6 +107,7 @@ One scope per scene (`audio.createScope()`, disposed in `onExit`; also on `Scene
 - **Events first**: map EventBus events to sounds in `AudioManager.wireEvents(bus)`. The bus is cleared on scene teardown, so it re-wires per scene. Music is never wired there — claim it.
 - **Mobs**: set the creature's `audioTag` (a `CreatureAudioTag`) and say what each generic flag plays in its `MOB_VOICES` row (`src/systems/mobVoices.ts`), which `playMobAudioCues` reads. `dealDamage` sets `attackSoundPending`; set `projectileSoundPending` for ranged attacks. More voices than the boolean flags carry go in a typed field (`Cow.voicePending`, drained by `playCowVoice`) or a cue queue with its own player (`src/systems/undeadAudioCues.ts`).
 - **Systems** hold no `AudioManager`; they set pending flags the scene drains, and take `MusicClaims` / `audioScope` for music and loops.
+- **The human crawler's voice**: hurt, knocked-out and revived sounds follow the body the player chose, through `humanVocalSounds()` (`HUMAN_VOCAL_SOUNDS`, `src/characters/humanVocalSounds.ts`, a `Record<CrawlerBody, …>`). Play from that table, never a fixed id; a new vocal moment is a new field filled for every body. The crawler's name is the player's, so no sound, caption or file id names the human.
 - **UI buttons**: the scene's `UiRoot` plays the tap (a region's `sound` option picks another cue or `null`); never add per-button play calls — see `add-ui`.
 
 ## Gates

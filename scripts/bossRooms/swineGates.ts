@@ -30,9 +30,11 @@ import { buildColosseumDressing } from '../../src/systems/bossRooms/BossRoomDres
 import {
   CAGE_RELEASE_MAX,
   COLOSSEUM_MUD_WALLOWS,
+} from '../../src/systems/bossRooms/ColosseumDressingSystem.js';
+import {
   parseColosseumDressingCheckpoint,
   type ColosseumDressingCheckpoint,
-} from '../../src/systems/bossRooms/ColosseumDressingSystem.js';
+} from '../../src/systems/bossRooms/colosseumDressingCheckpoint.js';
 import { PORTCULLIS_FRAMES } from '../../src/sprites/art/colosseumArt.js';
 import {
   COLOSSEUM_FOOTING_RADIUS_TILES,

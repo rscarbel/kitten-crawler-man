@@ -26,6 +26,7 @@ import { LOCAL_WIPE_MARKER } from './core/save/wipeMarker';
 import { WipeHoldScene } from './scenes/WipeHoldScene';
 import { loadUiFont } from './ui/theme/fonts';
 import { prewarmTitleCast } from './scenes/title/titleCast';
+import { setPlayerIdentity } from './characters/playerIdentity';
 import { prewarmTitleHall } from './scenes/title/layers/dungeonHallLayer';
 
 declare const __AI_ENABLED__: boolean;
@@ -196,6 +197,8 @@ requestAnimationFrame(() => dismissBootSplash());
     const options = persistenceOptions(LOCAL_PROGRESS_STORAGE);
     const showStartMenu = () => {
       const saved = readLocalProgress();
+      // The title paints the saved crawler, so their identity is set before it builds.
+      if (saved !== null) setPlayerIdentity(saved.playerIdentity);
       const onContinue = saved === null ? undefined : () => resumeFromProgress(options, saved);
       sceneManager.replace(new TitleScene(input, sceneManager, options, onContinue));
     };

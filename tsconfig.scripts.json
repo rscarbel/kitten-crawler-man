@@ -461,6 +461,7 @@
     "scripts/verify-craft-level-ups.ts",
     "scripts/check-ui-style.ts",
     "scripts/check-spawn-funnel.ts",
+    "scripts/check-server-imports.ts",
     "scripts/gateRunner.ts",
     "scripts/gate.ts",
     "scripts/check.ts",

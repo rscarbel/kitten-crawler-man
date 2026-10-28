@@ -27,7 +27,8 @@ import { TIKKA_PLANS_UNLOCKS } from '../../src/core/quests/villageUnlocks';
 import type { VillageQuestPhase } from '../../src/core/quests/villageQuestPhase';
 import type { NPCMarkerType } from '../../src/creatures/QuestNPC';
 import type { ConversationRequest } from '../../src/dialog/request';
-import { FENNA, type VillagerId } from '../../src/dialog/scripts/briarHollow';
+import { FENNA } from '../../src/dialog/scripts/briarHollow';
+import { type VillagerId } from '../../src/core/quests/villagerIds';
 import { GameMap } from '../../src/map/GameMap';
 import {
   BLUEPRINTS_SIEGE_HINT,

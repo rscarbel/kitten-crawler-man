@@ -10,7 +10,7 @@
  * gate needs no scene.
  */
 
-import { playerCharacter } from '../../src/characters/characters';
+import { CRAWLER_SPEAKERS } from '../../src/characters/characters';
 import type { BlueprintsQuestPhase } from '../../src/core/quests/blueprintsQuestPhase';
 import {
   createBriarHollowState,
@@ -126,7 +126,7 @@ export function verifyWendellFirstVisit(check: Check): void {
   check(hook.isDialogOpen, 'and the beat is his');
   const firstLine = firstLineOf(rig.opened[0]);
   check(
-    firstLine !== null && speakerOf(firstLine) === playerCharacter('human').speakerId,
+    firstLine !== null && speakerOf(firstLine) === CRAWLER_SPEAKERS.human,
     'the human opens it when the human is being driven',
   );
 
@@ -141,7 +141,7 @@ export function verifyWendellFirstVisit(check: Check): void {
   check(hook.tryOpenDialog('wendell', rig.cat), 'asking again replays the first visit');
   const catFirst = firstLineOf(rig.opened[1]);
   check(
-    catFirst !== null && speakerOf(catFirst) === playerCharacter('cat').speakerId,
+    catFirst !== null && speakerOf(catFirst) === CRAWLER_SPEAKERS.cat,
     'the cat opens it when the cat is being driven',
   );
   readThrough(rig.conversation);

@@ -9,6 +9,7 @@ import { crease } from '../../art/biped/paint';
 import type { Ramp } from '../../art/biped/palette';
 import { NECK_WIDTH } from '../../art/biped/proportions';
 import type { ViewSpec } from '../../art/biped/rig';
+import type { BipedTorsoFrame } from '../../art/biped/bipedParts';
 import type { TorsoFrame } from '../../art/biped/torso';
 import { pt } from '../../art/biped/geometry';
 import { rgba, type Pt } from '../../art/bipedArt';
@@ -23,6 +24,13 @@ const HOOD_TOP_Y = -0.12;
 const HOOD_SHOULDER_Y = 0.015;
 const HOOD_THROAT_Y = 0.045;
 const HOOD_INNER_HALF = 0.075;
+/**
+ * The bunched hood lies on the shoulders and never reaches further out along
+ * them than this share of the way to their points: on narrow, sloping
+ * shoulders a roll of the full width stands out past the shoulder line and
+ * reads as a yoke wider than the body under it.
+ */
+const HOOD_SHOULDER_SHARE = 0.73;
 const HOOD_INNER_Y = 0.0;
 /** Head-on the neck stands in front of the hood behind it: the hood is left off the neck's column. */
 const NECK_COLUMN_SHARE = 0.95;
@@ -138,9 +146,14 @@ export function paintProfileHood(ctx: Ctx, torso: TorsoFrame, cloth: Ramp): void
 }
 
 /** Head-on the hood is a thick roll round the neck, standing out past it and meeting in a V at the throat. */
-export function paintFacingHood(ctx: Ctx, torso: TorsoFrame, view: ViewSpec, cloth: Ramp): void {
+export function paintFacingHood(ctx: Ctx, frame: BipedTorsoFrame, cloth: Ramp): void {
+  const { torso, view, skeleton } = frame;
   const { at } = torso;
-  const outer = HOOD_OUTER_HALF * view.girth;
+  const shoulderHalf = Math.max(
+    -torso.acrossOf(skeleton.leftShoulder),
+    torso.acrossOf(skeleton.rightShoulder),
+  );
+  const outer = Math.min(HOOD_OUTER_HALF * view.girth, shoulderHalf * HOOD_SHOULDER_SHARE);
   const inner = HOOD_INNER_HALF * view.girth;
   const outline = (): void => {
     ctx.beginPath();

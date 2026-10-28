@@ -8,7 +8,7 @@
  */
 
 import { getDeinonychusStats, DEINONYCHUS_DEF } from '../abilities/deinonychus';
-import { crawlerName } from '../characters/characters';
+import { crawlerDisplayName } from '../characters/characters';
 import type { EventBus } from '../core/EventBus';
 import type { GrantedReward } from '../core/items/loot/GrantedReward';
 import { petWords, type PetNameBook } from '../core/party/petNames';
@@ -51,7 +51,7 @@ function deinonychusGrantedReward(introduction: DeinonychusIntroduction): Grante
   return {
     kind: 'ability',
     name: DEINONYCHUS_DEF.name,
-    description: `A loyal dinosaur companion. Summon ${pet.referred} to fight alongside ${crawlerName('cat')} in battle!`,
+    description: `A loyal dinosaur companion. Summon ${pet.referred} to fight alongside ${crawlerDisplayName('cat')} in battle!`,
     renderIcon: deinonychusPortrait(introduction.deinonychusLevel),
   };
 }

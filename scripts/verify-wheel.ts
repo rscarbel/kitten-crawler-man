@@ -64,7 +64,8 @@ import {
 import { LOCAL_PROGRESS_STORAGE, writeLocalProgress } from '../src/core/save/LocalProgress';
 import { stampGameProgress } from '../src/core/save/saveFormat';
 import { AuthClient, type GameProgressInput } from '../src/auth/AuthClient';
-import { parsePlayerSnapshot, restorePlayer, snapPlayer } from '../src/core/save/PlayerSnapshot';
+import { restorePlayer, snapPlayer } from '../src/core/save/PlayerSnapshot';
+import { parsePlayerSnapshot } from '../src/core/save/playerSnapshotFormat';
 import { AbilityManager } from '../src/core/skills/AbilityManager';
 import { AchievementManager } from '../src/core/progression/AchievementManager';
 import { GameStats } from '../src/core/progression/GameStats';
@@ -97,6 +98,8 @@ import {
 } from '../src/ui/casino/wheel/permanentDeathView';
 import { DONALD_LINES, donaldLinesFor } from '../src/dialog/scripts/donald';
 import { PetNameBook, petWords } from '../src/core/party/petNames';
+import { parsePlayerName } from '../src/core/naming/playerName';
+import type { PlayerIdentity } from '../src/characters/playerIdentity';
 import {
   CRAWLER_HP_THRESHOLDS,
   HP_THRESHOLD_IDS,
@@ -111,6 +114,9 @@ import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { TILE_SIZE } from '../src/core/constants';
 import { level1 } from '../src/levels/level1';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+
+useDevPlayerIdentity();
 
 let failures = 0;
 
@@ -490,6 +496,12 @@ class FakeLocalStorage implements Storage {
 /** Deletes that fail before the wipe's retry loop gets one through. */
 const FAILED_DELETES_BEFORE_SUCCESS = 2;
 
+function latchFixtureIdentity(): PlayerIdentity {
+  const name = parsePlayerName('Sam');
+  if (name === null) throw new Error('the fixture name is not a legal player name');
+  return { name, body: 'male', complexion: 'light' };
+}
+
 function latchFixture(): GameProgressInput {
   return {
     levelId: level1.id,
@@ -515,6 +527,7 @@ function latchFixture(): GameProgressInput {
     storyBeatsSeen: [],
     objectivesBriefed: [],
     petNames: {},
+    playerIdentity: latchFixtureIdentity(),
   };
 }
 

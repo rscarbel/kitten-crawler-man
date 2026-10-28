@@ -35,6 +35,7 @@ import {
 import { LineRotation, CAROLINE_FALLBACK_LINES } from './characters/fallbackLines';
 import { AIContextBuilder } from './context/AIContextBuilder';
 import { rememberForgottenPlayer, takeForgottenPlayerNotice } from './context/forgottenNotice';
+import { textForTheServer } from './context/forTheServer';
 import { SdkContextTransport } from './context/transport';
 import type { AIContextSource } from './context/types';
 import type { AIOutboundMessage, AnsweredAction } from './replay/aiReplayFormat';
@@ -541,7 +542,7 @@ export class AIAdapter {
     this.reportOutcome(parsed, outcome);
     if (!outcome.ok || outcome.indicator === null) return;
     const characterName = parsed.request.characterName;
-    this.context.recordAIAction(characterName, parsed.request.name, outcome.indicator);
+    this.context.recordAIAction(characterName, parsed.request.name, outcome.detail);
     if (this.showInterventions()) this.feed.addIntervention(characterName, outcome.indicator);
   }
 
@@ -563,10 +564,11 @@ export class AIAdapter {
   ): void {
     const client = this.client;
     if (client === null) return;
-    client.sendActionResult(actionId, ok, detail);
+    const sentDetail = detail === undefined ? undefined : textForTheServer(detail);
+    client.sendActionResult(actionId, ok, sentDetail);
     this.outboundListener?.({
       type: 'action_result',
-      payload: detail === undefined ? { actionId, ok } : { actionId, ok, detail },
+      payload: sentDetail === undefined ? { actionId, ok } : { actionId, ok, detail: sentDetail },
       answers,
     });
   }

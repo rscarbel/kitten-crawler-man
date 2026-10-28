@@ -173,7 +173,7 @@ function paintCollar(ctx: Ctx, frame: BipedTorsoFrame): void {
     paintBackHoodRim(ctx, torso, view, FADED_RED);
     return;
   }
-  paintFacingHood(ctx, torso, view, FADED_RED);
+  paintFacingHood(ctx, frame, FADED_RED);
   paintDrawstrings(ctx, torso, view);
 }
 
@@ -189,7 +189,7 @@ export const LUCKY_HOODIE = defineGarment({
   material: 'cloth',
   layer: 'overcoat',
   region: ['torso'],
-  covers: ['chest'],
+  covers: ['chest', 'throat'],
   sleeves: { cloth: FADED_RED, cut: { cuffBulk: FLEECE_CUFF_BULK } },
   paint: { torso: humanEveryView(paintTorso) },
 });

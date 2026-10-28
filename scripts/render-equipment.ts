@@ -90,10 +90,13 @@ import {
 } from '../src/sprites/art/biped/figure.js';
 import { idleBack, idleFront, idleSide } from '../src/sprites/art/human/idles.js';
 import type { CardinalView } from '../src/sprites/facingView.js';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+
+useDevPlayerIdentity();
 
 installCanvasGlobals();
 
-/** The look every item is shown on: `--look=<id>`, Ryan's by default. */
+/** The look every item is shown on: `--look=<id>`, or the harnesses' default look. */
 const LOOK = humanLookFlag();
 const BARE_OUTFIT = outfitOf(LOOK, []);
 const LARGE_TILE = 96;

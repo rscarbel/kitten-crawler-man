@@ -41,13 +41,18 @@ import type { AssaultLaneId, BriarHollowSite } from '../../map/overworld/briarHo
 import type { TilePoint } from '../../map/town/townPlan';
 import { findNearbyWalkableTile } from '../../map/findWalkableTile';
 import { HOLLOW_THRESHOLD } from '../../map/tileTypes';
-import { RATKIN_SOLDIER_IDS, type RatkinSoldierId } from '../../sprites/art/ratkin/cast';
 import { drawTimedSpeechBubble, type TimedBubbleStyle } from '../../sprites/speechBubble';
 import { drawInteractionPromptOver } from '../../ui/InteractionPrompt';
 import type { MobRoster } from '../kits/SceneWorld';
 import { hostileWithinAttackRange } from '../interactionPromptGate';
 import type { BarkLine } from '../../dialog/line';
-import { HOBB, type VillagerId } from '../../dialog/scripts/briarHollow';
+import { HOBB } from '../../dialog/scripts/briarHollow';
+import {
+  isSoldierId,
+  SOLDIER_IDS,
+  type SoldierId,
+  type VillagerId,
+} from '../../core/quests/villagerIds';
 import { SOLDIER_SCRIPTS } from '../../dialog/villagerRegistry';
 import {
   contractContactPin,
@@ -206,10 +211,6 @@ interface SoldierTalk {
   readonly talker: HumanPlayer | CatPlayer;
 }
 
-function isSoldierId(id: VillagerId): id is RatkinSoldierId {
-  return RATKIN_SOLDIER_IDS.some((soldier) => soldier === id);
-}
-
 function centreTile(body: { readonly x: number; readonly y: number }): TilePoint {
   return {
     x: Math.floor(body.x / TILE_SIZE + TILE_CENTRE),
@@ -238,7 +239,7 @@ export class SoldierSystem {
   private breachScratch = new Set<string>();
   /** Whether the militia has fallen back from the wall to guard the bell. */
   private fallenBack = false;
-  private readonly bellStations: Record<RatkinSoldierId, SoldierPosts['post'][RatkinSoldierId]>;
+  private readonly bellStations: Record<SoldierId, SoldierPosts['post'][SoldierId]>;
   private lastGateStruck: number | null;
   private contractPinMemo: ContractPinMemo | null = null;
 
@@ -249,7 +250,7 @@ export class SoldierSystem {
     this.lastPhase = deps.state.quest.phase;
     this.collectBreaches(this.breachedSegments);
     this.lastGateStruck = deps.defense()?.gateStruckAtSeconds ?? null;
-    this.soldiers = RATKIN_SOLDIER_IDS.map((id) => this.spawn(id));
+    this.soldiers = SOLDIER_IDS.map((id) => this.spawn(id));
     const provider: TopicProvider = {
       topics: (villager, _ctx, flow) => this.topicsFor(villager, flow),
     };
@@ -259,12 +260,12 @@ export class SoldierSystem {
   // ── Orders ─────────────────────────────────────────────────────────────
 
   /** The standing orders on record for `id`, or undefined for a soldier at their post. */
-  orderFor(id: RatkinSoldierId): SoldierOrderRecord | undefined {
+  orderFor(id: SoldierId): SoldierOrderRecord | undefined {
     return this.deps.state.soldierOrders.find((order) => order.soldierId === id);
   }
 
   /** What the resolver reads: the orders, or at their post. */
-  stanceOf(id: RatkinSoldierId): SoldierStance {
+  stanceOf(id: SoldierId): SoldierStance {
     return this.orderFor(id)?.order ?? 'post';
   }
 
@@ -276,7 +277,7 @@ export class SoldierSystem {
     return crawler === this.deps.human ? 'human' : 'cat';
   }
 
-  private writeOrder(id: RatkinSoldierId, record: SoldierOrderRecord | null): void {
+  private writeOrder(id: SoldierId, record: SoldierOrderRecord | null): void {
     const { state } = this.deps;
     state.soldierOrders = state.soldierOrders.filter((order) => order.soldierId !== id);
     if (record !== null) state.soldierOrders.push(record);
@@ -285,12 +286,12 @@ export class SoldierSystem {
   }
 
   /** Orders `id` to follow `crawler`. */
-  orderFollow(id: RatkinSoldierId, crawler: HumanPlayer | CatPlayer): void {
+  orderFollow(id: SoldierId, crawler: HumanPlayer | CatPlayer): void {
     this.writeOrder(id, { soldierId: id, order: 'follow', followCrawler: this.kindOf(crawler) });
   }
 
   /** Orders `id` to hold the tile they stand on. */
-  orderHold(id: RatkinSoldierId): void {
+  orderHold(id: SoldierId): void {
     const soldier = this.soldierById(id);
     if (soldier === null) return;
     const tile = soldier.tile;
@@ -301,7 +302,7 @@ export class SoldierSystem {
    * Orders `id` to patrol around where they stand. Returns false, and leaves
    * the orders as they were, when no route from there can be walked.
    */
-  orderPatrol(id: RatkinSoldierId): boolean {
+  orderPatrol(id: SoldierId): boolean {
     const soldier = this.soldierById(id);
     if (soldier === null) return false;
     const from = soldier.tile;
@@ -318,7 +319,7 @@ export class SoldierSystem {
   }
 
   /** Sends `id` back to their post. */
-  orderPost(id: RatkinSoldierId): void {
+  orderPost(id: SoldierId): void {
     this.writeOrder(id, null);
   }
 
@@ -326,7 +327,7 @@ export class SoldierSystem {
    * Where `id`'s post duty puts them now: their post; their battle post while
    * the siege is on; or round the bell, once the dead are inside and at it.
    */
-  private postStation(id: RatkinSoldierId): SoldierPosts['post'][RatkinSoldierId] {
+  private postStation(id: SoldierId): SoldierPosts['post'][SoldierId] {
     const inSiege = SIEGE_PHASES.has(this.deps.state.quest.phase);
     if (inSiege && this.fallenBack) return this.bellStations[id];
     if (!inSiege) return this.posts.post[id];
@@ -338,12 +339,12 @@ export class SoldierSystem {
    * One tile beside the bell tower per soldier, on open ground, facing out
    * from it: where the militia falls back to when the dead reach the square.
    */
-  private computeBellStations(): Record<RatkinSoldierId, SoldierPosts['post'][RatkinSoldierId]> {
+  private computeBellStations(): Record<SoldierId, SoldierPosts['post'][SoldierId]> {
     const bell = this.deps.site.square.bellTile;
     const centre = { x: bell.x + BELL_TOWER_HALF_TILES, y: bell.y + BELL_TOWER_HALF_TILES };
     const taken = new Set<string>();
-    const stationFor = (id: RatkinSoldierId): SoldierPosts['post'][RatkinSoldierId] => {
-      const index = RATKIN_SOLDIER_IDS.indexOf(id);
+    const stationFor = (id: SoldierId): SoldierPosts['post'][SoldierId] => {
+      const index = SOLDIER_IDS.indexOf(id);
       const offset = BELL_GUARD_OFFSETS[index % BELL_GUARD_OFFSETS.length];
       const aim = { x: bell.x + offset.x, y: bell.y + offset.y };
       const tile =
@@ -392,14 +393,14 @@ export class SoldierSystem {
       );
     if (threatened === this.fallenBack) return;
     this.fallenBack = threatened;
-    for (const id of RATKIN_SOLDIER_IDS) {
+    for (const id of SOLDIER_IDS) {
       const soldier = this.soldierById(id);
       if (soldier !== null && this.orderFor(id) === undefined) soldier.setDuty(this.dutyFor(id));
     }
   }
 
   /** The duty `id`'s orders make of them this moment. */
-  dutyFor(id: RatkinSoldierId): SoldierDuty {
+  dutyFor(id: SoldierId): SoldierDuty {
     const order = this.orderFor(id);
     const profile = SOLDIER_PROFILES[id];
     if (order?.order === 'follow') {
@@ -475,7 +476,7 @@ export class SoldierSystem {
     return pin;
   }
 
-  private contractPinTile(id: RatkinSoldierId): TilePoint | null {
+  private contractPinTile(id: SoldierId): TilePoint | null {
     const pin = this.contractPin();
     return pin?.contact === id ? pin.tile : null;
   }
@@ -509,7 +510,7 @@ export class SoldierSystem {
   // ── Spawning ───────────────────────────────────────────────────────────
 
   /** Where `id` appears on a fresh build, dropping a follow order whose crawler is out of reach. */
-  private spawnTile(id: RatkinSoldierId): TilePoint {
+  private spawnTile(id: SoldierId): TilePoint {
     const order = this.orderFor(id);
     if (order?.order === 'follow') {
       const crawler = this.crawlerOf(order.followCrawler ?? 'human');
@@ -537,7 +538,7 @@ export class SoldierSystem {
     return this.postStation(id).tile;
   }
 
-  private spawn(id: RatkinSoldierId): RatkinSoldier {
+  private spawn(id: SoldierId): RatkinSoldier {
     const tile = this.spawnTile(id);
     const soldier = new RatkinSoldier(tile.x, tile.y, TILE_SIZE, id);
     soldier.applyMobLevel(this.deps.level());
@@ -562,7 +563,7 @@ export class SoldierSystem {
     return soldier;
   }
 
-  soldierById(id: RatkinSoldierId): RatkinSoldier | null {
+  soldierById(id: SoldierId): RatkinSoldier | null {
     return this.soldiers.find((soldier) => soldier.soldierId === id) ?? null;
   }
 
@@ -623,7 +624,7 @@ export class SoldierSystem {
         if (soldier.isDowned) soldier.rise(SOLDIER_RISE_HP_FRACTION);
       }
     }
-    for (const id of RATKIN_SOLDIER_IDS) {
+    for (const id of SOLDIER_IDS) {
       const soldier = this.soldierById(id);
       if (soldier !== null && this.orderFor(id) === undefined) soldier.setDuty(this.dutyFor(id));
     }
@@ -812,8 +813,8 @@ export class SoldierSystem {
   // ── Call-outs ──────────────────────────────────────────────────────────
 
   private barkAll(
-    ids: readonly RatkinSoldierId[],
-    lineFor: (id: RatkinSoldierId) => BarkLine | undefined,
+    ids: readonly SoldierId[],
+    lineFor: (id: SoldierId) => BarkLine | undefined,
   ): void {
     for (const id of ids) {
       const soldier = this.soldierById(id);

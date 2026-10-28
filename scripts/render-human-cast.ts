@@ -29,8 +29,11 @@ import { TOWN_CAST_PAINT_SIZE, townCastFigure } from '../src/sprites/art/townCas
 import { TOWN_CAST_LOOKS, type TownCastLook } from '../src/sprites/person/townCastLooks.js';
 import { ratkinCastFigure } from '../src/sprites/art/ratkinCastFigure.js';
 import { RATKIN_CAST_IDS } from '../src/sprites/art/ratkin/cast.js';
-import { HUMAN_FIGURE } from '../src/sprites/art/humanFigure.js';
-import { playerCharacter } from '../src/characters/characters.js';
+import { undressedHumanFigure } from '../src/sprites/art/humanFigure.js';
+import { activeHumanLook } from '../src/sprites/humanSprite.js';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+
+useDevPlayerIdentity();
 
 const OUT_DIR = `${PREVIEW_DIR}/human-cast`;
 const REVIEW_SCALE = 3;
@@ -200,7 +203,7 @@ function renderCompare(): void {
     label(ctx, id, canvas.width / 2, canvas.height - COMPARE_LABEL_Y_MARGIN);
     return canvas;
   });
-  const humanCell = bakeFigureCell(HUMAN_FIGURE, 'idle', 0);
+  const humanCell = bakeFigureCell(undressedHumanFigure(activeHumanLook()), 'idle', 0);
   const humanCanvas = createCanvas(
     humanCell.width * IN_GAME_SCALE + PADDING * 2,
     humanCell.height * IN_GAME_SCALE + PADDING * 2,
@@ -217,7 +220,7 @@ function renderCompare(): void {
   );
   label(
     humanCtx,
-    playerCharacter('human').look.id,
+    activeHumanLook().id,
     humanCanvas.width / 2,
     humanCanvas.height - COMPARE_LABEL_Y_MARGIN,
   );

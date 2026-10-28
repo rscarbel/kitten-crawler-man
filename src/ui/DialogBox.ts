@@ -37,6 +37,7 @@ import {
 import { measureText, text as drawLabel } from './widgets/text';
 import type { AudioManager } from '../audio/AudioManager';
 import { viewportWidth, viewportHeight } from '../core/rendering/Viewport';
+import { graphemes } from '../core/text/graphemes';
 import { allocCanvas, surfaceContext } from '../core/rendering/canvasSurface';
 import type { Paragraphs } from '../dialog/line';
 import { computeLineSpans, paginate, splitSentences, type Page } from '../dialog/paginate';
@@ -54,6 +55,23 @@ function measuringContext(): CanvasRenderingContext2D {
   measuringCtx ??= surfaceContext(allocCanvas('ui', 1, 1));
   return measuringCtx;
 }
+
+/**
+ * The least time between two word ticks. A tick sound lasts about 72 ms, so
+ * ticks for a run of one- and two-letter words at a fast reveal would
+ * otherwise pile up into a buzz.
+ */
+const WORD_TICK_MIN_GAP_MS = 45;
+const UPDATE_TICKS_PER_SECOND = 60;
+const MS_PER_SECOND = 1000;
+/**
+ * The most one `update()` may advance a clock-paced reveal: a couple of update
+ * ticks, enough to ride out an uneven frame, while a longer gap (the scene
+ * paused, the tab in the background) is treated as no time at all.
+ */
+const REVEAL_CLOCK_MAX_STEP_TICKS = 2;
+const REVEAL_CLOCK_MAX_STEP_MS =
+  (REVEAL_CLOCK_MAX_STEP_TICKS * MS_PER_SECOND) / UPDATE_TICKS_PER_SECOND;
 
 // Layout geometry
 const DIALOG_MAX_WIDTH = 560;
@@ -309,6 +327,16 @@ export class DialogBox {
   private _tokens: string[] = [];
   private _revealedCount = 0;
   private _lastRevealTime = 0;
+  /**
+   * How long the current page has been revealing, counted only across
+   * `update()` calls, so time the scene spent not updating the box (paused,
+   * or a backgrounded tab) does not count toward a clock-paced reveal.
+   */
+  private _pageRevealElapsedMs = 0;
+  /** When `update()` last advanced the page's reveal clock. */
+  private _revealClockReadAtMs = 0;
+  /** When the last word tick played, so a run of short words cannot stack ticks into a buzz. */
+  private _lastWordTickMs = Number.NEGATIVE_INFINITY;
   /** Whether this line's voice clip has already played — reset only by `show()`, so a line split across several display pages speaks once. */
   private _voiceSpoken = false;
   /**
@@ -325,16 +353,43 @@ export class DialogBox {
     this._showFooterHint = config.showFooterHint;
   }
 
-  private _playRevealSound(): void {
+  /** Voices the tokens from `firstNewIndex` up to the revealed count, which this reveal step uncovered. */
+  private _playRevealSound(firstNewIndex: number, now: number): void {
     const voice = this._speaker?.voice;
-    if (voice === undefined || voice.kind === 'silent') return;
-    if (voice.kind === 'typing') {
-      this._audio?.play('typing_click');
-      return;
+    if (voice === undefined) return;
+    switch (voice.kind) {
+      case 'silent':
+        return;
+      case 'typing':
+        this._audio?.play('typing_click');
+        return;
+      case 'wordTicks': {
+        const tickWouldBuzz = now - this._lastWordTickMs < WORD_TICK_MIN_GAP_MS;
+        if (tickWouldBuzz || !this._aWordStartsIn(firstNewIndex)) return;
+        this._lastWordTickMs = now;
+        this._audio?.playRandom(voice.sounds, { bus: 'ui' });
+        return;
+      }
+      case 'clips':
+        if (this._voiceSpoken) return;
+        this._voiceSpoken = true;
+        this._audio?.playRandom(voice.sounds);
+        return;
+      default: {
+        const unhandled: never = voice;
+        throw new Error(`unhandled speaker voice ${JSON.stringify(unhandled)}`);
+      }
     }
-    if (this._voiceSpoken) return;
-    this._voiceSpoken = true;
-    this._audio?.playRandom(voice.sounds);
+  }
+
+  private _aWordStartsIn(firstNewIndex: number): boolean {
+    const end = Math.min(this._revealedCount, this._tokens.length);
+    for (let index = Math.max(0, firstNewIndex); index < end; index++) {
+      if (isBlank(this._tokens[index])) continue;
+      const isFirstToken = index === 0;
+      if (isFirstToken || isBlank(this._tokens[index - 1])) return true;
+    }
+    return false;
   }
 
   /** Begin showing a line. Resets any in-progress animation and starts from its first display page. */
@@ -364,12 +419,27 @@ export class DialogBox {
     if (speaker === null || speaker.reveal === 'all' || this.isFullyRevealed()) return;
 
     const now = performance.now();
-    const readyForNextToken = now - this._lastRevealTime >= speaker.revealIntervalMs;
-    if (!readyForNextToken) return;
-
-    this._lastRevealTime = now;
-    this._revealedCount++;
-    this._playRevealSound();
+    const previousCount = this._revealedCount;
+    if (speaker.skin === 'caroline') {
+      // Her frame's reveal is a pure function of the clock, as her toasts and
+      // modals are, and her interval is shorter than one update tick, so
+      // stepping one token per tick would cap her pace at the tick rate.
+      const sinceLastUpdateMs = now - this._revealClockReadAtMs;
+      this._revealClockReadAtMs = now;
+      this._pageRevealElapsedMs += Math.min(sinceLastUpdateMs, REVEAL_CLOCK_MAX_STEP_MS);
+      const elapsedIntervals = Math.floor(this._pageRevealElapsedMs / speaker.revealIntervalMs);
+      const firstTokenShownAtStart = 1;
+      this._revealedCount = Math.min(
+        this._tokens.length,
+        firstTokenShownAtStart + elapsedIntervals,
+      );
+    } else {
+      const readyForNextToken = now - this._lastRevealTime >= speaker.revealIntervalMs;
+      if (!readyForNextToken) return;
+      this._lastRevealTime = now;
+      this._revealedCount++;
+    }
+    if (this._revealedCount > previousCount) this._playRevealSound(previousCount, now);
   }
 
   /** True once all of the current display page's text has been revealed. */
@@ -498,7 +568,7 @@ export class DialogBox {
   private _renderStandard(target: PaintTarget, dx: number, dy: number, dw: number): void {
     const rect = { x: dx, y: dy, w: dw, h: this._height };
     drawGlass(target, rect, skinsFor(target.theme).panel.card);
-    this._renderSpeakerRow(target, dx, dy);
+    this._renderSpeakerRow(target, dx, dy, dw);
     this._renderBodyText(target, dx, dy, dw);
     this._renderFooterHint(target, dx, dy, dw);
     this._renderQuestIcon(target, dx, dy, dw);
@@ -546,7 +616,7 @@ export class DialogBox {
         return { text: line, start };
       },
     );
-    // Tokens are code points but her painter counts UTF-16 units, as `page.text` does.
+    // Tokens are grapheme clusters but her painter counts UTF-16 units, as `page.text` does.
     const total = page.text.length;
     const shown = this._tokens.slice(0, this._revealedCount).join('').length;
     const decodeTail = skinsFor(target.theme).caroline.decodeTail;
@@ -691,15 +761,17 @@ export class DialogBox {
     } else {
       this._revealedCount = 1;
       this._lastRevealTime = performance.now();
+      this._revealClockReadAtMs = this._lastRevealTime;
+      this._pageRevealElapsedMs = 0;
     }
-    if (this._tokens.length > 0) this._playRevealSound();
+    if (this._tokens.length > 0) this._playRevealSound(0, performance.now());
   }
 
   private get _typeface(): SpeakerTypeface {
     return this._speaker?.typeface ?? 'ui';
   }
 
-  private _renderSpeakerRow(target: PaintTarget, dx: number, dy: number): void {
+  private _renderSpeakerRow(target: PaintTarget, dx: number, dy: number, dw: number): void {
     const speaker = this._speaker;
     if (speaker === null) return;
     const { ctx, theme } = target;
@@ -716,7 +788,13 @@ export class DialogBox {
     }
 
     if (speaker.name !== null) {
-      const nameWidth = measureText(target, speaker.name, { role: 'accent' });
+      const questIconReserve = this._questRelated ? QUEST_ICON_SIZE : 0;
+      const rowRight = dx + dw - DIALOG_PADDING - questIconReserve;
+      const roomForName = Math.max(0, rowRight - plateX - space.sm * 2);
+      const nameWidth = Math.min(
+        measureText(target, speaker.name, { role: 'accent' }),
+        roomForName,
+      );
       const plate = { x: plateX, y: rowY, w: nameWidth + space.sm * 2, h: ICON_SIZE };
       fillRounded(ctx, plate, radius.pill, palette.accent.soft);
       strokeRounded(ctx, plate, radius.pill, palette.border.subtle, SPEAKER_PLATE_BORDER_WIDTH);
@@ -802,8 +880,11 @@ export class DialogBox {
       case 'word':
         return text.split(/\s+/).filter((word) => word.length > 0);
       case 'letter':
-        // eslint-disable-next-line @typescript-eslint/no-misused-spread
-        return [...text];
+        return graphemes(text);
     }
   }
+}
+
+function isBlank(token: string): boolean {
+  return token.trim().length === 0;
 }

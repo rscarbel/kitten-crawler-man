@@ -23,28 +23,7 @@ import type { CitizenSpeechStyle } from '../dialog/speakers';
 import type { DialogLine, Paragraphs } from '../dialog/line';
 import type { TownSpecies } from './townSpecies';
 import { type PlannedBuildingId, mapByBuildingId, type BuildingId } from '../map/buildingIds';
-
-export type ResidentId =
-  | 'old_lori'
-  | 'steve_cartwright'
-  | 'wendell'
-  | 'marta_miller'
-  | 'apothecary_fen'
-  | 'deacon_aviel'
-  | 'smith_varga'
-  | 'innkeep_ossie'
-  | 'innkeep_brend'
-  | 'innkeep_marlow'
-  | 'sgt_kessler'
-  | 'corporal_pell'
-  | 'quartermaster_dann'
-  | 'tattooist_nim'
-  | 'stock_clerk_wick'
-  | 'keeper_brenna_kestrel'
-  | 'janitor_puddles'
-  | 'janitor_grout'
-  | 'sydney'
-  | 'brandon';
+import { RESIDENT_IDS, type ResidentId } from '../core/state/residentIds';
 
 export interface ResidentDef {
   readonly id: ResidentId;
@@ -57,127 +36,132 @@ export interface ResidentDef {
   readonly home: PlannedBuildingId;
 }
 
-const RESIDENT_DEFS = [
-  {
+/**
+ * Keyed by every `ResidentId`, each entry carrying its own key as its id, so an
+ * id without a resident (or a resident without an id) fails to compile rather
+ * than parsing from a save and failing at the first lookup.
+ */
+const RESIDENT_DEFS = {
+  old_lori: {
     id: 'old_lori',
     name: 'Old Lori',
     role: 'priest',
     species: 'dwarf',
     home: 'taloncrest_old_lady_cottage',
   },
-  {
+  steve_cartwright: {
     id: 'steve_cartwright',
     name: 'Steve Cartwright',
     role: 'laborer',
     species: 'otter',
     home: 'taloncrest_crafting_house',
   },
-  {
+  janitor_puddles: {
     id: 'janitor_puddles',
     name: 'Puddles',
     role: 'laborer',
     species: 'crocodilian',
     home: 'taloncrest_pub',
   },
-  {
+  janitor_grout: {
     id: 'janitor_grout',
     name: 'Grout',
     role: 'laborer',
     species: 'crocodilian',
     home: 'taloncrest_flagon_tavern',
   },
-  {
+  wendell: {
     id: 'wendell',
     name: 'Wendell',
     role: 'farmer',
     species: 'human',
     home: 'taloncrest_builder_farm',
   },
-  {
+  marta_miller: {
     id: 'marta_miller',
     name: 'Marta Miller',
     role: 'farmer',
     species: 'human',
     home: 'taloncrest_mill_farm',
   },
-  {
+  apothecary_fen: {
     id: 'apothecary_fen',
     name: 'Apothecary Fen',
     role: 'merchant',
     species: 'human',
     home: 'taloncrest_apothecary',
   },
-  {
+  deacon_aviel: {
     id: 'deacon_aviel',
     name: 'Deacon Aviel',
     role: 'priest',
     species: 'hawkfolk',
     home: 'taloncrest_temple',
   },
-  {
+  smith_varga: {
     id: 'smith_varga',
     name: 'Smith Varga',
     role: 'smith',
     species: 'hawkfolk',
     home: 'taloncrest_smithy',
   },
-  {
+  innkeep_ossie: {
     id: 'innkeep_ossie',
     name: 'Innkeep Ossie',
     role: 'innkeeper',
     species: 'hawkfolk',
     home: 'taloncrest_inn',
   },
-  {
+  innkeep_brend: {
     id: 'innkeep_brend',
     name: 'Innkeep Brend',
     role: 'innkeeper',
     species: 'hawkfolk',
     home: 'taloncrest_flagon_tavern',
   },
-  {
+  innkeep_marlow: {
     id: 'innkeep_marlow',
     name: 'Innkeep Marlow',
     role: 'innkeeper',
     species: 'human',
     home: 'taloncrest_pub',
   },
-  {
+  sgt_kessler: {
     id: 'sgt_kessler',
     name: 'Sgt. Kessler',
     role: 'guard',
     species: 'hawkfolk',
     home: 'taloncrest_garrison_lodge',
   },
-  {
+  sydney: {
     id: 'sydney',
     name: 'Sydney',
     role: 'merchant',
     species: 'crocodilian',
     home: 'taloncrest_barracks',
   },
-  {
+  corporal_pell: {
     id: 'corporal_pell',
     name: 'Corporal Pell',
     role: 'guard',
     species: 'hawkfolk',
     home: 'taloncrest_barracks',
   },
-  {
+  quartermaster_dann: {
     id: 'quartermaster_dann',
     name: 'Quartermaster Dann',
     role: 'merchant',
     species: 'hawkfolk',
     home: 'taloncrest_barracks',
   },
-  {
+  stock_clerk_wick: {
     id: 'stock_clerk_wick',
     name: 'Wick',
     role: 'commoner',
     species: 'human',
     home: 'taloncrest_general_store',
   },
-  {
+  tattooist_nim: {
     id: 'tattooist_nim',
     name: 'Nim',
     role: 'merchant',
@@ -185,23 +169,23 @@ const RESIDENT_DEFS = [
     home: 'taloncrest_tattoo_parlor',
   },
   // The club's host, drawn by his own painter, at the front desk by the door.
-  {
+  brandon: {
     id: 'brandon',
     name: 'Brandon',
     role: 'noble',
     species: 'human',
     home: 'taloncrest_nightclub',
   },
-  {
+  keeper_brenna_kestrel: {
     id: 'keeper_brenna_kestrel',
     name: 'Keeper Brenna Kestrel',
     role: 'merchant',
     species: 'hawkfolk',
     home: 'taloncrest_general_store',
   },
-] as const satisfies ReadonlyArray<ResidentDef>;
+} as const satisfies { readonly [Id in ResidentId]: ResidentDef & { readonly id: Id } };
 
-type ResidentRecord = (typeof RESIDENT_DEFS)[number];
+type ResidentRecord = (typeof RESIDENT_DEFS)[ResidentId];
 
 /** The species the resident with id `Id` is authored as. */
 export type ResidentSpeciesOf<Id extends ResidentId> = Extract<
@@ -240,18 +224,14 @@ const BUILDING_KEEPERS = {
 
 const KEEPER_BY_BUILDING = mapByBuildingId<ResidentId>(BUILDING_KEEPERS);
 
-const RESIDENTS_BY_ID = new Map<ResidentId, ResidentDef>(RESIDENT_DEFS.map((def) => [def.id, def]));
-
 /** The named resident with this id. */
 export function residentById(id: ResidentId): ResidentDef {
-  const def = RESIDENTS_BY_ID.get(id);
-  if (def === undefined) throw new Error(`Unknown resident id: ${id}`);
-  return def;
+  return RESIDENT_DEFS[id];
 }
 
 /** Every authored resident, for registries and validation sweeps. */
 export function allResidents(): ReadonlyArray<ResidentDef> {
-  return RESIDENT_DEFS;
+  return RESIDENT_IDS.map(residentById);
 }
 
 /** The resident who keeps the building named `buildingId`, or null for a building no resident lives in. */

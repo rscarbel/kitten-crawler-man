@@ -11,13 +11,11 @@
 import { carolineLines } from '../../caroline';
 import { speakerLines, transientSpeaker } from '../../line';
 import type { BarkLine, DialogLine, NonEmpty } from '../../line';
-import { crawlerName } from '../../../characters/characters';
-
-const HUMAN_NAME = crawlerName('human');
+import { crawlerDisplayName } from '../../../characters/characters';
 
 /** The murder mystery's own header, for a narration page with no more specific location to name. */
 const narrator = transientSpeaker('The Krasue Murders', 'narration');
-const ryan = speakerLines('ryan');
+const humanCrawler = speakerLines('human_crawler');
 const belle = speakerLines('belle');
 const voice = speakerLines('mysteriousVoice');
 const lich = speakerLines('lich');
@@ -26,7 +24,7 @@ export const LICH_REVEAL: NonEmpty<DialogLine> = [
   narrator.line(
     'Miss Quill drops mid-sentence, and for one long moment her floating pen keeps writing without her, striking one last name from a list. Then it clatters to the boards, and the office is quiet.',
   ),
-  ryan.line(
+  humanCrawler.line(
     'Okay. The magistrate’s a corpse, the secretary ran the harvest, case closed. So why does this room still feel like somebody’s in it? Hello?',
   ),
   voice.line(
@@ -40,7 +38,8 @@ export const LICH_REVEAL: NonEmpty<DialogLine> = [
   ).line,
   belle.button(
     'Ready weapons',
-    `${HUMAN_NAME}, the room got cold. I don’t like this voice. It’s not a cuddly voice.`,
+    () =>
+      `${crawlerDisplayName('human')}, the room got cold. I don’t like this voice. It’s not a cuddly voice.`,
   ),
 ];
 

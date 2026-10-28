@@ -12,16 +12,8 @@
  */
 
 import type { DialogLine, NonEmpty } from '../../dialog/line';
-import {
-  GARN,
-  MERRIT,
-  TIKKA,
-  VETCH,
-  WICKER,
-  isSoldierId,
-  type SoldierId,
-  type VillagerId,
-} from '../../dialog/scripts/briarHollow';
+import { GARN, MERRIT, TIKKA, VETCH, WICKER } from '../../dialog/scripts/briarHollow';
+import { isSoldierId, type SoldierId, type VillagerId } from '../../core/quests/villagerIds';
 import { SOLDIER_SCRIPTS, VILLAGER_SCRIPTS } from '../../dialog/villagerRegistry';
 import type { SoldierLines } from '../../dialog/roles';
 import type { ToolTier } from '../../core/items/gathering/toolTiers';

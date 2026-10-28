@@ -148,7 +148,7 @@ function paintCollar(ctx: Ctx, frame: BipedTorsoFrame): void {
     paintBackHoodRim(ctx, torso, view, MONK_WOOL);
     return;
   }
-  paintFacingHood(ctx, torso, view, MONK_WOOL);
+  paintFacingHood(ctx, frame, MONK_WOOL);
 }
 
 function paintTorso(ctx: Ctx, frame: BipedTorsoFrame, context: GarmentFrameContext<'human'>): void {
@@ -414,7 +414,7 @@ export const MONK_HABIT = defineGarment({
   material: 'cloth',
   layer: 'overcoat',
   region: ['torso', 'hips', 'leg', 'back'],
-  covers: ['chest'],
+  covers: ['chest', 'throat'],
   sleeves: {
     cloth: MONK_WOOL,
     cut: {

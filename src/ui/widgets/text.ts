@@ -9,6 +9,7 @@ import type { PaintTarget } from './paint';
 import { digitCellWidth, onUiFontLoaded } from '../theme/fonts';
 import { skinsFor, type TextFillSkin, type TextRole } from '../theme/skins';
 import { ITALIC_SLANT, fontFor, type Theme, type TypeStyle } from '../theme/tokens';
+import { graphemes } from '../../core/text/graphemes';
 
 export type TextAlign = 'left' | 'center' | 'right';
 export type TextVAlign = 'top' | 'middle' | 'bottom';
@@ -130,11 +131,12 @@ function measureLine(
   digitCell: number | null,
 ): number {
   if (spacing === 0 && digitCell === null) return ctx.measureText(text).width;
+  const clusters = graphemes(text);
   let width = 0;
-  for (const char of text) {
-    width += digitCell !== null && DIGIT.test(char) ? digitCell : ctx.measureText(char).width;
+  for (const cluster of clusters) {
+    width += digitCell !== null && DIGIT.test(cluster) ? digitCell : ctx.measureText(cluster).width;
   }
-  return width + spacing * Math.max(0, Array.from(text).length - 1);
+  return width + spacing * Math.max(0, clusters.length - 1);
 }
 
 function paintLine(
@@ -155,30 +157,30 @@ function paintLine(
     return;
   }
   let x = left;
-  for (const char of text) {
-    const natural = ctx.measureText(char).width;
-    const isDigitCell = digitCell !== null && DIGIT.test(char);
+  for (const cluster of graphemes(text)) {
+    const natural = ctx.measureText(cluster).width;
+    const isDigitCell = digitCell !== null && DIGIT.test(cluster);
     const cell = isDigitCell ? digitCell : natural;
-    draw(char, x + (cell - natural) / 2);
+    draw(cluster, x + (cell - natural) / 2);
     x += cell + spacing;
   }
 }
 
 function fitWithEllipsis(text: string, maxWidth: number, measure: (s: string) => number): string {
   if (measure(text) <= maxWidth + FIT_TOLERANCE) return text;
-  const chars = Array.from(text);
+  const clusters = graphemes(text);
   let low = 0;
-  let high = chars.length;
+  let high = clusters.length;
   while (low < high) {
     const mid = Math.ceil((low + high) / 2);
-    const candidate = `${chars.slice(0, mid).join('').trimEnd()}${ELLIPSIS}`;
+    const candidate = `${clusters.slice(0, mid).join('').trimEnd()}${ELLIPSIS}`;
     if (measure(candidate) <= maxWidth) low = mid;
     else high = mid - 1;
   }
-  return low === 0 ? ELLIPSIS : `${chars.slice(0, low).join('').trimEnd()}${ELLIPSIS}`;
+  return low === 0 ? ELLIPSIS : `${clusters.slice(0, low).join('').trimEnd()}${ELLIPSIS}`;
 }
 
-/** Splits `text` into lines no wider than `maxWidth`; `\n` always breaks. Words wider than a line break by character. */
+/** Splits `text` into lines no wider than `maxWidth`; `\n` always breaks. Words wider than a line break between grapheme clusters. */
 export function wrapToWidth(
   text: string,
   maxWidth: number,
@@ -199,12 +201,12 @@ export function wrapToWidth(
         continue;
       }
       let piece = '';
-      for (const char of word) {
-        if (measure(piece + char) > maxWidth && piece !== '') {
+      for (const cluster of graphemes(word)) {
+        if (measure(piece + cluster) > maxWidth && piece !== '') {
           lines.push(piece);
-          piece = char;
+          piece = cluster;
         } else {
-          piece += char;
+          piece += cluster;
         }
       }
       current = piece;

@@ -92,6 +92,12 @@ export interface TrackerEntry {
   /** Stable across frames — this is what a pin is remembered by. */
   readonly id: string;
   readonly name: string;
+  /**
+   * The name told to the AI, for a quest whose `name` carries the player's
+   * typed name: that reaches the AI only where its server fences it as
+   * player text, so this one names them by `crawlerAIName` instead.
+   */
+  readonly aiName?: string;
   readonly status: TrackerStatus;
   /** What to do next, in one line: "Survive the assault (18s left)". */
   readonly objective: string;

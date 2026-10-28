@@ -281,7 +281,7 @@ export const SEQUIN_TAILCOAT = defineGarment({
   material: 'cloth',
   layer: 'overcoat',
   region: ['torso', 'back'],
-  covers: ['chest'],
+  covers: ['chest', 'throat'],
   sleeves: { cloth: RINGMASTER_RED },
   paint: { torso: humanEveryView(paintTorso), back: humanEveryView(paintBack) },
 });

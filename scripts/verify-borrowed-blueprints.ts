@@ -21,7 +21,7 @@ import {
   parseBriarHollowStateSnapshot,
   restoreBriarHollowState,
 } from '../src/core/quests/briarHollowState';
-import { playerCharacter } from '../src/characters/characters';
+import { CRAWLER_SPEAKERS } from '../src/characters/characters';
 import { EventBus } from '../src/core/EventBus';
 import { Inventory } from '../src/core/items/inventory/Inventory';
 import { ITEM_DEF, QUEST_SLOT_IDX, type InventoryItem } from '../src/core/items/defs/ItemDefs';
@@ -30,7 +30,7 @@ import { PASTURE_FENCE_SECTION_COUNT } from '../src/map/overworld/briarHollowLay
 import { SFX_GROUPS } from '../src/audio/sfxGroups';
 import type { SoundId } from '../src/audio/sounds';
 import type { DialogLine } from '../src/dialog/line';
-import type { VillagerId } from '../src/dialog/scripts/briarHollow';
+import type { VillagerId } from '../src/core/quests/villagerIds';
 import type { NPCMarkerType } from '../src/creatures/QuestNPC';
 import {
   firstQuestMarker,
@@ -85,6 +85,9 @@ import { evictionSections } from './borrowed-blueprints/evictions';
 import { agreementSections } from './borrowed-blueprints/agreement';
 import { escortRouteSections } from './borrowed-blueprints/escortRoute';
 import { verifyMidgeFriendlyFire } from './borrowed-blueprints/midgeFriendlyFire';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+
+useDevPlayerIdentity();
 
 installCanvasGlobals();
 
@@ -260,7 +263,7 @@ function standInProvider(
 
 function verifyProviderOrder(): void {
   const ctx = villagerContext();
-  const humanVoice = playerCharacter('human').speakerId;
+  const humanVoice = CRAWLER_SPEAKERS.human;
   const [pleaLine] = merritFenceDonePages(humanVoice);
   const [sideLine] = merritAskPages(humanVoice, true);
   const plea = standInProvider('fenna', pleaLine, 'question');
@@ -432,8 +435,8 @@ function verifyDialog(): void {
     ),
     "Fenna's directions finish her sentence",
   );
-  const humanVoice = playerCharacter('human').speakerId;
-  const catVoice = playerCharacter('cat').speakerId;
+  const humanVoice = CRAWLER_SPEAKERS.human;
+  const catVoice = CRAWLER_SPEAKERS.cat;
   const humanVisit = wendellFirstVisitPages(humanVoice);
   const catVisit = wendellFirstVisitPages(catVoice);
   const speakerOf = (line: DialogLine): string =>

@@ -5,7 +5,7 @@
 
 import type { StatId } from '../../core/party/stats';
 import { GearState } from '../../gear/gearState';
-import { crawlerName } from '../../characters/characters';
+import { crawlerDisplayName } from '../../characters/characters';
 import { Inventory } from '../../core/items/inventory/Inventory';
 import { BAG_PAGE_SLOTS, ITEM_DEF, isItemId, type ItemId } from '../../core/items/defs/ItemDefs';
 import type { CrawlerKind } from '../../core/skills/SkillManager';
@@ -22,7 +22,9 @@ import type { DialogFixture } from './dialogs/fixture';
 const FIXTURE_COINS = 1240;
 /** Where the fixture's right-click lands, in UI units. */
 const MENU_AT = { x: 200, y: 120 } as const;
-const FIXTURE_COIN_SPLIT = `${crawlerName('human')} 900 · ${crawlerName('cat')} 340`;
+function fixtureCoinSplit(): string {
+  return `${crawlerDisplayName('human')} 900 · ${crawlerDisplayName('cat')} 340`;
+}
 /** Potions share a cooldown; the fixture shows it part-way through. */
 const POTION_COOLDOWN = { current: 180, max: 480 } as const;
 
@@ -133,14 +135,14 @@ export function buildFixture(spec: FixtureSpec): DialogFixture {
       human.inventory.unseenUpgrades.add('cockscomb_crest');
       if (spec.packedBag === true) packBag(human);
       const party: readonly InventoryMember[] = [
-        { id: 'human', name: crawlerName('human'), owner: human },
-        { id: 'cat', name: crawlerName('cat'), owner: cat },
+        { id: 'human', name: crawlerDisplayName('human'), owner: human },
+        { id: 'cat', name: crawlerDisplayName('cat'), owner: cat },
       ];
       const screen = new InventoryScreen({
         actions: new InventoryActions(),
         party: () => party,
         coins: () => FIXTURE_COINS,
-        coinSplit: () => FIXTURE_COIN_SPLIT,
+        coinSplit: fixtureCoinSplit,
         cooldownFor: (item) => (item.id === 'health_potion' ? POTION_COOLDOWN : null),
       });
       screen.open({ tab: spec.tab, member: spec.member });

@@ -6,7 +6,7 @@
  */
 
 import { carolineLines, type CarolineMessage } from '../caroline';
-import type { AdviceObjectiveId } from '../../systems/daveAdvice';
+import type { AdviceObjectiveId } from '../../story/adviceObjectiveIds';
 import type { CardinalDirection } from '../../utils';
 
 export interface CarolineIntelArgs {

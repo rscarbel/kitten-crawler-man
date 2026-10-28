@@ -6,7 +6,7 @@
 import { displayHp } from '../../../core/party/crawlerFormulas';
 import { ALL_STATS, STAT_DEFS, type StatId } from '../../../core/party/stats';
 import { formatPlayTime, type GameStats } from '../../../core/progression/GameStats';
-import { crawlerName } from '../../../characters/characters';
+import { crawlerDisplayName } from '../../../characters/characters';
 import {
   getSkillDef,
   isEligible,
@@ -90,7 +90,7 @@ function crawlerHeader(column: SectionLayout, ctx: PauseContext, crawler: Crawle
   const player = crawlerOf(ctx, crawler);
   const titleRow = column.row(lineHeightOf(ui, 'title'), space.xs);
   text(ui, titleRow, {
-    text: crawlerName(crawler),
+    text: crawlerDisplayName(crawler),
     role: 'title',
     color: crawlerColor(ui.theme, crawler),
   });
@@ -308,7 +308,7 @@ function renderSkills(layout: SectionLayout, ctx: PauseContext): void {
     const remaining = undiscoveredCount(crawler, states.length);
     const titleRow = column.row(lineHeightOf(ui, 'title'), ui.theme.space.sm);
     text(ui, titleRow, {
-      text: `${crawlerName(crawler)} · ${states.length} known`,
+      text: `${crawlerDisplayName(crawler)} · ${states.length} known`,
       role: 'title',
       color: crawlerColor(ui.theme, crawler),
     });

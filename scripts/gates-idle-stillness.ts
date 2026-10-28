@@ -30,7 +30,8 @@ import { nothingMeasuredFailures, reportFigureGates } from './figureGates.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
-import { HUMAN_FIGURE, HUMAN_ROW_TABLE } from '../src/sprites/art/humanFigure.js';
+import { undressedHumanFigure, HUMAN_ROW_TABLE } from '../src/sprites/art/humanFigure.js';
+import { activeHumanLook } from '../src/sprites/humanSprite.js';
 import {
   ALL_TOWN_CAST_VIEWS,
   IDLE_FRAMES as TOWN_CAST_IDLE_FRAMES,
@@ -133,7 +134,7 @@ interface IdleSubject {
 function idleSubjects(): IdleSubject[] {
   const subjects: IdleSubject[] = [];
   for (const state of ['idle', 'idle_side', 'idle_away']) {
-    subjects.push({ label: `human.${state}`, def: HUMAN_FIGURE, state });
+    subjects.push({ label: `human.${state}`, def: undressedHumanFigure(activeHumanLook()), state });
   }
   for (const look of TOWN_CAST_LOOKS) {
     for (const view of ALL_TOWN_CAST_VIEWS) {

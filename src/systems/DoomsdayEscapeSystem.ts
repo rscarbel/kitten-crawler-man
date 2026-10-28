@@ -18,7 +18,7 @@
  * long before the finale exists.
  */
 
-import { crawlerName } from '../characters/characters';
+import { crawlerDisplayName, HUMAN_CRAWLER_AI_NAME } from '../characters/characters';
 import { TILE_SIZE } from '../core/constants';
 import type { GameMap } from '../map/GameMap';
 import type { GameSystem, SystemContext } from './GameSystem';
@@ -65,7 +65,26 @@ export const STAIRWELL_KNOCKED_OUT_TOAST = 'Revive your partner before you go do
 
 /** Stable Journal id for the finale, so a pin on it survives the objective changing under it. */
 export const DOOMSDAY_TRACKER_ID = 'doomsday_scenario';
-const DOOMSDAY_TRACKER_NAME = `${crawlerName('human')}'s Doomsday Scenario`;
+function doomsdayTrackerName(): string {
+  return `${crawlerDisplayName('human')}'s Doomsday Scenario`;
+}
+const DOOMSDAY_TRACKER_AI_NAME = `${HUMAN_CRAWLER_AI_NAME}'s Doomsday Scenario`;
+
+/** The finale's Journal line. */
+export function doomsdayTrackerEntry(
+  status: TrackerEntry['status'],
+  objective: string,
+  target: TrackerTarget | undefined,
+): TrackerEntry {
+  const named = {
+    id: DOOMSDAY_TRACKER_ID,
+    name: doomsdayTrackerName(),
+    aiName: DOOMSDAY_TRACKER_AI_NAME,
+    status,
+    objective,
+  };
+  return target === undefined ? named : { ...named, target };
+}
 const ESCAPE_OBJECTIVE = 'Reach the escape stairwell';
 const ESCAPED_OBJECTIVE = 'You escaped the city';
 /** The stairwell's art is two tiles wide; the beacon should stand over all of it. */
@@ -193,7 +212,7 @@ export class DoomsdayEscapeSystem implements GameSystem, TrackerSource {
       case 'containment': {
         const towerDoor = this.gameMap.buildingEntries.find((entry) => entry.type === 'tower');
         const target = towerApproachBeaconTarget(towerDoor ?? null) ?? undefined;
-        return [this.trackerEntry('active', DOOMSDAY_CONTAIN_OBJECTIVE, target)];
+        return [doomsdayTrackerEntry('active', DOOMSDAY_CONTAIN_OBJECTIVE, target)];
       }
       case 'escape': {
         const escapeTile = this.gameMap.doomsdayEscapeTile;
@@ -201,21 +220,11 @@ export class DoomsdayEscapeSystem implements GameSystem, TrackerSource {
           escapeTile === undefined
             ? undefined
             : { x: escapeTile.x, y: escapeTile.y, widthTiles: STAIRWELL_BEACON_WIDTH_TILES };
-        return [this.trackerEntry('active', ESCAPE_OBJECTIVE, target)];
+        return [doomsdayTrackerEntry('active', ESCAPE_OBJECTIVE, target)];
       }
       case 'complete':
-        return [this.trackerEntry('completed', ESCAPED_OBJECTIVE, undefined)];
+        return [doomsdayTrackerEntry('completed', ESCAPED_OBJECTIVE, undefined)];
     }
-  }
-
-  private trackerEntry(
-    status: TrackerEntry['status'],
-    objective: string,
-    target: TrackerTarget | undefined,
-  ): TrackerEntry {
-    return target === undefined
-      ? { id: DOOMSDAY_TRACKER_ID, name: DOOMSDAY_TRACKER_NAME, status, objective }
-      : { id: DOOMSDAY_TRACKER_ID, name: DOOMSDAY_TRACKER_NAME, status, objective, target };
   }
 
   private buildStairwellProp(): TownPropRenderable {

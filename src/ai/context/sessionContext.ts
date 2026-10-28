@@ -1,8 +1,11 @@
-import { crawlerName } from '../../characters/characters';
+import { PRONOUN_LABELS } from '../../characters/crawlerPronouns';
+import { HUMAN_CRAWLER_APPEARANCE } from '../../characters/humanCrawlerLooks';
+import { lookIdOf } from '../../characters/crawlerChoices';
+import { playerIdentity } from '../../characters/playerIdentity';
 import { isAtOrUnderLowHealth } from '../../core/combat/hpThresholds';
+import { PET_KINDS, type PetNames } from '../../core/party/petNames';
 import type { ActionSeverity } from '../actions/types';
 import type { JsonObject } from './json';
-import { liveCrawlerNamed } from './liveState';
 import type { LiveInput, SessionInput } from './types';
 
 /** Under this many seconds on the collapse clock the AI should treat the floor as urgent. */
@@ -52,7 +55,7 @@ export function buildSessionFlags(
   live: LiveInput,
   commentaryOnly: boolean,
 ): SessionFlags {
-  const active = liveCrawlerNamed(live, live.activeCrawler);
+  const active = live.crawlers[live.activeCrawler];
   const timerLow =
     session.levelTimerRunning &&
     session.levelTimerSeconds !== undefined &&
@@ -72,18 +75,49 @@ export function buildSessionFlags(
 }
 
 /**
+ * The human crawler as the player made them. The name is text the player
+ * typed; the AI server fences `humanCrawler.name` as untrusted player text,
+ * so the name travels here and nowhere else in the context, live state,
+ * events or action results, which name the human by `crawlerAIName`.
+ */
+function humanCrawlerJson(): JsonObject {
+  const identity = playerIdentity();
+  return {
+    name: identity.name,
+    pronouns: PRONOUN_LABELS[identity.body],
+    appearance: HUMAN_CRAWLER_APPEARANCE[lookIdOf(identity)],
+  };
+}
+
+/** The pets the player has named, by kind; the AI server fences each name as untrusted player text. */
+function petNamesJson(petNames: PetNames): JsonObject {
+  const named: JsonObject = {};
+  for (const kind of PET_KINDS) {
+    const name = petNames.nameOf(kind);
+    if (name !== null) named[kind] = name;
+  }
+  return named;
+}
+
+/**
  * The session half of `context_set`. Clocks are reported in whole minutes so
  * the payload only changes when something worth re-sending changed, not every
  * second.
  */
-export function buildSessionContext(session: SessionInput, profile: JsonObject | null): JsonObject {
+export function buildSessionContext(
+  session: SessionInput,
+  petNames: PetNames,
+  profile: JsonObject | null,
+): JsonObject {
   const context: JsonObject = {
     floor: {
       number: session.floorNumber,
       levelId: session.levelId,
       name: session.floorName,
     },
-    party: [crawlerName('human'), crawlerName('cat'), ...session.companions],
+    humanCrawler: humanCrawlerJson(),
+    companions: [...session.companions],
+    petNames: petNamesJson(petNames),
     difficulty: session.difficulty,
     minutesPlayed: Math.floor(session.secondsPlayed / SECONDS_PER_MINUTE),
     deaths: session.deaths,

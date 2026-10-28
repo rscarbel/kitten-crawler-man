@@ -2,11 +2,7 @@ import type { LevelId } from '../../levels/levelIds';
 import type { Player } from '../../Player';
 import type { JsonObject } from './json';
 import type { PetNames } from '../../core/party/petNames';
-import type { PlayerCharacterName } from '../../characters/characters';
 import type { CrawlerKind } from '../../core/skills/SkillManager';
-
-/** The two crawlers, by the names the AI knows them by. */
-export type CrawlerName = PlayerCharacterName;
 
 /**
  * A game event as the AI server receives it. `witnessedBy` names every
@@ -40,7 +36,7 @@ export interface SemanticLocation {
 }
 
 export interface CrawlerState {
-  name: CrawlerName;
+  kind: CrawlerKind;
   hp: number;
   maxHp: number;
   level: number;
@@ -85,7 +81,11 @@ export interface SessionInput {
   secondsPlayed: number;
   deaths: number;
   activeQuests: QuestSummary[];
-  /** Companions out with the party (Deinonychus, hirelings, the attack cow). */
+  /**
+   * Companions out with the party (Deinonychus, hirelings, the attack cow),
+   * each by kind and never by a pet's name: those are player-typed text and
+   * travel apart, in the context's `petNames`, where the server fences them.
+   */
   companions: string[];
   /** Rooms on this floor's map, for the exploration share. Absent where the map has none. */
   roomCount?: number;
@@ -94,7 +94,7 @@ export interface SessionInput {
 
 /** Fast-changing state: what `state_snapshot` is built from. */
 export interface LiveInput {
-  activeCrawler: CrawlerName;
+  activeCrawler: CrawlerKind;
   /** Both crawlers, keyed by species: which character plays each is the registry's business, not this record's. */
   crawlers: Record<CrawlerKind, CrawlerState>;
   location: SemanticLocation;
@@ -117,8 +117,9 @@ export interface AIContextSource {
   /** Cheap check used per event to decide whether Dave saw it: is the active crawler in a safe room? */
   isPartyInSafeRoom(): boolean;
   /** The same check for one crawler, for events that happened to that crawler. */
-  isCrawlerInSafeRoom(crawler: CrawlerName): boolean;
-  crawlerNameOf(player: Player): CrawlerName | null;
+  isCrawlerInSafeRoom(crawler: CrawlerKind): boolean;
+  /** Which crawler `player` is, or null for a player that is neither. */
+  crawlerKindOf(player: Player): CrawlerKind | null;
   /** The run's pet names, so a pet is told about by the name the player gave it. */
   readonly petNames: PetNames;
 }

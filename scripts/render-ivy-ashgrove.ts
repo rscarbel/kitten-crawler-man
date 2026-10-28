@@ -30,7 +30,8 @@ import { TILE_SIZE } from '../src/core/constants.js';
 import { progressFrameIndex } from '../src/core/spriteAssets/SpriteRenderer.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 import { figureByteBudgetFor } from '../src/sprites/figure/figureFrameCache.js';
-import { HUMAN_FIGURE } from '../src/sprites/art/humanFigure.js';
+import { undressedHumanFigure } from '../src/sprites/art/humanFigure.js';
+import { activeHumanLook } from '../src/sprites/humanSprite.js';
 import { LONGBOW_NOCKED } from '../src/sprites/art/biped/props/longbow.js';
 import type { BipedPose } from '../src/sprites/art/biped/rig.js';
 import { bowShotBack, bowShotFront, bowShotSide } from '../src/sprites/art/human/actionsBow.js';
@@ -263,7 +264,7 @@ function spacingFor(state: string): number {
 function contextSubjects(): Subject[] {
   const fullDraw = BOW_RELEASE_FRAME - 1;
   return [
-    { label: 'the human', def: HUMAN_FIGURE, state: 'idle', frame: 0 },
+    { label: 'the human', def: undressedHumanFigure(activeHumanLook()), state: 'idle', frame: 0 },
     { label: 'front', def: FIGURE, state: ivyStateName('idle', 'front'), frame: 0 },
     { label: 'side', def: FIGURE, state: ivyStateName('idle', 'side'), frame: 0 },
     { label: 'away', def: FIGURE, state: ivyStateName('idle', 'away'), frame: 0 },

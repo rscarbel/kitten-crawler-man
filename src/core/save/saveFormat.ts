@@ -2,8 +2,8 @@ import type { GameProgress, GameProgressInput } from '../../auth/AuthClient';
 import { parseSavedWorld } from './SavedWorld';
 import { parseGameStatsSnapshot } from '../progression/GameStats';
 import { isNonNegativeFinite, isRecord } from '../util/guards';
-import { parsePlayerSnapshot } from './PlayerSnapshot';
-import { AchievementManager } from '../progression/AchievementManager';
+import { parsePlayerSnapshot } from './playerSnapshotFormat';
+import { parseSerializedAchievements } from '../progression/achievementSave';
 import { parsePartyCraftsState } from '../labour/partyCrafts';
 import {
   parsePendingWheelOutcome,
@@ -19,6 +19,7 @@ import { parseSerializedAbilityStates } from '../skills/AbilityManager';
 import { isLevelId } from '../../levels/levelIds';
 import { parseObjectivesBriefed, parseStoryBeatsSeen } from '../../story/storySave';
 import { parseSavedPetNames } from '../party/petNames';
+import { parseSavedPlayerIdentity } from './playerIdentitySave';
 
 /**
  * The fields of a save that belong to the whole run rather than to the floor it
@@ -46,7 +47,8 @@ type RunSaveFieldKey =
   | 'musicLibrary'
   | 'storyBeatsSeen'
   | 'objectivesBriefed'
-  | 'petNames';
+  | 'petNames'
+  | 'playerIdentity';
 
 /**
  * Run fields whose absence means something, so their keys must be written but
@@ -81,8 +83,8 @@ export function parseGameProgress(raw: unknown): GameProgress | null {
   const world = raw.world === undefined ? undefined : parseSavedWorld(raw.world);
   if (raw.world !== undefined && world === undefined) return null;
   const abilityStates = parseSerializedAbilityStates(raw.abilityStates);
-  const humanAchievements = AchievementManager.parse(raw.humanAchievements)?.serialize();
-  const catAchievements = AchievementManager.parse(raw.catAchievements)?.serialize();
+  const humanAchievements = parseSerializedAchievements(raw.humanAchievements);
+  const catAchievements = parseSerializedAchievements(raw.catAchievements);
   const gameStats = parseGameStatsSnapshot(raw.gameStats);
   const crafts = parsePartyCraftsState(raw.crafts);
   const wheelPrizesWon = parseWheelPrizesWon(raw.wheelPrizesWon);
@@ -95,6 +97,7 @@ export function parseGameProgress(raw: unknown): GameProgress | null {
   const storyBeatsSeen = parseStoryBeatsSeen(raw.storyBeatsSeen);
   const objectivesBriefed = parseObjectivesBriefed(raw.objectivesBriefed);
   const petNames = parseSavedPetNames(raw.petNames);
+  const playerIdentity = parseSavedPlayerIdentity(raw.playerIdentity);
   const {
     deinonychusUnlocked,
     deinonychusPetHp,
@@ -121,6 +124,7 @@ export function parseGameProgress(raw: unknown): GameProgress | null {
     storyBeatsSeen === undefined ||
     objectivesBriefed === undefined ||
     petNames === undefined ||
+    playerIdentity === undefined ||
     typeof deinonychusUnlocked !== 'boolean' ||
     !isNonNegativeFinite(deinonychusPetHp) ||
     typeof deinonychusPetResting !== 'boolean' ||
@@ -156,6 +160,7 @@ export function parseGameProgress(raw: unknown): GameProgress | null {
     storyBeatsSeen,
     objectivesBriefed,
     petNames,
+    playerIdentity,
     savedAt,
   };
 }

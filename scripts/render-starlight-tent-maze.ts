@@ -114,6 +114,9 @@ import {
   drawTurnPreviewStarRing,
   drawTurnPreviewTile,
 } from '../src/sprites/art/starlightTent/turnPreviewProps';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+
+useDevPlayerIdentity();
 
 /** A fixed floor-3 world seed, so the hall deals the same board every run. */
 const TEST_WORLD_SEED = 0x5eed_b16;

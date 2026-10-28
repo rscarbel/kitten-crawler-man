@@ -26,6 +26,9 @@
 
 import type { Surface } from '../src/ui/core/UiRoot.js';
 import type { ShimKeyInit } from './browserShim.js';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity.js';
+
+useDevPlayerIdentity();
 
 export {};
 

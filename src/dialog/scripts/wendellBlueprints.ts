@@ -11,7 +11,7 @@
 import { speakerLines } from '../line';
 
 const wendell = speakerLines('wendell');
-const ryan = speakerLines('ryan');
+const humanCrawler = speakerLines('human_crawler');
 const belle = speakerLines('belle');
 
 export const WENDELL = {
@@ -57,15 +57,15 @@ export const WENDELL = {
  * picks whichever crawler the player is controlling.
  */
 export const WENDELL_BLUEPRINTS_REPLIES = {
-  ryan: {
-    askAboutBlueprints: ryan.line(
+  human: {
+    askAboutBlueprints: humanCrawler.line(
       'Wendell! Good to meet you. Our friend Fenna from Briar Hollow says she left some blueprints with you last year, for a saw station and a rope walk. Ring any bells?',
     ),
-    askToBorrow: ryan.line(
+    askToBorrow: humanCrawler.line(
       "Fantastic! Any chance we could borrow them? Just for a little while, and we'll bring them straight back. Promise.",
     ),
   },
-  belle: {
+  cat: {
     askAboutBlueprints: belle.line(
       "Hi Wendell! You're nice and warm. Fenna from Briar Hollow left some blueprints with you. For a saw station and a rope walk. Do you still have them?",
     ),
@@ -80,10 +80,10 @@ export const WENDELL_BLUEPRINTS_ASIDES = {
   /** Belle, to Wendell, whoever asked about the blueprints. */
   belleAsksAboutCows: belle.line('You miss the cows? Aww. Do you want a hug?'),
   /**
-   * Ryan, to Belle. He has not met Merrit yet, so the "she" is Ryan guessing
-   * at a farmer he has never seen.
+   * The human crawler, to Belle. The crawlers have not met Merrit yet, so
+   * the "she" is a guess at a farmer neither has seen.
    */
-  ryanPlansTheCow: ryan.line(
+  humanPlansTheCow: humanCrawler.line(
     "So all we need is one cow and a few resources. How hard can that be? Let's go find the farmer in Briar Hollow and talk her into giving us a cow.",
   ),
 } as const;

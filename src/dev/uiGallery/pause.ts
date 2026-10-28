@@ -8,11 +8,8 @@ import { DEINONYCHUS_DEF } from '../../abilities/deinonychus';
 import { ENERGY_SHIELD_DEF } from '../../abilities/energyShield';
 import { SEISMIC_STOMP_DEF } from '../../abilities/seismicStomp';
 import { AbilityManager } from '../../core/skills/AbilityManager';
-import {
-  ACHIEVEMENT_DEFS,
-  AchievementManager,
-  isAchievementId,
-} from '../../core/progression/AchievementManager';
+import { ACHIEVEMENT_DEFS, AchievementManager } from '../../core/progression/AchievementManager';
+import { isAchievementId } from '../../core/progression/achievementSave';
 import { awardXp } from '../../core/progression/awardXp';
 import { TILE_SIZE } from '../../core/constants';
 import { EventBus } from '../../core/EventBus';

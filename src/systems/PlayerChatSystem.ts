@@ -1,5 +1,6 @@
 import type { Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
+import { graphemes } from '../core/text/graphemes';
 import type { Rect } from '../ui/core/geom';
 import { inset } from '../ui/core/geom';
 import type { KeyModifiers, Surface, Ui } from '../ui/core/UiRoot';
@@ -21,7 +22,7 @@ const CHAT_TEXT_TRUNCATE_SHOW = 77;
 const TILE_CENTER_OFFSET = 0.5;
 
 /** Longest line the chat box accepts. */
-const CHAT_INPUT_MAX_LENGTH = 120;
+const CHAT_INPUT_MAX_CODE_UNITS = 120;
 const CHAT_PLACEHOLDER = 'Say something...';
 const CHAT_FIELD_MAX_WIDTH = 400;
 /** Space kept clear on either side of the chat box on a narrow screen. */
@@ -66,7 +67,7 @@ export class PlayerChatSystem {
   open(canvas: HTMLCanvasElement, onSubmit: (text: string) => void): void {
     if (this.sink !== null) return;
     const sink = new TextEntrySink({
-      maxLength: CHAT_INPUT_MAX_LENGTH,
+      maxCodeUnits: CHAT_INPUT_MAX_CODE_UNITS,
       onEnter: () => this.submit(),
       onEscape: () => this.close(),
     });
@@ -182,9 +183,10 @@ export class PlayerChatSystem {
   }
 
   showBubble(text: string): void {
+    const clusters = graphemes(text);
     this.bubbleText =
-      text.length > CHAT_TEXT_TRUNCATE_LENGTH
-        ? `${text.slice(0, CHAT_TEXT_TRUNCATE_SHOW)}...`
+      clusters.length > CHAT_TEXT_TRUNCATE_LENGTH
+        ? `${clusters.slice(0, CHAT_TEXT_TRUNCATE_SHOW).join('')}...`
         : text;
     this.bubbleTtl = BUBBLE_TTL;
   }

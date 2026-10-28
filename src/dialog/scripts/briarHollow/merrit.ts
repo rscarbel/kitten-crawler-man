@@ -59,7 +59,7 @@ export const MERRIT = {
   ),
 } as const;
 
-const ryan = speakerLines('ryan');
+const humanCrawler = speakerLines('human_crawler');
 const belle = speakerLines('belle');
 
 /**
@@ -68,17 +68,21 @@ const belle = speakerLines('belle');
  * scene picks whichever crawler the player is controlling.
  */
 export const MERRIT_BLUEPRINTS_REPLIES = {
-  ryan: {
-    goodMorning: ryan.line('Morning, Merrit! Those winter crops are looking great.'),
-    itsWhatWeDo: ryan.line("Happy to. It's kind of our thing."),
-    askForCow: ryan.line(
+  human: {
+    goodMorning: humanCrawler.line('Morning, Merrit! Those winter crops are looking great.'),
+    itsWhatWeDo: humanCrawler.line("Happy to. It's kind of our thing."),
+    askForCow: humanCrawler.line(
       "Okay, there's no smooth way to ask this, so I'll just ask... Could we have one of your cows?",
     ),
-    fenceAgreed: ryan.line("Deal. Leave it to us. That'll be the best fence in Briar Hollow."),
-    theMayor: ryan.line('Wait. The mayor?'),
-    needMilk: ryan.line('Ha! Good. We need a cow that gives milk, not one that runs a village.'),
+    fenceAgreed: humanCrawler.line(
+      "Deal. Leave it to us. That'll be the best fence in Briar Hollow.",
+    ),
+    theMayor: humanCrawler.line('Wait. The mayor?'),
+    needMilk: humanCrawler.line(
+      'Ha! Good. We need a cow that gives milk, not one that runs a village.',
+    ),
   },
-  belle: {
+  cat: {
     goodMorning: belle.line('Good morning, Merrit! Your barn is so cozy.'),
     itsWhatWeDo: belle.line('We like helping! Helping is nice.'),
     askForCow: belle.line('Um... can we have a cow? A nice one? We will love her lots.'),

@@ -1,5 +1,5 @@
 import type { LevelId } from './levelIds';
-import { crawlerName } from '../characters/characters';
+import { crawlerDisplayName } from '../characters/characters';
 import { keybindings } from '../core/input/Keybindings';
 import type { LevelDef } from './types';
 
@@ -20,7 +20,7 @@ export const tutorialLevel: LevelDef = {
     // Read when the loading screen opens, so a rebound switch key is the one named.
     get tips(): readonly [string, ...string[]] {
       return [
-        `${crawlerName('human')} and ${crawlerName('cat')} crawl together. Switch between them with the Switch button, or press ${keybindings.labelFor('switchCharacter')}.`,
+        `${crawlerDisplayName('human')} and ${crawlerDisplayName('cat')} crawl together. Switch between them with the Switch button, or press ${keybindings.labelFor('switchCharacter')}.`,
         'Follow the hints on screen. The tutorial teaches one thing at a time.',
         'Safe rooms keep the monsters out. Use them to catch your breath.',
         'A health potion on your hotbar can turn a losing fight around.',

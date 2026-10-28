@@ -4,12 +4,9 @@ import {
   type BossRoomDressingCheckpoint,
 } from '../../systems/bossRooms/bossRoomDressingCheckpoint';
 import type { ArenaCheckpoint } from '../../systems/ArenaSystem';
-import {
-  lockProgressOf,
-  type ChestLockProgress,
-  type TreasureChest,
-  type TreasureChestCheckpoint,
-  type TreasureChestProgressSnapshot,
+import type {
+  ChestLockProgress,
+  TreasureChestProgressSnapshot,
 } from '../../systems/TreasureChestSystem';
 import type { DefendQuestCheckpoint } from '../../systems/DefendQuestSystem';
 import {
@@ -25,7 +22,7 @@ import type { SpiderQuestCheckpoint } from '../../systems/SpiderQuestSystem';
 import type { BountyCheckpoint } from '../../systems/BountySystem';
 import type { CasinoStateCheckpoint, PokerReads } from '../club/CasinoState';
 import type { PlayerRead } from '../../systems/casino/poker/npc/playerRead';
-import { isRegularId } from '../../systems/casino/poker/npc/regulars';
+import { isRegularId } from '../../systems/casino/poker/npc/regularIds';
 import { normalizeJackpotPool } from '../../systems/casino/slots/slotBets';
 import type { HiredMercenary, MercenaryRosterCheckpoint } from '../party/MercenaryRoster';
 import type { DeinonychusPetStateCheckpoint } from '../state/DeinonychusPetState';
@@ -52,15 +49,12 @@ import type { QuestMarkerType } from '../../systems/MiniMapSystem';
 import { SUITS, RANKS, type ShoeState } from '../../systems/casino/Deck';
 import type { WoodBarrier, PendingBuild } from '../../systems/DefendQuestSystem';
 import type { LifeMachine } from '../../systems/SpiderQuestSystem';
-import { allResidents } from '../../systems/townResidents';
+import { RESIDENT_IDS } from '../state/residentIds';
 import { MERCENARY_TEMPLATE_IDS } from '../party/mercenaryTemplates';
 import { isRecord } from '../util/guards';
 import { parsePersistedDoomsday, type PersistedDoomsdayProgress } from '../quests/DoomsdayProgress';
-import {
-  debriefBossType,
-  type DebriefMemory,
-  type DaveDebriefCheckpoint,
-} from '../../systems/daveDebrief';
+import { type DebriefMemory, type DaveDebriefCheckpoint } from '../../systems/daveDebrief';
+import { debriefBossType } from '../mobs/debriefBossTypes';
 import {
   parseBriarHollowStateSnapshot,
   type BriarHollowStateSnapshot,
@@ -119,21 +113,6 @@ export interface PersistedWorldState {
 
 export type PersistedArenaCheckpoint = Omit<ArenaCheckpoint, 'arenaLiveTusklings'>;
 
-export function toPersistedArenaCheckpoint(cp: ArenaCheckpoint): PersistedArenaCheckpoint {
-  return {
-    arenaLocked: cp.arenaLocked,
-    arenaPhase2Active: cp.arenaPhase2Active,
-    arenaStairwellUnlocked: cp.arenaStairwellUnlocked,
-    entryWindowTimer: cp.entryWindowTimer,
-    humanIsInsider: cp.humanIsInsider,
-    catIsInsider: cp.catIsInsider,
-  };
-}
-
-export function fromPersistedArenaCheckpoint(persisted: PersistedArenaCheckpoint): ArenaCheckpoint {
-  return { ...persisted, arenaLiveTusklings: [] };
-}
-
 /** One chest's state, keyed by its tile rather than by the chest object. */
 export type PersistedTreasureChestEntry = Omit<TreasureChestProgressSnapshot, 'chest'> & {
   readonly tileX: number;
@@ -144,169 +123,19 @@ export interface PersistedTreasureChestCheckpoint {
   readonly chests: readonly PersistedTreasureChestEntry[];
 }
 
-export function toPersistedTreasureChestCheckpoint(
-  cp: TreasureChestCheckpoint,
-): PersistedTreasureChestCheckpoint {
-  return {
-    chests: cp.chests.map((entry) => ({
-      tileX: entry.chest.tileX,
-      tileY: entry.chest.tileY,
-      state: entry.state,
-      loot: entry.loot,
-      unlockFrame: entry.unlockFrame,
-      tryLockedTimer: entry.tryLockedTimer,
-      lock: entry.lock,
-    })),
-  };
-}
-
-/**
- * Matches each saved entry to the chest the regenerated floor put on the same
- * tile. An entry with no chest there, or whose lock is of another kind than
- * that chest's, is dropped.
- */
-export function fromPersistedTreasureChestCheckpoint(
-  persisted: PersistedTreasureChestCheckpoint,
-  liveChests: readonly TreasureChest[],
-): TreasureChestCheckpoint {
-  const chests: TreasureChestProgressSnapshot[] = [];
-  const matched = new Set<TreasureChest>();
-  for (const entry of persisted.chests) {
-    const chest = liveChests.find((c) => c.tileX === entry.tileX && c.tileY === entry.tileY);
-    if (chest === undefined) continue;
-    if (entry.lock.kind !== chest.lock.kind) {
-      console.warn(
-        `[PersistedWorldState] Saved chest at ${entry.tileX},${entry.tileY} has a ${entry.lock.kind} lock; the chest there has a ${chest.lock.kind} lock. Dropped.`,
-      );
-      continue;
-    }
-    matched.add(chest);
-    chests.push({
-      chest,
-      state: entry.state,
-      loot: entry.loot,
-      unlockFrame: entry.unlockFrame,
-      tryLockedTimer: entry.tryLockedTimer,
-      lock: entry.lock,
-    });
-  }
-  // `restoreCheckpoint` replaces the whole chest list, so a chest the save
-  // does not know about has to be listed as it is or it disappears.
-  for (const chest of liveChests) {
-    if (matched.has(chest)) continue;
-    chests.push({
-      chest,
-      state: chest.state,
-      loot: chest.loot,
-      unlockFrame: chest.unlockFrame,
-      tryLockedTimer: chest.tryLockedTimer,
-      lock: lockProgressOf(chest.lock),
-    });
-  }
-  return { chests };
-}
-
 export type PersistedDefendQuestCheckpoint = Omit<DefendQuestCheckpoint, 'questMobs'>;
-
-export function toPersistedDefendQuestCheckpoint(
-  cp: DefendQuestCheckpoint,
-): PersistedDefendQuestCheckpoint {
-  return {
-    questStatuses: cp.questStatuses,
-    phase: cp.phase,
-    approachTimer: cp.approachTimer,
-    defenseTimer: cp.defenseTimer,
-    spawnTimer: cp.spawnTimer,
-    woodRespawnTimer: cp.woodRespawnTimer,
-    woodPileAvailable: cp.woodPileAvailable,
-    barriers: cp.barriers,
-    pendingBuild: cp.pendingBuild,
-    audienceAbsenceFrames: cp.audienceAbsenceFrames,
-    encounterAborted: cp.encounterAborted,
-    npcHp: cp.npcHp,
-    npcMarkerType: cp.npcMarkerType,
-  };
-}
-
-export function fromPersistedDefendQuestCheckpoint(
-  persisted: PersistedDefendQuestCheckpoint,
-): DefendQuestCheckpoint {
-  return { ...persisted, questMobs: [] };
-}
 
 export type PersistedMurderMysteryQuestCheckpoint = Omit<
   MurderMysteryQuestCheckpoint,
   'swarm' | 'baggi' | 'swarmSpawnGrace'
 >;
 
-export function toPersistedMurderMysteryQuestCheckpoint(
-  cp: MurderMysteryQuestCheckpoint,
-): PersistedMurderMysteryQuestCheckpoint {
-  return {
-    questStatuses: cp.questStatuses,
-    phase: cp.phase,
-    swarmCleared: cp.swarmCleared,
-    swarmStarted: cp.swarmStarted,
-    swarmDefeatedBaseline: cp.swarmDefeatedBaseline,
-    swarmSpawnQueue: cp.swarmSpawnQueue,
-  };
-}
-
-export function fromPersistedMurderMysteryQuestCheckpoint(
-  persisted: PersistedMurderMysteryQuestCheckpoint,
-): MurderMysteryQuestCheckpoint {
-  return { ...persisted, swarm: [], swarmSpawnGrace: [], baggi: null };
-}
-
 export type PersistedSpiderQuestCheckpoint = Omit<
   SpiderQuestCheckpoint,
   'grotesqueSpider' | 'smallSpiders'
 >;
 
-export function toPersistedSpiderQuestCheckpoint(
-  cp: SpiderQuestCheckpoint,
-): PersistedSpiderQuestCheckpoint {
-  return {
-    phase: cp.phase,
-    spiderEggOpened: cp.spiderEggOpened,
-    scientistDead: cp.scientistDead,
-    hackingDone: cp.hackingDone,
-    machineryForcedOff: cp.machineryForcedOff,
-    playerLocked: cp.playerLocked,
-    roomLocked: cp.roomLocked,
-    fightAborted: cp.fightAborted,
-    entryWindowTimer: cp.entryWindowTimer,
-    humanIsInsider: cp.humanIsInsider,
-    catIsInsider: cp.catIsInsider,
-    lifeMachines: cp.lifeMachines,
-    keyboardHero: cp.keyboardHero,
-  };
-}
-
-export function fromPersistedSpiderQuestCheckpoint(
-  persisted: PersistedSpiderQuestCheckpoint,
-): SpiderQuestCheckpoint {
-  return { ...persisted, grotesqueSpider: null, smallSpiders: [] };
-}
-
 export type PersistedBountyCheckpoint = Omit<BountyCheckpoint, 'boss' | 'encounter' | 'shady'>;
-
-export function toPersistedBountyCheckpoint(cp: BountyCheckpoint): PersistedBountyCheckpoint {
-  return {
-    aggroReleased: cp.aggroReleased,
-    // A mark still at large has no mob to point at after a reload, so it is
-    // re-staged the same way a pending respawn is.
-    respawnPending: cp.respawnPending || cp.boss !== null,
-    markers: cp.markers,
-    collectPointWorld: cp.collectPointWorld,
-  };
-}
-
-export function fromPersistedBountyCheckpoint(
-  persisted: PersistedBountyCheckpoint,
-): BountyCheckpoint {
-  return { ...persisted, boss: null, encounter: [], shady: null };
-}
 
 function isNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
@@ -937,11 +766,10 @@ function parsePersistedBountyCheckpoint(value: unknown): PersistedBountyCheckpoi
 export function parseTownMemoryCheckpoint(value: unknown): TownMemoryCheckpoint | undefined {
   if (!isRecord(value)) return undefined;
   const { residentTalks, clearedRooms, clearedCamps, paidOutInteriorProps, visitedPlaces } = value;
-  const residentIds = allResidents().map((resident) => resident.id);
   const parsedTalks = parseArray(residentTalks, (entry) => {
     const talk = parseStringKeyedTuple(entry, (v) => (isNumber(v) ? v : undefined));
     if (talk === undefined) return undefined;
-    const residentId = stringUnion(talk[0], residentIds);
+    const residentId = stringUnion(talk[0], RESIDENT_IDS);
     return residentId === undefined ? undefined : ([residentId, talk[1]] as const);
   });
   const parsedVisitedPlaces = parseArray(visitedPlaces, (entry) =>

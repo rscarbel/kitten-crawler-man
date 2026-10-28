@@ -13,7 +13,7 @@
  * price in coins when that lands on an owned piece too.
  */
 
-import type { AchievementId } from '../core/progression/AchievementManager';
+import type { AchievementId } from '../core/progression/achievementSave';
 import { ITEM_DEF, wearerAllows, type GearItemId, type ItemId } from '../core/items/defs/ItemDefs';
 import type { QuestId } from '../core/quests/QuestManager';
 import { RARITIES, rarityRank, type Rarity } from '../core/items/defs/rarity';

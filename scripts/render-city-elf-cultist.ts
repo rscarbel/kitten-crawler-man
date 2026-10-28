@@ -27,7 +27,8 @@ import {
 import { TILE_SIZE } from '../src/core/constants.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 import { figureByteBudgetFor } from '../src/sprites/figure/figureFrameCache.js';
-import { HUMAN_FIGURE } from '../src/sprites/art/humanFigure.js';
+import { undressedHumanFigure } from '../src/sprites/art/humanFigure.js';
+import { activeHumanLook } from '../src/sprites/humanSprite.js';
 import { townCastOutfitFigure, townCastStateName } from '../src/sprites/art/townCastFigure.js';
 import { TOWN_CAST_LOOKS } from '../src/sprites/person/townCastLooks.js';
 import {
@@ -82,10 +83,10 @@ function inkTopOf(def: FigureDef, state: string): number | null {
 
 function heightFailures(): string[] {
   const cultistTop = inkTopOf(FIGURE, cultistStateName('idle', 'front'));
-  const humanTop = inkTopOf(HUMAN_FIGURE, 'idle');
+  const humanTop = inkTopOf(undressedHumanFigure(activeHumanLook()), 'idle');
   if (cultistTop === null || humanTop === null) return ['the idle rows painted no ink to measure'];
   const cultistAboveTile = FIGURE.tileY - cultistTop;
-  const humanAboveTile = HUMAN_FIGURE.tileY - humanTop;
+  const humanAboveTile = undressedHumanFigure(activeHumanLook()).tileY - humanTop;
   console.log(
     `  info ink above the tile: cultist ${cultistAboveTile}px, the human ${humanAboveTile}px`,
   );
@@ -246,7 +247,7 @@ function contextSubjects(): Subject[] {
   const robed = TOWN_CAST_LOOKS.find((look) => look.id === ROBED_RESIDENT_ID);
   if (robed === undefined) throw new Error(`no town cast look "${ROBED_RESIDENT_ID}"`);
   return [
-    { label: 'The human', def: HUMAN_FIGURE, state: 'idle', frame: 0 },
+    { label: 'The human', def: undressedHumanFigure(activeHumanLook()), state: 'idle', frame: 0 },
     { label: 'cultist', def: FIGURE, state: cultistStateName('idle', 'front'), frame: 0 },
     { label: 'side', def: FIGURE, state: cultistStateName('idle', 'side'), frame: 0 },
     { label: 'away', def: FIGURE, state: cultistStateName('idle', 'away'), frame: 0 },

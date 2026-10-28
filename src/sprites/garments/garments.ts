@@ -39,10 +39,14 @@ import type {
 import { DAVE_JACKET } from './human/daveJacket';
 import { DAVE_TROUSERS } from './human/daveTrousers';
 import { DAVE_BOOTS } from './human/daveBoots';
-import { RYAN_BELT, RYAN_CHINOS } from './human/ryanChinos';
-import { RYAN_SHIRT } from './human/ryanShirt';
-import { RYAN_SNEAKERS } from './human/ryanSneakers';
-import { RYAN_WATCH } from './human/ryanWatch';
+import { LEATHER_BELT, CHINOS } from './human/chinos';
+import { CHAMBRAY_SHIRT } from './human/chambrayShirt';
+import { KNIT_SNEAKERS } from './human/knitSneakers';
+import { GOLD_WATCH, SMARTWATCH } from './human/wristwatches';
+import { BELTED_TWILL_JACKET } from './human/beltedJacket';
+import { SILK_NECK_SCARF } from './human/neckScarf';
+import { TAPERED_TROUSERS } from './human/taperedTrousers';
+import { ANKLE_BOOTS } from './human/ankleBoots';
 import { LUCKY_HOODIE } from './human/luckyHoodie';
 import { PATCHED_DUSTER } from './human/patchedDuster';
 import { SEQUIN_TAILCOAT } from './human/sequinTailcoat';
@@ -91,11 +95,16 @@ const HUMAN_BASE_GARMENTS: Readonly<Record<HumanBaseGarmentId, BaseGarmentDef<'h
   dave_jacket: DAVE_JACKET,
   dave_trousers: DAVE_TROUSERS,
   dave_boots: DAVE_BOOTS,
-  ryan_shirt: RYAN_SHIRT,
-  ryan_belt: RYAN_BELT,
-  ryan_chinos: RYAN_CHINOS,
-  ryan_sneakers: RYAN_SNEAKERS,
-  ryan_watch: RYAN_WATCH,
+  chambray_shirt: CHAMBRAY_SHIRT,
+  leather_belt: LEATHER_BELT,
+  chinos: CHINOS,
+  knit_sneakers: KNIT_SNEAKERS,
+  smartwatch: SMARTWATCH,
+  belted_twill_jacket: BELTED_TWILL_JACKET,
+  silk_neck_scarf: SILK_NECK_SCARF,
+  tapered_trousers: TAPERED_TROUSERS,
+  ankle_boots: ANKLE_BOOTS,
+  gold_watch: GOLD_WATCH,
 };
 
 const CAT_WORN_GARMENTS: Readonly<Record<CatWornGarmentId, WornGarmentDef<'cat'>>> = {

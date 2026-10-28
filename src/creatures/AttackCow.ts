@@ -19,7 +19,8 @@
  * `AttackCowState`, which `AttackCowSystem` keeps.
  */
 
-import { crawlerName } from '../characters/characters';
+import { crawlerDisplayName } from '../characters/characters';
+import { crawlerPronouns } from '../characters/crawlerPronouns';
 import { Cow, type CowLeadBand } from './Cow';
 import type { LootDrop, Mob, PlayerDamageType } from './Mob';
 import type { DamageOptions, DamageSource, Player } from '../Player';
@@ -217,7 +218,7 @@ export class AttackCow extends Cow {
     this.creditTarget = owner;
     this.mass = ATTACK_COW_MASS;
     this.displayName = 'Attack Cow';
-    this.description = `${crawlerName('human')}’s war cow. Helmet, spiked collar, and a grudge against anything near him.`;
+    this.description = `${crawlerDisplayName('human')}’s war cow. Helmet, spiked collar, and a grudge against anything near ${crawlerPronouns('human').object}.`;
     const level = attackCowLevelForFloor(floorNumber);
     this.setFixedMaxHp(attackCowMaxHpForFloor(floorNumber));
     this.hp = Math.max(1, Math.min(this.maxHp, Math.round(startingHp ?? this.maxHp)));

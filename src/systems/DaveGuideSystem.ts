@@ -14,7 +14,6 @@ import {
   DAVE_TELEPORT_OUT_FRAMES,
   DAVE_TILES_PER_WALK_CYCLE,
   daveHeadTop,
-  daveOverheadLift,
   drawDaveSprite,
   prewarmDaveSprite,
   type DaveTeleportDraw,
@@ -29,10 +28,14 @@ import {
   type QuestMarkerGlyph,
   type QuestMarkerState,
 } from '../sprites/questNPCSprite';
-import { drawSpeechBubble, speechBubbleTop } from '../sprites/speechBubble';
+import {
+  drawSpeechBubble,
+  speechBubbleOriginAbove,
+  speechBubbleTop,
+} from '../sprites/speechBubble';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { pixelToTile } from '../utils';
-import type { AdviceObjectiveId } from './daveAdvice';
+import type { AdviceObjectiveId } from '../story/adviceObjectiveIds';
 import { DaveWanderer } from './daveWander';
 import type { GuidePlacement, SafeRoomInfo, SafeRoomSystem } from './SafeRoomSystem';
 
@@ -46,10 +49,13 @@ const DAVE_ARRIVAL_DELAY_FRAMES = 40;
 const WAITING_BOUNDS_MARGIN_TILES = 1;
 const WAITING_BOUNDS_SPAN_TILES = WAITING_BOUNDS_MARGIN_TILES * 2 + 1;
 
+/** Clear air between the top of his hair and the tip of the "…" bubble's tail, as a share of a tile so it holds at every zoom. */
+const DAVE_BUBBLE_GAP_TILES = 0.0625;
+
 /** What his arrival and his departure sound like. */
 const DAVE_TELEPORT_SOUNDS = {
-  in: 'teleport',
-  out: 'teleport',
+  in: 'dave_teleport_in',
+  out: 'dave_teleport_out',
 } as const satisfies Record<DaveTeleportDraw['direction'], SoundId>;
 
 /** Tiles from where he stands within which a press talks to him. */
@@ -545,6 +551,12 @@ export class DaveGuideSystem {
     return figureRowInkTop(drawnRow, sy, ts);
   }
 
+  /** The `sy` that hangs the "…" bubble's tail just clear of the top of his art. */
+  private bubbleOrigin(sy: number, ts: number): number {
+    const bubbleBottom = this.artTop(sy, ts) - DAVE_BUBBLE_GAP_TILES * ts;
+    return speechBubbleOriginAbove(bubbleBottom, ts);
+  }
+
   private teleportDraw(phase: DavePhase): DaveTeleportDraw | null {
     switch (phase.kind) {
       case 'teleportingIn':
@@ -612,7 +624,7 @@ export class DaveGuideSystem {
         if (markerColor !== undefined) {
           drawQuestMarker(ctx, sx, this.artTop(sy, ts), ts, markerGlyph, markerColor);
         } else if (showBubble) {
-          drawSpeechBubble(ctx, sx, sy - daveOverheadLift(ts), ts, speechBubblePulse);
+          drawSpeechBubble(ctx, sx, this.bubbleOrigin(sy, ts), ts, speechBubblePulse);
         }
       },
     });
@@ -643,10 +655,9 @@ export class DaveGuideSystem {
     const sy = at.y - camY;
     const headTop = this.artTop(sy, TILE_SIZE);
     const marked = questMarkerColorFor(this.marker) !== undefined;
-    const bubbleOriginY = sy - daveOverheadLift(TILE_SIZE);
     const promptY = marked
       ? questMarkerTopY(ctx, headTop, TILE_SIZE, this.markerGlyph())
-      : Math.min(headTop, speechBubbleTop(bubbleOriginY, TILE_SIZE));
+      : speechBubbleTop(this.bubbleOrigin(sy, TILE_SIZE), TILE_SIZE);
     drawInteractionPrompt(ctx, sx, promptY, TILE_SIZE, sy + TILE_SIZE, 'Talk');
   }
 }

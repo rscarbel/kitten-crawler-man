@@ -1,5 +1,4 @@
 import { TILE_SIZE } from '../../core/constants';
-import { isRecord } from '../../core/util/guards';
 import { getSpriteDef } from '../../core/spriteAssets/SpriteLoader';
 import { drawSpriteKey } from '../../core/spriteAssets/SpriteRenderer';
 import { viewportHeight, viewportWidth } from '../../core/rendering/Viewport';
@@ -37,6 +36,7 @@ import { stampProps, type TilePoint } from './bossRoomLayout';
 import { InertBossRoomDressing } from './InertBossRoomDressing';
 import { colosseumFloodLamps, type FloodLamp } from './bossRoomMoodLights';
 import { drawFloodLamp } from '../../sprites/art/moodLightArt';
+import type { ColosseumDressingCheckpoint, GroundDecal } from './colosseumDressingCheckpoint';
 
 const FRAMES_PER_SECOND = 60;
 const HALF = 0.5;
@@ -196,22 +196,6 @@ const DECAL_WALL_CLEARANCE_TILES = 0.3;
 const CULL_MARGIN_PX = TILE_SIZE * 2;
 
 const DECAL_SEED = 811;
-
-interface GroundDecal {
-  x: number;
-  y: number;
-  variant: number;
-  life: number;
-}
-
-/** What the Iron Colosseum's dressing has to put back after a death. */
-export interface ColosseumDressingCheckpoint {
-  /** Indices of the cages whose doors have burst, in bearing order. */
-  readonly openCages: readonly number[];
-  readonly portcullisDown: boolean;
-  readonly mudSplatter: readonly Readonly<GroundDecal>[];
-  readonly bloodDecals: readonly Readonly<GroundDecal>[];
-}
 
 /**
  * Ball of Swine's Iron Colosseum: its portcullis, its caged pigs, its crowd,
@@ -857,51 +841,4 @@ function drawBloodDecal(
     radiusY * 2,
   );
   ctx.restore();
-}
-
-// ── Save parsing ────────────────────────────────────────────────────────────
-
-function parseDecals(value: unknown): GroundDecal[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const decals: GroundDecal[] = [];
-  for (const entry of value) {
-    if (!isRecord(entry)) return undefined;
-    const { x, y, variant, life } = entry;
-    if (typeof x !== 'number' || typeof y !== 'number') return undefined;
-    if (typeof variant !== 'number' || typeof life !== 'number') return undefined;
-    decals.push({ x, y, variant, life });
-  }
-  return decals;
-}
-
-function parseCageIndices(value: unknown): number[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const indices: number[] = [];
-  for (const entry of value) {
-    if (typeof entry !== 'number') return undefined;
-    indices.push(entry);
-  }
-  return indices;
-}
-
-/**
- * Reads the colosseum's part of a saved checkpoint back from untrusted JSON. A
- * missing field or a field of the wrong shape rejects the whole snapshot.
- */
-export function parseColosseumDressingCheckpoint(
-  value: unknown,
-): ColosseumDressingCheckpoint | undefined {
-  if (!isRecord(value)) return undefined;
-  const { openCages, portcullisDown, mudSplatter, bloodDecals } = value;
-  const cages = parseCageIndices(openCages);
-  const splatter = parseDecals(mudSplatter);
-  const blood = parseDecals(bloodDecals);
-  if (cages === undefined || splatter === undefined || blood === undefined) return undefined;
-  if (typeof portcullisDown !== 'boolean') return undefined;
-  return {
-    openCages: cages,
-    portcullisDown,
-    mudSplatter: splatter,
-    bloodDecals: blood,
-  };
 }

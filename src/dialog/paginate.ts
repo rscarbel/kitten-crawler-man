@@ -7,10 +7,11 @@
  * Break preference, in order: every paragraph boundary is a forced page
  * break; within a paragraph, lines fill greedily by word and a page cuts at
  * the last sentence end that fits; failing that, at the last word boundary;
- * failing that (a single word wider than the box), by character.
+ * failing that (a single word wider than the box), by grapheme cluster.
  */
 
 import type { NonEmpty, Paragraphs } from './line';
+import { graphemes } from '../core/text/graphemes';
 
 export interface Page {
   readonly text: string;
@@ -58,25 +59,24 @@ export function splitSentences(text: string): NonEmpty<string> {
   return toNonEmpty(sentences.length > 0 ? sentences : [text]);
 }
 
-/** Hard-breaks a single word wider than `maxWidth` into character-fitting fragments. Always makes progress, even for a single glyph wider than the width. */
+/** Hard-breaks a single word wider than `maxWidth` into fragments that fit, never splitting a grapheme cluster. Always makes progress, even for a single cluster wider than the width. */
 export function hardBreakWord(
   word: string,
   maxWidth: number,
   measure: (s: string) => number,
 ): string[] {
   const fragments: string[] = [];
-  let start = 0;
-  let end = 1;
-  while (end <= word.length) {
-    const candidate = word.slice(start, end);
-    if (measure(candidate) > maxWidth && end - start > 1) {
-      fragments.push(word.slice(start, end - 1));
-      start = end - 1;
+  let piece = '';
+  for (const cluster of graphemes(word)) {
+    const extended = piece + cluster;
+    if (piece !== '' && measure(extended) > maxWidth) {
+      fragments.push(piece);
+      piece = cluster;
     } else {
-      end += 1;
+      piece = extended;
     }
   }
-  fragments.push(word.slice(start));
+  fragments.push(piece);
   return fragments;
 }
 
@@ -146,6 +146,9 @@ function computeChunkLineSpans(
   return spans.length > 0 ? spans : [{ offset: chunkStart, length: 0 }];
 }
 
+/** A grapheme that forces a line break; `\r\n` is one cluster, not two. */
+const LINE_BREAK_CLUSTERS: ReadonlySet<string> = new Set(['\n', '\r\n']);
+
 /**
  * Wraps `text` into display-line spans, honoring explicit `\n` as a forced
  * line break — each `\n`-delimited chunk is wrapped independently. The dialog
@@ -159,11 +162,15 @@ export function computeLineSpans(
 ): LineSpan[] {
   const spans: LineSpan[] = [];
   let chunkStart = 0;
-  for (let i = 0; i <= text.length; i++) {
-    if (i < text.length && text.charAt(i) !== '\n') continue;
-    spans.push(...computeChunkLineSpans(text, chunkStart, i, maxWidth, measure));
-    chunkStart = i + 1;
+  let cursor = 0;
+  for (const cluster of graphemes(text)) {
+    if (LINE_BREAK_CLUSTERS.has(cluster)) {
+      spans.push(...computeChunkLineSpans(text, chunkStart, cursor, maxWidth, measure));
+      chunkStart = cursor + cluster.length;
+    }
+    cursor += cluster.length;
   }
+  spans.push(...computeChunkLineSpans(text, chunkStart, text.length, maxWidth, measure));
   return spans;
 }
 

@@ -67,7 +67,8 @@ const { FLOOR_ART_SEEDS } = await import('../src/map/ground/artSeedAlphabet.js')
 const { drawTownInteriorGroundProps, townInteriorGroundProps, townInteriorPropFigures } =
   await import('../src/systems/townInteriorPropFigures.js');
 const { drawFigureCached } = await import('../src/sprites/figure/figureFrameCache.js');
-const { HUMAN_FIGURE } = await import('../src/sprites/art/humanFigure.js');
+const { undressedHumanFigure } = await import('../src/sprites/art/humanFigure.js');
+const { activeHumanLook } = await import('../src/sprites/humanSprite.js');
 
 /** Matches how `TownPlan` sizes and centres a level-3 town; only `.buildings` is read here. */
 const TOWN_PLAN_SIZE = 280;
@@ -160,7 +161,7 @@ for (const { building, floor, floorCount } of storeys) {
   function drawHumanProbe(tileX: number, tileY: number): void {
     drawFigureCached(
       gameCtx,
-      HUMAN_FIGURE,
+      undressedHumanFigure(activeHumanLook()),
       'idle',
       0,
       tileX * TILE_SIZE,

@@ -34,7 +34,7 @@ export function paintHeadStrap(ctx: Ctx, frame: BipedHeadFrame, strap: StrapLook
   const toX = view.profile ? -HEAD_DEPTH * STRAP_OVERREACH : HEAD_RX * STRAP_OVERREACH;
   withClip(
     ctx,
-    () => traceSkull(ctx, view),
+    () => traceSkull(ctx, view, frame.look.face),
     () => {
       ctx.beginPath();
       ctx.moveTo(fromX, strap.y);

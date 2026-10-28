@@ -10,14 +10,14 @@
  * taunt.
  */
 
-import { crawlerName } from '../../characters/characters';
+import { crawlerAIName } from '../../characters/characters';
 import type { Rarity } from '../../core/items/defs/rarity';
 
 export const CHALLENGE_TEMPLATE_IDS = [
   'slay',
   'slay_untouched',
   'untouched',
-  'belle_finishes',
+  'cat_finishes',
   'no_potion_until_boss',
   'stairwell_dash',
 ] as const;
@@ -95,9 +95,9 @@ export const CHALLENGE_TEMPLATES: Readonly<Record<ChallengeTemplateId, Challenge
     summary: 'untouched: neither crawler loses any HP for `seconds`.',
     rules: { ...KILL_RULES, goal: 'survive', countsKills: false, failOnDamage: true },
   },
-  belle_finishes: {
-    id: 'belle_finishes',
-    summary: `belle_finishes: ${crawlerName('cat')} lands the killing blow on \`count\` of \`mob_type\` within \`seconds\`; a matching kill by ${crawlerName('human')} fails it (companions’ and hazards’ kills do not count either way).`,
+  cat_finishes: {
+    id: 'cat_finishes',
+    summary: `cat_finishes: the cat crawler lands the killing blow on \`count\` of \`mob_type\` within \`seconds\`; a matching kill by the human crawler fails it (companions’ and hazards’ kills do not count either way).`,
     rules: { ...KILL_RULES, killer: 'cat', failOnOtherKiller: true },
   },
   no_potion_until_boss: {
@@ -162,8 +162,8 @@ export function challengeObjective(spec: ChallengeSpec): string {
       return `Kill ${mobWords(spec)} within ${seconds} without taking damage`;
     case 'untouched':
       return `Take no damage for ${seconds}`;
-    case 'belle_finishes':
-      return `Let ${crawlerName('cat')} land the killing blow on ${mobWords(spec)} within ${seconds}`;
+    case 'cat_finishes':
+      return `Let ${crawlerAIName('cat')} land the killing blow on ${mobWords(spec)} within ${seconds}`;
     case 'no_potion_until_boss':
       return 'Drink no healing potion until the boss is dead';
     case 'stairwell_dash':

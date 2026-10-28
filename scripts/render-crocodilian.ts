@@ -37,7 +37,8 @@ import {
   JANITOR_CELL,
   SYDNEY_CELL,
 } from '../src/sprites/art/crocodilianFigure.js';
-import { HUMAN_FIGURE } from '../src/sprites/art/humanFigure.js';
+import { undressedHumanFigure } from '../src/sprites/art/humanFigure.js';
+import { activeHumanLook } from '../src/sprites/humanSprite.js';
 import { JANITOR_BUILD, SYDNEY_BUILD } from '../src/sprites/art/crocodilianArt.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 
@@ -255,7 +256,7 @@ function renderStrip32(def: FigureDef, states: readonly string[], outPath: strin
  */
 function renderLineup(outPath: string): void {
   const entries: ReadonlyArray<{ def: FigureDef; states: readonly string[] }> = [
-    { def: HUMAN_FIGURE, states: ['idle', 'idle_side', 'idle_away'] },
+    { def: undressedHumanFigure(activeHumanLook()), states: ['idle', 'idle_side', 'idle_away'] },
     { def: JANITOR_FIGURE, states: ['idle', 'idle_side', 'idle_away'] },
     { def: SYDNEY_FIGURE, states: ['idle', 'idle_side', 'idle_away'] },
   ];

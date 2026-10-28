@@ -19,7 +19,7 @@ import type { CitizenSpeechStyle } from '../../dialog/speakers';
 import type { Player } from '../../Player';
 import { interiorRoomOwnedByStory, type InteriorStoryState } from '../interiorStoryOwnership';
 import type { ResidentQuestHook } from '../residentQuestHooks';
-import type { ResidentId } from '../townResidents';
+import type { ResidentId } from '../../core/state/residentIds';
 import {
   contractSiteFor,
   taloncrestContractSite,

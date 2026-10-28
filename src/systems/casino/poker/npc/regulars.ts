@@ -11,28 +11,7 @@
 
 import type { ClubFigureRef } from '../../../../sprites/clubCastFigure';
 import { townCastLook } from '../../../../sprites/person/townCastLooks';
-
-export const REGULAR_IDS = [
-  'wren',
-  'grizzle',
-  'ottoline',
-  'pell',
-  'dabney',
-  'corvina',
-  'reverend',
-  'malloy',
-  'crumb',
-  'quillfeather',
-  'tuppence',
-  'vane',
-  'brisket',
-  'mags',
-] as const;
-export type RegularId = (typeof REGULAR_IDS)[number];
-
-export function isRegularId(id: string | null): id is RegularId {
-  return REGULAR_IDS.some((regularId) => regularId === id);
-}
+import type { RegularId } from './regularIds';
 
 export interface PokerRegular {
   readonly id: RegularId;

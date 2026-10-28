@@ -58,14 +58,8 @@ import {
 } from '../src/ui/screens/shop/shopSession';
 import { RewardGrantedDialog } from '../src/ui/RewardGrantedDialog';
 import { QuantityDialog } from '../src/ui/screens/dialogs/QuantityDialog';
-import {
-  FENNA,
-  OREN,
-  PIPKIN,
-  SELLA,
-  VETCH,
-  type VillagerId,
-} from '../src/dialog/scripts/briarHollow';
+import { FENNA, OREN, PIPKIN, SELLA, VETCH } from '../src/dialog/scripts/briarHollow';
+import { type VillagerId } from '../src/core/quests/villagerIds';
 import type { BarkLine, DialogLine } from '../src/dialog/line';
 import { VillagerSystem } from '../src/systems/briarHollow/VillagerSystem';
 import { Conversation } from '../src/dialog/Conversation';
@@ -122,6 +116,9 @@ import {
 } from '../src/systems/briarHollow/services/lumberForeman';
 import { NEED_WOOD_LINE } from '../src/systems/briarHollow/services/sawmill';
 import type { ProcessingStationKind } from '../src/systems/briarHollow/processingStations';
+import { useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+
+useDevPlayerIdentity();
 
 installCanvasGlobals();
 

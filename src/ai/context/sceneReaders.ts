@@ -1,11 +1,12 @@
 import { TILE_SIZE } from '../../core/constants';
 import { displayHp } from '../../core/party/crawlerFormulas';
-import { ITEM_DEF } from '../../core/items/defs/ItemDefs';
+import { itemAIName } from '../../core/items/defs/ItemDefs';
 import type { Mob } from '../../creatures/Mob';
 import type { Player } from '../../Player';
-import type { PetNames } from '../../core/party/petNames';
 import { mobLabel } from './eventMapping';
-import type { CrawlerName, CrawlerState, NearbyMobState, ThreatLevel } from './types';
+import type { CrawlerKind } from '../../core/skills/SkillManager';
+import type { TrackerEntry } from '../../systems/questTracker';
+import type { CrawlerState, NearbyMobState, QuestSummary, ThreatLevel } from './types';
 
 /** Mobs further than this from the active crawler are not "nearby" for the AI. */
 export const NEARBY_MOB_RADIUS_TILES = 15;
@@ -45,7 +46,8 @@ function notableItems(player: Player): Record<string, number> {
     if (slot === null) continue;
     const notable = slot.type !== undefined || slot.id.startsWith(QUEST_ITEM_PREFIX);
     if (!notable) continue;
-    counts[slot.name] = (counts[slot.name] ?? 0) + slot.quantity;
+    const name = itemAIName(slot.id);
+    counts[name] = (counts[name] ?? 0) + slot.quantity;
   }
   return counts;
 }
@@ -53,15 +55,26 @@ function notableItems(player: Player): Record<string, number> {
 function equippedNames(player: Player): Record<string, string> {
   const equipped: Record<string, string> = {};
   for (const [slotKey, itemId] of player.inventory.equipment.entries()) {
-    equipped[slotKey] = ITEM_DEF[itemId].name;
+    equipped[slotKey] = itemAIName(itemId);
   }
   return equipped;
 }
 
-export function readCrawler(player: Player, name: CrawlerName): CrawlerState {
+/** The Journal's active quests as told to the AI, each by its name for the AI where it has one. */
+export function readActiveQuests(entries: ReadonlyArray<TrackerEntry>): QuestSummary[] {
+  return entries
+    .filter((entry) => entry.status === 'active')
+    .map((entry) => ({
+      id: entry.id,
+      name: entry.aiName ?? entry.name,
+      objective: entry.objective,
+    }));
+}
+
+export function readCrawler(player: Player, kind: CrawlerKind): CrawlerState {
   const tile = tileOf(player);
   return {
-    name,
+    kind,
     hp: displayHp(player.hp),
     maxHp: player.maxHp,
     level: player.level,
@@ -79,11 +92,7 @@ export function readCrawler(player: Player, name: CrawlerName): CrawlerState {
 }
 
 /** Living hostiles near `from`, nearest first. */
-export function readNearbyMobs(
-  mobs: readonly Mob[],
-  from: Player,
-  petNames: PetNames,
-): NearbyMobState[] {
+export function readNearbyMobs(mobs: readonly Mob[], from: Player): NearbyMobState[] {
   const origin = tileOf(from);
   return mobs
     .filter((mob) => mob.isAlive && mob.isHostile)
@@ -95,7 +104,7 @@ export function readNearbyMobs(
     .sort((a, b) => a.distance - b.distance)
     .slice(0, NEARBY_MOB_MAX)
     .map(({ mob, distance }) => ({
-      name: mobLabel(mob, petNames),
+      name: mobLabel(mob),
       level: mob.level,
       isBoss: mob.isBoss,
       threat: threatOf(mob, from.level),
