@@ -88,10 +88,13 @@ const menu = new PauseScreen({
 });
 // Music pausing is not under test, and the silent audio shim has no voices to pause.
 menu.skipAudioPause = () => true;
+/** The pause menu's stats differ by floor; the difficulty guard is floor-independent, so floor 1 stands in. */
+const GUARD_CHECK_FLOOR = 1;
 const frameData = {
   humanAchievements: new AchievementManager(),
   catAchievements: new AchievementManager(),
   gameStats: new GameStats(),
+  floorNumber: GUARD_CHECK_FLOOR,
 };
 root.mount(
   menu.surface({

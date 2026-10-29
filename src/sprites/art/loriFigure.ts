@@ -28,15 +28,26 @@ import {
 
 /** Cell pixels per tile. */
 export const TILE_SCALE = 64;
+/**
+ * Tiles per unit of her pose space. Her art and choreography are written in
+ * pose units, so this one factor sets how big she stands in the world.
+ */
+export const LORI_BODY_SCALE = 1.66;
+/** Cell pixels per unit of her pose space. */
+export const POSE_UNIT_PX = TILE_SCALE * LORI_BODY_SCALE;
 
-export const FRAME_W = 80;
-export const FRAME_H = 80;
+/** Wide enough for the cane swung out round her skirt on either side. */
+export const FRAME_W = 136;
+export const FRAME_H = 118;
 export const TILE_X = (FRAME_W - TILE_SCALE) / 2;
 /** Her feet sit on a whole cell row near the bottom of her tile, level with where the human crawler's do. */
 const GROUND_ROW_IN_TILE = 58;
 export const GROUND_OFFSET_IN_TILE = GROUND_ROW_IN_TILE / TILE_SCALE;
-/** Cell row of the ground line; everything above it is room for her. */
-const GROUND_ROW = 72;
+/**
+ * Cell row of the ground line; everything above it is room for her, and the
+ * rows below it hold a cane planted well ahead of her head-on.
+ */
+const GROUND_ROW = 104;
 export const TILE_Y = GROUND_ROW - GROUND_ROW_IN_TILE;
 const ORIGIN_X = TILE_X + TILE_SCALE / 2;
 const ORIGIN_Y = GROUND_ROW;
@@ -155,12 +166,15 @@ const LEG_LENGTH = 0.4;
 const STEP_SHARE = 0.5;
 const STEP_LENGTH = LEG_LENGTH * STEP_SHARE;
 
+/** Ground covered in one full cycle — two steps — in her pose units. */
+export const WALK_CYCLE_POSE_LENGTH = STEP_LENGTH * 2;
+
 /**
- * Tiles covered in one full cycle — two steps. A caller advances the walk
- * phase by 2π for every this many tiles she moves, which is the only way a
- * planted boot and a planted cane stay put on the floor.
+ * Tiles covered in one full cycle. A caller advances the walk phase by 2π for
+ * every this many tiles she moves, which is the only way a planted boot and a
+ * planted cane stay put on the floor.
  */
-export const LORI_TILES_PER_WALK_CYCLE = STEP_LENGTH * 2;
+export const LORI_TILES_PER_WALK_CYCLE = WALK_CYCLE_POSE_LENGTH * LORI_BODY_SCALE;
 
 /** One foot (or the cane) through the cycle: when it lands, and how long it bears weight. */
 export interface Support {
@@ -231,7 +245,7 @@ function supportPlace(
   phase: number,
   support: Support,
 ): { d: number; lift: number; t: number; stance: boolean } {
-  const slide = LORI_TILES_PER_WALK_CYCLE * support.stance;
+  const slide = WALK_CYCLE_POSE_LENGTH * support.stance;
   const landD = support.centreD + slide / 2;
   const liftD = support.centreD - slide / 2;
   const { stance, t } = supportPhase(phase, support);
@@ -293,7 +307,7 @@ const HEM_LAG = 0.12;
 const HEM_FOLLOW = 0.08;
 const HEM_REST_LEAD = RESTING_LEFT_FOOT_D;
 const WALK_TWIST = 0.08;
-/** The free arm's swing, in tiles of hand travel: an old woman's arm barely swings. */
+/** The free arm's swing, in pose units of hand travel: an old woman's arm barely swings. */
 const WALK_ARM_SWING = 0.035;
 const WALK_ARM_LIFT = 0.012;
 /** The head nods forward on each footfall, a beat late. */
@@ -397,7 +411,7 @@ function paintLori(ctx: CanvasRenderingContext2D, state: string, frame: number):
   const pose = loriPose(resolved.row, frame);
   ctx.save();
   ctx.translate(ORIGIN_X, ORIGIN_Y);
-  ctx.scale(TILE_SCALE, TILE_SCALE);
+  ctx.scale(POSE_UNIT_PX, POSE_UNIT_PX);
   PAINTERS[resolved.view](ctx, pose);
   ctx.restore();
 }

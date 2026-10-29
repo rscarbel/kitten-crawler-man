@@ -121,6 +121,7 @@ import { AI_TOOLS } from '../src/ai/aiTools';
 import { SESSION_FLAG_NAMES } from '../src/ai/context/sessionContext';
 import { HUMAN_CRAWLER_AI_NAME, crawlerDisplayName } from '../src/characters/characters';
 import { DEV_PLAYER_IDENTITY, useDevPlayerIdentity } from '../src/dev/devPlayerIdentity';
+import { mulberry32 } from '../src/sprites/person/rng';
 
 useDevPlayerIdentity();
 
@@ -158,6 +159,12 @@ const FUZZ_CALLS_PER_ACTION = 400;
 const MAX_CLOCK_STEP_MS = 90_000;
 /** One in this many fuzzed calls carries deliberately broken arguments. */
 const BROKEN_ARGS_ONE_IN = 4;
+/**
+ * The fuzz is seeded so its coverage check is a fixed fact: unseeded, a rarely
+ * eligible action (a challenge needs a calm, unpaused, out-of-combat scene and
+ * chest allowance left) could go a whole run without one success.
+ */
+const FUZZ_SEED = 0xa1f022;
 const LOW_HP_SCENE_CHANCE = 0.3;
 const KNOCKED_OUT_SCENE_CHANCE = 0.05;
 const PAUSED_SCENE_CHANCE = 0.2;
@@ -650,6 +657,7 @@ function anyVulnerable(world: FakeWorld): boolean {
 
 section('fuzzed calls through the governor keep the fairness rules');
 {
+  Math.random = mulberry32(FUZZ_SEED);
   let clockMs = 0;
   const world = buildWorld();
   const lastSuccessAt = new Map<string, number>();

@@ -5,7 +5,8 @@
  * The painter knows nothing about animation: it draws one pose in one of three
  * views — head-on, in profile (mirrored for the other side) and from behind.
  *
- * Every measurement is in tile units with the origin on the ground between her
+ * Every measurement is in pose units (`LORI_BODY_SCALE` tiles each, in
+ * `loriFigure.ts`) with the origin on the ground between her
  * feet and +Y down, so heights are negative. Limbs are placed in a small body
  * space — `l` lateral (+ toward her left, the cane side), `y` height, `d` depth
  * (+ the way she faces) — and each view projects that space, so an arm solved
@@ -60,9 +61,8 @@ const FINE_WIDTH = 0.01;
 // ── Proportions ──────────────────────────────────────────────────────────────
 
 /**
- * She stands a little under one tile to the crown of her hair — about half of
- * the human crawler's two tiles, which puts her at a tall man's waist. The stoop takes the
- * rest: upright she would be a head taller.
+ * She stands a little under one pose unit to the crown of her hair. The stoop
+ * takes some of her height: upright she would be a head taller.
  */
 const WAIST_Y = -0.47;
 const SHOULDER_Y = -0.62;
@@ -262,7 +262,7 @@ function lateralSign(view: 'front' | 'away'): number {
   return view === 'front' ? 1 : -1;
 }
 
-/** Body space to the cell's tile-unit plane for one view. */
+/** Body space to the cell's pose-unit plane for one view. */
 function project(view: LoriView, p: Vec3): Pt {
   if (view === 'side') return { x: p.d, y: p.y };
   return { x: lateralSign(view) * p.l, y: p.y };
@@ -346,7 +346,7 @@ function solveArms(pose: LoriPose): Arms {
   };
 }
 
-/** Where the cane's ferrule is drawn, in the view's tile plane (origin between her feet). */
+/** Where the cane's ferrule is drawn, in the view's pose plane (origin between her feet). */
 export function loriCaneTipPoint(view: LoriView, pose: LoriPose): Pt {
   return projectOnFloor(view, caneFootOf(pose));
 }
@@ -1392,7 +1392,7 @@ function bootSide(ctx: Ctx, foot: FootPose): void {
 }
 
 /**
- * Where each boot stands, in the view's tile plane: `x` across the screen and
+ * Where each boot stands, in the view's pose plane: `x` across the screen and
  * `floorY` the height of the floor under it — head-on and from behind a boot
  * stepped ahead stands on floor drawn nearer or further from the camera. The
  * boot's own height is not here: a gate measures how low the painted boot

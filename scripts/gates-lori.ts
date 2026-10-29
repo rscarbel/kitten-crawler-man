@@ -31,14 +31,15 @@ import {
   IDLE_BLINK_FRAME,
   LORI_FIGURE,
   LORI_ROW_NAMES,
-  LORI_TILES_PER_WALK_CYCLE,
   LORI_VIEWS,
   type LoriRow,
+  POSE_UNIT_PX,
   type Support,
   TILE_SCALE,
   TILE_X,
   TILE_Y,
   WALK_BLINK_FRAME,
+  WALK_CYCLE_POSE_LENGTH,
   loriPose,
   loriStateName,
 } from '../src/sprites/art/loriFigure.js';
@@ -268,7 +269,7 @@ function planted(lift: number): boolean {
 
 function gateSupportsHoldTheFloor(): void {
   const poses = walkPoses();
-  const perFrame = LORI_TILES_PER_WALK_CYCLE / LORI_WALK_FRAMES;
+  const perFrame = WALK_CYCLE_POSE_LENGTH / LORI_WALK_FRAMES;
   let measured = 0;
   for (const track of SUPPORTS) {
     for (let frame = 0; frame < poses.length; frame++) {
@@ -283,7 +284,7 @@ function gateSupportsHoldTheFloor(): void {
         fail(
           'G5',
           `walk[${frame}→${(frame + 1) % poses.length}]: the planted ${track.name} moved ` +
-            `${slid.toFixed(REPORT_DECIMALS)} tiles against the ${perFrame.toFixed(REPORT_DECIMALS)} ` +
+            `${slid.toFixed(REPORT_DECIMALS)} pose units against the ${perFrame.toFixed(REPORT_DECIMALS)} ` +
             'she travels per frame',
         );
       }
@@ -335,7 +336,7 @@ function gateCaneRhythm(): void {
       fail(
         'G6',
         `walk[${frame}]: the bad boot bears weight with the cane in the air ` +
-          `(${pose.caneLift.toFixed(REPORT_DECIMALS)} tiles up)`,
+          `(${pose.caneLift.toFixed(REPORT_DECIMALS)} pose units up)`,
       );
     }
   });
@@ -345,20 +346,32 @@ function gateCaneRhythm(): void {
 // ── G7: what bears weight is painted on the floor ────────────────────────────
 
 /**
+ * Her painted tolerances are written in pose units and turned into cell
+ * pixels at her body scale, so they grow with her outline and her floor's
+ * depth rather than tightening as she is drawn bigger.
+ */
+function posePx(poseUnits: number): number {
+  return Math.round(poseUnits * POSE_UNIT_PX);
+}
+
+/**
  * How far below the ground row a planted boot's lowest solid pixel may sit:
- * its outline reaches a pixel or two past the line, a step ahead a little more
- * for the floor's depth.
+ * its outline reaches a little past the line, a step ahead a little more for
+ * the floor's depth.
  */
 const GROUND_MIN_SINK_PX = 0;
-const GROUND_MAX_SINK_PX = 5;
+const GROUND_MAX_SINK = 0.078;
+const GROUND_MAX_SINK_PX = posePx(GROUND_MAX_SINK);
 /**
  * The same for her whole figure, whose lowest pixel is often the cane's
  * ferrule: head-on, a cane planted well ahead of her draws further down the
  * floor than her boots do.
  */
-const FIGURE_MAX_SINK_PX = 7;
-/** How far, in cell pixels, the ferrule's painted ink may sit from where the pose puts it. */
-const CANE_TIP_TOLERANCE = 2;
+const FIGURE_MAX_SINK = 0.11;
+const FIGURE_MAX_SINK_PX = posePx(FIGURE_MAX_SINK);
+/** How far the ferrule's painted ink may sit from where the pose puts it. */
+const CANE_TIP_TOLERANCE = 0.031;
+const CANE_TIP_TOLERANCE_PX = posePx(CANE_TIP_TOLERANCE);
 /**
  * Half the width, in cell pixels, of the column a boot is measured in:
  * narrower than a boot, so the cane and the other boot stay out of it.
@@ -398,8 +411,8 @@ function gateGroundContact(): void {
         for (const sole of loriBootSoles(view, pose)) {
           if (!planted(sole.lift)) continue;
           boots++;
-          const column = ORIGIN_X + sole.x * TILE_SCALE;
-          const floorRow = ORIGIN_Y + sole.floorY * TILE_SCALE;
+          const column = ORIGIN_X + sole.x * POSE_UNIT_PX;
+          const floorRow = ORIGIN_Y + sole.floorY * POSE_UNIT_PX;
           const bootSink = Math.round(
             lowestSolidInColumns(pixels, column, BOOT_COLUMN_HALF) + 1 - floorRow,
           );
@@ -415,9 +428,9 @@ function gateGroundContact(): void {
         if (!planted(pose.caneLift)) continue;
         tips++;
         const tip = loriCaneTipPoint(view, pose);
-        const x = ORIGIN_X + tip.x * TILE_SCALE;
-        const y = ORIGIN_Y + tip.y * TILE_SCALE;
-        if (!solidNear(pixels, x, y, CANE_TIP_TOLERANCE)) {
+        const x = ORIGIN_X + tip.x * POSE_UNIT_PX;
+        const y = ORIGIN_Y + tip.y * POSE_UNIT_PX;
+        if (!solidNear(pixels, x, y, CANE_TIP_TOLERANCE_PX)) {
           fail(
             'G7',
             `${state}[${frame}]: the planted cane's ferrule (${x.toFixed(1)}, ${y.toFixed(1)}) is not painted`,
@@ -451,15 +464,16 @@ function extentInBand(pixels: Pixels, top: number, bottom: number): RowExtent | 
   return Number.isFinite(left) ? { left: ORIGIN_X - left, right: right - ORIGIN_X } : null;
 }
 
-/** Heights, in tiles above the ground, of the bands the parity checks read. */
+/** Heights, in pose units above the ground, of the bands the parity checks read. */
 const NOSE_BAND_LOW = 0.64;
 const NOSE_BAND_HIGH = 0.74;
 const CANE_BAND_LOW = 0.02;
 const CANE_BAND_HIGH = 0.12;
 const FACE_BAND: readonly [number, number] = [NOSE_BAND_LOW, NOSE_BAND_HIGH];
 const CANE_BAND: readonly [number, number] = [CANE_BAND_LOW, CANE_BAND_HIGH];
-/** How much further, in cell pixels, the leading side must reach. */
-const PARITY_MARGIN = 4;
+/** How much further the leading side must reach. */
+const PARITY_MARGIN = 0.0625;
+const PARITY_MARGIN_PX = posePx(PARITY_MARGIN);
 
 interface ParityCheck {
   readonly view: LoriView;
@@ -482,8 +496,8 @@ function gateFacingParity(): void {
   for (const { view, band, what, side } of PARITY_CHECKS) {
     for (const row of LORI_ROW_NAMES) {
       const state = loriStateName(row, view);
-      const top = ORIGIN_Y - band[1] * TILE_SCALE;
-      const bottom = ORIGIN_Y - band[0] * TILE_SCALE;
+      const top = ORIGIN_Y - band[1] * POSE_UNIT_PX;
+      const bottom = ORIGIN_Y - band[0] * POSE_UNIT_PX;
       for (let frame = 0; frame < framesOf(state); frame++) {
         const extent = extentInBand(pixelsOf(state, frame), top, bottom);
         measured++;
@@ -493,10 +507,10 @@ function gateFacingParity(): void {
         }
         const leading = side > 0 ? extent.right : extent.left;
         const trailing = side > 0 ? extent.left : extent.right;
-        if (leading < trailing + PARITY_MARGIN) {
+        if (leading < trailing + PARITY_MARGIN_PX) {
           fail(
             'G8',
-            `${state}[${frame}]: ${what} should reach ${PARITY_MARGIN}px further to the ` +
+            `${state}[${frame}]: ${what} should reach ${PARITY_MARGIN_PX}px further to the ` +
               `${side > 0 ? 'right' : 'left'} of her centre (${leading}px) than the other way (${trailing}px)`,
           );
         }
@@ -506,14 +520,14 @@ function gateFacingParity(): void {
   failUnlessMeasured('G8', measured, 'parity bands');
 }
 
-// ── G9: she is short even for a dwarf ────────────────────────────────────────
+// ── G9: she stands her own height ────────────────────────────────────────────
 
 /**
- * Standing height to the crown of her hair, in tiles. The human crawler is two
- * tiles; a dwarf woman bent over a cane comes to his hip.
+ * Standing height to the crown of her hair, in tiles: the band her stooped
+ * figure is sized to read at in the world.
  */
-const MIN_HEIGHT_TILES = 0.82;
-const MAX_HEIGHT_TILES = 0.95;
+const MIN_HEIGHT_TILES = 1.36;
+const MAX_HEIGHT_TILES = 1.58;
 
 function gateHeight(): void {
   let measured = 0;
